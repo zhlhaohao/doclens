@@ -38,27 +38,27 @@ class RetrieveRerankConfig:
     """Configuration for three-stage retrieve-rerank pipeline.
 
     Stage 1: Parallel recall (embedding + BM25)
-    Stage 2: Score fusion with candidate-pool normalization
-    Stage 3: LLM listwise rerank with tree context
+    Stage 2: Reciprocal Rank Fusion (RRF) -- rank-based, no normalization needed
+    Stage 3: LLM listwise rerank with tree context (boost mode)
     """
     # Stage 1: parallel recall
     embedding_topk: int = int(os.getenv("TREESEARCH_RR_EMB_TOPK", "20"))
     bm25_topk: int = int(os.getenv("TREESEARCH_RR_BM25_TOPK", "20"))
 
-    # Stage 2: score fusion
-    bm25_weight: float = float(os.getenv("TREESEARCH_RR_BM25_WEIGHT", "0.5"))
-    normalize: str = "candidate_pool"
+    # Stage 2: RRF fusion
+    rrf_k: int = int(os.getenv("TREESEARCH_RR_RRF_K", "60"))
 
     # Stage 3: LLM rerank
-    rerank_top_n: int = int(os.getenv("TREESEARCH_RR_RERANK_N", "8"))
+    rerank_top_n: int = int(os.getenv("TREESEARCH_RR_RERANK_N", "10"))
     rerank_mode: str = "listwise"
     text_excerpt_len: int = int(os.getenv("TREESEARCH_RR_EXCERPT_LEN", "500"))
     include_ancestors: bool = True
     include_sibling_titles: bool = False
+    llm_weight: float = float(os.getenv("TREESEARCH_RR_LLM_WEIGHT", "0.6"))
 
-    # Adaptive: query length based alpha adjustment
+    # Adaptive (used by HybridPreFilter, not by RRF pipeline)
     query_length_threshold: int = 8
-    short_query_bm25_weight: float = float(os.getenv("TREESEARCH_RR_SHORT_ALPHA", "0.7"))
+    short_query_bm25_weight: float = float(os.getenv("TREESEARCH_RR_SHORT_ALPHA", "0.4"))
     long_query_bm25_weight: float = float(os.getenv("TREESEARCH_RR_LONG_ALPHA", "0.3"))
 
 

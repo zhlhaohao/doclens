@@ -7,88 +7,76 @@ Tree search 的价值不在"遍历"，而在"提供结构化上下文给 LLM 做
 
 ## Benchmark Baseline (QASPER, 9 samples)
 
-| Metric | BM25 | Embedding | Hybrid | BestFirst |
-|--------|------|-----------|--------|-----------|
-| MRR | 0.606 | **0.726** | 0.481 | 0.272 |
-| Hit@1 | 0.556 | **0.667** | 0.333 | 0.222 |
-| R@5 | 0.806 | **0.917** | 0.833 | 0.444 |
-| NDCG@5 | 0.646 | **0.753** | 0.600 | 0.313 |
-| LLM calls | 0 | 0 | 0 | 19/query |
-| Latency | **0.04s** | 7.8s | 14.2s | 3.7s |
+| Metric | BM25 | Embedding | Hybrid | BestFirst | RR v1 (broken) |
+|--------|------|-----------|--------|-----------|----------------|
+| MRR | 0.606 | **0.726** | 0.133 | 0.281 | 0.333 |
+| Hit@1 | 0.556 | **0.667** | 0.000 | 0.222 | 0.333 |
+| R@5 | 0.806 | **0.917** | 0.139 | 0.444 | 0.278 |
+| LLM calls | 0 | 0 | 0 | 19 | 1 |
 
-## Problems Identified
+## Root Cause Analysis (v1 failure)
 
-1. **BestFirst**: LLM 只看 title+summary（~20% 信息量），19 次 pointwise 打分效率极低
-2. **Hybrid**: per-doc min-max 归一化破坏跨文档可比性
-3. **BestFirst routing**: route_documents() 选错论文后，后续全废
+v1 `retrieve_rerank` scored **worse than pure embedding** because:
 
-## Three-Stage Pipeline Architecture
+1. **Alpha-weighted normalization killed single-channel recall**: alpha=0.7 (BM25 weight),
+   nodes only hit by embedding got score = 0.3 * emb_norm, effectively a 70% penalty.
+   Example: node at emb_rank=0 dropped to fused_rank=2; node at emb_rank=3 dropped to fused_rank=8 (out of top-8).
+2. **Short query heuristic backfired**: QASPER queries average 5-7 words, all classified as
+   "short" -> alpha=0.7 -> BM25 dominance. But BM25 is weaker than embedding on academic text.
+3. **LLM rerank fully replaced fusion scores**: when LLM misjudged relevance, the original
+   retrieval signal was completely lost.
+
+## Fix: Three Key Changes
+
+### 1. Reciprocal Rank Fusion (RRF) replaces weighted normalization
 
 ```
-Stage 1: Recall Maximizer (cheap, parallel, 0 LLM calls)
-  ├── Stage 1a: Embedding top-K_emb (semantic recall)
-  └── Stage 1b: BM25 top-K_bm25 (keyword recall, parallel)
-  → Union(K_emb ∪ K_bm25) → ~30-35 unique candidates
+RRF_score(node) = sum(1 / (k + rank_i)) for each retrieval channel
+```
 
-Stage 2: Signal Enrichment & Soft Prior (0 LLM calls)
-  → Candidate-pool normalization (NOT per-doc)
-  → score = alpha * bm25_norm + (1-alpha) * emb_norm
-  → Soft sort, NO hard pruning
-  → Take top-N for Stage 3
+RRF is rank-based, not score-based. A node appearing at rank 3 in embedding but absent
+from BM25 gets score = 1/(60+4) = 0.0156, NOT zero. This preserves recall from both channels.
 
-Stage 3: Precision Arbiter (1 LLM call, listwise)
+### 2. LLM rerank in "boost mode" (blend, not replace)
+
+```
+final_score = 0.6 * llm_relevance + 0.4 * normalized_rrf_score
+```
+
+LLM judgment improves precision without catastrophically destroying retrieval recall.
+
+### 3. Larger rerank window (8 -> 10)
+
+With RRF preserving more diverse candidates, a slightly larger window captures more hits.
+
+## Architecture
+
+```
+Stage 1: Recall Maximizer (0 LLM calls, parallel)
+  ├── Embedding top-20 (semantic)
+  └── BM25 top-20 (keyword)
+  → Union: ~25-35 unique candidates
+
+Stage 2: Reciprocal Rank Fusion (0 LLM calls)
+  → RRF(emb_ranks, bm25_ranks, k=60)
+  → Rank-based fusion, no normalization needed
+  → Top-10 for Stage 3
+
+Stage 3: LLM Listwise Rerank (1 LLM call, boost mode)
   → LLM sees: title + text excerpt + ancestor path
-  → Listwise ranking (all candidates in one prompt)
-  → Tree-aware context: ancestor path, sibling titles
+  → final = 0.6 * llm_score + 0.4 * rrf_norm
+  → Top-5 output
 ```
 
-### Stage Roles
+## Configuration
 
-| Stage | Role | Cost |
-|-------|------|------|
-| Stage 1 | Recall maximizer (cheap, parallel) | 0 LLM |
-| Stage 2 | Signal enrichment & soft prior | 0 LLM |
-| Stage 3 | Precision arbiter (LLM as judge) | 1 LLM |
+All parameters in `RetrieveRerankConfig`, env var overridable:
 
-### Key Design: Stage 2 is NOT a Hard Filter
-
-Stage 2 的职责是「扩展候选 + 提供更强排序 prior」，而不是 pruning。
-BM25 和 Embedding 并行召回 → Union 候选池 → 避免过早丢掉 recall。
-
-## Configuration (config-first)
-
-所有参数通过 `RetrieveRerankConfig` 配置，支持环境变量覆盖：
-
-```python
-@dataclass
-class RetrieveRerankConfig:
-    # Stage 1: parallel recall
-    embedding_topk: int = 20    # TREESEARCH_RR_EMB_TOPK
-    bm25_topk: int = 20         # TREESEARCH_RR_BM25_TOPK
-
-    # Stage 2: score fusion
-    bm25_weight: float = 0.5    # TREESEARCH_RR_BM25_WEIGHT
-    normalize: str = "candidate_pool"
-
-    # Stage 3: LLM rerank
-    rerank_top_n: int = 8       # TREESEARCH_RR_RERANK_N
-    rerank_mode: str = "listwise"
-    text_excerpt_len: int = 500 # TREESEARCH_RR_EXCERPT_LEN
-    include_ancestors: bool = True
-    include_sibling_titles: bool = False
-
-    # Adaptive
-    query_length_threshold: int = 8
-    short_query_bm25_weight: float = 0.7
-    long_query_bm25_weight: float = 0.3
-```
-
-## Why This Over Simple Hybrid
-
-| Dimension | Simple Emb+BestFirst | Three-Stage Pipeline |
-|-----------|---------------------|---------------------|
-| Recall | BestFirst relies on LLM routing, may miss | Parallel Emb+BM25 global search, won't miss |
-| Precision | LLM sees only summary | LLM sees text + tree context |
-| LLM calls | 19 (wasted on irrelevant nodes) | 1 (listwise over top candidates) |
-| Latency | ~4s (serial LLM calls) | ~2-3s (embedding fast + 1 LLM call) |
-| Tree usage | Only traversal order | Ancestor path as context enhancement |
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| TREESEARCH_RR_EMB_TOPK | 20 | Embedding recall size |
+| TREESEARCH_RR_BM25_TOPK | 20 | BM25 recall size |
+| TREESEARCH_RR_RRF_K | 60 | RRF smoothing constant |
+| TREESEARCH_RR_RERANK_N | 10 | LLM rerank window |
+| TREESEARCH_RR_LLM_WEIGHT | 0.6 | LLM vs RRF blend weight |
+| TREESEARCH_RR_EXCERPT_LEN | 500 | Text excerpt chars for LLM |

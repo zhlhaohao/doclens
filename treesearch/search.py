@@ -819,6 +819,31 @@ def _adaptive_bm25_weight(query: str, config) -> float:
     return config.long_query_bm25_weight
 
 
+def _reciprocal_rank_fusion(
+    *rank_lists: list[str],
+    k: int = 60,
+) -> list[tuple[str, float]]:
+    """Reciprocal Rank Fusion (RRF) over multiple ranked lists.
+
+    RRF score = sum(1 / (k + rank_i)) across all lists.
+    Nodes appearing in only one list still get a valid score (not penalized to 0).
+
+    Args:
+        *rank_lists: each list is an ordered list of node_ids (best first)
+        k: smoothing constant (default 60, standard in literature)
+
+    Returns:
+        sorted list of (node_id, rrf_score) descending
+    """
+    scores: dict[str, float] = {}
+    for ranked in rank_lists:
+        for rank, nid in enumerate(ranked):
+            scores[nid] = scores.get(nid, 0.0) + 1.0 / (k + rank + 1)
+
+    result = sorted(scores.items(), key=lambda x: -x[1])
+    return result
+
+
 async def retrieve_rerank(
     query: str,
     documents: list[Document],
@@ -830,9 +855,13 @@ async def retrieve_rerank(
     """
     Three-stage retrieve-rerank pipeline combining flat retrieval with LLM reranking.
 
-    Stage 1: Parallel recall — Embedding top-K_emb + BM25 top-K_bm25 (0 LLM calls)
-    Stage 2: Union candidate pool + score fusion + candidate-pool normalization (0 LLM calls)
+    Stage 1: Parallel recall -- Embedding top-K_emb + BM25 top-K_bm25 (0 LLM calls)
+    Stage 2: Reciprocal Rank Fusion (RRF) over union candidate pool (0 LLM calls)
     Stage 3: LLM listwise rerank with text excerpt + ancestor path (1 LLM call)
+
+    Key design: RRF instead of weighted normalization. Nodes appearing in only one
+    retrieval channel still get valid scores, avoiding the "single-channel penalty"
+    that kills recall when using alpha-weighted normalization.
 
     Args:
         query: search query
@@ -861,36 +890,15 @@ async def retrieve_rerank(
     emb_results = emb_index.search(query, top_k=config.embedding_topk)
     bm25_results = bm25_index.search(query, top_k=config.bm25_topk)
 
-    emb_scores = {r["node_id"]: r["embedding_score"] for r in emb_results}
-    bm25_scores = {r["node_id"]: r["bm25_score"] for r in bm25_results}
+    # Build rank lists for RRF
+    emb_ranked = [r["node_id"] for r in emb_results]
+    bm25_ranked = [r["node_id"] for r in bm25_results]
 
-    # Stage 2: Union candidate pool + score fusion
-    all_nids = set(emb_scores.keys()) | set(bm25_scores.keys())
+    # Stage 2: Reciprocal Rank Fusion
+    rrf_results = _reciprocal_rank_fusion(emb_ranked, bm25_ranked, k=60)
 
-    def _norm(scores: dict[str, float]) -> dict[str, float]:
-        if not scores:
-            return {}
-        vals = list(scores.values())
-        lo, hi = min(vals), max(vals)
-        rng = hi - lo
-        if rng == 0:
-            return {k: 0.5 for k in scores}
-        return {k: (v - lo) / rng for k, v in scores.items()}
-
-    emb_norm = _norm(emb_scores)
-    bm25_norm = _norm(bm25_scores)
-
-    # Adaptive alpha based on query length
-    alpha = _adaptive_bm25_weight(query, config)
-
-    fused = []
-    for nid in all_nids:
-        score = alpha * bm25_norm.get(nid, 0.0) + (1 - alpha) * emb_norm.get(nid, 0.0)
-        fused.append((nid, score))
-
-    fused.sort(key=lambda x: -x[1])
-    # Soft sort, take top-N for LLM rerank (no hard pruning before this)
-    candidates = fused[:config.rerank_top_n]
+    # Take top-N for LLM rerank
+    candidates = rrf_results[:config.rerank_top_n]
 
     # Build doc_id lookup
     doc_lookup = {r["node_id"]: r["doc_id"] for r in emb_results}
@@ -929,7 +937,7 @@ async def retrieve_rerank(
             "fusion_score": fusion_score,
         })
 
-    # Stage 3: LLM listwise rerank
+    # Stage 3: LLM listwise rerank (boost mode: blend with fusion, not replace)
     if candidate_data:
         sections_text = ""
         for i, c in enumerate(candidate_data):
@@ -964,18 +972,26 @@ async def retrieve_rerank(
             rel = float(item.get("relevance", 0.0))
             rerank_scores[rid] = rel
 
+        # Normalize fusion scores to [0, 1] for blending
+        fusion_vals = [c["fusion_score"] for c in candidate_data]
+        f_lo, f_hi = min(fusion_vals), max(fusion_vals)
+        f_rng = f_hi - f_lo if f_hi > f_lo else 1.0
+
+        # Blend: 60% LLM rerank + 40% RRF fusion (LLM boosts, not replaces)
+        llm_weight = 0.6
         final_scored = []
         for c in candidate_data:
             nid = c["node_id"]
+            fusion_norm = (c["fusion_score"] - f_lo) / f_rng if f_rng > 0 else 0.5
             if nid in rerank_scores:
-                final_scored.append((nid, c["doc_id"], rerank_scores[nid]))
+                blended = llm_weight * rerank_scores[nid] + (1 - llm_weight) * fusion_norm
+                final_scored.append((nid, c["doc_id"], blended))
             else:
-                # Fallback: discount fusion score for nodes LLM didn't rank
-                final_scored.append((nid, c["doc_id"], c["fusion_score"] * 0.5))
+                final_scored.append((nid, c["doc_id"], (1 - llm_weight) * fusion_norm))
 
         final_scored.sort(key=lambda x: -x[2])
     else:
-        final_scored = [(nid, doc_lookup.get(nid, ""), s) for nid, s in fused[:top_k]]
+        final_scored = [(nid, doc_lookup.get(nid, ""), s) for nid, s in rrf_results[:top_k]]
 
     # Build output (group by doc)
     final_scored = final_scored[:top_k]
