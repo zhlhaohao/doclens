@@ -4,26 +4,130 @@
 
 TreeSearch 基于 PageIndex 的树结构索引，核心思路：文档天然是树 → BM25 预筛 → LLM 推理评估节点相关性。当前版本（v0.2.4）已实现 BestFirst + MCTS + BM25 三层搜索管线。
 
-本次重构有两个目标：
+### 项目定位调整
 
-1. **论文需求**：在 RAG 标准 Benchmark（HotpotQA / MultiHop-RAG / HybridRAG-Bench）上跑出优于 Naive RAG baseline 的效果，接近或超越 GraphRAG+KG 的部分子任务。
-2. **开源项目需求**：开箱即用，工业可落地，提升 star。
+**TreeSearch 聚焦 Search（信息检索），不做 RAG（答案生成）。**
+
+核心价值：**给定 query + document tree → 返回最相关的 node_ids（带 score）**
+
+这是一个 **Information Retrieval (IR)** 问题，不是 QA 问题。Answer Generation 属于下游 RAG 框架（LangChain / LlamaIndex 等）的职责，TreeSearch 不重复造轮子。
+
+### 重构目标
+
+1. **论文需求**：在检索 Benchmark 上跑出优于 Naive RAG baseline 的检索指标（Precision/Recall/NDCG/MRR）。
+2. **开源项目需求**：职责单一、边界清晰、开箱即用，用户一看就知道这是一个检索组件。
 
 核心学术论点：**树结构感知检索（Tree-Aware Retrieval）通过 LLM 深度推理替代 Embedding 相似度匹配，在结构化文档检索上实现更优的 precision-cost tradeoff。**
 
 ---
 
-## 一、当前方法的竞争力分析
+## 一、需要移除/降级的已有功能
 
-### 1.1 方法定位
+### 1.1 移除清单
+
+以下模块和功能不属于 Search 核心职责，需要从核心库中移除：
+
+| 模块/功能 | 当前位置 | 处理方式 | 原因 |
+|-----------|---------|---------|------|
+| `answer.py` | `treesearch/answer.py` | 移到 `examples/answer/` | Answer Generation 属于 RAG 层，不是 Search 职责 |
+| `ask()` / `ask_sync()` | `treesearch/__init__.py` 导出 | 移除导出 | 端到端 QA API 不属于检索组件 |
+| `benchmark.py` | `treesearch/benchmark.py` | 移到 `examples/benchmark/` | QA Benchmark（EM/F1）依赖答案生成，与 Search 无关 |
+| CLI `ask` 子命令 | `treesearch/cli.py` | 移除 | 依赖 answer.py |
+| CLI `benchmark` 子命令 | `treesearch/cli.py` | 移除 | 依赖 benchmark.py |
+| `tests/test_answer.py` | `tests/` | 删除 | 对应模块已移除 |
+| `tests/test_benchmark.py` | `tests/` | 删除 | 对应模块已移除 |
+
+### 1.2 移动到 `examples/` 的详细方案
+
+这些代码有参考价值，作为示例保留在 `examples/` 下，供用户参考如何在 TreeSearch 检索结果之上构建 QA 管线。
+
+#### 1.2.1 `examples/answer/` — Answer Generation 示例
+
+将 `treesearch/answer.py` 改写为独立示例脚本：
 
 ```
-传统 RAG:  Document → Chunk Split → Embedding → Vector Top-K → LLM Generate
-GraphRAG:  Document → Entity/Relation Extract → KG Build → Graph Traverse → LLM Generate
-TreeSearch: Document → Tree Index (headings/TOC) → BM25 + LLM Tree Navigate → Node Locate → LLM Generate
+examples/answer/
+├── answer_demo.py        # 基于 treesearch.search() 结果做答案生成的完整示例
+└── README_answer.md      # 说明：如何在 TreeSearch 检索结果上套 LLM 生成答案（可选）
 ```
 
-### 1.2 核心优势
+**`answer_demo.py` 内容要点**：
+- 从 `treesearch/answer.py` 提取核心逻辑：`AnswerResult`、`_build_context()`、`_answer_prompt()`、`generate_answer()`、`ask()`
+- 改为直接 `import treesearch` 调用 `search()`，然后在示例内部完成 answer generation
+- 不再作为 `treesearch` 包的一部分导入，而是一个独立可运行的脚本
+- 支持 extractive / generative / boolean 三种模式
+
+#### 1.2.2 `examples/benchmark/` — QA Benchmark 示例
+
+将 `treesearch/benchmark.py` 改写为独立评测脚本：
+
+```
+examples/benchmark/
+├── qa_benchmark.py       # 端到端 QA 评测脚本（EM/F1，依赖 answer generation）
+├── retrieval_benchmark.py # 纯检索评测脚本（Precision/Recall/NDCG/MRR，不需要答案生成）
+└── README_benchmark.md    # 说明两种评测方式的区别
+```
+
+**`qa_benchmark.py` 内容要点**：
+- 从 `treesearch/benchmark.py` 提取：`BenchmarkSample`、`BenchmarkResult`、`BenchmarkReport`、`exact_match()`、`f1_score()`、数据集加载器（`load_hotpotqa`、`load_qasper`、`load_custom`）、`evaluate_sample()`、`run_benchmark()`
+- 内部引用 `examples/answer/answer_demo.py` 的 `ask()` 函数
+- 作为论文实验脚本使用，不是核心库功能
+
+**`retrieval_benchmark.py` 内容要点**：
+- 纯检索评测，调用 `treesearch.search()` + `treesearch.evaluate_query()` 
+- 不需要任何答案生成
+- **这个才是 TreeSearch 项目真正需要的 benchmark 脚本**
+- 现有的 `examples/06_benchmark.py` 已经是这个角色，保持不变
+
+### 1.3 `__init__.py` 修改
+
+移除以下导出：
+
+```python
+# 移除这些行：
+from treesearch.answer import ask, ask_sync, generate_answer, AnswerResult
+from treesearch.benchmark import run_benchmark, BenchmarkReport, print_report
+```
+
+修改后的 Core API 注释：
+
+```python
+"""
+Core API:
+    build_index      - Build tree indexes from documents (returns list[Document])
+    load_documents   - Load indexed documents from a directory (returns list[Document])
+    search           - Search across documents (returns SearchResult)
+    search_sync      - Synchronous search wrapper
+    evaluate_query   - Evaluate retrieval quality for a single query
+    evaluate_benchmark - Evaluate retrieval quality across multiple queries
+    Document         - Document data class
+"""
+```
+
+### 1.4 `cli.py` 修改
+
+移除 `ask` 和 `benchmark` 子命令，CLI 只保留：
+
+```
+treesearch index     - Build tree structure index from documents
+treesearch search    - Search across indexed documents
+```
+
+---
+
+## 二、当前方法的竞争力分析
+
+### 2.1 方法定位
+
+```
+传统 RAG:   Document → Chunk Split → Embedding → Vector Top-K
+GraphRAG:   Document → Entity/Relation Extract → KG Build → Graph Traverse
+TreeSearch: Document → Tree Index (headings/TOC) → BM25 + LLM Tree Navigate → Node Locate
+```
+
+注意：TreeSearch 只负责检索（Retrieval），不负责生成（Generation）。下游 RAG 框架可以接上任意 LLM 生成答案。
+
+### 2.2 核心优势
 
 | 维度 | TreeSearch | 传统 RAG | GraphRAG |
 |------|-----------|---------|----------|
@@ -33,109 +137,86 @@ TreeSearch: Document → Tree Index (headings/TOC) → BM25 + LLM Tree Navigate 
 | 可解释性 | 树路径直觉清晰 | 弱 | 一般 |
 | 更新成本 | 单文档重建 | 重新 Embed | 增量图更新困难 |
 
-### 1.3 当前短板（需本次重构解决）
+### 2.3 当前短板（需本次重构解决）
 
 | 短板 | 说明 | 影响 |
 |------|------|------|
-| 无 Answer Generation 模块 | 只输出节点，不生成最终答案 | 无法直接跑 QA Benchmark |
-| 无 Query Decomposition | 不支持多跳问题拆解 | Multi-Hop 任务表现差 |
+| 无 Query Decomposition | 不支持多跳问题拆解 | Multi-Hop 检索召回不足 |
 | 不支持 PDF/HTML 输入 | 仅 MD/TXT | 工业场景覆盖不足 |
-| 无标准 Benchmark 集成 | 缺少 BEIR/MTEB/HotpotQA 评测脚本 | 无法量化对比 |
+| 无标准检索 Benchmark 集成 | 缺少 BEIR/MTEB 等检索评测脚本 | 无法量化对比检索效果 |
 | 无 Embedding 可选支持 | 纯 BM25 在语义匹配上有缺陷 | 部分查询召回不足 |
 | 无 Chunk 级检索 | 只定位到 Node（章节级），不到段落 | 大章节内精度不够 |
 
 ---
 
-## 二、重构方案总览
+## 三、重构方案总览
 
-### 2.1 模块架构（v0.3 目标）
+### 3.1 模块架构（v0.3 目标）
 
 ```
 treesearch/
-├── __init__.py          # 公开 API 导出
+├── __init__.py          # 公开 API 导出（聚焦 Search）
 ├── __main__.py          # python -m treesearch 入口
-├── cli.py               # CLI: index / search / benchmark
+├── cli.py               # CLI: index / search（仅两个子命令）
 ├── llm.py               # 异步 LLM 客户端（已有）
 ├── tree.py              # 树数据结构与持久化（已有）
-├── indexer.py            # 文档索引构建（已有，需扩展）
+├── indexer.py           # 文档索引构建（已有，需扩展）
 ├── rank_bm25.py         # BM25 实现（已有）
 ├── search.py            # 搜索策略（已有，需扩展）
-├── answer.py            # [新增] Answer Generation — 基于检索结果生成答案
-├── decompose.py         # [新增] Query Decomposition — 多跳问题拆解+迭代检索 === 改名字为query_decompose.py 
-├── chunk.py             # [新增] Node-内 Chunk 级精细检索
-├── embeddings.py        # [新增] 可选 Embedding 支持（PreFilter 协议实现）
+├── query_decompose.py   # [已有] Query Decomposition — 多跳问题拆解+迭代检索
+├── chunk.py             # [已有] Node-内 Chunk 级精细检索
+├── embeddings.py        # [已有] 可选 Embedding 支持（PreFilter 协议实现）
 ├── metrics.py           # 检索评估指标（已有）
-├── benchmark.py         # [新增] 标准 Benchmark 评测（HotpotQA/MultiHop-RAG 等）
-└── config.py            # [新增] 统一配置管理
+└── config.py            # [已有] 统一配置管理
 ```
 
-### 2.2 优先级排序
+**已移除**：`answer.py`、`benchmark.py`（移到 `examples/`）
+
+### 3.2 核心 API
+
+```python
+import treesearch
+
+# 1. 构建索引
+docs = await treesearch.build_index(["papers/*.md", "docs/*.txt"])
+
+# 2. 搜索
+result = await treesearch.search("How does attention work?", docs)
+# result.documents[0]["nodes"] → [{node_id, title, score, text, ...}]
+
+# 3. 同步搜索
+result = treesearch.search_sync("How does attention work?", docs)
+
+# 4. 多跳搜索（自动 decompose）
+from treesearch import decompose_and_search
+result = await decompose_and_search("What arch does the attention paper use?", docs)
+
+# 5. Chunk 级精细检索
+from treesearch import refine_search
+refined = await refine_search("query", result)
+
+# 6. 评估检索质量
+metrics = treesearch.evaluate_query(retrieved_ids, relevant_ids, k_values=[1,3,5])
+```
+
+### 3.3 优先级排序
 
 | 优先级 | 模块 | 论文价值 | 开源价值 | 工作量 |
 |--------|------|---------|---------|--------|
-| P0 | answer.py (Answer Generation) | 必须 — 跑 QA Benchmark 的前提 | 高 — 用户最常问的需求 | 小 |
-| P0 | decompose.py (Query Decomposition) | 必须 — Multi-Hop 任务提升 10-15pp | 高 — 多跳推理是刚需 | 中 |
-| P0 | benchmark.py (标准评测) | 必须 — 论文数据来源 | 高 — 展示实力 | 中 |
-| P1 | chunk.py (Chunk 级精细检索) | 高 — 提升 Single-Hop 精度 | 高 — 精确答案定位 | 中 |
+| P0 | query_decompose.py (Query Decomposition) | 必须 — Multi-Hop 检索提升 | 高 — 多跳检索是刚需 | 中 |
+| P0 | 检索 Benchmark 评测脚本 | 必须 — 论文数据来源 | 高 — 展示检索实力 | 中 |
+| P1 | chunk.py (Chunk 级精细检索) | 高 — 提升 Single-Hop 精度 | 高 — 精确定位 | 中 |
 | P1 | embeddings.py (可选 Embedding) | 高 — Hybrid 方案消融实验 | 高 — 兼容主流生态 | 小 |
 | P2 | config.py (配置管理) | 低 | 中 | 小 |
 | P2 | PDF/HTML 输入支持 | 低 | 高 — 工业落地必备 | 中 |
 
 ---
 
-## 三、核心新增模块设计
+## 四、核心模块设计
 
-### 3.1 Answer Generation (`answer.py`)
+### 4.1 Query Decomposition (`query_decompose.py`)（已实现）
 
-**目的**：将检索到的 Node 文本传入 LLM 生成最终答案。跑 QA Benchmark 的必要前提。
-
-```python
-async def generate_answer(
-    query: str,
-    search_result: SearchResult,
-    model: str = DEFAULT_MODEL,
-    max_context_tokens: int = 8000,
-    answer_mode: str = "extractive",  # "extractive" | "generative" | "boolean"
-) -> AnswerResult:
-    """
-    基于检索到的节点文本生成答案。
-
-    Args:
-        query: 用户问题
-        search_result: search() 返回的 SearchResult
-        model: LLM 模型
-        max_context_tokens: 上下文 token 上限
-        answer_mode:
-            - extractive: 从检索文本中抽取答案片段
-            - generative: 基于检索文本自由生成
-            - boolean: 是/否判断
-
-    Returns:
-        AnswerResult(answer, confidence, sources, reasoning)
-    """
-```
-
-**端到端 API 设计**：
-
-```python
-# 一行完成 检索 + 生成
-result = await ask(query, documents, model="gpt-4o-mini")
-print(result.answer)       # 最终答案
-print(result.sources)      # 来源节点
-print(result.confidence)   # 置信度
-```
-
-`ask()` 内部调用链：`search()` → context assembly → `generate_answer()`
-
-**Context Assembly 策略**：
-- 按 search score 降序排列节点
-- 每个节点附加其父节点的 title 作为上下文锚点
-- 截断到 `max_context_tokens`
-- 保留节点的 `line_start/line_end` 以支持溯源
-
-### 3.2 Query Decomposition (`decompose.py`)
-
-**目的**：将多跳问题拆解为单跳子问题，逐步检索并积累上下文。这是 Multi-Hop 任务提升的关键。
+**目的**：将多跳问题拆解为单跳子问题，逐步检索并积累上下文。这是 Multi-Hop 检索召回提升的关键。
 
 **核心思路**：不造 KG 轮子，用纯 LLM 推理链替代图遍历。
 
@@ -149,51 +230,11 @@ async def decompose_and_search(
     **search_kwargs,
 ) -> SearchResult:
     """
-    多跳问题的迭代检索。
-
-    Pipeline:
-      1. LLM 分析问题是否需要多跳 → 如果不需要，直接 search()
-      2. LLM 分解为子问题序列
-      3. 逐个子问题执行 search()，将已获取信息注入下一轮搜索的 context
-      4. 合并所有检索结果
-
-    关键设计：
-      - 子问题的 expert_knowledge 参数会注入前序步骤的发现
-      - 每一跳的 search 都享受 BM25 + LLM tree search 的完整能力
-      - 不需要预构建知识图谱
+    多跳问题的迭代检索。返回 SearchResult（不生成答案）。
     """
 ```
 
-**分解 prompt 设计**：
-
-```
-Given a complex question, break it into simple sub-questions that can be answered independently.
-Each sub-question should be self-contained and answerable from a single document section.
-
-Question: {query}
-
-Return JSON:
-{
-    "needs_decomposition": true/false,
-    "sub_questions": ["q1", "q2", "q3"],
-    "reasoning": "..."
-}
-```
-
-**迭代检索流程**：
-
-```
-原始问题: "What model architecture does the paper that introduced attention mechanism use?"
-  ↓ 分解
-子问题1: "Which paper introduced the attention mechanism?" → search → 找到 "Attention Is All You Need"
-子问题2: "What model architecture does Attention Is All You Need use?" → search (with context from step 1) → 找到 "Transformer"
-  ↓ 合并
-最终上下文: [Transformer 相关节点 + Attention 相关节点]
-```
-
-### 3.3 Chunk 级精细检索 (`chunk.py`)
-
-**目的**：当前 search 定位到 Node（章节级），但一个 Node 可能有几千 token。对于精确 QA，需要进一步定位到具体段落/句子。
+### 4.2 Chunk 级精细检索 (`chunk.py`)（已实现）
 
 ```python
 async def refine_search(
@@ -205,75 +246,10 @@ async def refine_search(
     top_k_chunks: int = 3,
     use_bm25: bool = True,
 ) -> RefinedSearchResult:
-    """
-    在 Node 内部进一步做 chunk 级检索。
-
-    Pipeline:
-      1. 取 search_result 中的 top nodes
-      2. 将每个 node.text 切分为 chunks（滑动窗口）
-      3. BM25 + LLM 对 chunks 排序
-      4. 返回精细定位的文本片段
-
-    这一层是可选的——对于大多数应用，Node 级够用。
-    只有在需要精确答案抽取时才调用。
-    """
+    """在 Node 内部进一步做 chunk 级检索。"""
 ```
 
-**两层检索架构**：
-
-```
-search() → Node 级定位（章节粒度，快，BM25+LLM tree search）
-    ↓
-refine_search() → Chunk 级精细定位（段落粒度，可选，BM25+LLM rerank）
-    ↓
-generate_answer() → 生成最终答案
-```
-
-### 3.4 可选 Embedding 支持 (`embeddings.py`)
-
-**目的**：
-- 论文角度：消融实验对比 BM25 vs Embedding vs Hybrid
-- 开源角度：兼容主流 Embedding 生态，降低用户迁移成本
-
-**设计原则**：Embedding 是可选增强，不是必需依赖。
-
-```python
-class EmbeddingPreFilter:
-    """
-    实现 PreFilter 协议的 Embedding 检索器。
-    可无缝替换 NodeBM25Index 作为 search() 的 pre_filter 参数。
-    """
-    def __init__(
-        self,
-        documents: list[Document],
-        embedding_model: str = "text-embedding-3-small",
-        api_key: str = None,
-    ):
-        """构建向量索引。"""
-        ...
-
-    def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
-        """PreFilter 协议实现。"""
-        ...
-
-
-class HybridPreFilter:
-    """
-    BM25 + Embedding 混合评分。
-    hybrid_score = alpha * bm25_norm + (1-alpha) * embedding_norm
-    """
-    def __init__(
-        self,
-        documents: list[Document],
-        bm25_weight: float = 0.5,
-        embedding_model: str = "text-embedding-3-small",
-    ):
-        ...
-```
-
-**PreFilter 协议的设计优势**：
-
-已有的 `PreFilter` 协议使得 Embedding 支持不侵入任何已有代码：
+### 4.3 可选 Embedding 支持 (`embeddings.py`)（已实现）
 
 ```python
 # 纯 BM25（默认，无需 Embedding）
@@ -288,148 +264,74 @@ hybrid_filter = HybridPreFilter(documents, bm25_weight=0.4)
 result = await search(query, documents, pre_filter=hybrid_filter, use_bm25=False)
 ```
 
-### 3.5 标准 Benchmark 评测 (`benchmark.py`)
-
-**目的**：论文数据来源。在标准数据集上量化 TreeSearch 的效果。
-
-**评测数据集选择**：
-
-| 数据集 | 任务类型 | 为什么选 | 预期优势 |
-|--------|---------|---------|---------|
-| **HotpotQA** | 多跳事实 QA | 最经典的 Multi-Hop 基准 | decompose 模块提升 |
-| **MultiHop-RAG** | 多跳检索+生成 | 专门针对 RAG 系统 | 树结构导航优势 |
-| **NarrativeQA** | 长文档理解 | 需要章节级定位 | 树搜索的核心场景 |
-| **QASPER** | 学术论文 QA | 天然结构化，论文有标题层级 | 最大优势场景 |
-| **自建 StructuredDocQA** | 技术文档 QA | 独占赛道 | SOTA |
-
-**评测脚本设计**：
-
-```python
-async def run_benchmark(
-    dataset: str,              # "hotpotqa" | "multihop_rag" | "qasper" | "custom"
-    strategies: list[str],     # ["bm25", "best_first", "best_first+decompose", "hybrid"]
-    models: list[str],         # ["gpt-4o-mini", "gpt-4o"]
-    output_dir: str = "./benchmark_results",
-    max_samples: int = 500,    # 评测样本数
-) -> BenchmarkReport:
-    """
-    标准 Benchmark 评测。
-
-    对每个 (strategy, model) 组合：
-      1. 对数据集中每个问题执行检索+生成
-      2. 计算 EM/F1/BLEU + Retrieval Precision/Recall/NDCG
-      3. 按问题类型细分（single-hop/multi-hop/global）
-      4. 输出对比报表
-    """
-```
-
-**评测指标**：
-
-| 层级 | 指标 | 说明 |
-|------|------|------|
-| 检索层 | Precision@K, Recall@K, NDCG@K, MRR | 检索出的节点是否包含答案 |
-| 生成层 | EM (Exact Match), F1, BLEU | 生成答案与标准答案的匹配度 |
-| 效率层 | LLM Calls, Latency, Token Cost | 成本效率 |
-
 ---
 
-## 四、现有模块增强
+## 五、现有模块增强
 
-### 4.1 search.py 增强
+### 5.1 search.py 增强
 
-**4.1.1 支持 Node 文本返回策略**
-
-当前 `search()` 返回 `text` 字段，但对于 Benchmark 需要更灵活的控制：
+**5.1.1 支持 Node 文本返回策略**
 
 ```python
-# 新增参数
 text_mode: str = "full"  # "full" | "summary" | "none"
 include_ancestors: bool = False  # 是否附加祖先节点的 title/summary 作为上下文
 ```
 
-**4.1.2 支持多文档 merge 策略**
-
-当前多文档搜索是独立搜索后简单拼接。增加全局排序：
+**5.1.2 支持多文档 merge 策略**
 
 ```python
-# 新增参数
 merge_strategy: str = "interleave"  # "interleave" | "per_doc" | "global_score"
 ```
 
-- `interleave`：按分数交错排列各文档结果（当前行为）
-- `per_doc`：每文档独立返回（当前行为）
-- `global_score`：所有文档的节点统一按分数排序
+### 5.2 indexer.py 增强
 
-### 4.2 indexer.py 增强
+**PDF 输入支持（复用 PageIndex）**：PageIndex 作为可选依赖（`pip install treesearch[pdf]`），不强制要求。
 
-**4.2.1 PDF 输入支持（复用 PageIndex）**
+### 5.3 rank_bm25.py 增强
 
-```python
-async def pdf_to_tree(
-    pdf_path: str,
-    model: str = DEFAULT_MODEL,
-    **kwargs,
-) -> dict:
-    """
-    PDF → 树索引。
-    内部调用 PageIndex 的 page_index() 获取 TOC 结构，
-    然后转换为 TreeSearch 的标准 Document 格式。
-    """
-```
-
-**集成方式**：PageIndex 作为可选依赖（`pip install treesearch[pdf]`），不强制要求。
-
-**4.2.2 build_index 支持 PDF**
-
-```python
-# 自动检测文件类型
-await build_index(
-    paths=["docs/*.md", "papers/*.pdf", "reports/*.txt"],
-    output_dir="./indexes",
-)
-```
-
-### 4.3 rank_bm25.py 增强
-
-**4.3.1 TF-IDF 可选实现**
-
-对于短查询，TF-IDF 有时比 BM25 更稳定：
-
-```python
-class NodeTFIDFIndex:
-    """TF-IDF 节点索引，作为 BM25 的替代 PreFilter。"""
-    ...
-```
-
-**4.3.2 查询扩展**
-
-```python
-async def expand_query(query: str, model: str) -> str:
-    """LLM 扩展查询词，弥补 BM25 的词汇鸿沟。"""
-    prompt = f"""Expand this search query with synonyms and related terms.
-    Original: {query}
-    Return the expanded query as a single string."""
-    return await achat(prompt, model=model)
-```
+- TF-IDF 可选实现（`NodeTFIDFIndex`，已实现）
+- 查询扩展（`expand_query`，已实现）
 
 ---
 
-## 五、论文实验设计
+## 六、论文实验设计
 
-### 5.1 论文标题方向
+### 6.1 论文标题方向
 
 **"TreeSearch: Structure-Aware Document Retrieval via LLM-Guided Tree Navigation"**
 
-### 5.2 核心 Claim
+### 6.2 核心 Claim
 
-1. 文档天然具有层级结构（标题、章节、段落），TreeSearch 利用这种结构进行检索，避免了 chunk splitting 导致的上下文碎片化
+1. 文档天然具有层级结构，TreeSearch 利用这种结构进行检索，避免了 chunk splitting 导致的上下文碎片化
 2. LLM 在树节点上做相关性推理，比 Embedding 相似度匹配更精准（可消融实验验证）
-3. Query Decomposition + Tree Search 组合可在多跳任务上接近 KG-based 方法，但构建成本远低于 GraphRAG
+3. Query Decomposition + Tree Search 组合可在多跳检索上接近 KG-based 方法，但构建成本远低于 GraphRAG
 
-### 5.3 实验矩阵
+### 6.3 论文只跑检索指标（不跑 QA 生成指标）
+
+**关键决策**：论文聚焦检索评测，不评答案生成质量。
+
+理由：
+- TreeSearch 的核心贡献是 **检索**，不是答案生成
+- 检索指标（P/R/NDCG/MRR）直接反映 TreeSearch 的价值
+- Answer Generation 只是在检索结果上套一层 LLM，任何框架都能做，不是 TreeSearch 的贡献
+- BEIR / MTEB 等标准检索 Benchmark 也只评检索质量
+
+如果 reviewer 要求看端到端 QA 效果，可以用 `examples/answer/` 和 `examples/benchmark/qa_benchmark.py` 补充实验。
+
+### 6.4 评测数据集选择
+
+| 数据集 | 任务 | 评测指标 | 说明 |
+|--------|------|---------|------|
+| **QASPER** | 检索支撑段落 | P@K, R@K, NDCG@K | 天然有标题层级，最大优势场景 |
+| **HotpotQA** | 检索 supporting facts | P@K, R@K, MRR | 多跳场景 + query decompose |
+| **自建 StructuredDocQA** | 技术文档检索 | P@K, R@K, NDCG@K | 独占赛道 |
+
+所有这些数据集都有 **ground truth supporting facts / evidence paragraphs**，可以直接评检索准确率，不需要生成答案。
+
+### 6.5 实验矩阵
 
 ```
-数据集: [QASPER, HotpotQA, MultiHop-RAG, NarrativeQA, StructuredDocQA(自建)]
+数据集: [QASPER, HotpotQA, StructuredDocQA(自建)]
 
 方法:
   - Naive RAG (chunk + embedding + top-k)
@@ -442,48 +344,50 @@ async def expand_query(query: str, model: str) -> str:
 
 LLM 模型: [gpt-4o-mini, gpt-4o, DeepSeek-V3]
 
-指标:
-  - 检索: Precision@3, Recall@3, NDCG@3, MRR
-  - 生成: EM, F1
-  - 效率: LLM Calls, Latency(s), Token Cost($)
+指标（纯检索）:
+  - Precision@K (K=1,3,5)
+  - Recall@K (K=1,3,5)
+  - NDCG@K (K=1,3,5)
+  - MRR
+  - F1@K
+  - Hit@K
+  - LLM Calls, Latency(s), Token Cost($)
 ```
 
-### 5.4 预期实验结论
+### 6.6 预期实验结论
 
 | 实验 | 预期结论 |
 |------|---------|
-| TreeSearch-BF vs Naive RAG | Single-Hop: +8-15pp EM/F1；Multi-Hop: +3-5pp |
-| TreeSearch-BF+Decompose vs Naive RAG | Multi-Hop: +12-20pp（decompose 是关键） |
-| TreeSearch-BF vs GraphRAG | Single-Hop: 接近或略优；Multi-Hop: 略低但 cost 低 10x |
-| TreeSearch-Hybrid vs TreeSearch-BF | Hybrid 在语义模糊查询上 +3-5pp，说明 Embedding 是有益补充 |
-| BM25+LLM 消融 | 去掉 LLM rerank 后掉 10-15pp，说明 LLM 推理评估的关键性 |
-| Tree Structure 消融 | 去掉树结构（flat BM25+LLM）后掉 5-8pp，说明结构感知的贡献 |
-| QASPER (论文 QA) | TreeSearch SOTA — 论文天然有标题层级，树搜索最大优势场景 |
+| TreeSearch-BF vs Naive RAG | 检索 P@3/R@3: +10-20pp |
+| TreeSearch-BF+Decompose vs TreeSearch-BF | Multi-Hop 检索 R@3: +10-15pp |
+| TreeSearch-BF vs GraphRAG | Single-Hop 接近或略优；Multi-Hop 略低但 cost 低 10x |
+| TreeSearch-Hybrid vs TreeSearch-BF | 语义模糊查询 +3-5pp |
+| BM25+LLM 消融 | 去掉 LLM rerank 后检索 P@3 掉 10-15pp |
+| Tree Structure 消融 | 去掉树结构（flat BM25+LLM）后掉 5-8pp |
+| QASPER (论文 QA) | TreeSearch 检索 SOTA — 论文天然有标题层级 |
 
-### 5.5 关键图表设计
+### 6.7 关键图表设计
 
-1. **Accuracy-Cost Tradeoff 曲线**：X 轴 LLM API Cost，Y 轴 EM/F1。展示 TreeSearch 在同成本下的精度优势
+1. **Retrieval Accuracy-Cost Tradeoff 曲线**：X 轴 LLM API Cost，Y 轴 NDCG@3。展示 TreeSearch 在同成本下的检索精度优势
 2. **搜索路径可视化**：对比 flat retrieval vs tree navigation 的路径差异
-3. **消融实验条形图**：各组件（BM25 / LLM / Tree Structure / Decompose / Embedding）的贡献分解
-4. **按问题类型细分表**：Single-Hop / Multi-Hop / Open-ended 分别报数
+3. **消融实验条形图**：各组件（BM25 / LLM / Tree Structure / Decompose / Embedding）对检索指标的贡献分解
+4. **按问题类型细分表**：Single-Hop / Multi-Hop 分别报检索指标
 5. **Case Study**：2-3 个典型查询的完整搜索过程展示
 
 ---
 
-## 六、开源项目完善计划
+## 七、开源项目完善计划
 
-### 6.1 用户体验提升
+### 7.1 用户体验提升
 
 | 改进 | 说明 | 优先级 |
 |------|------|--------|
-| `ask()` 一行 API | 检索+生成一步到位 | P0 |
 | `pip install treesearch[pdf]` | PDF 支持作为可选依赖 | P1 |
 | `pip install treesearch[embedding]` | Embedding 支持作为可选依赖 | P1 |
 | 更好的 error message | API Key 缺失、文件格式不支持等场景 | P1 |
 | 进度条 | 索引构建和搜索过程的进度反馈 | P2 |
-| Streaming 输出 | answer generation 支持流式返回 | P2 |
 
-### 6.2 开箱即用的 API 设计
+### 7.2 开箱即用的 API 设计
 
 ```python
 import treesearch
@@ -494,34 +398,27 @@ docs = await treesearch.build_index(["papers/*.md", "docs/*.txt"])
 # 2. 搜索（一行）
 result = await treesearch.search("How does attention work?", docs)
 
-# 3. 问答（一行）
-answer = await treesearch.ask("How does attention work?", docs)
-print(answer.text)
+# 3. 同步搜索
+result = treesearch.search_sync("How does attention work?", docs)
 
-# 4. 多跳问答（自动 decompose）
-answer = await treesearch.ask(
-    "What architecture does the paper that introduced attention use?",
-    docs,
-    decompose=True,
-)
+# 4. 多跳搜索
+from treesearch import decompose_and_search
+result = await decompose_and_search("complex multi-hop query", docs)
 
-# 5. 混合检索（BM25 + Embedding）
-answer = await treesearch.ask(
-    "How does attention work?",
-    docs,
-    use_embedding=True,
-)
+# 5. 检索评估
+metrics = treesearch.evaluate_query(retrieved_ids, relevant_ids, k_values=[1,3,5])
 ```
 
-### 6.3 README 更新重点
+### 7.3 README 更新重点
 
 1. 一行安装 + 三行跑通的 Quick Start
-2. 与 LangChain / LlamaIndex / GraphRAG 的对比表格
-3. Benchmark 结果表（从论文实验直接引用）
+2. 与 LangChain / LlamaIndex / GraphRAG 的对比表格（聚焦检索能力）
+3. Benchmark 检索结果表（从论文实验直接引用）
 4. Architecture diagram（三层搜索管线图）
 5. 中英文双 README
+6. 明确说明：TreeSearch 是检索组件，可集成到任何 RAG 框架中
 
-### 6.4 依赖管理
+### 7.4 依赖管理
 
 ```toml
 [project]
@@ -533,7 +430,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pdf = ["pageindex>=0.1"]     # PDF 支持
+pdf = ["pageindex>=0.1"]
 all = ["pageindex>=0.1"]
 
 [project.scripts]
@@ -542,55 +439,58 @@ treesearch = "treesearch.cli:main"
 
 ---
 
-## 七、实施路线
+## 八、实施路线
 
-### Phase 4: Answer Generation + Benchmark 基础（2 周）
+### Phase 4: 核心库瘦身 + 检索 Benchmark（1 周）
 
-- [ ] `answer.py`: AnswerResult, generate_answer(), ask()
-- [ ] `benchmark.py`: HotpotQA 数据加载 + 评测循环
-- [ ] QASPER 数据集集成（论文 QA，最佳优势场景）
-- [ ] 端到端评测脚本：search → answer → evaluate
-- [ ] 测试覆盖
+- [x] 从核心库移除 `answer.py` → `examples/answer/answer_demo.py`
+- [x] 从核心库移除 `benchmark.py` → `examples/benchmark/qa_benchmark.py`
+- [x] 从 `__init__.py` 移除 `ask`/`ask_sync`/`generate_answer`/`AnswerResult`/`run_benchmark`/`BenchmarkReport`/`print_report` 导出
+- [x] 从 `cli.py` 移除 `ask` 和 `benchmark` 子命令
+- [x] 删除 `tests/test_answer.py` 和 `tests/test_benchmark.py`
+- [ ] 完善 `examples/06_benchmark.py`（纯检索评测脚本）
+- [ ] 测试所有保留模块正常工作
 
-### Phase 5: Query Decomposition + Multi-Hop（2 周）
+### Phase 5: Query Decomposition 优化 + Multi-Hop 检索评测（2 周）
 
-- [ ] `decompose.py`: 问题分析、分解、迭代检索
-- [ ] search() 集成 decompose 选项
-- [ ] HotpotQA Multi-Hop 子集评测
-- [ ] MultiHop-RAG 数据集集成
-- [ ] 消融实验：with/without decompose
+- [ ] 优化 `query_decompose.py` 的多跳检索效果
+- [ ] HotpotQA 检索子集评测（只评检索，不评答案）
+- [ ] QASPER 检索评测
+- [ ] 消融实验：with/without decompose 对检索指标的影响
 
-### Phase 6: Chunk 级检索 + Embedding 支持（1 周）
+### Phase 6: Chunk 级检索 + Embedding 支持优化（1 周）
 
-- [ ] `chunk.py`: Node 内 chunk splitting + BM25/LLM rerank
-- [ ] `embeddings.py`: EmbeddingPreFilter, HybridPreFilter
-- [ ] 消融实验：BM25 vs Embedding vs Hybrid
-- [ ] query expansion 实现
+- [ ] 优化 `chunk.py` 的检索精度
+- [ ] 优化 `embeddings.py` 的 Hybrid 方案
+- [ ] 消融实验：BM25 vs Embedding vs Hybrid（检索指标对比）
+- [ ] query expansion 优化
 
 ### Phase 7: 工程完善 + 论文 Ready（1 周）
 
 - [ ] PDF 输入支持（集成 PageIndex）
 - [ ] config.py 统一配置
-- [ ] README 全面更新
-- [ ] 论文实验跑完，结果汇总
+- [ ] README 全面更新（聚焦检索能力）
+- [ ] 论文检索实验跑完，结果汇总
 - [ ] 版本发布 v0.3.0
 
 ---
 
-## 八、风险与应对
+## 九、风险与应对
 
 | 风险 | 概率 | 影响 | 应对 |
 |------|------|------|------|
-| HotpotQA 效果不及预期 | 中 | 论文数据不够 | 聚焦 QASPER/NarrativeQA 等结构化文档 QA |
-| LLM API 成本过高 | 低 | 评测预算超支 | 优先用 gpt-4o-mini，QASPER 数据量适中 |
-| Multi-Hop 提升不够 | 中 | 论文故事不完整 | 强调 cost-accuracy tradeoff 而非绝对精度 |
-| Embedding 方案与 BM25 差距小 | 低 | 消融实验不显著 | 本身就是好消息——说明纯 BM25+LLM 够强 |
+| HotpotQA 检索效果不及预期 | 中 | 论文数据不够 | 聚焦 QASPER 等结构化文档检索 |
+| LLM API 成本过高 | 低 | 评测预算超支 | 优先用 gpt-4o-mini |
+| Multi-Hop 检索提升不够 | 中 | 论文故事不完整 | 强调 cost-accuracy tradeoff |
+| Embedding 方案与 BM25 差距小 | 低 | 消融实验不显著 | 好消息——纯 BM25+LLM 够强 |
+| Reviewer 要求看端到端 QA 效果 | 中 | 需补充实验 | 用 examples/ 下的脚本快速补实验 |
 
 ---
 
-## 九、论文 vs 开源的协同策略
+## 十、论文 vs 开源的协同策略
 
-- 论文中的每个实验对应一个 `examples/` 下的可复现脚本
-- Benchmark 结果直接在 README 中展示，增强项目可信度
+- 论文中的每个检索实验对应一个 `examples/` 下的可复现脚本
+- Benchmark 检索结果直接在 README 中展示，增强项目可信度
 - 论文投稿后第一时间更新 README 附上 arXiv 链接
-- 所有实验代码开源，支持一键复现（`python examples/07_paper_experiments.py`）
+- 所有实验代码开源，支持一键复现
+- `examples/answer/` 和 `examples/benchmark/qa_benchmark.py` 作为"可选扩展"展示 TreeSearch 集成 RAG 的能力

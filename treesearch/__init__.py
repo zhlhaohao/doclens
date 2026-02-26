@@ -1,24 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: TreeSearch - Reasoning-based RAG with tree-structured document retrieval.
+@description: TreeSearch - Structure-aware document retrieval via LLM-guided tree navigation.
 
 No vector embeddings. No chunk splitting. Pure LLM reasoning over document trees.
 
 Core API:
-    build_index     - Build tree indexes from documents (returns list[Document])
-    load_documents  - Load indexed documents from a directory (returns list[Document])
-    search          - Search across documents (returns SearchResult)
-    ask             - End-to-end QA: search + answer generation (returns AnswerResult)
-    Document        - Document data class
+    build_index      - Build tree indexes from documents (returns list[Document])
+    load_documents   - Load indexed documents from a directory (returns list[Document])
+    search           - Search across documents (returns SearchResult)
+    search_sync      - Synchronous search wrapper
+    evaluate_query   - Evaluate retrieval quality for a single query
+    evaluate_benchmark - Evaluate retrieval quality across multiple queries
+    Document         - Document data class
 """
 __version__ = "0.3.0"
 
-# Core API: index -> load -> search -> ask
+# Core API: index -> load -> search
 from treesearch.tree import Document, load_index, load_documents, save_index, clear_doc_cache
 from treesearch.indexer import build_index, md_to_tree, text_to_tree
 from treesearch.search import search, search_sync, SearchResult
-from treesearch.answer import ask, ask_sync, generate_answer, AnswerResult
 
 # Query decomposition
 from treesearch.query_decompose import decompose_and_search, analyze_query
@@ -27,7 +28,7 @@ from treesearch.query_decompose import decompose_and_search, analyze_query
 from treesearch.chunk import refine_search, RefinedSearchResult, Chunk
 
 # Configuration
-from treesearch.config import TreeSearchConfig, get_config, set_config
+from treesearch.config import TreeSearchConfig, get_config, set_config, reset_config
 
 # Advanced: search strategies, BM25, metrics (for power users)
 from treesearch.search import (
@@ -49,9 +50,6 @@ from treesearch.metrics import (
     evaluate_query,
     evaluate_benchmark,
 )
-
-# Benchmark
-from treesearch.benchmark import run_benchmark, BenchmarkReport, print_report
 
 # Tree utilities (for advanced usage)
 from treesearch.tree import (

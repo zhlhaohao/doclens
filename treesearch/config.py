@@ -3,6 +3,10 @@
 @author:XuMing(xuming624@qq.com)
 @description: Unified configuration management for TreeSearch.
 
+This is the SINGLE source of truth for all environment variables and defaults.
+Other modules (llm.py, embeddings.py, etc.) should import from here instead of
+calling os.getenv() directly.
+
 Provides sensible defaults with environment variable overrides.
 """
 import os
@@ -43,15 +47,12 @@ class IndexConfig:
 
 
 @dataclass
-class AnswerConfig:
-    """Configuration for answer generation."""
-    answer_mode: str = "extractive"
-    max_context_tokens: int = 8000
-
-
-@dataclass
 class TreeSearchConfig:
-    """Top-level configuration for TreeSearch."""
+    """Top-level configuration for TreeSearch.
+
+    All environment variable reading is centralized here.
+    Other modules should call get_config() to access these values.
+    """
     # LLM settings
     model: str = os.getenv("TREESEARCH_MODEL", "gpt-4o-mini")
     api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
@@ -64,14 +65,12 @@ class TreeSearchConfig:
     # Sub-configs
     search: SearchConfig = field(default_factory=SearchConfig)
     index: IndexConfig = field(default_factory=IndexConfig)
-    answer: AnswerConfig = field(default_factory=AnswerConfig)
 
     @classmethod
     def from_env(cls) -> "TreeSearchConfig":
-        """Create config from environment variables."""
+        """Create config from environment variables with overrides."""
         config = cls()
 
-        # Override from env
         if os.getenv("TREESEARCH_STRATEGY"):
             config.search.strategy = os.getenv("TREESEARCH_STRATEGY")
         if os.getenv("TREESEARCH_MAX_LLM_CALLS"):
@@ -80,8 +79,6 @@ class TreeSearchConfig:
             config.search.value_threshold = float(os.getenv("TREESEARCH_THRESHOLD"))
         if os.getenv("TREESEARCH_USE_EMBEDDING"):
             config.use_embedding = os.getenv("TREESEARCH_USE_EMBEDDING").lower() in ("1", "true", "yes")
-        if os.getenv("TREESEARCH_ANSWER_MODE"):
-            config.answer.answer_mode = os.getenv("TREESEARCH_ANSWER_MODE")
 
         return config
 
@@ -91,7 +88,7 @@ _default_config: Optional[TreeSearchConfig] = None
 
 
 def get_config() -> TreeSearchConfig:
-    """Get the global default configuration."""
+    """Get the global default configuration (lazy singleton)."""
     global _default_config
     if _default_config is None:
         _default_config = TreeSearchConfig.from_env()
@@ -102,3 +99,9 @@ def set_config(config: TreeSearchConfig) -> None:
     """Set the global default configuration."""
     global _default_config
     _default_config = config
+
+
+def reset_config() -> None:
+    """Reset global config to None, forcing re-initialization on next get_config() call."""
+    global _default_config
+    _default_config = None

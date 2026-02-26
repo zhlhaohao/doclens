@@ -2,28 +2,36 @@
 """
 @author:XuMing(xuming624@qq.com)
 @description: Async-first LLM client with singleton connection pool, retry, token counting, and JSON extraction.
+
+All environment variables (OPENAI_API_KEY, OPENAI_BASE_URL, TREESEARCH_MODEL)
+are read from config.py. Do NOT use os.getenv() here.
 """
 import asyncio
 import json
 import logging
-import os
 from typing import Optional, Any
 
 import openai
 import tiktoken
-from dotenv import load_dotenv
 
-load_dotenv()
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Global defaults from env
+# Constants
 # ---------------------------------------------------------------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
-DEFAULT_MODEL = os.getenv("TREESEARCH_MODEL", "gpt-4o-mini")
 MAX_RETRIES = 3
+
+
+def _get_default_model() -> str:
+    """Get default model from config (lazy, always fresh)."""
+    return get_config().model
+
+
+# Module-level alias for backward compatibility (used as default parameter).
+# NOTE: This is evaluated at import time. For runtime-fresh value, use _get_default_model().
+DEFAULT_MODEL = "gpt-4o-mini"  # Static fallback; actual value comes from config at call time.
 
 # ---------------------------------------------------------------------------
 # Singleton async client (connection pool reuse)
@@ -33,12 +41,14 @@ _async_clients: dict[str, openai.AsyncOpenAI] = {}
 
 def _get_async_client(api_key: Optional[str] = None) -> openai.AsyncOpenAI:
     """Return a singleton AsyncOpenAI client keyed by (api_key, base_url)."""
-    key = api_key or OPENAI_API_KEY or ""
-    cache_key = f"{key}::{OPENAI_BASE_URL or ''}"
+    cfg = get_config()
+    key = api_key or cfg.api_key or ""
+    base_url = cfg.base_url
+    cache_key = f"{key}::{base_url or ''}"
     if cache_key not in _async_clients:
         kw: dict[str, Any] = {"api_key": key}
-        if OPENAI_BASE_URL:
-            kw["base_url"] = OPENAI_BASE_URL
+        if base_url:
+            kw["base_url"] = base_url
         _async_clients[cache_key] = openai.AsyncOpenAI(**kw)
     return _async_clients[cache_key]
 
@@ -49,10 +59,12 @@ def _get_async_client(api_key: Optional[str] = None) -> openai.AsyncOpenAI:
 _encoder_cache: dict[str, tiktoken.Encoding] = {}
 
 
-def count_tokens(text: str, model: str = DEFAULT_MODEL) -> int:
+def count_tokens(text: str, model: Optional[str] = None) -> int:
     """Count tokens using tiktoken with cached encoder."""
     if not text:
         return 0
+    if model is None:
+        model = _get_default_model()
     if model not in _encoder_cache:
         _encoder_cache[model] = tiktoken.encoding_for_model(model)
     return len(_encoder_cache[model].encode(text))
@@ -64,12 +76,14 @@ def count_tokens(text: str, model: str = DEFAULT_MODEL) -> int:
 
 async def _achat_impl(
     prompt: str,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
     temperature: float = 0,
     messages: Optional[list[dict]] = None,
 ) -> openai.types.chat.ChatCompletion:
     """Internal: async chat completion with retry. Returns raw response."""
+    if model is None:
+        model = _get_default_model()
     if messages is not None:
         msgs = list(messages) + [{"role": "user", "content": prompt}]
     else:
@@ -98,7 +112,7 @@ async def _achat_impl(
 
 async def achat(
     prompt: str,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
     temperature: float = 0,
     messages: Optional[list[dict]] = None,
@@ -111,7 +125,7 @@ async def achat(
 
 async def achat_with_finish_reason(
     prompt: str,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
     temperature: float = 0,
     messages: Optional[list[dict]] = None,
@@ -130,7 +144,7 @@ async def achat_with_finish_reason(
 
 def chat(
     prompt: str,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
     temperature: float = 0,
     messages: Optional[list[dict]] = None,

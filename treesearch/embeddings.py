@@ -22,6 +22,7 @@ from typing import Optional, Callable
 
 import openai
 
+from .config import get_config
 from .rank_bm25 import NodeBM25Index, tokenize
 from .tree import Document, flatten_tree
 
@@ -100,10 +101,10 @@ class EmbeddingPreFilter:
             self._doc_node_map[doc.doc_id] = doc_indices
 
     def _get_client(self) -> openai.OpenAI:
-        """Get sync OpenAI client for embedding."""
-        import os
-        key = self.api_key or os.getenv("OPENAI_API_KEY", "")
-        base_url = os.getenv("OPENAI_BASE_URL")
+        """Get sync OpenAI client for embedding, using centralized config."""
+        cfg = get_config()
+        key = self.api_key or cfg.api_key or ""
+        base_url = cfg.base_url
         kw = {"api_key": key}
         if base_url:
             kw["base_url"] = base_url

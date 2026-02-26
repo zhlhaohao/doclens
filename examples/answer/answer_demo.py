@@ -1,24 +1,43 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Answer generation module. Generates answers from retrieved tree nodes.
+@description: Answer generation demo - shows how to build QA on top of TreeSearch retrieval.
 
-Supports three modes:
+This is an example of how to use TreeSearch as a retrieval component and add
+answer generation on top. TreeSearch focuses on search; answer generation is
+left to downstream applications (like this demo).
+
+Supports three answer modes:
   - extractive: extract answer spans from retrieved text
   - generative: free-form answer based on retrieved context
   - boolean: yes/no judgment
+
+Usage:
+    python examples/answer/answer_demo.py
 """
 import asyncio
 import logging
+import os
+import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .llm import achat, extract_json, count_tokens, DEFAULT_MODEL
-from .search import search, SearchResult
-from .tree import Document
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from treesearch import search, SearchResult, Document, load_documents, build_index
+from treesearch.llm import achat, extract_json, count_tokens, DEFAULT_MODEL
+from treesearch.query_decompose import decompose_and_search
 
 logger = logging.getLogger(__name__)
 
+pwd_path = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(os.path.dirname(pwd_path), "data", "markdowns")
+INDEX_DIR = os.path.join(os.path.dirname(pwd_path), "indexes", "best_first_demo")
+
+
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 
 @dataclass
 class AnswerResult:
@@ -30,6 +49,10 @@ class AnswerResult:
     search_result: Optional[SearchResult] = None
     llm_calls: int = 0
 
+
+# ---------------------------------------------------------------------------
+# Core functions
+# ---------------------------------------------------------------------------
 
 def _build_context(search_result: SearchResult, max_context_tokens: int = 8000) -> tuple[str, list[dict]]:
     """
@@ -72,10 +95,9 @@ def _build_context(search_result: SearchResult, max_context_tokens: int = 8000) 
         section = f"[Document: {node['doc_name']}] [Section: {node['title']}]\n{text}\n"
         section_tokens = count_tokens(section)
         if total_tokens + section_tokens > max_context_tokens:
-            # Try truncating this section
             remaining = max_context_tokens - total_tokens
             if remaining > 100:
-                truncated = text[:remaining * 4]  # rough char estimate
+                truncated = text[:remaining * 4]
                 section = f"[Document: {node['doc_name']}] [Section: {node['title']}]\n{truncated}\n"
                 context_parts.append(section)
                 sources.append({
@@ -144,7 +166,7 @@ async def generate_answer(
 
     Args:
         query: user question
-        search_result: SearchResult from search()
+        search_result: SearchResult from treesearch.search()
         model: LLM model name
         max_context_tokens: max context token budget
         answer_mode: 'extractive' | 'generative' | 'boolean'
@@ -185,7 +207,6 @@ async def ask(
     answer_mode: str = "extractive",
     max_context_tokens: int = 8000,
     decompose: bool = False,
-    use_embedding: bool = False,
     pre_filter=None,
     **search_kwargs,
 ) -> AnswerResult:
@@ -200,43 +221,21 @@ async def ask(
         answer_mode: 'extractive' | 'generative' | 'boolean'
         max_context_tokens: max context token budget
         decompose: enable query decomposition for multi-hop questions
-        use_embedding: use embedding pre-filter (requires embeddings module)
         pre_filter: custom PreFilter instance
         **search_kwargs: additional args passed to search()
 
     Returns:
         AnswerResult
     """
-    # Optional embedding pre-filter
-    if use_embedding and pre_filter is None:
-        try:
-            from .embeddings import EmbeddingPreFilter
-            pre_filter = EmbeddingPreFilter(documents, model=model)
-        except ImportError:
-            logger.warning("Embedding support not available, falling back to BM25")
-
-    # Optional query decomposition
     if decompose:
-        try:
-            from .query_decompose import decompose_and_search
-            search_result = await decompose_and_search(
-                query=query,
-                documents=documents,
-                model=model,
-                strategy=strategy,
-                pre_filter=pre_filter,
-                **search_kwargs,
-            )
-        except ImportError:
-            logger.warning("Query decomposition not available, using direct search")
-            search_result = await search(
-                query=query,
-                documents=documents,
-                model=model,
-                strategy=strategy,
-                pre_filter=pre_filter,
-                **search_kwargs,
-            )
+        search_result = await decompose_and_search(
+            query=query,
+            documents=documents,
+            model=model,
+            strategy=strategy,
+            pre_filter=pre_filter,
+            **search_kwargs,
+        )
     else:
         search_result = await search(
             query=query,
@@ -247,7 +246,6 @@ async def ask(
             **search_kwargs,
         )
 
-    # Generate answer
     answer_result = await generate_answer(
         query=query,
         search_result=search_result,
@@ -263,3 +261,49 @@ async def ask(
 def ask_sync(query: str, documents: list[Document], **kwargs) -> AnswerResult:
     """Synchronous wrapper around :func:`ask`."""
     return asyncio.run(ask(query, documents, **kwargs))
+
+
+# ---------------------------------------------------------------------------
+# Demo
+# ---------------------------------------------------------------------------
+
+async def main():
+    """Demo: search + answer generation using TreeSearch."""
+    print("Loading indexed documents...")
+    documents = load_documents(INDEX_DIR)
+    if not documents:
+        print(f"No indexes found in {INDEX_DIR}, building...")
+        documents = await build_index(
+            paths=[f"{DATA_DIR}/*.md"],
+            output_dir=INDEX_DIR,
+        )
+
+    print(f"Loaded {len(documents)} document(s)")
+    for doc in documents:
+        print(f"  - {doc.doc_name}")
+
+    queries = [
+        "How to configure openclaw plugins?",
+        "接听电话的白名单如何设置？",
+    ]
+
+    for query in queries:
+        print(f"\n{'='*60}")
+        print(f"Question: {query}")
+        print(f"{'='*60}")
+
+        result = await ask(query=query, documents=documents)
+
+        print(f"\nAnswer: {result.answer}")
+        print(f"Confidence: {result.confidence:.2f}")
+        if result.reasoning:
+            print(f"Reasoning: {result.reasoning}")
+        print(f"\nSources ({len(result.sources)}):")
+        for src in result.sources:
+            print(f"  [{src.get('score', 0):.2f}] {src.get('doc_name', '')} > {src.get('title', '')}")
+        print(f"\nLLM calls: {result.llm_calls}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    asyncio.run(main())

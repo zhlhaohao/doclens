@@ -1,26 +1,38 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Standard benchmark evaluation framework.
+@description: QA Benchmark evaluation script.
 
-Supports: HotpotQA, MultiHop-RAG, NarrativeQA, QASPER, custom datasets.
-Evaluates retrieval (Precision/Recall/NDCG/MRR) and generation (EM/F1/BLEU) metrics.
+This is an example showing how to run end-to-end QA evaluation (EM/F1) on top of
+TreeSearch retrieval. TreeSearch itself focuses on search; this script adds
+answer generation for benchmark purposes.
+
+Supports: HotpotQA, QASPER, custom datasets.
+Evaluates retrieval (Precision/Recall/NDCG/MRR) and generation (EM/F1) metrics.
+
+Usage:
+    python examples/benchmark/qa_benchmark.py --dataset custom --data-path data.jsonl --index_dir ./indexes/
 """
 import asyncio
 import json
 import logging
 import os
 import re
+import sys
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .answer import ask, AnswerResult
-from .llm import DEFAULT_MODEL
-from .metrics import evaluate_query, evaluate_benchmark
-from .search import search, SearchResult
-from .tree import Document
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# Import answer generation from the answer demo
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "answer"))
+from answer_demo import ask, AnswerResult
+
+from treesearch import search, SearchResult, Document, load_documents
+from treesearch.llm import DEFAULT_MODEL
+from treesearch.metrics import evaluate_query, evaluate_benchmark
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +86,8 @@ class BenchmarkReport:
 def _normalize_answer(s: str) -> str:
     """Normalize answer string for comparison."""
     s = s.lower().strip()
-    # Remove articles
     s = re.sub(r"\b(a|an|the)\b", " ", s)
-    # Remove punctuation
     s = re.sub(r"[^\w\s]", "", s)
-    # Collapse whitespace
     s = " ".join(s.split())
     return s
 
@@ -112,11 +121,7 @@ def f1_score(prediction: str, ground_truth: str) -> float:
 # ---------------------------------------------------------------------------
 
 def load_hotpotqa(data_path: str, max_samples: int = 500) -> list[BenchmarkSample]:
-    """
-    Load HotpotQA dataset.
-
-    Expected format: JSONL with fields: question, answer, type, supporting_facts
-    """
+    """Load HotpotQA dataset. Expected format: JSONL."""
     samples = []
     with open(data_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -124,9 +129,7 @@ def load_hotpotqa(data_path: str, max_samples: int = 500) -> list[BenchmarkSampl
                 break
             item = json.loads(line.strip())
             qtype = item.get("type", "")
-            if qtype == "bridge":
-                qtype = "multi_hop"
-            elif qtype == "comparison":
+            if qtype in ("bridge", "comparison"):
                 qtype = "multi_hop"
             else:
                 qtype = "single_hop"
@@ -143,11 +146,7 @@ def load_hotpotqa(data_path: str, max_samples: int = 500) -> list[BenchmarkSampl
 
 
 def load_qasper(data_path: str, max_samples: int = 500) -> list[BenchmarkSample]:
-    """
-    Load QASPER dataset (academic paper QA).
-
-    Expected format: JSON with papers, each containing qas.
-    """
+    """Load QASPER dataset (academic paper QA). Expected format: JSON."""
     samples = []
     with open(data_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -159,7 +158,6 @@ def load_qasper(data_path: str, max_samples: int = 500) -> list[BenchmarkSample]
             if len(samples) >= max_samples:
                 break
             question = qa.get("question", "")
-            # Get first answer
             answers = qa.get("answers", [])
             answer_text = ""
             for ans in answers:
@@ -188,11 +186,7 @@ def load_qasper(data_path: str, max_samples: int = 500) -> list[BenchmarkSample]
 
 
 def load_custom(data_path: str, max_samples: int = 500) -> list[BenchmarkSample]:
-    """
-    Load custom dataset.
-
-    Expected format: JSONL with fields: question, answer, type (optional)
-    """
+    """Load custom dataset. Expected format: JSONL."""
     samples = []
     with open(data_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -232,12 +226,10 @@ async def evaluate_sample(
     """Evaluate a single benchmark sample."""
     start = time.time()
 
-    # Determine answer mode
     answer_mode = "extractive"
     if sample.question_type == "boolean":
         answer_mode = "boolean"
 
-    # Run ask() pipeline
     answer_result = await ask(
         query=sample.question,
         documents=documents,
@@ -250,13 +242,11 @@ async def evaluate_sample(
 
     latency = time.time() - start
 
-    # Compute generation metrics
     gen_metrics = {
         "em": exact_match(answer_result.answer, sample.answer),
         "f1": f1_score(answer_result.answer, sample.answer),
     }
 
-    # Compute retrieval metrics (if supporting facts available)
     retrieval_metrics = {}
     if sample.supporting_facts and answer_result.search_result:
         retrieved_ids = []
@@ -292,30 +282,12 @@ async def run_benchmark(
     use_decompose: bool = False,
     **search_kwargs,
 ) -> list[BenchmarkReport]:
-    """
-    Run benchmark evaluation.
-
-    Args:
-        dataset: 'hotpotqa' | 'qasper' | 'custom'
-        documents: indexed Document objects
-        strategies: list of search strategies to evaluate
-        models: list of LLM models to evaluate
-        data_path: path to dataset file
-        output_dir: directory to save results
-        max_samples: max samples to evaluate
-        max_concurrency: max concurrent evaluations
-        use_decompose: enable query decomposition
-        **search_kwargs: additional args for search
-
-    Returns:
-        list of BenchmarkReport for each (strategy, model) combination
-    """
+    """Run QA benchmark evaluation."""
     if strategies is None:
         strategies = ["best_first"]
     if models is None:
         models = [DEFAULT_MODEL]
 
-    # Load dataset
     loader = DATASET_LOADERS.get(dataset)
     if loader is None:
         raise ValueError(f"Unknown dataset: {dataset}. Available: {list(DATASET_LOADERS.keys())}")
@@ -352,7 +324,6 @@ async def run_benchmark(
 
             results = await asyncio.gather(*[_eval_one(s) for s in samples])
 
-            # Aggregate metrics
             gen_metrics_list = [r.generation_metrics for r in results if r.generation_metrics]
             avg_gen = {}
             if gen_metrics_list:
@@ -368,7 +339,6 @@ async def run_benchmark(
             avg_latency = sum(r.latency for r in results) / len(results) if results else 0
             avg_calls = sum(r.llm_calls for r in results) / len(results) if results else 0
 
-            # Results by question type
             by_type = {}
             for r in results:
                 qtype = r.sample.question_type if r.sample else "unknown"
@@ -398,7 +368,6 @@ async def run_benchmark(
             )
             reports.append(report)
 
-            # Save report
             report_data = {
                 "dataset": report.dataset,
                 "strategy": report.strategy,
@@ -445,3 +414,50 @@ def print_report(report: BenchmarkReport) -> None:
             print(f"    {qtype}: n={metrics['count']}, EM={metrics['avg_em']:.4f}, F1={metrics['avg_f1']:.4f}")
 
     print(f"{'='*70}\n")
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+async def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="QA Benchmark (answer generation on top of TreeSearch)")
+    parser.add_argument("--dataset", type=str, required=True,
+                        choices=["hotpotqa", "qasper", "custom"], help="Benchmark dataset")
+    parser.add_argument("--data-path", type=str, required=True, help="Path to dataset file")
+    parser.add_argument("--index_dir", type=str, required=True, help="Directory containing index JSON files")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="LLM model name")
+    parser.add_argument("--strategy", type=str, nargs="+", default=["best_first"],
+                        help="Search strategies to evaluate")
+    parser.add_argument("--max-samples", type=int, default=100, help="Max samples to evaluate")
+    parser.add_argument("--output-dir", type=str, default="./benchmark_results")
+    parser.add_argument("--decompose", action="store_true", help="Enable query decomposition")
+    args = parser.parse_args()
+
+    documents = load_documents(args.index_dir)
+    if not documents:
+        print(f"No indexes found in {args.index_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Loaded {len(documents)} document(s)")
+    print(f"Running QA benchmark: {args.dataset} ({args.max_samples} samples)\n")
+
+    reports = await run_benchmark(
+        dataset=args.dataset,
+        documents=documents,
+        strategies=args.strategy,
+        models=[args.model],
+        data_path=args.data_path,
+        output_dir=args.output_dir,
+        max_samples=args.max_samples,
+        use_decompose=args.decompose,
+    )
+
+    for report in reports:
+        print_report(report)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    asyncio.run(main())
