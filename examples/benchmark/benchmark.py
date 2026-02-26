@@ -373,6 +373,7 @@ async def _evaluate_sample(
     top_k: int = 5,
     k_values: Optional[list[int]] = None,
     use_bm25: bool = True,
+    embedding_model: str = "text-embedding-3-small",
 ) -> SampleResult:
     """Evaluate a single benchmark sample with cost tracking."""
     if k_values is None:
@@ -389,6 +390,16 @@ async def _evaluate_sample(
             index = NodeBM25Index(documents)
             bm25_results = index.search(sample.question, top_k=top_k)
             retrieved_node_ids = [r["node_id"] for r in bm25_results]
+        elif strategy == "embedding":
+            from treesearch.embeddings import EmbeddingPreFilter
+            emb_index = EmbeddingPreFilter(documents, model=embedding_model)
+            emb_results = emb_index.search(sample.question, top_k=top_k)
+            retrieved_node_ids = [r["node_id"] for r in emb_results]
+        elif strategy == "hybrid":
+            from treesearch.embeddings import HybridPreFilter
+            hybrid_index = HybridPreFilter(documents, embedding_model=embedding_model)
+            hybrid_results = hybrid_index.search(sample.question, top_k=top_k)
+            retrieved_node_ids = [r["node_id"] for r in hybrid_results]
         else:
             result = await search(
                 query=sample.question,
@@ -433,6 +444,7 @@ async def run_benchmark(
     k_values: Optional[list[int]] = None,
     max_concurrency: int = 3,
     output_dir: Optional[str] = None,
+    embedding_model: str = "text-embedding-3-small",
 ) -> list[BenchmarkReport]:
     """Run benchmark across multiple strategies with cost tracking.
 
@@ -447,6 +459,7 @@ async def run_benchmark(
         k_values: list of K values for @K metrics
         max_concurrency: max concurrent evaluations
         output_dir: if set, save JSON reports here
+        embedding_model: embedding model for embedding/hybrid strategies
 
     Returns:
         list of BenchmarkReport (one per strategy)
@@ -478,6 +491,7 @@ async def run_benchmark(
             async with semaphore:
                 return await _evaluate_sample(
                     s, documents, strategy, model, top_k, k_values,
+                    embedding_model=embedding_model,
                 )
 
         tasks = [_eval_with_limit(s) for s in samples]
@@ -572,6 +586,7 @@ async def run_benchmark_with_samples(
     k_values: Optional[list[int]] = None,
     max_concurrency: int = 3,
     output_dir: Optional[str] = None,
+    embedding_model: str = "text-embedding-3-small",
 ) -> list[BenchmarkReport]:
     """Run benchmark with pre-loaded samples (e.g. from HuggingFace).
 
@@ -601,6 +616,7 @@ async def run_benchmark_with_samples(
             async with semaphore:
                 return await _evaluate_sample(
                     s, documents, strategy, model, top_k, k_values,
+                    embedding_model=embedding_model,
                 )
 
         tasks = [_eval_with_limit(s) for s in samples]

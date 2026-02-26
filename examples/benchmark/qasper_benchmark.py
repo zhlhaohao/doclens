@@ -4,7 +4,8 @@
 @description: QASPER benchmark script.
 
 Loads the QASPER dataset from HuggingFace (allenai/qasper), builds tree indexes
-from academic papers, and evaluates BM25 / BestFirst / MCTS retrieval strategies.
+from academic papers, and evaluates BM25 / BestFirst / MCTS / Embedding / Hybrid
+retrieval strategies.
 
 QASPER Dataset Overview:
     QASPER (Question Answering on Scientific Papers) contains ~1600 NLP papers with
@@ -27,14 +28,14 @@ QASPER Dataset Overview:
     Evidence is paragraph-level text; highlighted_evidence is sentence-level.
 
 Usage:
-    # Evaluate on 20 samples from validation set with BM25, BestFirst, MCTS:
+    # Evaluate on 20 samples with BM25, BestFirst, MCTS, Embedding, Hybrid:
     python examples/benchmark/qasper_benchmark.py --max-samples 20
 
-    # Evaluate on train set with specific strategies:
-    python examples/benchmark/qasper_benchmark.py --split train --strategies bm25 best_first --max-samples 50
+    # Evaluate with specific strategies:
+    python examples/benchmark/qasper_benchmark.py --strategies bm25 embedding hybrid --max-samples 50
 
-    # Evaluate with a different model:
-    python examples/benchmark/qasper_benchmark.py --model gpt-4o --max-samples 10
+    # Evaluate with a different embedding model:
+    python examples/benchmark/qasper_benchmark.py --embedding-model text-embedding-3-large --max-samples 10
 """
 import asyncio
 import argparse
@@ -146,10 +147,13 @@ async def main():
         help="QASPER dataset split (default: validation)"
     )
     parser.add_argument(
-        "--strategies", type=str, nargs="+", default=["bm25", "best_first", "mcts"],
-        help="Search strategies to evaluate (default: bm25 best_first mcts)"
+        "--strategies", type=str, nargs="+",
+        default=["bm25", "best_first", "mcts", "embedding", "hybrid"],
+        help="Search strategies to evaluate (default: bm25 best_first mcts embedding hybrid)"
     )
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="LLM model name")
+    parser.add_argument("--embedding-model", type=str, default="text-embedding-3-small",
+                        help="Embedding model for embedding/hybrid strategies")
     parser.add_argument("--max-samples", type=int, default=50, help="Max QA samples to evaluate")
     parser.add_argument("--max-papers", type=int, default=20, help="Max papers to index")
     parser.add_argument("--top-k", type=int, default=5, help="Top-K results per query")
@@ -198,6 +202,7 @@ async def main():
         top_k=args.top_k,
         max_concurrency=args.concurrency,
         output_dir=args.output_dir,
+        embedding_model=args.embedding_model,
     )
 
     # Print results
@@ -212,5 +217,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     asyncio.run(main())

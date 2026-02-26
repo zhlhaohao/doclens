@@ -94,6 +94,8 @@ class EmbeddingPreFilter:
                 self._node_entries.append({
                     "doc_id": doc.doc_id,
                     "node_id": nid,
+                    "title": title,
+                    "summary": summary,
                     "text": embed_text,
                 })
                 doc_indices.append(idx)
@@ -167,6 +169,42 @@ class EmbeddingPreFilter:
 
         return scores
 
+    def search(self, query: str, top_k: int = 20) -> list[dict]:
+        """
+        Search nodes by embedding similarity across all documents.
+
+        Args:
+            query: search query string
+            top_k: max number of results
+
+        Returns:
+            list of {node_id, doc_id, title, summary, embedding_score}
+        """
+        self._compute_embeddings()
+
+        query_emb = self._embed_query(query)
+
+        scored = []
+        for idx, entry in enumerate(self._node_entries):
+            if idx < len(self._embeddings):
+                sim = _cosine_similarity(query_emb, self._embeddings[idx])
+                scored.append((idx, max(sim, 0.0)))
+
+        scored.sort(key=lambda x: -x[1])
+        scored = scored[:top_k]
+
+        results = []
+        for idx, score in scored:
+            entry = self._node_entries[idx]
+            results.append({
+                "node_id": entry["node_id"],
+                "doc_id": entry["doc_id"],
+                "title": entry.get("title", ""),
+                "summary": entry.get("summary", ""),
+                "embedding_score": score,
+            })
+        return results
+
 
 class HybridPreFilter:
     """
@@ -229,3 +267,33 @@ class HybridPreFilter:
             nid: alpha * bm25_norm.get(nid, 0.0) + (1 - alpha) * emb_norm.get(nid, 0.0)
             for nid in all_ids
         }
+
+    def search(self, query: str, top_k: int = 20) -> list[dict]:
+        """
+        Search nodes by hybrid BM25+embedding score across all documents.
+
+        Args:
+            query: search query string
+            top_k: max number of results
+
+        Returns:
+            list of {node_id, doc_id, hybrid_score}
+        """
+        # Collect scores from all documents
+        all_doc_ids = set()
+        for entry in self._embedding._node_entries:
+            all_doc_ids.add(entry["doc_id"])
+
+        all_scores: list[tuple[str, str, float]] = []  # (node_id, doc_id, score)
+        for doc_id in all_doc_ids:
+            scores = self.score_nodes(query, doc_id)
+            for nid, score in scores.items():
+                all_scores.append((nid, doc_id, score))
+
+        all_scores.sort(key=lambda x: -x[2])
+        all_scores = all_scores[:top_k]
+
+        return [
+            {"node_id": nid, "doc_id": did, "hybrid_score": score}
+            for nid, did, score in all_scores
+        ]
