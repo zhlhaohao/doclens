@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from treesearch import load_documents
-from treesearch.benchmark import (
+from examples.benchmark.benchmark import (
     run_benchmark,
     print_report,
     print_comparison,

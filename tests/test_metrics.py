@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Tests for treesearch.metrics evaluation module.
+@description: Tests for examples.benchmark.metrics evaluation module.
 """
+import os
+import sys
+
 import pytest
-from treesearch.metrics import (
+
+# Ensure project root is on sys.path for examples imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from examples.benchmark.metrics import (
     precision_at_k,
     recall_at_k,
     hit_at_k,

@@ -10,7 +10,7 @@ Supported datasets: QASPER, QuALITY, custom JSONL.
 Key metrics: retrieval accuracy (P@K, R@K, NDCG@K, MRR, Hit@K) + cost (tokens, LLM calls, latency).
 
 Usage:
-    from treesearch.benchmark import load_dataset, run_benchmark, print_report, print_comparison
+    from examples.benchmark.benchmark import load_dataset, run_benchmark, print_report, print_comparison
 """
 import asyncio
 import json
@@ -20,13 +20,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .llm import count_tokens, DEFAULT_MODEL
+from treesearch.llm import count_tokens, DEFAULT_MODEL
+from treesearch.search import search, SearchResult
+from treesearch.tree import Document, flatten_tree
+
 from .metrics import (
     CostStats, CostTracker, aggregate_cost_stats,
     evaluate_query,
 )
-from .search import search, SearchResult
-from .tree import Document, flatten_tree
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,102 @@ def load_qasper(data_path: str, max_samples: int = 200) -> list[BenchmarkSample]
                 metadata={"paper_title": paper.get("title", "")},
             ))
     logger.info("Loaded %d QASPER samples from %s", len(samples), data_path)
+    return samples
+
+
+def load_qasper_from_hf(split: str = "validation", max_samples: int = 200) -> tuple[list[BenchmarkSample], list[dict]]:
+    """Load QASPER directly from HuggingFace datasets (allenai/qasper).
+
+    Args:
+        split: 'train' or 'validation'
+        max_samples: max number of QA samples
+
+    Returns:
+        (samples, papers) - samples for evaluation, papers as raw dicts for indexing
+    """
+    try:
+        from datasets import load_dataset as hf_load
+    except ImportError:
+        raise ImportError("Install datasets: pip install datasets")
+
+    ds = hf_load("allenai/qasper", split=split)
+
+    samples = []
+    papers = []
+    for row in ds:
+        if len(samples) >= max_samples:
+            break
+        paper_id = row.get("id", "")
+        paper_title = row.get("title", "")
+        abstract = row.get("abstract", "")
+        full_text = row.get("full_text", {})
+        qas = row.get("qas", {})
+
+        papers.append({
+            "id": paper_id,
+            "title": paper_title,
+            "abstract": abstract,
+            "full_text": full_text,
+        })
+
+        new_samples = _parse_qasper_qas_hf(paper_id, paper_title, qas, max_samples - len(samples))
+        samples.extend(new_samples)
+
+    # Deduplicate papers by id
+    seen_ids = set()
+    unique_papers = []
+    for p in papers:
+        if p["id"] not in seen_ids:
+            seen_ids.add(p["id"])
+            unique_papers.append(p)
+
+    logger.info("Loaded %d QASPER samples from HuggingFace (%s split), %d papers",
+                len(samples), split, len(unique_papers))
+    return samples, unique_papers
+
+
+def _parse_qasper_qas_hf(
+    paper_id: str,
+    paper_title: str,
+    qas: dict,
+    remaining: int,
+) -> list[BenchmarkSample]:
+    """Parse HuggingFace QASPER qas format (parallel lists)."""
+    questions = qas.get("question", [])
+    answers_list = qas.get("answers", [])  # list of {answer: [...], ...}
+
+    samples = []
+    for q_idx, question in enumerate(questions):
+        if len(samples) >= remaining:
+            break
+
+        answer_texts = []
+        evidence_texts = []
+        if q_idx < len(answers_list):
+            ans_obj = answers_list[q_idx]
+            # ans_obj['answer'] is a list of answer dicts
+            for answer in ans_obj.get("answer", []):
+                free_text = answer.get("free_form_answer", "")
+                extractive = answer.get("extractive_spans", [])
+                if free_text:
+                    answer_texts.append(free_text)
+                if extractive:
+                    answer_texts.extend(extractive)
+                # evidence: list of paragraph-level evidence strings
+                evidence = answer.get("evidence", [])
+                for ev in evidence:
+                    if ev and not ev.startswith("FLOAT SELECTED"):
+                        evidence_texts.append(ev)
+
+        samples.append(BenchmarkSample(
+            question=question,
+            answer=" | ".join(answer_texts) if answer_texts else "",
+            evidence_texts=evidence_texts,
+            relevant_section_titles=evidence_texts,
+            question_type="",
+            doc_id=paper_id,
+            metadata={"paper_title": paper_title},
+        ))
     return samples
 
 
@@ -288,7 +385,7 @@ async def _evaluate_sample(
 
     with tracker:
         if strategy == "bm25":
-            from .rank_bm25 import NodeBM25Index
+            from treesearch.rank_bm25 import NodeBM25Index
             index = NodeBM25Index(documents)
             bm25_results = index.search(sample.question, top_k=top_k)
             retrieved_node_ids = [r["node_id"] for r in bm25_results]
@@ -454,6 +551,126 @@ async def run_benchmark(
         os.makedirs(output_dir, exist_ok=True)
         for report in reports:
             path = os.path.join(output_dir, f"{dataset}_{report.strategy}_report.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+            logger.info("Report saved: %s", path)
+
+    return reports
+
+
+# ---------------------------------------------------------------------------
+# Benchmark runner (with pre-loaded samples)
+# ---------------------------------------------------------------------------
+
+async def run_benchmark_with_samples(
+    samples: list[BenchmarkSample],
+    documents: list[Document],
+    dataset_name: str = "qasper",
+    strategies: Optional[list[str]] = None,
+    model: str = DEFAULT_MODEL,
+    top_k: int = 5,
+    k_values: Optional[list[int]] = None,
+    max_concurrency: int = 3,
+    output_dir: Optional[str] = None,
+) -> list[BenchmarkReport]:
+    """Run benchmark with pre-loaded samples (e.g. from HuggingFace).
+
+    Same as run_benchmark but accepts samples directly instead of loading from file.
+    """
+    if strategies is None:
+        strategies = ["bm25", "best_first"]
+    if k_values is None:
+        k_values = [1, 3, 5]
+
+    if not samples:
+        logger.warning("No samples provided")
+        return []
+
+    logger.info("Benchmark: %d samples, strategies=%s, model=%s", len(samples), strategies, model)
+
+    reports = []
+    for strategy in strategies:
+        print(f"\n{'='*60}")
+        print(f"Strategy: {strategy.upper()} | Dataset: {dataset_name} | Samples: {len(samples)}")
+        print(f"{'='*60}")
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+        results: list[SampleResult] = []
+
+        async def _eval_with_limit(s: BenchmarkSample) -> SampleResult:
+            async with semaphore:
+                return await _evaluate_sample(
+                    s, documents, strategy, model, top_k, k_values,
+                )
+
+        tasks = [_eval_with_limit(s) for s in samples]
+        for i, coro in enumerate(asyncio.as_completed(tasks)):
+            result = await coro
+            results.append(result)
+            m = result.retrieval_metrics
+            if m:
+                hit = "HIT" if m.get("hit@1", 0) > 0 else "miss"
+                print(f"  [{i+1}/{len(samples)}] MRR={m.get('mrr', 0):.2f} "
+                      f"P@3={m.get('precision@3', 0):.2f} R@3={m.get('recall@3', 0):.2f} "
+                      f"[{hit}] LLM={result.cost.llm_calls} "
+                      f"{result.cost.latency_seconds:.1f}s")
+            else:
+                print(f"  [{i+1}/{len(samples)}] Skipped (no ground truth)")
+
+        valid_results = [r for r in results if r.retrieval_metrics]
+        if valid_results:
+            avg_metrics = {}
+            for key in valid_results[0].retrieval_metrics:
+                avg_metrics[key] = sum(
+                    r.retrieval_metrics.get(key, 0) for r in valid_results
+                ) / len(valid_results)
+
+            cost_list = [r.cost for r in valid_results]
+            avg_cost = aggregate_cost_stats(cost_list)
+            total_cost = CostStats(
+                total_tokens=sum(c.total_tokens for c in cost_list),
+                prompt_tokens=sum(c.prompt_tokens for c in cost_list),
+                completion_tokens=sum(c.completion_tokens for c in cost_list),
+                llm_calls=sum(c.llm_calls for c in cost_list),
+                latency_seconds=sum(c.latency_seconds for c in cost_list),
+            )
+
+            per_type: dict[str, dict] = {}
+            for r in valid_results:
+                qtype = r.sample.question_type or "unknown"
+                if qtype not in per_type:
+                    per_type[qtype] = {"count": 0, "metrics": {}}
+                per_type[qtype]["count"] += 1
+                for key, val in r.retrieval_metrics.items():
+                    per_type[qtype]["metrics"].setdefault(key, 0.0)
+                    per_type[qtype]["metrics"][key] += val
+            for qtype in per_type:
+                cnt = per_type[qtype]["count"]
+                for key in per_type[qtype]["metrics"]:
+                    per_type[qtype]["metrics"][key] /= cnt
+        else:
+            avg_metrics = {}
+            avg_cost = CostStats()
+            total_cost = CostStats()
+            per_type = {}
+
+        report = BenchmarkReport(
+            dataset=dataset_name,
+            strategy=strategy,
+            model=model,
+            num_samples=len(valid_results),
+            avg_retrieval_metrics=avg_metrics,
+            avg_cost=avg_cost,
+            total_cost=total_cost,
+            per_type_metrics=per_type,
+            individual_results=results,
+        )
+        reports.append(report)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        for report in reports:
+            path = os.path.join(output_dir, f"{dataset_name}_{report.strategy}_report.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
             logger.info("Report saved: %s", path)

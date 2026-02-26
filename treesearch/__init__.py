@@ -10,8 +10,6 @@ Core API:
     load_documents   - Load indexed documents from a directory (returns list[Document])
     search           - Search across documents (returns SearchResult)
     search_sync      - Synchronous search wrapper
-    evaluate_query   - Evaluate retrieval quality for a single query
-    evaluate_benchmark - Evaluate retrieval quality across multiple queries
     Document         - Document data class
 """
 __version__ = "0.3.0"
@@ -30,7 +28,7 @@ from treesearch.chunk import refine_search, RefinedSearchResult, Chunk
 # Configuration
 from treesearch.config import TreeSearchConfig, get_config, set_config, reset_config
 
-# Advanced: search strategies, BM25, metrics (for power users)
+# Advanced: search strategies, BM25 (for power users)
 from treesearch.search import (
     BestFirstTreeSearch,
     BestFirstTreeSearch as TreeSearch,
@@ -40,30 +38,6 @@ from treesearch.search import (
     PreFilter,
 )
 from treesearch.rank_bm25 import NodeBM25Index, NodeTFIDFIndex, BM25Okapi, tokenize, expand_query
-from treesearch.metrics import (
-    precision_at_k,
-    recall_at_k,
-    hit_at_k,
-    reciprocal_rank,
-    ndcg_at_k,
-    f1_at_k,
-    evaluate_query,
-    evaluate_benchmark,
-    CostStats,
-    CostTracker,
-    aggregate_cost_stats,
-)
-
-# Benchmark
-from treesearch.benchmark import (
-    load_dataset,
-    run_benchmark,
-    print_report,
-    print_comparison,
-    BenchmarkSample,
-    BenchmarkReport,
-    SampleResult,
-)
 
 # Tree utilities (for advanced usage)
 from treesearch.tree import (

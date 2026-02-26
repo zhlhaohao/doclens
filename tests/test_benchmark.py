@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Tests for treesearch.benchmark module.
+@description: Tests for examples.benchmark.benchmark module.
 """
 import json
 import os
+import sys
 import tempfile
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 
-from treesearch.benchmark import (
+# Ensure project root is on sys.path for examples imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from examples.benchmark.benchmark import (
     BenchmarkSample,
     BenchmarkReport,
     SampleResult,
@@ -22,7 +26,7 @@ from treesearch.benchmark import (
     print_report,
     print_comparison,
 )
-from treesearch.metrics import CostStats, CostTracker, aggregate_cost_stats
+from examples.benchmark.metrics import CostStats, CostTracker, aggregate_cost_stats
 from treesearch.tree import Document
 
 
