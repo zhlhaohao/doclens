@@ -776,6 +776,200 @@ async def search(
     )
 
 
+# ---------------------------------------------------------------------------
+# Three-stage Retrieve-Rerank Pipeline
+# ---------------------------------------------------------------------------
+
+async def retrieve_rerank(
+    query: str,
+    documents: list[Document],
+    model: str = DEFAULT_MODEL,
+    embedding_model: str = "text-embedding-3-small",
+    top_k: int = 5,
+    recall_k: int = 20,
+    rerank_n: int = 8,
+    bm25_weight: float = 0.5,
+    include_ancestors: bool = True,
+    text_excerpt_len: int = 500,
+) -> SearchResult:
+    """
+    Three-stage retrieve-rerank pipeline combining flat retrieval with LLM reranking.
+
+    Stage 1: Embedding recall (top recall_k candidates, 0 LLM calls)
+    Stage 2: BM25 score fusion + candidate-pool normalization (0 LLM calls)
+    Stage 3: LLM listwise rerank with tree context (1-2 LLM calls)
+
+    Args:
+        query: search query
+        documents: list of Document objects
+        model: LLM model for reranking
+        embedding_model: embedding model for Stage 1
+        top_k: final number of results
+        recall_k: Stage 1 candidate pool size
+        rerank_n: Stage 3 candidates to send to LLM
+        bm25_weight: weight for BM25 in score fusion (alpha)
+        include_ancestors: include ancestor path in LLM rerank context
+        text_excerpt_len: max chars of text excerpt for LLM rerank
+
+    Returns:
+        SearchResult
+    """
+    from .embeddings import EmbeddingPreFilter
+    from .rank_bm25 import NodeBM25Index
+
+    total_llm_calls = 0
+
+    # Stage 1: Embedding recall
+    emb_index = EmbeddingPreFilter(documents, model=embedding_model)
+    emb_results = emb_index.search(query, top_k=recall_k)
+    emb_scores = {r["node_id"]: r["embedding_score"] for r in emb_results}
+
+    # Stage 2: BM25 score fusion
+    bm25_index = NodeBM25Index(documents)
+    bm25_results = bm25_index.search(query, top_k=recall_k)
+    bm25_scores = {r["node_id"]: r["bm25_score"] for r in bm25_results}
+
+    # Merge candidate pool
+    all_nids = set(emb_scores.keys()) | set(bm25_scores.keys())
+
+    # Candidate-pool normalization
+    def _norm(scores: dict[str, float]) -> dict[str, float]:
+        if not scores:
+            return {}
+        vals = list(scores.values())
+        lo, hi = min(vals), max(vals)
+        rng = hi - lo
+        if rng == 0:
+            return {k: 0.5 for k in scores}
+        return {k: (v - lo) / rng for k, v in scores.items()}
+
+    emb_norm = _norm(emb_scores)
+    bm25_norm = _norm(bm25_scores)
+
+    alpha = bm25_weight
+    fused = []
+    for nid in all_nids:
+        score = alpha * bm25_norm.get(nid, 0.0) + (1 - alpha) * emb_norm.get(nid, 0.0)
+        fused.append((nid, score))
+
+    fused.sort(key=lambda x: -x[1])
+    candidates = fused[:rerank_n]
+
+    # Build doc_id lookup from emb_results + bm25_results
+    doc_lookup = {r["node_id"]: r["doc_id"] for r in emb_results}
+    for r in bm25_results:
+        doc_lookup.setdefault(r["node_id"], r["doc_id"])
+
+    # Build node data for LLM rerank
+    doc_map = {d.doc_id: d for d in documents}
+    candidate_data = []
+    for nid, fusion_score in candidates:
+        did = doc_lookup.get(nid, "")
+        doc = doc_map.get(did)
+        if not doc:
+            continue
+
+        full_node = doc.get_node_by_id(str(nid))
+        if not full_node:
+            continue
+
+        title = full_node.get("title", "")
+        summary = full_node.get("summary", full_node.get("prefix_summary", ""))
+        text = full_node.get("text", "")
+        text_excerpt = text[:text_excerpt_len] if text else ""
+
+        ancestors = []
+        if include_ancestors:
+            ancestors = _get_ancestor_titles(doc, str(nid))
+
+        candidate_data.append({
+            "node_id": nid,
+            "doc_id": did,
+            "title": title,
+            "summary": summary,
+            "text_excerpt": text_excerpt,
+            "ancestors": ancestors,
+            "fusion_score": fusion_score,
+        })
+
+    # Stage 3: LLM listwise rerank
+    if candidate_data:
+        sections_text = ""
+        for i, c in enumerate(candidate_data):
+            path = " > ".join(c["ancestors"] + [c["title"]]) if c["ancestors"] else c["title"]
+            sections_text += (
+                f"\nCandidate {i + 1} (node_id: {c['node_id']}):\n"
+                f"  Path: {path}\n"
+                f"  Title: {c['title']}\n"
+            )
+            if c["text_excerpt"]:
+                sections_text += f"  Content: {c['text_excerpt']}\n"
+
+        prompt = (
+            f"Rank these document sections by relevance to the query. "
+            f"Return a JSON array of objects with node_id and relevance score (0.0-1.0).\n\n"
+            f"Query: {query}\n"
+            f"{sections_text}\n"
+            f"Return JSON only:\n"
+            f'{{"rankings": [{{"node_id": "...", "relevance": 0.0}}]}}'
+        )
+
+        response = await achat(prompt, model=model, temperature=0)
+        result = extract_json(response)
+        total_llm_calls += 1
+
+        rankings = result.get("rankings", [])
+        rerank_scores = {}
+        for item in rankings:
+            rid = str(item.get("node_id", ""))
+            rel = float(item.get("relevance", 0.0))
+            rerank_scores[rid] = rel
+
+        # Merge: use LLM rerank score where available, fallback to fusion score
+        final_scored = []
+        for c in candidate_data:
+            nid = c["node_id"]
+            if nid in rerank_scores:
+                final_scored.append((nid, c["doc_id"], rerank_scores[nid]))
+            else:
+                final_scored.append((nid, c["doc_id"], c["fusion_score"] * 0.5))
+
+        final_scored.sort(key=lambda x: -x[2])
+    else:
+        final_scored = [(nid, doc_lookup.get(nid, ""), s) for nid, s in fused[:top_k]]
+
+    # Build output (group by doc)
+    final_scored = final_scored[:top_k]
+
+    doc_results: dict[str, dict] = {}
+    for nid, did, score in final_scored:
+        if did not in doc_results:
+            doc = doc_map.get(did)
+            doc_results[did] = {
+                "doc_id": did,
+                "doc_name": doc.doc_name if doc else "",
+                "nodes": [],
+            }
+        node_entry = {"node_id": nid, "title": "", "score": round(score, 4)}
+        doc = doc_map.get(did)
+        if doc:
+            full_node = doc.get_node_by_id(str(nid))
+            if full_node:
+                node_entry["title"] = full_node.get("title", "")
+                node_entry["text"] = full_node.get("text", "")
+                node_entry["summary"] = full_node.get("summary", full_node.get("prefix_summary", ""))
+                node_entry["line_start"] = full_node.get("line_start")
+                node_entry["line_end"] = full_node.get("line_end")
+        doc_results[did]["nodes"].append(node_entry)
+
+    return SearchResult(
+        documents=list(doc_results.values()),
+        query=query,
+        total_llm_calls=total_llm_calls,
+        strategy="retrieve_rerank",
+    )
+
+
 def search_sync(query: str, documents: list[Document], **kwargs) -> SearchResult:
     """Synchronous wrapper around :func:`search`."""
     return asyncio.run(search(query, documents, **kwargs))

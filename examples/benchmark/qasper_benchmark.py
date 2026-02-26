@@ -4,8 +4,8 @@
 @description: QASPER benchmark script.
 
 Loads the QASPER dataset from HuggingFace (allenai/qasper), builds tree indexes
-from academic papers, and evaluates BM25 / BestFirst / MCTS / Embedding / Hybrid
-retrieval strategies.
+from academic papers, and evaluates BM25 / BestFirst / MCTS / Embedding / Hybrid /
+RetrieveRerank retrieval strategies.
 
 QASPER Dataset Overview:
     QASPER (Question Answering on Scientific Papers) contains ~1600 NLP papers with
@@ -28,11 +28,11 @@ QASPER Dataset Overview:
     Evidence is paragraph-level text; highlighted_evidence is sentence-level.
 
 Usage:
-    # Evaluate on 20 samples with BM25, BestFirst, MCTS, Embedding, Hybrid:
+    # Evaluate on 20 samples with BM25, BestFirst, MCTS, Embedding, Hybrid, RetrieveRerank:
     python examples/benchmark/qasper_benchmark.py --max-samples 20
 
     # Evaluate with specific strategies:
-    python examples/benchmark/qasper_benchmark.py --strategies bm25 embedding hybrid --max-samples 50
+    python examples/benchmark/qasper_benchmark.py --strategies bm25 embedding retrieve_rerank --max-samples 50
 
     # Evaluate with a different embedding model:
     python examples/benchmark/qasper_benchmark.py --embedding-model text-embedding-3-large --max-samples 10
@@ -148,8 +148,8 @@ async def main():
     )
     parser.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["bm25", "best_first", "mcts", "embedding", "hybrid"],
-        help="Search strategies to evaluate (default: bm25 best_first mcts embedding hybrid)"
+        default=["bm25", "best_first", "mcts", "embedding", "hybrid", "retrieve_rerank"],
+        help="Search strategies to evaluate (default: bm25 best_first mcts embedding hybrid retrieve_rerank)"
     )
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="LLM model name")
     parser.add_argument("--embedding-model", type=str, default="text-embedding-3-small",

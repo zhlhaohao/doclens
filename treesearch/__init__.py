@@ -35,6 +35,7 @@ from treesearch.search import (
     MCTSTreeSearch,
     llm_tree_search,
     route_documents,
+    retrieve_rerank,
     PreFilter,
 )
 from treesearch.rank_bm25 import NodeBM25Index, NodeTFIDFIndex, BM25Okapi, tokenize, expand_query

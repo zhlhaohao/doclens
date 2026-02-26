@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from treesearch.llm import count_tokens, DEFAULT_MODEL
-from treesearch.search import search, SearchResult
+from treesearch.search import search, retrieve_rerank, SearchResult
 from treesearch.tree import Document, flatten_tree
 
 from .metrics import (
@@ -400,6 +400,19 @@ async def _evaluate_sample(
             hybrid_index = HybridPreFilter(documents, embedding_model=embedding_model)
             hybrid_results = hybrid_index.search(sample.question, top_k=top_k)
             retrieved_node_ids = [r["node_id"] for r in hybrid_results]
+        elif strategy == "retrieve_rerank":
+            result = await retrieve_rerank(
+                query=sample.question,
+                documents=documents,
+                model=model,
+                embedding_model=embedding_model,
+                top_k=top_k,
+            )
+            for doc_result in result.documents:
+                for node in doc_result.get("nodes", []):
+                    retrieved_node_ids.append(node["node_id"])
+            retrieved_node_ids = retrieved_node_ids[:top_k]
+            tracker.stats.llm_calls = result.total_llm_calls
         else:
             result = await search(
                 query=sample.question,

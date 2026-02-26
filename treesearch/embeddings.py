@@ -272,6 +272,8 @@ class HybridPreFilter:
         """
         Search nodes by hybrid BM25+embedding score across all documents.
 
+        Uses global candidate-pool normalization (not per-doc) for cross-document comparability.
+
         Args:
             query: search query string
             top_k: max number of results
@@ -279,21 +281,35 @@ class HybridPreFilter:
         Returns:
             list of {node_id, doc_id, hybrid_score}
         """
-        # Collect scores from all documents
-        all_doc_ids = set()
-        for entry in self._embedding._node_entries:
-            all_doc_ids.add(entry["doc_id"])
+        # Collect raw scores globally (not per-doc)
+        emb_results = self._embedding.search(query, top_k=max(top_k * 3, 50))
+        candidate_nids = {r["node_id"] for r in emb_results}
+        emb_raw = {r["node_id"]: r["embedding_score"] for r in emb_results}
 
-        all_scores: list[tuple[str, str, float]] = []  # (node_id, doc_id, score)
-        for doc_id in all_doc_ids:
-            scores = self.score_nodes(query, doc_id)
-            for nid, score in scores.items():
-                all_scores.append((nid, doc_id, score))
+        # Get BM25 scores for the same candidates (global search)
+        bm25_results = self._bm25.search(query, top_k=max(top_k * 3, 50))
+        bm25_raw = {r["node_id"]: r["bm25_score"] for r in bm25_results}
+        candidate_nids |= {r["node_id"] for r in bm25_results}
 
-        all_scores.sort(key=lambda x: -x[2])
-        all_scores = all_scores[:top_k]
+        # Normalize in candidate pool (not per-doc)
+        emb_norm = self._normalize_scores(emb_raw)
+        bm25_norm = self._normalize_scores(bm25_raw)
+
+        # Build doc_id lookup
+        doc_lookup = {r["node_id"]: r["doc_id"] for r in emb_results}
+        for r in bm25_results:
+            doc_lookup.setdefault(r["node_id"], r["doc_id"])
+
+        alpha = self.bm25_weight
+        scored = []
+        for nid in candidate_nids:
+            score = alpha * bm25_norm.get(nid, 0.0) + (1 - alpha) * emb_norm.get(nid, 0.0)
+            scored.append((nid, doc_lookup.get(nid, ""), score))
+
+        scored.sort(key=lambda x: -x[2])
+        scored = scored[:top_k]
 
         return [
             {"node_id": nid, "doc_id": did, "hybrid_score": score}
-            for nid, did, score in all_scores
+            for nid, did, score in scored
         ]
