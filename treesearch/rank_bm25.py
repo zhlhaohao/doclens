@@ -326,3 +326,127 @@ class NodeBM25Index:
     def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
         """PreFilter protocol: return {node_id: score} for a given query and document."""
         return self.get_node_scores_for_doc(query, doc_id)
+
+
+# ---------------------------------------------------------------------------
+# TF-IDF alternative (simpler scoring for short queries)
+# ---------------------------------------------------------------------------
+
+class NodeTFIDFIndex:
+    """
+    TF-IDF based node index. Alternative to BM25 for short queries.
+
+    Implements the PreFilter protocol for seamless use with search().
+    """
+
+    def __init__(
+        self,
+        documents: list,
+        title_weight: float = 1.0,
+        summary_weight: float = 0.7,
+        body_weight: float = 0.3,
+        tokenizer: Optional[Callable] = None,
+    ):
+        self.title_weight = title_weight
+        self.summary_weight = summary_weight
+        self.body_weight = body_weight
+        self._tokenize = tokenizer or tokenize
+
+        self._nodes: list[dict] = []
+        self._doc_freqs: dict[str, int] = {}
+        self._node_tokens: list[dict[str, int]] = []
+        self._total_docs = 0
+
+        self._build_index(documents)
+
+    def _build_index(self, documents: list) -> None:
+        """Build TF-IDF index from document trees."""
+        from .tree import flatten_tree
+
+        for doc in documents:
+            for node in flatten_tree(doc.structure):
+                nid = node.get("node_id", "")
+                title = self._tokenize(node.get("title", ""))
+                summary = self._tokenize(node.get("summary", node.get("prefix_summary", "")))
+                body = self._tokenize((node.get("text", "") or "")[:500])
+
+                # Weighted token frequencies
+                freq: dict[str, float] = {}
+                for t in title:
+                    freq[t] = freq.get(t, 0) + self.title_weight
+                for t in summary:
+                    freq[t] = freq.get(t, 0) + self.summary_weight
+                for t in body:
+                    freq[t] = freq.get(t, 0) + self.body_weight
+
+                self._node_tokens.append(freq)
+                self._nodes.append({"node_id": nid, "doc_id": doc.doc_id, "title": node.get("title", "")})
+
+                for token in freq:
+                    self._doc_freqs[token] = self._doc_freqs.get(token, 0) + 1
+
+        self._total_docs = len(self._nodes)
+
+    def search(self, query: str, top_k: int = 20) -> list[dict]:
+        """Search using TF-IDF scoring."""
+        query_tokens = self._tokenize(query)
+        if not query_tokens or not self._nodes:
+            return []
+
+        scores = []
+        for i, freq in enumerate(self._node_tokens):
+            score = 0.0
+            for qt in query_tokens:
+                tf = freq.get(qt, 0)
+                df = self._doc_freqs.get(qt, 0)
+                if tf > 0 and df > 0:
+                    idf = math.log(self._total_docs / df)
+                    score += tf * idf
+            if score > 0:
+                scores.append((i, score))
+
+        scores.sort(key=lambda x: -x[1])
+
+        results = []
+        for idx, score in scores[:top_k]:
+            entry = self._nodes[idx]
+            results.append({
+                "node_id": entry["node_id"],
+                "doc_id": entry["doc_id"],
+                "title": entry["title"],
+                "tfidf_score": round(score, 6),
+            })
+        return results
+
+    def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
+        """PreFilter protocol implementation."""
+        results = self.search(query)
+        return {r["node_id"]: r["tfidf_score"] for r in results if r["doc_id"] == doc_id}
+
+
+# ---------------------------------------------------------------------------
+# Query expansion via LLM
+# ---------------------------------------------------------------------------
+
+async def expand_query(query: str, model: str = None) -> str:
+    """
+    Expand query with synonyms and related terms using LLM.
+
+    Helps bridge the vocabulary gap for BM25/TF-IDF retrieval.
+    """
+    from .llm import achat, DEFAULT_MODEL as _DM
+    if model is None:
+        model = _DM
+
+    prompt = (
+        "Expand this search query with synonyms and related terms. "
+        "Keep the original query and add 3-5 related terms.\n\n"
+        f"Original: {query}\n\n"
+        "Return the expanded query as a single string, no explanation."
+    )
+    try:
+        expanded = await achat(prompt, model=model, temperature=0)
+        return expanded.strip()
+    except Exception as e:
+        logger.warning("Query expansion failed: %s", e)
+        return query

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytreesearch"
-version = "0.2.4"
+version = "0.3.0"
 description = "Structure-aware document retrieval without embeddings."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -34,6 +34,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pdf = ["pageindex>=0.1"]
+all = ["jieba>=0.42", "pageindex>=0.1"]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",

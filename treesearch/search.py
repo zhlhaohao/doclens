@@ -566,6 +566,96 @@ async def route_documents(
 # Unified search API
 # ---------------------------------------------------------------------------
 
+def _get_ancestor_titles(doc: Document, node_id: str) -> list[str]:
+    """Get ancestor node titles for context anchoring."""
+    titles = []
+    # Build parent map
+    parent_map = {}
+
+    def _scan(structure, parent_id=None):
+        if isinstance(structure, list):
+            for item in structure:
+                _scan(item, parent_id)
+        elif isinstance(structure, dict):
+            nid = structure.get("node_id", "")
+            parent_map[nid] = parent_id
+            for child in structure.get("nodes", []):
+                _scan(child, nid)
+
+    _scan(doc.structure)
+
+    pid = parent_map.get(node_id)
+    while pid:
+        pnode = doc.get_node_by_id(pid)
+        if pnode:
+            titles.append(pnode.get("title", ""))
+        pid = parent_map.get(pid)
+
+    titles.reverse()
+    return titles
+
+
+def _attach_node_fields(
+    nodes: list[dict],
+    doc: Document,
+    text_mode: str = "full",
+    include_ancestors: bool = False,
+) -> None:
+    """Attach full node fields to search result nodes."""
+    for n in nodes:
+        full = doc.get_node_by_id(str(n["node_id"]))
+        if not full:
+            continue
+
+        if text_mode == "full":
+            n["text"] = full.get("text", "")
+        elif text_mode == "summary":
+            n["text"] = full.get("summary", full.get("prefix_summary", ""))
+        # text_mode == "none": no text attached
+
+        n["summary"] = full.get("summary", full.get("prefix_summary", ""))
+        n["line_start"] = full.get("line_start")
+        n["line_end"] = full.get("line_end")
+
+        if include_ancestors:
+            n["ancestors"] = _get_ancestor_titles(doc, str(n["node_id"]))
+
+
+def _merge_doc_results(
+    doc_results: list[dict],
+    merge_strategy: str = "interleave",
+) -> list[dict]:
+    """Apply merge strategy to multi-document results."""
+    if merge_strategy == "per_doc":
+        return [r for r in doc_results if r.get("nodes")]
+
+    if merge_strategy == "global_score":
+        # Flatten all nodes with doc info, sort globally by score
+        all_nodes = []
+        for r in doc_results:
+            for node in r.get("nodes", []):
+                node_copy = dict(node)
+                node_copy["_doc_id"] = r.get("doc_id", "")
+                node_copy["_doc_name"] = r.get("doc_name", "")
+                all_nodes.append(node_copy)
+        all_nodes.sort(key=lambda x: (-x.get("score", 0), x.get("node_id", "")))
+
+        # Re-group by doc but preserve global order
+        seen_docs = {}
+        merged = []
+        for node in all_nodes:
+            did = node.pop("_doc_id", "")
+            dname = node.pop("_doc_name", "")
+            if did not in seen_docs:
+                seen_docs[did] = {"doc_id": did, "doc_name": dname, "nodes": []}
+                merged.append(seen_docs[did])
+            seen_docs[did]["nodes"].append(node)
+        return merged
+
+    # Default: interleave (current behavior)
+    return [r for r in doc_results if r.get("nodes")]
+
+
 async def search(
     query: str,
     documents: list[Document],
@@ -579,6 +669,9 @@ async def search(
     use_bm25: bool = True,
     pre_filter: Optional[PreFilter] = None,
     expert_knowledge: str = "",
+    text_mode: str = "full",
+    include_ancestors: bool = False,
+    merge_strategy: str = "interleave",
 ) -> SearchResult:
     """
     Search across one or more documents using tree-structured retrieval.
@@ -602,6 +695,9 @@ async def search(
         use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
         pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
         expert_knowledge: optional domain knowledge to guide search
+        text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
+        include_ancestors: attach ancestor titles for context anchoring
+        merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
     """
     total_llm_calls = 0
 
@@ -663,20 +759,17 @@ async def search(
         total_llm_calls += doc_llm_calls
 
         # Attach full node fields to results
-        for n in nodes:
-            full = doc.get_node_by_id(str(n["node_id"]))
-            if full:
-                n["text"] = full.get("text", "")
-                n["summary"] = full.get("summary", full.get("prefix_summary", ""))
-                n["line_start"] = full.get("line_start")
-                n["line_end"] = full.get("line_end")
+        _attach_node_fields(nodes, doc, text_mode=text_mode, include_ancestors=include_ancestors)
 
         return {"doc_id": doc.doc_id, "doc_name": doc.doc_name, "nodes": nodes}
 
     doc_results = await asyncio.gather(*(_search_doc(d) for d in selected))
 
+    # Stage 3: merge results across documents
+    merged = _merge_doc_results(list(doc_results), merge_strategy)
+
     return SearchResult(
-        documents=[r for r in doc_results if r["nodes"]],
+        documents=merged,
         query=query,
         total_llm_calls=total_llm_calls,
         strategy=strategy,

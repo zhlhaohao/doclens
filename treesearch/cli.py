@@ -3,15 +3,17 @@
 @author:XuMing(xuming624@qq.com)
 @description: CLI entry point for TreeSearch.
 
-Two modes:
-  index  - Build tree structure index from documents (Markdown / plain text), supports glob patterns
-  search - Multi-document tree search with Best-First/MCTS reasoning (no vector DB needed)
+Subcommands:
+  index     - Build tree structure index from documents
+  search    - Search across indexed documents
+  ask       - End-to-end QA (search + answer generation)
+  benchmark - Run standard benchmark evaluation
 
 Usage:
     treesearch index --paths "docs/*.md"
-    treesearch index --paths doc.md paper.txt
     treesearch search --index_dir ./indexes/ --query "How does auth work?"
-    treesearch search --index_dir ./indexes/ --query "deployment" --strategy mcts
+    treesearch ask --index_dir ./indexes/ --query "How does auth work?"
+    treesearch benchmark --dataset custom --data-path data.jsonl --index_dir ./indexes/
 """
 import argparse
 import asyncio
@@ -24,6 +26,7 @@ import time
 from treesearch.indexer import build_index, md_to_tree, text_to_tree
 from treesearch.tree import Document, save_index, load_documents, print_toc
 from treesearch.search import search
+from treesearch.answer import ask
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +63,6 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
 
 
 async def _run_index(args) -> None:
-    # Set API key if provided
     if args.api_key:
         os.environ["OPENAI_API_KEY"] = args.api_key
 
@@ -131,7 +133,6 @@ def _load_documents_from_dir(index_dir: str) -> list[Document]:
 
 
 async def _run_search(args) -> None:
-    # Set API key if provided
     if args.api_key:
         os.environ["OPENAI_API_KEY"] = args.api_key
 
@@ -183,6 +184,103 @@ async def _run_search(args) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: ask
+# ---------------------------------------------------------------------------
+
+def _add_ask_args(sub: argparse.ArgumentParser) -> None:
+    sub.add_argument("--index_dir", type=str, required=True,
+                     help="Directory containing index JSON files")
+    sub.add_argument("--query", type=str, required=True, help="Question to answer")
+    sub.add_argument("--model", type=str, default="gpt-4o-2024-11-20", help="LLM model name")
+    sub.add_argument("--api-key", type=str, default=None, help="OpenAI API key")
+    sub.add_argument("--strategy", type=str, default="best_first",
+                     choices=["best_first", "mcts", "llm"])
+    sub.add_argument("--answer-mode", type=str, default="extractive",
+                     choices=["extractive", "generative", "boolean"])
+    sub.add_argument("--decompose", action="store_true",
+                     help="Enable query decomposition for multi-hop questions")
+    sub.add_argument("--max-llm-calls", type=int, default=30)
+    sub.add_argument("--no-bm25", action="store_true")
+
+
+async def _run_ask(args) -> None:
+    if args.api_key:
+        os.environ["OPENAI_API_KEY"] = args.api_key
+
+    documents = _load_documents_from_dir(args.index_dir)
+    print(f"Loaded {len(documents)} document(s)")
+    print(f"Question: {args.query}\n")
+
+    start_time = time.time()
+    result = await ask(
+        query=args.query,
+        documents=documents,
+        model=args.model,
+        strategy=args.strategy,
+        answer_mode=args.answer_mode,
+        decompose=args.decompose,
+        max_llm_calls=args.max_llm_calls,
+        use_bm25=not args.no_bm25,
+    )
+    elapsed = time.time() - start_time
+
+    print(f"Answer: {result.answer}")
+    print(f"Confidence: {result.confidence:.2f}")
+    if result.reasoning:
+        print(f"Reasoning: {result.reasoning}")
+    print(f"\nSources ({len(result.sources)}):")
+    for src in result.sources:
+        print(f"  [{src.get('score', 0):.2f}] {src.get('doc_name', '')} > {src.get('title', '')}")
+    print(f"\nLLM calls: {result.llm_calls}, Time: {elapsed:.1f}s")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: benchmark
+# ---------------------------------------------------------------------------
+
+def _add_benchmark_args(sub: argparse.ArgumentParser) -> None:
+    sub.add_argument("--dataset", type=str, required=True,
+                     choices=["hotpotqa", "qasper", "custom"],
+                     help="Benchmark dataset")
+    sub.add_argument("--data-path", type=str, required=True,
+                     help="Path to dataset file")
+    sub.add_argument("--index_dir", type=str, required=True,
+                     help="Directory containing index JSON files")
+    sub.add_argument("--model", type=str, default="gpt-4o-mini", help="LLM model name")
+    sub.add_argument("--api-key", type=str, default=None, help="OpenAI API key")
+    sub.add_argument("--strategy", type=str, nargs="+", default=["best_first"],
+                     help="Search strategies to evaluate")
+    sub.add_argument("--max-samples", type=int, default=100, help="Max samples to evaluate")
+    sub.add_argument("--output-dir", type=str, default="./benchmark_results")
+    sub.add_argument("--decompose", action="store_true", help="Enable query decomposition")
+
+
+async def _run_benchmark(args) -> None:
+    if args.api_key:
+        os.environ["OPENAI_API_KEY"] = args.api_key
+
+    from treesearch.benchmark import run_benchmark, print_report
+
+    documents = _load_documents_from_dir(args.index_dir)
+    print(f"Loaded {len(documents)} document(s)")
+    print(f"Running benchmark: {args.dataset} ({args.max_samples} samples)\n")
+
+    reports = await run_benchmark(
+        dataset=args.dataset,
+        documents=documents,
+        strategies=args.strategy,
+        models=[args.model],
+        data_path=args.data_path,
+        output_dir=args.output_dir,
+        max_samples=args.max_samples,
+        use_decompose=args.decompose,
+    )
+
+    for report in reports:
+        print_report(report)
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -205,6 +303,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sch = sub.add_parser("search", help="Search across indexed documents using tree reasoning")
     _add_search_args(sch)
 
+    ask_cmd = sub.add_parser("ask", help="End-to-end QA: search + answer generation")
+    _add_ask_args(ask_cmd)
+
+    bench = sub.add_parser("benchmark", help="Run standard benchmark evaluation")
+    _add_benchmark_args(bench)
+
     return p
 
 
@@ -223,6 +327,10 @@ def main():
         asyncio.run(_run_index(args))
     elif args.command == "search":
         asyncio.run(_run_search(args))
+    elif args.command == "ask":
+        asyncio.run(_run_ask(args))
+    elif args.command == "benchmark":
+        asyncio.run(_run_benchmark(args))
 
 
 if __name__ == "__main__":
