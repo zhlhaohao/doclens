@@ -56,13 +56,13 @@ class TestBuildParser:
 
     def test_search_strategy(self):
         parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "mcts"])
-        assert args.strategy == "mcts"
+        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "llm"])
+        assert args.strategy == "llm"
 
     def test_search_strategy_default(self):
         parser = _build_parser()
         args = parser.parse_args(["search", "--index_dir", ".", "--query", "q"])
-        assert args.strategy == "best_first"
+        assert args.strategy == "fts5_only"
 
     def test_search_no_bm25(self):
         parser = _build_parser()

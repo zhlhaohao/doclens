@@ -4,8 +4,7 @@
 @description: QASPER benchmark script.
 
 Loads the QASPER dataset from HuggingFace (allenai/qasper), builds tree indexes
-from academic papers, and evaluates BM25 / BestFirst / MCTS / Embedding / Hybrid /
-RetrieveRerank retrieval strategies.
+from academic papers, and evaluates BM25 / FTS5 / BestFirst / MCTS retrieval strategies.
 
 QASPER Dataset Overview:
     QASPER (Question Answering on Scientific Papers) contains ~1600 NLP papers with
@@ -28,14 +27,11 @@ QASPER Dataset Overview:
     Evidence is paragraph-level text; highlighted_evidence is sentence-level.
 
 Usage:
-    # Evaluate on 20 samples with BM25, BestFirst, MCTS, Embedding, Hybrid, RetrieveRerank:
+    # Evaluate on 20 samples with BM25, FTS5, BestFirst, MCTS:
     python examples/benchmark/qasper_benchmark.py --max-samples 20
 
     # Evaluate with specific strategies:
-    python examples/benchmark/qasper_benchmark.py --strategies bm25 embedding retrieve_rerank --max-samples 50
-
-    # Evaluate with a different embedding model:
-    python examples/benchmark/qasper_benchmark.py --embedding-model text-embedding-3-large --max-samples 10
+    python examples/benchmark/qasper_benchmark.py --strategies bm25 fts5 best_first --max-samples 50
 """
 import asyncio
 import argparse
@@ -47,8 +43,6 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from treesearch import build_index, load_documents, search
-from treesearch.tree import Document, assign_node_ids, flatten_tree
-from treesearch.rank_bm25 import NodeBM25Index
 
 from examples.benchmark.benchmark import (
     BenchmarkSample,
@@ -95,10 +89,10 @@ def paper_to_markdown(paper: dict) -> str:
 async def build_paper_indexes(
     papers: list[dict],
     output_dir: str,
-    model: str = "gpt-4o-mini",
+    model: str = None,
     max_concurrency: int = 5,
     force: bool = False,
-) -> list[Document]:
+):
     """Build tree indexes for QASPER papers.
 
     Converts each paper to Markdown, writes temp files, then runs build_index.
@@ -140,7 +134,7 @@ async def build_paper_indexes(
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="QASPER benchmark: evaluate BM25/BestFirst/MCTS on academic paper QA"
+        description="QASPER benchmark: evaluate BM25/FTS5/BestFirst/MCTS on academic paper QA"
     )
     parser.add_argument(
         "--split", type=str, default="validation", choices=["train", "validation"],
@@ -148,15 +142,13 @@ async def main():
     )
     parser.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["bm25", "best_first", "mcts", "embedding", "hybrid", "retrieve_rerank"],
-        help="Search strategies to evaluate (default: bm25 best_first mcts embedding hybrid retrieve_rerank)"
+        default=["bm25", "fts5", "best_first"],
+        help="Search strategies to evaluate (default: bm25 fts5 best_first)"
     )
-    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="LLM model name")
-    parser.add_argument("--embedding-model", type=str, default="text-embedding-3-small",
-                        help="Embedding model for embedding/hybrid strategies")
+    parser.add_argument("--model", type=str, default=None, help="LLM model name")
     parser.add_argument("--max-samples", type=int, default=50, help="Max QA samples to evaluate")
     parser.add_argument("--max-papers", type=int, default=20, help="Max papers to index")
-    parser.add_argument("--top-k", type=int, default=5, help="Top-K results per query")
+    parser.add_argument("--top-k", type=int, default=10, help="Top-K results per query")
     parser.add_argument("--output-dir", type=str, default="./benchmark_results/qasper", help="Output directory")
     parser.add_argument("--index-dir", type=str, default="./indexes/qasper", help="Index directory")
     parser.add_argument("--concurrency", type=int, default=3, help="Max concurrent evaluations")
@@ -202,7 +194,6 @@ async def main():
         top_k=args.top_k,
         max_concurrency=args.concurrency,
         output_dir=args.output_dir,
-        embedding_model=args.embedding_model,
     )
 
     # Print results

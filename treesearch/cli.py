@@ -38,7 +38,7 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
                      help="Output directory for index JSON files (default: ./indexes)")
     sub.add_argument("--model", type=str, default="gpt-4o-2024-11-20", help="LLM model name")
     sub.add_argument("--api-key", type=str, default=None,
-                     help="OpenAI API key (overrides OPENAI_API_KEY env var)")
+                     help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
     sub.add_argument("--no-summary", action="store_true", help="Skip node summary generation")
     sub.add_argument("--add-description", action="store_true", help="Generate doc description")
     sub.add_argument("--add-text", action="store_true", help="Include node text in output")
@@ -100,12 +100,14 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
                      help="Search query")
     sub.add_argument("--model", type=str, default="gpt-4o-2024-11-20", help="LLM model name")
     sub.add_argument("--api-key", type=str, default=None,
-                     help="OpenAI API key (overrides OPENAI_API_KEY env var)")
-    sub.add_argument("--strategy", type=str, default="best_first",
-                     choices=["best_first", "mcts", "llm"],
-                     help="Search strategy (default: best_first)")
-    sub.add_argument("--mcts-iterations", type=int, default=10,
-                     help="MCTS iteration count (default: 10)")
+                     help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
+    sub.add_argument("--strategy", type=str, default="fts5_only",
+                     choices=["fts5_only", "best_first", "llm", "fts5_rerank"],
+                     help="Search strategy (default: fts5_only)")
+    sub.add_argument("--fts", action="store_true",
+                     help="Enable SQLite FTS5 full-text search as pre-filter backend")
+    sub.add_argument("--fts-db", type=str, default=None,
+                     help="Path to FTS5 database file (default: in-memory)")
     sub.add_argument("--top-k-docs", type=int, default=3,
                      help="Max documents to search (default: 3)")
     sub.add_argument("--max-nodes", type=int, default=5,
@@ -135,21 +137,32 @@ async def _run_search(args) -> None:
         cfg.api_key = args.api_key
         set_config(cfg)
 
+    # Enable FTS5 if --fts flag is set
+    if args.fts:
+        cfg = get_config()
+        cfg.fts.enabled = True
+        if args.fts_db:
+            cfg.fts.db_path = args.fts_db
+        set_config(cfg)
+
     documents = _load_documents_from_dir(args.index_dir)
     print(f"Loaded {len(documents)} document(s) from {args.index_dir}")
     for doc in documents:
         print(f"  - {doc.doc_name}")
 
     print(f"\nQuery: {args.query}")
+    pre_filter = "FTS5" if args.fts else ("BM25" if not args.no_bm25 else "none")
     strategy_desc = {
-        "best_first": f"Best-First (max_llm_calls={args.max_llm_calls}, bm25={'on' if not args.no_bm25 else 'off'})",
-        "mcts": f"MCTS ({args.mcts_iterations} iterations)",
+        "best_first": f"Best-First (max_llm_calls={args.max_llm_calls}, pre_filter={pre_filter})",
         "llm": "LLM single-pass",
+        "fts5_only": "FTS5-only (no LLM)",
+        "fts5_rerank": "FTS5 + LLM rerank",
     }
     print("Search strategy:", strategy_desc.get(args.strategy, args.strategy))
     print("---")
 
     start_time = time.time()
+
     result = await search(
         query=args.query,
         documents=documents,
@@ -157,7 +170,6 @@ async def _run_search(args) -> None:
         top_k_docs=args.top_k_docs,
         max_nodes_per_doc=args.max_nodes,
         strategy=args.strategy,
-        mcts_iterations=args.mcts_iterations,
         value_threshold=args.threshold,
         max_llm_calls=args.max_llm_calls,
         use_bm25=not args.no_bm25,

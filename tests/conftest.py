@@ -12,6 +12,36 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 
+# ---------------------------------------------------------------------------
+# Isolate tests from project .env file
+# ---------------------------------------------------------------------------
+# config.py calls load_dotenv() at import time, which injects .env values
+# (e.g. TREESEARCH_MODEL=ep-xxx) into os.environ. These can break tests that
+# expect default values. This autouse fixture saves and removes all injected
+# TREESEARCH_* and OPENAI_* vars before each test, then restores them after.
+# ---------------------------------------------------------------------------
+
+_ENV_PREFIXES = ("TREESEARCH_", "OPENAI_")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env_and_config():
+    """Remove .env-injected vars before each test, restore after."""
+    from treesearch.config import reset_config
+    saved = {}
+    for k in list(os.environ):
+        if k.startswith(_ENV_PREFIXES):
+            saved[k] = os.environ.pop(k)
+    reset_config()
+    yield
+    # Restore
+    for k in list(os.environ):
+        if k.startswith(_ENV_PREFIXES):
+            os.environ.pop(k, None)
+    os.environ.update(saved)
+    reset_config()
+
+
 @pytest.fixture
 def sample_md_file():
     """Create a temp Markdown file for testing."""

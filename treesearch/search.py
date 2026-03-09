@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Tree search over document structures — Best-First (default), MCTS,
-              single-pass LLM, and the unified multi-document ``search()`` pipeline.
+@description: Tree search over document structures — FTS5-only (default),
+              Best-First LLM-enhanced, single-pass LLM, and the unified multi-document ``search()`` pipeline.
 
 Key design:
-  - BestFirstTreeSearch: deterministic priority-queue search with optional BM25 pre-scoring,
+  - TreeSearch: deterministic priority-queue search with optional BM25 pre-scoring,
     LLM relevance evaluation, early stopping, budget control, and subtree caching.
-  - MCTS: preserved as alternative strategy, deterministic + cache-friendly.
   - ``search()`` is the primary public API — it natively handles one or many documents.
 """
 import asyncio
@@ -15,13 +14,12 @@ import hashlib
 import heapq
 import json
 import logging
-import math
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional, Protocol, runtime_checkable
 
-from .llm import achat, extract_json, DEFAULT_MODEL
-from .tree import Document, flatten_tree, find_node, remove_fields
+from .llm import achat, count_tokens, extract_json
+from .tree import Document
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -73,35 +71,35 @@ def _query_fingerprint(query: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Best-First Tree Search (default strategy)
+# Tree Search (optional LLM-enhanced strategy)
 # ---------------------------------------------------------------------------
 
-class BestFirstTreeSearch:
+class TreeSearch:
     """
-    Deterministic best-first tree search over a document tree.
+    Best-first tree search with batch comparative ranking.
 
-    Three-layer design:
-      - Layer 1: BM25 pre-scoring (optional, provides initial priority)
-      - Layer 2: Best-first expansion with LLM relevance evaluation
-      - Layer 3: Budget-controlled LLM calls with early stopping
-
-    Features:
-      - Priority queue driven: always expands the most promising node first
-      - BM25 scores as prior: when available, nodes start with BM25-based priority
-      - LLM as judge: evaluates "does this node contain the answer?" (title+summary only)
-      - Early stopping: stops when top-of-queue score drops below threshold
+    Key optimizations over naive per-node evaluation:
+      - Batch eval: rank sibling nodes in one LLM call (comparative > absolute scoring)
+      - Context-aware batching: auto-split batches to respect model context window
+      - Text excerpts: include node text in prompts for richer context
+      - Adaptive depth: flat trees (depth <= threshold) use single batch eval
+      - Dynamic threshold: median-based cutoff from first-round scores
+      - BM25 prior: optional pre-scoring for initial priority
       - Budget control: max_llm_calls limits total LLM invocations
-      - Subtree cache: caches (query_fingerprint, node_id) -> relevance for reuse
     """
 
     # Class-level subtree cache shared across searches
     _subtree_cache: dict[str, dict] = {}
+    _SUBTREE_CACHE_MAX_SIZE: int = 10000
+
+    # Default max tokens for batch prompt (leave room for response)
+    _DEFAULT_MAX_PROMPT_TOKENS = 60000
 
     def __init__(
         self,
         document: Document,
         query: str,
-        model: str = DEFAULT_MODEL,
+        model: Optional[str] = None,
         max_results: int = 5,
         threshold: float = 0.3,
         max_llm_calls: int = 30,
@@ -109,6 +107,11 @@ class BestFirstTreeSearch:
         bm25_weight: float = 0.3,
         depth_penalty: float = 0.02,
         use_subtree_cache: bool = True,
+        text_excerpt_len: int = 300,
+        adaptive_depth_threshold: int = 2,
+        dynamic_threshold: bool = True,
+        min_threshold: float = 0.15,
+        max_prompt_tokens: int = 0,
     ):
         self.document = document
         self.query = query
@@ -120,6 +123,11 @@ class BestFirstTreeSearch:
         self.bm25_weight = bm25_weight
         self.depth_penalty = depth_penalty
         self.use_subtree_cache = use_subtree_cache
+        self.text_excerpt_len = text_excerpt_len
+        self.adaptive_depth_threshold = adaptive_depth_threshold
+        self.dynamic_threshold = dynamic_threshold
+        self.min_threshold = min_threshold
+        self.max_prompt_tokens = max_prompt_tokens or self._DEFAULT_MAX_PROMPT_TOKENS
 
         self._llm_calls = 0
         self._value_cache: dict[str, float] = {}
@@ -150,78 +158,256 @@ class BestFirstTreeSearch:
     def _get_summary(self, node: dict) -> str:
         return _normalize(node.get("summary", node.get("prefix_summary", "")))
 
+    def _get_text_excerpt(self, node: dict) -> str:
+        """Get text excerpt for richer evaluation context."""
+        text = node.get("text", "")
+        if text and self.text_excerpt_len > 0:
+            return _normalize(text, max_len=self.text_excerpt_len)
+        return ""
+
+    def _max_tree_depth(self) -> int:
+        """Return the maximum depth in the tree."""
+        return max(self._depth_map.values()) if self._depth_map else 0
+
     def _initial_priority(self, node_id: str) -> float:
         """Compute initial priority from BM25 score and depth penalty."""
         bm25 = self.bm25_scores.get(node_id, 0.0)
         depth = self._depth_map.get(node_id, 0)
-        # Normalize BM25 to [0,1] range approximately
         bm25_norm = min(bm25 / max(max(self.bm25_scores.values(), default=1.0), 1e-6), 1.0) if bm25 > 0 else 0.0
         return bm25_norm * self.bm25_weight - depth * self.depth_penalty
 
-    async def _evaluate(self, node_id: str) -> float:
-        """LLM scores node relevance. Returns value in [0, 1]."""
-        # Check subtree cache
-        if self.use_subtree_cache:
-            cache_key = f"{self._qfp}::{node_id}"
-            cached = BestFirstTreeSearch._subtree_cache.get(cache_key)
-            if cached is not None:
-                return cached.get("max_relevance", 0.0)
-
-        # Check local cache
-        if node_id in self._value_cache:
-            return self._value_cache[node_id]
-
-        node = self._node_map.get(node_id)
+    def _build_section_text(self, nid: str, index: int) -> str:
+        """Build section text for a single node in batch prompt."""
+        node = self._node_map.get(nid)
         if not node:
-            return 0.0
+            return ""
+        title = node.get("title", "")
+        summary = self._get_summary(node)
+        excerpt = self._get_text_excerpt(node)
+        section_text = f"Section {index} (node_id: {nid}):\n  Title: {title}\n  Summary: {summary}"
+        if excerpt:
+            section_text += f"\n  Content: {excerpt}"
+        return section_text
 
-        prompt = (
-            f"Rate relevance of this document section to the query.\n\n"
+    def _build_prompt(self, sections_str: str, num_sections: int = 0) -> str:
+        """Build the listwise ranking prompt from sections string.
+
+        Uses listwise ranking (order by relevance) instead of absolute scoring.
+        LLMs are more accurate at comparative ordering than absolute calibration.
+        """
+        return (
+            f"Rank these document sections from MOST to LEAST relevant to the query. "
+            f"Only include sections that have ANY relevance. "
+            f"Omit completely irrelevant sections.\n\n"
             f"Query: {self.query}\n\n"
-            f"Section title: {node.get('title', '')}\n"
-            f"Section summary: {self._get_summary(node)}\n\n"
-            f"Return JSON only:\n"
-            f'{{"relevance": <float 0.0-1.0>}}'
+            f"{sections_str}\n\n"
+            f"Return JSON only — node_ids ordered from most to least relevant:\n"
+            f'{{"ranked_node_ids": ["most_relevant_id", "second_id", ...]}}'
         )
-        response = await achat(prompt, model=self.model, temperature=0)
-        result = extract_json(response)
-        value = float(result.get("relevance", 0.0))
 
-        self._value_cache[node_id] = value
-        self._llm_calls += 1
+    def _split_into_batches(self, node_ids: list[str]) -> list[list[str]]:
+        """Split node_ids into batches that fit within max_prompt_tokens.
 
-        # Update subtree cache
-        if self.use_subtree_cache:
-            cache_key = f"{self._qfp}::{node_id}"
-            BestFirstTreeSearch._subtree_cache[cache_key] = {
-                "max_relevance": value,
-                "depth": self._depth_map.get(node_id, 0),
-            }
+        Estimates token count for each section and groups them so that
+        the total prompt stays under the context window limit.
+        """
+        # Build prompt skeleton (without sections) to measure overhead
+        skeleton = self._build_prompt("")
+        overhead_tokens = count_tokens(skeleton, model=self.model)
+        budget = self.max_prompt_tokens - overhead_tokens
 
-        return value
+        if budget <= 0:
+            # Fallback: one node per batch
+            return [[nid] for nid in node_ids]
+
+        batches: list[list[str]] = []
+        current_batch: list[str] = []
+        current_tokens = 0
+
+        for i, nid in enumerate(node_ids):
+            section = self._build_section_text(nid, i + 1)
+            section_tokens = count_tokens(section, model=self.model)
+
+            # If a single section exceeds budget, it gets its own batch
+            if section_tokens >= budget:
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_tokens = 0
+                batches.append([nid])
+                continue
+
+            if current_tokens + section_tokens > budget:
+                batches.append(current_batch)
+                current_batch = [nid]
+                current_tokens = section_tokens
+            else:
+                current_batch.append(nid)
+                current_tokens += section_tokens
+
+        if current_batch:
+            batches.append(current_batch)
+
+        return batches if batches else [node_ids]
+
+    async def _batch_evaluate(self, node_ids: list[str]) -> dict[str, float]:
+        """Batch comparative ranking with auto-splitting for context window.
+
+        If the combined prompt exceeds max_prompt_tokens, splits into
+        multiple LLM calls automatically.
+        """
+        if not node_ids:
+            return {}
+
+        # Check caches first, only evaluate uncached nodes
+        scores: dict[str, float] = {}
+        to_evaluate: list[str] = []
+        for nid in node_ids:
+            if self.use_subtree_cache:
+                cache_key = f"{self._qfp}::{nid}"
+                cached = TreeSearch._subtree_cache.get(cache_key)
+                if cached is not None:
+                    scores[nid] = cached.get("max_relevance", 0.0)
+                    continue
+            if nid in self._value_cache:
+                scores[nid] = self._value_cache[nid]
+                continue
+            to_evaluate.append(nid)
+
+        if not to_evaluate:
+            return scores
+
+        # Split into batches respecting context window
+        batches = self._split_into_batches(to_evaluate)
+        logger.debug("Batch evaluate %d nodes in %d batch(es)", len(to_evaluate), len(batches))
+
+        for batch_nids in batches:
+            if self._llm_calls >= self.max_llm_calls:
+                break
+
+            sections = []
+            for i, nid in enumerate(batch_nids):
+                section = self._build_section_text(nid, i + 1)
+                if section:
+                    sections.append(section)
+
+            if not sections:
+                continue
+
+            sections_str = "\n".join(sections)
+            prompt = self._build_prompt(sections_str, num_sections=len(batch_nids))
+            response = await achat(prompt, model=self.model, temperature=0)
+            result = extract_json(response)
+            self._llm_calls += 1
+
+            # Parse listwise ranking: ranked_node_ids → positional scores
+            ranked_ids = result.get("ranked_node_ids", [])
+            if ranked_ids:
+                n_ranked = len(ranked_ids)
+                for rank, nid_raw in enumerate(ranked_ids):
+                    nid = str(nid_raw)
+                    if nid in self._node_map:
+                        # Convert rank to score: top-1 gets ~0.95, decays linearly
+                        rel = max(0.95 - rank * (0.8 / max(n_ranked - 1, 1)), 0.1)
+                        scores[nid] = rel
+                        self._value_cache[nid] = rel
+                        if self.use_subtree_cache:
+                            cache_key = f"{self._qfp}::{nid}"
+                            TreeSearch._subtree_cache[cache_key] = {
+                                "max_relevance": rel,
+                                "depth": self._depth_map.get(nid, 0),
+                            }
+                            # LRU eviction: drop oldest entries when cache exceeds limit
+                            if len(TreeSearch._subtree_cache) > TreeSearch._SUBTREE_CACHE_MAX_SIZE:
+                                excess = len(TreeSearch._subtree_cache) - TreeSearch._SUBTREE_CACHE_MAX_SIZE
+                                for old_key in list(TreeSearch._subtree_cache)[:excess]:
+                                    del TreeSearch._subtree_cache[old_key]
+            else:
+                # Fallback: try old format (rankings with absolute scores)
+                rankings = result.get("rankings", [])
+                for item in rankings:
+                    nid = str(item.get("node_id", ""))
+                    rel = float(item.get("relevance", 0.0))
+                    if nid in self._node_map:
+                        scores[nid] = rel
+                        self._value_cache[nid] = rel
+
+            # Nodes not returned by LLM in this batch get score 0
+            for nid in batch_nids:
+                if nid not in scores:
+                    scores[nid] = 0.0
+                    self._value_cache[nid] = 0.0
+
+        return scores
+
+    def _compute_dynamic_threshold(self, scores: dict[str, float]) -> float:
+        """Compute dynamic threshold from median of first-round scores."""
+        if not scores:
+            return self.threshold
+        vals = sorted(scores.values())
+        median = vals[len(vals) // 2]
+        return max(median * 0.8, self.min_threshold)
+
+    async def _run_flat(self) -> list[dict]:
+        """Flat tree mode: use BM25 scoring without LLM.
+
+        For shallow trees (depth <= adaptive_depth_threshold), LLM evaluation
+        adds noise without tree-structure advantage. BM25 ranking is more
+        reliable and avoids LLM cost.
+        """
+        scores = dict(self.bm25_scores) if self.bm25_scores else {}
+
+        if not scores:
+            # Fall back to LLM batch evaluation if no scores available
+            all_ids = list(self._node_map.keys())
+            scores = await self._batch_evaluate(all_ids)
+
+        results = []
+        for nid, score in scores.items():
+            node = self._node_map.get(nid, {})
+            if node:
+                results.append({
+                    "node_id": nid,
+                    "title": node.get("title", ""),
+                    "score": round(score, 4),
+                })
+
+        results.sort(key=lambda x: (-x["score"], x["node_id"]))
+        return results[:self.max_results]
 
     async def run(self) -> list[dict]:
         """
         Run best-first tree search.
 
+        Uses adaptive strategy:
+        - Flat trees (depth <= adaptive_depth_threshold): batch evaluate all nodes
+        - Deep trees: priority-queue expansion with batch sibling evaluation
+
         Returns: [{'node_id': str, 'title': str, 'score': float}]
         """
-        # Priority queue: (-score, node_id) for max-heap via min-heap
+        max_depth = self._max_tree_depth()
+
+        # Adaptive: flat tree -> single-pass batch evaluation
+        if max_depth <= self.adaptive_depth_threshold:
+            return await self._run_flat()
+
+        # Deep tree: priority-queue based best-first expansion
         pq: list[tuple[float, str]] = []
         visited: set[str] = set()
         results: list[dict] = []
 
-        # Phase 1: evaluate root nodes and push to queue
+        # Phase 1: batch evaluate root nodes
         root_ids = [n.get("node_id", "") for n in self.document.structure if isinstance(n, dict)]
-        root_tasks = []
+        root_scores = await self._batch_evaluate(root_ids)
         for rid in root_ids:
-            if self._llm_calls < self.max_llm_calls:
-                root_tasks.append((rid, self._evaluate(rid)))
-        root_results = await asyncio.gather(*(t for _, t in root_tasks))
-
-        for (rid, _), val in zip(root_tasks, root_results):
+            val = root_scores.get(rid, 0.0)
             priority = val + self._initial_priority(rid)
             heapq.heappush(pq, (-priority, rid))
+
+        # Compute dynamic threshold from root scores if enabled
+        threshold = self.threshold
+        if self.dynamic_threshold and self._value_cache:
+            threshold = self._compute_dynamic_threshold(self._value_cache)
 
         # Phase 2: best-first expansion
         while pq and len(results) < self.max_results and self._llm_calls < self.max_llm_calls:
@@ -232,8 +418,7 @@ class BestFirstTreeSearch:
                 continue
             visited.add(nid)
 
-            # Early stopping: best remaining score below threshold
-            if score < self.threshold:
+            if score < threshold:
                 break
 
             node = self._node_map.get(nid)
@@ -242,6 +427,7 @@ class BestFirstTreeSearch:
 
             children = node.get("nodes", [])
             child_ids = [c.get("node_id", "") for c in children if isinstance(c, dict)]
+            unvisited_children = [cid for cid in child_ids if cid not in visited]
 
             if not child_ids:
                 # Leaf node -> collect as result
@@ -252,23 +438,17 @@ class BestFirstTreeSearch:
                     "score": round(llm_score, 4),
                 })
             else:
-                # Non-leaf: evaluate children and push to queue
-                eval_tasks = []
-                eval_ids = []
-                for cid in child_ids:
-                    if cid not in visited and self._llm_calls < self.max_llm_calls:
-                        eval_tasks.append(self._evaluate(cid))
-                        eval_ids.append(cid)
-
-                if eval_tasks:
-                    child_values = await asyncio.gather(*eval_tasks)
-                    for cid, cval in zip(eval_ids, child_values):
+                # Non-leaf: batch evaluate children
+                if unvisited_children and self._llm_calls < self.max_llm_calls:
+                    child_scores = await self._batch_evaluate(unvisited_children)
+                    for cid in unvisited_children:
+                        cval = child_scores.get(cid, 0.0)
                         priority = cval + self._initial_priority(cid)
                         heapq.heappush(pq, (-priority, cid))
 
-                # Non-leaf node itself can also be a result if highly relevant
+                # Non-leaf node itself can also be a result if relevant
                 llm_score = self._value_cache.get(nid, score)
-                if llm_score >= self.threshold:
+                if llm_score >= threshold:
                     results.append({
                         "node_id": nid,
                         "title": node.get("title", ""),
@@ -284,216 +464,22 @@ class BestFirstTreeSearch:
         cls._subtree_cache.clear()
 
 
-# ---------------------------------------------------------------------------
-# MCTS data structures
-# ---------------------------------------------------------------------------
-
-@dataclass
-class MCTSNode:
-    """A node in the MCTS search tree (wraps a document tree node)."""
-    node_id: str
-    title: str
-    summary: str = ""
-    children_ids: list[str] = field(default_factory=list)
-    parent_id: Optional[str] = None
-
-    # MCTS statistics
-    visit_count: int = 0
-    total_value: float = 0.0
-    is_expanded: bool = False
-    is_terminal: bool = False
-
-    @property
-    def avg_value(self) -> float:
-        return self.total_value / self.visit_count if self.visit_count > 0 else 0.0
+# Backward compatibility alias
+BestFirstTreeSearch = TreeSearch
 
 
 # ---------------------------------------------------------------------------
-# MCTS Tree Search (deterministic + cache-friendly)
-# ---------------------------------------------------------------------------
-
-class MCTSTreeSearch:
-    """
-    Monte Carlo Tree Search over a document tree.
-
-    Deterministic + cache-friendly design:
-      - temperature=0 for all LLM calls
-      - No "thinking" field in prompts (removes non-deterministic chain-of-thought)
-      - UCB1 tie-break by node_id for stable selection
-      - Per-query value cache to avoid redundant LLM calls
-      - Batch evaluations sorted by node_id for reproducibility
-    """
-
-    def __init__(
-        self,
-        document: Document,
-        query: str,
-        model: str = DEFAULT_MODEL,
-        exploration_weight: float = 1.0,
-        max_iterations: int = 10,
-        max_selected_nodes: int = 5,
-        value_threshold: float = 0.3,
-    ):
-        self.document = document
-        self.query = query
-        self.model = model
-        self.c = exploration_weight
-        self.max_iterations = max_iterations
-        self.max_selected_nodes = max_selected_nodes
-        self.value_threshold = value_threshold
-
-        self.nodes: dict[str, MCTSNode] = {}
-        self.root_ids: list[str] = []
-        self._value_cache: dict[str, float] = {}
-        self._llm_calls = 0
-        self._build(document.structure)
-
-    @property
-    def llm_calls(self) -> int:
-        return self._llm_calls
-
-    def _build(self, structure, parent_id: Optional[str] = None) -> None:
-        """Convert document tree to MCTS node map."""
-        if isinstance(structure, list):
-            for item in structure:
-                self._build(item, parent_id)
-        elif isinstance(structure, dict):
-            nid = structure.get("node_id", "")
-            children = structure.get("nodes", [])
-            child_ids = [c.get("node_id", "") for c in children if isinstance(c, dict)]
-
-            self.nodes[nid] = MCTSNode(
-                node_id=nid,
-                title=structure.get("title", ""),
-                summary=_normalize(structure.get("summary", structure.get("prefix_summary", ""))),
-                children_ids=child_ids,
-                parent_id=parent_id,
-                is_terminal=(len(children) == 0),
-            )
-            if parent_id is None:
-                self.root_ids.append(nid)
-            for child in children:
-                self._build(child, parent_id=nid)
-
-    def _ucb1(self, node: MCTSNode, parent_visits: int) -> tuple[float, str]:
-        """UCB1 with stable tie-break by node_id."""
-        if node.visit_count == 0:
-            return (float("inf"), node.node_id)
-        score = node.avg_value + self.c * math.sqrt(math.log(parent_visits + 1) / node.visit_count)
-        return (score, node.node_id)
-
-    def _select(self) -> MCTSNode:
-        """Selection: walk from root to a promising unexpanded/leaf node."""
-        roots = [self.nodes[rid] for rid in self.root_ids]
-        total_visits = sum(n.visit_count for n in roots) + 1
-        current = max(roots, key=lambda n: self._ucb1(n, total_visits))
-
-        while current.is_expanded and not current.is_terminal:
-            children = [self.nodes[cid] for cid in current.children_ids if cid in self.nodes]
-            if not children:
-                break
-            current = max(children, key=lambda n: self._ucb1(n, current.visit_count))
-        return current
-
-    async def _evaluate(self, node: MCTSNode) -> float:
-        """LLM scores node relevance. Returns value in [0, 1]. Results are cached."""
-        cache_key = f"{self.query}::{node.node_id}"
-        if cache_key in self._value_cache:
-            return self._value_cache[cache_key]
-
-        prompt = (
-            f"Rate relevance of this document section to the query.\n\n"
-            f"Query: {self.query}\n\n"
-            f"Section title: {node.title}\n"
-            f"Section summary: {node.summary}\n\n"
-            f"Return JSON only:\n"
-            f'{{"relevance": <float 0.0-1.0>}}'
-        )
-        response = await achat(prompt, model=self.model, temperature=0)
-        result = extract_json(response)
-        value = float(result.get("relevance", 0.0))
-        self._value_cache[cache_key] = value
-        self._llm_calls += 1
-        return value
-
-    async def _evaluate_batch(self, nodes: list[MCTSNode]) -> list[float]:
-        """Evaluate multiple nodes concurrently (sorted by node_id for stability)."""
-        sorted_nodes = sorted(nodes, key=lambda n: n.node_id)
-        values = await asyncio.gather(*(self._evaluate(n) for n in sorted_nodes))
-        # Map back to original order
-        value_map = {n.node_id: v for n, v in zip(sorted_nodes, values)}
-        return [value_map[n.node_id] for n in nodes]
-
-    def _backpropagate(self, node: MCTSNode, value: float) -> None:
-        """Update visit counts and values up to root."""
-        nid = node.node_id
-        while nid is not None:
-            n = self.nodes.get(nid)
-            if n is None:
-                break
-            n.visit_count += 1
-            n.total_value += value
-            nid = n.parent_id
-
-    async def run(self) -> list[dict]:
-        """
-        Run MCTS search and return ranked relevant nodes.
-
-        Returns: [{'node_id': str, 'title': str, 'score': float, 'visits': int}]
-        """
-        # Phase 1: screen root-level nodes
-        roots = [self.nodes[rid] for rid in self.root_ids]
-        root_values = await self._evaluate_batch(roots)
-        for node, value in zip(roots, root_values):
-            node.visit_count += 1
-            node.total_value += value
-            node.is_expanded = True
-
-        # Phase 2: MCTS iterations
-        for _ in range(self.max_iterations):
-            selected = self._select()
-
-            if not selected.is_terminal and not selected.is_expanded:
-                selected.is_expanded = True
-                children = [self.nodes[cid] for cid in selected.children_ids if cid in self.nodes]
-                if children:
-                    values = await self._evaluate_batch(children)
-                    for child, val in zip(children, values):
-                        child.visit_count += 1
-                        child.total_value += val
-                    self._backpropagate(selected, max(values) if values else 0.0)
-                    continue
-
-            value = await self._evaluate(selected)
-            self._backpropagate(selected, value)
-
-        # Collect results above threshold
-        results = []
-        for nid, node in self.nodes.items():
-            if node.visit_count > 0 and node.avg_value >= self.value_threshold:
-                results.append({
-                    "node_id": node.node_id,
-                    "title": node.title,
-                    "score": round(node.avg_value, 4),
-                    "visits": node.visit_count,
-                })
-
-        results.sort(key=lambda x: (-x["score"], x["node_id"]))
-        return results[: self.max_selected_nodes]
-
-
-# ---------------------------------------------------------------------------
-# Simple LLM tree search (single-pass, non-MCTS)
+# Simple LLM tree search (single-pass)
 # ---------------------------------------------------------------------------
 
 async def llm_tree_search(
     query: str,
     document: Document,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     expert_knowledge: str = "",
 ) -> list[dict]:
     """
-    Single-pass LLM tree search. Faster but less thorough than MCTS.
+    Single-pass LLM tree search. Sends full tree to LLM in one call.
 
     Returns: [{'node_id': str, 'title': str}]
     """
@@ -532,7 +518,7 @@ async def llm_tree_search(
 async def route_documents(
     query: str,
     documents: list[Document],
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     top_k: int = 3,
 ) -> list[Document]:
     """
@@ -659,11 +645,10 @@ def _merge_doc_results(
 async def search(
     query: str,
     documents: list[Document],
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     top_k_docs: int = 3,
     max_nodes_per_doc: int = 5,
-    strategy: str = "best_first",
-    mcts_iterations: int = 10,
+    strategy: str = "fts5_only",
     value_threshold: float = 0.3,
     max_llm_calls: int = 30,
     use_bm25: bool = True,
@@ -679,7 +664,7 @@ async def search(
     This is the primary API. It natively supports multi-document search:
       1. Route query to relevant documents (LLM reasoning, no vector DB)
       2. (Optional) Pre-filter scoring over tree nodes for initial ranking
-      3. Tree search within each document (best_first / mcts / llm)
+      3. Tree search within each document (fts5_only / best_first / llm / fts5_rerank)
       4. Return ranked nodes with text content
 
     Args:
@@ -688,8 +673,9 @@ async def search(
         model: LLM model name
         top_k_docs: max documents to search (routing stage)
         max_nodes_per_doc: max result nodes per document
-        strategy: 'best_first' (default), 'mcts', or 'llm'
-        mcts_iterations: MCTS iteration count (only for strategy='mcts')
+        strategy: 'best_first' (default), 'llm', 'fts5_only', or 'fts5_rerank'
+                  'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
+                  'fts5_rerank' uses FTS5 top-N candidates + single LLM listwise rerank (best cost/quality)
         value_threshold: minimum relevance score
         max_llm_calls: max LLM calls per document (only for best_first)
         use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
@@ -701,32 +687,135 @@ async def search(
     """
     total_llm_calls = 0
 
-    # Stage 1: document routing (skip for single doc)
-    if len(documents) <= 1:
-        selected = documents
+    # Stage 1: document routing (skip for single doc or fts5_only/fts5_rerank)
+    if len(documents) <= 1 or strategy in ("fts5_only", "fts5_rerank"):
+        selected = documents[:top_k_docs] if strategy in ("fts5_only", "fts5_rerank") else documents
     else:
         selected = await route_documents(query, documents, model, top_k=top_k_docs)
         total_llm_calls += 1
 
     logger.info("Selected %d documents: %s", len(selected), [d.doc_name for d in selected])
 
-    # Stage 1.5: Pre-filter scoring (for best_first strategy)
+    # Stage 1.5: Pre-filter scoring (for best_first, fts5_only, fts5_rerank)
     scorer = pre_filter
-    if scorer is None and use_bm25 and strategy == "best_first" and selected:
-        from .rank_bm25 import NodeBM25Index
-        scorer = NodeBM25Index(selected)
+    if scorer is None and strategy in ("best_first", "fts5_only", "fts5_rerank") and selected:
+        fts_cfg = get_config().fts
+        # fts5_rerank always needs FTS5; other strategies check fts_cfg.enabled
+        if fts_cfg.enabled or strategy in ("fts5_only", "fts5_rerank"):
+            from .fts import FTS5Index, get_fts_index
+            fts_index = get_fts_index(db_path=fts_cfg.db_path or None)
+            for doc in selected:
+                if not fts_index.is_document_indexed(doc.doc_id):
+                    fts_index.index_document(doc)
+            scorer = fts_index
+        elif use_bm25:
+            from .rank_bm25 import NodeBM25Index
+            scorer = NodeBM25Index(selected)
 
     # Stage 2: tree search within each document (concurrent)
     async def _search_doc(doc: Document) -> dict:
         nonlocal total_llm_calls
         doc_llm_calls = 0
 
-        if strategy == "best_first":
+        if strategy == "fts5_only":
+            # Pure FTS5/BM25 scoring — zero LLM calls, millisecond-level
+            nodes = []
+            if scorer is not None:
+                score_map = scorer.score_nodes(query, doc.doc_id)
+                for nid, score in sorted(score_map.items(), key=lambda x: -x[1]):
+                    full_node = doc.get_node_by_id(nid)
+                    nodes.append({
+                        "node_id": nid,
+                        "title": full_node.get("title", "") if full_node else "",
+                        "score": round(score, 4),
+                    })
+                    if len(nodes) >= max_nodes_per_doc:
+                        break
+
+        elif strategy == "fts5_rerank":
+            # FTS5 top-N candidates → single LLM listwise rerank
+            candidates = []
+            if scorer is not None:
+                score_map = scorer.score_nodes(query, doc.doc_id)
+                for nid, score in sorted(score_map.items(), key=lambda x: -x[1]):
+                    full_node = doc.get_node_by_id(nid)
+                    if full_node:
+                        candidates.append({
+                            "node_id": nid,
+                            "title": full_node.get("title", ""),
+                            "summary": _normalize(full_node.get("summary", full_node.get("prefix_summary", ""))),
+                            "text_excerpt": _normalize(full_node.get("text", ""), max_len=500),
+                            "fts_score": score,
+                        })
+                    if len(candidates) >= 20:
+                        break
+
+            if candidates:
+                # Build listwise rerank prompt (achat uses config default model if model=None)
+                sections = []
+                for i, c in enumerate(candidates):
+                    sec = f"{i+1}. [{c['node_id']}] {c['title']}"
+                    if c['summary']:
+                        sec += f"\n   Summary: {c['summary']}"
+                    if c['text_excerpt']:
+                        sec += f"\n   Content: {c['text_excerpt']}"
+                    sections.append(sec)
+
+                rerank_prompt = (
+                    f"Rank these document sections by relevance to the query. "
+                    f"Return the top {max_nodes_per_doc} most relevant section IDs in order.\n\n"
+                    f"Query: {query}\n\n"
+                    f"Sections:\n" + "\n".join(sections) + "\n\n"
+                    f"Return JSON only:\n"
+                    f'{{"ranked_ids": ["node_id_1", "node_id_2", ...]}}'
+                )
+                response = await achat(rerank_prompt, model=model, temperature=0)
+                result = extract_json(response)
+                ranked_ids = result.get("ranked_ids", [])
+                doc_llm_calls = 1
+
+                # Build result from LLM ranking
+                candidate_map = {c["node_id"]: c for c in candidates}
+                nodes = []
+                for rank, nid in enumerate(ranked_ids):
+                    nid = str(nid)
+                    if nid in candidate_map:
+                        nodes.append({
+                            "node_id": nid,
+                            "title": candidate_map[nid]["title"],
+                            "score": round(1.0 - rank * 0.05, 4),
+                        })
+                    if len(nodes) >= max_nodes_per_doc:
+                        break
+
+                # Fill remaining slots from FTS5 ranking if LLM missed some
+                if len(nodes) < max_nodes_per_doc:
+                    seen = {n["node_id"] for n in nodes}
+                    for c in candidates:
+                        if c["node_id"] not in seen:
+                            nodes.append({
+                                "node_id": c["node_id"],
+                                "title": c["title"],
+                                "score": round(c["fts_score"] * 0.5, 4),
+                            })
+                            if len(nodes) >= max_nodes_per_doc:
+                                break
+            else:
+                # No model available, fall back to FTS5 only
+                nodes = [{
+                    "node_id": c["node_id"],
+                    "title": c["title"],
+                    "score": round(c["fts_score"], 4),
+                } for c in candidates[:max_nodes_per_doc]]
+
+        elif strategy == "best_first":
+            bf_cfg = get_config().best_first
+
             bm25_scores = {}
             if scorer is not None:
                 bm25_scores = scorer.score_nodes(query, doc.doc_id)
 
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query=query,
                 model=model,
@@ -734,18 +823,12 @@ async def search(
                 threshold=value_threshold,
                 max_llm_calls=max_llm_calls,
                 bm25_scores=bm25_scores,
-            )
-            nodes = await searcher.run()
-            doc_llm_calls = searcher.llm_calls
-
-        elif strategy == "mcts":
-            searcher = MCTSTreeSearch(
-                document=doc,
-                query=query,
-                model=model,
-                max_iterations=mcts_iterations,
-                max_selected_nodes=max_nodes_per_doc,
-                value_threshold=value_threshold,
+                bm25_weight=bf_cfg.bm25_weight,
+                depth_penalty=bf_cfg.depth_penalty,
+                text_excerpt_len=bf_cfg.text_excerpt_len,
+                adaptive_depth_threshold=bf_cfg.adaptive_depth_threshold,
+                dynamic_threshold=bf_cfg.dynamic_threshold,
+                min_threshold=bf_cfg.min_threshold,
             )
             nodes = await searcher.run()
             doc_llm_calls = searcher.llm_calls
@@ -775,291 +858,6 @@ async def search(
         strategy=strategy,
     )
 
-
-# ---------------------------------------------------------------------------
-# Three-stage Retrieve-Rerank Pipeline
-# ---------------------------------------------------------------------------
-
-def _get_sibling_titles(doc: Document, node_id: str) -> list[str]:
-    """Get sibling node titles for context."""
-    parent_map = {}
-
-    def _scan(structure, parent_id=None):
-        if isinstance(structure, list):
-            for item in structure:
-                _scan(item, parent_id)
-        elif isinstance(structure, dict):
-            nid = structure.get("node_id", "")
-            parent_map[nid] = parent_id
-            for child in structure.get("nodes", []):
-                _scan(child, nid)
-
-    _scan(doc.structure)
-    pid = parent_map.get(node_id)
-    if not pid:
-        return []
-
-    parent_node = doc.get_node_by_id(pid)
-    if not parent_node:
-        return []
-
-    siblings = []
-    for child in parent_node.get("nodes", []):
-        cid = child.get("node_id", "")
-        if cid != node_id:
-            siblings.append(child.get("title", ""))
-    return siblings
-
-
-def _adaptive_bm25_weight(query: str, config) -> float:
-    """Compute adaptive BM25 weight based on query length."""
-    word_count = len(query.strip().split())
-    if word_count <= config.query_length_threshold:
-        return config.short_query_bm25_weight
-    return config.long_query_bm25_weight
-
-
-def _reciprocal_rank_fusion(
-    *rank_lists: list[str],
-    k: int = 60,
-) -> list[tuple[str, float]]:
-    """Reciprocal Rank Fusion (RRF) over multiple ranked lists.
-
-    RRF score = sum(1 / (k + rank_i)) across all lists.
-    Nodes appearing in only one list still get a valid score (not penalized to 0).
-
-    Args:
-        *rank_lists: each list is an ordered list of node_ids (best first)
-        k: smoothing constant (default 60, standard in literature)
-
-    Returns:
-        sorted list of (node_id, rrf_score) descending
-    """
-    scores: dict[str, float] = {}
-    for ranked in rank_lists:
-        for rank, nid in enumerate(ranked):
-            scores[nid] = scores.get(nid, 0.0) + 1.0 / (k + rank + 1)
-
-    result = sorted(scores.items(), key=lambda x: -x[1])
-    return result
-
-
-async def retrieve_rerank(
-    query: str,
-    documents: list[Document],
-    model: str = DEFAULT_MODEL,
-    embedding_model: str = "text-embedding-3-small",
-    top_k: int = 5,
-    config=None,
-) -> SearchResult:
-    """
-    Embedding-first retrieve-rerank pipeline.
-
-    Stage 1: Embedding recall as primary backbone (ranking preserved exactly)
-    Stage 2: BM25 supplements -- find candidates embedding missed entirely
-    Stage 3: LLM gates BM25 supplements -- only append to tail if highly relevant
-
-    Key principle: embedding's top-k order is SACRED. BM25+LLM can only ADD
-    to the result set (expand recall), never reorder or replace embedding picks.
-
-    Args:
-        query: search query
-        documents: list of Document objects
-        model: LLM model for supplement gating
-        embedding_model: embedding model for Stage 1
-        top_k: final number of results
-        config: RetrieveRerankConfig (uses global config if None)
-
-    Returns:
-        SearchResult
-    """
-    from .config import get_config, RetrieveRerankConfig
-    from .embeddings import EmbeddingPreFilter
-    from .rank_bm25 import NodeBM25Index
-
-    if config is None:
-        config = get_config().retrieve_rerank
-
-    total_llm_calls = 0
-
-    # Stage 1: Embedding recall — this is the backbone, order is sacred
-    emb_index = EmbeddingPreFilter(documents, model=embedding_model)
-    emb_results = emb_index.search(query, top_k=config.embedding_topk)
-    emb_scores = {r["node_id"]: r["embedding_score"] for r in emb_results}
-    emb_ranked = [r["node_id"] for r in emb_results]
-
-    # Build doc lookup
-    doc_lookup = {r["node_id"]: r["doc_id"] for r in emb_results}
-
-    # Stage 2: BM25 supplements
-    bm25_index = NodeBM25Index(documents)
-    bm25_results = bm25_index.search(query, top_k=config.bm25_topk)
-    for r in bm25_results:
-        doc_lookup.setdefault(r["node_id"], r["doc_id"])
-
-    emb_top_set = set(emb_ranked[:top_k])
-    bm25_supplements = [
-        r for r in bm25_results
-        if r["node_id"] not in emb_top_set
-    ][:5]
-
-    doc_map = {d.doc_id: d for d in documents}
-
-    # Start with embedding top-k exactly as-is
-    final_nids = list(emb_ranked[:top_k])
-
-    # Stage 3: LLM comparative judgment — compare BM25 supplements vs embedding tail
-    if bm25_supplements:
-        supplement_data = []
-        for r in bm25_supplements:
-            nid = r["node_id"]
-            did = doc_lookup.get(nid, "")
-            doc = doc_map.get(did)
-            if not doc:
-                continue
-            full_node = doc.get_node_by_id(str(nid))
-            if not full_node:
-                continue
-
-            title = full_node.get("title", "")
-            text = full_node.get("text", "")
-            text_excerpt = text[:config.text_excerpt_len] if text else ""
-            ancestors = _get_ancestor_titles(doc, str(nid)) if config.include_ancestors else []
-
-            supplement_data.append({
-                "node_id": nid,
-                "doc_id": did,
-                "title": title,
-                "text_excerpt": text_excerpt,
-                "ancestors": ancestors,
-            })
-
-        # Also include the weakest embedding candidates for comparative judging
-        emb_tail = []
-        for nid in final_nids[max(0, len(final_nids) - 2):]:  # last 2 embedding results
-            did = doc_lookup.get(nid, "")
-            doc = doc_map.get(did)
-            if not doc:
-                continue
-            full_node = doc.get_node_by_id(str(nid))
-            if not full_node:
-                continue
-
-            title = full_node.get("title", "")
-            text = full_node.get("text", "")
-            text_excerpt = text[:config.text_excerpt_len] if text else ""
-            ancestors = _get_ancestor_titles(doc, str(nid)) if config.include_ancestors else []
-
-            emb_tail.append({
-                "node_id": nid,
-                "doc_id": did,
-                "title": title,
-                "text_excerpt": text_excerpt,
-                "ancestors": ancestors,
-                "source": "embedding",
-            })
-
-        if supplement_data and emb_tail:
-            # Build combined candidate list for LLM to compare
-            all_candidates = []
-            for c in emb_tail:
-                c["source"] = "current"
-                all_candidates.append(c)
-            for c in supplement_data:
-                c["source"] = "candidate"
-                all_candidates.append(c)
-
-            sections_text = ""
-            for i, c in enumerate(all_candidates):
-                path = " > ".join(c["ancestors"] + [c["title"]]) if c["ancestors"] else c["title"]
-                sections_text += (
-                    f"\nSection {i + 1} (node_id: {c['node_id']}):\n"
-                    f"  Path: {path}\n"
-                    f"  Title: {c['title']}\n"
-                )
-                if c["text_excerpt"]:
-                    sections_text += f"  Content: {c['text_excerpt'][:300]}\n"
-
-            prompt = (
-                f"Rate each document section's relevance to the query on a scale of 0.0 to 1.0. "
-                f"Be precise: 0.9+ means the section directly answers the query, "
-                f"0.5-0.8 means partially relevant, below 0.5 means not relevant.\n\n"
-                f"Query: {query}\n"
-                f"{sections_text}\n"
-                f"Return JSON only:\n"
-                f'{{"rankings": [{{"node_id": "...", "relevance": 0.0}}]}}'
-            )
-
-            response = await achat(prompt, model=model, temperature=0)
-            result = extract_json(response)
-            total_llm_calls += 1
-
-            rankings = result.get("rankings", [])
-            llm_scores = {}
-            for item in rankings:
-                rid = str(item.get("node_id", ""))
-                rel = float(item.get("relevance", 0.0))
-                llm_scores[rid] = rel
-
-            # Compare: if any supplement scores higher than the weakest embedding tail,
-            # swap them (from the tail, preserving top embedding positions)
-            emb_tail_nids = [c["node_id"] for c in emb_tail]
-            emb_tail_scores = [(nid, llm_scores.get(nid, 0.0)) for nid in emb_tail_nids]
-            emb_tail_scores.sort(key=lambda x: x[1])  # weakest first
-
-            supplement_scores = [
-                (c["node_id"], llm_scores.get(c["node_id"], 0.0))
-                for c in supplement_data
-                if c["node_id"] not in set(final_nids)
-            ]
-            supplement_scores.sort(key=lambda x: -x[1])  # strongest first
-
-            # Swap: replace ONLY the weakest embedding tail with the strongest supplement
-            # Limit to at most 1 swap to minimize risk of losing good embedding results
-            swapped = False
-            for sup_nid, sup_score in supplement_scores:
-                if swapped or not emb_tail_scores:
-                    break
-                weakest_nid, weakest_score = emb_tail_scores[0]
-                # Only swap if supplement is clearly better (margin > 0.15)
-                if sup_score > weakest_score + 0.15 and sup_score >= 0.6:
-                    try:
-                        idx = final_nids.index(weakest_nid)
-                        final_nids[idx] = sup_nid
-                        swapped = True
-                    except ValueError:
-                        pass
-
-    # Build output (group by doc), take top_k from the expanded list
-    doc_results: dict[str, dict] = {}
-    for nid in final_nids[:top_k]:
-        did = doc_lookup.get(nid, "")
-        if did not in doc_results:
-            doc = doc_map.get(did)
-            doc_results[did] = {
-                "doc_id": did,
-                "doc_name": doc.doc_name if doc else "",
-                "nodes": [],
-            }
-        score = emb_scores.get(nid, 0.5)
-        node_entry = {"node_id": nid, "title": "", "score": round(score, 4)}
-        doc = doc_map.get(did)
-        if doc:
-            full_node = doc.get_node_by_id(str(nid))
-            if full_node:
-                node_entry["title"] = full_node.get("title", "")
-                node_entry["text"] = full_node.get("text", "")
-                node_entry["summary"] = full_node.get("summary", full_node.get("prefix_summary", ""))
-                node_entry["line_start"] = full_node.get("line_start")
-                node_entry["line_end"] = full_node.get("line_end")
-        doc_results[did]["nodes"].append(node_entry)
-
-    return SearchResult(
-        documents=list(doc_results.values()),
-        query=query,
-        total_llm_calls=total_llm_calls,
-        strategy="retrieve_rerank",
-    )
 
 
 def search_sync(query: str, documents: list[Document], **kwargs) -> SearchResult:

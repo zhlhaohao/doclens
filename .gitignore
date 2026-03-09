@@ -208,3 +208,12 @@ __marimo__/
 
 indexes/
 examples/results/
+*.db
+examples/*.db
+
+# Benchmark outputs & generated indexes (should not be version-controlled)
+benchmark_results/
+examples/benchmark/benchmark_results/
+examples/benchmark/indexes/
+examples/indexes/
+docs/internal/*

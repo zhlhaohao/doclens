@@ -20,8 +20,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from treesearch.llm import count_tokens, DEFAULT_MODEL
-from treesearch.search import search, retrieve_rerank, SearchResult
+from treesearch.llm import count_tokens
+from treesearch.search import search, SearchResult
 from treesearch.tree import Document, flatten_tree
 
 from .metrics import (
@@ -373,11 +373,18 @@ async def _evaluate_sample(
     top_k: int = 5,
     k_values: Optional[list[int]] = None,
     use_bm25: bool = True,
-    embedding_model: str = "text-embedding-3-small",
+    cached_indexes: Optional[dict] = None,
 ) -> SampleResult:
-    """Evaluate a single benchmark sample with cost tracking."""
+    """Evaluate a single benchmark sample with cost tracking.
+
+    Args:
+        cached_indexes: pre-built indexes keyed by type ('bm25').
+            Avoids rebuilding expensive indexes for every sample.
+    """
     if k_values is None:
         k_values = [1, 3, 5]
+    if cached_indexes is None:
+        cached_indexes = {}
 
     relevant_node_ids = resolve_relevant_nodes(sample, documents)
 
@@ -386,34 +393,31 @@ async def _evaluate_sample(
 
     with tracker:
         if strategy == "bm25":
-            from treesearch.rank_bm25 import NodeBM25Index
-            index = NodeBM25Index(documents)
+            index = cached_indexes.get("bm25")
+            if index is None:
+                from treesearch.rank_bm25 import NodeBM25Index
+                index = NodeBM25Index(documents)
             bm25_results = index.search(sample.question, top_k=top_k)
             retrieved_node_ids = [r["node_id"] for r in bm25_results]
-        elif strategy == "embedding":
-            from treesearch.embeddings import EmbeddingPreFilter
-            emb_index = EmbeddingPreFilter(documents, model=embedding_model)
-            emb_results = emb_index.search(sample.question, top_k=top_k)
-            retrieved_node_ids = [r["node_id"] for r in emb_results]
-        elif strategy == "hybrid":
-            from treesearch.embeddings import HybridPreFilter
-            hybrid_index = HybridPreFilter(documents, embedding_model=embedding_model)
-            hybrid_results = hybrid_index.search(sample.question, top_k=top_k)
-            retrieved_node_ids = [r["node_id"] for r in hybrid_results]
-        elif strategy == "retrieve_rerank":
-            result = await retrieve_rerank(
-                query=sample.question,
-                documents=documents,
-                model=model,
-                embedding_model=embedding_model,
-                top_k=top_k,
-                config=None,  # uses global RetrieveRerankConfig from env
-            )
-            for doc_result in result.documents:
-                for node in doc_result.get("nodes", []):
-                    retrieved_node_ids.append(node["node_id"])
-            retrieved_node_ids = retrieved_node_ids[:top_k]
-            tracker.stats.llm_calls = result.total_llm_calls
+        elif strategy == "fts5":
+            fts_index = cached_indexes.get("fts5")
+            if fts_index is None:
+                from treesearch.fts import FTS5Index
+                fts_index = FTS5Index()
+                fts_index.index_documents(documents)
+            # Use score_nodes (with ancestor propagation) per target doc,
+            # then merge and rank — mirrors how BM25 strategy works
+            all_scored: list[tuple[str, float]] = []
+            target_docs = documents
+            if sample.doc_id:
+                matched = [d for d in documents if sample.doc_id in d.doc_id or sample.doc_id in d.doc_name]
+                if matched:
+                    target_docs = matched
+            for doc in target_docs:
+                node_scores = fts_index.score_nodes(sample.question, doc.doc_id)
+                all_scored.extend(node_scores.items())
+            all_scored.sort(key=lambda x: -x[1])
+            retrieved_node_ids = [nid for nid, _ in all_scored[:top_k]]
         else:
             result = await search(
                 query=sample.question,
@@ -428,8 +432,6 @@ async def _evaluate_sample(
                 for node in doc_result.get("nodes", []):
                     retrieved_node_ids.append(node["node_id"])
             retrieved_node_ids = retrieved_node_ids[:top_k]
-
-            # Record token usage from LLM calls
             tracker.stats.llm_calls = result.total_llm_calls
 
     metrics = evaluate_query(retrieved_node_ids, relevant_node_ids, k_values) if relevant_node_ids else {}
@@ -444,6 +446,35 @@ async def _evaluate_sample(
 
 
 # ---------------------------------------------------------------------------
+# Index caching for benchmark (avoids rebuilding per sample)
+# ---------------------------------------------------------------------------
+
+def _build_cached_indexes(
+    strategy: str,
+    documents: list[Document],
+) -> dict:
+    """Pre-build and cache indexes for a given strategy.
+
+    BM25/FTS5 indexes are built once and reused across all samples.
+    """
+    indexes = {}
+
+    if strategy == "bm25":
+        from treesearch.rank_bm25 import NodeBM25Index
+        indexes["bm25"] = NodeBM25Index(documents)
+        logger.info("Pre-built BM25 index for %d documents", len(documents))
+
+    elif strategy == "fts5":
+        from treesearch.fts import FTS5Index
+        fts_index = FTS5Index()
+        fts_index.index_documents(documents)
+        indexes["fts5"] = fts_index
+        logger.info("Pre-built FTS5 index for %d documents", len(documents))
+
+    return indexes
+
+
+# ---------------------------------------------------------------------------
 # Benchmark runner
 # ---------------------------------------------------------------------------
 
@@ -452,7 +483,7 @@ async def run_benchmark(
     documents: list[Document],
     data_path: str,
     strategies: Optional[list[str]] = None,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     max_samples: int = 50,
     top_k: int = 5,
     k_values: Optional[list[int]] = None,
@@ -497,6 +528,9 @@ async def run_benchmark(
         print(f"Strategy: {strategy.upper()} | Dataset: {dataset} | Samples: {len(samples)}")
         print(f"{'='*60}")
 
+        # Pre-build indexes once per strategy (avoids per-sample rebuild)
+        cached_indexes = _build_cached_indexes(strategy, documents)
+
         # Run evaluation with concurrency control
         semaphore = asyncio.Semaphore(max_concurrency)
         results: list[SampleResult] = []
@@ -505,7 +539,7 @@ async def run_benchmark(
             async with semaphore:
                 return await _evaluate_sample(
                     s, documents, strategy, model, top_k, k_values,
-                    embedding_model=embedding_model,
+                    cached_indexes=cached_indexes,
                 )
 
         tasks = [_eval_with_limit(s) for s in samples]
@@ -595,12 +629,11 @@ async def run_benchmark_with_samples(
     documents: list[Document],
     dataset_name: str = "qasper",
     strategies: Optional[list[str]] = None,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     top_k: int = 5,
     k_values: Optional[list[int]] = None,
     max_concurrency: int = 3,
     output_dir: Optional[str] = None,
-    embedding_model: str = "text-embedding-3-small",
 ) -> list[BenchmarkReport]:
     """Run benchmark with pre-loaded samples (e.g. from HuggingFace).
 
@@ -623,6 +656,9 @@ async def run_benchmark_with_samples(
         print(f"Strategy: {strategy.upper()} | Dataset: {dataset_name} | Samples: {len(samples)}")
         print(f"{'='*60}")
 
+        # Pre-build indexes once per strategy (avoids per-sample rebuild)
+        cached_indexes = _build_cached_indexes(strategy, documents)
+
         semaphore = asyncio.Semaphore(max_concurrency)
         results: list[SampleResult] = []
 
@@ -630,7 +666,7 @@ async def run_benchmark_with_samples(
             async with semaphore:
                 return await _evaluate_sample(
                     s, documents, strategy, model, top_k, k_values,
-                    embedding_model=embedding_model,
+                    cached_indexes=cached_indexes,
                 )
 
         tasks = [_eval_with_limit(s) for s in samples]

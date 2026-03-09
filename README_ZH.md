@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#社区与支持)
 
-**TreeSearch** 是一个结构感知的文档检索库。无需向量嵌入，无需分块，基于 BM25 + LLM 推理在文档树结构上进行检索。
+**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。无需向量嵌入，无需分块。
 
 ## 安装
 
@@ -28,9 +28,15 @@ pip install -U pytreesearch
 
 ```python
 import asyncio
-from treesearch import build_index, load_index, Document, search
+from treesearch import build_index, load_index, Document, search, get_config, set_config
 
 async def main():
+    # 启用 FTS5（SQLite 全文检索，默认预过滤引擎）
+    cfg = get_config()
+    cfg.fts.enabled = True
+    cfg.fts.db_path = "indexes/fts.db"  # 持久化, 或 "" 为内存模式
+    set_config(cfg)
+
     # 构建 Markdown 文件索引
     await build_index(paths=["docs/*.md"], output_dir="./indexes")
 
@@ -47,7 +53,7 @@ async def main():
             doc_description=data.get("doc_description", ""),
         ))
 
-    # 使用 Best-First 策略搜索（BM25 + LLM）
+    # 使用 Best-First 策略搜索（FTS5 + LLM）
     result = await search(query="认证系统如何工作？", documents=documents)
     for doc_result in result.documents:
         for node in doc_result["nodes"]:
@@ -56,7 +62,7 @@ async def main():
 asyncio.run(main())
 ```
 
-需要先设置 API Key：
+FTS5/BM25 策略无需 API Key 即可开箱即用。若需 LLM 增强策略（`best_first`、`fts5_rerank`、`llm`），请先设置 API Key：
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -73,11 +79,11 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 | | 传统 RAG | TreeSearch |
 |---|---|---|
 | **预处理** | 分块 + 向量嵌入 | 解析标题 → 构建树 |
-| **检索** | 向量相似度搜索 | BM25 预打分 + LLM 树搜索 |
+| **检索** | 向量相似度搜索 | FTS5/BM25 预打分 + LLM 树搜索 |
 | **多文档** | 需要向量数据库路由 | LLM 根据文档描述路由 |
 | **结构** | 分块后丢失 | 完整保留为树形层级 |
-| **依赖** | 向量数据库 + 嵌入模型 | 仅 LLM（无嵌入、无向量库） |
-| **零成本基线** | 无 | BM25 独立搜索（无需 LLM） |
+| **依赖** | 向量数据库 + 嵌入模型 | 仅 SQLite（LLM 可选，无嵌入、无向量库） |
+| **零成本基线** | 无 | FTS5/BM25 独立搜索（无需 LLM） |
 
 ### 核心优势
 
@@ -85,23 +91,50 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 - **无需分块** — 文档保留自然的标题层级结构
 - **无需向量数据库** — 不需要 Pinecone、Milvus 或 Chroma
 - **树感知检索** — 标题层级引导搜索，而非任意的分块边界
+- **SQLite FTS5 预过滤**（默认） — 持久化倒排索引，WAL 模式，增量更新，CJK 分词，SQL 聚合查询
 - **BM25 零成本基线** — 即时关键词搜索，无需 API 调用，可独立使用或作为预过滤
 - **LLM 预算控制** — 设定每次查询的最大 LLM 调用次数，置信度高时提前停止
 
 ## 功能特性
 
-- **三层搜索** — BM25 预打分 → Best-First 树搜索 → LLM 相关性评估
+- **FTS5-only 搜索**（默认） — 零 LLM 调用，毫秒级 FTS5/BM25 关键词匹配，无需 API Key
+- **SQLite FTS5 引擎** — 持久化倒排索引，WAL 模式，增量更新，MD 结构感知列（标题/摘要/正文/代码/前言），列权重加权，CJK 分词
 - **树结构索引** — Markdown 和纯文本文档被解析为层级树
 - **BM25 节点级索引** — 结构感知评分，层级字段加权（标题 > 摘要 > 正文）和祖先传播
-- **Best-First 搜索**（默认） — 优先队列驱动，确定性搜索，支持提前停止和预算控制
-- **MCTS 搜索** — 蒙特卡洛树搜索，LLM 作为价值函数
+- **Best-First 搜索**（可选） — 优先队列驱动，FTS5 预打分 + LLM 评估，提前停止和预算控制
+- **FTS5-rerank** — FTS5 候选 + 单次 LLM 重排序，成本/质量最佳平衡
 - **LLM 单次调用** — 每个文档一次 LLM 调用，成本最低
 - **多文档搜索** — 通过 LLM 推理在文档集合间路由查询
 - **中英文支持** — 内置 jieba 中文分词和英文正则分词
 - **批量索引** — `build_index()` 支持 glob 模式并发多文件处理
-- **评估指标** — 内置 Precision@K、Recall@K、MRR、NDCG@K、Hit@K、F1@K
+- **评估指标** — Precision@K、Recall@K、MRR、NDCG@K、Hit@K、F1@K（位于 `examples/benchmark/metrics.py`）
 - **异步优先** — 所有核心函数均为异步，提供同步适配器
 - **CLI 命令** — `treesearch index` 和 `treesearch search` 命令
+
+## FTS5 独立搜索（无需 LLM）
+
+```python
+from treesearch import FTS5Index, Document, load_index
+
+data = load_index("indexes/my_doc.json")
+doc = Document(doc_id="doc1", doc_name=data["doc_name"], structure=data["structure"])
+
+fts = FTS5Index(db_path="indexes/fts.db")  # 持久化, 或不传为内存模式
+fts.index_documents([doc])
+
+# 简单关键词搜索
+results = fts.search("认证配置", top_k=5)
+for r in results:
+    print(f"[{r['fts_score']:.4f}] {r['title']}")
+
+# 高级 FTS5 查询语法
+results = fts.search("认证", fts_expression='title:认证 AND body:配置', top_k=5)
+
+# 按文档聚合统计
+agg = fts.search_with_aggregation("认证", group_by_doc=True)
+for doc_agg in agg:
+    print(f"{doc_agg['doc_name']}: {doc_agg['hit_count']} 命中, 最高分={doc_agg['best_score']:.4f}")
+```
 
 ## BM25 独立搜索（无需 LLM）
 
@@ -123,11 +156,11 @@ for r in results:
 # 从 glob 模式构建索引
 treesearch index --paths "docs/*.md" --add-description
 
-# 使用 Best-First 搜索（默认，BM25 + LLM）
-treesearch search --index_dir ./indexes/ --query "认证系统如何工作？"
+# 使用 Best-First + FTS5 搜索（默认预过滤引擎）
+treesearch search --index_dir ./indexes/ --query "认证系统如何工作？" --fts
 
-# 使用 MCTS 策略搜索
-treesearch search --index_dir ./indexes/ --query "部署" --strategy mcts
+# 持久化 FTS5 数据库
+treesearch search --index_dir ./indexes/ --query "认证" --fts --fts-db ./indexes/fts.db
 
 # 控制 LLM 调用预算
 treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
@@ -145,16 +178,16 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
         │  JSON 索引文件
         ▼
    ┌──────────┐
-   │  search   │  BM25 预打分 → 文档路由 → 树搜索
+   │  search   │  FTS5 关键词匹配 → （可选）文档路由 → 树搜索
    └────┬─────┘
         │  SearchResult
         ▼
   带分数和文本的排序节点
 ```
 
-**第一层 — BM25 预打分**：`NodeBM25Index` 使用结构感知的 BM25 对所有树节点评分，采用层级字段加权（标题 > 摘要 > 正文）和祖先分数传播。即时完成，无需 LLM。
+**第一层 — FTS5/BM25 预打分**：`FTS5Index`（默认）使用 SQLite FTS5 倒排索引，MD 结构感知列和列权重加权实现快速预过滤。或使用 `NodeBM25Index` 进行内存 BM25 打分。两者均即时完成，无需 LLM。
 
-**第二层 — Best-First 树搜索**：`BestFirstTreeSearch` 使用优先队列展开最有潜力的节点。LLM 仅评估节点的标题 + 摘要的相关性。当最高分低于阈值时提前停止。
+**第二层 — 树搜索**（可选）：`TreeSearch` 使用优先队列展开最有潜力的节点。LLM 仅评估节点的标题 + 摘要的相关性。当最高分低于阈值时提前停止。
 
 **第三层 — 结果输出**：预算控制的 LLM 调用，支持子树缓存以便跨查询复用。
 
@@ -162,20 +195,22 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 
 | 策略 | 描述 | LLM 调用 | 适用场景 |
 |------|------|----------|----------|
-| `best_first`（默认） | BM25 预打分 + 优先队列 + LLM 评估 | 中等（预算控制） | 通用场景，准确率最高 |
-| `mcts` | 蒙特卡洛树搜索，LLM 作为价值函数 | 较高 | 复杂推理查询 |
+| `fts5_only`（默认） | 纯 FTS5/BM25 评分 | 零 | 快速关键词搜索，无需 API Key |
+| `fts5_rerank` | FTS5 候选 + 单次 LLM 重排序 | 每文档 1 次 | 成本/质量最佳平衡 |
+| `best_first` | FTS5/BM25 预打分 + 优先队列 + LLM 评估 | 中等（预算控制） | 准确率最高 |
 | `llm` | 每个文档一次 LLM 调用 | 最少 | 低成本、简单查询 |
-| BM25-only | `NodeBM25Index.search()` 独立使用 | 零 | 即时关键词搜索，无需 API Key |
+| FTS5 独立 | `FTS5Index.search()` | 零 | 持久化倒排索引，无需 API Key |
+| BM25 独立 | `NodeBM25Index.search()` | 零 | 内存关键词搜索，无需 API Key |
 
 ## 示例
 
 | 示例 | 描述 |
 |------|------|
-| [`01_index_and_search.py`](examples/01_index_and_search.py) | 单文档索引 + BestFirst 搜索 |
-| [`02_text_indexing.py`](examples/02_text_indexing.py) | 纯文本 → 树索引，自动标题检测 |
-| [`03_cli_workflow.py`](examples/03_cli_workflow.py) | CLI 工作流：构建索引 + 策略搜索 |
-| [`04_multi_doc_search.py`](examples/04_multi_doc_search.py) | 多文档 BM25 + BestFirst + 策略对比 + 中文 |
-| [`05_benchmark.py`](examples/05_benchmark.py) | 基准测试：BM25 / BestFirst / MCTS / LLM 全指标评估 |
+| [`01_basic_demo.py`](examples/01_basic_demo.py) | 基础演示：构建索引 + FTS5/TreeSearch 搜索 |
+| [`02_index_and_search.py`](examples/02_index_and_search.py) | 单文档索引 + FTS5 搜索 |
+| [`03_text_indexing.py`](examples/03_text_indexing.py) | 纯文本 → 树索引，自动标题检测 |
+| [`04_cli_workflow.py`](examples/04_cli_workflow.py) | CLI 工作流：构建索引 + 策略搜索 |
+| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | 多文档 BM25 + TreeSearch + 策略对比 + 中文 |
 
 ## 项目结构
 
@@ -184,9 +219,10 @@ treesearch/
 ├── llm.py            # 异步 LLM 客户端，支持重试和 JSON 提取
 ├── tree.py           # Document 数据类、树操作、持久化
 ├── indexer.py        # Markdown / 纯文本 → 树结构，批量 build_index()
-├── search.py         # Best-First、MCTS、LLM 搜索，文档路由，统一 search() API
+├── search.py         # Best-First、LLM 搜索，文档路由，统一 search() API
+├── fts.py            # SQLite FTS5 全文检索引擎（持久化倒排索引）
 ├── rank_bm25.py      # BM25Okapi、NodeBM25Index、中英文分词器
-├── metrics.py        # 评估指标：Precision@K、Recall@K、MRR、NDCG@K、Hit@K、F1@K
+├── config.py         # 统一配置管理（env > YAML > 默认值）
 └── cli.py            # CLI 入口（index / search）
 ```
 

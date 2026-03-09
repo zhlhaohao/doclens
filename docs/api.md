@@ -72,23 +72,26 @@ Build tree indexes for multiple files concurrently. Accepts glob patterns (e.g. 
 async def search(
     query: str,
     documents: list[Document],
-    model: str = "gpt-4o-2024-11-20",
+    model: Optional[str] = None,
     top_k_docs: int = 3,
     max_nodes_per_doc: int = 5,
-    strategy: str = "best_first",
-    mcts_iterations: int = 10,
+    strategy: str = "fts5_only",
     value_threshold: float = 0.3,
     max_llm_calls: int = 30,
     use_bm25: bool = True,
+    pre_filter: Optional[PreFilter] = None,
     expert_knowledge: str = "",
+    text_mode: str = "full",
+    include_ancestors: bool = False,
+    merge_strategy: str = "interleave",
 ) -> SearchResult
 ```
 
 Search across one or more documents using tree-structured retrieval. This is the primary API — it natively supports multi-document search:
 
 1. Route query to relevant documents (LLM reasoning, skipped for single doc)
-2. (Optional) BM25 pre-scoring over tree nodes for initial ranking
-3. Tree search within each document (best_first / mcts / llm)
+2. (Optional) Pre-filter scoring over tree nodes for initial ranking
+3. Tree search within each document (fts5_only / best_first / llm / fts5_rerank)
 4. Return ranked nodes with text content
 
 **Args**:
@@ -97,35 +100,43 @@ Search across one or more documents using tree-structured retrieval. This is the
 |-----------|-------------|
 | `query` | User query string |
 | `documents` | List of `Document` objects (single or multiple) |
-| `strategy` | `"best_first"` (default), `"mcts"`, or `"llm"` |
+| `strategy` | `"fts5_only"` (default), `"best_first"`, `"llm"`, or `"fts5_rerank"` |
 | `max_llm_calls` | Max LLM calls per document (best_first only, default: 30) |
 | `use_bm25` | Enable BM25 pre-scoring for best_first strategy (default: True) |
-| `mcts_iterations` | MCTS iteration count (mcts only, default: 10) |
+| `pre_filter` | Custom `PreFilter` instance for node pre-scoring (overrides `use_bm25`) |
 | `value_threshold` | Minimum relevance score (default: 0.3) |
 | `top_k_docs` | Max documents to search in routing stage (default: 3) |
 | `max_nodes_per_doc` | Max result nodes per document (default: 5) |
 | `expert_knowledge` | Optional domain knowledge to guide search |
+| `text_mode` | `"full"` (default), `"summary"`, or `"none"` — controls text in results |
+| `include_ancestors` | Attach ancestor titles for context anchoring (default: False) |
+| `merge_strategy` | `"interleave"` (default), `"per_doc"`, or `"global_score"` — multi-doc merge |
 
 ### `search_sync`
 
 Synchronous wrapper: `search_sync(query, documents, **kwargs) -> SearchResult`
 
-### `BestFirstTreeSearch`
+### `TreeSearch`
 
 ```python
-class BestFirstTreeSearch:
+class TreeSearch:
     def __init__(
         self,
         document: Document,
         query: str,
-        model: str = "gpt-4o-2024-11-20",
+        model: Optional[str] = None,
         max_results: int = 5,
         threshold: float = 0.3,
         max_llm_calls: int = 30,
-        bm25_scores: dict[str, float] = None,
+        bm25_scores: Optional[dict[str, float]] = None,
         bm25_weight: float = 0.3,
         depth_penalty: float = 0.02,
         use_subtree_cache: bool = True,
+        text_excerpt_len: int = 300,
+        adaptive_depth_threshold: int = 2,
+        dynamic_threshold: bool = True,
+        min_threshold: float = 0.15,
+        max_prompt_tokens: int = 60000,
     )
 
     async def run(self) -> list[dict]
@@ -137,45 +148,23 @@ class BestFirstTreeSearch:
     def clear_subtree_cache(cls)
 ```
 
-**Default search strategy.** Deterministic best-first tree search with three-layer design:
+**Default LLM-enhanced search strategy.** Deterministic best-first tree search with three-layer design:
 
-- **Layer 1**: BM25 pre-scoring (optional, provides initial priority via `bm25_scores`)
-- **Layer 2**: Priority queue expansion with LLM relevance evaluation (title + summary only)
+- **Layer 1**: BM25/FTS5 pre-scoring (optional, provides initial priority via `bm25_scores`)
+- **Layer 2**: Priority queue expansion with LLM batch comparative ranking (title + summary + text excerpt)
 - **Layer 3**: Budget-controlled LLM calls with early stopping
 
 **Features**:
-- Priority queue driven: always expands the most promising node first
+- Batch comparative ranking: evaluate sibling nodes in one LLM call
+- Context-aware batching: auto-split batches to respect model context window
+- Adaptive depth: flat trees use single batch eval; deep trees use priority queue
+- Dynamic threshold: median-based cutoff from first-round scores
 - BM25 warm start: when provided, nodes start with BM25-based priority
 - Early stopping: stops when top-of-queue score drops below `threshold`
 - Budget control: `max_llm_calls` limits total LLM invocations
-- Subtree cache: class-level `(query_fingerprint, node_id) -> relevance` cache for reuse across searches
+- Subtree cache: class-level `(query_fingerprint, node_id) -> relevance` cache for reuse
 
 **Returns**: `[{'node_id', 'title', 'score'}]`
-
-### `MCTSTreeSearch`
-
-```python
-class MCTSTreeSearch:
-    def __init__(
-        self,
-        document: Document,
-        query: str,
-        model: str = "gpt-4o-2024-11-20",
-        exploration_weight: float = 1.0,
-        max_iterations: int = 10,
-        max_selected_nodes: int = 5,
-        value_threshold: float = 0.3,
-    )
-
-    async def run(self) -> list[dict]
-
-    @property
-    def llm_calls(self) -> int
-```
-
-MCTS-based tree search over a single document. Deterministic + cache-friendly design (temperature=0, UCB tie-break by node_id, value cache per query×node).
-
-**Returns**: `[{'node_id', 'title', 'score', 'visits'}]`
 
 ### `llm_tree_search`
 
@@ -183,12 +172,12 @@ MCTS-based tree search over a single document. Deterministic + cache-friendly de
 async def llm_tree_search(
     query: str,
     document: Document,
-    model: str = "gpt-4o-2024-11-20",
+    model: Optional[str] = None,
     expert_knowledge: str = "",
 ) -> list[dict]
 ```
 
-Single-pass LLM tree search. Fastest but least thorough — sends full tree structure to LLM in one call.
+Single-pass LLM tree search. Sends full tree structure to LLM in one call.
 
 **Returns**: `[{'node_id', 'title'}]`
 
@@ -198,7 +187,7 @@ Single-pass LLM tree search. Fastest but least thorough — sends full tree stru
 async def route_documents(
     query: str,
     documents: list[Document],
-    model: str = "gpt-4o-2024-11-20",
+    model: Optional[str] = None,
     top_k: int = 3,
 ) -> list[Document]
 ```
@@ -325,11 +314,11 @@ treesearch index --paths "docs/*.md" --add-description
 # Build index from mixed file types
 treesearch index --paths docs/*.md paper.txt -o ./indexes
 
-# Search with Best-First strategy (default, BM25 + LLM)
+# Search with FTS5-only (default, no API key needed)
 treesearch search --index_dir ./indexes/ --query "How does authentication work?"
 
-# Search with MCTS strategy
-treesearch search --index_dir ./indexes/ --query "deployment" --strategy mcts
+# Search with Best-First strategy (FTS5 + LLM, best accuracy)
+treesearch search --index_dir ./indexes/ --query "How does authentication work?" --strategy best_first --fts
 
 # Search with single-pass LLM (fastest, less thorough)
 treesearch search --index_dir ./indexes/ --query "config" --strategy llm

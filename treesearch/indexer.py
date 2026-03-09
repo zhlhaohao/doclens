@@ -14,7 +14,7 @@ import os
 import re
 from typing import Optional
 
-from .llm import achat, achat_with_finish_reason, count_tokens, extract_json, DEFAULT_MODEL
+from .llm import achat, achat_with_finish_reason, count_tokens, extract_json
 from .tree import (
     Document, assign_node_ids, flatten_tree, format_structure, remove_fields, save_index, load_index,
 )
@@ -40,7 +40,7 @@ def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int)
 # Summary generation (shared by MD and Text)
 # ============================================================================
 
-async def _summarize_node(node: dict, threshold: int = 200, model: str = DEFAULT_MODEL) -> str:
+async def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = None) -> str:
     """Generate a summary for a single node. Short nodes use their own text."""
     text = node.get("text", "")
     if count_tokens(text, model=model) < threshold:
@@ -55,7 +55,7 @@ async def _summarize_node(node: dict, threshold: int = 200, model: str = DEFAULT
 
 
 async def generate_summaries(
-    structure, threshold: int = 200, model: str = DEFAULT_MODEL
+    structure, threshold: int = 200, model: Optional[str] = None
 ):
     """Generate summaries for all nodes in a tree (concurrently)."""
     nodes = flatten_tree(structure)
@@ -69,7 +69,7 @@ async def generate_summaries(
     return structure
 
 
-async def generate_doc_description(structure, model: str = DEFAULT_MODEL) -> str:
+async def generate_doc_description(structure, model: Optional[str] = None) -> str:
     """Generate a one-sentence document description from its tree structure."""
 
     def _clean(s):
@@ -142,7 +142,7 @@ def _cut_md_text(markers: list[dict], lines: list[str]) -> list[dict]:
     return nodes
 
 
-def _update_token_counts(node_list: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
+def _update_token_counts(node_list: list[dict], model: Optional[str] = None) -> list[dict]:
     """Compute cumulative token counts (self + descendants) for thinning."""
     for i in range(len(node_list) - 1, -1, -1):
         text = node_list[i].get("text", "")
@@ -154,7 +154,7 @@ def _update_token_counts(node_list: list[dict], model: str = DEFAULT_MODEL) -> l
     return node_list
 
 
-def _thin_tree(node_list: list[dict], min_tokens: int, model: str = DEFAULT_MODEL) -> list[dict]:
+def _thin_tree(node_list: list[dict], min_tokens: int, model: Optional[str] = None) -> list[dict]:
     """Merge small sub-trees into their parent nodes."""
     to_remove = set()
     for i in range(len(node_list) - 1, -1, -1):
@@ -215,7 +215,7 @@ async def md_to_tree(
     md_path: Optional[str] = None,
     md_content: Optional[str] = None,
     *,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     if_thinning: bool = False,
     min_token_threshold: int = 5000,
     if_add_node_summary: bool = True,
@@ -406,7 +406,7 @@ def _preprocess_text(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text)
 
 
-def _chunk_for_llm(text: str, max_tokens: int = 80000, model: str = DEFAULT_MODEL) -> list[str]:
+def _chunk_for_llm(text: str, max_tokens: int = 80000, model: Optional[str] = None) -> list[str]:
     """Split text into chunks within LLM context limits."""
     lines = text.split("\n")
     chunks, current, tokens = [], [], 0
@@ -531,7 +531,7 @@ async def text_to_tree(
     text_path: Optional[str] = None,
     text_content: Optional[str] = None,
     *,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     fallback_to_llm: str = "auto",
     if_thinning: bool = False,
     min_token_threshold: int = 5000,
@@ -666,7 +666,7 @@ async def build_index(
     paths: list[str],
     output_dir: str = "./indexes",
     *,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     if_add_node_summary: bool = True,
     if_add_doc_description: bool = True,
     if_add_node_text: bool = True,

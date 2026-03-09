@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Best-First Tree Search demo with BM25 pre-scoring.
+@description: Multi-document search demo with FTS5 and strategy comparison.
 
-Demonstrates the three-layer search architecture:
-  Layer 1: BM25 node-level pre-scoring (structure-aware, Chinese/English)
-  Layer 2: Best-First tree search with LLM relevance evaluation
+Demonstrates the search architecture:
+  Layer 1: FTS5/BM25 keyword matching (default, no LLM needed)
+  Layer 2: Optional Best-First tree search with LLM relevance evaluation
   Layer 3: Results with budget control and early stopping
 
-Compares: best_first (default) vs mcts vs llm strategies.
+Compares: fts5_only (default) vs best_first vs llm strategies.
 
 Usage:
     python examples/05_multi_doc_search.py
@@ -81,9 +81,9 @@ async def demo_bm25_standalone(documents: list[Document]):
 
 
 async def demo_best_first_search(documents: list[Document]):
-    """Demo: Best-First tree search with BM25 + LLM."""
+    """Demo: Best-First tree search with FTS5 + LLM (optional enhancement)."""
     print("\n" + "=" * 60)
-    print("Demo 2: Best-First Tree Search (BM25 + LLM)")
+    print("Demo 2: Best-First Tree Search (FTS5 + LLM, optional enhancement)")
     print("=" * 60)
 
     queries = [
@@ -121,7 +121,7 @@ async def demo_best_first_search(documents: list[Document]):
 
 
 async def demo_strategy_comparison(documents: list[Document]):
-    """Demo: Compare best_first vs mcts vs llm strategies."""
+    """Demo: Compare fts5_only vs best_first vs llm strategies."""
     print("\n" + "=" * 60)
     print("Demo 3: Strategy Comparison")
     print("=" * 60)
@@ -129,10 +129,8 @@ async def demo_strategy_comparison(documents: list[Document]):
     query = "How to configure Twilio for voice calls?"
     print(f"\nQuery: {query}\n")
 
-    for strategy in ["best_first", "mcts", "llm"]:
+    for strategy in ["fts5_only", "best_first", "llm"]:
         kwargs = {"strategy": strategy, "top_k_docs": 2, "max_nodes_per_doc": 3}
-        if strategy == "mcts":
-            kwargs["mcts_iterations"] = 5
         if strategy == "best_first":
             kwargs["max_llm_calls"] = 15
 
@@ -168,6 +166,33 @@ async def demo_chinese_query(documents: list[Document]):
         print("  (no matches)")
 
 
+async def demo_fts5_standalone(documents: list[Document]):
+    """Demo: FTS5 search via unified search() API (default, no LLM needed)."""
+    print("\n" + "=" * 60)
+    print("Demo 1b: FTS5 via search() API (default strategy, no LLM needed)")
+    print("=" * 60)
+
+    queries = [
+        "How to configure Twilio for voice calls?",
+        "agent tool registration",
+    ]
+
+    for query in queries:
+        print(f"\nQuery: {query}")
+        result = await search(
+            query=query,
+            documents=documents,
+            top_k_docs=2,
+            max_nodes_per_doc=3,
+        )
+        print(f"Strategy: {result.strategy}, LLM calls: {result.total_llm_calls}")
+        for doc_result in result.documents:
+            for node in doc_result["nodes"]:
+                score = node.get("score", 0)
+                nid = node.get("node_id", "")
+                print(f"  [{score:.4f}] [{nid}] {node['title']}")
+
+
 async def main():
     await ensure_indexes()
 
@@ -178,19 +203,22 @@ async def main():
         print(f"  - [{doc.doc_name}] {desc}")
     print()
 
-    # BM25 demo (no LLM needed)
+    # BM25 standalone demo (no LLM needed)
     await demo_bm25_standalone(documents)
 
-    # Best-First search (needs LLM API key)
+    # FTS5 via search() API (default, no LLM needed)
+    await demo_fts5_standalone(documents)
+
+    # Chinese query demo (no LLM needed)
+    await demo_chinese_query(documents)
+
+    # Best-First search and strategy comparison (needs LLM API key)
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         await demo_best_first_search(documents)
         await demo_strategy_comparison(documents)
     else:
         print("\n(Skipping LLM demos - set OPENAI_API_KEY to enable)")
-
-    # Chinese query demo (no LLM needed)
-    await demo_chinese_query(documents)
 
 
 if __name__ == "__main__":

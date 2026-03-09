@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#Community)
 
-**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. BM25 + LLM reasoning over document tree structures.
+**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 + BM25 + LLM reasoning over document tree structures.
 
 ## Installation
 
@@ -28,9 +28,15 @@ pip install -U pytreesearch
 
 ```python
 import asyncio
-from treesearch import build_index, load_index, Document, search
+from treesearch import build_index, load_index, Document, search, get_config, set_config
 
 async def main():
+    # Enable FTS5 (SQLite full-text search, default pre-filter)
+    cfg = get_config()
+    cfg.fts.enabled = True
+    cfg.fts.db_path = "indexes/fts.db"  # persistent, or "" for in-memory
+    set_config(cfg)
+
     # Build indexes for markdown files
     await build_index(paths=["docs/*.md"], output_dir="./indexes")
 
@@ -47,7 +53,7 @@ async def main():
             doc_description=data.get("doc_description", ""),
         ))
 
-    # Search with Best-First strategy (BM25 + LLM)
+    # Search with Best-First strategy (FTS5 + LLM)
     result = await search(query="How does auth work?", documents=documents)
     for doc_result in result.documents:
         for node in doc_result["nodes"]:
@@ -56,7 +62,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Set up API key first:
+FTS5/BM25 strategies work out of the box with no API key. For LLM-enhanced strategies (`best_first`, `fts5_rerank`, `llm`), set up API key:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -68,16 +74,16 @@ export OPENAI_BASE_URL="https://api.openai.com/v1"
 
 Traditional RAG systems split documents into fixed-size chunks and retrieve by vector similarity. This **destroys document structure**, loses heading hierarchy, and misses reasoning-dependent queries.
 
-TreeSearch takes a fundamentally different approach — parse documents into **tree structures** based on their natural heading hierarchy, then use **BM25 + LLM reasoning** to navigate the tree and find the most relevant sections.
+TreeSearch takes a fundamentally different approach — parse documents into **tree structures** based on their natural heading hierarchy, then search with **FTS5/BM25 keyword matching** (zero-cost, no API key) or **LLM reasoning** for enhanced accuracy.
 
 | | Traditional RAG | TreeSearch |
 |---|---|---|
 | **Preprocessing** | Chunk splitting + embedding | Parse headings → build tree |
-| **Retrieval** | Vector similarity search | BM25 pre-scoring + LLM tree search |
+| **Retrieval** | Vector similarity search | FTS5/BM25 pre-scoring + LLM tree search |
 | **Multi-doc** | Needs vector DB for routing | LLM routes by document descriptions |
 | **Structure** | Lost after chunking | Fully preserved as tree hierarchy |
-| **Dependencies** | Vector DB + embedding model | LLM only (no embedding, no vector DB) |
-| **Zero-cost baseline** | N/A | BM25-only search (no LLM needed) |
+| **Dependencies** | Vector DB + embedding model | SQLite only (LLM optional, no embedding, no vector DB) |
+| **Zero-cost baseline** | N/A | FTS5/BM25-only search (no LLM needed) |
 
 ### Key Advantages
 
@@ -85,23 +91,50 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 - **No chunk splitting** — Documents retain their natural heading structure
 - **No vector DB** — No Pinecone, Milvus, or Chroma to manage
 - **Tree-aware retrieval** — Heading hierarchy guides search, not arbitrary chunk boundaries
+- **SQLite FTS5 pre-filter** (default) — Persistent inverted index with WAL mode, incremental updates, CJK support, and SQL aggregation
 - **BM25 zero-cost baseline** — Instant keyword search with no API calls, useful as standalone or pre-filter
 - **Budget-controlled LLM calls** — Set max LLM calls per query, with early stopping when confidence is high
 
 ## Features
 
-- **Three-layer search** — BM25 pre-scoring → Best-First tree search → LLM relevance evaluation
+- **FTS5-only search** (default) — Zero LLM calls, millisecond-level FTS5/BM25 keyword matching, no API key needed
+- **SQLite FTS5 engine** — Persistent inverted index, WAL mode, incremental updates, MD structure-aware columns (title/summary/body/code/front_matter), column weighting, CJK tokenization
 - **Tree-structured indexing** — Markdown and plain text documents are parsed into hierarchical trees
 - **BM25 node-level index** — Structure-aware scoring with hierarchical field weighting (title > summary > body) and ancestor propagation
-- **Best-First search** (default) — Priority queue driven, deterministic, with early stopping and budget control
-- **MCTS search** — Monte Carlo Tree Search with LLM as value function
+- **Best-First search** (optional) — Priority queue driven, FTS5 pre-scoring + LLM evaluation, early stopping and budget control
+- **FTS5-rerank** — FTS5 candidates + single LLM listwise rerank, best cost/quality tradeoff
 - **LLM single-pass** — One LLM call per document for minimal cost
 - **Multi-document search** — Route queries across document collections via LLM reasoning
 - **Chinese + English** — Built-in jieba tokenization for Chinese and regex tokenization for English
 - **Batch indexing** — `build_index()` supports glob patterns for concurrent multi-file processing
-- **Evaluation metrics** — Built-in Precision@K, Recall@K, MRR, NDCG@K, Hit@K, F1@K
+- **Evaluation metrics** — Precision@K, Recall@K, MRR, NDCG@K, Hit@K, F1@K (in `examples/benchmark/metrics.py`)
 - **Async-first** — All core functions are async with sync wrappers available
 - **CLI included** — `treesearch index` and `treesearch search` commands
+
+## FTS5 Standalone (No LLM Needed)
+
+```python
+from treesearch import FTS5Index, Document, load_index
+
+data = load_index("indexes/my_doc.json")
+doc = Document(doc_id="doc1", doc_name=data["doc_name"], structure=data["structure"])
+
+fts = FTS5Index(db_path="indexes/fts.db")  # persistent, or omit for in-memory
+fts.index_documents([doc])
+
+# Simple keyword search
+results = fts.search("authentication config", top_k=5)
+for r in results:
+    print(f"[{r['fts_score']:.4f}] {r['title']}")
+
+# Advanced FTS5 query syntax
+results = fts.search("auth", fts_expression='title:auth AND body:config', top_k=5)
+
+# Per-document aggregation
+agg = fts.search_with_aggregation("authentication", group_by_doc=True)
+for doc_agg in agg:
+    print(f"{doc_agg['doc_name']}: {doc_agg['hit_count']} hits, best={doc_agg['best_score']:.4f}")
+```
 
 ## BM25 Standalone (No LLM Needed)
 
@@ -123,11 +156,11 @@ for r in results:
 # Build indexes from glob pattern
 treesearch index --paths "docs/*.md" --add-description
 
-# Search with Best-First (default, BM25 + LLM)
-treesearch search --index_dir ./indexes/ --query "How does auth work?"
+# Search with Best-First + FTS5 (default pre-filter)
+treesearch search --index_dir ./indexes/ --query "How does auth work?" --fts
 
-# Search with MCTS strategy
-treesearch search --index_dir ./indexes/ --query "deployment" --strategy mcts
+# Search with persistent FTS5 database
+treesearch search --index_dir ./indexes/ --query "auth" --fts --fts-db ./indexes/fts.db
 
 # Control LLM budget
 treesearch search --index_dir ./indexes/ --query "auth" --max-llm-calls 10
@@ -145,16 +178,16 @@ Input Documents (MD/TXT)
         │  JSON index files
         ▼
    ┌──────────┐
-   │  search   │  BM25 pre-score → route to docs → tree search
+   │  search   │  FTS5 keyword match → (optional) route to docs → tree search
    └────┬─────┘
         │  SearchResult
         ▼
   Ranked nodes with scores and text
 ```
 
-**Layer 1 — BM25 Pre-Scoring**: `NodeBM25Index` scores all tree nodes using structure-aware BM25 with hierarchical field weighting (title > summary > body) and ancestor score propagation. Instant, no LLM needed.
+**Layer 1 — FTS5/BM25 Pre-Scoring**: `FTS5Index` (default) uses SQLite FTS5 inverted index with MD structure-aware columns and column weighting for fast pre-filtering. Alternatively, `NodeBM25Index` provides in-memory BM25 scoring. Both are instant, no LLM needed.
 
-**Layer 2 — Best-First Tree Search**: `BestFirstTreeSearch` uses a priority queue to expand the most promising nodes. LLM evaluates each node's relevance (title + summary only). Early stopping when top score drops below threshold.
+**Layer 2 — Tree Search** (optional): `TreeSearch` uses a priority queue to expand the most promising nodes. LLM evaluates each node's relevance (title + summary only). Early stopping when top score drops below threshold.
 
 **Layer 3 — Results**: Budget-controlled LLM calls with subtree caching for reuse across similar queries.
 
@@ -162,20 +195,22 @@ Input Documents (MD/TXT)
 
 | Strategy | Description | LLM Calls | Best For |
 |----------|-------------|-----------|----------|
-| `best_first` (default) | BM25 pre-scoring + priority queue + LLM evaluation | Moderate (budget-controlled) | General-purpose, best accuracy |
-| `mcts` | Monte Carlo Tree Search with LLM as value function | High | Complex reasoning queries |
+| `fts5_only` (default) | Pure FTS5/BM25 scoring | Zero | Fast keyword search, no API key needed |
+| `fts5_rerank` | FTS5 top-N candidates + single LLM listwise rerank | 1 per doc | Best cost/quality tradeoff |
+| `best_first` | FTS5/BM25 pre-scoring + priority queue + LLM evaluation | Moderate (budget-controlled) | Best accuracy |
 | `llm` | Single LLM call per document | Minimal | Low-cost, simple queries |
-| BM25-only | `NodeBM25Index.search()` standalone | Zero | Instant keyword search, no API key |
+| FTS5 standalone | `FTS5Index.search()` | Zero | Persistent inverted index, no API key |
+| BM25 standalone | `NodeBM25Index.search()` | Zero | In-memory keyword search, no API key |
 
 ## Examples
 
 | Example | Description |
 |---------|-------------|
-| [`01_index_and_search.py`](examples/01_index_and_search.py) | Single document indexing + BestFirst search |
-| [`02_text_indexing.py`](examples/02_text_indexing.py) | Plain text → tree index with auto heading detection |
-| [`03_cli_workflow.py`](examples/03_cli_workflow.py) | CLI workflow: build indexes + search with strategies |
-| [`04_multi_doc_search.py`](examples/04_multi_doc_search.py) | Multi-doc BM25 + BestFirst + strategy comparison + Chinese |
-| [`05_benchmark.py`](examples/05_benchmark.py) | Benchmark: BM25 / BestFirst / MCTS / LLM with metrics |
+| [`01_basic_demo.py`](examples/01_basic_demo.py) | Basic demo: build index + search with FTS5/TreeSearch |
+| [`02_index_and_search.py`](examples/02_index_and_search.py) | Single document indexing + FTS5 search |
+| [`03_text_indexing.py`](examples/03_text_indexing.py) | Plain text → tree index with auto heading detection |
+| [`04_cli_workflow.py`](examples/04_cli_workflow.py) | CLI workflow: build indexes + search with strategies |
+| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | Multi-doc BM25 + TreeSearch + strategy comparison + Chinese |
 
 ## Project Structure
 
@@ -184,9 +219,10 @@ treesearch/
 ├── llm.py            # Async LLM client with retry and JSON extraction
 ├── tree.py           # Document dataclass, tree operations, persistence
 ├── indexer.py        # Markdown / plain text → tree structure, batch build_index()
-├── search.py         # Best-First, MCTS, LLM search, document routing, unified search() API
+├── search.py         # Best-First, LLM search, document routing, unified search() API
+├── fts.py            # SQLite FTS5 full-text search engine (persistent inverted index)
 ├── rank_bm25.py      # BM25Okapi, NodeBM25Index, Chinese/English tokenizer
-├── metrics.py        # Evaluation: Precision@K, Recall@K, MRR, NDCG@K, Hit@K, F1@K
+├── config.py         # Unified configuration management (env > YAML > defaults)
 └── cli.py            # CLI entry point (index / search)
 ```
 

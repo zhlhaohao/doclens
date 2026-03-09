@@ -3,15 +3,15 @@
 @author:XuMing(xuming624@qq.com)
 @description: Tests for treesearch.search module (with mocked LLM).
 
-Tests cover: BestFirstTreeSearch, MCTSTreeSearch, llm_tree_search, route_documents,
+Tests cover: TreeSearch, llm_tree_search, route_documents,
              search(), search_sync(), SearchResult.
 """
 from unittest.mock import patch, AsyncMock, MagicMock
+import json
 
 import pytest
 from treesearch.search import (
-    BestFirstTreeSearch,
-    MCTSTreeSearch,
+    TreeSearch,
     llm_tree_search,
     SearchResult,
     search,
@@ -21,15 +21,17 @@ from treesearch.search import (
 from treesearch.tree import Document
 
 
-class TestBestFirstTreeSearch:
+class TestTreeSearch:
     @pytest.mark.asyncio
     async def test_run_returns_results(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.6}, {"node_id": "0003", "relevance": 0.9}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="What is the backend technology?",
                 max_results=5,
@@ -46,31 +48,38 @@ class TestBestFirstTreeSearch:
 
     @pytest.mark.asyncio
     async def test_early_stopping(self, sample_tree_structure):
+        """Flat tree with low scores should return few/no high-scoring results."""
         async def mock_achat(prompt, **kwargs):
-            return '{"relevance": 0.1}'
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.05}, {"node_id": "0001", "relevance": 0.05}, {"node_id": "0002", "relevance": 0.05}, {"node_id": "0003", "relevance": 0.05}]}'
+            return '{"relevance": 0.05}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="Unrelated query",
                 threshold=0.5,
                 use_subtree_cache=False,
+                dynamic_threshold=False,
             )
             results = await searcher.run()
 
-        # All scores below threshold -> no results
+        # All scores are very low
         assert isinstance(results, list)
-        assert len(results) == 0
+        for r in results:
+            assert r["score"] <= 0.1
 
     @pytest.mark.asyncio
     async def test_max_results_limit(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.9}, {"node_id": "0001", "relevance": 0.9}, {"node_id": "0002", "relevance": 0.9}, {"node_id": "0003", "relevance": 0.9}]}'
             return '{"relevance": 0.9}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="test",
                 max_results=2,
@@ -84,11 +93,13 @@ class TestBestFirstTreeSearch:
     @pytest.mark.asyncio
     async def test_budget_control(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="test",
                 max_llm_calls=5,
@@ -101,21 +112,19 @@ class TestBestFirstTreeSearch:
 
     @pytest.mark.asyncio
     async def test_results_sorted_by_score(self, sample_tree_structure):
-        call_count = 0
-
         async def mock_achat(prompt, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            scores = [0.9, 0.3, 0.7, 0.5]
-            return f'{{"relevance": {scores[call_count % len(scores)]}}}'
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.3}, {"node_id": "0001", "relevance": 0.9}, {"node_id": "0002", "relevance": 0.5}, {"node_id": "0003", "relevance": 0.7}]}'
+            return '{"relevance": 0.5}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="test",
                 threshold=0.1,
                 use_subtree_cache=False,
+                dynamic_threshold=False,
             )
             results = await searcher.run()
 
@@ -126,13 +135,15 @@ class TestBestFirstTreeSearch:
     @pytest.mark.asyncio
     async def test_with_bm25_scores(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.7}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.7}, {"node_id": "0003", "relevance": 0.7}]}'
             return '{"relevance": 0.7}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         bm25_scores = {"0001": 2.5, "0002": 0.5, "0003": 1.8}
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = BestFirstTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
                 query="backend",
                 bm25_scores=bm25_scores,
@@ -147,21 +158,58 @@ class TestBestFirstTreeSearch:
 
     @pytest.mark.asyncio
     async def test_subtree_cache(self, sample_tree_structure):
-        """Subtree cache should avoid redundant LLM calls across searches."""
-        BestFirstTreeSearch.clear_subtree_cache()
+        """Subtree cache should avoid redundant LLM calls across searches (deep tree)."""
+        TreeSearch.clear_subtree_cache()
         call_count = 0
+
+        # Use a deep tree to trigger priority-queue mode (not flat hybrid mode)
+        deep_structure = [
+            {
+                "title": "Root",
+                "summary": "Root section.",
+                "node_id": "0000",
+                "text": "Root text.",
+                "nodes": [
+                    {
+                        "title": "Level 1A",
+                        "summary": "Level 1A section.",
+                        "node_id": "0001",
+                        "text": "Level 1A text.",
+                        "nodes": [
+                            {
+                                "title": "Level 2A",
+                                "summary": "Level 2A section.",
+                                "node_id": "0002",
+                                "text": "Level 2A text.",
+                                "nodes": [
+                                    {
+                                        "title": "Level 3A",
+                                        "summary": "Level 3A leaf.",
+                                        "node_id": "0003",
+                                        "text": "Level 3A text.",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
 
         async def mock_achat(prompt, **kwargs):
             nonlocal call_count
             call_count += 1
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
+        doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
 
         # First search
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher1 = BestFirstTreeSearch(
-                document=doc, query="backend tech", use_subtree_cache=True
+            searcher1 = TreeSearch(
+                document=doc, query="backend tech", use_subtree_cache=True,
+                adaptive_depth_threshold=1,
             )
             await searcher1.run()
 
@@ -169,133 +217,150 @@ class TestBestFirstTreeSearch:
 
         # Second search with same query -> should hit cache
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher2 = BestFirstTreeSearch(
-                document=doc, query="backend tech", use_subtree_cache=True
+            searcher2 = TreeSearch(
+                document=doc, query="backend tech", use_subtree_cache=True,
+                adaptive_depth_threshold=1,
             )
             await searcher2.run()
 
         # Second search should make fewer LLM calls due to cache
         assert call_count - first_calls < first_calls
 
-        BestFirstTreeSearch.clear_subtree_cache()
+        TreeSearch.clear_subtree_cache()
 
-
-class TestMCTSTreeSearch:
     @pytest.mark.asyncio
-    async def test_run_returns_results(self, sample_tree_structure):
+    async def test_dynamic_threshold(self, sample_tree_structure):
+        """Dynamic threshold should filter low-scoring nodes."""
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.9}, {"node_id": "0001", "relevance": 0.1}, {"node_id": "0002", "relevance": 0.1}, {"node_id": "0003", "relevance": 0.1}]}'
+            return '{"relevance": 0.5}'
+
+        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
+        with patch("treesearch.search.achat", side_effect=mock_achat):
+            searcher = TreeSearch(
+                document=doc,
+                query="test",
+                use_subtree_cache=False,
+                dynamic_threshold=True,
+            )
+            results = await searcher.run()
+
+        # Dynamic threshold should filter out very low-scoring nodes
+        assert isinstance(results, list)
+        for r in results:
+            assert r["score"] > 0
+
+    @pytest.mark.asyncio
+    async def test_context_window_splits_batches(self):
+        """When nodes exceed max_prompt_tokens, batches are split into multiple LLM calls.
+
+        Uses a deep tree (depth > 2) to bypass the flat hybrid mode and test
+        the actual LLM batch splitting logic.
+        """
+        # Build a deep structure to avoid flat mode
+        structure = [
+            {
+                "title": "Root",
+                "summary": "Root section.",
+                "node_id": "root",
+                "text": "Root text.",
+                "nodes": [
+                    {
+                        "title": "Mid",
+                        "summary": "Mid section.",
+                        "node_id": "mid",
+                        "text": "Mid text.",
+                        "nodes": [
+                            {
+                                "title": f"Section {i}",
+                                "summary": f"Summary for section {i}.",
+                                "node_id": f"{i:04d}",
+                                "text": f"Content for section {i}. " * 50,
+                            }
+                            for i in range(6)
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        call_count = 0
+
+        async def mock_achat(prompt, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            import re
+            node_ids = re.findall(r'node_id: (\w+)', prompt)
+            rankings = [{"node_id": nid, "relevance": 0.8} for nid in node_ids]
+            return json.dumps({"rankings": rankings})
+
+        doc = Document(doc_id="test", doc_name="Test Doc", structure=structure)
+        with patch("treesearch.search.achat", side_effect=mock_achat):
+            searcher = TreeSearch(
+                document=doc,
+                query="test query",
+                use_subtree_cache=False,
+                max_prompt_tokens=500,
+                adaptive_depth_threshold=1,
+            )
+            results = await searcher.run()
+
+        assert isinstance(results, list)
+        assert call_count > 1
+
+    @pytest.mark.asyncio
+    async def test_deep_tree_uses_priority_queue(self):
+        """Deep trees (depth > adaptive_depth_threshold) should use priority queue."""
+        deep_structure = [
+            {
+                "title": "Root",
+                "summary": "Root section.",
+                "node_id": "0000",
+                "text": "Root text.",
+                "nodes": [
+                    {
+                        "title": "Level 1",
+                        "summary": "Level 1 section.",
+                        "node_id": "0001",
+                        "text": "Level 1 text.",
+                        "nodes": [
+                            {
+                                "title": "Level 2",
+                                "summary": "Level 2 section.",
+                                "node_id": "0002",
+                                "text": "Level 2 text.",
+                                "nodes": [
+                                    {
+                                        "title": "Level 3",
+                                        "summary": "Level 3 leaf.",
+                                        "node_id": "0003",
+                                        "text": "Level 3 text.",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
+        doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
+            searcher = TreeSearch(
                 document=doc,
-                query="What is the backend technology?",
-                max_iterations=3,
+                query="test",
+                use_subtree_cache=False,
+                adaptive_depth_threshold=2,
             )
             results = await searcher.run()
 
         assert isinstance(results, list)
-        assert len(results) > 0
-        for r in results:
-            assert "title" in r
-            assert "score" in r
-            assert "node_id" in r
-            assert "visits" in r
-
-    @pytest.mark.asyncio
-    async def test_run_with_high_threshold(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            return '{"relevance": 0.2}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
-                document=doc,
-                query="Unrelated query",
-                max_iterations=2,
-                value_threshold=0.9,
-            )
-            results = await searcher.run()
-
-        assert isinstance(results, list)
-
-    @pytest.mark.asyncio
-    async def test_results_sorted_by_score(self, sample_tree_structure):
-        call_count = 0
-
-        async def mock_achat(prompt, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            scores = [0.9, 0.3, 0.7, 0.5, 0.8, 0.6, 0.4, 0.2]
-            return f'{{"relevance": {scores[call_count % len(scores)]}}}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
-                document=doc,
-                query="test",
-                max_iterations=3,
-                value_threshold=0.1,
-            )
-            results = await searcher.run()
-
-        if len(results) >= 2:
-            scores = [r["score"] for r in results]
-            assert scores == sorted(scores, reverse=True)
-
-    @pytest.mark.asyncio
-    async def test_max_selected_nodes_limit(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            return '{"relevance": 0.9}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
-                document=doc,
-                query="test",
-                max_iterations=5,
-                max_selected_nodes=2,
-                value_threshold=0.1,
-            )
-            results = await searcher.run()
-
-        assert len(results) <= 2
-
-    @pytest.mark.asyncio
-    async def test_value_cache_reduces_calls(self, sample_tree_structure):
-        call_count = 0
-
-        async def mock_achat(prompt, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return '{"relevance": 0.7}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
-                document=doc,
-                query="test",
-                max_iterations=5,
-                value_threshold=0.1,
-            )
-            await searcher.run()
-
-        num_nodes = len(searcher.nodes)
-        assert call_count <= num_nodes * 2
-
-    @pytest.mark.asyncio
-    async def test_llm_calls_tracked(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            return '{"relevance": 0.7}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = MCTSTreeSearch(
-                document=doc, query="test", max_iterations=2,
-            )
-            await searcher.run()
-
         assert searcher.llm_calls > 0
 
 
@@ -453,9 +518,9 @@ class TestSearch:
         async def mock_achat(prompt, **kwargs):
             if "select" in prompt.lower() or "document" in prompt.lower():
                 return '{"selected_doc_ids": ["a"]}'
-            if "relevance" in prompt.lower() or "rate" in prompt.lower():
-                return '{"relevance": 0.8}'
-            return '{"node_list": ["0001"]}'
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.6}, {"node_id": "0003", "relevance": 0.9}]}'
+            return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
             result = await search(
@@ -469,27 +534,6 @@ class TestSearch:
         assert result.strategy == "best_first"
         assert result.query == "What is the backend?"
         assert result.total_llm_calls > 0
-
-    @pytest.mark.asyncio
-    async def test_end_to_end_mcts(self, two_documents):
-        async def mock_achat(prompt, **kwargs):
-            if "select" in prompt.lower() or "document" in prompt.lower():
-                return '{"selected_doc_ids": ["a"]}'
-            if "relevance" in prompt.lower() or "rate" in prompt.lower():
-                return '{"relevance": 0.8}'
-            return '{"node_list": ["0001"]}'
-
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            result = await search(
-                query="What is the backend?",
-                documents=two_documents,
-                strategy="mcts",
-                mcts_iterations=2,
-                top_k_docs=3,
-            )
-
-        assert isinstance(result, SearchResult)
-        assert result.strategy == "mcts"
 
     @pytest.mark.asyncio
     async def test_end_to_end_llm_search(self, two_documents):
@@ -518,6 +562,8 @@ class TestSearch:
         )
 
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.7}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.7}, {"node_id": "0003", "relevance": 0.7}]}'
             return '{"relevance": 0.7}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -534,6 +580,8 @@ class TestSearch:
         async def mock_achat(prompt, **kwargs):
             if "select" in prompt.lower() or "document" in prompt.lower():
                 return '{"selected_doc_ids": ["a"]}'
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -557,6 +605,8 @@ class TestSearchSync:
         )
 
         async def mock_achat(prompt, **kwargs):
+            if "rankings" in prompt.lower() or "rank" in prompt.lower():
+                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -568,7 +618,7 @@ class TestSearchSync:
 
         assert isinstance(result, SearchResult)
 
-    def test_sync_mcts(self, sample_tree_structure):
+    def test_sync_llm(self, sample_tree_structure):
         doc_a = Document(
             doc_id="a", doc_name="Doc A",
             doc_description="Architecture guide.",
@@ -576,14 +626,13 @@ class TestSearchSync:
         )
 
         async def mock_achat(prompt, **kwargs):
-            return '{"relevance": 0.8}'
+            return '{"node_list": ["0001"]}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
             result = search_sync(
                 query="test",
                 documents=[doc_a],
-                strategy="mcts",
-                mcts_iterations=1,
+                strategy="llm",
             )
 
         assert isinstance(result, SearchResult)

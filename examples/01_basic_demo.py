@@ -1,11 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Quick start demo - build index and search with pretty output.
+@description: Quick start demo - FTS5 keyword search over document trees (default, no LLM needed).
+
+Demonstrates search strategies:
+  1. FTS5-only (default) — pure FTS5/BM25 keyword matching, zero LLM calls, fastest
+  2. Best-First (FTS5 + LLM) — FTS5 pre-scoring + LLM tree search, best accuracy
+  3. FTS5-rerank — FTS5 candidates + single LLM rerank, best cost/quality tradeoff
 
 Usage:
-    python examples/01_basic_demo.py
+    python examples/01_basic_demo.py                         # default: fts5_only (no API key needed)
+    python examples/01_basic_demo.py --strategy best_first   # FTS5 + LLM tree search
+    python examples/01_basic_demo.py --strategy fts5_rerank  # FTS5 + single LLM rerank
+    python examples/01_basic_demo.py --fts-db ./fts.db       # persistent FTS5 database
 """
+import argparse
 import asyncio
 import os
 import sys
@@ -14,7 +23,7 @@ import textwrap
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from treesearch import build_index, search
+from treesearch import build_index, search, get_config, set_config
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
 SEPARATOR = "=" * 72
@@ -79,6 +88,21 @@ def pprint_result(result):
 
 
 async def main():
+    parser = argparse.ArgumentParser(description="TreeSearch demo with FTS5")
+    parser.add_argument("--strategy", type=str, default="fts5_only",
+                        choices=["fts5_only", "best_first", "fts5_rerank", "llm"],
+                        help="Search strategy (default: fts5_only, no API key needed)")
+    parser.add_argument("--fts-db", type=str, default="", help="Path to persistent FTS5 database (default: in-memory)")
+    args = parser.parse_args()
+
+    # Enable FTS5
+    cfg = get_config()
+    cfg.fts.enabled = True
+    cfg.fts.db_path = args.fts_db
+    set_config(cfg)
+
+    search_strategy = args.strategy
+
     # Step 1: Build indexes (auto-skips unchanged files)
     print("Building indexes ...")
     t0 = time.time()
@@ -89,6 +113,8 @@ async def main():
         src = doc.metadata.get("source_path", "")
         print(f"  - {doc.doc_name} ({len(doc.structure)} root nodes) source: {src}")
 
+    print(f"\nFTS5 DB: {cfg.fts.db_path or 'in-memory'} | Strategy: {search_strategy}")
+
     # Step 2: Search
     queries = [
         "how to configure openclaw plugins?",
@@ -97,7 +123,7 @@ async def main():
 
     for query in queries:
         t0 = time.time()
-        result = await search(query=query, documents=documents)
+        result = await search(query=query, documents=documents, strategy=search_strategy)
         t_search = time.time() - t0
 
         pprint_result(result)

@@ -3,8 +3,8 @@
 @author:XuMing(xuming624@qq.com)
 @description: Async-first LLM client with singleton connection pool, retry, token counting, and JSON extraction.
 
-All environment variables (OPENAI_API_KEY, OPENAI_BASE_URL, TREESEARCH_MODEL)
-are read from config.py. Do NOT use os.getenv() here.
+All configuration (api_key, base_url, model) is read from config.py.
+Do NOT use os.getenv() here.
 """
 import asyncio
 import json
@@ -22,16 +22,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 MAX_RETRIES = 3
-
-
-def _get_default_model() -> str:
-    """Get default model from config (lazy, always fresh)."""
-    return get_config().model
-
-
-# Module-level alias for backward compatibility (used as default parameter).
-# NOTE: This is evaluated at import time. For runtime-fresh value, use _get_default_model().
-DEFAULT_MODEL = "gpt-4o-mini"  # Static fallback; actual value comes from config at call time.
 
 # ---------------------------------------------------------------------------
 # Singleton async client (connection pool reuse)
@@ -60,13 +50,20 @@ _encoder_cache: dict[str, tiktoken.Encoding] = {}
 
 
 def count_tokens(text: str, model: Optional[str] = None) -> int:
-    """Count tokens using tiktoken with cached encoder."""
+    """Count tokens using tiktoken with cached encoder.
+
+    Falls back to cl100k_base encoding when the model name is not recognised
+    by tiktoken (e.g. custom endpoint IDs like ``ep-xxxxx``).
+    """
     if not text:
         return 0
     if model is None:
-        model = _get_default_model()
+        model = get_config().model
     if model not in _encoder_cache:
-        _encoder_cache[model] = tiktoken.encoding_for_model(model)
+        try:
+            _encoder_cache[model] = tiktoken.encoding_for_model(model)
+        except KeyError:
+            _encoder_cache[model] = tiktoken.get_encoding("cl100k_base")
     return len(_encoder_cache[model].encode(text))
 
 
@@ -82,21 +79,30 @@ async def _achat_impl(
     messages: Optional[list[dict]] = None,
 ) -> openai.types.chat.ChatCompletion:
     """Internal: async chat completion with retry. Returns raw response."""
+    cfg = get_config()
     if model is None:
-        model = _get_default_model()
+        model = cfg.model
     if messages is not None:
         msgs = list(messages) + [{"role": "user", "content": prompt}]
     else:
         msgs = [{"role": "user", "content": prompt}]
 
     client = _get_async_client(api_key)
+    # Build extra_body: thinking mode from config (disabled/enabled/auto)
+    extra_body = {}
+    if cfg.thinking_type in ("disabled", "enabled", "auto"):
+        extra_body["thinking"] = {"type": cfg.thinking_type}
+
     for attempt in range(MAX_RETRIES):
         try:
-            return await client.chat.completions.create(
-                model=model,
-                messages=msgs,
-                temperature=temperature,
-            )
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": msgs,
+                "temperature": temperature,
+            }
+            if extra_body:
+                kwargs["extra_body"] = extra_body
+            return await client.chat.completions.create(**kwargs)
         except Exception as e:
             logger.warning("LLM retry %d/%d: %s", attempt + 1, MAX_RETRIES, e)
             if attempt < MAX_RETRIES - 1:

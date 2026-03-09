@@ -19,10 +19,26 @@ logger = logging.getLogger(__name__)
 
 _JIEBA_LOADED = False
 _jieba = None
+_STEMMER = None
 
 # Chinese character range detection
 _RE_HAS_CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
 _RE_SPLIT_EN = re.compile(r"\W+")
+
+# English stopwords (compact set covering most frequent terms)
+_EN_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "need", "dare",
+    "it", "its", "this", "that", "these", "those", "i", "me", "my", "we",
+    "our", "you", "your", "he", "him", "his", "she", "her", "they", "them",
+    "their", "what", "which", "who", "whom", "when", "where", "why", "how",
+    "not", "no", "nor", "as", "if", "then", "than", "so", "such", "both",
+    "each", "all", "any", "few", "more", "most", "other", "some", "only",
+    "same", "also", "very", "just", "about", "above", "after", "again",
+    "between", "into", "through", "during", "before", "under", "over",
+})
 
 
 def _ensure_jieba():
@@ -39,12 +55,24 @@ def _ensure_jieba():
     return _jieba
 
 
-def tokenize(text: str) -> list[str]:
+def _ensure_stemmer():
+    """Lazy-load Porter stemmer to avoid import cost when unused."""
+    global _STEMMER
+    if _STEMMER is None:
+        try:
+            from nltk.stem import PorterStemmer
+            _STEMMER = PorterStemmer()
+        except ImportError:
+            _STEMMER = False  # sentinel: tried but unavailable
+    return _STEMMER if _STEMMER is not False else None
+
+
+def tokenize(text: str, use_stemmer: bool = True, remove_stopwords: bool = True) -> list[str]:
     """
     Tokenize text for BM25 indexing. Supports Chinese and English.
 
     - Chinese text: jieba word segmentation (falls back to character-level if jieba not installed)
-    - English text: lowercase + split on non-word characters
+    - English text: lowercase + split on non-word characters + optional stemming + stopword removal
     - Mixed text: handled correctly
     """
     if not text:
@@ -65,7 +93,19 @@ def tokenize(text: str) -> list[str]:
     else:
         tokens = _RE_SPLIT_EN.split(text.lower())
 
-    return [t.strip() for t in tokens if t.strip() and len(t.strip()) > 0]
+    tokens = [t.strip() for t in tokens if t.strip() and len(t.strip()) > 1]
+
+    # Remove English stopwords
+    if remove_stopwords:
+        tokens = [t for t in tokens if t not in _EN_STOPWORDS]
+
+    # Apply Porter stemmer for English tokens
+    if use_stemmer and not _RE_HAS_CJK.search(text):
+        stemmer = _ensure_stemmer()
+        if stemmer is not None:
+            tokens = [stemmer.stem(t) for t in tokens]
+
+    return tokens
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +119,7 @@ class BM25Okapi:
     Pure Python implementation, no numpy dependency.
     """
 
-    def __init__(self, corpus: list[list[str]], k1: float = 1.5, b: float = 0.75, epsilon: float = 0.25):
+    def __init__(self, corpus: list[list[str]], k1: float = 1.2, b: float = 0.5, epsilon: float = 0.25):
         self.k1 = k1
         self.b = b
         self.epsilon = epsilon
@@ -161,10 +201,11 @@ class NodeBM25Index:
     def __init__(
         self,
         documents: list,
-        title_weight: float = 1.0,
-        summary_weight: float = 0.7,
-        body_weight: float = 0.3,
-        ancestor_decay: float = 0.5,
+        title_weight: float = 2.0,
+        summary_weight: float = 0.8,
+        body_weight: float = 1.0,
+        ancestor_decay: float = 0.6,
+        body_max_chars: int = 3000,
         tokenizer: Optional[Callable] = None,
     ):
         """
@@ -174,8 +215,10 @@ class NodeBM25Index:
             summary_weight: BM25 weight for summary field
             body_weight: BM25 weight for body text
             ancestor_decay: decay factor for ancestor score propagation (alpha)
+            body_max_chars: max characters of body text to index
             tokenizer: custom tokenizer function, defaults to built-in tokenize()
         """
+        self.body_max_chars = body_max_chars
         self.title_weight = title_weight
         self.summary_weight = summary_weight
         self.body_weight = body_weight
@@ -183,7 +226,7 @@ class NodeBM25Index:
         self._tokenize = tokenizer or tokenize
 
         # Build index
-        self._nodes: list[dict] = []  # flat list of {node_id, doc_id, node_ref, parent_idx, children_idxs}
+        self._nodes: list[dict] = []
         self._title_corpus: list[list[str]] = []
         self._summary_corpus: list[list[str]] = []
         self._body_corpus: list[list[str]] = []
@@ -223,8 +266,7 @@ class NodeBM25Index:
             title_text = structure.get("title", "")
             summary_text = structure.get("summary", structure.get("prefix_summary", ""))
             body_text = structure.get("text", "")
-            # Use first 200 chars of body as excerpt for efficiency
-            body_excerpt = body_text[:500] if body_text else ""
+            body_excerpt = body_text[:self.body_max_chars] if body_text else ""
 
             self._title_corpus.append(self._tokenize(title_text))
             self._summary_corpus.append(self._tokenize(summary_text))
@@ -434,9 +476,7 @@ async def expand_query(query: str, model: str = None) -> str:
 
     Helps bridge the vocabulary gap for BM25/TF-IDF retrieval.
     """
-    from .llm import achat, DEFAULT_MODEL as _DM
-    if model is None:
-        model = _DM
+    from .llm import achat
 
     prompt = (
         "Expand this search query with synonyms and related terms. "

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Build tree index from a real Markdown file and search.
+@description: Build tree index from a real Markdown file and search with FTS5.
 
 Demonstrates:
   - md_to_tree: parse Markdown into a hierarchical tree structure
-  - BestFirstTreeSearch: find relevant sections via best-first tree search (default)
+  - FTS5Index: fast keyword search over tree nodes (default, no LLM needed)
   - No vector embeddings or chunk splitting needed
 
 Usage:
@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from treesearch import md_to_tree, BestFirstTreeSearch, Document, save_index, print_toc
+from treesearch import md_to_tree, Document, save_index, print_toc
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
 MD_FILE = os.path.join(DATA_DIR, "voice-call.md")
@@ -40,12 +40,15 @@ async def main():
     save_index(result, output_path)
     print(f"\nIndex saved to: {output_path}")
 
-    # Step 2: Build Document and search
+    # Step 2: Build Document and search with FTS5 (no LLM needed)
     doc = Document(
         doc_id="voice-call",
         doc_name=result["doc_name"],
         structure=result["structure"],
     )
+
+    fts = FTS5Index()  # in-memory
+    fts.index_documents([doc])
 
     queries = [
         "How to configure Twilio for voice calls?",
@@ -55,13 +58,7 @@ async def main():
 
     for query in queries:
         print(f"\n--- Query: '{query}' ---")
-        searcher = BestFirstTreeSearch(
-            document=doc,
-            query=query,
-            max_results=5,
-            max_llm_calls=15,
-        )
-        results = await searcher.run()
+        results = fts.search(query, top_k=5)
         for r in results:
             node_id = r.get("node_id", "")
             full = doc.get_node_by_id(node_id)
@@ -69,7 +66,7 @@ async def main():
             line_end = full.get("line_end", "") if full else ""
             summary = (full.get("summary", full.get("prefix_summary", "")) if full else "")[:80]
             text_preview = (full.get("text", "") if full else "").replace("\n", " ")[:120]
-            print(f"  [{r['score']:.2f}] [{node_id}] {r['title']}  L{line_start}-{line_end}")
+            print(f"  [{r['fts_score']:.4f}] [{node_id}] {r['title']}  L{line_start}-{line_end}")
             if summary:
                 print(f"         summary: {summary}...")
             if text_preview:

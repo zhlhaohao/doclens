@@ -5,7 +5,7 @@
 
 This script demonstrates the typical TreeSearch workflow:
   1. Build indexes for multiple documents using build_index (returns Documents directly)
-  2. Search across all indexed documents with Best-First strategy (default)
+  2. Search across all indexed documents with FTS5-only strategy (default, no LLM needed)
 
 Usage:
     python examples/04_cli_workflow.py
@@ -48,8 +48,8 @@ async def main():
         print(f"Indexed: {doc.doc_name}")
         print(f"  Description: {doc.doc_description or 'N/A'}")
 
-    # Step 2: Search directly with returned documents
-    print(f"\n=== Step 2: Multi-document search (Best-First + BM25) ===\n")
+    # Step 2: Search directly with returned documents (default: fts5_only, no LLM needed)
+    print(f"\n=== Step 2: Multi-document search (FTS5-only, default) ===\n")
     print(f"Using {len(documents)} documents\n")
 
     queries = [
@@ -63,9 +63,7 @@ async def main():
         result = await search(
             query=query,
             documents=documents,
-            strategy="best_first",
-            max_llm_calls=15,
-            use_bm25=True,
+            max_nodes_per_doc=5,
         )
         print(f"  Strategy: {result.strategy}, LLM calls: {result.total_llm_calls}")
         for doc_result in result.documents:
@@ -82,7 +80,6 @@ async def main():
     print("\n=== Equivalent CLI commands ===")
     print(f'treesearch index --paths {DATA_DIR}/voice-call.md {DATA_DIR}/agent-tools.md -o {INDEX_DIR} --add-description')
     print(f'treesearch search --index_dir {INDEX_DIR} --query "How to configure the voice call webhook URL?"')
-    print(f'treesearch search --index_dir {INDEX_DIR} --query "deployment" --strategy mcts')
     print(f'treesearch search --index_dir {INDEX_DIR} --query "tools" --no-bm25')
 
 

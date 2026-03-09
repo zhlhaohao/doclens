@@ -25,8 +25,7 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from treesearch import search, SearchResult, Document, load_documents, build_index
-from treesearch.llm import achat, extract_json, count_tokens, DEFAULT_MODEL
-from treesearch.query_decompose import decompose_and_search
+from treesearch.llm import achat, extract_json, count_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +156,7 @@ def _answer_prompt(query: str, context: str, answer_mode: str) -> str:
 async def generate_answer(
     query: str,
     search_result: SearchResult,
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     max_context_tokens: int = 8000,
     answer_mode: str = "extractive",
 ) -> AnswerResult:
@@ -202,11 +201,10 @@ async def generate_answer(
 async def ask(
     query: str,
     documents: list[Document],
-    model: str = DEFAULT_MODEL,
+    model: Optional[str] = None,
     strategy: str = "best_first",
     answer_mode: str = "extractive",
     max_context_tokens: int = 8000,
-    decompose: bool = False,
     pre_filter=None,
     **search_kwargs,
 ) -> AnswerResult:
@@ -217,34 +215,23 @@ async def ask(
         query: user question
         documents: list of Document objects
         model: LLM model
-        strategy: search strategy ('best_first', 'mcts', 'llm')
+        strategy: search strategy ('best_first', 'llm')
         answer_mode: 'extractive' | 'generative' | 'boolean'
         max_context_tokens: max context token budget
-        decompose: enable query decomposition for multi-hop questions
         pre_filter: custom PreFilter instance
         **search_kwargs: additional args passed to search()
 
     Returns:
         AnswerResult
     """
-    if decompose:
-        search_result = await decompose_and_search(
-            query=query,
-            documents=documents,
-            model=model,
-            strategy=strategy,
-            pre_filter=pre_filter,
-            **search_kwargs,
-        )
-    else:
-        search_result = await search(
-            query=query,
-            documents=documents,
-            model=model,
-            strategy=strategy,
-            pre_filter=pre_filter,
-            **search_kwargs,
-        )
+    search_result = await search(
+        query=query,
+        documents=documents,
+        model=model,
+        strategy=strategy,
+        pre_filter=pre_filter,
+        **search_kwargs,
+    )
 
     answer_result = await generate_answer(
         query=query,
@@ -305,5 +292,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
     asyncio.run(main())

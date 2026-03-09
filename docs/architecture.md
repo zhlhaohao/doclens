@@ -2,7 +2,7 @@
 
 **TreeSearch: Structure-aware document retrieval without embeddings.**
 
-TreeSearch is a **reasoning-based RAG** framework. Unlike traditional RAG systems that rely on vector embeddings and chunk splitting, TreeSearch preserves document structure as trees and uses BM25 + LLM reasoning for retrieval.
+TreeSearch is a **structure-aware RAG** framework. Unlike traditional RAG systems that rely on vector embeddings and chunk splitting, TreeSearch preserves document structure as trees and uses FTS5/BM25 keyword matching for fast retrieval, with optional LLM reasoning for enhanced accuracy.
 
 ## Core Concepts
 
@@ -30,15 +30,15 @@ Document
 Query
   │
   ▼
-[Layer 1] BM25 Node-Level Pre-Scoring (millions → thousands)
+[Layer 1] FTS5/BM25 Keyword Search (default: fts5_only)
+  │       - SQLite FTS5 inverted index with MD structure-aware columns
   │       - Hierarchical field weighting: title > summary > body
-  │       - Ancestor score propagation: parent inherits max(child scores)
   │       - Chinese + English tokenization (jieba / regex)
-  │       - No LLM needed — instant results
+  │       - No LLM needed — instant results, millisecond-level
   ▼
-[Layer 2] Best-First Tree Search (thousands → tens)
+[Layer 2] Best-First Tree Search (optional: strategy="best_first")
   │       - Priority queue driven: always expands most promising node
-  │       - BM25 scores as initial priority (warm start)
+  │       - FTS5/BM25 scores as initial priority (warm start)
   │       - LLM evaluates relevance: title + summary only (no full text)
   │       - Early stopping: queue top score < threshold → stop
   │       - Budget control: max_llm_calls limit
@@ -50,11 +50,9 @@ Query
 
 **Stage 0 - Document Routing**: Given a query and multiple documents, the LLM reasons about which documents are most likely to contain the answer, based on document descriptions. No vector search needed. (Skipped automatically for single-document queries.)
 
-**Stage 1 - BM25 Pre-Scoring**: `NodeBM25Index` scores all tree nodes using structure-aware BM25 with hierarchical field weighting (`title × 1.0 + summary × 0.7 + body × 0.3`) and ancestor score propagation. This is instant (no LLM needed) and provides a warm start for tree search.
+**Stage 1 - FTS5/BM25 Keyword Search** (default): `FTS5Index` scores all tree nodes using SQLite FTS5 inverted index with MD structure-aware columns and column weighting. `NodeBM25Index` provides an in-memory BM25 alternative with hierarchical field weighting (`title × 1.0 + summary × 0.7 + body × 0.3`) and ancestor score propagation. Both are instant (no LLM needed). This is the default strategy (`fts5_only`).
 
-**Stage 2 - Best-First Tree Search** (default): `BestFirstTreeSearch` uses a priority queue to expand the most promising nodes first. Each node is evaluated by LLM (title + summary only) and scored for relevance. BM25 scores serve as initial priority. Early stopping and budget control keep LLM usage efficient.
-
-**Alternative - MCTS Tree Search**: `MCTSTreeSearch` uses Monte Carlo Tree Search with UCB1 selection. Preserved as an optional strategy via `strategy="mcts"`.
+**Stage 2 - Best-First Tree Search** (optional): `TreeSearch` uses a priority queue to expand the most promising nodes first. Each node is evaluated by LLM (title + summary only) and scored for relevance. FTS5/BM25 scores serve as initial priority. Early stopping and budget control keep LLM usage efficient. Enable with `strategy="best_first"`.
 
 **Alternative - LLM Single-Pass**: `llm_tree_search` sends the full tree structure to LLM in one call. Fastest but least thorough. Use via `strategy="llm"`.
 
@@ -65,8 +63,10 @@ Query
 | `llm.py` | Async OpenAI client with retry, token counting, JSON extraction |
 | `tree.py` | `Document` dataclass, tree traversal, persistence (save/load) |
 | `indexer.py` | Markdown / plain text → tree structure conversion, batch `build_index()` |
-| `search.py` | Best-First tree search (default), MCTS, single-pass LLM, document routing, unified `search()` API |
+| `search.py` | FTS5-only (default), Best-First tree search, single-pass LLM, FTS5-rerank, document routing, unified `search()` API |
+| `fts.py` | SQLite FTS5 full-text search engine with MD structure-aware columns, WAL mode, incremental updates |
 | `rank_bm25.py` | BM25Okapi (pure Python), `NodeBM25Index` with hierarchical weighting, Chinese/English tokenization |
+| `config.py` | Unified configuration management: env vars > YAML (`~/.treesearch/config.yaml`) > built-in defaults |
 | `cli.py` | CLI with `index` (glob support) and `search` subcommands |
 
 ## Why No Vector Embeddings?
@@ -84,16 +84,26 @@ TreeSearch takes a different approach:
 3. **Reasoning over structure**: LLM reads section titles and summaries to navigate
 4. **Best-First exploration**: Priority queue expands the most promising nodes first, with early stopping
 
-## Why Best-First Over MCTS?
+## Why FTS5-only as Default?
 
-MCTS was designed for **non-deterministic** problems (e.g., Go) where multiple simulations are needed. In TreeSearch:
+FTS5-only is the default strategy because:
+
+- **Zero-cost**: No LLM API key, no API calls, no cost
+- **Instant**: Millisecond-level SQLite FTS5 inverted index queries
+- **Structure-aware**: MD-aware columns (title/summary/body/code) with column weighting
+- **Production-ready**: Persistent inverted index, WAL mode, incremental updates, CJK tokenization
+- **Great baseline**: Benchmark results show FTS5-only already achieves strong performance
+
+For higher accuracy, upgrade to `best_first` (FTS5 + LLM) or `fts5_rerank` (FTS5 + single LLM rerank).
+
+## Why Best-First for LLM Enhancement?
+
+Best-First search is the recommended LLM-enhanced strategy because:
 
 - LLM uses `temperature=0` → evaluations are **deterministic**
 - Same query + node always produces the same relevance score
-- MCTS's `visit_count/total_value` statistics add overhead for no benefit
-- UCB1 exploration term decays to zero, making MCTS effectively a slower Best-First
-
-Best-First is the default because it's simpler, faster, and natively supports BM25 integration, early stopping, and budget control. MCTS is preserved as `strategy="mcts"` for comparison.
+- Priority queue is simple, fast, and natively supports FTS5/BM25 integration, early stopping, and budget control
+- Batch comparative ranking reduces LLM calls vs per-node evaluation
 
 ## Data Flow
 
@@ -107,7 +117,7 @@ Input Documents (MD/TXT)
         │  JSON index files
         ▼
    ┌──────────┐
-   │  search  │  BM25 pre-score → route to docs → Best-First tree search
+   │  search  │  FTS5 keyword match → (optional) route to docs → Best-First tree search
    └────┬─────┘
         │  SearchResult
         ▼
@@ -126,4 +136,4 @@ Input Documents (MD/TXT)
 | Chinese / vertical domains | Unstable (embedding quality dependent) | Customizable (LLM prompts) |
 | Vector dependency | Required | Not needed |
 
-**Key insight**: GraphRAG solves "how to build structure from unstructured data". TreeSearch solves "how to truly leverage existing structure". For documents that are naturally trees, TreeSearch is the more efficient, cheaper, and controllable approach.
+**Key insight**: GraphRAG solves "how to build structure from unstructured data". TreeSearch solves "how to truly leverage existing structure". For documents that are naturally trees, TreeSearch is the more efficient, cheaper, and controllable approach — with FTS5 providing a zero-cost baseline and LLM reasoning as an optional enhancement.
