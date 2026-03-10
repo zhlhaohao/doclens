@@ -79,7 +79,7 @@ class TreeSearchConfig:
     # Index
     if_add_node_summary: bool = True
     if_add_doc_description: bool = False
-    if_add_node_text: bool = False
+    if_add_node_text: bool = True
     if_add_node_id: bool = True
     if_thinning: bool = False
     min_token_threshold: int = 5000
