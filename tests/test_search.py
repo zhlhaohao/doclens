@@ -28,7 +28,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="What is the backend technology?",
@@ -53,7 +53,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.05}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="Unrelated query",
@@ -76,7 +76,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.9}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
@@ -96,7 +96,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
@@ -116,7 +116,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.5}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
@@ -140,7 +140,7 @@ class TestBestFirstTreeSearch:
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         bm25_scores = {"1": 2.5, "2": 0.5, "3": 1.8}
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="backend",
@@ -204,7 +204,7 @@ class TestBestFirstTreeSearch:
         doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
 
         # First search
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher1 = BestFirstTreeSearch(
                 document=doc, query="backend tech", use_subtree_cache=True,
                 adaptive_depth_threshold=1,
@@ -214,7 +214,7 @@ class TestBestFirstTreeSearch:
         first_calls = call_count
 
         # Second search with same query -> should hit cache
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher2 = BestFirstTreeSearch(
                 document=doc, query="backend tech", use_subtree_cache=True,
                 adaptive_depth_threshold=1,
@@ -235,7 +235,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.5}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
@@ -294,7 +294,7 @@ class TestBestFirstTreeSearch:
             return json.dumps({"rankings": rankings})
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test query",
@@ -349,7 +349,7 @@ class TestBestFirstTreeSearch:
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
@@ -400,7 +400,7 @@ class TestRouteDocuments:
         async def mock_achat(prompt, **kwargs):
             return '{"selected_doc_ids": ["a"]}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             selected = await route_documents(
                 query="How is the system deployed?",
                 documents=two_documents,
@@ -415,7 +415,7 @@ class TestRouteDocuments:
         async def mock_achat(prompt, **kwargs):
             return '{"selected_doc_ids": []}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             selected = await route_documents(
                 query="Unrelated query",
                 documents=two_documents,
@@ -428,7 +428,7 @@ class TestRouteDocuments:
         async def mock_achat(prompt, **kwargs):
             return '{"selected_doc_ids": ["a", "b"]}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             selected = await route_documents(
                 query="test",
                 documents=two_documents,
@@ -465,7 +465,7 @@ class TestSearch:
                 return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.6}, {"node_id": "3", "relevance": 0.9}]}'
             return '{"relevance": 0.8}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await search(
                 query="What is the backend?",
                 documents=two_documents,
@@ -491,7 +491,7 @@ class TestSearch:
                 return '{"rankings": [{"node_id": "0", "relevance": 0.7}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.7}, {"node_id": "3", "relevance": 0.7}]}'
             return '{"relevance": 0.7}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await search(
                 query="test",
                 documents=[doc],
@@ -510,7 +510,7 @@ class TestSearch:
                 return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await search(
                 query="backend",
                 documents=two_documents,
@@ -535,7 +535,7 @@ class TestSearchSync:
                 return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
-        with patch("treesearch.search.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = search_sync(
                 query="test",
                 documents=[doc_a],

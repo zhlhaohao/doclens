@@ -14,7 +14,6 @@ import os
 import re
 from typing import Optional
 
-from .llm import achat, achat_with_finish_reason, count_tokens, extract_json
 from .tree import (
     Document, assign_node_ids, flatten_tree, format_structure, remove_fields,
 )
@@ -45,6 +44,7 @@ def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = Non
 
     For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
     """
+    from .llm import count_tokens
     text = node.get("text", "")
     if count_tokens(text, model=model) < threshold:
         return text
@@ -61,6 +61,7 @@ async def generate_summaries(
     
     if use_llm:
         async def _llm_summarize(node, thr, mod):
+            from .llm import count_tokens, achat
             text = node.get("text", "")
             if count_tokens(text, model=mod) < thr:
                 return text
@@ -112,6 +113,7 @@ async def generate_doc_description(structure, model: Optional[str] = None) -> st
         f"Document Structure: {json.dumps(clean, ensure_ascii=False)}\n\n"
         "Directly return the description, no other text."
     )
+    from .llm import achat
     return await achat(prompt, model=model)
 
 
@@ -163,6 +165,7 @@ def _cut_md_text(markers: list[dict], lines: list[str]) -> list[dict]:
 
 def _update_token_counts(node_list: list[dict], model: Optional[str] = None) -> list[dict]:
     """Compute cumulative token counts (self + descendants) for thinning."""
+    from .llm import count_tokens
     for i in range(len(node_list) - 1, -1, -1):
         text = node_list[i].get("text", "")
         for ci in _children_indices(node_list, i, node_list[i]["level"]):
@@ -175,6 +178,7 @@ def _update_token_counts(node_list: list[dict], model: Optional[str] = None) -> 
 
 def _thin_tree(node_list: list[dict], min_tokens: int, model: Optional[str] = None) -> list[dict]:
     """Merge small sub-trees into their parent nodes."""
+    from .llm import count_tokens
     to_remove = set()
     for i in range(len(node_list) - 1, -1, -1):
         if i in to_remove:
@@ -427,6 +431,7 @@ def _preprocess_text(text: str) -> str:
 
 def _chunk_for_llm(text: str, max_tokens: int = 80000, model: Optional[str] = None) -> list[str]:
     """Split text into chunks within LLM context limits."""
+    from .llm import count_tokens
     lines = text.split("\n")
     chunks, current, tokens = [], [], 0
     for line in lines:
@@ -475,6 +480,7 @@ Return only the additional JSON array."""
 
 async def _llm_generate_toc(text: str, lines: list[str], model: str) -> list[dict]:
     """Use LLM to generate TOC, then locate sections in original text."""
+    from .llm import achat_with_finish_reason, extract_json
     chunks = _chunk_for_llm(text, model=model)
 
     # First chunk
@@ -585,7 +591,7 @@ async def text_to_tree(
 
     text = _preprocess_text(raw)
     lines = text.split("\n")
-    logger.info("Text loaded: %d lines, ~%d tokens", len(lines), count_tokens(text, model=model))
+    logger.info("Text loaded: %d lines", len(lines))
 
     # Step 1: heading detection
     use_llm = (fallback_to_llm == "yes")
@@ -745,7 +751,7 @@ async def code_to_tree(
 
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     lines = text.split("\n")
-    logger.info("Code loaded: %d lines, ~%d tokens", len(lines), count_tokens(text, model=model))
+    logger.info("Code loaded: %d lines", len(lines))
 
     headings = _detect_code_headings(lines, ext, source=text)
     markers = [{"title": h["title"], "line_num": h["line_num"], "level": h["level"]} for h in headings]

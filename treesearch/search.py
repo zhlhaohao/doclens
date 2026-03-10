@@ -11,7 +11,6 @@ import json
 import logging
 from typing import Optional, Protocol, runtime_checkable
 
-from .llm import achat, count_tokens, extract_json
 from .tree import Document
 from .config import get_config
 
@@ -254,6 +253,7 @@ class BestFirstTreeSearch:
         Estimates token count for each section and groups them so that
         the total prompt stays under the context window limit.
         """
+        from .llm import count_tokens
         # Build prompt skeleton (without sections) to measure overhead
         skeleton = self._build_prompt("")
         overhead_tokens = count_tokens(skeleton, model=self.model)
@@ -339,6 +339,7 @@ class BestFirstTreeSearch:
 
             sections_str = "\n".join(sections)
             prompt = self._build_prompt(sections_str, num_sections=len(batch_nids))
+            from .llm import achat, extract_json
             response = await achat(prompt, model=self.model, temperature=0)
             result = extract_json(response)
             self._llm_calls += 1
@@ -542,6 +543,7 @@ async def route_documents(
         f'{{"selected_doc_ids": ["doc_id_1", "doc_id_2"]}}'
     )
 
+    from .llm import achat, extract_json
     response = await achat(prompt, model=model, temperature=0)
     result = extract_json(response)
     selected_ids = result.get("selected_doc_ids", [])

@@ -11,9 +11,6 @@ import json
 import logging
 from typing import Optional, Any
 
-import openai
-import tiktoken
-
 from .config import get_config
 
 logger = logging.getLogger(__name__)
@@ -26,11 +23,12 @@ MAX_RETRIES = 3
 # ---------------------------------------------------------------------------
 # Singleton async client (connection pool reuse)
 # ---------------------------------------------------------------------------
-_async_clients: dict[str, openai.AsyncOpenAI] = {}
+_async_clients: dict = {}
 
 
-def _get_async_client(api_key: Optional[str] = None) -> openai.AsyncOpenAI:
+def _get_async_client(api_key: Optional[str] = None):
     """Return a singleton AsyncOpenAI client keyed by (api_key, base_url)."""
+    import openai
     cfg = get_config()
     key = api_key or cfg.api_key or ""
     base_url = cfg.base_url
@@ -46,7 +44,7 @@ def _get_async_client(api_key: Optional[str] = None) -> openai.AsyncOpenAI:
 # ---------------------------------------------------------------------------
 # Token counting (with encoder cache)
 # ---------------------------------------------------------------------------
-_encoder_cache: dict[str, tiktoken.Encoding] = {}
+_encoder_cache: dict = {}
 
 
 def count_tokens(text: str, model: Optional[str] = None) -> int:
@@ -57,6 +55,7 @@ def count_tokens(text: str, model: Optional[str] = None) -> int:
     """
     if not text:
         return 0
+    import tiktoken
     if model is None:
         model = get_config().model
     if model not in _encoder_cache:
@@ -77,7 +76,7 @@ async def _achat_impl(
     api_key: Optional[str] = None,
     temperature: float = 0,
     messages: Optional[list[dict]] = None,
-) -> openai.types.chat.ChatCompletion:
+):
     """Internal: async chat completion with retry. Returns raw response."""
     cfg = get_config()
     if model is None:

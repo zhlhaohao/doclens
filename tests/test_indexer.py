@@ -139,7 +139,7 @@ class TestMdToTree:
         async def mock_achat(prompt, **kwargs):
             return "This is a mock summary."
 
-        with patch("treesearch.indexer.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await md_to_tree(
                 md_path=sample_md_file,
                 if_add_node_summary=True,
@@ -175,7 +175,7 @@ class TestMdToTree:
                 return "A document about system architecture."
             return "Mock summary."
 
-        with patch("treesearch.indexer.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await md_to_tree(
                 md_path=sample_md_file,
                 if_add_node_summary=True,
@@ -189,7 +189,7 @@ class TestMdToTree:
             return "Summary."
 
         content = "# Title\n\nSome content.\n\n## Section\n\nMore content."
-        with patch("treesearch.indexer.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await md_to_tree(
                 md_content=content,
                 if_add_node_summary=True,
@@ -209,7 +209,7 @@ class TestTextToTree:
         async def mock_achat(prompt, **kwargs):
             return "Mock summary."
 
-        with patch("treesearch.indexer.achat", side_effect=mock_achat):
+        with patch("treesearch.llm.achat", side_effect=mock_achat):
             result = await text_to_tree(
                 text_path=sample_text_file,
                 fallback_to_llm="no",

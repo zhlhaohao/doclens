@@ -52,8 +52,14 @@ from treesearch.tree import (
 # Parser registry
 from treesearch.parsers import ParserRegistry, get_parser
 
-# LLM utilities
-from treesearch.llm import achat, chat, count_tokens, extract_json
+# LLM utilities (lazy import to avoid loading openai/tiktoken at startup)
+def __getattr__(name):
+    _llm_names = {"achat", "chat", "count_tokens", "extract_json"}
+    if name in _llm_names:
+        from treesearch.llm import achat, chat, count_tokens, extract_json
+        globals().update({"achat": achat, "chat": chat, "count_tokens": count_tokens, "extract_json": extract_json})
+        return globals()[name]
+    raise AttributeError(f"module 'treesearch' has no attribute {name!r}")
 
 __all__ = [
     # Primary API
