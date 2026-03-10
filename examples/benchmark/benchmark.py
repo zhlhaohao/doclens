@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from treesearch.llm import count_tokens
-from treesearch.search import search, SearchResult
+from treesearch.search import search
 from treesearch.tree import Document, flatten_tree
 
 from .metrics import (
@@ -428,11 +428,10 @@ async def _evaluate_sample(
                 max_nodes_per_doc=top_k,
                 use_bm25=use_bm25,
             )
-            for doc_result in result.documents:
+            for doc_result in result["documents"]:
                 for node in doc_result.get("nodes", []):
                     retrieved_node_ids.append(node["node_id"])
             retrieved_node_ids = retrieved_node_ids[:top_k]
-            tracker.stats.llm_calls = result.total_llm_calls
 
     metrics = evaluate_query(retrieved_node_ids, relevant_node_ids, k_values) if relevant_node_ids else {}
 

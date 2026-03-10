@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#社区与支持)
 
-**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。无需向量嵌入，无需分块。
+**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。支持 Markdown、纯文本、代码文件（Python/Java/Go/JS/C++ 等）、HTML、XML、JSON 和 CSV。无需向量嵌入，无需分块。
 
 ## 安装
 
@@ -27,42 +27,17 @@ pip install -U pytreesearch
 ## 快速开始
 
 ```python
-import asyncio
-from treesearch import build_index, load_index, Document, search, get_config, set_config
+from treesearch import TreeSearch
 
-async def main():
-    # 启用 FTS5（SQLite 全文检索，默认预过滤引擎）
-    cfg = get_config()
-    cfg.fts.enabled = True
-    cfg.fts.db_path = "indexes/fts.db"  # 持久化, 或 "" 为内存模式
-    set_config(cfg)
-
-    # 构建 Markdown 文件索引
-    await build_index(paths=["docs/*.md"], output_dir="./indexes")
-
-    # 加载索引文档
-    import os
-    documents = []
-    for fp in sorted(os.listdir("./indexes")):
-        if not fp.endswith(".json"):
-            continue
-        data = load_index(os.path.join("./indexes", fp))
-        documents.append(Document(
-            doc_id=fp, doc_name=data["doc_name"],
-            structure=data["structure"],
-            doc_description=data.get("doc_description", ""),
-        ))
-
-    # 使用 Best-First 策略搜索（FTS5 + LLM）
-    result = await search(query="认证系统如何工作？", documents=documents)
-    for doc_result in result.documents:
-        for node in doc_result["nodes"]:
-            print(f"[{node['score']:.2f}] {node['title']}")
-
-asyncio.run(main())
+# 懒加载索引 —— 首次搜索时自动构建索引
+ts = TreeSearch("docs/*.md", "src/*.py", model="gpt-4o")
+results = ts.search("认证系统如何工作？")
+for doc in results.documents:
+    for node in doc["nodes"]:
+        print(f"[{node['score']:.2f}] {node['title']}")
 ```
 
-FTS5/BM25 策略无需 API Key 即可开箱即用。若需 LLM 增强策略（`best_first`、`fts5_rerank`、`llm`），请先设置 API Key：
+FTS5/BM25 策略无需 API Key 即可开箱即用。若需 LLM 增强策略（`best_first`），请先设置 API Key：
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -83,7 +58,7 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 | **多文档** | 需要向量数据库路由 | LLM 根据文档描述路由 |
 | **结构** | 分块后丢失 | 完整保留为树形层级 |
 | **依赖** | 向量数据库 + 嵌入模型 | 仅 SQLite（LLM 可选，无嵌入、无向量库） |
-| **零成本基线** | 无 | FTS5/BM25 独立搜索（无需 LLM） |
+| **零成本基线** | 无 | FTS5 独立搜索（无需 LLM） |
 
 ### 核心优势
 
@@ -99,11 +74,10 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 
 - **FTS5-only 搜索**（默认） — 零 LLM 调用，毫秒级 FTS5/BM25 关键词匹配，无需 API Key
 - **SQLite FTS5 引擎** — 持久化倒排索引，WAL 模式，增量更新，MD 结构感知列（标题/摘要/正文/代码/前言），列权重加权，CJK 分词
-- **树结构索引** — Markdown 和纯文本文档被解析为层级树
+- **树结构索引** — Markdown、纯文本、代码文件（Python/Java/Go/JS/C++/PHP）、HTML、XML、JSON 和 CSV 均被解析为层级树
+- **GrepFilter 精准匹配** — 支持字面量/正则表达式匹配，精准定位代码符号和关键词
 - **BM25 节点级索引** — 结构感知评分，层级字段加权（标题 > 摘要 > 正文）和祖先传播
 - **Best-First 搜索**（可选） — 优先队列驱动，FTS5 预打分 + LLM 评估，提前停止和预算控制
-- **FTS5-rerank** — FTS5 候选 + 单次 LLM 重排序，成本/质量最佳平衡
-- **LLM 单次调用** — 每个文档一次 LLM 调用，成本最低
 - **多文档搜索** — 通过 LLM 推理在文档集合间路由查询
 - **中英文支持** — 内置 jieba 中文分词和英文正则分词
 - **批量索引** — `build_index()` 支持 glob 模式并发多文件处理
@@ -136,20 +110,6 @@ for doc_agg in agg:
     print(f"{doc_agg['doc_name']}: {doc_agg['hit_count']} 命中, 最高分={doc_agg['best_score']:.4f}")
 ```
 
-## BM25 独立搜索（无需 LLM）
-
-```python
-from treesearch import NodeBM25Index, Document, load_index
-
-data = load_index("indexes/my_doc.json")
-doc = Document(doc_id="doc1", doc_name=data["doc_name"], structure=data["structure"])
-
-index = NodeBM25Index([doc])
-results = index.search("认证配置", top_k=5)
-for r in results:
-    print(f"[{r['bm25_score']:.4f}] {r['title']}")
-```
-
 ## CLI
 
 ```bash
@@ -169,18 +129,18 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 ## 工作原理
 
 ```
-输入文档 (MD/TXT)
+输入文档 (MD/TXT/Code/JSON/CSV/HTML/XML)
         │
         ▼
    ┌──────────┐
-   │  Indexer  │  解析标题 → 构建树 → 生成摘要
+   │  Indexer  │  解析结构 → 构建树 → 生成摘要
    └────┬─────┘    (build_index 支持 glob 批量处理)
         │  JSON 索引文件
         ▼
    ┌──────────┐
-   │  search   │  FTS5 关键词匹配 → （可选）文档路由 → 树搜索
+   │  search   │  FTS5/Grep 匹配 → （可选）文档路由 → 树搜索
    └────┬─────┘
-        │  SearchResult
+        │  dict 结果
         ▼
   带分数和文本的排序节点
 ```
@@ -196,21 +156,17 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 | 策略 | 描述 | LLM 调用 | 适用场景 |
 |------|------|----------|----------|
 | `fts5_only`（默认） | 纯 FTS5/BM25 评分 | 零 | 快速关键词搜索，无需 API Key |
-| `fts5_rerank` | FTS5 候选 + 单次 LLM 重排序 | 每文档 1 次 | 成本/质量最佳平衡 |
 | `best_first` | FTS5/BM25 预打分 + 优先队列 + LLM 评估 | 中等（预算控制） | 准确率最高 |
-| `llm` | 每个文档一次 LLM 调用 | 最少 | 低成本、简单查询 |
 | FTS5 独立 | `FTS5Index.search()` | 零 | 持久化倒排索引，无需 API Key |
-| BM25 独立 | `NodeBM25Index.search()` | 零 | 内存关键词搜索，无需 API Key |
 
 ## 示例
 
 | 示例 | 描述 |
 |------|------|
-| [`01_basic_demo.py`](examples/01_basic_demo.py) | 基础演示：构建索引 + FTS5/TreeSearch 搜索 |
-| [`02_index_and_search.py`](examples/02_index_and_search.py) | 单文档索引 + FTS5 搜索 |
-| [`03_text_indexing.py`](examples/03_text_indexing.py) | 纯文本 → 树索引，自动标题检测 |
+| [`01_basic_demo.py`](examples/01_basic_demo.py) | 最简演示：构建索引 + 搜索 |
+| [`02_index_and_search.py`](examples/02_index_and_search.py) | Markdown 和纯文本索引 + FTS5 搜索 |
 | [`04_cli_workflow.py`](examples/04_cli_workflow.py) | CLI 工作流：构建索引 + 策略搜索 |
-| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | 多文档 BM25 + TreeSearch + 策略对比 + 中文 |
+| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | 多文档搜索 + BM25 + GrepFilter + 策略对比 |
 
 ## 项目结构
 
@@ -218,8 +174,9 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 treesearch/
 ├── llm.py            # 异步 LLM 客户端，支持重试和 JSON 提取
 ├── tree.py           # Document 数据类、树操作、持久化
-├── indexer.py        # Markdown / 纯文本 → 树结构，批量 build_index()
-├── search.py         # Best-First、LLM 搜索，文档路由，统一 search() API
+├── indexer.py        # MD / 文本 / 代码 / JSON / CSV / HTML / XML → 树结构，批量 build_index()
+├── search.py         # Best-First、GrepFilter，文档路由，统一 search() API
+├── treesearch.py     # TreeSearch 统一引擎类（索引 + 搜索）
 ├── fts.py            # SQLite FTS5 全文检索引擎（持久化倒排索引）
 ├── rank_bm25.py      # BM25Okapi、NodeBM25Index、中英文分词器
 ├── config.py         # 统一配置管理（env > YAML > 默认值）

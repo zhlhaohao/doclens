@@ -84,14 +84,14 @@ async def search(
     text_mode: str = "full",
     include_ancestors: bool = False,
     merge_strategy: str = "interleave",
-) -> SearchResult
+) -> dict
 ```
 
 Search across one or more documents using tree-structured retrieval. This is the primary API — it natively supports multi-document search:
 
 1. Route query to relevant documents (LLM reasoning, skipped for single doc)
 2. (Optional) Pre-filter scoring over tree nodes for initial ranking
-3. Tree search within each document (fts5_only / best_first / llm / fts5_rerank)
+3. Tree search within each document (fts5_only / best_first)
 4. Return ranked nodes with text content
 
 **Args**:
@@ -100,7 +100,7 @@ Search across one or more documents using tree-structured retrieval. This is the
 |-----------|-------------|
 | `query` | User query string |
 | `documents` | List of `Document` objects (single or multiple) |
-| `strategy` | `"fts5_only"` (default), `"best_first"`, `"llm"`, or `"fts5_rerank"` |
+| `strategy` | `"fts5_only"` (default) or `"best_first"` |
 | `max_llm_calls` | Max LLM calls per document (best_first only, default: 30) |
 | `use_bm25` | Enable BM25 pre-scoring for best_first strategy (default: True) |
 | `pre_filter` | Custom `PreFilter` instance for node pre-scoring (overrides `use_bm25`) |
@@ -114,7 +114,7 @@ Search across one or more documents using tree-structured retrieval. This is the
 
 ### `search_sync`
 
-Synchronous wrapper: `search_sync(query, documents, **kwargs) -> SearchResult`
+Synchronous wrapper: `search_sync(query, documents, **kwargs) -> dict`
 
 ### `TreeSearch`
 
@@ -165,21 +165,6 @@ class TreeSearch:
 - Subtree cache: class-level `(query_fingerprint, node_id) -> relevance` cache for reuse
 
 **Returns**: `[{'node_id', 'title', 'score'}]`
-
-### `llm_tree_search`
-
-```python
-async def llm_tree_search(
-    query: str,
-    document: Document,
-    model: Optional[str] = None,
-    expert_knowledge: str = "",
-) -> list[dict]
-```
-
-Single-pass LLM tree search. Sends full tree structure to LLM in one call.
-
-**Returns**: `[{'node_id', 'title'}]`
 
 ### `route_documents`
 
@@ -274,15 +259,16 @@ class Document:
     def get_node_by_id(self, node_id: str) -> Optional[dict]
 ```
 
-### `SearchResult`
+### Search Result (dict)
 
 ```python
-@dataclass
-class SearchResult:
-    documents: list   # [{'doc_id', 'doc_name', 'nodes': [{'node_id', 'title', 'text', 'score'}]}]
-    query: str = ""
-    total_llm_calls: int = 0
-    strategy: str = ""
+# search() returns a dict:
+{
+    "documents": [  # [{'doc_id', 'doc_name', 'nodes': [{'node_id', 'title', 'text', 'score'}]}]
+        ...
+    ],
+    "query": "",
+}
 ```
 
 ---
@@ -319,9 +305,6 @@ treesearch search --index_dir ./indexes/ --query "How does authentication work?"
 
 # Search with Best-First strategy (FTS5 + LLM, best accuracy)
 treesearch search --index_dir ./indexes/ --query "How does authentication work?" --strategy best_first --fts
-
-# Search with single-pass LLM (fastest, less thorough)
-treesearch search --index_dir ./indexes/ --query "config" --strategy llm
 
 # Search without BM25 pre-scoring
 treesearch search --index_dir ./indexes/ --query "auth" --no-bm25

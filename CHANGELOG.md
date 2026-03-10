@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - SQLite FTS5 full-text search engine (`fts.py`) with persistent inverted index, WAL mode, incremental updates, and CJK tokenization
-- `fts5_only` and `fts5_rerank` search strategies for zero-LLM and single-LLM retrieval
+- `fts5_only` and `best_first` search strategies for zero-LLM and LLM-enhanced retrieval
 - Batch comparative ranking in `TreeSearch` with context-aware batching
 - `text_mode`, `include_ancestors`, `merge_strategy`, `pre_filter` parameters to `search()`
 - Unified configuration management (`config.py`) with env > YAML > defaults
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `QueryEngineConfig` from configuration
 
 ### Changed
-- `search()` strategy options: `best_first`, `llm`, `fts5_only`, `fts5_rerank` (removed `mcts`)
+- `search()` strategy options: `best_first`, `fts5_only` (removed `mcts`, `llm`, `fts5_rerank`)
 - CLI `--strategy` choices updated accordingly
 
 ## [0.3.0] - 2026-02-01

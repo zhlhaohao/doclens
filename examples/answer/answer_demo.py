@@ -24,7 +24,7 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from treesearch import search, SearchResult, Document, load_documents, build_index
+from treesearch import search, Document, load_documents, build_index
 from treesearch.llm import achat, extract_json, count_tokens
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class AnswerResult:
     confidence: float = 0.0
     sources: list[dict] = field(default_factory=list)
     reasoning: str = ""
-    search_result: Optional[SearchResult] = None
+    search_result: Optional[dict] = None
     llm_calls: int = 0
 
 
@@ -53,7 +53,7 @@ class AnswerResult:
 # Core functions
 # ---------------------------------------------------------------------------
 
-def _build_context(search_result: SearchResult, max_context_tokens: int = 8000) -> tuple[str, list[dict]]:
+def _build_context(search_result: dict, max_context_tokens: int = 8000) -> tuple[str, list[dict]]:
     """
     Build context string from search results.
 
@@ -155,7 +155,7 @@ def _answer_prompt(query: str, context: str, answer_mode: str) -> str:
 
 async def generate_answer(
     query: str,
-    search_result: SearchResult,
+    search_result: dict,
     model: Optional[str] = None,
     max_context_tokens: int = 8000,
     answer_mode: str = "extractive",
@@ -165,7 +165,7 @@ async def generate_answer(
 
     Args:
         query: user question
-        search_result: SearchResult from treesearch.search()
+        search_result: dict from treesearch.search()
         model: LLM model name
         max_context_tokens: max context token budget
         answer_mode: 'extractive' | 'generative' | 'boolean'
@@ -215,7 +215,7 @@ async def ask(
         query: user question
         documents: list of Document objects
         model: LLM model
-        strategy: search strategy ('best_first', 'llm')
+        strategy: search strategy ('best_first')
         answer_mode: 'extractive' | 'generative' | 'boolean'
         max_context_tokens: max context token budget
         pre_filter: custom PreFilter instance
@@ -240,7 +240,7 @@ async def ask(
         max_context_tokens=max_context_tokens,
         answer_mode=answer_mode,
     )
-    answer_result.llm_calls += search_result.total_llm_calls
+    answer_result.llm_calls += 0
 
     return answer_result
 

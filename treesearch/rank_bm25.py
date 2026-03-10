@@ -466,27 +466,4 @@ class NodeTFIDFIndex:
         return {r["node_id"]: r["tfidf_score"] for r in results if r["doc_id"] == doc_id}
 
 
-# ---------------------------------------------------------------------------
-# Query expansion via LLM
-# ---------------------------------------------------------------------------
 
-async def expand_query(query: str, model: str = None) -> str:
-    """
-    Expand query with synonyms and related terms using LLM.
-
-    Helps bridge the vocabulary gap for BM25/TF-IDF retrieval.
-    """
-    from .llm import achat
-
-    prompt = (
-        "Expand this search query with synonyms and related terms. "
-        "Keep the original query and add 3-5 related terms.\n\n"
-        f"Original: {query}\n\n"
-        "Return the expanded query as a single string, no explanation."
-    )
-    try:
-        expanded = await achat(prompt, model=model, temperature=0)
-        return expanded.strip()
-    except Exception as e:
-        logger.warning("Query expansion failed: %s", e)
-        return query

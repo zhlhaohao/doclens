@@ -78,7 +78,7 @@ class TestIndexConfig:
 class TestFTSConfig:
     def test_defaults(self):
         c = FTSConfig()
-        assert c.enabled is False
+        assert c.enabled is True
         assert c.db_path == ""
         assert c.title_weight == 5.0
         assert c.summary_weight == 2.0
@@ -140,15 +140,15 @@ class TestCoerceValue:
 class TestApplyYamlToDataclass:
     def test_apply_known_fields(self):
         sc = SearchConfig()
-        _apply_yaml_to_dataclass(sc, {"strategy": "llm", "max_llm_calls": 50})
-        assert sc.strategy == "llm"
+        _apply_yaml_to_dataclass(sc, {"strategy": "best_first", "max_llm_calls": 50})
+        assert sc.strategy == "best_first"
         assert sc.max_llm_calls == 50
 
     def test_unknown_keys_ignored(self):
         sc = SearchConfig()
-        _apply_yaml_to_dataclass(sc, {"unknown_field": "ignored", "strategy": "llm"})
-        assert sc.strategy == "llm"
-        assert not hasattr(sc, "unknown_field") or sc.strategy == "llm"
+        _apply_yaml_to_dataclass(sc, {"unknown_field": "ignored", "strategy": "best_first"})
+        assert sc.strategy == "best_first"
+        assert not hasattr(sc, "unknown_field") or sc.strategy == "best_first"
 
     def test_invalid_type_keeps_default(self):
         sc = SearchConfig()
@@ -170,7 +170,7 @@ class TestApplyYamlToDataclass:
         """All SearchConfig fields can be set from YAML without hardcoding."""
         sc = SearchConfig()
         yaml_data = {
-            "strategy": "llm",
+            "strategy": "best_first",
             "max_nodes_per_doc": 10,
             "top_k_docs": 5,
             "value_threshold": 0.5,
@@ -178,7 +178,7 @@ class TestApplyYamlToDataclass:
             "use_bm25": False,
         }
         _apply_yaml_to_dataclass(sc, yaml_data)
-        assert sc.strategy == "llm"
+        assert sc.strategy == "best_first"
         assert sc.max_nodes_per_doc == 10
         assert sc.top_k_docs == 5
         assert sc.value_threshold == 0.5
@@ -234,13 +234,13 @@ class TestFromEnvVars:
 
     def test_search_overrides_from_env(self):
         env = {
-            "TREESEARCH_STRATEGY": "llm",
+            "TREESEARCH_STRATEGY": "best_first",
             "TREESEARCH_MAX_LLM_CALLS": "50",
             "TREESEARCH_THRESHOLD": "0.5",
         }
         with patch.dict(os.environ, env, clear=False):
             c = TreeSearchConfig.from_env()
-        assert c.search.strategy == "llm"
+        assert c.search.strategy == "best_first"
         assert c.search.max_llm_calls == 50
         assert c.search.value_threshold == 0.5
 
@@ -284,7 +284,7 @@ class TestFromEnvWithYaml:
         """YAML sets tuning params, no secrets."""
         yaml_data = {
             "model": "gpt-4o",
-            "search": {"strategy": "llm", "max_llm_calls": 50},
+            "search": {"strategy": "best_first", "max_llm_calls": 50},
             "fts": {"enabled": True, "db_path": "/tmp/test.db", "title_weight": 15.0},
         }
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -297,7 +297,7 @@ class TestFromEnvWithYaml:
                     os.environ.pop(k, None)
                 c = TreeSearchConfig.from_env(yaml_path=tmp_path)
             assert c.model == "gpt-4o"
-            assert c.search.strategy == "llm"
+            assert c.search.strategy == "best_first"
             assert c.search.max_llm_calls == 50
             assert c.fts.enabled is True
             assert c.fts.db_path == "/tmp/test.db"
@@ -322,7 +322,7 @@ class TestFromEnvWithYaml:
 
     def test_env_overrides_yaml_strategy(self):
         """Env var TREESEARCH_STRATEGY takes priority over YAML search.strategy."""
-        yaml_data = {"search": {"strategy": "llm"}}
+        yaml_data = {"search": {"strategy": "best_first"}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(yaml_data, f)
             tmp_path = f.name

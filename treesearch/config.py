@@ -186,7 +186,7 @@ class FTSConfig:
     Controls whether FTS5 is used as the pre-filter backend,
     database path for persistent indexing, and column weights.
     """
-    enabled: bool = False
+    enabled: bool = True
     db_path: str = ""  # empty = in-memory, set path for persistent index
     title_weight: float = 5.0
     summary_weight: float = 2.0

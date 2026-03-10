@@ -3,17 +3,15 @@
 @author:XuMing(xuming624@qq.com)
 @description: Tests for treesearch.search module (with mocked LLM).
 
-Tests cover: TreeSearch, llm_tree_search, route_documents,
-             search(), search_sync(), SearchResult.
+Tests cover: BestFirstTreeSearch, route_documents,
+             search(), search_sync().
 """
 from unittest.mock import patch, AsyncMock, MagicMock
 import json
 
 import pytest
 from treesearch.search import (
-    TreeSearch,
-    llm_tree_search,
-    SearchResult,
+    BestFirstTreeSearch,
     search,
     search_sync,
     route_documents,
@@ -21,7 +19,7 @@ from treesearch.search import (
 from treesearch.tree import Document
 
 
-class TestTreeSearch:
+class TestBestFirstTreeSearch:
     @pytest.mark.asyncio
     async def test_run_returns_results(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
@@ -31,7 +29,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="What is the backend technology?",
                 max_results=5,
@@ -56,7 +54,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="Unrelated query",
                 threshold=0.5,
@@ -79,7 +77,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
                 max_results=2,
@@ -99,7 +97,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
                 max_llm_calls=5,
@@ -119,7 +117,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
                 threshold=0.1,
@@ -143,7 +141,7 @@ class TestTreeSearch:
         bm25_scores = {"0001": 2.5, "0002": 0.5, "0003": 1.8}
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="backend",
                 bm25_scores=bm25_scores,
@@ -159,7 +157,7 @@ class TestTreeSearch:
     @pytest.mark.asyncio
     async def test_subtree_cache(self, sample_tree_structure):
         """Subtree cache should avoid redundant LLM calls across searches (deep tree)."""
-        TreeSearch.clear_subtree_cache()
+        BestFirstTreeSearch.clear_subtree_cache()
         call_count = 0
 
         # Use a deep tree to trigger priority-queue mode (not flat hybrid mode)
@@ -207,7 +205,7 @@ class TestTreeSearch:
 
         # First search
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher1 = TreeSearch(
+            searcher1 = BestFirstTreeSearch(
                 document=doc, query="backend tech", use_subtree_cache=True,
                 adaptive_depth_threshold=1,
             )
@@ -217,7 +215,7 @@ class TestTreeSearch:
 
         # Second search with same query -> should hit cache
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher2 = TreeSearch(
+            searcher2 = BestFirstTreeSearch(
                 document=doc, query="backend tech", use_subtree_cache=True,
                 adaptive_depth_threshold=1,
             )
@@ -226,7 +224,7 @@ class TestTreeSearch:
         # Second search should make fewer LLM calls due to cache
         assert call_count - first_calls < first_calls
 
-        TreeSearch.clear_subtree_cache()
+        BestFirstTreeSearch.clear_subtree_cache()
 
     @pytest.mark.asyncio
     async def test_dynamic_threshold(self, sample_tree_structure):
@@ -238,7 +236,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
                 use_subtree_cache=False,
@@ -297,7 +295,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test query",
                 use_subtree_cache=False,
@@ -352,7 +350,7 @@ class TestTreeSearch:
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
         with patch("treesearch.search.achat", side_effect=mock_achat):
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query="test",
                 use_subtree_cache=False,
@@ -364,74 +362,19 @@ class TestTreeSearch:
         assert searcher.llm_calls > 0
 
 
-class TestLlmTreeSearch:
-    @pytest.mark.asyncio
-    async def test_llm_search_returns_nodes(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            return '{"node_list": ["0001", "0003"]}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            results = await llm_tree_search(
-                query="Backend and deployment",
-                document=doc,
-            )
-
-        assert isinstance(results, list)
-        assert len(results) >= 1
-        for r in results:
-            assert "node_id" in r
-            assert "title" in r
-
-    @pytest.mark.asyncio
-    async def test_llm_search_with_expert_knowledge(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            assert "Expert knowledge" in prompt
-            return '{"node_list": ["0001"]}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            results = await llm_tree_search(
-                query="Backend tech",
-                document=doc,
-                expert_knowledge="The backend uses FastAPI",
-            )
-
-        assert len(results) >= 1
-
-    @pytest.mark.asyncio
-    async def test_llm_search_nonexistent_node(self, sample_tree_structure):
-        async def mock_achat(prompt, **kwargs):
-            return '{"node_list": ["9999"]}'
-
-        doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            results = await llm_tree_search(
-                query="test",
-                document=doc,
-            )
-
-        assert len(results) == 0
-
-
 class TestSearchResult:
     def test_fields(self):
-        r = SearchResult(
-            documents=[{"doc_id": "d1", "doc_name": "Doc", "nodes": []}],
-            query="test",
-            total_llm_calls=5,
-            strategy="best_first",
-        )
-        assert len(r.documents) == 1
-        assert r.query == "test"
-        assert r.total_llm_calls == 5
-        assert r.strategy == "best_first"
+        r = {
+            "documents": [{"doc_id": "d1", "doc_name": "Doc", "nodes": []}],
+            "query": "test",
+        }
+        assert len(r["documents"]) == 1
+        assert r["query"] == "test"
 
     def test_empty(self):
-        r = SearchResult()
-        assert r.documents == []
-        assert r.query == ""
-        assert r.total_llm_calls == 0
+        r = {"documents": [], "query": ""}
+        assert r["documents"] == []
+        assert r["query"] == ""
 
 
 class TestRouteDocuments:
@@ -530,28 +473,9 @@ class TestSearch:
                 top_k_docs=3,
             )
 
-        assert isinstance(result, SearchResult)
-        assert result.strategy == "best_first"
-        assert result.query == "What is the backend?"
-        assert result.total_llm_calls > 0
-
-    @pytest.mark.asyncio
-    async def test_end_to_end_llm_search(self, two_documents):
-        async def mock_achat(prompt, **kwargs):
-            if "select" in prompt.lower() or "document" in prompt.lower():
-                return '{"selected_doc_ids": ["a"]}'
-            return '{"node_list": ["0001", "0003"]}'
-
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            result = await search(
-                query="Backend and deployment",
-                documents=two_documents,
-                strategy="llm",
-                top_k_docs=3,
-            )
-
-        assert isinstance(result, SearchResult)
-        assert result.strategy == "llm"
+        assert isinstance(result, dict)
+        assert result["query"] == "What is the backend?"
+        assert "documents" in result
 
     @pytest.mark.asyncio
     async def test_single_document_skips_routing(self, sample_tree_structure):
@@ -573,7 +497,7 @@ class TestSearch:
                 strategy="best_first",
             )
 
-        assert isinstance(result, SearchResult)
+        assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_search_with_bm25_disabled(self, two_documents):
@@ -593,7 +517,7 @@ class TestSearch:
                 top_k_docs=3,
             )
 
-        assert isinstance(result, SearchResult)
+        assert isinstance(result, dict)
 
 
 class TestSearchSync:
@@ -616,23 +540,4 @@ class TestSearchSync:
                 strategy="best_first",
             )
 
-        assert isinstance(result, SearchResult)
-
-    def test_sync_llm(self, sample_tree_structure):
-        doc_a = Document(
-            doc_id="a", doc_name="Doc A",
-            doc_description="Architecture guide.",
-            structure=sample_tree_structure,
-        )
-
-        async def mock_achat(prompt, **kwargs):
-            return '{"node_list": ["0001"]}'
-
-        with patch("treesearch.search.achat", side_effect=mock_achat):
-            result = search_sync(
-                query="test",
-                documents=[doc_a],
-                strategy="llm",
-            )
-
-        assert isinstance(result, SearchResult)
+        assert isinstance(result, dict)

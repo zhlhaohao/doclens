@@ -1,225 +1,86 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Multi-document search demo with FTS5 and strategy comparison.
+@description: Multi-document search with strategy comparison and GrepFilter demo.
 
-Demonstrates the search architecture:
-  Layer 1: FTS5/BM25 keyword matching (default, no LLM needed)
-  Layer 2: Optional Best-First tree search with LLM relevance evaluation
-  Layer 3: Results with budget control and early stopping
-
-Compares: fts5_only (default) vs best_first vs llm strategies.
+Demonstrates:
+  - TreeSearch multi-doc search (default FTS5, zero LLM calls)
+  - BM25 standalone search (advanced)
+  - GrepFilter for exact literal matching (advanced)
+  - Strategy comparison: fts5_only vs best_first
 
 Usage:
     python examples/05_multi_doc_search.py
 """
-import asyncio
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from treesearch import (
-    Document,
-    NodeBM25Index,
-    TreeSearch,
-    build_index,
-    load_documents,
-    search,
-    tokenize,
-)
+from treesearch import TreeSearch, NodeBM25Index, GrepFilter
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
-INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexes", "best_first_demo")
+INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexes", "multi_doc_demo")
 
+# 1. Create engine and index
+ts = TreeSearch(index_dir=INDEX_DIR, model="gpt-4o")
+ts.index(f"{DATA_DIR}/*.md")
+print(f"Indexed {len(ts.documents)} documents: {[d.doc_name for d in ts.documents]}\n")
 
-async def ensure_indexes() -> None:
-    """Build indexes if not already present."""
-    if os.path.isdir(INDEX_DIR) and any(f.endswith(".json") for f in os.listdir(INDEX_DIR)):
-        print(f"Using existing indexes in {INDEX_DIR}/")
-        return
-    print("Building indexes from markdown files...")
-    pattern = os.path.join(DATA_DIR, "*.md")
-    results = await build_index(
-        paths=[pattern],
-        output_dir=INDEX_DIR,
-        if_add_node_summary=True,
-        if_add_node_text=True,
-        if_add_doc_description=True,
-        if_add_node_id=True,
-    )
-    print(f"Indexed {len(results)} file(s) to {INDEX_DIR}/\n")
+# --- Demo 1: FTS5 multi-doc search (default, no LLM) ---
+print("=" * 60)
+print("Demo 1: FTS5 Multi-Document Search (no LLM)")
+print("=" * 60)
+for query in ["voice call configuration", "agent tool registration"]:
+    result = ts.search(query, max_nodes_per_doc=3)
+    print(f"\nQuery: {query}  (LLM calls: {result.total_llm_calls})")
+    for doc in result.documents:
+        for node in doc["nodes"]:
+            print(f"  [{node['score']:.4f}] {node['title']}")
 
-
-def load_docs() -> list[Document]:
-    """Load all indexed documents."""
-    return load_documents(INDEX_DIR)
-
-
-async def demo_bm25_standalone(documents: list[Document]):
-    """Demo: BM25 node-level search (no LLM, instant results)."""
-    print("=" * 60)
-    print("Demo 1: BM25 Node-Level Search (no LLM needed)")
-    print("=" * 60)
-
-    index = NodeBM25Index(documents)
-
-    queries = [
-        "How to configure Twilio voice calls?",
-        "agent tool registration",
-        "memory workspace recall architecture",
-    ]
-
-    for query in queries:
-        print(f"\nQuery: {query}")
-        print(f"Tokens: {tokenize(query)}")
-        results = index.search(query, top_k=5)
-        for r in results:
-            print(f"  [{r['bm25_score']:.4f}] [{r['doc_id'][:20]}] {r['title']}")
-        if not results:
-            print("  (no BM25 matches)")
-
-
-async def demo_best_first_search(documents: list[Document]):
-    """Demo: Best-First tree search with FTS5 + LLM (optional enhancement)."""
-    print("\n" + "=" * 60)
-    print("Demo 2: Best-First Tree Search (FTS5 + LLM, optional enhancement)")
-    print("=" * 60)
-
-    queries = [
-        "How to configure Twilio for voice calls?",
-        "What is the memory architecture for workspace recall?",
-    ]
-
-    for query in queries:
-        print(f"\nQuery: {query}")
-        result = await search(
-            query=query,
-            documents=documents,
-            strategy="best_first",
-            top_k_docs=2,
-            max_nodes_per_doc=3,
-            max_llm_calls=15,
-            use_bm25=True,
-        )
-
-        print(f"Strategy: {result.strategy}, LLM calls: {result.total_llm_calls}")
-        for doc_result in result.documents:
-            print(f"  [{doc_result['doc_name']}]")
-            for node in doc_result["nodes"]:
-                score = node.get("score", 0)
-                nid = node.get("node_id", "")
-                ls = node.get("line_start", "")
-                le = node.get("line_end", "")
-                summary = node.get("summary", "")[:80]
-                text = node.get("text", "").replace("\n", " ")[:120]
-                print(f"    [{score:.2f}] [{nid}] {node['title']}  L{ls}-{le}")
-                if summary:
-                    print(f"             summary: {summary}...")
-                if text:
-                    print(f"             text: {text}...")
-
-
-async def demo_strategy_comparison(documents: list[Document]):
-    """Demo: Compare fts5_only vs best_first vs llm strategies."""
-    print("\n" + "=" * 60)
-    print("Demo 3: Strategy Comparison")
-    print("=" * 60)
-
-    query = "How to configure Twilio for voice calls?"
-    print(f"\nQuery: {query}\n")
-
-    for strategy in ["fts5_only", "best_first", "llm"]:
-        kwargs = {"strategy": strategy, "top_k_docs": 2, "max_nodes_per_doc": 3}
-        if strategy == "best_first":
-            kwargs["max_llm_calls"] = 15
-
-        result = await search(query=query, documents=documents, **kwargs)
-
-        print(f"--- {strategy.upper()} ---")
-        print(f"  LLM calls: {result.total_llm_calls}")
-        for doc_result in result.documents:
-            for node in doc_result["nodes"][:3]:
-                score = node.get("score", 0)
-                nid = node.get("node_id", "")
-                ls = node.get("line_start", "")
-                le = node.get("line_end", "")
-                print(f"  [{score:.2f}] [{nid}] {node['title']}  L{ls}-{le}")
-        print()
-
-
-async def demo_chinese_query(documents: list[Document]):
-    """Demo: Chinese query support."""
-    print("=" * 60)
-    print("Demo 4: Chinese Query Support")
-    print("=" * 60)
-
-    index = NodeBM25Index(documents)
-    query = "语音通话配置"
-
+# --- Demo 2: BM25 standalone (advanced) ---
+print("\n" + "=" * 60)
+print("Demo 2: BM25 Standalone Search (no LLM)")
+print("=" * 60)
+bm25 = NodeBM25Index(ts.documents)
+for query in ["Twilio voice calls", "语音通话配置"]:
     print(f"\nQuery: {query}")
-    print(f"Tokens: {tokenize(query)}")
-    results = index.search(query, top_k=3)
+    results = bm25.search(query, top_k=3)
     for r in results:
-        print(f"  [{r['bm25_score']:.4f}] [{r['doc_id'][:20]}] {r['title']}")
+        print(f"  [{r['bm25_score']:.4f}] {r['title']}")
     if not results:
         print("  (no matches)")
 
+# --- Demo 3: GrepFilter for exact matching (advanced) ---
+print("\n" + "=" * 60)
+print("Demo 3: GrepFilter Exact Matching")
+print("=" * 60)
+grep = GrepFilter(ts.documents)
+for query in ["Twilio", "white_list"]:
+    print(f"\nGrep: '{query}'")
+    for doc in ts.documents:
+        hits = grep.score_nodes(query, doc.doc_id)
+        if hits:
+            print(f"  [{doc.doc_name}] {len(hits)} node(s) matched")
+            for nid in list(hits)[:3]:
+                node = doc.get_node_by_id(nid)
+                print(f"    [{nid}] {node.get('title', '') if node else ''}")
 
-async def demo_fts5_standalone(documents: list[Document]):
-    """Demo: FTS5 search via unified search() API (default, no LLM needed)."""
+# --- Demo 4: Strategy comparison (needs OPENAI_API_KEY) ---
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key:
     print("\n" + "=" * 60)
-    print("Demo 1b: FTS5 via search() API (default strategy, no LLM needed)")
+    print("Demo 4: Strategy Comparison")
     print("=" * 60)
-
-    queries = [
-        "How to configure Twilio for voice calls?",
-        "agent tool registration",
-    ]
-
-    for query in queries:
-        print(f"\nQuery: {query}")
-        result = await search(
-            query=query,
-            documents=documents,
-            top_k_docs=2,
-            max_nodes_per_doc=3,
-        )
-        print(f"Strategy: {result.strategy}, LLM calls: {result.total_llm_calls}")
-        for doc_result in result.documents:
-            for node in doc_result["nodes"]:
-                score = node.get("score", 0)
-                nid = node.get("node_id", "")
-                print(f"  [{score:.4f}] [{nid}] {node['title']}")
-
-
-async def main():
-    await ensure_indexes()
-
-    documents = load_docs()
-    print(f"Loaded {len(documents)} documents:")
-    for doc in documents:
-        desc = doc.doc_description[:60] if doc.doc_description else "N/A"
-        print(f"  - [{doc.doc_name}] {desc}")
-    print()
-
-    # BM25 standalone demo (no LLM needed)
-    await demo_bm25_standalone(documents)
-
-    # FTS5 via search() API (default, no LLM needed)
-    await demo_fts5_standalone(documents)
-
-    # Chinese query demo (no LLM needed)
-    await demo_chinese_query(documents)
-
-    # Best-First search and strategy comparison (needs LLM API key)
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        await demo_best_first_search(documents)
-        await demo_strategy_comparison(documents)
-    else:
-        print("\n(Skipping LLM demos - set OPENAI_API_KEY to enable)")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    query = "How to configure Twilio for voice calls?"
+    for strategy in ["fts5_only", "best_first"]:
+        kwargs = {"strategy": strategy, "max_nodes_per_doc": 3}
+        if strategy == "best_first":
+            kwargs["max_llm_calls"] = 10
+        result = ts.search(query, **kwargs)
+        print(f"\n{strategy}: LLM calls={result.total_llm_calls}")
+        for doc in result.documents:
+            for node in doc["nodes"][:3]:
+                print(f"  [{node['score']:.2f}] {node['title']}")
+else:
+    print("\n(Skipping LLM demos — set OPENAI_API_KEY to enable)")

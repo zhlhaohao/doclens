@@ -2,19 +2,13 @@
 """
 @author:XuMing(xuming624@qq.com)
 @description: Tree search over document structures — FTS5-only (default),
-              Best-First LLM-enhanced, single-pass LLM, and the unified multi-document ``search()`` pipeline.
-
-Key design:
-  - TreeSearch: deterministic priority-queue search with optional BM25 pre-scoring,
-    LLM relevance evaluation, early stopping, budget control, and subtree caching.
-  - ``search()`` is the primary public API — it natively handles one or many documents.
+              Best-First LLM-enhanced, and the unified multi-document ``search()`` pipeline.
 """
 import asyncio
 import hashlib
 import heapq
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import Optional, Protocol, runtime_checkable
 
 from .llm import achat, count_tokens, extract_json
@@ -34,7 +28,7 @@ class PreFilter(Protocol):
 
     Implementations must provide ``score_nodes`` which returns a dict
     mapping node_id -> relevance score for a given query and document.
-    Built-in implementation: ``NodeBM25Index``.
+    Built-in implementation: ``NodeBM25Index``, ``GrepFilter``.
     """
 
     def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
@@ -42,18 +36,67 @@ class PreFilter(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
-# Search result
-# ---------------------------------------------------------------------------
+class GrepFilter:
+    """
+    Literal string or regex matching filter.
 
-@dataclass
-class SearchResult:
-    """Result returned by :func:`search`."""
-    documents: list = field(default_factory=list)
-    # documents: [{'doc_id', 'doc_name', 'nodes': [{'node_id', 'title', 'text', 'score'}]}]
-    query: str = ""
-    total_llm_calls: int = 0
-    strategy: str = ""
+    Provides exact matching capabilities to complement semantic search.
+    """
+
+    def __init__(self, documents: list[Document], case_sensitive: bool = False, use_regex: bool = False):
+        self._doc_map = {doc.doc_id: doc for doc in documents}
+        self.case_sensitive = case_sensitive
+        self.use_regex = use_regex
+
+    def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
+        """Return {node_id: 1.0} for nodes that contain the query literal/regex."""
+        doc = self._doc_map.get(doc_id)
+        if not doc:
+            return {}
+
+        results = {}
+        pattern = query if self.case_sensitive else query.lower()
+        
+        import re
+        regex = None
+        if self.use_regex:
+            try:
+                regex = re.compile(query, 0 if self.case_sensitive else re.IGNORECASE)
+            except re.error:
+                logger.warning("Invalid regex in GrepFilter: %s", query)
+
+        def _scan(node):
+            nid = node.get("node_id", "")
+            title = node.get("title", "")
+            summary = node.get("summary", node.get("prefix_summary", ""))
+            text = node.get("text", "")
+            
+            # Match against title, summary, and text
+            matched = False
+            if regex:
+                if regex.search(title) or regex.search(summary) or regex.search(text):
+                    matched = True
+            else:
+                t_title = title if self.case_sensitive else title.lower()
+                t_summary = summary if self.case_sensitive else summary.lower()
+                t_text = text if self.case_sensitive else text.lower()
+                if (t_title and pattern in t_title) or (t_summary and pattern in t_summary) or (t_text and pattern in t_text):
+                    matched = True
+            
+            if matched:
+                results[nid] = 1.0
+            
+            for child in node.get("nodes", []):
+                _scan(child)
+
+        structure = doc.structure
+        if isinstance(structure, list):
+            for item in structure:
+                _scan(item)
+        else:
+            _scan(structure)
+            
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +117,7 @@ def _query_fingerprint(query: str) -> str:
 # Tree Search (optional LLM-enhanced strategy)
 # ---------------------------------------------------------------------------
 
-class TreeSearch:
+class BestFirstTreeSearch:
     """
     Best-first tree search with batch comparative ranking.
 
@@ -265,7 +308,7 @@ class TreeSearch:
         for nid in node_ids:
             if self.use_subtree_cache:
                 cache_key = f"{self._qfp}::{nid}"
-                cached = TreeSearch._subtree_cache.get(cache_key)
+                cached = BestFirstTreeSearch._subtree_cache.get(cache_key)
                 if cached is not None:
                     scores[nid] = cached.get("max_relevance", 0.0)
                     continue
@@ -313,15 +356,15 @@ class TreeSearch:
                         self._value_cache[nid] = rel
                         if self.use_subtree_cache:
                             cache_key = f"{self._qfp}::{nid}"
-                            TreeSearch._subtree_cache[cache_key] = {
+                            BestFirstTreeSearch._subtree_cache[cache_key] = {
                                 "max_relevance": rel,
                                 "depth": self._depth_map.get(nid, 0),
                             }
                             # LRU eviction: drop oldest entries when cache exceeds limit
-                            if len(TreeSearch._subtree_cache) > TreeSearch._SUBTREE_CACHE_MAX_SIZE:
-                                excess = len(TreeSearch._subtree_cache) - TreeSearch._SUBTREE_CACHE_MAX_SIZE
-                                for old_key in list(TreeSearch._subtree_cache)[:excess]:
-                                    del TreeSearch._subtree_cache[old_key]
+                            if len(BestFirstTreeSearch._subtree_cache) > BestFirstTreeSearch._SUBTREE_CACHE_MAX_SIZE:
+                                excess = len(BestFirstTreeSearch._subtree_cache) - BestFirstTreeSearch._SUBTREE_CACHE_MAX_SIZE
+                                for old_key in list(BestFirstTreeSearch._subtree_cache)[:excess]:
+                                    del BestFirstTreeSearch._subtree_cache[old_key]
             else:
                 # Fallback: try old format (rankings with absolute scores)
                 rankings = result.get("rankings", [])
@@ -331,6 +374,12 @@ class TreeSearch:
                     if nid in self._node_map:
                         scores[nid] = rel
                         self._value_cache[nid] = rel
+                        if self.use_subtree_cache:
+                            cache_key = f"{self._qfp}::{nid}"
+                            BestFirstTreeSearch._subtree_cache[cache_key] = {
+                                "max_relevance": rel,
+                                "depth": self._depth_map.get(nid, 0),
+                            }
 
             # Nodes not returned by LLM in this batch get score 0
             for nid in batch_nids:
@@ -464,51 +513,6 @@ class TreeSearch:
         cls._subtree_cache.clear()
 
 
-# Backward compatibility alias
-BestFirstTreeSearch = TreeSearch
-
-
-# ---------------------------------------------------------------------------
-# Simple LLM tree search (single-pass)
-# ---------------------------------------------------------------------------
-
-async def llm_tree_search(
-    query: str,
-    document: Document,
-    model: Optional[str] = None,
-    expert_knowledge: str = "",
-) -> list[dict]:
-    """
-    Single-pass LLM tree search. Sends full tree to LLM in one call.
-
-    Returns: [{'node_id': str, 'title': str}]
-    """
-    tree_no_text = document.get_tree_without_text()
-
-    prompt = (
-        f"Find all sections relevant to the query.\n\n"
-        f"Query: {query}\n\n"
-        f"Document: {document.doc_name}\n"
-        f"Tree structure: {json.dumps(tree_no_text, indent=2, ensure_ascii=False)}\n"
-    )
-    if expert_knowledge:
-        prompt += f"\nExpert knowledge: {expert_knowledge}\n"
-
-    prompt += (
-        '\nReturn JSON only:\n'
-        '{"node_list": ["node_id_1", "node_id_2"]}'
-    )
-
-    response = await achat(prompt, model=model, temperature=0)
-    result = extract_json(response)
-    node_ids = result.get("node_list", [])
-
-    nodes = []
-    for nid in node_ids:
-        node = document.get_node_by_id(str(nid))
-        if node:
-            nodes.append({"node_id": nid, "title": node.get("title", "")})
-    return nodes
 
 
 # ---------------------------------------------------------------------------
@@ -653,18 +657,17 @@ async def search(
     max_llm_calls: int = 30,
     use_bm25: bool = True,
     pre_filter: Optional[PreFilter] = None,
-    expert_knowledge: str = "",
     text_mode: str = "full",
     include_ancestors: bool = False,
     merge_strategy: str = "interleave",
-) -> SearchResult:
+) -> dict:
     """
     Search across one or more documents using tree-structured retrieval.
 
     This is the primary API. It natively supports multi-document search:
       1. Route query to relevant documents (LLM reasoning, no vector DB)
       2. (Optional) Pre-filter scoring over tree nodes for initial ranking
-      3. Tree search within each document (fts5_only / best_first / llm / fts5_rerank)
+      3. Tree search within each document (fts5_only / best_first)
       4. Return ranked nodes with text content
 
     Args:
@@ -673,36 +676,36 @@ async def search(
         model: LLM model name
         top_k_docs: max documents to search (routing stage)
         max_nodes_per_doc: max result nodes per document
-        strategy: 'best_first' (default), 'llm', 'fts5_only', or 'fts5_rerank'
+        strategy: 'fts5_only' (default) or 'best_first'
                   'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
-                  'fts5_rerank' uses FTS5 top-N candidates + single LLM listwise rerank (best cost/quality)
+                  'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
         value_threshold: minimum relevance score
         max_llm_calls: max LLM calls per document (only for best_first)
         use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
         pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
-        expert_knowledge: optional domain knowledge to guide search
         text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
         include_ancestors: attach ancestor titles for context anchoring
         merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
-    """
-    total_llm_calls = 0
 
-    # Stage 1: document routing (skip for single doc or fts5_only/fts5_rerank)
-    if len(documents) <= 1 or strategy in ("fts5_only", "fts5_rerank"):
-        selected = documents[:top_k_docs] if strategy in ("fts5_only", "fts5_rerank") else documents
+    Returns:
+        dict with 'documents' (list) and 'query' (str).
+        documents: [{'doc_id', 'doc_name', 'nodes': [{'node_id', 'title', 'text', 'score'}]}]
+    """
+
+    # Stage 1: document routing (skip for single doc or fts5_only)
+    if len(documents) <= 1 or strategy == "fts5_only":
+        selected = documents[:top_k_docs] if strategy == "fts5_only" else documents
     else:
         selected = await route_documents(query, documents, model, top_k=top_k_docs)
-        total_llm_calls += 1
 
     logger.info("Selected %d documents: %s", len(selected), [d.doc_name for d in selected])
 
-    # Stage 1.5: Pre-filter scoring (for best_first, fts5_only, fts5_rerank)
+    # Stage 1.5: Pre-filter scoring (for best_first, fts5_only)
     scorer = pre_filter
-    if scorer is None and strategy in ("best_first", "fts5_only", "fts5_rerank") and selected:
+    if scorer is None and strategy in ("best_first", "fts5_only") and selected:
         fts_cfg = get_config().fts
-        # fts5_rerank always needs FTS5; other strategies check fts_cfg.enabled
-        if fts_cfg.enabled or strategy in ("fts5_only", "fts5_rerank"):
-            from .fts import FTS5Index, get_fts_index
+        if fts_cfg.enabled or strategy == "fts5_only":
+            from .fts import get_fts_index
             fts_index = get_fts_index(db_path=fts_cfg.db_path or None)
             for doc in selected:
                 if not fts_index.is_document_indexed(doc.doc_id):
@@ -714,8 +717,6 @@ async def search(
 
     # Stage 2: tree search within each document (concurrent)
     async def _search_doc(doc: Document) -> dict:
-        nonlocal total_llm_calls
-        doc_llm_calls = 0
 
         if strategy == "fts5_only":
             # Pure FTS5/BM25 scoring — zero LLM calls, millisecond-level
@@ -732,82 +733,6 @@ async def search(
                     if len(nodes) >= max_nodes_per_doc:
                         break
 
-        elif strategy == "fts5_rerank":
-            # FTS5 top-N candidates → single LLM listwise rerank
-            candidates = []
-            if scorer is not None:
-                score_map = scorer.score_nodes(query, doc.doc_id)
-                for nid, score in sorted(score_map.items(), key=lambda x: -x[1]):
-                    full_node = doc.get_node_by_id(nid)
-                    if full_node:
-                        candidates.append({
-                            "node_id": nid,
-                            "title": full_node.get("title", ""),
-                            "summary": _normalize(full_node.get("summary", full_node.get("prefix_summary", ""))),
-                            "text_excerpt": _normalize(full_node.get("text", ""), max_len=500),
-                            "fts_score": score,
-                        })
-                    if len(candidates) >= 20:
-                        break
-
-            if candidates:
-                # Build listwise rerank prompt (achat uses config default model if model=None)
-                sections = []
-                for i, c in enumerate(candidates):
-                    sec = f"{i+1}. [{c['node_id']}] {c['title']}"
-                    if c['summary']:
-                        sec += f"\n   Summary: {c['summary']}"
-                    if c['text_excerpt']:
-                        sec += f"\n   Content: {c['text_excerpt']}"
-                    sections.append(sec)
-
-                rerank_prompt = (
-                    f"Rank these document sections by relevance to the query. "
-                    f"Return the top {max_nodes_per_doc} most relevant section IDs in order.\n\n"
-                    f"Query: {query}\n\n"
-                    f"Sections:\n" + "\n".join(sections) + "\n\n"
-                    f"Return JSON only:\n"
-                    f'{{"ranked_ids": ["node_id_1", "node_id_2", ...]}}'
-                )
-                response = await achat(rerank_prompt, model=model, temperature=0)
-                result = extract_json(response)
-                ranked_ids = result.get("ranked_ids", [])
-                doc_llm_calls = 1
-
-                # Build result from LLM ranking
-                candidate_map = {c["node_id"]: c for c in candidates}
-                nodes = []
-                for rank, nid in enumerate(ranked_ids):
-                    nid = str(nid)
-                    if nid in candidate_map:
-                        nodes.append({
-                            "node_id": nid,
-                            "title": candidate_map[nid]["title"],
-                            "score": round(1.0 - rank * 0.05, 4),
-                        })
-                    if len(nodes) >= max_nodes_per_doc:
-                        break
-
-                # Fill remaining slots from FTS5 ranking if LLM missed some
-                if len(nodes) < max_nodes_per_doc:
-                    seen = {n["node_id"] for n in nodes}
-                    for c in candidates:
-                        if c["node_id"] not in seen:
-                            nodes.append({
-                                "node_id": c["node_id"],
-                                "title": c["title"],
-                                "score": round(c["fts_score"] * 0.5, 4),
-                            })
-                            if len(nodes) >= max_nodes_per_doc:
-                                break
-            else:
-                # No model available, fall back to FTS5 only
-                nodes = [{
-                    "node_id": c["node_id"],
-                    "title": c["title"],
-                    "score": round(c["fts_score"], 4),
-                } for c in candidates[:max_nodes_per_doc]]
-
         elif strategy == "best_first":
             bf_cfg = get_config().best_first
 
@@ -815,7 +740,7 @@ async def search(
             if scorer is not None:
                 bm25_scores = scorer.score_nodes(query, doc.doc_id)
 
-            searcher = TreeSearch(
+            searcher = BestFirstTreeSearch(
                 document=doc,
                 query=query,
                 model=model,
@@ -831,15 +756,9 @@ async def search(
                 min_threshold=bf_cfg.min_threshold,
             )
             nodes = await searcher.run()
-            doc_llm_calls = searcher.llm_calls
 
-        else:  # strategy == "llm"
-            raw = await llm_tree_search(query, doc, model, expert_knowledge)
-            nodes = [{"node_id": n["node_id"], "title": n["title"], "score": 1.0} for n in raw]
-            nodes = nodes[:max_nodes_per_doc]
-            doc_llm_calls = 1
-
-        total_llm_calls += doc_llm_calls
+        else:
+            raise ValueError(f"Unknown strategy: {strategy!r}. Use 'fts5_only' or 'best_first'.")
 
         # Attach full node fields to results
         _attach_node_fields(nodes, doc, text_mode=text_mode, include_ancestors=include_ancestors)
@@ -851,15 +770,13 @@ async def search(
     # Stage 3: merge results across documents
     merged = _merge_doc_results(list(doc_results), merge_strategy)
 
-    return SearchResult(
-        documents=merged,
-        query=query,
-        total_llm_calls=total_llm_calls,
-        strategy=strategy,
-    )
+    return {
+        "documents": merged,
+        "query": query,
+    }
 
 
 
-def search_sync(query: str, documents: list[Document], **kwargs) -> SearchResult:
+def search_sync(query: str, documents: list[Document], **kwargs) -> dict:
     """Synchronous wrapper around :func:`search`."""
     return asyncio.run(search(query, documents, **kwargs))

@@ -56,8 +56,8 @@ class TestBuildParser:
 
     def test_search_strategy(self):
         parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "llm"])
-        assert args.strategy == "llm"
+        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "best_first"])
+        assert args.strategy == "best_first"
 
     def test_search_strategy_default(self):
         parser = _build_parser()

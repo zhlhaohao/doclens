@@ -54,8 +54,6 @@ Query
 
 **Stage 2 - Best-First Tree Search** (optional): `TreeSearch` uses a priority queue to expand the most promising nodes first. Each node is evaluated by LLM (title + summary only) and scored for relevance. FTS5/BM25 scores serve as initial priority. Early stopping and budget control keep LLM usage efficient. Enable with `strategy="best_first"`.
 
-**Alternative - LLM Single-Pass**: `llm_tree_search` sends the full tree structure to LLM in one call. Fastest but least thorough. Use via `strategy="llm"`.
-
 ## Module Overview
 
 | Module | Responsibility |
@@ -63,7 +61,7 @@ Query
 | `llm.py` | Async OpenAI client with retry, token counting, JSON extraction |
 | `tree.py` | `Document` dataclass, tree traversal, persistence (save/load) |
 | `indexer.py` | Markdown / plain text → tree structure conversion, batch `build_index()` |
-| `search.py` | FTS5-only (default), Best-First tree search, single-pass LLM, FTS5-rerank, document routing, unified `search()` API |
+| `search.py` | FTS5-only (default), Best-First tree search, document routing, unified `search()` API |
 | `fts.py` | SQLite FTS5 full-text search engine with MD structure-aware columns, WAL mode, incremental updates |
 | `rank_bm25.py` | BM25Okapi (pure Python), `NodeBM25Index` with hierarchical weighting, Chinese/English tokenization |
 | `config.py` | Unified configuration management: env vars > YAML (`~/.treesearch/config.yaml`) > built-in defaults |
@@ -94,7 +92,7 @@ FTS5-only is the default strategy because:
 - **Production-ready**: Persistent inverted index, WAL mode, incremental updates, CJK tokenization
 - **Great baseline**: Benchmark results show FTS5-only already achieves strong performance
 
-For higher accuracy, upgrade to `best_first` (FTS5 + LLM) or `fts5_rerank` (FTS5 + single LLM rerank).
+**Alternative**: For higher accuracy, upgrade to `best_first` (FTS5 + LLM).
 
 ## Why Best-First for LLM Enhancement?
 
@@ -119,7 +117,7 @@ Input Documents (MD/TXT)
    ┌──────────┐
    │  search  │  FTS5 keyword match → (optional) route to docs → Best-First tree search
    └────┬─────┘
-        │  SearchResult
+        │  dict result
         ▼
   Ranked nodes with text content
 ```

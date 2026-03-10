@@ -40,27 +40,46 @@ def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int)
 # Summary generation (shared by MD and Text)
 # ============================================================================
 
-async def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = None) -> str:
-    """Generate a summary for a single node. Short nodes use their own text."""
+def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = None) -> str:
+    """Generate a summary for a single node. Short nodes use their own text.
+
+    For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
+    """
     text = node.get("text", "")
     if count_tokens(text, model=model) < threshold:
         return text
-    prompt = (
-        "You are given a part of a document. Generate a concise description "
-        "of the main points covered.\n\n"
-        f"Partial Document Text: {text}\n\n"
-        "Directly return the description, no other text."
-    )
-    return await achat(prompt, model=model)
+    head = text[:250].replace("\n", " ").strip()
+    tail = text[-100:].replace("\n", " ").strip()
+    return f"{head} ... {tail}"
 
 
 async def generate_summaries(
-    structure, threshold: int = 200, model: Optional[str] = None
+    structure, threshold: int = 200, model: Optional[str] = None, use_llm: bool = False
 ):
     """Generate summaries for all nodes in a tree (concurrently)."""
     nodes = flatten_tree(structure)
-    tasks = [_summarize_node(n, threshold=threshold, model=model) for n in nodes]
-    summaries = await asyncio.gather(*tasks)
+    
+    if use_llm:
+        async def _llm_summarize(node, thr, mod):
+            text = node.get("text", "")
+            if count_tokens(text, model=mod) < thr:
+                return text
+            prompt = (
+                "You are given a part of a document. Generate a concise description "
+                "of the main points covered.\n\n"
+                f"Partial Document Text: {text}\n\n"
+                "Directly return the description, no other text."
+            )
+            return await achat(prompt, model=mod)
+        
+        tasks = [_llm_summarize(n, threshold, model) for n in nodes]
+        summaries = await asyncio.gather(*tasks)
+    else:
+        summaries = [_summarize_node(n, threshold=threshold, model=model) for n in nodes]
+        if asyncio.iscoroutine(summaries[0]) if summaries else False:
+             # _summarize_node is not async anymore, so it shouldn't be here, but just in case
+             summaries = await asyncio.gather(*summaries)
+
     for node, summary in zip(nodes, summaries):
         if node.get("nodes"):
             node["prefix_summary"] = summary
@@ -632,6 +651,266 @@ async def text_to_tree(
 
 
 # ============================================================================
+# Code file indexer
+# ============================================================================
+
+def _detect_code_headings(lines: list[str], ext: str) -> list[dict]:
+    """Detect classes and methods from code lines."""
+    headings = []
+    
+    patterns = []
+    if ext == ".py":
+        patterns = [
+            (re.compile(r"^(class\s+\w+.*)"), 1),
+            (re.compile(r"^(\s*def\s+\w+.*)"), 2)
+        ]
+    elif ext in (".java", ".ts", ".js", ".cpp", ".cc", ".cs", ".php"):
+        patterns = [
+            (re.compile(r"^(\s*(?:public|private|protected|static|abstract|final\s+)*class\s+\w+.*)"), 1),
+            (re.compile(r"^(\s*(?:public|private|protected|static|abstract|final\s+)*interface\s+\w+.*)"), 1),
+            (re.compile(r"^(\s*(?:public|private|protected|static|abstract|final\s+)*(?:[\w<>\[\]]+\s+)+\w+\s*\(.*)"), 2),
+            (re.compile(r"^(\s*function\s+\w+.*)"), 2)
+        ]
+    elif ext == ".go":
+        patterns = [
+            (re.compile(r"^(\s*type\s+\w+\s+struct.*)"), 1),
+            (re.compile(r"^(\s*type\s+\w+\s+interface.*)"), 1),
+            (re.compile(r"^(\s*func\s+(?:\([^)]+\)\s+)?\w+.*)"), 2)
+        ]
+    elif ext == ".html":
+        patterns = [
+            (re.compile(r"^\s*<h1.*>(.*)</h1>"), 1),
+            (re.compile(r"^\s*<h2.*>(.*)</h2>"), 2),
+            (re.compile(r"^\s*<h3.*>(.*)</h3>"), 3),
+            (re.compile(r"^\s*<div.*id=\"(.*)\".*>"), 2),
+            (re.compile(r"^\s*<section.*id=\"(.*)\".*>"), 2)
+        ]
+    elif ext == ".xml":
+        patterns = [
+            (re.compile(r"^\s*<(\w+).*>\s*$"), 1),
+        ]
+    
+    if not patterns:
+        return []
+
+    for idx, raw in enumerate(lines):
+        line = raw.rstrip()
+        if not line:
+            continue
+        num = idx + 1
+        
+        for pat, level in patterns:
+            m = pat.match(line)
+            if m:
+                # remove trailing colon or braces and truncate to 100 chars
+                title = m.group(1).strip().rstrip(":{").strip()[:100]
+                headings.append({"title": title, "line_num": num, "level": level})
+                break
+                
+    return headings
+
+
+async def code_to_tree(
+    code_path: str,
+    *,
+    model: Optional[str] = None,
+    if_thinning: bool = False,
+    min_token_threshold: int = 5000,
+    if_add_node_summary: bool = True,
+    summary_token_threshold: int = 200,
+    if_add_doc_description: bool = False,
+    if_add_node_text: bool = False,
+    if_add_node_id: bool = True,
+) -> dict:
+    """
+    Build a tree index from a code file.
+    
+    Returns:
+        {'doc_name': str, 'structure': list, 'doc_description'?: str}
+    """
+    with open(code_path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    doc_name = os.path.splitext(os.path.basename(code_path))[0]
+    ext = os.path.splitext(code_path)[1].lower()
+
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    logger.info("Code loaded: %d lines, ~%d tokens", len(lines), count_tokens(text, model=model))
+
+    headings = _detect_code_headings(lines, ext)
+    markers = [{"title": h["title"], "line_num": h["line_num"], "level": h["level"]} for h in headings]
+    logger.info("Code structure detection: %d methods/classes", len(markers))
+
+    if not markers:
+        markers = [{"title": doc_name, "line_num": 1, "level": 1}]
+
+    nodes = _cut_text_content(markers, lines)
+
+    if if_thinning and min_token_threshold:
+        nodes = _update_token_counts(nodes, model=model)
+        logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
+        nodes = _thin_tree(nodes, min_token_threshold, model=model)
+
+    logger.info("Building tree from %d nodes...", len(nodes))
+    tree = _build_tree(nodes)
+
+    if if_add_node_id:
+        assign_node_ids(tree)
+
+    base_order = ["title", "node_id", "summary", "prefix_summary"]
+    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
+    tail_fields = ["line_start", "line_end", "nodes"]
+    order = base_order + text_fields + tail_fields
+
+    tree = format_structure(tree, order=order)
+
+    if if_add_node_summary:
+        logger.info("Generating summaries...")
+        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
+        if not if_add_node_text:
+            order_no_text = [f for f in order if f != "text"]
+            tree = format_structure(tree, order=order_no_text)
+
+    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(code_path)}
+
+    if if_add_doc_description:
+        logger.info("Generating document description...")
+        result["doc_description"] = await generate_doc_description(tree, model=model)
+
+    return result
+
+
+# ============================================================================
+# JSON file indexer
+# ============================================================================
+
+def _json_to_nodes(data, prefix: str = "", level: int = 1) -> list[dict]:
+    """Recursively convert JSON data into flat node list."""
+    nodes = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, (dict, list)):
+                nodes.append({"title": path, "level": level, "text": ""})
+                nodes.extend(_json_to_nodes(value, prefix=path, level=level + 1))
+            else:
+                nodes.append({"title": path, "level": level, "text": f"{key}: {value}"})
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            path = f"{prefix}[{i}]"
+            if isinstance(item, (dict, list)):
+                nodes.append({"title": path, "level": level, "text": ""})
+                nodes.extend(_json_to_nodes(item, prefix=path, level=level + 1))
+            else:
+                nodes.append({"title": path, "level": level, "text": str(item)})
+    return nodes
+
+
+async def json_to_tree(
+    json_path: str,
+    *,
+    model: Optional[str] = None,
+    if_add_node_summary: bool = True,
+    summary_token_threshold: int = 200,
+    if_add_doc_description: bool = False,
+    if_add_node_text: bool = False,
+    if_add_node_id: bool = True,
+    **kwargs,
+) -> dict:
+    """Build a tree index from a JSON file."""
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    doc_name = os.path.splitext(os.path.basename(json_path))[0]
+
+    flat_nodes = _json_to_nodes(data)
+    if not flat_nodes:
+        flat_nodes = [{"title": doc_name, "level": 1, "text": json.dumps(data, ensure_ascii=False)[:500]}]
+
+    # Assign line_num for _build_tree compatibility
+    for i, node in enumerate(flat_nodes):
+        node["line_num"] = i + 1
+        node["line_start"] = i + 1
+        node["line_end"] = i + 1
+
+    tree = _build_tree(flat_nodes)
+    if if_add_node_id:
+        assign_node_ids(tree)
+
+    base_order = ["title", "node_id", "summary", "prefix_summary"]
+    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
+    tail_fields = ["line_start", "line_end", "nodes"]
+    order = base_order + text_fields + tail_fields
+    tree = format_structure(tree, order=order)
+
+    if if_add_node_summary:
+        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
+        if not if_add_node_text:
+            order_no_text = [f for f in order if f != "text"]
+            tree = format_structure(tree, order=order_no_text)
+
+    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(json_path)}
+    if if_add_doc_description:
+        result["doc_description"] = await generate_doc_description(tree, model=model)
+    return result
+
+
+# ============================================================================
+# CSV file indexer
+# ============================================================================
+
+async def csv_to_tree(
+    csv_path: str,
+    *,
+    model: Optional[str] = None,
+    if_add_node_summary: bool = True,
+    summary_token_threshold: int = 200,
+    if_add_doc_description: bool = False,
+    if_add_node_text: bool = False,
+    if_add_node_id: bool = True,
+    **kwargs,
+) -> dict:
+    """Build a tree index from a CSV file. Each row becomes a leaf node under a header node."""
+    import csv as csvmod
+
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csvmod.reader(f)
+        rows = list(reader)
+
+    doc_name = os.path.splitext(os.path.basename(csv_path))[0]
+    if not rows:
+        return {"doc_name": doc_name, "structure": [{"title": doc_name, "node_id": "0001", "nodes": []}]}
+
+    headers = rows[0]
+    flat_nodes = [{"title": doc_name, "level": 1, "text": f"Columns: {', '.join(headers)}", "line_num": 1, "line_start": 1, "line_end": 1}]
+
+    for i, row in enumerate(rows[1:], start=2):
+        row_text = "; ".join(f"{h}: {v}" for h, v in zip(headers, row) if v.strip())
+        title = row_text[:80] if row_text else f"Row {i}"
+        flat_nodes.append({"title": title, "level": 2, "text": row_text, "line_num": i, "line_start": i, "line_end": i})
+
+    tree = _build_tree(flat_nodes)
+    if if_add_node_id:
+        assign_node_ids(tree)
+
+    base_order = ["title", "node_id", "summary", "prefix_summary"]
+    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
+    tail_fields = ["line_start", "line_end", "nodes"]
+    order = base_order + text_fields + tail_fields
+    tree = format_structure(tree, order=order)
+
+    if if_add_node_summary:
+        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
+        if not if_add_node_text:
+            order_no_text = [f for f in order if f != "text"]
+            tree = format_structure(tree, order=order_no_text)
+
+    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(csv_path)}
+    if if_add_doc_description:
+        result["doc_description"] = await generate_doc_description(tree, model=model)
+    return result
+
+
+# ============================================================================
 # Batch indexing API
 # ============================================================================
 
@@ -737,6 +1016,12 @@ async def build_index(
             )
             if ext in (".md", ".markdown"):
                 result = await md_to_tree(md_path=fp, **common)
+            elif ext in (".json",):
+                result = await json_to_tree(json_path=fp, **common)
+            elif ext in (".csv",):
+                result = await csv_to_tree(csv_path=fp, **common)
+            elif ext in (".py", ".java", ".ts", ".js", ".cpp", ".cc", ".cs", ".php", ".go", ".html", ".xml"):
+                result = await code_to_tree(code_path=fp, **common)
             else:
                 result = await text_to_tree(text_path=fp, **common)
 

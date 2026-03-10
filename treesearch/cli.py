@@ -102,7 +102,7 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--api-key", type=str, default=None,
                      help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
     sub.add_argument("--strategy", type=str, default="fts5_only",
-                     choices=["fts5_only", "best_first", "llm", "fts5_rerank"],
+                     choices=["fts5_only", "best_first"],
                      help="Search strategy (default: fts5_only)")
     sub.add_argument("--fts", action="store_true",
                      help="Enable SQLite FTS5 full-text search as pre-filter backend")
@@ -154,9 +154,7 @@ async def _run_search(args) -> None:
     pre_filter = "FTS5" if args.fts else ("BM25" if not args.no_bm25 else "none")
     strategy_desc = {
         "best_first": f"Best-First (max_llm_calls={args.max_llm_calls}, pre_filter={pre_filter})",
-        "llm": "LLM single-pass",
         "fts5_only": "FTS5-only (no LLM)",
-        "fts5_rerank": "FTS5 + LLM rerank",
     }
     print("Search strategy:", strategy_desc.get(args.strategy, args.strategy))
     print("---")
