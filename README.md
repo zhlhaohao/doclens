@@ -18,6 +18,8 @@
 
 **TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 + BM25 + LLM reasoning over document tree structures. Supports Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++ etc.), HTML, XML, JSON, CSV, PDF, and DOCX.
 
+Millisecond-latency search over tens of thousands of documents and large codebases, with structure preservation.
+
 ## Installation
 
 ```bash
