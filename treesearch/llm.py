@@ -90,7 +90,7 @@ async def _achat_impl(
     client = _get_async_client(api_key)
     # Build extra_body: thinking mode from config (disabled/enabled/auto)
     extra_body = {}
-    if cfg.thinking_type in ("disabled", "enabled", "auto"):
+    if cfg.thinking_type in ("enabled", "auto"):
         extra_body["thinking"] = {"type": cfg.thinking_type}
 
     for attempt in range(MAX_RETRIES):
