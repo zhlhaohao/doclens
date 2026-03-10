@@ -170,7 +170,7 @@ class EmbeddingIndex:
         self.embeddings: np.ndarray | None = None
         self.samples: list[CodeSample] = []
 
-    def _get_embedding(self, texts: list[str], batch_size: int = 100) -> np.ndarray:
+    def _get_embedding(self, texts: list[str], batch_size: int = 10) -> np.ndarray:
         """Get embeddings for texts in batches."""
         all_embeddings = []
         for i in range(0, len(texts), batch_size):

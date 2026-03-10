@@ -302,35 +302,35 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 
 | 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
-| **MRR** | 0.5403 | 0.4422 |
+| **MRR** | 0.5403 | 0.4596 |
 | **Precision@1** | 0.3830 | 0.1915 |
-| **Recall@5** | 0.5139 | **0.6011** |
-| **索引时间** | 74.1s | **0.2s** |
-| **查询时间** | 720ms | **0.3ms** |
+| **Recall@5** | 0.5139 | **0.6613** |
+| **索引时间** | 118.7s | **0.0s** |
+| **查询时间** | 573ms | **0.7ms** |
 
 **核心结论**：
-- ✅ **Embedding MRR 高 22%** — 语义理解更强
-- ✅ **TreeSearch Recall@5 高 17%** — 结构保留有助于召回更多相关内容
-- ✅ **TreeSearch 查询速度快 2300x** — 毫秒级 vs 秒级
-- ✅ **TreeSearch 索引速度快 370x** — 无需 Embedding API 调用
+- ✅ **Embedding MRR 高 18%** — 语义理解更强
+- ✅ **TreeSearch Recall@5 高 29%** — 结构保留有助于召回更多相关内容
+- ✅ **TreeSearch 查询速度快 780x** — 毫秒级 vs 秒级
+- ✅ **TreeSearch 索引瞬间完成** — 无需 Embedding API 调用
 
 ### 代码检索（CodeSearchNet）
 
-基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个查询，500 个 Python 函数）：
+基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个查询，500 个 Python corpus）：
 
 | 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
 | **MRR** | 0.9567 | 0.8469 |
 | **Hit@1** | 0.9200 | 0.8000 |
 | **Recall@5** | 1.0000 | 0.9200 |
-| **索引时间** | 18.3s | **3.6s** |
-| **查询时间** | 1596ms | **0.6ms** |
+| **索引时间** | 73.7s | **3.3s** |
+| **查询时间** | 620ms | **0.8ms** |
 
 **核心结论**：
 - ✅ **Embedding MRR 高 13%** — 代码语义理解更强
 - ✅ **TreeSearch MRR 达到 84.7%** — 关键词代码搜索表现出色
-- ✅ **TreeSearch 查询速度快 2500x** — 毫秒级 vs 秒级
-- ✅ **TreeSearch 索引速度快 5x** — 无需 Embedding API 调用
+- ✅ **TreeSearch 查询速度快 800x** — 毫秒级 vs 秒级
+- ✅ **TreeSearch 索引速度快 22x** — 无需 Embedding API 调用
 
 ### 总结
 

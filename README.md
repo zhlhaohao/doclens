@@ -292,35 +292,35 @@ Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (5
 
 | Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
-| **MRR** | 0.5403 | 0.4422 |
+| **MRR** | 0.5403 | 0.4596 |
 | **Precision@1** | 0.3830 | 0.1915 |
-| **Recall@5** | 0.5139 | **0.6011** |
-| **Index Time** | 74.1s | **0.2s** |
-| **Query Time** | 720ms | **0.3ms** |
+| **Recall@5** | 0.5139 | **0.6613** |
+| **Index Time** | 118.7s | **0.0s** |
+| **Query Time** | 573ms | **0.7ms** |
 
 **Key Findings**:
-- ✅ **Embedding MRR +22%** — Better semantic understanding
-- ✅ **TreeSearch Recall@5 +17%** — Structure preservation helps recall more relevant content
-- ✅ **TreeSearch 2300x faster queries** — Milliseconds vs seconds
-- ✅ **TreeSearch 370x faster indexing** — No embedding API calls needed
+- ✅ **Embedding MRR +18%** — Better semantic understanding
+- ✅ **TreeSearch Recall@5 +29%** — Structure preservation helps recall more relevant content
+- ✅ **TreeSearch 780x faster queries** — Milliseconds vs seconds
+- ✅ **TreeSearch instant indexing** — No embedding API calls needed
 
 ### Code Retrieval (CodeSearchNet)
 
-Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) dataset (50 queries, 500 Python functions):
+Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) dataset (50 queries, 500 Python corpus):
 
 | Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
 | **MRR** | 0.9567 | 0.8469 |
 | **Hit@1** | 0.9200 | 0.8000 |
 | **Recall@5** | 1.0000 | 0.9200 |
-| **Index Time** | 18.3s | **3.6s** |
-| **Query Time** | 1596ms | **0.6ms** |
+| **Index Time** | 73.7s | **3.3s** |
+| **Query Time** | 620ms | **0.8ms** |
 
 **Key Findings**:
 - ✅ **Embedding MRR +13%** — Better code semantic understanding
 - ✅ **TreeSearch MRR 84.7%** — Strong performance for keyword-based code search
-- ✅ **TreeSearch 2500x faster queries** — Milliseconds vs seconds
-- ✅ **TreeSearch 5x faster indexing** — No embedding API calls needed
+- ✅ **TreeSearch 800x faster queries** — Milliseconds vs seconds
+- ✅ **TreeSearch 22x faster indexing** — No embedding API calls needed
 
 ### Summary
 
