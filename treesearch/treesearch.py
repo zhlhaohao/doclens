@@ -68,6 +68,33 @@ class TreeSearch:
         self.config = get_config()
         self.model = model or self.config.model
         self.kwargs = kwargs
+        # Ensure FTS5 scorer uses the same DB as tree storage
+        if db_path and not self.config.fts_db_path:
+            self.config.fts_db_path = db_path
+
+    def _has_changed_files(self) -> bool:
+        """Quick check: are any pending source files newer than what's stored in the DB?
+
+        Uses (mtime_ns, size) fingerprints stored in index_meta.
+        Returns True if any file changed or is missing from DB metadata.
+        """
+        from .fts import FTS5Index
+        from .indexer import _file_hash
+
+        fts = FTS5Index(db_path=self.db_path)
+        stored_meta = fts.get_all_index_meta()
+        fts.close()
+
+        for p in self._pending_paths:
+            if "*" in p or "?" in p:
+                files = glob.glob(p, recursive=True)
+            else:
+                files = [p] if os.path.isfile(p) else []
+            for fp in files:
+                current_hash = _file_hash(fp)
+                if stored_meta.get(fp) != current_hash:
+                    return True
+        return False
 
     # ------------------------------------------------------------------
     # Index
@@ -145,8 +172,17 @@ class TreeSearch:
             dict with 'documents', 'query', and 'llm_calls'.
         """
         if not self.documents and self._pending_paths:
-            await self.aindex(*self._pending_paths)
-            self._pending_paths.clear()
+            # Fast path: if DB already has documents and no files changed,
+            # skip the full build_index pipeline (avoids N file hashes + DB queries)
+            if os.path.isfile(self.db_path):
+                cached_docs = load_documents(self.db_path)
+                if cached_docs and not self._has_changed_files():
+                    self.documents = cached_docs
+                    self._pending_paths.clear()
+            # Slow path: need to build or rebuild index
+            if not self.documents and self._pending_paths:
+                await self.aindex(*self._pending_paths)
+                self._pending_paths.clear()
 
         if not self.documents:
             if os.path.isfile(self.db_path):

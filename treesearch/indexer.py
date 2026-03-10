@@ -43,10 +43,11 @@ def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = Non
     """Generate a summary for a single node. Short nodes use their own text.
 
     For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
+    Uses character-length heuristic (~4 chars/token) to avoid expensive tiktoken calls.
     """
-    from .llm import count_tokens
     text = node.get("text", "")
-    if count_tokens(text, model=model) < threshold:
+    # ~4 chars per token for English, ~2 for CJK; use 3 as balanced estimate
+    if len(text) < threshold * 3:
         return text
     head = text[:250].replace("\n", " ").strip()
     tail = text[-100:].replace("\n", " ").strip()
@@ -931,13 +932,14 @@ async def csv_to_tree(
 # ============================================================================
 
 def _file_hash(fp: str) -> str:
-    """Compute MD5 hash of a file for incremental indexing."""
-    import hashlib
-    h = hashlib.md5()
-    with open(fp, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    """Compute a fast fingerprint for incremental indexing.
+
+    Uses (mtime_ns, size) as a lightweight proxy instead of reading the
+    entire file for MD5.  This is orders-of-magnitude faster on network
+    filesystems (NFS / CIFS) and still catches all real edits.
+    """
+    st = os.stat(fp)
+    return f"{st.st_mtime_ns}:{st.st_size}"
 
 
 async def build_index(
@@ -1008,18 +1010,24 @@ async def build_index(
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
-    # Incremental indexing: check file hashes via DB
+    # Incremental indexing: batch check file hashes via DB
     fts = FTS5Index(db_path=db_path)
     to_index = []
     skipped = []
     file_hashes = {}
+
+    if not force:
+        # Batch fetch all stored hashes in one query (instead of N queries)
+        all_meta = fts.get_all_index_meta()
+    else:
+        all_meta = {}
+
     for fp in expanded:
         fh = _file_hash(fp)
         file_hashes[fp] = fh
         if not force:
-            stored_hash = fts.get_index_meta(fp)
+            stored_hash = all_meta.get(fp)
             if stored_hash == fh:
-                # Check if document also exists in DB
                 name = os.path.splitext(os.path.basename(fp))[0]
                 if fts.is_document_indexed(name):
                     skipped.append(fp)
@@ -1063,6 +1071,12 @@ async def build_index(
     result_map = dict(zip(to_index, results))
     documents = []
 
+    # Batch load all skipped documents in one query (instead of N individual loads)
+    if skipped:
+        all_docs_from_db = {d.doc_id: d for d in fts.load_all_documents()}
+    else:
+        all_docs_from_db = {}
+
     for fp in expanded:
         name = os.path.splitext(os.path.basename(fp))[0]
         if fp in result_map:
@@ -1079,16 +1093,15 @@ async def build_index(
             fts.index_document(doc, force=True)
             logger.info("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
         else:
-            # Skipped file: load from DB
-            doc = fts.load_document(name)
+            # Skipped file: use batch-loaded docs
+            doc = all_docs_from_db.get(name)
             if doc is None:
                 logger.warning("Skipped file %s but document not found in DB, re-indexing", fp)
                 continue
         documents.append(doc)
 
-    # Update metadata
-    for fp in expanded:
-        fts.set_index_meta(fp, file_hashes[fp])
+    # Batch update metadata (single transaction)
+    fts.set_index_meta_batch(file_hashes)
 
     fts.close()
     return documents

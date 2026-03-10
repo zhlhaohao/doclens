@@ -754,6 +754,14 @@ class FTS5Index:
         )
         self._conn.commit()
 
+    def set_index_meta_batch(self, meta: dict[str, str]) -> None:
+        """Batch store/update file hashes. Single transaction for performance."""
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO index_meta (source_path, file_hash) VALUES (?, ?)",
+            list(meta.items()),
+        )
+        self._conn.commit()
+
     def get_all_index_meta(self) -> dict[str, str]:
         """Get all stored file hashes.
 
@@ -888,6 +896,12 @@ def get_fts_index(db_path: Optional[str] = None) -> FTS5Index:
                  Pass a file path for persistent indexing across sessions.
     """
     global _global_fts
+    if _global_fts is not None:
+        # If db_path changed, re-create the singleton
+        requested = db_path or ":memory:"
+        if _global_fts.db_path != requested:
+            _global_fts.close()
+            _global_fts = None
     if _global_fts is None:
         _global_fts = FTS5Index(db_path=db_path)
     return _global_fts

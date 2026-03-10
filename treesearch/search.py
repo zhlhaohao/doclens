@@ -721,9 +721,26 @@ async def search(
         )
         effective_strategy = route.get("strategy", "fts5_only")
 
-    # Stage 1: document routing (skip for single doc or fts5_only)
-    if len(documents) <= 1 or effective_strategy == "fts5_only":
-        selected = documents[:top_k_docs] if effective_strategy == "fts5_only" else documents
+    # Stage 1: document routing
+    if len(documents) <= 1:
+        selected = documents
+    elif effective_strategy == "fts5_only":
+        # Use FTS5 aggregation to select the most relevant documents
+        # (instead of blindly taking the first N)
+        from .fts import get_fts_index
+        fts_index = get_fts_index(db_path=cfg.fts_db_path or None)
+        # Ensure all documents are indexed in FTS5
+        for doc in documents:
+            if not fts_index.is_document_indexed(doc.doc_id):
+                fts_index.index_document(doc)
+        agg = fts_index.search_with_aggregation(query, top_k=top_k_docs)
+        if agg:
+            relevant_ids = {a["doc_id"] for a in agg}
+            selected = [d for d in documents if d.doc_id in relevant_ids]
+            if not selected:
+                selected = documents[:top_k_docs]
+        else:
+            selected = documents[:top_k_docs]
     else:
         selected = await route_documents(query, documents, model, top_k=top_k_docs)
         total_llm_calls += 1
