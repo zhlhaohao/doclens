@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-10
+
+### Added
+- **Parser registry** (`parsers/registry.py`): extensible `ParserRegistry` with `SOURCE_TYPE_MAP` and `STRATEGY_ROUTING`; built-in parsers auto-registered at import time
+- **Python AST parser** (`parsers/ast_parser.py`): `ast` module extracts classes/functions with full signatures (parameters, return types, decorators); regex fallback on syntax errors
+- **PDF parser** (`parsers/pdf_parser.py`): optional `pageindex`-based PDF text extraction
+- **DOCX parser** (`parsers/docx_parser.py`): optional `python-docx`-based heading structure extraction
+- **HTML parser** (`parsers/html_parser.py`): optional `beautifulsoup4`-based h1–h6 structure extraction
+- `search()` `strategy="auto"` mode: per-document strategy routing based on `source_type` (code → GrepFilter + FTS5)
+- `Document.source_type` field for file-type-aware search routing
+- `_CombinedScorer` in search.py: combines GrepFilter + FTS5 for code file searches
+- Optional dependencies: `pip install pytreesearch[pdf]`, `[docx]`, `[html]`, `[all]`
+
+### Changed
+- `search()` and `build_index()` parameters now default to `None` and resolve from `get_config()` at runtime (config-driven defaults)
+- `node_id` encoding changed from fixed 4-digit zero-padded (`zfill(4)`) to variable-length `str(id)` — supports trees of any size
+- `_index_one()` in `build_index()` now dispatches via `ParserRegistry.get(ext)` instead of hardcoded `if/elif` chain; unknown extensions fall back to `text_to_tree`
+- `_detect_code_headings()` for `.py` files now tries AST parsing first, falls back to regex
+- Config priority simplified: `set_config()` > env vars > defaults (YAML support removed)
+- Default model changed from `gpt-4o-mini` to `gpt-4o`
+
+### Fixed
+- `cli.py` `_run_index()`: fixed dict access on `Document` objects (`r['doc_name']` → `doc.doc_name`)
+- FTS5 expression tokenization: `_tokenize_fts_expression()` now stems query terms while preserving FTS5 operators (AND/OR/NOT/NEAR)
+
 ## [0.4.0] - 2026-03-09
 
 ### Added

@@ -432,6 +432,7 @@ async def _evaluate_sample(
                 for node in doc_result.get("nodes", []):
                     retrieved_node_ids.append(node["node_id"])
             retrieved_node_ids = retrieved_node_ids[:top_k]
+            tracker.stats.llm_calls = result.get("llm_calls", 0)
 
     metrics = evaluate_query(retrieved_node_ids, relevant_node_ids, k_values) if relevant_node_ids else {}
 

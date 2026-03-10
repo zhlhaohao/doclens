@@ -19,20 +19,59 @@ python examples/benchmark/qasper_benchmark.py
 
 ## Architecture
 
-- `treesearch/config.py` — 统一配置管理（单一来源），支持 env > YAML > default 优先级
+- `treesearch/config.py` — 统一配置管理（单一来源），支持 env > default 优先级
 - `treesearch/llm.py` — 异步 LLM 客户端（单例连接池、重试、token 计数、JSON 提取）
-- `treesearch/search.py` — 核心搜索逻辑（best_first / MCTS / retrieve_rerank）
-- `treesearch/indexer.py` — 文档树索引构建
-- `treesearch/embeddings.py` — Embedding 相关
-- `treesearch/chunk.py` — 文档分块与 LLM rerank
+- `treesearch/search.py` — 核心搜索逻辑（fts5_only / best_first / auto 策略），search() 和 build_index() 默认值从 get_config() 读取
+- `treesearch/indexer.py` — 文档树索引构建，通过 ParserRegistry 分派解析器
 - `treesearch/rank_bm25.py` — BM25 排序
-- `treesearch/query_decompose.py` — 查询分解
+- `treesearch/fts.py` — SQLite FTS5 全文检索引擎（持久化倒排索引）
+- `treesearch/treesearch.py` — TreeSearch 统一引擎类（索引 + 搜索）
+- `treesearch/cli.py` — CLI 入口（index / search）
+- `treesearch/parsers/` — 可扩展解析器注册表
+  - `registry.py` — ParserRegistry, SOURCE_TYPE_MAP, STRATEGY_ROUTING, 内置解析器自动注册
+  - `ast_parser.py` — Python AST 结构提取（类、函数、完整签名）
+  - `pdf_parser.py` — PDF 解析器（可选：pageindex）
+  - `docx_parser.py` — DOCX 解析器（可选：python-docx）
+  - `html_parser.py` — HTML 解析器（可选：beautifulsoup4）
 
 ---
 
 # 开发历史记录
 
-## 最近更新 (2026-02-27)
+## 最近更新 (2026-03-10)
+
+### v0.5.0 重构演进（Phase 1-4 全部完成）
+
+**Phase 1：解析器注册表 + 自动路由**
+- 新增 `treesearch/parsers/` 子包，定义 `ParserRegistry` + `SOURCE_TYPE_MAP` + `STRATEGY_ROUTING`
+- `_register_builtin_parsers()` 在模块加载时自动注册所有内置解析器（md, txt, code, json, csv, pdf, docx, html）
+- `indexer.py` `_index_one()` 改为 `get_parser(ext)` 分派，不再需要 hardcoded if/elif 链
+- `Document` 增加 `source_type` 字段
+- `search()` 增加 `strategy="auto"` 模式，根据 source_type 路由策略
+
+**Phase 2：代码 AST 解析**
+- 新增 `parsers/ast_parser.py`：基于 `ast` 模块解析 Python 源码，提取 class/function 签名（含参数、返回值注解、装饰器）
+- `_detect_code_headings()` 优先走 AST，语法错误时回退 regex
+- `_CombinedScorer` 自动组合 GrepFilter + FTS5 用于代码文件搜索
+- tree-sitter 作为可选扩展点保留
+
+**Phase 3：配置治理 + 缓存隔离**
+- `search()` / `build_index()` 所有参数默认值改为 `None`，运行时从 `get_config()` 读取
+- `node_id` 改为变长编码（移除 `zfill(4)`）
+- `_doc_cache` / `clear_doc_cache` 已移除
+- YAML 配置支持已移除，简化为 env > defaults
+
+**Phase 4：新格式支持**
+- `parsers/pdf_parser.py` — 基于 pageindex 提取 PDF 文本
+- `parsers/docx_parser.py` — 基于 python-docx 提取 DOCX heading 结构
+- `parsers/html_parser.py` — 基于 BeautifulSoup 提取 h1-h6 结构
+- `pyproject.toml` 新增 `[docx]` / `[html]` optional dependencies
+
+### 其他修复
+- `cli.py` `_run_index()` 修复 dict 访问 Document 对象的 bug
+- FTS5 表达式 tokenization：新增 `_tokenize_fts_expression()` 对查询词做 stemming
+
+## 更早更新 (2026-02-27)
 
 ### 1. 彻底删除 DEFAULT_MODEL 硬编码
 

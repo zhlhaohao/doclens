@@ -155,8 +155,8 @@ class TestNodeBM25Index:
         score_with = {r["node_id"]: r["bm25_score"] for r in results_with}
         score_without = {r["node_id"]: r["bm25_score"] for r in results_without}
 
-        if "0000" in score_with and "0000" in score_without:
-            assert score_with["0000"] >= score_without["0000"]
+        if "0" in score_with and "0" in score_without:
+            assert score_with["0"] >= score_without["0"]
 
     def test_hierarchical_weighting(self, sample_tree_structure):
         """Title matches should score higher than body matches."""
@@ -165,7 +165,7 @@ class TestNodeBM25Index:
         results = index.search("Backend")
         # "Backend" node (0001) has it in title, should rank high
         if results:
-            assert results[0]["node_id"] == "0001"
+            assert results[0]["node_id"] == "1"
 
     def test_chinese_query(self, sample_tree_structure):
         """Chinese queries should work without errors."""
@@ -182,7 +182,7 @@ class TestNodeBM25Index:
             structure=[{
                 "title": "Machine Learning",
                 "summary": "ML algorithms and models.",
-                "node_id": "0000",
+                "node_id": "0",
                 "text": "Deep learning neural networks training.",
             }],
         )

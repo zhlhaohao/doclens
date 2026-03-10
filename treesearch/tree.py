@@ -26,6 +26,7 @@ class Document:
     structure: list  # tree structure (list of root nodes)
     doc_description: str = ""
     metadata: dict = field(default_factory=dict)
+    source_type: str = ""  # e.g. "markdown", "code", "text", "json", "csv"
 
     def __post_init__(self):
         self._node_map: dict[str, dict] = {}
@@ -102,9 +103,12 @@ def find_node(structure, node_id: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def assign_node_ids(data, node_id: int = 0) -> int:
-    """Recursively assign zero-padded node_id to each node. Returns next available id."""
+    """Recursively assign node_id to each node. Returns next available id.
+
+    Uses variable-length encoding: no fixed zero-padding, supports any tree size.
+    """
     if isinstance(data, dict):
-        data["node_id"] = str(node_id).zfill(4)
+        data["node_id"] = str(node_id)
         node_id += 1
         if "nodes" in data:
             node_id = assign_node_ids(data["nodes"], node_id)
@@ -157,9 +161,6 @@ def format_structure(structure, order: list[str] = None):
 
 INDEX_VERSION = "1.0"
 
-# Global document cache: path -> Document
-_doc_cache: dict[str, Document] = {}
-
 
 def save_index(index: dict, path: str) -> None:
     """Save tree structure index to a JSON file with version metadata."""
@@ -171,13 +172,8 @@ def save_index(index: dict, path: str) -> None:
 
 
 def load_index(path: str) -> Document:
-    """Load a single index JSON file and return a Document object.
-
-    Results are cached: loading the same path again returns the cached Document.
-    """
+    """Load a single index JSON file and return a Document object."""
     abs_path = os.path.abspath(path)
-    if abs_path in _doc_cache:
-        return _doc_cache[abs_path]
 
     with open(abs_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -195,15 +191,15 @@ def load_index(path: str) -> Document:
         structure=data.get("structure", []),
         doc_description=data.get("doc_description", ""),
         metadata={"source_path": data.get("source_path", "")},
+        source_type=data.get("source_type", ""),
     )
-    _doc_cache[abs_path] = doc
     return doc
 
 
 def load_documents(index_dir: str) -> list[Document]:
     """Load all index JSON files from a directory and return a list of Documents.
 
-    Skips meta files (starting with '_'). Uses cache internally.
+    Skips meta files (starting with '_').
     """
     pattern = os.path.join(index_dir, "*.json")
     files = sorted(
@@ -211,11 +207,6 @@ def load_documents(index_dir: str) -> list[Document]:
         if not os.path.basename(f).startswith("_")
     )
     return [load_index(f) for f in files]
-
-
-def clear_doc_cache() -> None:
-    """Clear the global document cache."""
-    _doc_cache.clear()
 
 
 # ---------------------------------------------------------------------------

@@ -650,12 +650,12 @@ async def search(
     query: str,
     documents: list[Document],
     model: Optional[str] = None,
-    top_k_docs: int = 3,
-    max_nodes_per_doc: int = 5,
-    strategy: str = "fts5_only",
-    value_threshold: float = 0.3,
-    max_llm_calls: int = 30,
-    use_bm25: bool = True,
+    top_k_docs: Optional[int] = None,
+    max_nodes_per_doc: Optional[int] = None,
+    strategy: Optional[str] = None,
+    value_threshold: Optional[float] = None,
+    max_llm_calls: Optional[int] = None,
+    use_bm25: Optional[bool] = None,
     pre_filter: Optional[PreFilter] = None,
     text_mode: str = "full",
     include_ancestors: bool = False,
@@ -664,11 +664,7 @@ async def search(
     """
     Search across one or more documents using tree-structured retrieval.
 
-    This is the primary API. It natively supports multi-document search:
-      1. Route query to relevant documents (LLM reasoning, no vector DB)
-      2. (Optional) Pre-filter scoring over tree nodes for initial ranking
-      3. Tree search within each document (fts5_only / best_first)
-      4. Return ranked nodes with text content
+    All parameters default to ``get_config()`` values when not explicitly set.
 
     Args:
         query: user query
@@ -676,9 +672,10 @@ async def search(
         model: LLM model name
         top_k_docs: max documents to search (routing stage)
         max_nodes_per_doc: max result nodes per document
-        strategy: 'fts5_only' (default) or 'best_first'
+        strategy: 'fts5_only' (default) | 'best_first' | 'auto'
                   'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
                   'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
+                  'auto' selects per-document strategy based on source_type (all default to fts5_only)
         value_threshold: minimum relevance score
         max_llm_calls: max LLM calls per document (only for best_first)
         use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
@@ -688,38 +685,86 @@ async def search(
         merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
 
     Returns:
-        dict with 'documents' (list) and 'query' (str).
+        dict with 'documents' (list), 'query' (str), and 'llm_calls' (int).
         documents: [{'doc_id', 'doc_name', 'nodes': [{'node_id', 'title', 'text', 'score'}]}]
     """
+    cfg = get_config()
+
+    # Resolve defaults from config
+    if strategy is None:
+        strategy = cfg.strategy
+    if top_k_docs is None:
+        top_k_docs = cfg.top_k_docs
+    if max_nodes_per_doc is None:
+        max_nodes_per_doc = cfg.max_nodes_per_doc
+    if value_threshold is None:
+        value_threshold = cfg.value_threshold
+    if max_llm_calls is None:
+        max_llm_calls = cfg.max_llm_calls
+    if use_bm25 is None:
+        use_bm25 = cfg.use_bm25
+    if model is None:
+        model = cfg.model
+
+    total_llm_calls = 0
+
+    # Resolve effective strategy per document
+    effective_strategy = strategy
+    if strategy == "auto" and documents:
+        # auto mode: use routing table, but all default to fts5_only
+        from .parsers import get_strategy_for_source_type
+        # Use first document's source_type as representative
+        route = get_strategy_for_source_type(
+            documents[0].source_type if documents[0].source_type else "text"
+        )
+        effective_strategy = route.get("strategy", "fts5_only")
 
     # Stage 1: document routing (skip for single doc or fts5_only)
-    if len(documents) <= 1 or strategy == "fts5_only":
-        selected = documents[:top_k_docs] if strategy == "fts5_only" else documents
+    if len(documents) <= 1 or effective_strategy == "fts5_only":
+        selected = documents[:top_k_docs] if effective_strategy == "fts5_only" else documents
     else:
         selected = await route_documents(query, documents, model, top_k=top_k_docs)
+        total_llm_calls += 1
 
     logger.info("Selected %d documents: %s", len(selected), [d.doc_name for d in selected])
 
-    # Stage 1.5: Pre-filter scoring (for best_first, fts5_only)
+    # Stage 1.5: Pre-filter scoring
     scorer = pre_filter
-    if scorer is None and strategy in ("best_first", "fts5_only") and selected:
-        fts_cfg = get_config().fts
-        if fts_cfg.enabled or strategy == "fts5_only":
-            from .fts import get_fts_index
-            fts_index = get_fts_index(db_path=fts_cfg.db_path or None)
+    if scorer is None and selected:
+
+        # In auto mode, check if any document recommends grep pre-filter
+        use_grep = False
+        if strategy == "auto":
+            from .parsers import get_strategy_for_source_type
             for doc in selected:
-                if not fts_index.is_document_indexed(doc.doc_id):
-                    fts_index.index_document(doc)
-            scorer = fts_index
+                route = get_strategy_for_source_type(doc.source_type or "text")
+                if "grep" in route.get("pre_filters", []):
+                    use_grep = True
+                    break
+
+        if use_grep:
+            # Combine GrepFilter + FTS5
+            grep_filter = GrepFilter(selected)
+            fts_index = _get_fts_scorer(selected, cfg)
+            scorer = _CombinedScorer(grep_filter, fts_index) if fts_index else grep_filter
+        elif cfg.fts_enabled or effective_strategy == "fts5_only":
+            scorer = _get_fts_scorer(selected, cfg)
         elif use_bm25:
             from .rank_bm25 import NodeBM25Index
             scorer = NodeBM25Index(selected)
 
     # Stage 2: tree search within each document (concurrent)
-    async def _search_doc(doc: Document) -> dict:
+    async def _search_doc(doc: Document) -> tuple[dict, int]:
+        doc_llm_calls = 0
 
-        if strategy == "fts5_only":
-            # Pure FTS5/BM25 scoring — zero LLM calls, millisecond-level
+        # Per-document strategy resolution for auto mode
+        doc_strategy = effective_strategy
+        if strategy == "auto":
+            from .parsers import get_strategy_for_source_type
+            route = get_strategy_for_source_type(doc.source_type or "text")
+            doc_strategy = route.get("strategy", "fts5_only")
+
+        if doc_strategy == "fts5_only":
             nodes = []
             if scorer is not None:
                 score_map = scorer.score_nodes(query, doc.doc_id)
@@ -733,9 +778,7 @@ async def search(
                     if len(nodes) >= max_nodes_per_doc:
                         break
 
-        elif strategy == "best_first":
-            bf_cfg = get_config().best_first
-
+        elif doc_strategy == "best_first":
             bm25_scores = {}
             if scorer is not None:
                 bm25_scores = scorer.score_nodes(query, doc.doc_id)
@@ -748,33 +791,64 @@ async def search(
                 threshold=value_threshold,
                 max_llm_calls=max_llm_calls,
                 bm25_scores=bm25_scores,
-                bm25_weight=bf_cfg.bm25_weight,
-                depth_penalty=bf_cfg.depth_penalty,
-                text_excerpt_len=bf_cfg.text_excerpt_len,
-                adaptive_depth_threshold=bf_cfg.adaptive_depth_threshold,
-                dynamic_threshold=bf_cfg.dynamic_threshold,
-                min_threshold=bf_cfg.min_threshold,
+                bm25_weight=cfg.bm25_weight,
+                depth_penalty=cfg.depth_penalty,
+                text_excerpt_len=cfg.text_excerpt_len,
+                adaptive_depth_threshold=cfg.adaptive_depth_threshold,
+                dynamic_threshold=cfg.dynamic_threshold,
+                min_threshold=cfg.min_threshold,
             )
             nodes = await searcher.run()
+            doc_llm_calls = searcher.llm_calls
 
         else:
-            raise ValueError(f"Unknown strategy: {strategy!r}. Use 'fts5_only' or 'best_first'.")
+            raise ValueError(f"Unknown strategy: {doc_strategy!r}. Use 'fts5_only', 'best_first', or 'auto'.")
 
-        # Attach full node fields to results
         _attach_node_fields(nodes, doc, text_mode=text_mode, include_ancestors=include_ancestors)
 
-        return {"doc_id": doc.doc_id, "doc_name": doc.doc_name, "nodes": nodes}
+        return {"doc_id": doc.doc_id, "doc_name": doc.doc_name, "nodes": nodes}, doc_llm_calls
 
-    doc_results = await asyncio.gather(*(_search_doc(d) for d in selected))
+    raw_results = await asyncio.gather(*(_search_doc(d) for d in selected))
+    doc_results = []
+    for doc_result, llm_count in raw_results:
+        doc_results.append(doc_result)
+        total_llm_calls += llm_count
 
     # Stage 3: merge results across documents
-    merged = _merge_doc_results(list(doc_results), merge_strategy)
+    merged = _merge_doc_results(doc_results, merge_strategy)
 
     return {
         "documents": merged,
         "query": query,
+        "llm_calls": total_llm_calls,
     }
 
+
+def _get_fts_scorer(documents: list[Document], cfg) -> Optional[PreFilter]:
+    """Get FTS5 scorer, auto-indexing documents as needed."""
+    from .fts import get_fts_index
+    fts_index = get_fts_index(db_path=cfg.fts_db_path or None)
+    for doc in documents:
+        if not fts_index.is_document_indexed(doc.doc_id):
+            fts_index.index_document(doc)
+    return fts_index
+
+
+class _CombinedScorer:
+    """Combine multiple PreFilter scorers by summing normalized scores."""
+
+    def __init__(self, *scorers):
+        self._scorers = scorers
+
+    def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
+        combined: dict[str, float] = {}
+        for scorer in self._scorers:
+            if scorer is None:
+                continue
+            scores = scorer.score_nodes(query, doc_id)
+            for nid, score in scores.items():
+                combined[nid] = combined.get(nid, 0.0) + score
+        return combined
 
 
 def search_sync(query: str, documents: list[Document], **kwargs) -> dict:

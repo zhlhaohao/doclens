@@ -106,6 +106,29 @@ def _tokenize_for_fts(text: str) -> str:
     return " ".join(tokens)
 
 
+# FTS5 operators that should NOT be tokenized
+_FTS5_OPERATORS = {"AND", "OR", "NOT", "NEAR"}
+
+
+def _tokenize_fts_expression(expr: str) -> str:
+    """Tokenize terms in an FTS5 expression while preserving operators.
+
+    Raw FTS5 expressions like ``"machine AND learning"`` must have their
+    terms tokenized (stemmed) to match the indexed content, but FTS5
+    operators (AND, OR, NOT, NEAR) must remain untouched.
+    """
+    parts = expr.split()
+    result = []
+    for part in parts:
+        if part.upper() in _FTS5_OPERATORS:
+            result.append(part.upper())
+        else:
+            tokenized = _tokenize_for_fts(part)
+            if tokenized.strip():
+                result.append(tokenized.strip())
+    return " ".join(result)
+
+
 # ---------------------------------------------------------------------------
 # FTS5 Index Engine
 # ---------------------------------------------------------------------------
@@ -347,7 +370,8 @@ class FTS5Index:
             list of {node_id, doc_id, title, summary, fts_score, depth}
         """
         if fts_expression:
-            match_expr = fts_expression
+            # Tokenize terms in the expression while preserving FTS5 operators
+            match_expr = _tokenize_fts_expression(fts_expression)
         else:
             # Tokenize query for FTS5 matching
             tokens = _tokenize_for_fts(query)

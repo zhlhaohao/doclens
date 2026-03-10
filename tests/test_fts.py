@@ -28,7 +28,7 @@ def sample_document():
     structure = [
         {
             "title": "Introduction",
-            "node_id": "0000",
+            "node_id": "0",
             "summary": "Overview of the project",
             "text": "This is the introduction to our machine learning project.",
             "line_start": 1,
@@ -36,7 +36,7 @@ def sample_document():
             "nodes": [
                 {
                     "title": "Background",
-                    "node_id": "0001",
+                    "node_id": "1",
                     "summary": "Historical context and motivation",
                     "text": "Deep learning has revolutionized natural language processing.",
                     "line_start": 11,
@@ -45,7 +45,7 @@ def sample_document():
                 },
                 {
                     "title": "Objectives",
-                    "node_id": "0002",
+                    "node_id": "2",
                     "summary": "Goals of this research",
                     "text": "Our objective is to build a fast retrieval system using BM25 and tree search.",
                     "line_start": 21,
@@ -56,7 +56,7 @@ def sample_document():
         },
         {
             "title": "Methods",
-            "node_id": "0003",
+            "node_id": "3",
             "prefix_summary": "Research methodology",
             "text": "We use SQLite FTS5 for full-text indexing with inverted index.",
             "line_start": 31,
@@ -64,7 +64,7 @@ def sample_document():
             "nodes": [
                 {
                     "title": "Data Collection",
-                    "node_id": "0004",
+                    "node_id": "4",
                     "summary": "How data was gathered",
                     "text": "Data was collected from academic papers and web documents.",
                     "line_start": 51,
@@ -88,7 +88,7 @@ def chinese_document():
     structure = [
         {
             "title": "项目简介",
-            "node_id": "0000",
+            "node_id": "0",
             "summary": "关于本项目的概述",
             "text": "本项目旨在构建一个高效的语义检索系统，支持中文和英文混合搜索。",
             "line_start": 1,
@@ -97,7 +97,7 @@ def chinese_document():
         },
         {
             "title": "技术方案",
-            "node_id": "0001",
+            "node_id": "1",
             "summary": "采用的核心技术",
             "text": "核心技术包括：大模型驱动的查询生成、SQLite FTS5全文检索、BM25排序算法。",
             "line_start": 11,
@@ -216,7 +216,7 @@ class TestFTS5Search:
         fts_index.index_document(sample_document)
         results = fts_index.search("machine learning")
         assert len(results) > 0
-        assert any(r["node_id"] == "0000" for r in results)
+        assert any(r["node_id"] == "0" for r in results)
 
     def test_search_with_doc_filter(self, fts_index, sample_document, chinese_document):
         fts_index.index_documents([sample_document, chinese_document])
@@ -246,7 +246,7 @@ class TestFTS5Search:
         assert len(results) > 0
         # Node 0002 mentions "retrieval system" in its text
         node_ids = [r["node_id"] for r in results]
-        assert "0002" in node_ids
+        assert "2" in node_ids
 
     def test_search_fts_expression(self, fts_index, sample_document):
         """Test raw FTS5 expression search."""

@@ -83,10 +83,10 @@ async def _run_index(args) -> None:
 
     elapsed = time.time() - start_time
     print(f"\nIndexed {len(results)} file(s) to {args.output_dir}/ ({elapsed:.1f}s)")
-    for r in results:
-        print(f"  - {r['doc_name']}")
+    for doc in results:
+        print(f"  - {doc.doc_name}")
         print(f"    TOC:")
-        print_toc(r["structure"])
+        print_toc(doc.structure)
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--api-key", type=str, default=None,
                      help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
     sub.add_argument("--strategy", type=str, default="fts5_only",
-                     choices=["fts5_only", "best_first"],
+                     choices=["fts5_only", "best_first", "auto"],
                      help="Search strategy (default: fts5_only)")
     sub.add_argument("--fts", action="store_true",
                      help="Enable SQLite FTS5 full-text search as pre-filter backend")
@@ -140,9 +140,9 @@ async def _run_search(args) -> None:
     # Enable FTS5 if --fts flag is set
     if args.fts:
         cfg = get_config()
-        cfg.fts.enabled = True
+        cfg.fts_enabled = True
         if args.fts_db:
-            cfg.fts.db_path = args.fts_db
+            cfg.fts_db_path = args.fts_db
         set_config(cfg)
 
     documents = _load_documents_from_dir(args.index_dir)
@@ -155,6 +155,7 @@ async def _run_search(args) -> None:
     strategy_desc = {
         "best_first": f"Best-First (max_llm_calls={args.max_llm_calls}, pre_filter={pre_filter})",
         "fts5_only": "FTS5-only (no LLM)",
+        "auto": "Auto (per-document strategy based on source_type)",
     }
     print("Search strategy:", strategy_desc.get(args.strategy, args.strategy))
     print("---")
@@ -174,13 +175,13 @@ async def _run_search(args) -> None:
     )
     elapsed = time.time() - start_time
 
-    if not result.documents:
+    if not result["documents"]:
         print("\nNo relevant results found.")
         return
 
-    print(f"\nFound results in {len(result.documents)} document(s) "
-          f"(LLM calls: {result.total_llm_calls}, {elapsed:.1f}s):\n")
-    for doc_result in result.documents:
+    print(f"\nFound results in {len(result['documents'])} document(s) "
+          f"(LLM calls: {result.get('llm_calls', 0)}, {elapsed:.1f}s):\n")
+    for doc_result in result["documents"]:
         print(f"[{doc_result['doc_name']}]")
         for node in doc_result["nodes"]:
             score = node.get("score", 0)

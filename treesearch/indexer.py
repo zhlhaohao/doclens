@@ -210,7 +210,7 @@ def _build_tree(node_list: list[dict]) -> list[dict]:
         level = node["level"]
         tree_node = {
             "title": node["title"],
-            "node_id": str(counter).zfill(4),
+            "node_id": str(counter),
             "text": node.get("text", ""),
             "line_start": node.get("line_start", node.get("line_num")),
             "line_end": node.get("line_end"),
@@ -654,10 +654,21 @@ async def text_to_tree(
 # Code file indexer
 # ============================================================================
 
-def _detect_code_headings(lines: list[str], ext: str) -> list[dict]:
-    """Detect classes and methods from code lines."""
+def _detect_code_headings(lines: list[str], ext: str, source: str = "") -> list[dict]:
+    """Detect classes and methods from code lines.
+
+    For ``.py`` files, tries AST-based parsing first (richer signatures),
+    falling back to regex if AST fails (e.g. syntax errors).
+    """
+    # Python: use AST parser for accurate structure extraction
+    if ext == ".py" and source:
+        from .parsers.ast_parser import parse_python_structure
+        headings = parse_python_structure(source)
+        if headings:
+            return headings
+        # AST failed, fall through to regex
+
     headings = []
-    
     patterns = []
     if ext == ".py":
         patterns = [
@@ -689,7 +700,7 @@ def _detect_code_headings(lines: list[str], ext: str) -> list[dict]:
         patterns = [
             (re.compile(r"^\s*<(\w+).*>\s*$"), 1),
         ]
-    
+
     if not patterns:
         return []
 
@@ -698,15 +709,14 @@ def _detect_code_headings(lines: list[str], ext: str) -> list[dict]:
         if not line:
             continue
         num = idx + 1
-        
+
         for pat, level in patterns:
             m = pat.match(line)
             if m:
-                # remove trailing colon or braces and truncate to 100 chars
                 title = m.group(1).strip().rstrip(":{").strip()[:100]
                 headings.append({"title": title, "line_num": num, "level": level})
                 break
-                
+
     return headings
 
 
@@ -737,7 +747,7 @@ async def code_to_tree(
     lines = text.split("\n")
     logger.info("Code loaded: %d lines, ~%d tokens", len(lines), count_tokens(text, model=model))
 
-    headings = _detect_code_headings(lines, ext)
+    headings = _detect_code_headings(lines, ext, source=text)
     markers = [{"title": h["title"], "line_num": h["line_num"], "level": h["level"]} for h in headings]
     logger.info("Code structure detection: %d methods/classes", len(markers))
 
@@ -946,27 +956,45 @@ async def build_index(
     output_dir: str = "./indexes",
     *,
     model: Optional[str] = None,
-    if_add_node_summary: bool = True,
-    if_add_doc_description: bool = True,
-    if_add_node_text: bool = True,
-    if_add_node_id: bool = True,
-    max_concurrency: int = 5,
+    if_add_node_summary: Optional[bool] = None,
+    if_add_doc_description: Optional[bool] = None,
+    if_add_node_text: Optional[bool] = None,
+    if_add_node_id: Optional[bool] = None,
+    max_concurrency: Optional[int] = None,
     force: bool = False,
     **kwargs,
 ) -> list[Document]:
     """
     Build tree indexes for multiple files. Returns list of Document objects ready for search.
 
+    All parameters default to ``get_config()`` values when not explicitly set.
+
     Args:
         paths: list of file paths or glob patterns (e.g. ["docs/*.md", "paper.txt"])
         output_dir: directory to save index JSON files
-        max_concurrency: max concurrent indexing tasks (default: 5)
+        max_concurrency: max concurrent indexing tasks
         force: force re-index even if file unchanged (default: False)
-        **kwargs: passed through to md_to_tree / text_to_tree
+        **kwargs: passed through to individual parsers
 
     Returns:
         list of Document objects (directly usable with search())
     """
+    from .config import get_config
+    cfg = get_config()
+
+    # Resolve defaults from config
+    if model is None:
+        model = cfg.model
+    if if_add_node_summary is None:
+        if_add_node_summary = cfg.if_add_node_summary
+    if if_add_doc_description is None:
+        if_add_doc_description = cfg.if_add_doc_description
+    if if_add_node_text is None:
+        if_add_node_text = cfg.if_add_node_text
+    if if_add_node_id is None:
+        if_add_node_id = cfg.if_add_node_id
+    if max_concurrency is None:
+        max_concurrency = cfg.max_concurrency
     # Expand globs
     expanded = []
     for p in paths:
@@ -1014,16 +1042,18 @@ async def build_index(
                 if_add_node_id=if_add_node_id,
                 **kwargs,
             )
-            if ext in (".md", ".markdown"):
-                result = await md_to_tree(md_path=fp, **common)
-            elif ext in (".json",):
-                result = await json_to_tree(json_path=fp, **common)
-            elif ext in (".csv",):
-                result = await csv_to_tree(csv_path=fp, **common)
-            elif ext in (".py", ".java", ".ts", ".js", ".cpp", ".cc", ".cs", ".php", ".go", ".html", ".xml"):
-                result = await code_to_tree(code_path=fp, **common)
+
+            # Use ParserRegistry for dispatch (built-in parsers auto-registered)
+            from .parsers import get_parser, SOURCE_TYPE_MAP
+            parser_fn = get_parser(ext)
+            if parser_fn is not None:
+                result = await parser_fn(fp, **common)
             else:
+                # Unknown extension: fall back to text_to_tree
                 result = await text_to_tree(text_path=fp, **common)
+
+            # Tag source_type for search routing
+            result["source_type"] = SOURCE_TYPE_MAP.get(ext, "text")
 
             name = os.path.splitext(os.path.basename(fp))[0]
             out_path = os.path.join(output_dir, f"{name}_structure.json")

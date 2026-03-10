@@ -10,7 +10,7 @@ Demonstrates:
   - Strategy comparison: fts5_only vs best_first
 
 Usage:
-    python examples/05_multi_doc_search.py
+    python examples/04_multi_doc_search.py
 """
 import os
 import sys
@@ -23,7 +23,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
 INDEX_DIR = os.path.join(os.path.dirname(__file__), "indexes", "multi_doc_demo")
 
 # 1. Create engine and index
-ts = TreeSearch(index_dir=INDEX_DIR, model="gpt-4o")
+ts = TreeSearch(index_dir=INDEX_DIR)
 ts.index(f"{DATA_DIR}/*.md")
 print(f"Indexed {len(ts.documents)} documents: {[d.doc_name for d in ts.documents]}\n")
 
@@ -33,8 +33,8 @@ print("Demo 1: FTS5 Multi-Document Search (no LLM)")
 print("=" * 60)
 for query in ["voice call configuration", "agent tool registration"]:
     result = ts.search(query, max_nodes_per_doc=3)
-    print(f"\nQuery: {query}  (LLM calls: {result.total_llm_calls})")
-    for doc in result.documents:
+    print(f"\nQuery: {query}")
+    for doc in result["documents"]:
         for node in doc["nodes"]:
             print(f"  [{node['score']:.4f}] {node['title']}")
 
@@ -66,8 +66,8 @@ for query in ["Twilio", "white_list"]:
                 node = doc.get_node_by_id(nid)
                 print(f"    [{nid}] {node.get('title', '') if node else ''}")
 
-# --- Demo 4: Strategy comparison (needs OPENAI_API_KEY) ---
-api_key = os.getenv("OPENAI_API_KEY")
+# --- Demo 4: Strategy comparison (needs LLM) ---
+api_key = os.getenv("TREESEARCH_LLM_API_KEY")
 if api_key:
     print("\n" + "=" * 60)
     print("Demo 4: Strategy Comparison")
@@ -78,8 +78,8 @@ if api_key:
         if strategy == "best_first":
             kwargs["max_llm_calls"] = 10
         result = ts.search(query, **kwargs)
-        print(f"\n{strategy}: LLM calls={result.total_llm_calls}")
-        for doc in result.documents:
+        print(f"\n{strategy}: LLM calls={result.get('llm_calls', 0)}")
+        for doc in result["documents"]:
             for node in doc["nodes"][:3]:
                 print(f"  [{node['score']:.2f}] {node['title']}")
 else:

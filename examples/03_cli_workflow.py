@@ -8,7 +8,7 @@ This script demonstrates the typical TreeSearch workflow:
   2. Search across all indexed documents with FTS5-only strategy (default, no LLM needed)
 
 Usage:
-    python examples/04_cli_workflow.py
+    python examples/03_cli_workflow.py
 """
 import asyncio
 import os
@@ -65,8 +65,7 @@ async def main():
             documents=documents,
             max_nodes_per_doc=5,
         )
-        print(f"  Strategy: {result.strategy}, LLM calls: {result.total_llm_calls}")
-        for doc_result in result.documents:
+        for doc_result in result["documents"]:
             for node in doc_result["nodes"]:
                 print(f"  [{node.get('score', 0):.2f}] [{doc_result['doc_name']}] {node['title']}")
         print()

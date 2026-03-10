@@ -64,7 +64,7 @@ def _build_context(search_result: dict, max_context_tokens: int = 8000) -> tuple
         (context_string, sources_list)
     """
     nodes_with_meta = []
-    for doc_result in search_result.documents:
+    for doc_result in search_result["documents"]:
         doc_name = doc_result.get("doc_name", "")
         for node in doc_result.get("nodes", []):
             nodes_with_meta.append({
@@ -240,7 +240,7 @@ async def ask(
         max_context_tokens=max_context_tokens,
         answer_mode=answer_mode,
     )
-    answer_result.llm_calls += 0
+    answer_result.llm_calls += search_result.get("llm_calls", 0)
 
     return answer_result
 

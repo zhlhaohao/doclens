@@ -20,7 +20,7 @@ ts = TreeSearch(f"{DATA_DIR}/*.md")
 
 # 2. Search (first call triggers index build automatically)
 results = ts.search("如何配置语音通话？")
-for doc in results.documents:
+for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"  [{node['score']:.2f}] {node['title']}")
 
@@ -28,6 +28,6 @@ for doc in results.documents:
 for query in ["how to configure voice call plugins?", "接听电话的白名单如何设置？"]:
     print(f"\nQuery: {query}")
     results = ts.search(query)
-    for doc in results.documents:
+    for doc in results["documents"]:
         for node in doc["nodes"]:
             print(f"  [{node['score']:.2f}] {node['title']}")

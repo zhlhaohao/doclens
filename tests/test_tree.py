@@ -19,7 +19,6 @@ from treesearch.tree import (
     save_index,
     load_index,
     load_documents,
-    clear_doc_cache,
     print_toc,
 )
 
@@ -34,7 +33,7 @@ class TestFlattenTree:
         assert "Deployment" in titles
 
     def test_single_node(self):
-        node = {"title": "Root", "node_id": "0000"}
+        node = {"title": "Root", "node_id": "0"}
         nodes = flatten_tree(node)
         assert len(nodes) == 1
         assert nodes[0]["title"] == "Root"
@@ -45,12 +44,12 @@ class TestFlattenTree:
 
 class TestFindNode:
     def test_find_existing(self, sample_tree_structure):
-        node = find_node(sample_tree_structure, "0002")
+        node = find_node(sample_tree_structure, "2")
         assert node is not None
         assert node["title"] == "Frontend"
 
     def test_find_root(self, sample_tree_structure):
-        node = find_node(sample_tree_structure, "0000")
+        node = find_node(sample_tree_structure, "0")
         assert node is not None
         assert node["title"] == "Architecture"
 
@@ -69,7 +68,7 @@ class TestGetLeafNodes:
         assert "Architecture" not in titles
 
     def test_single_leaf(self):
-        node = {"title": "Leaf", "node_id": "0000"}
+        node = {"title": "Leaf", "node_id": "0"}
         leaves = get_leaf_nodes(node)
         assert len(leaves) == 1
 
@@ -83,7 +82,7 @@ class TestAssignNodeIds:
         assign_node_ids(tree)
         flat = flatten_tree(tree)
         ids = [n["node_id"] for n in flat]
-        assert ids == ["0000", "0001", "0002", "0003"]
+        assert ids == ["0", "1", "2", "3"]
 
 
 class TestRemoveFields:
@@ -109,7 +108,6 @@ class TestFormatStructure:
 
 class TestSaveLoadIndex:
     def test_round_trip(self, sample_tree_structure):
-        clear_doc_cache()
         index = {"doc_name": "test", "structure": sample_tree_structure, "source_path": "/tmp/test.md"}
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
@@ -121,11 +119,9 @@ class TestSaveLoadIndex:
             assert len(doc.structure) == 2
             assert doc.metadata.get("source_path") == "/tmp/test.md"
         finally:
-            clear_doc_cache()
             os.unlink(path)
 
-    def test_cache_returns_same_object(self, sample_tree_structure):
-        clear_doc_cache()
+    def test_load_returns_fresh_object(self, sample_tree_structure):
         index = {"doc_name": "cached", "structure": sample_tree_structure}
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
@@ -133,13 +129,13 @@ class TestSaveLoadIndex:
             save_index(index, path)
             doc1 = load_index(path)
             doc2 = load_index(path)
-            assert doc1 is doc2
+            # No cache: each call returns a new Document
+            assert doc1 is not doc2
+            assert doc1.doc_name == doc2.doc_name
         finally:
-            clear_doc_cache()
             os.unlink(path)
 
     def test_load_documents_from_dir(self, sample_tree_structure):
-        clear_doc_cache()
         with tempfile.TemporaryDirectory() as tmpdir:
             for name in ["alpha", "beta"]:
                 index = {"doc_name": name, "structure": sample_tree_structure}
@@ -152,7 +148,6 @@ class TestSaveLoadIndex:
             assert len(docs) == 2
             assert docs[0].doc_name == "alpha"
             assert docs[1].doc_name == "beta"
-        clear_doc_cache()
 
     def test_creates_directory(self, sample_tree_structure):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -178,7 +173,7 @@ class TestDocument:
         doc = Document(
             doc_id="d1", doc_name="test", structure=sample_tree_structure
         )
-        node = doc.get_node_by_id("0001")
+        node = doc.get_node_by_id("1")
         assert node is not None
         assert node["title"] == "Backend"
 

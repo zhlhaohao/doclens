@@ -59,6 +59,11 @@ class TestBuildParser:
         args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "best_first"])
         assert args.strategy == "best_first"
 
+    def test_search_strategy_auto(self):
+        parser = _build_parser()
+        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "auto"])
+        assert args.strategy == "auto"
+
     def test_search_strategy_default(self):
         parser = _build_parser()
         args = parser.parse_args(["search", "--index_dir", ".", "--query", "q"])
@@ -87,13 +92,11 @@ class TestBuildParser:
 
 class TestLoadDocuments:
     def test_loads_json_files(self):
-        from treesearch.tree import clear_doc_cache
-        clear_doc_cache()
         with tempfile.TemporaryDirectory() as tmpdir:
             for name in ["doc_a", "doc_b"]:
                 data = {
                     "doc_name": name,
-                    "structure": [{"title": f"{name} root", "node_id": "0000"}],
+                    "structure": [{"title": f"{name} root", "node_id": "0"}],
                     "doc_description": f"Description of {name}",
                 }
                 with open(os.path.join(tmpdir, f"{name}.json"), "w") as f:
@@ -104,17 +107,14 @@ class TestLoadDocuments:
             assert docs[0].doc_name == "doc_a"
             assert docs[1].doc_name == "doc_b"
             assert docs[0].doc_description == "Description of doc_a"
-        clear_doc_cache()
 
     def test_skips_meta_files(self):
         """_index_meta.json should be excluded from document loading."""
-        from treesearch.tree import clear_doc_cache
-        clear_doc_cache()
         with tempfile.TemporaryDirectory() as tmpdir:
             # Normal doc
             data = {
                 "doc_name": "doc_a",
-                "structure": [{"title": "root", "node_id": "0000"}],
+                "structure": [{"title": "root", "node_id": "0"}],
             }
             with open(os.path.join(tmpdir, "doc_a.json"), "w") as f:
                 json.dump(data, f)
@@ -125,7 +125,6 @@ class TestLoadDocuments:
             docs = _load_documents_from_dir(tmpdir)
             assert len(docs) == 1
             assert docs[0].doc_name == "doc_a"
-        clear_doc_cache()
 
     def test_empty_directory_exits(self):
         with tempfile.TemporaryDirectory() as tmpdir:

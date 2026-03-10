@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Single document indexing + FTS5 search demo (advanced usage).
+@description: Indexing + search demo with TreeSearch and lower-level APIs.
 
-Demonstrates lower-level APIs:
-  - md_to_tree: parse Markdown into a hierarchical tree structure
-  - text_to_tree: parse plain text with auto heading detection
-  - FTS5Index: fast keyword search over tree nodes (no LLM needed)
-
-For most users, use TreeSearch class instead (see 01_basic_demo.py).
+Demonstrates:
+  - TreeSearch: high-level API for indexing + search (recommended)
+  - md_to_tree / text_to_tree: lower-level tree building APIs
+  - FTS5Index: standalone keyword search over tree nodes
 
 Usage:
     python examples/02_index_and_search.py
@@ -20,7 +18,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from treesearch import md_to_tree, text_to_tree, Document, save_index, print_toc, FTS5Index
+from treesearch import TreeSearch, md_to_tree, text_to_tree, Document, save_index, print_toc, FTS5Index
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
 MD_FILE = os.path.join(DATA_DIR, "voice-call.md")
@@ -57,10 +55,32 @@ In P2P systems, all nodes are equal and can act as both client and server.
 """
 
 
-async def demo_markdown():
-    """Demo: Build tree from a Markdown file and search with FTS5."""
+def demo_treesearch():
+    """Demo 1: TreeSearch high-level API (recommended)."""
     print("=" * 60)
-    print("Demo 1: Markdown Indexing + FTS5 Search")
+    print("Demo 1: TreeSearch High-Level API (Recommended)")
+    print("=" * 60)
+
+    ts = TreeSearch(MD_FILE)
+    result = ts.search("How to configure Twilio?")
+    for doc in result["documents"]:
+        print(f"\n[{doc['doc_name']}]")
+        for node in doc["nodes"]:
+            print(f"  [{node['score']:.4f}] {node['title']}")
+
+    # Search more queries
+    for query in ["What TTS providers are supported?", "语音通话配置"]:
+        print(f"\nQuery: {query}")
+        result = ts.search(query)
+        for doc in result["documents"]:
+            for node in doc["nodes"]:
+                print(f"  [{node['score']:.4f}] {node['title']}")
+
+
+async def demo_lower_level_apis():
+    """Demo 2: Lower-level APIs — md_to_tree + FTS5Index."""
+    print("\n" + "=" * 60)
+    print("Demo 2: Lower-Level APIs (md_to_tree + FTS5Index)")
     print("=" * 60)
 
     result = await md_to_tree(md_path=MD_FILE, if_add_node_summary=True, if_add_node_text=True)
@@ -85,9 +105,9 @@ async def demo_markdown():
 
 
 async def demo_plain_text():
-    """Demo: Build tree from plain text with auto heading detection."""
+    """Demo 3: Build tree from plain text with auto heading detection."""
     print("\n" + "=" * 60)
-    print("Demo 2: Plain Text Indexing (auto heading detection)")
+    print("Demo 3: Plain Text Indexing (auto heading detection)")
     print("=" * 60)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -103,9 +123,10 @@ async def demo_plain_text():
 
 
 async def main():
-    await demo_markdown()
+    await demo_lower_level_apis()
     await demo_plain_text()
 
 
 if __name__ == "__main__":
+    demo_treesearch()
     asyncio.run(main())

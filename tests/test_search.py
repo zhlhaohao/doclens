@@ -24,7 +24,7 @@ class TestBestFirstTreeSearch:
     async def test_run_returns_results(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.6}, {"node_id": "0003", "relevance": 0.9}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.6}, {"node_id": "3", "relevance": 0.9}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -49,7 +49,7 @@ class TestBestFirstTreeSearch:
         """Flat tree with low scores should return few/no high-scoring results."""
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.05}, {"node_id": "0001", "relevance": 0.05}, {"node_id": "0002", "relevance": 0.05}, {"node_id": "0003", "relevance": 0.05}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.05}, {"node_id": "1", "relevance": 0.05}, {"node_id": "2", "relevance": 0.05}, {"node_id": "3", "relevance": 0.05}]}'
             return '{"relevance": 0.05}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -72,7 +72,7 @@ class TestBestFirstTreeSearch:
     async def test_max_results_limit(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.9}, {"node_id": "0001", "relevance": 0.9}, {"node_id": "0002", "relevance": 0.9}, {"node_id": "0003", "relevance": 0.9}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.9}, {"node_id": "1", "relevance": 0.9}, {"node_id": "2", "relevance": 0.9}, {"node_id": "3", "relevance": 0.9}]}'
             return '{"relevance": 0.9}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -92,7 +92,7 @@ class TestBestFirstTreeSearch:
     async def test_budget_control(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -112,7 +112,7 @@ class TestBestFirstTreeSearch:
     async def test_results_sorted_by_score(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.3}, {"node_id": "0001", "relevance": 0.9}, {"node_id": "0002", "relevance": 0.5}, {"node_id": "0003", "relevance": 0.7}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.3}, {"node_id": "1", "relevance": 0.9}, {"node_id": "2", "relevance": 0.5}, {"node_id": "3", "relevance": 0.7}]}'
             return '{"relevance": 0.5}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -134,11 +134,11 @@ class TestBestFirstTreeSearch:
     async def test_with_bm25_scores(self, sample_tree_structure):
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.7}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.7}, {"node_id": "0003", "relevance": 0.7}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.7}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.7}, {"node_id": "3", "relevance": 0.7}]}'
             return '{"relevance": 0.7}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
-        bm25_scores = {"0001": 2.5, "0002": 0.5, "0003": 1.8}
+        bm25_scores = {"1": 2.5, "2": 0.5, "3": 1.8}
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
             searcher = BestFirstTreeSearch(
@@ -165,25 +165,25 @@ class TestBestFirstTreeSearch:
             {
                 "title": "Root",
                 "summary": "Root section.",
-                "node_id": "0000",
+                "node_id": "0",
                 "text": "Root text.",
                 "nodes": [
                     {
                         "title": "Level 1A",
                         "summary": "Level 1A section.",
-                        "node_id": "0001",
+                        "node_id": "1",
                         "text": "Level 1A text.",
                         "nodes": [
                             {
                                 "title": "Level 2A",
                                 "summary": "Level 2A section.",
-                                "node_id": "0002",
+                                "node_id": "2",
                                 "text": "Level 2A text.",
                                 "nodes": [
                                     {
                                         "title": "Level 3A",
                                         "summary": "Level 3A leaf.",
-                                        "node_id": "0003",
+                                        "node_id": "3",
                                         "text": "Level 3A text.",
                                     }
                                 ],
@@ -198,7 +198,7 @@ class TestBestFirstTreeSearch:
             nonlocal call_count
             call_count += 1
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
@@ -231,7 +231,7 @@ class TestBestFirstTreeSearch:
         """Dynamic threshold should filter low-scoring nodes."""
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.9}, {"node_id": "0001", "relevance": 0.1}, {"node_id": "0002", "relevance": 0.1}, {"node_id": "0003", "relevance": 0.1}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.9}, {"node_id": "1", "relevance": 0.1}, {"node_id": "2", "relevance": 0.1}, {"node_id": "3", "relevance": 0.1}]}'
             return '{"relevance": 0.5}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=sample_tree_structure)
@@ -314,25 +314,25 @@ class TestBestFirstTreeSearch:
             {
                 "title": "Root",
                 "summary": "Root section.",
-                "node_id": "0000",
+                "node_id": "0",
                 "text": "Root text.",
                 "nodes": [
                     {
                         "title": "Level 1",
                         "summary": "Level 1 section.",
-                        "node_id": "0001",
+                        "node_id": "1",
                         "text": "Level 1 text.",
                         "nodes": [
                             {
                                 "title": "Level 2",
                                 "summary": "Level 2 section.",
-                                "node_id": "0002",
+                                "node_id": "2",
                                 "text": "Level 2 text.",
                                 "nodes": [
                                     {
                                         "title": "Level 3",
                                         "summary": "Level 3 leaf.",
-                                        "node_id": "0003",
+                                        "node_id": "3",
                                         "text": "Level 3 text.",
                                     }
                                 ],
@@ -345,7 +345,7 @@ class TestBestFirstTreeSearch:
 
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         doc = Document(doc_id="test", doc_name="Test Doc", structure=deep_structure)
@@ -390,7 +390,7 @@ class TestRouteDocuments:
             doc_description="Machine learning algorithms overview.",
             structure=[{
                 "title": "ML Basics", "summary": "Introduction to machine learning.",
-                "node_id": "0000", "text": "Machine learning is a subset of AI.",
+                "node_id": "0", "text": "Machine learning is a subset of AI.",
             }],
         )
         return [doc_a, doc_b]
@@ -451,7 +451,7 @@ class TestSearch:
             doc_description="Machine learning algorithms overview.",
             structure=[{
                 "title": "ML Basics", "summary": "Introduction to machine learning.",
-                "node_id": "0000", "text": "Machine learning is a subset of AI.",
+                "node_id": "0", "text": "Machine learning is a subset of AI.",
             }],
         )
         return [doc_a, doc_b]
@@ -462,7 +462,7 @@ class TestSearch:
             if "select" in prompt.lower() or "document" in prompt.lower():
                 return '{"selected_doc_ids": ["a"]}'
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.6}, {"node_id": "0003", "relevance": 0.9}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.6}, {"node_id": "3", "relevance": 0.9}]}'
             return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -476,6 +476,7 @@ class TestSearch:
         assert isinstance(result, dict)
         assert result["query"] == "What is the backend?"
         assert "documents" in result
+        assert result["llm_calls"] > 0
 
     @pytest.mark.asyncio
     async def test_single_document_skips_routing(self, sample_tree_structure):
@@ -487,7 +488,7 @@ class TestSearch:
 
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.7}, {"node_id": "0001", "relevance": 0.7}, {"node_id": "0002", "relevance": 0.7}, {"node_id": "0003", "relevance": 0.7}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.7}, {"node_id": "1", "relevance": 0.7}, {"node_id": "2", "relevance": 0.7}, {"node_id": "3", "relevance": 0.7}]}'
             return '{"relevance": 0.7}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -498,6 +499,7 @@ class TestSearch:
             )
 
         assert isinstance(result, dict)
+        assert "llm_calls" in result
 
     @pytest.mark.asyncio
     async def test_search_with_bm25_disabled(self, two_documents):
@@ -505,7 +507,7 @@ class TestSearch:
             if "select" in prompt.lower() or "document" in prompt.lower():
                 return '{"selected_doc_ids": ["a"]}'
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -530,7 +532,7 @@ class TestSearchSync:
 
         async def mock_achat(prompt, **kwargs):
             if "rankings" in prompt.lower() or "rank" in prompt.lower():
-                return '{"rankings": [{"node_id": "0000", "relevance": 0.8}, {"node_id": "0001", "relevance": 0.8}, {"node_id": "0002", "relevance": 0.8}, {"node_id": "0003", "relevance": 0.8}]}'
+                return '{"rankings": [{"node_id": "0", "relevance": 0.8}, {"node_id": "1", "relevance": 0.8}, {"node_id": "2", "relevance": 0.8}, {"node_id": "3", "relevance": 0.8}]}'
             return '{"relevance": 0.8}'
 
         with patch("treesearch.search.achat", side_effect=mock_achat):
@@ -541,3 +543,4 @@ class TestSearchSync:
             )
 
         assert isinstance(result, dict)
+        assert "llm_calls" in result

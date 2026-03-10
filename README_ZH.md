@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#社区与支持)
 
-**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。支持 Markdown、纯文本、代码文件（Python/Java/Go/JS/C++ 等）、HTML、XML、JSON 和 CSV。无需向量嵌入，无需分块。
+**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。支持 Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++ 等）、HTML、XML、JSON、CSV、PDF 和 DOCX。无需向量嵌入，无需分块。
 
 ## 安装
 
@@ -74,7 +74,10 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 
 - **FTS5-only 搜索**（默认） — 零 LLM 调用，毫秒级 FTS5/BM25 关键词匹配，无需 API Key
 - **SQLite FTS5 引擎** — 持久化倒排索引，WAL 模式，增量更新，MD 结构感知列（标题/摘要/正文/代码/前言），列权重加权，CJK 分词
-- **树结构索引** — Markdown、纯文本、代码文件（Python/Java/Go/JS/C++/PHP）、HTML、XML、JSON 和 CSV 均被解析为层级树
+- **树结构索引** — Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++/PHP）、HTML、XML、JSON、CSV、PDF 和 DOCX 均被解析为层级树
+- **解析器注册表** — 可扩展的 `ParserRegistry`，内置解析器自动注册；支持 `ParserRegistry.register()` 注册自定义解析器
+- **Python AST 解析** — `ast` 模块提取类/函数的完整签名（参数、返回值类型）；语法错误时回退正则
+- **PDF/DOCX/HTML 解析器** — 可选解析器，通过 `pageindex`、`python-docx`、`beautifulsoup4` 实现（`pip install pytreesearch[all]`）
 - **GrepFilter 精准匹配** — 支持字面量/正则表达式匹配，精准定位代码符号和关键词
 - **BM25 节点级索引** — 结构感知评分，层级字段加权（标题 > 摘要 > 正文）和祖先传播
 - **Best-First 搜索**（可选） — 优先队列驱动，FTS5 预打分 + LLM 评估，提前停止和预算控制
@@ -83,6 +86,7 @@ TreeSearch 采用完全不同的方法——根据文档的自然标题层级将
 - **批量索引** — `build_index()` 支持 glob 模式并发多文件处理
 - **评估指标** — Precision@K、Recall@K、MRR、NDCG@K、Hit@K、F1@K（位于 `examples/benchmark/metrics.py`）
 - **异步优先** — 所有核心函数均为异步，提供同步适配器
+- **配置驱动默认值** — `search()` 和 `build_index()` 从 `get_config()` 读取默认值，支持按调用覆盖
 - **CLI 命令** — `treesearch index` 和 `treesearch search` 命令
 
 ## FTS5 独立搜索（无需 LLM）
@@ -129,11 +133,11 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 ## 工作原理
 
 ```
-输入文档 (MD/TXT/Code/JSON/CSV/HTML/XML)
+输入文档 (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
         │
         ▼
    ┌──────────┐
-   │  Indexer  │  解析结构 → 构建树 → 生成摘要
+   │  Indexer  │  ParserRegistry 分派 → 解析结构 → 构建树 → 生成摘要
    └────┬─────┘    (build_index 支持 glob 批量处理)
         │  JSON 索引文件
         ▼
@@ -157,6 +161,7 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 |------|------|----------|----------|
 | `fts5_only`（默认） | 纯 FTS5/BM25 评分 | 零 | 快速关键词搜索，无需 API Key |
 | `best_first` | FTS5/BM25 预打分 + 优先队列 + LLM 评估 | 中等（预算控制） | 准确率最高 |
+| `auto` | 根据 `source_type` 按文档选择策略（代码 → GrepFilter + FTS5） | 视情况而定 | 混合文件类型 |
 | FTS5 独立 | `FTS5Index.search()` | 零 | 持久化倒排索引，无需 API Key |
 
 ## 示例
@@ -165,8 +170,8 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 |------|------|
 | [`01_basic_demo.py`](examples/01_basic_demo.py) | 最简演示：构建索引 + 搜索 |
 | [`02_index_and_search.py`](examples/02_index_and_search.py) | Markdown 和纯文本索引 + FTS5 搜索 |
-| [`04_cli_workflow.py`](examples/04_cli_workflow.py) | CLI 工作流：构建索引 + 策略搜索 |
-| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | 多文档搜索 + BM25 + GrepFilter + 策略对比 |
+| [`03_cli_workflow.py`](examples/03_cli_workflow.py) | CLI 工作流：构建索引 + 策略搜索 |
+| [`04_multi_doc_search.py`](examples/04_multi_doc_search.py) | 多文档搜索 + BM25 + GrepFilter + 策略对比 |
 
 ## 项目结构
 
@@ -174,13 +179,19 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 treesearch/
 ├── llm.py            # 异步 LLM 客户端，支持重试和 JSON 提取
 ├── tree.py           # Document 数据类、树操作、持久化
-├── indexer.py        # MD / 文本 / 代码 / JSON / CSV / HTML / XML → 树结构，批量 build_index()
+├── indexer.py        # MD / 文本 / 代码 / JSON / CSV → 树结构，批量 build_index()
 ├── search.py         # Best-First、GrepFilter，文档路由，统一 search() API
 ├── treesearch.py     # TreeSearch 统一引擎类（索引 + 搜索）
 ├── fts.py            # SQLite FTS5 全文检索引擎（持久化倒排索引）
 ├── rank_bm25.py      # BM25Okapi、NodeBM25Index、中英文分词器
-├── config.py         # 统一配置管理（env > YAML > 默认值）
-└── cli.py            # CLI 入口（index / search）
+├── config.py         # 统一配置管理（env > 默认值）
+├── cli.py            # CLI 入口（index / search）
+└── parsers/          # 可扩展解析器注册表
+    ├── registry.py   # ParserRegistry、SOURCE_TYPE_MAP、STRATEGY_ROUTING
+    ├── ast_parser.py # Python AST 结构提取（类、函数、签名）
+    ├── pdf_parser.py # PDF 解析器（可选：pageindex）
+    ├── docx_parser.py# DOCX 解析器（可选：python-docx）
+    └── html_parser.py# HTML 解析器（可选：beautifulsoup4）
 ```
 
 ## 文档

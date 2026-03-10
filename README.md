@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#Community)
 
-**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 + BM25 + LLM reasoning over document tree structures. Supports Markdown, plain text, code files (Python/Java/Go/JS/C++ etc.), HTML, XML, JSON, and CSV.
+**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 + BM25 + LLM reasoning over document tree structures. Supports Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++ etc.), HTML, XML, JSON, CSV, PDF, and DOCX.
 
 ## Installation
 
@@ -74,7 +74,10 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 
 - **FTS5-only search** (default) — Zero LLM calls, millisecond-level FTS5/BM25 keyword matching, no API key needed
 - **SQLite FTS5 engine** — Persistent inverted index, WAL mode, incremental updates, MD structure-aware columns (title/summary/body/code/front_matter), column weighting, CJK tokenization
-- **Tree-structured indexing** — Markdown, plain text, code files (Python/Java/Go/JS/C++/PHP), HTML, XML, JSON, and CSV are parsed into hierarchical trees
+- **Tree-structured indexing** — Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++/PHP), HTML, XML, JSON, CSV, PDF, and DOCX are parsed into hierarchical trees
+- **Parser registry** — Extensible `ParserRegistry` with built-in parsers auto-registered; custom parsers via `ParserRegistry.register()`
+- **Python AST parsing** — `ast` module extracts classes/functions with full signatures (parameters, return types); regex fallback for syntax errors
+- **PDF/DOCX/HTML parsers** — Optional parsers via `pageindex`, `python-docx`, `beautifulsoup4` (install with `pip install pytreesearch[all]`)
 - **GrepFilter** — Exact literal/regex matching for precise symbol and keyword search across tree nodes
 - **BM25 node-level index** — Structure-aware scoring with hierarchical field weighting (title > summary > body) and ancestor propagation
 - **Best-First search** (optional) — Priority queue driven, FTS5 pre-scoring + LLM evaluation, early stopping and budget control
@@ -83,6 +86,7 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 - **Batch indexing** — `build_index()` supports glob patterns for concurrent multi-file processing
 - **Evaluation metrics** — Precision@K, Recall@K, MRR, NDCG@K, Hit@K, F1@K (in `examples/benchmark/metrics.py`)
 - **Async-first** — All core functions are async with sync wrappers available
+- **Config-driven defaults** — `search()` and `build_index()` read defaults from `get_config()`, overridable per-call
 - **CLI included** — `treesearch index` and `treesearch search` commands
 
 ## FTS5 Standalone (No LLM Needed)
@@ -129,11 +133,11 @@ treesearch search --index_dir ./indexes/ --query "auth" --max-llm-calls 10
 ## How It Works
 
 ```
-Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML)
+Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
         │
         ▼
    ┌──────────┐
-   │  Indexer  │  Parse structure → build tree → generate summaries
+   │  Indexer  │  ParserRegistry dispatch → parse structure → build tree → generate summaries
    └────┬─────┘    (build_index supports glob for batch processing)
         │  JSON index files
         ▼
@@ -157,6 +161,7 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML)
 |----------|-------------|-----------|----------|
 | `fts5_only` (default) | Pure FTS5/BM25 scoring | Zero | Fast keyword search, no API key needed |
 | `best_first` | FTS5/BM25 pre-scoring + priority queue + LLM evaluation | Moderate (budget-controlled) | Best accuracy |
+| `auto` | Per-document strategy based on `source_type` (code → GrepFilter + FTS5) | Varies | Mixed file types |
 | FTS5 standalone | `FTS5Index.search()` | Zero | Persistent inverted index, no API key |
 
 ## Examples
@@ -165,8 +170,8 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML)
 |---------|-------------|
 | [`01_basic_demo.py`](examples/01_basic_demo.py) | Simplest demo: build index + search |
 | [`02_index_and_search.py`](examples/02_index_and_search.py) | Markdown & plain text indexing + FTS5 search |
-| [`04_cli_workflow.py`](examples/04_cli_workflow.py) | CLI workflow: build indexes + search with strategies |
-| [`05_multi_doc_search.py`](examples/05_multi_doc_search.py) | Multi-doc search + BM25 + GrepFilter + strategy comparison |
+| [`03_cli_workflow.py`](examples/03_cli_workflow.py) | CLI workflow: build indexes + search with strategies |
+| [`04_multi_doc_search.py`](examples/04_multi_doc_search.py) | Multi-doc search + BM25 + GrepFilter + strategy comparison |
 
 ## Project Structure
 
@@ -174,13 +179,19 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML)
 treesearch/
 ├── llm.py            # Async LLM client with retry and JSON extraction
 ├── tree.py           # Document dataclass, tree operations, persistence
-├── indexer.py        # MD / text / code / JSON / CSV / HTML / XML → tree structure, batch build_index()
+├── indexer.py        # MD / text / code / JSON / CSV → tree structure, batch build_index()
 ├── search.py         # Best-First, GrepFilter, document routing, unified search() API
 ├── treesearch.py     # TreeSearch unified engine class (index + search)
 ├── fts.py            # SQLite FTS5 full-text search engine (persistent inverted index)
 ├── rank_bm25.py      # BM25Okapi, NodeBM25Index, Chinese/English tokenizer
-├── config.py         # Unified configuration management (env > YAML > defaults)
-└── cli.py            # CLI entry point (index / search)
+├── config.py         # Unified configuration management (env > defaults)
+├── cli.py            # CLI entry point (index / search)
+└── parsers/          # Extensible parser registry
+    ├── registry.py   # ParserRegistry, SOURCE_TYPE_MAP, STRATEGY_ROUTING
+    ├── ast_parser.py # Python AST structure extraction (classes, functions, signatures)
+    ├── pdf_parser.py # PDF parser (optional: pageindex)
+    ├── docx_parser.py# DOCX parser (optional: python-docx)
+    └── html_parser.py# HTML parser (optional: beautifulsoup4)
 ```
 
 ## Documentation

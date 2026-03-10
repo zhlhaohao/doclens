@@ -9,18 +9,18 @@ Quick Start::
 
     from treesearch import TreeSearch
 
-    # Lazy indexing — auto-builds index on first search
+    # Lazy indexing -- auto-builds index on first search
     ts = TreeSearch("docs/*.md", "src/*.py", model="gpt-4o")
     results = ts.search("How to configure voice calls?")
 """
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
-# ── Primary API: TreeSearch is the only class most users need ──
+# -- Primary API: TreeSearch is the only class most users need --
 from treesearch.treesearch import TreeSearch
 
-# ── Advanced / Power-user API (importable but not front-and-center) ──
+# -- Advanced / Power-user API --
 # Index & Document
-from treesearch.tree import Document, load_index, load_documents, save_index, clear_doc_cache
+from treesearch.tree import Document, load_index, load_documents, save_index
 from treesearch.indexer import build_index, md_to_tree, text_to_tree, code_to_tree, json_to_tree, csv_to_tree
 
 # Search
@@ -28,7 +28,7 @@ from treesearch.search import search, search_sync
 from treesearch.search import BestFirstTreeSearch, route_documents, PreFilter, GrepFilter
 
 # Configuration
-from treesearch.config import TreeSearchConfig, BestFirstConfig, SearchConfig, FTSConfig, IndexConfig, get_config, set_config, reset_config
+from treesearch.config import TreeSearchConfig, get_config, set_config, reset_config
 
 # FTS5
 from treesearch.fts import FTS5Index, get_fts_index, set_fts_index, reset_fts_index
@@ -49,22 +49,25 @@ from treesearch.tree import (
     print_tree_json,
 )
 
+# Parser registry
+from treesearch.parsers import ParserRegistry, get_parser
+
 # LLM utilities
 from treesearch.llm import achat, chat, count_tokens, extract_json
 
 __all__ = [
-    # ── Primary API ──
+    # Primary API
     "TreeSearch",
-    # ── Advanced API ──
+    # Advanced API
     "build_index", "md_to_tree", "text_to_tree", "code_to_tree", "json_to_tree", "csv_to_tree",
-    "Document", "load_index", "load_documents", "save_index", "clear_doc_cache",
+    "Document", "load_index", "load_documents", "save_index",
     "search", "search_sync",
     "BestFirstTreeSearch", "route_documents", "PreFilter", "GrepFilter",
-    "TreeSearchConfig", "BestFirstConfig", "SearchConfig", "FTSConfig", "IndexConfig",
-    "get_config", "set_config", "reset_config",
+    "TreeSearchConfig", "get_config", "set_config", "reset_config",
     "FTS5Index", "get_fts_index", "set_fts_index", "reset_fts_index",
     "NodeBM25Index", "NodeTFIDFIndex", "BM25Okapi", "tokenize",
     "INDEX_VERSION", "assign_node_ids", "flatten_tree", "find_node",
     "get_leaf_nodes", "remove_fields", "format_structure", "print_toc", "print_tree_json",
+    "ParserRegistry", "get_parser",
     "achat", "chat", "count_tokens", "extract_json",
 ]

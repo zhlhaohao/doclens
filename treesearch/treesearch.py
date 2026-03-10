@@ -55,15 +55,15 @@ class TreeSearch:
             *paths: File paths or glob patterns to index lazily on first search.
             index_dir: Default directory to save/load indexes.
             model: LLM model name (for 'best_first' strategy).
-            strategy: Default search strategy. Options: 'fts5_only', 'best_first'.
+            strategy: Default search strategy. Options: 'fts5_only', 'best_first', 'auto'.
             **kwargs: Additional default arguments for search().
         """
         self._pending_paths: List[str] = list(paths)
         self.index_dir = index_dir
-        self.model = model
         self.strategy = strategy
         self.documents: List[Document] = []
         self.config = get_config()
+        self.model = model or self.config.model
         self.kwargs = kwargs
 
     # ------------------------------------------------------------------
@@ -115,7 +115,32 @@ class TreeSearch:
     # ------------------------------------------------------------------
 
     async def asearch(self, query: str, **kwargs) -> dict:
-        """Async: Search across indexed documents. Auto-builds index if pending paths exist."""
+        """Async: Search across indexed documents. Auto-builds index if pending paths exist.
+        Search across one or more documents using tree-structured retrieval.
+
+        All parameters default to ``get_config()`` values when not explicitly set.
+
+        Args:
+            query: user query
+            documents: list of Document objects (single or multiple)
+            model: LLM model name
+            top_k_docs: max documents to search (routing stage)
+            max_nodes_per_doc: max result nodes per document
+            strategy: 'fts5_only' (default) | 'best_first' | 'auto'
+                    'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
+                    'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
+                    'auto' selects per-document strategy based on source_type (all default to fts5_only)
+            value_threshold: minimum relevance score
+            max_llm_calls: max LLM calls per document (only for best_first)
+            use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
+            pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
+            text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
+            include_ancestors: attach ancestor titles for context anchoring
+            merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
+            
+        Returns:
+            dict with 'documents', 'query', and 'llm_calls'.
+        """
         if not self.documents and self._pending_paths:
             await self.aindex(*self._pending_paths)
             self._pending_paths.clear()
@@ -139,9 +164,30 @@ class TreeSearch:
 
     def search(self, query: str, **kwargs) -> dict:
         """Sync: Search across indexed documents.
+        Search across one or more documents using tree-structured retrieval.
+
+        All parameters default to ``get_config()`` values when not explicitly set.
+
+        Args:
+            query: user query
+            documents: list of Document objects (single or multiple)
+            model: LLM model name
+            top_k_docs: max documents to search (routing stage)
+            max_nodes_per_doc: max result nodes per document
+            strategy: 'fts5_only' (default) | 'best_first' | 'auto'
+                    'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
+                    'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
+                    'auto' selects per-document strategy based on source_type (all default to fts5_only)
+            value_threshold: minimum relevance score
+            max_llm_calls: max LLM calls per document (only for best_first)
+            use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
+            pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
+            text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
+            include_ancestors: attach ancestor titles for context anchoring
+            merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
 
         Returns:
-            dict with 'documents' and 'query'.
+            dict with 'documents', 'query', and 'llm_calls'.
         """
         try:
             loop = asyncio.get_running_loop()

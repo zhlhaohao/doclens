@@ -107,18 +107,18 @@ def sample_tree_structure():
         {
             "title": "Architecture",
             "summary": "System architecture overview.",
-            "node_id": "0000",
+            "node_id": "0",
             "nodes": [
                 {
                     "title": "Backend",
                     "summary": "Python FastAPI backend.",
-                    "node_id": "0001",
+                    "node_id": "1",
                     "text": "The backend is built with Python and FastAPI. It handles REST API requests.",
                 },
                 {
                     "title": "Frontend",
                     "summary": "React TypeScript frontend.",
-                    "node_id": "0002",
+                    "node_id": "2",
                     "text": "The frontend uses React with TypeScript for type safety.",
                 },
             ],
@@ -126,7 +126,7 @@ def sample_tree_structure():
         {
             "title": "Deployment",
             "summary": "Kubernetes deployment.",
-            "node_id": "0003",
+            "node_id": "3",
             "text": "The app is deployed on Kubernetes using Helm charts and ArgoCD.",
         },
     ]
