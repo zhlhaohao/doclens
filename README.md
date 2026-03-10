@@ -286,6 +286,8 @@ result = search("How to request GPU machines", docs, strategy="fts5_only")
 
 ## Benchmark
 
+### Document Retrieval (QASPER)
+
 Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (50 QA samples, 18 academic papers):
 
 | Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
@@ -302,11 +304,35 @@ Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (5
 - ✅ **TreeSearch 2300x faster queries** — Milliseconds vs seconds
 - ✅ **TreeSearch 370x faster indexing** — No embedding API calls needed
 
+### Code Retrieval (CodeSearchNet)
+
+Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) dataset (50 queries, 500 Python functions):
+
+| Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+|--------|-----------------------------------|-----------------|
+| **MRR** | 0.9567 | 0.8469 |
+| **Hit@1** | 0.9200 | 0.8000 |
+| **Recall@5** | 1.0000 | 0.9200 |
+| **Index Time** | 18.3s | **3.6s** |
+| **Query Time** | 1596ms | **0.6ms** |
+
+**Key Findings**:
+- ✅ **Embedding MRR +13%** — Better code semantic understanding
+- ✅ **TreeSearch MRR 84.7%** — Strong performance for keyword-based code search
+- ✅ **TreeSearch 2500x faster queries** — Milliseconds vs seconds
+- ✅ **TreeSearch 5x faster indexing** — No embedding API calls needed
+
+### Summary
+
 > TreeSearch is not meant to replace embedding-based retrieval, but to provide a **zero-cost, ultra-fast** alternative. For scenarios prioritizing speed and recall over precision, TreeSearch is the better choice.
 
-Run the benchmark yourself:
+Run the benchmarks yourself:
 ```bash
-python examples/benchmark/embedding_benchmark.py --max-samples 50 --max-papers 20
+# Document retrieval (QASPER)
+python examples/benchmark/qasper_benchmark.py --max-samples 50 --max-papers 20 --with-embedding
+
+# Code retrieval (CodeSearchNet)
+python examples/benchmark/codesearchnet_benchmark.py --max-samples 50 --max-corpus 500 --with-embedding
 ```
 
 ## Documentation

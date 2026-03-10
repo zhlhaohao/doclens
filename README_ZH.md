@@ -18,6 +18,8 @@
 
 **TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。支持 Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++ 等）、HTML、XML、JSON、CSV、PDF 和 DOCX。无需向量嵌入，无需分块。
 
+毫秒检索万级文档和大型代码库，并保留文档结构。
+
 ## 安装
 
 ```bash
@@ -294,6 +296,8 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 
 ## Benchmark 评测
 
+### 文档检索（QASPER）
+
 基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（50 个 QA 样本，18 篇学术论文）：
 
 | 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
@@ -310,11 +314,35 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 - ✅ **TreeSearch 查询速度快 2300x** — 毫秒级 vs 秒级
 - ✅ **TreeSearch 索引速度快 370x** — 无需 Embedding API 调用
 
+### 代码检索（CodeSearchNet）
+
+基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个查询，500 个 Python 函数）：
+
+| 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+|------|-----------------------------------|-----------------|
+| **MRR** | 0.9567 | 0.8469 |
+| **Hit@1** | 0.9200 | 0.8000 |
+| **Recall@5** | 1.0000 | 0.9200 |
+| **索引时间** | 18.3s | **3.6s** |
+| **查询时间** | 1596ms | **0.6ms** |
+
+**核心结论**：
+- ✅ **Embedding MRR 高 13%** — 代码语义理解更强
+- ✅ **TreeSearch MRR 达到 84.7%** — 关键词代码搜索表现出色
+- ✅ **TreeSearch 查询速度快 2500x** — 毫秒级 vs 秒级
+- ✅ **TreeSearch 索引速度快 5x** — 无需 Embedding API 调用
+
+### 总结
+
 > TreeSearch 不是要替代 Embedding 检索，而是提供一个**零成本、极速**的选择。对于优先考虑速度和召回率的场景，TreeSearch 是更好的选择。
 
 自行运行评测：
 ```bash
-python examples/benchmark/embedding_benchmark.py --max-samples 50 --max-papers 20
+# 文档检索（QASPER）
+python examples/benchmark/qasper_benchmark.py --max-samples 50 --max-papers 20 --with-embedding
+
+# 代码检索（CodeSearchNet）
+python examples/benchmark/codesearchnet_benchmark.py --max-samples 50 --max-corpus 500 --with-embedding
 ```
 
 ## 文档
