@@ -32,7 +32,7 @@ from treesearch import TreeSearch
 # Lazy indexing — auto-builds index on first search
 ts = TreeSearch("docs/*.md", "src/*.py", model="gpt-4o")
 results = ts.search("How does auth work?")
-for doc in results.documents:
+for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"[{node['score']:.2f}] {node['title']}")
 ```
@@ -281,6 +281,31 @@ result = search("How to request GPU machines", docs, strategy="fts5_only")
 | **Traditional RAG** | Good semantic understanding | Chunking destroys context, slow response | Plain text QA |
 | **Vector DB** | Similarity search | Requires embedding preprocessing, high cost | Large-scale semantic retrieval |
 | **TreeSearch** | Preserves structure + Fast + Zero cost | Requires structured documents | Tech docs/Codebase |
+
+## Benchmark
+
+Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (50 QA samples, 18 academic papers):
+
+| Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+|--------|-----------------------------------|-----------------|
+| **MRR** | 0.5403 | 0.4422 |
+| **Precision@1** | 0.3830 | 0.1915 |
+| **Recall@5** | 0.5139 | **0.6011** |
+| **Index Time** | 74.1s | **0.2s** |
+| **Query Time** | 720ms | **0.3ms** |
+
+**Key Findings**:
+- ✅ **Embedding MRR +22%** — Better semantic understanding
+- ✅ **TreeSearch Recall@5 +17%** — Structure preservation helps recall more relevant content
+- ✅ **TreeSearch 2300x faster queries** — Milliseconds vs seconds
+- ✅ **TreeSearch 370x faster indexing** — No embedding API calls needed
+
+> TreeSearch is not meant to replace embedding-based retrieval, but to provide a **zero-cost, ultra-fast** alternative. For scenarios prioritizing speed and recall over precision, TreeSearch is the better choice.
+
+Run the benchmark yourself:
+```bash
+python examples/benchmark/embedding_benchmark.py --max-samples 50 --max-papers 20
+```
 
 ## Documentation
 

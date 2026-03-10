@@ -32,7 +32,7 @@ from treesearch import TreeSearch
 # 懒加载索引 —— 首次搜索时自动构建索引
 ts = TreeSearch("docs/*.md", "src/*.py", model="gpt-4o")
 results = ts.search("认证系统如何工作？")
-for doc in results.documents:
+for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"[{node['score']:.2f}] {node['title']}")
 ```
@@ -291,6 +291,31 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 | **传统 RAG** | 语义理解好 | 切片破坏上下文，响应慢 | 纯文本 QA |
 | **向量数据库** | 相似度搜索 | 需要 Embedding 预处理，成本高 | 大规模语义检索 |
 | **TreeSearch** | 保留结构 + 快速 + 零成本 | 需要结构化文档 | 技术文档/代码库 |
+
+## Benchmark 评测
+
+基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（50 个 QA 样本，18 篇学术论文）：
+
+| 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+|------|-----------------------------------|-----------------|
+| **MRR** | 0.5403 | 0.4422 |
+| **Precision@1** | 0.3830 | 0.1915 |
+| **Recall@5** | 0.5139 | **0.6011** |
+| **索引时间** | 74.1s | **0.2s** |
+| **查询时间** | 720ms | **0.3ms** |
+
+**核心结论**：
+- ✅ **Embedding MRR 高 22%** — 语义理解更强
+- ✅ **TreeSearch Recall@5 高 17%** — 结构保留有助于召回更多相关内容
+- ✅ **TreeSearch 查询速度快 2300x** — 毫秒级 vs 秒级
+- ✅ **TreeSearch 索引速度快 370x** — 无需 Embedding API 调用
+
+> TreeSearch 不是要替代 Embedding 检索，而是提供一个**零成本、极速**的选择。对于优先考虑速度和召回率的场景，TreeSearch 是更好的选择。
+
+自行运行评测：
+```bash
+python examples/benchmark/embedding_benchmark.py --max-samples 50 --max-papers 20
+```
 
 ## 文档
 
