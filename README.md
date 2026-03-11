@@ -253,9 +253,9 @@ result = await search("How to request GPU machines", docs)
 
 ### Document Retrieval (QASPER)
 
-Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (47 QA samples, 18 academic papers):
+Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (50 queries, 18 academic papers):
 
-| Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+| Metric | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
 | **MRR** | 0.4235 | 0.3863 |
 | **Precision@1** | 0.2553 | 0.1915 |

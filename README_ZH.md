@@ -265,9 +265,9 @@ result = await search("如何申请 GPU 机器", docs)
 
 ### 文档检索（QASPER）
 
-基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（47 个 QA 样本，18 篇学术论文）：
+基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（50 个 query，18 篇学术论文）：
 
-| 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+| 指标 | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
 | **MRR** | 0.4235 | 0.3863 |
 | **Precision@1** | 0.2553 | 0.1915 |
@@ -285,7 +285,7 @@ result = await search("如何申请 GPU 机器", docs)
 
 ### 代码检索（CodeSearchNet）
 
-基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个查询，500 个 Python corpus）：
+基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个 query，500 个 Python corpus）：
 
 | 指标 | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
