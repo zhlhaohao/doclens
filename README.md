@@ -37,6 +37,7 @@ results = ts.search("How does auth work?")
 for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"[{node['score']:.2f}] {node['title']}")
+        print(f"  {node['text'][:200]}")
 ```
 
 ## Why TreeSearch?

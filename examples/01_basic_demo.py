@@ -41,13 +41,12 @@ print("=" * 60)
 
 results = ts.search(query)
 for doc in results["documents"]:
-    print(f"\n  {doc['doc_name']}")
+    print(f"\n📄 {doc['doc_name']}")
     for node in doc["nodes"]:
-        text = node.get("text", "").strip().replace("\n", " ")
-        preview = text[:200] + "..." if len(text) > 200 else text
         print(f"  [{node['score']:.2f}] {node['title']}")
-        if preview:
-            print(f"         {preview}")
+        print(f"         line: {node['line_start']}-{node['line_end']}")
+        print(f"         text: {node['text'][:200]}...")
+        print()
 
 # 4. Query indexed files from the database (after indexing)
 print(f"\n{'=' * 60}")
