@@ -28,7 +28,13 @@ _async_clients: dict = {}
 
 def _get_async_client(api_key: Optional[str] = None):
     """Return a singleton AsyncOpenAI client keyed by (api_key, base_url)."""
-    import openai
+    try:
+        import openai
+    except ImportError:
+        raise ImportError(
+            "The 'openai' package is required for LLM features. "
+            "Install it via: pip install 'pytreesearch[llm]'"
+        )
     cfg = get_config()
     key = api_key or cfg.api_key or ""
     base_url = cfg.base_url
@@ -50,20 +56,24 @@ _encoder_cache: dict = {}
 def count_tokens(text: str, model: Optional[str] = None) -> int:
     """Count tokens using tiktoken with cached encoder.
 
-    Falls back to cl100k_base encoding when the model name is not recognised
-    by tiktoken (e.g. custom endpoint IDs like ``ep-xxxxx``).
+    Falls back to a character-length heuristic (~3 chars/token) when tiktoken
+    is not installed or the model name is not recognised.
     """
     if not text:
         return 0
-    import tiktoken
-    if model is None:
-        model = get_config().model
-    if model not in _encoder_cache:
-        try:
-            _encoder_cache[model] = tiktoken.encoding_for_model(model)
-        except KeyError:
-            _encoder_cache[model] = tiktoken.get_encoding("cl100k_base")
-    return len(_encoder_cache[model].encode(text))
+    try:
+        import tiktoken
+        if model is None:
+            model = get_config().model
+        if model not in _encoder_cache:
+            try:
+                _encoder_cache[model] = tiktoken.encoding_for_model(model)
+            except KeyError:
+                _encoder_cache[model] = tiktoken.get_encoding("cl100k_base")
+        return len(_encoder_cache[model].encode(text))
+    except ImportError:
+        # tiktoken not installed; heuristic: ~3 chars per token (English/CJK mix)
+        return len(text) // 3
 
 
 # ---------------------------------------------------------------------------

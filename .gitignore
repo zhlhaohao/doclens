@@ -218,3 +218,5 @@ examples/benchmark/indexes/
 examples/indexes/
 docs/internal/*
 examples/a.py
+examples/benchmark/codesearchnet_benchmark.py
+examples/benchmark/qasper_benchmark.py

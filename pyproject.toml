@@ -26,18 +26,16 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Indexing",
 ]
-dependencies = [
-    "openai>=1.0",
-    "tiktoken>=0.5",
-]
+dependencies = []
 
 [project.optional-dependencies]
+llm = ["openai>=1.0", "tiktoken>=0.5"]
 jieba = ["jieba>=0.42"]
 pdf = ["pageindex>=0.1"]
 docx = ["python-docx>=0.8"]
 html = ["beautifulsoup4>=4.12"]
 fts5 = ["pysqlite3-binary>=0.5"]
-all = ["jieba>=0.42", "pageindex>=0.1", "python-docx>=0.8", "beautifulsoup4>=4.12", "python-dotenv>=1.0", "pysqlite3-binary>=0.5"]
+all = ["openai>=1.0", "tiktoken>=0.5", "jieba>=0.42", "pageindex>=0.1", "python-docx>=0.8", "beautifulsoup4>=4.12", "python-dotenv>=1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",

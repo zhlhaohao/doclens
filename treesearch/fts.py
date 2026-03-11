@@ -31,6 +31,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Ensure we have the best available sqlite3 (pysqlite3 may have replaced it)
+# This handles the case where fts.py is imported before __init__.py's pysqlite3 swap
+try:
+    _test_conn = sqlite3.connect(":memory:")
+    _test_conn.execute("CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)")
+    _test_conn.execute("DROP TABLE _fts5_probe")
+    _test_conn.close()
+except Exception:
+    try:
+        import pysqlite3.dbapi2 as sqlite3  # type: ignore[no-redef]
+    except ImportError:
+        pass  # will fall back to LIKE search later
+
 # FTS5 column weights: title > body > summary > code
 # Used in bm25() ranking function
 _DEFAULT_WEIGHTS = {
