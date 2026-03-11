@@ -40,7 +40,9 @@ try:
     _test_conn.close()
 except Exception:
     try:
-        import pysqlite3.dbapi2 as sqlite3  # type: ignore[no-redef]
+        import pysqlite3.dbapi2 as _pysqlite3
+        sqlite3 = _pysqlite3  # replace module-level sqlite3
+        logger.info("Using pysqlite3 (SQLite %s) for FTS5 support", sqlite3.sqlite_version)
     except ImportError:
         pass  # will fall back to LIKE search later
 
