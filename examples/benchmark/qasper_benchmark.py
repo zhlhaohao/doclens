@@ -78,7 +78,7 @@ from metrics import (
 logger = logging.getLogger(__name__)
 
 # Environment variable for Zhipu API key
-_ENV_ZHIPU_API_KEY = "TREESEARCH_EMBEDDING_API_KEY"
+_ENV_ZHIPU_API_KEY = "ZHIPU_API_KEY"
 
 
 # ---------------------------------------------------------------------------

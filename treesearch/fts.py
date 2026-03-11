@@ -482,11 +482,11 @@ class FTS5Index:
             if not tokens.strip():
                 return []
             words = tokens.split()
-            # Strip FTS5 special characters from each token
+            # Strip FTS5 special characters and filter out reserved words
             clean_words = []
             for w in words:
                 cleaned = _RE_FTS5_SPECIAL.sub("", w).strip()
-                if cleaned:
+                if cleaned and cleaned.upper() not in _FTS5_OPERATORS:
                     clean_words.append(cleaned)
             if not clean_words:
                 return []

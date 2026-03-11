@@ -253,43 +253,46 @@ result = await search("How to request GPU machines", docs)
 
 ### Document Retrieval (QASPER)
 
-Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (50 QA samples, 18 academic papers):
+Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (47 QA samples, 18 academic papers):
 
 | Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
-| **MRR** | 0.5403 | 0.4596 |
-| **Precision@1** | 0.3830 | 0.1915 |
-| **Recall@5** | 0.5139 | **0.6613** |
-| **Index Time** | 118.7s | **0.0s** |
-| **Query Time** | 573ms | **0.7ms** |
+| **MRR** | 0.4235 | 0.3863 |
+| **Precision@1** | 0.2553 | 0.1915 |
+| **Recall@5** | 0.4259 | **0.5514** |
+| **NDCG@3** | 0.3053 | 0.2836 |
+| **F1@3** | 0.2196 | 0.2207 |
+| **Index Time** | 22.8s | **0.1s** |
+| **Avg Query Time** | 199.7ms | **0.9ms** |
 
 **Key Findings**:
-- Embedding MRR +18% — Better semantic understanding
+- Embedding MRR +9.6% — Better semantic understanding for natural language queries
 - TreeSearch Recall@5 +29% — Structure preservation helps recall more relevant content
-- TreeSearch 780x faster queries — Milliseconds vs seconds
-- TreeSearch instant indexing — No embedding API calls needed
+- TreeSearch **217x faster** queries — Sub-millisecond vs hundreds of milliseconds
+- TreeSearch **228x faster** indexing — No embedding API calls needed
 
 ### Code Retrieval (CodeSearchNet)
 
 Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) dataset (50 queries, 500 Python corpus):
 
-| Metric | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+| Metric | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
-| **MRR** | 0.9567 | 0.8469 |
-| **Hit@1** | 0.9200 | 0.8000 |
-| **Recall@5** | 1.0000 | 0.9200 |
-| **Index Time** | 73.7s | **3.3s** |
-| **Query Time** | 620ms | **0.8ms** |
+| **MRR** | 0.8483 | 0.8433 |
+| **Precision@1** | 0.7800 | **0.8000** |
+| **Recall@5** | **0.9400** | 0.9000 |
+| **Hit@1** | 0.7800 | **0.8000** |
+| **Index Time** | 33.8s | **3.5s** |
+| **Avg Query Time** | 179.0ms | **2.4ms** |
 
 **Key Findings**:
-- Embedding MRR +13% — Better code semantic understanding
-- TreeSearch MRR 84.7% — Strong performance for keyword-based code search
-- TreeSearch 800x faster queries — Milliseconds vs seconds
-- TreeSearch 22x faster indexing — No embedding API calls needed
+- TreeSearch MRR nearly matches Embedding (0.84 vs 0.85) — BM25 excels on code with high lexical overlap
+- TreeSearch **Precision@1 wins** (0.80 vs 0.78) — Exact keyword matching is strong for code search
+- TreeSearch **74x faster** queries — Milliseconds vs hundreds of milliseconds
+- TreeSearch **10x faster** indexing — No embedding API calls needed
 
 ### Summary
 
-> TreeSearch is not meant to replace embedding-based retrieval, but to provide a **zero-cost, ultra-fast** alternative. For scenarios prioritizing speed and recall over precision, TreeSearch is the better choice.
+> TreeSearch is not meant to replace embedding-based retrieval, but to provide a **zero-cost, ultra-fast** alternative. For code search where queries and code share vocabulary, TreeSearch performs on par with embeddings. For natural language queries over documents, embeddings have a modest edge in precision while TreeSearch excels in recall.
 
 Run the benchmarks yourself:
 ```bash

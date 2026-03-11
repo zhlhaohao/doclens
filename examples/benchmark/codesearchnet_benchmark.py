@@ -502,11 +502,11 @@ async def main():
 
     # Embedding evaluation (optional)
     if args.with_embedding:
-        api_key = os.environ.get("TREESEARCH_EMBEDDING_API_KEY", "")
+        api_key = os.environ.get("ZHIPU_API_KEY", "")
 
         if not api_key:
-            print("\nTREESEARCH_EMBEDDING_API_KEY not set, skipping embedding evaluation")
-            print("  Set it in .env or: export TREESEARCH_EMBEDDING_API_KEY=your_api_key")
+            print("\ZHIPU_API_KEY not set, skipping embedding evaluation")
+            print("  Set it in .env or: export ZHIPU_API_KEY=your_api_key")
         else:
             print(f"\n{'='*60}")
             print("Strategy: EMBEDDING (Zhipu embedding-3)")

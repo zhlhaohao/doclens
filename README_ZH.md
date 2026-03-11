@@ -265,43 +265,46 @@ result = await search("如何申请 GPU 机器", docs)
 
 ### 文档检索（QASPER）
 
-基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（50 个 QA 样本，18 篇学术论文）：
+基于 [QASPER](https://huggingface.co/datasets/allenai/qasper) 数据集评测（47 个 QA 样本，18 篇学术论文）：
 
 | 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
-| **MRR** | 0.5403 | 0.4596 |
-| **Precision@1** | 0.3830 | 0.1915 |
-| **Recall@5** | 0.5139 | **0.6613** |
-| **索引时间** | 118.7s | **0.0s** |
-| **查询时间** | 573ms | **0.7ms** |
+| **MRR** | 0.4235 | 0.3863 |
+| **Precision@1** | 0.2553 | 0.1915 |
+| **Recall@5** | 0.4259 | **0.5514** |
+| **NDCG@3** | 0.3053 | 0.2836 |
+| **F1@3** | 0.2196 | 0.2207 |
+| **索引时间** | 22.8s | **0.1s** |
+| **平均查询时间** | 199.7ms | **0.9ms** |
 
 **核心结论**：
-- Embedding MRR 高 18% — 语义理解更强
+- Embedding MRR 高 9.6% — 自然语言查询的语义理解更强
 - TreeSearch Recall@5 高 29% — 结构保留有助于召回更多相关内容
-- TreeSearch 查询速度快 780x — 毫秒级 vs 秒级
-- TreeSearch 索引瞬间完成 — 无需 Embedding API 调用
+- TreeSearch 查询速度快 **217x** — 亚毫秒级 vs 百毫秒级
+- TreeSearch 索引速度快 **228x** — 无需 Embedding API 调用
 
 ### 代码检索（CodeSearchNet）
 
 基于 [CodeSearchNet](https://huggingface.co/datasets/code_search_net) 数据集评测（50 个查询，500 个 Python corpus）：
 
-| 指标 | Embedding (text-embedding-3-small) | TreeSearch FTS5 |
+| 指标 | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |------|-----------------------------------|-----------------|
-| **MRR** | 0.9567 | 0.8469 |
-| **Hit@1** | 0.9200 | 0.8000 |
-| **Recall@5** | 1.0000 | 0.9200 |
-| **索引时间** | 73.7s | **3.3s** |
-| **查询时间** | 620ms | **0.8ms** |
+| **MRR** | 0.8483 | 0.8433 |
+| **Precision@1** | 0.7800 | **0.8000** |
+| **Recall@5** | **0.9400** | 0.9000 |
+| **Hit@1** | 0.7800 | **0.8000** |
+| **索引时间** | 33.8s | **3.5s** |
+| **平均查询时间** | 179.0ms | **2.4ms** |
 
 **核心结论**：
-- Embedding MRR 高 13% — 代码语义理解更强
-- TreeSearch MRR 达到 84.7% — 关键词代码搜索表现出色
-- TreeSearch 查询速度快 800x — 毫秒级 vs 秒级
-- TreeSearch 索引速度快 22x — 无需 Embedding API 调用
+- TreeSearch MRR 几乎持平 Embedding（0.84 vs 0.85）— BM25 在代码搜索中词汇重叠度高，表现出色
+- TreeSearch **Precision@1 胜出**（0.80 vs 0.78）— 精确关键词匹配在代码搜索中更强
+- TreeSearch 查询速度快 **74x** — 毫秒级 vs 百毫秒级
+- TreeSearch 索引速度快 **10x** — 无需 Embedding API 调用
 
 ### 总结
 
-> TreeSearch 不是要替代 Embedding 检索，而是提供一个**零成本、极速**的选择。对于优先考虑速度和召回率的场景，TreeSearch 是更好的选择。
+> TreeSearch 不是要替代 Embedding 检索，而是提供一个**零成本、极速**的选择。在代码搜索场景中，查询与代码共享大量词汇，TreeSearch 表现与 Embedding 持平。在自然语言查询文档场景中，Embedding 在精度上略有优势，而 TreeSearch 在召回率上更胜一筹。
 
 自行运行评测：
 ```bash
