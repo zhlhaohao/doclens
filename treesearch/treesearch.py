@@ -98,6 +98,9 @@ class TreeSearch:
             for fp in files:
                 abs_fp = os.path.abspath(fp)
                 current_hash = _file_hash(abs_fp)
+                if not current_hash:
+                    # File disappeared after glob (e.g. dangling symlink)
+                    continue
                 if stored_meta.get(abs_fp) != current_hash:
                     changed.append(fp)
         return changed

@@ -259,7 +259,7 @@ async def md_to_tree(
         raise ValueError("Must specify md_path or md_content")
 
     if md_path:
-        with open(md_path, "r", encoding="utf-8") as f:
+        with open(md_path, "r", encoding="utf-8", errors="replace") as f:
             md_content = f.read()
         doc_name = os.path.splitext(os.path.basename(md_path))[0]
     else:
@@ -583,7 +583,7 @@ async def text_to_tree(
         raise ValueError("Must specify text_path or text_content")
 
     if text_path:
-        with open(text_path, "r", encoding="utf-8") as f:
+        with open(text_path, "r", encoding="utf-8", errors="replace") as f:
             raw = f.read()
         doc_name = os.path.splitext(os.path.basename(text_path))[0]
     else:
@@ -745,7 +745,7 @@ async def code_to_tree(
     Returns:
         {'doc_name': str, 'structure': list, 'doc_description'?: str}
     """
-    with open(code_path, "r", encoding="utf-8") as f:
+    with open(code_path, "r", encoding="utf-8", errors="replace") as f:
         raw = f.read()
     doc_name = os.path.splitext(os.path.basename(code_path))[0]
     ext = os.path.splitext(code_path)[1].lower()
@@ -835,7 +835,7 @@ async def json_to_tree(
     **kwargs,
 ) -> dict:
     """Build a tree index from a JSON file."""
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, "r", encoding="utf-8", errors="replace") as f:
         data = json.load(f)
     doc_name = os.path.splitext(os.path.basename(json_path))[0]
 
@@ -889,7 +889,7 @@ async def csv_to_tree(
     """Build a tree index from a CSV file. Each row becomes a leaf node under a header node."""
     import csv as csvmod
 
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
         reader = csvmod.reader(f)
         rows = list(reader)
 
@@ -937,8 +937,13 @@ def _file_hash(fp: str) -> str:
     Uses (mtime_ns, size) as a lightweight proxy instead of reading the
     entire file for MD5.  This is orders-of-magnitude faster on network
     filesystems (NFS / CIFS) and still catches all real edits.
+
+    Returns empty string if the file does not exist (e.g. deleted after glob).
     """
-    st = os.stat(fp)
+    try:
+        st = os.stat(fp)
+    except (FileNotFoundError, OSError):
+        return ""
     return f"{st.st_mtime_ns}:{st.st_size}"
 
 
@@ -1025,6 +1030,10 @@ async def build_index(
     for fp in expanded:
         abs_fp = os.path.abspath(fp)
         fh = _file_hash(abs_fp)
+        if not fh:
+            # File disappeared after glob expansion (e.g. broken symlink)
+            logger.debug("Skipping missing file: %s", abs_fp)
+            continue
         file_hashes[abs_fp] = fh
         if not force:
             stored_hash = all_meta.get(abs_fp)
@@ -1041,35 +1050,39 @@ async def build_index(
 
     semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def _index_one(fp: str) -> dict:
+    async def _index_one(fp: str) -> dict | None:
         async with semaphore:
-            ext = os.path.splitext(fp)[1].lower()
-            common = dict(
-                model=model,
-                if_add_node_summary=if_add_node_summary,
-                if_add_doc_description=if_add_doc_description,
-                if_add_node_text=if_add_node_text,
-                if_add_node_id=if_add_node_id,
-                **kwargs,
-            )
+            try:
+                ext = os.path.splitext(fp)[1].lower()
+                common = dict(
+                    model=model,
+                    if_add_node_summary=if_add_node_summary,
+                    if_add_doc_description=if_add_doc_description,
+                    if_add_node_text=if_add_node_text,
+                    if_add_node_id=if_add_node_id,
+                    **kwargs,
+                )
 
-            # Use ParserRegistry for dispatch (built-in parsers auto-registered)
-            from .parsers import get_parser, SOURCE_TYPE_MAP
-            parser_fn = get_parser(ext)
-            if parser_fn is not None:
-                result = await parser_fn(fp, **common)
-            else:
-                # Unknown extension: fall back to text_to_tree
-                result = await text_to_tree(text_path=fp, **common)
+                # Use ParserRegistry for dispatch (built-in parsers auto-registered)
+                from .parsers import get_parser, SOURCE_TYPE_MAP
+                parser_fn = get_parser(ext)
+                if parser_fn is not None:
+                    result = await parser_fn(fp, **common)
+                else:
+                    # Unknown extension: fall back to text_to_tree
+                    result = await text_to_tree(text_path=fp, **common)
 
-            # Tag source_type for search routing
-            result["source_type"] = SOURCE_TYPE_MAP.get(ext, "text")
-            return result
+                # Tag source_type for search routing
+                result["source_type"] = SOURCE_TYPE_MAP.get(ext, "text")
+                return result
+            except Exception as e:
+                logger.warning("Failed to index %s: %s", fp, e)
+                return None
 
-    results = await asyncio.gather(*(_index_one(fp) for fp in to_index))
+    raw_results = await asyncio.gather(*(_index_one(fp) for fp in to_index))
 
     # Save results to DB and collect Document objects
-    result_map = dict(zip(to_index, results))
+    result_map = {fp: r for fp, r in zip(to_index, raw_results) if r is not None}
     documents = []
 
     # Batch load all skipped documents in one query (instead of N individual loads)
