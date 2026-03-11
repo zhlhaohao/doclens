@@ -2,7 +2,7 @@
 
 **TreeSearch: Structure-aware document retrieval without embeddings.**
 
-TreeSearch is a **structure-aware RAG** framework. Unlike traditional RAG systems that rely on vector embeddings and chunk splitting, TreeSearch preserves document structure as trees and uses FTS5/BM25 keyword matching for fast retrieval, with optional LLM reasoning for enhanced accuracy.
+TreeSearch is a **structure-aware RAG** framework. Unlike traditional RAG systems that rely on vector embeddings and chunk splitting, TreeSearch preserves document structure as trees and uses FTS5 keyword matching for fast retrieval.
 
 ## Core Concepts
 
@@ -24,48 +24,48 @@ Document
 └── Chapter 3: Results
 ```
 
-### Three-Layer Search Architecture
+### Search Architecture
 
 ```
 Query
   │
   ▼
-[Layer 1] FTS5/BM25 Keyword Search (default: fts5_only)
+[FTS5/Grep Pre-filter]
   │       - SQLite FTS5 inverted index with MD structure-aware columns
   │       - Hierarchical field weighting: title > summary > body
   │       - Chinese + English tokenization (jieba / regex)
+  │       - GrepFilter for exact symbol matching (code files)
   │       - No LLM needed — instant results, millisecond-level
   ▼
-[Layer 2] Best-First Tree Search (optional: strategy="best_first")
-  │       - Priority queue driven: always expands most promising node
-  │       - FTS5/BM25 scores as initial priority (warm start)
-  │       - LLM evaluates relevance: title + summary only (no full text)
-  │       - Early stopping: queue top score < threshold → stop
-  │       - Budget control: max_llm_calls limit
+[Cross-document Scoring]
+  │       - FTS5 scores across all documents
+  │       - Source-type routing: auto-select pre-filters by file type
+  │       - Top-K document selection
   ▼
-[Layer 3] Ranked Results (tens → 2~4)
-          - Subtree cache: (query_fingerprint, node_id) for reuse
-          - Results with scores, paths, and source text
+[Ranked Results]
+          - Nodes with scores, paths, and source text
+          - Line number references for code files
 ```
 
-**Stage 0 - Document Routing**: Given a query and multiple documents, the LLM reasons about which documents are most likely to contain the answer, based on document descriptions. No vector search needed. (Skipped automatically for single-document queries.)
+**Stage 1 - FTS5 Pre-Scoring**: `FTS5Index` scores all tree nodes using SQLite FTS5 inverted index with MD structure-aware columns and column weighting. Instant results, no LLM needed.
 
-**Stage 1 - FTS5/BM25 Keyword Search** (default): `FTS5Index` scores all tree nodes using SQLite FTS5 inverted index with MD structure-aware columns and column weighting. `NodeBM25Index` provides an in-memory BM25 alternative with hierarchical field weighting (`title × 1.0 + summary × 0.7 + body × 0.3`) and ancestor score propagation. Both are instant (no LLM needed). This is the default strategy (`fts5_only`).
+**Stage 2 - Source-Type Routing**: Pre-filters are automatically selected based on document `source_type` via `PREFILTER_ROUTING`. Code files get `GrepFilter` + `FTS5` combined scoring. Markdown/text files use `FTS5` only.
 
-**Stage 2 - Best-First Tree Search** (optional): `TreeSearch` uses a priority queue to expand the most promising nodes first. Each node is evaluated by LLM (title + summary only) and scored for relevance. FTS5/BM25 scores serve as initial priority. Early stopping and budget control keep LLM usage efficient. Enable with `strategy="best_first"`.
+**Stage 3 - Ranked Results**: Top-scoring nodes are returned with text content, section titles, and line number references.
 
 ## Module Overview
 
 | Module | Responsibility |
 |---|---|
-| `llm.py` | Async OpenAI client with retry, token counting, JSON extraction |
 | `tree.py` | `Document` dataclass, tree traversal, persistence (save/load) |
-| `indexer.py` | Markdown / plain text → tree structure conversion, batch `build_index()` |
-| `search.py` | FTS5-only (default), Best-First tree search, document routing, unified `search()` API |
+| `indexer.py` | Markdown / plain text / code → tree structure conversion, batch `build_index()` |
+| `search.py` | FTS5 scoring, source-type pre-filter routing, unified `search()` API |
 | `fts.py` | SQLite FTS5 full-text search engine with MD structure-aware columns, WAL mode, incremental updates |
-| `rank_bm25.py` | BM25Okapi (pure Python), `NodeBM25Index` with hierarchical weighting, Chinese/English tokenization |
-| `config.py` | Unified configuration management: env vars > YAML (`~/.treesearch/config.yaml`) > built-in defaults |
+| `tokenizer.py` | Chinese/English tokenization (jieba / regex) |
+| `utils.py` | Token counting utilities |
+| `config.py` | Unified configuration management: env vars > built-in defaults |
 | `cli.py` | CLI with `index` (glob support) and `search` subcommands |
+| `parsers/` | Extensible parser registry: Markdown, code (AST+regex), PDF, DOCX, HTML, XML, JSON, CSV |
 
 ## Why No Vector Embeddings?
 
@@ -78,44 +78,32 @@ Traditional RAG splits documents into fixed-size chunks and retrieves by vector 
 TreeSearch takes a different approach:
 
 1. **Preserve structure**: Documents keep their natural hierarchy
-2. **BM25 pre-scoring**: Structure-aware keyword matching with hierarchical weighting — no embedding model needed
-3. **Reasoning over structure**: LLM reads section titles and summaries to navigate
-4. **Best-First exploration**: Priority queue expands the most promising nodes first, with early stopping
+2. **FTS5 scoring**: Structure-aware keyword matching with hierarchical column weighting — no embedding model needed
+3. **Source-type routing**: Automatic pre-filter selection based on file type (code → GrepFilter + FTS5)
 
-## Why FTS5-only as Default?
+## Why FTS5 as Default?
 
-FTS5-only is the default strategy because:
+FTS5 is the default (and only) search strategy because:
 
 - **Zero-cost**: No LLM API key, no API calls, no cost
 - **Instant**: Millisecond-level SQLite FTS5 inverted index queries
 - **Structure-aware**: MD-aware columns (title/summary/body/code) with column weighting
 - **Production-ready**: Persistent inverted index, WAL mode, incremental updates, CJK tokenization
-- **Great baseline**: Benchmark results show FTS5-only already achieves strong performance
-
-**Alternative**: For higher accuracy, upgrade to `best_first` (FTS5 + LLM).
-
-## Why Best-First for LLM Enhancement?
-
-Best-First search is the recommended LLM-enhanced strategy because:
-
-- LLM uses `temperature=0` → evaluations are **deterministic**
-- Same query + node always produces the same relevance score
-- Priority queue is simple, fast, and natively supports FTS5/BM25 integration, early stopping, and budget control
-- Batch comparative ranking reduces LLM calls vs per-node evaluation
+- **Great baseline**: Benchmark results show FTS5 already achieves strong performance
 
 ## Data Flow
 
 ```
-Input Documents (MD/TXT)
+Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
         │
         ▼
    ┌──────────┐
-   │  Indexer  │  Parse headings → build tree → generate summaries
+   │  Indexer  │  ParserRegistry dispatch → parse structure → build tree → generate summaries
    └────┬─────┘    (build_index supports glob patterns for batch processing)
         │  JSON index files
         ▼
    ┌──────────┐
-   │  search  │  FTS5 keyword match → (optional) route to docs → Best-First tree search
+   │  search  │  FTS5/Grep pre-filter → cross-doc scoring → ranked results
    └────┬─────┘
         │  dict result
         ▼
@@ -129,9 +117,9 @@ Input Documents (MD/TXT)
 | Offline build cost | High (knowledge graph construction) | Low (trees are natural) |
 | Update complexity | High (graph incremental update) | Low (rebuild single doc tree) |
 | Explainability | Moderate (complex graph paths) | Strong (tree paths are intuitive) |
-| Query latency | High | Controllable (budget mechanism) |
-| Engineering complexity | High (graph DB + embedding + LLM) | Medium (pure LLM + BM25) |
-| Chinese / vertical domains | Unstable (embedding quality dependent) | Customizable (LLM prompts) |
+| Query latency | High | Millisecond-level |
+| Engineering complexity | High (graph DB + embedding + LLM) | Low (SQLite FTS5 only) |
+| Chinese / vertical domains | Unstable (embedding quality dependent) | Customizable (CJK tokenizer) |
 | Vector dependency | Required | Not needed |
 
-**Key insight**: GraphRAG solves "how to build structure from unstructured data". TreeSearch solves "how to truly leverage existing structure". For documents that are naturally trees, TreeSearch is the more efficient, cheaper, and controllable approach — with FTS5 providing a zero-cost baseline and LLM reasoning as an optional enhancement.
+**Key insight**: GraphRAG solves "how to build structure from unstructured data". TreeSearch solves "how to truly leverage existing structure". For documents that are naturally trees, TreeSearch is the more efficient, cheaper, and controllable approach — with FTS5 providing a zero-cost baseline.

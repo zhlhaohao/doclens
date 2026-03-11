@@ -115,7 +115,7 @@ async def demo_plain_text():
         text_path = f.name
 
     try:
-        result = await text_to_tree(text_path=text_path, fallback_to_llm="no", if_add_node_summary=True)
+        result = await text_to_tree(text_path=text_path, if_add_node_summary=True)
         print("\nTable of Contents:")
         print_toc(result["structure"])
     finally:

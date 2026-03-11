@@ -5,7 +5,7 @@
 
 This script demonstrates the typical TreeSearch workflow:
   1. Build indexes for multiple documents using build_index (returns Documents directly)
-  2. Search across all indexed documents with FTS5-only strategy (default, no LLM needed)
+  2. Search across all indexed documents with FTS5 (default, no LLM needed)
 
 Usage:
     python examples/03_cli_workflow.py
@@ -49,8 +49,8 @@ async def main():
         print(f"Indexed: {doc.doc_name}")
         print(f"  Description: {doc.doc_description or 'N/A'}")
 
-    # Step 2: Search directly with returned documents (default: fts5_only, no LLM needed)
-    print(f"\n=== Step 2: Multi-document search (FTS5-only, default) ===\n")
+    # Step 2: Search directly with returned documents (FTS5, no LLM needed)
+    print(f"\n=== Step 2: Multi-document search (FTS5, default) ===\n")
     print(f"Using {len(documents)} documents\n")
 
     queries = [
@@ -80,7 +80,7 @@ async def main():
     print("\n=== Equivalent CLI commands ===")
     print(f'treesearch index --paths {DATA_DIR}/voice-call.md {DATA_DIR}/agent-tools.md -o {INDEX_DIR} --add-description')
     print(f'treesearch search --index_dir {INDEX_DIR} --query "How to configure the voice call webhook URL?"')
-    print(f'treesearch search --index_dir {INDEX_DIR} --query "tools" --no-bm25')
+    print(f'treesearch search --index_dir {INDEX_DIR} --query "tools"')
 
 
 if __name__ == "__main__":

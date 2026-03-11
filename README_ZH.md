@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#社区与支持)
 
-**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5/BM25 关键词匹配或 LLM 推理进行检索。支持 Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++ 等）、HTML、XML、JSON、CSV、PDF 和 DOCX。无需向量embedding，无需分chunk。
+**TreeSearch** 是一个结构感知的文档检索库。将文档解析为树结构，然后通过 FTS5 关键词匹配进行检索。支持 Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++ 等）、HTML、XML、JSON、CSV、PDF 和 DOCX。无需向量embedding，无需分chunk。
 
 毫秒检索万级文档和大型代码库，并保留文档结构，避免上下文丢失。
 
@@ -59,15 +59,15 @@ TreeSearch：
 | | 传统 RAG | TreeSearch |
 |---|---|---|
 | **预处理** | 分块 + 向量嵌入 | 解析标题 → 构建树 |
-| **检索** | 向量相似度搜索 | FTS5/BM25 关键词匹配（默认，无需 LLM）；可选 LLM 树搜索 |
-| **多文档** | 需要向量数据库路由 | FTS5 跨文档打分（默认）；可选 LLM 根据文档描述路由 |
+| **检索** | 向量相似度搜索 | FTS5 关键词匹配（无需 LLM） |
+| **多文档** | 需要向量数据库路由 | FTS5 跨文档打分 |
 | **结构** | 分块后丢失 | 完整保留为树形层级 |
-| **依赖** | 向量数据库 + 嵌入模型 | 仅 SQLite（无嵌入、无向量库，LLM 可选） |
+| **依赖** | 向量数据库 + 嵌入模型 | 仅 SQLite（无嵌入、无向量库） |
 
 ### 核心优势
 
 - **结构感知** — 不是"找字符串"，而是"找章节/类/函数"
-- **零成本** — 可以完全不用 LLM（`fts5_only` 模式）
+- **零成本** — 不需要 LLM，不需要 API Key
 - **快速** — 毫秒级响应，不需要 Embedding
 - **精准** — 带章节标题作为锚点，上下文清晰
 - **无需向量嵌入** — 不需要训练、部署或付费使用嵌入模型
@@ -76,23 +76,21 @@ TreeSearch：
 
 ## 功能特性
 
-- **FTS5-only 搜索**（默认） — 零 LLM 调用，毫秒级 FTS5/BM25 关键词匹配，无需 API Key
+- **FTS5 搜索** — 零 LLM 调用，毫秒级 FTS5 关键词匹配，无需 API Key
 - **SQLite FTS5 引擎** — 持久化倒排索引，WAL 模式，增量更新，MD 结构感知列（标题/摘要/正文/代码/前言），列权重加权，CJK 分词
 - **树结构索引** — Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++/PHP）、HTML、XML、JSON、CSV、PDF 和 DOCX 均被解析为层级树
 - **解析器注册表** — 可扩展的 `ParserRegistry`，内置解析器自动注册；支持 `ParserRegistry.register()` 注册自定义解析器
 - **Python AST 解析** — `ast` 模块提取类/函数的完整签名（参数、返回值类型）；语法错误时回退正则
 - **PDF/DOCX/HTML 解析器** — 可选解析器，通过 `pageindex`、`python-docx`、`beautifulsoup4` 实现（`pip install pytreesearch[all]`）
 - **GrepFilter 精准匹配** — 支持字面量/正则表达式匹配，精准定位代码符号和关键词
-- **BM25 节点级索引** — 结构感知评分，层级字段加权（标题 > 摘要 > 正文）和祖先传播
-- **Best-First 搜索**（可选） — 优先队列驱动，FTS5 预打分 + LLM 评估，提前停止和预算控制
-- **多文档搜索** — 通过 LLM 推理在文档集合间路由查询
+- **Source-type 路由** — 根据文件类型自动选择预过滤器（如代码文件使用 GrepFilter + FTS5）
 - **中英文支持** — 内置 jieba 中文分词和英文正则分词
 - **批量索引** — `build_index()` 支持 glob 模式并发多文件处理
 - **异步优先** — 所有核心函数均为异步，提供同步适配器
 - **配置驱动默认值** — `search()` 和 `build_index()` 从 `get_config()` 读取默认值，支持按调用覆盖
 - **CLI 命令** — `treesearch index` 和 `treesearch search` 命令
 
-## FTS5 独立搜索（无需 LLM）
+## FTS5 独立搜索
 
 ```python
 from treesearch import FTS5Index, Document, load_index
@@ -123,14 +121,11 @@ for doc_agg in agg:
 # 从 glob 模式构建索引
 treesearch index --paths "docs/*.md" --add-description
 
-# 使用 Best-First + FTS5 搜索（默认预过滤引擎）
+# 使用 FTS5 搜索
 treesearch search --index_dir ./indexes/ --query "认证系统如何工作？" --fts
 
 # 持久化 FTS5 数据库
 treesearch search --index_dir ./indexes/ --query "认证" --fts --fts-db ./indexes/fts.db
-
-# 控制 LLM 调用预算
-treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
 ```
 
 ## 工作原理
@@ -145,40 +140,16 @@ treesearch search --index_dir ./indexes/ --query "认证" --max-llm-calls 10
         │  JSON 索引文件
         ▼
    ┌──────────┐
-   │  search   │  FTS5/Grep 匹配 → （可选）文档路由 → 树搜索
+   │  search   │  FTS5/Grep 预过滤 → 跨文档打分 → 排序结果
    └────┬─────┘
         │  dict 结果
         ▼
   带分数和文本的排序节点
 ```
 
-**第一层 — FTS5/BM25 预打分**：`FTS5Index`（默认）使用 SQLite FTS5 倒排索引，MD 结构感知列和列权重加权实现快速预过滤。或使用 `NodeBM25Index` 进行内存 BM25 打分。两者均即时完成，无需 LLM。
+**FTS5 预打分**：`FTS5Index` 使用 SQLite FTS5 倒排索引，MD 结构感知列（标题/摘要/正文/代码/前言）和列权重加权实现快速打分。即时返回结果，无需 LLM。
 
-**第二层 — 树搜索**（可选）：`TreeSearch` 使用优先队列展开最有潜力的节点。LLM 仅评估节点的标题 + 摘要的相关性。当最高分低于阈值时提前停止。
-
-**第三层 — 结果输出**：预算控制的 LLM 调用，支持子树缓存以便跨查询复用。
-
-### 搜索策略
-
-| 策略 | 描述 | LLM 调用 | 适用场景 |
-|------|------|----------|----------|
-| `fts5_only`（默认） | 纯 FTS5/BM25 评分 | 零 | 快速关键词搜索，无需 API Key |
-| `best_first` | FTS5/BM25 预打分 + 优先队列 + LLM 评估 | 中等（预算控制） | 准确率最高 |
-| `auto` | 根据 `source_type` 按文档选择策略（代码 → GrepFilter + FTS5） | 视情况而定 | 混合文件类型 |
-| FTS5 独立 | `FTS5Index.search()` | 零 | 持久化倒排索引，无需 API Key |
-
-FTS5/BM25 策略无需 API Key 即可开箱即用。若需 LLM 增强策略（`best_first`），请先设置 API Key：
-
-```bash
-# 推荐：TreeSearch 专属环境变量（优先级最高）
-export TREESEARCH_LLM_API_KEY="sk-..."
-export TREESEARCH_LLM_BASE_URL="https://api.openai.com/v1"
-export TREESEARCH_MODEL="gpt-4o"
-
-# 备选：OpenAI 兼容环境变量（回退）
-export OPENAI_API_KEY="sk-..."
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-```
+**Source-Type 路由**：对于代码文件，自动组合 `GrepFilter` + `FTS5` 实现精准符号匹配。预过滤器根据文件类型通过 `PREFILTER_ROUTING` 自动选择。
 
 ## 适用场景
 
@@ -195,11 +166,10 @@ docs = await build_index(
     output_dir="./indexes"
 )
 
-# 2. 搜索
-result = search(
+# 2. 搜索 — 毫秒级响应
+result = await search(
     query="如何配置 Redis 集群？",
     documents=docs,
-    strategy="fts5_only"  # 毫秒级响应
 )
 
 # 3. 结果 — 完整章节，不是碎片
@@ -211,9 +181,9 @@ for doc in result["documents"]:
 ```
 
 **为什么比传统 RAG 好？**
-- ✅ 找到的是**完整章节**，不是碎片
-- ✅ 带上**章节标题**作为上下文锚点
-- ✅ 支持"查看父章节/子章节"的层级导航
+- 找到的是**完整章节**，不是碎片
+- 带上**章节标题**作为上下文锚点
+- 支持"查看父章节/子章节"的层级导航
 
 ### 场景 2：代码库检索
 
@@ -226,11 +196,10 @@ docs = await build_index(
     output_dir="./code_indexes"
 )
 
-# 搜索
-result = search(
+# 搜索 — 自动识别代码文件，用 AST 解析 + GrepFilter
+result = await search(
     query="用户登录 authentication",
     documents=docs,
-    strategy="auto"  # 自动识别代码文件，用 AST 解析
 )
 
 # 结果示例：
@@ -241,9 +210,9 @@ result = search(
 ```
 
 **为什么比 grep/IDE 搜索好？**
-- ✅ **语义理解**：不只是关键字匹配，能理解"登录"="authentication"
-- ✅ **结构感知**：找到的是完整的类/方法，带 docstring
-- ✅ **精准定位**：直接定位到代码行号
+- **语义理解**：不只是关键字匹配，能理解"登录"="authentication"
+- **结构感知**：找到的是完整的类/方法，带 docstring
+- **精准定位**：直接定位到代码行号
 
 ### 场景 3：长文本 QA（论文/书籍）
 
@@ -252,19 +221,18 @@ result = search(
 ```python
 docs = await build_index(paths=["paper.pdf"])
 
-result = search(
+result = await search(
     query="实验方法 methodology",
     documents=docs,
-    strategy="fts5_only"
 )
 
 # 自动找到 "3.2 实验设计" 这一节的内容
 ```
 
 **为什么比 Ctrl+F 好？**
-- ✅ **语义匹配**：找的是"实验方法"的同义词段落
-- ✅ **章节定位**：告诉你在第几章第几节
-- ✅ **可扩展到多文档**：同时搜索 10 篇论文
+- **语义匹配**：找的是"实验方法"的同义词段落
+- **章节定位**：告诉你在第几章第几节
+- **可扩展到多文档**：同时搜索 10 篇论文
 
 ### 实际案例对比
 
@@ -277,7 +245,7 @@ result = search(
 
 **TreeSearch 方式**：
 ```python
-result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
+result = await search("如何申请 GPU 机器", docs)
 # 直接返回 "资源申请指南 > GPU 申请流程" 章节
 # 耗时：< 100ms
 ```
@@ -308,10 +276,10 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 | **查询时间** | 573ms | **0.7ms** |
 
 **核心结论**：
-- ✅ **Embedding MRR 高 18%** — 语义理解更强
-- ✅ **TreeSearch Recall@5 高 29%** — 结构保留有助于召回更多相关内容
-- ✅ **TreeSearch 查询速度快 780x** — 毫秒级 vs 秒级
-- ✅ **TreeSearch 索引瞬间完成** — 无需 Embedding API 调用
+- Embedding MRR 高 18% — 语义理解更强
+- TreeSearch Recall@5 高 29% — 结构保留有助于召回更多相关内容
+- TreeSearch 查询速度快 780x — 毫秒级 vs 秒级
+- TreeSearch 索引瞬间完成 — 无需 Embedding API 调用
 
 ### 代码检索（CodeSearchNet）
 
@@ -326,10 +294,10 @@ result = search("如何申请 GPU 机器", docs, strategy="fts5_only")
 | **查询时间** | 620ms | **0.8ms** |
 
 **核心结论**：
-- ✅ **Embedding MRR 高 13%** — 代码语义理解更强
-- ✅ **TreeSearch MRR 达到 84.7%** — 关键词代码搜索表现出色
-- ✅ **TreeSearch 查询速度快 800x** — 毫秒级 vs 秒级
-- ✅ **TreeSearch 索引速度快 22x** — 无需 Embedding API 调用
+- Embedding MRR 高 13% — 代码语义理解更强
+- TreeSearch MRR 达到 84.7% — 关键词代码搜索表现出色
+- TreeSearch 查询速度快 800x — 毫秒级 vs 秒级
+- TreeSearch 索引速度快 22x — 无需 Embedding API 调用
 
 ### 总结
 
@@ -346,7 +314,7 @@ python examples/benchmark/codesearchnet_benchmark.py --max-samples 50 --max-corp
 
 ## 文档
 
-- [架构设计](https://github.com/shibing624/TreeSearch/blob/main/docs/architecture.md) — 设计原则和三层架构
+- [架构设计](https://github.com/shibing624/TreeSearch/blob/main/docs/architecture.md) — 设计原则和架构
 - [API 参考](https://github.com/shibing624/TreeSearch/blob/main/docs/api.md) — 完整 API 文档
 
 ## 社区与支持
@@ -380,5 +348,5 @@ python examples/benchmark/codesearchnet_benchmark.py --max-samples 50 --max-corp
 
 ## 致谢
 
-- [BM25 (Okapi BM25)](https://en.wikipedia.org/wiki/Okapi_BM25) — 经典的概率排序函数
+- [SQLite FTS5](https://www.sqlite.org/fts5.html) — TreeSearch 的全文搜索引擎
 - [VectifyAI/PageIndex](https://github.com/VectifyAI/PageIndex) — 为结构化索引与检索提供了启发

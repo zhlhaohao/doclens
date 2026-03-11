@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Tests for treesearch.indexer module (with mocked LLM).
+@description: Tests for treesearch.indexer module.
 """
 import json
 import os
@@ -15,7 +15,6 @@ from treesearch.indexer import (
     _detect_headings,
     _build_tree,
     _cut_md_text,
-    _needs_llm_fallback,
 )
 
 
@@ -123,28 +122,14 @@ class TestBuildTree:
         assert _build_tree([]) == []
 
 
-class TestNeedsLlmFallback:
-    def test_too_few_headings(self):
-        markers = [{"level": 1}, {"level": 2}]
-        assert _needs_llm_fallback(markers, [""] * 100) is True
-
-    def test_enough_headings(self):
-        markers = [{"level": 1}, {"level": 2}, {"level": 2}, {"level": 1}]
-        assert _needs_llm_fallback(markers, [""] * 50) is False
-
-
 class TestMdToTree:
     @pytest.mark.asyncio
     async def test_basic_structure(self, sample_md_file):
-        async def mock_achat(prompt, **kwargs):
-            return "This is a mock summary."
-
-        with patch("treesearch.llm.achat", side_effect=mock_achat):
-            result = await md_to_tree(
-                md_path=sample_md_file,
-                if_add_node_summary=True,
-                if_add_node_id=True,
-            )
+        result = await md_to_tree(
+            md_path=sample_md_file,
+            if_add_node_summary=True,
+            if_add_node_id=True,
+        )
 
         assert "doc_name" in result
         assert "structure" in result
@@ -170,30 +155,23 @@ class TestMdToTree:
 
     @pytest.mark.asyncio
     async def test_with_description(self, sample_md_file):
-        async def mock_achat(prompt, **kwargs):
-            if "description" in prompt.lower() or "one sentence" in prompt.lower():
-                return "A document about system architecture."
-            return "Mock summary."
-
-        with patch("treesearch.llm.achat", side_effect=mock_achat):
-            result = await md_to_tree(
-                md_path=sample_md_file,
-                if_add_node_summary=True,
-                if_add_doc_description=True,
-            )
+        result = await md_to_tree(
+            md_path=sample_md_file,
+            if_add_node_summary=True,
+            if_add_doc_description=True,
+        )
         assert "doc_description" in result
+        # generate_doc_description is now pure-text (no LLM)
+        assert isinstance(result["doc_description"], str)
+        assert len(result["doc_description"]) > 0
 
     @pytest.mark.asyncio
     async def test_from_content(self):
-        async def mock_achat(prompt, **kwargs):
-            return "Summary."
-
         content = "# Title\n\nSome content.\n\n## Section\n\nMore content."
-        with patch("treesearch.llm.achat", side_effect=mock_achat):
-            result = await md_to_tree(
-                md_content=content,
-                if_add_node_summary=True,
-            )
+        result = await md_to_tree(
+            md_content=content,
+            if_add_node_summary=True,
+        )
         assert result["doc_name"] == "untitled"
         assert len(result["structure"]) > 0
 
@@ -206,16 +184,11 @@ class TestMdToTree:
 class TestTextToTree:
     @pytest.mark.asyncio
     async def test_basic_structure(self, sample_text_file):
-        async def mock_achat(prompt, **kwargs):
-            return "Mock summary."
-
-        with patch("treesearch.llm.achat", side_effect=mock_achat):
-            result = await text_to_tree(
-                text_path=sample_text_file,
-                fallback_to_llm="no",
-                if_add_node_summary=True,
-                if_add_node_id=True,
-            )
+        result = await text_to_tree(
+            text_path=sample_text_file,
+            if_add_node_summary=True,
+            if_add_node_id=True,
+        )
 
         assert "doc_name" in result
         assert "structure" in result
@@ -227,7 +200,6 @@ class TestTextToTree:
     async def test_no_summary(self, sample_text_file):
         result = await text_to_tree(
             text_path=sample_text_file,
-            fallback_to_llm="no",
             if_add_node_summary=False,
         )
         assert "structure" in result
@@ -237,7 +209,6 @@ class TestTextToTree:
         content = "1.1 Section A\n\nContent A.\n\n1.2 Section B\n\nContent B."
         result = await text_to_tree(
             text_content=content,
-            fallback_to_llm="no",
             if_add_node_summary=False,
         )
         assert result["doc_name"] == "untitled"

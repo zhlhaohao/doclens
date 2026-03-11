@@ -13,12 +13,10 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# Isolate tests from project .env file
+# Isolate tests from environment
 # ---------------------------------------------------------------------------
-# config.py calls load_dotenv() at import time, which injects .env values
-# (e.g. TREESEARCH_MODEL=ep-xxx) into os.environ. These can break tests that
-# expect default values. This autouse fixture saves and removes all injected
-# TREESEARCH_* and OPENAI_* vars before each test, then restores them after.
+# This autouse fixture saves and removes all TREESEARCH_* and OPENAI_*
+# vars before each test, then restores them after.
 # ---------------------------------------------------------------------------
 
 _ENV_PREFIXES = ("TREESEARCH_", "OPENAI_")

@@ -13,7 +13,6 @@ Usage:
 """
 import argparse
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -39,9 +38,6 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
                      help="Output directory for database file (default: ./indexes)")
     sub.add_argument("--db", type=str, default="",
                      help="Path to SQLite database file (default: {output_dir}/index.db)")
-    sub.add_argument("--model", type=str, default="gpt-4o-2024-11-20", help="LLM model name")
-    sub.add_argument("--api-key", type=str, default=None,
-                     help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
     sub.add_argument("--no-summary", action="store_true", help="Skip node summary generation")
     sub.add_argument("--add-description", action="store_true", help="Generate doc description")
     sub.add_argument("--add-text", action="store_true", help="Include node text in output")
@@ -51,9 +47,6 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
                      help="Min token threshold for thinning (default: 5000)")
     sub.add_argument("--summary-threshold", type=int, default=200,
                      help="Token threshold for summary generation (default: 200)")
-    sub.add_argument("--fallback-to-llm", type=str, default="auto",
-                     choices=["auto", "yes", "no"],
-                     help="LLM fallback for text heading detection (default: auto)")
     sub.add_argument("--max-concurrency", type=int, default=5,
                      help="Max concurrent indexing tasks (default: 5)")
     sub.add_argument("--force", action="store_true",
@@ -61,11 +54,6 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
 
 
 async def _run_index(args) -> None:
-    if args.api_key:
-        cfg = get_config()
-        cfg.api_key = args.api_key
-        set_config(cfg)
-
     start_time = time.time()
     print(f"Indexing {len(args.paths)} path pattern(s)...")
 
@@ -73,7 +61,6 @@ async def _run_index(args) -> None:
         paths=args.paths,
         output_dir=args.output_dir,
         db_path=args.db,
-        model=args.model,
         if_add_node_summary=not args.no_summary,
         if_add_doc_description=args.add_description,
         if_add_node_text=args.add_text,
@@ -105,12 +92,6 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
                      help="Path to SQLite database file (default: {index_dir}/index.db)")
     sub.add_argument("--query", type=str, required=True,
                      help="Search query")
-    sub.add_argument("--model", type=str, default="gpt-4o-2024-11-20", help="LLM model name")
-    sub.add_argument("--api-key", type=str, default=None,
-                     help="LLM API key (overrides TREESEARCH_LLM_API_KEY / OPENAI_API_KEY)")
-    sub.add_argument("--strategy", type=str, default="fts5_only",
-                     choices=["fts5_only", "best_first", "auto"],
-                     help="Search strategy (default: fts5_only)")
     sub.add_argument("--fts", action="store_true",
                      help="Enable SQLite FTS5 full-text search as pre-filter backend")
     sub.add_argument("--fts-db", type=str, default=None,
@@ -121,10 +102,6 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
                      help="Max result nodes per document (default: 5)")
     sub.add_argument("--threshold", type=float, default=0.3,
                      help="Minimum relevance score (default: 0.3)")
-    sub.add_argument("--max-llm-calls", type=int, default=30,
-                     help="Max LLM calls per document for best_first (default: 30)")
-    sub.add_argument("--no-bm25", action="store_true",
-                     help="Disable BM25 pre-scoring for best_first strategy")
 
 
 def _load_documents_from_dir(index_dir: str, db: str = "") -> list[Document]:
@@ -143,11 +120,6 @@ def _load_documents_from_dir(index_dir: str, db: str = "") -> list[Document]:
 
 
 async def _run_search(args) -> None:
-    if args.api_key:
-        cfg = get_config()
-        cfg.api_key = args.api_key
-        set_config(cfg)
-
     # Enable FTS5 if --fts flag is set
     if args.fts:
         cfg = get_config()
@@ -163,13 +135,6 @@ async def _run_search(args) -> None:
         print(f"  - {doc.doc_name}")
 
     print(f"\nQuery: {args.query}")
-    pre_filter = "FTS5" if args.fts else ("BM25" if not args.no_bm25 else "none")
-    strategy_desc = {
-        "best_first": f"Best-First (max_llm_calls={args.max_llm_calls}, pre_filter={pre_filter})",
-        "fts5_only": "FTS5-only (no LLM)",
-        "auto": "Auto (per-document strategy based on source_type)",
-    }
-    print("Search strategy:", strategy_desc.get(args.strategy, args.strategy))
     print("---")
 
     start_time = time.time()
@@ -177,13 +142,8 @@ async def _run_search(args) -> None:
     result = await search(
         query=args.query,
         documents=documents,
-        model=args.model,
         top_k_docs=args.top_k_docs,
         max_nodes_per_doc=args.max_nodes,
-        strategy=args.strategy,
-        value_threshold=args.threshold,
-        max_llm_calls=args.max_llm_calls,
-        use_bm25=not args.no_bm25,
     )
     elapsed = time.time() - start_time
 
@@ -191,8 +151,7 @@ async def _run_search(args) -> None:
         print("\nNo relevant results found.")
         return
 
-    print(f"\nFound results in {len(result['documents'])} document(s) "
-          f"(LLM calls: {result.get('llm_calls', 0)}, {elapsed:.1f}s):\n")
+    print(f"\nFound results in {len(result['documents'])} document(s) ({elapsed:.1f}s):\n")
     for doc_result in result["documents"]:
         print(f"[{doc_result['doc_name']}]")
         for node in doc_result["nodes"]:
@@ -214,7 +173,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="treesearch",
         description=(
             "TreeSearch: Structure-aware document retrieval without embeddings.\n"
-            "No vector embeddings. No chunk splitting. Pure LLM reasoning."
+            "No vector embeddings. No chunk splitting. FTS5/BM25 keyword matching over document trees."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -225,7 +184,7 @@ def _build_parser() -> argparse.ArgumentParser:
     idx = sub.add_parser("index", help="Build tree structure index from documents (supports glob)")
     _add_index_args(idx)
 
-    sch = sub.add_parser("search", help="Search across indexed documents using tree reasoning")
+    sch = sub.add_parser("search", help="Search across indexed documents using FTS5/BM25")
     _add_search_args(sch)
 
     return p

@@ -80,6 +80,39 @@ def get_leaf_nodes(structure) -> list[dict]:
     return leaves
 
 
+def build_tree_maps(structure) -> tuple[dict, dict, dict]:
+    """Build node_map, parent_map, and depth_map from a tree structure.
+
+    Centralizes the parent/depth map construction that was duplicated
+    in search.py, fts.py, and tree.py.
+
+    Returns:
+        (node_map, parent_map, depth_map) where:
+        - node_map: {node_id: node_dict}
+        - parent_map: {node_id: parent_node_id or None}
+        - depth_map: {node_id: int}
+    """
+    node_map: dict[str, dict] = {}
+    parent_map: dict[str, Optional[str]] = {}
+    depth_map: dict[str, int] = {}
+
+    def _scan(struct, parent_id=None, depth=0):
+        if isinstance(struct, list):
+            for item in struct:
+                _scan(item, parent_id, depth)
+        elif isinstance(struct, dict):
+            nid = struct.get("node_id", "")
+            if nid:
+                node_map[nid] = struct
+                parent_map[nid] = parent_id
+                depth_map[nid] = depth
+            for child in struct.get("nodes", []):
+                _scan(child, nid, depth + 1)
+
+    _scan(structure)
+    return node_map, parent_map, depth_map
+
+
 def find_node(structure, node_id: str) -> Optional[dict]:
     """Find a node by node_id in the tree."""
     if isinstance(structure, dict):

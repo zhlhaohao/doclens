@@ -3,7 +3,7 @@
 @author:XuMing(xuming624@qq.com)
 @description: Benchmark module for evaluating TreeSearch on long-document QA/retrieval tasks.
 
-Compares TreeSearch vs. BM25 vs. full-context approaches with automatic
+Compares TreeSearch FTS5 vs. full-context approaches with automatic
 cost (token consumption) and latency tracking.
 
 Supported datasets: QASPER, QuALITY, custom JSONL.
@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-from treesearch.llm import count_tokens
+from treesearch.utils import count_tokens
 from treesearch.search import search
 from treesearch.tree import Document, flatten_tree
 
@@ -375,7 +375,7 @@ async def _evaluate_sample(
     """Evaluate a single benchmark sample with cost tracking.
 
     Args:
-        cached_indexes: pre-built indexes keyed by type ('bm25').
+        cached_indexes: pre-built indexes keyed by type ('fts5').
             Avoids rebuilding expensive indexes for every sample.
     """
     if k_values is None:
@@ -389,21 +389,14 @@ async def _evaluate_sample(
     retrieved_node_ids = []
 
     with tracker:
-        if strategy == "bm25":
-            index = cached_indexes.get("bm25")
-            if index is None:
-                from treesearch.rank_bm25 import NodeBM25Index
-                index = NodeBM25Index(documents)
-            bm25_results = index.search(sample.question, top_k=top_k)
-            retrieved_node_ids = [r["node_id"] for r in bm25_results]
-        elif strategy == "fts5":
+        if strategy == "fts5":
             fts_index = cached_indexes.get("fts5")
             if fts_index is None:
                 from treesearch.fts import FTS5Index
                 fts_index = FTS5Index()
                 fts_index.index_documents(documents)
             # Use score_nodes (with ancestor propagation) per target doc,
-            # then merge and rank — mirrors how BM25 strategy works
+            # then merge and rank
             all_scored: list[tuple[str, float]] = []
             target_docs = documents
             if sample.doc_id:
@@ -419,11 +412,8 @@ async def _evaluate_sample(
             result = await search(
                 query=sample.question,
                 documents=documents,
-                model=model,
-                strategy=strategy,
                 top_k_docs=min(3, len(documents)),
                 max_nodes_per_doc=top_k,
-                use_bm25=use_bm25,
             )
             for doc_result in result["documents"]:
                 for node in doc_result.get("nodes", []):
@@ -452,16 +442,11 @@ def _build_cached_indexes(
 ) -> dict:
     """Pre-build and cache indexes for a given strategy.
 
-    BM25/FTS5 indexes are built once and reused across all samples.
+    FTS5 indexes are built once and reused across all samples.
     """
     indexes = {}
 
-    if strategy == "bm25":
-        from treesearch.rank_bm25 import NodeBM25Index
-        indexes["bm25"] = NodeBM25Index(documents)
-        logger.info("Pre-built BM25 index for %d documents", len(documents))
-
-    elif strategy == "fts5":
+    if strategy == "fts5":
         from treesearch.fts import FTS5Index
         fts_index = FTS5Index()
         fts_index.index_documents(documents)
@@ -507,7 +492,7 @@ async def run_benchmark(
         list of BenchmarkReport (one per strategy)
     """
     if strategies is None:
-        strategies = ["bm25", "best_first"]
+        strategies = ["fts5"]
     if k_values is None:
         k_values = [1, 3, 5]
 
@@ -637,7 +622,7 @@ async def run_benchmark_with_samples(
     Same as run_benchmark but accepts samples directly instead of loading from file.
     """
     if strategies is None:
-        strategies = ["bm25", "best_first"]
+        strategies = ["fts5"]
     if k_values is None:
         k_values = [1, 3, 5]
 

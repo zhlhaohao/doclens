@@ -3,8 +3,8 @@
 @author:XuMing(xuming624@qq.com)
 @description: QASPER benchmark script with optional embedding comparison.
 
-Loads the QASPER dataset from HuggingFace (allenai/qasper), builds tree indexes
-from academic papers, and evaluates BM25 / FTS5 / BestFirst / Embedding retrieval strategies.
+Evaluates TreeSearch on code retrieval using the CodeSearchNet dataset.
+Compares FTS5 structure-aware search against embedding-based retrieval.
 
 QASPER Dataset Overview:
     QASPER (Question Answering on Scientific Papers) contains ~1600 NLP papers with
@@ -30,11 +30,11 @@ Environment variables for embedding comparison:
     TREESEARCH_EMBEDDING_API_KEY - API key for Zhipu BigModel embedding-3
 
 Usage:
-    # Evaluate on 20 samples with BM25, FTS5, BestFirst:
+    # Evaluate on 20 samples with FTS5:
     python examples/benchmark/qasper_benchmark.py --max-samples 20
 
     # Evaluate with specific strategies:
-    python examples/benchmark/qasper_benchmark.py --strategies bm25 fts5 best_first --max-samples 50
+    python examples/benchmark/qasper_benchmark.py --strategies fts5 --max-samples 50
 
     # Compare with embedding retrieval:
     python examples/benchmark/qasper_benchmark.py --max-samples 50 --max-papers 20 --with-embedding
@@ -420,7 +420,6 @@ def paper_to_markdown(paper: dict) -> str:
 async def build_paper_indexes(
     papers: list[dict],
     output_dir: str,
-    model: str = None,
     max_concurrency: int = 5,
     force: bool = False,
 ) -> list[Document]:
@@ -443,7 +442,6 @@ async def build_paper_indexes(
     documents = await build_index(
         paths=md_paths,
         output_dir=output_dir,
-        model=model,
         if_add_node_summary=True,
         if_add_doc_description=False,
         if_add_node_text=True,
@@ -705,7 +703,7 @@ async def main():
     )
 
     parser = argparse.ArgumentParser(
-        description="QASPER benchmark: evaluate BM25/FTS5/BestFirst/Embedding on academic paper QA"
+        description="QASPER benchmark: evaluate FTS5/Embedding on academic paper QA"
     )
     parser.add_argument(
         "--split", type=str, default="validation", choices=["train", "validation"],
@@ -713,10 +711,9 @@ async def main():
     )
     parser.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["bm25", "fts5", "best_first"],
-        help="Search strategies to evaluate (default: bm25 fts5 best_first)"
+        default=["fts5"],
+        help="Search strategies to evaluate (default: fts5)"
     )
-    parser.add_argument("--model", type=str, default=None, help="LLM model name")
     parser.add_argument("--max-samples", type=int, default=50, help="Max QA samples to evaluate")
     parser.add_argument("--max-papers", type=int, default=20, help="Max papers to index")
     parser.add_argument("--top-k", type=int, default=10, help="Top-K results per query")
@@ -746,7 +743,6 @@ async def main():
 
     print(f"Dataset loaded: {len(samples)} QA samples from {len(papers)} papers")
     print(f"Strategies: {args.strategies}")
-    print(f"Model: {args.model}")
 
     # Build indexes
     t0 = time.time()
@@ -754,7 +750,6 @@ async def main():
     documents = await build_paper_indexes(
         papers=papers,
         output_dir=args.index_dir,
-        model=args.model,
         max_concurrency=args.concurrency,
         force=args.force_reindex,
     )
@@ -785,7 +780,6 @@ async def main():
         documents=documents,
         dataset_name="qasper",
         strategies=args.strategies,
-        model=args.model,
         top_k=args.top_k,
         max_concurrency=args.concurrency,
         output_dir=args.output_dir,

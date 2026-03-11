@@ -3,7 +3,7 @@
 @author:XuMing(xuming624@qq.com)
 @description: TreeSearch - Structure-aware document retrieval via tree-structured indexing.
 
-No vector embeddings. No chunk splitting. FTS5/BM25 keyword matching over document trees, with optional LLM reasoning for enhanced accuracy.
+No vector embeddings. No chunk splitting. FTS5/BM25 keyword matching over document trees.
 
 Quick Start::
 
@@ -13,18 +13,11 @@ Quick Start::
     ts = TreeSearch("docs/*.md", "src/*.py")
     results = ts.search("How to configure voice calls?")
 """
-__version__ = "0.5.8"
+__version__ = "0.7.0"
 
 # ============================================================================
 # FTS5 Compatibility: Use pysqlite3 on systems without FTS5 support
 # ============================================================================
-# On CentOS/older systems, SQLite may be compiled without FTS5 extension.
-# pysqlite3-binary provides a modern SQLite with FTS5 enabled.
-#
-# Installation: pip install pysqlite3-binary
-#
-# If neither pysqlite3 nor system FTS5 is available, the library falls back
-# to plain-table LIKE-based search (reduced ranking quality, but functional).
 import sys
 
 def _ensure_fts5_support():
@@ -60,11 +53,9 @@ from treesearch.treesearch import TreeSearch
 # -- Advanced / Power-user API --
 # Index & Document
 from treesearch.tree import Document, load_index, load_documents, save_index
-from treesearch.indexer import build_index, md_to_tree, text_to_tree, code_to_tree, json_to_tree, csv_to_tree
 
 # Search
-from treesearch.search import search, search_sync
-from treesearch.search import BestFirstTreeSearch, route_documents, PreFilter, GrepFilter
+from treesearch.search import search, search_sync, PreFilter, GrepFilter
 
 # Configuration
 from treesearch.config import TreeSearchConfig, get_config, set_config, reset_config
@@ -72,13 +63,15 @@ from treesearch.config import TreeSearchConfig, get_config, set_config, reset_co
 # FTS5
 from treesearch.fts import FTS5Index, get_fts_index, set_fts_index, reset_fts_index
 
-# BM25
-from treesearch.rank_bm25 import NodeBM25Index, NodeTFIDFIndex, BM25Okapi, tokenize
+# Tokenizer & utilities
+from treesearch.tokenizer import tokenize
+from treesearch.utils import count_tokens
 
 # Tree utilities
 from treesearch.tree import (
     INDEX_VERSION,
     assign_node_ids,
+    build_tree_maps,
     flatten_tree,
     find_node,
     get_leaf_nodes,
@@ -88,31 +81,30 @@ from treesearch.tree import (
     print_tree_json,
 )
 
+# Indexer functions
+from treesearch.indexer import build_index, md_to_tree, text_to_tree, code_to_tree, json_to_tree, csv_to_tree
+
 # Parser registry
 from treesearch.parsers import ParserRegistry, get_parser
-
-# LLM utilities (lazy import to avoid loading openai/tiktoken at startup)
-def __getattr__(name):
-    _llm_names = {"achat", "chat", "count_tokens", "extract_json"}
-    if name in _llm_names:
-        from treesearch.llm import achat, chat, count_tokens, extract_json
-        globals().update({"achat": achat, "chat": chat, "count_tokens": count_tokens, "extract_json": extract_json})
-        return globals()[name]
-    raise AttributeError(f"module 'treesearch' has no attribute {name!r}")
 
 __all__ = [
     # Primary API
     "TreeSearch",
-    # Advanced API
+    # Indexer
     "build_index", "md_to_tree", "text_to_tree", "code_to_tree", "json_to_tree", "csv_to_tree",
+    # Document
     "Document", "load_index", "load_documents", "save_index",
-    "search", "search_sync",
-    "BestFirstTreeSearch", "route_documents", "PreFilter", "GrepFilter",
+    # Search
+    "search", "search_sync", "PreFilter", "GrepFilter",
+    # Config
     "TreeSearchConfig", "get_config", "set_config", "reset_config",
+    # FTS5
     "FTS5Index", "get_fts_index", "set_fts_index", "reset_fts_index",
-    "NodeBM25Index", "NodeTFIDFIndex", "BM25Okapi", "tokenize",
-    "INDEX_VERSION", "assign_node_ids", "flatten_tree", "find_node",
+    # Tokenizer & utilities
+    "tokenize", "count_tokens",
+    # Tree utilities
+    "INDEX_VERSION", "assign_node_ids", "build_tree_maps", "flatten_tree", "find_node",
     "get_leaf_nodes", "remove_fields", "format_structure", "print_toc", "print_tree_json",
+    # Parser registry
     "ParserRegistry", "get_parser",
-    "achat", "chat", "count_tokens", "extract_json",
 ]

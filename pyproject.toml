@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytreesearch"
-version = "0.5.8"
-description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees, with optional LLM reasoning."
+version = "0.6.0"
+description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "XuMing", email = "xuming624@qq.com"},
 ]
-keywords = ["rag", "retrieval", "tree-search", "best-first", "llm", "bm25", "fts5", "document-indexing"]
+keywords = ["rag", "retrieval", "tree-search", "bm25", "fts5", "document-indexing"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -29,18 +29,16 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-llm = ["openai>=1.0", "tiktoken>=0.5"]
 jieba = ["jieba>=0.42"]
 pdf = ["pageindex>=0.1"]
 docx = ["python-docx>=0.8"]
 html = ["beautifulsoup4>=4.12"]
 fts5 = ["pysqlite3-binary>=0.5"]
 treesitter = ["tree-sitter-languages>=1.10"]
-all = ["openai>=1.0", "tiktoken>=0.5", "jieba>=0.42", "pageindex>=0.1", "python-docx>=0.8", "beautifulsoup4>=4.12", "python-dotenv>=1.0", "tree-sitter-languages>=1.10"]
+all = ["jieba>=0.42", "pageindex>=0.1", "python-docx>=0.8", "beautifulsoup4>=4.12", "tree-sitter-languages>=1.10"]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
-    "python-dotenv>=1.0",
 ]
 
 [project.urls]

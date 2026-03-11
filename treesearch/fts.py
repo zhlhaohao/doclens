@@ -152,7 +152,7 @@ def _tokenize_for_fts(text: str) -> str:
     if not text or not text.strip():
         return ""
     if _RE_HAS_CJK.search(text):
-        from .rank_bm25 import tokenize
+        from .tokenizer import tokenize
         tokens = tokenize(text)
         return " ".join(tokens)
     # English / non-CJK: return as-is, FTS5 unicode61 handles tokenization
@@ -339,8 +339,6 @@ class FTS5Index:
         Returns:
             number of nodes indexed
         """
-        from .tree import flatten_tree
-
         # Compute content hash for incremental check
         content_str = json.dumps(document.structure, ensure_ascii=False, sort_keys=True)
         content_hash = hashlib.md5(content_str.encode()).hexdigest()
@@ -371,26 +369,12 @@ class FTS5Index:
             self._conn.execute("DELETE FROM fts_nodes WHERE doc_id = ?", (document.doc_id,))
         self._conn.execute("DELETE FROM nodes WHERE doc_id = ?", (document.doc_id,))
 
-        # Flatten tree and index each node
+        # Build parent map and depth map using shared utility
+        from .tree import flatten_tree, build_tree_maps
+        _, parent_map, depth_map = build_tree_maps(document.structure)
+
         all_nodes = flatten_tree(document.structure)
         count = 0
-
-        # Build parent map for depth calculation
-        parent_map: dict[str, Optional[str]] = {}
-        depth_map: dict[str, int] = {}
-
-        def _scan(structure, parent_id=None, depth=0):
-            if isinstance(structure, list):
-                for item in structure:
-                    _scan(item, parent_id, depth)
-            elif isinstance(structure, dict):
-                nid = structure.get("node_id", "")
-                parent_map[nid] = parent_id
-                depth_map[nid] = depth
-                for child in structure.get("nodes", []):
-                    _scan(child, nid, depth + 1)
-
-        _scan(document.structure)
 
         for node in all_nodes:
             nid = node.get("node_id", "")
@@ -744,21 +728,14 @@ class FTS5Index:
             for nid, pid in parent_map.items():
                 children_map.setdefault(pid, []).append(nid)
 
-            # Bottom-up: propagate max child score to parent
-            # Single pass is enough for tree structures
-            changed = True
-            while changed:
-                changed = False
-                for pid, cids in children_map.items():
-                    child_scores = [scores.get(c, 0.0) for c in cids]
-                    if not child_scores:
-                        continue
-                    bonus = ancestor_decay * max(child_scores)
-                    old = scores.get(pid, 0.0)
-                    new_score = old + bonus
-                    if new_score > old + 1e-9:
-                        scores[pid] = new_score
-                        changed = False  # single pass is enough for tree
+            # Bottom-up: propagate max child score to parent (single pass)
+            for pid, cids in children_map.items():
+                child_scores = [scores.get(c, 0.0) for c in cids]
+                if not child_scores:
+                    continue
+                bonus = ancestor_decay * max(child_scores)
+                old = scores.get(pid, 0.0)
+                scores[pid] = old + bonus
 
             # Re-normalize to [0, 1] after ancestor propagation
             final_max = max(scores.values()) if scores else 1.0

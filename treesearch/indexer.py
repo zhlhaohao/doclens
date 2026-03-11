@@ -39,7 +39,7 @@ def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int)
 # Summary generation (shared by MD and Text)
 # ============================================================================
 
-def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = None) -> str:
+def _summarize_node(node: dict, threshold: int = 200) -> str:
     """Generate a summary for a single node. Short nodes use their own text.
 
     For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
@@ -54,33 +54,10 @@ def _summarize_node(node: dict, threshold: int = 200, model: Optional[str] = Non
     return f"{head} ... {tail}"
 
 
-async def generate_summaries(
-    structure, threshold: int = 200, model: Optional[str] = None, use_llm: bool = False
-):
-    """Generate summaries for all nodes in a tree (concurrently)."""
+async def generate_summaries(structure, threshold: int = 200):
+    """Generate summaries for all nodes in a tree."""
     nodes = flatten_tree(structure)
-    
-    if use_llm:
-        async def _llm_summarize(node, thr, mod):
-            from .llm import count_tokens, achat
-            text = node.get("text", "")
-            if count_tokens(text, model=mod) < thr:
-                return text
-            prompt = (
-                "You are given a part of a document. Generate a concise description "
-                "of the main points covered.\n\n"
-                f"Partial Document Text: {text}\n\n"
-                "Directly return the description, no other text."
-            )
-            return await achat(prompt, model=mod)
-        
-        tasks = [_llm_summarize(n, threshold, model) for n in nodes]
-        summaries = await asyncio.gather(*tasks)
-    else:
-        summaries = [_summarize_node(n, threshold=threshold, model=model) for n in nodes]
-        if asyncio.iscoroutine(summaries[0]) if summaries else False:
-             # _summarize_node is not async anymore, so it shouldn't be here, but just in case
-             summaries = await asyncio.gather(*summaries)
+    summaries = [_summarize_node(n, threshold=threshold) for n in nodes]
 
     for node, summary in zip(nodes, summaries):
         if node.get("nodes"):
@@ -90,32 +67,67 @@ async def generate_summaries(
     return structure
 
 
-async def generate_doc_description(structure, model: Optional[str] = None) -> str:
-    """Generate a one-sentence document description from its tree structure."""
+def generate_doc_description(structure) -> str:
+    """Generate a document description from its tree structure (no LLM).
 
-    def _clean(s):
-        if isinstance(s, dict):
-            out = {}
-            for k in ("title", "node_id", "summary", "prefix_summary"):
-                if k in s:
-                    out[k] = s[k]
-            if s.get("nodes"):
-                out["nodes"] = _clean(s["nodes"])
-            return out
-        elif isinstance(s, list):
-            return [_clean(i) for i in s]
-        return s
+    Extracts top-level titles and first substantial text paragraph.
+    """
+    nodes = flatten_tree(structure)
+    titles = [n.get("title", "") for n in nodes if n.get("title")][:5]
+    title_str = " > ".join(titles)
+    text = ""
+    for n in nodes:
+        t = n.get("text", "")
+        if t and len(t) > 20:
+            text = t[:200]
+            break
+    return f"{title_str}. {text}" if text else title_str
 
-    clean = _clean(structure)
-    prompt = (
-        "You are an expert in generating descriptions for a document. "
-        "Generate a one-sentence description that distinguishes this document "
-        "from others.\n\n"
-        f"Document Structure: {json.dumps(clean, ensure_ascii=False)}\n\n"
-        "Directly return the description, no other text."
-    )
-    from .llm import achat
-    return await achat(prompt, model=model)
+
+async def _finalize_tree(
+    tree,
+    doc_name: str,
+    source_path: str = "",
+    source_type: str = "",
+    *,
+    if_add_node_id: bool = True,
+    if_add_node_summary: bool = True,
+    summary_token_threshold: int = 200,
+    if_add_node_text: bool = False,
+    if_add_doc_description: bool = False,
+) -> dict:
+    """Common post-processing for all *_to_tree functions.
+
+    Steps: assign_node_ids -> format_structure -> generate_summaries -> doc_description.
+    """
+    if if_add_node_id:
+        assign_node_ids(tree)
+
+    base_order = ["title", "node_id", "summary", "prefix_summary"]
+    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
+    tail_fields = ["line_start", "line_end", "nodes"]
+    order = base_order + text_fields + tail_fields
+
+    tree = format_structure(tree, order=order)
+
+    if if_add_node_summary:
+        logger.info("Generating summaries...")
+        tree = await generate_summaries(tree, threshold=summary_token_threshold)
+        if not if_add_node_text:
+            order_no_text = [f for f in order if f != "text"]
+            tree = format_structure(tree, order=order_no_text)
+
+    result = {"doc_name": doc_name, "structure": tree}
+    if source_path:
+        result["source_path"] = source_path
+    if source_type:
+        result["source_type"] = source_type
+
+    if if_add_doc_description:
+        logger.info("Generating document description...")
+        result["doc_description"] = generate_doc_description(tree)
+
+    return result
 
 
 # ============================================================================
@@ -164,22 +176,22 @@ def _cut_md_text(markers: list[dict], lines: list[str]) -> list[dict]:
     return nodes
 
 
-def _update_token_counts(node_list: list[dict], model: Optional[str] = None) -> list[dict]:
+def _update_token_counts(node_list: list[dict]) -> list[dict]:
     """Compute cumulative token counts (self + descendants) for thinning."""
-    from .llm import count_tokens
+    from .utils import count_tokens
     for i in range(len(node_list) - 1, -1, -1):
         text = node_list[i].get("text", "")
         for ci in _children_indices(node_list, i, node_list[i]["level"]):
             ct = node_list[ci].get("text", "")
             if ct:
                 text += "\n" + ct
-        node_list[i]["text_token_count"] = count_tokens(text, model=model)
+        node_list[i]["text_token_count"] = count_tokens(text)
     return node_list
 
 
-def _thin_tree(node_list: list[dict], min_tokens: int, model: Optional[str] = None) -> list[dict]:
+def _thin_tree(node_list: list[dict], min_tokens: int) -> list[dict]:
     """Merge small sub-trees into their parent nodes."""
-    from .llm import count_tokens
+    from .utils import count_tokens
     to_remove = set()
     for i in range(len(node_list) - 1, -1, -1):
         if i in to_remove:
@@ -196,7 +208,7 @@ def _thin_tree(node_list: list[dict], min_tokens: int, model: Optional[str] = No
             if merged_parts:
                 base = node_list[i].get("text", "")
                 node_list[i]["text"] = base + "\n\n" + "\n\n".join(merged_parts) if base else "\n\n".join(merged_parts)
-                node_list[i]["text_token_count"] = count_tokens(node_list[i]["text"], model=model)
+                node_list[i]["text_token_count"] = count_tokens(node_list[i]["text"])
 
     for idx in sorted(to_remove, reverse=True):
         node_list.pop(idx)
@@ -239,7 +251,6 @@ async def md_to_tree(
     md_path: Optional[str] = None,
     md_content: Optional[str] = None,
     *,
-    model: Optional[str] = None,
     if_thinning: bool = False,
     min_token_threshold: int = 5000,
     if_add_node_summary: bool = True,
@@ -247,6 +258,7 @@ async def md_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    **kwargs,
 ) -> dict:
     """
     Build a tree index from a Markdown file or string.
@@ -270,40 +282,22 @@ async def md_to_tree(
     nodes = _cut_md_text(markers, lines)
 
     if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes, model=model)
+        nodes = _update_token_counts(nodes)
         logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold, model=model)
+        nodes = _thin_tree(nodes, min_token_threshold)
 
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    if if_add_node_id:
-        assign_node_ids(tree)
-
-    # Field ordering (unified: line_start/line_end for both MD and text)
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        logger.info("Generating summaries...")
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree}
-    if md_path:
-        result["source_path"] = os.path.abspath(md_path)
-
-    if if_add_doc_description:
-        logger.info("Generating document description...")
-        result["doc_description"] = await generate_doc_description(tree, model=model)
-
-    return result
+    return await _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(md_path) if md_path else "",
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
 
 
 # ============================================================================
@@ -410,130 +404,10 @@ def _detect_headings(lines: list[str]) -> list[dict]:
     return headings
 
 
-def _needs_llm_fallback(markers: list, lines: list, min_headings: int = 3) -> bool:
-    """Check if rule-based headings are insufficient."""
-    if len(markers) < min_headings:
-        return True
-    levels = {m["level"] for m in markers}
-    total = len(lines)
-    if len(levels) <= 1 and total > 200:
-        if total / max(len(markers), 1) > 150:
-            return True
-    if len(markers) > 0 and total / len(markers) < 3:
-        return True
-    return False
-
-
 def _preprocess_text(text: str) -> str:
     """Normalize line endings and collapse excessive blank lines."""
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\f", "\n")
     return re.sub(r"\n{3,}", "\n\n", text)
-
-
-def _chunk_for_llm(text: str, max_tokens: int = 80000, model: Optional[str] = None) -> list[str]:
-    """Split text into chunks within LLM context limits."""
-    from .llm import count_tokens
-    lines = text.split("\n")
-    chunks, current, tokens = [], [], 0
-    for line in lines:
-        lt = count_tokens(line, model=model)
-        if tokens + lt > max_tokens and current:
-            chunks.append("\n".join(current))
-            current, tokens = [], 0
-        current.append(line)
-        tokens += lt
-    if current:
-        chunks.append("\n".join(current))
-    return chunks
-
-
-def _llm_toc_prompt_init() -> str:
-    return """You are an expert in extracting hierarchical tree structure from text documents.
-Generate a tree structure (table of contents) from the given text.
-
-The structure variable is a numeric index representing the hierarchy:
-- "1" for first section, "1.1" for first subsection, etc.
-
-For line_keyword, provide a short unique phrase (5-15 words) from the beginning of that section.
-
-Response format:
-[
-    {"structure": "<hierarchy index>", "title": "<section title>", "line_keyword": "<unique phrase>"}
-]
-
-Return only the JSON array."""
-
-
-def _llm_toc_prompt_continue() -> str:
-    return """You are an expert in extracting hierarchical tree structure.
-Continue the tree structure for the current text chunk.
-
-The structure variable is a numeric index: "1", "1.1", "2", "2.1", etc.
-For line_keyword, provide a short unique phrase (5-15 words) from the beginning of that section.
-
-Response format:
-[
-    {"structure": "<hierarchy index>", "title": "<section title>", "line_keyword": "<unique phrase>"}
-]
-
-Return only the additional JSON array."""
-
-
-async def _llm_generate_toc(text: str, lines: list[str], model: str) -> list[dict]:
-    """Use LLM to generate TOC, then locate sections in original text."""
-    from .llm import achat_with_finish_reason, extract_json
-    chunks = _chunk_for_llm(text, model=model)
-
-    # First chunk
-    prompt = _llm_toc_prompt_init() + "\n\nGiven text:\n" + chunks[0]
-    resp, reason = await achat_with_finish_reason(prompt, model=model)
-    if reason != "finished":
-        raise RuntimeError(f"LLM finish_reason: {reason}")
-    toc = extract_json(resp)
-    if not isinstance(toc, list):
-        toc = []
-
-    # Continuation chunks
-    for chunk in chunks[1:]:
-        prompt = (_llm_toc_prompt_continue()
-                  + "\n\nPrevious tree structure:\n" + json.dumps(toc, indent=2)
-                  + "\n\nCurrent text:\n" + chunk)
-        resp, reason = await achat_with_finish_reason(prompt, model=model)
-        if reason != "finished":
-            raise RuntimeError(f"LLM finish_reason: {reason}")
-        additional = extract_json(resp)
-        if isinstance(additional, list):
-            toc.extend(additional)
-
-    # Locate each section in text
-    def _locate(keyword: str, start_from: int) -> int:
-        kw = keyword.lower().strip()
-        for i in range(start_from, len(lines)):
-            if kw in lines[i].lower():
-                return i + 1
-        # Fuzzy match first few words
-        words = kw.split()[:4]
-        if words:
-            pattern = r"\s+".join(re.escape(w) for w in words)
-            for i in range(start_from, len(lines)):
-                if re.search(pattern, lines[i].lower()):
-                    return i + 1
-        return start_from + 1
-
-    markers = []
-    last_line = 0
-    for item in toc:
-        structure = item.get("structure", "1")
-        level = len(structure.rstrip(".").split("."))
-        keyword = item.get("line_keyword", "")
-        line_num = _locate(keyword, last_line)
-        last_line = max(last_line, line_num - 1)
-        markers.append({
-            "title": item.get("title", "Untitled"),
-            "line_num": line_num,
-            "level": level,
-        })
-    return markers
 
 
 def _cut_text_content(markers: list[dict], lines: list[str]) -> list[dict]:
@@ -557,8 +431,6 @@ async def text_to_tree(
     text_path: Optional[str] = None,
     text_content: Optional[str] = None,
     *,
-    model: Optional[str] = None,
-    fallback_to_llm: str = "auto",
     if_thinning: bool = False,
     min_token_threshold: int = 5000,
     if_add_node_summary: bool = True,
@@ -566,14 +438,14 @@ async def text_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    **kwargs,
 ) -> dict:
     """
-    Build a tree index from plain text.
+    Build a tree index from plain text (pure rule-based, no LLM).
 
     Args:
         text_path: path to a .txt file
         text_content: raw text string (alternative to text_path)
-        fallback_to_llm: 'auto' | 'yes' | 'no'
     Returns:
         {'doc_name': str, 'structure': list, 'doc_description'?: str}
     """
@@ -594,24 +466,12 @@ async def text_to_tree(
     lines = text.split("\n")
     logger.info("Text loaded: %d lines", len(lines))
 
-    # Step 1: heading detection
-    use_llm = (fallback_to_llm == "yes")
-    markers = []
+    # Step 1: heading detection (pure rule-based)
+    headings = _detect_headings(lines)
+    markers = [{"title": h["title"], "line_num": h["line_num"], "level": h["level"]} for h in headings]
+    logger.info("Rule-based detection: %d headings", len(markers))
 
-    if not use_llm:
-        headings = _detect_headings(lines)
-        markers = [{"title": h["title"], "line_num": h["line_num"], "level": h["level"]} for h in headings]
-        logger.info("Rule-based detection: %d headings", len(markers))
-        if fallback_to_llm == "auto" and _needs_llm_fallback(markers, lines):
-            logger.info("Insufficient headings, falling back to LLM...")
-            use_llm = True
-
-    if use_llm:
-        if not model:
-            raise ValueError("model is required for LLM fallback")
-        markers = await _llm_generate_toc(text, lines, model)
-        logger.info("LLM-generated structure: %d sections", len(markers))
-
+    # Fallback: single root node if no headings detected
     if not markers:
         markers = [{"title": doc_name, "line_num": 1, "level": 1}]
 
@@ -620,41 +480,23 @@ async def text_to_tree(
 
     # Step 3: thinning
     if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes, model=model)
+        nodes = _update_token_counts(nodes)
         logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold, model=model)
+        nodes = _thin_tree(nodes, min_token_threshold)
 
     # Step 4: build tree
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    if if_add_node_id:
-        assign_node_ids(tree)
-
-    # Step 5: format and summaries
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        logger.info("Generating summaries...")
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree}
-    if text_path:
-        result["source_path"] = os.path.abspath(text_path)
-
-    if if_add_doc_description:
-        logger.info("Generating document description...")
-        result["doc_description"] = await generate_doc_description(tree, model=model)
-
-    return result
+    return await _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(text_path) if text_path else "",
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
 
 
 # ============================================================================
@@ -730,7 +572,6 @@ def _detect_code_headings(lines: list[str], ext: str, source: str = "") -> list[
 async def code_to_tree(
     code_path: str,
     *,
-    model: Optional[str] = None,
     if_thinning: bool = False,
     min_token_threshold: int = 5000,
     if_add_node_summary: bool = True,
@@ -738,10 +579,11 @@ async def code_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    **kwargs,
 ) -> dict:
     """
     Build a tree index from a code file.
-    
+
     Returns:
         {'doc_name': str, 'structure': list, 'doc_description'?: str}
     """
@@ -764,37 +606,22 @@ async def code_to_tree(
     nodes = _cut_text_content(markers, lines)
 
     if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes, model=model)
+        nodes = _update_token_counts(nodes)
         logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold, model=model)
+        nodes = _thin_tree(nodes, min_token_threshold)
 
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    if if_add_node_id:
-        assign_node_ids(tree)
-
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        logger.info("Generating summaries...")
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(code_path)}
-
-    if if_add_doc_description:
-        logger.info("Generating document description...")
-        result["doc_description"] = await generate_doc_description(tree, model=model)
-
-    return result
+    return await _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(code_path),
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
 
 
 # ============================================================================
@@ -826,7 +653,6 @@ def _json_to_nodes(data, prefix: str = "", level: int = 1) -> list[dict]:
 async def json_to_tree(
     json_path: str,
     *,
-    model: Optional[str] = None,
     if_add_node_summary: bool = True,
     summary_token_threshold: int = 200,
     if_add_doc_description: bool = False,
@@ -850,25 +676,16 @@ async def json_to_tree(
         node["line_end"] = i + 1
 
     tree = _build_tree(flat_nodes)
-    if if_add_node_id:
-        assign_node_ids(tree)
 
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(json_path)}
-    if if_add_doc_description:
-        result["doc_description"] = await generate_doc_description(tree, model=model)
-    return result
+    return await _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(json_path),
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
 
 
 # ============================================================================
@@ -878,7 +695,6 @@ async def json_to_tree(
 async def csv_to_tree(
     csv_path: str,
     *,
-    model: Optional[str] = None,
     if_add_node_summary: bool = True,
     summary_token_threshold: int = 200,
     if_add_doc_description: bool = False,
@@ -906,25 +722,16 @@ async def csv_to_tree(
         flat_nodes.append({"title": title, "level": 2, "text": row_text, "line_num": i, "line_start": i, "line_end": i})
 
     tree = _build_tree(flat_nodes)
-    if if_add_node_id:
-        assign_node_ids(tree)
 
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(csv_path)}
-    if if_add_doc_description:
-        result["doc_description"] = await generate_doc_description(tree, model=model)
-    return result
+    return await _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(csv_path),
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
 
 
 # ============================================================================
@@ -952,7 +759,6 @@ async def build_index(
     output_dir: str = "./indexes",
     *,
     db_path: str = "",
-    model: Optional[str] = None,
     if_add_node_summary: Optional[bool] = None,
     if_add_doc_description: Optional[bool] = None,
     if_add_node_text: Optional[bool] = None,
@@ -982,8 +788,6 @@ async def build_index(
     cfg = get_config()
 
     # Resolve defaults from config
-    if model is None:
-        model = cfg.model
     if if_add_node_summary is None:
         if_add_node_summary = cfg.if_add_node_summary
     if if_add_doc_description is None:
@@ -1055,7 +859,6 @@ async def build_index(
             try:
                 ext = os.path.splitext(fp)[1].lower()
                 common = dict(
-                    model=model,
                     if_add_node_summary=if_add_node_summary,
                     if_add_doc_description=if_add_doc_description,
                     if_add_node_text=if_add_node_text,

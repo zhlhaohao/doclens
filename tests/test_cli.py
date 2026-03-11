@@ -5,9 +5,7 @@
 """
 import os
 import sys
-import json
 import tempfile
-from unittest.mock import patch, AsyncMock
 
 import pytest
 from treesearch.cli import _build_parser, _load_documents_from_dir
@@ -32,11 +30,6 @@ class TestBuildParser:
         assert args.command == "index"
         assert args.output_dir == "./out"
 
-    def test_index_with_api_key(self):
-        parser = _build_parser()
-        args = parser.parse_args(["index", "--paths", "test.md", "--api-key", "sk-test"])
-        assert args.api_key == "sk-test"
-
     def test_index_with_force(self):
         parser = _build_parser()
         args = parser.parse_args(["index", "--paths", "test.md", "--force"])
@@ -53,31 +46,6 @@ class TestBuildParser:
         assert args.command == "search"
         assert args.index_dir == "./idx"
         assert args.query == "hello"
-
-    def test_search_strategy(self):
-        parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "best_first"])
-        assert args.strategy == "best_first"
-
-    def test_search_strategy_auto(self):
-        parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--strategy", "auto"])
-        assert args.strategy == "auto"
-
-    def test_search_strategy_default(self):
-        parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q"])
-        assert args.strategy == "fts5_only"
-
-    def test_search_no_bm25(self):
-        parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--no-bm25"])
-        assert args.no_bm25 is True
-
-    def test_search_with_api_key(self):
-        parser = _build_parser()
-        args = parser.parse_args(["search", "--index_dir", ".", "--query", "q", "--api-key", "sk-test"])
-        assert args.api_key == "sk-test"
 
     def test_verbose_flag(self):
         parser = _build_parser()

@@ -30,7 +30,7 @@ class TreeSearch:
         from treesearch import TreeSearch
 
         # Eager indexing
-        ts = TreeSearch(model="gpt-4o")
+        ts = TreeSearch()
         ts.index("docs/*.md", "src/*.py")
         results = ts.search("How to configure voice calls?")
 
@@ -47,8 +47,6 @@ class TreeSearch:
         self,
         *paths: str,
         db_path: str = "./index.db",
-        model: Optional[str] = None,
-        strategy: str = "fts5_only",
         **kwargs
     ):
         """
@@ -57,16 +55,12 @@ class TreeSearch:
         Args:
             *paths: File paths or glob patterns to index lazily on first search.
             db_path: Path to the SQLite database file for all data storage.
-            model: LLM model name (for 'best_first' strategy).
-            strategy: Default search strategy. Options: 'fts5_only', 'best_first', 'auto'.
             **kwargs: Additional default arguments for search().
         """
         self._pending_paths: List[str] = list(paths)
         self.db_path = db_path
-        self.strategy = strategy
         self.documents: List[Document] = []
         self.config = get_config()
-        self.model = model or self.config.model
         self.kwargs = kwargs
         # Ensure FTS5 scorer uses the same DB as tree storage
         if db_path and not self.config.fts_db_path:
@@ -99,7 +93,6 @@ class TreeSearch:
                 abs_fp = os.path.abspath(fp)
                 current_hash = _file_hash(abs_fp)
                 if not current_hash:
-                    # File disappeared after glob (e.g. dangling symlink)
                     continue
                 if stored_meta.get(abs_fp) != current_hash:
                     changed.append(fp)
@@ -155,55 +148,36 @@ class TreeSearch:
 
     async def asearch(self, query: str, **kwargs) -> dict:
         """Async: Search across indexed documents. Auto-builds index if pending paths exist.
-        Search across one or more documents using tree-structured retrieval.
-
-        All parameters default to ``get_config()`` values when not explicitly set.
 
         Args:
             query: user query
-            documents: list of Document objects (single or multiple)
-            model: LLM model name
             top_k_docs: max documents to search (routing stage)
             max_nodes_per_doc: max result nodes per document
-            strategy: 'fts5_only' (default) | 'best_first' | 'auto'
-                    'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
-                    'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
-                    'auto' selects per-document strategy based on source_type (all default to fts5_only)
-            value_threshold: minimum relevance score
-            max_llm_calls: max LLM calls per document (only for best_first)
-            use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
-            pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
+            pre_filter: custom PreFilter instance for node pre-scoring
             text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
             include_ancestors: attach ancestor titles for context anchoring
             merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
-            
+
         Returns:
-            dict with 'documents', 'query', and 'llm_calls'.
+            dict with 'documents', 'query', and 'flat_nodes'.
         """
         if not self.documents and self._pending_paths:
             if os.path.isfile(self.db_path):
-                # Single DB open: load documents + meta in one session.
-                # Register as global singleton so search() reuses this connection
-                # instead of opening the DB again (critical for slow filesystems like CephFS/NFS).
                 from .fts import FTS5Index, get_fts_index, set_fts_index
                 fts = get_fts_index(db_path=self.db_path)
                 cached_docs = fts.load_all_documents()
                 stored_meta = fts.get_all_index_meta() if cached_docs else {}
-                # Don't close — keep the singleton alive for search() to reuse
 
                 if cached_docs:
                     changed = self._get_changed_files(stored_meta=stored_meta)
                     if not changed:
-                        # No files changed — use cached documents directly
                         self.documents = cached_docs
                         self._pending_paths.clear()
                     else:
-                        # Only re-index changed files, then load all from DB
                         logger.info("Incremental re-index: %d file(s) changed", len(changed))
                         await self.aindex(*changed)
                         self.documents = load_documents(self.db_path)
                         self._pending_paths.clear()
-            # First-time index: no DB exists yet
             if not self.documents and self._pending_paths:
                 await self.aindex(*self._pending_paths)
                 self._pending_paths.clear()
@@ -218,8 +192,6 @@ class TreeSearch:
             )
 
         search_kwargs = {
-            "model": self.model,
-            "strategy": self.strategy,
             **self.kwargs,
             **kwargs
         }
@@ -227,30 +199,18 @@ class TreeSearch:
 
     def search(self, query: str, **kwargs) -> dict:
         """Sync: Search across indexed documents.
-        Search across one or more documents using tree-structured retrieval.
-
-        All parameters default to ``get_config()`` values when not explicitly set.
 
         Args:
             query: user query
-            documents: list of Document objects (single or multiple)
-            model: LLM model name
             top_k_docs: max documents to search (routing stage)
             max_nodes_per_doc: max result nodes per document
-            strategy: 'fts5_only' (default) | 'best_first' | 'auto'
-                    'fts5_only' uses pure FTS5/BM25 scoring without any LLM calls (fastest)
-                    'best_first' uses BM25 pre-scoring + LLM batch ranking (highest quality)
-                    'auto' selects per-document strategy based on source_type (all default to fts5_only)
-            value_threshold: minimum relevance score
-            max_llm_calls: max LLM calls per document (only for best_first)
-            use_bm25: enable built-in BM25 pre-scoring (ignored if pre_filter is set)
-            pre_filter: custom PreFilter instance for node pre-scoring (overrides use_bm25)
+            pre_filter: custom PreFilter instance for node pre-scoring
             text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
             include_ancestors: attach ancestor titles for context anchoring
             merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
 
         Returns:
-            dict with 'documents', 'query', and 'llm_calls'.
+            dict with 'documents', 'query', and 'flat_nodes'.
         """
         try:
             loop = asyncio.get_running_loop()
@@ -287,7 +247,6 @@ class TreeSearch:
             else:
                 if os.path.isfile(p):
                     resolved.append(p)
-        # Deduplicate and sort
         return sorted(set(os.path.abspath(f) for f in resolved))
 
     def get_indexed_files(self) -> List[dict]:

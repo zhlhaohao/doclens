@@ -16,7 +16,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/shibing624/TreeSearch.svg)](https://github.com/shibing624/TreeSearch/issues)
 [![Wechat Group](https://img.shields.io/badge/wechat-group-green.svg?logo=wechat)](#Community)
 
-**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 + BM25 + LLM reasoning over document tree structures. Supports Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++ etc.), HTML, XML, JSON, CSV, PDF, and DOCX.
+**TreeSearch** is a structure-aware document retrieval library. No vector embeddings. No chunk splitting. SQLite FTS5 keyword matching over document tree structures. Supports Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++ etc.), HTML, XML, JSON, CSV, PDF, and DOCX.
 
 Millisecond-latency search over tens of thousands of documents and large codebases, with structure preservation.
 
@@ -44,15 +44,15 @@ for doc in results["documents"]:
 
 Traditional RAG systems split documents into fixed-size chunks and retrieve by vector similarity. This **destroys document structure**, loses heading hierarchy, and misses reasoning-dependent queries.
 
-TreeSearch takes a fundamentally different approach — parse documents into **tree structures** based on their natural heading hierarchy, then search with **FTS5/BM25 keyword matching** (zero-cost, no API key) or **LLM reasoning** for enhanced accuracy.
+TreeSearch takes a fundamentally different approach — parse documents into **tree structures** based on their natural heading hierarchy, then search with **FTS5 keyword matching** (zero-cost, no API key needed).
 
 | | Traditional RAG | TreeSearch |
 |---|---|---|
 | **Preprocessing** | Chunk splitting + embedding | Parse headings → build tree |
-| **Retrieval** | Vector similarity search | FTS5/BM25 keyword matching (default, no LLM); optional LLM tree search |
-| **Multi-doc** | Needs vector DB for routing | FTS5 cross-doc scoring (default); optional LLM routing by doc descriptions |
+| **Retrieval** | Vector similarity search | FTS5 keyword matching (no LLM needed) |
+| **Multi-doc** | Needs vector DB for routing | FTS5 cross-doc scoring |
 | **Structure** | Lost after chunking | Fully preserved as tree hierarchy |
-| **Dependencies** | Vector DB + embedding model | SQLite only (no embedding, no vector DB, LLM optional) |
+| **Dependencies** | Vector DB + embedding model | SQLite only (no embedding, no vector DB) |
 
 ### Key Advantages
 
@@ -60,28 +60,25 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 - **No chunk splitting** — Documents retain their natural heading structure
 - **No vector DB** — No Pinecone, Milvus, or Chroma to manage
 - **Tree-aware retrieval** — Heading hierarchy guides search, not arbitrary chunk boundaries
-- **SQLite FTS5 pre-filter** (default) — Persistent inverted index with WAL mode, incremental updates, CJK support, and SQL aggregation
-- **BM25 zero-cost baseline** — Instant keyword search with no API calls, useful as standalone or pre-filter
+- **SQLite FTS5 engine** — Persistent inverted index with WAL mode, incremental updates, CJK support, and SQL aggregation
 
 ## Features
 
-- **FTS5-only search** (default) — Zero LLM calls, millisecond-level FTS5/BM25 keyword matching, no API key needed
+- **FTS5 search** — Zero LLM calls, millisecond-level FTS5 keyword matching, no API key needed
 - **SQLite FTS5 engine** — Persistent inverted index, WAL mode, incremental updates, MD structure-aware columns (title/summary/body/code/front_matter), column weighting, CJK tokenization
 - **Tree-structured indexing** — Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++/PHP), HTML, XML, JSON, CSV, PDF, and DOCX are parsed into hierarchical trees
 - **Parser registry** — Extensible `ParserRegistry` with built-in parsers auto-registered; custom parsers via `ParserRegistry.register()`
 - **Python AST parsing** — `ast` module extracts classes/functions with full signatures (parameters, return types); regex fallback for syntax errors
 - **PDF/DOCX/HTML parsers** — Optional parsers via `pageindex`, `python-docx`, `beautifulsoup4` (install with `pip install pytreesearch[all]`)
 - **GrepFilter** — Exact literal/regex matching for precise symbol and keyword search across tree nodes
-- **BM25 node-level index** — Structure-aware scoring with hierarchical field weighting (title > summary > body) and ancestor propagation
-- **Best-First search** (optional) — Priority queue driven, FTS5 pre-scoring + LLM evaluation, early stopping and budget control
-- **Multi-document search** — Route queries across document collections via LLM reasoning
+- **Source-type routing** — Automatic pre-filter selection based on file type (e.g., code files use GrepFilter + FTS5)
 - **Chinese + English** — Built-in jieba tokenization for Chinese and regex tokenization for English
 - **Batch indexing** — `build_index()` supports glob patterns for concurrent multi-file processing
 - **Async-first** — All core functions are async with sync wrappers available
 - **Config-driven defaults** — `search()` and `build_index()` read defaults from `get_config()`, overridable per-call
 - **CLI included** — `treesearch index` and `treesearch search` commands
 
-## FTS5 Standalone (No LLM Needed)
+## FTS5 Standalone
 
 ```python
 from treesearch import FTS5Index, Document, load_index
@@ -112,14 +109,11 @@ for doc_agg in agg:
 # Build indexes from glob pattern
 treesearch index --paths "docs/*.md" --add-description
 
-# Search with Best-First + FTS5 (default pre-filter)
+# Search with FTS5
 treesearch search --index_dir ./indexes/ --query "How does auth work?" --fts
 
 # Search with persistent FTS5 database
 treesearch search --index_dir ./indexes/ --query "auth" --fts --fts-db ./indexes/fts.db
-
-# Control LLM budget
-treesearch search --index_dir ./indexes/ --query "auth" --max-llm-calls 10
 ```
 
 ## How It Works
@@ -134,41 +128,16 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
         │  JSON index files
         ▼
    ┌──────────┐
-   │  search   │  FTS5/Grep match → (optional) route to docs → tree search
+   │  search   │  FTS5/Grep pre-filter → cross-doc scoring → ranked results
    └────┬─────┘
         │  dict result
         ▼
   Ranked nodes with scores and text
 ```
 
-**Layer 1 — FTS5/BM25 Pre-Scoring**: `FTS5Index` (default) uses SQLite FTS5 inverted index with MD structure-aware columns and column weighting for fast pre-filtering. Alternatively, `NodeBM25Index` provides in-memory BM25 scoring. Both are instant, no LLM needed.
+**FTS5 Pre-Scoring**: `FTS5Index` uses SQLite FTS5 inverted index with MD structure-aware columns (title/summary/body/code/front_matter) and column weighting for fast scoring. Instant results, no LLM needed.
 
-**Layer 2 — Tree Search** (optional): `TreeSearch` uses a priority queue to expand the most promising nodes. LLM evaluates each node's relevance (title + summary only). Early stopping when top score drops below threshold.
-
-**Layer 3 — Results**: Budget-controlled LLM calls with subtree caching for reuse across similar queries.
-
-### Search Strategies
-
-| Strategy | Description | LLM Calls | Best For |
-|----------|-------------|-----------|----------|
-| `fts5_only` (default) | Pure FTS5/BM25 scoring | Zero | Fast keyword search, no API key needed |
-| `best_first` | FTS5/BM25 pre-scoring + priority queue + LLM evaluation | Moderate (budget-controlled) | Best accuracy |
-| `auto` | Per-document strategy based on `source_type` (code → GrepFilter + FTS5) | Varies | Mixed file types |
-| FTS5 standalone | `FTS5Index.search()` | Zero | Persistent inverted index, no API key |
-
-
-FTS5/BM25 strategies work out of the box with no API key. For LLM-enhanced strategy (`best_first`), set up API key:
-
-```bash
-# Recommended: TreeSearch-specific environment variables (highest priority)
-export TREESEARCH_LLM_API_KEY="sk-..."
-export TREESEARCH_LLM_BASE_URL="https://api.openai.com/v1"
-export TREESEARCH_MODEL="gpt-4o"
-
-# Alternative: OpenAI-compatible environment variables (fallback)
-export OPENAI_API_KEY="sk-..."
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-```
+**Source-Type Routing**: For code files, `GrepFilter` + `FTS5` are combined automatically for precise symbol matching. The pre-filter is selected based on file type via `PREFILTER_ROUTING`.
 
 ## Use Cases
 
@@ -185,11 +154,10 @@ docs = await build_index(
     output_dir="./indexes"
 )
 
-# 2. Search
-result = search(
+# 2. Search — millisecond response
+result = await search(
     query="How to configure Redis cluster?",
     documents=docs,
-    strategy="fts5_only"  # Millisecond response
 )
 
 # 3. Results — complete sections, not fragments
@@ -201,9 +169,9 @@ for doc in result["documents"]:
 ```
 
 **Why better than traditional RAG?**
-- ✅ Finds **complete sections**, not fragments
-- ✅ Includes **section titles** as context anchors
-- ✅ Supports hierarchical navigation (parent/child sections)
+- Finds **complete sections**, not fragments
+- Includes **section titles** as context anchors
+- Supports hierarchical navigation (parent/child sections)
 
 ### Use Case 2: Codebase Search
 
@@ -216,11 +184,10 @@ docs = await build_index(
     output_dir="./code_indexes"
 )
 
-# Search
-result = search(
+# Search — auto-detects code files, uses AST parsing + GrepFilter
+result = await search(
     query="user login authentication",
     documents=docs,
-    strategy="auto"  # Auto-detects code files, uses AST parsing
 )
 
 # Results example:
@@ -231,9 +198,9 @@ result = search(
 ```
 
 **Why better than grep/IDE search?**
-- ✅ **Semantic understanding**: Not just keyword matching, understands "login" = "authentication"
-- ✅ **Structure-aware**: Finds complete classes/methods with docstrings
-- ✅ **Precise location**: Directly locates to code line numbers
+- **Semantic understanding**: Not just keyword matching, understands "login" = "authentication"
+- **Structure-aware**: Finds complete classes/methods with docstrings
+- **Precise location**: Directly locates to code line numbers
 
 ### Use Case 3: Long Document QA (Papers/Books)
 
@@ -242,19 +209,18 @@ result = search(
 ```python
 docs = await build_index(paths=["paper.pdf"])
 
-result = search(
+result = await search(
     query="experimental methodology",
     documents=docs,
-    strategy="fts5_only"
 )
 
 # Automatically finds "3.2 Experimental Design" section content
 ```
 
 **Why better than Ctrl+F?**
-- ✅ **Semantic matching**: Finds synonymous paragraphs for "experimental methods"
-- ✅ **Section location**: Tells you which chapter and section
-- ✅ **Scalable to multi-doc**: Search 10 papers simultaneously
+- **Semantic matching**: Finds synonymous paragraphs for "experimental methods"
+- **Section location**: Tells you which chapter and section
+- **Scalable to multi-doc**: Search 10 papers simultaneously
 
 ### Real Case Comparison
 
@@ -267,7 +233,7 @@ Search "GPU" → Found 47 matches → Manual review → 10 minutes
 
 **TreeSearch way**:
 ```python
-result = search("How to request GPU machines", docs, strategy="fts5_only")
+result = await search("How to request GPU machines", docs)
 # Directly returns "Resource Guide > GPU Request Process" section
 # Time: < 100ms
 ```
@@ -298,10 +264,10 @@ Evaluated on [QASPER](https://huggingface.co/datasets/allenai/qasper) dataset (5
 | **Query Time** | 573ms | **0.7ms** |
 
 **Key Findings**:
-- ✅ **Embedding MRR +18%** — Better semantic understanding
-- ✅ **TreeSearch Recall@5 +29%** — Structure preservation helps recall more relevant content
-- ✅ **TreeSearch 780x faster queries** — Milliseconds vs seconds
-- ✅ **TreeSearch instant indexing** — No embedding API calls needed
+- Embedding MRR +18% — Better semantic understanding
+- TreeSearch Recall@5 +29% — Structure preservation helps recall more relevant content
+- TreeSearch 780x faster queries — Milliseconds vs seconds
+- TreeSearch instant indexing — No embedding API calls needed
 
 ### Code Retrieval (CodeSearchNet)
 
@@ -316,10 +282,10 @@ Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) da
 | **Query Time** | 620ms | **0.8ms** |
 
 **Key Findings**:
-- ✅ **Embedding MRR +13%** — Better code semantic understanding
-- ✅ **TreeSearch MRR 84.7%** — Strong performance for keyword-based code search
-- ✅ **TreeSearch 800x faster queries** — Milliseconds vs seconds
-- ✅ **TreeSearch 22x faster indexing** — No embedding API calls needed
+- Embedding MRR +13% — Better code semantic understanding
+- TreeSearch MRR 84.7% — Strong performance for keyword-based code search
+- TreeSearch 800x faster queries — Milliseconds vs seconds
+- TreeSearch 22x faster indexing — No embedding API calls needed
 
 ### Summary
 
@@ -336,7 +302,7 @@ python examples/benchmark/codesearchnet_benchmark.py --max-samples 50 --max-corp
 
 ## Documentation
 
-- [Architecture](https://github.com/shibing624/TreeSearch/blob/main/docs/architecture.md) — Design principles and three-layer architecture
+- [Architecture](https://github.com/shibing624/TreeSearch/blob/main/docs/architecture.md) — Design principles and architecture
 - [API Reference](https://github.com/shibing624/TreeSearch/blob/main/docs/api.md) — Complete API documentation
 
 ## Community
@@ -370,5 +336,5 @@ Contributions are welcome! Please submit a [Pull Request](https://github.com/shi
 
 ## Acknowledgements
 
-- [BM25 (Okapi BM25)](https://en.wikipedia.org/wiki/Okapi_BM25) — The classic probabilistic ranking function
+- [SQLite FTS5](https://www.sqlite.org/fts5.html) — The full-text search engine powering TreeSearch
 - [VectifyAI/PageIndex](https://github.com/VectifyAI/PageIndex) — Inspiration for structure-aware indexing and retrieval

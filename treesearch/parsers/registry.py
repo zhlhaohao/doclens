@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Parser registry and search strategy routing.
+@description: Parser registry and pre-filter routing.
 
-Maps file extensions to source types, parsers, and default search strategies.
-All strategies default to fts5_only (no LLM cost). Users opt-in to best_first.
+Maps file extensions to source types, parsers, and default pre-filter chains.
 """
 import logging
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -87,55 +86,26 @@ def _get_source_type(ext: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Search strategy routing
+# Pre-filter routing
 # ---------------------------------------------------------------------------
-# All defaults are fts5_only (zero LLM cost).
-# pre_filters: list of PreFilter class names to auto-enable.
-# Users can override strategy to "best_first" via config/kwargs.
+# pre_filters: list of PreFilter class names to auto-enable per source_type.
 
-STRATEGY_ROUTING: dict[str, dict[str, Any]] = {
-    "markdown": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "code": {
-        "strategy": "fts5_only",
-        "pre_filters": ["grep", "fts5"],
-    },
-    "text": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "json": {
-        "strategy": "fts5_only",
-        "pre_filters": ["grep"],
-    },
-    "csv": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "html": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "xml": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "pdf": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
-    "docx": {
-        "strategy": "fts5_only",
-        "pre_filters": ["fts5"],
-    },
+PREFILTER_ROUTING: dict[str, list[str]] = {
+    "markdown": ["fts5"],
+    "code": ["grep", "fts5"],
+    "text": ["fts5"],
+    "json": ["grep"],
+    "csv": ["fts5"],
+    "html": ["fts5"],
+    "xml": ["fts5"],
+    "pdf": ["fts5"],
+    "docx": ["fts5"],
 }
 
 
-def get_strategy_for_source_type(source_type: str) -> dict[str, Any]:
-    """Get recommended search strategy config for a source_type."""
-    return STRATEGY_ROUTING.get(source_type, STRATEGY_ROUTING["text"])
+def get_prefilters_for_source_type(source_type: str) -> list[str]:
+    """Get recommended pre-filter chain for a source_type."""
+    return PREFILTER_ROUTING.get(source_type, PREFILTER_ROUTING["text"])
 
 
 # ---------------------------------------------------------------------------
