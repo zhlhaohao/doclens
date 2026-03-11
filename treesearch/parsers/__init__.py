@@ -15,6 +15,17 @@ from .registry import (
 )
 from .ast_parser import parse_python_structure
 
+# Tree-sitter parser (optional)
+try:
+    from .treesitter_parser import (
+        parse_treesitter_structure,
+        treesitter_code_to_tree,
+        EXT_TO_LANGUAGE,
+    )
+    _has_treesitter = True
+except ImportError:
+    _has_treesitter = False
+
 __all__ = [
     "ParserRegistry",
     "get_parser",
@@ -23,3 +34,6 @@ __all__ = [
     "get_strategy_for_source_type",
     "parse_python_structure",
 ]
+
+if _has_treesitter:
+    __all__ += ["parse_treesitter_structure", "treesitter_code_to_tree", "EXT_TO_LANGUAGE"]

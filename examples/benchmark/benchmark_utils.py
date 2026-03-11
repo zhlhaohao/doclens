@@ -9,14 +9,11 @@ cost (token consumption) and latency tracking.
 Supported datasets: QASPER, QuALITY, custom JSONL.
 Key metrics: retrieval accuracy (P@K, R@K, NDCG@K, MRR, Hit@K) + cost (tokens, LLM calls, latency).
 
-Usage:
-    from examples.benchmark.benchmark import load_dataset, run_benchmark, print_report, print_comparison
 """
 import asyncio
 import json
 import logging
 import os
-import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -24,7 +21,7 @@ from treesearch.llm import count_tokens
 from treesearch.search import search
 from treesearch.tree import Document, flatten_tree
 
-from .metrics import (
+from metrics import (
     CostStats, CostTracker, aggregate_cost_stats,
     evaluate_query,
 )

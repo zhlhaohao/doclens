@@ -19,13 +19,19 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     # Markdown
     ".md": "markdown",
     ".markdown": "markdown",
-    # Code
+    # Code (core languages)
     ".py": "code",
     ".java": "code",
     ".ts": "code",
+    ".tsx": "code",
     ".js": "code",
+    ".jsx": "code",
     ".cpp": "code",
     ".cc": "code",
+    ".cxx": "code",
+    ".hpp": "code",
+    ".h": "code",
+    ".c": "code",
     ".cs": "code",
     ".php": "code",
     ".go": "code",
@@ -33,6 +39,24 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".rs": "code",
     ".swift": "code",
     ".kt": "code",
+    # Code (extended languages via tree-sitter)
+    ".scala": "code",
+    ".lua": "code",
+    ".r": "code",
+    ".R": "code",
+    ".sql": "code",
+    ".bash": "code",
+    ".sh": "code",
+    ".el": "code",
+    ".clj": "code",
+    ".ex": "code",
+    ".exs": "code",
+    ".erl": "code",
+    ".hs": "code",
+    ".jl": "code",
+    ".ml": "code",
+    ".pl": "code",
+    ".m": "code",
     # Structured data
     ".json": "json",
     ".csv": "csv",
@@ -40,6 +64,13 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".html": "html",
     ".htm": "html",
     ".xml": "xml",
+    ".css": "code",
+    # Config
+    ".toml": "code",
+    ".yaml": "code",
+    ".yml": "code",
+    ".dockerfile": "code",
+    ".mk": "code",
     # Documents
     ".pdf": "pdf",
     ".docx": "docx",
@@ -178,13 +209,39 @@ def _register_builtin_parsers() -> None:
     for ext in (".txt", ".log", ".rst"):
         ParserRegistry.register(ext, _text_parser)
 
-    # Code files
+    # Code files (regex-based fallback, registered first)
     async def _code_parser(fp, **kw):
         return await code_to_tree(code_path=fp, **kw)
 
-    for ext in (".py", ".java", ".ts", ".js", ".cpp", ".cc", ".cs", ".php", ".go",
-                ".rb", ".rs", ".swift", ".kt", ".html", ".htm", ".xml"):
+    _regex_code_exts = (
+        ".py", ".java", ".ts", ".tsx", ".js", ".jsx",
+        ".cpp", ".cc", ".cxx", ".hpp", ".h", ".c",
+        ".cs", ".php", ".go", ".rb", ".rs", ".swift", ".kt",
+        ".html", ".htm", ".xml",
+    )
+    for ext in _regex_code_exts:
         ParserRegistry.register(ext, _code_parser)
+
+    # Tree-sitter code parser (optional, overrides regex for supported languages)
+    try:
+        from ..parsers.treesitter_parser import treesitter_code_to_tree, EXT_TO_LANGUAGE
+
+        async def _treesitter_parser(fp, **kw):
+            return await treesitter_code_to_tree(code_path=fp, **kw)
+
+        # Register tree-sitter parser for all supported extensions
+        _ts_exts = list(EXT_TO_LANGUAGE.keys())
+        # Exclude .html/.htm (handled by dedicated HTML parser below)
+        _ts_exts = [e for e in _ts_exts if e not in (".html", ".htm")]
+        for ext in _ts_exts:
+            ParserRegistry.register(ext, _treesitter_parser)
+            # Register source_type for new extensions not in SOURCE_TYPE_MAP
+            if ext not in SOURCE_TYPE_MAP:
+                SOURCE_TYPE_MAP[ext] = "code"
+
+        logger.debug("tree-sitter parser registered for %d extensions", len(_ts_exts))
+    except ImportError:
+        logger.debug("tree-sitter parser not available (install 'tree-sitter-languages' for multi-language support)")
 
     # JSON
     async def _json_parser(fp, **kw):
