@@ -1023,10 +1023,11 @@ async def build_index(
         all_meta = {}
 
     for fp in expanded:
-        fh = _file_hash(fp)
-        file_hashes[fp] = fh
+        abs_fp = os.path.abspath(fp)
+        fh = _file_hash(abs_fp)
+        file_hashes[abs_fp] = fh
         if not force:
-            stored_hash = all_meta.get(fp)
+            stored_hash = all_meta.get(abs_fp)
             if stored_hash == fh:
                 name = os.path.splitext(os.path.basename(fp))[0]
                 if fts.is_document_indexed(name):
@@ -1101,7 +1102,7 @@ async def build_index(
         documents.append(doc)
 
     # Batch update metadata only for changed files (single transaction)
-    changed_hashes = {fp: file_hashes[fp] for fp in to_index if fp in file_hashes}
+    changed_hashes = {os.path.abspath(fp): file_hashes[os.path.abspath(fp)] for fp in to_index if os.path.abspath(fp) in file_hashes}
     if changed_hashes:
         fts.set_index_meta_batch(changed_hashes)
 

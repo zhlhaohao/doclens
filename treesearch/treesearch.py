@@ -72,18 +72,22 @@ class TreeSearch:
         if db_path and not self.config.fts_db_path:
             self.config.fts_db_path = db_path
 
-    def _get_changed_files(self) -> List[str]:
+    def _get_changed_files(self, stored_meta: dict = None) -> List[str]:
         """Return list of pending source files that changed since last index.
 
         Uses (mtime_ns, size) fingerprints stored in index_meta.
         Returns only the files whose fingerprint differs from the stored value.
+
+        Args:
+            stored_meta: Pre-loaded index metadata dict. If None, reads from DB.
         """
-        from .fts import FTS5Index
         from .indexer import _file_hash
 
-        fts = FTS5Index(db_path=self.db_path)
-        stored_meta = fts.get_all_index_meta()
-        fts.close()
+        if stored_meta is None:
+            from .fts import FTS5Index
+            fts = FTS5Index(db_path=self.db_path)
+            stored_meta = fts.get_all_index_meta()
+            fts.close()
 
         changed = []
         for p in self._pending_paths:
@@ -92,8 +96,9 @@ class TreeSearch:
             else:
                 files = [p] if os.path.isfile(p) else []
             for fp in files:
-                current_hash = _file_hash(fp)
-                if stored_meta.get(fp) != current_hash:
+                abs_fp = os.path.abspath(fp)
+                current_hash = _file_hash(abs_fp)
+                if stored_meta.get(abs_fp) != current_hash:
                     changed.append(fp)
         return changed
 
@@ -174,9 +179,17 @@ class TreeSearch:
         """
         if not self.documents and self._pending_paths:
             if os.path.isfile(self.db_path):
-                cached_docs = load_documents(self.db_path)
+                # Single DB open: load documents + meta in one session.
+                # Register as global singleton so search() reuses this connection
+                # instead of opening the DB again (critical for slow filesystems like CephFS/NFS).
+                from .fts import FTS5Index, get_fts_index, set_fts_index
+                fts = get_fts_index(db_path=self.db_path)
+                cached_docs = fts.load_all_documents()
+                stored_meta = fts.get_all_index_meta() if cached_docs else {}
+                # Don't close — keep the singleton alive for search() to reuse
+
                 if cached_docs:
-                    changed = self._get_changed_files()
+                    changed = self._get_changed_files(stored_meta=stored_meta)
                     if not changed:
                         # No files changed — use cached documents directly
                         self.documents = cached_docs
