@@ -47,6 +47,7 @@ class TreeSearchConfig:
     min_token_threshold: int = 5000
     summary_token_threshold: int = 200
     max_concurrency: int = 5
+    max_dir_files: int = 10_000  # safety cap for directory walk
 
     # FTS
     fts_db_path: str = ""  # empty = same DB as tree storage (default: index.db)

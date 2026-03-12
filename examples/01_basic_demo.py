@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Basic demo — TreeSearch with multi-level glob patterns.
+@description: Basic demo — TreeSearch with multi-level glob patterns and directories.
 
 Shows:
   1. Multi-level glob patterns (recursive **/*.py, single-level *.md)
-  2. resolve_glob_files() — preview which files a glob pattern matches
-  3. get_indexed_files() — query which files are already in the index
-  4. Search across mixed file types
+  2. Directory indexing — just pass a directory path
+  3. resolve_glob_files() — preview which files a glob pattern matches
+  4. get_indexed_files() — query which files are already in the index
+  5. Search across mixed file types
 
 Usage:
     cd TreeSearch
@@ -23,8 +24,8 @@ from treesearch import TreeSearch
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "markdowns")
 
-# 1. Create engine with multi-level glob patterns (lazy indexing)
-ts = TreeSearch(os.path.join(PROJECT_ROOT, "treesearch", "**", "*.py"), f"{DATA_DIR}/*.md")
+# 1. Create engine with multi-level glob patterns (lazy indexing), can also pass directories directly
+ts = TreeSearch(PROJECT_ROOT, DATA_DIR)
 
 # 2. Preview: resolve glob patterns to see matched files (before indexing)
 matched_files = ts.resolve_glob_files()

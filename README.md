@@ -31,13 +31,27 @@ pip install -U pytreesearch
 ```python
 from treesearch import TreeSearch
 
-# Lazy indexing — auto-builds index on first search
-ts = TreeSearch("docs/*.md", "src/*.py")
+# Just pass directories — auto-discovers all supported files
+ts = TreeSearch("project_root/", "docs/")
 results = ts.search("How does auth work?")
 for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"[{node['score']:.2f}] {node['title']}")
         print(f"  {node['text'][:200]}")
+```
+
+Directories are walked recursively with smart defaults:
+- Auto-discovers `.py`, `.md`, `.json`, `.java`, `.go`, `.ts`, `.pdf`, `.docx`, etc.
+- Skips `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, etc.
+- Respects `.gitignore` when [`pathspec`](https://pypi.org/project/pathspec/) is installed
+- Safety cap of 10,000 files per directory (configurable via `max_files`)
+
+You can also mix directories, files, and glob patterns freely:
+
+```python
+# All three input types work together
+ts = TreeSearch("src/", "docs/*.md", "README.md")
+results = ts.search("authentication")
 ```
 
 ## Why TreeSearch?
@@ -64,19 +78,21 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 
 ## Features
 
+- **Smart directory discovery** — `ts.index("src/")` recursively discovers all supported files; skips `.git`/`node_modules`/`__pycache__`; respects `.gitignore`
 - **FTS5 search** — Zero LLM calls, millisecond-level FTS5 keyword matching, no API key needed
 - **SQLite FTS5 engine** — Persistent inverted index, WAL mode, incremental updates, MD structure-aware columns (title/summary/body/code/front_matter), column weighting, CJK tokenization
 - **Tree-structured indexing** — Markdown, plain text, code files (Python AST + regex, Java/Go/JS/C++/PHP), HTML, XML, JSON, CSV, PDF, and DOCX are parsed into hierarchical trees
+- **Ripgrep-accelerated GrepFilter** — Auto-uses system `rg` for fast line-level matching with transparent native Python fallback; hit-count-based scoring ranks multi-match nodes higher
 - **Parser registry** — Extensible `ParserRegistry` with built-in parsers auto-registered; custom parsers via `ParserRegistry.register()`
 - **Python AST parsing** — `ast` module extracts classes/functions with full signatures (parameters, return types); regex fallback for syntax errors
 - **PDF/DOCX/HTML parsers** — Optional parsers via `pageindex`, `python-docx`, `beautifulsoup4` (install with `pip install pytreesearch[all]`)
 - **GrepFilter** — Exact literal/regex matching for precise symbol and keyword search across tree nodes
 - **Source-type routing** — Automatic pre-filter selection based on file type (e.g., code files use GrepFilter + FTS5)
 - **Chinese + English** — Built-in jieba tokenization for Chinese and regex tokenization for English
-- **Batch indexing** — `build_index()` supports glob patterns for concurrent multi-file processing
+- **Batch indexing** — `build_index()` supports glob patterns, files, and directories for concurrent multi-file processing
 - **Async-first** — All core functions are async with sync wrappers available
 - **Config-driven defaults** — `search()` and `build_index()` read defaults from `get_config()`, overridable per-call
-- **CLI included** — `treesearch index` and `treesearch search` commands
+- **CLI included** — `treesearch "query" path/` for instant search; `treesearch index` and `treesearch search` for advanced workflows
 
 ## FTS5 Standalone
 
@@ -106,14 +122,19 @@ for doc_agg in agg:
 ## CLI
 
 ```bash
-# Build indexes from glob pattern
-treesearch index --paths "docs/*.md" --add-description
+# Default mode: one command does everything (lazy index + search)
+treesearch "How does auth work?" src/ docs/
+treesearch "configure Redis" project/
 
-# Search with FTS5
-treesearch search --index_dir ./indexes/ --query "How does auth work?" --fts
+# With options
+treesearch "auth" src/ --max-nodes 10 --db ./my_index.db
 
-# Search with persistent FTS5 database
-treesearch search --index_dir ./indexes/ --query "auth" --fts --fts-db ./indexes/fts.db
+# Advanced: build index separately (for large codebases)
+treesearch index --paths src/ docs/ --add-description
+treesearch index --paths "docs/*.md" "src/**/*.py" --add-description
+
+# Advanced: search a pre-built index
+treesearch search --index_dir ./indexes/ --query "How does auth work?"
 ```
 
 ## How It Works
@@ -148,9 +169,9 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
 ```python
 from treesearch import build_index, search
 
-# 1. Build index (run once)
+# 1. Build index — just pass directories (run once)
 docs = await build_index(
-    paths=["docs/*.md", "specs/*.txt"],
+    paths=["docs/", "specs/"],
     output_dir="./indexes"
 )
 
@@ -178,13 +199,13 @@ for doc in result["documents"]:
 **Problem**: Want to search for "login-related classes and methods" in a large codebase, but grep only finds lines without structure.
 
 ```python
-# Index codebase
+# Index entire directories — auto-discovers .py, .java, .go, etc.
 docs = await build_index(
-    paths=["src/**/*.py", "lib/**/*.java"],
+    paths=["src/", "lib/"],
     output_dir="./code_indexes"
 )
 
-# Search — auto-detects code files, uses AST parsing + GrepFilter
+# Search — auto-detects code files, uses AST parsing + GrepFilter (ripgrep-accelerated)
 result = await search(
     query="user login authentication",
     documents=docs,

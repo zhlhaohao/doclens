@@ -6,6 +6,7 @@
 Tests cover: search(), search_sync(), GrepFilter, _CombinedScorer.
 """
 import pytest
+from unittest.mock import patch
 from treesearch.search import (
     search,
     search_sync,
@@ -132,3 +133,51 @@ class TestSearchSync:
         )
         assert isinstance(result, dict)
         assert "flat_nodes" in result
+
+
+class TestGrepFilterFallback:
+    """Ensure GrepFilter works correctly when rg is unavailable."""
+
+    def test_native_fallback_no_rg(self, sample_tree_structure):
+        """GrepFilter falls back to native when rg is not installed."""
+        doc = Document(
+            doc_id="test", doc_name="Test Doc",
+            structure=sample_tree_structure,
+            metadata={"source_path": "/nonexistent/file.py"},
+        )
+        grep = GrepFilter([doc])
+        with patch("treesearch.ripgrep.rg_available", return_value=False):
+            scores = grep.score_nodes("FastAPI", doc.doc_id)
+        # source_path doesn't exist, so it goes straight to native
+        assert len(scores) > 0
+
+    def test_native_fallback_no_source_path(self, sample_tree_structure):
+        """GrepFilter uses native path when no source_path in metadata."""
+        doc = Document(
+            doc_id="test", doc_name="Test Doc",
+            structure=sample_tree_structure,
+        )
+        grep = GrepFilter([doc])
+        scores = grep.score_nodes("FastAPI", doc.doc_id)
+        assert len(scores) > 0
+
+    def test_lines_to_nodes_mapping(self):
+        """Test that _lines_to_nodes correctly maps line numbers to node_ids."""
+        structure = [
+            {"title": "A", "node_id": "0", "text": "line1", "line_start": 1, "line_end": 5, "nodes": [
+                {"title": "B", "node_id": "1", "text": "line2", "line_start": 2, "line_end": 3},
+                {"title": "C", "node_id": "2", "text": "line3", "line_start": 4, "line_end": 5},
+            ]},
+        ]
+        doc = Document(doc_id="t", doc_name="T", structure=structure)
+        result = GrepFilter._lines_to_nodes(doc, [2, 3, 4])
+        # Node "0" spans 1-5 so hits 2,3,4 → 3 hits
+        # Node "1" spans 2-3 so hits 2,3 → 2 hits
+        # Node "2" spans 4-5 so hits 4 → 1 hit
+        assert "0" in result
+        assert "1" in result
+        assert "2" in result
+        # Normalized: max is node "0" with 3 hits
+        assert result["0"] == 1.0
+        assert abs(result["1"] - 2 / 3) < 0.01
+        assert abs(result["2"] - 1 / 3) < 0.01

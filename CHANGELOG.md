@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-12
+
+### Added
+- **Smart directory discovery**: `ts.index("path/to/dir")` recursively discovers and indexes all supported files in a directory. No glob patterns needed.
+- **`treesearch/pathutil.py`**: New `resolve_paths()` utility that handles files, globs, and directories in a single call with configurable ignore rules
+- **`.gitignore` support**: Directory walks automatically respect `.gitignore` rules when `pathspec` is installed (`pip install pathspec`)
+- **Default ignore list**: `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, `*.egg-info` etc. are skipped by default
+- **Safety cap**: `max_files=10000` prevents accidental indexing of huge directories
+- **Ripgrep acceleration**: `GrepFilter` automatically uses system `rg` (ripgrep) for line-level matching when available, with transparent fallback to native Python
+- **`treesearch/ripgrep.py`**: New `rg_search()` and `rg_available()` utilities wrapping `rg --json` output
+- **Hit-count scoring**: Ripgrep mode returns normalized hit-count scores (not binary 0/1), so multi-hit nodes rank higher
+- **New demo**: `examples/05_directory_and_grep.py` — showcases directory indexing and ripgrep-accelerated search
+- **New parameters**: `TreeSearch.__init__` accepts `ignore_dirs`, `respect_gitignore`, `max_files`
+
+### Changed
+- `TreeSearch._resolve_patterns()` now delegates to `resolve_paths()` (supports directories in addition to files and globs)
+- `build_index()` glob expansion replaced with `resolve_paths()` for unified path resolution
+- `GrepFilter` constructor now builds `source_path -> doc_id` mapping for ripgrep mode
+- `GrepFilter.score_nodes()` tries ripgrep first (when source file exists + rg available), falls back to native Python
+- CLI `--paths` help text updated to mention directory support
+
 ## [0.7.0] - 2026-03-11
 
 ### Removed

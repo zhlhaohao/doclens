@@ -10,7 +10,6 @@ All data (tree structures, FTS5 indexes, incremental metadata) is stored
 in a single SQLite .db file — no more scattered JSON files.
 """
 import asyncio
-import glob
 import logging
 import os
 from typing import Optional, List
@@ -18,6 +17,7 @@ from typing import Optional, List
 from .tree import Document, load_documents
 from .search import search
 from .config import get_config
+from .pathutil import resolve_paths, DEFAULT_IGNORE_DIRS
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +47,21 @@ class TreeSearch:
         self,
         *paths: str,
         db_path: str = "./index.db",
+        ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
+        respect_gitignore: bool = True,
+        max_files: int | None = None,
         **kwargs
     ):
         """
         Initialize the TreeSearch engine.
 
         Args:
-            *paths: File paths or glob patterns to index lazily on first search.
+            *paths: File paths, glob patterns, or directories to index lazily on first search.
             db_path: Path to the SQLite database file for all data storage.
+            ignore_dirs: Directory names to skip when recursively walking directories.
+            respect_gitignore: Honour .gitignore files when walking directories (requires ``pathspec``).
+            max_files: Safety cap on files discovered per directory walk.
+                Defaults to ``get_config().max_dir_files`` (10,000).
             **kwargs: Additional default arguments for search().
         """
         self._pending_paths: List[str] = list(paths)
@@ -62,21 +69,21 @@ class TreeSearch:
         self.documents: List[Document] = []
         self.config = get_config()
         self.kwargs = kwargs
+        self._ignore_dirs = ignore_dirs
+        self._respect_gitignore = respect_gitignore
+        self._max_files = max_files if max_files is not None else self.config.max_dir_files
         # Ensure FTS5 scorer uses the same DB as tree storage
         if db_path and not self.config.fts_db_path:
             self.config.fts_db_path = db_path
 
-    @staticmethod
-    def _resolve_patterns(patterns: list[str]) -> list[str]:
-        """Resolve glob patterns into a flat list of file paths."""
-        resolved = []
-        for p in patterns:
-            if "*" in p or "?" in p:
-                resolved.extend(glob.glob(p, recursive=True))
-            else:
-                if os.path.isfile(p):
-                    resolved.append(p)
-        return resolved
+    def _resolve_patterns(self, patterns: list[str]) -> list[str]:
+        """Resolve glob patterns, files, and directories into a flat list of file paths."""
+        return resolve_paths(
+            patterns,
+            ignore_dirs=self._ignore_dirs,
+            respect_gitignore=self._respect_gitignore,
+            max_files=self._max_files,
+        )
 
     def _get_changed_files(self, stored_meta: dict = None) -> List[str]:
         """Return list of pending source files that changed since last index.
@@ -110,19 +117,16 @@ class TreeSearch:
     # ------------------------------------------------------------------
 
     async def aindex(self, *paths: str, force: bool = False, **kwargs) -> List[Document]:
-        """Async: Build tree indexes from files. Supports glob patterns."""
+        """Async: Build tree indexes from files, directories, or glob patterns."""
         from .indexer import build_index
 
-        resolved_paths = self._resolve_patterns(list(paths))
-
-        if not resolved_paths:
-            logger.warning("No files found to index.")
-            return self.documents
-
         self.documents = await build_index(
-            resolved_paths,
+            list(paths),
             db_path=self.db_path,
             force=force,
+            ignore_dirs=self._ignore_dirs,
+            respect_gitignore=self._respect_gitignore,
+            max_files=self._max_files,
             **kwargs
         )
         return self.documents

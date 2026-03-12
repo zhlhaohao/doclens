@@ -31,13 +31,27 @@ pip install -U pytreesearch
 ```python
 from treesearch import TreeSearch
 
-# 懒加载索引 —— 首次搜索时自动构建索引
-ts = TreeSearch("docs/*.md", "src/*.py")
+# 直接传入目录 —— 自动递归发现所有支持的文件
+ts = TreeSearch("project_root/", "docs/")
 results = ts.search("认证系统如何工作？")
 for doc in results["documents"]:
     for node in doc["nodes"]:
         print(f"[{node['score']:.2f}] {node['title']}")
         print(f"  {node['text'][:200]}")
+```
+
+目录递归扫描带有智能默认值：
+- 自动发现 `.py`、`.md`、`.json`、`.java`、`.go`、`.ts`、`.pdf`、`.docx` 等文件
+- 自动跳过 `.git`、`node_modules`、`__pycache__`、`.venv`、`dist`、`build` 等
+- 安装 [`pathspec`](https://pypi.org/project/pathspec/) 后自动尊重 `.gitignore` 规则
+- 单目录安全上限 10,000 文件（可通过 `max_files` 配置）
+
+也可以自由混合目录、文件和 glob 模式：
+
+```python
+# 三种输入类型可自由组合
+ts = TreeSearch("src/", "docs/*.md", "README.md")
+results = ts.search("认证配置")
 ```
 
 
@@ -76,19 +90,21 @@ TreeSearch：
 
 ## 功能特性
 
+- **智能目录发现** — `ts.index("src/")` 自动递归发现所有支持的文件；跳过 `.git`/`node_modules`/`__pycache__`；尊重 `.gitignore`
 - **FTS5 搜索** — 零 LLM 调用，毫秒级 FTS5 关键词匹配，无需 API Key
 - **SQLite FTS5 引擎** — 持久化倒排索引，WAL 模式，增量更新，MD 结构感知列（标题/摘要/正文/代码/前言），列权重加权，CJK 分词
 - **树结构索引** — Markdown、纯文本、代码文件（Python AST + 正则、Java/Go/JS/C++/PHP）、HTML、XML、JSON、CSV、PDF 和 DOCX 均被解析为层级树
+- **Ripgrep 加速 GrepFilter** — 自动调用系统 `rg` 进行快速行级匹配，未安装时透明降级为纯 Python；基于命中次数的评分让多次命中的节点排名更高
 - **解析器注册表** — 可扩展的 `ParserRegistry`，内置解析器自动注册；支持 `ParserRegistry.register()` 注册自定义解析器
 - **Python AST 解析** — `ast` 模块提取类/函数的完整签名（参数、返回值类型）；语法错误时回退正则
 - **PDF/DOCX/HTML 解析器** — 可选解析器，通过 `pageindex`、`python-docx`、`beautifulsoup4` 实现（`pip install pytreesearch[all]`）
 - **GrepFilter 精准匹配** — 支持字面量/正则表达式匹配，精准定位代码符号和关键词
 - **Source-type 路由** — 根据文件类型自动选择预过滤器（如代码文件使用 GrepFilter + FTS5）
 - **中英文支持** — 内置 jieba 中文分词和英文正则分词
-- **批量索引** — `build_index()` 支持 glob 模式并发多文件处理
+- **批量索引** — `build_index()` 支持 glob 模式、文件路径和目录，并发多文件处理
 - **异步优先** — 所有核心函数均为异步，提供同步适配器
 - **配置驱动默认值** — `search()` 和 `build_index()` 从 `get_config()` 读取默认值，支持按调用覆盖
-- **CLI 命令** — `treesearch index` 和 `treesearch search` 命令
+- **CLI 命令** — `treesearch "查询" 路径/` 一键搜索；`treesearch index` 和 `treesearch search` 支持高级工作流
 
 ## FTS5 独立搜索
 
@@ -118,14 +134,19 @@ for doc_agg in agg:
 ## CLI
 
 ```bash
-# 从 glob 模式构建索引
-treesearch index --paths "docs/*.md" --add-description
+# 默认模式：一条命令完成所有操作（懒索引 + 搜索）
+treesearch "认证系统如何工作？" src/ docs/
+treesearch "配置 Redis" project/
 
-# 使用 FTS5 搜索
-treesearch search --index_dir ./indexes/ --query "认证系统如何工作？" --fts
+# 带参数
+treesearch "认证" src/ --max-nodes 10 --db ./my_index.db
 
-# 持久化 FTS5 数据库
-treesearch search --index_dir ./indexes/ --query "认证" --fts --fts-db ./indexes/fts.db
+# 高级：单独构建索引（适合大型代码库）
+treesearch index --paths src/ docs/ --add-description
+treesearch index --paths "docs/*.md" "src/**/*.py" --add-description
+
+# 高级：搜索已构建的索引
+treesearch search --index_dir ./indexes/ --query "认证系统如何工作？"
 ```
 
 ## 工作原理
@@ -160,9 +181,9 @@ treesearch search --index_dir ./indexes/ --query "认证" --fts --fts-db ./index
 ```python
 from treesearch import build_index, search
 
-# 1. 构建索引（只需运行一次）
+# 1. 构建索引 — 直接传目录（只需运行一次）
 docs = await build_index(
-    paths=["docs/*.md", "specs/*.txt"],
+    paths=["docs/", "specs/"],
     output_dir="./indexes"
 )
 
@@ -190,13 +211,13 @@ for doc in result["documents"]:
 **问题**：想在大型代码库中搜索"登录相关的类和方法"，但 grep 只能找行，看不到结构。
 
 ```python
-# 索引代码库
+# 直接索引目录 —— 自动发现 .py, .java, .go 等文件
 docs = await build_index(
-    paths=["src/**/*.py", "lib/**/*.java"],
+    paths=["src/", "lib/"],
     output_dir="./code_indexes"
 )
 
-# 搜索 — 自动识别代码文件，用 AST 解析 + GrepFilter
+# 搜索 — 自动识别代码文件，用 AST 解析 + GrepFilter（ripgrep 加速）
 result = await search(
     query="用户登录 authentication",
     documents=docs,

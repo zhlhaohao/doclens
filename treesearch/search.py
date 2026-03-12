@@ -8,6 +8,7 @@
 """
 import asyncio
 import logging
+import os
 import re
 from typing import Optional, Protocol, runtime_checkable
 
@@ -40,6 +41,10 @@ class GrepFilter:
     Literal string or regex matching filter.
 
     Provides exact matching capabilities to complement semantic search.
+    When a document has a ``source_path`` pointing to an existing file and
+    ``rg`` (ripgrep) is available on PATH, matching is delegated to ``rg``
+    for significantly faster line-level search.  Otherwise falls back to
+    pure-Python scanning over the in-memory tree.
     """
 
     def __init__(self, documents: list[Document], case_sensitive: bool = False, use_regex: bool = False):
@@ -47,13 +52,76 @@ class GrepFilter:
         self.case_sensitive = case_sensitive
         self.use_regex = use_regex
 
+        # Build source_path -> doc_id mapping for rg mode
+        self._path_to_doc: dict[str, str] = {}
+        for doc in documents:
+            sp = doc.metadata.get("source_path", "")
+            if sp and os.path.isfile(sp):
+                self._path_to_doc[sp] = doc.doc_id
+
     def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
-        """Return {node_id: 1.0} for nodes that contain the query literal/regex."""
+        """Return {node_id: score} for nodes that contain the query literal/regex."""
         doc = self._doc_map.get(doc_id)
         if not doc:
             return {}
 
-        results = {}
+        sp = doc.metadata.get("source_path", "")
+        # Try rg if the source file exists
+        if sp and os.path.isfile(sp):
+            from .ripgrep import rg_available, rg_search
+            if rg_available():
+                result = self._rg_score(query, doc, sp)
+                if result:
+                    return result
+                # rg returned nothing — might be a rg error, fall through to native
+
+        # Fallback: native Python search
+        return self._native_score(query, doc)
+
+    def _rg_score(self, query: str, doc: Document, source_path: str) -> dict[str, float]:
+        """Use rg to find matching lines, map to node_ids via line ranges."""
+        from .ripgrep import rg_search
+        hits = rg_search(
+            query, [source_path],
+            case_sensitive=self.case_sensitive,
+            use_regex=self.use_regex,
+        )
+        matched_lines = hits.get(source_path, [])
+        if not matched_lines:
+            return {}
+        return self._lines_to_nodes(doc, matched_lines)
+
+    @staticmethod
+    def _lines_to_nodes(doc: Document, lines: list[int]) -> dict[str, float]:
+        """Map matched line numbers to node_ids with hit-count-based scores."""
+        from bisect import bisect_left, bisect_right
+        from .tree import flatten_tree
+
+        nodes = flatten_tree(doc.structure)
+        sorted_lines = sorted(lines)
+        results: dict[str, float] = {}
+        for node in nodes:
+            nid = node.get("node_id", "")
+            ls = node.get("line_start")
+            le = node.get("line_end")
+            if ls is None or le is None or not nid:
+                continue
+            # O(log N) range count via bisect on sorted lines
+            lo = bisect_left(sorted_lines, ls)
+            hi = bisect_right(sorted_lines, le)
+            hit_count = hi - lo
+            if hit_count > 0:
+                results[nid] = float(hit_count)
+        # Normalize so max score = 1.0
+        if results:
+            max_s = max(results.values())
+            if max_s > 0:
+                results = {k: v / max_s for k, v in results.items()}
+        return results
+
+    def _native_score(self, query: str, doc: Document) -> dict[str, float]:
+        """Pure-Python matching over in-memory tree nodes."""
+        results: dict[str, float] = {}
         pattern = query if self.case_sensitive else query.lower()
 
         regex = None

@@ -7,7 +7,6 @@ Supports batch indexing via ``build_index()`` which accepts glob patterns and
 processes multiple files concurrently.
 """
 import asyncio
-import glob as globmod
 import json
 import logging
 import os
@@ -17,6 +16,7 @@ from typing import Optional
 from .tree import (
     Document, assign_node_ids, flatten_tree, format_structure, remove_fields,
 )
+from .pathutil import resolve_paths, DEFAULT_IGNORE_DIRS, MAX_DIR_FILES
 
 logger = logging.getLogger(__name__)
 
@@ -749,6 +749,9 @@ async def build_index(
     if_add_node_id: Optional[bool] = None,
     max_concurrency: Optional[int] = None,
     force: bool = False,
+    ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
+    respect_gitignore: bool = True,
+    max_files: int = MAX_DIR_FILES,
     **kwargs,
 ) -> list[Document]:
     """
@@ -757,11 +760,15 @@ async def build_index(
     All parameters default to ``get_config()`` values when not explicitly set.
 
     Args:
-        paths: list of file paths or glob patterns (e.g. ["docs/*.md", "paper.txt"])
+        paths: list of file paths, glob patterns, or directories
+            (e.g. ``["docs/*.md", "paper.txt", "src/"]``)
         output_dir: directory for the database file (used to derive db_path if db_path is empty)
         db_path: path to the SQLite database file. If empty, defaults to ``{output_dir}/index.db``.
         max_concurrency: max concurrent indexing tasks
         force: force re-index even if file unchanged (default: False)
+        ignore_dirs: directory names to skip during recursive walk
+        respect_gitignore: honour ``.gitignore`` files when walking directories
+        max_files: safety cap on files discovered per directory walk
         **kwargs: passed through to individual parsers
 
     Returns:
@@ -788,18 +795,13 @@ async def build_index(
         db_path = os.path.join(output_dir, "index.db")
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
 
-    # Expand globs
-    expanded = []
-    for p in paths:
-        matches = sorted(globmod.glob(p))
-        if matches:
-            expanded.extend(matches)
-        elif os.path.isfile(p):
-            expanded.append(p)
-        else:
-            logger.warning("No files matched: %s", p)
-    expanded = list(dict.fromkeys(expanded))  # deduplicate, preserve order
-
+    # Expand globs, files, and directories via resolve_paths
+    expanded = resolve_paths(
+        paths,
+        ignore_dirs=ignore_dirs,
+        respect_gitignore=respect_gitignore,
+        max_files=max_files,
+    )
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
