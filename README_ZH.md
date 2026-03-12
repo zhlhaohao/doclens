@@ -43,7 +43,7 @@ for doc in results["documents"]:
 目录递归扫描带有智能默认值：
 - 自动发现 `.py`、`.md`、`.json`、`.java`、`.go`、`.ts`、`.pdf`、`.docx` 等文件
 - 自动跳过 `.git`、`node_modules`、`__pycache__`、`.venv`、`dist`、`build` 等
-- 安装 [`pathspec`](https://pypi.org/project/pathspec/) 后自动尊重 `.gitignore` 规则
+- 安装 [`pathspec`](https://pypi.org/project/pathspec/) 后自动尊重 `.gitignore` 规则(`pip install pathspec`)
 - 单目录安全上限 10,000 文件（可通过 `max_files` 配置）
 
 也可以自由混合目录、文件和 glob 模式：
