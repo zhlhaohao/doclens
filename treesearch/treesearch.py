@@ -66,6 +66,18 @@ class TreeSearch:
         if db_path and not self.config.fts_db_path:
             self.config.fts_db_path = db_path
 
+    @staticmethod
+    def _resolve_patterns(patterns: list[str]) -> list[str]:
+        """Resolve glob patterns into a flat list of file paths."""
+        resolved = []
+        for p in patterns:
+            if "*" in p or "?" in p:
+                resolved.extend(glob.glob(p, recursive=True))
+            else:
+                if os.path.isfile(p):
+                    resolved.append(p)
+        return resolved
+
     def _get_changed_files(self, stored_meta: dict = None) -> List[str]:
         """Return list of pending source files that changed since last index.
 
@@ -84,18 +96,13 @@ class TreeSearch:
             fts.close()
 
         changed = []
-        for p in self._pending_paths:
-            if "*" in p or "?" in p:
-                files = glob.glob(p, recursive=True)
-            else:
-                files = [p] if os.path.isfile(p) else []
-            for fp in files:
-                abs_fp = os.path.abspath(fp)
-                current_hash = _file_hash(abs_fp)
-                if not current_hash:
-                    continue
-                if stored_meta.get(abs_fp) != current_hash:
-                    changed.append(fp)
+        for fp in self._resolve_patterns(self._pending_paths):
+            abs_fp = os.path.abspath(fp)
+            current_hash = _file_hash(abs_fp)
+            if not current_hash:
+                continue
+            if stored_meta.get(abs_fp) != current_hash:
+                changed.append(fp)
         return changed
 
     # ------------------------------------------------------------------
@@ -106,12 +113,7 @@ class TreeSearch:
         """Async: Build tree indexes from files. Supports glob patterns."""
         from .indexer import build_index
 
-        resolved_paths = []
-        for p in paths:
-            if "*" in p or "?" in p:
-                resolved_paths.extend(glob.glob(p, recursive=True))
-            else:
-                resolved_paths.append(p)
+        resolved_paths = self._resolve_patterns(list(paths))
 
         if not resolved_paths:
             logger.warning("No files found to index.")
@@ -240,13 +242,7 @@ class TreeSearch:
             Sorted list of resolved absolute file paths.
         """
         targets = list(paths) if paths else self._pending_paths
-        resolved = []
-        for p in targets:
-            if "*" in p or "?" in p:
-                resolved.extend(glob.glob(p, recursive=True))
-            else:
-                if os.path.isfile(p):
-                    resolved.append(p)
+        resolved = self._resolve_patterns(targets)
         return sorted(set(os.path.abspath(f) for f in resolved))
 
     def get_indexed_files(self) -> List[dict]:

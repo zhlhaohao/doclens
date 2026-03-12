@@ -30,9 +30,3 @@ class TestCountTokens:
         # "Hello" (5 non-CJK chars -> ~1 token) + 4 CJK chars -> ~5 tokens
         count = count_tokens("Hello你好世界")
         assert count >= 5
-
-    def test_model_param_ignored(self):
-        """model parameter is accepted but unused."""
-        a = count_tokens("test text", model="gpt-4")
-        b = count_tokens("test text", model=None)
-        assert a == b

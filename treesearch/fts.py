@@ -6,7 +6,7 @@
 Single-file storage: tree structures, FTS5 indexes, and incremental metadata
 are all stored in one SQLite database (.db file).
 
-Architecture: "SQLite FTS5 + Producer-Consumer + LLM Query Generation"
+Architecture: "SQLite FTS5 + Producer-Consumer"
   - Deferred indexing via WAL mode solves real-time freshness
   - Local SQL execution handles aggregation needs
   - FTS5 inverted index guarantees retrieval performance
@@ -19,7 +19,6 @@ Key features:
   - CJK-aware tokenizer: jieba segmentation only when Chinese text is detected
   - Implements PreFilter protocol for seamless integration with search()
   - Hierarchical field boosting via FTS5 column weighting
-  - LLM-generated FTS5 query expressions (AND/OR/NOT/NEAR)
 """
 import hashlib
 import json
@@ -30,21 +29,6 @@ import sqlite3
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-# Ensure we have the best available sqlite3 (pysqlite3 may have replaced it)
-# This handles the case where fts.py is imported before __init__.py's pysqlite3 swap
-try:
-    _test_conn = sqlite3.connect(":memory:")
-    _test_conn.execute("CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)")
-    _test_conn.execute("DROP TABLE _fts5_probe")
-    _test_conn.close()
-except Exception:
-    try:
-        import pysqlite3.dbapi2 as _pysqlite3
-        sqlite3 = _pysqlite3  # replace module-level sqlite3
-        logger.info("Using pysqlite3 (SQLite %s) for FTS5 support", sqlite3.sqlite_version)
-    except ImportError:
-        pass  # will fall back to LIKE search later
 
 # FTS5 column weights: title > body > summary > code
 # Used in bm25() ranking function
@@ -139,7 +123,7 @@ def parse_md_node_text(text: str) -> dict:
 # Tokenizer for FTS5 (Chinese/English)
 # ---------------------------------------------------------------------------
 
-_RE_HAS_CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+from .utils import _RE_HAS_CJK
 
 
 def _tokenize_for_fts(text: str) -> str:
@@ -600,6 +584,18 @@ class FTS5Index:
 
         w = self._weights
 
+        # Pre-fetch all node metadata to avoid N+1 queries
+        if doc_id:
+            meta_rows = self._conn.execute(
+                "SELECT node_id, doc_id, title, summary, depth FROM nodes WHERE doc_id = ?",
+                (doc_id,),
+            ).fetchall()
+        else:
+            meta_rows = self._conn.execute(
+                "SELECT node_id, doc_id, title, summary, depth FROM nodes"
+            ).fetchall()
+        meta_map = {(r[0], r[1]): {"title": r[2], "summary": r[3], "depth": r[4]} for r in meta_rows}
+
         if doc_id:
             rows = self._conn.execute(
                 """SELECT node_id, doc_id, title, summary, body, code_blocks, front_matter
@@ -627,19 +623,13 @@ class FTS5Index:
                     if kw in text.lower():
                         score += weight
             if score > 0:
-                depth_row = self._conn.execute(
-                    "SELECT depth FROM nodes WHERE doc_id = ? AND node_id = ?", (did, nid)
-                ).fetchone()
-                depth = depth_row[0] if depth_row else 0
-                meta_row = self._conn.execute(
-                    "SELECT title, summary FROM nodes WHERE doc_id = ? AND node_id = ?", (did, nid)
-                ).fetchone()
+                meta = meta_map.get((nid, did))
                 scored.append((score, {
                     "node_id": nid,
                     "doc_id": did,
-                    "title": meta_row[0] if meta_row else title,
-                    "summary": meta_row[1] if meta_row else summary,
-                    "depth": depth,
+                    "title": meta["title"] if meta else title,
+                    "summary": meta["summary"] if meta else summary,
+                    "depth": meta["depth"] if meta else 0,
                     "fts_score": round(score, 6),
                 }))
 
@@ -696,8 +686,7 @@ class FTS5Index:
     def score_nodes(self, query: str, doc_id: str, ancestor_decay: float = 0.6) -> dict[str, float]:
         """PreFilter protocol: return {node_id: score} for search() integration.
 
-        This allows FTS5Index to be used as a drop-in replacement for
-        NodeBM25Index in the search pipeline.
+        This allows FTS5Index to be used as a drop-in PreFilter in the search pipeline.
 
         Includes:
         - Ancestor score propagation: parent nodes inherit child scores
@@ -754,6 +743,7 @@ class FTS5Index:
         This persists the tree structure so that JSON files are no longer needed.
         FTS indexing is NOT performed here — call index_document() separately.
         """
+        from .tree import flatten_tree
         structure_json = json.dumps(document.structure, ensure_ascii=False)
         content_hash = hashlib.md5(structure_json.encode()).hexdigest()
         self._conn.execute(
@@ -765,22 +755,11 @@ class FTS5Index:
                 document.metadata.get("source_path", ""),
                 document.source_type,
                 structure_json,
-                len(list(self._iter_flat_nodes(document.structure))),
+                len(flatten_tree(document.structure)),
                 content_hash,
             ),
         )
         self._conn.commit()
-
-    @staticmethod
-    def _iter_flat_nodes(structure):
-        """Iterate over all nodes in a tree structure."""
-        if isinstance(structure, dict):
-            yield structure
-            for child in structure.get("nodes", []):
-                yield from FTS5Index._iter_flat_nodes(child)
-        elif isinstance(structure, list):
-            for item in structure:
-                yield from FTS5Index._iter_flat_nodes(item)
 
     def load_document(self, doc_id: str):
         """Load a single Document from the DB by doc_id.
@@ -1009,12 +988,13 @@ class FTS5Index:
 _global_fts: Optional[FTS5Index] = None
 
 
-def get_fts_index(db_path: Optional[str] = None) -> FTS5Index:
+def get_fts_index(db_path: Optional[str] = None, weights: Optional[dict] = None) -> FTS5Index:
     """Get or create the global FTS5 index.
 
     Args:
         db_path: database path. If None, uses in-memory database.
                  Pass a file path for persistent indexing across sessions.
+        weights: column weight overrides for bm25() ranking.
     """
     global _global_fts
     if _global_fts is not None:
@@ -1024,7 +1004,7 @@ def get_fts_index(db_path: Optional[str] = None) -> FTS5Index:
             _global_fts.close()
             _global_fts = None
     if _global_fts is None:
-        _global_fts = FTS5Index(db_path=db_path)
+        _global_fts = FTS5Index(db_path=db_path, weights=weights)
     return _global_fts
 
 

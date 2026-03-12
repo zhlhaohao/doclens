@@ -218,3 +218,6 @@ examples/benchmark/indexes/
 examples/indexes/
 docs/internal/*
 examples/a.py
+AGENT.md
+CLAUDE.md
+

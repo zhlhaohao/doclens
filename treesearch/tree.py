@@ -40,7 +40,7 @@ class Document:
                 self._node_map[nid] = node
 
     def get_tree_without_text(self) -> list:
-        """Return tree with text fields removed (for LLM prompts)."""
+        """Return tree with text fields removed (for compact display)."""
         return remove_fields(copy.deepcopy(self.structure), fields=["text"])
 
     def get_node_by_id(self, node_id: str) -> Optional[dict]:
@@ -190,8 +190,6 @@ def format_structure(structure, order: list[str] = None):
 # ---------------------------------------------------------------------------
 # Persistence (SQLite DB via FTS5Index)
 # ---------------------------------------------------------------------------
-
-INDEX_VERSION = "1.0"
 
 
 def save_index(index: dict, db_path: str, doc_id: str = "") -> None:

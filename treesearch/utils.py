@@ -9,9 +9,10 @@ import re
 
 # CJK Unicode ranges
 _RE_CJK_CHAR = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]")
+_RE_HAS_CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
 
 
-def count_tokens(text: str, model: str | None = None) -> int:  # noqa: ARG001
+def count_tokens(text: str) -> int:
     """Estimate token count using a character-based heuristic.
 
     Rules:

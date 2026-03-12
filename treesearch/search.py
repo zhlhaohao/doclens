@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Tree search over document structures — FTS5/BM25 keyword matching
+@description: Tree search over document structures — FTS5 keyword matching
               and the unified multi-document ``search()`` pipeline.
 
-              No LLM calls at search time. All scoring is done via FTS5/BM25.
+              No LLM calls at search time. All scoring is done via FTS5.
 """
 import asyncio
 import logging
+import re
 from typing import Optional, Protocol, runtime_checkable
 
 from .tree import Document
@@ -55,7 +56,6 @@ class GrepFilter:
         results = {}
         pattern = query if self.case_sensitive else query.lower()
 
-        import re
         regex = None
         if self.use_regex:
             try:
@@ -306,7 +306,14 @@ async def search(
 def _get_fts_scorer(documents: list[Document], cfg) -> Optional[PreFilter]:
     """Get FTS5 scorer, auto-indexing documents as needed."""
     from .fts import get_fts_index
-    fts_index = get_fts_index(db_path=cfg.fts_db_path or None)
+    weights = {
+        "title": cfg.fts_title_weight,
+        "summary": cfg.fts_summary_weight,
+        "body": cfg.fts_body_weight,
+        "code_blocks": cfg.fts_code_weight,
+        "front_matter": cfg.fts_front_matter_weight,
+    }
+    fts_index = get_fts_index(db_path=cfg.fts_db_path or None, weights=weights)
     for doc in documents:
         if not fts_index.is_document_indexed(doc.doc_id):
             fts_index.index_document(doc)

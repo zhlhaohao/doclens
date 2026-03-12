@@ -49,14 +49,12 @@ class TreeSearchConfig:
     max_concurrency: int = 5
 
     # FTS
-    fts_enabled: bool = True
     fts_db_path: str = ""  # empty = same DB as tree storage (default: index.db)
     fts_title_weight: float = 5.0
     fts_summary_weight: float = 2.0
     fts_body_weight: float = 10.0
     fts_code_weight: float = 1.0
     fts_front_matter_weight: float = 2.0
-    fts_auto_index: bool = True
 
     # Tokenizer
     cjk_tokenizer: str = "auto"  # "auto" | "jieba" | "bigram" | "char"

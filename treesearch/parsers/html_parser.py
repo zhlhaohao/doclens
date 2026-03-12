@@ -138,7 +138,7 @@ async def html_to_tree(
     tree = format_structure(tree, order=order)
 
     if if_add_node_summary:
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
+        tree = generate_summaries(tree, threshold=summary_token_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)
@@ -146,6 +146,6 @@ async def html_to_tree(
     result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(html_path)}
 
     if if_add_doc_description:
-        result["doc_description"] = await generate_doc_description(tree, model=model)
+        result["doc_description"] = generate_doc_description(tree)
 
     return result

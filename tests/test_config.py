@@ -29,14 +29,12 @@ class TestTreeSearchConfig:
         assert c.max_concurrency == 5
         assert c.min_token_threshold == 5000
         # FTS
-        assert c.fts_enabled is True
         assert c.fts_db_path == ""
         assert c.fts_title_weight == 5.0
         assert c.fts_summary_weight == 2.0
         assert c.fts_body_weight == 10.0
         assert c.fts_code_weight == 1.0
         assert c.fts_front_matter_weight == 2.0
-        assert c.fts_auto_index is True
         # Tokenizer
         assert c.cjk_tokenizer == "auto"
 

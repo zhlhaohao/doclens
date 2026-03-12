@@ -18,10 +18,9 @@ import os
 import sys
 import time
 
-from treesearch.indexer import build_index, md_to_tree, text_to_tree
+from treesearch.indexer import build_index
 from treesearch.tree import Document, load_documents, print_toc
 from treesearch.search import search
-from treesearch.config import get_config, set_config, TreeSearchConfig
 
 logger = logging.getLogger(__name__)
 
@@ -92,16 +91,10 @@ def _add_search_args(sub: argparse.ArgumentParser) -> None:
                      help="Path to SQLite database file (default: {index_dir}/index.db)")
     sub.add_argument("--query", type=str, required=True,
                      help="Search query")
-    sub.add_argument("--fts", action="store_true",
-                     help="Enable SQLite FTS5 full-text search as pre-filter backend")
-    sub.add_argument("--fts-db", type=str, default=None,
-                     help="Path to FTS5 database file (default: in-memory)")
     sub.add_argument("--top-k-docs", type=int, default=3,
                      help="Max documents to search (default: 3)")
     sub.add_argument("--max-nodes", type=int, default=5,
                      help="Max result nodes per document (default: 5)")
-    sub.add_argument("--threshold", type=float, default=0.3,
-                     help="Minimum relevance score (default: 0.3)")
 
 
 def _load_documents_from_dir(index_dir: str, db: str = "") -> list[Document]:
@@ -120,14 +113,6 @@ def _load_documents_from_dir(index_dir: str, db: str = "") -> list[Document]:
 
 
 async def _run_search(args) -> None:
-    # Enable FTS5 if --fts flag is set
-    if args.fts:
-        cfg = get_config()
-        cfg.fts_enabled = True
-        if args.fts_db:
-            cfg.fts_db_path = args.fts_db
-        set_config(cfg)
-
     documents = _load_documents_from_dir(args.index_dir, db=args.db)
     db_path = args.db or os.path.join(args.index_dir, "index.db")
     print(f"Loaded {len(documents)} document(s) from {db_path}")
@@ -173,7 +158,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="treesearch",
         description=(
             "TreeSearch: Structure-aware document retrieval without embeddings.\n"
-            "No vector embeddings. No chunk splitting. FTS5/BM25 keyword matching over document trees."
+            "No vector embeddings. No chunk splitting. FTS5 keyword matching over document trees."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -184,7 +169,7 @@ def _build_parser() -> argparse.ArgumentParser:
     idx = sub.add_parser("index", help="Build tree structure index from documents (supports glob)")
     _add_index_args(idx)
 
-    sch = sub.add_parser("search", help="Search across indexed documents using FTS5/BM25")
+    sch = sub.add_parser("search", help="Search across indexed documents using FTS5")
     _add_search_args(sch)
 
     return p

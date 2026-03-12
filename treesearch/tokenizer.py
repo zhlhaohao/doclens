@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 # CJK detection
 # ---------------------------------------------------------------------------
 
-_RE_HAS_CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+from .utils import _RE_HAS_CJK
+
 _RE_SPLIT_EN = re.compile(r"\W+")
 
 # English stopwords (compact set covering most frequent terms)

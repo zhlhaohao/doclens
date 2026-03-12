@@ -358,7 +358,7 @@ async def treesitter_code_to_tree(
         {"doc_name": str, "structure": list, "source_path": str}
     """
     from ..indexer import (
-        _build_tree, _cut_text_content, _update_token_counts, _thin_tree,
+        _build_tree, _cut_md_text, _update_token_counts, _thin_tree,
         generate_summaries, generate_doc_description, code_to_tree,
     )
     from ..tree import assign_node_ids, format_structure
@@ -396,7 +396,7 @@ async def treesitter_code_to_tree(
     if not markers:
         markers = [{"title": doc_name, "line_num": 1, "level": 1}]
 
-    nodes = _cut_text_content(markers, lines)
+    nodes = _cut_md_text(markers, lines)
 
     if if_thinning and min_token_threshold:
         nodes = _update_token_counts(nodes, model=model)
@@ -418,7 +418,7 @@ async def treesitter_code_to_tree(
 
     if if_add_node_summary:
         logger.info("Generating summaries...")
-        tree = await generate_summaries(tree, threshold=summary_token_threshold, model=model)
+        tree = generate_summaries(tree, threshold=summary_token_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)
@@ -427,6 +427,6 @@ async def treesitter_code_to_tree(
 
     if if_add_doc_description:
         logger.info("Generating document description...")
-        result["doc_description"] = await generate_doc_description(tree, model=model)
+        result["doc_description"] = generate_doc_description(tree)
 
     return result

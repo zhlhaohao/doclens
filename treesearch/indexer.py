@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int) -> list[int]:
-    """Return indices of immediate children of node_list[parent_idx]."""
+    """Return indices of all descendants of node_list[parent_idx]."""
     indices = []
     for j in range(parent_idx + 1, len(node_list)):
         if node_list[j]["level"] <= parent_level:
@@ -54,7 +54,7 @@ def _summarize_node(node: dict, threshold: int = 200) -> str:
     return f"{head} ... {tail}"
 
 
-async def generate_summaries(structure, threshold: int = 200):
+def generate_summaries(structure, threshold: int = 200):
     """Generate summaries for all nodes in a tree."""
     nodes = flatten_tree(structure)
     summaries = [_summarize_node(n, threshold=threshold) for n in nodes]
@@ -84,7 +84,7 @@ def generate_doc_description(structure) -> str:
     return f"{title_str}. {text}" if text else title_str
 
 
-async def _finalize_tree(
+def _finalize_tree(
     tree,
     doc_name: str,
     source_path: str = "",
@@ -112,7 +112,7 @@ async def _finalize_tree(
 
     if if_add_node_summary:
         logger.info("Generating summaries...")
-        tree = await generate_summaries(tree, threshold=summary_token_threshold)
+        tree = generate_summaries(tree, threshold=summary_token_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)
@@ -289,7 +289,7 @@ async def md_to_tree(
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    return await _finalize_tree(
+    return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(md_path) if md_path else "",
         if_add_node_id=if_add_node_id,
@@ -410,22 +410,6 @@ def _preprocess_text(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text)
 
 
-def _cut_text_content(markers: list[dict], lines: list[str]) -> list[dict]:
-    """Cut text between headings for plain text."""
-    nodes = []
-    for i, mk in enumerate(markers):
-        start = mk["line_num"] - 1
-        end = markers[i + 1]["line_num"] - 1 if i + 1 < len(markers) else len(lines)
-        nodes.append({
-            "title": mk["title"],
-            "line_num": mk["line_num"],
-            "line_start": mk["line_num"],
-            "line_end": end,
-            "level": mk["level"],
-            "text": "\n".join(lines[start:end]).strip(),
-        })
-    return nodes
-
 
 async def text_to_tree(
     text_path: Optional[str] = None,
@@ -476,7 +460,7 @@ async def text_to_tree(
         markers = [{"title": doc_name, "line_num": 1, "level": 1}]
 
     # Step 2: extract text
-    nodes = _cut_text_content(markers, lines)
+    nodes = _cut_md_text(markers, lines)
 
     # Step 3: thinning
     if if_thinning and min_token_threshold:
@@ -488,7 +472,7 @@ async def text_to_tree(
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    return await _finalize_tree(
+    return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(text_path) if text_path else "",
         if_add_node_id=if_add_node_id,
@@ -603,7 +587,7 @@ async def code_to_tree(
     if not markers:
         markers = [{"title": doc_name, "line_num": 1, "level": 1}]
 
-    nodes = _cut_text_content(markers, lines)
+    nodes = _cut_md_text(markers, lines)
 
     if if_thinning and min_token_threshold:
         nodes = _update_token_counts(nodes)
@@ -613,7 +597,7 @@ async def code_to_tree(
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
-    return await _finalize_tree(
+    return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(code_path),
         if_add_node_id=if_add_node_id,
@@ -677,7 +661,7 @@ async def json_to_tree(
 
     tree = _build_tree(flat_nodes)
 
-    return await _finalize_tree(
+    return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(json_path),
         if_add_node_id=if_add_node_id,
@@ -723,7 +707,7 @@ async def csv_to_tree(
 
     tree = _build_tree(flat_nodes)
 
-    return await _finalize_tree(
+    return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(csv_path),
         if_add_node_id=if_add_node_id,
