@@ -57,9 +57,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from treesearch import build_index, search
+from treesearch import build_index
 from treesearch.tree import Document, flatten_tree
 
 from benchmark_utils import (
@@ -470,12 +471,12 @@ async def run_embedding_comparison(
     treesearch_index_time: float,
 ) -> tuple[EmbeddingBenchmarkReport, EmbeddingBenchmarkReport]:
     """Run embedding vs TreeSearch FTS5 comparison."""
-    k_values = [1, 3, 5]
+    k_values = [1, 3, 5, 10]
 
     # Build embedding index
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Building EMBEDDING index (traditional RAG approach)...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     t0 = time.time()
     all_chunks = []
@@ -501,9 +502,9 @@ async def run_embedding_comparison(
     fts_index.index_documents(documents)
 
     # Evaluate embedding retrieval
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Strategy: EMBEDDING | Samples: {len(samples)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     embedding_results = []
     for i, sample in enumerate(samples):
@@ -511,7 +512,7 @@ async def run_embedding_comparison(
         with tracker:
             results = embedding_index.search(
                 sample.question,
-                top_k=top_k,
+                top_k=max(k_values),
                 doc_id=sample.doc_id,
             )
             retrieved_chunk_ids = [r["chunk_id"] for r in results]
@@ -521,11 +522,11 @@ async def run_embedding_comparison(
 
         if metrics:
             hit = "HIT" if metrics.get("hit@1", 0) > 0 else "miss"
-            print(f"  [{i+1}/{len(samples)}] MRR={metrics.get('mrr', 0):.2f} "
+            print(f"  [{i + 1}/{len(samples)}] MRR={metrics.get('mrr', 0):.2f} "
                   f"P@3={metrics.get('precision@3', 0):.2f} R@3={metrics.get('recall@3', 0):.2f} "
                   f"[{hit}] {tracker.stats.latency_seconds:.2f}s")
         else:
-            print(f"  [{i+1}/{len(samples)}] Skipped (no ground truth)")
+            print(f"  [{i + 1}/{len(samples)}] Skipped (no ground truth)")
 
         embedding_results.append({
             "metrics": metrics,
@@ -563,9 +564,9 @@ async def run_embedding_comparison(
     )
 
     # Evaluate FTS5 retrieval
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Strategy: FTS5 (TreeSearch) | Samples: {len(samples)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     fts_results = []
     for i, sample in enumerate(samples):
@@ -581,18 +582,18 @@ async def run_embedding_comparison(
                 node_scores = fts_index.score_nodes(sample.question, doc.doc_id)
                 all_scored.extend(node_scores.items())
             all_scored.sort(key=lambda x: -x[1])
-            retrieved_node_ids = [nid for nid, _ in all_scored[:top_k]]
+            retrieved_node_ids = [nid for nid, _ in all_scored[:max(k_values)]]
 
         relevant_node_ids = resolve_relevant_nodes(sample, documents)
         metrics = evaluate_query(retrieved_node_ids, relevant_node_ids, k_values) if relevant_node_ids else {}
 
         if metrics:
             hit = "HIT" if metrics.get("hit@1", 0) > 0 else "miss"
-            print(f"  [{i+1}/{len(samples)}] MRR={metrics.get('mrr', 0):.2f} "
+            print(f"  [{i + 1}/{len(samples)}] MRR={metrics.get('mrr', 0):.2f} "
                   f"P@3={metrics.get('precision@3', 0):.2f} R@3={metrics.get('recall@3', 0):.2f} "
                   f"[{hit}] {tracker.stats.latency_seconds:.3f}s")
         else:
-            print(f"  [{i+1}/{len(samples)}] Skipped (no ground truth)")
+            print(f"  [{i + 1}/{len(samples)}] Skipped (no ground truth)")
 
         fts_results.append({
             "metrics": metrics,
@@ -630,56 +631,85 @@ async def run_embedding_comparison(
     )
 
     # Print comparison
-    print(f"\n{'='*80}")
-    print("BENCHMARK COMPARISON: Embedding vs TreeSearch")
-    print(f"{'='*80}")
+    w = 80
+    dataset_label = "QASPER"
+    print(f"\n{'=' * w}")
+    print(f"  📋 BENCHMARK: {dataset_label} — Embedding vs TreeSearch (FTS5)")
+    print(f"{'=' * w}")
 
-    metrics_to_show = ["mrr", "precision@1", "precision@3", "precision@5",
-                       "recall@1", "recall@3", "recall@5", "ndcg@3", "hit@1", "f1@3"]
+    emb_m = emb_report.avg_retrieval_metrics
+    fts_m = fts_report.avg_retrieval_metrics
 
-    header = f"{'Metric':<22}{'EMBEDDING':>18}{'FTS5':>18}"
-    print(header)
-    print("-" * 58)
+    def _row(label, emb_val, fts_val, fmt=".4f"):
+        return f"  {label:<22}{emb_val:>14{fmt}}{fts_val:>14{fmt}}"
 
-    for metric in metrics_to_show:
-        row = f"{metric:<22}"
-        row += f"{emb_report.avg_retrieval_metrics.get(metric, 0):>18.4f}"
-        row += f"{fts_report.avg_retrieval_metrics.get(metric, 0):>18.4f}"
-        print(row)
+    hdr = f"  {'Metric':<22}{'EMBEDDING':>14}{'FTS5':>14}"
+    sep = "  " + "-" * 50
 
-    print("-" * 58)
-    print(f"{'Index time (s)':<22}{emb_report.embedding_time:>18.1f}{fts_report.embedding_time:>18.1f}")
-    print(f"{'Num chunks/nodes':<22}{emb_report.num_chunks:>18}{fts_report.num_chunks:>18}")
-    print(f"{'Avg query time (s)':<22}{emb_report.avg_cost.latency_seconds:>18.4f}{fts_report.avg_cost.latency_seconds:>18.4f}")
-    print(f"{'='*80}\n")
+    # --- Ranking Quality ---
+    print(f"\n  ▸ Ranking Quality")
+    print(hdr)
+    print(sep)
+    print(_row("MRR", emb_m.get("mrr", 0), fts_m.get("mrr", 0)))
+    for k in [1, 3, 5, 10]:
+        print(_row(f"NDCG@{k}", emb_m.get(f"ndcg@{k}", 0), fts_m.get(f"ndcg@{k}", 0)))
+
+    # --- Precision & Recall ---
+    print(f"\n  ▸ Precision / Recall / F1")
+    print(hdr)
+    print(sep)
+    for k in [1, 3, 5, 10]:
+        print(_row(f"P@{k}", emb_m.get(f"precision@{k}", 0), fts_m.get(f"precision@{k}", 0)))
+        print(_row(f"R@{k}", emb_m.get(f"recall@{k}", 0), fts_m.get(f"recall@{k}", 0)))
+        print(_row(f"F1@{k}", emb_m.get(f"f1@{k}", 0), fts_m.get(f"f1@{k}", 0)))
+        if k != 10:
+            print()
+
+    # --- Hit Rate ---
+    print(f"\n  ▸ Hit Rate")
+    print(hdr)
+    print(sep)
+    for k in [1, 3, 5, 10]:
+        print(_row(f"Hit@{k}", emb_m.get(f"hit@{k}", 0), fts_m.get(f"hit@{k}", 0)))
+
+    # --- Cost & Efficiency ---
+    print(f"\n  ▸ Cost & Efficiency")
+    print(f"  {'Metric':<22}{'EMBEDDING':>14}{'FTS5':>14}")
+    print(sep)
+    print(f"  {'Index time (s)':<22}{emb_report.embedding_time:>14.1f}{fts_report.embedding_time:>14.1f}")
+    print(f"  {'Num chunks/nodes':<22}{emb_report.num_chunks:>14}{fts_report.num_chunks:>14}")
+    print(f"  {'Avg query time (s)':<22}{emb_report.avg_cost.latency_seconds:>14.4f}{fts_report.avg_cost.latency_seconds:>14.4f}")
+
+    print(f"\n{'=' * w}")
 
     # Summary
-    print("\n" + "="*60)
-    print("SUMMARY")
-    print("="*60)
+    emb_mrr = emb_m.get("mrr", 0)
+    fts_mrr = fts_m.get("mrr", 0)
+    emb_r5 = emb_m.get("recall@5", 0)
+    fts_r5 = fts_m.get("recall@5", 0)
+    speed_ratio = emb_report.avg_cost.latency_seconds / fts_report.avg_cost.latency_seconds if fts_report.avg_cost.latency_seconds > 0 else 0
 
-    emb_mrr = emb_report.avg_retrieval_metrics.get("mrr", 0)
-    fts_mrr = fts_report.avg_retrieval_metrics.get("mrr", 0)
-
-    print(f"\nEmbedding ({embedding_model}):")
-    print(f"  - MRR: {emb_mrr:.4f}")
-    print(f"  - Index time: {emb_report.embedding_time:.1f}s ({emb_report.num_chunks} chunks)")
-    print(f"  - Avg query time: {emb_report.avg_cost.latency_seconds:.4f}s")
-
-    print(f"\nTreeSearch (FTS5):")
-    print(f"  - MRR: {fts_mrr:.4f}")
-    print(f"  - Index time: {fts_report.embedding_time:.1f}s ({fts_report.num_chunks} nodes)")
-    print(f"  - Avg query time: {fts_report.avg_cost.latency_seconds:.4f}s")
+    print(f"\n  📊 SUMMARY ({dataset_label})")
+    print(f"  {'─' * 50}")
+    print(f"  Embedding ({embedding_model}): MRR={emb_mrr:.4f}  R@5={emb_r5:.4f}  ⏱ {emb_report.avg_cost.latency_seconds:.4f}s/q")
+    print(f"  TreeSearch (FTS5):            MRR={fts_mrr:.4f}  R@5={fts_r5:.4f}  ⏱ {fts_report.avg_cost.latency_seconds:.4f}s/q")
+    print()
 
     if fts_mrr > emb_mrr:
         improvement = ((fts_mrr - emb_mrr) / emb_mrr * 100) if emb_mrr > 0 else 0
-        print(f"\n✅ TreeSearch FTS5 outperforms Embedding by {improvement:.1f}% on MRR")
+        print(f"  ✅ TreeSearch FTS5 outperforms Embedding by {improvement:.1f}% on MRR")
     else:
         improvement = ((emb_mrr - fts_mrr) / fts_mrr * 100) if fts_mrr > 0 else 0
-        print(f"\n📊 Embedding outperforms TreeSearch FTS5 by {improvement:.1f}% on MRR")
+        print(f"  📊 Embedding outperforms TreeSearch FTS5 by {improvement:.1f}% on MRR")
 
-    speed_ratio = emb_report.avg_cost.latency_seconds / fts_report.avg_cost.latency_seconds if fts_report.avg_cost.latency_seconds > 0 else 0
-    print(f"⚡ TreeSearch FTS5 is {speed_ratio:.1f}x faster per query")
+    if fts_r5 > emb_r5:
+        r5_imp = ((fts_r5 - emb_r5) / emb_r5 * 100) if emb_r5 > 0 else 0
+        print(f"  ✅ TreeSearch FTS5 outperforms Embedding by {r5_imp:.1f}% on Recall@5")
+    else:
+        r5_imp = ((emb_r5 - fts_r5) / fts_r5 * 100) if fts_r5 > 0 else 0
+        print(f"  📊 Embedding outperforms TreeSearch FTS5 by {r5_imp:.1f}% on Recall@5")
+
+    print(f"  ⚡ TreeSearch FTS5 is {speed_ratio:.1f}x faster per query")
 
     # Save reports
     os.makedirs(output_dir, exist_ok=True)

@@ -47,19 +47,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from treesearch import build_index, search
+from treesearch import build_index
 from treesearch.fts import FTS5Index
 from treesearch.tree import Document, flatten_tree
 
 from metrics import (
-    precision_at_k,
-    recall_at_k,
-    reciprocal_rank,
-    ndcg_at_k,
-    hit_at_k,
-    f1_at_k,
+    CostTracker, aggregate_cost_stats,
+    evaluate_query,
 )
 
 logging.basicConfig(
@@ -387,7 +384,6 @@ class TreeSearchCodeIndex:
 def evaluate_retrieval(
     query_samples: list[CodeSample],
     index,
-    top_k: int = 10,
     k_values: list[int] = None,
 ) -> dict:
     """Evaluate retrieval performance.
@@ -397,50 +393,37 @@ def evaluate_retrieval(
     if k_values is None:
         k_values = [1, 3, 5, 10]
 
-    all_metrics = {f"precision@{k}": [] for k in k_values}
-    all_metrics.update({f"recall@{k}": [] for k in k_values})
-    all_metrics["mrr"] = []
-    all_metrics.update({f"ndcg@{k}": [] for k in k_values})
-    all_metrics.update({f"hit@{k}": [] for k in k_values})
-    all_metrics.update({f"f1@{k}": [] for k in k_values})
-
-    query_times = []
-    hits = 0
-    total = 0
+    all_results = []
+    cost_stats = []
 
     for sample in query_samples:
-        t0 = time.time()
-        results = index.search(sample.query, top_k=max(k_values))
-        query_time = time.time() - t0
-        query_times.append(query_time)
+        tracker = CostTracker()
+        with tracker:
+            results = index.search(sample.query, top_k=max(k_values))
 
         retrieved_ids = [idx for idx, _ in results]
         relevant_ids = [sample.idx]  # Ground truth is the sample's own idx
 
-        for k in k_values:
-            all_metrics[f"precision@{k}"].append(precision_at_k(retrieved_ids, relevant_ids, k))
-            all_metrics[f"recall@{k}"].append(recall_at_k(retrieved_ids, relevant_ids, k))
-            all_metrics[f"ndcg@{k}"].append(ndcg_at_k(retrieved_ids, relevant_ids, k))
-            all_metrics[f"hit@{k}"].append(hit_at_k(retrieved_ids, relevant_ids, k))
-            all_metrics[f"f1@{k}"].append(f1_at_k(retrieved_ids, relevant_ids, k))
+        metrics = evaluate_query(retrieved_ids, relevant_ids, k_values)
 
-        all_metrics["mrr"].append(reciprocal_rank(retrieved_ids, relevant_ids))
-
-        if sample.idx in retrieved_ids[:1]:
-            hits += 1
-        total += 1
+        all_results.append(metrics)
+        cost_stats.append(tracker.stats)
 
         hit_str = "HIT" if sample.idx in retrieved_ids[:1] else "miss"
         logger.info(
-            f"[{total}/{len(query_samples)}] MRR={all_metrics['mrr'][-1]:.2f} "
-            f"P@1={all_metrics['precision@1'][-1]:.2f} [{hit_str}] {query_time:.3f}s"
+            f"[{len(all_results)}/{len(query_samples)}] MRR={metrics['mrr']:.2f} "
+            f"P@1={metrics['precision@1']:.2f} [{hit_str}] {tracker.stats.latency_seconds:.3f}s"
         )
 
     # Aggregate
-    avg_metrics = {k: np.mean(v) for k, v in all_metrics.items()}
-    avg_metrics["avg_query_time"] = np.mean(query_times)
+    avg_metrics = {}
+    if all_results:
+        for key in all_results[0]:
+            avg_metrics[key] = np.mean([r[key] for r in all_results])
+
+    avg_cost = aggregate_cost_stats(cost_stats)
+    avg_metrics["avg_query_time"] = avg_cost.latency_seconds
     avg_metrics["total_queries"] = len(query_samples)
-    avg_metrics["hit_rate@1"] = hits / total if total > 0 else 0
 
     return avg_metrics
 
@@ -479,23 +462,23 @@ async def main():
         max_corpus=args.max_corpus,
     )
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"CodeSearchNet Benchmark: {args.language.upper()}")
     print(f"Queries: {len(query_samples)} | Corpus: {len(corpus.samples)} | Top-K: {args.top_k}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     results = {}
 
     # TreeSearch FTS5 evaluation
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Strategy: TREESEARCH FTS5")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     ts_index = TreeSearchCodeIndex()
     ts_index_time = await ts_index.index(corpus, args.index_dir)
     print(f"Index time: {ts_index_time:.2f}s")
 
-    ts_metrics = evaluate_retrieval(query_samples, ts_index, top_k=args.top_k)
+    ts_metrics = evaluate_retrieval(query_samples, ts_index)
     ts_metrics["index_time"] = ts_index_time
     ts_metrics["num_nodes"] = sum(len(flatten_tree(d.structure)) for d in ts_index.documents)
     results["treesearch_fts5"] = ts_metrics
@@ -505,12 +488,12 @@ async def main():
         api_key = os.environ.get("ZHIPU_API_KEY", "")
 
         if not api_key:
-            print("\ZHIPU_API_KEY not set, skipping embedding evaluation")
-            print("  Set it in .env or: export ZHIPU_API_KEY=your_api_key")
+            print("ZHIPU_API_KEY not set, skipping embedding evaluation")
+            print("Set it in .env or: export ZHIPU_API_KEY=your_api_key")
         else:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("Strategy: EMBEDDING (Zhipu embedding-3)")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             emb_client = ZhipuEmbeddingClient(api_key=api_key)
             emb_index = EmbeddingIndex(
@@ -520,71 +503,110 @@ async def main():
             emb_index_time = emb_index.index(corpus)
             print(f"Index time: {emb_index_time:.2f}s")
 
-            emb_metrics = evaluate_retrieval(query_samples, emb_index, top_k=args.top_k)
+            emb_metrics = evaluate_retrieval(query_samples, emb_index)
             emb_metrics["index_time"] = emb_index_time
             emb_metrics["num_embeddings"] = len(corpus.samples)
             results["embedding"] = emb_metrics
 
     # Print comparison
-    print(f"\n{'='*70}")
-    print("BENCHMARK COMPARISON: CodeSearchNet")
-    print(f"{'='*70}")
+    w = 80
+    dataset_label = f"CodeSearchNet ({args.language.upper()})"
+    col_w = 16
+    num_cols = len(results)
 
-    metrics_to_show = ["mrr", "precision@1", "precision@5", "recall@5", "hit_rate@1"]
+    print(f"\n{'=' * w}")
+    print(f"  📋 BENCHMARK: {dataset_label}")
+    print(f"{'=' * w}")
 
-    header = f"{'Metric':<25}"
-    for name in results:
-        header += f"{name.upper():>20}"
-    print(header)
-    print("-" * (25 + 20 * len(results)))
+    col_names = list(results.keys())
 
-    for metric in metrics_to_show:
-        row = f"{metric:<25}"
-        for name, m in results.items():
-            val = m.get(metric, 0)
-            row += f"{val:>20.4f}"
-        print(row)
+    def _hdr():
+        h = f"  {'Metric':<22}"
+        for name in col_names:
+            h += f"{name.upper():>{col_w}}"
+        return h
 
-    print("-" * (25 + 20 * len(results)))
+    def _row_key(label, key, fmt=".4f"):
+        r = f"  {label:<22}"
+        for name in col_names:
+            val = results[name].get(key, 0)
+            r += f"{val:>{col_w}{fmt}}"
+        return r
 
-    # Index stats
-    row = f"{'Index time (s)':<25}"
-    for name, m in results.items():
-        row += f"{m.get('index_time', 0):>20.2f}"
-    print(row)
+    sep = "  " + "-" * (22 + col_w * num_cols)
 
-    row = f"{'Avg query time (s)':<25}"
-    for name, m in results.items():
-        row += f"{m.get('avg_query_time', 0):>20.4f}"
-    print(row)
+    # --- Ranking Quality ---
+    print(f"\n  ▸ Ranking Quality")
+    print(_hdr())
+    print(sep)
+    print(_row_key("MRR", "mrr"))
+    for k in [1, 3, 5, 10]:
+        print(_row_key(f"NDCG@{k}", f"ndcg@{k}"))
 
-    print(f"{'='*70}\n")
+    # --- Precision & Recall ---
+    print(f"\n  ▸ Precision / Recall / F1")
+    print(_hdr())
+    print(sep)
+    for k in [1, 3, 5, 10]:
+        print(_row_key(f"P@{k}", f"precision@{k}"))
+        print(_row_key(f"R@{k}", f"recall@{k}"))
+        print(_row_key(f"F1@{k}", f"f1@{k}"))
+        if k != 10:
+            print()
+
+    # --- Hit Rate ---
+    print(f"\n  ▸ Hit Rate")
+    print(_hdr())
+    print(sep)
+    for k in [1, 3, 5, 10]:
+        print(_row_key(f"Hit@{k}", f"hit@{k}"))
+
+    # --- Cost & Efficiency ---
+    print(f"\n  ▸ Cost & Efficiency")
+    print(_hdr())
+    print(sep)
+    r = f"  {'Index time (s)':<22}"
+    for name in col_names:
+        r += f"{results[name].get('index_time', 0):>{col_w}.2f}"
+    print(r)
+    r = f"  {'Avg query time (s)':<22}"
+    for name in col_names:
+        r += f"{results[name].get('avg_query_time', 0):>{col_w}.4f}"
+    print(r)
+
+    print(f"\n{'=' * w}")
 
     # Summary
-    print("\n" + "="*60)
-    print("SUMMARY")
-    print("="*60)
+    print(f"\n  📊 SUMMARY ({dataset_label})")
+    print(f"  {'─' * 50}")
 
     for name, m in results.items():
-        print(f"\n{name.upper()}:")
-        print(f"  - MRR: {m.get('mrr', 0):.4f}")
-        print(f"  - Hit@1: {m.get('hit_rate@1', 0):.4f}")
-        print(f"  - Index time: {m.get('index_time', 0):.2f}s")
-        print(f"  - Avg query time: {m.get('avg_query_time', 0):.4f}s")
+        mrr_val = m.get("mrr", 0)
+        r5_val = m.get("recall@5", 0)
+        qt_val = m.get("avg_query_time", 0)
+        print(f"  {name.upper():<24} MRR={mrr_val:.4f}  R@5={r5_val:.4f}  ⏱ {qt_val:.4f}s/q")
 
     if "embedding" in results and "treesearch_fts5" in results:
         emb_mrr = results["embedding"]["mrr"]
         ts_mrr = results["treesearch_fts5"]["mrr"]
+        emb_r5 = results["embedding"].get("recall@5", 0)
+        ts_r5 = results["treesearch_fts5"].get("recall@5", 0)
         ts_query_time = results["treesearch_fts5"]["avg_query_time"]
         emb_query_time = results["embedding"]["avg_query_time"]
 
-        if emb_mrr > ts_mrr:
-            print(f"\n📊 Embedding outperforms TreeSearch FTS5 by {(emb_mrr - ts_mrr) / ts_mrr * 100:.1f}% on MRR")
+        print()
+        if ts_mrr > emb_mrr:
+            print(f"  ✅ TreeSearch FTS5 outperforms Embedding by {(ts_mrr - emb_mrr) / emb_mrr * 100:.1f}% on MRR")
         else:
-            print(f"\n📊 TreeSearch FTS5 outperforms Embedding by {(ts_mrr - emb_mrr) / emb_mrr * 100:.1f}% on MRR")
+            print(f"  📊 Embedding outperforms TreeSearch FTS5 by {(emb_mrr - ts_mrr) / ts_mrr * 100:.1f}% on MRR")
+
+        if ts_r5 > emb_r5:
+            print(f"  ✅ TreeSearch FTS5 outperforms Embedding by {(ts_r5 - emb_r5) / emb_r5 * 100:.1f}% on Recall@5")
+        else:
+            print(f"  📊 Embedding outperforms TreeSearch FTS5 by {(emb_r5 - ts_r5) / ts_r5 * 100:.1f}% on Recall@5")
 
         speedup = emb_query_time / ts_query_time if ts_query_time > 0 else 0
-        print(f"⚡ TreeSearch FTS5 is {speedup:.1f}x faster per query")
+        print(f"  ⚡ TreeSearch FTS5 is {speedup:.1f}x faster per query")
 
     # Save results
     os.makedirs(args.output_dir, exist_ok=True)
