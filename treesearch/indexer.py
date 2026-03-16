@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import re
+import time
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .tree import (
@@ -673,6 +675,105 @@ async def json_to_tree(
 
 
 # ============================================================================
+# JSONL file indexer
+# ============================================================================
+
+def _jsonl_to_nodes(records: list[dict], key_field: str = None) -> list[dict]:
+    """Convert a list of JSONL records into flat node list.
+
+    Each record becomes a level-1 node. If key_field is specified and exists
+    in the record, it is used as the title; otherwise uses the record index.
+    Nested structures within each record are expanded as child nodes.
+    """
+    nodes = []
+    for i, record in enumerate(records):
+        # Determine title for this record
+        if key_field and isinstance(record, dict) and key_field in record:
+            title = str(record[key_field])
+        elif isinstance(record, dict):
+            # Auto-detect: use first string-valued field as title
+            title = None
+            for k, v in record.items():
+                if isinstance(v, str) and len(v) < 200:
+                    title = f"{k}: {v}"
+                    break
+            if title is None:
+                title = f"record[{i}]"
+        else:
+            title = f"record[{i}]"
+
+        # Build text from record content
+        if isinstance(record, dict):
+            text_parts = []
+            child_nodes = []
+            for k, v in record.items():
+                if isinstance(v, (dict, list)):
+                    child_nodes.extend(_json_to_nodes(v, prefix=f"record[{i}].{k}", level=2))
+                else:
+                    text_parts.append(f"{k}: {v}")
+            text = "\n".join(text_parts)
+            nodes.append({"title": title, "level": 1, "text": text})
+            nodes.extend(child_nodes)
+        else:
+            nodes.append({"title": title, "level": 1, "text": str(record)})
+
+    return nodes
+
+
+async def jsonl_to_tree(
+    jsonl_path: str,
+    *,
+    key_field: str = None,
+    if_add_node_summary: bool = True,
+    summary_token_threshold: int = 200,
+    if_add_doc_description: bool = False,
+    if_add_node_text: bool = False,
+    if_add_node_id: bool = True,
+    **kwargs,
+) -> dict:
+    """Build a tree index from a JSONL file (one JSON object per line).
+
+    Args:
+        jsonl_path: path to the .jsonl file
+        key_field: optional field name to use as record title
+    """
+    records = []
+    with open(jsonl_path, "r", encoding="utf-8", errors="replace") as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                logger.warning("Skipping invalid JSON at line %d in %s: %s", line_num, jsonl_path, e)
+
+    doc_name = os.path.splitext(os.path.basename(jsonl_path))[0]
+    logger.info("JSONL loaded: %d records from %s", len(records), jsonl_path)
+
+    flat_nodes = _jsonl_to_nodes(records, key_field=key_field)
+    if not flat_nodes:
+        flat_nodes = [{"title": doc_name, "level": 1, "text": ""}]
+
+    for i, node in enumerate(flat_nodes):
+        node["line_num"] = i + 1
+        node["line_start"] = i + 1
+        node["line_end"] = i + 1
+
+    tree = _build_tree(flat_nodes)
+
+    return _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(jsonl_path),
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_token_threshold=summary_token_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )
+
+
+# ============================================================================
 # CSV file indexer
 # ============================================================================
 
@@ -716,6 +817,83 @@ async def csv_to_tree(
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
+
+
+# ============================================================================
+# Index statistics
+# ============================================================================
+
+@dataclass
+class IndexStats:
+    """Statistics collected during an indexing run.
+
+    Attributes:
+        total_files: Total files discovered (including skipped).
+        indexed_files: Files actually (re-)indexed in this run.
+        skipped_files: Files skipped because they were unchanged.
+        failed_files: Files that failed to parse.
+        total_nodes: Total tree nodes generated across all indexed files.
+        total_time_s: Total wall-clock time for the indexing run.
+        per_type: Breakdown by source_type with counts, node totals, and timings.
+        db_path: Path to the SQLite database file.
+        db_size_bytes: Size of the database file on disk (0 for in-memory).
+        failed_paths: List of file paths that failed to index.
+    """
+    total_files: int = 0
+    indexed_files: int = 0
+    skipped_files: int = 0
+    failed_files: int = 0
+    total_nodes: int = 0
+    total_time_s: float = 0.0
+    per_type: dict = field(default_factory=dict)
+    db_path: str = ""
+    db_size_bytes: int = 0
+    failed_paths: list = field(default_factory=list)
+
+    def summary(self) -> str:
+        """Return a human-readable summary string."""
+        lines = []
+        lines.append(f"Index Statistics")
+        lines.append(f"  Total files discovered: {self.total_files}")
+        lines.append(f"  Indexed (new/changed):  {self.indexed_files}")
+        lines.append(f"  Skipped (unchanged):    {self.skipped_files}")
+        if self.failed_files:
+            lines.append(f"  Failed:                 {self.failed_files}")
+        lines.append(f"  Total nodes generated:  {self.total_nodes}")
+        lines.append(f"  Total time:             {self.total_time_s:.3f}s")
+        if self.db_path:
+            size_str = _format_size(self.db_size_bytes)
+            lines.append(f"  Database:               {self.db_path} ({size_str})")
+
+        if self.per_type:
+            lines.append(f"")
+            lines.append(f"  Per file type:")
+            # Sort by file count descending
+            for stype, info in sorted(self.per_type.items(), key=lambda x: -x[1]["count"]):
+                cnt = info["count"]
+                nodes = info["nodes"]
+                t = info["time_s"]
+                lines.append(f"    {stype:12s}  {cnt:4d} file(s)  {nodes:5d} nodes  {t:.3f}s")
+
+        if self.failed_paths:
+            lines.append(f"")
+            lines.append(f"  Failed files:")
+            for fp in self.failed_paths[:10]:
+                lines.append(f"    - {fp}")
+            if len(self.failed_paths) > 10:
+                lines.append(f"    ... and {len(self.failed_paths) - 10} more")
+
+        return "\n".join(lines)
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format bytes into human-readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
 # ============================================================================
@@ -838,10 +1016,15 @@ async def build_index(
         logger.info("Skipped %d unchanged file(s)", len(skipped))
     logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
 
+    build_start = time.monotonic()
     semaphore = asyncio.Semaphore(max_concurrency)
+    # Collect per-file timing and source_type for stats
+    _file_timings: dict[str, tuple[str, float]] = {}  # fp -> (source_type, elapsed_s)
+    _failed_paths: list[str] = []
 
     async def _index_one(fp: str) -> dict | None:
         async with semaphore:
+            t0 = time.monotonic()
             try:
                 ext = os.path.splitext(fp)[1].lower()
                 common = dict(
@@ -862,10 +1045,14 @@ async def build_index(
                     result = await text_to_tree(text_path=fp, **common)
 
                 # Tag source_type for search routing
-                result["source_type"] = SOURCE_TYPE_MAP.get(ext, "text")
+                source_type = SOURCE_TYPE_MAP.get(ext, "text")
+                result["source_type"] = source_type
+                _file_timings[fp] = (source_type, time.monotonic() - t0)
                 return result
             except Exception as e:
                 logger.warning("Failed to index %s: %s", fp, e)
+                _failed_paths.append(fp)
+                _file_timings[fp] = ("(failed)", time.monotonic() - t0)
                 return None
 
     raw_results = await asyncio.gather(*(_index_one(fp) for fp in to_index))
@@ -908,5 +1095,57 @@ async def build_index(
     if changed_hashes:
         fts.set_index_meta_batch(changed_hashes)
 
+    # ---------------------------------------------------------------
+    # Build IndexStats
+    # ---------------------------------------------------------------
+    build_elapsed = time.monotonic() - build_start
+
+    # Count total nodes in newly indexed documents
+    total_nodes = 0
+    for doc in documents:
+        total_nodes += len(flatten_tree(doc.structure))
+
+    # Per source_type aggregation
+    per_type: dict[str, dict] = {}
+    for fp, (stype, elapsed) in _file_timings.items():
+        if stype == "(failed)":
+            continue
+        entry = per_type.setdefault(stype, {"count": 0, "nodes": 0, "time_s": 0.0})
+        entry["count"] += 1
+        entry["time_s"] += elapsed
+        # Count nodes for this file
+        result = result_map.get(fp)
+        if result:
+            entry["nodes"] += len(flatten_tree(result.get("structure", [])))
+
+    # Database size
+    db_size = 0
+    if db_path and os.path.isfile(db_path):
+        try:
+            db_size = os.path.getsize(db_path)
+        except OSError:
+            pass
+
+    stats = IndexStats(
+        total_files=len(expanded),
+        indexed_files=len(to_index) - len(_failed_paths),
+        skipped_files=len(skipped),
+        failed_files=len(_failed_paths),
+        total_nodes=total_nodes,
+        total_time_s=build_elapsed,
+        per_type=per_type,
+        db_path=db_path,
+        db_size_bytes=db_size,
+        failed_paths=_failed_paths,
+    )
+
+    # Attach stats to the returned list for easy access
+    class _DocumentList(list):
+        """List subclass that carries IndexStats."""
+        stats: IndexStats = None  # type: ignore[assignment]
+
+    doc_list = _DocumentList(documents)
+    doc_list.stats = stats
+
     fts.close()
-    return documents
+    return doc_list

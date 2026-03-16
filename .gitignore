@@ -220,4 +220,6 @@ docs/internal/*
 examples/a.py
 AGENT.md
 CLAUDE.md
-
+data/financebench_pdfs/*
+CODEBUDDY.md
+.codebuddy/

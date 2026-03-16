@@ -14,6 +14,15 @@ from .registry import (
     get_prefilters_for_source_type,
 )
 from .ast_parser import parse_python_structure
+from .pdf_parser import extract_pdf_text, extract_document_text, PYMUPDF_EXTENSIONS
+from .doc_parser import extract_doc_text
+
+# Excel parser (optional)
+try:
+    from .excel_parser import excel_to_tree, EXCEL_EXTENSIONS
+    _has_excel = True
+except ImportError:
+    _has_excel = False
 
 # Tree-sitter parser (optional)
 try:
@@ -33,7 +42,14 @@ __all__ = [
     "PREFILTER_ROUTING",
     "get_prefilters_for_source_type",
     "parse_python_structure",
+    "extract_pdf_text",
+    "extract_document_text",
+    "extract_doc_text",
+    "PYMUPDF_EXTENSIONS",
 ]
+
+if _has_excel:
+    __all__ += ["excel_to_tree", "EXCEL_EXTENSIONS"]
 
 if _has_treesitter:
     __all__ += ["parse_treesitter_structure", "treesitter_code_to_tree", "EXT_TO_LANGUAGE"]

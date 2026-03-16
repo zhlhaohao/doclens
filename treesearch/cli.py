@@ -101,6 +101,8 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
                      help="Max concurrent indexing tasks (default: 5)")
     sub.add_argument("--force", action="store_true",
                      help="Force re-index even if files unchanged")
+    sub.add_argument("--stats", action="store_true",
+                     help="Show detailed indexing statistics after completion")
 
 
 async def _run_index(args) -> None:
@@ -132,6 +134,10 @@ async def _run_index(args) -> None:
         print(f"  - {doc.doc_name}")
         print(f"    TOC:")
         print_toc(doc.structure)
+
+    # Display stats if requested
+    if args.stats and hasattr(results, 'stats') and results.stats:
+        print(f"\n{results.stats.summary()}")
 
 
 # ---------------------------------------------------------------------------

@@ -55,7 +55,7 @@ if not _ensure_fts5_support():
 from treesearch.treesearch import TreeSearch
 
 # -- Core --
-from treesearch.indexer import build_index, md_to_tree, text_to_tree
+from treesearch.indexer import build_index, md_to_tree, text_to_tree, IndexStats
 from treesearch.search import search, search_sync, GrepFilter
 from treesearch.tree import Document, load_index, load_documents, save_index, flatten_tree, print_toc
 from treesearch.config import TreeSearchConfig, get_config, set_config, reset_config
@@ -65,7 +65,7 @@ __all__ = [
     # Primary
     "TreeSearch",
     # Indexing
-    "build_index", "md_to_tree", "text_to_tree",
+    "build_index", "md_to_tree", "text_to_tree", "IndexStats",
     # Search
     "search", "search_sync", "GrepFilter",
     # Document & tree
@@ -77,10 +77,10 @@ __all__ = [
 ]
 
 # Advanced APIs — import from submodules directly:
-#   from treesearch.indexer import code_to_tree, json_to_tree, csv_to_tree
+#   from treesearch.indexer import code_to_tree, json_to_tree, jsonl_to_tree, csv_to_tree
 #   from treesearch.search import PreFilter
 #   from treesearch.fts import get_fts_index, set_fts_index, reset_fts_index
 #   from treesearch.tokenizer import tokenize
 #   from treesearch.utils import count_tokens
 #   from treesearch.tree import assign_node_ids, find_node, get_leaf_nodes, ...
-#   from treesearch.parsers import ParserRegistry, get_parser
+#   from treesearch.parsers import ParserRegistry, get_parser, extract_pdf_text

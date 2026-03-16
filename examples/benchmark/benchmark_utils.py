@@ -318,6 +318,16 @@ def load_dataset(
 # Ground truth resolution
 # ---------------------------------------------------------------------------
 
+def _normalize_text(text: str) -> str:
+    """Normalize text for fuzzy matching: lowercase, collapse whitespace, strip table pipes."""
+    import re
+    text = text.lower()
+    text = text.replace('|', ' ')  # Markdown table cell separators -> space
+    text = re.sub(r'\s+', ' ', text)  # collapse all whitespace to single space
+    text = text.strip()
+    return text
+
+
 def resolve_relevant_nodes(
     sample: BenchmarkSample,
     documents: list[Document],
@@ -326,7 +336,9 @@ def resolve_relevant_nodes(
 
     Matching strategy:
       1. Exact title match (case-insensitive)
-      2. Substring match on node text (for evidence_texts)
+      2. Fuzzy substring match on node text (for evidence_texts)
+         - Normalizes whitespace to handle PDF extraction differences
+         - Uses first 80 chars of evidence for matching (avoids cross-node spans)
     """
     relevant_ids = []
     target_docs = documents
@@ -340,7 +352,9 @@ def resolve_relevant_nodes(
         for node in all_nodes:
             nid = node.get("node_id", "")
             title = (node.get("title", "") or "").lower().strip()
-            text = (node.get("text", "") or "").lower()
+            # Use text, summary, or prefix_summary for matching
+            raw_text = node.get("text", "") or node.get("summary", "") or node.get("prefix_summary", "") or ""
+            text_normalized = _normalize_text(raw_text)
 
             # Match by section title
             for ref_title in sample.relevant_section_titles:
@@ -348,11 +362,23 @@ def resolve_relevant_nodes(
                     relevant_ids.append(nid)
                     break
 
-            # Match by evidence text (substring in node text)
+            # Match by evidence text (fuzzy substring matching)
             if nid not in relevant_ids:
                 for evidence in sample.evidence_texts:
-                    if evidence and evidence.lower() in text:
-                        relevant_ids.append(nid)
+                    if not evidence:
+                        continue
+                    # Progressive prefix matching: try 80→50→30 chars
+                    # Longer prefixes may span formatting differences (table borders, etc.)
+                    matched = False
+                    for prefix_len in [80, 50, 30]:
+                        evidence_prefix = _normalize_text(evidence[:prefix_len])
+                        if len(evidence_prefix) < 10:
+                            evidence_prefix = _normalize_text(evidence)
+                        if evidence_prefix in text_normalized:
+                            relevant_ids.append(nid)
+                            matched = True
+                            break
+                    if matched:
                         break
 
     return list(dict.fromkeys(relevant_ids))  # deduplicate preserving order

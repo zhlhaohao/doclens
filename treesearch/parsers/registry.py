@@ -58,6 +58,7 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".m": "code",
     # Structured data
     ".json": "json",
+    ".jsonl": "jsonl",
     ".csv": "csv",
     # Web / markup
     ".html": "html",
@@ -72,7 +73,20 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".mk": "code",
     # Documents
     ".pdf": "pdf",
+    ".doc": "doc",
     ".docx": "docx",
+    # Spreadsheets (openpyxl)
+    ".xlsx": "excel",
+    ".xlsm": "excel",
+    ".xltx": "excel",
+    ".xltm": "excel",
+    # Documents (PyMuPDF supported formats, share 'pdf' source_type)
+    ".epub": "pdf",
+    ".xps": "pdf",
+    ".oxps": "pdf",
+    ".fb2": "pdf",
+    ".cbz": "pdf",
+    ".cbr": "pdf",
     # Plain text (fallback)
     ".txt": "text",
     ".log": "text",
@@ -95,11 +109,14 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "code": ["grep", "fts5"],
     "text": ["fts5"],
     "json": ["grep"],
+    "jsonl": ["grep", "fts5"],
     "csv": ["fts5"],
     "html": ["fts5"],
     "xml": ["fts5"],
     "pdf": ["fts5"],
+    "doc": ["fts5"],
     "docx": ["fts5"],
+    "excel": ["fts5"],
 }
 
 
@@ -163,7 +180,7 @@ def _register_builtin_parsers() -> None:
     Called at module load time. Deferred import avoids circular dependency
     with indexer.py which imports from this module.
     """
-    from ..indexer import md_to_tree, text_to_tree, code_to_tree, json_to_tree, csv_to_tree
+    from ..indexer import md_to_tree, text_to_tree, code_to_tree, json_to_tree, csv_to_tree, jsonl_to_tree
 
     # Markdown
     async def _md_parser(fp, **kw):
@@ -219,22 +236,31 @@ def _register_builtin_parsers() -> None:
 
     ParserRegistry.register(".json", _json_parser)
 
+    # JSONL
+    async def _jsonl_parser(fp, **kw):
+        return await jsonl_to_tree(jsonl_path=fp, **kw)
+
+    ParserRegistry.register(".jsonl", _jsonl_parser)
+
     # CSV
     async def _csv_parser(fp, **kw):
         return await csv_to_tree(csv_path=fp, **kw)
 
     ParserRegistry.register(".csv", _csv_parser)
 
-    # PDF (optional dependency)
+    # PDF and other PyMuPDF-supported document formats (optional dependency)
     try:
-        from ..parsers.pdf_parser import pdf_to_tree
+        from ..parsers.pdf_parser import pdf_to_tree, PYMUPDF_EXTENSIONS
 
         async def _pdf_parser(fp, **kw):
-            return await pdf_to_tree(pdf_path=fp, **kw)
+            return await pdf_to_tree(file_path=fp, **kw)
 
-        ParserRegistry.register(".pdf", _pdf_parser)
+        for ext in sorted(PYMUPDF_EXTENSIONS):
+            ParserRegistry.register(ext, _pdf_parser)
+        logger.debug("PyMuPDF parser registered for %d extensions: %s",
+                      len(PYMUPDF_EXTENSIONS), ", ".join(sorted(PYMUPDF_EXTENSIONS)))
     except ImportError:
-        logger.debug("PDF parser not available (install 'pageindex' for PDF support)")
+        logger.debug("Document parser not available (install 'pymupdf' for PDF/EPUB/XPS support)")
 
     # DOCX (optional dependency)
     try:
@@ -246,6 +272,28 @@ def _register_builtin_parsers() -> None:
         ParserRegistry.register(".docx", _docx_parser)
     except ImportError:
         logger.debug("DOCX parser not available (install 'python-docx' for DOCX support)")
+
+    # DOC (Word 97-2003, uses system tools: textutil/antiword/catdoc/LibreOffice)
+    from ..parsers.doc_parser import doc_to_tree
+
+    async def _doc_parser(fp, **kw):
+        return await doc_to_tree(doc_path=fp, **kw)
+
+    ParserRegistry.register(".doc", _doc_parser)
+
+    # Excel/Spreadsheet (optional dependency, uses openpyxl)
+    try:
+        from ..parsers.excel_parser import excel_to_tree, EXCEL_EXTENSIONS
+
+        async def _excel_parser(fp, **kw):
+            return await excel_to_tree(excel_path=fp, **kw)
+
+        for ext in sorted(EXCEL_EXTENSIONS):
+            ParserRegistry.register(ext, _excel_parser)
+        logger.debug("Excel parser registered for %d extensions: %s",
+                      len(EXCEL_EXTENSIONS), ", ".join(sorted(EXCEL_EXTENSIONS)))
+    except ImportError:
+        logger.debug("Excel parser not available (install 'openpyxl' for Excel support)")
 
     # HTML (optional dependency, uses BeautifulSoup)
     try:

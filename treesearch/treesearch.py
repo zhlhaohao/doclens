@@ -82,6 +82,7 @@ class TreeSearch:
         self._pending_paths: List[str] = list(paths)
         self.db_path = db_path
         self.documents: List[Document] = []
+        self._last_index_stats = None  # IndexStats from last index() call
         self.config = get_config()
         self.kwargs = kwargs
         self._ignore_dirs = ignore_dirs
@@ -135,7 +136,7 @@ class TreeSearch:
         """Async: Build tree indexes from files, directories, or glob patterns."""
         from .indexer import build_index
 
-        self.documents = await build_index(
+        result = await build_index(
             list(paths),
             db_path=self.db_path or "",
             force=force,
@@ -144,6 +145,10 @@ class TreeSearch:
             max_files=self._max_files,
             **kwargs
         )
+        self.documents = list(result)
+        # Capture IndexStats if available
+        if hasattr(result, 'stats'):
+            self._last_index_stats = result.stats
         return self.documents
 
     def index(self, *paths: str, force: bool = False, **kwargs) -> List[Document]:
@@ -289,6 +294,18 @@ class TreeSearch:
                 "source_type": doc.source_type,
             })
         return sorted(result, key=lambda x: x["source_path"])
+
+    # ------------------------------------------------------------------
+    # Index statistics
+    # ------------------------------------------------------------------
+
+    def get_index_stats(self):
+        """Return IndexStats from the most recent index() or aindex() call.
+
+        Returns:
+            IndexStats object, or None if no indexing has been performed yet.
+        """
+        return self._last_index_stats
 
     # ------------------------------------------------------------------
     # Save / Load indexes

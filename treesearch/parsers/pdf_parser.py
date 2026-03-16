@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: PDF parser for TreeSearch.
+@description: Document parser for TreeSearch (PyMuPDF backend).
 
-Requires optional dependency: ``pip install pageindex``
-Extracts text from PDF and builds tree structure based on heading detection.
+Uses PyMuPDF (pymupdf) to extract text from PDF/XPS/EPUB/FB2/CBZ/CBR,
+then delegates to text_to_tree for structure detection.
+
+Simple pipeline: PyMuPDF page text extraction → text_to_tree (heading detection).
 """
 import logging
 import os
@@ -12,10 +14,72 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Backend detection flag
+_HAS_PYMUPDF = None
+
+
+def _check_backends():
+    """Lazy-check that PyMuPDF is available."""
+    global _HAS_PYMUPDF
+    if _HAS_PYMUPDF is None:
+        try:
+            import pymupdf  # noqa: F401
+            _HAS_PYMUPDF = True
+        except ImportError:
+            _HAS_PYMUPDF = False
+    if not _HAS_PYMUPDF:
+        raise ImportError(
+            "Document parsing (PDF/EPUB/XPS/FB2/CBZ/CBR) requires PyMuPDF. "
+            "Install with: pip install pymupdf"
+        )
+
+
+# All file extensions that PyMuPDF can open natively
+PYMUPDF_EXTENSIONS = {
+    ".pdf", ".xps", ".oxps", ".epub", ".fb2", ".cbz", ".cbr",
+}
+
+
+def extract_document_text(file_path: str, *, plain: bool = False) -> str:
+    """Extract text from a document file using PyMuPDF.
+
+    Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
+
+    Args:
+        file_path: path to the document file.
+        plain: if True, return raw page text concatenated without [PAGE N]
+               markers — suitable for embedding or full-text search where
+               page metadata would pollute the content.
+
+    Returns page-aware text with [PAGE N] markers by default.
+    Returns empty string on failure.
+    """
+    _check_backends()
+    try:
+        import pymupdf
+        doc = pymupdf.open(file_path)
+        parts = []
+        for i, page in enumerate(doc):
+            text = page.get_text().strip()
+            if text:
+                if plain:
+                    parts.append(text)
+                else:
+                    parts.append(f"\n[PAGE {i + 1}]\n{text}")
+        doc.close()
+        return "\n\n".join(parts) if plain else "\n".join(parts)
+    except Exception as e:
+        logger.error("Error extracting text from %s: %s", file_path, e)
+        return ""
+
+
+extract_pdf_text = extract_document_text
+
 
 async def pdf_to_tree(
-    pdf_path: str,
+    file_path: str = "",
     *,
+    pdf_path: str = "",
     model: Optional[str] = None,
     if_add_node_summary: bool = True,
     summary_token_threshold: int = 200,
@@ -24,35 +88,34 @@ async def pdf_to_tree(
     if_add_node_id: bool = True,
     **kwargs,
 ) -> dict:
-    """Build a tree index from a PDF file.
+    """Build a tree index from a document file using PyMuPDF.
 
-    Uses ``pageindex`` to extract text, then delegates to ``text_to_tree``
-    for structure detection.
+    Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
+
+    Simple pipeline: extract page text with [PAGE N] markers → text_to_tree
+    for pattern-based heading detection and tree building.
+
+    Args:
+        file_path: path to document file (preferred parameter name).
+        pdf_path: deprecated alias for file_path, kept for backward compatibility.
 
     Returns:
         {'doc_name': str, 'structure': list, 'source_path': str}
     """
-    try:
-        import PyPDF2
-    except ImportError:
-        raise ImportError(
-            "PDF support requires 'PyPDF2'. Install with: pip install PyPDF2"
-        )
+    # Backward compatibility: accept pdf_path as alias
+    fp = file_path or pdf_path
+    if not fp:
+        raise ValueError("file_path (or pdf_path) is required")
 
-    doc_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    logger.info("Extracting text from PDF: %s", pdf_path)
+    _check_backends()
+    doc_name = os.path.splitext(os.path.basename(fp))[0]
+    logger.info("Parsing document: %s", fp)
 
-    try:
-        pdf_reader = PyPDF2.PdfReader(pdf_path)
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() or ""
-    except Exception as e:
-        logger.error("Error extracting text from PDF %s: %s", pdf_path, e)
-        text = ""
+    # Extract text with [PAGE N] markers
+    text = extract_document_text(fp, plain=False)
 
-    if not text or not text.strip():
-        logger.warning("No text extracted from PDF: %s", pdf_path)
+    if not text.strip():
+        logger.warning("No text extracted from document: %s", fp)
         from ..tree import assign_node_ids
         structure = [{"title": doc_name, "node_id": "0", "text": "", "nodes": []}]
         if if_add_node_id:
@@ -60,9 +123,10 @@ async def pdf_to_tree(
         return {
             "doc_name": doc_name,
             "structure": structure,
-            "source_path": os.path.abspath(pdf_path),
+            "source_path": os.path.abspath(fp),
         }
 
+    # Delegate to text_to_tree for heading detection and tree building
     from ..indexer import text_to_tree
     result = await text_to_tree(
         text_content=text,
@@ -75,5 +139,5 @@ async def pdf_to_tree(
         **kwargs,
     )
     result["doc_name"] = doc_name
-    result["source_path"] = os.path.abspath(pdf_path)
+    result["source_path"] = os.path.abspath(fp)
     return result
