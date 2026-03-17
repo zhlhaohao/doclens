@@ -41,7 +41,7 @@ for doc in results["documents"]:
 ```
 
 Directories are walked recursively with smart defaults:
-- Auto-discovers `.py`, `.md`, `.json`, `.java`, `.go`, `.ts`, `.pdf`, `.docx`, etc.
+- Auto-discovers `.py`, `.md`, `.json`, `.jsonl`, `.java`, `.go`, `.ts`, `.pdf`, `.docx`, etc.
 - Skips `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, etc.
 - Respects `.gitignore` when [`pathspec`](https://pypi.org/project/pathspec/) is installed(`pip install pathspec`)
 - Safety cap of 10,000 files per directory (configurable via `max_files`)

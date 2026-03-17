@@ -14,7 +14,7 @@ from .registry import (
     get_prefilters_for_source_type,
 )
 from .ast_parser import parse_python_structure
-from .pdf_parser import extract_pdf_text, extract_document_text, PYMUPDF_EXTENSIONS
+from .pdf_parser import extract_pdf_text, PYMUPDF_EXTENSIONS
 from .doc_parser import extract_doc_text
 
 # Excel parser (optional)
@@ -43,7 +43,6 @@ __all__ = [
     "get_prefilters_for_source_type",
     "parse_python_structure",
     "extract_pdf_text",
-    "extract_document_text",
     "extract_doc_text",
     "PYMUPDF_EXTENSIONS",
 ]

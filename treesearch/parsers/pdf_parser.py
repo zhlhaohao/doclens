@@ -40,7 +40,7 @@ PYMUPDF_EXTENSIONS = {
 }
 
 
-def extract_document_text(file_path: str) -> str:
+def extract_pdf_text(file_path: str) -> str:
     """Extract text from a document file using PyMuPDF.
 
     Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
@@ -65,9 +65,6 @@ def extract_document_text(file_path: str) -> str:
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
         return ""
-
-
-extract_pdf_text = extract_document_text
 
 
 async def pdf_to_tree(
@@ -106,7 +103,7 @@ async def pdf_to_tree(
     logger.info("Parsing document: %s", fp)
 
     # Extract text with [PAGE N] markers
-    text = extract_document_text(fp)
+    text = extract_pdf_text(fp)
 
     if not text.strip():
         logger.warning("No text extracted from document: %s", fp)

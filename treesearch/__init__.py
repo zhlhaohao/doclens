@@ -13,7 +13,7 @@ Quick Start::
     ts = TreeSearch("./docs/")
     results = ts.search("How to configure voice calls?")
 """
-__version__ = "0.6.3"
+__version__ = "0.6.4"
 
 # ============================================================================
 # FTS5 Compatibility: Use pysqlite3 on systems without FTS5 support
