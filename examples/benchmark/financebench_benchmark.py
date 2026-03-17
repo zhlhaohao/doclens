@@ -1057,14 +1057,11 @@ async def main():
             print("Building EMBEDDING index (traditional RAG approach)...")
             print(f"{'=' * 60}")
 
-            # Build chunks from PDFs using plain text (not Markdown) for embedding
-            # plain=True ensures pymupdf/PyPDF2 page-text output, avoiding
-            # Markdown syntax from pymupdf4llm that would pollute chunk content
-            # and break evidence matching.
+            # Build chunks from PDFs using plain text for embedding
             t0 = time.time()
             all_chunks = []
             for doc_name, pdf_path in pdf_paths.items():
-                text = extract_pdf_text(pdf_path, plain=True)
+                text = extract_pdf_text(pdf_path)
                 chunks = chunk_pdf_text(doc_name, text)
                 all_chunks.extend(chunks)
 

@@ -40,18 +40,15 @@ PYMUPDF_EXTENSIONS = {
 }
 
 
-def extract_document_text(file_path: str, *, plain: bool = False) -> str:
+def extract_document_text(file_path: str) -> str:
     """Extract text from a document file using PyMuPDF.
 
     Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
 
     Args:
         file_path: path to the document file.
-        plain: if True, return raw page text concatenated without [PAGE N]
-               markers — suitable for embedding or full-text search where
-               page metadata would pollute the content.
 
-    Returns page-aware text with [PAGE N] markers by default.
+    Returns page-aware text with [PAGE N] markers.
     Returns empty string on failure.
     """
     _check_backends()
@@ -62,12 +59,9 @@ def extract_document_text(file_path: str, *, plain: bool = False) -> str:
         for i, page in enumerate(doc):
             text = page.get_text().strip()
             if text:
-                if plain:
-                    parts.append(text)
-                else:
-                    parts.append(f"\n[PAGE {i + 1}]\n{text}")
+                parts.append(f"\n[PAGE {i + 1}]\n{text}")
         doc.close()
-        return "\n\n".join(parts) if plain else "\n".join(parts)
+        return "\n".join(parts)
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
         return ""
@@ -112,7 +106,7 @@ async def pdf_to_tree(
     logger.info("Parsing document: %s", fp)
 
     # Extract text with [PAGE N] markers
-    text = extract_document_text(fp, plain=False)
+    text = extract_document_text(fp)
 
     if not text.strip():
         logger.warning("No text extracted from document: %s", fp)
