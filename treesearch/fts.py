@@ -131,15 +131,20 @@ def parse_md_node_text(text: str) -> dict:
 # Tokenizer for FTS5 (Chinese/English)
 # ---------------------------------------------------------------------------
 
+from functools import lru_cache
+
 from .tokenizer import _RE_HAS_CJK
 
 
+@lru_cache(maxsize=4096)
 def _tokenize_for_fts(text: str) -> str:
     """Tokenize text for FTS5 indexing. Space-separated tokens.
 
     Only uses jieba segmentation when Chinese (CJK) characters are detected.
     For pure English/non-CJK text, relies on FTS5's built-in unicode61 tokenizer
     (no jieba overhead).
+
+    Results are LRU-cached to avoid repeated jieba overhead for the same text.
     """
     if not text or not text.strip():
         return ""
@@ -462,12 +467,36 @@ class FTS5Index:
     # Search (Consumer side)
     # -------------------------------------------------------------------
 
+    def _build_match_expr(self, query: str, fts_expression: Optional[str] = None) -> Optional[str]:
+        """Build FTS5 MATCH expression from query (cached tokenization).
+
+        Returns None if no valid tokens could be extracted.
+        """
+        if fts_expression:
+            return _tokenize_fts_expression(fts_expression)
+
+        tokens = _tokenize_for_fts(query)
+        if not tokens.strip():
+            return None
+        words = tokens.split()
+        clean_words = []
+        for w in words:
+            cleaned = _RE_FTS5_SPECIAL.sub("", w).strip()
+            if cleaned and cleaned.upper() not in _FTS5_OPERATORS:
+                clean_words.append(cleaned)
+        if not clean_words:
+            return None
+        if len(clean_words) > 1:
+            return " OR ".join(clean_words)
+        return clean_words[0]
+
     def search(
         self,
         query: str,
         doc_id: Optional[str] = None,
         top_k: int = 20,
         fts_expression: Optional[str] = None,
+        _precomputed_match_expr: Optional[str] = None,
     ) -> list[dict]:
         """Search nodes using FTS5 BM25 ranking (or LIKE fallback).
 
@@ -477,6 +506,7 @@ class FTS5Index:
             top_k: max results
             fts_expression: raw FTS5 query expression (overrides query tokenization).
                             Supports AND, OR, NOT, NEAR, phrases.
+            _precomputed_match_expr: internal — skip tokenization if already computed.
 
         Returns:
             list of {node_id, doc_id, title, summary, fts_score, depth}
@@ -484,33 +514,17 @@ class FTS5Index:
         if not self._use_fts5:
             return self._search_like(query, doc_id=doc_id, top_k=top_k)
 
-        if fts_expression:
-            # Tokenize terms in the expression while preserving FTS5 operators
-            match_expr = _tokenize_fts_expression(fts_expression)
+        if _precomputed_match_expr is not None:
+            match_expr = _precomputed_match_expr
         else:
-            # Tokenize query for FTS5 matching
-            tokens = _tokenize_for_fts(query)
-            if not tokens.strip():
+            match_expr = self._build_match_expr(query, fts_expression)
+            if match_expr is None:
                 return []
-            words = tokens.split()
-            # Strip FTS5 special characters and filter out reserved words
-            clean_words = []
-            for w in words:
-                cleaned = _RE_FTS5_SPECIAL.sub("", w).strip()
-                if cleaned and cleaned.upper() not in _FTS5_OPERATORS:
-                    clean_words.append(cleaned)
-            if not clean_words:
-                return []
-            if len(clean_words) > 1:
-                # Use OR for recall; FTS5 bm25() naturally ranks multi-term matches higher
-                match_expr = " OR ".join(clean_words)
-            else:
-                match_expr = clean_words[0]
 
         # Phase 1: phrase boosting for multi-word queries
         # Run a separate phrase match query and record which nodes get a boost
         phrase_boost_nids: set[str] = set()
-        if not fts_expression and len(query.split()) >= 2:
+        if not fts_expression and _precomputed_match_expr is None and len(query.split()) >= 2:
             # Build phrase expression from original (unstemmed) query words
             raw_words = [w.lower().strip() for w in re.split(r'\W+', query) if w.strip() and len(w.strip()) > 2]
             if len(raw_words) >= 2:
@@ -728,7 +742,12 @@ class FTS5Index:
         Includes:
         - Ancestor score propagation: parent nodes inherit child scores
         """
-        results = self.search(query, doc_id=doc_id, top_k=200)
+        # Pre-build match expression once to avoid redundant tokenization in search()
+        match_expr = self._build_match_expr(query)
+        if match_expr is None:
+            return {}
+
+        results = self.search(query, doc_id=doc_id, top_k=200, _precomputed_match_expr=match_expr)
 
         if not results:
             return {}
@@ -1023,6 +1042,21 @@ class FTS5Index:
             "SELECT 1 FROM documents WHERE doc_id = ?", (doc_id,)
         ).fetchone()
         return row is not None
+
+    def get_unindexed_doc_ids(self, doc_ids: list[str]) -> set[str]:
+        """Return the subset of doc_ids that are NOT yet indexed.
+
+        Uses a single SQL query instead of per-document checks.
+        """
+        if not doc_ids:
+            return set()
+        placeholders = ",".join("?" for _ in doc_ids)
+        rows = self._conn.execute(
+            f"SELECT doc_id FROM documents WHERE doc_id IN ({placeholders})",
+            doc_ids,
+        ).fetchall()
+        indexed = {r[0] for r in rows}
+        return set(doc_ids) - indexed
 
 
 # ---------------------------------------------------------------------------

@@ -292,9 +292,11 @@ async def search(
     else:
         from .fts import get_fts_index
         fts_index = get_fts_index(db_path=cfg.fts_db_path or None)
-        for doc in documents:
-            if not fts_index.is_document_indexed(doc.doc_id):
-                fts_index.index_document(doc)
+        # Batch check and index unindexed documents
+        doc_map = {doc.doc_id: doc for doc in documents}
+        unindexed = fts_index.get_unindexed_doc_ids(list(doc_map.keys()))
+        for doc_id in unindexed:
+            fts_index.index_document(doc_map[doc_id])
         agg = fts_index.search_with_aggregation(query, top_k=top_k_docs)
         if agg:
             relevant_ids = {a["doc_id"] for a in agg}
@@ -392,9 +394,11 @@ def _get_fts_scorer(documents: list[Document], cfg) -> Optional[PreFilter]:
         "front_matter": cfg.fts_front_matter_weight,
     }
     fts_index = get_fts_index(db_path=cfg.fts_db_path or None, weights=weights)
-    for doc in documents:
-        if not fts_index.is_document_indexed(doc.doc_id):
-            fts_index.index_document(doc)
+    # Batch check: only index documents not yet in the FTS5 index
+    doc_map = {doc.doc_id: doc for doc in documents}
+    unindexed = fts_index.get_unindexed_doc_ids(list(doc_map.keys()))
+    for doc_id in unindexed:
+        fts_index.index_document(doc_map[doc_id])
     return fts_index
 
 
