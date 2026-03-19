@@ -102,7 +102,7 @@ async def excel_to_tree(
     *,
     model: Optional[str] = None,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -136,7 +136,7 @@ async def excel_to_tree(
         source_type="excel",
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )

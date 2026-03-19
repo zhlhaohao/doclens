@@ -131,7 +131,7 @@ def parse_md_node_text(text: str) -> dict:
 # Tokenizer for FTS5 (Chinese/English)
 # ---------------------------------------------------------------------------
 
-from .utils import _RE_HAS_CJK
+from .tokenizer import _RE_HAS_CJK
 
 
 def _tokenize_for_fts(text: str) -> str:

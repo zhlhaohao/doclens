@@ -41,22 +41,22 @@ def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int)
 # Summary generation (shared by MD and Text)
 # ============================================================================
 
-def _summarize_node(node: dict, threshold: int = 200) -> str:
+def _summarize_node(node: dict, threshold: int = 600) -> str:
     """Generate a summary for a single node. Short nodes use their own text.
 
-    For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
-    Uses character-length heuristic (~4 chars/token) to avoid expensive tiktoken calls.
+    Args:
+        threshold: character count threshold. Nodes shorter than this use full text as summary.
+            For long nodes: head 250 chars + tail 100 chars (captures intro and conclusion).
     """
     text = node.get("text", "")
-    # ~4 chars per token for English, ~2 for CJK; use 3 as balanced estimate
-    if len(text) < threshold * 3:
+    if len(text) < threshold:
         return text
     head = text[:250].replace("\n", " ").strip()
     tail = text[-100:].replace("\n", " ").strip()
     return f"{head} ... {tail}"
 
 
-def generate_summaries(structure, threshold: int = 200):
+def generate_summaries(structure, threshold: int = 600):
     """Generate summaries for all nodes in a tree."""
     nodes = flatten_tree(structure)
     summaries = [_summarize_node(n, threshold=threshold) for n in nodes]
@@ -94,7 +94,7 @@ def _finalize_tree(
     *,
     if_add_node_id: bool = True,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_node_text: bool = False,
     if_add_doc_description: bool = False,
 ) -> dict:
@@ -114,7 +114,7 @@ def _finalize_tree(
 
     if if_add_node_summary:
         logger.info("Generating summaries...")
-        tree = generate_summaries(tree, threshold=summary_token_threshold)
+        tree = generate_summaries(tree, threshold=summary_chars_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)
@@ -178,27 +178,25 @@ def _cut_md_text(markers: list[dict], lines: list[str]) -> list[dict]:
     return nodes
 
 
-def _update_token_counts(node_list: list[dict]) -> list[dict]:
-    """Compute cumulative token counts (self + descendants) for thinning."""
-    from .utils import count_tokens
+def _update_char_counts(node_list: list[dict]) -> list[dict]:
+    """Compute cumulative character counts (self + descendants) for thinning."""
     for i in range(len(node_list) - 1, -1, -1):
         text = node_list[i].get("text", "")
         for ci in _children_indices(node_list, i, node_list[i]["level"]):
             ct = node_list[ci].get("text", "")
             if ct:
                 text += "\n" + ct
-        node_list[i]["text_token_count"] = count_tokens(text)
+        node_list[i]["text_char_count"] = len(text)
     return node_list
 
 
-def _thin_tree(node_list: list[dict], min_tokens: int) -> list[dict]:
+def _thin_tree(node_list: list[dict], min_chars: int) -> list[dict]:
     """Merge small sub-trees into their parent nodes."""
-    from .utils import count_tokens
     to_remove = set()
     for i in range(len(node_list) - 1, -1, -1):
         if i in to_remove:
             continue
-        if node_list[i].get("text_token_count", 0) < min_tokens:
+        if node_list[i].get("text_char_count", 0) < min_chars:
             children = _children_indices(node_list, i, node_list[i]["level"])
             merged_parts = []
             for ci in sorted(children):
@@ -210,7 +208,7 @@ def _thin_tree(node_list: list[dict], min_tokens: int) -> list[dict]:
             if merged_parts:
                 base = node_list[i].get("text", "")
                 node_list[i]["text"] = base + "\n\n" + "\n\n".join(merged_parts) if base else "\n\n".join(merged_parts)
-                node_list[i]["text_token_count"] = count_tokens(node_list[i]["text"])
+                node_list[i]["text_char_count"] = len(node_list[i]["text"])
 
     for idx in sorted(to_remove, reverse=True):
         node_list.pop(idx)
@@ -254,9 +252,9 @@ async def md_to_tree(
     md_content: Optional[str] = None,
     *,
     if_thinning: bool = False,
-    min_token_threshold: int = 5000,
+    min_thinning_chars: int = 15000,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -283,10 +281,10 @@ async def md_to_tree(
     markers, lines = _extract_md_headings(md_content)
     nodes = _cut_md_text(markers, lines)
 
-    if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes)
-        logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold)
+    if if_thinning and min_thinning_chars:
+        nodes = _update_char_counts(nodes)
+        logger.info("Thinning tree (threshold=%d chars)...", min_thinning_chars)
+        nodes = _thin_tree(nodes, min_thinning_chars)
 
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
@@ -296,7 +294,7 @@ async def md_to_tree(
         source_path=os.path.abspath(md_path) if md_path else "",
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
@@ -418,9 +416,9 @@ async def text_to_tree(
     text_content: Optional[str] = None,
     *,
     if_thinning: bool = False,
-    min_token_threshold: int = 5000,
+    min_thinning_chars: int = 15000,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -465,10 +463,10 @@ async def text_to_tree(
     nodes = _cut_md_text(markers, lines)
 
     # Step 3: thinning
-    if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes)
-        logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold)
+    if if_thinning and min_thinning_chars:
+        nodes = _update_char_counts(nodes)
+        logger.info("Thinning tree (threshold=%d chars)...", min_thinning_chars)
+        nodes = _thin_tree(nodes, min_thinning_chars)
 
     # Step 4: build tree
     logger.info("Building tree from %d nodes...", len(nodes))
@@ -479,7 +477,7 @@ async def text_to_tree(
         source_path=os.path.abspath(text_path) if text_path else "",
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
@@ -559,9 +557,9 @@ async def code_to_tree(
     code_path: str,
     *,
     if_thinning: bool = False,
-    min_token_threshold: int = 5000,
+    min_thinning_chars: int = 15000,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -591,10 +589,10 @@ async def code_to_tree(
 
     nodes = _cut_md_text(markers, lines)
 
-    if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes)
-        logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold)
+    if if_thinning and min_thinning_chars:
+        nodes = _update_char_counts(nodes)
+        logger.info("Thinning tree (threshold=%d chars)...", min_thinning_chars)
+        nodes = _thin_tree(nodes, min_thinning_chars)
 
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
@@ -604,7 +602,7 @@ async def code_to_tree(
         source_path=os.path.abspath(code_path),
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
@@ -640,7 +638,7 @@ async def json_to_tree(
     json_path: str,
     *,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -668,7 +666,7 @@ async def json_to_tree(
         source_path=os.path.abspath(json_path),
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
@@ -725,7 +723,7 @@ async def jsonl_to_tree(
     *,
     key_field: str = None,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -767,7 +765,7 @@ async def jsonl_to_tree(
         source_path=os.path.abspath(jsonl_path),
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )
@@ -781,7 +779,7 @@ async def csv_to_tree(
     csv_path: str,
     *,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -813,7 +811,7 @@ async def csv_to_tree(
         source_path=os.path.abspath(csv_path),
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
-        summary_token_threshold=summary_token_threshold,
+        summary_chars_threshold=summary_chars_threshold,
         if_add_node_text=if_add_node_text,
         if_add_doc_description=if_add_doc_description,
     )

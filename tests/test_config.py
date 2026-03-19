@@ -27,7 +27,7 @@ class TestTreeSearchConfig:
         assert c.top_k_docs == 3
         # Index
         assert c.max_concurrency == 5
-        assert c.min_token_threshold == 5000
+        assert c.min_thinning_chars == 15000
         # FTS
         assert c.fts_db_path == ""
         assert c.fts_title_weight == 5.0

@@ -93,10 +93,10 @@ def _add_index_args(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--add-text", action="store_true", help="Include node text in output")
     sub.add_argument("--no-node-id", action="store_true", help="Skip node ID assignment")
     sub.add_argument("--thinning", action="store_true", help="Apply tree thinning")
-    sub.add_argument("--thinning-threshold", type=int, default=5000,
-                     help="Min token threshold for thinning (default: 5000)")
-    sub.add_argument("--summary-threshold", type=int, default=200,
-                     help="Token threshold for summary generation (default: 200)")
+    sub.add_argument("--thinning-threshold", type=int, default=15000,
+                     help="Min chars threshold for thinning (default: 15000)")
+    sub.add_argument("--summary-threshold", type=int, default=600,
+                     help="Chars threshold for summary generation (default: 600)")
     sub.add_argument("--max-concurrency", type=int, default=5,
                      help="Max concurrent indexing tasks (default: 5)")
     sub.add_argument("--force", action="store_true",
@@ -121,8 +121,8 @@ async def _run_index(args) -> None:
         if_add_node_text=args.add_text,
         if_add_node_id=not args.no_node_id,
         if_thinning=args.thinning,
-        min_token_threshold=args.thinning_threshold,
-        summary_token_threshold=args.summary_threshold,
+        min_thinning_chars=args.thinning_threshold,
+        summary_chars_threshold=args.summary_threshold,
         max_concurrency=args.max_concurrency,
         force=args.force,
     )

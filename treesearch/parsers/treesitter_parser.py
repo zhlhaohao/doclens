@@ -342,9 +342,9 @@ async def treesitter_code_to_tree(
     *,
     model: Optional[str] = None,
     if_thinning: bool = False,
-    min_token_threshold: int = 5000,
+    min_thinning_chars: int = 15000,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -358,7 +358,7 @@ async def treesitter_code_to_tree(
         {"doc_name": str, "structure": list, "source_path": str}
     """
     from ..indexer import (
-        _build_tree, _cut_md_text, _update_token_counts, _thin_tree,
+        _build_tree, _cut_md_text, _update_char_counts, _thin_tree,
         generate_summaries, generate_doc_description, code_to_tree,
     )
     from ..tree import assign_node_ids, format_structure
@@ -381,9 +381,9 @@ async def treesitter_code_to_tree(
             code_path=code_path,
             model=model,
             if_thinning=if_thinning,
-            min_token_threshold=min_token_threshold,
+            min_thinning_chars=min_thinning_chars,
             if_add_node_summary=if_add_node_summary,
-            summary_token_threshold=summary_token_threshold,
+            summary_chars_threshold=summary_chars_threshold,
             if_add_doc_description=if_add_doc_description,
             if_add_node_text=if_add_node_text,
             if_add_node_id=if_add_node_id,
@@ -398,10 +398,10 @@ async def treesitter_code_to_tree(
 
     nodes = _cut_md_text(markers, lines)
 
-    if if_thinning and min_token_threshold:
-        nodes = _update_token_counts(nodes, model=model)
-        logger.info("Thinning tree (threshold=%d)...", min_token_threshold)
-        nodes = _thin_tree(nodes, min_token_threshold, model=model)
+    if if_thinning and min_thinning_chars:
+        nodes = _update_char_counts(nodes)
+        logger.info("Thinning tree (threshold=%d chars)...", min_thinning_chars)
+        nodes = _thin_tree(nodes, min_thinning_chars)
 
     logger.info("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
@@ -418,7 +418,7 @@ async def treesitter_code_to_tree(
 
     if if_add_node_summary:
         logger.info("Generating summaries...")
-        tree = generate_summaries(tree, threshold=summary_token_threshold)
+        tree = generate_summaries(tree, threshold=summary_chars_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)

@@ -69,7 +69,7 @@ async def html_to_tree(
     *,
     model: Optional[str] = None,
     if_add_node_summary: bool = True,
-    summary_token_threshold: int = 200,
+    summary_chars_threshold: int = 600,
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
@@ -97,7 +97,7 @@ async def html_to_tree(
             text_content=plain_text,
             model=model,
             if_add_node_summary=if_add_node_summary,
-            summary_token_threshold=summary_token_threshold,
+            summary_chars_threshold=summary_chars_threshold,
             if_add_doc_description=if_add_doc_description,
             if_add_node_text=if_add_node_text,
             if_add_node_id=if_add_node_id,
@@ -138,7 +138,7 @@ async def html_to_tree(
     tree = format_structure(tree, order=order)
 
     if if_add_node_summary:
-        tree = generate_summaries(tree, threshold=summary_token_threshold)
+        tree = generate_summaries(tree, threshold=summary_chars_threshold)
         if not if_add_node_text:
             order_no_text = [f for f in order if f != "text"]
             tree = format_structure(tree, order=order_no_text)

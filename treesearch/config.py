@@ -44,8 +44,8 @@ class TreeSearchConfig:
     if_add_node_text: bool = True
     if_add_node_id: bool = True
     if_thinning: bool = False
-    min_token_threshold: int = 5000
-    summary_token_threshold: int = 200
+    min_thinning_chars: int = 15000  # min chars to keep a sub-tree during thinning
+    summary_chars_threshold: int = 600  # nodes shorter than this use full text as summary
     max_concurrency: int = 5
     max_dir_files: int = 10_000  # safety cap for directory walk
 

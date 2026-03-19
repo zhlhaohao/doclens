@@ -81,6 +81,5 @@ __all__ = [
 #   from treesearch.search import PreFilter
 #   from treesearch.fts import get_fts_index, set_fts_index, reset_fts_index
 #   from treesearch.tokenizer import tokenize
-#   from treesearch.utils import count_tokens
 #   from treesearch.tree import assign_node_ids, find_node, get_leaf_nodes, ...
 #   from treesearch.parsers import ParserRegistry, get_parser, extract_pdf_text

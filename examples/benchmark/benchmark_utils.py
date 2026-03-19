@@ -17,7 +17,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-from treesearch.utils import count_tokens
 from treesearch.search import search
 from treesearch.tree import Document, flatten_tree
 
