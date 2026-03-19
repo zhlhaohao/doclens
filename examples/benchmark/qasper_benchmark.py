@@ -38,6 +38,11 @@ Usage:
 
     # Compare with embedding retrieval:
     python examples/benchmark/qasper_benchmark.py --max-samples 50 --max-papers 20 --with-embedding
+
+  📊 SUMMARY (QASPER)
+  ──────────────────────────────────────────────────
+  Embedding (embedding-3): MRR=0.4235  R@5=0.4259  ⏱ 0.2003s/q
+  TreeSearch (FTS5):       MRR=0.4033  R@5=0.5337  ⏱ 0.0011s/q
 """
 import asyncio
 import argparse

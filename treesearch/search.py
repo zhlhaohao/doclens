@@ -351,17 +351,27 @@ async def search(
     merged = _merge_doc_results(doc_results, merge_strategy)
 
     # Build flat_nodes: all nodes sorted by score across all documents
+    # Enforce max_result_chars: stop adding nodes when total text exceeds limit
+    max_result_chars = cfg.max_result_chars
     flat_nodes = []
+    total_chars = 0
     for doc_result in merged:
         for node in doc_result.get("nodes", []):
+            node_text = node.get("text", "")
+            if max_result_chars and total_chars + len(node_text) > max_result_chars and flat_nodes:
+                break
             flat_nodes.append({
                 "node_id": node.get("node_id", ""),
                 "doc_id": doc_result.get("doc_id", ""),
                 "doc_name": doc_result.get("doc_name", ""),
                 "title": node.get("title", ""),
                 "score": node.get("score", 0),
-                "text": node.get("text", ""),
+                "text": node_text,
             })
+            total_chars += len(node_text)
+        else:
+            continue
+        break
     flat_nodes.sort(key=lambda x: (-x["score"], x["node_id"]))
 
     return {

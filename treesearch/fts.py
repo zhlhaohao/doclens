@@ -40,6 +40,14 @@ _DEFAULT_WEIGHTS = {
     "front_matter": 2.0,
 }
 
+# Pattern to match chunk suffixes appended during text splitting
+_RE_CHUNK_SUFFIX = re.compile(r"_chunk\d+$")
+
+
+def _strip_chunk_suffix(node_id: str) -> str:
+    """Strip _chunk{N} suffix from a node_id to get the original node_id."""
+    return _RE_CHUNK_SUFFIX.sub("", node_id)
+
 # ---------------------------------------------------------------------------
 # FTS5 availability detection
 # ---------------------------------------------------------------------------
@@ -376,17 +384,7 @@ class FTS5Index:
             text = node.get("text", "")
             depth = depth_map.get(nid, 0)
 
-            # Parse MD structure
-            parsed = parse_md_node_text(text)
-
-            # Pre-tokenize for CJK support
-            title_tok = _tokenize_for_fts(title)
-            summary_tok = _tokenize_for_fts(summary)
-            body_tok = _tokenize_for_fts(parsed["body"])
-            code_tok = _tokenize_for_fts(parsed["code_blocks"])
-            fm_tok = _tokenize_for_fts(parsed["front_matter"])
-
-            # Insert into metadata table
+            # Insert into metadata table (always stores the original node)
             self._conn.execute(
                 """INSERT OR REPLACE INTO nodes
                    (node_id, doc_id, title, summary, depth, line_start, line_end, parent_node_id, content_hash)
@@ -398,13 +396,36 @@ class FTS5Index:
                 ),
             )
 
-            # Insert into FTS5 index
-            self._conn.execute(
-                """INSERT INTO fts_nodes
-                   (node_id, doc_id, title, summary, body, code_blocks, front_matter)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (nid, document.doc_id, title_tok, summary_tok, body_tok, code_tok, fm_tok),
-            )
+            # Split text into chunks if exceeding max_node_chars for FTS5 indexing
+            from .config import get_config
+            max_chars = get_config().max_node_chars
+            if max_chars and len(text) > max_chars:
+                text_chunks = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
+            else:
+                text_chunks = [text]
+
+            for chunk_idx, chunk_text in enumerate(text_chunks):
+                # Use original node_id for single chunk, append _chunk{i} for splits
+                chunk_nid = nid if len(text_chunks) == 1 else f"{nid}_chunk{chunk_idx}"
+                chunk_title = title if chunk_idx == 0 else f"{title} (part {chunk_idx + 1})"
+
+                # Parse MD structure per chunk
+                parsed = parse_md_node_text(chunk_text)
+
+                # Pre-tokenize for CJK support
+                title_tok = _tokenize_for_fts(chunk_title)
+                summary_tok = _tokenize_for_fts(summary) if chunk_idx == 0 else ""
+                body_tok = _tokenize_for_fts(parsed["body"])
+                code_tok = _tokenize_for_fts(parsed["code_blocks"])
+                fm_tok = _tokenize_for_fts(parsed["front_matter"])
+
+                # Insert into FTS5 index
+                self._conn.execute(
+                    """INSERT INTO fts_nodes
+                       (node_id, doc_id, title, summary, body, code_blocks, front_matter)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (chunk_nid, document.doc_id, title_tok, summary_tok, body_tok, code_tok, fm_tok),
+                )
             count += 1
 
         # Update document metadata (including tree structure)
@@ -549,14 +570,24 @@ class FTS5Index:
             rows = []
 
         results = []
+        seen_original_nids: dict[str, int] = {}  # track dedup for chunk merging
         for row in rows:
             # bm25() returns negative values (lower = more relevant)
             fts_score = -row[5] if row[5] else 0.0
             # Apply phrase boost: nodes matching exact phrase get 50% score bonus
             if row[0] in phrase_boost_nids:
                 fts_score *= 1.5
+            # Map chunk node_id back to original node_id
+            original_nid = _strip_chunk_suffix(row[0])
+            if original_nid in seen_original_nids:
+                # Keep the higher score for the same original node
+                idx = seen_original_nids[original_nid]
+                if fts_score > results[idx]["fts_score"]:
+                    results[idx]["fts_score"] = round(fts_score, 6)
+                continue
+            seen_original_nids[original_nid] = len(results)
             results.append({
-                "node_id": row[0],
+                "node_id": original_nid,
                 "doc_id": row[1],
                 "title": row[2],
                 "summary": row[3],
@@ -702,14 +733,21 @@ class FTS5Index:
         if not results:
             return {}
 
+        # Map chunk node_ids back to original node_ids (take max score per original)
+        raw_scores: dict[str, float] = {}
+        for r in results:
+            original_nid = _strip_chunk_suffix(r["node_id"])
+            old = raw_scores.get(original_nid, 0.0)
+            raw_scores[original_nid] = max(old, r["fts_score"])
+
         # Normalize scores to [0, 1] range
-        max_score = max(r["fts_score"] for r in results) if results else 1.0
+        max_score = max(raw_scores.values()) if raw_scores else 1.0
         if max_score <= 0:
             max_score = 1.0
 
         scores = {
-            r["node_id"]: r["fts_score"] / max_score
-            for r in results
+            nid: s / max_score
+            for nid, s in raw_scores.items()
         }
 
         # Ancestor propagation using parent_node_id from nodes table

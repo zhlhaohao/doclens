@@ -28,6 +28,11 @@ Usage:
 
     # Compare with embedding
     python examples/benchmark/codesearchnet_benchmark.py --with-embedding --max-samples 50
+
+      📊 SUMMARY (CodeSearchNet (PYTHON))
+  ──────────────────────────────────────────────────
+  TREESEARCH_FTS5          MRR=0.8400  R@5=0.8600  ⏱ 0.0023s/q
+  EMBEDDING                MRR=0.8483  R@5=0.9400  ⏱ 0.1966s/q
 """
 import asyncio
 import argparse

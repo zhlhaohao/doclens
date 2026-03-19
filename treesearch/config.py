@@ -49,6 +49,10 @@ class TreeSearchConfig:
     max_concurrency: int = 5
     max_dir_files: int = 10_000  # safety cap for directory walk
 
+    # Text length limits
+    max_node_chars: int = 8000  # max characters per node text when indexing into FTS5
+    max_result_chars: int = 32000  # max total characters of returned search result texts
+
     # FTS
     fts_db_path: str = ""  # empty = same DB as tree storage (default: index.db)
     fts_title_weight: float = 5.0
