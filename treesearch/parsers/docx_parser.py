@@ -96,8 +96,7 @@ async def docx_to_tree(
         return result
 
     # Build nodes from headings
-    from ..indexer import _build_tree, generate_summaries, generate_doc_description
-    from ..tree import assign_node_ids, format_structure
+    from ..indexer import _build_tree, _finalize_tree
 
     nodes = []
     for i, hd in enumerate(headings):
@@ -115,24 +114,13 @@ async def docx_to_tree(
 
     tree = _build_tree(nodes)
 
-    if if_add_node_id:
-        assign_node_ids(tree)
-
-    base_order = ["title", "node_id", "summary", "prefix_summary"]
-    text_fields = ["text"] if if_add_node_text or if_add_node_summary else []
-    tail_fields = ["line_start", "line_end", "nodes"]
-    order = base_order + text_fields + tail_fields
-    tree = format_structure(tree, order=order)
-
-    if if_add_node_summary:
-        tree = generate_summaries(tree, threshold=summary_chars_threshold)
-        if not if_add_node_text:
-            order_no_text = [f for f in order if f != "text"]
-            tree = format_structure(tree, order=order_no_text)
-
-    result = {"doc_name": doc_name, "structure": tree, "source_path": os.path.abspath(docx_path)}
-
-    if if_add_doc_description:
-        result["doc_description"] = generate_doc_description(tree)
-
-    return result
+    return _finalize_tree(
+        tree, doc_name,
+        source_path=os.path.abspath(docx_path),
+        source_type="docx",
+        if_add_node_id=if_add_node_id,
+        if_add_node_summary=if_add_node_summary,
+        summary_chars_threshold=summary_chars_threshold,
+        if_add_node_text=if_add_node_text,
+        if_add_doc_description=if_add_doc_description,
+    )

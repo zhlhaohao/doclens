@@ -102,8 +102,14 @@ def _finalize_tree(
 ) -> dict:
     """Common post-processing for all *_to_tree functions.
 
-    Steps: assign_node_ids -> format_structure -> generate_summaries -> doc_description.
+    Steps: split_oversized_nodes -> assign_node_ids -> format_structure -> generate_summaries -> doc_description.
     """
+    # Split oversized nodes before assigning IDs (so sub-nodes get proper IDs)
+    from .config import get_config
+    max_node_chars = get_config().max_node_chars
+    if max_node_chars:
+        tree = _split_oversized_nodes(tree, max_node_chars)
+
     if if_add_node_id:
         assign_node_ids(tree)
 
@@ -247,6 +253,127 @@ def _build_tree(node_list: list[dict]) -> list[dict]:
 
         stack.append((tree_node, level))
     return roots
+
+
+# ============================================================================
+# Structure-aware node splitting for oversized nodes
+# ============================================================================
+
+def _split_text_by_paragraphs(text: str, max_chars: int) -> list[str]:
+    """Split text into chunks at paragraph boundaries (double newline).
+
+    Each chunk stays under max_chars. Falls back to single newline
+    boundaries, then hard character cut if paragraphs are still too large.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    # Try splitting by double newline (paragraph boundary)
+    chunks = _split_at_boundary(text, max_chars, "\n\n")
+    if chunks:
+        return chunks
+
+    # Fallback: split by single newline (line boundary)
+    chunks = _split_at_boundary(text, max_chars, "\n")
+    if chunks:
+        return chunks
+
+    # Last resort: hard character cut (should rarely happen)
+    return [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
+
+
+def _split_at_boundary(text: str, max_chars: int, separator: str) -> list[str]:
+    """Split text into chunks at the given separator, each under max_chars.
+
+    Returns None if any segment between separators exceeds max_chars
+    (caller should try a finer-grained separator).
+    """
+    segments = text.split(separator)
+    chunks = []
+    current = []
+    current_len = 0
+
+    for seg in segments:
+        seg_with_sep = (separator + seg) if current else seg
+        new_len = current_len + len(seg_with_sep)
+
+        if new_len > max_chars and current:
+            # Flush current chunk
+            chunks.append(separator.join(current))
+            current = [seg]
+            current_len = len(seg)
+            # If a single segment exceeds max_chars, this separator is too coarse
+            if current_len > max_chars:
+                return None
+        else:
+            current.append(seg)
+            current_len = new_len if current_len > 0 else len(seg)
+
+    if current:
+        chunks.append(separator.join(current))
+
+    return chunks if chunks else None
+
+
+def _split_oversized_nodes(tree: list[dict], max_chars: int) -> list[dict]:
+    """Recursively split oversized tree nodes into smaller sub-nodes.
+
+    For leaf nodes with text exceeding max_chars:
+    - Split text at paragraph boundaries (structure-aware)
+    - Create child nodes with sequential titles: "Part 1", "Part 2", etc.
+    - Parent node retains the original title with empty text
+
+    For non-leaf nodes: recurse into children first, then check the parent's
+    own text (the text before the first child heading).
+    """
+    if not max_chars:
+        return tree
+
+    result = []
+    for node in tree:
+        # Recurse into children first
+        children = node.get("nodes", [])
+        if children:
+            node["nodes"] = _split_oversized_nodes(children, max_chars)
+
+        text = node.get("text", "")
+        if len(text) <= max_chars:
+            result.append(node)
+            continue
+
+        # Node text exceeds max_chars: split into sub-nodes
+        chunks = _split_text_by_paragraphs(text, max_chars)
+        if len(chunks) <= 1:
+            result.append(node)
+            continue
+
+        title = node.get("title", "")
+        line_start = node.get("line_start")
+        line_end = node.get("line_end")
+        existing_children = node.get("nodes", [])
+
+        # Create sub-nodes from text chunks
+        sub_nodes = []
+        for i, chunk in enumerate(chunks):
+            sub_node = {
+                "title": f"{title} (part {i + 1})",
+                "text": chunk,
+                "line_start": line_start,
+                "line_end": line_end,
+                "nodes": [],
+            }
+            sub_nodes.append(sub_node)
+
+        # Attach existing children to the last sub-node (they belong to the tail of the text)
+        if existing_children:
+            sub_nodes[-1]["nodes"] = existing_children
+
+        # Parent node becomes a container with truncated text
+        node["text"] = ""
+        node["nodes"] = sub_nodes
+        result.append(node)
+
+    return result
 
 
 async def md_to_tree(

@@ -40,12 +40,13 @@ _DEFAULT_WEIGHTS = {
     "front_matter": 2.0,
 }
 
-# Pattern to match chunk suffixes appended during text splitting
+# Pattern to match chunk suffixes (legacy: from old FTS5-level text splitting).
+# Kept for backward compatibility with existing database indexes.
 _RE_CHUNK_SUFFIX = re.compile(r"_chunk\d+$")
 
 
 def _strip_chunk_suffix(node_id: str) -> str:
-    """Strip _chunk{N} suffix from a node_id to get the original node_id."""
+    """Strip _chunk{N} suffix from a node_id (backward compatibility)."""
     return _RE_CHUNK_SUFFIX.sub("", node_id)
 
 # ---------------------------------------------------------------------------
@@ -402,36 +403,23 @@ class FTS5Index:
                 ),
             )
 
-            # Split text into chunks if exceeding max_node_chars for FTS5 indexing
-            from .config import get_config
-            max_chars = get_config().max_node_chars
-            if max_chars and len(text) > max_chars:
-                text_chunks = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
-            else:
-                text_chunks = [text]
+            # Parse MD structure for FTS5 columns
+            parsed = parse_md_node_text(text)
 
-            for chunk_idx, chunk_text in enumerate(text_chunks):
-                # Use original node_id for single chunk, append _chunk{i} for splits
-                chunk_nid = nid if len(text_chunks) == 1 else f"{nid}_chunk{chunk_idx}"
-                chunk_title = title if chunk_idx == 0 else f"{title} (part {chunk_idx + 1})"
+            # Pre-tokenize for CJK support
+            title_tok = _tokenize_for_fts(title)
+            summary_tok = _tokenize_for_fts(summary)
+            body_tok = _tokenize_for_fts(parsed["body"])
+            code_tok = _tokenize_for_fts(parsed["code_blocks"])
+            fm_tok = _tokenize_for_fts(parsed["front_matter"])
 
-                # Parse MD structure per chunk
-                parsed = parse_md_node_text(chunk_text)
-
-                # Pre-tokenize for CJK support
-                title_tok = _tokenize_for_fts(chunk_title)
-                summary_tok = _tokenize_for_fts(summary) if chunk_idx == 0 else ""
-                body_tok = _tokenize_for_fts(parsed["body"])
-                code_tok = _tokenize_for_fts(parsed["code_blocks"])
-                fm_tok = _tokenize_for_fts(parsed["front_matter"])
-
-                # Insert into FTS5 index
-                self._conn.execute(
-                    """INSERT INTO fts_nodes
-                       (node_id, doc_id, title, summary, body, code_blocks, front_matter)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (chunk_nid, document.doc_id, title_tok, summary_tok, body_tok, code_tok, fm_tok),
-                )
+            # Insert into FTS5 index
+            self._conn.execute(
+                """INSERT INTO fts_nodes
+                   (node_id, doc_id, title, summary, body, code_blocks, front_matter)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (nid, document.doc_id, title_tok, summary_tok, body_tok, code_tok, fm_tok),
+            )
             count += 1
 
         # Update document metadata (including tree structure)
