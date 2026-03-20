@@ -25,8 +25,8 @@ class TestTreeSearchConfig:
         # Search
         assert c.max_nodes_per_doc == 5
         assert c.top_k_docs == 3
-        # Index
-        assert c.max_concurrency == 5
+        # Index — default is min(cpu_count, 64)
+        assert c.max_concurrency == min(os.cpu_count() or 4, 64)
         assert c.min_thinning_chars == 15000
         # FTS
         assert c.fts_db_path == ""

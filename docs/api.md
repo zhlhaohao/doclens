@@ -71,7 +71,7 @@ async def build_index(
     if_add_doc_description: bool = True,
     if_add_node_text: bool = True,
     if_add_node_id: bool = True,
-    max_concurrency: int = 5,
+    max_concurrency: int = min(os.cpu_count(), 64),
     force: bool = False,
     **kwargs,
 ) -> list[Document]
