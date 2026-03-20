@@ -1111,12 +1111,14 @@ async def build_index(
         _save_bar.update()
     # Final commit for remaining pending writes
     if _pending_commits > 0:
+        logger.info("Committing remaining %d documents to database...", _pending_commits)
         fts.commit()
     _save_bar.close()
 
     # Batch update metadata only for changed files (single transaction)
     changed_hashes = {os.path.abspath(fp): file_hashes[os.path.abspath(fp)] for fp in to_index if os.path.abspath(fp) in file_hashes}
     if changed_hashes:
+        logger.info("Updating file metadata for %d file(s)...", len(changed_hashes))
         fts.set_index_meta_batch(changed_hashes)
 
     # ---------------------------------------------------------------
