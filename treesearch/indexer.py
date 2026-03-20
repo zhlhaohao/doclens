@@ -1075,10 +1075,13 @@ async def build_index(
     else:
         all_docs_from_db = {}
 
-    # Progress bar for Indexing stage
+    # Progress bar for Indexing stage (batch commit every N files to reduce fsync)
+    _COMMIT_BATCH = 500
     _save_bar = tqdm(total=len(expanded), desc="Indexing", unit="file", dynamic_ncols=True)
+    _pending_commits = 0
     for fp in expanded:
         name = os.path.splitext(os.path.basename(fp))[0]
+        _save_bar.set_postfix_str(os.path.basename(fp), refresh=False)
         if fp in result_map:
             result = result_map[fp]
             doc = Document(
@@ -1089,8 +1092,13 @@ async def build_index(
                 metadata={"source_path": result.get("source_path", "")},
                 source_type=result.get("source_type", ""),
             )
-            fts.save_document(doc)
-            fts.index_document(doc, force=True)
+            fts.save_document(doc, auto_commit=False)
+            fts.index_document(doc, force=True, auto_commit=False)
+            _pending_commits += 1
+            # Batch commit to reduce fsync overhead
+            if _pending_commits >= _COMMIT_BATCH:
+                fts.commit()
+                _pending_commits = 0
             logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
         else:
             # Skipped file: use batch-loaded docs
@@ -1101,6 +1109,9 @@ async def build_index(
                 continue
         documents.append(doc)
         _save_bar.update()
+    # Final commit for remaining pending writes
+    if _pending_commits > 0:
+        fts.commit()
     _save_bar.close()
 
     # Batch update metadata only for changed files (single transaction)

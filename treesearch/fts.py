@@ -332,12 +332,13 @@ class FTS5Index:
     # Indexing (Producer side)
     # -------------------------------------------------------------------
 
-    def index_document(self, document, force: bool = False) -> int:
+    def index_document(self, document, force: bool = False, auto_commit: bool = True) -> int:
         """Index all nodes from a Document into FTS5.
 
         Args:
             document: Document object with structure tree
             force: re-index even if content hash matches
+            auto_commit: if False, skip commit (caller is responsible for committing)
 
         Returns:
             number of nodes indexed
@@ -448,9 +449,14 @@ class FTS5Index:
             ),
         )
 
-        self._conn.commit()
+        if auto_commit:
+            self._conn.commit()
         logger.debug("FTS5 indexed document %s: %d nodes", document.doc_id, count)
         return count
+
+    def commit(self) -> None:
+        """Manually commit pending changes to the database."""
+        self._conn.commit()
 
     def index_documents(self, documents: list, force: bool = False) -> int:
         """Batch index multiple documents.
@@ -800,11 +806,15 @@ class FTS5Index:
     # Document persistence (tree structure storage)
     # -------------------------------------------------------------------
 
-    def save_document(self, document) -> None:
+    def save_document(self, document, auto_commit: bool = True) -> None:
         """Save/update a Document's tree structure into the DB.
 
         This persists the tree structure so that JSON files are no longer needed.
         FTS indexing is NOT performed here — call index_document() separately.
+
+        Args:
+            document: Document object with structure tree
+            auto_commit: if False, skip commit (caller is responsible for committing)
         """
         from .tree import flatten_tree
         structure_json = json.dumps(document.structure, ensure_ascii=False)
@@ -822,7 +832,8 @@ class FTS5Index:
                 content_hash,
             ),
         )
-        self._conn.commit()
+        if auto_commit:
+            self._conn.commit()
 
     def load_document(self, doc_id: str):
         """Load a single Document from the DB by doc_id.
