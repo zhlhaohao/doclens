@@ -38,8 +38,10 @@ Usage:
     # Compare with embedding retrieval:
     python examples/benchmark/financebench_benchmark.py --max-samples 50 --with-embedding
 
-    # Force re-download all PDFs:
-    python examples/benchmark/financebench_benchmark.py --max-samples 50 --force-download
+  📊 SUMMARY (FinanceBench (SEC Filings))
+  ──────────────────────────────────────────────────
+  TREESEARCH_FTS5          MRR=0.3969  R@5=0.2773  ⏱ 0.0158s/q  (50/50 valid)
+  
 """
 import asyncio
 import argparse
