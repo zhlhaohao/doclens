@@ -40,15 +40,6 @@ _DEFAULT_WEIGHTS = {
     "front_matter": 2.0,
 }
 
-# Pattern to match chunk suffixes (legacy: from old FTS5-level text splitting).
-# Kept for backward compatibility with existing database indexes.
-_RE_CHUNK_SUFFIX = re.compile(r"_chunk\d+$")
-
-
-def _strip_chunk_suffix(node_id: str) -> str:
-    """Strip _chunk{N} suffix from a node_id (backward compatibility)."""
-    return _RE_CHUNK_SUFFIX.sub("", node_id)
-
 # ---------------------------------------------------------------------------
 # FTS5 availability detection
 # ---------------------------------------------------------------------------
@@ -576,14 +567,14 @@ class FTS5Index:
             logger.warning("FTS5 query error: %s, query=%r", e, match_expr)
             rows = []
 
-        # Pre-fetch node metadata (depth, title, summary) for deduped original node_ids
-        original_nids_in_result = {_strip_chunk_suffix(r[0]) for r in rows}
+        # Pre-fetch node metadata (depth, title, summary) for deduped node_ids
+        unique_nids_in_result = {r[0] for r in rows}
         node_meta: dict[tuple[str, str], dict] = {}
-        if original_nids_in_result:
+        if unique_nids_in_result:
             # Batch lookup from nodes table
-            for raw_nid in original_nids_in_result:
+            for raw_nid in unique_nids_in_result:
                 for r in rows:
-                    if _strip_chunk_suffix(r[0]) == raw_nid:
+                    if r[0] == raw_nid:
                         did = r[1]
                         break
                 else:
@@ -596,25 +587,24 @@ class FTS5Index:
                     node_meta[(raw_nid, did)] = {"title": meta_row[0], "summary": meta_row[1], "depth": meta_row[2]}
 
         results = []
-        seen_original_nids: dict[str, int] = {}  # track dedup for chunk merging
+        seen_nids: dict[str, int] = {}  # track dedup by node_id
         for row in rows:
             # bm25() returns negative values (lower = more relevant)
             fts_score = -row[4] if row[4] else 0.0
             # Apply phrase boost: nodes matching exact phrase get 50% score bonus
             if row[0] in phrase_boost_nids:
                 fts_score *= 1.5
-            # Map chunk node_id back to original node_id
-            original_nid = _strip_chunk_suffix(row[0])
-            if original_nid in seen_original_nids:
-                # Keep the higher score for the same original node
-                idx = seen_original_nids[original_nid]
+            nid = row[0]
+            if nid in seen_nids:
+                # Keep the higher score for the same node
+                idx = seen_nids[nid]
                 if fts_score > results[idx]["fts_score"]:
                     results[idx]["fts_score"] = round(fts_score, 6)
                 continue
-            seen_original_nids[original_nid] = len(results)
-            meta = node_meta.get((original_nid, row[1]))
+            seen_nids[nid] = len(results)
+            meta = node_meta.get((nid, row[1]))
             results.append({
-                "node_id": original_nid,
+                "node_id": nid,
                 "doc_id": row[1],
                 "title": meta["title"] if meta else row[2],
                 "summary": meta["summary"] if meta else row[3],
@@ -688,14 +678,12 @@ class FTS5Index:
                     if kw in text.lower():
                         score += weight
             if score > 0:
-                # Map chunk node_id back to original node_id
-                original_nid = _strip_chunk_suffix(nid)
-                if original_nid in seen_original_nids:
-                    idx = seen_original_nids[original_nid]
+                if nid in seen_original_nids:
+                    idx = seen_original_nids[nid]
                     if score > scored[idx][0]:
-                        meta = meta_map.get((original_nid, did))
+                        meta = meta_map.get((nid, did))
                         scored[idx] = (score, {
-                            "node_id": original_nid,
+                            "node_id": nid,
                             "doc_id": did,
                             "title": meta["title"] if meta else title,
                             "summary": meta["summary"] if meta else summary,
@@ -703,10 +691,10 @@ class FTS5Index:
                             "fts_score": round(score, 6),
                         })
                     continue
-                seen_original_nids[original_nid] = len(scored)
-                meta = meta_map.get((original_nid, did))
+                seen_original_nids[nid] = len(scored)
+                meta = meta_map.get((nid, did))
                 scored.append((score, {
-                    "node_id": original_nid,
+                    "node_id": nid,
                     "doc_id": did,
                     "title": meta["title"] if meta else title,
                     "summary": meta["summary"] if meta else summary,
@@ -782,12 +770,12 @@ class FTS5Index:
         if not results:
             return {}
 
-        # Map chunk node_ids back to original node_ids (take max score per original)
+        # Aggregate scores by node_id (take max score per node)
         raw_scores: dict[str, float] = {}
         for r in results:
-            original_nid = _strip_chunk_suffix(r["node_id"])
-            old = raw_scores.get(original_nid, 0.0)
-            raw_scores[original_nid] = max(old, r["fts_score"])
+            nid = r["node_id"]
+            old = raw_scores.get(nid, 0.0)
+            raw_scores[nid] = max(old, r["fts_score"])
 
         # Normalize scores to [0, 1] range
         max_score = max(raw_scores.values()) if raw_scores else 1.0
