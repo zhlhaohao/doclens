@@ -121,11 +121,17 @@ TreeSearch：
 ## FTS5 独立搜索
 
 ```python
-from treesearch import FTS5Index, Document, load_index
+from treesearch import FTS5Index, Document, load_index, save_index, md_to_tree
+import asyncio
 
-data = load_index("indexes/my_doc.json")
-doc = Document(doc_id="doc1", doc_name=data["doc_name"], structure=data["structure"])
+# 方式 1：从 Markdown 构建并保存到 DB
+result = asyncio.run(md_to_tree(md_path="docs/voice-call.md", if_add_node_summary=True))
+save_index(result, "indexes/voice-call.db")
 
+# 方式 2：从 DB 加载已保存的文档
+doc = load_index("indexes/voice-call.db")  # 返回 Document 对象
+
+# 创建 FTS5 索引并搜索
 fts = FTS5Index(db_path="indexes/fts.db")  # 持久化, 或不传为内存模式
 fts.index_documents([doc])
 
@@ -170,7 +176,7 @@ treesearch search --index_dir ./indexes/ --query "认证系统如何工作？"
    ┌──────────┐
    │  Indexer  │  ParserRegistry 分派 → 解析结构 → 构建树 → 生成摘要
    └────┬─────┘    (build_index 支持 glob 批量处理)
-        │  JSON 索引文件
+        │  SQLite DB (FTS5)
         ▼
    ┌──────────┐
    │  search   │  FTS5/Grep 预过滤 → 跨文档打分 → 排序结果

@@ -557,13 +557,14 @@ class FTS5Index:
         w = self._weights
         weight_args = f"{w['title']}, {w['summary']}, {w['body']}, {w['code_blocks']}, {w['front_matter']}"
 
+        # Query FTS5 directly without JOIN to nodes table, because fts_nodes
+        # stores chunk node_ids (e.g. "0_chunk0") that don't match the original
+        # node_ids in nodes table (e.g. "0"). Metadata is looked up separately.
         if doc_id:
             sql = f"""
-                SELECT f.node_id, f.doc_id,
-                       n.title, n.summary, n.depth,
+                SELECT f.node_id, f.doc_id, f.title, f.summary,
                        bm25(fts_nodes, {weight_args}) AS rank_score
                 FROM fts_nodes f
-                JOIN nodes n ON f.node_id = n.node_id AND f.doc_id = n.doc_id
                 WHERE fts_nodes MATCH ?
                   AND f.doc_id = ?
                 ORDER BY rank_score
@@ -572,11 +573,9 @@ class FTS5Index:
             params = (match_expr, doc_id, top_k)
         else:
             sql = f"""
-                SELECT f.node_id, f.doc_id,
-                       n.title, n.summary, n.depth,
+                SELECT f.node_id, f.doc_id, f.title, f.summary,
                        bm25(fts_nodes, {weight_args}) AS rank_score
                 FROM fts_nodes f
-                JOIN nodes n ON f.node_id = n.node_id AND f.doc_id = n.doc_id
                 WHERE fts_nodes MATCH ?
                 ORDER BY rank_score
                 LIMIT ?
@@ -589,11 +588,30 @@ class FTS5Index:
             logger.warning("FTS5 query error: %s, query=%r", e, match_expr)
             rows = []
 
+        # Pre-fetch node metadata (depth, title, summary) for deduped original node_ids
+        original_nids_in_result = {_strip_chunk_suffix(r[0]) for r in rows}
+        node_meta: dict[tuple[str, str], dict] = {}
+        if original_nids_in_result:
+            # Batch lookup from nodes table
+            for raw_nid in original_nids_in_result:
+                for r in rows:
+                    if _strip_chunk_suffix(r[0]) == raw_nid:
+                        did = r[1]
+                        break
+                else:
+                    continue
+                meta_row = self._conn.execute(
+                    "SELECT title, summary, depth FROM nodes WHERE node_id = ? AND doc_id = ?",
+                    (raw_nid, did),
+                ).fetchone()
+                if meta_row:
+                    node_meta[(raw_nid, did)] = {"title": meta_row[0], "summary": meta_row[1], "depth": meta_row[2]}
+
         results = []
         seen_original_nids: dict[str, int] = {}  # track dedup for chunk merging
         for row in rows:
             # bm25() returns negative values (lower = more relevant)
-            fts_score = -row[5] if row[5] else 0.0
+            fts_score = -row[4] if row[4] else 0.0
             # Apply phrase boost: nodes matching exact phrase get 50% score bonus
             if row[0] in phrase_boost_nids:
                 fts_score *= 1.5
@@ -606,12 +624,13 @@ class FTS5Index:
                     results[idx]["fts_score"] = round(fts_score, 6)
                 continue
             seen_original_nids[original_nid] = len(results)
+            meta = node_meta.get((original_nid, row[1]))
             results.append({
                 "node_id": original_nid,
                 "doc_id": row[1],
-                "title": row[2],
-                "summary": row[3],
-                "depth": row[4],
+                "title": meta["title"] if meta else row[2],
+                "summary": meta["summary"] if meta else row[3],
+                "depth": meta["depth"] if meta else 0,
                 "fts_score": round(fts_score, 6),
             })
 
@@ -665,6 +684,7 @@ class FTS5Index:
             ).fetchall()
 
         scored: list[tuple[float, dict]] = []
+        seen_original_nids: dict[str, int] = {}
         for row in rows:
             nid, did, title, summary, body, code_blocks, front_matter = row
             score = 0.0
@@ -680,9 +700,25 @@ class FTS5Index:
                     if kw in text.lower():
                         score += weight
             if score > 0:
-                meta = meta_map.get((nid, did))
+                # Map chunk node_id back to original node_id
+                original_nid = _strip_chunk_suffix(nid)
+                if original_nid in seen_original_nids:
+                    idx = seen_original_nids[original_nid]
+                    if score > scored[idx][0]:
+                        meta = meta_map.get((original_nid, did))
+                        scored[idx] = (score, {
+                            "node_id": original_nid,
+                            "doc_id": did,
+                            "title": meta["title"] if meta else title,
+                            "summary": meta["summary"] if meta else summary,
+                            "depth": meta["depth"] if meta else 0,
+                            "fts_score": round(score, 6),
+                        })
+                    continue
+                seen_original_nids[original_nid] = len(scored)
+                meta = meta_map.get((original_nid, did))
                 scored.append((score, {
-                    "node_id": nid,
+                    "node_id": original_nid,
                     "doc_id": did,
                     "title": meta["title"] if meta else title,
                     "summary": meta["summary"] if meta else summary,

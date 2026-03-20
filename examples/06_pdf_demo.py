@@ -31,7 +31,7 @@ async def pdf_demo():
         print(f" - {doc.doc_name} ({len(doc.structure)} root nodes)")
 
     # 2. Perform a search
-    query = "Earth Mover"
+    query = "Earth"
     print(f"\nSearching for: '{query}'")
     result_dict = await search(query, documents=documents)
     flat_nodes = result_dict.get("flat_nodes", [])

@@ -109,11 +109,17 @@ TreeSearch takes a fundamentally different approach — parse documents into **t
 ## FTS5 Standalone
 
 ```python
-from treesearch import FTS5Index, Document, load_index
+from treesearch import FTS5Index, Document, load_index, save_index, md_to_tree
+import asyncio
 
-data = load_index("indexes/my_doc.json")
-doc = Document(doc_id="doc1", doc_name=data["doc_name"], structure=data["structure"])
+# Option 1: Build from Markdown and save to DB
+result = asyncio.run(md_to_tree(md_path="docs/voice-call.md", if_add_node_summary=True))
+save_index(result, "indexes/voice-call.db")
 
+# Option 2: Load a previously saved document from DB
+doc = load_index("indexes/voice-call.db")  # returns a Document object
+
+# Create FTS5 index and search
 fts = FTS5Index(db_path="indexes/fts.db")  # persistent, or omit for in-memory
 fts.index_documents([doc])
 
@@ -158,7 +164,7 @@ Input Documents (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX)
    ┌──────────┐
    │  Indexer  │  ParserRegistry dispatch → parse structure → build tree → generate summaries
    └────┬─────┘    (build_index supports glob for batch processing)
-        │  JSON index files
+        │  SQLite DB (FTS5)
         ▼
    ┌──────────┐
    │  search   │  FTS5/Grep pre-filter → cross-doc scoring → ranked results
