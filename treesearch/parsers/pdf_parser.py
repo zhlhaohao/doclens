@@ -61,10 +61,6 @@ _ACADEMIC_HEADINGS = {
     "MOTIVATION", "CONTRIBUTIONS", "PRELIMINARIES",
 }
 
-# Max average characters per node before triggering page-based fallback
-_MAX_NODE_CHARS_THRESHOLD = 8000
-
-
 def extract_pdf_text(file_path: str) -> str:
     """Extract text from a document file using PyMuPDF.
 
@@ -181,23 +177,25 @@ def _check_needs_page_fallback(text: str) -> bool:
     Returns True if heading detection would produce nodes that are too large.
     Heuristic: count headings vs total text length.
     """
+    from ..config import get_config
     from ..indexer import _detect_headings, _preprocess_text
 
+    max_node_chars = get_config().max_node_chars
     processed = _preprocess_text(text)
     lines = processed.split("\n")
     headings = _detect_headings(lines)
     total_chars = len(processed)
 
     if not headings:
-        return total_chars > _MAX_NODE_CHARS_THRESHOLD
+        return total_chars > max_node_chars
 
     # Estimate average node size
     avg_chars_per_node = total_chars / (len(headings) + 1)
-    if avg_chars_per_node > _MAX_NODE_CHARS_THRESHOLD:
+    if avg_chars_per_node > max_node_chars:
         logger.debug(
             "PDF heading detection: %d headings for %d chars (avg %.0f chars/node > %d), "
             "falling back to page-based splitting",
-            len(headings), total_chars, avg_chars_per_node, _MAX_NODE_CHARS_THRESHOLD
+            len(headings), total_chars, avg_chars_per_node, max_node_chars
         )
         return True
     return False
