@@ -365,9 +365,11 @@ def _detect_headings(lines: list[str]) -> list[dict]:
             headings.append({"title": line, "line_num": num, "level": 2})
             continue
 
-        # Numeric hierarchical
+        # Numeric hierarchical (e.g. "1.2 Introduction", "3.1.1 Methods")
+        # Require short line and title starts with a letter to avoid matching
+        # math expressions like "0.1 + (-0.6) + 0.9 = 0.4..."
         m = _RE_NUMERIC.match(line)
-        if m:
+        if m and _is_short(line) and re.match(r"[A-Za-z\u4e00-\u9fff]", m.group("title")):
             level = len(m.group("prefix").rstrip(".").split("."))
             headings.append({"title": line, "line_num": num, "level": level})
             continue
@@ -384,9 +386,10 @@ def _detect_headings(lines: list[str]) -> list[dict]:
             headings.append({"title": line, "line_num": num, "level": 1})
             continue
 
-        # Letter heading
+        # Letter heading (e.g. "A. Introduction", "B) Methods")
+        # Only match short lines to avoid false positives like "D. All these works..."
         m = _RE_LETTER.match(line)
-        if m:
+        if m and _is_short(line, 60):
             headings.append({"title": line, "line_num": num, "level": 2})
             continue
 
