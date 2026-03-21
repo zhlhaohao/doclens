@@ -315,17 +315,17 @@ Evaluated on [CodeSearchNet](https://huggingface.co/datasets/code_search_net) da
 
 | Metric | Embedding (zhipu-embedding-3) | TreeSearch FTS5 |
 |--------|-----------------------------------|-----------------|
-| **MRR** | 0.8483 | 0.8433 |
+| **MRR** | 0.8483 | **0.8400** |
 | **Precision@1** | 0.7800 | **0.8000** |
-| **Recall@5** | **0.9400** | 0.9000 |
+| **Recall@5** | **0.9400** | 0.8600 |
 | **Hit@1** | 0.7800 | **0.8000** |
 | **Index Time** | 33.8s | **3.5s** |
-| **Avg Query Time** | 179.0ms | **2.4ms** |
+| **Avg Query Time** | 179.0ms | **1.7ms** |
 
 **Key Findings**:
 - TreeSearch MRR nearly matches Embedding (0.84 vs 0.85) — BM25 excels on code with high lexical overlap
 - TreeSearch **Precision@1 wins** (0.80 vs 0.78) — Exact keyword matching is strong for code search
-- TreeSearch **74x faster** queries — Milliseconds vs hundreds of milliseconds
+- TreeSearch **105x faster** queries — Milliseconds vs hundreds of milliseconds
 - TreeSearch **10x faster** indexing — No embedding API calls needed
 
 ### Summary

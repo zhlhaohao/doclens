@@ -40,7 +40,8 @@ Usage:
 
   📊 SUMMARY (FinanceBench (SEC Filings))
   ──────────────────────────────────────────────────
-  TREESEARCH_FTS5          MRR=0.3969  R@5=0.2773  ⏱ 0.0158s/q  (50/50 valid)
+  TREESEARCH_FTS5          MRR=0.3969  R@5=0.2773  ⏱ 0.0165s/q  (50/50 valid)
+  TREESEARCH_TREE          MRR=0.3415  R@5=0.2834  ⏱ 0.0482s/q  (50/50 valid)
   
 """
 import asyncio

@@ -273,8 +273,8 @@ async def search(
         text_mode: 'full' (default) | 'summary' | 'none' - controls text in results
         include_ancestors: attach ancestor titles for context anchoring
         merge_strategy: 'interleave' (default) | 'per_doc' | 'global_score'
-        search_mode: 'tree' (default) | 'flat' - tree mode uses Best-First Search,
-                     flat mode uses the original FTS5-only ranking
+        search_mode: 'flat' (default) | 'tree' - flat mode uses FTS5-only ranking,
+                     tree mode uses Best-First Search over document trees
 
     Returns:
         dict with 'documents' (list), 'query' (str), 'flat_nodes' (list),
