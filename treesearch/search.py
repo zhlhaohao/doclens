@@ -334,9 +334,11 @@ async def search(
 
     # Branch: resolve effective search mode
     # - "auto": intelligently picks tree vs flat based on document source types
-    #   (tree for documents/markdown/pdf, flat for code-only collections)
-    # - "tree": always uses tree walk (pure tree mode)
-    # - "flat": always uses FTS5-only (pure flat mode)
+    #   - all code → flat (code benefits from FTS5 keyword matching)
+    #   - all non-code are flat_formats (pdf/docx/csv/text/html) → flat (no meaningful hierarchy)
+    #   - otherwise → tree (has markdown/json/other hierarchical docs)
+    # - "tree": always uses tree walk (Best-First Walk)
+    # - "flat": always uses FTS5-only
     effective_mode = search_mode
     if search_mode == "auto" and selected:
         code_count = sum(1 for d in selected if (d.source_type or "") == "code")
@@ -344,9 +346,23 @@ async def search(
             effective_mode = "flat"
             logger.debug("Auto mode → flat: all %d docs are code", len(selected))
         else:
-            effective_mode = "tree"
-            logger.debug("Auto mode → tree: %d docs (%d code, %d non-code)",
-                        len(selected), code_count, len(selected) - code_count)
+            # Flat formats: these don't have meaningful tree hierarchy,
+            # tree walk won't help over flat FTS5 search
+            flat_formats = {"pdf", "docx", "csv", "text", "html", "xml", "epub", "gitignore"}
+            non_code_types = set(d.source_type or "" for d in selected
+                                  if (d.source_type or "") != "code")
+            non_flat_non_code = non_code_types - flat_formats
+            if non_flat_non_code:
+                # Has markdown/json/jsonl/other hierarchical docs → tree helps
+                effective_mode = "tree"
+                logger.debug("Auto mode → tree: %d docs (%d code, %d hierarchical, %d flat)",
+                            len(selected), code_count, len(non_flat_non_code),
+                            len(non_code_types) - len(non_flat_non_code))
+            else:
+                # All non-code are flat formats → tree won't help, use flat
+                effective_mode = "flat"
+                logger.debug("Auto mode → flat: %d docs (all flat formats: %s)",
+                            len(selected), non_code_types)
 
     if effective_mode == "tree" and scorer is not None:
         return await _search_tree_mode(

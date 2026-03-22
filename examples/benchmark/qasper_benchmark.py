@@ -841,8 +841,8 @@ async def main():
     )
     parser.add_argument(
         "--strategies", type=str, nargs="+",
-        default=["fts5"],
-        help="Search strategies to evaluate: fts5, tree (default: fts5)"
+        default=["fts5", "tree"],
+        help="Search strategies to evaluate: fts5, tree (default: fts5 tree)"
     )
     parser.add_argument("--max-samples", type=int, default=50, help="Max QA samples to evaluate")
     parser.add_argument("--max-papers", type=int, default=20, help="Max papers to index")

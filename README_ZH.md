@@ -92,9 +92,30 @@ for path in results["paths"]:
 **何时使用哪种模式？**
 | 模式 | 最适合 | MRR 优势 |
 |------|--------|---------|
-| `"flat"`（默认） | 代码搜索、金融文档、关键词密集查询 | CodeSearchNet 最优 (0.84)，FinanceBench 最优 (0.40) |
-| `"tree"` | 学术论文、有标题层级的技术文档 | QASPER 最优 (0.50)，比 Embedding 高 18% |
+| `"auto"` (默认) | 自动根据文档类型选择 | 智能默认 |
+| `"tree"` | 学术论文、有标题层级的技术文档 | QASPER 最优 (+18%) |
+| `"flat"` | 代码搜索、关键词密集查询 | CodeSearchNet 最优 (0.84) |
 
+**Auto Mode** (`search_mode="auto"`, 默认): 智能选择 tree vs flat
+- **All code** → `flat` (FTS5 关键词匹配)
+- **All non-code are flat formats** (PDF/DOCX/CSV/Text/HTML) → `flat` (无层级结构)
+- **Otherwise** → `tree` (Markdown/JSON/JSONL 等有层级结构)
+
+| 文档类型 | 有层级结构？ | Auto Mode |
+|---|---|---|
+| Code (.py/.js/.go...) | AST-based | `flat` |
+| Markdown (.md) | 标题 + 章节 | `tree` |
+| JSON (.json) | 嵌套对象 | `tree` |
+| JSONL (.jsonl) | Mixed | `tree` |
+| PDF (.pdf) | **Flat** (单节点 fallback) | `flat` |
+| DOCX (.docx) | **Flat** (无标题 → 单节点) | `flat` |
+| CSV (.csv) | Flat table | `flat` |
+| Text (.txt) | Flat | `flat` |
+
+**Benchmark验证**:
+- QASPER (Markdown/JSONL) → auto → `tree` ✅ MRR +18%
+- FinanceBench (PDF) → auto → `flat` ✅ (v0.6.2 修复: MRR 0.2420 vs 旧版 tree 0.2386)
+- CodeSearchNet (Code) → auto → `flat` ✅ MRR 0.84
 
 ## 为什么选择 TreeSearch？
 

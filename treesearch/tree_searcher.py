@@ -477,6 +477,8 @@ class TreeSearcher:
         # 1b. Generic section demotion: reduce score of overview sections
         # (Abstract, Introduction, Conclusion, etc.) that get inflated BM25
         # scores due to broad topic coverage rather than specific answers.
+        # NOTE: depth=0 root nodes (e.g., paper title or PDF doc title) are NOT
+        # demoted since they are often the most relevant entry point.
         for doc_id, doc_scores in fts_score_map.items():
             doc = doc_map.get(doc_id)
             if not doc:
@@ -487,9 +489,11 @@ class TreeSearcher:
                     continue
                 title = node.get("title", "")
                 depth = doc.get_depth(nid)
+                if depth == 0:
+                    continue  # Root nodes are never demoted
                 if is_generic_section(title, depth):
                     key = (doc_id, nid)
-                    node_scores[key] *= 0.60
+                    node_scores[key] *= 0.70
 
         # 2. Title-prefix propagation: scan ALL low-score nodes in each document.
         # In QASPER, section titles use ::: delimiter for hierarchy,
@@ -552,13 +556,9 @@ class TreeSearcher:
                 # Node found by both FTS5 and Walk — structural confirmation bonus
                 walk_bonus = 0.15 * combined_score
                 node_scores[key] = node_scores[key] + walk_bonus
-            elif fts_s > 0:
-                # Walk-discovered node with some FTS5 signal
-                node_scores[key] = combined_score
-            elif plan and plan.terms and hop <= 3:
-                # Walk-only node (FTS5 = 0): inject if text contains query terms.
-                # Relaxed threshold (0.25) to catch more FTS5 blind spots in
-                # financial tables where terms are scattered across cells.
+            elif fts_s == 0 and plan and plan.terms and hop <= 3:
+                # Walk-discovered node with NO FTS5 signal (truly missed by FTS5).
+                # Only inject if text contains query terms to avoid false positives.
                 doc = doc_map.get(doc_id)
                 if doc:
                     node = doc.get_node_by_id(nid)
@@ -569,9 +569,10 @@ class TreeSearcher:
                         if full.strip():
                             hits = sum(1 for t in plan.terms if t in full)
                             overlap = hits / len(plan.terms)
-                            if overlap >= 0.25:
-                                hop_decay = 1.0 - 0.2 * (hop - 1)  # hop 1→1.0, 2→0.8, 3→0.6
-                                inject_score = 0.25 * overlap * hop_decay
+                            # Strict overlap threshold: node must be clearly relevant
+                            if overlap >= 0.40:
+                                hop_decay = 1.0 - 0.15 * (hop - 1)  # hop 1→1.0, 2→0.85, 3→0.70
+                                inject_score = min(0.25 * overlap * hop_decay, 0.20)
                                 node_scores[key] = inject_score
 
         # 4. Parent context boost (key for financial docs)
@@ -602,30 +603,27 @@ class TreeSearcher:
                         continue
                     hits = sum(1 for t in plan.terms if t in full_text)
                     overlap = hits / len(plan.terms)
-                    if overlap < 0.25:
+                    if overlap < 0.20:
                         continue  # Node doesn't contain enough query terms
 
-                    # 4a. Boost from parent: if parent has higher FTS5, child gets lifted
+                    # 4a. Boost from parent: if parent has significantly higher FTS5,
+                    # child gets lifted. Use additive threshold (more sensitive than multiplicative).
                     pid = doc.get_parent_id(nid)
                     if pid:
                         parent_fts = doc_scores.get(pid, 0.0)
-                        if parent_fts > current * 1.2:
-                            parent_boost = 0.18 * parent_fts * overlap
+                        # Additive threshold: parent must be at least 0.06 better
+                        if parent_fts > current + 0.06:
+                            parent_boost = 0.50 * parent_fts * overlap
                             node_scores[key] = current + parent_boost
 
-                    # 4b. Sibling zone boost: if ≥2 siblings have FTS5 scores, this is
-                    # a relevant region (e.g., financial table with multiple matched rows)
-                    sibling_ids = doc.get_sibling_ids(nid)
-                    if sibling_ids:
-                        scored_siblings = [
-                            doc_scores.get(sid, 0.0)
-                            for sid in sibling_ids
-                            if doc_scores.get(sid, 0.0) > 0.05
-                        ]
-                        if len(scored_siblings) >= 2:
-                            avg_sibling = sum(scored_siblings) / len(scored_siblings)
-                            zone_boost = 0.08 * avg_sibling * overlap
-                            node_scores[key] = node_scores.get(key, current) + zone_boost
+                    # 4b. Grandparent boost: if grandparent has very high FTS5, it strongly
+                    # indicates this subtree is relevant (e.g., section header with subsections)
+                    grandparent_pid = doc.get_parent_id(pid) if pid else None
+                    if grandparent_pid:
+                        gp_fts = doc_scores.get(grandparent_pid, 0.0)
+                        if gp_fts > current + 0.10:
+                            gp_boost = 0.25 * gp_fts * overlap
+                            node_scores[key] = node_scores.get(key, current) + gp_boost
 
         # 5. Term density boost: nodes with higher query term density get boosted.
         # This reranks nodes based on how many unique query terms appear in the text,
@@ -649,7 +647,7 @@ class TreeSearcher:
                 hits = sum(1 for t in plan.terms if t in combined_text)
                 overlap = hits / len(plan.terms)
                 if overlap >= 0.5:
-                    # Boost nodes with high term coverage (lowered from 0.6 to 0.5)
+                    # Only boost nodes with high term coverage to avoid noise
                     density_bonus = 0.12 * overlap * score
                     node_scores[(doc_id, nid)] += density_bonus
 

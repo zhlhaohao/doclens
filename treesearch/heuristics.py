@@ -300,10 +300,10 @@ def score_path(
         path score (higher = better answer path)
     """
     # Leaf score dominates (walk-level quality)
-    score = 0.35 * leaf_score
+    score = 0.30 * leaf_score
 
     # Leaf FTS5 score direct contribution (content relevance of the answer node)
-    score += 0.20 * leaf_fts_score
+    score += 0.30 * leaf_fts_score
 
     # Path content coverage: how many query terms appear in ANY node's text along the path
     if query_terms and path_texts:
