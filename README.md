@@ -96,26 +96,25 @@ for path in results["paths"]:
 | `"tree"` | Academic papers, technical docs with heading hierarchy | Best on QASPER (+18%) |
 | `"flat"` | Code search, keyword-heavy queries | Best on CodeSearchNet (0.84) |
 
-**Auto Mode** (`search_mode="auto"`, 默认): 智能选择 tree vs flat
-- **All code** → `flat` (FTS5 keyword matching)
-- **All non-code are flat formats** (PDF/DOCX/CSV/Text/HTML) → `flat` (no meaningful hierarchy)
-- **Otherwise** → `tree` (has Markdown/JSON/JSONL with hierarchical structure)
+**Auto Mode** (`search_mode="auto"`, default): Intelligently selects tree vs flat using a three-layer strategy:
+1. **Type mapping** — Each `source_type` has an explicit tree-benefit flag (`_TREE_BENEFIT`)
+2. **Depth verification** — Only docs with actual tree depth ≥ 2 count as hierarchical
+3. **Proportion threshold** — If ≥ 30% of docs truly benefit from tree → `tree` mode; otherwise → `flat`
 
-| Document Type | Has Hierarchy? | Auto Mode |
-|---|---|---|
-| Code (.py/.js/.go...) | AST-based | `flat` |
-| Markdown (.md) | Headings + sections | `tree` |
-| JSON (.json) | Nested objects | `tree` |
-| JSONL (.jsonl) | Mixed | `tree` |
-| PDF (.pdf) | **Flat** (single node fallback) | `flat` |
-| DOCX (.docx) | **Flat** (no headings → single node) | `flat` |
-| CSV (.csv) | Flat table | `flat` |
-| Text (.txt) | Flat | `flat` |
+This avoids the old "1 markdown among 50 code files → tree for everything" problem.
 
-**Benchmark验证**:
-- QASPER (Markdown/JSONL) → auto → `tree` ✅ MRR +18%
-- FinanceBench (PDF) → auto → `flat` ✅ (v0.6.2 修复: MRR 0.2420 vs 旧版 tree 0.2386)
-- CodeSearchNet (Code) → auto → `flat` ✅ MRR 0.84
+| Document Type | Tree Benefit? | Depth Check | Auto Mode |
+|---|---|---|---|
+| Markdown (.md) | ✅ Yes | Must have headings (depth ≥ 2) | `tree` if deep |
+| JSON (.json) | ✅ Yes | Must have nesting (depth ≥ 2) | `tree` if nested |
+| Code (.py/.js/.go...) | ❌ No | — | `flat` |
+| PDF (.pdf) | ❌ No | — | `flat` |
+| DOCX (.docx) | ❌ No | — | `flat` |
+| CSV (.csv) | ❌ No | — | `flat` |
+| Text (.txt) | ❌ No | — | `flat` |
+| JSONL (.jsonl) | ❌ No | — | `flat` |
+| Unknown types | ❌ No (safe default) | — | `flat` |
+
 
 ## Why TreeSearch?
 

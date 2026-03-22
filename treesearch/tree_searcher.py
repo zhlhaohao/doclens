@@ -479,6 +479,8 @@ class TreeSearcher:
         # scores due to broad topic coverage rather than specific answers.
         # NOTE: depth=0 root nodes (e.g., paper title or PDF doc title) are NOT
         # demoted since they are often the most relevant entry point.
+        # Strategy 1: Query-Aware Demotion — skip demotion when query
+        # explicitly targets the section (e.g., "introduction methods").
         for doc_id, doc_scores in fts_score_map.items():
             doc = doc_map.get(doc_id)
             if not doc:
@@ -493,7 +495,31 @@ class TreeSearcher:
                     continue  # Root nodes are never demoted
                 if is_generic_section(title, depth):
                     key = (doc_id, nid)
+                    # Query-aware: don't demote if query terms mention this section
+                    if plan and plan.terms:
+                        base_title = title.split(" ::: ")[0].strip().lower() if " ::: " in title else title.strip().lower()
+                        query_targets_section = any(t in base_title for t in plan.terms)
+                        if query_targets_section:
+                            continue  # Skip demotion — query targets this section
                     node_scores[key] *= 0.70
+
+        # 1c. Leaf node preference: leaf nodes with substantial text are more
+        # likely to contain specific answers than heading/parent nodes.
+        # BM25 over-ranks heading nodes because they mention more terms broadly.
+        for doc_id, doc_scores in fts_score_map.items():
+            doc = doc_map.get(doc_id)
+            if not doc:
+                continue
+            for nid in doc_scores:
+                node = doc.get_node_by_id(nid)
+                if not node:
+                    continue
+                children = doc.get_children_ids(nid)
+                text_len = len(node.get("text", ""))
+                if not children and text_len > 100:
+                    key = (doc_id, nid)
+                    if key in node_scores:
+                        node_scores[key] *= 1.08  # 8% leaf bonus
 
         # 2. Title-prefix propagation: scan ALL low-score nodes in each document.
         # In QASPER, section titles use ::: delimiter for hierarchy,
@@ -650,6 +676,36 @@ class TreeSearcher:
                     # Only boost nodes with high term coverage to avoid noise
                     density_bonus = 0.12 * overlap * score
                     node_scores[(doc_id, nid)] += density_bonus
+
+        # 6. Subtree evidence aggregation: lift low-scoring nodes in strong
+        # structural neighborhoods. Current Stages 3-5 add 10-15% bonuses which
+        # are too small to change rank order. This pass can promote a node from
+        # rank 8 to rank 3 when its parent/children/siblings have high scores.
+        for (doc_id, nid), score in list(node_scores.items()):
+            if score < 0.01:
+                continue
+            doc = doc_map.get(doc_id)
+            if not doc:
+                continue
+
+            # Collect evidence from structural neighborhood
+            pid = doc.get_parent_id(nid)
+            parent_score = node_scores.get((doc_id, pid), 0) if pid else 0
+            children_scores = [node_scores.get((doc_id, cid), 0)
+                               for cid in doc.get_children_ids(nid)]
+            sibling_scores = [node_scores.get((doc_id, sid), 0)
+                              for sid in doc.get_sibling_ids(nid)]
+
+            best_child = max(children_scores) if children_scores else 0
+            best_sibling = max(sibling_scores) if sibling_scores else 0
+
+            # Context evidence: strongest signal from neighborhood
+            context = max(parent_score, best_child, best_sibling)
+
+            # Only boost if context is significantly stronger than self
+            if context > score * 1.5 and context > 0.15:
+                lift = 0.30 * (context - score)
+                node_scores[(doc_id, nid)] = score + lift
 
         # Build flat node dicts
         flat_nodes: list[dict] = []

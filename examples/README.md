@@ -67,5 +67,5 @@ python examples/benchmark/codesearchnet_benchmark.py --max-samples 50
 | `04_multi_doc_search.py` | 多文档批量搜索 |
 | `05_directory_and_grep.py` | 目录遍历 + 代码级 grep 搜索 |
 | `06_pdf_demo.py` | PDF 文档解析和搜索 |
-| `07_tree_search_demo.py` | Tree Search 模式演示 (带可视化) |
+| `07_tree_search_demo.py` | Tree Search 模式演示 (含 Auto 模式智能选择) |
 

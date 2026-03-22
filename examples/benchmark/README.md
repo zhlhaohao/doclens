@@ -7,7 +7,7 @@ Benchmark 模块用于在长文档 QA/检索任务上评估 TreeSearch 的检索
 | 数据集 | 类型 | 描述 |
 |--------|------|------|
 | **QASPER** | 长文档问答 | 学术论文 QA，section 级证据标注 |
-| **FinanceBench** | 金融文档检索 | SEC 年报问答，验证 Tree > FTS5 |
+| **FinanceBench** | 金融文档检索 | SEC 年报问答 |
 | **CodeSearchNet** | 代码检索 | 6 种编程语言函数级检索 |
 
 ## 快速开始
@@ -102,17 +102,6 @@ Boosting Stages:
 - 结果保存到: `benchmark_results/{dataset}_{strategy}_report.json`
 - 示例: `benchmark_results/qasper_tree_report.json`
 
-## 诊断工具
-
-```bash
-# FinanceBench 详细诊断
-python examples/benchmark/_diag_finance.py --max-samples 50
-```
-
-诊断输出包括：
-- FTS5-only / Both-hit / Both-miss / Walk-only 分类统计
-- 每个 miss 案例的 FTS5 rank、score、Tree score
-- Node-level 详细日志
 
 ## 添加新数据集
 

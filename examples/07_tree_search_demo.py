@@ -9,6 +9,7 @@ Demonstrates the new tree search capabilities:
   3. TreeSearcher low-level API
   4. QueryPlan parsing
   5. Multi-document tree search
+  6. Auto mode resolution (smart tree/flat selection)
 
 Usage:
     cd TreeSearch
@@ -314,10 +315,66 @@ def demo_multi_doc_tree_search():
                 print(f"  Path {i} ({p['score']:.4f}): {chain}")
 
 
-def demo_config_tuning():
-    """Demo 7: Tree search config tuning -- adjust search behavior."""
+def demo_auto_mode_resolution():
+    """Demo 7: Auto mode resolution -- smart tree/flat selection based on doc types and depth."""
     print("\n" + "=" * 70)
-    print("Demo 7: Config Tuning for Tree Search")
+    print("Demo 7: Auto Mode Resolution (Smart tree/flat Selection)")
+    print("=" * 70)
+
+    from treesearch.search import _TREE_BENEFIT, _TREE_RATIO_THRESHOLD, _has_meaningful_depth
+
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    treesearch_dir = os.path.join(PROJECT_ROOT, "treesearch")
+
+    # Scenario A: Pure markdown docs → expect tree mode
+    print("\n--- Scenario A: Pure markdown (hierarchical) ---")
+    ts_md = TreeSearch(DATA_DIR, db_path=None)
+    result_md = ts_md.search("voice call configuration", search_mode="auto")
+    print(f"  Docs: {[d.doc_name for d in ts_md.documents[:5]]}")
+    for doc in ts_md.documents[:3]:
+        st = doc.source_type or ""
+        benefit = _TREE_BENEFIT.get(st, False)
+        has_depth = _has_meaningful_depth(doc) if benefit else False
+        print(f"    [{doc.doc_name}] type={st}, tree_benefit={benefit}, has_depth={has_depth}")
+    print(f"  Auto resolved → {result_md.get('mode', '?')} mode")
+
+    # Scenario B: Pure code docs → expect flat mode
+    print("\n--- Scenario B: Pure code files ---")
+    ts_code = TreeSearch(treesearch_dir, db_path=None)
+    result_code = ts_code.search("FTS5 search index", search_mode="auto")
+    code_count = sum(1 for d in ts_code.documents if (d.source_type or "") == "code")
+    print(f"  Total docs: {len(ts_code.documents)}, code: {code_count}")
+    print(f"  Auto resolved → {result_code.get('mode', '?')} mode")
+
+    # Scenario C: Mixed docs (markdown + code) → depends on ratio
+    print("\n--- Scenario C: Mixed (markdown + code) ---")
+    ts_mixed = TreeSearch(DATA_DIR, treesearch_dir, db_path=None)
+    result_mixed = ts_mixed.search("tree search configuration", search_mode="auto")
+    type_counts: dict[str, int] = {}
+    tree_count = 0
+    for doc in ts_mixed.documents:
+        st = doc.source_type or "unknown"
+        type_counts[st] = type_counts.get(st, 0) + 1
+        if _TREE_BENEFIT.get(st, False) and _has_meaningful_depth(doc):
+            tree_count += 1
+    total = len(ts_mixed.documents)
+    ratio = tree_count / total if total else 0
+    print(f"  Total docs: {total}, type breakdown: {type_counts}")
+    print(f"  Tree-benefiting docs: {tree_count}/{total} ({ratio:.0%}), threshold: {_TREE_RATIO_THRESHOLD:.0%}")
+    print(f"  Auto resolved → {result_mixed.get('mode', '?')} mode")
+
+    # Summary table
+    print(f"\n  {'Scenario':<25} {'Mode':<8} {'Rationale'}")
+    print(f"  {'-'*25} {'-'*8} {'-'*40}")
+    print(f"  {'Pure markdown':<25} {result_md.get('mode','?'):<8} All docs have heading hierarchy")
+    print(f"  {'Pure code':<25} {result_code.get('mode','?'):<8} Code → FTS5 keyword match suffices")
+    print(f"  {'Mixed (md+code)':<25} {result_mixed.get('mode','?'):<8} Ratio {ratio:.0%} vs threshold {_TREE_RATIO_THRESHOLD:.0%}")
+
+
+def demo_config_tuning():
+    """Demo 8: Tree search config tuning -- adjust search behavior."""
+    print("\n" + "=" * 70)
+    print("Demo 8: Config Tuning for Tree Search")
     print("=" * 70)
 
     ts = TreeSearch(DATA_DIR, db_path=None)
@@ -390,7 +447,10 @@ def main():
     # Demo 6: Multi-document tree search
     demo_multi_doc_tree_search()
 
-    # Demo 7: Config tuning
+    # Demo 7: Auto mode resolution (smart tree/flat selection)
+    demo_auto_mode_resolution()
+
+    # Demo 8: Config tuning
     demo_config_tuning()
 
     print("\n" + "=" * 70)
