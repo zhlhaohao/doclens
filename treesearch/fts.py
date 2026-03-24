@@ -893,23 +893,105 @@ class FTS5Index:
             ))
         return documents
 
+    def delete_document(self, doc_id: str) -> bool:
+        """Delete a document and all its indexed data from the DB atomically.
+
+        Clears all four storage locations in a single transaction:
+        - ``fts_nodes`` (FTS5 inverted index entries)
+        - ``nodes`` (structured node metadata)
+        - ``documents`` (tree structure + document metadata)
+        - ``index_meta`` (incremental indexing fingerprint)
+
+        Clearing ``index_meta`` is critical: without it the incremental indexing
+        logic would see the file as already-processed and silently skip re-indexing
+        it after a subsequent ``index()`` call.
+
+        Args:
+            doc_id: document identifier to delete.
+
+        Returns:
+            ``True`` if the document existed and was deleted, ``False`` if it was
+            not found (operation is idempotent — no exception is raised).
+        """
+        # Check existence before entering the transaction so we can return a
+        # meaningful bool without relying on changes_count() across all tables.
+        row = self._conn.execute(
+            "SELECT source_path FROM documents WHERE doc_id = ?", (doc_id,)
+        ).fetchone()
+
+        if row is None:
+            logger.warning("delete_document: doc_id=%r not found, nothing deleted", doc_id)
+            return False
+
+        source_path = row[0] or ""
+
+        try:
+            # Single atomic transaction — all-or-nothing.
+            with self._conn:
+                # 1. FTS5 virtual table: must delete by rowid (UNINDEXED columns
+                #    cannot be used in a WHERE clause for DELETE on FTS5 tables).
+                if self._use_fts5:
+                    old_rowids = self._conn.execute(
+                        "SELECT rowid FROM fts_nodes WHERE doc_id = ?", (doc_id,)
+                    ).fetchall()
+                    if old_rowids:
+                        placeholders = ",".join("?" for _ in old_rowids)
+                        self._conn.execute(
+                            f"DELETE FROM fts_nodes WHERE rowid IN ({placeholders})",
+                            [r[0] for r in old_rowids],
+                        )
+                else:
+                    self._conn.execute("DELETE FROM fts_nodes WHERE doc_id = ?", (doc_id,))
+
+                # 2. Structured node metadata.
+                self._conn.execute("DELETE FROM nodes WHERE doc_id = ?", (doc_id,))
+
+                # 3. Document record (tree structure + metadata).
+                self._conn.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
+
+                # 4. Incremental index fingerprint — CRITICAL: must be cleared so
+                #    that the next index() call re-processes this file rather than
+                #    skipping it as "already indexed".
+                if source_path:
+                    self._conn.execute(
+                        "DELETE FROM index_meta WHERE source_path = ?", (source_path,)
+                    )
+
+        except sqlite3.DatabaseError as e:
+            logger.error(
+                "delete_document failed for doc_id=%r (source_path=%r): %s",
+                doc_id, source_path, e,
+            )
+            raise
+
+        logger.info("Deleted document doc_id=%r (source_path=%r)", doc_id, source_path)
+        return True
+
     def remove_document(self, doc_id: str) -> None:
-        """Remove a document and all its indexed nodes from the DB."""
-        if self._use_fts5:
-            old_rowids = self._conn.execute(
-                "SELECT rowid FROM fts_nodes WHERE doc_id = ?", (doc_id,)
-            ).fetchall()
-            if old_rowids:
-                placeholders = ",".join("?" for _ in old_rowids)
-                self._conn.execute(
-                    f"DELETE FROM fts_nodes WHERE rowid IN ({placeholders})",
-                    [r[0] for r in old_rowids],
-                )
-        else:
-            self._conn.execute("DELETE FROM fts_nodes WHERE doc_id = ?", (doc_id,))
-        self._conn.execute("DELETE FROM nodes WHERE doc_id = ?", (doc_id,))
-        self._conn.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
-        self._conn.commit()
+        """Remove a document from the DB.
+
+        .. deprecated::
+            Use :meth:`delete_document` instead.  ``delete_document`` fixes a
+            bug where ``index_meta`` was not cleared, uses an atomic transaction,
+            and returns a boolean indicating whether the document existed.
+        """
+        self.delete_document(doc_id)
+
+    def get_doc_id_by_source_path(self, source_path: str) -> Optional[str]:
+        """Look up a doc_id from a source file path.
+
+        Useful when callers know the file path but not the internal doc_id.
+
+        Args:
+            source_path: absolute path of the source file.
+
+        Returns:
+            The ``doc_id`` string, or ``None`` if no document matches.
+        """
+        row = self._conn.execute(
+            "SELECT doc_id FROM documents WHERE source_path = ?", (source_path,)
+        ).fetchone()
+        return row[0] if row else None
 
     # -------------------------------------------------------------------
     # Index metadata (replaces _index_meta.json)

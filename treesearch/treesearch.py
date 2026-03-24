@@ -296,6 +296,89 @@ class TreeSearch:
         return sorted(result, key=lambda x: x["source_path"])
 
     # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
+
+    def delete(self, *paths_or_ids: str) -> int:
+        """Delete documents from the index by source path or doc_id.
+
+        Accepts file paths, absolute paths, or doc_ids (the internal identifier
+        stored in the database).  Matching is attempted in this order:
+
+        1. Exact ``source_path`` match in the database (most common use case —
+           pass the same path you passed to ``index()``).
+        2. Absolute path version of the given string.
+        3. Direct ``doc_id`` match (for advanced callers who know the doc_id).
+
+        The in-memory ``self.documents`` list is kept in sync so subsequent
+        ``search()`` calls reflect the deletion immediately.
+
+        Args:
+            *paths_or_ids: one or more file paths / doc_ids to remove.
+
+        Returns:
+            Number of documents actually deleted (0 if none were found).
+
+        Example::
+
+            ts = TreeSearch("docs/", db_path="./index.db")
+            ts.index()
+            removed = ts.delete("docs/old_file.md")
+            # removed == 1 if the file was indexed, 0 if not found
+        """
+        if not paths_or_ids:
+            return 0
+
+        if not self.db_path or not os.path.isfile(self.db_path):
+            # In-memory mode or no DB yet — only remove from self.documents.
+            removed = 0
+            abs_targets = {os.path.abspath(p) for p in paths_or_ids}
+            remaining = []
+            for doc in self.documents:
+                sp = doc.metadata.get("source_path", "")
+                if sp in abs_targets or os.path.abspath(sp) in abs_targets or doc.doc_id in paths_or_ids:
+                    removed += 1
+                    logger.info("Deleted document (in-memory): doc_id=%r", doc.doc_id)
+                else:
+                    remaining.append(doc)
+            self.documents = remaining
+            return removed
+
+        from .fts import FTS5Index
+        fts = FTS5Index(db_path=self.db_path)
+        removed = 0
+
+        for target in paths_or_ids:
+            # 1. Try source_path exact match.
+            doc_id = fts.get_doc_id_by_source_path(target)
+
+            # 2. Try absolute path.
+            if doc_id is None:
+                abs_target = os.path.abspath(target)
+                if abs_target != target:
+                    doc_id = fts.get_doc_id_by_source_path(abs_target)
+
+            # 3. Try treating the argument itself as a doc_id.
+            if doc_id is None:
+                if fts.is_document_indexed(target):
+                    doc_id = target
+
+            if doc_id is None:
+                logger.warning("delete: %r not found in index (checked source_path and doc_id)", target)
+                continue
+
+            if fts.delete_document(doc_id):
+                removed += 1
+                # Keep self.documents in sync.
+                self.documents = [d for d in self.documents if d.doc_id != doc_id]
+
+        fts.close()
+
+        if removed:
+            logger.info("Deleted %d document(s) from index %r", removed, self.db_path)
+        return removed
+
+    # ------------------------------------------------------------------
     # Index statistics
     # ------------------------------------------------------------------
 

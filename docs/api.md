@@ -157,6 +157,7 @@ class TreeSearch:
     def search(self, query: str, **kwargs) -> dict
     def resolve_glob_files(self) -> list[str]
     def get_indexed_files(self) -> list[dict]
+    def delete(self, *paths_or_ids: str) -> int
 ```
 
 High-level API for indexing + search. Recommended for most use cases.
@@ -166,6 +167,41 @@ High-level API for indexing + search. Recommended for most use cases.
 - Glob patterns for file selection
 - Persistent SQLite database for incremental updates
 - Sync interface (wraps async internally)
+
+#### `delete` — Remove Documents
+
+```python
+def delete(self, *paths_or_ids: str) -> int
+```
+
+Delete documents from the index by source path or doc_id. Matching is attempted in this order:
+
+1. Exact `source_path` match (most common — pass the same path used in `index()`)
+2. Absolute path version of the given string
+3. Direct `doc_id` match (for advanced callers who know the doc_id)
+
+**Args**:
+- `paths_or_ids`: One or more file paths / doc_ids to remove.
+
+**Returns**: Number of documents deleted (0 if none were found).
+
+**Example**:
+```python
+ts = TreeSearch("docs/", db_path="./index.db")
+ts.index()
+
+# Get indexed files
+files = ts.get_indexed_files()
+
+# Delete by source_path
+ts.delete("docs/old_file.md")
+
+# Delete by doc_id
+ts.delete(files[0]["doc_id"])
+
+# Batch delete
+ts.delete("docs/a.md", "docs/b.md")
+```
 
 ---
 
@@ -181,6 +217,7 @@ class FTS5Index:
     def search(self, query: str, top_k: int = 20, fts_expression: str = "") -> list[dict]
     def score_nodes(self, query: str, doc_id: str) -> dict[str, float]
     def search_with_aggregation(self, query: str, group_by_doc: bool = False) -> list[dict]
+    def delete_document(self, doc_id: str) -> bool
 ```
 
 SQLite FTS5 full-text search engine with MD structure-aware columns.
@@ -192,6 +229,29 @@ SQLite FTS5 full-text search engine with MD structure-aware columns.
 - Column weighting (configurable via `TreeSearchConfig`)
 - CJK tokenization support (jieba / bigram)
 - FTS5 query syntax support (AND/OR/NOT/NEAR)
+
+#### `delete_document` — Low-level Delete
+
+```python
+def delete_document(self, doc_id: str) -> bool
+```
+
+Delete a document and all its indexed data atomically. Clears all storage locations in a single transaction:
+- `fts_nodes` (FTS5 inverted index entries)
+- `nodes` (structured node metadata)
+- `documents` (tree structure + metadata)
+- `index_meta` (incremental indexing fingerprint)
+
+**Returns**: `True` if document existed and was deleted, `False` if not found (idempotent — no exception).
+
+**Example**:
+```python
+from treesearch.fts import FTS5Index
+
+fts = FTS5Index(db_path="./index.db")
+fts.delete_document("doc_id_xxx")  # Returns True/False
+fts.close()
+```
 
 ### `GrepFilter`
 

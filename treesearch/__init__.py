@@ -87,3 +87,12 @@ __all__ = [
 #   from treesearch.tokenizer import tokenize
 #   from treesearch.tree import assign_node_ids, find_node, get_leaf_nodes, ...
 #   from treesearch.parsers import ParserRegistry, get_parser, extract_pdf_text
+
+# Framework integrations (optional — require extra dependencies):
+#   from treesearch.integrations.langchain import TreeSearchRetriever
+#   from treesearch.integrations.llamaindex import TreeSearchNodeRetriever
+#
+# Install extras:
+#   pip install pytreesearch[langchain]      # adds langchain-core
+#   pip install pytreesearch[llamaindex]     # adds llama-index-core
+#   pip install pytreesearch[integrations]   # both
