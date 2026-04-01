@@ -260,18 +260,18 @@ def _resolve_auto_mode(selected: list[Document]) -> str:
 # ---------------------------------------------------------------------------
 
 def _get_ancestor_titles(doc: Document, node_id: str) -> list[str]:
-    """Get ancestor node titles for context anchoring."""
-    from .tree import build_tree_maps
-    _, parent_map, _ = build_tree_maps(doc.structure)
+    """Get ancestor node titles for context anchoring.
 
+    Uses Document's cached parent map — O(depth) traversal with O(1) lookups,
+    avoids redundant build_tree_maps() call.
+    """
     titles = []
-    pid = parent_map.get(node_id)
+    pid = doc.get_parent_id(node_id)
     while pid:
         pnode = doc.get_node_by_id(pid)
         if pnode:
             titles.append(pnode.get("title", ""))
-        pid = parent_map.get(pid)
-
+        pid = doc.get_parent_id(pid)
     titles.reverse()
     return titles
 
@@ -465,11 +465,16 @@ async def _search_tree_mode(
     from .tree_searcher import TreeSearcher
 
     # Build FTS score maps for all selected documents
+    # Use batch scoring when scorer supports it — single SQL instead of N queries
     fts_score_map: dict[str, dict[str, float]] = {}
-    for doc in selected:
-        scores = scorer.score_nodes(query, doc.doc_id)
-        if scores:
-            fts_score_map[doc.doc_id] = scores
+    doc_ids = [doc.doc_id for doc in selected]
+    if hasattr(scorer, "score_nodes_batch"):
+        fts_score_map = scorer.score_nodes_batch(query, doc_ids=doc_ids)
+    else:
+        for doc in selected:
+            scores = scorer.score_nodes(query, doc.doc_id)
+            if scores:
+                fts_score_map[doc.doc_id] = scores
 
     # Run tree search
     searcher = TreeSearcher()

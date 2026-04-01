@@ -759,60 +759,119 @@ class FTS5Index:
 
         Includes:
         - Ancestor score propagation: parent nodes inherit child scores
+
+        For scoring multiple documents at once, prefer score_nodes_batch() which uses
+        a single SQL query instead of one query per document.
         """
-        # Pre-build match expression once to avoid redundant tokenization in search()
+        result = self.score_nodes_batch(query, doc_ids=[doc_id], ancestor_decay=ancestor_decay)
+        return result.get(doc_id, {})
+
+    def score_nodes_batch(
+        self,
+        query: str,
+        doc_ids: list[str] | None = None,
+        ancestor_decay: float = 0.6,
+    ) -> dict[str, dict[str, float]]:
+        """Batch version of score_nodes: score all documents in a single SQL query.
+
+        Returns {doc_id: {node_id: score}} for all matched documents.
+
+        This is the fast path for tree search, replacing the N_docs loop:
+            # Before (slow): N SQL queries
+            for doc in documents:
+                scores = fts_index.score_nodes(query, doc.doc_id)
+
+            # After (fast): 1 SQL query
+            all_scores = fts_index.score_nodes_batch(query, [d.doc_id for d in documents])
+        """
         match_expr = self._build_match_expr(query)
         if match_expr is None:
             return {}
 
-        results = self.search(query, doc_id=doc_id, top_k=200, _precomputed_match_expr=match_expr)
+        w = self._weights
+        weight_args = f"{w['title']}, {w['summary']}, {w['body']}, {w['code_blocks']}, {w['front_matter']}"
 
-        if not results:
+        # Single SQL query across all requested doc_ids (or entire index)
+        if doc_ids:
+            placeholders = ",".join("?" * len(doc_ids))
+            sql = f"""
+                SELECT f.node_id, f.doc_id,
+                       bm25(fts_nodes, {weight_args}) AS rank_score
+                FROM fts_nodes f
+                WHERE fts_nodes MATCH ?
+                  AND f.doc_id IN ({placeholders})
+                ORDER BY rank_score
+                LIMIT 2000
+            """
+            params = (match_expr, *doc_ids)
+        else:
+            sql = f"""
+                SELECT f.node_id, f.doc_id,
+                       bm25(fts_nodes, {weight_args}) AS rank_score
+                FROM fts_nodes f
+                WHERE fts_nodes MATCH ?
+                ORDER BY rank_score
+                LIMIT 2000
+            """
+            params = (match_expr,)
+
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except Exception:
             return {}
 
-        # Aggregate scores by node_id (take max score per node)
-        raw_scores: dict[str, float] = {}
-        for r in results:
-            nid = r["node_id"]
-            old = raw_scores.get(nid, 0.0)
-            raw_scores[nid] = max(old, r["fts_score"])
+        if not rows:
+            return {}
 
-        # Normalize scores to [0, 1] range
-        max_score = max(raw_scores.values()) if raw_scores else 1.0
-        if max_score <= 0:
-            max_score = 1.0
+        # Group raw scores by doc_id
+        per_doc_raw: dict[str, dict[str, float]] = {}
+        for node_id, doc_id, rank_score in rows:
+            fts_score = -rank_score if rank_score else 0.0
+            per_doc_raw.setdefault(doc_id, {})
+            old = per_doc_raw[doc_id].get(node_id, 0.0)
+            per_doc_raw[doc_id][node_id] = max(old, fts_score)
 
-        scores = {
-            nid: s / max_score
-            for nid, s in raw_scores.items()
-        }
-
-        # Ancestor propagation using parent_node_id from nodes table
-        if ancestor_decay > 0:
-            rows = self._conn.execute(
-                "SELECT node_id, parent_node_id FROM nodes WHERE doc_id = ?",
-                (doc_id,),
+        # Per-doc: normalize + ancestor propagation in one pass
+        result: dict[str, dict[str, float]] = {}
+        doc_children_map: dict[str, dict[str, list[str]]] = {}
+        if ancestor_decay > 0 and per_doc_raw:
+            # Single query to fetch parent maps for all affected docs
+            affected_docs = list(per_doc_raw.keys())
+            ph = ",".join("?" * len(affected_docs))
+            parent_rows = self._conn.execute(
+                f"SELECT doc_id, node_id, parent_node_id FROM nodes WHERE doc_id IN ({ph})",
+                affected_docs,
             ).fetchall()
-            parent_map = {r[0]: r[1] for r in rows if r[1]}
-            children_map: dict[str, list[str]] = {}
-            for nid, pid in parent_map.items():
-                children_map.setdefault(pid, []).append(nid)
+            # Build per-doc children maps for bottom-up propagation
+            for d_id, nid, pid in parent_rows:
+                if pid:
+                    doc_children_map.setdefault(d_id, {}).setdefault(pid, []).append(nid)
 
-            # Bottom-up: propagate max child score to parent (single pass)
-            for pid, cids in children_map.items():
-                child_scores = [scores.get(c, 0.0) for c in cids]
-                if not child_scores:
-                    continue
-                bonus = ancestor_decay * max(child_scores)
-                old = scores.get(pid, 0.0)
-                scores[pid] = old + bonus
+        for doc_id, raw_scores in per_doc_raw.items():
+            # Normalize to [0, 1]
+            max_s = max(raw_scores.values()) if raw_scores else 1.0
+            if max_s <= 0:
+                max_s = 1.0
+            scores = {nid: s / max_s for nid, s in raw_scores.items()}
 
-            # Re-normalize to [0, 1] after ancestor propagation
-            final_max = max(scores.values()) if scores else 1.0
-            if final_max > 1.0:
-                scores = {nid: s / final_max for nid, s in scores.items()}
+            # Ancestor propagation
+            if ancestor_decay > 0:
+                children_map = doc_children_map.get(doc_id, {})
+                for pid, cids in children_map.items():
+                    child_scores = [scores.get(c, 0.0) for c in cids]
+                    if not child_scores:
+                        continue
+                    bonus = ancestor_decay * max(child_scores)
+                    scores[pid] = scores.get(pid, 0.0) + bonus
 
-        return {nid: round(s, 6) for nid, s in scores.items()}
+                # Re-normalize after propagation
+                final_max = max(scores.values()) if scores else 1.0
+                if final_max > 1.0:
+                    scores = {nid: s / final_max for nid, s in scores.items()}
+
+            result[doc_id] = {nid: round(s, 6) for nid, s in scores.items()}
+
+        return result
 
     # -------------------------------------------------------------------
     # Document persistence (tree structure storage)
