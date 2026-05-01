@@ -291,6 +291,48 @@ class NotebookSearchCLI:
         # 过滤：至少匹配 2 个词，且 proximity >= 1
         filtered = [(did, best_node, cnt, prox) for did, (best_node, cnt, prox) in doc_best.items() if cnt >= 2 and prox >= 1]
 
+        # 如果没有结果，尝试降级到匹配数 >= 1
+        if not filtered and query_words:
+            filtered = [(did, best_node, cnt, prox) for did, (best_node, cnt, prox) in doc_best.items() if cnt >= 1]
+
+        # 如果仍无结果，使用 ripgrep 做精确子串匹配
+        if not filtered:
+            from treesearch.ripgrep import rg_available, rg_search
+
+            if rg_available():
+                # 获取所有源文件路径
+                file_paths = [self.path_map.get(did, "") for did in doc_nodes_map.keys()]
+                file_paths = [p for p in file_paths if p and os.path.exists(p)]
+
+                if file_paths:
+                    # 使用 ripgrep 做精确子串匹配
+                    hits = rg_search(query, file_paths, case_sensitive=False, use_regex=False)
+
+                    # 找到匹配行对应的节点
+                    for doc_id, line_nums in hits.items():
+                        source_path = self.path_map.get(doc_id, "")
+                        if not source_path:
+                            continue
+                        # 找到与行号匹配的节点
+                        all_nodes = doc_nodes_map.get(doc_id, [])
+                        matched_node = None
+                        for n in all_nodes:
+                            n_line = n.get("line_start")
+                            if n_line and n_line in line_nums:
+                                matched_node = n
+                                break
+
+                        if not matched_node:
+                            # 如果没有精确行号匹配，使用第一个匹配行附近的节点
+                            for n in all_nodes:
+                                n_text = n.get("text", "") or ""
+                                if query.lower() in n_text.lower():
+                                    matched_node = n
+                                    break
+
+                        if matched_node:
+                            filtered.append((doc_id, matched_node, len(query_words), 0))
+
         # 按紧邻分数降序，再按匹配词数降序
         filtered.sort(key=lambda x: (-x[3], -x[2]))
 
