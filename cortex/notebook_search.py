@@ -23,10 +23,10 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-from treesearch import TreeSearch
+from treesearch import TreeSearch, set_config, TreeSearchConfig
 
 # 配置
-DEFAULT_INDEX_PATH = "./index.db"
+DEFAULT_INDEX_PATH = os.path.join(os.path.expanduser("~"), ".cortex", "index.db")
 DEFAULT_SEARCH_PATH = "E:/github/notebook"
 
 # 高亮
@@ -98,7 +98,9 @@ class NotebookSearchCLI:
         if self.ts is not None:
             return True
 
-        self.ts = TreeSearch()
+        # 设置 CJK 分词为 bigram（字符二元组，减少单字符匹配）
+        set_config(TreeSearchConfig(cjk_tokenizer="jieba"))
+        self.ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
         if os.path.exists(abs_path):
@@ -114,6 +116,8 @@ class NotebookSearchCLI:
         # 构建新索引
         print(f"[正在构建索引: {self.search_path}]")
         self.ts.index(self.search_path)
+        # 确保目录存在
+        os.makedirs(os.path.dirname(os.path.abspath(self.index_path)), exist_ok=True)
         self.ts.save_index()
         self._build_path_map()
         print(f"[索引完成: {len(self.ts.documents)} 个文档]")
@@ -151,7 +155,7 @@ class NotebookSearchCLI:
         result = self.ts.search(
             query=query,
             max_results=max_results,
-            max_nodes_per_doc=1,
+            max_nodes_per_doc=5,
             top_k_docs=100,
         )
 
@@ -159,12 +163,16 @@ class NotebookSearchCLI:
 
     # ---- 格式化输出 ----
 
-    def hl(self, text, query):
-        """高亮关键词"""
-        if not query or not text:
+    def hl(self, text, keywords):
+        """高亮关键词（支持多个分词后的关键词）"""
+        if not keywords or not text:
             return text
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
-        return pattern.sub(lambda m: f"{HL_START}{m.group()}{HL_END}", text)
+        result = text
+        for kw in keywords:
+            if kw:
+                pattern = re.compile(re.escape(kw), re.IGNORECASE)
+                result = pattern.sub(lambda m: f"{HL_START}{m.group()}{HL_END}", result)
+        return result
 
     def short_path(self, path):
         """缩短路径"""
@@ -200,74 +208,160 @@ class NotebookSearchCLI:
         # 构建 ANSI 超链接，显示完整路径
         return f"{LINK_START}{url}{LINK_SEP}{display_text}{LINK_END}"
 
+    def _tokenize_query(self, query):
+        """使用 jieba 对查询进行分词，过滤掉单字词"""
+        from treesearch.tokenizer import tokenize
+        tokens = tokenize(query)
+        # 过滤掉单字符词
+        return [t for t in tokens if len(t) > 1]
+
+    def _calc_proximity_score(self, text, keywords, max_span=20):
+        """计算关键词紧密度分数
+
+        Args:
+            text: 要检查的文本
+            keywords: 关键词列表
+            max_span: 关键词最大跨度（字符数），超过则不算紧邻
+        Returns:
+            (matched_count, proximity_score) - 匹配词数和紧邻分数
+                proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
+        """
+        if not text or not keywords:
+            return 0, 0
+
+        text_lower = text.lower()
+        positions = []
+
+        for kw in keywords:
+            kw_lower = kw.lower()
+            idx = text_lower.find(kw_lower)
+            if idx >= 0:
+                positions.append(idx)
+
+        if not positions:
+            return 0, 0
+
+        matched = len(positions)
+        span = max(positions) - min(positions) if len(positions) > 1 else 0
+
+        # 全部关键词都匹配且紧邻 = 最高分
+        if matched == len(keywords) and span <= max_span:
+            return matched, 2
+        # 部分关键词匹配 = 中等分数（按匹配比例）
+        return matched, 1
+
     def format_results(self, nodes, docs, query, max_results=20):
         """格式化搜索结果"""
         if not nodes:
             print(f"\n[未找到包含 '{query}' 的结果]\n")
             return
 
+        # 使用 jieba 分词
+        query_words = self._tokenize_query(query)
+        if not query_words:
+            query_words = [w.strip() for w in query.split() if w.strip()]
+
+        # 构建 doc_id -> 文档节点的映射
+        doc_nodes_map = {}
+        for doc in docs:
+            doc_id = doc.get("doc_id", "")
+            doc_nodes_map[doc_id] = list(doc.get("nodes", []))
+
+        # 对每个文档，找到包含关键词且紧邻匹配最好的节点
+        doc_best: dict = {}  # doc_id -> (best_node, matched_count, proximity_score)
+        for node in nodes:
+            doc_id = node.get("doc_id", "")
+            if doc_id in doc_best:
+                continue  # 已处理过
+            all_nodes = doc_nodes_map.get(doc_id, [])
+            best_node = None
+            best_count = 0
+            best_proximity = 0
+            for n in all_nodes:
+                n_text = n.get("text", "") or ""
+                cnt, proximity = self._calc_proximity_score(n_text, query_words)
+                # 优先选择紧邻分数高，其次匹配词数多
+                if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
+                    best_count = cnt
+                    best_proximity = proximity
+                    best_node = n
+            if best_node and best_count > 0:
+                doc_best[doc_id] = (best_node, best_count, best_proximity)
+
+        # 过滤：至少匹配 2 个词，且 proximity >= 1
+        filtered = [(did, best_node, cnt, prox) for did, (best_node, cnt, prox) in doc_best.items() if cnt >= 2 and prox >= 1]
+
+        # 按紧邻分数降序，再按匹配词数降序
+        filtered.sort(key=lambda x: (-x[3], -x[2]))
+
         print(f"\n{'='*60}")
-        print(f"关键词: {query}  |  找到 {len(nodes)} 个匹配")
+        print(f"关键词: {query}  |  找到 {len(filtered)} 个匹配")
         print(f"{'='*60}")
 
-        for i, node in enumerate(nodes[:max_results], 1):
-            doc_id = node.get("doc_id", "")
-            node_id = node.get("node_id", "")
+        for i, item in enumerate(filtered[:max_results], 1):
+            doc_id, display_node, matched, prox = item
+            display_title = display_node.get("title", "")
+            display_text = display_node.get("text", "") or ""
+            display_line = display_node.get("line_start")
             path = self.path_map.get(doc_id, "")
-            score = node.get("score", 0)
-            title = node.get("title", "")
-
-            # 获取节点详细内容
-            text = ""
-            line_start = None
-            for doc in docs:
-                if doc.get("doc_id") == doc_id:
-                    for n in doc.get("nodes", []):
-                        if n.get("node_id") == node_id:
-                            text = n.get("text", "")
-                            line_start = n.get("line_start")
-                            break
-                    break
 
             # 输出结果
-            print(f"\n+-- [{i}] {self.hl(title[:55], query)}")
-            # 生成 VSCode 可点击超链接（包含行号）
-            file_link = self.make_vscode_link(path, line_start)
+            print(f"\n+-- [{i}] {self.hl(display_title[:55], query_words)}")
+            file_link = self.make_vscode_link(path, display_line)
             print(f"|    文件: {file_link}")
             print(f"|    {'-'*45}")
 
-            if text:
-                lines = text.split('\n')
-                query_lower = query.lower()
+            if display_text:
+                lines = display_text.split('\n')
 
-                # 找关键词行
-                keyword_idx = [j for j, l in enumerate(lines) if query_lower in l.lower()]
+                # 给每行计算包含几个关键词
+                line_keyword_counts = []
+                for j, l in enumerate(lines):
+                    l_lower = l.lower()
+                    cnt = sum(1 for w in query_words if w in l_lower)
+                    if cnt > 0:
+                        line_keyword_counts.append((cnt, j, l))
 
-                # 收集上下文（上下3行）
-                show_idx = set()
-                for idx in keyword_idx:
-                    show_idx.add(idx)
-                    for off in range(-3, 4):
-                        j = idx + off
-                        if 0 <= j < len(lines):
-                            show_idx.add(j)
+                if not line_keyword_counts:
+                    # 没有匹配行，显示前5行
+                    for j in range(min(5, len(lines))):
+                        line = lines[j].strip()
+                        if line:
+                            hl_line = self.hl(line, query_words)
+                            if len(hl_line) > 78:
+                                hl_line = hl_line[:75] + "..."
+                            print(f"|  >>> {hl_line}")
+                else:
+                    # 按包含关键词数降序排序
+                    line_keyword_counts.sort(key=lambda x: -x[0])
 
-                show_idx = sorted(show_idx)
+                    # 优先显示包含2+关键词的行
+                    best_lines = [(j, l) for cnt, j, l in line_keyword_counts if cnt >= 2]
+                    if not best_lines:
+                        # 没有2+关键词的行，显示包含1个关键词的（最多5行）
+                        best_lines = [(j, l) for cnt, j, l in line_keyword_counts[:5]]
 
-                for j in show_idx:
-                    line = lines[j].strip()
-                    if not line:
-                        continue
-                    hl_line = self.hl(line, query)
-                    if len(hl_line) > 78:
-                        hl_line = hl_line[:75] + "..."
-                    marker = ">>>" if j in keyword_idx else "   "
-                    print(f"|  {marker} {hl_line}")
+                    # 显示匹配行及其上下文（上下5行）
+                    context_lines = set()
+                    for j, l in best_lines[:3]:  # 最多3个匹配点
+                        for offset in range(-5, 6):
+                            idx = j + offset
+                            if 0 <= idx < len(lines):
+                                context_lines.add(idx)
+                    context_lines = sorted(context_lines)
 
-                if show_idx and len(lines) > max(show_idx) + 3:
-                    print(f"|    ... 还有 {len(lines) - max(show_idx) - 1} 行")
+                    for j in context_lines:
+                        line = lines[j].strip()
+                        if not line:
+                            continue
+                        hl_line = self.hl(line, query_words)
+                        if len(hl_line) > 78:
+                            hl_line = hl_line[:75] + "..."
+                        is_match = any(j == bj for bj, _ in best_lines)
+                        marker = ">>>" if is_match else "   "
+                        print(f"|  {marker} {hl_line}")
 
-            print(f"|    评分: {score:.4f}")
+            print(f"|    匹配: {matched}/{len(query_words)} 词")
 
         print()
 

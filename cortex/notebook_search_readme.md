@@ -172,20 +172,20 @@ python -m cortex
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `DEFAULT_SEARCH_PATH` | `E:/github/notebook` | 搜索路径 |
-| `DEFAULT_INDEX_PATH` | `./index.db` | 索引文件路径 |
+| `DEFAULT_INDEX_PATH` | `~/.cortex/index.db` | 索引文件路径 |
 
 修改配置文件位置：
 ```python
 # 在 notebook_search.py 中
 DEFAULT_SEARCH_PATH = "你的笔记本目录路径"
-DEFAULT_INDEX_PATH = "./你的索引文件路径.db"
+DEFAULT_INDEX_PATH = "~/.cortex/你的索引文件路径.db"
 ```
 
 ## 索引管理
 
 ### 索引位置
 
-索引文件默认保存在 `./index.db`
+索引文件默认保存在 `~/.cortex/index.db`
 
 ### 强制重建索引
 
