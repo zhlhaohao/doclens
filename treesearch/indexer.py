@@ -1258,16 +1258,11 @@ async def build_index(
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
-    # Pre-compute unique doc_ids: basename for unique files, basename_pathhash for collisions
-    from collections import Counter
-    _base_names = [os.path.splitext(os.path.basename(fp))[0] for fp in expanded]
-    _name_counts = Counter(_base_names)
+    # Pre-compute deterministic doc_ids: basename + path hash (always, for determinism)
     _base_dir = os.path.dirname(os.path.abspath(db_path)) if db_path else os.getcwd()
 
     def _doc_id_for(fp):
         base = os.path.splitext(os.path.basename(fp))[0]
-        if _name_counts[base] == 1:
-            return base
         rel = os.path.relpath(os.path.abspath(fp), _base_dir)
         h = hashlib.md5(rel.encode()).hexdigest()[:8]
         return f"{base}_{h}"
@@ -1443,8 +1438,13 @@ async def build_index(
     documents = []
 
     # Batch load all skipped documents in one query (instead of N individual loads)
+    # Key by source_path (unique and stable) instead of doc_id (may change)
     if skipped:
-        all_docs_from_db = {d.doc_id: d for d in fts.load_all_documents()}
+        all_docs_from_db = {
+            d.metadata.get("source_path", ""): d
+            for d in fts.load_all_documents()
+            if d.metadata.get("source_path")
+        }
     else:
         all_docs_from_db = {}
 
@@ -1489,8 +1489,9 @@ async def build_index(
                 docs_since_optimize = 0
             logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
         else:
-            # Skipped file: use batch-loaded docs
-            doc = all_docs_from_db.get(name)
+            # Skipped file: use batch-loaded docs (lookup by source_path, not doc_id)
+            abs_fp = os.path.abspath(fp)
+            doc = all_docs_from_db.get(abs_fp)
             if doc is None:
                 logger.warning("Skipped file %s but document not found in DB, re-indexing", fp)
                 _save_bar.update()
