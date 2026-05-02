@@ -1,0 +1,52 @@
+"""
+Cortex 配置模块 - 从 .env 文件或环境变量加载配置
+"""
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+from pathlib import Path
+from typing import Optional
+import os
+
+
+class CortexConfig(BaseSettings):
+    """Cortex 配置模型"""
+
+    # 搜索路径
+    search_path: str = Field(default_factory=lambda: os.getcwd())
+
+    # 索引路径（默认 None，会在代码中拼接为 {search_path}/.cortex/index.db）
+    index_path: Optional[str] = None
+
+    # 搜索参数
+    max_results: int = Field(default=20)
+    max_nodes_per_doc: int = Field(default=5)
+    top_k_docs: int = Field(default=100)
+
+    # 匹配参数
+    max_span: int = Field(default=20)
+    min_keyword_match: int = Field(default=2)
+
+    # 分词器
+    cjk_tokenizer: str = Field(default="jieba")
+
+    # Planify / Agent 配置
+    planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
+    planify_model_id: str = Field(default="claude-opus-4-6", alias="PLANIFY_MODEL_ID")
+    planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
+
+    @classmethod
+    def load(cls) -> "CortexConfig":
+        """从 .cortex/.env 加载配置，失败则降级到环境变量"""
+        env_path = Path(os.getcwd()) / ".cortex" / ".env"
+
+        if env_path.exists():
+            return cls(_env_file=str(env_path), _env_file_encoding="utf-8")
+
+        # 降级到环境变量
+        return cls(_env_file=None)
+
+    class Config:
+        env_prefix = "CORTEX_"
+        env_file = None  # 初始为 None，运行时动态设置
+        populate_by_name = True  # 允许使用 alias 填充字段

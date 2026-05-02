@@ -3,12 +3,26 @@
   "configurations": [
     {
       "name": "Cortex (notebook)",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "module": "cortex",
       "cwd": "${workspaceFolder}/../notebook",
       "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Planify CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/planify/cli.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "TERM": "xterm-256color"
+      }
     }
   ]
 }

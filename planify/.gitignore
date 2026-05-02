@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.env
+.env.local
+.env.*.local
+venv/
+.venv/
+venv37/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Planify session data
+.planify/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if any frontend deps)
+node_modules/
+
+# Build outputs
+backend/app/__pycache__/

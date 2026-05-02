@@ -16,18 +16,88 @@ NotebookSearch CLI - 交互式全文检索工具
 import sys
 import os
 import re
-import io
-
-# 强制 UTF-8 输出
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+from pathlib import Path
 
 from treesearch import TreeSearch, set_config, TreeSearchConfig
+from cortex.config import CortexConfig
 
-# 配置
-DEFAULT_INDEX_PATH = os.path.join(os.getcwd(), ".cortex", "index.db")
-DEFAULT_SEARCH_PATH = os.getcwd()
+
+# ============================================================================
+# 直接控制台输入（绕过 Python stdin 管道，修复 VSCode 调试器下 input() 无法输入的问题）
+# 与 Planify CLI 的 input_with_history 采用相同的 msvcrt.getch() 方式
+# ============================================================================
+
+def _direct_input(prompt: str) -> str:
+    """使用 msvcrt 直接读取控制台输入（Windows），Unix 下回退到 input()"""
+    if sys.platform != 'win32':
+        return input(prompt)
+
+    import msvcrt
+
+    buf = ""
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    while True:
+        raw = msvcrt.getch()
+        b = raw[0] if isinstance(raw, bytes) else ord(raw)
+
+        # Enter
+        if b in (13, 10):
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+            return buf
+
+        # Ctrl+C
+        if b == 3:
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+            raise KeyboardInterrupt
+
+        # Ctrl+Z (EOF)
+        if b == 26:
+            if not buf:
+                raise EOFError
+            continue
+
+        # Backspace
+        if b == 8:
+            if buf:
+                buf = buf[:-1]
+                sys.stdout.write('\b \b')
+                sys.stdout.flush()
+            continue
+
+        # 特殊键前缀（方向键、功能键）
+        if b in (0, 0xe0):
+            msvcrt.getch()  # 消耗第二个字节
+            continue
+
+        # ASCII 可打印字符
+        if 32 <= b <= 126:
+            ch = chr(b)
+        else:
+            # 非 ASCII：UTF-8 多字节序列
+            char_bytes = bytes([b])
+            if 0xC0 <= b <= 0xDF:
+                n = 1
+            elif 0xE0 <= b <= 0xEF:
+                n = 2
+            elif 0xF0 <= b <= 0xF7:
+                n = 3
+            else:
+                continue  # 忽略无效字节
+            for _ in range(n):
+                cont = msvcrt.getch()
+                char_bytes += cont if isinstance(cont, bytes) else bytes([ord(cont)])
+            try:
+                ch = char_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                continue
+
+        buf += ch
+        sys.stdout.write(ch)
+        sys.stdout.flush()
 
 # 高亮
 HL_START = "\033[1;31m"
@@ -85,11 +155,24 @@ class NotebookSearchCLI:
     """NotebookSearch 交互式 CLI"""
 
     def __init__(self):
-        self.search_path = DEFAULT_SEARCH_PATH
-        self.index_path = DEFAULT_INDEX_PATH
+        # 加载配置
+        config = CortexConfig.load()
+
+        self.search_path = config.search_path
+        self.index_path = config.index_path or os.path.join(self.search_path, ".cortex", "index.db")
+        self.max_results = config.max_results
+        self.max_nodes_per_doc = config.max_nodes_per_doc
+        self.top_k_docs = config.top_k_docs
+        self.max_span = config.max_span
+        self.min_keyword_match = config.min_keyword_match
+        self.cjk_tokenizer = config.cjk_tokenizer
+
         self.ts = None
         self.path_map = {}
-        self.max_results = 20
+
+        # Agent 相关（延迟初始化）
+        self.agent = None
+        self._agent_history = []
 
     # ---- 索引管理 ----
 
@@ -99,7 +182,7 @@ class NotebookSearchCLI:
             return True
 
         # 设置 CJK 分词为 bigram（字符二元组，减少单字符匹配）
-        set_config(TreeSearchConfig(cjk_tokenizer="jieba"))
+        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
         self.ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
@@ -155,8 +238,8 @@ class NotebookSearchCLI:
         result = self.ts.search(
             query=query,
             max_results=max_results,
-            max_nodes_per_doc=5,
-            top_k_docs=100,
+            max_nodes_per_doc=self.max_nodes_per_doc,
+            top_k_docs=self.top_k_docs,
         )
 
         return result.get("flat_nodes", []), result.get("documents", [])
@@ -407,6 +490,24 @@ class NotebookSearchCLI:
 
         print()
 
+    # ---- Agent 支持 ----
+
+    def _ensure_agent(self):
+        """确保 Agent 已初始化"""
+        if self.agent is None:
+            from cortex.agent_integration import CortexAgent
+            self.agent = CortexAgent(Path(self.search_path)).initialize()
+
+    def cmd_ai(self, arg: str):
+        """AI 对话命令"""
+        self._ensure_agent()
+        self._agent_history = self.agent.run_query(arg, self._agent_history)
+
+    def cmd_compact(self):
+        """压缩历史"""
+        self._ensure_agent()
+        _, self._agent_history = self.agent.handle_slash_command("compact", "", self._agent_history)
+
     # ---- 斜杠命令 ----
 
     def cmd_help(self):
@@ -424,9 +525,19 @@ class NotebookSearchCLI:
 ║                    NotebookSearch 斜杠命令                    ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  搜索命令                                                      ║
-║    <关键词>          直接搜索（如：python 存款）                 ║
-║    /s <关键词>       搜索（等同于直接输入）                     ║
+║    /s <关键词>       搜索                                      ║
 ║    /search <关键词>  搜索                                       ║
+║                                                              ║
+║  AI 命令                                                      ║
+║    /ai <消息>        与 LLM Agent 对话                         ║
+║    /llm <消息>       与 LLM Agent 对话（等同于 /ai）           ║
+║    /compact          压缩对话历史                              ║
+║    /tasks            显示任务列表                               ║
+║    /team             显示团队列表                               ║
+║    /inbox            显示收件箱                                 ║
+║                                                              ║
+║  默认输入（无斜杠前缀）                                        ║
+║    <自然语言消息>   交给 Agent 处理                            ║
 ║                                                              ║
 ║  索引命令                                                      ║
 ║    /index            重建索引                                   ║
@@ -553,15 +664,21 @@ class NotebookSearchCLI:
         if not line:
             return None
 
-        # 斜杠命令
+        # 中文顿号转斜杠
+        if line.startswith('、'):
+            line = '/' + line[1:]
+
         if line.startswith('/'):
             parts = line[1:].split(maxsplit=1)
+            if not parts or not parts[0]:
+                print("[提示] 命令不完整")
+                return None
             cmd = parts[0].lower()
             arg = parts[1] if len(parts) > 1 else ""
             return (cmd, arg)
 
-        # 非斜杠开头 - 拒绝处理，提示用户使用斜杠命令
-        return ('unknown', line)
+        # 无斜杠前缀 -> Agent 对话
+        return ('ai', line)
 
     def run(self):
         """运行交互式会话"""
@@ -581,7 +698,7 @@ class NotebookSearchCLI:
 
         while True:
             try:
-                user_input = input("> ").strip()
+                user_input = _direct_input("> ").strip()
 
                 if not user_input:
                     continue
@@ -613,7 +730,7 @@ class NotebookSearchCLI:
                         nodes, docs = self.do_search(arg)
                         self.format_results(nodes, docs, arg)
                     else:
-                        print("[提示] 用法: /search <关键词>")
+                        print("[提示] 用法: /s <关键词>")
 
                 elif cmd in ('set', 'n'):
                     if arg:
@@ -624,12 +741,26 @@ class NotebookSearchCLI:
                 elif cmd in ('clear', 'cls', 'cl'):
                     self.cmd_clear()
 
-                elif cmd == 'unknown':
-                    print("[提示] 直接输入文字已禁用，请使用 /s <关键词> 或 /search <关键词> 进行搜索")
+                # AI 命令
+                elif cmd in ('ai', 'llm', 'agent'):
+                    if arg:
+                        self.cmd_ai(arg)
+                    else:
+                        print("[提示] 用法: /ai <消息>")
+
+                elif cmd in ('compact',):
+                    self.cmd_compact()
+
+                elif cmd in ('tasks', 'team', 'inbox'):
+                    self._ensure_agent()
+                    _, self._agent_history = self.agent.handle_slash_command(cmd, "", self._agent_history)
 
                 else:
-                    # 当作搜索处理（已禁用）
-                    print("[提示] 请使用 /s <关键词> 或 /search <关键词> 进行搜索")
+                    # 非斜杠输入默认交给 Agent
+                    if cmd == 'ai' and not arg:
+                        print("[提示] 用法: /ai <消息> 或直接输入文字与 Agent 对话")
+                    else:
+                        print(f"[提示] 未知命令: /{cmd}")
 
             except KeyboardInterrupt:
                 print("\n\n再见!")
