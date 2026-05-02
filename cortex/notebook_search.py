@@ -26,8 +26,8 @@ if sys.platform == 'win32':
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 
 # 配置
-DEFAULT_INDEX_PATH = os.path.join(os.path.expanduser("~"), ".cortex", "index.db")
-DEFAULT_SEARCH_PATH = "E:/github/notebook"
+DEFAULT_INDEX_PATH = os.path.join(os.getcwd(), ".cortex", "index.db")
+DEFAULT_SEARCH_PATH = os.getcwd()
 
 # 高亮
 HL_START = "\033[1;31m"
@@ -560,8 +560,8 @@ class NotebookSearchCLI:
             arg = parts[1] if len(parts) > 1 else ""
             return (cmd, arg)
 
-        # 直接搜索
-        return ('search', line)
+        # 非斜杠开头 - 拒绝处理，提示用户使用斜杠命令
+        return ('unknown', line)
 
     def run(self):
         """运行交互式会话"""
@@ -624,10 +624,12 @@ class NotebookSearchCLI:
                 elif cmd in ('clear', 'cls', 'cl'):
                     self.cmd_clear()
 
+                elif cmd == 'unknown':
+                    print("[提示] 直接输入文字已禁用，请使用 /s <关键词> 或 /search <关键词> 进行搜索")
+
                 else:
-                    # 当作搜索处理
-                    nodes, docs = self.do_search(user_input)
-                    self.format_results(nodes, docs, user_input)
+                    # 当作搜索处理（已禁用）
+                    print("[提示] 请使用 /s <关键词> 或 /search <关键词> 进行搜索")
 
             except KeyboardInterrupt:
                 print("\n\n再见!")
