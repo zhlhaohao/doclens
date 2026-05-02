@@ -65,7 +65,7 @@ Issues = "https://github.com/shibing624/TreeSearch/issues"
 treesearch = "treesearch.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["treesearch*"]
+include = ["treesearch*", "cortex*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
