@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Cortex (notebook)",
+      "name": "Cortex CLI",
       "type": "debugpy",
       "request": "launch",
       "module": "cortex",

@@ -23,6 +23,30 @@ from cortex.config import CortexConfig
 
 
 # ============================================================================
+# 编码设置（必须在 _direct_input 之前执行）
+# 将控制台代码页设为 UTF-8 (65001)，使 msvcrt.getch() 返回 UTF-8 字节
+# ============================================================================
+
+def _setup_console_encoding():
+    """设置控制台为 UTF-8 模式"""
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleCP(65001)
+        kernel32.SetConsoleOutputCP(65001)
+    except Exception:
+        pass
+    # 重新配置 Python stdio 为 UTF-8
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+
+_setup_console_encoding()
+
+
+# ============================================================================
 # 直接控制台输入（绕过 Python stdin 管道，修复 VSCode 调试器下 input() 无法输入的问题）
 # 与 Planify CLI 的 input_with_history 采用相同的 msvcrt.getch() 方式
 # ============================================================================
@@ -218,13 +242,27 @@ class NotebookSearchCLI:
                     self.path_map[doc.doc_name] = path
 
     def reindex(self, force=False):
-        """重建索引"""
-        if force and os.path.exists(self.index_path):
-            os.remove(self.index_path)
-            print(f"[已删除旧索引]")
-        self.ts = None
-        self.load_or_build_index()
-        print(f"[索引已更新: {len(self.ts.documents)} 个文档]")
+        """增量更新索引（force=True 时全量重建）"""
+        if self.ts is None:
+            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
+            self.ts = TreeSearch(db_path=self.index_path)
+
+        mode = "全量重建" if force else "增量更新"
+        print(f"[正在{mode}: {self.search_path}]")
+        self.ts.index(self.search_path, force=force)
+        self._build_path_map()
+
+        # 展示增量统计
+        stats = self.ts.get_index_stats()
+        if stats:
+            print(f"[{mode}完成: "
+                  f"{stats.indexed_files} 个文件已索引, "
+                  f"{stats.skipped_files} 个未变更, "
+                  f"{len(stats.pruned_paths)} 个已清理 | "
+                  f"共 {len(self.ts.documents)} 个文档, "
+                  f"{stats.total_time_s:.2f}s]")
+        else:
+            print(f"[索引已更新: {len(self.ts.documents)} 个文档]")
 
     # ---- 搜索 ----
 
