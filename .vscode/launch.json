@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Cortex (notebook)",
+      "type": "python",
+      "request": "launch",
+      "module": "cortex",
+      "cwd": "${workspaceFolder}/../notebook",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "console": "integratedTerminal"
+    }
+  ]
+}
