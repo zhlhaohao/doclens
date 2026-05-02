@@ -36,7 +36,8 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
         line_num = len(lines) + 1
         lines.append(text)
 
-        style_name = (para.style.name or "").lower()
+        style_name = (para.style.name if para.style else "") or ""
+        style_name = style_name.lower()
         if style_name.startswith("heading"):
             # Extract heading level from style name (e.g. "Heading 1" -> 1)
             try:

@@ -767,6 +767,21 @@ def _json_to_nodes(data, prefix: str = "", level: int = 1) -> list[dict]:
     return nodes
 
 
+def _load_json_lenient(raw: str):
+    """Load JSON tolerantly: handle control characters, comments, and trailing commas."""
+    # First try with strict=False to tolerate control characters
+    try:
+        return json.loads(raw, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Strip trailing commas before } or ]
+    stripped = re.sub(r',\s*([}\]])', r'\1', raw)
+    # Strip // comments, but preserve // inside quoted strings (e.g. URLs)
+    stripped = re.sub(r'("(?:[^"\\]|\\.)*")|//[^\n]*', r'\1', stripped)
+    return json.loads(stripped, strict=False)
+
+
 async def json_to_tree(
     json_path: str,
     *,
@@ -779,8 +794,26 @@ async def json_to_tree(
 ) -> dict:
     """Build a tree index from a JSON file."""
     with open(json_path, "r", encoding="utf-8", errors="replace") as f:
-        data = json.load(f)
+        raw = f.read()
     doc_name = os.path.splitext(os.path.basename(json_path))[0]
+
+    try:
+        data = _load_json_lenient(raw)
+    except (json.JSONDecodeError, ValueError):
+        # JSON 解析失败，降级为纯文本
+        logger.debug("JSON parse failed for %s, falling back to text", json_path)
+        result = await text_to_tree(
+            text_content=raw,
+            if_add_node_summary=if_add_node_summary,
+            summary_chars_threshold=summary_chars_threshold,
+            if_add_doc_description=if_add_doc_description,
+            if_add_node_text=if_add_node_text,
+            if_add_node_id=if_add_node_id,
+            **kwargs,
+        )
+        result["doc_name"] = doc_name
+        result["source_path"] = os.path.abspath(json_path)
+        return result
 
     flat_nodes = _json_to_nodes(data)
     if not flat_nodes:
@@ -1225,6 +1258,22 @@ async def build_index(
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
+    # Pre-compute unique doc_ids: basename for unique files, basename_pathhash for collisions
+    from collections import Counter
+    _base_names = [os.path.splitext(os.path.basename(fp))[0] for fp in expanded]
+    _name_counts = Counter(_base_names)
+    _base_dir = os.path.dirname(os.path.abspath(db_path)) if db_path else os.getcwd()
+
+    def _doc_id_for(fp):
+        base = os.path.splitext(os.path.basename(fp))[0]
+        if _name_counts[base] == 1:
+            return base
+        rel = os.path.relpath(os.path.abspath(fp), _base_dir)
+        h = hashlib.md5(rel.encode()).hexdigest()[:8]
+        return f"{base}_{h}"
+
+    _fp_to_doc_id = {fp: _doc_id_for(fp) for fp in expanded}
+
     # Resolve prune policy: full-scope walks default to pruning orphans.
     explicit_prune = prune is not None
     if prune is None:
@@ -1275,7 +1324,7 @@ async def build_index(
             if old_path and old_path != abs_fp and not os.path.isfile(old_path):
                 moved_doc_id = fts.get_doc_id_by_source_path(old_path)
                 if moved_doc_id:
-                    new_doc_id = os.path.splitext(os.path.basename(abs_fp))[0]
+                    new_doc_id = _fp_to_doc_id.get(fp, os.path.splitext(os.path.basename(abs_fp))[0])
                     # Keep doc identity aligned with the new basename so that
                     # the skipped-doc backfill below (keyed by basename) and
                     # any caller looking the doc up by name after build_index
@@ -1346,7 +1395,8 @@ async def build_index(
     _failed_paths: list[str] = []
 
     # Progress bar for parsing stage
-    _parse_bar = tqdm(total=len(to_index), desc="Parsing", unit="file", dynamic_ncols=True)
+    _parse_bar = tqdm(total=len(to_index), desc="Parsing", unit="file",
+                      dynamic_ncols=True, disable=not to_index)
 
     async def _index_one(fp: str) -> dict | None:
         async with semaphore:
@@ -1400,16 +1450,18 @@ async def build_index(
 
     # Progress bar for Indexing stage (batch commit every N files to reduce fsync)
     _COMMIT_BATCH = 500
-    _save_bar = tqdm(total=len(expanded), desc="Indexing", unit="file", dynamic_ncols=True)
+    _has_work = bool(result_map)
+    _save_bar = tqdm(total=len(expanded), desc="Indexing", unit="file",
+                     dynamic_ncols=True, disable=not _has_work)
     _pending_commits = 0
     # Aggregate node-level diff stats across all reindexed docs.
     diff_totals = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
     optimize_threshold = cfg.auto_optimize_threshold
     docs_since_optimize = 0
     for fp in expanded:
-        name = os.path.splitext(os.path.basename(fp))[0]
-        _save_bar.set_postfix_str(os.path.basename(fp), refresh=False)
+        name = _fp_to_doc_id[fp]
         if fp in result_map:
+            _save_bar.set_postfix_str(os.path.basename(fp), refresh=False)
             result = result_map[fp]
             doc = Document(
                 doc_id=name,
