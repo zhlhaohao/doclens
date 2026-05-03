@@ -573,7 +573,7 @@ class NotebookSearchCLI:
                 elif cmd in ('search', 's'):
                     if arg:
                         nodes, docs = self.do_search(arg)
-                        self.format_results(nodes, docs, arg)
+                        self.format_results(nodes, docs, arg, max_results=self.max_results)
                     else:
                         print("[提示] 用法: /s <关键词>")
 
