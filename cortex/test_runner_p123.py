@@ -302,7 +302,7 @@ def run_all():
     try:
         os.rename(src_dir, dst_dir)
         output_reindex = capture_stdout(lambda: cli.reindex(force=False))
-        output_search = search("Docker 容器编排")
+        output_search = search("Docker Kubernetes")
         has_new = "开发指南" in output_search
         add_result("INDEX-009", "子目录改名", "P1",
                    "✅ 通过" if has_new else "❌ 未通过",
