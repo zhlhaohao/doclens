@@ -1,0 +1,186 @@
+[
+  {
+    "id": "INDEX-001",
+    "name": "首次启动自动构建索引",
+    "conclusion": "✅ 通过",
+    "output": "[正在构建索引: E:\\github\\TreeSearch\\test_work_dir]\n[索引完成: 61 个文档]\n",
+    "reason": "构建=True, 完成=True, 文档数=61",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-002",
+    "name": "二次启动加载已有索引",
+    "conclusion": "✅ 通过",
+    "output": "输出: ''\n文档数1=61, 文档数2=61",
+    "reason": "未重建=True, 文档一致=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-001",
+    "name": "FTS5 BM25 中文搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 神经网络  |  找到 3 个匹配\n============================================================\n\n+-- [1] 人工智能前沿突破\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:24\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:24\u001b]8;;\u0007\n|    ---------------------------------------------\n|      # 人工智能前沿突破\n|      AI与量子融合：算力与能耗逼近人类极限\n|      Google+Oratomic: AI辅助量子可能提前破解加密\n|  >>> 可解释AI：\u001b[1;31m神经网络\u001b[0m量子态+张量网络+生成模型\n|      脑机接口：首次让患者有感情地说话唱歌\n|      中国研发经费投入强度达2.8%，超OECD平均\n|      <!-- Slide number: 5 -->\n|    评分: 53% | 匹配: 1/1 词\n\n+-- [2] 7.1 PyTorch 基础\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/编程/Python数据科学与机器学习指南.md:219\u0007E:/github/TreeSearch/test_work_dir/编程/Python数据科学与机器学习指南.md:219\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ```python\n|      import torch\n|      import torch.nn as nn\n|  >>> # 定义简单\u001b[1;31m神经网络\u001b[0m\n|      class SimpleNet(nn.Module):\n|      def __init__(self, input_size, hidden_size, num_classes):\n|      super().__init__()\n|      self.fc1 = nn.Linear(input_size, hidden_size)\n|      self.relu = nn.ReLU()\n|    评分: 53% | 匹配: 1/1 词\n\n+-- [3] 2.2 可解释 AI 研究\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:31\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:31\u001b]8;;\u0007\n|    ---------------------------------------------\n|      2.2 可解释 AI 研究\n|      国家自然科学基金委员会启动了“可解释、可通用的下一代人工智能方法”重大研究计划，围绕：\n|  >>> 构建融合\u001b[1;31m神经网络\u001b[0m量子态、张量网络与生成模型的新型计算框架\n|      突破高精度、大规模与长时间演化的技术瓶颈\n|      实现AI决策过程的可解释性\n|    评分: 53% | 匹配: 1/1 词\n\n",
+    "reason": "有结果=True, 高亮=True, 评分=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-002",
+    "name": "FTS5 BM25 英文搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: transformer  |  找到 2 个匹配\n============================================================\n\n+-- [1] 2. AI驱动安全运营\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/2025网络安全趋势报告.html:185\u0007E:/github/TreeSearch/test_work_dir/科技/2025网络安全趋势报告.html:185\u001b]8;;\u0007\n|    ---------------------------------------------\n|      用户实体行为分析（UEBA）误报率降低92%\n|      安全编排自动化响应（SOAR）平均响应时间缩短至12分钟\n|  >>> 威胁情报\u001b[1;31mTransformer\u001b[0m模型对APT组织归属准确率达89%\n|      AI自动化漏洞评估和修复优先级排序\n|    评分: 53% | 匹配: 1/1 词\n\n+-- [2] 威胁情报\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/网络安全与AI防御2025威胁态势.md:32\u0007E:/github/TreeSearch/test_work_dir/科技/网络安全与AI防御2025威胁态势.md:32\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ### 威胁情报\n|  >>> AI系统可实时分析全球数十亿条威胁情报数据，预测攻击趋势。基于\u001b[1;31mTransformer\u001b[0m架构的威胁情报分析模型在APT（高级持续性威胁）组织归属任务中达到...\u001b[0m\n|    评分: 53% | 匹配: 1/1 词\n\n",
+    "reason": "有结果=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-009",
+    "name": "大小写不敏感搜索",
+    "conclusion": "✅ 通过",
+    "output": "python(4):\n\n============================================================\n关键词: python  |  找到 4 个匹配\n============================================================\n\n+-- [1] 1.1 安装 \u001b[1;31mPython\u001b[0m\n|    文件: \u001b]8;;vsco\nPython(4):\n\n============================================================\n关键词: Python  |  找到 4 个匹配\n============================================================\n\n+-- [1] 1.1 安装 \u001b[1;31mPython\u001b[0m\n|    文件: \u001b]8;;vsco\nasyncio:\n\n============================================================\n关键词: asyncio  |  找到 1 个匹配\n============================================================\n\n+-- [1] Python Async Programming Guide: Mastering \nkubernetes:\n\n============================================================\n关键词: kubernetes  |  找到 1 个匹配\n============================================================\n\n+-- [1] Helm: The \u001b[1;31mKubernetes\u001b[0m Package",
+    "reason": "python=4, Python=4, asyncio=True, kubernetes=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-001",
+    "name": "Markdown (.md) 搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 半固态电池 量产  |  找到 5 个匹配\n============================================================\n\n+-- [1] 半\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m率先\u001b[1;31m量产\u001b[0m\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:18\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:18\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ## 半\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m率先\u001b[1;31m量产\u001b[0m\n|  >>> 蔚来汽车在2025年底发布的ET7 150kWh半\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m版成为行业标杆。该\u001b[1;31m电池\u001b[0m采用原位固化技术，电解质中\u001b[1;31m固态\u001b[0m成分占比超过90%，能量密度达到360W...\u001b[0m\n|  >>> 卫蓝新能源为蔚来供应的这款半\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m的关键参数：\n|      | 参数 | 数值 |\n|      |------|------|\n|      | 额定容量 | 150 kWh |\n|      | 电芯能量密度 | 360 Wh/kg |\n|    评分: 87% | 匹配: 3/3 词\n\n+-- [2] 四、商业化进度对比\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:244\u0007E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:244\u001b]8;;\u0007\n|    ---------------------------------------------\n|      维度\n|      液态锂\u001b[1;31m电池\u001b[0m\n|  >>> \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m\n|      钠离子\u001b[1;31m电池\u001b[0m\n|      \u001b[1;31m量产\u001b[0m状态\n|      大规模\u001b[1;31m量产\u001b[0m（全球产能>3TWh）\n|  >>> 半\u001b[1;31m固态\u001b[0m已\u001b[1;31m量产\u001b[0m，全\u001b[1;31m固态\u001b[0m2027-2028\n|      小规模\u001b[1;31m量产\u001b[0m（<50GWh）\n|      已装车车型\n|    评分: 62% | 匹配: 3/3 词\n\n+-- [3] \u001b[1;31m量产\u001b[0m进展\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:21\u0007E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:21\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ### \u001b[1;31m量产\u001b[0m进展\n|  >>> - 蔚来ET7 150kWh半\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m版交付，续航1100公里\n|  >>> - 智己L6搭载光年\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m，能量密度达到300Wh/kg以上\n|  >>> - 广汽埃安宣布全\u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m将于2026年装车，能量密度400Wh/kg\n|    评分: 59% | 匹配: 3/3 词\n\n+-- [4] 1.1 主流\u001b[1;31m电池\u001b[0m技术路线\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/太阳能与风能技术详解.html:18\u0007E:/github/TreeSearch/test_work_dir/能源环境/太阳能与风能技术详解.html:18\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 1.1 主流\u001b[1;31m电池\u001b[0m技术路线\n|      技术路线\n|  >>> \u001b[1;31m量产\u001b[0m效率\n|      实验室记录\n|      成本（元/W）\n|    评分: 48% | 匹配: 2/3 词\n\n+-- [5] 光伏产业领跑全球\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/中国可再生能源突破性进展.md:15\u0007E:/github/TreeSearch/test_work_dir/能源环境/中国可再生能源突破性进展.md:15\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ## 光伏产业领跑全球\n|  >>> 中国光伏产业继续保持全球绝对领先地位。2025年，中国光伏组件产量占全球总产量的85%以上。技术层面，钙钛矿-硅叠层\u001b[1;31m电池\u001b[0m效率突破33.9%，创下新的世...\u001b[0m\n|      分布式光伏成为新增长引擎，户用光伏累计装机超过3亿千瓦，惠及超过800万农村家庭。\"光伏+农业\"、\"光伏+渔业\"等复合模式在全国广泛推广。\n|    评分: 42% | 匹配: 2/3 词\n\n",
+    "reason": "有结果=True, 命中文件=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-002",
+    "name": "HTML (.html) 搜索",
+    "conclusion": "✅ 通过",
+    "output": "=== 钠离子 ===\n\n============================================================\n关键词: 钠离子 电解质  |  找到 1 个匹配\n============================================================\n\n+-- [1] 固态电池\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:5\u0007E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:5\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ...锂离子电池、代表未来的固态电池、以及作为补充方案的\u001b[1;31m钠离子\u001b[0m电池。本页面对三种技术进行全面对比分析。...\u001b[0m\n|      固态电池\n|      核心特征：\n|  >>> 固体\u001b[1;31m电解质\u001b[0m替代液体\u001b[1;31m电解质\u001b[0m\n|      发展阶段：\n|      半固态已量产，全固态2027年\n|      领先企业：\n|    评分: 54% | 匹配: 2/2 词\n\n\n=== 固态 vs 液态 ===\n\n============================================================\n关键词: 固态 vs 液态  |  找到 2 个匹配\n============================================================\n\n+-- [1] 电动车电池技术对比：\u001b[1;31m固态\u001b[0m \u001b[1;31mvs\u001b[0m \u001b[1;31m液态\u001b[0m \u001b[1;31mvs\u001b[0m 钠离子\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u0007E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 电动车电池技术对比：\u001b[1;31m固态\u001b[0m \u001b[1;31mvs\u001b[0m \u001b[1;31m液态\u001b[0m \u001b[1;31mvs\u001b[0m 钠离子\n|    评分: 72% | 匹配: 3/3 词\n\n+-- [2] 技术挑战与突破方向\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:55\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:55\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ## 技术挑战与突破方向\n|      全\u001b[1;31m固态\u001b[0m电池仍面临三大核心挑战：\n|  >>> 1. **固-固界面接触**：电极与\u001b[1;31m固态\u001b[0m电解质之间的界面阻抗是\u001b[1;31m液态\u001b[0m电池的10-100倍。解决方案包括引入柔性界面层和热压成型工艺。\n|      2. **锂枝晶穿透**：金属锂负极在充放电过程中产生的枝晶可穿透\u001b[1;31m固态\u001b[0m电解质导致短路。哈佛大学开发的多层结构设计可将临界电流密度提升至10mA/cm²。\n|  >>> 3. **规模化制备成本**：当前全\u001b[1;31m固态\u001b[0m电池的制造成本是\u001b[1;31m液态\u001b[0m锂电池的3-5倍。干法电极技术和卷对卷生产工艺有望将成本降低50%以上。\n|    评分: 49% | 匹配: 2/3 词\n\n",
+    "reason": "有结果=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-003",
+    "name": "PDF (.pdf) 搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: McKinsey Quantum Technology Monitor  |  找到 3 个匹配\n============================================================\n\n+-- [1] 3. Investment & Commercialization\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:43\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:43\u001b]8;;\u0007\n|    ---------------------------------------------\n|      3. Investment & Commercialization\n|  >>> \u001b[1;31mMcKinsey\u001b[0m \u001b[1;31mQuantum\u001b[0m \u001b[1;31mTechnology\u001b[0m \u001b[1;31mMonitor\u001b[0m 2025 reports record investment levels:\n|      Direction\n|      Share\n|      Description\n|      \u001b[1;31mQuantum\u001b[0m Hardware\n|      ~45%\n|    评分: 59% | 匹配: 4/4 词\n\n+-- [2] 3.1 创纪录的投资规模\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:39\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:39\u001b]8;;\u0007\n|    ---------------------------------------------\n|      3.1 创纪录的投资规模\n|  >>> \u001b[1;31mMcKinsey\u001b[0m 发布的 \u001b[1;31mQuantum\u001b[0m \u001b[1;31mTechnology\u001b[0m \u001b[1;31mMonitor\u001b[0m 2025 报告显示，量子技术领域的投资达到了创纪录的水平。主要投资方向包括：\n|    评分: 53% | 匹配: 4/4 词\n\n+-- [3] Global Competitive Landscape\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/solid_state_ev_2026.md:105\u0007E:/github/TreeSearch/test_work_dir/能源环境/solid_state_ev_2026.md:105\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ## Global Competitive Landscape\n|  >>> | Company | \u001b[1;31mTechnology\u001b[0m | Timeline | Key Metric |\n|      |---------|-----------|----------|------------|\n|      | Toyota | Sulfide solid-state | 2027 | 500 Wh/kg, 1200 km range |\n|      | Samsung SDI | Oxide solid-state | 2027 | 900 Wh/L volumetric |\n|      | CATL | Sulfide + composite | 2028 | 500 Wh/kg mass production |\n|  >>> | \u001b[1;31mQuantum\u001b[0mScape | Oxide ceramic | 2026 | 380 Wh/kg, 800+ cycles |\n|      | Solid Power | Sulfide electrolyte | 2027 | Licensed to BMW and Ford |\n|      | WeLion | Semi-solid polymer | 2025 (shipping) | 360 Wh/kg in production |\n|    评分: 35% | 匹配: 2/4 词\n\n",
+    "reason": "有结果=True, 命中PDF=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-005",
+    "name": "Word (.docx) 搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: Google 量子计算 13000  |  找到 6 个匹配\n============================================================\n\n+-- [1] 1.1 \u001b[1;31mGoogle\u001b[0m \u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m实现 \u001b[1;31m13000\u001b[0m 倍加速\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:13\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:13\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 1.1 \u001b[1;31mGoogle\u001b[0m \u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m实现 \u001b[1;31m13000\u001b[0m 倍加速\n|  >>> 2025年10月，\u001b[1;31mGoogle\u001b[0m Quantum AI 团队宣布其\u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m机在物理模拟任务中实现了 13,000 倍的加速，超越了世界上最快的经典超级\u001b[1;31m计...\u001b[0m\n|  >>> \u001b[1;31mGoogle\u001b[0m 的\u001b[1;31m量子\u001b[0m处理器采用了最新的\u001b[1;31m量子\u001b[0m纠错架构，通过增加\u001b[1;31m量子\u001b[0m比特数量和改进纠错算法，成功展示了在特定\u001b[1;31m计算\u001b[0m任务上的指数级加速优势。该成果发表在 Na...\u001b[0m\n|    评分: 84% | 匹配: 4/4 词\n\n+-- [2] 总结与展望\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:66\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:66\u001b]8;;\u0007\n|    ---------------------------------------------\n|      # 总结与展望\n|  >>> \u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m与AI呈现深度融合趋势\n|  >>> \u001b[1;31m量子\u001b[0m优越性从理论走向实践（\u001b[1;31m13000\u001b[0m倍加速）\n|      中国\u001b[1;31m量子\u001b[0m科技稳步推进三阶段战略\n|      全球经济增长放缓但科技投资创纪录\n|  >>> \u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m将在未来十年深刻改变人类社会\n|      投资者应关注: AI、\u001b[1;31m量子\u001b[0m、新能源、网络安全\n|    评分: 56% | 匹配: 3/4 词\n\n+-- [3] \u001b[1;31m量子\u001b[0m技术投资 (4 rows)\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:12\u0007E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:12\u001b]8;;\u0007\n|    ---------------------------------------------\n|      Columns: 投资方向, 2023年(亿美元), 2024年(亿美元), 2025年(亿美元), 增长率(%), 占比(%), 主要公司/机构\n|  >>> ...2.5; 占比(%): 45; 主要公司/机构: \u001b[1;31mGoogle\u001b[0m, IBM, Quantinuum, IonQ...\u001b[0m\n|      投资方向: \u001b[1;31m量子\u001b[0m通信与加密; 2023年(亿美元): 8.2; 2024年(亿美元): 14.5; 2025年(亿美元): 28; 增长率(%): 9...\u001b[0m\n|      投资方向: \u001b[1;31m量子\u001b[0m传感; 2023年(亿美元): 5.1; 2024年(亿美元): 8.8; 2025年(亿美元): 16; 增长率(%): 81.8;...\u001b[0m\n|      投资方向: \u001b[1;31m量子\u001b[0m软件与算法; 2023年(亿美元): 4.8; 2024年(亿美元): 9.2; 2025年(亿美元): 18; 增长率(%): 95...\u001b[0m\n|    评分: 49% | 匹配: 3/4 词\n\n+-- [4] \u001b[1;31m量子\u001b[0m威胁\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子密码学从QKD到后量子密码学.md:3\u0007E:/github/TreeSearch/test_work_dir/科技/量子密码学从QKD到后量子密码学.md:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ## \u001b[1;31m量子\u001b[0m威胁\n|  >>> \u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m机对现有密码体系构成根本性威胁。Shor算法可以在多项式时间内分解大整数和\u001b[1;31m计算\u001b[0m离散对数，这意味着广泛使用的RSA、ECC（椭圆曲线密码）和DH...\u001b[0m\n|    评分: 46% | 匹配: 2/4 词\n\n+-- [5] 1.1 \u001b[1;31mGoogle\u001b[0m \u001b[1;31m13000\u001b[0mx Speedup\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:12\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:12\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 1.1 \u001b[1;31mGoogle\u001b[0m \u001b[1;31m13000\u001b[0mx Speedup\n|      October  2025:  \u001b[1;31mGoogle\u001b[0m  Quantum  AI  achieved  13,000x  speedup  over  clas...\u001b[0m\n|      physics  simulation.  Published  in  Nature,  this  milestone  demonstrates...\u001b[0m\n|      transitioning from theory to practice.\n|    评分: 45% | 匹配: 2/4 词\n\n+-- [6] 五、投资建议\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/经济/2026年全球经济形势分析.md:61\u0007E:/github/TreeSearch/test_work_dir/经济/2026年全球经济形势分析.md:61\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ## 五、投资建议\n|      在全球经济充满不确定性的背景下，投资者应关注以下领域：\n|  >>> 1. **AI与\u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m**：长期增长确定性最高的赛道\n|      2. **新能源与清洁技术**：政策驱动下的结构性机会\n|      3. **医疗健康**：老龄化社会的刚性需求\n|      4. **网络安全**：数字化转型的必要保障\n|      5. **新兴市场**：多元化配置的重要方向\n|    评分: 36% | 匹配: 2/4 词\n\n",
+    "reason": "有结果=True, 命中DOCX=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-006",
+    "name": "Excel (.xlsx) 搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 韩国 研发投入强度 4.9  |  找到 5 个匹配\n============================================================\n\n+-- [1] 全球经济数据 (10 rows)\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:1\u0007E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> Columns: 国家/地区, 2024年GDP(万亿美元), 2025年GDP(万亿美元), 2026年预测GDP, 增长率(%), \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(...\u001b[0m\n|  >>> ...测GDP: 31.5; 增长率(%): 2.5; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 3.4; AI产业规模(亿美元): 1850; 量子技术投资(亿美元): 82...\u001b[0m\n|  >>> ...测GDP: 20.8; 增长率(%): 4.6; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 2.8; AI产业规模(亿美元): 1200; 量子技术投资(亿美元): 65...\u001b[0m\n|  >>> ...测GDP: 4.45; 增长率(%): 1.2; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 3.3; AI产业规模(亿美元): 280; 量子技术投资(亿美元): 18...\u001b[0m\n|  >>> ...年预测GDP: 4.65; 增长率(%): 1; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 3.1; AI产业规模(亿美元): 195; 量子技术投资(亿美元): 22...\u001b[0m\n|  >>> ...测GDP: 3.72; 增长率(%): 1.5; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 2.9; AI产业规模(亿美元): 310; 量子技术投资(亿美元): 15...\u001b[0m\n|  >>> ...测GDP: 3.22; 增长率(%): 1.1; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 2.2; AI产业规模(亿美元): 145; 量子技术投资(亿美元): 12...\u001b[0m\n|  >>> ...测GDP: 4.85; 增长率(%): 6.5; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 0.7; AI产业规模(亿美元): 85; 量子技术投资(亿美元): 5...\u001b[0m\n|  >>> 国家/地区: \u001b[1;31m韩国\u001b[0m; 2024年GDP(万亿美元): 1.76; 2025年GDP(万亿美元): 1.85; 2026年预测GDP: 1.92; 增长...\u001b[0m\n|  >>> ...测GDP: 2.38; 增长率(%): 1.8; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 1.7; AI产业规模(亿美元): 95; 量子技术投资(亿美元): 6...\u001b[0m\n|  >>> ...年预测GDP: 1.86; 增长率(%): 2; \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m(%): 1.8; AI产业规模(亿美元): 60; 量子技术投资(亿美元): 4...\u001b[0m\n|    评分: 54% | 匹配: 5/5 词\n\n+-- [2] 6G\u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/5G与6G通信技术发展.md:153\u0007E:/github/TreeSearch/test_work_dir/科技/5G与6G通信技术发展.md:153\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ### 6G\u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m\n|      - 中国：国家自然科学基金6G重大研究计划\u001b[1;31m投入\u001b[0m50亿元\n|      - 欧盟：Hexa-X-II项目\u001b[1;31m投入\u001b[0m1.3亿欧元\n|      - 美国：FCC启动6G频谱规划，NSF\u001b[1;31m投入\u001b[0m6G研究\n|      - 日本：Beyond 5G推进联盟，目标2030年商用\n|      - \u001b[1;31m韩国\u001b[0m：三星和LG已建立6G研究中心\n|    评分: 47% | 匹配: 3/5 词\n\n+-- [3] 全球经济关键数据\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:58\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:58\u001b]8;;\u0007\n|    ---------------------------------------------\n|      # 全球经济关键数据\n|      美国: GDP约31.5万亿, 增长2.5%, AI产业1850亿美元\n|      中国: GDP约20.8万亿, 增长4.6%, AI产业1200亿美元\n|  >>> 日本: GDP约4.45万亿, 增长1.2%, \u001b[1;31m研发\u001b[0m\u001b[1;31m强度\u001b[0m3.3%\n|  >>> \u001b[1;31m韩国\u001b[0m: GDP约1.92万亿, \u001b[1;31m研发\u001b[0m\u001b[1;31m强度\u001b[0m\u001b[1;31m4.9\u001b[0m%全球最高\n|      印度: GDP约4.85万亿, 增长6.5%增速最快\n|      <!-- Slide number: 9 -->\n|    评分: 46% | 匹配: 4/5 词\n\n+-- [4] 2.1 \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m创新高\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/经济/2026年全球经济形势分析.md:19\u0007E:/github/TreeSearch/test_work_dir/经济/2026年全球经济形势分析.md:19\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ### 2.1 \u001b[1;31m研发\u001b[0m\u001b[1;31m投入\u001b[0m创新高\n|  >>> 2025年中国\u001b[1;31m研发\u001b[0m经费\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m达**2.8%**，首次超过OECD国家平均水平，展现出\"向新而行\"的特征。这一数据表明中国正在从\"制造大国\"向\"创新强...\u001b[0m\n|    评分: 46% | 匹配: 3/5 词\n\n+-- [5] 4.4 中国经济亮点\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:58\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:58\u001b]8;;\u0007\n|    ---------------------------------------------\n|      4.4 中国经济亮点\n|  >>> 2025年中国\u001b[1;31m研发\u001b[0m经费\u001b[1;31m投入\u001b[0m\u001b[1;31m强度\u001b[0m达 2.8%，首次超过OECD国家平均水平，展现出“向新而行”的特征。以AI为代表的科技创新正在深刻改变中国经济面貌。\n|    评分: 39% | 匹配: 3/5 词\n\n",
+    "reason": "有结果=True, 命中XLSX=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-005",
+    "name": "支持 14 种文件格式",
+    "conclusion": "✅ 通过",
+    "output": "\n╔══════════════════════════════════════════════════════════════╗\n║                      NotebookSearch 状态                      ║\n╠══════════════════════════════════════════════════════════════╣\n║  索引路径:   E:\\github\\TreeSearch\\test_work_dir\\.cortex\\index.db\n║  索引大小:   2.45 MB\n╠══════════════════════════════════════════════════════════════╣\n║  搜索路径:   E:\\github\\TreeSearch\\test_work_dir\n║  文档总数:   61\n║  文件总大小: 0 B\n╠══════════════════════════════════════════════════════════════╣\n║  文件类型统计 (前10)                                      \n║    .md: 52 个 (Markdown)\n║    .html: 5 个 (HTML)\n║    .pdf: 1 个 (PDF)\n║    .xlsx: 1 个 (Excel表格)\n║    .docx: 1 个 (Word文档)\n║    .pptx: 1 个 (PowerPoint)\n╠══════════════════════════════════════════════════════════════╣\n║  依赖状态:   全部已安装 ✓\n╚══════════════════════════════════════════════════════════════╝\n\n",
+    "reason": "有统计=True",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-001",
+    "name": "综合评分四因子加权",
+    "conclusion": "✅ 通过",
+    "output": "=== 固态电池 ===\n\n============================================================\n关键词: 固态电池  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    评分: 95% | 匹配: 2/2 词\n\n+-- [2] 电动车\u001b[1;31m电池\u001b[0m技术对比：\u001b[1;31m固态\u001b[0m vs 液态 vs 钠离子\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u0007E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 电动车\u001b[1;31m电池\u001b[0m技术对比：\u001b[1;31m固态\u001b[0m vs 液态 vs 钠离子\n|    评分: 83% | 匹配: 2/2 词\n\n+-- [3] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术突破\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:17\u0007E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:17\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ## \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术突破\n|  >>> \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m成为2025年中国新能源汽车行业最热门的技术赛道。\n|    评分: 72% | 匹配: 2/2 词\n\n\n=== 基因治疗 ===\n\n============================================================\n关键词: 基因治疗  |  找到 2 个匹配\n============================================================\n\n+-- [1] CRISPR\u001b[1;31m基因治疗\u001b[0m逆转肺癌化疗耐药性\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/生命科学/CRISPR基因治疗逆转肺癌耐药性.md:1\u0007E:/github/TreeSearch/test_work_dir/生命科学/CRISPR基因治疗逆转肺癌耐药性.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # CRISPR\u001b[1;31m基因治疗\u001b[0m逆转肺癌化疗耐药性\n|    评分: 95% | 匹配: 1/1 词\n\n+-- [2] \u001b[1;31m基因治疗\u001b[0m商业化\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/生命科学/生物技术新药2025前沿突破.md:99\u0007E:/github/TreeSearch/test_work_dir/生命科学/生物技术新药2025前沿突破.md:99\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ### \u001b[1;31m基因治疗\u001b[0m商业化\n|      - Zolgensma（脊髓性肌萎缩症）：单次治疗费用210万美元\n|      - Hemgenix（B型血友病）：单次治疗费用350万美元\n|      - Casgevy（镰刀型贫血）：首款CRISPR基因编辑疗法获批\n|  >>> - 累计获批\u001b[1;31m基因治疗\u001b[0m产品超过30个\n|    评分: 71% | 匹配: 1/1 词\n\n",
+    "reason": "有评分1=True, 有评分2=True",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-003",
+    "name": "三级过滤降级策略",
+    "conclusion": "✅ 通过",
+    "output": "\n[未找到包含 'xyznonexistent12345' 的结果]\n\n",
+    "reason": "无结果提示=True",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-005",
+    "name": "评分公式 — 全因子命中",
+    "conclusion": "✅ 通过",
+    "output": "composite=0.9720 (97%)\nfactors={\"keyword_match_ratio\": 1.0, \"file_name_match\": 1.0, \"fts_score\": 0.8808, \"title_match\": 1.0}",
+    "reason": "composite=0.9720",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-006",
+    "name": "评分公式 — 部分因子命中",
+    "conclusion": "✅ 通过",
+    "output": "composite=0.5294 (52%)\nfactors={\"keyword_match_ratio\": 0.5, \"file_name_match\": 1.0, \"fts_score\": 0.5, \"title_match\": 0.0}",
+    "reason": "composite=0.5294",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-007",
+    "name": "评分公式 — 仅内容匹配",
+    "conclusion": "✅ 通过",
+    "output": "composite=0.6132 (61%)\nfactors={\"keyword_match_ratio\": 1.0, \"file_name_match\": 0.0, \"fts_score\": 0.7311, \"title_match\": 0.5}",
+    "reason": "composite=0.6132",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-009",
+    "name": "近邻评分数值验证",
+    "conclusion": "✅ 通过",
+    "output": "场景1=(2, 2), 场景2=(2, 1), 场景3=(0, 0), 场景4=(1, 2)",
+    "reason": "r1=(2, 2), r2=(2, 1), r3=(0, 0), r4=(1, 2)",
+    "issues": "无"
+  },
+  {
+    "id": "CJK-001",
+    "name": "jieba 中文分词",
+    "conclusion": "✅ 通过",
+    "output": "分词: ['自然语言', '处理']\n搜索: \n============================================================\n关键词: 自然语言处理  |  找到 6 个匹配\n============================================================\n\n+-- [1] 企业级应用\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/中国AI词元调用量爆发式增长.md:9\u0007E:/github/TreeSearch/test_work_dir/科技/中国AI词元调用量爆发式增",
+    "reason": "含'自然语言'=True, 含'处理'=True, 搜索正常=True",
+    "issues": "无"
+  },
+  {
+    "id": "FMT-001",
+    "name": "ANSI 红色加粗高亮",
+    "conclusion": "✅ 通过",
+    "output": "高亮: '\\x1b[1;31m机器学习\\x1b[0m入门指南'\n大小写: '\\x1b[1;31mPython\\x1b[0m is great, \\x1b[1;31mpython\\x1b[0m is fun'",
+    "reason": "ANSI=True, 大小写=True",
+    "issues": "无"
+  },
+  {
+    "id": "FMT-002",
+    "name": "ANSI 安全截断",
+    "conclusion": "✅ 通过",
+    "output": "原始: 114字符\n截断: '...AAAAAAAAAAAA\\x1b[1;31m关键词\\x1b[0mBBBBBBBBBBBBBBBBBBBBBB...\\x1b[0m'\n可见: 43字符",
+    "reason": "关键词=True, 省略号=True",
+    "issues": "无"
+  },
+  {
+    "id": "RG-001",
+    "name": "ripgrep 降级搜索",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: surpassing Microsoft and Apple  |  找到 1 个匹配\n============================================================\n\n+-- [1] 4. Global Economy 2026\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u001b]8;;\u0007\n|    ---------------------------------------------\n|      4. Global Economy 2026\n|      WTO cut 2026 global trade growth forecast to 0.5% (from 2.4% in 2025). IMF/...\u001b[0m\n|      GDP  growth  of  2.7%-3.1%.  The  world  faces  four  major  shifts:  geopo...\u001b[0m\n|      protectionism, tech polarization, and social inequality.\n|  >>> NVIDIA market cap exceeded $5 trillion in October 2025, \u001b[1;31msurpassing\u001b[0m \u001b[1;31mMicrosof...\u001b[0m\n|      R&D spending intensity reached 2.8%, exceeding OECD average for the first t...\u001b[0m\n|      Key trends: AI-driven productivity gains, quantum computing commercializati...\u001b[0m\n|      transition, cybersecurity threats, and supply chain restructuring.\n|      Page 5\n|    评分: 54% | 匹配: 3/3 词\n\n",
+    "reason": "rg可用=True, 有结果=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-006",
+    "name": "文件改名后增量索引",
+    "conclusion": "✅ 通过",
+    "output": "增量日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 0 个文件已索引, 61 个未变更, 0 个已清理 | 共 61 个文档, 0.05s]\n\n搜索结果:\n\n============================================================\n关键词: 5G基站  |  找到 2 个匹配\n============================================================\n\n+-- [1] 全球\u001b[1;31m5G\u001b[0m数据\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/5G6G通信技术发展.md:7\u0007E:/github/TreeSearch/test_work_dir/科技/5G6G通信技术发展.md:7\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ### 全球\u001b[1;31m5G\u001b[0m数据\n|      | 指标 | 数值 |\n|      |------|------|\n|  >>> | 全球\u001b[1;31m5G\u001b[0m\u001b[1;31m基站\u001b[0m数 | 500万+ |\n|      | \u001b[1;31m5G\u001b[0m用户数 | 20亿+ |\n|      | \u001b[1;31m5G\u001b[0m智能手机出货占比 | 60%+ |\n|      | \u001b[1;31m5G\u001b[0m网络覆盖国家 | 100+ |\n|  >>> | 中国\u001b[1;31m5G\u001b[0m\u001b[1;31m基站\u001b[0m数 | 380万+（占全球75%） |\n|      | 中国\u001b[1;31m5G\u001b[0m用户数 | 10亿+ |\n|    评分: 74% | 匹配: 2/2 词\n\n+-- [2] 通信协议\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/智慧城市与物联网.md:36\u0007E:/github/TreeSearch/test_work_dir/科技/智慧城市与物联网.md:36\u001b]8;;\u0007\n|    ---------------------------------------------\n|      ### 通信协议\n|      | 协议 | 范围 | 速率 | 功耗 | 典型应用 |\n|      |------|------|------|------|----------|\n|      | NB-IoT | 10-15km | <100kbps | 极低 | 智能水表、烟感 |\n|      | LoRaWAN | 5-15km | 0.3-50kbps | 极低 | 农业、环境监测 |\n|  >>> | \u001b[1;31m5G\u001b[0m mMTC | \u001b[1;31m基站\u001b[0m覆盖 | <10Mbps | 中 | 视频监控、车联网 |\n|      | Wi-Fi HaLow | 1km | 0.1-80Mbps | 低 | 智能家居、安防 |\n|      | Bluetooth LE | 100m | 1-2Mbps | 低 | 可穿戴、室内定位 |\n|      | Zigbee | 100m | 250kbps | 低 | 智能家居、楼宇 |\n|    评分: 54% | 匹配: 2/2 词\n\n",
+    "reason": "新名称=True, 旧名称=False",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-007",
+    "name": "文件删除后增量索引",
+    "conclusion": "✅ 通过",
+    "output": "增量日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 0 个文件已索引, 60 个未变更, 1 个已清理 | 共 60 个文档, 0.06s]\n\n搜索结果:\n\n============================================================\n关键词: dark matter  |  找到 1 个匹配\n============================================================\n\n+-- [1] Condition 3: Massive \u001b[1;31mDark\u001b[0m \u001b[1;31mMatter\u001b[0m Halo\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/天文航天/direct_collapse_blackholes.md:29\u0007E:/github/TreeSearch/test_work_dir/天文航天/direct_collapse_blackholes.md:29\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ### Condition 3: Massive \u001b[1;31mDark\u001b[0m \u001b[1;31mMatter\u001b[0m Halo\n|  >>> The host \u001b[1;31mdark\u001b[0m \u001b[1;31mmatter\u001b[0m halo must have a virial temperature above 10,000K, cor...\u001b[0m\n|    评分: 72% | 匹配: 2/2 词\n\n",
+    "reason": "已删除文件消失=True",
+    "issues": "无"
+  }
+]
