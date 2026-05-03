@@ -419,6 +419,18 @@ async def md_to_tree(
     logger.debug("Building tree from %d nodes...", len(nodes))
     tree = _build_tree(nodes)
 
+    # 无标题回退：为纯文本 Markdown 创建一个根节点
+    if not tree and md_content.strip():
+        total_lines = len(md_content.split("\n"))
+        tree = [{
+            "title": doc_name,
+            "node_id": "0",
+            "text": md_content.strip(),
+            "line_start": 1,
+            "line_end": total_lines,
+            "nodes": [],
+        }]
+
     return _finalize_tree(
         tree, doc_name,
         source_path=os.path.abspath(md_path) if md_path else "",
@@ -1280,7 +1292,7 @@ async def build_index(
 
     # Open DB with advisory file lock so concurrent build_index() calls on the
     # same DB serialize cleanly instead of racing on writes.
-    fts = FTS5Index(db_path=db_path)
+    fts = FTS5Index(db_path=db_path, tokenize_log_path=os.path.join(os.path.dirname(db_path), "tokenize.log"))
     _lock_handle = _acquire_index_lock(db_path)
 
     # Incremental indexing: batch check file hashes via DB

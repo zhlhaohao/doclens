@@ -82,6 +82,8 @@ def rg_search(
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -92,6 +94,8 @@ def rg_search(
         return {}
 
     # Parse JSON lines output
+    if not result.stdout:
+        return {}
     hits: dict[str, list[int]] = {}
     for line in result.stdout.splitlines():
         if not line.strip():

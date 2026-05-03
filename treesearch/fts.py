@@ -210,18 +210,24 @@ class FTS5Index:
         self,
         db_path: Optional[str] = None,
         weights: Optional[dict] = None,
+        tokenize_log_path: Optional[str] = None,
     ):
         """
         Args:
             db_path: Path to SQLite database file. ``None`` for in-memory mode
                 (no file written to disk). Default: ``None``.
             weights: column weight overrides for bm25() ranking.
+            tokenize_log_path: Optional path to write per-document tokenize logs.
+                When set, each call to ``index_document()`` appends deduplicated
+                token lists to this file.
         """
         self._db_path = db_path or ":memory:"
         self._weights = {**_DEFAULT_WEIGHTS, **(weights or {})}
         self._conn: Optional[sqlite3.Connection] = None
         # Populated by index_document(); inspected by build_index for stats.
         self.last_node_diff: dict[str, int] = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
+        self._tokenize_log_path = tokenize_log_path
+        self._tokenize_log_file = None  # lazy-opened in _log_tokenize()
         self._init_db()
 
     def _init_db(self) -> None:
@@ -322,10 +328,28 @@ class FTS5Index:
         return self._db_path
 
     def close(self) -> None:
-        """Close database connection."""
+        """Close database connection and tokenize log file."""
+        if self._tokenize_log_file:
+            self._tokenize_log_file.close()
+            self._tokenize_log_file = None
         if self._conn:
             self._conn.close()
             self._conn = None
+
+    def _log_tokenize(self, doc_id: str, tokens: set[str]) -> None:
+        """Append deduplicated token list for *doc_id* to the tokenize log."""
+        if not self._tokenize_log_path:
+            return
+        if self._tokenize_log_file is None:
+            self._tokenize_log_file = open(
+                self._tokenize_log_path, 'a', encoding='utf-8',
+            )
+        sorted_tokens = sorted(tokens)
+        self._tokenize_log_file.write(
+            f"--- {doc_id} ({len(sorted_tokens)} tokens) ---\n"
+        )
+        self._tokenize_log_file.write(" ".join(sorted_tokens) + "\n\n")
+        self._tokenize_log_file.flush()
 
     def __del__(self):
         self.close()
@@ -425,6 +449,7 @@ class FTS5Index:
         # ---- Stage all rows ahead of the transaction ----
         node_rows: list[tuple] = []
         fts_rows: list[tuple] = []
+        doc_tokens: set[str] = set()
         for node in all_nodes:
             nid = node["node_id"]
             if nid not in to_write:
@@ -440,14 +465,24 @@ class FTS5Index:
             ))
 
             parsed = parse_md_node_text(text)
+            tok_title = _tokenize_for_fts(title)
+            tok_summary = _tokenize_for_fts(summary)
+            tok_body = _tokenize_for_fts(parsed["body"])
+            tok_code = _tokenize_for_fts(parsed["code_blocks"])
+            tok_fm = _tokenize_for_fts(parsed["front_matter"])
+
+            # 将文件名分词后注入 front_matter，使文件名可被 FTS5 搜索到
+            tok_doc_name = _tokenize_for_fts(document.doc_name)
+            if tok_doc_name and tok_doc_name not in tok_fm:
+                tok_fm = tok_doc_name + " " + tok_fm
             fts_rows.append((
                 nid, document.doc_id,
-                _tokenize_for_fts(title),
-                _tokenize_for_fts(summary),
-                _tokenize_for_fts(parsed["body"]),
-                _tokenize_for_fts(parsed["code_blocks"]),
-                _tokenize_for_fts(parsed["front_matter"]),
+                tok_title, tok_summary, tok_body, tok_code, tok_fm,
             ))
+            for tok_str in (tok_title, tok_summary, tok_body, tok_code, tok_fm):
+                doc_tokens.update(tok_str.split())
+
+        self._log_tokenize(document.doc_id, doc_tokens)
 
         # ---- Single atomic transaction ----
         # Wraps deletes + inserts + document metadata + index_meta so a crash

@@ -127,6 +127,74 @@ def _direct_input(prompt: str) -> str:
 HL_START = "\033[1;31m"
 HL_END = "\033[0m"
 
+# 匹配所有 ANSI 转义序列
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
+
+
+def _strip_ansi(text):
+    """移除所有 ANSI 转义序列，返回纯文本"""
+    return _ANSI_RE.sub("", text)
+
+
+def _truncate_ansi_safe(text, max_visible, keywords=None):
+    """安全截断含 ANSI 转义码的字符串，保留完整的转义序列。
+
+    按可见字符数截断，不会被 ANSI 序列中间切断，
+    并在截断时追加 HL_END 确保终端状态正确关闭。
+
+    如果提供 keywords，会尝试以第一个关键词为中心截断，
+    确保关键词（含高亮标记）在可见范围内。
+    """
+    plain = _strip_ansi(text)
+    if len(plain) <= max_visible:
+        return text
+
+    target = max_visible - 3  # 留 3 字符给 "..."
+
+    # 确定截断的可见字符起始偏移（默认从 0 开始）
+    skip_visible = 0
+
+    if keywords:
+        for kw in keywords:
+            if not kw:
+                continue
+            kw_lower = kw.lower()
+            pos = plain.lower().find(kw_lower)
+            if pos < 0:
+                continue
+            kw_end = pos + len(kw)
+            # 关键词在可见范围内，从头截断即可
+            if kw_end <= target:
+                break
+            # 关键词超出范围，从中间偏前处开始截断
+            skip_visible = max(0, pos - target // 3)
+            break
+
+    # 在原始 text（含 ANSI）上按可见字符截取
+    visible = 0
+    result = []
+    i = 0
+    while i < len(text):
+        m = _ANSI_RE.match(text, i)
+        if m:
+            # ANSI 序列无条件保留
+            if visible >= skip_visible:
+                result.append(m.group())
+            i = m.end()
+        else:
+            if visible < skip_visible:
+                # 跳过前面的可见字符
+                visible += 1
+            elif visible < skip_visible + target:
+                result.append(text[i])
+                visible += 1
+            else:
+                break
+            i += 1
+
+    prefix = "..." if skip_visible > 0 else ""
+    return prefix + "".join(result) + "..." + HL_END
+
 # 超链接（ANSI escape code）
 # 格式: \033]8;;URL\007显示文本\033]8;;\007
 # 说明: \033]8;;URL\007 是开始链接，\033]8;;\007 是结束链接
@@ -190,6 +258,14 @@ class NotebookSearchCLI:
         self.max_span = config.max_span
         self.min_keyword_match = config.min_keyword_match
         self.cjk_tokenizer = config.cjk_tokenizer
+
+        # 评分权重
+        self.scoring_weights = {
+            "keyword_match_ratio": config.weight_keyword_match,
+            "file_name_match": config.weight_file_name_match,
+            "fts_score": config.weight_fts_score,
+            "title_match": config.weight_title_match,
+        }
 
         self.ts = None
         self.path_map = {}
@@ -371,10 +447,176 @@ class NotebookSearchCLI:
         # 部分关键词匹配 = 中等分数（按匹配比例）
         return matched, 1
 
+    def _compute_composite_score(self, matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights):
+        """计算综合评分
+
+        Args:
+            matched_count: 匹配的关键词数
+            total_keywords: 总关键词数
+            doc_name: 文档名（文件名）
+            node_title: 节点标题
+            fts_score: FTS5 BM25 原始分数
+            query_words: 查询分词列表
+            weights: 各因子权重字典
+
+        Returns:
+            (composite_score, factors_dict) - 综合评分(0~1)和各因子明细
+        """
+        factors = {}
+        total_weight = 0.0
+        weighted_sum = 0.0
+
+        if total_keywords <= 0:
+            return 0.0, factors
+
+        name_lower = (doc_name or "").lower()
+        title_lower = (node_title or "").lower()
+
+        # keyword_match_ratio: 匹配关键词数 / 总关键词数
+        w = weights.get("keyword_match_ratio", 0)
+        if w > 0:
+            val = matched_count / total_keywords
+            factors["keyword_match_ratio"] = val
+            weighted_sum += w * val
+            total_weight += w
+
+        # file_name_match: 文件名中匹配的关键词数 / 总关键词数
+        w = weights.get("file_name_match", 0)
+        if w > 0:
+            name_hits = sum(1 for kw in query_words if kw.lower() in name_lower)
+            val = name_hits / total_keywords
+            factors["file_name_match"] = val
+            weighted_sum += w * val
+            total_weight += w
+
+        # fts_score: 归一化 BM25 分数 (用 sigmoid 映射到 0~1)
+        w = weights.get("fts_score", 0)
+        if w > 0:
+            import math
+            val = 1.0 / (1.0 + math.exp(-fts_score)) if fts_score != 0 else 0.5
+            factors["fts_score"] = val
+            weighted_sum += w * val
+            total_weight += w
+
+        # title_match: 标题中匹配的关键词数 / 总关键词数
+        w = weights.get("title_match", 0)
+        if w > 0:
+            title_hits = sum(1 for kw in query_words if kw.lower() in title_lower)
+            val = title_hits / total_keywords
+            factors["title_match"] = val
+            weighted_sum += w * val
+            total_weight += w
+
+        composite = weighted_sum / total_weight if total_weight > 0 else 0.0
+        return composite, factors
+
+    def _ripgrep_fallback(self, query, max_results=20):
+        """FTS5 无结果时，用 ripgrep 在所有源文件中搜索"""
+        from treesearch.ripgrep import rg_available, rg_search
+
+        if not rg_available():
+            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            return
+
+        # 收集所有已索引文件的路径
+        all_paths = list(set(p for p in self.path_map.values() if p and os.path.exists(p)))
+        if not all_paths:
+            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            return
+
+        hits = rg_search(query, all_paths, case_sensitive=False, use_regex=False)
+        if not hits:
+            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            return
+
+        # 从 path 反查 doc_id
+        reverse_map = {}
+        for key, path in self.path_map.items():
+            reverse_map.setdefault(path, []).append(key)
+
+        query_words = self._tokenize_query(query)
+        if not query_words:
+            query_words = [w.strip() for w in query.split() if w.strip()]
+
+        filtered = []
+        for file_path, line_nums in hits.items():
+            doc_ids = reverse_map.get(file_path, [])
+            doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(file_path))[0]
+
+            # 读取匹配行附近的内容作为显示文本
+            matched_line = line_nums[0]
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    all_lines = f.readlines()
+            except OSError:
+                continue
+
+            # 构造一个合成节点用于显示
+            context_start = max(0, matched_line - 6)
+            context_end = min(len(all_lines), matched_line + 5)
+            text = ''.join(all_lines[context_start:context_end]).rstrip()
+
+            title = os.path.splitext(os.path.basename(file_path))[0]
+            # 用 doc_name 查找更友好的标题
+            for did in doc_ids:
+                if did in self.path_map and did != self.path_map[did]:
+                    title = did
+                    doc_id = did
+                    break
+
+            synthetic_node = {
+                "title": title,
+                "text": text,
+                "line_start": matched_line,
+            }
+            filtered.append((doc_id, synthetic_node, len(query_words), 0))
+
+        if not filtered:
+            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            return
+
+        # 复用后续的渲染逻辑
+        filtered.sort(key=lambda x: (-x[3], -x[2]))
+        print(f"\n{'='*60}")
+        print(f"关键词: {query}  |  找到 {len(filtered)} 个匹配 (ripgrep)")
+        print(f"{'='*60}")
+
+        for i, item in enumerate(filtered[:max_results], 1):
+            doc_id, display_node, matched, prox = item
+            display_title = display_node.get("title", "")
+            display_text = display_node.get("text", "") or ""
+            display_line = display_node.get("line_start")
+            path = self.path_map.get(doc_id, "")
+
+            print(f"\n+-- [{i}] {self.hl(display_title[:55], query_words)}")
+            file_link = self.make_vscode_link(path, display_line)
+            print(f"|    文件: {file_link}")
+            print(f"|    {'-'*45}")
+
+            if display_text:
+                lines = display_text.split('\n')
+                for j, l in enumerate(lines):
+                    line = l.strip()
+                    if not line:
+                        continue
+                    hl_line = self.hl(line, query_words)
+                    hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
+                    rg_line_num = display_line - 5 + j  # 近似行号
+                    is_match = any(
+                        abs(rg_line_num - ln) <= 1
+                        for ln in hits.get(path, [])
+                    )
+                    marker = ">>>" if is_match else "   "
+                    print(f"|  {marker} {hl_line}")
+
+            print(f"|    匹配: {matched}/{len(query_words)} 词")
+        print()
+
     def format_results(self, nodes, docs, query, max_results=20):
         """格式化搜索结果"""
         if not nodes:
-            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            # FTS5 无结果，降级到 ripgrep 搜索所有已索引源文件
+            self._ripgrep_fallback(query, max_results)
             return
 
         # 使用 jieba 分词
@@ -389,9 +631,15 @@ class NotebookSearchCLI:
             doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
         # 对每个文档，找到包含关键词且紧邻匹配最好的节点
-        doc_best: dict = {}  # doc_id -> (best_node, matched_count, proximity_score)
+        # 同时收集每个 doc 最好的 FTS 分数
+        doc_best: dict = {}  # doc_id -> (best_node, matched_count, proximity_score, fts_score)
+        doc_fts_best: dict = {}  # doc_id -> max fts_score across all nodes
         for node in nodes:
             doc_id = node.get("doc_id", "")
+            score = node.get("score", 0.0)
+            # 记录该 doc 最高的 fts 分数
+            if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
+                doc_fts_best[doc_id] = score
             if doc_id in doc_best:
                 continue  # 已处理过
             all_nodes = doc_nodes_map.get(doc_id, [])
@@ -407,14 +655,14 @@ class NotebookSearchCLI:
                     best_proximity = proximity
                     best_node = n
             if best_node and best_count > 0:
-                doc_best[doc_id] = (best_node, best_count, best_proximity)
+                doc_best[doc_id] = (best_node, best_count, best_proximity, doc_fts_best.get(doc_id, 0.0))
 
         # 过滤：至少匹配 2 个词，且 proximity >= 1
-        filtered = [(did, best_node, cnt, prox) for did, (best_node, cnt, prox) in doc_best.items() if cnt >= 2 and prox >= 1]
+        filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= 2 and prox >= 1]
 
         # 如果没有结果，尝试降级到匹配数 >= 1
         if not filtered and query_words:
-            filtered = [(did, best_node, cnt, prox) for did, (best_node, cnt, prox) in doc_best.items() if cnt >= 1]
+            filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= 1]
 
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
@@ -452,17 +700,32 @@ class NotebookSearchCLI:
                                     break
 
                         if matched_node:
-                            filtered.append((doc_id, matched_node, len(query_words), 0))
+                            filtered.append((doc_id, matched_node, len(query_words), 0, 0.0))
 
-        # 按紧邻分数降序，再按匹配词数降序
-        filtered.sort(key=lambda x: (-x[3], -x[2]))
+        # 计算综合评分并按其降序排序
+        scored_results = []
+        for item in filtered:
+            did, display_node, matched, prox, fts = item
+            composite, factors = self._compute_composite_score(
+                matched_count=matched,
+                total_keywords=len(query_words),
+                doc_name=did,
+                node_title=display_node.get("title", ""),
+                fts_score=fts,
+                query_words=query_words,
+                weights=self.scoring_weights,
+            )
+            scored_results.append((composite, item))
+
+        scored_results.sort(key=lambda x: -x[0])
+        filtered_display = [item for _, item in scored_results]
 
         print(f"\n{'='*60}")
-        print(f"关键词: {query}  |  找到 {len(filtered)} 个匹配")
+        print(f"关键词: {query}  |  找到 {len(filtered_display)} 个匹配")
         print(f"{'='*60}")
 
-        for i, item in enumerate(filtered[:max_results], 1):
-            doc_id, display_node, matched, prox = item
+        for i, (composite, item) in enumerate(scored_results[:max_results], 1):
+            doc_id, display_node, matched, prox, fts = item
             display_title = display_node.get("title", "")
             display_text = display_node.get("text", "") or ""
             display_line = display_node.get("line_start")
@@ -491,8 +754,7 @@ class NotebookSearchCLI:
                         line = lines[j].strip()
                         if line:
                             hl_line = self.hl(line, query_words)
-                            if len(hl_line) > 78:
-                                hl_line = hl_line[:75] + "..."
+                            hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
                             print(f"|  >>> {hl_line}")
                 else:
                     # 按包含关键词数降序排序
@@ -518,13 +780,12 @@ class NotebookSearchCLI:
                         if not line:
                             continue
                         hl_line = self.hl(line, query_words)
-                        if len(hl_line) > 78:
-                            hl_line = hl_line[:75] + "..."
+                        hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
                         is_match = any(j == bj for bj, _ in best_lines)
                         marker = ">>>" if is_match else "   "
                         print(f"|  {marker} {hl_line}")
 
-            print(f"|    匹配: {matched}/{len(query_words)} 词")
+            print(f"|    评分: {int(composite * 100)}% | 匹配: {matched}/{len(query_words)} 词")
 
         print()
 
