@@ -513,23 +513,39 @@ class NotebookSearchCLI:
     def _ripgrep_fallback(self, query, max_results=20):
         """FTS5 无结果时，用 ripgrep 在所有源文件中搜索"""
         from treesearch.ripgrep import rg_available, rg_search
+        from treesearch.parsers.registry import is_binary_extension
+        from treesearch.pathutil import shadow_md_path
 
         if not rg_available():
             print(f"\n[未找到包含 '{query}' 的结果]\n")
             return
 
-        # 收集所有已索引文件的路径
-        all_paths = list(set(p for p in self.path_map.values() if p and os.path.exists(p)))
-        if not all_paths:
+        # 收集所有已索引文件的路径，二进制文件替换为 shadow MD
+        rg_paths = []
+        shadow_to_original = {}  # shadow_md_path -> original_binary_path
+        for p in set(self.path_map.values()):
+            if not p or not os.path.exists(p):
+                continue
+            ext = os.path.splitext(p)[1].lower()
+            if is_binary_extension(ext):
+                md = shadow_md_path(p)
+                if os.path.exists(md):
+                    rg_paths.append(md)
+                    shadow_to_original[md] = p
+                # 无 shadow md 则跳过（rg 搜不了二进制）
+            else:
+                rg_paths.append(p)
+
+        if not rg_paths:
             print(f"\n[未找到包含 '{query}' 的结果]\n")
             return
 
-        hits = rg_search(query, all_paths, case_sensitive=False, use_regex=False)
+        hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=False)
         if not hits:
             print(f"\n[未找到包含 '{query}' 的结果]\n")
             return
 
-        # 从 path 反查 doc_id
+        # 从 path 反查 doc_id（映射 shadow 路径回原始路径）
         reverse_map = {}
         for key, path in self.path_map.items():
             reverse_map.setdefault(path, []).append(key)
@@ -540,8 +556,10 @@ class NotebookSearchCLI:
 
         filtered = []
         for file_path, line_nums in hits.items():
-            doc_ids = reverse_map.get(file_path, [])
-            doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(file_path))[0]
+            # Map shadow MD hits back to original binary path
+            display_path = shadow_to_original.get(file_path, file_path)
+            doc_ids = reverse_map.get(display_path, [])
+            doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(display_path))[0]
 
             # 读取匹配行附近的内容作为显示文本
             matched_line = line_nums[0]
@@ -556,7 +574,7 @@ class NotebookSearchCLI:
             context_end = min(len(all_lines), matched_line + 5)
             text = ''.join(all_lines[context_start:context_end]).rstrip()
 
-            title = os.path.splitext(os.path.basename(file_path))[0]
+            title = os.path.splitext(os.path.basename(display_path))[0]
             # 用 doc_name 查找更友好的标题
             for did in doc_ids:
                 if did in self.path_map and did != self.path_map[did]:
@@ -604,7 +622,7 @@ class NotebookSearchCLI:
                     rg_line_num = display_line - 5 + j  # 近似行号
                     is_match = any(
                         abs(rg_line_num - ln) <= 1
-                        for ln in hits.get(path, [])
+                        for ln in hits.get(shadow_to_original.get(path, path), [])
                     )
                     marker = ">>>" if is_match else "   "
                     print(f"|  {marker} {hl_line}")
@@ -667,23 +685,45 @@ class NotebookSearchCLI:
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
             from treesearch.ripgrep import rg_available, rg_search
+            from treesearch.parsers.registry import is_binary_extension
+            from treesearch.pathutil import shadow_md_path
 
             if rg_available():
-                # 获取所有源文件路径
-                file_paths = [self.path_map.get(did, "") for did in doc_nodes_map.keys()]
-                file_paths = [p for p in file_paths if p and os.path.exists(p)]
+                # 获取所有源文件路径，二进制文件替换为 shadow MD
+                raw_paths = [self.path_map.get(did, "") for did in doc_nodes_map.keys()]
+                rg_paths = []
+                shadow_to_original = {}
+                for p in raw_paths:
+                    if not p or not os.path.exists(p):
+                        continue
+                    ext = os.path.splitext(p)[1].lower()
+                    if is_binary_extension(ext):
+                        md = shadow_md_path(p)
+                        if os.path.exists(md):
+                            rg_paths.append(md)
+                            shadow_to_original[md] = p
+                    else:
+                        rg_paths.append(p)
 
-                if file_paths:
+                if rg_paths:
                     # 使用 ripgrep 做精确子串匹配
-                    hits = rg_search(query, file_paths, case_sensitive=False, use_regex=False)
+                    hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=False)
 
                     # 找到匹配行对应的节点
-                    for doc_id, line_nums in hits.items():
-                        source_path = self.path_map.get(doc_id, "")
-                        if not source_path:
+                    for hit_path, line_nums in hits.items():
+                        # Map shadow hits back to original path/doc_id
+                        original_path = shadow_to_original.get(hit_path, hit_path)
+                        # Find doc_id for the original path
+                        source_doc_id = None
+                        for did in doc_nodes_map.keys():
+                            if self.path_map.get(did, "") == original_path:
+                                source_doc_id = did
+                                break
+                        if not source_doc_id:
                             continue
+
                         # 找到与行号匹配的节点
-                        all_nodes = doc_nodes_map.get(doc_id, [])
+                        all_nodes = doc_nodes_map.get(source_doc_id, [])
                         matched_node = None
                         for n in all_nodes:
                             n_line = n.get("line_start")
@@ -700,7 +740,7 @@ class NotebookSearchCLI:
                                     break
 
                         if matched_node:
-                            filtered.append((doc_id, matched_node, len(query_words), 0, 0.0))
+                            filtered.append((source_doc_id, matched_node, len(query_words), 0, 0.0))
 
         # 计算综合评分并按其降序排序
         scored_results = []

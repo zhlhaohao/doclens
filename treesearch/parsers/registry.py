@@ -129,6 +129,22 @@ def get_prefilters_for_source_type(source_type: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Binary extensions that need shadow MD for ripgrep fallback
+# ---------------------------------------------------------------------------
+
+SHADOW_MD_EXTENSIONS: frozenset[str] = frozenset({
+    ".pdf", ".epub", ".xps", ".oxps", ".fb2", ".cbz", ".cbr",
+    ".doc", ".docx", ".pptx",
+    ".xlsx", ".xlsm", ".xltx", ".xltm",
+})
+
+
+def is_binary_extension(ext: str) -> bool:
+    """Check if a file extension is a binary format that needs shadow MD."""
+    return ext.lower() in SHADOW_MD_EXTENSIONS
+
+
+# ---------------------------------------------------------------------------
 # Parser registry
 # ---------------------------------------------------------------------------
 

@@ -21,7 +21,7 @@ from tqdm import tqdm
 from .tree import (
     Document, assign_node_ids, flatten_tree, format_structure, remove_fields,
 )
-from .pathutil import resolve_paths, DEFAULT_IGNORE_DIRS, MAX_DIR_FILES
+from .pathutil import resolve_paths, DEFAULT_IGNORE_DIRS, MAX_DIR_FILES, shadow_md_path
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,43 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Shared helpers
 # ============================================================================
+
+def _generate_shadow_md(binary_path: str) -> None:
+    """Convert a binary file to a hidden Markdown text copy using markitdown.
+
+    The shadow file (``._<name>.<ext>.md``) lives alongside the source and is
+    used by ripgrep fallback search when FTS5 has no results.
+
+    Skips generation if the shadow file is newer than the source (incremental).
+    """
+    md_path = shadow_md_path(binary_path)
+    # Incremental: skip if shadow is up-to-date
+    try:
+        if os.path.exists(md_path) and os.path.getmtime(md_path) >= os.path.getmtime(binary_path):
+            return
+    except OSError:
+        pass
+
+    try:
+        from markitdown import MarkItDown
+    except ImportError:
+        logger.debug("markitdown not installed, skipping shadow MD for %s", binary_path)
+        return
+
+    md = MarkItDown()
+    result = md.convert(binary_path)
+    text = result.text_content or ""
+    if not text.strip():
+        logger.debug("markitdown returned empty content for %s", binary_path)
+        return
+
+    try:
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        logger.debug("Generated shadow MD: %s", md_path)
+    except OSError as e:
+        logger.warning("Failed to write shadow MD %s: %s", md_path, e)
+
 
 def _children_indices(node_list: list[dict], parent_idx: int, parent_level: int) -> list[int]:
     """Return indices of all descendants of node_list[parent_idx]."""
@@ -1374,6 +1411,19 @@ async def build_index(
             fts.delete_documents(prune_doc_ids)
             logger.info("Pruned %d orphan document(s) from index", len(prune_doc_ids))
 
+        # Clean up shadow MD files for pruned binary sources
+        from .parsers.registry import is_binary_extension
+        for pruned_path in pruned_paths:
+            ext = os.path.splitext(pruned_path)[1].lower()
+            if is_binary_extension(ext):
+                md_path = shadow_md_path(pruned_path)
+                if os.path.exists(md_path):
+                    try:
+                        os.remove(md_path)
+                        logger.debug("Removed orphan shadow MD: %s", md_path)
+                    except OSError as e:
+                        logger.debug("Failed to remove shadow MD %s: %s", md_path, e)
+
     for fp in expanded:
         abs_fp = os.path.abspath(fp)
         fh = _file_hash(abs_fp)
@@ -1500,6 +1550,15 @@ async def build_index(
                 fts.optimize()
                 docs_since_optimize = 0
             logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
+
+            # Generate shadow MD for binary files (for ripgrep fallback)
+            from .parsers.registry import is_binary_extension
+            ext = os.path.splitext(fp)[1].lower()
+            if is_binary_extension(ext):
+                try:
+                    _generate_shadow_md(abs_fp)
+                except Exception as e:
+                    logger.debug("Shadow MD generation failed for %s: %s", abs_fp, e)
         else:
             # Skipped file: use batch-loaded docs (lookup by source_path, not doc_id)
             abs_fp = os.path.abspath(fp)
