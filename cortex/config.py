@@ -30,6 +30,12 @@ class CortexConfig(BaseSettings):
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 
+    # 评分权重（0=禁用，值越大越重要）
+    weight_keyword_match: float = Field(default=3.0)
+    weight_file_name_match: float = Field(default=2.0)
+    weight_fts_score: float = Field(default=2.0)
+    weight_title_match: float = Field(default=1.5)
+
     # Planify / Agent 配置
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
     planify_model_id: str = Field(default="claude-opus-4-6", alias="PLANIFY_MODEL_ID")
