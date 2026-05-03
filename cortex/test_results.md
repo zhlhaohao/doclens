@@ -703,18 +703,18 @@ Cas9: 2条
 
 ## SEARCH-010 /set 控制结果数量
 
-**结论**: ❌ 未通过
+**结论**: ✅ 通过（已修复）
 
 **测试问题**: `/set 3` 设置 cli.max_results 为3后，搜索仍返回8条结果。原因是 `format_results()` 函数有自己的默认值20，未使用 cli 实例的 max_results 属性。
 
 **输出响应内容**:
 
 ```
-/set 3 → 8条
-/set 20 → 8条
+/set 3 → max_results=3 返回 3条
+/set 20 → max_results=20 返回 8条（上限为实际匹配数）
 ```
 
-**判定理由**: `/set` 命令修改了 cli.max_results 但 format_results 未读取该值，导致限制无效。需修复 format_results 使其使用实例属性而非函数默认值。
+**判定理由**: 已修复 `cortex_cli.py` 调用 `format_results()` 时传入 `max_results=self.max_results` 参数，`/set` 命令现在正确控制返回数量。
 
 ---
 
@@ -1216,43 +1216,39 @@ rg_available=True
 
 ## EDGE-001 搜索路径为空目录
 
-**结论**: ❌ 未通过
+**结论**: ✅ 通过（已修复）
 
 **测试问题**: 对空目录执行索引时抛出 FileNotFoundError，搜索时抛出 ValueError。
 
 **输出响应内容**:
 
 ```
-[正在构建索引: E:\github\TreeSearch\test_work_dir\空目录测试]
-
-[异常] No files found for patterns: ['E:\\github\\TreeSearch\\test_work_dir\\空目录测试']
-FileNotFoundError: No files found for patterns: [...]
-
-搜索:
-[异常] No documents available. Pass file paths to TreeSearch() or call index() first.
-ValueError: No documents available.
+[正在构建索引: test_work_dir\_empty_test]
+[警告] 路径不存在或为空: test_work_dir\_empty_test
+load_or_build_index: OK
+search: OK, nodes=0, docs=0
 ```
 
-**判定理由**: 空目录应优雅处理，给出友好提示而非抛出异常。需在 CLI 层捕获异常并输出提示信息。
+**判定理由**: 空目录索引时打印友好警告 `[警告] 路径不存在或为空`，不抛异常；搜索返回空结果 (nodes=0, docs=0)，不崩溃。修复方式：`index_manager.py` 中 `load_or_build_index()` 和 `reindex()` 捕获 `FileNotFoundError`，`search()` 检查空文档列表提前返回。
 
 ---
 
 ## EDGE-002 搜索路径不存在
 
-**结论**: ❌ 未通过
+**结论**: ✅ 通过（已修复）
 
 **测试问题**: 对不存在的路径执行索引时抛出 FileNotFoundError，未给出友好提示。
 
 **输出响应内容**:
 
 ```
-[正在构建索引: /nonexistent/path/xyz123]
-
-[异常] No files found for patterns: ['/nonexistent/path/xyz123']
-FileNotFoundError: No files found for patterns: [...]
+[正在构建索引: /nonexistent/path/that/does/not/exist]
+[警告] 路径不存在或为空: /nonexistent/path/that/does/not/exist
+load_or_build_index: OK
+search: OK, nodes=0, docs=0
 ```
 
-**判定理由**: 路径不存在时应优雅处理，给出友好提示而非抛出异常。需在 CLI 层校验路径有效性。
+**判定理由**: 不存在路径索引时打印友好警告，不抛异常；搜索返回空结果，不崩溃。与 EDGE-001 共用同一修复。
 
 ---
 
@@ -1366,19 +1362,15 @@ file.txt:
 | 优先级 | 总数 | 通过 | 未通过 | 部分通过 | 通过率 |
 |--------|------|------|--------|----------|--------|
 | P0     | 22   | 22   | 0      | 0        | 100%   |
-| P1     | 24   | 22   | 1      | 1        | 91.7%  |
-| P2     | 9    | 6    | 2      | 1        | 66.7%  |
+| P1     | 24   | 23   | 0      | 1        | 95.8%  |
+| P2     | 9    | 8    | 0      | 1        | 88.9%  |
 | P3     | 1    | 1    | 0      | 0        | 100%   |
 | Q验证  | 52   | 52   | 0      | 0        | 100%   |
-| **合计** | **108** | **103** | **3** | **2** | **95.4%** |
+| **合计** | **108** | **106** | **0** | **2** | **98.1%** |
 
 ### 未通过用例清单
 
-| 编号 | 优先级 | 功能点 | 问题描述 |
-|------|--------|--------|----------|
-| SEARCH-010 | P1 | /set 控制结果数量 | `format_results()` 使用函数默认值而非 cli.max_results 实例属性，导致 `/set` 限制无效 |
-| EDGE-001 | P2 | 空目录搜索 | 空目录索引时抛出 FileNotFoundError，未优雅处理 |
-| EDGE-002 | P2 | 路径不存在 | 不存在的路径索引时抛出 FileNotFoundError，未优雅处理 |
+无。所有 108 条测试用例均已通过或部分通过。
 
 ### 部分通过用例清单
 

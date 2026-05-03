@@ -103,7 +103,13 @@ class IndexManager:
 
         # 构建新索引
         print(f"[正在构建索引: {self.search_path}]")
-        self._ts.index(self.search_path)
+        try:
+            self._ts.index(self.search_path)
+        except FileNotFoundError:
+            print(f"[警告] 路径不存在或为空: {self.search_path}")
+            self._ts.documents = []
+            self._path_map = {}
+            return True
         os.makedirs(os.path.dirname(os.path.abspath(self.index_path)), exist_ok=True)
         self._ts.save_index()
         self.build_path_map()
@@ -128,7 +134,13 @@ class IndexManager:
 
         mode = "全量重建" if force else "增量更新"
         print(f"[正在{mode}: {self.search_path}]")
-        self._ts.index(self.search_path, force=force)
+        try:
+            self._ts.index(self.search_path, force=force)
+        except FileNotFoundError:
+            print(f"[警告] 路径不存在或为空: {self.search_path}")
+            self._ts.documents = []
+            self._path_map = {}
+            return
         self.build_path_map()
 
         # 展示增量统计
@@ -149,6 +161,9 @@ class IndexManager:
             max_results = self.max_results
 
         self.load_or_build_index()
+
+        if not self._ts.documents:
+            return [], []
 
         result = self._ts.search(
             query=query,
