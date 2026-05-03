@@ -15,11 +15,13 @@ NotebookSearch CLI - 交互式全文检索工具
 
 import sys
 import os
-import re
 from pathlib import Path
 
-from treesearch import TreeSearch, set_config, TreeSearchConfig
 from cortex.config import CortexConfig
+from cortex.formatting import hl, truncate_ansi_safe, make_vscode_link
+from cortex.scoring import tokenize_query, calc_proximity_score, compute_composite_score
+from cortex.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
+from cortex import ripgrep as rg_module
 
 
 # ============================================================================
@@ -123,125 +125,6 @@ def _direct_input(prompt: str) -> str:
         sys.stdout.write(ch)
         sys.stdout.flush()
 
-# 高亮
-HL_START = "\033[1;31m"
-HL_END = "\033[0m"
-
-# 匹配所有 ANSI 转义序列
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
-
-
-def _strip_ansi(text):
-    """移除所有 ANSI 转义序列，返回纯文本"""
-    return _ANSI_RE.sub("", text)
-
-
-def _truncate_ansi_safe(text, max_visible, keywords=None):
-    """安全截断含 ANSI 转义码的字符串，保留完整的转义序列。
-
-    按可见字符数截断，不会被 ANSI 序列中间切断，
-    并在截断时追加 HL_END 确保终端状态正确关闭。
-
-    如果提供 keywords，会尝试以第一个关键词为中心截断，
-    确保关键词（含高亮标记）在可见范围内。
-    """
-    plain = _strip_ansi(text)
-    if len(plain) <= max_visible:
-        return text
-
-    target = max_visible - 3  # 留 3 字符给 "..."
-
-    # 确定截断的可见字符起始偏移（默认从 0 开始）
-    skip_visible = 0
-
-    if keywords:
-        for kw in keywords:
-            if not kw:
-                continue
-            kw_lower = kw.lower()
-            pos = plain.lower().find(kw_lower)
-            if pos < 0:
-                continue
-            kw_end = pos + len(kw)
-            # 关键词在可见范围内，从头截断即可
-            if kw_end <= target:
-                break
-            # 关键词超出范围，从中间偏前处开始截断
-            skip_visible = max(0, pos - target // 3)
-            break
-
-    # 在原始 text（含 ANSI）上按可见字符截取
-    visible = 0
-    result = []
-    i = 0
-    while i < len(text):
-        m = _ANSI_RE.match(text, i)
-        if m:
-            # ANSI 序列无条件保留
-            if visible >= skip_visible:
-                result.append(m.group())
-            i = m.end()
-        else:
-            if visible < skip_visible:
-                # 跳过前面的可见字符
-                visible += 1
-            elif visible < skip_visible + target:
-                result.append(text[i])
-                visible += 1
-            else:
-                break
-            i += 1
-
-    prefix = "..." if skip_visible > 0 else ""
-    return prefix + "".join(result) + "..." + HL_END
-
-# 超链接（ANSI escape code）
-# 格式: \033]8;;URL\007显示文本\033]8;;\007
-# 说明: \033]8;;URL\007 是开始链接，\033]8;;\007 是结束链接
-LINK_START = "\033]8;;"
-LINK_SEP = "\007"       # 分隔 URL 和显示文本
-LINK_END = "\033]8;;\007" # 结束链接
-
-# 支持的文件类型和依赖
-SUPPORTED_FORMATS = {
-    # 内置支持
-    '.md': ('Markdown', None),
-    '.txt': ('纯文本', None),
-    '.json': ('JSON', None),
-    '.yaml': ('YAML', None),
-    '.yml': ('YAML', None),
-    '.toml': ('TOML', None),
-    '.py': ('Python', None),
-    '.js': ('JavaScript', None),
-    '.ts': ('TypeScript', None),
-    '.html': ('HTML', 'bs4'),
-    '.xml': ('XML', None),
-    # 需要额外依赖
-    '.pdf': ('PDF', 'pymupdf'),
-    '.docx': ('Word文档', 'docx'),
-    '.xlsx': ('Excel表格', 'openpyxl'),
-    '.xls': ('Excel表格', 'openpyxl'),
-    '.pptx': ('PowerPoint', 'pptx'),
-}
-
-
-def check_dependencies():
-    """检查依赖是否安装，返回未安装的依赖列表"""
-    missing = []
-    for ext, (name, dep) in SUPPORTED_FORMATS.items():
-        if dep and not _check_module(dep):
-            missing.append((name, dep))
-    return missing
-
-
-def _check_module(module_name):
-    """检查模块是否已安装"""
-    try:
-        __import__(module_name)
-        return True
-    except ImportError:
-        return False
-
 
 class NotebookSearchCLI:
     """NotebookSearch 交互式 CLI"""
@@ -249,398 +132,66 @@ class NotebookSearchCLI:
     def __init__(self):
         # 加载配置
         config = CortexConfig.load()
-
-        self.search_path = config.search_path
-        self.index_path = config.index_path or os.path.join(self.search_path, ".cortex", "index.db")
+        self.idx = IndexManager(config)
         self.max_results = config.max_results
-        self.max_nodes_per_doc = config.max_nodes_per_doc
-        self.top_k_docs = config.top_k_docs
-        self.max_span = config.max_span
-        self.min_keyword_match = config.min_keyword_match
-        self.cjk_tokenizer = config.cjk_tokenizer
-
-        # 评分权重
-        self.scoring_weights = {
-            "keyword_match_ratio": config.weight_keyword_match,
-            "file_name_match": config.weight_file_name_match,
-            "fts_score": config.weight_fts_score,
-            "title_match": config.weight_title_match,
-        }
-
-        self.ts = None
-        self.path_map = {}
 
         # Agent 相关（延迟初始化）
         self.agent = None
         self._agent_history = []
 
-    # ---- 索引管理 ----
+    # ---- 向后兼容属性代理 ----
+
+    @property
+    def ts(self):
+        return self.idx.ts
+
+    @property
+    def path_map(self):
+        return self.idx.path_map
+
+    @property
+    def search_path(self):
+        return self.idx.search_path
+
+    @property
+    def index_path(self):
+        return self.idx.index_path
+
+    @property
+    def scoring_weights(self):
+        return self.idx.scoring_weights
+
+    # ---- 索引管理（委托给 IndexManager）----
 
     def load_or_build_index(self):
-        """加载或构建索引"""
-        if self.ts is not None:
-            return True
-
-        # 设置 CJK 分词为 bigram（字符二元组，减少单字符匹配）
-        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
-        self.ts = TreeSearch(db_path=self.index_path)
-        abs_path = os.path.abspath(self.index_path)
-
-        if os.path.exists(abs_path):
-            try:
-                docs = self.ts.load_index(abs_path)
-                if docs:
-                    self.ts.documents = docs
-                    self._build_path_map()
-                    return True
-            except Exception:
-                pass
-
-        # 构建新索引
-        print(f"[正在构建索引: {self.search_path}]")
-        self.ts.index(self.search_path)
-        # 确保目录存在
-        os.makedirs(os.path.dirname(os.path.abspath(self.index_path)), exist_ok=True)
-        self.ts.save_index()
-        self._build_path_map()
-        print(f"[索引完成: {len(self.ts.documents)} 个文档]")
-        return True
-
-    def _build_path_map(self):
-        """构建路径映射"""
-        self.path_map = {}
-        for doc in self.ts.documents:
-            if hasattr(doc, 'metadata') and doc.metadata:
-                path = doc.metadata.get('source_path', '')
-                if path:
-                    # 同时用 doc_id 和 doc_name 作为 key（搜索结果中 doc_id 实际上是 doc_name）
-                    self.path_map[doc.doc_id] = path
-                    self.path_map[doc.doc_name] = path
+        return self.idx.load_or_build_index()
 
     def reindex(self, force=False):
-        """增量更新索引（force=True 时全量重建）"""
-        if self.ts is None:
-            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
-            self.ts = TreeSearch(db_path=self.index_path)
-
-        mode = "全量重建" if force else "增量更新"
-        print(f"[正在{mode}: {self.search_path}]")
-        self.ts.index(self.search_path, force=force)
-        self._build_path_map()
-
-        # 展示增量统计
-        stats = self.ts.get_index_stats()
-        if stats:
-            print(f"[{mode}完成: "
-                  f"{stats.indexed_files} 个文件已索引, "
-                  f"{stats.skipped_files} 个未变更, "
-                  f"{len(stats.pruned_paths)} 个已清理 | "
-                  f"共 {len(self.ts.documents)} 个文档, "
-                  f"{stats.total_time_s:.2f}s]")
-        else:
-            print(f"[索引已更新: {len(self.ts.documents)} 个文档]")
-
-    # ---- 搜索 ----
+        return self.idx.reindex(force=force)
 
     def do_search(self, query, max_results=None):
-        """执行搜索"""
-        if max_results is None:
-            max_results = self.max_results
+        return self.idx.search(query, max_results)
 
-        self.load_or_build_index()
-
-        result = self.ts.search(
-            query=query,
-            max_results=max_results,
-            max_nodes_per_doc=self.max_nodes_per_doc,
-            top_k_docs=self.top_k_docs,
-        )
-
-        return result.get("flat_nodes", []), result.get("documents", [])
-
-    # ---- 格式化输出 ----
-
-    def hl(self, text, keywords):
-        """高亮关键词（支持多个分词后的关键词）"""
-        if not keywords or not text:
-            return text
-        result = text
-        for kw in keywords:
-            if kw:
-                pattern = re.compile(re.escape(kw), re.IGNORECASE)
-                result = pattern.sub(lambda m: f"{HL_START}{m.group()}{HL_END}", result)
-        return result
-
-    def short_path(self, path):
-        """缩短路径"""
-        return path.replace("E:\\github\\notebook\\", "").replace("E:/github/notebook/", "")
-
-    def make_vscode_link(self, path, line=None):
-        """生成 VSCode 可点击超链接
-
-        Args:
-            path: 文件绝对路径
-            line: 可选，行号
-        Returns:
-            ANSI 超链接格式的字符串
-        """
-        import urllib.parse
-
-        # 转义反斜杠（Windows 路径）
-        abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
-        # 替换反斜杠为正斜杠（URL 标准）
-        abs_path = abs_path.replace('\\', '/')
-
-        # 只对空格编码，其他字符保留原样
-        encoded_path = abs_path.replace(' ', '%20')
-
-        # 显示文本（包含行号）
-        display_text = f"{abs_path}:{line}" if line is not None else abs_path
-
-        if line is not None:
-            url = f"vscode://file/{encoded_path}:{line}"
-        else:
-            url = f"vscode://file/{encoded_path}"
-
-        # 构建 ANSI 超链接，显示完整路径
-        return f"{LINK_START}{url}{LINK_SEP}{display_text}{LINK_END}"
-
-    def _tokenize_query(self, query):
-        """使用 jieba 对查询进行分词，过滤掉单字词"""
-        from treesearch.tokenizer import tokenize
-        tokens = tokenize(query)
-        # 过滤掉单字符词
-        return [t for t in tokens if len(t) > 1]
-
-    def _calc_proximity_score(self, text, keywords, max_span=20):
-        """计算关键词紧密度分数
-
-        Args:
-            text: 要检查的文本
-            keywords: 关键词列表
-            max_span: 关键词最大跨度（字符数），超过则不算紧邻
-        Returns:
-            (matched_count, proximity_score) - 匹配词数和紧邻分数
-                proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
-        """
-        if not text or not keywords:
-            return 0, 0
-
-        text_lower = text.lower()
-        positions = []
-
-        for kw in keywords:
-            kw_lower = kw.lower()
-            idx = text_lower.find(kw_lower)
-            if idx >= 0:
-                positions.append(idx)
-
-        if not positions:
-            return 0, 0
-
-        matched = len(positions)
-        span = max(positions) - min(positions) if len(positions) > 1 else 0
-
-        # 全部关键词都匹配且紧邻 = 最高分
-        if matched == len(keywords) and span <= max_span:
-            return matched, 2
-        # 部分关键词匹配 = 中等分数（按匹配比例）
-        return matched, 1
-
-    def _compute_composite_score(self, matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights):
-        """计算综合评分
-
-        Args:
-            matched_count: 匹配的关键词数
-            total_keywords: 总关键词数
-            doc_name: 文档名（文件名）
-            node_title: 节点标题
-            fts_score: FTS5 BM25 原始分数
-            query_words: 查询分词列表
-            weights: 各因子权重字典
-
-        Returns:
-            (composite_score, factors_dict) - 综合评分(0~1)和各因子明细
-        """
-        factors = {}
-        total_weight = 0.0
-        weighted_sum = 0.0
-
-        if total_keywords <= 0:
-            return 0.0, factors
-
-        name_lower = (doc_name or "").lower()
-        title_lower = (node_title or "").lower()
-
-        # keyword_match_ratio: 匹配关键词数 / 总关键词数
-        w = weights.get("keyword_match_ratio", 0)
-        if w > 0:
-            val = matched_count / total_keywords
-            factors["keyword_match_ratio"] = val
-            weighted_sum += w * val
-            total_weight += w
-
-        # file_name_match: 文件名中匹配的关键词数 / 总关键词数
-        w = weights.get("file_name_match", 0)
-        if w > 0:
-            name_hits = sum(1 for kw in query_words if kw.lower() in name_lower)
-            val = name_hits / total_keywords
-            factors["file_name_match"] = val
-            weighted_sum += w * val
-            total_weight += w
-
-        # fts_score: 归一化 BM25 分数 (用 sigmoid 映射到 0~1)
-        w = weights.get("fts_score", 0)
-        if w > 0:
-            import math
-            val = 1.0 / (1.0 + math.exp(-fts_score)) if fts_score != 0 else 0.5
-            factors["fts_score"] = val
-            weighted_sum += w * val
-            total_weight += w
-
-        # title_match: 标题中匹配的关键词数 / 总关键词数
-        w = weights.get("title_match", 0)
-        if w > 0:
-            title_hits = sum(1 for kw in query_words if kw.lower() in title_lower)
-            val = title_hits / total_keywords
-            factors["title_match"] = val
-            weighted_sum += w * val
-            total_weight += w
-
-        composite = weighted_sum / total_weight if total_weight > 0 else 0.0
-        return composite, factors
-
-    def _ripgrep_fallback(self, query, max_results=20):
-        """FTS5 无结果时，用 ripgrep 在所有源文件中搜索"""
-        from treesearch.ripgrep import rg_available, rg_search
-        from treesearch.parsers.registry import is_binary_extension
-        from treesearch.pathutil import shadow_md_path
-
-        if not rg_available():
-            print(f"\n[未找到包含 '{query}' 的结果]\n")
-            return
-
-        # 收集所有已索引文件的路径，二进制文件替换为 shadow MD
-        rg_paths = []
-        shadow_to_original = {}  # shadow_md_path -> original_binary_path
-        for p in set(self.path_map.values()):
-            if not p or not os.path.exists(p):
-                continue
-            ext = os.path.splitext(p)[1].lower()
-            if is_binary_extension(ext):
-                md = shadow_md_path(p)
-                if os.path.exists(md):
-                    rg_paths.append(md)
-                    shadow_to_original[md] = p
-                # 无 shadow md 则跳过（rg 搜不了二进制）
-            else:
-                rg_paths.append(p)
-
-        if not rg_paths:
-            print(f"\n[未找到包含 '{query}' 的结果]\n")
-            return
-
-        hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=False)
-        if not hits:
-            print(f"\n[未找到包含 '{query}' 的结果]\n")
-            return
-
-        # 从 path 反查 doc_id（映射 shadow 路径回原始路径）
-        reverse_map = {}
-        for key, path in self.path_map.items():
-            reverse_map.setdefault(path, []).append(key)
-
-        query_words = self._tokenize_query(query)
-        if not query_words:
-            query_words = [w.strip() for w in query.split() if w.strip()]
-
-        filtered = []
-        for file_path, line_nums in hits.items():
-            # Map shadow MD hits back to original binary path
-            display_path = shadow_to_original.get(file_path, file_path)
-            doc_ids = reverse_map.get(display_path, [])
-            doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(display_path))[0]
-
-            # 读取匹配行附近的内容作为显示文本
-            matched_line = line_nums[0]
-            try:
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    all_lines = f.readlines()
-            except OSError:
-                continue
-
-            # 构造一个合成节点用于显示
-            context_start = max(0, matched_line - 6)
-            context_end = min(len(all_lines), matched_line + 5)
-            text = ''.join(all_lines[context_start:context_end]).rstrip()
-
-            title = os.path.splitext(os.path.basename(display_path))[0]
-            # 用 doc_name 查找更友好的标题
-            for did in doc_ids:
-                if did in self.path_map and did != self.path_map[did]:
-                    title = did
-                    doc_id = did
-                    break
-
-            synthetic_node = {
-                "title": title,
-                "text": text,
-                "line_start": matched_line,
-            }
-            filtered.append((doc_id, synthetic_node, len(query_words), 0))
-
-        if not filtered:
-            print(f"\n[未找到包含 '{query}' 的结果]\n")
-            return
-
-        # 复用后续的渲染逻辑
-        filtered.sort(key=lambda x: (-x[3], -x[2]))
-        print(f"\n{'='*60}")
-        print(f"关键词: {query}  |  找到 {len(filtered)} 个匹配 (ripgrep)")
-        print(f"{'='*60}")
-
-        for i, item in enumerate(filtered[:max_results], 1):
-            doc_id, display_node, matched, prox = item
-            display_title = display_node.get("title", "")
-            display_text = display_node.get("text", "") or ""
-            display_line = display_node.get("line_start")
-            path = self.path_map.get(doc_id, "")
-
-            print(f"\n+-- [{i}] {self.hl(display_title[:55], query_words)}")
-            file_link = self.make_vscode_link(path, display_line)
-            print(f"|    文件: {file_link}")
-            print(f"|    {'-'*45}")
-
-            if display_text:
-                lines = display_text.split('\n')
-                for j, l in enumerate(lines):
-                    line = l.strip()
-                    if not line:
-                        continue
-                    hl_line = self.hl(line, query_words)
-                    hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
-                    rg_line_num = display_line - 5 + j  # 近似行号
-                    is_match = any(
-                        abs(rg_line_num - ln) <= 1
-                        for ln in hits.get(shadow_to_original.get(path, path), [])
-                    )
-                    marker = ">>>" if is_match else "   "
-                    print(f"|  {marker} {hl_line}")
-
-            print(f"|    匹配: {matched}/{len(query_words)} 词")
-        print()
+    # ---- 搜索结果格式化 ----
 
     def format_results(self, nodes, docs, query, max_results=20):
-        """格式化搜索结果"""
-        if not nodes:
-            # FTS5 无结果，降级到 ripgrep 搜索所有已索引源文件
-            self._ripgrep_fallback(query, max_results)
-            return
-
-        # 使用 jieba 分词
-        query_words = self._tokenize_query(query)
+        """格式化搜索结果（协调器）"""
+        # 分词
+        query_words = tokenize_query(query)
         if not query_words:
             query_words = [w.strip() for w in query.split() if w.strip()]
+
+        # FTS 无结果时，直接 ripgrep 降级
+        if not nodes:
+            filtered = rg_module.rg_fallback_search(
+                query, self.idx.path_map, {}, query_words
+            )
+            if not filtered:
+                print(f"\n[未找到包含 '{query}' 的结果]\n")
+                return
+            # 降级结果直接渲染（无综合评分）
+            self._render_results(query, filtered, query_words, max_results, is_ripgrep=True)
+            return
 
         # 构建 doc_id -> 文档节点的映射
         doc_nodes_map = {}
@@ -649,25 +200,22 @@ class NotebookSearchCLI:
             doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
         # 对每个文档，找到包含关键词且紧邻匹配最好的节点
-        # 同时收集每个 doc 最好的 FTS 分数
         doc_best: dict = {}  # doc_id -> (best_node, matched_count, proximity_score, fts_score)
         doc_fts_best: dict = {}  # doc_id -> max fts_score across all nodes
         for node in nodes:
             doc_id = node.get("doc_id", "")
             score = node.get("score", 0.0)
-            # 记录该 doc 最高的 fts 分数
             if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
                 doc_fts_best[doc_id] = score
             if doc_id in doc_best:
-                continue  # 已处理过
+                continue
             all_nodes = doc_nodes_map.get(doc_id, [])
             best_node = None
             best_count = 0
             best_proximity = 0
             for n in all_nodes:
                 n_text = n.get("text", "") or ""
-                cnt, proximity = self._calc_proximity_score(n_text, query_words)
-                # 优先选择紧邻分数高，其次匹配词数多
+                cnt, proximity = calc_proximity_score(n_text, query_words)
                 if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
                     best_count = cnt
                     best_proximity = proximity
@@ -684,96 +232,63 @@ class NotebookSearchCLI:
 
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
-            from treesearch.ripgrep import rg_available, rg_search
-            from treesearch.parsers.registry import is_binary_extension
-            from treesearch.pathutil import shadow_md_path
+            filtered = rg_module.rg_fallback_search(
+                query, self.idx.path_map, doc_nodes_map, query_words
+            )
 
-            if rg_available():
-                # 获取所有源文件路径，二进制文件替换为 shadow MD
-                raw_paths = [self.path_map.get(did, "") for did in doc_nodes_map.keys()]
-                rg_paths = []
-                shadow_to_original = {}
-                for p in raw_paths:
-                    if not p or not os.path.exists(p):
-                        continue
-                    ext = os.path.splitext(p)[1].lower()
-                    if is_binary_extension(ext):
-                        md = shadow_md_path(p)
-                        if os.path.exists(md):
-                            rg_paths.append(md)
-                            shadow_to_original[md] = p
-                    else:
-                        rg_paths.append(p)
-
-                if rg_paths:
-                    # 使用 ripgrep 做精确子串匹配
-                    hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=False)
-
-                    # 找到匹配行对应的节点
-                    for hit_path, line_nums in hits.items():
-                        # Map shadow hits back to original path/doc_id
-                        original_path = shadow_to_original.get(hit_path, hit_path)
-                        # Find doc_id for the original path
-                        source_doc_id = None
-                        for did in doc_nodes_map.keys():
-                            if self.path_map.get(did, "") == original_path:
-                                source_doc_id = did
-                                break
-                        if not source_doc_id:
-                            continue
-
-                        # 找到与行号匹配的节点
-                        all_nodes = doc_nodes_map.get(source_doc_id, [])
-                        matched_node = None
-                        for n in all_nodes:
-                            n_line = n.get("line_start")
-                            if n_line and n_line in line_nums:
-                                matched_node = n
-                                break
-
-                        if not matched_node:
-                            # 如果没有精确行号匹配，使用第一个匹配行附近的节点
-                            for n in all_nodes:
-                                n_text = n.get("text", "") or ""
-                                if query.lower() in n_text.lower():
-                                    matched_node = n
-                                    break
-
-                        if matched_node:
-                            filtered.append((source_doc_id, matched_node, len(query_words), 0, 0.0))
+        if not filtered:
+            print(f"\n[未找到包含 '{query}' 的结果]\n")
+            return
 
         # 计算综合评分并按其降序排序
         scored_results = []
         for item in filtered:
             did, display_node, matched, prox, fts = item
-            composite, factors = self._compute_composite_score(
+            composite, factors = compute_composite_score(
                 matched_count=matched,
                 total_keywords=len(query_words),
                 doc_name=did,
                 node_title=display_node.get("title", ""),
                 fts_score=fts,
                 query_words=query_words,
-                weights=self.scoring_weights,
+                weights=self.idx.scoring_weights,
             )
             scored_results.append((composite, item))
 
         scored_results.sort(key=lambda x: -x[0])
-        filtered_display = [item for _, item in scored_results]
+        self._render_results(query, scored_results, query_words, max_results, is_ripgrep=False)
+
+    def _render_results(self, query, results, query_words, max_results, is_ripgrep=False):
+        """渲染搜索结果到终端
+
+        Args:
+            query: 原始查询
+            results: is_ripgrep 时为 [(doc_id, node, matched, prox, fts)]
+                     否则为 [(composite_score, (doc_id, node, matched, prox, fts))]
+            query_words: 分词列表
+            max_results: 最大显示数
+            is_ripgrep: 是否为 ripgrep 降级结果（无综合评分）
+        """
+        if is_ripgrep:
+            label = f"找到 {len(results)} 个匹配 (ripgrep)"
+            display_items = [(0.0, item) for item in results[:max_results]]
+        else:
+            label = f"找到 {len(results)} 个匹配"
+            display_items = results[:max_results]
 
         print(f"\n{'='*60}")
-        print(f"关键词: {query}  |  找到 {len(filtered_display)} 个匹配")
+        print(f"关键词: {query}  |  {label}")
         print(f"{'='*60}")
 
-        for i, (composite, item) in enumerate(scored_results[:max_results], 1):
+        for i, (composite, item) in enumerate(display_items, 1):
             doc_id, display_node, matched, prox, fts = item
             display_title = display_node.get("title", "")
             display_text = display_node.get("text", "") or ""
             display_line = display_node.get("line_start")
-            path = self.path_map.get(doc_id, "")
+            path = self.idx.path_map.get(doc_id, "")
 
-            # 输出结果
-            print(f"\n+-- [{i}] {self.hl(display_title[:55], query_words)}")
-            file_link = self.make_vscode_link(path, display_line)
+            print(f"\n+-- [{i}] {hl(display_title[:55], query_words)}")
+            file_link = make_vscode_link(path, display_line)
             print(f"|    文件: {file_link}")
             print(f"|    {'-'*45}")
 
@@ -789,26 +304,20 @@ class NotebookSearchCLI:
                         line_keyword_counts.append((cnt, j, l))
 
                 if not line_keyword_counts:
-                    # 没有匹配行，显示前5行
                     for j in range(min(5, len(lines))):
                         line = lines[j].strip()
                         if line:
-                            hl_line = self.hl(line, query_words)
-                            hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
+                            hl_line = hl(line, query_words)
+                            hl_line = truncate_ansi_safe(hl_line, 78, query_words)
                             print(f"|  >>> {hl_line}")
                 else:
-                    # 按包含关键词数降序排序
                     line_keyword_counts.sort(key=lambda x: -x[0])
-
-                    # 优先显示包含2+关键词的行
                     best_lines = [(j, l) for cnt, j, l in line_keyword_counts if cnt >= 2]
                     if not best_lines:
-                        # 没有2+关键词的行，显示包含1个关键词的（最多5行）
                         best_lines = [(j, l) for cnt, j, l in line_keyword_counts[:5]]
 
-                    # 显示匹配行及其上下文（上下5行）
                     context_lines = set()
-                    for j, l in best_lines[:3]:  # 最多3个匹配点
+                    for j, l in best_lines[:3]:
                         for offset in range(-5, 6):
                             idx = j + offset
                             if 0 <= idx < len(lines):
@@ -819,13 +328,16 @@ class NotebookSearchCLI:
                         line = lines[j].strip()
                         if not line:
                             continue
-                        hl_line = self.hl(line, query_words)
-                        hl_line = _truncate_ansi_safe(hl_line, 78, query_words)
+                        hl_line = hl(line, query_words)
+                        hl_line = truncate_ansi_safe(hl_line, 78, query_words)
                         is_match = any(j == bj for bj, _ in best_lines)
                         marker = ">>>" if is_match else "   "
                         print(f"|  {marker} {hl_line}")
 
-            print(f"|    评分: {int(composite * 100)}% | 匹配: {matched}/{len(query_words)} 词")
+            if is_ripgrep:
+                print(f"|    匹配: {matched}/{len(query_words)} 词")
+            else:
+                print(f"|    评分: {int(composite * 100)}% | 匹配: {matched}/{len(query_words)} 词")
 
         print()
 
@@ -835,7 +347,7 @@ class NotebookSearchCLI:
         """确保 Agent 已初始化"""
         if self.agent is None:
             from cortex.agent_integration import CortexAgent
-            self.agent = CortexAgent(Path(self.search_path)).initialize()
+            self.agent = CortexAgent(Path(self.idx.search_path)).initialize()
 
     def cmd_ai(self, arg: str):
         """AI 对话命令"""
@@ -851,7 +363,6 @@ class NotebookSearchCLI:
 
     def cmd_help(self):
         """帮助命令"""
-        # 检查依赖状态
         missing = check_dependencies()
         deps_line = ""
         if missing:
@@ -910,28 +421,26 @@ class NotebookSearchCLI:
         self.load_or_build_index()
 
         # 获取索引文件信息
-        index_abs_path = os.path.abspath(self.index_path)
+        index_abs_path = os.path.abspath(self.idx.index_path)
         index_size = 0
         if os.path.exists(index_abs_path):
             index_size = os.path.getsize(index_abs_path)
 
         # 计算文档统计
-        total_files = len(self.ts.documents)
+        docs = self.idx.documents
+        total_files = len(docs)
         total_size = 0
         file_type_counts = {}
 
-        for doc in self.ts.documents:
-            # 从 metadata 获取文件大小
+        for doc in docs:
             if hasattr(doc, 'metadata') and doc.metadata:
                 size = doc.metadata.get('file_size', 0)
                 total_size += size
-                # 统计文件类型
                 source_path = doc.metadata.get('source_path', '')
                 ext = os.path.splitext(source_path)[1].lower() if source_path else ''
                 if ext:
                     file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
 
-        # 格式化大小
         def format_size(size):
             if size >= 1024 * 1024 * 1024:
                 return f"{size / (1024*1024*1024):.2f} GB"
@@ -941,17 +450,14 @@ class NotebookSearchCLI:
                 return f"{size / 1024:.2f} KB"
             return f"{size} B"
 
-        # 索引文件大小
         index_size_str = format_size(index_size)
         total_size_str = format_size(total_size)
 
-        # 文件类型统计字符串
         type_lines = []
         for ext, count in sorted(file_type_counts.items(), key=lambda x: -x[1])[:10]:
             type_name = SUPPORTED_FORMATS.get(ext, (ext, None))[0] if ext in SUPPORTED_FORMATS else ext
             type_lines.append(f"║    {ext}: {count} 个 ({type_name})")
 
-        # 检查依赖
         missing = check_dependencies()
         deps_ok = not missing
 
@@ -962,7 +468,7 @@ class NotebookSearchCLI:
 ║  索引路径:   {index_abs_path}
 ║  索引大小:   {index_size_str}
 ╠══════════════════════════════════════════════════════════════╣
-║  搜索路径:   {self.search_path}
+║  搜索路径:   {self.idx.search_path}
 ║  文档总数:   {total_files}
 ║  文件总大小: {total_size_str}
 ╠══════════════════════════════════════════════════════════════╣
@@ -1033,7 +539,7 @@ class NotebookSearchCLI:
 
         # 预加载索引
         self.load_or_build_index()
-        print(f"[已加载 {len(self.ts.documents)} 个文档]\n")
+        print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
 
         while True:
             try:
