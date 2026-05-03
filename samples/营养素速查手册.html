@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>营养素速查手册</title>
+    <style>
+        body { font-family: -apple-system, "Microsoft YaHei", sans-serif; max-width: 950px; margin: 0 auto; padding: 20px; line-height: 1.8; color: #2d3748; }
+        h1 { color: #276749; border-bottom: 3px solid #48bb78; padding-bottom: 10px; }
+        h2 { color: #2f855a; margin-top: 30px; border-left: 4px solid #48bb78; padding-left: 12px; }
+        h3 { color: #38a169; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #c6f6d5; padding: 8px 12px; text-align: left; }
+        th { background-color: #f0fff4; color: #276749; font-weight: 600; }
+        tr:nth-child(even) { background-color: #fafafa; }
+        .vitamin-tag { display: inline-block; background: #e6fffa; border: 1px solid #81e6d9; border-radius: 12px; padding: 2px 10px; margin: 2px; font-size: 0.85em; }
+        .good-source { color: #276749; font-weight: 600; }
+        .note { background: #fffff0; border-left: 4px solid #ecc94b; padding: 12px 16px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .rda-box { background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 8px; padding: 12px 16px; margin: 10px 0; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>营养素速查手册</h1>
+
+    <p>本手册涵盖人体必需的宏量营养素和微量营养素，包括每日推荐摄入量（RDA）、主要食物来源、关键功能和缺乏症状。所有数据参考中国营养学会《中国居民膳食营养素参考摄入量（2023版）》。</p>
+
+    <h2>一、宏量营养素</h2>
+
+    <h3>1.1 三大产能营养素</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>营养素</th>
+                <th>每日推荐量</th>
+                <th>热量密度</th>
+                <th>占总热量比</th>
+                <th>主要功能</th>
+                <th>优质来源</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>蛋白质</strong></td>
+                <td>0.8-1.2g/kg体重</td>
+                <td>4 kcal/g</td>
+                <td>15-20%</td>
+                <td>组织修复、酶和激素合成、免疫抗体</td>
+                <td>鸡蛋、鱼、瘦肉、豆类、乳制品</td>
+            </tr>
+            <tr>
+                <td><strong>碳水化合物</strong></td>
+                <td>占总热量45-65%</td>
+                <td>4 kcal/g</td>
+                <td>50-60%</td>
+                <td>主要能源、大脑供能、膳食纤维来源</td>
+                <td>全谷物、薯类、水果、蔬菜</td>
+            </tr>
+            <tr>
+                <td><strong>脂肪</strong></td>
+                <td>占总热量20-30%</td>
+                <td>9 kcal/g</td>
+                <td>20-30%</td>
+                <td>能量储备、脂溶性维生素吸收、细胞膜构成</td>
+                <td>橄榄油、坚果、深海鱼、牛油果</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>1.2 必需脂肪酸</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>脂肪酸类型</th>
+                <th>每日推荐量</th>
+                <th>主要功能</th>
+                <th>最佳食物来源</th>
+                <th>缺乏症状</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Omega-3 (ALA)</td>
+                <td>1.1-1.6g</td>
+                <td>抗炎、心血管保护、脑部发育</td>
+                <td>亚麻籽、核桃、奇亚籽</td>
+                <td>皮肤干燥、记忆力下降</td>
+            </tr>
+            <tr>
+                <td>Omega-3 (EPA/DHA)</td>
+                <td>250-500mg</td>
+                <td>降血脂、神经保护、情绪调节</td>
+                <td>深海鱼（三文鱼、沙丁鱼、鲭鱼）</td>
+                <td>心血管风险增加</td>
+            </tr>
+            <tr>
+                <td>Omega-6 (亚油酸)</td>
+                <td>12-17g</td>
+                <td>细胞膜结构、皮肤屏障</td>
+                <td>葵花籽油、玉米油、大豆油</td>
+                <td>皮肤炎症、生长迟缓</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note">
+        <strong>注意：</strong>现代饮食中Omega-6与Omega-3的比例往往过高（15-20:1），理想比例应为4-5:1。建议增加Omega-3摄入，减少精炼植物油使用。
+    </div>
+
+    <h2>二、维生素</h2>
+
+    <h3>2.1 脂溶性维生素</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>维生素</th>
+                <th>RDA（成人/日）</th>
+                <th>上限</th>
+                <th>核心功能</th>
+                <th>富含食物</th>
+                <th>缺乏症状</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>维生素A</strong></td>
+                <td>700-800ug RAE</td>
+                <td>3000ug</td>
+                <td>视力保护、免疫功能、皮肤健康</td>
+                <td class="good-source">动物肝脏、胡萝卜、菠菜、红薯</td>
+                <td>夜盲症、皮肤干燥、免疫力下降</td>
+            </tr>
+            <tr>
+                <td><strong>维生素D</strong></td>
+                <td>400-800IU</td>
+                <td>4000IU</td>
+                <td>钙磷吸收、骨骼健康、免疫调节</td>
+                <td class="good-source">日晒、三文鱼、蛋黄、强化牛奶</td>
+                <td>骨质疏松、肌肉无力、反复感染</td>
+            </tr>
+            <tr>
+                <td><strong>维生素E</strong></td>
+                <td>14mg</td>
+                <td>700mg</td>
+                <td>抗氧化、保护细胞膜、免疫支持</td>
+                <td class="good-source">杏仁、葵花籽、橄榄油、牛油果</td>
+                <td>罕见缺乏；神经功能异常</td>
+            </tr>
+            <tr>
+                <td><strong>维生素K</strong></td>
+                <td>80-120ug</td>
+                <td>未设定</td>
+                <td>凝血功能、骨骼代谢</td>
+                <td class="good-source">深绿叶蔬菜（羽衣甘蓝、菠菜）、纳豆</td>
+                <td>出血倾向、骨密度降低</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>2.2 水溶性维生素</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>维生素</th>
+                <th>RDA（成人/日）</th>
+                <th>核心功能</th>
+                <th>富含食物</th>
+                <th>缺乏症状</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>维生素B1</strong>（硫胺素）</td>
+                <td>1.2-1.5mg</td>
+                <td>能量代谢、神经功能</td>
+                <td>全谷物、猪肉、豆类</td>
+                <td>脚气病、疲劳、食欲不振</td>
+            </tr>
+            <tr>
+                <td><strong>维生素B2</strong>（核黄素）</td>
+                <td>1.2-1.4mg</td>
+                <td>能量代谢、抗氧化</td>
+                <td>牛奶、鸡蛋、深绿叶蔬菜</td>
+                <td>口角炎、舌炎、脂溢性皮炎</td>
+            </tr>
+            <tr>
+                <td><strong>维生素B6</strong></td>
+                <td>1.3-1.7mg</td>
+                <td>氨基酸代谢、神经递质合成</td>
+                <td>鸡肉、鱼肉、香蕉、土豆</td>
+                <td>贫血、抑郁、免疫力下降</td>
+            </tr>
+            <tr>
+                <td><strong>维生素B12</strong></td>
+                <td>2.4ug</td>
+                <td>红细胞生成、神经髓鞘</td>
+                <td>肉类、鱼类、乳制品</td>
+                <td>巨幼红细胞贫血、神经损伤</td>
+            </tr>
+            <tr>
+                <td><strong>叶酸（B9）</strong></td>
+                <td>400ug</td>
+                <td>DNA合成、细胞分裂</td>
+                <td>深绿叶蔬菜、豆类、柑橘类</td>
+                <td>巨幼红细胞贫血、胎儿神经管缺陷</td>
+            </tr>
+            <tr>
+                <td><strong>维生素C</strong></td>
+                <td>100mg</td>
+                <td>抗氧化、胶原合成、铁吸收</td>
+                <td>猕猴桃、橙子、草莓、甜椒</td>
+                <td>坏血病、牙龈出血、伤口愈合慢</td>
+            </tr>
+            <tr>
+                <td><strong>烟酸（B3）</strong></td>
+                <td>14-16mg NE</td>
+                <td>能量代谢、皮肤健康</td>
+                <td>鸡肉、牛肉、花生、蘑菇</td>
+                <td>糙皮病（腹泻、皮炎、痴呆）</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>三、矿物质</h2>
+
+    <h3>3.1 常量元素</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>矿物质</th>
+                <th>RDA（成人/日）</th>
+                <th>核心功能</th>
+                <th>富含食物</th>
+                <th>缺乏症状</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>钙</strong></td>
+                <td>800-1000mg</td>
+                <td>骨骼和牙齿、肌肉收缩、神经传导</td>
+                <td class="good-source">牛奶、酸奶、豆腐、小鱼干、芝麻</td>
+                <td>骨质疏松、肌肉痉挛</td>
+            </tr>
+            <tr>
+                <td><strong>铁</strong></td>
+                <td>12-20mg</td>
+                <td>血红蛋白合成、氧气运输</td>
+                <td class="good-source">红肉、动物肝脏、菠菜、黑木耳</td>
+                <td>缺铁性贫血、疲劳、面色苍白</td>
+            </tr>
+            <tr>
+                <td><strong>镁</strong></td>
+                <td>330-350mg</td>
+                <td>300+种酶的辅因子、肌肉放松、睡眠</td>
+                <td class="good-source">南瓜籽、黑巧克力、菠菜、杏仁</td>
+                <td>肌肉抽搐、失眠、心律不齐</td>
+            </tr>
+            <tr>
+                <td><strong>锌</strong></td>
+                <td>12.5mg</td>
+                <td>免疫功能、伤口愈合、味觉嗅觉</td>
+                <td class="good-source">生蚝、牛肉、南瓜籽、鹰嘴豆</td>
+                <td>免疫力下降、味觉丧失、脱发</td>
+            </tr>
+            <tr>
+                <td><strong>钾</strong></td>
+                <td>2000mg</td>
+                <td>血压调节、神经传导、心脏功能</td>
+                <td class="good-source">香蕉、土豆、牛油果、菠菜</td>
+                <td>肌肉无力、心律失常</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>3.2 微量元素</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>微量元素</th>
+                <th>RDA（成人/日）</th>
+                <th>核心功能</th>
+                <th>富含食物</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>硒</td><td>60ug</td><td>抗氧化（谷胱甘肽过氧化物酶）、甲状腺功能</td><td>巴西坚果、海鲜、全谷物</td></tr>
+            <tr><td>碘</td><td>120-150ug</td><td>甲状腺激素合成、代谢调节</td><td>海带、紫菜、碘盐</td></tr>
+            <tr><td>铬</td><td>30-35ug</td><td>葡萄糖代谢、胰岛素敏感性</td><td>西兰花、全谷物、葡萄</td></tr>
+            <tr><td>铜</td><td>0.8mg</td><td>铁代谢、胶原蛋白交联、抗氧化</td><td>动物肝脏、坚果、豆类</td></tr>
+            <tr><td>锰</td><td>4.5mg</td><td>骨骼发育、糖脂代谢</td><td>全谷物、坚果、茶叶</td></tr>
+        </tbody>
+    </table>
+
+    <h2>四、膳食纤维</h2>
+
+    <div class="rda-box">
+        <strong>推荐摄入量：</strong>成人每日 25-30 克 | 实际平均摄入量：约 10-12 克
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>纤维类型</th>
+                <th>特性</th>
+                <th>每日目标</th>
+                <th>最佳来源</th>
+                <th>健康效益</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>可溶性纤维</td>
+                <td>溶于水形成凝胶</td>
+                <td>8-12g</td>
+                <td>燕麦、苹果、豆类、亚麻籽</td>
+                <td>降胆固醇、稳定血糖、喂养益生菌</td>
+            </tr>
+            <tr>
+                <td>不溶性纤维</td>
+                <td>不溶于水，增加体积</td>
+                <td>12-18g</td>
+                <td>全麦、蔬菜、坚果、糙米</td>
+                <td>促进肠道蠕动、预防便秘</td>
+            </tr>
+            <tr>
+                <td>抗性淀粉</td>
+                <td>抵抗小肠消化</td>
+                <td>5-10g</td>
+                <td>冷却的土豆/米饭、绿香蕉</td>
+                <td>丁酸产生、改善胰岛素敏感性</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>五、每日饮食参考方案</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>食物类别</th>
+                <th>每日推荐量</th>
+                <th>关键营养素贡献</th>
+                <th>示例</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>谷薯类</td><td>250-400g</td><td>碳水化合物、B族维生素、膳食纤维</td><td>糙米、全麦面包、红薯</td></tr>
+            <tr><td>蔬菜类</td><td>300-500g</td><td>维生素C、叶酸、钾、膳食纤维</td><td>深绿叶菜、西兰花、胡萝卜</td></tr>
+            <tr><td>水果类</td><td>200-350g</td><td>维生素C、钾、多酚类抗氧化物</td><td>蓝莓、橙子、猕猴桃</td></tr>
+            <tr><td>畜禽鱼蛋</td><td>120-200g</td><td>蛋白质、铁、锌、维生素B12</td><td>鸡胸肉、三文鱼、鸡蛋</td></tr>
+            <tr><td>奶制品</td><td>300-500ml</td><td>钙、蛋白质、维生素D</td><td>牛奶、酸奶、奶酪</td></tr>
+            <tr><td>大豆及坚果</td><td>25-35g</td><td>植物蛋白、不饱和脂肪酸、镁</td><td>豆腐、核桃、杏仁</td></tr>
+            <tr><td>油盐</td><td>油25-30g、盐&lt;5g</td><td>必需脂肪酸</td><td>橄榄油、亚麻籽油</td></tr>
+        </tbody>
+    </table>
+</body>
+</html>
