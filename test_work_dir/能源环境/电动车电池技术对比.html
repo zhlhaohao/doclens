@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电动车电池技术对比</title>
+    <style>
+        body { font-family: -apple-system, "Microsoft YaHei", sans-serif; max-width: 950px; margin: 0 auto; padding: 20px; line-height: 1.8; color: #1a202c; }
+        h1 { color: #553c9a; border-bottom: 3px solid #805ad5; padding-bottom: 10px; }
+        h2 { color: #6b46c1; margin-top: 30px; border-left: 4px solid #805ad5; padding-left: 12px; }
+        h3 { color: #805ad5; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #e9d8fd; padding: 10px 14px; text-align: left; }
+        th { background-color: #faf5ff; color: #553c9a; font-weight: 600; }
+        tr:nth-child(even) { background-color: #fafafa; }
+        .tech-badge { display: inline-block; padding: 3px 12px; border-radius: 16px; font-size: 0.85em; font-weight: 600; margin: 2px; }
+        .solid-state { background: #c6f6d5; color: #276749; }
+        .liquid { background: #bee3f8; color: #2a4365; }
+        .sodium { background: #fefcbf; color: #975a16; }
+        .winner { background-color: #c6f6d5; font-weight: 600; }
+        .pros { color: #276749; }
+        .cons { color: #c53030; }
+        .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+        .card { border-radius: 10px; padding: 18px; border: 2px solid; }
+        .card-solid { border-color: #9ae6b4; background: #f0fff4; }
+        .card-liquid { border-color: #90cdf4; background: #ebf8ff; }
+        .card-sodium { border-color: #fbd38d; background: #fffff0; }
+        .card h3 { margin-top: 0; }
+        .timeline { border-left: 3px solid #805ad5; padding-left: 20px; margin: 20px 0; }
+        .timeline-item { margin-bottom: 15px; position: relative; }
+        .timeline-item::before { content: ''; position: absolute; left: -26px; top: 8px; width: 10px; height: 10px; border-radius: 50%; background: #805ad5; }
+    </style>
+</head>
+<body>
+    <h1>电动车电池技术对比：固态 vs 液态 vs 钠离子</h1>
+
+    <p>电池技术是电动汽车产业的核心竞争力。2025-2026年，三种主流电池技术路线正在并行发展：传统的液态锂离子电池、代表未来的固态电池、以及作为补充方案的钠离子电池。本页面对三种技术进行全面对比分析。</p>
+
+    <div class="card-grid">
+        <div class="card card-solid">
+            <h3><span class="tech-badge solid-state">固态电池</span></h3>
+            <p><strong>核心特征：</strong>固体电解质替代液体电解质</p>
+            <p><strong>发展阶段：</strong>半固态已量产，全固态2027年</p>
+            <p><strong>领先企业：</strong>丰田、宁德时代、三星SDI</p>
+        </div>
+        <div class="card card-liquid">
+            <h3><span class="tech-badge liquid">液态锂电池</span></h3>
+            <p><strong>核心特征：</strong>液态有机电解质 + 隔膜</p>
+            <p><strong>发展阶段：</strong>大规模成熟应用</p>
+            <p><strong>领先企业：</strong>宁德时代、比亚迪、LG新能源</p>
+        </div>
+        <div class="card card-sodium">
+            <h3><span class="tech-badge sodium">钠离子电池</span></h3>
+            <p><strong>核心特征：</strong>钠离子载体 + 硬碳负极</p>
+            <p><strong>发展阶段：</strong>小规模商业化</p>
+            <p><strong>领先企业：</strong>宁德时代、中科海钠、Faradion</p>
+        </div>
+    </div>
+
+    <h2>一、核心技术参数对比</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>技术参数</th>
+                <th><span class="tech-badge liquid">液态锂电池</span></th>
+                <th><span class="tech-badge solid-state">半固态电池</span></th>
+                <th><span class="tech-badge solid-state">全固态电池</span></th>
+                <th><span class="tech-badge sodium">钠离子电池</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>电芯能量密度</strong></td>
+                <td>250-300 Wh/kg</td>
+                <td class="winner">350-400 Wh/kg</td>
+                <td class="winner">500-700 Wh/kg</td>
+                <td>120-160 Wh/kg</td>
+            </tr>
+            <tr>
+                <td><strong>包能量密度</strong></td>
+                <td>160-200 Wh/kg</td>
+                <td class="winner">220-260 Wh/kg</td>
+                <td class="winner">350-450 Wh/kg</td>
+                <td>100-130 Wh/kg</td>
+            </tr>
+            <tr>
+                <td><strong>快充能力（10-80%）</strong></td>
+                <td>18-30分钟</td>
+                <td class="winner">12-18分钟</td>
+                <td class="winner">10-15分钟</td>
+                <td>20-30分钟</td>
+            </tr>
+            <tr>
+                <td><strong>循环寿命</strong></td>
+                <td class="winner">1,500-3,000次</td>
+                <td>1,000-1,500次</td>
+                <td class="winner">2,000-5,000次</td>
+                <td>2,000-4,000次</td>
+            </tr>
+            <tr>
+                <td><strong>工作温度范围</strong></td>
+                <td>-20~60 C</td>
+                <td>-20~60 C</td>
+                <td class="winner">-30~80 C</td>
+                <td>-40~60 C</td>
+            </tr>
+            <tr>
+                <td><strong>安全性（热失控）</strong></td>
+                <td>150-200 C 起始</td>
+                <td>250-300 C 起始</td>
+                <td class="winner">350 C+ 起始</td>
+                <td class="winner">300 C+ 起始</td>
+            </tr>
+            <tr>
+                <td><strong>当前成本</strong></td>
+                <td class="winner">$100-130/kWh</td>
+                <td>$200-350/kWh</td>
+                <td>$300-500/kWh</td>
+                <td>$70-100/kWh</td>
+            </tr>
+            <tr>
+                <td><strong>目标成本（2028）</strong></td>
+                <td>$80-100/kWh</td>
+                <td>$120-180/kWh</td>
+                <td>$150-200/kWh</td>
+                <td class="winner">$50-70/kWh</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>二、电解质技术对比</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>电解质类型</th>
+                <th>离子电导率 (S/cm)</th>
+                <th>优点</th>
+                <th>缺点</th>
+                <th>代表企业</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>液态有机电解质</td>
+                <td>10^-2</td>
+                <td class="pros">高电导率、成熟工艺、成本低</td>
+                <td class="cons">易燃、热失控风险</td>
+                <td>宁德时代、比亚迪</td>
+            </tr>
+            <tr>
+                <td>氧化物固态（LLZO等）</td>
+                <td>10^-4 ~ 10^-3</td>
+                <td class="pros">安全性好、空气稳定</td>
+                <td class="cons">电导率偏低、硬质界面接触差</td>
+                <td>清陶能源、QuantumScape</td>
+            </tr>
+            <tr>
+                <td>硫化物固态（Li6PS5Cl等）</td>
+                <td>10^-3 ~ 10^-2</td>
+                <td class="pros">最高离子电导率、接近液态</td>
+                <td class="cons">空气不稳定、产生H2S、成本高</td>
+                <td>宁德时代、丰田、三星SDI</td>
+            </tr>
+            <tr>
+                <td>聚合物固态（PEO基）</td>
+                <td>10^-5 ~ 10^-4</td>
+                <td class="pros">柔韧性好、界面接触佳、工艺成熟</td>
+                <td class="cons">室温电导率低、需加热工作</td>
+                <td>蜂巢能源、Bollore</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>三、负极材料技术对比</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>负极材料</th>
+                <th>比容量 (mAh/g)</th>
+                <th>首次效率</th>
+                <th>配套电池类型</th>
+                <th>优缺点</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>石墨</td>
+                <td>370</td>
+                <td>93-95%</td>
+                <td>液态锂电</td>
+                <td class="pros">成熟、便宜</td> / <td class="cons">容量已达极限</td>
+            </tr>
+            <tr>
+                <td>硅基（硅碳复合）</td>
+                <td>450-500</td>
+                <td>80-88%</td>
+                <td>液态/半固态</td>
+                <td class="pros">高容量</td> / <td class="cons">体积膨胀300%</td>
+            </tr>
+            <tr>
+                <td>金属锂</td>
+                <td>3,860</td>
+                <td>N/A</td>
+                <td>全固态</td>
+                <td class="pros">理论最高容量</td> / <td class="cons">锂枝晶问题</td>
+            </tr>
+            <tr>
+                <td>硬碳</td>
+                <td>300-350</td>
+                <td>85-90%</td>
+                <td>钠离子电池</td>
+                <td class="pros">适配钠离子</td> / <td class="cons">容量有限</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>四、商业化进度对比</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>维度</th>
+                <th><span class="tech-badge liquid">液态锂电池</span></th>
+                <th><span class="tech-badge solid-state">固态电池</span></th>
+                <th><span class="tech-badge sodium">钠离子电池</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>量产状态</strong></td>
+                <td>大规模量产（全球产能>3TWh）</td>
+                <td>半固态已量产，全固态2027-2028</td>
+                <td>小规模量产（<50GWh）</td>
+            </tr>
+            <tr>
+                <td><strong>已装车车型</strong></td>
+                <td>所有主流EV</td>
+                <td>蔚来ET7 150kWh、智己L6</td>
+                <td>奇瑞iCAR、江铃易至</td>
+            </tr>
+            <tr>
+                <td><strong>典型续航</strong></td>
+                <td>400-700 km</td>
+                <td>800-1100 km</td>
+                <td>200-400 km</td>
+            </tr>
+            <tr>
+                <td><strong>主要应用场景</strong></td>
+                <td>全部EV场景</td>
+                <td>高端EV、长续航需求</td>
+                <td>A00/A0级EV、储能、两轮车</td>
+            </tr>
+            <tr>
+                <td><strong>供应风险</strong></td>
+                <td>锂资源依赖</td>
+                <td>电解质材料供应链不成熟</td>
+                <td class="pros">钠资源丰富，供应风险低</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>五、技术发展路线图</h2>
+
+    <div class="timeline">
+        <div class="timeline-item">
+            <strong>2025年（当前）</strong>
+            <ul>
+                <li>液态锂电：磷酸铁锂成本降至$80/kWh，三元锂能量密度突破300Wh/kg</li>
+                <li>半固态：蔚来ET7 150kWh交付，能量密度360Wh/kg</li>
+                <li>钠离子：宁德时代第二代产品能量密度提升至160Wh/kg</li>
+            </ul>
+        </div>
+        <div class="timeline-item">
+            <strong>2026年</strong>
+            <ul>
+                <li>中国固态电池国标正式实施（GB/T 4XXXX-2026）</li>
+                <li>广汽埃安全固态电池装车，能量密度400Wh/kg</li>
+                <li>钠离子电池成本降至$50/kWh以下，A0级EV大规模应用</li>
+            </ul>
+        </div>
+        <div class="timeline-item">
+            <strong>2027年</strong>
+            <ul>
+                <li>丰田全固态电池量产，能量密度500Wh/kg</li>
+                <li>固态电池成本降至$150/kWh</li>
+                <li>液态锂电逐步退出高端EV市场</li>
+            </ul>
+        </div>
+        <div class="timeline-item">
+            <strong>2030年（远期）</strong>
+            <ul>
+                <li>全固态电池成本降至$100/kWh以下，实现全面替代</li>
+                <li>钠离子电池在储能和低速EV领域占据30%+市场份额</li>
+                <li>锂金属负极+固态电解质实现700Wh/kg能量密度</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>六、选购建议</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>用户需求</th>
+                <th>推荐电池类型</th>
+                <th>理由</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>日常通勤（<50km/天）</td>
+                <td><span class="tech-badge sodium">钠离子</span> 或 <span class="tech-badge liquid">液态锂电</span></td>
+                <td>成本低、安全性好、低温性能佳</td>
+            </tr>
+            <tr>
+                <td>中等距离出行（100-300km/天）</td>
+                <td><span class="tech-badge liquid">液态锂电</span>（磷酸铁锂）</td>
+                <td>性价比最优、循环寿命长、技术成熟</td>
+            </tr>
+            <tr>
+                <td>长途出行需求（>500km/次）</td>
+                <td><span class="tech-badge solid-state">半固态</span></td>
+                <td>高能量密度提供更长续航</td>
+            </tr>
+            <tr>
+                <td>高端/豪华车型</td>
+                <td><span class="tech-badge solid-state">全固态</span>（2027+）</td>
+                <td>极致性能、安全性、轻量化</td>
+            </tr>
+            <tr>
+                <td>寒冷地区使用</td>
+                <td><span class="tech-badge sodium">钠离子</span></td>
+                <td>-40C仍可正常工作，低温性能最佳</td>
+            </tr>
+            <tr>
+                <td>预算有限</td>
+                <td><span class="tech-badge sodium">钠离子</span> 或 <span class="tech-badge liquid">液态锂电（磷酸铁锂）</span></td>
+                <td>钠离子成本最低，磷酸铁锂性价比高</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>

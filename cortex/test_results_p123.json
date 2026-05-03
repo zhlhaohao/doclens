@@ -1,0 +1,317 @@
+[
+  {
+    "id": "CJK-CMD-001",
+    "name": "中文顿号兼容",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "、help → ('help', '')\n、s 测试 → ('s', '测试')\n、status → ('status', '')",
+    "reason": "help=True, s=True, status=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-003",
+    "name": "多关键词搜索（中英混合）",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "分词: ['Python', '数据分析']\n搜索:\n\n============================================================\n关键词: Python 数据分析  |  找到 5 个匹配\n============================================================\n\n+-- [1] \u001b[1;31mPython\u001b[0m Async Programming Guide: Mastering asyncio\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/编程/python_async_programming.md:1\u0007E:/github/TreeSearch/test_work_dir/编程/python_async_programming.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # \u001b[1;31mPython\u001b[0m Async Programming Guide: Mast",
+    "reason": "有结果=True, 匹配信息=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-004",
+    "name": "无结果时的提示",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n[未找到包含 'xyznonexistent12345' 的结果]\n\n",
+    "reason": "有提示=True, 无异常=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-005",
+    "name": "搜索结果格式化输出",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 固态电池  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    评分: 95% | 匹配: 2/2 词\n\n+-- [2] 电动车\u001b[1;31m电池\u001b[0m技术对比：\u001b[1;31m固态\u001b[0m vs 液态 vs 钠离子\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u0007E:/github/TreeSearch/test_work_dir/能源环境/电动车电池技术对比.html:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> 电动车\u001b[1;31m电池\u001b[0m技术对比：\u001b[1;31m固态\u001b[0m vs 液态 vs 钠离子\n|    评分: 83% | 匹配: 2/2 词\n\n+-- [3] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术突破\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:17\u0007E:/github/TreeSearch/test_work_dir/能源环境/中国新能源汽车市场2025.md:17\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ## \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术突破\n|  >>> \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m成为2025年中国新能源汽车行业最热门的技术赛道。\n|    评分: 72% | 匹配: 2/2 词\n\n",
+    "reason": "标题=True, 文件=True, 分隔=True, 内容=True, 评分=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-006",
+    "name": "ripgrep 降级搜索标记",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: tensor networks, and generative models  |  找到 1 个匹配\n============================================================\n\n+-- [1] 2.2 Explainable AI\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:33\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:33\u001b]8;;\u0007\n|    ---------------------------------------------\n|      2.2 Explainable AI\n|      NSFC launched the 'Explainable Next-Gen AI' program, combining neural netwo...\u001b[0m\n|  >>> \u001b[1;31mtensor\u001b[0m \u001b[1;31mnetworks\u001b[0m, and \u001b[1;31mgenerative\u001b[0m \u001b[1;31mmodels\u001b[0m into a novel computational framework.\n|    评分: 54% | 匹配: 4/4 词\n\n",
+    "reason": "有结果=True, ripgrep标记=False",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-007",
+    "name": "单关键词 vs 多关键词对比",
+    "priority": "P1",
+    "conclusion": "⚠️ 部分通过",
+    "output": "免疫细胞: 5条\n免疫细胞+基因编辑: 6条",
+    "reason": "N1=5, N2=6, 收窄=False, 多词匹配=False",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-008",
+    "name": "精确子串与部分匹配",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "CRISPR-Cas9: 2条\nCRISPR: 3条\nCas9: 2条",
+    "reason": "c1=2, c2=3, c3=2",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-010",
+    "name": "/set 控制结果数量",
+    "priority": "P1",
+    "conclusion": "❌ 未通过",
+    "output": "/set 3 → 8条\n/set 20 → 8条",
+    "reason": "限制有效=False, 恢复后更多=False",
+    "issues": "限制无效: 8>3"
+  },
+  {
+    "id": "SEARCH-012",
+    "name": "同一文档多节点命中",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 量子  |  找到 7 个匹配\n============================================================\n\n+-- [1] 中国后\u001b[1;31m量子\u001b[0m密码进展\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子密码学从QKD到后量子密码学.md:99\u0007E:/github/TreeSearch/test_work_dir/科技/量子密码学从QKD到后量子密码学.md:99\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ### 中国后\u001b[1;31m量子\u001b[0m密码进展\n|  >>> 中国密码管理部门也在加速推进后\u001b[1;31m量子\u001b[0m密码标准化：\n|      - 国密局发布了基于格的密码算法草案（GM/T 00XX-2025）\n|  ",
+    "reason": "有结果=True, 结果数=7",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-013",
+    "name": "空查询处理",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "/s → ('s', '')\n/s ' ' → ('s', '')\n空搜索无异常=True",
+    "reason": "空查询安全=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-004",
+    "name": "PDF ripgrep shadow MD 降级",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: surpassing Microsoft and Apple  |  找到 1 个匹配\n============================================================\n\n+-- [1] 4. Global Economy 2026\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u001b]8;;\u0007\n|    ---------------------------------------------\n|      4. Global Economy 2026\n|      WTO cut 2026 global trade growth forecast to 0.5% (from 2.4% in 2025). IMF/...\u001b[0m\n|      GDP  growth  of  2.7%-3.1%.  The  world  faces  four  major  shifts:  geopo...\u001b[0m\n|      protectionism, tech polarization, and social inequality.\n|  >>> NVIDIA market cap exceeded $5 trillion in October 2025, \u001b[1;31msurpassing\u001b[0m \u001b[1;31mMicrosof...\u001b[0m\n|      R&D spending intensity reached 2.8%, exceeding OECD average for the first t...\u001b[0m\n|      Key trends: AI-driven productivity gains, quantum computing commercializati...\u001b[0m\n|      transition, cybersecurity threats, and supply chain restructuring.\n|      Page 5\n|    评分: 54% | 匹配: 3/3 词\n\n",
+    "reason": "有结果=True, 命中PDF=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-007",
+    "name": "PowerPoint (.pptx) 搜索",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 140万亿 词元  |  找到 4 个匹配\n============================================================\n\n+-- [1] 日均\u001b[1;31m140\u001b[0m\u001b[1;31m万亿\u001b[0m\u001b[1;31m词元\u001b[0m：千倍增长\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/中国AI词元调用量爆发式增长.md:3\u0007E:/github/TreeSearch/test_work_dir/科技/中国AI词元调用量爆发式增长.md:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ## 日均\u001b[1;31m140\u001b[0m\u001b[1;31m万亿\u001b[0m\u001b[1;31m词元\u001b[0m：千倍增长\n|  >>> 2025年，中国人工智能产业迎来了\u001b[1;31m词元\u001b[0m（Token）调用量的爆发式增长。据中国信息通信研究院数据，全国AI大模型日均\u001b[1;31m词元\u001b[0m调用量突破\u001b[1;31m140\u001b[0m\u001b[1;31m万亿\u001b[0m，较202...\u001b[0m\n|    评分: 80% | 匹配: 3/3 词\n\n+-- [2] 中国量子科技路线图\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:15\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能演示.pptx:15\u001b]8;;\u0007\n|    ---------------------------------------------\n|      # 中国量子科技路线图\n|      第一阶段（已完成）：量子计算原理验证\n|      第二阶段（2025进入）：专用量子模拟机\n|      - 解决量子化学、高温超导等重大问题\n|  >>> - 日均AI\u001b[1;31m词元\u001b[0m调用量超\u001b[1;31m140\u001b[0m\u001b[1;31m万亿\u001b[0m\n|      第三阶段（目标）：通用量子计算机\n|      潘建伟院士：2025年顺利进入第二阶段\n|      <!-- Slide number: 4 -->\n|    评分: 54% | 匹配: 3/3 词\n\n+-- [3] 2.1 AI 与量子计算的融合\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:28\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:28\u001b]8;;\u0007\n|    ---------------------------------------------\n|      2.1 AI 与量子计算的融合\n|  >>> 到2026年3月，中国日均AI\u001b[1;31m词元\u001b[0m调用量已超过 \u001b[1;31m140\u001b[0m \u001b[1;31m万亿\u001b[0m，相比2024年初的1000亿增长了1000多倍。如果沿着当前经典计算框架继续发展，算力与...\u001b[0m\n|      Google 和 Oratomic 的联合研究表明，AI辅助的量子计算可能比预期更早具备破解互联网加密的能力，这一发现被 TIME 杂志称为“世界尚未...\u001b[0m\n|    评分: 54% | 匹配: 3/3 词\n\n+-- [4] AI发展趋势 (9 rows)\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:17\u0007E:/github/TreeSearch/test_work_dir/经济/全球科技与健康数据.xlsx:17\u001b]8;;\u0007\n|    ---------------------------------------------\n|      时间: 2024年Q4; 全球AI\u001b[1;31m词元\u001b[0m日调用量(亿): 6000; 中国AI\u001b[1;31m词元\u001b[0m日调用量(亿): 1200; GPU出货量(万张): 510; AI专...\u001b[0m\n|      时间: 2025年Q1; 全球AI\u001b[1;31m词元\u001b[0m日调用量(亿): 12000; 中国AI\u001b[1;31m词元\u001b[0m日调用量(亿): 3500; GPU出货量(万张): 620; AI...\u001b[0m\n|      时间: 2025年Q2; 全球AI\u001b[1;31m词元\u001b[0m日调用量(亿): 25000; 中国AI\u001b[1;31m词元\u001b[0m日调用量(亿): 8000; GPU出货量(万张): 780; AI...\u001b[0m\n|      时间: 2025年Q3; 全球AI\u001b[1;31m词元\u001b[0m日调用量(亿): 50000; 中国AI\u001b[1;31m词元\u001b[0m日调用量(亿): 18000; GPU出货量(万张): 950; A...\u001b[0m\n|      时间: 2025年Q4; 全球AI\u001b[1;31m词元\u001b[0m日调用量(亿): 100000; 中国AI\u001b[1;31m词元\u001b[0m日调用量(亿): 45000; GPU出货量(万张): 1200;...\u001b[0m\n|  >>> ...数(万件): 45.2; AI相关就业(万人): \u001b[1;31m140\u001b[0m0...\u001b[0m\n|    评分: 42% | 匹配: 2/3 词\n\n",
+    "reason": "有结果=True, 命中PPTX=True",
+    "issues": "无"
+  },
+  {
+    "id": "FTYPE-008",
+    "name": "混合格式交叉搜索",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 太阳能 风能 装机容量  |  找到 2 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m太阳能\u001b[0m与\u001b[1;31m风能\u001b[0m技术详解：2025全球\u001b[1;31m装机容量\u001b[0m对比\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/太阳能与风能技术详解.html:3\u0007E:/github/TreeSearch/test_work_dir/能源环境/太阳能与风能技术详解.html:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> \u001b[1;31m太阳能\u001b[0m与\u001b[1;31m风能\u001b[0m技术详解：2025全球\u001b[1;31m装机容量\u001b[0m对比\n|  >>> 可再生能源已成为全",
+    "reason": "有结果=True, HTML=True, MD=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-003",
+    "name": "增量索引",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "增量日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 3 个文件已索引, 59 个未变更, 0 个已清理 | 共 62 个文档, 0.11s]\n\n新文件搜索:\n\n============================================================\n关键词: INCREMENTAL_TEST_99999  |  找到 1 个匹配\n============================================================\n\n+-- [1] 增量测试\n|    文件: \u001b]8;;vscode:/\n修改文件搜索:\n\n============================================================\n关键词: INSERT_TEST_12345  |  找到 1 个匹配\n============================================================\n\n+-- [1] 市场预测\n|    文件: \u001b]8;;vscode://file",
+    "reason": "新文件=True, 修改文件=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-008",
+    "name": "文件跨目录移动",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 0 个文件已索引, 61 个未变更, 1 个已清理 | 共 61 个文档, 0.05s]\n\n搜索:\n\n============================================================\n关键词: 益生菌 肠道  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m肠道\u001b[0m健康与\u001b[1;31m益生菌\u001b[0m科学指南\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/生命科学/肠道健康与益生菌科学指南.md:1\u0007E:/github/TreeSearch/t",
+    "reason": "新路径=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-009",
+    "name": "子目录改名",
+    "priority": "P1",
+    "conclusion": "❌ 未通过",
+    "output": "日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 0 个文件已索引, 61 个未变更, 0 个已清理 | 共 61 个文档, 0.08s]\n\n搜索:\n\n============================================================\n关键词: Docker 容器编排  |  找到 1 个匹配\n============================================================\n\n+-- [1] 1.3 供应链攻击\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/2025网络安全趋势报告.html:157\u0007E:/github/TreeSearch/test_work_dir/科技/20",
+    "reason": "新目录名=False",
+    "issues": "目录名未更新"
+  },
+  {
+    "id": "SCORE-002",
+    "name": "近邻评分",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: Python 数据分析  |  找到 5 个匹配\n============================================================\n\n+-- [1] \u001b[1;31mPython\u001b[0m Async Programming Guide: Mastering asyncio\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/开发指南/python_async_programming.md:1\u0007E:/github/TreeSearch/test_work_dir/开发指南/python_async_programming.md:1\u001b]8;;\u0007\n|  ",
+    "reason": "有结果=True",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-008",
+    "name": "低匹配度边界",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "composite=0.1809 (18%)\nfactors={\"keyword_match_ratio\": 0.3333, \"file_name_match\": 0.0, \"fts_score\": 0.2689, \"title_match\": 0.0}",
+    "reason": "kwr=0.3333, fnm=0.0000, fts=0.2689, tm=0.0000",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-010",
+    "name": "权重对排序影响",
+    "priority": "P1",
+    "conclusion": "❌ 未通过",
+    "output": "\n============================================================\n关键词: 固态电池  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    评分: 95% | 匹配: 2/2 词\n\n+-- [2] 电动车\u001b[1;31m电池\u001b[0m技术对比：\u001b[1;31m固态\u001b",
+    "reason": "第一名含'固态电池'=False",
+    "issues": "排序异常"
+  },
+  {
+    "id": "CJK-002",
+    "name": "英文查询不经分词",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "分词结果: ['machine', 'learning']",
+    "reason": "machine=True, learning=True",
+    "issues": "无"
+  },
+  {
+    "id": "CJK-003",
+    "name": "单字查询被过滤",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "分词: []\n搜索安全: True",
+    "reason": "过滤后为空=True, 搜索安全=True",
+    "issues": "无"
+  },
+  {
+    "id": "FMT-003",
+    "name": "智能上下文展示",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 量子计算  |  找到 5 个匹配\n============================================================\n\n+-- [1] 一、\u001b[1;31m量子\u001b[0m\u001b[1;31m计算\u001b[0m最新进展\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:12\u0007E:/github/TreeSearch/test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:12\u001b]8;;\u0007\n|    ---------------------------------------",
+    "reason": "有上下文标记=True",
+    "issues": "无"
+  },
+  {
+    "id": "FMT-004",
+    "name": "VSCode 超链接",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 固态电池  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u0007E:/github/TreeSearch/test_work_dir/能源环境/固态电池技术进展与产业化.md:1\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> # ",
+    "reason": "有超链接=True",
+    "issues": "无"
+  },
+  {
+    "id": "RG-003",
+    "name": "Shadow Markdown 二进制文件搜索",
+    "priority": "P1",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: surpassing Microsoft and Apple  |  找到 1 个匹配\n============================================================\n\n+-- [1] 4. Global Economy 2026\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u0007E:/github/TreeSearch/test_work_dir/科技/quantum_ai_report.pdf:64\u001b]8;;\u0007\n|    -------------------------------",
+    "reason": "有结果=True, PDF链接=True",
+    "issues": "无"
+  },
+  {
+    "id": "SEARCH-011",
+    "name": "同义词搜索对比",
+    "priority": "P2",
+    "conclusion": "⚠️ 部分通过",
+    "output": "AI: 19条\n人工智能: 6条\n电动车: 2条\n新能源汽车: 4条",
+    "reason": "AI=19, 人工智能=6, 电动车=2, 新能源汽车=4",
+    "issues": "同义词搜索结果不完全一致（预期行为）"
+  },
+  {
+    "id": "SEARCH-014",
+    "name": "中文文件名及特殊字符",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 元宇宙 空间计算  |  找到 1 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m空间\u001b[0m\u001b[1;31m计算\u001b[0m时代\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/元宇宙与VR_AR技术发展.md:3\u0007E:/github/TreeSearch/test_work_dir/科技/元宇宙与VR_AR技术发展.md:3\u001b]8;;\u0007\n|    ---------------------------------------------\n|  >>> ## \u001b[1",
+    "reason": "有结果=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-004",
+    "name": "索引损坏降级重建",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "加载日志:\n\n搜索:\n\n============================================================\n关键词: 固态电池  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m固态\u001b[0m\u001b[1;31m电池\u001b[0m技术进展与产业化\n|    文件: \u001b",
+    "reason": "重建=False, 搜索正常=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-010",
+    "name": "子目录移动嵌套",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "日志:\n[正在增量更新: E:\\github\\TreeSearch\\test_work_dir]\n[增量更新完成: 0 个文件已索引, 61 个未变更, 0 个已清理 | 共 61 个文档, 0.11s]\n\n搜索:\n\n============================================================\n关键词: CRISPR 基因编辑  |  找到 2 个匹配\n============================================================\n\n+-- [1] 核心技术：CISH\u001b[1;31m基因\u001b[0m\u001b[1;31m编辑\u001b[0m\n|    文件: \u001b]8;;vscode://file/E:/github/TreeSearch/test_work_dir/科技/生命科学/CRISPR基因治疗逆转肺癌耐药性.md:11\u0007E:/gith",
+    "reason": "嵌套路径=True",
+    "issues": "无"
+  },
+  {
+    "id": "INDEX-011",
+    "name": "连续多次操作后全量重建",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "重建日志:\n[正在全量重建: E:\\github\\TreeSearch\\test_work_dir]\n[全量重建完成: 61 个文件已索引, 0 个未变更, 0 个已清理 | 共 61 个文档, 3.36s]\n\n搜索改名文件:\n\n============================================================\n关键词: 褪黑素 深度睡眠  |  找到 3 个匹配\n============================================================\n\n+-- [1] \u001b[1;31m褪黑素\u001b[0m（Melatonin）\n|    文件: \u001b]8;;v",
+    "reason": "改名文件=True, xls清理=True",
+    "issues": "无"
+  },
+  {
+    "id": "SCORE-004",
+    "name": "BM25 sigmoid 归一化",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "fts=5.0 → sigmoid=0.9933\nfts=-5.0 → sigmoid=0.0067\nfts=0 → sigmoid=0.5000",
+    "reason": "正=True, 负=True, 零=True",
+    "issues": "无"
+  },
+  {
+    "id": "RG-002",
+    "name": "ripgrep 不可用优雅降级",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "rg_available=True\n代码审查: rg_fallback_search 检查 rg_available() 后返回空列表",
+    "reason": "rg可用=True, 降级逻辑代码审查通过",
+    "issues": "无（代码审查通过）"
+  },
+  {
+    "id": "EDGE-001",
+    "name": "搜索路径为空目录",
+    "priority": "P2",
+    "conclusion": "❌ 未通过",
+    "output": "索引:\n[正在构建索引: E:\\github\\TreeSearch\\test_work_dir\\空目录测试]\n\n[异常] No files found for patterns: ['E:\\\\github\\\\TreeSearch\\\\test_work_dir\\\\空目录测试']\nTraceback (most recent call last):\n  File \"E:\\github\\TreeSearch\\cortex\\test_runner_p123.py\", line 29, in capture_stdout\n    func(*args, **kwargs)\n  File \"E:\\github\\TreeSearch\\cortex\\cortex_cli.py\", line 167, in load_or_build_index\n    return self.idx.load_or_build_index()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\cortex\\index_manager.py\", line 106, in load_or_build_index\n    self._ts.index(self.search_path)\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 169, in index\n    return asyncio.run(self.aindex(*paths, force=force, **kwargs))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 190, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 139, in aindex\n    result = await build_index(\n             ^^^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\indexer.py\", line 1308, in build_index\n    raise FileNotFoundError(f\"No files found for patterns: {paths}\")\nFileNotFoundError: No files found for patterns: ['E:\\\\github\\\\TreeSearch\\\\test_work_dir\\\\空目录测试']\n\n搜索:\n\n[异常] No documents available. Pass file paths to TreeSearch() or call index() first.\nTraceback (most recent call last):\n  File \"E:\\github\\TreeSearch\\cortex\\test_runner_p123.py\", line 29, in capture_stdout\n    func(*args, **kwargs)\n  File \"E:\\github\\TreeSearch\\cortex\\test_runner_p123.py\", line 573, in <lambda>\n    output_search = capture_stdout(lambda: cli_empty.format_results(*cli_empty.do_search(\"测试\"), \"测试\"))\n                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\cortex\\cortex_cli.py\", line 173, in do_search\n    return self.idx.search(query, max_results)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\cortex\\index_manager.py\", line 153, in search\n    result = self._ts.search(\n             ^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 250, in search\n    return asyncio.run(self.asearch(query, **kwargs))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 190, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 216, in asearch\n    raise ValueError(\nValueError: No documents available. Pass file paths to TreeSearch() or call index() first.\n",
+    "reason": "无结果=False, 无崩溃=False",
+    "issues": "空目录处理异常"
+  },
+  {
+    "id": "EDGE-002",
+    "name": "搜索路径不存在",
+    "priority": "P2",
+    "conclusion": "❌ 未通过",
+    "output": "[正在构建索引: /nonexistent/path/xyz123]\n\n[异常] No files found for patterns: ['/nonexistent/path/xyz123']\nTraceback (most recent call last):\n  File \"E:\\github\\TreeSearch\\cortex\\test_runner_p123.py\", line 29, in capture_stdout\n    func(*args, **kwargs)\n  File \"E:\\github\\TreeSearch\\cortex\\index_manager.py\", line 106, in load_or_build_index\n    self._ts.index(self.search_path)\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 169, in index\n    return asyncio.run(self.aindex(*paths, force=force, **kwargs))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 190, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Program Files\\Python311\\Lib\\asyncio\\base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\treesearch.py\", line 139, in aindex\n    result = await build_index(\n             ^^^^^^^^^^^^^^^^^^\n  File \"E:\\github\\TreeSearch\\treesearch\\indexer.py\", line 1308, in build_index\n    raise FileNotFoundError(f\"No files found for patterns: {paths}\")\nFileNotFoundError: No files found for patterns: ['/nonexistent/path/xyz123']\n",
+    "reason": "无崩溃=False",
+    "issues": "路径不存在导致崩溃"
+  },
+  {
+    "id": "EDGE-004",
+    "name": "特殊字符查询",
+    "priority": "P2",
+    "conclusion": "✅ 通过",
+    "output": "C++:\n\n============================================================\n关键词: C++  |  找到 1 个匹配\n============================================================\n\n+-- [1] The Ownership System: Rust's Defining Feature\n\nfile.txt:\n\n[未找到包含 'file.txt' 的结果]\n\n",
+    "reason": "C++安全=True, file.txt安全=True",
+    "issues": "无"
+  },
+  {
+    "id": "EDGE-003",
+    "name": "超长查询",
+    "priority": "P3",
+    "conclusion": "✅ 通过",
+    "output": "\n============================================================\n关键词: 量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算量子计算  |  找到 11 个匹配\n==================",
+    "reason": "无崩溃=True",
+    "issues": "无"
+  }
+]
