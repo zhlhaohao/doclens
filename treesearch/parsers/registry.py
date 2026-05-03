@@ -75,6 +75,8 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".pdf": "pdf",
     ".doc": "doc",
     ".docx": "docx",
+    # Presentations (markitdown)
+    ".pptx": "pptx",
     # Spreadsheets (openpyxl)
     ".xlsx": "excel",
     ".xlsm": "excel",
@@ -116,6 +118,7 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "pdf": ["fts5"],
     "doc": ["fts5"],
     "docx": ["fts5"],
+    "pptx": ["fts5"],
     "excel": ["fts5"],
 }
 
@@ -307,6 +310,20 @@ def _register_builtin_parsers() -> None:
         ParserRegistry.register(".htm", _html_parser)
     except ImportError:
         logger.debug("HTML parser not available (install 'beautifulsoup4' for HTML support)")
+
+    # PPTX via markitdown (optional dependency)
+    try:
+        from ..parsers.markitdown_parser import markitdown_to_tree, MARKITDOWN_EXTENSIONS
+
+        async def _markitdown_parser(fp, **kw):
+            return await markitdown_to_tree(file_path=fp, **kw)
+
+        for ext in sorted(MARKITDOWN_EXTENSIONS):
+            ParserRegistry.register(ext, _markitdown_parser)
+        logger.debug("Markitdown parser registered for %d extensions: %s",
+                      len(MARKITDOWN_EXTENSIONS), ", ".join(sorted(MARKITDOWN_EXTENSIONS)))
+    except ImportError:
+        logger.debug("PPTX parser not available (install 'markitdown' for PPTX support)")
 
 
 # Auto-register built-in parsers on import
