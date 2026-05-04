@@ -122,8 +122,8 @@ class CortexAgent:
         self._setup_dirs()
 
     def _setup_dirs(self):
-        """创建 .cortex/ 子目录"""
-        subdirs = ["team/inbox", "tasks", "transcripts", "skills", "logs"]
+        """创建 .cortex/ 子目录（skills 不再在工作目录下）"""
+        subdirs = ["team/inbox", "tasks", "transcripts", "logs"]
         for subdir in subdirs:
             (self.workdir / f".cortex/{subdir}").mkdir(parents=True, exist_ok=True)
 
@@ -132,11 +132,16 @@ class CortexAgent:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        # 从 .cortex/.env 读取配置（优先），不存在则降级到环境变量
-        cortex_env = self.workdir / ".cortex" / ".env"
-        if cortex_env.exists():
+        # 从 ~/.cortex/.env 读取配置（全局优先），降级到 {workdir}/.cortex/.env
+        from cortex.config import get_global_cortex_dir
+        global_env = get_global_cortex_dir() / ".env"
+        local_env = self.workdir / ".cortex" / ".env"
+        if global_env.exists():
             from dotenv import load_dotenv
-            load_dotenv(cortex_env, override=True)
+            load_dotenv(global_env, override=True)
+        elif local_env.exists():
+            from dotenv import load_dotenv
+            load_dotenv(local_env, override=True)
 
         # 从环境变量构建配置
         config = {
@@ -161,7 +166,7 @@ class CortexAgent:
         tasks_dir = self.workdir / ".cortex/tasks"
         transcript_dir = self.workdir / ".cortex/transcripts"
         inbox_dir = team_dir / "inbox"
-        skills_dir = self.workdir / ".cortex/skills"
+        skills_dir = get_global_cortex_dir() / "skills"
         logs_dir = self.workdir / ".cortex/logs"
 
         # 创建目录
@@ -223,7 +228,7 @@ class CortexAgent:
         from planify.tools.registry import register_external_tools
         register_external_tools(kb_tools, kb_handlers)
 
-        # 部署技能文件到 .cortex/skills/
+        # 部署技能文件到 ~/.cortex/skills/
         import shutil
         skill_src_dir = Path(__file__).parent / "skills" / "knowledge_base"
         skill_dst_dir = skills_dir / "knowledge_base"
