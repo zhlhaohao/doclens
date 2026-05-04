@@ -1208,13 +1208,443 @@
         {"编号": "Q-051", "查询": "simulation platforms algorithms investment record", "目标文件": "quantum_ai_report.pdf, global_tech_health_data.xlsx"},
         {"编号": "Q-052", "查询": "brain computer interface sing emotion patients", "目标文件": "quantum_ai_report.docx, quantum_ai_report.pdf"}
       ]
+    },
+    {
+      "分类": "十一、KB 工具 — search_kb",
+      "测试用例": [
+        {
+          "编号": "KB-SEARCH-001",
+          "功能点": "search_kb 基本中文搜索",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 初始化 IndexManager 并构建索引",
+            "2. 调用 build_kb_tools 获取 handlers",
+            "3. 调用 handlers['search_kb'](query='搜索', max_results=5)",
+            "4. 检查返回字符串格式"
+          ],
+          "预期结果": [
+            "返回非空字符串",
+            "包含 '搜索到 N 个结果' 标题行",
+            "每个结果包含 '=== 结果 N [评分: XX%] ===' 格式",
+            "每个结果包含 '文档:', '路径:', '层级:', '标题:' 字段",
+            "上下文内容以段落为单位截断"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-SEARCH-002",
+          "功能点": "search_kb 层级路径构建",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 搜索一个在嵌套章节中出现的关键词",
+            "2. 检查返回结果中的 '层级' 字段"
+          ],
+          "预期结果": [
+            "层级字段格式为 '文档名 > 章节A > 子节B > 节点标题'",
+            "用 ' > ' 连接各层级",
+            "最多显示 3 级祖先 + 文档名 + 节点标题"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-SEARCH-003",
+          "功能点": "search_kb 索引未加载时的错误提示",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 创建 IndexManager 但不调用 load_or_build_index",
+            "2. 调用 search_kb handler"
+          ],
+          "预期结果": [
+            "返回 '知识库索引未就绪或为空' 提示",
+            "建议使用 manage_kb(action='reindex') 构建索引",
+            "不抛出异常"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-SEARCH-004",
+          "功能点": "search_kb 搜索无结果时的降级提示",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 搜索一个确定不存在的关键词 'xyznonexistent999'",
+            "2. 检查返回结果"
+          ],
+          "预期结果": [
+            "FTS + ripgrep 三级降级后无结果",
+            "返回包含 '未找到' 的提示",
+            "建议尝试不同关键词或重建索引"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-SEARCH-005",
+          "功能点": "search_kb 段落级截断",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 搜索一个在超长文本中出现的关键词",
+            "2. 检查上下文是否在段落边界截断"
+          ],
+          "预期结果": [
+            "每个结果上下文不超过 800 字符",
+            "截断位置在段落边界（双换行）",
+            "总返回内容不超过 10000 字符",
+            "截断时注明被截断的结果数"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-SEARCH-006",
+          "功能点": "search_kb ripgrep 降级格式",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 搜索一个 FTS 未索引但文件中存在的精确子串（触发 ripgrep 降级）",
+            "2. 检查返回格式"
+          ],
+          "预期结果": [
+            "结果标题包含 'ripgrep 降级' 标记",
+            "每个结果显示 '匹配: N/M 词' 而非百分比评分"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        }
+      ]
+    },
+    {
+      "分类": "十二、KB 工具 — manage_kb",
+      "测试用例": [
+        {
+          "编号": "KB-MGMT-001",
+          "功能点": "manage_kb stats 统计信息",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 确保 IndexManager 已加载索引",
+            "2. 调用 handlers['manage_kb'](action='stats')",
+            "3. 检查返回内容"
+          ],
+          "预期结果": [
+            "返回非空字符串",
+            "包含 '知识库状态' 标题",
+            "包含索引路径、索引大小、已索引文档数",
+            "包含文件类型统计列表"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-MGMT-002",
+          "功能点": "manage_kb reindex 增量重建",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 调用 handlers['manage_kb'](action='reindex')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "返回 '索引重建完成 (mode=增量)'",
+            "显示总文档数和搜索路径"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-MGMT-003",
+          "功能点": "manage_kb reindex force 全量重建",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 调用 handlers['manage_kb'](action='reindex', force=True)",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "删除旧索引文件后重建",
+            "返回 '索引重建完成 (mode=全量)'",
+            "重建后搜索功能正常"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-MGMT-004",
+          "功能点": "manage_kb 无效操作类型",
+          "优先级": "P2",
+          "测试步骤": [
+            "1. 调用 handlers['manage_kb'](action='invalid')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "返回 '未知操作: invalid'",
+            "提示支持的操作: reindex, stats",
+            "不抛出异常"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        }
+      ]
+    },
+    {
+      "分类": "十三、KB 工具 — read_document",
+      "测试用例": [
+        {
+          "编号": "KB-READ-001",
+          "功能点": "read_document 读取 Markdown 文件",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 调用 handlers['read_document'](path='CLAUDE.md')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "返回包含 '文档: CLAUDE.md' 标题",
+            "包含 '格式: .md (X.XX KB)' 元信息",
+            "包含 '## 目录结构' 章节，列出标题层级",
+            "包含 '## 内容' 章节，展示文档正文",
+            "正文按 '### 标题' 分节展示"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-002",
+          "功能点": "read_document section 参数按章节定位",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 调用 handlers['read_document'](path='CLAUDE.md', section='Cortex CLI')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "内容定位到匹配 'Cortex CLI' 的章节",
+            "显示 '## 内容（... > Cortex CLI）' 标题",
+            "返回该章节及其子章节的完整内容",
+            "内容不超过 6000 字符，超出时截断并提示"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-003",
+          "功能点": "read_document 文档不存在时的错误处理",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 调用 handlers['read_document'](path='nonexistent_file.md')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "返回 '文档不存在: nonexistent_file.md'",
+            "提示确认路径是否正确",
+            "不抛出异常"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-004",
+          "功能点": "read_document 解析器输出标准化",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 直接调用 _parse_document 解析 CLAUDE.md",
+            "2. 检查返回的标准化结构"
+          ],
+          "预期结果": [
+            "返回 {title, text, nodes} 格式",
+            "nodes 为标准化后的列表，每项含 {title, text, line_start, line_end, nodes}",
+            "text 字段从 summary 或 prefix_summary 提取",
+            "子节点递归标准化"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-005",
+          "功能点": "read_document start_line/end_line 按行号范围读取",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 调用 handlers['read_document'](path='CLAUDE.md', start_line=30, end_line=60)",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "内容标题显示 '[第 30-60 行]'",
+            "只返回该行号范围内的节点内容",
+            "超出范围的内容被过滤"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-006",
+          "功能点": "read_document section 未匹配时回退全文",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 调用 handlers['read_document'](path='CLAUDE.md', section='不存在的章节标题')",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "section 未匹配时不报错",
+            "回退到显示全文内容",
+            "仍然包含目录结构信息"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-007",
+          "功能点": "read_document 多格式文件解析（PDF/DOCX/PPTX/XLSX）",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 对 samples/ 下每种二进制格式文件调用 read_document",
+            "2. 检查返回内容"
+          ],
+          "预期结果": [
+            "PDF 文件解析成功，返回页码和文本内容",
+            "DOCX 文件解析成功，保留 Heading 层级",
+            "XLSX 文件解析成功，Sheet 以独立节点展示",
+            "PPTX 文件解析成功（依赖 markitdown）",
+            "缺少依赖时返回 ImportError 提示而非崩溃"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-READ-008",
+          "功能点": "read_document 路径解析策略",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 使用相对路径调用: read_document(path='CLAUDE.md')",
+            "2. 使用绝对路径调用: read_document(path='E:/github/TreeSearch/CLAUDE.md')",
+            "3. 使用索引路径映射中的路径调用"
+          ],
+          "预期结果": [
+            "相对路径相对于 workdir 解析",
+            "绝对路径直接使用",
+            "path_map 中的路径可被查找",
+            "三种方式均能正确定位文件"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        }
+      ]
+    },
+    {
+      "分类": "十四、KB Agent 集成",
+      "测试用例": [
+        {
+          "编号": "KB-INT-001",
+          "功能点": "build_kb_tools 返回正确的工具定义和处理器",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 初始化 IndexManager 并加载索引",
+            "2. 调用 build_kb_tools(idx_manager, workdir)",
+            "3. 检查返回值"
+          ],
+          "预期结果": [
+            "tools 列表包含 3 个工具定义",
+            "工具名分别为 'search_kb', 'manage_kb', 'read_document'",
+            "每个工具有 'name', 'description', 'input_schema' 字段",
+            "handlers 字典包含 3 个可调用处理器"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-INT-002",
+          "功能点": "register_external_tools 注册 KB 工具到 planify",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 调用 register_external_tools(kb_tools, kb_handlers)",
+            "2. 调用 build_tool_registry 获取聚合后的工具列表",
+            "3. 检查 KB 工具是否在聚合列表中"
+          ],
+          "预期结果": [
+            "聚合后的工具列表包含 search_kb、manage_kb、read_document",
+            "聚合后的 handlers 包含对应处理器",
+            "不影响 planify 原有工具（bash, read_file 等）"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-INT-003",
+          "功能点": "SKILL.md 技能文件部署",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 确认 cortex/skills/knowledge_base/SKILL.md 源文件存在",
+            "2. 调用 CortexAgent.initialize()",
+            "3. 检查 .cortex/skills/knowledge_base/SKILL.md 是否被部署"
+          ],
+          "预期结果": [
+            "initialize() 后 .cortex/skills/knowledge_base/SKILL.md 存在",
+            "部署文件内容与源文件一致",
+            "SkillLoader 能扫描到 knowledge-base 技能",
+            "已存在时不重复覆盖"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-INT-004",
+          "功能点": "CortexAgent.idx 属性正确初始化",
+          "优先级": "P0",
+          "测试步骤": [
+            "1. 创建 CortexAgent 实例",
+            "2. 检查初始 idx 值",
+            "3. 调用 initialize()",
+            "4. 检查初始化后 idx 值"
+          ],
+          "预期结果": [
+            "初始化前 agent.idx 为 None",
+            "initialize() 后 agent.idx 为 IndexManager 实例",
+            "agent.idx.ts 不为 None（索引已加载）",
+            "agent.idx.documents 非空（如有文件）"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-INT-005",
+          "功能点": "Agent 自然语言触发 KB 工具调用（端到端）",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 启动 cortex CLI",
+            "2. 输入自然语言问题，如 '知识库里有什么文档？'",
+            "3. 观察 Agent 是否调用 search_kb 或 manage_kb 工具",
+            "4. 检查 Agent 回答是否引用了搜索结果"
+          ],
+          "预期结果": [
+            "Agent 接收到知识库相关问题后调用 KB 工具",
+            "Agent 回答引用了文档名和路径",
+            "搜索结果中的层级信息被 Agent 正确理解",
+            "Agent 在搜索无结果时建议重建索引"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        },
+        {
+          "编号": "KB-INT-006",
+          "功能点": "SKILL.md 技能内容引导 Agent 策略",
+          "优先级": "P1",
+          "测试步骤": [
+            "1. 启动 cortex CLI",
+            "2. 输入需要深度研究的问题，如 '帮我分析固态电池技术的最新进展'",
+            "3. 观察 Agent 是否遵循多步策略：search_kb → read_document → 综合回答"
+          ],
+          "预期结果": [
+            "Agent 先调用 search_kb 搜索相关文档",
+            "对搜索结果中的关键文档调用 read_document 深入阅读",
+            "综合多源信息生成回答",
+            "回答中标注文档来源路径"
+          ],
+          "实测结果": "",
+          "状态": "待测试"
+        }
+      ]
     }
   ],
   "总结": {
-    "测试用例总数": 110,
-    "P0 用例数": 22,
-    "P1 用例数": 23,
-    "P2 用例数": 10,
+    "测试用例总数": 134,
+    "P0 用例数": 32,
+    "P1 用例数": 39,
+    "P2 用例数": 12,
     "P3 用例数": 1,
     "测试问题数": 52,
     "覆盖模块": [
@@ -1224,7 +1654,9 @@
       "index_manager.py - 索引生命周期管理",
       "ripgrep.py - ripgrep 降级搜索、Shadow Markdown",
       "config.py - Pydantic Settings 配置系统",
-      "agent_integration.py - LLM Agent 集成"
+      "agent_integration.py - LLM Agent 集成",
+      "kb_tools.py - KB 工具定义与处理器（search_kb, manage_kb, read_document）",
+      "skills/knowledge_base/SKILL.md - Agent 知识库技能指引"
     ],
     "备注": "实测结果和状态列需在实际测试时填写。P0 为核心功能必须通过，P1 为重要功能，P2 为边界情况，P3 为低优先级。",
     "测试结果文件要求": {

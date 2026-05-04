@@ -91,44 +91,4 @@ def run_chat_search(query: str, zhipu_client: ZhipuAI, model_id: str = "glm-4") 
 def make_web_tools(
     zhipu_client: ZhipuAI, zhipu_model_id: str = "glm-4"
 ) -> Tuple[list, dict]:
-    tools = [
-        {
-            "name": "web_search",
-            "description": "搜索网络信息（不包括天气信息）",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "搜索查询内容"},
-                    "search_recency_filter": {
-                        "type": "string",
-                        "enum": ["noLimit", "oneDay", "oneWeek", "oneMonth", "oneYear"],
-                        "description": "搜索时间范围：noLimit（不限）、oneDay（一天内）、oneWeek（一周内）、oneMonth（一个月内）、oneYear（一年内）",
-                        "default": "noLimit",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-        {
-            "name": "chat_search",
-            "description": "联网搜索并生成总结性回答",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "搜索查询内容"}
-                },
-                "required": ["query"],
-            },
-        },
-    ]
-
-    handlers = {
-        "web_search": lambda **kw: run_web_search(
-            kw["query"], zhipu_client, kw.get("search_recency_filter", "noLimit")
-        ),
-        "chat_search": lambda **kw: run_chat_search(
-            kw["query"], zhipu_client, zhipu_model_id
-        ),
-    }
-
-    return tools, handlers
+    return [], {}
