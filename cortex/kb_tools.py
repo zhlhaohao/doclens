@@ -384,7 +384,14 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
 
 
 def _parse_document(file_path: str, ext: str) -> Optional[dict]:
-    """使用 treesearch ParserRegistry 解析文档。"""
+    """使用 treesearch ParserRegistry 解析文档。
+
+    解析器返回格式为 {doc_name, structure: [Node...], source_path}。
+    我们将其标准化为 {title, text, nodes} 格式：
+    - structure 中的节点 → nodes（递归转换字段名）
+    - summary 字段 → text
+    - prefix_summary 字段 → text（根节点）
+    """
     from treesearch.parsers.registry import get_parser
 
     parser_fn = get_parser(ext)
@@ -394,7 +401,33 @@ def _parse_document(file_path: str, ext: str) -> Optional[dict]:
         return {"title": os.path.basename(file_path), "text": text, "nodes": []}
 
     loop = _get_or_create_event_loop()
-    result = loop.run_until_complete(parser_fn(file_path))
+    raw = loop.run_until_complete(parser_fn(file_path))
+
+    # 标准化解析器输出
+    title = raw.get("doc_name", os.path.basename(file_path))
+    structure = raw.get("structure", [])
+    nodes = _normalize_nodes(structure)
+    return {"title": title, "text": "", "nodes": nodes}
+
+
+def _normalize_nodes(nodes: list[dict]) -> list[dict]:
+    """将解析器节点递归标准化为统一的 {title, text, line_start, line_end, nodes} 格式。"""
+    result = []
+    for node in nodes:
+        title = node.get("title", "")
+        # 正文内容优先用 summary，回退到 prefix_summary
+        text = node.get("summary", "") or node.get("prefix_summary", "") or node.get("text", "") or ""
+        line_start = node.get("line_start", 0)
+        line_end = node.get("line_end", 0)
+        children = node.get("nodes", [])
+        normalized = {
+            "title": title,
+            "text": text,
+            "line_start": line_start,
+            "line_end": line_end,
+            "nodes": _normalize_nodes(children),
+        }
+        result.append(normalized)
     return result
 
 
