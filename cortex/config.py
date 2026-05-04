@@ -9,6 +9,13 @@ from typing import Optional
 import os
 
 
+def get_global_cortex_dir() -> Path:
+    """返回全局配置目录 ~/.cortex，不存在则自动创建"""
+    p = Path.home() / ".cortex"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 class CortexConfig(BaseSettings):
     """Cortex 配置模型"""
 
@@ -43,11 +50,16 @@ class CortexConfig(BaseSettings):
 
     @classmethod
     def load(cls) -> "CortexConfig":
-        """从 .cortex/.env 加载配置，失败则降级到环境变量"""
-        env_path = Path(os.getcwd()) / ".cortex" / ".env"
+        """从 ~/.cortex/.env 或 {cwd}/.cortex/.env 加载配置，失败则降级到环境变量"""
+        # 优先读取全局配置
+        global_env = get_global_cortex_dir() / ".env"
+        if global_env.exists():
+            return cls(_env_file=str(global_env), _env_file_encoding="utf-8")
 
-        if env_path.exists():
-            return cls(_env_file=str(env_path), _env_file_encoding="utf-8")
+        # 降级到项目级配置
+        local_env = Path(os.getcwd()) / ".cortex" / ".env"
+        if local_env.exists():
+            return cls(_env_file=str(local_env), _env_file_encoding="utf-8")
 
         # 降级到环境变量
         return cls(_env_file=None)

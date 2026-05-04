@@ -75,13 +75,23 @@ def extract_pdf_text(file_path: str) -> str:
     _check_backends()
     try:
         import pymupdf
-        doc = pymupdf.open(file_path)
-        parts = []
-        for i, page in enumerate(doc):
-            text = page.get_text().strip()
-            if text:
-                parts.append(f"\n[PAGE {i + 1}]\n{text}")
-        doc.close()
+        import sys
+        import os
+
+        # Suppress MuPDF stderr warnings (FontBBox, etc.)
+        old_stderr = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+        try:
+            doc = pymupdf.open(file_path)
+            parts = []
+            for i, page in enumerate(doc):
+                text = page.get_text().strip()
+                if text:
+                    parts.append(f"\n[PAGE {i + 1}]\n{text}")
+            doc.close()
+        finally:
+            sys.stderr.close()
+            sys.stderr = old_stderr
         return "\n".join(parts)
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
