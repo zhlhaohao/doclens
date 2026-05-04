@@ -117,6 +117,7 @@ class CortexAgent:
         self.workdir = workdir
         self.loop = None
         self.session = None
+        self.idx = None
         self._escape_watcher = None
         self._setup_dirs()
 
@@ -207,6 +208,28 @@ class CortexAgent:
 
         # 子代理运行器
         from planify.subagent.runner import run_subagent
+
+        # --- 知识库工具注册 ---
+        from cortex.index_manager import IndexManager
+        from cortex.config import CortexConfig
+
+        kb_config = CortexConfig.load()
+        self.idx = IndexManager(kb_config)
+        self.idx.load_or_build_index()
+
+        from cortex.kb_tools import build_kb_tools
+        kb_tools, kb_handlers = build_kb_tools(self.idx, self.workdir)
+
+        from planify.tools.registry import register_external_tools
+        register_external_tools(kb_tools, kb_handlers)
+
+        # 部署技能文件到 .cortex/skills/
+        import shutil
+        skill_src_dir = Path(__file__).parent / "skills" / "knowledge_base"
+        skill_dst_dir = skills_dir / "knowledge_base"
+        if skill_src_dir.exists() and not (skill_dst_dir / "SKILL.md").exists():
+            skill_dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(skill_src_dir / "SKILL.md", skill_dst_dir / "SKILL.md")
 
         # 工具注册表
         tools, tool_handlers = build_tool_registry(
