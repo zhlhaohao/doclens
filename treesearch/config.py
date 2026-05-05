@@ -107,6 +107,9 @@ class TreeSearchConfig:
     # Set to False to never auto-delete orphans even on directory walks.
     prune_orphans_on_directory: bool = True
 
+    # Failed files auto-skip: after N consecutive parse failures, skip the file
+    max_index_fail_count: int = 3
+
     @classmethod
     def from_env(cls) -> "TreeSearchConfig":
         """Create config from environment variables, falling back to defaults."""

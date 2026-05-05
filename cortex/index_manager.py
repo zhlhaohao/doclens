@@ -60,6 +60,7 @@ class IndexManager:
         self.min_proximity_score = config.min_proximity_score
         self.min_keywords_per_line = config.min_keywords_per_line
         self.cjk_tokenizer = config.cjk_tokenizer
+        self.max_index_fail_count = config.max_index_fail_count
 
         # 终端显示参数
         self.title_width = config.title_width
@@ -119,7 +120,7 @@ class IndexManager:
             return True
 
         # 设置 CJK 分词
-        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
+        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
         self._ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
@@ -148,7 +149,7 @@ class IndexManager:
                             import time
                             time.sleep(0.2)
                             gc.collect()
-                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
+                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
                 self._ts = TreeSearch(db_path=self.index_path)
 
         # 构建新索引
@@ -179,7 +180,7 @@ class IndexManager:
     def reindex(self, force=False):
         """增量更新索引（force=True 时全量重建）"""
         if self._ts is None:
-            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
+            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
             self._ts = TreeSearch(db_path=self.index_path)
 
         mode = "全量重建" if force else "增量更新"
@@ -196,10 +197,11 @@ class IndexManager:
         # 展示增量统计
         stats = self._ts.get_index_stats()
         if stats:
+            excluded_info = f", {stats.excluded_files} 个失败跳过" if stats.excluded_files else ""
             print(f"[{mode}完成: "
                   f"{stats.indexed_files} 个文件已索引, "
                   f"{stats.skipped_files} 个未变更, "
-                  f"{len(stats.pruned_paths)} 个已清理 | "
+                  f"{len(stats.pruned_paths)} 个已清理{excluded_info} | "
                   f"共 {len(self._ts.documents)} 个文档, "
                   f"{stats.total_time_s:.2f}s]")
         else:

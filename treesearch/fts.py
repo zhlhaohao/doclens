@@ -317,6 +317,17 @@ class FTS5Index:
             )
         """)
 
+        # Failed files tracking (auto-skip after consecutive parse failures)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS failed_files (
+                source_path TEXT PRIMARY KEY,
+                fail_count INTEGER NOT NULL DEFAULT 1,
+                last_error TEXT DEFAULT '',
+                last_fail_time REAL NOT NULL,
+                file_hash TEXT DEFAULT ''
+            )
+        """)
+
         # Performance indexes for large-scale document sets (10k+ docs)
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nodes_doc_id ON nodes (doc_id)"
@@ -357,6 +368,58 @@ class FTS5Index:
 
     def __del__(self):
         self.close()
+
+    # -------------------------------------------------------------------
+    # Failed files tracking
+    # -------------------------------------------------------------------
+
+    def get_all_failed_files(self) -> dict[str, tuple[int, str]]:
+        """Batch load all failed file records.
+
+        Returns:
+            ``{source_path: (fail_count, file_hash)}``
+        """
+        rows = self._conn.execute(
+            "SELECT source_path, fail_count, file_hash FROM failed_files"
+        ).fetchall()
+        return {row[0]: (row[1], row[2]) for row in rows}
+
+    def upsert_failed_file(self, path: str, error_msg: str, file_hash: str = "") -> None:
+        """Insert or increment fail count for a file that failed to parse."""
+        import time as _time
+        now = _time.time()
+        self._conn.execute(
+            """INSERT INTO failed_files (source_path, fail_count, last_error, last_fail_time, file_hash)
+               VALUES (?, 1, ?, ?, ?)
+               ON CONFLICT(source_path) DO UPDATE SET
+                   fail_count = fail_count + 1,
+                   last_error = excluded.last_error,
+                   last_fail_time = excluded.last_fail_time,
+                   file_hash = excluded.file_hash
+            """,
+            (path, error_msg, now, file_hash),
+        )
+
+    def clear_failed_file(self, path: str) -> None:
+        """Remove a file's failed record after it is successfully indexed."""
+        self._conn.execute(
+            "DELETE FROM failed_files WHERE source_path = ?", (path,)
+        )
+
+    def clear_all_failed_files(self) -> None:
+        """Remove all failed file records (used during full rebuild)."""
+        self._conn.execute("DELETE FROM failed_files")
+
+    def get_failed_files_summary(self) -> list[tuple[str, int, str]]:
+        """Return failed files list for display.
+
+        Returns:
+            list of ``(source_path, fail_count, last_error)``
+        """
+        rows = self._conn.execute(
+            "SELECT source_path, fail_count, last_error FROM failed_files ORDER BY fail_count DESC"
+        ).fetchall()
+        return [(row[0], row[1], row[2]) for row in rows]
 
     # -------------------------------------------------------------------
     # Indexing (Producer side)

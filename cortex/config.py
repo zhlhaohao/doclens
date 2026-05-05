@@ -56,6 +56,9 @@ class CortexConfig(BaseSettings):
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)
 
+    # 失败文件自动跳过阈值
+    max_index_fail_count: int = Field(default=3)
+
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 
