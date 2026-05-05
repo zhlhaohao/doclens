@@ -131,7 +131,25 @@ class IndexManager:
                     self.build_path_map()
                     return True
             except Exception:
-                pass
+                # 索引文件损坏，删除并重建 TreeSearch 实例
+                print("[警告] 索引文件损坏，正在重建...")
+                self._ts = None  # 释放旧实例引用，帮助 GC 回收 SQLite 连接
+                import gc
+                gc.collect()
+                # 删除损坏的索引文件及 WAL/SHM 文件
+                for suffix in ("", "-wal", "-shm"):
+                    p = abs_path + suffix
+                    for _ in range(3):
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                            break
+                        except PermissionError:
+                            import time
+                            time.sleep(0.2)
+                            gc.collect()
+                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer))
+                self._ts = TreeSearch(db_path=self.index_path)
 
         # 构建新索引
         print(f"[正在构建索引: {self.search_path}]")

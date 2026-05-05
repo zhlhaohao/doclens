@@ -350,10 +350,20 @@ def _kb_reindex(idx_manager: IndexManager, force: bool = False) -> str:
     """重建知识库索引。"""
     if force:
         index_abs = os.path.abspath(idx_manager.index_path)
-        if os.path.exists(index_abs):
-            os.remove(index_abs)
         idx_manager._ts = None
         idx_manager._path_map = {}
+        # 删除索引文件及 WAL/SHM 文件（带重试，兼容 Windows 文件锁）
+        for suffix in ("", "-wal", "-shm"):
+            p = index_abs + suffix
+            for attempt in range(3):
+                try:
+                    if os.path.exists(p):
+                        os.remove(p)
+                    break
+                except PermissionError:
+                    import time
+                    time.sleep(0.3 * (attempt + 1))
+                    import gc; gc.collect()
 
     idx_manager.reindex(force=force)
 
