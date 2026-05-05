@@ -18,6 +18,32 @@ logger = logging.getLogger(__name__)
 # Extensions handled by markitdown
 MARKITDOWN_EXTENSIONS = {".pptx"}
 
+# ---------------------------------------------------------------------------
+# Monkey-patch: python-pptx AutoShape.shape_type raises NotImplementedError
+# for unrecognized shape types (e.g. SmartArt, connectors, ink).  Returning
+# None instead lets markitdown skip those shapes gracefully while still
+# extracting text from shapes that have a text_frame.
+# ---------------------------------------------------------------------------
+def _patch_pptx_shape_type():
+    try:
+        from pptx.shapes.autoshape import Shape
+    except ImportError:
+        return
+
+    _orig = Shape.shape_type.fget  # type: ignore[attr-defined]
+
+    @property  # type: ignore[misc]
+    def _safe_shape_type(self):
+        try:
+            return _orig(self)
+        except NotImplementedError:
+            return None
+
+    Shape.shape_type = _safe_shape_type  # type: ignore[assignment]
+
+
+_patch_pptx_shape_type()
+
 
 async def markitdown_to_tree(
     file_path: str,
