@@ -52,6 +52,10 @@ class CortexConfig(BaseSettings):
     rg_context_before: int = Field(default=6)
     rg_context_after: int = Field(default=5)
 
+    # 文件监控
+    watch_enabled: bool = Field(default=True)
+    watch_debounce: float = Field(default=5.0)
+
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 
