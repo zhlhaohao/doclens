@@ -1061,6 +1061,7 @@ class IndexStats:
     indexed_files: int = 0
     skipped_files: int = 0
     failed_files: int = 0
+    excluded_files: int = 0
     total_nodes: int = 0
     total_time_s: float = 0.0
     per_type: dict = field(default_factory=dict)
@@ -1081,6 +1082,8 @@ class IndexStats:
         lines.append(f"  Skipped (unchanged):    {self.skipped_files}")
         if self.failed_files:
             lines.append(f"  Failed:                 {self.failed_files}")
+        if self.excluded_files:
+            lines.append(f"  Exceeded failures:      {self.excluded_files}")
         if self.pruned_paths:
             lines.append(f"  Pruned (orphans):       {len(self.pruned_paths)}")
         lines.append(f"  Total nodes generated:  {self.total_nodes}")
@@ -1338,6 +1341,10 @@ async def build_index(
     file_hashes = {}
     pruned_paths: list[str] = []
 
+    if force:
+        # Full rebuild: clear all failed file records
+        fts.clear_all_failed_files()
+
     if not force:
         # Batch fetch all stored hashes in one query (instead of N queries)
         all_meta = fts.get_all_index_meta()
@@ -1443,6 +1450,29 @@ async def build_index(
 
     if skipped:
         logger.info("Skipped %d unchanged file(s)", len(skipped))
+
+    # Filter out files that have exceeded the consecutive failure threshold
+    excluded_count = 0
+    if not force and to_index:
+        failed_records = fts.get_all_failed_files()  # {path: (fail_count, file_hash)}
+        max_fail_count = cfg.max_index_fail_count
+        excluded = []
+        remaining = []
+        for fp in to_index:
+            abs_fp = os.path.abspath(fp)
+            record = failed_records.get(abs_fp)
+            if record and record[0] >= max_fail_count:
+                # Check if file content has changed since last failure
+                current_hash = file_hashes.get(abs_fp, "")
+                if record[1] and record[1] == current_hash:
+                    excluded.append(fp)
+                    continue
+            remaining.append(fp)
+        to_index = remaining
+        if excluded:
+            excluded_count = len(excluded)
+            logger.info("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
+
     logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
 
     build_start = time.monotonic()
@@ -1487,6 +1517,8 @@ async def build_index(
             except Exception as e:
                 logger.warning("Failed to index %s: %s", fp, e)
                 _failed_paths.append(fp)
+                abs_fp = os.path.abspath(fp)
+                fts.upsert_failed_file(abs_fp, str(e), file_hashes.get(abs_fp, ""))
                 _file_timings[fp] = ("(failed)", time.monotonic() - t0)
                 return None
             finally:
@@ -1538,6 +1570,8 @@ async def build_index(
             # index_document writes nodes, fts_nodes, documents AND index_meta
             # in a single atomic transaction (auto_commit handles batching).
             fts.index_document(doc, auto_commit=False, file_hash=file_h)
+            # Clear any prior failure record for this file
+            fts.clear_failed_file(abs_fp)
             d = fts.last_node_diff
             for k in diff_totals:
                 diff_totals[k] += d[k]
@@ -1615,6 +1649,7 @@ async def build_index(
         indexed_files=len(to_index) - len(_failed_paths),
         skipped_files=len(skipped),
         failed_files=len(_failed_paths),
+        excluded_files=excluded_count,
         total_nodes=total_nodes,
         total_time_s=build_elapsed,
         per_type=per_type,
