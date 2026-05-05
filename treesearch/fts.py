@@ -228,7 +228,11 @@ class FTS5Index:
         self.last_node_diff: dict[str, int] = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
         self._tokenize_log_path = tokenize_log_path
         self._tokenize_log_file = None  # lazy-opened in _log_tokenize()
-        self._init_db()
+        try:
+            self._init_db()
+        except Exception:
+            self.close()
+            raise
 
     def _init_db(self) -> None:
         """Initialize SQLite database with FTS5 virtual table (or fallback plain table)."""
