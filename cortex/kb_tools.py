@@ -97,7 +97,7 @@ READ_DOCUMENT_TOOL = {
 
 
 # ---------------------------------------------------------------------------
-# 格式化常量
+# 格式化常量（默认值，运行时从 idx_manager 配置读取）
 # ---------------------------------------------------------------------------
 
 MAX_CONTEXT_CHARS_PER_RESULT = 800
@@ -124,12 +124,33 @@ def build_kb_tools(
         - tools: Anthropic tool use 格式的工具定义列表
         - handlers: 工具名 -> 处理函数的映射
     """
+    # 动态生成 search_kb schema，使用配置中的 max_results
+    search_kb_schema = {
+        "name": "search_kb",
+        "description": SEARCH_KB_TOOL["description"],
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "搜索关键词，支持中英文混合",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "返回的最大结果数",
+                    "default": idx_manager.max_results,
+                },
+            },
+            "required": ["query"],
+        },
+    }
+
     handlers = {
         "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
         "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
         "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
     }
-    return [SEARCH_KB_TOOL, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
+    return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +215,8 @@ def _format_kb_results(
     doc_nodes_map: dict[str, list[dict]],
     doc_title_map: dict[str, str],
     max_results: int,
+    max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
+    max_total_chars: int = MAX_TOTAL_CHARS,
 ) -> str:
     """格式化 FTS 搜索结果为带层次结构的文本。"""
     total_hits = len(scored_results)
@@ -212,7 +235,7 @@ def _format_kb_results(
         doc_title = doc_title_map.get(doc_id, doc_id)
         hierarchy = _build_hierarchy_path(node, doc_nodes_map, doc_title)
 
-        context = _truncate_to_paragraphs(node_text, MAX_CONTEXT_CHARS_PER_RESULT)
+        context = _truncate_to_paragraphs(node_text, max_context_chars_per_result)
 
         entry = (
             f"\n=== 结果 {shown + 1} [评分: {int(composite * 100)}%] ===\n"
@@ -225,7 +248,7 @@ def _format_kb_results(
             entry += f"\n{context}\n"
 
         entry_len = len(entry)
-        if total_chars + entry_len > MAX_TOTAL_CHARS:
+        if total_chars + entry_len > max_total_chars:
             truncated_count = total_hits - shown
             break
 
@@ -244,6 +267,7 @@ def _format_ripgrep_results(
     query_words: list[str],
     path_map: dict[str, str],
     max_results: int,
+    max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
 ) -> str:
     """格式化 ripgrep 降级搜索结果。"""
     display = results[:max_results]
@@ -254,7 +278,7 @@ def _format_ripgrep_results(
         node_text = node.get("text", "") or ""
         path = path_map.get(doc_id, "")
 
-        context = _truncate_to_paragraphs(node_text, MAX_CONTEXT_CHARS_PER_RESULT)
+        context = _truncate_to_paragraphs(node_text, max_context_chars_per_result)
 
         entry = (
             f"\n=== 结果 {i} [匹配: {matched}/{len(query_words)} 词] ===\n"
@@ -493,6 +517,7 @@ def _format_document_output(
     start_line: Optional[int],
     end_line: Optional[int],
     section: Optional[str],
+    max_read_chars: int = MAX_READ_CHARS,
 ) -> str:
     """格式化文档内容输出。"""
     def fmt_size(s):
@@ -515,10 +540,10 @@ def _format_document_output(
         match = _find_section_text(nodes, section)
         if match:
             matched_title, matched_text, hierarchy = match
-            content = _truncate_to_paragraphs(matched_text, MAX_READ_CHARS)
+            content = _truncate_to_paragraphs(matched_text, max_read_chars)
             content_header = f"\n## 内容（{hierarchy}）\n"
             output = header + content_header + "\n" + content
-            if len(matched_text) > MAX_READ_CHARS:
+            if len(matched_text) > max_read_chars:
                 output += f"\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
             return output
 
@@ -527,9 +552,9 @@ def _format_document_output(
     if not all_text_parts:
         root_text = tree.get("text", "")
         if root_text:
-            content = _truncate_to_paragraphs(root_text, MAX_READ_CHARS)
+            content = _truncate_to_paragraphs(root_text, max_read_chars)
             output = header + f"\n## 内容\n\n" + content
-            if len(root_text) > MAX_READ_CHARS:
+            if len(root_text) > max_read_chars:
                 output += "\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
             return output
         return header + "\n（文档内容为空）"
@@ -552,8 +577,8 @@ def _format_document_output(
         else:
             part = text
 
-        if total_chars + len(part) > MAX_READ_CHARS:
-            remaining = MAX_READ_CHARS - total_chars
+        if total_chars + len(part) > max_read_chars:
+            remaining = max_read_chars - total_chars
             if remaining > 200:
                 content_parts.append(_truncate_to_paragraphs(part, remaining))
             break
@@ -571,7 +596,7 @@ def _format_document_output(
     output = header + f"\n## 内容{line_info}\n\n" + content
 
     total_text_len = sum(len(t) for _, t, _, _ in all_text_parts)
-    if total_text_len > MAX_READ_CHARS:
+    if total_text_len > max_read_chars:
         output += "\n\n（内容已截断。使用 start_line/end_line 或 section 参数读取后续内容。）"
 
     return output
@@ -586,9 +611,12 @@ def _handle_search_kb(
     workdir: Path,
     *,
     query: str,
-    max_results: int = 10,
+    max_results: Optional[int] = None,
 ) -> str:
     """搜索知识库，返回带层次结构的格式化结果。"""
+    if max_results is None:
+        max_results = idx_manager.max_results
+
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
 
@@ -609,7 +637,8 @@ def _handle_search_kb(
 
     if not nodes:
         filtered = rg_module.rg_fallback_search(
-            query, idx_manager.path_map, {}, query_words
+            query, idx_manager.path_map, {}, query_words,
+            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
         )
         if not filtered:
             return (
@@ -644,7 +673,7 @@ def _handle_search_kb(
         best_proximity = 0
         for n in all_nodes:
             n_text = n.get("text", "") or ""
-            cnt, proximity = calc_proximity_score(n_text, query_words)
+            cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
             if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
                 best_count = cnt
                 best_proximity = proximity
@@ -655,7 +684,7 @@ def _handle_search_kb(
     filtered = [
         (did, bn, cnt, prox, fts)
         for did, (bn, cnt, prox, fts) in doc_best.items()
-        if cnt >= 2 and prox >= 1
+        if cnt >= idx_manager.min_keyword_match and prox >= idx_manager.min_proximity_score
     ]
     if not filtered and query_words:
         filtered = [
@@ -665,7 +694,8 @@ def _handle_search_kb(
         ]
     if not filtered:
         filtered = rg_module.rg_fallback_search(
-            query, idx_manager.path_map, doc_nodes_map, query_words
+            query, idx_manager.path_map, doc_nodes_map, query_words,
+            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
         )
 
     if not filtered:
@@ -686,7 +716,11 @@ def _handle_search_kb(
         scored_results.append((composite, item))
     scored_results.sort(key=lambda x: -x[0])
 
-    return _format_kb_results(scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results)
+    return _format_kb_results(
+        scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results,
+        max_context_chars_per_result=idx_manager.max_context_chars_per_result,
+        max_total_chars=idx_manager.max_total_chars,
+    )
 
 
 def _handle_manage_kb(
@@ -746,4 +780,5 @@ def _handle_read_document(
         start_line=start_line,
         end_line=end_line,
         section=section,
+        max_read_chars=idx_manager.max_read_chars,
     )

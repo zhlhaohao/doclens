@@ -57,7 +57,25 @@ class IndexManager:
         self.top_k_docs = config.top_k_docs
         self.max_span = config.max_span
         self.min_keyword_match = config.min_keyword_match
+        self.min_proximity_score = config.min_proximity_score
+        self.min_keywords_per_line = config.min_keywords_per_line
         self.cjk_tokenizer = config.cjk_tokenizer
+
+        # 终端显示参数
+        self.title_width = config.title_width
+        self.line_width = config.line_width
+        self.max_context_lines = config.max_context_lines
+        self.max_anchor_lines = config.max_anchor_lines
+        self.context_expand_range = config.context_expand_range
+
+        # KB 工具字符限制
+        self.max_context_chars_per_result = config.max_context_chars_per_result
+        self.max_total_chars = config.max_total_chars
+        self.max_read_chars = config.max_read_chars
+
+        # Ripgrep 降级搜索上下文
+        self.rg_context_before = config.rg_context_before
+        self.rg_context_after = config.rg_context_after
 
         self.scoring_weights = {
             "keyword_match_ratio": config.weight_keyword_match,
