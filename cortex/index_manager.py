@@ -86,6 +86,8 @@ class IndexManager:
 
         self._ts = None
         self._path_map = {}
+        self._pending_swap = None  # (new_ts, new_path_map, doc_count)
+        self._reindexing = False
 
     @property
     def ts(self):
@@ -98,6 +100,18 @@ class IndexManager:
     @property
     def documents(self):
         return self._ts.documents if self._ts else []
+
+    def _check_swap(self):
+        """检查是否有待替换的新索引，有则原子替换（主线程调用）"""
+        if self._pending_swap is None:
+            return
+        new_ts, new_path_map, doc_count = self._pending_swap
+        self._pending_swap = None
+        old_count = len(self._ts.documents) if self._ts else 0
+        self._ts = new_ts
+        self._path_map = new_path_map
+        if doc_count != old_count:
+            print(f"\n[索引已自动更新: {doc_count} 个文档]")
 
     def load_or_build_index(self):
         """加载或构建索引"""
@@ -178,6 +192,7 @@ class IndexManager:
         if max_results is None:
             max_results = self.max_results
 
+        self._check_swap()
         self.load_or_build_index()
 
         if not self._ts.documents:

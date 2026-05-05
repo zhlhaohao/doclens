@@ -139,6 +139,9 @@ class NotebookSearchCLI:
         self.agent = None
         self._agent_history = []
 
+        # 文件监控（延迟启动）
+        self.watcher = None
+
     # ---- 向后兼容属性代理 ----
 
     @property
@@ -484,7 +487,19 @@ class NotebookSearchCLI:
 
     def cmd_index(self, force=False):
         """索引命令"""
-        self.reindex(force=force)
+        if self.watcher and self.watcher.reindexing:
+            print("[后台正在更新索引，请稍后...]")
+            return
+        if self.watcher:
+            self.watcher.reindexing = True
+        try:
+            self.reindex(force=force)
+        finally:
+            if self.watcher:
+                self.watcher.reindexing = False
+        # 如果 watcher 还没启动（首次 /index），启动它
+        if self.watcher is None and self.config.watch_enabled:
+            self._start_watcher()
 
     def cmd_set(self, value):
         """设置命令"""
@@ -501,6 +516,27 @@ class NotebookSearchCLI:
     def cmd_clear(self):
         """清屏命令"""
         os.system('cls' if sys.platform == 'win32' else 'clear')
+
+    # ---- 文件监控 ----
+
+    def _start_watcher(self):
+        """启动文件监控（索引加载成功后调用）"""
+        if not self.config.watch_enabled:
+            return
+        try:
+            from cortex.file_watcher import FileWatcher
+            self.watcher = FileWatcher(self.idx, debounce_seconds=self.config.watch_debounce)
+            if self.watcher.start():
+                print("[已启动文件监控，变化将自动更新索引]")
+        except Exception as e:
+            print(f"[文件监控启动失败: {e}]")
+            self.watcher = None
+
+    def cleanup(self):
+        """清理资源，退出前调用"""
+        if self.watcher:
+            self.watcher.stop()
+            self.watcher = None
 
     # ---- 交互循环 ----
 
@@ -565,12 +601,16 @@ class NotebookSearchCLI:
             if answer in ('y', 'yes', '是'):
                 print()
                 self.load_or_build_index()
-                print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
+                print(f"[已加载 {len(self.idx.documents)} 个文档]")
+                self._start_watcher()
+                print()
             else:
                 print("[跳过索引创建，可使用 /index 命令稍后创建]\n")
         else:
             self.load_or_build_index()
-            print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
+            print(f"[已加载 {len(self.idx.documents)} 个文档]")
+            self._start_watcher()
+            print()
 
         while True:
             try:
@@ -588,6 +628,7 @@ class NotebookSearchCLI:
 
                 # 执行命令
                 if cmd in ('quit', 'q', 'exit', 'e'):
+                    self.cleanup()
                     print("\n再见!")
                     break
 
@@ -639,6 +680,7 @@ class NotebookSearchCLI:
                         print(f"[提示] 未知命令: /{cmd}")
 
             except KeyboardInterrupt:
+                self.cleanup()
                 print("\n\n再见!")
                 break
             except Exception as e:
