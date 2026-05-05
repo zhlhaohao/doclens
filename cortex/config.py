@@ -33,6 +33,24 @@ class CortexConfig(BaseSettings):
     # 匹配参数
     max_span: int = Field(default=20)
     min_keyword_match: int = Field(default=2)
+    min_proximity_score: int = Field(default=1)
+    min_keywords_per_line: int = Field(default=2)
+
+    # 终端显示参数
+    title_width: int = Field(default=55)
+    line_width: int = Field(default=78)
+    max_context_lines: int = Field(default=5)
+    max_anchor_lines: int = Field(default=3)
+    context_expand_range: int = Field(default=5)
+
+    # KB 工具字符限制（影响 LLM token 消耗）
+    max_context_chars_per_result: int = Field(default=800)
+    max_total_chars: int = Field(default=10000)
+    max_read_chars: int = Field(default=6000)
+
+    # Ripgrep 降级搜索上下文
+    rg_context_before: int = Field(default=6)
+    rg_context_after: int = Field(default=5)
 
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")

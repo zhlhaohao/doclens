@@ -131,9 +131,9 @@ class NotebookSearchCLI:
 
     def __init__(self):
         # 加载配置
-        config = CortexConfig.load()
-        self.idx = IndexManager(config)
-        self.max_results = config.max_results
+        self.config = CortexConfig.load()
+        self.idx = IndexManager(self.config)
+        self.max_results = self.config.max_results
 
         # Agent 相关（延迟初始化）
         self.agent = None
@@ -184,7 +184,8 @@ class NotebookSearchCLI:
         # FTS 无结果时，直接 ripgrep 降级
         if not nodes:
             filtered = rg_module.rg_fallback_search(
-                query, self.idx.path_map, {}, query_words
+                query, self.idx.path_map, {}, query_words,
+                context_before=self.idx.rg_context_before, context_after=self.idx.rg_context_after,
             )
             if not filtered:
                 print(f"\n[未找到包含 '{query}' 的结果]\n")
@@ -215,7 +216,7 @@ class NotebookSearchCLI:
             best_proximity = 0
             for n in all_nodes:
                 n_text = n.get("text", "") or ""
-                cnt, proximity = calc_proximity_score(n_text, query_words)
+                cnt, proximity = calc_proximity_score(n_text, query_words, max_span=self.idx.max_span)
                 if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
                     best_count = cnt
                     best_proximity = proximity
@@ -223,8 +224,8 @@ class NotebookSearchCLI:
             if best_node and best_count > 0:
                 doc_best[doc_id] = (best_node, best_count, best_proximity, doc_fts_best.get(doc_id, 0.0))
 
-        # 过滤：至少匹配 2 个词，且 proximity >= 1
-        filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= 2 and prox >= 1]
+        # 过滤：使用配置的最小匹配词数和邻近度阈值
+        filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= self.idx.min_keyword_match and prox >= self.idx.min_proximity_score]
 
         # 如果没有结果，尝试降级到匹配数 >= 1
         if not filtered and query_words:
@@ -233,7 +234,8 @@ class NotebookSearchCLI:
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
             filtered = rg_module.rg_fallback_search(
-                query, self.idx.path_map, doc_nodes_map, query_words
+                query, self.idx.path_map, doc_nodes_map, query_words,
+                context_before=self.idx.rg_context_before, context_after=self.idx.rg_context_after,
             )
 
         if not filtered:
@@ -287,7 +289,7 @@ class NotebookSearchCLI:
             display_line = display_node.get("line_start")
             path = self.idx.path_map.get(doc_id, "")
 
-            print(f"\n+-- [{i}] {hl(display_title[:55], query_words)}")
+            print(f"\n+-- [{i}] {hl(display_title[:self.idx.title_width], query_words)}")
             file_link = make_vscode_link(path, display_line)
             print(f"|    文件: {file_link}")
             print(f"|    {'-'*45}")
@@ -304,21 +306,21 @@ class NotebookSearchCLI:
                         line_keyword_counts.append((cnt, j, l))
 
                 if not line_keyword_counts:
-                    for j in range(min(5, len(lines))):
+                    for j in range(min(self.idx.max_context_lines, len(lines))):
                         line = lines[j].strip()
                         if line:
                             hl_line = hl(line, query_words)
-                            hl_line = truncate_ansi_safe(hl_line, 78, query_words)
+                            hl_line = truncate_ansi_safe(hl_line, self.idx.line_width, query_words)
                             print(f"|  >>> {hl_line}")
                 else:
                     line_keyword_counts.sort(key=lambda x: -x[0])
-                    best_lines = [(j, l) for cnt, j, l in line_keyword_counts if cnt >= 2]
+                    best_lines = [(j, l) for cnt, j, l in line_keyword_counts if cnt >= self.idx.min_keywords_per_line]
                     if not best_lines:
-                        best_lines = [(j, l) for cnt, j, l in line_keyword_counts[:5]]
+                        best_lines = [(j, l) for cnt, j, l in line_keyword_counts[:self.idx.max_context_lines]]
 
                     context_lines = set()
-                    for j, l in best_lines[:3]:
-                        for offset in range(-5, 6):
+                    for j, l in best_lines[:self.idx.max_anchor_lines]:
+                        for offset in range(-self.idx.context_expand_range, self.idx.context_expand_range + 1):
                             idx = j + offset
                             if 0 <= idx < len(lines):
                                 context_lines.add(idx)
@@ -329,7 +331,7 @@ class NotebookSearchCLI:
                         if not line:
                             continue
                         hl_line = hl(line, query_words)
-                        hl_line = truncate_ansi_safe(hl_line, 78, query_words)
+                        hl_line = truncate_ansi_safe(hl_line, self.idx.line_width, query_words)
                         is_match = any(j == bj for bj, _ in best_lines)
                         marker = ">>>" if is_match else "   "
                         print(f"|  {marker} {hl_line}")
@@ -537,9 +539,38 @@ class NotebookSearchCLI:
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
-        # 预加载索引
-        self.load_or_build_index()
-        print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
+        # 检查索引状态，按情况决定是否需要提示用户
+        cortex_dir = os.path.join(self.idx.search_path, ".cortex")
+        index_file = os.path.abspath(self.idx.index_path)
+        has_cortex_dir = os.path.isdir(cortex_dir)
+        has_index_file = os.path.isfile(index_file)
+
+        need_prompt = False
+        if not has_cortex_dir:
+            print(f"当前目录未找到 .cortex 索引目录。")
+            print(f"搜索路径: {self.idx.search_path}")
+            prompt_msg = "是否创建索引以启用全文检索? (y/n): "
+            need_prompt = True
+        elif not has_index_file:
+            print(f".cortex 目录已存在，但未找到索引文件。")
+            prompt_msg = "是否进行全量索引? (y/n): "
+            need_prompt = True
+
+        if need_prompt:
+            try:
+                answer = _direct_input(prompt_msg).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\n[跳过索引创建]\n")
+                answer = 'n'
+            if answer in ('y', 'yes', '是'):
+                print()
+                self.load_or_build_index()
+                print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
+            else:
+                print("[跳过索引创建，可使用 /index 命令稍后创建]\n")
+        else:
+            self.load_or_build_index()
+            print(f"[已加载 {len(self.idx.documents)} 个文档]\n")
 
         while True:
             try:
