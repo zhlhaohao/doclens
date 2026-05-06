@@ -33,6 +33,7 @@ class CortexApp(App):
     BINDINGS = [
         ("ctrl+q", "quit", "退出"),
         ("ctrl+l", "clear_screen", "清屏"),
+        ("escape", "focus_input", "聚焦输入框"),
     ]
 
     def __init__(self):
@@ -68,14 +69,8 @@ class CortexApp(App):
         self.run_worker(self._do_init_index, thread=True, name="init_index")
 
     def _show_welcome(self) -> None:
-        """在 ContentArea 显示欢迎横幅"""
-        content = self.query_one(ContentArea)
-        content.write(Text("╔════════════════════════════════════════════════════╗", style="#7aa2f7"))
-        content.write(Text("║              Cortex 交互式全文检索                   ║", style="#7aa2f7 bold"))
-        content.write(Text("╠════════════════════════════════════════════════════╣", style="#7aa2f7"))
-        content.write(Text("║  输入关键词搜索 | /help 查看命令 | /quit 退出      ║", style="#c0caf5"))
-        content.write(Text("╚════════════════════════════════════════════════════╝", style="#7aa2f7"))
-        content.write(Text(""))
+        """在 ContentArea 显示欢迎信息"""
+        pass
 
     def _do_init_index(self) -> None:
         """后台线程：加载或构建索引"""
@@ -367,7 +362,7 @@ class CortexApp(App):
             return
 
         header.set_mode("搜索中...")
-        self.run_worker(self._do_search, arg, thread=True, name="search")
+        self.run_worker(lambda: self._do_search(arg), thread=True, name="search")
 
     def _do_search(self, query: str) -> None:
         """后台线程：执行搜索"""
@@ -568,7 +563,7 @@ class CortexApp(App):
         status = self.query_one(StatusBar)
         status.set_agent_status("思考中")
 
-        self.run_worker(self._do_ai_query, arg, thread=True, name="ai_query")
+        self.run_worker(lambda: self._do_ai_query(arg), thread=True, name="ai_query")
 
     def _do_ai_query(self, query: str) -> None:
         """后台线程：执行 AI 查询"""
@@ -665,7 +660,7 @@ class CortexApp(App):
         header = self.query_one(HeaderBar)
 
         header.set_mode("Agent...")
-        self.run_worker(self._do_agent_slash, cmd, arg, thread=True, name="agent_slash")
+        self.run_worker(lambda: self._do_agent_slash(cmd, arg), thread=True, name="agent_slash")
 
     def _do_agent_slash(self, cmd: str, arg: str) -> None:
         """后台线程：执行 agent 斜杠命令"""
@@ -704,6 +699,10 @@ class CortexApp(App):
         """Ctrl+L 清屏"""
         content = self.query_one(ContentArea)
         content.clear()
+
+    def action_focus_input(self) -> None:
+        """ESC 聚焦输入框"""
+        self.query_one(InputBox).focus_input()
 
     # ------------------------------------------------------------------
     # 清理

@@ -10,7 +10,7 @@ class ContentArea(RichLog):
     DEFAULT_CSS = """
     ContentArea {
         height: 1fr;
-        background: #1a1b26;
+        background: #000000;
         border: none;
         padding: 0 1;
         scrollbar-size: 1 1;

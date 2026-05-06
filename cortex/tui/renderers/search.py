@@ -2,6 +2,7 @@
 
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.style import Style
 from rich.text import Text
 
 
@@ -83,20 +84,36 @@ def render_search_result(
 
     content_parts: list = []
     if path:
-        path_display = path.replace("\\", "/")
+        path_display = path.replace("\\", "\\\\")
         if display_line is not None:
             path_display += f":{display_line}"
         content_parts.append(Text(f"\U0001f4c4 {path_display}", style="#7aa2f7"))
         content_parts.append(Text(""))
 
     lines = display_text.split("\n")
-    snippet_lines = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped:
-            snippet_lines.append(stripped)
-        if len(snippet_lines) >= 5:
-            break
+    # 找到包含关键词的行索引
+    kw_lower = [kw.lower() for kw in query_words if kw]
+    match_indices = [
+        i for i, line in enumerate(lines)
+        if any(kw in line.lower() for kw in kw_lower)
+    ]
+
+    if match_indices:
+        # 从第一个匹配行到最后一个匹配行，前后各扩展 1 行上下文
+        first = max(0, match_indices[0] - 1)
+        last = min(len(lines) - 1, match_indices[-1] + 1)
+        selected = lines[first:last + 1]
+    else:
+        # 无关键词匹配时取前 5 行
+        selected = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped:
+                selected.append(stripped)
+            if len(selected) >= 5:
+                break
+
+    snippet_lines = [line.strip() for line in selected if line.strip()]
 
     snippet = "\n".join(snippet_lines)
     snippet = _truncate_text(snippet, 300)

@@ -1,33 +1,39 @@
-"""输入框组件 - 用户命令输入区"""
+"""输入框组件 - 模仿 Claude Code 风格：> 提示符 + 简洁输入"""
 
 from textual.app import ComposeResult
+from textual.containers import Horizontal
 from textual.message import Message
-from textual.widget import Widget
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 
-class InputBox(Widget):
-    """底部输入框"""
+class InputBox(Horizontal):
+    """底部输入框 - Claude Code 风格"""
 
     DEFAULT_CSS = """
     InputBox {
-        dock: bottom;
         height: 3;
-        background: #24283b;
+        background: #000000;
         border-top: solid #3b3d57;
+        border-bottom: solid #3b3d57;
         padding: 0 1;
+    }
+    InputBox > #prompt {
+        width: 2;
+        color: #9ece6a;
+        background: #000000;
     }
     InputBox > Input {
-        background: #1a1b26;
-        border: round #3b3d57;
+        background: #000000;
+        border: none;
         color: #c0caf5;
-        padding: 0 1;
+        padding: 0;
+        height: 1;
     }
     InputBox > Input:focus {
-        border: round #7aa2f7;
+        border: none;
     }
     InputBox > Input.-invalid {
-        border: round #f7768e;
+        border: none;
     }
     """
 
@@ -39,6 +45,7 @@ class InputBox(Widget):
             super().__init__()
 
     def compose(self) -> ComposeResult:
+        yield Static(">", id="prompt")
         yield Input(
             placeholder="输入搜索关键词或 / 命令...",
             id="cmd-input",
