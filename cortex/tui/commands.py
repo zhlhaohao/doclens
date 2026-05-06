@@ -38,6 +38,9 @@ COMMAND_ALIASES: dict[str, str] = {
     "agent": "ai",
     # 压缩
     "compact": "compact",
+    # 复制
+    "copy": "copy",
+    "cp": "copy",
 }
 
 # 不走别名映射的命令（直接透传）

@@ -282,7 +282,7 @@ class TestCommandAliasesStructure:
         """所有值应该是指向已知的规范命令名"""
         canonical_names = {
             "search", "index", "status", "quit",
-            "help", "set", "clear", "ai", "compact",
+            "help", "set", "clear", "ai", "compact", "copy",
         }
         for alias, canonical in COMMAND_ALIASES.items():
             assert canonical in canonical_names, (
@@ -293,7 +293,7 @@ class TestCommandAliasesStructure:
         """每个规范命令应该有自身映射"""
         canonical_names = {
             "search", "index", "status", "quit",
-            "help", "set", "clear", "ai", "compact",
+            "help", "set", "clear", "ai", "compact", "copy",
         }
         for name in canonical_names:
             assert name in COMMAND_ALIASES, (

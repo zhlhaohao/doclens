@@ -691,7 +691,7 @@ def main():
     """主函数 - 启动 TUI"""
     from cortex.tui.app import CortexApp
     app = CortexApp()
-    app.run()
+    app.run(mouse=True)
 
 
 if __name__ == "__main__":
