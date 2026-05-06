@@ -688,9 +688,10 @@ class NotebookSearchCLI:
 
 
 def main():
-    """主函数"""
-    cli = NotebookSearchCLI()
-    cli.run()
+    """主函数 - 启动 TUI"""
+    from cortex.tui.app import CortexApp
+    app = CortexApp()
+    app.run()
 
 
 if __name__ == "__main__":
