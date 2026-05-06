@@ -29,12 +29,14 @@ from cortex import ripgrep as rg_module
 # 将控制台代码页设为 UTF-8 (65001)，使 msvcrt.getch() 返回 UTF-8 字节
 # ============================================================================
 
+
 def _setup_console_encoding():
     """设置控制台为 UTF-8 模式"""
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         return
     try:
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleCP(65001)
         kernel32.SetConsoleOutputCP(65001)
@@ -42,8 +44,9 @@ def _setup_console_encoding():
         pass
     # 重新配置 Python stdio 为 UTF-8
     for stream in (sys.stdin, sys.stdout, sys.stderr):
-        if hasattr(stream, 'reconfigure'):
-            stream.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
 
 _setup_console_encoding()
 
@@ -53,9 +56,10 @@ _setup_console_encoding()
 # 与 Planify CLI 的 input_with_history 采用相同的 msvcrt.getch() 方式
 # ============================================================================
 
+
 def _direct_input(prompt: str) -> str:
     """使用 msvcrt 直接读取控制台输入（Windows），Unix 下回退到 input()"""
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         return input(prompt)
 
     import msvcrt
@@ -70,13 +74,13 @@ def _direct_input(prompt: str) -> str:
 
         # Enter
         if b in (13, 10):
-            sys.stdout.write('\n')
+            sys.stdout.write("\n")
             sys.stdout.flush()
             return buf
 
         # Ctrl+C
         if b == 3:
-            sys.stdout.write('\n')
+            sys.stdout.write("\n")
             sys.stdout.flush()
             raise KeyboardInterrupt
 
@@ -90,12 +94,12 @@ def _direct_input(prompt: str) -> str:
         if b == 8:
             if buf:
                 buf = buf[:-1]
-                sys.stdout.write('\b \b')
+                sys.stdout.write("\b \b")
                 sys.stdout.flush()
             continue
 
         # 特殊键前缀（方向键、功能键）
-        if b in (0, 0xe0):
+        if b in (0, 0xE0):
             msvcrt.getch()  # 消耗第二个字节
             continue
 
@@ -117,7 +121,7 @@ def _direct_input(prompt: str) -> str:
                 cont = msvcrt.getch()
                 char_bytes += cont if isinstance(cont, bytes) else bytes([ord(cont)])
             try:
-                ch = char_bytes.decode('utf-8')
+                ch = char_bytes.decode("utf-8")
             except UnicodeDecodeError:
                 continue
 
@@ -187,14 +191,20 @@ class NotebookSearchCLI:
         # FTS 无结果时，直接 ripgrep 降级
         if not nodes:
             filtered = rg_module.rg_fallback_search(
-                query, self.idx.path_map, {}, query_words,
-                context_before=self.idx.rg_context_before, context_after=self.idx.rg_context_after,
+                query,
+                self.idx.path_map,
+                {},
+                query_words,
+                context_before=self.idx.rg_context_before,
+                context_after=self.idx.rg_context_after,
             )
             if not filtered:
                 print(f"\n[未找到包含 '{query}' 的结果]\n")
                 return
             # 降级结果直接渲染（无综合评分）
-            self._render_results(query, filtered, query_words, max_results, is_ripgrep=True)
+            self._render_results(
+                query, filtered, query_words, max_results, is_ripgrep=True
+            )
             return
 
         # 构建 doc_id -> 文档节点的映射
@@ -219,26 +229,48 @@ class NotebookSearchCLI:
             best_proximity = 0
             for n in all_nodes:
                 n_text = n.get("text", "") or ""
-                cnt, proximity = calc_proximity_score(n_text, query_words, max_span=self.idx.max_span)
-                if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
+                cnt, proximity = calc_proximity_score(
+                    n_text, query_words, max_span=self.idx.max_span
+                )
+                if proximity > best_proximity or (
+                    proximity == best_proximity and cnt > best_count
+                ):
                     best_count = cnt
                     best_proximity = proximity
                     best_node = n
             if best_node and best_count > 0:
-                doc_best[doc_id] = (best_node, best_count, best_proximity, doc_fts_best.get(doc_id, 0.0))
+                doc_best[doc_id] = (
+                    best_node,
+                    best_count,
+                    best_proximity,
+                    doc_fts_best.get(doc_id, 0.0),
+                )
 
         # 过滤：使用配置的最小匹配词数和邻近度阈值
-        filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= self.idx.min_keyword_match and prox >= self.idx.min_proximity_score]
+        filtered = [
+            (did, bn, cnt, prox, fts)
+            for did, (bn, cnt, prox, fts) in doc_best.items()
+            if cnt >= self.idx.min_keyword_match
+            and prox >= self.idx.min_proximity_score
+        ]
 
         # 如果没有结果，尝试降级到匹配数 >= 1
         if not filtered and query_words:
-            filtered = [(did, bn, cnt, prox, fts) for did, (bn, cnt, prox, fts) in doc_best.items() if cnt >= 1]
+            filtered = [
+                (did, bn, cnt, prox, fts)
+                for did, (bn, cnt, prox, fts) in doc_best.items()
+                if cnt >= 1
+            ]
 
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
             filtered = rg_module.rg_fallback_search(
-                query, self.idx.path_map, doc_nodes_map, query_words,
-                context_before=self.idx.rg_context_before, context_after=self.idx.rg_context_after,
+                query,
+                self.idx.path_map,
+                doc_nodes_map,
+                query_words,
+                context_before=self.idx.rg_context_before,
+                context_after=self.idx.rg_context_after,
             )
 
         if not filtered:
@@ -261,9 +293,13 @@ class NotebookSearchCLI:
             scored_results.append((composite, item))
 
         scored_results.sort(key=lambda x: -x[0])
-        self._render_results(query, scored_results, query_words, max_results, is_ripgrep=False)
+        self._render_results(
+            query, scored_results, query_words, max_results, is_ripgrep=False
+        )
 
-    def _render_results(self, query, results, query_words, max_results, is_ripgrep=False):
+    def _render_results(
+        self, query, results, query_words, max_results, is_ripgrep=False
+    ):
         """渲染搜索结果到终端
 
         Args:
@@ -281,9 +317,9 @@ class NotebookSearchCLI:
             label = f"找到 {len(results)} 个匹配"
             display_items = results[:max_results]
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"关键词: {query}  |  {label}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         for i, (composite, item) in enumerate(display_items, 1):
             doc_id, display_node, matched, prox, fts = item
@@ -292,13 +328,15 @@ class NotebookSearchCLI:
             display_line = display_node.get("line_start")
             path = self.idx.path_map.get(doc_id, "")
 
-            print(f"\n+-- [{i}] {hl(display_title[:self.idx.title_width], query_words)}")
+            print(
+                f"\n+-- [{i}] {hl(display_title[: self.idx.title_width], query_words)}"
+            )
             file_link = make_vscode_link(path, display_line)
             print(f"|    文件: {file_link}")
-            print(f"|    {'-'*45}")
+            print(f"|    {'-' * 45}")
 
             if display_text:
-                lines = display_text.split('\n')
+                lines = display_text.split("\n")
 
                 # 给每行计算包含几个关键词
                 line_keyword_counts = []
@@ -313,17 +351,31 @@ class NotebookSearchCLI:
                         line = lines[j].strip()
                         if line:
                             hl_line = hl(line, query_words)
-                            hl_line = truncate_ansi_safe(hl_line, self.idx.line_width, query_words)
+                            hl_line = truncate_ansi_safe(
+                                hl_line, self.idx.line_width, query_words
+                            )
                             print(f"|  >>> {hl_line}")
                 else:
                     line_keyword_counts.sort(key=lambda x: -x[0])
-                    best_lines = [(j, l) for cnt, j, l in line_keyword_counts if cnt >= self.idx.min_keywords_per_line]
+                    best_lines = [
+                        (j, l)
+                        for cnt, j, l in line_keyword_counts
+                        if cnt >= self.idx.min_keywords_per_line
+                    ]
                     if not best_lines:
-                        best_lines = [(j, l) for cnt, j, l in line_keyword_counts[:self.idx.max_context_lines]]
+                        best_lines = [
+                            (j, l)
+                            for cnt, j, l in line_keyword_counts[
+                                : self.idx.max_context_lines
+                            ]
+                        ]
 
                     context_lines = set()
-                    for j, l in best_lines[:self.idx.max_anchor_lines]:
-                        for offset in range(-self.idx.context_expand_range, self.idx.context_expand_range + 1):
+                    for j, l in best_lines[: self.idx.max_anchor_lines]:
+                        for offset in range(
+                            -self.idx.context_expand_range,
+                            self.idx.context_expand_range + 1,
+                        ):
                             idx = j + offset
                             if 0 <= idx < len(lines):
                                 context_lines.add(idx)
@@ -334,7 +386,9 @@ class NotebookSearchCLI:
                         if not line:
                             continue
                         hl_line = hl(line, query_words)
-                        hl_line = truncate_ansi_safe(hl_line, self.idx.line_width, query_words)
+                        hl_line = truncate_ansi_safe(
+                            hl_line, self.idx.line_width, query_words
+                        )
                         is_match = any(j == bj for bj, _ in best_lines)
                         marker = ">>>" if is_match else "   "
                         print(f"|  {marker} {hl_line}")
@@ -342,7 +396,9 @@ class NotebookSearchCLI:
             if is_ripgrep:
                 print(f"|    匹配: {matched}/{len(query_words)} 词")
             else:
-                print(f"|    评分: {int(composite * 100)}% | 匹配: {matched}/{len(query_words)} 词")
+                print(
+                    f"|    评分: {int(composite * 100)}% | 匹配: {matched}/{len(query_words)} 词"
+                )
 
         print()
 
@@ -352,6 +408,7 @@ class NotebookSearchCLI:
         """确保 Agent 已初始化"""
         if self.agent is None:
             from cortex.agent_integration import CortexAgent
+
             self.agent = CortexAgent(Path(self.idx.search_path)).initialize()
 
     def cmd_ai(self, arg: str):
@@ -362,7 +419,9 @@ class NotebookSearchCLI:
     def cmd_compact(self):
         """压缩历史"""
         self._ensure_agent()
-        _, self._agent_history = self.agent.handle_slash_command("compact", "", self._agent_history)
+        _, self._agent_history = self.agent.handle_slash_command(
+            "compact", "", self._agent_history
+        )
 
     # ---- 斜杠命令 ----
 
@@ -438,19 +497,19 @@ class NotebookSearchCLI:
         file_type_counts = {}
 
         for doc in docs:
-            if hasattr(doc, 'metadata') and doc.metadata:
-                size = doc.metadata.get('file_size', 0)
+            if hasattr(doc, "metadata") and doc.metadata:
+                size = doc.metadata.get("file_size", 0)
                 total_size += size
-                source_path = doc.metadata.get('source_path', '')
-                ext = os.path.splitext(source_path)[1].lower() if source_path else ''
+                source_path = doc.metadata.get("source_path", "")
+                ext = os.path.splitext(source_path)[1].lower() if source_path else ""
                 if ext:
                     file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
 
         def format_size(size):
             if size >= 1024 * 1024 * 1024:
-                return f"{size / (1024*1024*1024):.2f} GB"
+                return f"{size / (1024 * 1024 * 1024):.2f} GB"
             elif size >= 1024 * 1024:
-                return f"{size / (1024*1024):.2f} MB"
+                return f"{size / (1024 * 1024):.2f} MB"
             elif size >= 1024:
                 return f"{size / 1024:.2f} KB"
             return f"{size} B"
@@ -460,7 +519,11 @@ class NotebookSearchCLI:
 
         type_lines = []
         for ext, count in sorted(file_type_counts.items(), key=lambda x: -x[1])[:10]:
-            type_name = SUPPORTED_FORMATS.get(ext, (ext, None))[0] if ext in SUPPORTED_FORMATS else ext
+            type_name = (
+                SUPPORTED_FORMATS.get(ext, (ext, None))[0]
+                if ext in SUPPORTED_FORMATS
+                else ext
+            )
             type_lines.append(f"║    {ext}: {count} 个 ({type_name})")
 
         missing = check_dependencies()
@@ -481,7 +544,7 @@ class NotebookSearchCLI:
         for line in type_lines:
             print(line)
         print(f"""╠══════════════════════════════════════════════════════════════╣
-║  依赖状态:   {'全部已安装 ✓' if deps_ok else '部分缺失 ✗'}
+║  依赖状态:   {"全部已安装 ✓" if deps_ok else "部分缺失 ✗"}
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
@@ -515,7 +578,7 @@ class NotebookSearchCLI:
 
     def cmd_clear(self):
         """清屏命令"""
-        os.system('cls' if sys.platform == 'win32' else 'clear')
+        os.system("cls" if sys.platform == "win32" else "clear")
 
     # ---- 文件监控 ----
 
@@ -525,7 +588,10 @@ class NotebookSearchCLI:
             return
         try:
             from cortex.file_watcher import FileWatcher
-            self.watcher = FileWatcher(self.idx, debounce_seconds=self.config.watch_debounce)
+
+            self.watcher = FileWatcher(
+                self.idx, debounce_seconds=self.config.watch_debounce
+            )
             if self.watcher.start():
                 print("[已启动文件监控，变化将自动更新索引]")
         except Exception as e:
@@ -548,10 +614,10 @@ class NotebookSearchCLI:
             return None
 
         # 中文顿号转斜杠
-        if line.startswith('、'):
-            line = '/' + line[1:]
+        if line.startswith("、"):
+            line = "/" + line[1:]
 
-        if line.startswith('/'):
+        if line.startswith("/"):
             parts = line[1:].split(maxsplit=1)
             if not parts or not parts[0]:
                 print("[提示] 命令不完整")
@@ -561,7 +627,7 @@ class NotebookSearchCLI:
             return (cmd, arg)
 
         # 无斜杠前缀 -> Agent 对话
-        return ('ai', line)
+        return ("ai", line)
 
     def run(self):
         """运行交互式会话"""
@@ -597,8 +663,8 @@ class NotebookSearchCLI:
                 answer = _direct_input(prompt_msg).strip().lower()
             except (EOFError, KeyboardInterrupt):
                 print("\n[跳过索引创建]\n")
-                answer = 'n'
-            if answer in ('y', 'yes', '是'):
+                answer = "n"
+            if answer in ("y", "yes", "是"):
                 print()
                 self.load_or_build_index()
                 print(f"[已加载 {len(self.idx.documents)} 个文档]")
@@ -627,54 +693,58 @@ class NotebookSearchCLI:
                 cmd, arg = parsed
 
                 # 执行命令
-                if cmd in ('quit', 'q', 'exit', 'e'):
+                if cmd in ("quit", "q", "exit", "e"):
                     self.cleanup()
                     print("\n再见!")
                     break
 
-                elif cmd in ('help', 'h', '?'):
+                elif cmd in ("help", "h", "?"):
                     self.cmd_help()
 
-                elif cmd in ('stats', 'status', 'st', 't'):
+                elif cmd in ("stats", "status", "st", "t"):
                     self.cmd_status()
 
-                elif cmd in ('index', 'i', 'reindex'):
-                    force = '-f' in arg or '--force' in arg
+                elif cmd in ("index", "i", "reindex"):
+                    force = "-f" in arg or "--force" in arg
                     self.cmd_index(force=force)
 
-                elif cmd in ('search', 's'):
+                elif cmd in ("search", "s"):
                     if arg:
                         nodes, docs = self.do_search(arg)
-                        self.format_results(nodes, docs, arg, max_results=self.max_results)
+                        self.format_results(
+                            nodes, docs, arg, max_results=self.max_results
+                        )
                     else:
                         print("[提示] 用法: /s <关键词>")
 
-                elif cmd in ('set', 'n'):
+                elif cmd in ("set", "n"):
                     if arg:
                         self.cmd_set(arg)
                     else:
                         print(f"[提示] 当前最大显示数: {self.max_results}")
 
-                elif cmd in ('clear', 'cls', 'cl'):
+                elif cmd in ("clear", "cls", "cl"):
                     self.cmd_clear()
 
                 # AI 命令
-                elif cmd in ('ai', 'llm', 'agent'):
+                elif cmd in ("ai", "llm", "agent"):
                     if arg:
                         self.cmd_ai(arg)
                     else:
                         print("[提示] 用法: /ai <消息>")
 
-                elif cmd in ('compact',):
+                elif cmd in ("compact",):
                     self.cmd_compact()
 
-                elif cmd in ('tasks', 'team', 'inbox'):
+                elif cmd in ("tasks", "team", "inbox"):
                     self._ensure_agent()
-                    _, self._agent_history = self.agent.handle_slash_command(cmd, "", self._agent_history)
+                    _, self._agent_history = self.agent.handle_slash_command(
+                        cmd, "", self._agent_history
+                    )
 
                 else:
                     # 非斜杠输入默认交给 Agent
-                    if cmd == 'ai' and not arg:
+                    if cmd == "ai" and not arg:
                         print("[提示] 用法: /ai <消息> 或直接输入文字与 Agent 对话")
                     else:
                         print(f"[提示] 未知命令: /{cmd}")
@@ -690,6 +760,7 @@ class NotebookSearchCLI:
 def main():
     """主函数 - 启动 TUI"""
     from cortex.tui.app import CortexApp
+
     app = CortexApp()
     app.run(mouse=True)
 

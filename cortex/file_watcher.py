@@ -16,18 +16,6 @@ except ImportError:
 from cortex.index_manager import SUPPORTED_FORMATS
 
 
-def _build_path_map(ts) -> dict:
-    """从 TreeSearch 实例构建路径映射"""
-    path_map = {}
-    for doc in ts.documents:
-        if hasattr(doc, 'metadata') and doc.metadata:
-            path = doc.metadata.get('source_path', '')
-            if path:
-                path_map[doc.doc_id] = path
-                path_map[doc.doc_name] = path
-    return path_map
-
-
 if _HAS_WATCHDOG:
 
     class _ChangeHandler(FileSystemEventHandler):
@@ -126,24 +114,8 @@ class FileWatcher:
             return
         self._reindexing = True
         try:
-            from treesearch import TreeSearch, set_config, TreeSearchConfig
-            import os
-            set_config(TreeSearchConfig(cjk_tokenizer=self._idx.cjk_tokenizer))
-            new_ts = TreeSearch(db_path=self._idx.index_path)
-            # 先加载已有索引，以便增量模式能识别并清理已删除的文件
-            abs_path = os.path.abspath(self._idx.index_path)
-            if os.path.exists(abs_path):
-                try:
-                    docs = new_ts.load_index(abs_path)
-                    if docs:
-                        new_ts.documents = docs
-                except Exception:
-                    pass
-            new_ts.index(self._idx.search_path)
-            new_ts.save_index()
-            new_path_map = _build_path_map(new_ts)
-            self._idx._pending_swap = (new_ts, new_path_map, len(new_ts.documents))
-            logger.info("后台 reindex 完成: %d 个文档", len(new_ts.documents))
+            self._idx.trigger_background_reindex()
+            logger.info("后台 reindex 已触发")
         except Exception as e:
             logger.warning("后台 reindex 失败: %s", e)
         finally:

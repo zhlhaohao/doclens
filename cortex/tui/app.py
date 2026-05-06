@@ -37,6 +37,14 @@ class CortexApp(App):
         ("escape", "focus_input", "聚焦输入框"),
         ("pageup", "scroll_up", "向上翻页"),
         ("pagedown", "scroll_down", "向下翻页"),
+        ("ctrl+shift+up", "scroll_line_up", "向上滚动"),
+        ("ctrl+shift+down", "scroll_line_down", "向下滚动"),
+        ("alt+up", "scroll_line_up", "向上滚动"),
+        ("alt+down", "scroll_line_down", "向下滚动"),
+        ("alt+u", "scroll_up", "向上翻页 (Alt+U)"),
+        ("alt+d", "scroll_down", "向下翻页 (Alt+D)"),
+        ("alt+k", "scroll_line_up", "向上滚动 (Alt+K)"),
+        ("alt+j", "scroll_line_down", "向下滚动 (Alt+J)"),
     ]
 
     def __init__(self):
@@ -245,6 +253,13 @@ class CortexApp(App):
             "  /help             显示帮助\n"
             "  /quit             退出\n"
             "\n"
+            "━━━ 滚动 ━━━\n"
+            "  Alt+Up/Down       逐行滚动（外部终端）\n"
+            "  Alt+K/J           逐行滚动（VSCode 终端）\n"
+            "  PageUp/PageDown   翻页滚动（外部终端）\n"
+            "  Alt+U/D           翻页滚动（VSCode 终端）\n"
+            "  Shift+鼠标滚轮    VSCode 终端中鼠标滚动\n"
+            "\n"
             f"━━━ 支持的文件类型 ━━━\n"
             "  Markdown(.md), 纯文本(.txt), JSON, YAML, TOML\n"
             "  Python(.py), JavaScript(.js), TypeScript(.ts)\n"
@@ -331,7 +346,8 @@ class CortexApp(App):
         if self.watcher:
             self.watcher.reindexing = True
 
-        def _do_reindex(worker: Worker) -> None:
+        def _do_reindex() -> None:
+            worker = get_current_worker()
             if worker.is_cancelled:
                 return
             try:
@@ -757,12 +773,22 @@ class CortexApp(App):
     def action_scroll_up(self) -> None:
         """PageUp 向上翻页"""
         content = self.query_one(ContentArea)
-        content.scroll_page_up()
+        content.scroll_page_up(force=True)
 
     def action_scroll_down(self) -> None:
         """PageDown 向下翻页"""
         content = self.query_one(ContentArea)
-        content.scroll_page_down()
+        content.scroll_page_down(force=True)
+
+    def action_scroll_line_up(self) -> None:
+        """Alt+Up 向上滚动"""
+        content = self.query_one(ContentArea)
+        content.scroll_relative(y=-3, force=True)
+
+    def action_scroll_line_down(self) -> None:
+        """Alt+Down 向下滚动"""
+        content = self.query_one(ContentArea)
+        content.scroll_relative(y=3, force=True)
 
     # ------------------------------------------------------------------
     # 清理
