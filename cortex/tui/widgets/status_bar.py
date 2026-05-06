@@ -29,7 +29,7 @@ class StatusBar(Horizontal):
         self._right_text = "就绪"
 
     def compose(self) -> ComposeResult:
-        yield Static("Shift + 鼠标拖选 复制文字", id="status-left")
+        yield Static("", id="status-left")
         yield Static(self._right_text, id="status-right")
 
     def _refresh_right(self) -> None:

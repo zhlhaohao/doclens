@@ -21,6 +21,7 @@ from cortex.tui.widgets.header_bar import HeaderBar
 from cortex.tui.widgets.content_area import ContentArea
 from cortex.tui.widgets.input_box import InputBox
 from cortex.tui.widgets.status_bar import StatusBar
+from cortex.tui.widgets.thinking_indicator import ThinkingIndicator
 from cortex.tui.renderers.search import render_search_results
 
 
@@ -34,6 +35,8 @@ class CortexApp(App):
         ("ctrl+q", "quit", "退出"),
         ("ctrl+l", "clear_screen", "清屏"),
         ("escape", "focus_input", "聚焦输入框"),
+        ("pageup", "scroll_up", "向上翻页"),
+        ("pagedown", "scroll_down", "向下翻页"),
     ]
 
     def __init__(self):
@@ -56,6 +59,7 @@ class CortexApp(App):
     def compose(self) -> ComposeResult:
         yield HeaderBar(version="v1.1.0", workdir=self.idx.search_path)
         yield ContentArea()
+        yield ThinkingIndicator()
         yield InputBox()
         yield StatusBar()
 
@@ -161,28 +165,39 @@ class CortexApp(App):
         # 回显用户输入
         content.write_prompt(raw_input)
 
-        if cmd == "quit":
-            self._cmd_quit()
-        elif cmd == "help":
-            self._cmd_help()
-        elif cmd in ("status",):
-            self._cmd_status()
-        elif cmd == "index":
-            self._cmd_index(arg)
-        elif cmd == "search":
-            self._cmd_search(arg)
-        elif cmd == "set":
-            self._cmd_set(arg)
-        elif cmd == "clear":
-            self._cmd_clear()
-        elif cmd == "ai":
-            self._cmd_ai(arg)
-        elif cmd == "compact":
-            self._cmd_compact()
-        elif cmd in ("tasks", "team", "inbox"):
-            self._cmd_agent_slash(cmd, arg)
-        else:
-            content.write_error(f"未知命令: /{cmd}  输入 /help 查看帮助")
+        # copy 命令不需要录制
+        if cmd == "copy":
+            self._cmd_copy()
+            return
+
+        # 开始录制输出
+        content.start_recording()
+
+        try:
+            if cmd == "quit":
+                self._cmd_quit()
+            elif cmd == "help":
+                self._cmd_help()
+            elif cmd in ("status",):
+                self._cmd_status()
+            elif cmd == "index":
+                self._cmd_index(arg)
+            elif cmd == "search":
+                self._cmd_search(arg)
+            elif cmd == "set":
+                self._cmd_set(arg)
+            elif cmd == "clear":
+                self._cmd_clear()
+            elif cmd == "ai":
+                self._cmd_ai(arg)
+            elif cmd == "compact":
+                self._cmd_compact()
+            elif cmd in ("tasks", "team", "inbox"):
+                self._cmd_agent_slash(cmd, arg)
+            else:
+                content.write_error(f"未知命令: /{cmd}  输入 /help 查看帮助")
+        finally:
+            content.stop_recording()
 
     # ------------------------------------------------------------------
     # 命令实现
@@ -226,6 +241,7 @@ class CortexApp(App):
             "  /status           显示详细状态\n"
             "  /set <n>          设置最大显示结果数\n"
             "  /clear            清屏\n"
+            "  /copy             复制上一条命令输出到剪贴板\n"
             "  /help             显示帮助\n"
             "  /quit             退出\n"
             "\n"
@@ -516,8 +532,11 @@ class CortexApp(App):
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
 
+        # 重新启用 recording 以捕获异步返回的搜索结果
+        content.start_recording()
         for r in renderables:
             content.write(r)
+        content.stop_recording()
 
         header.set_mode("就绪")
 
@@ -550,6 +569,25 @@ class CortexApp(App):
         content = self.query_one(ContentArea)
         content.clear()
 
+    def _cmd_copy(self) -> None:
+        """复制上一个命令的输出到剪贴板"""
+        content = self.query_one(ContentArea)
+        text = content.get_last_output()
+        if not text:
+            content.write_system("没有可复制的内容")
+            return
+        try:
+            import subprocess
+            subprocess.run(
+                ["clip"],
+                input=text.encode("utf-16"),
+                check=True,
+            )
+            line_count = len(text.strip().split("\n"))
+            content.write_success(f"已复制 {line_count} 行到剪贴板")
+        except Exception as e:
+            content.write_error(f"复制失败: {e}")
+
     def _cmd_ai(self, arg: str) -> None:
         """AI 对话命令"""
         content = self.query_one(ContentArea)
@@ -562,6 +600,10 @@ class CortexApp(App):
         header.set_mode("Agent 思考中...")
         status = self.query_one(StatusBar)
         status.set_agent_status("思考中")
+
+        # 启动思考动画
+        thinking = self.query_one(ThinkingIndicator)
+        thinking.start("Agent 思考中")
 
         self.run_worker(lambda: self._do_ai_query(arg), thread=True, name="ai_query")
 
@@ -595,6 +637,10 @@ class CortexApp(App):
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
         status = self.query_one(StatusBar)
+        thinking = self.query_one(ThinkingIndicator)
+
+        # 停止思考动画
+        thinking.stop()
 
         if output.strip():
             content.write(Text(output.rstrip(), style="#c0caf5"))
@@ -610,6 +656,10 @@ class CortexApp(App):
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
         status = self.query_one(StatusBar)
+        thinking = self.query_one(ThinkingIndicator)
+
+        # 停止思考动画
+        thinking.stop()
 
         content.write_error(f"Agent 错误: {error_msg}")
         header.set_mode("就绪")
@@ -703,6 +753,16 @@ class CortexApp(App):
     def action_focus_input(self) -> None:
         """ESC 聚焦输入框"""
         self.query_one(InputBox).focus_input()
+
+    def action_scroll_up(self) -> None:
+        """PageUp 向上翻页"""
+        content = self.query_one(ContentArea)
+        content.scroll_page_up()
+
+    def action_scroll_down(self) -> None:
+        """PageDown 向下翻页"""
+        content = self.query_one(ContentArea)
+        content.scroll_page_down()
 
     # ------------------------------------------------------------------
     # 清理

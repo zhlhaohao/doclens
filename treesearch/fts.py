@@ -239,7 +239,7 @@ class FTS5Index:
         if self._db_path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(self._db_path)), exist_ok=True)
 
-        self._conn = sqlite3.connect(self._db_path)
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
 
@@ -367,7 +367,10 @@ class FTS5Index:
         self._tokenize_log_file.flush()
 
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------
     # Failed files tracking
