@@ -1,6 +1,7 @@
 """索引管理模块 - 封装 TreeSearch 生命周期"""
 
 import os
+import threading
 
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 from cortex.config import CortexConfig
@@ -89,6 +90,7 @@ class IndexManager:
         self._path_map = {}
         self._pending_swap = None  # (new_ts, new_path_map, doc_count)
         self._reindexing = False
+        self._reindex_lock = threading.Lock()
 
     @property
     def ts(self):
@@ -113,6 +115,39 @@ class IndexManager:
         self._path_map = new_path_map
         if doc_count != old_count:
             print(f"\n[索引已自动更新: {doc_count} 个文档]")
+
+    def trigger_background_reindex(self):
+        """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）"""
+        def _bg_work():
+            with self._reindex_lock:
+                # 创建临时 TreeSearch 实例完成索引构建
+                from treesearch import TreeSearch, set_config, TreeSearchConfig
+                abs_path = os.path.abspath(self.index_path)
+                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
+                new_ts = TreeSearch(db_path=self.index_path)
+                if os.path.exists(abs_path):
+                    try:
+                        docs = new_ts.load_index(abs_path)
+                        if docs:
+                            new_ts.documents = docs
+                    except Exception:
+                        pass
+                try:
+                    new_ts.index(self.search_path)
+                except FileNotFoundError:
+                    new_ts.documents = []
+                new_ts.save_index()
+                new_path_map = {}
+                for doc in new_ts.documents:
+                    if hasattr(doc, 'metadata') and doc.metadata:
+                        path = doc.metadata.get('source_path', '')
+                        if path:
+                            new_path_map[doc.doc_id] = path
+                            new_path_map[doc.doc_name] = path
+                self._pending_swap = (new_ts, new_path_map, len(new_ts.documents))
+        t = threading.Thread(target=_bg_work, daemon=True)
+        t.start()
+        return t
 
     def load_or_build_index(self):
         """加载或构建索引"""
@@ -179,6 +214,11 @@ class IndexManager:
 
     def reindex(self, force=False):
         """增量更新索引（force=True 时全量重建）"""
+        with self._reindex_lock:
+            return self._reindex_internal(force)
+
+    def _reindex_internal(self, force=False):
+        """内部 reindex（已持有锁）"""
         if self._ts is None:
             set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
             self._ts = TreeSearch(db_path=self.index_path)

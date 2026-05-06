@@ -19,6 +19,8 @@ class ContentArea(RichLog):
         scrollbar-size: 1 1;
         scrollbar-background: #24283b;
         scrollbar-color: #3b3d57;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
     """
 
@@ -27,7 +29,7 @@ class ContentArea(RichLog):
             highlight=True,
             markup=False,
             wrap=True,
-            auto_scroll=True,
+            auto_scroll=False,
             id="content-area",
         )
         self._last_output: list[str] = []
