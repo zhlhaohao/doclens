@@ -9,7 +9,6 @@ class HeaderBar(Horizontal):
 
     DEFAULT_CSS = """
     HeaderBar {
-        dock: top;
         height: 1;
         background: #24283b;
         color: #7aa2f7;

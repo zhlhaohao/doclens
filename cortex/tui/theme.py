@@ -18,11 +18,12 @@ COLORS = {
 APP_CSS = """
 Screen {
     layout: vertical;
-    background: #1a1b26;
+    background: #000000;
+    overflow: hidden;
+    padding: 1 2;
 }
 
 HeaderBar {
-    dock: top;
     height: 1;
     background: #24283b;
     color: #7aa2f7;
@@ -31,26 +32,24 @@ HeaderBar {
 
 ContentArea {
     height: 1fr;
-    background: #1a1b26;
+    background: #000000;
     border: none;
     padding: 0 1;
     scrollbar-size: 1 1;
 }
 
 InputBox {
-    dock: bottom;
     height: 3;
-    background: #24283b;
+    background: #000000;
     border-top: solid #3b3d57;
+    border-bottom: solid #3b3d57;
     padding: 0 1;
 }
 
 StatusBar {
-    dock: bottom;
     height: 1;
     background: #24283b;
     color: #565f89;
-    border-top: solid #3b3d57;
     padding: 0 1;
 }
 """
