@@ -14,24 +14,24 @@ COLORS = {
     "error": "#f7768e",
 }
 
-# 全局 App CSS
+# 全局 App CSS (使用硬编码颜色值，Textual 不支持自定义 CSS 变量)
 APP_CSS = """
 Screen {
     layout: vertical;
-    background: $bg;
+    background: #1a1b26;
 }
 
 HeaderBar {
     dock: top;
     height: 1;
-    background: $panel;
-    color: $primary;
+    background: #24283b;
+    color: #7aa2f7;
     padding: 0 1;
 }
 
 ContentArea {
     height: 1fr;
-    background: $bg;
+    background: #1a1b26;
     border: none;
     padding: 0 1;
     scrollbar-size: 1 1;
@@ -40,17 +40,17 @@ ContentArea {
 InputBox {
     dock: bottom;
     height: 3;
-    background: $panel;
-    border-top: solid $border;
+    background: #24283b;
+    border-top: solid #3b3d57;
     padding: 0 1;
 }
 
 StatusBar {
     dock: bottom;
     height: 1;
-    background: $panel;
-    color: $dim;
-    border-top: solid $border;
+    background: #24283b;
+    color: #565f89;
+    border-top: solid #3b3d57;
     padding: 0 1;
 }
 """
