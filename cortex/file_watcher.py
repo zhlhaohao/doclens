@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent, FileDeletedEvent, FileMovedEvent
+    from watchdog.events import FileSystemEventHandler
     _HAS_WATCHDOG = True
 except ImportError:
     _HAS_WATCHDOG = False
@@ -28,45 +28,47 @@ def _build_path_map(ts) -> dict:
     return path_map
 
 
-class _ChangeHandler(FileSystemEventHandler):
-    """watchdog 事件处理器，过滤支持的文件扩展名"""
+if _HAS_WATCHDOG:
 
-    def __init__(self, callback, search_path: str):
-        super().__init__()
-        self._callback = callback
-        self._search_path = os.path.normpath(search_path).lower()
-        # 预计算支持的扩展名集合（小写）
-        self._extensions = set(SUPPORTED_FORMATS.keys())
+    class _ChangeHandler(FileSystemEventHandler):
+        """watchdog 事件处理器，过滤支持的文件扩展名"""
 
-    def _should_handle(self, path: str) -> bool:
-        """判断是否需要处理该路径的变化"""
-        norm = os.path.normpath(path)
-        # 忽略 .cortex 目录
-        parts = norm.split(os.sep)
-        if '.cortex' in (p.lower() for p in parts):
-            return False
-        # 只处理支持的扩展名
-        _, ext = os.path.splitext(path)
-        return ext.lower() in self._extensions
+        def __init__(self, callback, search_path: str):
+            super().__init__()
+            self._callback = callback
+            self._search_path = os.path.normpath(search_path).lower()
+            # 预计算支持的扩展名集合（小写）
+            self._extensions = set(SUPPORTED_FORMATS.keys())
 
-    def on_modified(self, event):
-        if not event.is_directory and self._should_handle(event.src_path):
-            self._callback(event.src_path)
+        def _should_handle(self, path: str) -> bool:
+            """判断是否需要处理该路径的变化"""
+            norm = os.path.normpath(path)
+            # 忽略 .cortex 目录
+            parts = norm.split(os.sep)
+            if '.cortex' in (p.lower() for p in parts):
+                return False
+            # 只处理支持的扩展名
+            _, ext = os.path.splitext(path)
+            return ext.lower() in self._extensions
 
-    def on_created(self, event):
-        if not event.is_directory and self._should_handle(event.src_path):
-            self._callback(event.src_path)
-
-    def on_deleted(self, event):
-        if not event.is_directory and self._should_handle(event.src_path):
-            self._callback(event.src_path)
-
-    def on_moved(self, event):
-        if not event.is_directory:
-            if self._should_handle(event.src_path):
+        def on_modified(self, event):
+            if not event.is_directory and self._should_handle(event.src_path):
                 self._callback(event.src_path)
-            if self._should_handle(event.dest_path):
-                self._callback(event.dest_path)
+
+        def on_created(self, event):
+            if not event.is_directory and self._should_handle(event.src_path):
+                self._callback(event.src_path)
+
+        def on_deleted(self, event):
+            if not event.is_directory and self._should_handle(event.src_path):
+                self._callback(event.src_path)
+
+        def on_moved(self, event):
+            if not event.is_directory:
+                if self._should_handle(event.src_path):
+                    self._callback(event.src_path)
+                if self._should_handle(event.dest_path):
+                    self._callback(event.dest_path)
 
 
 class FileWatcher:

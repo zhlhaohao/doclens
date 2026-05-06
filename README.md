@@ -22,6 +22,53 @@ Millisecond-latency search over tens of thousands of documents and large codebas
 
 ## Installation
 
+### Quick Start (like `npx`)
+
+Run cortex from any directory without manual setup:
+
+**Using uvx** (fastest, no install needed):
+
+```bash
+# Run directly — no clone, no install, just like npx
+uvx --from "cortex @ git+https://github.com/zhlhaohao/cortex" cortex
+
+# Or install permanently
+uv tool install "cortex @ git+https://github.com/zhlhaohao/cortex"
+cortex
+```
+
+**Using pipx**:
+
+```bash
+# Install pipx (one-time setup)
+pip install pipx
+pipx ensurepath
+
+# Install directly from GitHub (no clone needed)
+pipx install "cortex @ git+https://github.com/zhlhaohao/cortex"
+cortex
+```
+
+### Development Setup (Virtual Environment)
+
+For development and contributing:
+
+```bash
+# Create virtual environment
+python -m venv .venv
+
+# Activate it
+# Windows (bash):
+source .venv/Scripts/activate
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+source .venv/bin/activate
+
+# Install project in editable mode with cortex dependencies
+pip install -e ".[cortex]"
+```
+
 ### Python Library
 
 Use this when you want to call TreeSearch from Python code, such as scripts, backend services, or data pipelines:
