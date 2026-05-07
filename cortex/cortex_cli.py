@@ -22,6 +22,7 @@ from cortex.formatting import hl, truncate_ansi_safe, make_vscode_link
 from cortex.scoring import tokenize_query, calc_proximity_score, compute_composite_score
 from cortex.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
 from cortex import ripgrep as rg_module
+from planify.cli_history import CommandHistory, input_with_history
 
 
 # ============================================================================
@@ -139,12 +140,22 @@ class NotebookSearchCLI:
         self.idx = IndexManager(self.config)
         self.max_results = self.config.max_results
 
+        # 命令历史（支持上下箭头导航）
+        history_dir = Path.home() / ".cortex" / "cli_history"
+        self._history = CommandHistory(history_dir / "history.json")
+
         # Agent 相关（延迟初始化）
         self.agent = None
         self._agent_history = []
 
         # 文件监控（延迟启动）
         self.watcher = None
+
+    # ---- 历史输入 ----
+
+    def _input(self, prompt: str) -> str:
+        """带历史命令导航的输入（使用上下箭头调出历史）"""
+        return input_with_history(prompt, self._history)
 
     # ---- 向后兼容属性代理 ----
 
@@ -662,7 +673,7 @@ class NotebookSearchCLI:
 
         if need_prompt:
             try:
-                answer = _direct_input(prompt_msg).strip().lower()
+                answer = self._input(prompt_msg).strip().lower()
             except (EOFError, KeyboardInterrupt):
                 print("\n[跳过索引创建]\n")
                 answer = "n"
@@ -682,7 +693,7 @@ class NotebookSearchCLI:
 
         while True:
             try:
-                user_input = _direct_input("> ").strip()
+                user_input = self._input("> ").strip()
 
                 if not user_input:
                     continue
