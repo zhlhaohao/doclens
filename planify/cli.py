@@ -213,12 +213,10 @@ _escape_watcher = EscapeInterruptWatcher()
 setup_encoding()
 apply_safe_stdio()
 
-# 重新配置日志（CLI 模式输出到控制台）
-logging.basicConfig(
-    level=logging.WARNING,  # 只显示 WARNING 及以上级别的日志
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    handlers=[],
-)
+# 重新配置日志（使用统一的 setup_logging）
+from planify.core.logging_config import setup_logging
+from pathlib import Path
+setup_logging(log_dir=Path(".cortex") / "logs", console_output=False, log_level=logging.WARNING)
 
 # 禁用 SQLAlchemy SQL 日志输出到控制台
 # 使用 propagate=False 彻底阻止 SQL 输出到任何 handler
