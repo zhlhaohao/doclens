@@ -2,11 +2,14 @@
 Cortex 配置模块 - 从 .env 文件或环境变量加载配置
 """
 
-from pydantic import Field
-from pydantic_settings import BaseSettings
+import os
+import shutil
+import sys
 from pathlib import Path
 from typing import Optional
-import os
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 def get_global_cortex_dir() -> Path:
@@ -14,6 +17,12 @@ def get_global_cortex_dir() -> Path:
     p = Path.home() / ".cortex"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _get_package_dir() -> Path:
+    """Return the directory containing the cortex package."""
+    import cortex as _pkg
+    return Path(os.path.dirname(os.path.abspath(_pkg.__file__)))
 
 
 class CortexConfig(BaseSettings):
@@ -74,8 +83,42 @@ class CortexConfig(BaseSettings):
     planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
 
     @classmethod
+    def _init_first_run(cls):
+        """首次运行引导：复制 .env.example 和 skills/ 到 ~/.cortex"""
+        global_dir = get_global_cortex_dir()
+        env_dest = global_dir / ".env"
+
+        if env_dest.exists():
+            return  # 已有 .env，跳过
+
+        pkg_dir = _get_package_dir()
+        print(f"首次运行，正在初始化配置目录: {global_dir}")
+
+        # 复制 .env.example -> ~/.cortex/.env
+        env_example = pkg_dir / ".env.example"
+        if env_example.exists():
+            with open(env_example, "r", encoding="utf-8") as f:
+                env_dest.write_text(f.read(), encoding="utf-8")
+            print(f"已创建配置文件: {env_dest}")
+
+        # 复制 skills/
+        skills_src = pkg_dir / "skills"
+        skills_dest = global_dir / "skills"
+        if skills_src.exists() and not skills_dest.exists():
+            shutil.copytree(skills_src, skills_dest)
+            print(f"已复制技能目录: {skills_dest}")
+
+        print("\n请在以下文件中设置大模型 API 密钥:")
+        print(f"  {env_dest}")
+        print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
+        sys.exit(0)
+
+    @classmethod
     def load(cls) -> "CortexConfig":
         """从 ~/.cortex/.env 或 {cwd}/.cortex/.env 加载配置，失败则降级到环境变量"""
+        # 首次运行引导
+        cls._init_first_run()
+
         # 优先读取全局配置
         global_env = get_global_cortex_dir() / ".env"
         if global_env.exists():
