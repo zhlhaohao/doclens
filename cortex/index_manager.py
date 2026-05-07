@@ -118,8 +118,11 @@ class IndexManager:
 
     def trigger_background_reindex(self):
         """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）"""
+        logger.debug("trigger_background_reindex called")
         def _bg_work():
+            logger.debug("_bg_work started")
             with self._reindex_lock:
+                logger.debug("_bg_work got lock")
                 # 创建临时 TreeSearch 实例完成索引构建
                 from treesearch import TreeSearch, set_config, TreeSearchConfig
                 abs_path = os.path.abspath(self.index_path)

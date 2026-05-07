@@ -50,6 +50,8 @@ class StatusBar(Horizontal):
 
     def _on_status_event(self, payload: dict) -> None:
         """处理状态事件"""
+        import logging
+        logging.getLogger(__name__).debug("StatusBar received event: %s", payload)
         event_type = payload.get("event_type")
         message = payload.get("message", "")
 

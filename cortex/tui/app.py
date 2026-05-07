@@ -1,11 +1,15 @@
 """CortexApp - Textual 主应用，组合所有 Widget 并处理命令路由"""
 
 import io
+import logging
 import os
 import sys
 import time
 from pathlib import Path
 from typing import Optional
+
+# 开启 DEBUG 日志
+logging.basicConfig(level=logging.DEBUG, format="%(name)s - %(levelname)s - %(message)s")
 
 from textual.app import App, ComposeResult
 from textual.worker import Worker, get_current_worker
@@ -137,12 +141,15 @@ class CortexApp(App):
 
             def on_file_change(file_path: str):
                 nonlocal changed_files, changed_count
+                import logging
+                logging.getLogger(__name__).debug("on_file_change called: %s", file_path)
                 if file_path not in changed_files:
                     changed_files.append(file_path)
                     changed_count += 1
 
                 # 发布事件
                 bus = EventBus.get_instance()
+                logging.getLogger(__name__).debug("Publishing file_change event: %d files", changed_count)
                 bus.publish("status", {
                     "event_type": "file_change",
                     "message": f"检测到 {changed_count} 个文件变化，正在更新索引...",
