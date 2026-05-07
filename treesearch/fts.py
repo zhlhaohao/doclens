@@ -411,7 +411,8 @@ class FTS5Index:
 
     def clear_all_failed_files(self) -> None:
         """Remove all failed file records (used during full rebuild)."""
-        self._conn.execute("DELETE FROM failed_files")
+        with self._conn:
+            self._conn.execute("DELETE FROM failed_files")
 
     def get_failed_files_summary(self) -> list[tuple[str, int, str]]:
         """Return failed files list for display.
