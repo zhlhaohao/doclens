@@ -39,6 +39,38 @@ SEARCH_KB_TOOL = {
     },
 }
 
+SEARCH_KB_V2_TOOL = {
+    "name": "search_kb_v2",
+    "description": (
+        "使用结构化查询在知识库索引中搜索相关文档片段。"
+        "query_tokens 支持: "
+        "AND (所有词匹配), OR (任一匹配), NOT (排除), PHRASE (短语精确匹配)。"
+        "返回带层次结构的搜索结果。"
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query_tokens": {
+                "type": "object",
+                "description": "结构化查询，支持 AND/OR/NOT/PHRASE 操作符",
+                "properties": {
+                    "type": {"type": "string", "enum": ["and", "or", "not", "phrase"]},
+                    "terms": {"type": "array", "items": {"type": "string"}},
+                    "term": {"type": "string"},
+                    "text": {"type": "string"},
+                    "exclude": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "返回的最大结果数，默认 10",
+                "default": 10,
+            },
+        },
+        "required": ["query_tokens"],
+    },
+}
+
 MANAGE_KB_TOOL = {
     "name": "manage_kb",
     "description": (
@@ -147,10 +179,11 @@ def build_kb_tools(
 
     handlers = {
         "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
+        "search_kb_v2": lambda **kw: _handle_search_kb_v2(idx_manager, workdir, **kw),
         "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
         "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
     }
-    return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
+    return [search_kb_schema, SEARCH_KB_V2_TOOL, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
 
 
 # ---------------------------------------------------------------------------
