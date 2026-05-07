@@ -62,12 +62,13 @@ if _HAS_WATCHDOG:
 class FileWatcher:
     """后台文件监控器，检测变化后自动 reindex"""
 
-    def __init__(self, idx_manager, debounce_seconds: float = 5.0):
+    def __init__(self, idx_manager, debounce_seconds: float = 5.0, on_change_callback=None):
         self._idx = idx_manager
         self._debounce = debounce_seconds
         self._timer = None
         self._observer = None
         self._reindexing = False
+        self._on_change_callback = on_change_callback
 
     def start(self):
         """启动文件监控"""
@@ -107,6 +108,10 @@ class FileWatcher:
         self._timer = threading.Timer(self._debounce, self._do_reindex)
         self._timer.daemon = True
         self._timer.start()
+
+        # 发布文件变化事件
+        if self._on_change_callback:
+            self._on_change_callback(file_path)
 
     def _do_reindex(self):
         """后台线程执行 reindex，完成后设置 pending swap"""
