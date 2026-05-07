@@ -449,6 +449,7 @@ class NotebookSearchCLI:
 ║    /tasks            显示任务列表                               ║
 ║    /team             显示团队列表                               ║
 ║    /inbox            显示收件箱                                 ║
+║    /failed          显示解析失败的文件                         ║
 ║                                                              ║
 ║  默认输入（无斜杠前缀）                                        ║
 ║    <自然语言消息>   交给 Agent 处理                            ║

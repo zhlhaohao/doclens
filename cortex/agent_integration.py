@@ -345,6 +345,23 @@ class CortexAgent:
             print(json.dumps(inbox, indent=2, ensure_ascii=False))
             return False, history
 
+        if cmd in ("failed",):
+            # 列出解析失败的文件
+            from treesearch.fts import FTS5Index
+            db_path = str(self.workdir / ".cortex/index.db")
+            try:
+                fts = FTS5Index(db_path=db_path)
+                failed = fts.get_all_failed_files()
+                if not failed:
+                    print("没有解析失败的文件")
+                else:
+                    print(f"共有 {len(failed)} 个解析失败的文件:")
+                    for path, (count, _) in sorted(failed.items(), key=lambda x: -x[1][0]):
+                        print(f"  [{count}次] {path}")
+            except Exception as e:
+                print(f"读取失败文件失败: {e}")
+            return False, history
+
         if cmd in ("clear",):
             history.clear()
             self.session.replace_messages_in_place([])
