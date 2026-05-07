@@ -182,6 +182,7 @@ def _read_key_win32() -> tuple[str, str]:
     对于非 ASCII 字节（>127），尝试读取完整 UTF-8 序列。
     """
     import os
+    import sys
 
     # 检测是否在 Git Bash/mintty 环境下
     is_mintty = os.environ.get("TERM", "").lower().find("mintty") >= 0
@@ -208,34 +209,16 @@ def _read_key_win32() -> tuple[str, str]:
             second_ord = second_raw[0]
         else:
             second_ord = ord(second_raw)
-        # Windows 虚拟键码：VK_UP=0x26, VK_DOWN=0x28, VK_LEFT=0x25, VK_RIGHT=0x27
-        # 但 getch() 在某些配置下返回扫描码，需要同时处理
+
         # 扫描码：上=72(0x48), 下=80(0x50), 左=75(0x4B), 右=77(0x4D)
         # 虚拟键码：上=38(0x26), 下=40(0x28), 左=37(0x25), 右=39(0x27)
-        if second_ord in (72, 38):  # Up arrow
-            # PowerShell 可能发送 3 字节序列 [0xe0, H, 0xe0]，消费第三个字节
-            try:
-                third = msvcrt.getch()
-            except:
-                pass
+        if second_ord in (72, 38):  # Up arrow - 可能有第3字节
             return ("up", "")
-        if second_ord in (80, 40):  # Down arrow
-            try:
-                third = msvcrt.getch()
-            except:
-                pass
+        if second_ord in (80, 40):  # Down arrow - 2字节序列
             return ("down", "")
-        if second_ord in (77, 39):  # Right arrow
-            try:
-                third = msvcrt.getch()
-            except:
-                pass
+        if second_ord in (77, 39):  # Right arrow - 可能有第3字节
             return ("right", "")
-        if second_ord in (75, 37):  # Left arrow
-            try:
-                third = msvcrt.getch()
-            except:
-                pass
+        if second_ord in (75, 37):  # Left arrow - 可能有第3字节
             return ("left", "")
         return ("other", "")
 
