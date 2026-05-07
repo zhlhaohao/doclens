@@ -119,8 +119,12 @@ class IndexManager:
         if doc_count != old_count:
             print(f"\n[索引已自动更新: {doc_count} 个文档]")
 
-    def trigger_background_reindex(self):
-        """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）"""
+    def trigger_background_reindex(self, on_complete=None):
+        """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）
+
+        Args:
+            on_complete: 索引完成后的回调，签名为 (success: bool, doc_count: int, failed_count: int) -> None
+        """
         logger.debug("trigger_background_reindex called")
         def _bg_work():
             try:
@@ -173,6 +177,7 @@ class IndexManager:
                     publish_progress()
 
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
+                    failed_count = 0
                     try:
                         new_ts.index(self.search_path, progress_callback=on_file_indexed)
                     except FileNotFoundError:
@@ -180,6 +185,16 @@ class IndexManager:
                     finally:
                         progress_timer.cancel()
                         logger.debug("progress_timer cancelled")
+
+                    # 获取失败文件统计
+                    try:
+                        from treesearch.fts import FTS5Index
+                        fts = FTS5Index(db_path=self.index_path)
+                        failed = fts.get_all_failed_files()
+                        failed_count = len(failed) if failed else 0
+                    except Exception:
+                        pass
+
                     new_ts.save_index()
                     new_path_map = {}
                     for doc in new_ts.documents:
@@ -188,9 +203,16 @@ class IndexManager:
                             if path:
                                 new_path_map[doc.doc_id] = path
                                 new_path_map[doc.doc_name] = path
-                    self._pending_swap = (new_ts, new_path_map, len(new_ts.documents))
+                    doc_count = len(new_ts.documents)
+                    self._pending_swap = (new_ts, new_path_map, doc_count)
+
+                    # 调用完成回调
+                    if on_complete:
+                        on_complete(True, doc_count, failed_count)
             except Exception as e:
                 logger.exception("_bg_work exception: %s", e)
+                if on_complete:
+                    on_complete(False, 0, 0)
         t = threading.Thread(target=_bg_work, daemon=True)
         t.start()
         return t
