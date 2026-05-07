@@ -71,6 +71,21 @@ class StatusBar(Horizontal):
                     self._right_text = f"文件变化: {count} 个文件"
             else:
                 self._right_text = message
+        elif event_type == "indexing":
+            current_file = payload.get("current_file", "")
+            indexed_count = payload.get("indexed_count", 0)
+            self._right_text = f"索引中: {current_file} ({indexed_count})"
+            # 5 秒后自动恢复（防止卡住）
+            import threading
+            app = self.app
+            widget = self
+
+            def restore():
+                app.call_from_thread(widget._do_restore)
+
+            self._auto_reset_timer = threading.Timer(5.0, restore)
+            self._auto_reset_timer.daemon = True
+            self._auto_reset_timer.start()
         else:
             self._right_text = message
 
