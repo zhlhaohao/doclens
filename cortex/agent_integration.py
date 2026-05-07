@@ -370,8 +370,18 @@ class CortexAgent:
                 fts = FTS5Index(db_path=db_path)
                 fts.clear_all_failed_files()
                 print("已清空所有解析失败的文件记录，正在重新索引...")
-                # 触发后台重新索引
-                self.idx.trigger_background_reindex()
+
+                # 触发后台重新索引，带完成回调
+                def on_reindex_complete(success, doc_count, failed_count):
+                    if success:
+                        if failed_count > 0:
+                            print(f"[索引完成] 成功: {doc_count} 文档, 失败: {failed_count} 文件")
+                        else:
+                            print(f"[索引完成] 共 {doc_count} 文档")
+                    else:
+                        print("[索引失败] 请查看日志")
+
+                self.idx.trigger_background_reindex(on_complete=on_reindex_complete)
             except Exception as e:
                 print(f"清空失败文件记录失败: {e}")
             return False, history
