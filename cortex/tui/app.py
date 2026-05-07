@@ -105,9 +105,6 @@ class CortexApp(App):
 
     def _on_index_loaded(self, doc_count: int) -> None:
         """索引加载完成（主线程回调）"""
-        content = self.query_one(ContentArea)
-        content.write_success(f"已加载 {doc_count} 个文档")
-
         # 更新状态栏
         status = self.query_one(StatusBar)
         status.set_index_stats(doc_count)
@@ -165,8 +162,6 @@ class CortexApp(App):
                 on_change_callback=on_file_change
             )
             if self.watcher.start():
-                content = self.query_one(ContentArea)
-                content.write_system("已启动文件监控")
                 status = self.query_one(StatusBar)
                 status.set_watcher_status("运行中")
         except Exception as exc:
