@@ -348,7 +348,7 @@ class CortexAgent:
         if cmd in ("failed",):
             # 列出解析失败的文件
             from treesearch.fts import FTS5Index
-            db_path = str(self.workdir / ".cortex/index.db")
+            db_path = self.idx.index_path
             try:
                 fts = FTS5Index(db_path=db_path)
                 failed = fts.get_all_failed_files()
@@ -365,7 +365,7 @@ class CortexAgent:
         if cmd in ("clearfailed",):
             # 清空解析失败的文件记录并重新索引
             from treesearch.fts import FTS5Index
-            db_path = str(self.workdir / ".cortex/index.db")
+            db_path = self.idx.index_path
             try:
                 fts = FTS5Index(db_path=db_path)
                 fts.clear_all_failed_files()
