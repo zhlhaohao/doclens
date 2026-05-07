@@ -156,10 +156,17 @@ class CortexApp(App):
                     "timestamp": time.time(),
                 })
 
+            def on_reindex_start():
+                """reindex 开始时清零文件变化计数"""
+                nonlocal changed_files, changed_count
+                changed_files = []
+                changed_count = 0
+
             self.watcher = FileWatcher(
                 self.idx,
                 debounce_seconds=self.config.watch_debounce,
-                on_change_callback=on_file_change
+                on_change_callback=on_file_change,
+                on_reindex_start=on_reindex_start
             )
             if self.watcher.start():
                 status = self.query_one(StatusBar)
