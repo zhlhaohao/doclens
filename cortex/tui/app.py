@@ -3,6 +3,7 @@
 import io
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -128,7 +129,32 @@ class CortexApp(App):
             return
         try:
             from cortex.file_watcher import FileWatcher
-            self.watcher = FileWatcher(self.idx, debounce_seconds=self.config.watch_debounce)
+            from cortex.event_bus import EventBus
+
+            # 创建文件变化回调
+            changed_files = []
+            changed_count = 0
+
+            def on_file_change(file_path: str):
+                nonlocal changed_files, changed_count
+                changed_files.append(file_path)
+                changed_count += 1
+
+                # 发布事件
+                bus = EventBus.get_instance()
+                bus.publish("status", {
+                    "event_type": "file_change",
+                    "message": f"检测到 {changed_count} 个文件变化，正在更新索引...",
+                    "files": changed_files,
+                    "count": changed_count,
+                    "timestamp": time.time(),
+                })
+
+            self.watcher = FileWatcher(
+                self.idx,
+                debounce_seconds=self.config.watch_debounce,
+                on_change_callback=on_file_change
+            )
             if self.watcher.start():
                 content = self.query_one(ContentArea)
                 content.write_system("已启动文件监控")
