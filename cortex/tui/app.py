@@ -137,8 +137,9 @@ class CortexApp(App):
 
             def on_file_change(file_path: str):
                 nonlocal changed_files, changed_count
-                changed_files.append(file_path)
-                changed_count += 1
+                if file_path not in changed_files:
+                    changed_files.append(file_path)
+                    changed_count += 1
 
                 # 发布事件
                 bus = EventBus.get_instance()
