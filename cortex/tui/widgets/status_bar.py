@@ -127,14 +127,8 @@ class StatusBar(Horizontal):
         self._refresh_right()
 
     def set_watcher_status(self, status: str) -> None:
-        """更新监控状态"""
-        if "监控" not in self._right_text:
-            self._right_text = f"{self._right_text} · 监控: {status}"
-        else:
-            self._right_text = re.sub(
-                r"监控: \w+", f"监控: {status}", self._right_text
-            )
-        self._refresh_right()
+        """更新监控状态（已禁用）"""
+        pass
 
     def set_agent_status(self, status: str) -> None:
         """更新 Agent 状态"""
