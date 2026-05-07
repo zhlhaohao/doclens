@@ -29,6 +29,23 @@ class SafeFileHandler(logging.FileHandler):
             super().emit(record)
 
 
+def _load_cortex_env():
+    """从 .env 文件加载环境变量（如果尚未加载）"""
+    if os.environ.get("CORTEX_ENV_LOADED"):
+        return
+    try:
+        from dotenv import load_dotenv
+        # 全局配置: ~/.cortex/.env
+        global_env = Path.home() / ".cortex" / ".env"
+        if global_env.exists():
+            load_dotenv(global_env, override=True)
+        # 项目配置: {cwd}/.cortex/.env
+        local_env = Path.cwd() / ".cortex" / ".env"
+        if local_env.exists():
+            load_dotenv(local_env, override=True)
+        os.environ["CORTEX_ENV_LOADED"] = "1"
+    except ImportError:
+        pass  # dotenv 未安装
 
 
 def setup_logging(
@@ -41,7 +58,7 @@ def setup_logging(
     设置应用日志记录。
 
     Args:
-        log_dir: 日志文件目录（默认为脚本目录下的 logs/）
+        log_dir: 日志文件目录（默认为 .cortex/logs）
         log_level: 日志级别（默认为 DEBUG）
         console_output: 是否输出到控制台（默认为 False）
         console_level: 控制台日志级别（默认为 INFO）
@@ -62,25 +79,6 @@ def setup_logging(
                 log_dir = Path(env_dir)
             else:
                 log_dir = Path(".cortex") / "logs"
-
-
-def _load_cortex_env():
-    """从 .env 文件加载环境变量（如果尚未加载）"""
-    if os.environ.get("CORTEX_ENV_LOADED"):
-        return
-    try:
-        from dotenv import load_dotenv
-        # 全局配置: ~/.cortex/.env
-        global_env = Path.home() / ".cortex" / ".env"
-        if global_env.exists():
-            load_dotenv(global_env, override=True)
-        # 项目配置: {cwd}/.cortex/.env
-        local_env = Path.cwd() / ".cortex" / ".env"
-        if local_env.exists():
-            load_dotenv(local_env, override=True)
-        os.environ["CORTEX_ENV_LOADED"] = "1"
-    except ImportError:
-        pass  # dotenv 未安装
 
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
