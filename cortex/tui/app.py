@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -116,10 +117,39 @@ class CortexApp(App):
         # 启动文件监控
         self._start_watcher()
 
+        # 延迟 3 秒后检查索引是否需要增量更新
+        self._sync_timer = threading.Timer(3.0, self._startup_sync_check)
+        self._sync_timer.daemon = True
+        self._sync_timer.start()
+
     def _on_index_error(self, error_msg: str) -> None:
         """索引加载失败（主线程回调）"""
         content = self.query_one(ContentArea)
         content.write_error(f"索引加载失败: {error_msg}")
+
+    # ------------------------------------------------------------------
+    # 启动后增量索引同步
+    # ------------------------------------------------------------------
+
+    def _startup_sync_check(self) -> None:
+        """启动后延迟检查索引是否需要增量更新。"""
+        try:
+            self.idx.trigger_background_reindex(
+                on_complete=self._on_startup_sync_done
+            )
+        except Exception:
+            pass  # 静默失败，不影响正常使用
+
+    def _on_startup_sync_done(self, success: bool, doc_count: int, failed_count: int) -> None:
+        """启动同步完成后，仅在更新了文件时显示状态。"""
+        self.call_from_thread(self._show_startup_sync_result, success, doc_count)
+
+    def _show_startup_sync_result(self, success: bool, doc_count: int) -> None:
+        """主线程中显示同步结果。"""
+        if success and doc_count > 0:
+            from cortex.event_bus import EventBus
+            status = self.query_one(StatusBar)
+            status.set_index_stats(len(self.idx.documents))
 
     # ------------------------------------------------------------------
     # 文件监控
@@ -838,6 +868,9 @@ class CortexApp(App):
 
     def _cleanup(self) -> None:
         """清理资源"""
+        if hasattr(self, '_sync_timer') and self._sync_timer:
+            self._sync_timer.cancel()
+            self._sync_timer = None
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
