@@ -1,15 +1,13 @@
 """输入框组件 - 模仿 Claude Code 风格：> 提示符 + 简洁输入 + 历史导航"""
 
-import sys
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.events import Key, MouseDown
 from textual.message import Message
 from textual.widgets import Input, Static
 
-from planify.cli_history import CommandHistory, _get_clipboard_text
+from planify.cli_history import CommandHistory
 
 
 class InputBox(Horizontal):
@@ -67,7 +65,7 @@ class InputBox(Horizontal):
         """挂载后自动聚焦输入框"""
         self.query_one("#cmd-input", Input).focus()
 
-    def on_key(self, event: Key) -> None:
+    def on_key(self, event) -> None:
         """拦截上下箭头键实现历史导航"""
         if event.key not in ("up", "down"):
             return
@@ -78,7 +76,6 @@ class InputBox(Horizontal):
         input_widget = self.query_one("#cmd-input", Input)
 
         if event.key == "up":
-            # 首次按上箭头时，保存当前未提交的输入
             if self._history._history_index == len(self._history._entries):
                 self._saved_input = input_widget.value
             entry = self._history.up()
@@ -109,18 +106,3 @@ class InputBox(Horizontal):
     def focus_input(self) -> None:
         """重新聚焦输入框"""
         self.query_one("#cmd-input", Input).focus()
-
-    def on_mouse_down(self, event: MouseDown) -> None:
-        """右键粘贴剪贴板内容"""
-        if event.button != 2 or sys.platform != "win32":
-            return
-
-        event.stop()
-        clipboard_text = _get_clipboard_text()
-        if not clipboard_text:
-            return
-
-        input_widget = self.query_one("#cmd-input", Input)
-        pos = input_widget.cursor_position
-        input_widget.value = input_widget.value[:pos] + clipboard_text + input_widget.value[pos:]
-        input_widget.cursor_position = pos + len(clipboard_text)
