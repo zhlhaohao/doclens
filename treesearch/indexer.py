@@ -1347,6 +1347,8 @@ async def build_index(
         respect_gitignore=respect_gitignore,
         max_files=max_files,
     )
+    total_files = len(expanded)
+    processed_counter = [0]
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
@@ -1490,8 +1492,9 @@ async def build_index(
                 # source_path lookup catches both same-name and moved files.
                 if fts.get_doc_id_by_source_path(abs_fp) is not None:
                     skipped.append(fp)
+                    processed_counter[0] += 1
                     if progress_callback:
-                        progress_callback(fp)
+                        progress_callback(fp, processed_counter[0], total_files)
                     continue
         to_index.append(fp)
 
@@ -1561,8 +1564,9 @@ async def build_index(
                 result["source_type"] = source_type
                 _file_timings[fp] = (source_type, time.monotonic() - t0)
                 # Call progress callback if provided
+                processed_counter[0] += 1
                 if progress_callback:
-                    progress_callback(fp)
+                    progress_callback(fp, processed_counter[0], total_files)
                 return result
             except Exception as e:
                 logger.warning("Failed to index %s: %s", fp, e)
