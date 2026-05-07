@@ -139,50 +139,33 @@ class IndexManager:
                                 new_ts.documents = docs
                         except Exception:
                             pass
+                    # 启动进度发布 Timer（TreeSearch 内部处理索引，暂无 per-file 回调）
+                    import time as time_module
+
+                    def publish_progress():
+                        from cortex.event_bus import EventBus
+                        bus = EventBus.get_instance()
+                        bus.publish("status", {
+                            "event_type": "indexing",
+                            "current_file": "正在索引...",
+                            "indexed_count": 0,
+                            "timestamp": time_module.time(),
+                        })
+                        logger.debug("indexing event published")
+
+                    progress_timer = threading.Timer(1.0, publish_progress)
+                    progress_timer.daemon = True
+                    progress_timer.start()
+                    logger.debug("progress_timer started")
+
+                    logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
                     try:
-                        # 包装 index_document 方法来追踪进度
-                        original_index_doc = new_ts.index_document
-                        new_ts._current_indexing_file = None
-                        new_ts._indexed_count = 0
-
-                        def wrapped_index_doc(doc, **kwargs):
-                            new_ts._current_indexing_file = doc.doc_name if hasattr(doc, 'doc_name') else '未知'
-                            new_ts._indexed_count += 1
-                            return original_index_doc(doc, **kwargs)
-
-                        new_ts.index_document = wrapped_index_doc
-
-                        # 启动进度发布 Timer
-                        import time as time_module
-
-                        def publish_progress():
-                            logger.debug("publish_progress called, _current_indexing_file=%s, _indexed_count=%s",
-                                         new_ts._current_indexing_file, new_ts._indexed_count)
-                            if new_ts._current_indexing_file:
-                                from cortex.event_bus import EventBus
-                                bus = EventBus.get_instance()
-                                bus.publish("status", {
-                                    "event_type": "indexing",
-                                    "current_file": os.path.basename(new_ts._current_indexing_file),
-                                    "indexed_count": new_ts._indexed_count,
-                                    "timestamp": time_module.time(),
-                                })
-                                logger.debug("indexing event published")
-
-                        progress_timer = threading.Timer(1.0, publish_progress)
-                        progress_timer.daemon = True
-                        progress_timer.start()
-                        logger.debug("progress_timer started")
-
-                        logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
-                        try:
-                            new_ts.index(self.search_path)
-                        finally:
-                            new_ts.index_document = original_index_doc
-                            progress_timer.cancel()
-                            logger.debug("progress_timer cancelled")
+                        new_ts.index(self.search_path)
                     except FileNotFoundError:
                         new_ts.documents = []
+                    finally:
+                        progress_timer.cancel()
+                        logger.debug("progress_timer cancelled")
                     new_ts.save_index()
                     new_path_map = {}
                     for doc in new_ts.documents:
