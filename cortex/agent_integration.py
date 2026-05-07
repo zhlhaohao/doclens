@@ -363,13 +363,15 @@ class CortexAgent:
             return False, history
 
         if cmd in ("clearfailed",):
-            # 清空解析失败的文件记录
+            # 清空解析失败的文件记录并重新索引
             from treesearch.fts import FTS5Index
             db_path = str(self.workdir / ".cortex/index.db")
             try:
                 fts = FTS5Index(db_path=db_path)
                 fts.clear_all_failed_files()
-                print("已清空所有解析失败的文件记录")
+                print("已清空所有解析失败的文件记录，正在重新索引...")
+                # 触发后台重新索引
+                self.idx.trigger_background_reindex()
             except Exception as e:
                 print(f"清空失败文件记录失败: {e}")
             return False, history
