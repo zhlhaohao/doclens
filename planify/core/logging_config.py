@@ -6,6 +6,7 @@
 import json
 import logging
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -110,6 +111,63 @@ def _confirm_trust_dir(log_dir: Path) -> bool:
     return trusted
 
 
+def _cortex_package_dir() -> Optional[Path]:
+    """定位 cortex 包安装目录，用于拷贝模板文件。"""
+    try:
+        # planify/core/logging_config.py -> site-packages/cortex/
+        pkg = Path(__file__).parent.parent.parent / "cortex"
+        if pkg.exists():
+            return pkg
+    except Exception:
+        pass
+    return None
+
+
+def _init_cortex_workspace(workspace_dir: Path) -> None:
+    """初始化 .cortex 工作区：拷贝 .env.example 和 skills 目录。
+
+    仅在首次创建时执行，已有文件不覆盖。
+    完成后提示用户编辑 .env 填写大模型密钥。
+    """
+    pkg_dir = _cortex_package_dir()
+    if pkg_dir is None:
+        return
+
+    copied_any = False
+
+    # 1. 拷贝 .env.example -> .cortex/.env
+    env_example = pkg_dir / ".env.example"
+    if env_example.exists():
+        target_env = workspace_dir / ".env"
+        if not target_env.exists():
+            try:
+                shutil.copy2(env_example, target_env)
+                copied_any = True
+            except Exception:
+                pass
+
+    # 2. 拷贝 skills 目录 -> .cortex/skills/
+    skills_src = pkg_dir / "skills"
+    if skills_src.exists() and skills_src.is_dir():
+        target_skills = workspace_dir / "skills"
+        if not target_skills.exists():
+            try:
+                shutil.copytree(skills_src, target_skills)
+                copied_any = True
+            except Exception:
+                pass
+
+    # 3. 提示用户编辑 .env
+    if copied_any:
+        print(
+            f"\n📋 已初始化工作区: '{workspace_dir}'\n"
+            f"   - 已创建 {workspace_dir / '.env'}\n"
+            f"   - 已拷贝 skills 目录\n"
+            f"\n⚠️  请先编辑 '{workspace_dir / '.env'}' 填写你的大模型 API 密钥，"
+            f"然后重新运行 cortex。\n"
+        )
+
+
 def _load_cortex_env():
     """从 .env 文件加载环境变量（如果尚未加载）"""
     if os.environ.get("CORTEX_ENV_LOADED"):
@@ -166,6 +224,8 @@ def setup_logging(
 
     if trusted:
         log_dir.mkdir(parents=True, exist_ok=True)
+        # 首次初始化：拷贝 .env.example 和 skills
+        _init_cortex_workspace(log_dir.parent)
 
     # 格式化器
     fmt = '%(asctime)s | %(levelname)s | %(message)s'
