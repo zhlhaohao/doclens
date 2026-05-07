@@ -1,7 +1,10 @@
 """索引管理模块 - 封装 TreeSearch 生命周期"""
 
+import logging
 import os
 import threading
+
+logger = logging.getLogger(__name__)
 
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 from cortex.config import CortexConfig
