@@ -80,7 +80,7 @@ def setup_logging(
             else:
                 log_dir = Path(".cortex") / "logs"
 
-    log_dir.mkdir(exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
 
     # 格式化器
