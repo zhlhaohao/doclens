@@ -89,15 +89,15 @@ search_kb_v2(
 4. **短语切分**：长句无结果时，切分为多个短词组合
 5. **结果汇总**：多次查询的结果去重合并
 
+**并行查询：** 使用 `Task` 工具并行执行多个搜索查询以加快速度：
+
 ```python
-# 示例：多次查询并汇总
-results = []
-for query in [
-    {"type": "and", "terms": ["机器学习"]},
-    {"type": "and", "terms": ["machine learning"]},
-    {"type": "or", "terms": ["ML", "AI"]},
-]:
-    r = search_kb_v2(query_tokens=query, max_results=5)
-    results.extend(r)
-# 去重处理...
+# 使用 Task 工具并行查询
+Task(description="搜索机器学习",
+     prompt="调用 search_kb_v2(query_tokens={'type': 'and', 'terms': ['机器学习']}, max_results=5)")
+Task(description="搜索 machine learning",
+     prompt="调用 search_kb_v2(query_tokens={'type': 'and', 'terms': ['machine learning']}, max_results=5)")
+Task(description="搜索 ML/AI",
+     prompt="调用 search_kb_v2(query_tokens={'type': 'or', 'terms': ['ML', 'AI']}, max_results=5)")
+# 等待所有结果后合并去重
 ```
