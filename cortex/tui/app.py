@@ -237,7 +237,7 @@ class CortexApp(App):
                 self._cmd_ai(arg)
             elif cmd == "compact":
                 self._cmd_compact()
-            elif cmd in ("tasks", "team", "inbox"):
+            elif cmd in ("tasks", "team", "inbox", "failed"):
                 self._cmd_agent_slash(cmd, arg)
             else:
                 content.write_error(f"未知命令: /{cmd}  输入 /help 查看帮助")
