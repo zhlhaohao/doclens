@@ -737,7 +737,7 @@ class NotebookSearchCLI:
                 elif cmd in ("compact",):
                     self.cmd_compact()
 
-                elif cmd in ("tasks", "team", "inbox"):
+                elif cmd in ("tasks", "team", "inbox", "failed"):
                     self._ensure_agent()
                     _, self._agent_history = self.agent.handle_slash_command(
                         cmd, "", self._agent_history
