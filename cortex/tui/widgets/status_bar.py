@@ -30,6 +30,7 @@ class StatusBar(Horizontal):
         self._right_text = "就绪"
         self._unsubscribe = None
         self._auto_reset_timer = None
+        self._last_indexed_count = 0  # 记录最后索引的文件数
 
     def compose(self) -> ComposeResult:
         yield Static("", id="status-left")
@@ -76,6 +77,7 @@ class StatusBar(Horizontal):
         elif event_type == "indexing":
             current_file = payload.get("current_file", "")
             indexed_count = payload.get("indexed_count", 0)
+            self._last_indexed_count = indexed_count
             self._right_text = f"索引中: {current_file} ({indexed_count})"
             # 5 秒后自动恢复（防止卡住）
             import threading
@@ -108,7 +110,10 @@ class StatusBar(Horizontal):
 
     def _do_restore(self) -> None:
         """恢复状态（需在主线程调用）"""
-        self._right_text = "就绪"
+        if self._last_indexed_count > 0:
+            self._right_text = f"索引: {self._last_indexed_count} 文档"
+        else:
+            self._right_text = "就绪"
         self._refresh_right()
 
     def _refresh_right(self) -> None:
