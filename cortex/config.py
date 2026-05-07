@@ -83,23 +83,53 @@ class CortexConfig(BaseSettings):
     @classmethod
     def _init_first_run(cls):
         """首次运行引导：复制 .env.example 和 skills/ 到 ~/.cortex"""
-        global_dir = get_global_cortex_dir()
-        env_dest = global_dir / ".env"
+        import traceback
 
-        if env_dest.exists():
-            return  # 已有 .env，跳过
+        try:
+            global_dir = get_global_cortex_dir()
+            print(f"[DEBUG] global_dir = {global_dir}, exists = {global_dir.exists()}")
+            env_dest = global_dir / ".env"
+            print(f"[DEBUG] env_dest = {env_dest}, exists = {env_dest.exists()}")
 
-        # 创建 ~/.cortex 目录（如果还不存在）
-        global_dir.mkdir(parents=True, exist_ok=True)
+            if env_dest.exists():
+                return  # 已有 .env，跳过
 
-        pkg_dir = _get_package_dir()
-        print(f"首次运行，正在初始化配置目录: {global_dir}")
+            # 创建 ~/.cortex 目录（如果还不存在）
+            global_dir.mkdir(parents=True, exist_ok=True)
+            print(f"[DEBUG] after mkdir: global_dir = {global_dir}, exists = {global_dir.exists()}")
+
+            pkg_dir = _get_package_dir()
+            print(f"[DEBUG] pkg_dir = {pkg_dir}")
+            print(f"首次运行，正在初始化配置目录: {global_dir}")
+
+            # 复制 .env.example -> ~/.cortex/.env
+            env_example = pkg_dir / ".env.example"
+            print(f"[DEBUG] env_example = {env_example}, exists = {env_example.exists()}")
+            if env_example.exists():
+                env_dest.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
+                print(f"已创建配置文件: {env_dest}")
+
+            # 复制 skills/
+            skills_src = pkg_dir / "skills"
+            skills_dest = global_dir / "skills"
+            if skills_src.exists() and not skills_dest.exists():
+                shutil.copytree(skills_src, skills_dest)
+                print(f"已复制技能目录: {skills_dest}")
+
+            print("\n请在以下文件中设置大模型 API 密钥:")
+            print(f"  {env_dest}")
+            print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
+            sys.exit(0)
+        except Exception as e:
+            print(f"[DEBUG] _init_first_run exception: {e}")
+            traceback.print_exc()
+            raise
 
         # 复制 .env.example -> ~/.cortex/.env
         env_example = pkg_dir / ".env.example"
+        print(f"[DEBUG] env_example = {env_example}, exists = {env_example.exists()}")
         if env_example.exists():
-            with open(env_example, "r", encoding="utf-8") as f:
-                env_dest.write_text(f.read(), encoding="utf-8")
+            env_dest.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
             print(f"已创建配置文件: {env_dest}")
 
         # 复制 skills/
