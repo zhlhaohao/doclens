@@ -373,13 +373,14 @@ class CortexAgent:
 
                 # 触发后台重新索引，带完成回调
                 def on_reindex_complete(success, doc_count, failed_count):
+                    import sys
                     if success:
                         if failed_count > 0:
-                            print(f"[索引完成] 成功: {doc_count} 文档, 失败: {failed_count} 文件")
+                            print(f"[索引完成] 成功: {doc_count} 文档, 失败: {failed_count} 文件", file=sys.stderr)
                         else:
-                            print(f"[索引完成] 共 {doc_count} 文档")
+                            print(f"[索引完成] 共 {doc_count} 文档", file=sys.stderr)
                     else:
-                        print("[索引失败] 请查看日志")
+                        print("[索引失败] 请查看日志", file=sys.stderr)
 
                 self.idx.trigger_background_reindex(on_complete=on_reindex_complete)
             except Exception as e:
