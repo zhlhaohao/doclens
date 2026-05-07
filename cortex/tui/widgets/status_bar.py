@@ -1,5 +1,6 @@
 """状态栏组件 - 最底部固定显示"""
 
+import os
 import re
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -61,11 +62,13 @@ class StatusBar(Horizontal):
             count = payload.get("count", 0)
             files = payload.get("files", [])
             if count > 0:
-                # 显示文件名和数量
-                file_list = ", ".join(files[:3])
-                if count > 3:
-                    file_list += f" (+{count - 3} more)"
-                self._right_text = f"文件变化: {file_list}"
+                # 只显示文件名（basename）和数量
+                file_names = [os.path.basename(f) for f in files]
+                unique_names = list(dict.fromkeys(file_names))  # 去重保持顺序
+                if len(unique_names) == 1:
+                    self._right_text = f"文件变化: {unique_names[0]}"
+                else:
+                    self._right_text = f"文件变化: {count} 个文件"
             else:
                 self._right_text = message
         else:
@@ -76,16 +79,18 @@ class StatusBar(Horizontal):
         # file_change 事件 3 秒后自动恢复
         if event_type == "file_change":
             import threading
-            self._auto_reset_timer = threading.Timer(3.0, self._restore_status)
+            app = self.app
+            widget = self
+
+            def restore():
+                app.call_from_thread(widget._do_restore)
+
+            self._auto_reset_timer = threading.Timer(3.0, restore)
             self._auto_reset_timer.daemon = True
             self._auto_reset_timer.start()
 
-    def _restore_status(self) -> None:
-        """恢复原来的状态文本"""
-        self.call_from_thread(self._do_restore)
-
     def _do_restore(self) -> None:
-        """在主线程恢复状态"""
+        """恢复状态（需在主线程调用）"""
         self._right_text = "就绪"
         self._refresh_right()
 
