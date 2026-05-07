@@ -128,6 +128,7 @@ class IndexManager:
         logger.debug("trigger_background_reindex called")
         def _bg_work():
             try:
+                print(f"[DEBUG] _bg_work started, search_path={self.search_path}", flush=True)
                 logger.debug("_bg_work started")
                 with self._reindex_lock:
                     logger.debug("_bg_work got lock")
@@ -177,23 +178,30 @@ class IndexManager:
                     publish_progress()
 
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
+                    print(f"[DEBUG] 开始执行 new_ts.index(), to_index 将在内部计算", flush=True)
                     failed_count = 0
                     try:
                         new_ts.index(self.search_path, progress_callback=on_file_indexed)
+                        print(f"[DEBUG] new_ts.index() 执行完成", flush=True)
                     except FileNotFoundError:
                         new_ts.documents = []
+                        print(f"[DEBUG] new_ts.index() 捕获 FileNotFoundError", flush=True)
                     finally:
                         progress_timer.cancel()
                         logger.debug("progress_timer cancelled")
 
                     # 获取失败文件统计
+                    failed_count = 0
                     try:
                         from treesearch.fts import FTS5Index
                         fts = FTS5Index(db_path=self.index_path)
                         failed = fts.get_all_failed_files()
                         failed_count = len(failed) if failed else 0
-                    except Exception:
-                        pass
+                        print(f"[DEBUG] 索引完成，失败文件数: {failed_count}", flush=True)
+                    except Exception as e:
+                        print(f"[DEBUG] 获取失败文件统计失败: {e}", flush=True)
+                        import traceback
+                        traceback.print_exc()
 
                     new_ts.save_index()
                     new_path_map = {}
