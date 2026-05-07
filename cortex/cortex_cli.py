@@ -775,7 +775,53 @@ class NotebookSearchCLI:
 
 def main():
     """主函数 - 启动 TUI"""
+    import os
+    import sqlite3
+    import sys
+    from cortex.config import CortexConfig
     from cortex.tui.app import CortexApp
+    from treesearch.treesearch import TreeSearch
+
+    config = CortexConfig.load()
+    index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
+
+    # Check if index exists and contains documents
+    doc_count = 0
+    if os.path.exists(index_path):
+        try:
+            conn = sqlite3.connect(index_path)
+            cursor = conn.execute("SELECT COUNT(*) FROM documents")
+            doc_count = cursor.fetchone()[0]
+            conn.close()
+        except Exception:
+            pass  # Corrupt or missing table — treat as empty
+
+    if doc_count == 0:
+        search_path = config.search_path
+        try:
+            response = input(
+                f"当前目录 '{search_path}' 尚未建立索引，是否创建？ [Y/n] "
+            ).strip().lower()
+        except EOFError:
+            print("当前目录尚未建立索引，请在交互式终端中运行或先手动创建索引。")
+            sys.exit(1)
+
+        if response and response not in ("y", "yes"):
+            print("已取消。如需进入 TUI，请先建立索引。")
+            sys.exit(1)
+
+        print("正在创建索引...")
+
+        def on_progress(current_file: str, processed: int, total: int):
+            print(f"Indexing [{processed}/{total}] {current_file}")
+
+        try:
+            ts = TreeSearch(search_path, db_path=index_path)
+            ts.index(progress_callback=on_progress)
+            print("索引创建完成。")
+        except Exception as e:
+            print(f"索引创建失败: {e}")
+            sys.exit(1)
 
     app = CortexApp()
     app.run(mouse=True)
