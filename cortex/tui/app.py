@@ -8,16 +8,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# 开启 DEBUG 日志到文件
-import pathlib
-log_dir = pathlib.Path(".cortex") / "logs"
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / "cortex.log"
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file)]
-)
+# 统一日志配置：使用 planify 的 setup_logging
+from planify.core.logging_config import setup_logging
+logs_dir = Path(".cortex") / "logs"
+setup_logging(log_dir=logs_dir, console_output=False)
 
 from textual.app import App, ComposeResult
 from textual.worker import Worker, get_current_worker
