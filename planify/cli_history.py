@@ -208,13 +208,17 @@ def _read_key_win32() -> tuple[str, str]:
             second_ord = second_raw[0]
         else:
             second_ord = ord(second_raw)
-        if second_ord == 72:
+        # Windows 虚拟键码：VK_UP=0x26, VK_DOWN=0x28, VK_LEFT=0x25, VK_RIGHT=0x27
+        # 但 getch() 在某些配置下返回扫描码，需要同时处理
+        # 扫描码：上=72(0x48), 下=80(0x50), 左=75(0x4B), 右=77(0x4D)
+        # 虚拟键码：上=38(0x26), 下=40(0x28), 左=37(0x25), 右=39(0x27)
+        if second_ord in (72, 38):  # Up arrow
             return ("up", "")
-        if second_ord == 80:
+        if second_ord in (80, 40):  # Down arrow
             return ("down", "")
-        if second_ord == 77:
+        if second_ord in (77, 39):  # Right arrow
             return ("right", "")
-        if second_ord == 75:
+        if second_ord in (75, 37):  # Left arrow
             return ("left", "")
         return ("other", "")
 
