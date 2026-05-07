@@ -5,12 +5,15 @@
 """
 import json
 import os
-from unittest.mock import patch, AsyncMock
+import tempfile
+import shutil
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 from treesearch.indexer import (
     md_to_tree,
     text_to_tree,
+    build_index,
     _extract_md_headings,
     _detect_headings,
     _build_tree,
@@ -213,3 +216,43 @@ class TestTextToTree:
         )
         assert result["doc_name"] == "untitled"
         assert len(result["structure"]) > 0
+
+
+async def test_build_index_progress_callback():
+    """progress_callback should receive (file_path, processed, total)."""
+    tmpdir = tempfile.mkdtemp()
+
+    # Create two temp files
+    md_path = os.path.join(tmpdir, "doc.md")
+    with open(md_path, "w") as f:
+        f.write("# Hello\n\nWorld\n")
+
+    txt_path = os.path.join(tmpdir, "notes.txt")
+    with open(txt_path, "w") as f:
+        f.write("Some notes\n")
+
+    db_path = os.path.join(tmpdir, "test.db")
+    callback = MagicMock()
+
+    await build_index(
+        paths=[tmpdir],
+        db_path=db_path,
+        force=True,
+        progress_callback=callback,
+    )
+
+    # Should have been called twice (once per file)
+    assert callback.call_count == 2
+
+    # First call: processed=1, total=2
+    first_call = callback.call_args_list[0]
+    assert first_call[0][1] == 1
+    assert first_call[0][2] == 2
+
+    # Second call: processed=2, total=2
+    second_call = callback.call_args_list[1]
+    assert second_call[0][1] == 2
+    assert second_call[0][2] == 2
+
+    # Cleanup
+    shutil.rmtree(tmpdir, ignore_errors=True)
