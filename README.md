@@ -47,6 +47,12 @@ pipx ensurepath
 # Install directly from GitHub (no clone needed)
 pipx install "cortex @ git+https://github.com/zhlhaohao/cortex"
 cortex
+
+# Upgrade to the latest version
+pipx upgrade cortex
+
+# Uninstall
+pipx uninstall cortex
 ```
 
 ### Development Setup (Virtual Environment)

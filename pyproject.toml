@@ -27,59 +27,48 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-    "tqdm>=4.42",
+    "aiosmtplib==3.0.1",
+    "anthropic>=0.25.0",
+    "beautifulsoup4>=4.12.0",
+    "borax>=4.1.0",
+    "cryptography>=42.0.0",
+    "dateparser==1.2.0",
+    "defusedxml>=0.7.1",
+    "httpx>=0.27.1",
     "jieba>=0.42",
+    "lxml>=5.0.0",
+    "markitdown>=0.1.0",
+    "openai>=1.10.0",
+    "openpyxl>=3.1.0",
+    "passlib[bcrypt]>=1.7.4",
     "pathspec>=0.11",
+    "pdf2image>=1.16.3",
+    "pdfplumber>=0.10.0",
+    "Pillow>=10.0.0",
+    "pydantic>=2.11.0,<3.0.0",
+    "pydantic-settings>=2.5.2",
+    "pymupdf>=1.27.0",
+    "PyJWT[crypto]>=2.8.0,<2.9.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "textual>=0.47.0",
+    "tqdm>=4.42",
+    "watchdog>=3.0",
+    "zhipuai>=2.1.0",
 ]
 
 [project.optional-dependencies]
-pdf = ["pymupdf>=1.24"]
-docx = ["python-docx>=0.8"]
-excel = ["openpyxl>=3.1"]
-html = ["beautifulsoup4>=4.12"]
 fts5 = ["pysqlite3-binary>=0.5"]
 treesitter = ["tree-sitter-languages>=1.10"]
-watch = ["watchdog>=3.0"]
 langchain = ["langchain-core>=0.1"]
 llamaindex = ["llama-index-core>=0.10"]
 integrations = ["langchain-core>=0.1", "llama-index-core>=0.10"]
 all = [
-    "pymupdf>=1.24",
-    "python-docx>=0.8",
-    "openpyxl>=3.1",
-    "beautifulsoup4>=4.12",
     "tree-sitter-languages>=1.10",
-    "watchdog>=3.0",
 ]
-cortex = [
-    "textual>=0.47.0",
-    "pydantic>=2.11.0,<3.0.0",
-    "pydantic-settings>=2.5.2",
-    "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
-    "cryptography>=42.0.0",
-    "openai>=1.10.0",
-    "PyJWT[crypto]>=2.8.0,<2.9.0",
-    "zhipuai>=2.1.0",
-    "dateparser==1.2.0",
-    "aiosmtplib==3.0.1",
-    "httpx>=0.27.1",
-    "python-dotenv>=1.0.0",
-    "borax>=4.1.0",
-    "anthropic>=0.25.0",
-    "defusedxml>=0.7.1",
-    "lxml>=5.0.0",
-    "pypdf>=4.0.0",
-    "pdfplumber>=0.10.0",
-    "pdf2image>=1.16.3",
-    "Pillow>=10.0.0",
-    "openpyxl>=3.1.0",
-    "pymupdf>=1.27.0",
-    "python-docx>=1.0.0",
-    "markitdown>=0.1.0",
-    "beautifulsoup4>=4.12.0",
-    "watchdog>=3.0",
-]
+cortex = []
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
