@@ -1349,6 +1349,7 @@ async def build_index(
     )
     total_files = len(expanded)
     processed_counter = [0]
+    _progress_lock = asyncio.Lock()
     if not expanded:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
@@ -1522,6 +1523,10 @@ async def build_index(
         if excluded:
             excluded_count = len(excluded)
             logger.info("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
+            for fp in excluded:
+                processed_counter[0] += 1
+                if progress_callback:
+                    progress_callback(fp, processed_counter[0], total_files)
 
     logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
 
@@ -1564,9 +1569,10 @@ async def build_index(
                 result["source_type"] = source_type
                 _file_timings[fp] = (source_type, time.monotonic() - t0)
                 # Call progress callback if provided
-                processed_counter[0] += 1
-                if progress_callback:
-                    progress_callback(fp, processed_counter[0], total_files)
+                async with _progress_lock:
+                    processed_counter[0] += 1
+                    if progress_callback:
+                        progress_callback(fp, processed_counter[0], total_files)
                 return result
             except Exception as e:
                 logger.warning("Failed to index %s: %s", fp, e)
@@ -1574,6 +1580,10 @@ async def build_index(
                 abs_fp = os.path.abspath(fp)
                 fts.upsert_failed_file(abs_fp, str(e), file_hashes.get(abs_fp, ""))
                 _file_timings[fp] = ("(failed)", time.monotonic() - t0)
+                async with _progress_lock:
+                    processed_counter[0] += 1
+                    if progress_callback:
+                        progress_callback(fp, processed_counter[0], total_files)
                 return None
             finally:
                 _parse_bar.update()
