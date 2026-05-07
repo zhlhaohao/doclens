@@ -10,7 +10,7 @@ from typing import Optional
 
 # 开启 DEBUG 日志到文件
 import pathlib
-log_dir = pathlib.Path.home() / ".cortex" / "logs"
+log_dir = pathlib.Path(".cortex") / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "cortex.log"
 logging.basicConfig(
