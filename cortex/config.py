@@ -125,25 +125,6 @@ class CortexConfig(BaseSettings):
             traceback.print_exc()
             raise
 
-        # 复制 .env.example -> ~/.cortex/.env
-        env_example = pkg_dir / ".env.example"
-        print(f"[DEBUG] env_example = {env_example}, exists = {env_example.exists()}")
-        if env_example.exists():
-            env_dest.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
-            print(f"已创建配置文件: {env_dest}")
-
-        # 复制 skills/
-        skills_src = pkg_dir / "skills"
-        skills_dest = global_dir / "skills"
-        if skills_src.exists() and not skills_dest.exists():
-            shutil.copytree(skills_src, skills_dest)
-            print(f"已复制技能目录: {skills_dest}")
-
-        print("\n请在以下文件中设置大模型 API 密钥:")
-        print(f"  {env_dest}")
-        print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
-        sys.exit(0)
-
     @classmethod
     def load(cls) -> "CortexConfig":
         """从 ~/.cortex/.env 或 {cwd}/.cortex/.env 加载配置，失败则降级到环境变量"""
