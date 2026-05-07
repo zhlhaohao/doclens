@@ -450,6 +450,7 @@ class NotebookSearchCLI:
 ║    /team             显示团队列表                               ║
 ║    /inbox            显示收件箱                                 ║
 ║    /failed          显示解析失败的文件                         ║
+║    /clearfailed     清空解析失败的文件记录                     ║
 ║                                                              ║
 ║  默认输入（无斜杠前缀）                                        ║
 ║    <自然语言消息>   交给 Agent 处理                            ║
@@ -737,7 +738,7 @@ class NotebookSearchCLI:
                 elif cmd in ("compact",):
                     self.cmd_compact()
 
-                elif cmd in ("tasks", "team", "inbox", "failed"):
+                elif cmd in ("tasks", "team", "inbox", "failed", "clearfailed"):
                     self._ensure_agent()
                     _, self._agent_history = self.agent.handle_slash_command(
                         cmd, "", self._agent_history
