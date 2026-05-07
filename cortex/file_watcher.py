@@ -103,6 +103,7 @@ class FileWatcher:
 
     def _on_change(self, file_path: str):
         """收到文件变化事件，重置防抖定时器"""
+        logger.debug("FileWatcher _on_change: %s", file_path)
         if self._timer:
             self._timer.cancel()
         self._timer = threading.Timer(self._debounce, self._do_reindex)
@@ -111,11 +112,14 @@ class FileWatcher:
 
         # 发布文件变化事件
         if self._on_change_callback:
+            logger.debug("FileWatcher calling callback for: %s", file_path)
             self._on_change_callback(file_path)
 
     def _do_reindex(self):
         """后台线程执行 reindex，完成后设置 pending swap"""
+        logger.debug("_do_reindex called")
         if self._reindexing:
+            logger.debug("_do_reindex: already reindexing, returning")
             return
         self._reindexing = True
         try:
