@@ -1446,6 +1446,8 @@ async def build_index(
                 # source_path lookup catches both same-name and moved files.
                 if fts.get_doc_id_by_source_path(abs_fp) is not None:
                     skipped.append(fp)
+                    if progress_callback:
+                        progress_callback(fp)
                     continue
         to_index.append(fp)
 

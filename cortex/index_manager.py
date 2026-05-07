@@ -169,6 +169,9 @@ class IndexManager:
                     progress_timer.start()
                     logger.debug("progress_timer started")
 
+                    # 立即发布一次初始状态（如果索引快速完成，Timer 不会触发）
+                    publish_progress()
+
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
                     try:
                         new_ts.index(self.search_path, progress_callback=on_file_indexed)
