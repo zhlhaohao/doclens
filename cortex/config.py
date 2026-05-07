@@ -18,9 +18,13 @@ def get_global_cortex_dir() -> Path:
 
 
 def _get_package_dir() -> Path:
-    """Return the directory containing the cortex package."""
-    import cortex as _pkg
-    return Path(os.path.dirname(os.path.abspath(_pkg.__file__)))
+    """Return the directory containing the cortex package source files.
+
+    Uses cortex_cli.__file__ to find the package root, which resolves
+    correctly for both editable installs and pipx venv installations.
+    """
+    import cortex.cortex_cli as _m
+    return Path(_m.__file__).parent
 
 
 class CortexConfig(BaseSettings):
@@ -99,7 +103,7 @@ class CortexConfig(BaseSettings):
             print(f"[DEBUG] after mkdir: global_dir = {global_dir}, exists = {global_dir.exists()}")
 
             pkg_dir = _get_package_dir()
-            print(f"[DEBUG] pkg_dir = {pkg_dir}")
+            print(f"[DEBUG] pkg_dir = {pkg_dir}, __file__ = {__file__}")
             print(f"首次运行，正在初始化配置目录: {global_dir}")
 
             # 复制 .env.example -> ~/.cortex/.env
