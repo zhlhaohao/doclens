@@ -13,10 +13,8 @@ from pydantic_settings import BaseSettings
 
 
 def get_global_cortex_dir() -> Path:
-    """返回全局配置目录 ~/.cortex，不存在则自动创建"""
-    p = Path.home() / ".cortex"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    """返回全局配置目录 ~/.cortex（已由 _init_first_run 保证存在）"""
+    return Path.home() / ".cortex"
 
 
 def _get_package_dir() -> Path:
@@ -90,6 +88,9 @@ class CortexConfig(BaseSettings):
 
         if env_dest.exists():
             return  # 已有 .env，跳过
+
+        # 创建 ~/.cortex 目录（如果还不存在）
+        global_dir.mkdir(parents=True, exist_ok=True)
 
         pkg_dir = _get_package_dir()
         print(f"首次运行，正在初始化配置目录: {global_dir}")
