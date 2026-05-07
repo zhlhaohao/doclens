@@ -28,7 +28,7 @@ SUPPORTED_FORMATS = {
     '.docx': ('Word文档', 'docx'),
     '.xlsx': ('Excel表格', 'openpyxl'),
     '.xls': ('Excel表格', 'openpyxl'),
-    '.pptx': ('PowerPoint', 'pptx'),
+    '.pptx': ('PowerPoint', 'markitdown'),
 }
 
 
