@@ -218,7 +218,7 @@ def _read_key_win32() -> tuple[str, str]:
             return ("left", "")
         return ("other", "")
 
-    # ANSI ESC 序列（VS Code 集成终端的箭头键）
+    # ANSI ESC 序列（VS Code 集成终端 / Windows Terminal / MSYS2 的箭头键）
     if first_ord == 0x1b:
         second_raw = msvcrt.getch()
         if isinstance(second_raw, int):
@@ -227,7 +227,11 @@ def _read_key_win32() -> tuple[str, str]:
             second_ord = second_raw[0]
         else:
             second_ord = ord(second_raw)
-        if second_ord == 91:  # '['
+
+        # 两种 ANSI 序列格式：
+        # 1. ESC [ A/B/C/D (xterm 风格，第二个字节是 '[' = 91)
+        # 2. ESC O A/B/C/D (部分终端风格，第二个字节是 'O' = 79)
+        if second_ord in (91, 79):  # '[' 或 'O'
             third_raw = msvcrt.getch()
             if isinstance(third_raw, int):
                 third_ord = third_raw
@@ -235,14 +239,17 @@ def _read_key_win32() -> tuple[str, str]:
                 third_ord = third_raw[0]
             else:
                 third_ord = ord(third_raw)
-            if third_ord == 65:  # 'A'
+            # 'A' = 65 (上), 'B' = 66 (下), 'C' = 67 (右), 'D' = 68 (左)
+            if third_ord == 65:
                 return ("up", "")
-            if third_ord == 66:  # 'B'
+            if third_ord == 66:
                 return ("down", "")
-            if third_ord == 67:  # 'C'
+            if third_ord == 67:
                 return ("right", "")
-            if third_ord == 68:  # 'D'
+            if third_ord == 68:
                 return ("left", "")
+            # 其他情况不消费，直接返回
+            return ("other", "")
         # ESC 键：清除当前输入
         return ("esc_clear", "")
 
