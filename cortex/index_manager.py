@@ -173,6 +173,7 @@ class IndexManager:
                     progress_timer.start()
                     logger.debug("progress_timer started")
 
+                    logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
                     try:
                         new_ts.index(self.search_path)
                     finally:
