@@ -274,6 +274,7 @@ class CortexApp(App):
             "  /tasks            显示任务列表\n"
             "  /team             显示团队列表\n"
             "  /inbox            显示收件箱\n"
+            "  /failed          显示解析失败的文件\n"
             "\n"
             "━━━ 默认输入（无斜杠前缀）━━━\n"
             "  <自然语言消息>    交给 Agent 处理\n"
