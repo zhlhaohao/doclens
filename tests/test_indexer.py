@@ -218,41 +218,38 @@ class TestTextToTree:
         assert len(result["structure"]) > 0
 
 
+@pytest.mark.asyncio
 async def test_build_index_progress_callback():
     """progress_callback should receive (file_path, processed, total)."""
-    tmpdir = tempfile.mkdtemp()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create two temp files
+        md_path = os.path.join(tmpdir, "doc.md")
+        with open(md_path, "w") as f:
+            f.write("# Hello\n\nWorld\n")
 
-    # Create two temp files
-    md_path = os.path.join(tmpdir, "doc.md")
-    with open(md_path, "w") as f:
-        f.write("# Hello\n\nWorld\n")
+        txt_path = os.path.join(tmpdir, "notes.txt")
+        with open(txt_path, "w") as f:
+            f.write("Some notes\n")
 
-    txt_path = os.path.join(tmpdir, "notes.txt")
-    with open(txt_path, "w") as f:
-        f.write("Some notes\n")
+        db_path = os.path.join(tmpdir, "test.db")
+        callback = MagicMock()
 
-    db_path = os.path.join(tmpdir, "test.db")
-    callback = MagicMock()
+        await build_index(
+            paths=[tmpdir],
+            db_path=db_path,
+            force=True,
+            progress_callback=callback,
+        )
 
-    await build_index(
-        paths=[tmpdir],
-        db_path=db_path,
-        force=True,
-        progress_callback=callback,
-    )
+        # Should have been called twice (once per file)
+        assert callback.call_count == 2
 
-    # Should have been called twice (once per file)
-    assert callback.call_count == 2
+        # First call: processed=1, total=2
+        first_call = callback.call_args_list[0]
+        assert first_call[0][1] == 1
+        assert first_call[0][2] == 2
 
-    # First call: processed=1, total=2
-    first_call = callback.call_args_list[0]
-    assert first_call[0][1] == 1
-    assert first_call[0][2] == 2
-
-    # Second call: processed=2, total=2
-    second_call = callback.call_args_list[1]
-    assert second_call[0][1] == 2
-    assert second_call[0][2] == 2
-
-    # Cleanup
-    shutil.rmtree(tmpdir, ignore_errors=True)
+        # Second call: processed=2, total=2
+        second_call = callback.call_args_list[1]
+        assert second_call[0][1] == 2
+        assert second_call[0][2] == 2
