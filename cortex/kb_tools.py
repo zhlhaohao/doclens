@@ -157,6 +157,45 @@ def build_kb_tools(
 # 搜索辅助函数
 # ---------------------------------------------------------------------------
 
+def _build_fts5_query(query_tokens: dict) -> str:
+    """将结构化查询转换为 FTS5 查询语法。
+
+    Args:
+        query_tokens: 结构化查询字典，支持以下类型：
+            - {"type": "and", "terms": [...], "exclude": [...]}  # 所有词都匹配，可选排除
+            - {"type": "or", "terms": [...]}  # 任一词匹配
+            - {"type": "not", "term": "word"}  # 排除该词
+            - {"type": "phrase", "text": "exact phrase"}  # 短语精确匹配
+
+    Returns:
+        FTS5 查询字符串
+    """
+    qtype = query_tokens.get("type", "").lower()
+
+    if qtype == "and":
+        terms = query_tokens.get("terms", [])
+        exclude = query_tokens.get("exclude", [])
+        parts = list(terms)
+        for ex in exclude:
+            parts.append(f"-{ex}")
+        return " ".join(parts)
+
+    elif qtype == "or":
+        terms = query_tokens.get("terms", [])
+        return " OR ".join(terms)
+
+    elif qtype == "not":
+        term = query_tokens.get("term", "")
+        return f"-{term}"
+
+    elif qtype == "phrase":
+        text = query_tokens.get("text", "")
+        return f'"{text}"'
+
+    else:
+        raise ValueError(f"Unknown query type: {qtype}")
+
+
 def _build_hierarchy_path(node: dict, doc_nodes_map: dict[str, list[dict]], doc_title: str) -> str:
     """构建节点在文档树中的层级路径。"""
     node_title = node.get("title", "")
@@ -510,8 +549,20 @@ def _find_section_text(
 
             if title and section_lower in title.lower():
                 text = node.get("text", "") or ""
+                # 递归收集所有子节点的内容
+                def _collect_all_text(n):
+                    parts = [text] if text else []
+                    for child in n.get("nodes", []):
+                        child_text = child.get("text", "") or ""
+                        if child_text:
+                            parts.append(child_text)
+                        parts.extend(_collect_all_text(child))
+                    return parts
+
+                all_texts = _collect_all_text(node)
+                combined_text = "\n\n".join(all_texts)
                 hierarchy = " > ".join(current_path)
-                return (title, text, hierarchy)
+                return (title, combined_text, hierarchy)
 
             if children:
                 queue.append((children, current_path))
