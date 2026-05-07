@@ -775,9 +775,7 @@ class NotebookSearchCLI:
 
 def main():
     """主函数 - 启动 TUI"""
-    import os
     import sqlite3
-    import sys
     from cortex.config import CortexConfig
     from cortex.tui.app import CortexApp
     from treesearch.treesearch import TreeSearch
@@ -789,12 +787,11 @@ def main():
     doc_count = 0
     if os.path.exists(index_path):
         try:
-            conn = sqlite3.connect(index_path)
-            cursor = conn.execute("SELECT COUNT(*) FROM documents")
-            doc_count = cursor.fetchone()[0]
-            conn.close()
-        except Exception:
-            pass  # Corrupt or missing table — treat as empty
+            with sqlite3.connect(index_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM documents")
+                doc_count = cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"[警告] 无法读取索引: {e}")
 
     if doc_count == 0:
         search_path = config.search_path
@@ -804,6 +801,9 @@ def main():
             ).strip().lower()
         except EOFError:
             print("当前目录尚未建立索引，请在交互式终端中运行或先手动创建索引。")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\n已取消。")
             sys.exit(1)
 
         if response and response not in ("y", "yes"):
