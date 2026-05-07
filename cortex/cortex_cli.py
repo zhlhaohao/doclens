@@ -773,49 +773,6 @@ class NotebookSearchCLI:
                 print(f"\n[错误] {e}\n")
 
 
-def _get_cortex_package_dir() -> str:
-    """Return the directory containing the cortex package."""
-    import cortex as _cortex_pkg
-    return os.path.dirname(os.path.dirname(os.path.abspath(_cortex_pkg.__file__)))
-
-
-def _ensure_global_config():
-    """首次运行引导：如果 ~/.cortex/.env 不存在，则创建并初始化配置。"""
-    global_cortex_dir = os.path.expanduser("~/.cortex")
-    env_dest = os.path.join(global_cortex_dir, ".env")
-
-    if os.path.exists(env_dest):
-        return
-
-    pkg_dir = _get_cortex_package_dir()
-
-    # 创建 ~/.cortex 目录
-    os.makedirs(global_cortex_dir, exist_ok=True)
-    print(f"首次运行，正在初始化配置目录: {global_cortex_dir}")
-
-    # 拷贝 .env.example -> ~/.cortex/.env
-    env_example = os.path.join(pkg_dir, ".env.example")
-    if os.path.exists(env_example):
-        with open(env_example, "r", encoding="utf-8") as src:
-            content = src.read()
-        with open(env_dest, "w", encoding="utf-8") as dst:
-            dst.write(content)
-        print(f"已创建配置文件: {env_dest}")
-
-    # 拷贝 skills 目录
-    skills_src = os.path.join(pkg_dir, "skills")
-    skills_dest = os.path.join(global_cortex_dir, "skills")
-    if os.path.exists(skills_src) and not os.path.exists(skills_dest):
-        import shutil
-        shutil.copytree(skills_src, skills_dest)
-        print(f"已复制技能目录: {skills_dest}")
-
-    print("\n请在以下文件中设置大模型 API 密钥:")
-    print(f"  {env_dest}")
-    print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
-    sys.exit(0)
-
-
 def main():
     """主函数 - 启动 TUI"""
     import sqlite3
@@ -823,9 +780,7 @@ def main():
     from cortex.tui.app import CortexApp
     from treesearch.treesearch import TreeSearch
 
-    _ensure_global_config()
-
-    config = CortexConfig.load()
+    config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
     index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
 
     # Check if index exists and contains documents
