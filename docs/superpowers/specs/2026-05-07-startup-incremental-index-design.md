@@ -68,13 +68,13 @@ def _startup_sync_check(self) -> None:
 #### 3. 新增 `_on_startup_sync_done()` 回调
 
 ```python
-def _on_startup_sync_done(self, doc_count: int) -> None:
+def _on_startup_sync_done(self, success: bool, doc_count: int, failed_count: int) -> None:
     """启动同步完成后，仅在更新了文件时显示状态。"""
-    self.call_from_thread(self._show_startup_sync_result, doc_count)
+    self.call_from_thread(self._show_startup_sync_result, success, doc_count, failed_count)
 
-def _show_startup_sync_result(self, doc_count: int) -> None:
+def _show_startup_sync_result(self, success: bool, doc_count: int, failed_count: int) -> None:
     """主线程中显示同步结果。"""
-    if doc_count > 0:
+    if success and doc_count > 0:
         EventBus().publish({
             "event_type": "indexing",
             "status": f"启动同步完成，已更新 {doc_count} 个文件",
