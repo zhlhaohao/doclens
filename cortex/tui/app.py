@@ -593,6 +593,9 @@ class CortexApp(App):
             content.write(r)
         content.stop_recording()
 
+        # 滚动到底部以展示最新结果
+        content.scroll_end(animate=False)
+
         header.set_mode("就绪")
 
     def _on_search_error(self, error_msg: str) -> None:

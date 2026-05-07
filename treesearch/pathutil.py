@@ -16,7 +16,7 @@ DEFAULT_IGNORE_DIRS: frozenset[str] = frozenset({
     ".git", ".hg", ".svn",
     "node_modules", "__pycache__", ".venv", "venv", "env",
     "dist", "build", ".tox", ".mypy_cache", ".pytest_cache",
-    ".eggs",
+    ".eggs", ".cortex",
 })
 
 # Patterns for directory names (matched with fnmatch-style)
