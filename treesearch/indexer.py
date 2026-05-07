@@ -1253,6 +1253,7 @@ async def build_index(
     respect_gitignore: bool = True,
     max_files: int = MAX_DIR_FILES,
     prune: Optional[bool] = None,
+    progress_callback: Optional[callable] = None,
     **kwargs,
 ) -> list[Document]:
     """
@@ -1513,6 +1514,9 @@ async def build_index(
                 source_type = SOURCE_TYPE_MAP.get(ext, "text")
                 result["source_type"] = source_type
                 _file_timings[fp] = (source_type, time.monotonic() - t0)
+                # Call progress callback if provided
+                if progress_callback:
+                    progress_callback(fp)
                 return result
             except Exception as e:
                 logger.warning("Failed to index %s: %s", fp, e)

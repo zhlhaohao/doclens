@@ -143,6 +143,7 @@ class TreeSearch:
             ignore_dirs=self._ignore_dirs,
             respect_gitignore=self._respect_gitignore,
             max_files=self._max_files,
+            progress_callback=kwargs.pop("progress_callback", None),
             **kwargs
         )
         self.documents = list(result)
