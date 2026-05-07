@@ -155,6 +155,8 @@ class IndexManager:
                     import time as time_module
 
                     def publish_progress():
+                        logger.debug("publish_progress called, _current_indexing_file=%s, _indexed_count=%s",
+                                     new_ts._current_indexing_file, new_ts._indexed_count)
                         if new_ts._current_indexing_file:
                             from cortex.event_bus import EventBus
                             bus = EventBus.get_instance()
@@ -164,16 +166,19 @@ class IndexManager:
                                 "indexed_count": new_ts._indexed_count,
                                 "timestamp": time_module.time(),
                             })
+                            logger.debug("indexing event published")
 
                     progress_timer = threading.Timer(1.0, publish_progress)
                     progress_timer.daemon = True
                     progress_timer.start()
+                    logger.debug("progress_timer started")
 
                     try:
                         new_ts.index(self.search_path)
                     finally:
                         new_ts.index_document = original_index_doc
                         progress_timer.cancel()
+                        logger.debug("progress_timer cancelled")
                 except FileNotFoundError:
                     new_ts.documents = []
                 new_ts.save_index()
