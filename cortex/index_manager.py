@@ -224,6 +224,38 @@ class IndexManager:
             self._ts = TreeSearch(db_path=self.index_path)
 
         mode = "全量重建" if force else "增量更新"
+
+        # 包装 index_document 方法来追踪进度
+        original_index_doc = self._ts.index_document
+        self._current_indexing_file = None
+        self._indexed_count = 0
+
+        def wrapped_index_doc(doc, **kwargs):
+            self._current_indexing_file = doc.doc_name if hasattr(doc, 'doc_name') else '未知'
+            self._indexed_count += 1
+            return original_index_doc(doc, **kwargs)
+
+        self._ts.index_document = wrapped_index_doc
+
+        # 启动进度发布 Timer
+        import threading
+        import time as time_module
+
+        def publish_progress():
+            if self._current_indexing_file:
+                from cortex.event_bus import EventBus
+                bus = EventBus.get_instance()
+                bus.publish("status", {
+                    "event_type": "indexing",
+                    "current_file": os.path.basename(self._current_indexing_file),
+                    "indexed_count": self._indexed_count,
+                    "timestamp": time_module.time(),
+                })
+
+        progress_timer = threading.Timer(1.0, publish_progress)
+        progress_timer.daemon = True
+        progress_timer.start()
+
         print(f"[正在{mode}: {self.search_path}]")
         try:
             self._ts.index(self.search_path, force=force)
@@ -232,6 +264,9 @@ class IndexManager:
             self._ts.documents = []
             self._path_map = {}
             return
+        finally:
+            self._ts.index_document = original_index_doc
+            progress_timer.cancel()
         self.build_path_map()
 
         # 展示增量统计
