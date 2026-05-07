@@ -8,8 +8,16 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# 开启 DEBUG 日志
-logging.basicConfig(level=logging.DEBUG, format="%(name)s - %(levelname)s - %(message)s")
+# 开启 DEBUG 日志到文件
+import pathlib
+log_dir = pathlib.Path.home() / ".cortex" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "cortex.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(log_file)]
+)
 
 from textual.app import App, ComposeResult
 from textual.worker import Worker, get_current_worker
