@@ -817,7 +817,7 @@ def main():
 
         try:
             ts = TreeSearch(search_path, db_path=index_path)
-            ts.index(progress_callback=on_progress)
+            ts.index(search_path, progress_callback=on_progress)
             print("索引创建完成。")
         except Exception as e:
             print(f"索引创建失败: {e}")
