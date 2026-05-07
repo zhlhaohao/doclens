@@ -147,8 +147,12 @@ async def test_clear_command_clears_content():
 
         content: ContentArea = pilot.app.query_one(ContentArea)
 
-        # Welcome banner should have produced some lines
-        assert len(content.lines) > 0, "Expected welcome banner lines"
+        # Add some content first via /help
+        await _type_and_submit(pilot, "/help")
+        await pilot.pause()
+
+        lines_before = len(content.lines)
+        assert lines_before > 0, "Expected /help to produce lines"
 
         await _type_and_submit(pilot, "/clear")
         await pilot.pause()
