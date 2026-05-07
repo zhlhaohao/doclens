@@ -50,12 +50,37 @@ def setup_logging(
         配置好的日志记录器实例
     """
     if log_dir is None:
-        # 从环境变量读取，默认为 ".cortex/logs"
+        # 优先从环境变量读取
         env_dir = os.environ.get("CORTEX_LOG_DIR")
         if env_dir:
             log_dir = Path(env_dir)
         else:
-            log_dir = Path(".cortex") / "logs"
+            # 从 .env 文件读取（支持 ~/.cortex/.env 或 {cwd}/.cortex/.env）
+            _load_cortex_env()
+            env_dir = os.environ.get("CORTEX_LOG_DIR")
+            if env_dir:
+                log_dir = Path(env_dir)
+            else:
+                log_dir = Path(".cortex") / "logs"
+
+
+def _load_cortex_env():
+    """从 .env 文件加载环境变量（如果尚未加载）"""
+    if os.environ.get("CORTEX_ENV_LOADED"):
+        return
+    try:
+        from dotenv import load_dotenv
+        # 全局配置: ~/.cortex/.env
+        global_env = Path.home() / ".cortex" / ".env"
+        if global_env.exists():
+            load_dotenv(global_env, override=True)
+        # 项目配置: {cwd}/.cortex/.env
+        local_env = Path.cwd() / ".cortex" / ".env"
+        if local_env.exists():
+            load_dotenv(local_env, override=True)
+        os.environ["CORTEX_ENV_LOADED"] = "1"
+    except ImportError:
+        pass  # dotenv 未安装
 
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
