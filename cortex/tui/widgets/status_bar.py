@@ -28,6 +28,7 @@ class StatusBar(Horizontal):
         super().__init__()
         self._right_text = "就绪"
         self._unsubscribe = None
+        self._auto_reset_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static("", id="status-left")
@@ -41,6 +42,8 @@ class StatusBar(Horizontal):
 
     def on_unmount(self) -> None:
         """取消订阅"""
+        if self._auto_reset_timer:
+            self._auto_reset_timer.cancel()
         if self._unsubscribe:
             self._unsubscribe()
 
@@ -48,6 +51,11 @@ class StatusBar(Horizontal):
         """处理状态事件"""
         event_type = payload.get("event_type")
         message = payload.get("message", "")
+
+        # 取消之前的自动重置定时器
+        if self._auto_reset_timer:
+            self._auto_reset_timer.cancel()
+            self._auto_reset_timer = None
 
         if event_type == "file_change":
             count = payload.get("count", 0)
@@ -63,6 +71,22 @@ class StatusBar(Horizontal):
         else:
             self._right_text = message
 
+        self._refresh_right()
+
+        # file_change 事件 3 秒后自动恢复
+        if event_type == "file_change":
+            import threading
+            self._auto_reset_timer = threading.Timer(3.0, self._restore_status)
+            self._auto_reset_timer.daemon = True
+            self._auto_reset_timer.start()
+
+    def _restore_status(self) -> None:
+        """恢复原来的状态文本"""
+        self.call_from_thread(self._do_restore)
+
+    def _do_restore(self) -> None:
+        """在主线程恢复状态"""
+        self._right_text = "就绪"
         self._refresh_right()
 
     def _refresh_right(self) -> None:
