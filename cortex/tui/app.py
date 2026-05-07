@@ -10,8 +10,7 @@ from typing import Optional
 
 # 统一日志配置：使用 planify 的 setup_logging
 from planify.core.logging_config import setup_logging
-logs_dir = Path(".cortex") / "logs"
-setup_logging(log_dir=logs_dir, console_output=False)
+setup_logging(console_output=False)
 
 from textual.app import App, ComposeResult
 from textual.worker import Worker, get_current_worker

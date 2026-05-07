@@ -487,7 +487,7 @@ def main(argv: list[str] | None = None):
         args = parser.parse_args(idx_argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
         from planify.core.logging_config import setup_logging
-        setup_logging(log_dir=Path(".cortex") / "logs", console_output=False)
+        setup_logging(console_output=False)
         asyncio.run(_run_index(args))
 
     elif subcmd == "search":
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None):
         args = parser.parse_args(sch_argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
         from planify.core.logging_config import setup_logging
-        setup_logging(log_dir=Path(".cortex") / "logs", console_output=False)
+        setup_logging(console_output=False)
         asyncio.run(_run_search(args))
 
     elif subcmd in ("verify", "watch"):
@@ -522,7 +522,7 @@ def main(argv: list[str] | None = None):
         args = p.parse_args(sub_argv)
         level = logging.INFO if args.verbose else logging.WARNING
         from planify.core.logging_config import setup_logging
-        setup_logging(log_dir=Path(".cortex") / "logs", console_output=False)
+        setup_logging(console_output=False)
         if subcmd == "verify":
             _run_verify(args)
         else:
@@ -533,7 +533,7 @@ def main(argv: list[str] | None = None):
         args = parser.parse_args(argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
         from planify.core.logging_config import setup_logging
-        setup_logging(log_dir=Path(".cortex") / "logs", console_output=False)
+        setup_logging(console_output=False)
         if args.query or args.fts_expression:
             _run_default(args)
         else:

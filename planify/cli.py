@@ -215,8 +215,7 @@ apply_safe_stdio()
 
 # 重新配置日志（使用统一的 setup_logging）
 from planify.core.logging_config import setup_logging
-from pathlib import Path
-setup_logging(log_dir=Path(".cortex") / "logs", console_output=False, log_level=logging.WARNING)
+setup_logging(console_output=False, log_level=logging.WARNING)
 
 # 禁用 SQLAlchemy SQL 日志输出到控制台
 # 使用 propagate=False 彻底阻止 SQL 输出到任何 handler

@@ -4,6 +4,7 @@
 """
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -49,7 +50,12 @@ def setup_logging(
         配置好的日志记录器实例
     """
     if log_dir is None:
-        log_dir = Path(__file__).parent.parent / "logs"
+        # 从环境变量读取，默认为 ".cortex/logs"
+        env_dir = os.environ.get("CORTEX_LOG_DIR")
+        if env_dir:
+            log_dir = Path(env_dir)
+        else:
+            log_dir = Path(".cortex") / "logs"
 
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
