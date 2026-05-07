@@ -1,14 +1,15 @@
 """输入框组件 - 模仿 Claude Code 风格：> 提示符 + 简洁输入 + 历史导航"""
 
+import sys
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.events import Key
+from textual.events import Key, MouseDown
 from textual.message import Message
 from textual.widgets import Input, Static
 
-from planify.cli_history import CommandHistory
+from planify.cli_history import CommandHistory, _get_clipboard_text
 
 
 class InputBox(Horizontal):
@@ -108,3 +109,18 @@ class InputBox(Horizontal):
     def focus_input(self) -> None:
         """重新聚焦输入框"""
         self.query_one("#cmd-input", Input).focus()
+
+    def on_mouse_down(self, event: MouseDown) -> None:
+        """右键粘贴剪贴板内容"""
+        if event.button != 2 or sys.platform != "win32":
+            return
+
+        event.stop()
+        clipboard_text = _get_clipboard_text()
+        if not clipboard_text:
+            return
+
+        input_widget = self.query_one("#cmd-input", Input)
+        pos = input_widget.cursor_position
+        input_widget.value = input_widget.value[:pos] + clipboard_text + input_widget.value[pos:]
+        input_widget.cursor_position = pos + len(clipboard_text)
