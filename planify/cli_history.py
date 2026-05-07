@@ -109,6 +109,51 @@ def _read_char_unix() -> str:
     return ch
 
 
+def _get_clipboard_text() -> str:
+    """获取 Windows 剪贴板文本内容"""
+    import ctypes
+    from ctypes import wintypes
+
+    CF_UNICODETEXT = 13
+
+    class HGLOBAL(ctypes.Structure):
+        pass
+
+    HGLOBAL._fields_ = []
+
+    OpenClipboard = ctypes.windll.user32.OpenClipboard
+    OpenClipboard.argtypes = [wintypes.HWND]
+    OpenClipboard.restype = wintypes.BOOL
+
+    CloseClipboard = ctypes.windll.user32.CloseClipboard
+    CloseClipboard.restype = wintypes.BOOL
+
+    GetClipboardData = ctypes.windll.user32.GetClipboardData
+    GetClipboardData.argtypes = [wintypes.UINT]
+    GetClipboardData.restype = wintypes.HANDLE
+
+    GlobalLock = ctypes.windll.kernel32.GlobalLock
+    GlobalLock.argtypes = [wintypes.HGLOBAL]
+    GlobalLock.restype = wintypes.LPVOID
+
+    GlobalUnlock = ctypes.windll.kernel32.GlobalUnlock
+    GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    GlobalUnlock.restype = wintypes.BOOL
+
+    text = ""
+    if OpenClipboard(None):
+        try:
+            hwnd = GetClipboardData(CF_UNICODETEXT)
+            if hwnd:
+                data = GlobalLock(hwnd)
+                if data:
+                    text = ctypes.c_wchar_p(data).value
+                    GlobalUnlock(hwnd)
+        finally:
+            CloseClipboard()
+    return text
+
+
 def _read_key() -> tuple[str, str]:
     """
     读取一个逻辑按键。
@@ -120,6 +165,7 @@ def _read_key() -> tuple[str, str]:
         - 'backspace': 退格
         - 'up': 上箭头
         - 'down': 下箭头
+        - 'paste': 右键粘贴，value 为剪贴板文本
         - 'ctrl_c': Ctrl+C
         - 'ctrl_d': Ctrl+D
         - 'other': 其他控制键
@@ -211,6 +257,13 @@ def _read_key_win32() -> tuple[str, str]:
         return ("backspace", "")  # 退格键
     if first_ord == 127:
         return ("backspace", "")  # Delete 键
+
+    # 右键点击（粘贴）- Windows 控制台 VK_APPS (0x5D) 或 0x2E
+    # 右键在很多终端模拟器中发送 0x00 或 0xE0 前缀 + 0x2E (VK_CANCEL) 或 0x5D
+    # 检测 0x5D (93) - VK_APPS 通常是右键
+    if first_ord == 93:
+        clipboard_text = _get_clipboard_text()
+        return ("paste", clipboard_text)
 
     # ASCII 可打印字符（32-126）
     if first_ord <= 127:
@@ -412,6 +465,14 @@ def input_with_history(prompt: str, history: CommandHistory) -> str:
                 buf = ""
             cursor_pos = len(buf)
             _redraw_line(prompt, buf, cursor_pos)
+
+        elif kind == "paste":
+            # 右键粘贴：在光标位置插入剪贴板内容
+            clipboard_text = value
+            if clipboard_text:
+                buf = buf[:cursor_pos] + clipboard_text + buf[cursor_pos:]
+                cursor_pos += len(clipboard_text)
+                _redraw_line(prompt, buf, cursor_pos)
 
         elif kind == "ctrl_c":
             sys.stdout.write("\n")
