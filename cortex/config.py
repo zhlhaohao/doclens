@@ -3,7 +3,6 @@ Cortex 配置模块 - 从 .env 文件或环境变量加载配置
 """
 
 import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Optional
@@ -15,16 +14,6 @@ from pydantic_settings import BaseSettings
 def get_global_cortex_dir() -> Path:
     """返回全局配置目录 ~/.cortex（已由 _init_first_run 保证存在）"""
     return Path.home() / ".cortex"
-
-
-def _get_package_dir() -> Path:
-    """Return the directory containing the cortex package source files.
-
-    Uses cortex_cli.__file__ to find the package root, which resolves
-    correctly for both editable installs and pipx venv installations.
-    """
-    import cortex.cortex_cli as _m
-    return Path(_m.__file__).parent
 
 
 class CortexConfig(BaseSettings):
@@ -86,48 +75,55 @@ class CortexConfig(BaseSettings):
 
     @classmethod
     def _init_first_run(cls):
-        """首次运行引导：复制 .env.example 和 skills/ 到 ~/.cortex"""
-        import traceback
+        """首次运行引导：从 GitHub 下载 .env.example 和 skills/ 到 ~/.cortex"""
+        global_dir = get_global_cortex_dir()
+        env_dest = global_dir / ".env"
 
+        if env_dest.exists():
+            return  # 已有 .env，跳过
+
+        global_dir.mkdir(parents=True, exist_ok=True)
+        print(f"首次运行，正在初始化配置目录: {global_dir}")
+
+        # 下载 .env.example
+        env_example_url = (
+            "https://raw.githubusercontent.com/zhlhaohao/cortex/main/cortex/.env.example"
+        )
         try:
-            global_dir = get_global_cortex_dir()
-            print(f"[DEBUG] global_dir = {global_dir}, exists = {global_dir.exists()}")
-            env_dest = global_dir / ".env"
-            print(f"[DEBUG] env_dest = {env_dest}, exists = {env_dest.exists()}")
-
-            if env_dest.exists():
-                return  # 已有 .env，跳过
-
-            # 创建 ~/.cortex 目录（如果还不存在）
-            global_dir.mkdir(parents=True, exist_ok=True)
-            print(f"[DEBUG] after mkdir: global_dir = {global_dir}, exists = {global_dir.exists()}")
-
-            pkg_dir = _get_package_dir()
-            print(f"[DEBUG] pkg_dir = {pkg_dir}, __file__ = {__file__}")
-            print(f"首次运行，正在初始化配置目录: {global_dir}")
-
-            # 复制 .env.example -> ~/.cortex/.env
-            env_example = pkg_dir / ".env.example"
-            print(f"[DEBUG] env_example = {env_example}, exists = {env_example.exists()}")
-            if env_example.exists():
-                env_dest.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
-                print(f"已创建配置文件: {env_dest}")
-
-            # 复制 skills/
-            skills_src = pkg_dir / "skills"
-            skills_dest = global_dir / "skills"
-            if skills_src.exists() and not skills_dest.exists():
-                shutil.copytree(skills_src, skills_dest)
-                print(f"已复制技能目录: {skills_dest}")
-
-            print("\n请在以下文件中设置大模型 API 密钥:")
-            print(f"  {env_dest}")
-            print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
-            sys.exit(0)
+            import urllib.request
+            with urllib.request.urlopen(env_example_url, timeout=10) as resp:
+                env_dest.write_bytes(resp.read())
+            print(f"已下载配置文件: {env_dest}")
         except Exception as e:
-            print(f"[DEBUG] _init_first_run exception: {e}")
-            traceback.print_exc()
-            raise
+            print(f"[警告] 下载 .env.example 失败: {e}")
+            env_dest.write_text("# 请手动创建此文件并设置 PLANIFY_API_KEY\n", encoding="utf-8")
+
+        # 下载 skills/knowledge_base/ 目录
+        skills_dest = global_dir / "skills" / "knowledge_base"
+        if not skills_dest.exists():
+            skills_url = (
+                "https://api.github.com/repos/zhlhaohao/cortex/contents/cortex/skills/knowledge_base"
+            )
+            try:
+                import urllib.request
+                import json
+                with urllib.request.urlopen(skills_url, timeout=10) as resp:
+                    items = json.loads(resp.read().decode())
+                skills_dest.mkdir(parents=True, exist_ok=True)
+                for item in items:
+                    if item["type"] == "file":
+                        file_url = item["download_url"]
+                        file_path = skills_dest / item["name"]
+                        with urllib.request.urlopen(file_url, timeout=10) as f:
+                            file_path.write_bytes(f.read())
+                print(f"已下载技能目录: {skills_dest}")
+            except Exception as e:
+                print(f"[警告] 下载 skills 目录失败: {e}")
+
+        print("\n请在以下文件中设置大模型 API 密钥:")
+        print(f"  {env_dest}")
+        print("\n打开文件后设置: PLANIFY_API_KEY=你的密钥")
+        sys.exit(0)
 
     @classmethod
     def load(cls) -> "CortexConfig":
