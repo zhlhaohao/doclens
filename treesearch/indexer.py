@@ -1375,6 +1375,11 @@ async def build_index(
     fts = FTS5Index(db_path=db_path, tokenize_log_path=os.path.join(os.path.dirname(db_path), "tokenize.log"))
     _lock_handle = _acquire_index_lock(db_path)
 
+    # 如果锁获取失败（_NullLock），说明有其他进程在索引，跳过本次
+    if isinstance(_lock_handle, _NullLock):
+        logger.warning("Index is locked by another process, skipping this indexing run")
+        return []
+
     # Incremental indexing: batch check file hashes via DB
     to_index = []
     skipped = []
