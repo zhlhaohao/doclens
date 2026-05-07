@@ -151,7 +151,7 @@ class IndexManager:
                     current_file = [None]  # 使用列表存储，模拟可变引用
                     indexed_count = [0]
 
-                    def on_file_indexed(file_path: str):
+                    def on_file_indexed(file_path: str, processed: int = 0, total: int = 0):
                         """每索引完一个文件时调用"""
                         current_file[0] = file_path
                         indexed_count[0] += 1
