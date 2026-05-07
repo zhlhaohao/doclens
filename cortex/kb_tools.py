@@ -939,7 +939,7 @@ def _extract_keywords(query_tokens: dict) -> list[str]:
 
     if qtype == "and":
         keywords.extend(query_tokens.get("terms", []))
-        keywords.extend(query_tokens.get("exclude", []))
+        # exclude 关键词不参与 proximity 评分
     elif qtype == "or":
         keywords.extend(query_tokens.get("terms", []))
     elif qtype == "not":
