@@ -213,12 +213,29 @@ def _read_key_win32() -> tuple[str, str]:
         # 扫描码：上=72(0x48), 下=80(0x50), 左=75(0x4B), 右=77(0x4D)
         # 虚拟键码：上=38(0x26), 下=40(0x28), 左=37(0x25), 右=39(0x27)
         if second_ord in (72, 38):  # Up arrow
+            # PowerShell 可能发送 3 字节序列 [0xe0, H, 0xe0]，消费第三个字节
+            try:
+                third = msvcrt.getch()
+            except:
+                pass
             return ("up", "")
         if second_ord in (80, 40):  # Down arrow
+            try:
+                third = msvcrt.getch()
+            except:
+                pass
             return ("down", "")
         if second_ord in (77, 39):  # Right arrow
+            try:
+                third = msvcrt.getch()
+            except:
+                pass
             return ("right", "")
         if second_ord in (75, 37):  # Left arrow
+            try:
+                third = msvcrt.getch()
+            except:
+                pass
             return ("left", "")
         return ("other", "")
 
