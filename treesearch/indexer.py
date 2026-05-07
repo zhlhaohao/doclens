@@ -1152,22 +1152,53 @@ def _acquire_index_lock(db_path: str):
     """
     if not db_path or db_path == ":memory:":
         return _NullLock()
+
+    # Unix: 使用 fcntl.flock
     try:
         import fcntl
     except ImportError:
+        pass
+    else:
+        lock_path = db_path + ".lock"
+        os.makedirs(os.path.dirname(os.path.abspath(lock_path)), exist_ok=True)
+        f = open(lock_path, "w")
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        except OSError as e:
+            f.close()
+            logger.warning("Failed to acquire index lock %s: %s", lock_path, e)
+            return _NullLock()
+
+        class _Handle:
+            def __init__(self, fh):
+                self._fh = fh
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                self.release()
+                return False
+            def release(self) -> None:
+                if self._fh is not None:
+                    try:
+                        fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                    finally:
+                        self._fh.close()
+                        self._fh = None
+
+        return _Handle(f)
+
+    # Windows: 使用 msvcrt.locking
+    try:
+        import msvcrt
+    except ImportError:
+        logger.warning("No file locking available on this platform (no fcntl, no msvcrt)")
         return _NullLock()
 
     lock_path = db_path + ".lock"
     os.makedirs(os.path.dirname(os.path.abspath(lock_path)), exist_ok=True)
-    f = open(lock_path, "w")
-    try:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-    except OSError as e:
-        f.close()
-        logger.warning("Failed to acquire index lock %s: %s", lock_path, e)
-        return _NullLock()
+    f = open(lock_path, "w+")
 
-    class _Handle:
+    class _WindowsHandle:
         def __init__(self, fh):
             self._fh = fh
         def __enter__(self):
@@ -1178,12 +1209,20 @@ def _acquire_index_lock(db_path: str):
         def release(self) -> None:
             if self._fh is not None:
                 try:
-                    fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                    msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 0)
+                except (OSError, IOError):
+                    pass  # Lock auto-released on close on Windows
                 finally:
                     self._fh.close()
                     self._fh = None
 
-    return _Handle(f)
+    try:
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        return _WindowsHandle(f)
+    except (OSError, IOError) as e:
+        f.close()
+        logger.warning("Failed to acquire Windows index lock %s: %s", lock_path, e)
+        return _NullLock()
 
 
 def _file_hash(fp: str, mode: Optional[str] = None) -> str:
