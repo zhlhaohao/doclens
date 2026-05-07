@@ -129,6 +129,8 @@ class IndexManager:
                     logger.debug("_bg_work got lock")
                     # 创建临时 TreeSearch 实例完成索引构建
                     from treesearch import TreeSearch, set_config, TreeSearchConfig
+                    import time as time_module
+
                     abs_path = os.path.abspath(self.index_path)
                     set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
                     new_ts = TreeSearch(db_path=self.index_path)
@@ -139,19 +141,28 @@ class IndexManager:
                                 new_ts.documents = docs
                         except Exception:
                             pass
-                    # 启动进度发布 Timer（TreeSearch 内部处理索引，暂无 per-file 回调）
-                    import time as time_module
+
+                    # 线程安全的共享状态用于追踪进度
+                    current_file = [None]  # 使用列表存储，模拟可变引用
+                    indexed_count = [0]
+
+                    def on_file_indexed(file_path: str):
+                        """每索引完一个文件时调用"""
+                        current_file[0] = file_path
+                        indexed_count[0] += 1
 
                     def publish_progress():
+                        """Timer 回调，发布当前索引进度"""
                         from cortex.event_bus import EventBus
                         bus = EventBus.get_instance()
+                        file_name = os.path.basename(current_file[0]) if current_file[0] else "正在索引..."
                         bus.publish("status", {
                             "event_type": "indexing",
-                            "current_file": "正在索引...",
-                            "indexed_count": 0,
+                            "current_file": file_name,
+                            "indexed_count": indexed_count[0],
                             "timestamp": time_module.time(),
                         })
-                        logger.debug("indexing event published")
+                        logger.debug("indexing event published: %s (%d)", file_name, indexed_count[0])
 
                     progress_timer = threading.Timer(1.0, publish_progress)
                     progress_timer.daemon = True
@@ -160,7 +171,7 @@ class IndexManager:
 
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
                     try:
-                        new_ts.index(self.search_path)
+                        new_ts.index(self.search_path, progress_callback=on_file_indexed)
                     except FileNotFoundError:
                         new_ts.documents = []
                     finally:
