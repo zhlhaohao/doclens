@@ -132,7 +132,10 @@ def _direct_input(prompt: str) -> str:
 
 
 class NotebookSearchCLI:
-    """NotebookSearch 交互式 CLI"""
+    """[已废弃] 旧版纯命令行界面，已由 Textual TUI (CortexApp) 替代。
+
+    保留仅供参考，main() 入口已切换到 cortex.tui.app.CortexApp。
+    """
 
     def __init__(self):
         # 加载配置

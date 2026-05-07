@@ -1,13 +1,18 @@
-"""输入框组件 - 模仿 Claude Code 风格：> 提示符 + 简洁输入"""
+"""输入框组件 - 模仿 Claude Code 风格：> 提示符 + 简洁输入 + 历史导航"""
+
+from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
+from textual.events import Key
 from textual.message import Message
 from textual.widgets import Input, Static
 
+from planify.cli_history import CommandHistory
+
 
 class InputBox(Horizontal):
-    """底部输入框 - Claude Code 风格"""
+    """底部输入框 - Claude Code 风格，支持上下箭头历史导航"""
 
     DEFAULT_CSS = """
     InputBox {
@@ -44,6 +49,12 @@ class InputBox(Horizontal):
             self.value = value
             super().__init__()
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        history_path = Path.home() / ".cortex" / "cli_history" / "history.json"
+        self._history = CommandHistory(history_path)
+        self._saved_input = ""
+
     def compose(self) -> ComposeResult:
         yield Static(">", id="prompt")
         yield Input(
@@ -55,12 +66,42 @@ class InputBox(Horizontal):
         """挂载后自动聚焦输入框"""
         self.query_one("#cmd-input", Input).focus()
 
+    def on_key(self, event: Key) -> None:
+        """拦截上下箭头键实现历史导航"""
+        if event.key not in ("up", "down"):
+            return
+
+        event.stop()
+        event.prevent_default()
+
+        input_widget = self.query_one("#cmd-input", Input)
+
+        if event.key == "up":
+            # 首次按上箭头时，保存当前未提交的输入
+            if self._history._history_index == len(self._history._entries):
+                self._saved_input = input_widget.value
+            entry = self._history.up()
+            if entry is not None:
+                input_widget.value = entry
+                input_widget.cursor_position = len(entry)
+
+        elif event.key == "down":
+            entry = self._history.down()
+            if entry is not None:
+                input_widget.value = entry
+                input_widget.cursor_position = len(entry)
+            else:
+                input_widget.value = self._saved_input
+                input_widget.cursor_position = len(self._saved_input)
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Enter 提交输入"""
         event.stop()
         value = event.value.strip()
         if not value:
             return
+        self._history.add(value)
+        self._saved_input = ""
         event.input.value = ""
         self.post_message(self.Submitted(value))
 
