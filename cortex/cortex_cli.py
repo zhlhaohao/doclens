@@ -832,8 +832,19 @@ def _build_parser():
 def _cli_search(args, config, idx):
     """Handle `cortex search <query>` — plain text output."""
     query = " ".join(args.query)
-    print(f"[search] query={query!r}")
-    # TODO: implement
+
+    # Load or build index if needed
+    idx.load_or_build_index()
+
+    # Perform search
+    nodes, docs = idx.search(query, max_results=config.max_results)
+
+    # Reuse NotebookSearchCLI's format_results for plain text output
+    cli = NotebookSearchCLI.__new__(NotebookSearchCLI)
+    cli.config = config
+    cli.idx = idx
+    cli.max_results = config.max_results
+    cli.format_results(nodes, docs, query, max_results=cli.max_results)
 
 
 def _cli_ai(args, config, idx):
