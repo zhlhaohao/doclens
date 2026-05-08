@@ -59,13 +59,26 @@ class TestSearchCommand:
         mock_idx.scoring_weights = {"title": 1.0, "body": 0.8}
         mock_idx.load_or_build_index = MagicMock()
 
-        args = MagicMock()
-        args.query = ["test", "query"]
+        # Mock format_results - patch NotebookSearchCLI.__new__ via side_effect
+        mock_cli_instance = MagicMock()
 
-        # Should not raise
-        _cli_search(args, mock_config, mock_idx)
-        mock_idx.load_or_build_index.assert_called_once()
-        mock_idx.search.assert_called_once()
+        # Create a custom mock for NotebookSearchCLI that bypasses __new__ issues
+        from cortex.cortex_cli import NotebookSearchCLI
+        original_new = NotebookSearchCLI.__new__
+
+        class MockNotebookSearchCLI:
+            def __new__(cls, *args, **kwargs):
+                return mock_cli_instance
+
+        with patch.object(NotebookSearchCLI, '__new__', lambda *args, **kwargs: mock_cli_instance):
+            args = MagicMock()
+            args.query = ["test", "query"]
+
+            # Should not raise
+            _cli_search(args, mock_config, mock_idx)
+            mock_idx.load_or_build_index.assert_called_once()
+            mock_idx.search.assert_called_once()
+            mock_cli_instance.format_results.assert_called_once()
 
 
 class TestIndexCommand:
@@ -104,6 +117,73 @@ class TestIndexCommand:
         assert call_kwargs["force"] is False
 
 
+class TestAiCommand:
+    @patch("sys.modules", new_callable=dict)
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_ai_captures_output(self, mock_stdout, mock_modules):
+        """Test that _cli_ai captures agent stdout and prints it."""
+        import sys
+        mock_config = MagicMock()
+        mock_idx = MagicMock()
+        mock_idx.search_path = "/tmp"
+
+        # Create mock agent
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.initialize.return_value = mock_agent_instance
+
+        # Simulate agent writing to stdout
+        def run_query_side_effect(query, history):
+            sys.stdout.write("Agent response text\n")
+            return []
+
+        mock_agent_instance.run_query.side_effect = run_query_side_effect
+
+        # Create mock CortexAgent class
+        mock_agent_class = MagicMock(return_value=mock_agent_instance)
+
+        # Mock the agent_integration module
+        mock_agent_module = MagicMock()
+        mock_agent_module.CortexAgent = mock_agent_class
+        mock_modules['cortex.agent_integration'] = mock_agent_module
+
+        args = MagicMock()
+        args.message = ["hello", "world"]
+
+        _cli_ai(args, mock_config, mock_idx)
+
+        output = mock_stdout.getvalue()
+        assert "Agent response text" in output
+
+    @patch("sys.modules", new_callable=dict)
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_ai_fallback_when_no_output(self, mock_stdout, mock_modules):
+        """Test fallback message when agent produces no stdout."""
+        mock_config = MagicMock()
+        mock_idx = MagicMock()
+        mock_idx.search_path = "/tmp"
+
+        # Create mock agent
+        mock_agent_instance = MagicMock()
+        mock_agent_instance.initialize.return_value = mock_agent_instance
+        mock_agent_instance.run_query.return_value = []  # No stdout output
+
+        # Create mock CortexAgent class
+        mock_agent_class = MagicMock(return_value=mock_agent_instance)
+
+        # Mock the agent_integration module
+        mock_agent_module = MagicMock()
+        mock_agent_module.CortexAgent = mock_agent_class
+        mock_modules['cortex.agent_integration'] = mock_agent_module
+
+        args = MagicMock()
+        args.message = ["hello"]
+
+        _cli_ai(args, mock_config, mock_idx)
+
+        output = mock_stdout.getvalue()
+        assert "(Agent 已完成，无文本输出)" in output
+
+
 class TestStatusCommand:
     @patch("cortex.cortex_cli.IndexManager")
     @patch("cortex.cortex_cli.CortexConfig")
@@ -122,4 +202,4 @@ class TestStatusCommand:
 
         _cli_status(args, mock_config, mock_idx)
         output = mock_stdout.getvalue()
-        assert "NotebookSearch 状态" in output or "索引路径" in output
+        assert "NotebookSearch 状态" in output and "索引路径" in output
