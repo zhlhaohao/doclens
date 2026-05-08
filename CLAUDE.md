@@ -4,14 +4,6 @@
 
 Cortex — 结构感知文档检索工具，使用 SQLite FTS5/BM25 全文索引，支持 Markdown、Python、JavaScript、PDF、DOCX 等多种文件类型。
 
-## 测试命令
-
-```bash
-python -m pytest tests/test_cli_subcommands.py -v
-python -m pytest tests/test_cortex_cli_main.py -v
-python -m pytest tests/ -v
-```
-
 ## 开发命令
 
 ```bash
