@@ -857,8 +857,20 @@ def _cli_ai(args, config, idx):
 def _cli_index(args, config, idx):
     """Handle `cortex index [--force]` — plain text output."""
     force = args.force
-    print(f"[index] force={force}")
-    # TODO: implement
+
+    # Ensure idx is ready
+    idx.load_or_build_index()
+
+    if force:
+        print("正在执行全量重建索引...")
+        idx.reindex(force=True)
+        doc_count = len(idx.documents)
+        print(f"索引全量重建完成: {doc_count} 个文档")
+    else:
+        print("正在执行增量更新索引...")
+        idx.reindex(force=False)
+        doc_count = len(idx.documents)
+        print(f"索引增量更新完成: {doc_count} 个文档")
 
 
 def _cli_status(args, config, idx):
