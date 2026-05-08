@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
-    {name = "XuMing", email = "xuming624@qq.com"},
+    {name = "Lianghao", email = "zhlhao@163.com"},
 ]
 keywords = ["rag", "retrieval", "tree-search", "bm25", "fts5", "document-indexing"]
 classifiers = [
