@@ -29,6 +29,7 @@ class TestMainPreTuiCheck:
             conn.execute("INSERT INTO documents VALUES ('doc_1')")
             conn.commit()
 
+    @patch("sys.argv", ["cortex"])
     @patch("cortex.tui.app.CortexApp")
     @patch("cortex.config.CortexConfig")
     @patch("builtins.input")
@@ -51,6 +52,7 @@ class TestMainPreTuiCheck:
             mock_app.run.assert_called_once_with(mouse=True)
             mock_input.assert_not_called()
 
+    @patch("sys.argv", ["cortex"])
     @patch("cortex.tui.app.CortexApp")
     @patch("cortex.config.CortexConfig")
     @patch("treesearch.treesearch.TreeSearch")
@@ -82,6 +84,7 @@ class TestMainPreTuiCheck:
             assert "progress_callback" in call_kwargs
             mock_app.run.assert_called_once_with(mouse=True)
 
+    @patch("sys.argv", ["cortex"])
     @patch("cortex.config.CortexConfig")
     @patch("builtins.input", return_value="n")
     def test_exits_when_user_declines(self, mock_input, MockConfig):
@@ -100,6 +103,7 @@ class TestMainPreTuiCheck:
             assert exc_info.value.code == 1
             mock_input.assert_called_once()
 
+    @patch("sys.argv", ["cortex"])
     @patch("cortex.config.CortexConfig")
     @patch("builtins.input", side_effect=EOFError)
     def test_exits_on_eof_error(self, mock_input, MockConfig):
