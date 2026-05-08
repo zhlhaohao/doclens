@@ -467,7 +467,7 @@ class FTS5Index:
                 (document.doc_id,),
             ).fetchone()
             if row and row[0] == content_hash:
-                logger.debug("Document %s already indexed (hash match), skipping", document.doc_id)
+                # logger.debug("Document %s already indexed (hash match), skipping", document.doc_id)
                 self.last_node_diff = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
                 # Still write index_meta if requested — we may have been called
                 # because the file fingerprint changed but the structure didn't.

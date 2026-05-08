@@ -107,6 +107,58 @@ class IndexManager:
     def documents(self):
         return self._ts.documents if self._ts else []
 
+    def has_changed_files(self) -> bool:
+        """快速检查是否有文件变化，用于启动同步前置判断。
+
+        检测三类变化：已索引文件内容修改、已索引文件被删除、新增文件。
+        排除 .cortex 目录内的文件（索引元数据）和之前索引失败的文件。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            from treesearch.indexer import _file_hash
+
+            fts = FTS5Index(db_path=self.index_path)
+            stored_meta = fts.get_all_index_meta()
+            failed_files = fts.get_all_failed_files()
+            fts.close()
+
+            cortex_dir = os.path.abspath(os.path.join(self.search_path, ".cortex"))
+            supported_exts = set(SUPPORTED_FORMATS.keys())
+            ignore_dirs = {".cortex", ".git", "__pycache__", "node_modules", ".venv"}
+
+            # 1. 检查已索引文件是否被修改或删除
+            for abs_fp, stored_hash in stored_meta.items():
+                if abs_fp.startswith(cortex_dir):
+                    continue
+                if not os.path.isfile(abs_fp):
+                    logger.debug("File deleted: %s", abs_fp)
+                    return True
+                current_hash = _file_hash(abs_fp)
+                if current_hash != stored_hash:
+                    logger.debug("File changed: %s", abs_fp)
+                    return True
+
+            # 2. 检查是否有新增文件（在 supported_exts 中、不在 stored_meta、不在 failed_files）
+            disk_files = set()
+            for root, dirs, files in os.walk(self.search_path):
+                dirs[:] = [d for d in dirs if d not in ignore_dirs]
+                for fname in files:
+                    ext = os.path.splitext(fname)[1].lower()
+                    if ext not in supported_exts:
+                        continue
+                    disk_files.add(os.path.abspath(os.path.join(root, fname)))
+
+            known = set(stored_meta.keys()) | set(failed_files.keys())
+            new_files = disk_files - known
+            if new_files:
+                logger.debug("New files detected: %d", len(new_files))
+                return True
+
+            return False
+        except Exception as e:
+            logger.debug("has_changed_files exception: %s", e)
+            return True
+
     def _check_swap(self):
         """检查是否有待替换的新索引，有则原子替换（主线程调用）"""
         if self._pending_swap is None:
