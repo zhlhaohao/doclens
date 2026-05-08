@@ -875,8 +875,54 @@ def _cli_index(args, config, idx):
 
 def _cli_status(args, config, idx):
     """Handle `cortex status` — plain text output."""
-    print("[status]")
-    # TODO: implement
+    idx.load_or_build_index()
+
+    index_abs_path = os.path.abspath(idx.index_path)
+    index_size = 0
+    if os.path.exists(index_abs_path):
+        index_size = os.path.getsize(index_abs_path)
+
+    docs = idx.documents
+    total_files = len(docs)
+    total_size = 0
+    file_type_counts: dict[str, int] = {}
+
+    for doc in docs:
+        if hasattr(doc, "metadata") and doc.metadata:
+            size = doc.metadata.get("file_size", 0)
+            total_size += size
+            source_path = doc.metadata.get("source_path", "")
+            ext = os.path.splitext(source_path)[1].lower() if source_path else ""
+            if ext:
+                file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
+
+    def _format_size(sz: int) -> str:
+        if sz >= 1024 * 1024 * 1024:
+            return f"{sz / (1024 * 1024 * 1024):.2f} GB"
+        elif sz >= 1024 * 1024:
+            return f"{sz / (1024 * 1024):.2f} MB"
+        elif sz >= 1024:
+            return f"{sz / 1024:.2f} KB"
+        return f"{sz} B"
+
+    missing = check_dependencies()
+    deps_ok = not missing
+
+    type_lines = ""
+    for ext, count in sorted(file_type_counts.items(), key=lambda x: -x[1])[:10]:
+        type_name = SUPPORTED_FORMATS.get(ext, (ext, None))[0] if ext in SUPPORTED_FORMATS else ext
+        type_lines += f"  {ext}: {count} 个 ({type_name})\n"
+
+    print(f"""━━━ NotebookSearch 状态 ━━━
+  索引路径:   {index_abs_path}
+  索引大小:   {_format_size(index_size)}
+  ─────────────────────────────
+  搜索路径:   {idx.search_path}
+  文档总数:   {total_files}
+  文件总大小: {_format_size(total_size)}
+  ─────────────────────────────
+  文件类型统计 (前10)
+{type_lines}  依赖状态:   {'全部已安装' if deps_ok else '部分缺失'}""")
 
 
 def main():
