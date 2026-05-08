@@ -92,6 +92,7 @@ class IndexManager:
         self._ts = None
         self._path_map = {}
         self._pending_swap = None  # (new_ts, new_path_map, doc_count)
+        self._needs_reload = False  # 后台 reindex 完成后标记，下次 load 时重新加载
         self._reindexing = False
         self._reindex_lock = threading.Lock()
 
@@ -160,16 +161,8 @@ class IndexManager:
             return True
 
     def _check_swap(self):
-        """检查是否有待替换的新索引，有则原子替换（主线程调用）"""
-        if self._pending_swap is None:
-            return
-        new_ts, new_path_map, doc_count = self._pending_swap
+        """兼容保留，实际 reload 由 _needs_reload 机制处理"""
         self._pending_swap = None
-        old_count = len(self._ts.documents) if self._ts else 0
-        self._ts = new_ts
-        self._path_map = new_path_map
-        if doc_count != old_count:
-            print(f"\n[索引已自动更新: {doc_count} 个文档]")
 
     def trigger_background_reindex(self, on_complete=None):
         """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）
@@ -252,15 +245,9 @@ class IndexManager:
                         logger.debug("failed to get failed file stats: %s", e)
 
                     new_ts.save_index()
-                    new_path_map = {}
-                    for doc in new_ts.documents:
-                        if hasattr(doc, 'metadata') and doc.metadata:
-                            path = doc.metadata.get('source_path', '')
-                            if path:
-                                new_path_map[doc.doc_id] = path
-                                new_path_map[doc.doc_name] = path
                     doc_count = len(new_ts.documents)
-                    self._pending_swap = (new_ts, new_path_map, doc_count)
+                    # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
+                    self._needs_reload = True
 
                     # 调用完成回调
                     if on_complete:
@@ -275,8 +262,9 @@ class IndexManager:
 
     def load_or_build_index(self):
         """加载或构建索引"""
-        if self._ts is not None:
+        if self._ts is not None and not self._needs_reload:
             return True
+        self._needs_reload = False
 
         # 设置 CJK 分词
         set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))

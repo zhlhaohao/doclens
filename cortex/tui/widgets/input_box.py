@@ -70,6 +70,10 @@ class InputBox(Horizontal):
         if event.key not in ("up", "down"):
             return
 
+        # 鼠标关闭时不拦截 Up/Down，让 App 级别的滚动绑定生效
+        if not getattr(self.app, "_mouse_enabled", True):
+            return
+
         event.stop()
         event.prevent_default()
 
