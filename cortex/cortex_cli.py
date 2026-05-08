@@ -875,9 +875,6 @@ def main():
     config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
     index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
 
-    config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
-    index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
-
     # Check if index exists and contains documents
     doc_count = 0
     if os.path.exists(index_path):
