@@ -15,6 +15,7 @@ NotebookSearch CLI - 交互式全文检索工具
 
 import sys
 import os
+import argparse
 from pathlib import Path
 
 from cortex.config import CortexConfig
@@ -773,12 +774,106 @@ class NotebookSearchCLI:
                 print(f"\n[错误] {e}\n")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI mode: argparse subcommands
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _init_components():
+    """Shared initialization for both CLI and TUI modes.
+
+    Returns:
+        tuple: (config, idx)
+    """
+    config = CortexConfig.load()
+    idx = IndexManager(config)
+    return config, idx
+
+
+def _build_parser():
+    """Build argparse parser with subcommands."""
+    parser = argparse.ArgumentParser(
+        prog="cortex",
+        description="Cortex CLI — structure-aware document retrieval"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # cortex search <query>
+    search_parser = sub.add_parser(
+        "search", help="Search for a query string in the indexed documents"
+    )
+    search_parser.add_argument("query", nargs="+", help="Search query keywords")
+    search_parser.set_defaults(func=_cli_search)
+
+    # cortex ai <message>
+    ai_parser = sub.add_parser(
+        "ai", help="Send a message to the LLM agent"
+    )
+    ai_parser.add_argument("message", nargs="+", help="Message to send")
+    ai_parser.set_defaults(func=_cli_ai)
+
+    # cortex index [--force]
+    index_parser = sub.add_parser(
+        "index", help="Build or update the document index"
+    )
+    index_parser.add_argument(
+        "--force", "-f", action="store_true",
+        help="Force full rebuild (delete existing index first)"
+    )
+    index_parser.set_defaults(func=_cli_index)
+
+    # cortex status
+    sub.add_parser("status", help="Show index and system status").set_defaults(
+        func=_cli_status
+    )
+
+    return parser
+
+
+def _cli_search(args, config, idx):
+    """Handle `cortex search <query>` — plain text output."""
+    query = " ".join(args.query)
+    print(f"[search] query={query!r}")
+    # TODO: implement
+
+
+def _cli_ai(args, config, idx):
+    """Handle `cortex ai <message>` — plain text output."""
+    message = " ".join(args.message)
+    print(f"[ai] message={message!r}")
+    # TODO: implement
+
+
+def _cli_index(args, config, idx):
+    """Handle `cortex index [--force]` — plain text output."""
+    force = args.force
+    print(f"[index] force={force}")
+    # TODO: implement
+
+
+def _cli_status(args, config, idx):
+    """Handle `cortex status` — plain text output."""
+    print("[status]")
+    # TODO: implement
+
+
 def main():
     """主函数 - 启动 TUI"""
     import sqlite3
     from cortex.config import CortexConfig
     from cortex.tui.app import CortexApp
     from treesearch.treesearch import TreeSearch
+
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    if args.command is not None:
+        config, idx = _init_components()
+        args.func(args, config, idx)
+        return
+
+    # ── TUI mode (unchanged original logic) ──
+    config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
+    index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
 
     config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
     index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
