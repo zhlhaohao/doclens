@@ -1,8 +1,6 @@
 """搜索结果渲染器 - 将搜索数据转换为 Rich 可渲染对象"""
 
-from rich.panel import Panel
 from rich.rule import Rule
-from rich.style import Style
 from rich.text import Text
 
 
@@ -61,7 +59,7 @@ def _format_score(score: float) -> Text:
     pct = int(score * 100)
     filled = score * 5
     stars = "★" * int(filled) + "☆" * (5 - int(filled))
-    return Text(f"{stars} {pct}%", style="#e0af68")
+    return Text(f"{stars} {pct}%", style="#9e9e9e")
 
 
 def render_search_result(
@@ -74,24 +72,25 @@ def render_search_result(
     path: str = "",
     is_ripgrep: bool = False,
     query_words: list[str] | None = None,
-) -> Panel:
+) -> Text:
     query_words = query_words or []
     title_text = node.get("title", "")
     display_text = node.get("text", "") or ""
     display_line = node.get("line_start")
 
-    title = _highlight_keywords(title_text, query_words, "#7aa2f7 bold")
-
-    content_parts: list = []
+    # 路径行: [序号] 路径:行号
+    header = Text()
+    header.append(f"[{index}] ", style="#7aa2f7 bold")
     if path:
-        path_display = path.replace("\\", "\\\\")
+        path_note = path.replace("\\", "/")
         if display_line is not None:
-            path_display += f":{display_line}"
-        content_parts.append(Text(f"\U0001f4c4 {path_display}", style="#7aa2f7"))
-        content_parts.append(Text(""))
+            path_note += f":{display_line}"
+        header.append(path_note, style="#7aa2f7")
+    else:
+        header.append(_highlight_keywords(title_text, query_words, "#7aa2f7"))
 
+    # 内容片段
     lines = display_text.split("\n")
-    # 找到包含关键词的行索引
     kw_lower = [kw.lower() for kw in query_words if kw]
     match_indices = [
         i for i, line in enumerate(lines)
@@ -99,12 +98,10 @@ def render_search_result(
     ]
 
     if match_indices:
-        # 从第一个匹配行到最后一个匹配行，前后各扩展 1 行上下文
         first = max(0, match_indices[0] - 1)
         last = min(len(lines) - 1, match_indices[-1] + 1)
         selected = lines[first:last + 1]
     else:
-        # 无关键词匹配时取前 5 行
         selected = []
         for line in lines:
             stripped = line.strip()
@@ -113,34 +110,30 @@ def render_search_result(
             if len(selected) >= 5:
                 break
 
-    snippet_lines = [line.strip() for line in selected if line.strip()]
-
-    snippet = "\n".join(snippet_lines)
+    snippet = "\n".join(line.strip() for line in selected if line.strip())
     snippet = _truncate_text(snippet, 300)
-    content_parts.append(_highlight_keywords(snippet, query_words))
 
-    content_parts.append(Text(""))
+    # 评分行 - 使用暗色与正文区分
+    score_style = "#4a4a5a"
     if is_ripgrep:
-        score_text = Text(f"匹配: {matched}/{total_keywords} 词", style="#565f89")
+        score_text = Text(f"评分: 匹配 {matched}/{total_keywords} 词", style=score_style)
     else:
-        score_text = Text()
+        score_text = Text(style=score_style)
         score_text.append("评分: ")
         score_text.append_text(_format_score(composite))
         score_text.append(f"  匹配: {matched}/{total_keywords} 词")
-    content_parts.append(score_text)
 
-    panel_content = Text("\n").join(
-        p if isinstance(p, Text) else Text(str(p))
-        for p in content_parts
-    )
+    # 组装: 标题 \n 分隔线 \n 内容 \n\n 评分 \n
+    result_parts: list[Text] = [
+        header,
+        Text("─" * 60, style="#3b3d57"),
+        _highlight_keywords(snippet, query_words),
+        Text(""),
+        score_text,
+        Text(""),
+    ]
 
-    return Panel(
-        panel_content,
-        title=f"[{index}]",
-        title_align="left",
-        border_style="#3b3d57",
-        padding=(0, 1),
-    )
+    return Text("\n").join(result_parts)
 
 
 def render_search_results(
@@ -158,6 +151,7 @@ def render_search_results(
         return output
 
     output.append(render_search_header(query, len(results), is_ripgrep))
+    output.append(Text(""))
 
     display_items = results[:max_results]
     for i, item in enumerate(display_items, 1):

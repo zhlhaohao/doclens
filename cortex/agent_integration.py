@@ -356,8 +356,8 @@ class CortexAgent:
                     print("没有解析失败的文件")
                 else:
                     print(f"共有 {len(failed)} 个解析失败的文件:")
-                    for path, (count, _) in sorted(failed.items(), key=lambda x: -x[1][0]):
-                        print(f"  [{count}次] {path}")
+                    for path, (count, _, err) in sorted(failed.items(), key=lambda x: -x[1][0]):
+                        print(f"  [{count}次] {path}  --- {err}" if err else f"  [{count}次] {path}")
             except Exception as e:
                 print(f"读取失败文件失败: {e}")
             return False, history

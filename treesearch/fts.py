@@ -376,16 +376,16 @@ class FTS5Index:
     # Failed files tracking
     # -------------------------------------------------------------------
 
-    def get_all_failed_files(self) -> dict[str, tuple[int, str]]:
+    def get_all_failed_files(self) -> dict[str, tuple[int, str, str]]:
         """Batch load all failed file records.
 
         Returns:
-            ``{source_path: (fail_count, file_hash)}``
+            ``{source_path: (fail_count, file_hash, last_error)}``
         """
         rows = self._conn.execute(
-            "SELECT source_path, fail_count, file_hash FROM failed_files"
+            "SELECT source_path, fail_count, file_hash, last_error FROM failed_files"
         ).fetchall()
-        return {row[0]: (row[1], row[2]) for row in rows}
+        return {row[0]: (row[1], row[2], row[3] or "") for row in rows}
 
     def upsert_failed_file(self, path: str, error_msg: str, file_hash: str = "") -> None:
         """Insert or increment fail count for a file that failed to parse."""
