@@ -850,8 +850,25 @@ def _cli_search(args, config, idx):
 def _cli_ai(args, config, idx):
     """Handle `cortex ai <message>` — plain text output."""
     message = " ".join(args.message)
-    print(f"[ai] message={message!r}")
-    # TODO: implement
+
+    # Initialize agent
+    from cortex.agent_integration import CortexAgent
+    agent = CortexAgent(Path(idx.search_path)).initialize()
+
+    # Capture stdout from agent
+    old_stdout = sys.stdout
+    captured = io.StringIO()
+    try:
+        sys.stdout = captured
+        history = agent.run_query(message, [])
+    finally:
+        sys.stdout = old_stdout
+
+    output = captured.getvalue()
+    if output.strip():
+        print(output.rstrip())
+    else:
+        print("(Agent 已完成，无文本输出)")
 
 
 def _cli_index(args, config, idx):
