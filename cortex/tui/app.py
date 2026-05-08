@@ -839,7 +839,9 @@ class CortexApp(App):
         header = self.query_one(HeaderBar)
 
         header.set_mode("Agent...")
-        self.run_worker(lambda: self._do_agent_slash(cmd, arg), thread=True, name="agent_slash")
+        self._ai_worker = self.run_worker(
+            lambda: self._do_agent_slash(cmd, arg), thread=True, name="agent_slash"
+        )
 
     def _do_agent_slash(self, cmd: str, arg: str) -> None:
         """后台线程：执行 agent 斜杠命令"""

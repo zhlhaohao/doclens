@@ -1505,7 +1505,7 @@ async def build_index(
     # Filter out files that have exceeded the consecutive failure threshold
     excluded_count = 0
     if not force and to_index:
-        failed_records = fts.get_all_failed_files()  # {path: (fail_count, file_hash)}
+        failed_records = fts.get_all_failed_files()  # {path: (fail_count, file_hash, last_error)}
         max_fail_count = cfg.max_index_fail_count
         excluded = []
         remaining = []
@@ -1522,8 +1522,15 @@ async def build_index(
         to_index = remaining
         if excluded:
             excluded_count = len(excluded)
-            logger.info("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
+            logger.warning("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
             for fp in excluded:
+                abs_fp = os.path.abspath(fp)
+                record = failed_records.get(abs_fp)
+                last_error = record[2] if record else ""
+                if last_error:
+                    logger.warning("  Skipped %s: %s", fp, last_error)
+                else:
+                    logger.warning("  Skipped %s: unknown error", fp)
                 processed_counter[0] += 1
                 if progress_callback:
                     progress_callback(fp, processed_counter[0], total_files)
@@ -1662,7 +1669,7 @@ async def build_index(
             abs_fp = os.path.abspath(fp)
             doc = all_docs_from_db.get(abs_fp)
             if doc is None:
-                logger.warning("Skipped file %s but document not found in DB, re-indexing", fp)
+                logger.debug("Skipped file %s has no document in DB (excluded by failure threshold)", fp)
                 _save_bar.update()
                 continue
         documents.append(doc)
