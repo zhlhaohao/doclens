@@ -15,6 +15,7 @@ NotebookSearch CLI - 交互式全文检索工具
 
 import sys
 import os
+import io
 import argparse
 from pathlib import Path
 
