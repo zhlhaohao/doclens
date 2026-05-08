@@ -24,10 +24,10 @@ Screen {
 }
 
 HeaderBar {
-    height: 1;
-    background: #24283b;
-    color: #7aa2f7;
-    padding: 0 1;
+    height: auto;
+    background: transparent;
+    color: #ff9e64;
+    padding: 1 1;
 }
 
 ContentArea {

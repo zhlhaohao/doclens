@@ -30,6 +30,7 @@ class StatusBar(Horizontal):
         self._right_text = "就绪"
         self._unsubscribe = None
         self._auto_reset_timer = None
+        self._left_timer = None
         self._last_indexed_count = 0  # 记录最后索引的文件数
 
     def compose(self) -> ComposeResult:
@@ -46,6 +47,8 @@ class StatusBar(Horizontal):
         """取消订阅"""
         if self._auto_reset_timer:
             self._auto_reset_timer.cancel()
+        if self._left_timer:
+            self._left_timer.cancel()
         if self._unsubscribe:
             self._unsubscribe()
 
@@ -123,6 +126,9 @@ class StatusBar(Horizontal):
 
     def set_index_stats(self, doc_count: int) -> None:
         """更新索引统计"""
+        if self._auto_reset_timer:
+            self._auto_reset_timer.cancel()
+            self._auto_reset_timer = None
         self._right_text = f"索引: {doc_count} 文档"
         self._refresh_right()
 
@@ -139,3 +145,46 @@ class StatusBar(Horizontal):
                 r"Agent: \w+", f"Agent: {status}", self._right_text
             )
         self._refresh_right()
+
+    def flash_message(self, message: str, duration: float = 10.0) -> None:
+        """在状态栏右侧显示临时消息，duration 秒后自动恢复"""
+        self._right_text = message
+        self._refresh_right()
+
+        if self._auto_reset_timer:
+            self._auto_reset_timer.cancel()
+
+        import threading
+        app = self.app
+        widget = self
+
+        def restore():
+            app.call_from_thread(widget._do_restore)
+
+        self._auto_reset_timer = threading.Timer(duration, restore)
+        self._auto_reset_timer.daemon = True
+        self._auto_reset_timer.start()
+
+    def show_f9_hint(self, duration: float = 10.0) -> None:
+        """在状态栏左侧显示 F9 提示，duration 秒后清除"""
+        left = self.query_one("#status-left", Static)
+        left.update("F9: 切换鼠标模式")
+
+        if self._left_timer:
+            self._left_timer.cancel()
+
+        import threading
+        app = self.app
+        widget = self
+
+        def clear_left():
+            app.call_from_thread(widget._clear_left)
+
+        self._left_timer = threading.Timer(duration, clear_left)
+        self._left_timer.daemon = True
+        self._left_timer.start()
+
+    def _clear_left(self) -> None:
+        """清除左侧提示"""
+        left = self.query_one("#status-left", Static)
+        left.update("")

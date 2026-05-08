@@ -9,9 +9,9 @@ class HeaderBar(Horizontal):
 
     DEFAULT_CSS = """
     HeaderBar {
-        height: 1;
-        background: #24283b;
-        color: #7aa2f7;
+        height: auto;
+        background: transparent;
+        color: #ff9e64;
         padding: 0 1;
     }
     HeaderBar > #header-left {

@@ -47,7 +47,10 @@ class CortexApp(App):
     BINDINGS = [
         ("ctrl+q", "quit", "退出"),
         ("ctrl+l", "clear_screen", "清屏"),
+        ("f9", "toggle_mouse", "切换鼠标模式"),
         ("escape", "focus_input", "聚焦输入框"),
+        ("up", "scroll_line_up", "向上滚动"),
+        ("down", "scroll_line_down", "向下滚动"),
         ("pageup", "scroll_up", "向上翻页"),
         ("pagedown", "scroll_down", "向下翻页"),
         ("ctrl+shift+up", "scroll_line_up", "向上滚动"),
@@ -65,6 +68,9 @@ class CortexApp(App):
         self.config = CortexConfig.load()
         self.idx = IndexManager(self.config)
         self.max_results = self.config.max_results
+
+        # 鼠标模式切换（关闭后可用鼠标选择文字）
+        self._mouse_enabled = True
 
         # Agent 延迟初始化
         self.agent = None
@@ -206,11 +212,17 @@ class CortexApp(App):
                 changed_files = []
                 changed_count = 0
 
+            def on_reindex_done(success, doc_count, failed_count):
+                """reindex 完成后更新状态栏"""
+                if success:
+                    self.call_from_thread(self._on_watcher_reindex_done, doc_count)
+
             self.watcher = FileWatcher(
                 self.idx,
                 debounce_seconds=self.config.watch_debounce,
                 on_change_callback=on_file_change,
-                on_reindex_start=on_reindex_start
+                on_reindex_start=on_reindex_start,
+                on_reindex_done=on_reindex_done,
             )
             if self.watcher.start():
                 status = self.query_one(StatusBar)
@@ -220,6 +232,12 @@ class CortexApp(App):
             content.write_error(f"文件监控启动失败: {exc}")
             self.watcher = None
 
+    def _on_watcher_reindex_done(self, doc_count: int) -> None:
+        """文件监控触发 reindex 完成后重新加载索引并更新状态栏"""
+        self.idx.load_or_build_index()  # _needs_reload=True，会从磁盘重新加载
+        status = self.query_one(StatusBar)
+        status.set_index_stats(len(self.idx.documents))
+
     # ------------------------------------------------------------------
     # 输入处理
     # ------------------------------------------------------------------
@@ -228,7 +246,11 @@ class CortexApp(App):
         """用户提交输入"""
         event.stop()
         value = event.value
-        if not value:
+        if not value or not value.strip():
+            return
+
+        # 斜杠命令直接放行，自然语言至少 3 字
+        if not value.strip().startswith("/") and len(value.strip()) < 3:
             return
 
         parsed = parse_input(value)
@@ -287,6 +309,7 @@ class CortexApp(App):
                 content.write_error(f"未知命令: /{cmd}  输入 /help 查看帮助")
         finally:
             content.stop_recording()
+            content.scroll_end(animate=False)
 
     # ------------------------------------------------------------------
     # 命令实现
@@ -641,6 +664,7 @@ class CortexApp(App):
         content.scroll_end(animate=False)
 
         header.set_mode("就绪")
+        self.query_one(StatusBar).show_f9_hint()
 
     def _on_search_error(self, error_msg: str) -> None:
         """搜索失败（主线程回调）"""
@@ -770,6 +794,7 @@ class CortexApp(App):
         content.scroll_end(animate=False)
         header.set_mode("就绪")
         status.set_agent_status("就绪")
+        status.show_f9_hint()
 
     def _on_ai_error(self, error_msg: str) -> None:
         """AI 查询失败（主线程回调）"""
@@ -880,6 +905,18 @@ class CortexApp(App):
         """Ctrl+L 清屏"""
         content = self.query_one(ContentArea)
         content.clear()
+
+    def action_toggle_mouse(self) -> None:
+        """F9 切换鼠标捕获模式（关闭后可用鼠标选择/复制文字）"""
+        status = self.query_one(StatusBar)
+        if self._mouse_enabled:
+            self._mouse_enabled = False
+            self._driver.write("\x1b[?1000l\x1b[?1002l\x1b[?1006l")
+            status.flash_message("鼠标已关闭 — 可选择文字 | F9 重新开启", 10.0)
+        else:
+            self._mouse_enabled = True
+            self._driver.write("\x1b[?1006h\x1b[?1002h\x1b[?1000h")
+            status.flash_message("鼠标已开启 | F9 关闭以选择文字", 10.0)
 
     def action_focus_input(self) -> None:
         """ESC 聚焦输入框；AI 运行中则终止线程并恢复问题"""
