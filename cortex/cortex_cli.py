@@ -796,7 +796,7 @@ def _build_parser():
         prog="cortex",
         description="Cortex CLI — structure-aware document retrieval"
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
     # cortex search <query>
     search_parser = sub.add_parser(
@@ -951,7 +951,7 @@ def main():
     from treesearch.treesearch import TreeSearch
 
     parser = _build_parser()
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
 
     if args.command is not None:
         config, idx = _init_components()
