@@ -1,5 +1,6 @@
 """CortexApp - Textual 主应用，组合所有 Widget 并处理命令路由"""
 
+import ctypes
 import io
 import logging
 import os
@@ -14,6 +15,7 @@ from planify.core.logging_config import setup_logging
 setup_logging(console_output=False)
 
 from textual.app import App, ComposeResult
+from textual.widgets import Input
 from textual.worker import Worker, get_current_worker
 
 from rich.text import Text
@@ -30,6 +32,10 @@ from cortex.tui.widgets.input_box import InputBox
 from cortex.tui.widgets.status_bar import StatusBar
 from cortex.tui.widgets.thinking_indicator import ThinkingIndicator
 from cortex.tui.renderers.search import render_search_results
+
+
+class _AIQueryCancelled(Exception):
+    """用于强制终止 AI 查询线程"""
 
 
 class CortexApp(App):
@@ -66,6 +72,11 @@ class CortexApp(App):
 
         # 文件监控
         self.watcher = None
+
+        # AI 查询状态
+        self._ai_worker: Optional[Worker] = None
+        self._ai_pending_query: Optional[str] = None
+        self._ai_thread_id: Optional[int] = None
 
     # ------------------------------------------------------------------
     # Widget 组合
@@ -134,6 +145,9 @@ class CortexApp(App):
     def _startup_sync_check(self) -> None:
         """启动后延迟检查索引是否需要增量更新。"""
         try:
+            if not self.idx.has_changed_files():
+                logger.debug("No files changed since last index, skipping startup sync")
+                return
             self.idx.trigger_background_reindex(
                 on_complete=self._on_startup_sync_done
             )
@@ -685,6 +699,11 @@ class CortexApp(App):
             content.write_system("用法: /ai <消息> 或直接输入文字与 Agent 对话")
             return
 
+        # 防止重入：上一个 AI 查询仍在运行
+        if self._ai_worker and self._ai_worker.is_running:
+            content.write_system("Agent 正在思考中，请按 ESC 取消后再试")
+            return
+
         header.set_mode("Agent 思考中...")
         status = self.query_one(StatusBar)
         status.set_agent_status("思考中")
@@ -693,10 +712,14 @@ class CortexApp(App):
         thinking = self.query_one(ThinkingIndicator)
         thinking.start("Agent 思考中")
 
-        self.run_worker(lambda: self._do_ai_query(arg), thread=True, name="ai_query")
+        self._ai_pending_query = arg
+        self._ai_worker = self.run_worker(
+            lambda: self._do_ai_query(arg), thread=True, name="ai_query"
+        )
 
     def _do_ai_query(self, query: str) -> None:
         """后台线程：执行 AI 查询"""
+        self._ai_thread_id = threading.current_thread().ident
         worker = get_current_worker()
         if worker.is_cancelled:
             return
@@ -722,6 +745,14 @@ class CortexApp(App):
 
     def _on_ai_done(self, output: str) -> None:
         """AI 查询完成（主线程回调）"""
+        # 已被 ESC 手动取消过，跳过
+        if self._ai_worker is None:
+            return
+
+        self._ai_worker = None
+        self._ai_thread_id = None
+        self._ai_pending_query = None
+
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
         status = self.query_one(StatusBar)
@@ -736,11 +767,20 @@ class CortexApp(App):
             content.write_system("(Agent 已完成，无文本输出)")
 
         content.write(Text(""))
+        content.scroll_end(animate=False)
         header.set_mode("就绪")
         status.set_agent_status("就绪")
 
     def _on_ai_error(self, error_msg: str) -> None:
         """AI 查询失败（主线程回调）"""
+        # 已被 ESC 手动取消过，跳过
+        if self._ai_worker is None:
+            return
+
+        self._ai_worker = None
+        self._ai_thread_id = None
+        self._ai_pending_query = None
+
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
         status = self.query_one(StatusBar)
@@ -750,6 +790,7 @@ class CortexApp(App):
         thinking.stop()
 
         content.write_error(f"Agent 错误: {error_msg}")
+        content.scroll_end(animate=False)
         header.set_mode("就绪")
         status.set_agent_status("错误")
 
@@ -839,8 +880,53 @@ class CortexApp(App):
         content.clear()
 
     def action_focus_input(self) -> None:
-        """ESC 聚焦输入框"""
+        """ESC 聚焦输入框；AI 运行中则终止线程并恢复问题"""
+        if self._ai_worker and self._ai_worker.is_running:
+            # 先置空防止回调重复处理
+            self._ai_worker = None
+
+            # 强制终止后台线程
+            self._kill_ai_thread()
+
+            # 停止思考动画
+            thinking = self.query_one(ThinkingIndicator)
+            thinking.stop()
+
+            # 恢复 UI 状态
+            header = self.query_one(HeaderBar)
+            status = self.query_one(StatusBar)
+            header.set_mode("就绪")
+            status.set_agent_status("就绪")
+
+            content = self.query_one(ContentArea)
+            content.write_system("(已取消)")
+            content.scroll_end(animate=False)
+
+            # 将问题填回输入框
+            if self._ai_pending_query:
+                input_box = self.query_one(InputBox)
+                input_widget = input_box.query_one("#cmd-input", Input)
+                input_widget.value = self._ai_pending_query
+                input_widget.cursor_position = len(self._ai_pending_query)
+                self._ai_pending_query = None
+                input_box.focus_input()
+            return
+
         self.query_one(InputBox).focus_input()
+
+    def _kill_ai_thread(self) -> None:
+        """通过 ctypes 向 AI 线程注入 SystemExit 异常来强制终止"""
+        thread_id = self._ai_thread_id
+        self._ai_thread_id = None
+        if thread_id is None:
+            return
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(thread_id), ctypes.py_object(_AIQueryCancelled)
+        )
+        if res > 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_long(thread_id), 0
+            )
 
     def action_scroll_up(self) -> None:
         """PageUp 向上翻页"""
