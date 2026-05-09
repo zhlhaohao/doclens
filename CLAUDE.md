@@ -12,15 +12,19 @@ python -m venv .venv
 
 # 以可编辑模式安装 cortex
 pip install -e ".[cortex]"
-
-# 激活虚拟环境
-# Windows (PowerShell):
-& .venv\Scripts\Activate.ps1
-# Windows (Git Bash):
-source .venv/Scripts/activate
-# macOS / Linux:
-source .venv/bin/activate
 ```
+
+**运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
+
+```bash
+# 必须直接使用 .venv 中的 python.exe
+.venv/Scripts/python.exe -m cortex ...
+
+# 如果在子目录（如 test_work_dir/）执行，用相对路径：
+../.venv/Scripts/python.exe -m cortex ...
+```
+
+> 人工在终端操作时，PowerShell 用 `& .venv\Scripts\Activate.ps1`，macOS/Linux 用 `source .venv/bin/activate`。
 
 ## Cortex 技术栈
 
@@ -171,14 +175,18 @@ planify/
 ### TUI 界面（交互式）
 
 ```bash
-python -m cortex
+.venv/Scripts/python.exe -m cortex
 ```
 
 ## CORTEX-CLI 测试命令
 
+> 以下命令中 `python` 均指 `.venv/Scripts/python.exe`（在 `test_work_dir/` 下执行时为 `../.venv/Scripts/python.exe`）。
+
 | 命令 | 说明 | 参数 | 示例 |
 |------|------|------|------|
 | `python -m cortex search <query>` | 在已索引的文档中搜索关键词 | `<query>`: 搜索关键词，支持多个词 | `python -m cortex search python`<br>`python -m cortex search "token limit"` |
-| `python -m cortex ai <message>` | AI问答 | `<message>`: 发送的消息内容 | `python -m cortex ai 你好`<br>`python -m cortex ai "解释一下 token limit"` |
+| `python -m cortex search_v2 '<json>'` | 结构化搜索（AND/OR/NOT/PHRASE） | JSON 查询语法 | `python -m cortex search_v2 '{"type": "and", "terms": ["量子", "密码"]}'` |
+| `python -m cortex read_document --path '<path>'` | 文档阅读 | `--section`, `--start-line`, `--end-line` | `python -m cortex read_document --path '科技/doc.md' --section '摘要'` |
+| `python -m cortex ai <message>` | AI问答 | `<message>`: 发送的消息内容 | `python -m cortex ai 你好` |
 | `python -m cortex index [--force]` | 创建或增量同步更新文档索引 | `--force`, `-f`: 强制全量重建（删除旧索引） | `python -m cortex index`<br>`python -m cortex index --force` |
-| `python -m cortex status` | 显示系统状态：索引路径、索引大小、搜索路径、文档总数、文件总大小、文件类型统计（前10）、依赖状态 | 无 | `python -m cortex status` |
+| `python -m cortex status` | 显示系统状态 | 无 | `python -m cortex status` |

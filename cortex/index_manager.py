@@ -399,7 +399,7 @@ class IndexManager:
         else:
             print(f"[索引已更新: {len(self._ts.documents)} 个文档]")
 
-    def search(self, query, max_results=None):
+    def search(self, query, max_results=None, fts_expression=None):
         """执行搜索，返回 (flat_nodes, documents)"""
         if max_results is None:
             max_results = self.max_results
@@ -415,6 +415,7 @@ class IndexManager:
             max_results=max_results,
             max_nodes_per_doc=self.max_nodes_per_doc,
             top_k_docs=self.top_k_docs,
+            fts_expression=fts_expression,
         )
 
         return result.get("flat_nodes", []), result.get("documents", [])
