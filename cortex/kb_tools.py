@@ -570,8 +570,13 @@ def _find_section_text(
     nodes: list[dict],
     section: str,
 ) -> Optional[tuple[str, str, str]]:
-    """在节点树中查找匹配章节的内容。"""
+    """在节点树中查找匹配章节的内容。
+
+    优先返回最深（最具体）的匹配节点，避免宽泛的父节点先被选中。
+    """
     section_lower = section.lower()
+    matches: list[tuple[str, str, list[str]]] = []
+
     queue = [(nodes, [])]
     while queue:
         current_nodes, path = queue.pop(0)
@@ -582,9 +587,9 @@ def _find_section_text(
 
             if title and section_lower in title.lower():
                 text = node.get("text", "") or ""
-                # 递归收集所有子节点的内容
-                def _collect_all_text(n):
-                    parts = [text] if text else []
+
+                def _collect_all_text(n, root_text=text):
+                    parts = [root_text] if root_text else []
                     for child in n.get("nodes", []):
                         child_text = child.get("text", "") or ""
                         if child_text:
@@ -594,12 +599,27 @@ def _find_section_text(
 
                 all_texts = _collect_all_text(node)
                 combined_text = "\n\n".join(all_texts)
-                hierarchy = " > ".join(current_path)
-                return (title, combined_text, hierarchy)
+                matches.append((title, combined_text, current_path))
 
             if children:
                 queue.append((children, current_path))
-    return None
+
+    if not matches:
+        return None
+
+    # 排序优先级：
+    # 1. 路径深度（最深优先，即最具体的节点）
+    # 2. 标题与 section 的相似度（标题越短且包含 section，越精确）
+    #    用 len(section) / len(title) 衡量：section 占标题比例越高越精确
+    def _match_score(m):
+        path_depth = len(m[2])
+        title_lower = m[0].lower()
+        ratio = len(section_lower) / max(len(title_lower), 1)
+        return (path_depth, ratio)
+
+    best = max(matches, key=_match_score)
+    hierarchy = " > ".join(best[2])
+    return (best[0], best[1], hierarchy)
 
 
 def _format_document_output(
