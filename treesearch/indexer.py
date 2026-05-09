@@ -1277,6 +1277,135 @@ def _file_hash(fp: str, mode: Optional[str] = None) -> str:
     return f"v{INDEX_SCHEMA_VERSION}:{mode}:{payload}"
 
 
+def _extract_size_from_fingerprint(fp_hash: str) -> Optional[str]:
+    """Extract the file size portion from a fingerprint string.
+
+    Supports both stat (``v{VER}:stat:{mtime}:{size}``) and content
+    (``v{VER}:content:{size}:{md5}``) formats.
+    """
+    parts = fp_hash.split(":")
+    if len(parts) < 3:
+        return None
+    candidate = parts[-1]
+    return candidate if candidate.isdigit() else None
+
+
+def _detect_and_apply_moves(
+    expanded: list[str],
+    all_meta: dict[str, str],
+    fts,
+    fp_to_doc_id: dict[str, str],
+    file_hash_fn,
+) -> list[tuple[str, str]]:
+    """Detect file moves/renames and apply them in-place via ``fts.rename_document``.
+
+    Two-pass strategy:
+
+    1. **Fingerprint match** (exact): compute the file fingerprint and look it up
+       in a reverse index built from stored metadata.  This works perfectly when
+       the fingerprint is content-based (MD5), and also catches the rare case
+       where ``stat`` mtime is preserved after a move.
+
+    2. **Size heuristic** (fallback): for stat-mode fingerprints where mtime
+       changed on move, match by ``(basename, file_size)``.  This is reliable
+       because: same basename + same byte size + old path gone = move.
+
+    Mutates ``all_meta`` in-place by popping old entries and inserting new ones.
+    Returns a list of ``(old_path, new_path)`` tuples for logging.
+    """
+    from .config import INDEX_SCHEMA_VERSION
+
+    _current_prefix = f"v{INDEX_SCHEMA_VERSION}:"
+
+    # --- Build reverse index: fingerprint → stored_path ---
+    hash_to_old_path: dict[str, str] = {}
+    for sp, fh in all_meta.items():
+        if fh.startswith(_current_prefix):
+            hash_to_old_path.setdefault(fh, sp)
+
+    moved: list[tuple[str, str]] = []
+    expanded_abs = {os.path.abspath(p) for p in expanded}
+    matched_new = set()  # abs_fp of new files already claimed
+
+    # --- Pass 1: fingerprint-based matching ---
+    if hash_to_old_path:
+        for fp in expanded:
+            abs_fp = os.path.abspath(fp)
+            if abs_fp in all_meta:
+                continue
+            fh = file_hash_fn(abs_fp)
+            if not fh:
+                continue
+            old_path = hash_to_old_path.get(fh)
+            if old_path and old_path != abs_fp and not os.path.isfile(old_path):
+                moved_doc_id = fts.get_doc_id_by_source_path(old_path)
+                if moved_doc_id:
+                    new_doc_id = fp_to_doc_id.get(fp, os.path.splitext(os.path.basename(abs_fp))[0])
+                    if fts.rename_document(moved_doc_id, new_doc_id, new_doc_id, abs_fp):
+                        fts.set_index_meta(abs_fp, fh)
+                        all_meta.pop(old_path, None)
+                        all_meta[abs_fp] = fh
+                        hash_to_old_path[fh] = abs_fp
+                        matched_new.add(abs_fp)
+                        moved.append((old_path, abs_fp))
+                        logger.info(
+                            "Detected moved file: %s -> %s (doc_id %s -> %s)",
+                            old_path, abs_fp, moved_doc_id, new_doc_id,
+                        )
+                    else:
+                        logger.debug(
+                            "Move-detection skipped for %s -> %s "
+                            "(doc_id collision); will full re-index",
+                            old_path, abs_fp,
+                        )
+
+    # --- Pass 2: size-based heuristic for stat-mode moves ---
+    # Collect orphan candidates: indexed paths whose files disappeared from disk
+    # and were not already remapped by Pass 1.
+    orphan_by_key: dict[str, list[tuple[str, str]]] = {}  # "basename:size" → [(path, hash)]
+    for sp, sh in list(all_meta.items()):
+        if sp in expanded_abs or os.path.isfile(sp):
+            continue
+        size_str = _extract_size_from_fingerprint(sh)
+        if not size_str:
+            continue
+        bn = os.path.basename(sp)
+        orphan_by_key.setdefault(f"{bn}:{size_str}", []).append((sp, sh))
+
+    if orphan_by_key:
+        for fp in expanded:
+            abs_fp = os.path.abspath(fp)
+            if abs_fp in all_meta or abs_fp in matched_new:
+                continue
+            try:
+                st = os.stat(abs_fp)
+            except OSError:
+                continue
+            bn = os.path.basename(abs_fp)
+            key = f"{bn}:{st.st_size}"
+            candidates = orphan_by_key.get(key, [])
+            for old_path, stored_hash in candidates:
+                if old_path not in all_meta:
+                    continue  # already claimed by another new file
+                moved_doc_id = fts.get_doc_id_by_source_path(old_path)
+                if not moved_doc_id:
+                    continue
+                new_doc_id = fp_to_doc_id.get(fp, os.path.splitext(bn)[0])
+                if fts.rename_document(moved_doc_id, new_doc_id, new_doc_id, abs_fp):
+                    new_fh = file_hash_fn(abs_fp)
+                    fts.set_index_meta(abs_fp, new_fh)
+                    all_meta.pop(old_path, None)
+                    all_meta[abs_fp] = new_fh
+                    moved.append((old_path, abs_fp))
+                    logger.info(
+                        "Detected moved/renamed file (size heuristic): %s -> %s",
+                        old_path, abs_fp,
+                    )
+                    break
+
+    return moved
+
+
 async def build_index(
     paths: list[str],
     output_dir: str = "./indexes",
@@ -1399,50 +1528,12 @@ async def build_index(
     else:
         all_meta = {}
 
-    # Reverse index for move/rename detection (file_hash → source_path).
-    # Only entries with the *current* schema version count as candidates —
-    # cross-version matches must always re-index.
-    hash_to_old_path: dict[str, str] = {}
-    from .config import INDEX_SCHEMA_VERSION
-    _current_prefix = f"v{INDEX_SCHEMA_VERSION}:"
-    for sp, fh in all_meta.items():
-        if fh.startswith(_current_prefix):
-            hash_to_old_path.setdefault(fh, sp)
-
     # Pre-pass: detect moves/renames and remap source_path BEFORE pruning,
     # so the orphan cleanup below doesn't drop a doc whose file just moved.
-    if not force and hash_to_old_path:
-        for fp in expanded:
-            abs_fp = os.path.abspath(fp)
-            if abs_fp in all_meta:
-                continue  # path unchanged → not a move
-            fh = _file_hash(abs_fp)
-            if not fh:
-                continue
-            old_path = hash_to_old_path.get(fh)
-            if old_path and old_path != abs_fp and not os.path.isfile(old_path):
-                moved_doc_id = fts.get_doc_id_by_source_path(old_path)
-                if moved_doc_id:
-                    new_doc_id = _fp_to_doc_id.get(fp, os.path.splitext(os.path.basename(abs_fp))[0])
-                    # Keep doc identity aligned with the new basename so that
-                    # the skipped-doc backfill below (keyed by basename) and
-                    # any caller looking the doc up by name after build_index
-                    # both see consistent values.
-                    if fts.rename_document(moved_doc_id, new_doc_id, new_doc_id, abs_fp):
-                        fts.set_index_meta(abs_fp, fh)
-                        all_meta.pop(old_path, None)
-                        all_meta[abs_fp] = fh
-                        hash_to_old_path[fh] = abs_fp
-                        logger.info(
-                            "Detected moved file: %s -> %s (doc_id %s -> %s)",
-                            old_path, abs_fp, moved_doc_id, new_doc_id,
-                        )
-                    else:
-                        logger.debug(
-                            "Move-detection skipped for %s -> %s "
-                            "(doc_id collision); will full re-index",
-                            old_path, abs_fp,
-                        )
+    if not force:
+        _detect_and_apply_moves(
+            expanded, all_meta, fts, _fp_to_doc_id, _file_hash
+        )
 
     # Orphan cleanup: docs in DB whose source_path is not in the new scope.
     # Implicit prune (defaulted from a directory walk): only drop docs whose

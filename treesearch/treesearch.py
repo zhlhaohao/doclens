@@ -101,7 +101,7 @@ class TreeSearch:
             max_files=self._max_files,
         )
 
-    def _get_changed_files(self, stored_meta: dict = None) -> List[str]:
+    def _get_changed_files(self, stored_meta: dict = None) -> tuple[list[str], bool]:
         """Return list of pending source files that changed since last index.
 
         Uses (mtime_ns, size) fingerprints stored in index_meta.
@@ -109,6 +109,12 @@ class TreeSearch:
 
         Args:
             stored_meta: Pre-loaded index metadata dict. If None, reads from DB.
+
+        Returns:
+            ``(changed_files, has_orphans)`` where *has_orphans* is True when
+            at least one previously-indexed file has disappeared from disk
+            (indicating a move, rename, or deletion that requires full-scope
+            re-indexing with orphan pruning).
         """
         from .indexer import _file_hash
 
@@ -118,15 +124,25 @@ class TreeSearch:
             stored_meta = fts.get_all_index_meta()
             fts.close()
 
+        resolved = self._resolve_patterns(self._pending_paths)
+        disk_abs = {os.path.abspath(fp) for fp in resolved}
+
         changed = []
-        for fp in self._resolve_patterns(self._pending_paths):
+        for fp in resolved:
             abs_fp = os.path.abspath(fp)
             current_hash = _file_hash(abs_fp)
             if not current_hash:
                 continue
             if stored_meta.get(abs_fp) != current_hash:
                 changed.append(fp)
-        return changed
+
+        # Detect orphaned entries: indexed paths that are no longer on disk.
+        has_orphans = any(
+            sp not in disk_abs and not os.path.isfile(sp)
+            for sp in stored_meta
+        )
+
+        return changed, has_orphans
 
     # ------------------------------------------------------------------
     # Index
@@ -196,13 +212,18 @@ class TreeSearch:
                 stored_meta = fts.get_all_index_meta() if cached_docs else {}
 
                 if cached_docs:
-                    changed = self._get_changed_files(stored_meta=stored_meta)
-                    if not changed:
+                    changed, has_orphans = self._get_changed_files(stored_meta=stored_meta)
+                    if not changed and not has_orphans:
                         self.documents = cached_docs
                         self._pending_paths.clear()
                     else:
-                        logger.info("Incremental re-index: %d file(s) changed", len(changed))
-                        await self.aindex(*changed)
+                        if has_orphans:
+                            # Full-scope reindex needed for orphan cleanup + move detection
+                            logger.info("Incremental re-index with orphan cleanup: %d file(s) changed", len(changed))
+                            await self.aindex(*self._pending_paths)
+                        else:
+                            logger.info("Incremental re-index: %d file(s) changed", len(changed))
+                            await self.aindex(*changed)
                         self.documents = load_documents(self.db_path)
                         self._pending_paths.clear()
             if not self.documents and self._pending_paths:
