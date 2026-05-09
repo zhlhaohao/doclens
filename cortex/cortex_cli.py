@@ -827,6 +827,44 @@ def _build_parser():
         func=_cli_status
     )
 
+    # cortex search_v2 '<json>'
+    search_v2_parser = sub.add_parser(
+        "search_v2",
+        help="Structured search with AND/OR/NOT/PHRASE operators (JSON input)",
+    )
+    search_v2_parser.add_argument(
+        "query_tokens", type=str,
+        help='JSON query, e.g. \'{"type": "and", "terms": ["量子", "密码"]}\'',
+    )
+    search_v2_parser.add_argument(
+        "--max-results", type=int, default=None,
+        help="Maximum number of results",
+    )
+    search_v2_parser.set_defaults(func=_cli_search_v2)
+
+    # cortex read_document --path <path> [--start-line N] [--end-line N] [--section T]
+    read_parser = sub.add_parser(
+        "read_document",
+        help="Read a document with structure info (supports md/pdf/docx/pptx/xlsx/html)",
+    )
+    read_parser.add_argument(
+        "--path", required=True, type=str,
+        help="Document path (relative to search path or absolute)",
+    )
+    read_parser.add_argument(
+        "--start-line", type=int, default=None,
+        help="Start line number",
+    )
+    read_parser.add_argument(
+        "--end-line", type=int, default=None,
+        help="End line number",
+    )
+    read_parser.add_argument(
+        "--section", type=str, default=None,
+        help="Section title to read (takes priority over line numbers)",
+    )
+    read_parser.set_defaults(func=_cli_read_document)
+
     return parser
 
 
@@ -941,6 +979,50 @@ def _cli_status(args, config, idx):
   ─────────────────────────────
   文件类型统计 (前10)
 {type_lines}  依赖状态:   {'全部已安装' if deps_ok else '部分缺失'}""")
+
+
+def _cli_search_v2(args, config, idx):
+    """Handle `cortex search_v2 '<json>'` — structured search output."""
+    import json as _json
+    from cortex.kb_tools import _handle_search_kb_v2
+
+    try:
+        query_tokens = _json.loads(args.query_tokens)
+    except _json.JSONDecodeError as e:
+        print(f"JSON 解析失败: {e}")
+        print('示例: python -m cortex search_v2 \'{"type": "and", "terms": ["量子", "密码"]}\'')
+        return
+
+    if "type" not in query_tokens:
+        print("JSON 必须包含 'type' 字段 (and/or/not/phrase)")
+        return
+
+    idx.load_or_build_index()
+    workdir = Path(idx.search_path)
+    result = _handle_search_kb_v2(
+        idx,
+        workdir,
+        query_tokens=query_tokens,
+        max_results=args.max_results,
+    )
+    print(result)
+
+
+def _cli_read_document(args, config, idx):
+    """Handle `cortex read_document --path <path>` — document reading output."""
+    from cortex.kb_tools import _handle_read_document
+
+    idx.load_or_build_index()
+    workdir = Path(idx.search_path)
+    result = _handle_read_document(
+        idx,
+        workdir,
+        path=args.path,
+        start_line=args.start_line,
+        end_line=args.end_line,
+        section=args.section,
+    )
+    print(result)
 
 
 def main():
