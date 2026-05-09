@@ -174,11 +174,11 @@ planify/
 python -m cortex
 ```
 
-## 测试命令
+## CORTEX-CLI 测试命令
 
 | 命令 | 说明 | 参数 | 示例 |
 |------|------|------|------|
 | `python -m cortex search <query>` | 在已索引的文档中搜索关键词 | `<query>`: 搜索关键词，支持多个词 | `python -m cortex search python`<br>`python -m cortex search "token limit"` |
 | `python -m cortex ai <message>` | AI问答 | `<message>`: 发送的消息内容 | `python -m cortex ai 你好`<br>`python -m cortex ai "解释一下 token limit"` |
-| `python -m cortex index [--force]` | 构建或更新文档索引 | `--force`, `-f`: 强制全量重建（删除旧索引） | `python -m cortex index`<br>`python -m cortex index --force` |
+| `python -m cortex index [--force]` | 创建或增量同步更新文档索引 | `--force`, `-f`: 强制全量重建（删除旧索引） | `python -m cortex index`<br>`python -m cortex index --force` |
 | `python -m cortex status` | 显示系统状态：索引路径、索引大小、搜索路径、文档总数、文件总大小、文件类型统计（前10）、依赖状态 | 无 | `python -m cortex status` |
