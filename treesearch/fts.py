@@ -171,13 +171,48 @@ def _tokenize_fts_expression(expr: str) -> str:
     terms tokenized to match the indexed content, but FTS5
     operators (AND, OR, NOT, NEAR) must remain untouched.
 
+    Handles:
+    - FTS5 keyword operators: AND, OR, NOT, NEAR
+    - Unary NOT prefix: ``-term`` → ``-tokenized``
+    - Quoted phrases: ``"exact phrase"`` → ``"tokenized phrase"``
+
     Only applies jieba segmentation when CJK characters are detected.
     """
-    parts = expr.split()
+    # Split while preserving quoted segments as single units
+    tokens: list[str] = []
+    i = 0
+    while i < len(expr):
+        if expr[i] == '"':
+            end = expr.find('"', i + 1)
+            if end == -1:
+                end = len(expr)
+            tokens.append(expr[i:end + 1])
+            i = end + 1
+        elif expr[i].isspace():
+            i += 1
+        else:
+            end = i
+            while end < len(expr) and not expr[end].isspace() and expr[end] != '"':
+                end += 1
+            tokens.append(expr[i:end])
+            i = end
+
     result = []
-    for part in parts:
-        if part.upper() in _FTS5_OPERATORS:
-            result.append(part.upper())
+    for part in tokens:
+        upper = part.upper()
+        if upper in _FTS5_OPERATORS:
+            result.append(upper)
+        elif part.startswith('"') and part.endswith('"'):
+            # Phrase query: "exact phrase" → tokenize inner content, keep quotes
+            inner = part[1:-1]
+            tokenized = _tokenize_for_fts(inner)
+            if tokenized.strip():
+                result.append(f'"{tokenized.strip()}"')
+        elif part.startswith('-'):
+            # Unary NOT: -term → -tokenized
+            tokenized = _tokenize_for_fts(part[1:])
+            if tokenized.strip():
+                result.append(f"-{tokenized.strip()}")
         else:
             tokenized = _tokenize_for_fts(part)
             if tokenized.strip():

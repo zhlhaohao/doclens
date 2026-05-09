@@ -197,20 +197,27 @@ def _build_fts5_query(query_tokens: dict) -> str:
         query_tokens: 结构化查询字典，支持以下类型：
             - {"type": "and", "terms": [...], "exclude": [...]}  # 所有词都匹配，可选排除
             - {"type": "or", "terms": [...]}  # 任一词匹配
-            - {"type": "not", "term": "word"}  # 排除该词
+            - {"type": "not", "term": "word"}  # 排除该词（应用层处理，FTS5 不支持独立 NOT）
             - {"type": "phrase", "text": "exact phrase"}  # 短语精确匹配
 
     Returns:
-        FTS5 查询字符串
+        FTS5 查询字符串。对于 type="not"，返回空字符串（由调用方在应用层处理）。
     """
     qtype = query_tokens.get("type", "").lower()
 
     if qtype == "and":
         terms = query_tokens.get("terms", [])
         exclude = query_tokens.get("exclude", [])
-        parts = list(terms)
+        # Use OR at FTS5 level (node-level AND is too strict; document-level AND
+        # is handled by post-processing / proximity scoring).
+        # Exclude uses FTS5 NOT operator (binary: positive NOT negative).
+        parts = []
+        if len(terms) > 1:
+            parts.append(" OR ".join(terms))
+        else:
+            parts.extend(terms)
         for ex in exclude:
-            parts.append(f"-{ex}")
+            parts.append(f"NOT {ex}")
         return " ".join(parts)
 
     elif qtype == "or":
@@ -218,8 +225,8 @@ def _build_fts5_query(query_tokens: dict) -> str:
         return " OR ".join(terms)
 
     elif qtype == "not":
-        term = query_tokens.get("term", "")
-        return f"-{term}"
+        # FTS5 不支持独立的一元 NOT 查询，由 _handle_search_kb_v2 在应用层处理
+        return ""
 
     elif qtype == "phrase":
         text = query_tokens.get("text", "")
@@ -330,6 +337,8 @@ def _format_kb_results(
 
     if truncated_count > 0:
         lines.append(f"\n（还有 {truncated_count} 个结果被截断，可用 max_results 参数获取更多）")
+    elif total_hits > shown:
+        lines.append(f"\n（还有 {total_hits - shown} 个结果被截断，可用 max_results 参数获取更多）")
 
     return "\n".join(lines)
 
@@ -877,6 +886,10 @@ def _handle_search_kb_v2(
     from cortex.scoring import calc_proximity_score, compute_composite_score
     from cortex import ripgrep as rg_module
 
+    # NOT 查询：FTS5 不支持独立一元 NOT，在应用层处理
+    if qtype == "not":
+        return _handle_not_query(idx_manager, query_tokens, max_results)
+
     # 解析结构化查询为 FTS5 语法
     try:
         fts_query = _build_fts5_query(query_tokens)
@@ -887,7 +900,7 @@ def _handle_search_kb_v2(
     query_words = _extract_keywords(query_tokens)
 
     # 执行 FTS5 搜索
-    nodes, docs = idx_manager.search(fts_query, max_results=max_results)
+    nodes, docs = idx_manager.search(fts_query, max_results=max_results, fts_expression=fts_query)
 
     if not nodes:
         # 降级到 ripgrep
@@ -976,6 +989,61 @@ def _handle_search_kb_v2(
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
     )
+
+def _handle_not_query(
+    idx_manager: IndexManager,
+    query_tokens: dict,
+    max_results: int,
+) -> str:
+    """处理 NOT 查询：返回不包含指定关键词的文档。
+
+    FTS5 不支持独立的一元 NOT 查询，因此通过正向搜索 + 结果取反实现。
+    """
+    term = query_tokens.get("term", "")
+    if not term:
+        return "NOT 查询需要提供 'term' 字段。"
+
+    # 正向搜索：找到包含该词的文档
+    positive_query = _build_fts5_query({"type": "and", "terms": [term]})
+    positive_nodes, positive_docs = idx_manager.search(
+        positive_query, max_results=None, fts_expression=positive_query,
+    )
+    exclude_paths: set[str] = set()
+    for d in positive_docs:
+        path = idx_manager.path_map.get(d.get("doc_id", ""))
+        if path:
+            exclude_paths.add(path)
+
+    # 同时用 ripgrep 补充（FTS5 可能漏掉一些）
+    from cortex import ripgrep as rg_module
+    rg_results = rg_module.rg_fallback_search(
+        positive_query, idx_manager.path_map, {}, [term],
+        context_before=0, context_after=0,
+    )
+    for item in (rg_results or []):
+        path = idx_manager.path_map.get(item[0], "")
+        if path:
+            exclude_paths.add(path)
+
+    # 取反：所有文档路径中排除包含该词的，按路径去重
+    all_paths = sorted(set(idx_manager.path_map.values()))
+    remaining_paths = [p for p in all_paths if p not in exclude_paths]
+
+    if not remaining_paths:
+        return f"所有文档都包含 '{term}'。"
+
+    lines = [f"搜索到 {len(remaining_paths)} 个结果（排除包含 '{term}' 的文档）："]
+    shown = 0
+    for path in remaining_paths:
+        if shown >= max_results:
+            remaining = len(remaining_paths) - shown
+            lines.append(f"\n（还有 {remaining} 个结果被截断，可用 max_results 参数获取更多）")
+            break
+        doc_name = Path(path).stem if path else path
+        lines.append(f"\n=== 结果 {shown + 1} ===\n文档: {doc_name}\n路径: {path}")
+        shown += 1
+
+    return "\n".join(lines)
 
 
 def _extract_keywords(query_tokens: dict) -> list[str]:
