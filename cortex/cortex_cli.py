@@ -843,11 +843,19 @@ def _build_parser():
     )
     search_v2_parser.set_defaults(func=_cli_search_v2)
 
-    # cortex web <query>
+    # cortex web <query> [--allowed-domains DOMAINS] [--blocked-domains DOMAINS]
     web_parser = sub.add_parser(
         "web", help="Web search using Anthropic server-side search"
     )
     web_parser.add_argument("query", nargs="+", help="Search query keywords")
+    web_parser.add_argument(
+        "--allowed-domains", type=str, default=None,
+        help="只搜索这些域名（逗号分隔）"
+    )
+    web_parser.add_argument(
+        "--blocked-domains", type=str, default=None,
+        help="排除这些域名（逗号分隔）"
+    )
     web_parser.set_defaults(func=_cli_web)
 
     # cortex read_document --path <path> [--start-line N] [--end-line N] [--section T]
@@ -1037,6 +1045,14 @@ def _cli_web(args, config, idx):
     """Handle `cortex web <query>` — web search via Anthropic server-side search."""
     query = " ".join(args.query)
 
+    # 解析域名过滤参数
+    allowed = None
+    if args.allowed_domains:
+        allowed = [d.strip() for d in args.allowed_domains.split(",") if d.strip()]
+    blocked = None
+    if args.blocked_domains:
+        blocked = [d.strip() for d in args.blocked_domains.split(",") if d.strip()]
+
     from planify.tools.web import run_web_search
     from planify.core.client import init_anthropic_client
 
@@ -1049,7 +1065,10 @@ def _cli_web(args, config, idx):
         return
 
     client = init_anthropic_client(base_url, api_key)
-    result = run_web_search(query, client, model_id)
+    result = run_web_search(
+        query, client, model_id,
+        allowed_domains=allowed, blocked_domains=blocked
+    )
     print(result)
 
 
