@@ -1,16 +1,65 @@
 """网络搜索工具
 
-使用 Anthropic API 的服务端 web_search 工具获取实时网络信息。
+使用 Anthropic API 的服务端 web_search_20250305 工具获取实时网络信息。
 需要 API 端点支持 web_search_20250305 工具类型。
 """
 
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from anthropic import Anthropic
 
 
+def extract_search_results(content_blocks: list) -> list[dict]:
+    """
+    从 API 返回的 content blocks 中提取搜索结果
+
+    Args:
+        content_blocks: Anthropic API 返回的 content 块列表
+
+    Returns:
+        结果字典列表，每项包含 title/url/page_age 或 type:text
+    """
+    results = []
+    for block in content_blocks:
+        if hasattr(block, 'type') and block.type == 'web_search_tool_result':
+            if hasattr(block, 'content') and isinstance(block.content, list):
+                for r in block.content:
+                    if hasattr(r, 'title') and hasattr(r, 'url'):
+                        results.append({
+                            "title": r.title,
+                            "url": r.url,
+                            **({"page_age": r.page_age} if hasattr(r, 'page_age') and r.page_age else {}),
+                        })
+        elif hasattr(block, 'type') and block.type == 'text':
+            results.append({"type": "text", "text": block.text})
+    return results
+
+
+def _format_results(results: list[dict]) -> str:
+    """将提取的结果格式化为字符串"""
+    if not results:
+        return "未找到相关结果"
+
+    output_parts = []
+    for r in results:
+        if r.get("type") == "text":
+            output_parts.append(r["text"])
+        else:
+            title = r.get("title", "Untitled")
+            url = r.get("url", "")
+            page_age = r.get("page_age", "")
+            output_parts.append(f"- [{title}]({url}){f' ({page_age})' if page_age else ''}")
+
+    return "\n".join(output_parts)
+
+
 def run_web_search(
-    query: str, client: Anthropic, model_id: str = "claude-opus-4-6"
+    query: str,
+    client: Anthropic,
+    model_id: str = "claude-opus-4-6",
+    thinking_budget: int = 10000,
+    allowed_domains: Optional[List[str]] = None,
+    blocked_domains: Optional[List[str]] = None,
 ) -> str:
     """
     使用 Anthropic API 的服务端 web_search 工具搜索网络信息
@@ -19,36 +68,53 @@ def run_web_search(
         query: 搜索查询字符串
         client: Anthropic 客户端实例
         model_id: 模型 ID
+        thinking_budget: Thinking 预算 token 数（默认 10000）
+        allowed_domains: 只搜索这些域名
+        blocked_domains: 排除这些域名
 
     Returns:
-        搜索结果文本
+        格式化后的搜索结果文本
     """
     if client is None:
         return "网络搜索不可用：客户端未初始化"
+
+    # 构建工具 schema
+    tool_web_search: dict[str, Any] = {
+        "enable": True,
+        "search_query": "auto",
+    }
+    if allowed_domains:
+        tool_web_search["allowed_domains"] = allowed_domains
+    if blocked_domains:
+        tool_web_search["blocked_domains"] = blocked_domains
+
+    tools = [
+        {
+            "name": "web_search",
+            "type": "web_search_20250305",
+            "web_search": tool_web_search,
+        }
+    ]
+
+    kwargs: dict[str, Any] = {
+        "model": model_id,
+        "max_tokens": 4096,
+        "tools": tools,
+        "messages": [{"role": "user", "content": query}],
+        "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
+    }
+
     try:
         import httpx
-        response = client.messages.create(
-            model=model_id,
-            max_tokens=4096,
-            timeout=httpx.Timeout(60.0, connect=10.0),
-            tools=[
-                {
-                    "name": "web_search",
-                    "type": "web_search_20250305",
-                    "web_search": {
-                        "enable": True,
-                        "search_query": "auto",
-                    },
-                }
-            ],
-            messages=[{"role": "user", "content": query}],
-        )
-        texts = [
-            block.text
-            for block in response.content
-            if hasattr(block, "text") and block.text is not None
-        ]
-        return "\n".join(texts) if texts else "未找到相关结果"
+        kwargs["timeout"] = httpx.Timeout(60.0, connect=10.0)
+
+        # 内部流式调用，获取最终结果
+        with client.messages.stream(**kwargs) as stream:
+            response = stream.get_final_message()
+
+        results = extract_search_results(response.content)
+        return _format_results(results)
+
     except Exception as e:
         err_msg = str(e)
         if "401" in err_msg or "authentication" in err_msg.lower():
@@ -77,13 +143,23 @@ def make_web_tools(
     tools = [
         {
             "name": "web_search",
-            "description": "搜索网络信息。返回基于实时搜索的结果摘要。",
+            "description": "搜索网络信息。返回基于实时搜索的结果摘要。支持 allowed_domains 和 blocked_domains 过滤。",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
                         "description": "搜索查询内容",
+                    },
+                    "allowed_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "只搜索这些域名",
+                    },
+                    "blocked_domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "排除这些域名",
                     },
                 },
                 "required": ["query"],
@@ -92,7 +168,13 @@ def make_web_tools(
     ]
 
     handlers = {
-        "web_search": lambda **kw: run_web_search(kw["query"], client, model_id),
+        "web_search": lambda **kw: run_web_search(
+            kw["query"],
+            client,
+            model_id,
+            allowed_domains=kw.get("allowed_domains"),
+            blocked_domains=kw.get("blocked_domains"),
+        ),
     }
 
     return tools, handlers
