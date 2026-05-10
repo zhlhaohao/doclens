@@ -36,6 +36,9 @@ COMMAND_ALIASES: dict[str, str] = {
     "ai": "ai",
     "llm": "ai",
     "agent": "ai",
+    # 网络搜索
+    "web": "web",
+    "w": "web",
     # 压缩
     "compact": "compact",
     # 复制

@@ -233,7 +233,6 @@ from planify.core import (
     setup_logging,
     SessionConfig,
     Session,
-    init_zhipu_client,
 )  # noqa: E402
 from planify.managers import (
     TodoManager,
@@ -272,12 +271,6 @@ def setup_single_user_session():
 
     # 获取配置（由 get_config 统一加载 .env 文件）
     config = get_config(load_env=True)
-
-    # 初始化 ZhipuAI 客户端
-    zhipu_client, zhipu_model_id = init_zhipu_client(
-        config.get("zhipu_api_key"),
-        config.get("zhipu_model_id", "glm-4"),
-    )
 
     # 单用户模式：直接使用当前目录，创建所需子目录
     team_dir = workdir / ".planify/team"
@@ -339,8 +332,6 @@ def setup_single_user_session():
 
     tools, tool_handlers = build_tool_registry(
         workdir=workdir,
-        zhipu_client=zhipu_client,
-        zhipu_model_id=zhipu_model_id,
         todo_mgr=todo_mgr,
         task_mgr=task_mgr,
         bg_mgr=bg_mgr,
@@ -369,7 +360,6 @@ def setup_single_user_session():
     session = Session(user_id="default", phone="", config=session_config)
     session.session_id = "default"  # 单用户单会话模式
     session.client = client
-    # zhipu_client 现在是全局共享的，从 SessionManager 获取
     session.todo_mgr = todo_mgr
     session.task_mgr = task_mgr
     session.bg_mgr = bg_mgr

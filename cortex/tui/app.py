@@ -301,6 +301,8 @@ class CortexApp(App):
                 self._cmd_clear()
             elif cmd == "ai":
                 self._cmd_ai(arg)
+            elif cmd == "web":
+                self._cmd_web(arg)
             elif cmd == "compact":
                 self._cmd_compact()
             elif cmd in ("tasks", "team", "inbox", "failed", "clearfailed"):
@@ -337,6 +339,7 @@ class CortexApp(App):
             "\n"
             "━━━ AI 命令 ━━━\n"
             "  /ai <消息>        与 LLM Agent 对话\n"
+            "  /web <搜索内容>   网络搜索\n"
             "  /compact          压缩对话历史\n"
             "  /tasks            显示任务列表\n"
             "  /team             显示团队列表\n"
@@ -818,6 +821,55 @@ class CortexApp(App):
         content.scroll_end(animate=False)
         header.set_mode("就绪")
         status.set_agent_status("错误")
+
+    def _cmd_web(self, arg: str) -> None:
+        """网络搜索命令"""
+        content = self.query_one(ContentArea)
+        header = self.query_one(HeaderBar)
+
+        if not arg:
+            content.write_error("用法: /web <搜索内容>")
+            return
+
+        header.set_mode("搜索中...")
+        self.run_worker(lambda: self._do_web_search(arg), thread=True, name="web_search")
+
+    def _do_web_search(self, query: str) -> None:
+        """后台线程：执行网络搜索"""
+        try:
+            from planify.tools.web import run_web_search
+            from planify.core.client import init_anthropic_client
+
+            config = self.config
+            if not config.planify_api_key:
+                self.call_from_thread(
+                    self._on_web_error, "未配置 PLANIFY_API_KEY，请在 .env 中设置"
+                )
+                return
+
+            client = init_anthropic_client(config.planify_base_url, config.planify_api_key)
+            result = run_web_search(query, client, config.planify_model_id)
+            self.call_from_thread(self._on_web_done, result)
+        except Exception as exc:
+            self.call_from_thread(self._on_web_error, str(exc))
+
+    def _on_web_done(self, result: str) -> None:
+        """网络搜索完成（主线程回调）"""
+        content = self.query_one(ContentArea)
+        header = self.query_one(HeaderBar)
+
+        content.write(Text(result, style="#c0caf5"))
+        content.scroll_end(animate=False)
+        header.set_mode("就绪")
+
+    def _on_web_error(self, error_msg: str) -> None:
+        """网络搜索错误（主线程回调）"""
+        content = self.query_one(ContentArea)
+        header = self.query_one(HeaderBar)
+
+        content.write_error(f"搜索失败: {error_msg}")
+        content.scroll_end(animate=False)
+        header.set_mode("就绪")
 
     def _cmd_compact(self) -> None:
         """压缩历史"""

@@ -49,9 +49,6 @@ def register_app_dependencies(
 
 
 def register_planify_config(
-    zhipuai_api_key: str = "",
-    zhipuai_model_id: str = "glm-4",
-    zhipuai_base_url: str = "",
     planify_api_key: str = "",
     planify_model_id: str = "claude-opus-4-6",
     planify_base_url: str = "",
@@ -69,9 +66,6 @@ def register_planify_config(
     3. 默认值
 
     Args:
-        zhipuai_api_key: 智谱AI API Key
-        zhipuai_model_id: 智谱AI 模型 ID
-        zhipuai_base_url: 智谱AI API 端点
         planify_api_key: Anthropic API Key
         planify_model_id: Anthropic 模型 ID
         planify_base_url: Anthropic API 端点
@@ -82,9 +76,6 @@ def register_planify_config(
     """
     global _registered_config
     _registered_config = {
-        "zhipuai_api_key": zhipuai_api_key,
-        "zhipuai_model_id": zhipuai_model_id,
-        "zhipuai_base_url": zhipuai_base_url,
         "planify_api_key": planify_api_key,
         "planify_model_id": planify_model_id,
         "planify_base_url": planify_base_url,
@@ -257,7 +248,6 @@ def close_session_simple(user_id: str) -> bool:
 config = None
 logger = None
 client = None
-zhipu_client = None
 todo_mgr = None
 task_mgr = None
 bg_mgr = None
@@ -283,7 +273,7 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
         user_id: 用户 ID
         session_id: 会话 ID（已废弃，保留参数以兼容）
     """
-    global config, logger, client, zhipu_client
+    global config, logger, client
     global todo_mgr, task_mgr, bg_mgr, bus, team, skills
     global tools, tool_handlers, workdir, model, token_threshold
 
@@ -305,8 +295,6 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
     config = session.config
     logger = session.logger
     client = session.client
-    # zhipu_client 现在是全局共享的，从 SessionManager 获取
-    zhipu_client, _ = SessionManager.get_zhipu_client()
     todo_mgr = session.todo_mgr
     task_mgr = session.task_mgr
     bg_mgr = session.bg_mgr
