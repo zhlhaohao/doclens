@@ -78,23 +78,18 @@ def run_web_search(
     if client is None:
         return "网络搜索不可用：客户端未初始化"
 
-    # 构建工具 schema
-    tool_web_search: dict[str, Any] = {
-        "enable": True,
-        "search_query": "auto",
+    # 构建工具 schema（与 TypeScript ApiSearchAdapter 一致：allowed/blocked_domains 在顶层）
+    tool: dict[str, Any] = {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 8,
     }
     if allowed_domains:
-        tool_web_search["allowed_domains"] = allowed_domains
+        tool["allowed_domains"] = allowed_domains
     if blocked_domains:
-        tool_web_search["blocked_domains"] = blocked_domains
+        tool["blocked_domains"] = blocked_domains
 
-    tools = [
-        {
-            "name": "web_search",
-            "type": "web_search_20250305",
-            "web_search": tool_web_search,
-        }
-    ]
+    tools = [tool]
 
     kwargs: dict[str, Any] = {
         "model": model_id,
