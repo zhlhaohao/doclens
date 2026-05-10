@@ -33,7 +33,7 @@ def register_config(config: dict) -> None:
     注册 Planify 配置（由主应用注入）。
 
     Args:
-        config: 配置字典，包含 zhipuai_api_key, planify_api_key 等字段
+        config: 配置字典，包含 planify_api_key 等字段
     """
     global _registered_config
     _registered_config = config
@@ -59,18 +59,6 @@ class _PlanifySettings:
         # 回退到环境变量
         env_key = key.upper()
         return os.getenv(env_key, default)
-
-    @property
-    def ZHIPUAI_API_KEY(self) -> str:
-        return self._get("zhipuai_api_key", "")
-
-    @property
-    def ZHIPUAI_MODEL_ID(self) -> str:
-        return self._get("zhipuai_model_id", "glm-4")
-
-    @property
-    def ZHIPUAI_BASE_URL(self) -> str:
-        return self._get("zhipuai_base_url", "")
 
     @property
     def PLANIFY_API_KEY(self) -> str:
@@ -192,9 +180,6 @@ def get_config(
         "model_id": os.getenv("PLANIFY_MODEL_ID"),
         "anthropic_base_url": os.getenv("PLANIFY_BASE_URL"),
         "anthropic_api_key": os.getenv("PLANIFY_API_KEY"),
-        "zhipu_api_key": os.getenv("ZHIPUAI_API_KEY"),
-        "zhipu_model_id": os.getenv("ZHIPUAI_MODEL_ID", "glm-4"),
-
         # 路径配置
         "workdir": workdir,
         "team_dir": team_dir,

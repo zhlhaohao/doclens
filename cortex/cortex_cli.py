@@ -460,6 +460,7 @@ class NotebookSearchCLI:
 ║                                                              ║
 ║  AI 命令                                                      ║
 ║    /ai <消息>        与 LLM Agent 对话                         ║
+║    /web <搜索内容>   网络搜索                                   ║
 ║    /llm <消息>       与 LLM Agent 对话（等同于 /ai）           ║
 ║    /compact          压缩对话历史                              ║
 ║    /tasks            显示任务列表                               ║
@@ -842,6 +843,13 @@ def _build_parser():
     )
     search_v2_parser.set_defaults(func=_cli_search_v2)
 
+    # cortex web <query>
+    web_parser = sub.add_parser(
+        "web", help="Web search using Anthropic server-side search"
+    )
+    web_parser.add_argument("query", nargs="+", help="Search query keywords")
+    web_parser.set_defaults(func=_cli_web)
+
     # cortex read_document --path <path> [--start-line N] [--end-line N] [--section T]
     read_parser = sub.add_parser(
         "read_document",
@@ -1022,6 +1030,26 @@ def _cli_read_document(args, config, idx):
         end_line=args.end_line,
         section=args.section,
     )
+    print(result)
+
+
+def _cli_web(args, config, idx):
+    """Handle `cortex web <query>` — web search via Anthropic server-side search."""
+    query = " ".join(args.query)
+
+    from planify.tools.web import run_web_search
+    from planify.core.client import init_anthropic_client
+
+    api_key = config.planify_api_key
+    base_url = config.planify_base_url
+    model_id = config.planify_model_id
+
+    if not api_key:
+        print("错误: 未配置 PLANIFY_API_KEY。请在 .env 中设置。")
+        return
+
+    client = init_anthropic_client(base_url, api_key)
+    result = run_web_search(query, client, model_id)
     print(result)
 
 

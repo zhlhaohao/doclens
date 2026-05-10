@@ -41,8 +41,6 @@ def get_external_tools() -> Tuple[List[Dict], Dict[str, Any]]:
 
 def build_tool_registry(
     workdir,
-    zhipu_client,
-    zhipu_model_id="glm-4",
     todo_mgr=None,
     task_mgr=None,
     bg_mgr=None,
@@ -54,13 +52,13 @@ def build_tool_registry(
     client=None,
     transcript_dir=None,
     session=None,
+    **kwargs,
 ) -> Tuple[List[Dict], Dict[str, Any]]:
     """
     从所有模块构建完整的工具注册表
 
     Args:
         workdir: 工作目录
-        zhipu_client: ZhipuAI 客户端
         todo_mgr: TodoManager 实例
         task_mgr: TaskManager 实例
         bg_mgr: BackgroundManager 实例
@@ -72,6 +70,7 @@ def build_tool_registry(
         client: Anthropic 客户端
         transcript_dir: 脚本目录
         session: Session 实例（可选，用于会话上下文）
+        **kwargs: 忽略额外的关键字参数（向后兼容）
 
     Returns:
         工具定义和处理器字典的元组
@@ -141,7 +140,7 @@ def build_tool_registry(
     handlers.update(make_basic_tools(workdir))
 
     # 网络工具
-    web_tools, web_handlers = make_web_tools(zhipu_client, zhipu_model_id)
+    web_tools, web_handlers = make_web_tools(client, model or "claude-opus-4-6")
     tools.extend(web_tools)
     handlers.update(web_handlers)
 

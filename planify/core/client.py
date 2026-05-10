@@ -3,7 +3,7 @@
 """Anthropic 客户端初始化工具函数。"""
 
 import os
-from typing import Any, Optional
+from typing import Optional
 
 from anthropic import Anthropic
 
@@ -36,38 +36,3 @@ def init_anthropic_client(
         client_kwargs["base_url"] = base_url
 
     return Anthropic(**client_kwargs)
-
-
-def init_zhipu_client(
-    api_key: Optional[str],
-    model_id: str = "glm-4",
-    base_url: Optional[str] = None,
-) -> tuple[Optional[Any], str]:
-    """
-    初始化 ZhipuAI 客户端。
-
-    Args:
-        api_key: ZhipuAI API 密钥
-        model_id: ZhipuAI 模型 ID
-        base_url: ZhipuAI API 端点（可选）
-
-    Returns:
-        (zhipu_client, model_id) 元组
-    """
-    if not api_key:
-        print("未配置 ZHIPUAI_API_KEY，web_search/weather 工具将不可用")
-        return None, model_id
-
-    try:
-        import httpx
-        from zhipuai import ZhipuAI
-        masked = api_key[:8] + "..." + api_key[-4:]
-        print(f"初始化 ZhipuAI 客户端: api_key={masked}, model_id={model_id}, base_url={base_url}")
-        # 禁用 SSL 验证（适配自签名证书环境）
-        http_client = httpx.Client(verify=False)
-        client = ZhipuAI(api_key=api_key, base_url=base_url, http_client=http_client)
-        return client, model_id
-    except Exception as e:
-        print(f"警告: 无法初始化 ZhipuAI 客户端: {e}")
-        print("web_search/weather 工具将不可用")
-        return None, model_id

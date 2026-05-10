@@ -46,7 +46,7 @@ class SessionManager:
     使用单例模式，管理所有活跃会话。
     提供线程安全的会话操作。
 
-    Anthropic 和 ZhipuAI 客户端都作为全局共享资源，所有会话共用同一个实例。
+    Anthropic 客户端作为全局共享资源，所有会话共用同一个实例。
     """
 
     _instance: Optional["SessionManager"] = None
@@ -57,10 +57,6 @@ class SessionManager:
     _anthropic_client: Optional[Any] = None
     _anthropic_model_id: str = "claude-opus-4-6"
     _anthropic_base_url: Optional[str] = None
-
-    # 全局共享的 ZhipuAI 客户端（所有会话共用）
-    _zhipu_client: Optional[Any] = None
-    _zhipu_model_id: str = "glm-4"
 
     def __init__(self, base_workdir: Path):
         """
@@ -79,32 +75,6 @@ class SessionManager:
         if cls._base_workdir is None:
             cls._base_workdir = Path.cwd()
         return get_config(workdir=cls._base_workdir)
-
-    @classmethod
-    def _init_zhipu_client(cls) -> Optional[Any]:
-        """初始化全局共享的 ZhipuAI 客户端"""
-        # 使用 get_settings() 统一读取配置（支持 FastAPI settings 或环境变量兜底）
-        s = get_settings()
-        zhipu_api_key = s.ZHIPUAI_API_KEY
-        zhipu_model_id = s.ZHIPUAI_MODEL_ID or "glm-4"
-        if zhipu_api_key:
-            cls._zhipu_model_id = zhipu_model_id
-            try:
-                import httpx
-                from zhipuai import ZhipuAI
-                masked = zhipu_api_key[:8] + "..." + zhipu_api_key[-4:]
-                print(f"初始化全局 ZhipuAI 客户端: api_key={masked}, model_id={cls._zhipu_model_id}, base_url={s.ZHIPUAI_BASE_URL}")
-                base_url = s.ZHIPUAI_BASE_URL if s.ZHIPUAI_BASE_URL else None
-                # 禁用 SSL 验证（适配自签名证书环境）
-                http_client = httpx.Client(verify=False)
-                cls._zhipu_client = ZhipuAI(api_key=zhipu_api_key, base_url=base_url, http_client=http_client)
-            except Exception as e:
-                print(f"警告: 无法初始化 ZhipuAI 客户端: {e}")
-                print("web_search/weather 工具将不可用")
-                cls._zhipu_client = None
-        else:
-            print("未配置 ZHIPUAI_API_KEY，web_search/weather 工具将不可用")
-            cls._zhipu_client = None
 
     @classmethod
     def _init_anthropic_client(cls, base_url: Optional[str] = None) -> Optional[Any]:
@@ -137,18 +107,6 @@ class SessionManager:
         if cls._anthropic_client is None:
             cls._init_anthropic_client()
         return cls._anthropic_client, cls._anthropic_model_id
-
-    @classmethod
-    def get_zhipu_client(cls) -> tuple[Optional[Any], str]:
-        """
-        获取全局共享的 ZhipuAI 客户端。
-
-        Returns:
-            (zhipu_client, zhipu_model_id) 元组
-        """
-        if cls._zhipu_client is None:
-            cls._init_zhipu_client()
-        return cls._zhipu_client, cls._zhipu_model_id
 
     @classmethod
     def get_instance(cls, base_workdir: Optional[Path] = None) -> "SessionManager":
@@ -313,9 +271,6 @@ class SessionManager:
         anthropic_client, _ = self.get_anthropic_client()
         session.client = anthropic_client
 
-        # 获取全局共享的 ZhipuAI 客户端
-        zhipu_client, zhipu_model_id = self.get_zhipu_client()
-
         # 导入管理器（延迟导入避免循环依赖）
         from ..managers import TodoManager, TaskManager, BackgroundManager, TeammateManager
         from ..messaging import MessageBus
@@ -352,12 +307,8 @@ class SessionManager:
         )
 
         # 构建工具注册表
-        # 使用用户级别的工作目录
-        # 使用全局共享的 zhipu_client
         session.tools, session.tool_handlers = build_tool_registry(
             workdir=user_workdir,
-            zhipu_client=zhipu_client,
-            zhipu_model_id=zhipu_model_id,
             todo_mgr=session.todo_mgr,
             task_mgr=session.task_mgr,
             bg_mgr=session.bg_mgr,
