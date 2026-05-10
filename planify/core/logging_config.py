@@ -224,8 +224,6 @@ def setup_logging(
 
     if trusted:
         log_dir.mkdir(parents=True, exist_ok=True)
-        # 首次初始化：拷贝 .env.example 和 skills
-        _init_cortex_workspace(log_dir.parent)
 
     # 格式化器
     fmt = '%(asctime)s | %(levelname)s | %(message)s'
