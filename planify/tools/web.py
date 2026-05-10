@@ -1,4 +1,5 @@
 """网络搜索工具
+.venv/Scripts/python.exe -m cortex web  "外交部活动 --  search from domain gov.cn, 不要总结，只需要给出网站标题和url" 
 
 使用 Anthropic API 的服务端 web_search_20250305 工具获取实时网络信息。
 需要 API 端点支持 web_search_20250305 工具类型。
@@ -81,7 +82,7 @@ def run_web_search(
     # 构建工具 schema（与 TypeScript ApiSearchAdapter 一致：allowed/blocked_domains 在顶层）
     tool: dict[str, Any] = {
         "type": "web_search_20250305",
-        "name": "web_search",
+        "name": "web_search_20250305",
         "max_uses": 8,
     }
     if allowed_domains:
@@ -93,11 +94,18 @@ def run_web_search(
 
     kwargs: dict[str, Any] = {
         "model": model_id,
-        "max_tokens": 4096,
+        "max_tokens": 32000,
         "tools": tools,
-        "messages": [{"role": "user", "content": query}],
+        "messages": [{"role": "user", "content": f"Perform a web search for: {query}"}],
         "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
     }
+
+    import logging
+    logging.getLogger("planify.tools.web").info(
+        "web_search request | model=%s | kwargs=%s",
+        model_id,
+        kwargs,
+    )
 
     try:
         import httpx
