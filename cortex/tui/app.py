@@ -545,6 +545,14 @@ class CortexApp(App):
                     is_ripgrep=True,
                 )
             else:
+                # 将 like_search 返回的 dict 格式转换为 tuple 格式
+                content_tuples = []
+                for item in results:
+                    node = {
+                        "title": item.get("title", ""),
+                        "text": item.get("summary", ""),
+                    }
+                    content_tuples.append((item["doc_id"], node, 1, 0, item.get("fts_score", 0.0)))
                 # 追加路径搜索
                 path_results = rg_module.search_paths_by_regex(
                     query,
@@ -552,14 +560,14 @@ class CortexApp(App):
                     max_results=self.max_results,
                 )
                 # 合并结果（内容在前，路径在后）
-                all_results = results + path_results
+                all_results = content_tuples + path_results
                 renderables = render_search_results(
                     results=all_results,
                     query=query,
                     query_words=query_words,
                     path_map=self.idx.path_map,
                     max_results=self.max_results,
-                    is_like=True,
+                    is_ripgrep=True,
                 )
             self.call_from_thread(self._on_search_done, renderables)
 
