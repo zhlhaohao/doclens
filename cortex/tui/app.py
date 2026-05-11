@@ -528,8 +528,16 @@ class CortexApp(App):
                     context_before=self.idx.rg_context_before,
                     context_after=self.idx.rg_context_after,
                 )
+                # 追加路径搜索
+                path_results = rg_module.search_paths_by_regex(
+                    query,
+                    self.idx.path_map,
+                    max_results=self.max_results,
+                )
+                # 合并结果（路径排在后面）
+                all_results = filtered + path_results
                 renderables = render_search_results(
-                    results=filtered,
+                    results=all_results,
                     query=query,
                     query_words=query_words,
                     path_map=self.idx.path_map,
@@ -537,8 +545,16 @@ class CortexApp(App):
                     is_ripgrep=True,
                 )
             else:
+                # 追加路径搜索
+                path_results = rg_module.search_paths_by_regex(
+                    query,
+                    self.idx.path_map,
+                    max_results=self.max_results,
+                )
+                # 合并结果（内容在前，路径在后）
+                all_results = results + path_results
                 renderables = render_search_results(
-                    results=results,
+                    results=all_results,
                     query=query,
                     query_words=query_words,
                     path_map=self.idx.path_map,
