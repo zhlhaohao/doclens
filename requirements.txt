@@ -10,10 +10,10 @@ cryptography>=42.0.0
 openai>=1.10.0
 PyJWT[crypto]>=2.8.0,<2.9.0
 # Time Parsing
-dateparser==1.2.0
+dateparser>=1.2.0
 
 # Email (for future SMTP support)
-aiosmtplib==3.0.1
+aiosmtplib>=3.0.1
 
 # Development & Testing
 pytest>=7.4.4
