@@ -1,6 +1,7 @@
 """统一的 ripgrep 降级搜索逻辑"""
 
 import os
+import re
 from typing import Iterable
 
 
@@ -151,3 +152,37 @@ def rg_fallback_search(
             results.append((doc_id, synthetic_node, len(query_words), 0, 0.0))
 
     return results
+
+
+def search_paths_by_regex(
+    regex: str,
+    path_map: dict[str, str],
+    max_results: int = 100,
+) -> list[tuple[str, dict, int, int, float]]:
+    """在文件路径上执行正则匹配。
+
+    Args:
+        regex: 正则表达式
+        path_map: doc_id -> 文件路径的映射
+        max_results: 最大返回结果数
+
+    Returns:
+        [(doc_id, node_dict, matched_count, proximity, fts_score)]
+        node_dict 包含 'title'（路径）和 'text'（路径）字段
+    """
+    results = []
+    try:
+        pattern = re.compile(regex, re.IGNORECASE)
+    except re.error:
+        return results
+
+    for doc_id, file_path in path_map.items():
+        if pattern.search(file_path):
+            # 构造与 rg_fallback_search 模式 2 一致的 node dict
+            node = {
+                "title": f"[路径匹配] {file_path}",
+                "text": f"路径包含正则匹配: {regex}",
+            }
+            results.append((doc_id, node, 1, 0, 0.0))
+
+    return results[:max_results]
