@@ -180,7 +180,7 @@ def make_web_tools(
     tools = [
         {
             "name": "web_search",
-            "description": "搜索网络信息。返回基于实时搜索的结果摘要。支持 allowed_domains 和 blocked_domains 过滤。",
+            "description": "搜索网络信息。返回基于实时搜索的结果摘要。支持域名过滤、结果数量、时效性、内容详细度和地区控制。",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -191,12 +191,28 @@ def make_web_tools(
                     "allowed_domains": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "只搜索这些域名",
+                        "description": "只搜索这些域名，如 ['python.org', 'docs.python.org']",
                     },
-                    "blocked_domains": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "排除这些域名",
+                    "count": {
+                        "type": "integer",
+                        "description": "返回结果条数，1-50，默认10",
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                    "search_recency_filter": {
+                        "type": "string",
+                        "enum": ["oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"],
+                        "description": "搜索时间范围过滤，默认noLimit",
+                    },
+                    "content_size": {
+                        "type": "string",
+                        "enum": ["medium", "high"],
+                        "description": "返回内容详细度，medium=摘要，high=详细",
+                    },
+                    "location": {
+                        "type": "string",
+                        "enum": ["cn", "us"],
+                        "description": "搜索地区/语言，cn=中文，us=英文",
                     },
                 },
                 "required": ["query"],
@@ -210,7 +226,10 @@ def make_web_tools(
             client,
             model_id,
             allowed_domains=kw.get("allowed_domains"),
-            blocked_domains=kw.get("blocked_domains"),
+            count=kw.get("count"),
+            search_recency_filter=kw.get("search_recency_filter"),
+            content_size=kw.get("content_size"),
+            location=kw.get("location"),
         ),
     }
 
