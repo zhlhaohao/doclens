@@ -197,7 +197,7 @@ class NotebookSearchCLI:
 
     # ---- 搜索结果格式化 ----
 
-    def format_results(self, nodes, docs, query, max_results=20):
+    def format_results(self, nodes, docs, query, max_results=20, min_score_threshold=0.0):
         """格式化搜索结果（协调器）"""
         # 分词
         query_words = tokenize_query(query)
@@ -229,54 +229,46 @@ class NotebookSearchCLI:
             doc_id = doc.get("doc_id", "")
             doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
-        # 对每个文档，找到包含关键词且紧邻匹配最好的节点
-        doc_best: dict = {}  # doc_id -> (best_node, matched_count, proximity_score, fts_score)
+        # 找到每个文档的 max fts_score
         doc_fts_best: dict = {}  # doc_id -> max fts_score across all nodes
         for node in nodes:
             doc_id = node.get("doc_id", "")
             score = node.get("score", 0.0)
             if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
                 doc_fts_best[doc_id] = score
-            if doc_id in doc_best:
-                continue
-            all_nodes = doc_nodes_map.get(doc_id, [])
-            best_node = None
-            best_count = 0
-            best_proximity = 0
-            for n in all_nodes:
-                n_text = n.get("text", "") or ""
-                cnt, proximity = calc_proximity_score(
-                    n_text, query_words, max_span=self.idx.max_span
-                )
-                if proximity > best_proximity or (
-                    proximity == best_proximity and cnt > best_count
-                ):
-                    best_count = cnt
-                    best_proximity = proximity
-                    best_node = n
-            if best_node and best_count > 0:
-                doc_best[doc_id] = (
-                    best_node,
-                    best_count,
-                    best_proximity,
-                    doc_fts_best.get(doc_id, 0.0),
-                )
+
+        # 收集每个文档所有满足条件的节点
+        doc_multi_best: dict = {}  # doc_id -> list of (node, matched_count, proximity_score, fts_score)
+        for node in nodes:
+            doc_id = node.get("doc_id", "")
+            node_text = node.get("text", "") or ""
+            cnt, proximity = calc_proximity_score(
+                node_text, query_words, max_span=self.idx.max_span
+            )
+            # 只要有关键词匹配就收集，不在这里过滤
+            if doc_id not in doc_multi_best:
+                doc_multi_best[doc_id] = []
+            doc_multi_best[doc_id].append((
+                node,
+                cnt,
+                proximity,
+                doc_fts_best.get(doc_id, 0.0),
+            ))
 
         # 过滤：使用配置的最小匹配词数和邻近度阈值
-        filtered = [
-            (did, bn, cnt, prox, fts)
-            for did, (bn, cnt, prox, fts) in doc_best.items()
-            if cnt >= self.idx.min_keyword_match
-            and prox >= self.idx.min_proximity_score
-        ]
+        filtered = []
+        for did, node_list in doc_multi_best.items():
+            for bn, cnt, prox, fts in node_list:
+                if cnt >= self.idx.min_keyword_match and prox >= self.idx.min_proximity_score:
+                    filtered.append((did, bn, cnt, prox, fts))
 
         # 如果没有结果，尝试降级到匹配数 >= 1
         if not filtered and query_words:
-            filtered = [
-                (did, bn, cnt, prox, fts)
-                for did, (bn, cnt, prox, fts) in doc_best.items()
-                if cnt >= 1
-            ]
+            filtered = []
+            for did, node_list in doc_multi_best.items():
+                for bn, cnt, prox, fts in node_list:
+                    if cnt >= 1:
+                        filtered.append((did, bn, cnt, prox, fts))
 
         # 如果仍无结果，使用 ripgrep 做精确子串匹配
         if not filtered:
@@ -309,6 +301,14 @@ class NotebookSearchCLI:
             scored_results.append((composite, item))
 
         scored_results.sort(key=lambda x: -x[0])
+
+        # 按分数阈值过滤
+        if min_score_threshold > 0.0:
+            filtered_count_before = len(scored_results)
+            scored_results = [r for r in scored_results if r[0] >= min_score_threshold]
+            if scored_results:
+                print(f"[分数过滤: 阈值 {min_score_threshold:.0%}, 过滤掉 {filtered_count_before - len(scored_results)} 个低分结果]")
+
         self._render_results(
             query, scored_results, query_words, max_results, is_ripgrep=False
         )
@@ -804,6 +804,10 @@ def _build_parser():
         "search", help="Search for a query string in the indexed documents"
     )
     search_parser.add_argument("query", nargs="+", help="Search query keywords")
+    search_parser.add_argument(
+        "--min-score", type=float, default=None,
+        help="Minimum composite score threshold (0.0-1.0), results below this are filtered"
+    )
     search_parser.set_defaults(func=_cli_search)
 
     # cortex ai <message>
@@ -905,12 +909,15 @@ def _cli_search(args, config, idx):
     # Perform search
     nodes, docs = idx.search(query, max_results=config.max_results)
 
+    # Determine min_score_threshold: CLI arg takes priority over config
+    min_score = args.min_score if args.min_score is not None else config.min_score_threshold
+
     # Reuse NotebookSearchCLI's format_results for plain text output
     cli = NotebookSearchCLI.__new__(NotebookSearchCLI)
     cli.config = config
     cli.idx = idx
     cli.max_results = config.max_results
-    cli.format_results(nodes, docs, query, max_results=cli.max_results)
+    cli.format_results(nodes, docs, query, max_results=cli.max_results, min_score_threshold=min_score)
 
 
 def _cli_ai(args, config, idx):

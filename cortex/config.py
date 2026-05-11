@@ -29,6 +29,7 @@ class CortexConfig(BaseSettings):
     max_results: int = Field(default=20)
     max_nodes_per_doc: int = Field(default=5)
     top_k_docs: int = Field(default=100)
+    min_score_threshold: float = Field(default=0.0, description="综合评分阈值，低于此值的结果将被过滤")
 
     # 匹配参数
     max_span: int = Field(default=20)
