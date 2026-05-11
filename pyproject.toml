@@ -27,12 +27,12 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-    "aiosmtplib==3.0.1",
+    "aiosmtplib>=3.0.1",
     "anthropic>=0.25.0",
     "beautifulsoup4>=4.12.0",
     "borax>=4.1.0",
     "cryptography>=42.0.0",
-    "dateparser==1.2.0",
+    "dateparser>=1.2.0",
     "defusedxml>=0.7.1",
     "httpx>=0.27.1",
     "jieba>=0.42",
