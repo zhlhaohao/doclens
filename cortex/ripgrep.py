@@ -124,15 +124,16 @@ def rg_fallback_search(
             doc_ids = reverse_map.get(display_path, [])
             doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(display_path))[0]
 
-            matched_line = line_nums[0]
+            matched_line = line_nums[0]  # 1-based
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                     all_lines = f.readlines()
             except OSError:
                 continue
 
-            context_start = max(0, matched_line - context_before)
-            context_end = min(len(all_lines), matched_line + context_after)
+            matched_idx = matched_line - 1  # convert to 0-based
+            context_start = max(0, matched_idx - context_before)
+            context_end = min(len(all_lines), matched_idx + context_after + 1)
             text = ''.join(all_lines[context_start:context_end]).rstrip()
 
             title = os.path.splitext(os.path.basename(display_path))[0]

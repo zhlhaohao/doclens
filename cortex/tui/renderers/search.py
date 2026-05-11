@@ -1,5 +1,7 @@
 """搜索结果渲染器 - 将搜索数据转换为 Rich 可渲染对象"""
 
+import re
+
 from rich.rule import Rule
 from rich.text import Text
 
@@ -17,7 +19,12 @@ def render_no_results(query: str) -> Text:
     return Text(f"未找到包含 '{query}' 的结果", style="#565f89")
 
 
-def _highlight_keywords(text: str, keywords: list[str], base_style: str = "#c0caf5") -> Text:
+def _highlight_keywords(
+    text: str,
+    keywords: list[str],
+    base_style: str = "#c0caf5",
+    is_regex: bool = False,
+) -> Text:
     if not keywords or not text:
         return Text(text, style=base_style)
 
@@ -25,26 +32,32 @@ def _highlight_keywords(text: str, keywords: list[str], base_style: str = "#c0ca
     remaining = text
     while remaining:
         earliest_pos = len(remaining)
-        earliest_kw = None
+        earliest_len = 0
         for kw in keywords:
             if not kw:
                 continue
-            pos = remaining.lower().find(kw.lower())
-            if pos >= 0 and pos < earliest_pos:
-                earliest_pos = pos
-                earliest_kw = kw
+            if is_regex:
+                m = re.search(kw, remaining, re.IGNORECASE)
+                if m and m.start() < earliest_pos:
+                    earliest_pos = m.start()
+                    earliest_len = m.end() - m.start()
+            else:
+                pos = remaining.lower().find(kw.lower())
+                if pos >= 0 and pos < earliest_pos:
+                    earliest_pos = pos
+                    earliest_len = len(kw)
 
-        if earliest_kw is None:
+        if earliest_len == 0:
             rich_text.append(remaining)
             break
 
         if earliest_pos > 0:
             rich_text.append(remaining[:earliest_pos])
 
-        match_text = remaining[earliest_pos:earliest_pos + len(earliest_kw)]
+        match_text = remaining[earliest_pos:earliest_pos + earliest_len]
         rich_text.append(match_text, style="#e0af68 bold")
 
-        remaining = remaining[earliest_pos + len(earliest_kw):]
+        remaining = remaining[earliest_pos + earliest_len:]
 
     return rich_text
 
@@ -88,7 +101,7 @@ def render_search_result(
             path_note += f":{display_line}"
         header.append(path_note, style="#7aa2f7")
     else:
-        header.append(_highlight_keywords(title_text, query_words, "#7aa2f7"))
+        header.append(_highlight_keywords(title_text, query_words, "#7aa2f7", is_regex=is_ripgrep))
 
     # 内容片段
     lines = display_text.split("\n")
@@ -96,6 +109,7 @@ def render_search_result(
     match_indices = [
         i for i, line in enumerate(lines)
         if any(kw in line.lower() for kw in kw_lower)
+        or (is_ripgrep and any(re.search(kw, line, re.IGNORECASE) for kw in query_words if kw))
     ]
 
     if match_indices:
@@ -116,8 +130,8 @@ def render_search_result(
 
     # 评分行 - 使用暗色与正文区分
     score_style = "#4a4a5a"
-    if is_ripgrep:
-        score_text = Text(f"评分: 匹配 {matched}/{total_keywords} 词", style=score_style)
+    if is_ripgrep or is_like:
+        score_text = Text(f"匹配 {matched}/{total_keywords} 词", style=score_style)
     else:
         score_text = Text(style=score_style)
         score_text.append("评分: ")
@@ -128,7 +142,7 @@ def render_search_result(
     result_parts: list[Text] = [
         header,
         Text("─" * 60, style="#3b3d57"),
-        _highlight_keywords(snippet, query_words),
+        _highlight_keywords(snippet, query_words, is_regex=is_ripgrep),
         Text(""),
         score_text,
         Text(""),
