@@ -5,6 +5,7 @@
 需要 API 端点支持 web_search_20250305 工具类型。
 """
 
+import json
 from typing import Any, List, Optional, Tuple
 
 from anthropic import Anthropic
@@ -52,6 +53,29 @@ def _format_results(results: list[dict]) -> str:
             output_parts.append(f"- [{title}]({url}){f' ({page_age})' if page_age else ''}")
 
     return "\n".join(output_parts)
+
+
+def _build_search_query(
+    query: str,
+    allowed_domains: Optional[List[str]] = None,
+    count: Optional[int] = None,
+    search_recency_filter: Optional[str] = None,
+    content_size: Optional[str] = None,
+    location: Optional[str] = None,
+) -> str:
+    """将搜索参数封装为 JSON 字符串，用于传递给 API query 字段。"""
+    payload: dict[str, Any] = {"search_query": query}
+    if allowed_domains:
+        payload["search_domain_filter"] = ",".join(allowed_domains)
+    if count is not None:
+        payload["count"] = count
+    if search_recency_filter is not None:
+        payload["search_recency_filter"] = search_recency_filter
+    if content_size is not None:
+        payload["content_size"] = content_size
+    if location is not None:
+        payload["location"] = location
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def run_web_search(
