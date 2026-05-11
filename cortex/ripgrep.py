@@ -52,6 +52,7 @@ def rg_fallback_search(
     query_words: list[str],
     context_before: int = 6,
     context_after: int = 5,
+    use_regex: bool = False,
 ) -> list[tuple[str, dict, int, int, float]]:
     """执行 ripgrep 降级搜索。
 
@@ -76,7 +77,7 @@ def rg_fallback_search(
     if not rg_paths:
         return []
 
-    hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=False)
+    hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=use_regex)
     if not hits:
         return []
 

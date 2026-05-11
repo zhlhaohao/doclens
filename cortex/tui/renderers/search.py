@@ -4,8 +4,8 @@ from rich.rule import Rule
 from rich.text import Text
 
 
-def render_search_header(query: str, count: int, is_ripgrep: bool = False) -> Rule:
-    source = " (ripgrep)" if is_ripgrep else ""
+def render_search_header(query: str, count: int, is_ripgrep: bool = False, is_like: bool = False) -> Rule:
+    source = " (ripgrep)" if is_ripgrep else (" (LIKE)" if is_like else "")
     return Rule(
         f" 关键词: {query}  |  找到 {count} 个匹配{source} ",
         style="#7aa2f7",
@@ -71,6 +71,7 @@ def render_search_result(
     composite: float = 0.0,
     path: str = "",
     is_ripgrep: bool = False,
+    is_like: bool = False,
     query_words: list[str] | None = None,
 ) -> Text:
     query_words = query_words or []
@@ -143,6 +144,7 @@ def render_search_results(
     path_map: dict[str, str],
     max_results: int = 20,
     is_ripgrep: bool = False,
+    is_like: bool = False,
 ) -> list:
     output: list = []
 
@@ -150,12 +152,21 @@ def render_search_results(
         output.append(render_no_results(query))
         return output
 
-    output.append(render_search_header(query, len(results), is_ripgrep))
+    output.append(render_search_header(query, len(results), is_ripgrep, is_like))
     output.append(Text(""))
 
     display_items = results[:max_results]
     for i, item in enumerate(display_items, 1):
-        if is_ripgrep:
+        if is_like:
+            # LIKE results are dicts: {node_id, doc_id, title, summary, fts_score, depth}
+            doc_id = item["doc_id"]
+            node = {
+                "title": item.get("title", ""),
+                "text": item.get("summary", ""),
+            }
+            matched = 1
+            composite = item.get("fts_score", 0.0)
+        elif is_ripgrep:
             doc_id, node, matched, prox, fts = item
             composite = 0.0
         else:
@@ -172,6 +183,7 @@ def render_search_results(
                 composite=composite,
                 path=path,
                 is_ripgrep=is_ripgrep,
+                is_like=is_like,
                 query_words=query_words,
             )
         )

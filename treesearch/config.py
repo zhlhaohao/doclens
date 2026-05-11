@@ -37,6 +37,7 @@ INDEX_SCHEMA_VERSION = "2"
 _ENV_CJK_TOKENIZER = "TREESEARCH_CJK_TOKENIZER"
 _ENV_FINGERPRINT_MODE = "TREESEARCH_FINGERPRINT_MODE"
 _ENV_PRUNE = "TREESEARCH_PRUNE"
+_ENV_SHADOW_MD = "TREESEARCH_ENABLE_SHADOW_MD"
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +111,10 @@ class TreeSearchConfig:
     # Failed files auto-skip: after N consecutive parse failures, skip the file
     max_index_fail_count: int = 3
 
+    # Shadow Markdown: generate a hidden .md copy for binary files (PDF, DOCX, etc.)
+    # so ripgrep fallback can search them. Disable to speed up indexing.
+    enable_shadow_md: bool = True
+
     @classmethod
     def from_env(cls) -> "TreeSearchConfig":
         """Create config from environment variables, falling back to defaults."""
@@ -126,6 +131,10 @@ class TreeSearchConfig:
         env_prune = os.getenv(_ENV_PRUNE)
         if env_prune is not None:
             config.prune_orphans_on_directory = env_prune.lower() in ("1", "true", "yes")
+
+        env_shadow = os.getenv(_ENV_SHADOW_MD)
+        if env_shadow is not None:
+            config.enable_shadow_md = env_shadow.lower() in ("1", "true", "yes")
 
         return config
 

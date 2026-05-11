@@ -7,29 +7,11 @@ import threading
 logger = logging.getLogger(__name__)
 
 from treesearch import TreeSearch, set_config, TreeSearchConfig
+from treesearch.parsers.registry import SOURCE_TYPE_MAP
 from cortex.config import CortexConfig
 
-# 支持的文件类型和依赖
-SUPPORTED_FORMATS = {
-    # 内置支持
-    '.md': ('Markdown', None),
-    '.txt': ('纯文本', None),
-    '.json': ('JSON', None),
-    '.yaml': ('YAML', None),
-    '.yml': ('YAML', None),
-    '.toml': ('TOML', None),
-    '.py': ('Python', None),
-    '.js': ('JavaScript', None),
-    '.ts': ('TypeScript', None),
-    '.html': ('HTML', 'bs4'),
-    '.xml': ('XML', None),
-    # 需要额外依赖
-    '.pdf': ('PDF', 'pymupdf'),
-    '.docx': ('Word文档', 'docx'),
-    '.xlsx': ('Excel表格', 'openpyxl'),
-    '.xls': ('Excel表格', 'openpyxl'),
-    '.pptx': ('PowerPoint', 'markitdown'),
-}
+# 支持的文件类型：直接从 treesearch parser registry 获取，保持单一数据源
+SUPPORTED_FORMATS = {ext: (source_type, None) for ext, source_type in SOURCE_TYPE_MAP.items()}
 
 
 def check_dependencies():
@@ -65,6 +47,7 @@ class IndexManager:
         self.min_keywords_per_line = config.min_keywords_per_line
         self.cjk_tokenizer = config.cjk_tokenizer
         self.max_index_fail_count = config.max_index_fail_count
+        self.enable_shadow_md = config.treesearch_enable_shadow_md
 
         # 终端显示参数
         self.title_width = config.title_width
@@ -181,7 +164,7 @@ class IndexManager:
                     import time as time_module
 
                     abs_path = os.path.abspath(self.index_path)
-                    set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
+                    set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md))
                     new_ts = TreeSearch(db_path=self.index_path)
                     if os.path.exists(abs_path):
                         try:
@@ -246,6 +229,7 @@ class IndexManager:
 
                     new_ts.save_index()
                     doc_count = len(new_ts.documents)
+                    logger.info("Background reindex completed: %d documents", doc_count)
                     # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
                     self._needs_reload = True
 
@@ -267,7 +251,7 @@ class IndexManager:
         self._needs_reload = False
 
         # 设置 CJK 分词
-        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
+        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md))
         self._ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
@@ -296,7 +280,7 @@ class IndexManager:
                             import time
                             time.sleep(0.2)
                             gc.collect()
-                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
+                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md))
                 self._ts = TreeSearch(db_path=self.index_path)
 
         # 构建新索引
@@ -332,7 +316,7 @@ class IndexManager:
     def _reindex_internal(self, force=False):
         """内部 reindex（已持有锁）"""
         if self._ts is None:
-            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count))
+            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md))
             self._ts = TreeSearch(db_path=self.index_path)
 
         mode = "全量重建" if force else "增量更新"
@@ -419,3 +403,25 @@ class IndexManager:
         )
 
         return result.get("flat_nodes", []), result.get("documents", [])
+
+    def like_search(self, query, max_results=None, use_regex=False):
+        """SQLite LIKE/REGEXP 降级搜索，对原文做子串或正则匹配。
+
+        当 FTS5 分词导致查询词被错误拆分时使用。
+        返回格式与 search() 的 flat_nodes 兼容。
+        """
+        if max_results is None:
+            max_results = self.max_results
+
+        self.load_or_build_index()
+
+        if not self._ts.documents:
+            return []
+
+        from treesearch.fts import FTS5Index
+
+        fts = FTS5Index(db_path=self.index_path)
+        try:
+            return fts.like_search(query, top_k=max_results, use_regex=use_regex)
+        finally:
+            fts.close()

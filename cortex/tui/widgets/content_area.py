@@ -68,7 +68,7 @@ class ContentArea(RichLog):
             from rich.protocol import is_renderable
             if is_renderable(content):
                 buf = StringIO()
-                console = Console(file=buf, force_terminal=False, width=200, markup=False)
+                console = Console(file=buf, force_terminal=True, width=200, markup=False, no_color=True)
                 console.print(content)
                 return buf.getvalue()
         except Exception:

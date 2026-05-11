@@ -7,6 +7,9 @@ COMMAND_ALIASES: dict[str, str] = {
     # 搜索
     "s": "search",
     "search": "search",
+    # 正则搜索
+    "grep": "grep",
+    "g": "grep",
     # 索引
     "i": "index",
     "index": "index",
@@ -39,6 +42,9 @@ COMMAND_ALIASES: dict[str, str] = {
     # 网络搜索
     "web": "web",
     "w": "web",
+    # ripgrep 正则搜索
+    "ripgrep": "ripgrep",
+    "rg": "ripgrep",
     # 压缩
     "compact": "compact",
     # 复制

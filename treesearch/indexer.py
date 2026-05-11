@@ -1665,6 +1665,16 @@ async def build_index(
                 # Tag source_type for search routing
                 source_type = SOURCE_TYPE_MAP.get(ext, "text")
                 result["source_type"] = source_type
+
+                # Generate shadow MD for binary files (concurrent with parsing)
+                if cfg.enable_shadow_md:
+                    from .parsers.registry import is_binary_extension
+                    if is_binary_extension(ext):
+                        try:
+                            _generate_shadow_md(os.path.abspath(fp))
+                        except Exception as e:
+                            logger.debug("Shadow MD generation failed for %s: %s", fp, e)
+
                 _file_timings[fp] = (source_type, time.monotonic() - t0)
                 # Call progress callback if provided
                 async with _progress_lock:
@@ -1746,15 +1756,6 @@ async def build_index(
                 fts.optimize()
                 docs_since_optimize = 0
             logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
-
-            # Generate shadow MD for binary files (for ripgrep fallback)
-            from .parsers.registry import is_binary_extension
-            ext = os.path.splitext(fp)[1].lower()
-            if is_binary_extension(ext):
-                try:
-                    _generate_shadow_md(abs_fp)
-                except Exception as e:
-                    logger.debug("Shadow MD generation failed for %s: %s", abs_fp, e)
         else:
             # Skipped file: use batch-loaded docs (lookup by source_path, not doc_id)
             abs_fp = os.path.abspath(fp)
