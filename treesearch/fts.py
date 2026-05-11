@@ -1048,7 +1048,8 @@ class FTS5Index:
                 continue
             if not isinstance(nodes_data, list):
                 continue
-            for node in nodes_data:
+            from .tree import flatten_tree
+            for node in flatten_tree(nodes_data):
                 text = node.get("text", "") or ""
                 title = node.get("title", "") or ""
                 if match_fn(text) or match_fn(title):
@@ -1057,11 +1058,13 @@ class FTS5Index:
                     if key in seen:
                         continue
                     seen.add(key)
+                    # 提取包含匹配关键词的片段
+                    snippet = _extract_match_snippet(text, query, use_regex, size=300)
                     results.append({
                         "node_id": nid,
                         "doc_id": doc_id,
                         "title": title,
-                        "summary": text[:200],
+                        "summary": snippet,
                         "depth": node.get("depth", 0),
                         "fts_score": 0.5,
                     })
@@ -1936,6 +1939,26 @@ class FTS5Index:
         ).fetchall()
         indexed = {r[0] for r in rows}
         return set(doc_ids) - indexed
+
+
+def _extract_match_snippet(text: str, query: str, use_regex: bool, size: int = 300) -> str:
+    """Extract a snippet of *size* chars centered around the first match."""
+    if len(text) <= size:
+        return text
+    pos = -1
+    if use_regex:
+        m = re.search(query, text, re.IGNORECASE)
+        if m:
+            pos = m.start()
+    else:
+        pos = text.lower().find(query.lower())
+    if pos < 0:
+        pos = 0
+    half = size // 2
+    start = max(0, pos - half)
+    end = min(len(text), start + size)
+    start = max(0, end - size)
+    return text[start:end]
 
 
 # ---------------------------------------------------------------------------
