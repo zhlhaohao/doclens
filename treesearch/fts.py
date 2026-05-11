@@ -78,6 +78,16 @@ def _check_fts5() -> bool:
     return _FTS5_AVAILABLE
 
 
+def _sqlite_regexp(pattern: str, string: str) -> bool:
+    """SQLite REGEXP callback — registered via create_function."""
+    if string is None or pattern is None:
+        return False
+    try:
+        return bool(re.search(pattern, string))
+    except re.error:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Markdown structure parser
 # ---------------------------------------------------------------------------
@@ -277,6 +287,9 @@ class FTS5Index:
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
+
+        # Register REGEXP function for like_search(use_regex=True)
+        self._conn.create_function("REGEXP", 2, _sqlite_regexp)
 
         self._use_fts5 = _check_fts5()
 
@@ -577,10 +590,14 @@ class FTS5Index:
             tok_code = _tokenize_for_fts(parsed["code_blocks"])
             tok_fm = _tokenize_for_fts(parsed["front_matter"])
 
-            # 将文件名分词后注入 front_matter，使文件名可被 FTS5 搜索到
+            # 将文件名和路径分词后注入 front_matter，使文件名/路径可被 FTS5 搜索到
             tok_doc_name = _tokenize_for_fts(document.doc_name)
             if tok_doc_name and tok_doc_name not in tok_fm:
                 tok_fm = tok_doc_name + " " + tok_fm
+            source_path = document.metadata.get("source_path", "")
+            tok_path = _tokenize_for_fts(source_path)
+            if tok_path and tok_path not in tok_fm:
+                tok_fm = tok_path + " " + tok_fm
             fts_rows.append((
                 nid, document.doc_id,
                 tok_title, tok_summary, tok_body, tok_code, tok_fm,
@@ -941,6 +958,115 @@ class FTS5Index:
 
         scored.sort(key=lambda x: -x[0])
         return [item[1] for item in scored[:top_k]]
+
+    def like_search(self, query: str, top_k: int = 20, use_regex: bool = False) -> list[dict]:
+        """Substring or regex search on nodes.summary/title (original text, not tokenized).
+
+        Fallback when FTS5 tokenization causes query mismatches.
+        Searches the ``nodes`` table which stores original (un-tokenized) text,
+        so phrases that were split by jieba can still be matched.
+
+        Args:
+            query: search string or regex pattern (when use_regex=True).
+            top_k: max results.
+            use_regex: if True, treat query as a regular expression (SQLite REGEXP).
+
+        If ``nodes`` yields no matches, searches ``documents.structure_json``
+        which contains the full original document structure.
+
+        Returns same format as search(): list of {node_id, doc_id, title, summary, fts_score, depth}.
+        """
+        results: list[dict] = []
+        seen: set[str] = set()
+
+        # Build match expression based on mode
+        if use_regex:
+            compiled = re.compile(query, re.IGNORECASE)
+            where_clause = "n.summary REGEXP ? OR n.title REGEXP ?"
+            params = (query, query)
+        else:
+            pattern = f"%{query}%"
+            where_clause = "n.summary LIKE ? OR n.title LIKE ?"
+            params = (pattern, pattern)
+
+        # Phase 1: Search nodes.summary and nodes.title (original text)
+        rows = self._conn.execute(
+            f"""SELECT n.node_id, n.doc_id, n.title, n.summary, n.depth,
+                      d.doc_name, d.source_path
+               FROM nodes n
+               JOIN documents d ON n.doc_id = d.doc_id
+               WHERE {where_clause}
+               ORDER BY n.depth ASC""",
+            params,
+        ).fetchall()
+
+        for row in rows:
+            nid, did = row[0], row[1]
+            key = f"{did}/{nid}"
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "node_id": nid,
+                "doc_id": did,
+                "title": row[2] or "",
+                "summary": row[3] or "",
+                "depth": row[4] or 0,
+                "fts_score": 1.0,
+            })
+
+        if results:
+            return results[:top_k]
+
+        # Phase 2: Search documents.structure_json (full original text)
+        if use_regex:
+            match_fn = compiled.search
+        else:
+            query_lower = query.lower()
+            match_fn = lambda t: query_lower in t.lower() if t else False
+
+        try:
+            if use_regex:
+                doc_rows = self._conn.execute(
+                    "SELECT doc_id, structure_json FROM documents WHERE structure_json REGEXP ?",
+                    (query,),
+                ).fetchall()
+            else:
+                doc_rows = self._conn.execute(
+                    "SELECT doc_id, structure_json FROM documents WHERE structure_json LIKE ?",
+                    (pattern,),
+                ).fetchall()
+        except Exception:
+            return []
+
+        for doc_id, structure_json in doc_rows:
+            if not structure_json:
+                continue
+            try:
+                nodes_data = json.loads(structure_json)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(nodes_data, list):
+                continue
+            for node in nodes_data:
+                text = node.get("text", "") or ""
+                title = node.get("title", "") or ""
+                if match_fn(text) or match_fn(title):
+                    nid = node.get("node_id", "")
+                    key = f"{doc_id}/{nid}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    results.append({
+                        "node_id": nid,
+                        "doc_id": doc_id,
+                        "title": title,
+                        "summary": text[:200],
+                        "depth": node.get("depth", 0),
+                        "fts_score": 0.5,
+                    })
+
+        return results[:top_k]
 
     def search_with_aggregation(
         self,
@@ -1463,11 +1589,16 @@ class FTS5Index:
                     existing_ids,
                 ).fetchall()
                 if old_rowids:
-                    ph2 = ",".join("?" for _ in old_rowids)
-                    self._conn.execute(
-                        f"DELETE FROM fts_nodes WHERE rowid IN ({ph2})",
-                        [r[0] for r in old_rowids],
-                    )
+                    # Batch delete in chunks to avoid SQLite's variable limit (~999)
+                    _MAX_VARS = 500
+                    rowid_list = [r[0] for r in old_rowids]
+                    for i in range(0, len(rowid_list), _MAX_VARS):
+                        chunk = rowid_list[i:i + _MAX_VARS]
+                        ph2 = ",".join("?" for _ in chunk)
+                        self._conn.execute(
+                            f"DELETE FROM fts_nodes WHERE rowid IN ({ph2})",
+                            chunk,
+                        )
             else:
                 self._conn.execute(
                     f"DELETE FROM fts_nodes WHERE doc_id IN ({ph_e})", existing_ids

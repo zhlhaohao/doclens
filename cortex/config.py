@@ -59,6 +59,12 @@ class CortexConfig(BaseSettings):
     # 失败文件自动跳过阈值
     max_index_fail_count: int = Field(default=3)
 
+    # Shadow Markdown（为二进制文件生成 .md 副本用于 ripgrep 降级搜索）
+    treesearch_enable_shadow_md: bool = Field(
+        default=True,
+        alias="TREESEARCH_ENABLE_SHADOW_MD",
+    )
+
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 

@@ -36,6 +36,18 @@ def _reset_cache() -> None:
     _rg_checked = False
 
 
+def _estimate_cmd_length(cmd: list[str]) -> int:
+    """Estimate total command-line length (args + separating spaces)."""
+    return sum(len(arg) for arg in cmd) + len(cmd)
+
+
+# Windows command-line limit (CreateProcess)
+_WIN_CMD_LIMIT = 32767
+
+# Conservative per-batch path budget (leave room for rg flags + pattern)
+_BATCH_PATH_BUDGET = 25000
+
+
 def rg_search(
     pattern: str,
     file_paths: list[str],
@@ -53,7 +65,7 @@ def rg_search(
         case_sensitive: if False, search case-insensitively.
         use_regex: if True, treat *pattern* as a regex; otherwise ``--fixed-strings``.
         max_count: max matches per file.
-        timeout: subprocess timeout in seconds.
+        timeout: subprocess timeout in seconds (per batch).
 
     Returns:
         Dict mapping file paths to lists of 1-based line numbers where
@@ -64,19 +76,48 @@ def rg_search(
 
     if not rg_available():
         return {}
-    rg_bin = _rg_path
 
-    cmd = [rg_bin, "--json", "--max-count", str(max_count)]
-
+    # Build base command (without file paths) to measure overhead
+    base_cmd = [_rg_path, "--json", "--max-count", str(max_count)]
     if not case_sensitive:
-        cmd.append("--ignore-case")
+        base_cmd.append("--ignore-case")
     if not use_regex:
-        cmd.append("--fixed-strings")
+        base_cmd.append("--fixed-strings")
+    base_cmd.extend(["--", pattern])
+    base_len = _estimate_cmd_length(base_cmd)
 
-    cmd.append("--")
-    cmd.append(pattern)
-    cmd.extend(file_paths)
+    # If everything fits in one command, run directly
+    full_cmd = base_cmd + file_paths
+    if _estimate_cmd_length(full_cmd) <= _WIN_CMD_LIMIT:
+        return _run_rg(full_cmd, timeout)
 
+    # Split into batches to stay under command-line limit
+    per_path_budget = _BATCH_PATH_BUDGET - base_len
+    if per_path_budget <= 0:
+        logger.warning("rg base command too long, cannot run search")
+        return {}
+
+    hits: dict[str, list[int]] = {}
+    batch: list[str] = []
+    batch_len = 0
+
+    for fp in file_paths:
+        fp_len = len(fp) + 1  # +1 for separator
+        if batch and batch_len + fp_len > per_path_budget:
+            hits.update(_run_rg(base_cmd + batch, timeout))
+            batch = []
+            batch_len = 0
+        batch.append(fp)
+        batch_len += fp_len
+
+    if batch:
+        hits.update(_run_rg(base_cmd + batch, timeout))
+
+    return hits
+
+
+def _run_rg(cmd: list[str], timeout: float) -> dict[str, list[int]]:
+    """Execute a single rg command and parse JSON output."""
     try:
         result = subprocess.run(
             cmd,
@@ -93,9 +134,9 @@ def rg_search(
         logger.warning("rg execution failed: %s", e)
         return {}
 
-    # Parse JSON lines output
     if not result.stdout:
         return {}
+
     hits: dict[str, list[int]] = {}
     for line in result.stdout.splitlines():
         if not line.strip():

@@ -19,11 +19,13 @@ from textual.widgets import Input
 from textual.worker import Worker, get_current_worker
 
 from rich.text import Text
+from rich.table import Table
 
 from cortex.config import CortexConfig
 from cortex.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
 from cortex.scoring import tokenize_query, calc_proximity_score, compute_composite_score
 from cortex import ripgrep as rg_module
+from treesearch.ripgrep import rg_available
 from cortex.tui.theme import APP_CSS
 from cortex.tui.commands import parse_input
 from cortex.tui.widgets.header_bar import HeaderBar
@@ -32,6 +34,8 @@ from cortex.tui.widgets.input_box import InputBox
 from cortex.tui.widgets.status_bar import StatusBar
 from cortex.tui.widgets.thinking_indicator import ThinkingIndicator
 from cortex.tui.renderers.search import render_search_results
+
+logger = logging.getLogger(__name__)
 
 
 class _AIQueryCancelled(Exception):
@@ -123,6 +127,7 @@ class CortexApp(App):
 
     def _on_index_loaded(self, doc_count: int) -> None:
         """索引加载完成（主线程回调）"""
+        logger.info("Index loaded: %d documents", doc_count)
         # 更新状态栏
         status = self.query_one(StatusBar)
         status.set_index_stats(doc_count)
@@ -178,7 +183,9 @@ class CortexApp(App):
     def _start_watcher(self) -> None:
         """启动文件监控"""
         if not self.config.watch_enabled:
+            logger.info("File watcher disabled by config")
             return
+        logger.info("Starting file watcher...")
         try:
             from cortex.file_watcher import FileWatcher
             from cortex.event_bus import EventBus
@@ -225,9 +232,13 @@ class CortexApp(App):
                 on_reindex_done=on_reindex_done,
             )
             if self.watcher.start():
+                logger.info("File watcher started successfully")
                 status = self.query_one(StatusBar)
                 status.set_watcher_status("运行中")
+            else:
+                logger.warning("File watcher start() returned False")
         except Exception as exc:
+            logger.exception("File watcher start failed: %s", exc)
             content = self.query_one(ContentArea)
             content.write_error(f"文件监控启动失败: {exc}")
             self.watcher = None
@@ -295,6 +306,10 @@ class CortexApp(App):
                 self._cmd_index(arg)
             elif cmd == "search":
                 self._cmd_search(arg)
+            elif cmd == "grep":
+                self._cmd_grep(arg)
+            elif cmd == "ripgrep":
+                self._cmd_ripgrep(arg)
             elif cmd == "set":
                 self._cmd_set(arg)
             elif cmd == "clear":
@@ -326,57 +341,33 @@ class CortexApp(App):
         """显示帮助信息"""
         content = self.query_one(ContentArea)
         missing = check_dependencies()
-        deps_line = ""
-        if missing:
-            deps_line = f"  提示: pip install {' '.join([d for _, d in missing])} 安装缺失依赖"
-        else:
-            deps_line = "  提示: 所有文件类型依赖已安装"
 
-        help_text = (
-            "━━━ 搜索命令 ━━━\n"
-            "  /s <关键词>       搜索\n"
-            "  /search <关键词>  搜索\n"
-            "\n"
-            "━━━ AI 命令 ━━━\n"
-            "  /ai <消息>        与 LLM Agent 对话\n"
-            "  /web <搜索内容>   网络搜索\n"
-            "  /compact          压缩对话历史\n"
-            "  /tasks            显示任务列表\n"
-            "  /team             显示团队列表\n"
-            "  /inbox            显示收件箱\n"
-            "  /failed          显示解析失败的文件\n"
-            "  /clearfailed     清空解析失败的文件记录\n"
-            "\n"
-            "━━━ 默认输入（无斜杠前缀）━━━\n"
-            "  <自然语言消息>    交给 Agent 处理\n"
-            "\n"
-            "━━━ 索引命令 ━━━\n"
-            "  /index            重建索引\n"
-            "  /index -f         强制全量重建\n"
-            "\n"
-            "━━━ 信息命令 ━━━\n"
-            "  /status           显示详细状态\n"
-            "  /set <n>          设置最大显示结果数\n"
-            "  /clear            清屏\n"
-            "  /copy             复制上一条命令输出到剪贴板\n"
-            "  /help             显示帮助\n"
-            "  /quit             退出\n"
-            "\n"
-            "━━━ 滚动 ━━━\n"
-            "  Alt+Up/Down       逐行滚动（外部终端）\n"
-            "  Alt+K/J           逐行滚动（VSCode 终端）\n"
-            "  PageUp/PageDown   翻页滚动（外部终端）\n"
-            "  Alt+U/D           翻页滚动（VSCode 终端）\n"
-            "  Shift+鼠标滚轮    VSCode 终端中鼠标滚动\n"
-            "\n"
-            f"━━━ 支持的文件类型 ━━━\n"
-            "  Markdown(.md), 纯文本(.txt), JSON, YAML, TOML\n"
-            "  Python(.py), JavaScript(.js), TypeScript(.ts)\n"
-            "  HTML(.html), XML(.xml)\n"
-            "  PDF(.pdf)*, Word(.docx)*, Excel(.xlsx)*\n"
-            f"{deps_line}"
-        )
-        content.write(Text(help_text, style="#c0caf5"))
+        # 创建两列网格表格：命令 | 说明
+        from rich.box import SQUARE
+        table = Table(show_header=False, box=SQUARE, pad_edge=False, show_lines=True, border_style="#414868")
+        table.add_column("命令", style="#c0caf5", width=14)
+        table.add_column("说明", style="#787c99", width=14)
+        table.add_column("命令", style="#c0caf5", width=14)
+        table.add_column("说明", style="#787c99", width=14)
+
+        rows = [
+            ("/s", "搜索", "/search", "搜索"),
+            ("/grep", "正则搜索(索引)", "/rg", "正则搜索(磁盘)"),
+            ("/ai", "Agent对话", "/web", "网络搜索"),
+            ("/failed", "解析失败", "/index", "重建索引"),
+            ("/index -f", "强制重建", "/status", "状态"),
+            ("/clear", "清屏", "/help", "帮助"),
+            ("/quit", "退出", "", ""),
+        ]
+        for row in rows:
+            table.add_row(*row)
+
+        content.write(table)
+
+        if missing:
+            content.write_system(f"提示: pip install {' '.join([d for _, d in missing])} 安装缺失依赖")
+        else:
+            content.write_system("提示: 所有文件类型依赖已安装")
 
     def _cmd_status(self) -> None:
         """显示状态"""
@@ -505,6 +496,60 @@ class CortexApp(App):
         header.set_mode("搜索中...")
         self.run_worker(lambda: self._do_search(arg), thread=True, name="search")
 
+    def _cmd_grep(self, arg: str) -> None:
+        """正则搜索命令"""
+        content = self.query_one(ContentArea)
+        header = self.query_one(HeaderBar)
+
+        if not arg:
+            content.write_system("用法: /grep <正则表达式>")
+            return
+
+        header.set_mode("搜索中...")
+        self.run_worker(lambda: self._do_grep(arg), thread=True, name="grep")
+
+    def _do_grep(self, query: str) -> None:
+        """后台线程：执行正则搜索"""
+        worker = get_current_worker()
+        if worker.is_cancelled:
+            return
+
+        try:
+            results = self.idx.like_search(query, max_results=self.max_results, use_regex=True)
+            query_words = [query]
+
+            if not results:
+                # 正则无结果，尝试 ripgrep 降级
+                filtered = rg_module.rg_fallback_search(
+                    query,
+                    self.idx.path_map,
+                    {},
+                    query_words,
+                    context_before=self.idx.rg_context_before,
+                    context_after=self.idx.rg_context_after,
+                )
+                renderables = render_search_results(
+                    results=filtered,
+                    query=query,
+                    query_words=query_words,
+                    path_map=self.idx.path_map,
+                    max_results=self.max_results,
+                    is_ripgrep=True,
+                )
+            else:
+                renderables = render_search_results(
+                    results=results,
+                    query=query,
+                    query_words=query_words,
+                    path_map=self.idx.path_map,
+                    max_results=self.max_results,
+                    is_like=True,
+                )
+            self.call_from_thread(self._on_search_done, renderables)
+
+        except Exception as exc:
+            self.call_from_thread(self._on_search_error, str(exc))
+
     def _do_search(self, query: str) -> None:
         """后台线程：执行搜索"""
         worker = get_current_worker()
@@ -521,7 +566,21 @@ class CortexApp(App):
                 query_words = [w.strip() for w in query.split() if w.strip()]
 
             if not nodes:
-                # FTS 无结果，尝试 ripgrep 降级
+                # FTS 无结果，尝试 SQLite LIKE 降级（原文子串匹配）
+                like_results = self.idx.like_search(query, max_results=self.max_results)
+                if like_results:
+                    renderables = render_search_results(
+                        results=like_results,
+                        query=query,
+                        query_words=query_words,
+                        path_map=self.idx.path_map,
+                        max_results=self.max_results,
+                        is_like=True,
+                    )
+                    self.call_from_thread(self._on_search_done, renderables)
+                    return
+
+                # LIKE 也无结果，尝试 ripgrep 降级
                 filtered = rg_module.rg_fallback_search(
                     query,
                     self.idx.path_map,
@@ -601,8 +660,21 @@ class CortexApp(App):
                     if cnt >= 1
                 ]
 
-            # ripgrep 最终降级
+            # ripgrep 最终降级（先尝试 LIKE，再 ripgrep）
             if not filtered:
+                like_results = self.idx.like_search(query, max_results=self.max_results)
+                if like_results:
+                    renderables = render_search_results(
+                        results=like_results,
+                        query=query,
+                        query_words=query_words,
+                        path_map=self.idx.path_map,
+                        max_results=self.max_results,
+                        is_like=True,
+                    )
+                    self.call_from_thread(self._on_search_done, renderables)
+                    return
+
                 filtered = rg_module.rg_fallback_search(
                     query,
                     self.idx.path_map,
@@ -649,6 +721,51 @@ class CortexApp(App):
             )
             self.call_from_thread(self._on_search_done, renderables)
 
+        except Exception as exc:
+            self.call_from_thread(self._on_search_error, str(exc))
+
+    def _cmd_ripgrep(self, arg: str) -> None:
+        """ripgrep 正则搜索命令"""
+        content = self.query_one(ContentArea)
+        header = self.query_one(HeaderBar)
+
+        if not arg:
+            content.write_system("用法: /rg <正则表达式>")
+            return
+
+        if not rg_available():
+            content.write_error("ripgrep 未安装，/rg 命令不可用。请安装: winget install BurntSushi.ripgrep.MSVC --source winget")
+            return
+
+        header.set_mode("搜索中...")
+        self.run_worker(lambda: self._do_ripgrep(arg), thread=True, name="ripgrep")
+
+    def _do_ripgrep(self, query: str) -> None:
+        """后台线程：执行 ripgrep 正则搜索"""
+        worker = get_current_worker()
+        if worker.is_cancelled:
+            return
+
+        try:
+            query_words = [query]
+            filtered = rg_module.rg_fallback_search(
+                query,
+                self.idx.path_map,
+                {},
+                query_words,
+                context_before=self.idx.rg_context_before,
+                context_after=self.idx.rg_context_after,
+                use_regex=True,
+            )
+            renderables = render_search_results(
+                results=filtered,
+                query=query,
+                query_words=query_words,
+                path_map=self.idx.path_map,
+                max_results=self.max_results,
+                is_ripgrep=True,
+            )
+            self.call_from_thread(self._on_search_done, renderables)
         except Exception as exc:
             self.call_from_thread(self._on_search_error, str(exc))
 
