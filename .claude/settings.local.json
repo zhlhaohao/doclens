@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python _fix.py)",
+      "Bash(python _fix_watch.py)",
+      "Bash(rm _fix_watch.py)"
+    ]
+  }
+}
