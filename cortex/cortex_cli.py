@@ -843,7 +843,7 @@ def _build_parser():
     )
     search_v2_parser.set_defaults(func=_cli_search_v2)
 
-    # cortex web <query> [--allowed-domains DOMAINS] [--blocked-domains DOMAINS]
+    # cortex web <query> [--allowed-domains DOMAINS] [--count N] [--recency FILTER] [--content-size SIZE] [--location LOC]
     web_parser = sub.add_parser(
         "web", help="Web search using Anthropic server-side search"
     )
@@ -853,8 +853,23 @@ def _build_parser():
         help="只搜索这些域名（逗号分隔）"
     )
     web_parser.add_argument(
-        "--blocked-domains", type=str, default=None,
-        help="排除这些域名（逗号分隔）"
+        "--count", type=int, default=None,
+        help="返回结果条数 (1-50)"
+    )
+    web_parser.add_argument(
+        "--recency", type=str, default=None,
+        choices=["oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"],
+        help="时间范围过滤"
+    )
+    web_parser.add_argument(
+        "--content-size", type=str, default=None,
+        choices=["medium", "high"],
+        help="内容详细度"
+    )
+    web_parser.add_argument(
+        "--location", type=str, default=None,
+        choices=["cn", "us"],
+        help="搜索地区"
     )
     web_parser.set_defaults(func=_cli_web)
 
@@ -1045,13 +1060,9 @@ def _cli_web(args, config, idx):
     """Handle `cortex web <query>` — web search via Anthropic server-side search."""
     query = " ".join(args.query)
 
-    # 解析域名过滤参数
     allowed = None
     if args.allowed_domains:
         allowed = [d.strip() for d in args.allowed_domains.split(",") if d.strip()]
-    blocked = None
-    if args.blocked_domains:
-        blocked = [d.strip() for d in args.blocked_domains.split(",") if d.strip()]
 
     from planify.tools.web import run_web_search
     from planify.core.client import init_anthropic_client
@@ -1067,7 +1078,11 @@ def _cli_web(args, config, idx):
     client = init_anthropic_client(base_url, api_key)
     result = run_web_search(
         query, client, model_id,
-        allowed_domains=allowed, blocked_domains=blocked
+        allowed_domains=allowed,
+        count=args.count,
+        search_recency_filter=args.recency,
+        content_size=args.content_size,
+        location=args.location,
     )
     print(result)
 
