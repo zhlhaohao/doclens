@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -219,8 +220,6 @@ examples/benchmark/.cache/
 examples/indexes/
 docs/internal/*
 examples/a.py
-AGENT.md
-CLAUDE.md
 data/financebench_pdfs/*
 CODEBUDDY.md
 .codebuddy/
@@ -249,4 +248,3 @@ rust/Cargo.lock
 PERFORMANCE_ANALYSIS.md
 PERFORMANCE_CODE_REFERENCES.md
 PERFORMANCE_SUMMARY.txt
-.claude/
