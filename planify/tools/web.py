@@ -84,7 +84,10 @@ def run_web_search(
     model_id: str = "claude-opus-4-6",
     thinking_budget: int = 10000,
     allowed_domains: Optional[List[str]] = None,
-    blocked_domains: Optional[List[str]] = None,
+    count: Optional[int] = None,
+    search_recency_filter: Optional[str] = None,
+    content_size: Optional[str] = None,
+    location: Optional[str] = None,
 ) -> str:
     """
     使用 Anthropic API 的服务端 web_search 工具搜索网络信息
@@ -95,7 +98,10 @@ def run_web_search(
         model_id: 模型 ID
         thinking_budget: Thinking 预算 token 数（默认 10000）
         allowed_domains: 只搜索这些域名
-        blocked_domains: 排除这些域名
+        count: 返回结果条数 (1-50)
+        search_recency_filter: 时间范围 (oneDay/oneWeek/oneMonth/oneYear/noLimit)
+        content_size: 内容详细度 (medium/high)
+        location: 搜索地区 (cn/us)
 
     Returns:
         格式化后的搜索结果文本
@@ -103,24 +109,28 @@ def run_web_search(
     if client is None:
         return "网络搜索不可用：客户端未初始化"
 
-    # 构建工具 schema（与 TypeScript ApiSearchAdapter 一致：allowed/blocked_domains 在顶层）
+    # 将所有搜索参数封装为 JSON 字符串传递给 API query 字段
+    actual_query = _build_search_query(
+        query,
+        allowed_domains=allowed_domains,
+        count=count,
+        search_recency_filter=search_recency_filter,
+        content_size=content_size,
+        location=location,
+    )
+
     tool: dict[str, Any] = {
         "type": "web_search_20250305",
         "name": "web_search_20250305",
         "max_uses": 8,
     }
-    if allowed_domains:
-        tool["allowed_domains"] = allowed_domains
-    if blocked_domains:
-        tool["blocked_domains"] = blocked_domains
-
     tools = [tool]
 
     kwargs: dict[str, Any] = {
         "model": model_id,
         "max_tokens": 32000,
         "tools": tools,
-        "messages": [{"role": "user", "content": f"Perform a web search for: {query}"}],
+        "messages": [{"role": "user", "content": f"Perform a web search for: {actual_query}"}],
         "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
     }
 
