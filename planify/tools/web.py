@@ -58,7 +58,6 @@ def _format_results(results: list[dict]) -> str:
 def _build_search_query(
     query: str,
     allowed_domains: Optional[List[str]] = None,
-    count: Optional[int] = None,
     search_recency_filter: Optional[str] = None,
     content_size: Optional[str] = None,
     location: Optional[str] = None,
@@ -67,8 +66,6 @@ def _build_search_query(
     payload: dict[str, Any] = {"search_query": query}
     if allowed_domains:
         payload["search_domain_filter"] = ",".join(allowed_domains)
-    if count is not None:
-        payload["count"] = count
     if search_recency_filter is not None:
         payload["search_recency_filter"] = search_recency_filter
     if content_size is not None:
@@ -84,7 +81,6 @@ def run_web_search(
     model_id: str = "claude-opus-4-6",
     thinking_budget: int = 10000,
     allowed_domains: Optional[List[str]] = None,
-    count: Optional[int] = None,
     search_recency_filter: Optional[str] = None,
     content_size: Optional[str] = None,
     location: Optional[str] = None,
@@ -98,7 +94,6 @@ def run_web_search(
         model_id: 模型 ID
         thinking_budget: Thinking 预算 token 数（默认 10000）
         allowed_domains: 只搜索这些域名
-        count: 返回结果条数 (1-50)
         search_recency_filter: 时间范围 (oneDay/oneWeek/oneMonth/oneYear/noLimit)
         content_size: 内容详细度 (medium/high)
         location: 搜索地区 (cn/us)
@@ -113,7 +108,6 @@ def run_web_search(
     actual_query = _build_search_query(
         query,
         allowed_domains=allowed_domains,
-        count=count,
         search_recency_filter=search_recency_filter,
         content_size=content_size,
         location=location,
@@ -180,7 +174,7 @@ def make_web_tools(
     tools = [
         {
             "name": "web_search",
-            "description": "搜索网络信息。返回基于实时搜索的结果摘要。支持域名过滤、结果数量、时效性、内容详细度和地区控制。",
+            "description": "搜索网络信息。返回基于实时搜索的结果摘要。支持域名过滤、时效性、内容详细度和地区控制。",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -192,12 +186,6 @@ def make_web_tools(
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "只搜索这些域名，如 ['python.org', 'docs.python.org']",
-                    },
-                    "count": {
-                        "type": "integer",
-                        "description": "返回结果条数，1-50，默认10",
-                        "minimum": 1,
-                        "maximum": 50,
                     },
                     "search_recency_filter": {
                         "type": "string",
@@ -226,7 +214,6 @@ def make_web_tools(
             client,
             model_id,
             allowed_domains=kw.get("allowed_domains"),
-            count=kw.get("count"),
             search_recency_filter=kw.get("search_recency_filter"),
             content_size=kw.get("content_size"),
             location=kw.get("location"),

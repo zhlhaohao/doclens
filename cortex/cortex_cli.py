@@ -843,7 +843,7 @@ def _build_parser():
     )
     search_v2_parser.set_defaults(func=_cli_search_v2)
 
-    # cortex web <query> [--allowed-domains DOMAINS] [--count N] [--recency FILTER] [--content-size SIZE] [--location LOC]
+    # cortex web <query> [--allowed-domains DOMAINS] [--recency FILTER] [--content-size SIZE] [--location LOC]
     web_parser = sub.add_parser(
         "web", help="Web search using Anthropic server-side search"
     )
@@ -851,10 +851,6 @@ def _build_parser():
     web_parser.add_argument(
         "--allowed-domains", type=str, default=None,
         help="只搜索这些域名（逗号分隔）"
-    )
-    web_parser.add_argument(
-        "--count", type=int, default=None,
-        help="返回结果条数 (1-50)"
     )
     web_parser.add_argument(
         "--recency", type=str, default=None,
@@ -1079,7 +1075,6 @@ def _cli_web(args, config, idx):
     result = run_web_search(
         query, client, model_id,
         allowed_domains=allowed,
-        count=args.count,
         search_recency_filter=args.recency,
         content_size=args.content_size,
         location=args.location,
