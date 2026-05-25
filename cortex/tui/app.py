@@ -730,6 +730,7 @@ class CortexApp(App):
                     fts_score=fts,
                     query_words=query_words,
                     weights=self.idx.scoring_weights,
+                    proximity=prox,
                 )
                 scored_results.append((composite, item))
 

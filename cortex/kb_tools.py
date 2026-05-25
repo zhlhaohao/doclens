@@ -3,6 +3,10 @@
 为 AI Agent 提供知识库搜索、索引管理和文档阅读能力。
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import asyncio
 import os
 from pathlib import Path
@@ -179,11 +183,11 @@ def build_kb_tools(
 
     handlers = {
         "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
-        "search_kb_v2": lambda **kw: _handle_search_kb_v2(idx_manager, workdir, **kw),
+        # "search_kb_v2": lambda **kw: _handle_search_kb_v2(idx_manager, workdir, **kw),
         "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
         "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
     }
-    return [search_kb_schema, SEARCH_KB_V2_TOOL, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
+    return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
 
 
 # ---------------------------------------------------------------------------
@@ -236,38 +240,52 @@ def _build_fts5_query(query_tokens: dict) -> str:
         raise ValueError(f"Unknown query type: {qtype}")
 
 
-def _build_hierarchy_path(node: dict, doc_nodes_map: dict[str, list[dict]], doc_title: str) -> str:
-    """构建节点在文档树中的层级路径。"""
+def _build_hierarchy_path(node: dict, doc_id: str, doc_nodes_map: dict[str, list[dict]], doc_title: str) -> str:
+    """构建节点在文档树中的层级路径。通过遍历文档节点树找到目标节点的真实路径。"""
     node_title = node.get("title", "")
     node_line_start = node.get("line_start")
 
     if not node_title:
         return doc_title
 
-    all_nodes: list[dict] = []
-    for nodes_list in doc_nodes_map.values():
-        all_nodes.extend(nodes_list)
-
-    if not all_nodes:
+    root_nodes = doc_nodes_map.get(doc_id, [])
+    if not root_nodes:
         return f"{doc_title} > {node_title}"
 
-    candidates = []
-    for n in all_nodes:
-        n_title = n.get("title", "")
-        n_line = n.get("line_start")
-        if not n_title or n_title == node_title:
-            continue
-        if n_line is not None and node_line_start is not None:
-            if n_line < node_line_start:
-                candidates.append((n_line, n_title))
-
-    if not candidates:
+    # 在文档树中 DFS 查找目标节点，收集从根到目标的路径
+    path = _find_node_in_tree(root_nodes, node_title, node_line_start)
+    if not path:
         return f"{doc_title} > {node_title}"
 
-    candidates.sort()
-    ancestors = [title for _, title in candidates[-3:]]
-    parts = [doc_title] + ancestors + [node_title]
-    return " > ".join(parts)
+    # 如果路径第一段与 doc_title 相同则去掉，避免重复
+    if path[0] == doc_title:
+        path = path[1:]
+
+    if not path:
+        return doc_title
+
+    return doc_title + " > " + " > ".join(path)
+
+
+def _find_node_in_tree(nodes: list[dict], target_title: str, target_line_start) -> list[str] | None:
+    """在节点树中 DFS 查找目标节点，返回从当前层到目标的标题路径。"""
+    for node in nodes:
+        title = node.get("title", "")
+        line_start = node.get("line_start")
+
+        # 匹配：标题相同且行号相同（行号均可用时比较行号）
+        if title and title == target_title:
+            if target_line_start is None or line_start == target_line_start:
+                return [title]
+
+        # 搜索子节点
+        children = node.get("nodes", [])
+        if children:
+            child_path = _find_node_in_tree(children, target_title, target_line_start)
+            if child_path is not None:
+                return ([title] if title else []) + child_path
+
+    return None
 
 
 def _truncate_to_paragraphs(text: str, max_chars: int) -> str:
@@ -297,34 +315,36 @@ def _format_kb_results(
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
     max_total_chars: int = MAX_TOTAL_CHARS,
 ) -> str:
-    """格式化 FTS 搜索结果为带层次结构的文本。"""
+    """格式化 FTS 搜索结果为 XML 结构化文本，便于 LLM 区分元信息和原始内容。"""
     total_hits = len(scored_results)
     display = scored_results[:max_results]
 
-    lines = [f"搜索到 {total_hits} 个结果："]
+    lines = [
+        f"Found {total_hits} results:",
+        "Use read_document tool to read full content: path=<path value>, section=<any section in hierarchy>. Larger section = broader content, smaller section = more specific.",
+    ]
 
     total_chars = 0
     shown = 0
     truncated_count = 0
 
     for composite, (doc_id, node, matched, prox, fts) in display:
-        node_title = node.get("title", "")
         node_text = node.get("text", "") or ""
         path = path_map.get(doc_id, "")
         doc_title = doc_title_map.get(doc_id, doc_id)
-        hierarchy = _build_hierarchy_path(node, doc_nodes_map, doc_title)
+        hierarchy = _build_hierarchy_path(node, doc_id, doc_nodes_map, doc_title)
 
         context = _truncate_to_paragraphs(node_text, max_context_chars_per_result)
 
-        entry = (
-            f"\n=== 结果 {shown + 1} [评分: {int(composite * 100)}%] ===\n"
-            f"文档: {doc_title}\n"
-            f"路径: {path}\n"
-            f"层级: {hierarchy}\n"
-            f"标题: {node_title}\n"
-        )
+        entry = f'<result index="{shown + 1}" score="{int(composite * 100)}%" matches="{matched}/{len(query_words)}">\n'
+        entry += "  <meta>\n"
+        entry += f"    <doc>{doc_title}</doc>\n"
+        entry += f"    <path>{path}</path>\n"
+        entry += f"    <hierarchy>{hierarchy}</hierarchy>\n"
+        entry += "  </meta>\n"
         if context:
-            entry += f"\n{context}\n"
+            entry += f"  <content>\n{context}\n  </content>\n"
+        entry += "</result>"
 
         entry_len = len(entry)
         if total_chars + entry_len > max_total_chars:
@@ -336,9 +356,9 @@ def _format_kb_results(
         shown += 1
 
     if truncated_count > 0:
-        lines.append(f"\n（还有 {truncated_count} 个结果被截断，可用 max_results 参数获取更多）")
+        lines.append(f"\n({truncated_count} more results truncated. Use max_results parameter to get more.)")
     elif total_hits > shown:
-        lines.append(f"\n（还有 {total_hits - shown} 个结果被截断，可用 max_results 参数获取更多）")
+        lines.append(f"\n({total_hits - shown} more results truncated. Use max_results parameter to get more.)")
 
     return "\n".join(lines)
 
@@ -757,6 +777,7 @@ def _handle_search_kb(
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
+    logger.debug("query=%r, query_words=%s, FTS nodes=%d, docs=%d", query, query_words, len(nodes), len(docs))
 
     if not nodes:
         filtered = rg_module.rg_fallback_search(
@@ -781,39 +802,61 @@ def _handle_search_kb(
         doc_title_map[doc_id] = doc_name
         doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
-    doc_best: dict[str, tuple] = {}
+    logger.debug("max_nodes_per_doc=%d, FTS nodes=%d, docs=%d", idx_manager.max_nodes_per_doc, len(nodes), len(docs))
+    doc_best: dict[str, list[tuple]] = {}
     doc_fts_best: dict[str, float] = {}
     for node in nodes:
         doc_id = node.get("doc_id", "")
         score = node.get("score", 0.0)
         if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
             doc_fts_best[doc_id] = score
-        if doc_id in doc_best:
-            continue
         all_nodes = doc_nodes_map.get(doc_id, [])
-        best_node = None
-        best_count = 0
-        best_proximity = 0
+        node_scores: list[tuple] = []
         for n in all_nodes:
             n_text = n.get("text", "") or ""
             cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
-            if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
-                best_count = cnt
-                best_proximity = proximity
-                best_node = n
-        if best_node and best_count > 0:
-            doc_best[doc_id] = (best_node, best_count, best_proximity, doc_fts_best.get(doc_id, 0.0))
+            if cnt > 0:
+                composite, factors = compute_composite_score(
+                    matched_count=cnt,
+                    total_keywords=len(query_words),
+                    doc_name=doc_id,
+                    node_title=n.get("title", ""),
+                    fts_score=doc_fts_best.get(doc_id, 0.0),
+                    query_words=query_words,
+                    weights=idx_manager.scoring_weights,
+                    proximity=proximity,
+                )
+                node_scores.append((n, cnt, proximity, composite, factors))
+        node_scores.sort(key=lambda x: -x[3])
+        top_n = node_scores[:idx_manager.max_nodes_per_doc]
+        if top_n:
+            doc_best[doc_id] = [
+                (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite, factors)
+                for n, cnt, prox, composite, factors in top_n
+            ]
+    _debug_lines = []
+    for d, v in doc_best.items():
+        for n, cnt, prox, fts, composite, factors in v:
+            title = n.get("title", "")[:20]
+            _debug_lines.append(f"  {doc_title_map.get(d,'?')[:15]} > {title}: {composite:.0%} factors={factors}")
+    logger.debug("scoring detail:\n%s", "\n".join(_debug_lines))
+    logger.debug("doc_best counts: %s", [(doc_title_map.get(d,'?')[:15], len(v)) for d, v in doc_best.items()])
+
+    # Flatten all nodes across docs for filtering
+    all_candidates = []
+    for did, node_list in doc_best.items():
+        for bn, cnt, prox, fts, composite, _factors in node_list:
+            all_candidates.append((did, bn, cnt, prox, fts, composite))
 
     filtered = [
-        (did, bn, cnt, prox, fts)
-        for did, (bn, cnt, prox, fts) in doc_best.items()
-        if cnt >= idx_manager.min_keyword_match and prox >= idx_manager.min_proximity_score
+        item for item in all_candidates
+        if item[5] >= idx_manager.min_score_threshold or
+           (item[2] >= idx_manager.min_keyword_match and item[3] >= idx_manager.min_proximity_score)
     ]
     if not filtered and query_words:
         filtered = [
-            (did, bn, cnt, prox, fts)
-            for did, (bn, cnt, prox, fts) in doc_best.items()
-            if cnt >= 1
+            item for item in all_candidates
+            if item[2] >= 1
         ]
     if not filtered:
         filtered = rg_module.rg_fallback_search(
@@ -826,18 +869,12 @@ def _handle_search_kb(
 
     scored_results = []
     for item in filtered:
-        did, display_node, matched, prox, fts = item
-        composite, _ = compute_composite_score(
-            matched_count=matched,
-            total_keywords=len(query_words),
-            doc_name=did,
-            node_title=display_node.get("title", ""),
-            fts_score=fts,
-            query_words=query_words,
-            weights=idx_manager.scoring_weights,
-        )
-        scored_results.append((composite, item))
+        did, display_node, matched, prox, fts, composite = item[:6]
+        scored_results.append((composite, (did, display_node, matched, prox, fts)))
     scored_results.sort(key=lambda x: -x[0])
+
+    if idx_manager.min_score_threshold > 0.0:
+        scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
     return _format_kb_results(
         scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results,
@@ -936,28 +973,37 @@ def _handle_search_kb_v2(
         if doc_id in doc_best:
             continue
         all_nodes = doc_nodes_map.get(doc_id, [])
-        best_node = None
-        best_count = 0
-        best_proximity = 0
+        node_scores: list[tuple] = []
         for n in all_nodes:
             n_text = n.get("text", "") or ""
             cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
-            if proximity > best_proximity or (proximity == best_proximity and cnt > best_count):
-                best_count = cnt
-                best_proximity = proximity
-                best_node = n
-        if best_node and best_count > 0:
-            doc_best[doc_id] = (best_node, best_count, best_proximity, doc_fts_best.get(doc_id, 0.0))
+            if cnt > 0:
+                composite, _ = compute_composite_score(
+                    matched_count=cnt,
+                    total_keywords=len(query_words),
+                    doc_name=doc_id,
+                    node_title=n.get("title", ""),
+                    fts_score=doc_fts_best.get(doc_id, 0.0),
+                    query_words=query_words,
+                    weights=idx_manager.scoring_weights,
+                    proximity=proximity,
+                )
+                node_scores.append((n, cnt, proximity, composite))
+        node_scores.sort(key=lambda x: -x[3])
+        if node_scores:
+            n, cnt, prox, composite = node_scores[0]
+            doc_best[doc_id] = (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite)
 
     filtered = [
-        (did, bn, cnt, prox, fts)
-        for did, (bn, cnt, prox, fts) in doc_best.items()
-        if cnt >= idx_manager.min_keyword_match and prox >= idx_manager.min_proximity_score
+        (did, bn, cnt, prox, fts, composite)
+        for did, (bn, cnt, prox, fts, composite) in doc_best.items()
+        if composite >= idx_manager.min_score_threshold or
+           (cnt >= idx_manager.min_keyword_match and prox >= idx_manager.min_proximity_score)
     ]
     if not filtered and query_words:
         filtered = [
-            (did, bn, cnt, prox, fts)
-            for did, (bn, cnt, prox, fts) in doc_best.items()
+            (did, bn, cnt, prox, fts, composite)
+            for did, (bn, cnt, prox, fts, composite) in doc_best.items()
             if cnt >= 1
         ]
     if not filtered:
@@ -971,18 +1017,12 @@ def _handle_search_kb_v2(
 
     scored_results = []
     for item in filtered:
-        did, display_node, matched, prox, fts = item
-        composite, _ = compute_composite_score(
-            matched_count=matched,
-            total_keywords=len(query_words),
-            doc_name=did,
-            node_title=display_node.get("title", ""),
-            fts_score=fts,
-            query_words=query_words,
-            weights=idx_manager.scoring_weights,
-        )
-        scored_results.append((composite, item))
+        did, display_node, matched, prox, fts, composite = item[:6]
+        scored_results.append((composite, (did, display_node, matched, prox, fts)))
     scored_results.sort(key=lambda x: -x[0])
+
+    if idx_manager.min_score_threshold > 0.0:
+        scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
     return _format_kb_results(
         scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results,

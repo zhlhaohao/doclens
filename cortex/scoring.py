@@ -45,7 +45,7 @@ def calc_proximity_score(text, keywords, max_span=20):
     return matched, 1
 
 
-def compute_composite_score(matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights):
+def compute_composite_score(matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights, proximity=0):
     """计算综合评分
 
     Args:
@@ -56,6 +56,7 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         fts_score: FTS5 BM25 原始分数
         query_words: 查询分词列表
         weights: 各因子权重字典
+        proximity: 邻近度分数 (0=无匹配, 1=部分匹配, 2=全部关键词紧邻)
 
     Returns:
         (composite_score, factors_dict) - 综合评分(0~1)和各因子明细
@@ -102,6 +103,14 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         title_hits = sum(1 for kw in query_words if kw.lower() in title_lower)
         val = title_hits / total_keywords
         factors["title_match"] = val
+        weighted_sum += w * val
+        total_weight += w
+
+    # proximity: 邻近度分数归一化 (0→0.0, 1→0.5, 2→1.0)
+    w = weights.get("proximity_match", 0)
+    if w > 0 and proximity > 0:
+        val = proximity / 2.0
+        factors["proximity_match"] = val
         weighted_sum += w * val
         total_weight += w
 

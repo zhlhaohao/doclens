@@ -45,6 +45,7 @@ class IndexManager:
         self.min_keyword_match = config.min_keyword_match
         self.min_proximity_score = config.min_proximity_score
         self.min_keywords_per_line = config.min_keywords_per_line
+        self.min_score_threshold = config.min_score_threshold
         self.cjk_tokenizer = config.cjk_tokenizer
         self.max_index_fail_count = config.max_index_fail_count
         self.enable_shadow_md = config.treesearch_enable_shadow_md
@@ -70,6 +71,7 @@ class IndexManager:
             "file_name_match": config.weight_file_name_match,
             "fts_score": config.weight_fts_score,
             "title_match": config.weight_title_match,
+            "proximity_match": config.weight_proximity_match,
         }
 
         self._ts = None
