@@ -153,12 +153,30 @@ class StreamingAgent:
                     )
 
             # 2. agent.md 内容
-            assets_base_path = Path("backend/app/assets")
+            agent_md_content = ""
             if self.session and self.session.config.assets_dir:
-                assets_base_path = self.session.config.assets_dir
-            agent_md_path = assets_base_path / "agent.md"
-            if agent_md_path.exists():
-                agent_md_content = agent_md_path.read_text(encoding="utf-8")
+                # Web 模式：从 assets_dir 读取
+                agent_md_path = self.session.config.assets_dir / "agent.md"
+                if agent_md_path.exists():
+                    agent_md_content = agent_md_path.read_text(encoding="utf-8")
+            else:
+                # CLI 模式：合并全局 + 项目级 agent.md
+                from pathlib import Path as _Path
+                import os as _os
+                global_agent_md = _Path.home() / ".cortex" / "agent.md"
+                workdir = "."
+                if self.config:
+                    workdir = getattr(self.config, "workdir", ".")
+                local_agent_md = _Path(workdir) / ".cortex" / "agent.md"
+                parts = []
+                if global_agent_md.exists():
+                    parts.append(global_agent_md.read_text(encoding="utf-8"))
+                if local_agent_md.exists():
+                    parts.append(local_agent_md.read_text(encoding="utf-8"))
+                if parts:
+                    agent_md_content = "\n\n".join(parts)
+
+            if agent_md_content:
                 context_parts.append(
                     f"<system-reminder>\n"
                     f"As you answer the user's questions, you can use the following context:\n"

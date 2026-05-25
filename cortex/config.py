@@ -27,7 +27,7 @@ class CortexConfig(BaseSettings):
 
     # 搜索参数
     max_results: int = Field(default=20)
-    max_nodes_per_doc: int = Field(default=5)
+    max_nodes_per_doc: int = Field(default=3)
     top_k_docs: int = Field(default=100)
     min_score_threshold: float = Field(default=0.0, description="综合评分阈值，低于此值的结果将被过滤")
 
@@ -74,6 +74,7 @@ class CortexConfig(BaseSettings):
     weight_file_name_match: float = Field(default=2.0)
     weight_fts_score: float = Field(default=2.0)
     weight_title_match: float = Field(default=1.5)
+    weight_proximity_match: float = Field(default=1.0)
 
     # Planify / Agent 配置
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
@@ -134,19 +135,26 @@ class CortexConfig(BaseSettings):
 
     @classmethod
     def load(cls) -> "CortexConfig":
-        """从 ~/.cortex/.env 或 {cwd}/.cortex/.env 加载配置，失败则降级到环境变量"""
+        """从 ~/.cortex/.env 和 {cwd}/.cortex/.env 加载配置，项目级覆盖全局"""
         # 首次运行引导
         cls._init_first_run()
 
-        # 优先读取全局配置
         global_env = get_global_cortex_dir() / ".env"
-        if global_env.exists():
-            return cls(_env_file=str(global_env), _env_file_encoding="utf-8")
-
-        # 降级到项目级配置
         local_env = Path(os.getcwd()) / ".cortex" / ".env"
+
+        env_files = []
+        if global_env.exists():
+            env_files.append(str(global_env))
         if local_env.exists():
-            return cls(_env_file=str(local_env), _env_file_encoding="utf-8")
+            env_files.append(str(local_env))
+
+        if env_files:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug("CortexConfig.load env_files: %s", env_files)
+            result = cls(_env_file=env_files, _env_file_encoding="utf-8")
+            logger.debug("CortexConfig.load max_nodes_per_doc=%d", result.max_nodes_per_doc)
+            return result
 
         # 降级到环境变量
         return cls(_env_file=None)

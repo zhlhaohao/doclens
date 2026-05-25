@@ -132,16 +132,15 @@ class CortexAgent:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        # 从 ~/.cortex/.env 读取配置（全局优先），降级到 {workdir}/.cortex/.env
+        # 从 ~/.cortex/.env 和 {workdir}/.cortex/.env 加载配置，项目级覆盖全局
         from cortex.config import get_global_cortex_dir
+        from dotenv import load_dotenv
         global_env = get_global_cortex_dir() / ".env"
         local_env = self.workdir / ".cortex" / ".env"
         if global_env.exists():
-            from dotenv import load_dotenv
             load_dotenv(global_env, override=True)
-        elif local_env.exists():
-            from dotenv import load_dotenv
-            load_dotenv(local_env, override=True)
+        if local_env.exists():
+            load_dotenv(local_env, override=False)
 
         # 从环境变量构建配置
         config = {

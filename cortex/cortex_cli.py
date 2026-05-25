@@ -297,6 +297,7 @@ class NotebookSearchCLI:
                 fts_score=fts,
                 query_words=query_words,
                 weights=self.idx.scoring_weights,
+                proximity=prox,
             )
             scored_results.append((composite, item))
 
@@ -810,6 +811,13 @@ def _build_parser():
     )
     search_parser.set_defaults(func=_cli_search)
 
+    # cortex search_kb <query>
+    search_kb_parser = sub.add_parser(
+        "search_kb", help="Search KB in LLM-friendly format (same as search_kb tool)"
+    )
+    search_kb_parser.add_argument("query", nargs="+", help="Search query keywords")
+    search_kb_parser.set_defaults(func=_cli_search_kb)
+
     # cortex ai <message>
     ai_parser = sub.add_parser(
         "ai", help="Send a message to the LLM agent"
@@ -918,6 +926,19 @@ def _cli_search(args, config, idx):
     cli.idx = idx
     cli.max_results = config.max_results
     cli.format_results(nodes, docs, query, max_results=cli.max_results, min_score_threshold=min_score)
+
+
+def _cli_search_kb(args, config, idx):
+    """Handle `cortex search_kb <query>` — LLM-friendly format via search_kb tool."""
+    import logging
+    from cortex.kb_tools import _handle_search_kb
+
+    logger = logging.getLogger(__name__)
+    logger.debug("_cli_search_kb config.max_nodes_per_doc=%d, idx.max_nodes_per_doc=%d", config.max_nodes_per_doc, idx.max_nodes_per_doc)
+    query = " ".join(args.query)
+    idx.load_or_build_index()
+    result = _handle_search_kb(idx, Path(idx.search_path), query=query)
+    print(result)
 
 
 def _cli_ai(args, config, idx):
@@ -1091,10 +1112,15 @@ def _cli_web(args, config, idx):
 
 def main():
     """主函数 - 启动 TUI"""
+    import logging
     import sqlite3
     from cortex.config import CortexConfig
     from cortex.tui.app import CortexApp
     from treesearch.treesearch import TreeSearch
+
+    # 配置日志 → .cortex/logs/debug_YYYYMMDD.log
+    from planify.core.logging_config import setup_logging
+    setup_logging()
 
     parser = _build_parser()
     args, unknown = parser.parse_known_args()
