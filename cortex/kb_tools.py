@@ -617,16 +617,20 @@ def _find_section_text(
             if title and section_lower in title.lower():
                 text = node.get("text", "") or ""
 
-                def _collect_all_text(n, root_text=text):
-                    parts = [root_text] if root_text else []
-                    for child in n.get("nodes", []):
-                        child_text = child.get("text", "") or ""
-                        if child_text:
-                            parts.append(child_text)
-                        parts.extend(_collect_all_text(child))
+                def _collect_leaf_text(n):
+                    """递归收集叶子节点 text，跳过非叶节点的 prefix_summary（避免重复）。"""
+                    children = n.get("nodes", [])
+                    if not children:
+                        # 叶子节点：直接取 text
+                        t = n.get("text", "") or ""
+                        return [t] if t else []
+                    # 非叶节点：只递归子节点，不取自身的 prefix_summary
+                    parts = []
+                    for child in children:
+                        parts.extend(_collect_leaf_text(child))
                     return parts
 
-                all_texts = _collect_all_text(node)
+                all_texts = _collect_leaf_text(node)
                 combined_text = "\n\n".join(all_texts)
                 matches.append((title, combined_text, current_path))
 
