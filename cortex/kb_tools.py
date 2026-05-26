@@ -288,6 +288,27 @@ def _find_node_in_tree(nodes: list[dict], target_title: str, target_line_start) 
     return None
 
 
+def _bump_heading_levels(text: str, levels: int) -> str:
+    """将 markdown 文本中的标题层级提升指定级数（# → ### 等）。"""
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            # 计算 # 的数量
+            count = 0
+            while count < len(stripped) and stripped[count] == "#":
+                count += 1
+            if count < 6:
+                indent = line[:len(line) - len(stripped)]
+                result.append(indent + "#" * levels + stripped)
+            else:
+                result.append(line)
+        else:
+            result.append(line)
+    return "\n".join(result)
+
+
 def _truncate_to_paragraphs(text: str, max_chars: int) -> str:
     """以段落为单位截断文本，不超过 max_chars。"""
     if len(text) <= max_chars:
@@ -723,7 +744,8 @@ def _format_document_output(
         if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
         else:
-            part = text
+            # 内容在 ## 内容 下，标题层级提升 2 级（# → ###，## → ####）
+            part = _bump_heading_levels(text, 2)
 
         if total_chars + len(part) > max_read_chars:
             remaining = max_read_chars - total_chars
