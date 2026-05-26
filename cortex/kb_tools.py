@@ -807,6 +807,11 @@ def _handle_search_kb(
         doc_title_map[doc_id] = doc_name
         doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
+    # 嵌套树映射：用于构建层级路径（搜索结果的 nodes 是扁平列表，缺少中间层级）
+    doc_tree_map: dict[str, list[dict]] = {
+        d.doc_id: d.structure for d in idx_manager.documents
+    }
+
     logger.debug("max_nodes_per_doc=%d, FTS nodes=%d, docs=%d", idx_manager.max_nodes_per_doc, len(nodes), len(docs))
     doc_best: dict[str, list[tuple]] = {}
     doc_fts_best: dict[str, float] = {}
@@ -882,7 +887,7 @@ def _handle_search_kb(
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
     return _format_kb_results(
-        scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results,
+        scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
     )
@@ -968,6 +973,10 @@ def _handle_search_kb_v2(
         doc_title_map[doc_id] = doc_name
         doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
+    doc_tree_map: dict[str, list[dict]] = {
+        d.doc_id: d.structure for d in idx_manager.documents
+    }
+
     doc_best: dict[str, tuple] = {}
     doc_fts_best: dict[str, float] = {}
     for node in nodes:
@@ -1030,7 +1039,7 @@ def _handle_search_kb_v2(
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
     return _format_kb_results(
-        scored_results, query_words, idx_manager.path_map, doc_nodes_map, doc_title_map, max_results,
+        scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
     )
