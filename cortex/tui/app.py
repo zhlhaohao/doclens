@@ -630,58 +630,64 @@ class CortexApp(App):
                 doc_id = doc.get("doc_id", "")
                 doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
-            # 对每个文档找最佳节点
-            doc_best: dict[str, tuple] = {}
+            # 找到每个文档的 max fts_score
             doc_fts_best: dict[str, float] = {}
-
             for node in nodes:
                 doc_id = node.get("doc_id", "")
                 score = node.get("score", 0.0)
                 if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
                     doc_fts_best[doc_id] = score
 
-                if doc_id in doc_best:
-                    continue
-
-                all_nodes = doc_nodes_map.get(doc_id, [])
-                best_node = None
-                best_count = 0
-                best_proximity = 0
-
+            # 对每个文档的所有节点计算综合评分（先评分后过滤）
+            doc_best: dict[str, list[tuple]] = {}
+            for doc_id in doc_nodes_map:
+                all_nodes = doc_nodes_map[doc_id]
+                node_scores: list[tuple] = []
                 for n in all_nodes:
                     n_text = n.get("text", "") or ""
                     cnt, proximity = calc_proximity_score(
                         n_text, query_words, max_span=self.idx.max_span
                     )
-                    if proximity > best_proximity or (
-                        proximity == best_proximity and cnt > best_count
-                    ):
-                        best_count = cnt
-                        best_proximity = proximity
-                        best_node = n
+                    if cnt > 0:
+                        composite, factors = compute_composite_score(
+                            matched_count=cnt,
+                            total_keywords=len(query_words),
+                            doc_name=doc_id,
+                            node_title=n.get("title", ""),
+                            fts_score=doc_fts_best.get(doc_id, 0.0),
+                            query_words=query_words,
+                            weights=self.idx.scoring_weights,
+                            proximity=proximity,
+                        )
+                        node_scores.append((n, cnt, proximity, composite, factors))
+                # 每文档取 top N
+                node_scores.sort(key=lambda x: -x[3])
+                top_n = node_scores[:self.idx.max_nodes_per_doc]
+                if top_n:
+                    doc_best[doc_id] = [
+                        (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite, factors)
+                        for n, cnt, prox, composite, factors in top_n
+                    ]
 
-                if best_node and best_count > 0:
-                    doc_best[doc_id] = (
-                        best_node,
-                        best_count,
-                        best_proximity,
-                        doc_fts_best.get(doc_id, 0.0),
-                    )
+            # 汇总所有候选节点
+            all_candidates = []
+            for did, node_list in doc_best.items():
+                for bn, cnt, prox, fts, composite, _factors in node_list:
+                    all_candidates.append((did, bn, cnt, prox, fts, composite))
 
-            # 过滤
+            # 过滤：composite >= 0 OR (关键词匹配 AND 邻近度)
             filtered = [
-                (did, bn, cnt, prox, fts)
-                for did, (bn, cnt, prox, fts) in doc_best.items()
-                if cnt >= self.idx.min_keyword_match
-                and prox >= self.idx.min_proximity_score
+                item for item in all_candidates
+                if item[5] >= 0
+                or (item[2] >= self.idx.min_keyword_match
+                    and item[3] >= self.idx.min_proximity_score)
             ]
 
             # 降级到 >= 1 匹配
             if not filtered and query_words:
                 filtered = [
-                    (did, bn, cnt, prox, fts)
-                    for did, (bn, cnt, prox, fts) in doc_best.items()
-                    if cnt >= 1
+                    item for item in all_candidates
+                    if item[2] >= 1
                 ]
 
             # ripgrep 最终降级（先尝试 LIKE，再 ripgrep）
@@ -718,22 +724,11 @@ class CortexApp(App):
                 self.call_from_thread(self._on_search_done, renderables)
                 return
 
-            # 计算综合评分并排序
+            # 按综合评分排序
             scored_results = []
             for item in filtered:
-                did, display_node, matched, prox, fts = item
-                composite, _factors = compute_composite_score(
-                    matched_count=matched,
-                    total_keywords=len(query_words),
-                    doc_name=did,
-                    node_title=display_node.get("title", ""),
-                    fts_score=fts,
-                    query_words=query_words,
-                    weights=self.idx.scoring_weights,
-                    proximity=prox,
-                )
-                scored_results.append((composite, item))
-
+                did, display_node, matched, prox, fts, composite = item[:6]
+                scored_results.append((composite, (did, display_node, matched, prox, fts)))
             scored_results.sort(key=lambda x: -x[0])
 
             renderables = render_search_results(
