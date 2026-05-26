@@ -720,7 +720,7 @@ def _format_document_output(
     content_parts = []
     total_chars = 0
     for title, text, ls, le in all_text_parts:
-        if title:
+        if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
         else:
             part = text
