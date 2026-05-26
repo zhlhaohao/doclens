@@ -616,6 +616,34 @@ def _collect_all_text(nodes: list[dict]) -> list[tuple[str, str, int, int]]:
     return results
 
 
+def _extract_intro_text(node: dict, children: list[dict]) -> str:
+    """提取非叶节点自身的引导文本（去掉自标题 + 第一个子节标题之前的内容）。"""
+    text = node.get("text", "") or ""
+    if not text or not children:
+        return ""
+    # 去掉开头的自标题行（如 "## 5G网络部署现状\n"）
+    title = node.get("title", "")
+    if title:
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped:
+                # 去掉 markdown 标题符号后比较
+                clean = stripped.lstrip("#").strip()
+                if clean == title:
+                    after_title = text[text.find(stripped) + len(stripped):].strip()
+                    text = after_title
+                break
+    if not text:
+        return ""
+    # 截断到第一个子节标题
+    first_title = children[0].get("title", "")
+    if first_title:
+        idx = text.find(first_title)
+        if idx > 0:
+            return text[:idx].strip()
+    return text.strip()
+
+
 def _find_section_text(
     nodes: list[dict],
     section: str,
@@ -639,15 +667,18 @@ def _find_section_text(
                 text = node.get("text", "") or ""
 
                 def _collect_leaf_text(n):
-                    """递归收集叶子节点 text，跳过非叶节点的 prefix_summary（避免重复）。"""
-                    children = n.get("nodes", [])
-                    if not children:
+                    """递归收集节点文本：提取非叶节点的引导段落 + 叶子节点全文。"""
+                    n_children = n.get("nodes", [])
+                    if not n_children:
                         # 叶子节点：直接取 text
                         t = n.get("text", "") or ""
                         return [t] if t else []
-                    # 非叶节点：只递归子节点，不取自身的 prefix_summary
+                    # 非叶节点：提取引导段落（第一个子节标题之前的内容），再递归子节点
                     parts = []
-                    for child in children:
+                    own_text = _extract_intro_text(n, n_children)
+                    if own_text:
+                        parts.append(own_text)
+                    for child in n_children:
                         parts.extend(_collect_leaf_text(child))
                     return parts
 
@@ -709,7 +740,8 @@ def _format_document_output(
         if not match:
             return header + f"\n（未找到章节: {section}）"
         matched_title, matched_text, hierarchy = match
-        content = _truncate_to_paragraphs(matched_text, max_read_chars)
+        display_text = _bump_heading_levels(matched_text, 2) if ext == ".pptx" else matched_text
+        content = _truncate_to_paragraphs(display_text, max_read_chars)
         content_header = f"\n## 内容（{hierarchy}）\n"
         output = header + content_header + "\n" + content
         if len(matched_text) > max_read_chars:
@@ -743,9 +775,11 @@ def _format_document_output(
     for title, text, ls, le in all_text_parts:
         if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
-        else:
-            # 内容在 ## 内容 下，标题层级提升 2 级（# → ###，## → ####）
+        elif ext == ".pptx":
+            # pptx 内容以 # 标题开头，提升 2 级（# → ###，## → ####）
             part = _bump_heading_levels(text, 2)
+        else:
+            part = text
 
         if total_chars + len(part) > max_read_chars:
             remaining = max_read_chars - total_chars
