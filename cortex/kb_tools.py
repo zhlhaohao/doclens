@@ -685,14 +685,15 @@ def _format_document_output(
 
     if section:
         match = _find_section_text(nodes, section)
-        if match:
-            matched_title, matched_text, hierarchy = match
-            content = _truncate_to_paragraphs(matched_text, max_read_chars)
-            content_header = f"\n## 内容（{hierarchy}）\n"
-            output = header + content_header + "\n" + content
-            if len(matched_text) > max_read_chars:
-                output += f"\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
-            return output
+        if not match:
+            return header + f"\n（未找到章节: {section}）"
+        matched_title, matched_text, hierarchy = match
+        content = _truncate_to_paragraphs(matched_text, max_read_chars)
+        content_header = f"\n## 内容（{hierarchy}）\n"
+        output = header + content_header + "\n" + content
+        if len(matched_text) > max_read_chars:
+            output += f"\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
+        return output
 
     all_text_parts = _collect_all_text(nodes)
 
