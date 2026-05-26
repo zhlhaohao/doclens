@@ -50,6 +50,9 @@ COMMAND_ALIASES: dict[str, str] = {
     # 复制
     "copy": "copy",
     "cp": "copy",
+    # 网页抓取
+    "webfetch": "webfetch",
+    "wf": "webfetch",
 }
 
 # 不走别名映射的命令（直接透传）

@@ -881,6 +881,17 @@ def _build_parser():
     )
     web_parser.set_defaults(func=_cli_web)
 
+    # cortex webfetch <url> [--no-meta]
+    webfetch_parser = sub.add_parser(
+        "webfetch", help="Fetch and extract web page content as Markdown"
+    )
+    webfetch_parser.add_argument("url", type=str, help="URL to fetch")
+    webfetch_parser.add_argument(
+        "--no-meta", action="store_true",
+        help="Exclude metadata (title, author, date)"
+    )
+    webfetch_parser.set_defaults(func=_cli_webfetch)
+
     # cortex read_document --path <path> [--start-line N] [--end-line N] [--section T]
     read_parser = sub.add_parser(
         "read_document",
@@ -1106,6 +1117,17 @@ def _cli_web(args, config, idx):
         search_recency_filter=args.recency,
         content_size=args.content_size,
         location=args.location,
+    )
+    print(result)
+
+
+def _cli_webfetch(args, config, idx):
+    """Handle `cortex webfetch <url>` — web page content extraction."""
+    from planify.tools.webfetch import run_webfetch
+
+    result = run_webfetch(
+        args.url,
+        include_metadata=not args.no_meta,
     )
     print(result)
 

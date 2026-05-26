@@ -13,6 +13,7 @@ from .team_tools import get_team_tools_definitions, get_team_tools_handlers
 from .protocols import get_protocol_definitions, get_protocol_handlers
 from .user_interaction import get_user_interaction_tools
 from .weather_tool import make_baidu_weather_tools
+from .webfetch import make_webfetch_tools
 
 
 # ==================== 外部工具注册表 ====================
@@ -292,6 +293,11 @@ def build_tool_registry(
     baidu_weather_tools, baidu_weather_handlers = make_baidu_weather_tools()
     tools.extend(baidu_weather_tools)
     handlers.update(baidu_weather_handlers)
+
+    # 网页内容抓取工具
+    webfetch_tools, webfetch_handlers = make_webfetch_tools()
+    tools.extend(webfetch_tools)
+    handlers.update(webfetch_handlers)
 
     return tools, handlers
 
