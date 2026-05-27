@@ -1525,6 +1525,9 @@ async def build_index(
     if not force:
         # Batch fetch all stored hashes in one query (instead of N queries)
         all_meta = fts.get_all_index_meta()
+    elif cfg.allowed_source_types:
+        # force=True with source_type filter: still need all_meta for orphan cleanup
+        all_meta = fts.get_all_index_meta()
     else:
         all_meta = {}
 
@@ -1542,12 +1545,26 @@ async def build_index(
     # Explicit `prune=True`: reduce the index to exactly `paths`.
     if prune and all_meta:
         expanded_abs = {os.path.abspath(p) for p in expanded}
+        # Pre-compute allowed extensions from source_type filter (if any)
+        source_type_exts = None
+        if cfg.allowed_source_types:
+            from .pathutil import get_allowed_extensions_for_source_types
+            source_type_exts = get_allowed_extensions_for_source_types(cfg.allowed_source_types)
         prune_doc_ids: list[str] = []
         for stored_path in list(all_meta.keys()):
             if stored_path in expanded_abs:
                 continue
             if not explicit_prune and os.path.isfile(stored_path):
-                continue
+                # File exists on disk but was filtered out — only keep it if
+                # it would have been included WITHOUT the source_type filter.
+                if source_type_exts is not None:
+                    ext = os.path.splitext(stored_path)[1].lower()
+                    if ext not in source_type_exts:
+                        pass  # excluded by source_type → prune
+                    else:
+                        continue
+                else:
+                    continue
             doc_id = fts.get_doc_id_by_source_path(stored_path)
             if doc_id:
                 prune_doc_ids.append(doc_id)

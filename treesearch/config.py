@@ -38,6 +38,7 @@ _ENV_CJK_TOKENIZER = "TREESEARCH_CJK_TOKENIZER"
 _ENV_FINGERPRINT_MODE = "TREESEARCH_FINGERPRINT_MODE"
 _ENV_PRUNE = "TREESEARCH_PRUNE"
 _ENV_SHADOW_MD = "TREESEARCH_ENABLE_SHADOW_MD"
+_ENV_ALLOWED_SOURCE_TYPES = "TREESEARCH_ALLOWED_SOURCE_TYPES"
 
 
 def _env_int(cfg: "TreeSearchConfig", attr: str, min_val: int, env_name: str) -> None:
@@ -131,6 +132,12 @@ class TreeSearchConfig:
     # so ripgrep fallback can search them. Disable to speed up indexing.
     enable_shadow_md: bool = True
 
+    # Allowed source types: if non-empty, only files matching these source types
+    # will be indexed. Empty list means all types are allowed (backward compatible).
+    # Valid values: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc,
+    # docx, pptx, excel
+    allowed_source_types: list[str] = field(default_factory=list)
+
     @classmethod
     def from_env(cls) -> "TreeSearchConfig":
         """Create config from environment variables, falling back to defaults."""
@@ -154,6 +161,12 @@ class TreeSearchConfig:
 
         _env_int(config, "xlsx_max_rows_per_sheet", 1, "TREESEARCH_XLSX_MAX_ROWS_PER_SHEET")
         _env_int(config, "xlsx_max_consecutive_empty_rows", 1, "TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS")
+
+        env_source_types = os.getenv(_ENV_ALLOWED_SOURCE_TYPES)
+        if env_source_types:
+            config.allowed_source_types = [
+                t.strip() for t in env_source_types.split(",") if t.strip()
+            ]
 
         return config
 

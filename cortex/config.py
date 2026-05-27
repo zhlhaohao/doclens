@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings
 
 
@@ -75,6 +75,21 @@ class CortexConfig(BaseSettings):
         default=100,
         alias="TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS",
     )
+
+    # 允许解析的文件类型（逗号分隔，空=全部允许）
+    # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, pptx, excel
+    allowed_source_types_str: str = Field(
+        default="",
+        alias="CORTEX_ALLOWED_SOURCE_TYPES",
+    )
+
+    @computed_field
+    @property
+    def allowed_source_types(self) -> list[str]:
+        """解析逗号分隔的 allowed_source_types_str 为列表。"""
+        if not self.allowed_source_types_str:
+            return []
+        return [t.strip() for t in self.allowed_source_types_str.split(",") if t.strip()]
 
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
