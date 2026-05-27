@@ -832,7 +832,6 @@ def _handle_search_kb(
         )
 
     from cortex.scoring import tokenize_query, calc_proximity_score, compute_composite_score
-    from cortex import ripgrep as rg_module
 
     nodes, docs = idx_manager.search(query, max_results=max_results)
     query_words = tokenize_query(query)
@@ -841,19 +840,12 @@ def _handle_search_kb(
     logger.debug("query=%r, query_words=%s, FTS nodes=%d, docs=%d", query, query_words, len(nodes), len(docs))
 
     if not nodes:
-        filtered = rg_module.rg_fallback_search(
-            query, idx_manager.path_map, {}, query_words,
-            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
+        return (
+            f"未找到包含 '{query}' 的结果。\n"
+            "建议：\n"
+            "1. 尝试不同的关键词\n"
+            "2. 用 manage_kb(action='reindex') 重建索引"
         )
-        if not filtered:
-            return (
-                f"未找到包含 '{query}' 的结果。\n"
-                "建议：\n"
-                "1. 尝试不同的关键词\n"
-                "2. 用 manage_kb(action='reindex') 重建索引\n"
-                "3. 用 bash grep 搜索文件名或内容"
-            )
-        return _format_ripgrep_results(filtered, query_words, idx_manager.path_map, max_results)
 
     doc_nodes_map: dict[str, list[dict]] = {}
     doc_title_map: dict[str, str] = {}
@@ -924,12 +916,6 @@ def _handle_search_kb(
             item for item in all_candidates
             if item[2] >= 1
         ]
-    if not filtered:
-        filtered = rg_module.rg_fallback_search(
-            query, idx_manager.path_map, doc_nodes_map, query_words,
-            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
-        )
-
     if not filtered:
         return f"未找到包含 '{query}' 的结果。请尝试不同的关键词或重建索引。"
 
