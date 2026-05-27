@@ -195,6 +195,29 @@ class NotebookSearchCLI:
     def do_search(self, query, max_results=None):
         return self.idx.search(query, max_results)
 
+    @staticmethod
+    def _convert_like_to_render_items(
+        like_results: list[dict], query_words: list[str]
+    ) -> list[tuple]:
+        """将 like_search 的 dict 结果转为 _render_results 兼容的 tuple 格式。
+
+        LIKE 结果: {node_id, doc_id, title, summary, fts_score, depth}
+        目标格式: (doc_id, node_dict, matched_count, proximity, fts_score)
+        """
+        items = []
+        for r in like_results:
+            doc_id = r.get("doc_id", "")
+            node = {
+                "title": r.get("title", ""),
+                "text": r.get("summary", ""),
+            }
+            text_lower = (r.get("summary", "") or "").lower()
+            matched = sum(1 for w in query_words if w and w.lower() in text_lower)
+            matched = max(matched, 1)
+            fts_score = r.get("fts_score", 0.0)
+            items.append((doc_id, node, matched, 0, fts_score))
+        return items
+
     # ---- 搜索结果格式化 ----
 
     def format_results(self, nodes, docs, query, max_results=20, min_score_threshold=0.0):
@@ -204,8 +227,17 @@ class NotebookSearchCLI:
         if not query_words:
             query_words = [w.strip() for w in query.split() if w.strip()]
 
-        # FTS 无结果时，直接 ripgrep 降级
+        # FTS 无结果时，先 LIKE 降级，再 ripgrep 降级
         if not nodes:
+            # 先尝试 SQLite LIKE 降级（原文子串匹配）
+            like_results = self.idx.like_search(query, max_results=self.max_results)
+            if like_results:
+                like_items = self._convert_like_to_render_items(like_results, query_words)
+                self._render_results(
+                    query, like_items, query_words, max_results, is_like=True
+                )
+                return
+            # LIKE 也无结果，ripgrep 降级
             filtered = rg_module.rg_fallback_search(
                 query,
                 self.idx.path_map,
@@ -289,8 +321,15 @@ class NotebookSearchCLI:
                 if item[2] >= 1
             ]
 
-        # 如果仍无结果，使用 ripgrep 做精确子串匹配
+        # 如果仍无结果，先 LIKE 降级，再 ripgrep
         if not filtered:
+            like_results = self.idx.like_search(query, max_results=self.max_results)
+            if like_results:
+                like_items = self._convert_like_to_render_items(like_results, query_words)
+                self._render_results(
+                    query, like_items, query_words, max_results, is_like=True
+                )
+                return
             filtered = rg_module.rg_fallback_search(
                 query,
                 self.idx.path_map,
@@ -323,20 +362,24 @@ class NotebookSearchCLI:
         )
 
     def _render_results(
-        self, query, results, query_words, max_results, is_ripgrep=False
+        self, query, results, query_words, max_results, is_ripgrep=False, is_like=False
     ):
         """渲染搜索结果到终端
 
         Args:
             query: 原始查询
-            results: is_ripgrep 时为 [(doc_id, node, matched, prox, fts)]
+            results: is_ripgrep/is_like 时为 [(doc_id, node, matched, prox, fts)]
                      否则为 [(composite_score, (doc_id, node, matched, prox, fts))]
             query_words: 分词列表
             max_results: 最大显示数
             is_ripgrep: 是否为 ripgrep 降级结果（无综合评分）
+            is_like: 是否为 LIKE 降级结果（无综合评分）
         """
         if is_ripgrep:
             label = f"找到 {len(results)} 个匹配 (ripgrep)"
+            display_items = [(0.0, item) for item in results[:max_results]]
+        elif is_like:
+            label = f"找到 {len(results)} 个匹配 (LIKE)"
             display_items = [(0.0, item) for item in results[:max_results]]
         else:
             label = f"找到 {len(results)} 个匹配"
@@ -418,7 +461,7 @@ class NotebookSearchCLI:
                         marker = ">>>" if is_match else "   "
                         print(f"|  {marker} {hl_line}")
 
-            if is_ripgrep:
+            if is_ripgrep or is_like:
                 print(f"|    匹配: {matched}/{len(query_words)} 词")
             else:
                 print(

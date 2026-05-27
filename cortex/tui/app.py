@@ -602,6 +602,10 @@ class CortexApp(App):
                         path_map=self.idx.path_map,
                         max_results=self.max_results,
                         is_like=True,
+                        max_anchor_lines=self.idx.max_anchor_lines,
+                        context_expand_range=self.idx.context_expand_range,
+                        min_keywords_per_line=self.idx.min_keywords_per_line,
+                        max_context_lines=self.idx.max_context_lines,
                     )
                     self.call_from_thread(self._on_search_done, renderables)
                     return
@@ -622,6 +626,10 @@ class CortexApp(App):
                     path_map=self.idx.path_map,
                     max_results=self.max_results,
                     is_ripgrep=True,
+                    max_anchor_lines=self.idx.max_anchor_lines,
+                    context_expand_range=self.idx.context_expand_range,
+                    min_keywords_per_line=self.idx.min_keywords_per_line,
+                    max_context_lines=self.idx.max_context_lines,
                 )
                 self.call_from_thread(self._on_search_done, renderables)
                 return
@@ -677,10 +685,10 @@ class CortexApp(App):
                 for bn, cnt, prox, fts, composite, _factors in node_list:
                     all_candidates.append((did, bn, cnt, prox, fts, composite))
 
-            # 过滤：composite >= 0 OR (关键词匹配 AND 邻近度)
+            # 过滤：composite >= threshold OR (关键词匹配 AND 邻近度)
             filtered = [
                 item for item in all_candidates
-                if item[5] >= 0
+                if item[5] >= self.idx.min_score_threshold
                 or (item[2] >= self.idx.min_keyword_match
                     and item[3] >= self.idx.min_proximity_score)
             ]
@@ -703,6 +711,10 @@ class CortexApp(App):
                         path_map=self.idx.path_map,
                         max_results=self.max_results,
                         is_like=True,
+                        max_anchor_lines=self.idx.max_anchor_lines,
+                        context_expand_range=self.idx.context_expand_range,
+                        min_keywords_per_line=self.idx.min_keywords_per_line,
+                        max_context_lines=self.idx.max_context_lines,
                     )
                     self.call_from_thread(self._on_search_done, renderables)
                     return
@@ -722,6 +734,10 @@ class CortexApp(App):
                     path_map=self.idx.path_map,
                     max_results=self.max_results,
                     is_ripgrep=True,
+                    max_anchor_lines=self.idx.max_anchor_lines,
+                    context_expand_range=self.idx.context_expand_range,
+                    min_keywords_per_line=self.idx.min_keywords_per_line,
+                    max_context_lines=self.idx.max_context_lines,
                 )
                 self.call_from_thread(self._on_search_done, renderables)
                 return
@@ -733,6 +749,10 @@ class CortexApp(App):
                 scored_results.append((composite, (did, display_node, matched, prox, fts)))
             scored_results.sort(key=lambda x: -x[0])
 
+            # 按分数阈值二次过滤
+            if self.idx.min_score_threshold > 0.0:
+                scored_results = [r for r in scored_results if r[0] >= self.idx.min_score_threshold]
+
             renderables = render_search_results(
                 results=scored_results,
                 query=query,
@@ -740,6 +760,10 @@ class CortexApp(App):
                 path_map=self.idx.path_map,
                 max_results=self.max_results,
                 is_ripgrep=False,
+                max_anchor_lines=self.idx.max_anchor_lines,
+                context_expand_range=self.idx.context_expand_range,
+                min_keywords_per_line=self.idx.min_keywords_per_line,
+                max_context_lines=self.idx.max_context_lines,
             )
             self.call_from_thread(self._on_search_done, renderables)
 
