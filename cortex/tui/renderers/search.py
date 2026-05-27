@@ -86,6 +86,10 @@ def render_search_result(
     is_ripgrep: bool = False,
     is_like: bool = False,
     query_words: list[str] | None = None,
+    max_anchor_lines: int = 3,
+    context_expand_range: int = 5,
+    min_keywords_per_line: int = 2,
+    max_context_lines: int = 5,
 ) -> Text:
     query_words = query_words or []
     title_text = node.get("title", "")
@@ -103,29 +107,52 @@ def render_search_result(
     else:
         header.append(_highlight_keywords(title_text, query_words, "#7aa2f7", is_regex=is_ripgrep))
 
-    # 内容片段
+    # 内容片段 — 智能锚点上下文选择（与 CLI _render_results 对齐）
     lines = display_text.split("\n")
     kw_lower = [kw.lower() for kw in query_words if kw]
-    match_indices = [
-        i for i, line in enumerate(lines)
-        if any(kw in line.lower() for kw in kw_lower)
-        or (is_ripgrep and any(re.search(kw, line, re.IGNORECASE) for kw in query_words if kw))
-    ]
 
-    if match_indices:
-        first = max(0, match_indices[0] - 1)
-        last = min(len(lines) - 1, match_indices[-1] + 1)
-        selected = lines[first:last + 1]
-    else:
-        selected = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped:
-                selected.append(stripped)
-            if len(selected) >= 5:
+    # 给每行计算包含几个关键词
+    line_keyword_counts: list[tuple[int, int, str]] = []
+    for j, l in enumerate(lines):
+        l_lower = l.lower()
+        cnt = sum(1 for w in kw_lower if w in l_lower)
+        if cnt > 0:
+            line_keyword_counts.append((cnt, j, l))
+
+    selected_line_indices: list[int]
+    if not line_keyword_counts:
+        # 无匹配行：取前 max_context_lines 个非空行
+        selected_line_indices = []
+        for j, line in enumerate(lines):
+            if line.strip():
+                selected_line_indices.append(j)
+            if len(selected_line_indices) >= max_context_lines:
                 break
+    else:
+        # 按关键词命中数降序排序
+        line_keyword_counts.sort(key=lambda x: -x[0])
+        # 筛选命中数 >= min_keywords_per_line 的行作为锚点
+        best_lines = [
+            (j, l)
+            for cnt, j, l in line_keyword_counts
+            if cnt >= min_keywords_per_line
+        ]
+        if not best_lines:
+            best_lines = [
+                (j, l)
+                for cnt, j, l in line_keyword_counts[:max_context_lines]
+            ]
+        # 取前 max_anchor_lines 个锚点，向前后扩展 context_expand_range 行
+        context_indices = set()
+        for j, _l in best_lines[:max_anchor_lines]:
+            for offset in range(-context_expand_range, context_expand_range + 1):
+                idx = j + offset
+                if 0 <= idx < len(lines):
+                    context_indices.add(idx)
+        selected_line_indices = sorted(context_indices)
 
-    snippet = "\n".join(line.strip() for line in selected if line.strip())
+    selected = [lines[j].strip() for j in selected_line_indices if lines[j].strip()]
+    snippet = "\n".join(selected)
     snippet = _truncate_text(snippet, 300)
 
     # 评分行 - 使用暗色与正文区分
@@ -159,6 +186,10 @@ def render_search_results(
     max_results: int = 20,
     is_ripgrep: bool = False,
     is_like: bool = False,
+    max_anchor_lines: int = 3,
+    context_expand_range: int = 5,
+    min_keywords_per_line: int = 2,
+    max_context_lines: int = 5,
 ) -> list:
     output: list = []
 
@@ -199,6 +230,10 @@ def render_search_results(
                 is_ripgrep=is_ripgrep,
                 is_like=is_like,
                 query_words=query_words,
+                max_anchor_lines=max_anchor_lines,
+                context_expand_range=context_expand_range,
+                min_keywords_per_line=min_keywords_per_line,
+                max_context_lines=max_context_lines,
             )
         )
 
