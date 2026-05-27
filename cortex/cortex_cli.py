@@ -1197,6 +1197,15 @@ def main():
             print(f"Indexing [{processed}/{total}] {current_file}")
 
         try:
+            from treesearch import set_config, TreeSearchConfig
+            set_config(TreeSearchConfig(
+                cjk_tokenizer=config.cjk_tokenizer,
+                max_index_fail_count=config.max_index_fail_count,
+                enable_shadow_md=config.treesearch_enable_shadow_md,
+                xlsx_max_rows_per_sheet=config.treesearch_xlsx_max_rows_per_sheet,
+                xlsx_max_consecutive_empty_rows=config.treesearch_xlsx_max_consecutive_empty_rows,
+                allowed_source_types=config.allowed_source_types,
+            ))
             ts = TreeSearch(search_path, db_path=index_path)
             ts.index(search_path, progress_callback=on_progress)
             print("索引创建完成。")

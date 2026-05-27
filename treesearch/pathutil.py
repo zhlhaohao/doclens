@@ -37,6 +37,17 @@ def _get_default_extensions() -> set[str]:
     return exts
 
 
+def get_allowed_extensions_for_source_types(source_types: list[str]) -> set[str] | None:
+    """If *source_types* is non-empty, return the set of extensions belonging
+    to those source types.  Return ``None`` when the list is empty (meaning
+    "all types allowed").
+    """
+    if not source_types:
+        return None
+    from .parsers.registry import SOURCE_TYPE_MAP
+    return {ext for ext, st in SOURCE_TYPE_MAP.items() if st in source_types}
+
+
 def _find_gitignore(start_dir: str) -> str | None:
     """Find the nearest .gitignore by searching *start_dir* and its parents.
 
@@ -180,6 +191,14 @@ def resolve_paths(
     """
     if allowed_extensions is None:
         allowed_extensions = _get_default_extensions()
+
+    # Overlay source_type filter from global config
+    from .config import get_config
+    source_type_exts = get_allowed_extensions_for_source_types(
+        get_config().allowed_source_types
+    )
+    if source_type_exts is not None:
+        allowed_extensions = allowed_extensions & source_type_exts
 
     resolved: list[str] = []
     seen: set[str] = set()
