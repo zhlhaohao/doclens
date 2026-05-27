@@ -16,13 +16,24 @@ logger = logging.getLogger(__name__)
 EXCEL_EXTENSIONS = frozenset({".xlsx", ".xlsm", ".xltx", ".xltm"})
 
 
-def _extract_excel_data(excel_path: str) -> list[dict]:
+def _extract_excel_data(
+    excel_path: str,
+    *,
+    max_rows_per_sheet: int = 10000,
+    max_consecutive_empty_rows: int = 100,
+) -> list[dict]:
     """Extract sheet data from an Excel file.
 
     Returns a flat node list with:
     - Level 1: Sheet name
     - Level 2: Header row (columns)
     - Level 3: Data rows
+
+    Args:
+        excel_path: Path to the Excel file.
+        max_rows_per_sheet: Maximum number of rows to process per sheet.
+        max_consecutive_empty_rows: Stop parsing a sheet after this many
+            consecutive empty rows.
     """
     try:
         from openpyxl import load_workbook
@@ -37,9 +48,12 @@ def _extract_excel_data(excel_path: str) -> list[dict]:
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
-        rows = list(ws.iter_rows(values_only=True))
+        rows_iter = ws.iter_rows(values_only=True)
 
-        if not rows:
+        # Read header row first
+        try:
+            header_row = next(rows_iter)
+        except StopIteration:
             nodes.append({
                 "title": sheet_name,
                 "level": 1,
@@ -51,21 +65,38 @@ def _extract_excel_data(excel_path: str) -> list[dict]:
             row_counter += 1
             continue
 
-        # Detect header row (first row)
-        headers = [str(cell) if cell is not None else "" for cell in rows[0]]
+        headers = [str(cell) if cell is not None else "" for cell in header_row]
         header_text = f"Columns: {', '.join(h for h in headers if h)}"
 
         # Sheet node (level 1)
         sheet_start = row_counter
         sheet_text_parts = [header_text]
 
-        # Collect data rows
+        # Collect data rows with early termination
         data_rows_text = []
-        for row_idx, row in enumerate(rows[1:], start=2):
+        consecutive_empty = 0
+        rows_processed = 0
+        truncated = False
+
+        for row in rows_iter:
+            rows_processed += 1
+            if rows_processed > max_rows_per_sheet:
+                truncated = True
+                break
+
             cells = [str(cell) if cell is not None else "" for cell in row]
-            # Skip completely empty rows
-            if not any(c.strip() for c in cells):
+            is_empty = not any(c.strip() for c in cells)
+
+            if is_empty:
+                consecutive_empty += 1
+                if consecutive_empty >= max_consecutive_empty_rows:
+                    truncated = True
+                    break
                 continue
+
+            # Reset counter on non-empty row
+            consecutive_empty = 0
+
             row_text = "; ".join(
                 f"{h}: {v}" for h, v in zip(headers, cells) if v.strip()
             )
@@ -79,6 +110,12 @@ def _extract_excel_data(excel_path: str) -> list[dict]:
             sheet_text_parts.extend(displayed_rows)
             if len(data_rows_text) > 200:
                 sheet_text_parts.append(f"... ({len(data_rows_text) - 200} more rows)")
+
+        if truncated:
+            sheet_text_parts.append(
+                f"(parsing stopped: reached limit of {max_rows_per_sheet} rows "
+                f"or {max_consecutive_empty_rows} consecutive empty rows)"
+            )
 
         sheet_text = "\n".join(sheet_text_parts)
         row_count = len(data_rows_text)
@@ -116,10 +153,17 @@ async def excel_to_tree(
     Returns:
         {'doc_name': str, 'structure': list, 'source_path': str}
     """
+    from ..config import get_config
+
     doc_name = os.path.splitext(os.path.basename(excel_path))[0]
     logger.debug("Parsing Excel: %s", excel_path)
 
-    nodes = _extract_excel_data(excel_path)
+    cfg = get_config()
+    nodes = _extract_excel_data(
+        excel_path,
+        max_rows_per_sheet=cfg.xlsx_max_rows_per_sheet,
+        max_consecutive_empty_rows=cfg.xlsx_max_consecutive_empty_rows,
+    )
 
     if not nodes:
         # Empty workbook, create a single root node

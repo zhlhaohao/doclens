@@ -40,6 +40,18 @@ _ENV_PRUNE = "TREESEARCH_PRUNE"
 _ENV_SHADOW_MD = "TREESEARCH_ENABLE_SHADOW_MD"
 
 
+def _env_int(cfg: "TreeSearchConfig", attr: str, min_val: int, env_name: str) -> None:
+    """Read an integer env var and set it on *cfg* if present and >= *min_val*."""
+    raw = os.getenv(env_name)
+    if raw is not None:
+        try:
+            v = int(raw)
+            if v >= min_val:
+                setattr(cfg, attr, v)
+        except ValueError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Configuration dataclass
 # ---------------------------------------------------------------------------
@@ -111,6 +123,10 @@ class TreeSearchConfig:
     # Failed files auto-skip: after N consecutive parse failures, skip the file
     max_index_fail_count: int = 3
 
+    # Excel parser limits
+    xlsx_max_rows_per_sheet: int = 10000  # max rows to index per sheet
+    xlsx_max_consecutive_empty_rows: int = 100  # stop parsing after this many consecutive empty rows
+
     # Shadow Markdown: generate a hidden .md copy for binary files (PDF, DOCX, etc.)
     # so ripgrep fallback can search them. Disable to speed up indexing.
     enable_shadow_md: bool = True
@@ -135,6 +151,9 @@ class TreeSearchConfig:
         env_shadow = os.getenv(_ENV_SHADOW_MD)
         if env_shadow is not None:
             config.enable_shadow_md = env_shadow.lower() in ("1", "true", "yes")
+
+        _env_int(config, "xlsx_max_rows_per_sheet", 1, "TREESEARCH_XLSX_MAX_ROWS_PER_SHEET")
+        _env_int(config, "xlsx_max_consecutive_empty_rows", 1, "TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS")
 
         return config
 

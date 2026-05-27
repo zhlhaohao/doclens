@@ -66,6 +66,16 @@ class CortexConfig(BaseSettings):
         alias="TREESEARCH_ENABLE_SHADOW_MD",
     )
 
+    # XLSX 解析限制（透传至 TreeSearchConfig）
+    treesearch_xlsx_max_rows_per_sheet: int = Field(
+        default=10000,
+        alias="TREESEARCH_XLSX_MAX_ROWS_PER_SHEET",
+    )
+    treesearch_xlsx_max_consecutive_empty_rows: int = Field(
+        default=100,
+        alias="TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS",
+    )
+
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 
