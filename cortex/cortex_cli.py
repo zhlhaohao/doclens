@@ -21,9 +21,9 @@ from pathlib import Path
 
 from cortex.config import CortexConfig
 from cortex.formatting import hl, truncate_ansi_safe, make_vscode_link
-from cortex.scoring import tokenize_query, calc_proximity_score, compute_composite_score
+from cortex.scoring import tokenize_query
 from cortex.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
-from cortex import ripgrep as rg_module
+from cortex.scoring_pipeline import score_and_rank
 from planify.cli_history import CommandHistory, input_with_history
 
 
@@ -227,139 +227,44 @@ class NotebookSearchCLI:
         if not query_words:
             query_words = [w.strip() for w in query.split() if w.strip()]
 
-        # FTS 无结果时，先 LIKE 降级，再 ripgrep 降级
-        if not nodes:
-            # 先尝试 SQLite LIKE 降级（原文子串匹配）
-            like_results = self.idx.like_search(query, max_results=self.max_results)
-            if like_results:
-                like_items = self._convert_like_to_render_items(like_results, query_words)
-                self._render_results(
-                    query, like_items, query_words, max_results, is_like=True
-                )
-                return
-            # LIKE 也无结果，ripgrep 降级
-            filtered = rg_module.rg_fallback_search(
-                query,
-                self.idx.path_map,
-                {},
-                query_words,
-                context_before=self.idx.rg_context_before,
-                context_after=self.idx.rg_context_after,
+        # 评分管道
+        result = score_and_rank(nodes, docs, query, query_words, self.idx)
+
+        if result.source == "like":
+            like_items = self._convert_like_to_render_items(
+                result.like_raw, query_words
             )
-            if not filtered:
+            self._render_results(
+                query, like_items, query_words, max_results, is_like=True
+            )
+        elif result.source == "ripgrep":
+            if not result.results:
                 print(f"\n[未找到包含 '{query}' 的结果]\n")
                 return
-            # 降级结果直接渲染（无综合评分）
             self._render_results(
-                query, filtered, query_words, max_results, is_ripgrep=True
+                query, result.results, query_words, max_results, is_ripgrep=True
             )
-            return
-
-        # 构建 doc_id -> 文档节点的映射
-        doc_nodes_map = {}
-        for doc in docs:
-            doc_id = doc.get("doc_id", "")
-            doc_nodes_map[doc_id] = list(doc.get("nodes", []))
-
-        # 找到每个文档的 max fts_score
-        doc_fts_best: dict = {}  # doc_id -> max fts_score across all nodes
-        for node in nodes:
-            doc_id = node.get("doc_id", "")
-            score = node.get("score", 0.0)
-            if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
-                doc_fts_best[doc_id] = score
-
-        # 对每个文档的所有节点计算综合评分（先评分后过滤）
-        doc_best: dict = {}  # doc_id -> list of (node, cnt, prox, fts, composite, factors)
-        for doc_id in doc_nodes_map:
-            all_nodes = doc_nodes_map[doc_id]
-            node_scores: list[tuple] = []
-            for n in all_nodes:
-                n_text = n.get("text", "") or ""
-                cnt, proximity = calc_proximity_score(
-                    n_text, query_words, max_span=self.idx.max_span
-                )
-                if cnt > 0:
-                    composite, factors = compute_composite_score(
-                        matched_count=cnt,
-                        total_keywords=len(query_words),
-                        doc_name=doc_id,
-                        node_title=n.get("title", ""),
-                        fts_score=doc_fts_best.get(doc_id, 0.0),
-                        query_words=query_words,
-                        weights=self.idx.scoring_weights,
-                        proximity=proximity,
-                    )
-                    node_scores.append((n, cnt, proximity, composite, factors))
-            # 每文档取 top N
-            node_scores.sort(key=lambda x: -x[3])
-            top_n = node_scores[:self.idx.max_nodes_per_doc]
-            if top_n:
-                doc_best[doc_id] = [
-                    (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite, factors)
-                    for n, cnt, prox, composite, factors in top_n
-                ]
-
-        # 汇总所有候选节点
-        all_candidates = []
-        for did, node_list in doc_best.items():
-            for bn, cnt, prox, fts, composite, _factors in node_list:
-                all_candidates.append((did, bn, cnt, prox, fts, composite))
-
-        # 过滤：composite >= threshold OR (关键词匹配 AND 邻近度)
-        filtered = [
-            item for item in all_candidates
-            if item[5] >= min_score_threshold
-            or (item[2] >= self.idx.min_keyword_match
-                and item[3] >= self.idx.min_proximity_score)
-        ]
-
-        # 如果没有结果，尝试降级到匹配数 >= 1
-        if not filtered and query_words:
-            filtered = [
-                item for item in all_candidates
-                if item[2] >= 1
-            ]
-
-        # 如果仍无结果，先 LIKE 降级，再 ripgrep
-        if not filtered:
-            like_results = self.idx.like_search(query, max_results=self.max_results)
-            if like_results:
-                like_items = self._convert_like_to_render_items(like_results, query_words)
-                self._render_results(
-                    query, like_items, query_words, max_results, is_like=True
-                )
-                return
-            filtered = rg_module.rg_fallback_search(
-                query,
-                self.idx.path_map,
-                doc_nodes_map,
-                query_words,
-                context_before=self.idx.rg_context_before,
-                context_after=self.idx.rg_context_after,
-            )
-
-        if not filtered:
+        elif not result.results:
             print(f"\n[未找到包含 '{query}' 的结果]\n")
-            return
-
-        # 按综合评分排序
-        scored_results = []
-        for item in filtered:
-            did, display_node, matched, prox, fts, composite = item[:6]
-            scored_results.append((composite, (did, display_node, matched, prox, fts)))
-        scored_results.sort(key=lambda x: -x[0])
-
-        # 按分数阈值过滤
-        if min_score_threshold > 0.0:
-            filtered_count_before = len(scored_results)
-            scored_results = [r for r in scored_results if r[0] >= min_score_threshold]
+        else:
+            # CLI 额外的分数过滤日志
+            scored_results = result.results
+            if min_score_threshold > 0.0:
+                filtered_count_before = len(scored_results)
+                scored_results = [
+                    r for r in scored_results if r[0] >= min_score_threshold
+                ]
+                if scored_results:
+                    print(
+                        f"[分数过滤: 阈值 {min_score_threshold:.0%}, "
+                        f"过滤掉 {filtered_count_before - len(scored_results)} 个低分结果]"
+                    )
             if scored_results:
-                print(f"[分数过滤: 阈值 {min_score_threshold:.0%}, 过滤掉 {filtered_count_before - len(scored_results)} 个低分结果]")
-
-        self._render_results(
-            query, scored_results, query_words, max_results, is_ripgrep=False
-        )
+                self._render_results(
+                    query, scored_results, query_words, max_results
+                )
+            else:
+                print(f"\n[未找到包含 '{query}' 的结果]\n")
 
     def _render_results(
         self, query, results, query_words, max_results, is_ripgrep=False, is_like=False
