@@ -227,6 +227,11 @@ class CortexAgent:
         from planify.tools.registry import register_external_tools
         register_external_tools(kb_tools, kb_handlers)
 
+        # --- grep 工具注册 ---
+        from cortex.grep_tools import build_grep_tools
+        grep_tools, grep_handlers = build_grep_tools(self.workdir)
+        register_external_tools(grep_tools, grep_handlers)
+
         # 部署技能文件到 ~/.cortex/skills/
         import shutil
         skill_src_dir = Path(__file__).parent / "skills" / "knowledge_base"
