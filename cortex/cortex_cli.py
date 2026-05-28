@@ -281,7 +281,7 @@ class NotebookSearchCLI:
             is_like: 是否为 LIKE 降级结果（无综合评分）
         """
         if is_ripgrep:
-            label = f"找到 {len(results)} 个匹配 (ripgrep)"
+            label = f"找到 {len(results)} 个匹配"
             display_items = [(0.0, item) for item in results[:max_results]]
         elif is_like:
             label = f"找到 {len(results)} 个匹配 (LIKE)"
@@ -877,10 +877,6 @@ def _build_parser():
     )
     grep_parser.add_argument("pattern", help="Regex search pattern (ripgrep syntax)")
     grep_parser.add_argument(
-        "--glob", "-g", default=None,
-        help="File filter glob, e.g. '*.py', '*.{md,txt}'"
-    )
-    grep_parser.add_argument(
         "--case-sensitive", "-s", action="store_true",
         help="Case sensitive search"
     )
@@ -1097,14 +1093,12 @@ def _cli_web(args, config, idx):
 
 
 def _cli_grep(args, config, idx):
-    """Handle `cortex grep <pattern>` — ripgrep regex search on working directory."""
+    """Handle `cortex grep <pattern>` — regex search on working directory."""
     from cortex.grep_tools import build_grep_tools
 
-    workdir = Path(config.search_path).resolve()
-    _, handlers = build_grep_tools(workdir)
+    _, handlers = build_grep_tools(idx)
     result = handlers["grep"](
         pattern=args.pattern,
-        glob=args.glob,
         case_sensitive=args.case_sensitive,
         max_results=args.max_results,
     )

@@ -7,7 +7,7 @@ from rich.text import Text
 
 
 def render_search_header(query: str, count: int, is_ripgrep: bool = False, is_like: bool = False) -> Rule:
-    source = " (ripgrep)" if is_ripgrep else (" (LIKE)" if is_like else "")
+    source = " (LIKE)" if is_like else ""
     return Rule(
         f" 关键词: {query}  |  找到 {count} 个匹配{source} ",
         style="#7aa2f7",
