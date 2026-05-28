@@ -518,60 +518,19 @@ class CortexApp(App):
             return
 
         try:
-            results = self.idx.like_search(query, max_results=self.max_results, use_regex=True)
-            query_words = [query]
+            from cortex.ripgrep import execute_grep_search
 
-            if not results:
-                # 正则无结果，尝试 ripgrep 降级
-                filtered = rg_module.rg_fallback_search(
-                    query,
-                    self.idx.path_map,
-                    {},
-                    query_words,
-                    context_before=self.idx.rg_context_before,
-                    context_after=self.idx.rg_context_after,
-                )
-                # 追加路径搜索
-                path_results = rg_module.search_paths_by_regex(
-                    query,
-                    self.idx.path_map,
-                    max_results=self.max_results,
-                )
-                # 合并结果（路径排在后面）
-                all_results = filtered + path_results
-                renderables = render_search_results(
-                    results=all_results,
-                    query=query,
-                    query_words=query_words,
-                    path_map=self.idx.path_map,
-                    max_results=self.max_results,
-                    is_ripgrep=True,
-                )
-            else:
-                # 将 like_search 返回的 dict 格式转换为 tuple 格式
-                content_tuples = []
-                for item in results:
-                    node = {
-                        "title": item.get("title", ""),
-                        "text": item.get("summary", ""),
-                    }
-                    content_tuples.append((item["doc_id"], node, 1, 0, item.get("fts_score", 0.0)))
-                # 追加路径搜索
-                path_results = rg_module.search_paths_by_regex(
-                    query,
-                    self.idx.path_map,
-                    max_results=self.max_results,
-                )
-                # 合并结果（内容在前，路径在后）
-                all_results = content_tuples + path_results
-                renderables = render_search_results(
-                    results=all_results,
-                    query=query,
-                    query_words=query_words,
-                    path_map=self.idx.path_map,
-                    max_results=self.max_results,
-                    is_ripgrep=True,
-                )
+            result = execute_grep_search(self.idx, query, self.max_results)
+            all_results = result.content_results + result.path_results
+
+            renderables = render_search_results(
+                results=all_results,
+                query=query,
+                query_words=result.query_words,
+                path_map=self.idx.path_map,
+                max_results=self.max_results,
+                is_ripgrep=True,
+            )
             self.call_from_thread(self._on_search_done, renderables)
 
         except Exception as exc:
