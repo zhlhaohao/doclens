@@ -180,6 +180,7 @@ planify/
 
 ## CORTEX-CLI 测试命令
 
+> **测试工作目录必须为 `test_work_dir/`**，所有测试命令必须在该目录下执行。
 > 以下命令中 `python` 均指 `.venv/Scripts/python.exe`（在 `test_work_dir/` 下执行时为 `../.venv/Scripts/python.exe`）。
 
 | 命令 | 说明 | 参数 | 示例 |
