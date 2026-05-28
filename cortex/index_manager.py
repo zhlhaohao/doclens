@@ -69,6 +69,10 @@ class IndexManager:
         self.rg_context_before = config.rg_context_before
         self.rg_context_after = config.rg_context_after
 
+        # Grep 工具配置
+        self.grep_score_threshold = config.grep_score_threshold
+        self.grep_max_results = config.grep_max_results
+
         self.scoring_weights = {
             "keyword_match_ratio": config.weight_keyword_match,
             "file_name_match": config.weight_file_name_match,

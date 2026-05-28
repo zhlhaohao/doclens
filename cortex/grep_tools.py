@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MAX_TOTAL_CHARS = 8000
-DEFAULT_MAX_RESULTS = 50
 
 # ---------------------------------------------------------------------------
 # Anthropic tool use schema
@@ -38,16 +37,7 @@ GREP_TOOL = {
                 "type": "string",
                 "description": "正则表达式搜索模式（ripgrep 语法）",
             },
-            "case_sensitive": {
-                "type": "boolean",
-                "description": "是否区分大小写，默认 false",
-                "default": False,
-            },
-            "max_results": {
-                "type": "integer",
-                "description": "最大返回结果数，默认 50",
-                "default": 50,
-            },
+        },
         },
         "required": ["pattern"],
     },
@@ -78,19 +68,71 @@ def build_grep_tools(
 # Agent 输出格式化
 # ---------------------------------------------------------------------------
 
+def _select_keyword_lines(
+    text: str,
+    kw_lower: list[str],
+    max_lines: int = 3,
+    context_range: int = 1,
+) -> str:
+    """从文本中选取包含关键词的行及其上下文。
+
+    逻辑与 TUI render_search_result 的锚点选择一致：
+    1. 遍历所有行，统计每行包含的关键词数
+    2. 按命中数降序取锚点行
+    3. 向前后各扩展 context_range 行
+    4. 拼接并截断
+    """
+    if not text or not kw_lower:
+        return (text or "")[:200].strip()
+
+    all_lines = text.split("\n")
+
+    # 统计每行命中关键词数
+    line_hits: list[tuple[int, int]] = []  # (count, line_index)
+    for j, line in enumerate(all_lines):
+        l_lower = line.lower()
+        cnt = sum(1 for w in kw_lower if w in l_lower)
+        if cnt > 0:
+            line_hits.append((cnt, j))
+
+    if not line_hits:
+        # 无匹配行：取前几个非空行
+        selected = [l.strip() for l in all_lines if l.strip()][:max_lines]
+        return " ".join(selected)[:200]
+
+    # 按命中数降序，取前 max_lines 个锚点
+    line_hits.sort(key=lambda x: -x[0])
+    anchor_indices = [j for _, j in line_hits[:max_lines]]
+
+    # 向前后各扩展 context_range 行
+    context_indices: set[int] = set()
+    for j in anchor_indices:
+        for offset in range(-context_range, context_range + 1):
+            idx = j + offset
+            if 0 <= idx < len(all_lines):
+                context_indices.add(idx)
+
+    selected = [all_lines[j].strip() for j in sorted(context_indices) if all_lines[j].strip()]
+    return " ".join(selected)[:200]
+
+
 def _format_agent_output(
     content_results: list[tuple[str, dict, int, int, float]],
     path_results: list[tuple[str, dict, int, int, float]],
     path_map: dict[str, str],
-    max_results: int,
+    total_terms: int,
+    query_words: list[str],
 ) -> str:
-    """将搜索结果格式化为 Agent 友好的纯文本。
+    """将搜索结果格式化为结构化 XML，与 search_kb 输出格式对齐。
 
     格式:
         Found N results in M files:
         Use read_document tool to read full content: path=<path value>.
 
-        path:line: text
+        <result index="1" score="100%" matches="3/3">
+          <path>科技/quantum_ai_report.pdf:59</path>
+          <content>NSFC launched the 'Explainable Next-Gen AI' program...</content>
+        </result>
         ...
 
         Paths matched: path1, path2
@@ -98,42 +140,52 @@ def _format_agent_output(
     if not content_results and not path_results:
         return ""
 
-    lines: list[str] = []
+    total_terms = max(total_terms, 1)
+    kw_lower = [w.lower() for w in query_words if w]
+    output_lines: list[str] = []
 
     if content_results:
         unique_files = len({path_map.get(doc_id, doc_id) for doc_id, _, _, _, _ in content_results})
-        lines.append(f"Found {len(content_results)} results in {unique_files} files:")
-        lines.append("Use read_document tool to read full content: path=<path value>.\n")
+        output_lines.append(f"Found {len(content_results)} results in {unique_files} files:")
+        output_lines.append("Use read_document tool to read full content: path=<path value>.")
 
-        total_chars = sum(len(l) for l in lines)
+        total_chars = sum(len(l) for l in output_lines)
         shown = 0
 
-        for doc_id, node, _matched, _prox, _fts in content_results:
+        for doc_id, node, matched, _prox, _fts in content_results:
             path = path_map.get(doc_id, doc_id)
             line_start = node.get("line_start")
-            text = (node.get("text", "") or "").split("\n")[0].strip()
+            full_text = node.get("text", "") or ""
 
-            path_note = f"{path}"
+            snippet = _select_keyword_lines(full_text, kw_lower)
+
+            path_note = path
             if line_start is not None:
                 path_note += f":{line_start}"
-            entry = f"{path_note}: {text}"
+            pct = int(matched / total_terms * 100)
+
+            entry = f'<result index="{shown + 1}" score="{pct}%" matches="{matched}/{total_terms}">\n'
+            entry += f"  <path>{path_note}</path>\n"
+            entry += f"  <content>{snippet}</content>\n"
+            entry += "</result>"
+
             entry_len = len(entry) + 1
 
             if total_chars + entry_len > MAX_TOTAL_CHARS:
                 remaining = len(content_results) - shown
                 if remaining > 0:
-                    lines.append(f"\n({remaining} more results truncated. Use max_results parameter to get more.)")
+                    output_lines.append(f"\n({remaining} more results truncated. Use max_results parameter to get more.)")
                 break
 
-            lines.append(entry)
+            output_lines.append(entry)
             total_chars += entry_len
             shown += 1
 
     if path_results:
         path_strs = [path_map.get(doc_id, doc_id) for doc_id, _, _, _, _ in path_results]
-        lines.append(f"\nPaths matched: {', '.join(path_strs)}")
+        output_lines.append(f"\nPaths matched: {', '.join(path_strs)}")
 
-    return "\n".join(lines)
+    return "\n\n".join(output_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +196,6 @@ def _handle_grep(
     idx: IndexManager,
     *,
     pattern: str,
-    case_sensitive: bool = False,
-    max_results: int = DEFAULT_MAX_RESULTS,
 ) -> str:
     """在工作目录中搜索文件内容。"""
     if not pattern:
@@ -153,13 +203,14 @@ def _handle_grep(
 
     from cortex.ripgrep import execute_grep_search
 
-    result = execute_grep_search(idx, pattern, max_results)
+    result = execute_grep_search(idx, pattern)
 
     output = _format_agent_output(
         content_results=result.content_results,
         path_results=result.path_results,
         path_map=idx.path_map,
-        max_results=max_results,
+        total_terms=len(result.query_words),
+        query_words=result.query_words,
     )
 
     if not output:
