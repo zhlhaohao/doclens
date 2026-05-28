@@ -871,6 +871,25 @@ def _build_parser():
     )
     read_parser.set_defaults(func=_cli_read_document)
 
+    # cortex grep <pattern>
+    grep_parser = sub.add_parser(
+        "grep", help="Search file content with ripgrep regex"
+    )
+    grep_parser.add_argument("pattern", help="Regex search pattern (ripgrep syntax)")
+    grep_parser.add_argument(
+        "--glob", "-g", default=None,
+        help="File filter glob, e.g. '*.py', '*.{md,txt}'"
+    )
+    grep_parser.add_argument(
+        "--case-sensitive", "-s", action="store_true",
+        help="Case sensitive search"
+    )
+    grep_parser.add_argument(
+        "--max-results", type=int, default=50,
+        help="Max results (default: 50)"
+    )
+    grep_parser.set_defaults(func=_cli_grep)
+
     return parser
 
 
@@ -1073,6 +1092,21 @@ def _cli_web(args, config, idx):
         search_recency_filter=args.recency,
         content_size=args.content_size,
         location=args.location,
+    )
+    print(result)
+
+
+def _cli_grep(args, config, idx):
+    """Handle `cortex grep <pattern>` — ripgrep regex search on working directory."""
+    from cortex.grep_tools import build_grep_tools
+
+    workdir = Path(config.search_path).resolve()
+    _, handlers = build_grep_tools(workdir)
+    result = handlers["grep"](
+        pattern=args.pattern,
+        glob=args.glob,
+        case_sensitive=args.case_sensitive,
+        max_results=args.max_results,
     )
     print(result)
 
