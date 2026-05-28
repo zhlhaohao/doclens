@@ -38,7 +38,6 @@ GREP_TOOL = {
                 "description": "正则表达式搜索模式（ripgrep 语法）",
             },
         },
-        },
         "required": ["pattern"],
     },
 }
