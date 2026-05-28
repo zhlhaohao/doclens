@@ -2,6 +2,7 @@
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Iterable
 
 
@@ -186,3 +187,78 @@ def search_paths_by_regex(
             results.append((doc_id, node, 1, 0, 0.0))
 
     return results[:max_results]
+
+
+# ---------------------------------------------------------------------------
+# 统一 grep 搜索入口
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GrepResult:
+    """grep 搜索结果。
+
+    Attributes:
+        content_results: 内容匹配 [(doc_id, node_dict, matched, proximity, fts_score)]
+        path_results: 路径匹配，格式同上
+        query_words: 查询词列表
+    """
+    content_results: list[tuple[str, dict, int, int, float]]
+    path_results: list[tuple[str, dict, int, int, float]]
+    query_words: list[str]
+
+
+def execute_grep_search(
+    idx,
+    query: str,
+    max_results: int = 50,
+) -> GrepResult:
+    """执行统一的 grep 搜索流程。
+
+    搜索流程:
+    1. like_search(use_regex=True) — SQLite REGEXP 搜索
+    2. 若无结果: rg_fallback_search — ripgrep 降级搜索
+    3. search_paths_by_regex — 路径正则匹配
+
+    Args:
+        idx: IndexManager 实例
+        query: 正则表达式
+        max_results: 最大结果数
+
+    Returns:
+        GrepResult 包含内容结果、路径结果和查询词
+    """
+    query_words = [query]
+
+    # 步骤 1: like_search
+    like_results = idx.like_search(query, max_results=max_results, use_regex=True)
+
+    if like_results:
+        # like_search 返回 dict 列表，转为 tuple 格式
+        content_results = [
+            (item["doc_id"], {"title": item.get("title", ""), "text": item.get("summary", "")}, 1, 0, item.get("fts_score", 0.0))
+            for item in like_results
+        ]
+    else:
+        # 步骤 2: ripgrep 降级
+        content_results = rg_fallback_search(
+            query,
+            idx.path_map,
+            {},
+            query_words,
+            context_before=idx.rg_context_before,
+            context_after=idx.rg_context_after,
+            use_regex=True,
+        )
+
+    # 步骤 3: 路径搜索
+    path_results = search_paths_by_regex(
+        query,
+        idx.path_map,
+        max_results=max_results,
+    )
+
+    return GrepResult(
+        content_results=content_results,
+        path_results=path_results,
+        query_words=query_words,
+    )
