@@ -13,8 +13,20 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _table_to_text(table) -> str:
+    """Convert a docx Table to a plain-text representation."""
+    rows = []
+    for row in table.rows:
+        cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+        rows.append(" | ".join(cells))
+    return "\n".join(rows)
+
+
 def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
     """Extract headings and text from a DOCX file.
+
+    Iterates document body elements in order so that tables are
+    interleaved with paragraphs at the correct position.
 
     Returns:
         (headings, lines) where headings is a list of
@@ -22,6 +34,9 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
     """
     try:
         from docx import Document as DocxDocument
+        from docx.oxml.ns import qn
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except ImportError:
         raise ImportError(
             "DOCX support requires 'python-docx'. Install with: pip install python-docx"
@@ -31,25 +46,35 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
     lines = []
     headings = []
 
-    for para in doc.paragraphs:
-        text = para.text.strip()
-        line_num = len(lines) + 1
-        lines.append(text)
+    for child in doc.element.body:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
 
-        style_name = (para.style.name if para.style else "") or ""
-        style_name = style_name.lower()
-        if style_name.startswith("heading"):
-            # Extract heading level from style name (e.g. "Heading 1" -> 1)
-            try:
-                level = int(style_name.split()[-1])
-            except (ValueError, IndexError):
-                level = 1
-            if text:
-                headings.append({
-                    "title": text,
-                    "line_num": line_num,
-                    "level": level,
-                })
+        if tag == "p":
+            para = Paragraph(child, doc)
+            text = para.text.strip()
+            line_num = len(lines) + 1
+            lines.append(text)
+
+            style_name = (para.style.name if para.style else "") or ""
+            style_name = style_name.lower()
+            if style_name.startswith("heading"):
+                try:
+                    level = int(style_name.split()[-1])
+                except (ValueError, IndexError):
+                    level = 1
+                if text:
+                    headings.append({
+                        "title": text,
+                        "line_num": line_num,
+                        "level": level,
+                    })
+
+        elif tag == "tbl":
+            table = Table(child, doc)
+            table_text = _table_to_text(table)
+            if table_text.strip():
+                line_num = len(lines) + 1
+                lines.append(table_text)
 
     return headings, lines
 
