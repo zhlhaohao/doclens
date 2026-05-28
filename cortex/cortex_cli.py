@@ -876,14 +876,6 @@ def _build_parser():
         "grep", help="Search file content with ripgrep regex"
     )
     grep_parser.add_argument("pattern", help="Regex search pattern (ripgrep syntax)")
-    grep_parser.add_argument(
-        "--case-sensitive", "-s", action="store_true",
-        help="Case sensitive search"
-    )
-    grep_parser.add_argument(
-        "--max-results", type=int, default=50,
-        help="Max results (default: 50)"
-    )
     grep_parser.set_defaults(func=_cli_grep)
 
     return parser
@@ -1099,8 +1091,6 @@ def _cli_grep(args, config, idx):
     _, handlers = build_grep_tools(idx)
     result = handlers["grep"](
         pattern=args.pattern,
-        case_sensitive=args.case_sensitive,
-        max_results=args.max_results,
     )
     print(result)
 
