@@ -53,6 +53,10 @@ class CortexConfig(BaseSettings):
     rg_context_before: int = Field(default=6)
     rg_context_after: int = Field(default=5)
 
+    # Grep 工具配置
+    grep_score_threshold: float = Field(default=0.0, description="grep 评分阈值（0.0-1.0），低于此比例的词项命中率的结果将被过滤")
+    grep_max_results: int = Field(default=50, description="grep 工具最大返回结果数")
+
     # 文件监控
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)

@@ -199,12 +199,47 @@ class GrepResult:
 
     Attributes:
         content_results: 内容匹配 [(doc_id, node_dict, matched, proximity, fts_score)]
+                         已按 matched（命中词项数）降序排序
         path_results: 路径匹配，格式同上
-        query_words: 查询词列表
+        query_words: 提取的词项列表（从正则 | 分割）
     """
     content_results: list[tuple[str, dict, int, int, float]]
     path_results: list[tuple[str, dict, int, int, float]]
     query_words: list[str]
+
+
+def _extract_terms(pattern: str) -> list[str]:
+    """从正则中提取独立词项（按 | 分割顶层 alternation）。"""
+    terms = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(pattern):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+        elif ch == "|" and depth == 0:
+            term = pattern[start:i].strip()
+            if term:
+                terms.append(term)
+            start = i + 1
+    tail = pattern[start:].strip()
+    if tail:
+        terms.append(tail)
+    return terms
+
+
+def _count_term_hits(text: str, terms: list[str]) -> int:
+    """统计 text 中命中了多少个词项。"""
+    count = 0
+    for term in terms:
+        try:
+            if re.search(term, text, re.IGNORECASE):
+                count += 1
+        except re.error:
+            if term.lower() in text.lower():
+                count += 1
+    return count
 
 
 def execute_grep_search(
@@ -218,6 +253,7 @@ def execute_grep_search(
     1. like_search(use_regex=True) — SQLite REGEXP 搜索
     2. 若无结果: rg_fallback_search — ripgrep 降级搜索
     3. search_paths_by_regex — 路径正则匹配
+    4. 对内容结果评分排序（按词项命中数降序）
 
     Args:
         idx: IndexManager 实例
@@ -227,7 +263,8 @@ def execute_grep_search(
     Returns:
         GrepResult 包含内容结果、路径结果和查询词
     """
-    query_words = [query]
+    terms = _extract_terms(query)
+    query_words = terms if terms else [query]
 
     # 步骤 1: like_search
     like_results = idx.like_search(query, max_results=max_results, use_regex=True)
@@ -256,6 +293,35 @@ def execute_grep_search(
         idx.path_map,
         max_results=max_results,
     )
+
+    # 步骤 4: 评分排序 — 更新 matched 为实际命中词项数，按命中数降序
+    total_terms = len(query_words)
+    if terms:
+        scored: list[tuple[int, tuple]] = []
+        for item in content_results:
+            doc_id, node, _matched, prox, fts = item
+            text = node.get("text", "") or ""
+            hits = _count_term_hits(text, terms)
+            scored.append((hits, (doc_id, node, hits, prox, fts)))
+        scored.sort(key=lambda x: -x[0])
+        content_results = [item for _, item in scored]
+
+    # 步骤 5: 评分阈值过滤（同时过滤内容和路径结果）
+    score_threshold = getattr(idx, "grep_score_threshold", 0.0)
+    if score_threshold > 0 and total_terms > 0:
+        content_results = [
+            item for item in content_results
+            if item[2] / total_terms >= score_threshold
+        ]
+        path_results = [
+            item for item in path_results
+            if item[2] / total_terms >= score_threshold
+        ]
+
+    # 步骤 6: 限制最大结果数
+    grep_max = getattr(idx, "grep_max_results", max_results)
+    if len(content_results) > grep_max:
+        content_results = content_results[:grep_max]
 
     return GrepResult(
         content_results=content_results,
