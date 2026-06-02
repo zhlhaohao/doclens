@@ -64,6 +64,7 @@ class IndexManager:
         self.max_context_chars_per_result = config.max_context_chars_per_result
         self.max_total_chars = config.max_total_chars
         self.max_read_chars = config.max_read_chars
+        self.read_doc_show_toc = config.read_doc_show_toc
 
         # Ripgrep 降级搜索上下文
         self.rg_context_before = config.rg_context_before

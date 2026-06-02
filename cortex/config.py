@@ -49,6 +49,12 @@ class CortexConfig(BaseSettings):
     max_total_chars: int = Field(default=10000)
     max_read_chars: int = Field(default=6000)
 
+    # read_document 输出选项
+    read_doc_show_toc: bool = Field(
+        default=False,
+        description="read_document 是否输出目录结构（默认关闭以节省 token）",
+    )
+
     # Ripgrep 降级搜索上下文
     rg_context_before: int = Field(default=6)
     rg_context_after: int = Field(default=5)
