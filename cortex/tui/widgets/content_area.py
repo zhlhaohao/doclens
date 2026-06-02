@@ -34,6 +34,9 @@ class ContentArea(RichLog):
         )
         self._last_output: list[str] = []
         self._recording: bool = False
+        self._streaming_buffer: str = ""
+        self._streaming_active: bool = False
+        self._tool_details: list[tuple[str, str]] = []
 
     def start_recording(self) -> None:
         """开始记录输出（命令执行前调用）"""
@@ -92,3 +95,42 @@ class ContentArea(RichLog):
     def write_prompt(self, query: str) -> None:
         """写入用户输入提示"""
         self.write(Text(f"> {query}", style="#9ece6a bold"))
+
+    def write_streaming(self, text: str) -> None:
+        """缓冲流式文本增量，不立即写入 RichLog（避免 in-place 修改问题）。"""
+        self._streaming_active = True
+        self._streaming_buffer += text
+
+    def finish_streaming(self) -> None:
+        """结束流式状态，将缓冲的文本一次性写入 RichLog。"""
+        if self._streaming_active and self._streaming_buffer.strip():
+            self.write(Text(self._streaming_buffer, style="#c0caf5"))
+            self.write(Text(""))
+            self.scroll_end(animate=False)
+        self._streaming_buffer = ""
+        self._streaming_active = False
+
+    def write_tool_summary(self, name: str, input_str: str, text: str) -> None:
+        """写入工具调用摘要（折叠显示），同时存储完整内容用于展开。"""
+        # 存储完整内容（入参 + 结果）
+        self._tool_details.append((name, input_str, text))
+        # 截断入参到 80 字符
+        input_summary = input_str.replace("\n", " ").strip()
+        if len(input_summary) > 80:
+            input_summary = input_summary[:80] + "..."
+        # 截断结果到 60 字符
+        result_summary = text.replace("\n", " ").strip()
+        if len(result_summary) > 60:
+            result_summary = result_summary[:60] + "..."
+        line = f"\u2699 {name}({input_summary}) \u2192 {result_summary}"
+        self.write(Text(line, style="#565f89"))
+        self.scroll_end(animate=False)
+
+    def clear_tool_details(self) -> None:
+        """清空工具详情（新查询开始时调用）"""
+        self._tool_details = []
+
+    @property
+    def tool_details(self) -> list[tuple[str, str, str]]:
+        """获取存储的工具调用详情列表: [(name, input, result)]"""
+        return self._tool_details

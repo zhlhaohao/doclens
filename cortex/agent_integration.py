@@ -285,8 +285,20 @@ class CortexAgent:
         self.session = session
         return self
 
-    def run_query(self, query: str, history: List[Dict]) -> List[Dict]:
-        """运行流式查询"""
+    def run_query(
+        self,
+        query: str,
+        history: List[Dict],
+        emitter_callbacks: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict]:
+        """运行流式查询
+
+        Args:
+            query: 用户查询
+            history: 消息历史
+            emitter_callbacks: TUI 回调函数字典，传入时使用 TUIEventEmitter，
+                              不传时使用 CLIEventEmitter（CLI 模式）
+        """
         global _interrupt_event
         _interrupt_event.clear()
 
@@ -294,8 +306,18 @@ class CortexAgent:
         self._escape_watcher.start()
 
         waiter = get_global_waiter()
-        emitter = CLIEventEmitter(colors=Colors, waiter=waiter, interrupt_event=_interrupt_event)
-        bind_user_interaction_handlers(self.session.tool_handlers, emitter, waiter)
+
+        if emitter_callbacks is not None:
+            from planify.streaming.emitter import TUIEventEmitter
+            emitter = TUIEventEmitter(
+                callbacks=emitter_callbacks,
+                interrupt_event=_interrupt_event,
+            )
+        else:
+            emitter = CLIEventEmitter(
+                colors=Colors, waiter=waiter, interrupt_event=_interrupt_event,
+            )
+            bind_user_interaction_handlers(self.session.tool_handlers, emitter, waiter)
 
         agent = StreamingAgent(
             client=self.session.client,
@@ -314,9 +336,17 @@ class CortexAgent:
         )
 
         try:
+            # 每次查询使用新的事件循环，避免 ESC 中断后残留 running 状态
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
             return self.loop.run_until_complete(
                 agent.run_stream(history, query, self.session.session_id)
             )
+        except Exception:
+            # ESC 中断：丢弃残留循环，下次 run_query 会创建新的
+            if _interrupt_event.is_set():
+                return history
+            raise
         finally:
             self._escape_watcher.stop()
 

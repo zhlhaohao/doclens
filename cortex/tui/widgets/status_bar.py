@@ -142,7 +142,18 @@ class StatusBar(Horizontal):
             self._right_text = f"{self._right_text} · Agent: {status}"
         else:
             self._right_text = re.sub(
-                r"Agent: \w+", f"Agent: {status}", self._right_text
+                r"Agent: \S+", f"Agent: {status}", self._right_text
+            )
+        self._refresh_right()
+
+    def set_tool_status(self, tool_name: str) -> None:
+        """更新 Agent 状态为正在调用工具"""
+        status = f"调用 {tool_name}..."
+        if "Agent" not in self._right_text:
+            self._right_text = f"{self._right_text} · Agent: {status}"
+        else:
+            self._right_text = re.sub(
+                r"Agent: \S+", f"Agent: {status}", self._right_text
             )
         self._refresh_right()
 
