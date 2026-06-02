@@ -114,14 +114,6 @@ READ_DOCUMENT_TOOL = {
                 "type": "string",
                 "description": "文档路径（从搜索结果中获取）",
             },
-            "start_line": {
-                "type": "integer",
-                "description": "起始行号（可选）",
-            },
-            "end_line": {
-                "type": "integer",
-                "description": "结束行号（可选）",
-            },
             "section": {
                 "type": "string",
                 "description": (
