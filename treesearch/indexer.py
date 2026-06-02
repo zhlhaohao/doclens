@@ -485,7 +485,7 @@ async def md_to_tree(
 
 # --- Heading detection patterns ---
 
-_RE_NUMERIC = re.compile(r"^(?P<prefix>(?:\d+\.)+\d*)\s+(?P<title>.+)$")
+_RE_NUMERIC = re.compile(r"^(?P<prefix>(?:\d+\.)+\d*)\s*(?P<title>.+)$")
 _RE_PAREN_NUM = re.compile(r"^(?:\(?\d+\))\s+(?P<title>.+)$")
 _RE_ROMAN = re.compile(r"^(?P<prefix>[IVXLCDM]+)\.\s+(?P<title>.+)$")
 _RE_LETTER = re.compile(r"^(?P<prefix>[A-Z])[.)]\s+(?P<title>.+)$")
