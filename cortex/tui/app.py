@@ -28,12 +28,14 @@ from cortex import ripgrep as rg_module
 from cortex.scoring_pipeline import score_and_rank
 from treesearch.ripgrep import rg_available
 from cortex.tui.theme import APP_CSS
-from cortex.tui.commands import parse_input
+from cortex.tui.commands import parse_input, build_builtin_registry
+from cortex.tui.command_registry import Command
 from cortex.tui.widgets.header_bar import HeaderBar
 from cortex.tui.widgets.content_area import ContentArea
 from cortex.tui.widgets.input_box import InputBox
 from cortex.tui.widgets.status_bar import StatusBar
 from cortex.tui.widgets.thinking_indicator import ThinkingIndicator
+from cortex.tui.widgets.autocomplete import AutoComplete
 from cortex.tui.renderers.search import render_search_results
 
 logger = logging.getLogger(__name__)
@@ -75,6 +77,10 @@ class CortexApp(App):
         self.idx = IndexManager(self.config)
         self.max_results = self.config.max_results
 
+        # 命令注册表
+        self._cmd_registry = build_builtin_registry()
+        self._register_skill_commands()
+
         # 鼠标模式切换（关闭后可用鼠标选择文字）
         self._mouse_enabled = True
 
@@ -98,8 +104,9 @@ class CortexApp(App):
         yield HeaderBar(version="v1.1.0", workdir=self.idx.search_path)
         yield ContentArea()
         yield ThinkingIndicator()
-        yield InputBox()
+        yield InputBox(registry=self._cmd_registry)
         yield StatusBar()
+        yield AutoComplete(id="app-autocomplete")
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -266,7 +273,7 @@ class CortexApp(App):
         if not value.strip().startswith("/") and len(value.strip()) < 3:
             return
 
-        parsed = parse_input(value)
+        parsed = parse_input(value, self._cmd_registry)
         if parsed is None:
             return
 
@@ -278,13 +285,36 @@ class CortexApp(App):
         input_box.focus_input()
 
     # ------------------------------------------------------------------
+    # Skill 命令注册
+    # ------------------------------------------------------------------
+
+    def _register_skill_commands(self) -> None:
+        """从 SkillLoader 扫描可用 skill 并注册为斜杠命令"""
+        try:
+            from planify.skills.skill_loader import SkillLoader
+
+            skills_dir = Path.home() / ".cortex" / "skills"
+            loader = SkillLoader(skills_dir)
+
+            for name, info in loader.skills.items():
+                description = info["meta"].get("description", "Skill")
+                self._cmd_registry.register(Command(
+                    name=name,
+                    handler="_cmd_skill",
+                    description=description,
+                    aliases=(name,),
+                    is_skill=True,
+                ))
+        except Exception:
+            logger.debug("Skill registration failed, skipping skill commands", exc_info=True)
+
+    # ------------------------------------------------------------------
     # 命令路由
     # ------------------------------------------------------------------
 
     def _dispatch_command(self, cmd: str, arg: str, raw_input: str) -> None:
         """将解析后的命令分发到对应处理函数"""
         content = self.query_one(ContentArea)
-        header = self.query_one(HeaderBar)
 
         # 回显用户输入
         content.write_prompt(raw_input)
@@ -298,34 +328,16 @@ class CortexApp(App):
         content.start_recording()
 
         try:
-            if cmd == "quit":
-                self._cmd_quit()
-            elif cmd == "help":
-                self._cmd_help()
-            elif cmd in ("status",):
-                self._cmd_status()
-            elif cmd == "index":
-                self._cmd_index(arg)
-            elif cmd == "search":
-                self._cmd_search(arg)
-            elif cmd == "grep":
-                self._cmd_grep(arg)
-            elif cmd == "ripgrep":
-                self._cmd_ripgrep(arg)
-            elif cmd == "set":
-                self._cmd_set(arg)
-            elif cmd == "clear":
-                self._cmd_clear()
-            elif cmd == "ai":
-                self._cmd_ai(arg)
-            elif cmd == "web":
-                self._cmd_web(arg)
-            elif cmd == "webfetch":
-                self._cmd_webfetch(arg)
-            elif cmd == "compact":
-                self._cmd_compact()
-            elif cmd in ("tasks", "team", "inbox", "failed", "clearfailed"):
-                self._cmd_agent_slash(cmd, arg)
+            command = self._cmd_registry.resolve(cmd)
+            if command:
+                handler_name = command.handler
+                if command.is_skill:
+                    self._cmd_skill(cmd, arg)
+                elif handler_name == "_cmd_agent_slash":
+                    self._cmd_agent_slash(cmd, arg)
+                else:
+                    handler = getattr(self, handler_name)
+                    handler(arg)
             else:
                 content.write_error(f"未知命令: /{cmd}  输入 /help 查看帮助")
         finally:
@@ -336,12 +348,12 @@ class CortexApp(App):
     # 命令实现
     # ------------------------------------------------------------------
 
-    def _cmd_quit(self) -> None:
+    def _cmd_quit(self, _arg: str = "") -> None:
         """退出应用"""
         self._cleanup()
         self.exit()
 
-    def _cmd_help(self) -> None:
+    def _cmd_help(self, _arg: str = "") -> None:
         """显示帮助信息"""
         content = self.query_one(ContentArea)
         missing = check_dependencies()
@@ -373,7 +385,7 @@ class CortexApp(App):
         else:
             content.write_system("提示: 所有文件类型依赖已安装")
 
-    def _cmd_status(self) -> None:
+    def _cmd_status(self, _arg: str = "") -> None:
         """显示状态"""
         content = self.query_one(ContentArea)
         self.idx.load_or_build_index()
@@ -671,7 +683,7 @@ class CortexApp(App):
         except ValueError:
             content.write_error(f"无效的值: {arg}")
 
-    def _cmd_clear(self) -> None:
+    def _cmd_clear(self, _arg: str = "") -> None:
         """清屏"""
         content = self.query_one(ContentArea)
         content.clear()
@@ -694,6 +706,28 @@ class CortexApp(App):
             content.write_success(f"已复制 {line_count} 行到剪贴板")
         except Exception as e:
             content.write_error(f"复制失败: {e}")
+
+    def _cmd_skill(self, skill_name: str, arg: str) -> None:
+        """Skill 命令：加载 SKILL.md 内容并注入到 AI 对话"""
+        content = self.query_one(ContentArea)
+
+        try:
+            from planify.skills.skill_loader import SkillLoader
+
+            skills_dir = Path.home() / ".cortex" / "skills"
+            loader = SkillLoader(skills_dir)
+            skill_content = loader.load(skill_name)
+        except Exception as exc:
+            content.write_error(f"Skill 加载失败: {exc}")
+            return
+
+        # 组合 prompt：skill 内容 + 用户参数
+        query = skill_content
+        if arg:
+            query = f"{skill_content}\n\n用户请求: {arg}"
+
+        # 委托给 AI 对话
+        self._cmd_ai(query)
 
     def _cmd_ai(self, arg: str) -> None:
         """AI 对话命令"""
@@ -904,7 +938,7 @@ class CortexApp(App):
         content.scroll_end(animate=False)
         header.set_mode("就绪")
 
-    def _cmd_compact(self) -> None:
+    def _cmd_compact(self, _arg: str = "") -> None:
         """压缩历史"""
         content = self.query_one(ContentArea)
         header = self.query_one(HeaderBar)
