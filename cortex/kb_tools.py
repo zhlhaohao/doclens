@@ -124,7 +124,12 @@ READ_DOCUMENT_TOOL = {
             },
             "section": {
                 "type": "string",
-                "description": "章节标题，如 '第三章 实验方法'（可选，优先于行号）",
+                "description": (
+                    "单个章节标题，用于读取该章节及其子章节内容（可选，优先于行号）。"
+                    "只传入目标章节自身的标题文本，不要拼接上级章节路径。"
+                    "正确: '3.4.2. 变更流程'，错误: '第三章研发项目实施 > 3.4.2. 变更流程'。"
+                    "传入较大章节可获得更宽泛的内容，传入较小章节可获得更精确的内容。"
+                ),
             },
         },
         "required": ["path"],
@@ -342,7 +347,7 @@ def _format_kb_results(
 
     lines = [
         f"Found {total_hits} results:",
-        "Use read_document tool to read full content: path=<path value>, section=<any section in hierarchy>. Larger section = broader content, smaller section = more specific.",
+        "Use read_document tool to read full content: path=<path value>, section=<single section title only, NOT the full hierarchy path>. E.g. use '3.4.2. 变更流程' not '第三章 > 3.4.2. 变更流程'. Larger section = broader content, smaller section = more specific.",
     ]
 
     total_chars = 0
