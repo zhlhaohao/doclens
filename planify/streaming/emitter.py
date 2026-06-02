@@ -551,3 +551,141 @@ class CLIEventEmitter(EventEmitter):
         if code is not None:
             data["code"] = code
         await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
+
+
+class TUIEventEmitter(EventEmitter):
+    """
+    TUI 事件发射器
+
+    将流式事件通过回调函数传递给 TUI 层，支持实时更新 UI。
+    回调函数由 app.py 提供，内部通过 call_from_thread 安全更新 UI。
+    """
+
+    def __init__(self, callbacks: Dict[str, Any], interrupt_event: Any = None):
+        """
+        Args:
+            callbacks: 回调函数字典，支持以下键:
+                - on_text_delta(text): AI 文本增量
+                - on_tool_call(name, input_str): 工具调用开始
+                - on_tool_result(name, text): 工具调用结果
+                - on_done(): 查询完成
+                - on_error(error): 错误
+            interrupt_event: 中断事件
+        """
+        self._callbacks = callbacks
+        self.interrupt_event = interrupt_event
+        self._current_text_line = ""
+
+    async def emit(self, event: StreamEvent) -> None:
+        """处理所有事件类型，路由到对应回调"""
+        if event.event_type == StreamEventType.TEXT:
+            cb = self._callbacks.get("on_text_delta")
+            if cb:
+                cb(event.data.get("content", ""))
+            self._current_text_line += event.data.get("content", "")
+
+        elif event.event_type == StreamEventType.TOOL_CALL:
+            if self._current_text_line:
+                self._current_text_line = ""
+            if event.data.get("is_complete", False):
+                cb = self._callbacks.get("on_tool_call")
+                if cb:
+                    name = event.data.get("name", "")
+                    input_data = event.data.get("input", {})
+                    input_str = json.dumps(input_data, ensure_ascii=False)
+                    cb(name, input_str)
+
+        elif event.event_type == StreamEventType.TOOL_RESULT:
+            cb = self._callbacks.get("on_tool_result")
+            if cb:
+                cb(
+                    event.data.get("name", ""),
+                    event.data.get("output", ""),
+                )
+
+        elif event.event_type == StreamEventType.DONE:
+            cb = self._callbacks.get("on_done")
+            if cb:
+                cb()
+
+        elif event.event_type == StreamEventType.ERROR:
+            cb = self._callbacks.get("on_error")
+            if cb:
+                cb(event.data.get("error", "未知错误"))
+
+    async def emit_text(self, content: str, is_end: bool = False) -> None:
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TEXT,
+                data={"content": content, "is_end": is_end},
+            )
+        )
+
+    async def emit_tool_call(
+        self,
+        tool_use_id: str,
+        name: str,
+        input_data: Dict[str, Any],
+        is_complete: bool = False,
+    ) -> None:
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TOOL_CALL,
+                data={
+                    "tool_use_id": tool_use_id,
+                    "name": name,
+                    "input": input_data,
+                    "is_complete": is_complete,
+                },
+            )
+        )
+
+    async def emit_tool_result(
+        self,
+        tool_use_id: str,
+        name: str,
+        output: str,
+        is_error: bool = False,
+    ) -> None:
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TOOL_RESULT,
+                data={
+                    "tool_use_id": tool_use_id,
+                    "name": name,
+                    "output": output,
+                    "is_error": is_error,
+                },
+            )
+        )
+
+    async def emit_ask_user(
+        self,
+        request_id: str,
+        question: str,
+        input_type: str = "text",
+        options: Optional[List[Dict[str, str]]] = None,
+        default: Optional[str] = None,
+    ) -> None:
+        data: Dict[str, Any] = {
+            "request_id": request_id,
+            "question": question,
+            "input_type": input_type,
+        }
+        if options is not None:
+            data["options"] = options
+        if default is not None:
+            data["default"] = default
+        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
+
+    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
+        data: Dict[str, Any] = {"session_id": session_id}
+        if summary is not None:
+            data["summary"] = summary
+        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
+
+    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
+        data: Dict[str, Any] = {"error": error}
+        if code is not None:
+            data["code"] = code
+        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))

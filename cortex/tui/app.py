@@ -53,6 +53,7 @@ class CortexApp(App):
         ("ctrl+q", "quit", "退出"),
         ("ctrl+l", "clear_screen", "清屏"),
         ("f9", "toggle_mouse", "切换鼠标模式"),
+        ("f2", "show_tool_details", "展开工具详情"),
         ("escape", "focus_input", "聚焦输入框"),
         ("up", "scroll_line_up", "向上滚动"),
         ("down", "scroll_line_down", "向下滚动"),
@@ -708,9 +709,10 @@ class CortexApp(App):
             content.write_system("Agent 正在思考中，请按 ESC 取消后再试")
             return
 
-        header.set_mode("Agent 思考中...")
         status = self.query_one(StatusBar)
-        status.set_agent_status("思考中")
+
+        # 清空上次的工具详情
+        content.clear_tool_details()
 
         # 启动思考动画
         thinking = self.query_one(ThinkingIndicator)
@@ -718,40 +720,61 @@ class CortexApp(App):
 
         self._ai_pending_query = arg
         self._ai_worker = self.run_worker(
-            lambda: self._do_ai_query(arg), thread=True, name="ai_query"
+            lambda: self._do_ai_query(arg, content, status),
+            thread=True, name="ai_query",
         )
 
-    def _do_ai_query(self, query: str) -> None:
+    def _do_ai_query(self, query: str, content: ContentArea, status: StatusBar) -> None:
         """后台线程：执行 AI 查询"""
         self._ai_thread_id = threading.current_thread().ident
         worker = get_current_worker()
         if worker.is_cancelled:
             return
 
+        app = self
+        pending_tool_inputs: dict[str, str] = {}
+
+        def on_text_delta(text):
+            app.call_from_thread(content.write_streaming, text)
+
+        def on_tool_call(name, input_str):
+            pending_tool_inputs[name] = input_str
+
+        def on_tool_result(name, text):
+            input_str = pending_tool_inputs.pop(name, "")
+            app.call_from_thread(content.write_tool_summary, name, input_str, text)
+
+        def on_done():
+            app.call_from_thread(app._on_ai_streaming_done)
+
+        def on_error(error):
+            app.call_from_thread(app._on_ai_error, error)
+
         try:
             self._ensure_agent()
 
-            # 捕获 stdout 输出
-            old_stdout = sys.stdout
-            captured = io.StringIO()
+            callbacks = {
+                "on_text_delta": on_text_delta,
+                "on_tool_call": on_tool_call,
+                "on_tool_result": on_tool_result,
+                "on_done": on_done,
+                "on_error": on_error,
+            }
+            self._agent_history = self.agent.run_query(
+                query, self._agent_history, emitter_callbacks=callbacks,
+            )
 
-            try:
-                sys.stdout = captured
-                self._agent_history = self.agent.run_query(query, self._agent_history)
-            finally:
-                sys.stdout = old_stdout
-
-            output = captured.getvalue()
-            self.call_from_thread(self._on_ai_done, output)
+            # 兜底：如果 on_done 回调未被处理，直接在此触发完成
+            if self._ai_worker is not None:
+                self.call_from_thread(self._on_ai_streaming_done)
 
         except Exception as exc:
             self.call_from_thread(self._on_ai_error, str(exc))
 
-    def _on_ai_done(self, output: str) -> None:
-        """AI 查询完成（主线程回调）"""
-        # 已被 ESC 手动取消过，跳过
-        if self._ai_worker is None:
-            return
+    def _on_ai_streaming_done(self) -> None:
+        """AI 流式查询完成（主线程回调）"""
+        if self._ai_worker is None and self._ai_thread_id is None:
+            return  # 已经处理过了
 
         self._ai_worker = None
         self._ai_thread_id = None
@@ -762,18 +785,10 @@ class CortexApp(App):
         status = self.query_one(StatusBar)
         thinking = self.query_one(ThinkingIndicator)
 
-        # 停止思考动画
         thinking.stop()
-
-        if output.strip():
-            content.write(Text(output.rstrip(), style="#c0caf5"))
-        else:
-            content.write_system("(Agent 已完成，无文本输出)")
-
-        content.write(Text(""))
+        content.finish_streaming()
         content.scroll_end(animate=False)
-        header.set_mode("就绪")
-        status.set_agent_status("就绪")
+        header.set_mode("")
         status.show_f9_hint()
 
     def _on_ai_error(self, error_msg: str) -> None:
@@ -796,8 +811,7 @@ class CortexApp(App):
 
         content.write_error(f"Agent 错误: {error_msg}")
         content.scroll_end(animate=False)
-        header.set_mode("就绪")
-        status.set_agent_status("错误")
+        header.set_mode("")
 
     def _cmd_web(self, arg: str) -> None:
         """网络搜索命令"""
@@ -977,6 +991,16 @@ class CortexApp(App):
         content = self.query_one(ContentArea)
         content.clear()
 
+    def action_show_tool_details(self) -> None:
+        """F2 展开工具调用详情"""
+        content = self.query_one(ContentArea)
+        details = content.tool_details
+        if not details:
+            content.write_system("无可展开的工具详情")
+            return
+        from cortex.tui.widgets.tool_detail_screen import ToolDetailScreen
+        self.push_screen(ToolDetailScreen(details))
+
     def action_toggle_mouse(self) -> None:
         """F9 切换鼠标捕获模式（关闭后可用鼠标选择/复制文字）"""
         status = self.query_one(StatusBar)
@@ -1005,8 +1029,7 @@ class CortexApp(App):
             # 恢复 UI 状态
             header = self.query_one(HeaderBar)
             status = self.query_one(StatusBar)
-            header.set_mode("就绪")
-            status.set_agent_status("就绪")
+            header.set_mode("")
 
             content = self.query_one(ContentArea)
             content.write_system("(已取消)")

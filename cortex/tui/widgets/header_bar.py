@@ -27,7 +27,7 @@ class HeaderBar(Horizontal):
         super().__init__()
         self.version = version
         self.workdir = workdir
-        self._mode = "就绪"
+        self._mode = ""
 
     def compose(self):
         yield Static(
