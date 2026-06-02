@@ -722,6 +722,7 @@ def _format_document_output(
     end_line: Optional[int],
     section: Optional[str],
     max_read_chars: int = MAX_READ_CHARS,
+    show_toc: bool = False,
 ) -> str:
     """格式化文档内容输出。"""
     def fmt_size(s):
@@ -736,9 +737,10 @@ def _format_document_output(
 
     header = f"文档: {path}\n格式: {ext} ({fmt_size(file_size)})\n"
 
-    toc_lines = _build_toc(nodes)
-    if toc_lines:
-        header += f"\n## 目录结构\n" + "\n".join(toc_lines) + "\n"
+    if show_toc:
+        toc_lines = _build_toc(nodes)
+        if toc_lines:
+            header += f"\n## 目录结构\n" + "\n".join(toc_lines) + "\n"
 
     if section:
         match = _find_section_text(nodes, section)
@@ -1234,4 +1236,5 @@ def _handle_read_document(
         end_line=end_line,
         section=section,
         max_read_chars=idx_manager.max_read_chars,
+        show_toc=idx_manager.read_doc_show_toc,
     )
