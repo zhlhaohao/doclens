@@ -766,17 +766,27 @@ class CortexApp(App):
             return
 
         app = self
-        pending_tool_inputs: dict[str, str] = {}
+        # key = tool_use_id：用 SDK 给的全局唯一 id 做主键，避免 LLM
+        # 在单次响应里并发调用同名工具（GLM-4.7 常见）时后写覆盖前写，
+        # 导致 F2 详情面板把入参/结果配错对。
+        pending_tool_inputs: dict[str, tuple[str, str]] = {}
 
         def on_text_delta(text):
             app.call_from_thread(content.write_streaming, text)
 
-        def on_tool_call(name, input_str):
-            pending_tool_inputs[name] = input_str
+        def on_tool_call(tool_use_id, name, input_str):
+            if tool_use_id:
+                pending_tool_inputs[tool_use_id] = (name, input_str)
 
-        def on_tool_result(name, text):
-            input_str = pending_tool_inputs.pop(name, "")
-            app.call_from_thread(content.write_tool_summary, name, input_str, text)
+        def on_tool_result(tool_use_id, name, text):
+            entry = None
+            if tool_use_id:
+                entry = pending_tool_inputs.pop(tool_use_id, None)
+            if entry is None:
+                # 兜底：旧版 SDK 没传 tool_use_id 时按 name 退化（避免显示空白）
+                entry = (name, "")
+            stored_name, input_str = entry
+            app.call_from_thread(content.write_tool_summary, stored_name, input_str, text)
 
         def on_done():
             app.call_from_thread(app._on_ai_streaming_done)

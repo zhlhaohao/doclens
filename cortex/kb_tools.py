@@ -924,6 +924,10 @@ def _handle_search_kb(
         scored_results.append((composite, (did, display_node, matched, prox, fts)))
     scored_results.sort(key=lambda x: -x[0])
 
+    # 评分阈值过滤：composite_score 来自 compute_composite_score，
+    # 3 词 query 命中 2 词的典型综合分约 0.5。把 CORTEX_MIN_SCORE_THRESHOLD
+    # 设成 0.5+ 会把大多数多关键词 query 的有效结果砍光——LLM 拿不到
+    # 足够候选做综合推理。推荐保持 0.0 或最多 0.2。
     if idx_manager.min_score_threshold > 0.0:
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
@@ -1076,6 +1080,10 @@ def _handle_search_kb_v2(
         scored_results.append((composite, (did, display_node, matched, prox, fts)))
     scored_results.sort(key=lambda x: -x[0])
 
+    # 评分阈值过滤：composite_score 来自 compute_composite_score，
+    # 3 词 query 命中 2 词的典型综合分约 0.5。把 CORTEX_MIN_SCORE_THRESHOLD
+    # 设成 0.5+ 会把大多数多关键词 query 的有效结果砍光——LLM 拿不到
+    # 足够候选做综合推理。推荐保持 0.0 或最多 0.2。
     if idx_manager.min_score_threshold > 0.0:
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
