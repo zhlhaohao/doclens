@@ -566,8 +566,8 @@ class TUIEventEmitter(EventEmitter):
         Args:
             callbacks: 回调函数字典，支持以下键:
                 - on_text_delta(text): AI 文本增量
-                - on_tool_call(name, input_str): 工具调用开始
-                - on_tool_result(name, text): 工具调用结果
+                - on_tool_call(tool_use_id, name, input_str): 工具调用完成
+                - on_tool_result(tool_use_id, name, text): 工具调用结果
                 - on_done(): 查询完成
                 - on_error(error): 错误
             interrupt_event: 中断事件
@@ -590,15 +590,17 @@ class TUIEventEmitter(EventEmitter):
             if event.data.get("is_complete", False):
                 cb = self._callbacks.get("on_tool_call")
                 if cb:
-                    name = event.data.get("name", "")
-                    input_data = event.data.get("input", {})
-                    input_str = json.dumps(input_data, ensure_ascii=False)
-                    cb(name, input_str)
+                    cb(
+                        event.data.get("tool_use_id", ""),
+                        event.data.get("name", ""),
+                        json.dumps(event.data.get("input", {}), ensure_ascii=False),
+                    )
 
         elif event.event_type == StreamEventType.TOOL_RESULT:
             cb = self._callbacks.get("on_tool_result")
             if cb:
                 cb(
+                    event.data.get("tool_use_id", ""),
                     event.data.get("name", ""),
                     event.data.get("output", ""),
                 )

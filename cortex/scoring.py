@@ -9,6 +9,10 @@ def tokenize_query(query):
     return [t for t in tokens if len(t) > 1]
 
 
+# 注意：proximity_score 只是一个粗粒度分数 (0/1/2)，
+# 经过 compute_composite_score 综合后，3 词 query 命中 2 词的
+# 综合分通常约 0.5 左右——所以 CORTEX_MIN_SCORE_THRESHOLD 设成 0.5
+# 会把多关键词 query 的大多数有效结果砍掉，慎用。
 def calc_proximity_score(text, keywords, max_span=20):
     """计算关键词紧密度分数
 
