@@ -70,7 +70,7 @@ integrations = ["langchain-core>=0.1", "llama-index-core>=0.10"]
 all = [
     "tree-sitter-languages>=1.10",
 ]
-cortex = ["trafilatura>=2.0.0"]
+cortex = ["trafilatura>=2.0.0", "gradio>=4.0"]
 playwright-browser = ["playwright>=1.40.0"]
 dev = [
     "pytest>=7.0",
