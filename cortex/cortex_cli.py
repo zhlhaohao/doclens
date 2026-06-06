@@ -878,6 +878,24 @@ def _build_parser():
     grep_parser.add_argument("pattern", help="Regex search pattern (ripgrep syntax)")
     grep_parser.set_defaults(func=_cli_grep)
 
+    # cortex gui [--port PORT] [--host HOST] [--share]
+    gui_parser = sub.add_parser(
+        "gui", help="Launch Gradio Web UI"
+    )
+    gui_parser.add_argument(
+        "--port", type=int, default=7860,
+        help="Server port (default: 7860)",
+    )
+    gui_parser.add_argument(
+        "--host", type=str, default="127.0.0.1",
+        help="Server host (default: 127.0.0.1)",
+    )
+    gui_parser.add_argument(
+        "--share", action="store_true",
+        help="Create a public Gradio share link",
+    )
+    gui_parser.set_defaults(func=_cli_gui)
+
     return parser
 
 
@@ -1104,6 +1122,15 @@ def _cli_webfetch(args, config, idx):
         include_metadata=not args.no_meta,
     )
     print(result)
+
+
+def _cli_gui(args, config, idx):
+    """Handle `cortex gui` — launch Gradio Web UI."""
+    from planify.core.logging_config import setup_logging
+    setup_logging()
+
+    from cortex.web.app import launch_app
+    launch_app(port=args.port, host=args.host, share=args.share)
 
 
 def main():
