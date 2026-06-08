@@ -8,13 +8,7 @@ def create_app() -> gr.Blocks:
     from cortex.web.search_tab import build_search_tab
     from cortex.web.chat_tab import build_chat_tab
 
-    with gr.Blocks(
-        title="Cortex",
-        theme=gr.themes.Soft(),
-        css="""
-        #search-results { min-height: 400px; }
-        """,
-    ) as app:
+    with gr.Blocks(title="Cortex") as app:
         gr.Markdown("# Cortex 文档检索")
         with gr.Tabs():
             with gr.Tab("🔍 搜索"):
@@ -28,4 +22,10 @@ def create_app() -> gr.Blocks:
 def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False):
     """启动 Gradio Server"""
     app = create_app()
-    app.launch(server_name=host, server_port=port, share=share)
+    app.launch(
+        server_name=host,
+        server_port=port,
+        share=share,
+        theme=gr.themes.Soft(),
+        css="#search-results { min-height: 400px; }",
+    )
