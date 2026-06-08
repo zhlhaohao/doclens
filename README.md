@@ -342,6 +342,44 @@ treesearch index --paths "docs/*.md" "src/**/*.py" --add-description
 treesearch search --index_dir ./indexes/ --query "How does auth work?"
 ```
 
+## Web UI (Cortex Gradio)
+
+Cortex provides a browser-based Web UI built with Gradio, offering a visual interface for document search and AI-powered Q&A.
+
+### Quick Start
+
+```bash
+# Install with cortex extras (includes gradio)
+pip install -e ".[cortex]"
+
+# Launch the Web UI (default: http://127.0.0.1:7860)
+python -m cortex gui
+
+# Custom port and host
+python -m cortex gui --port 8080 --host 0.0.0.0
+
+# Create a public share link (via Gradio tunnel)
+python -m cortex gui --share
+```
+
+### Features
+
+| Tab | Description |
+|-----|-------------|
+| **🔍 Search** | FTS5 keyword search with Markdown-rendered results, keyword highlighting, score bars, and file path + line number references |
+| **🤖 AI Chat** | Streaming AI agent conversation with tool-call annotations, powered by the Planify agent framework |
+
+### Search Tab
+
+Enter keywords and press Enter or click "搜索". Results are rendered as Markdown with:
+- Ranked file paths with line numbers
+- Context snippets with **bold** keyword highlighting
+- Visual score bars (e.g., `████████░░ 80%`)
+
+### AI Chat Tab
+
+Chat with the Cortex AI agent in real time. Responses stream token-by-token with visible tool-call annotations. Supports clearing conversation history.
+
 ## How It Works
 
 ```

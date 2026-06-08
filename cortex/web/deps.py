@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 _idx_manager: Optional[IndexManager] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 
 def get_config() -> CortexConfig:

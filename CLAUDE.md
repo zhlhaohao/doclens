@@ -10,6 +10,12 @@ Cortex — 结构感知文档检索工具
 # 创建虚拟环境
 python -m venv .venv
 
+# 激活虚拟环境
+& .venv\Scripts\Activate.ps1 
+
+# 在 windows arm64 环境下，需要给cryptography下载预编译包
+pip install cryptography --only-binary=:all:
+
 # 以可编辑模式安装 cortex
 pip install -e ".[cortex]"
 ```

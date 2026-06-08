@@ -67,8 +67,8 @@ def _run_agent_in_thread(
 def chat_respond(message: str, chat_history: list):
     """Gradio Chatbot 的流式响应函数（generator）
 
-    Gradio 的 gr.Chatbot 流式模式要求此函数 yield 更新后的 chat_history。
-    chat_history 格式: list of [user_msg, assistant_msg] pairs（或 None）
+    Gradio 6.x chat_history 格式: list of ChatMessage dicts
+    {"role": "user"|"assistant", "content": "..."}
     """
     if not message or not message.strip():
         yield chat_history
@@ -77,16 +77,27 @@ def chat_respond(message: str, chat_history: list):
     from cortex.web.deps import get_agent
     from cortex.web.emitter import GradioEventEmitter
 
-    agent = get_agent()
-    session = agent.session
+    # 先添加用户消息和等待提示
+    chat_history.append({"role": "user", "content": message})
+    chat_history.append({"role": "assistant", "content": "正在初始化 Agent..."})
+    yield chat_history
 
-    # 从 chat_history 重建 history
+    try:
+        agent = get_agent()
+        session = agent.session
+    except Exception as e:
+        logger.exception("Agent init failed: %s", e)
+        chat_history[-1]["content"] = f"**Agent 初始化失败:** {e}"
+        yield chat_history
+        return
+
+    # 从 chat_history 重建 agent history
     agent_history = []
-    for pair in chat_history:
-        if pair[0] is not None:
-            agent_history.append({"role": "user", "content": pair[0]})
-        if pair[1] is not None:
-            agent_history.append({"role": "assistant", "content": pair[1]})
+    for msg in chat_history[:-2]:  # 排除刚添加的用户消息和助手回复
+        role = msg.get("role") if isinstance(msg, dict) else None
+        content = msg.get("content") if isinstance(msg, dict) else None
+        if role and content:
+            agent_history.append({"role": role, "content": content})
 
     emitter = GradioEventEmitter()
     done_event = threading.Event()
@@ -99,8 +110,8 @@ def chat_respond(message: str, chat_history: list):
     )
     t.start()
 
-    # 先添加用户消息和空的 assistant 回复
-    chat_history.append([message, ""])
+    chat_history[-1]["content"] = "正在思考..."
+    yield chat_history
 
     # 逐步 yield 更新
     last_text = ""
@@ -109,30 +120,29 @@ def chat_respond(message: str, chat_history: list):
         current_text = emitter.get_display_text()
         if current_text != last_text:
             last_text = current_text
-            chat_history[-1][1] = current_text
+            chat_history[-1]["content"] = current_text
             yield chat_history
 
     # 最终更新
     if emitter.error:
-        chat_history[-1][1] = (chat_history[-1][1] or "") + f"\n\n**错误:** {emitter.error}"
+        chat_history[-1]["content"] = (chat_history[-1]["content"] or "") + f"\n\n**错误:** {emitter.error}"
     else:
         final_text = emitter.get_display_text()
         if final_text:
-            chat_history[-1][1] = final_text
+            chat_history[-1]["content"] = final_text
 
     yield chat_history
 
 
 def clear_chat():
     """清空对话历史"""
-    return [], ""
+    return [], gr.Textbox(value="")
 
 
 def build_chat_tab():
     """构建 AI 对话 Tab UI"""
     chatbot = gr.Chatbot(
         height=500,
-        show_copy_button=True,
     )
 
     with gr.Row():
