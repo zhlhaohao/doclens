@@ -251,7 +251,7 @@ def setup_logging(
     )
 
     # Suppress noisy third-party loggers to WARNING (they spam DEBUG millions of lines)
-    for _name in ("pdfminer", "pdfplumber", "pymupdf", "fitz", "markitdown",
+    for _name in ("pdfminer", "pdfplumber", "markitdown",
                   "urllib3", "httpx", "httpcore", "asyncio", "filelock"):
         logging.getLogger(_name).setLevel(logging.WARNING)
 
