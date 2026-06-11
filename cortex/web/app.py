@@ -30,6 +30,7 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False):
     app.launch(
         server_name=host,
         server_port=port,
+        inbrowser=True,
         share=share,
         theme=get_bento_theme(),
         css=CSS,
