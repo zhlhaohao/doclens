@@ -2,6 +2,8 @@
 
 import gradio as gr
 
+from cortex.web.theme import get_bento_theme, CSS
+
 
 def create_app() -> gr.Blocks:
     """创建 Cortex Gradio 应用"""
@@ -9,11 +11,14 @@ def create_app() -> gr.Blocks:
     from cortex.web.chat_tab import build_chat_tab
 
     with gr.Blocks(title="Cortex") as app:
-        gr.Markdown("# Cortex 文档检索")
+        gr.HTML(
+            '<div class="cortex-header">Cortex</div>'
+            '<div class="cortex-header-sub">结构感知文档检索</div>'
+        )
         with gr.Tabs():
-            with gr.Tab("🔍 搜索"):
+            with gr.Tab("搜索"):
                 build_search_tab()
-            with gr.Tab("🤖 AI 对话"):
+            with gr.Tab("AI 对话"):
                 build_chat_tab()
 
     return app
@@ -26,6 +31,6 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False):
         server_name=host,
         server_port=port,
         share=share,
-        theme=gr.themes.Soft(),
-        css="#search-results { min-height: 400px; }",
+        theme=get_bento_theme(),
+        css=CSS,
     )

@@ -143,6 +143,7 @@ def build_chat_tab():
     """构建 AI 对话 Tab UI"""
     chatbot = gr.Chatbot(
         height=500,
+        elem_classes=["chatbot-container"],
     )
 
     with gr.Row():
