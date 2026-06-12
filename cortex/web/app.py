@@ -11,10 +11,6 @@ def create_app() -> gr.Blocks:
     from cortex.web.chat_tab import build_chat_tab
 
     with gr.Blocks(title="Cortex") as app:
-        gr.HTML(
-            '<div class="cortex-header">Cortex</div>'
-            '<div class="cortex-header-sub">结构感知文档检索</div>'
-        )
         with gr.Tabs():
             with gr.Tab("搜索"):
                 build_search_tab()
