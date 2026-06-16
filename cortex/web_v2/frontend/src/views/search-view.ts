@@ -168,9 +168,6 @@ export class SearchView extends LitElement {
 
   render() {
     const s = this.viewState;
-    // loading is a future hook for loading indicators
-    const _loading = this.loading;
-    void _loading;
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
@@ -185,6 +182,7 @@ export class SearchView extends LitElement {
               placeholder="输入搜索关键词..."
               button-label="搜索"
               button-icon="🔍"
+              ?disabled=${this.loading}
               .value=${this.localQuery}
               @input-change=${(e: any) => (this.localQuery = e.detail.value)}
               @submit=${this._submit}>
@@ -220,6 +218,7 @@ export class SearchView extends LitElement {
           <input-box
             placeholder="重新搜索..."
             button-label="🔍"
+            ?disabled=${this.loading}
             .value=${this.localQuery}
             @input-change=${(e: any) => (this.localQuery = e.detail.value)}
             @submit=${this._submit}>
