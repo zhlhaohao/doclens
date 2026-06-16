@@ -1,1 +1,48 @@
-/* placeholder, filled in Task 14 */
+/* Cortex 设计 tokens（与 specs/search_page_spec.md Bento Grid 风格对齐） */
+:root {
+  /* 主色 */
+  --cortex-primary: #0D9488;        /* teal-600 */
+  --cortex-primary-hover: #0F766E;
+  --cortex-primary-soft: #F0FDFA;
+
+  /* 中性色 */
+  --cortex-bg: #F5F5F7;
+  --cortex-surface: #FFFFFF;
+  --cortex-surface-muted: #FAFAFA;
+  --cortex-border: #E4E4E7;
+  --cortex-border-muted: #F1F5F9;
+
+  /* 文字 */
+  --cortex-text: #0F172A;
+  --cortex-text-muted: #64748B;
+  --cortex-text-subtle: #94A3B8;
+
+  /* 状态 */
+  --cortex-warning: #F59E0B;
+  --cortex-danger: #DC2626;
+  --cortex-success: #10B981;
+
+  /* 间距（4px 基线） */
+  --cortex-space-1: 4px;
+  --cortex-space-2: 8px;
+  --cortex-space-3: 12px;
+  --cortex-space-4: 16px;
+  --cortex-space-6: 24px;
+  --cortex-space-8: 32px;
+
+  /* 圆角 */
+  --cortex-radius-sm: 4px;
+  --cortex-radius-md: 8px;
+  --cortex-radius-lg: 12px;
+
+  /* 字体 */
+  --cortex-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --cortex-font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+
+  /* Activity Bar 宽度 */
+  --cortex-activity-bar-width: 48px;
+  /* Tab Bar 高度（移动） */
+  --cortex-tab-bar-height: 56px;
+  /* 触控目标 */
+  --cortex-touch-target: 44px;
+}
