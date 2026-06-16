@@ -13,15 +13,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "lit": "^3.2.0",
-    "@shoelace-style/shoelace": "^2.15.0"
+    "@shoelace-style/shoelace": "^2.15.0",
+    "lit": "^3.2.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "vite": "^5.4.0",
-    "vitest": "^2.1.0",
     "@open-wc/testing": "^4.0.0",
     "@playwright/test": "^1.47.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "happy-dom": "^20.10.4",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
   }
 }
