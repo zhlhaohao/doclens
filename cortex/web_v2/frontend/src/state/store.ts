@@ -3,7 +3,7 @@
  * 不引入 Redux/Zustand。组件通过 `store.subscribe(selector, cb)`
  * 订阅特定切片，状态变化时自动回调。
  */
-import type { AppState } from "./types";
+import type { AppState, Session } from "./types";
 
 const INITIAL_STATE: AppState = {
   view: "search",
@@ -21,6 +21,7 @@ const INITIAL_STATE: AppState = {
     streaming: false,
   },
   detailStack: [],
+  pendingSession: null,
   status: null,
   error: null,
 };
@@ -90,5 +91,9 @@ export const actions = {
 
   setError(error: string | null) {
     store.setState({ error });
+  },
+
+  setPendingSession(session: Session | null) {
+    store.setState({ pendingSession: session });
   },
 };

@@ -39,13 +39,9 @@ export class HistoryView extends LitElement {
 
   private _onSelect(e: CustomEvent<{ session: Session }>) {
     const s = e.detail.session;
-    if (s.type === "search") {
-      actions.setView("search");
-    } else {
-      actions.setView("chat");
-    }
-    // 让对应的 view 处理加载（通过全局事件或 store 信号）
-    window.dispatchEvent(new CustomEvent("cortex:open-session", { detail: { session: s } }));
+    // 通过 store 信号传递会话，目标 view 在 connectedCallback 中消费
+    actions.setPendingSession(s);
+    actions.setView(s.type === "search" ? "search" : "chat");
   }
 
   render() {
