@@ -3,6 +3,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   root: ".",
   base: "/",
+  test: {
+    environment: "jsdom",
+  },
   build: {
     // 输出到 web_v2/static/，供 FastAPI StaticFiles 服务
     outDir: "../static",
