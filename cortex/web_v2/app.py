@@ -26,7 +26,8 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix="/api")
     from cortex.web_v2.api import preview
     app.include_router(preview.router, prefix="/api")
-    # app.include_router(sessions.router, prefix="/api") # Task 8
+    from cortex.web_v2.api import sessions
+    app.include_router(sessions.router, prefix="/api")
     # app.include_router(status.router, prefix="/api")   # Task 9
     # app.include_router(chat.router, prefix="/api")     # Task 10
 
