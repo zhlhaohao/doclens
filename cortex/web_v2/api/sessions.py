@@ -58,15 +58,18 @@ async def list_sessions(
 ):
     store = _get_store()
     if type is None:
-        items = list(chain(store.list(SessionType.SEARCH, limit, offset),
-                           store.list(SessionType.CHAT, limit, offset)))
+        # Fetch each type with offset=0; paginate after merge to avoid double-offset.
+        items = list(chain(
+            store.list(SessionType.SEARCH, limit=limit + offset),
+            store.list(SessionType.CHAT, limit=limit + offset),
+        ))
         items.sort(key=lambda s: s.updated_at, reverse=True)
         items = items[offset:offset + limit]
     else:
         items = store.list(type, limit, offset)
     return SessionListResponse(
         sessions=[s.model_dump(mode="json") for s in items],
-        total=len(items),
+        returned=len(items),
     )
 
 
