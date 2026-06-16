@@ -28,7 +28,8 @@ def create_app() -> FastAPI:
     app.include_router(preview.router, prefix="/api")
     from cortex.web_v2.api import sessions
     app.include_router(sessions.router, prefix="/api")
-    # app.include_router(status.router, prefix="/api")   # Task 9
+    from cortex.web_v2.api import status
+    app.include_router(status.router, prefix="/api")
     # app.include_router(chat.router, prefix="/api")     # Task 10
 
     @app.get("/api/health")
