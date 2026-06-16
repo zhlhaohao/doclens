@@ -1,4 +1,7 @@
-"""Gradio 专用的 EventEmitter — 收集流式文本供 Chatbot generator 消费"""
+"""Chat SSE 专用 EventEmitter — 收集流式文本供 /api/chat SSE 端点消费。
+
+从旧 cortex/web/emitter.py 内联而来，移除对 Gradio 的依赖。
+"""
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -10,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 class GradioEventEmitter:
     """
-    收集流式事件到缓冲区，供 Gradio Chatbot generator 读取。
+    收集流式事件到缓冲区，供 chat SSE generator 读取。
 
     不直接打印，而是将文本增量和工具信息追加到内部缓冲区。
-    chat_tab 的生成器函数定时读取缓冲区内容来更新 UI。
+    chat.py 的生成器函数定时读取缓冲区内容来产出 SSE token。
     """
 
     def __init__(self):
@@ -124,8 +127,8 @@ class GradioEventEmitter:
         options: Optional[List[Dict[str, str]]] = None,
         default: Optional[str] = None,
     ) -> None:
-        # Gradio 模式暂不支持 ask_user，记录日志
-        logger.warning("ask_user not supported in Gradio mode: %s", question)
+        # SSE 模式暂不支持 ask_user，记录日志
+        logger.warning("ask_user not supported in SSE mode: %s", question)
 
     async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
         await self.emit(StreamEvent(event_type=StreamEventType.DONE, data={"session_id": session_id}))
