@@ -1,0 +1,27 @@
+{
+  "name": "cortex-web-v2-frontend",
+  "private": true,
+  "version": "1.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lit": "^3.2.0",
+    "@shoelace-style/shoelace": "^2.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0",
+    "@open-wc/testing": "^4.0.0",
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^22.0.0"
+  }
+}
