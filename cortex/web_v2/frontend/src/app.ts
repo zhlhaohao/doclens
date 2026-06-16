@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
 
 import { store, actions } from "./state/store";
-import type { ViewId, Session } from "./state/types";
+import type { ViewId } from "./state/types";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -43,33 +43,18 @@ export class CortexApp extends LitElement {
     }
   `;
 
+  private _unsubscribe?: () => void;
+
   connectedCallback() {
     super.connectedCallback();
-    // 监听跨 view 跳转（来自 history-view）
-    window.addEventListener("cortex:open-session", this._onOpenSession as EventListener);
+    // 订阅 store —— view 切换时触发重新渲染
+    this._unsubscribe = store.subscribe(() => this.requestUpdate());
   }
 
   disconnectedCallback() {
-    window.removeEventListener("cortex:open-session", this._onOpenSession as EventListener);
+    this._unsubscribe?.();
     super.disconnectedCallback();
   }
-
-  private _onOpenSession = (e: Event) => {
-    // 由对应 view 自行处理加载（search-view / chat-view 监听此事件）
-    const detail = (e as CustomEvent<{ session: Session }>).detail;
-    if (detail.session.type === "search") {
-      actions.setView("search");
-    } else {
-      actions.setView("chat");
-    }
-    // 触发对应 view 加载（在 view 内部 connectedCallback 已加载；
-    // 这里通过 store 切到 focus 态以便 view 自动处理）
-    const ev = new CustomEvent("cortex:load-session", {
-      detail: { session: detail.session },
-      bubbles: true, composed: true,
-    });
-    setTimeout(() => this.dispatchEvent(ev), 0);
-  };
 
   private _navigate(e: CustomEvent<{ view: ViewId }>) {
     actions.setView(e.detail.view);

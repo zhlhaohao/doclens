@@ -57,6 +57,8 @@ export interface AppState {
   chat: ChatViewState;
   /** 详情推入栈（移动端整页推入） */
   detailStack: SearchResult[];
+  /** 跨视图会话加载请求（history-view → search-view / chat-view） */
+  pendingSession: Session | null;
   status: SystemStatus | null;
   error: string | null;
 }

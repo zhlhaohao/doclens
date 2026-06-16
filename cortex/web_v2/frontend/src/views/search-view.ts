@@ -70,6 +70,12 @@ export class SearchView extends LitElement {
     super.connectedCallback();
     this._loadHistory();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    // 消费跨视图会话加载请求（来自 history-view）
+    const pending = store.getState().pendingSession;
+    if (pending && pending.type === "search") {
+      actions.setPendingSession(null);
+      this._loadSession(pending);
+    }
   }
 
   disconnectedCallback() {
@@ -151,8 +157,7 @@ export class SearchView extends LitElement {
     actions.popDetail();
   }
 
-  private async _onHistorySelect(e: CustomEvent<{ session: Session }>) {
-    const s = e.detail.session;
+  private async _loadSession(s: Session) {
     actions.setSearchState({
       state: "focus",
       currentSession: s,
@@ -171,6 +176,10 @@ export class SearchView extends LitElement {
     } catch (e) {
       console.warn("load session failed", e);
     }
+  }
+
+  private _onHistorySelect(e: CustomEvent<{ session: Session }>) {
+    this._loadSession(e.detail.session);
   }
 
   render() {
