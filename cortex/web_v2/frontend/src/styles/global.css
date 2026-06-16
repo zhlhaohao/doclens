@@ -1,1 +1,40 @@
-/* placeholder, filled in Task 14 */
+/* Cortex 全局样式（沉浸式 PWA） */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  height: 100dvh;             /* 移动动态视口高度 */
+  overflow: hidden;
+  overscroll-behavior: none;   /* 禁下拉刷新 */
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--cortex-font);
+  color: var(--cortex-text);
+  background: var(--cortex-bg);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* PWA standalone 模式优化 */
+@media (display-mode: standalone) {
+  body {
+    user-select: none;
+    /* iOS 安全区适配 */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 全局滚动条样式（webkit） */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: var(--cortex-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--cortex-text-subtle); }
