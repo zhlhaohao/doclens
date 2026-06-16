@@ -36,3 +36,8 @@ async def test_status_returns_index_info(env_cortex_config, reset_deps, temp_wor
     body = res.json()
     assert body["indexed_docs"] >= 0
     assert "index_path" in body
+    # file_types should contain extensions for doc1.md and doc2.py from temp_workdir.
+    # .md is always indexed (no extra deps); .py requires tree-sitter languages.
+    assert ".md" in body["file_types"]
+    # total_size_bytes should be > 0 because temp_workdir's doc1.md has content.
+    assert body["total_size_bytes"] > 0
