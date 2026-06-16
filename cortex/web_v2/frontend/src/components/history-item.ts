@@ -17,8 +17,8 @@ export class HistoryItem extends LitElement {
       transition: border-color 0.15s;
     }
     :host(:hover) { border-color: var(--cortex-primary); }
-    .name { font-size: 14px; color: var(--cortex-text); font-weight: 500; }
-    .meta { font-size: 11px; color: var(--cortex-text-subtle); }
+    .name { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
+    .meta { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
   `;
 
   @property({ attribute: false }) session: Session | null = null;

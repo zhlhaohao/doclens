@@ -19,9 +19,9 @@ export class ResultCard extends LitElement {
       background: var(--cortex-primary-soft);
     }
     :host(:hover) { border-color: var(--cortex-primary); }
-    .path { font-size: 11px; color: var(--cortex-text-muted); font-family: var(--cortex-font-mono); }
+    .path { font-size: var(--cortex-fs-xs); color: var(--cortex-text-muted); font-family: var(--cortex-font-mono); }
     .snippet {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       margin-top: 4px;
       line-height: 1.4;

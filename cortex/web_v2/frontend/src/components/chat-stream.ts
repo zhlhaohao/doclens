@@ -15,7 +15,7 @@ export class ChatStream extends LitElement {
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       margin-top: var(--cortex-space-8);
     }

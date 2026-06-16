@@ -55,6 +55,17 @@ export class SearchView extends LitElement {
     }
     @media (min-width: 1024px) {
       .detail-overlay { display: none; }
+      /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感 */
+      .initial-stack {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .focus-input-bar {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
     }
   `;
 

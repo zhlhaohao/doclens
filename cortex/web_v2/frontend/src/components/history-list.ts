@@ -15,7 +15,7 @@ export class HistoryList extends LitElement {
       border-bottom: 1px solid var(--cortex-border-muted);
     }
     .title {
-      font-size: 11px;
+      font-size: var(--cortex-fs-xs);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--cortex-text-subtle);
@@ -23,7 +23,7 @@ export class HistoryList extends LitElement {
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-6);
     }

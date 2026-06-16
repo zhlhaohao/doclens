@@ -14,7 +14,7 @@ export class ChatMessageEl extends LitElement {
     .bubble {
       padding: 10px 14px;
       border-radius: 12px;
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
@@ -32,7 +32,7 @@ export class ChatMessageEl extends LitElement {
     }
     .error {
       color: var(--cortex-danger);
-      font-size: 12px;
+      font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
   `;
