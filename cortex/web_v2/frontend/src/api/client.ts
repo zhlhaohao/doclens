@@ -50,13 +50,17 @@ export async function* streamSSE(
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+    // SSE 规范允许 \r\n\r\n、\r\r 或 \n\n 作为事件分隔符
+    while (true) {
+      const m = buffer.match(/\r\n\r\n|\r\r|\n\n/);
+      if (!m || m.index === undefined) break;
+      const idx = m.index;
+      const sepLen = m[0].length;
       const rawEvent = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
+      buffer = buffer.slice(idx + sepLen);
       let event = "message";
       let data = "";
-      for (const line of rawEvent.split("\n")) {
+      for (const line of rawEvent.split(/\r\n|\r|\n/)) {
         if (line.startsWith("event:")) event = line.slice(6).trim();
         else if (line.startsWith("data:")) data += line.slice(5).trim();
       }
