@@ -50,6 +50,13 @@ def create_app() -> FastAPI:
             return FileResponse(m, media_type="application/manifest+json")
         return JSONResponse(status_code=404, content={"code": "MANIFEST_MISSING"})
 
+    @app.get("/sw.js")
+    async def _sw():
+        p = STATIC_DIR / "sw.js"
+        if p.exists():
+            return FileResponse(p, media_type="application/javascript")
+        return JSONResponse(status_code=404, content={"code": "SW_MISSING"})
+
     @app.get("/{full_path:path}")
     async def spa(full_path: str):
         """SPA fallback：所有非 /api 路径都返回 index.html（若存在）。"""
