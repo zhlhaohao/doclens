@@ -22,7 +22,8 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     # API 路由（后续任务逐步挂载）
-    # app.include_router(search.router, prefix="/api")  # Task 6
+    from cortex.web_v2.api import search
+    app.include_router(search.router, prefix="/api")
     # app.include_router(preview.router, prefix="/api")  # Task 7
     # app.include_router(sessions.router, prefix="/api") # Task 8
     # app.include_router(status.router, prefix="/api")   # Task 9
