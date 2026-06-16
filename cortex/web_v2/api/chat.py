@@ -39,7 +39,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
     # 复用旧 chat_tab 的线程模式
     def _run_in_thread():
         try:
-            from cortex.web.emitter import GradioEventEmitter  # 复用旧实现
+            from cortex.web_v2.api._chat_emitter import GradioEventEmitter
             from planify.streaming.runner import StreamingAgent
             from planify.streaming.types import StreamingConfig
             from planify.streaming.waiter import get_global_waiter
