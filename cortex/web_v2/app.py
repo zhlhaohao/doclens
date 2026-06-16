@@ -43,6 +43,13 @@ def create_app() -> FastAPI:
         from fastapi.staticfiles import StaticFiles
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+    @app.get("/manifest.webmanifest")
+    async def _manifest():
+        m = STATIC_DIR / "manifest.webmanifest"
+        if m.exists():
+            return FileResponse(m, media_type="application/manifest+json")
+        return JSONResponse(status_code=404, content={"code": "MANIFEST_MISSING"})
+
     @app.get("/{full_path:path}")
     async def spa(full_path: str):
         """SPA fallback：所有非 /api 路径都返回 index.html（若存在）。"""
