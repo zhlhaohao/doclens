@@ -880,7 +880,7 @@ def _build_parser():
 
     # cortex gui [--port PORT] [--host HOST] [--share]
     gui_parser = sub.add_parser(
-        "gui", help="Launch Gradio Web UI"
+        "gui", help="Launch Cortex Web UI (PWA)"
     )
     gui_parser.add_argument(
         "--port", type=int, default=7860,
@@ -892,7 +892,7 @@ def _build_parser():
     )
     gui_parser.add_argument(
         "--share", action="store_true",
-        help="Create a public Gradio share link",
+        help="(Deprecated in v2) Use --host 0.0.0.0 to expose on LAN",
     )
     gui_parser.set_defaults(func=_cli_gui)
 
@@ -1129,7 +1129,7 @@ def _cli_gui(args, config, idx):
     from planify.core.logging_config import setup_logging
     setup_logging()
 
-    from cortex.web.app import launch_app
+    from cortex.web_v2.app import launch_app
     launch_app(port=args.port, host=args.host, share=args.share)
 
 
