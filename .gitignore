@@ -259,3 +259,7 @@ cortex/web_v2/frontend/.vitest/
 cortex/web_v2/frontend/test-results/
 cortex/web_v2/frontend/playwright-report/
 cortex/web_v2/frontend/.vite/
+cortex/web_v2/frontend/.playwright-cli/
+
+# Test workspace
+test_work_dir/
