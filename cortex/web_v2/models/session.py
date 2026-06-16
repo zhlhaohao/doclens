@@ -38,7 +38,7 @@ class SessionListItem(BaseModel):
 
 class SessionListResponse(BaseModel):
     sessions: list[SessionListItem]
-    total: int
+    returned: int
 
 
 class SessionDetailResponse(BaseModel):

@@ -44,6 +44,7 @@ async def test_list_sessions_filter_by_type(patched_store):
     assert res.status_code == 200
     body = res.json()
     assert len(body["sessions"]) == 1
+    assert body["returned"] == 1
     assert body["sessions"][0]["title"] == "c1"
 
 
