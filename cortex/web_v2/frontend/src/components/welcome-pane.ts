@@ -13,16 +13,22 @@ export class WelcomePane extends LitElement {
       flex-shrink: 0;
     }
     .title {
-      font-size: 28px;
+      font-size: var(--cortex-fs-xl);
       font-weight: 700;
       color: var(--cortex-primary);
       letter-spacing: -0.5px;
       margin: 0;
     }
     .subtitle {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text-muted);
       margin-top: var(--cortex-space-1);
+    }
+    @media (min-width: 1024px) {
+      :host {
+        padding: var(--cortex-space-6) var(--cortex-space-4) var(--cortex-space-4);
+        border-radius: var(--cortex-radius-lg);
+      }
     }
   `;
 

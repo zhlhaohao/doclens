@@ -2293,16 +2293,22 @@
       flex-shrink: 0;
     }
     .title {
-      font-size: 28px;
+      font-size: var(--cortex-fs-xl);
       font-weight: 700;
       color: var(--cortex-primary);
       letter-spacing: -0.5px;
       margin: 0;
     }
     .subtitle {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text-muted);
       margin-top: var(--cortex-space-1);
+    }
+    @media (min-width: 1024px) {
+      :host {
+        padding: var(--cortex-space-6) var(--cortex-space-4) var(--cortex-space-4);
+        border-radius: var(--cortex-radius-lg);
+      }
     }
   `;_e([l()],St.prototype,"heading",2);_e([l()],St.prototype,"subheading",2);St=_e([k("welcome-pane")],St);var os=Object.defineProperty,ss=Object.getOwnPropertyDescriptor,Wt=(e,t,r,o)=>{for(var s=o>1?void 0:o?ss(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&os(t,r,s),s};let dt=class extends w{constructor(){super(...arguments),this.backLabel="返回",this.title="",this.meta=""}_back(){this.dispatchEvent(new CustomEvent("back",{bubbles:!0,composed:!0}))}render(){return u`
       <button class="back" @click=${this._back}>← ${this.backLabel}</button>
@@ -2323,7 +2329,7 @@
       border: none;
       color: var(--cortex-primary);
       font-weight: 600;
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       cursor: pointer;
       padding: 4px 8px;
       border-radius: var(--cortex-radius-sm);
@@ -2332,13 +2338,13 @@
     .title {
       font-weight: 600;
       color: var(--cortex-text);
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .meta { color: var(--cortex-text-subtle); font-size: 12px; }
+    .meta { color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm); }
   `;Wt([l()],dt.prototype,"backLabel",2);Wt([l()],dt.prototype,"title",2);Wt([l()],dt.prototype,"meta",2);dt=Wt([k("focus-header")],dt);var is=Object.defineProperty,as=Object.getOwnPropertyDescriptor,we=(e,t,r,o)=>{for(var s=o>1?void 0:o?as(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&is(t,r,s),s};let kt=class extends w{constructor(){super(...arguments),this.title="历史会话",this.sessions=[]}_onSelect(e){this.dispatchEvent(new CustomEvent("select",{detail:e.detail,bubbles:!0,composed:!0}))}render(){return u`
       <div class="title">${this.title}</div>
       ${this.sessions.length===0?u`<div class="empty">暂无历史会话</div>`:this.sessions.map(e=>u`<history-item .session=${e} @select=${this._onSelect}></history-item>`)}
@@ -2353,7 +2359,7 @@
       border-bottom: 1px solid var(--cortex-border-muted);
     }
     .title {
-      font-size: 11px;
+      font-size: var(--cortex-fs-xs);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--cortex-text-subtle);
@@ -2361,7 +2367,7 @@
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-6);
     }
@@ -2381,8 +2387,8 @@
       transition: border-color 0.15s;
     }
     :host(:hover) { border-color: var(--cortex-primary); }
-    .name { font-size: 14px; color: var(--cortex-text); font-weight: 500; }
-    .meta { font-size: 11px; color: var(--cortex-text-subtle); }
+    .name { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
+    .meta { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
   `;yr([l({attribute:!1})],Ut.prototype,"session",2);Ut=yr([k("history-item")],Ut);var cs=Object.defineProperty,ds=Object.getOwnPropertyDescriptor,W=(e,t,r,o)=>{for(var s=o>1?void 0:o?ds(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&cs(t,r,s),s};let M=class extends w{constructor(){super(...arguments),this.value="",this.placeholder="",this.buttonLabel="搜索",this.buttonIcon="",this.multiline=!1,this.disabled=!1}focus(){var e;(e=this.inputEl)==null||e.focus()}get trimmed(){return this.value.trim()}_onInput(e){const t=e.target;this.value=t.value,this.dispatchEvent(new CustomEvent("input-change",{detail:{value:this.value}}));const r=this.renderRoot.querySelector("button");r&&(r.disabled=!this.trimmed||this.disabled)}_onKeydown(e){e.key==="Enter"&&(e.ctrlKey||e.metaKey)&&(e.preventDefault(),this._submit()),e.key==="Enter"&&!this.multiline&&!e.shiftKey&&(e.preventDefault(),this._submit())}_submit(){!this.trimmed||this.disabled||this.dispatchEvent(new CustomEvent("submit",{detail:{value:this.trimmed}}))}render(){const e=this.multiline?u`<textarea rows="1" .value=${this.value} placeholder=${this.placeholder}
           @input=${this._onInput} @keydown=${this._onKeydown}></textarea>`:u`<input type="text" .value=${this.value} placeholder=${this.placeholder}
           @input=${this._onInput} @keydown=${this._onKeydown} />`;return u`
@@ -2418,7 +2424,7 @@
       background: transparent;
       outline: none;
       font-family: var(--cortex-font);
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
       resize: none;
       min-height: calc(var(--min-h) - 12px);
@@ -2437,7 +2443,7 @@
       min-width: var(--cortex-touch-target);
       height: calc(var(--min-h) - 8px);
       padding: 0 12px;
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -2467,9 +2473,9 @@
       background: var(--cortex-primary-soft);
     }
     :host(:hover) { border-color: var(--cortex-primary); }
-    .path { font-size: 11px; color: var(--cortex-text-muted); font-family: var(--cortex-font-mono); }
+    .path { font-size: var(--cortex-fs-xs); color: var(--cortex-text-muted); font-family: var(--cortex-font-mono); }
     .snippet {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       margin-top: 4px;
       line-height: 1.4;
@@ -2514,7 +2520,7 @@
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-8);
     }
@@ -2541,7 +2547,7 @@
       overflow: hidden;
     }
     .header {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       padding: 10px 14px;
       border-bottom: 1px solid var(--cortex-border);
@@ -2553,7 +2559,7 @@
       overflow: auto;
       padding: 12px 14px;
       font-family: var(--cortex-font-mono);
-      font-size: 12px;
+      font-size: var(--cortex-fs-sm);
       line-height: 1.7;
       color: var(--cortex-text);
       white-space: pre;
@@ -2565,7 +2571,7 @@
       align-items: center;
       justify-content: center;
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
     }
   `;ht([l()],q.prototype,"path",2);ht([l()],q.prototype,"language",2);ht([l()],q.prototype,"content",2);ht([l({attribute:!1})],q.prototype,"highlights",2);ht([l({type:Boolean})],q.prototype,"loading",2);q=ht([k("preview-pane")],q);var ms=Object.defineProperty,gs=Object.getOwnPropertyDescriptor,Kt=(e,t,r,o)=>{for(var s=o>1?void 0:o?gs(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&ms(t,r,s),s};let ut=class extends w{constructor(){super(...arguments),this.role="user",this.message=null,this.error=null}render(){return this.message?u`
       <div class="bubble">${this.message.content}${this.message.content===""?u`<span style="opacity:0.6">思考中...</span>`:null}</div>
@@ -2580,7 +2586,7 @@
     .bubble {
       padding: 10px 14px;
       border-radius: 12px;
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
@@ -2598,7 +2604,7 @@
     }
     .error {
       color: var(--cortex-danger);
-      font-size: 12px;
+      font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
   `;Kt([l({reflect:!0})],ut.prototype,"role",2);Kt([l({attribute:!1})],ut.prototype,"message",2);Kt([l()],ut.prototype,"error",2);ut=Kt([k("chat-message")],ut);var ys=Object.defineProperty,_s=Object.getOwnPropertyDescriptor,_r=(e,t,r,o)=>{for(var s=o>1?void 0:o?_s(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&ys(t,r,s),s};let Vt=class extends w{constructor(){super(...arguments),this.messages=[]}updated(){this.scrollTop=this.scrollHeight}render(){return this.messages.length===0?u`<div class="empty">开始与 Cortex 对话</div>`:u`
@@ -2614,7 +2620,7 @@
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       margin-top: var(--cortex-space-8);
     }
@@ -2730,6 +2736,17 @@
     }
     @media (min-width: 1024px) {
       .detail-overlay { display: none; }
+      /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感 */
+      .initial-stack {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .focus-input-bar {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
     }
   `;st([$()],U.prototype,"localQuery",2);st([$()],U.prototype,"loading",2);st([$()],U.prototype,"previewContent",2);st([$()],U.prototype,"previewPath",2);st([$()],U.prototype,"previewLanguage",2);st([$()],U.prototype,"historySessions",2);U=st([k("search-view")],U);async function*ks(e){for await(const t of ws("/api/chat",e))if(t.event==="token")try{yield{type:"token",text:JSON.parse(t.data).text}}catch{}else if(t.event==="done")yield{type:"done"};else if(t.event==="error")try{yield{type:"error",detail:JSON.parse(t.data).detail}}catch{yield{type:"error",detail:"未知错误"}}}var Cs=Object.defineProperty,As=Object.getOwnPropertyDescriptor,ke=(e,t,r,o)=>{for(var s=o>1?void 0:o?As(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&Cs(t,r,s),s};let Et=class extends w{constructor(){super(...arguments),this.draft="",this.historySessions=[]}connectedCallback(){super.connectedCallback(),this._loadHistory(),this._unsubscribe=y.subscribe(()=>this.requestUpdate());const e=y.getState().pendingSession;e&&e.type==="chat"&&(_.setPendingSession(null),this._loadSession(e))}disconnectedCallback(){var e;super.disconnectedCallback(),(e=this._unsubscribe)==null||e.call(this)}async _loadHistory(){try{const{sessions:e}=await Se({type:"chat",limit:20});this.historySessions=e}catch(e){console.warn("load history failed",e)}}get viewState(){return y.getState().chat}async _submit(e){const t=e.detail.value;if(this.draft="",this.viewState.state==="initial"){const o=await xr({type:"chat",title:t.slice(0,60),preview:t.slice(0,100)});_.setChatState({state:"focus",currentSession:{id:o.id,type:"chat",title:t.slice(0,60),preview:t.slice(0,100),updated_at:new Date().toISOString(),message_count:0},messages:[{role:"user",content:t}],streaming:!0})}else _.setChatState({messages:[...this.viewState.messages,{role:"user",content:t}],streaming:!0});const r=y.getState().chat.currentSession.id;_.setChatState({messages:[...y.getState().chat.messages,{role:"assistant",content:""}]});try{let o="";for await(const s of ks({message:t,session_id:r}))if(s.type==="token"){o+=s.text;const i=[...y.getState().chat.messages];i[i.length-1]={role:"assistant",content:o},_.setChatState({messages:i})}else if(s.type==="error"){const i=[...y.getState().chat.messages];i[i.length-1]={role:"assistant",content:o+`
 
@@ -2801,6 +2818,24 @@
       padding: var(--cortex-space-3) var(--cortex-space-6);
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
+    }
+    @media (min-width: 1024px) {
+      /* 桌面端：居中列布局，避免全宽拉伸 */
+      .initial-stack {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      chat-stream {
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .input-bar {
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
     }
   `;ke([$()],Et.prototype,"draft",2);ke([$()],Et.prototype,"historySessions",2);Et=ke([k("chat-view")],Et);var Es=Object.defineProperty,Ts=Object.getOwnPropertyDescriptor,Ce=(e,t,r,o)=>{for(var s=o>1?void 0:o?Ts(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&Es(t,r,s),s};let Tt=class extends w{constructor(){super(...arguments),this.sessions=[],this.loading=!0}connectedCallback(){super.connectedCallback(),this._load()}async _load(){this.loading=!0;try{const{sessions:e}=await Se({limit:100});this.sessions=e}catch(e){console.warn("load history failed",e)}finally{this.loading=!1}}_onSelect(e){const t=e.detail.session;_.setPendingSession(t),_.setView(t.type==="search"?"search":"chat")}render(){return u`
       <welcome-pane heading="历史会话" subheading="全部搜索与对话历史"></welcome-pane>

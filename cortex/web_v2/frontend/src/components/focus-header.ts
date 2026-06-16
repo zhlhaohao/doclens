@@ -18,7 +18,7 @@ export class FocusHeader extends LitElement {
       border: none;
       color: var(--cortex-primary);
       font-weight: 600;
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       cursor: pointer;
       padding: 4px 8px;
       border-radius: var(--cortex-radius-sm);
@@ -27,13 +27,13 @@ export class FocusHeader extends LitElement {
     .title {
       font-weight: 600;
       color: var(--cortex-text);
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .meta { color: var(--cortex-text-subtle); font-size: 12px; }
+    .meta { color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm); }
   `;
 
   @property() backLabel = "返回";

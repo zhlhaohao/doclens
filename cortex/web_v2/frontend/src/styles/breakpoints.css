@@ -17,10 +17,17 @@
   }
 }
 
-/* 桌面（≥1024px）：Activity Bar + 双栏 */
+/* 桌面（≥1024px）：Activity Bar + 双栏 + 紧凑字号 */
 @media (min-width: 1024px) {
   :root {
     --cortex-show-activity-bar: flex;
     --cortex-show-tab-bar: none;
+    /* 桌面端字号整体缩小约 1px，避免"手机浏览器"观感 */
+    --cortex-fs-xs: 11px;
+    --cortex-fs-sm: 12px;
+    --cortex-fs-base: 13px;
+    --cortex-fs-md: 14px;
+    --cortex-fs-lg: 15px;
+    --cortex-fs-xl: 24px;
   }
 }

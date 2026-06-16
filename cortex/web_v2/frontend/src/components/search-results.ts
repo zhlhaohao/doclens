@@ -25,7 +25,7 @@ export class SearchResults extends LitElement {
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-8);
     }

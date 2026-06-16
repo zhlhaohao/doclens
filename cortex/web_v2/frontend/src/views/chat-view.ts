@@ -37,6 +37,24 @@ export class ChatView extends LitElement {
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
+    @media (min-width: 1024px) {
+      /* 桌面端：居中列布局，避免全宽拉伸 */
+      .initial-stack {
+        max-width: 720px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      chat-stream {
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .input-bar {
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
+    }
   `;
 
   @state() private draft = "";

@@ -28,7 +28,7 @@ export class InputBox extends LitElement {
       background: transparent;
       outline: none;
       font-family: var(--cortex-font);
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
       resize: none;
       min-height: calc(var(--min-h) - 12px);
@@ -47,7 +47,7 @@ export class InputBox extends LitElement {
       min-width: var(--cortex-touch-target);
       height: calc(var(--min-h) - 8px);
       padding: 0 12px;
-      font-size: 14px;
+      font-size: var(--cortex-fs-md);
       cursor: pointer;
       display: flex;
       align-items: center;

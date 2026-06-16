@@ -12,7 +12,7 @@ export class PreviewPane extends LitElement {
       overflow: hidden;
     }
     .header {
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       padding: 10px 14px;
       border-bottom: 1px solid var(--cortex-border);
@@ -24,7 +24,7 @@ export class PreviewPane extends LitElement {
       overflow: auto;
       padding: 12px 14px;
       font-family: var(--cortex-font-mono);
-      font-size: 12px;
+      font-size: var(--cortex-fs-sm);
       line-height: 1.7;
       color: var(--cortex-text);
       white-space: pre;
@@ -36,7 +36,7 @@ export class PreviewPane extends LitElement {
       align-items: center;
       justify-content: center;
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-base);
     }
   `;
 
