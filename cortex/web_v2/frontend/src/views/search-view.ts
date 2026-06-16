@@ -64,10 +64,17 @@ export class SearchView extends LitElement {
   @state() private previewPath = "";
   @state() private previewLanguage = "text";
   @state() private historySessions: Session[] = [];
+  private _unsubscribe?: () => void;
 
   connectedCallback() {
     super.connectedCallback();
     this._loadHistory();
+    this._unsubscribe = store.subscribe(() => this.requestUpdate());
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsubscribe?.();
   }
 
   private async _loadHistory() {
