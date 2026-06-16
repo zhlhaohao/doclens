@@ -38,17 +38,22 @@ pip install -e ".[cortex]"
 | 技术 | 用途 |
 |------|------|
 | Textual | TUI 框架（终端用户界面） |
+| FastAPI | Web API 框架（Web UI 后端） |
+| Lit + Shoelace | 前端 SPA（Web Components） |
+| Vite | 前端构建工具 |
 | Pydantic + pydantic-settings | 配置管理（.env 环境变量） |
 | TreeSearch | 索引引擎（SQLite FTS5 + BM25） |
 | Watchdog | 文件监控（后台检测变化） |
 | Planify | AI Agent 框架（Anthropic API 集成） |
 | Rich | 终端格式化（语法高亮、链接） |
 | Jieba | 中日韩分词器 |
+| uvicorn | ASGI 服务器 |
+| SSE (sse-starlette) | AI 对话流式响应 |
 
 ### 依赖服务
 | 服务 | 用途 |
 |------|------|
-| SQLite | 存储 FTS5 索引 |
+| SQLite | FTS5 索引 + 历史会话存储（.cortex/sessions.db） |
 | Anthropic API | AI 对话（可替换本地模型） |
 
 ## Cortex 架构
@@ -131,6 +136,39 @@ cortex/
 │       └── status_bar.py    # 底部状态栏
 ```
 
+### cortex/web_v2/ - Web UI（FastAPI + Lit PWA）
+```
+cortex/web_v2/
+├── app.py                    # FastAPI 应用入口（create_app / launch_app）
+├── deps.py                   # 依赖注入单例（IndexManager / CortexAgent / Config）
+├── api/                      # REST API 路由
+│   ├── search.py             # GET /api/search
+│   ├── preview.py            # GET /api/preview
+│   ├── sessions.py           # CRUD /api/sessions
+│   ├── status.py             # GET /api/status
+│   ├── chat.py               # POST /api/chat（SSE 流）
+│   ├── errors.py             # 全局错误处理器
+│   └── _chat_emitter.py      # Chat SSE 事件收集器
+├── models/                   # Pydantic 请求/响应模型
+├── sessions_store.py         # SQLite 会话持久化
+├── frontend/                 # Lit + Vite 前端工程
+│   ├── src/
+│   │   ├── app.ts            # <cortex-app> 顶层路由
+│   │   ├── state/            # 轻量 store（订阅模式）
+│   │   ├── api/              # 前端 API client（fetch + SSE）
+│   │   ├── components/       # 12 个 Lit Web Components
+│   │   ├── views/            # 3 个视图（search / chat / history）
+│   │   └── styles/           # CSS tokens + 响应式断点
+│   ├── tests/                # Vitest 单元测试 + Playwright E2E
+│   ├── public/               # PWA manifest + icons + sw.js
+│   └── vite.config.ts        # Vite 构建配置（输出到 ../static/）
+└── static/                   # Vite 构建产物（已 git 跟踪）
+    ├── index.html
+    ├── manifest.webmanifest
+    ├── sw.js
+    └── assets/               # 带 hash 的 JS/CSS + PWA icons
+```
+
 ### treesearch/ - 结构感知检索核心库
 ```
 treesearch/
@@ -182,6 +220,26 @@ planify/
 
 ```bash
 .venv/Scripts/python.exe -m cortex
+```
+
+### Web UI（PWA，桌面/移动）
+
+```bash
+.venv/Scripts/python.exe -m cortex gui
+# 浏览器自动打开 http://localhost:7860
+# 选项：--port PORT / --host HOST
+```
+
+前端开发模式（需 Node.js 18+）：
+```bash
+cd cortex/web_v2/frontend && npm install && npm run dev
+# Vite dev server on http://localhost:5173，自动代理 /api → 7860
+```
+
+前端构建（开发者改动后需重新构建）：
+```bash
+cd cortex/web_v2/frontend && npm run build
+# 输出到 cortex/web_v2/static/（已 git 跟踪）
 ```
 
 ## CORTEX-CLI 测试命令
