@@ -167,9 +167,17 @@ export class MdViewer extends LitElement {
     }, null);
     if (!target) return;
 
-    // scrollIntoView 在某些环境（如 happy-dom）可能缺失，做防御性检查
-    if (typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
+    // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
+    // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
+    const hostRect = this.getBoundingClientRect();
+    if (hostRect.height > 0) {
+      const targetRect = target.getBoundingClientRect();
+      const targetContentTop = targetRect.top - hostRect.top + this.scrollTop;
+      this.scrollTo({
+        top: targetContentTop - hostRect.height / 2 + targetRect.height / 2,
+        behavior: "smooth",
+      });
     }
     target.classList.remove("highlight-flash");  // 重置以便动画重放
     // 强制 reflow，让 animation 重新触发
