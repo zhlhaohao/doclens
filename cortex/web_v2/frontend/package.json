@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@shoelace-style/shoelace": "^2.15.0",
-    "lit": "^3.2.0"
+    "lit": "^3.2.0",
+    "marked": "^18.0.5"
   },
   "devDependencies": {
     "@open-wc/testing": "^4.0.0",
