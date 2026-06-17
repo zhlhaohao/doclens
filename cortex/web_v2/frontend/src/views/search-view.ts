@@ -74,6 +74,7 @@ export class SearchView extends LitElement {
   @state() private previewContent = "";
   @state() private previewPath = "";
   @state() private previewLanguage = "text";
+  @state() private previewLine: number | null = null;
   @state() private historySessions: Session[] = [];
   private _unsubscribe?: () => void;
 
@@ -158,6 +159,7 @@ export class SearchView extends LitElement {
         this.previewContent = body.content;
         this.previewPath = body.path;
         this.previewLanguage = body.language;
+        this.previewLine = (r.line as number | null) ?? null;
       }
     } catch (e) {
       console.warn("preview failed", e);
@@ -238,7 +240,8 @@ export class SearchView extends LitElement {
             class="desktop-only"
             path=${this.previewPath}
             language=${this.previewLanguage}
-            content=${this.previewContent}>
+            content=${this.previewContent}
+            .line=${this.previewLine}>
           </preview-pane>
         </div>
         <div class="focus-input-bar">
@@ -262,7 +265,8 @@ export class SearchView extends LitElement {
           <preview-pane
             path=${this.previewPath}
             language=${this.previewLanguage}
-            content=${this.previewContent}>
+            content=${this.previewContent}
+            .line=${this.previewLine}>
           </preview-pane>
         </div>` : null}
     `;
