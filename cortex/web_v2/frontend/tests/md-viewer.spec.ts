@@ -26,4 +26,18 @@ describe("<md-viewer>", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".empty")).toBeTruthy();
   });
+
+  it("adds data-source-line to block elements", async () => {
+    const md = "# Title\n\nfirst paragraph\n\nsecond paragraph\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    const h1 = el.shadowRoot!.querySelector("h1");
+    expect(h1?.getAttribute("data-source-line")).toBe("1");
+
+    const ps = el.shadowRoot!.querySelectorAll("p");
+    expect(ps.length).toBe(2);
+    expect(ps[0].getAttribute("data-source-line")).toBe("3");
+    expect(ps[1].getAttribute("data-source-line")).toBe("5");
+  });
 });
