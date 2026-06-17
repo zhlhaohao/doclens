@@ -60,3 +60,46 @@ async def test_delete_session(patched_store):
         del_res = await client.delete(f"/api/sessions/{sid}")
     assert del_res.status_code == 200
     assert del_res.json()["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_clear_sessions_by_type(patched_store):
+    """DELETE /sessions?type=search 清空 search 类型，不影响 chat。"""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 建两个 search + 一个 chat 会话
+        s1 = await client.post("/api/sessions", json={"type": "search", "title": "s1"})
+        s2 = await client.post("/api/sessions", json={"type": "search", "title": "s2"})
+        c1 = await client.post("/api/sessions", json={"type": "chat", "title": "c1"})
+        assert s1.status_code == 200 and s2.status_code == 200 and c1.status_code == 200
+
+        # 清空 search
+        res = await client.delete("/api/sessions", params={"type": "search"})
+        assert res.status_code == 200
+        body = res.json()
+        assert body["ok"] is True
+        assert body["deleted_count"] == 2
+
+        # search 应空，chat 不变
+        after_s = await client.get("/api/sessions", params={"type": "search"})
+        assert after_s.json()["returned"] == 0
+        after_c = await client.get("/api/sessions", params={"type": "chat"})
+        assert after_c.json()["returned"] == 1
+
+
+@pytest.mark.asyncio
+async def test_clear_sessions_all_when_no_type(patched_store):
+    """DELETE /sessions（不带 type）清空所有。"""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/api/sessions", json={"type": "search", "title": "s"})
+        await client.post("/api/sessions", json={"type": "chat", "title": "c"})
+
+        res = await client.delete("/api/sessions")
+        assert res.status_code == 200
+        assert res.json()["deleted_count"] == 2
+
+        all_list = await client.get("/api/sessions")
+        assert all_list.json()["returned"] == 0
