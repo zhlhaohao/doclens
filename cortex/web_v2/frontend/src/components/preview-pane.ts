@@ -47,6 +47,8 @@ export class PreviewPane extends LitElement {
   @property({ attribute: false }) highlights: number[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Number }) line: number | null = null;
+  /** 搜索关键字，透传给 md-viewer 用于高亮命中词 */
+  @property() keyword = "";
 
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
@@ -58,7 +60,8 @@ export class PreviewPane extends LitElement {
         <div class="header">${this.path}</div>
         <md-viewer
           .content=${this.content}
-          .line=${this.line}>
+          .line=${this.line}
+          .keyword=${this.keyword}>
         </md-viewer>
       `;
     }

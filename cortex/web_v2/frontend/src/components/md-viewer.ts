@@ -129,7 +129,7 @@ export class MdViewer extends LitElement {
       text-align: center;
       padding: 24px;
     }
-    /* Task 5 会用到的 highlight 动画（提前放入，避免后续再改 CSS） */
+    /* 定位块的闪烁动画（"你滚到这里了"指示） */
     .highlight-flash {
       animation: highlight-flash 2s ease-out;
     }
@@ -137,14 +137,27 @@ export class MdViewer extends LitElement {
       0% { background: rgba(254, 243, 199, 0.8); }
       100% { background: transparent; }
     }
+    /* 搜索关键字命中高亮（持久黄底，类似浏览器 Ctrl+F） */
+    :host mark.keyword-hit {
+      background: #FEF3C7;
+      color: inherit;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
   `;
 
   @property() content = "";
-  /** 1-indexed 目标行；Task 5 会实现 scroll + highlight，当前预留 */
+  /** 1-indexed 目标行；用于滚动到命中块并闪烁定位 */
   @property({ type: Number }) line: number | null = null;
+  /** 搜索关键字（按空格分词，在渲染后的正文里高亮所有命中词） */
+  @property() keyword = "";
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
+    // content/keyword 变化都需重新高亮（render 会重建 .md-body，旧 <mark> 随之销毁）
+    if (changedProps.has("content") || changedProps.has("keyword")) {
+      this._highlightKeyword();
+    }
     if (changedProps.has("line") || changedProps.has("content")) {
       this._locateAndHighlight();
     }
@@ -183,6 +196,57 @@ export class MdViewer extends LitElement {
     // 强制 reflow，让 animation 重新触发
     void target.offsetWidth;
     target.classList.add("highlight-flash");
+  }
+
+  /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
+   *  使用 TreeWalker 遍历文本节点，避免对 HTML 结构做字符串替换引入 XSS。 */
+  private _highlightKeyword() {
+    const root = this.shadowRoot?.querySelector(".md-body") as HTMLElement | null;
+    if (!root) return;
+    const words = (this.keyword ?? "").split(/\s+/).filter((w) => w.length > 0);
+    if (words.length === 0) return;
+    const re = new RegExp(words.map((w) => this._escapeRegExp(w)).join("|"), "gi");
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = (node as Text).parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = parent.tagName;
+        // 跳过脚本/样式/已标记节点，避免重复嵌套
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "MARK") {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return re.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const targets: Text[] = [];
+    let n: Node | null;
+    while ((n = walker.nextNode())) targets.push(n as Text);
+    for (const text of targets) {
+      re.lastIndex = 0;
+      const value = text.nodeValue ?? "";
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(value)) !== null) {
+        if (m.index > last) {
+          frag.appendChild(document.createTextNode(value.slice(last, m.index)));
+        }
+        const mark = document.createElement("mark");
+        mark.textContent = m[0];
+        mark.className = "keyword-hit";
+        frag.appendChild(mark);
+        last = m.index + m[0].length;
+        if (m[0].length === 0) re.lastIndex++; // 防御零宽匹配死循环
+      }
+      if (last < value.length) {
+        frag.appendChild(document.createTextNode(value.slice(last)));
+      }
+      text.parentNode?.replaceChild(frag, text);
+    }
+  }
+
+  private _escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   render() {

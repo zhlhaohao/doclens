@@ -269,7 +269,8 @@ export class SearchView extends LitElement {
             path=${this.previewPath}
             language=${this.previewLanguage}
             content=${this.previewContent}
-            .line=${this.previewLine}>
+            .line=${this.previewLine}
+            .keyword=${s.query}>
           </preview-pane>
         </div>
         <div class="focus-input-bar">
@@ -294,7 +295,8 @@ export class SearchView extends LitElement {
             path=${this.previewPath}
             language=${this.previewLanguage}
             content=${this.previewContent}
-            .line=${this.previewLine}>
+            .line=${this.previewLine}
+            .keyword=${s.query}>
           </preview-pane>
         </div>` : null}
     `;
