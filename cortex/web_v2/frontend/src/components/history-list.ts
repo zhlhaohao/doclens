@@ -14,12 +14,36 @@ export class HistoryList extends LitElement {
       overflow-y: auto;
       border-bottom: 1px solid var(--cortex-border-muted);
     }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 var(--cortex-space-2) 0;
+    }
     .title {
       font-size: var(--cortex-fs-xs);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--cortex-text-subtle);
-      margin: 0 0 var(--cortex-space-2) 0;
+    }
+    .clear-btn {
+      background: transparent;
+      border: none;
+      padding: 2px 6px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .clear-btn:hover {
+      color: #dc2626;
+      background: rgba(220, 38, 38, 0.08);
+    }
+    .clear-btn:disabled {
+      color: var(--cortex-text-subtle);
+      cursor: not-allowed;
+      opacity: 0.6;
     }
     .empty {
       color: var(--cortex-text-subtle);
@@ -31,6 +55,10 @@ export class HistoryList extends LitElement {
 
   @property() title = "历史会话";
   @property({ attribute: false }) sessions: Session[] = [];
+  /** 调用方类型，仅作文档化用；实际清空范围由父组件决定 */
+  @property() type?: "search" | "chat";
+  /** 清空中状态：禁用按钮 + 文字变化 */
+  @property({ type: Boolean }) clearing = false;
 
   private _onSelect(e: CustomEvent<{ session: Session }>) {
     this.dispatchEvent(new CustomEvent("select", {
@@ -39,9 +67,26 @@ export class HistoryList extends LitElement {
     }));
   }
 
+  private _onClear() {
+    if (this.clearing) return;
+    this.dispatchEvent(new CustomEvent("clear", {
+      bubbles: true, composed: true,
+    }));
+  }
+
   render() {
+    const showBtn = this.sessions.length > 0;
     return html`
-      <div class="title">${this.title}</div>
+      <div class="header">
+        <div class="title">${this.title}</div>
+        ${showBtn ? html`
+          <button
+            class="clear-btn"
+            ?disabled=${this.clearing}
+            @click=${this._onClear}>
+            ${this.clearing ? "清空中..." : "清空"}
+          </button>` : null}
+      </div>
       ${this.sessions.length === 0
         ? html`<div class="empty">暂无历史会话</div>`
         : this.sessions.map((s) => html`<history-item .session=${s} @select=${this._onSelect}></history-item>`)}
