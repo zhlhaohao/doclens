@@ -151,8 +151,14 @@ export class SearchView extends LitElement {
     // 拉取预览
     try {
       const params = new URLSearchParams({ path: r.path });
-      if (r.line) params.set("start_line", String(Math.max(1, r.line - 10)));
-      if (r.line) params.set("end_line", String(r.line + 20));
+      // markdown 走 md-viewer 渲染：需要全文件以保持 data-source-line 与绝对行号一致，
+      // 否则 md-viewer 的行号映射会偏移，scroll-to-line 定位错误。
+      // 非 markdown（纯文本视图）保留 30 行窗口切片以节省渲染。
+      const isMarkdown = r.path.toLowerCase().endsWith(".md");
+      if (r.line && !isMarkdown) {
+        params.set("start_line", String(Math.max(1, r.line - 10)));
+        params.set("end_line", String(r.line + 20));
+      }
       const res = await fetch(`/api/preview?${params}`);
       if (res.ok) {
         const body = await res.json();
