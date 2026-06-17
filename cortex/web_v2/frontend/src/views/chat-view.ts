@@ -4,7 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { Session } from "../state/types";
 import { chatStream } from "../api/chat";
-import { createSession, appendSession, listSessions } from "../api/sessions";
+import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 
 @customElement("chat-view")
 export class ChatView extends LitElement {
@@ -59,6 +59,7 @@ export class ChatView extends LitElement {
 
   @state() private draft = "";
   @state() private historySessions: Session[] = [];
+  @state() private _clearing = false;
   private _unsubscribe?: () => void;
 
   connectedCallback() {
@@ -84,6 +85,20 @@ export class ChatView extends LitElement {
       this.historySessions = sessions;
     } catch (e) {
       console.warn("load history failed", e);
+    }
+  }
+
+  private async _onClearHistory() {
+    this._clearing = true;
+    this.requestUpdate();
+    try {
+      await clearSessions("chat");
+      this.historySessions = [];
+    } catch (e) {
+      console.warn("clear sessions failed", e);
+    } finally {
+      this._clearing = false;
+      this.requestUpdate();
     }
   }
 
@@ -188,8 +203,11 @@ export class ChatView extends LitElement {
           <welcome-pane heading="Cortex" subheading="与你的知识库对话"></welcome-pane>
           <history-list
             title="历史会话"
+            type="chat"
+            ?clearing=${this._clearing}
             .sessions=${this.historySessions}
-            @select=${this._onHistorySelect}>
+            @select=${this._onHistorySelect}
+            @clear=${this._onClearHistory}>
           </history-list>
           <div class="input-row">
             <input-box
