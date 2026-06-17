@@ -143,8 +143,38 @@ export class MdViewer extends LitElement {
   /** 1-indexed 目标行；Task 5 会实现 scroll + highlight，当前预留 */
   @property({ type: Number }) line: number | null = null;
 
-  updated() {
-    // Task 5 会在这里挂 scroll + highlight 逻辑
+  updated(changedProps: Map<string, unknown>) {
+    super.updated?.(changedProps);
+    if (changedProps.has("line") || changedProps.has("content")) {
+      this._locateAndHighlight();
+    }
+  }
+
+  private _locateAndHighlight() {
+    if (this.line === null || this.line === undefined) return;
+    const blocks = Array.from(
+      this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]")
+    );
+    if (blocks.length === 0) return;
+
+    // 找 data-source-line <= this.line 的最后一个块
+    const target = blocks.reduce<HTMLElement | null>((best, el) => {
+      const ls = Number(el.getAttribute("data-source-line"));
+      if (ls <= this.line! && (!best || ls > Number(best.getAttribute("data-source-line")))) {
+        return el;
+      }
+      return best;
+    }, null);
+    if (!target) return;
+
+    // scrollIntoView 在某些环境（如 happy-dom）可能缺失，做防御性检查
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    target.classList.remove("highlight-flash");  // 重置以便动画重放
+    // 强制 reflow，让 animation 重新触发
+    void target.offsetWidth;
+    target.classList.add("highlight-flash");
   }
 
   render() {
