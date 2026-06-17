@@ -40,4 +40,21 @@ describe("<md-viewer>", () => {
     expect(ps[0].getAttribute("data-source-line")).toBe("3");
     expect(ps[1].getAttribute("data-source-line")).toBe("5");
   });
+
+  it("scrolls to and highlights block containing target line", async () => {
+    const md = "# Heading 1\n\npara 1\n\n## Heading 2\n\npara 2\n";
+    const el = await fixture(html`<md-viewer .content=${md} .line=${6}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    // 找到 data-source-line ≤ 6 的最后一个块（应该是 "## Heading 2" 在第 5 行）
+    const highlighted = el.shadowRoot!.querySelector(".highlight-flash");
+    expect(highlighted).toBeTruthy();
+    expect(highlighted!.getAttribute("data-source-line")).toBe("5");
+  });
+
+  it("does not highlight when line is null", async () => {
+    const el = await fixture(html`<md-viewer content="# x" .line=${null}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-flash")).toBeNull();
+  });
 });
