@@ -123,6 +123,18 @@ class SessionsStore:
         with self._lock, self._conn() as conn:
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
+    def delete_by_type(self, type_: Optional[SessionType]) -> int:
+        """批量删除某 type 的全部会话。type_=None 时清空所有。返回删除条数。
+
+        session_items 通过 FK ON DELETE CASCADE 自动级联删除。
+        """
+        with self._lock, self._conn() as conn:
+            if type_ is None:
+                cur = conn.execute("DELETE FROM sessions")
+            else:
+                cur = conn.execute("DELETE FROM sessions WHERE type = ?", (type_.value,))
+            return cur.rowcount
+
     # ---- 读取 ----
 
     def list(self, type_: SessionType, limit: int = 50, offset: int = 0) -> list[SessionSummary]:

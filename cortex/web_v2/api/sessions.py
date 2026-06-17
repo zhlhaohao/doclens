@@ -114,3 +114,13 @@ async def delete_session(session_id: str):
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     store.delete(session_id)
     return {"ok": True}
+
+
+@router.delete("/sessions")
+async def clear_sessions(
+    type: Optional[SessionType] = Query(default=None, description="按类型清空；不传则清空全部"),
+):
+    """批量删除会话。type=None 清全部。"""
+    store = _get_store()
+    deleted = store.delete_by_type(type)
+    return {"ok": True, "deleted_count": deleted}
