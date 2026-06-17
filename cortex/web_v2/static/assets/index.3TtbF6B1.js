@@ -2536,11 +2536,11 @@ var Ns=Object.defineProperty;var Hs=(e,t,r)=>t in e?Ns(e,t,{enumerable:!0,config
     :host {
       display: flex;
       gap: var(--cortex-space-4);
-      flex: 1;
+      flex: 0 0 auto;
       min-height: 0;
     }
     .list-pane {
-      flex: 0 0 40%;
+      flex: 0 0 360px;
       min-width: 280px;
       max-width: 480px;
       background: var(--cortex-surface-muted);
@@ -2559,7 +2559,7 @@ var Ns=Object.defineProperty;var Hs=(e,t,r)=>t in e?Ns(e,t,{enumerable:!0,config
     }
     /* 桌面：双栏，列表 + 预览；移动：单栏，点击触发 push */
     @media (max-width: 1023px) {
-      :host { flex-direction: column; }
+      :host { flex-direction: column; flex: 1; }
       .list-pane {
         flex: 1; max-width: none; min-width: 0;
         border-right: none; border-bottom: 1px solid var(--cortex-border);
