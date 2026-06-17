@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import "./md-viewer";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
@@ -45,10 +46,23 @@ export class PreviewPane extends LitElement {
   @property() content = "";
   @property({ attribute: false }) highlights: number[] = [];
   @property({ type: Boolean }) loading = false;
+  @property({ type: Number }) line: number | null = null;
 
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
     if (!this.content) return html`<div class="empty">点击左侧结果查看预览</div>`;
+
+    // markdown 走 <md-viewer>，其它类型保持原纯文本+行号视图
+    if (this.language === "markdown") {
+      return html`
+        <div class="header">${this.path}</div>
+        <md-viewer
+          .content=${this.content}
+          .line=${this.line}>
+        </md-viewer>
+      `;
+    }
+
     const lines = this.content.split("\n");
     return html`
       <div class="header">${this.path}</div>
