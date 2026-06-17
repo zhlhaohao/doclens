@@ -4,7 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
-import { createSession, appendSession, listSessions } from "../api/sessions";
+import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 
 @customElement("search-view")
 export class SearchView extends LitElement {
@@ -76,6 +76,7 @@ export class SearchView extends LitElement {
   @state() private previewLanguage = "text";
   @state() private previewLine: number | null = null;
   @state() private historySessions: Session[] = [];
+  @state() private _clearing = false;
   private _unsubscribe?: () => void;
 
   connectedCallback() {
@@ -101,6 +102,20 @@ export class SearchView extends LitElement {
       this.historySessions = sessions;
     } catch (e) {
       console.warn("load history failed", e);
+    }
+  }
+
+  private async _onClearHistory() {
+    this._clearing = true;
+    this.requestUpdate();
+    try {
+      await clearSessions("search");
+      this.historySessions = [];
+    } catch (e) {
+      console.warn("clear sessions failed", e);
+    } finally {
+      this._clearing = false;
+      this.requestUpdate();
     }
   }
 
@@ -209,8 +224,11 @@ export class SearchView extends LitElement {
           <welcome-pane heading="Cortex" subheading="结构感知文档检索"></welcome-pane>
           <history-list
             title="历史会话"
+            type="search"
+            ?clearing=${this._clearing}
             .sessions=${this.historySessions}
-            @select=${this._onHistorySelect}>
+            @select=${this._onHistorySelect}
+            @clear=${this._onClearHistory}>
           </history-list>
           <div class="input-row">
             <input-box
