@@ -22,3 +22,9 @@ export async function appendSession(sessionId: string, items: Array<{ kind: stri
 export async function deleteSession(sessionId: string): Promise<void> {
   await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
 }
+
+export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boolean; deleted_count: number }> {
+  const sp = new URLSearchParams();
+  if (type) sp.set("type", type);
+  return request(`/api/sessions?${sp}`, { method: "DELETE" });
+}
