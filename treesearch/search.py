@@ -748,6 +748,8 @@ async def _search_tree_mode(
                 "title": node.get("title", ""),
                 "score": node.get("score", 0),
                 "text": node.get("text", ""),
+                "line_start": node.get("line_start"),
+                "line_end": node.get("line_end"),
             })
     all_candidates.sort(key=lambda x: (-x["score"], x["node_id"]))
 
@@ -861,6 +863,8 @@ async def _search_flat_mode(
                 "title": node.get("title", ""),
                 "score": node.get("score", 0),
                 "text": node.get("text", ""),
+                "line_start": node.get("line_start"),
+                "line_end": node.get("line_end"),
             })
     all_candidates.sort(key=lambda x: (-x["score"], x["node_id"]))
 

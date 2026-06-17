@@ -4,7 +4,7 @@
 SearchResult 列表。
 
 IndexManager.search() 返回:
-    flat_nodes: list[dict]  每项含 {node_id, doc_id, doc_name, title, score, text}
+    flat_nodes: list[dict]  每项含 {node_id, doc_id, doc_name, title, score, text, line_start, line_end}
     documents:  list[dict]  合并后的文档结果（含 nodes 子列表）
 主要数据（路径、文本、分数）来自 flat_nodes 项。
 """
@@ -60,7 +60,7 @@ def _format_results(nodes, path_map: dict, search_path: str) -> Iterator[SearchR
             path=path,
             snippet=snippet,
             score=score,
-            line=None,
+            line=node.get("line_start"),
             highlights=[],
         )
 

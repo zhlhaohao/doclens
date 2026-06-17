@@ -71,6 +71,15 @@ async def test_search_path_can_be_previewed(env_cortex_config, reset_deps, temp_
             path = r["path"]
             # path 必须带扩展名（doc1.md 而不是 doc1），否则 preview 会 404
             assert "." in path, f"path 缺少扩展名: {path!r}"
+            # line 必须是 int（命中行号）或 None（treesearch 未注入）
+            assert r["line"] is None or isinstance(r["line"], int), (
+                f"line 字段类型错误: {type(r['line'])} value={r['line']!r}"
+            )
+            # .md 命中应有具体行号（fixture 里 doc1.md 必带 line_start）
+            if path.endswith(".md"):
+                assert isinstance(r["line"], int) and r["line"] >= 1, (
+                    f"markdown 结果缺少 line: {r!r}"
+                )
             preview = await client.get("/api/preview", params={"path": path})
             assert preview.status_code == 200, (
                 f"preview 失败 path={path!r} status={preview.status_code} body={preview.text}"
