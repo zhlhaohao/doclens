@@ -53,6 +53,10 @@ export class SearchView extends LitElement {
       flex-direction: column;
       z-index: 10;
     }
+    /* 移动端（<1024px）：隐藏桌面端独占的预览栏，预览由 detail-overlay 全屏覆盖 */
+    @media (max-width: 1023px) {
+      .desktop-only { display: none; }
+    }
     @media (min-width: 1024px) {
       .detail-overlay { display: none; }
       /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感 */
