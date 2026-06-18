@@ -30,6 +30,12 @@ export class ResultCard extends LitElement {
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    .score {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
+      margin-top: 2px;
+    }
     mark {
       background: #FEF3C7;
       color: inherit;
@@ -60,9 +66,11 @@ export class ResultCard extends LitElement {
 
   render() {
     if (!this.result) return null;
+    const scorePct = Math.round(this.result.score * 100);
     return html`
       <div class="path">${this.result.path}${this.result.line ? `:${this.result.line}` : ""}</div>
       <div class="snippet">${this.result.snippet}</div>
+      <div class="score">评分: ${scorePct}%</div>
     `;
   }
 }

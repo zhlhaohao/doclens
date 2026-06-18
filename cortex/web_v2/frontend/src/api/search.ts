@@ -6,6 +6,7 @@ export interface SearchResponse {
   total: number;
   query: string;
   elapsed_ms: number;
+  source: "fts" | "like" | "ripgrep";
 }
 
 export async function searchApi(req: { query: string; mode?: string; limit?: number; offset?: number }): Promise<SearchResponse> {

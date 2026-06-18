@@ -148,7 +148,7 @@ export class SearchView extends LitElement {
   private async _submit(e: CustomEvent<{ value: string }>) {
     const query = e.detail.value;
     this.localQuery = query;
-    actions.setSearchState({ state: "focus", query, results: [], total: 0 });
+    actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
     this.loading = true;
     try {
       const res = await searchApi({ query });
@@ -158,6 +158,7 @@ export class SearchView extends LitElement {
         query,
         results: res.results,
         total: res.total,
+        source: res.source,
         currentSession: {
           id: created.id, type: "search", title: query,
           preview: query.slice(0, 100), updated_at: new Date().toISOString(),
@@ -241,7 +242,7 @@ export class SearchView extends LitElement {
         const results = (body.items || [])
           .filter((i: any) => i.kind === "result")
           .map((i: any) => JSON.parse(i.payload));
-        actions.setSearchState({ results, total: results.length });
+        actions.setSearchState({ results, total: results.length, source: "fts" });
       }
     } catch (e) {
       console.warn("load session failed", e);
@@ -287,7 +288,7 @@ export class SearchView extends LitElement {
         <focus-header
           back-label="新搜索"
           title=${s.query}
-          meta=${`${s.total} 条结果`}
+          meta=${`${s.total} 条结果${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`}
           @back=${this._backToInitial}>
         </focus-header>
         <div class="focus-main">
