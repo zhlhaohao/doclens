@@ -11,6 +11,10 @@ def temp_workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """创建临时工作目录，含几个示例文档。"""
     (tmp_path / "doc1.md").write_text("# Doc 1\n\nHello world from doc1.", encoding="utf-8")
     (tmp_path / "doc2.py").write_text("def hello():\n    return 'world'\n", encoding="utf-8")
+    (tmp_path / "data.csv").write_text(
+        "name,age\nAlice,30\nBob,25\n",
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
