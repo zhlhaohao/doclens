@@ -2,6 +2,7 @@
 
 路径解析相对于 IndexManager.search_path，防止越权访问。
 """
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
@@ -10,8 +11,16 @@ from cortex.index_manager import IndexManager
 from cortex.web_v2.api.errors import CortexAPIError
 from cortex.web_v2.deps import get_index_manager
 from cortex.web_v2.models.preview import PreviewResponse
+from cortex.web_v2.preview_synthesizer import render_tree_to_md
 
 router = APIRouter()
+
+# 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
+BINARY_PREVIEW_EXTS = frozenset({
+    ".pdf", ".docx",
+    ".xlsx", ".xlsm", ".xltx", ".xltm",
+    ".csv",
+})
 
 _LANGUAGE_MAP = {
     ".py": "python", ".md": "markdown", ".txt": "text",
@@ -42,6 +51,11 @@ async def preview(
 ):
     base = Path(idx.search_path)
     full = _safe_resolve(base, path)
+
+    # 二进制文档：走 DB 合成 md 路径
+    if full.suffix.lower() in BINARY_PREVIEW_EXTS:
+        return _synthesize_binary_preview(idx, path)
+
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
 
@@ -65,5 +79,36 @@ async def preview(
         language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
         content=content,
         line_range=line_range,
+        highlights=[],
+    )
+
+
+def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewResponse:
+    """从 DB 读 structure_json → 合成 md → 返回 language=markdown。"""
+    from treesearch.fts import FTS5Index
+
+    abs_path = os.path.abspath(os.path.join(idx.search_path, rel_path))
+    fts = FTS5Index(db_path=idx.index_path)
+    try:
+        doc = fts.load_document_by_source_path(abs_path)
+        # 防御性双查：部分历史索引可能用相对路径存
+        if doc is None:
+            doc = fts.load_document_by_source_path(rel_path)
+    finally:
+        fts.close()
+
+    if doc is None:
+        raise CortexAPIError(
+            status=404,
+            code="NOT_INDEXED",
+            detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
+        )
+
+    md_content = render_tree_to_md(doc.structure, doc.source_type)
+    return PreviewResponse(
+        path=rel_path,
+        language="markdown",
+        content=md_content,
+        line_range=None,
         highlights=[],
     )

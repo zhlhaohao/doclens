@@ -6,6 +6,14 @@ import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 
+/** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐） */
+const FULL_FILE_PREVIEW_EXTS = [".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv"];
+
+function isFullFilePreview(path: string): boolean {
+  const lower = path.toLowerCase();
+  return FULL_FILE_PREVIEW_EXTS.some((ext) => lower.endsWith(ext));
+}
+
 @customElement("search-view")
 export class SearchView extends LitElement {
   static styles = css`
@@ -53,6 +61,15 @@ export class SearchView extends LitElement {
       flex-direction: column;
       z-index: 10;
     }
+    .not-indexed-hint {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cortex-text-subtle);
+      padding: 24px;
+      text-align: center;
+    }
     /* 移动端（<1024px）：隐藏桌面端独占的预览栏，预览由 detail-overlay 全屏覆盖 */
     @media (max-width: 1023px) {
       .desktop-only { display: none; }
@@ -81,6 +98,7 @@ export class SearchView extends LitElement {
   @state() private previewLine: number | null = null;
   @state() private historySessions: Session[] = [];
   @state() private _clearing = false;
+  @state() private previewError: "NOT_INDEXED" | null = null;
   private _unsubscribe?: () => void;
 
   connectedCallback() {
@@ -167,14 +185,14 @@ export class SearchView extends LitElement {
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
     const r = e.detail.result;
     actions.pushDetail(r);
-    // 拉取预览
+    this.previewError = null; // 重置错误态
     try {
       const params = new URLSearchParams({ path: r.path });
-      // markdown 走 md-viewer 渲染：需要全文件以保持 data-source-line 与绝对行号一致，
-      // 否则 md-viewer 的行号映射会偏移，scroll-to-line 定位错误。
+      // md 与二进制合成 md 走 md-viewer 渲染：需要全文件以保持
+      // data-source-line 与绝对行号一致，否则 md-viewer 的行号映射会偏移。
       // 非 markdown（纯文本视图）保留 30 行窗口切片以节省渲染。
-      const isMarkdown = r.path.toLowerCase().endsWith(".md");
-      if (r.line && !isMarkdown) {
+      const fullFile = isFullFilePreview(r.path);
+      if (r.line && !fullFile) {
         params.set("start_line", String(Math.max(1, r.line - 10)));
         params.set("end_line", String(r.line + 20));
       }
@@ -185,6 +203,13 @@ export class SearchView extends LitElement {
         this.previewPath = body.path;
         this.previewLanguage = body.language;
         this.previewLine = (r.line as number | null) ?? null;
+      } else {
+        const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
+        if (err.code === "NOT_INDEXED") {
+          this.previewError = "NOT_INDEXED";
+          this.previewContent = "";
+          this.previewPath = r.path;
+        }
       }
     } catch (e) {
       console.warn("preview failed", e);
@@ -193,6 +218,13 @@ export class SearchView extends LitElement {
 
   private _popDetail() {
     actions.popDetail();
+  }
+
+  private _renderNotIndexedHint(desktopOnly: boolean) {
+    const cls = desktopOnly ? "desktop-only not-indexed-hint" : "not-indexed-hint";
+    return html`<div class=${cls}>
+      该文件未索引，无法预览。<br>请先执行 cortex index 后重试。
+    </div>`;
   }
 
   private async _loadSession(s: Session) {
@@ -264,14 +296,16 @@ export class SearchView extends LitElement {
             .activePath=${detailTop?.path ?? null}
             @select=${this._onResultSelect}>
           </search-results>
-          <preview-pane
-            class="desktop-only"
-            path=${this.previewPath}
-            language=${this.previewLanguage}
-            content=${this.previewContent}
-            .line=${this.previewLine}
-            .keyword=${s.query}>
-          </preview-pane>
+          ${this.previewError === "NOT_INDEXED"
+            ? this._renderNotIndexedHint(true)
+            : html`<preview-pane
+                class="desktop-only"
+                path=${this.previewPath}
+                language=${this.previewLanguage}
+                content=${this.previewContent}
+                .line=${this.previewLine}
+                .keyword=${s.query}>
+              </preview-pane>`}
         </div>
         <div class="focus-input-bar">
           <input-box
@@ -291,13 +325,15 @@ export class SearchView extends LitElement {
             title=${detailTop.path}
             @back=${this._popDetail}>
           </focus-header>
-          <preview-pane
-            path=${this.previewPath}
-            language=${this.previewLanguage}
-            content=${this.previewContent}
-            .line=${this.previewLine}
-            .keyword=${s.query}>
-          </preview-pane>
+          ${this.previewError === "NOT_INDEXED"
+            ? this._renderNotIndexedHint(false)
+            : html`<preview-pane
+                path=${this.previewPath}
+                language=${this.previewLanguage}
+                content=${this.previewContent}
+                .line=${this.previewLine}
+                .keyword=${s.query}>
+              </preview-pane>`}
         </div>` : null}
     `;
   }
