@@ -85,3 +85,38 @@ async def test_search_path_can_be_previewed(env_cortex_config, reset_deps, temp_
                 f"preview 失败 path={path!r} status={preview.status_code} body={preview.text}"
             )
             assert preview.json()["content"], f"preview 内容为空 path={path!r}"
+
+
+@pytest.mark.asyncio
+async def test_search_response_has_source_field(env_cortex_config, reset_deps):
+    """SearchResponse 必须含 source 字段，默认 'fts'。"""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/search", json={"query": "hello"})
+    assert res.status_code == 200
+    body = res.json()
+    assert "source" in body
+    assert body["source"] in ("fts", "like", "ripgrep")
+
+
+@pytest.mark.asyncio
+async def test_search_scores_are_composite_in_unit_range(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    """所有 SearchResult.score 必须在 [0, 1] 区间（composite 综合分语义）。"""
+    # 准备一个能命中的 md 文件
+    (temp_workdir / "健康.md").write_text(
+        "# 健康指南\n\n肠道健康很重要。健康饮食。", encoding="utf-8"
+    )
+    await asyncio.to_thread(_init_and_reindex)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/search", json={"query": "健康"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["results"], "应至少返回一条结果"
+    for r in body["results"]:
+        assert 0.0 <= r["score"] <= 1.0, f"score {r['score']} 不在 [0,1] 区间"

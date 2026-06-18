@@ -13,6 +13,7 @@ const INITIAL_STATE: AppState = {
     query: "",
     results: [],
     total: 0,
+    source: "fts",
   },
   chat: {
     state: "initial",

@@ -14,7 +14,7 @@ class SearchRequest(BaseModel):
 class SearchResult(BaseModel):
     path: str
     snippet: str
-    score: float
+    score: float  # 语义变更：原 FTS5 BM25 原始分 → composite 综合分（0~1 归一化）
     line: Optional[int] = None
     highlights: list[tuple[int, int]] = []
 
@@ -24,3 +24,4 @@ class SearchResponse(BaseModel):
     total: int
     query: str
     elapsed_ms: int
+    source: str = "fts"  # 新增：值 ∈ {"fts", "like", "ripgrep"}
