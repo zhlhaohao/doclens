@@ -4,8 +4,6 @@ Values are always exchanged as strings (matching .env on-disk format).
 Numeric / enum validation happens in IndexManager-backed validation on
 the PUT path, not in these transport models.
 """
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -17,7 +15,7 @@ class ConfigScope:
 
 # Fields whose change requires restarting cortex gui to take effect.
 # Must stay in sync with the `effect: "restart"` metadata in
-# cortex/web_v2/frontend/src/views/settings-fields.ts
+# cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
 RESTART_FIELDS: frozenset[str] = frozenset({
     "PLANIFY_BASE_URL",
     "PLANIFY_API_KEY",
