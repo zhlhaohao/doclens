@@ -25,13 +25,21 @@ export class FocusHeader extends LitElement {
       background: none;
       border: none;
       color: var(--cortex-primary);
-      font-weight: 600;
-      font-size: var(--cortex-fs-base);
       cursor: pointer;
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1;
+      transition: background 0.15s, transform 0.1s;
     }
     .back:hover { background: var(--cortex-primary-soft); }
+    .back:active { transform: scale(0.92); }
     .title {
       font-weight: 600;
       color: var(--cortex-text);
@@ -44,19 +52,22 @@ export class FocusHeader extends LitElement {
     .meta { color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm); }
     .more-wrap { position: relative; }
     .more-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
       background: transparent;
-      border: 1px solid var(--cortex-border);
+      border: none;
       color: var(--cortex-text);
       font-family: inherit;
-      font-size: var(--cortex-fs-sm);
-      padding: 4px 10px;
-      border-radius: var(--cortex-radius-sm);
       cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.15s, transform 0.1s;
     }
-    .more-btn:hover { background: var(--cortex-surface); }
+    .more-btn:hover { background: var(--cortex-surface-muted); }
+    .more-btn:active { transform: scale(0.92); }
     .more-btn .kebab {
       font-size: 18px;
       line-height: 1;
@@ -141,7 +152,7 @@ export class FocusHeader extends LitElement {
 
   render() {
     return html`
-      <button class="back" @click=${this._back}>← ${this.backLabel}</button>
+      <button class="back" aria-label=${this.backLabel} title=${this.backLabel} @click=${this._back}>‹</button>
       <div class="title">${this.title}</div>
       ${this.meta ? html`<div class="meta">${this.meta}</div>` : null}
       ${this.actions.length > 0 ? html`
