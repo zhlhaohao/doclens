@@ -25,11 +25,13 @@ def test_resolve_env_path_global_uses_home(tmp_path, monkeypatch):
     assert p == tmp_path / ".cortex" / ".env"
 
 
-def test_read_env_values_returns_empty_dict_when_missing(tmp_path):
+def test_read_env_values_returns_all_keys_empty_when_file_missing(tmp_path):
+    """When .env is missing, all requested keys returned with empty values."""
     p = tmp_path / "missing.env"
-    values, exists = read_env_values(p, frozenset({"CORTEX_MAX_RESULTS"}))
-    assert values == {}
+    requested = frozenset({"CORTEX_MAX_RESULTS", "PLANIFY_API_KEY"})
+    values, exists = read_env_values(p, requested)
     assert exists is False
+    assert values == {"CORTEX_MAX_RESULTS": "", "PLANIFY_API_KEY": ""}
 
 
 def test_read_env_values_returns_only_requested_keys(tmp_path):

@@ -59,11 +59,11 @@ def read_env_values(
 ) -> tuple[dict[str, str], bool]:
     """Return (values, exists).
 
-    values maps each requested key to its current string value ("" if unset).
-    exists is False if `path` does not exist on disk.
+    values maps each requested key to its current string value ("" if unset
+    or if the file is missing). exists is False if `path` does not exist.
     """
     if not path.exists():
-        return {}, False
+        return {k: "" for k in keys}, False
     raw = dotenv_values(str(path))  # dict[str, Optional[str]]
     return {k: (raw.get(k) or "") for k in keys}, True
 
