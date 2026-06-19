@@ -2,15 +2,20 @@
 
 路径解析相对于 IndexManager.search_path，防止越权访问。
 """
+import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from cortex.index_manager import IndexManager
 from cortex.web_v2.api.errors import CortexAPIError
 from cortex.web_v2.deps import get_index_manager
-from cortex.web_v2.models.preview import PreviewResponse
+from cortex.web_v2.models.preview import (
+    PreviewResponse,
+    PreviewSaveRequest,
+    PreviewSaveResponse,
+)
 from cortex.web_v2.preview_synthesizer import render_tree_to_md
 
 router = APIRouter()
@@ -131,4 +136,46 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         line_range=None,
         highlights=[],
         writable=False,  # 合成预览不可写
+    )
+
+
+# 5MB 上限（防御性，避免 OOM）
+_MAX_SAVE_BYTES = 5 * 1024 * 1024
+
+
+@router.put("/preview", response_model=PreviewSaveResponse)
+async def save_preview(
+    path: str = Query(..., description="相对路径"),
+    body: PreviewSaveRequest = Body(...),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    base = Path(idx.search_path)
+    full = _safe_resolve(base, path)
+
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+    if not _compute_writable(full, base):
+        raise CortexAPIError(403, "NOT_WRITABLE", f"该文件不可编辑: {path}")
+
+    encoded = body.content.encode("utf-8")
+    if len(encoded) > _MAX_SAVE_BYTES:
+        raise CortexAPIError(413, "CONTENT_TOO_LARGE", f"content 超过 {_MAX_SAVE_BYTES // 1024 // 1024}MB 上限")
+
+    try:
+        full.write_bytes(encoded)
+    except OSError as e:
+        raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
+
+    # 触发后台增量重索引（不阻塞响应）
+    try:
+        idx.trigger_background_reindex()
+    except Exception as e:
+        # 索引失败不阻断保存成功
+        logging.getLogger(__name__).warning("Save reindex failed: %s", e)
+
+    return PreviewSaveResponse(
+        path=path,
+        content=body.content,
+        bytes_written=len(encoded),
+        reindex_triggered=True,
     )
