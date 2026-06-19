@@ -66,6 +66,7 @@ export class PreviewPane extends LitElement {
   @property({ type: Number }) line: number | null = null;
   @property() keyword = "";
   @property({ type: Boolean }) writable = false;
+  @property({ type: Boolean }) noHeader = false;
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
@@ -77,9 +78,9 @@ export class PreviewPane extends LitElement {
     }
   }
 
-  private _enterEdit = () => {
+  enterEdit() {
     this._mode = "edit";
-  };
+  }
 
   private _onEditorCancel = () => {
     this._mode = "preview";
@@ -126,9 +127,11 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown" && this._mode === "edit") {
       return html`
-        <div class="header">
-          <span class="path">${this.path}</span>
-        </div>
+        ${this.noHeader ? null : html`
+          <div class="header">
+            <span class="path">${this.path}</span>
+          </div>
+        `}
         <md-editor
           .path=${this.path}
           .originalContent=${this._content}
@@ -141,12 +144,14 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown") {
       return html`
-        <div class="header">
-          <span class="path">${this.path}</span>
-          ${this.writable
-            ? html`<button class="edit-btn" @click=${this._enterEdit}>✏️ 编辑</button>`
-            : null}
-        </div>
+        ${this.noHeader ? null : html`
+          <div class="header">
+            <span class="path">${this.path}</span>
+            ${this.writable
+              ? html`<button class="edit-btn" @click=${() => this.enterEdit()}>✏️ 编辑</button>`
+              : null}
+          </div>
+        `}
         <md-viewer
           .content=${this._content}
           .line=${this.line}
@@ -158,9 +163,11 @@ export class PreviewPane extends LitElement {
     // 非 md：现有纯文本 + 行号视图
     const lines = this._content.split("\n");
     return html`
-      <div class="header">
-        <span class="path">${this.path}</span>
-      </div>
+      ${this.noHeader ? null : html`
+        <div class="header">
+          <span class="path">${this.path}</span>
+        </div>
+      `}
       <div class="body">
         ${lines.map((line, i) => {
           const lineNo = i + 1;

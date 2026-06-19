@@ -114,3 +114,25 @@ describe("<preview-pane> edit mode", () => {
     expect(el.shadowRoot!.querySelector("md-editor")).toBeNull();
   });
 });
+
+describe("<preview-pane> noHeader prop", () => {
+  it("does not render .header in markdown preview branch when noHeader=true", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# hi" ?noHeader=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
+  });
+
+  it("does not render .header in edit mode when noHeader=true", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# hi" writable ?noHeader=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+  });
+});
