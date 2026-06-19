@@ -2446,7 +2446,7 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
     .menu-item:disabled { opacity: 0.5; cursor: not-allowed; }
     .menu-item .icon { font-size: 16px; flex-shrink: 0; }
     .menu-item .label { font-size: var(--cortex-fs-sm); font-weight: 500; }
-  `;Dt([c()],at.prototype,"backLabel",2);Dt([c()],at.prototype,"title",2);Dt([c()],at.prototype,"meta",2);Dt([c({attribute:!1})],at.prototype,"actions",2);Dt([m()],at.prototype,"_menuOpen",2);at=Dt([P("focus-header")],at);var Ro=Object.defineProperty,Io=Object.getOwnPropertyDescriptor,ne=(e,t,r,s)=>{for(var i=s>1?void 0:s?Io(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Ro(t,r,i),i};let xt=class extends T{constructor(){super(...arguments),this.title="历史会话",this.sessions=[],this.clearing=!1}_onSelect(e){this.dispatchEvent(new CustomEvent("select",{detail:e.detail,bubbles:!0,composed:!0}))}_onClear(){this.clearing||this.dispatchEvent(new CustomEvent("clear",{bubbles:!0,composed:!0}))}render(){const e=this.sessions.length>0;return p`
+  `;Dt([c()],at.prototype,"backLabel",2);Dt([c()],at.prototype,"title",2);Dt([c()],at.prototype,"meta",2);Dt([c({attribute:!1})],at.prototype,"actions",2);Dt([m()],at.prototype,"_menuOpen",2);at=Dt([P("focus-header")],at);var Ro=Object.defineProperty,Io=Object.getOwnPropertyDescriptor,ne=(e,t,r,s)=>{for(var i=s>1?void 0:s?Io(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Ro(t,r,i),i};let xt=class extends T{constructor(){super(...arguments),this.title="历史会话",this.sessions=[],this.clearing=!1}_onClear(){this.clearing||this.dispatchEvent(new CustomEvent("clear",{bubbles:!0,composed:!0}))}render(){const e=this.sessions.length>0;return p`
       <div class="header">
         <div class="title">${this.title}</div>
         ${e?p`
@@ -2457,7 +2457,7 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
             ${this.clearing?"清空中...":"清空"}
           </button>`:null}
       </div>
-      ${this.sessions.length===0?p`<div class="empty">暂无历史会话</div>`:this.sessions.map(t=>p`<history-item .session=${t} @select=${this._onSelect}></history-item>`)}
+      ${this.sessions.length===0?p`<div class="empty">暂无历史会话</div>`:this.sessions.map(t=>p`<history-item .session=${t}></history-item>`)}
     `}};xt.styles=$`
     :host {
       display: flex;
@@ -2631,13 +2631,12 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
       padding: 0 2px;
       border-radius: 2px;
     }
-  `;gr([c({attribute:!1})],re.prototype,"result",2);gr([c({type:Boolean,reflect:!0})],re.prototype,"active",2);re=gr([P("result-card")],re);var Mo=Object.defineProperty,Vo=Object.getOwnPropertyDescriptor,Pe=(e,t,r,s)=>{for(var i=s>1?void 0:s?Vo(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Mo(t,r,i),i};let Pt=class extends T{constructor(){super(...arguments),this.results=[],this.activePath=null,this.activeLine=null}_onSelect(e){this.dispatchEvent(new CustomEvent("select",{detail:e.detail,bubbles:!0,composed:!0}))}render(){return p`
+  `;gr([c({attribute:!1})],re.prototype,"result",2);gr([c({type:Boolean,reflect:!0})],re.prototype,"active",2);re=gr([P("result-card")],re);var Mo=Object.defineProperty,Vo=Object.getOwnPropertyDescriptor,Pe=(e,t,r,s)=>{for(var i=s>1?void 0:s?Vo(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Mo(t,r,i),i};let Pt=class extends T{constructor(){super(...arguments),this.results=[],this.activePath=null,this.activeLine=null}render(){return p`
       <div class="list-pane">
         ${this.results.length===0?p`<div class="empty">无搜索结果</div>`:this.results.map(e=>p`
               <result-card
                 .result=${e}
-                ?active=${this.activePath===e.path&&this.activeLine===e.line}
-                @select=${this._onSelect}>
+                ?active=${this.activePath===e.path&&this.activeLine===e.line}>
               </result-card>`)}
       </div>
     `}};Pt.styles=$`
