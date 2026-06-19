@@ -3,12 +3,50 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from cortex.web_v2 import deps
 from cortex.web_v2.api.preview import _compute_writable
+from cortex.web_v2.app import create_app
 from cortex.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
     PreviewSaveResponse,
 )
+
+
+@pytest.fixture
+def reset_deps():
+    deps.reset_singletons()
+    yield
+    deps.reset_singletons()
+
+
+@pytest.mark.asyncio
+async def test_get_preview_includes_writable_true_for_md(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "doc1.md"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["writable"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_preview_includes_writable_false_for_csv(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "data.csv"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["writable"] is False
 
 
 def test_preview_response_has_writable_field():
