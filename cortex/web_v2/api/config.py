@@ -3,7 +3,6 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
 
 from cortex.web_v2.api.errors import CortexAPIError
 from cortex.web_v2.config_store import (
@@ -28,10 +27,12 @@ Scope = Literal["local", "global"]
 
 @router.get("/config", response_model=ConfigResponse)
 async def get_config(scope: Scope = Query(...)):
-    try:
-        path = resolve_env_path(scope)
-    except ValueError as e:
-        raise CortexAPIError(400, "INVALID_SCOPE", str(e))
+    """Read all known .env keys for the given scope.
+
+    Returns every key in KNOWN_KEYS; missing keys are returned as empty
+    strings. ``exists`` indicates whether the .env file is on disk.
+    """
+    path = resolve_env_path(scope)
     values, exists = read_env_values(path, KNOWN_KEYS)
     return ConfigResponse(scope=scope, values=values, exists=exists)
 
@@ -41,28 +42,29 @@ async def put_config(
     req: ConfigUpdateRequest,
     scope: Scope = Query(...),
 ):
-    try:
-        path = resolve_env_path(scope)
-    except ValueError as e:
-        raise CortexAPIError(400, "INVALID_SCOPE", str(e))
+    """Write the supplied values to the .env at the given scope.
+
+    Values are strings; empty string deletes the key. Returns which fields
+    require a cortex gui restart to take effect.
+    """
+    path = resolve_env_path(scope)
 
     # 1. Validate
     errors = validate_values(req.values)
     if errors.fields:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "code": "VALIDATION_FAILED",
-                "fields": [f.model_dump() for f in errors.fields],
-            },
+        raise CortexAPIError(
+            status=400,
+            code="VALIDATION_FAILED",
+            detail=f"{len(errors.fields)} 个字段校验失败",
+            extra={"fields": [f.model_dump() for f in errors.fields]},
         )
 
     # 2. Diff against current to compute needs_restart
     current_values, _ = read_env_values(path, KNOWN_KEYS)
-    changed_fields = [
+    changed_fields = sorted(
         k for k, v in req.values.items()
         if (current_values.get(k, "") != v)
-    ]
+    )
     restart_fields = [f for f in changed_fields if f in RESTART_FIELDS]
 
     # 3. Write

@@ -1,6 +1,4 @@
 """Integration tests for /api/config endpoints via FastAPI TestClient."""
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
