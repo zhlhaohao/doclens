@@ -37,6 +37,10 @@ export class FocusHeader extends LitElement {
       font-weight: 500;
       line-height: 1;
       transition: background 0.15s, opacity 0.1s;
+      /* Disable iOS Safari double-tap-zoom detection: without this, the first
+         tap is held for ~300ms to see if a second tap follows, which surfaces
+         as "needs 2 clicks" on touch devices. */
+      touch-action: manipulation;
     }
     .back:hover { background: var(--cortex-primary-soft); }
     .back:active { opacity: 0.7; }
@@ -65,6 +69,7 @@ export class FocusHeader extends LitElement {
       justify-content: center;
       padding: 0;
       transition: background 0.15s, opacity 0.1s;
+      touch-action: manipulation;
     }
     .more-btn:hover { background: var(--cortex-surface-muted); }
     .more-btn:active { opacity: 0.7; }
