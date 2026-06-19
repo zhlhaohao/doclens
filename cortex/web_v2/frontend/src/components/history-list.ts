@@ -60,13 +60,6 @@ export class HistoryList extends LitElement {
   /** 清空中状态：禁用按钮 + 文字变化 */
   @property({ type: Boolean }) clearing = false;
 
-  private _onSelect(e: CustomEvent<{ session: Session }>) {
-    this.dispatchEvent(new CustomEvent("select", {
-      detail: e.detail,
-      bubbles: true, composed: true,
-    }));
-  }
-
   private _onClear() {
     if (this.clearing) return;
     this.dispatchEvent(new CustomEvent("clear", {
@@ -89,7 +82,7 @@ export class HistoryList extends LitElement {
       </div>
       ${this.sessions.length === 0
         ? html`<div class="empty">暂无历史会话</div>`
-        : this.sessions.map((s) => html`<history-item .session=${s} @select=${this._onSelect}></history-item>`)}
+        : this.sessions.map((s) => html`<history-item .session=${s}></history-item>`)}
     `;
   }
 }
