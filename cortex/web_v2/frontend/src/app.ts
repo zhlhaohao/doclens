@@ -19,16 +19,24 @@ import "./components/chat-stream";
 import "./views/search-view";
 import "./views/chat-view";
 import "./views/history-view";
+import "./views/settings-view";
+import "./components/app-bar";
 
 @customElement("cortex-app")
 export class CortexApp extends LitElement {
   static styles = css`
     :host {
       display: flex;
-      flex-direction: row;
+      flex-direction: column;
       height: 100dvh;
       overflow: hidden;
       background: var(--cortex-bg);
+    }
+    .app-body {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      min-height: 0;
     }
     .main {
       flex: 1;
@@ -39,7 +47,7 @@ export class CortexApp extends LitElement {
     }
     /* 移动端：纵向布局（activity-bar 隐藏，tab-bar 在底部） */
     @media (max-width: 1023px) {
-      :host { flex-direction: column; }
+      .app-body { flex-direction: column; }
     }
   `;
 
@@ -56,25 +64,35 @@ export class CortexApp extends LitElement {
     super.disconnectedCallback();
   }
 
-  private _navigate(e: CustomEvent<{ view: ViewId }>) {
+  private _navigate(e: CustomEvent<{ view: ViewId; scope?: "local" | "global" }>) {
     actions.setView(e.detail.view);
+    if (e.detail.view === "settings" && e.detail.scope) {
+      actions.setSettingsScope(e.detail.scope);
+    }
   }
 
   private _renderView() {
     const view = store.getState().view;
     if (view === "search") return html`<search-view></search-view>`;
     if (view === "chat") return html`<chat-view></chat-view>`;
+    if (view === "settings") return html`<settings-view></settings-view>`;
     return html`<history-view></history-view>`;
   }
 
   render() {
     const view = store.getState().view;
     return html`
-      <activity-bar .active=${view} @navigate=${this._navigate}></activity-bar>
-      <div class="main">
-        ${this._renderView()}
+      <app-bar
+        .activeView=${view}
+        @navigate=${this._navigate}
+      ></app-bar>
+      <div class="app-body">
+        <activity-bar .active=${view} @navigate=${this._navigate}></activity-bar>
+        <div class="main">
+          ${this._renderView()}
+        </div>
+        <tab-bar .active=${view} @navigate=${this._navigate}></tab-bar>
       </div>
-      <tab-bar .active=${view} @navigate=${this._navigate}></tab-bar>
     `;
   }
 }
