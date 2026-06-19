@@ -3,7 +3,35 @@
  * 不引入 Redux/Zustand。组件通过 `store.subscribe(selector, cb)`
  * 订阅特定切片，状态变化时自动回调。
  */
-import type { AppState, Session } from "./types";
+import type {
+  AppState,
+  Session,
+  SettingsFieldValues,
+  SettingsScope,
+} from "./types";
+
+function computeDirty(
+  original: SettingsFieldValues,
+  values: SettingsFieldValues,
+): boolean {
+  const keys = new Set([...Object.keys(original), ...Object.keys(values)]);
+  for (const k of keys) {
+    if ((original[k] ?? "") !== (values[k] ?? "")) return true;
+  }
+  return false;
+}
+
+function dirtyFieldList(
+  original: SettingsFieldValues,
+  values: SettingsFieldValues,
+): string[] {
+  const keys = new Set([...Object.keys(original), ...Object.keys(values)]);
+  const changed: string[] = [];
+  for (const k of keys) {
+    if ((original[k] ?? "") !== (values[k] ?? "")) changed.push(k);
+  }
+  return changed;
+}
 
 const INITIAL_STATE: AppState = {
   view: "search",
@@ -25,6 +53,15 @@ const INITIAL_STATE: AppState = {
   pendingSession: null,
   status: null,
   error: null,
+  settings: {
+    scope: "local",
+    values: {},
+    original: {},
+    dirty: false,
+    exists: true,
+    saving: false,
+    error: null,
+  },
 };
 
 type Listener = (state: AppState) => void;
@@ -97,4 +134,50 @@ export const actions = {
   setPendingSession(session: Session | null) {
     store.setState({ pendingSession: session });
   },
+
+  setSettingsScope(scope: SettingsScope) {
+    const cur = store.getState().settings;
+    store.setState({ settings: { ...cur, scope } });
+  },
+
+  loadSettings(values: SettingsFieldValues, exists: boolean) {
+    const cur = store.getState().settings;
+    store.setState({
+      settings: {
+        ...cur,
+        values: { ...values },
+        original: { ...values },
+        exists,
+        dirty: false,
+        error: null,
+      },
+    });
+  },
+
+  updateSetting(field: string, value: string) {
+    const cur = store.getState().settings;
+    const values = { ...cur.values, [field]: value };
+    const dirty = computeDirty(cur.original, values);
+    store.setState({ settings: { ...cur, values, dirty } });
+  },
+
+  revertSettings() {
+    const cur = store.getState().settings;
+    const values = { ...cur.original };
+    store.setState({ settings: { ...cur, values, dirty: false } });
+  },
+
+  setSettingsSaving(saving: boolean) {
+    const cur = store.getState().settings;
+    store.setState({ settings: { ...cur, saving } });
+  },
+
+  setSettingsError(error: string | null) {
+    const cur = store.getState().settings;
+    store.setState({ settings: { ...cur, error } });
+  },
 };
+
+export function selectSettingsDirtyFields(state: AppState): string[] {
+  return dirtyFieldList(state.settings.original, state.settings.values);
+}
