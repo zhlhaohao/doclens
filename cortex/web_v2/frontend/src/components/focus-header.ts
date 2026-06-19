@@ -36,10 +36,10 @@ export class FocusHeader extends LitElement {
       font-size: 22px;
       font-weight: 500;
       line-height: 1;
-      transition: background 0.15s, transform 0.1s;
+      transition: background 0.15s, opacity 0.1s;
     }
     .back:hover { background: var(--cortex-primary-soft); }
-    .back:active { transform: scale(0.92); }
+    .back:active { opacity: 0.7; }
     .title {
       font-weight: 600;
       color: var(--cortex-text);
@@ -64,10 +64,10 @@ export class FocusHeader extends LitElement {
       align-items: center;
       justify-content: center;
       padding: 0;
-      transition: background 0.15s, transform 0.1s;
+      transition: background 0.15s, opacity 0.1s;
     }
     .more-btn:hover { background: var(--cortex-surface-muted); }
-    .more-btn:active { transform: scale(0.92); }
+    .more-btn:active { opacity: 0.7; }
     .more-btn .kebab {
       font-size: 18px;
       line-height: 1;
