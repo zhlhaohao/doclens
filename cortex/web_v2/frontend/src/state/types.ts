@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "history";
+export type ViewId = "search" | "chat" | "history" | "settings";
 export type FocusState = "initial" | "focus";
 
 export interface SearchResult {
@@ -52,6 +52,20 @@ export interface SystemStatus {
   file_types: Record<string, number>;
 }
 
+/** Settings page */
+export type SettingsScope = "local" | "global";
+export type SettingsFieldValues = Record<string, string>;
+
+export interface SettingsViewState {
+  scope: SettingsScope;
+  values: SettingsFieldValues;
+  original: SettingsFieldValues;   // snapshot at load / last save
+  dirty: boolean;                   // recomputed on every action for convenience
+  exists: boolean;                  // does the target .env exist on disk?
+  saving: boolean;
+  error: string | null;
+}
+
 export interface AppState {
   view: ViewId;
   search: SearchViewState;
@@ -62,4 +76,5 @@ export interface AppState {
   pendingSession: Session | null;
   status: SystemStatus | null;
   error: string | null;
+  settings: SettingsViewState;
 }
