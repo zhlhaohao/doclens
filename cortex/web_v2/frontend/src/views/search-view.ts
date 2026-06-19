@@ -5,7 +5,6 @@ import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
-import { savePreview, PreviewSaveError } from "../api/preview";
 import "../components/preview-pane";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
@@ -239,6 +238,7 @@ export class SearchView extends LitElement {
   };
 
   private _onPreviewSaved = () => {
+    this.previewDirty = false;
     this._pushToast("已保存", "success", 2500);
   };
 
