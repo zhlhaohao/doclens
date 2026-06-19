@@ -44,6 +44,11 @@ export class SearchView extends LitElement {
       flex: 1;
       min-height: 0;
     }
+    /* When the detail-overlay covers focus-body, disable pointer events on
+       focus-body so its (visually-hidden) focus-header can't intercept taps.
+       Without this, iOS Safari's hit-testing can route the tap to the wrong
+       one of the two overlapping focus-headers, causing "needs 2 taps". */
+    .focus-body.is-covered { pointer-events: none; }
     .focus-main {
       display: flex;
       flex: 1;
@@ -335,7 +340,7 @@ export class SearchView extends LitElement {
     const detailTop = store.getState().detailStack[store.getState().detailStack.length - 1];
     return html`
       <toast-stack></toast-stack>
-      <div class="focus-body">
+      <div class="focus-body ${detailTop ? "is-covered" : ""}">
         <focus-header
           back-label="新搜索"
           title=${s.query}

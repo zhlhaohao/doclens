@@ -2370,6 +2370,10 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
       font-weight: 500;
       line-height: 1;
       transition: background 0.15s, opacity 0.1s;
+      /* Disable iOS Safari double-tap-zoom detection: without this, the first
+         tap is held for ~300ms to see if a second tap follows, which surfaces
+         as "needs 2 clicks" on touch devices. */
+      touch-action: manipulation;
     }
     .back:hover { background: var(--cortex-primary-soft); }
     .back:active { opacity: 0.7; }
@@ -2398,6 +2402,7 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
       justify-content: center;
       padding: 0;
       transition: background 0.15s, opacity 0.1s;
+      touch-action: manipulation;
     }
     .more-btn:hover { background: var(--cortex-surface-muted); }
     .more-btn:active { opacity: 0.7; }
@@ -3100,7 +3105,7 @@ ${r}</blockquote>
         </div>
       `;const t=v.getState().detailStack[v.getState().detailStack.length-1];return p`
       <toast-stack></toast-stack>
-      <div class="focus-body">
+      <div class="focus-body ${t?"is-covered":""}">
         <focus-header
           back-label="新搜索"
           title=${e.query}
@@ -3184,6 +3189,11 @@ ${r}</blockquote>
       flex: 1;
       min-height: 0;
     }
+    /* When the detail-overlay covers focus-body, disable pointer events on
+       focus-body so its (visually-hidden) focus-header can't intercept taps.
+       Without this, iOS Safari's hit-testing can route the tap to the wrong
+       one of the two overlapping focus-headers, causing "needs 2 taps". */
+    .focus-body.is-covered { pointer-events: none; }
     .focus-main {
       display: flex;
       flex: 1;
