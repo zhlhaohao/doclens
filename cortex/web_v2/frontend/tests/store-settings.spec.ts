@@ -1,8 +1,14 @@
-import { describe, it, expect } from "vitest";
-import { store, actions, selectSettingsDirtyFields } from "../src/state/store";
+import { describe, it, expect, beforeEach } from "vitest";
+import { store, actions, selectSettingsDirtyFields, INITIAL_STATE } from "../src/state/store";
 import { SETTINGS_FIELDS } from "../src/views/settings-fields";
 
 describe("settings store slice", () => {
+  beforeEach(() => {
+    // Reset the store singleton to INITIAL_STATE before each test to avoid
+    // cross-test contamination from the module-level state.
+    store.setState({ ...INITIAL_STATE, settings: { ...INITIAL_STATE.settings } });
+  });
+
   it("starts with scope=local and empty values", () => {
     // sanity: SETTINGS_FIELDS placeholder is exported (filled in Task 6)
     expect(Array.isArray(SETTINGS_FIELDS)).toBe(true);
