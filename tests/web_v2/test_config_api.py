@@ -77,3 +77,41 @@ def test_put_returns_400_on_type_validation_error(client):
 def test_put_rejects_unknown_scope(client):
     resp = client.get("/api/config", params={"scope": "weird"})
     assert resp.status_code == 400 or resp.status_code == 422  # 422 if FastAPI validates Literal
+
+
+def test_copy_from_global_creates_local_when_global_exists(client, tmp_path, monkeypatch):
+    # Use separate home/work dirs so global and local .env are distinct files
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("USERPROFILE", str(home_dir))
+    monkeypatch.chdir(work_dir)
+
+    global_env = home_dir / ".cortex" / ".env"
+    global_env.parent.mkdir(parents=True)
+    global_env.write_text("PLANIFY_API_KEY=sk-global\nCORTEX_MAX_RESULTS=20\n", encoding="utf-8")
+
+    # Local doesn't exist yet
+    local_env = work_dir / ".cortex" / ".env"
+    assert not local_env.exists()
+
+    # Trigger copy
+    resp = client.post("/api/config/copy-from-global")
+    assert resp.status_code == 200
+    assert local_env.exists()
+    assert "PLANIFY_API_KEY=sk-global" in local_env.read_text(encoding="utf-8")
+
+
+def test_copy_from_global_returns_404_when_global_missing(client, tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("USERPROFILE", str(home_dir))
+    monkeypatch.chdir(work_dir)
+
+    resp = client.post("/api/config/copy-from-global")
+    assert resp.status_code == 404
