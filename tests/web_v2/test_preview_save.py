@@ -1,4 +1,9 @@
 """PUT /api/preview + GET writable 字段测试。"""
+import os
+import stat
+from pathlib import Path
+
+from cortex.web_v2.api.preview import _compute_writable
 from cortex.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
@@ -32,3 +37,38 @@ def test_save_response_has_required_fields():
     assert resp.content == "abc"
     assert resp.bytes_written == 3
     assert resp.reindex_triggered is True
+
+
+def test_compute_writable_true_for_normal_md(tmp_path: Path, monkeypatch):
+    f = tmp_path / "doc.md"
+    f.write_text("hi", encoding="utf-8")
+    assert _compute_writable(f, search_path=tmp_path) is True
+
+
+def test_compute_writable_false_for_binary_ext(tmp_path: Path, monkeypatch):
+    f = tmp_path / "doc.pdf"
+    f.write_text("fake", encoding="utf-8")
+    assert _compute_writable(f, search_path=tmp_path) is False
+
+
+def test_compute_writable_false_inside_cortex_dir(tmp_path: Path, monkeypatch):
+    cortex = tmp_path / ".cortex"
+    cortex.mkdir()
+    f = cortex / "config.env"
+    f.write_text("X=1", encoding="utf-8")
+    assert _compute_writable(f, search_path=tmp_path) is False
+
+
+def test_compute_writable_false_for_readonly_file(tmp_path: Path, monkeypatch):
+    f = tmp_path / "ro.md"
+    f.write_text("hi", encoding="utf-8")
+    os.chmod(f, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    try:
+        assert _compute_writable(f, search_path=tmp_path) is False
+    finally:
+        os.chmod(f, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_compute_writable_false_for_missing_file(tmp_path: Path, monkeypatch):
+    f = tmp_path / "missing.md"
+    assert _compute_writable(f, search_path=tmp_path) is False

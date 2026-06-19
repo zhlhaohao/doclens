@@ -22,6 +22,24 @@ BINARY_PREVIEW_EXTS = frozenset({
     ".csv",
 })
 
+
+def _compute_writable(full: Path, search_path: Path) -> bool:
+    """判断文件是否可在 PUT /api/preview 中写入。
+
+    用于 GET（响应 writable 字段）和 PUT（写前检查），保持两端判断一致。
+    """
+    if not full.exists() or not full.is_file():
+        return False
+    if full.suffix.lower() in BINARY_PREVIEW_EXTS:
+        return False
+    # .cortex/ 内部不让用户改索引
+    try:
+        full.relative_to(search_path / ".cortex")
+        return False
+    except ValueError:
+        pass
+    return os.access(full, os.W_OK)
+
 _LANGUAGE_MAP = {
     ".py": "python", ".md": "markdown", ".txt": "text",
     ".js": "javascript", ".ts": "typescript", ".tsx": "tsx",
