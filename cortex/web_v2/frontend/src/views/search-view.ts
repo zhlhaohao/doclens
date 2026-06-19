@@ -5,6 +5,10 @@ import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
+import { savePreview, PreviewSaveError } from "../api/preview";
+import "../components/preview-pane";
+import "../components/toast-stack";
+import type { ToastStack } from "../components/toast-stack";
 
 /** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐） */
 const FULL_FILE_PREVIEW_EXTS = [".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv"];
@@ -99,6 +103,8 @@ export class SearchView extends LitElement {
   @state() private historySessions: Session[] = [];
   @state() private _clearing = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
+  @state() private previewDirty = false;
+  @state() private previewWritable = false;
   private _unsubscribe?: () => void;
 
   connectedCallback() {
@@ -184,14 +190,17 @@ export class SearchView extends LitElement {
   }
 
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
+    // dirty 时弹 confirm
+    if (this.previewDirty) {
+      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
+      if (!ok) return;
+      this._discardPreviewEdits();
+    }
     const r = e.detail.result;
     actions.pushDetail(r);
-    this.previewError = null; // 重置错误态
+    this.previewError = null;
     try {
       const params = new URLSearchParams({ path: r.path });
-      // md 与二进制合成 md 走 md-viewer 渲染：需要全文件以保持
-      // data-source-line 与绝对行号一致，否则 md-viewer 的行号映射会偏移。
-      // 非 markdown（纯文本视图）保留 30 行窗口切片以节省渲染。
       const fullFile = isFullFilePreview(r.path);
       if (r.line && !fullFile) {
         params.set("start_line", String(Math.max(1, r.line - 10)));
@@ -204,17 +213,42 @@ export class SearchView extends LitElement {
         this.previewPath = body.path;
         this.previewLanguage = body.language;
         this.previewLine = (r.line as number | null) ?? null;
+        this.previewWritable = body.writable ?? false;
       } else {
         const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
         if (err.code === "NOT_INDEXED") {
           this.previewError = "NOT_INDEXED";
           this.previewContent = "";
           this.previewPath = r.path;
+          this.previewWritable = false;
         }
       }
     } catch (e) {
       console.warn("preview failed", e);
     }
+  }
+
+  private _discardPreviewEdits() {
+    const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+    pp?.discard?.();
+    this.previewDirty = false;
+  }
+
+  private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
+    this.previewDirty = e.detail.dirty;
+  };
+
+  private _onPreviewSaved = () => {
+    this._pushToast("已保存", "success", 2500);
+  };
+
+  private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>) => {
+    this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
+  };
+
+  private _pushToast(message: string, level: "success" | "error" | "info", duration: number) {
+    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
+    stack?.pushToast(message, level, duration);
   }
 
   private _popDetail() {
@@ -284,6 +318,7 @@ export class SearchView extends LitElement {
     // focus 状态
     const detailTop = store.getState().detailStack[store.getState().detailStack.length - 1];
     return html`
+      <toast-stack></toast-stack>
       <div class="focus-body">
         <focus-header
           back-label="新搜索"
@@ -306,7 +341,11 @@ export class SearchView extends LitElement {
                 language=${this.previewLanguage}
                 content=${this.previewContent}
                 .line=${this.previewLine}
-                .keyword=${s.query}>
+                .keyword=${s.query}
+                ?writable=${this.previewWritable}
+                @dirty-change=${this._onPreviewDirty}
+                @saved=${this._onPreviewSaved}
+                @save-failed=${this._onPreviewSaveFailed}>
               </preview-pane>`}
         </div>
         <div class="focus-input-bar">
@@ -334,7 +373,11 @@ export class SearchView extends LitElement {
                 language=${this.previewLanguage}
                 content=${this.previewContent}
                 .line=${this.previewLine}
-                .keyword=${s.query}>
+                .keyword=${s.query}
+                ?writable=${this.previewWritable}
+                @dirty-change=${this._onPreviewDirty}
+                @saved=${this._onPreviewSaved}
+                @save-failed=${this._onPreviewSaveFailed}>
               </preview-pane>`}
         </div>` : null}
     `;
