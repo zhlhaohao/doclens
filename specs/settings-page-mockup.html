@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cortex · 设置页 Mockup</title>
+<style>
+  /* ===== Cortex design tokens（复制自 tokens.css） ===== */
+  :root {
+    --cortex-primary: #0D9488;
+    --cortex-primary-hover: #0F766E;
+    --cortex-primary-soft: #F0FDFA;
+    --cortex-bg: #F5F5F7;
+    --cortex-surface: #FFFFFF;
+    --cortex-surface-muted: #FAFAFA;
+    --cortex-border: #E4E4E7;
+    --cortex-border-muted: #F1F5F9;
+    --cortex-text: #0F172A;
+    --cortex-text-muted: #64748B;
+    --cortex-text-subtle: #94A3B8;
+    --cortex-warning: #F59E0B;
+    --cortex-danger: #DC2626;
+    --cortex-success: #10B981;
+    --cortex-space-1: 4px;
+    --cortex-space-2: 8px;
+    --cortex-space-3: 12px;
+    --cortex-space-4: 16px;
+    --cortex-space-6: 24px;
+    --cortex-space-8: 32px;
+    --cortex-radius-sm: 4px;
+    --cortex-radius-md: 8px;
+    --cortex-radius-lg: 12px;
+    --cortex-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --cortex-font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --cortex-fs-xs: 12px;
+    --cortex-fs-sm: 13px;
+    --cortex-fs-base: 14px;
+    --cortex-fs-md: 15px;
+    --cortex-fs-lg: 17px;
+    --cortex-fs-xl: 30px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--cortex-font);
+    background: var(--cortex-bg);
+    color: var(--cortex-text);
+    font-size: var(--cortex-fs-base);
+    line-height: 1.5;
+  }
+  code, .mono { font-family: var(--cortex-font-mono); }
+
+  /* ===== 整体框架：模拟 cortex gui 的主视图 ===== */
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* 顶部 AppBar */
+  .app-bar {
+    height: 56px;
+    background: var(--cortex-surface);
+    border-bottom: 1px solid var(--cortex-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--cortex-space-6);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 50;
+  }
+  .app-bar .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    font-weight: 600;
+    font-size: var(--cortex-fs-md);
+  }
+  .app-bar .brand .logo {
+    width: 28px; height: 28px;
+    background: var(--cortex-primary);
+    border-radius: var(--cortex-radius-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+  }
+  .app-bar .right-cluster {
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-3);
+    position: relative;
+  }
+  .avatar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    padding: 4px 8px 4px 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--cortex-text);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .avatar-btn:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
+  .avatar-btn .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0D9488, #0F766E);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: var(--cortex-fs-sm);
+  }
+  .avatar-btn .name { font-size: var(--cortex-fs-sm); }
+  .avatar-btn .chev { color: var(--cortex-text-muted); font-size: 12px; }
+
+  /* 用户菜单下拉 */
+  .user-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 280px;
+    background: var(--cortex-surface);
+    border: 1px solid var(--cortex-border);
+    border-radius: var(--cortex-radius-lg);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    padding: var(--cortex-space-2);
+    z-index: 60;
+  }
+  .user-menu .menu-header {
+    padding: var(--cortex-space-2) var(--cortex-space-3);
+    border-bottom: 1px solid var(--cortex-border-muted);
+    margin-bottom: var(--cortex-space-2);
+  }
+  .user-menu .menu-header .email {
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-muted);
+    font-family: var(--cortex-font-mono);
+  }
+  .user-menu .menu-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--cortex-space-3);
+    padding: var(--cortex-space-3);
+    border-radius: var(--cortex-radius-md);
+    cursor: pointer;
+    transition: background 0.15s;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+  }
+  .user-menu .menu-item:hover { background: var(--cortex-surface-muted); }
+  .user-menu .menu-item.active { background: var(--cortex-primary-soft); }
+  .user-menu .menu-item .icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+  }
+  .user-menu .menu-item .text { flex: 1; min-width: 0; }
+  .user-menu .menu-item .text .label {
+    font-size: var(--cortex-fs-sm);
+    font-weight: 500;
+    color: var(--cortex-text);
+    display: block;
+  }
+  .user-menu .menu-item .text .desc {
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-muted);
+    display: block;
+    margin-top: 2px;
+  }
+
+  .shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* 左侧 activity-bar（与现有 3 视图共享导航；⚙️ 为新增） */
+  .activity-bar {
+    width: 48px;
+    background: #0F172A;
+    color: #94A3B8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--cortex-space-4) 0;
+    gap: var(--cortex-space-4);
+    flex-shrink: 0;
+  }
+  .activity-bar button {
+    width: 36px; height: 36px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    border-radius: var(--cortex-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .activity-bar button:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .activity-bar button.active { background: var(--cortex-primary); color: #fff; }
+
+  /* 主内容区 */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--cortex-bg);
+  }
+
+  /* 顶部 header：标题 + 当前工作目录 + 操作 */
+  .page-header {
+    background: var(--cortex-surface);
+    border-bottom: 1px solid var(--cortex-border);
+    padding: var(--cortex-space-4) var(--cortex-space-8);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cortex-space-4);
+    flex-shrink: 0;
+  }
+  .page-header .title-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .page-header h1 {
+    margin: 0;
+    font-size: var(--cortex-fs-lg);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+  }
+  .page-header .workdir {
+    font-family: var(--cortex-font-mono);
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .page-header .actions { display: flex; gap: var(--cortex-space-2); align-items: center; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    padding: 6px 12px;
+    border: 1px solid var(--cortex-border);
+    background: var(--cortex-surface);
+    color: var(--cortex-text);
+    font-size: var(--cortex-fs-sm);
+    border-radius: var(--cortex-radius-md);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: var(--cortex-surface-muted); }
+  .btn.primary {
+    background: var(--cortex-primary);
+    border-color: var(--cortex-primary);
+    color: #fff;
+  }
+  .btn.primary:hover { background: var(--cortex-primary-hover); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ghost:hover { background: var(--cortex-surface-muted); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* 从全局复制 banner（仅 .env 不存在时显示） */
+  .copy-banner {
+    background: var(--cortex-primary-soft);
+    border-bottom: 1px solid var(--cortex-border);
+    padding: var(--cortex-space-3) var(--cortex-space-8);
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-3);
+    font-size: var(--cortex-fs-sm);
+    color: var(--cortex-text);
+  }
+  .copy-banner .icon { color: var(--cortex-primary); font-size: 16px; }
+  .copy-banner .grow { flex: 1; }
+
+  /* Tab 导航 */
+  .tab-strip {
+    display: flex;
+    gap: 0;
+    background: var(--cortex-surface);
+    border-bottom: 1px solid var(--cortex-border);
+    padding: 0 var(--cortex-space-8);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .tab-strip button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: var(--cortex-space-3) var(--cortex-space-4);
+    font-size: var(--cortex-fs-base);
+    color: var(--cortex-text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-strip button:hover { color: var(--cortex-text); }
+  .tab-strip button.active {
+    color: var(--cortex-primary);
+    border-bottom-color: var(--cortex-primary);
+    font-weight: 500;
+  }
+  .tab-strip .badge-restart {
+    font-size: 10px;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--cortex-warning);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+
+  /* 滚动内容区 */
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--cortex-space-6) var(--cortex-space-8) 120px;
+  }
+  .tab-panel { display: none; max-width: 880px; margin: 0 auto; }
+  .tab-panel.active { display: block; }
+
+  /* Section 卡片 */
+  .section {
+    background: var(--cortex-surface);
+    border: 1px solid var(--cortex-border);
+    border-radius: var(--cortex-radius-lg);
+    padding: var(--cortex-space-6);
+    margin-bottom: var(--cortex-space-4);
+  }
+  .section h2 {
+    margin: 0 0 var(--cortex-space-1) 0;
+    font-size: var(--cortex-fs-md);
+    font-weight: 600;
+  }
+  .section .section-desc {
+    color: var(--cortex-text-muted);
+    font-size: var(--cortex-fs-sm);
+    margin-bottom: var(--cortex-space-6);
+  }
+
+  /* 字段行 */
+  .field {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    gap: var(--cortex-space-6);
+    padding: var(--cortex-space-3) 0;
+    border-top: 1px solid var(--cortex-border-muted);
+    align-items: start;
+  }
+  .field:first-of-type { border-top: none; }
+  .field-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .field-label .name {
+    font-size: var(--cortex-fs-base);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+  }
+  .field-label .env {
+    font-family: var(--cortex-font-mono);
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-subtle);
+  }
+  .field-control { display: flex; flex-direction: column; gap: var(--cortex-space-1); }
+  .field-control .row { display: flex; align-items: center; gap: var(--cortex-space-2); }
+  .field-control .hint {
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-muted);
+  }
+
+  /* 输入组件 */
+  .input, .select {
+    padding: 6px 10px;
+    border: 1px solid var(--cortex-border);
+    border-radius: var(--cortex-radius-md);
+    background: var(--cortex-surface);
+    font-size: var(--cortex-fs-sm);
+    font-family: inherit;
+    color: var(--cortex-text);
+    width: 100%;
+    max-width: 420px;
+    transition: border-color 0.15s;
+  }
+  .input.mono { font-family: var(--cortex-font-mono); }
+  .input:focus, .select:focus {
+    outline: none;
+    border-color: var(--cortex-primary);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+  }
+  .input:disabled { background: var(--cortex-surface-muted); color: var(--cortex-text-muted); }
+  .input.with-suffix { padding-right: 64px; }
+  .input-row { position: relative; max-width: 420px; }
+  .input-suffix {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-subtle);
+    pointer-events: none;
+  }
+  .input-row .reveal-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--cortex-text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: var(--cortex-fs-xs);
+    border-radius: var(--cortex-radius-sm);
+  }
+  .input-row .reveal-btn:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
+
+  /* Toggle */
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: var(--cortex-border);
+    border-radius: 20px;
+    transition: background 0.15s;
+  }
+  .toggle .slider::before {
+    content: "";
+    position: absolute;
+    height: 16px; width: 16px;
+    left: 2px; bottom: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.15s;
+  }
+  .toggle input:checked + .slider { background: var(--cortex-primary); }
+  .toggle input:checked + .slider::before { transform: translateX(16px); }
+
+  /* Multi-checkbox group */
+  .check-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: var(--cortex-space-2);
+    max-width: 560px;
+  }
+  .check-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    padding: 4px 8px;
+    border: 1px solid var(--cortex-border);
+    border-radius: var(--cortex-radius-md);
+    font-size: var(--cortex-fs-sm);
+    cursor: pointer;
+    user-select: none;
+  }
+  .check-item input { margin: 0; }
+  .check-item.checked {
+    background: var(--cortex-primary-soft);
+    border-color: var(--cortex-primary);
+    color: var(--cortex-primary-hover);
+  }
+
+  /* Effect badges */
+  .effect {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .effect.restart { background: rgba(245, 158, 11, 0.12); color: var(--cortex-warning); }
+  .effect.reindex { background: rgba(13, 148, 136, 0.12); color: var(--cortex-primary-hover); }
+  .effect.live { background: rgba(16, 185, 129, 0.12); color: var(--cortex-success); }
+
+  /* Scope badge in page header */
+  .scope-badge {
+    display: inline-block;
+    font-size: var(--cortex-fs-md);
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: var(--cortex-radius-md);
+    margin-right: var(--cortex-space-2);
+  }
+  .scope-badge.local {
+    background: var(--cortex-primary-soft);
+    color: var(--cortex-primary-hover);
+    border: 1px solid var(--cortex-primary);
+  }
+  .scope-badge.global {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--cortex-warning);
+    border: 1px solid var(--cortex-warning);
+  }
+
+  /* 显式 scope 切换器（segmented control）*/
+  .scope-switch {
+    display: inline-flex;
+    border: 1px solid var(--cortex-border);
+    border-radius: var(--cortex-radius-md);
+    overflow: hidden;
+    background: var(--cortex-surface-muted);
+  }
+  .scope-switch button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--cortex-text-muted);
+    font-family: inherit;
+    font-size: var(--cortex-fs-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .scope-switch button:hover { color: var(--cortex-text); }
+  .scope-switch button.active[data-scope="local"] {
+    background: var(--cortex-primary);
+    color: #fff;
+  }
+  .scope-switch button.active[data-scope="global"] {
+    background: var(--cortex-warning);
+    color: #fff;
+  }
+  .scope-switch button .ic { font-size: 14px; }
+
+  /* Read-only display */
+  .readonly-value {
+    font-family: var(--cortex-font-mono);
+    font-size: var(--cortex-fs-sm);
+    color: var(--cortex-text);
+    padding: 6px 10px;
+    background: var(--cortex-surface-muted);
+    border-radius: var(--cortex-radius-md);
+    border: 1px solid var(--cortex-border-muted);
+  }
+
+  /* Info box */
+  .info-box {
+    background: var(--cortex-primary-soft);
+    border-left: 3px solid var(--cortex-primary);
+    padding: var(--cortex-space-3) var(--cortex-space-4);
+    border-radius: var(--cortex-radius-md);
+    font-size: var(--cortex-fs-sm);
+    color: var(--cortex-text);
+    margin-bottom: var(--cortex-space-4);
+  }
+  .info-box.warn { background: rgba(245, 158, 11, 0.08); border-left-color: var(--cortex-warning); }
+
+  /* 粘性页脚 */
+  .footer-bar {
+    position: absolute;
+    bottom: 0;
+    left: 48px;
+    right: 0;
+    background: var(--cortex-surface);
+    border-top: 1px solid var(--cortex-border);
+    padding: var(--cortex-space-3) var(--cortex-space-8);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cortex-space-4);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  }
+  .footer-bar .dirty-status {
+    font-size: var(--cortex-fs-sm);
+    color: var(--cortex-text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--cortex-space-2);
+  }
+  .footer-bar .dirty-dot {
+    width: 8px; height: 8px;
+    background: var(--cortex-warning);
+    border-radius: 50%;
+  }
+  .footer-bar .actions { display: flex; gap: var(--cortex-space-2); }
+
+  /* Effect legend (top of scroll area) */
+  .legend {
+    display: flex;
+    gap: var(--cortex-space-4);
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text-muted);
+    margin-bottom: var(--cortex-space-4);
+    flex-wrap: wrap;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* Notes panel (mockup-only commentary) */
+  .mockup-notes {
+    position: fixed;
+    right: 16px;
+    bottom: 80px;
+    max-width: 320px;
+    background: #FFFCEF;
+    border: 1px dashed var(--cortex-warning);
+    border-radius: var(--cortex-radius-md);
+    padding: var(--cortex-space-3);
+    font-size: var(--cortex-fs-xs);
+    color: var(--cortex-text);
+    line-height: 1.5;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    z-index: 100;
+  }
+  .mockup-notes h3 { margin: 0 0 var(--cortex-space-2) 0; font-size: var(--cortex-fs-sm); color: var(--cortex-warning); }
+  .mockup-notes ul { margin: 0; padding-left: 18px; }
+  .mockup-notes li { margin-bottom: 4px; }
+  .mockup-notes .close { position: absolute; top: 4px; right: 8px; cursor: pointer; border: none; background: transparent; color: var(--cortex-text-muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ===== AppBar（新增；放品牌 + 用户/配置入口） ===== -->
+  <header class="app-bar">
+    <div class="brand">
+      <span class="logo">🧠</span>
+      <span>Cortex</span>
+    </div>
+    <div class="right-cluster">
+      <button class="avatar-btn" id="avatar-btn">
+        <span class="avatar">L</span>
+        <span class="name">Liang</span>
+        <span class="chev">▾</span>
+      </button>
+      <!-- 用户菜单下拉（mockup 默认展开以便评审；真实实现点击 avatar 切换） -->
+      <div class="user-menu" id="user-menu">
+        <div class="menu-header">
+          <div style="font-size: var(--cortex-fs-sm); font-weight: 500;">Liang</div>
+          <div class="email">liang@example.com</div>
+        </div>
+        <button class="menu-item active" type="button">
+          <span class="icon">📁</span>
+          <span class="text">
+            <span class="label">本地配置</span>
+            <span class="desc">D:\github\cortex\test_work_dir\.cortex\.env · 仅当前目录</span>
+          </span>
+        </button>
+        <button class="menu-item" type="button">
+          <span class="icon">🌍</span>
+          <span class="text">
+            <span class="label">全局配置</span>
+            <span class="desc">~/.cortex/.env · 所有项目共用</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+  <!-- ===== Activity Bar（左侧；仅搜索/对话/历史，配置入口已上移到 AppBar） ===== -->
+  <nav class="activity-bar" aria-label="主导航">
+    <button title="搜索">🔍</button>
+    <button title="对话">💬</button>
+    <button title="历史">🕘</button>
+  </nav>
+
+  <!-- ===== 主内容 ===== -->
+  <div class="main" style="position: relative;">
+
+    <!-- 页面 header 已移除：scope 入口仅在 AppBar 下拉里，不重复显示；文件位置也不显示。
+         当前 scope 通过页脚【💾 保存本地配置 / 保存全局配置】按钮文案体现。 -->
+
+    <!-- "从全局复制" banner（仅 .env 不存在时显示；mockup 默认展示） -->
+    <!-- 真实实现：检测 local .env 是否存在，存在则不渲染此 banner -->
+    <!--
+    <div class="copy-banner">
+      <span class="icon">ℹ️</span>
+      <span>当前工作目录尚未创建 <code>.cortex/.env</code>，将使用全局配置 <code>~/.cortex/.env</code>。</span>
+      <span class="grow"></span>
+      <button class="btn primary">📋 从全局复制并编辑</button>
+    </div>
+    -->
+
+    <!-- Tab 导航 -->
+    <nav class="tab-strip" role="tablist">
+      <button class="active" data-tab="ai" role="tab">AI 配置</button>
+      <button data-tab="search" role="tab">搜索调优</button>
+      <button data-tab="scoring" role="tab">评分</button>
+      <button data-tab="terminal" role="tab">终端</button>
+    </nav>
+
+    <!-- 滚动内容 -->
+    <div class="scroll-area">
+
+      <!-- 生效条件 legend -->
+      <div class="legend">
+        <span><span class="effect live">●</span> 即时生效（下次查询）</span>
+        <span><span class="effect restart">●</span> 需重启 cortex gui</span>
+      </div>
+
+      <!-- ============================== Tab 1: AI 配置 ============================== -->
+      <div class="tab-panel active" data-panel="ai">
+
+        <div class="info-box">
+          本 tab 的所有参数修改后需<strong>重启 cortex gui</strong> 才能生效。当前编辑的是 <strong>本地配置</strong>（{cwd}/.cortex/.env），只影响当前工作目录；如需所有项目共用，请从左侧 activity-bar 切换到 <strong>全局配置</strong> 入口。
+        </div>
+
+        <div class="section">
+          <h2>🤖 AI 模型与 API</h2>
+          <p class="section-desc">用于 cortex ai 子命令与 Web UI 对话视图。</p>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">API Base URL <span class="effect restart">🔁 需重启</span></div>
+              <div class="env">PLANIFY_BASE_URL</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input mono" type="text" value="https://api.minimaxi.com/anthropic" style="max-width: 420px;" />
+              </div>
+              <div class="hint">Anthropic API 端点。可替换为兼容代理或本地模型服务。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">API Key <span class="effect restart">🔁 需重启</span></div>
+              <div class="env">PLANIFY_API_KEY</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <div class="input-row" style="max-width: 420px;">
+                  <input class="input mono" id="api-key" type="password" value="sk-ant-xxxxx" />
+                  <button class="reveal-btn" onclick="const i=document.getElementById('api-key');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'显示':'隐藏'">显示</button>
+                </div>
+              </div>
+              <div class="hint">Anthropic API 密钥。保存时写入 .env，不会回传到前端其它视图。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">模型 ID <span class="effect restart">🔁 需重启</span></div>
+              <div class="env">PLANIFY_MODEL_ID</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input mono" list="model-list" type="text" value="MiniMax-M2.7-highspeed" style="max-width: 420px;" />
+                <datalist id="model-list">
+                  <option value="claude-opus-4-6"></option>
+                  <option value="claude-sonnet-4-6"></option>
+                  <option value="claude-haiku-4-5"></option>
+                </datalist>
+              </div>
+              <div class="hint">支持自动补全常见模型；也可手动输入自定义模型 ID。</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ============================== Tab 2: 搜索调优 ============================== -->
+      <div class="tab-panel" data-panel="search">
+
+        <div class="info-box">
+          本 tab 的参数保存后下次查询即时生效，<strong>无需重启</strong>。
+        </div>
+
+        <div class="section">
+          <h2>📊 结果数量</h2>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">最大结果数（跨文档） <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MAX_RESULTS</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" min="1" max="200" value="20" style="width: 120px;" />
+              </div>
+              <div class="hint">search 工具返回的最大文档数量。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">每文档最大节点数 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MAX_NODES_PER_DOC</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" min="1" max="20" value="5" style="width: 120px;" />
+              </div>
+              <div class="hint">同一文档返回的最大节点（段落）数。</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="section">
+          <h2>🎯 关键词匹配</h2>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">关键词最大跨度 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MAX_SPAN</div>
+            </div>
+            <div class="field-control">
+              <div class="row"><input class="input" type="number" min="1" max="100" value="20" style="width: 120px;" /></div>
+              <div class="hint">窗口内匹配关键词的最大字符跨度。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">最少关键词匹配数 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MIN_KEYWORD_MATCH</div>
+            </div>
+            <div class="field-control">
+              <div class="row"><input class="input" type="number" min="0" max="10" value="2" style="width: 120px;" /></div>
+              <div class="hint">文档至少命中多少个关键词才进入候选。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">最低邻近度阈值 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MIN_PROXIMITY_SCORE</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <select class="select" style="width: 200px;">
+                  <option value="0">0 — 不限制</option>
+                  <option value="1" selected>1 — 部分紧邻</option>
+                  <option value="2">2 — 全部关键词紧邻</option>
+                </select>
+              </div>
+              <div class="hint">关键词在文档中的邻近程度阈值。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">行级关键词阈值 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MIN_KEYWORDS_PER_LINE</div>
+            </div>
+            <div class="field-control">
+              <div class="row"><input class="input" type="number" min="1" max="10" value="2" style="width: 120px;" /></div>
+              <div class="hint">单行至少命中多少关键词才被选为"最佳行"。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">综合评分阈值 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_MIN_SCORE_THRESHOLD</div>
+            </div>
+            <div class="field-control">
+              <div class="row"><input class="input" type="number" step="0.05" min="0" max="1" value="0.0" style="width: 120px;" /></div>
+              <div class="hint">0 = 不过滤；0.3 = 轻微过滤；0.5+ 容易砍光多关键词结果。</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ============================== Tab 3: 评分 ============================== -->
+      <div class="tab-panel" data-panel="scoring">
+
+        <div class="info-box">
+          <strong>📐 评分原理（白话版）</strong>
+          <div style="margin-top: 8px; font-size: 13px; line-height: 1.7;">
+            最终得分（0~1）= 把下面 5 个信号<strong>按权重做加权平均</strong>（每个信号名对应下方一个"XX 权重"字段）：<br>
+            • <strong>关键词匹配</strong> —— 文档里命中的关键词数 ÷ 你查询的总词数<br>
+            • <strong>文件名匹配</strong> —— 文件名里命中的关键词数 ÷ 总词数<br>
+            • <strong>FTS 原始分</strong> —— FTS5 全文检索给的相关度（0~1 之间）<br>
+            • <strong>标题匹配</strong> —— 段落标题里命中的关键词数 ÷ 总词数<br>
+            • <strong>邻近度</strong> —— 0 / 0.5 / 1 三档（多词紧挨着分数更高）
+          </div>
+          <div style="margin-top: 8px; font-size: 13px;">
+            每个权重<strong>越大</strong>，对应信号对最终排序的影响越大；权重设为 <code>0</code> = <strong>完全忽略</strong>该信号。推荐区间 <code>0~10</code>。修改后下次查询即时生效。
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>⚖️ 权重配置</h2>
+          <p class="section-desc">所有权重推荐区间 <code>0 ~ 10</code>；<code>0</code> = 禁用该信号。</p>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">关键词匹配权重 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_WEIGHT_KEYWORD_MATCH · 范围 0~10</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" step="0.1" min="0" max="10" value="3.0" style="width: 100px;" />
+                <input type="range" min="0" max="10" step="0.1" value="3.0" style="flex: 1; max-width: 280px;" />
+              </div>
+              <div class="hint">权重越大，越偏好"命中的关键词数量多"的文档（多关键词 query 时尤其重要）。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">文件名匹配权重 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_WEIGHT_FILE_NAME_MATCH · 范围 0~10</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" step="0.1" min="0" max="10" value="2.0" style="width: 100px;" />
+                <input type="range" min="0" max="10" step="0.1" value="2.0" style="flex: 1; max-width: 280px;" />
+              </div>
+              <div class="hint">权重越大，文件名包含关键词的文档排序越靠前。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">FTS 原始分权重 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_WEIGHT_FTS_SCORE · 范围 0~10</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" step="0.1" min="0" max="10" value="2.0" style="width: 100px;" />
+                <input type="range" min="0" max="10" step="0.1" value="2.0" style="flex: 1; max-width: 280px;" />
+              </div>
+              <div class="hint">权重越大，越偏向传统全文检索 BM25 排序（与关键词匹配度正相关）。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">标题匹配权重 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_WEIGHT_TITLE_MATCH · 范围 0~10</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" step="0.1" min="0" max="10" value="1.5" style="width: 100px;" />
+                <input type="range" min="0" max="10" step="0.1" value="1.5" style="flex: 1; max-width: 280px;" />
+              </div>
+              <div class="hint">权重越大，节点标题（如 Markdown 小节标题）含关键词时排序越靠前。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">邻近度权重 <span class="effect live">● 即时</span></div>
+              <div class="env">CORTEX_WEIGHT_PROXIMITY_MATCH · 范围 0~10</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <input class="input" type="number" step="0.1" min="0" max="10" value="1.0" style="width: 100px;" />
+                <input type="range" min="0" max="10" step="0.1" value="1.0" style="flex: 1; max-width: 280px;" />
+              </div>
+              <div class="hint">权重越大，多关键词在文档中紧邻出现的文档越受偏好。</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ============================== Tab 4: 终端 ============================== -->
+      <div class="tab-panel" data-panel="terminal">
+
+        <div class="info-box warn">
+          ⚠️ 这些参数仅影响 <code>cortex</code> 命令行 / TUI 的<strong>终端输出格式</strong>，对 Web UI 没有可见效果。在此处提供编辑仅为了免去手动改 .env 的麻烦。
+        </div>
+
+        <div class="section">
+          <h2>🖥️ 终端结果显示</h2>
+          <p class="section-desc">仅影响 <code>cortex</code> CLI/TUI 在终端里展示搜索结果时的上下文行数。</p>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">上下文行数上限</div>
+              <div class="env">CORTEX_MAX_CONTEXT_LINES</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <div class="input-row">
+                  <input class="input with-suffix" type="number" value="5" style="width: 100px;" />
+                  <span class="input-suffix">行</span>
+                </div>
+              </div>
+              <div class="hint">每个命中行向上/向下最多各显示多少行原文上下文。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">锚点行数上限</div>
+              <div class="env">CORTEX_MAX_ANCHOR_LINES</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <div class="input-row">
+                  <input class="input with-suffix" type="number" value="3" style="width: 100px;" />
+                  <span class="input-suffix">行</span>
+                </div>
+              </div>
+              <div class="hint">从同一文档的所有命中行里，挑出多少个"最佳行"作为展示中心（锚点）。锚点越多，结果越完整但输出越长。</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <div class="name">锚点上下文扩展范围</div>
+              <div class="env">CORTEX_CONTEXT_EXPAND_RANGE</div>
+            </div>
+            <div class="field-control">
+              <div class="row">
+                <div class="input-row">
+                  <input class="input with-suffix" type="number" value="5" style="width: 100px;" />
+                  <span class="input-suffix">行</span>
+                </div>
+              </div>
+              <div class="hint">以每个锚点为中心，向前/向后各展开多少行作为上下文（再与"上下文行数上限"取较小值）。</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- 粘性页脚：保存 / 放弃 + 脏指示 -->
+    <footer class="footer-bar">
+      <div class="dirty-status">
+        <span class="dirty-dot"></span>
+        <span>有 <strong>3</strong> 个字段已修改（PLANIFY_API_KEY、CORTEX_MAX_RESULTS、CORTEX_WEIGHT_KEYWORD_MATCH）</span>
+      </div>
+      <div class="actions">
+        <button class="btn">放弃修改</button>
+        <button class="btn primary" title="把当前表单写入 {cwd}/.cortex/.env">💾 保存本地配置</button>
+      </div>
+    </footer>
+
+  </div>
+</div>
+</div>
+<!-- /.app-shell -->
+
+<!-- Mockup 说明卡（仅用于本次设计评审，真实实现移除） -->
+<div class="mockup-notes" id="notes">
+  <button class="close" onclick="document.getElementById('notes').remove()">×</button>
+  <h3>📋 Mockup 评审说明</h3>
+  <ul>
+    <li><strong>新增顶部 AppBar</strong>：左侧 🧠 Cortex 品牌；右侧用户头像 + 下拉菜单</li>
+    <li><strong>scope 入口仅此一处</strong>：AppBar 下拉里的 📁 本地配置 / 🌍 全局配置，不在页面其它地方重复显示，也不显示文件位置</li>
+    <li><strong>当前 scope</strong> 由页脚保存按钮文案体现（💾 保存本地配置 / 💾 保存全局配置）</li>
+    <li><strong>左侧 activity-bar</strong>保持只有 搜索/对话/历史 3 项</li>
+    <li><strong>4 个 tab</strong>：AI 配置 / 搜索调优 / 评分 / 终端</li>
+    <li><strong>页脚脏指示</strong>：展示有 N 个字段已修改</li>
+    <li><strong>API Key</strong>：默认隐藏，点【显示】切换</li>
+    <li><strong>评分 tab</strong>有综合评分公式和 5 个因子的精确解释</li>
+    <li><strong>终端 tab</strong>提示这些参数对 Web 无效</li>
+    <li>"从全局复制" banner 默认隐藏（顶部注释里有示例）</li>
+  </ul>
+</div>
+
+<script>
+  // 简单 tab 切换（仅供 mockup 演示）
+  document.querySelectorAll('.tab-strip button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll('.tab-strip button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p => {
+        p.classList.toggle('active', p.dataset.panel === target);
+      });
+    });
+  });
+
+  // Multi-checkbox：勾选时给 label 加 .checked
+  document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.check-item').classList.toggle('checked', cb.checked);
+    });
+  });
+
+  // AppBar 用户菜单：点击 avatar 切换下拉
+  const avatarBtn = document.getElementById('avatar-btn');
+  const userMenu = document.getElementById('user-menu');
+  if (avatarBtn && userMenu) {
+    avatarBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userMenu.style.display = userMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', (e) => {
+      if (!userMenu.contains(e.target) && e.target !== avatarBtn) {
+        userMenu.style.display = 'none';
+      }
+    });
+  }
+
+  // 用户菜单项：点击切换 active（mockup 演示；真实实现会切换到对应 scope 的配置页）
+  // 选 🌍 全局配置 → 整页切换为全局编辑模式（页脚保存按钮文案变为 "💾 保存全局配置"）
+  document.querySelectorAll('.user-menu .menu-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.user-menu .menu-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      const isGlobal = item.querySelector('.label').textContent.includes('全局');
+      const saveBtn = document.querySelector('.footer-bar .btn.primary');
+      if (saveBtn) saveBtn.textContent = isGlobal ? '💾 保存全局配置' : '💾 保存本地配置';
+      // 关闭下拉
+      document.getElementById('user-menu').style.display = 'none';
+    });
+  });
+</script>
+
+</body>
+</html>
