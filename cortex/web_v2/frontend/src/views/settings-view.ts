@@ -10,7 +10,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig } from "../api/config";
+import { getConfig, putConfig, ConfigApiError } from "../api/config";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
 
@@ -211,9 +211,11 @@ export class SettingsView extends LitElement {
   @state() private _values: Record<string, string> = {};
   @state() private _original: Record<string, string> = {};
   @state() private _exists = true;
+  @state() private _scope: SettingsScope = "local";
 
-  private _scope: SettingsScope = "local";
   private _unsubscribe?: () => void;
+  private _loadGen = 0;            // invalidate stale loads (I1)
+  private _toastTimer?: number;    // clear on disconnect (I2)
 
   connectedCallback() {
     super.connectedCallback();
@@ -225,6 +227,13 @@ export class SettingsView extends LitElement {
 
   disconnectedCallback() {
     this._unsubscribe?.();
+    // I2: clear any pending toast timer to avoid post-disconnect state writes
+    if (this._toastTimer !== undefined) {
+      window.clearTimeout(this._toastTimer);
+      this._toastTimer = undefined;
+    }
+    // I1: invalidate any in-flight load so its resolution is a no-op
+    this._loadGen += 1;
     super.disconnectedCallback();
   }
 
@@ -237,14 +246,20 @@ export class SettingsView extends LitElement {
   }
 
   private async _load() {
+    // I1: generation counter invalidates stale loads (e.g. when scope
+    // changes before the previous fetch resolves, or when component is
+    // disconnected mid-fetch).
+    const gen = ++this._loadGen;
     this._error = null;
     try {
       const resp = await getConfig(this._scope);
+      if (gen !== this._loadGen || !this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
       this._exists = resp.exists;
       actions.loadSettings(resp.values, resp.exists);
-    } catch (e) {
+    } catch (e: unknown) {
+      if (gen !== this._loadGen || !this.isConnected) return;
       this._error = `加载失败: ${(e as Error).message}`;
     }
   }
@@ -275,16 +290,34 @@ export class SettingsView extends LitElement {
   private async _save() {
     if (!this._dirty || this._saving) return;
     this._saving = true;
+    // I5: clear any prior error so success toast isn't shown next to a stale error
+    this._error = null;
     try {
       const result = await putConfig(this._scope, this._values);
+      if (!this.isConnected) return;
       this._original = { ...this._values };
       actions.loadSettings(this._values, true);
       this._toast = result.needs_restart
         ? `已保存。重启 cortex gui 后 AI 配置生效。`
         : `已保存。下次查询立即生效。`;
-      setTimeout(() => { this._toast = null; }, 4000);
-    } catch (e: any) {
-      this._error = `保存失败: ${e?.body?.fields?.map((f: any) => f.field).join(", ") || e.message}`;
+      // I2: track timer so it can be cleared on disconnect
+      this._toastTimer = window.setTimeout(() => {
+        this._toast = null;
+        this._toastTimer = undefined;
+      }, 4000);
+    } catch (e: unknown) {
+      // I6: prefer typed ConfigApiError to extract per-field failure list
+      let msg: string;
+      if (e instanceof ConfigApiError) {
+        const body = e.body as { fields?: { field: string; error: string }[] } | null;
+        const failedFields = body?.fields?.map((f) => f.field).join(", ");
+        msg = failedFields ? `保存失败（${failedFields}）` : `保存失败 (HTTP ${e.status})`;
+      } else if (e instanceof Error) {
+        msg = `保存失败: ${e.message}`;
+      } else {
+        msg = "保存失败: 未知错误";
+      }
+      this._error = msg;
     } finally {
       this._saving = false;
     }
