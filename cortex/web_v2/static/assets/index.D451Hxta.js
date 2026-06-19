@@ -2319,11 +2319,13 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
           <button
             class="more-btn"
             type="button"
+            aria-label="更多"
+            title="更多"
             aria-haspopup="true"
             aria-expanded=${this._menuOpen?"true":"false"}
             @click=${this._onMoreClick}
           >
-            更多 <span class="chev">▾</span>
+            <span class="kebab" aria-hidden="true">${this._menuOpen?"⋯":"⋮"}</span>
           </button>
           <div class="menu ${this._menuOpen?"open":""}" role="menu">
             ${this.actions.map(e=>p`
@@ -2388,8 +2390,12 @@ var Gs=Object.defineProperty;var Zs=(e,t,r)=>t in e?Gs(e,t,{enumerable:!0,config
       cursor: pointer;
     }
     .more-btn:hover { background: var(--cortex-surface); }
-    .more-btn .chev { transition: transform 0.15s; display: inline-block; }
-    .more-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+    .more-btn .kebab {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
     .menu {
       position: absolute;
       top: calc(100% + 6px);
