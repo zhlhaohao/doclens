@@ -33,7 +33,7 @@ function dirtyFieldList(
   return changed;
 }
 
-const INITIAL_STATE: AppState = {
+export const INITIAL_STATE: AppState = {
   view: "search",
   search: {
     state: "initial",
