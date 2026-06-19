@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi import APIRouter, Query
 import ulid as _ulid
 
-from cortex.config import get_global_cortex_dir
 from cortex.web_v2.api.errors import CortexAPIError
 from cortex.web_v2.models.session import (
     SessionAppendRequest,
@@ -26,12 +25,18 @@ _store_lock = threading.RLock()
 
 
 def _get_store() -> SessionsStore:
-    """全局单例 SessionsStore（路径来自 get_global_cortex_dir()）。"""
+    """全局单例 SessionsStore。
+
+    sessions.db 与 index.db 放在同一个 .cortex/ 目录下，跟随当前工作目录，
+    保证不同工作目录的会话相互隔离。
+    """
     global _store
     if _store is None:
         with _store_lock:
             if _store is None:
-                db_path = get_global_cortex_dir() / "sessions.db"
+                from cortex.web_v2.deps import get_index_manager
+                idx = get_index_manager()
+                db_path = Path(idx.index_path).parent / "sessions.db"
                 db_path.parent.mkdir(parents=True, exist_ok=True)
                 _store = SessionsStore(db_path)
     return _store

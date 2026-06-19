@@ -1,5 +1,6 @@
 """/api/sessions CRUD 测试。"""
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -103,3 +104,30 @@ async def test_clear_sessions_all_when_no_type(patched_store):
 
         all_list = await client.get("/api/sessions")
         assert all_list.json()["returned"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sessions_db_follows_workdir(temp_workdir, env_cortex_config, monkeypatch):
+    """sessions.db 必须跟随工作目录（与 index.db 同目录），不能写到全局 ~/.cortex/。
+
+    防止回归：之前 _get_store 用 get_global_cortex_dir() 导致不同工作目录的
+    会话互相串扰。修复后应与 IndexManager.index_path 同目录。
+    """
+    import asyncio
+    from cortex.web_v2 import deps
+    import cortex.web_v2.api.sessions as sessions_mod
+    deps.reset_singletons()
+    monkeypatch.setattr(sessions_mod, "_store", None)
+
+    try:
+        # _get_store 内部会触发 IndexManager.load_or_build_index（同步阻塞），
+        # 必须丢到子线程跑避免 pytest-asyncio 事件循环冲突。
+        store = await asyncio.to_thread(sessions_mod._get_store)
+
+        # 期望路径：{temp_workdir}/.cortex/sessions.db（与 index.db 同目录）
+        expected_path = temp_workdir / ".cortex" / "sessions.db"
+        assert Path(store._db_path).resolve() == expected_path.resolve(), (
+            f"sessions.db 路径错误：期望 {expected_path}，实际 {store._db_path}"
+        )
+    finally:
+        deps.reset_singletons()
