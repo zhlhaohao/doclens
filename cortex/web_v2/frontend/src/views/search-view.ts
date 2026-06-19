@@ -295,6 +295,7 @@ export class SearchView extends LitElement {
           <search-results
             .results=${s.results}
             .activePath=${detailTop?.path ?? null}
+            .activeLine=${detailTop?.line ?? null}
             @select=${this._onResultSelect}>
           </search-results>
           ${this.previewError === "NOT_INDEXED"

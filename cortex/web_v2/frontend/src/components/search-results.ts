@@ -41,6 +41,7 @@ export class SearchResults extends LitElement {
 
   @property({ attribute: false }) results: SearchResult[] = [];
   @property({ attribute: false }) activePath: string | null = null;
+  @property({ attribute: false }) activeLine: number | null = null;
 
   private _onSelect(e: CustomEvent<{ result: SearchResult }>) {
     this.dispatchEvent(new CustomEvent("select", {
@@ -57,7 +58,7 @@ export class SearchResults extends LitElement {
           : this.results.map((r) => html`
               <result-card
                 .result=${r}
-                ?active=${this.activePath === r.path}
+                ?active=${this.activePath === r.path && this.activeLine === r.line}
                 @select=${this._onSelect}>
               </result-card>`)}
       </div>
