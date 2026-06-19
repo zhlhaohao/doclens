@@ -10,7 +10,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, ConfigApiError } from "../api/config";
+import { getConfig, putConfig, ConfigApiError, copyFromGlobal } from "../api/config";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
 
@@ -287,6 +287,21 @@ export class SettingsView extends LitElement {
     actions.revertSettings();
   }
 
+  private async _copyFromGlobal() {
+    try {
+      await copyFromGlobal();
+      await this._load();
+    } catch (e: unknown) {
+      if (e instanceof ConfigApiError) {
+        this._error = `复制失败 (HTTP ${e.status})`;
+      } else if (e instanceof Error) {
+        this._error = `复制失败: ${e.message}`;
+      } else {
+        this._error = "复制失败: 未知错误";
+      }
+    }
+  }
+
   private async _save() {
     if (!this._dirty || this._saving) return;
     this._saving = true;
@@ -474,6 +489,16 @@ export class SettingsView extends LitElement {
     const scopeLabel = this._scope === "local" ? "本地" : "全局";
     const existsHint = this._exists ? "" : "（新建）";
     return html`
+      ${this._scope === "local" && !this._exists
+        ? html`
+            <div class="copy-banner">
+              <span>ℹ️</span>
+              <span>当前工作目录尚未创建 <code>.cortex/.env</code>，将使用全局配置。</span>
+              <span class="grow"></span>
+              <button class="btn primary" @click=${this._copyFromGlobal}>📋 从全局复制并编辑</button>
+            </div>
+          `
+        : nothing}
       <nav class="tab-strip" role="tablist">
         ${TAB_ORDER.map((tab) => html`
           <button

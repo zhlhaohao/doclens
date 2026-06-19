@@ -54,3 +54,12 @@ export async function putConfig(
   }
   return body as ConfigSaveResult;
 }
+
+export async function copyFromGlobal(): Promise<{ ok: boolean; saved_path: string }> {
+  const resp = await fetch("/api/config/copy-from-global", { method: "POST" });
+  const body = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new ConfigApiError(resp.status, body);
+  }
+  return body as { ok: boolean; saved_path: string };
+}

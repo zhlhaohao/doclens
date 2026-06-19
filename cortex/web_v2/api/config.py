@@ -1,5 +1,6 @@
 """GET/PUT /api/config — read/write .env for a given scope."""
 import logging
+import shutil
 from typing import Literal
 
 from fastapi import APIRouter, Query
@@ -82,3 +83,20 @@ async def put_config(
         needs_restart=bool(restart_fields),
         restart_fields=restart_fields,
     )
+
+
+@router.post("/config/copy-from-global")
+async def copy_from_global():
+    """Copy ~/.cortex/.env to {cwd}/.cortex/.env.
+
+    Used by the empty-state banner in <settings-view> when the local .env
+    does not exist. Returns 404 if the global .env doesn't exist either.
+    """
+    global_path = resolve_env_path("global")
+    local_path = resolve_env_path("local")
+    if not global_path.exists():
+        raise CortexAPIError(404, "GLOBAL_ENV_MISSING", f"全局 .env 不存在: {global_path}")
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(str(global_path), str(local_path))
+    logger.info("copied global env -> %s", local_path)
+    return {"ok": True, "saved_path": str(local_path)}

@@ -74,4 +74,30 @@ describe("config api client", () => {
       body: errBody,
     });
   });
+
+  it("copyFromGlobal builds POST /api/config/copy-from-global", async () => {
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true, saved_path: "/tmp/.cortex/.env" }),
+    });
+
+    const { copyFromGlobal } = await import("../src/api/config");
+    const result = await copyFromGlobal();
+    expect(result.ok).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/config/copy-from-global",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("copyFromGlobal throws ConfigApiError on 404", async () => {
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({ code: "GLOBAL_ENV_MISSING", detail: "not found" }),
+    });
+
+    const { copyFromGlobal } = await import("../src/api/config");
+    await expect(copyFromGlobal()).rejects.toBeInstanceOf(ConfigApiError);
+  });
 });
