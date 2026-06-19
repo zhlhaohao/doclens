@@ -98,6 +98,7 @@ async def preview(
         content=content,
         line_range=line_range,
         highlights=[],
+        writable=_compute_writable(full, base),
     )
 
 
@@ -129,4 +130,5 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         content=md_content,
         line_range=None,
         highlights=[],
+        writable=False,  # 合成预览不可写
     )
