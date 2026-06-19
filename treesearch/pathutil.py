@@ -49,31 +49,23 @@ def get_allowed_extensions_for_source_types(source_types: list[str]) -> set[str]
 
 
 def _find_gitignore(start_dir: str) -> str | None:
-    """Find the nearest .gitignore by searching *start_dir* and its parents.
+    """Return ``<start_dir>/.gitignore`` if it exists, else ``None``.
 
-    Stops searching when a ``.git`` directory is found (project root) or the
-    filesystem root is reached.  Returns the path to the ``.gitignore`` file,
-    or ``None`` if not found.
+    Only the gitignore at the indexed root is consulted — parent project
+    gitignores are intentionally NOT walked into. Otherwise indexing a
+    subdirectory of a project (e.g. a dir that the project's own .gitignore
+    marks as ignored) would silently filter out every file, contradicting
+    the user's explicit intent to index that directory. This also matches
+    ``resolve_paths``'s documented behaviour ("honour .gitignore files
+    found at the root of walked directories").
     """
-    curr = os.path.abspath(start_dir)
-    while True:
-        candidate = os.path.join(curr, ".gitignore")
-        if os.path.isfile(candidate):
-            return candidate
-        # Stop at project root (.git present) or filesystem root
-        if os.path.isdir(os.path.join(curr, ".git")):
-            break
-        parent = os.path.dirname(curr)
-        if parent == curr:
-            break
-        curr = parent
-    return None
+    candidate = os.path.join(os.path.abspath(start_dir), ".gitignore")
+    return candidate if os.path.isfile(candidate) else None
 
 
 def _load_gitignore_spec(root: str):
-    """Try to load the nearest .gitignore as a ``pathspec`` matcher.
+    """Load ``<root>/.gitignore`` as a ``pathspec`` matcher.
 
-    Searches *root* and its parent directories (up to the project root).
     Returns a ``(pathspec.PathSpec, base_dir)`` tuple, or ``(None, root)``
     if the file is not found or ``pathspec`` is not installed.
     """

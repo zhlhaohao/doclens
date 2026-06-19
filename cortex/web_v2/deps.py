@@ -30,15 +30,34 @@ def get_config() -> CortexConfig:
 
 
 def get_index_manager() -> IndexManager:
-    """获取 IndexManager 单例（懒加载 + 线程安全）。"""
+    """获取 IndexManager 单例（懒加载 + 线程安全）。
+
+    `load_or_build_index()` 最终会调用 `TreeSearch.index()`，后者在事件循环
+    已运行时会拒绝执行（见 treesearch.py 的 `asyncio.get_running_loop()` 检查）。
+    因此在子线程中完成初始化，既绕过事件循环检查，也兼容 sync / async 调用方。
+    """
     global _idx_manager
     if _idx_manager is None:
         with _lock:
             if _idx_manager is None:
                 config = get_config()
-                _idx_manager = IndexManager(config)
-                _idx_manager.load_or_build_index()
-                logger.info("IndexManager initialized: %d documents", len(_idx_manager.documents))
+                mgr = IndexManager(config)
+                err: list = []
+
+                def _build():
+                    try:
+                        mgr.load_or_build_index()
+                    except Exception as e:  # noqa: BLE001
+                        err.append(e)
+
+                t = threading.Thread(target=_build, daemon=True)
+                t.start()
+                t.join()
+                if err:
+                    raise err[0]
+                # 构建成功后再发布单例，避免半初始化实例泄漏到后续调用
+                _idx_manager = mgr
+                logger.info("IndexManager initialized: %d documents", len(mgr.documents))
     return _idx_manager
 
 
