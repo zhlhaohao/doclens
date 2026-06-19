@@ -235,6 +235,11 @@ export class SearchView extends LitElement {
     this.previewDirty = false;
   }
 
+  private _enterPreviewEdit() {
+    const pp = this.shadowRoot?.querySelector(".detail-overlay preview-pane") as any;
+    pp?.enterEdit?.();
+  }
+
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
     this.previewDirty = e.detail.dirty;
   };
@@ -375,11 +380,15 @@ export class SearchView extends LitElement {
           <focus-header
             back-label="结果"
             title=${detailTop.path}
+            .actions=${this.previewWritable
+              ? [{ label: "编辑", icon: "✏️", onClick: () => this._enterPreviewEdit() }]
+              : []}
             @back=${this._popDetail}>
           </focus-header>
           ${this.previewError === "NOT_INDEXED"
             ? this._renderNotIndexedHint(false)
             : html`<preview-pane
+                ?noHeader=${true}
                 path=${this.previewPath}
                 language=${this.previewLanguage}
                 content=${this.previewContent}
