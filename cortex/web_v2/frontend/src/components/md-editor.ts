@@ -167,6 +167,7 @@ export class MdEditor extends LitElement {
     this._text = this.originalContent;
     this._dirty = false;
     this._error = null;
+    this._updateDirty();
     this.dispatchEvent(new CustomEvent("cancel", {}));
   }
 

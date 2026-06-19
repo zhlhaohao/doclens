@@ -133,17 +133,19 @@ export class SearchView extends LitElement {
   }
 
   private async _onClearHistory() {
-    this._clearing = true;
-    this.requestUpdate();
-    try {
-      await clearSessions("search");
-      this.historySessions = [];
-    } catch (e) {
-      console.warn("clear sessions failed", e);
-    } finally {
-      this._clearing = false;
+    await this._safeAction(async () => {
+      this._clearing = true;
       this.requestUpdate();
-    }
+      try {
+        await clearSessions("search");
+        this.historySessions = [];
+      } catch (e) {
+        console.warn("clear sessions failed", e);
+      } finally {
+        this._clearing = false;
+        this.requestUpdate();
+      }
+    });
   }
 
   private get viewState() {
@@ -151,80 +153,80 @@ export class SearchView extends LitElement {
   }
 
   private async _submit(e: CustomEvent<{ value: string }>) {
-    const query = e.detail.value;
-    this.localQuery = query;
-    actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
-    this.loading = true;
-    try {
-      const res = await searchApi({ query });
-      const created = await createSession({ type: "search", title: query, preview: query.slice(0, 100) });
-      actions.setSearchState({
-        state: "focus",
-        query,
-        results: res.results,
-        total: res.total,
-        source: res.source,
-        currentSession: {
-          id: created.id, type: "search", title: query,
-          preview: query.slice(0, 100), updated_at: new Date().toISOString(),
-          message_count: res.total,
-        },
-      });
-      await appendSession(created.id, res.results.map((r) => ({
-        kind: "result",
-        payload: JSON.stringify(r),
-      })), res.total);
-      this._loadHistory();
-    } catch (err) {
-      actions.setError(`搜索失败: ${(err as Error).message}`);
-    } finally {
-      this.loading = false;
-    }
+    await this._safeAction(async () => {
+      const query = e.detail.value;
+      this.localQuery = query;
+      actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
+      this.loading = true;
+      try {
+        const res = await searchApi({ query });
+        const created = await createSession({ type: "search", title: query, preview: query.slice(0, 100) });
+        actions.setSearchState({
+          state: "focus",
+          query,
+          results: res.results,
+          total: res.total,
+          source: res.source,
+          currentSession: {
+            id: created.id, type: "search", title: query,
+            preview: query.slice(0, 100), updated_at: new Date().toISOString(),
+            message_count: res.total,
+          },
+        });
+        await appendSession(created.id, res.results.map((r) => ({
+          kind: "result",
+          payload: JSON.stringify(r),
+        })), res.total);
+        this._loadHistory();
+      } catch (err) {
+        actions.setError(`搜索失败: ${(err as Error).message}`);
+      } finally {
+        this.loading = false;
+      }
+    });
   }
 
-  private _backToInitial() {
-    actions.setSearchState({ state: "initial", currentSession: null, results: [], query: "" });
-    this.localQuery = "";
-    this._loadHistory();
+  private async _backToInitial() {
+    await this._safeAction(() => {
+      actions.setSearchState({ state: "initial", currentSession: null, results: [], query: "" });
+      this.localQuery = "";
+      this._loadHistory();
+    });
   }
 
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
-    // dirty 时弹 confirm
-    if (this.previewDirty) {
-      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
-      if (!ok) return;
-      this._discardPreviewEdits();
-    }
-    const r = e.detail.result;
-    actions.pushDetail(r);
-    this.previewError = null;
-    try {
-      const params = new URLSearchParams({ path: r.path });
-      const fullFile = isFullFilePreview(r.path);
-      if (r.line && !fullFile) {
-        params.set("start_line", String(Math.max(1, r.line - 10)));
-        params.set("end_line", String(r.line + 20));
-      }
-      const res = await fetch(`/api/preview?${params}`);
-      if (res.ok) {
-        const body = await res.json();
-        this.previewContent = body.content;
-        this.previewPath = body.path;
-        this.previewLanguage = body.language;
-        this.previewLine = (r.line as number | null) ?? null;
-        this.previewWritable = body.writable ?? false;
-      } else {
-        const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
-        if (err.code === "NOT_INDEXED") {
-          this.previewError = "NOT_INDEXED";
-          this.previewContent = "";
-          this.previewPath = r.path;
-          this.previewWritable = false;
+    await this._safeAction(async () => {
+      const r = e.detail.result;
+      actions.pushDetail(r);
+      this.previewError = null;
+      try {
+        const params = new URLSearchParams({ path: r.path });
+        const fullFile = isFullFilePreview(r.path);
+        if (r.line && !fullFile) {
+          params.set("start_line", String(Math.max(1, r.line - 10)));
+          params.set("end_line", String(r.line + 20));
         }
+        const res = await fetch(`/api/preview?${params}`);
+        if (res.ok) {
+          const body = await res.json();
+          this.previewContent = body.content;
+          this.previewPath = body.path;
+          this.previewLanguage = body.language;
+          this.previewLine = (r.line as number | null) ?? null;
+          this.previewWritable = body.writable ?? false;
+        } else {
+          const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
+          if (err.code === "NOT_INDEXED") {
+            this.previewError = "NOT_INDEXED";
+            this.previewContent = "";
+            this.previewPath = r.path;
+            this.previewWritable = false;
+          }
+        }
+      } catch (e) {
+        console.warn("preview failed", e);
       }
-    } catch (e) {
-      console.warn("preview failed", e);
-    }
+    });
   }
 
   private _discardPreviewEdits() {
@@ -236,6 +238,15 @@ export class SearchView extends LitElement {
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
     this.previewDirty = e.detail.dirty;
   };
+
+  private async _safeAction(action: () => void | Promise<void>) {
+    if (this.previewDirty) {
+      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
+      if (!ok) return;
+      this._discardPreviewEdits();
+    }
+    await action();
+  }
 
   private _onPreviewSaved = () => {
     this.previewDirty = false;
