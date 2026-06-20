@@ -360,6 +360,9 @@ export class SearchView extends LitElement {
   };
 
   private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
+    // 清掉可能残留的编辑脏标志（上传可能发生在 edit 模式下），避免
+    // 后续切换结果时弹出陈旧的"丢弃修改？"确认框
+    this.previewDirty = false;
     this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
     // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
     this._reloadPreview();
