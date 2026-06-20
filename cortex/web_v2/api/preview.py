@@ -225,3 +225,41 @@ def _parse_upload_filename(filename: str):
     if not m:
         return None
     return (m.group("stem"), m.group("hash"), m.group("suffix"))
+
+
+class _HashCollisionError(Exception):
+    """多个索引文档命中同一 (stem, hash6) 时抛出。"""
+
+
+def _resolve_upload_target(idx, stem: str, hash6: str):
+    """遍历索引文档，按 (stem, sha256(rel_path)[:6]) 双因素匹配。
+
+    - IndexManager.documents[*].metadata["source_path"] 存的是绝对路径，
+      需先转相对 search_path 的 POSIX 路径再算 hash
+    - 命中 0 → None
+    - 命中 1 → 相对路径字符串
+    - 命中 ≥2 → raise _HashCollisionError
+    """
+    base = Path(idx.search_path)
+    matches = []
+    for doc in idx.documents:
+        abs_path = doc.metadata.get("source_path", "")
+        if not abs_path:
+            continue
+        try:
+            rel = os.path.relpath(abs_path, base).replace(os.sep, "/")
+        except ValueError:
+            # Windows 跨盘符 relpath 会抛 ValueError
+            continue
+        if Path(rel).stem != stem:
+            continue
+        h = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:6]
+        if h == hash6:
+            matches.append(rel)
+    if len(matches) == 0:
+        return None
+    if len(matches) > 1:
+        raise _HashCollisionError(
+            f"hash+stem 命中多个文件：{matches}"
+        )
+    return matches[0]
