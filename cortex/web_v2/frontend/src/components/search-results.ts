@@ -12,9 +12,9 @@ export class SearchResults extends LitElement {
       min-height: 0;
     }
     .list-pane {
-      flex: 0 0 360px;
+      flex: 0 0 var(--results-pane-width, 360px);
       min-width: 280px;
-      max-width: 480px;
+      max-width: 800px;
       background: var(--cortex-surface-muted);
       border-right: 1px solid var(--cortex-border);
       padding: var(--cortex-space-3);

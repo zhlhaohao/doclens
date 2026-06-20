@@ -19,6 +19,11 @@ function isFullFilePreview(path: string): boolean {
 
 @customElement("search-view")
 export class SearchView extends LitElement {
+  static readonly RESULTS_PANE_WIDTH_KEY = "cortex.resultsPaneWidth";
+  static readonly RESULTS_PANE_WIDTH_DEFAULT = 360;
+  static readonly RESULTS_PANE_WIDTH_MIN = 280;
+  static readonly RESULTS_PANE_WIDTH_MAX = 800;
+
   static styles = css`
     :host {
       display: flex;
@@ -55,6 +60,16 @@ export class SearchView extends LitElement {
       display: flex;
       flex: 1;
       min-height: 0;
+    }
+    .splitter {
+      flex: 0 0 4px;
+      cursor: col-resize;
+      background: var(--cortex-border);
+      transition: background 0.15s;
+    }
+    .splitter:hover, .splitter:active { background: var(--cortex-primary); }
+    @media (max-width: 1023px) {
+      .splitter { display: none; }
     }
     .focus-input-bar {
       padding: var(--cortex-space-3) var(--cortex-space-6);
@@ -111,12 +126,14 @@ export class SearchView extends LitElement {
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
   @state() private previewWritable = false;
+  @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   private _unsubscribe?: () => void;
 
   connectedCallback() {
     super.connectedCallback();
     this._loadHistory();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    this._loadResultsPaneWidth();
     // 消费跨视图会话加载请求（来自 history-view）
     const pending = store.getState().pendingSession;
     if (pending && pending.type === "search") {
@@ -124,6 +141,49 @@ export class SearchView extends LitElement {
       this._loadSession(pending);
     }
   }
+
+  private _loadResultsPaneWidth() {
+    const saved = localStorage.getItem(SearchView.RESULTS_PANE_WIDTH_KEY);
+    if (!saved) return;
+    const w = Number(saved);
+    if (!Number.isNaN(w)) {
+      this._resultsPaneWidth = Math.max(
+        SearchView.RESULTS_PANE_WIDTH_MIN,
+        Math.min(SearchView.RESULTS_PANE_WIDTH_MAX, w),
+      );
+    }
+  }
+
+  /** Drag handler — bound as a class field so `this` is captured and listeners
+   *  added to `document` can be removed by reference on mouseup. */
+  private _onSplitterMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = this._resultsPaneWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const w = Math.max(
+        SearchView.RESULTS_PANE_WIDTH_MIN,
+        Math.min(SearchView.RESULTS_PANE_WIDTH_MAX, startWidth + dx),
+      );
+      if (w !== this._resultsPaneWidth) this._resultsPaneWidth = w;
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(
+        SearchView.RESULTS_PANE_WIDTH_KEY,
+        String(this._resultsPaneWidth),
+      );
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -349,13 +409,18 @@ export class SearchView extends LitElement {
           meta=${`${s.total} 条结果${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`}
           @back=${this._backToInitial}>
         </focus-header>
-        <div class="focus-main">
+        <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
           <search-results
             .results=${s.results}
             .activePath=${detailTop?.path ?? null}
             .activeLine=${detailTop?.line ?? null}
             @select=${this._onResultSelect}>
           </search-results>
+          <div class="splitter"
+               role="separator"
+               aria-orientation="vertical"
+               aria-label="调整搜索结果栏宽度"
+               @mousedown=${this._onSplitterMouseDown}></div>
           ${this.previewError === "NOT_INDEXED"
             ? this._renderNotIndexedHint(true)
             : html`<preview-pane
