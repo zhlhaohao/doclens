@@ -44,11 +44,13 @@ export class SearchView extends LitElement {
       flex: 1;
       min-height: 0;
     }
-    /* When the detail-overlay covers focus-body, disable pointer events on
-       focus-body so its (visually-hidden) focus-header can't intercept taps.
-       Without this, iOS Safari's hit-testing can route the tap to the wrong
-       one of the two overlapping focus-headers, causing "needs 2 taps". */
-    .focus-body.is-covered { pointer-events: none; }
+    /* Mobile only (<1024px): when the detail-overlay covers focus-body,
+       disable pointer events on focus-body so its (visually-hidden)
+       focus-header can't intercept taps. On desktop, detail-overlay is
+       display:none, so focus-body is NOT covered and must stay interactive. */
+    @media (max-width: 1023px) {
+      .focus-body.is-covered { pointer-events: none; }
+    }
     .focus-main {
       display: flex;
       flex: 1;
