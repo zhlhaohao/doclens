@@ -2906,10 +2906,11 @@ ${r}</blockquote>
       white-space: pre;
       overflow: auto;
     }
-  `;Bt([c()],nt.prototype,"path",2);Bt([c()],nt.prototype,"originalContent",2);Bt([m()],nt.prototype,"_text",2);Bt([m()],nt.prototype,"_dirty",2);Bt([m()],nt.prototype,"_error",2);nt=Bt([O("md-editor")],nt);class Us extends Error{constructor(t,r,s){super(r),this.code=t,this.status=s,this.name="PreviewSaveError"}}async function Da(e,t){const r=await fetch(`/api/preview?path=${encodeURIComponent(e)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:t})});if(!r.ok){const s=await r.json().catch(()=>({code:"UNKNOWN",detail:r.statusText}));throw new Us(s.code??"UNKNOWN",s.detail??"保存失败",r.status)}return r.json()}var Na=Object.defineProperty,Ba=Object.getOwnPropertyDescriptor,X=(e,t,r,s)=>{for(var i=s>1?void 0:s?Ba(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Na(t,r,i),i};let B=class extends P{constructor(){super(...arguments),this.path="",this.language="text",this.content="",this.highlights=[],this.loading=!1,this.line=null,this.keyword="",this.writable=!1,this.noHeader=!1,this._mode="preview",this._content="",this._onEditorCancel=()=>{this._mode="preview"},this._onEditorDirty=e=>{this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:e.detail.dirty}}))}}willUpdate(e){e.has("content")&&(this._content=this.content,this._mode="preview")}enterEdit(){this._mode="edit"}async _onEditorSave(e){const t=this.shadowRoot.querySelector("md-editor");try{await Da(this.path,e.detail.content),this._content=e.detail.content,this._mode="preview",this.dispatchEvent(new CustomEvent("saved",{detail:{content:e.detail.content}}))}catch(r){const s=r instanceof Us?`${r.code} ${r.message}`:r.message??"保存失败";t==null||t.setError(s),this.dispatchEvent(new CustomEvent("save-failed",{detail:{message:s}}))}}discard(){const e=this.shadowRoot.querySelector("md-editor");e==null||e.discard(),this._mode="preview"}render(){if(this.loading)return p`<div class="empty">加载中...</div>`;if(!this._content&&!this.content)return p`<div class="empty">点击左侧结果查看预览</div>`;if(this.language==="markdown"&&this._mode==="edit")return p`
+  `;Bt([c()],nt.prototype,"path",2);Bt([c()],nt.prototype,"originalContent",2);Bt([m()],nt.prototype,"_text",2);Bt([m()],nt.prototype,"_dirty",2);Bt([m()],nt.prototype,"_error",2);nt=Bt([O("md-editor")],nt);class Us extends Error{constructor(t,r,s){super(r),this.code=t,this.status=s,this.name="PreviewSaveError"}}async function Da(e,t){const r=await fetch(`/api/preview?path=${encodeURIComponent(e)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:t})});if(!r.ok){const s=await r.json().catch(()=>({code:"UNKNOWN",detail:r.statusText}));throw new Us(s.code??"UNKNOWN",s.detail??"保存失败",r.status)}return r.json()}var Na=Object.defineProperty,Ba=Object.getOwnPropertyDescriptor,X=(e,t,r,s)=>{for(var i=s>1?void 0:s?Ba(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Na(t,r,i),i};let B=class extends P{constructor(){super(...arguments),this.path="",this.language="text",this.content="",this.highlights=[],this.loading=!1,this.line=null,this.keyword="",this.writable=!1,this.noHeader=!1,this._mode="preview",this._content="",this._onEditorCancel=()=>{this._mode="preview"},this._onEditorDirty=e=>{this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:e.detail.dirty}}))},this._onDownloadClick=()=>{if(!this.path)return;const e=`/api/preview/download?path=${encodeURIComponent(this.path)}`,t=document.createElement("a");t.href=e,t.rel="noopener",document.body.appendChild(t),t.click(),document.body.removeChild(t)}}willUpdate(e){e.has("content")&&(this._content=this.content,this._mode="preview")}enterEdit(){this._mode="edit"}async _onEditorSave(e){const t=this.shadowRoot.querySelector("md-editor");try{await Da(this.path,e.detail.content),this._content=e.detail.content,this._mode="preview",this.dispatchEvent(new CustomEvent("saved",{detail:{content:e.detail.content}}))}catch(r){const s=r instanceof Us?`${r.code} ${r.message}`:r.message??"保存失败";t==null||t.setError(s),this.dispatchEvent(new CustomEvent("save-failed",{detail:{message:s}}))}}discard(){const e=this.shadowRoot.querySelector("md-editor");e==null||e.discard(),this._mode="preview"}_renderDownloadBtn(){return p`<button class="download-btn" @click=${this._onDownloadClick}>⬇️ 下载</button>`}render(){if(this.loading)return p`<div class="empty">加载中...</div>`;if(!this._content&&!this.content)return p`<div class="empty">点击左侧结果查看预览</div>`;if(this.language==="markdown"&&this._mode==="edit")return p`
         ${this.noHeader?null:p`
           <div class="header">
             <span class="path">${this.path}</span>
+            ${this._renderDownloadBtn()}
           </div>
         `}
         <md-editor
@@ -2924,6 +2925,7 @@ ${r}</blockquote>
           <div class="header">
             <span class="path">${this.path}</span>
             ${this.writable?p`<button class="edit-btn" @click=${()=>this.enterEdit()}>✏️ 编辑</button>`:null}
+            ${this._renderDownloadBtn()}
           </div>
         `}
         <md-viewer
@@ -2936,6 +2938,7 @@ ${r}</blockquote>
       ${this.noHeader?null:p`
         <div class="header">
           <span class="path">${this.path}</span>
+          ${this._renderDownloadBtn()}
         </div>
       `}
       <div class="body">
@@ -2980,7 +2983,8 @@ ${r}</blockquote>
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
     }
-    button.edit-btn {
+    button.edit-btn,
+    button.download-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
       padding: 4px 10px;

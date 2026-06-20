@@ -136,3 +136,83 @@ describe("<preview-pane> noHeader prop", () => {
     expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
   });
 });
+
+describe("<preview-pane> download button", () => {
+  it("renders download button in markdown preview header", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
+  });
+
+  it("renders download button in plain-text preview header", async () => {
+    const el = await fixture(html`
+      <preview-pane language="python" content="print('hi')" path="a.py"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
+  });
+
+  it("renders download button in edit mode header", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
+  });
+
+  it("does not render download button when noHeader=true", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md" ?noHeader=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
+  });
+
+  it("clicking download button triggers anchor click with server URL", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="sub/doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+
+    const created: HTMLAnchorElement[] = [];
+    // 捕获 document.createElement('a') 创建的锚点，断言其 href 和 click 调用
+    const origCreate = document.createElement.bind(document);
+    const origAppend = document.body.appendChild.bind(document.body);
+    const origRemove = document.body.removeChild.bind(document.body);
+    (document as any).createElement = (tag: string) => {
+      const node = origCreate(tag);
+      if (tag.toLowerCase() === "a") {
+        node.click = () => created.push(node as HTMLAnchorElement);
+        node.setAttribute = function (name: string, value: string) {
+          (HTMLAnchorElement.prototype as any).setAttribute.call(this, name, value);
+        };
+      }
+      return node;
+    };
+    document.body.appendChild = <any>((n: Node) => {
+      origAppend(n);
+      return n;
+    });
+    document.body.removeChild = <any>((n: Node) => {
+      origRemove(n);
+      return n;
+    });
+
+    try {
+      (el.shadowRoot!.querySelector(".download-btn") as HTMLElement).click();
+    } finally {
+      (document as any).createElement = origCreate;
+      document.body.appendChild = origAppend;
+      document.body.removeChild = origRemove;
+    }
+
+    expect(created.length).toBe(1);
+    const href = created[0].getAttribute("href") || "";
+    expect(href).toContain("/api/preview/download");
+    expect(href).toContain(encodeURIComponent("sub/doc.md"));
+  });
+});

@@ -2,11 +2,13 @@
 
 路径解析相对于 IndexManager.search_path，防止越权访问。
 """
+import hashlib
 import logging
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import FileResponse
 
 from cortex.index_manager import IndexManager
 from cortex.web_v2.api.errors import CortexAPIError
@@ -63,6 +65,30 @@ def _safe_resolve(base: Path, requested: str) -> Path:
     except ValueError:
         raise CortexAPIError(404, "FILE_NOT_FOUND", "路径越权")
     return candidate
+
+
+def _build_download_filename(rel_path: str, full: Path) -> str:
+    """下载文件名 = 原始文件名 + '_' + sha256(rel_path)[:6] + 后缀。"""
+    h = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
+    return f"{full.stem}_{h}{full.suffix}"
+
+
+@router.get("/preview/download")
+async def download(
+    path: str = Query(..., description="相对路径"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """以附件形式下载原始文件，文件名带相对路径 hash 防冲突。"""
+    base = Path(idx.search_path)
+    full = _safe_resolve(base, path)
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+    download_name = _build_download_filename(path, full)
+    return FileResponse(
+        path=str(full),
+        filename=download_name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.get("/preview", response_model=PreviewResponse)

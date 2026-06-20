@@ -46,7 +46,8 @@ export class PreviewPane extends LitElement {
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
     }
-    button.edit-btn {
+    button.edit-btn,
+    button.download-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
       padding: 4px 10px;
@@ -120,6 +121,23 @@ export class PreviewPane extends LitElement {
     this._mode = "preview";
   }
 
+  /** 触发原始文件下载；文件名由后端 Content-Disposition 决定。 */
+  private _onDownloadClick = () => {
+    if (!this.path) return;
+    const url = `/api/preview/download?path=${encodeURIComponent(this.path)}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    // 文件名由后端 Content-Disposition 提供，这里不设 download 属性
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  private _renderDownloadBtn() {
+    return html`<button class="download-btn" @click=${this._onDownloadClick}>⬇️ 下载</button>`;
+  }
+
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
     if (!this._content && !this.content)
@@ -130,6 +148,7 @@ export class PreviewPane extends LitElement {
         ${this.noHeader ? null : html`
           <div class="header">
             <span class="path">${this.path}</span>
+            ${this._renderDownloadBtn()}
           </div>
         `}
         <md-editor
@@ -150,6 +169,7 @@ export class PreviewPane extends LitElement {
             ${this.writable
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}>✏️ 编辑</button>`
               : null}
+            ${this._renderDownloadBtn()}
           </div>
         `}
         <md-viewer
@@ -166,6 +186,7 @@ export class PreviewPane extends LitElement {
       ${this.noHeader ? null : html`
         <div class="header">
           <span class="path">${this.path}</span>
+          ${this._renderDownloadBtn()}
         </div>
       `}
       <div class="body">
