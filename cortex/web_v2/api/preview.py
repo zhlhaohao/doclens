@@ -235,12 +235,49 @@ def _extract_pages(
     Returns:
         (pages, cleaned_md):
         - pages: list[PageMarker] 或 None（不支持的类型或空 structure）
-        - cleaned_md: 处理后的 md（pdf 会剥除 [PAGE N] 标记行；其他类型原样返回）
+        - cleaned_md: pdf 分支为剥除 [PAGE N] 后的 md；其他分支原样返回 md_content
     """
     if source_type == "pdf":
         return _extract_pdf_pages(md_content)
-    # pptx / excel 在 Task 2 实现
+    if source_type == "pptx":
+        return _extract_pptx_pages(structure), md_content
+    if source_type == "excel":
+        return _extract_excel_pages(structure), md_content
     return None, md_content
+
+
+def _extract_pptx_pages(structure: list):
+    """PPTX: 返回 pages 或 None。content 由 _extract_pages 原样返回。"""
+    from cortex.web_v2.models.preview import PageMarker
+
+    root = structure[0] if structure else None
+    slides = (root.get("nodes", []) if root else []) or []
+    if not slides:
+        return None
+
+    pages = []
+    for i, slide in enumerate(slides):
+        title = (slide.get("title") or "").strip()
+        label = f"幻灯片 {i + 1}" + (f" · {title}" if title else "")
+        line_start = slide.get("line_start") or 1
+        pages.append(PageMarker(label=label, line_start=line_start))
+    return pages
+
+
+def _extract_excel_pages(structure: list):
+    """Excel: 返回 pages 或 None。content 由 _extract_pages 原样返回。"""
+    from cortex.web_v2.models.preview import PageMarker
+
+    if not structure:
+        return None
+
+    pages = []
+    for i, sheet in enumerate(structure):
+        name = (sheet.get("title") or "").strip()
+        label = f"工作表 {i + 1}" + (f" · {name}" if name else "")
+        line_start = sheet.get("line_start") or 1
+        pages.append(PageMarker(label=label, line_start=line_start))
+    return pages
 
 
 def _extract_pdf_pages(md_content: str):
