@@ -5,6 +5,7 @@ import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
+import type { PageMarker } from "../api/preview";
 import "../components/preview-pane";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
@@ -126,6 +127,7 @@ export class SearchView extends LitElement {
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
   @state() private previewWritable = false;
+  @state() private previewPages: PageMarker[] | null = null;
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   private _unsubscribe?: () => void;
 
@@ -228,6 +230,7 @@ export class SearchView extends LitElement {
       this.previewContent = "";
       this.previewPath = "";
       this.previewError = null;
+      this.previewPages = null;
       actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
       this.loading = true;
       try {
@@ -295,6 +298,7 @@ export class SearchView extends LitElement {
         this.previewLanguage = body.language;
         this.previewLine = (r.line as number | null) ?? null;
         this.previewWritable = body.writable ?? false;
+        this.previewPages = body.pages ?? null;
       } else {
         const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
         if (err.code === "NOT_INDEXED") {
@@ -302,6 +306,7 @@ export class SearchView extends LitElement {
           this.previewContent = "";
           this.previewPath = r.path;
           this.previewWritable = false;
+          this.previewPages = null;
         }
       }
     } catch (e) {
@@ -384,6 +389,7 @@ export class SearchView extends LitElement {
         this.previewContent = body.content;
         this.previewLanguage = body.language;
         this.previewWritable = body.writable ?? false;
+        this.previewPages = body.pages ?? null;
       }
     } catch (e) {
       console.warn("reload preview failed", e);
@@ -412,6 +418,7 @@ export class SearchView extends LitElement {
     this.previewContent = "";
     this.previewPath = "";
     this.previewError = null;
+    this.previewPages = null;
     actions.setSearchState({
       state: "focus",
       currentSession: s,
@@ -498,6 +505,7 @@ export class SearchView extends LitElement {
                 .line=${this.previewLine}
                 .keyword=${s.query}
                 ?writable=${this.previewWritable}
+                .pages=${this.previewPages}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
@@ -536,6 +544,7 @@ export class SearchView extends LitElement {
                 .line=${this.previewLine}
                 .keyword=${s.query}
                 ?writable=${this.previewWritable}
+                .pages=${this.previewPages}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}

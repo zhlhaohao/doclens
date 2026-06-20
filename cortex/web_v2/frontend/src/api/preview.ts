@@ -69,3 +69,12 @@ export async function uploadPreview(file: File): Promise<PreviewUploadResponse> 
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// 分页标记（PDF / PPTX / XLSX 预览）
+// ---------------------------------------------------------------------------
+
+export interface PageMarker {
+  label: string;
+  line_start: number;
+}
