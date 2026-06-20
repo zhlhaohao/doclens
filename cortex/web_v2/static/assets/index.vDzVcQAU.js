@@ -2790,6 +2790,27 @@ ${r}</blockquote>
       color: var(--cortex-text-muted);
       margin: 0.5em 0;
     }
+    /* md 表格：之前缺规则导致浏览器默认无边框，分隔线不可见 */
+    :host table {
+      border-collapse: collapse;
+      margin: 0.75em 0;
+      font-size: var(--cortex-fs-sm);
+      display: block;
+      overflow-x: auto;  /* 宽表横向滚动，避免撑破预览面板 */
+    }
+    :host th, :host td {
+      border: 1px solid var(--cortex-border);
+      padding: 6px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    :host th {
+      background: var(--cortex-surface-muted);
+      font-weight: 600;
+    }
+    :host tbody tr:nth-child(even) {
+      background: var(--cortex-surface-muted);
+    }
     .empty {
       color: var(--cortex-text-subtle);
       text-align: center;
