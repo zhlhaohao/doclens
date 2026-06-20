@@ -4,6 +4,12 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class PageMarker(BaseModel):
+    """预览分页标记（PDF 页 / PPTX slide / XLSX sheet）。"""
+    label: str          # "第 3 页" / "幻灯片 3 · 项目背景" / "工作表 2 · 销售数据"
+    line_start: int     # 1-indexed，对应 PreviewResponse.content 的行号
+
+
 class PreviewResponse(BaseModel):
     path: str
     language: str = "text"
@@ -11,6 +17,7 @@ class PreviewResponse(BaseModel):
     line_range: Optional[tuple[int, int]] = None
     highlights: list[int] = []
     writable: bool = False
+    pages: Optional[list[PageMarker]] = None  # 仅 pdf/pptx/excel 返回
 
 
 class PreviewSaveRequest(BaseModel):
