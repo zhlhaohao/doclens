@@ -200,3 +200,140 @@ describe("<search-view> auto-preview first result (desktop)", () => {
     expect(previewCalls.length).toBe(0);
   });
 });
+
+describe("<search-view> pagination integration", () => {
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    resetStore(store);
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("new search resets offset to 0", async () => {
+    // 先把 state 设成"在 page 3"
+    actions.setSearchState({
+      state: "focus",
+      query: "old",
+      results: [],
+      total: 100,
+      offset: 40,  // page 3
+      limit: 20,
+      source: "fts",
+    });
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+
+    // mock fetch 拦截 searchApi + sessionsApi
+    const fetchSpy = vi.fn(async (url: string, init?: any) => {
+      const u = String(url);
+      if (u === "/api/search") {
+        const body = init && init.body ? JSON.parse(init.body) : {};
+        return new Response(
+          JSON.stringify({
+            results: [{ path: "x.md", snippet: "...", score: 1, line: 1, highlights: [] }],
+            total: 5,
+            offset: body.offset ?? 0,
+            limit: body.limit ?? 20,
+            query: body.query,
+            elapsed_ms: 10,
+            source: "fts",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      // sessions endpoints
+      return new Response(
+        JSON.stringify({ id: "sess-1", type: "search", title: "new", preview: "new", updated_at: new Date().toISOString(), message_count: 5 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as any;
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    // 触发新搜索 (as any bypasses TS signature check)
+    await (el as any)._submit("new");
+    await new Promise((r) => setTimeout(r, 20));
+
+    const s = store.getState().search;
+    expect(s.offset).toBe(0);
+    expect(s.query).toBe("new");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("pagination-bar rendered when total > limit", async () => {
+    actions.setSearchState({
+      state: "focus",
+      query: "x",
+      results: [],
+      total: 100,
+      offset: 0,
+      limit: 20,
+      source: "fts",
+    });
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("pagination-bar")).toBeTruthy();
+  });
+
+  it("pagination-bar not rendered when total <= limit", async () => {
+    actions.setSearchState({
+      state: "focus",
+      query: "x",
+      results: [],
+      total: 15,
+      offset: 0,
+      limit: 20,
+      source: "fts",
+    });
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("pagination-bar")).toBeNull();
+  });
+
+  it("_goToPage calls searchApi with new offset", async () => {
+    actions.setSearchState({
+      state: "focus",
+      query: "x",
+      results: [],
+      total: 100,
+      offset: 0,
+      limit: 20,
+      source: "fts",
+    });
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+
+    const fetchSpy = vi.fn(async (url: string, init?: any) => {
+      const u = String(url);
+      if (u === "/api/search") {
+        const body = init && init.body ? JSON.parse(init.body) : {};
+        return new Response(
+          JSON.stringify({
+            results: [],
+            total: 100,
+            offset: body.offset ?? 0,
+            limit: body.limit ?? 20,
+            query: body.query ?? "x",
+            elapsed_ms: 5,
+            source: "fts",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as any;
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    await (el as any)._goToPage(3);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.offset).toBe(40);  // (3-1) * 20
+    expect(body.limit).toBe(20);
+
+    vi.unstubAllGlobals();
+  });
+});

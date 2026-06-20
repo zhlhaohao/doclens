@@ -7,6 +7,7 @@ import { searchApi } from "../api/search";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 import type { PageMarker } from "../api/preview";
 import "../components/preview-pane";
+import "../components/pagination-bar";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
@@ -61,6 +62,29 @@ export class SearchView extends LitElement {
       display: flex;
       flex: 1;
       min-height: 0;
+    }
+    /* 结果列：search-results + pagination-bar 垂直堆叠，宽度跟随 --results-pane-width */
+    .results-col {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 var(--results-pane-width, 360px);
+      min-width: 280px;
+      max-width: 800px;
+      min-height: 0;
+    }
+    /* 让 search-results 在 .results-col 内填充剩余高度（覆盖其 :host 的 flex: 0 0 auto）。
+       !important 是必要的，因为子组件 :host 的特异性 (0,1,0) 高于父级类型选择器 (0,0,1)。 */
+    .results-col > search-results {
+      flex: 1 1 0 !important;
+      min-height: 0;
+    }
+    /* 移动端：结果列占满全宽，跟随 search-results 的响应式行为 */
+    @media (max-width: 1023px) {
+      .results-col {
+        flex: 1;
+        max-width: none;
+        min-width: 0;
+      }
     }
     .splitter {
       flex: 0 0 4px;
@@ -221,9 +245,11 @@ export class SearchView extends LitElement {
     return store.getState().search;
   }
 
-  private async _submit(e: CustomEvent<{ value: string }>) {
+  private async _submit(e: CustomEvent<{ value: string }> | string) {
     await this._safeAction(async () => {
-      const query = e.detail.value;
+      // Allow being called directly with a query string (used by tests &
+      // any internal caller that doesn't go through the input-box event).
+      const query = typeof e === "string" ? e : e.detail.value;
       this.localQuery = query;
       // Reset any previous preview state so auto-preview starts fresh
       store.setState({ detailStack: [] });
@@ -231,16 +257,19 @@ export class SearchView extends LitElement {
       this.previewPath = "";
       this.previewError = null;
       this.previewPages = null;
-      actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
+      // 新搜索始终从第 0 页开始（重置 offset）
+      actions.setSearchState({ state: "focus", query, results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
       try {
-        const res = await searchApi({ query });
+        const res = await searchApi({ query, offset: 0, limit: 20 });
         const created = await createSession({ type: "search", title: query, preview: query.slice(0, 100) });
         actions.setSearchState({
           state: "focus",
           query,
           results: res.results,
           total: res.total,
+          offset: 0,
+          limit: 20,
           source: res.source,
           currentSession: {
             id: created.id, type: "search", title: query,
@@ -269,6 +298,40 @@ export class SearchView extends LitElement {
       this._loadHistory();
     });
   }
+
+  /** 切换到指定页码（1-indexed）。no-op if same as current page. */
+  private async _goToPage(page: number) {
+    const s = store.getState().search;
+    if (!s.query || s.state !== "focus") return;
+    const limit = s.limit || 20;
+    const newOffset = Math.max(0, (page - 1) * limit);
+    if (newOffset === s.offset) return;  // 已在该页，no-op
+    this.loading = true;
+    try {
+      const res = await searchApi({ query: s.query, offset: newOffset, limit });
+      actions.setSearchState({
+        state: "focus",
+        query: s.query,
+        results: res.results,
+        total: res.total,
+        offset: res.offset,  // 用后端 clamp 后的值
+        limit,
+        source: res.source,
+      });
+      // 翻页后预览面板清空（避免显示前一页的高亮）
+      this.previewContent = "";
+      this.previewPath = "";
+      this.previewLine = null;
+    } catch (err) {
+      actions.setError(`翻页失败: ${(err as Error).message}`);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private _onPageChange = (e: CustomEvent<{ page: number }>) => {
+    void this._goToPage(e.detail.page);
+  };
 
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
     await this._safeAction(async () => {
@@ -484,12 +547,23 @@ export class SearchView extends LitElement {
           @back=${this._backToInitial}>
         </focus-header>
         <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
-          <search-results
-            .results=${s.results}
-            .activePath=${detailTop?.path ?? this.previewPath ?? null}
-            .activeLine=${detailTop?.line ?? this.previewLine ?? null}
-            @select=${this._onResultSelect}>
-          </search-results>
+          <div class="results-col">
+            <search-results
+              .results=${s.results}
+              .activePath=${detailTop?.path ?? this.previewPath ?? null}
+              .activeLine=${detailTop?.line ?? this.previewLine ?? null}
+              @select=${this._onResultSelect}>
+            </search-results>
+            ${s.total > s.limit
+              ? html`<pagination-bar
+                  .total=${s.total}
+                  .offset=${s.offset}
+                  .limit=${s.limit}
+                  ?disabled=${this.loading}
+                  @page-change=${this._onPageChange}>
+                </pagination-bar>`
+              : null}
+          </div>
           <div class="splitter"
                role="separator"
                aria-orientation="vertical"
