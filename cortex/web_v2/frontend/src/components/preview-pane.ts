@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
-import { savePreview, PreviewSaveError } from "../api/preview";
+import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from "../api/preview";
 import type { MdEditor } from "./md-editor";
 
 @customElement("preview-pane")
@@ -47,7 +47,8 @@ export class PreviewPane extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     button.edit-btn,
-    button.download-btn {
+    button.download-btn,
+    button.upload-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
       padding: 4px 10px;
@@ -138,6 +139,41 @@ export class PreviewPane extends LitElement {
     return html`<button class="download-btn" @click=${this._onDownloadClick}>⬇️ 下载</button>`;
   }
 
+  private _onUploadClick = () => {
+    const input = this.shadowRoot?.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement | null;
+    input?.click();
+  };
+
+  private async _onFileChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // 重置 value 允许下次再选同一文件
+    input.value = "";
+    if (!file) return;
+    const ok = window.confirm(`即将上传 '${file.name}' 覆盖原文件，是否继续？`);
+    if (!ok) return;
+    try {
+      const res = await uploadPreview(file);
+      this.dispatchEvent(
+        new CustomEvent("upload-success", { detail: { path: res.path } }),
+      );
+    } catch (err) {
+      const msg =
+        err instanceof PreviewUploadError
+          ? `${err.code} ${err.message}`
+          : (err as Error).message ?? "上传失败";
+      this.dispatchEvent(
+        new CustomEvent("upload-failed", { detail: { message: msg } }),
+      );
+    }
+  }
+
+  private _renderUploadBtn() {
+    return html`<button class="upload-btn" @click=${this._onUploadClick}>⬆️ 上传</button>`;
+  }
+
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
     if (!this._content && !this.content)
@@ -145,10 +181,12 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown" && this._mode === "edit") {
       return html`
+        <input type="file" hidden @change=${this._onFileChange}>
         ${this.noHeader ? null : html`
           <div class="header">
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
+            ${this._renderUploadBtn()}
           </div>
         `}
         <md-editor
@@ -163,6 +201,7 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown") {
       return html`
+        <input type="file" hidden @change=${this._onFileChange}>
         ${this.noHeader ? null : html`
           <div class="header">
             <span class="path">${this.path}</span>
@@ -170,6 +209,7 @@ export class PreviewPane extends LitElement {
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}>✏️ 编辑</button>`
               : null}
             ${this._renderDownloadBtn()}
+            ${this._renderUploadBtn()}
           </div>
         `}
         <md-viewer
@@ -183,10 +223,12 @@ export class PreviewPane extends LitElement {
     // 非 md：现有纯文本 + 行号视图
     const lines = this._content.split("\n");
     return html`
+      <input type="file" hidden @change=${this._onFileChange}>
       ${this.noHeader ? null : html`
         <div class="header">
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
+          ${this._renderUploadBtn()}
         </div>
       `}
       <div class="body">
