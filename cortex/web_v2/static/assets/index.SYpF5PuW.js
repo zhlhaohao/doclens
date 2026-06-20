@@ -3114,8 +3114,8 @@ ${r}</blockquote>
         <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
           <search-results
             .results=${e.results}
-            .activePath=${(t==null?void 0:t.path)??null}
-            .activeLine=${(t==null?void 0:t.line)??null}
+            .activePath=${(t==null?void 0:t.path)??this.previewPath??null}
+            .activeLine=${(t==null?void 0:t.line)??this.previewLine??null}
             @select=${this._onResultSelect}>
           </search-results>
           <div class="splitter"

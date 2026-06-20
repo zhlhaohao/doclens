@@ -448,8 +448,8 @@ export class SearchView extends LitElement {
         <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
           <search-results
             .results=${s.results}
-            .activePath=${detailTop?.path ?? null}
-            .activeLine=${detailTop?.line ?? null}
+            .activePath=${detailTop?.path ?? this.previewPath ?? null}
+            .activeLine=${detailTop?.line ?? this.previewLine ?? null}
             @select=${this._onResultSelect}>
           </search-results>
           <div class="splitter"
