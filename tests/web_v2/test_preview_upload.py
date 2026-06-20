@@ -158,3 +158,159 @@ async def test_resolve_upload_target_collision_raises(
     from cortex.web_v2.api.preview import _resolve_upload_target, _HashCollisionError
     with pytest.raises(_HashCollisionError):
         _resolve_upload_target(idx, "doc1", expected_hash)
+
+
+# ---------------------------------------------------------------------------
+# 集成测试：POST /api/preview/upload
+# ---------------------------------------------------------------------------
+
+
+def _hash_for(rel_path: str) -> str:
+    return hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
+
+
+@pytest.mark.asyncio
+async def test_upload_overwrites_markdown_file(temp_workdir, env_cortex_config, reset_deps):
+    """正常上传覆盖 markdown：磁盘内容被替换，响应 200。"""
+    await asyncio.to_thread(_init_and_reindex)
+
+    h = _hash_for("doc1.md")
+    new_content = b"# Overwritten by upload test"
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": (f"doc1_{h}.md", new_content, "text/markdown")},
+        )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["path"] == "doc1.md"
+    assert body["bytes_written"] == len(new_content)
+    assert body["reindex_triggered"] is True
+    # 磁盘内容确实被覆盖
+    assert (temp_workdir / "doc1.md").read_bytes() == new_content
+
+
+@pytest.mark.asyncio
+async def test_upload_overwrites_binary_file(temp_workdir, env_cortex_config, reset_deps):
+    """正常上传覆盖二进制（.pdf）：字节完全一致。"""
+    # 准备一个 pdf + 索引
+    original_pdf = b"%PDF-1.4 original"
+    (temp_workdir / "sample.pdf").write_bytes(original_pdf)
+    await asyncio.to_thread(_init_and_reindex)
+
+    h = _hash_for("sample.pdf")
+    new_pdf = b"%PDF-1.4 replaced bytes"
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": (f"sample_{h}.pdf", new_pdf, "application/pdf")},
+        )
+    assert res.status_code == 200
+    assert (temp_workdir / "sample.pdf").read_bytes() == new_pdf
+
+
+@pytest.mark.asyncio
+async def test_upload_bad_filename_returns_400(temp_workdir, env_cortex_config, reset_deps):
+    """文件名不符合格式 → 400 BAD_FILENAME。"""
+    await asyncio.to_thread(_init_and_reindex)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": ("plain.md", b"hello", "text/markdown")},
+        )
+    assert res.status_code == 400
+    assert res.json()["code"] == "BAD_FILENAME"
+
+
+@pytest.mark.asyncio
+async def test_upload_not_indexed_returns_404(temp_workdir, env_cortex_config, reset_deps):
+    """hash+stem 在索引中找不到 → 404 NOT_INDEXED。"""
+    await asyncio.to_thread(_init_and_reindex)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": ("doc1_deadbe.md", b"x", "text/markdown")},
+        )
+    assert res.status_code == 404
+    assert res.json()["code"] == "NOT_INDEXED"
+
+
+@pytest.mark.asyncio
+async def test_upload_too_large_returns_413(temp_workdir, env_cortex_config, reset_deps, monkeypatch):
+    """超过大小上限 → 413。"""
+    await asyncio.to_thread(_init_and_reindex)
+    # monkeypatch 缩小上限避免造大文件
+    from cortex.web_v2.api import preview as preview_api_module
+    monkeypatch.setattr(preview_api_module, "_MAX_UPLOAD_BYTES", 16)
+
+    h = _hash_for("doc1.md")
+    big = b"x" * 32
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": (f"doc1_{h}.md", big, "text/markdown")},
+        )
+    assert res.status_code == 413
+    assert res.json()["code"] == "CONTENT_TOO_LARGE"
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_dotcortex_target(
+    temp_workdir, env_cortex_config, reset_deps, monkeypatch
+):
+    """解析出的相对路径落入 .cortex/ → 403 NOT_WRITABLE。
+
+    .cortex/ 在 DEFAULT_IGNORE_DIRS 中，正常 reindex 不会索引它。
+    这里通过 monkeypatch 注入一条伪造的 Document 记录（source_path 指向
+    .cortex/internal.md），模拟"万一有记录落入该目录"的防御场景。
+    """
+    await asyncio.to_thread(_init_and_reindex)
+    idx = deps.get_index_manager()
+
+    # 在 .cortex 下造一个物理文件（用于后续 _safe_resolve / write_bytes 检查）
+    cortex_dir = temp_workdir / ".cortex"
+    cortex_dir.mkdir(exist_ok=True)
+    (cortex_dir / "internal.md").write_text("# internal", encoding="utf-8")
+
+    # 注入伪造 Document：让 _resolve_upload_target 能匹配到 .cortex/internal.md
+    from treesearch.tree import Document
+    abs_internal = str((cortex_dir / "internal.md").resolve())
+    fake_doc = Document(
+        doc_id="_cortex_internal",
+        doc_name="internal.md",
+        structure=[],
+        doc_description="",
+        metadata={"source_path": abs_internal},
+        source_type="markdown",
+    )
+    real_docs = list(idx.documents)
+    monkeypatch.setattr(idx._ts, "documents", real_docs + [fake_doc])
+
+    # 计算 .cortex/internal.md 的 hash
+    rel = ".cortex/internal.md"
+    h = _hash_for(rel)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/preview/upload",
+            files={"file": (f"internal_{h}.md", b"hacked", "text/markdown")},
+        )
+    assert res.status_code == 403
+    assert res.json()["code"] == "NOT_WRITABLE"

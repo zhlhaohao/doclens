@@ -24,3 +24,10 @@ class PreviewSaveResponse(BaseModel):
     content: str
     bytes_written: int
     reindex_triggered: bool
+
+
+class PreviewUploadResponse(BaseModel):
+    """POST /api/preview/upload 响应。"""
+    path: str
+    bytes_written: int
+    reindex_triggered: bool
