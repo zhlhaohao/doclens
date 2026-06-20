@@ -266,6 +266,9 @@ def _extract_pptx_pages(structure: list):
     return pages
 
 
+_RE_XLSX_ROW_SUFFIX = re.compile(r"\s*\(\d+\s*rows?\)\s*$")
+
+
 def _extract_excel_pages(structure: list):
     """Excel: 返回 pages 或 None。content 由 _extract_pages 原样返回。"""
     from cortex.web_v2.models.preview import PageMarker
@@ -275,7 +278,9 @@ def _extract_excel_pages(structure: list):
 
     pages = []
     for i, sheet in enumerate(structure):
-        name = (sheet.get("title") or "").strip()
+        # excel_parser 把 title 存为 "{sheet_name} ({row_count} rows)"；
+        # 卡片标签只需要 sheet 名，剥掉行数后缀。
+        name = _RE_XLSX_ROW_SUFFIX.sub("", (sheet.get("title") or "")).strip()
         label = f"工作表 {i + 1}" + (f" · {name}" if name else "")
         line_start = sheet.get("line_start") or 1
         pages.append(PageMarker(label=label, line_start=line_start))
