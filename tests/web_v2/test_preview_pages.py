@@ -68,3 +68,93 @@ def test_extract_pages_unsupported_types_return_none(source_type):
 
     assert pages is None
     assert cleaned == "some content"
+
+
+# ---------------------------------------------------------------------------
+# PPTX 分支
+# ---------------------------------------------------------------------------
+
+
+def test_extract_pages_pptx_with_slides():
+    """PPTX: 每个 slide 子节点 → 一个 page，label 含标题。"""
+    structure = [{
+        "title": "doc.pptx",
+        "line_start": 1,
+        "nodes": [
+            {"title": "Intro", "line_start": 2, "nodes": []},
+            {"title": "Method", "line_start": 10, "nodes": []},
+        ],
+    }]
+    pages, cleaned = _extract_pages(structure, "pptx", "md content")
+
+    assert pages is not None
+    assert len(pages) == 2
+    assert pages[0] == PageMarker(label="幻灯片 1 · Intro", line_start=2)
+    assert pages[1] == PageMarker(label="幻灯片 2 · Method", line_start=10)
+    assert cleaned == "md content"  # pptx 不改 content
+
+
+def test_extract_pages_pptx_empty_slides_returns_none():
+    """PPTX: root.nodes 为空 → None。"""
+    structure = [{"title": "empty.pptx", "line_start": 1, "nodes": []}]
+    pages, cleaned = _extract_pages(structure, "pptx", "md")
+
+    assert pages is None
+    assert cleaned == "md"
+
+
+def test_extract_pages_pptx_no_structure_returns_none():
+    """PPTX: structure 为空 → None。"""
+    pages, cleaned = _extract_pages([], "pptx", "md")
+
+    assert pages is None
+    assert cleaned == "md"
+
+
+def test_extract_pages_pptx_slide_without_title():
+    """PPTX: slide 无 title → label 只有序号（不带 ·）。"""
+    structure = [{
+        "title": "doc.pptx",
+        "nodes": [{"title": "", "line_start": 2}],
+    }]
+    pages, _ = _extract_pages(structure, "pptx", "md")
+
+    assert pages is not None
+    assert pages[0].label == "幻灯片 1"
+
+
+# ---------------------------------------------------------------------------
+# Excel 分支
+# ---------------------------------------------------------------------------
+
+
+def test_extract_pages_excel_with_sheets():
+    """XLSX: 每个 sheet 顶层节点 → 一个 page。"""
+    structure = [
+        {"title": "Sales", "line_start": 1, "nodes": []},
+        {"title": "Inventory", "line_start": 50, "nodes": []},
+    ]
+    pages, cleaned = _extract_pages(structure, "excel", "md content")
+
+    assert pages is not None
+    assert len(pages) == 2
+    assert pages[0] == PageMarker(label="工作表 1 · Sales", line_start=1)
+    assert pages[1] == PageMarker(label="工作表 2 · Inventory", line_start=50)
+    assert cleaned == "md content"
+
+
+def test_extract_pages_excel_empty_returns_none():
+    """XLSX: structure 空 → None。"""
+    pages, cleaned = _extract_pages([], "excel", "md")
+
+    assert pages is None
+    assert cleaned == "md"
+
+
+def test_extract_pages_excel_sheet_without_title():
+    """XLSX: sheet 无 title → label 只有序号。"""
+    structure = [{"title": "", "line_start": 1}]
+    pages, _ = _extract_pages(structure, "excel", "md")
+
+    assert pages is not None
+    assert pages[0].label == "工作表 1"
