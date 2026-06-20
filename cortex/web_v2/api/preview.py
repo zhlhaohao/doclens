@@ -210,14 +210,16 @@ async def save_preview(
 
 
 _UPLOAD_FILENAME_RE = re.compile(
-    r"^(?P<stem>.+)_(?P<hash>[a-f0-9]{6})(?P<suffix>\.[^./\\]+)$"
+    # 可选的 " (N)" 容忍浏览器下载去重后缀（Chrome/Edge: file (1).ext）
+    r"^(?P<stem>.+)_(?P<hash>[a-f0-9]{6})(?: \(\d+\))?(?P<suffix>\.[^./\\]+)$"
 )
 
 
 def _parse_upload_filename(filename: str):
     """解析上传文件名 → (stem, hash6, suffix)。
 
-    格式：{stem}_{hash6}{suffix}，其中 hash6 必须是 6 位小写十六进制。
+    格式：{stem}_{hash6}[ (N)]{suffix}，其中 hash6 必须是 6 位小写十六进制。
+    可选的 " (N)" 是浏览器下载重名时自动添加的去重后缀，解析时容忍并忽略。
 
     Returns:
         (stem, hash6, suffix) 元组；不匹配返回 None。

@@ -72,6 +72,51 @@ def test_parse_upload_filename_rejects_double_extension():
 
 
 # ---------------------------------------------------------------------------
+# 浏览器去重后缀 " (N)" 兼容（download 重名时 Chrome/Edge 自动添加）
+# ---------------------------------------------------------------------------
+
+
+def test_parse_upload_filename_tolerates_browser_dup_suffix_single_digit():
+    """浏览器去重后缀 ' (1)' 应被容忍：hash+suffix 正确解析。"""
+    result = _parse_upload_filename("doc1_a1b2c3 (1).md")
+    assert result == ("doc1", "a1b2c3", ".md")
+
+
+def test_parse_upload_filename_tolerates_browser_dup_suffix_multi_digit():
+    """多位数去重后缀 ' (10)' 也应被容忍。"""
+    result = _parse_upload_filename("doc1_a1b2c3 (10).md")
+    assert result == ("doc1", "a1b2c3", ".md")
+
+
+def test_parse_upload_filename_tolerates_dup_with_unicode_stem():
+    """用户场景：中文 stem + 去重后缀。"""
+    result = _parse_upload_filename(
+        "量子计算与人工智能报告2025-2026_63cae7 (1).docx"
+    )
+    assert result == (
+        "量子计算与人工智能报告2025-2026",
+        "63cae7",
+        ".docx",
+    )
+
+
+def test_parse_upload_filename_no_dup_still_works():
+    """无去重后缀的常规文件名仍正常解析（回归）。"""
+    result = _parse_upload_filename("doc1_a1b2c3.md")
+    assert result == ("doc1", "a1b2c3", ".md")
+
+
+def test_parse_upload_filename_rejects_dup_without_space():
+    """'(1)' 缺少前导空格 → None（不是浏览器标准格式）。"""
+    assert _parse_upload_filename("doc1_a1b2c3(1).md") is None
+
+
+def test_parse_upload_filename_rejects_dup_without_parens():
+    """' 1' 缺少括号 → None（不是浏览器标准格式）。"""
+    assert _parse_upload_filename("doc1_a1b2c3 1.md") is None
+
+
+# ---------------------------------------------------------------------------
 # 单元测试：_resolve_upload_target
 # ---------------------------------------------------------------------------
 
