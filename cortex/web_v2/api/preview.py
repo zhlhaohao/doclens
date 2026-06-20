@@ -26,7 +26,7 @@ router = APIRouter()
 
 # 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
 BINARY_PREVIEW_EXTS = frozenset({
-    ".pdf", ".docx",
+    ".pdf", ".docx", ".pptx",
     ".xlsx", ".xlsm", ".xltx", ".xltm",
     ".csv",
 })
