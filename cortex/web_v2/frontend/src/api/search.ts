@@ -4,6 +4,8 @@ import type { SearchResult } from "../state/types";
 export interface SearchResponse {
   results: SearchResult[];
   total: number;
+  offset: number;
+  limit: number;
   query: string;
   elapsed_ms: number;
   source: "fts" | "like" | "ripgrep";

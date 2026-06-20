@@ -42,6 +42,8 @@ export const INITIAL_STATE: AppState = {
     results: [],
     total: 0,
     source: "fts",
+    offset: 0,
+    limit: 20,
   },
   chat: {
     state: "initial",
