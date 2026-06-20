@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
 import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from "../api/preview";
+import type { PageMarker } from "../api/preview";
 import type { MdEditor } from "./md-editor";
 
 @customElement("preview-pane")
@@ -69,6 +70,7 @@ export class PreviewPane extends LitElement {
   @property() keyword = "";
   @property({ type: Boolean }) writable = false;
   @property({ type: Boolean }) noHeader = false;
+  @property({ attribute: false }) pages: PageMarker[] | null = null;
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
@@ -216,6 +218,7 @@ export class PreviewPane extends LitElement {
           .content=${this._content}
           .line=${this.line}
           .keyword=${this.keyword}
+          .pages=${this.pages}
         ></md-viewer>
       `;
     }

@@ -366,3 +366,25 @@ describe("<preview-pane> upload button", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("<preview-pane> pages pass-through", () => {
+  it("passes pages prop to md-viewer", async () => {
+    const pages = [{ label: "第 1 页", line_start: 1 }];
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" .pages=${pages}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
+    expect(mdv).toBeTruthy();
+    expect(mdv.pages).toEqual(pages);
+  });
+
+  it("defaults pages to null when not provided", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
+    expect(mdv.pages).toBeNull();
+  });
+});
