@@ -5,6 +5,7 @@
 import hashlib
 import logging
 import os
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, Query
@@ -205,3 +206,22 @@ async def save_preview(
         bytes_written=len(encoded),
         reindex_triggered=True,
     )
+
+
+_UPLOAD_FILENAME_RE = re.compile(
+    r"^(?P<stem>.+)_(?P<hash>[a-f0-9]{6})(?P<suffix>\.[^./\\]+)$"
+)
+
+
+def _parse_upload_filename(filename: str):
+    """解析上传文件名 → (stem, hash6, suffix)。
+
+    格式：{stem}_{hash6}{suffix}，其中 hash6 必须是 6 位小写十六进制。
+
+    Returns:
+        (stem, hash6, suffix) 元组；不匹配返回 None。
+    """
+    m = _UPLOAD_FILENAME_RE.match(filename)
+    if not m:
+        return None
+    return (m.group("stem"), m.group("hash"), m.group("suffix"))
