@@ -239,10 +239,9 @@ async def test_preview_xlsx_returns_pages_with_sheet_names(
     body = res.json()
     assert body["pages"] is not None
     assert len(body["pages"]) == 2
-    # excel_parser 将 sheet title 存为 "{sheet_name} ({row_count} rows)"，
-    # label 会保留这个完整 title（与 _extract_excel_pages 直接透传 title 一致）
-    assert body["pages"][0]["label"].startswith("工作表 1 · Sales")
-    assert body["pages"][1]["label"].startswith("工作表 2 · Inventory")
+    # _extract_excel_pages 剥掉了 excel_parser 加的 " (N rows)" 后缀
+    assert body["pages"][0]["label"] == "工作表 1 · Sales"
+    assert body["pages"][1]["label"] == "工作表 2 · Inventory"
 
 
 @pytest.mark.asyncio
