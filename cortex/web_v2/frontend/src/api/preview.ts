@@ -32,3 +32,40 @@ export async function savePreview(path: string, content: string): Promise<Previe
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/preview/upload
+// ---------------------------------------------------------------------------
+
+export interface PreviewUploadResponse {
+  path: string;
+  bytes_written: number;
+  reindex_triggered: boolean;
+}
+
+export class PreviewUploadError extends Error {
+  constructor(public code: string, message: string, public status: number) {
+    super(message);
+    this.name = "PreviewUploadError";
+  }
+}
+
+export async function uploadPreview(file: File): Promise<PreviewUploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/preview/upload", {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res
+      .json()
+      .catch(() => ({ code: "UNKNOWN", detail: res.statusText }));
+    throw new PreviewUploadError(
+      err.code ?? "UNKNOWN",
+      err.detail ?? "上传失败",
+      res.status,
+    );
+  }
+  return res.json();
+}
