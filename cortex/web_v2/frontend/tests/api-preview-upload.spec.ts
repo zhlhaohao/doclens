@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { uploadPreview, PreviewUploadError } from "../src/api/preview";
+import { uploadPreview } from "../src/api/preview";
 
 describe("uploadPreview", () => {
   beforeEach(() => {
