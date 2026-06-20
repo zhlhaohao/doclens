@@ -215,6 +215,65 @@ _UPLOAD_FILENAME_RE = re.compile(
 )
 
 
+# PDF [PAGE N] 标记正则（与 treesearch.parsers.pdf_parser._RE_PAGE_MARKER 同模式，
+# 但本模块内独立定义避免跨模块耦合）
+_RE_PDF_PAGE_MARKER = re.compile(r"^\[PAGE\s+(\d+)\]$")
+
+
+def _extract_pages(
+    structure: list,
+    source_type: str,
+    md_content: str,
+):
+    """从合成 md + structure 抽取分页信息。
+
+    Args:
+        structure: treesearch Document.structure（root 节点列表）
+        source_type: Document.source_type（"pdf" / "pptx" / "excel" / ...）
+        md_content: render_tree_to_md 的输出
+
+    Returns:
+        (pages, cleaned_md):
+        - pages: list[PageMarker] 或 None（不支持的类型或空 structure）
+        - cleaned_md: 处理后的 md（pdf 会剥除 [PAGE N] 标记行；其他类型原样返回）
+    """
+    if source_type == "pdf":
+        return _extract_pdf_pages(md_content)
+    # pptx / excel 在 Task 2 实现
+    return None, md_content
+
+
+def _extract_pdf_pages(md_content: str):
+    """PDF 分支：剥除 [PAGE N] 标记 + 按 counter 生成 pages。"""
+    from cortex.web_v2.models.preview import PageMarker
+
+    pages: list = []
+    cleaned_lines: list[str] = []
+
+    for line in md_content.split("\n"):
+        if _RE_PDF_PAGE_MARKER.match(line.strip()):
+            if not pages:
+                # 第一个 marker → page 1 起始 = cleaned-line 1
+                pages.append(PageMarker(label="第 1 页", line_start=1))
+            else:
+                # 后续 marker → page N 起始 = 下一 cleaned-line
+                pages.append(
+                    PageMarker(
+                        label=f"第 {len(pages) + 1} 页",
+                        line_start=len(cleaned_lines) + 1,
+                    )
+                )
+            # 不写入 cleaned_lines
+        else:
+            cleaned_lines.append(line)
+
+    if not pages:
+        # 无 marker → 整篇当一页
+        pages = [PageMarker(label="第 1 页", line_start=1)]
+
+    return pages, "\n".join(cleaned_lines)
+
+
 def _parse_upload_filename(filename: str):
     """解析上传文件名 → (stem, hash6, suffix)。
 
