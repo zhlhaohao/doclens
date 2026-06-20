@@ -32,6 +32,8 @@ export interface SearchViewState {
   results: SearchResult[];
   total: number;
   source: "fts" | "like" | "ripgrep";
+  offset: number;
+  limit: number;
 }
 
 export interface ChatViewState {
