@@ -359,6 +359,34 @@ export class SearchView extends LitElement {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
   };
 
+  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
+    this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
+    // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
+    this._reloadPreview();
+  };
+
+  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>) => {
+    this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
+  };
+
+  /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
+  private async _reloadPreview() {
+    if (!this.previewPath) return;
+    try {
+      const res = await fetch(
+        `/api/preview?path=${encodeURIComponent(this.previewPath)}`,
+      );
+      if (res.ok) {
+        const body = await res.json();
+        this.previewContent = body.content;
+        this.previewLanguage = body.language;
+        this.previewWritable = body.writable ?? false;
+      }
+    } catch (e) {
+      console.warn("reload preview failed", e);
+    }
+  }
+
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number) {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
     stack?.pushToast(message, level, duration);
@@ -469,7 +497,9 @@ export class SearchView extends LitElement {
                 ?writable=${this.previewWritable}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
-                @save-failed=${this._onPreviewSaveFailed}>
+                @save-failed=${this._onPreviewSaveFailed}
+                @upload-success=${this._onPreviewUploadSuccess}
+                @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
         </div>
         <div class="focus-input-bar">
@@ -505,7 +535,9 @@ export class SearchView extends LitElement {
                 ?writable=${this.previewWritable}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
-                @save-failed=${this._onPreviewSaveFailed}>
+                @save-failed=${this._onPreviewSaveFailed}
+                @upload-success=${this._onPreviewUploadSuccess}
+                @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
         </div>` : null}
     `;
