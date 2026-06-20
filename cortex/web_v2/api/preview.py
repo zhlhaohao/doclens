@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from cortex.index_manager import IndexManager
@@ -18,6 +18,7 @@ from cortex.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
     PreviewSaveResponse,
+    PreviewUploadResponse,
 )
 from cortex.web_v2.preview_synthesizer import render_tree_to_md
 
@@ -263,3 +264,70 @@ def _resolve_upload_target(idx, stem: str, hash6: str):
             f"hash+stem 命中多个文件：{matches}"
         )
     return matches[0]
+
+
+# 50MB 上限（防御性，避免 OOM；允许二进制大文件）
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+@router.post("/preview/upload", response_model=PreviewUploadResponse)
+async def upload(
+    file: UploadFile = File(..., description="要上传的文件"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """上传文件，按文件名 hash 反查目标路径并覆盖原文件。"""
+    # 1. 解析文件名
+    parsed = _parse_upload_filename(file.filename or "")
+    if parsed is None:
+        raise CortexAPIError(
+            400, "BAD_FILENAME",
+            "文件名不符合 {stem}_{hash6}{suffix} 格式",
+        )
+    stem, hash6, _suffix = parsed
+
+    # 2. 反查目标相对路径
+    try:
+        rel = _resolve_upload_target(idx, stem, hash6)
+    except _HashCollisionError as e:
+        raise CortexAPIError(409, "HASH_COLLISION", str(e)) from e
+    if rel is None:
+        raise CortexAPIError(
+            404, "NOT_INDEXED",
+            f"hash+stem 在索引中找不到匹配：{file.filename}",
+        )
+
+    # 3. 越权与可写性检查
+    base = Path(idx.search_path)
+    full = _safe_resolve(base, rel)
+    # 显式拒绝 .cortex/ 子目录
+    try:
+        full.relative_to(base / ".cortex")
+        raise CortexAPIError(403, "NOT_WRITABLE", "禁止覆盖索引元数据")
+    except ValueError:
+        pass
+
+    # 4. 读字节 + 大小检查
+    data = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise CortexAPIError(
+            413, "CONTENT_TOO_LARGE",
+            f"文件超过 {_MAX_UPLOAD_BYTES // 1024 // 1024}MB 上限",
+        )
+
+    # 5. 写盘
+    try:
+        full.write_bytes(data)
+    except OSError as e:
+        raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
+
+    # 6. 触发后台重索引（不阻塞响应）
+    try:
+        idx.trigger_background_reindex()
+    except Exception as e:
+        logging.getLogger(__name__).warning("Upload reindex failed: %s", e)
+
+    return PreviewUploadResponse(
+        path=rel,
+        bytes_written=len(data),
+        reindex_triggered=True,
+    )
