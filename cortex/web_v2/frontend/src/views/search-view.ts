@@ -223,6 +223,11 @@ export class SearchView extends LitElement {
     await this._safeAction(async () => {
       const query = e.detail.value;
       this.localQuery = query;
+      // Reset any previous preview state so auto-preview starts fresh
+      store.setState({ detailStack: [] });
+      this.previewContent = "";
+      this.previewPath = "";
+      this.previewError = null;
       actions.setSearchState({ state: "focus", query, results: [], total: 0, source: "fts" });
       this.loading = true;
       try {
@@ -245,6 +250,7 @@ export class SearchView extends LitElement {
           payload: JSON.stringify(r),
         })), res.total);
         this._loadHistory();
+        this._autoPreviewFirstDesktop(res.results);
       } catch (err) {
         actions.setError(`搜索失败: ${(err as Error).message}`);
       } finally {
@@ -265,35 +271,59 @@ export class SearchView extends LitElement {
     await this._safeAction(async () => {
       const r = e.detail.result;
       actions.pushDetail(r);
-      this.previewError = null;
-      try {
-        const params = new URLSearchParams({ path: r.path });
-        const fullFile = isFullFilePreview(r.path);
-        if (r.line && !fullFile) {
-          params.set("start_line", String(Math.max(1, r.line - 10)));
-          params.set("end_line", String(r.line + 20));
-        }
-        const res = await fetch(`/api/preview?${params}`);
-        if (res.ok) {
-          const body = await res.json();
-          this.previewContent = body.content;
-          this.previewPath = body.path;
-          this.previewLanguage = body.language;
-          this.previewLine = (r.line as number | null) ?? null;
-          this.previewWritable = body.writable ?? false;
-        } else {
-          const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
-          if (err.code === "NOT_INDEXED") {
-            this.previewError = "NOT_INDEXED";
-            this.previewContent = "";
-            this.previewPath = r.path;
-            this.previewWritable = false;
-          }
-        }
-      } catch (e) {
-        console.warn("preview failed", e);
-      }
+      await this._fetchAndShowPreview(r);
     });
+  }
+
+  /** Fetches preview content for a result and updates preview-* state.
+   *  Pulled out of _onResultSelect so it can be reused by desktop auto-preview
+   *  (which doesn't go through the user-click path). */
+  private async _fetchAndShowPreview(r: SearchResult) {
+    this.previewError = null;
+    try {
+      const params = new URLSearchParams({ path: r.path });
+      const fullFile = isFullFilePreview(r.path);
+      if (r.line && !fullFile) {
+        params.set("start_line", String(Math.max(1, r.line - 10)));
+        params.set("end_line", String(r.line + 20));
+      }
+      const res = await fetch(`/api/preview?${params}`);
+      if (res.ok) {
+        const body = await res.json();
+        this.previewContent = body.content;
+        this.previewPath = body.path;
+        this.previewLanguage = body.language;
+        this.previewLine = (r.line as number | null) ?? null;
+        this.previewWritable = body.writable ?? false;
+      } else {
+        const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
+        if (err.code === "NOT_INDEXED") {
+          this.previewError = "NOT_INDEXED";
+          this.previewContent = "";
+          this.previewPath = r.path;
+          this.previewWritable = false;
+        }
+      }
+    } catch (e) {
+      console.warn("preview failed", e);
+    }
+  }
+
+  /** Desktop-only: auto-preview the first result after a search or session
+   *  load, so the preview pane isn't empty.
+   *
+   *  Does NOT call actions.pushDetail — detailStack is overloaded as the
+   *  trigger for the mobile full-screen detail-overlay, so pushing on
+   *  desktop would cause the overlay to appear if the user later resizes
+   *  the window narrower. We only fetch and populate the preview-* state;
+   *  if the user wants the first card highlighted, clicking it does the
+   *  normal pushDetail flow. */
+  private _autoPreviewFirstDesktop(results: SearchResult[]) {
+    if (typeof window === "undefined") return;
+    if (window.innerWidth < 1024) return;
+    if (results.length === 0) return;
+    // Fire-and-forget; preview loads in background
+    void this._fetchAndShowPreview(results[0]);
   }
 
   private _discardPreviewEdits() {
@@ -346,6 +376,11 @@ export class SearchView extends LitElement {
   }
 
   private async _loadSession(s: Session) {
+    // Reset any previous preview state so auto-preview starts fresh
+    store.setState({ detailStack: [] });
+    this.previewContent = "";
+    this.previewPath = "";
+    this.previewError = null;
     actions.setSearchState({
       state: "focus",
       currentSession: s,
@@ -360,6 +395,7 @@ export class SearchView extends LitElement {
           .filter((i: any) => i.kind === "result")
           .map((i: any) => JSON.parse(i.payload));
         actions.setSearchState({ results, total: results.length, source: "fts" });
+        this._autoPreviewFirstDesktop(results);
       }
     } catch (e) {
       console.warn("load session failed", e);

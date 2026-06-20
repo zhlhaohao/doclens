@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fixture } from "@open-wc/testing";
 import { html } from "lit";
 import { SearchView } from "../src/views/search-view";
@@ -117,5 +117,86 @@ describe("<search-view> splitter", () => {
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
     expect(el["_resultsPaneWidth"]).toBe(SearchView.RESULTS_PANE_WIDTH_MAX);
+  });
+});
+
+describe("<search-view> auto-preview first result (desktop)", () => {
+  let originalInnerWidth: PropertyDescriptor | undefined;
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    resetStore(store);
+    actions.setSearchState({
+      state: "focus",
+      query: "x",
+      results: [],
+      total: 0,
+      source: "fts",
+    });
+    originalInnerWidth = Object.getOwnPropertyDescriptor(window, "innerWidth");
+    fetchSpy = vi.fn(async (url: string) => {
+      // Minimal mock for /api/preview only; other endpoints return empty 200
+      const u = String(url);
+      if (u.startsWith("/api/preview")) {
+        return new Response(
+          JSON.stringify({ path: "doc1.md", language: "markdown", content: "# Hello", writable: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as any;
+    global.fetch = fetchSpy as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    if (originalInnerWidth) Object.defineProperty(window, "innerWidth", originalInnerWidth);
+    vi.restoreAllMocks();
+  });
+
+  function setViewport(width: number) {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: width,
+    });
+  }
+
+  it("auto-previews first result on desktop width (>=1024)", async () => {
+    setViewport(1440);
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    const results = [
+      { path: "doc1.md", snippet: "alpha", score: 1, line: 1 } as any,
+      { path: "doc2.md", snippet: "beta", score: 0.5, line: 5 } as any,
+    ];
+    (el as any)._autoPreviewFirstDesktop(results);
+    // Should NOT push to detailStack (that would trigger mobile overlay on resize)
+    expect(store.getState().detailStack.length).toBe(0);
+    // _fetchAndShowPreview is async — let it settle
+    await new Promise((r) => setTimeout(r, 20));
+    await el.updateComplete;
+    expect(el["previewContent"]).toBe("# Hello");
+    expect(el["previewPath"]).toBe("doc1.md");
+  });
+
+  it("does NOT auto-preview on mobile width (<1024)", async () => {
+    setViewport(390);
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    const results = [
+      { path: "doc1.md", snippet: "alpha", score: 1, line: 1 } as any,
+    ];
+    (el as any)._autoPreviewFirstDesktop(results);
+    // fetch should not have been called for /api/preview
+    const previewCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]).startsWith("/api/preview"));
+    expect(previewCalls.length).toBe(0);
+  });
+
+  it("does NOT auto-preview when results array is empty", async () => {
+    setViewport(1440);
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    (el as any)._autoPreviewFirstDesktop([]);
+    const previewCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]).startsWith("/api/preview"));
+    expect(previewCalls.length).toBe(0);
   });
 });
