@@ -21,7 +21,9 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
-    total: int
+    total: int  # 真实过滤后总数（不再是 len(results)）
+    offset: int = 0  # 当前页起始 offset（响应回显）
+    limit: int = 20  # 当前页大小
     query: str
     elapsed_ms: int
-    source: str = "fts"  # 新增：值 ∈ {"fts", "like", "ripgrep"}
+    source: str = "fts"  # 值 ∈ {"fts", "like", "ripgrep"}

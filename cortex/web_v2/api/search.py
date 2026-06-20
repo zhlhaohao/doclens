@@ -19,6 +19,11 @@ from cortex.web_v2.models.search import SearchRequest, SearchResponse, SearchRes
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# 单次搜索拉取的最大 FTS 候选数。覆盖大部分实际匹配；
+# score_and_rank 在此集合上做完整过滤+排序，提供准确 total。
+# 超过该值的匹配不可见（v1 接受）。
+_MAX_FETCH = 1000
+
 
 def _resolve_preview_path(doc_key: str, path_map: dict, search_path: str) -> str:
     """把 doc_id 或 doc_name 解析为相对 search_path 的可预览路径。
@@ -40,9 +45,10 @@ def _format_scored_results(
     result: ScoreResult,
     path_map: dict,
     search_path: str,
-    limit: int,
 ) -> list[SearchResult]:
-    """把 score_and_rank 的 ScoreResult 转成 SearchResult 列表。
+    """把 score_and_rank 的 ScoreResult 转成完整 SearchResult 列表（不切片）。
+
+    切片由调用方（endpoint）按 offset/limit 处理。
 
     三个分支：
       - source="fts":     result.results = [(composite, (doc_id, node, matched, prox, fts))]
@@ -85,12 +91,18 @@ def _format_scored_results(
                 highlights=[],
             ))
 
-    return out[:limit]
+    return out
 
 
-def _do_search(idx: IndexManager, query: str, limit: int) -> ScoreResult:
-    """在子线程中执行同步搜索 + 评分管道（TreeSearch.search 不能在事件循环内调用）。"""
-    nodes, docs = idx.search(query, max_results=limit)
+def _do_search(
+    idx: IndexManager, query: str, max_fetch: int = _MAX_FETCH
+) -> ScoreResult:
+    """在子线程中执行同步搜索 + 评分管道。
+
+    max_fetch 是 FTS 候选拉取上限（搜索池大小），与 endpoint 的 limit（页大小）解耦。
+    TreeSearch.search 是同步的，不能在事件循环内调用。
+    """
+    nodes, docs = idx.search(query, max_results=max_fetch)
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
@@ -101,22 +113,30 @@ def _do_search(idx: IndexManager, query: str, limit: int) -> ScoreResult:
 async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manager)):
     start = time.perf_counter()
     try:
-        result = await asyncio.to_thread(_do_search, idx, req.query, req.limit)
+        result = await asyncio.to_thread(_do_search, idx, req.query)
     except Exception as e:
         logger.warning("score_and_rank failed: %s; returning empty result", e)
         return SearchResponse(
             results=[],
             total=0,
+            offset=0,
+            limit=req.limit,
             query=req.query,
             source="fts",
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    results = _format_scored_results(result, idx.path_map, idx.search_path, req.limit)
+    all_results = _format_scored_results(result, idx.path_map, idx.search_path)
+    total = len(all_results)
+    # offset 越界兜底：clamp 到最后一页的起点
+    safe_offset = min(req.offset, max(0, total - 1)) if total > 0 else 0
+    page = all_results[safe_offset : safe_offset + req.limit]
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     return SearchResponse(
-        results=results,
-        total=len(results),
+        results=page,
+        total=total,
+        offset=safe_offset,
+        limit=req.limit,
         query=req.query,
         source=result.source,
         elapsed_ms=elapsed_ms,
