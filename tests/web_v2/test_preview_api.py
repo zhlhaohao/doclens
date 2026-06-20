@@ -167,3 +167,107 @@ async def test_preview_csv_path_traversal_blocked(env_cortex_config, reset_deps)
     # 走二进制分支前已先 _safe_resolve 校验，返回 FILE_NOT_FOUND 而非 NOT_INDEXED
     assert res.status_code == 404
     assert res.json()["code"] == "FILE_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# 分页标记（pages 字段）集成测试
+# ---------------------------------------------------------------------------
+
+
+def _init_and_reindex_sync():
+    """在非事件循环线程中初始化 + 索引。"""
+    idx = deps.get_index_manager()
+    idx.reindex(force=True)
+    return idx
+
+
+@pytest.mark.asyncio
+async def test_preview_pptx_returns_pages_with_slide_titles(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    """pptx 预览：pages 列出每个 slide，label 含 slide 标题。"""
+    from pptx import Presentation  # type: ignore
+
+    prs = Presentation()
+    s1 = prs.slides.add_slide(prs.slide_layouts[0])
+    s1.shapes.title.text = "Intro Slide"
+    s1.placeholders[1].text = "intro body"
+    s2 = prs.slides.add_slide(prs.slide_layouts[0])
+    s2.shapes.title.text = "Method Slide"
+    s2.placeholders[1].text = "method body"
+    prs.save(str(temp_workdir / "twoslides.pptx"))
+
+    await asyncio.to_thread(_init_and_reindex_sync)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "twoslides.pptx"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["pages"] is not None
+    assert len(body["pages"]) == 2
+    assert body["pages"][0]["label"] == "幻灯片 1 · Intro Slide"
+    assert body["pages"][1]["label"] == "幻灯片 2 · Method Slide"
+    # line_start 是 1-indexed 整数
+    assert isinstance(body["pages"][0]["line_start"], int)
+
+
+@pytest.mark.asyncio
+async def test_preview_xlsx_returns_pages_with_sheet_names(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    """xlsx 预览：pages 列出每个 sheet，label 含 sheet 名。"""
+    from openpyxl import Workbook  # type: ignore
+
+    wb = Workbook()
+    wb.active.title = "Sales"
+    wb.active.append(["name", "amt"])
+    wb.active.append(["Alice", 100])
+    wb.create_sheet("Inventory").append(["item", "qty"])
+    wb.save(str(temp_workdir / "multi.xlsx"))
+
+    await asyncio.to_thread(_init_and_reindex_sync)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "multi.xlsx"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["pages"] is not None
+    assert len(body["pages"]) == 2
+    # excel_parser 将 sheet title 存为 "{sheet_name} ({row_count} rows)"，
+    # label 会保留这个完整 title（与 _extract_excel_pages 直接透传 title 一致）
+    assert body["pages"][0]["label"].startswith("工作表 1 · Sales")
+    assert body["pages"][1]["label"].startswith("工作表 2 · Inventory")
+
+
+@pytest.mark.asyncio
+async def test_preview_md_pages_is_null(temp_workdir, env_cortex_config, reset_deps):
+    """回归：md 文件预览，pages 为 null（不支持分页）。"""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "doc1.md"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["pages"] is None
+
+
+@pytest.mark.asyncio
+async def test_preview_csv_pages_is_null(temp_workdir, env_cortex_config, reset_deps):
+    """回归：csv 文件预览，pages 为 null。"""
+    await asyncio.to_thread(_init_and_reindex_sync)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "data.csv"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["pages"] is None

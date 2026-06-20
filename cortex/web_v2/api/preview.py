@@ -157,13 +157,15 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         )
 
     md_content = render_tree_to_md(doc.structure, doc.source_type)
+    pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content)
     return PreviewResponse(
         path=rel_path,
         language="markdown",
-        content=md_content,
+        content=cleaned_md,
         line_range=None,
         highlights=[],
         writable=False,  # 合成预览不可写
+        pages=pages,
     )
 
 
