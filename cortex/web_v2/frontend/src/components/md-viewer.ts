@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { marked } from "marked";
+import type { PageMarker } from "../api/preview";
 
 /**
  * 块级元素 renderer —— 给每个块注入 data-source-line（1-indexed）
@@ -144,6 +145,28 @@ export class MdViewer extends LitElement {
       padding: 0 2px;
       border-radius: 2px;
     }
+    /* 分页卡片 */
+    .page-card {
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+      margin: 16px 8px;
+      padding: 14px 20px;
+    }
+    .page-card-header {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--cortex-border);
+    }
+    /* 卡片内部标题更紧凑 */
+    .page-card h1, .page-card h2, .page-card h3 {
+      margin-top: 0.5em;
+    }
   `;
 
   @property() content = "";
@@ -151,6 +174,8 @@ export class MdViewer extends LitElement {
   @property({ type: Number }) line: number | null = null;
   /** 搜索关键字（按空格分词，在渲染后的正文里高亮所有命中词） */
   @property() keyword = "";
+  /** 分页标记（PDF/PPTX/XLSX）；为 null 时走单块渲染 */
+  @property({ attribute: false }) pages: PageMarker[] | null = null;
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
@@ -201,7 +226,7 @@ export class MdViewer extends LitElement {
   /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
    *  使用 TreeWalker 遍历文本节点，避免对 HTML 结构做字符串替换引入 XSS。 */
   private _highlightKeyword() {
-    const root = this.shadowRoot?.querySelector(".md-body") as HTMLElement | null;
+    const root = this.shadowRoot?.querySelector(".md-body-paged, .md-body") as HTMLElement | null;
     if (!root) return;
     const words = (this.keyword ?? "").split(/\s+/).filter((w) => w.length > 0);
     if (words.length === 0) return;
@@ -249,11 +274,41 @@ export class MdViewer extends LitElement {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
+  /** 按 pages 的 line_start 把 md content 切成 N 段。
+   *  line_start 是 1-indexed；返回 [{label, md}, ...]。 */
+  private _splitByPages(
+    content: string,
+    pages: PageMarker[],
+  ): Array<{ label: string; md: string }> {
+    const lines = content.split("\n");
+    const chunks: Array<{ label: string; md: string }> = [];
+    for (let i = 0; i < pages.length; i++) {
+      const start = pages[i].line_start - 1;  // 转 0-indexed
+      const end = i + 1 < pages.length ? pages[i + 1].line_start - 1 : lines.length;
+      const md = lines.slice(Math.max(0, start), Math.max(0, end)).join("\n");
+      chunks.push({ label: pages[i].label, md });
+    }
+    return chunks;
+  }
+
   render() {
     ensureMdConfigured();
     if (!this.content) {
       return html`<div class="empty">无内容</div>`;
     }
+    // 分页模式：每段 = 一张卡片
+    if (this.pages && this.pages.length > 0) {
+      const chunks = this._splitByPages(this.content, this.pages);
+      return html`<div class="md-body md-body-paged">
+        ${chunks.map((c) => html`
+          <section class="page-card">
+            <header class="page-card-header">${c.label}</header>
+            <div .innerHTML=${marked.parse(c.md, { async: false }) as string}></div>
+          </section>
+        `)}
+      </div>`;
+    }
+    // 回归：单块渲染
     const raw = marked.parse(this.content, { async: false }) as string;
     return html`<div class="md-body" .innerHTML=${raw}></div>`;
   }
