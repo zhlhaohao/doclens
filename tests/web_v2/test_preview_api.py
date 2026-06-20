@@ -74,6 +74,48 @@ async def test_preview_csv_returns_markdown(temp_workdir, env_cortex_config, res
 
 
 @pytest.mark.asyncio
+async def test_preview_pptx_returns_markdown_from_db(
+    temp_workdir, env_cortex_config, reset_deps
+):
+    """pptx 是二进制（ZIP），预览应从 DB 合成 markdown，而非 utf-8 直读（会乱码）。
+
+    Regression: 之前 .pptx 没在 BINARY_PREVIEW_EXTS 里，导致走 utf-8 分支，
+    把 ZIP 字节流当文本解码 → 乱码。修复后应通过 markitdown 入库的结构合成 md。
+    """
+    # 用 python-pptx 造一个最小 pptx（markitdown 依赖 python-pptx，可用）
+    from pptx import Presentation  # type: ignore
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    slide.shapes.title.text = "Hello PPTX Title"
+    slide.placeholders[1].text = "Slide body content"
+
+    pptx_path = temp_workdir / "sample.pptx"
+    prs.save(str(pptx_path))
+    assert pptx_path.exists()
+
+    # 索引（让 markitdown parser 把 pptx 写入 DB）
+    await asyncio.to_thread(_init_and_reindex)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/preview", params={"path": "sample.pptx"})
+
+    assert res.status_code == 200
+    body = res.json()
+    # 关键：language 必须是 markdown（走 DB 合成），不能是 text（utf-8 直读）
+    assert body["language"] == "markdown", (
+        f"pptx 应走二进制合成路径，实际 language={body['language']!r}, "
+        f"content 前 80 字节: {body['content'][:80]!r}"
+    )
+    # markitdown 应提取出标题
+    assert "Hello PPTX Title" in body["content"]
+    # 不能出现 ZIP magic（PK\x03\x04）—— 那是 utf-8 直读乱码的标志
+    assert "PK\x03\x04" not in body["content"]
+
+
+@pytest.mark.asyncio
 async def test_preview_unindexed_pdf_returns_404(temp_workdir, env_cortex_config, reset_deps):
     """未索引的 .pdf 文件应返回 404 NOT_INDEXED（不读磁盘 utf-8）。"""
     # 故意不索引；temp_workdir 里也没有这个文件
