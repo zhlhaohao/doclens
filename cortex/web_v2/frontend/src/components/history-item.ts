@@ -33,9 +33,15 @@ export class HistoryItem extends LitElement {
 
   render() {
     if (!this.session) return null;
+    // search 历史只保留关键词（不再保存结果数量）；chat 仍显示消息数。
+    const metaParts: string[] = [];
+    if (this.session.type === "chat") {
+      metaParts.push(String(this.session.message_count));
+    }
+    metaParts.push(new Date(this.session.updated_at).toLocaleDateString());
     return html`
       <div class="name">${this.session.title}</div>
-      <div class="meta">${this.session.message_count} · ${new Date(this.session.updated_at).toLocaleDateString()}</div>
+      <div class="meta">${metaParts.join(" · ")}</div>
     `;
   }
 

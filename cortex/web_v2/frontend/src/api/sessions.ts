@@ -7,6 +7,11 @@ export async function createSession(req: { type: "search" | "chat"; title: strin
   return request<CreateSessionResponse>("/api/sessions", { method: "POST", json: req });
 }
 
+/** 按 (type, title) 原子地查找或新建会话；用于 search 历史去重。 */
+export async function findOrCreateSession(req: { type: "search" | "chat"; title: string; preview?: string }): Promise<CreateSessionResponse> {
+  return request<CreateSessionResponse>("/api/sessions/find-or-create", { method: "POST", json: req });
+}
+
 export async function listSessions(params: { type?: "search" | "chat"; limit?: number; offset?: number }): Promise<{ sessions: Session[]; total: number }> {
   const sp = new URLSearchParams();
   if (params.type) sp.set("type", params.type);

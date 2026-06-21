@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import ulid as _ulid
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -99,6 +100,54 @@ class SessionsStore:
                     s.id, s.type.value, s.title, s.preview,
                     s.created_at.isoformat(), s.updated_at.isoformat(), s.message_count,
                 ),
+            )
+
+    def find_or_create(
+        self,
+        type_: SessionType,
+        title: str,
+        preview: str = "",
+    ) -> SessionSummary:
+        """按 (type, title) 原子地查找会话；命中则刷新 updated_at（并更新 preview），
+        未命中则新建。整个过程持锁，避免并发条件下的重复创建。
+
+        主要服务于 search 历史：相同关键词只保留一条记录，重复搜索时只置顶。
+        """
+        now = datetime.utcnow()
+        now_iso = now.isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id, type, title, preview, created_at, updated_at, message_count
+                   FROM sessions
+                   WHERE type = ? AND title = ?
+                   ORDER BY datetime(updated_at) DESC
+                   LIMIT 1""",
+                (type_.value, title),
+            ).fetchone()
+            if row is not None:
+                conn.execute(
+                    """UPDATE sessions SET updated_at = ?, preview = ? WHERE id = ?""",
+                    (now_iso, preview, row["id"]),
+                )
+                return SessionSummary(
+                    id=row["id"],
+                    type=SessionType(row["type"]),
+                    title=row["title"],
+                    preview=preview,
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=now,
+                    message_count=row["message_count"],
+                )
+            sid = str(_ulid.new())
+            conn.execute(
+                """INSERT INTO sessions
+                   (id, type, title, preview, created_at, updated_at, message_count)
+                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                (sid, type_.value, title, preview, now_iso, now_iso),
+            )
+            return SessionSummary(
+                id=sid, type=type_, title=title, preview=preview,
+                created_at=now, updated_at=now, message_count=0,
             )
 
     def append_item(self, item: SessionItem) -> None:
