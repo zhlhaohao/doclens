@@ -4,7 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
-import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
+import { listSessions, clearSessions, findOrCreateSession } from "../api/sessions";
 import type { PageMarker } from "../api/preview";
 import "../components/preview-pane";
 import "../components/pagination-bar";
@@ -62,6 +62,8 @@ export class SearchView extends LitElement {
       display: flex;
       flex: 1;
       min-height: 0;
+      /* 四周留白：避免结果/预览/分页紧贴 focus-header 下沿和视口边缘 */
+      padding: var(--cortex-space-3);
     }
     /* 结果列：search-results + pagination-bar 垂直堆叠，宽度跟随 --results-pane-width */
     .results-col {
@@ -71,6 +73,8 @@ export class SearchView extends LitElement {
       min-width: 280px;
       max-width: 800px;
       min-height: 0;
+      /* 结果列表与分页栏之间的呼吸空间 */
+      gap: var(--cortex-space-2);
     }
     /* 让 search-results 在 .results-col 内填充剩余高度（覆盖其 :host 的 flex: 0 0 auto）。
        !important 是必要的，因为子组件 :host 的特异性 (0,1,0) 高于父级类型选择器 (0,0,1)。 */
@@ -95,12 +99,6 @@ export class SearchView extends LitElement {
     .splitter:hover, .splitter:active { background: var(--cortex-primary); }
     @media (max-width: 1023px) {
       .splitter { display: none; }
-    }
-    .focus-input-bar {
-      padding: var(--cortex-space-3) var(--cortex-space-6);
-      border-top: 1px solid var(--cortex-border-muted);
-      background: var(--cortex-surface);
-      flex-shrink: 0;
     }
     /* 移动端：详情整页推入覆盖 */
     .detail-overlay {
@@ -128,11 +126,6 @@ export class SearchView extends LitElement {
       .detail-overlay { display: none; }
       /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感 */
       .initial-stack {
-        max-width: 720px;
-        margin: 0 auto;
-        width: 100%;
-      }
-      .focus-input-bar {
         max-width: 720px;
         margin: 0 auto;
         width: 100%;
@@ -262,7 +255,7 @@ export class SearchView extends LitElement {
       this.loading = true;
       try {
         const res = await searchApi({ query, offset: 0, limit: 20 });
-        const created = await createSession({ type: "search", title: query, preview: query.slice(0, 100) });
+        // 立即用搜索结果更新 UI（不等会话写入），避免长时间"空白"
         actions.setSearchState({
           state: "focus",
           query,
@@ -271,18 +264,23 @@ export class SearchView extends LitElement {
           offset: 0,
           limit: 20,
           source: res.source,
-          currentSession: {
-            id: created.id, type: "search", title: query,
-            preview: query.slice(0, 100), updated_at: new Date().toISOString(),
-            message_count: res.total,
-          },
         });
-        await appendSession(created.id, res.results.map((r) => ({
-          kind: "result",
-          payload: JSON.stringify(r),
-        })), res.total);
-        this._loadHistory();
         this._autoPreviewFirstDesktop(res.results);
+        // 后台：去重写入历史会话（不阻塞 UI）。即使失败也不影响搜索结果展示。
+        void findOrCreateSession({
+          type: "search", title: query, preview: query.slice(0, 100),
+        }).then((created) => {
+          actions.setSearchState({
+            currentSession: {
+              id: created.id, type: "search", title: query,
+              preview: query.slice(0, 100), updated_at: new Date().toISOString(),
+              message_count: 0,
+            },
+          });
+          this._loadHistory();
+        }).catch((e) => {
+          console.warn("find-or-create session failed", e);
+        });
       } catch (err) {
         actions.setError(`搜索失败: ${(err as Error).message}`);
       } finally {
@@ -476,31 +474,9 @@ export class SearchView extends LitElement {
   }
 
   private async _loadSession(s: Session) {
-    // Reset any previous preview state so auto-preview starts fresh
-    store.setState({ detailStack: [] });
-    this.previewContent = "";
-    this.previewPath = "";
-    this.previewError = null;
-    this.previewPages = null;
-    actions.setSearchState({
-      state: "focus",
-      currentSession: s,
-      query: s.title,
-    });
-    // 从后端加载会话内容
-    try {
-      const res = await fetch(`/api/sessions/${s.id}`);
-      if (res.ok) {
-        const body = await res.json();
-        const results = (body.items || [])
-          .filter((i: any) => i.kind === "result")
-          .map((i: any) => JSON.parse(i.payload));
-        actions.setSearchState({ results, total: results.length, source: "fts" });
-        this._autoPreviewFirstDesktop(results);
-      }
-    } catch (e) {
-      console.warn("load session failed", e);
-    }
+    // 历史只保存查询关键词，点击 = 用关键词重新执行搜索（拿到最新结果）。
+    // 委托给 _submit，复用其去重 + 置顶 + 状态更新 + 历史刷新逻辑。
+    await this._submit(s.title);
   }
 
   private _onHistorySelect(e: CustomEvent<{ session: Session }>) {
@@ -537,19 +513,24 @@ export class SearchView extends LitElement {
     }
     // focus 状态
     const detailTop = store.getState().detailStack[store.getState().detailStack.length - 1];
+    // loading 时显示"搜索中"，避免误以为"0 条结果"
+    const meta = this.loading
+      ? "搜索中"
+      : `${s.total} 条结果${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`;
     return html`
       <toast-stack></toast-stack>
       <div class="focus-body ${detailTop ? "is-covered" : ""}">
         <focus-header
           back-label="新搜索"
           title=${s.query}
-          meta=${`${s.total} 条结果${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`}
+          meta=${meta}
           @back=${this._backToInitial}>
         </focus-header>
         <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
           <div class="results-col">
             <search-results
               .results=${s.results}
+              ?loading=${this.loading}
               .activePath=${detailTop?.path ?? this.previewPath ?? null}
               .activeLine=${detailTop?.line ?? this.previewLine ?? null}
               @select=${this._onResultSelect}>
@@ -586,16 +567,6 @@ export class SearchView extends LitElement {
                 @upload-success=${this._onPreviewUploadSuccess}
                 @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
-        </div>
-        <div class="focus-input-bar">
-          <input-box
-            placeholder="重新搜索..."
-            button-label="🔍"
-            ?disabled=${this.loading}
-            .value=${this.localQuery}
-            @input-change=${(e: any) => (this.localQuery = e.detail.value)}
-            @submit=${this._submit}>
-          </input-box>
         </div>
       </div>
       ${detailTop ? html`

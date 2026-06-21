@@ -55,6 +55,20 @@ async def create_session(req: SessionCreateRequest):
     return SessionCreatedResponse(id=sid, type=req.type, title=req.title, preview=req.preview)
 
 
+@router.post("/sessions/find-or-create", response_model=SessionCreatedResponse)
+async def find_or_create_session(req: SessionCreateRequest):
+    """按 (type, title) 原子地查找或新建会话。
+
+    主要服务于 search 历史：相同关键词只保留一条记录，重复搜索时刷新 updated_at 置顶。
+    chat 等需要保留每条消息的场景仍应使用 POST /sessions + PATCH /sessions/{id}。
+    """
+    store = _get_store()
+    summary = store.find_or_create(req.type, req.title, req.preview)
+    return SessionCreatedResponse(
+        id=summary.id, type=summary.type, title=summary.title, preview=summary.preview,
+    )
+
+
 @router.get("/sessions", response_model=SessionListResponse)
 async def list_sessions(
     type: Optional[SessionType] = Query(default=None),
