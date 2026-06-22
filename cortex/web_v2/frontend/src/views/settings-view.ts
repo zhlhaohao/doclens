@@ -286,6 +286,30 @@ export class SettingsView extends LitElement {
         color: var(--cortex-danger);
         margin-top: var(--cortex-space-1);
       }
+
+      /* ===== Mobile polish: tightened spacing ===== */
+      .section {
+        padding: var(--cortex-space-4);
+        margin-bottom: var(--cortex-space-3);
+      }
+      .info-box {
+        padding: var(--cortex-space-2) var(--cortex-space-3);
+        line-height: 1.55;
+        font-size: var(--cortex-fs-xs);
+      }
+      .info-box br + br { display: none; }
+      .tab-strip {
+        padding: 0 var(--cortex-space-3);
+        gap: var(--cortex-space-1);
+      }
+      .tab-strip button {
+        padding: var(--cortex-space-3) var(--cortex-space-2);
+        font-size: var(--cortex-fs-sm);
+      }
+      .copy-banner {
+        padding: var(--cortex-space-3);
+        font-size: var(--cortex-fs-xs);
+      }
     }
   `;
 

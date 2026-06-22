@@ -110,4 +110,29 @@ test.describe("settings mobile", () => {
       .evaluate((el) => el.getBoundingClientRect());
     expect(box.top).toBe(scrollAreaBox.top);
   });
+
+  test("section padding is 16px at 390px (tightened from 24px)", async ({ page }) => {
+    await page.locator("app-bar .avatar-btn").tap();
+    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    const padding = await page.locator(".section").first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));
+    expect(padding).toBe(16);  // var(--cortex-space-4) = 16px
+  });
+
+  test("tab strip fits without horizontal overflow at 390px", async ({ page }) => {
+    await page.locator("app-bar .avatar-btn").tap();
+    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    const overflow = await page.locator(".tab-strip")
+      .evaluate((el) => el.scrollWidth > el.clientWidth);
+    expect(overflow).toBe(false);
+  });
+
+  test("fields are single-column at tablet width 768px", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.locator("app-bar .avatar-btn").tap();
+    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    const gridCols = await page.locator(".field").first()
+      .evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+    expect(gridCols.split(" ").length).toBe(1);
+  });
 });
