@@ -103,4 +103,19 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(putConfig).toHaveBeenCalled();
   });
+
+  it("scope-segment and tab-strip live inside .scroll-area (template structure)", () => {
+    const scrollArea = el.shadowRoot?.querySelector(".scroll-area");
+    expect(scrollArea, ".scroll-area must exist").toBeTruthy();
+    const scopeInScroll = scrollArea?.querySelector("settings-scope-segment");
+    const tabsInScroll = scrollArea?.querySelector(".tab-strip");
+    expect(
+      scopeInScroll,
+      "settings-scope-segment must be inside .scroll-area so position:sticky works"
+    ).toBeTruthy();
+    expect(
+      tabsInScroll,
+      ".tab-strip must be inside .scroll-area so it scrolls with the content"
+    ).toBeTruthy();
+  });
 });

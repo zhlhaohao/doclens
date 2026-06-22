@@ -626,23 +626,23 @@ export class SettingsView extends LitElement {
             </div>
           `
         : nothing}
-      <settings-scope-segment
-        .scope=${this._scope}
-        .exists=${this._exists}
-        @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
-          actions.setSettingsScope(e.detail.scope);
-        }}
-      ></settings-scope-segment>
-      <nav class="tab-strip" role="tablist">
-        ${TAB_ORDER.map((tab) => html`
-          <button
-            class=${this._activeTab === tab ? "active" : ""}
-            @click=${() => { this._activeTab = tab; }}
-          >${SETTINGS_TAB_LABELS[tab]}</button>
-        `)}
-      </nav>
-
       <div class="scroll-area">
+        <settings-scope-segment
+          .scope=${this._scope}
+          .exists=${this._exists}
+          @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
+            actions.setSettingsScope(e.detail.scope);
+          }}
+        ></settings-scope-segment>
+        <nav class="tab-strip" role="tablist">
+          ${TAB_ORDER.map((tab) => html`
+            <button
+              class=${this._activeTab === tab ? "active" : ""}
+              @click=${() => { this._activeTab = tab; }}
+            >${SETTINGS_TAB_LABELS[tab]}</button>
+          `)}
+        </nav>
+
         ${TAB_ORDER.map((tab) => {
           const fields = SETTINGS_FIELDS.filter((f) => f.tab === tab);
           const sections: { title: string; desc?: string; fields: SettingsField[] }[] = [];
