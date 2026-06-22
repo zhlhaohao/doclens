@@ -86,7 +86,7 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
 
 | 文件 | 改动 |
 |------|------|
-| `cortex/web_v2/frontend/src/views/settings-view.ts` | 扩展 `@media (max-width: 1023px)` 块：减小 `.section`/`.info-box`/`.tab-strip` padding |
+| `cortex/web_v2/frontend/src/views/settings-view.ts` | 1) `render()` 把 `<settings-scope-segment>` 和 `.tab-strip` 移到 `.scroll-area` 内部；2) 扩展 `@media (max-width: 1023px)` 块减小 padding |
 | `cortex/web_v2/frontend/src/components/settings-scope-segment.ts` | 新增 `@media (max-width: 1023px)` 块：`position: sticky; top: 0; z-index: 5` |
 | `cortex/web_v2/frontend/tests/e2e/settings-mobile.spec.ts` | 新增 4 个 viewport-coverage 测试（360 / 390 / 768 sticky / 768 single-column） |
 | `cortex/web_v2/static/assets/index.*.js` + `.css` | `npm run build` 重建并提交 |
@@ -97,7 +97,7 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
 
 ```css
 @media (max-width: 1023px) {
-  /* 现有规则保持不变 */
+  /* 现有规则保持不变（照抄源码，确保不被本次改动影响） */
   .field { grid-template-columns: 1fr; gap: var(--cortex-space-3); padding: var(--cortex-space-4) 0; }
   .field-label .name { font-size: var(--cortex-fs-md); }
   .scroll-area { padding: var(--cortex-space-3) var(--cortex-space-4) var(--cortex-space-6); }
@@ -107,18 +107,19 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
   .slider-row { display: flex; flex-direction: column; gap: var(--cortex-space-2); }
   .slider-row input[type="number"] { display: none; }
   .slider-row input[type="range"] { max-width: 100%; width: 100%; flex: 1; }
-  .value-chip { display: inline-block; align-self: flex-start; ... }
+  .value-chip { display: inline-block; align-self: flex-start; font-variant-numeric: tabular-nums; font-size: var(--cortex-fs-md); font-weight: 600; color: var(--cortex-primary); background: var(--cortex-primary-soft); padding: 2px 10px; border-radius: var(--cortex-radius-md); }
   /* Password "显示" 按钮 */
   .password-wrap { max-width: 100% !important; position: static !important; }
-  .password-toggle { position: static !important; transform: none !important; ... }
+  .password-toggle { position: static !important; transform: none !important; margin-top: var(--cortex-space-2); align-self: flex-end; }
   /* 复制 banner 堆叠 */
   .copy-banner { flex-direction: column; align-items: stretch; padding: var(--cortex-space-3) var(--cortex-space-4); }
   .copy-banner .grow { display: none; }
   .copy-banner button { align-self: flex-end; }
   /* Toast-stack 避开移动 tab-bar */
-  toast-stack { bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px); ... }
+  toast-stack { bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px); right: 12px; left: 12px; width: auto; }
+  toast-stack .toast { max-width: 100%; }
   /* 字段错误红字 */
-  .field-error { font-size: var(--cortex-fs-xs); ... }
+  .field-error { font-size: var(--cortex-fs-xs); color: var(--cortex-danger); margin-top: var(--cortex-space-1); }
 
   /* ===== 新增规则 ===== */
   .section {
@@ -146,7 +147,34 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
 }
 ```
 
-### 2.3 settings-scope-segment.ts 新增媒体查询
+### 2.3 模板结构调整 + settings-scope-segment.ts 新增媒体查询
+
+**为什么需要改模板：** 当前 `settings-view.render()` 把 `<settings-scope-segment>` 渲染在 `.scroll-area` **外面**。`.scroll-area` 才是滚动容器（`overflow-y: auto`），外面的元素不参与滚动，sticky 不会生效。需要把 `<settings-scope-segment>` 和 `.tab-strip` 一起移到 `.scroll-area` **内部顶部**。
+
+`settings-view.render()` 新结构：
+
+```ts
+return html`
+  ${this._scope === "local" && !this._exists
+    ? html`<div class="copy-banner">…</div>`
+    : nothing}
+  <div class="scroll-area">
+    <settings-scope-segment
+      .scope=${this._scope}
+      .exists=${this._exists}
+      @scope-change=${...}
+    ></settings-scope-segment>
+    <nav class="tab-strip" role="tablist">
+      ${TAB_ORDER.map((tab) => html`<button ...>${SETTINGS_TAB_LABELS[tab]}</button>`)}
+    </nav>
+    ${TAB_ORDER.map((tab) => html`<div class="tab-panel ${this._activeTab === tab ? "active" : ""}" ...>…</div>`)}
+    <div class="footer-bar">…</div>
+  </div>
+  <toast-stack></toast-stack>
+`;
+```
+
+**移动端 `settings-scope-segment.ts` 新增媒体查询：**
 
 ```css
 @media (max-width: 1023px) {
@@ -159,6 +187,8 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
 }
 ```
 
+`top: 0` 是相对 `.scroll-area` 内部的可见区域顶部（不是视口顶部）。因为 app-bar 在 settings-view 之外，scope-segment sticky 时正好停在 app-bar 下边缘，行为符合预期。
+
 ### 2.4 视觉差异
 
 | 元素 | 桌面 (≥1024px) | 移动 (<1024px, 当前) | 移动 (<1024px, 目标) |
@@ -168,7 +198,7 @@ $ grep "grid-template-columns" cortex/web_v2/static/assets/index.CzEh6gvE.js
 | `.info-box` padding | 12px / 16px | 12px / 16px（CSS 未生效） | **8px / 12px**，字号缩到 xs |
 | `.tab-strip` 水平 padding | 32px | 32px（CSS 未生效） | **12px**，按钮间距收紧 |
 | `.copy-banner` padding | 12px / 32px | 12px / 32px（CSS 未生效） | **12px**，字号缩到 xs |
-| `settings-scope-segment` | 默认静态 | 默认静态 | **sticky top:0** |
+| `settings-scope-segment` | 默认静态 | 默认静态 | **sticky top:0**（在 .scroll-area 内部顶部） |
 | footer-bar | 显示 | 显示（CSS 未生效） | **隐藏**（save 走 app-bar，revert 走头像菜单） |
 
 ### 2.5 数据流（不变）
@@ -205,7 +235,7 @@ Revert → avatar menu click
 
 ### 2.7 生命周期（不变）
 
-现有 I1（生成计数器使过期 load 失效）和 I2（disconnect 时清理 toast 定时器）保留。无新增 async 操作、无新增定时器。
+现有 I1（生成计数器 `_loadGen` 使过期 load 失效——处理 scope 切换中途的前次 fetch、组件 disconnect 中途）和 I2（disconnect 时清理 toast 定时器）保留。无新增 async 操作、无新增定时器。模板结构调整不涉及组件 mount/unmount 顺序变化。
 
 ---
 
@@ -237,16 +267,14 @@ test.describe("settings mobile — viewport coverage", () => {
     await page.locator("app-bar .avatar-btn").tap();
     await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
     await page.locator(".tab-strip button:has-text('评分')").tap();
-    // 滚到评分 tab 底部
-    await page.evaluate(() => {
-      const el = document.querySelector("settings-view")?.shadowRoot
-        ?.querySelector(".scroll-area");
-      el?.scrollTo(0, 9999);
-    });
-    // sticky 元素应仍在视口顶部
+    // 滚到评分 tab 底部（scroll-area 内部滚动）
+    await page.locator(".scroll-area").evaluate((el) => el.scrollTo(0, 9999));
+    // sticky 元素应仍在 .scroll-area 可见区域的顶部
     const box = await page.locator("settings-scope-segment")
       .evaluate((el) => el.getBoundingClientRect());
-    expect(box.top).toBeLessThan(56);  // 56 = app-bar 高度
+    const scrollArea = await page.locator(".scroll-area")
+      .evaluate((el) => el.getBoundingClientRect());
+    expect(box.top).toBe(scrollArea.top);  // 相对 scroll-area 顶部
   });
 
   test("section padding is reduced at 390px", async ({ page }) => {
@@ -321,10 +349,13 @@ CSS 改动后：
 
 ## 6. 实施步骤摘要
 
-1. 修改 `settings-view.ts` 的 `@media (max-width: 1023px)` 块（追加新规则）
-2. 修改 `settings-scope-segment.ts`，新增 `@media (max-width: 1023px)` 块
+1. 修改 `settings-view.ts`：
+   - `render()` 把 `<settings-scope-segment>` 和 `<nav class="tab-strip">` 移到 `.scroll-area` 内部顶部
+   - 扩展 `@media (max-width: 1023px)` 块追加新规则（section / info-box / tab-strip / copy-banner padding）
+2. 修改 `settings-scope-segment.ts`，新增 `@media (max-width: 1023px)` 块（sticky 定位）
 3. 在 `tests/e2e/settings-mobile.spec.ts` 追加 4 个 viewport 测试
-4. `cd cortex/web_v2/frontend && npm run build`
-5. 验证 `grep "1023" static/assets/index.*.js` 有匹配
-6. `git add` 源码 + 静态资源并提交
-7. 跑完整测试套件确认无回归
+4. 跑 `tests/settings-view.spec.ts`（vitest）和 `tests/settings-scope-segment.spec.ts` 确认模板结构调整未破坏单元测试
+5. `cd cortex/web_v2/frontend && npm run build`
+6. 验证 `grep "1023" static/assets/index.*.js` 有匹配；`grep "grid-template-columns" static/assets/index.*.js` 有匹配
+7. `git add` 源码 + 静态资源并提交
+8. 跑完整 Playwright E2E 套件（含新加的 4 个 viewport 测试）确认无回归
