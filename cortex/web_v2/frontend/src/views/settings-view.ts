@@ -10,6 +10,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
+import "../components/settings-scope-segment";
 import { getConfig, putConfig, ConfigApiError, copyFromGlobal } from "../api/config";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
@@ -499,6 +500,13 @@ export class SettingsView extends LitElement {
             </div>
           `
         : nothing}
+      <settings-scope-segment
+        .scope=${this._scope}
+        .exists=${this._exists}
+        @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
+          actions.setSettingsScope(e.detail.scope);
+        }}
+      ></settings-scope-segment>
       <nav class="tab-strip" role="tablist">
         ${TAB_ORDER.map((tab) => html`
           <button
