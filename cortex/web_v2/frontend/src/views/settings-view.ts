@@ -101,6 +101,12 @@ export class SettingsView extends LitElement {
     }
     .field-control { display: flex; flex-direction: column; gap: var(--cortex-space-1); }
     .field-control .row { display: flex; align-items: center; gap: var(--cortex-space-2); }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-3);
+    }
+    .slider-row .value-chip { display: none; }
     .field-control .hint {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -501,26 +507,28 @@ export class SettingsView extends LitElement {
         `;
       case "slider":
         return html`
-          <input
-            class="input"
-            type="number"
-            .value=${value}
-            min=${f.min ?? nothing}
-            max=${f.max ?? nothing}
-            step=${f.step ?? nothing}
-            style="width: 100px;"
-            data-env=${f.envVar}
-            @input=${onInput}
-          />
-          <input
-            type="range"
-            .value=${value}
-            min=${f.min ?? nothing}
-            max=${f.max ?? nothing}
-            step=${f.step ?? nothing}
-            style="flex: 1; max-width: 280px;"
-            @input=${onInput}
-          />
+          <div class="slider-row">
+            <input
+              class="input"
+              type="number"
+              .value=${value}
+              min=${f.min ?? nothing}
+              max=${f.max ?? nothing}
+              step=${f.step ?? nothing}
+              style="width: 100px;"
+              data-env=${f.envVar}
+              @input=${onInput}
+            />
+            <input
+              type="range"
+              .value=${value}
+              min=${f.min ?? nothing}
+              max=${f.max ?? nothing}
+              step=${f.step ?? nothing}
+              @input=${onInput}
+            />
+            <span class="value-chip" data-role="value-chip">${value}</span>
+          </div>
         `;
       default:
         return nothing;
