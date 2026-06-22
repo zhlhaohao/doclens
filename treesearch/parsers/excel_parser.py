@@ -8,12 +8,20 @@ Extracts sheets, headers, and row data from Excel files and builds tree structur
 """
 import logging
 import os
+from itertools import chain
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # Extensions supported by openpyxl
 EXCEL_EXTENSIONS = frozenset({".xlsx", ".xlsm", ".xltx", ".xltm"})
+
+
+def _non_empty_count(row) -> int:
+    """Count non-empty cells in a row tuple (None / blank 字符串视为空)."""
+    if not row:
+        return 0
+    return sum(1 for c in row if c is not None and str(c).strip())
 
 
 def _extract_excel_data(
@@ -65,6 +73,23 @@ def _extract_excel_data(
             row_counter += 1
             continue
 
+        # Title-row detection: many sheets start with a merged title cell
+        # (e.g., "2025年通讯录" spanning all columns) above the real headers.
+        # If row 1 has only 1 non-empty cell while row 2 has ≥2, treat row 2
+        # as the real header. Strict threshold avoids false positives on
+        # regular tables where row 1 happens to have a blank trailing cell.
+        try:
+            second_row = next(rows_iter)
+        except StopIteration:
+            second_row = None
+        first_data_row = second_row
+        if (second_row is not None
+                and _non_empty_count(header_row) <= 1
+                and _non_empty_count(second_row) >= 2):
+            # row 1 was title; row 2 becomes header; first data row unknown yet
+            header_row = second_row
+            first_data_row = None
+
         headers = [str(cell) if cell is not None else "" for cell in header_row]
         header_text = f"Columns: {', '.join(h for h in headers if h)}"
 
@@ -72,13 +97,20 @@ def _extract_excel_data(
         sheet_start = row_counter
         sheet_text_parts = [header_text]
 
-        # Collect data rows with early termination
+        # Collect data rows with early termination.
+        # If we peeked row 2 for title detection but kept row 1 as header,
+        # row 2 is the first data row and must be prepended back to the stream.
+        data_rows_iter = (
+            chain([first_data_row], rows_iter)
+            if first_data_row is not None
+            else rows_iter
+        )
         data_rows_text = []
         consecutive_empty = 0
         rows_processed = 0
         truncated = False
 
-        for row in rows_iter:
+        for row in data_rows_iter:
             rows_processed += 1
             if rows_processed > max_rows_per_sheet:
                 truncated = True
