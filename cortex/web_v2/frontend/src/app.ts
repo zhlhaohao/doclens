@@ -3,6 +3,7 @@ import { customElement } from "lit/decorators.js";
 
 import { store, actions } from "./state/store";
 import type { ViewId } from "./state/types";
+import { router } from "./router/router";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -55,6 +56,8 @@ export class CortexApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // 启动 URL ↔ store 双向同步：初始 hash 规范化 + 订阅 hashchange
+    router.init();
     // 订阅 store —— view 切换时触发重新渲染
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
   }
@@ -65,8 +68,10 @@ export class CortexApp extends LitElement {
   }
 
   private _navigate(e: CustomEvent<{ view: ViewId; scope?: "local" | "global" }>) {
-    actions.setView(e.detail.view);
+    // URL 是 view 的唯一真相源：通过 router 写 hash，hashchange 监听器再同步 store
+    router.navigate(e.detail.view);
     if (e.detail.view === "settings" && e.detail.scope) {
+      // scope 不进 URL（用户已确认"仅 tab 子路径"），仍走 store
       actions.setSettingsScope(e.detail.scope);
     }
   }
