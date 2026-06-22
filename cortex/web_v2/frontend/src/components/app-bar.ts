@@ -1,6 +1,7 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+import { store } from "../state/store";
 import type { ViewId, SettingsScope } from "../state/types";
 
 @customElement("app-bar")
@@ -87,6 +88,19 @@ export class AppBar extends LitElement {
       z-index: 60;
     }
     .user-menu.open { display: block; }
+    .save-btn {
+      padding: 6px 14px;
+      background: var(--cortex-primary);
+      color: #fff;
+      border: 1px solid var(--cortex-primary);
+      border-radius: var(--cortex-radius-md);
+      font-family: inherit;
+      font-size: var(--cortex-fs-sm);
+      font-weight: 500;
+      cursor: pointer;
+      min-height: var(--cortex-touch-target, 44px);
+    }
+    .save-btn:hover { background: var(--cortex-primary-hover); border-color: var(--cortex-primary-hover); }
     .menu-header {
       padding: var(--cortex-space-2) var(--cortex-space-3);
       border-bottom: 1px solid var(--cortex-border-muted);
@@ -136,6 +150,8 @@ export class AppBar extends LitElement {
   @property() activeView: ViewId = "search";
 
   @state() private _menuOpen = false;
+  @state() private _showSaveAndRevert = false;
+  private _unsubStore?: () => void;
 
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {
     if (!this._menuOpen) return;
@@ -159,14 +175,32 @@ export class AppBar extends LitElement {
     }));
   }
 
+  private _onSaveClick() {
+    window.dispatchEvent(new CustomEvent("cortex:save-settings"));
+  }
+
+  private _onRevertClick() {
+    this._menuOpen = false;
+    window.dispatchEvent(new CustomEvent("cortex:revert-settings"));
+  }
+
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener("click", this._onDocClick);
+    this._syncFromStore();
+    this._unsubStore = store.subscribe(() => this._syncFromStore());
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick);
+    this._unsubStore?.();
     super.disconnectedCallback();
+  }
+
+  private _syncFromStore() {
+    const s = store.getState();
+    this._showSaveAndRevert = s.view === "settings" && s.settings.dirty;
+    this.requestUpdate();
   }
 
   render() {
@@ -176,6 +210,9 @@ export class AppBar extends LitElement {
         <span>Cortex</span>
       </div>
       <div class="right-cluster">
+        ${this._showSaveAndRevert ? html`
+          <button class="save-btn" type="button" @click=${this._onSaveClick}>💾 保存</button>
+        ` : nothing}
         <button class="avatar-btn" @click=${this._onAvatarClick}>
           <span class="avatar">L</span>
           <span class="name">Liang</span>
@@ -200,6 +237,15 @@ export class AppBar extends LitElement {
               <span class="desc">所有项目共用</span>
             </span>
           </button>
+          ${this._showSaveAndRevert ? html`
+            <button class="menu-item" type="button" @click=${this._onRevertClick}>
+              <span class="icon">↩</span>
+              <span class="text">
+                <span class="label">放弃修改</span>
+                <span class="desc">恢复到 .env 当前值</span>
+              </span>
+            </button>
+          ` : nothing}
         </div>
       </div>
     `;
