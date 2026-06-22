@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { fixture, html, elementUpdated } from "@open-wc/testing";
 
-import "../../src/components/settings-scope-segment";
-import type { SettingsScopeSegment } from "../../src/components/settings-scope-segment";
+import "../src/components/settings-scope-segment";
+import type { SettingsScopeSegment } from "../src/components/settings-scope-segment";
 
 describe("<settings-scope-segment>", () => {
   let el: SettingsScopeSegment;
@@ -74,6 +74,18 @@ describe("<settings-scope-segment>", () => {
 
       expect(events).toHaveLength(1);
       expect(events[0].detail).toEqual({ scope: "global" });
+    });
+
+    it("does not dispatch scope-change when clicking the active pill", async () => {
+      // scope is "local" by default; click the local pill — should not re-fire
+      const events: CustomEvent[] = [];
+      el.addEventListener("scope-change", (e: Event) => events.push(e as CustomEvent));
+
+      const pills = el.shadowRoot?.querySelectorAll(".pill");
+      (pills?.[0] as HTMLButtonElement).click();   // local pill, already active
+      await elementUpdated(el);
+
+      expect(events).toHaveLength(0);
     });
   });
 });
