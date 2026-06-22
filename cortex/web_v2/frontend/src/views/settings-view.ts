@@ -222,7 +222,7 @@ export class SettingsView extends LitElement {
       .field-label .name { font-size: var(--cortex-fs-md); }
 
       .scroll-area {
-        padding: var(--cortex-space-3) var(--cortex-space-4) var(--cortex-space-6);
+        padding: 0 var(--cortex-space-4) var(--cortex-space-6);
       }
 
       .footer-bar { display: none; }
