@@ -20,6 +20,7 @@ import "./views/search-view";
 import "./views/chat-view";
 import "./views/history-view";
 import "./views/settings-view";
+import "./views/files-view";
 import "./components/app-bar";
 
 @customElement("cortex-app")
@@ -76,6 +77,7 @@ export class CortexApp extends LitElement {
     if (view === "search") return html`<search-view></search-view>`;
     if (view === "chat") return html`<chat-view></chat-view>`;
     if (view === "settings") return html`<settings-view></settings-view>`;
+    if (view === "files") return html`<files-view></files-view>`;
     return html`<history-view></history-view>`;
   }
 

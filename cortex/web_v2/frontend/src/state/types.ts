@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "history" | "settings";
+export type ViewId = "search" | "chat" | "history" | "settings" | "files";
 export type FocusState = "initial" | "focus";
 
 export interface SearchResult {
@@ -68,6 +68,36 @@ export interface SettingsViewState {
   error: string | null;
 }
 
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_at: string;
+  indexed: boolean;
+  writable: boolean;
+}
+
+export interface FileAttrs extends FileEntry {
+  created_at: string;
+  extension: string | null;
+  is_protected: boolean;
+}
+
+export interface FileExplorerViewState {
+  treeCache: Record<string, FileEntry[]>;
+  expandedPaths: string[];
+  currentDir: string;
+  selectedPaths: string[];
+  lastSelectedAnchor: string | null;
+  detail: FileAttrs | null;
+  detailLoading: boolean;
+  listing: boolean;
+  mobilePane: "tree" | "list" | "detail";
+  pendingAction: "mkdir" | "delete" | "move" | "rename" | "upload" | null;
+  error: string | null;
+}
+
 export interface AppState {
   view: ViewId;
   search: SearchViewState;
@@ -79,4 +109,5 @@ export interface AppState {
   status: SystemStatus | null;
   error: string | null;
   settings: SettingsViewState;
+  files: FileExplorerViewState;
 }
