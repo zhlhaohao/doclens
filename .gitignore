@@ -264,5 +264,3 @@ cortex/web_v2/frontend/.playwright-cli/
 # Playwright CLI skill snapshots (任意层级 — 根目录与 frontend 子目录均覆盖)
 .playwright-cli/
 
-# Test workspace
-test_work_dir/
