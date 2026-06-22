@@ -75,10 +75,83 @@ def create_app() -> FastAPI:
     return app
 
 
+def _kill_port_process(port: int) -> bool:
+    """尝试杀死占用指定端口的进程（Windows/macOS/Linux）。
+
+    返回 True 表示成功清理了端口，False 表示端口未被占用或清理失败。
+    """
+    import subprocess
+    import sys
+
+    try:
+        # Windows: 使用 PowerShell 查找并杀死进程
+        if sys.platform == "win32":
+            import os
+            ps_path = os.path.expandvars(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+            # 查找占用端口的进程 PID
+            result = subprocess.run(
+                [ps_path, "-Command",
+                 f"(Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue).OwningProcess"],
+                capture_output=True, text=True
+            )
+            if not result.stdout.strip():
+                return False
+
+            # 去重 PID
+            pids = set(line.strip() for line in result.stdout.strip().split("\n") if line.strip().isdigit())
+            for pid in pids:
+                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+            return True
+
+        # macOS: 使用 lsof 查找并杀死进程
+        elif sys.platform == "darwin":
+            result = subprocess.run(
+                ["lsof", "-t", "-i", f":{port}"],
+                capture_output=True, text=True
+            )
+            if not result.stdout.strip():
+                return False
+
+            for pid in result.stdout.strip().split("\n"):
+                if pid.isdigit():
+                    subprocess.run(["kill", "-9", pid], capture_output=True)
+            return True
+
+        # Linux: 使用 lsof 或 ss 查找并杀死进程
+        else:
+            result = subprocess.run(
+                ["lsof", "-t", "-i", f":{port}"],
+                capture_output=True, text=True
+            )
+            if not result.stdout.strip():
+                # 尝试用 ss (部分 Linux 发行版没有 lsof)
+                result = subprocess.run(
+                    ["ss", "-tlnp", f"sport = :{port}"],
+                    capture_output=True, text=True
+                )
+                if not result.stdout.strip():
+                    return False
+                # 解析 ss 输出获取 PID
+                for line in result.stdout.strip().split("\n"):
+                    if f":{port}" in line and "pid=" in line:
+                        pid = line.split("pid=")[1].split(",")[0]
+                        subprocess.run(["kill", "-9", pid], capture_output=True)
+                return True
+
+            for pid in result.stdout.strip().split("\n"):
+                if pid.isdigit():
+                    subprocess.run(["kill", "-9", pid], capture_output=True)
+            return True
+
+    except Exception:
+        return False
+
+
 def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -> None:
     """启动 FastAPI + uvicorn，并自动打开浏览器。
 
     `share` 参数保留向后兼容，但 v2 不再支持公网分享。
+    如果端口被占用，自动尝试杀死占用进程后启动。
     """
     if share:
         import warnings
@@ -88,6 +161,9 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     import webbrowser
 
     import uvicorn
+
+    # 尝试清理占用端口的进程
+    _kill_port_process(port)
 
     app = create_app()
     url = f"http://localhost:{port}" if host in ("127.0.0.1", "0.0.0.0") else f"http://{host}:{port}"

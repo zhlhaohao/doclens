@@ -14,6 +14,7 @@ class Entry(BaseModel):
     modified_at: datetime
     indexed: bool
     writable: bool
+    has_child_dirs: bool = False
 
 
 class ListDirResponse(BaseModel):

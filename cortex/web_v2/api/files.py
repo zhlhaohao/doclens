@@ -47,10 +47,22 @@ def _posix_rel(full: Path, base: Path) -> str:
     return "/".join(rel.parts) if rel.parts else ""
 
 
+def _has_child_dirs(full: Path, base: Path) -> bool:
+    """目录是否包含至少一个非受保护的子目录（向前看一层，用于树形控件的箭头显示）。"""
+    try:
+        for child in full.iterdir():
+            if child.is_dir() and not is_protected(child, base):
+                return True
+    except (PermissionError, OSError):
+        return False
+    return False
+
+
 def _build_entry(full: Path, base: Path, indexed_paths: set) -> Entry:
     stat = full.stat()
     rel = _posix_rel(full, base)
     is_dir = full.is_dir()
+    has_child_dirs = _has_child_dirs(full, base) if is_dir else False
     return Entry(
         name=full.name,
         path=rel,
@@ -59,6 +71,7 @@ def _build_entry(full: Path, base: Path, indexed_paths: set) -> Entry:
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
         indexed=(not is_dir) and (rel in indexed_paths),
         writable=compute_writable(full, base),
+        has_child_dirs=has_child_dirs,
     )
 
 

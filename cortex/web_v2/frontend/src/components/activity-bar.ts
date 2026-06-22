@@ -39,7 +39,6 @@ export class ActivityBar extends LitElement {
     { id: "search", icon: "🔍", label: "搜索" },
     { id: "chat", icon: "💬", label: "对话" },
     { id: "files", icon: "📁", label: "文件" },
-    { id: "history", icon: "🕘", label: "历史" },
   ];
 
   private _select(id: ViewId) {

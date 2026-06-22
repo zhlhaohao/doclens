@@ -10,7 +10,7 @@ vi.mock("../src/api/files", () => ({
     stats: vi.fn().mockResolvedValue({ file_count: 0, dir_count: 0, total_size_bytes: 0 }),
     attrs: vi.fn().mockResolvedValue({
       name: "", path: "", is_dir: false, size: 0,
-      modified_at: "", indexed: false, writable: true,
+      modified_at: "", indexed: false, writable: true, has_child_dirs: false,
       created_at: "", extension: null, is_protected: false,
     }),
     mkdir: vi.fn().mockResolvedValue({ ok: true, path: "", reindex_triggered: true }),

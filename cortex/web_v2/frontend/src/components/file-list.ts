@@ -11,12 +11,26 @@ export class FileList extends LitElement {
       background: var(--cortex-surface);
     }
     .breadcrumb {
+      display: flex; align-items: center; gap: var(--cortex-space-2);
       padding: var(--cortex-space-2) var(--cortex-space-3);
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
+    .breadcrumb .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .up-btn {
+      padding: 2px 8px;
+      font-size: var(--cortex-fs-sm);
+      border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      color: var(--cortex-text);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-sm);
+      line-height: 1.4;
+    }
+    .up-btn:hover:not(:disabled) { background: var(--cortex-surface-muted); }
+    .up-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .toolbar {
       display: flex; gap: var(--cortex-space-2);
       padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -72,16 +86,34 @@ export class FileList extends LitElement {
     }
   }
 
+  private _goUp() {
+    const { currentDir } = store.getState().files;
+    if (currentDir === "") return;
+    const parent = currentDir.includes("/")
+      ? currentDir.slice(0, currentDir.lastIndexOf("/"))
+      : "";
+    actions.selectDir(parent);
+  }
+
   render() {
     const { currentDir, treeCache, selectedPaths } = store.getState().files;
     const entries = treeCache[currentDir] || [];
     const sel = new Set(selectedPaths);
     const canRename = selectedPaths.length === 1;
     const canAct = selectedPaths.length >= 1;
+    const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
 
     return html`
-      <div class="breadcrumb">${breadcrumb}</div>
+      <div class="breadcrumb">
+        <button
+          class="up-btn"
+          title="返回上一级目录"
+          ?disabled=${!canGoUp}
+          @click=${this._goUp}
+        >↑</button>
+        <span class="path">${breadcrumb}</span>
+      </div>
       <div class="toolbar">
         <button data-action="mkdir" @click=${() => this._action("mkdir")}>+ 新目录</button>
         <button data-action="upload" @click=${() => this._action("upload")}>⬆ 上传</button>

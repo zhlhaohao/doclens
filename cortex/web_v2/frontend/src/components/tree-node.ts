@@ -52,7 +52,7 @@ export class TreeNode extends LitElement {
 
   private _toggle(e: Event) {
     e.stopPropagation();
-    if (!this.entry.is_dir) return;
+    if (!this.entry.has_child_dirs) return;
     this.dispatchEvent(new CustomEvent("toggle", {
       detail: { path: this.entry.path },
       bubbles: true, composed: true,
@@ -63,7 +63,7 @@ export class TreeNode extends LitElement {
     return html`
       <div class="row ${this.selected ? "selected" : ""}" @click=${this._onClick}>
         <span
-          class="arrow ${this.expanded ? "expanded" : ""} ${this.entry.is_dir ? "" : "leaf"}"
+          class="arrow ${this.expanded ? "expanded" : ""} ${this.entry.has_child_dirs ? "" : "leaf"}"
           @click=${this._toggle}>▶</span>
         <span class="icon">${this.entry.is_dir ? "📁" : "📄"}</span>
         <span class="label">${this.entry.name}</span>
