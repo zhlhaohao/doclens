@@ -5,6 +5,7 @@
  */
 import type {
   AppState,
+  FileEntry,
   Session,
   SettingsFieldValues,
   SettingsScope,
@@ -62,6 +63,19 @@ export const INITIAL_STATE: AppState = {
     dirty: false,
     exists: true,
     saving: false,
+    error: null,
+  },
+  files: {
+    treeCache: {},
+    expandedPaths: [],
+    currentDir: "",
+    selectedPaths: [],
+    lastSelectedAnchor: null,
+    detail: null,
+    detailLoading: false,
+    listing: false,
+    mobilePane: "tree",
+    pendingAction: null,
     error: null,
   },
 };
@@ -177,6 +191,94 @@ export const actions = {
   setSettingsError(error: string | null) {
     const cur = store.getState().settings;
     store.setState({ settings: { ...cur, error } });
+  },
+
+  setFilesState(s: Partial<AppState["files"]>) {
+    const cur = store.getState().files;
+    store.setState({ files: { ...cur, ...s } });
+  },
+
+  expandDir(path: string) {
+    const cur = store.getState().files;
+    if (cur.expandedPaths.includes(path)) return;
+    store.setState({ files: { ...cur, expandedPaths: [...cur.expandedPaths, path] } });
+  },
+
+  collapseDir(path: string) {
+    const cur = store.getState().files;
+    store.setState({ files: { ...cur, expandedPaths: cur.expandedPaths.filter(p => p !== path) } });
+  },
+
+  selectDir(path: string) {
+    const cur = store.getState().files;
+    store.setState({
+      files: {
+        ...cur,
+        currentDir: path,
+        selectedPaths: [],
+        lastSelectedAnchor: null,
+        detail: null,
+        mobilePane: cur.mobilePane === "tree" ? "list" : cur.mobilePane,
+      },
+    });
+  },
+
+  selectEntry(path: string, opts: { ctrl?: boolean; shift?: boolean } = {}) {
+    const cur = store.getState().files;
+    let next: string[];
+    let anchor: string | null = cur.lastSelectedAnchor;
+    if (opts.shift && anchor !== null) {
+      const entries = cur.treeCache[cur.currentDir] || [];
+      const paths = entries.map(e => e.path);
+      const a = paths.indexOf(anchor);
+      const b = paths.indexOf(path);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        next = paths.slice(lo, hi + 1);
+      } else {
+        next = [path];
+        anchor = path;
+      }
+    } else if (opts.ctrl) {
+      next = cur.selectedPaths.includes(path)
+        ? cur.selectedPaths.filter(p => p !== path)
+        : [...cur.selectedPaths, path];
+      anchor = path;
+    } else {
+      next = [path];
+      anchor = path;
+    }
+    store.setState({ files: { ...cur, selectedPaths: next, lastSelectedAnchor: anchor } });
+  },
+
+  clearSelection() {
+    const cur = store.getState().files;
+    store.setState({
+      files: { ...cur, selectedPaths: [], lastSelectedAnchor: null, detail: null },
+    });
+  },
+
+  invalidateDir(dirPath: string) {
+    const cur = store.getState().files;
+    const nextCache = { ...cur.treeCache };
+    delete nextCache[dirPath];
+    store.setState({ files: { ...cur, treeCache: nextCache } });
+  },
+
+  invalidateSubtree(prefix: string) {
+    const cur = store.getState().files;
+    const nextCache: Record<string, FileEntry[]> = {};
+    for (const [k, v] of Object.entries(cur.treeCache)) {
+      if (k !== prefix && !k.startsWith(prefix + "/")) {
+        nextCache[k] = v;
+      }
+    }
+    store.setState({ files: { ...cur, treeCache: nextCache } });
+  },
+
+  setMobilePane(pane: "tree" | "list" | "detail") {
+    const cur = store.getState().files;
+    store.setState({ files: { ...cur, mobilePane: pane } });
   },
 };
 
