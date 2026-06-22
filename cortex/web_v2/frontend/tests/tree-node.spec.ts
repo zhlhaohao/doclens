@@ -61,7 +61,7 @@ describe("tree-node", () => {
     el.entry = { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true };
     el.depth = 0;
     el.expanded = false;
-    el.children = [{ name: "sub", path: "docs/sub", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true }];
+    el.childEntries = [{ name: "sub", path: "docs/sub", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true }];
     document.body.appendChild(el);
     await el.updateComplete;
     expect(el.shadowRoot.querySelectorAll("tree-node").length).toBe(0);
