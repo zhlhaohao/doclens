@@ -12,6 +12,8 @@ import {
 } from "./settings-fields";
 import "../components/settings-scope-segment";
 import { getConfig, putConfig, ConfigApiError, copyFromGlobal } from "../api/config";
+import "../components/toast-stack";
+import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
 
@@ -295,6 +297,7 @@ export class SettingsView extends LitElement {
   @state() private _original: Record<string, string> = {};
   @state() private _exists = true;
   @state() private _scope: SettingsScope = "local";
+  @state() private _fieldErrors: Record<string, string> = {};
 
   private _unsubscribe?: () => void;
   private _loadGen = 0;            // invalidate stale loads (I1)
@@ -305,6 +308,8 @@ export class SettingsView extends LitElement {
     const state = store.getState();
     this._scope = state.settings.scope;
     this._unsubscribe = store.subscribe(() => this._onStoreChange());
+    window.addEventListener("cortex:save-settings", this._onSaveRequest);
+    window.addEventListener("cortex:revert-settings", this._onRevertRequest);
     this._load();
   }
 
@@ -317,6 +322,8 @@ export class SettingsView extends LitElement {
     }
     // I1: invalidate any in-flight load so its resolution is a no-op
     this._loadGen += 1;
+    window.removeEventListener("cortex:save-settings", this._onSaveRequest);
+    window.removeEventListener("cortex:revert-settings", this._onRevertRequest);
     super.disconnectedCallback();
   }
 
@@ -340,6 +347,7 @@ export class SettingsView extends LitElement {
       this._values = { ...resp.values };
       this._original = { ...resp.values };
       this._exists = resp.exists;
+      this._fieldErrors = {};
       actions.loadSettings(resp.values, resp.exists);
     } catch (e: unknown) {
       if (gen !== this._loadGen || !this.isConnected) return;
@@ -365,6 +373,29 @@ export class SettingsView extends LitElement {
     actions.updateSetting(envVar, value);
   }
 
+  private _isMobile(): boolean {
+    return typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 1023px)").matches;
+  }
+
+  private _pushToast(message: string, level: "success" | "error" | "info" = "info", duration = 2500) {
+    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
+    stack?.pushToast(message, level, duration);
+  }
+
+  private _extractFieldErrors(e: unknown): Record<string, string> {
+    if (e instanceof ConfigApiError) {
+      const body = e.body as { fields?: { field: string; error: string }[] } | null;
+      const out: Record<string, string> = {};
+      for (const f of body?.fields ?? []) out[f.field] = f.error;
+      return out;
+    }
+    return {};
+  }
+
+  private _onSaveRequest = () => { void this._save(); };
+  private _onRevertRequest = () => { this._revert(); };
+
   private _revert() {
     this._values = { ...this._original };
     actions.revertSettings();
@@ -375,12 +406,18 @@ export class SettingsView extends LitElement {
       await copyFromGlobal();
       await this._load();
     } catch (e: unknown) {
+      let msg: string;
       if (e instanceof ConfigApiError) {
-        this._error = `复制失败 (HTTP ${e.status})`;
+        msg = `复制失败 (HTTP ${e.status})`;
       } else if (e instanceof Error) {
-        this._error = `复制失败: ${e.message}`;
+        msg = `复制失败: ${e.message}`;
       } else {
-        this._error = "复制失败: 未知错误";
+        msg = "复制失败: 未知错误";
+      }
+      if (this._isMobile()) {
+        this._pushToast(msg, "error", 5000);
+      } else {
+        this._error = msg;
       }
     }
   }
@@ -388,23 +425,22 @@ export class SettingsView extends LitElement {
   private async _save() {
     if (!this._dirty || this._saving) return;
     this._saving = true;
-    // I5: clear any prior error so success toast isn't shown next to a stale error
     this._error = null;
+    this._fieldErrors = {};
     try {
       const result = await putConfig(this._scope, this._values);
       if (!this.isConnected) return;
       this._original = { ...this._values };
       actions.loadSettings(this._values, true);
-      this._toast = result.needs_restart
-        ? `已保存。重启 cortex gui 后 AI 配置生效。`
-        : `已保存。下次查询立即生效。`;
-      // I2: track timer so it can be cleared on disconnect
-      this._toastTimer = window.setTimeout(() => {
-        this._toast = null;
-        this._toastTimer = undefined;
-      }, 4000);
+      const msg = result.needs_restart
+        ? "已保存。重启 cortex gui 后 AI 配置生效。"
+        : "已保存。下次查询立即生效。";
+      if (this._isMobile()) {
+        this._pushToast(msg, "success", 4000);
+      } else {
+        this._toast = msg;
+      }
     } catch (e: unknown) {
-      // I6: prefer typed ConfigApiError to extract per-field failure list
       let msg: string;
       if (e instanceof ConfigApiError) {
         const body = e.body as { fields?: { field: string; error: string }[] } | null;
@@ -415,7 +451,12 @@ export class SettingsView extends LitElement {
       } else {
         msg = "保存失败: 未知错误";
       }
-      this._error = msg;
+      if (this._isMobile()) {
+        this._pushToast(msg, "error", 5000);
+        this._fieldErrors = this._extractFieldErrors(e);
+      } else {
+        this._error = msg;
+      }
     } finally {
       this._saving = false;
     }
@@ -435,6 +476,7 @@ export class SettingsView extends LitElement {
         <div class="field-control">
           <div class="row">${this._renderInput(f, value)}</div>
           ${f.hint ? html`<div class="hint">${f.hint}</div>` : nothing}
+          ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
         </div>
       </div>
     `;
@@ -639,6 +681,7 @@ export class SettingsView extends LitElement {
           </div>
         </div>
       </div>
+      <toast-stack></toast-stack>
     `;
   }
 }
