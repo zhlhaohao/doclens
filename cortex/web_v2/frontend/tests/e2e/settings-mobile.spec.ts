@@ -94,4 +94,20 @@ test.describe("settings mobile", () => {
     // Original value restored
     await expect(numInput).toHaveValue(original);
   });
+
+  test("scope segment stays sticky at top of scroll-area when scrolling deep", async ({ page }) => {
+    // Open settings
+    await page.locator("app-bar .avatar-btn").tap();
+    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    // Switch to 评分 (longest tab: 5 sliders)
+    await page.locator(".tab-strip button:has-text('评分')").tap();
+    // Scroll .scroll-area to its bottom
+    await page.locator(".scroll-area").evaluate((el) => el.scrollTo(0, 9999));
+    // The scope-segment must still be at the top of the visible scroll-area
+    const box = await page.locator("settings-scope-segment")
+      .evaluate((el) => el.getBoundingClientRect());
+    const scrollAreaBox = await page.locator(".scroll-area")
+      .evaluate((el) => el.getBoundingClientRect());
+    expect(box.top).toBe(scrollAreaBox.top);
+  });
 });

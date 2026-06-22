@@ -43,6 +43,14 @@ export class SettingsScopeSegment extends LitElement {
       color: var(--cortex-warning);
       margin-left: 4px;
     }
+    @media (max-width: 1023px) {
+      :host {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        box-shadow: 0 1px 0 var(--cortex-border);
+      }
+    }
   `;
 
   private _onSelect(scope: SettingsScope) {
