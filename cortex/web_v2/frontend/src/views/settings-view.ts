@@ -203,6 +203,82 @@ export class SettingsView extends LitElement {
       font-size: var(--cortex-fs-sm);
     }
     .copy-banner .grow { flex: 1; }
+
+    /* ===== 移动端 (<1024px) ===== */
+    @media (max-width: 1023px) {
+      .field {
+        grid-template-columns: 1fr;
+        gap: var(--cortex-space-3);
+        padding: var(--cortex-space-4) 0;
+      }
+      .field-label .name { font-size: var(--cortex-fs-md); }
+
+      .scroll-area {
+        padding: var(--cortex-space-3) var(--cortex-space-4) var(--cortex-space-6);
+      }
+
+      .footer-bar { display: none; }
+
+      .input, .select { max-width: 100%; }
+
+      /* Slider 单控件 + 数值 chip */
+      .slider-row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--cortex-space-2);
+      }
+      .slider-row input[type="number"] { display: none; }
+      .slider-row input[type="range"] {
+        max-width: 100%;
+        width: 100%;
+        flex: 1;
+      }
+      .value-chip {
+        display: inline-block;
+        align-self: flex-start;
+        font-variant-numeric: tabular-nums;
+        font-size: var(--cortex-fs-md);
+        font-weight: 600;
+        color: var(--cortex-primary);
+        background: var(--cortex-primary-soft);
+        padding: 2px 10px;
+        border-radius: var(--cortex-radius-md);
+      }
+
+      /* Password "显示" 按钮：从绝对定位改为独立行 */
+      .password-wrap { max-width: 100% !important; position: static !important; }
+      .password-toggle {
+        position: static !important;
+        transform: none !important;
+        margin-top: var(--cortex-space-2);
+        align-self: flex-end;
+      }
+
+      /* 复制 banner 堆叠 */
+      .copy-banner {
+        flex-direction: column;
+        align-items: stretch;
+        padding: var(--cortex-space-3) var(--cortex-space-4);
+      }
+      .copy-banner .grow { display: none; }
+      .copy-banner button { align-self: flex-end; }
+
+      /* Toast-stack 避开移动 tab-bar */
+      toast-stack {
+        bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px);
+        right: 12px;
+        left: 12px;
+        width: auto;
+      }
+      toast-stack .toast { max-width: 100%; }
+
+      /* 字段错误红字 */
+      .field-error {
+        font-size: var(--cortex-fs-xs);
+        color: var(--cortex-danger);
+        margin-top: var(--cortex-space-1);
+      }
+    }
   `;
 
   @state() private _activeTab: SettingsTab = "ai";
