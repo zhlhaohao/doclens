@@ -88,7 +88,7 @@ export class MoveDialog extends LitElement {
             .readonly=${true}
             .expanded=${expanded.has(d.path)}
             .selected=${this._dest === d.path}
-            .children=${treeCache[d.path] || []}
+            .childEntries=${treeCache[d.path] || []}
             @pick-dir=${this._onPickDir}
             @toggle=${this._onToggle}
           ></tree-node>

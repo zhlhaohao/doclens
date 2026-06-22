@@ -33,7 +33,7 @@ export class TreeNode extends LitElement {
   @property({ type: Boolean }) expanded = false;
   @property({ type: Boolean }) selected = false;
   @property({ type: Boolean }) readonly = false;
-  @property({ type: Array }) children: FileEntry[] = [];
+  @property({ type: Array }) childEntries: FileEntry[] = [];
   @property({ type: String }) loading = "";
 
   private _onClick() {
@@ -72,7 +72,7 @@ export class TreeNode extends LitElement {
         <div class="children">
           ${this.loading === this.entry.path
             ? html`<div style="padding: 4px 8px; color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm);">加载中…</div>`
-            : this.children.filter(c => c.is_dir).map(c => html`
+            : this.childEntries.filter(c => c.is_dir).map(c => html`
               <tree-node
                 .entry=${c}
                 .depth=${this.depth + 1}
