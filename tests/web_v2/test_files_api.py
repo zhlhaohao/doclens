@@ -103,6 +103,42 @@ async def test_list_indexed_badge(populated_workdir, env_cortex_config, reset_de
     assert doc1["indexed"] is True
 
 
+@pytest.mark.asyncio
+async def test_list_has_child_dirs_flag(populated_workdir, env_cortex_config, reset_deps):
+    """目录的 has_child_dirs 标志应反映是否存在非受保护的子目录。"""
+    await asyncio.to_thread(_init_and_reindex)
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/files/list", params={"path": ""})
+    entries = res.json()["entries"]
+    by_name = {e["name"]: e for e in entries}
+    # docs/ 含子目录 sub/ → True
+    assert by_name["docs"]["has_child_dirs"] is True
+    # images/ 仅含文件 → False
+    assert by_name["images"]["has_child_dirs"] is False
+    # 文件始终为 False
+    assert by_name["doc1.md"]["has_child_dirs"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_has_child_dirs_ignores_protected(temp_workdir, env_cortex_config, reset_deps):
+    """仅含 .cortex 等受保护子目录的目录应返回 has_child_dirs=False。"""
+    (temp_workdir / "wrap").mkdir()
+    (temp_workdir / "wrap" / ".cortex").mkdir()  # 受保护
+    (temp_workdir / "wrap" / ".env").write_text("x", encoding="utf-8")  # 受保护文件
+    await asyncio.to_thread(_init_and_reindex)
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/files/list", params={"path": "wrap"})
+        assert res.status_code == 200
+        # wrap 本身在父级列表里应是 has_child_dirs=False
+        parent = await client.get("/api/files/list", params={"path": ""})
+    wrap_entry = next(e for e in parent.json()["entries"] if e["name"] == "wrap")
+    assert wrap_entry["has_child_dirs"] is False
+
+
 # === GET /stats ===
 
 @pytest.mark.asyncio

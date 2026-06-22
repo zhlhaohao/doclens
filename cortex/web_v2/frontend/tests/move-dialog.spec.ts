@@ -10,7 +10,7 @@ describe("move-dialog", () => {
     actions.setFilesState({
       selectedPaths: ["a.md", "b.md", "c.md"],
       treeCache: { "": [
-        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true },
+        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true, has_child_dirs: true },
       ]},
     });
     const el = document.createElement("move-dialog") as any;
@@ -24,7 +24,7 @@ describe("move-dialog", () => {
     actions.setFilesState({
       selectedPaths: ["a.md"],
       treeCache: { "": [
-        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true },
+        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true, has_child_dirs: true },
       ]},
     });
     const el = document.createElement("move-dialog") as any;
@@ -39,7 +39,7 @@ describe("move-dialog", () => {
     actions.setFilesState({
       selectedPaths: ["a.md"],
       treeCache: { "": [
-        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true },
+        { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "", indexed: false, writable: true, has_child_dirs: true },
       ]},
     });
     const el = document.createElement("move-dialog") as any;

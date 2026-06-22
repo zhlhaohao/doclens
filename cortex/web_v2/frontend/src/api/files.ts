@@ -8,6 +8,7 @@ export interface FileEntry {
   modified_at: string;
   indexed: boolean;
   writable: boolean;
+  has_child_dirs: boolean;
 }
 
 export interface FileAttrs extends FileEntry {

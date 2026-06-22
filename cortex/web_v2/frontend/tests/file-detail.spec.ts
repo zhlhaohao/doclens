@@ -19,7 +19,7 @@ describe("file-detail", () => {
       selectedPaths: ["a.md"],
       detail: {
         name: "a.md", path: "a.md", is_dir: false, size: 100,
-        modified_at: "2026-06-22T00:00:00Z", indexed: true, writable: true,
+        modified_at: "2026-06-22T00:00:00Z", indexed: true, writable: true, has_child_dirs: false,
         created_at: "2026-06-20T00:00:00Z", extension: ".md", is_protected: false,
       } as any,
     });

@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "history" | "settings" | "files";
+export type ViewId = "search" | "chat" | "settings" | "files";
 export type FocusState = "initial" | "focus";
 
 export interface SearchResult {
@@ -76,6 +76,7 @@ export interface FileEntry {
   modified_at: string;
   indexed: boolean;
   writable: boolean;
+  has_child_dirs: boolean;
 }
 
 export interface FileAttrs extends FileEntry {
@@ -104,7 +105,7 @@ export interface AppState {
   chat: ChatViewState;
   /** 详情推入栈（移动端整页推入） */
   detailStack: SearchResult[];
-  /** 跨视图会话加载请求（history-view → search-view / chat-view） */
+  /** 跨视图会话加载请求（search-view ↔ chat-view） */
   pendingSession: Session | null;
   status: SystemStatus | null;
   error: string | null;

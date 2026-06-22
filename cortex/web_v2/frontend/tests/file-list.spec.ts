@@ -5,9 +5,9 @@ import { store, actions } from "../src/state/store";
 import type { FileEntry } from "../src/api/files";
 
 const entries: FileEntry[] = [
-  { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "2026-06-22T00:00:00Z", indexed: false, writable: true },
-  { name: "a.md", path: "a.md", is_dir: false, size: 100, modified_at: "2026-06-22T00:00:00Z", indexed: true, writable: true },
-  { name: "b.md", path: "b.md", is_dir: false, size: 200, modified_at: "2026-06-22T00:00:00Z", indexed: false, writable: true },
+  { name: "docs", path: "docs", is_dir: true, size: 0, modified_at: "2026-06-22T00:00:00Z", indexed: false, writable: true, has_child_dirs: true },
+  { name: "a.md", path: "a.md", is_dir: false, size: 100, modified_at: "2026-06-22T00:00:00Z", indexed: true, writable: true, has_child_dirs: false },
+  { name: "b.md", path: "b.md", is_dir: false, size: 200, modified_at: "2026-06-22T00:00:00Z", indexed: false, writable: true, has_child_dirs: false },
 ];
 
 describe("file-list", () => {
@@ -80,6 +80,46 @@ describe("file-list", () => {
     el.addEventListener("action", (e: Event) => captured = (e as CustomEvent).detail);
     el.shadowRoot.querySelector('[data-action="mkdir"]').click();
     expect(captured).toEqual({ name: "mkdir" });
+    document.body.removeChild(el);
+  });
+
+  it("up button disabled at root", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const upBtn = el.shadowRoot.querySelector(".up-btn") as HTMLButtonElement;
+    expect(upBtn.disabled).toBe(true);
+    document.body.removeChild(el);
+  });
+
+  it("up button enabled in subdirectory", async () => {
+    actions.setFilesState({ currentDir: "docs", treeCache: { docs: entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const upBtn = el.shadowRoot.querySelector(".up-btn") as HTMLButtonElement;
+    expect(upBtn.disabled).toBe(false);
+    document.body.removeChild(el);
+  });
+
+  it("clicking up button navigates to parent dir", async () => {
+    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries, docs: [] } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector(".up-btn").click();
+    expect(store.getState().files.currentDir).toBe("docs");
+    document.body.removeChild(el);
+  });
+
+  it("clicking up button from top-level dir navigates to root", async () => {
+    actions.setFilesState({ currentDir: "docs", treeCache: { docs: entries, "": [] } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector(".up-btn").click();
+    expect(store.getState().files.currentDir).toBe("");
     document.body.removeChild(el);
   });
 });
