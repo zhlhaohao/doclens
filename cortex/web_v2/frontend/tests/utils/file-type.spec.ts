@@ -61,14 +61,19 @@ describe("getFileTypeBadge", () => {
       letter: "C", bg: "#16A34A", fg: "#FFFFFF",
     });
   });
-  it("returns orange P badge for pptx", () => {
+  it("returns orange S badge for pptx", () => {
     expect(getFileTypeBadge("slides.pptx", false)).toEqual({
-      letter: "P", bg: "#EA580C", fg: "#FFFFFF",
+      letter: "S", bg: "#EA580C", fg: "#FFFFFF",
     });
   });
-  it("returns orange P badge for ppt", () => {
+  it("returns orange S badge for ppt", () => {
     expect(getFileTypeBadge("deck.ppt", false)).toEqual({
-      letter: "P", bg: "#EA580C", fg: "#FFFFFF",
+      letter: "S", bg: "#EA580C", fg: "#FFFFFF",
+    });
+  });
+  it("returns HTML5-orange H badge for html", () => {
+    expect(getFileTypeBadge("index.html", false)).toEqual({
+      letter: "H", bg: "#E34F26", fg: "#FFFFFF",
     });
   });
   it("returns indigo M badge for md", () => {

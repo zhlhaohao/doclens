@@ -23,10 +23,11 @@ const KNOWN_TYPES: Record<string, FileTypeBadge> = {
   xls:  { letter: "X", bg: "#16A34A", fg: "#FFFFFF" },  // green
   xlsx: { letter: "X", bg: "#16A34A", fg: "#FFFFFF" },
   csv:  { letter: "C", bg: "#16A34A", fg: "#FFFFFF" },
-  ppt:  { letter: "P", bg: "#EA580C", fg: "#FFFFFF" },  // orange
-  pptx: { letter: "P", bg: "#EA580C", fg: "#FFFFFF" },
+  ppt:  { letter: "S", bg: "#EA580C", fg: "#FFFFFF" },  // orange (S = Slides, avoid clash with PDF's P)
+  pptx: { letter: "S", bg: "#EA580C", fg: "#FFFFFF" },
   md:   { letter: "M", bg: "#6366F1", fg: "#FFFFFF" },  // indigo
   txt:  { letter: "T", bg: "#6B7280", fg: "#FFFFFF" },  // gray
+  html: { letter: "H", bg: "#E34F26", fg: "#FFFFFF" },  // HTML5 orange
 };
 
 /**
