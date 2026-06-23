@@ -887,8 +887,8 @@ def _build_parser():
         help="Server port (default: 7860)",
     )
     gui_parser.add_argument(
-        "--host", type=str, default="127.0.0.1",
-        help="Server host (default: 127.0.0.1)",
+        "--host", type=str, default="0.0.0.0",
+        help="Server host (default: 0.0.0.0)",
     )
     gui_parser.add_argument(
         "--share", action="store_true",
