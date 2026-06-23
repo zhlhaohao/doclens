@@ -156,7 +156,6 @@ describe("file-row", () => {
     const el = makeRow(fileEntry);
     await el.updateComplete;
     const row = el.shadowRoot.querySelector(".row") as HTMLElement;
-    const style = (row).style.gridTemplateColumns || getComputedStyle(row).gridTemplateColumns;
     // grid-template-columns is exposed via :host style; we verify 7 tokens are present
     // The class .row is shadow-scoped, but the column count shows in the count of children
     const cells = row.children;

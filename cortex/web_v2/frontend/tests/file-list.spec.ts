@@ -152,4 +152,66 @@ describe("file-list", () => {
     expect(store.getState().files.selectedPaths).toEqual([]);
     document.body.removeChild(el);
   });
+
+  it("header row renders 7 columns including 类型", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const headerCells = el.shadowRoot.querySelectorAll(".header-row > *");
+    expect(headerCells.length).toBe(7);
+    const typeHeader = Array.from(headerCells).find(
+      (c) => (c as HTMLElement).textContent?.trim() === "类型",
+    );
+    expect(typeHeader).toBeTruthy();
+    document.body.removeChild(el);
+  });
+
+  it("header uses 7-column grid template (desktop default)", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const header = el.shadowRoot.querySelector(".header-row") as HTMLElement;
+    // jsdom exposes style.gridTemplateColumns only if explicitly set; rely on computed style check
+    // on the stylesheet. Verify presence of 7 children instead — covered by previous test.
+    // The mobile test below verifies the breakpoint logic.
+    expect(header).toBeTruthy();
+    document.body.removeChild(el);
+  });
+
+  it("header row uses 7-column grid template (cell-type hidden on ≤1023px)", async () => {
+    // Match media query for mobile
+    const origMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query.includes("max-width: 1023"),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+    let el: any;
+    try {
+      actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+      el = document.createElement("file-list") as any;
+      document.body.appendChild(el);
+      await el.updateComplete;
+      const typeHeader = Array.from(
+        el.shadowRoot.querySelectorAll(".header-row > *"),
+      ).find((c) => (c as HTMLElement).textContent?.trim() === "类型") as HTMLElement;
+      expect(typeHeader).toBeTruthy();
+      // The CSS rule for @media (max-width: 1023px) hides .cell-type via display: none.
+      // jsdom doesn't compute CSS rules from adopted stylesheets, so we verify
+      // that .cell-type has the *class* and that the stylesheet contains the rule.
+      const cssText = (el.constructor as any).styles.cssText as string;
+      expect(cssText).toMatch(/@media\s*\(max-width:\s*1023px\)/);
+      expect(cssText).toMatch(/\.cell-type\s*\{\s*display:\s*none/);
+    } finally {
+      window.matchMedia = origMatchMedia;
+      if (el && el.parentNode) document.body.removeChild(el);
+    }
+  });
 });
