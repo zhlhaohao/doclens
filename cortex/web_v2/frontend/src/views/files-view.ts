@@ -444,6 +444,7 @@ export class FilesView extends LitElement {
 
   private async _onFileListActivated(e: CustomEvent<{ path: string; is_dir: boolean }>) {
     if (e.detail.is_dir) {
+      actions.selectDir(e.detail.path);
       await this._ensureLoaded(e.detail.path);
       return;
     }

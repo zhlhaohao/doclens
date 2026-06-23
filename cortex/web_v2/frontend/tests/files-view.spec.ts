@@ -143,6 +143,22 @@ describe("files-view", () => {
     document.body.removeChild(el);
   });
 
+  it("updating currentDir when a directory is activated (so file-list re-renders)", async () => {
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(store.getState().files.currentDir).toBe("");
+    el.shadowRoot.querySelector("file-list").dispatchEvent(
+      new CustomEvent("activated", {
+        detail: { path: "docs", is_dir: true },
+        bubbles: true, composed: true,
+      }),
+    );
+    await new Promise(r => setTimeout(r, 0));
+    expect(store.getState().files.currentDir).toBe("docs");
+    document.body.removeChild(el);
+  });
+
   it("clicking a file loads preview via fetchPreview", async () => {
     const spy = fetchPreview as ReturnType<typeof vi.fn>;
     spy.mockClear();
