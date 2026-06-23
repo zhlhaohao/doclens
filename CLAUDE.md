@@ -214,44 +214,61 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
-## 正常使用
+## 启动脚本 start-cortex.ps1
 
-### TUI 界面（交互式）
+使用 `start-cortex.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
-```bash
-.venv/Scripts/python.exe -m cortex
+**测试工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
+
+### 支持的场景
+
+| 场景 | 运行方式 | cortex 代码 | 虚拟环境 |
+|------|----------|-------------|----------|
+| 主分支 | `~/github/cortex/start-cortex.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
+| worktree | `~/github/cortex-feat-settings/start-cortex.ps1` | `$PSScriptRoot` | `../cortex/.venv` |
+
+### 三种运行模式
+
+**1. TUI 界面（交互式终端）**
+```powershell
+./start-cortex.ps1
+./start-cortex.ps1 tui
 ```
 
-### Web UI（PWA，桌面/移动）
+**2. Web UI（GUI PWA）**
+```powershell
+./start-cortex.ps1 gui
+```
+> 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：
+> ```
+> INFO: Uvicorn running on http://127.0.0.1:7860 (Press CTRL+C to quit)
+> ```
 
+**3. 命令行模式（离线命令）**
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `./start-cortex.ps1 search <关键词>` | 搜索文档 | `./start-cortex.ps1 search python`<br>`./start-cortex.ps1 search "量子 计算"` |
+| `./start-cortex.ps1 search_v2 '<json>'` | 结构化搜索 | `./start-cortex.ps1 search_v2 '{"type":"and","terms":["量子","密码"]}'` |
+| `./start-cortex.ps1 read_document --path <路径>` | 读取文档 | `./start-cortex.ps1 read_document --path '科技/doc.md'` |
+| `./start-cortex.ps1 ai <问题>` | AI 问答 | `./start-cortex.ps1 ai 你好` |
+| `./start-cortex.ps1 index` | 增量索引 | `./start-cortex.ps1 index` |
+| `./start-cortex.ps1 index --force` | 强制全量重建 | `./start-cortex.ps1 index --force` |
+| `./start-cortex.ps1 status` | 查看状态 | `./start-cortex.ps1 status` |
+
+### 前端开发模式
+
+修改前端代码后需要重新构建：
 ```bash
-.venv/Scripts/python.exe -m cortex gui
-# 浏览器自动打开 http://localhost:7860
-# 选项：--port PORT / --host HOST
+cd cortex/web_v2/frontend && npm install && npm run dev   # 开发模式
+cd cortex/web_v2/frontend && npm run build                 # 生产构建
 ```
 
-前端开发模式（需 Node.js 18+）：
+### 备用方式（直接调用 Python）
+
+如果 `start-cortex.ps1` 不可用，可直接使用 Python：
+
 ```bash
-cd cortex/web_v2/frontend && npm install && npm run dev
-# Vite dev server on http://localhost:5173，自动代理 /api → 7860
+# 在 test_work_dir 目录下执行
+../.venv/Scripts/python.exe -m cortex <命令>
 ```
-
-前端构建（开发者改动后需重新构建）：
-```bash
-cd cortex/web_v2/frontend && npm run build
-# 输出到 cortex/web_v2/static/（已 git 跟踪）
-```
-
-## CORTEX-CLI 测试命令
-
-> **测试工作目录必须为 `test_work_dir/`**，所有测试命令必须在该目录下执行。
-> 以下命令中 `python` 均指 `.venv/Scripts/python.exe`（在 `test_work_dir/` 下执行时为 `../.venv/Scripts/python.exe`）。
-
-| 命令 | 说明 | 参数 | 示例 |
-|------|------|------|------|
-| `python -m cortex search <query>` | 在已索引的文档中搜索关键词 | `<query>`: 搜索关键词，支持多个词 | `python -m cortex search python`<br>`python -m cortex search "token limit"` |
-| `python -m cortex search_v2 '<json>'` | 结构化搜索（AND/OR/NOT/PHRASE） | JSON 查询语法 | `python -m cortex search_v2 '{"type": "and", "terms": ["量子", "密码"]}'` |
-| `python -m cortex read_document --path '<path>'` | 文档阅读 | `--section`, `--start-line`, `--end-line` | `python -m cortex read_document --path '科技/doc.md' --section '摘要'` |
-| `python -m cortex ai <message>` | AI问答 | `<message>`: 发送的消息内容 | `python -m cortex ai 你好` |
-| `python -m cortex index [--force]` | 创建或增量同步更新文档索引 | `--force`, `-f`: 强制全量重建（删除旧索引） | `python -m cortex index`<br>`python -m cortex index --force` |
-| `python -m cortex status` | 显示系统状态 | 无 | `python -m cortex status` |
