@@ -52,7 +52,7 @@ export class FileList extends LitElement {
     .toolbar button.danger { color: var(--cortex-danger); }
     .header-row {
       display: grid;
-      grid-template-columns: 28px 20px 1fr 80px 140px 70px;
+      grid-template-columns: 28px 28px 1fr 80px 140px 70px 80px;
       gap: var(--cortex-space-2);
       padding: 6px var(--cortex-space-3);
       font-size: var(--cortex-fs-sm);
@@ -60,7 +60,12 @@ export class FileList extends LitElement {
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
+    @media (max-width: 1023px) {
+      .header-row { grid-template-columns: 28px 28px 1fr 80px 140px 70px; }
+      .header-row .cell-type { display: none; }
+    }
     .select-all { display: flex; align-items: center; justify-content: center; }
+    .header-row .cell-type { color: var(--cortex-text-muted); font-size: var(--cortex-fs-sm); }
     .rows { flex: 1; overflow-y: auto; }
     .empty {
       padding: var(--cortex-space-8);
@@ -161,6 +166,7 @@ export class FileList extends LitElement {
             <span style="text-align:right;">大小</span>
             <span style="text-align:right;">修改</span>
             <span></span>
+            <span class="cell-type">类型</span>
           </div>`}
       <div class="rows">
         ${entries.map(e => html`
