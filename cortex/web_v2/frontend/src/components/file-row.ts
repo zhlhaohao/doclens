@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
+import { getFileTypeBadge, getTypeLabel } from "../utils/file-type";
 
 @customElement("file-row")
 export class FileRow extends LitElement {
@@ -8,7 +9,7 @@ export class FileRow extends LitElement {
     :host { display: block; }
     .row {
       display: grid;
-      grid-template-columns: 28px 20px 1fr 80px 140px 70px;
+      grid-template-columns: 28px 28px 1fr 80px 140px 70px 80px;
       gap: var(--cortex-space-2);
       align-items: center;
       padding: 6px var(--cortex-space-3);
@@ -19,14 +20,15 @@ export class FileRow extends LitElement {
     .row:hover { background: var(--cortex-surface-muted); }
     .row.active { background: var(--cortex-primary-soft); }
     .checkbox { display: flex; align-items: center; justify-content: center; }
-    .icon { font-size: 14px; }
+    .cell-icon { font-size: 14px; }
     .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .size, .time {
+    .size, .time, .cell-type {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
+    .cell-type { text-align: left; }
     .badge {
       display: inline-block;
       padding: 1px 6px;
@@ -34,6 +36,23 @@ export class FileRow extends LitElement {
       border-radius: var(--cortex-radius-sm);
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
+    }
+    .type-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      user-select: none;
+      font-family: var(--cortex-font-sans);
+    }
+    @media (max-width: 1023px) {
+      .row { grid-template-columns: 28px 28px 1fr 80px 140px 70px; }
+      .cell-type { display: none; }
     }
   `;
 
@@ -80,6 +99,7 @@ export class FileRow extends LitElement {
   }
 
   render() {
+    const badge = getFileTypeBadge(this.entry.name, this.entry.is_dir);
     return html`
       <div
         class="row ${this.active ? "active" : ""}"
@@ -91,11 +111,19 @@ export class FileRow extends LitElement {
             @click=${this._onCheckboxClick}
           />
         </span>
-        <span class="icon">${this.entry.is_dir ? "📁" : "📄"}</span>
+        <span class="cell-icon">
+          ${this.entry.is_dir
+            ? "📁"
+            : badge
+              ? html`<span class="type-badge"
+                  style="background:${badge.bg};color:${badge.fg}">${badge.letter}</span>`
+              : "📄"}
+        </span>
         <span class="name">${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
         <span>${!this.entry.is_dir && this.entry.indexed ? html`<span class="badge">已索引</span>` : ""}</span>
+        <span class="cell-type">${getTypeLabel(this.entry)}</span>
       </div>
     `;
   }

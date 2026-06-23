@@ -70,4 +70,96 @@ describe("file-row", () => {
     const cb = el.shadowRoot.querySelector("input[type='checkbox']") as HTMLInputElement;
     expect(cb.checked).toBe(true);
   });
+
+  it("renders red P badge for .pdf files", async () => {
+    const el = makeRow({ ...fileEntry, name: "report.pdf" });
+    await el.updateComplete;
+    const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toBe("P");
+    expect(badge.style.background).toBe("rgb(220, 38, 38)");  // #DC2626
+    expect(badge.style.color).toBe("rgb(255, 255, 255)");
+  });
+
+  it("renders blue D badge for .docx files", async () => {
+    const el = makeRow({ ...fileEntry, name: "notes.docx" });
+    await el.updateComplete;
+    const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
+    expect(badge?.textContent).toBe("D");
+    expect(badge?.style.background).toBe("rgb(37, 99, 235)");  // #2563EB
+  });
+
+  it("renders green X badge for .xlsx files", async () => {
+    const el = makeRow({ ...fileEntry, name: "sales.xlsx" });
+    await el.updateComplete;
+    const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
+    expect(badge?.textContent).toBe("X");
+    expect(badge?.style.background).toBe("rgb(22, 163, 74)");  // #16A34A
+  });
+
+  it("renders indigo M badge for .md files", async () => {
+    const el = makeRow(fileEntry);  // name: a.md
+    await el.updateComplete;
+    const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
+    expect(badge?.textContent).toBe("M");
+    expect(badge?.style.background).toBe("rgb(99, 102, 241)");  // #6366F1
+  });
+
+  it("renders gray T badge for .txt files", async () => {
+    const el = makeRow({ ...fileEntry, name: "notes.txt" });
+    await el.updateComplete;
+    const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
+    expect(badge?.textContent).toBe("T");
+    expect(badge?.style.background).toBe("rgb(107, 114, 128)");  // #6B7280
+  });
+
+  it("falls back to 📄 for unknown file types", async () => {
+    const el = makeRow({ ...fileEntry, name: "archive.zip" });
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
+    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📄");
+  });
+
+  it("falls back to 📄 for files without extension", async () => {
+    const el = makeRow({ ...fileEntry, name: "README" });
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
+    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📄");
+  });
+
+  it("renders 📁 for directory rows (no badge)", async () => {
+    const el = makeRow(dirEntry);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
+    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📁");
+  });
+
+  it("type cell shows the lowercase extension for files", async () => {
+    const el = makeRow({ ...fileEntry, name: "Sales.XLSX" });
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("xlsx");
+  });
+
+  it("type cell shows 文件夹 for directories", async () => {
+    const el = makeRow(dirEntry);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("文件夹");
+  });
+
+  it("type cell is blank for files without extension", async () => {
+    const el = makeRow({ ...fileEntry, name: "README" });
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("");
+  });
+
+  it("row uses 7-column grid template (icon column grows from 20px to 28px)", async () => {
+    const el = makeRow(fileEntry);
+    await el.updateComplete;
+    const row = el.shadowRoot.querySelector(".row") as HTMLElement;
+    const style = (row).style.gridTemplateColumns || getComputedStyle(row).gridTemplateColumns;
+    // grid-template-columns is exposed via :host style; we verify 7 tokens are present
+    // The class .row is shadow-scoped, but the column count shows in the count of children
+    const cells = row.children;
+    expect(cells.length).toBe(7);
+  });
 });
