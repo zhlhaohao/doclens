@@ -30,7 +30,7 @@ pip install -e ".[cortex]"
 ../.venv/Scripts/python.exe -m cortex ...
 ```
 
-> 人工在终端操作时，PowerShell 用 `& .venv\Scripts\Activate.ps1`，macOS/Linux 用 `source .venv/bin/activate`。
+> 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
 
 ## Cortex 技术栈
 
@@ -215,6 +215,8 @@ planify/
 ```
 
 ## 启动脚本 start-cortex.ps1
+
+> **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
 使用 `start-cortex.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
