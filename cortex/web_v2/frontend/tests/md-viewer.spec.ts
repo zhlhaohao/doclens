@@ -53,6 +53,33 @@ describe("<md-viewer>", () => {
     expect(highlighted!.getAttribute("data-source-line")).toBe("5");
   });
 
+  it("locates the correct block when content is paginated (xlsx/pdf/pptx)", async () => {
+    // 3 pages of 5 lines each: lines 1-5, 6-10, 11-15
+    // Each page contains 3 paragraphs separated by blank lines.
+    const md = [
+      "p1-a", "", "p1-b", "", "p1-c",          // lines 1, 3, 5
+      "p2-a", "", "p2-b", "", "p2-c",          // lines 6, 8, 10
+      "p3-a", "", "p3-b", "", "p3-c",          // lines 11, 13, 15
+    ].join("\n");
+    const pages = [
+      { label: "P1", line_start: 1 },
+      { label: "P2", line_start: 6 },
+      { label: "P3", line_start: 11 },
+    ];
+    // line=13 should land on p3-b (page 3, second paragraph, absolute line 13).
+    // Without the fix, _locateAndHighlight uses per-chunk data-source-line numbers
+    // (1..5 per page) and finds p3-c instead of p3-b.
+    const el = await fixture(html`
+      <md-viewer .content=${md} .line=${13} .pages=${pages}></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+
+    const highlighted = el.shadowRoot!.querySelector(".highlight-flash");
+    expect(highlighted).toBeTruthy();
+    expect(highlighted!.getAttribute("data-source-line")).toBe("13");
+    expect(highlighted!.textContent).toContain("p3-b");
+  });
+
   it("does not highlight when line is null", async () => {
     const el = await fixture(html`<md-viewer content="# x" .line=${null}></md-viewer>`) as MdViewer;
     await el.updateComplete;
