@@ -8,7 +8,7 @@ export class FileRow extends LitElement {
     :host { display: block; }
     .row {
       display: grid;
-      grid-template-columns: 20px 1fr 80px 140px 70px;
+      grid-template-columns: 28px 20px 1fr 80px 140px 70px;
       gap: var(--cortex-space-2);
       align-items: center;
       padding: 6px var(--cortex-space-3);
@@ -18,6 +18,7 @@ export class FileRow extends LitElement {
     }
     .row:hover { background: var(--cortex-surface-muted); }
     .row.selected { background: var(--cortex-primary-soft); }
+    .checkbox { display: flex; align-items: center; justify-content: center; }
     .icon { font-size: 14px; }
     .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .size, .time {
@@ -55,8 +56,18 @@ export class FileRow extends LitElement {
     } catch { return ""; }
   }
 
-  private _onClick(e: MouseEvent) {
-    this.dispatchEvent(new CustomEvent("clicked", {
+  /** 行体单击 = 激活（文件夹=进入；文件=预览） */
+  private _onRowClick() {
+    this.dispatchEvent(new CustomEvent("activated", {
+      detail: { path: this.entry.path, is_dir: this.entry.is_dir },
+      bubbles: true, composed: true,
+    }));
+  }
+
+  /** 复选框单击 = 多选（不触发 activated） */
+  private _onCheckboxClick(e: MouseEvent) {
+    e.stopPropagation();
+    this.dispatchEvent(new CustomEvent("checked", {
       detail: {
         path: this.entry.path,
         ctrl: e.ctrlKey || e.metaKey,
@@ -66,19 +77,18 @@ export class FileRow extends LitElement {
     }));
   }
 
-  private _onDblClick() {
-    this.dispatchEvent(new CustomEvent("activated", {
-      detail: { path: this.entry.path, is_dir: this.entry.is_dir },
-      bubbles: true, composed: true,
-    }));
-  }
-
   render() {
     return html`
       <div
         class="row ${this.selected ? "selected" : ""}"
-        @click=${this._onClick}
-        @dblclick=${this._onDblClick}>
+        @click=${this._onRowClick}>
+        <span class="checkbox">
+          <input
+            type="checkbox"
+            .checked=${this.selected}
+            @click=${this._onCheckboxClick}
+          />
+        </span>
         <span class="icon">${this.entry.is_dir ? "📁" : "📄"}</span>
         <span class="name">${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { savePreview, PreviewSaveError } from "../src/api/preview";
+import { savePreview, PreviewSaveError, fetchPreview, isFullFilePreview } from "../src/api/preview";
 
 describe("savePreview", () => {
   const originalFetch = global.fetch;
@@ -52,5 +52,82 @@ describe("PreviewSaveError", () => {
     expect(e.code).toBe("X");
     expect(e.status).toBe(400);
     expect(e.message).toBe("msg");
+  });
+});
+
+describe("isFullFilePreview", () => {
+  it("returns true for .md/.pdf/.docx/.xlsx/.xlsm/.xltx/.xltm/.csv", () => {
+    for (const p of ["x.md", "a.pdf", "b.docx", "c.xlsx", "d.xlsm", "e.xltx", "f.xltm", "g.csv"]) {
+      expect(isFullFilePreview(p)).toBe(true);
+    }
+  });
+  it("returns false for other extensions", () => {
+    for (const p of ["x.py", "y.txt", "z.html", "noext"]) {
+      expect(isFullFilePreview(p)).toBe(false);
+    }
+  });
+  it("is case-insensitive on suffix", () => {
+    expect(isFullFilePreview("X.PDF")).toBe(true);
+    expect(isFullFilePreview("X.Md")).toBe(true);
+  });
+});
+
+describe("fetchPreview", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it("returns ok result with content/language/writable on 200", async () => {
+    let capturedUrl = "";
+    global.fetch = vi.fn(async (url) => {
+      capturedUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          path: "a.md", content: "# hi", language: "markdown",
+          line_range: null, highlights: [], writable: true,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const r = await fetchPreview("a.md");
+    expect(capturedUrl).toBe("/api/preview?path=a.md");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.content).toBe("# hi");
+      expect(r.language).toBe("markdown");
+      expect(r.writable).toBe(true);
+      expect(r.pages).toBe(null);
+    }
+  });
+
+  it("returns notIndexed=true when backend returns 404 NOT_INDEXED", async () => {
+    global.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ code: "NOT_INDEXED", detail: "未索引" }),
+        { status: 404 },
+      ),
+    ) as unknown as typeof fetch;
+
+    const r = await fetchPreview("unindexed.pdf");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.notIndexed).toBe(true);
+    }
+  });
+
+  it("returns notIndexed=false for other errors", async () => {
+    global.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ code: "FILE_NOT_FOUND", detail: "missing" }),
+        { status: 404 },
+      ),
+    ) as unknown as typeof fetch;
+
+    const r = await fetchPreview("missing.md");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.notIndexed).toBe(false);
+      expect(r.message).toContain("missing");
+    }
   });
 });

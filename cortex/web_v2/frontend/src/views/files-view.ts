@@ -2,9 +2,11 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
+import { fetchPreview } from "../api/preview";
+import type { PageMarker } from "../api/preview";
 import "../components/file-tree";
 import "../components/file-list";
-import "../components/file-detail";
+import "../components/preview-pane";
 import "../components/mkdir-dialog";
 import "../components/rename-dialog";
 import "../components/move-dialog";
@@ -15,6 +17,16 @@ type DialogKind = "mkdir" | "rename" | "move" | "delete" | null;
 
 @customElement("files-view")
 export class FilesView extends LitElement {
+  static readonly TREE_PANE_WIDTH_KEY = "cortex.files.treePaneWidth";
+  static readonly TREE_PANE_WIDTH_DEFAULT = 240;
+  static readonly TREE_PANE_WIDTH_MIN = 180;
+  static readonly TREE_PANE_WIDTH_MAX = 480;
+
+  static readonly PREVIEW_PANE_WIDTH_KEY = "cortex.files.previewPaneWidth";
+  static readonly PREVIEW_PANE_WIDTH_DEFAULT = 320;
+  static readonly PREVIEW_PANE_WIDTH_MIN = 240;
+  static readonly PREVIEW_PANE_WIDTH_MAX = 800;
+
   static styles = css`
     :host {
       display: flex; flex-direction: column;
@@ -25,19 +37,52 @@ export class FilesView extends LitElement {
     .desktop-layout {
       flex: 1;
       display: grid;
-      grid-template-columns: 240px 1fr 320px;
+      grid-template-columns:
+        var(--tree-pane-width, 240px)
+        4px
+        1fr
+        4px
+        var(--preview-pane-width, 320px);
       min-height: 0;
     }
+    .splitter {
+      cursor: col-resize;
+      background: var(--cortex-border);
+      transition: background 0.15s;
+      min-height: 0;
+    }
+    .splitter:hover, .splitter:active { background: var(--cortex-primary); }
     .mobile-layout {
       flex: 1; min-height: 0; position: relative;
     }
     .mobile-layout file-tree,
     .mobile-layout file-list,
-    .mobile-layout file-detail {
+    .mobile-layout .mobile-preview {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
+    }
+    .preview-col {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--cortex-surface);
+      border-left: 1px solid var(--cortex-border);
+      overflow: hidden;
+    }
+    .preview-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--cortex-space-8);
+      color: var(--cortex-text-subtle);
+      text-align: center;
+      font-size: var(--cortex-fs-base);
+    }
+    .mobile-preview {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
     }
     dialog {
       border: 1px solid var(--cortex-border);
@@ -83,7 +128,18 @@ export class FilesView extends LitElement {
   @state() private _dialog: DialogKind = null;
   @state() private _toast: string | null = null;
   private _toastTimer: any = null;
-  private _lastSelectedSig = "";
+
+  // preview state（与 search-view 同款，本地管理）
+  @state() private _previewPath = "";
+  @state() private _previewContent = "";
+  @state() private _previewLanguage = "text";
+  @state() private _previewWritable = false;
+  @state() private _previewPages: PageMarker[] | null = null;
+  @state() private _previewError: "NOT_INDEXED" | null = null;
+  @state() private _previewDirty = false;
+
+  @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
+  @state() private _previewPaneWidth = FilesView.PREVIEW_PANE_WIDTH_DEFAULT;
 
   private _unsubscribe?: () => void;
   private _fileInput: HTMLInputElement | null = null;
@@ -92,7 +148,91 @@ export class FilesView extends LitElement {
     super.connectedCallback();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     this._ensureLoaded("");
+    this._loadPaneWidths();
   }
+
+  private _loadPaneWidths() {
+    const treeSaved = localStorage.getItem(FilesView.TREE_PANE_WIDTH_KEY);
+    if (treeSaved) {
+      const w = Number(treeSaved);
+      if (!Number.isNaN(w)) {
+        this._treePaneWidth = Math.max(
+          FilesView.TREE_PANE_WIDTH_MIN,
+          Math.min(FilesView.TREE_PANE_WIDTH_MAX, w),
+        );
+      }
+    }
+    const previewSaved = localStorage.getItem(FilesView.PREVIEW_PANE_WIDTH_KEY);
+    if (previewSaved) {
+      const w = Number(previewSaved);
+      if (!Number.isNaN(w)) {
+        this._previewPaneWidth = Math.max(
+          FilesView.PREVIEW_PANE_WIDTH_MIN,
+          Math.min(FilesView.PREVIEW_PANE_WIDTH_MAX, w),
+        );
+      }
+    }
+  }
+
+  /** 左 splitter：拖动 file-tree 右边缘。dx 正 = 变宽。 */
+  private _onTreeSplitterMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = this._treePaneWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const w = Math.max(
+        FilesView.TREE_PANE_WIDTH_MIN,
+        Math.min(FilesView.TREE_PANE_WIDTH_MAX, startWidth + dx),
+      );
+      if (w !== this._treePaneWidth) this._treePaneWidth = w;
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(
+        FilesView.TREE_PANE_WIDTH_KEY,
+        String(this._treePaneWidth),
+      );
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  /** 右 splitter：拖动 preview-col 左边缘。dx 负 = 变宽。 */
+  private _onPreviewSplitterMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = this._previewPaneWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const w = Math.max(
+        FilesView.PREVIEW_PANE_WIDTH_MIN,
+        Math.min(FilesView.PREVIEW_PANE_WIDTH_MAX, startWidth - dx),
+      );
+      if (w !== this._previewPaneWidth) this._previewPaneWidth = w;
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(
+        FilesView.PREVIEW_PANE_WIDTH_KEY,
+        String(this._previewPaneWidth),
+      );
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   disconnectedCallback() {
     this._unsubscribe?.();
@@ -132,32 +272,8 @@ export class FilesView extends LitElement {
     }
   }
 
-  private async _maybeLoadDetail() {
-    const sel = this._state.selectedPaths;
-    const sig = sel.join(",");
-    if (sig === this._lastSelectedSig) return;
-    this._lastSelectedSig = sig;
-
-    if (sel.length !== 1) {
-      if (this._state.detail !== null) {
-        actions.setFilesState({ detail: null });
-      }
-      return;
-    }
-    actions.setFilesState({ detailLoading: true });
-    try {
-      const attrs = await filesApi.attrs(sel[0]);
-      // 期间若 selection 已变，丢弃结果
-      if (store.getState().files.selectedPaths.join(",") !== sig) return;
-      actions.setFilesState({ detail: attrs as any, detailLoading: false });
-    } catch (e: any) {
-      actions.setFilesState({ detailLoading: false });
-    }
-  }
-
   updated() {
-    // 每次 update 都检查 detail 是否需要刷新
-    this._maybeLoadDetail();
+    // preview 由 _onFileListActivated 主动驱动，无需在 update 中被动触发
   }
 
   private _showToast(msg: string) {
@@ -168,13 +284,6 @@ export class FilesView extends LitElement {
 
   private _onAction(e: CustomEvent<{ name: string }>) {
     const name = e.detail.name;
-    if (name === "preview" || name === "download") {
-      const path = this._state.selectedPaths[0];
-      if (path) {
-        window.open(`/api/preview/download?path=${encodeURIComponent(path)}`, "_blank");
-      }
-      return;
-    }
     if (name === "upload") {
       this._openFilePicker();
       return;
@@ -226,6 +335,14 @@ export class FilesView extends LitElement {
       await filesApi.rename(path, e.detail.newName);
       actions.invalidateDir(this._state.currentDir);
       await this._ensureLoaded(this._state.currentDir);
+      // 若重命名的是当前预览文件，更新 previewPath 并重载内容
+      if (this._previewPath === path) {
+        const newPath = path.includes("/")
+          ? path.slice(0, path.lastIndexOf("/") + 1) + e.detail.newName
+          : e.detail.newName;
+        this._previewPath = newPath;
+        void this._reloadPreview();
+      }
       this._showToast("已重命名");
     } catch (e: any) {
       this._showToast(e?.message || "重命名失败");
@@ -272,6 +389,15 @@ export class FilesView extends LitElement {
     const parents = new Set<string>();
     paths.forEach(p => parents.add(p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ""));
     for (const p of parents) await this._ensureLoaded(p);
+    // 若删除了正在预览的文件，清空 preview state
+    if (this._previewPath && paths.includes(this._previewPath)) {
+      this._previewPath = "";
+      this._previewContent = "";
+      this._previewError = null;
+      this._previewWritable = false;
+      this._previewPages = null;
+      this._previewDirty = false;
+    }
     actions.clearSelection();
     this._showToast(failed
       ? `已删除 ${deleted}，失败 ${failed}`
@@ -316,6 +442,112 @@ export class FilesView extends LitElement {
     else if (pane === "list") actions.setMobilePane("tree");
   }
 
+  private async _onFileListActivated(e: CustomEvent<{ path: string; is_dir: boolean }>) {
+    if (e.detail.is_dir) {
+      await this._ensureLoaded(e.detail.path);
+      return;
+    }
+    // 文件：dirty 检查后切换预览
+    if (this._previewDirty) {
+      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
+      if (!ok) return;
+      this._discardPreviewEdits();
+    }
+    await this._fetchPreview(e.detail.path);
+    if (this._isMobile) {
+      actions.setMobilePane("detail");
+    }
+  }
+
+  private async _fetchPreview(path: string) {
+    const result = await fetchPreview(path);
+    if (result.ok) {
+      this._previewError = null;
+      this._previewPath = result.path;
+      this._previewContent = result.content;
+      this._previewLanguage = result.language;
+      this._previewWritable = result.writable;
+      this._previewPages = result.pages;
+    } else if (result.notIndexed) {
+      this._previewError = "NOT_INDEXED";
+      this._previewPath = path;
+      this._previewContent = "";
+      this._previewWritable = false;
+      this._previewPages = null;
+    } else {
+      this._showToast(result.message || "预览失败");
+    }
+  }
+
+  private async _reloadPreview() {
+    if (!this._previewPath) return;
+    const r = await fetchPreview(this._previewPath);
+    if (r.ok) {
+      this._previewContent = r.content;
+      this._previewLanguage = r.language;
+      this._previewWritable = r.writable;
+      this._previewPages = r.pages;
+    }
+  }
+
+  private _discardPreviewEdits() {
+    const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+    pp?.discard?.();
+    this._previewDirty = false;
+  }
+
+  private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
+    this._previewDirty = e.detail.dirty;
+  };
+
+  private _onPreviewSaved = () => {
+    this._previewDirty = false;
+    this._showToast("已保存");
+  };
+
+  private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>) => {
+    this._showToast(`保存失败：${e.detail.message}`);
+  };
+
+  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
+    this._previewDirty = false;
+    this._showToast(`已覆盖：${e.detail.path}`);
+    void this._reloadPreview();
+  };
+
+  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>) => {
+    this._showToast(`上传失败：${e.detail.message}`);
+  };
+
+  private _renderNotIndexedHint() {
+    return html`<div class="preview-placeholder">
+      该文件未索引，无法预览。<br>
+      请先执行 cortex index 后重试。
+    </div>`;
+  }
+
+  private _renderPreviewPane(noHeader = false) {
+    if (this._previewError === "NOT_INDEXED") {
+      return this._renderNotIndexedHint();
+    }
+    if (!this._previewPath) {
+      return html`<div class="preview-placeholder">点击文件预览</div>`;
+    }
+    return html`<preview-pane
+      ?noHeader=${noHeader}
+      path=${this._previewPath}
+      language=${this._previewLanguage}
+      content=${this._previewContent}
+      ?writable=${this._previewWritable}
+      .pages=${this._previewPages}
+      @dirty-change=${this._onPreviewDirty}
+      @saved=${this._onPreviewSaved}
+      @save-failed=${this._onPreviewSaveFailed}
+      @upload-success=${this._onPreviewUploadSuccess}
+      @upload-failed=${this._onPreviewUploadFailed}
+    ></preview-pane>`;
+  }
+
   private _cancelDialog = () => {
     this._dialog = null;
   };
@@ -333,10 +565,27 @@ export class FilesView extends LitElement {
 
   private _renderDesktop() {
     return html`
-      <div class="desktop-layout">
+      <div
+        class="desktop-layout"
+        style="--tree-pane-width: ${this._treePaneWidth}px; --preview-pane-width: ${this._previewPaneWidth}px"
+      >
         <file-tree></file-tree>
-        <file-list @action=${this._onAction}></file-list>
-        <file-detail @action=${this._onAction}></file-detail>
+        <div
+          class="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整文件树栏宽度"
+          @mousedown=${this._onTreeSplitterMouseDown}
+        ></div>
+        <file-list @action=${this._onAction} @activated=${this._onFileListActivated}></file-list>
+        <div
+          class="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整预览栏宽度"
+          @mousedown=${this._onPreviewSplitterMouseDown}
+        ></div>
+        <div class="preview-col">${this._renderPreviewPane(false)}</div>
       </div>
     `;
   }
@@ -360,13 +609,11 @@ export class FilesView extends LitElement {
           : ""}
         ${pane === "list"
           ? html`<file-list @action=${this._onAction}
-              @activated=${(e: CustomEvent<{ path: string; is_dir: boolean }>) => {
-                if (!e.detail.is_dir) actions.setMobilePane("detail");
-              }}
+              @activated=${this._onFileListActivated}
             ></file-list>`
           : ""}
         ${pane === "detail"
-          ? html`<file-detail @action=${this._onAction}></file-detail>`
+          ? html`<div class="mobile-preview">${this._renderPreviewPane(true)}</div>`
           : ""}
       </div>
     `;

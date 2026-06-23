@@ -122,4 +122,34 @@ describe("file-list", () => {
     expect(store.getState().files.currentDir).toBe("");
     document.body.removeChild(el);
   });
+
+  it("forwards row 'checked' event to actions.selectEntry", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const row = el.shadowRoot.querySelector("file-row");
+    expect(row).toBeTruthy();
+    row.dispatchEvent(new CustomEvent("checked", {
+      detail: { path: "a.md", ctrl: false, shift: false },
+      bubbles: true, composed: true,
+    }));
+    expect(store.getState().files.selectedPaths).toEqual(["a.md"]);
+    document.body.removeChild(el);
+  });
+
+  it("header select-all checkbox toggles all entries", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const headerCb = el.shadowRoot.querySelector(".select-all input[type='checkbox']") as HTMLInputElement;
+    expect(headerCb).toBeTruthy();
+    headerCb.click();
+    expect(store.getState().files.selectedPaths.sort()).toEqual(["a.md", "b.md", "docs"].sort());
+    // 再点一次清空
+    headerCb.click();
+    expect(store.getState().files.selectedPaths).toEqual([]);
+    document.body.removeChild(el);
+  });
 });

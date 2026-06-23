@@ -50,6 +50,17 @@ export class FileList extends LitElement {
     .toolbar button:hover:not(:disabled) { background: var(--cortex-surface-muted); }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
     .toolbar button.danger { color: var(--cortex-danger); }
+    .header-row {
+      display: grid;
+      grid-template-columns: 28px 20px 1fr 80px 140px 70px;
+      gap: var(--cortex-space-2);
+      padding: 6px var(--cortex-space-3);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      flex-shrink: 0;
+    }
+    .select-all { display: flex; align-items: center; justify-content: center; }
     .rows { flex: 1; overflow-y: auto; }
     .empty {
       padding: var(--cortex-space-8);
@@ -76,13 +87,23 @@ export class FileList extends LitElement {
     }));
   }
 
-  private _onRowClicked(e: CustomEvent<{ path: string; ctrl: boolean; shift: boolean }>) {
+  private _onRowChecked(e: CustomEvent<{ path: string; ctrl: boolean; shift: boolean }>) {
     actions.selectEntry(e.detail.path, { ctrl: e.detail.ctrl, shift: e.detail.shift });
   }
 
-  private _onRowActivated(e: CustomEvent<{ path: string; is_dir: boolean }>) {
-    if (e.detail.is_dir) {
-      actions.selectDir(e.detail.path);
+  private _onSelectAll(e: Event) {
+    const cb = e.target as HTMLInputElement;
+    const { currentDir, treeCache, selectedPaths } = store.getState().files;
+    const entries = treeCache[currentDir] || [];
+    if (cb.checked) {
+      const all = entries.map(en => en.path);
+      const merged = Array.from(new Set([...selectedPaths, ...all]));
+      actions.setFilesState({ selectedPaths: merged });
+    } else {
+      const inDir = new Set(entries.map(en => en.path));
+      actions.setFilesState({
+        selectedPaths: selectedPaths.filter(p => !inDir.has(p)),
+      });
     }
   }
 
@@ -103,6 +124,7 @@ export class FileList extends LitElement {
     const canAct = selectedPaths.length >= 1;
     const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
+    const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
 
     return html`
       <div class="breadcrumb">
@@ -121,16 +143,29 @@ export class FileList extends LitElement {
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}>→ 移动</button>
         <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}>🗑 删除</button>
       </div>
+      ${entries.length === 0
+        ? html`<div class="empty">目录为空</div>`
+        : html`<div class="header-row">
+            <span class="select-all">
+              <input
+                type="checkbox"
+                .checked=${allSelected}
+                @click=${this._onSelectAll}
+              />
+            </span>
+            <span></span>
+            <span>名称</span>
+            <span style="text-align:right;">大小</span>
+            <span style="text-align:right;">修改</span>
+            <span></span>
+          </div>`}
       <div class="rows">
-        ${entries.length === 0
-          ? html`<div class="empty">目录为空</div>`
-          : entries.map(e => html`
-            <file-row
-              .entry=${e}
-              .selected=${sel.has(e.path)}
-              @clicked=${this._onRowClicked}
-              @activated=${this._onRowActivated}
-            ></file-row>`)}
+        ${entries.map(e => html`
+          <file-row
+            .entry=${e}
+            .selected=${sel.has(e.path)}
+            @checked=${this._onRowChecked}
+          ></file-row>`)}
       </div>
     `;
   }

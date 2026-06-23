@@ -5,19 +5,12 @@ import { store, actions } from "../state/store";
 import type { SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { listSessions, clearSessions, findOrCreateSession } from "../api/sessions";
+import { fetchPreview, isFullFilePreview } from "../api/preview";
 import type { PageMarker } from "../api/preview";
 import "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
-
-/** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐） */
-const FULL_FILE_PREVIEW_EXTS = [".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv"];
-
-function isFullFilePreview(path: string): boolean {
-  const lower = path.toLowerCase();
-  return FULL_FILE_PREVIEW_EXTS.some((ext) => lower.endsWith(ext));
-}
 
 @customElement("search-view")
 export class SearchView extends LitElement {
@@ -344,34 +337,60 @@ export class SearchView extends LitElement {
    *  (which doesn't go through the user-click path). */
   private async _fetchAndShowPreview(r: SearchResult) {
     this.previewError = null;
+    const line = (r.line as number | null) ?? null;
+    const fullFile = isFullFilePreview(r.path);
+    // search-hit 范围预览（非 full-file 时只取 line ±10/+20 行）—— fetchPreview
+    // 暂不支持 line range，走专用分支。
+    let result;
+    if (line && !fullFile) {
+      result = await this._fetchPreviewRange(r.path, line);
+    } else {
+      result = await fetchPreview(r.path);
+    }
+    if (result.ok) {
+      this.previewContent = result.content;
+      this.previewPath = result.path;
+      this.previewLanguage = result.language;
+      this.previewLine = line;
+      this.previewWritable = result.writable;
+      this.previewPages = result.pages;
+    } else if (result.notIndexed) {
+      this.previewError = "NOT_INDEXED";
+      this.previewContent = "";
+      this.previewPath = r.path;
+      this.previewWritable = false;
+      this.previewPages = null;
+    }
+  }
+
+  /** search-hit 范围预览专用 —— 仅取 line ±10/+20 行。 */
+  private async _fetchPreviewRange(
+    path: string,
+    line: number,
+  ): Promise<
+    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null }
+    | { ok: false; notIndexed: boolean }
+  > {
+    const params = new URLSearchParams({ path });
+    params.set("start_line", String(Math.max(1, line - 10)));
+    params.set("end_line", String(line + 20));
     try {
-      const params = new URLSearchParams({ path: r.path });
-      const fullFile = isFullFilePreview(r.path);
-      if (r.line && !fullFile) {
-        params.set("start_line", String(Math.max(1, r.line - 10)));
-        params.set("end_line", String(r.line + 20));
-      }
       const res = await fetch(`/api/preview?${params}`);
       if (res.ok) {
         const body = await res.json();
-        this.previewContent = body.content;
-        this.previewPath = body.path;
-        this.previewLanguage = body.language;
-        this.previewLine = (r.line as number | null) ?? null;
-        this.previewWritable = body.writable ?? false;
-        this.previewPages = body.pages ?? null;
-      } else {
-        const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
-        if (err.code === "NOT_INDEXED") {
-          this.previewError = "NOT_INDEXED";
-          this.previewContent = "";
-          this.previewPath = r.path;
-          this.previewWritable = false;
-          this.previewPages = null;
-        }
+        return {
+          ok: true,
+          path: body.path,
+          content: body.content,
+          language: body.language,
+          writable: body.writable ?? false,
+          pages: body.pages ?? null,
+        };
       }
-    } catch (e) {
-      console.warn("preview failed", e);
+      const err = await res.json().catch(() => ({}));
+      return { ok: false, notIndexed: err.code === "NOT_INDEXED" };
+    } catch {
+      return { ok: false, notIndexed: false };
     }
   }
 
@@ -441,19 +460,12 @@ export class SearchView extends LitElement {
   /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
   private async _reloadPreview() {
     if (!this.previewPath) return;
-    try {
-      const res = await fetch(
-        `/api/preview?path=${encodeURIComponent(this.previewPath)}`,
-      );
-      if (res.ok) {
-        const body = await res.json();
-        this.previewContent = body.content;
-        this.previewLanguage = body.language;
-        this.previewWritable = body.writable ?? false;
-        this.previewPages = body.pages ?? null;
-      }
-    } catch (e) {
-      console.warn("reload preview failed", e);
+    const r = await fetchPreview(this.previewPath);
+    if (r.ok) {
+      this.previewContent = r.content;
+      this.previewLanguage = r.language;
+      this.previewWritable = r.writable;
+      this.previewPages = r.pages;
     }
   }
 

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../src/views/files-view";
 import { resetStore } from "./test-utils";
 import { store, actions } from "../src/state/store";
+import { filesApi } from "../src/api/files";
+import { fetchPreview } from "../src/api/preview";
 
 // Mock filesApi
 vi.mock("../src/api/files", () => ({
@@ -19,6 +21,19 @@ vi.mock("../src/api/files", () => ({
     rename: vi.fn().mockResolvedValue({}),
     upload: vi.fn().mockResolvedValue({}),
   },
+}));
+
+// Mock fetchPreview
+vi.mock("../src/api/preview", () => ({
+  fetchPreview: vi.fn().mockResolvedValue({
+    ok: true,
+    path: "a.md",
+    content: "# hello",
+    language: "markdown",
+    writable: false,
+    pages: null,
+  }),
+  isFullFilePreview: vi.fn(() => false),
 }));
 
 describe("files-view", () => {
@@ -107,6 +122,41 @@ describe("files-view", () => {
     );
     await el.updateComplete;
     expect(el.shadowRoot.querySelector("mkdir-dialog")).toBeFalsy();
+    document.body.removeChild(el);
+  });
+
+  it("loads directory contents when file-list activates a directory", async () => {
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const listSpy = filesApi.list as ReturnType<typeof vi.fn>;
+    listSpy.mockClear();
+    el.shadowRoot.querySelector("file-list").dispatchEvent(
+      new CustomEvent("activated", {
+        detail: { path: "subdir", is_dir: true },
+        bubbles: true, composed: true,
+      }),
+    );
+    // Wait a microtask for the async _onFileListActivated handler
+    await new Promise(r => setTimeout(r, 0));
+    expect(listSpy).toHaveBeenCalledWith("subdir");
+    document.body.removeChild(el);
+  });
+
+  it("clicking a file loads preview via fetchPreview", async () => {
+    const spy = fetchPreview as ReturnType<typeof vi.fn>;
+    spy.mockClear();
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector("file-list").dispatchEvent(
+      new CustomEvent("activated", {
+        detail: { path: "a.md", is_dir: false },
+        bubbles: true, composed: true,
+      }),
+    );
+    await new Promise(r => setTimeout(r, 0));
+    expect(spy).toHaveBeenCalledWith("a.md");
     document.body.removeChild(el);
   });
 });
