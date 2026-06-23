@@ -157,13 +157,15 @@ export class MdViewer extends LitElement {
       text-align: center;
       padding: 24px;
     }
-    /* 定位块的闪烁动画（"你滚到这里了"指示） */
+    /* 定位块的闪烁动画（"你滚到这里了"指示）
+       使用 box-shadow 而不是 background，避免和 <mark class="keyword-hit">
+       的黄色背景叠加产生视觉混乱（xlsx 场景下 scrollTo 可能是 mark）。 */
     .highlight-flash {
       animation: highlight-flash 2s ease-out;
     }
     @keyframes highlight-flash {
-      0% { background: rgba(254, 243, 199, 0.8); }
-      100% { background: transparent; }
+      0% { box-shadow: 0 0 0 4px rgba(254, 243, 199, 1); }
+      100% { box-shadow: 0 0 0 4px transparent; }
     }
     /* 搜索关键字命中高亮（持久黄底，类似浏览器 Ctrl+F） */
     :host mark.keyword-hit {
@@ -232,22 +234,48 @@ export class MdViewer extends LitElement {
     }, null);
     if (!target) return;
 
+    // 决定 flash/scroll 目标：
+    // - target 文本含 keyword → target 本身就是命中点（md 正常 case）
+    // - 否则（典型场景：xlsx 的 sheet 节点被当一个 FTS node，r.line 指向 sheet 起始；
+    //   keyword 实际出现在 sheet 内部的 table 单元格里）。此时退而求其次，
+    //   把 first keyword mark 作为滚动目标 —— 否则 heading 已在视口顶部，
+    //   scrollTo 它不会有任何位移，用户完全看不到滚动动作。
+    //
+    // 多 sheet xlsx：target 是 sheet 标题，firstMark 应该在该 sheet 内部（page-card
+    // 范围内），而不是整篇文档的第一个 mark（可能落在不相关的 sheet 里）。
+    let flashTo: HTMLElement = target;
+    if (this.keyword) {
+      const words = this.keyword.split(/\s+/).filter((w) => w.length > 0);
+      const targetText = target.textContent ?? "";
+      const targetHasHit = words.some((w) => targetText.includes(w));
+      if (!targetHasHit) {
+        const pageCard = target.closest(".page-card") as HTMLElement | null;
+        const scope: ParentNode = pageCard ?? this.shadowRoot!;
+        const firstMark = scope.querySelector(
+          "mark.keyword-hit",
+        ) as HTMLElement | null;
+        if (firstMark) flashTo = firstMark;
+      }
+    }
+
     // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
-    // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
+    // 不能用 flashTo.scrollIntoView —— 它会沿滚动链传播到 window，
     // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
     const hostRect = this.getBoundingClientRect();
     if (hostRect.height > 0) {
-      const targetRect = target.getBoundingClientRect();
+      const targetRect = flashTo.getBoundingClientRect();
       const targetContentTop = targetRect.top - hostRect.top + this.scrollTop;
       this.scrollTo({
         top: targetContentTop - hostRect.height / 2 + targetRect.height / 2,
         behavior: "smooth",
       });
     }
-    target.classList.remove("highlight-flash");  // 重置以便动画重放
+    // 闪烁 scrollTo（命中点指示）。使用 box-shadow 动画以避免和
+    // <mark class="keyword-hit"> 的黄色背景叠加产生视觉混乱。
+    flashTo.classList.remove("highlight-flash");  // 重置以便动画重放
     // 强制 reflow，让 animation 重新触发
-    void target.offsetWidth;
-    target.classList.add("highlight-flash");
+    void flashTo.offsetWidth;
+    flashTo.classList.add("highlight-flash");
   }
 
   /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
