@@ -9,11 +9,17 @@ import type { PageMarker } from "../api/preview";
  * marked v18 的 token 对象没有 `line` 字段，因此采用 preprocess hook
  * 缓存当前 markdown 源文本，renderer 内通过 token.raw 在源文本中的
  * 顺序位置反推起始行号（cursor 递增保证多次调用不回退匹配）。
+ *
+ * 分页模式（xlsx/pdf/pptx）：每个分块走一次 marked.parse，preprocess 会
+ * 重置 currentSrc/cursor，使行号变成「分块内 1-indexed」。_splitByPages
+ * 在调用前显式设置 currentOffset = chunk 的起始行偏移，lineOf 把分块
+ * 内行号加上偏移，得到「全文 1-indexed」的绝对行号。
  */
 let currentSrc = "";
 let cursor = 0;
+let currentOffset = 0;
 
-/** 在 currentSrc 中查找 raw 的起始位置，返回 1-indexed 行号 */
+/** 在 currentSrc 中查找 raw 的起始位置，返回 1-indexed 行号（全文绝对） */
 function lineOf(raw: string | undefined): number {
   if (!raw) return 0;
   const idx = currentSrc.indexOf(raw, cursor);
@@ -21,11 +27,11 @@ function lineOf(raw: string | undefined): number {
     // 降级：从头查找（处理罕见的乱序情况）
     const idx0 = currentSrc.indexOf(raw);
     if (idx0 === -1) return 0;
-    return (currentSrc.slice(0, idx0).match(/\n/g) ?? []).length + 1;
+    return (currentSrc.slice(0, idx0).match(/\n/g) ?? []).length + 1 + currentOffset;
   }
   const line = (currentSrc.slice(0, idx).match(/\n/g) ?? []).length + 1;
   cursor = idx + raw.length;
-  return line;
+  return line + currentOffset;
 }
 
 function escapeHtml(s: string): string {
@@ -296,18 +302,19 @@ export class MdViewer extends LitElement {
   }
 
   /** 按 pages 的 line_start 把 md content 切成 N 段。
-   *  line_start 是 1-indexed；返回 [{label, md}, ...]。 */
+   *  line_start 是 1-indexed；返回 [{label, md, offset}, ...]，
+   *  offset = 该分块第一行在全文中的 0-indexed 偏移（供分页渲染时校准行号）。 */
   private _splitByPages(
     content: string,
     pages: PageMarker[],
-  ): Array<{ label: string; md: string }> {
+  ): Array<{ label: string; md: string; offset: number }> {
     const lines = content.split("\n");
-    const chunks: Array<{ label: string; md: string }> = [];
+    const chunks: Array<{ label: string; md: string; offset: number }> = [];
     for (let i = 0; i < pages.length; i++) {
       const start = pages[i].line_start - 1;  // 转 0-indexed
       const end = i + 1 < pages.length ? pages[i + 1].line_start - 1 : lines.length;
       const md = lines.slice(Math.max(0, start), Math.max(0, end)).join("\n");
-      chunks.push({ label: pages[i].label, md });
+      chunks.push({ label: pages[i].label, md, offset: start });
     }
     return chunks;
   }
@@ -321,12 +328,17 @@ export class MdViewer extends LitElement {
     if (this.pages && this.pages.length > 0) {
       const chunks = this._splitByPages(this.content, this.pages);
       return html`<div class="md-body md-body-paged">
-        ${chunks.map((c) => html`
-          <section class="page-card">
-            <header class="page-card-header">${c.label}</header>
-            <div .innerHTML=${marked.parse(c.md, { async: false }) as string}></div>
-          </section>
-        `)}
+        ${chunks.map((c) => {
+          // 在调 marked.parse 前先设偏移，renderer 把分块内行号加上 offset 得绝对行号
+          currentOffset = c.offset;
+          const chunkHtml = marked.parse(c.md, { async: false }) as string;
+          return html`
+            <section class="page-card">
+              <header class="page-card-header">${c.label}</header>
+              <div .innerHTML=${chunkHtml}></div>
+            </section>
+          `;
+        })}
       </div>`;
     }
     // 回归：单块渲染
