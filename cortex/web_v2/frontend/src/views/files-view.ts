@@ -577,7 +577,11 @@ export class FilesView extends LitElement {
           aria-label="调整文件树栏宽度"
           @mousedown=${this._onTreeSplitterMouseDown}
         ></div>
-        <file-list @action=${this._onAction} @activated=${this._onFileListActivated}></file-list>
+        <file-list
+          .activePath=${this._previewPath}
+          @action=${this._onAction}
+          @activated=${this._onFileListActivated}
+        ></file-list>
         <div
           class="splitter"
           role="separator"
@@ -608,7 +612,9 @@ export class FilesView extends LitElement {
             ></file-tree>`
           : ""}
         ${pane === "list"
-          ? html`<file-list @action=${this._onAction}
+          ? html`<file-list
+              .activePath=${this._previewPath}
+              @action=${this._onAction}
               @activated=${this._onFileListActivated}
             ></file-list>`
           : ""}

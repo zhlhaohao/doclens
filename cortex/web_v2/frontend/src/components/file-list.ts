@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import "./file-row";
 
@@ -70,6 +70,9 @@ export class FileList extends LitElement {
   `;
 
   private _unsubscribe?: () => void;
+
+  /** 当前预览/焦点文件路径 —— 该行会加 active 高亮（区别于 checkbox 多选） */
+  @property() activePath = "";
 
   connectedCallback() {
     super.connectedCallback();
@@ -164,6 +167,7 @@ export class FileList extends LitElement {
           <file-row
             .entry=${e}
             .selected=${sel.has(e.path)}
+            .active=${e.path === this.activePath}
             @checked=${this._onRowChecked}
           ></file-row>`)}
       </div>
