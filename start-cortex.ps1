@@ -1,21 +1,32 @@
 # 启动 Cortex 前后端用于验证和测试
-# 必须在 git worktree 独立目录下运行
+#
+# 支持两种运行方式：
+#   1. 从主分支目录运行：~/github/cortex/start-cortex.ps1
+#   2. 从 worktree 目录运行：~/github/cortex-feat-settings/start-cortex.ps1
 #
 # 目录结构：
-#   ~/github/cortex/              - 主分支
+#   ~/github/cortex/              - 主分支（具备 .venv 和 test_work_dir）
 #   ~/github/cortex-feat-settings/ - worktree
-#
-# 脚本应放在 worktree 根目录，从那里运行
 
-# 计算绝对路径
-$worktreeRoot = $PSScriptRoot                          # worktree 根目录
-$cortexRoot = Join-Path $worktreeRoot "cortex"        # worktree/cortex 代码
-$venvPython = "C:\Users\lianghao\github\cortex\.venv\Scripts\python.exe"
-$testWorkDir = "C:\Users\lianghao\github\cortex\test_work_dir"
+# 检测运行场景
+$venvPythonInScriptRoot = Test-Path (Join-Path $PSScriptRoot ".venv\Scripts\python.exe")
+
+if ($venvPythonInScriptRoot) {
+    # 场景1：从主分支目录运行
+    $cortexRoot = $PSScriptRoot
+    $venvPython = Join-Path $cortexRoot ".venv\Scripts\python.exe"
+    $testWorkDir = Join-Path $cortexRoot "test_work_dir"
+} else {
+    # 场景2：从 worktree 目录运行
+    $cortexRoot = $PSScriptRoot                                # worktree 根目录（PYTHONPATH）
+    $parentDir = Split-Path -Parent $PSScriptRoot
+    $venvPython = Join-Path $parentDir "cortex\.venv\Scripts\python.exe"
+    $testWorkDir = Join-Path $parentDir "cortex\test_work_dir"
+}
 
 # 1. 进入到 test_work_dir 目录
 Set-Location $testWorkDir
 
-# 2. 用 worktree 的 cortex 代码 + 主分支的虚拟环境运行
+# 2. 用 cortex 代码 + 虚拟环境运行
 $env:PYTHONPATH = $cortexRoot
 & $venvPython -m cortex $args
