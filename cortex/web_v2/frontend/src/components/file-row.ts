@@ -17,7 +17,7 @@ export class FileRow extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     .row:hover { background: var(--cortex-surface-muted); }
-    .row.selected { background: var(--cortex-primary-soft); }
+    .row.active { background: var(--cortex-primary-soft); }
     .checkbox { display: flex; align-items: center; justify-content: center; }
     .icon { font-size: 14px; }
     .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -39,6 +39,8 @@ export class FileRow extends LitElement {
 
   @property({ type: Object }) entry!: FileEntry;
   @property({ type: Boolean }) selected = false;
+  /** 当前预览/焦点的文件行 —— 由行体单击触发，区别于 checkbox 的多选 */
+  @property({ type: Boolean }) active = false;
 
   private _fmtSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -80,7 +82,7 @@ export class FileRow extends LitElement {
   render() {
     return html`
       <div
-        class="row ${this.selected ? "selected" : ""}"
+        class="row ${this.active ? "active" : ""}"
         @click=${this._onRowClick}>
         <span class="checkbox">
           <input
