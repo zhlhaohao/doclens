@@ -13,8 +13,9 @@ const COL_WIDTHS_KEY = "cortex.files.colWidths";
 export class FileList extends LitElement {
   static styles = css`
     :host {
-      display: flex; flex-direction: column; flex: 1; min-height: 0;
+      display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
       background: var(--cortex-surface);
+      overflow: hidden;
     }
     .breadcrumb {
       display: flex; align-items: center; gap: var(--cortex-space-2);
