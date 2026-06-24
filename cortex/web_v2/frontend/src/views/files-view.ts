@@ -59,6 +59,11 @@ export class FilesView extends LitElement {
     }
     .splitter:hover, .splitter:active { background: var(--cortex-primary); }
     .mobile-layout {
+      /* display:flex 让子元素(file-tree/file-list/.mobile-preview)的
+         flex:1 生效，提供明确高度链。缺少这个会导致 .mobile-preview
+         高度塌陷（因为 block 容器内 flex:1 无效），进而让 preview-pane
+         内的 md-viewer（flex:1 1 0）塌陷为 0，预览内容不可见。 */
+      display: flex; flex-direction: column;
       flex: 1; min-height: 0; position: relative;
     }
     .mobile-layout file-tree,

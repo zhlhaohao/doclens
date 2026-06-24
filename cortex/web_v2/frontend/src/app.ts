@@ -44,6 +44,7 @@ export class CortexApp extends LitElement {
       display: flex;
       flex-direction: column;
       min-width: 0;
+      min-height: 0;
       position: relative;
     }
     /* 移动端：纵向布局（activity-bar 隐藏，tab-bar 在底部） */

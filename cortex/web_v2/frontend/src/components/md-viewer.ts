@@ -101,7 +101,11 @@ export class MdViewer extends LitElement {
       line-height: 1.7;
       color: var(--cortex-text);
       overflow: auto;
-      height: 100%;
+      /* 作为 preview-pane (flex column) 的 flex item，必须用 flex 填充
+         而非 height: 100%。height: 100% + overflow: auto 在 iOS Safari
+         中会触发 flexbox 触摸滚动 bug，导致手指滑动无法滚动内容。 */
+      flex: 1 1 0;
+      min-height: 0;
     }
     :host h1, :host h2, :host h3 {
       margin: 1em 0 0.5em;
