@@ -217,7 +217,9 @@ export class FileList extends LitElement {
   }
 
   private _onRowChecked(e: CustomEvent<{ path: string; ctrl: boolean; shift: boolean }>) {
-    actions.selectEntry(e.detail.path, { ctrl: e.detail.ctrl, shift: e.detail.shift });
+    // 默认 checkbox 单击 = toggle（累积多选）；shift 保留范围选择语义
+    const { path, shift } = e.detail;
+    actions.selectEntry(path, { ctrl: !shift, shift });
   }
 
   private _onSelectAll(e: Event) {
