@@ -253,13 +253,13 @@ PERFORMANCE_CODE_REFERENCES.md
 PERFORMANCE_SUMMARY.txt
 
 # Frontend (web_v2)
-cortex/web_v2/frontend/node_modules/
-cortex/web_v2/frontend/dist/
-cortex/web_v2/frontend/.vitest/
-cortex/web_v2/frontend/test-results/
-cortex/web_v2/frontend/playwright-report/
-cortex/web_v2/frontend/.vite/
-cortex/web_v2/frontend/.playwright-cli/
+doclens/web_v2/frontend/node_modules/
+doclens/web_v2/frontend/dist/
+doclens/web_v2/frontend/.vitest/
+doclens/web_v2/frontend/test-results/
+doclens/web_v2/frontend/playwright-report/
+doclens/web_v2/frontend/.vite/
+doclens/web_v2/frontend/.playwright-cli/
 
 # Playwright CLI skill snapshots (任意层级 — 根目录与 frontend 子目录均覆盖)
 .playwright-cli/

@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from cortex.web_v2.app import create_app
+from doclens.web_v2.app import create_app
 
 
 @pytest.fixture

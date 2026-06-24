@@ -1,5 +1,5 @@
 """Tests for config_validator: validates a values dict against CortexConfig."""
-from cortex.web_v2.config_validator import validate_values, ValidationErrors
+from doclens.web_v2.config_validator import validate_values, ValidationErrors
 
 
 def test_validate_accepts_known_good_values():

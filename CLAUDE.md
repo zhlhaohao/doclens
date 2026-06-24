@@ -24,10 +24,10 @@ pip install -e ".[cortex]"
 
 ```bash
 # 必须直接使用 .venv 中的 python.exe
-.venv/Scripts/python.exe -m cortex ...
+.venv/Scripts/python.exe -m doclens ...
 
 # 如果在子目录（如 test_work_dir/）执行，用相对路径：
-../.venv/Scripts/python.exe -m cortex ...
+../.venv/Scripts/python.exe -m doclens ...
 ```
 
 > 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
@@ -112,9 +112,9 @@ IndexManager.subscribe("file_changed") → 增量 reindex
 
 ## 项目结构
 
-### cortex/ - 文档检索工具
+### doclens/ - 文档检索工具
 ```
-cortex/
+doclens/
 ├── agent_integration.py      # Agent 集成
 ├── config.py                # 配置管理 (Pydantic)
 ├── cortex_cli.py            # CLI 入口（TUI + 子命令）
@@ -136,9 +136,9 @@ cortex/
 │       └── status_bar.py    # 底部状态栏
 ```
 
-### cortex/web_v2/ - Web UI（FastAPI + Lit PWA）
+### doclens/web_v2/ - Web UI（FastAPI + Lit PWA）
 ```
-cortex/web_v2/
+doclens/web_v2/
 ├── app.py                    # FastAPI 应用入口（create_app / launch_app）
 ├── deps.py                   # 依赖注入单例（IndexManager / CortexAgent / Config）
 ├── api/                      # REST API 路由
@@ -226,8 +226,8 @@ planify/
 
 | 场景 | 运行方式 | cortex 代码 | 虚拟环境 |
 |------|----------|-------------|----------|
-| 主分支 | `~/github/cortex/start-cortex.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
-| worktree | `~/github/cortex-feat-settings/start-cortex.ps1` | `$PSScriptRoot` | `../cortex/.venv` |
+| 主分支 | `~/github/doclens/start-cortex.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
+| worktree | `~/github/cortex-feat-settings/start-cortex.ps1` | `$PSScriptRoot` | `../doclens/.venv` |
 
 ### 三种运行模式
 
@@ -262,8 +262,8 @@ planify/
 
 修改前端代码后需要重新构建：
 ```bash
-cd cortex/web_v2/frontend && npm install && npm run dev   # 开发模式
-cd cortex/web_v2/frontend && npm run build                 # 生产构建
+cd doclens/web_v2/frontend && npm install && npm run dev   # 开发模式
+cd doclens/web_v2/frontend && npm run build                 # 生产构建
 ```
 
 ### 备用方式（直接调用 Python）
@@ -272,5 +272,5 @@ cd cortex/web_v2/frontend && npm run build                 # 生产构建
 
 ```bash
 # 在 test_work_dir 目录下执行
-../.venv/Scripts/python.exe -m cortex <命令>
+../.venv/Scripts/python.exe -m doclens <命令>
 ```

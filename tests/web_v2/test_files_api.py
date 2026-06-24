@@ -4,8 +4,8 @@ import asyncio
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2 import deps
-from cortex.web_v2.app import create_app
+from doclens.web_v2 import deps
+from doclens.web_v2.app import create_app
 
 
 @pytest.fixture
@@ -599,7 +599,7 @@ async def test_upload_protected_dest_returns_403(temp_workdir, env_cortex_config
 @pytest.mark.asyncio
 async def test_upload_too_large_returns_413(temp_workdir, env_cortex_config, reset_deps, monkeypatch):
     await asyncio.to_thread(_init_and_reindex)
-    from cortex.web_v2.api import files as files_module
+    from doclens.web_v2.api import files as files_module
     monkeypatch.setattr(files_module, "_MAX_UPLOAD_BYTES", 16)
     app = create_app()
     transport = ASGITransport(app=app)

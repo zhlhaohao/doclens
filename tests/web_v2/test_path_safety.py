@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from cortex.web_v2.api.errors import CortexAPIError
-from cortex.web_v2.path_safety import (
+from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.path_safety import (
     safe_resolve,
     is_protected,
     is_root,
