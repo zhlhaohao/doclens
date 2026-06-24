@@ -138,6 +138,34 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
+  it("default checkbox click toggles (accumulates) without needing ctrl", async () => {
+    actions.setFilesState({
+      currentDir: "",
+      treeCache: { "": entries },
+      selectedPaths: ["b.md"],
+    });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const rows = el.shadowRoot.querySelectorAll("file-row");
+    // 点 a.md 的 checkbox（无 modifier）—— 应该 toggle 加入，而不是替换
+    const aRow = Array.from(rows).find(
+      (r: any) => r.entry?.path === "a.md",
+    ) as any;
+    aRow.dispatchEvent(new CustomEvent("checked", {
+      detail: { path: "a.md", ctrl: false, shift: false },
+      bubbles: true, composed: true,
+    }));
+    expect(store.getState().files.selectedPaths.sort()).toEqual(["a.md", "b.md"].sort());
+    // 再点一次 a.md —— 移除
+    aRow.dispatchEvent(new CustomEvent("checked", {
+      detail: { path: "a.md", ctrl: false, shift: false },
+      bubbles: true, composed: true,
+    }));
+    expect(store.getState().files.selectedPaths).toEqual(["b.md"]);
+    document.body.removeChild(el);
+  });
+
   it("header select-all checkbox toggles all entries", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
