@@ -283,3 +283,59 @@ git tag v1.2.3 && git push origin v1.2.3   # CI 自动构建+发布
 - [ ] GitHub Secrets 配置 `PYPI_API_TOKEN`
 - [ ] publish workflow 就绪（tag 触发）
 - [ ]（可选）UI 品牌从 Cortex → Doclens
+
+## 版本管理与用户更新
+
+### 发布新版本（发布者操作）
+
+每次发布新版本只需 3 步：
+
+```bash
+# 1. 改 pyproject.toml 中的版本号
+#    version = "1.1.0"  →  "1.2.0"
+
+# 2. commit + tag
+git commit -am "bump version to 1.2.0"
+git tag v1.2.0
+
+# 3a. 手动发布
+python -m build && twine upload dist/*
+
+# 3b. 或 CI 自动发布（push tag 触发 GitHub Actions）
+git push origin v1.2.0
+```
+
+### 用户更新方式
+
+```bash
+pip install --upgrade doclens        # 升级到最新版
+pip install -U "doclens[cortex]"     # 含 extras 升级
+pip install doclens==1.2.0           # 指定版本降级/回滚
+```
+
+`pip install -U` 会查询 PyPI 上的最新版本号，比本地新则下载安装。
+
+### 关键规则
+
+1. **PyPI 版本号不可覆盖**：`1.1.0` 上传成功后，不能再用 `1.1.0` 上传。
+   每次发布必须递增版本号，否则 `twine upload` 报 `File already exists`。
+2. **首次版本锁定**：首次发布用 `1.1.0`，之后 `1.1.0` 永远指向那次构建的产物。
+   首次发布前务必确保一切就绪（TestPyPI 验证通过）。
+3. **语义化版本（SemVer）**：`MAJOR.MINOR.PATCH`
+   - `1.1.0 → 1.1.1`：bug 修复（PATCH）
+   - `1.1.0 → 1.2.0`：新功能，向后兼容（MINOR）
+   - `1.1.0 → 2.0.0`：破坏性变更，如 CLI 参数改名/移除（MAJOR）
+4. **预发布版本**（可选）：`1.2.0a1`（alpha）、`1.2.0b1`（beta）、`1.2.0rc1`（release candidate）。
+   `pip install -U` 默认不安装预发布版，用户需显式指定 `pip install doclens==1.2.0a1`。
+
+### 版本号一致性
+
+pyproject.toml 的 `version` 与 git tag 必须一致：
+
+| pyproject.toml | git tag | PyPI 版本 |
+|----------------|---------|-----------|
+| `1.1.0` | `v1.1.0` | `1.1.0` |
+| `1.2.0` | `v1.2.0` | `1.2.0` |
+
+> 如果配了 `setuptools-scm`（从 git tag 自动派生版本号），可省去手动改
+> pyproject.toml，但首次发布用静态版本更简单可靠。
