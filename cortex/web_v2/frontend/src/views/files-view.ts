@@ -45,10 +45,11 @@ export class FilesView extends LitElement {
       grid-template-columns:
         var(--tree-pane-width, 240px)
         4px
-        1fr
+        minmax(0, 1fr)
         4px
         var(--preview-pane-width, 320px);
       min-height: 0;
+      min-width: 0;
     }
     .splitter {
       cursor: col-resize;
@@ -180,7 +181,7 @@ export class FilesView extends LitElement {
   }
 
   /** 左 splitter：拖动 file-tree 右边缘。dx 正 = 变宽。
-   *  动态上限 = 窗口宽 - preview 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
+   *  动态上限 = files-view 实际宽 - preview 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
   private _onTreeSplitterMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -190,8 +191,9 @@ export class FilesView extends LitElement {
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
-      const dynMax = typeof window !== "undefined"
-        ? window.innerWidth - this._previewPaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
+      const hostWidth = this.clientWidth;
+      const dynMax = hostWidth > 0
+        ? hostWidth - this._previewPaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
         : FilesView.TREE_PANE_WIDTH_MAX;
       const cap = Math.min(FilesView.TREE_PANE_WIDTH_MAX, dynMax);
       const w = Math.max(
@@ -215,7 +217,7 @@ export class FilesView extends LitElement {
   };
 
   /** 右 splitter：拖动 preview-col 左边缘。dx 负 = 变宽。
-   *  动态上限 = 窗口宽 - tree 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
+   *  动态上限 = files-view 实际宽 - tree 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
   private _onPreviewSplitterMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -225,8 +227,9 @@ export class FilesView extends LitElement {
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
-      const dynMax = typeof window !== "undefined"
-        ? window.innerWidth - this._treePaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
+      const hostWidth = this.clientWidth;
+      const dynMax = hostWidth > 0
+        ? hostWidth - this._treePaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
         : FilesView.PREVIEW_PANE_WIDTH_MAX;
       const cap = Math.min(FilesView.PREVIEW_PANE_WIDTH_MAX, dynMax);
       const w = Math.max(
