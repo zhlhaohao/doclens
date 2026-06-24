@@ -754,6 +754,16 @@ def _build_parser():
         prog="cortex",
         description="Cortex CLI — structure-aware document retrieval"
     )
+    # 全局参数：工作目录。必须在子命令之前传入，例如：
+    #   cortex -C /path/to/docs search "关键词"
+    #   cortex --workdir /path/to/docs gui
+    # os.chdir 在 main() 中、CortexConfig.load() 之前执行，
+    # 因此 search_path 默认值、.env 查找、索引/预览路径都会跟随此目录。
+    parser.add_argument(
+        "--workdir", "-C",
+        default=None, metavar="DIR",
+        help="工作目录（默认: 当前目录）。索引/搜索/预览都基于此目录",
+    )
     sub = parser.add_subparsers(dest="command")
 
     # cortex search <query>
@@ -1141,12 +1151,22 @@ def main():
     from cortex.tui.app import CortexApp
     from treesearch.treesearch import TreeSearch
 
-    # 配置日志 → .cortex/logs/debug_YYYYMMDD.log
-    from planify.core.logging_config import setup_logging
-    setup_logging()
-
     parser = _build_parser()
     args, unknown = parser.parse_known_args()
+
+    # 切换工作目录。必须在 setup_logging() 和 CortexConfig.load() 之前执行：
+    # 前者用相对路径 .cortex/logs 定位日志文件，后者用 os.getcwd() 定位
+    # search_path 默认值和本地 .env。顺序颠倒会导致日志/配置写到错误目录。
+    if args.workdir:
+        workdir = os.path.abspath(args.workdir)
+        if not os.path.isdir(workdir):
+            print(f"错误: 工作目录不存在: {workdir}", file=sys.stderr)
+            sys.exit(1)
+        os.chdir(workdir)
+
+    # 配置日志 → {workdir}/.cortex/logs/debug_YYYYMMDD.log
+    from planify.core.logging_config import setup_logging
+    setup_logging()
 
     if args.command is not None:
         config, idx = _init_components()
