@@ -214,4 +214,67 @@ describe("file-list", () => {
       if (el && el.parentNode) document.body.removeChild(el);
     }
   });
+
+  it("header-row has 4 col-resize handles (only adjustable columns)", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const handles = el.shadowRoot.querySelectorAll(".header-row .col-resize");
+    expect(handles.length).toBe(4);
+    document.body.removeChild(el);
+  });
+
+  it("col-resize mousedown + mousemove updates --col-N on host", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const handles = el.shadowRoot.querySelectorAll(".header-row .col-resize");
+    // handles[0] is name column (idx=2), default 240px, drag dx=60 → 300px
+    handles[0].dispatchEvent(
+      new MouseEvent("mousedown", { clientX: 100, bubbles: true }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 160 }));
+    document.dispatchEvent(new MouseEvent("mouseup"));
+    await el.updateComplete;
+    expect(el.style.getPropertyValue("--col-3")).toBe("300px");
+    document.body.removeChild(el);
+  });
+
+  it("col widths persist to localStorage after drag end", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const handles = el.shadowRoot.querySelectorAll(".header-row .col-resize");
+    // handles[1] is size column (idx=3), default 80px, drag dx=-50 → clamped to min 50
+    handles[1].dispatchEvent(
+      new MouseEvent("mousedown", { clientX: 200, bubbles: true }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 150 }));
+    document.dispatchEvent(new MouseEvent("mouseup"));
+    await el.updateComplete;
+    const saved = localStorage.getItem("cortex.files.colWidths");
+    expect(saved).toBeTruthy();
+    const arr = JSON.parse(saved!);
+    expect(arr[3]).toBe(50); // clamped to COL_MINS[3]=50
+    document.body.removeChild(el);
+    localStorage.removeItem("cortex.files.colWidths");
+  });
+
+  it("loads col widths from localStorage on connect", async () => {
+    localStorage.setItem(
+      "cortex.files.colWidths",
+      JSON.stringify([30, 30, 300, 100, 150, 80, 100]),
+    );
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(el.style.getPropertyValue("--col-3")).toBe("300px");
+    expect(el.style.getPropertyValue("--col-4")).toBe("100px");
+    document.body.removeChild(el);
+    localStorage.removeItem("cortex.files.colWidths");
+  });
 });
