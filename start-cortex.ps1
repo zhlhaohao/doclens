@@ -24,9 +24,8 @@ if ($venvPythonInScriptRoot) {
     $testWorkDir = Join-Path $parentDir "cortex\test_work_dir"
 }
 
-# 1. 进入到 test_work_dir 目录
-Set-Location $testWorkDir
-
-# 2. 用 cortex 代码 + 虚拟环境运行
+# 用 cortex 代码 + 虚拟环境运行。
+# -C 指定工作目录为 test_work_dir（替代旧的 Set-Location），不改变调用者的当前目录。
+# 若调用方传入自己的 -C，argparse 会取最后一个，从而覆盖默认的 testWorkDir。
 $env:PYTHONPATH = $cortexRoot
-& $venvPython -m cortex $args
+& $venvPython -m cortex -C $testWorkDir $args
