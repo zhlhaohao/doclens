@@ -11,6 +11,11 @@ export class HistoryList extends LitElement {
       gap: var(--cortex-space-2);
       padding: var(--cortex-space-3) var(--cortex-space-6);
       flex: 1;
+      /* min-height:0 允许在 flex column 容器内收缩到 content 以下，
+         配合 overflow-y:auto 实现内部滚动。缺少时 min-height 默认为
+         auto(=min-content)，历史会话多时会撑开父容器，把底部 tab-bar
+         推出视口。 */
+      min-height: 0;
       overflow-y: auto;
       border-bottom: 1px solid var(--cortex-border-muted);
     }

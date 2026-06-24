@@ -2465,6 +2465,11 @@ var Oi=Object.defineProperty;var Ii=(t,e,r)=>e in t?Oi(t,e,{enumerable:!0,config
       gap: var(--cortex-space-2);
       padding: var(--cortex-space-3) var(--cortex-space-6);
       flex: 1;
+      /* min-height:0 允许在 flex column 容器内收缩到 content 以下，
+         配合 overflow-y:auto 实现内部滚动。缺少时 min-height 默认为
+         auto(=min-content)，历史会话多时会撑开父容器，把底部 tab-bar
+         推出视口。 */
+      min-height: 0;
       overflow-y: auto;
       border-bottom: 1px solid var(--cortex-border-muted);
     }
@@ -2779,7 +2784,11 @@ ${r}</blockquote>
       line-height: 1.7;
       color: var(--cortex-text);
       overflow: auto;
-      height: 100%;
+      /* 作为 preview-pane (flex column) 的 flex item，必须用 flex 填充
+         而非 height: 100%。height: 100% + overflow: auto 在 iOS Safari
+         中会触发 flexbox 触摸滚动 bug，导致手指滑动无法滚动内容。 */
+      flex: 1 1 0;
+      min-height: 0;
     }
     :host h1, :host h2, :host h3 {
       margin: 1em 0 0.5em;
@@ -4767,6 +4776,11 @@ ${r}</blockquote>
     }
     .splitter:hover, .splitter:active { background: var(--cortex-primary); }
     .mobile-layout {
+      /* display:flex 让子元素(file-tree/file-list/.mobile-preview)的
+         flex:1 生效，提供明确高度链。缺少这个会导致 .mobile-preview
+         高度塌陷（因为 block 容器内 flex:1 无效），进而让 preview-pane
+         内的 md-viewer（flex:1 1 0）塌陷为 0，预览内容不可见。 */
+      display: flex; flex-direction: column;
       flex: 1; min-height: 0; position: relative;
     }
     .mobile-layout file-tree,
@@ -5051,6 +5065,7 @@ ${r}</blockquote>
       display: flex;
       flex-direction: column;
       min-width: 0;
+      min-height: 0;
       position: relative;
     }
     /* 移动端：纵向布局（activity-bar 隐藏，tab-bar 在底部） */
