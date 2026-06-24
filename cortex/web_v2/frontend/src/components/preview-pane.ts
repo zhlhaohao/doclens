@@ -39,6 +39,13 @@ export class PreviewPane extends LitElement {
       white-space: pre;
     }
     .highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+    .html-frame {
+      flex: 1;
+      border: 0;
+      width: 100%;
+      background: white;
+      min-height: 0;
+    }
     .empty {
       flex: 1;
       display: flex;
@@ -220,6 +227,26 @@ export class PreviewPane extends LitElement {
           .keyword=${this.keyword}
           .pages=${this.pages}
         ></md-viewer>
+      `;
+    }
+
+    // HTML：iframe srcdoc 渲染原生网页（脚本隔离，不可编辑）
+    if (this.language === "html") {
+      return html`
+        <input type="file" hidden @change=${this._onFileChange}>
+        ${this.noHeader ? null : html`
+          <div class="header">
+            <span class="path">${this.path}</span>
+            ${this._renderDownloadBtn()}
+            ${this._renderUploadBtn()}
+          </div>
+        `}
+        <iframe
+          class="html-frame"
+          srcdoc=${this._content}
+          sandbox="allow-scripts"
+          title="HTML 预览"
+        ></iframe>
       `;
     }
 
