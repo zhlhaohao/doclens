@@ -3011,6 +3011,21 @@ ${r}</blockquote>
           .keyword=${this.keyword}
           .pages=${this.pages}
         ></md-viewer>
+      `;if(this.language==="html")return c`
+        <input type="file" hidden @change=${this._onFileChange}>
+        ${this.noHeader?null:c`
+          <div class="header">
+            <span class="path">${this.path}</span>
+            ${this._renderDownloadBtn()}
+            ${this._renderUploadBtn()}
+          </div>
+        `}
+        <iframe
+          class="html-frame"
+          srcdoc=${this._content}
+          sandbox="allow-scripts"
+          title="HTML 预览"
+        ></iframe>
       `;const t=this._content.split(`
 `);return c`
       <input type="file" hidden @change=${this._onFileChange}>
@@ -3055,6 +3070,13 @@ ${r}</blockquote>
       white-space: pre;
     }
     .highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+    .html-frame {
+      flex: 1;
+      border: 0;
+      width: 100%;
+      background: white;
+      min-height: 0;
+    }
     .empty {
       flex: 1;
       display: flex;

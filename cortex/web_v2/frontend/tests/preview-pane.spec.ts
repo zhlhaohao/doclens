@@ -388,3 +388,74 @@ describe("<preview-pane> pages pass-through", () => {
     expect(mdv.pages).toBeNull();
   });
 });
+
+describe("<preview-pane> html branch", () => {
+  it("renders <iframe class='html-frame'> when language=html", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="html"
+        content="<h1>Hi</h1><p>Hello</p>"
+        path="page.html">
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const frame = el.shadowRoot!.querySelector("iframe.html-frame") as HTMLIFrameElement;
+    expect(frame).toBeTruthy();
+    expect(frame.getAttribute("srcdoc")).toBe("<h1>Hi</h1><p>Hello</p>");
+  });
+
+  it("uses sandbox=allow-scripts (no allow-same-origin)", async () => {
+    const el = await fixture(html`
+      <preview-pane language="html" content="<p>x</p>"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const frame = el.shadowRoot!.querySelector("iframe.html-frame") as HTMLIFrameElement;
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+  });
+
+  it("does NOT show edit button for html", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="html"
+        content="<p>x</p>"
+        writable>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".edit-btn")).toBeNull();
+  });
+
+  it("shows download + upload buttons for html", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="html"
+        content="<p>x</p>"
+        path="page.html">
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeTruthy();
+  });
+
+  it("hides header when noHeader=true for html", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        noHeader
+        language="html"
+        content="<p>x</p>">
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeTruthy();
+  });
+
+  it("does not render iframe for non-html languages", async () => {
+    const el = await fixture(html`
+      <preview-pane language="python" content="print('hi')"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeNull();
+  });
+});
