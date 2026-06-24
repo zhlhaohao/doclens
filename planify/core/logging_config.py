@@ -115,7 +115,7 @@ def _cortex_package_dir() -> Optional[Path]:
     """定位 cortex 包安装目录，用于拷贝模板文件。"""
     try:
         # planify/core/logging_config.py -> site-packages/cortex/
-        pkg = Path(__file__).parent.parent.parent / "cortex"
+        pkg = Path(__file__).parent.parent.parent / "doclens"
         if pkg.exists():
             return pkg
     except Exception:

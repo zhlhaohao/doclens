@@ -1,8 +1,8 @@
 """_extract_pages 单元测试。"""
 import pytest
 
-from cortex.web_v2.api.preview import _extract_pages
-from cortex.web_v2.models.preview import PageMarker
+from doclens.web_v2.api.preview import _extract_pages
+from doclens.web_v2.models.preview import PageMarker
 
 
 # ---------------------------------------------------------------------------

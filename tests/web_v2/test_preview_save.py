@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2 import deps
-from cortex.web_v2.api.preview import _compute_writable
-from cortex.web_v2.app import create_app
-from cortex.web_v2.models.preview import (
+from doclens.web_v2 import deps
+from doclens.web_v2.api.preview import _compute_writable
+from doclens.web_v2.app import create_app
+from doclens.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
     PreviewSaveResponse,

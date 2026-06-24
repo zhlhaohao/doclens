@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from cortex.web_v2.sessions_store import (
+from doclens.web_v2.sessions_store import (
     SessionItem,
     SessionSummary,
     SessionType,

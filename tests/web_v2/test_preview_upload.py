@@ -5,9 +5,9 @@ import hashlib
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2 import deps
-from cortex.web_v2.app import create_app
-from cortex.web_v2.api.preview import _parse_upload_filename
+from doclens.web_v2 import deps
+from doclens.web_v2.app import create_app
+from doclens.web_v2.api.preview import _parse_upload_filename
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ async def test_resolve_upload_target_matches_indexed_doc(temp_workdir, env_corte
     rel_path = "doc1.md"
     expected_hash = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
 
-    from cortex.web_v2.api.preview import _resolve_upload_target, _HashCollisionError
+    from doclens.web_v2.api.preview import _resolve_upload_target, _HashCollisionError
     result = _resolve_upload_target(idx, "doc1", expected_hash)
     assert result == rel_path
 
@@ -150,7 +150,7 @@ async def test_resolve_upload_target_no_match_returns_none(
     await asyncio.to_thread(_init_and_reindex)
     idx = deps.get_index_manager()
 
-    from cortex.web_v2.api.preview import _resolve_upload_target
+    from doclens.web_v2.api.preview import _resolve_upload_target
     assert _resolve_upload_target(idx, "doc1", "deadbe") is None
 
 
@@ -165,7 +165,7 @@ async def test_resolve_upload_target_stem_mismatch_returns_none(
     rel_path = "doc1.md"
     expected_hash = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
 
-    from cortex.web_v2.api.preview import _resolve_upload_target
+    from doclens.web_v2.api.preview import _resolve_upload_target
     # hash 对但 stem 错
     assert _resolve_upload_target(idx, "wrong_stem", expected_hash) is None
 
@@ -200,7 +200,7 @@ async def test_resolve_upload_target_collision_raises(
     rel_path = "doc1.md"
     expected_hash = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
 
-    from cortex.web_v2.api.preview import _resolve_upload_target, _HashCollisionError
+    from doclens.web_v2.api.preview import _resolve_upload_target, _HashCollisionError
     with pytest.raises(_HashCollisionError):
         _resolve_upload_target(idx, "doc1", expected_hash)
 
@@ -297,7 +297,7 @@ async def test_upload_too_large_returns_413(temp_workdir, env_cortex_config, res
     """超过大小上限 → 413。"""
     await asyncio.to_thread(_init_and_reindex)
     # monkeypatch 缩小上限避免造大文件
-    from cortex.web_v2.api import preview as preview_api_module
+    from doclens.web_v2.api import preview as preview_api_module
     monkeypatch.setattr(preview_api_module, "_MAX_UPLOAD_BYTES", 16)
 
     h = _hash_for("doc1.md")

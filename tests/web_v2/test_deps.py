@@ -1,5 +1,5 @@
 """deps.py 单例测试。"""
-from cortex.web_v2 import deps
+from doclens.web_v2 import deps
 
 
 def test_get_config_returns_singleton(env_cortex_config):

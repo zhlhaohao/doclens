@@ -2,7 +2,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2.app import create_app
+from doclens.web_v2.app import create_app
 
 
 @pytest.mark.asyncio

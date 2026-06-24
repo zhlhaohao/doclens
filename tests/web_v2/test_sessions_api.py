@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2.app import create_app
-from cortex.web_v2.sessions_store import SessionType, SessionsStore
+from doclens.web_v2.app import create_app
+from doclens.web_v2.sessions_store import SessionType, SessionsStore
 
 
 @pytest.fixture
 def patched_store(monkeypatch, tmp_path):
     """用临时 db 替换全局 store。"""
     store = SessionsStore(tmp_path / "sessions.db")
-    import cortex.web_v2.api.sessions as mod
+    import doclens.web_v2.api.sessions as mod
     monkeypatch.setattr(mod, "_get_store", lambda: store)
     return store
 
@@ -114,8 +114,8 @@ async def test_sessions_db_follows_workdir(temp_workdir, env_cortex_config, monk
     会话互相串扰。修复后应与 IndexManager.index_path 同目录。
     """
     import asyncio
-    from cortex.web_v2 import deps
-    import cortex.web_v2.api.sessions as sessions_mod
+    from doclens.web_v2 import deps
+    import doclens.web_v2.api.sessions as sessions_mod
     deps.reset_singletons()
     monkeypatch.setattr(sessions_mod, "_store", None)
 

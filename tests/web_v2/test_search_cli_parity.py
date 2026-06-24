@@ -9,10 +9,10 @@ import os
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from cortex.scoring import tokenize_query
-from cortex.scoring_pipeline import score_and_rank
-from cortex.web_v2 import deps
-from cortex.web_v2.app import create_app
+from doclens.scoring import tokenize_query
+from doclens.scoring_pipeline import score_and_rank
+from doclens.web_v2 import deps
+from doclens.web_v2.app import create_app
 
 
 @pytest.fixture

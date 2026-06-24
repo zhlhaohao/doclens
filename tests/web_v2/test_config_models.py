@@ -1,5 +1,5 @@
 """Tests for config request/response models."""
-from cortex.web_v2.models.config import (
+from doclens.web_v2.models.config import (
     ConfigScope,
     ConfigResponse,
     ConfigUpdateRequest,

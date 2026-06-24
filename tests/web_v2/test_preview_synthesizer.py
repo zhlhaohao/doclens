@@ -62,7 +62,7 @@ def test_load_document_by_source_path_empty_structure(fts_index):
     assert found.structure == []
 
 
-from cortex.web_v2.preview_synthesizer import render_tree_to_md
+from doclens.web_v2.preview_synthesizer import render_tree_to_md
 
 
 def test_render_pdf_simple_node():

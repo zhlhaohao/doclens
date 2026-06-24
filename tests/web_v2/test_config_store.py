@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from cortex.web_v2.config_store import (
+from doclens.web_v2.config_store import (
     resolve_env_path,
     read_env_values,
     write_env_values,

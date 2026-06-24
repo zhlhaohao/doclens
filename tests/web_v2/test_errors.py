@@ -3,7 +3,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from cortex.web_v2.api.errors import CortexAPIError, register_error_handlers
+from doclens.web_v2.api.errors import CortexAPIError, register_error_handlers
 
 
 def _build_app() -> FastAPI:
