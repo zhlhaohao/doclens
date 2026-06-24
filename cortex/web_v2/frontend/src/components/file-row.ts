@@ -9,7 +9,14 @@ export class FileRow extends LitElement {
     :host { display: block; }
     .row {
       display: grid;
-      grid-template-columns: 28px 28px 1fr 80px 140px 70px 80px;
+      grid-template-columns:
+        var(--col-1, 28px)
+        var(--col-2, 28px)
+        var(--col-3, 240px)
+        var(--col-4, 80px)
+        var(--col-5, 140px)
+        var(--col-6, 70px)
+        var(--col-7, 80px);
       gap: var(--cortex-space-2);
       align-items: center;
       padding: 6px var(--cortex-space-3);
@@ -22,13 +29,12 @@ export class FileRow extends LitElement {
     .checkbox { display: flex; align-items: center; justify-content: center; }
     .cell-icon { font-size: 14px; }
     .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .size, .time, .cell-type {
+    .size, .time, .cell-type, .cell-indexed {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
-      text-align: right;
+      text-align: center;
       font-variant-numeric: tabular-nums;
     }
-    .cell-type { text-align: left; }
     .badge {
       display: inline-block;
       padding: 1px 6px;
@@ -51,7 +57,15 @@ export class FileRow extends LitElement {
       font-family: var(--cortex-font-sans);
     }
     @media (max-width: 1023px) {
-      .row { grid-template-columns: 28px 28px 1fr 80px 140px 70px; }
+      .row {
+        grid-template-columns:
+          var(--col-1, 28px)
+          var(--col-2, 28px)
+          var(--col-3, 240px)
+          var(--col-4, 80px)
+          var(--col-5, 140px)
+          var(--col-6, 70px);
+      }
       .cell-type { display: none; }
     }
   `;
@@ -122,7 +136,7 @@ export class FileRow extends LitElement {
         <span class="name">${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
-        <span>${!this.entry.is_dir && this.entry.indexed ? html`<span class="badge">已索引</span>` : ""}</span>
+        <span class="cell-indexed">${!this.entry.is_dir && this.entry.indexed ? html`<span class="badge">已索引</span>` : ""}</span>
         <span class="cell-type">${getTypeLabel(this.entry)}</span>
       </div>
     `;

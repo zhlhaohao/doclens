@@ -20,12 +20,17 @@ export class FilesView extends LitElement {
   static readonly TREE_PANE_WIDTH_KEY = "cortex.files.treePaneWidth";
   static readonly TREE_PANE_WIDTH_DEFAULT = 240;
   static readonly TREE_PANE_WIDTH_MIN = 180;
-  static readonly TREE_PANE_WIDTH_MAX = 480;
+  static readonly TREE_PANE_WIDTH_MAX = 720;
 
   static readonly PREVIEW_PANE_WIDTH_KEY = "cortex.files.previewPaneWidth";
   static readonly PREVIEW_PANE_WIDTH_DEFAULT = 320;
   static readonly PREVIEW_PANE_WIDTH_MIN = 240;
-  static readonly PREVIEW_PANE_WIDTH_MAX = 800;
+  static readonly PREVIEW_PANE_WIDTH_MAX = 1600;
+
+  /** file-list（中间栏）最小宽度，用于动态限制 splitter 拖动 */
+  static readonly MIDDLE_PANE_MIN = 300;
+  /** 两个 splitter 的总宽度 */
+  static readonly SPLITTERS_TOTAL = 8;
 
   static styles = css`
     :host {
@@ -174,7 +179,8 @@ export class FilesView extends LitElement {
     }
   }
 
-  /** 左 splitter：拖动 file-tree 右边缘。dx 正 = 变宽。 */
+  /** 左 splitter：拖动 file-tree 右边缘。dx 正 = 变宽。
+   *  动态上限 = 窗口宽 - preview 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
   private _onTreeSplitterMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -184,9 +190,13 @@ export class FilesView extends LitElement {
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
+      const dynMax = typeof window !== "undefined"
+        ? window.innerWidth - this._previewPaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
+        : FilesView.TREE_PANE_WIDTH_MAX;
+      const cap = Math.min(FilesView.TREE_PANE_WIDTH_MAX, dynMax);
       const w = Math.max(
         FilesView.TREE_PANE_WIDTH_MIN,
-        Math.min(FilesView.TREE_PANE_WIDTH_MAX, startWidth + dx),
+        Math.min(cap, startWidth + dx),
       );
       if (w !== this._treePaneWidth) this._treePaneWidth = w;
     };
@@ -204,7 +214,8 @@ export class FilesView extends LitElement {
     document.addEventListener("mouseup", onUp);
   };
 
-  /** 右 splitter：拖动 preview-col 左边缘。dx 负 = 变宽。 */
+  /** 右 splitter：拖动 preview-col 左边缘。dx 负 = 变宽。
+   *  动态上限 = 窗口宽 - tree 宽 - 中间栏最小 - splitters，避免挤掉中间栏。 */
   private _onPreviewSplitterMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -214,9 +225,13 @@ export class FilesView extends LitElement {
 
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
+      const dynMax = typeof window !== "undefined"
+        ? window.innerWidth - this._treePaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
+        : FilesView.PREVIEW_PANE_WIDTH_MAX;
+      const cap = Math.min(FilesView.PREVIEW_PANE_WIDTH_MAX, dynMax);
       const w = Math.max(
         FilesView.PREVIEW_PANE_WIDTH_MIN,
-        Math.min(FilesView.PREVIEW_PANE_WIDTH_MAX, startWidth - dx),
+        Math.min(cap, startWidth - dx),
       );
       if (w !== this._previewPaneWidth) this._previewPaneWidth = w;
     };
