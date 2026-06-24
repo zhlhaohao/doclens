@@ -167,3 +167,119 @@ PyPI 页面渲染 `README.md`。需确保顶部包含：
 - **TestPyPI 包名**：TestPyPI 和 PyPI 是独立的命名空间，需分别验证
 - **treesearch 独立发布**：当前 treesearch 作为 doclens 内部包包含，不独立发布。
   若未来需要，再拆分 pyproject.toml
+
+## 后续发布步骤（代码重构已完成后的手动操作）
+
+> 以下步骤需要人工操作（账号注册、仓库创建、CI 配置），无法自动化。
+
+### 1. 创建 GitHub 公开仓库
+
+```bash
+# 在 GitHub 上创建空仓库 zhlhaohao/doclens（不勾选 README/LICENSE/.gitignore）
+git remote set-url origin https://github.com/zhlhaohao/doclens.git
+git push -u origin release
+# 或创建 main 分支并推送
+```
+
+### 2. README PyPI 渲染优化
+
+PyPI 页面会渲染 `README.md`。确保顶部包含：
+
+```markdown
+# doclens
+
+Structure-aware document retrieval — FTS5/BM25 keyword matching over document trees.
+
+## 安装
+
+    pip install doclens
+
+## 快速开始
+
+    doclens index          # 为当前目录建立索引
+    doclens search "关键词"  # 搜索
+    doclens gui            # 启动 Web UI（http://127.0.0.1:7860）
+    doclens -C /path/to/docs status   # 指定工作目录
+
+## 可选依赖
+
+    pip install "doclens[cortex]"     # FastAPI/uvicorn 等 Web 依赖（gui 模式必需）
+```
+
+### 3. TestPyPI 验证发布（首次必做）
+
+```bash
+# 注册 https://test.pypi.org/account/register/ 和 https://pypi.org/account/register/
+pip install build twine
+python -m build                    # 生成 dist/doclens-1.1.0-*.whl + .tar.gz
+
+# 先发 TestPyPI（用 TestPyPI API token 认证）
+twine upload --repository testpypi dist/*
+
+# 从 TestPyPI 安装验证（注意 --index-url）
+pip install --index-url https://test.pypi.org/simple/ doclens
+doclens --help                     # 确认 CLI 可用
+python -c "import doclens; print('ok')"  # 确认 import 可用
+```
+
+### 4. 正式 PyPI 发布
+
+```bash
+# 用 PyPI API token 认证（https://pypi.org/manage/account/token/）
+twine upload dist/*
+
+# 全世界用户即可安装
+pip install doclens
+```
+
+> PyPI 发布不可撤销（只能 yank/下架），务必先走 TestPyPI 验证。
+
+### 5. GitHub Actions 自动发布（tag 触发）
+
+创建 `.github/workflows/publish.yml`：
+
+```yaml
+name: Publish to PyPI
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install build twine
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+```
+
+在 GitHub 仓库 Settings → Secrets → Actions 添加 `PYPI_API_TOKEN`。
+
+后续发布只需：
+```bash
+git tag v1.2.3 && git push origin v1.2.3   # CI 自动构建+发布
+```
+
+### 6. UI 品牌替换（可选，不阻塞首次发布）
+
+前端代码中仍有 `Cortex` 品牌名和 `<cortex-app>` 自定义元素：
+
+- `doclens/web_v2/frontend/src/` 中的显示文本 "Cortex" → "Doclens"
+- `doclens/web_v2/frontend/src/components/app.ts` 的 `<cortex-app>` tag
+- `doclens/web_v2/frontend/index.html` 的 `<cortex-app>`
+
+这是纯前端改动，改完需 `npm run build` 重新生成 `static/`，再重新发布。
+
+### 检查清单
+
+- [ ] GitHub 仓库 `zhlhaohao/doclens` 已创建并推送
+- [ ] README 顶部有安装说明
+- [ ] TestPyPI 验证通过（install + import + CLI）
+- [ ] 正式 PyPI 发布成功（`pip install doclens` 全局可用）
+- [ ] GitHub Secrets 配置 `PYPI_API_TOKEN`
+- [ ] publish workflow 就绪（tag 触发）
+- [ ]（可选）UI 品牌从 Cortex → Doclens
