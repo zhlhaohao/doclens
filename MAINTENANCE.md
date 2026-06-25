@@ -3,14 +3,49 @@
 > 本文档面向项目维护者，涵盖首次发布、版本管理、日常发版流程。
 > 用户安装/使用文档见 [README.md](README.md)。
 
+## 环境准备（venv）
+
+**所有 `pip` / `python` / `twine` 命令都必须在项目虚拟环境中执行**，否则会装到
+全局 Python，构建产物也不对。
+
+```bash
+# 创建虚拟环境（仅首次需要）
+python -m venv .venv
+
+# 激活虚拟环境（每次开新终端都要执行）
+# Windows PowerShell 7:
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+source .venv/bin/activate
+
+# 安装项目 + 发布工具
+pip install -e ".[dev]"
+pip install build twine
+```
+
+激活后命令行提示符会出现 `(.venv)` 前缀，此后的所有 `pip install` / `python -m
+build` / `twine upload` 都会作用于虚拟环境。
+
+> 也可以不激活，直接用全路径：`.venv/Scripts/python.exe -m build`（Windows）
+> 或 `.venv/bin/python -m build`（macOS/Linux）。
+
 ## 首次发布
 
 ### 1. 创建 GitHub 公开仓库
 
 ```bash
 # 在 GitHub 上创建空仓库 zhlhaohao/doclens（不勾选 README/LICENSE/.gitignore）
-git remote set-url origin https://github.com/zhlhaohao/doclens.git
-git push -u origin release
+git remote add github https://github.com/zhlhaohao/doclens.git
+git tag v1.1.0
+
+# 确保本地main是最新稳定发布版
+git checkout main
+git pull origin main
+# 仅推送main分支到github，其他分支完全不处理
+git push github main
+
+
+
 ```
 
 ### 2. README PyPI 渲染优化
