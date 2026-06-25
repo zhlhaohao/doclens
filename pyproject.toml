@@ -41,6 +41,7 @@ dependencies = [
     "tqdm>=4.42",
     "ulid-py>=1.1",
     "uvicorn[standard]>=0.27.0",
+    "ripgrep-bin>=15.1.0",
     # Multi-format document parsers (PDF / DOCX / PPTX / Excel / HTML / code AST / gitignore)
     "beautifulsoup4>=4.12.0",
     "markitdown>=0.1.0",
@@ -62,6 +63,7 @@ dev = [
     "black>=24.1.1",
     "flake8>=7.0.0",
     "mypy>=1.8.0",
+    "playwright>=1.40.0",
 ]
 
 [project.urls]
