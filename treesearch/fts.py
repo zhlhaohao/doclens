@@ -1353,6 +1353,35 @@ class FTS5Index:
             source_type=row[4] or "",
         )
 
+    def load_document_by_source_path(self, source_path: str) -> Optional["Document"]:
+        """按 source_path 加载单个 Document（含 structure_json 反序列化）。
+
+        Args:
+            source_path: 文件绝对路径，必须与索引时存入 documents.source_path 完全一致。
+
+        Returns:
+            Document 对象；无匹配返回 None。
+        """
+        from .tree import Document  # 局部导入避免循环依赖
+
+        row = self._conn.execute(
+            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json "
+            "FROM documents WHERE source_path = ? LIMIT 1",
+            (source_path,),
+        ).fetchone()
+        if not row:
+            return None
+        doc_id, doc_name, doc_description, sp, source_type, structure_json = row
+        structure = json.loads(structure_json) if structure_json else []
+        return Document(
+            doc_id=doc_id,
+            doc_name=doc_name or "",
+            doc_description=doc_description or "",
+            structure=structure,
+            source_type=source_type or "",
+            metadata={"source_path": sp or ""},
+        )
+
     def load_all_documents(self) -> list:
         """Load all Documents stored in the DB.
 

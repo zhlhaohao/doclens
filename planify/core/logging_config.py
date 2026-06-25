@@ -115,7 +115,7 @@ def _cortex_package_dir() -> Optional[Path]:
     """定位 cortex 包安装目录，用于拷贝模板文件。"""
     try:
         # planify/core/logging_config.py -> site-packages/cortex/
-        pkg = Path(__file__).parent.parent.parent / "cortex"
+        pkg = Path(__file__).parent.parent.parent / "doclens"
         if pkg.exists():
             return pkg
     except Exception:
@@ -251,7 +251,7 @@ def setup_logging(
     )
 
     # Suppress noisy third-party loggers to WARNING (they spam DEBUG millions of lines)
-    for _name in ("pdfminer", "pdfplumber", "pymupdf", "fitz", "markitdown",
+    for _name in ("pdfminer", "pdfplumber", "markitdown",
                   "urllib3", "httpx", "httpcore", "asyncio", "filelock"):
         logging.getLogger(_name).setLevel(logging.WARNING)
 

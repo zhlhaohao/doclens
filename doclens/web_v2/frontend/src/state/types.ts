@@ -1,0 +1,114 @@
+/** 前端全局状态类型定义。 */
+
+export type ViewId = "search" | "chat" | "settings" | "files";
+export type FocusState = "initial" | "focus";
+
+export interface SearchResult {
+  path: string;
+  snippet: string;
+  score: number;
+  line: number | null;
+  highlights: [number, number][];
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface Session {
+  id: string;
+  type: "search" | "chat";
+  title: string;
+  preview: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface SearchViewState {
+  state: FocusState;
+  currentSession: Session | null;
+  query: string;
+  results: SearchResult[];
+  total: number;
+  source: "fts" | "like" | "ripgrep";
+  offset: number;
+  limit: number;
+}
+
+export interface ChatViewState {
+  state: FocusState;
+  currentSession: Session | null;
+  messages: ChatMessage[];
+  streaming: boolean;
+}
+
+export interface HistoryEntry {
+  session: Session;
+}
+
+export interface SystemStatus {
+  indexed_docs: number;
+  index_path: string;
+  total_size_bytes: number;
+  file_types: Record<string, number>;
+}
+
+/** Settings page */
+export type SettingsScope = "local" | "global";
+export type SettingsFieldValues = Record<string, string>;
+
+export interface SettingsViewState {
+  scope: SettingsScope;
+  values: SettingsFieldValues;
+  original: SettingsFieldValues;   // snapshot at load / last save
+  dirty: boolean;                   // recomputed on every action for convenience
+  exists: boolean;                  // does the target .env exist on disk?
+  saving: boolean;
+  error: string | null;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_at: string;
+  indexed: boolean;
+  writable: boolean;
+  has_child_dirs: boolean;
+}
+
+export interface FileAttrs extends FileEntry {
+  created_at: string;
+  extension: string | null;
+  is_protected: boolean;
+}
+
+export interface FileExplorerViewState {
+  treeCache: Record<string, FileEntry[]>;
+  expandedPaths: string[];
+  currentDir: string;
+  selectedPaths: string[];
+  lastSelectedAnchor: string | null;
+  detail: FileAttrs | null;
+  detailLoading: boolean;
+  listing: boolean;
+  mobilePane: "tree" | "list" | "detail";
+  pendingAction: "mkdir" | "delete" | "move" | "rename" | "upload" | null;
+  error: string | null;
+}
+
+export interface AppState {
+  view: ViewId;
+  search: SearchViewState;
+  chat: ChatViewState;
+  /** 详情推入栈（移动端整页推入） */
+  detailStack: SearchResult[];
+  /** 跨视图会话加载请求（search-view ↔ chat-view） */
+  pendingSession: Session | null;
+  status: SystemStatus | null;
+  error: string | null;
+  settings: SettingsViewState;
+  files: FileExplorerViewState;
+}

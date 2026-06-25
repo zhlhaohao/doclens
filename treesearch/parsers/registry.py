@@ -82,13 +82,13 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".xlsm": "excel",
     ".xltx": "excel",
     ".xltm": "excel",
-    # Documents (PyMuPDF supported formats, share 'pdf' source_type)
-    ".epub": "pdf",
-    ".xps": "pdf",
-    ".oxps": "pdf",
-    ".fb2": "pdf",
-    ".cbz": "pdf",
-    ".cbr": "pdf",
+    # Documents
+    ".epub": "epub",
+    ".xps": "xps",
+    ".oxps": "xps",
+    ".fb2": "fb2",
+    ".cbz": "cbz",
+    ".cbr": "cbr",
     # Plain text (fallback)
     ".txt": "text",
     ".log": "text",
@@ -267,19 +267,19 @@ def _register_builtin_parsers() -> None:
 
     ParserRegistry.register(".csv", _csv_parser)
 
-    # PDF and other PyMuPDF-supported document formats (optional dependency)
+    # PDF (optional dependency: pdfplumber)
     try:
-        from ..parsers.pdf_parser import pdf_to_tree, PYMUPDF_EXTENSIONS
+        from ..parsers.pdf_parser import pdf_to_tree, PDF_EXTENSIONS
 
         async def _pdf_parser(fp, **kw):
             return await pdf_to_tree(file_path=fp, **kw)
 
-        for ext in sorted(PYMUPDF_EXTENSIONS):
+        for ext in sorted(PDF_EXTENSIONS):
             ParserRegistry.register(ext, _pdf_parser)
-        logger.debug("PyMuPDF parser registered for %d extensions: %s",
-                      len(PYMUPDF_EXTENSIONS), ", ".join(sorted(PYMUPDF_EXTENSIONS)))
+        logger.debug("PDF parser registered for %d extensions: %s",
+                      len(PDF_EXTENSIONS), ", ".join(sorted(PDF_EXTENSIONS)))
     except ImportError:
-        logger.debug("Document parser not available (install 'pymupdf' for PDF/EPUB/XPS support)")
+        logger.debug("PDF parser not available (install 'pdfplumber' for PDF support)")
 
     # DOCX (optional dependency)
     try:

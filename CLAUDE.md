@@ -24,13 +24,13 @@ pip install -e ".[cortex]"
 
 ```bash
 # 必须直接使用 .venv 中的 python.exe
-.venv/Scripts/python.exe -m cortex ...
+.venv/Scripts/python.exe -m doclens ...
 
 # 如果在子目录（如 test_work_dir/）执行，用相对路径：
-../.venv/Scripts/python.exe -m cortex ...
+../.venv/Scripts/python.exe -m doclens ...
 ```
 
-> 人工在终端操作时，PowerShell 用 `& .venv\Scripts\Activate.ps1`，macOS/Linux 用 `source .venv/bin/activate`。
+> 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
 
 ## Cortex 技术栈
 
@@ -38,17 +38,22 @@ pip install -e ".[cortex]"
 | 技术 | 用途 |
 |------|------|
 | Textual | TUI 框架（终端用户界面） |
+| FastAPI | Web API 框架（Web UI 后端） |
+| Lit + Shoelace | 前端 SPA（Web Components） |
+| Vite | 前端构建工具 |
 | Pydantic + pydantic-settings | 配置管理（.env 环境变量） |
 | TreeSearch | 索引引擎（SQLite FTS5 + BM25） |
 | Watchdog | 文件监控（后台检测变化） |
 | Planify | AI Agent 框架（Anthropic API 集成） |
 | Rich | 终端格式化（语法高亮、链接） |
 | Jieba | 中日韩分词器 |
+| uvicorn | ASGI 服务器 |
+| SSE (sse-starlette) | AI 对话流式响应 |
 
 ### 依赖服务
 | 服务 | 用途 |
 |------|------|
-| SQLite | 存储 FTS5 索引 |
+| SQLite | FTS5 索引 + 历史会话存储（.cortex/sessions.db） |
 | Anthropic API | AI 对话（可替换本地模型） |
 
 ## Cortex 架构
@@ -107,9 +112,9 @@ IndexManager.subscribe("file_changed") → 增量 reindex
 
 ## 项目结构
 
-### cortex/ - 文档检索工具
+### doclens/ - 文档检索工具
 ```
-cortex/
+doclens/
 ├── agent_integration.py      # Agent 集成
 ├── config.py                # 配置管理 (Pydantic)
 ├── cortex_cli.py            # CLI 入口（TUI + 子命令）
@@ -129,6 +134,39 @@ cortex/
 │       ├── header_bar.py    # 顶部标题栏
 │       ├── input_box.py     # 输入框（带历史）
 │       └── status_bar.py    # 底部状态栏
+```
+
+### doclens/web_v2/ - Web UI（FastAPI + Lit PWA）
+```
+doclens/web_v2/
+├── app.py                    # FastAPI 应用入口（create_app / launch_app）
+├── deps.py                   # 依赖注入单例（IndexManager / CortexAgent / Config）
+├── api/                      # REST API 路由
+│   ├── search.py             # GET /api/search
+│   ├── preview.py            # GET /api/preview
+│   ├── sessions.py           # CRUD /api/sessions
+│   ├── status.py             # GET /api/status
+│   ├── chat.py               # POST /api/chat（SSE 流）
+│   ├── errors.py             # 全局错误处理器
+│   └── _chat_emitter.py      # Chat SSE 事件收集器
+├── models/                   # Pydantic 请求/响应模型
+├── sessions_store.py         # SQLite 会话持久化
+├── frontend/                 # Lit + Vite 前端工程
+│   ├── src/
+│   │   ├── app.ts            # <cortex-app> 顶层路由
+│   │   ├── state/            # 轻量 store（订阅模式）
+│   │   ├── api/              # 前端 API client（fetch + SSE）
+│   │   ├── components/       # 12 个 Lit Web Components
+│   │   ├── views/            # 3 个视图（search / chat / history）
+│   │   └── styles/           # CSS tokens + 响应式断点
+│   ├── tests/                # Vitest 单元测试 + Playwright E2E
+│   ├── public/               # PWA manifest + icons + sw.js
+│   └── vite.config.ts        # Vite 构建配置（输出到 ../static/）
+└── static/                   # Vite 构建产物（已 git 跟踪）
+    ├── index.html
+    ├── manifest.webmanifest
+    ├── sw.js
+    └── assets/               # 带 hash 的 JS/CSS + PWA icons
 ```
 
 ### treesearch/ - 结构感知检索核心库
@@ -176,24 +214,63 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
-## 正常使用
+## 启动脚本 start-cortex.ps1
 
-### TUI 界面（交互式）
+> **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
-```bash
-.venv/Scripts/python.exe -m cortex
+使用 `start-cortex.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
+
+**测试工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
+
+### 支持的场景
+
+| 场景 | 运行方式 | cortex 代码 | 虚拟环境 |
+|------|----------|-------------|----------|
+| 主分支 | `~/github/doclens/start-cortex.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
+| worktree | `~/github/cortex-feat-settings/start-cortex.ps1` | `$PSScriptRoot` | `../doclens/.venv` |
+
+### 三种运行模式
+
+**1. TUI 界面（交互式终端）**
+```powershell
+./start-cortex.ps1
+./start-cortex.ps1 tui
 ```
 
-## CORTEX-CLI 测试命令
+**2. Web UI（GUI PWA）**
+```powershell
+./start-cortex.ps1 gui
+```
+> 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：
+> ```
+> INFO: Uvicorn running on http://127.0.0.1:7860 (Press CTRL+C to quit)
+> ```
 
-> **测试工作目录必须为 `test_work_dir/`**，所有测试命令必须在该目录下执行。
-> 以下命令中 `python` 均指 `.venv/Scripts/python.exe`（在 `test_work_dir/` 下执行时为 `../.venv/Scripts/python.exe`）。
+**3. 命令行模式（离线命令）**
 
-| 命令 | 说明 | 参数 | 示例 |
-|------|------|------|------|
-| `python -m cortex search <query>` | 在已索引的文档中搜索关键词 | `<query>`: 搜索关键词，支持多个词 | `python -m cortex search python`<br>`python -m cortex search "token limit"` |
-| `python -m cortex search_v2 '<json>'` | 结构化搜索（AND/OR/NOT/PHRASE） | JSON 查询语法 | `python -m cortex search_v2 '{"type": "and", "terms": ["量子", "密码"]}'` |
-| `python -m cortex read_document --path '<path>'` | 文档阅读 | `--section`, `--start-line`, `--end-line` | `python -m cortex read_document --path '科技/doc.md' --section '摘要'` |
-| `python -m cortex ai <message>` | AI问答 | `<message>`: 发送的消息内容 | `python -m cortex ai 你好` |
-| `python -m cortex index [--force]` | 创建或增量同步更新文档索引 | `--force`, `-f`: 强制全量重建（删除旧索引） | `python -m cortex index`<br>`python -m cortex index --force` |
-| `python -m cortex status` | 显示系统状态 | 无 | `python -m cortex status` |
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `./start-cortex.ps1 search <关键词>` | 搜索文档 | `./start-cortex.ps1 search python`<br>`./start-cortex.ps1 search "量子 计算"` |
+| `./start-cortex.ps1 search_v2 '<json>'` | 结构化搜索 | `./start-cortex.ps1 search_v2 '{"type":"and","terms":["量子","密码"]}'` |
+| `./start-cortex.ps1 read_document --path <路径>` | 读取文档 | `./start-cortex.ps1 read_document --path '科技/doc.md'` |
+| `./start-cortex.ps1 ai <问题>` | AI 问答 | `./start-cortex.ps1 ai 你好` |
+| `./start-cortex.ps1 index` | 增量索引 | `./start-cortex.ps1 index` |
+| `./start-cortex.ps1 index --force` | 强制全量重建 | `./start-cortex.ps1 index --force` |
+| `./start-cortex.ps1 status` | 查看状态 | `./start-cortex.ps1 status` |
+
+### 前端开发模式
+
+修改前端代码后需要重新构建：
+```bash
+cd doclens/web_v2/frontend && npm install && npm run dev   # 开发模式
+cd doclens/web_v2/frontend && npm run build                 # 生产构建
+```
+
+### 备用方式（直接调用 Python）
+
+如果 `start-cortex.ps1` 不可用，可直接使用 Python：
+
+```bash
+# 在 test_work_dir 目录下执行
+../.venv/Scripts/python.exe -m doclens <命令>
+```
