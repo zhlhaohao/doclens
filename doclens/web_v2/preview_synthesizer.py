@@ -58,12 +58,44 @@ def _emit_node(out: list[str], node: dict, depth: int, source_type: str) -> None
     if source_type in _TABLE_SOURCE_TYPES:
         _emit_table_block(out, text, children, source_type)
     elif text:
-        out.append("")
-        out.extend(text.split("\n"))
-        out.append("")
+        body = _strip_leading_title(text, title)
+        if body:
+            out.append("")
+            out.extend(body.split("\n"))
+            out.append("")
 
     for child in children:
         _emit_node(out, child, depth + 1, source_type=source_type)
+
+
+# 标题尾部页码/行号：如 "Introduction 12" / "2.1 Foundation... 7"
+_TRAILING_NUM_RE = re.compile(r"\s+\d+\s*$")
+
+
+def _normalize_title(s: str) -> str:
+    """归一化标题用于相似性比较：
+    - 去除 markdown # 前缀
+    - strip 空白
+    - 去除尾随数字（页码/行号，如 "Introduction 12" → "Introduction"）
+    """
+    return _TRAILING_NUM_RE.sub("", s.strip().lstrip("#").strip())
+
+
+def _strip_leading_title(text: str, title: str) -> str:
+    """剥除 text 第一行如果它与 title 归一化后相等。
+
+    修复 indexer 把 heading 行同时塞进 node.text 首行导致的 title 重复显示：
+    原 text="2.1 Foundation...\\n\\n<正文>" + 渲染时已输出 "# 2.1 Foundation..."
+    → 剥掉首行后只保留 <正文>。
+
+    若 text 不以 title 开头则原样返回，避免误剥。
+    """
+    if not title.strip():
+        return text.strip()
+    lines = text.split("\n")
+    if not lines or _normalize_title(lines[0]) != _normalize_title(title):
+        return text.strip()
+    return "\n".join(lines[1:]).strip()
 
 
 def _emit_table_block(
