@@ -25,5 +25,6 @@ class SearchResponse(BaseModel):
     offset: int = 0  # 当前页起始 offset（响应回显）
     limit: int = 20  # 当前页大小
     query: str
+    query_words: list[str] = []  # 后端分词结果，供前端高亮使用
     elapsed_ms: int
     source: str = "fts"  # 值 ∈ {"fts", "like", "ripgrep"}

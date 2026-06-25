@@ -40,6 +40,7 @@ export const INITIAL_STATE: AppState = {
     state: "initial",
     currentSession: null,
     query: "",
+    queryWords: [],
     results: [],
     total: 0,
     source: "fts",
