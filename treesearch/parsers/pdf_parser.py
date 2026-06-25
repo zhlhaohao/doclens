@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description: Document parser for TreeSearch (PyMuPDF backend).
+@description: Document parser for TreeSearch (pdfplumber backend).
 
-Uses PyMuPDF (pymupdf) to extract text from PDF/XPS/EPUB/FB2/CBZ/CBR,
+Uses pdfplumber to extract text from PDF,
 then delegates to text_to_tree for structure detection.
 
 Pipeline:
-  1. PyMuPDF page text extraction with [PAGE N] markers
+  1. pdfplumber page text extraction with [PAGE N] markers
   2. PDF-specific heading normalization (merge split headings, e.g. "2.\nPRELIMINARIES")
   3. Fallback: if too few headings detected, use [PAGE N] as section boundaries
   4. text_to_tree for tree building
@@ -20,28 +20,28 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Backend detection flag
-_HAS_PYMUPDF = None
+_HAS_PDFPLUMBER = None
 
 
 def _check_backends():
-    """Lazy-check that PyMuPDF is available."""
-    global _HAS_PYMUPDF
-    if _HAS_PYMUPDF is None:
+    """Lazy-check that pdfplumber is available."""
+    global _HAS_PDFPLUMBER
+    if _HAS_PDFPLUMBER is None:
         try:
-            import pymupdf  # noqa: F401
-            _HAS_PYMUPDF = True
+            import pdfplumber  # noqa: F401
+            _HAS_PDFPLUMBER = True
         except ImportError:
-            _HAS_PYMUPDF = False
-    if not _HAS_PYMUPDF:
+            _HAS_PDFPLUMBER = False
+    if not _HAS_PDFPLUMBER:
         raise ImportError(
-            "Document parsing (PDF/EPUB/XPS/FB2/CBZ/CBR) requires PyMuPDF. "
-            "Install with: pip install pymupdf"
+            "Document parsing (PDF) requires pdfplumber. "
+            "Install with: pip install pdfplumber"
         )
 
 
-# All file extensions that PyMuPDF can open natively
-PYMUPDF_EXTENSIONS = {
-    ".pdf", ".xps", ".oxps", ".epub", ".fb2", ".cbz", ".cbr",
+# Supported PDF file extensions
+PDF_EXTENSIONS = {
+    ".pdf",
 }
 
 # Regex: a standalone section number like "2." or "3.1" or "3.1." on its own line
@@ -62,36 +62,24 @@ _ACADEMIC_HEADINGS = {
 }
 
 def extract_pdf_text(file_path: str) -> str:
-    """Extract text from a document file using PyMuPDF.
-
-    Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
+    """Extract text from a PDF file using pdfplumber.
 
     Args:
-        file_path: path to the document file.
+        file_path: path to the PDF file.
 
     Returns page-aware text with [PAGE N] markers.
     Returns empty string on failure.
     """
     _check_backends()
     try:
-        import pymupdf
-        import sys
-        import os
+        import pdfplumber
 
-        # Suppress MuPDF stderr warnings (FontBBox, etc.)
-        old_stderr = sys.stderr
-        sys.stderr = open(os.devnull, 'w')
-        try:
-            doc = pymupdf.open(file_path)
-            parts = []
-            for i, page in enumerate(doc):
-                text = page.get_text().strip()
+        parts = []
+        with pdfplumber.open(file_path) as doc:
+            for i, page in enumerate(doc.pages):
+                text = (page.extract_text() or "").strip()
                 if text:
                     parts.append(f"\n[PAGE {i + 1}]\n{text}")
-            doc.close()
-        finally:
-            sys.stderr.close()
-            sys.stderr = old_stderr
         return "\n".join(parts)
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
@@ -223,9 +211,7 @@ async def pdf_to_tree(
     if_add_node_id: bool = True,
     **kwargs,
 ) -> dict:
-    """Build a tree index from a document file using PyMuPDF.
-
-    Supports: PDF, XPS, OpenXPS, EPUB, FB2, CBZ, CBR.
+    """Build a tree index from a PDF file using pdfplumber.
 
     Pipeline:
       1. Extract page text with [PAGE N] markers

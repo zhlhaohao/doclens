@@ -748,6 +748,8 @@ async def _search_tree_mode(
                 "title": node.get("title", ""),
                 "score": node.get("score", 0),
                 "text": node.get("text", ""),
+                "line_start": node.get("line_start"),
+                "line_end": node.get("line_end"),
             })
     all_candidates.sort(key=lambda x: (-x["score"], x["node_id"]))
 
@@ -806,9 +808,10 @@ async def _search_flat_mode(
     fts_expression: Optional[str] = None,
 ) -> dict:
     """Flat search mode (original behavior): FTS5 scoring -> rank -> return."""
-    # When fts_expression is provided, use batch scoring so the expression applies
-    # to all documents in a single SQL call.
-    if fts_expression and hasattr(scorer, "score_nodes_batch"):
+    # 默认走 batch 路径：单次 SQL 覆盖所有文档，避免 N+1 查询。
+    # 此前仅在提供 fts_expression 时才走 batch，导致默认搜索对 N 个文档
+    # 发起 N 次 score_nodes 调用（每次 1 次 SQL），在大索引上产生 10x+ 退化。
+    if hasattr(scorer, "score_nodes_batch"):
         doc_ids = [doc.doc_id for doc in selected]
         batch = scorer.score_nodes_batch(query, doc_ids=doc_ids, fts_expression=fts_expression)
         doc_results = []
@@ -861,6 +864,8 @@ async def _search_flat_mode(
                 "title": node.get("title", ""),
                 "score": node.get("score", 0),
                 "text": node.get("text", ""),
+                "line_start": node.get("line_start"),
+                "line_end": node.get("line_end"),
             })
     all_candidates.sort(key=lambda x: (-x["score"], x["node_id"]))
 
