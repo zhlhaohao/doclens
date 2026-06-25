@@ -244,7 +244,7 @@ export class SearchView extends LitElement {
       this.previewError = null;
       this.previewPages = null;
       // 新搜索始终从第 0 页开始（重置 offset）
-      actions.setSearchState({ state: "focus", query, results: [], total: 0, offset: 0, limit: 20, source: "fts" });
+      actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
       try {
         const res = await searchApi({ query, offset: 0, limit: 20 });
@@ -252,6 +252,7 @@ export class SearchView extends LitElement {
         actions.setSearchState({
           state: "focus",
           query,
+          queryWords: res.query_words ?? [],
           results: res.results,
           total: res.total,
           offset: 0,
@@ -284,7 +285,7 @@ export class SearchView extends LitElement {
 
   private async _backToInitial() {
     await this._safeAction(() => {
-      actions.setSearchState({ state: "initial", currentSession: null, results: [], query: "" });
+      actions.setSearchState({ state: "initial", currentSession: null, results: [], query: "", queryWords: [] });
       this.localQuery = "";
       this._loadHistory();
     });
@@ -570,7 +571,7 @@ export class SearchView extends LitElement {
                 language=${this.previewLanguage}
                 content=${this.previewContent}
                 .line=${this.previewLine}
-                .keyword=${s.query}
+                .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
                 @dirty-change=${this._onPreviewDirty}
@@ -599,7 +600,7 @@ export class SearchView extends LitElement {
                 language=${this.previewLanguage}
                 content=${this.previewContent}
                 .line=${this.previewLine}
-                .keyword=${s.query}
+                .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
                 @dirty-change=${this._onPreviewDirty}

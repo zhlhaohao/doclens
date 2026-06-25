@@ -96,24 +96,27 @@ def _format_scored_results(
 
 def _do_search(
     idx: IndexManager, query: str, max_fetch: int = _MAX_FETCH
-) -> ScoreResult:
+) -> tuple[ScoreResult, list[str]]:
     """在子线程中执行同步搜索 + 评分管道。
 
     max_fetch 是 FTS 候选拉取上限（搜索池大小），与 endpoint 的 limit（页大小）解耦。
     TreeSearch.search 是同步的，不能在事件循环内调用。
+
+    返回 (ScoreResult, query_words)：query_words 是后端分词结果，
+    空分词时降级为按空白拆分，供前端做关键字高亮。
     """
     nodes, docs = idx.search(query, max_results=max_fetch)
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
-    return score_and_rank(nodes, docs, query, query_words, idx)
+    return score_and_rank(nodes, docs, query, query_words, idx), query_words
 
 
 @router.post("/search", response_model=SearchResponse)
 async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manager)):
     start = time.perf_counter()
     try:
-        result = await asyncio.to_thread(_do_search, idx, req.query)
+        result, query_words = await asyncio.to_thread(_do_search, idx, req.query)
     except Exception as e:
         logger.warning("score_and_rank failed: %s; returning empty result", e)
         return SearchResponse(
@@ -122,6 +125,7 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
             offset=0,
             limit=req.limit,
             query=req.query,
+            query_words=[],
             source="fts",
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
@@ -138,6 +142,7 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
         offset=safe_offset,
         limit=req.limit,
         query=req.query,
+        query_words=query_words,
         source=result.source,
         elapsed_ms=elapsed_ms,
     )

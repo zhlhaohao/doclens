@@ -7,6 +7,7 @@ export interface SearchResponse {
   offset: number;
   limit: number;
   query: string;
+  query_words: string[];
   elapsed_ms: number;
   source: "fts" | "like" | "ripgrep";
 }
