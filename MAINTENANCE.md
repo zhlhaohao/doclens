@@ -18,20 +18,14 @@ python -m venv .venv
 # macOS / Linux:
 source .venv/bin/activate
 
-# 安装项目 + 发布工具
-pip install -e ".[dev]"
+# 安装项目 + PYPI发布工具
+pip install -e "."
 pip install build twine
 ```
 
-激活后命令行提示符会出现 `(.venv)` 前缀，此后的所有 `pip install` / `python -m
-build` / `twine upload` 都会作用于虚拟环境。
-
-> 也可以不激活，直接用全路径：`.venv/Scripts/python.exe -m build`（Windows）
-> 或 `.venv/bin/python -m build`（macOS/Linux）。
-
 ## 首次发布
 
-### 1. 创建 GitHub 公开仓库
+### 1. 创建 GitHub 公开仓库（不是必须的）
 
 ```bash
 # 在 GitHub 上创建空仓库 zhlhaohao/doclens（不勾选 README/LICENSE/.gitignore）
@@ -44,33 +38,6 @@ git pull origin main
 # 仅推送main分支到github，其他分支完全不处理
 git push github main
 
-
-
-```
-
-### 2. README PyPI 渲染优化
-
-PyPI 页面会渲染 `README.md`。确保顶部包含：
-
-```markdown
-# doclens
-
-Structure-aware document retrieval — FTS5/BM25 keyword matching over document trees.
-
-## 安装
-
-    pip install doclens
-
-## 快速开始
-
-    doclens index          # 为当前目录建立索引
-    doclens search "关键词"  # 搜索
-    doclens gui            # 启动 Web UI（http://127.0.0.1:7860）
-    doclens -C /path/to/docs status   # 指定工作目录
-
-## 可选依赖
-
-    pip install "doclens[cortex]"     # FastAPI/uvicorn 等 Web 依赖（gui 模式必需）
 ```
 
 ### 3. 注册 PyPI 账号
@@ -82,51 +49,28 @@ Structure-aware document retrieval — FTS5/BM25 keyword matching over document 
 ### 4. TestPyPI 验证发布（首次必做）
 
 ```bash
-pip install build twine
-python -m build                    # 生成 dist/doclens-1.1.0-*.whl + .tar.gz
+.venv\Scripts\Activate.ps1
+# 重新生成 `static/`
+npm run build
+# 生成 dist/doclens-1.1.0-*.whl + .tar.gz
+python -m build
 
 twine upload --repository testpypi dist/*
 
 # 从 TestPyPI 安装验证
-pip install --index-url https://test.pypi.org/simple/ doclens
+pip install  -i https://pypi.org/simple/  --extra-index-url https://test.pypi.org/simple/  doclens
 doclens --help                     # 确认 CLI 可用
-python -c "import doclens; print('ok')"  # 确认 import 可用
 ```
 
 ### 5. 正式 PyPI 发布
 
 ```bash
+.venv\Scripts\Activate.ps1
+npm run build
+python -m build
 twine upload dist/*
 ```
 
-> PyPI 发布不可撤销（只能 yank/下架，不能删除版本号），务必先走 TestPyPI 验证。
-
-### 6. GitHub Actions 自动发布（tag 触发）
-
-创建 `.github/workflows/publish.yml`：
-
-```yaml
-name: Publish to PyPI
-on:
-  push:
-    tags: ["v*"]
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install build twine
-      - run: python -m build
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-```
-
-在 GitHub 仓库 **Settings → Secrets → Actions** 添加 `PYPI_API_TOKEN`。
-
-## 版本管理
 
 ### 发布新版本（日常发版流程）
 
@@ -137,25 +81,22 @@ jobs:
 #    version = "1.1.0"  →  "1.2.0"
 
 # 2. commit + tag
-git commit -am "bump version to 1.2.0"
+git commit -am "update version to 1.2.0"
 git tag v1.2.0
 
 # 3a. 手动发布
+rm dist/   删除dist目录下旧版本的 whl, tar.gz 文件
+npm run build
 python -m build && twine upload dist/*
-
-# 3b. 或 CI 自动发布（push tag 触发 GitHub Actions）
-git push origin v1.2.0
 ```
 
 ### 用户更新方式
 
 ```bash
 pip install --upgrade doclens        # 升级到最新版
-pip install -U "doclens[cortex]"     # 含 extras 升级
+pip install -U doclens               # 会查询 PyPI 上的最新版本号，比本地新则下载安装
 pip install doclens==1.2.0           # 指定版本降级/回滚
 ```
-
-`pip install -U` 会查询 PyPI 上的最新版本号，比本地新则下载安装。
 
 ### 版本号规则
 
@@ -192,12 +133,4 @@ pyproject.toml 的 `version` 与 git tag 必须一致：
 - [ ] publish workflow 就绪（tag 触发）
 - [ ]（可选）UI 品牌从 Cortex → Doclens
 
-## 附：UI 品牌替换（可选，不阻塞首次发布）
 
-前端代码中仍有 `Cortex` 品牌名和 `<cortex-app>` 自定义元素：
-
-- `doclens/web_v2/frontend/src/` 中的显示文本 "Cortex" → "Doclens"
-- `doclens/web_v2/frontend/src/components/app.ts` 的 `<cortex-app>` tag
-- `doclens/web_v2/frontend/index.html` 的 `<cortex-app>`
-
-这是纯前端改动，改完需 `npm run build` 重新生成 `static/`，再重新发布（递增版本号）。
