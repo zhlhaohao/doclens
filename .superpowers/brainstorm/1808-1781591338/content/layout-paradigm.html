@@ -1,0 +1,176 @@
+<h2>选择整体布局范式</h2>
+<p class="subtitle">同一套 SPA 在桌面端和移动端的布局/交互策略。点击卡片选择你偏好的方案。</p>
+
+<style>
+  .browser-frame {
+    background: #fff; border: 1px solid #d4d4d8; border-radius: 6px;
+    overflow: hidden; height: 130px; display: flex; flex-direction: column;
+    margin-bottom: 8px;
+  }
+  .browser-bar {
+    background: #f1f1f3; padding: 4px 8px; font-size: 9px; color: #71717a;
+    border-bottom: 1px solid #e4e4e7;
+  }
+  .browser-body { flex: 1; display: flex; padding: 6px; gap: 4px; min-height: 0; }
+  .phone-frame {
+    width: 70px; height: 130px; background: #fff; border: 1px solid #d4d4d8;
+    border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;
+    margin: 0 auto;
+  }
+  .phone-body { flex: 1; padding: 4px; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+
+  .hero-block { background: linear-gradient(135deg,#0d9488,#14b8a6); color:#fff; border-radius:4px; padding:8px; text-align:center; font-size:8px; flex:1; display:flex; align-items:center; justify-content:center; }
+  .col-list { flex: 1; background: #f4f4f5; border-radius: 3px; padding: 4px; font-size: 7px; color: #52525b; }
+  .col-detail { flex: 1.4; background: #ecfdf5; border: 1px solid #99f6e4; border-radius: 3px; padding: 4px; font-size: 7px; color: #115e59; }
+  .top-search { background: #fef3c7; border-radius: 3px; padding: 3px 5px; font-size: 7px; color: #92400e; margin-bottom: 3px; }
+  .activity-bar { width: 18px; background: #1f2937; color: #9ca3af; font-size: 6px; display: flex; flex-direction: column; align-items: center; padding: 4px 0; gap: 4px; border-radius: 3px; }
+  .activity-bar span { background: #374151; width: 12px; height: 8px; border-radius: 2px; display: flex; align-items: center; justify-content: center; }
+  .activity-bar span.active { background: #14b8a6; color: #fff; }
+  .main-area { flex: 1; display: flex; gap: 3px; }
+  .tab-bar { background: #f1f1f3; padding: 4px; display: flex; justify-content: space-around; font-size: 6px; border-top: 1px solid #e4e4e7; }
+  .tab-bar span.active { color: #0d9488; font-weight: bold; }
+  .stack-detail { background: #ecfdf5; border: 1px solid #14b8a6; border-radius: 3px; padding: 4px; font-size: 7px; color: #115e59; flex: 1; }
+  .back-arrow { font-size: 8px; color: #0d9488; margin-bottom: 2px; }
+
+  .card-image { display: flex; gap: 12px; align-items: flex-start; justify-content: center; padding: 8px 0; background: #f8f8f9; border-radius: 6px; }
+  .device-label { font-size: 8px; color: #71717a; text-align: center; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+
+<div class="cards">
+
+  <!-- Paradigm A -->
+  <div class="card" data-choice="adaptive-current" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — Cortex</div>
+          <div class="browser-body">
+            <div class="hero-block">Cortex 搜索</div>
+          </div>
+        </div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — 搜索后</div>
+          <div class="browser-body">
+            <div class="col-list">结果列表</div>
+            <div class="col-detail">文件预览</div>
+          </div>
+        </div>
+        <div class="device-label">桌面</div>
+      </div>
+      <div>
+        <div class="phone-frame">
+          <div class="browser-bar" style="padding:3px 4px">Mobile</div>
+          <div class="phone-body">
+            <div class="col-list" style="background:#f4f4f5">结果列表<br>↓<br>点卡片<br>整页推入<br>详情</div>
+          </div>
+        </div>
+        <div class="device-label">移动</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 保留现有交互（沉浸化 + 移动适配）</h3>
+      <p><strong>桌面：</strong>保留 Hero 空状态 + 紧凑双栏，仅去掉 padding、隐藏 Gradio chrome、fill viewport<br>
+      <strong>移动：</strong>单栏列表，点卡片整页推入详情（带返回按钮）</p>
+    </div>
+  </div>
+
+  <!-- Paradigm B -->
+  <div class="card" data-choice="activity-bar" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — 搜索</div>
+          <div class="browser-body">
+            <div class="activity-bar">
+              <span class="active">🔍</span>
+              <span>💬</span>
+              <span>🕘</span>
+            </div>
+            <div class="main-area">
+              <div class="col-list">搜索<br>结果</div>
+              <div class="col-detail">文件预览</div>
+            </div>
+          </div>
+        </div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — AI 对话</div>
+          <div class="browser-body">
+            <div class="activity-bar">
+              <span>🔍</span>
+              <span class="active">💬</span>
+              <span>🕘</span>
+            </div>
+            <div class="main-area">
+              <div class="col-detail" style="background:#eff6ff;border-color:#93c5fd;color:#1e40af">AI 对话</div>
+            </div>
+          </div>
+        </div>
+        <div class="device-label">桌面</div>
+      </div>
+      <div>
+        <div class="phone-frame">
+          <div class="browser-bar" style="padding:3px 4px">Mobile</div>
+          <div class="phone-body">
+            <div class="col-list" style="background:#f4f4f5">结果列表</div>
+          </div>
+          <div class="tab-bar">
+            <span class="active">🔍</span>
+            <span>💬</span>
+            <span>🕘</span>
+          </div>
+        </div>
+        <div class="device-label">移动</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Activity Bar 模式（VS Code 风格）</h3>
+      <p><strong>桌面：</strong>左侧 activity bar 切换搜索 / AI / 历史；主区域显示对应内容<br>
+      <strong>移动：</strong>底部 Tab Bar 切换模式，列表点卡片推入详情</p>
+    </div>
+  </div>
+
+  <!-- Paradigm C -->
+  <div class="card" data-choice="command-bar" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — 搜索</div>
+          <div class="browser-body" style="flex-direction:column">
+            <div class="top-search">⌘ 搜索框（顶部全宽）</div>
+            <div style="display:flex;gap:3px;flex:1;min-height:0">
+              <div class="col-list">结果列表</div>
+              <div class="col-detail">文件预览</div>
+            </div>
+          </div>
+        </div>
+        <div class="browser-frame">
+          <div class="browser-bar">Desktop — 选中后</div>
+          <div class="browser-body" style="flex-direction:column">
+            <div class="top-search">⌘ 关键词</div>
+            <div style="display:flex;gap:3px;flex:1;min-height:0">
+              <div class="col-list">列表</div>
+              <div class="col-detail" style="background:#fff;border-color:#0d9488">详情（右滑抽屉）</div>
+            </div>
+          </div>
+        </div>
+        <div class="device-label">桌面</div>
+      </div>
+      <div>
+        <div class="phone-frame">
+          <div class="browser-bar" style="padding:3px 4px">Mobile</div>
+          <div class="phone-body">
+            <div class="top-search" style="margin-bottom:3px">⌘ 搜索</div>
+            <div class="col-list" style="background:#f4f4f5">列表</div>
+          </div>
+        </div>
+        <div class="device-label">移动</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Command Bar 模式（Linear/Raycast 风格）</h3>
+      <p><strong>桌面：</strong>顶部全宽搜索 command bar 常驻；结果 + 详情双栏<br>
+      <strong>移动：</strong>顶部搜索栏 + 单栏列表；点卡片推入详情</p>
+    </div>
+  </div>
+
+</div>

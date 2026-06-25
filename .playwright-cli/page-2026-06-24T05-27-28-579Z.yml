@@ -1,0 +1,120 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e15]:
+      - button "← 返回" [ref=e61] [cursor=pointer]
+      - generic [ref=e62]:
+        - generic [ref=e63]:
+          - button "↑" [ref=e64] [cursor=pointer]
+          - generic [ref=e65]: /健康/
+        - generic [ref=e66]:
+          - button "+ 新目录" [ref=e67] [cursor=pointer]
+          - button "⬆ 上传" [ref=e68] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e69]
+          - button "→ 移动" [disabled] [ref=e70]
+          - button "🗑 删除" [disabled] [ref=e71]
+        - generic [ref=e72]:
+          - checkbox [ref=e74]
+          - generic [ref=e76]: 名称
+          - generic [ref=e77]: 大小
+          - generic [ref=e78]: 修改
+        - generic [ref=e80]:
+          - generic [ref=e82] [cursor=pointer]:
+            - checkbox [ref=e84]
+            - generic [ref=e86]: H
+            - generic [ref=e87]: 2025年健康生活与科学养生指南.html
+            - generic [ref=e88]: 9.1 KB
+            - generic [ref=e89]: 2026/06/12 16:43
+          - generic [ref=e91] [cursor=pointer]:
+            - checkbox [ref=e93]
+            - generic [ref=e95]: M
+            - generic [ref=e96]: healthy_meal_prep.md
+            - generic [ref=e97]: 5.5 KB
+            - generic [ref=e98]: 2026/06/12 16:43
+            - generic [ref=e100]: 已索引
+          - generic [ref=e102] [cursor=pointer]:
+            - checkbox [ref=e104]
+            - generic [ref=e106]: M
+            - generic [ref=e107]: meditation_beginner.md
+            - generic [ref=e108]: 5.8 KB
+            - generic [ref=e109]: 2026/06/12 16:43
+            - generic [ref=e111]: 已索引
+          - generic [ref=e113] [cursor=pointer]:
+            - checkbox [ref=e115]
+            - generic [ref=e117]: M
+            - generic [ref=e118]: running_marathon_guide.md
+            - generic [ref=e119]: 6.4 KB
+            - generic [ref=e120]: 2026/06/12 16:43
+            - generic [ref=e122]: 已索引
+          - generic [ref=e124] [cursor=pointer]:
+            - checkbox [ref=e126]
+            - generic [ref=e128]: M
+            - generic [ref=e129]: stress_management_work.md
+            - generic [ref=e130]: 7.4 KB
+            - generic [ref=e131]: 2026/06/12 16:43
+            - generic [ref=e133]: 已索引
+          - generic [ref=e135] [cursor=pointer]:
+            - checkbox [ref=e137]
+            - generic [ref=e139]: M
+            - generic [ref=e140]: Z世代心理健康与保健品消费.md
+            - generic [ref=e141]: 3.5 KB
+            - generic [ref=e142]: 2026/06/12 16:43
+            - generic [ref=e144]: 已索引
+          - generic [ref=e146] [cursor=pointer]:
+            - checkbox [ref=e148]
+            - generic [ref=e150]: M
+            - generic [ref=e151]: 中医理疗养生传统智慧的现代应用.md
+            - generic [ref=e152]: 4.3 KB
+            - generic [ref=e153]: 2026/06/12 16:43
+            - generic [ref=e155]: 已索引
+          - generic [ref=e157] [cursor=pointer]:
+            - checkbox [ref=e159]
+            - generic [ref=e161]: M
+            - generic [ref=e162]: 体重管理年科学减重指南.md
+            - generic [ref=e163]: 3.5 KB
+            - generic [ref=e164]: 2026/06/12 16:43
+            - generic [ref=e166]: 已索引
+          - generic [ref=e168] [cursor=pointer]:
+            - checkbox [ref=e170]
+            - generic [ref=e172]: M
+            - generic [ref=e173]: 居家健身指南.md
+            - generic [ref=e174]: 4.5 KB
+            - generic [ref=e175]: 2026/06/12 16:43
+            - generic [ref=e177]: 已索引
+          - generic [ref=e179] [cursor=pointer]:
+            - checkbox [ref=e181]
+            - generic [ref=e183]: M
+            - generic [ref=e184]: 睡眠科学如何获得高质量睡眠.md
+            - generic [ref=e185]: 3.6 KB
+            - generic [ref=e186]: 2026/06/12 16:43
+            - generic [ref=e188]: 已索引
+          - generic [ref=e190] [cursor=pointer]:
+            - checkbox [ref=e192]
+            - generic [ref=e194]: M
+            - generic [ref=e195]: 肠道健康与益生菌科学指南.md
+            - generic [ref=e196]: 4.2 KB
+            - generic [ref=e197]: 2026/06/12 16:43
+            - generic [ref=e199]: 已索引
+          - generic [ref=e201] [cursor=pointer]:
+            - checkbox [ref=e203]
+            - generic [ref=e205]: H
+            - generic [ref=e206]: 营养素速查手册.html
+            - generic [ref=e207]: 14.7 KB
+            - generic [ref=e208]: 2026/06/12 16:43
+    - generic [ref=e18]:
+      - button "🔍 搜索" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 🔍
+        - generic [ref=e21]: 搜索
+      - button "💬 对话" [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: 💬
+        - generic [ref=e24]: 对话
+      - button "📁 文件" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 📁
+        - generic [ref=e27]: 文件

@@ -1,0 +1,834 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e45]:
+    - generic "工作记录" [ref=e46]:
+      - button "← 返回" [ref=e47] [cursor=pointer]
+      - generic [ref=e48]: 工作记录
+      - generic [ref=e49]: 273 条结果
+    - generic [ref=e50]:
+      - generic [ref=e52]:
+        - generic [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:89
+          - generic [ref=e55]: "### 错误处理 - 锁获取失败时记录 warning 并返回 `_NullLock()`（不阻塞程序启动） - 后续的 DB 写入可能冲突，但不会导致进程崩溃 - 这是 advisory lock，不影响其他进程正常读取"
+        - generic [ref=e56] [cursor=pointer]:
+          - generic [ref=e57]: CLAUDE.md:187
+          - generic [ref=e58]: "## CORTEX-CLI 测试命令 > **测试工作目录必须为 `test_work_dir/`**，所有测试命令必须在该目录下执行。 > 以下命令中 `python` 均指 `.venv/Scripts/python.exe`（"
+        - generic [ref=e59] [cursor=pointer]:
+          - generic [ref=e60]: planify/INTEGRATION.md:79
+          - generic [ref=e61]: "### 2.2 构建 Session 和 StreamingAgent 在 `backend/app/agent/chitchat.py`（或其他聊天逻辑文件）中： ```python import asyncio from pa"
+        - generic [ref=e62] [cursor=pointer]:
+          - generic [ref=e63]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:7
+          - generic [ref=e64]: "## 背景 当前 `/grep` 命令的工作流程： 1. `like_search` — 通过 FTS5 或 SQLite LIKE/REGEXP 在索引内容中搜索 2. 无结果时 → `rg_fallback_search` —"
+        - generic [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:134
+          - generic [ref=e67]: "### Task 2: 重写 `cortex/grep_tools.py` 调用统一搜索入口 **Files:** - Modify: `cortex/grep_tools.py` (全文件重写) - [ ] **Step 1:"
+        - generic [ref=e68] [cursor=pointer]:
+          - generic [ref=e69]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:23
+          - generic [ref=e70]: "### Task 1: 创建 `cortex/kb_tools.py` — 工具定义骨架 **Files:** - Create: `cortex/kb_tools.py` - [ ] **Step 1: 创建 kb_tools."
+        - generic [ref=e71] [cursor=pointer]:
+          - generic [ref=e72]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:13
+          - generic [ref=e73]: "## 布局 从上到下四层： ``` ┌─────────────────────────────────────────────┐ │ ① 标题栏：版本号 · 工作目录 · 当前模式 │ ├─────────────"
+        - generic [ref=e74] [cursor=pointer]:
+          - generic [ref=e75]: docs/superpowers/plans/2026-06-04-knowledge-base-citations.md:271
+          - generic [ref=e76]: "## Task 5: 手动集成验证 **目的**：通过 TUI 交互确认 LLM Agent 实际按规范输出引文。 - [ ] **Step 1: 启动 TUI 模式** ```bash cd test_work_dir ../"
+        - generic [ref=e77] [cursor=pointer]:
+          - generic [ref=e78]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:101
+          - generic [ref=e79]: "### 测试计划 1. 正常启动，验证 3 秒后后台增量检查执行 2. 启动前修改文件，验证增量索引捕获变更并在 StatusBar 显示 3. 启动前无文件变化，验证无任何状态提示 4. 验证与 FileWatcher 并行工作正"
+        - generic [ref=e80] [cursor=pointer]:
+          - generic [ref=e81]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:68
+          - generic [ref=e82]: "### 4.1 `search_kb` 工具 **描述**: 在知识库索引中搜索相关文档片段 **参数**: ```json { \"query\": \"string (required) - 搜索关键词，支持中英文混合\","
+        - generic [ref=e83] [cursor=pointer]:
+          - generic [ref=e84]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:133
+          - generic [ref=e85]: "### Task 3: 创建 GradioEventEmitter **Files:** - Create: `cortex/web/emitter.py` Gradio 的 `gr.Chatbot` 流式模式需要一个生成器函数逐"
+        - generic [ref=e86] [cursor=pointer]:
+          - generic [ref=e87]: samples/编程/Python数据科学与机器学习指南.md:244
+          - generic [ref=e88]: "## 八、项目实践建议 1. **从简单开始**：先理解数据，再建模 2. **重视数据清洗**：垃圾进，垃圾出 3. **可视化先行**：画图帮助理解数据分布和模式 4. **交叉验证**：不要只看训练集表现 5. **持续学习*"
+        - generic [ref=e89] [cursor=pointer]:
+          - generic [ref=e90]: samples/科技/AI辅助教育重塑学习方式.md:108
+          - generic [ref=e91]: "### 从知识传授者到学习引导者 AI正在改变教师的工作方式： **AI释放教师时间** - 自动批改作业：节省教师每周5-8小时 - 教案和课件自动生成 - 学生数据分析自动报告 - 常规问答由AI助教处理 **教师新的核心价值"
+        - generic [ref=e92] [cursor=pointer]:
+          - generic [ref=e93]: samples/科技/AI辅助教育重塑学习方式.md:108
+          - generic [ref=e94]: "### 从知识传授者到学习引导者 AI正在改变教师的工作方式： **AI释放教师时间** - 自动批改作业：节省教师每周5-8小时 - 教案和课件自动生成 - 学生数据分析自动报告 - 常规问答由AI助教处理 **教师新的核心价值"
+        - generic [ref=e95] [cursor=pointer]:
+          - generic [ref=e96]: docs/superpowers/plans/2026-05-28-grep-tool.md:327
+          - generic [ref=e97]: "### Task 5: 端到端验证 - [ ] **Step 1: 验证 grep tool 在测试工作目录中正常工作** Run: `cd /c/Users/lianghao/github/cortex/test_work_di"
+        - generic [ref=e98] [cursor=pointer]:
+          - generic [ref=e99]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:400
+          - generic [ref=e100]: "### Task 4: 创建四个 Widget 组件 **Files:** - Create: `cortex/tui/widgets/header_bar.py` - Create: `cortex/tui/widgets/con"
+        - generic [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]: README_ZH.md:303
+          - generic [ref=e103]: "## 工作原理 ``` 输入文档 (MD/TXT/Code/JSON/CSV/HTML/XML/PDF/DOCX) │ ▼ ┌──────────┐ │ Indexer │ Pars"
+        - generic [ref=e104] [cursor=pointer]:
+          - generic [ref=e105]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:3
+          - generic [ref=e106]: "## 概述 为 AI Agent 新增 `grep` tool，使用 ripgrep 在工作目录中搜索文件内容，支持正则表达式。作为独立工具注册，与 `search_kb`（索引搜索）各司其职。"
+        - generic [ref=e107] [cursor=pointer]:
+          - generic [ref=e108]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:257
+          - generic [ref=e109]: "### 2. 为什么事件 payload 包含 `timestamp`？ 便于调试和日志记录，也能支持按时间排序或去重。"
+        - generic [ref=e110] [cursor=pointer]:
+          - generic [ref=e111]: docs/superpowers/specs/2026-06-02-tui-ai-streaming-design.md:10
+          - generic [ref=e112]: "## 目标 - AI 文本回复实时流式显示到 ContentArea - 工具调用时在状态栏显示工具名摘要 - 工具结果折叠为一行摘要显示 - 保持 ESC 取消机制正常工作"
+        - generic [ref=e113] [cursor=pointer]:
+          - generic [ref=e114]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:13
+          - generic [ref=e115]: "## 方案 在进入 TUI 之前，在命令行层面对当前目录的索引进行检查： 1. 检查 `index.db` 文件是否存在，且 `documents` 表中至少有一条记录。 2. 若不存在，在命令行询问用户是否给当前目录创建索引。"
+        - generic [ref=e116] [cursor=pointer]:
+          - generic [ref=e117]: cortex/cortex_cli_readme.md:101
+          - generic [ref=e118]: "### 2. 中文搜索 ``` > 存款 ============================================================ 关键词: 存款 | 找到 5 个匹配 ============="
+        - generic [ref=e119] [cursor=pointer]:
+          - generic [ref=e120]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:22
+          - generic [ref=e121]: 1.3 Quantinuum Helios 量子计算机 2025年11月5日，Quantinuum宣布新型量子计算机 Helios 正式上市。Helios 代表了量子计算与 AI 深度融合的新阶段，其核心创新在于： 采用离子阷技术实现
+        - generic [ref=e122] [cursor=pointer]:
+          - generic [ref=e123]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:22
+          - generic [ref=e124]: 1.3 Quantinuum Helios 量子计算机 2025年11月5日，Quantinuum宣布新型量子计算机 Helios 正式上市。Helios 代表了量子计算与 AI 深度融合的新阶段，其核心创新在于： 采用离子阷技术实现
+        - generic [ref=e125] [cursor=pointer]:
+          - generic [ref=e126]: .claude/skills/cortex-test/skill.md:51
+          - generic [ref=e127]: "### WATCH 类：文件操作 → 索引同步 → 搜索验证 → 清理还原 WATCH 关键规则： - 文件变更后必须先 `../.venv/Scripts/python.exe -m cortex index` 再搜索 - 始终记"
+        - generic [ref=e128] [cursor=pointer]:
+          - generic [ref=e129]: cortex/test_results.md:1197
+          - generic [ref=e130]: "## SEARCH-012 同一文档多节点命中时的去重展示 **结论**: ✅ 通过 **测试问题**: 无 **输出响应内容**: ``` ========================================="
+        - generic [ref=e131] [cursor=pointer]:
+          - generic [ref=e132]: test_work_dir/生命科学/深海生物新物种发现.md:15
+          - generic [ref=e133]: "## 深渊带新纪录 在日本海沟8000米以下的深渊带（Hadopelagic zone），研究团队首次记录到了完整的动物生态系统。这一发现发表于《Nature Ecology & Evolution》，表明即使在海洋最深处，生命依然"
+        - generic [ref=e134] [cursor=pointer]:
+          - generic [ref=e135]: test_work_dir/生命科学/深海生物新物种发现.md:15
+          - generic [ref=e136]: "## 深渊带新纪录 在日本海沟8000米以下的深渊带（Hadopelagic zone），研究团队首次记录到了完整的动物生态系统。这一发现发表于《Nature Ecology & Evolution》，表明即使在海洋最深处，生命依然"
+        - generic [ref=e137] [cursor=pointer]:
+          - generic [ref=e138]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:72
+          - generic [ref=e139]: "## 睡眠卫生习惯 建立良好的睡眠卫生习惯是改善睡眠质量的基础： 1. 固定作息时间，周末也保持一致（偏差不超过30分钟） 2. 下午2点后避免摄入咖啡因（半衰期5-6小时） 3. 睡前3小时内不进行剧烈运动 4. 睡前避免大量进"
+        - generic [ref=e140] [cursor=pointer]:
+          - generic [ref=e141]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:72
+          - generic [ref=e142]: "## 睡眠卫生习惯 建立良好的睡眠卫生习惯是改善睡眠质量的基础： 1. 固定作息时间，周末也保持一致（偏差不超过30分钟） 2. 下午2点后避免摄入咖啡因（半衰期5-6小时） 3. 睡前3小时内不进行剧烈运动 4. 睡前避免大量进"
+        - generic [ref=e143] [cursor=pointer]:
+          - generic [ref=e144]: examples/README.md:5
+          - generic [ref=e145]: "## 目录结构 ``` examples/ ├── benchmark/ # Benchmark 评测套件 │ ├── qasper_benchmark.py # QASPER 学术"
+        - generic [ref=e146] [cursor=pointer]:
+          - generic [ref=e147]: test_work_dir/健康/体重管理年科学减重指南.md:88
+          - generic [ref=e148]: "## 心理调适 体重管理不仅是身体层面的挑战，更需要心理层面的调适。建议： - 设定合理的阶段性目标（每月减重2-4公斤） - 记录饮食和运动日志，提高自我觉察 - 不要因为一次放纵就放弃整体计划 - 寻求家人和朋友的支持和监督"
+        - generic [ref=e149] [cursor=pointer]:
+          - generic [ref=e150]: test_work_dir/健康/体重管理年科学减重指南.md:88
+          - generic [ref=e151]: "## 心理调适 体重管理不仅是身体层面的挑战，更需要心理层面的调适。建议： - 设定合理的阶段性目标（每月减重2-4公斤） - 记录饮食和运动日志，提高自我觉察 - 不要因为一次放纵就放弃整体计划 - 寻求家人和朋友的支持和监督"
+        - generic [ref=e152] [cursor=pointer]:
+          - generic [ref=e153]: samples/编程/Python数据科学与机器学习指南.md:244
+          - generic [ref=e154]: "## 八、项目实践建议 1. **从简单开始**：先理解数据，再建模 2. **重视数据清洗**：垃圾进，垃圾出 3. **可视化先行**：画图帮助理解数据分布和模式 4. **交叉验证**：不要只看训练集表现 5. **持续学习*"
+        - generic [ref=e155] [cursor=pointer]:
+          - generic [ref=e156]: examples/README.md:93
+          - generic [ref=e157]: "### 多用户模式 数据存储在 `.sessions/` 目录下，每个用户有独立的隔离空间： ``` project/ ├── .sessions/ │ ├── alice/ # 用户 alice 的"
+        - generic [ref=e158] [cursor=pointer]:
+          - generic [ref=e159]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:35
+          - generic [ref=e160]: "## 后量子密码学标准化 2024年NIST正式发布了后量子密码学标准后，2025年进入了过渡实施阶段。三项核心标准已获正式发布： 1. **ML-KEM（FIPS 203）**：基于格的密钥封装机制，用于密钥交换 2. **ML"
+        - generic [ref=e161] [cursor=pointer]:
+          - generic [ref=e162]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:35
+          - generic [ref=e163]: "## 后量子密码学标准化 2024年NIST正式发布了后量子密码学标准后，2025年进入了过渡实施阶段。三项核心标准已获正式发布： 1. **ML-KEM（FIPS 203）**：基于格的密钥封装机制，用于密钥交换 2. **ML"
+        - generic [ref=e164] [cursor=pointer]:
+          - generic [ref=e165]: study/grep-logic.md:92
+          - generic [ref=e166]: "## 1.3 词项提取算法 `_extract_terms()` 从正则表达式中提取独立词项，用于后续评分： ```mermaid flowchart TD INPUT([\"输入 pattern\"]) --> WALK[\""
+        - generic [ref=e167] [cursor=pointer]:
+          - generic [ref=e168]: cortex/test_task.md:335
+          - generic [ref=e169]: "## 五、结果记录规范"
+        - generic [ref=e170] [cursor=pointer]:
+          - generic [ref=e171]: docs/tree_search_experiments.md:1
+          - generic [ref=e172]: "# Tree Search 优化实验记录 > **日期**: 2026-03-22 > **目标**: 优化 TreeSearch 的 Tree 模式（Best-First Search）在多个 Benchmark 上的检索效果"
+        - generic [ref=e173] [cursor=pointer]:
+          - generic [ref=e174]: tests/test_report_0509_001.md:49
+          - generic [ref=e175]: "## 详细测试记录"
+        - generic [ref=e176] [cursor=pointer]:
+          - generic [ref=e177]: tests/test_report_0509_002.md:41
+          - generic [ref=e178]: "## 详细测试记录"
+        - generic [ref=e179] [cursor=pointer]:
+          - generic [ref=e180]: tests/test_report_0526_001.md:31
+          - generic [ref=e181]: "## 详细测试记录"
+        - generic [ref=e182] [cursor=pointer]:
+          - generic [ref=e183]: tests/test_report_template.md:56
+          - generic [ref=e184]: "## 详细测试记录"
+        - generic [ref=e185] [cursor=pointer]:
+          - generic [ref=e186]: .claude/skills/cortex-test/skill.md:74
+          - generic [ref=e187]: "## 关键路径 | 资源 | 路径 | |------|------| | 测试用例 | `tests/test_case.json` | | 报告模板 | `tests/test_report_template.md` | | 样本文件"
+        - generic [ref=e188] [cursor=pointer]:
+          - generic [ref=e189]: docs/superpowers/plans/2026-06-04-knowledge-base-citations.md:24
+          - generic [ref=e190]: "## Task 1: 确认 SKILL.md 现状 **Files:** - Read: `cortex/skills/knowledge_base/SKILL.md` - [ ] **Step 1: 读取并确认基线内容** 读取 `"
+        - generic [ref=e191] [cursor=pointer]:
+          - generic [ref=e192]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:275
+          - generic [ref=e193]: "## 扩展性 未来可订阅 `status` 事件的其他组件： - `ContentArea` - 可选地在界面上显示通知 - `ThinkingIndicator` - 可触发特定动画 - 日志系统 - 记录状态变化历史"
+        - generic [ref=e194] [cursor=pointer]:
+          - generic [ref=e195]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:121
+          - generic [ref=e196]: "## 与现有搜索工具的定位区别 | 工具 | 搜索范围 | 依赖索引 | 支持正则 | 用途 | |------|----------|----------|----------|------| | `search_kb` | 已索引文档"
+        - generic [ref=e197] [cursor=pointer]:
+          - generic [ref=e198]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:261
+          - generic [ref=e199]: "### 3. 为什么 file_change 事件包含 `files` 数组？ 虽然当前 UI 只显示前几个文件名，但保留完整列表便于： - 将来支持点击查看完整列表 - 日志记录完整变化 - 调试用途"
+        - generic [ref=e200] [cursor=pointer]:
+          - generic [ref=e201]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:103
+          - generic [ref=e202]: "## 测试场景 1. **单进程正常索引**：与现有行为一致 2. **Windows 双进程同时索引**：第二个进程应等待锁或跳过 3. **Unix 双进程同时索引**：已有 fcntl，不受影响 4. **锁文件不存在**：自动创建"
+        - generic [ref=e203] [cursor=pointer]:
+          - generic [ref=e204]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:65
+          - generic [ref=e205]: "### NIST标准化进程 美国国家标准与技术研究院（NIST）的后量子密码标准化工作历时8年，于2024年正式发布了第一批标准："
+        - generic [ref=e206] [cursor=pointer]:
+          - generic [ref=e207]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:65
+          - generic [ref=e208]: "### NIST标准化进程 美国国家标准与技术研究院（NIST）的后量子密码标准化工作历时8年，于2024年正式发布了第一批标准："
+        - generic [ref=e209] [cursor=pointer]:
+          - generic [ref=e210]: planify/SIMPLIFIED.md:143
+          - generic [ref=e211]: "### 问题：权限错误 - 确保工作目录有读写权限 - 检查磁盘空间是否足够"
+        - generic [ref=e212] [cursor=pointer]:
+          - generic [ref=e213]: samples/能源环境/气候变化与碳中和技术.md:3
+          - generic [ref=e214]: "## 全球气候现状 2024年成为有气象记录以来最热的一年，全球平均温度较工业化前水平（1850-1900年）升高了约1.55°C，首次突破了《巴黎协定》设定的1.5°C温控目标。这一里程碑事件使碳中和技术的部署更加紧迫。"
+        - generic [ref=e215] [cursor=pointer]:
+          - generic [ref=e216]: samples/能源环境/气候变化与碳中和技术.md:3
+          - generic [ref=e217]: "## 全球气候现状 2024年成为有气象记录以来最热的一年，全球平均温度较工业化前水平（1850-1900年）升高了约1.55°C，首次突破了《巴黎协定》设定的1.5°C温控目标。这一里程碑事件使碳中和技术的部署更加紧迫。"
+        - generic [ref=e218] [cursor=pointer]:
+          - generic [ref=e219]: test_work_dir/生命科学/地球已知最深动物生态系统.md:18
+          - generic [ref=e220]: "## 发现的物种组成 在8300-8500米深度范围内，研究团队记录到了以下动物类群："
+        - generic [ref=e221] [cursor=pointer]:
+          - generic [ref=e222]: test_work_dir/生命科学/地球已知最深动物生态系统.md:18
+          - generic [ref=e223]: "## 发现的物种组成 在8300-8500米深度范围内，研究团队记录到了以下动物类群："
+        - generic [ref=e224] [cursor=pointer]:
+          - generic [ref=e225]: planify/SIMPLIFIED.md:119
+          - generic [ref=e226]: "## 向后兼容性 旧代码仍然可以工作，但会收到迁移提示： ```python # 旧方式仍然有效，但会显示警告 session = create_session(\"alice\", config, \"session_id\") # 警告: c"
+        - generic [ref=e227] [cursor=pointer]:
+          - generic [ref=e228]: .claude/skills/cortex-test/skill.md:23
+          - generic [ref=e229]: "## 前置检查（每个用例前验证） 1. **Python 路径**：**Windows Git Bash 环境下 `python` 命令不可用**，必须使用绝对路径 `.venv/Scripts/python.exe` 2. **工作目录*"
+        - generic [ref=e230] [cursor=pointer]:
+          - generic [ref=e231]: examples/README.md:73
+          - generic [ref=e232]: "### 单用户模式 所有数据存储在当前工作目录： ``` your-project/ ├── .team/ # 团队配置和收件箱 │ ├── config.json │ └── inbox/ ├── .tasks"
+        - generic [ref=e233] [cursor=pointer]:
+          - generic [ref=e234]: docs/tree_search_experiments.md:207
+          - generic [ref=e235]: "## 5. 失败实验记录"
+        - generic [ref=e236] [cursor=pointer]:
+          - generic [ref=e237]: cortex/test_task.md:355
+          - generic [ref=e238]: "### 5.3 测试问题记录 - 无问题填 `无` - 有问题时必须描述: 现象是什么、与预期的偏差是什么、可能的原因 - 如果是异常，记录完整的 traceback"
+        - generic [ref=e239] [cursor=pointer]:
+          - generic [ref=e240]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:153
+          - generic [ref=e241]: "### 4.3 `read_document` 工具 **描述**: 读取知识库中某个文档的完整或部分内容，支持多种文件格式 **参数**: ```json { \"path\": \"string (required) - 文档路径（从搜索"
+        - generic [ref=e242] [cursor=pointer]:
+          - generic [ref=e243]: docs/superpowers/plans/2026-05-28-grep-tool.md:22
+          - generic [ref=e244]: "### Task 1: 创建 `grep_tools.py` — schema + 入口函数 **Files:** - Create: `cortex/grep_tools.py` - [ ] **Step 1: 创建文件，写入 schem"
+        - generic [ref=e245] [cursor=pointer]:
+          - generic [ref=e246]: README_ZH.md:285
+          - generic [ref=e247]: "## CLI ```bash # 默认模式：一条命令完成所有操作（懒索引 + 搜索） treesearch \"认证系统如何工作？\" src/ docs/ treesearch \"配置 Redis\" project/ # 带参数 treese"
+        - generic [ref=e248] [cursor=pointer]:
+          - generic [ref=e249]: examples/README.md:21
+          - generic [ref=e250]: "#### Unix/Linux/macOS (Git Bash) ```bash # cd 到你的工作目录 cd /path/to/your/project # 执行脚本（绝对路径） bash ~/github/learn-claude-c"
+        - generic [ref=e251] [cursor=pointer]:
+          - generic [ref=e252]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:22
+          - generic [ref=e253]: "### 架构流程 ``` 运行 cortex | v main() in cortex_cli.py | v 加载 CortexConfig，获取 index_path | v 检查 SQLit"
+        - generic [ref=e254] [cursor=pointer]:
+          - generic [ref=e255]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:7
+          - generic [ref=e256]: "## Tool Schema ```python GREP_TOOL = { \"name\": \"grep\", \"description\": ( \"在工作目录中使用正则表达式搜索文件内容。\" \"支"
+        - generic [ref=e257] [cursor=pointer]:
+          - generic [ref=e258]: README_ZH.md:236
+          - generic [ref=e259]: "## 功能特性 - **智能目录发现** — `ts.index(\"src/\")` 自动递归发现所有支持的文件；跳过 `.git`/`node_modules`/`__pycache__`；尊重 `.gitignore` - **FTS5 搜"
+        - generic [ref=e260] [cursor=pointer]:
+          - generic [ref=e261]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:57
+          - generic [ref=e262]: "### _handle_grep 流程 ``` 输入: pattern, glob?, case_sensitive=False, max_results=50 ↓ 1. rg_available() 检查，不可用返回提示 ↓ 2."
+        - generic [ref=e263] [cursor=pointer]:
+          - generic [ref=e264]: README_ZH.md:113
+          - generic [ref=e265]: "## 快速开始 ```python from treesearch import TreeSearch # 直接传入目录 —— 自动递归发现所有支持的文件 ts = TreeSearch(\"project_root/\", \"docs/\")"
+        - generic [ref=e266] [cursor=pointer]:
+          - generic [ref=e267]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:13
+          - generic [ref=e268]: "## File Structure | Action | File | Responsibility | |--------|------|----------------| | Create | `cortex/kb_tools.py` |"
+        - generic [ref=e269] [cursor=pointer]:
+          - generic [ref=e270]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:13
+          - generic [ref=e271]: "## File Structure | 文件 | 操作 | 职责 | |------|------|------| | `cortex/ripgrep.py` | 修改 | 新增 `GrepResult` + `execute_grep_se"
+        - generic [ref=e272] [cursor=pointer]:
+          - generic [ref=e273]: samples/编程/Python数据科学与机器学习指南.md:1
+          - generic [ref=e274]: "# Python 数据科学与机器学习实用指南"
+        - generic [ref=e275] [cursor=pointer]:
+          - generic [ref=e276]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:13
+          - generic [ref=e277]: "## 实现方案"
+        - generic [ref=e278] [cursor=pointer]:
+          - generic [ref=e279]: docs/superpowers/plans/2026-05-28-grep-tool.md:13
+          - generic [ref=e280]: "## File Structure | 文件 | 责任 | |------|------| | `cortex/grep_tools.py` | 新建。GREP_TOOL schema + `build_grep_tools()` 入口 + `"
+        - generic [ref=e281] [cursor=pointer]:
+          - generic [ref=e282]: samples/科技/AI辅助教育重塑学习方式.md:106
+          - generic [ref=e283]: "## AI对教师角色的影响"
+        - generic [ref=e284] [cursor=pointer]:
+          - generic [ref=e285]: samples/科技/AI辅助教育重塑学习方式.md:106
+          - generic [ref=e286]: "## AI对教师角色的影响"
+        - generic [ref=e287] [cursor=pointer]:
+          - generic [ref=e288]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:1
+          - generic [ref=e289]: "# grep 路径搜索功能设计"
+        - generic [ref=e290] [cursor=pointer]:
+          - generic [ref=e291]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:251
+          - generic [ref=e292]: "## 设计决策"
+        - generic [ref=e293] [cursor=pointer]:
+          - generic [ref=e294]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:1
+          - generic [ref=e295]: "# Grep Tool for AI Agent — Design Spec"
+        - generic [ref=e296] [cursor=pointer]:
+          - generic [ref=e297]: cortex/cortex_cli_readme.md:80
+          - generic [ref=e298]: "## 使用示例"
+        - generic [ref=e299] [cursor=pointer]:
+          - generic [ref=e300]: tests/test_report_0509_001.md:302
+          - generic [ref=e301]: "### READ-008: XLSX 表格读取 - **优先级**: P0 - **执行命令**: `python -m cortex read_document --path '经济/全球科技与健康数据.xlsx'` **输出结果**: ``` 文"
+        - generic [ref=e302] [cursor=pointer]:
+          - generic [ref=e303]: cortex/test_task.md:337
+          - generic [ref=e304]: "### 5.1 必须遵守 1. **输出响应内容不得删减** — 终端输出什么就记录什么，包括 ANSI 转义码 2. **不得意译** — 不能把 `[1;31m机器学习[0m` 改写为 \"机器学习(红色)\" 3. **每条结果用 `---` 分隔*"
+        - generic [ref=e305] [cursor=pointer]:
+          - generic [ref=e306]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:1
+          - generic [ref=e307]: "# 网络安全与AI防御：2025威胁态势"
+        - generic [ref=e308] [cursor=pointer]:
+          - generic [ref=e309]: samples/编程/Python数据科学与机器学习指南.md:1
+          - generic [ref=e310]: "# Python 数据科学与机器学习实用指南"
+        - generic [ref=e311] [cursor=pointer]:
+          - generic [ref=e312]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:12
+          - generic [ref=e313]: 一、量子计算最新进展
+        - generic [ref=e314] [cursor=pointer]:
+          - generic [ref=e315]: test_work_dir/健康/体重管理年科学减重指南.md:1
+          - generic [ref=e316]: "# 体重管理年：科学减重指南"
+        - generic [ref=e317] [cursor=pointer]:
+          - generic [ref=e318]: test_work_dir/健康/体重管理年科学减重指南.md:1
+          - generic [ref=e319]: "# 体重管理年：科学减重指南"
+        - generic [ref=e320] [cursor=pointer]:
+          - generic [ref=e321]: test_work_dir/生命科学/深海生物新物种发现.md:1
+          - generic [ref=e322]: "# 深海生物新物种发现"
+        - generic [ref=e323] [cursor=pointer]:
+          - generic [ref=e324]: examples/README.md:1
+          - generic [ref=e325]: "# TreeSearch Examples 本目录包含 TreeSearch 的使用示例和 benchmark 评测代码。"
+        - generic [ref=e326] [cursor=pointer]:
+          - generic [ref=e327]: examples/README.md:71
+          - generic [ref=e328]: "## 目录结构"
+        - generic [ref=e329] [cursor=pointer]:
+          - generic [ref=e330]: .claude/skills/cortex-test/skill.md:45
+          - generic [ref=e331]: "## 执行流程"
+        - generic [ref=e332] [cursor=pointer]:
+          - generic [ref=e333]: README_ZH.md:11
+          - generic [ref=e334]: "# TreeSearch: 结构感知的文档检索 [![PyPI version](https://badge.fury.io/py/pytreesearch.svg)](https://badge.fury.io/py/pytreesearch) [![Downl"
+        - generic [ref=e335] [cursor=pointer]:
+          - generic [ref=e336]: study/grep-logic.md:5
+          - generic [ref=e337]: "# 第一章 grep 管道 > CLI `cortex grep <pattern>`、TUI `/grep <pattern>` 和 Agent `grep` Tool 共享同一套搜索管道，基于 `ripgrep.py` 的 `execute_grep_sea"
+        - generic [ref=e338] [cursor=pointer]:
+          - generic [ref=e339]: docs/superpowers/plans/2026-05-28-grep-tool.md:1
+          - generic [ref=e340]: "# Grep Tool for AI Agent — Implementation Plan > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-devel"
+        - generic [ref=e341] [cursor=pointer]:
+          - generic [ref=e342]: test_work_dir/生命科学/地球已知最深动物生态系统.md:1
+          - generic [ref=e343]: "# 地球已知最深动物生态系统"
+        - generic [ref=e344] [cursor=pointer]:
+          - generic [ref=e345]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:57
+          - generic [ref=e346]: "## 后量子密码学（PQC）"
+        - generic [ref=e347] [cursor=pointer]:
+          - generic [ref=e348]: tests/test_report_template.md:1
+          - generic [ref=e349]: "# Cortex CLI E2E 测试报告 - **测试日期**: {YYYY-MM-DD} - **测试时间**: {HH:MM:SS} - **测试用例文件路径**: ---"
+        - generic [ref=e350] [cursor=pointer]:
+          - generic [ref=e351]: samples/能源环境/气候变化与碳中和技术.md:1
+          - generic [ref=e352]: "# 气候变化与碳中和技术"
+        - generic [ref=e353] [cursor=pointer]:
+          - generic [ref=e354]: docs/superpowers/plans/2026-05-28-grep-tool.md:338
+          - generic [ref=e355]: "# 测试 grep handler result = handlers['grep'](pattern='def ', glob='*.py', max_results=5) print(result[:500]) print('---') print('Tool n"
+        - generic [ref=e356] [cursor=pointer]:
+          - generic [ref=e357]: README_ZH.md:39
+          - generic [ref=e358]: "### Python CLI 适合已经在用 Python 环境，但更想直接在命令行里搜索文件、文档和代码库： ```bash pip install -U pytreesearch treesearch --help ``` 常见用法： ```bash tre"
+        - generic [ref=e359] [cursor=pointer]:
+          - generic [ref=e360]: docs/superpowers/plans/2026-05-28-grep-tool.md:114
+          - generic [ref=e361]: "### Task 2: 实现 `_read_matched_lines` 辅助函数 **Files:** - Modify: `cortex/grep_tools.py` 此函数负责从 `rg_search` 返回的 `{path: [line_nums]}` 中"
+        - generic [ref=e362] [cursor=pointer]:
+          - generic [ref=e363]: test_work_dir/生命科学/地球已知最深动物生态系统.md:1
+          - generic [ref=e364]: "# 地球已知最深动物生态系统"
+        - generic [ref=e365] [cursor=pointer]:
+          - generic [ref=e366]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:1
+          - generic [ref=e367]: "# Cortex TUI 交互式 CLI 升级设计"
+        - generic [ref=e368] [cursor=pointer]:
+          - generic [ref=e369]: docs/superpowers/plans/2026-06-04-knowledge-base-citations.md:1
+          - generic [ref=e370]: "# 知识库引文规范实现计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:e"
+        - generic [ref=e371] [cursor=pointer]:
+          - generic [ref=e372]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:1
+          - generic [ref=e373]: "# 网络安全与AI防御：2025威胁态势"
+        - generic [ref=e374] [cursor=pointer]:
+          - generic [ref=e375]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:12
+          - generic [ref=e376]: 一、量子计算最新进展
+        - generic [ref=e377] [cursor=pointer]:
+          - generic [ref=e378]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:1
+          - generic [ref=e379]: "# 睡眠科学：如何获得高质量睡眠"
+        - generic [ref=e380] [cursor=pointer]:
+          - generic [ref=e381]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:1
+          - generic [ref=e382]: "# 睡眠科学：如何获得高质量睡眠"
+        - generic [ref=e383] [cursor=pointer]:
+          - generic [ref=e384]: planify/INTEGRATION.md:47
+          - generic [ref=e385]: "## 2. SSE 流式对话"
+        - generic [ref=e386] [cursor=pointer]:
+          - generic [ref=e387]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:57
+          - generic [ref=e388]: "## 后量子密码学（PQC）"
+        - generic [ref=e389] [cursor=pointer]:
+          - generic [ref=e390]: tests/test_report_0509_002.md:1
+          - generic [ref=e391]: "# Cortex CLI E2E 测试报告 - **测试日期**: 2026-05-09 - **测试时间**: 15:31:00 - **测试用例文件**: test_case_v2.json - **测试范围**: QUERY 类（结构化搜索 search_v2） ---"
+        - generic [ref=e392] [cursor=pointer]:
+          - generic [ref=e393]: tests/test_report_0526_001.md:1
+          - generic [ref=e394]: "# Cortex CLI E2E 测试报告 - **测试日期**: 2026-05-26 - **测试时间**: 执行中 - **测试用例文件路径**: tests/test_case_kb.json ---"
+        - generic [ref=e395] [cursor=pointer]:
+          - generic [ref=e396]: test_work_dir/生命科学/深海生物新物种发现.md:1
+          - generic [ref=e397]: "# 深海生物新物种发现"
+        - generic [ref=e398] [cursor=pointer]:
+          - generic [ref=e399]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:13
+          - generic [ref=e400]: "## File Structure | 操作 | 文件 | 职责 | |------|------|------| | Create | `cortex/tui/__init__.py` | 包初始化 | | Create | `cortex/tui/theme.py` | To"
+        - generic [ref=e401] [cursor=pointer]:
+          - generic [ref=e402]: docs/superpowers/specs/2026-06-02-tui-ai-streaming-design.md:1
+          - generic [ref=e403]: "# TUI AI 流式输出设计"
+        - generic [ref=e404] [cursor=pointer]:
+          - generic [ref=e405]: CLAUDE.md:1
+          - generic [ref=e406]: "# Cortex CLAUDE.md Cortex — 结构感知文档检索工具"
+        - generic [ref=e407] [cursor=pointer]:
+          - generic [ref=e408]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:12
+          - generic [ref=e409]: "## 方案 在 `_on_index_loaded()` 完成索引加载后，延迟 3 秒触发一次后台增量索引检查，复用现有的 `trigger_background_reindex()` 机制。"
+        - generic [ref=e410] [cursor=pointer]:
+          - generic [ref=e411]: planify/SIMPLIFIED.md:136
+          - generic [ref=e412]: "## 故障排除"
+        - generic [ref=e413] [cursor=pointer]:
+          - generic [ref=e414]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:66
+          - generic [ref=e415]: "## 4. 工具详细规格"
+        - generic [ref=e416] [cursor=pointer]:
+          - generic [ref=e417]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:13
+          - generic [ref=e418]: "## File Structure | File | Responsibility | |------|---------------| | `cortex/web/__init__.py` | 包标识 | | `cortex/web/deps.py` | IndexManager /"
+        - generic [ref=e419] [cursor=pointer]:
+          - generic [ref=e420]: samples/能源环境/气候变化与碳中和技术.md:1
+          - generic [ref=e421]: "# 气候变化与碳中和技术"
+        - generic [ref=e422] [cursor=pointer]:
+          - generic [ref=e423]: cortex/test_results.md:1
+          - generic [ref=e424]: "# Cortex CLI 测试结果 > 测试日期: 2026-05-05 > 测试环境: Windows 10 Pro / Python 3.11.9 / Windows Terminal > 测试版本: main 分支 (commit: 40ad59c) ---"
+        - generic [ref=e425] [cursor=pointer]:
+          - generic [ref=e426]: .claude/skills/cortex-test/skill.md:6
+          - generic [ref=e427]: "# Cortex Test Runner 从测试用例文件读取测试用例并执行，结果写入 `tests/test_report_MMDD_NNN.md`（模板：`tests/test_report_template.md`）。 **测试用例文件**：参数可指定用例文件路径，未指定时默认使用"
+        - generic [ref=e428] [cursor=pointer]:
+          - generic [ref=e429]: docs/superpowers/plans/2026-05-28-grep-tool.md:187
+          - generic [ref=e430]: "### Task 3: 实现 `_handle_grep` handler **Files:** - Modify: `cortex/grep_tools.py` - [ ] **Step 1: 在 `_read_matched_lines` 之后添加 handler 函数** ```"
+        - generic [ref=e431] [cursor=pointer]:
+          - generic [ref=e432]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:1
+          - generic [ref=e433]: "# 文件变化状态栏通知 - 设计文档"
+        - generic [ref=e434] [cursor=pointer]:
+          - generic [ref=e435]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:1
+          - generic [ref=e436]: "# Windows 跨进程文件锁设计"
+        - generic [ref=e437] [cursor=pointer]:
+          - generic [ref=e438]: planify/SIMPLIFIED.md:1
+          - generic [ref=e439]: "# Planify 简化版使用指南"
+        - generic [ref=e440] [cursor=pointer]:
+          - generic [ref=e441]: cortex/test_task.md:384
+          - generic [ref=e442]: "### 6.2 索引状态管理 - 部分测试需要删除/损坏索引文件，测试后**必须恢复**原始索引 - 增量索引测试前先记录当前文档数，测试后验证数量一致 - `/index -f` 会重建索引，执行前确认不会影响其他测试的数据"
+        - generic [ref=e443] [cursor=pointer]:
+          - generic [ref=e444]: examples/README.md:19
+          - generic [ref=e445]: "### 单用户 CLI"
+        - generic [ref=e446] [cursor=pointer]:
+          - generic [ref=e447]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:44
+          - generic [ref=e448]: "## Handler 实现"
+        - generic [ref=e449] [cursor=pointer]:
+          - generic [ref=e450]: tests/test_report_0509_001.md:1
+          - generic [ref=e451]: "# Cortex CLI E2E 测试报告 - **测试日期**: 2026-05-09 - **测试时间**: 14:57 - 15:10 ---"
+        - generic [ref=e452] [cursor=pointer]:
+          - generic [ref=e453]: cortex/test_task.md:15
+          - generic [ref=e454]: "### 2.1 环境检查 ``` 1. 确认 Python venv 存在: E:\\github\\TreeSearch\\.venv\\Scripts\\python.exe 2. 确认 treesearch 包已安装: python -c \"import treesearch; print(treese"
+        - generic [ref=e455] [cursor=pointer]:
+          - generic [ref=e456]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:1
+          - generic [ref=e457]: "# 启动 TUI 前索引存在性检查与全量创建 **日期**: 2026-05-07 **状态**: Draft"
+        - generic [ref=e458] [cursor=pointer]:
+          - generic [ref=e459]: cortex/test_task.md:1
+          - generic [ref=e460]: "# Cortex CLI 测试任务书"
+        - generic [ref=e461] [cursor=pointer]:
+          - generic [ref=e462]: README_ZH.md:23
+          - generic [ref=e463]: "## 安装"
+        - generic [ref=e464] [cursor=pointer]:
+          - generic [ref=e465]: cortex/test_task.md:361
+          - generic [ref=e466]: "## 六、测试注意事项"
+        - generic [ref=e467] [cursor=pointer]:
+          - generic [ref=e468]: cortex/test_task.md:25
+          - generic [ref=e469]: "### 2.2 测试数据准备 测试工作目录为项目根目录下的 `test_work_dir/`。执行测试前，将 `samples/` 中的文件按主题分门别类拷贝到 `test_work_dir/` 的子目录下（最多两层）。 ``` test_work_dir/ ├── 科技/"
+        - generic [ref=e470] [cursor=pointer]:
+          - generic [ref=e471]: cortex/test_task.md:13
+          - generic [ref=e472]: "## 二、测试前准备"
+        - generic [ref=e473] [cursor=pointer]:
+          - generic [ref=e474]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:48
+          - generic [ref=e475]: 四、2026年全球经济形势
+        - generic [ref=e476] [cursor=pointer]:
+          - generic [ref=e477]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:48
+          - generic [ref=e478]: 四、2026年全球经济形势
+        - generic [ref=e479] [cursor=pointer]:
+          - generic [ref=e480]: planify/INTEGRATION.md:526
+          - generic [ref=e481]: "## 6. 完整示例"
+        - generic [ref=e482] [cursor=pointer]:
+          - generic [ref=e483]: docs/tree_search_experiments.md:30
+          - generic [ref=e484]: "## 2. 评测数据集"
+        - generic [ref=e485] [cursor=pointer]:
+          - generic [ref=e486]: cortex/cortex_cli_readme.md:226
+          - generic [ref=e487]: "## 依赖 - Python 3.7+"
+        - generic [ref=e488] [cursor=pointer]:
+          - generic [ref=e489]: examples/README.md:111
+          - generic [ref=e490]: "## CLI 命令 - `/compact` - 手动压缩对话上下文 - `/tasks` - 列出任务 - `/team` - 列出队友 - `/inbox` - 读取收件箱 - `/exit` - 退出 REPL"
+        - generic [ref=e491] [cursor=pointer]:
+          - generic [ref=e492]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:42
+          - generic [ref=e493]: "## 助眠营养素"
+        - generic [ref=e494] [cursor=pointer]:
+          - generic [ref=e495]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:42
+          - generic [ref=e496]: "## 助眠营养素"
+        - generic [ref=e497] [cursor=pointer]:
+          - generic [ref=e498]: planify/SIMPLIFIED.md:7
+          - generic [ref=e499]: "## 主要变化"
+        - generic [ref=e500] [cursor=pointer]:
+          - generic [ref=e501]: samples/科技/AI辅助教育重塑学习方式.md:17
+          - generic [ref=e502]: "## 自适应学习"
+        - generic [ref=e503] [cursor=pointer]:
+          - generic [ref=e504]: samples/科技/AI辅助教育重塑学习方式.md:17
+          - generic [ref=e505]: "## 自适应学习"
+        - generic [ref=e506] [cursor=pointer]:
+          - generic [ref=e507]: examples/README.md:127
+          - generic [ref=e508]: "## 架构说明"
+        - generic [ref=e509] [cursor=pointer]:
+          - generic [ref=e510]: docs/tree_search_experiments.md:263
+          - generic [ref=e511]: "## 6. 最终结果"
+        - generic [ref=e512] [cursor=pointer]:
+          - generic [ref=e513]: planify/SIMPLIFIED.md:14
+          - generic [ref=e514]: "### 目录结构变化"
+        - generic [ref=e515] [cursor=pointer]:
+          - generic [ref=e516]: samples/编程/Python数据科学与机器学习指南.md:184
+          - generic [ref=e517]: "## 六、模型评估与调优"
+        - generic [ref=e518] [cursor=pointer]:
+          - generic [ref=e519]: samples/编程/Python数据科学与机器学习指南.md:184
+          - generic [ref=e520]: "## 六、模型评估与调优"
+        - generic [ref=e521] [cursor=pointer]:
+          - generic [ref=e522]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:15
+          - generic [ref=e523]: "## 设计"
+        - generic [ref=e524] [cursor=pointer]:
+          - generic [ref=e525]: examples/README.md:45
+          - generic [ref=e526]: "## 环境配置 在当前工作目录创建 `.env` 文件，配置以下变量："
+        - generic [ref=e527] [cursor=pointer]:
+          - generic [ref=e528]: study/grep-logic.md:221
+          - generic [ref=e529]: "# 第二章 Agent 输出格式 > `grep_tools.py` 的 `_format_agent_output()` 生成 XML 结构化文本，格式与 `search_kb` 的 `_format_kb_results()` 对齐。 ---"
+        - generic [ref=e530] [cursor=pointer]:
+          - generic [ref=e531]: examples/README.md:17
+          - generic [ref=e532]: "## 快速开始"
+        - generic [ref=e533] [cursor=pointer]:
+          - generic [ref=e534]: planify/INTEGRATION.md:446
+          - generic [ref=e535]: "## 4. 注册外部工具"
+        - generic [ref=e536] [cursor=pointer]:
+          - generic [ref=e537]: study/grep-logic.md:301
+          - generic [ref=e538]: "## 3.1 数据结构"
+        - generic [ref=e539] [cursor=pointer]:
+          - generic [ref=e540]: cortex/cortex_cli_readme.md:1
+          - generic [ref=e541]: "# Cortex CLI 使用手册"
+        - generic [ref=e542] [cursor=pointer]:
+          - generic [ref=e543]: study/grep-logic.md:325
+          - generic [ref=e544]: "## 3.2 搜索后端函数"
+        - generic [ref=e545] [cursor=pointer]:
+          - generic [ref=e546]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:3
+          - generic [ref=e547]: "## 量子威胁 量子计算机对现有密码体系构成根本性威胁。Shor算法可以在多项式时间内分解大整数和计算离散对数，这意味着广泛使用的RSA、ECC（椭圆曲线密码）和DH（Diffie-Hellman）密钥交换将不再安全。"
+        - generic [ref=e548] [cursor=pointer]:
+          - generic [ref=e549]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:3
+          - generic [ref=e550]: "## 量子威胁 量子计算机对现有密码体系构成根本性威胁。Shor算法可以在多项式时间内分解大整数和计算离散对数，这意味着广泛使用的RSA、ECC（椭圆曲线密码）和DH（Diffie-Hellman）密钥交换将不再安全。"
+        - generic [ref=e551] [cursor=pointer]:
+          - generic [ref=e552]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:1
+          - generic [ref=e553]: "# Cortex 知识库 AI Agent 实现计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan t"
+        - generic [ref=e554] [cursor=pointer]:
+          - generic [ref=e555]: samples/能源环境/气候变化与碳中和技术.md:63
+          - generic [ref=e556]: "## 绿色氢能"
+        - generic [ref=e557] [cursor=pointer]:
+          - generic [ref=e558]: samples/能源环境/气候变化与碳中和技术.md:63
+          - generic [ref=e559]: "## 绿色氢能"
+        - generic [ref=e560] [cursor=pointer]:
+          - generic [ref=e561]: docs/tree_search_experiments.md:61
+          - generic [ref=e562]: "## 4. 优化实验"
+        - generic [ref=e563] [cursor=pointer]:
+          - generic [ref=e564]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:113
+          - generic [ref=e565]: "## 数据流"
+        - generic [ref=e566] [cursor=pointer]:
+          - generic [ref=e567]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:52
+          - generic [ref=e568]: "## 核心组件"
+        - generic [ref=e569] [cursor=pointer]:
+          - generic [ref=e570]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:226
+          - generic [ref=e571]: "## 5. Skill 设计"
+        - generic [ref=e572] [cursor=pointer]:
+          - generic [ref=e573]: cortex/cortex_cli_readme.md:172
+          - generic [ref=e574]: "## 搜索结果说明"
+        - generic [ref=e575] [cursor=pointer]:
+          - generic [ref=e576]: samples/科技/AI辅助教育重塑学习方式.md:133
+          - generic [ref=e577]: "## 未来展望"
+        - generic [ref=e578] [cursor=pointer]:
+          - generic [ref=e579]: samples/科技/AI辅助教育重塑学习方式.md:133
+          - generic [ref=e580]: "## 未来展望"
+        - generic [ref=e582] [cursor=pointer]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:219
+        - generic [ref=e583] [cursor=pointer]:
+          - generic [ref=e584]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:107
+          - generic [ref=e585]: "## 迁移策略"
+        - generic [ref=e586] [cursor=pointer]:
+          - generic [ref=e587]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:107
+          - generic [ref=e588]: "## 迁移策略"
+        - generic [ref=e589] [cursor=pointer]:
+          - generic [ref=e590]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:1
+          - generic [ref=e591]: "# 量子密码学：从QKD到后量子密码学"
+        - generic [ref=e592] [cursor=pointer]:
+          - generic [ref=e593]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:1
+          - generic [ref=e594]: "# 量子密码学：从QKD到后量子密码学"
+        - generic [ref=e595] [cursor=pointer]:
+          - generic [ref=e596]: README_ZH.md:203
+          - generic [ref=e597]: "## 为什么选择 TreeSearch？ **一句话**：保留文档结构的智能检索库，避免传统 RAG 把文档切碎导致的上下文丢失。 **核心差异**： ``` 传统 RAG 方案： 文档 → 切成 chunks → 向量化 → 检索 → ❌ 上下文断裂 TreeSearch： 文档 → 解析为树结构（章节层级）→ 结构化检索 → ✅ 保留完整语义 ```"
+        - generic [ref=e598] [cursor=pointer]:
+          - generic [ref=e599]: cortex/cortex_cli_readme.md:255
+          - generic [ref=e600]: "## 常见问题"
+        - generic [ref=e601] [cursor=pointer]:
+          - generic [ref=e602]: samples/科技/AI辅助教育重塑学习方式.md:1
+          - generic [ref=e603]: "# AI辅助教育：重塑学习方式"
+        - generic [ref=e604] [cursor=pointer]:
+          - generic [ref=e605]: samples/科技/AI辅助教育重塑学习方式.md:1
+          - generic [ref=e606]: "# AI辅助教育：重塑学习方式"
+        - generic [ref=e607] [cursor=pointer]:
+          - generic [ref=e608]: CLAUDE.md:54
+          - generic [ref=e609]: "## Cortex 架构"
+        - generic [ref=e610] [cursor=pointer]:
+          - generic [ref=e611]: test_work_dir/生命科学/地球已知最深动物生态系统.md:32
+          - generic [ref=e612]: "## 极端环境生存策略 这些生物在极端条件下展现出惊人的适应能力："
+        - generic [ref=e613] [cursor=pointer]:
+          - generic [ref=e614]: test_work_dir/生命科学/地球已知最深动物生态系统.md:32
+          - generic [ref=e615]: "## 极端环境生存策略 这些生物在极端条件下展现出惊人的适应能力："
+        - generic [ref=e616] [cursor=pointer]:
+          - generic [ref=e617]: examples/README.md:25
+          - generic [ref=e618]: "## 快速开始"
+        - generic [ref=e619] [cursor=pointer]:
+          - generic [ref=e620]: samples/编程/Python数据科学与机器学习指南.md:64
+          - generic [ref=e621]: "## 三、Pandas 数据处理"
+        - generic [ref=e622] [cursor=pointer]:
+          - generic [ref=e623]: samples/编程/Python数据科学与机器学习指南.md:64
+          - generic [ref=e624]: "## 三、Pandas 数据处理"
+        - generic [ref=e625] [cursor=pointer]:
+          - generic [ref=e626]: samples/科技/AI辅助教育重塑学习方式.md:71
+          - generic [ref=e627]: "## 教育公平"
+        - generic [ref=e628] [cursor=pointer]:
+          - generic [ref=e629]: samples/科技/AI辅助教育重塑学习方式.md:71
+          - generic [ref=e630]: "## 教育公平"
+        - generic [ref=e631] [cursor=pointer]:
+          - generic [ref=e632]: tests/test_report_0509_001.md:20
+          - generic [ref=e633]: "## 测试结果明细"
+        - generic [ref=e634] [cursor=pointer]:
+          - generic [ref=e635]: tests/test_report_0509_002.md:22
+          - generic [ref=e636]: "## 测试结果明细"
+        - generic [ref=e637] [cursor=pointer]:
+          - generic [ref=e638]: tests/test_report_0526_001.md:21
+          - generic [ref=e639]: "## 测试结果明细"
+        - generic [ref=e640] [cursor=pointer]:
+          - generic [ref=e641]: tests/test_report_template.md:21
+          - generic [ref=e642]: "## 测试结果明细"
+        - generic [ref=e644] [cursor=pointer]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:875
+        - generic [ref=e645] [cursor=pointer]:
+          - generic [ref=e646]: samples/科技/AI辅助教育重塑学习方式.md:40
+          - generic [ref=e647]: "## 智能辅导"
+        - generic [ref=e648] [cursor=pointer]:
+          - generic [ref=e649]: samples/科技/AI辅助教育重塑学习方式.md:40
+          - generic [ref=e650]: "## 智能辅导"
+        - generic [ref=e651] [cursor=pointer]:
+          - generic [ref=e652]: samples/编程/Python数据科学与机器学习指南.md:217
+          - generic [ref=e653]: "## 七、深度学习入门"
+        - generic [ref=e654] [cursor=pointer]:
+          - generic [ref=e655]: samples/编程/Python数据科学与机器学习指南.md:217
+          - generic [ref=e656]: "## 七、深度学习入门"
+        - generic [ref=e657] [cursor=pointer]:
+          - generic [ref=e658]: samples/编程/Python数据科学与机器学习指南.md:100
+          - generic [ref=e659]: "## 四、Matplotlib 数据可视化"
+        - generic [ref=e660] [cursor=pointer]:
+          - generic [ref=e661]: samples/编程/Python数据科学与机器学习指南.md:100
+          - generic [ref=e662]: "## 四、Matplotlib 数据可视化"
+        - generic [ref=e663] [cursor=pointer]:
+          - generic [ref=e664]: README_ZH.md:326
+          - generic [ref=e665]: "## 适用场景"
+        - generic [ref=e666] [cursor=pointer]:
+          - generic [ref=e667]: test_work_dir/健康/体重管理年科学减重指南.md:71
+          - generic [ref=e668]: "## 体重管理工具"
+        - generic [ref=e669] [cursor=pointer]:
+          - generic [ref=e670]: test_work_dir/健康/体重管理年科学减重指南.md:71
+          - generic [ref=e671]: "## 体重管理工具"
+        - generic [ref=e672] [cursor=pointer]:
+          - generic [ref=e673]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:38
+          - generic [ref=e674]: "### 实现细节"
+        - generic [ref=e675] [cursor=pointer]:
+          - generic [ref=e676]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:1
+          - generic [ref=e677]: "# Cortex TUI 交互式 CLI 实施计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Goal:** 将 Cortex CLI 从手写 ANSI REPL 升级为 Textu"
+        - generic [ref=e678] [cursor=pointer]:
+          - generic [ref=e679]: examples/README.md:1
+          - generic [ref=e680]: "# Planify 基于 Claude API 的多代理 LLM 系统，提供交互式 REPL 命令行界面和单用户 CLI。"
+        - generic [ref=e681] [cursor=pointer]:
+          - generic [ref=e682]: study/grep-logic.md:152
+          - generic [ref=e683]: "## 1.5 评分与过滤"
+        - generic [ref=e684] [cursor=pointer]:
+          - generic [ref=e685]: cortex/test_results.md:4471
+          - generic [ref=e686]: "## 修复后测试汇总 | 优先级 | 总数 | 通过 | 未通过 | 部分通过 | 通过率 | |--------|------|------|--------|----------|--------| | P0 | 35 | 32 | 0 | 1 | 91% | | P1 | 35 | 28 | 0 | 5 | 80% | | P2/P3 | 17 | 14 | 0 | 3 | 82% | | 搜索验证 | 52 | 52 | 0 | 0"
+        - generic [ref=e687] [cursor=pointer]:
+          - generic [ref=e688]: cortex/cortex_cli_readme.md:206
+          - generic [ref=e689]: "## 索引管理"
+        - generic [ref=e690] [cursor=pointer]:
+          - generic [ref=e691]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:38
+          - generic [ref=e692]: 三、量子技术投资与商业化
+        - generic [ref=e693] [cursor=pointer]:
+          - generic [ref=e694]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:38
+          - generic [ref=e695]: 三、量子技术投资与商业化
+        - generic [ref=e696] [cursor=pointer]:
+          - generic [ref=e697]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:7
+          - generic [ref=e698]: "## 架构设计"
+        - generic [ref=e699] [cursor=pointer]:
+          - generic [ref=e700]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:26
+          - generic [ref=e701]: "## 优化睡眠环境"
+        - generic [ref=e702] [cursor=pointer]:
+          - generic [ref=e703]: test_work_dir/健康/睡眠科学如何获得高质量睡眠.md:26
+          - generic [ref=e704]: "## 优化睡眠环境"
+        - generic [ref=e705] [cursor=pointer]:
+          - generic [ref=e706]: study/grep-logic.md:295
+          - generic [ref=e707]: "# 第三章 公共模块 > `ripgrep.py` 提供搜索管道和评分基础设施，`grep_tools.py` 提供 Agent 输出格式化。 ---"
+        - generic [ref=e708] [cursor=pointer]:
+          - generic [ref=e709]: study/grep-logic.md:186
+          - generic [ref=e710]: "## 1.6 调用方对比"
+        - generic [ref=e711] [cursor=pointer]:
+          - generic [ref=e712]: docs/tree_search_experiments.md:366
+          - generic [ref=e713]: "## 10. Phase 2 优化：Tree Mode 超越 FTS5 + Code 兼容性设计 > **日期**: 2026-03-22 (Phase 2) > **目标**: FinanceBench Tree > FTS5，CodeSearchNet 不退化，Tree 作为默认检索方式"
+        - generic [ref=e714] [cursor=pointer]:
+          - generic [ref=e715]: docs/tree_search_experiments.md:371
+          - generic [ref=e716]: "### 10.1 问题诊断"
+        - generic [ref=e717] [cursor=pointer]:
+          - generic [ref=e718]: samples/能源环境/气候变化与碳中和技术.md:14
+          - generic [ref=e719]: "## 碳中和路径"
+        - generic [ref=e720] [cursor=pointer]:
+          - generic [ref=e721]: samples/能源环境/气候变化与碳中和技术.md:14
+          - generic [ref=e722]: "## 碳中和路径"
+        - generic [ref=e723] [cursor=pointer]:
+          - generic [ref=e724]: samples/能源环境/气候变化与碳中和技术.md:33
+          - generic [ref=e725]: "## 碳捕集技术"
+        - generic [ref=e726] [cursor=pointer]:
+          - generic [ref=e727]: samples/能源环境/气候变化与碳中和技术.md:33
+          - generic [ref=e728]: "## 碳捕集技术"
+        - generic [ref=e729] [cursor=pointer]:
+          - generic [ref=e730]: docs/tree_search_experiments.md:555
+          - generic [ref=e731]: "## 11. Phase 3 优化：Reranking 策略提升 Tree 全面超越 FTS5 > **日期**: 2026-03-22 (Phase 3) > **目标**: Tree 在 QASPER 和 FinanceBench 上均全面超越 FTS5"
+        - generic [ref=e732] [cursor=pointer]:
+          - generic [ref=e733]: test_work_dir/健康/体重管理年科学减重指南.md:17
+          - generic [ref=e734]: "## 吃动平衡原则 科学的体重管理核心在于建立\"吃动平衡\"——能量摄入与消耗的动态平衡。"
+        - generic [ref=e735] [cursor=pointer]:
+          - generic [ref=e736]: test_work_dir/健康/体重管理年科学减重指南.md:17
+          - generic [ref=e737]: "## 吃动平衡原则 科学的体重管理核心在于建立\"吃动平衡\"——能量摄入与消耗的动态平衡。"
+        - generic [ref=e738] [cursor=pointer]:
+          - generic [ref=e739]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:1
+          - generic [ref=e740]: "# Cortex 知识库 AI Agent 设计文档 **日期**: 2026-05-04 **状态**: 草案"
+        - generic [ref=e741] [cursor=pointer]:
+          - generic [ref=e742]: cortex/test_results.md:4372
+          - generic [ref=e743]: "## 测试汇总 | 优先级 | 总数 | 通过 | 未通过 | 部分通过 | 通过率 | |--------|------|------|--------|----------|--------| | P0 | 35 | 29 | 2 | 1 | 83% | | P1 | 35 | 25 | 1 | 7 | 71% | | P2/P3 | 17 | 12 | 2 | 3 | 71% | | 搜索验证 | 52 | 52 | 0 | 0"
+        - generic [ref=e744] [cursor=pointer]:
+          - generic [ref=e745]: planify/SIMPLIFIED.md:45
+          - generic [ref=e746]: "## 使用方法"
+        - generic [ref=e747] [cursor=pointer]:
+          - generic [ref=e748]: test_work_dir/健康/体重管理年科学减重指南.md:57
+          - generic [ref=e749]: "## 常见误区"
+        - generic [ref=e750] [cursor=pointer]:
+          - generic [ref=e751]: test_work_dir/健康/体重管理年科学减重指南.md:57
+          - generic [ref=e752]: "## 常见误区"
+        - generic [ref=e753] [cursor=pointer]:
+          - generic [ref=e754]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:26
+          - generic [ref=e755]: "## 3. 设计方案"
+        - generic [ref=e756] [cursor=pointer]:
+          - generic [ref=e757]: samples/编程/Python数据科学与机器学习指南.md:3
+          - generic [ref=e758]: "## 一、Python 环境搭建"
+        - generic [ref=e759] [cursor=pointer]:
+          - generic [ref=e760]: samples/编程/Python数据科学与机器学习指南.md:3
+          - generic [ref=e761]: "## 一、Python 环境搭建"
+        - generic [ref=e762] [cursor=pointer]:
+          - generic [ref=e763]: CLAUDE.md:108
+          - generic [ref=e764]: "## 项目结构"
+        - generic [ref=e765] [cursor=pointer]:
+          - generic [ref=e766]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:1
+          - generic [ref=e767]: "# grep tool 搜索逻辑统一 实现计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Goal:** 将 grep tool 和 TUI `/grep` 的搜索逻辑统一为 `execu"
+        - generic [ref=e768] [cursor=pointer]:
+          - generic [ref=e769]: planify/INTEGRATION.md:495
+          - generic [ref=e770]: "## 5. 配置注入"
+        - generic [ref=e771] [cursor=pointer]:
+          - generic [ref=e772]: cortex/test_results.md:4411
+          - generic [ref=e773]: "## 修复验证结果"
+        - generic [ref=e774] [cursor=pointer]:
+          - generic [ref=e775]: README_ZH.md:445
+          - generic [ref=e776]: "## Benchmark 评测"
+        - generic [ref=e777] [cursor=pointer]:
+          - generic [ref=e778]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:22
+          - generic [ref=e779]: "## AI驱动的威胁检测 人工智能在网络安全防御中的应用从辅助工具升级为核心能力。2025年，AI安全系统的主要进展包括："
+        - generic [ref=e780] [cursor=pointer]:
+          - generic [ref=e781]: test_work_dir/科技/网络安全与AI防御2025威胁态势.md:22
+          - generic [ref=e782]: "## AI驱动的威胁检测 人工智能在网络安全防御中的应用从辅助工具升级为核心能力。2025年，AI安全系统的主要进展包括："
+        - generic [ref=e783] [cursor=pointer]:
+          - generic [ref=e784]: docs/superpowers/specs/2026-06-02-tui-ai-streaming-design.md:17
+          - generic [ref=e785]: "## 方案"
+        - generic [ref=e786] [cursor=pointer]:
+          - generic [ref=e787]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:14
+          - generic [ref=e788]: "## 量子密钥分发（QKD）"
+        - generic [ref=e789] [cursor=pointer]:
+          - generic [ref=e790]: test_work_dir/科技/量子密码学从QKD到后量子密码学.md:14
+          - generic [ref=e791]: "## 量子密钥分发（QKD）"
+        - generic [ref=e792] [cursor=pointer]:
+          - generic [ref=e793]: samples/编程/Python数据科学与机器学习指南.md:121
+          - generic [ref=e794]: "## 五、Scikit-learn 机器学习"
+        - generic [ref=e795] [cursor=pointer]:
+          - generic [ref=e796]: samples/编程/Python数据科学与机器学习指南.md:121
+          - generic [ref=e797]: "## 五、Scikit-learn 机器学习"
+        - generic [ref=e798] [cursor=pointer]:
+          - generic [ref=e799]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:1
+          - generic [ref=e800]: "# 启动后增量索引同步 **日期**: 2026-05-07 **状态**: Draft"
+        - generic [ref=e801] [cursor=pointer]:
+          - generic [ref=e802]: planify/INTEGRATION.md:285
+          - generic [ref=e803]: "## 3. 开发自定义工具"
+        - generic [ref=e804] [cursor=pointer]:
+          - generic [ref=e805]: cortex/cortex_cli_readme.md:29
+          - generic [ref=e806]: "## 命令列表"
+        - generic [ref=e807] [cursor=pointer]:
+          - generic [ref=e808]: CLAUDE.md:179
+          - generic [ref=e809]: "## 正常使用"
+        - generic [ref=e810] [cursor=pointer]:
+          - generic [ref=e811]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:27
+          - generic [ref=e812]: 二、人工智能前沿
+        - generic [ref=e813] [cursor=pointer]:
+          - generic [ref=e814]: test_work_dir/科技/量子计算与人工智能报告2025-2026.docx:27
+          - generic [ref=e815]: 二、人工智能前沿
+        - generic [ref=e816] [cursor=pointer]:
+          - generic [ref=e817]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:76
+          - generic [ref=e818]: "### 实现细节"
+        - generic [ref=e819] [cursor=pointer]:
+          - generic [ref=e820]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:10
+          - generic [ref=e821]: "## 2. 现状分析"
+        - generic [ref=e822] [cursor=pointer]:
+          - generic [ref=e823]: CLAUDE.md:35
+          - generic [ref=e824]: "## Cortex 技术栈"
+        - generic [ref=e826] [cursor=pointer]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:630
+        - generic [ref=e827] [cursor=pointer]:
+          - generic [ref=e828]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:153
+          - generic [ref=e829]: "## 渲染器"
+        - generic [ref=e830] [cursor=pointer]:
+          - generic [ref=e831]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:1
+          - generic [ref=e832]: "# Gradio Web UI 实现计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Goal:** 用 Gradio 实现 Cortex Web UI，提供浏览器端的搜索和 AI Agen"
+        - generic [ref=e833] [cursor=pointer]:
+          - generic [ref=e834]: samples/科技/AI辅助教育重塑学习方式.md:3
+          - generic [ref=e835]: "## 教育AI的市场规模 2025年全球AI教育市场规模达到350亿美元，预计2030年将超过1000亿美元。AI技术正在从根本上改变教育的交付方式、评估方法和个性化程度。"
+        - generic [ref=e836] [cursor=pointer]:
+          - generic [ref=e837]: samples/科技/AI辅助教育重塑学习方式.md:3
+          - generic [ref=e838]: "## 教育AI的市场规模 2025年全球AI教育市场规模达到350亿美元，预计2030年将超过1000亿美元。AI技术正在从根本上改变教育的交付方式、评估方法和个性化程度。"
+        - generic [ref=e839] [cursor=pointer]:
+          - generic [ref=e840]: samples/编程/Python数据科学与机器学习指南.md:31
+          - generic [ref=e841]: "## 二、NumPy 数值计算"
+        - generic [ref=e842] [cursor=pointer]:
+          - generic [ref=e843]: samples/编程/Python数据科学与机器学习指南.md:31
+          - generic [ref=e844]: "## 二、NumPy 数值计算"
+        - generic [ref=e845] [cursor=pointer]:
+          - generic [ref=e846]: planify/INTEGRATION.md:1
+          - generic [ref=e847]: "# Planify 模块集成指南 本文档指导主应用（backend/app）如何集成 planify 模块，包括 SSE 流式对话和自定义工具开发。 ---"
+        - generic [ref=e848] [cursor=pointer]:
+          - generic [ref=e849]: CLAUDE.md:5
+          - generic [ref=e850]: "## 安装"
+        - generic [ref=e851] [cursor=pointer]:
+          - generic [ref=e852]: docs/tree_search_experiments.md:308
+          - generic [ref=e853]: "## 8. 经验总结"
+        - generic [ref=e854] [cursor=pointer]:
+          - generic [ref=e855]: docs/tree_search_experiments.md:340
+          - generic [ref=e856]: "## 9. 配置参考"
+        - generic [ref=e857] [cursor=pointer]:
+          - generic [ref=e858]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:9
+          - generic [ref=e859]: "### 核心组件"
+        - generic [ref=e860] [cursor=pointer]:
+          - generic [ref=e861]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:271
+          - generic [ref=e862]: "## 6. 集成实现"
+        - generic [ref=e863] [cursor=pointer]:
+          - generic [ref=e864]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:93
+          - generic [ref=e865]: "## 实现细节"
+        - generic [ref=e866] [cursor=pointer]:
+          - generic [ref=e867]: cortex/test_task.md:218
+          - generic [ref=e868]: "## 三、测试执行方法"
+      - generic [ref=e869]:
+        - generic [ref=e877]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md
+        - generic [ref=e879]:
+          - code [ref=e881]: "# 两者都不可用，返回无锁 logger.warning(\"No file locking available on this platform\") return _NullLock()"
+          - code [ref=e883]: "### `_Handle` 类保留（Unix 版本） 原有的 `_Handle` 类保持不变，用于 Unix 系统。 ### 错误处理 - 锁获取失败时记录 warning 并返回 `_NullLock()`（不阻塞程序启动） - 后续的 DB 写入可能冲突，但不会导致进程崩溃 - 这是 advisory lock，不影响其他进程正常读取 ## 兼容性 | 平台 | 锁机制 | 行为 | |------|--------|------| | Unix (Linux/macOS) | `fcntl.flock` | 排他文件锁 | | Windows | `msvcrt.locking` | 非阻塞排他锁 | | 其他 | `_NullLock` | 无锁，降级运行 | ## 测试场景 1. **单进程正常索引**：与现有行为一致 2. **Windows 双进程同时索引**：第二个进程应等待锁或跳过 3. **Unix 双进程同时索引**：已有 fcntl，不受影响 4. **锁文件不存在**：自动创建 `db_path.lock` 5. **锁获取失败**：graceful degradation，记录 warning"
+    - generic [ref=e873]:
+      - textbox "重新搜索..." [ref=e874]: 工作记录
+      - button "搜索" [ref=e875] [cursor=pointer]:
+        - generic [ref=e876]: 搜索

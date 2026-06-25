@@ -1,0 +1,1631 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e50]:
+    - generic "python" [ref=e51]:
+      - button "← 返回" [ref=e52] [cursor=pointer]
+      - generic [ref=e53]: python
+      - generic [ref=e54]: 540 条结果
+    - generic [ref=e55]:
+      - generic [ref=e57]:
+        - generic [ref=e58] [cursor=pointer]:
+          - generic [ref=e59]: samples/编程/Python数据科学与机器学习指南.md:5
+          - generic [ref=e60]: "### 1.1 安装 Python 推荐使用 Python 3.11 或更高版本。可以从 python.org 下载"
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: samples/编程/Python数据科学与机器学习指南.md:5
+          - generic [ref=e63]: "### 1.1 安装 Python 推荐使用 Python 3.11 或更高版本。可以从 python.org 下载"
+        - generic [ref=e64] [cursor=pointer]:
+          - generic [ref=e65]: samples/编程/Python数据科学与机器学习指南.md:15
+          - generic [ref=e66]: "### 1.2 虚拟环境 使用虚拟环境隔离项目依赖是最佳实践： ```bash python -m venv my"
+        - generic [ref=e67] [cursor=pointer]:
+          - generic [ref=e68]: samples/编程/Python数据科学与机器学习指南.md:15
+          - generic [ref=e69]: "### 1.2 虚拟环境 使用虚拟环境隔离项目依赖是最佳实践： ```bash python -m venv my"
+        - generic [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: docs/superpowers/plans/2026-05-27-scoring-pipeline-dedup.md:408
+          - generic [ref=e72]: "### Task 4: 端到端验证 **Files:** - 无代码变更 - [ ] **Step 1: 验证 C"
+        - generic [ref=e73] [cursor=pointer]:
+          - generic [ref=e74]: samples/编程/python_async_programming.md:126
+          - generic [ref=e75]: "### Forgetting to Await A coroutine that is not awaited wil"
+        - generic [ref=e76] [cursor=pointer]:
+          - generic [ref=e77]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:589
+          - generic [ref=e78]: "### Task 5: 端到端验证 **Files:** - 无代码变更 - [ ] **Step 1: 验证 C"
+        - generic [ref=e79] [cursor=pointer]:
+          - generic [ref=e80]: samples/编程/python_async_programming.md:126
+          - generic [ref=e81]: "### Forgetting to Await A coroutine that is not awaited wil"
+        - generic [ref=e82] [cursor=pointer]:
+          - generic [ref=e83]: samples/编程/python_async_programming.md:135
+          - generic [ref=e84]: "### Mixing Sync and Async Code Libraries that do not suppor"
+        - generic [ref=e85] [cursor=pointer]:
+          - generic [ref=e86]: samples/编程/python_async_programming.md:135
+          - generic [ref=e87]: "### Mixing Sync and Async Code Libraries that do not suppor"
+        - generic [ref=e88] [cursor=pointer]:
+          - generic [ref=e89]: samples/编程/python_async_programming.md:27
+          - generic [ref=e90]: "### Coroutines Coroutines are functions defined with `async"
+        - generic [ref=e91] [cursor=pointer]:
+          - generic [ref=e92]: samples/编程/Python数据科学与机器学习指南.md:33
+          - generic [ref=e93]: "### 2.1 数组创建与操作 NumPy 是Python数值计算的基础库，提供了高效的多维数组操作。 ```py"
+        - generic [ref=e94] [cursor=pointer]:
+          - generic [ref=e95]: samples/编程/python_async_programming.md:27
+          - generic [ref=e96]: "### Coroutines Coroutines are functions defined with `async"
+        - generic [ref=e97] [cursor=pointer]:
+          - generic [ref=e98]: samples/编程/Python数据科学与机器学习指南.md:33
+          - generic [ref=e99]: "### 2.1 数组创建与操作 NumPy 是Python数值计算的基础库，提供了高效的多维数组操作。 ```py"
+        - generic [ref=e100] [cursor=pointer]:
+          - generic [ref=e101]: samples/编程/python_async_programming.md:107
+          - generic [ref=e102]: "### Blocking the Event Loop The most common mistake in asyn"
+        - generic [ref=e103] [cursor=pointer]:
+          - generic [ref=e104]: samples/编程/python_async_programming.md:107
+          - generic [ref=e105]: "### Blocking the Event Loop The most common mistake in asyn"
+        - generic [ref=e106] [cursor=pointer]:
+          - generic [ref=e107]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:559
+          - generic [ref=e108]: "## Task 7: Final verification - [ ] **Step 1: Run all CLI"
+        - generic [ref=e109] [cursor=pointer]:
+          - generic [ref=e110]: examples/README.md:46
+          - generic [ref=e111]: "### CodeSearchNet Python（代码检索，100 queries） | 指标 | Embeddin"
+        - generic [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]: cortex/test_results.md:2597
+          - generic [ref=e114]: "## Q-020 搜索验证: Python NumPy Pandas Scikit-lea **结论**: ✅ 通过"
+        - generic [ref=e115] [cursor=pointer]:
+          - generic [ref=e116]: samples/编程/Python数据科学与机器学习指南.md:52
+          - generic [ref=e117]: "### 2.2 线性代数 ```python # 矩阵乘法 A = np.random.randn(3, 3) B"
+        - generic [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: samples/编程/Python数据科学与机器学习指南.md:52
+          - generic [ref=e120]: "### 2.2 线性代数 ```python # 矩阵乘法 A = np.random.randn(3, 3) B"
+        - generic [ref=e121] [cursor=pointer]:
+          - generic [ref=e122]: examples/README.md:38
+          - generic [ref=e123]: "#### 直接调用 Python（通用） ```bash cd /path/to/your/project pyth"
+        - generic [ref=e124] [cursor=pointer]:
+          - generic [ref=e125]: docs/superpowers/specs/2026-05-08-cli-subcommands-design.md:62
+          - generic [ref=e126]: "## Error Handling - No index found: prompt user to build ("
+        - generic [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:295
+          - generic [ref=e129]: "async def test_search_024_catl_shixing(pilot): \"\"\"SEAR"
+        - generic [ref=e130] [cursor=pointer]:
+          - generic [ref=e131]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:179
+          - generic [ref=e132]: "### Pilot 使用模式 ```python async with CortexApp().run_test()"
+        - generic [ref=e133] [cursor=pointer]:
+          - generic [ref=e134]: docs/superpowers/specs/2026-05-07-kb-search-v2-design.md:45
+          - generic [ref=e135]: "### search_kb_v2 **入参：** ```python query_tokens: dict # 结"
+        - generic [ref=e136] [cursor=pointer]:
+          - generic [ref=e137]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:13
+          - generic [ref=e138]: "### 事件格式 ```python { \"event_type\": \"indexing\", \"cu"
+        - generic [ref=e139] [cursor=pointer]:
+          - generic [ref=e140]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:42
+          - generic [ref=e141]: "#### 2. 事件类型定义 ```python StatusEventType = Literal[\"info\","
+        - generic [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:19
+          - generic [ref=e144]: "### Windows 文件锁实现 ```python def _acquire_index_lock(db_pat"
+        - generic [ref=e145] [cursor=pointer]:
+          - generic [ref=e146]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:7
+          - generic [ref=e147]: "## 技术选型 - **TUI 框架**：Textual（Python 最成熟的现代 TUI 框架） - **渲染引"
+        - generic [ref=e148] [cursor=pointer]:
+          - generic [ref=e149]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:288
+          - generic [ref=e150]: "### 6.2 `cortex/agent_integration.py` 修改 在 `CortexAgent.in"
+        - generic [ref=e151] [cursor=pointer]:
+          - generic [ref=e152]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:78
+          - generic [ref=e153]: "#### 1. `treesearch/indexer.py` 新增 `progress_callback` 在 `"
+        - generic [ref=e154] [cursor=pointer]:
+          - generic [ref=e155]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:1092
+          - generic [ref=e156]: "### Task 7: 端到端验证 **Files:** - No new files - [ ] **Step"
+        - generic [ref=e157] [cursor=pointer]:
+          - generic [ref=e158]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:55
+          - generic [ref=e159]: "#### 2. 新增 `_startup_sync_check()` 方法 ```python def _start"
+        - generic [ref=e160] [cursor=pointer]:
+          - generic [ref=e161]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:51
+          - generic [ref=e162]: "### 2. read_document 命令 **命令格式**: ```bash python -m cortex"
+        - generic [ref=e163] [cursor=pointer]:
+          - generic [ref=e164]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:1428
+          - generic [ref=e165]: "### Task 7: 修改 CLI 入口点委托给 TUI **Files:** - Modify: `cortex"
+        - generic [ref=e166] [cursor=pointer]:
+          - generic [ref=e167]: samples/编程/python_async_programming.md:81
+          - generic [ref=e168]: "### Timeout Handling Prevent hanging operations with timeou"
+        - generic [ref=e169] [cursor=pointer]:
+          - generic [ref=e170]: samples/编程/python_async_programming.md:81
+          - generic [ref=e171]: "### Timeout Handling Prevent hanging operations with timeou"
+        - generic [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: samples/编程/python_async_programming.md:92
+          - generic [ref=e174]: "### Background Tasks Run operations in the background while"
+        - generic [ref=e175] [cursor=pointer]:
+          - generic [ref=e176]: samples/编程/python_async_programming.md:92
+          - generic [ref=e177]: "### Background Tasks Run operations in the background while"
+        - generic [ref=e178] [cursor=pointer]:
+          - generic [ref=e179]: cortex/test_results.md:103
+          - generic [ref=e180]: "## SEARCH-009 大小写不敏感搜索 **结论**: ✅ 通过 **测试问题**: 无 **输出响应内容"
+        - generic [ref=e181] [cursor=pointer]:
+          - generic [ref=e182]: cortex/cortex_cli_readme.md:230
+          - generic [ref=e183]: "### 文件类型支持 | 文件类型 | 扩展名 | 依赖包 | 说明 | |----------|--------|"
+        - generic [ref=e184] [cursor=pointer]:
+          - generic [ref=e185]: samples/编程/Python数据科学与机器学习指南.md:169
+          - generic [ref=e186]: "### 5.3 聚类：K-Means ```python from sklearn.cluster import K"
+        - generic [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: samples/编程/Python数据科学与机器学习指南.md:169
+          - generic [ref=e189]: "### 5.3 聚类：K-Means ```python from sklearn.cluster import K"
+        - generic [ref=e190] [cursor=pointer]:
+          - generic [ref=e191]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:13
+          - generic [ref=e192]: "### Task 1: 新增 `_build_search_query` 函数并编写测试 **Files:** -"
+        - generic [ref=e193] [cursor=pointer]:
+          - generic [ref=e194]: samples/编程/python_async_programming.md:66
+          - generic [ref=e195]: "### Rate Limiting When making many API requests, rate limit"
+        - generic [ref=e196] [cursor=pointer]:
+          - generic [ref=e197]: samples/编程/python_async_programming.md:66
+          - generic [ref=e198]: "### Rate Limiting When making many API requests, rate limit"
+        - generic [ref=e199] [cursor=pointer]:
+          - generic [ref=e200]: samples/编程/Python数据科学与机器学习指南.md:85
+          - generic [ref=e201]: "### 3.2 数据清洗 ```python # 处理缺失值 df.isnull().sum() df.fillna"
+        - generic [ref=e202] [cursor=pointer]:
+          - generic [ref=e203]: cortex/test_results.md:2694
+          - generic [ref=e204]: "## Q-023 搜索验证: K-Means 聚类 StandardScaler **结论**: ✅ 通过 **测"
+        - generic [ref=e205] [cursor=pointer]:
+          - generic [ref=e206]: samples/编程/Python数据科学与机器学习指南.md:85
+          - generic [ref=e207]: "### 3.2 数据清洗 ```python # 处理缺失值 df.isnull().sum() df.fillna"
+        - generic [ref=e208] [cursor=pointer]:
+          - generic [ref=e209]: cortex/test_results.md:2756
+          - generic [ref=e210]: "## Q-025 搜索验证: 波士顿房价 LinearRegression **结论**: ✅ 通过 **测试问题"
+        - generic [ref=e211] [cursor=pointer]:
+          - generic [ref=e212]: cortex/test_results.md:2724
+          - generic [ref=e213]: "## Q-024 搜索验证: PyTorch 神经网络 Linear ReLU **结论**: ✅ 通过 **测试"
+        - generic [ref=e214] [cursor=pointer]:
+          - generic [ref=e215]: samples/编程/Python数据科学与机器学习指南.md:186
+          - generic [ref=e216]: "### 6.1 交叉验证 交叉验证是评估模型泛化能力的重要方法，避免过拟合。 ```python from skl"
+        - generic [ref=e217] [cursor=pointer]:
+          - generic [ref=e218]: samples/编程/Python数据科学与机器学习指南.md:102
+          - generic [ref=e219]: "### 4.1 基础图表 ```python import matplotlib.pyplot as plt #"
+        - generic [ref=e220] [cursor=pointer]:
+          - generic [ref=e221]: README_ZH.md:236
+          - generic [ref=e222]: "## 功能特性 - **智能目录发现** — `ts.index(\"src/\")` 自动递归发现所有支持的文件；跳过"
+        - generic [ref=e223] [cursor=pointer]:
+          - generic [ref=e224]: examples/README.md:278
+          - generic [ref=e225]: "## Features - **Smart directory discovery** — `ts.index(\"s"
+        - generic [ref=e226] [cursor=pointer]:
+          - generic [ref=e227]: cortex/test_results.md:912
+          - generic [ref=e228]: "## SEARCH-003 多关键词搜索（中英混合） **结论**: ✅ 通过 **测试问题**: 无 **输出"
+        - generic [ref=e229] [cursor=pointer]:
+          - generic [ref=e230]: samples/编程/Python数据科学与机器学习指南.md:186
+          - generic [ref=e231]: "### 6.1 交叉验证 交叉验证是评估模型泛化能力的重要方法，避免过拟合。 ```python from skl"
+        - generic [ref=e232] [cursor=pointer]:
+          - generic [ref=e233]: samples/编程/Python数据科学与机器学习指南.md:102
+          - generic [ref=e234]: "### 4.1 基础图表 ```python import matplotlib.pyplot as plt #"
+        - generic [ref=e235] [cursor=pointer]:
+          - generic [ref=e236]: cortex/test_results.md:2786
+          - generic [ref=e237]: "## Q-026 搜索验证: 虚拟环境 venv pip install **结论**: ✅ 通过 **测试问题*"
+        - generic [ref=e238] [cursor=pointer]:
+          - generic [ref=e239]: cortex/test_results.md:2630
+          - generic [ref=e240]: "## Q-021 搜索验证: 鸢尾花分类 RandomForest **结论**: ✅ 通过 **测试问题**:"
+        - generic [ref=e241] [cursor=pointer]:
+          - generic [ref=e242]: samples/编程/python_async_programming.md:39
+          - generic [ref=e243]: "### Tasks Tasks are wrappers around coroutines that schedul"
+        - generic [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]: samples/编程/python_async_programming.md:39
+          - generic [ref=e246]: "### Tasks Tasks are wrappers around coroutines that schedul"
+        - generic [ref=e247] [cursor=pointer]:
+          - generic [ref=e248]: samples/编程/python_async_programming.md:3
+          - generic [ref=e249]: "## Introduction to Asynchronous Python Asynchronous progra"
+        - generic [ref=e250] [cursor=pointer]:
+          - generic [ref=e251]: samples/编程/python_async_programming.md:3
+          - generic [ref=e252]: "## Introduction to Asynchronous Python Asynchronous progra"
+        - generic [ref=e253] [cursor=pointer]:
+          - generic [ref=e254]: samples/编程/Python数据科学与机器学习指南.md:66
+          - generic [ref=e255]: "### 3.1 DataFrame 基础 Pandas 提供了 DataFrame 和 Series 两种核心数据结"
+        - generic [ref=e256] [cursor=pointer]:
+          - generic [ref=e257]: samples/编程/Python数据科学与机器学习指南.md:66
+          - generic [ref=e258]: "### 3.1 DataFrame 基础 Pandas 提供了 DataFrame 和 Series 两种核心数据结"
+        - generic [ref=e259] [cursor=pointer]:
+          - generic [ref=e260]: samples/编程/python_async_programming.md:11
+          - generic [ref=e261]: "### Event Loop The event loop is the heart of asyncio. It s"
+        - generic [ref=e262] [cursor=pointer]:
+          - generic [ref=e263]: samples/编程/python_async_programming.md:11
+          - generic [ref=e264]: "### Event Loop The event loop is the heart of asyncio. It s"
+        - generic [ref=e265] [cursor=pointer]:
+          - generic [ref=e266]: docs/superpowers/plans/2026-05-07-indexing-progress-implementation.md:1
+          - generic [ref=e267]: "# 索引进度通知 - 实现计划 > **For agentic workers:** REQUIRED SUB-SK"
+        - generic [ref=e268] [cursor=pointer]:
+          - generic [ref=e269]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:1
+          - generic [ref=e270]: "# 文件变化状态栏通知 - 实现计划 > **For agentic workers:** REQUIRED SUB"
+        - generic [ref=e271] [cursor=pointer]:
+          - generic [ref=e272]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:132
+          - generic [ref=e273]: "## 依赖 - 新增 Python 依赖：`watchdog`（可选，未安装时不影响其他功能）"
+        - generic [ref=e274] [cursor=pointer]:
+          - generic [ref=e275]: docs/superpowers/plans/2026-05-07-pre-tui-index-check.md:1
+          - generic [ref=e276]: "# Pre-TUI Index Check Implementation Plan > **For agentic"
+        - generic [ref=e277] [cursor=pointer]:
+          - generic [ref=e278]: examples/README.md:208
+          - generic [ref=e279]: "### Python 找不到 如果看到 `Error: Python or python3 not found`，请"
+        - generic [ref=e280] [cursor=pointer]:
+          - generic [ref=e281]: samples/编程/Python数据科学与机器学习指南.md:3
+          - generic [ref=e282]: "## 一、Python 环境搭建"
+        - generic [ref=e283] [cursor=pointer]:
+          - generic [ref=e284]: docs/superpowers/plans/2026-05-07-kb-search-v2-implementation.md:1
+          - generic [ref=e285]: "# KB Search V2 Implementation Plan > **For agentic workers"
+        - generic [ref=e286] [cursor=pointer]:
+          - generic [ref=e287]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:1
+          - generic [ref=e288]: "# CLI Subcommands Implementation Plan > **For agentic work"
+        - generic [ref=e289] [cursor=pointer]:
+          - generic [ref=e290]: docs/superpowers/plans/2026-05-07-kb-search-v2-implementation.md:20
+          - generic [ref=e291]: "## Task 1: 实现 `_build_fts5_query()` 函数 **Files:** - Modify"
+        - generic [ref=e292] [cursor=pointer]:
+          - generic [ref=e293]: samples/编程/Python数据科学与机器学习指南.md:197
+          - generic [ref=e294]: "### 6.2 超参数搜索 ```python from sklearn.model_selection impor"
+        - generic [ref=e295] [cursor=pointer]:
+          - generic [ref=e296]: cortex/test_results.md:1522
+          - generic [ref=e297]: "## SCORE-002 近邻评分 (Proximity Scoring) **结论**: ✅ 通过 **测试问题"
+        - generic [ref=e298] [cursor=pointer]:
+          - generic [ref=e299]: cortex/test_results.md:2661
+          - generic [ref=e300]: "## Q-022 搜索验证: 交叉验证 GridSearchCV 超参数 **结论**: ✅ 通过 **测试问题*"
+        - generic [ref=e301] [cursor=pointer]:
+          - generic [ref=e302]: docs/superpowers/plans/2026-05-11-grep-path-search.md:152
+          - generic [ref=e303]: "## Task 3: 手动测试验证 **Files:** - Test: 在 TUI 中执行 `/grep src`"
+        - generic [ref=e304] [cursor=pointer]:
+          - generic [ref=e305]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:451
+          - generic [ref=e306]: "### Task 5: 端到端验证 - [ ] **Step 1: 验证模块导入链完整** Run: ```bas"
+        - generic [ref=e307] [cursor=pointer]:
+          - generic [ref=e308]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:342
+          - generic [ref=e309]: "### Task 4: 更新 CLI `web` 子命令参数和处理器 **Files:** - Modify: `c"
+        - generic [ref=e310] [cursor=pointer]:
+          - generic [ref=e311]: cortex/cortex_cli_readme.md:249
+          - generic [ref=e312]: "### 安装所有依赖 ```bash pip install beautifulsoup4 pymupdf pyth"
+        - generic [ref=e313] [cursor=pointer]:
+          - generic [ref=e314]: README_ZH.md:25
+          - generic [ref=e315]: "### Python 库 适合在 Python 代码里调用，例如脚本、服务端检索、数据处理流程： ```bash"
+        - generic [ref=e316] [cursor=pointer]:
+          - generic [ref=e317]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:193
+          - generic [ref=e318]: "## 非目标（本次不实现） - 索引管理 UI（继续使用 `python -m cortex index`） - 文"
+        - generic [ref=e319] [cursor=pointer]:
+          - generic [ref=e320]: CLAUDE.md:187
+          - generic [ref=e321]: "## CORTEX-CLI 测试命令 > **测试工作目录必须为 `test_work_dir/`**，所有测试命令"
+        - generic [ref=e322] [cursor=pointer]:
+          - generic [ref=e323]: tests/test_report_0509_001.md:334
+          - generic [ref=e324]: "### READ-009: 不存在文件错误处理 - **优先级**: P0 - **执行命令**: `python"
+        - generic [ref=e325] [cursor=pointer]:
+          - generic [ref=e326]: examples/README.md:37
+          - generic [ref=e327]: "### Benchmark 评测 ```bash # QASPER (学术论文 QA) - 默认评测 fts5 +"
+        - generic [ref=e328] [cursor=pointer]:
+          - generic [ref=e329]: tests/test_report_0526_001.md:33
+          - generic [ref=e330]: "### KB-004: search_kb + read_document 联合测试 — 量子计算 pptx - *"
+        - generic [ref=e331] [cursor=pointer]:
+          - generic [ref=e332]: cortex/test_task.md:15
+          - generic [ref=e333]: "### 2.1 环境检查 ``` 1. 确认 Python venv 存在: E:\\github\\TreeSearc"
+        - generic [ref=e334] [cursor=pointer]:
+          - generic [ref=e335]: tests/test_report_0509_002.md:167
+          - generic [ref=e336]: "### QUERY-006: PHRASE 查询英文（Surface Code） - **执行命令**: `pyth"
+        - generic [ref=e337] [cursor=pointer]:
+          - generic [ref=e338]: cortex/skills/knowledge_base/SKILL.md:32
+          - generic [ref=e339]: "### search_kb 调用方式 `search_kb` 接受自然语言关键词查询，会自动进行中英文分词： **"
+        - generic [ref=e340] [cursor=pointer]:
+          - generic [ref=e341]: docs/api.md:48
+          - generic [ref=e342]: "### `code_to_tree` ```python async def code_to_tree( c"
+        - generic [ref=e343] [cursor=pointer]:
+          - generic [ref=e344]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:195
+          - generic [ref=e345]: "### ContentArea 内容获取 ```python content = pilot.app.query_on"
+        - generic [ref=e346] [cursor=pointer]:
+          - generic [ref=e347]: .claude/skills/cortex-test/skill.md:29
+          - generic [ref=e348]: "## CLI 命令 **重要**： - 所有命令必须在 `test_work_dir/` 目录下执行，否则索引和搜索"
+        - generic [ref=e349] [cursor=pointer]:
+          - generic [ref=e350]: docs/superpowers/specs/2026-05-11-web-search-query-params-design.md:41
+          - generic [ref=e351]: "## API 请求变更 ```python # 之前：通过 tool 配置传递 domain 参数 tool = {"
+        - generic [ref=e352] [cursor=pointer]:
+          - generic [ref=e353]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:110
+          - generic [ref=e354]: "#### 4. `cortex/agent_integration.py` — 传入 idx ```python #"
+        - generic [ref=e355] [cursor=pointer]:
+          - generic [ref=e356]: planify/examples.md:369
+          - generic [ref=e357]: "### 运行 FastAPI 应用 ```bash # 安装依赖 pip install fastapi uvico"
+        - generic [ref=e358] [cursor=pointer]:
+          - generic [ref=e359]: docs/superpowers/plans/2026-06-04-knowledge-base-citations.md:271
+          - generic [ref=e360]: "## Task 5: 手动集成验证 **目的**：通过 TUI 交互确认 LLM Agent 实际按规范输出引文。"
+        - generic [ref=e361] [cursor=pointer]:
+          - generic [ref=e362]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:9
+          - generic [ref=e363]: "### 1. Thinking 支持（升级点 2） `run_web_search()` 新增 `thinking_"
+        - generic [ref=e364] [cursor=pointer]:
+          - generic [ref=e365]: samples/编程/microservices_patterns.md:85
+          - generic [ref=e366]: "### Solution: Orchestration-Based Saga A central orchestrat"
+        - generic [ref=e367] [cursor=pointer]:
+          - generic [ref=e368]: samples/编程/microservices_patterns.md:85
+          - generic [ref=e369]: "### Solution: Orchestration-Based Saga A central orchestrat"
+        - generic [ref=e370] [cursor=pointer]:
+          - generic [ref=e371]: docs/superpowers/specs/2026-05-26-webfetch-tool-design.md:135
+          - generic [ref=e372]: "## CLI 命令 ```bash python -m cortex webfetch <url>"
+        - generic [ref=e373] [cursor=pointer]:
+          - generic [ref=e374]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:46
+          - generic [ref=e375]: "### 入口函数 ```python def build_grep_tools(workdir: Path) ->"
+        - generic [ref=e376] [cursor=pointer]:
+          - generic [ref=e377]: study/grep-logic.md:339
+          - generic [ref=e378]: "### search_paths_by_regex() ```python def search_paths_by_"
+        - generic [ref=e379] [cursor=pointer]:
+          - generic [ref=e380]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:40
+          - generic [ref=e381]: "### 排序后二次过滤 在 scored_results 排序后（第 734 行之后），增加： ```python"
+        - generic [ref=e382] [cursor=pointer]:
+          - generic [ref=e383]: CHANGELOG.md:29
+          - generic [ref=e384]: "### Changed - Aligned the Python package and Rust CLI to re"
+        - generic [ref=e385] [cursor=pointer]:
+          - generic [ref=e386]: docs/superpowers/specs/2026-06-04-knowledge-base-citations-design.md:99
+          - generic [ref=e387]: "## 验证方法 **功能测试**（手动）： 1. 启动 TUI 模式（`python -m cortex`），对知"
+        - generic [ref=e388] [cursor=pointer]:
+          - generic [ref=e389]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:823
+          - generic [ref=e390]: "### Task 8: 端到端测试 — 搜索 Tab **Files:** - No new files - ["
+        - generic [ref=e391] [cursor=pointer]:
+          - generic [ref=e392]: test_work_dir/编程/git_workflow.md:139
+          - generic [ref=e393]: "### CI Pipeline Configuration A typical CI pipeline trigger"
+        - generic [ref=e394] [cursor=pointer]:
+          - generic [ref=e395]: test_work_dir/编程/git_workflow.md:139
+          - generic [ref=e396]: "### CI Pipeline Configuration A typical CI pipeline trigger"
+        - generic [ref=e397] [cursor=pointer]:
+          - generic [ref=e398]: tests/test_report_template.md:58
+          - generic [ref=e399]: "### SEARCH-001: 搜索'勒索软件' - 网络安全主题 - **优先级**: P0 - **执行命令**"
+        - generic [ref=e400] [cursor=pointer]:
+          - generic [ref=e401]: planify/streaming_spec.md:271
+          - generic [ref=e402]: "### 用户交互工具定义 ```python # backend/app/planify/streaming/use"
+        - generic [ref=e403] [cursor=pointer]:
+          - generic [ref=e404]: CONTRIBUTING.md:44
+          - generic [ref=e405]: "## Reporting Issues - Use [GitHub Issues](https://github.c"
+        - generic [ref=e406] [cursor=pointer]:
+          - generic [ref=e407]: examples/README.md:90
+          - generic [ref=e408]: "## Search Modes `ts` supports three search modes: - `auto"
+        - generic [ref=e409] [cursor=pointer]:
+          - generic [ref=e410]: docs/superpowers/plans/2026-05-28-grep-tool.md:327
+          - generic [ref=e411]: "### Task 5: 端到端验证 - [ ] **Step 1: 验证 grep tool 在测试工作目录中正常工"
+        - generic [ref=e412] [cursor=pointer]:
+          - generic [ref=e413]: study/search-logic.md:335
+          - generic [ref=e414]: "### CLI (`cortex_cli.py`) ```python # _cli_search_kb() 精简后"
+        - generic [ref=e415] [cursor=pointer]:
+          - generic [ref=e416]: planify/bootstrap_api_changes.md:75
+          - generic [ref=e417]: "### 新的简化 API（推荐） ```python # 初始化 from app.planify.bootstra"
+        - generic [ref=e418] [cursor=pointer]:
+          - generic [ref=e419]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:23
+          - generic [ref=e420]: "### 路径搜索实现 在 `cortex/ripgrep.py` 新增函数： ```python def sear"
+        - generic [ref=e421] [cursor=pointer]:
+          - generic [ref=e422]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:9
+          - generic [ref=e423]: "### 新文件：`cortex/scoring_pipeline.py` 提取函数 `score_and_rank("
+        - generic [ref=e424] [cursor=pointer]:
+          - generic [ref=e425]: docs/tree_search_experiments.md:643
+          - generic [ref=e426]: "## 12. 复现指南 ```bash # 安装依赖 pip install -e \".[dev,pdf]\" #"
+        - generic [ref=e427] [cursor=pointer]:
+          - generic [ref=e428]: planify/INTEGRATION.md:448
+          - generic [ref=e429]: "### 4.1 在工具文件中实现工厂函数 ```python def make_my_tool_tools(sess"
+        - generic [ref=e430] [cursor=pointer]:
+          - generic [ref=e431]: examples/data/markdowns/voice-call-cn.md:58
+          - generic [ref=e432]: "## 外呼电话 通过 Agent 工具发起外呼： ```python await agent.call(\"voic"
+        - generic [ref=e433] [cursor=pointer]:
+          - generic [ref=e434]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:22
+          - generic [ref=e435]: "### 2. 内部流式（升级点 3） 使用 `client.messages.stream()` 获取最终结果，对"
+        - generic [ref=e436] [cursor=pointer]:
+          - generic [ref=e437]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:507
+          - generic [ref=e438]: "### Task 5: E2E 验证 **Files:** 无改动，仅运行验证 - [ ] **Step 1: C"
+        - generic [ref=e439] [cursor=pointer]:
+          - generic [ref=e440]: samples/编程/microservices_patterns.md:220
+          - generic [ref=e441]: "### Solution Instead of storing the current state, store th"
+        - generic [ref=e442] [cursor=pointer]:
+          - generic [ref=e443]: samples/编程/microservices_patterns.md:220
+          - generic [ref=e444]: "### Solution Instead of storing the current state, store th"
+        - generic [ref=e445] [cursor=pointer]:
+          - generic [ref=e446]: planify/bootstrap_api_changes.md:98
+          - generic [ref=e447]: "### 兼容性 API ```python # 使用新 API（默认会话） session = create_ses"
+        - generic [ref=e448] [cursor=pointer]:
+          - generic [ref=e449]: examples/README.md:78
+          - generic [ref=e450]: "### Python Library Use this when you want to call TreeSear"
+        - generic [ref=e451] [cursor=pointer]:
+          - generic [ref=e452]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:16
+          - generic [ref=e453]: "### 1. search_v2 命令 **命令格式**: ```bash python -m cortex sea"
+        - generic [ref=e454] [cursor=pointer]:
+          - generic [ref=e455]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:68
+          - generic [ref=e456]: "### 文件变化事件示例 ```python { \"event_type\": \"file_change\","
+        - generic [ref=e457] [cursor=pointer]:
+          - generic [ref=e458]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:57
+          - generic [ref=e459]: "### `wait_for_index_ready` ```python async def wait_for_ind"
+        - generic [ref=e460] [cursor=pointer]:
+          - generic [ref=e461]: examples/README.md:27
+          - generic [ref=e462]: "### 基础搜索 ```bash # CLI 快速搜索 (自动发现文件，延迟索引) treesearch \"How"
+        - generic [ref=e463] [cursor=pointer]:
+          - generic [ref=e464]: samples/编程/microservices_patterns.md:23
+          - generic [ref=e465]: "### Implementation Example ```python # Write side - Command"
+        - generic [ref=e466] [cursor=pointer]:
+          - generic [ref=e467]: samples/编程/microservices_patterns.md:23
+          - generic [ref=e468]: "### Implementation Example ```python # Write side - Command"
+        - generic [ref=e469] [cursor=pointer]:
+          - generic [ref=e470]: planify/streaming_spec.md:242
+          - generic [ref=e471]: "### 核心接口定义 ```python # backend/app/planify/streaming/types"
+        - generic [ref=e472] [cursor=pointer]:
+          - generic [ref=e473]: README_ZH.md:39
+          - generic [ref=e474]: "### Python CLI 适合已经在用 Python 环境，但更想直接在命令行里搜索文件、文档和代码库： ``"
+        - generic [ref=e475] [cursor=pointer]:
+          - generic [ref=e476]: tests/test_report_0509_002.md:244
+          - generic [ref=e477]: "### QUERY-009: AND 查询无结果（XYZNOTEXIST999） - **执行命令**: `pyth"
+        - generic [ref=e478] [cursor=pointer]:
+          - generic [ref=e479]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:37
+          - generic [ref=e480]: "### `test_data_dir` ```python @pytest.fixture def test_data"
+        - generic [ref=e481] [cursor=pointer]:
+          - generic [ref=e482]: tests/test_report_0509_001.md:242
+          - generic [ref=e483]: "### READ-006: PDF 按章节读取 — quantum - **优先级**: P0 - **执行命令**"
+        - generic [ref=e484] [cursor=pointer]:
+          - generic [ref=e485]: docs/superpowers/specs/2026-05-11-web-search-query-params-design.md:24
+          - generic [ref=e486]: "## JSON 封装逻辑 新增 `_build_search_query` 函数： ```python def _"
+        - generic [ref=e487] [cursor=pointer]:
+          - generic [ref=e488]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:220
+          - generic [ref=e489]: "### Task 3: 更新 `make_web_tools` 的 tool schema 和 handler **"
+        - generic [ref=e490] [cursor=pointer]:
+          - generic [ref=e491]: examples/README.md:92
+          - generic [ref=e492]: "### Python CLI Use this when you're already in a Python en"
+        - generic [ref=e493] [cursor=pointer]:
+          - generic [ref=e494]: planify/INTEGRATION.md:296
+          - generic [ref=e495]: "### 3.2 工具定义格式 ```python MY_TOOL = { \"name\": \"my_tool\""
+        - generic [ref=e496] [cursor=pointer]:
+          - generic [ref=e497]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:20
+          - generic [ref=e498]: "### 初始过滤 ```python # 现状 (第 681 行) filtered = [ item fo"
+        - generic [ref=e499] [cursor=pointer]:
+          - generic [ref=e500]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:96
+          - generic [ref=e501]: "## 集成注册 在 `agent_integration.py` 的 `initialize()` 中，与 `kb_"
+        - generic [ref=e502] [cursor=pointer]:
+          - generic [ref=e503]: examples/README.md:139
+          - generic [ref=e504]: "## 快速运行 ```bash # QASPER（学术论文，带 Embedding 对比） python examp"
+        - generic [ref=e505] [cursor=pointer]:
+          - generic [ref=e506]: README_ZH.md:113
+          - generic [ref=e507]: "## 快速开始 ```python from treesearch import TreeSearch # 直接传"
+        - generic [ref=e508] [cursor=pointer]:
+          - generic [ref=e509]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:186
+          - generic [ref=e510]: "### 输入模拟 ```python cmd_input = pilot.app.query_one(\"#cmd-in"
+        - generic [ref=e511] [cursor=pointer]:
+          - generic [ref=e512]: .claude/skills/cortex-test/skill.md:23
+          - generic [ref=e513]: "## 前置检查（每个用例前验证） 1. **Python 路径**：**Windows Git Bash 环境下 `"
+        - generic [ref=e514] [cursor=pointer]:
+          - generic [ref=e515]: tests/test_report_0509_002.md:119
+          - generic [ref=e516]: "### QUERY-004: OR 查询中英文（CRISPR+Surface Code） - **执行命令**: `"
+        - generic [ref=e517] [cursor=pointer]:
+          - generic [ref=e518]: docs/api.md:233
+          - generic [ref=e519]: "#### `delete_document` — Low-level Delete ```python def de"
+        - generic [ref=e520] [cursor=pointer]:
+          - generic [ref=e521]: examples/README.md:166
+          - generic [ref=e522]: "## Quick Start ```python from treesearch import TreeSearch"
+        - generic [ref=e523] [cursor=pointer]:
+          - generic [ref=e524]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:80
+          - generic [ref=e525]: "## Task 2: 创建事件类型定义 **Files:** - Create: `cortex/events.py"
+        - generic [ref=e526] [cursor=pointer]:
+          - generic [ref=e527]: docs/superpowers/plans/2026-05-27-scoring-pipeline-dedup.md:308
+          - generic [ref=e528]: "### Task 3: 精简 CLI format_results **Files:** - Modify: `co"
+        - generic [ref=e529] [cursor=pointer]:
+          - generic [ref=e530]: docs/tree_search_experiments.md:46
+          - generic [ref=e531]: "### 2.3 CodeSearchNet (代码检索) - **来源**: CodeSearchNet bench"
+        - generic [ref=e532] [cursor=pointer]:
+          - generic [ref=e533]: docs/superpowers/plans/2026-05-07-kb-search-v2-implementation.md:314
+          - generic [ref=e534]: "## Task 3: 注册 `search_kb_v2` 工具 **Files:** - Modify: `cort"
+        - generic [ref=e535] [cursor=pointer]:
+          - generic [ref=e536]: CLAUDE.md:7
+          - generic [ref=e537]: "### 开发环境 (虚拟环境) ```bash # 创建虚拟环境 python -m venv .venv # 激"
+        - generic [ref=e538] [cursor=pointer]:
+          - generic [ref=e539]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:40
+          - generic [ref=e540]: "#### 1. `_on_index_loaded()` 新增 Timer 在 `_on_index_loaded("
+        - generic [ref=e541] [cursor=pointer]:
+          - generic [ref=e542]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:131
+          - generic [ref=e543]: "### 2. 事件类型定义 (`cortex/events.py`) ```python \"\"\"事件类型定义\"\"\""
+        - generic [ref=e544] [cursor=pointer]:
+          - generic [ref=e545]: cortex/cortex_cli_readme.md:226
+          - generic [ref=e546]: "## 依赖 - Python 3.7+"
+        - generic [ref=e547] [cursor=pointer]:
+          - generic [ref=e548]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:1
+          - generic [ref=e549]: "# 搜索逻辑对齐 Implementation Plan > **For agentic workers:** RE"
+        - generic [ref=e550] [cursor=pointer]:
+          - generic [ref=e551]: specs/search_page_spec.md:1
+          - generic [ref=e552]: "# Cortex Search Page - 前端设计指导文件 > 基于 `search_page_design.m"
+        - generic [ref=e553] [cursor=pointer]:
+          - generic [ref=e554]: docs/superpowers/plans/2026-05-11-grep-path-search.md:1
+          - generic [ref=e555]: "# grep 路径搜索实现计划 > **For agentic workers:** REQUIRED SUB-SK"
+        - generic [ref=e556] [cursor=pointer]:
+          - generic [ref=e557]: examples/README.md:11
+          - generic [ref=e558]: "# TreeSearch: Structure-Aware Document Retrieval [![PyPI ve"
+        - generic [ref=e559] [cursor=pointer]:
+          - generic [ref=e560]: docs/superpowers/plans/2026-05-27-scoring-pipeline-dedup.md:1
+          - generic [ref=e561]: "# 搜索评分管道去重 Implementation Plan > **For agentic workers:**"
+        - generic [ref=e562] [cursor=pointer]:
+          - generic [ref=e563]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:1
+          - generic [ref=e564]: "# Web Search Query Params JSON 封装 — 实现计划 > **For agentic w"
+        - generic [ref=e565] [cursor=pointer]:
+          - generic [ref=e566]: planify/SIMPLIFIED.md:69
+          - generic [ref=e567]: "### 2. 单用户 CLI（推荐） ```bash python backend/app/planify/cli."
+        - generic [ref=e568] [cursor=pointer]:
+          - generic [ref=e569]: README_ZH.md:11
+          - generic [ref=e570]: "# TreeSearch: 结构感知的文档检索 [![PyPI version](https://badge.fury"
+        - generic [ref=e571] [cursor=pointer]:
+          - generic [ref=e572]: cortex/test_results_template.md:1
+          - generic [ref=e573]: "# Cortex CLI 测试结果 > 测试日期: YYYY-MM-DD > 测试环境: Windows 10 Pr"
+        - generic [ref=e574] [cursor=pointer]:
+          - generic [ref=e575]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:1010
+          - generic [ref=e576]: "### Task 6: 修改 `agent_integration.py` — 集成 KB 工具和部署技能 **Fi"
+        - generic [ref=e577] [cursor=pointer]:
+          - generic [ref=e578]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:134
+          - generic [ref=e579]: "### Task 2: 重写 `cortex/grep_tools.py` 调用统一搜索入口 **Files:**"
+        - generic [ref=e580] [cursor=pointer]:
+          - generic [ref=e581]: CHANGELOG.md:18
+          - generic [ref=e582]: "### Changed - Unified wildcard query behavior across Python"
+        - generic [ref=e583] [cursor=pointer]:
+          - generic [ref=e584]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:214
+          - generic [ref=e585]: "## Task 2: Implement `_cli_search` **Files:** - Modify: `c"
+        - generic [ref=e586] [cursor=pointer]:
+          - generic [ref=e587]: tests/test_report_0509_001.md:354
+          - generic [ref=e588]: "### READ-010: 英文 MD 按章节读取 — Surface Code - **优先级**: P0 - *"
+        - generic [ref=e589] [cursor=pointer]:
+          - generic [ref=e590]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:33
+          - generic [ref=e591]: "### 关键设计 - `_pending_swap` 是 `None | tuple(new_ts, new_pat"
+        - generic [ref=e592] [cursor=pointer]:
+          - generic [ref=e593]: docs/superpowers/plans/2026-05-07-pre-tui-index-check.md:447
+          - generic [ref=e594]: "### Task 6: Full integration verification - [ ] **Step 1:"
+        - generic [ref=e595] [cursor=pointer]:
+          - generic [ref=e596]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:256
+          - generic [ref=e597]: "## Task 3: Implement `_cli_index` **Files:** - Modify: `co"
+        - generic [ref=e598] [cursor=pointer]:
+          - generic [ref=e599]: examples/README.md:349
+          - generic [ref=e600]: "### Quick Start ```bash # Install with cortex extras (incl"
+        - generic [ref=e601] [cursor=pointer]:
+          - generic [ref=e602]: docs/superpowers/plans/2026-05-28-grep-tool.md:338
+          - generic [ref=e603]: "# 测试 grep handler result = handlers['grep'](pattern='def ',"
+        - generic [ref=e604] [cursor=pointer]:
+          - generic [ref=e605]: planify/INTEGRATION.md:458
+          - generic [ref=e606]: "### 4.2 在 main.py 启动时注册 ```python # backend/app/main.py -"
+        - generic [ref=e607] [cursor=pointer]:
+          - generic [ref=e608]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:273
+          - generic [ref=e609]: "### 6.1 `cortex/kb_tools.py` ```python def build_kb_tools("
+        - generic [ref=e610] [cursor=pointer]:
+          - generic [ref=e611]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:1470
+          - generic [ref=e612]: "### Task 8: 集成测试 **Files:** - Create: `tests/test_tui_app."
+        - generic [ref=e613] [cursor=pointer]:
+          - generic [ref=e614]: README_ZH.md:515
+          - generic [ref=e615]: "### 总结 > **Auto Mode 是生产环境的最优选择**：自动识别文档类型，永远走最优路径，零配置、不踩坑"
+        - generic [ref=e616] [cursor=pointer]:
+          - generic [ref=e617]: CHANGELOG.md:15
+          - generic [ref=e618]: "### Added - Explicit `--regex` and `--fts-expression` query"
+        - generic [ref=e619] [cursor=pointer]:
+          - generic [ref=e620]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:373
+          - generic [ref=e621]: "## Task 5: Implement `_cli_ai` **Files:** - Modify: `corte"
+        - generic [ref=e622] [cursor=pointer]:
+          - generic [ref=e623]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:23
+          - generic [ref=e624]: "### Task 1: 创建 `cortex/kb_tools.py` — 工具定义骨架 **Files:** -"
+        - generic [ref=e625] [cursor=pointer]:
+          - generic [ref=e626]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:1
+          - generic [ref=e627]: "# Cortex 知识库 AI Agent 实现计划 > **For agentic workers:** REQU"
+        - generic [ref=e628] [cursor=pointer]:
+          - generic [ref=e629]: tests/test_report_0509_002.md:67
+          - generic [ref=e630]: "### QUERY-002: AND+排除查询（新能源+效率-传统） - **执行命令**: `python -m"
+        - generic [ref=e631] [cursor=pointer]:
+          - generic [ref=e632]: cortex/test_task.md:220
+          - generic [ref=e633]: "### 3.1 交互式命令测试 对于需要启动 cortex CLI 后在 REPL 中输入命令的测试用例： **方"
+        - generic [ref=e634] [cursor=pointer]:
+          - generic [ref=e635]: examples/README.md:587
+          - generic [ref=e636]: "### Summary > **Auto Mode is the recommended choice for pr"
+        - generic [ref=e637] [cursor=pointer]:
+          - generic [ref=e638]: planify/INTEGRATION.md:319
+          - generic [ref=e639]: "### 3.3 工具处理器签名 ```python async def handle_my_tool(arg1: s"
+        - generic [ref=e640] [cursor=pointer]:
+          - generic [ref=e641]: tests/test_report_0509_002.md:144
+          - generic [ref=e642]: "### QUERY-005: PHRASE 查询（固态电池技术） - **执行命令**: `python -m co"
+        - generic [ref=e643] [cursor=pointer]:
+          - generic [ref=e644]: tests/test_report_0509_002.md:43
+          - generic [ref=e645]: "### QUERY-001: AND 查询（量子+密码） - **执行命令**: `python -m cortex"
+        - generic [ref=e646] [cursor=pointer]:
+          - generic [ref=e647]: study/grep-logic.md:188
+          - generic [ref=e648]: "### TUI (`tui/app.py`) ```python # _do_grep() 精简后 ~20 行 re"
+        - generic [ref=e649] [cursor=pointer]:
+          - generic [ref=e650]: tests/test_report_0509_001.md:302
+          - generic [ref=e651]: "### READ-008: XLSX 表格读取 - **优先级**: P0 - **执行命令**: `python"
+        - generic [ref=e652] [cursor=pointer]:
+          - generic [ref=e653]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:50
+          - generic [ref=e654]: "#### CLI (`cortex_cli.py:format_results`) ```python def fo"
+        - generic [ref=e655] [cursor=pointer]:
+          - generic [ref=e656]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:153
+          - generic [ref=e657]: "### 4.3 `read_document` 工具 **描述**: 读取知识库中某个文档的完整或部分内容，支持多种"
+        - generic [ref=e658] [cursor=pointer]:
+          - generic [ref=e659]: tests/test_report_0509_001.md:159
+          - generic [ref=e660]: "### READ-003: 按行号范围读取 — 第20-40行 - **优先级**: P0 - **执行命令**:"
+        - generic [ref=e661] [cursor=pointer]:
+          - generic [ref=e662]: docs/superpowers/plans/2026-05-07-kb-search-v2-implementation.md:105
+          - generic [ref=e663]: "## Task 2: 实现 `_handle_search_kb_v2()` 函数 **Files:** - Mod"
+        - generic [ref=e664] [cursor=pointer]:
+          - generic [ref=e665]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:387
+          - generic [ref=e666]: "### Task 4: 更新调用方 — `agent_integration.py` 和 `cortex_cli.py"
+        - generic [ref=e667] [cursor=pointer]:
+          - generic [ref=e668]: docs/api.md:171
+          - generic [ref=e669]: "#### `delete` — Remove Documents ```python def delete(self"
+        - generic [ref=e670] [cursor=pointer]:
+          - generic [ref=e671]: study/grep-logic.md:327
+          - generic [ref=e672]: "### rg_fallback_search() ```python def rg_fallback_search("
+        - generic [ref=e673] [cursor=pointer]:
+          - generic [ref=e674]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:30
+          - generic [ref=e675]: "## Task 1: 创建 EventBus **Files:** - Create: `cortex/event_"
+        - generic [ref=e676] [cursor=pointer]:
+          - generic [ref=e677]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:13
+          - generic [ref=e678]: "### Task 1: TUI 过滤阈值对齐 **Files:** - Modify: `cortex/tui/ap"
+        - generic [ref=e679] [cursor=pointer]:
+          - generic [ref=e680]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:105
+          - generic [ref=e681]: "### 排序后无结果降级（第 293-301 行） ```python # 现状：排序后无结果直接 ripgrep"
+        - generic [ref=e682] [cursor=pointer]:
+          - generic [ref=e683]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:96
+          - generic [ref=e684]: "### `wait_for_file_indexed(pilot, marker, timeout=30) -> bo"
+        - generic [ref=e685] [cursor=pointer]:
+          - generic [ref=e686]: tests/test_report_0509_001.md:271
+          - generic [ref=e687]: "### READ-007: PPTX 按章节读取 — 量子 - **优先级**: P0 - **执行命令**: `p"
+        - generic [ref=e688] [cursor=pointer]:
+          - generic [ref=e689]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:37
+          - generic [ref=e690]: "### 数据结构 ```python @dataclass class GrepResult: conten"
+        - generic [ref=e691] [cursor=pointer]:
+          - generic [ref=e692]: tests/test_report_0509_002.md:92
+          - generic [ref=e693]: "### QUERY-003: OR 查询（勒索软件+益生菌+量子计算） - **执行命令**: `python -m"
+        - generic [ref=e694] [cursor=pointer]:
+          - generic [ref=e695]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:1
+          - generic [ref=e696]: "# Cortex TUI 交互式 CLI 实施计划 > **For agentic workers:** REQUI"
+        - generic [ref=e697] [cursor=pointer]:
+          - generic [ref=e698]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:34
+          - generic [ref=e699]: "### Task 1: 安装 Textual 并添加依赖 **Files:** - Modify: `pyproje"
+        - generic [ref=e700] [cursor=pointer]:
+          - generic [ref=e701]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:67
+          - generic [ref=e702]: "### `run_search(pilot, query) -> SearchResult` ```python as"
+        - generic [ref=e703] [cursor=pointer]:
+          - generic [ref=e704]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:461
+          - generic [ref=e705]: "## Task 7: 集成测试 **Files:** - Modify: `tests/test_event_bus"
+        - generic [ref=e706] [cursor=pointer]:
+          - generic [ref=e707]: CHANGELOG.md:86
+          - generic [ref=e708]: "### Added - **Parser registry** (`parsers/registry.py`): ex"
+        - generic [ref=e709] [cursor=pointer]:
+          - generic [ref=e710]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:82
+          - generic [ref=e711]: "### `run_ai_query(pilot, question, timeout=120) -> AiResult"
+        - generic [ref=e712] [cursor=pointer]:
+          - generic [ref=e713]: docs/superpowers/plans/2026-05-28-grep-tool.md:114
+          - generic [ref=e714]: "### Task 2: 实现 `_read_matched_lines` 辅助函数 **Files:** - Mod"
+        - generic [ref=e715] [cursor=pointer]:
+          - generic [ref=e716]: planify/INTEGRATION.md:528
+          - generic [ref=e717]: "### 6.1 主应用启动（main.py） ```python from contextlib import as"
+        - generic [ref=e718] [cursor=pointer]:
+          - generic [ref=e719]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:156
+          - generic [ref=e720]: "## CLI 集成 在 `cortex_cli.py` 添加 `web` 子命令： ```bash python"
+        - generic [ref=e721] [cursor=pointer]:
+          - generic [ref=e722]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:45
+          - generic [ref=e723]: "### `cortex_app_with_index` ```python @pytest.fixture async"
+        - generic [ref=e724] [cursor=pointer]:
+          - generic [ref=e725]: tests/test_report_0509_002.md:217
+          - generic [ref=e726]: "### QUERY-008: AND 查询跨格式（潘建伟）— 第三轮重测通过 - **执行命令**: `python"
+        - generic [ref=e727] [cursor=pointer]:
+          - generic [ref=e728]: tests/test_report_0509_002.md:268
+          - generic [ref=e729]: "### QUERY-010: OR 查询限制结果数（AI+量子+能源）— 第二轮重测通过 - **执行命令**: `"
+        - generic [ref=e730] [cursor=pointer]:
+          - generic [ref=e731]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:85
+          - generic [ref=e732]: "### FTS 无结果降级（第 208-224 行） ```python # 现状：FTS 无结果直接 ripgre"
+        - generic [ref=e733] [cursor=pointer]:
+          - generic [ref=e734]: README_ZH.md:141
+          - generic [ref=e735]: "### 内存模式 快速搜索、脚本或临时使用场景，设置 `db_path=None` 即可跳过写入 `.db` 文件："
+        - generic [ref=e736] [cursor=pointer]:
+          - generic [ref=e737]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:299
+          - generic [ref=e738]: "## Task 4: Implement `_cli_status` **Files:** - Modify: `c"
+        - generic [ref=e739] [cursor=pointer]:
+          - generic [ref=e740]: tests/test_report_0509_001.md:90
+          - generic [ref=e741]: "### READ-001: 读取固态电池文档 — 文档阅读 - **优先级**: P0 - **执行命令**: `p"
+        - generic [ref=e742] [cursor=pointer]:
+          - generic [ref=e743]: planify/SIMPLIFIED.md:47
+          - generic [ref=e744]: "### 1. 多用户 REPL（简化版） ```bash python backend/app/planify/ma"
+        - generic [ref=e745] [cursor=pointer]:
+          - generic [ref=e746]: examples/README.md:72
+          - generic [ref=e747]: "### 汇总 | 评测集 | 最优模式 | MRR | vs Embedding | 查询速度 | |-------"
+        - generic [ref=e748] [cursor=pointer]:
+          - generic [ref=e749]: docs/superpowers/plans/2026-05-07-kb-search-v2-implementation.md:441
+          - generic [ref=e750]: "## Task 5: 端到端测试 **Files:** - Test: 手动测试 - [ ] **Step 1:"
+        - generic [ref=e751] [cursor=pointer]:
+          - generic [ref=e752]: tests/test_report_0509_001.md:213
+          - generic [ref=e753]: "### READ-005: DOCX 按章节读取 — 三阶段 - **优先级**: P0 - **执行命令**: `"
+        - generic [ref=e754] [cursor=pointer]:
+          - generic [ref=e755]: tests/test_report_0509_001.md:129
+          - generic [ref=e756]: "### READ-002: 按章节读取 — 快充世界纪录 - **优先级**: P0 - **执行命令**: `py"
+        - generic [ref=e757] [cursor=pointer]:
+          - generic [ref=e758]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:509
+          - generic [ref=e759]: "### Task 3: 实现 `_handle_manage_kb` — 索引管理工具处理器 **Files:**"
+        - generic [ref=e760] [cursor=pointer]:
+          - generic [ref=e761]: tests/test_report_0509_001.md:51
+          - generic [ref=e762]: "### QUERY-001: AND 查询\"量子+密码\" — 结构化搜索 - **优先级**: P0 - **执行命"
+        - generic [ref=e763] [cursor=pointer]:
+          - generic [ref=e764]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:161
+          - generic [ref=e765]: "### Task 3: 提取命令路由为纯函数 + 单元测试 **Files:** - Create: `cortex"
+        - generic [ref=e766] [cursor=pointer]:
+          - generic [ref=e767]: docs/superpowers/specs/2026-05-08-cortex-e2e-tui-test-design.md:109
+          - generic [ref=e768]: "### 测试模式 ```python async def test_search_001_ransomware(pil"
+        - generic [ref=e769] [cursor=pointer]:
+          - generic [ref=e770]: planify/INTEGRATION.md:497
+          - generic [ref=e771]: "### 5.1 register_planify_config 参数 ```python register_plan"
+        - generic [ref=e772] [cursor=pointer]:
+          - generic [ref=e773]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:78
+          - generic [ref=e774]: "#### TUI (`tui/app.py:_do_search`) ```python def _do_searc"
+        - generic [ref=e775] [cursor=pointer]:
+          - generic [ref=e776]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:712
+          - generic [ref=e777]: "### Task 6: 创建 Gradio 应用入口 **Files:** - Create: `cortex/we"
+        - generic [ref=e778] [cursor=pointer]:
+          - generic [ref=e779]: tests/test_report_0509_002.md:188
+          - generic [ref=e780]: "### QUERY-007: NOT 查询（排除AI）— 第二轮重测通过 - **执行命令**: `python -"
+        - generic [ref=e781] [cursor=pointer]:
+          - generic [ref=e782]: docs/superpowers/plans/2026-05-28-grep-tool.md:279
+          - generic [ref=e783]: "### Task 4: 集成注册到 `agent_integration.py` **Files:** - Modi"
+        - generic [ref=e784] [cursor=pointer]:
+          - generic [ref=e785]: test_work_dir/编程/git_workflow.md:71
+          - generic [ref=e786]: "### Feature Flags Feature flags are essential for trunk-bas"
+        - generic [ref=e787] [cursor=pointer]:
+          - generic [ref=e788]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:281
+          - generic [ref=e789]: "## Task 5: 修改 StatusBar 订阅事件 **Files:** - Modify: `cortex/"
+        - generic [ref=e790] [cursor=pointer]:
+          - generic [ref=e791]: samples/编程/microservices_patterns.md:133
+          - generic [ref=e792]: "### Implementation ```python import time from enum import E"
+        - generic [ref=e793] [cursor=pointer]:
+          - generic [ref=e794]: samples/编程/microservices_patterns.md:133
+          - generic [ref=e795]: "### Implementation ```python import time from enum import E"
+        - generic [ref=e796] [cursor=pointer]:
+          - generic [ref=e797]: test_work_dir/编程/git_workflow.md:71
+          - generic [ref=e798]: "### Feature Flags Feature flags are essential for trunk-bas"
+        - generic [ref=e799] [cursor=pointer]:
+          - generic [ref=e800]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:22
+          - generic [ref=e801]: "## 架构 ``` 用户浏览器 ↓ Gradio Server (python -m cortex web)"
+        - generic [ref=e802] [cursor=pointer]:
+          - generic [ref=e803]: docs/api.md:146
+          - generic [ref=e804]: "### `TreeSearch` (High-level API) ```python class TreeSear"
+        - generic [ref=e805] [cursor=pointer]:
+          - generic [ref=e806]: docs/superpowers/plans/2026-05-11-grep-path-search.md:13
+          - generic [ref=e807]: "## Task 1: 新增 `search_paths_by_regex` 函数 **Files:** - Modi"
+        - generic [ref=e808] [cursor=pointer]:
+          - generic [ref=e809]: planify/INTEGRATION.md:556
+          - generic [ref=e810]: "### 6.2 SSE 流式对话端点 ```python # backend/app/api/v1/chat.py"
+        - generic [ref=e811] [cursor=pointer]:
+          - generic [ref=e812]: docs/superpowers/plans/2026-05-27-scoring-pipeline-dedup.md:205
+          - generic [ref=e813]: "### Task 2: 精简 TUI _do_search **Files:** - Modify: `cortex"
+        - generic [ref=e814] [cursor=pointer]:
+          - generic [ref=e815]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:69
+          - generic [ref=e816]: "#### 2. `cortex/tui/app.py` — 简化 `_do_grep` ```python def"
+        - generic [ref=e817] [cursor=pointer]:
+          - generic [ref=e818]: examples/README.md:194
+          - generic [ref=e819]: "### In-Memory Mode For quick searches, scripts, or ephemer"
+        - generic [ref=e820] [cursor=pointer]:
+          - generic [ref=e821]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:33
+          - generic [ref=e822]: "### 3. 域名过滤（升级点 4） Tool schema 和函数签名都新增 `allowed_domains`"
+        - generic [ref=e823] [cursor=pointer]:
+          - generic [ref=e824]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:11
+          - generic [ref=e825]: "#### 1. EventBus（事件总线） 单例模式，提供全局事件发布/订阅能力。 ```python clas"
+        - generic [ref=e826] [cursor=pointer]:
+          - generic [ref=e827]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:68
+          - generic [ref=e828]: "#### 3. 新增 `_on_startup_sync_done()` 回调 ```python def _on_"
+        - generic [ref=e829] [cursor=pointer]:
+          - generic [ref=e830]: docs/api.md:210
+          - generic [ref=e831]: "### `FTS5Index` ```python class FTS5Index: def __init_"
+        - generic [ref=e832] [cursor=pointer]:
+          - generic [ref=e833]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:210
+          - generic [ref=e834]: "## Task 4: 修改 FileWatcher 添加回调支持 **Files:** - Modify: `cor"
+        - generic [ref=e835] [cursor=pointer]:
+          - generic [ref=e836]: docs/superpowers/plans/2026-05-11-web-search-query-params.md:99
+          - generic [ref=e837]: "### Task 2: 更新 `run_web_search` 函数签名和内部逻辑 **Files:** - Mod"
+        - generic [ref=e838] [cursor=pointer]:
+          - generic [ref=e839]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:111
+          - generic [ref=e840]: "## Task 3: 为 EventBus 编写测试 **Files:** - Create: `tests/tes"
+        - generic [ref=e841] [cursor=pointer]:
+          - generic [ref=e842]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:52
+          - generic [ref=e843]: "#### 1. `cortex/ripgrep.py` — 新增 `execute_grep_search` ```"
+        - generic [ref=e844] [cursor=pointer]:
+          - generic [ref=e845]: .claude/skills/cortex-test/skill.md:51
+          - generic [ref=e846]: "### WATCH 类：文件操作 → 索引同步 → 搜索验证 → 清理还原 WATCH 关键规则： - 文件变更后必"
+        - generic [ref=e847] [cursor=pointer]:
+          - generic [ref=e848]: examples/README.md:554
+          - generic [ref=e849]: "### Code Retrieval (CodeSearchNet) Evaluated on [CodeSearc"
+        - generic [ref=e850] [cursor=pointer]:
+          - generic [ref=e851]: study/grep-logic.md:203
+          - generic [ref=e852]: "### Agent Tool (`grep_tools.py`) ```python # _handle_grep("
+        - generic [ref=e853] [cursor=pointer]:
+          - generic [ref=e854]: README_ZH.md:482
+          - generic [ref=e855]: "### 代码检索（CodeSearchNet） 基于 [CodeSearchNet](https://hugging"
+        - generic [ref=e856] [cursor=pointer]:
+          - generic [ref=e857]: CLAUDE.md:181
+          - generic [ref=e858]: "### TUI 界面（交互式） ```bash .venv/Scripts/python.exe -m cortex"
+        - generic [ref=e859] [cursor=pointer]:
+          - generic [ref=e860]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:28
+          - generic [ref=e861]: "### Task 1: 添加 gradio 依赖 **Files:** - Modify: `pyproject.t"
+        - generic [ref=e862] [cursor=pointer]:
+          - generic [ref=e863]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:7
+          - generic [ref=e864]: "## Tool Schema ```python GREP_TOOL = { \"name\": \"grep\","
+        - generic [ref=e865] [cursor=pointer]:
+          - generic [ref=e866]: CHANGELOG.md:48
+          - generic [ref=e867]: "### Changed - `TreeSearch._resolve_patterns()` now delegate"
+        - generic [ref=e868] [cursor=pointer]:
+          - generic [ref=e869]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:147
+          - generic [ref=e870]: "### 3. FileWatcher 修改 (`cortex/file_watcher.py`) - 新增 `on_"
+        - generic [ref=e871] [cursor=pointer]:
+          - generic [ref=e872]: study/search-logic.md:343
+          - generic [ref=e873]: "### Agent Tool (`kb_tools.py`) ```python # build_kb_tools("
+        - generic [ref=e874] [cursor=pointer]:
+          - generic [ref=e875]: examples/README.md:58
+          - generic [ref=e876]: "### Development Setup (Virtual Environment) For developmen"
+        - generic [ref=e877] [cursor=pointer]:
+          - generic [ref=e878]: README_ZH.md:254
+          - generic [ref=e879]: "## FTS5 独立搜索 ```python from treesearch import FTS5Index, D"
+        - generic [ref=e880] [cursor=pointer]:
+          - generic [ref=e881]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:25
+          - generic [ref=e882]: "### Task 1: 在 `cortex/ripgrep.py` 新增 `GrepResult` 和 `execut"
+        - generic [ref=e883] [cursor=pointer]:
+          - generic [ref=e884]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:295
+          - generic [ref=e885]: "### 测试模式 ```python # -*- coding: utf-8 -*- \"\"\"SEARCH 类 E2E"
+        - generic [ref=e886] [cursor=pointer]:
+          - generic [ref=e887]: study/grep-logic.md:303
+          - generic [ref=e888]: "### GrepResult ```python @dataclass class GrepResult:"
+        - generic [ref=e889] [cursor=pointer]:
+          - generic [ref=e890]: planify/INTEGRATION.md:49
+          - generic [ref=e891]: "### 2.1 启动时注册 在 `backend/app/main.py` 的 `lifespan` 中注册配置和工"
+        - generic [ref=e892] [cursor=pointer]:
+          - generic [ref=e893]: planify/SIMPLIFIED.md:77
+          - generic [ref=e894]: "### 3. API 使用 ```python from app.planify.bootstrap import"
+        - generic [ref=e895] [cursor=pointer]:
+          - generic [ref=e896]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:423
+          - generic [ref=e897]: "## Task 6: Add unit tests **Files:** - Create: `tests/test"
+        - generic [ref=e898] [cursor=pointer]:
+          - generic [ref=e899]: study/search-logic.md:144
+          - generic [ref=e900]: "### CLI (`cortex_cli.py`) ```python # format_results() 精简后"
+        - generic [ref=e901] [cursor=pointer]:
+          - generic [ref=e902]: docs/superpowers/plans/2026-05-07-status-bar-file-change-implementation.md:359
+          - generic [ref=e903]: "## Task 6: 修改 app.py 集成回调 **Files:** - Modify: `cortex/tui"
+        - generic [ref=e904] [cursor=pointer]:
+          - generic [ref=e905]: docs/superpowers/plans/2026-05-28-grep-tool.md:22
+          - generic [ref=e906]: "### Task 1: 创建 `grep_tools.py` — schema + 入口函数 **Files:**"
+        - generic [ref=e907] [cursor=pointer]:
+          - generic [ref=e908]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:58
+          - generic [ref=e909]: "### Task 2: 创建 cortex/web/__init__.py 和 deps.py **Files:**"
+        - generic [ref=e910] [cursor=pointer]:
+          - generic [ref=e911]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:293
+          - generic [ref=e912]: "### Task 4: 创建搜索 Tab **Files:** - Create: `cortex/web/sear"
+        - generic [ref=e913] [cursor=pointer]:
+          - generic [ref=e914]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:667
+          - generic [ref=e915]: "### Task 5: 创建搜索结果渲染器 **Files:** - Create: `cortex/tui/ren"
+        - generic [ref=e916] [cursor=pointer]:
+          - generic [ref=e917]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:95
+          - generic [ref=e918]: "### 1. EventBus 实现 (`cortex/event_bus.py`) ```python \"\"\"全局"
+        - generic [ref=e919] [cursor=pointer]:
+          - generic [ref=e920]: planify/INTEGRATION.md:248
+          - generic [ref=e921]: "### 2.3 处理 ask_user 事件 当 agent 需要用户输入时，会通过 `GlobalResponse"
+        - generic [ref=e922] [cursor=pointer]:
+          - generic [ref=e923]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:65
+          - generic [ref=e924]: "### Task 2: 创建 tui 包骨架和主题 **Files:** - Create: `cortex/tui"
+        - generic [ref=e925] [cursor=pointer]:
+          - generic [ref=e926]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:66
+          - generic [ref=e927]: "### 4. 搜索结果提取（升级点 7） 从 `web_search_tool_result` 类型的 conten"
+        - generic [ref=e928] [cursor=pointer]:
+          - generic [ref=e929]: docs/superpowers/plans/2026-05-28-grep-tool.md:187
+          - generic [ref=e930]: "### Task 3: 实现 `_handle_grep` handler **Files:** - Modify:"
+        - generic [ref=e931] [cursor=pointer]:
+          - generic [ref=e932]: examples/README.md:83
+          - generic [ref=e933]: "## Auto Mode 路由原理 三层自动策略，靠文档结构客观特征决策，无需手动配置： ``` 输入文档"
+        - generic [ref=e934] [cursor=pointer]:
+          - generic [ref=e935]: cortex/test_task.md:25
+          - generic [ref=e936]: "### 2.2 测试数据准备 测试工作目录为项目根目录下的 `test_work_dir/`。执行测试前，将 `sa"
+        - generic [ref=e937] [cursor=pointer]:
+          - generic [ref=e938]: planify/SIMPLIFIED.md:119
+          - generic [ref=e939]: "## 向后兼容性 旧代码仍然可以工作，但会收到迁移提示： ```python # 旧方式仍然有效，但会显示警告 s"
+        - generic [ref=e940] [cursor=pointer]:
+          - generic [ref=e941]: README_ZH.md:69
+          - generic [ref=e942]: "### Rust CLI 适合直接在命令行里搜索项目、文档和代码库，不依赖 Python 运行时；命令名是 `ts`"
+        - generic [ref=e943] [cursor=pointer]:
+          - generic [ref=e944]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:166
+          - generic [ref=e945]: "### 4. StatusBar 修改 (`cortex/tui/widgets/status_bar.py`) `"
+        - generic [ref=e946] [cursor=pointer]:
+          - generic [ref=e947]: study/search-logic.md:160
+          - generic [ref=e948]: "### TUI (`tui/app.py`) ```python # _do_search() 精简后 ~47 行"
+        - generic [ref=e949] [cursor=pointer]:
+          - generic [ref=e950]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:100
+          - generic [ref=e951]: "#### 2. `treesearch/treesearch.py` 透传 `progress_callback`"
+        - generic [ref=e952] [cursor=pointer]:
+          - generic [ref=e953]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:630
+          - generic [ref=e954]: content = "\n\n".join(content_parts) line_info = ""
+        - generic [ref=e955] [cursor=pointer]:
+          - generic [ref=e956]: docs/tree_search_experiments.md:356
+          - generic [ref=e957]: "### Benchmark 配置（评测时使用更大参数） ```python TreeSearchConfig("
+        - generic [ref=e958] [cursor=pointer]:
+          - generic [ref=e959]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:207
+          - generic [ref=e960]: "### 5. App 集成 (`cortex/tui/app.py`) ```python def _start_w"
+        - generic [ref=e961] [cursor=pointer]:
+          - generic [ref=e962]: docs/tree_search_experiments.md:532
+          - generic [ref=e963]: "### 10.7 Tree 作为默认检索方式的完整设计 ```python # 推荐的 config.py 默认值"
+        - generic [ref=e964] [cursor=pointer]:
+          - generic [ref=e965]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:1
+          - generic [ref=e966]: "# grep tool 搜索逻辑统一 实现计划 > **For agentic workers:** REQUIRE"
+        - generic [ref=e967] [cursor=pointer]:
+          - generic [ref=e968]: docs/superpowers/plans/2026-05-27-scoring-pipeline-dedup.md:13
+          - generic [ref=e969]: "### Task 1: 创建 scoring_pipeline.py **Files:** - Create: `c"
+        - generic [ref=e970] [cursor=pointer]:
+          - generic [ref=e971]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:219
+          - generic [ref=e972]: for i, (doc_id, node, matched, prox, fts) in enumerate(
+        - generic [ref=e973] [cursor=pointer]:
+          - generic [ref=e974]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:379
+          - generic [ref=e975]: "### Task 4: CLI FTS 无结果时增加 LIKE 降级 **Files:** - Modify: `c"
+        - generic [ref=e976] [cursor=pointer]:
+          - generic [ref=e977]: planify/examples.md:84
+          - generic [ref=e978]: "### 列出和管理会话 ```python from planify.bootstrap import ("
+        - generic [ref=e979] [cursor=pointer]:
+          - generic [ref=e980]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:133
+          - generic [ref=e981]: "### Task 3: 创建 GradioEventEmitter **Files:** - Create: `cor"
+        - generic [ref=e982] [cursor=pointer]:
+          - generic [ref=e983]: docs/api.md:256
+          - generic [ref=e984]: "### `GrepFilter` ```python class GrepFilter: def __init"
+        - generic [ref=e985] [cursor=pointer]:
+          - generic [ref=e986]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:330
+          - generic [ref=e987]: "### Task 3: 简化 TUI `_do_grep` 调用统一搜索入口 **Files:** - Modify:"
+        - generic [ref=e988] [cursor=pointer]:
+          - generic [ref=e989]: cortex/cortex_cli_readme.md:82
+          - generic [ref=e990]: "### 1. 基本搜索 ``` > python =================================="
+        - generic [ref=e991] [cursor=pointer]:
+          - generic [ref=e992]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:506
+          - generic [ref=e993]: "### Task 5: 创建 AI 对话 Tab **Files:** - Create: `cortex/web/c"
+        - generic [ref=e994] [cursor=pointer]:
+          - generic [ref=e995]: planify/examples.md:38
+          - generic [ref=e996]: "### 获取和使用会话 ```python from planify.bootstrap import get_ses"
+        - generic [ref=e997] [cursor=pointer]:
+          - generic [ref=e998]: docs/superpowers/specs/2026-05-26-webfetch-tool-design.md:70
+          - generic [ref=e999]: "### 注册方式 ```python # planify/tools/registry.py from planify"
+        - generic [ref=e1000] [cursor=pointer]:
+          - generic [ref=e1001]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:264
+          - generic [ref=e1002]: "### Task 3: TUI 调用方传递上下文参数 **Files:** - Modify: `cortex/tui"
+        - generic [ref=e1003] [cursor=pointer]:
+          - generic [ref=e1004]: docs/tree_search_experiments.md:427
+          - generic [ref=e1005]: "### 10.3 实现一：Walk-Only 节点注入 **原理**: Tree Walk 通过 parent/chi"
+        - generic [ref=e1006] [cursor=pointer]:
+          - generic [ref=e1007]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:82
+          - generic [ref=e1008]: "### 2. StatusBar 修改 (`cortex/tui/widgets/status_bar.py`) 在"
+        - generic [ref=e1009] [cursor=pointer]:
+          - generic [ref=e1010]: planify/examples.md:14
+          - generic [ref=e1011]: "### 初始化和创建会话 ```python from pathlib import Path from planif"
+        - generic [ref=e1012] [cursor=pointer]:
+          - generic [ref=e1013]: planify/examples.md:59
+          - generic [ref=e1014]: "### 会话消息操作 ```python # 追加消息 session.append_message({\"role\":"
+        - generic [ref=e1015] [cursor=pointer]:
+          - generic [ref=e1016]: docs/superpowers/plans/2026-05-08-cli-subcommands.md:20
+          - generic [ref=e1017]: "## Task 1: Scaffold argparse and `_init_components()` **Fil"
+        - generic [ref=e1018] [cursor=pointer]:
+          - generic [ref=e1019]: cortex/skills/knowledge_base/SKILL.md:51
+          - generic [ref=e1020]: "## grep 工具 当 `search_kb` 无结果或需要精确匹配时，使用 `grep` 工具： **适用场景："
+        - generic [ref=e1021] [cursor=pointer]:
+          - generic [ref=e1022]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:766
+          - generic [ref=e1023]: "### Task 7: 添加 `web` CLI 子命令 **Files:** - Modify: `cortex/c"
+        - generic [ref=e1024] [cursor=pointer]:
+          - generic [ref=e1025]: docs/superpowers/plans/2026-05-27-search-logic-alignment.md:72
+          - generic [ref=e1026]: "### Task 2: TUI 上下文选择对齐 — Renderer 参数扩展 **Files:** - Modify"
+        - generic [ref=e1027] [cursor=pointer]:
+          - generic [ref=e1028]: docs/api.md:270
+          - generic [ref=e1029]: "### `Document` ```python @dataclass class Document: doc"
+        - generic [ref=e1030] [cursor=pointer]:
+          - generic [ref=e1031]: cortex/cortex_cli_readme.md:31
+          - generic [ref=e1032]: "### 搜索命令 | 命令 | 别名 | 说明 | 搜索方式 | 搜索范围 | 示例 | |------|------"
+        - generic [ref=e1033] [cursor=pointer]:
+          - generic [ref=e1034]: docs/tree_search_experiments.md:470
+          - generic [ref=e1035]: "### 10.4 实现二：Source-Type-Aware 自适应降级 ```python # search.py"
+        - generic [ref=e1036] [cursor=pointer]:
+          - generic [ref=e1037]: docs/tree_search_experiments.md:593
+          - generic [ref=e1038]: "### 11.4 实验七: Subtree Evidence Aggregation ✅ (FinanceBench 核"
+        - generic [ref=e1039] [cursor=pointer]:
+          - generic [ref=e1040]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:119
+          - generic [ref=e1041]: "#### 3. `cortex/cortex_cli.py` 修改 `main()` ```python def ma"
+        - generic [ref=e1042] [cursor=pointer]:
+          - generic [ref=e1043]: CHANGELOG.md:36
+          - generic [ref=e1044]: "### Added - **Smart directory discovery**: `ts.index(\"path/t"
+        - generic [ref=e1045] [cursor=pointer]:
+          - generic [ref=e1046]: cortex/skills/knowledge_base/SKILL.md:132
+          - generic [ref=e1047]: "### FTS 查询策略 **重要：** `search_kb` 是基于 FTS5 的全文搜索，不是语义 RAG 查询"
+        - generic [ref=e1048] [cursor=pointer]:
+          - generic [ref=e1049]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:36
+          - generic [ref=e1050]: "### 1. IndexManager 修改 (`cortex/index_manager.py`) 在 `_rein"
+        - generic [ref=e1051] [cursor=pointer]:
+          - generic [ref=e1052]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:50
+          - generic [ref=e1053]: "### cortex/web/deps.py — 共享依赖 ```python _idx_manager: Index"
+        - generic [ref=e1054] [cursor=pointer]:
+          - generic [ref=e1055]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:140
+          - generic [ref=e1056]: "### cortex/web/app.py — Gradio 应用入口 ```python def create_ap"
+        - generic [ref=e1057] [cursor=pointer]:
+          - generic [ref=e1058]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:764
+          - generic [ref=e1059]: "# 确认初始内容可搜索 result_initial = await run_searc"
+        - generic [ref=e1060] [cursor=pointer]:
+          - generic [ref=e1061]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:7
+          - generic [ref=e1062]: "## 架构设计"
+        - generic [ref=e1063] [cursor=pointer]:
+          - generic [ref=e1064]: docs/api.md:3
+          - generic [ref=e1065]: "## Indexing"
+        - generic [ref=e1066] [cursor=pointer]:
+          - generic [ref=e1067]: study/search-logic.md:333
+          - generic [ref=e1068]: "## 2.7 调用方对比"
+        - generic [ref=e1069] [cursor=pointer]:
+          - generic [ref=e1070]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:13
+          - generic [ref=e1071]: "## File Structure | Action | File | Responsibility | |-----"
+        - generic [ref=e1072] [cursor=pointer]:
+          - generic [ref=e1073]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:1
+          - generic [ref=e1074]: "# Cortex TUI 交互式 CLI 升级设计"
+        - generic [ref=e1075] [cursor=pointer]:
+          - generic [ref=e1076]: test_work_dir/编程/git_workflow.md:127
+          - generic [ref=e1077]: "## CI/CD Integration"
+        - generic [ref=e1078] [cursor=pointer]:
+          - generic [ref=e1079]: test_work_dir/编程/git_workflow.md:127
+          - generic [ref=e1080]: "## CI/CD Integration"
+        - generic [ref=e1081] [cursor=pointer]:
+          - generic [ref=e1082]: docs/superpowers/plans/2026-05-28-grep-tool-unify.md:13
+          - generic [ref=e1083]: "## File Structure | 文件 | 操作 | 职责 | |------|------|------| |"
+        - generic [ref=e1084] [cursor=pointer]:
+          - generic [ref=e1085]: docs/superpowers/plans/2026-06-04-knowledge-base-citations.md:1
+          - generic [ref=e1086]: "# 知识库引文规范实现计划 > **For agentic workers:** REQUIRED SUB-SKILL:"
+        - generic [ref=e1087] [cursor=pointer]:
+          - generic [ref=e1088]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:15
+          - generic [ref=e1089]: "## 设计"
+        - generic [ref=e1090] [cursor=pointer]:
+          - generic [ref=e1091]: planify/INTEGRATION.md:446
+          - generic [ref=e1092]: "## 4. 注册外部工具"
+        - generic [ref=e1093] [cursor=pointer]:
+          - generic [ref=e1094]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:7
+          - generic [ref=e1095]: "## 升级点"
+        - generic [ref=e1096] [cursor=pointer]:
+          - generic [ref=e1097]: examples/data/markdowns/voice-call-cn.md:1
+          - generic [ref=e1098]: "# 语音通话插件 语音通话插件提供了通过 Twilio 进行语音通话的能力，支持外呼和接听。"
+        - generic [ref=e1099] [cursor=pointer]:
+          - generic [ref=e1100]: planify/streaming_spec.md:238
+          - generic [ref=e1101]: "## 原始设计文档 以下为原始设计文档内容，保留作为参考："
+        - generic [ref=e1102] [cursor=pointer]:
+          - generic [ref=e1103]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:16
+          - generic [ref=e1104]: "## 变更 1：TUI 过滤阈值对齐 **文件**: `cortex/tui/app.py` — `_do_search("
+        - generic [ref=e1105] [cursor=pointer]:
+          - generic [ref=e1106]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:44
+          - generic [ref=e1107]: "## Handler 实现"
+        - generic [ref=e1108] [cursor=pointer]:
+          - generic [ref=e1109]: cortex/skills/knowledge_base/SKILL.md:15
+          - generic [ref=e1110]: "## 搜索策略"
+        - generic [ref=e1111] [cursor=pointer]:
+          - generic [ref=e1112]: study/grep-logic.md:325
+          - generic [ref=e1113]: "## 3.2 搜索后端函数"
+        - generic [ref=e1114] [cursor=pointer]:
+          - generic [ref=e1115]: docs/superpowers/specs/2026-05-08-cli-subcommands-design.md:1
+          - generic [ref=e1116]: "# CLI Subcommands Design"
+        - generic [ref=e1117] [cursor=pointer]:
+          - generic [ref=e1118]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:50
+          - generic [ref=e1119]: "### 改动文件"
+        - generic [ref=e1120] [cursor=pointer]:
+          - generic [ref=e1121]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:13
+          - generic [ref=e1122]: "## 实现方案"
+        - generic [ref=e1123] [cursor=pointer]:
+          - generic [ref=e1124]: planify/bootstrap_api_changes.md:73
+          - generic [ref=e1125]: "## 使用示例"
+        - generic [ref=e1126] [cursor=pointer]:
+          - generic [ref=e1127]: examples/README.md:25
+          - generic [ref=e1128]: "## 快速开始"
+        - generic [ref=e1129] [cursor=pointer]:
+          - generic [ref=e1130]: docs/superpowers/plans/2026-05-28-grep-tool.md:13
+          - generic [ref=e1131]: "## File Structure | 文件 | 责任 | |------|------| | `cortex/grep_to"
+        - generic [ref=e1132] [cursor=pointer]:
+          - generic [ref=e1133]: CHANGELOG.md:23
+          - generic [ref=e1134]: "## [1.0.6] - 2026-04-16"
+        - generic [ref=e1135] [cursor=pointer]:
+          - generic [ref=e1136]: .claude/skills/cortex-test/skill.md:6
+          - generic [ref=e1137]: "# Cortex Test Runner 从测试用例文件读取测试用例并执行，结果写入 `tests/test_report_M"
+        - generic [ref=e1138] [cursor=pointer]:
+          - generic [ref=e1139]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:38
+          - generic [ref=e1140]: "### 实现细节"
+        - generic [ref=e1141] [cursor=pointer]:
+          - generic [ref=e1142]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:14
+          - generic [ref=e1143]: "## CLI 命令设计"
+        - generic [ref=e1144] [cursor=pointer]:
+          - generic [ref=e1145]: CONTRIBUTING.md:1
+          - generic [ref=e1146]: "# Contributing to TreeSearch Thank you for your interest in cont"
+        - generic [ref=e1147] [cursor=pointer]:
+          - generic [ref=e1148]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:13
+          - generic [ref=e1149]: "## File Structure | 操作 | 文件 | 职责 | |------|------|------| | Crea"
+        - generic [ref=e1150] [cursor=pointer]:
+          - generic [ref=e1151]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:7
+          - generic [ref=e1152]: "## 核心设计"
+        - generic [ref=e1153] [cursor=pointer]:
+          - generic [ref=e1154]: examples/README.md:1
+          - generic [ref=e1155]: "# TreeSearch Rust CLI `treesearch` is a fast, structure-aware do"
+        - generic [ref=e1156] [cursor=pointer]:
+          - generic [ref=e1157]: cortex/test_task.md:13
+          - generic [ref=e1158]: "## 二、测试前准备"
+        - generic [ref=e1159] [cursor=pointer]:
+          - generic [ref=e1160]: docs/superpowers/specs/2026-05-07-kb-search-v2-design.md:43
+          - generic [ref=e1161]: "## 工具定义"
+        - generic [ref=e1162] [cursor=pointer]:
+          - generic [ref=e1163]: planify/SIMPLIFIED.md:45
+          - generic [ref=e1164]: "## 使用方法"
+        - generic [ref=e1165] [cursor=pointer]:
+          - generic [ref=e1166]: docs/superpowers/specs/2026-05-26-webfetch-tool-design.md:1
+          - generic [ref=e1167]: "# Webfetch Tool 设计文档"
+        - generic [ref=e1168] [cursor=pointer]:
+          - generic [ref=e1169]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:1
+          - generic [ref=e1170]: "# Gradio Web UI 设计文档"
+        - generic [ref=e1171] [cursor=pointer]:
+          - generic [ref=e1172]: planify/examples.md:110
+          - generic [ref=e1173]: "## FastAPI 集成"
+        - generic [ref=e1174] [cursor=pointer]:
+          - generic [ref=e1175]: docs/superpowers/specs/2026-06-04-knowledge-base-citations-design.md:1
+          - generic [ref=e1176]: "# 知识库引文规范设计"
+        - generic [ref=e1177] [cursor=pointer]:
+          - generic [ref=e1178]: CLAUDE.md:1
+          - generic [ref=e1179]: "# Cortex CLAUDE.md Cortex — 结构感知文档检索工具"
+        - generic [ref=e1180] [cursor=pointer]:
+          - generic [ref=e1181]: samples/编程/microservices_patterns.md:63
+          - generic [ref=e1182]: "## Pattern 2: Saga Pattern"
+        - generic [ref=e1183] [cursor=pointer]:
+          - generic [ref=e1184]: samples/编程/microservices_patterns.md:63
+          - generic [ref=e1185]: "## Pattern 2: Saga Pattern"
+        - generic [ref=e1186] [cursor=pointer]:
+          - generic [ref=e1187]: docs/superpowers/specs/2026-05-11-web-search-query-params-design.md:1
+          - generic [ref=e1188]: "# Web Search Tool — 查询参数 JSON 封装设计"
+        - generic [ref=e1189] [cursor=pointer]:
+          - generic [ref=e1190]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:1
+          - generic [ref=e1191]: "# FileWatcher 自动索引更新设计"
+        - generic [ref=e1192] [cursor=pointer]:
+          - generic [ref=e1193]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:76
+          - generic [ref=e1194]: "### 实现细节"
+        - generic [ref=e1195] [cursor=pointer]:
+          - generic [ref=e1196]: docs/tree_search_experiments.md:1
+          - generic [ref=e1197]: "# Tree Search 优化实验记录 > **日期**: 2026-03-22 > **目标**: 优化 TreeSearch"
+        - generic [ref=e1198] [cursor=pointer]:
+          - generic [ref=e1199]: examples/README.md:11
+          - generic [ref=e1200]: "## 评测结果"
+        - generic [ref=e1201] [cursor=pointer]:
+          - generic [ref=e1202]: examples/README.md:185
+          - generic [ref=e1203]: "## 常见问题"
+        - generic [ref=e1204] [cursor=pointer]:
+          - generic [ref=e1205]: tests/test_report_0526_001.md:31
+          - generic [ref=e1206]: "## 详细测试记录"
+        - generic [ref=e1207] [cursor=pointer]:
+          - generic [ref=e1208]: tests/test_report_template.md:56
+          - generic [ref=e1209]: "## 详细测试记录"
+        - generic [ref=e1210] [cursor=pointer]:
+          - generic [ref=e1211]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:9
+          - generic [ref=e1212]: "### 核心组件"
+        - generic [ref=e1213] [cursor=pointer]:
+          - generic [ref=e1214]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:13
+          - generic [ref=e1215]: "## File Structure | File | Responsibility | |------|---------------| |"
+        - generic [ref=e1216] [cursor=pointer]:
+          - generic [ref=e1217]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:271
+          - generic [ref=e1218]: "## 6. 集成实现"
+        - generic [ref=e1220] [cursor=pointer]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:295
+        - generic [ref=e1221] [cursor=pointer]:
+          - generic [ref=e1222]: samples/编程/microservices_patterns.md:215
+          - generic [ref=e1223]: "## Pattern 5: Event Sourcing"
+        - generic [ref=e1224] [cursor=pointer]:
+          - generic [ref=e1225]: samples/编程/microservices_patterns.md:215
+          - generic [ref=e1226]: "## Pattern 5: Event Sourcing"
+        - generic [ref=e1227] [cursor=pointer]:
+          - generic [ref=e1228]: examples/README.md:19
+          - generic [ref=e1229]: "### 单用户 CLI"
+        - generic [ref=e1230] [cursor=pointer]:
+          - generic [ref=e1231]: examples/README.md:165
+          - generic [ref=e1232]: "## 添加新数据集 ```python # 1. 在 benchmark_utils.py 实现加载函数 def load_my_dataset"
+        - generic [ref=e1233] [cursor=pointer]:
+          - generic [ref=e1234]: docs/tree_search_experiments.md:582
+          - generic [ref=e1235]: "### 11.3 实验六: Leaf Node Preference ✅ (两个数据集 +1-2% MRR) **问题**: BM25 偏好 h"
+        - generic [ref=e1236] [cursor=pointer]:
+          - generic [ref=e1237]: cortex/test_task.md:302
+          - generic [ref=e1238]: "### 3.4 ripgrep 降级测试 ```python from cortex.ripgrep import rg_fallback_se"
+        - generic [ref=e1239] [cursor=pointer]:
+          - generic [ref=e1240]: docs/superpowers/specs/2026-05-07-status-bar-file-change-design.md:7
+          - generic [ref=e1241]: "## 架构设计"
+        - generic [ref=e1242] [cursor=pointer]:
+          - generic [ref=e1243]: samples/编程/microservices_patterns.md:7
+          - generic [ref=e1244]: "## Pattern 1: CQRS (Command Query Responsibility Segregation)"
+        - generic [ref=e1245] [cursor=pointer]:
+          - generic [ref=e1246]: samples/编程/microservices_patterns.md:7
+          - generic [ref=e1247]: "## Pattern 1: CQRS (Command Query Responsibility Segregation)"
+        - generic [ref=e1248] [cursor=pointer]:
+          - generic [ref=e1249]: cortex/test_task.md:390
+          - generic [ref=e1250]: "### 6.3 输出捕获 - 使用 `io.StringIO` 重定向 stdout 来捕获完整输出 - ANSI 转义码属于输出的一部分，**不"
+        - generic [ref=e1251] [cursor=pointer]:
+          - generic [ref=e1252]: docs/tree_search_experiments.md:342
+          - generic [ref=e1253]: "### Tree Search 默认配置 (`config.py`) ```python TreeSearchConfig( anchor"
+        - generic [ref=e1254] [cursor=pointer]:
+          - generic [ref=e1255]: docs/superpowers/specs/2026-05-28-grep-tool-design.md:1
+          - generic [ref=e1256]: "# Grep Tool for AI Agent — Design Spec"
+        - generic [ref=e1257] [cursor=pointer]:
+          - generic [ref=e1258]: docs/api.md:5
+          - generic [ref=e1259]: "### `md_to_tree` ```python async def md_to_tree( md_path: str = None,"
+        - generic [ref=e1260] [cursor=pointer]:
+          - generic [ref=e1261]: docs/api.md:27
+          - generic [ref=e1262]: "### `text_to_tree` ```python async def text_to_tree( text_path: str ="
+        - generic [ref=e1263] [cursor=pointer]:
+          - generic [ref=e1264]: examples/README.md:1
+          - generic [ref=e1265]: "# TreeSearch Benchmark Suite > 评测时间: 2026-04-03 | 覆盖 4 大评测集：QASPER / Fina"
+        - generic [ref=e1266] [cursor=pointer]:
+          - generic [ref=e1267]: cortex/cortex_cli_readme.md:7
+          - generic [ref=e1268]: "## 快速开始 ```bash python -m cortex ```"
+        - generic [ref=e1269] [cursor=pointer]:
+          - generic [ref=e1270]: CLAUDE.md:5
+          - generic [ref=e1271]: "## 安装"
+        - generic [ref=e1272] [cursor=pointer]:
+          - generic [ref=e1273]: CHANGELOG.md:13
+          - generic [ref=e1274]: "## [1.0.7] - 2026-04-16"
+        - generic [ref=e1275] [cursor=pointer]:
+          - generic [ref=e1276]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:580
+          - generic [ref=e1277]: "### 测试模式 ```python # -*- coding: utf-8 -*- \"\"\"AI 类 E2E 测试 - 10 个测试用例\"\"\" i"
+        - generic [ref=e1278] [cursor=pointer]:
+          - generic [ref=e1279]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:11
+          - generic [ref=e1280]: "## 架构 ``` ┌─────────────────────────────────────────────┐ │ Main Thread ("
+        - generic [ref=e1281] [cursor=pointer]:
+          - generic [ref=e1282]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:630
+          - generic [ref=e1283]: "### Task 4: 实现 `_handle_read_document` — 多格式文档阅读工具 **Files:** - Modify: `c"
+        - generic [ref=e1284] [cursor=pointer]:
+          - generic [ref=e1285]: cortex/test_task.md:283
+          - generic [ref=e1286]: "### 3.3 格式化输出测试 ```python from cortex.formatting import hl, truncate_ansi_"
+        - generic [ref=e1287] [cursor=pointer]:
+          - generic [ref=e1288]: cortex/test_task.md:218
+          - generic [ref=e1289]: "## 三、测试执行方法"
+        - generic [ref=e1290] [cursor=pointer]:
+          - generic [ref=e1291]: planify/examples.md:112
+          - generic [ref=e1292]: "### 完整 FastAPI 应用示例 ```python from fastapi import FastAPI, HTTPException, D"
+        - generic [ref=e1293] [cursor=pointer]:
+          - generic [ref=e1294]: study/grep-logic.md:186
+          - generic [ref=e1295]: "## 1.6 调用方对比"
+        - generic [ref=e1296] [cursor=pointer]:
+          - generic [ref=e1297]: docs/superpowers/plans/2026-05-04-cortex-kb-agent.md:219
+          - generic [ref=e1298]: "### Task 2: 实现 `_handle_search_kb` — 搜索工具处理器 **Files:** - Modify: `cortex/k"
+        - generic [ref=e1299] [cursor=pointer]:
+          - generic [ref=e1300]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:48
+          - generic [ref=e1301]: "### 调用方精简"
+        - generic [ref=e1302] [cursor=pointer]:
+          - generic [ref=e1303]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:66
+          - generic [ref=e1304]: "## 4. 工具详细规格"
+        - generic [ref=e1305] [cursor=pointer]:
+          - generic [ref=e1306]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:57
+          - generic [ref=e1307]: "### 核心辅助函数设计 ```python # 获取 ContentArea 纯文本内容 def get_content_text(content:"
+        - generic [ref=e1308] [cursor=pointer]:
+          - generic [ref=e1309]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:764
+          - generic [ref=e1310]: "### 测试模式 ```python # -*- coding: utf-8 -*- \"\"\"WATCH 类 E2E 测试 - 12 个测试用例\"\"\""
+        - generic [ref=e1311] [cursor=pointer]:
+          - generic [ref=e1312]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:81
+          - generic [ref=e1313]: "## 变更 3：CLI 加 LIKE 降级 **文件**: `cortex/cortex_cli.py` — `format_results()` 方法"
+        - generic [ref=e1314] [cursor=pointer]:
+          - generic [ref=e1315]: CLAUDE.md:134
+          - generic [ref=e1316]: "### treesearch/ - 结构感知检索核心库 ``` treesearch/ ├── cli.py # CL"
+        - generic [ref=e1317] [cursor=pointer]:
+          - generic [ref=e1318]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:16
+          - generic [ref=e1319]: "## 设计"
+        - generic [ref=e1320] [cursor=pointer]:
+          - generic [ref=e1321]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:875
+          - generic [ref=e1322]: "### Task 6: 创建 CortexApp 主入口（搜索命令可用） **Files:** - Create: `cortex/tui/app.py`"
+        - generic [ref=e1323] [cursor=pointer]:
+          - generic [ref=e1324]: CHANGELOG.md:84
+          - generic [ref=e1325]: "## [0.5.0] - 2026-03-10"
+        - generic [ref=e1326] [cursor=pointer]:
+          - generic [ref=e1327]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:43
+          - generic [ref=e1328]: "#### `FileWatcher` ```python class FileWatcher: def __init__(self, idx_ma"
+        - generic [ref=e1329] [cursor=pointer]:
+          - generic [ref=e1330]: CLAUDE.md:179
+          - generic [ref=e1331]: "## 正常使用"
+        - generic [ref=e1332] [cursor=pointer]:
+          - generic [ref=e1333]: cortex/test_task.md:256
+          - generic [ref=e1334]: "### 3.2 搜索功能测试 ```python from cortex.scoring import tokenize_query, calc_proxi"
+        - generic [ref=e1335] [cursor=pointer]:
+          - generic [ref=e1336]: test_work_dir/编程/git_workflow.md:61
+          - generic [ref=e1337]: "## Trunk-Based Development The simplest model, where all developers commit to"
+        - generic [ref=e1338] [cursor=pointer]:
+          - generic [ref=e1339]: samples/编程/microservices_patterns.md:118
+          - generic [ref=e1340]: "## Pattern 3: Circuit Breaker"
+        - generic [ref=e1341] [cursor=pointer]:
+          - generic [ref=e1342]: samples/编程/microservices_patterns.md:118
+          - generic [ref=e1343]: "## Pattern 3: Circuit Breaker"
+        - generic [ref=e1344] [cursor=pointer]:
+          - generic [ref=e1345]: test_work_dir/编程/git_workflow.md:61
+          - generic [ref=e1346]: "## Trunk-Based Development The simplest model, where all developers commit to a"
+        - generic [ref=e1347] [cursor=pointer]:
+          - generic [ref=e1348]: cortex/test_task.md:363
+          - generic [ref=e1349]: "### 6.1 搜索测试关键词选择 不要使用 `test_plan.json` 中的示例关键词直接搜索（目录中可能不存在）。应先确认测试数据中有哪些内容可被搜"
+        - generic [ref=e1350] [cursor=pointer]:
+          - generic [ref=e1351]: .claude/skills/cortex-test/skill.md:45
+          - generic [ref=e1352]: "## 执行流程"
+        - generic [ref=e1353] [cursor=pointer]:
+          - generic [ref=e1354]: CHANGELOG.md:34
+          - generic [ref=e1355]: "## [0.8.0] - 2026-03-12"
+        - generic [ref=e1356] [cursor=pointer]:
+          - generic [ref=e1357]: study/grep-logic.md:301
+          - generic [ref=e1358]: "## 3.1 数据结构"
+        - generic [ref=e1359] [cursor=pointer]:
+          - generic [ref=e1360]: study/search-logic.md:142
+          - generic [ref=e1361]: "## 1.5 调用方对比"
+        - generic [ref=e1362] [cursor=pointer]:
+          - generic [ref=e1363]: planify/SIMPLIFIED.md:1
+          - generic [ref=e1364]: "# Planify 简化版使用指南"
+        - generic [ref=e1365] [cursor=pointer]:
+          - generic [ref=e1366]: planify/examples.md:12
+          - generic [ref=e1367]: "## Session 基础使用"
+        - generic [ref=e1368] [cursor=pointer]:
+          - generic [ref=e1369]: cortex/cortex_cli_readme.md:80
+          - generic [ref=e1370]: "## 使用示例"
+        - generic [ref=e1371] [cursor=pointer]:
+          - generic [ref=e1372]: docs/superpowers/specs/2026-05-26-webfetch-tool-design.md:52
+          - generic [ref=e1373]: "## 文件结构"
+        - generic [ref=e1374] [cursor=pointer]:
+          - generic [ref=e1375]: cortex/cortex_cli_readme.md:192
+          - generic [ref=e1376]: "## 配置文件 | 配置项 | 默认值 | 说明 | |--------|--------|------| | `DEFAULT_SEARCH_PATH` | `E:/"
+        - generic [ref=e1377] [cursor=pointer]:
+          - generic [ref=e1378]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:34
+          - generic [ref=e1379]: "## 实现细节"
+        - generic [ref=e1380] [cursor=pointer]:
+          - generic [ref=e1381]: cortex/cortex_cli_readme.md:1
+          - generic [ref=e1382]: "# Cortex CLI 使用手册"
+        - generic [ref=e1383] [cursor=pointer]:
+          - generic [ref=e1384]: cortex/skills/knowledge_base/SKILL.md:6
+          - generic [ref=e1385]: "# 知识库技能 你拥有以下知识库工具： - **search_kb**: 在知识库索引中搜索文档片段。输入自然语言关键词，自动分词并检索。返回带评分和层次路径的 XML"
+        - generic [ref=e1386] [cursor=pointer]:
+          - generic [ref=e1387]: cortex/cortex_cli_readme.md:29
+          - generic [ref=e1388]: "## 命令列表"
+        - generic [ref=e1389] [cursor=pointer]:
+          - generic [ref=e1390]: cortex/skills/knowledge_base/SKILL.md:91
+          - generic [ref=e1391]: "## 引文要求（强制） 凡是答案引用了工具返回的具体事实、数字、定义或引文时， **必须在末尾追加\"## 参考资料\"列表**。 仅作流程性回复（如 `manage_kb(r"
+        - generic [ref=e1392] [cursor=pointer]:
+          - generic [ref=e1393]: docs/superpowers/specs/2026-06-06-gradio-web-ui-design.md:48
+          - generic [ref=e1394]: "## 模块设计"
+        - generic [ref=e1396] [cursor=pointer]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:764
+        - generic [ref=e1397] [cursor=pointer]:
+          - generic [ref=e1398]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:561
+          - generic [ref=e1399]: "## Task 4: 创建 test_e2e_ai.py - AI 测试 - 创建: `unit-test/test_e2e_ai.py`"
+        - generic [ref=e1400] [cursor=pointer]:
+          - generic [ref=e1401]: samples/编程/microservices_patterns.md:68
+          - generic [ref=e1402]: "### Solution: Choreography-Based Saga Each service publishes events that trigger the next"
+        - generic [ref=e1403] [cursor=pointer]:
+          - generic [ref=e1404]: samples/编程/microservices_patterns.md:68
+          - generic [ref=e1405]: "### Solution: Choreography-Based Saga Each service publishes events that trigger the next"
+        - generic [ref=e1406] [cursor=pointer]:
+          - generic [ref=e1407]: docs/superpowers/plans/2026-05-08-cortex-e2e-tui-test-impl.md:46
+          - generic [ref=e1408]: "## Task 2: 创建 conftest.py - 共享 fixtures - 创建: `unit-test/conftest.py`"
+        - generic [ref=e1409] [cursor=pointer]:
+          - generic [ref=e1410]: CLAUDE.md:108
+          - generic [ref=e1411]: "## 项目结构"
+        - generic [ref=e1413] [cursor=pointer]: docs/superpowers/plans/2026-05-06-tui-interactive-cli.md:875
+        - generic [ref=e1414] [cursor=pointer]:
+          - generic [ref=e1415]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:41
+          - generic [ref=e1416]: "### 新增：`cortex/file_watcher.py`"
+        - generic [ref=e1417] [cursor=pointer]:
+          - generic [ref=e1418]: specs/search_page_spec.md:8
+          - generic [ref=e1419]: "## 一、页面功能结构（所有风格通用）"
+        - generic [ref=e1420] [cursor=pointer]:
+          - generic [ref=e1421]: study/search-logic.md:364
+          - generic [ref=e1422]: "## 3.1 综合评分算法"
+        - generic [ref=e1423] [cursor=pointer]:
+          - generic [ref=e1424]: planify/streaming_spec.md:119
+          - generic [ref=e1425]: "## 五、API 使用说明"
+        - generic [ref=e1426] [cursor=pointer]:
+          - generic [ref=e1427]: examples/README.md:111
+          - generic [ref=e1428]: "## CLI 命令 - `/compact` - 手动压缩对话上下文 - `/tasks` - 列出任务 - `/team` - 列出队友 - `/inbox` - 读取收件箱 - `/ex"
+        - generic [ref=e1429] [cursor=pointer]:
+          - generic [ref=e1430]: planify/SIMPLIFIED.md:7
+          - generic [ref=e1431]: "## 主要变化"
+        - generic [ref=e1432] [cursor=pointer]:
+          - generic [ref=e1433]: docs/superpowers/specs/2026-05-08-cli-subcommands-design.md:28
+          - generic [ref=e1434]: "## Commands"
+        - generic [ref=e1435] [cursor=pointer]:
+          - generic [ref=e1436]: test_work_dir/编程/git_workflow.md:39
+          - generic [ref=e1437]: "## GitHub Flow A simpler model optimized for continuous deployment:"
+        - generic [ref=e1438] [cursor=pointer]:
+          - generic [ref=e1439]: test_work_dir/编程/git_workflow.md:39
+          - generic [ref=e1440]: "## GitHub Flow A simpler model optimized for continuous deployment:"
+        - generic [ref=e1441] [cursor=pointer]:
+          - generic [ref=e1442]: examples/README.md:127
+          - generic [ref=e1443]: "## 架构说明"
+        - generic [ref=e1444] [cursor=pointer]:
+          - generic [ref=e1445]: specs/search_page_spec.md:248
+          - generic [ref=e1446]: "### 风格 E：Soft Warm（柔和暖色风） **定位**：温和舒适、柔和阴影、圆润造型，有亲和力的工具感"
+        - generic [ref=e1447] [cursor=pointer]:
+          - generic [ref=e1448]: planify/SIMPLIFIED.md:14
+          - generic [ref=e1449]: "### 目录结构变化"
+        - generic [ref=e1450] [cursor=pointer]:
+          - generic [ref=e1451]: test_work_dir/编程/git_workflow.md:7
+          - generic [ref=e1452]: "## Git Flow Git Flow is the most established branching model, introduced by Vincent Driessen in 2010"
+        - generic [ref=e1453] [cursor=pointer]:
+          - generic [ref=e1454]: test_work_dir/编程/git_workflow.md:7
+          - generic [ref=e1455]: "## Git Flow Git Flow is the most established branching model, introduced by Vincent Driessen in 2010"
+        - generic [ref=e1456] [cursor=pointer]:
+          - generic [ref=e1457]: examples/README.md:45
+          - generic [ref=e1458]: "## 环境配置 在当前工作目录创建 `.env` 文件，配置以下变量："
+        - generic [ref=e1459] [cursor=pointer]:
+          - generic [ref=e1460]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:88
+          - generic [ref=e1461]: "## 测试用例设计 新增测试文件 `tests/test_case_v2.json`，包含两个分类共 20 个测试用例。"
+        - generic [ref=e1462] [cursor=pointer]:
+          - generic [ref=e1463]: examples/README.md:17
+          - generic [ref=e1464]: "## 快速开始"
+        - generic [ref=e1465] [cursor=pointer]:
+          - generic [ref=e1466]: test_work_dir/编程/git_workflow.md:1
+          - generic [ref=e1467]: "# Git Branching and Workflow Strategies"
+        - generic [ref=e1468] [cursor=pointer]:
+          - generic [ref=e1469]: test_work_dir/编程/git_workflow.md:1
+          - generic [ref=e1470]: "# Git Branching and Workflow Strategies"
+        - generic [ref=e1471] [cursor=pointer]:
+          - generic [ref=e1472]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:1
+          - generic [ref=e1473]: "# 索引进度通知 - 设计文档"
+        - generic [ref=e1474] [cursor=pointer]:
+          - generic [ref=e1475]: docs/superpowers/specs/2026-05-26-webfetch-tool-design.md:9
+          - generic [ref=e1476]: "## 工具接口"
+        - generic [ref=e1477] [cursor=pointer]:
+          - generic [ref=e1478]: specs/search_page_spec.md:106
+          - generic [ref=e1479]: "### 风格 B：Bento Grid（便当盒网格风） **定位**：Apple 风格现代感，模块化卡片，视觉层次丰富"
+        - generic [ref=e1480] [cursor=pointer]:
+          - generic [ref=e1481]: specs/search_page_spec.md:200
+          - generic [ref=e1482]: "### 风格 D：Flat Vibrant（扁平活力风） **定位**：大胆鲜明的色块、无阴影、快速高效，年轻有活力"
+        - generic [ref=e1483] [cursor=pointer]:
+          - generic [ref=e1484]: examples/data/markdowns/voice-call-cn.md:5
+          - generic [ref=e1485]: "## 安装"
+        - generic [ref=e1486] [cursor=pointer]:
+          - generic [ref=e1487]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:113
+          - generic [ref=e1488]: "## 数据流"
+        - generic [ref=e1489] [cursor=pointer]:
+          - generic [ref=e1490]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:52
+          - generic [ref=e1491]: "## 核心组件"
+        - generic [ref=e1492] [cursor=pointer]:
+          - generic [ref=e1493]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:122
+          - generic [ref=e1494]: "## 实现计划"
+        - generic [ref=e1495] [cursor=pointer]:
+          - generic [ref=e1496]: specs/search_page_spec.md:153
+          - generic [ref=e1497]: "### 风格 C：Dark Cinema（深色影院风） **定位**：沉浸式深色主题，适合长时间阅读，高端科技感"
+        - generic [ref=e1498] [cursor=pointer]:
+          - generic [ref=e1499]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:226
+          - generic [ref=e1500]: "## 5. Skill 设计"
+        - generic [ref=e1501] [cursor=pointer]:
+          - generic [ref=e1502]: docs/superpowers/specs/2026-05-07-kb-search-v2-design.md:1
+          - generic [ref=e1503]: "# KB Search V2 设计方案"
+        - generic [ref=e1504] [cursor=pointer]:
+          - generic [ref=e1505]: specs/search_page_spec.md:56
+          - generic [ref=e1506]: "## 二、5 种风格方案 ---"
+        - generic [ref=e1507] [cursor=pointer]:
+          - generic [ref=e1508]: planify/bootstrap_api_changes.md:1
+          - generic [ref=e1509]: "# Bootstrap.py API 变更说明"
+        - generic [ref=e1510] [cursor=pointer]:
+          - generic [ref=e1511]: docs/superpowers/specs/2026-05-27-scoring-pipeline-dedup-design.md:1
+          - generic [ref=e1512]: "# 搜索评分管道去重设计"
+        - generic [ref=e1513] [cursor=pointer]:
+          - generic [ref=e1514]: docs/superpowers/specs/2026-05-09-kb-tool-cli-commands-design.md:1
+          - generic [ref=e1515]: "# KB Tool CLI Commands 设计 **日期**: 2026-05-09 **状态**: Draft"
+        - generic [ref=e1516] [cursor=pointer]:
+          - generic [ref=e1517]: study/search-logic.md:5
+          - generic [ref=e1518]: "# 第一章 search 管道 > CLI `cortex search <query>` 和 TUI `/search <query>` 共享同一套管道，基于 `scoring_pipeline.py` 的 `score_and_rank()` 实现评分/"
+        - generic [ref=e1519] [cursor=pointer]:
+          - generic [ref=e1520]: test_work_dir/编程/git_workflow.md:84
+          - generic [ref=e1521]: "## Rebase vs Merge One of the most debated topics in Git workflow is whether to use rebase or merge for integrating changes."
+        - generic [ref=e1522] [cursor=pointer]:
+          - generic [ref=e1523]: test_work_dir/编程/git_workflow.md:84
+          - generic [ref=e1524]: "## Rebase vs Merge One of the most debated topics in Git workflow is whether to use rebase or merge for integrating changes."
+        - generic [ref=e1525] [cursor=pointer]:
+          - generic [ref=e1526]: tests/test_report_0526_001.md:1
+          - generic [ref=e1527]: "# Cortex CLI E2E 测试报告 - **测试日期**: 2026-05-26 - **测试时间**: 执行中 - **测试用例文件路径**: tests/test_case_kb.json ---"
+        - generic [ref=e1528] [cursor=pointer]:
+          - generic [ref=e1529]: tests/test_report_template.md:1
+          - generic [ref=e1530]: "# Cortex CLI E2E 测试报告 - **测试日期**: {YYYY-MM-DD} - **测试时间**: {HH:MM:SS} - **测试用例文件路径**: ---"
+        - generic [ref=e1531] [cursor=pointer]:
+          - generic [ref=e1532]: CLAUDE.md:54
+          - generic [ref=e1533]: "## Cortex 架构"
+        - generic [ref=e1534] [cursor=pointer]:
+          - generic [ref=e1535]: specs/search_page_spec.md:313
+          - generic [ref=e1536]: "## 四、通用设计规范（所有风格共享）"
+        - generic [ref=e1537] [cursor=pointer]:
+          - generic [ref=e1538]: tests/test_report_0526_001.md:21
+          - generic [ref=e1539]: "## 测试结果明细"
+        - generic [ref=e1540] [cursor=pointer]:
+          - generic [ref=e1541]: tests/test_report_template.md:21
+          - generic [ref=e1542]: "## 测试结果明细"
+        - generic [ref=e1543] [cursor=pointer]:
+          - generic [ref=e1544]: planify/bootstrap_api_changes.md:22
+          - generic [ref=e1545]: "### 2. 简化的便捷函数"
+        - generic [ref=e1546] [cursor=pointer]:
+          - generic [ref=e1547]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:1
+          - generic [ref=e1548]: "# 启动 TUI 前索引存在性检查与全量创建 **日期**: 2026-05-07 **状态**: Draft"
+        - generic [ref=e1549] [cursor=pointer]:
+          - generic [ref=e1550]: planify/bootstrap_api_changes.md:3
+          - generic [ref=e1551]: "## 新增的简化 API"
+        - generic [ref=e1552] [cursor=pointer]:
+          - generic [ref=e1553]: examples/README.md:1
+          - generic [ref=e1554]: "# Planify 基于 Claude API 的多代理 LLM 系统，提供交互式 REPL 命令行界面和单用户 CLI。"
+        - generic [ref=e1555] [cursor=pointer]:
+          - generic [ref=e1556]: study/grep-logic.md:152
+          - generic [ref=e1557]: "## 1.5 评分与过滤"
+        - generic [ref=e1558] [cursor=pointer]:
+          - generic [ref=e1559]: docs/superpowers/specs/2026-05-11-web-search-query-params-design.md:55
+          - generic [ref=e1560]: "## 变更文件"
+        - generic [ref=e1561] [cursor=pointer]:
+          - generic [ref=e1562]: docs/superpowers/specs/2026-05-07-pre-tui-index-check-design.md:13
+          - generic [ref=e1563]: "## 方案 在进入 TUI 之前，在命令行层面对当前目录的索引进行检查： 1. 检查 `index.db` 文件是否存在，且 `documents` 表中至少有一条记录。 2. 若不存在，在命令行询问用户是否给当前目录创建索引。 3. 用户同意后，创建 `TreeSearch` 实例，调用 `ts.index(pr"
+        - generic [ref=e1564] [cursor=pointer]:
+          - generic [ref=e1565]: study/search-logic.md:358
+          - generic [ref=e1566]: "# 第三章 公共模块 > `scoring.py` 和 `scoring_pipeline.py` 是两个管道共用的评分核心与管道基础设施。 ---"
+        - generic [ref=e1567] [cursor=pointer]:
+          - generic [ref=e1568]: docs/superpowers/specs/2026-05-07-kb-search-v2-design.md:55
+          - generic [ref=e1569]: "## 实现方案"
+        - generic [ref=e1570] [cursor=pointer]:
+          - generic [ref=e1571]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:1
+          - generic [ref=e1572]: "# Cortex 知识库 AI Agent 设计文档 **日期**: 2026-05-04 **状态**: 草案"
+        - generic [ref=e1573] [cursor=pointer]:
+          - generic [ref=e1574]: planify/streaming_spec.md:1
+          - generic [ref=e1575]: "# Planify 流式输出改造方案"
+        - generic [ref=e1576] [cursor=pointer]:
+          - generic [ref=e1577]: specs/search_page_spec.md:60
+          - generic [ref=e1578]: "### 风格 A：Swiss Minimal（瑞士极简风） **定位**：专业、干净、高可读性，适合文档检索工具的严肃感"
+        - generic [ref=e1579] [cursor=pointer]:
+          - generic [ref=e1580]: test_work_dir/编程/git_workflow.md:180
+          - generic [ref=e1581]: "## Commit Message Conventions"
+        - generic [ref=e1582] [cursor=pointer]:
+          - generic [ref=e1583]: test_work_dir/编程/git_workflow.md:180
+          - generic [ref=e1584]: "## Commit Message Conventions"
+        - generic [ref=e1585] [cursor=pointer]:
+          - generic [ref=e1586]: samples/编程/microservices_patterns.md:1
+          - generic [ref=e1587]: "# Microservices Design Patterns"
+        - generic [ref=e1588] [cursor=pointer]:
+          - generic [ref=e1589]: samples/编程/microservices_patterns.md:1
+          - generic [ref=e1590]: "# Microservices Design Patterns"
+        - generic [ref=e1591] [cursor=pointer]:
+          - generic [ref=e1592]: docs/superpowers/plans/2026-05-28-grep-tool.md:1
+          - generic [ref=e1593]: "# Grep Tool for AI Agent — Implementation Plan > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement thi"
+        - generic [ref=e1594] [cursor=pointer]:
+          - generic [ref=e1595]: docs/superpowers/specs/2026-05-07-indexing-progress-design.md:116
+          - generic [ref=e1596]: "## 设计决策"
+        - generic [ref=e1597] [cursor=pointer]:
+          - generic [ref=e1598]: examples/README.md:1
+          - generic [ref=e1599]: "# TreeSearch Examples 本目录包含 TreeSearch 的使用示例和 benchmark 评测代码。"
+        - generic [ref=e1600] [cursor=pointer]:
+          - generic [ref=e1601]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:26
+          - generic [ref=e1602]: "## 3. 设计方案"
+        - generic [ref=e1603] [cursor=pointer]:
+          - generic [ref=e1604]: docs/superpowers/specs/2026-05-10-planify-web-search-upgrade-design.md:1
+          - generic [ref=e1605]: "# planify/web_search tool 升级设计"
+        - generic [ref=e1606] [cursor=pointer]:
+          - generic [ref=e1607]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:96
+          - generic [ref=e1608]: "## REPL 集成"
+        - generic [ref=e1609] [cursor=pointer]:
+          - generic [ref=e1610]: examples/README.md:71
+          - generic [ref=e1611]: "## 目录结构"
+        - generic [ref=e1612] [cursor=pointer]:
+          - generic [ref=e1613]: planify/bootstrap_api_changes.md:30
+          - generic [ref=e1614]: "## 已修改的兼容性 API 以下函数现在支持新旧两种调用方式："
+        - generic [ref=e1615] [cursor=pointer]:
+          - generic [ref=e1616]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:51
+          - generic [ref=e1617]: "## 变更 2：TUI 上下文选择对齐 **文件**: `cortex/tui/renderers/search.py` — `render_search_result()` 函数"
+        - generic [ref=e1618] [cursor=pointer]:
+          - generic [ref=e1619]: study/search-logic.md:182
+          - generic [ref=e1620]: "# 第二章 search_kb 管道 > CLI `cortex search_kb <query>` 和 Agent `search_kb` Tool 共享同一入口 `_handle_search_kb()`（`kb_tools.py`）。 > 评分算法与第一章相同（共用 `scoring.py`），但无降级搜索、输出为 XML 结构化文本。 ---"
+        - generic [ref=e1621] [cursor=pointer]:
+          - generic [ref=e1622]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:12
+          - generic [ref=e1623]: "## 方案 在 `_on_index_loaded()` 完成索引加载后，延迟 3 秒触发一次后台增量索引检查，复用现有的 `trigger_background_reindex()` 机制。"
+        - generic [ref=e1624] [cursor=pointer]:
+          - generic [ref=e1625]: docs/superpowers/specs/2026-05-07-windows-file-locking-design.md:1
+          - generic [ref=e1626]: "# Windows 跨进程文件锁设计"
+        - generic [ref=e1627] [cursor=pointer]:
+          - generic [ref=e1628]: planify/streaming_spec.md:33
+          - generic [ref=e1629]: "## 二、SSE 事件类型设计"
+        - generic [ref=e1630] [cursor=pointer]:
+          - generic [ref=e1631]: docs/superpowers/specs/2026-06-04-knowledge-base-citations-design.md:18
+          - generic [ref=e1632]: "## 方案"
+        - generic [ref=e1633] [cursor=pointer]:
+          - generic [ref=e1634]: planify/SIMPLIFIED.md:136
+          - generic [ref=e1635]: "## 故障排除"
+        - generic [ref=e1636] [cursor=pointer]:
+          - generic [ref=e1637]: docs/superpowers/specs/2026-05-07-startup-incremental-index-design.md:1
+          - generic [ref=e1638]: "# 启动后增量索引同步 **日期**: 2026-05-07 **状态**: Draft"
+        - generic [ref=e1639] [cursor=pointer]:
+          - generic [ref=e1640]: examples/data/markdowns/voice-call-cn.md:20
+          - generic [ref=e1641]: "## 配置 语音通话插件需要以下环境变量： | 变量名 | 说明 | 必填 | |--------|------|------| | `TWILIO_ACCOUNT_SID` | Twilio 账户 SID | 是 | | `TWILIO_AUTH_TOKEN` | Twilio 认证令牌 | 是 | | `TWILIO_PHONE_NUMBER` | Twilio 电话号码 | 是 | | `WEBHOOK_URL` | Webhook 回调地址 | 是 |"
+        - generic [ref=e1642] [cursor=pointer]:
+          - generic [ref=e1643]: docs/superpowers/specs/2026-05-11-grep-path-search-design.md:1
+          - generic [ref=e1644]: "# grep 路径搜索功能设计"
+        - generic [ref=e1645] [cursor=pointer]:
+          - generic [ref=e1646]: docs/superpowers/specs/2026-05-04-cortex-kb-agent-design.md:10
+          - generic [ref=e1647]: "## 2. 现状分析"
+        - generic [ref=e1648] [cursor=pointer]:
+          - generic [ref=e1649]: CLAUDE.md:35
+          - generic [ref=e1650]: "## Cortex 技术栈"
+        - generic [ref=e1651] [cursor=pointer]:
+          - generic [ref=e1652]: docs/superpowers/specs/2026-05-05-file-watcher-design.md:39
+          - generic [ref=e1653]: "## 组件设计"
+        - generic [ref=e1654] [cursor=pointer]:
+          - generic [ref=e1655]: docs/superpowers/specs/2026-05-27-search-logic-alignment-design.md:1
+          - generic [ref=e1656]: "# 搜索逻辑对齐：CLI search 与 TUI /search"
+        - generic [ref=e1657] [cursor=pointer]:
+          - generic [ref=e1658]: docs/superpowers/specs/2026-05-06-tui-interactive-cli-design.md:153
+          - generic [ref=e1659]: "## 渲染器"
+        - generic [ref=e1660] [cursor=pointer]:
+          - generic [ref=e1661]: study/grep-logic.md:5
+          - generic [ref=e1662]: "# 第一章 grep 管道 > CLI `cortex grep <pattern>`、TUI `/grep <pattern>` 和 Agent `grep` Tool 共享同一套搜索管道，基于 `ripgrep.py` 的 `execute_grep_search()` 实现。 ---"
+        - generic [ref=e1663] [cursor=pointer]:
+          - generic [ref=e1664]: docs/superpowers/specs/2026-05-07-kb-search-v2-design.md:13
+          - generic [ref=e1665]: "## 查询语法"
+        - generic [ref=e1666] [cursor=pointer]:
+          - generic [ref=e1667]: docs/superpowers/plans/2026-06-06-gradio-web-ui.md:1
+          - generic [ref=e1668]: "# Gradio Web UI 实现计划 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Goal:** 用 Gradio 实现 Cortex Web UI，提供浏览器端的搜索和 AI Agen"
+        - generic [ref=e1669] [cursor=pointer]:
+          - generic [ref=e1670]: planify/examples.md:1
+          - generic [ref=e1671]: "# Planify 使用示例 本文档提供 Planify 的各种使用示例代码。"
+        - generic [ref=e1672] [cursor=pointer]:
+          - generic [ref=e1673]: docs/superpowers/specs/2026-05-28-grep-tool-unify-design.md:1
+          - generic [ref=e1674]: "# grep tool 搜索逻辑统一设计"
+      - generic [ref=e1676]: 点击左侧结果查看预览
+    - generic [ref=e1679]:
+      - textbox "重新搜索..." [ref=e1680]: python
+      - button "搜索" [ref=e1681] [cursor=pointer]:
+        - generic [ref=e1682]: 搜索

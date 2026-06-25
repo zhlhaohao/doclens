@@ -1,0 +1,19 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e684]:
+    - button "🔍 搜索" [ref=e685] [cursor=pointer]:
+      - generic [ref=e686]: 🔍
+      - generic [ref=e687]: 搜索
+    - button "💬 对话" [ref=e688] [cursor=pointer]:
+      - generic [ref=e689]: 💬
+      - generic [ref=e690]: 对话
+    - button "📁 文件" [ref=e691] [cursor=pointer]:
+      - generic [ref=e692]: 📁
+      - generic [ref=e693]: 文件

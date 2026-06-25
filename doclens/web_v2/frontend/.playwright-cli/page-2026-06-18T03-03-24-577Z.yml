@@ -1,0 +1,179 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e50]:
+    - generic "analysis" [ref=e1683]:
+      - button "← 返回" [ref=e52] [cursor=pointer]
+      - generic [ref=e53]: analysis
+      - generic [ref=e54]: 56 条结果
+    - generic [ref=e55]:
+      - generic [ref=e57]:
+        - generic [ref=e1684] [cursor=pointer]:
+          - generic [ref=e1685]: docs/tree_search_experiments.md:401
+          - generic [ref=e1686]: "### 10.2 方案设计：Source-Type-Aware Adaptive Tree Mode 设计哲学：**Tree 作为默认方式，但内部根据 source_type 自动做对的事。对用户完全透明。** ``` User calls: search(query, mode=\"tree\") ↓ Source-Type Analysis ↓ ┌─────────────────────────────┐ │ All docs are code? │"
+        - generic [ref=e1687] [cursor=pointer]:
+          - generic [ref=e1688]: samples/生命科学/crispr_lung_cancer.md:38
+          - generic [ref=e1689]: "### Step 3: Quality Control and Reinfusion Edited TIL cells undergo rigorous quality control: - Flow cytometry confirmation of CISH protein knockout (>90% of cells) - Karyotype analysis to confirm genomic integrity - Endotoxin and mycoplasma testing - Functional assays confirming enhanced cytokine"
+        - generic [ref=e1690] [cursor=pointer]:
+          - generic [ref=e1691]: samples/生命科学/crispr_lung_cancer.md:38
+          - generic [ref=e1692]: "### Step 3: Quality Control and Reinfusion Edited TIL cells undergo rigorous quality control: - Flow cytometry confirmation of CISH protein knockout (>90% of cells) - Karyotype analysis to confirm genomic integrity - Endotoxin and mycoplasma testing - Functional assays confirming enhanced cytokine"
+        - generic [ref=e1693] [cursor=pointer]:
+          - generic [ref=e1694]: test_work_dir/编程/linux_system_admin.md:276
+          - generic [ref=e1695]: "## Performance Monitoring ```bash # Real-time system monitoring htop atop # CPU and process stats mpstat 1 10 # CPU stats every 1 second, 10 times pidstat -u 1 # Per-process CPU usage # Memory analysis free -h vmstat 1 10 slabtop # Kernel slab cache usage # I/"
+        - generic [ref=e1696] [cursor=pointer]:
+          - generic [ref=e1697]: test_work_dir/编程/linux_system_admin.md:276
+          - generic [ref=e1698]: "## Performance Monitoring ```bash # Real-time system monitoring htop atop # CPU and process stats mpstat 1 10 # CPU stats every 1 second, 10 times pidstat -u 1 # Per-process CPU usage # Memory analysis free -h vmstat 1 10 slabtop # Kernel slab cache usage # I/"
+        - generic [ref=e1699] [cursor=pointer]:
+          - generic [ref=e1700]: examples/data/pdfs/earthmover.pdf:52
+          - generic [ref=e1701]: 1. INTRODUCTION two object histograms is equivalent to finding the minimum-cost Given two histograms (e.g., probability distributions), their flow (MCF) in a bipartite network, where each vertex indicates a EarthMover’sDistance(EMD)isdefinedastheminimumamount histogram bin and edges connect bins fro
+        - generic [ref=e1702] [cursor=pointer]:
+          - generic [ref=e1703]: CHANGELOG.md:119
+          - generic [ref=e1704]: "### Removed - `query_engine.py` (smart search, intent analysis, query decomposition, reflection) - `chunk.py` (chunk-level refinement) - MCTS tree search strategy (`MCTSTreeSearch`) - `--smart` and `--mcts-iterations` CLI flags - `QueryEngineConfig` from configuration"
+        - generic [ref=e1705] [cursor=pointer]:
+          - generic [ref=e1706]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+          - generic [ref=e1707]: Supervision and Regulation 35 On February 23, the agencies issued a second statement focused on liquidity risk and the poten- tial volatility of funding inflows and outflows associated with crypto-asset activity. On August 8, 2023, the Federal Reserve published SR letter 23-08/CA letter 23-08, “Supe
+        - generic [ref=e1708] [cursor=pointer]:
+          - generic [ref=e1709]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+          - generic [ref=e1710]: 28 110th Annual Report | 2023 institutions or between financial institutions and the FMU. The Federal Reserve supervises FMUs that are chartered as member banks or Edge Act corporations, and coordinates with other federal banking supervisors to supervise FMUs considered bank service providers under
+        - generic [ref=e1711] [cursor=pointer]:
+          - generic [ref=e1712]: examples/data/pdfs/2023-annual-report-truncated.pdf:5
+          - generic [ref=e1713]: "REPORT TO CONGRESS 110th Annual Report of the Board of Governors of the Federal Reserve System 2023 BOARD OF GOVERNORS OF THE FEDERAL RESERVE SYSTEM ## Page 3 i Contents About the Federal Reserve ...........................................................................................iii 1 Ove"
+        - generic [ref=e1714] [cursor=pointer]:
+          - generic [ref=e1715]: test_work_dir/编程/linux_system_admin.md:1
+          - generic [ref=e1716]: "# Linux System Administration: Essential Guide"
+        - generic [ref=e1717] [cursor=pointer]:
+          - generic [ref=e1718]: test_work_dir/编程/linux_system_admin.md:1
+          - generic [ref=e1719]: "# Linux System Administration: Essential Guide"
+        - generic [ref=e1720] [cursor=pointer]:
+          - generic [ref=e1721]: docs/tree_search_experiments.md:366
+          - generic [ref=e1722]: "## 10. Phase 2 优化：Tree Mode 超越 FTS5 + Code 兼容性设计 > **日期**: 2026-03-22 (Phase 2) > **目标**: FinanceBench Tree > FTS5，CodeSearchNet 不退化，Tree 作为默认检索方式"
+        - generic [ref=e1723] [cursor=pointer]:
+          - generic [ref=e1724]: samples/生命科学/crispr_lung_cancer.md:22
+          - generic [ref=e1725]: "## The CRISPR-TIL Approach The ChristianaCare team developed an innovative approach that combines tumor-infiltrating lymphocyte (TIL) therapy with CRISPR gene editing:"
+        - generic [ref=e1726] [cursor=pointer]:
+          - generic [ref=e1727]: samples/生命科学/crispr_lung_cancer.md:22
+          - generic [ref=e1728]: "## The CRISPR-TIL Approach The ChristianaCare team developed an innovative approach that combines tumor-infiltrating lymphocyte (TIL) therapy with CRISPR gene editing:"
+        - generic [ref=e1730] [cursor=pointer]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+        - generic [ref=e1731] [cursor=pointer]:
+          - generic [ref=e1732]: CHANGELOG.md:107
+          - generic [ref=e1733]: "## [0.4.0] - 2026-03-09"
+        - generic [ref=e1735] [cursor=pointer]: examples/data/pdfs/2023-annual-report-truncated.pdf:5
+        - generic [ref=e1736] [cursor=pointer]:
+          - generic [ref=e1737]: examples/data/pdfs/2023-annual-report-truncated.pdf:590
+          - generic [ref=e1738]: 18 110th Annual Report | 2023 Equity prices were still high relative to earn- Figure 3.2. Aggregate forward price-to-earnings ratio of S&P 500 firms, 1989–2023 ings (figure 3.2). In addition, real estate prices continued to be high relative to fundamentals. Ratio Spreads on corporate bonds and loans
+        - generic [ref=e1739] [cursor=pointer]:
+          - generic [ref=e1740]: examples/data/pdfs/2023-annual-report-truncated.pdf:590
+          - generic [ref=e1741]: 3. engaging in domestic and international cooperation and coordination. Periodically, Federal Reserve Board staff assess potential vulnerabilities relevant for financial system stability. These monitoring efforts promote financial stability by informing broader policy discussions and stimulating add
+        - generic [ref=e1742] [cursor=pointer]:
+          - generic [ref=e1743]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+          - generic [ref=e1744]: (4) digital assets.3 The council continued to assess vulnerabilities associated with nonbank financial institutions. The Hedge Fund Working Group (HFWG) has developed an interagency risk-monitoring system to assess the financial stability risks associated with hedge funds. The Nonbank Mortgage Servi
+        - generic [ref=e1745] [cursor=pointer]:
+          - generic [ref=e1746]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+          - generic [ref=e1747]: 26 110th Annual Report | 2023 Supervised and Regulated Institutions The Federal Reserve categorizes banking organizations into portfolios by size and entity type, as described in table 4.1. State Member Banks At year-end 2023, a total of 1,411 banks (excluding non-depository trust companies and priv
+        - generic [ref=e1748] [cursor=pointer]:
+          - generic [ref=e1749]: examples/data/pdfs/2023-annual-report-truncated.pdf:944
+          - generic [ref=e1750]: 30 110th Annual Report | 2023 Tables 4.2 and 4.3 provide information on examinations and inspections conducted by the Federal Reserve during the past five years. Additionally, the Federal Reserve took a number of actions, including enhanced monitoring to stabilize the banking environment after two b
+        - generic [ref=e1751] [cursor=pointer]:
+          - generic [ref=e1752]: docs/tree_search_experiments.md:30
+          - generic [ref=e1753]: "## 2. 评测数据集"
+        - generic [ref=e1754] [cursor=pointer]:
+          - generic [ref=e1755]: CHANGELOG.md:8
+          - generic [ref=e1756]: "## [1.0.8] - 2026-04-16"
+        - generic [ref=e1757] [cursor=pointer]:
+          - generic [ref=e1758]: docs/tree_search_experiments.md:263
+          - generic [ref=e1759]: "## 6. 最终结果"
+        - generic [ref=e1760] [cursor=pointer]:
+          - generic [ref=e1761]: examples/data/pdfs/earthmover.pdf:1357
+          - generic [ref=e1762]: SIA PB DRO (b) WORLD Figure16:Scalabilitytohistogramdimensionality byPB-CandDRO-C).WeobservethatSIAisquitesensitivetothe number of refinements while PB and DRO are likely sensitive to thenumberofthecompleterefinements(PB-CandDRO-C).Inad- dition,theimprovementofDROoverPBisstable,indicatingthat there
+        - generic [ref=e1763] [cursor=pointer]:
+          - generic [ref=e1764]: CHANGELOG.md:55
+          - generic [ref=e1765]: "## [0.7.0] - 2026-03-11"
+        - generic [ref=e1766] [cursor=pointer]:
+          - generic [ref=e1767]: CHANGELOG.md:84
+          - generic [ref=e1768]: "## [0.5.0] - 2026-03-10"
+        - generic [ref=e1769] [cursor=pointer]:
+          - generic [ref=e1770]: examples/data/pdfs/earthmover.pdf:437
+          - generic [ref=e1771]: 4. BOOSTINGTHEREFINEMENTPHASE In this section, we propose two novel techniques, progressive bounding (PB) and dynamic refinement ordering (DRO), which boosttheperformanceoftherefinementphaseduringEMD-based similaritysearch. PBisinspiredbytherunningtimepatternofa singleEMDcalculationandDROisinspiredb
+        - generic [ref=e1773] [cursor=pointer]: examples/data/pdfs/earthmover.pdf:491
+        - generic [ref=e1774] [cursor=pointer]:
+          - generic [ref=e1775]: docs/tree_search_experiments.md:61
+          - generic [ref=e1776]: "## 4. 优化实验"
+        - generic [ref=e1777] [cursor=pointer]:
+          - generic [ref=e1778]: examples/data/pdfs/earthmover.pdf:119
+          - generic [ref=e1779]: 2. PRELIMINARIES TheEarthMover’sDistance(EMD),firstintroducedbythecom- 4 putervisioncommunityin[23,24],isadistancefunctionthatmea- 3 suresthedissimilarityoftwohistograms(e.g.,probabilityorfea- 2 1 ture distributions). Given two histograms q = (q ,...,q ) and 1 n p=(p ,...,p ),eachhavingnbins,aflowma
+        - generic [ref=e1780] [cursor=pointer]:
+          - generic [ref=e1781]: test_work_dir/编程/linux_system_admin.md:228
+          - generic [ref=e1782]: "## Disk and File System Management"
+        - generic [ref=e1783] [cursor=pointer]:
+          - generic [ref=e1784]: test_work_dir/编程/linux_system_admin.md:228
+          - generic [ref=e1785]: "## Disk and File System Management"
+        - generic [ref=e1786] [cursor=pointer]:
+          - generic [ref=e1787]: docs/tree_search_experiments.md:207
+          - generic [ref=e1788]: "## 5. 失败实验记录"
+        - generic [ref=e1789] [cursor=pointer]:
+          - generic [ref=e1790]: CHANGELOG.md:34
+          - generic [ref=e1791]: "## [0.8.0] - 2026-03-12"
+        - generic [ref=e1792] [cursor=pointer]:
+          - generic [ref=e1793]: samples/生命科学/crispr_lung_cancer.md:57
+          - generic [ref=e1794]: "## Clinical Trial Results The Phase I/II clinical trial (NCT05838249) enrolled 32 patients with advanced, chemoresistant NSCLC:"
+        - generic [ref=e1795] [cursor=pointer]:
+          - generic [ref=e1796]: samples/生命科学/crispr_lung_cancer.md:57
+          - generic [ref=e1797]: "## Clinical Trial Results The Phase I/II clinical trial (NCT05838249) enrolled 32 patients with advanced, chemoresistant NSCLC:"
+        - generic [ref=e1798] [cursor=pointer]:
+          - generic [ref=e1799]: CHANGELOG.md:23
+          - generic [ref=e1800]: "## [1.0.6] - 2026-04-16"
+        - generic [ref=e1801] [cursor=pointer]:
+          - generic [ref=e1802]: CHANGELOG.md:13
+          - generic [ref=e1803]: "## [1.0.7] - 2026-04-16"
+        - generic [ref=e1804] [cursor=pointer]:
+          - generic [ref=e1805]: samples/生命科学/crispr_lung_cancer.md:1
+          - generic [ref=e1806]: "# CRISPR Reverses Chemoresistance in Lung Cancer Treatment"
+        - generic [ref=e1807] [cursor=pointer]:
+          - generic [ref=e1808]: samples/生命科学/crispr_lung_cancer.md:1
+          - generic [ref=e1809]: "# CRISPR Reverses Chemoresistance in Lung Cancer Treatment"
+        - generic [ref=e1810] [cursor=pointer]:
+          - generic [ref=e1811]: CHANGELOG.md:1
+          - generic [ref=e1812]: "# Changelog All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+        - generic [ref=e1813] [cursor=pointer]:
+          - generic [ref=e1814]: test_work_dir/编程/linux_system_admin.md:160
+          - generic [ref=e1815]: "## Network Configuration"
+        - generic [ref=e1816] [cursor=pointer]:
+          - generic [ref=e1817]: test_work_dir/编程/linux_system_admin.md:160
+          - generic [ref=e1818]: "## Network Configuration"
+        - generic [ref=e1819] [cursor=pointer]:
+          - generic [ref=e1820]: docs/tree_search_experiments.md:371
+          - generic [ref=e1821]: "### 10.1 问题诊断"
+        - generic [ref=e1822] [cursor=pointer]:
+          - generic [ref=e1823]: test_work_dir/编程/linux_system_admin.md:102
+          - generic [ref=e1824]: "## Logging with journalctl journald collects and stores log data from the kernel, systemd services, and other system components."
+        - generic [ref=e1825] [cursor=pointer]:
+          - generic [ref=e1826]: test_work_dir/编程/linux_system_admin.md:102
+          - generic [ref=e1827]: "## Logging with journalctl journald collects and stores log data from the kernel, systemd services, and other system components."
+        - generic [ref=e1828] [cursor=pointer]:
+          - generic [ref=e1829]: test_work_dir/编程/linux_system_admin.md:3
+          - generic [ref=e1830]: "## System Management with systemd systemd is the init system and service manager used by virtually all modern Linux distributions. Understanding systemd is essential for effective system administration."
+        - generic [ref=e1831] [cursor=pointer]:
+          - generic [ref=e1832]: test_work_dir/编程/linux_system_admin.md:3
+          - generic [ref=e1833]: "## System Management with systemd systemd is the init system and service manager used by virtually all modern Linux distributions. Understanding systemd is essential for effective system administration."
+        - generic [ref=e1834] [cursor=pointer]:
+          - generic [ref=e1835]: examples/data/pdfs/earthmover.pdf:1110
+          - generic [ref=e1836]: PB DRO 2 1 0 48 16 32 64 k (a) RETINA )s( emit yreuQ
+        - generic [ref=e1837] [cursor=pointer]:
+          - generic [ref=e1838]: docs/tree_search_experiments.md:1
+          - generic [ref=e1839]: "# Tree Search 优化实验记录 > **日期**: 2026-03-22 > **目标**: 优化 TreeSearch 的 Tree 模式（Best-First Search）在多个 Benchmark 上的检索效果 > **核心文件**: `treesearch/tree_searcher.py`, `treesearch/heuristics.py`"
+        - generic [ref=e1840] [cursor=pointer]:
+          - generic [ref=e1841]: docs/tree_search_experiments.md:308
+          - generic [ref=e1842]: "## 8. 经验总结"
+        - generic [ref=e1843] [cursor=pointer]:
+          - generic [ref=e1844]: docs/tree_search_experiments.md:340
+          - generic [ref=e1845]: "## 9. 配置参考"
+        - generic [ref=e1846] [cursor=pointer]:
+          - generic [ref=e1847]: CHANGELOG.md:74
+          - generic [ref=e1848]: "## [0.6.0] - 2026-03-10"
+      - generic [ref=e1676]: 点击左侧结果查看预览
+    - generic [ref=e1679]:
+      - textbox "重新搜索..." [ref=e1680]: analysis
+      - button "搜索" [ref=e1681] [cursor=pointer]:
+        - generic [ref=e1682]: 搜索

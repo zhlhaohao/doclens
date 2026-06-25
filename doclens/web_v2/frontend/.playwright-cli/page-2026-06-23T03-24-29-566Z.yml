@@ -1,0 +1,149 @@
+- generic [active] [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 文件
+        - generic [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: 📁
+          - generic [ref=e39]: 健康
+        - generic [ref=e41] [cursor=pointer]:
+          - generic [ref=e42]: 📁
+          - generic [ref=e43]: 公司
+        - generic [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 📁
+          - generic [ref=e47]: 天文航天
+        - generic [ref=e49] [cursor=pointer]:
+          - generic [ref=e50]: 📁
+          - generic [ref=e51]: 生命科学
+        - generic [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]: 📁
+          - generic [ref=e55]: 科技
+        - generic [ref=e57] [cursor=pointer]:
+          - generic [ref=e58]: 📁
+          - generic [ref=e59]: 经济
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: 📁
+          - generic [ref=e63]: 编程
+        - generic [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: ▶
+          - generic [ref=e67]: 📁
+          - generic [ref=e68]: 能源环境
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - button "↑" [ref=e24] [cursor=pointer]
+          - generic [ref=e25]: /健康/
+        - generic [ref=e26]:
+          - button "+ 新目录" [ref=e27] [cursor=pointer]
+          - button "⬆ 上传" [ref=e28] [cursor=pointer]
+          - button "✎ 重命名" [ref=e29] [cursor=pointer]
+          - button "→ 移动" [ref=e30] [cursor=pointer]
+          - button "🗑 删除" [ref=e31] [cursor=pointer]
+        - generic [ref=e69]:
+          - checkbox [ref=e71]
+          - generic [ref=e73]: 名称
+          - generic [ref=e74]: 大小
+          - generic [ref=e75]: 修改
+        - generic [ref=e33]:
+          - generic [ref=e78] [cursor=pointer]:
+            - checkbox [checked] [ref=e80]
+            - generic [ref=e81]: 📄
+            - generic [ref=e82]: 2025年健康生活与科学养生指南.html
+            - generic [ref=e153]: 9.1 KB
+            - generic [ref=e83]: 2026/06/12 16:43
+          - generic [ref=e85] [cursor=pointer]:
+            - checkbox [ref=e87]
+            - generic [ref=e88]: 📄
+            - generic [ref=e89]: healthy_meal_prep.md
+            - generic [ref=e154]: 5.5 KB
+            - generic [ref=e90]: 2026/06/12 16:43
+            - generic [ref=e156]: 已索引
+          - generic [ref=e92] [cursor=pointer]:
+            - checkbox [ref=e94]
+            - generic [ref=e95]: 📄
+            - generic [ref=e96]: meditation_beginner.md
+            - generic [ref=e157]: 5.8 KB
+            - generic [ref=e97]: 2026/06/12 16:43
+            - generic [ref=e159]: 已索引
+          - generic [ref=e99] [cursor=pointer]:
+            - checkbox [ref=e101]
+            - generic [ref=e102]: 📄
+            - generic [ref=e103]: running_marathon_guide.md
+            - generic [ref=e160]: 6.4 KB
+            - generic [ref=e104]: 2026/06/12 16:43
+            - generic [ref=e162]: 已索引
+          - generic [ref=e106] [cursor=pointer]:
+            - checkbox [ref=e108]
+            - generic [ref=e109]: 📄
+            - generic [ref=e110]: stress_management_work.md
+            - generic [ref=e163]: 7.4 KB
+            - generic [ref=e111]: 2026/06/12 16:43
+            - generic [ref=e165]: 已索引
+          - generic [ref=e113] [cursor=pointer]:
+            - checkbox [ref=e115]
+            - generic [ref=e116]: 📄
+            - generic [ref=e117]: Z世代心理健康与保健品消费.md
+            - generic [ref=e166]: 3.5 KB
+            - generic [ref=e118]: 2026/06/12 16:43
+            - generic [ref=e168]: 已索引
+          - generic [ref=e120] [cursor=pointer]:
+            - checkbox [ref=e122]
+            - generic [ref=e123]: 📄
+            - generic [ref=e124]: 中医理疗养生传统智慧的现代应用.md
+            - generic [ref=e169]: 4.3 KB
+            - generic [ref=e125]: 2026/06/12 16:43
+            - generic [ref=e171]: 已索引
+          - generic [ref=e127] [cursor=pointer]:
+            - checkbox [ref=e129]
+            - generic [ref=e130]: 📄
+            - generic [ref=e131]: 体重管理年科学减重指南.md
+            - generic [ref=e172]: 3.5 KB
+            - generic [ref=e132]: 2026/06/12 16:43
+            - generic [ref=e174]: 已索引
+          - generic [ref=e134] [cursor=pointer]:
+            - checkbox [ref=e136]
+            - generic [ref=e137]: 📄
+            - generic [ref=e138]: 居家健身指南.md
+            - generic [ref=e139]: 4.5 KB
+            - generic [ref=e140]: 2026/06/12 16:43
+            - generic [ref=e142]: 已索引
+          - generic [ref=e176] [cursor=pointer]:
+            - checkbox [ref=e178]
+            - generic [ref=e179]: 📄
+            - generic [ref=e180]: 睡眠科学如何获得高质量睡眠.md
+            - generic [ref=e181]: 3.6 KB
+            - generic [ref=e182]: 2026/06/12 16:43
+            - generic [ref=e184]: 已索引
+          - generic [ref=e186] [cursor=pointer]:
+            - checkbox [ref=e188]
+            - generic [ref=e189]: 📄
+            - generic [ref=e190]: 肠道健康与益生菌科学指南.md
+            - generic [ref=e191]: 4.2 KB
+            - generic [ref=e192]: 2026/06/12 16:43
+            - generic [ref=e194]: 已索引
+          - generic [ref=e196] [cursor=pointer]:
+            - checkbox [ref=e198]
+            - generic [ref=e199]: 📄
+            - generic [ref=e200]: 营养素速查手册.html
+            - generic [ref=e201]: 14.7 KB
+            - generic [ref=e202]: 2026/06/12 16:43
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - generic [ref=e145]: test.md
+          - button "✏️ 编辑" [ref=e146] [cursor=pointer]
+          - button "⬇️ 下载" [ref=e147] [cursor=pointer]
+          - button "⬆️ 上传" [ref=e148] [cursor=pointer]
+        - generic [ref=e150]:
+          - heading "Test Document" [level=1] [ref=e151]
+          - paragraph [ref=e152]: This is a test document for Cortex search testing with keywords like python, document, search.

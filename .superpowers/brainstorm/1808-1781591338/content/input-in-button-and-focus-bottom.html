@@ -1,0 +1,421 @@
+<h2>v4：输入框内嵌按钮 + 搜索专注输入框下置</h2>
+<p class="subtitle">所有页面的输入框：搜索/发送按钮内嵌在输入框右边缘。搜索专注状态：输入框移到页面下部。</p>
+
+<style>
+  .row-2 { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .col-2 { flex: 1; min-width: 320px; }
+
+  .state-pair { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  .state-title { font-size: 11px; font-weight: 600; color: #0f172a; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .state-title .badge { background: #0d9488; color: #fff; font-size: 9px; padding: 2px 7px; border-radius: 10px; }
+  .state-title .badge.focus { background: #f59e0b; }
+  .state-title .badge.mobile { background: #6366f1; }
+
+  .browser-shell { background: #f8f8f9; border: 1px solid #d4d4d8; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+  .browser-chrome { background: #e4e4e7; padding: 4px 8px; font-size: 9px; color: #52525b; border-bottom: 1px solid #d4d4d8; display: flex; align-items: center; gap: 4px; }
+  .browser-chrome .dots { display: flex; gap: 3px; }
+  .browser-chrome .dot { width: 5px; height: 5px; border-radius: 50%; background: #a1a1aa; }
+  .browser-chrome .url { background: #f4f4f5; padding: 1px 6px; border-radius: 3px; margin-left: 6px; flex: 1; }
+  .browser-content { height: 260px; display: flex; min-height: 0; background: #fff; }
+
+  .activity-bar { width: 28px; background: #0f172a; color: #94a3b8; display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 10px; flex-shrink: 0; }
+  .activity-bar .ab-item { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+  .activity-bar .ab-item.active { background: #14b8a6; color: #fff; }
+
+  .main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .row-welcome { padding: 14px 20px 10px; text-align: center; background: linear-gradient(180deg, #f0fdfa, #ffffff); border-bottom: 1px solid #f1f5f9; }
+  .welcome-logo { font-size: 20px; font-weight: 700; color: #0d9488; }
+  .welcome-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
+
+  .row-history { padding: 8px 20px; flex: 1; min-height: 0; overflow: auto; border-bottom: 1px solid #f1f5f9; }
+  .history-title { font-size: 8px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .history-list { display: flex; flex-direction: column; gap: 4px; }
+  .history-item { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 5px; padding: 6px 10px; font-size: 9px; color: #334155; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .history-item .name { font-weight: 500; }
+  .history-item .meta { font-size: 7px; color: #94a3b8; }
+
+  /* === 关键：内嵌按钮的输入框 === */
+  .row-input { padding: 8px 20px 14px; background: #fff; }
+  .input-with-btn {
+    position: relative; border: 1px solid #d4d4d8; border-radius: 8px;
+    background: #fafafa; padding: 10px 50px 10px 14px; min-height: 24px;
+    font-size: 10px; color: #94a3b8;
+  }
+  .input-with-btn .inline-btn {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    background: #0d9488; color: #fff; font-size: 9px;
+    padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 3px;
+  }
+
+  /* 专注 */
+  .focus-toolbar { padding: 6px 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-size: 9px; color: #64748b; display: flex; align-items: center; gap: 8px; }
+  .focus-toolbar .back { color: #0d9488; font-weight: 600; cursor: pointer; }
+  .focus-toolbar .title { font-weight: 600; color: #334155; }
+  .focus-toolbar .meta { color: #94a3b8; font-size: 8px; margin-left: auto; }
+
+  .focus-body { flex: 1; display: flex; min-height: 0; }
+  .focus-results { width: 42%; background: #fafafa; border-right: 1px solid #e4e4e7; padding: 8px; overflow: auto; }
+  .result-card { background: #fff; border: 1px solid #e4e4e7; border-radius: 4px; padding: 5px 7px; margin-bottom: 4px; font-size: 8px; cursor: pointer; }
+  .result-card.active { border-color: #14b8a6; background: #f0fdfa; }
+  .result-card .path { color: #64748b; font-size: 7px; }
+  .result-card .snippet { color: #334155; margin-top: 2px; }
+
+  .focus-preview { flex: 1; background: #fff; padding: 10px; overflow: auto; }
+  .preview-header { font-size: 9px; color: #334155; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e4e4e7; }
+  .preview-line { font-size: 8px; color: #475569; line-height: 1.6; font-family: monospace; }
+  .preview-line.highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+
+  /* 专注底部输入栏 */
+  .focus-input-bar { padding: 8px 16px 12px; background: #fff; border-top: 1px solid #f1f5f9; }
+
+  /* 对话 */
+  .focus-chat { flex: 1; display: flex; flex-direction: column; }
+  .chat-stream { flex: 1; padding: 10px 12px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .chat-message { font-size: 9px; padding: 6px 10px; border-radius: 7px; max-width: 75%; line-height: 1.5; }
+  .chat-user { background: #0d9488; color: #fff; align-self: flex-end; }
+  .chat-ai { background: #f1f5f9; color: #334155; align-self: flex-start; }
+
+  /* === 移动端 === */
+  .phone-shell { background: #f8f8f9; border: 1px solid #d4d4d8; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; width: 200px; height: 400px; margin: 0 auto; }
+  .phone-status { background: #0f172a; color: #fff; padding: 3px 10px; font-size: 7px; display: flex; justify-content: space-between; align-items: center; }
+  .phone-content { flex: 1; display: flex; flex-direction: column; background: #fff; min-height: 0; }
+  .phone-tabbar { background: #fff; border-top: 1px solid #e4e4e7; display: flex; padding: 6px 0; }
+  .phone-tabbar .tab { flex: 1; text-align: center; font-size: 7px; color: #94a3b8; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .phone-tabbar .tab.active { color: #0d9488; font-weight: 600; }
+  .phone-tabbar .tab .icon { font-size: 11px; }
+
+  .m-welcome { padding: 12px 12px 8px; text-align: center; background: linear-gradient(180deg, #f0fdfa, #ffffff); }
+  .m-welcome .logo { font-size: 16px; font-weight: 700; color: #0d9488; }
+  .m-welcome .sub { font-size: 8px; color: #64748b; margin-top: 2px; }
+
+  .m-history { flex: 1; padding: 6px 10px; overflow: auto; min-height: 0; }
+  .m-history-item { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 5px; padding: 6px 8px; font-size: 8px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .m-history-item .name { color: #334155; font-weight: 500; }
+  .m-history-item .meta { font-size: 6px; color: #94a3b8; }
+
+  .m-input { padding: 6px 10px 8px; background: #fff; }
+  .m-input-with-btn { position: relative; border: 1px solid #d4d4d8; border-radius: 6px; background: #fafafa; padding: 6px 38px 6px 10px; font-size: 8px; color: #94a3b8; min-height: 14px; margin-bottom: 4px; }
+  .m-input-with-btn .inline-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: #0d9488; color: #fff; font-size: 7px; padding: 3px 7px; border-radius: 4px; border: none; }
+
+  .m-focus-header { padding: 6px 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-size: 8px; color: #64748b; display: flex; align-items: center; gap: 6px; }
+  .m-focus-header .back { color: #0d9488; font-weight: 600; }
+
+  .m-result-card { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 4px; padding: 6px 8px; margin-bottom: 4px; font-size: 8px; }
+  .m-result-card.active { border-color: #14b8a6; background: #f0fdfa; }
+  .m-result-card .path { color: #64748b; font-size: 7px; }
+  .m-result-card .snippet { color: #334155; margin-top: 2px; }
+
+  .m-chat-stream { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: auto; }
+  .m-chat-msg { font-size: 8px; padding: 5px 8px; border-radius: 6px; max-width: 78%; line-height: 1.4; }
+  .m-chat-user { background: #0d9488; color: #fff; align-self: flex-end; }
+  .m-chat-ai { background: #f1f5f9; color: #334155; align-self: flex-start; }
+
+  .m-detail-line { font-size: 8px; color: #475569; line-height: 1.6; font-family: monospace; }
+  .m-detail-line.highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+</style>
+
+<h3 style="margin-top:8px;border-left:3px solid #0d9488;padding-left:8px;">桌面端 v4（输入框内嵌按钮 + 搜索专注输入框下置）</h3>
+
+<div class="row-2">
+
+  <!-- 桌面搜索初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge">搜索 · 初始</span><span>输入框内嵌🔍按钮</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="url">localhost:7860</div></div>
+        <div class="browser-content">
+          <div class="activity-bar"><div class="ab-item active">🔍</div><div class="ab-item">💬</div><div class="ab-item">🕘</div></div>
+          <div class="main-stack">
+            <div class="row-welcome"><div class="welcome-logo">Cortex</div><div class="welcome-sub">结构感知文档检索</div></div>
+            <div class="row-history">
+              <div class="history-title">历史会话</div>
+              <div class="history-list">
+                <div class="history-item"><span class="name">python 异步</span><span class="meta">2 小时前 · 12 条</span></div>
+                <div class="history-item"><span class="name">BM25 评分</span><span class="meta">昨天 · 5 条</span></div>
+                <div class="history-item"><span class="name">pdf 解析</span><span class="meta">3 天前 · 8 条</span></div>
+              </div>
+            </div>
+            <div class="row-input">
+              <div class="input-with-btn">
+                输入搜索关键词...
+                <button class="inline-btn">🔍</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 桌面搜索专注（输入框下置） -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge focus">搜索 · 专注</span><span>双栏 + 底部输入框（内嵌按钮）</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="url">localhost:7860</div></div>
+        <div class="browser-content">
+          <div class="activity-bar"><div class="ab-item active">🔍</div><div class="ab-item">💬</div><div class="ab-item">🕘</div></div>
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+            <div class="focus-toolbar">
+              <span class="back">← 新搜索</span>
+              <span class="title">python 异步</span>
+              <span class="meta">12 条结果</span>
+            </div>
+            <div class="focus-body">
+              <div class="focus-results">
+                <div class="result-card active"><div class="path">async/utils.py:42</div><div class="snippet">async def gather_tasks(...)</div></div>
+                <div class="result-card"><div class="path">docs/async.md</div><div class="snippet">异步编程模式...</div></div>
+                <div class="result-card"><div class="path">core/scheduler.py:120</div><div class="snippet">asyncio.run(main())</div></div>
+              </div>
+              <div class="focus-preview">
+                <div class="preview-header">📄 async/utils.py · 42-50</div>
+                <div class="preview-line">42  async def gather_tasks(tasks):</div>
+                <div class="preview-line highlight">43      """并发执行所有任务"""</div>
+                <div class="preview-line">44      results = await asyncio.gather(*tasks)</div>
+              </div>
+            </div>
+            <div class="focus-input-bar">
+              <div class="input-with-btn" style="padding:8px 50px 8px 14px;">
+                python 异步
+                <button class="inline-btn">🔍</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row-2">
+
+  <!-- 桌面对话初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge">对话 · 初始</span><span>输入框内嵌→按钮</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="url">localhost:7860</div></div>
+        <div class="browser-content">
+          <div class="activity-bar"><div class="ab-item">🔍</div><div class="ab-item active">💬</div><div class="ab-item">🕘</div></div>
+          <div class="main-stack">
+            <div class="row-welcome"><div class="welcome-logo">Cortex</div><div class="welcome-sub">与你的知识库对话</div></div>
+            <div class="row-history">
+              <div class="history-title">历史会话</div>
+              <div class="history-list">
+                <div class="history-item"><span class="name">FTS5 vs BM25</span><span class="meta">昨天 · 8 条消息</span></div>
+                <div class="history-item"><span class="name">如何索引 PDF</span><span class="meta">3 天前 · 12 条</span></div>
+              </div>
+            </div>
+            <div class="row-input">
+              <div class="input-with-btn">
+                问 Cortex 任何问题...
+                <button class="inline-btn">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 桌面对话专注 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge focus">对话 · 专注</span><span>对话流 + 底部输入框（内嵌按钮）</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="url">localhost:7860</div></div>
+        <div class="browser-content">
+          <div class="activity-bar"><div class="ab-item">🔍</div><div class="ab-item active">💬</div><div class="ab-item">🕘</div></div>
+          <div class="focus-chat" style="flex:1;">
+            <div class="focus-toolbar">
+              <span class="back">← 新对话</span>
+              <span class="title">FTS5 vs BM25</span>
+              <span class="meta">8 条消息</span>
+            </div>
+            <div class="chat-stream">
+              <div class="chat-message chat-user">FTS5 和 BM25 有什么区别？</div>
+              <div class="chat-message chat-ai">FTS5 是 SQLite 全文检索扩展；BM25 是排序算法...</div>
+              <div class="chat-message chat-user">那评分怎么计算？</div>
+            </div>
+            <div class="focus-input-bar">
+              <div class="input-with-btn" style="padding:8px 50px 8px 14px;">
+                继续对话...
+                <button class="inline-btn">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:14px;border-left:3px solid #6366f1;padding-left:8px;">移动端 v4</h3>
+
+<div class="row-2">
+
+  <!-- 移动搜索初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile">搜索 · 初始</span><span>内嵌按钮输入框</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-welcome"><div class="logo">Cortex</div><div class="sub">结构感知文档检索</div></div>
+          <div class="m-history">
+            <div class="m-history-item"><span class="name">python 异步</span><span class="meta">2h</span></div>
+            <div class="m-history-item"><span class="name">BM25 评分</span><span class="meta">昨天</span></div>
+            <div class="m-history-item"><span class="name">pdf 解析</span><span class="meta">3d</span></div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-with-btn">
+              输入关键词...
+              <button class="inline-btn">🔍</button>
+            </div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动搜索专注（列表 + 底部输入框） -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">搜索 · 专注</span><span>列表 + 底部输入框</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-focus-header">
+            <span class="back">←</span>
+            <span style="font-weight:600;color:#334155;font-size:8px">python 异步</span>
+            <span style="color:#94a3b8;font-size:7px;margin-left:auto">12 条</span>
+          </div>
+          <div style="flex:1;padding:8px 10px;overflow:auto;background:#fafafa;min-height:0;">
+            <div class="m-result-card active"><div class="path">async/utils.py:42</div><div class="snippet">async def gather_tasks(...)</div></div>
+            <div class="m-result-card"><div class="path">docs/async.md</div><div class="snippet">异步编程模式...</div></div>
+            <div class="m-result-card"><div class="path">core/scheduler.py:120</div><div class="snippet">asyncio.run(main())</div></div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-with-btn">
+              python 异步
+              <button class="inline-btn">🔍</button>
+            </div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动搜索专注（详情整页推入） -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">搜索 · 详情</span><span>整页推入预览</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-focus-header">
+            <span class="back">← 结果</span>
+            <span style="color:#94a3b8;font-size:7px;margin-left:auto">async/utils.py</span>
+          </div>
+          <div style="flex:1;padding:8px 10px;overflow:auto;background:#fff;min-height:0;">
+            <div class="preview-header" style="font-size:8px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e4e4e7;">📄 async/utils.py · 42-50</div>
+            <div class="m-detail-line">42  async def gather_tasks(tasks):</div>
+            <div class="m-detail-line highlight">43      """并发执行所有任务"""</div>
+            <div class="m-detail-line">44      results = await asyncio.gather(*tasks)</div>
+            <div class="m-detail-line">45      return results</div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row-2">
+
+  <!-- 移动对话初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile">对话 · 初始</span><span>内嵌按钮输入框</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-welcome"><div class="logo">Cortex</div><div class="sub">与你的知识库对话</div></div>
+          <div class="m-history">
+            <div class="m-history-item"><span class="name">FTS5 vs BM25</span><span class="meta">昨天</span></div>
+            <div class="m-history-item"><span class="name">如何索引 PDF</span><span class="meta">3d</span></div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-with-btn">
+              问 Cortex 任何问题...
+              <button class="inline-btn">→</button>
+            </div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab"><span class="icon">🔍</span>搜索</div>
+            <div class="tab active"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动对话专注 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">对话 · 专注</span><span>对话流 + 底部输入框</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-focus-header">
+            <span class="back">←</span>
+            <span style="font-weight:600;color:#334155;font-size:8px">FTS5 vs BM25</span>
+            <span style="color:#94a3b8;font-size:7px;margin-left:auto">8 条</span>
+          </div>
+          <div class="m-chat-stream">
+            <div class="m-chat-msg m-chat-user">FTS5 和 BM25 有什么区别？</div>
+            <div class="m-chat-msg m-chat-ai">FTS5 是 SQLite 全文检索扩展...</div>
+            <div class="m-chat-msg m-chat-user">那评分怎么计算？</div>
+            <div class="m-chat-msg m-chat-ai">BM25 基于 TF-IDF 改进...</div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-with-btn">
+              继续对话...
+              <button class="inline-btn">→</button>
+            </div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab"><span class="icon">🔍</span>搜索</div>
+            <div class="tab active"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px;margin-top:12px;font-size:11px;color:#713f12;">
+  <strong>请确认：</strong>
+  ① 输入框样式：<code style="background:#fff;padding:1px 4px;border-radius:2px;">[ 输入关键词...           (🔍) ]</code> 内嵌右边缘按钮，符合预期？<br>
+  ② 搜索专注页面：顶部仅留"← 新搜索" + 标题；输入框下置；<strong>移除原本顶部的紧凑查询条</strong> —— 符合预期？<br>
+  ③ 详情页（整页推入）底部不放输入框（因为是浏览态），只在列表页和对话专注页保留底部输入 —— 合理？
+</div>

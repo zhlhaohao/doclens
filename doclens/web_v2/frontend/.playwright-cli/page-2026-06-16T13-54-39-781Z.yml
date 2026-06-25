@@ -1,0 +1,27 @@
+- generic [ref=e2]:
+  - generic [ref=e39]:
+    - button "🔍" [ref=e40] [cursor=pointer]
+    - button "💬" [ref=e41] [cursor=pointer]
+    - button "🕘" [ref=e42] [cursor=pointer]
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - heading "Cortex" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 结构感知文档检索
+    - generic "历史会话" [ref=e9]:
+      - generic [ref=e10]: 历史会话
+      - generic [ref=e11] [cursor=pointer]:
+        - generic [ref=e12]: 小顺
+        - generic [ref=e13]: 88 · 2026/6/16
+      - generic [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 公园
+        - generic [ref=e16]: 8 · 2026/6/16
+      - generic [ref=e17] [cursor=pointer]:
+        - generic [ref=e18]: 小顺
+        - generic [ref=e19]: 8 · 2026/6/16
+      - generic [ref=e20] [cursor=pointer]:
+        - generic [ref=e21]: test
+        - generic [ref=e22]: 547 · 2026/6/16
+    - generic [ref=e25]:
+      - textbox "输入搜索关键词..." [ref=e26]
+      - button "搜索" [disabled] [ref=e27]:
+        - generic [ref=e28]: 搜索

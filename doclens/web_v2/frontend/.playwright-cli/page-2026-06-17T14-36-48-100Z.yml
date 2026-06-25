@@ -1,0 +1,41 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "Cortex" [level=1] [ref=e11]
+      - paragraph [ref=e12]: 结构感知文档检索
+    - generic "历史会话" [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: 历史会话
+        - button "清空" [ref=e16] [cursor=pointer]
+      - generic [ref=e17] [cursor=pointer]:
+        - generic [ref=e18]: python
+        - generic [ref=e19]: 706 · 2026/6/17
+      - generic [ref=e20] [cursor=pointer]:
+        - generic [ref=e21]: python
+        - generic [ref=e22]: 706 · 2026/6/17
+      - generic [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: 公园
+        - generic [ref=e25]: 88 · 2026/6/17
+      - generic [ref=e26] [cursor=pointer]:
+        - generic [ref=e27]: python
+        - generic [ref=e28]: 706 · 2026/6/17
+      - generic [ref=e29] [cursor=pointer]:
+        - generic [ref=e30]: python
+        - generic [ref=e31]: 706 · 2026/6/17
+      - generic [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: 公园
+        - generic [ref=e34]: 88 · 2026/6/17
+      - generic [ref=e35] [cursor=pointer]:
+        - generic [ref=e36]: 小顺
+        - generic [ref=e37]: 88 · 2026/6/17
+      - generic [ref=e38] [cursor=pointer]:
+        - generic [ref=e39]: 小顺
+        - generic [ref=e40]: 88 · 2026/6/17
+    - generic [ref=e43]:
+      - textbox "输入搜索关键词..." [ref=e44]
+      - button "搜索" [disabled] [ref=e45]:
+        - generic [ref=e46]: 搜索

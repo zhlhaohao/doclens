@@ -1,0 +1,60 @@
+### Page
+- Page URL: http://localhost:7860/
+- Page Title: Cortex
+### Snapshot
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "Cortex" [level=1] [ref=e11]
+      - paragraph [ref=e12]: 结构感知文档检索
+    - generic "历史会话" [ref=e13]:
+      - generic [ref=e14]: 历史会话
+      - generic [ref=e15] [cursor=pointer]:
+        - generic [ref=e16]: 工作记录
+        - generic [ref=e17]: 273 · 2026/6/17
+      - generic [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: 工作记录
+        - generic [ref=e20]: 273 · 2026/6/17
+      - generic [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: 公园
+        - generic [ref=e23]: 8 · 2026/6/17
+      - generic [ref=e24] [cursor=pointer]:
+        - generic [ref=e25]: 工作记录
+        - generic [ref=e26]: 273 · 2026/6/17
+      - generic [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: 小顺
+        - generic [ref=e29]: 8 · 2026/6/17
+      - generic [ref=e30] [cursor=pointer]:
+        - generic [ref=e31]: 工作记录
+        - generic [ref=e32]: 594 · 2026/6/17
+      - generic [ref=e33] [cursor=pointer]:
+        - generic [ref=e34]: 小顺
+        - generic [ref=e35]: 88 · 2026/6/17
+      - generic [ref=e36] [cursor=pointer]:
+        - generic [ref=e37]: 工作记录
+        - generic [ref=e38]: 594 · 2026/6/17
+      - generic [ref=e39] [cursor=pointer]:
+        - generic [ref=e40]: test
+        - generic [ref=e41]: 547 · 2026/6/16
+      - generic [ref=e42] [cursor=pointer]:
+        - generic [ref=e43]: 小顺
+        - generic [ref=e44]: 88 · 2026/6/16
+      - generic [ref=e45] [cursor=pointer]:
+        - generic [ref=e46]: 公园
+        - generic [ref=e47]: 8 · 2026/6/16
+      - generic [ref=e48] [cursor=pointer]:
+        - generic [ref=e49]: 小顺
+        - generic [ref=e50]: 8 · 2026/6/16
+      - generic [ref=e51] [cursor=pointer]:
+        - generic [ref=e52]: test
+        - generic [ref=e53]: 547 · 2026/6/16
+    - generic [ref=e56]:
+      - textbox "输入搜索关键词..." [ref=e57]
+      - button "搜索" [disabled] [ref=e58]:
+        - generic [ref=e59]: 搜索
+```
