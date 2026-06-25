@@ -1,0 +1,518 @@
+<h2>桌面端 v3（纵向列表 + 全宽）+ 移动端预览</h2>
+<p class="subtitle">桌面端主区域填满整宽；历史会话改为纵向列表。移动端用底部 Tab Bar 替代 Activity Bar。</p>
+
+<style>
+  .row-2 { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .col-2 { flex: 1; min-width: 320px; }
+
+  .state-pair {
+    background: #fff; border: 1px solid #e4e4e7; border-radius: 8px;
+    padding: 10px; margin-bottom: 10px;
+  }
+  .state-title { font-size: 11px; font-weight: 600; color: #0f172a; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .state-title .badge { background: #0d9488; color: #fff; font-size: 9px; padding: 2px 7px; border-radius: 10px; }
+  .state-title .badge.focus { background: #f59e0b; }
+  .state-title .badge.mobile { background: #6366f1; }
+
+  .browser-shell {
+    background: #f8f8f9; border: 1px solid #d4d4d8; border-radius: 6px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .browser-chrome {
+    background: #e4e4e7; padding: 4px 8px; font-size: 9px; color: #52525b;
+    border-bottom: 1px solid #d4d4d8; display: flex; align-items: center; gap: 4px;
+  }
+  .browser-chrome .dots { display: flex; gap: 3px; }
+  .browser-chrome .dot { width: 5px; height: 5px; border-radius: 50%; background: #a1a1aa; }
+  .browser-chrome .url { background: #f4f4f5; padding: 1px 6px; border-radius: 3px; margin-left: 6px; flex: 1; }
+
+  .browser-content { height: 240px; display: flex; min-height: 0; background: #fff; }
+
+  .activity-bar {
+    width: 28px; background: #0f172a; color: #94a3b8;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 6px 0; gap: 10px; flex-shrink: 0;
+  }
+  .activity-bar .ab-item {
+    width: 20px; height: 20px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .activity-bar .ab-item.active { background: #14b8a6; color: #fff; }
+
+  .main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .row-welcome {
+    padding: 12px 20px 8px; text-align: center;
+    background: linear-gradient(180deg, #f0fdfa, #ffffff);
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .welcome-logo { font-size: 18px; font-weight: 700; color: #0d9488; }
+  .welcome-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
+
+  .row-history { padding: 8px 20px; flex: 1; min-height: 0; overflow: auto; border-bottom: 1px solid #f1f5f9; }
+  .history-title { font-size: 8px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .history-list { display: flex; flex-direction: column; gap: 4px; }
+  .history-item {
+    background: #fafafa; border: 1px solid #e4e4e7; border-radius: 5px;
+    padding: 6px 10px; font-size: 9px; color: #334155;
+    display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  }
+  .history-item .name { font-weight: 500; }
+  .history-item .meta { font-size: 7px; color: #94a3b8; }
+  .history-item:hover { border-color: #14b8a6; }
+
+  .row-input { padding: 8px 20px 10px; background: #fff; }
+  .input-box {
+    border: 1px solid #d4d4d8; border-radius: 6px; padding: 8px 10px;
+    font-size: 9px; color: #94a3b8; min-height: 28px; margin-bottom: 6px; background: #fafafa;
+  }
+  .input-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .btn-primary { background: #0d9488; color: #fff; font-size: 8px; padding: 4px 10px; border-radius: 3px; border: none; }
+  .btn-ghost { background: transparent; color: #64748b; font-size: 8px; padding: 4px 8px; border-radius: 3px; border: 1px solid #d4d4d8; }
+
+  /* 专注 */
+  .focus-toolbar {
+    padding: 6px 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7;
+    font-size: 9px; color: #64748b; display: flex; align-items: center; gap: 8px;
+  }
+  .focus-toolbar .back { color: #0d9488; font-weight: 600; cursor: pointer; }
+  .focus-toolbar .query { background: #fff; border: 1px solid #e4e4e7; border-radius: 3px; padding: 2px 8px; flex: 1; font-size: 8px; }
+  .focus-toolbar .meta { color: #94a3b8; font-size: 8px; }
+
+  .focus-body { flex: 1; display: flex; min-height: 0; }
+  .focus-results { width: 42%; background: #fafafa; border-right: 1px solid #e4e4e7; padding: 8px; overflow: auto; }
+  .result-card { background: #fff; border: 1px solid #e4e4e7; border-radius: 4px; padding: 5px 7px; margin-bottom: 4px; font-size: 8px; cursor: pointer; }
+  .result-card.active { border-color: #14b8a6; background: #f0fdfa; }
+  .result-card .path { color: #64748b; font-size: 7px; }
+  .result-card .snippet { color: #334155; margin-top: 2px; }
+
+  .focus-preview { flex: 1; background: #fff; padding: 10px; overflow: auto; }
+  .preview-header { font-size: 9px; color: #334155; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e4e4e7; }
+  .preview-line { font-size: 8px; color: #475569; line-height: 1.6; font-family: monospace; }
+  .preview-line.highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+
+  .focus-chat { flex: 1; display: flex; flex-direction: column; }
+  .chat-stream { flex: 1; padding: 10px 12px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .chat-message { font-size: 9px; padding: 6px 10px; border-radius: 7px; max-width: 75%; line-height: 1.5; }
+  .chat-user { background: #0d9488; color: #fff; align-self: flex-end; }
+  .chat-ai { background: #f1f5f9; color: #334155; align-self: flex-start; }
+  .chat-input-bar { padding: 6px 12px; border-top: 1px solid #e4e4e7; display: flex; gap: 5px; background: #fff; }
+  .chat-input-bar .input-box { flex: 1; margin-bottom: 0; min-height: 24px; }
+
+  /* ============ 移动端 ============ */
+  .phone-shell {
+    background: #f8f8f9; border: 1px solid #d4d4d8; border-radius: 14px;
+    overflow: hidden; display: flex; flex-direction: column; width: 200px; height: 380px;
+    margin: 0 auto;
+  }
+  .phone-status {
+    background: #0f172a; color: #fff; padding: 3px 10px; font-size: 7px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .phone-content { flex: 1; display: flex; flex-direction: column; background: #fff; min-height: 0; }
+
+  .phone-tabbar {
+    background: #fff; border-top: 1px solid #e4e4e7;
+    display: flex; padding: 6px 0;
+  }
+  .phone-tabbar .tab {
+    flex: 1; text-align: center; font-size: 7px; color: #94a3b8;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .phone-tabbar .tab.active { color: #0d9488; font-weight: 600; }
+  .phone-tabbar .tab .icon { font-size: 11px; }
+
+  .m-welcome {
+    padding: 14px 12px 8px; text-align: center;
+    background: linear-gradient(180deg, #f0fdfa, #ffffff);
+  }
+  .m-welcome .logo { font-size: 16px; font-weight: 700; color: #0d9488; }
+  .m-welcome .sub { font-size: 8px; color: #64748b; margin-top: 2px; }
+
+  .m-history { flex: 1; padding: 6px 10px; overflow: auto; min-height: 0; }
+  .m-history-item {
+    background: #fafafa; border: 1px solid #e4e4e7; border-radius: 5px;
+    padding: 6px 8px; font-size: 8px; margin-bottom: 4px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .m-history-item .name { color: #334155; font-weight: 500; }
+  .m-history-item .meta { font-size: 6px; color: #94a3b8; }
+
+  .m-input { padding: 6px 10px 8px; border-top: 1px solid #f1f5f9; background: #fff; }
+  .m-input-box {
+    border: 1px solid #d4d4d8; border-radius: 5px; padding: 5px 7px;
+    font-size: 8px; color: #94a3b8; min-height: 20px; margin-bottom: 4px; background: #fafafa;
+  }
+  .m-input-btn {
+    background: #0d9488; color: #fff; font-size: 7px; padding: 3px 8px;
+    border-radius: 3px; border: none; float: right;
+  }
+
+  .m-focus-header {
+    padding: 6px 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7;
+    font-size: 8px; color: #64748b; display: flex; align-items: center; gap: 6px;
+  }
+  .m-focus-header .back { color: #0d9488; font-weight: 600; }
+
+  .m-result-card {
+    background: #fafafa; border: 1px solid #e4e4e7; border-radius: 4px;
+    padding: 6px 8px; margin-bottom: 4px; font-size: 8px;
+  }
+  .m-result-card.active { border-color: #14b8a6; background: #f0fdfa; }
+  .m-result-card .path { color: #64748b; font-size: 7px; }
+  .m-result-card .snippet { color: #334155; margin-top: 2px; }
+
+  .m-chat-stream { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; overflow: auto; }
+  .m-chat-msg { font-size: 8px; padding: 5px 8px; border-radius: 6px; max-width: 78%; line-height: 1.4; }
+  .m-chat-user { background: #0d9488; color: #fff; align-self: flex-end; }
+  .m-chat-ai { background: #f1f5f9; color: #334155; align-self: flex-start; }
+
+  /* 移动端专注状态：整页推入示意（用覆盖层） */
+  .phone-overlay {
+    position: relative; width: 200px; height: 380px;
+    border: 1px solid #d4d4d8; border-radius: 14px; overflow: hidden;
+    background: #fff; display: flex; flex-direction: column;
+    margin: 0 auto;
+  }
+  .phone-overlay .m-detail {
+    flex: 1; display: flex; flex-direction: column; min-height: 0;
+  }
+  .m-detail-body { flex: 1; padding: 8px 10px; overflow: auto; background: #fff; }
+  .m-detail-header { font-size: 9px; color: #334155; padding-bottom: 4px; border-bottom: 1px solid #e4e4e7; margin-bottom: 6px; }
+  .m-detail-line { font-size: 8px; color: #475569; line-height: 1.6; font-family: monospace; }
+  .m-detail-line.highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+</style>
+
+<h3 style="margin-top:8px;border-left:3px solid #0d9488;padding-left:8px;">桌面端 v3</h3>
+
+<div class="row-2">
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge">搜索 · 初始</span><span>纵向三段 + 全宽</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome">
+          <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="url">localhost:7860</div>
+        </div>
+        <div class="browser-content">
+          <div class="activity-bar">
+            <div class="ab-item active">🔍</div>
+            <div class="ab-item">💬</div>
+            <div class="ab-item">🕘</div>
+          </div>
+          <div class="main-stack">
+            <div class="row-welcome">
+              <div class="welcome-logo">Cortex</div>
+              <div class="welcome-sub">结构感知文档检索</div>
+            </div>
+            <div class="row-history">
+              <div class="history-title">历史会话</div>
+              <div class="history-list">
+                <div class="history-item"><span class="name">python 异步</span><span class="meta">2 小时前 · 12 条</span></div>
+                <div class="history-item"><span class="name">BM25 评分</span><span class="meta">昨天 · 5 条</span></div>
+                <div class="history-item"><span class="name">pdf 解析</span><span class="meta">3 天前 · 8 条</span></div>
+              </div>
+            </div>
+            <div class="row-input">
+              <div class="input-box">输入搜索关键词...</div>
+              <div class="input-actions">
+                <button class="btn-primary">🔍 搜索</button>
+                <button class="btn-ghost">高级</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge focus">搜索 · 专注</span><span>双栏：结果 / 预览</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome">
+          <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="url">localhost:7860</div>
+        </div>
+        <div class="browser-content">
+          <div class="activity-bar">
+            <div class="ab-item active">🔍</div>
+            <div class="ab-item">💬</div>
+            <div class="ab-item">🕘</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+            <div class="focus-toolbar">
+              <span class="back">← 新搜索</span>
+              <div class="query">python 异步</div>
+              <span class="meta">12 条</span>
+            </div>
+            <div class="focus-body">
+              <div class="focus-results">
+                <div class="result-card active">
+                  <div class="path">async/utils.py:42</div>
+                  <div class="snippet">async def gather_tasks(...)</div>
+                </div>
+                <div class="result-card">
+                  <div class="path">docs/async.md</div>
+                  <div class="snippet">异步编程模式...</div>
+                </div>
+              </div>
+              <div class="focus-preview">
+                <div class="preview-header">📄 async/utils.py · 42-50</div>
+                <div class="preview-line">42  async def gather_tasks(tasks):</div>
+                <div class="preview-line highlight">43      """并发执行所有任务"""</div>
+                <div class="preview-line">44      results = await asyncio.gather(*tasks)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row-2">
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge">对话 · 初始</span><span>纵向三段 + 全宽（与搜索同构）</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome">
+          <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="url">localhost:7860</div>
+        </div>
+        <div class="browser-content">
+          <div class="activity-bar">
+            <div class="ab-item">🔍</div>
+            <div class="ab-item active">💬</div>
+            <div class="ab-item">🕘</div>
+          </div>
+          <div class="main-stack">
+            <div class="row-welcome">
+              <div class="welcome-logo">Cortex</div>
+              <div class="welcome-sub">与你的知识库对话</div>
+            </div>
+            <div class="row-history">
+              <div class="history-title">历史会话</div>
+              <div class="history-list">
+                <div class="history-item"><span class="name">FTS5 vs BM25</span><span class="meta">昨天 · 8 条消息</span></div>
+                <div class="history-item"><span class="name">如何索引 PDF</span><span class="meta">3 天前 · 12 条</span></div>
+              </div>
+            </div>
+            <div class="row-input">
+              <div class="input-box">问 Cortex 任何问题...</div>
+              <div class="input-actions">
+                <button class="btn-primary">→ 发送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge focus">对话 · 专注</span><span>对话流 + 底部输入栏</span></div>
+      <div class="browser-shell">
+        <div class="browser-chrome">
+          <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <div class="url">localhost:7860</div>
+        </div>
+        <div class="browser-content">
+          <div class="activity-bar">
+            <div class="ab-item">🔍</div>
+            <div class="ab-item active">💬</div>
+            <div class="ab-item">🕘</div>
+          </div>
+          <div class="focus-chat" style="flex:1;">
+            <div class="focus-toolbar">
+              <span class="back">← 新对话</span>
+              <div class="query" style="background:transparent;border:none;font-weight:600;color:#334155">FTS5 vs BM25</div>
+              <span class="meta">8 条</span>
+            </div>
+            <div class="chat-stream">
+              <div class="chat-message chat-user">FTS5 和 BM25 有什么区别？</div>
+              <div class="chat-message chat-ai">FTS5 是 SQLite 全文检索扩展；BM25 是排序算法...</div>
+              <div class="chat-message chat-user">那评分怎么计算？</div>
+            </div>
+            <div class="chat-input-bar">
+              <div class="input-box">继续对话...</div>
+              <button class="btn-primary">→</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:14px;border-left:3px solid #6366f1;padding-left:8px;">移动端预览</h3>
+
+<div class="row-2">
+
+  <!-- 移动 - 搜索初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile">搜索 · 初始</span><span>纵向三段 + 底部 Tab</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-welcome">
+            <div class="logo">Cortex</div>
+            <div class="sub">结构感知文档检索</div>
+          </div>
+          <div class="m-history">
+            <div class="m-history-item"><span class="name">python 异步</span><span class="meta">2h</span></div>
+            <div class="m-history-item"><span class="name">BM25 评分</span><span class="meta">昨天</span></div>
+            <div class="m-history-item"><span class="name">pdf 解析</span><span class="meta">3d</span></div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-box">输入关键词...</div>
+            <button class="m-input-btn">🔍 搜索</button>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动 - 搜索专注（列表） -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">搜索 · 专注（列表）</span><span>顶部返回 + 单栏结果</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-focus-header">
+            <span class="back">←</span>
+            <span style="background:#fff;border:1px solid #e4e4e7;border-radius:3px;padding:1px 6px;font-size:7px;flex:1">python 异步</span>
+            <span style="color:#94a3b8;font-size:7px">12 条</span>
+          </div>
+          <div style="flex:1;padding:8px 10px;overflow:auto;background:#fafafa;min-height:0;">
+            <div class="m-result-card active">
+              <div class="path">async/utils.py:42</div>
+              <div class="snippet">async def gather_tasks(...)</div>
+            </div>
+            <div class="m-result-card">
+              <div class="path">docs/async.md</div>
+              <div class="snippet">异步编程模式...</div>
+            </div>
+            <div class="m-result-card">
+              <div class="path">core/scheduler.py:120</div>
+              <div class="snippet">asyncio.run(main())</div>
+            </div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动 - 搜索专注（详情整页推入） -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">搜索 · 专注（详情）</span><span>点卡片 → 整页推入预览</span></div>
+      <div class="phone-overlay">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="m-detail">
+          <div class="m-focus-header">
+            <span class="back">← 结果</span>
+            <span style="color:#94a3b8;font-size:7px">async/utils.py</span>
+          </div>
+          <div class="m-detail-body">
+            <div class="m-detail-header">📄 async/utils.py · 42-50</div>
+            <div class="m-detail-line">42  async def gather_tasks(tasks):</div>
+            <div class="m-detail-line highlight">43      """并发执行所有任务"""</div>
+            <div class="m-detail-line">44      results = await asyncio.gather(*tasks)</div>
+            <div class="m-detail-line">45      return results</div>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab active"><span class="icon">🔍</span>搜索</div>
+            <div class="tab"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row-2">
+  <!-- 移动 - 对话初始 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile">对话 · 初始</span><span>纵向三段 + 底部 Tab</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-welcome">
+            <div class="logo">Cortex</div>
+            <div class="sub">与你的知识库对话</div>
+          </div>
+          <div class="m-history">
+            <div class="m-history-item"><span class="name">FTS5 vs BM25</span><span class="meta">昨天</span></div>
+            <div class="m-history-item"><span class="name">如何索引 PDF</span><span class="meta">3d</span></div>
+            <div class="m-history-item"><span class="name">Anthropic API</span><span class="meta">上周</span></div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-box">问 Cortex 任何问题...</div>
+            <button class="m-input-btn">→ 发送</button>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab"><span class="icon">🔍</span>搜索</div>
+            <div class="tab active"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 移动 - 对话专注 -->
+  <div class="col-2">
+    <div class="state-pair">
+      <div class="state-title"><span class="badge mobile focus">对话 · 专注</span><span>对话流 + 底部输入 + 底部 Tab</span></div>
+      <div class="phone-shell">
+        <div class="phone-status"><span>9:41</span><span>Cortex</span><span>📶</span></div>
+        <div class="phone-content">
+          <div class="m-focus-header">
+            <span class="back">←</span>
+            <span style="font-weight:600;color:#334155;font-size:8px">FTS5 vs BM25</span>
+            <span style="color:#94a3b8;font-size:7px">8 条</span>
+          </div>
+          <div class="m-chat-stream">
+            <div class="m-chat-msg m-chat-user">FTS5 和 BM25 有什么区别？</div>
+            <div class="m-chat-msg m-chat-ai">FTS5 是 SQLite 全文检索扩展；BM25 是排序算法...</div>
+            <div class="m-chat-msg m-chat-user">那评分怎么计算？</div>
+            <div class="m-chat-msg m-chat-ai">BM25 基于 TF-IDF 改进...</div>
+          </div>
+          <div class="m-input">
+            <div class="m-input-box">继续对话...</div>
+            <button class="m-input-btn">→</button>
+          </div>
+          <div class="phone-tabbar">
+            <div class="tab"><span class="icon">🔍</span>搜索</div>
+            <div class="tab active"><span class="icon">💬</span>对话</div>
+            <div class="tab"><span class="icon">🕘</span>历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px;margin-top:12px;font-size:11px;color:#713f12;">
+  <strong>请确认移动端的几个决策：</strong>
+  ① 搜索专注状态：默认显示<strong>列表</strong>，点击卡片<strong>整页推入详情</strong>（带"← 结果"返回） — 这种"两步推入"是否合理？<br>
+  ② 移动端底部 Tab Bar 是否<strong>在专注状态也保留</strong>？（mockup 中保留，便于随时切换模式）<br>
+  ③ 移动端是否也保留<strong>纵向三段初始状态</strong>（欢迎 → 历史列表 → 输入），只是更紧凑？
+</div>

@@ -1,0 +1,70 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e96]:
+      - generic "人类" [ref=e97]:
+        - button "返回" [ref=e98] [cursor=pointer]: ‹
+        - generic [ref=e99]: 人类
+        - generic [ref=e100]: 11 条结果
+      - generic [ref=e104]:
+        - generic [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: 生命科学/哈尔滨古人类化石与丹尼索瓦人.md:49
+          - generic [ref=e107]: "## 人类演化新模型 哈尔滨人的发现支持了一种全新的人类演化模型：在东亚地区，丹尼索瓦人、直立人后裔和早期智人在数十万年间可能同时并存，并存在不同程度的基因交流。这种\"网状演化\"模型取代了此前简单的线性替代模型，为我们理解人类演化提供了更加复杂但也更加真实的图景。"
+          - generic [ref=e108]: "评分: 96%"
+        - generic [ref=e109] [cursor=pointer]:
+          - generic [ref=e110]: 生命科学/哈尔滨古人类化石与丹尼索瓦人.md:3
+          - generic [ref=e111]: "## 改写人类演化史的发现 2025年，中国科学院古脊椎动物与古人类研究所在《The Innovation》上发表的最新研究成果，进一步确认了著名的\"哈尔滨人头骨化石\"属于丹尼索瓦人（Denisovan），为理解东亚地区古人类演化提供了关键证据。"
+          - generic [ref=e112]: "评分: 96%"
+        - generic [ref=e113] [cursor=pointer]:
+          - generic [ref=e114]: 生命科学/哈尔滨古人类化石与丹尼索瓦人.md:1
+          - generic [ref=e115]: "# 哈尔滨古人类化石与丹尼索瓦人"
+          - generic [ref=e116]: "评分: 96%"
+        - generic [ref=e117] [cursor=pointer]:
+          - generic [ref=e118]: 天文航天/嫦娥六号月球背面演化历史.md:3
+          - generic [ref=e119]: "## 人类首次月球背面采样返回 2024年6月，中国嫦娥六号探测器成功从月球背面南极-艾特肯盆地（South Pole-Aitken Basin, SPA）采集并返回了1935.3克月球样品。这是人类历史上首次获得月球背面物质样本，标志着月球科学研究进入全新纪元。相关成果于2025年发表在《Nature》和《Science》上。"
+          - generic [ref=e120]: "评分: 75%"
+        - generic [ref=e121] [cursor=pointer]:
+          - generic [ref=e122]: 科技/AI伦理与治理.md:104
+          - generic [ref=e123]: "### AI对齐（Alignment） 确保AI系统的行为与人类价值观和意图保持一致： - RLHF（基于人类反馈的强化学习）：当前最主流的对齐方法 - Constitutional AI：通过预设原则引导AI行为 - 可扩展监督：解决在AI能力超越人类评估能力时的监督问题 - 机制性可解释性：理解模型内部的表征和计算过程"
+          - generic [ref=e124]: "评分: 58%"
+        - generic [ref=e125] [cursor=pointer]:
+          - generic [ref=e126]: 科技/机器人与AI融合2025年发展报告.md:18
+          - generic [ref=e127]: "### AI赋能的关键能力 人形机器人的能力飞跃主要来自AI技术的突破： **具身智能（Embodied AI）** - 视觉-语言-动作模型（VLA）：将视觉感知、语言理解和动作规划统一在单一模型中 - 零样本操作：机器人可以执行训练中未见过的任务 - 自然语言指令：通过对话指导机器人完成复杂任务 **灵巧操作** - Google DeepMind的RT-2模型实现了基于语言指令的机器人操作 - 模仿学习：从人类演示视频中学习操作技能 - 力觉反馈：精密操作精度达到0.1毫米级别 **自主导航** - 端到端导航：从传感器输入直接输出运动指令 - 动态避障：在人群中安全导航 - 多层"
+          - generic [ref=e128]: "评分: 58%"
+        - generic [ref=e129] [cursor=pointer]:
+          - generic [ref=e130]: 健康/肠道健康与益生菌科学指南.md:3
+          - generic [ref=e131]: "## 肠道微生物组：人体的\"第二大脑\" 人体肠道内栖息着约100万亿个微生物，涵盖超过1000个物种，总重量约1.5-2公斤。这些微生物编码的基因总数是人类基因组的150倍以上，构成了一个复杂的生态系统——肠道微生物组（Gut Microbiome）。 近年来的研究揭示了肠道微生物组与人体健康的深层联系： - **免疫系统**：70%以上的免疫细胞分布在肠道，微生物组训练和调节免疫反应 - **代谢功能**：参与食物消化、维生素合成（K、B12、叶酸）和短链脂肪酸产生 - **脑肠轴**：通过迷走神经、神经递质和代谢产物与大脑双向通信 - **情绪调节**：约95%的血清素在肠道产生，直"
+          - generic [ref=e132]: "评分: 58%"
+        - generic [ref=e133] [cursor=pointer]:
+          - generic [ref=e134]: 科技/量子计算与人工智能报告2025-2026.docx:61
+          - generic [ref=e135]: 五、总结与展望 2025-2026年量子计算与人工智能领域呈现出深度融合的趋势。中国在量子科技方面持续推进三阶段发展战略，国际上量子AI的概念也开始从理论走向实际产品化。 随着投资规模持续增长和技术突破不断涌现，我们有理由相信量子计算将在未来十年内深刻改变人类社会。
+          - generic [ref=e136]: "评分: 58%"
+        - generic [ref=e137] [cursor=pointer]:
+          - generic [ref=e138]: 科技/量子计算与人工智能报告2025-2026.docx:28
+          - generic [ref=e139]: 2.1 AI 与量子计算的融合 到2026年3月，中国日均AI词元调用量已超过 140 万亿，相比2024年初的1000亿增长了1000多倍。如果沿着当前经典计算框架继续发展，算力与能耗都将触碰人类极限。专家认为，AI与量子计算的融合发展已成为必然选择。 Google 和 Oratomic 的联合研究表明，AI辅助的量子计算可能比预期更早具备破解互联网加密的能力，这一发现被 TIME 杂志称为“世界尚未准备好”的突破。
+          - generic [ref=e140]: "评分: 58%"
+        - generic [ref=e141] [cursor=pointer]:
+          - generic [ref=e142]: 科技/量子计算与人工智能演示.pptx:66
+          - generic [ref=e143]: "# 总结与展望 量子计算与AI呈现深度融合趋势 量子优越性从理论走向实践（13000倍加速） 中国量子科技稳步推进三阶段战略 全球经济增长放缓但科技投资创纪录 量子计算将在未来十年深刻改变人类社会 投资者应关注: AI、量子、新能源、网络安全"
+          - generic [ref=e144]: "评分: 58%"
+        - generic [ref=e145] [cursor=pointer]:
+          - generic [ref=e146]: 科技/量子计算与人工智能演示.pptx:24
+          - generic [ref=e147]: "# 人工智能前沿突破 AI与量子融合：算力与能耗逼近人类极限 Google+Oratomic: AI辅助量子可能提前破解加密 可解释AI：神经网络量子态+张量网络+生成模型 脑机接口：首次让患者有感情地说话唱歌 中国研发经费投入强度达2.8%，超OECD平均 <!-- Slide number: 5 -->"
+          - generic [ref=e148]: "评分: 58%"
+    - generic [ref=e86]:
+      - button "🔍 搜索" [ref=e87] [cursor=pointer]:
+        - generic [ref=e88]: 🔍
+        - generic [ref=e89]: 搜索
+      - button "💬 对话" [ref=e90] [cursor=pointer]:
+        - generic [ref=e91]: 💬
+        - generic [ref=e92]: 对话
+      - button "📁 文件" [ref=e93] [cursor=pointer]:
+        - generic [ref=e94]: 📁
+        - generic [ref=e95]: 文件

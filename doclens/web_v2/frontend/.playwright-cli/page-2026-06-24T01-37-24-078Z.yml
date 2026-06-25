@@ -1,0 +1,128 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 文件
+        - generic [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: 📁
+          - generic [ref=e25]: 健康
+        - generic [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: 📁
+          - generic [ref=e29]: 公司
+        - generic [ref=e31] [cursor=pointer]:
+          - generic [ref=e32]: 📁
+          - generic [ref=e33]: 天文航天
+        - generic [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: 📁
+          - generic [ref=e37]: 生命科学
+        - generic [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]: 📁
+          - generic [ref=e41]: 科技
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: 📁
+          - generic [ref=e45]: 经济
+        - generic [ref=e47] [cursor=pointer]:
+          - generic [ref=e48]: 📁
+          - generic [ref=e49]: 编程
+        - generic [ref=e51] [cursor=pointer]:
+          - generic [ref=e52]: ▶
+          - generic [ref=e53]: 📁
+          - generic [ref=e54]: 能源环境
+      - separator "调整文件树栏宽度" [ref=e55]
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - button "↑" [disabled] [ref=e58]
+          - generic [ref=e59]: /
+        - generic [ref=e60]:
+          - button "+ 新目录" [ref=e61] [cursor=pointer]
+          - button "⬆ 上传" [ref=e62] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e63]
+          - button "→ 移动" [disabled] [ref=e64]
+          - button "🗑 删除" [disabled] [ref=e65]
+        - generic [ref=e66]:
+          - generic [ref=e67]:
+            - checkbox [ref=e68]
+            - generic "拖动调整列宽" [ref=e69]
+          - generic "拖动调整列宽" [ref=e71]
+          - generic [ref=e72]:
+            - text: 名称
+            - generic "拖动调整列宽" [ref=e73]
+          - generic [ref=e74]:
+            - text: 大小
+            - generic "拖动调整列宽" [ref=e75]
+          - generic [ref=e76]:
+            - text: 修改
+            - generic "拖动调整列宽" [ref=e77]
+          - generic "拖动调整列宽" [ref=e79]
+          - generic [ref=e80]: 类型
+        - generic [ref=e81]:
+          - generic [ref=e83] [cursor=pointer]:
+            - checkbox [ref=e85]
+            - generic [ref=e86]: 📁
+            - generic [ref=e87]: 健康
+            - generic [ref=e88]: 2026/06/12 16:43
+            - generic [ref=e89]: 文件夹
+          - generic [ref=e91] [cursor=pointer]:
+            - checkbox [ref=e93]
+            - generic [ref=e94]: 📁
+            - generic [ref=e95]: 公司
+            - generic [ref=e96]: 2026/06/22 17:07
+            - generic [ref=e97]: 文件夹
+          - generic [ref=e99] [cursor=pointer]:
+            - checkbox [ref=e101]
+            - generic [ref=e102]: 📁
+            - generic [ref=e103]: 天文航天
+            - generic [ref=e104]: 2026/06/12 16:43
+            - generic [ref=e105]: 文件夹
+          - generic [ref=e107] [cursor=pointer]:
+            - checkbox [ref=e109]
+            - generic [ref=e110]: 📁
+            - generic [ref=e111]: 生命科学
+            - generic [ref=e112]: 2026/06/12 16:43
+            - generic [ref=e113]: 文件夹
+          - generic [ref=e115] [cursor=pointer]:
+            - checkbox [ref=e117]
+            - generic [ref=e118]: 📁
+            - generic [ref=e119]: 科技
+            - generic [ref=e120]: 2026/06/12 16:43
+            - generic [ref=e121]: 文件夹
+          - generic [ref=e123] [cursor=pointer]:
+            - checkbox [ref=e125]
+            - generic [ref=e126]: 📁
+            - generic [ref=e127]: 经济
+            - generic [ref=e128]: 2026/06/12 16:43
+            - generic [ref=e129]: 文件夹
+          - generic [ref=e131] [cursor=pointer]:
+            - checkbox [ref=e133]
+            - generic [ref=e134]: 📁
+            - generic [ref=e135]: 编程
+            - generic [ref=e136]: 2026/06/12 16:43
+            - generic [ref=e137]: 文件夹
+          - generic [ref=e139] [cursor=pointer]:
+            - checkbox [ref=e141]
+            - generic [ref=e142]: 📁
+            - generic [ref=e143]: 能源环境
+            - generic [ref=e144]: 2026/06/22 15:28
+            - generic [ref=e145]: 文件夹
+          - generic [ref=e147] [cursor=pointer]:
+            - checkbox [ref=e149]
+            - generic [ref=e151]: M
+            - generic [ref=e152]: test.md
+            - generic [ref=e153]: 111 B
+            - generic [ref=e154]: 2026/06/16 21:12
+            - generic [ref=e156]: 已索引
+            - generic [ref=e157]: md
+      - separator "调整预览栏宽度" [ref=e158]
+      - generic [ref=e160]: 点击文件预览

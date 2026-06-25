@@ -1,0 +1,212 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e15]:
+      - button "← 返回" [ref=e61] [cursor=pointer]
+      - generic [ref=e212]:
+        - 'heading "Healthy Meal Prep Guide: Plan, Cook, and Eat Well" [level=1] [ref=e213]'
+        - heading "Why Meal Prep Matters" [level=2] [ref=e214]
+        - paragraph [ref=e215]: Meal preparation — cooking meals or components in advance — is one of the most effective strategies for maintaining a healthy diet while saving time and money. Research published in the International Journal of Behavioral Nutrition and Physical Activity found that people who meal prep are 50% more likely to consume the recommended daily servings of fruits and vegetables and 30% less likely to be overweight.
+        - heading "Benefits at a Glance" [level=3] [ref=e216]
+        - list [ref=e217]:
+          - listitem [ref=e218]:
+            - strong [ref=e219]: Time savings
+            - text: ": 3-5 hours of cooking per week replaces daily 45-minute cooking sessions"
+          - listitem [ref=e220]:
+            - strong [ref=e221]: Cost savings
+            - text: ": Home-cooked meal prep costs $3-7 per meal vs. $12-20 for restaurant meals"
+          - listitem [ref=e222]:
+            - strong [ref=e223]: Portion control
+            - text: ": Pre-measured servings prevent overeating"
+          - listitem [ref=e224]:
+            - strong [ref=e225]: Reduced food waste
+            - text: ": Strategic shopping uses 85-95% of purchased ingredients"
+          - listitem [ref=e226]:
+            - strong [ref=e227]: Healthier choices
+            - text: ": Having healthy meals ready removes the temptation of convenience foods"
+        - heading "The Meal Prep Framework" [level=2] [ref=e228]
+        - 'heading "Step 1: Plan (Sunday or your preferred start day)" [level=3] [ref=e229]'
+        - paragraph [ref=e230]:
+          - strong [ref=e231]: "Choose your prep style:"
+        - list [ref=e232]:
+          - listitem [ref=e233]:
+            - strong [ref=e234]: Batch cooking
+            - text: ": Cook 2-3 large recipes and portion them out"
+          - listitem [ref=e235]:
+            - strong [ref=e236]: Ingredient prep
+            - text: ": Chop, marinate, and prepare ingredients for quick assembly"
+          - listitem [ref=e237]:
+            - strong [ref=e238]: Individual meals
+            - text: ": Cook complete meals in separate containers"
+        - paragraph [ref=e239]:
+          - strong [ref=e240]: "Plan for 5 days:"
+        - list [ref=e241]:
+          - listitem [ref=e242]: 5 lunches (work meals)
+          - listitem [ref=e243]: 5 dinners
+          - listitem [ref=e244]: 5-7 breakfasts (if desired)
+          - listitem [ref=e245]: 10-15 snacks
+        - 'heading "Step 2: Shop Efficiently" [level=3] [ref=e246]'
+        - paragraph [ref=e247]: "Create a consolidated shopping list organized by grocery store section:"
+        - code [ref=e249]: "Produce: - 2 lbs chicken breast - 1 head broccoli - 2 bell peppers - 1 bag spinach - 4 sweet potatoes - 2 onions, 4 garlic cloves - 3 lemons Grains & Legumes: - 2 cups brown rice - 1 can black beans - 1 can chickpeas Protein: - 2 lbs chicken breast - 1 dozen eggs - 1 block firm tofu Pantry: - Olive oil, soy sauce, cumin, paprika"
+        - 'heading "Step 3: Cook Strategically" [level=3] [ref=e250]'
+        - paragraph [ref=e251]:
+          - strong [ref=e252]: "Multi-task your cooking:"
+        - list [ref=e253]:
+          - listitem [ref=e254]: Start long-cooking items first (rice, roasted vegetables, baked chicken)
+          - listitem [ref=e255]: While those cook, prepare stovetop items (sauteed vegetables, sauces)
+          - listitem [ref=e256]: Use waiting time for chopping and portioning
+          - listitem [ref=e257]: Cool all items to room temperature before refrigerating
+        - heading "Sample Meal Plan (2,000 calories/day)" [level=2] [ref=e258]
+        - 'heading "Breakfast: Overnight Oats (Prep 5 jars)" [level=3] [ref=e259]'
+        - paragraph [ref=e260]: "Per jar:"
+        - list [ref=e261]:
+          - listitem [ref=e262]: 1/2 cup rolled oats (150 cal)
+          - listitem [ref=e263]: 1/2 cup Greek yogurt (100 cal)
+          - listitem [ref=e264]: 1/2 cup milk (almond or dairy) (40 cal)
+          - listitem [ref=e265]: 1 tbsp chia seeds (60 cal)
+          - listitem [ref=e266]: 1/2 cup mixed berries (40 cal)
+          - listitem [ref=e267]: 1 tbsp honey (optional) (65 cal)
+        - paragraph [ref=e268]: "Total per jar: approximately 455 calories, 20g protein, 8g fiber"
+        - 'heading "Lunch: Chicken Grain Bowls (Prep 5 containers)" [level=3] [ref=e269]'
+        - paragraph [ref=e270]: "Per container:"
+        - list [ref=e271]:
+          - listitem [ref=e272]: 4 oz grilled chicken breast (185 cal, 35g protein)
+          - listitem [ref=e273]: 1/2 cup cooked brown rice (110 cal)
+          - listitem [ref=e274]: 1 cup roasted broccoli and bell peppers (80 cal)
+          - listitem [ref=e275]: 1/4 cup chickpeas (80 cal)
+          - listitem [ref=e276]: 2 tbsp lemon-tahini dressing (90 cal)
+        - paragraph [ref=e277]: "Total per container: approximately 545 calories, 42g protein, 10g fiber"
+        - 'heading "Dinner: Sheet Pan Salmon (Prep 2-3 servings)" [level=3] [ref=e278]'
+        - paragraph [ref=e279]: "Per serving:"
+        - list [ref=e280]:
+          - listitem [ref=e281]: 5 oz baked salmon (290 cal, 28g protein)
+          - listitem [ref=e282]: 1 cup roasted sweet potatoes (115 cal)
+          - listitem [ref=e283]: 2 cups sauteed spinach with garlic (50 cal)
+          - listitem [ref=e284]: 1 tbsp olive oil for cooking (120 cal)
+        - paragraph [ref=e285]: "Total per serving: approximately 575 calories, 33g protein, 8g fiber"
+        - heading "Snacks (Choose 2 per day)" [level=3] [ref=e286]
+        - list [ref=e287]:
+          - listitem [ref=e288]: Apple + 1 tbsp almond butter (195 cal)
+          - listitem [ref=e289]: 1/4 cup mixed nuts (175 cal)
+          - listitem [ref=e290]: Carrot sticks + 2 tbsp hummus (130 cal)
+          - listitem [ref=e291]: 1 hard-boiled egg (70 cal)
+          - listitem [ref=e292]: Protein shake with 1 scoop whey (130 cal)
+        - heading "Macronutrient Balance" [level=2] [ref=e293]
+        - paragraph [ref=e294]: "For a balanced meal prep, aim for these ratios:"
+        - table [ref=e295]:
+          - rowgroup [ref=e296]:
+            - row "Nutrient Percentage of Calories Daily Amount (2000 cal)" [ref=e297]:
+              - columnheader "Nutrient" [ref=e298]
+              - columnheader "Percentage of Calories" [ref=e299]
+              - columnheader "Daily Amount (2000 cal)" [ref=e300]
+          - rowgroup [ref=e301]:
+            - row "Protein 25-30% 125-150g" [ref=e302]:
+              - cell "Protein" [ref=e303]
+              - cell "25-30%" [ref=e304]
+              - cell "125-150g" [ref=e305]
+            - row "Carbohydrates 40-50% 200-250g" [ref=e306]:
+              - cell "Carbohydrates" [ref=e307]
+              - cell "40-50%" [ref=e308]
+              - cell "200-250g" [ref=e309]
+            - row "Fat 25-30% 55-67g" [ref=e310]:
+              - cell "Fat" [ref=e311]
+              - cell "25-30%" [ref=e312]
+              - cell "55-67g" [ref=e313]
+            - row "Fiber - 25-30g minimum" [ref=e314]:
+              - cell "Fiber" [ref=e315]
+              - cell "-" [ref=e316]
+              - cell "25-30g minimum" [ref=e317]
+        - heading "Food Safety" [level=2] [ref=e318]
+        - paragraph [ref=e319]: "Critical food safety guidelines for meal prep:"
+        - list [ref=e320]:
+          - listitem [ref=e321]:
+            - strong [ref=e322]: Refrigerator storage
+            - text: ": Consume refrigerated meals within 4 days"
+          - listitem [ref=e323]:
+            - strong [ref=e324]: Cooling
+            - text: ": Cool cooked food to below 40F (4C) within 2 hours"
+          - listitem [ref=e325]:
+            - strong [ref=e326]: Reheating
+            - text: ": Heat to at least 165F (74C) internal temperature"
+          - listitem [ref=e327]:
+            - strong [ref=e328]: Cross-contamination
+            - text: ": Use separate cutting boards for raw meat and vegetables"
+          - listitem [ref=e329]:
+            - strong [ref=e330]: Container choice
+            - text: ": Use BPA-free, microwave-safe glass containers with tight-fitting lids"
+        - heading "Freezing Guidelines" [level=3] [ref=e331]
+        - paragraph [ref=e332]: "These items freeze well for up to 3 months:"
+        - list [ref=e333]:
+          - listitem [ref=e334]: Cooked grains (rice, quinoa)
+          - listitem [ref=e335]: Soups and stews (leave 1 inch of space for expansion)
+          - listitem [ref=e336]: Marinated raw proteins
+          - listitem [ref=e337]: Muffins and breakfast burritos
+        - paragraph [ref=e338]: "These items do NOT freeze well:"
+        - list [ref=e339]:
+          - listitem [ref=e340]: Raw vegetables (become mushy)
+          - listitem [ref=e341]: Dairy-based sauces (separate)
+          - listitem [ref=e342]: Fried foods (lose crispness)
+          - listitem [ref=e343]: Hard-boiled eggs (rubbery texture)
+        - heading "Time-Saving Equipment" [level=2] [ref=e344]
+        - table [ref=e345]:
+          - rowgroup [ref=e346]:
+            - row "Equipment Cost Time Saved" [ref=e347]:
+              - columnheader "Equipment" [ref=e348]
+              - columnheader "Cost" [ref=e349]
+              - columnheader "Time Saved" [ref=e350]
+          - rowgroup [ref=e351]:
+            - row "Instant Pot / Pressure Cooker $60-100 50-70% faster cooking" [ref=e352]:
+              - cell "Instant Pot / Pressure Cooker" [ref=e353]
+              - cell "$60-100" [ref=e354]
+              - cell "50-70% faster cooking" [ref=e355]
+            - row "Sheet pans (rimmed, half-size) $15-25 Cook entire meal on one pan" [ref=e356]:
+              - cell "Sheet pans (rimmed, half-size)" [ref=e357]
+              - cell "$15-25" [ref=e358]
+              - cell "Cook entire meal on one pan" [ref=e359]
+            - row "Food scale $10-20 Accurate portioning" [ref=e360]:
+              - cell "Food scale" [ref=e361]
+              - cell "$10-20" [ref=e362]
+              - cell "Accurate portioning" [ref=e363]
+            - row "Glass meal prep containers (set of 10) $25-40 Easy storage and reheating" [ref=e364]:
+              - cell "Glass meal prep containers (set of 10)" [ref=e365]
+              - cell "$25-40" [ref=e366]
+              - cell "Easy storage and reheating" [ref=e367]
+            - row "Slow cooker $30-50 Cook while you sleep or work" [ref=e368]:
+              - cell "Slow cooker" [ref=e369]
+              - cell "$30-50" [ref=e370]
+              - cell "Cook while you sleep or work" [ref=e371]
+        - heading "Weekly Schedule Template" [level=2] [ref=e372]
+        - paragraph [ref=e373]:
+          - strong [ref=e374]: "Sunday (2-3 hours):"
+        - list [ref=e375]:
+          - listitem [ref=e376]: Cook 2 cups brown rice in rice cooker
+          - listitem [ref=e377]: Roast 2 lbs chicken breast at 425F for 20-25 minutes
+          - listitem [ref=e378]: Roast broccoli and bell peppers (sheet pan, 20 minutes)
+          - listitem [ref=e379]: Bake 4 sweet potatoes (45 minutes at 400F)
+          - listitem [ref=e380]: Prepare 5 overnight oat jars
+          - listitem [ref=e381]: Hard boil 6 eggs
+          - listitem [ref=e382]: Make lemon-tahini dressing
+          - listitem [ref=e383]: Portion all meals into containers
+        - paragraph [ref=e384]:
+          - strong [ref=e385]: "Wednesday (20 minutes):"
+        - list [ref=e386]:
+          - listitem [ref=e387]: Prep Wednesday dinner (fresh salmon, quick-cooking)
+          - listitem [ref=e388]: Check remaining meals and adjust if needed
+          - listitem [ref=e389]: Refresh any wilted vegetables
+    - generic [ref=e18]:
+      - button "🔍 搜索" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 🔍
+        - generic [ref=e21]: 搜索
+      - button "💬 对话" [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: 💬
+        - generic [ref=e24]: 对话
+      - button "📁 文件" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 📁
+        - generic [ref=e27]: 文件

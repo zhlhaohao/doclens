@@ -1,0 +1,135 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e15]:
+      - button "← 返回" [ref=e61] [cursor=pointer]
+      - generic [ref=e212]:
+        - heading "Z世代心理健康与保健品消费" [level=1] [ref=e213]
+        - heading "Z世代心理健康现状" [level=2] [ref=e214]
+        - paragraph [ref=e215]: Z世代（1997-2012年出生）正面临前所未有的心理健康挑战。2025年《中国青年心理健康蓝皮书》显示，18-28岁人群中：
+        - list [ref=e216]:
+          - listitem [ref=e217]: 焦虑症状检出率：31.2%
+          - listitem [ref=e218]: 抑郁症状检出率：24.8%
+          - listitem [ref=e219]: 睡眠障碍发生率：42.5%
+          - listitem [ref=e220]: 感到"持续压力"的比例：67.3%
+        - paragraph [ref=e221]: 这一代人的心理健康挑战与独特的社会环境密切相关：
+        - list [ref=e222]:
+          - listitem [ref=e223]:
+            - strong [ref=e224]: 社交媒体影响
+            - text: ：日均使用社交媒体超过4小时，比较焦虑和FOMO（错失恐惧症）普遍
+          - listitem [ref=e225]:
+            - strong [ref=e226]: 学业与就业压力
+            - text: ：高校扩招导致学历贬值，就业竞争空前激烈
+          - listitem [ref=e227]:
+            - strong [ref=e228]: 经济不确定性
+            - text: ：房价高企、收入增长放缓，对未来的不确定感强烈
+          - listitem [ref=e229]:
+            - strong [ref=e230]: 信息过载
+            - text: ：24小时不间断的信息流导致注意力碎片化和认知疲劳
+        - heading "保健品消费趋势" [level=2] [ref=e231]
+        - paragraph [ref=e232]: 令人关注的是，Z世代正在成为保健品消费的新兴主力军。
+        - heading "消费数据" [level=3] [ref=e233]
+        - list [ref=e234]:
+          - listitem [ref=e235]: 55.7%的Z世代在过去一年中购买过功能性保健品
+          - listitem [ref=e236]: 48%的受访者表示购买保健品的主要目的是"情绪调节"
+          - listitem [ref=e237]: 月均保健品支出：150-300元
+          - listitem [ref=e238]: 线上渠道购买占比超过80%
+        - heading "热门保健品品类" [level=3] [ref=e239]
+        - table [ref=e240]:
+          - rowgroup [ref=e241]:
+            - row "品类 主要成分 功效诉求 购买比例" [ref=e242]:
+              - columnheader "品类" [ref=e243]
+              - columnheader "主要成分" [ref=e244]
+              - columnheader "功效诉求" [ref=e245]
+              - columnheader "购买比例" [ref=e246]
+          - rowgroup [ref=e247]:
+            - row "情绪调节 GABA、5-HTP、南非醉茄 缓解焦虑、改善情绪 48%" [ref=e248]:
+              - cell "情绪调节" [ref=e249]
+              - cell "GABA、5-HTP、南非醉茄" [ref=e250]
+              - cell "缓解焦虑、改善情绪" [ref=e251]
+              - cell "48%" [ref=e252]
+            - row "助眠 褪黑素、酸枣仁、镁 改善睡眠质量 42%" [ref=e253]:
+              - cell "助眠" [ref=e254]
+              - cell "褪黑素、酸枣仁、镁" [ref=e255]
+              - cell "改善睡眠质量" [ref=e256]
+              - cell "42%" [ref=e257]
+            - row "护眼 叶黄素、花青素、DHA 缓解视疲劳 38%" [ref=e258]:
+              - cell "护眼" [ref=e259]
+              - cell "叶黄素、花青素、DHA" [ref=e260]
+              - cell "缓解视疲劳" [ref=e261]
+              - cell "38%" [ref=e262]
+            - row "免疫 维生素C、锌、益生菌 增强免疫力 35%" [ref=e263]:
+              - cell "免疫" [ref=e264]
+              - cell "维生素C、锌、益生菌" [ref=e265]
+              - cell "增强免疫力" [ref=e266]
+              - cell "35%" [ref=e267]
+            - row "脑力增强 Omega-3、磷脂酰丝氨酸 提升注意力和记忆力 28%" [ref=e268]:
+              - cell "脑力增强" [ref=e269]
+              - cell "Omega-3、磷脂酰丝氨酸" [ref=e270]
+              - cell "提升注意力和记忆力" [ref=e271]
+              - cell "28%" [ref=e272]
+            - row "美容护肤 胶原蛋白、透明质酸 改善皮肤状态 45%" [ref=e273]:
+              - cell "美容护肤" [ref=e274]
+              - cell "胶原蛋白、透明质酸" [ref=e275]
+              - cell "改善皮肤状态" [ref=e276]
+              - cell "45%" [ref=e277]
+        - heading "消费特点" [level=3] [ref=e278]
+        - paragraph [ref=e279]: Z世代的保健品消费呈现以下特点：
+        - list [ref=e280]:
+          - listitem [ref=e281]:
+            - strong [ref=e282]: "\"朋克养生\""
+            - text: ：一边熬夜一边吃保健品，追求即时效果
+          - listitem [ref=e283]:
+            - strong [ref=e284]: 社交驱动
+            - text: ：小红书、抖音种草对购买决策影响达65%
+          - listitem [ref=e285]:
+            - strong [ref=e286]: 剂型偏好
+            - text: ：软糖、果冻、即饮等新型剂型受欢迎，传统片剂胶囊吸引力下降
+          - listitem [ref=e287]:
+            - strong [ref=e288]: 成分透明
+            - text: ：对成分表关注度高，偏好天然和清洁标签产品
+        - heading "正念冥想与心理干预" [level=2] [ref=e289]
+        - paragraph [ref=e290]: 除了保健品，越来越多的Z世代开始尝试非药物干预方式。
+        - heading "正念冥想" [level=3] [ref=e291]
+        - paragraph [ref=e292]: 正念冥想（Mindfulness Meditation）在Z世代中快速流行：
+        - list [ref=e293]:
+          - listitem [ref=e294]: 冥想类App（如潮汐、Keep冥想）月活用户超过2000万
+          - listitem [ref=e295]: 18-28岁用户占比达58%
+          - listitem [ref=e296]: 每日冥想10-15分钟，持续8周可使焦虑量表得分降低35%
+          - listitem [ref=e297]: 结合呼吸法（4-7-8呼吸、箱式呼吸）效果更佳
+        - heading "心理咨询" [level=3] [ref=e298]
+        - paragraph [ref=e299]: 心理咨询的接受度显著提高：
+        - list [ref=e300]:
+          - listitem [ref=e301]: 32%的Z世代表示接受过心理咨询或治疗
+          - listitem [ref=e302]: 线上心理咨询平台用户年增长45%
+          - listitem [ref=e303]: 认知行为疗法（CBT）对焦虑和抑郁的有效率达60-80%
+        - heading "运动干预" [level=3] [ref=e304]
+        - paragraph [ref=e305]: 运动对心理健康的益处已得到大量研究支持：
+        - list [ref=e306]:
+          - listitem [ref=e307]: 每周3次、每次30分钟的有氧运动可使抑郁症状减轻40%
+          - listitem [ref=e308]: 团体运动（如飞盘、瑜伽、团操）兼具社交功能，效果优于独自运动
+          - listitem [ref=e309]: 户外运动（公园、森林）比室内运动多带来15-20%的心理健康改善
+        - heading "企业和社会应对" [level=2] [ref=e310]
+        - paragraph [ref=e311]: 社会各界正在加强对Z世代心理健康的关注：
+        - list [ref=e312]:
+          - listitem [ref=e313]: 教育部要求高校按1:4000的比例配备心理健康教育专职教师
+          - listitem [ref=e314]: 腾讯、字节跳动等互联网企业推出员工心理健康计划（EAP）
+          - listitem [ref=e315]: 社交媒体平台上线"情绪关怀"功能，识别和干预高风险内容
+          - listitem [ref=e316]: 国家医保逐步覆盖心理咨询费用，部分城市试点免费心理健康服务
+    - generic [ref=e18]:
+      - button "🔍 搜索" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: 🔍
+        - generic [ref=e21]: 搜索
+      - button "💬 对话" [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: 💬
+        - generic [ref=e24]: 对话
+      - button "📁 文件" [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: 📁
+        - generic [ref=e27]: 文件

@@ -1,0 +1,124 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 文件
+        - generic [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: 📁
+          - generic [ref=e39]: 健康
+        - generic [ref=e41] [cursor=pointer]:
+          - generic [ref=e42]: 📁
+          - generic [ref=e43]: 公司
+        - generic [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 📁
+          - generic [ref=e47]: 天文航天
+        - generic [ref=e49] [cursor=pointer]:
+          - generic [ref=e50]: 📁
+          - generic [ref=e51]: 生命科学
+        - generic [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]: 📁
+          - generic [ref=e55]: 科技
+        - generic [ref=e57] [cursor=pointer]:
+          - generic [ref=e58]: 📁
+          - generic [ref=e59]: 经济
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: 📁
+          - generic [ref=e63]: 编程
+        - generic [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: ▶
+          - generic [ref=e67]: 📁
+          - generic [ref=e68]: 能源环境
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - button "↑" [ref=e24] [cursor=pointer]
+          - generic [ref=e25]: /健康/
+        - generic [ref=e26]:
+          - button "+ 新目录" [ref=e27] [cursor=pointer]
+          - button "⬆ 上传" [ref=e28] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e29]
+          - button "→ 移动" [disabled] [ref=e30]
+          - button "🗑 删除" [disabled] [ref=e31]
+        - generic [ref=e32]:
+          - generic [ref=e118] [cursor=pointer]:
+            - generic [ref=e119]: 📄
+            - generic [ref=e120]: 2025年健康生活与科学养生指南.html
+            - generic [ref=e121]: 9.1 KB
+            - generic [ref=e122]: 2026/06/12 16:43
+          - generic [ref=e124] [cursor=pointer]:
+            - generic [ref=e125]: 📄
+            - generic [ref=e126]: healthy_meal_prep.md
+            - generic [ref=e127]: 5.5 KB
+            - generic [ref=e128]: 2026/06/12 16:43
+            - generic [ref=e210]: 已索引
+          - generic [ref=e132] [cursor=pointer]:
+            - generic [ref=e133]: 📄
+            - generic [ref=e134]: meditation_beginner.md
+            - generic [ref=e135]: 5.8 KB
+            - generic [ref=e136]: 2026/06/12 16:43
+            - generic [ref=e211]: 已索引
+          - generic [ref=e140] [cursor=pointer]:
+            - generic [ref=e141]: 📄
+            - generic [ref=e142]: running_marathon_guide.md
+            - generic [ref=e143]: 6.4 KB
+            - generic [ref=e144]: 2026/06/12 16:43
+            - generic [ref=e212]: 已索引
+          - generic [ref=e148] [cursor=pointer]:
+            - generic [ref=e149]: 📄
+            - generic [ref=e150]: stress_management_work.md
+            - generic [ref=e151]: 7.4 KB
+            - generic [ref=e152]: 2026/06/12 16:43
+            - generic [ref=e213]: 已索引
+          - generic [ref=e156] [cursor=pointer]:
+            - generic [ref=e157]: 📄
+            - generic [ref=e158]: Z世代心理健康与保健品消费.md
+            - generic [ref=e159]: 3.5 KB
+            - generic [ref=e160]: 2026/06/12 16:43
+            - generic [ref=e214]: 已索引
+          - generic [ref=e164] [cursor=pointer]:
+            - generic [ref=e165]: 📄
+            - generic [ref=e166]: 中医理疗养生传统智慧的现代应用.md
+            - generic [ref=e167]: 4.3 KB
+            - generic [ref=e168]: 2026/06/12 16:43
+            - generic [ref=e215]: 已索引
+          - generic [ref=e172] [cursor=pointer]:
+            - generic [ref=e173]: 📄
+            - generic [ref=e174]: 体重管理年科学减重指南.md
+            - generic [ref=e175]: 3.5 KB
+            - generic [ref=e176]: 2026/06/12 16:43
+            - generic [ref=e216]: 已索引
+          - generic [ref=e180] [cursor=pointer]:
+            - generic [ref=e181]: 📄
+            - generic [ref=e182]: 居家健身指南.md
+            - generic [ref=e183]: 4.5 KB
+            - generic [ref=e184]: 2026/06/12 16:43
+            - generic [ref=e186]: 已索引
+          - generic [ref=e218] [cursor=pointer]:
+            - generic [ref=e219]: 📄
+            - generic [ref=e220]: 睡眠科学如何获得高质量睡眠.md
+            - generic [ref=e221]: 3.6 KB
+            - generic [ref=e222]: 2026/06/12 16:43
+            - generic [ref=e224]: 已索引
+          - generic [ref=e226] [cursor=pointer]:
+            - generic [ref=e227]: 📄
+            - generic [ref=e228]: 肠道健康与益生菌科学指南.md
+            - generic [ref=e229]: 4.2 KB
+            - generic [ref=e230]: 2026/06/12 16:43
+            - generic [ref=e232]: 已索引
+          - generic [ref=e234] [cursor=pointer]:
+            - generic [ref=e235]: 📄
+            - generic [ref=e236]: 营养素速查手册.html
+            - generic [ref=e237]: 14.7 KB
+            - generic [ref=e238]: 2026/06/12 16:43
+      - generic [ref=e209]: 选择一个文件查看详情

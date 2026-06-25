@@ -1,0 +1,462 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e94]:
+      - generic [ref=e95]:
+        - generic [ref=e96]: 文件
+        - generic [ref=e114] [cursor=pointer]:
+          - generic [ref=e115]: 📁
+          - generic [ref=e116]: 健康
+        - generic [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: 📁
+          - generic [ref=e120]: 公司
+        - generic [ref=e122] [cursor=pointer]:
+          - generic [ref=e123]: 📁
+          - generic [ref=e124]: 天文航天
+        - generic [ref=e126] [cursor=pointer]:
+          - generic [ref=e127]: 📁
+          - generic [ref=e128]: 生命科学
+        - generic [ref=e130] [cursor=pointer]:
+          - generic [ref=e131]: 📁
+          - generic [ref=e132]: 科技
+        - generic [ref=e134] [cursor=pointer]:
+          - generic [ref=e135]: 📁
+          - generic [ref=e136]: 经济
+        - generic [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: 📁
+          - generic [ref=e140]: 编程
+        - generic [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: ▶
+          - generic [ref=e144]: 📁
+          - generic [ref=e145]: 能源环境
+      - separator "调整文件树栏宽度" [ref=e97]
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - button "↑" [ref=e100] [cursor=pointer]
+          - generic [ref=e101]: /科技/
+        - generic [ref=e102]:
+          - button "+ 新目录" [ref=e103] [cursor=pointer]
+          - button "⬆ 上传" [ref=e104] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e105]
+          - button "→ 移动" [disabled] [ref=e106]
+          - button "🗑 删除" [disabled] [ref=e107]
+        - generic [ref=e235]:
+          - checkbox [ref=e237]
+          - generic [ref=e239]:
+            - text: 名称
+            - generic "拖动调整列宽" [ref=e240]
+          - generic [ref=e241]:
+            - text: 大小
+            - generic "拖动调整列宽" [ref=e242]
+          - generic [ref=e243]:
+            - text: 修改
+            - generic "拖动调整列宽" [ref=e244]
+          - generic "拖动调整列宽" [ref=e246]
+          - generic [ref=e247]: 类型
+        - generic [ref=e109]:
+          - generic [ref=e249] [cursor=pointer]:
+            - checkbox [ref=e251]
+            - generic [ref=e253]: H
+            - generic [ref=e254]: 2025网络安全趋势报告.html
+            - generic [ref=e255]: 11.6 KB
+            - generic [ref=e256]: 2026/06/12 16:43
+            - generic [ref=e257]: html
+          - generic [ref=e259] [cursor=pointer]:
+            - checkbox [ref=e261]
+            - generic [ref=e263]: M
+            - generic [ref=e264]: 5G与6G通信技术发展.md
+            - generic [ref=e265]: 5.9 KB
+            - generic [ref=e266]: 2026/06/12 16:43
+            - generic [ref=e268]: 已索引
+            - generic [ref=e269]: md
+          - generic [ref=e271] [cursor=pointer]:
+            - checkbox [ref=e273]
+            - generic [ref=e275]: M
+            - generic [ref=e276]: AI伦理与治理.md
+            - generic [ref=e277]: 6.0 KB
+            - generic [ref=e278]: 2026/06/12 16:43
+            - generic [ref=e280]: 已索引
+            - generic [ref=e281]: md
+          - generic [ref=e283] [cursor=pointer]:
+            - checkbox [ref=e285]
+            - generic [ref=e287]: M
+            - generic [ref=e288]: AI技术路线与产业应用.md
+            - generic [ref=e289]: 2.7 KB
+            - generic [ref=e290]: 2026/06/12 16:43
+            - generic [ref=e292]: 已索引
+            - generic [ref=e293]: md
+          - generic [ref=e295] [cursor=pointer]:
+            - checkbox [ref=e297]
+            - generic [ref=e299]: M
+            - generic [ref=e300]: AI辅助教育重塑学习方式.md
+            - generic [ref=e301]: 6.1 KB
+            - generic [ref=e302]: 2026/06/12 16:43
+            - generic [ref=e304]: 已索引
+            - generic [ref=e305]: md
+          - generic [ref=e307] [cursor=pointer]:
+            - checkbox [ref=e309]
+            - generic [ref=e311]: P
+            - generic [ref=e312]: quantum_ai_report.pdf
+            - generic [ref=e313]: 1.7 MB
+            - generic [ref=e314]: 2026/06/12 16:43
+            - generic [ref=e316]: 已索引
+            - generic [ref=e317]: pdf
+          - generic [ref=e319] [cursor=pointer]:
+            - checkbox [ref=e321]
+            - generic [ref=e323]: M
+            - generic [ref=e324]: quantum_error_correction.md
+            - generic [ref=e325]: 5.8 KB
+            - generic [ref=e326]: 2026/06/12 16:43
+            - generic [ref=e328]: 已索引
+            - generic [ref=e329]: md
+          - generic [ref=e331] [cursor=pointer]:
+            - checkbox [ref=e333]
+            - generic [ref=e335]: M
+            - generic [ref=e336]: 中国AI词元调用量爆发式增长.md
+            - generic [ref=e337]: 3.2 KB
+            - generic [ref=e338]: 2026/06/12 16:43
+            - generic [ref=e340]: 已索引
+            - generic [ref=e341]: md
+          - generic [ref=e343] [cursor=pointer]:
+            - checkbox [ref=e345]
+            - generic [ref=e347]: M
+            - generic [ref=e348]: 元宇宙与VR_AR技术发展.md
+            - generic [ref=e349]: 4.8 KB
+            - generic [ref=e350]: 2026/06/12 16:43
+            - generic [ref=e352]: 已索引
+            - generic [ref=e353]: md
+          - generic [ref=e355] [cursor=pointer]:
+            - checkbox [ref=e357]
+            - generic [ref=e359]: M
+            - generic [ref=e360]: 智慧城市与物联网.md
+            - generic [ref=e361]: 5.5 KB
+            - generic [ref=e362]: 2026/06/12 16:43
+            - generic [ref=e364]: 已索引
+            - generic [ref=e365]: md
+          - generic [ref=e367] [cursor=pointer]:
+            - checkbox [ref=e369]
+            - generic [ref=e371]: M
+            - generic [ref=e372]: 机器人与AI融合2025年发展报告.md
+            - generic [ref=e373]: 5.2 KB
+            - generic [ref=e374]: 2026/06/12 16:43
+            - generic [ref=e376]: 已索引
+            - generic [ref=e377]: md
+          - generic [ref=e379] [cursor=pointer]:
+            - checkbox [ref=e381]
+            - generic [ref=e383]: M
+            - generic [ref=e384]: 网络安全与AI防御2025威胁态势.md
+            - generic [ref=e385]: 3.2 KB
+            - generic [ref=e386]: 2026/06/12 16:43
+            - generic [ref=e388]: 已索引
+            - generic [ref=e389]: md
+          - generic [ref=e391] [cursor=pointer]:
+            - checkbox [ref=e393]
+            - generic [ref=e395]: M
+            - generic [ref=e396]: 量子密码学从QKD到后量子密码学.md
+            - generic [ref=e397]: 5.8 KB
+            - generic [ref=e398]: 2026/06/12 16:43
+            - generic [ref=e400]: 已索引
+            - generic [ref=e401]: md
+          - generic [ref=e403] [cursor=pointer]:
+            - checkbox [ref=e405]
+            - generic [ref=e407]: D
+            - generic [ref=e408]: 量子计算与人工智能报告2025-2026.docx
+            - generic [ref=e409]: 15.3 KB
+            - generic [ref=e410]: 2026/06/20 15:17
+            - generic [ref=e412]: 已索引
+            - generic [ref=e413]: docx
+          - generic [ref=e415] [cursor=pointer]:
+            - checkbox [ref=e417]
+            - generic [ref=e419]: S
+            - generic [ref=e420]: 量子计算与人工智能演示.pptx
+            - generic [ref=e421]: 36.5 KB
+            - generic [ref=e422]: 2026/06/12 16:43
+            - generic [ref=e424]: 已索引
+            - generic [ref=e425]: pptx
+      - separator "调整预览栏宽度" [ref=e110]
+      - generic [ref=e426]:
+        - generic [ref=e427]:
+          - generic [ref=e428]: 科技/5G与6G通信技术发展.md
+          - button "✏️ 编辑" [ref=e429] [cursor=pointer]
+          - button "⬇️ 下载" [ref=e430] [cursor=pointer]
+          - button "⬆️ 上传" [ref=e431] [cursor=pointer]
+        - generic [ref=e433]:
+          - heading "5G与6G通信技术发展" [level=1] [ref=e434]
+          - heading "5G网络部署现状" [level=2] [ref=e435]
+          - paragraph [ref=e436]: 截至2025年底，全球5G网络已覆盖超过45%的人口，5G基站总数超过500万个。5G技术正在从基础设施建设阶段进入应用价值释放阶段。
+          - heading "全球5G数据" [level=3] [ref=e437]
+          - table [ref=e438]:
+            - rowgroup [ref=e439]:
+              - row "指标 数值" [ref=e440]:
+                - columnheader "指标" [ref=e441]
+                - columnheader "数值" [ref=e442]
+            - rowgroup [ref=e443]:
+              - row "全球5G基站数 500万+" [ref=e444]:
+                - cell "全球5G基站数" [ref=e445]
+                - cell "500万+" [ref=e446]
+              - row "5G用户数 20亿+" [ref=e447]:
+                - cell "5G用户数" [ref=e448]
+                - cell "20亿+" [ref=e449]
+              - row "5G智能手机出货占比 60%+" [ref=e450]:
+                - cell "5G智能手机出货占比" [ref=e451]
+                - cell "60%+" [ref=e452]
+              - row "5G网络覆盖国家 100+" [ref=e453]:
+                - cell "5G网络覆盖国家" [ref=e454]
+                - cell "100+" [ref=e455]
+              - row "中国5G基站数 380万+（占全球75%）" [ref=e456]:
+                - cell "中国5G基站数" [ref=e457]
+                - cell "380万+（占全球75%）" [ref=e458]
+              - row "中国5G用户数 10亿+" [ref=e459]:
+                - cell "中国5G用户数" [ref=e460]
+                - cell "10亿+" [ref=e461]
+          - heading "5G技术演进" [level=3] [ref=e462]
+          - paragraph [ref=e463]: 3GPP Release 18（5G-Advanced）在2024年完成标准化，标志着5G进入增强阶段：
+          - list [ref=e464]:
+            - listitem [ref=e465]:
+              - strong [ref=e466]: 上行增强
+              - text: ：上行峰值速率从1Gbps提升至3Gbps
+            - listitem [ref=e467]:
+              - strong [ref=e468]: AI/ML集成
+              - text: ：网络侧AI实现智能资源分配和干扰管理
+            - listitem [ref=e469]:
+              - strong [ref=e470]: RedCap增强
+              - text: ：轻量化5G终端成本降至50美元以下
+            - listitem [ref=e471]:
+              - strong [ref=e472]: 网络节能
+              - text: ：AI驱动的基站节能方案降低能耗25%
+            - listitem [ref=e473]:
+              - strong [ref=e474]: 确定性网络
+              - text: ：工业场景时延抖动控制在100微秒以内
+          - heading "5G应用场景成熟度" [level=3] [ref=e475]
+          - paragraph [ref=e476]:
+            - strong [ref=e477]: 成熟应用（大规模商用）
+          - list [ref=e478]:
+            - listitem [ref=e479]: 固定无线接入（FWA）：全球超过3000万FWA用户
+            - listitem [ref=e480]: 视频直播和娱乐：4K/8K直播、云游戏
+            - listitem [ref=e481]: 工业互联网：远程控制、设备监控
+            - listitem [ref=e482]: 智慧城市：视频监控、交通管理
+          - paragraph [ref=e483]:
+            - strong [ref=e484]: 成长应用（试点扩大中）
+          - list [ref=e485]:
+            - listitem [ref=e486]: 自动驾驶V2X：车路协同，覆盖主要高速公路
+            - listitem [ref=e487]: 远程医疗：远程手术、应急救援
+            - listitem [ref=e488]: 智慧矿山：5G远程驾驶矿车
+            - listitem [ref=e489]: 智慧港口：无人集卡和自动化桥吊
+          - paragraph [ref=e490]:
+            - strong [ref=e491]: 探索应用（研发阶段）
+          - list [ref=e492]:
+            - listitem [ref=e493]: 数字孪生：全城市级别的实时数字映射
+            - listitem [ref=e494]: 全息通信：裸眼3D视频通话
+            - listitem [ref=e495]: 感知互联网：无线信号感知环境变化
+          - heading "5G核心技术" [level=2] [ref=e496]
+          - heading "毫米波（mmWave）" [level=3] [ref=e497]
+          - paragraph [ref=e498]: 毫米波频段（24-100GHz）提供极高的带宽和容量：
+          - table [ref=e499]:
+            - rowgroup [ref=e500]:
+              - row "频段 频率范围 可用带宽 峰值速率 覆盖范围" [ref=e501]:
+                - columnheader "频段" [ref=e502]
+                - columnheader "频率范围" [ref=e503]
+                - columnheader "可用带宽" [ref=e504]
+                - columnheader "峰值速率" [ref=e505]
+                - columnheader "覆盖范围" [ref=e506]
+            - rowgroup [ref=e507]:
+              - row "n257 26.5-29.5GHz 3GHz 4Gbps+ 200-500m" [ref=e508]:
+                - cell "n257" [ref=e509]
+                - cell "26.5-29.5GHz" [ref=e510]
+                - cell "3GHz" [ref=e511]
+                - cell "4Gbps+" [ref=e512]
+                - cell "200-500m" [ref=e513]
+              - row "n258 24.25-27.5GHz 3.25GHz 4Gbps+ 200-500m" [ref=e514]:
+                - cell "n258" [ref=e515]
+                - cell "24.25-27.5GHz" [ref=e516]
+                - cell "3.25GHz" [ref=e517]
+                - cell "4Gbps+" [ref=e518]
+                - cell "200-500m" [ref=e519]
+              - row "n260 37-40GHz 3GHz 4Gbps+ 150-300m" [ref=e520]:
+                - cell "n260" [ref=e521]
+                - cell "37-40GHz" [ref=e522]
+                - cell "3GHz" [ref=e523]
+                - cell "4Gbps+" [ref=e524]
+                - cell "150-300m" [ref=e525]
+              - row "n261 27.5-28.35GHz 850MHz 2Gbps+ 200-500m" [ref=e526]:
+                - cell "n261" [ref=e527]
+                - cell "27.5-28.35GHz" [ref=e528]
+                - cell "850MHz" [ref=e529]
+                - cell "2Gbps+" [ref=e530]
+                - cell "200-500m" [ref=e531]
+          - paragraph [ref=e532]: 毫米波挑战：
+          - list [ref=e533]:
+            - listitem [ref=e534]: 传播损耗大，覆盖距离短
+            - listitem [ref=e535]: 穿透能力弱，室内覆盖困难
+            - listitem [ref=e536]: 雨衰和植被遮挡影响
+            - listitem [ref=e537]: 需要密集部署小基站
+          - heading "Massive MIMO" [level=3] [ref=e538]
+          - paragraph [ref=e539]: 大规模天线阵列是5G提升频谱效率的核心技术：
+          - list [ref=e540]:
+            - listitem [ref=e541]: 64T64R（64发64收）天线商用部署
+            - listitem [ref=e542]: 3D波束赋形实现精确覆盖
+            - listitem [ref=e543]: 多用户MIMO同时服务16个用户
+            - listitem [ref=e544]: 频谱效率较4G提升5-8倍
+          - heading "网络切片" [level=3] [ref=e545]
+          - paragraph [ref=e546]: 5G网络切片允许在同一物理网络上创建多个虚拟网络：
+          - list [ref=e547]:
+            - listitem [ref=e548]: eMBB切片：高速宽带，用于视频和娱乐
+            - listitem [ref=e549]: URLLC切片：超低延迟，用于工业控制和自动驾驶
+            - listitem [ref=e550]: mMTC切片：海量连接，用于物联网
+            - listitem [ref=e551]: 每个切片独立管理，互不影响
+          - heading "6G技术展望" [level=2] [ref=e552]
+          - heading "6G愿景" [level=3] [ref=e553]
+          - paragraph [ref=e554]: 6G预计在2030年前后实现商用，其性能目标远超5G：
+          - table [ref=e555]:
+            - rowgroup [ref=e556]:
+              - row "指标 5G 6G目标 提升倍数" [ref=e557]:
+                - columnheader "指标" [ref=e558]
+                - columnheader "5G" [ref=e559]
+                - columnheader "6G目标" [ref=e560]
+                - columnheader "提升倍数" [ref=e561]
+            - rowgroup [ref=e562]:
+              - row "峰值速率 20Gbps 1Tbps 50x" [ref=e563]:
+                - cell "峰值速率" [ref=e564]
+                - cell "20Gbps" [ref=e565]
+                - cell "1Tbps" [ref=e566]
+                - cell "50x" [ref=e567]
+              - row "用户体验速率 100Mbps 10Gbps 100x" [ref=e568]:
+                - cell "用户体验速率" [ref=e569]
+                - cell "100Mbps" [ref=e570]
+                - cell "10Gbps" [ref=e571]
+                - cell "100x" [ref=e572]
+              - row "时延 1ms 0.1ms 10x" [ref=e573]:
+                - cell "时延" [ref=e574]
+                - cell "1ms" [ref=e575]
+                - cell "0.1ms" [ref=e576]
+                - cell "10x" [ref=e577]
+              - row "连接密度 10^6/km² 10^7/km² 10x" [ref=e578]:
+                - cell "连接密度" [ref=e579]
+                - cell "10^6/km²" [ref=e580]
+                - cell "10^7/km²" [ref=e581]
+                - cell "10x" [ref=e582]
+              - row "频谱效率 3x 4G 10x 5G 10x" [ref=e583]:
+                - cell "频谱效率" [ref=e584]
+                - cell "3x 4G" [ref=e585]
+                - cell "10x 5G" [ref=e586]
+                - cell "10x" [ref=e587]
+              - row "移动性 500km/h 1000km/h 2x" [ref=e588]:
+                - cell "移动性" [ref=e589]
+                - cell "500km/h" [ref=e590]
+                - cell "1000km/h" [ref=e591]
+                - cell "2x" [ref=e592]
+          - heading "太赫兹通信" [level=3] [ref=e593]
+          - paragraph [ref=e594]: 太赫兹频段（0.1-10THz）是6G的核心频谱资源：
+          - list [ref=e595]:
+            - listitem [ref=e596]: 可用带宽：数十到数百GHz（远超毫米波）
+            - listitem [ref=e597]: 传播特性：极高方向性，适合短距高速通信
+            - listitem [ref=e598]: 应用场景：全息通信、数字孪生、数据中心互联
+            - listitem [ref=e599]: 挑战：器件成熟度低、传播损耗极大、覆盖距离极短
+          - heading "卫星融合（天地一体化）" [level=3] [ref=e600]
+          - paragraph [ref=e601]: 6G将实现地面网络与卫星网络的无缝融合：
+          - list [ref=e602]:
+            - listitem [ref=e603]:
+              - strong [ref=e604]: 低轨卫星星座
+              - text: ：Starlink（7000+颗）、星网（规划12000+颗）、G60（规划12000颗）
+            - listitem [ref=e605]:
+              - strong [ref=e606]: 手机直连卫星
+              - text: ：已实现短信和低速数据，2026年目标支持语音通话
+            - listitem [ref=e607]:
+              - strong [ref=e608]: 高空平台（HAPS）
+              - text: ：20公里高度的太阳能无人机/气球提供广域覆盖
+            - listitem [ref=e609]:
+              - strong [ref=e610]: 无缝切换
+              - text: ：地面-卫星间自动切换，用户无感知
+          - heading "AI原生网络" [level=3] [ref=e611]
+          - paragraph [ref=e612]: 6G将从设计之初就融入AI能力：
+          - list [ref=e613]:
+            - listitem [ref=e614]:
+              - strong [ref=e615]: AI物理层
+              - text: ：深度学习替代传统信号处理算法
+            - listitem [ref=e616]:
+              - strong [ref=e617]: 智能资源管理
+              - text: ：AI实时优化频谱、功率和天线资源
+            - listitem [ref=e618]:
+              - strong [ref=e619]: 意图驱动网络
+              - text: ：用户描述意图，AI自动配置网络
+            - listitem [ref=e620]:
+              - strong [ref=e621]: 自愈网络
+              - text: ：AI检测和修复网络故障，实现零宕机
+            - listitem [ref=e622]:
+              - strong [ref=e623]: 语义通信
+              - text: ：传输语义信息而非原始比特，压缩率提升100倍
+          - heading "通信感知一体化（ISAC）" [level=3] [ref=e624]
+          - paragraph [ref=e625]: 6G将通信和感知功能融合在同一个系统中：
+          - list [ref=e626]:
+            - listitem [ref=e627]: 无线信号同时用于通信和环境感知
+            - listitem [ref=e628]: 可实现厘米级精度的目标检测和跟踪
+            - listitem [ref=e629]: 应用场景：自动驾驶感知、安防监控、健康监测
+            - listitem [ref=e630]: 无需额外传感器，降低系统复杂度和成本
+          - heading "6G标准化时间表" [level=3] [ref=e631]
+          - table [ref=e632]:
+            - rowgroup [ref=e633]:
+              - row "阶段 时间 内容" [ref=e634]:
+                - columnheader "阶段" [ref=e635]
+                - columnheader "时间" [ref=e636]
+                - columnheader "内容" [ref=e637]
+            - rowgroup [ref=e638]:
+              - row "愿景定义 2024-2025 ITU-R完成6G愿景和需求定义" [ref=e639]:
+                - cell "愿景定义" [ref=e640]
+                - cell "2024-2025" [ref=e641]
+                - cell "ITU-R完成6G愿景和需求定义" [ref=e642]
+              - row "标准研究 2025-2027 3GPP启动Release 20/21研究" [ref=e643]:
+                - cell "标准研究" [ref=e644]
+                - cell "2025-2027" [ref=e645]
+                - cell "3GPP启动Release 20/21研究" [ref=e646]
+              - row "标准制定 2027-2029 3GPP完成6G第一个版本标准" [ref=e647]:
+                - cell "标准制定" [ref=e648]
+                - cell "2027-2029" [ref=e649]
+                - cell "3GPP完成6G第一个版本标准" [ref=e650]
+              - row "产品开发 2028-2030 芯片和设备研发" [ref=e651]:
+                - cell "产品开发" [ref=e652]
+                - cell "2028-2030" [ref=e653]
+                - cell "芯片和设备研发" [ref=e654]
+              - row "商用部署 2030-2032 第一批6G网络商用" [ref=e655]:
+                - cell "商用部署" [ref=e656]
+                - cell "2030-2032" [ref=e657]
+                - cell "第一批6G网络商用" [ref=e658]
+          - heading "频谱资源" [level=2] [ref=e659]
+          - heading "全球6G候选频段" [level=3] [ref=e660]
+          - list [ref=e661]:
+            - listitem [ref=e662]:
+              - strong [ref=e663]: 6-7GHz（中频段）
+              - text: ：平衡覆盖和容量，6G主力频段
+            - listitem [ref=e664]:
+              - strong [ref=e665]: 7-24GHz（ upper mid-band）
+              - text: ：兼顾覆盖和带宽
+            - listitem [ref=e666]:
+              - strong [ref=e667]: 92-114GHz（Sub-THz）
+              - text: ：超大带宽，热点区域
+            - listitem [ref=e668]:
+              - strong [ref=e669]: 0.1-0.3THz（太赫兹低段）
+              - text: ：6G标志性频段
+          - paragraph [ref=e670]: 中国在6G频谱规划中积极参与ITU-R讨论，提出了6GHz和太赫兹频段的使用方案。
+          - heading "投资与产业生态" [level=2] [ref=e671]
+          - heading "5G投资" [level=3] [ref=e672]
+          - list [ref=e673]:
+            - listitem [ref=e674]: 全球5G累计投资超过1.5万亿美元
+            - listitem [ref=e675]: 中国5G累计投资超过2万亿元人民币
+            - listitem [ref=e676]: 5G带动经济总产出超过10万亿元
+          - heading "6G研发投入" [level=3] [ref=e677]
+          - list [ref=e678]:
+            - listitem [ref=e679]: 中国：国家自然科学基金6G重大研究计划投入50亿元
+            - listitem [ref=e680]: 欧盟：Hexa-X-II项目投入1.3亿欧元
+            - listitem [ref=e681]: 美国：FCC启动6G频谱规划，NSF投入6G研究
+            - listitem [ref=e682]: 日本：Beyond 5G推进联盟，目标2030年商用
+            - listitem [ref=e683]: 韩国：三星和LG已建立6G研究中心

@@ -1,0 +1,278 @@
+<h2>双状态范式确认（桌面端）</h2>
+<p class="subtitle">搜索 / 对话 两种模式都遵循：初始状态（三栏） → 专注状态（仅会话内容）。请确认这个范式是否符合你的设想。</p>
+
+<style>
+  .state-pair {
+    background: #fff; border: 1px solid #e4e4e7; border-radius: 8px;
+    padding: 12px; margin-bottom: 14px;
+  }
+  .state-title { font-size: 12px; font-weight: 600; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .state-title .badge { background: #0d9488; color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .state-title .badge.focus { background: #f59e0b; }
+
+  .browser-shell {
+    background: #f8f8f9; border: 1px solid #d4d4d8; border-radius: 6px;
+    overflow: hidden; height: 220px; display: flex; flex-direction: column;
+  }
+  .browser-chrome {
+    background: #e4e4e7; padding: 5px 8px; font-size: 9px; color: #52525b;
+    border-bottom: 1px solid #d4d4d8; display: flex; align-items: center; gap: 4px;
+  }
+  .browser-chrome .dots { display: flex; gap: 3px; }
+  .browser-chrome .dot { width: 6px; height: 6px; border-radius: 50%; background: #a1a1aa; }
+  .browser-chrome .url { background: #f4f4f5; padding: 1px 6px; border-radius: 3px; margin-left: 8px; flex: 1; }
+
+  .browser-content { flex: 1; display: flex; min-height: 0; background: #fff; }
+
+  .activity-bar {
+    width: 32px; background: #0f172a; color: #94a3b8;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 8px 0; gap: 12px;
+  }
+  .activity-bar .ab-item {
+    width: 22px; height: 22px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+  .activity-bar .ab-item.active { background: #14b8a6; color: #fff; }
+
+  .col { padding: 12px; min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  .col-welcome { background: linear-gradient(135deg, #f0fdfa, #ecfeff); border-right: 1px solid #e4e4e7; flex: 1.1; }
+  .col-history { background: #fafafa; border-right: 1px solid #e4e4e7; flex: 1; }
+  .col-input { background: #fff; flex: 1.3; }
+
+  .welcome-logo { font-size: 22px; font-weight: 700; color: #0d9488; margin-bottom: 4px; }
+  .welcome-sub { font-size: 9px; color: #64748b; margin-bottom: 14px; }
+  .welcome-tip { background: #fff; border: 1px dashed #99f6e4; border-radius: 4px; padding: 6px; font-size: 8px; color: #115e59; }
+
+  .history-title { font-size: 9px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .history-item { background: #fff; border: 1px solid #e4e4e7; border-radius: 3px; padding: 5px 6px; font-size: 8px; color: #334155; margin-bottom: 4px; cursor: pointer; }
+  .history-item .meta { font-size: 7px; color: #94a3b8; }
+  .history-item.active { border-color: #14b8a6; background: #f0fdfa; }
+
+  .input-label { font-size: 9px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .input-box {
+    flex: 1; border: 1px solid #d4d4d8; border-radius: 4px; padding: 8px;
+    font-size: 9px; color: #94a3b8; min-height: 60px; margin-bottom: 8px;
+    background: #fafafa;
+  }
+  .input-actions { display: flex; gap: 4px; }
+  .btn-primary { background: #0d9488; color: #fff; font-size: 8px; padding: 4px 10px; border-radius: 3px; border: none; }
+  .btn-ghost { background: transparent; color: #64748b; font-size: 8px; padding: 4px 8px; border-radius: 3px; border: 1px solid #d4d4d8; }
+
+  /* 专注状态 */
+  .focus-toolbar {
+    padding: 6px 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7;
+    font-size: 9px; color: #64748b; display: flex; align-items: center; gap: 8px;
+  }
+  .focus-toolbar .back { color: #0d9488; font-weight: 600; }
+  .focus-toolbar .query { background: #fff; border: 1px solid #e4e4e7; border-radius: 3px; padding: 2px 8px; flex: 1; font-size: 8px; }
+
+  .search-result-list { background: #fafafa; border-right: 1px solid #e4e4e7; padding: 8px; }
+  .result-card { background: #fff; border: 1px solid #e4e4e7; border-radius: 4px; padding: 6px; margin-bottom: 5px; font-size: 8px; }
+  .result-card.active { border-color: #14b8a6; background: #f0fdfa; }
+  .result-card .path { color: #64748b; font-size: 7px; }
+  .result-card .snippet { color: #334155; margin-top: 2px; }
+
+  .preview-pane { background: #fff; padding: 10px; }
+  .preview-header { font-size: 9px; color: #334155; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e4e4e7; }
+  .preview-line { font-size: 8px; color: #475569; line-height: 1.6; font-family: monospace; }
+  .preview-line.highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+
+  /* AI 对话 */
+  .chat-message { font-size: 9px; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; max-width: 75%; }
+  .chat-user { background: #0d9488; color: #fff; align-self: flex-end; margin-left: auto; }
+  .chat-ai { background: #f1f5f9; color: #334155; }
+  .chat-input-bar {
+    padding: 6px 8px; border-top: 1px solid #e4e4e7; display: flex; gap: 4px; background: #fff;
+  }
+  .chat-input-bar .input-box { flex: 1; min-height: auto; margin-bottom: 0; }
+</style>
+
+<!-- ============ 搜索模式 - 初始状态 ============ -->
+<div class="state-pair">
+  <div class="state-title">
+    <span class="badge">搜索 · 初始</span>
+    <span>三栏：欢迎区 / 历史会话 / 输入框</span>
+  </div>
+  <div class="browser-shell">
+    <div class="browser-chrome">
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="url">localhost:7860</div>
+    </div>
+    <div class="browser-content">
+      <div class="activity-bar">
+        <div class="ab-item active">🔍</div>
+        <div class="ab-item">💬</div>
+        <div class="ab-item">🕘</div>
+      </div>
+      <div class="col col-welcome">
+        <div class="welcome-logo">Cortex</div>
+        <div class="welcome-sub">结构感知文档检索</div>
+        <div class="welcome-tip">输入关键词开始搜索，或从右侧选一条历史会话继续</div>
+      </div>
+      <div class="col col-history">
+        <div class="history-title">历史会话</div>
+        <div class="history-item">
+          python 异步<br><span class="meta">2 小时前 · 12 条结果</span>
+        </div>
+        <div class="history-item">
+          BM25 评分<br><span class="meta">昨天 · 5 条结果</span>
+        </div>
+        <div class="history-item">
+          pdf 解析<br><span class="meta">3 天前 · 8 条结果</span>
+        </div>
+      </div>
+      <div class="col col-input">
+        <div class="input-label">新搜索</div>
+        <div class="input-box">输入搜索关键词...</div>
+        <div class="input-actions">
+          <button class="btn-primary">🔍 搜索</button>
+          <button class="btn-ghost">高级</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 搜索模式 - 专注状态 ============ -->
+<div class="state-pair">
+  <div class="state-title">
+    <span class="badge focus">搜索 · 专注</span>
+    <span>双栏：搜索结果列表 / 文件预览（无欢迎区、无历史列表）</span>
+  </div>
+  <div class="browser-shell">
+    <div class="browser-chrome">
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="url">localhost:7860</div>
+    </div>
+    <div class="browser-content">
+      <div class="activity-bar">
+        <div class="ab-item active">🔍</div>
+        <div class="ab-item">💬</div>
+        <div class="ab-item">🕘</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+        <div class="focus-toolbar">
+          <span class="back">← 新搜索</span>
+          <div class="query">python 异步</div>
+          <span style="color:#94a3b8">12 条结果</span>
+        </div>
+        <div style="flex: 1; display: flex; min-height: 0;">
+          <div class="search-result-list" style="width: 40%; box-sizing: border-box;">
+            <div class="result-card active">
+              <div class="path">async/utils.py:42</div>
+              <div class="snippet">async def gather_tasks(...)</div>
+            </div>
+            <div class="result-card">
+              <div class="path">docs/async.md</div>
+              <div class="snippet">异步编程模式...</div>
+            </div>
+            <div class="result-card">
+              <div class="path">core/scheduler.py:120</div>
+              <div class="snippet">asyncio.run(main())</div>
+            </div>
+          </div>
+          <div class="preview-pane" style="flex: 1;">
+            <div class="preview-header">📄 async/utils.py · 第 42-50 行</div>
+            <div class="preview-line">42  async def gather_tasks(tasks):</div>
+            <div class="preview-line highlight">43      """并发执行所有任务"""</div>
+            <div class="preview-line">44      results = await asyncio.gather(*tasks)</div>
+            <div class="preview-line">45      return results</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ AI 对话 - 初始状态 ============ -->
+<div class="state-pair">
+  <div class="state-title">
+    <span class="badge">对话 · 初始</span>
+    <span>三栏：欢迎区 / 历史会话 / 输入框（与搜索同构）</span>
+  </div>
+  <div class="browser-shell">
+    <div class="browser-chrome">
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="url">localhost:7860</div>
+    </div>
+    <div class="browser-content">
+      <div class="activity-bar">
+        <div class="ab-item">🔍</div>
+        <div class="ab-item active">💬</div>
+        <div class="ab-item">🕘</div>
+      </div>
+      <div class="col col-welcome">
+        <div class="welcome-logo">Cortex</div>
+        <div class="welcome-sub">与你的知识库对话</div>
+        <div class="welcome-tip">基于已索引的文档回答问题，或从右侧继续历史对话</div>
+      </div>
+      <div class="col col-history">
+        <div class="history-title">历史会话</div>
+        <div class="history-item">
+          FTS5 vs BM25<br><span class="meta">昨天 · 8 条消息</span>
+        </div>
+        <div class="history-item">
+          如何索引 PDF<br><span class="meta">3 天前 · 12 条消息</span>
+        </div>
+      </div>
+      <div class="col col-input">
+        <div class="input-label">新对话</div>
+        <div class="input-box">问 Cortex 任何问题...</div>
+        <div class="input-actions">
+          <button class="btn-primary">→ 发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ AI 对话 - 专注状态 ============ -->
+<div class="state-pair">
+  <div class="state-title">
+    <span class="badge focus">对话 · 专注</span>
+    <span>对话流 + 底部输入栏（无欢迎区、无历史列表）</span>
+  </div>
+  <div class="browser-shell">
+    <div class="browser-chrome">
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div class="url">localhost:7860</div>
+    </div>
+    <div class="browser-content">
+      <div class="activity-bar">
+        <div class="ab-item">🔍</div>
+        <div class="ab-item active">💬</div>
+        <div class="ab-item">🕘</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+        <div class="focus-toolbar">
+          <span class="back">← 新对话</span>
+          <div class="query" style="background:transparent;border:none;font-weight:600;color:#334155">FTS5 vs BM25</div>
+          <span style="color:#94a3b8">8 条消息</span>
+        </div>
+        <div style="flex: 1; padding: 12px; display: flex; flex-direction: column; overflow: hidden;">
+          <div class="chat-message chat-user">FTS5 和 BM25 有什么区别？</div>
+          <div class="chat-message chat-ai">
+            FTS5 是 SQLite 的全文检索扩展；BM25 是排序算法。FTS5 内置了 BM25 实现，可以通过 rank 函数调用...
+          </div>
+          <div class="chat-message chat-user">那评分怎么计算？</div>
+          <div class="chat-message chat-ai">
+            BM25 基于 TF-IDF 改进，考虑词频、文档长度归一化等...
+          </div>
+        </div>
+        <div class="chat-input-bar">
+          <div class="input-box">继续对话...</div>
+          <button class="btn-primary">→</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; padding: 10px; margin-top: 12px; font-size: 11px; color: #713f12;">
+  <strong>请确认：</strong>
+  ① 三栏布局分配是否合理？欢迎区/历史会话/输入框 的顺序和比例？
+  ② 专注状态下的"← 新搜索/新对话"返回入口是否符合预期？
+  ③ AI 对话专注状态底部保留输入栏（继续对话）；搜索专注状态无输入栏，只有顶部紧凑查询条 —— 这样区分合理吗？
+</div>

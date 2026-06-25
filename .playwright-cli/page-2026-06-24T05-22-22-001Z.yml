@@ -1,0 +1,188 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e94]:
+      - generic [ref=e95]:
+        - generic [ref=e96]: 文件
+        - generic [ref=e114] [cursor=pointer]:
+          - generic [ref=e115]: 📁
+          - generic [ref=e116]: 健康
+        - generic [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: 📁
+          - generic [ref=e120]: 公司
+        - generic [ref=e122] [cursor=pointer]:
+          - generic [ref=e123]: 📁
+          - generic [ref=e124]: 天文航天
+        - generic [ref=e126] [cursor=pointer]:
+          - generic [ref=e127]: 📁
+          - generic [ref=e128]: 生命科学
+        - generic [ref=e130] [cursor=pointer]:
+          - generic [ref=e131]: 📁
+          - generic [ref=e132]: 科技
+        - generic [ref=e134] [cursor=pointer]:
+          - generic [ref=e135]: 📁
+          - generic [ref=e136]: 经济
+        - generic [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: 📁
+          - generic [ref=e140]: 编程
+        - generic [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: ▶
+          - generic [ref=e144]: 📁
+          - generic [ref=e145]: 能源环境
+      - separator "调整文件树栏宽度" [ref=e97]
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - button "↑" [ref=e100] [cursor=pointer]
+          - generic [ref=e101]: /科技/
+        - generic [ref=e102]:
+          - button "+ 新目录" [ref=e103] [cursor=pointer]
+          - button "⬆ 上传" [ref=e104] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e105]
+          - button "→ 移动" [disabled] [ref=e106]
+          - button "🗑 删除" [disabled] [ref=e107]
+        - generic [ref=e235]:
+          - checkbox [ref=e237]
+          - generic [ref=e239]:
+            - text: 名称
+            - generic "拖动调整列宽" [ref=e240]
+          - generic [ref=e241]:
+            - text: 大小
+            - generic "拖动调整列宽" [ref=e242]
+          - generic [ref=e243]:
+            - text: 修改
+            - generic "拖动调整列宽" [ref=e244]
+          - generic "拖动调整列宽" [ref=e246]
+          - generic [ref=e247]: 类型
+        - generic [ref=e109]:
+          - generic [ref=e249] [cursor=pointer]:
+            - checkbox [ref=e251]
+            - generic [ref=e253]: H
+            - generic [ref=e254]: 2025网络安全趋势报告.html
+            - generic [ref=e255]: 11.6 KB
+            - generic [ref=e256]: 2026/06/12 16:43
+            - generic [ref=e257]: html
+          - generic [ref=e259] [cursor=pointer]:
+            - checkbox [ref=e261]
+            - generic [ref=e263]: M
+            - generic [ref=e264]: 5G与6G通信技术发展.md
+            - generic [ref=e265]: 5.9 KB
+            - generic [ref=e266]: 2026/06/12 16:43
+            - generic [ref=e268]: 已索引
+            - generic [ref=e269]: md
+          - generic [ref=e271] [cursor=pointer]:
+            - checkbox [ref=e273]
+            - generic [ref=e275]: M
+            - generic [ref=e276]: AI伦理与治理.md
+            - generic [ref=e277]: 6.0 KB
+            - generic [ref=e278]: 2026/06/12 16:43
+            - generic [ref=e280]: 已索引
+            - generic [ref=e281]: md
+          - generic [ref=e283] [cursor=pointer]:
+            - checkbox [ref=e285]
+            - generic [ref=e287]: M
+            - generic [ref=e288]: AI技术路线与产业应用.md
+            - generic [ref=e289]: 2.7 KB
+            - generic [ref=e290]: 2026/06/12 16:43
+            - generic [ref=e292]: 已索引
+            - generic [ref=e293]: md
+          - generic [ref=e295] [cursor=pointer]:
+            - checkbox [ref=e297]
+            - generic [ref=e299]: M
+            - generic [ref=e300]: AI辅助教育重塑学习方式.md
+            - generic [ref=e301]: 6.1 KB
+            - generic [ref=e302]: 2026/06/12 16:43
+            - generic [ref=e304]: 已索引
+            - generic [ref=e305]: md
+          - generic [ref=e307] [cursor=pointer]:
+            - checkbox [ref=e309]
+            - generic [ref=e311]: P
+            - generic [ref=e312]: quantum_ai_report.pdf
+            - generic [ref=e313]: 1.7 MB
+            - generic [ref=e314]: 2026/06/12 16:43
+            - generic [ref=e316]: 已索引
+            - generic [ref=e317]: pdf
+          - generic [ref=e319] [cursor=pointer]:
+            - checkbox [ref=e321]
+            - generic [ref=e323]: M
+            - generic [ref=e324]: quantum_error_correction.md
+            - generic [ref=e325]: 5.8 KB
+            - generic [ref=e326]: 2026/06/12 16:43
+            - generic [ref=e328]: 已索引
+            - generic [ref=e329]: md
+          - generic [ref=e331] [cursor=pointer]:
+            - checkbox [ref=e333]
+            - generic [ref=e335]: M
+            - generic [ref=e336]: 中国AI词元调用量爆发式增长.md
+            - generic [ref=e337]: 3.2 KB
+            - generic [ref=e338]: 2026/06/12 16:43
+            - generic [ref=e340]: 已索引
+            - generic [ref=e341]: md
+          - generic [ref=e343] [cursor=pointer]:
+            - checkbox [ref=e345]
+            - generic [ref=e347]: M
+            - generic [ref=e348]: 元宇宙与VR_AR技术发展.md
+            - generic [ref=e349]: 4.8 KB
+            - generic [ref=e350]: 2026/06/12 16:43
+            - generic [ref=e352]: 已索引
+            - generic [ref=e353]: md
+          - generic [ref=e355] [cursor=pointer]:
+            - checkbox [ref=e357]
+            - generic [ref=e359]: M
+            - generic [ref=e360]: 智慧城市与物联网.md
+            - generic [ref=e361]: 5.5 KB
+            - generic [ref=e362]: 2026/06/12 16:43
+            - generic [ref=e364]: 已索引
+            - generic [ref=e365]: md
+          - generic [ref=e367] [cursor=pointer]:
+            - checkbox [ref=e369]
+            - generic [ref=e371]: M
+            - generic [ref=e372]: 机器人与AI融合2025年发展报告.md
+            - generic [ref=e373]: 5.2 KB
+            - generic [ref=e374]: 2026/06/12 16:43
+            - generic [ref=e376]: 已索引
+            - generic [ref=e377]: md
+          - generic [ref=e379] [cursor=pointer]:
+            - checkbox [ref=e381]
+            - generic [ref=e383]: M
+            - generic [ref=e384]: 网络安全与AI防御2025威胁态势.md
+            - generic [ref=e385]: 3.2 KB
+            - generic [ref=e386]: 2026/06/12 16:43
+            - generic [ref=e388]: 已索引
+            - generic [ref=e389]: md
+          - generic [ref=e391] [cursor=pointer]:
+            - checkbox [ref=e393]
+            - generic [ref=e395]: M
+            - generic [ref=e396]: 量子密码学从QKD到后量子密码学.md
+            - generic [ref=e397]: 5.8 KB
+            - generic [ref=e398]: 2026/06/12 16:43
+            - generic [ref=e400]: 已索引
+            - generic [ref=e401]: md
+          - generic [ref=e403] [cursor=pointer]:
+            - checkbox [ref=e405]
+            - generic [ref=e407]: D
+            - generic [ref=e408]: 量子计算与人工智能报告2025-2026.docx
+            - generic [ref=e409]: 15.3 KB
+            - generic [ref=e410]: 2026/06/20 15:17
+            - generic [ref=e412]: 已索引
+            - generic [ref=e413]: docx
+          - generic [ref=e415] [cursor=pointer]:
+            - checkbox [ref=e417]
+            - generic [ref=e419]: S
+            - generic [ref=e420]: 量子计算与人工智能演示.pptx
+            - generic [ref=e421]: 36.5 KB
+            - generic [ref=e422]: 2026/06/12 16:43
+            - generic [ref=e424]: 已索引
+            - generic [ref=e425]: pptx
+      - separator "调整预览栏宽度" [ref=e110]
+      - generic [ref=e112]: 点击文件预览

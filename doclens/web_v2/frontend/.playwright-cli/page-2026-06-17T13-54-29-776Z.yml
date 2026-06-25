@@ -1,0 +1,2099 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e32]:
+    - generic "python" [ref=e33]:
+      - button "← 返回" [ref=e34] [cursor=pointer]
+      - generic [ref=e35]: python
+      - generic [ref=e36]: 706 条结果
+    - generic [ref=e37]:
+      - generic [ref=e39]: 点击结果查看预览
+      - generic [ref=e41]:
+        - generic [ref=e42] [cursor=pointer]:
+          - generic [ref=e43]: AI/提示词/awesome ai assistant.md:3607
+          - generic [ref=e44]: "### Python Interpreter 🐍 I'm \"<b>Python Inte"
+        - generic [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 后端/python/并发编程/python asyncio从入门到精通/21.深入理解ContextVars.md:47
+          - generic [ref=e47]: "# 四、如何在Python异步编程中使用contextvars模块来创建上下文变量? 在"
+        - generic [ref=e48] [cursor=pointer]:
+          - generic [ref=e49]: AI/LazyLLM/3. Lazy玩转LLM - LazyLLM.pdf:120
+          - generic [ref=e50]: （2）在python脚本中进行接口调用。 LazyLLM提供了一种非常 lazy 的实现方
+        - generic [ref=e51] [cursor=pointer]:
+          - generic [ref=e52]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:896
+          - generic [ref=e53]: "#### Create your deep learning Python virtual"
+        - generic [ref=e54] [cursor=pointer]:
+          - generic [ref=e55]: 未归类/windows_python_编码分析.md:54
+          - generic [ref=e56]: "### Python 3.7+ 编码支持 | Python 版本 | UTF-8 支持方"
+        - generic [ref=e57] [cursor=pointer]:
+          - generic [ref=e58]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:77
+          - generic [ref=e59]: 1.2 Why Python for Data Analysis? 2 Python as
+        - generic [ref=e60] [cursor=pointer]:
+          - generic [ref=e61]: 未归类/windows_python_编码分析.md:122
+          - generic [ref=e62]: "### 方案一：环境变量（推荐） ```python import os os.envi"
+        - generic [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:85
+          - generic [ref=e65]: 1.3 Essential Python Libraries 4 NumPy 4 pand
+        - generic [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:152
+          - generic [ref=e68]: 2.3 Python Language Basics 30 Language Semant
+        - generic [ref=e69] [cursor=pointer]:
+          - generic [ref=e70]: AI/LazyLLM/2. 快速上手RAG - LazyLLM.pdf:557
+          - generic [ref=e71]: 1. 安装homebrew，并并通过homebrew安装python和pip
+        - generic [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:1391
+          - generic [ref=e74]: 2.1 The Python Interpreter Python is an inter
+        - generic [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:2043
+          - generic [ref=e77]: 2.3 Python Language Basics | 33 [PAGE 52]
+        - generic [ref=e78] [cursor=pointer]:
+          - generic [ref=e79]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:2732
+          - generic [ref=e80]: 2.3 Python Language Basics | 49 [PAGE 68]
+        - generic [ref=e81] [cursor=pointer]:
+          - generic [ref=e82]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:2310
+          - generic [ref=e83]: 2.3 Python Language Basics | 39 [PAGE 58]
+        - generic [ref=e84] [cursor=pointer]:
+          - generic [ref=e85]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:101
+          - generic [ref=e86]: 1.4 Installation and Setup 8 Windows 9 Apple
+        - generic [ref=e87] [cursor=pointer]:
+          - generic [ref=e88]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:1388
+          - generic [ref=e89]: K. Jones (O’Reilly) • Fluent Python by Lucian
+        - generic [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:136
+          - generic [ref=e92]: "## 3.2 基于生成器的协程为await的目标 ```python @types.cor"
+        - generic [ref=e93] [cursor=pointer]:
+          - generic [ref=e94]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:1921
+          - generic [ref=e95]: 2.3 Python Language Basics In this section, I
+        - generic [ref=e96] [cursor=pointer]:
+          - generic [ref=e97]: 未归类/windows_python_编码分析.md:73
+          - generic [ref=e98]: "### 场景二：Git Bash 终端 (UTF-8) ```python print("
+        - generic [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: 未归类/windows_python_编码分析.md:386
+          - generic [ref=e101]: "### 日志配置 ```python logging.basicConfig("
+        - generic [ref=e102] [cursor=pointer]:
+          - generic [ref=e103]: 未归类/windows_python_编码分析.md:64
+          - generic [ref=e104]: "### 场景一：中文 Windows 命令行 (GBK) ```python # 默认情"
+        - generic [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:5866
+          - generic [ref=e107]: "[PAGE 172] 149 第1 5 章 接下来做什么 前面我们学习了如何使用SQLAl"
+        - generic [ref=e108] [cursor=pointer]:
+          - generic [ref=e109]: 未归类/windows_python_编码分析.md:151
+          - generic [ref=e110]: "### 方案三：reconfigure 方法 ```python if hasattr("
+        - generic [ref=e111] [cursor=pointer]:
+          - generic [ref=e112]: 未归类/windows_python_编码分析.md:160
+          - generic [ref=e113]: "### 方案四：ctypes 设置控制台代码页 ```python if sys.pla"
+        - generic [ref=e114] [cursor=pointer]:
+          - generic [ref=e115]: 后端/duckdb/DuckDB in Action.pdf:5142
+          - generic [ref=e116]: 6.1.1 Installing the Python package The DuckD
+        - generic [ref=e117] [cursor=pointer]:
+          - generic [ref=e118]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1691
+          - generic [ref=e119]: 3.1 异常 SQLAlchemy 中可能发生的异常有很多，我们重点讲讲最常见的Attri
+        - generic [ref=e120] [cursor=pointer]:
+          - generic [ref=e121]: 后端/pandas/THE PANDAS HANDBOOK 100 Essential Tips and Tricks for Beginners (Adetola Abiodun) (Z-Library).pdf:1545
+          - generic [ref=e122]: 100. Evaluate a Python expression as a string
+        - generic [ref=e123] [cursor=pointer]:
+          - generic [ref=e124]: 后端/python/python线程安全：使用lock或其他技术来实现 - 今日头条.md:1
+          - generic [ref=e125]: "[python线程安全：使用lock或其他技术来实现 - 今日头条](https://ww"
+        - generic [ref=e126] [cursor=pointer]:
+          - generic [ref=e127]: 项目/研发项目全流程指引/立项申报书_2025年中国联通广东面向网络创新产品的AI科研知识库软件研发.pdf:519
+          - generic [ref=e128]: 5. 后端采用 python + fastapi + mysql + myredis +
+        - generic [ref=e129] [cursor=pointer]:
+          - generic [ref=e130]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:457
+          - generic [ref=e131]: "#### (1). OpenAI Python库 ``` `from openai im"
+        - generic [ref=e132] [cursor=pointer]:
+          - generic [ref=e133]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:50
+          - generic [ref=e134]: "##### 2.1.2、安装Python环境 已经安装好的跳过，python>=3.8，"
+        - generic [ref=e135] [cursor=pointer]:
+          - generic [ref=e136]: 开发工具/vscode/快捷键_插件_技巧.md:64
+          - generic [ref=e137]: "### 设置python的模块查找根路径 * 在项目的根目录下，创建 .env 文件,对"
+        - generic [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: 后端/python/fastapi/填坑.md:3
+          - generic [ref=e140]: "### 1. 端点函数如果是def定义，那么就会将该函数扔到app某一个进程的线程池的某一"
+        - generic [ref=e141] [cursor=pointer]:
+          - generic [ref=e142]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:48
+          - generic [ref=e143]: "# 四、python执行任务 * vue-element-admin-fastapi/b"
+        - generic [ref=e144] [cursor=pointer]:
+          - generic [ref=e145]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:11
+          - generic [ref=e146]: "### 2\\. Python的XML处理库 Python标准库中的`xml`模块提供了一"
+        - generic [ref=e147] [cursor=pointer]:
+          - generic [ref=e148]: AI/提示词/awesome-chatgpt-prompts.md:1352
+          - generic [ref=e149]: "## Act as a Python interpreter Contributed b"
+        - generic [ref=e150] [cursor=pointer]:
+          - generic [ref=e151]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:79
+          - generic [ref=e152]: "### 5\\. sys.version - Python版本信息 `sys.versio"
+        - generic [ref=e153] [cursor=pointer]:
+          - generic [ref=e154]: AI/MCP/扣子空间系统提示词.md:47
+          - generic [ref=e155]: "### 通过 python_runner 工具处理： .csv：利用 pandas 操作（"
+        - generic [ref=e156] [cursor=pointer]:
+          - generic [ref=e157]: 后端/python/「知识」Python中导入包的方法有几种-今日头条.md:1
+          - generic [ref=e158]: "[「知识」Python中导入包的方法有几种-今日头条](https://www.touti"
+        - generic [ref=e159] [cursor=pointer]:
+          - generic [ref=e160]: 后端/python/并发编程/多线程.md:60
+          - generic [ref=e161]: "# 四、对于python,两个线程是否可以在不同的CPU核心执行 对于Python的CP"
+        - generic [ref=e162] [cursor=pointer]:
+          - generic [ref=e163]: AI/提示词/awesome-chatgpt-prompts.md:2231
+          - generic [ref=e164]: "## Act as Any Programming Language to Python"
+        - generic [ref=e165] [cursor=pointer]:
+          - generic [ref=e166]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:168
+          - generic [ref=e167]: "# 六、通过代码了解协程状态机 ![](../../../pic/图2024-02-14"
+        - generic [ref=e168] [cursor=pointer]:
+          - generic [ref=e169]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:155
+          - generic [ref=e170]: "# 六、结语 异步编程是Python强大功能的一部分，理解并准确运用这些并发执行任务的方法"
+        - generic [ref=e171] [cursor=pointer]:
+          - generic [ref=e172]: 后端/python/并发编程/python asyncio从入门到精通/23.异步IOdebug：aiodebug库.md:51
+          - generic [ref=e173]: "# 三、安装aiodebug 要安装 aiodebug，你需要使用 Python 的包管"
+        - generic [ref=e174] [cursor=pointer]:
+          - generic [ref=e175]: misc/2020工作记录.md:260
+          - generic [ref=e176]: "### 2020-3-17（2） 1、学习python多核处理器多进程编程，应用在逻辑回归"
+        - generic [ref=e177] [cursor=pointer]:
+          - generic [ref=e178]: 后端/python/并发编程/python asyncio从入门到精通/1.异步编程基础.md:1
+          - generic [ref=e179]: "[今日头条](https://learning.snssdk.com/feoffline/"
+        - generic [ref=e180] [cursor=pointer]:
+          - generic [ref=e181]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:564
+          - generic [ref=e182]: "9. Read the Docs 会自动构建并托管文档 # .readthedocs.ya"
+        - generic [ref=e183] [cursor=pointer]:
+          - generic [ref=e184]: 后端/python/fastapi/Building-Python-Microservices-with-FastAPI_ Building Python Microservices with FastAPI, published by Packt.md:49
+          - generic [ref=e185]: "### Software and Hardware List [](#software-"
+        - generic [ref=e186] [cursor=pointer]:
+          - generic [ref=e187]: AI/LazyLLM/18. Agentic RAG - LazyLLM.pdf:1112
+          - generic [ref=e188]: 18. Agentic RAG - LazyLLM file:///C:/Users/li
+        - generic [ref=e189] [cursor=pointer]:
+          - generic [ref=e190]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:765
+          - generic [ref=e191]: 11. 性能优化指南 - LazyLLM file:///C:/Users/liangha
+        - generic [ref=e192] [cursor=pointer]:
+          - generic [ref=e193]: 未归类/windows_python_编码分析.md:130
+          - generic [ref=e194]: "### 方案二：TextIOWrapper 包裹 ```python import io"
+        - generic [ref=e195] [cursor=pointer]:
+          - generic [ref=e196]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:126
+          - generic [ref=e197]: "#### 使用`with`语句 Python提供了`with`语句，可以更方便地管理文件"
+        - generic [ref=e198] [cursor=pointer]:
+          - generic [ref=e199]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:737
+          - generic [ref=e200]: "### Java Like Ruby, Java doesn't have the `a"
+        - generic [ref=e201] [cursor=pointer]:
+          - generic [ref=e202]: AI/提示词/awesome-chatgpt-prompts.md:1966
+          - generic [ref=e203]: "## Act as a Python Interpreter Contributed b"
+        - generic [ref=e204] [cursor=pointer]:
+          - generic [ref=e205]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e206]: Utilizing the Neo4j graph database 359
+        - generic [ref=e207] [cursor=pointer]:
+          - generic [ref=e208]: 未归类/windows_python_编码分析.md:377
+          - generic [ref=e209]: "### JSON 处理 ```python # ✅ 推荐：ensure_ascii=Fa"
+        - generic [ref=e210] [cursor=pointer]:
+          - generic [ref=e211]: 未归类/windows_python_编码分析.md:365
+          - generic [ref=e212]: "### 文件操作 ```python # ✅ 推荐：始终指定 encoding with"
+        - generic [ref=e213] [cursor=pointer]:
+          - generic [ref=e214]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:6388
+          - generic [ref=e215]: "[PAGE 198] In this chapter we looked at a sam"
+        - generic [ref=e216] [cursor=pointer]:
+          - generic [ref=e217]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1853
+          - generic [ref=e218]: 3.1.3 处理错误 为了防止错误导致程序崩溃或停止，需要正确地处理错误。我们可以像处理P
+        - generic [ref=e219] [cursor=pointer]:
+          - generic [ref=e220]: AI/MCP/扣子空间系统提示词.md:76
+          - generic [ref=e221]: "## Python 代码实现要求 - 只能从已经存在的文件读取数据然后再进行处理，不要直接"
+        - generic [ref=e222] [cursor=pointer]:
+          - generic [ref=e223]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:18
+          - generic [ref=e224]: "## 1.2 解释器维度定制支持Stackless Python Stackless"
+        - generic [ref=e225] [cursor=pointer]:
+          - generic [ref=e226]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1271
+          - generic [ref=e227]: 2.2.8 运算符 到目前为止，我们用来过滤数据的方法有两种：一是利用列是否等于某个值，二
+        - generic [ref=e228] [cursor=pointer]:
+          - generic [ref=e229]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:741
+          - generic [ref=e230]: "### C++ Although C++ also doesn't have the `"
+        - generic [ref=e231] [cursor=pointer]:
+          - generic [ref=e232]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1309
+          - generic [ref=e233]: 2.2.9 布尔运算符 SQLAlchemy 还支持SQL 布尔运算符AND、OR 和NO
+        - generic [ref=e234] [cursor=pointer]:
+          - generic [ref=e235]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1746
+          - generic [ref=e236]: 3.1.1 AttributeError 我们从AttributeError 学起。当试图
+        - generic [ref=e237] [cursor=pointer]:
+          - generic [ref=e238]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:530
+          - generic [ref=e239]: "#### Environment Variables You can pass secr"
+        - generic [ref=e240] [cursor=pointer]:
+          - generic [ref=e241]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:143
+          - generic [ref=e242]: "### Use Small Docker Base Images _Smaller Do"
+        - generic [ref=e243] [cursor=pointer]:
+          - generic [ref=e244]: 后端/python/并发编程/多线程.md:18
+          - generic [ref=e245]: "# 三、既然有GIL缺陷，python为什么还有多线程编程 尽管Python的CPyth"
+        - generic [ref=e246] [cursor=pointer]:
+          - generic [ref=e247]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e248]: Index 388 Keycloak environment, configuring
+        - generic [ref=e249] [cursor=pointer]:
+          - generic [ref=e250]: 后端/python/并发编程/python asyncio从入门到精通/21.深入理解ContextVars.md:39
+          - generic [ref=e251]: "# 三、Python异步编程中为什么需要上下文变量传递? 在Python异步编程中，上下文"
+        - generic [ref=e252] [cursor=pointer]:
+          - generic [ref=e253]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:287
+          - generic [ref=e254]: "#### 5\\. 使用并行处理 对于需要处理大量数据的任务，可以考虑使用并行处理技术来提"
+        - generic [ref=e255] [cursor=pointer]:
+          - generic [ref=e256]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:281
+          - generic [ref=e257]: "### Cache Python Packages to the Docker Host"
+        - generic [ref=e258] [cursor=pointer]:
+          - generic [ref=e259]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:266
+          - generic [ref=e260]: "#### 调试多线程程序 1. **使用`print`语句**：在适当的位置插入`pr"
+        - generic [ref=e261] [cursor=pointer]:
+          - generic [ref=e262]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:1366
+          - generic [ref=e263]: 81.0 NOTE The Python language gives you grea
+        - generic [ref=e264] [cursor=pointer]:
+          - generic [ref=e265]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:119
+          - generic [ref=e266]: "## 3.1 原生协程作为await语句的目标 类似于yield from，这个协程将恢"
+        - generic [ref=e267] [cursor=pointer]:
+          - generic [ref=e268]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:275
+          - generic [ref=e269]: "#### 2\\. 使用内置函数优化代码 Python提供了许多内置函数，如`map()`"
+        - generic [ref=e270] [cursor=pointer]:
+          - generic [ref=e271]: 项目/资源变现/爬虫/python爬虫教程系列.md:13
+          - generic [ref=e272]: "[wechat\\_public\\_account.py](https://github.c"
+        - generic [ref=e273] [cursor=pointer]:
+          - generic [ref=e274]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:747
+          - generic [ref=e275]: "### Using Python Virtual Environments _Shoul"
+        - generic [ref=e276] [cursor=pointer]:
+          - generic [ref=e277]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:315
+          - generic [ref=e278]: "#### 9\\. 使用Cython或NumPy加速 对于需要处理大量数据或需要高性能的计"
+        - generic [ref=e279] [cursor=pointer]:
+          - generic [ref=e280]: 后端/python/并发编程/Python并行编程 中文版 — python-parallel-programming-cookbook-cn 1.0 文档.md:1
+          - generic [ref=e281]: "[Python并行编程 中文版 — python-parallel-programming"
+        - generic [ref=e282] [cursor=pointer]:
+          - generic [ref=e283]: 后端/python/并发编程/Python并行编程 中文版 — python-parallel-programming-cookbook-cn 1.0 文档.md:1
+          - generic [ref=e284]: "* [15\\. 集体通讯：使用scatter通讯](https://pytho"
+        - generic [ref=e285] [cursor=pointer]:
+          - generic [ref=e286]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:555
+          - generic [ref=e287]: "#### Build-time Arguments You can pass secre"
+        - generic [ref=e288] [cursor=pointer]:
+          - generic [ref=e289]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:69
+          - generic [ref=e290]: Get in touch xxi Get in touch Feedback from o
+        - generic [ref=e291] [cursor=pointer]:
+          - generic [ref=e292]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:8
+          - generic [ref=e293]: "# 一、异步编程模式演变历史 > 想要写好python的异步编程我们有必要了解下pytho"
+        - generic [ref=e294] [cursor=pointer]:
+          - generic [ref=e295]: misc/2024工作记录.md:332
+          - generic [ref=e296]: "### 2024-06-03（1） 1、开发oo稽核资源入库的python程序 2、分配陈"
+        - generic [ref=e297] [cursor=pointer]:
+          - generic [ref=e298]: misc/2021工作记录.md:631
+          - generic [ref=e299]: "### 2021-9-9（4） 1、开发 inject接口，java、python联调。"
+        - generic [ref=e300] [cursor=pointer]:
+          - generic [ref=e301]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:111
+          - generic [ref=e302]: "# 五、协程的异常处理机制"
+        - generic [ref=e303] [cursor=pointer]:
+          - generic [ref=e304]: misc/2018工作记录.md:735
+          - generic [ref=e305]: "### 2018-09-27 1、上午开发python，安装了mongodb 在笔记本电脑"
+        - generic [ref=e306] [cursor=pointer]:
+          - generic [ref=e307]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:359
+          - generic [ref=e308]: "# Interpret the config file for Python loggin"
+        - generic [ref=e310] [cursor=pointer]: 后端/python/华为社区python入门/深入理解 Python 中的 with...as 语句：资源管理与更多应用场景-云社区-华为云.md:1
+        - generic [ref=e311] [cursor=pointer]:
+          - generic [ref=e312]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:106
+          - generic [ref=e313]: "# 三、什么对象是可await的 通过上面对比我们可以了解到原生协程和生成器协程在某种意"
+        - generic [ref=e315] [cursor=pointer]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:69
+        - generic [ref=e316] [cursor=pointer]:
+          - generic [ref=e317]: AI/读源码/langchain-chatchat/1.1 web服务器框架.md:18
+          - generic [ref=e318]: "# 二、Sanic 和 FastAPI比较 Sanic 和 FastAPI 是两个基于"
+        - generic [ref=e319] [cursor=pointer]:
+          - generic [ref=e320]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:3217
+          - generic [ref=e321]: Building message-driven transactions using Ra
+        - generic [ref=e322] [cursor=pointer]:
+          - generic [ref=e323]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:3217
+          - generic [ref=e324]: "Using a Non-Relational Database 170 _id:"
+        - generic [ref=e325] [cursor=pointer]:
+          - generic [ref=e326]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:4598
+          - generic [ref=e327]: "#### Iterators An iterator is a Python objec"
+        - generic [ref=e328] [cursor=pointer]:
+          - generic [ref=e329]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:4612
+          - generic [ref=e330]: "#### Asynchronous Iterators An asynchronous"
+        - generic [ref=e331] [cursor=pointer]:
+          - generic [ref=e332]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:704
+          - generic [ref=e333]: "### Go Rather than the traditional `async`/`"
+        - generic [ref=e334] [cursor=pointer]:
+          - generic [ref=e335]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:3217
+          - generic [ref=e336]: Applying the PyMongo driver for synchronous c
+        - generic [ref=e337] [cursor=pointer]:
+          - generic [ref=e338]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e339]: Deploying and running applications using Dock
+        - generic [ref=e340] [cursor=pointer]:
+          - generic [ref=e341]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:202
+          - generic [ref=e342]: "#### 1\\. 异步迭代器与生成器 在Python 3.6之后，引入了异步生成器和异步"
+        - generic [ref=e343] [cursor=pointer]:
+          - generic [ref=e344]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+          - generic [ref=e345]: "![](https://bbs-img.huaweicloud.com/blogs/img"
+        - generic [ref=e346] [cursor=pointer]:
+          - generic [ref=e347]: 代码片段/python代码片段.md:35
+          - generic [ref=e348]: "## 2. 任意对象转换为dict ```python def list_files_f"
+        - generic [ref=e349] [cursor=pointer]:
+          - generic [ref=e350]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:166
+          - generic [ref=e351]: "## 3.4 ioloop的穿针引线功能 到目前为止，我们已经看到了一些协程的例子，但始终"
+        - generic [ref=e352] [cursor=pointer]:
+          - generic [ref=e353]: 开发工具/claude/技能包/rules/common/patterns.md:37
+          - generic [ref=e354]: "## Reference See skill: `python-patterns` fo"
+        - generic [ref=e355] [cursor=pointer]:
+          - generic [ref=e356]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:81
+          - generic [ref=e357]: "#### 删除数据示例 假设我们需要删除某个员工的信息，我们可以使用Python生成删除"
+        - generic [ref=e358] [cursor=pointer]:
+          - generic [ref=e359]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1218
+          - generic [ref=e360]: 10 CHAPTER 1 Getting to know asyncio In figur
+        - generic [ref=e361] [cursor=pointer]:
+          - generic [ref=e362]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:5138
+          - generic [ref=e363]: "#### Generators A generator is a Python func"
+        - generic [ref=e364] [cursor=pointer]:
+          - generic [ref=e365]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:291
+          - generic [ref=e366]: "#### 6\\. 进行性能测试和优化 在编写代码之后，应该进行性能测试，并根据测试结果进"
+        - generic [ref=e367] [cursor=pointer]:
+          - generic [ref=e368]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:282
+          - generic [ref=e369]: "#### 性能分析多线程程序 1. **使用`timeit`模块**：通过在代码中嵌入"
+        - generic [ref=e370] [cursor=pointer]:
+          - generic [ref=e371]: 后端/python/华为社区python入门/数据库/Python数据库操作实战指南：从基础到高级技术-云社区-华为云.md:1
+          - generic [ref=e372]: 通过学习本文所涵盖的内容，读者可以建立起对Python中操作MySQL和SQL Serve
+        - generic [ref=e373] [cursor=pointer]:
+          - generic [ref=e374]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:352
+          - generic [ref=e375]: "#### Reason 2: To Use Asynchronous Programmin"
+        - generic [ref=e376] [cursor=pointer]:
+          - generic [ref=e377]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:4849
+          - generic [ref=e378]: "#### Create Asynchronous Iterator To use an"
+        - generic [ref=e379] [cursor=pointer]:
+          - generic [ref=e380]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:67
+          - generic [ref=e381]: "#### 更新数据示例 假设我们需要更新员工的工资信息，我们可以使用Python生成更新"
+        - generic [ref=e382] [cursor=pointer]:
+          - generic [ref=e383]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1218
+          - generic [ref=e384]: COOPERATIVE MULTITASKING In this model, inst
+        - generic [ref=e385] [cursor=pointer]:
+          - generic [ref=e386]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:280
+          - generic [ref=e387]: "[PAGE 20] >>> numpy_ser.mean() 84.5 They also"
+        - generic [ref=e388] [cursor=pointer]:
+          - generic [ref=e389]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:113
+          - generic [ref=e390]: "## 5.1 使用异常捕获 在 Python asyncio 中，协程中的异常可以通过 t"
+        - generic [ref=e391] [cursor=pointer]:
+          - generic [ref=e392]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:3217
+          - generic [ref=e393]: Using GINO for async transactions 139 res
+        - generic [ref=e394] [cursor=pointer]:
+          - generic [ref=e395]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:54
+          - generic [ref=e396]: "#### 插入数据示例 假设我们有一个新员工的信息，我们想将其插入到数据库中。我们可以使"
+        - generic [ref=e397] [cursor=pointer]:
+          - generic [ref=e398]: 开发工具/claude/技能包/rules/typescript/coding-style.md:40
+          - generic [ref=e399]: "## Reference See skill: `python-patterns` fo"
+        - generic [ref=e400] [cursor=pointer]:
+          - generic [ref=e401]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:433
+          - generic [ref=e402]: "#### 多个装饰器的堆叠 Python 允许将多个装饰器叠加在一起，形成装饰器的堆叠。"
+        - generic [ref=e403] [cursor=pointer]:
+          - generic [ref=e404]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1245
+          - generic [ref=e405]: "#### TIP: Monitor your Apache error logs if y"
+        - generic [ref=e406] [cursor=pointer]:
+          - generic [ref=e407]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:145
+          - generic [ref=e408]: "## 3.3 实现了__await__方法的协程对象作为await的目标(Future)"
+        - generic [ref=e409] [cursor=pointer]:
+          - generic [ref=e410]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:3217
+          - generic [ref=e411]: Connecting to a Relational Database 108 In th
+        - generic [ref=e412] [cursor=pointer]:
+          - generic [ref=e413]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:5208
+          - generic [ref=e414]: "#### Asynchronous Generators An asynchronous"
+        - generic [ref=e415] [cursor=pointer]:
+          - generic [ref=e416]: 后端/python/并发编程/多进程.md:5
+          - generic [ref=e417]: "### 原理： 1. **进程概念**： 进程是一个操作系统级别上的概念，它是程序"
+        - generic [ref=e418] [cursor=pointer]:
+          - generic [ref=e419]: 后端/duckdb/DuckDB in Action.pdf:6981
+          - generic [ref=e420]: 8.2.2 Building a pipeline dlt pipelines are w
+        - generic [ref=e421] [cursor=pointer]:
+          - generic [ref=e422]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1157
+          - generic [ref=e423]: 2.2.5 内置SQL函数和标签 SQLAlchemy 还可以利用后端数据库中的SQL 函
+        - generic [ref=e424] [cursor=pointer]:
+          - generic [ref=e425]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:132
+          - generic [ref=e426]: "#### 3\\. itertools模块 Python的itertools模块提供了一组"
+        - generic [ref=e427] [cursor=pointer]:
+          - generic [ref=e428]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:14303
+          - generic [ref=e429]: 12.3.1 Installing the xlrd and openpyxl libra
+        - generic [ref=e430] [cursor=pointer]:
+          - generic [ref=e431]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:76
+          - generic [ref=e432]: "## 1.5 python3.4的asyncio装饰器协程 在Python 3.4中，a"
+        - generic [ref=e433] [cursor=pointer]:
+          - generic [ref=e434]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:105
+          - generic [ref=e435]: "## 1.6 python3.5之后的async/await正式登场 在Python 3."
+        - generic [ref=e436] [cursor=pointer]:
+          - generic [ref=e437]: 开发工具/claude/技能包/rules/python/testing.md:36
+          - generic [ref=e438]: "## Reference See skill: `python-testing` for"
+        - generic [ref=e439] [cursor=pointer]:
+          - generic [ref=e440]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:4871
+          - generic [ref=e441]: "#### Step an Asynchronous Iterator One step"
+        - generic [ref=e442] [cursor=pointer]:
+          - generic [ref=e443]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:190
+          - generic [ref=e444]: 第三部分 Alembic 第11 章 Alembic 入门 ...............
+        - generic [ref=e445] [cursor=pointer]:
+          - generic [ref=e446]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:177
+          - generic [ref=e447]: "### 使用第三方日志库 除了Python标准库中的logging模块外，还有许多优秀的"
+        - generic [ref=e448] [cursor=pointer]:
+          - generic [ref=e449]: AI/资源/chatgpt-on-wechat.md:71
+          - generic [ref=e450]: "### 2.运行环境 支持 Linux、MacOS、Windows 系统（可在Linux"
+        - generic [ref=e451] [cursor=pointer]:
+          - generic [ref=e452]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:150
+          - generic [ref=e453]: "### 5\\. Flask中的装饰器应用 ``` from flask import F"
+        - generic [ref=e454] [cursor=pointer]:
+          - generic [ref=e455]: AI/资源/codefuse_chatbot.md:95
+          - generic [ref=e456]: "## 🚀 快速使用 请自行安装 nvidia 驱动程序，本项目已在 Python 3.9"
+        - generic [ref=e457] [cursor=pointer]:
+          - generic [ref=e458]: AI/Text2Sql/提示词.md:61
+          - generic [ref=e459]: "# 返回格式 请一步步思考并按照以下JSON格式回复： {{#"
+        - generic [ref=e460] [cursor=pointer]:
+          - generic [ref=e461]: 未归类/claude插件体系.md:265
+          - generic [ref=e462]: "#### 其他专业 Agents（来自 everything-claude-code） |"
+        - generic [ref=e463] [cursor=pointer]:
+          - generic [ref=e464]: 后端/python/列表推导式.md:63
+          - generic [ref=e465]: "## 集合推导式 Python 还支持集合推导。 Python 集类似于 Python"
+        - generic [ref=e466] [cursor=pointer]:
+          - generic [ref=e467]: 开发工具/claude/CLI管道对话.md:8
+          - generic [ref=e468]: "### 二、实现思路 1. 通过 Python 的 `subprocess` 模块启动 C"
+        - generic [ref=e469] [cursor=pointer]:
+          - generic [ref=e470]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:3
+          - generic [ref=e471]: "### Lambda表达式 Lambda表达式是Python中的一种匿名函数，它允许您快"
+        - generic [ref=e472] [cursor=pointer]:
+          - generic [ref=e473]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:3
+          - generic [ref=e474]: "### 1\\. 列表推导式 列表推导式是Python中最常见的推导式之一，用于快速创建列"
+        - generic [ref=e475] [cursor=pointer]:
+          - generic [ref=e476]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:5
+          - generic [ref=e477]: "### 1\\. 准备工作 首先，我们需要安装一些Python库来处理图像和进行机器学习。"
+        - generic [ref=e478] [cursor=pointer]:
+          - generic [ref=e479]: AI/资源/langchain-chatchat.md:107
+          - generic [ref=e480]: "### 3. 初始化知识库和配置文件 按照下列方式初始化自己的知识库和简单的复制配置文件"
+        - generic [ref=e481] [cursor=pointer]:
+          - generic [ref=e482]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:40
+          - generic [ref=e483]: "### 3\\. 连接MySQL数据库 MySQL是一种常见的关系型数据库管理系统。使用P"
+        - generic [ref=e484] [cursor=pointer]:
+          - generic [ref=e485]: 项目/资源变现/道路识别/github源码.md:13
+          - generic [ref=e486]: "## 链接 [https://github.com/mohamedameen93/La"
+        - generic [ref=e487] [cursor=pointer]:
+          - generic [ref=e488]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:14
+          - generic [ref=e489]: "### 1.2 JSON模块概述 Python的`json`模块提供了处理JSON数据的"
+        - generic [ref=e490] [cursor=pointer]:
+          - generic [ref=e491]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:111
+          - generic [ref=e492]: "### 8\\. 使用锚点 锚点用于匹配字符串的边界，而不是实际的字符。以下是一些常用的锚"
+        - generic [ref=e493] [cursor=pointer]:
+          - generic [ref=e494]: 项目/AI日程助手/README.md:4
+          - generic [ref=e495]: "### 1. 安装依赖 ```bash cd ~ conda create -n fast"
+        - generic [ref=e496] [cursor=pointer]:
+          - generic [ref=e497]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+          - generic [ref=e498]: "[Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft"
+        - generic [ref=e499] [cursor=pointer]:
+          - generic [ref=e500]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:20
+          - generic [ref=e501]: "### 1.3 数据库操作 MongoDB支持丰富的数据库操作，包括增删改查等基本操作。"
+        - generic [ref=e502] [cursor=pointer]:
+          - generic [ref=e503]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:696
+          - generic [ref=e504]: 8. 仓库中添加.github/workflows/publish-to-pypi.yam
+        - generic [ref=e505] [cursor=pointer]:
+          - generic [ref=e506]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+          - generic [ref=e507]: "* [Vaex](https://github.com/vaexio/vaex) \\-"
+        - generic [ref=e508] [cursor=pointer]:
+          - generic [ref=e509]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:323
+          - generic [ref=e510]: "#### 11\\. 定期进行代码审查和优化 定期进行代码审查和优化是保持代码性能的关键。"
+        - generic [ref=e511] [cursor=pointer]:
+          - generic [ref=e512]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:62
+          - generic [ref=e513]: "### 3.1 打印月历 ``` import calendar cal = cale"
+        - generic [ref=e514] [cursor=pointer]:
+          - generic [ref=e515]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:71
+          - generic [ref=e516]: "# 三、create_task创建协程与ensure_future创建的区别 在 Pyth"
+        - generic [ref=e517] [cursor=pointer]:
+          - generic [ref=e518]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:5308
+          - generic [ref=e519]: "#### Step an Asynchronous Generator One step"
+        - generic [ref=e520] [cursor=pointer]:
+          - generic [ref=e521]: 后端/python/fastapi/填坑.md:7
+          - generic [ref=e522]: "### 3. 将fastapi app的workers设置为大于1，让app的有多个进程来"
+        - generic [ref=e523] [cursor=pointer]:
+          - generic [ref=e524]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:154
+          - generic [ref=e525]: "### 11\\. 多行匹配 有时候我们需要匹配多行文本，而不仅仅是单行。这时可以使用 `"
+        - generic [ref=e526] [cursor=pointer]:
+          - generic [ref=e527]: 开发工具/claude/CLI管道对话.md:3
+          - generic [ref=e528]: "### 一、前置条件 1. 已在本机成功安装 Claude Code CLI，并完成认证（"
+        - generic [ref=e529] [cursor=pointer]:
+          - generic [ref=e530]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:274
+          - generic [ref=e531]: "### 19\\. 使用 `re.IGNORECASE` 标志进行不区分大小写匹配 在编译"
+        - generic [ref=e532] [cursor=pointer]:
+          - generic [ref=e533]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:36
+          - generic [ref=e534]: "### 2.1 获取当前日期和时间 ``` from datetime import d"
+        - generic [ref=e535] [cursor=pointer]:
+          - generic [ref=e536]: 后端/python/并发编程/多线程.md:43
+          - generic [ref=e537]: "# 三、全局解释器锁是什么 全局解释器锁（Global Interpreter Lock"
+        - generic [ref=e538] [cursor=pointer]:
+          - generic [ref=e539]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:66
+          - generic [ref=e540]: "#### launch详解 launch 方法用于启动浏览器进程并返回浏览器实例，它包含"
+        - generic [ref=e541] [cursor=pointer]:
+          - generic [ref=e542]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:189
+          - generic [ref=e543]: "### 函数式编程的模块与库 除了内置的函数式工具（如`map()`，`filter()"
+        - generic [ref=e544] [cursor=pointer]:
+          - generic [ref=e545]: 后端/duckdb/DuckDB in Action.pdf:5154
+          - generic [ref=e546]: 6.1.2 Opening up a database connection One of
+        - generic [ref=e547] [cursor=pointer]:
+          - generic [ref=e548]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:936
+          - generic [ref=e549]: "#### Install the Apache web server Other web"
+        - generic [ref=e550] [cursor=pointer]:
+          - generic [ref=e551]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:56
+          - generic [ref=e552]: "### 2.2 JSON反序列化示例 接下来，我们将演示如何使用`json.loads`"
+        - generic [ref=e553] [cursor=pointer]:
+          - generic [ref=e554]: 后端/python/列表推导式.md:1
+          - generic [ref=e555]: "## 列表推导 **列表推导式由括号组成，括号包含一个表达式，后跟一个子句，然后是零个或"
+        - generic [ref=e556] [cursor=pointer]:
+          - generic [ref=e557]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:18
+          - generic [ref=e558]: "### 1.3 基本函数和方法 * `json.dumps(obj, indent="
+        - generic [ref=e559] [cursor=pointer]:
+          - generic [ref=e560]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1711
+          - generic [ref=e561]: 23 asyncio basics Chapter 1 dived into concur
+        - generic [ref=e562] [cursor=pointer]:
+          - generic [ref=e563]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:1510
+          - generic [ref=e564]: "#### Check if a Task is Canceled We can chec"
+        - generic [ref=e565] [cursor=pointer]:
+          - generic [ref=e566]: 开发工具/claude/技能包/rules/python/security.md:10
+          - generic [ref=e567]: "## Secret Management ```python import os fro"
+        - generic [ref=e568] [cursor=pointer]:
+          - generic [ref=e569]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:103
+          - generic [ref=e570]: "### Order Dockerfile Commands Appropriately"
+        - generic [ref=e571] [cursor=pointer]:
+          - generic [ref=e572]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:159
+          - generic [ref=e573]: "### 10\\. 推导式的灵活运用 推导式可以根据实际需求进行灵活运用，组合使用不同类型"
+        - generic [ref=e574] [cursor=pointer]:
+          - generic [ref=e575]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:672
+          - generic [ref=e576]: "### Rust Rust now allows the use of the `asy"
+        - generic [ref=e577] [cursor=pointer]:
+          - generic [ref=e578]: 后端/python/华为社区python入门/深入理解 Python 中的 with...as 语句：资源管理与更多应用场景-云社区-华为云.md:1
+          - generic [ref=e579]: "通过这种方式，我们可以在不同领域的应用中利用`with...as`语句，使代码更加模块化和"
+        - generic [ref=e580] [cursor=pointer]:
+          - generic [ref=e581]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:140
+          - generic [ref=e582]: "## 5.2 使用wait for机制 在 Python asyncio 中，可以使用 a"
+        - generic [ref=e583] [cursor=pointer]:
+          - generic [ref=e584]: 后端/duckdb/DuckDB in Action.pdf:5224
+          - generic [ref=e585]: 6.2.1 Ingesting CSV data with the Python API
+        - generic [ref=e586] [cursor=pointer]:
+          - generic [ref=e587]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e588]: 158 CHAPTER 6 Handling CPU-bound work One th
+        - generic [ref=e589] [cursor=pointer]:
+          - generic [ref=e590]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:58
+          - generic [ref=e591]: "### 4\\. 生成器推导式 生成器推导式是一种懒加载的推导式，用于生成一个生成器对象。"
+        - generic [ref=e592] [cursor=pointer]:
+          - generic [ref=e593]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:119
+          - generic [ref=e594]: "### 使用上下文管理器（Context Managers） 上下文管理器是Python"
+        - generic [ref=e595] [cursor=pointer]:
+          - generic [ref=e596]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:210
+          - generic [ref=e597]: "### 15\\. 使用 re.finditer() 函数 `re.finditer()`"
+        - generic [ref=e598] [cursor=pointer]:
+          - generic [ref=e599]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+          - generic [ref=e600]: B- BAB HEF >> patient_list.join(
+        - generic [ref=e601] [cursor=pointer]:
+          - generic [ref=e602]: 后端/python/并发编程/多线程.md:2
+          - generic [ref=e603]: "# 二、全局解释器锁（GIL） 全局解释器锁（GIL, Global Interpret"
+        - generic [ref=e604] [cursor=pointer]:
+          - generic [ref=e605]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+          - generic [ref=e606]: "[Fugue](https://github.com/fugue-project/fugu"
+        - generic [ref=e607] [cursor=pointer]:
+          - generic [ref=e608]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:189
+          - generic [ref=e609]: "### 实现日志轮换和归档 在长期运行的应用程序中，日志文件可能会不断增长，占用大量磁盘"
+        - generic [ref=e610] [cursor=pointer]:
+          - generic [ref=e611]: 开发工具/claude/技能包/rules/common/patterns.md:20
+          - generic [ref=e612]: "## Dataclasses as DTOs ```python from datacl"
+        - generic [ref=e613] [cursor=pointer]:
+          - generic [ref=e614]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1218
+          - generic [ref=e615]: 14 CHAPTER 1 Getting to know asyncio Dependi
+        - generic [ref=e616] [cursor=pointer]:
+          - generic [ref=e617]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:1098
+          - generic [ref=e618]: 2.2.3 排序 如果查看示例2-10 的所有结果，而不仅仅是第一条记录，你会发现数据并不
+        - generic [ref=e619] [cursor=pointer]:
+          - generic [ref=e620]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:185
+          - generic [ref=e621]: "### 8\\. ORM框架 ORM（Object-Relational Mapping）"
+        - generic [ref=e622] [cursor=pointer]:
+          - generic [ref=e623]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e624]: 我们就用它来预测一下分类结果。 y\_pred = model.predict(X\_t
+        - generic [ref=e625] [cursor=pointer]:
+          - generic [ref=e626]: AI/资源/langchain-chatchat.md:71
+          - generic [ref=e627]: "### 1. 环境配置 + 首先，确保你的机器安装了 Python 3.8 - 3.10"
+        - generic [ref=e628] [cursor=pointer]:
+          - generic [ref=e629]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:113
+          - generic [ref=e630]: "# 五、协程关闭状态:CORO_CLOSED 在Python的asyncio库中，协程进"
+        - generic [ref=e631] [cursor=pointer]:
+          - generic [ref=e632]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+          - generic [ref=e633]: 142 In modern cores, the evaluation is split
+        - generic [ref=e634] [cursor=pointer]:
+          - generic [ref=e635]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:152
+          - generic [ref=e636]: "## 2.1 python asyncio 核心eventloop ![](../../."
+        - generic [ref=e637] [cursor=pointer]:
+          - generic [ref=e638]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:78
+          - generic [ref=e639]: "### 5\\. 嵌套推导式 Python推导式还支持嵌套，可以在一个推导式中使用多个循环"
+        - generic [ref=e640] [cursor=pointer]:
+          - generic [ref=e641]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:834
+          - generic [ref=e642]: 2 CHAPTER 1 Getting to know asyncio Making m
+        - generic [ref=e643] [cursor=pointer]:
+          - generic [ref=e644]: 后端/python/华为社区python入门/深入理解 Python 中的 with...as 语句：资源管理与更多应用场景-云社区-华为云.md:1
+          - generic [ref=e645]: "[深入理解 Python 中的 with...as 语句：资源管理与更多应用场景-云社区-"
+        - generic [ref=e646] [cursor=pointer]:
+          - generic [ref=e647]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:230
+          - generic [ref=e648]: "### 8\\. 参数化装饰器 ``` def repeat(n): def de"
+        - generic [ref=e649] [cursor=pointer]:
+          - generic [ref=e650]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:610
+          - generic [ref=e651]: 7.2.1 为什么要做whl包制品 .whl （Wheel）是一种 Python 包的二
+        - generic [ref=e652] [cursor=pointer]:
+          - generic [ref=e653]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:15672
+          - generic [ref=e654]: 329 APIs with coroutines and functions
+        - generic [ref=e655] [cursor=pointer]:
+          - generic [ref=e656]: 开发工具/claude/技能包/rules/python/testing.md:20
+          - generic [ref=e657]: "## Test Organization Use `pytest.mark` for t"
+        - generic [ref=e658] [cursor=pointer]:
+          - generic [ref=e659]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:857
+          - generic [ref=e660]: "### Secure Communication with TLS When a Doc"
+        - generic [ref=e661] [cursor=pointer]:
+          - generic [ref=e662]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:195
+          - generic [ref=e663]: "### 14\\. 使用肯定与否定预搜索断言 肯定预搜索断言 `(?=...)` 匹配满足"
+        - generic [ref=e664] [cursor=pointer]:
+          - generic [ref=e665]: 开发工具/claude/技能包/rules/common/patterns.md:10
+          - generic [ref=e666]: "## Protocol (Duck Typing) ```python from typ"
+        - generic [ref=e667] [cursor=pointer]:
+          - generic [ref=e668]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:241
+          - generic [ref=e669]: "#### 扩展自定义SQL语句生成器示例 ``` class SQLStatementG"
+        - generic [ref=e670] [cursor=pointer]:
+          - generic [ref=e671]: 后端/python/并发编程/python asyncio从入门到精通/21.深入理解ContextVars.md:7
+          - generic [ref=e672]: "# 一、contextvars介绍 ![](https://p3.toutiaoimg"
+        - generic [ref=e673] [cursor=pointer]:
+          - generic [ref=e674]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:39
+          - generic [ref=e675]: "### 使用 前两期文章中介绍到了 Selenium 与 Playwright 库的使用"
+        - generic [ref=e676] [cursor=pointer]:
+          - generic [ref=e677]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:379
+          - generic [ref=e678]: "### 迭代器、生成器和装饰器的高级应用"
+        - generic [ref=e679] [cursor=pointer]:
+          - generic [ref=e680]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:858
+          - generic [ref=e681]: "### Configuring our deep learning production"
+        - generic [ref=e682] [cursor=pointer]:
+          - generic [ref=e683]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:178
+          - generic [ref=e684]: "### 性能优化与注意事项 在使用`multiprocessing`模块进行多进程编程时"
+        - generic [ref=e685] [cursor=pointer]:
+          - generic [ref=e686]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:548
+          - generic [ref=e687]: "### 基本练习题"
+        - generic [ref=e688] [cursor=pointer]:
+          - generic [ref=e689]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:27
+          - generic [ref=e690]: "### 2.安装 首先就是安装问题了，由于 Pyppeteer 采用了 Python 的"
+        - generic [ref=e691] [cursor=pointer]:
+          - generic [ref=e692]: 开发工具/claude/技能包/rules/common/patterns.md:6
+          - generic [ref=e693]: "# Python Patterns > This file extends [commo"
+        - generic [ref=e694] [cursor=pointer]:
+          - generic [ref=e695]: 代码片段/python代码片段.md:3
+          - generic [ref=e696]: "# 一、数据类型"
+        - generic [ref=e697] [cursor=pointer]:
+          - generic [ref=e698]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:15
+          - generic [ref=e699]: "### 方法 我们将采用基于帧差的方法来实现视频去抖动。基本思路是对视频的连续帧进行比较"
+        - generic [ref=e700] [cursor=pointer]:
+          - generic [ref=e701]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:128
+          - generic [ref=e702]: "### 8\\. 进阶应用与注意事项"
+        - generic [ref=e703] [cursor=pointer]:
+          - generic [ref=e704]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:274
+          - generic [ref=e705]: "### 使用pickle进行数据序列化与反序列化 除了JSON之外，Python还提供了`"
+        - generic [ref=e706] [cursor=pointer]:
+          - generic [ref=e707]: 开发工具/claude/技能包/rules/python/security.md:6
+          - generic [ref=e708]: "# Python Security > This file extends [common"
+        - generic [ref=e709] [cursor=pointer]:
+          - generic [ref=e710]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:50
+          - generic [ref=e711]: "### 使用Python生成更复杂的SQL语句 除了简单的查询，Python还可以帮助我们"
+        - generic [ref=e712] [cursor=pointer]:
+          - generic [ref=e713]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:132
+          - generic [ref=e714]: "### 文件和目录操作 除了基本的文件读写操作外，Python还提供了一系列用于文件和目录"
+        - generic [ref=e715] [cursor=pointer]:
+          - generic [ref=e716]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:12
+          - generic [ref=e717]: "### 1.1 获取当前时间戳 ``` import time timestamp ="
+        - generic [ref=e719] [cursor=pointer]: 后端/python/华为社区python入门/数据库/Python数据库操作实战指南：从基础到高级技术-云社区-华为云.md:1
+        - generic [ref=e721] [cursor=pointer]: 项目/资源变现/爬虫/python爬虫教程系列.md:13
+        - generic [ref=e722] [cursor=pointer]:
+          - generic [ref=e723]: 开发工具/claude/技能包/rules/python/testing.md:6
+          - generic [ref=e724]: "# Python Testing > This file extends [common/"
+        - generic [ref=e726] [cursor=pointer]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+        - generic [ref=e728] [cursor=pointer]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+        - generic [ref=e729] [cursor=pointer]:
+          - generic [ref=e730]: 后端/python/并发编程/多进程.md:1
+          - generic [ref=e731]: "# 一、multiprocessing.Process 在Python中，多进程编程主要是"
+        - generic [ref=e732] [cursor=pointer]:
+          - generic [ref=e733]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:19631
+          - generic [ref=e734]: PYTHON/DATA SCIENCE
+        - generic [ref=e735] [cursor=pointer]:
+          - generic [ref=e736]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:200
+          - generic [ref=e737]: "### 文件和目录操作 除了基本的文件读写操作外，Python还提供了一系列用于文件和目录"
+        - generic [ref=e738] [cursor=pointer]:
+          - generic [ref=e739]: AI/提示词/awesome ai assistant.md:37
+          - generic [ref=e740]: 1. [📚💼 Talent Coach](#talent-coach) 1. [📦 R pr
+        - generic [ref=e742] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:6388
+        - generic [ref=e744] [cursor=pointer]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+        - generic [ref=e745] [cursor=pointer]:
+          - generic [ref=e746]: 开发工具/claude/韶关模型池/readme.md:1
+          - generic [ref=e747]: "# 初始化 cd project_dir uv init uv venv --python"
+        - generic [ref=e748] [cursor=pointer]:
+          - generic [ref=e749]: 开发工具/claude/技能包/rules/typescript/coding-style.md:6
+          - generic [ref=e750]: "# Python Coding Style > This file extends [co"
+        - generic [ref=e752] [cursor=pointer]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1218
+        - generic [ref=e754] [cursor=pointer]: 后端/python/并发编程/Python并行编程 中文版 — python-parallel-programming-cookbook-cn 1.0 文档.md:1
+        - generic [ref=e755] [cursor=pointer]:
+          - generic [ref=e756]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:262
+          - generic [ref=e757]: "### 16\\. 多线程的调试与性能分析 在进行多线程编程时，调试和性能分析是不可忽视的重"
+        - generic [ref=e758] [cursor=pointer]:
+          - generic [ref=e759]: 开发工具/python/fastapi/Python Asyncio_ The Complete Guide - Super Fast Python.md:306
+          - generic [ref=e760]: "### Reasons to Use Asyncio in Python There ar"
+        - generic [ref=e761] [cursor=pointer]:
+          - generic [ref=e762]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:525
+          - generic [ref=e763]: "# GOOD copy ./app.py .` Being explicit also"
+        - generic [ref=e764] [cursor=pointer]:
+          - generic [ref=e765]: 后端/duckdb/DuckDB in Action.pdf:5133
+          - generic [ref=e766]: 6.1 Getting started [PAGE 163] Let’s get star
+        - generic [ref=e768] [cursor=pointer]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:190
+        - generic [ref=e769] [cursor=pointer]:
+          - generic [ref=e770]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:295
+          - generic [ref=e771]: "### 性能优化技巧的进一步细节"
+        - generic [ref=e772] [cursor=pointer]:
+          - generic [ref=e773]: 开发工具/claude/技能包/rules/typescript/hooks.md:6
+          - generic [ref=e774]: "# Python Hooks > This file extends [common/hoo"
+        - generic [ref=e775] [cursor=pointer]:
+          - generic [ref=e776]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:51
+          - generic [ref=e777]: "### 高级日志记录配置 除了基本的日志记录配置外，logging 模块还提供了更多高级的配"
+        - generic [ref=e778] [cursor=pointer]:
+          - generic [ref=e779]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:51
+          - generic [ref=e780]: "### 高级日志记录配置 除了基本的日志记录配置外，logging 模块还提供了更多高级的配"
+        - generic [ref=e781] [cursor=pointer]:
+          - generic [ref=e782]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:64
+          - generic [ref=e783]: "### 文件和目录操作 除了基本的文件读写操作外，Python还提供了一系列用于文件和目录管"
+        - generic [ref=e784] [cursor=pointer]:
+          - generic [ref=e785]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:64
+          - generic [ref=e786]: "# pull the official docker image FROM python:3"
+        - generic [ref=e787] [cursor=pointer]:
+          - generic [ref=e788]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:18
+          - generic [ref=e789]: "### 1.2 常用os模块函数"
+        - generic [ref=e790] [cursor=pointer]:
+          - generic [ref=e791]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:457
+          - generic [ref=e792]: "### Further Reading Real Python has a great ar"
+        - generic [ref=e793] [cursor=pointer]:
+          - generic [ref=e794]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:122
+          - generic [ref=e795]: "### 文件写入进阶 在前述写入文件的示例中，我们使用了`write()`方法将内容写入文件"
+        - generic [ref=e796] [cursor=pointer]:
+          - generic [ref=e797]: 后端/python/python Nacos实现服务发现与注册.md:90
+          - generic [ref=e798]: "### 1\\. 添加 Python 端业务逻辑 在此处，我们简单的套上了一个 Flask 接"
+        - generic [ref=e799] [cursor=pointer]:
+          - generic [ref=e800]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+          - generic [ref=e801]: "130 >> def apply_percentileofscore(series):"
+        - generic [ref=e802] [cursor=pointer]:
+          - generic [ref=e803]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:198
+          - generic [ref=e804]: "### 迭代器与生成器的进阶应用 除了基本的迭代器和生成器之外，Python还提供了一些高级"
+        - generic [ref=e805] [cursor=pointer]:
+          - generic [ref=e806]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:210
+          - generic [ref=e807]: "#### Helper utilities [→ Launch Jupyter Notebo"
+        - generic [ref=e808] [cursor=pointer]:
+          - generic [ref=e809]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:1711
+          - generic [ref=e810]: 3. Reply bytes Server Socket Figure 1.7 Writing
+        - generic [ref=e811] [cursor=pointer]:
+          - generic [ref=e812]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:245
+          - generic [ref=e813]: "### 11.2 避免频繁的时间对象转换 在处理大量时间数据时，频繁的时间对象转换可能会带来"
+        - generic [ref=e814] [cursor=pointer]:
+          - generic [ref=e815]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:55
+          - generic [ref=e816]: "### 5\\. 使用编译的正则表达式 在处理大量文本时，编译正则表达式可以提高匹配效率。以下"
+        - generic [ref=e817] [cursor=pointer]:
+          - generic [ref=e818]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:21
+          - generic [ref=e819]: "### 1.2 睡眠指定时间 ``` import time print(\"开始任务\")"
+        - generic [ref=e820] [cursor=pointer]:
+          - generic [ref=e821]: 后端/python/fastapi/填坑.md:1
+          - generic [ref=e822]: "## 一、 fastapi endpoint函数，如果该函数实际上是同步函数，即里面没有调用异"
+        - generic [ref=e823] [cursor=pointer]:
+          - generic [ref=e824]: 未归类/claude插件体系.md:123
+          - generic [ref=e825]: "### 用户级（全局） ``` ~/.claude/ ├── settings.json"
+        - generic [ref=e826] [cursor=pointer]:
+          - generic [ref=e827]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:59
+          - generic [ref=e828]: "### 3\\. sys.path - 模块搜索路径 `sys.path` 是一个包含模块搜索"
+        - generic [ref=e829] [cursor=pointer]:
+          - generic [ref=e830]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:834
+          - generic [ref=e831]: ABOUT THIS BOOK xvi At minimum, you should rea
+        - generic [ref=e832] [cursor=pointer]:
+          - generic [ref=e833]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:48
+          - generic [ref=e834]: "## 1.4 python3.3基于yield from协程支持 在Python 3.3中，y"
+        - generic [ref=e835] [cursor=pointer]:
+          - generic [ref=e836]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:278
+          - generic [ref=e837]: "# copy and extract local compresses files ADD"
+        - generic [ref=e838] [cursor=pointer]:
+          - generic [ref=e839]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:356
+          - generic [ref=e840]: "# string format root@ede24a5ef536:/app# ps ax"
+        - generic [ref=e841] [cursor=pointer]:
+          - generic [ref=e842]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:452
+          - generic [ref=e843]: 4. 工程化入门 - LazyLLM file:///C:/Users/lianghao/Do
+        - generic [ref=e844] [cursor=pointer]:
+          - generic [ref=e845]: misc/2021工作记录.md:597
+          - generic [ref=e846]: "### 2021-8-27（5） 1、在九楼，编写测试平台python应用流水线"
+        - generic [ref=e847] [cursor=pointer]:
+          - generic [ref=e848]: 后端/python/华为社区python入门/数据库/Python数据库操作实战指南：从基础到高级技术-云社区-华为云.md:1
+          - generic [ref=e849]: "[Python数据库操作实战指南：从基础到高级技术-云社区-华为云](https://bbs."
+        - generic [ref=e850] [cursor=pointer]:
+          - generic [ref=e851]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:80
+          - generic [ref=e852]: "### 进程间通信与共享数据 在多进程编程中，不同进程之间通常是相互独立的，但有时候我们需要"
+        - generic [ref=e853] [cursor=pointer]:
+          - generic [ref=e854]: AI/提示词/awesome ai assistant.md:2355
+          - generic [ref=e855]: "### Instructor in a School 🎓🐍 I'm \"<b>Instruct"
+        - generic [ref=e856] [cursor=pointer]:
+          - generic [ref=e857]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e858]: "[如何用Python和深度神经网络发现即将流失的客户？-今日头条](https://www.t"
+        - generic [ref=e859] [cursor=pointer]:
+          - generic [ref=e860]: 后端/python/华为社区python入门/并发/Python中的迭代器与生成器优化性能的利器-云社区-华为云.md:84
+          - generic [ref=e861]: "### 迭代器与生成器的进阶应用 除了基本的迭代器和生成器之外，Python还提供了一些高级"
+        - generic [ref=e862] [cursor=pointer]:
+          - generic [ref=e863]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:313
+          - generic [ref=e864]: "### 21\\. sys.getallocatedblocks - 获取分配的内存块数量 `"
+        - generic [ref=e865] [cursor=pointer]:
+          - generic [ref=e866]: 开发工具/claude/技能包/rules/typescript/coding-style.md:15
+          - generic [ref=e867]: "## Immutability Prefer immutable data structur"
+        - generic [ref=e868] [cursor=pointer]:
+          - generic [ref=e869]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:5418
+          - generic [ref=e870]: 0.0 is replaced with the string null, the float
+        - generic [ref=e871] [cursor=pointer]:
+          - generic [ref=e872]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:5418
+          - generic [ref=e873]: 182 temporary variable, 141 writeback phase, 14
+        - generic [ref=e874] [cursor=pointer]:
+          - generic [ref=e875]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:280
+          - generic [ref=e876]: ARTIST DATA 0 145 1 142 2 38 3 13 To represent
+        - generic [ref=e877] [cursor=pointer]:
+          - generic [ref=e878]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:185
+          - generic [ref=e879]: "## 2.2 python asyncio的核心概念 除了EventLoop以外，async"
+        - generic [ref=e880] [cursor=pointer]:
+          - generic [ref=e881]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:133
+          - generic [ref=e882]: "### 使用装饰器（Decorators） 装饰器是Python中一种强大的功能，它可以用于"
+        - generic [ref=e883] [cursor=pointer]:
+          - generic [ref=e884]: 开发工具/claude/韶关模型池/readme.md:14
+          - generic [ref=e885]: "# 下载安装依赖到 .venv 目录下 uv sync --python 3.10 --fro"
+        - generic [ref=e886] [cursor=pointer]:
+          - generic [ref=e887]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:106
+          - generic [ref=e888]: "### 7\\. 推导式的性能考虑 虽然推导式提供了紧凑的语法，但在处理大规模数据时，需要注意"
+        - generic [ref=e889] [cursor=pointer]:
+          - generic [ref=e890]: misc/2018工作记录.md:719
+          - generic [ref=e891]: "### 2018-09-21 1、写python"
+        - generic [ref=e892] [cursor=pointer]:
+          - generic [ref=e893]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:140
+          - generic [ref=e894]: "### 面向对象与函数式编程的结合 虽然函数式编程在处理数据和并行计算等方面具有显著的优势，"
+        - generic [ref=e895] [cursor=pointer]:
+          - generic [ref=e896]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:18
+          - generic [ref=e897]: "### 函数式工具 Python标准库提供了一些函数式编程的工具，这些工具可以帮助简化代码并"
+        - generic [ref=e898] [cursor=pointer]:
+          - generic [ref=e899]: 后端/python/python Nacos实现服务发现与注册.md:3
+          - generic [ref=e900]: "#### 目录 * 一、前言 * 二、手写实现Flask注册到Nacos *"
+        - generic [ref=e901] [cursor=pointer]:
+          - generic [ref=e902]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:5
+          - generic [ref=e903]: "### 1\\. 导入 re 模块 在开始之前，首先要确保已经导入了 re 模块： ```"
+        - generic [ref=e904] [cursor=pointer]:
+          - generic [ref=e905]: misc/2018工作记录.md:692
+          - generic [ref=e906]: "### 2018-09-13 1、写 python 代码"
+        - generic [ref=e907] [cursor=pointer]:
+          - generic [ref=e908]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:127
+          - generic [ref=e909]: "### 9\\. 贪婪与非贪婪匹配 在正则表达式中，量词默认是贪婪的，即它们会尽可能匹配最长的"
+        - generic [ref=e910] [cursor=pointer]:
+          - generic [ref=e911]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:160
+          - generic [ref=e912]: "#### 使用Peewee ORM示例 Peewee是一个轻量级的Python ORM库，它"
+        - generic [ref=e913] [cursor=pointer]:
+          - generic [ref=e914]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:535
+          - generic [ref=e915]: "[PAGE 28] 1970 2 Name: George Songs, dtype:"
+        - generic [ref=e916] [cursor=pointer]:
+          - generic [ref=e917]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:85
+          - generic [ref=e918]: "### 2\\. 权限验证装饰器 ``` def check_permission(role)"
+        - generic [ref=e919] [cursor=pointer]:
+          - generic [ref=e920]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:472
+          - generic [ref=e921]: "### 日志文件加密和权限控制 除了备份和管理外，保护日志文件的安全性也是至关重要的。通过加"
+        - generic [ref=e922] [cursor=pointer]:
+          - generic [ref=e923]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:414
+          - generic [ref=e924]: "### 日志备份和恢复 除了监控和警报外，日志备份和恢复也是关键的安全实践。定期备份日志文件"
+        - generic [ref=e925] [cursor=pointer]:
+          - generic [ref=e926]: misc/2018工作记录.md:670
+          - generic [ref=e927]: "### 2018-09-05 1、开发python风云台"
+        - generic [ref=e928] [cursor=pointer]:
+          - generic [ref=e929]: misc/2020工作记录.md:402
+          - generic [ref=e930]: "### 2020-5-3（7） 1、今天从广州回珠海 2、晚上给小顺写了一个监控键盘按键记录的"
+        - generic [ref=e931] [cursor=pointer]:
+          - generic [ref=e932]: 后端/duckdb/DuckDB in Action.pdf:7729
+          - generic [ref=e933]: 8.4.1 Defining assets With those dependencies i
+        - generic [ref=e935] [cursor=pointer]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:459
+        - generic [ref=e936] [cursor=pointer]:
+          - generic [ref=e937]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:169
+          - generic [ref=e938]: "### 11\\. sys.setrecursionlimit - 递归深度设置 `sys.s"
+        - generic [ref=e939] [cursor=pointer]:
+          - generic [ref=e940]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:113
+          - generic [ref=e941]: "### 3\\. 缓存装饰器 ``` from functools import lru_ca"
+        - generic [ref=e942] [cursor=pointer]:
+          - generic [ref=e943]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:15
+          - generic [ref=e944]: "### 3\\. 读取XML文件 首先，我们来看如何使用Python读取XML文件。假设我们有"
+        - generic [ref=e946] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:280
+        - generic [ref=e947] [cursor=pointer]:
+          - generic [ref=e948]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:92
+          - generic [ref=e949]: "### 7\\. 使用量词 量词用于指定匹配字符或组的数量。以下是一些常用的量词及其示例用法："
+        - generic [ref=e950] [cursor=pointer]:
+          - generic [ref=e951]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:472
+          - generic [ref=e952]: "### 日志文件加密和权限控制 除了备份和管理外，保护日志文件的安全性也是至关重要的。通过加"
+        - generic [ref=e953] [cursor=pointer]:
+          - generic [ref=e954]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:414
+          - generic [ref=e955]: "### 日志备份和恢复 除了监控和警报外，日志备份和恢复也是关键的安全实践。定期备份日志文件"
+        - generic [ref=e956] [cursor=pointer]:
+          - generic [ref=e957]: misc/2020工作记录.md:775
+          - generic [ref=e958]: "### 2020-8-24（1） 1、上午安装hadoop虚拟机的常用软件，python、py"
+        - generic [ref=e959] [cursor=pointer]:
+          - generic [ref=e960]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:142
+          - generic [ref=e961]: "### 9\\. sys.setdefaultencoding - 字符编码设置 `sys.s"
+        - generic [ref=e962] [cursor=pointer]:
+          - generic [ref=e963]: 后端/python/华为社区python入门/Python 正则表达式大揭秘应用与技巧全解析-云社区-华为云.md:223
+          - generic [ref=e964]: "### 16\\. 使用 `re.split()` 函数 除了匹配和查找文本模式，`re` 模"
+        - generic [ref=e965] [cursor=pointer]:
+          - generic [ref=e966]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:12
+          - generic [ref=e967]: "# 一、async协程 async/await 是 Python 中实现异步编程的关键字。在"
+        - generic [ref=e968] [cursor=pointer]:
+          - generic [ref=e969]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+          - generic [ref=e970]: 151 implementations of BLAS and LAPACK availabl
+        - generic [ref=e971] [cursor=pointer]:
+          - generic [ref=e972]: AI/提示词/awesome ai assistant.md:2807
+          - generic [ref=e973]: "### Python interpreter 💻🐍 I'm \"<b>Python inter"
+        - generic [ref=e974] [cursor=pointer]:
+          - generic [ref=e975]: misc/2021工作记录.md:606
+          - generic [ref=e976]: "### 2021-9-31（2） 1、今天把划小python应用迁移到了天宫云，经过反复调试，"
+        - generic [ref=e977] [cursor=pointer]:
+          - generic [ref=e978]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:28
+          - generic [ref=e979]: "### 2.1 JSON序列化示例 让我们从一个简单的Python字典开始，演示如何使用`j"
+        - generic [ref=e980] [cursor=pointer]:
+          - generic [ref=e981]: misc/2018工作记录.md:131
+          - generic [ref=e982]: "### 2018-03-23 1、学习python. 2、写周报. 3、收集网站地址"
+        - generic [ref=e983] [cursor=pointer]:
+          - generic [ref=e984]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:330
+          - generic [ref=e985]: "### 日志监控和警报 除了记录日志和审计功能外，日志监控和警报也是关键的安全实践。通过监控"
+        - generic [ref=e986] [cursor=pointer]:
+          - generic [ref=e987]: AI/资源/langchain-chatchat.md:114
+          - generic [ref=e988]: "### 4. 一键启动 按照以下命令启动项目 ```shell $ python start"
+        - generic [ref=e989] [cursor=pointer]:
+          - generic [ref=e990]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:279
+          - generic [ref=e991]: "### 11\\. 性能优化 在进行大规模数据操作时，需要考虑性能优化。一些常见的性能优化策略"
+        - generic [ref=e992] [cursor=pointer]:
+          - generic [ref=e993]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:45
+          - generic [ref=e994]: "### 2.2 日期和时间的算术运算 ``` from datetime import da"
+        - generic [ref=e995] [cursor=pointer]:
+          - generic [ref=e996]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:747
+          - generic [ref=e997]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/
+        - generic [ref=e998] [cursor=pointer]:
+          - generic [ref=e999]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:2537
+          - generic [ref=e1000]: RESULT plot.area Creates an area plot for numer
+        - generic [ref=e1001] [cursor=pointer]:
+          - generic [ref=e1002]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:12501
+          - generic [ref=e1003]: 11.1.1 How Python works with datetimes To reduc
+        - generic [ref=e1004] [cursor=pointer]:
+          - generic [ref=e1005]: 后端/python/python Nacos实现服务发现与注册.md:64
+          - generic [ref=e1006]: "### 2\\. 心跳检测 > * **请求地址：** > http://1"
+        - generic [ref=e1007] [cursor=pointer]:
+          - generic [ref=e1008]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:245
+          - generic [ref=e1009]: "### 使用JSON进行数据序列化与反序列化 JSON（JavaScript Object"
+        - generic [ref=e1010] [cursor=pointer]:
+          - generic [ref=e1011]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:259
+          - generic [ref=e1012]: "### 日志记录的安全性考虑 除了性能和功能需求外，日志记录的安全性也是需要考虑的重要因素。"
+        - generic [ref=e1013] [cursor=pointer]:
+          - generic [ref=e1014]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:434
+          - generic [ref=e1015]: "### 23\\. 异步编程的优势与注意事项"
+        - generic [ref=e1016] [cursor=pointer]:
+          - generic [ref=e1017]: misc/2021工作记录.md:512
+          - generic [ref=e1018]: "### 2021-7-27（2） 1、爸爸家客厅和一楼房间的空调安装好了。 2、开发调试代码和"
+        - generic [ref=e1019] [cursor=pointer]:
+          - generic [ref=e1020]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:69
+          - generic [ref=e1021]: "### 4\\. sys.platform - 系统平台 `sys.platform` 返回一"
+        - generic [ref=e1022] [cursor=pointer]:
+          - generic [ref=e1023]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1035
+          - generic [ref=e1024]: "### Update your Apache configuration to point t"
+        - generic [ref=e1025] [cursor=pointer]:
+          - generic [ref=e1026]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:204
+          - generic [ref=e1027]: "### 日志记录的性能考虑 在实际项目中，日志记录的性能也是需要考虑的重要因素。过于频繁或过"
+        - generic [ref=e1028] [cursor=pointer]:
+          - generic [ref=e1029]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:15
+          - generic [ref=e1030]: "### 介绍 在上上期文章中，我们介绍了 Selenium 隐藏特征的方法，其中使用到了 s"
+        - generic [ref=e1031] [cursor=pointer]:
+          - generic [ref=e1032]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:441
+          - generic [ref=e1033]: "### 11.2 JWT解码 ``` import jwt decoded_payloa"
+        - generic [ref=e1034] [cursor=pointer]:
+          - generic [ref=e1035]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:330
+          - generic [ref=e1036]: "### 日志监控和警报 除了记录日志和审计功能外，日志监控和警报也是关键的安全实践。通过监控"
+        - generic [ref=e1037] [cursor=pointer]:
+          - generic [ref=e1038]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+          - generic [ref=e1039]: Despite the wide adoption, pandas has several d
+        - generic [ref=e1040] [cursor=pointer]:
+          - generic [ref=e1041]: misc/2021工作记录.md:580
+          - generic [ref=e1042]: "### 2021-8-20（5） 1、写了一个用户鉴权的http服务，供python调用，部署"
+        - generic [ref=e1043] [cursor=pointer]:
+          - generic [ref=e1044]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:302
+          - generic [ref=e1045]: "### 9.1 使用`ujson`替代`json` `ujson`是一个C语言实现的JSON"
+        - generic [ref=e1046] [cursor=pointer]:
+          - generic [ref=e1047]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:259
+          - generic [ref=e1048]: "### 日志记录的安全性考虑 除了性能和功能需求外，日志记录的安全性也是需要考虑的重要因素。"
+        - generic [ref=e1049] [cursor=pointer]:
+          - generic [ref=e1050]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:304
+          - generic [ref=e1051]: "### 11\\. 缓存到文件的装饰器 ``` import pickle def cach"
+        - generic [ref=e1052] [cursor=pointer]:
+          - generic [ref=e1053]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:76
+          - generic [ref=e1054]: "### 2.3 从文件读取和写入JSON数据 让我们看一个将JSON数据写入文件并从文件中读"
+        - generic [ref=e1055] [cursor=pointer]:
+          - generic [ref=e1056]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:78
+          - generic [ref=e1057]: "# copy project COPY . .` So, we started with"
+        - generic [ref=e1058] [cursor=pointer]:
+          - generic [ref=e1059]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:204
+          - generic [ref=e1060]: "### 日志记录的性能考虑 在实际项目中，日志记录的性能也是需要考虑的重要因素。过于频繁或过"
+        - generic [ref=e1061] [cursor=pointer]:
+          - generic [ref=e1062]: misc/2018工作记录.md:584
+          - generic [ref=e1063]: "### 2018-08-08 1、小顺到了洛杉矶，因为长时间旅行没有睡觉，改签了阿尔伯克基的飞"
+        - generic [ref=e1064] [cursor=pointer]:
+          - generic [ref=e1065]: 后端/duckdb/DuckDB in Action.pdf:6916
+          - generic [ref=e1066]: 8.2 Data ingestion with dlt dlt (data load tool
+        - generic [ref=e1067] [cursor=pointer]:
+          - generic [ref=e1068]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:256
+          - generic [ref=e1069]: "### 9\\. 异常处理装饰器 ``` def handle_exceptions(func"
+        - generic [ref=e1070] [cursor=pointer]:
+          - generic [ref=e1071]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:231
+          - generic [ref=e1072]: "### 11.1 使用 `time` 模块的 `monotonic` 函数 在需要测量时间间"
+        - generic [ref=e1073] [cursor=pointer]:
+          - generic [ref=e1074]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:193
+          - generic [ref=e1075]: "### 结合监控和警报系统 在生产环境中，及时发现和处理异常情况是至关重要的。因此，可以结合"
+        - generic [ref=e1076] [cursor=pointer]:
+          - generic [ref=e1077]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:535
+          - generic [ref=e1078]: THE PANDAS SERIES DATA STRUCTURE PROVIDES SUPPO
+        - generic [ref=e1079] [cursor=pointer]:
+          - generic [ref=e1080]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+          - generic [ref=e1081]: "[Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云](htt"
+        - generic [ref=e1082] [cursor=pointer]:
+          - generic [ref=e1083]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:289
+          - generic [ref=e1084]: "### 13.1 日志记录时间戳 在日志记录中，时间戳通常用于标识事件的发生时间。使用 `d"
+        - generic [ref=e1085] [cursor=pointer]:
+          - generic [ref=e1086]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:346
+          - generic [ref=e1087]: "### 13.4 查询路由 Sharding中的查询路由通过Shard Key进行，Mong"
+        - generic [ref=e1088] [cursor=pointer]:
+          - generic [ref=e1089]: misc/2020工作记录.md:287
+          - generic [ref=e1090]: "### 2020-3-30（1） 1、上午优化padding oracle代码，支持到 pyt"
+        - generic [ref=e1091] [cursor=pointer]:
+          - generic [ref=e1092]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:73
+          - generic [ref=e1093]: "### 4\\. 代码解析 * **连接数据库**：使用`sqlite3.connect("
+        - generic [ref=e1094] [cursor=pointer]:
+          - generic [ref=e1095]: misc/2018工作记录.md:656
+          - generic [ref=e1096]: "### 2018-08-30 1、请年假，下周一、二 2、开发Python，对风云台代码进行了"
+        - generic [ref=e1097] [cursor=pointer]:
+          - generic [ref=e1098]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:130
+          - generic [ref=e1099]: "# 二、python3.5以后asyncio模型正式定格为async/await asyn"
+        - generic [ref=e1100] [cursor=pointer]:
+          - generic [ref=e1101]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:396
+          - generic [ref=e1102]: "### 24\\. 使用RESTful API替代XML-RPC 虽然XML-RPC是一种简单"
+        - generic [ref=e1103] [cursor=pointer]:
+          - generic [ref=e1104]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:130
+          - generic [ref=e1105]: "### 4\\. 日志记录装饰器 ``` def log_function_call(func"
+        - generic [ref=e1106] [cursor=pointer]:
+          - generic [ref=e1107]: misc/2020工作记录.md:22
+          - generic [ref=e1108]: "### 2020-1-7（2） 1、今天卖出富国创新科技混合1466股，净值 1.6800，得"
+        - generic [ref=e1109] [cursor=pointer]:
+          - generic [ref=e1110]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:349
+          - generic [ref=e1111]: "### 21\\. 多线程的异步化与协程 在现代编程中，异步编程和协程成为处理高并发场景的重要"
+        - generic [ref=e1112] [cursor=pointer]:
+          - generic [ref=e1113]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:229
+          - generic [ref=e1114]: "### 14\\. sys.getfilesystemencoding - 文件系统编码获取"
+        - generic [ref=e1115] [cursor=pointer]:
+          - generic [ref=e1116]: 未归类/claude插件体系.md:210
+          - generic [ref=e1117]: "#### 方式 1: 自然语言指令（推荐） ``` \"启动 planner agent\" \"用"
+        - generic [ref=e1118] [cursor=pointer]:
+          - generic [ref=e1119]: 未归类/claude插件体系.md:218
+          - generic [ref=e1120]: "#### 方式 2: 斜杠命令 ``` /planner /code-reviewer /se"
+        - generic [ref=e1121] [cursor=pointer]:
+          - generic [ref=e1122]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:197
+          - generic [ref=e1123]: "### 进行持续改进和优化 异常处理与日志记录是一个持续改进的过程，应该定期审查和优化现有的"
+        - generic [ref=e1124] [cursor=pointer]:
+          - generic [ref=e1125]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:11
+          - generic [ref=e1126]: "## 1.1 Callbacks和Deferreds 在Python异步编程中，Callba"
+        - generic [ref=e1127] [cursor=pointer]:
+          - generic [ref=e1128]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:60
+          - generic [ref=e1129]: "### 1\\. 记录函数执行时间 ``` import time def timing_d"
+        - generic [ref=e1130] [cursor=pointer]:
+          - generic [ref=e1131]: misc/2018工作记录.md:128
+          - generic [ref=e1132]: "### 2018-03-22 1、为吴炬峰处理备品备件管理系统出库单导出功能，多于90天的问题"
+        - generic [ref=e1133] [cursor=pointer]:
+          - generic [ref=e1134]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:348
+          - generic [ref=e1135]: "### 24\\. sys.set\\_asyncgen\\_hooks - 设置异步生成器挂钩"
+        - generic [ref=e1136] [cursor=pointer]:
+          - generic [ref=e1137]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:337
+          - generic [ref=e1138]: "### 23\\. sys.set\\_coroutine\\_wrapper - 设置协程包装器"
+        - generic [ref=e1139] [cursor=pointer]:
+          - generic [ref=e1140]: misc/2018工作记录.md:569
+          - generic [ref=e1141]: "### 2018-08-02 1、给张园写材料 2、给待办已办工单菜单增加路径指示条功能 3、"
+        - generic [ref=e1142] [cursor=pointer]:
+          - generic [ref=e1143]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:185
+          - generic [ref=e1144]: "### 考虑国际化和本地化需求 对于面向全球用户的应用程序，应该考虑国际化和本地化需求，在日"
+        - generic [ref=e1145] [cursor=pointer]:
+          - generic [ref=e1146]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:88
+          - generic [ref=e1147]: "### 5\\. 数据库连接参数 在连接数据库时，需要提供一些参数以确保正确的连接。对于SQL"
+        - generic [ref=e1148] [cursor=pointer]:
+          - generic [ref=e1149]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:24
+          - generic [ref=e1150]: "### 2\\. 字典推导式 字典推导式用于创建字典，其语法结构为： ``` new_dic"
+        - generic [ref=e1151] [cursor=pointer]:
+          - generic [ref=e1152]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:5418
+          - generic [ref=e1153]: 175 Ufuncs Description divmod(x1, x2[, out1, ou
+        - generic [ref=e1154] [cursor=pointer]:
+          - generic [ref=e1155]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:428
+          - generic [ref=e1156]: "### 17\\. 数据库连接的安全性考虑 在连接数据库时，需要考虑安全性问题，特别是涉及到密"
+        - generic [ref=e1158] [cursor=pointer]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:5418
+        - generic [ref=e1159] [cursor=pointer]:
+          - generic [ref=e1160]: misc/2020工作记录.md:977
+          - generic [ref=e1161]: "### 2020-10-28（3） 1、上午安装spark，遇到了问题，python pip"
+        - generic [ref=e1162] [cursor=pointer]:
+          - generic [ref=e1163]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:92
+          - generic [ref=e1164]: "### 6\\. 条件表达式 推导式中的条件表达式允许根据条件选择不同的表达式。 **实例："
+        - generic [ref=e1165] [cursor=pointer]:
+          - generic [ref=e1166]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:143
+          - generic [ref=e1167]: "### 9\\. 推导式与函数结合 推导式可以与函数结合，进一步提高代码的简洁性和可读性。"
+        - generic [ref=e1168] [cursor=pointer]:
+          - generic [ref=e1169]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:306
+          - generic [ref=e1170]: "### 13.2 定时任务调度 在定时任务的开发中，我们可能需要根据特定的时间点执行某些操作"
+        - generic [ref=e1171] [cursor=pointer]:
+          - generic [ref=e1172]: misc/2018工作记录.md:704
+          - generic [ref=e1173]: "### 2018-09-18 1、早上4:30起床送梁斐回渥太华。之后返工。 2、上午写pyt"
+        - generic [ref=e1174] [cursor=pointer]:
+          - generic [ref=e1175]: 后端/pandas/Thinking in Pandas How to Use the Python Data Analysis Library the Right Way (Hannah Stepanek) (Z-Library).pdf:4041
+          - generic [ref=e1176]: 124 Listing 6-3. Equivalent of apply implement
+        - generic [ref=e1177] [cursor=pointer]:
+          - generic [ref=e1178]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:146
+          - generic [ref=e1179]: "### 10\\. 拓展阅读与学习资源 为了帮助读者更深入地学习和应用pdfplumber以及"
+        - generic [ref=e1180] [cursor=pointer]:
+          - generic [ref=e1181]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:279
+          - generic [ref=e1182]: "### 10\\. 参数验证装饰器 ``` def validate_params(*vali"
+        - generic [ref=e1183] [cursor=pointer]:
+          - generic [ref=e1184]: 后端/python/并发编程/多进程.md:19
+          - generic [ref=e1185]: "### 示例： 下面是一个使用 `multiprocessing.Process` 创建两个"
+        - generic [ref=e1186] [cursor=pointer]:
+          - generic [ref=e1187]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:343
+          - generic [ref=e1188]: "### 9.3 使用`json.JSONEncoder`自定义优化 通过继承`json.JS"
+        - generic [ref=e1189] [cursor=pointer]:
+          - generic [ref=e1190]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:41
+          - generic [ref=e1191]: "### 3\\. 集合推导式 集合推导式类似于列表推导式，但用于创建集合。其语法结构为： `"
+        - generic [ref=e1192] [cursor=pointer]:
+          - generic [ref=e1193]: 代码片段/python代码片段.md:4
+          - generic [ref=e1194]: "## 1. 扩展FastApi的BaseResponse ```python class"
+        - generic [ref=e1195] [cursor=pointer]:
+          - generic [ref=e1196]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:220
+          - generic [ref=e1197]: "### 14\\. 生成XML文件 除了解析，我们也可以使用`xmltodict`生成XML文"
+        - generic [ref=e1198] [cursor=pointer]:
+          - generic [ref=e1199]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:52
+          - generic [ref=e1200]: "### 4\\. 写入XML文件 接下来，我们将学习如何使用Python写入XML文件。我们将"
+        - generic [ref=e1201] [cursor=pointer]:
+          - generic [ref=e1202]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:30
+          - generic [ref=e1203]: "# 二、创建协程: CORD_CREATED 在Python的asyncio库中，创建协程的"
+        - generic [ref=e1205] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:1366
+        - generic [ref=e1206] [cursor=pointer]:
+          - generic [ref=e1207]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:169
+          - generic [ref=e1208]: "### 9\\. 验证码刷新 有些网站可能会提供刷新验证码的功能，为了应对这种情况，我们可以在识"
+        - generic [ref=e1209] [cursor=pointer]:
+          - generic [ref=e1210]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:80
+          - generic [ref=e1211]: "### 进阶应用：函数式编程在并行计算中的应用 除了在数据处理中的应用，函数式编程在并行计算领"
+        - generic [ref=e1212] [cursor=pointer]:
+          - generic [ref=e1213]: 后端/python/华为社区python入门/深入Python：sys模块的功能与应用详解-云社区-华为云.md:287
+          - generic [ref=e1214]: "### 19\\. sys.get\\_asyncgen\\_hooks - 异步生成器挂钩 `sy"
+        - generic [ref=e1215] [cursor=pointer]:
+          - generic [ref=e1216]: 后端/python/华为社区python入门/Python推导式：简洁、灵活、高效的代码利器-云社区-华为云.md:296
+          - generic [ref=e1217]: "### 18\\. 推导式的高级用法 推导式还支持一些高级的用法，如条件表达式的嵌套、多个for"
+        - generic [ref=e1218] [cursor=pointer]:
+          - generic [ref=e1219]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:234
+          - generic [ref=e1220]: "### 9.2 正则表达式查询 对于字符串的模糊查询，可以使用正则表达式： ``` res"
+        - generic [ref=e1221] [cursor=pointer]:
+          - generic [ref=e1222]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:14617
+          - generic [ref=e1223]: Python crash course The length of a string refer
+        - generic [ref=e1224] [cursor=pointer]:
+          - generic [ref=e1225]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:648
+          - generic [ref=e1226]: "### JavaScript First introduced in ES6, the `as"
+        - generic [ref=e1227] [cursor=pointer]:
+          - generic [ref=e1228]: AI/MCP/扣子空间系统提示词.md:29
+          - generic [ref=e1229]: "## 工具执行规则 - **使用中文文件名**：使用 file_write 工具的时候，需要为保"
+        - generic [ref=e1230] [cursor=pointer]:
+          - generic [ref=e1231]: 后端/python/华为社区python入门/深入探究 Python 装饰器：从基础到高级应用-云社区-华为云.md:35
+          - generic [ref=e1232]: "### 2\\. 带参数的装饰器 有时我们需要在装饰器中传递一些参数，可以通过在装饰器外再包一层"
+        - generic [ref=e1233] [cursor=pointer]:
+          - generic [ref=e1234]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:342
+          - generic [ref=e1235]: "### 14\\. 备份与恢复 定期备份数据库是保障数据安全的重要措施之一。备份可以通过数据库管"
+        - generic [ref=e1236] [cursor=pointer]:
+          - generic [ref=e1237]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:181
+          - generic [ref=e1238]: "### 定义清晰的日志级别策略 在设计日志记录系统时，应该定义清晰的日志级别策略，以确保日志信"
+        - generic [ref=e1239] [cursor=pointer]:
+          - generic [ref=e1240]: 后端/duckdb/DuckDB in Action.pdf:8824
+          - generic [ref=e1241]: 9.3 Summary Streamlit is a low-code environment
+        - generic [ref=e1242] [cursor=pointer]:
+          - generic [ref=e1243]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:14617
+          - generic [ref=e1244]: 347 appendix B Python crash course The pandas li
+        - generic [ref=e1245] [cursor=pointer]:
+          - generic [ref=e1246]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:226
+          - generic [ref=e1247]: "### 9.1 范围查询 通过使用 `$gt`、`$lt` 等操作符，可以进行范围查询： `"
+        - generic [ref=e1248] [cursor=pointer]:
+          - generic [ref=e1249]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:222
+          - generic [ref=e1250]: "### 16\\. 最佳实践：代码优化和异常处理 在实际项目中，为了保证代码的可维护性和稳定性，"
+        - generic [ref=e1251] [cursor=pointer]:
+          - generic [ref=e1252]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:27
+          - generic [ref=e1253]: "### 安装 Pyppeteer 的安装与 Playwright 相似。 Pyppeteer"
+        - generic [ref=e1254] [cursor=pointer]:
+          - generic [ref=e1255]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:740
+          - generic [ref=e1256]: "7.3.2 注册 Docker Hub 账号     run: python -m bu"
+        - generic [ref=e1257] [cursor=pointer]:
+          - generic [ref=e1258]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:553
+          - generic [ref=e1259]: "# v Arguments v num_pages=PAGES_"
+        - generic [ref=e1260] [cursor=pointer]:
+          - generic [ref=e1261]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:156
+          - generic [ref=e1262]: "### 使用数据库ORM简化数据操作 除了手动编写SQL语句或使用第三方库外，还可以使用数据库"
+        - generic [ref=e1263] [cursor=pointer]:
+          - generic [ref=e1264]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e1265]: array(\[\[ 0., 1.\], \[ 1., 0.\], \[ 0., 1.\],
+        - generic [ref=e1266] [cursor=pointer]:
+          - generic [ref=e1267]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:420
+          - generic [ref=e1268]: "### 11.1 JWT编码 ``` import json import jwt from"
+        - generic [ref=e1269] [cursor=pointer]:
+          - generic [ref=e1270]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:448
+          - generic [ref=e1271]: "### 17.1 安装 Motor 首先，使用pip安装Motor： ``` pip ins"
+        - generic [ref=e1272] [cursor=pointer]:
+          - generic [ref=e1273]: 后端/python/并发编程/python asyncio从入门到精通/2.核心知识点.md:28
+          - generic [ref=e1274]: "## 1.3 python2.5基于yield的协程支持 在Python2.5中，yield"
+        - generic [ref=e1275] [cursor=pointer]:
+          - generic [ref=e1276]: 后端/python/华为社区python入门/深入 Python 时间模块：从基础到实战-云社区-华为云.md:259
+          - generic [ref=e1277]: "### 11.3 使用生成器处理大量日期 当需要处理大量日期时，使用生成器可以有效地降低内存消"
+        - generic [ref=e1278] [cursor=pointer]:
+          - generic [ref=e1279]: 后端/python/华为社区python入门/深入Python JSON模块：基础操作到高级应用的全面指南-云社区-华为云.md:459
+          - generic [ref=e1280]: "### 12.1 异步JSON编码 ``` import json import asynci"
+        - generic [ref=e1281] [cursor=pointer]:
+          - generic [ref=e1282]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:12311
+          - generic [ref=e1283]: 261 Introducing the Timestamp object how to use
+        - generic [ref=e1284] [cursor=pointer]:
+          - generic [ref=e1285]: AI/MCP/扣子空间系统提示词.md:60
+          - generic [ref=e1286]: "## 数据计算和处理规则 - 从工具结果、用户上传的文件中分析和获取到数据后，整理数据内容，并以"
+        - generic [ref=e1287] [cursor=pointer]:
+          - generic [ref=e1288]: AI/LazyLLM/18. Agentic RAG - LazyLLM.pdf:1044
+          - generic [ref=e1289]: 18. Agentic RAG - LazyLLM file:///C:/Users/liang
+        - generic [ref=e1290] [cursor=pointer]:
+          - generic [ref=e1291]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:822
+          - generic [ref=e1292]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/D
+        - generic [ref=e1293] [cursor=pointer]:
+          - generic [ref=e1294]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:35
+          - generic [ref=e1295]: "### 2.2 连接数据库 使用PyMongo连接MongoDB数据库非常简单，以下是一个简单"
+        - generic [ref=e1296] [cursor=pointer]:
+          - generic [ref=e1297]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:591
+          - generic [ref=e1298]: 7.1 为什么要做制品 在 Python 项目开发过程中，除了编写代码，我们通常还需要将项目打包
+        - generic [ref=e1299] [cursor=pointer]:
+          - generic [ref=e1300]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:733
+          - generic [ref=e1301]: "### Ruby Similarly to Python, Ruby also has the"
+        - generic [ref=e1302] [cursor=pointer]:
+          - generic [ref=e1303]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:155
+          - generic [ref=e1304]: "### Building our deep learning web app [![](htt"
+        - generic [ref=e1305] [cursor=pointer]:
+          - generic [ref=e1306]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:16407
+          - generic [ref=e1307]: In [32] 3 + "5" -------------------------------
+        - generic [ref=e1308] [cursor=pointer]:
+          - generic [ref=e1309]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:407
+          - generic [ref=e1310]: "### 15.4 表单处理 Flask与MongoDB的结合不仅限于数据展示，还可以实现用户的"
+        - generic [ref=e1311] [cursor=pointer]:
+          - generic [ref=e1312]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:14617
+          - generic [ref=e1313]: 328 CHAPTER 14 Visualization Good news! It looks
+        - generic [ref=e1314] [cursor=pointer]:
+          - generic [ref=e1315]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+          - generic [ref=e1316]: "``` import duckdb products = duckdb.read_csv(\""
+        - generic [ref=e1317] [cursor=pointer]:
+          - generic [ref=e1318]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:7
+          - generic [ref=e1319]: "# 一、协程的几种状态详解 Python的asyncio协程的生命周期可以分为以下几种状态："
+        - generic [ref=e1320] [cursor=pointer]:
+          - generic [ref=e1321]: 后端/duckdb/DuckDB in Action.pdf:6823
+          - generic [ref=e1322]: 7.4 Summary MotherDuck is a serverless data anal
+        - generic [ref=e1323] [cursor=pointer]:
+          - generic [ref=e1324]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:299
+          - generic [ref=e1325]: 4.2 使用 pytest 编写测试 Pytest 是 Python 语言中最流行的测试框
+        - generic [ref=e1326] [cursor=pointer]:
+          - generic [ref=e1327]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:242
+          - generic [ref=e1328]: "### 9.3 聚合查询 利用聚合框架，可以进行更为复杂的数据分析和处理： ``` pip"
+        - generic [ref=e1329] [cursor=pointer]:
+          - generic [ref=e1330]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:236
+          - generic [ref=e1331]: "### 函数式编程的适用场景与优势 函数式编程的优势在于其清晰、简洁和高效的特性，使得它在许多"
+        - generic [ref=e1332] [cursor=pointer]:
+          - generic [ref=e1333]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:191
+          - generic [ref=e1334]: "### 13\\. 使用xmltodict进行简化处理 除了`xml.etree.Element"
+        - generic [ref=e1335] [cursor=pointer]:
+          - generic [ref=e1336]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:17026
+          - generic [ref=e1337]: 376 APPENDIX B Python crash course The split an
+        - generic [ref=e1338] [cursor=pointer]:
+          - generic [ref=e1339]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:237
+          - generic [ref=e1340]: "### 扩展自定义SQL语句生成器：支持插入、更新和删除操作 除了查询操作外，我们还可以扩展自"
+        - generic [ref=e1341] [cursor=pointer]:
+          - generic [ref=e1342]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:13
+          - generic [ref=e1343]: "### 2\\. 数据集 我们需要一个包含数字验证码图像的数据集来训练我们的模型。你可以在网上找"
+        - generic [ref=e1344] [cursor=pointer]:
+          - generic [ref=e1345]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:51
+          - generic [ref=e1346]: "### 锁的作用 锁是Python提供给我们能够自行操控线程切换的一种手段，使用锁可以让线程的"
+        - generic [ref=e1347] [cursor=pointer]:
+          - generic [ref=e1348]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:255
+          - generic [ref=e1349]: "### 10\\. 数据库连接池 在高并发的应用中，频繁地打开和关闭数据库连接会消耗大量资源。为"
+        - generic [ref=e1350] [cursor=pointer]:
+          - generic [ref=e1351]: AI/LazyLLM/2. 快速上手RAG - LazyLLM.pdf:532
+          - generic [ref=e1352]: 2. 快速上手RAG - LazyLLM file:///C:/Users/lianghao/D
+        - generic [ref=e1353] [cursor=pointer]:
+          - generic [ref=e1354]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:355
+          - generic [ref=e1355]: "### 15.1 安装 Flask 和 PyMongo 首先，使用pip安装Flask和PyM"
+        - generic [ref=e1356] [cursor=pointer]:
+          - generic [ref=e1357]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:467
+          - generic [ref=e1358]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/D
+        - generic [ref=e1359] [cursor=pointer]:
+          - generic [ref=e1360]: 后端/python/华为社区python入门/数据库/深入探索MongoDB与PyMongo：从基础操作到异步编程与Web应用整合-云社区-华为云.md:280
+          - generic [ref=e1361]: "### 10.2 索引管理 PyMongo提供了一些方法用于管理集合的索引： ``` in"
+        - generic [ref=e1362] [cursor=pointer]:
+          - generic [ref=e1363]: 后端/python/华为社区python入门/Python异常处理与日志记录构建稳健可靠的应用-云社区-华为云.md:158
+          - generic [ref=e1364]: "### 结合错误码（Error Codes） 在复杂的应用程序中，可以使用错误码来标识不同类型"
+        - generic [ref=e1365] [cursor=pointer]:
+          - generic [ref=e1366]: 后端/pandas/Pandas in Action (Boris Paskhover) (Z-Library).pdf:16540
+          - generic [ref=e1367]: In [51] last_name -----------------------------
+        - generic [ref=e1368] [cursor=pointer]:
+          - generic [ref=e1369]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:139
+          - generic [ref=e1370]: "### 9\\. 使用第三方库：lxml 虽然Python标准库中的`xml`模块提供了基本的X"
+        - generic [ref=e1371] [cursor=pointer]:
+          - generic [ref=e1372]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:107
+          - generic [ref=e1373]: "### 6\\. 数据库操作的异常处理 在实际应用中，数据库操作可能会出现各种异常情况，比如连接"
+        - generic [ref=e1374] [cursor=pointer]:
+          - generic [ref=e1375]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:7
+          - generic [ref=e1376]: "### 1\\. pdfplumber简介 pdfplumber是一个用于处理PDF文件的Pyt"
+        - generic [ref=e1377] [cursor=pointer]:
+          - generic [ref=e1378]: 后端/python/华为社区python入门/数据库/Python数据库编程全指南SQLite和MySQL实践-云社区-华为云.md:321
+          - generic [ref=e1379]: "### 13\\. 数据库迁移 在实际项目中，随着需求的变化，可能需要对数据库结构进行修改，这时"
+        - generic [ref=e1380] [cursor=pointer]:
+          - generic [ref=e1381]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:207
+          - generic [ref=e1382]: "### 12\\. 用户交互功能 为了增加用户交互的功能，我们可以添加一些用户界面元素，例如提示"
+        - generic [ref=e1383] [cursor=pointer]:
+          - generic [ref=e1384]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:11
+          - generic [ref=e1385]: "### 2\\. 安装pdfplumber 首先，确保你已经安装了Python。然后使用以下命令"
+        - generic [ref=e1386] [cursor=pointer]:
+          - generic [ref=e1387]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:153
+          - generic [ref=e1388]: "### 11\\. 探索其他PDF处理工具 pdfplumber是众多用于处理PDF的Pytho"
+        - generic [ref=e1389] [cursor=pointer]:
+          - generic [ref=e1390]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:56
+          - generic [ref=e1391]: "### 5\\. 测试模型 一旦模型训练完成，我们可以使用测试数据来评估模型的性能。对于每个测试"
+        - generic [ref=e1392] [cursor=pointer]:
+          - generic [ref=e1393]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:155
+          - generic [ref=e1394]: "### 8\\. 错误处理 在实际应用中，可能会遇到各种网络问题、元素定位失败或验证码识别错误等"
+        - generic [ref=e1395] [cursor=pointer]:
+          - generic [ref=e1396]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:219
+          - generic [ref=e1397]: "### 13\\. 自动化登录和错误处理 最后，我们可以将自动化登录和错误处理代码整合到一个函数"
+        - generic [ref=e1398] [cursor=pointer]:
+          - generic [ref=e1399]: 后端/python/并发编程/python asyncio从入门到精通/21.深入理解ContextVars.md:23
+          - generic [ref=e1400]: "# 二、上下文变量和线程局部变量的区别 Python中的上下文变量（由contextvars"
+        - generic [ref=e1401] [cursor=pointer]:
+          - generic [ref=e1402]: AI/LazyLLM/2. 快速上手RAG - LazyLLM.pdf:428
+          - generic [ref=e1403]: 2. 快速上手RAG - LazyLLM file:///C:/Users/lianghao/D
+        - generic [ref=e1404] [cursor=pointer]:
+          - generic [ref=e1405]: 后端/python/列表推导式.md:38
+          - generic [ref=e1406]: "## 词典推导 字典推导也称为字典推导式，它从键值表达式生成字典。 以下是字典推导的简单示例"
+        - generic [ref=e1407] [cursor=pointer]:
+          - generic [ref=e1408]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:33
+          - generic [ref=e1409]: "### 4\\. 模型训练 我们将使用简单的机器学习模型（如支持向量机）来训练我们的验证码识别系"
+        - generic [ref=e1410] [cursor=pointer]:
+          - generic [ref=e1411]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:116
+          - generic [ref=e1412]: "##### 2.1.4、安装vLLM ``` `pip install vllm pyth"
+        - generic [ref=e1413] [cursor=pointer]:
+          - generic [ref=e1414]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:7
+          - generic [ref=e1415]: "### 1\\. XML简介 XML是一种用于存储和传输数据的标记语言，具有自我描述性和可扩展性"
+        - generic [ref=e1416] [cursor=pointer]:
+          - generic [ref=e1417]: 后端/python/并发编程/python asyncio从入门到精通/21.深入理解ContextVars.md:76
+          - generic [ref=e1418]: "# 五、如何处理异步任务的共享和隔离? 在Python的异步编程中，我们可以使用context"
+        - generic [ref=e1419] [cursor=pointer]:
+          - generic [ref=e1420]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:270
+          - generic [ref=e1421]: "### 18\\. 整合XML处理到实际项目中 在实际项目中，XML处理通常不是独立的任务，而是"
+        - generic [ref=e1422] [cursor=pointer]:
+          - generic [ref=e1423]: 后端/duckdb/DuckDB in Action.pdf:8063
+          - generic [ref=e1424]: 8.5 Summary Data pipelines let us load and trans
+        - generic [ref=e1425] [cursor=pointer]:
+          - generic [ref=e1426]: 后端/python/华为社区python入门/Python中的XML技术探索：从基础操作到实际应用-云社区-华为云.md:388
+          - generic [ref=e1427]: "### 23\\. 安全性考虑 在实际项目中，为了确保XML-RPC服务的安全性，可以考虑以下措"
+        - generic [ref=e1428] [cursor=pointer]:
+          - generic [ref=e1429]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:17
+          - generic [ref=e1430]: "### 3\\. 图像预处理 在训练模型之前，我们需要对图像进行预处理。这包括将图像转换为灰度图"
+        - generic [ref=e1431] [cursor=pointer]:
+          - generic [ref=e1432]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:631
+          - generic [ref=e1433]: "##### 4.3.3、验证方法 ``` `systemctl status vllm-ap"
+        - generic [ref=e1434] [cursor=pointer]:
+          - generic [ref=e1435]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:114
+          - generic [ref=e1436]: "# 五、Async lterables 异步可迭代(Async lterable)的概念是Py"
+        - generic [ref=e1437] [cursor=pointer]:
+          - generic [ref=e1438]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:196
+          - generic [ref=e1439]: "### 11\\. 验证码识别准确性优化 为了进一步提高验证码识别的准确性，可以尝试以下方法："
+        - generic [ref=e1440] [cursor=pointer]:
+          - generic [ref=e1441]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:443
+          - generic [ref=e1442]: "#### (4). [包管理器](https://edu.csdn.net/cloud/sd_s"
+        - generic [ref=e1443] [cursor=pointer]:
+          - generic [ref=e1444]: 开发工具/claude/CLI管道对话.md:178
+          - generic [ref=e1445]: "### 总结 1. 核心方式是通过**进程调用 + 管道通信**，替代人工终端操作，实现与本机"
+        - generic [ref=e1446] [cursor=pointer]:
+          - generic [ref=e1447]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:795
+          - generic [ref=e1448]: "#### (3). 转换模型 > 注意：某些模型架构需要使用特定的转换脚本。例如，Qwen 模"
+        - generic [ref=e1450] [cursor=pointer]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:280
+        - generic [ref=e1451] [cursor=pointer]:
+          - generic [ref=e1452]: 项目/AI日程助手/README.md:69
+          - generic [ref=e1453]: "### 6. 执行后台测试任务 launch 3-audit_test ```python"
+        - generic [ref=e1454] [cursor=pointer]:
+          - generic [ref=e1455]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:729
+          - generic [ref=e1456]: "#### (1). 设置 首先，克隆 `ollama/ollama` 仓库： ``` `gi"
+        - generic [ref=e1457] [cursor=pointer]:
+          - generic [ref=e1458]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:42
+          - generic [ref=e1459]: "# 三、asyncio.Queue asyncio.Queue是Python中asyncio模"
+        - generic [ref=e1460] [cursor=pointer]:
+          - generic [ref=e1461]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:15
+          - generic [ref=e1462]: "# 一、协程的概念 ![](https://p3.toutiaoimg.com/large/t"
+        - generic [ref=e1463] [cursor=pointer]:
+          - generic [ref=e1464]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:138
+          - generic [ref=e1465]: "### 使用参数化查询防止SQL注入 在生成SQL语句时，我们应该注意防止SQL注入攻击，这是"
+        - generic [ref=e1466] [cursor=pointer]:
+          - generic [ref=e1467]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:5
+          - generic [ref=e1468]: "### 异常处理 在 Python 中，使用 try-except 语句来捕获异常。try 代"
+        - generic [ref=e1469] [cursor=pointer]:
+          - generic [ref=e1470]: 后端/python/华为社区python入门/数据库/Python与SQL的完美结合—SQL语句简化数据管理-云社区-华为云.md:194
+          - generic [ref=e1471]: "### 自定义SQL语句生成器 除了使用现有的库和工具外，我们还可以根据项目需求自定义SQL语"
+        - generic [ref=e1472] [cursor=pointer]:
+          - generic [ref=e1473]: AI/MCP/扣子空间系统提示词.md:103
+          - generic [ref=e1474]: "# 限制 1. **结果无效时**：如执行失败、未找到搜索结果等，不调用 file_write"
+        - generic [ref=e1475] [cursor=pointer]:
+          - generic [ref=e1476]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:787
+          - generic [ref=e1477]: "1. 拉取镜像 # 1. 选择基础镜像 FROM python:3.10 # 2. 设置环境变量"
+        - generic [ref=e1478] [cursor=pointer]:
+          - generic [ref=e1479]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:67
+          - generic [ref=e1480]: "# set work directory WORKDIR /app"
+        - generic [ref=e1481] [cursor=pointer]:
+          - generic [ref=e1482]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:292
+          - generic [ref=e1483]: "### 异步与多进程 在一些特定的场景中，异步编程可能比多进程更为适用。异步编程通过单线程实现"
+        - generic [ref=e1484] [cursor=pointer]:
+          - generic [ref=e1485]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:6
+          - generic [ref=e1486]: "### 文件的概念 文件是存储在计算机上的数据集合，可以包含文本、图像、音频等各种信息。在Py"
+        - generic [ref=e1487] [cursor=pointer]:
+          - generic [ref=e1488]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:54
+          - generic [ref=e1489]: "### 应用实例：函数式编程在数据处理中的应用 函数式编程在数据处理领域有着广泛的应用。让我们"
+        - generic [ref=e1490] [cursor=pointer]:
+          - generic [ref=e1491]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:5
+          - generic [ref=e1492]: "### 异常处理 在 Python 中，使用 try-except 语句来捕获异常。try 代"
+        - generic [ref=e1493] [cursor=pointer]:
+          - generic [ref=e1494]: 后端/python/并发编程/python asyncio从入门到精通/4.哪些对象是可以await的.md:38
+          - generic [ref=e1495]: "# 二、迭代器协程 作为对比我们用同样的操作来对比下早起的函数迭代器对象： ```python"
+        - generic [ref=e1496] [cursor=pointer]:
+          - generic [ref=e1497]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:17
+          - generic [ref=e1498]: "### 打开文件的基本语法 在Python中，使用`open()`函数来打开文件。`open("
+        - generic [ref=e1499] [cursor=pointer]:
+          - generic [ref=e1500]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:46
+          - generic [ref=e1501]: "# 二、协程的原理 ![](https://p3.toutiaoimg.com/large/t"
+        - generic [ref=e1502] [cursor=pointer]:
+          - generic [ref=e1503]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:53
+          - generic [ref=e1504]: "#### 快速上手 接下来我们测试基本的页面渲染操作，这里我们选用的网址为：[https://"
+        - generic [ref=e1505] [cursor=pointer]:
+          - generic [ref=e1506]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:70
+          - generic [ref=e1507]: "# set env variables ENV PYTHONDONTWRITEBYTECODE"
+        - generic [ref=e1508] [cursor=pointer]:
+          - generic [ref=e1509]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:5
+          - generic [ref=e1510]: "### 文件读取 在Python中，您可以使用`open()`函数打开文件进行读取操作。该函数"
+        - generic [ref=e1511] [cursor=pointer]:
+          - generic [ref=e1512]: 后端/python/列表推导式.md:29
+          - generic [ref=e1513]: "## 嵌套列表推导式 列表推导还支持多个for子句： ``` >>> [[i， j] fo"
+        - generic [ref=e1514] [cursor=pointer]:
+          - generic [ref=e1515]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:3
+          - generic [ref=e1516]: "### 迭代器（Iterators） 在Python中，迭代器是用于遍历集合中的元素的对象。它"
+        - generic [ref=e1517] [cursor=pointer]:
+          - generic [ref=e1518]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:445
+          - generic [ref=e1519]: "# listen on port 80 [entryPoints] [entryPoints"
+        - generic [ref=e1520] [cursor=pointer]:
+          - generic [ref=e1521]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:7
+          - generic [ref=e1522]: "### 1.Pyppeteer 介绍 Puppeteer 是 Google 基于 Node.j"
+        - generic [ref=e1523] [cursor=pointer]:
+          - generic [ref=e1524]: 后端/pandas/THE PANDAS HANDBOOK 100 Essential Tips and Tricks for Beginners (Adetola Abiodun) (Z-Library).pdf:604
+          - generic [ref=e1525]: 28. Display a Violin Plot using Seaborn. The sn
+        - generic [ref=e1526] [cursor=pointer]:
+          - generic [ref=e1527]: 后端/pandas/THE PANDAS HANDBOOK 100 Essential Tips and Tricks for Beginners (Adetola Abiodun) (Z-Library).pdf:383
+          - generic [ref=e1528]: 9. Convert a Pandas DataFrame into SQL. One of
+        - generic [ref=e1529] [cursor=pointer]:
+          - generic [ref=e1530]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:74
+          - generic [ref=e1531]: "# install dependencies COPY requirements.txt ."
+        - generic [ref=e1532] [cursor=pointer]:
+          - generic [ref=e1533]: AI/提示词/awesome-chatgpt-prompts.md:951
+          - generic [ref=e1534]: "## Act as an Instructor in a School Contributed"
+        - generic [ref=e1535] [cursor=pointer]:
+          - generic [ref=e1536]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:314
+          - generic [ref=e1537]: "### pickle的优点和适用场景 * **Python对象支持全面**：pickle可"
+        - generic [ref=e1538] [cursor=pointer]:
+          - generic [ref=e1539]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:499
+          - generic [ref=e1540]: "#### Arguments --- num_pages: int - Number of"
+        - generic [ref=e1541] [cursor=pointer]:
+          - generic [ref=e1542]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:450
+          - generic [ref=e1543]: "# Traefik dashboard over http [api] insecure ="
+        - generic [ref=e1544] [cursor=pointer]:
+          - generic [ref=e1545]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:66
+          - generic [ref=e1546]: "# 三、asyncio的事件循环框架 ![](https://p3.toutiaoimg.co"
+        - generic [ref=e1547] [cursor=pointer]:
+          - generic [ref=e1548]: 后端/python/华为社区python入门/Python中的函数式编程探究与实践-云社区-华为云.md:107
+          - generic [ref=e1549]: "### 深入探讨：函数式编程中的不可变性与纯函数 除了Lambda表达式和函数式工具外，函数式"
+        - generic [ref=e1550] [cursor=pointer]:
+          - generic [ref=e1551]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:16
+          - generic [ref=e1552]: "### 文件写入 要向文件中写入内容，您可以使用`open()`函数以写入模式打开文件，并使用"
+        - generic [ref=e1553] [cursor=pointer]:
+          - generic [ref=e1554]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:125
+          - generic [ref=e1555]: "### 装饰器链 装饰器可以链式调用，通过这种方式，可以将多个装饰器组合起来，实现更复杂的功能"
+        - generic [ref=e1556] [cursor=pointer]:
+          - generic [ref=e1557]: 后端/python/并发编程/多进程.md:221
+          - generic [ref=e1558]: "# 五、请写一个python模块foo，可在单独的进程中启动并通过进程间通信的队列来监听，再写一"
+        - generic [ref=e1559] [cursor=pointer]:
+          - generic [ref=e1560]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:368
+          - generic [ref=e1561]: "### Further Reading If you want to learn more a"
+        - generic [ref=e1562] [cursor=pointer]:
+          - generic [ref=e1563]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:257
+          - generic [ref=e1564]: "### 创建目录 使用`os`模块的`mkdir()`方法可以创建新的目录。 ``` imp"
+        - generic [ref=e1565] [cursor=pointer]:
+          - generic [ref=e1566]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:7
+          - generic [ref=e1567]: "### 1\\. 多线程基础概念 在开始之前，让我们先了解一些多线程编程的基本概念： *"
+        - generic [ref=e1568] [cursor=pointer]:
+          - generic [ref=e1569]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:119
+          - generic [ref=e1570]: "### 日志配置文件 在较大的项目中，可能需要更加灵活和复杂的日志配置。为了避免在代码中硬编码"
+        - generic [ref=e1571] [cursor=pointer]:
+          - generic [ref=e1572]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:71
+          - generic [ref=e1573]: "### 代码解析 * `Pool`类：进程池的创建和管理类，通过指定进程数量，可以实现并行"
+        - generic [ref=e1574] [cursor=pointer]:
+          - generic [ref=e1575]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:75
+          - generic [ref=e1576]: "#### 3\\. 添加异常堆栈信息 可以通过设置 `exc_info` 参数为 `True`"
+        - generic [ref=e1577] [cursor=pointer]:
+          - generic [ref=e1578]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:65
+          - generic [ref=e1579]: "#### 2\\. 指定日志格式 可以通过配置 `format` 参数来指定日志的格式，以便更清"
+        - generic [ref=e1580] [cursor=pointer]:
+          - generic [ref=e1581]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:189
+          - generic [ref=e1582]: "### 装饰器的实际应用：性能分析 装饰器还常用于实现性能分析，通过记录函数的执行时间来帮助开"
+        - generic [ref=e1583] [cursor=pointer]:
+          - generic [ref=e1584]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:55
+          - generic [ref=e1585]: "#### 1\\. 添加时间戳 可以通过配置 `format` 参数来添加时间戳到日志记录中，以"
+        - generic [ref=e1586] [cursor=pointer]:
+          - generic [ref=e1587]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:75
+          - generic [ref=e1588]: "#### 3\\. 添加异常堆栈信息 可以通过设置 `exc_info` 参数为 `True`"
+        - generic [ref=e1589] [cursor=pointer]:
+          - generic [ref=e1590]: 后端/python/Python中的异常处理与日志记录最佳实践-云社区-华为云.md:65
+          - generic [ref=e1591]: "#### 2\\. 指定日志格式 可以通过配置 `format` 参数来指定日志的格式，以便更清"
+        - generic [ref=e1592] [cursor=pointer]:
+          - generic [ref=e1593]: 后端/python/并发编程/python asyncio从入门到精通/5.协程的生命周期.md:87
+          - generic [ref=e1594]: "# 四、协程挂起与运行:CORORUNNING&COROSUSPENDED * CORO_RU"
+        - generic [ref=e1595] [cursor=pointer]:
+          - generic [ref=e1596]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:81
+          - generic [ref=e1597]: "### 逐行读取文件 如果文件很大，逐行读取更为高效。使用`readline()`方法可以逐行"
+        - generic [ref=e1598] [cursor=pointer]:
+          - generic [ref=e1599]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:371
+          - generic [ref=e1600]: "# can be acquired:"
+        - generic [ref=e1601] [cursor=pointer]:
+          - generic [ref=e1602]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:365
+          - generic [ref=e1603]: "# for 'autogenerate' support"
+        - generic [ref=e1604] [cursor=pointer]:
+          - generic [ref=e1605]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:34
+          - generic [ref=e1606]: "### 关闭文件 使用完文件后，应该及时关闭以释放系统资源。 ``` file.close("
+        - generic [ref=e1607] [cursor=pointer]:
+          - generic [ref=e1608]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:6
+          - generic [ref=e1609]: "### 1.1 os模块简介 `os`模块是Python标准库中的一部分，提供了一种与操作系统"
+        - generic [ref=e1610] [cursor=pointer]:
+          - generic [ref=e1611]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:135
+          - generic [ref=e1612]: "#### 写入多行 如果需要写入多行内容，可以使用`writelines()`方法。该方法接受"
+        - generic [ref=e1613] [cursor=pointer]:
+          - generic [ref=e1614]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:258
+          - generic [ref=e1615]: "### 使用上下文管理器 在进行文件操作时，最好使用`with`语句来自动管理文件的打开和关闭"
+        - generic [ref=e1616] [cursor=pointer]:
+          - generic [ref=e1617]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:190
+          - generic [ref=e1618]: "### 使用`open()`函数作为上下文管理器 Python的`open()`函数本身就是一"
+        - generic [ref=e1619] [cursor=pointer]:
+          - generic [ref=e1620]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:287
+          - generic [ref=e1621]: "### 遍历目录内容 使用`os`模块的`listdir()`方法可以获取目录中的文件和子目录"
+        - generic [ref=e1622] [cursor=pointer]:
+          - generic [ref=e1623]: 项目/资源变现/爬虫/python爬虫教程系列.md:13
+          - generic [ref=e1624]: "### License [Open in github.dev](https://github"
+        - generic [ref=e1625] [cursor=pointer]:
+          - generic [ref=e1626]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:167
+          - generic [ref=e1627]: "#### 等待 > waitForSelector ：等待符合条件的节点加载完成 > > w"
+        - generic [ref=e1628] [cursor=pointer]:
+          - generic [ref=e1629]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:366
+          - generic [ref=e1630]: "# from myapp import mymodel"
+        - generic [ref=e1631] [cursor=pointer]:
+          - generic [ref=e1632]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:448
+          - generic [ref=e1633]: "# ### end Alembic commands ### def downgrade():"
+        - generic [ref=e1634] [cursor=pointer]:
+          - generic [ref=e1635]: AI/LazyLLM/3. Lazy玩转LLM - LazyLLM.pdf:46
+          - generic [ref=e1636]: 3. Lazy玩转LLM - LazyLLM file:///C:/Users/lianghao
+        - generic [ref=e1637] [cursor=pointer]:
+          - generic [ref=e1638]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:19
+          - generic [ref=e1639]: "#### 步骤： 1. 读取视频文件； 2. 逐帧处理视频，计算相邻帧之间的差异； 3."
+        - generic [ref=e1640] [cursor=pointer]:
+          - generic [ref=e1641]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:466
+          - generic [ref=e1642]: "##### 2.3.1、流式调用 ``` `from openai import OpenAI"
+        - generic [ref=e1643] [cursor=pointer]:
+          - generic [ref=e1644]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:280
+          - generic [ref=e1645]: "### 视频监控 在视频监控系统中，摄像头通常会被安装在固定位置或者移动平台上，但是受到环境因"
+        - generic [ref=e1646] [cursor=pointer]:
+          - generic [ref=e1647]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:343
+          - generic [ref=e1648]: "### 19\\. 持续学习与实践 多线程编程是一个广阔而复杂的领域，本文只是为你提供了一个入门"
+        - generic [ref=e1649] [cursor=pointer]:
+          - generic [ref=e1650]: 开发工具/claude/CLI管道对话.md:13
+          - generic [ref=e1651]: "### 三、完整实现代码 ```python import subprocess import"
+        - generic [ref=e1652] [cursor=pointer]:
+          - generic [ref=e1653]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:414
+          - generic [ref=e1654]: "# ### end Alembic commands ### def downgrade()"
+        - generic [ref=e1655] [cursor=pointer]:
+          - generic [ref=e1656]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:20
+          - generic [ref=e1657]: "#### 1.2.1 文件和目录操作 * `os.getcwd()`: 获取当前工作目录。"
+        - generic [ref=e1658] [cursor=pointer]:
+          - generic [ref=e1659]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:43
+          - generic [ref=e1660]: "### 写入文件内容 ``` with open('example.txt', 'w') as"
+        - generic [ref=e1661] [cursor=pointer]:
+          - generic [ref=e1662]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:235
+          - generic [ref=e1663]: "### 跨平台兼容性 `multiprocessing`模块在大多数平台上都能正常运行，但在一"
+        - generic [ref=e1664] [cursor=pointer]:
+          - generic [ref=e1665]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:34
+          - generic [ref=e1666]: "### 读取文件内容 ``` with open('example.txt', 'r') as"
+        - generic [ref=e1667] [cursor=pointer]:
+          - generic [ref=e1668]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:290
+          - generic [ref=e1669]: "### 计算资源需求 一些视频去抖动算法需要大量的计算资源，特别是针对高分辨率或高帧率的视频。"
+        - generic [ref=e1670] [cursor=pointer]:
+          - generic [ref=e1671]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:84
+          - generic [ref=e1672]: "#### 1\\. 队列（Queue） 队列是多进程之间安全地传递数据的一种方式。以下是一个简单"
+        - generic [ref=e1673] [cursor=pointer]:
+          - generic [ref=e1674]: 后端/python/华为社区python入门/文件/Python文件操作大揭秘：从基础到高级技术全方位解析-云社区-华为云.md:10
+          - generic [ref=e1675]: "### 文件路径 文件路径是文件在计算机中的位置表示。在不同的操作系统中，文件路径的表示方式可"
+        - generic [ref=e1676] [cursor=pointer]:
+          - generic [ref=e1677]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:284
+          - generic [ref=e1678]: "### 摄像头防抖设备 一些摄像头防抖设备也可以使用视频去抖动技术来实现。这些设备通常会通过传"
+        - generic [ref=e1679] [cursor=pointer]:
+          - generic [ref=e1680]: 项目/资源变现/爬虫/python爬虫教程系列.md:705
+          - generic [ref=e1681]: "### Watchers"
+        - generic [ref=e1682] [cursor=pointer]:
+          - generic [ref=e1683]: 项目/资源变现/爬虫/python爬虫教程系列.md:701
+          - generic [ref=e1684]: "### License"
+        - generic [ref=e1685] [cursor=pointer]:
+          - generic [ref=e1686]: 项目/资源变现/爬虫/python爬虫教程系列.md:703
+          - generic [ref=e1687]: "### Stars"
+        - generic [ref=e1688] [cursor=pointer]:
+          - generic [ref=e1689]: 项目/资源变现/爬虫/python爬虫教程系列.md:707
+          - generic [ref=e1690]: "### Forks"
+        - generic [ref=e1691] [cursor=pointer]:
+          - generic [ref=e1692]: 项目/资源变现/爬虫/python爬虫教程系列.md:697
+          - generic [ref=e1693]: "### Topics"
+        - generic [ref=e1694] [cursor=pointer]:
+          - generic [ref=e1695]: 项目/资源变现/爬虫/python爬虫教程系列.md:699
+          - generic [ref=e1696]: "### Resources"
+        - generic [ref=e1697] [cursor=pointer]:
+          - generic [ref=e1698]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:41
+          - generic [ref=e1699]: "### 2.1 获取当前工作目录并改变工作目录 ``` import os current_d"
+        - generic [ref=e1700] [cursor=pointer]:
+          - generic [ref=e1701]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:122
+          - generic [ref=e1702]: "### 7\\. 多线程的适用场景 多线程适用于处理I/O密集型任务，如网络请求、文件读写等。在这些"
+        - generic [ref=e1703] [cursor=pointer]:
+          - generic [ref=e1704]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:170
+          - generic [ref=e1705]: "### 7.1 获取环境变量 通过`os.environ`字典，我们能够轻松获取系统的环境变量。"
+        - generic [ref=e1706] [cursor=pointer]:
+          - generic [ref=e1707]: AI/资源/chatgpt-on-wechat.md:194
+          - generic [ref=e1708]: "### 1.本地运行 如果是开发机 **本地运行**，直接在项目根目录下执行： ```bash"
+        - generic [ref=e1709] [cursor=pointer]:
+          - generic [ref=e1710]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:366
+          - generic [ref=e1711]: "### 生成器表达式的简洁性 除了常规的生成器外，Python还引入了生成器表达式，提供了一种更为"
+        - generic [ref=e1712] [cursor=pointer]:
+          - generic [ref=e1713]: 开发工具/claude/CLI管道对话.md:192
+          - generic [ref=e1714]: "#### 1. `claude-code-web`（专为 Claude Code CLI 设计） 这"
+        - generic [ref=e1715] [cursor=pointer]:
+          - generic [ref=e1716]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:276
+          - generic [ref=e1717]: "### 无人机航拍 无人机航拍视频通常受到风力和飞行姿态变化的影响，导致画面抖动。通过视频去抖动技"
+        - generic [ref=e1718] [cursor=pointer]:
+          - generic [ref=e1719]: AI/资源/codefuse_chatbot.md:371
+          - generic [ref=e1720]: "### 平台与模型兼容 随着大型语言模型（LLM）的出现，我们见证了问题解决方式的变革，比如智能客"
+        - generic [ref=e1721] [cursor=pointer]:
+          - generic [ref=e1722]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:368
+          - generic [ref=e1723]: "### 并行和分布式处理 利用多线程、多进程或者分布式计算技术，可以加速视频去抖动算法的处理速度，"
+        - generic [ref=e1724] [cursor=pointer]:
+          - generic [ref=e1725]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:356
+          - generic [ref=e1726]: "### 实时处理需求 在某些应用中，需要对实时生成的视频进行即时的去抖动处理。这对计算资源和算法效"
+        - generic [ref=e1727] [cursor=pointer]:
+          - generic [ref=e1728]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:99
+          - generic [ref=e1729]: "# 四、协程的生命周期 ![](../../../pic/图2024-02-14-20-38-2"
+        - generic [ref=e1730] [cursor=pointer]:
+          - generic [ref=e1731]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:364
+          - generic [ref=e1732]: "# add your model's MetaData object here"
+        - generic [ref=e1733] [cursor=pointer]:
+          - generic [ref=e1734]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:264
+          - generic [ref=e1735]: "#### 从JSON格式反序列化数据 ``` import json with open('da"
+        - generic [ref=e1736] [cursor=pointer]:
+          - generic [ref=e1737]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:332
+          - generic [ref=e1738]: "### 18\\. 探索其他并发模型 虽然多线程是一种常用的并发编程模型，但并不是唯一的选择。Pyt"
+        - generic [ref=e1739] [cursor=pointer]:
+          - generic [ref=e1740]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:430
+          - generic [ref=e1741]: "### 高性能硬件支持 利用高性能的硬件设备，如GPU加速、专用的视频处理芯片等，可以提高视频去抖"
+        - generic [ref=e1742] [cursor=pointer]:
+          - generic [ref=e1743]: 后端/python/华为社区python入门/python视频处理的原理、实现与挑战-云社区-华为云.md:294
+          - generic [ref=e1744]: "### 复杂场景处理 在复杂的场景中，如背景变化剧烈、运动速度快的情况下，传统的视频去抖动算法可能"
+        - generic [ref=e1745] [cursor=pointer]:
+          - generic [ref=e1746]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:123
+          - generic [ref=e1747]: "#### 2\\. 共享内存（Value、Array） 有时候我们需要在多个进程之间共享数据，`mu"
+        - generic [ref=e1748] [cursor=pointer]:
+          - generic [ref=e1749]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:34
+          - generic [ref=e1750]: "#### 1.2.3 系统命令执行 * `os.system(command)`: 在系统 s"
+        - generic [ref=e1751] [cursor=pointer]:
+          - generic [ref=e1752]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:249
+          - generic [ref=e1753]: "#### 数据序列化为JSON格式 ``` import json data = { '"
+        - generic [ref=e1754] [cursor=pointer]:
+          - generic [ref=e1755]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:278
+          - generic [ref=e1756]: "#### 数据序列化为pickle格式 ``` import pickle data = {"
+        - generic [ref=e1757] [cursor=pointer]:
+          - generic [ref=e1758]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:182
+          - generic [ref=e1759]: "#### 1\\. 进程池的重用 进程池（`Pool`）的创建和销毁是有开销的，为了避免频繁创建进程"
+        - generic [ref=e1760] [cursor=pointer]:
+          - generic [ref=e1761]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:190
+          - generic [ref=e1762]: "### 使用上下文管理器 在进行文件操作时，最好使用`with`语句来自动管理文件的打开和关闭，以"
+        - generic [ref=e1763] [cursor=pointer]:
+          - generic [ref=e1764]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:122
+          - generic [ref=e1765]: "### 使用上下文管理器 在进行文件操作时，最好使用`with`语句来自动管理文件的打开和关闭，以"
+        - generic [ref=e1766] [cursor=pointer]:
+          - generic [ref=e1767]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:53
+          - generic [ref=e1768]: "### 装饰器（Decorators） 装饰器是一种用于修改函数或方法行为的工具，它允许在函数执行"
+        - generic [ref=e1769] [cursor=pointer]:
+          - generic [ref=e1770]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:36
+          - generic [ref=e1771]: "### 文件关闭 在完成对文件的操作后，应该及时关闭文件，以释放系统资源。 ``` file."
+        - generic [ref=e1772] [cursor=pointer]:
+          - generic [ref=e1773]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:329
+          - generic [ref=e1774]: 2. 示例 tests/test_server.py     from my_project
+        - generic [ref=e1775] [cursor=pointer]:
+          - generic [ref=e1776]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:355
+          - generic [ref=e1777]: "# this is the Alembic Config object, which provide"
+        - generic [ref=e1778] [cursor=pointer]:
+          - generic [ref=e1779]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:457
+          - generic [ref=e1780]: "### 15.3 使用`pathlib`管理时间戳 在`pathlib`模块中，`Path`对象提"
+        - generic [ref=e1781] [cursor=pointer]:
+          - generic [ref=e1782]: 未归类/claude插件体系.md:239
+          - generic [ref=e1783]: "### 当前项目可用的 Agents"
+        - generic [ref=e1784] [cursor=pointer]:
+          - generic [ref=e1785]: AI/LazyLLM/3. Lazy玩转LLM - LazyLLM.pdf:111
+          - generic [ref=e1786]: 3. Lazy玩转LLM - LazyLLM file:///C:/Users/lianghao/Do
+        - generic [ref=e1787] [cursor=pointer]:
+          - generic [ref=e1788]: AI/资源/codefuse_chatbot.md:5
+          - generic [ref=e1789]: "# <p align=\"center\">CodeFuse-ChatBot: Development b"
+        - generic [ref=e1790] [cursor=pointer]:
+          - generic [ref=e1791]: AI/资源/langchain-chatchat.md:69
+          - generic [ref=e1792]: "## 快速上手"
+        - generic [ref=e1793] [cursor=pointer]:
+          - generic [ref=e1794]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:455
+          - generic [ref=e1795]: "### 1\\. 使用方法"
+        - generic [ref=e1796] [cursor=pointer]:
+          - generic [ref=e1797]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:20
+          - generic [ref=e1798]: "#### 2.1、步骤一：**系统环境准备**"
+        - generic [ref=e1799] [cursor=pointer]:
+          - generic [ref=e1800]: AI/提示词/awesome-chatgpt-prompts.md:87
+          - generic [ref=e1801]: "# Prompts"
+        - generic [ref=e1802] [cursor=pointer]:
+          - generic [ref=e1803]: AI/MCP/扣子空间系统提示词.md:46
+          - generic [ref=e1804]: "## 文件处理规则"
+        - generic [ref=e1806] [cursor=pointer]: 后端/大数据/Polars、DuckDB、Pandas、Modin、Ponder、Fugue、Daft — 哪一个是最好的数据框架和 SQL 工具？ _凯斯特拉 --- Polars, DuckDB, Pandas, Modin, Ponder, Fugue, Daft — which one is the best dataframe and SQL tool_ _ Kestra.md:1
+        - generic [ref=e1807] [cursor=pointer]:
+          - generic [ref=e1808]: AI/资源/chatgpt-on-wechat.md:61
+          - generic [ref=e1809]: "## 准备"
+        - generic [ref=e1810] [cursor=pointer]:
+          - generic [ref=e1811]: 后端/python/华为社区python入门/并发/Python并发编程探秘：多线程与异步编程的深入解析-云社区-华为云.md:152
+          - generic [ref=e1812]: "### 10\\. 多线程的注意事项 在进行多线程编程时，有一些常见的注意事项需要特别关注： * *"
+        - generic [ref=e1813] [cursor=pointer]:
+          - generic [ref=e1814]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:276
+          - generic [ref=e1815]: "### 装饰器在Web框架中的应用 在Web开发中，装饰器也经常用于实现路由、身份验证等功能。以下是一个"
+        - generic [ref=e1816] [cursor=pointer]:
+          - generic [ref=e1817]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:336
+          - generic [ref=e1818]: "### 子进程的异常处理 当子进程发生异常时，可以通过`Process`的`exitcode`属性获取其"
+        - generic [ref=e1819] [cursor=pointer]:
+          - generic [ref=e1820]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:367
+          - generic [ref=e1821]: "# target_metadata = mymodel.Base.metadata target_meta"
+        - generic [ref=e1822] [cursor=pointer]:
+          - generic [ref=e1823]: 后端/python/华为社区python入门/文件/深入探索Python文件操作与IO从基础到高级技巧-云社区-华为云.md:320
+          - generic [ref=e1824]: "### 如何选择 * **数据交换或存储**：如果需要与其他语言交换数据或存储在外部文件中，建议使用"
+        - generic [ref=e1825] [cursor=pointer]:
+          - generic [ref=e1826]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:26
+          - generic [ref=e1827]: "#### 1.2.2 路径处理 * `os.path.join(path, *paths)`: 将多"
+        - generic [ref=e1828] [cursor=pointer]:
+          - generic [ref=e1829]: 后端/python/并发编程/多线程.md:75
+          - generic [ref=e1830]: "# 六、可重入锁（threading.RLock） `threading.RLock()` 在 Pyth"
+        - generic [ref=e1831] [cursor=pointer]:
+          - generic [ref=e1832]: 后端/python/华为社区python入门/并发/深入多进程：Python中的Multiprocessing模块实战与优化-云社区-华为云.md:200
+          - generic [ref=e1833]: "#### 2\\. 避免过多的进程创建 尽管多进程可以提高程序的并行性，但过多的进程创建也会导致系统资源的"
+        - generic [ref=e1834] [cursor=pointer]:
+          - generic [ref=e1835]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:400
+          - generic [ref=e1836]: "# revision identifiers, used by Alembic. revision = '"
+        - generic [ref=e1837] [cursor=pointer]:
+          - generic [ref=e1838]: 后端/python/Python文件操作大全从基础到高级的全面指南-云社区-华为云.md:88
+          - generic [ref=e1839]: "#### 使用`shutil`模块进行文件操作 `shutil`模块提供了更高级的文件操作功能，如复制文"
+        - generic [ref=e1840] [cursor=pointer]:
+          - generic [ref=e1841]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:185
+          - generic [ref=e1842]: "### 7.2 进程管理 `os`模块也提供了一些基本的进程管理功能，如`os.spawn*`系列函数。"
+        - generic [ref=e1843] [cursor=pointer]:
+          - generic [ref=e1844]: AI/MCP/扣子空间系统提示词.md:13
+          - generic [ref=e1845]: "# 任务执行工作流 1. **理解任务**：使用 sequentialthinking 工具（该工具用于分"
+        - generic [ref=e1846] [cursor=pointer]:
+          - generic [ref=e1847]: 后端/python/并发编程/多进程.md:108
+          - generic [ref=e1848]: "# 三、asyncio.create_subprocess_exec() `asyncio.creat"
+        - generic [ref=e1849] [cursor=pointer]:
+          - generic [ref=e1850]: 后端/pandas/THE PANDAS HANDBOOK 100 Essential Tips and Tricks for Beginners (Adetola Abiodun) (Z-Library).pdf:1390
+          - generic [ref=e1851]: "91. Pandas.melt(): Reshape a wide DataFrame to tidy D"
+        - generic [ref=e1852] [cursor=pointer]:
+          - generic [ref=e1853]: AI/读源码/langchain-chatchat/1.1 web服务器框架.md:1
+          - generic [ref=e1854]: "# 一、Starlette框架 Starlette 是一个轻量级的异步 ASGI (Asynchronou"
+        - generic [ref=e1855] [cursor=pointer]:
+          - generic [ref=e1856]: AI/LazyLLM/18. Agentic RAG - LazyLLM.pdf:325
+          - generic [ref=e1857]: 18. Agentic RAG - LazyLLM file:///C:/Users/lianghao/D
+        - generic [ref=e1858] [cursor=pointer]:
+          - generic [ref=e1859]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:218
+          - generic [ref=e1860]: "### 15\\. 反馈与交流 如果在实践项目中遇到了问题或有任何疑问，欢迎在相关社区、论坛或平台上提出。"
+        - generic [ref=e1861] [cursor=pointer]:
+          - generic [ref=e1862]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:106
+          - generic [ref=e1863]: "### 生成器的无限序列 生成器非常适合表示无限序列，因为它们可以在需要时动态生成值，而不是一次性生成所"
+        - generic [ref=e1864] [cursor=pointer]:
+          - generic [ref=e1865]: 后端/python/华为社区python入门/文件/深入探索Python中的os模块：文件和目录操作的全方位指南-云社区-华为云.md:151
+          - generic [ref=e1866]: "### 6.2 路径规范化 使用`os.path.normpath(path)`函数可以规范化路径，消除"
+        - generic [ref=e1867] [cursor=pointer]:
+          - generic [ref=e1868]: AI/读源码/langchain-chatchat/1.1 web服务器框架.md:39
+          - generic [ref=e1869]: "# 三、为什么fastapi需要uvicorn的支持 FastAPI 是一个现代、异步的 Web 框架，"
+        - generic [ref=e1870] [cursor=pointer]:
+          - generic [ref=e1871]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:365
+          - generic [ref=e1872]: 1. 此外，您可以限制测试运行，仅运行与一个或多个标记关键字参数匹配的测 试，例如，仅运行标有device
+        - generic [ref=e1873] [cursor=pointer]:
+          - generic [ref=e1874]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1292
+          - generic [ref=e1875]: "### Starting your deep learning model server Your Ap"
+        - generic [ref=e1876] [cursor=pointer]:
+          - generic [ref=e1877]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:799
+          - generic [ref=e1878]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/Downlo
+        - generic [ref=e1879] [cursor=pointer]:
+          - generic [ref=e1880]: 未归类/claude插件体系.md:121
+          - generic [ref=e1881]: "## 📂 文件位置速查"
+        - generic [ref=e1882] [cursor=pointer]:
+          - generic [ref=e1883]: 后端/python/并发编程/多进程.md:63
+          - generic [ref=e1884]: "# 二、concurrent.futures.ProcessPoolExecutor `concurren"
+        - generic [ref=e1885] [cursor=pointer]:
+          - generic [ref=e1886]: 后端/python/并发编程/python asyncio从入门到精通/3.一篇文章搞定asyncio协程.md:84
+          - generic [ref=e1887]: "# 三、asyncio的核心组件 在 Python asyncio 中，有许多核心组件用于实现协程的调度和"
+        - generic [ref=e1888] [cursor=pointer]:
+          - generic [ref=e1889]: 未归类/claude插件体系.md:208
+          - generic [ref=e1890]: "### 手动启动 Agents 的方式"
+        - generic [ref=e1891] [cursor=pointer]:
+          - generic [ref=e1892]: AI/提示词/awesome ai assistant.md:3785
+          - generic [ref=e1893]: "## Todo Looking for contributions to help with the fo"
+        - generic [ref=e1894] [cursor=pointer]:
+          - generic [ref=e1895]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:550
+          - generic [ref=e1896]: "#### 条件锁的应用 需求：一个空列表，两个线程轮番往里面加值（一个加偶数，一个加奇数），最终让该列表中"
+        - generic [ref=e1897] [cursor=pointer]:
+          - generic [ref=e1898]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:77
+          - generic [ref=e1899]: "### 进一步深入：迭代器的应用 迭代器不仅仅用于简单的数值序列，还广泛应用于文件读取、数据库查询等场景。"
+        - generic [ref=e1900] [cursor=pointer]:
+          - generic [ref=e1901]: 后端/python/python Nacos实现服务发现与注册.md:94
+          - generic [ref=e1902]: "### 2\\. SpringBoot 的远程调用 * java-demo 模块的配置如下 * 业"
+        - generic [ref=e1903] [cursor=pointer]:
+          - generic [ref=e1904]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:24
+          - generic [ref=e1905]: "# 二、asyncio.Semaphore asyncio.Semaphore 是 asyncio"
+        - generic [ref=e1906] [cursor=pointer]:
+          - generic [ref=e1907]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:157
+          - generic [ref=e1908]: "### 12\\. 参与社区与反馈 如果在使用pdfplumber的过程中遇到问题或有建议，可以通过GitH"
+        - generic [ref=e1909] [cursor=pointer]:
+          - generic [ref=e1910]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:130
+          - generic [ref=e1911]: "#### 8.1 进阶应用 * **处理复杂表格结构：** 对于包含合并单元格、嵌套表格等复杂结构的"
+        - generic [ref=e1912] [cursor=pointer]:
+          - generic [ref=e1913]: 后端/python/并发编程/多进程.md:166
+          - generic [ref=e1914]: "# 四、写一个异步函数，用于在单独的进程中同步执行给定的函数func，并将结果返回到原异步上下文中 ```"
+        - generic [ref=e1915] [cursor=pointer]:
+          - generic [ref=e1916]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:1
+          - generic [ref=e1917]: "# 一、定义celery应用实例 * vue-element-admin-fastapi/backend/"
+        - generic [ref=e1918] [cursor=pointer]:
+          - generic [ref=e1919]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:18
+          - generic [ref=e1920]: "# 二、定义后台任务 * vue-element-admin-fastapi/backend/app/ap"
+        - generic [ref=e1921] [cursor=pointer]:
+          - generic [ref=e1922]: 后端/python/华为社区python入门/解锁PDF宝藏：pdfplumber指南与实战-云社区-华为云.md:19
+          - generic [ref=e1923]: "### 3\\. 使用pdfplumber读取PDF文档 让我们通过以下步骤演示如何使用pdfplumber"
+        - generic [ref=e1924] [cursor=pointer]:
+          - generic [ref=e1925]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:105
+          - generic [ref=e1926]: "#### 执行 JS 语句 ``` import asyncio from pyppeteer impor"
+        - generic [ref=e1927] [cursor=pointer]:
+          - generic [ref=e1928]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:3
+          - generic [ref=e1929]: "### 线程安全 线程安全是多线程或多进程编程中的一个概念，在拥有共享数据的多条线程并行执行的程序中，线程"
+        - generic [ref=e1930] [cursor=pointer]:
+          - generic [ref=e1931]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:84
+          - generic [ref=e1932]: "# 四、asyncio.wait asyncio.wait是asyncio 库中的一个重要函数，用于并发执"
+        - generic [ref=e1933] [cursor=pointer]:
+          - generic [ref=e1934]: 后端/python/并发编程/python asyncio从入门到精通/22.并发执行任务的五种方法.md:9
+          - generic [ref=e1935]: "# 一、asyncio.gather() asyncio.gather()是asyncio模块中一个"
+        - generic [ref=e1936] [cursor=pointer]:
+          - generic [ref=e1937]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:45
+          - generic [ref=e1938]: "#### 启动 以百度热搜榜为例： ``` import asyncio from pyppeteer"
+        - generic [ref=e1939] [cursor=pointer]:
+          - generic [ref=e1940]: 开发工具/claude/技能包/rules/python/security.md:21
+          - generic [ref=e1941]: "## Security Scanning - Use **bandit** for static secu"
+        - generic [ref=e1942] [cursor=pointer]:
+          - generic [ref=e1943]: 开发工具/claude/技能包/rules/typescript/hooks.md:17
+          - generic [ref=e1944]: "## Warnings - Warn about `print()` statements in edit"
+        - generic [ref=e1945] [cursor=pointer]:
+          - generic [ref=e1946]: 后端/python/python Nacos实现服务发现与注册.md:31
+          - generic [ref=e1947]: "### 1\\. 服务注册 [ Nacos官方文档](https://nacos.io/zh-cn/docs"
+        - generic [ref=e1948] [cursor=pointer]:
+          - generic [ref=e1949]: 开发工具/claude/CLI管道对话.md:237
+          - generic [ref=e1950]: "#### 1. `fastapi-claude-cli`（后端封装模板） 轻量级后端模板，已封装 Claud"
+        - generic [ref=e1951] [cursor=pointer]:
+          - generic [ref=e1952]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:1111
+          - generic [ref=e1953]: 2.4.2 高性能向量数据库Milvus 在企业级RAG系统场景下，有时会出现百万甚至上亿级的数据规模，同时
+        - generic [ref=e1954] [cursor=pointer]:
+          - generic [ref=e1955]: 开发工具/claude/技能包/rules/python/security.md:28
+          - generic [ref=e1956]: "## Reference See skill: `django-security` for Django-"
+        - generic [ref=e1957] [cursor=pointer]:
+          - generic [ref=e1958]: 开发工具/claude/CLI管道对话.md:154
+          - generic [ref=e1959]: "### 五、进阶优化建议 1. **动态等待响应**： 替换固定 `time.sleep()`，通过监"
+        - generic [ref=e1960] [cursor=pointer]:
+          - generic [ref=e1961]: 后端/python/并发编程/python asyncio从入门到精通/23.异步IOdebug：aiodebug库.md:13
+          - generic [ref=e1962]: "# 一、aio场景下阻塞任务介绍 “长时间运行的任务”是指在 asyncio 协程中所进行的函数调用，如果"
+        - generic [ref=e1963] [cursor=pointer]:
+          - generic [ref=e1964]: 开发工具/claude/技能包/rules/typescript/hooks.md:10
+          - generic [ref=e1965]: "## PostToolUse Hooks Configure in `~/.claude/settings."
+        - generic [ref=e1966] [cursor=pointer]:
+          - generic [ref=e1967]: 开发工具/claude/技能包/rules/python/testing.md:10
+          - generic [ref=e1968]: "## Framework Use **pytest** as the testing framework."
+        - generic [ref=e1969] [cursor=pointer]:
+          - generic [ref=e1970]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1397
+          - generic [ref=e1971]: "### Stress testing your deep learning REST API Of cour"
+        - generic [ref=e1972] [cursor=pointer]:
+          - generic [ref=e1973]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:555
+          - generic [ref=e1974]: "#### 4.3、设置为开机自启动"
+        - generic [ref=e1975] [cursor=pointer]:
+          - generic [ref=e1976]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:601
+          - generic [ref=e1977]: "#### 事件锁的应用 有2个任务线程来扮演李白和杜甫，如何让他们一人一句进行对答？文本如下： 杜甫：老李"
+        - generic [ref=e1978] [cursor=pointer]:
+          - generic [ref=e1979]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:508
+          - generic [ref=e1980]: "### 锁关系浅析 上面5种锁可以说都是基于同步锁来做的，这些你都可以从源码中找到答案。 首先来看RLoc"
+        - generic [ref=e1981] [cursor=pointer]:
+          - generic [ref=e1982]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:445
+          - generic [ref=e1983]: "#### 5、Semaphore() 信号量锁 **基本介绍** 信号量锁也是根据条件锁来做的，它与条件锁"
+        - generic [ref=e1984] [cursor=pointer]:
+          - generic [ref=e1985]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:379
+          - generic [ref=e1986]: "### 8\\. 社区集成"
+        - generic [ref=e1987] [cursor=pointer]:
+          - generic [ref=e1988]: 开发工具/claude/技能包/rules/python/testing.md:14
+          - generic [ref=e1989]: "## Coverage ```bash pytest --cov=src --cov-report=term-"
+        - generic [ref=e1990] [cursor=pointer]:
+          - generic [ref=e1991]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:36
+          - generic [ref=e1992]: "# 三、启动celery应用实例 * vue-element-admin-fastapi/backend/ap"
+        - generic [ref=e1993] [cursor=pointer]:
+          - generic [ref=e1994]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:725
+          - generic [ref=e1995]: "### 2\\. 导入（PyTorch & Safetensors） > 从 PyTorch 和 Safeten"
+        - generic [ref=e1996] [cursor=pointer]:
+          - generic [ref=e1997]: 后端/python/并发编程/python asyncio从入门到精通/23.异步IOdebug：aiodebug库.md:39
+          - generic [ref=e1998]: "# 二、使用aiodebug包识别阻塞任务 我们可以使用 aiodebug 包在 asyncio 中识别并报告"
+        - generic [ref=e1999] [cursor=pointer]:
+          - generic [ref=e2000]: 项目/资源变现/爬虫/python - 【0基础学爬虫】爬虫基础之自动化工具 Pyppeteer 的使用 - 个人文章 - SegmentFault 思否.md:183
+          - generic [ref=e2001]: "#### 选择器 Pyppeteer 提供了一些比较有意思的选择器方法。 > J() ：返回匹配到的第一个节"
+        - generic [ref=e2002] [cursor=pointer]:
+          - generic [ref=e2003]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:211
+          - generic [ref=e2004]: "#### 2、RLock() 递归锁 **基本介绍** 递归锁是同步锁的一个升级版本，在同步锁的基础上可以做"
+        - generic [ref=e2005] [cursor=pointer]:
+          - generic [ref=e2006]: 开发工具/claude/技能包/rules/common/patterns.md:32
+          - generic [ref=e2007]: "## Context Managers & Generators - Use context managers"
+        - generic [ref=e2008] [cursor=pointer]:
+          - generic [ref=e2009]: 开发工具/claude/技能包/rules/typescript/coding-style.md:34
+          - generic [ref=e2010]: "## Formatting - **black** for code formatting - **isort"
+        - generic [ref=e2011] [cursor=pointer]:
+          - generic [ref=e2012]: 开发工具/claude/技能包/rules/typescript/coding-style.md:10
+          - generic [ref=e2013]: "## Standards - Follow **PEP 8** conventions - Use **typ"
+        - generic [ref=e2014] [cursor=pointer]:
+          - generic [ref=e2015]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:296
+          - generic [ref=e2016]: "#### 3、Condition() 条件锁 **基本介绍** 条件锁是在递归锁的基础上增加了能够暂停线程运"
+        - generic [ref=e2017] [cursor=pointer]:
+          - generic [ref=e2018]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:459
+          - generic [ref=e2019]: "1. ``traefik.http.routers.fastapi.rule=Host(`fastapi-tr"
+        - generic [ref=e2020] [cursor=pointer]:
+          - generic [ref=e2021]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:464
+          - generic [ref=e2022]: "#### 2.3、测试服务"
+        - generic [ref=e2023] [cursor=pointer]:
+          - generic [ref=e2024]: 后端/python/fastapi/填坑.md:5
+          - generic [ref=e2025]: "### 2. 端点函数如果是async def定义，那么就会将该函数作为协程(任务)扔到app某一个进程的Main"
+        - generic [ref=e2026] [cursor=pointer]:
+          - generic [ref=e2027]: 后端/python/并发编程/python中5种线程锁-云社区-华为云.md:383
+          - generic [ref=e2028]: "#### 4、Event() 事件锁 **基本介绍** 事件锁是基于条件锁来做的，它与条件锁的区别在于一次只能"
+        - generic [ref=e2029] [cursor=pointer]:
+          - generic [ref=e2030]: AI/资源/chatgpt-on-wechat.md:192
+          - generic [ref=e2031]: "## 运行"
+        - generic [ref=e2032] [cursor=pointer]:
+          - generic [ref=e2033]: 开发工具/claude/CLI管道对话.md:189
+          - generic [ref=e2034]: "### 一、开箱即用的开源项目（推荐新手） 这类项目已完成 CLI 封装 + Web 界面，只需简单配置即可运行。"
+        - generic [ref=e2035] [cursor=pointer]:
+          - generic [ref=e2036]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:702
+          - generic [ref=e2037]: "##### 3.9.3 常见操作 作为一个页面，我们一定要有对应的方法来控制，如加载、前进、后退、关闭、保存等，示例"
+        - generic [ref=e2038] [cursor=pointer]:
+          - generic [ref=e2039]: 后端/python/并发编程/多线程.md:66
+          - generic [ref=e2040]: "# 五、对于java,两个线程是否可以在不同的CPU核心执行 在Java中，两个线程是可以并且经常在不同的CPU核心"
+        - generic [ref=e2041] [cursor=pointer]:
+          - generic [ref=e2042]: AI/提示词/awesome ai assistant.md:1
+          - generic [ref=e2043]: "# Awesome assistants > A curated list of awesome AI assis"
+        - generic [ref=e2045] [cursor=pointer]: AI/提示词/awesome ai assistant.md:37
+        - generic [ref=e2046] [cursor=pointer]:
+          - generic [ref=e2047]: AI/提示词/awesome ai assistant.md:37
+          - generic [ref=e2048]: "## Assistants [//]: # (START-contents) Total assistants: **"
+        - generic [ref=e2049] [cursor=pointer]:
+          - generic [ref=e2050]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:695
+          - generic [ref=e2051]: "# password: password $ echo $(htpasswd -nb testuser password"
+        - generic [ref=e2052] [cursor=pointer]:
+          - generic [ref=e2053]: AI/资源/codefuse_chatbot.md:223
+          - generic [ref=e2054]: "## 五大核心模块 DevOps-ChatBot项目整体架构简图如下： ![图片](data:image/svg+xm"
+        - generic [ref=e2055] [cursor=pointer]:
+          - generic [ref=e2056]: 开发工具/claude/CLI管道对话.md:234
+          - generic [ref=e2057]: "### 二、可定制开发的开源框架（适合二次开发） 若你需要深度定制功能（如集成到自有系统、添加权限控制等），可基于以下框架"
+        - generic [ref=e2058] [cursor=pointer]:
+          - generic [ref=e2059]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:1106
+          - generic [ref=e2060]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/Downloads/11.
+        - generic [ref=e2061] [cursor=pointer]:
+          - generic [ref=e2062]: 后端/python/并发编程/多进程.md:416
+          - generic [ref=e2063]: "# 七、确保始终只有一个foo进程且不退出，test每次都使用该进程的work_for_me来提供服务 为了确保只有一个`"
+        - generic [ref=e2064] [cursor=pointer]:
+          - generic [ref=e2065]: 后端/python/并发编程/多进程.md:312
+          - generic [ref=e2066]: "# 六、test调用foo的work_for_me函数时，如果超过0.1秒没有返回，则不再等待并关闭foo进程，然后返回默"
+        - generic [ref=e2067] [cursor=pointer]:
+          - generic [ref=e2068]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:134
+          - generic [ref=e2069]: "##### 2.2.1、编写启动vLLM服务脚本 ``` `sudo vim start_vllm.sh /h"
+        - generic [ref=e2070] [cursor=pointer]:
+          - generic [ref=e2071]: 后端/python/并发编程/多进程.md:514
+          - generic [ref=e2072]: "# 八、work_for_me需要输入一个二进制的图片数据和一个MyParam类型的参数对象，传回处理后的图片数据和处理结"
+        - generic [ref=e2073] [cursor=pointer]:
+          - generic [ref=e2074]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:572
+          - generic [ref=e2075]: "#### 3.9 Page Page 即页面，就对应一个网页，一个选项卡。在前面我们已经演示了几个 Page 方法的操作"
+        - generic [ref=e2076] [cursor=pointer]:
+          - generic [ref=e2077]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:132
+          - generic [ref=e2078]: "#### 2.2 步骤二：启动vLLM服务"
+        - generic [ref=e2079] [cursor=pointer]:
+          - generic [ref=e2080]: AI/资源/chatgpt-on-wechat.md:57
+          - generic [ref=e2081]: "# 快速开始 快速开始文档：[项目搭建文档](https://docs.link-ai.tech/cow/quick-sta"
+        - generic [ref=e2082] [cursor=pointer]:
+          - generic [ref=e2083]: 开发工具/vscode/快捷键_插件_技巧.md:14
+          - generic [ref=e2084]: "### 技巧"
+        - generic [ref=e2085] [cursor=pointer]:
+          - generic [ref=e2086]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:199
+          - generic [ref=e2087]: "### 3.详细用法 了解了基本的实例之后，我们再来梳理一下 Pyppeteer 的一些基本和常用操作。Pyppeteer 的几乎"
+        - generic [ref=e2088] [cursor=pointer]:
+          - generic [ref=e2089]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:12
+          - generic [ref=e2090]: "### 1\\. 安装"
+        - generic [ref=e2091] [cursor=pointer]:
+          - generic [ref=e2092]: 项目/AI知识库系统/MEC算力服务器/Linux本地部署DeepSeekR1-70B量化版_vllm部署deepseek 70b-CSDN博客.md:18
+          - generic [ref=e2093]: "### 2、具体步骤"
+        - generic [ref=e2094] [cursor=pointer]:
+          - generic [ref=e2095]: AI/资源/langchain-chatchat.md:149
+          - generic [ref=e2096]: "## 联系我们"
+        - generic [ref=e2097] [cursor=pointer]:
+          - generic [ref=e2098]: AI/资源/codefuse_chatbot.md:183
+          - generic [ref=e2099]: "### ✨ 点赞历史 [![Star History Chart](https://api.star-history.com/svg?repos=code"
+        - generic [ref=e2100] [cursor=pointer]:
+          - generic [ref=e2101]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:179
+          - generic [ref=e2102]: "### 5\\. CLI 参考"
+        - generic [ref=e2103] [cursor=pointer]:
+          - generic [ref=e2104]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:148
+          - generic [ref=e2105]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/Downloads/11. 性能优化指南 - LazyLLM (202
+        - generic [ref=e2106] [cursor=pointer]:
+          - generic [ref=e2107]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:64
+          - generic [ref=e2108]: 一、持久化存储
+        - generic [ref=e2109] [cursor=pointer]:
+          - generic [ref=e2110]: 未归类/claude插件体系.md:1
+          - generic [ref=e2111]: "# Claude Code 插件体系详解 /plugin list 可以将 everythin-claude-code plugin 去激活或者卸载"
+        - generic [ref=e2112] [cursor=pointer]:
+          - generic [ref=e2113]: AI/LazyLLM/3. Lazy玩转LLM - LazyLLM.pdf:1112
+          - generic [ref=e2114]: 3. Lazy玩转LLM - LazyLLM file:///C:/Users/lianghao/Downloads/3. Lazy玩转LLM - LazyLLM (2025_8_1
+        - generic [ref=e2115] [cursor=pointer]:
+          - generic [ref=e2116]: AI/资源/chatgpt-on-wechat.md:219
+          - generic [ref=e2117]: "### 3.Docker部署 > 使用docker部署无需下载源码和安装依赖，只需要获取 docker-compose.yml 配置文件并启动容器即可。 > 前提是需要安装好 `"
+        - generic [ref=e2118] [cursor=pointer]:
+          - generic [ref=e2119]: 未归类/claude插件体系.md:67
+          - generic [ref=e2120]: "## 🔄 执行顺序与优先级"
+        - generic [ref=e2121] [cursor=pointer]:
+          - generic [ref=e2122]: 项目/资源变现/爬虫/第18讲：爬虫神器 Pyppeteer 的使用_import asyncio from pyppeteer import launch-CSDN博客.md:477
+          - generic [ref=e2123]: "#### 3.8 Browser 上面我们了解了 launch 方法，其返回的就是一个 Browser 对象，即浏览器对象，我们会通常将其赋值给 browser 变量，其实它就是 Browser 类的一"
+        - generic [ref=e2124] [cursor=pointer]:
+          - generic [ref=e2125]: AI/资源/codefuse_chatbot.md:403
+          - generic [ref=e2126]: "## 功能展示 在这五大核心模块的驱动下，DevOps-ChatBot具有如下这些功能。 首先是文本知识库管理： - 文本载入、文本向量化服务、知识库的向量检索服务 - 提供多个知"
+        - generic [ref=e2127] [cursor=pointer]:
+          - generic [ref=e2128]: 未归类/claude插件体系.md:152
+          - generic [ref=e2129]: "## 🔧 实际配置示例"
+        - generic [ref=e2130] [cursor=pointer]:
+          - generic [ref=e2131]: AI/LazyLLM/11. 性能优化指南 - LazyLLM.pdf:126
+          - generic [ref=e2132]: 11. 性能优化指南 - LazyLLM file:///C:/Users/lianghao/Downloads/11. 性能优化指南 - LazyLLM (2025_8_15 16：57：33).html 8/57 [PAGE 9]
+        - generic [ref=e2133] [cursor=pointer]:
+          - generic [ref=e2134]: AI/LazyLLM/3. Lazy玩转LLM - LazyLLM.pdf:1072
+          - generic [ref=e2135]: 3. Lazy玩转LLM - LazyLLM file:///C:/Users/lianghao/Downloads/3. Lazy玩转LLM - LazyLLM (2025_8_15 17：18：02).html 34/41 [PAGE 35] 步骤
+        - generic [ref=e2136] [cursor=pointer]:
+          - generic [ref=e2137]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:82
+          - generic [ref=e2138]: "### 4\\. 自定义模型"
+        - generic [ref=e2139] [cursor=pointer]:
+          - generic [ref=e2140]: AI/资源/codefuse_chatbot.md:176
+          - generic [ref=e2141]: "## 🗂 其他"
+    - generic [ref=e2144]:
+      - textbox "重新搜索..." [ref=e2145]: python
+      - button "搜索" [ref=e2146] [cursor=pointer]:
+        - generic [ref=e2147]: 搜索

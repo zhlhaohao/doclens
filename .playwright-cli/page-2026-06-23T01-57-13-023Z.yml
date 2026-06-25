@@ -1,0 +1,54 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 文件
+        - generic [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: 📁
+          - generic [ref=e39]: 健康
+        - generic [ref=e41] [cursor=pointer]:
+          - generic [ref=e42]: 📁
+          - generic [ref=e43]: 公司
+        - generic [ref=e45] [cursor=pointer]:
+          - generic [ref=e46]: 📁
+          - generic [ref=e47]: 天文航天
+        - generic [ref=e49] [cursor=pointer]:
+          - generic [ref=e50]: 📁
+          - generic [ref=e51]: 生命科学
+        - generic [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]: 📁
+          - generic [ref=e55]: 科技
+        - generic [ref=e57] [cursor=pointer]:
+          - generic [ref=e58]: 📁
+          - generic [ref=e59]: 经济
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: 📁
+          - generic [ref=e63]: 编程
+        - generic [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: ▶
+          - generic [ref=e67]: 📁
+          - generic [ref=e68]: 能源环境
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - button "↑" [ref=e24] [cursor=pointer]
+          - generic [ref=e25]: /健康/
+        - generic [ref=e26]:
+          - button "+ 新目录" [ref=e27] [cursor=pointer]
+          - button "⬆ 上传" [ref=e28] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e29]
+          - button "→ 移动" [disabled] [ref=e30]
+          - button "🗑 删除" [disabled] [ref=e31]
+        - generic [ref=e117]: 目录为空
+      - generic [ref=e118]: 选择一个文件查看详情

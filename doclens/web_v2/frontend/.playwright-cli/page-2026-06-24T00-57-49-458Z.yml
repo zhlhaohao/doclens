@@ -1,0 +1,379 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 🧠
+      - generic [ref=e6]: Cortex
+    - button "L Liang ▾" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: L
+      - generic [ref=e10]: Liang
+      - generic [ref=e11]: ▾
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - button "🔍" [ref=e14] [cursor=pointer]
+      - button "💬" [ref=e15] [cursor=pointer]
+      - button "📁" [ref=e16] [cursor=pointer]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: 文件
+        - generic [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: 📁
+          - generic [ref=e25]: 健康
+        - generic [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: 📁
+          - generic [ref=e29]: 公司
+        - generic [ref=e31] [cursor=pointer]:
+          - generic [ref=e32]: 📁
+          - generic [ref=e33]: 天文航天
+        - generic [ref=e35] [cursor=pointer]:
+          - generic [ref=e36]: 📁
+          - generic [ref=e37]: 生命科学
+        - generic [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]: 📁
+          - generic [ref=e41]: 科技
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: 📁
+          - generic [ref=e45]: 经济
+        - generic [ref=e47] [cursor=pointer]:
+          - generic [ref=e48]: 📁
+          - generic [ref=e49]: 编程
+        - generic [ref=e51] [cursor=pointer]:
+          - generic [ref=e52]: ▶
+          - generic [ref=e53]: 📁
+          - generic [ref=e54]: 能源环境
+      - separator "调整文件树栏宽度" [ref=e55]
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - button "↑" [ref=e58] [cursor=pointer]
+          - generic [ref=e59]: /健康/
+        - generic [ref=e60]:
+          - button "+ 新目录" [ref=e61] [cursor=pointer]
+          - button "⬆ 上传" [ref=e62] [cursor=pointer]
+          - button "✎ 重命名" [disabled] [ref=e63]
+          - button "→ 移动" [disabled] [ref=e64]
+          - button "🗑 删除" [disabled] [ref=e65]
+        - generic [ref=e155]:
+          - checkbox [ref=e157]
+          - generic [ref=e159]: 名称
+          - generic [ref=e160]: 大小
+          - generic [ref=e161]: 修改
+          - generic [ref=e163]: 类型
+        - generic [ref=e75]:
+          - generic [ref=e165] [cursor=pointer]:
+            - checkbox [ref=e167]
+            - generic [ref=e169]: H
+            - generic [ref=e170]: 2025年健康生活与科学养生指南.html
+            - generic [ref=e171]: 9.1 KB
+            - generic [ref=e172]: 2026/06/12 16:43
+            - generic [ref=e173]: html
+          - generic [ref=e175] [cursor=pointer]:
+            - checkbox [ref=e177]
+            - generic [ref=e179]: M
+            - generic [ref=e180]: healthy_meal_prep.md
+            - generic [ref=e181]: 5.5 KB
+            - generic [ref=e182]: 2026/06/12 16:43
+            - generic [ref=e184]: 已索引
+            - generic [ref=e185]: md
+          - generic [ref=e187] [cursor=pointer]:
+            - checkbox [ref=e189]
+            - generic [ref=e191]: M
+            - generic [ref=e192]: meditation_beginner.md
+            - generic [ref=e193]: 5.8 KB
+            - generic [ref=e194]: 2026/06/12 16:43
+            - generic [ref=e196]: 已索引
+            - generic [ref=e197]: md
+          - generic [ref=e199] [cursor=pointer]:
+            - checkbox [ref=e201]
+            - generic [ref=e203]: M
+            - generic [ref=e204]: running_marathon_guide.md
+            - generic [ref=e205]: 6.4 KB
+            - generic [ref=e206]: 2026/06/12 16:43
+            - generic [ref=e208]: 已索引
+            - generic [ref=e209]: md
+          - generic [ref=e211] [cursor=pointer]:
+            - checkbox [ref=e213]
+            - generic [ref=e215]: M
+            - generic [ref=e216]: stress_management_work.md
+            - generic [ref=e217]: 7.4 KB
+            - generic [ref=e218]: 2026/06/12 16:43
+            - generic [ref=e220]: 已索引
+            - generic [ref=e221]: md
+          - generic [ref=e223] [cursor=pointer]:
+            - checkbox [ref=e225]
+            - generic [ref=e227]: M
+            - generic [ref=e228]: Z世代心理健康与保健品消费.md
+            - generic [ref=e229]: 3.5 KB
+            - generic [ref=e230]: 2026/06/12 16:43
+            - generic [ref=e232]: 已索引
+            - generic [ref=e233]: md
+          - generic [ref=e235] [cursor=pointer]:
+            - checkbox [ref=e237]
+            - generic [ref=e239]: M
+            - generic [ref=e240]: 中医理疗养生传统智慧的现代应用.md
+            - generic [ref=e241]: 4.3 KB
+            - generic [ref=e242]: 2026/06/12 16:43
+            - generic [ref=e244]: 已索引
+            - generic [ref=e245]: md
+          - generic [ref=e247] [cursor=pointer]:
+            - checkbox [ref=e249]
+            - generic [ref=e251]: M
+            - generic [ref=e252]: 体重管理年科学减重指南.md
+            - generic [ref=e253]: 3.5 KB
+            - generic [ref=e254]: 2026/06/12 16:43
+            - generic [ref=e256]: 已索引
+            - generic [ref=e257]: md
+          - generic [ref=e259] [cursor=pointer]:
+            - checkbox [ref=e261]
+            - generic [ref=e263]: M
+            - generic [ref=e264]: 居家健身指南.md
+            - generic [ref=e265]: 4.5 KB
+            - generic [ref=e266]: 2026/06/12 16:43
+            - generic [ref=e268]: 已索引
+            - generic [ref=e269]: md
+          - generic [ref=e271] [cursor=pointer]:
+            - checkbox [ref=e273]
+            - generic [ref=e275]: M
+            - generic [ref=e276]: 睡眠科学如何获得高质量睡眠.md
+            - generic [ref=e277]: 3.6 KB
+            - generic [ref=e278]: 2026/06/12 16:43
+            - generic [ref=e280]: 已索引
+            - generic [ref=e281]: md
+          - generic [ref=e283] [cursor=pointer]:
+            - checkbox [ref=e285]
+            - generic [ref=e287]: M
+            - generic [ref=e288]: 肠道健康与益生菌科学指南.md
+            - generic [ref=e289]: 4.2 KB
+            - generic [ref=e290]: 2026/06/12 16:43
+            - generic [ref=e292]: 已索引
+            - generic [ref=e293]: md
+          - generic [ref=e295] [cursor=pointer]:
+            - checkbox [ref=e297]
+            - generic [ref=e299]: H
+            - generic [ref=e300]: 营养素速查手册.html
+            - generic [ref=e301]: 14.7 KB
+            - generic [ref=e302]: 2026/06/12 16:43
+            - generic [ref=e303]: html
+      - separator "调整预览栏宽度" [ref=e152]
+      - generic [ref=e304]:
+        - generic [ref=e305]:
+          - generic [ref=e306]: 健康/2025年健康生活与科学养生指南.html
+          - button "⬇️ 下载" [ref=e307] [cursor=pointer]
+          - button "⬆️ 上传" [ref=e308] [cursor=pointer]
+        - iframe [ref=e309]:
+          - generic [active] [ref=f1e1]:
+            - heading "2025年健康生活与科学养生指南" [level=1] [ref=f1e2]
+            - paragraph [ref=f1e3]:
+              - text: 随着生活水平的提高和健康意识的增强，科学养生已成为全民关注的话题。国家卫生健康委将每年9月定为
+              - strong [ref=f1e4]: 全民健康生活方式宣传月
+              - text: ，2025年9月1日是第19个全民健康生活方式日。
+            - heading "一、科学饮食营养" [level=2] [ref=f1e5]
+            - heading "1.1 膳食纤维的重要性" [level=3] [ref=f1e6]
+            - paragraph [ref=f1e7]:
+              - text: 2025年十大营养热词中，
+              - strong [ref=f1e8]: 膳食纤维
+              - text: 位居前列。科学护肠饮食法则建议：
+            - list [ref=f1e10]:
+              - listitem [ref=f1e11]:
+                - text: 每天摄入
+                - strong [ref=f1e12]: 25-30克膳食纤维
+              - listitem [ref=f1e13]: 富含纤维的食物：燕麦、豆类、西蓝花、全麦面包
+              - listitem [ref=f1e14]: 膳食纤维能"喂饱"双歧杆菌等有益菌，维护肠道健康
+            - heading "1.2 多酚类抗氧化物质" [level=3] [ref=f1e15]
+            - paragraph [ref=f1e16]: 多酚是一类重要的植物化学物质，具有强大的抗氧化功能。
+            - list [ref=f1e18]:
+              - listitem [ref=f1e19]: 来源：蓝莓、绿茶、黑巧克力、红酒（适量）
+              - listitem [ref=f1e20]: 功效：增强肠道健康、抗炎、延缓衰老
+              - listitem [ref=f1e21]: 建议每天摄入500-1000毫克多酚
+            - heading "1.3 核心营养素速查表" [level=3] [ref=f1e22]
+            - table [ref=f1e23]:
+              - rowgroup [ref=f1e24]:
+                - row "营养素 每日推荐量 主要来源 核心功效" [ref=f1e25]:
+                  - columnheader "营养素" [ref=f1e26]
+                  - columnheader "每日推荐量" [ref=f1e27]
+                  - columnheader "主要来源" [ref=f1e28]
+                  - columnheader "核心功效" [ref=f1e29]
+                - row "蛋白质 60-75g 鸡胸肉、鸡蛋、豆腐、鱼类 肌肉修复、免疫维持" [ref=f1e30]:
+                  - cell "蛋白质" [ref=f1e31]
+                  - cell "60-75g" [ref=f1e32]
+                  - cell "鸡胸肉、鸡蛋、豆腐、鱼类" [ref=f1e33]
+                  - cell "肌肉修复、免疫维持" [ref=f1e34]
+                - row "膳食纤维 25-30g 燕麦、豆类、蔬菜、水果 肠道健康、血糖控制" [ref=f1e35]:
+                  - cell "膳食纤维" [ref=f1e36]
+                  - cell "25-30g" [ref=f1e37]
+                  - cell "燕麦、豆类、蔬菜、水果" [ref=f1e38]
+                  - cell "肠道健康、血糖控制" [ref=f1e39]
+                - row "维生素C 100mg 橙子、猕猴桃、西蓝花 抗氧化、增强免疫" [ref=f1e40]:
+                  - cell "维生素C" [ref=f1e41]
+                  - cell "100mg" [ref=f1e42]
+                  - cell "橙子、猕猴桃、西蓝花" [ref=f1e43]
+                  - cell "抗氧化、增强免疫" [ref=f1e44]
+                - row "钙 800-1000mg 牛奶、酸奶、芝麻 骨骼健康" [ref=f1e45]:
+                  - cell "钙" [ref=f1e46]
+                  - cell "800-1000mg" [ref=f1e47]
+                  - cell "牛奶、酸奶、芝麻" [ref=f1e48]
+                  - cell "骨骼健康" [ref=f1e49]
+                - row "铁 12-20mg 红肉、菠菜、黑木耳 预防贫血" [ref=f1e50]:
+                  - cell "铁" [ref=f1e51]
+                  - cell "12-20mg" [ref=f1e52]
+                  - cell "红肉、菠菜、黑木耳" [ref=f1e53]
+                  - cell "预防贫血" [ref=f1e54]
+                - row "维生素D 10-15μg 三文鱼、蛋黄、日晒 钙吸收、免疫调节" [ref=f1e55]:
+                  - cell "维生素D" [ref=f1e56]
+                  - cell "10-15μg" [ref=f1e57]
+                  - cell "三文鱼、蛋黄、日晒" [ref=f1e58]
+                  - cell "钙吸收、免疫调节" [ref=f1e59]
+            - heading "二、运动健身指南" [level=2] [ref=f1e60]
+            - heading "2.1 WHO 运动建议" [level=3] [ref=f1e61]
+            - paragraph [ref=f1e62]: 世界卫生组织建议成年人每周进行：
+            - list [ref=f1e64]:
+              - listitem [ref=f1e65]:
+                - strong [ref=f1e66]: 有氧运动
+                - text: ：至少150-300分钟中等强度，或75-150分钟高强度
+              - listitem [ref=f1e67]:
+                - strong [ref=f1e68]: 力量训练
+                - text: ：每周至少2次，覆盖主要肌群
+              - listitem [ref=f1e69]:
+                - strong [ref=f1e70]: 柔韧性训练
+                - text: ：每周至少2-3次拉伸
+            - heading "2.2 不同年龄段的运动方案" [level=3] [ref=f1e71]
+            - table [ref=f1e72]:
+              - rowgroup [ref=f1e73]:
+                - row "年龄段 推荐运动 频率 注意事项" [ref=f1e74]:
+                  - columnheader "年龄段" [ref=f1e75]
+                  - columnheader "推荐运动" [ref=f1e76]
+                  - columnheader "频率" [ref=f1e77]
+                  - columnheader "注意事项" [ref=f1e78]
+                - row "18-30岁 HIIT、跑步、游泳、球类 4-5次/周 避免过度训练，注意恢复" [ref=f1e79]:
+                  - cell "18-30岁" [ref=f1e80]
+                  - cell "HIIT、跑步、游泳、球类" [ref=f1e81]
+                  - cell "4-5次/周" [ref=f1e82]
+                  - cell "避免过度训练，注意恢复" [ref=f1e83]
+                - row "30-45岁 慢跑、瑜伽、力量训练 3-4次/周 关注心肺功能，增加柔韧性" [ref=f1e84]:
+                  - cell "30-45岁" [ref=f1e85]
+                  - cell "慢跑、瑜伽、力量训练" [ref=f1e86]
+                  - cell "3-4次/周" [ref=f1e87]
+                  - cell "关注心肺功能，增加柔韧性" [ref=f1e88]
+                - row "45-60岁 快走、太极、游泳、骑行 3-5次/周 低冲击运动为主，保护关节" [ref=f1e89]:
+                  - cell "45-60岁" [ref=f1e90]
+                  - cell "快走、太极、游泳、骑行" [ref=f1e91]
+                  - cell "3-5次/周" [ref=f1e92]
+                  - cell "低冲击运动为主，保护关节" [ref=f1e93]
+                - row "60岁以上 散步、太极、拉伸、轻度力量 每天30分钟 防跌倒训练，量力而行" [ref=f1e94]:
+                  - cell "60岁以上" [ref=f1e95]
+                  - cell "散步、太极、拉伸、轻度力量" [ref=f1e96]
+                  - cell "每天30分钟" [ref=f1e97]
+                  - cell "防跌倒训练，量力而行" [ref=f1e98]
+            - heading "三、睡眠管理" [level=2] [ref=f1e99]
+            - heading "3.1 科学睡眠时长" [level=3] [ref=f1e100]
+            - paragraph [ref=f1e101]: 充足的睡眠是健康的基石。不同年龄段的推荐睡眠时长：
+            - list [ref=f1e103]:
+              - listitem [ref=f1e104]: 青少年（14-17岁）：8-10小时
+              - listitem [ref=f1e105]: 成年人（18-64岁）：7-9小时
+              - listitem [ref=f1e106]: 老年人（65岁以上）：7-8小时
+            - heading "3.2 改善睡眠质量的建议" [level=3] [ref=f1e107]
+            - generic [ref=f1e108]:
+              - strong [ref=f1e109]: 注意事项：
+              - text: 长期睡眠不足会增加心血管疾病、肥胖和认知功能下降的风险。
+            - list [ref=f1e110]:
+              - listitem [ref=f1e111]: 保持规律的作息时间，每天同一时间起床
+              - listitem [ref=f1e112]: 睡前1小时避免使用电子设备
+              - listitem [ref=f1e113]: 卧室温度保持在18-22°C
+              - listitem [ref=f1e114]: 避免睡前摄入咖啡因和酒精
+              - listitem [ref=f1e115]: 适当补充褪黑素（需咨询医生）
+              - listitem [ref=f1e116]: GABA和酸枣仁可辅助改善睡眠质量
+            - heading "四、心理健康" [level=2] [ref=f1e117]
+            - heading "4.1 Z世代健康行为数据" [level=3] [ref=f1e118]
+            - paragraph [ref=f1e119]: 最新调查显示，Z世代（1995-2010年出生）采取最多的健康行为：
+            - generic [ref=f1e120]:
+              - generic [ref=f1e121]:
+                - heading "55.7%" [level=4] [ref=f1e122]
+                - paragraph [ref=f1e123]: 保健营养品摄入
+              - generic [ref=f1e124]:
+                - heading "48.6%" [level=4] [ref=f1e125]
+                - paragraph [ref=f1e126]: 睡眠管理
+              - generic [ref=f1e127]:
+                - heading "48.0%" [level=4] [ref=f1e128]
+                - paragraph [ref=f1e129]: 情绪调节行为
+              - generic [ref=f1e130]:
+                - heading "40.1%" [level=4] [ref=f1e131]
+                - paragraph [ref=f1e132]: 中医理疗服务
+              - generic [ref=f1e133]:
+                - heading "28.5%" [level=4] [ref=f1e134]
+                - paragraph [ref=f1e135]: 科学饮食管理
+              - generic [ref=f1e136]:
+                - heading "24.7%" [level=4] [ref=f1e137]
+                - paragraph [ref=f1e138]: 坚持运动
+            - heading "4.2 压力管理技巧" [level=3] [ref=f1e139]
+            - list [ref=f1e140]:
+              - listitem [ref=f1e141]:
+                - strong [ref=f1e142]: 正念冥想
+                - text: ：每天10-15分钟，专注呼吸
+              - listitem [ref=f1e143]:
+                - strong [ref=f1e144]: 运动减压
+                - text: ：运动时释放内啡肽，改善情绪
+              - listitem [ref=f1e145]:
+                - strong [ref=f1e146]: 社交连接
+                - text: ：与亲友保持定期联系
+              - listitem [ref=f1e147]:
+                - strong [ref=f1e148]: 时间管理
+                - text: ：合理规划，避免过度承诺
+              - listitem [ref=f1e149]:
+                - strong [ref=f1e150]: 专业帮助
+                - text: ：必要时寻求心理咨询
+            - heading "五、运动营养补充" [level=2] [ref=f1e151]
+            - heading "5.1 运动人群常见补充剂" [level=3] [ref=f1e152]
+            - table [ref=f1e153]:
+              - rowgroup [ref=f1e154]:
+                - row "补充剂 用途 建议用量" [ref=f1e155]:
+                  - columnheader "补充剂" [ref=f1e156]
+                  - columnheader "用途" [ref=f1e157]
+                  - columnheader "建议用量" [ref=f1e158]
+                - row "维生素B族 补充基础营养、恢复体力 按推荐剂量" [ref=f1e159]:
+                  - cell "维生素B族" [ref=f1e160]
+                  - cell "补充基础营养、恢复体力" [ref=f1e161]
+                  - cell "按推荐剂量" [ref=f1e162]
+                - row "GABA 改善睡眠质量 100-300mg/天" [ref=f1e163]:
+                  - cell "GABA" [ref=f1e164]
+                  - cell "改善睡眠质量" [ref=f1e165]
+                  - cell "100-300mg/天" [ref=f1e166]
+                - row "酸枣仁提取物 安神助眠 500-1000mg/天" [ref=f1e167]:
+                  - cell "酸枣仁提取物" [ref=f1e168]
+                  - cell "安神助眠" [ref=f1e169]
+                  - cell "500-1000mg/天" [ref=f1e170]
+                - row "南非醉茄 降低皮质醇、缓解训练压力 300-600mg/天" [ref=f1e171]:
+                  - cell "南非醉茄" [ref=f1e172]
+                  - cell "降低皮质醇、缓解训练压力" [ref=f1e173]
+                  - cell "300-600mg/天" [ref=f1e174]
+                - row "益生菌 辅助肠道健康 10-100亿CFU/天" [ref=f1e175]:
+                  - cell "益生菌" [ref=f1e176]
+                  - cell "辅助肠道健康" [ref=f1e177]
+                  - cell "10-100亿CFU/天" [ref=f1e178]
+                - row "蛋白质粉 肌肉修复与增长 1.6-2.2g/kg体重/天" [ref=f1e179]:
+                  - cell "蛋白质粉" [ref=f1e180]
+                  - cell "肌肉修复与增长" [ref=f1e181]
+                  - cell "1.6-2.2g/kg体重/天" [ref=f1e182]
+            - heading "六、\"吃动平衡\"核心理念" [level=2] [ref=f1e183]
+            - paragraph [ref=f1e184]:
+              - text: 2025年第十一届全民营养周的主题是
+              - strong [ref=f1e185]: "\"吃动平衡 健康体重 全民行动\""
+              - text: ，口号为
+              - strong [ref=f1e186]: "\"健康中国 营养先行\""
+              - text: 。
+            - paragraph [ref=f1e187]:
+              - text: 麦肯锡的调查显示，在中国
+              - strong [ref=f1e188]: 50-60%
+              - text: 的受访者宁愿通过饮食和锻炼计划来控制体重，而非药物或其他手段。运动和饮食仍然是体重管理的首选方式。
+            - generic [ref=f1e189]:
+              - heading "健康体重管理三原则：" [level=3] [ref=f1e190]
+              - list [ref=f1e191]:
+                - listitem [ref=f1e192]:
+                  - strong [ref=f1e193]: 均衡饮食
+                  - text: ：控制总热量，增加蛋白质和纤维摄入
+                - listitem [ref=f1e194]:
+                  - strong [ref=f1e195]: 规律运动
+                  - text: ：有氧+力量结合，每周至少150分钟
+                - listitem [ref=f1e196]:
+                  - strong [ref=f1e197]: 充足睡眠
+                  - text: ：每晚7-9小时，促进身体恢复
+            - contentinfo [ref=f1e198]:
+              - paragraph [ref=f1e199]: 参考资料：国家卫生健康委、麦肯锡中国、国家体育总局、中国营养学会
+              - paragraph [ref=f1e200]: 本文仅供参考，具体健康方案请咨询专业医生。

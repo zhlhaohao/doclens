@@ -1,0 +1,1348 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - button "🔍" [ref=e4] [cursor=pointer]
+    - button "💬" [ref=e5] [cursor=pointer]
+    - button "🕘" [ref=e6] [cursor=pointer]
+  - generic [ref=e23]:
+    - generic "test" [ref=e24]:
+      - button "← 返回" [ref=e25] [cursor=pointer]
+      - generic [ref=e26]: test
+      - generic [ref=e27]: 471 条结果
+    - generic [ref=e28]:
+      - generic [ref=e30]:
+        - generic [ref=e31] [cursor=pointer]:
+          - generic [ref=e32]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:95
+          - generic [ref=e33]: "### 路径映射规则 | 源文件路径 | 测试文件路径 | |-----------|-------------| | `src/m"
+        - generic [ref=e34] [cursor=pointer]:
+          - generic [ref=e35]: 项目/OO稽核/数据样例/103_resCommon_CUST_INFO_20240613.csv:30103
+          - generic [ref=e36]: "CUST_ID: 181756; CUST_TYPE_ID: 90110; CUST_NAME: TEST; REGION_ID: 3"
+        - generic [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: 后端/大数据/4 Faster Pandas Alternatives for Data Analysis – Chengzhi Zhao.md:37
+          - generic [ref=e39]: "#### The test dataset In this case, a medium-large dataset for the"
+        - generic [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:112
+          - generic [ref=e42]: "### 命名格式 ``` {SourceClassName}Test.java ```"
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:156
+          - generic [ref=e45]: "### 示例 ```java /** * AIAssistantLeaderAgendaServiceImpl 测试类 * *"
+        - generic [ref=e46] [cursor=pointer]:
+          - generic [ref=e47]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:76
+          - generic [ref=e48]: "### 目录结构对照 ``` 项目根目录/ ├── src/main/java/com/chinaunicom/ppep/ai/ │"
+        - generic [ref=e49] [cursor=pointer]:
+          - generic [ref=e50]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:118
+          - generic [ref=e51]: "### 示例 | 源类名 | 测试类名 | |--------|---------| | `AIAssistantLeaderAgen"
+        - generic [ref=e52] [cursor=pointer]:
+          - generic [ref=e53]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:441
+          - generic [ref=e54]: "### 测试类模板 ```java package com.chinaunicom.ppep.ai.{package_path};"
+        - generic [ref=e55] [cursor=pointer]:
+          - generic [ref=e56]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:303
+          - generic [ref=e57]: 2. 文件名 必须以 test_ 开头或 _test.py 结尾。
+        - generic [ref=e58] [cursor=pointer]:
+          - generic [ref=e59]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:4371
+          - generic [ref=e60]: 55.9 Wh Average of class Subnotebook Add an additional device (sea
+        - generic [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: 项目/AI质检/java端源码阅读/前端页面路由以及api路由.md:71
+          - generic [ref=e63]: "## 1. openresty-test的部署文件 ```yaml kind: Deployment apiVersion: apps/"
+        - generic [ref=e64] [cursor=pointer]:
+          - generic [ref=e65]: 项目/AI质检/java端源码阅读/前端页面路由以及api路由.md:160
+          - generic [ref=e66]: "## 2. openresty-configmap-test 挂载到 /etc/nginx/nginx.conf ``` { \"se"
+        - generic [ref=e67] [cursor=pointer]:
+          - generic [ref=e68]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:751
+          - generic [ref=e69]: "#### The stress test [→ Launch Jupyter Notebook on Google Colab](#p"
+        - generic [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: 开发工具/claude/系统提示词.md:390
+          - generic [ref=e72]: "#### Test plan [Bulleted markdown checklist of TODOs for testing the"
+        - generic [ref=e73] [cursor=pointer]:
+          - generic [ref=e74]: 开发工具/AI编程/Schema-Driven Development_ A Modern Approach.pdf:51
+          - generic [ref=e75]: "7. Efficient SDLC: Issue management, documentation, test automation,"
+        - generic [ref=e76] [cursor=pointer]:
+          - generic [ref=e77]: 后端/python/fastapi/fastapi-best-practices_ FastAPI Best Practices and Conventions we used at our startup.md:596
+          - generic [ref=e78]: "### 14\\. Set tests client async from day 0 [](#14-set-tests-client-"
+        - generic [ref=e79] [cursor=pointer]:
+          - generic [ref=e80]: AI/提示词/awesome-chatgpt-prompts.md:2110
+          - generic [ref=e81]: "## Act as a Unit Tester Assistant Contributed by: [@demian-ae](http"
+        - generic [ref=e82] [cursor=pointer]:
+          - generic [ref=e83]: 后端/python/celery/Asynchronous Tasks with FastAPI and Celery _ TestDriven.io.md:1
+          - generic [ref=e84]: "`=============================== test session starts ==============="
+        - generic [ref=e85] [cursor=pointer]:
+          - generic [ref=e86]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:227
+          - generic [ref=e87]: "### Testing asyncio with pytest It turns out testing async function"
+        - generic [ref=e88] [cursor=pointer]:
+          - generic [ref=e89]: 开发工具/claude/技能包/rules/python/testing.md:20
+          - generic [ref=e90]: "## Test Organization Use `pytest.mark` for test categorization: ``"
+        - generic [ref=e91] [cursor=pointer]:
+          - generic [ref=e92]: github/GitHub - livekit_livekit_ End-to-end stack for WebRTC. SFU media server and SDKs..md:107
+          - generic [ref=e93]: "### Simulating a test publisher [](#simulating-a-test-publisher) `"
+        - generic [ref=e94] [cursor=pointer]:
+          - generic [ref=e95]: 后端/python/并发编程/多进程.md:221
+          - generic [ref=e96]: "# 五、请写一个python模块foo，可在单独的进程中启动并通过进程间通信的队列来监听，再写一个异步函数test调用该模块的work_"
+        - generic [ref=e97] [cursor=pointer]:
+          - generic [ref=e98]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+          - generic [ref=e99]: "[Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云](https://bbs.huaweicloud."
+        - generic [ref=e100] [cursor=pointer]:
+          - generic [ref=e101]: 项目/资源变现/爬虫/infosimples_detect-headless_ Access https___infosimples.github.io_detect-headless to run several headless detection tests against your browser..md:1
+          - generic [ref=e102]: "[infosimples/detect-headless: Access https://infosimples.github.io/d"
+        - generic [ref=e103] [cursor=pointer]:
+          - generic [ref=e104]: AI/RAG/RAG LLM App开发实战_en.md:1483
+          - generic [ref=e105]: "### LinkTesting[](#testing) Besides just a metric based evaluation,"
+        - generic [ref=e106] [cursor=pointer]:
+          - generic [ref=e107]: 项目/OO稽核/数据样例/enum.csv:4021
+          - generic [ref=e108]: "SERIAL_NO: 10010308; DESC_ID: 8; DESC_CHINA: 海缆; CODE: TEST; KEYWORD"
+        - generic [ref=e109] [cursor=pointer]:
+          - generic [ref=e110]: AI/Claude Code/Claude Code Best Practices _ Anthropic-dual.pdf:404
+          - generic [ref=e111]: 1. Ask Claude to write tests based on expected input/output pairs. B
+        - generic [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]: 项目/无人机平台/1.md:49
+          - generic [ref=e114]: "## 3. Open-source drone platforms promote training, education, and s"
+        - generic [ref=e115] [cursor=pointer]:
+          - generic [ref=e116]: 项目/无人机平台/2.md:35
+          - generic [ref=e117]: "## 2. NASA is leading the development of a cloud-based UTM system to"
+        - generic [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: AI/LazyLLM/10. Deepseek实战 - LazyLLM.pdf:443
+          - generic [ref=e120]: 1.获取数据 首先我们需要获得数据集：GSM8K。代码见链接。 在上面代码中：   import os import json fr
+        - generic [ref=e121] [cursor=pointer]:
+          - generic [ref=e122]: 后端/python/并发编程/python asyncio从入门到精通/13.快速提升异步IO性能的简单方法.md:107
+          - generic [ref=e123]: "# 五、uvloop与原生ioloop的性能对比 对于uvloop与原生的ioloop(asyncio默认的事件循环)之间的性能对比，"
+        - generic [ref=e124] [cursor=pointer]:
+          - generic [ref=e125]: misc/2025年工作记录.md:736
+          - generic [ref=e126]: "### 2025-06-23（1） 1. 搞定DeepCoder的匹配检测和apply change功能 在项目的 test_cha"
+        - generic [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]: AI/LazyLLM/18. Agentic RAG - LazyLLM.pdf:522
+          - generic [ref=e129]: 18. Agentic RAG - LazyLLM file:///C:/Users/lianghao/Downloads/18. Ag
+        - generic [ref=e130] [cursor=pointer]:
+          - generic [ref=e131]: misc/2021工作记录.md:312
+          - generic [ref=e132]: "### 2021-5-4（2） 1、java开发，主要是研究maven的多模块子项目的配置方案。到睡觉前，有一些问题例如unit tes"
+        - generic [ref=e133] [cursor=pointer]:
+          - generic [ref=e134]: AI/LazyLLM/16. 论文问答进阶 - LazyLLM.pdf:86
+          - generic [ref=e135]: 16. 论文问答进阶 - LazyLLM file:///C:/Users/lianghao/Downloads/16. 论文问答进阶
+        - generic [ref=e136] [cursor=pointer]:
+          - generic [ref=e137]: AI/LazyLLM/9. 领域微调实践 - LazyLLM.pdf:1237
+          - generic [ref=e138]: 9. 领域微调实践 - LazyLLM file:///C:/Users/lianghao/Downloads/9. 领域微调实践 -
+        - generic [ref=e139] [cursor=pointer]:
+          - generic [ref=e140]: 前端/javascript/24 个 ES6 实用方法，用来解决实际开发的 JS 问题-今日头条.md:403
+          - generic [ref=e141]: "#### 23.如何确定设备是移动设备还是台式机/笔记本电脑？ ``` const detectDeviceType = () =>"
+        - generic [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: AI/LazyLLM/19. 知识图谱 RAG - LazyLLM.pdf:624
+          - generic [ref=e144]: 19. 知识图谱 RAG - LazyLLM file:///C:/Users/lianghao/Downloads/19. 知识图谱
+        - generic [ref=e145] [cursor=pointer]:
+          - generic [ref=e146]: misc/2018工作记录.md:290
+          - generic [ref=e147]: "### 2018-05-16 1、需求调研，风云台二期 -- 未完成 2、备品备件系统的登录框增加密码校验功能。 -- 完成 3、通知李"
+        - generic [ref=e148] [cursor=pointer]:
+          - generic [ref=e149]: AI/LazyLLM/2. 快速上手RAG - LazyLLM.pdf:348
+          - generic [ref=e150]: 2. 快速上手RAG - LazyLLM file:///C:/Users/lianghao/Downloads/2. 快速上手RAG
+        - generic [ref=e151] [cursor=pointer]:
+          - generic [ref=e152]: 前端/android/Android开发 设备横屏与竖屏的详解 - 观心静 - 博客园.md:1
+          - generic [ref=e153]: "[Android开发 设备横屏与竖屏的详解 - 观心静 - 博客园](https://www.cnblogs.com/guanxinji"
+        - generic [ref=e154] [cursor=pointer]:
+          - generic [ref=e155]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:290
+          - generic [ref=e156]: "## 测试分组规范 在测试类内部使用注释分隔不同方法的测试用例： ```java /** * AIAssistantLeaderA"
+        - generic [ref=e157] [cursor=pointer]:
+          - generic [ref=e158]: AI/Claude Code/new-claude-code-guide.md:8902
+          - generic [ref=e159]: "# .claude/hooks/test-enhancer.sh #!/bin/bash COVERAGE=$(npm run cove"
+        - generic [ref=e160] [cursor=pointer]:
+          - generic [ref=e161]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:329
+          - generic [ref=e162]: 2. 示例 tests/test_server.py     from my_project import create_ret
+        - generic [ref=e163] [cursor=pointer]:
+          - generic [ref=e164]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:2732
+          - generic [ref=e165]: "3.28.创建本地文件夹 Android: var folderData = {\"directory\": \"test\",\"type\":"
+        - generic [ref=e166] [cursor=pointer]:
+          - generic [ref=e167]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:216
+          - generic [ref=e168]: "### 标准五段式结构 ```java @Test public void testGetOrganizationAgendaCoun"
+        - generic [ref=e169] [cursor=pointer]:
+          - generic [ref=e170]: AI/提示词/awesome-chatgpt-prompts.md:900
+          - generic [ref=e171]: "## Act as a Software Quality Assurance Tester Contributed by: [@iuz"
+        - generic [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:308
+          - generic [ref=e174]: "1. 创建 tests/test_retriever.py ：   - repo: https://github.com/pycqa"
+        - generic [ref=e175] [cursor=pointer]:
+          - generic [ref=e176]: misc/2022工作记录.md:596
+          - generic [ref=e177]: "### 2022-08-04（4） 1、上午发版到isdp test分支， 2、下午编写获取sfu用户和房间信息（内存和数据库进行比较核"
+        - generic [ref=e178] [cursor=pointer]:
+          - generic [ref=e179]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:901
+          - generic [ref=e180]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 -
+        - generic [ref=e181] [cursor=pointer]:
+          - generic [ref=e182]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:803
+          - generic [ref=e183]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践
+        - generic [ref=e184] [cursor=pointer]:
+          - generic [ref=e185]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:371
+          - generic [ref=e186]: "## 边界值测试规范 ```java @Test public void testCreateSmartTableBoundaryVa"
+        - generic [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:2657
+          - generic [ref=e189]: "3.27.解压本地文件 Android: var unZipData = { \"zipFilePath\": \"/storage/emul"
+        - generic [ref=e190] [cursor=pointer]:
+          - generic [ref=e191]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:381
+          - generic [ref=e192]: "### 4.7 其他 | 问题 | 重要性 | 影响范围 | |------|--------|----------| | 根目录散落"
+        - generic [ref=e193] [cursor=pointer]:
+          - generic [ref=e194]: AI/Claude Code/Claude Code Router完全指南：安装配置与多模型集成实战 - 博客 - Hrefgo AI.md:344
+          - generic [ref=e195]: "### CI/CD 流水线集成 **自动化测试流程**集成展示了Claude Code Router在企业级开发中的应用潜力： ``"
+        - generic [ref=e196] [cursor=pointer]:
+          - generic [ref=e197]: 项目/AI日程助手/测试脚本.md:20
+          - generic [ref=e198]: "### 测试 getUserQueryableCompanies ```bash # json对象最后一个元素不能有逗号，切记 cu"
+        - generic [ref=e199] [cursor=pointer]:
+          - generic [ref=e200]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:93
+          - generic [ref=e201]: "### 测试规范 **重要**：本项目采用严格的测试文件组织规范，所有测试用例编写必须遵循 [TEST_STANDARDS.md](T"
+        - generic [ref=e202] [cursor=pointer]:
+          - generic [ref=e203]: 前端/android/不想用Android Studio，教你如何用vscode搭建原生app开发环境 - 简书.md:206
+          - generic [ref=e204]: "### 2\\. 添加vscode任务，嵌入安卓命令行 1. 通过快捷键F1，弹出下图所示界面，选择配置生成默认任务，选择创建task"
+        - generic [ref=e205] [cursor=pointer]:
+          - generic [ref=e206]: 项目/AI质检/web端源码阅读/api代理转发配置.md:1
+          - generic [ref=e207]: "**开发环境进行api的代理转发-- 这个是在本机调试的时候，由于nodejs webserver不提供java api功能，所以要将a"
+        - generic [ref=e208] [cursor=pointer]:
+          - generic [ref=e209]: 项目/AI日程助手/开发环境全栈跑通经验.md:105
+          - generic [ref=e210]: "#### bootstrap.yml ``` server: port: 8185 work: weixin: cor"
+        - generic [ref=e211] [cursor=pointer]:
+          - generic [ref=e212]: 开发工具/claude/技能包/week-report/SKILL.md:130
+          - generic [ref=e213]: "## 下周计划推断逻辑 下周计划不是随意猜测，而是基于以下信号推断： - 本周 commit 中标记为\"转下周\"或未完成的事项 - 功"
+        - generic [ref=e214] [cursor=pointer]:
+          - generic [ref=e215]: AI/Claude Code/Claude Code Best Practices _ Anthropic-dual.pdf:417
+          - generic [ref=e216]: 5. Ask Claude to commit the code once you’re satisfied with the chan
+        - generic [ref=e217] [cursor=pointer]:
+          - generic [ref=e218]: AI/Claude Code/claude-code-guide.md:1461
+          - generic [ref=e219]: "#### Advanced Debugging For complex hook issues: 1. **Inspect hook"
+        - generic [ref=e220] [cursor=pointer]:
+          - generic [ref=e221]: AI/Claude Code/How I use Claude Code (+ my best tips).pdf:1
+          - generic [ref=e222]: Claude Code hooks are shell commands that execute at various points
+        - generic [ref=e223] [cursor=pointer]:
+          - generic [ref=e224]: 项目/资源变现/爬虫/Selenium自动化测试全攻略：基础、实战、优化与集成-云社区-华为云.md:192
+          - generic [ref=e225]: "### 编写测试用例 创建一个pytest测试文件，例如`test_selenium.py`，并编写测试用例。 ``` import"
+        - generic [ref=e226] [cursor=pointer]:
+          - generic [ref=e227]: 项目/资源变现/爬虫/让 Chrome Headless 无法被检测到 --- Making Chrome Headless Undetectable.md:203
+          - generic [ref=e228]: This script will connect to our currently running Headless Chrome in
+        - generic [ref=e229] [cursor=pointer]:
+          - generic [ref=e230]: 项目/AI质检/安装运行踩坑.md:1
+          - generic [ref=e231]: 1. web的端口是8181，app的端口是8182，gateway的端口是8800, socketio的端口是8888，在java的v
+        - generic [ref=e232] [cursor=pointer]:
+          - generic [ref=e233]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:1337
+          - generic [ref=e234]: "### 9.4 测试 除了基于指标的评估之外，我们还想评估我们的模型在一些最小功能测试中的表现。 无论我们使用什么类型的模型，我们都需"
+        - generic [ref=e235] [cursor=pointer]:
+          - generic [ref=e236]: 项目/AI知识库系统/tools_desc.md:8
+          - generic [ref=e237]: "#### Description: 获取所有数据库列表，支持筛选和限制结果数量 Ar"
+        - generic [ref=e238] [cursor=pointer]:
+          - generic [ref=e239]: 项目/AI质检/java端源码阅读/unirqsr-business/高危视频检查记录.md:146
+          - generic [ref=e240]: <select id="getVideoAuditListTotal" resultType="java.lang.Intege
+        - generic [ref=e241] [cursor=pointer]:
+          - generic [ref=e242]: 项目/AI日程助手/README.md:54
+          - generic [ref=e243]: "### 企微callback 配置 callback url: https://www.zhlhao.cloud/callback?"
+        - generic [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:2170
+          - generic [ref=e246]: "[PAGE 73] 50 ｜ 第4 章 ins = insert(dal.line_items) order_"
+        - generic [ref=e247] [cursor=pointer]:
+          - generic [ref=e248]: 开发工具/git/比较两个分支之间的差异.md:1
+          - generic [ref=e249]: "要比较Git中的两个分支`dev_lianghao_no_delete`与`test`分支之间的文件差异，可以使用以下命令： ```s"
+        - generic [ref=e250] [cursor=pointer]:
+          - generic [ref=e251]: 开发工具/claude/韶关模型池/readme.md:1
+          - generic [ref=e252]: Nacos开发环境地址： http://10.242.31.7:10848/nacos 天宫地址： https://tg.unicom.
+        - generic [ref=e253] [cursor=pointer]:
+          - generic [ref=e254]: github/Doriandarko_deepseek-engineer_ A powerful coding assistant application that integrates with the DeepSeek API to process user conversations and generate structured JSON responses. Through an intuitive command-line.md:56
+          - generic [ref=e255]: "### Using uv (faster alternative) [](#using-uv-faster-alter"
+        - generic [ref=e256] [cursor=pointer]:
+          - generic [ref=e257]: 前端/vue/代码片段.md:1
+          - generic [ref=e258]: "设置自有库的导入路径，设置工作区子目录下一个文件的全路径 ```python import os # __file__代表当前的源文件"
+        - generic [ref=e259] [cursor=pointer]:
+          - generic [ref=e260]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:553
+          - generic [ref=e261]: "### 2.8 添加视图绑定框架依赖 app/build.gradle ``` `dependencies { implem"
+        - generic [ref=e262] [cursor=pointer]:
+          - generic [ref=e263]: AI/提示词/awesome ai assistant.md:2536
+          - generic [ref=e264]: "### Socratic Method 🤔🔍 I'm \"<b>Socratic Method</b>\". How can I help"
+        - generic [ref=e265] [cursor=pointer]:
+          - generic [ref=e266]: 开发工具/claude/技能包/rules/common/git-workflow.md:12
+          - generic [ref=e267]: "## Commit Message Format ``` <type>: <description> <optional body>"
+        - generic [ref=e268] [cursor=pointer]:
+          - generic [ref=e269]: 开发工具/claude/Claude Code加Superpowers从零开发一个完整项目.md:462
+          - generic [ref=e270]: "### 第六步：finishing-a-development-branch —— 收尾交付 **提示词：** > /superp"
+        - generic [ref=e271] [cursor=pointer]:
+          - generic [ref=e272]: 开发工具/vscode/快捷键_插件_技巧.md:64
+          - generic [ref=e273]: "### 设置python的模块查找根路径 * 在项目的根目录下，创建 .env 文件,对py和ipynb文件都生效 ``` PYTHO"
+        - generic [ref=e274] [cursor=pointer]:
+          - generic [ref=e275]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e276]: 我们就用它来预测一下分类结果。 y\_pred = model.predict(X\_test) 打印出来看看： y_pred\[
+        - generic [ref=e277] [cursor=pointer]:
+          - generic [ref=e278]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:503
+          - generic [ref=e279]: "#### (2). OpenAI JavaScript库 ``` `import OpenAI from 'openai' cons"
+        - generic [ref=e280] [cursor=pointer]:
+          - generic [ref=e281]: 未归类/claude插件体系.md:241
+          - generic [ref=e282]: "#### 通用 Agents（9 个） | Agent | 用途 | 触发方式 | |-------|------|---------|"
+        - generic [ref=e283] [cursor=pointer]:
+          - generic [ref=e284]: 后端/python/Python实战验证码识别与登录的完整指南-云社区-华为云.md:56
+          - generic [ref=e285]: "### 5\\. 测试模型 一旦模型训练完成，我们可以使用测试数据来评估模型的性能。对于每个测试图像，我们将其预处理并使用训练的模型进行"
+        - generic [ref=e286] [cursor=pointer]:
+          - generic [ref=e287]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:48
+          - generic [ref=e288]: "# 四、python执行任务 * vue-element-admin-fastapi/backend/app/test_celery."
+        - generic [ref=e289] [cursor=pointer]:
+          - generic [ref=e290]: 前端/semantic-ui/弹出模态框.md:1
+          - generic [ref=e291]: "[Modal | Semantic UI](https://1.semantic-ui.com/modules/modal.html#/"
+        - generic [ref=e292] [cursor=pointer]:
+          - generic [ref=e293]: 后端/mongodb/GitHub - mongo-express_mongo-express_ Web-based MongoDB admin interface, written with Node.js and express.md:1
+          - generic [ref=e294]: Here is an example of a document which can be read/edited in mongo-e
+        - generic [ref=e295] [cursor=pointer]:
+          - generic [ref=e296]: AI/资源/one-api-OpenAI 接口管理.md:299
+          - generic [ref=e297]: "### 环境变量 1. `REDIS_CONN_STRING`：设置之后将使用 Redis 作为缓存使用。 * 例子：`"
+        - generic [ref=e298] [cursor=pointer]:
+          - generic [ref=e299]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:340
+          - generic [ref=e300]: "### 装饰器在测试中的应用 装饰器在测试中也有着广泛的应用，例如用于计算函数执行时间、检查函数调用参数等。以下是一个简单的测试装饰器"
+        - generic [ref=e301] [cursor=pointer]:
+          - generic [ref=e302]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:402
+          - generic [ref=e303]: "### Include a HEALTHCHECK Instruction _Use a `HEALTHCHECK` to deter"
+        - generic [ref=e304] [cursor=pointer]:
+          - generic [ref=e305]: 项目/AI日程助手/README.md:69
+          - generic [ref=e306]: "### 6. 执行后台测试任务 launch 3-audit_test ```python # backend/app/unico"
+        - generic [ref=e307] [cursor=pointer]:
+          - generic [ref=e308]: 项目/资源变现/爬虫/反爬虫中chrome无头浏览器的几种检测与绕过方式_无头浏览器 反爬虫-CSDN博客.md:1
+          - generic [ref=e309]: "[反爬虫中chrome无头浏览器的几种检测与绕过方式_无头浏览器 反爬虫-CSDN博客](https://blog.csdn.net/R"
+        - generic [ref=e310] [cursor=pointer]:
+          - generic [ref=e311]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:247
+          - generic [ref=e312]: "# create a dummy entry await User.objects.get_or_create(email=\"t"
+        - generic [ref=e313] [cursor=pointer]:
+          - generic [ref=e314]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:17181
+          - generic [ref=e315]: 13.4 Introduction to scikit-learn | 397 [PAGE 416] As an example,
+        - generic [ref=e316] [cursor=pointer]:
+          - generic [ref=e317]: AI/资源/BERT 模型微调实战：使用Transformers微调BERT模型实现问答和文本分类任务.md:181
+          - generic [ref=e318]: "#### **4.2、加载数据集** 接下来，我们加载BertTokenizerFast的对象，对文本进行分词和编码，以便输入到BER"
+        - generic [ref=e319] [cursor=pointer]:
+          - generic [ref=e320]: 项目/OO稽核/数据样例/互联网专线-DOMESTIC_DIA_CIRCUIT.md:239
+          - generic [ref=e321]: "### 自动建表，如果存在则跳过 ```python from sqlalchemy import create_engine, Me"
+        - generic [ref=e322] [cursor=pointer]:
+          - generic [ref=e323]: 后端/python/fastapi/awesome-fastapi.md:5
+          - generic [ref=e324]: "* [Async SQLAlchemy with FastAPI](https://stribny.name/blog/fastap"
+        - generic [ref=e325] [cursor=pointer]:
+          - generic [ref=e326]: 开发工具/python/fastapi/英文原版 - FastApi 最佳实践-中文版.md:385
+          - generic [ref=e327]: "# orjson.dumps returns bytes, to match standard json.dumps we need t"
+        - generic [ref=e328] [cursor=pointer]:
+          - generic [ref=e329]: 后端/duckdb/DuckDB in Action.pdf:6368
+          - generic [ref=e330]: 7.3.2 Creating databases in MotherDuck In the previous section we up
+        - generic [ref=e331] [cursor=pointer]:
+          - generic [ref=e332]: 后端/pandas/THE PANDAS HANDBOOK 100 Essential Tips and Tricks for Beginners (Adetola Abiodun) (Z-Library).pdf:1313
+          - generic [ref=e333]: 88. Perform a comparison of a DataFrame object with a constant. Pan
+        - generic [ref=e334] [cursor=pointer]:
+          - generic [ref=e335]: 项目/AI质检/其它/IP地址获取实验.xlsx:1
+          - generic [ref=e336]: "Columns: 序号, 场景：, 访问地址, CLB, nginx配置, 输出日志, 结论 序号: 1; 场景：: TCP+直接访问w"
+        - generic [ref=e337] [cursor=pointer]:
+          - generic [ref=e338]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e339]: "183 Event loops in separate threads def _update_bar(self, pct: i"
+        - generic [ref=e340] [cursor=pointer]:
+          - generic [ref=e341]: AI/Text2Sql/Text2SQL圣经：从0到1精通Text2Sql（Chat2Sql）的原理，以及Text2Sql开源项目的使用-阿里云开发者社区.md:231
+          - generic [ref=e342]: "### 实操第2步骤：插入25条数据 ```null INSERT INTO `test_db`.`orders` (`OrderID"
+        - generic [ref=e343] [cursor=pointer]:
+          - generic [ref=e344]: 项目/资源变现/爬虫/_不可能_检测和阻止 Chrome headless --- It is _not_ possible to detect and block Chrome headless.md:1
+          - generic [ref=e345]: The code to visit the test page and record the test results with Pup
+        - generic [ref=e346] [cursor=pointer]:
+          - generic [ref=e347]: 开发工具/postman/只知道用 Postman？后起之秀 Insomnia 太强大了！-今日头条.md:1
+          - generic [ref=e348]: "[只知道用 Postman？后起之秀 Insomnia 太强大了！-今日头条](https://www.toutiao.com/arti"
+        - generic [ref=e349] [cursor=pointer]:
+          - generic [ref=e350]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:419
+          - generic [ref=e351]: "# ### end Alembic commands ###` Apply the migration: `$ docker-co"
+        - generic [ref=e352] [cursor=pointer]:
+          - generic [ref=e353]: AI/资源/ChatGPT微信机器人 .md:15
+          - generic [ref=e354]: "### 2024.01.17 更新 安装完依赖后，运行 `npm run dev` 前，可以先测试下 openai 的接口是否可用，运"
+        - generic [ref=e355] [cursor=pointer]:
+          - generic [ref=e356]: AI/LazyLLM/18. Agentic RAG - LazyLLM.pdf:620
+          - generic [ref=e357]: 1. LazyLLM调用MCP工具 步骤 1：获取工具列表 步骤 2：查看工具详情 步骤 3：调用MCP工具 以读取文件工具为例，假设
+        - generic [ref=e358] [cursor=pointer]:
+          - generic [ref=e359]: 项目/AI日程助手/配置以及claude code相关/TEST_STANDARDS.md:29
+          - generic [ref=e360]: "### MockBean 禁用原则（重要） > **在编写测试用例时，绝对禁止使用 `@MockBean` 注解。** **原因说明"
+        - generic [ref=e361] [cursor=pointer]:
+          - generic [ref=e362]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:3541
+          - generic [ref=e363]: "3.41.文件预览 Android: var fileData= {\"file\": \"http://xxx.pdf\"} window.W"
+        - generic [ref=e364] [cursor=pointer]:
+          - generic [ref=e365]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:296
+          - generic [ref=e366]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践
+        - generic [ref=e367] [cursor=pointer]:
+          - generic [ref=e368]: 未归类/claude插件体系.md:312
+          - generic [ref=e369]: "### 🧪 测试类 | 命令 | 说明 | Agent | |------|------|-------| | `/e2e` | 端到端"
+        - generic [ref=e370] [cursor=pointer]:
+          - generic [ref=e371]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:5002
+          - generic [ref=e372]: NAME AGE TEST SCORE Adam 15 test1 95 Bob 16 test1 81 Dave 16 test1
+        - generic [ref=e373] [cursor=pointer]:
+          - generic [ref=e374]: 未归类/claude插件体系.md:319
+          - generic [ref=e375]: "### 🐹 Go 专用类 | 命令 | 说明 | Agent | |------|------|-------| | `/go-buil"
+        - generic [ref=e376] [cursor=pointer]:
+          - generic [ref=e377]: 项目/AI质检/java端源码阅读/unirqsr-business/高危视频检查记录.md:146
+          - generic [ref=e378]: "# 四、Dao xml **unirqsr-business/src/main/resources/mapper/business/Tb"
+        - generic [ref=e379] [cursor=pointer]:
+          - generic [ref=e380]: 开发工具/claude/技能包/week-report/SKILL.md:68
+          - generic [ref=e381]: "### 5. 分析归类 将 commit 按事项/功能模块归类。归类依据： - commit message 前缀：`feat`、`f"
+        - generic [ref=e382] [cursor=pointer]:
+          - generic [ref=e383]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e384]: "9.5 shows a snapshot of the test result: ## Page 347 Utilizing Oth"
+        - generic [ref=e385] [cursor=pointer]:
+          - generic [ref=e386]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e387]: Index 388 Keycloak environment, configuring 240 Keycloak environmen
+        - generic [ref=e388] [cursor=pointer]:
+          - generic [ref=e389]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:5002
+          - generic [ref=e390]: "[PAGE 160] >>> df.fillna(method='ffill', axis=1) Name Age Co"
+        - generic [ref=e391] [cursor=pointer]:
+          - generic [ref=e392]: 后端/python/并发编程/多进程.md:416
+          - generic [ref=e393]: "# 七、确保始终只有一个foo进程且不退出，test每次都使用该进程的work_for_me来提供服务 为了确保只有一个`foo`进程且"
+        - generic [ref=e394] [cursor=pointer]:
+          - generic [ref=e395]: 项目/AI质检/java端源码阅读/前端页面路由以及api路由.md:188
+          - generic [ref=e396]: "## 3. http-mt-configmap-test 挂载到 /etc/nginx/conf.d/https-mt.conf"
+        - generic [ref=e397] [cursor=pointer]:
+          - generic [ref=e398]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:4369
+          - generic [ref=e399]: "[PAGE 131] 108 ｜ 第9 章 现在，把测试文件保存为test_app.py，然后使用如下命令运行单元测试： # p"
+        - generic [ref=e400] [cursor=pointer]:
+          - generic [ref=e401]: 前端/javascript/24 个 ES6 实用方法，用来解决实际开发的 JS 问题-今日头条.md:415
+          - generic [ref=e402]: "#### 24.如何创建目录（如果不存在）\\[Node服务端\\]？ ``` const fs = require('fs'); con"
+        - generic [ref=e403] [cursor=pointer]:
+          - generic [ref=e404]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:457
+          - generic [ref=e405]: "#### (1). OpenAI Python库 ``` `from openai import OpenAI client = O"
+        - generic [ref=e407] [cursor=pointer]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+        - generic [ref=e408] [cursor=pointer]:
+          - generic [ref=e409]: AI/RAG/从企业单文档问答到批量文档问答.md:778
+          - generic [ref=e410]: "# chunk_sizes 匹配单段内容的连接上下文长度 def get\\_knowledge\\_based\\"
+        - generic [ref=e411] [cursor=pointer]:
+          - generic [ref=e412]: 项目/AI质检/java端源码阅读/unirqsr-flowable/手册/Flowable学习指引_v1.0.pdf:27
+          - generic [ref=e413]: 二、原型参考 某位老师A 做好的一个样例系统，目的是试用，之后推销自己的产品。但我们可以作 为一个原型学习借鉴： 网上参考例子：http
+        - generic [ref=e414] [cursor=pointer]:
+          - generic [ref=e415]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:4153
+          - generic [ref=e416]: TFLOPS, SD X Elite X1E-78-100, Samsung Asus Zenbook S 14 UX5406 Arc
+        - generic [ref=e417] [cursor=pointer]:
+          - generic [ref=e418]: AI/Claude Code/new-claude-code-guide.md:8901
+          - generic [ref=e419]: "# Continuous test improvement"
+        - generic [ref=e420] [cursor=pointer]:
+          - generic [ref=e421]: 项目/OO稽核/数据样例/pub_res_type.csv:83
+          - generic [ref=e422]: "RES_TYPE_ID: 180; RES_TYPE: test---"
+        - generic [ref=e423] [cursor=pointer]:
+          - generic [ref=e424]: 项目/AI质检/java端源码阅读/前端页面路由以及api路由.md:67
+          - generic [ref=e425]: "# 二、前端页面路由 443是web和app的https页面监听端口，全部转发到CKE的 openresty-test pod，在cl"
+        - generic [ref=e426] [cursor=pointer]:
+          - generic [ref=e427]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:2576
+          - generic [ref=e428]: "43545338.mp4\"], \"filePath\": \"/storage/emulated/0/Android/data/cn.com"
+        - generic [ref=e430] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:5002
+        - generic [ref=e431] [cursor=pointer]:
+          - generic [ref=e432]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:316
+          - generic [ref=e433]: ADVERTISEMENT Looking at benchmarks, the Snapdragon X Elite is a fi
+        - generic [ref=e434] [cursor=pointer]:
+          - generic [ref=e435]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e436]: 178 CHAPTER 7 Handling blocking work with threads this problem. This
+        - generic [ref=e437] [cursor=pointer]:
+          - generic [ref=e438]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:365
+          - generic [ref=e439]: 1. 此外，您可以限制测试运行，仅运行与一个或多个标记关键字参数匹配的测 试，例如，仅运行标有device 和特定的测试serial="
+        - generic [ref=e440] [cursor=pointer]:
+          - generic [ref=e441]: AI/Claude Code/Claude Code Best Practices _ Anthropic-dual.pdf:393
+          - generic [ref=e442]: 4. Ask Claude to commit the result and create a pull request. If rel
+        - generic [ref=e443] [cursor=pointer]:
+          - generic [ref=e444]: 项目/OO稽核/数据样例/103_resCommon_CUST_INFO_20240613.csv:19643
+          - generic [ref=e445]: "CUST_ID: 180000090000000000368738; CUST_TYPE_ID: 0; CUST_NAME: test;"
+        - generic [ref=e446] [cursor=pointer]:
+          - generic [ref=e447]: 项目/OO稽核/数据样例/pub_res_type.csv:2033
+          - generic [ref=e448]: "RES_TYPE_ID: 9614; RES_TYPE: test; DATABASE_NAME: 1"
+        - generic [ref=e449] [cursor=pointer]:
+          - generic [ref=e450]: 项目/OO稽核/数据样例/pub_res_type.csv:1643
+          - generic [ref=e451]: "RES_TYPE_ID: 9223; RES_TYPE: test; DATABASE_NAME: 1"
+        - generic [ref=e452] [cursor=pointer]:
+          - generic [ref=e453]: 项目/OO稽核/数据样例/pub_res_type.csv:1805
+          - generic [ref=e454]: "RES_TYPE_ID: 9385; RES_TYPE: test; DATABASE_NAME: 1"
+        - generic [ref=e455] [cursor=pointer]:
+          - generic [ref=e456]: 项目/OO稽核/数据样例/pub_res_type.csv:1461
+          - generic [ref=e457]: "RES_TYPE_ID: 9039; RES_TYPE: test; DATABASE_NAME: null"
+        - generic [ref=e458] [cursor=pointer]:
+          - generic [ref=e459]: AI/Claude Code/new-claude-code-guide.md:8892
+          - generic [ref=e460]: "# Intelligent test creation from multiple sources"
+        - generic [ref=e461] [cursor=pointer]:
+          - generic [ref=e462]: 项目/OO稽核/数据样例/103_resCommon_CUST_INFO_20240613.csv:8938
+          - generic [ref=e463]: "CUST_ID: 000100000000000000348320; CUST_TYPE_ID: 0; CUST_NAME: test-"
+        - generic [ref=e464] [cursor=pointer]:
+          - generic [ref=e465]: AI/Claude Code/new-claude-code-guide.md:8899
+          - generic [ref=e466]: "# Create comprehensive test suite targeting weak spots"
+        - generic [ref=e467] [cursor=pointer]:
+          - generic [ref=e468]: AI/Claude Code/new-claude-code-guide.md:9107
+          - generic [ref=e469]: "# Claude checks both server logs AND test output"
+        - generic [ref=e470] [cursor=pointer]:
+          - generic [ref=e471]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:305
+          - generic [ref=e472]: 4. 函数/方法 必须以 test_ 开头。
+        - generic [ref=e473] [cursor=pointer]:
+          - generic [ref=e474]: misc/2022工作记录.md:580
+          - generic [ref=e475]: "### 2022-07-29（5） 1、docker 上传到 ccr 的功能完成，dist-sfu直接上传到CCR 2、优化了客服页面，新"
+        - generic [ref=e476] [cursor=pointer]:
+          - generic [ref=e477]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:304
+          - generic [ref=e478]: 3. 类名 必须以 Test 开头，并且不能有init 方法。
+        - generic [ref=e479] [cursor=pointer]:
+          - generic [ref=e480]: 项目/资源变现/爬虫/_不可能_检测和阻止 Chrome headless --- It is _not_ possible to detect and block Chrome headless.md:1
+          - generic [ref=e481]: "```null { app: { isInstalled: false, }, webstore: { onI"
+        - generic [ref=e482] [cursor=pointer]:
+          - generic [ref=e483]: 项目/AI日程助手/测试脚本.md:1
+          - generic [ref=e484]: "### 测试 getOrganizationAgendaCount ``` curl -X POST http://localhost:"
+        - generic [ref=e485] [cursor=pointer]:
+          - generic [ref=e486]: AI/提示词/awesome ai assistant.md:3169
+          - generic [ref=e487]: "### Software Quality Assurance Tester 🔍🛠️ I'm \"<b>Software Quality A"
+        - generic [ref=e488] [cursor=pointer]:
+          - generic [ref=e489]: 后端/python/并发编程/多进程.md:312
+          - generic [ref=e490]: "# 六、test调用foo的work_for_me函数时，如果超过0.1秒没有返回，则不再等待并关闭foo进程，然后返回默认值None，请"
+        - generic [ref=e491] [cursor=pointer]:
+          - generic [ref=e492]: AI/提示词/awesome-chatgpt-prompts.md:2572
+          - generic [ref=e493]: "## Act as Large Language Models Security Specialist Contributed by:"
+        - generic [ref=e494] [cursor=pointer]:
+          - generic [ref=e495]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:385
+          - generic [ref=e496]: 2.1GHz 的频率。触摸时它也稍微更暖一些——掌托区域的温度为 29.4° C，而骁龙型号为 26° C。另一个关键点是实际性能——英特
+        - generic [ref=e497] [cursor=pointer]:
+          - generic [ref=e498]: AI/提示词/awesome-chatgpt-prompts.md:809
+          - generic [ref=e499]: "## Act as a Fancy Title Generator Contributed by: [@sinanerdinc](htt"
+        - generic [ref=e500] [cursor=pointer]:
+          - generic [ref=e501]: 后端/duckdb/DuckDB in Action.pdf:7378
+          - generic [ref=e502]: 8.3.4 Testing transformations and pipelines dbt tests are assertions
+        - generic [ref=e503] [cursor=pointer]:
+          - generic [ref=e504]: AI/LazyLLM/9. 领域微调实践 - LazyLLM.pdf:1231
+          - generic [ref=e505]: "4. 构建知识库文件 主要代码实现如下所示：  def build_dataset_corpus(instruction: str, n"
+        - generic [ref=e506] [cursor=pointer]:
+          - generic [ref=e507]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:365
+          - generic [ref=e508]: 4.0 ones that are double the speed. 这颗 SoC 在 Cinebench 2024 的单核和多核测试中
+        - generic [ref=e509] [cursor=pointer]:
+          - generic [ref=e510]: 开发工具/claude/技能包/rules/common/git-workflow.md:38
+          - generic [ref=e511]: "## Pull Request Workflow When creating PRs: 1. Analyze full commit h"
+        - generic [ref=e512] [cursor=pointer]:
+          - generic [ref=e513]: AI/RAG/RAG LLM App开发实战_en.md:730
+          - generic [ref=e514]: "### LinkContext[](#context) We’re now ready to start our experiments"
+        - generic [ref=e515] [cursor=pointer]:
+          - generic [ref=e516]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e517]: "Integrating Flask and Django sub-applications 377 } } The applic"
+        - generic [ref=e518] [cursor=pointer]:
+          - generic [ref=e519]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:848
+          - generic [ref=e520]: "[PAGE 36] 执行以上代码获得输出：  ![image.png](12_images/img7.png) 代码如下： ```pyt"
+        - generic [ref=e521] [cursor=pointer]:
+          - generic [ref=e522]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:46
+          - generic [ref=e523]: "### Our deep learning project structure Our project structure is as"
+        - generic [ref=e524] [cursor=pointer]:
+          - generic [ref=e525]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e526]: Setting up service registry and client-side service discovery 369 A s
+        - generic [ref=e527] [cursor=pointer]:
+          - generic [ref=e528]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e529]: Solving Numerical, Symbolic, and Graphical Problems 346 This section
+        - generic [ref=e530] [cursor=pointer]:
+          - generic [ref=e531]: 项目/无人机平台/1.md:93
+          - generic [ref=e532]: In the realm of **training and education**, open-source drone softwar
+        - generic [ref=e533] [cursor=pointer]:
+          - generic [ref=e534]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:242
+          - generic [ref=e535]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 -
+        - generic [ref=e536] [cursor=pointer]:
+          - generic [ref=e537]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e538]: Performing statistical analysis 337 .get_answers_per_q
+        - generic [ref=e539] [cursor=pointer]:
+          - generic [ref=e540]: AI/Claude Code/new-claude-code-guide.md:6899
+          - generic [ref=e541]: "### Script Testing & Validation ```bash #!/bin/bash # .claude/scripts"
+        - generic [ref=e542] [cursor=pointer]:
+          - generic [ref=e543]: 项目/资源变现/爬虫/Selenium自动化测试全攻略：基础、实战、优化与集成-云社区-华为云.md:215
+          - generic [ref=e544]: "### 运行测试用例 在项目根目录下运行以下命令，pytest将自动发现并执行你的测试用例： ``` pytest test_sele"
+        - generic [ref=e545] [cursor=pointer]:
+          - generic [ref=e546]: 项目/资源变现/爬虫/让 Chrome Headless 无法被检测到 --- Making Chrome Headless Undetectable.md:203
+          - generic [ref=e547]: "### Facing unique challenges with Web Scraping? 面临网页抓取的独特挑战？ We wi"
+        - generic [ref=e548] [cursor=pointer]:
+          - generic [ref=e549]: AI/LazyLLM/9. 领域微调实践 - LazyLLM.pdf:402
+          - generic [ref=e550]: 9. 领域微调实践 - LazyLLM file:///C:/Users/lianghao/Downloads/9. 领域微调实践 - L
+        - generic [ref=e551] [cursor=pointer]:
+          - generic [ref=e552]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e553]: Solving Numerical, Symbolic, and Graphical Problems 350 The Celery si
+        - generic [ref=e554] [cursor=pointer]:
+          - generic [ref=e555]: 后端/python/celery/vue_fastapi使用celery的源码解释.md:18
+          - generic [ref=e556]: "# 二、定义后台任务 * vue-element-admin-fastapi/backend/app/app/celery_app/wo"
+        - generic [ref=e557] [cursor=pointer]:
+          - generic [ref=e558]: 项目/无人机平台/2.md:63
+          - generic [ref=e559]: "## 3. Low-altitude airspace management requires integrated sensing, p"
+        - generic [ref=e560] [cursor=pointer]:
+          - generic [ref=e561]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:2170
+          - generic [ref=e562]: 4.1 使用测试数据库做测试 在我们的示例应用程序中，有一个app.py 文件，它包含应用程序逻辑；还有一个db.py 文 件，它包含数据
+        - generic [ref=e563] [cursor=pointer]:
+          - generic [ref=e564]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e565]: Adding Other Microservice Features 364 Figure 11.4 – Activating the v
+        - generic [ref=e566] [cursor=pointer]:
+          - generic [ref=e567]: 后端/python/fastapi/Building Python Microservices with FastAPI.pdf:12146
+          - generic [ref=e568]: Solving Numerical, Symbolic, and Graphical Problems 354 Afterward, we
+        - generic [ref=e569] [cursor=pointer]:
+          - generic [ref=e570]: 项目/资源变现/爬虫/_不可能_检测和阻止 Chrome headless --- It is _not_ possible to detect and block Chrome headless.md:1
+          - generic [ref=e571]: "[*不可能*检测和阻止 Chrome headless --- It is *not* possible to detect and bl"
+        - generic [ref=e572] [cursor=pointer]:
+          - generic [ref=e573]: AI/Claude Code/new-claude-code-guide.md:9103
+          - generic [ref=e574]: "# 1. Integrated Debugging Environment npm run dev & npm run test:watc"
+        - generic [ref=e575] [cursor=pointer]:
+          - generic [ref=e576]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:385
+          - generic [ref=e577]: "[PAGE 15] Update June 2025: We ran some additional battery tests sinc"
+        - generic [ref=e578] [cursor=pointer]:
+          - generic [ref=e579]: AI/Claude Code/new-claude-code-guide.md:575
+          - generic [ref=e580]: "#### **For Researchers:** - Process experimental data and perform sta"
+        - generic [ref=e581] [cursor=pointer]:
+          - generic [ref=e582]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:1660
+          - generic [ref=e583]: "Returns ------- the_sum : type of arguments \"\"\" retur"
+        - generic [ref=e584] [cursor=pointer]:
+          - generic [ref=e585]: AI/Claude Code/new-claude-code-guide.md:581
+          - generic [ref=e586]: "#### **For Educators:** - Create interactive demonstrations of comple"
+        - generic [ref=e587] [cursor=pointer]:
+          - generic [ref=e588]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:1295
+          - generic [ref=e589]: "### 9.3 评估 我们现在准备评估我们经过训练的重新排名模型。 我们将使用自定义预测函数来预测“其他”，除非最高类别的概率高于某个阈"
+        - generic [ref=e590] [cursor=pointer]:
+          - generic [ref=e591]: AI/提示词/awesome-chatgpt-prompts.md:1130
+          - generic [ref=e592]: "## Act as a Socratic Method prompt Contributed by: [@thebear132](htt"
+        - generic [ref=e593] [cursor=pointer]:
+          - generic [ref=e594]: AI/Claude Code/new-claude-code-guide.md:5434
+          - generic [ref=e595]: "### Example 7: Setting Up CI/CD ```bash # 1. Research project needs \""
+        - generic [ref=e596] [cursor=pointer]:
+          - generic [ref=e597]: AI/Claude Code/claude-code-guide.md:1445
+          - generic [ref=e598]: "#### Basic Troubleshooting If your hooks aren't working: 1. **Check"
+        - generic [ref=e599] [cursor=pointer]:
+          - generic [ref=e600]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:37
+          - generic [ref=e601]: 1. 输入用户名及token 即可推到远程仓库 >>> mkdir my-project && cdmy-project >>> ec
+        - generic [ref=e602] [cursor=pointer]:
+          - generic [ref=e603]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:5002
+          - generic [ref=e604]: "[PAGE 154] these group by operations can be done with the .pivot_tabl"
+        - generic [ref=e605] [cursor=pointer]:
+          - generic [ref=e606]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:4369
+          - generic [ref=e607]: 9.1 使用测试数据库做测试 在我们的示例程序中，有一个app.py 文件，其中包含应用程序逻辑；还有一个db.py 文 件，其中包含我们
+        - generic [ref=e608] [cursor=pointer]:
+          - generic [ref=e609]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:459
+          - generic [ref=e610]: "# containers are not discovered automatically [providers] [provider"
+        - generic [ref=e611] [cursor=pointer]:
+          - generic [ref=e612]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:325
+          - generic [ref=e613]: "### Without pytest-asyncio Alternatively to pytest-asyncio, you can"
+        - generic [ref=e614] [cursor=pointer]:
+          - generic [ref=e615]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e616]: array(\[\[ 0., 1.\], \[ 1., 0.\], \[ 0., 1.\], ..., \[ 0., 1.\],
+        - generic [ref=e617] [cursor=pointer]:
+          - generic [ref=e618]: 后端/python/celery/Asynchronous Tasks with FastAPI and Celery _ TestDriven.io.md:1
+          - generic [ref=e619]: "web: build: ./project ports: - 8004:8000 command: uvicor"
+        - generic [ref=e620] [cursor=pointer]:
+          - generic [ref=e621]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:452
+          - generic [ref=e622]: 4. 工程化入门 - LazyLLM file:///C:/Users/lianghao/Downloads/4. 工程化入门 - Laz
+        - generic [ref=e623] [cursor=pointer]:
+          - generic [ref=e624]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:8737
+          - generic [ref=e625]: 6.4 Interacting with Databases In a business setting, most data may n
+        - generic [ref=e626] [cursor=pointer]:
+          - generic [ref=e627]: 项目/无人机平台/2.md:133
+          - generic [ref=e628]: "## 6. Artificial intelligence and cloud-based systems are transformin"
+        - generic [ref=e629] [cursor=pointer]:
+          - generic [ref=e630]: AI/RAG/从企业单文档问答到批量文档问答.md:743
+          - generic [ref=e631]: "#### **3.7.2 [chains /local\\_doc\\_qa.py](https://github.com/imClumsyP"
+        - generic [ref=e632] [cursor=pointer]:
+          - generic [ref=e633]: 项目/无人机平台/2.md:7
+          - generic [ref=e634]: "## 1. Unmanned Aircraft System Traffic Management (UTM) is essential"
+        - generic [ref=e635] [cursor=pointer]:
+          - generic [ref=e636]: 后端/python/SQLAlchemy/FastAPI with Async SQLAlchemy, SQLModel, and Alembic _ TestDriven.io.md:454
+          - generic [ref=e637]: "# ### end Alembic commands ###` Apply the migration: `$ docker-com"
+        - generic [ref=e638] [cursor=pointer]:
+          - generic [ref=e639]: AI/RAG/RAG LLM App开发实战_en.md:1423
+          - generic [ref=e640]: "### LinkTraining[](#training) Now we’re going to train a simple logi"
+        - generic [ref=e641] [cursor=pointer]:
+          - generic [ref=e642]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e643]: 242 CHAPTER 9 Web applications change the thread_sensitive url parame
+        - generic [ref=e644] [cursor=pointer]:
+          - generic [ref=e645]: 后端/大数据/4 Faster Pandas Alternatives for Data Analysis – Chengzhi Zhao.md:46
+          - generic [ref=e646]: "#### Helper function to repeat and compute the median ``` from itert"
+        - generic [ref=e647] [cursor=pointer]:
+          - generic [ref=e648]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1230
+          - generic [ref=e649]: "#### Testing your Apache web server + deep learning endpoint To test"
+        - generic [ref=e650] [cursor=pointer]:
+          - generic [ref=e651]: 后端/大数据/4 Faster Pandas Alternatives for Data Analysis – Chengzhi Zhao.md:46
+          - generic [ref=e652]: "``` import polars as pl from repeat_helper import repeat_executor df"
+        - generic [ref=e653] [cursor=pointer]:
+          - generic [ref=e654]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:612
+          - generic [ref=e655]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 -
+        - generic [ref=e656] [cursor=pointer]:
+          - generic [ref=e657]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:403
+          - generic [ref=e658]: 4.4 测试覆盖率 在持续集成（CI）中，测试覆盖率是衡量代码质量的重要指标。使用 pytest 结合 pytest-cov 插件，可以
+        - generic [ref=e659] [cursor=pointer]:
+          - generic [ref=e660]: AI/LazyLLM/9. 领域微调实践 - LazyLLM.pdf:1382
+          - generic [ref=e661]: 9. 领域微调实践 - LazyLLM file:///C:/Users/lianghao/Downloads/9. 领域微调实践 - L
+        - generic [ref=e662] [cursor=pointer]:
+          - generic [ref=e663]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e664]: 185 Using threads for CPU-bound work We’ve now seen how to utilize t
+        - generic [ref=e665] [cursor=pointer]:
+          - generic [ref=e666]: 后端/python/并发编程/多进程.md:514
+          - generic [ref=e667]: "# 八、work_for_me需要输入一个二进制的图片数据和一个MyParam类型的参数对象，传回处理后的图片数据和处理结果对象 ```"
+        - generic [ref=e668] [cursor=pointer]:
+          - generic [ref=e669]: AI/Claude Code/claude-code-guide.md:32
+          - generic [ref=e670]: "| Command | Action | | :-------------- | :"
+        - generic [ref=e671] [cursor=pointer]:
+          - generic [ref=e672]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:192
+          - generic [ref=e673]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 -
+        - generic [ref=e674] [cursor=pointer]:
+          - generic [ref=e675]: AI/LazyLLM/9. 领域微调实践 - LazyLLM.pdf:444
+          - generic [ref=e676]: 9. 领域微调实践 - LazyLLM file:///C:/Users/lianghao/Downloads/9. 领域微调实践 - L
+        - generic [ref=e677] [cursor=pointer]:
+          - generic [ref=e678]: 后端/duckdb/DuckDB in Action.pdf:7460
+          - generic [ref=e679]: 0.66 seconds (0.66s). ... Everything looks good so far. While dbt com
+        - generic [ref=e680] [cursor=pointer]:
+          - generic [ref=e681]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:1452
+          - generic [ref=e682]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 -
+        - generic [ref=e683] [cursor=pointer]:
+          - generic [ref=e684]: 开发工具/claude/Claude Code加Superpowers从零开发一个完整项目.md:294
+          - generic [ref=e685]: "### 第四步：using-tdd —— 测试驱动开发 **提示词：** > /superpowers.using-tdd 为当前的"
+        - generic [ref=e686] [cursor=pointer]:
+          - generic [ref=e687]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1397
+          - generic [ref=e688]: "### Stress testing your deep learning REST API Of course, this is ju"
+        - generic [ref=e689] [cursor=pointer]:
+          - generic [ref=e690]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:20520
+          - generic [ref=e691]: "[PAGE 505] You can execute multiple commands just as on the command l"
+        - generic [ref=e692] [cursor=pointer]:
+          - generic [ref=e693]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:17274
+          - generic [ref=e694]: "13.4 Introduction to scikit-learn | 399 [PAGE 418] In [102]: from"
+        - generic [ref=e695] [cursor=pointer]:
+          - generic [ref=e696]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e697]: 219 Creating a REST API with aiohttp While a proper look into all th
+        - generic [ref=e698] [cursor=pointer]:
+          - generic [ref=e699]: AI/LazyLLM/2. 快速上手RAG - LazyLLM.pdf:383
+          - generic [ref=e700]: 2. 快速上手RAG - LazyLLM file:///C:/Users/lianghao/Downloads/2. 快速上手RAG -
+        - generic [ref=e701] [cursor=pointer]:
+          - generic [ref=e702]: 项目/资源变现/爬虫/Selenium自动化测试全攻略：基础、实战、优化与集成-云社区-华为云.md:223
+          - generic [ref=e703]: "### 生成测试报告 可以使用pytest的插件`pytest-html`来生成漂亮的HTML测试报告。首先安装插件： ``` pip"
+        - generic [ref=e704] [cursor=pointer]:
+          - generic [ref=e705]: 后端/mongodb/GitHub - mongo-express_mongo-express_ Web-based MongoDB admin interface, written with Node.js and express.md:1
+          - generic [ref=e706]: "[GitHub - mongo-express/mongo-express: Web-based MongoDB admin interf"
+        - generic [ref=e707] [cursor=pointer]:
+          - generic [ref=e708]: 后端/duckdb/DuckDB in Action.pdf:7265
+          - generic [ref=e709]: 8.3.3 Describing transformations with models dbt models are a set of
+        - generic [ref=e710] [cursor=pointer]:
+          - generic [ref=e711]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:3177
+          - generic [ref=e712]: "3.35.1.base64 存本地 Android: var base64Data= {\"base64\": \"base64Code\",\"f"
+        - generic [ref=e713] [cursor=pointer]:
+          - generic [ref=e714]: AI/LazyLLM/10. Deepseek实战 - LazyLLM.pdf:199
+          - generic [ref=e715]: 10. Deepseek实战 - LazyLLM file:///C:/Users/lianghao/Downloads/10. Deep
+        - generic [ref=e716] [cursor=pointer]:
+          - generic [ref=e717]: 开发工具/claude/Claude Code加Superpowers从零开发一个完整项目.md:94
+          - generic [ref=e718]: "### 第二步：writing-plans —— 制定计划 **提示词：** > /superpowers.writing-plan"
+        - generic [ref=e719] [cursor=pointer]:
+          - generic [ref=e720]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:160
+          - generic [ref=e721]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 -
+        - generic [ref=e722] [cursor=pointer]:
+          - generic [ref=e723]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:8792
+          - generic [ref=e724]: 6.4 Interacting with Databases | 189 [PAGE 208] This is quite a bi
+        - generic [ref=e725] [cursor=pointer]:
+          - generic [ref=e726]: 前端/javascript/24 个 ES6 实用方法，用来解决实际开发的 JS 问题-今日头条.md:169
+          - generic [ref=e727]: "#### 12.如何从对象检索给定选择器指示的一组属性？ ``` const get = (from, ...selectors) =>"
+        - generic [ref=e728] [cursor=pointer]:
+          - generic [ref=e729]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e730]: 238 CHAPTER 9 Web applications <body> <h1>Summary of requests:</h1> <
+        - generic [ref=e731] [cursor=pointer]:
+          - generic [ref=e732]: AI/Claude Code/claude-code-guide.md:1392
+          - generic [ref=e733]: "#### Disclaimer **USE AT YOUR OWN RISK**: Claude Code hooks execute"
+        - generic [ref=e734] [cursor=pointer]:
+          - generic [ref=e735]: AI/资源/BERT 模型微调实战：使用Transformers微调BERT模型实现问答和文本分类任务.md:153
+          - generic [ref=e736]: "#### 4.1、设置 首先，让我们安装 Huggingface 转换器库以及其他库： ``` pip install -U tran"
+        - generic [ref=e737] [cursor=pointer]:
+          - generic [ref=e738]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:738
+          - generic [ref=e739]: 1.3.3 索引 索引用来加快字段值的查找速度。在示例1-1 中，我们在cookie_name 列上创建了一个索 引，因为我们知道以后会经
+        - generic [ref=e740] [cursor=pointer]:
+          - generic [ref=e741]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:12890
+          - generic [ref=e742]: 10.3.4 Retrying failed requests One issue with our first implementati
+        - generic [ref=e743] [cursor=pointer]:
+          - generic [ref=e744]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:21168
+          - generic [ref=e745]: "Line # Hits Time Per Hit % Time Line Contents ======"
+        - generic [ref=e747] [cursor=pointer]: 开发工具/python/fastapi/英文原版 - FastApi 最佳实践-中文版.md:385
+        - generic [ref=e748] [cursor=pointer]:
+          - generic [ref=e749]: 未归类/claude插件体系.md:239
+          - generic [ref=e750]: "### 当前项目可用的 Agents"
+        - generic [ref=e752] [cursor=pointer]: 项目/资源变现/爬虫/_不可能_检测和阻止 Chrome headless --- It is _not_ possible to detect and block Chrome headless.md:1
+        - generic [ref=e753] [cursor=pointer]:
+          - generic [ref=e754]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:455
+          - generic [ref=e755]: "### 1\\. 使用方法"
+        - generic [ref=e756] [cursor=pointer]:
+          - generic [ref=e757]: AI/资源/BERT 模型微调实战：使用Transformers微调BERT模型实现问答和文本分类任务.md:145
+          - generic [ref=e758]: "### 四、基于 [Transformers](https://so.csdn.net/so/search?q=Transformers&s"
+        - generic [ref=e759] [cursor=pointer]:
+          - generic [ref=e760]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:373
+          - generic [ref=e761]: "# and ENTRYPOINT [\"gunicorn\", \"config.wsgi\", \"-b\", \"0.0.0.0:8000\""
+        - generic [ref=e762] [cursor=pointer]:
+          - generic [ref=e763]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:1198
+          - generic [ref=e764]: "## 9、重排名 到目前为止，我们的所有方法都使用了嵌入模型（+词汇搜索）来识别数据集中前 k 个相关块。 块的数量 (k) 一直是一个很"
+        - generic [ref=e766] [cursor=pointer]: 项目/资源变现/爬虫/让 Chrome Headless 无法被检测到 --- Making Chrome Headless Undetectable.md:203
+        - generic [ref=e767] [cursor=pointer]:
+          - generic [ref=e768]: 开发工具/claude/技能包/week-report/SKILL.md:11
+          - generic [ref=e769]: "# 周报生成技能 从 git commit 历史自动提取工作内容，按公司周报模板生成结构化 Markdown 周报。"
+        - generic [ref=e771] [cursor=pointer]: 开发工具/claude/韶关模型池/readme.md:1
+        - generic [ref=e772] [cursor=pointer]:
+          - generic [ref=e773]: 开发工具/claude/系统提示词.md:368
+          - generic [ref=e774]: "### Creating pull requests Use the gh command via the Bash tool for ALL"
+        - generic [ref=e776] [cursor=pointer]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+        - generic [ref=e778] [cursor=pointer]: 后端/python/fastapi/awesome-fastapi.md:5
+        - generic [ref=e779] [cursor=pointer]:
+          - generic [ref=e780]: 开发工具/claude/技能包/rules/python/testing.md:6
+          - generic [ref=e781]: "# Python Testing > This file extends [common/testing.md](../common/tes"
+        - generic [ref=e783] [cursor=pointer]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+        - generic [ref=e784] [cursor=pointer]:
+          - generic [ref=e785]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:330
+          - generic [ref=e786]: "## 四、项目交接问题清单"
+        - generic [ref=e787] [cursor=pointer]:
+          - generic [ref=e788]: misc/2018工作记录.md:245
+          - generic [ref=e789]: "## 5月"
+        - generic [ref=e791] [cursor=pointer]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:2170
+        - generic [ref=e793] [cursor=pointer]: 项目/AI质检/java端源码阅读/unirqsr-business/高危视频检查记录.md:146
+        - generic [ref=e794] [cursor=pointer]:
+          - generic [ref=e795]: AI/提示词/awesome-chatgpt-prompts.md:87
+          - generic [ref=e796]: "# Prompts"
+        - generic [ref=e797] [cursor=pointer]:
+          - generic [ref=e798]: AI/提示词/awesome ai assistant.md:37
+          - generic [ref=e799]: 1. [📚💼 Talent Coach](#talent-coach) 1. [📦 R programming Interpreter](#r-p
+        - generic [ref=e800] [cursor=pointer]:
+          - generic [ref=e801]: 开发工具/claude/技能包/rules/common/git-workflow.md:1
+          - generic [ref=e802]: "# Git Workflow"
+        - generic [ref=e803] [cursor=pointer]:
+          - generic [ref=e804]: 项目/OO稽核/数据样例/pub_res_type.csv:1
+          - generic [ref=e805]: "Columns: RES_TYPE_ID, RES_TYPE, DATABASE_NAME"
+        - generic [ref=e806] [cursor=pointer]:
+          - generic [ref=e807]: 项目/OO稽核/数据样例/enum.csv:1
+          - generic [ref=e808]: "Columns: SERIAL_NO, DESC_ID, DESC_CHINA, CODE, KEYWORD, IS_DISPLAY, KEYWOR"
+        - generic [ref=e810] [cursor=pointer]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+        - generic [ref=e811] [cursor=pointer]:
+          - generic [ref=e812]: 项目/OO稽核/数据样例/103_resCommon_CUST_INFO_20240613.csv:1
+          - generic [ref=e813]: "Columns: CUST_ID, NO, CUST_TYPE_ID, CUST_NAME, SPELL, ALIAS, NAME_AB, REGI"
+        - generic [ref=e814] [cursor=pointer]:
+          - generic [ref=e815]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:84
+          - generic [ref=e816]: "## 开发指南"
+        - generic [ref=e818] [cursor=pointer]: 后端/python/celery/Asynchronous Tasks with FastAPI and Celery _ TestDriven.io.md:1
+        - generic [ref=e820] [cursor=pointer]: 项目/无人机平台/2.md:35
+        - generic [ref=e821] [cursor=pointer]:
+          - generic [ref=e822]: 后端/duckdb/DuckDB in Action.pdf:6281
+          - generic [ref=e823]: 7.3 Making the best possible use of MotherDuck In this section you will lea
+        - generic [ref=e824] [cursor=pointer]:
+          - generic [ref=e825]: 项目/AI知识库系统/tools_desc.md:7
+          - generic [ref=e826]: "### Tool: mysql_show_databases"
+        - generic [ref=e827] [cursor=pointer]:
+          - generic [ref=e828]: AI/Claude Code/claude-code-guide.md:27
+          - generic [ref=e829]: "### How To Use Claude Code Via Discord [Here!](https://github.com/zebbern/c"
+        - generic [ref=e830] [cursor=pointer]:
+          - generic [ref=e831]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:17082
+          - generic [ref=e832]: "Kurtosis: 3.243 Cond. No. 1"
+        - generic [ref=e833] [cursor=pointer]:
+          - generic [ref=e834]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:155
+          - generic [ref=e835]: "### Building our deep learning web app [![](https://b2633864.smushcdn.com/"
+        - generic [ref=e837] [cursor=pointer]: AI/Claude Code/How I use Claude Code (+ my best tips).pdf:1
+        - generic [ref=e838] [cursor=pointer]:
+          - generic [ref=e839]: 项目/AI日程助手/开发环境全栈跑通经验.md:101
+          - generic [ref=e840]: "### ppep-ai-service 以下是关键配置文件，要修改正确："
+        - generic [ref=e842] [cursor=pointer]: 后端/mongodb/GitHub - mongo-express_mongo-express_ Web-based MongoDB admin interface, written with Node.js and express.md:1
+        - generic [ref=e843] [cursor=pointer]:
+          - generic [ref=e844]: 未归类/claude插件体系.md:293
+          - generic [ref=e845]: "## 📜 斜杠命令完整列表 everything-claude-code 插件定义了 **26 个斜杠命令**："
+        - generic [ref=e846] [cursor=pointer]:
+          - generic [ref=e847]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:5237
+          - generic [ref=e848]: "3.61.通过WPS 打开文档 Android: var wordPath = { file: \"http://file.download.com/api"
+        - generic [ref=e849] [cursor=pointer]:
+          - generic [ref=e850]: AI/Claude Code/claude-code-guide.md:1499
+          - generic [ref=e851]: "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp"
+        - generic [ref=e852] [cursor=pointer]:
+          - generic [ref=e853]: 开发工具/claude/技能包/week-report/SKILL.md:30
+          - generic [ref=e854]: "## 执行步骤"
+        - generic [ref=e855] [cursor=pointer]:
+          - generic [ref=e856]: 开发工具/claude/系统提示词.md:936
+          - generic [ref=e857]: "## Task Launch a new agent to handle complex, multi-step tasks autonomously."
+        - generic [ref=e858] [cursor=pointer]:
+          - generic [ref=e859]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e860]: 228 CHAPTER 9 Web applications Running 30s test @ http:/ /localhost:8000/bran
+        - generic [ref=e861] [cursor=pointer]:
+          - generic [ref=e862]: 后端/python/celery/Asynchronous Tasks with FastAPI and Celery _ TestDriven.io.md:1
+          - generic [ref=e863]: "[Asynchronous Tasks with FastAPI and Celery | TestDriven.io](https://testdriv"
+        - generic [ref=e865] [cursor=pointer]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:4369
+        - generic [ref=e866] [cursor=pointer]:
+          - generic [ref=e867]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:848
+          - generic [ref=e868]: 12. 性能加速实践 - LazyLLM file:///C:/Users/lianghao/Downloads/12. 性能加速实践 - LazyLLM
+        - generic [ref=e869] [cursor=pointer]:
+          - generic [ref=e870]: 后端/python/并发编程/Python Concurrency with asyncio (Matthew Fowler) (Z-Library).pdf:7900
+          - generic [ref=e871]: 225 Creating a REST API with aiohttp import asyncpg from aiohttp import web f
+        - generic [ref=e872] [cursor=pointer]:
+          - generic [ref=e873]: AI/Claude Code/claude-code-guide.md:32
+          - generic [ref=e874]: "claude config set -g enableAllProjectMcpServers true # Auto-appr"
+        - generic [ref=e875] [cursor=pointer]:
+          - generic [ref=e876]: 后端/duckdb/DuckDB in Action.pdf:7460
+          - generic [ref=e877]: "[PAGE 245] Listing 8.16 Updating our transformations to deal with oddities in"
+        - generic [ref=e878] [cursor=pointer]:
+          - generic [ref=e879]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:8701
+          - generic [ref=e880]: "6.3 Interacting with Web APIs | 187 [PAGE 206] In [119]: issues = pd.DataF"
+        - generic [ref=e881] [cursor=pointer]:
+          - generic [ref=e882]: 开发工具/AI编程/Schema-Driven Development_ A Modern Approach.pdf:54
+          - generic [ref=e883]: 8. Observability for Fast Resolution What is Schema-Driven Development? Schem
+        - generic [ref=e884] [cursor=pointer]:
+          - generic [ref=e885]: AI/RAG/RAG LLM App开发实战_en.md:1060
+          - generic [ref=e886]: "### LinkFull parameter[](#full-parameter) Our full parameter fine-tuning app"
+        - generic [ref=e887] [cursor=pointer]:
+          - generic [ref=e888]: AI/LazyLLM/12. 性能加速实践 - LazyLLM.pdf:848
+          - generic [ref=e889]: "[PAGE 29] 在store_conf的配置中，存储后端和索引后端是独立的两部分，但是如果存储类型 选择milvus的情况下，由于kwargs中已经包"
+        - generic [ref=e890] [cursor=pointer]:
+          - generic [ref=e891]: 后端/duckdb/DuckDB in Action.pdf:7158
+          - generic [ref=e892]: 8.3 Data transformation and modeling with dbt Data, in its raw form, often re
+        - generic [ref=e893] [cursor=pointer]:
+          - generic [ref=e894]: AI/Claude Code/claude-code-guide.md:2031
+          - generic [ref=e895]: "## Best Practices > Curated guidance for safe, fast, and correct use of the"
+        - generic [ref=e896] [cursor=pointer]:
+          - generic [ref=e897]: AI/RAG/RAG LLM App开发实战_en.md:1504
+          - generic [ref=e898]: "### LinkReranking experiments[](#reranking-experiments) Now we're ready to a"
+        - generic [ref=e899] [cursor=pointer]:
+          - generic [ref=e900]: 后端/pandas/Python for Data Analysis Data Wrangling with Pandas, NumPy, and IPython (Wes McKinney) (Z-Library).pdf:1149
+          - generic [ref=e901]: 1.4 Installation and Setup | 9 [PAGE 28] Some Linux distributions have ver
+        - generic [ref=e903] [cursor=pointer]: 项目/无人机平台/1.md:93
+        - generic [ref=e905] [cursor=pointer]: 项目/无人机平台/2.md:63
+        - generic [ref=e906] [cursor=pointer]:
+          - generic [ref=e907]: 项目/无人机平台/1.md:7
+          - generic [ref=e908]: "## 1. Open-source drone software ecosystems foster innovation, interoperabilit"
+        - generic [ref=e909] [cursor=pointer]:
+          - generic [ref=e910]: 项目/无人机平台/2.md:83
+          - generic [ref=e911]: "## 4. Low Altitude Air Management Systems (LAAMS) are critical for ensuring sa"
+        - generic [ref=e912] [cursor=pointer]:
+          - generic [ref=e913]: AI/LazyLLM/4. 工程化入门 - LazyLLM.pdf:53
+          - generic [ref=e914]: 4. 工程化入门 - LazyLLM file:///C:/Users/lianghao/Downloads/4. 工程化入门 - LazyLLM (202
+        - generic [ref=e915] [cursor=pointer]:
+          - generic [ref=e916]: AI/Claude Code/claude-code-guide.md:32
+          - generic [ref=e917]: "#### [Click For Daily Updated & Organized Claude Changelogs & News](https://gi"
+        - generic [ref=e918] [cursor=pointer]:
+          - generic [ref=e919]: 后端/python/fastapi/awesome-fastapi.md:5
+          - generic [ref=e920]: "* [Full Stack FastAPI and PostgreSQL - Base Project Generator](https://githu"
+        - generic [ref=e921] [cursor=pointer]:
+          - generic [ref=e922]: 项目/资源变现/爬虫/Python自动化测试实战-Selenium与PyTest完美组合-云社区-华为云.md:1
+          - generic [ref=e923]: "![](https://bbs-img.huaweicloud.com/blogs/img/20240328/1711560855029323964.png"
+        - generic [ref=e924] [cursor=pointer]:
+          - generic [ref=e925]: 后端/python/fastapi/awesome-fastapi.md:5
+          - generic [ref=e926]: "### License [Open in github.dev](https://github.dev/) [Open in a new github.d"
+        - generic [ref=e927] [cursor=pointer]:
+          - generic [ref=e928]: 后端/mongodb/GitHub - mongo-express_mongo-express_ Web-based MongoDB admin interface, written with Node.js and express.md:1
+          - generic [ref=e929]: "| Name | Default | Description | | --- | --- | --- | | `ME_CONFIG_MONGODB_URL`"
+        - generic [ref=e930] [cursor=pointer]:
+          - generic [ref=e931]: 后端/python/fastapi/awesome-fastapi.md:5
+          - generic [ref=e932]: "* [FastAPI Code Generator](https://github.com/koxudaxi/fastapi-code-generato"
+        - generic [ref=e933] [cursor=pointer]:
+          - generic [ref=e934]: 项目/无人机平台/1.md:29
+          - generic [ref=e935]: "## 2. Open-source drone software supports a wide range of applications includi"
+        - generic [ref=e936] [cursor=pointer]:
+          - generic [ref=e937]: AI/Claude Code/Claude Code Best Practices _ Anthropic-dual.pdf:54
+          - generic [ref=e938]: 1. 自定义您的设置 Claude Code 是一个智能代理代码助手，能够自动将上下文整合到提示中。这种上 下文收集会消耗时间和 token，但您可以通过环
+        - generic [ref=e940] [cursor=pointer]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:459
+        - generic [ref=e941] [cursor=pointer]:
+          - generic [ref=e942]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:108
+          - generic [ref=e943]: "### 2.3 添加\\*.so 库 值得注意的是,我们还是切换到project视图,在src/main 目录下创建 jniLibs 文件夹 > 复制"
+        - generic [ref=e945] [cursor=pointer]: 项目/无人机平台/2.md:133
+        - generic [ref=e946] [cursor=pointer]:
+          - generic [ref=e947]: AI/RAG/从企业单文档问答到批量文档问答.md:710
+          - generic [ref=e948]: "# 使用索引在文本中搜索与嵌入向量相似的内容，返回最相似的fetch_k个文本的得分和索引 scores, indices = self."
+        - generic [ref=e950] [cursor=pointer]: 项目/无人机平台/2.md:7
+        - generic [ref=e951] [cursor=pointer]:
+          - generic [ref=e952]: AI/RAG/从企业单文档问答到批量文档问答.md:641
+          - generic [ref=e953]: "#### 3.4.1 [loader/pdf_loader.py](https://github.com/imClumsyPanda/langchain-Cha"
+        - generic [ref=e955] [cursor=pointer]: 后端/大数据/4 Faster Pandas Alternatives for Data Analysis – Chengzhi Zhao.md:46
+        - generic [ref=e956] [cursor=pointer]:
+          - generic [ref=e957]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1035
+          - generic [ref=e958]: "### Update your Apache configuration to point to the Flask app In order to conf"
+        - generic [ref=e960] [cursor=pointer]: AI/Claude Code/claude-code-guide.md:32
+        - generic [ref=e961] [cursor=pointer]:
+          - generic [ref=e962]: 开发工具/claude/Claude Code加Superpowers从零开发一个完整项目.md:141
+          - generic [ref=e963]: "### 第三步：executing-plans —— 执行计划 **提示词：** > /superpowers.executing-plans 开始执行计划"
+        - generic [ref=e965] [cursor=pointer]: 后端/duckdb/DuckDB in Action.pdf:7460
+        - generic [ref=e966] [cursor=pointer]:
+          - generic [ref=e967]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1292
+          - generic [ref=e968]: "### Starting your deep learning model server Your Apache server _should_ already"
+        - generic [ref=e969] [cursor=pointer]:
+          - generic [ref=e970]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:2463
+          - generic [ref=e971]: 4.2 使用mock 当在测试环境中创建测试数据库没有意义或者根本不可行时，mock 技术会派上大用场。 如果你有大量逻辑需要对查询结果进行操作，那么模拟SQLA
+        - generic [ref=e972] [cursor=pointer]:
+          - generic [ref=e973]: 项目/无人机平台/2.md:63
+          - generic [ref=e974]: In parallel, digital low-altitude airspace management systems are being developed
+        - generic [ref=e976] [cursor=pointer]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:385
+        - generic [ref=e977] [cursor=pointer]:
+          - generic [ref=e978]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:170
+          - generic [ref=e979]: "### Minimize the Number of Layers It's a good idea to combine the `RUN`, `COPY`,"
+        - generic [ref=e980] [cursor=pointer]:
+          - generic [ref=e981]: 后端/python/Dockerizing FastAPI with Postgres, Uvicorn, and Traefik _ TestDriven.io.md:459
+          - generic [ref=e982]: "1. ``traefik.http.routers.fastapi.rule=Host(`fastapi-traefik.your-domain.com`)``"
+        - generic [ref=e983] [cursor=pointer]:
+          - generic [ref=e984]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:4764
+          - generic [ref=e985]: ONE OF THE MORE ADVANCED FEATURES OF PANDAS IS THE ABILITY TO PERFORM operations
+        - generic [ref=e986] [cursor=pointer]:
+          - generic [ref=e987]: AI/RAG/RAG LLM App开发实战_en.md:483
+          - generic [ref=e988]: "### LinkEvaluator[](#evaluator) We're going to start by determining our evaluator"
+        - generic [ref=e989] [cursor=pointer]:
+          - generic [ref=e990]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:711
+          - generic [ref=e991]: 1.5 节和1.6 节中的所有命令都包含在Table 构造函数中，或者通过特殊方法 被添加到表中。它们将作为独立语句进行持久化或附加到元数据。
+        - generic [ref=e992] [cursor=pointer]:
+          - generic [ref=e993]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:3919
+          - generic [ref=e994]: "2. 开锁 function openBleLock() { var params = { \"params\": { \"ORDER_ID\": \"123456\", \"D"
+        - generic [ref=e996] [cursor=pointer]: 开发工具/claude/系统提示词.md:936
+        - generic [ref=e997] [cursor=pointer]:
+          - generic [ref=e998]: 后端/duckdb/DuckDB in Action.pdf:10194
+          - generic [ref=e999]: 10.4.5 Analyzing the data To get an overview of the data values and their distribut
+        - generic [ref=e1000] [cursor=pointer]:
+          - generic [ref=e1001]: 项目/AI知识库系统/tools_desc.md:224
+          - generic [ref=e1002]: "#### Description: 互联网搜索用户的问题,返回搜索结果 Args: query (str): 用户问题 Retur"
+        - generic [ref=e1003] [cursor=pointer]:
+          - generic [ref=e1004]: 项目/AI知识库系统/tools_desc.md:215
+          - generic [ref=e1005]: "#### Description: Convert time between timezones"
+        - generic [ref=e1006] [cursor=pointer]:
+          - generic [ref=e1007]: 项目/AI知识库系统/tools_desc.md:239
+          - generic [ref=e1008]: "#### Description: 获取图片链接和描述"
+        - generic [ref=e1009] [cursor=pointer]:
+          - generic [ref=e1010]: 项目/AI知识库系统/tools_desc.md:209
+          - generic [ref=e1011]: "#### Description: Get current time in a specific timezones"
+        - generic [ref=e1012] [cursor=pointer]:
+          - generic [ref=e1013]: 开发工具/claude/系统提示词.md:52
+          - generic [ref=e1014]: "## Doing tasks - The user will primarily request you to perform software engineerin"
+        - generic [ref=e1015] [cursor=pointer]:
+          - generic [ref=e1016]: 后端/duckdb/DuckDB in Action.pdf:8608
+          - generic [ref=e1017]: 9.2.3 Creating our first dashboard In this section, we’re going to learn how to crea
+        - generic [ref=e1019] [cursor=pointer]: AI/RAG/RAG LLM App开发实战_en.md:1504
+        - generic [ref=e1020] [cursor=pointer]:
+          - generic [ref=e1021]: 项目/AI日程助手/README.md:136
+          - generic [ref=e1022]: "### 配置内容 ```yaml spring: redis: password: ENC(9YZr+J5edUE7u7qyd+f0upXn3V7DqLPf"
+        - generic [ref=e1024] [cursor=pointer]: 项目/无人机平台/1.md:7
+        - generic [ref=e1026] [cursor=pointer]: 项目/无人机平台/1.md:29
+        - generic [ref=e1027] [cursor=pointer]:
+          - generic [ref=e1028]: AI/Claude Code/Claude Code Best Practices _ Anthropic-dual.pdf:642
+          - generic [ref=e1029]: 4. 优化您的工作流程 以下建议适用于所有工作流程： a. 请具体说明 Claude Code 的成功率在使用更具体的指令时会显著提高，尤其是在首次尝试 时。提前提供明确的
+        - generic [ref=e1030] [cursor=pointer]:
+          - generic [ref=e1031]: 开发工具/claude/系统提示词.md:321
+          - generic [ref=e1032]: "### Committing changes with git Only create commits when requested by the user. If un"
+        - generic [ref=e1033] [cursor=pointer]:
+          - generic [ref=e1034]: 后端/python/SQLAlchemy/SQLAlchemy：Python数据库实战_第2版 (贾森 • 迈尔斯, 里克 • 科普兰) (Z-Library).pdf:4722
+          - generic [ref=e1035]: 9.2 使用mock 当在你的测试环境中创建测试数据库没有意义或者根本不可行时，mock 技术会派上大用 场。如果你有大量逻辑需要对查询结果进行操作，那么模拟SQLAlch
+        - generic [ref=e1036] [cursor=pointer]:
+          - generic [ref=e1037]: AI/RAG/从企业单文档问答到批量文档问答.md:639
+          - generic [ref=e1038]: "### 3.4 loader：文档加载与text转换"
+        - generic [ref=e1039] [cursor=pointer]:
+          - generic [ref=e1040]: AI/Text2Sql/Text2SQL圣经：从0到1精通Text2Sql（Chat2Sql）的原理，以及Text2Sql开源项目的使用-阿里云开发者社区.md:262
+          - generic [ref=e1041]: "### 实操第3步骤：撸铁 写一个 python 代码， 调用openai接口作为llm，连接数据库， 然后 得到查询的结果 当然，这个代码也是用ai写的， 一句话就生"
+        - generic [ref=e1042] [cursor=pointer]:
+          - generic [ref=e1043]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:535
+          - generic [ref=e1044]: THE PANDAS SERIES DATA STRUCTURE PROVIDES SUPPORT FOR THE BASIC CRUD operations—creat
+        - generic [ref=e1045] [cursor=pointer]:
+          - generic [ref=e1046]: AI/RAG/RAG LLM App开发实战_en.md:1690
+          - generic [ref=e1047]: "# samples for OSS models: 544 (94.8%) Performance on samples predicted for codeLlama"
+        - generic [ref=e1048] [cursor=pointer]:
+          - generic [ref=e1049]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:3176
+          - generic [ref=e1050]: 3.35.保存base64 为本地文件
+        - generic [ref=e1051] [cursor=pointer]:
+          - generic [ref=e1052]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:87
+          - generic [ref=e1053]: "# final stage FROM python:3.12.2-slim WORKDIR /notebooks COPY --from=builder /whee"
+        - generic [ref=e1054] [cursor=pointer]:
+          - generic [ref=e1055]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:1155
+          - generic [ref=e1056]: 0.51 ms ... rise ↗ and fall ↘ combined ↗ 0.27 ms rise ↘ 0.24 ms fall The screen shows v
+        - generic [ref=e1057] [cursor=pointer]:
+          - generic [ref=e1058]: AI/RAG/从企业单文档问答到批量文档问答.md:965
+          - generic [ref=e1059]: "#### 4.1.1 knowledge\\_base /kb\\_doc_api.py 以下是对该项目文件的逐行分析：[Langchain-Chatchat/server/k"
+        - generic [ref=e1060] [cursor=pointer]:
+          - generic [ref=e1061]: AI/Claude Code/How I use Claude Code (+ my best tips).pdf:1
+          - generic [ref=e1062]: "## Page 1 我成为 Cursor 高级用户已经一年多了。我编写了每周成千上万开发人员参考 的 Cursor 技巧指南。我已经深入兔子洞了解了每个光标电源功能和代理模"
+        - generic [ref=e1063] [cursor=pointer]:
+          - generic [ref=e1064]: AI/Claude Code/How I use Claude Code (+ my best tips).pdf:1
+          - generic [ref=e1065]: "Here's the real difference: we have a React component at Builder that's 18,000 lines lo"
+        - generic [ref=e1066] [cursor=pointer]:
+          - generic [ref=e1067]: 开发工具/claude/韶关模型池/readme.md:1
+          - generic [ref=e1068]: "-- Insert into tbl_manage_video_storage_detail INSERT INTO tbl_manage_video_sto"
+        - generic [ref=e1069] [cursor=pointer]:
+          - generic [ref=e1070]: 科研/家宽大数据分析/论文/如何用Python和深度神经网络发现即将流失的客户？-今日头条.md:1
+          - generic [ref=e1071]: "[如何用Python和深度神经网络发现即将流失的客户？-今日头条](https://www.toutiao.com/article/6490077064580825614/?"
+        - generic [ref=e1072] [cursor=pointer]:
+          - generic [ref=e1073]: 开发工具/python/fastapi/英文原版 - FastApi 最佳实践-中文版.md:385
+          - generic [ref=e1074]: "`from fastapi import APIRouter, BackgroundTasks from pydantic import UUID4 from src.no"
+        - generic [ref=e1075] [cursor=pointer]:
+          - generic [ref=e1076]: 开发工具/claude/系统提示词.md:35
+          - generic [ref=e1077]: "# System Prompt You are a Claude agent, built on Anthropic's Claude Agent SDK. You ar"
+        - generic [ref=e1078] [cursor=pointer]:
+          - generic [ref=e1079]: 项目/无人机平台/1.md:93
+          - generic [ref=e1080]: "## 5. Open-source drone software provides flexibility, security, and long-term sustaina"
+        - generic [ref=e1081] [cursor=pointer]:
+          - generic [ref=e1082]: 开发工具/claude/系统提示词.md:280
+          - generic [ref=e1083]: "## Bash Executes a given bash command and returns its output. The working directory p"
+        - generic [ref=e1085] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:535
+        - generic [ref=e1087] [cursor=pointer]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:1155
+        - generic [ref=e1088] [cursor=pointer]:
+          - generic [ref=e1089]: AI/RAG/从企业单文档问答到批量文档问答.md:957
+          - generic [ref=e1090]: "### 4.1 server/knowledge_base：基于批量文档的企业知识库问答 该项目的最新版中实现了基于批量文档的问答，比如 ```null for file_"
+        - generic [ref=e1091] [cursor=pointer]:
+          - generic [ref=e1092]: 开发工具/claude/系统提示词.md:1066
+          - generic [ref=e1093]: "## TaskOutput - Retrieves output from a running or completed task (background shell, ag"
+        - generic [ref=e1094] [cursor=pointer]:
+          - generic [ref=e1095]: 开发工具/claude/系统提示词.md:936
+          - generic [ref=e1096]: "{ \"$schema\": \"https://json-schema.org/draft/2020-12/schema\", \"type\": \"object\", \"pr"
+        - generic [ref=e1097] [cursor=pointer]:
+          - generic [ref=e1098]: AI/RAG/RAG LLM App开发实战_en.md:1504
+          - generic [ref=e1099]: "```python # Train classifier vectorizer = CountVectorizer() classifier = LogisticRegress"
+        - generic [ref=e1100] [cursor=pointer]:
+          - generic [ref=e1101]: 项目/无人机平台/1.md:7
+          - generic [ref=e1102]: In conclusion, open-source drone software ecosystems offer a comprehensive, flexible, an
+        - generic [ref=e1103] [cursor=pointer]:
+          - generic [ref=e1104]: 项目/无人机平台/1.md:29
+          - generic [ref=e1105]: In summary, open-source drone software is driving innovation across commercial, industri
+        - generic [ref=e1106] [cursor=pointer]:
+          - generic [ref=e1107]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:281
+          - generic [ref=e1108]: "### 6\\. 构建 安装 `cmake` 和 `go`： ``` `brew install cmake go` * 1 ``` 然后生成依赖项： ```"
+        - generic [ref=e1109] [cursor=pointer]:
+          - generic [ref=e1110]: 开发工具/vscode/快捷键_插件_技巧.md:14
+          - generic [ref=e1111]: "### 技巧"
+        - generic [ref=e1112] [cursor=pointer]:
+          - generic [ref=e1113]: 后端/python/华为社区python入门/并发/Python 编程中的迭代器、生成器和装饰器-详细实战-云社区-华为云.md:379
+          - generic [ref=e1114]: "### 迭代器、生成器和装饰器的高级应用"
+        - generic [ref=e1115] [cursor=pointer]:
+          - generic [ref=e1116]: misc/2018工作记录.md:28
+          - generic [ref=e1117]: "## 2月"
+        - generic [ref=e1118] [cursor=pointer]:
+          - generic [ref=e1119]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:2198
+          - generic [ref=e1120]: AS SSD DiskSpd Add an additional device (search by model, GPU, CPU, storage) DPC 延迟 我们无法
+        - generic [ref=e1121] [cursor=pointer]:
+          - generic [ref=e1122]: AI/资源/BERT 模型微调实战：使用Transformers微调BERT模型实现问答和文本分类任务.md:19
+          - generic [ref=e1123]: "### 二、BERT的基本原理"
+        - generic [ref=e1124] [cursor=pointer]:
+          - generic [ref=e1125]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:858
+          - generic [ref=e1126]: "### Configuring our deep learning production environment This section will discuss how to"
+        - generic [ref=e1127] [cursor=pointer]:
+          - generic [ref=e1128]: 项目/AI日程助手/开发环境全栈跑通经验.md:18
+          - generic [ref=e1129]: "## 网络穿透配置 1. 在云服务器上运行 frps，run-frps `nohup /home/lianghao/frp/frps -c /home/lianghao/frp/fr"
+        - generic [ref=e1130] [cursor=pointer]:
+          - generic [ref=e1131]: misc/2018工作记录.md:1
+          - generic [ref=e1132]: "## 1月"
+        - generic [ref=e1134] [cursor=pointer]: AI/Text2Sql/Text2SQL圣经：从0到1精通Text2Sql（Chat2Sql）的原理，以及Text2Sql开源项目的使用-阿里云开发者社区.md:523
+        - generic [ref=e1135] [cursor=pointer]:
+          - generic [ref=e1136]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:1
+          - generic [ref=e1137]: "# SFU 视频通讯系统 - 项目交接与技术分析 > 文档生成时间: 2026-06-09 > 最近更新: 2026-06-09 (补充三端联合分析,修正参数来源结论) > 分析范围:"
+        - generic [ref=e1138] [cursor=pointer]:
+          - generic [ref=e1139]: 后端/python/并发编程/python asyncio从入门到精通/13.快速提升异步IO性能的简单方法.md:55
+          - generic [ref=e1140]: "# 三、深入探讨uvloop的兼容性与应用场景"
+        - generic [ref=e1141] [cursor=pointer]:
+          - generic [ref=e1142]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:197
+          - generic [ref=e1143]: "### 3.1 阶段一: 纯服务端,立即见效 > **前提确认**: App 端的分辨率/码率是否读取服务端 `getEncodeParams`/`mediaConstraints` 下"
+        - generic [ref=e1144] [cursor=pointer]:
+          - generic [ref=e1145]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:1603
+          - generic [ref=e1146]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：1
+        - generic [ref=e1147] [cursor=pointer]:
+          - generic [ref=e1148]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:12
+          - generic [ref=e1149]: "### 1\\. 安装"
+        - generic [ref=e1150] [cursor=pointer]:
+          - generic [ref=e1151]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:1435
+          - generic [ref=e1152]: "## 10、成本分析 除了性能之外，我们还想评估配置的成本（特别是考虑到较大的法学硕士的高价位）。 我们将把它分解为即时定价和抽样定价。 提示大小是我们的系统、助手和用户内容（包括检索到的"
+        - generic [ref=e1153] [cursor=pointer]:
+          - generic [ref=e1154]: AI/RAG/从企业单文档问答到批量文档问答.md:194
+          - generic [ref=e1155]: "### 1.2 能力层：Chains、Memory、Tools 如果基础层提供了最核心的能力，能力层则给这些能力安装上手、脚、脑，让其具有记忆和触发万物的能力，包括：Chains、Memo"
+        - generic [ref=e1156] [cursor=pointer]:
+          - generic [ref=e1157]: 项目/AI日程助手/开发环境全栈跑通经验.md:156
+          - generic [ref=e1158]: "### ppep-service-gateway 以下是关键配置文件，要修改正确："
+        - generic [ref=e1159] [cursor=pointer]:
+          - generic [ref=e1160]: misc/2018工作记录.md:564
+          - generic [ref=e1161]: "## 8月"
+        - generic [ref=e1162] [cursor=pointer]:
+          - generic [ref=e1163]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:9
+          - generic [ref=e1164]: "## 构建和运行"
+        - generic [ref=e1165] [cursor=pointer]:
+          - generic [ref=e1166]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:337
+          - generic [ref=e1167]: "### 7\\. REST API Ollama 提供了用于运行和管理模型的 REST API。"
+        - generic [ref=e1168] [cursor=pointer]:
+          - generic [ref=e1169]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:200
+          - generic [ref=e1170]: "### index.md 结构规范"
+        - generic [ref=e1171] [cursor=pointer]:
+          - generic [ref=e1172]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:356
+          - generic [ref=e1173]: "# string format root@ede24a5ef536:/app# ps ax PID TTY STAT TIME COMMAND 1 ? Ss"
+        - generic [ref=e1174] [cursor=pointer]:
+          - generic [ref=e1175]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:1711
+          - generic [ref=e1176]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).htm
+        - generic [ref=e1177] [cursor=pointer]:
+          - generic [ref=e1178]: 项目/AI知识库系统/tools_desc.md:41
+          - generic [ref=e1179]: "### Tool: mysql_show_status"
+        - generic [ref=e1180] [cursor=pointer]:
+          - generic [ref=e1181]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:575
+          - generic [ref=e1182]: "### 2\\. 端点"
+        - generic [ref=e1184] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:1366
+        - generic [ref=e1185] [cursor=pointer]:
+          - generic [ref=e1186]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:19
+          - generic [ref=e1187]: "## 一、系统架构概览"
+        - generic [ref=e1188] [cursor=pointer]:
+          - generic [ref=e1189]: AI/资源/BERT 模型微调实战：使用Transformers微调BERT模型实现问答和文本分类任务.md:50
+          - generic [ref=e1190]: "### 三、基于 Pytorch 微调 BERT 实现问答任务 在未经过任何训练之前的原始 BERT 理论上是无法来完成问答任务的，因为它只能完成两种任务，一种是 MLM，一种就是 NSP，它并没有经过问答"
+        - generic [ref=e1191] [cursor=pointer]:
+          - generic [ref=e1192]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:37
+          - generic [ref=e1193]: "### 包结构 项目采用分层架构，主要包含以下模块："
+        - generic [ref=e1194] [cursor=pointer]:
+          - generic [ref=e1195]: AI/资源/one-api-OpenAI 接口管理.md:196
+          - generic [ref=e1196]: "### 部署第三方服务配合 One API 使用 > 欢迎 PR 添加更多示例。"
+        - generic [ref=e1197] [cursor=pointer]:
+          - generic [ref=e1198]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:134
+          - generic [ref=e1199]: "## 二、现有问题分析"
+        - generic [ref=e1201] [cursor=pointer]: 项目/OO稽核/数据样例/互联网专线-DOMESTIC_DIA_CIRCUIT.md:9
+        - generic [ref=e1202] [cursor=pointer]:
+          - generic [ref=e1203]: misc/2018工作记录.md:457
+          - generic [ref=e1204]: "## 7月"
+        - generic [ref=e1205] [cursor=pointer]:
+          - generic [ref=e1206]: 项目/AI知识库系统/tools_desc.md:25
+          - generic [ref=e1207]: "### Tool: mysql_show_variables"
+        - generic [ref=e1208] [cursor=pointer]:
+          - generic [ref=e1209]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:102
+          - generic [ref=e1210]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).html 3/56 [PAG
+        - generic [ref=e1211] [cursor=pointer]:
+          - generic [ref=e1212]: 未归类/claude插件体系.md:173
+          - generic [ref=e1213]: "## 🚀 快速上手"
+        - generic [ref=e1214] [cursor=pointer]:
+          - generic [ref=e1215]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:615
+          - generic [ref=e1216]: "# output ... #4 [1/2] FROM docker.io/library/alpine #4 sha256:665ba8b2cdc0cb0200e2a42a6b3c0f8f684089f4cd1b81494fbb"
+        - generic [ref=e1217] [cursor=pointer]:
+          - generic [ref=e1218]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:179
+          - generic [ref=e1219]: "### 5\\. CLI 参考"
+        - generic [ref=e1220] [cursor=pointer]:
+          - generic [ref=e1221]: AI/RAG/从企业单文档问答到批量文档问答.md:34
+          - generic [ref=e1222]: "### 1.1 基础层：models、LLMs、index"
+        - generic [ref=e1223] [cursor=pointer]:
+          - generic [ref=e1224]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:1109
+          - generic [ref=e1225]: A SERIES OBJECT HAS MANY ATTRIBUTES AND METHODS THAT ARE USEFUL FOR DATA analysis. This section will cover a few of
+        - generic [ref=e1227] [cursor=pointer]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:280
+        - generic [ref=e1229] [cursor=pointer]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:39
+        - generic [ref=e1230] [cursor=pointer]:
+          - generic [ref=e1231]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:177
+          - generic [ref=e1232]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).html 5/56 [PAGE 6]
+        - generic [ref=e1234] [cursor=pointer]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:1719
+        - generic [ref=e1235] [cursor=pointer]:
+          - generic [ref=e1236]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:44
+          - generic [ref=e1237]: 3.12.物理返回操作事件拦截并处理......................................................... 28 3.13.文件下载...................................
+        - generic [ref=e1238] [cursor=pointer]:
+          - generic [ref=e1239]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:236
+          - generic [ref=e1240]: 8. Notebookcheck 总体评分 Honor MagicBook Art 14 是一款轻薄的 14 英寸笔记本电脑，我们已于 2024 年 8 月评测过 它，它配备了英特尔酷睿 Ultra 处理器。 英特尔酷睿 Ultra 处理器的 1
+        - generic [ref=e1241] [cursor=pointer]:
+          - generic [ref=e1242]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:1756
+          - generic [ref=e1243]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).html 48/56 [PAGE 49] 【注意】
+        - generic [ref=e1244] [cursor=pointer]:
+          - generic [ref=e1245]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:152
+          - generic [ref=e1246]: 1. 基于大模型的查询重写策略 查询重写（Query Rewriting）是指对用户输入的查询进行一定程度的修改或优 化，以提高检索结果的相关性和准确性。由于用户的查询可能存在表达不清、关 键词缺失、语法错误或查询意图不明确的情况，直接使用原始查
+        - generic [ref=e1248] [cursor=pointer]: 后端/pandas/Learning the Pandas Library Python Tools for Data Munging, Analysis, and Visual (Matt Harrison Michael Prentiss) (Z-Library).pdf:280
+        - generic [ref=e1249] [cursor=pointer]:
+          - generic [ref=e1250]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:29
+          - generic [ref=e1251]: "## 2、数据 在开始构建 RAG 应用程序之前，我们需要首先创建包含已处理数据源的向量数据库。 ![](https://pic3.zhimg.com/v2-dee971e46afdc2c1e644d968a01b045a_b.jpg)"
+        - generic [ref=e1252] [cursor=pointer]:
+          - generic [ref=e1253]: 未归类/claude插件体系.md:121
+          - generic [ref=e1254]: "## 📂 文件位置速查"
+        - generic [ref=e1255] [cursor=pointer]:
+          - generic [ref=e1256]: 项目/AI日程助手/开发环境全栈跑通经验.md:170
+          - generic [ref=e1257]: "### dify-chat-client"
+        - generic [ref=e1258] [cursor=pointer]:
+          - generic [ref=e1259]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:253
+          - generic [ref=e1260]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).html 7/56 [PAGE 8]
+        - generic [ref=e1261] [cursor=pointer]:
+          - generic [ref=e1262]: 项目/AI知识库系统/tools_desc.md:6
+          - generic [ref=e1263]: "## Tools of mcp server mysql_mcp_server:"
+        - generic [ref=e1264] [cursor=pointer]:
+          - generic [ref=e1265]: 后端/python/并发编程/多进程.md:1
+          - generic [ref=e1266]: "# 一、multiprocessing.Process 在Python中，多进程编程主要是通过 `multiprocessing` 模块实现的。这个模块允许程序员创建并管理多个独立运行的进程，从而充分利用多核CPU资源，提高程序执行效率和并发能力。"
+        - generic [ref=e1267] [cursor=pointer]:
+          - generic [ref=e1268]: AI/RAG/从企业单文档问答到批量文档问答.md:63
+          - generic [ref=e1269]: "#### 1.1.3 **[Index](https://github.com/hwchase17/langchain/tree/master/langchain/indexes \"Index\")(索引)：Vector方案、KG方案** 对用户私域文本、图片、P"
+        - generic [ref=e1270] [cursor=pointer]:
+          - generic [ref=e1271]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:195
+          - generic [ref=e1272]: "## 三、优化方案"
+        - generic [ref=e1273] [cursor=pointer]:
+          - generic [ref=e1274]: 项目/AI日程助手/测试脚本.md:82
+          - generic [ref=e1275]: "### 测试定时任务"
+        - generic [ref=e1276] [cursor=pointer]:
+          - generic [ref=e1277]: 未归类/claude插件体系.md:1
+          - generic [ref=e1278]: "# Claude Code 插件体系详解 /plugin list 可以将 everythin-claude-code plugin 去激活或者卸载"
+        - generic [ref=e1279] [cursor=pointer]:
+          - generic [ref=e1280]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:336
+          - generic [ref=e1281]: 2. 检索策略优化——Retriever LazyLLM 中的 Retriever 满足 ： 其中，Node Group 表示对原始文档按某种规则划分后的子集形式，例如通过固定 长度切分可生成多个子段，或通过摘要提取获取每段的摘要内容。Similarity 是 Retriever
+        - generic [ref=e1282] [cursor=pointer]:
+          - generic [ref=e1283]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:845
+          - generic [ref=e1284]: "## 6.3 验证 我们的验证评估标准涉及一个信息检索 (IR) 评估器，该评估器将从每个查询的语料库中检索前 k 个相似文档。 InformationRetrievalEvaluator 需要以下输入： - 查询：Dict\\[str, str\\] # qid => 查询"
+        - generic [ref=e1285] [cursor=pointer]:
+          - generic [ref=e1286]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:185
+          - generic [ref=e1287]: "## 代码文档格式规范（重要）"
+        - generic [ref=e1288] [cursor=pointer]:
+          - generic [ref=e1289]: 未归类/claude插件体系.md:67
+          - generic [ref=e1290]: "## 🔄 执行顺序与优先级"
+        - generic [ref=e1291] [cursor=pointer]:
+          - generic [ref=e1292]: misc/2018工作记录.md:84
+          - generic [ref=e1293]: "## 3月"
+        - generic [ref=e1294] [cursor=pointer]:
+          - generic [ref=e1295]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:1093
+          - generic [ref=e1296]: "## 8、词汇搜索 现在，我们将用传统的词法搜索（Lexical Search）来补充基于向量嵌入的搜索，传统的词法搜索搜索查询和文档块之间的精确标记匹配。 我们的直觉是，词法搜索可以帮助识别具有精确关键字匹配的块，而语义表示可能无法捕获这些块。 特别是对于我们的嵌入模型中词汇表之外的标记（因此通"
+        - generic [ref=e1297] [cursor=pointer]:
+          - generic [ref=e1298]: misc/2018工作记录.md:660
+          - generic [ref=e1299]: "## 9月"
+        - generic [ref=e1301] [cursor=pointer]: AI/提示词/awesome ai assistant.md:37
+        - generic [ref=e1302] [cursor=pointer]:
+          - generic [ref=e1303]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:798
+          - generic [ref=e1304]: "# final stage FROM python:3.12.2-slim COPY --from=builder /opt/venv /opt/venv WORKDIR /app ENV PATH=\"/opt/venv/bin:$PATH\"`"
+        - generic [ref=e1305] [cursor=pointer]:
+          - generic [ref=e1306]: 项目/AI知识库系统/tools_desc.md:57
+          - generic [ref=e1307]: "### Tool: mysql_show_tables"
+        - generic [ref=e1308] [cursor=pointer]:
+          - generic [ref=e1309]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:42
+          - generic [ref=e1310]: "#### 1.2.7 增强浏览能力"
+        - generic [ref=e1311] [cursor=pointer]:
+          - generic [ref=e1312]: 未归类/Honor MagicBook Art 14 Snapdragon 评测 - GSMArena.com 新闻.pdf:39
+          - generic [ref=e1313]: "[PAGE 6] better than what we got with the Intel MagicBook Art 14, while the HDR brightness was equal. 该屏幕在 HDR 模式下标称亮度为 700 尼特。我们在 SDR 模式下测量到整体亮度稳定在 540 尼特以上，屏幕底部接近 600"
+        - generic [ref=e1314] [cursor=pointer]:
+          - generic [ref=e1315]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:77
+          - generic [ref=e1316]: "### 1.5 三端架构与数据流 每端都有独立的 mediasoup-client 封装,按角色分文件实现。"
+        - generic [ref=e1317] [cursor=pointer]:
+          - generic [ref=e1318]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:226
+          - generic [ref=e1319]: "### 2.5 初始化X5 浏览器内核"
+        - generic [ref=e1320] [cursor=pointer]:
+          - generic [ref=e1321]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:346
+          - generic [ref=e1322]: "### 格式要点汇总"
+        - generic [ref=e1323] [cursor=pointer]:
+          - generic [ref=e1324]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:60
+          - generic [ref=e1325]: "### 1.3 整合能力开放 > 腾讯浏览服务不仅是移动互联网的Web技术解决方案，同时，基于腾讯庞大的内容和运营体系，整合内容框架和商业能力，腾讯浏览服务还向合作伙伴开放：内容，商业，数据能力，帮助合作伙伴有效运营内容，提升用户粘性，实现商业变现。同时，腾讯浏览服务宣布不参与广告分成，将收益100%给合作伙伴。"
+        - generic [ref=e1326] [cursor=pointer]:
+          - generic [ref=e1327]: AI/LazyLLM/16. 论文问答进阶 - LazyLLM.pdf:397
+          - generic [ref=e1328]: 16. 论文问答进阶 - LazyLLM file:///C:/Users/lianghao/Downloads/16. 论文问答进阶 - LazyLLM (2025_8_15 17：06：44).html 13/32 [PAGE 14]
+        - generic [ref=e1329] [cursor=pointer]:
+          - generic [ref=e1330]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:525
+          - generic [ref=e1331]: "# GOOD copy ./app.py .` Being explicit also helps to limit cache-busting."
+        - generic [ref=e1332] [cursor=pointer]:
+          - generic [ref=e1333]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:379
+          - generic [ref=e1334]: "### 8\\. 社区集成"
+        - generic [ref=e1335] [cursor=pointer]:
+          - generic [ref=e1336]: 后端/python/fastapi/Deep learning in production with Keras, Redis, Flask, and Apache - PyImageSearch.md:1501
+          - generic [ref=e1337]: "### What's next? We recommend [PyImageSearch University](https://pyimagesearch.com/pyimagesearch-university/?utm_source=blogPost&utm_medium=bottomBanner&utm_campaign=What%27s%20next%3F%20I%20recommend)"
+        - generic [ref=e1338] [cursor=pointer]:
+          - generic [ref=e1339]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:427
+          - generic [ref=e1340]: "## 5、评估 到目前为止，我们已经为 RAG 应用程序的各个部分选择了典型/任意值。 但如果我们要改变一些东西，比如我们的分块逻辑、嵌入模型、LLM 等，我们怎么知道我们的配置比以前更好呢？ 像这样的生成任务很难定量评估，因此我们需要开发可靠的方法来做到这一点。 因为我们的应用程序中有许多移动部件，所以我们需要执行单元/组件和端到端评估。 逐个组件的评估可以涉及单独评估我们的检索（是我们检索到"
+        - generic [ref=e1341] [cursor=pointer]:
+          - generic [ref=e1342]: AI/LazyLLM/16. 论文问答进阶 - LazyLLM.pdf:519
+          - generic [ref=e1343]: 16. 论文问答进阶 - LazyLLM file:///C:/Users/lianghao/Downloads/16. 论文问答进阶 - LazyLLM (2025_8_15 17：06：44).html 16/32 [PAGE 17]
+        - generic [ref=e1344] [cursor=pointer]:
+          - generic [ref=e1345]: misc/2018工作记录.md:356
+          - generic [ref=e1346]: "## 6月"
+        - generic [ref=e1347] [cursor=pointer]:
+          - generic [ref=e1348]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:1
+          - generic [ref=e1349]: "# CLAUDE.md This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository."
+        - generic [ref=e1350] [cursor=pointer]:
+          - generic [ref=e1351]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:390
+          - generic [ref=e1352]: "## 五、风险提示"
+        - generic [ref=e1353] [cursor=pointer]:
+          - generic [ref=e1354]: misc/2018工作记录.md:153
+          - generic [ref=e1355]: "## 4月"
+        - generic [ref=e1356] [cursor=pointer]:
+          - generic [ref=e1357]: 未归类/claude插件体系.md:152
+          - generic [ref=e1358]: "## 🔧 实际配置示例"
+        - generic [ref=e1360] [cursor=pointer]: 未归类/Honor MagicBook Art 14 Snapdragon 评测-Notebookcheck CN.pdf:311
+        - generic [ref=e1361] [cursor=pointer]:
+          - generic [ref=e1362]: 项目/AI知识库系统/ollama搭建本地大模型/Ollama 使用指南.md:82
+          - generic [ref=e1363]: "### 4\\. 自定义模型"
+        - generic [ref=e1364] [cursor=pointer]:
+          - generic [ref=e1365]: 前端/android/TBS 腾讯浏览服务(X5WebView) 集成指南_tunxun x5webview-CSDN博客.md:12
+          - generic [ref=e1366]: "### 1.2 浏览增强 > 传统系统内核(Webview)存在适配成本高、不安全、不稳定、耗流量、速度慢、视频播放差、文件能力差等问题，这是移动应用开发商在进行Hybrid App开发时普遍面临的难题。腾讯浏览服务基于腾讯X5内核解决方案（包括内核和云服务），能够有效解决传统移动web技术面临的普遍问题，同时能极大扩展应用(Hybrid App)内浏览场景的服务能力。"
+        - generic [ref=e1367] [cursor=pointer]:
+          - generic [ref=e1368]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:35
+          - generic [ref=e1369]: "## 代码架构"
+        - generic [ref=e1370] [cursor=pointer]:
+          - generic [ref=e1371]: AI/提示词/awesome ai assistant.md:1
+          - generic [ref=e1372]: "# Awesome assistants > A curated list of awesome AI assistants [![Awesome](https://awesome.re/badge.svg)](https://awesome.re) [![Build Status](https://img.shields.io/github/actions/workflow/status/awesome-assistants/awesome-assistants/ci.yml.svg?branch=main)](https://github.com/awesome-assistan"
+        - generic [ref=e1373] [cursor=pointer]:
+          - generic [ref=e1374]: AI/LazyLLM/7. 召回优化实战 - LazyLLM.pdf:1787
+          - generic [ref=e1375]: 7. 召回优化实战 - LazyLLM file:///C:/Users/lianghao/Downloads/7. 召回优化实战 - LazyLLM (2025_8_15 17：13：17).html 49/56 [PAGE 50]
+        - generic [ref=e1376] [cursor=pointer]:
+          - generic [ref=e1377]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:775
+          - generic [ref=e1378]: "## 6、微调 到目前为止，我们探索的所有内容都涉及优化数据预处理方式以及按原样使用我们的模型（嵌入、LLM 等）。 然而，还值得探索使用我们用例特有的数据来微调我们的模型。 这可以帮助我们更好地表示我们的数据，并最终提高我们的检索和质量分数。 在本节中，我们将微调我们的嵌入模型。 这里的直觉是，学习比默认嵌入模型更符合上下文的令牌表示可能是值得的。 如果我们有很多： 默认标记化过程创建子标记的新标记失去了标记的重要性 在我们的用例中具有上下文不同含义的现有标记： ![](https://pic3.zhimg.com/v2-59cad1078df52a5544031ce184efe56"
+        - generic [ref=e1379] [cursor=pointer]:
+          - generic [ref=e1380]: AI/RAG/基于检索增强生成（RAG）的LLM应用开发实战.md:281
+          - generic [ref=e1381]: "## 4、响应生成 现在，我们可以使用上下文来生成LLM的响应。 如果没有我们检索到的相关背景，LLM可能无法准确回答我们的问题。 随着数据的增长，我们可以轻松地嵌入和索引任何新数据，并能够检索它来回答问题。 ![](https://pic2.zhimg.com/v2-211cc9ac9f802f4b937c8e74d65f06b9_b.jpg) ``` from rag.generate import prepare_response from rag.utils import get_credentials def generate_response( llm, tempe"
+        - generic [ref=e1382] [cursor=pointer]:
+          - generic [ref=e1383]: misc/日报/20260610/邓寅给的SFU全面技术分析.md:270
+          - generic [ref=e1384]: "### 3.2 阶段二: 解决断线"
+        - generic [ref=e1385] [cursor=pointer]:
+          - generic [ref=e1386]: 项目/AI质检/开发文档/附件5：联通网络应用组件能力使用手册.pdf:51
+          - generic [ref=e1387]: 3.14.获取地理信息方法（BD09LL）....................................................... 33 3.15.百度地图相关能力........................................................................... 35
+        - generic [ref=e1388] [cursor=pointer]:
+          - generic [ref=e1389]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:553
+          - generic [ref=e1390]: "# v Arguments v num_pages=PAGES_PER_CORE, output_file=OUTPUT_FILE, i=i ) futures.append(new_future) futures.append( executor.submit( start_scraping, PAGES_FOR_FINAL_CORE, OUTP"
+        - generic [ref=e1391] [cursor=pointer]:
+          - generic [ref=e1392]: 后端/python/Docker Best Practices for Python Developers _ TestDriven.io.md:278
+          - generic [ref=e1393]: "# copy and extract local compresses files ADD source.file.tar.gz /destination/path`"
+        - generic [ref=e1394] [cursor=pointer]:
+          - generic [ref=e1395]: 项目/AI日程助手/开发环境全栈跑通经验.md:203
+          - generic [ref=e1396]: "### assistant-pc config/config.local.js: 指向本地开发环境 ``` module.exports = () => ({ // ppep-sevice-gateway endpoint ppep: { host: 'http://127.0.0.1:8888' }, // ppep-ai-service endpoint ai: { host: 'http://127.0.0.1:8185' }, }); ```"
+        - generic [ref=e1397] [cursor=pointer]:
+          - generic [ref=e1398]: 后端/python/并发编程/Speeding Up Python with Concurrency, Parallelism, and asyncio _ TestDriven.io.md:457
+          - generic [ref=e1399]: "### Further Reading Real Python has a great article on [concurrency vs parallelism](https://realpython.com/python-concurrency/). Engineer Man has a good video comparison of [threading vs multiprocessing](https://www.youtube.com/watch?v=ecKWiaHCEKs). Corey Schafer also has a good [video on multipr"
+        - generic [ref=e1400] [cursor=pointer]:
+          - generic [ref=e1401]: 项目/AI日程助手/配置以及claude code相关/service-api/CLAUDE.md:253
+          - generic [ref=e1402]: "### 方法文档结构规范 每个方法文档必须包含以下章节："
+      - generic [ref=e1404]: 点击左侧结果查看预览
+    - generic [ref=e1407]:
+      - textbox "重新搜索..." [ref=e1408]: test
+      - button "搜索" [disabled] [ref=e1409]:
+        - generic [ref=e1410]: 搜索
