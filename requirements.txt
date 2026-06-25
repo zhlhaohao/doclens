@@ -1,56 +1,36 @@
+# Mirrors pyproject.toml dependencies.
+# Source of truth: pyproject.toml.
+# Re-generate with: pip-compile pyproject.toml (or keep in sync manually).
+
+# Required
+anthropic>=0.25.0
+beautifulsoup4>=4.12.0
+borax>=4.1.0
+fastapi>=0.110.0
+httpx>=0.27.1
+jieba>=0.42
+markitdown>=0.1.0
+openpyxl>=3.1.0
+pathspec>=0.11
+pdfplumber>=0.10.0
 pydantic>=2.11.0,<3.0.0
 pydantic-settings>=2.5.2
+python-docx>=1.0.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+python-pptx>=1.0.0
+sse-starlette>=2.0.0
+textual>=0.47.0
+tqdm>=4.42
+tree-sitter-languages>=1.10
+ulid-py>=1.1
+uvicorn[standard]>=0.27.0
+watchdog>=3.0
 
-# Security
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-cryptography>=42.0.0
-
-# LLM Clients
-openai>=1.10.0
-PyJWT[crypto]>=2.8.0,<2.9.0
-# Time Parsing
-dateparser>=1.2.0
-
-# Email (for future SMTP support)
-aiosmtplib>=3.0.1
-
-# Development & Testing
-pytest>=7.4.4
-pytest-asyncio>=0.23.3
+# Optional [dev]
+pytest>=7.0
+pytest-asyncio>=0.21
 pytest-cov>=4.1.0
-httpx>=0.27.1
-
-# Code Quality
 black>=24.1.1
 flake8>=7.0.0
 mypy>=1.8.0
-
-# Utilities
-python-dotenv>=1.0.0
-borax>=4.1.0
-
-anthropic>=0.25.0
-
-# Planify Skills Dependencies
-defusedxml>=0.7.1
-lxml>=5.0.0
-pypdf>=4.0.0
-pdfplumber>=0.10.0
-pdf2image>=1.16.3
-Pillow>=10.0.0
-openpyxl>=3.1.0
-pymupdf>=1.27.0
-python-docx>=1.0.0
-markitdown>=0.1.0
-beautifulsoup4>=4.12.0
-python-pptx>=1.0.0
-XlsxWriter>=3.2.0
-
-
-
-
-tqdm>=4.42
-jieba>=0.42
-pathspec>=0.11
-watchdog>=3.0

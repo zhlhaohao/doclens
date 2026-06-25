@@ -1,6 +1,6 @@
-# Cortex CLAUDE.md
+# doclens CLAUDE.md
 
-Cortex — 结构感知文档检索工具
+doclens — 结构感知文档检索工具
 
 ## 安装
 
@@ -11,13 +11,13 @@ Cortex — 结构感知文档检索工具
 python -m venv .venv
 
 # 激活虚拟环境
-& .venv\Scripts\Activate.ps1 
+& .venv\Scripts\Activate.ps1
 
 # 在 windows arm64 环境下，需要给cryptography下载预编译包
 pip install cryptography --only-binary=:all:
 
-# 以可编辑模式安装 cortex
-pip install -e ".[cortex]"
+# 以可编辑模式安装 doclens的所有依赖（包括dev可选依赖组）
+pip install -e ".[dev]"
 ```
 
 **运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
@@ -25,14 +25,11 @@ pip install -e ".[cortex]"
 ```bash
 # 必须直接使用 .venv 中的 python.exe
 .venv/Scripts/python.exe -m doclens ...
-
-# 如果在子目录（如 test_work_dir/）执行，用相对路径：
-../.venv/Scripts/python.exe -m doclens ...
 ```
 
 > 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
 
-## Cortex 技术栈
+## doclens 技术栈
 
 ### 核心技术
 | 技术 | 用途 |
@@ -56,7 +53,7 @@ pip install -e ".[cortex]"
 | SQLite | FTS5 索引 + 历史会话存储（.cortex/sessions.db） |
 | Anthropic API | AI 对话（可替换本地模型） |
 
-## Cortex 架构
+## doclens 架构
 
 ### 分层架构
 ```
@@ -214,32 +211,31 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
-## 启动脚本 start-cortex.ps1
+## 启动脚本 start.ps1
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
-使用 `start-cortex.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
+使用 `start.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
-**测试工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
+**测试和验证的工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
 
 ### 支持的场景
 
-| 场景 | 运行方式 | cortex 代码 | 虚拟环境 |
+| 场景 | 运行方式 | doclens 代码 | 虚拟环境 |
 |------|----------|-------------|----------|
-| 主分支 | `~/github/doclens/start-cortex.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
-| worktree | `~/github/cortex-feat-settings/start-cortex.ps1` | `$PSScriptRoot` | `../doclens/.venv` |
+| 主分支 | `~/github/doclens/start.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
 
 ### 三种运行模式
 
 **1. TUI 界面（交互式终端）**
 ```powershell
-./start-cortex.ps1
-./start-cortex.ps1 tui
+./start.ps1
+./start.ps1 tui
 ```
 
 **2. Web UI（GUI PWA）**
 ```powershell
-./start-cortex.ps1 gui
+./start.ps1 gui
 ```
 > 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：
 > ```
@@ -250,13 +246,12 @@ planify/
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `./start-cortex.ps1 search <关键词>` | 搜索文档 | `./start-cortex.ps1 search python`<br>`./start-cortex.ps1 search "量子 计算"` |
-| `./start-cortex.ps1 search_v2 '<json>'` | 结构化搜索 | `./start-cortex.ps1 search_v2 '{"type":"and","terms":["量子","密码"]}'` |
-| `./start-cortex.ps1 read_document --path <路径>` | 读取文档 | `./start-cortex.ps1 read_document --path '科技/doc.md'` |
-| `./start-cortex.ps1 ai <问题>` | AI 问答 | `./start-cortex.ps1 ai 你好` |
-| `./start-cortex.ps1 index` | 增量索引 | `./start-cortex.ps1 index` |
-| `./start-cortex.ps1 index --force` | 强制全量重建 | `./start-cortex.ps1 index --force` |
-| `./start-cortex.ps1 status` | 查看状态 | `./start-cortex.ps1 status` |
+| `./start.ps1 search <关键词>` | 搜索文档 | `./start.ps1 search python`<br>`./start.ps1 search "量子 计算"` |
+| `./start.ps1 read_document --path <路径>` | 读取文档 | `./start.ps1 read_document --path '科技/doc.md'` |
+| `./start.ps1 ai <问题>` | AI 问答 | `./start.ps1 ai 你好` |
+| `./start.ps1 index` | 增量索引 | `./start.ps1 index` |
+| `./start.ps1 index --force` | 强制全量重建 | `./start.ps1 index --force` |
+| `./start.ps1 status` | 查看状态 | `./start.ps1 status` |
 
 ### 前端开发模式
 
@@ -268,7 +263,7 @@ cd doclens/web_v2/frontend && npm run build                 # 生产构建
 
 ### 备用方式（直接调用 Python）
 
-如果 `start-cortex.ps1` 不可用，可直接使用 Python：
+如果 `start.ps1` 不可用，可直接使用 Python：
 
 ```bash
 # 在 test_work_dir 目录下执行

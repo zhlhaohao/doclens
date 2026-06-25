@@ -16,38 +16,6 @@ Quick Start::
 __version__ = "1.1.0"
 
 # ============================================================================
-# FTS5 Compatibility: Use pysqlite3 on systems without FTS5 support
-# ============================================================================
-import sys
-
-def _ensure_fts5_support():
-    """Ensure SQLite has FTS5 support, use pysqlite3 as fallback."""
-    try:
-        import sqlite3
-        conn = sqlite3.connect(":memory:")
-        conn.execute("CREATE VIRTUAL TABLE _fts5_test USING fts5(content)")
-        conn.close()
-        return True
-    except Exception:
-        return False
-
-if not _ensure_fts5_support():
-    try:
-        from pysqlite3 import dbapi2 as _sqlite3
-        sys.modules["sqlite3"] = _sqlite3
-        if "treesearch.fts" in sys.modules:
-            sys.modules["treesearch.fts"].sqlite3 = _sqlite3
-    except ImportError:
-        import warnings
-        warnings.warn(
-            "SQLite FTS5 not available. Full-text search will use LIKE fallback "
-            "(slower, no BM25 ranking). For best performance, install pysqlite3-binary:\n"
-            "    pip install pysqlite3-binary",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
-# ============================================================================
 # Public API
 # ============================================================================
 
