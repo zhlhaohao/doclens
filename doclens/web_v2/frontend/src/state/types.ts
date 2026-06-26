@@ -87,6 +87,24 @@ export interface FileAttrs extends FileEntry {
   is_protected: boolean;
 }
 
+export interface IndexedDocument {
+  path: string;
+  name: string;
+  size: number;
+  modifiedAt: string;  // ISO8601
+}
+
+export interface FilenameSearchState {
+  query: string;
+  allDocs: IndexedDocument[];
+  docsLoading: boolean;
+  docsError: string | null;
+  results: IndexedDocument[];
+  selectedPath: string | null;
+  isActive: boolean;
+  totalMatches: number;
+}
+
 export interface FileExplorerViewState {
   treeCache: Record<string, FileEntry[]>;
   expandedPaths: string[];
@@ -99,6 +117,7 @@ export interface FileExplorerViewState {
   mobilePane: "tree" | "list" | "detail";
   pendingAction: "mkdir" | "delete" | "move" | "rename" | "upload" | null;
   error: string | null;
+  filenameSearch: FilenameSearchState;
 }
 
 export interface AppState {

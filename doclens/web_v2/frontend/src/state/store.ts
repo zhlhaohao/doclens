@@ -6,6 +6,7 @@
 import type {
   AppState,
   FileEntry,
+  IndexedDocument,
   Session,
   SettingsFieldValues,
   SettingsScope,
@@ -78,6 +79,16 @@ export const INITIAL_STATE: AppState = {
     mobilePane: "tree",
     pendingAction: null,
     error: null,
+    filenameSearch: {
+      query: "",
+      allDocs: [],
+      docsLoading: true,
+      docsError: null,
+      results: [],
+      selectedPath: null,
+      isActive: false,
+      totalMatches: 0,
+    },
   },
 };
 
@@ -280,6 +291,87 @@ export const actions = {
   setMobilePane(pane: "tree" | "list" | "detail") {
     const cur = store.getState().files;
     store.setState({ files: { ...cur, mobilePane: pane } });
+  },
+
+  loadIndexedDocuments(docs: IndexedDocument[]) {
+    const cur = store.getState().files;
+    store.setState({
+      files: {
+        ...cur,
+        filenameSearch: {
+          ...cur.filenameSearch,
+          allDocs: docs,
+          docsLoading: false,
+          docsError: null,
+        },
+      },
+    });
+  },
+
+  setFilenameSearchDocsError(message: string) {
+    const cur = store.getState().files;
+    store.setState({
+      files: {
+        ...cur,
+        filenameSearch: {
+          ...cur.filenameSearch,
+          docsLoading: false,
+          docsError: message,
+        },
+      },
+    });
+  },
+
+  setFilenameSearchQuery(payload: {
+    query: string;
+    results: IndexedDocument[];
+    totalMatches: number;
+  }) {
+    const cur = store.getState().files;
+    const isActive = payload.query.trim() !== "";
+    const selectedPath = isActive
+      ? (payload.results[0]?.path ?? null)
+      : null;
+    store.setState({
+      files: {
+        ...cur,
+        filenameSearch: {
+          ...cur.filenameSearch,
+          query: payload.query,
+          results: payload.results,
+          totalMatches: payload.totalMatches,
+          isActive,
+          selectedPath,
+        },
+      },
+    });
+  },
+
+  clearFilenameSearch() {
+    const cur = store.getState().files;
+    store.setState({
+      files: {
+        ...cur,
+        filenameSearch: {
+          ...cur.filenameSearch,
+          query: "",
+          results: [],
+          totalMatches: 0,
+          isActive: false,
+          selectedPath: null,
+        },
+      },
+    });
+  },
+
+  selectFilenameSearchResult(path: string | null) {
+    const cur = store.getState().files;
+    store.setState({
+      files: {
+        ...cur,
+        filenameSearch: { ...cur.filenameSearch, selectedPath: path },
+      },
+    });
   },
 };
 
