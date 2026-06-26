@@ -11,7 +11,10 @@ doclens — 结构感知文档检索工具
 python -m venv .venv
 
 # 激活虚拟环境
-& .venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
+
+# 升级pip
+python.exe -m pip install --upgrade pip setuptools wheel
 
 # 在 windows arm64 环境下，需要给cryptography下载预编译包
 pip install cryptography --only-binary=:all:

@@ -67,7 +67,10 @@ def extract_pdf_text(file_path: str) -> str:
     Args:
         file_path: path to the PDF file.
 
-    Returns page-aware text with [PAGE N] markers.
+    Returns page-aware text with [PAGE N] markers. 同一段落内的视觉硬换行
+    会被保留（Markdown 渲染时合并）；段落之间插入空行（\\n\\n），
+    以避免 pdfplumber 默认输出把多个段落挤成一段。
+
     Returns empty string on failure.
     """
     _check_backends()
@@ -77,13 +80,80 @@ def extract_pdf_text(file_path: str) -> str:
         parts = []
         with pdfplumber.open(file_path) as doc:
             for i, page in enumerate(doc.pages):
-                text = (page.extract_text() or "").strip()
-                if text:
-                    parts.append(f"\n[PAGE {i + 1}]\n{text}")
+                page_text = _extract_page_text_with_paragraphs(page)
+                if page_text:
+                    parts.append(f"\n[PAGE {i + 1}]\n{page_text}")
         return "\n".join(parts)
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
         return ""
+
+
+def _extract_page_text_with_paragraphs(page) -> str:
+    """单页文本提取：保留段落结构。
+
+    Pipeline:
+      1. page.extract_words(x_tolerance=1) 拿到词及位置/字号
+         - x_tolerance=1 修复学术 PDF 字距调整导致的空格丢失
+      2. 过滤噪声词：字号过小（页码/上下标/脚注）、页面边缘（边注/页眉）
+      3. 按 top 聚类成视觉行（容差 3 容忍字符轻微 y 抖动）
+      4. 用行间距中位数的 1.5x（且至少 +4）作为段落分隔阈值
+      5. 段内行保留单 \\n（Markdown 渲染时合并）；段间插入空行
+
+    局限：双栏 PDF 同一 top 的左右栏词会被合并到同一行。这是 PDF 解析的
+    固有局限，需要专门的分栏算法；本函数不处理，留给后续优化。
+    """
+    from collections import Counter, defaultdict
+    from statistics import median
+
+    words = page.extract_words(
+        x_tolerance=1, y_tolerance=3,
+        keep_blank_chars=False, extra_attrs=["size"],
+    )
+    if not words:
+        return ""
+
+    # 主流字号（出现次数最多的 rounding size）
+    size_counter = Counter(round(w["size"], 1) for w in words)
+    main_size = size_counter.most_common(1)[0][0]
+
+    # 过滤：字号过小（页码/上下标/脚注）+ 页面边缘 5%（页眉/页脚/边注）
+    margin_x = page.width * 0.05
+    margin_y = page.height * 0.05
+    filtered = [
+        w for w in words
+        if w["size"] >= main_size * 0.85
+        and w["x0"] >= margin_x
+        and w["top"] >= margin_y
+        and w["bottom"] <= page.height - margin_y
+    ]
+    if not filtered:
+        return ""
+
+    # 按 top 聚类成行（容差 3 抖动）
+    lines_map: dict = defaultdict(list)
+    for w in filtered:
+        key = round(w["top"] / 3) * 3
+        lines_map[key].append(w)
+    line_tops = sorted(lines_map.keys())
+
+    # 行间距中位数 → 段落分隔阈值
+    # med_gap+3：段内行距 vs 段间间距的实测分界（如典型 med=12 时段间最小
+    # gap=15；med=15 时段间最小 gap=18）。配合 >= 比较处理边界情况。
+    gaps = [line_tops[k] - line_tops[k - 1] for k in range(1, len(line_tops))]
+    med_gap = median(gaps) if gaps else 10.0
+    para_thresh = med_gap + 3
+
+    page_lines: list = []
+    for ti, t in enumerate(line_tops):
+        ws = sorted(lines_map[t], key=lambda x: x["x0"])
+        line_text = " ".join(w["text"] for w in ws).strip()
+        if not line_text:
+            continue
+        if ti > 0 and (t - line_tops[ti - 1]) >= para_thresh:
+            page_lines.append("")  # 段落分隔（空行）
+        page_lines.append(line_text)
+    return "\n".join(page_lines)
 
 
 def _normalize_pdf_headings(text: str) -> str:
