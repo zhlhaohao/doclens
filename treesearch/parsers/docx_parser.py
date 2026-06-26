@@ -13,13 +13,36 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _escape_md_cell(s: str) -> str:
+    """转义 md table 单元格：``|`` → ``\\|``，换行 → 空格，回车删除。
+
+    与 csv/xlsx 在 preview_synthesizer._escape_md_cell 的口径一致。
+    """
+    return s.replace("|", "\\|").replace("\n", " ").replace("\r", "")
+
+
 def _table_to_text(table) -> str:
-    """Convert a docx Table to a plain-text representation."""
+    """Convert a docx Table to a GitHub-flavored markdown table string.
+
+    首行视为 header，输出形如::
+
+        | h1 | h2 |
+        | --- | --- |
+        | v1 | v2 |
+
+    这样前端 ``<md-viewer>`` 才能识别为真正的表格（缺 separator 行只会被
+    当成软换行段落）。单元格里的 ``|`` 转义为 ``\\|``，换行替换为空格。
+    """
     rows = []
+    ncols = 0
     for row in table.rows:
-        cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
-        rows.append(" | ".join(cells))
-    return "\n".join(rows)
+        cells = [_escape_md_cell(cell.text.strip()) for cell in row.cells]
+        ncols = max(ncols, len(cells))
+        rows.append("| " + " | ".join(cells) + " |")
+    if not rows or ncols == 0:
+        return ""
+    separator = "| " + " | ".join(["---"] * ncols) + " |"
+    return "\n".join([rows[0], separator, *rows[1:]])
 
 
 def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
@@ -104,8 +127,9 @@ async def docx_to_tree(
     headings, lines = _extract_docx_headings(docx_path)
 
     if not headings:
-        # No DOCX headings found, fall back to text_to_tree
-        text_content = "\n".join(lines)
+        # No DOCX headings found, fall back to text_to_tree.
+        # 用 \n\n 分段（过滤空段），让 text_to_tree 和下游 preview 都能正确识别段落边界。
+        text_content = "\n\n".join(ln for ln in lines if ln.strip())
         from ..indexer import text_to_tree
         result = await text_to_tree(
             text_content=text_content,
@@ -128,7 +152,11 @@ async def docx_to_tree(
     for i, hd in enumerate(headings):
         start = hd["line_num"] - 1
         end = headings[i + 1]["line_num"] - 1 if i + 1 < len(headings) else len(lines)
-        text = "\n".join(lines[start:end]).strip()
+        # 用 \n\n 分隔非空段落，保留 docx 段落结构。
+        # 否则 preview synthesizer 输出单 \n，CommonMark 渲染会把多段合并成一段。
+        # 表格项作为整体参与连接（内部保持单 \n），与相邻段落正确分段。
+        paragraphs = [ln for ln in lines[start:end] if ln.strip()]
+        text = "\n\n".join(paragraphs).strip()
         nodes.append({
             "title": hd["title"],
             "line_num": hd["line_num"],

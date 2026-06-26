@@ -29,6 +29,8 @@ export interface SearchViewState {
   state: FocusState;
   currentSession: Session | null;
   query: string;
+  /** 后端分词结果，用于预览 pane 高亮（空数组时降级回 query 原文）。 */
+  queryWords: string[];
   results: SearchResult[];
   total: number;
   source: "fts" | "like" | "ripgrep";
