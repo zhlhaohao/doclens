@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 # History:
 #   "1" — original (mtime_ns:size) fingerprint with sequential int node_ids.
 #   "2" — stable hash node_ids + node-level diff + atomic per-doc transaction.
-INDEX_SCHEMA_VERSION = "2"
+#   "3" — docx parser emits \n\n between paragraphs for correct preview rendering,
+#         and renders tables as GFM markdown tables (header + separator + rows).
+INDEX_SCHEMA_VERSION = "3"
 
 # ---------------------------------------------------------------------------
 # Environment variable names
