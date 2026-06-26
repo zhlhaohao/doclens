@@ -36,6 +36,11 @@ vi.mock("../src/api/preview", () => ({
   isFullFilePreview: vi.fn(() => false),
 }));
 
+// Mock fetchDocuments (避免真实网络请求；返回空数组即可让 _loadIndexedDocuments 走完)
+vi.mock("../src/api/documents", () => ({
+  fetchDocuments: vi.fn().mockResolvedValue([]),
+}));
+
 describe("files-view", () => {
   beforeEach(() => {
     resetStore(store);
@@ -173,6 +178,49 @@ describe("files-view", () => {
     );
     await new Promise(r => setTimeout(r, 0));
     expect(spy).toHaveBeenCalledWith("a.md");
+    document.body.removeChild(el);
+  });
+});
+
+describe("files-view filename search", () => {
+  beforeEach(() => resetStore(store));
+
+  it("renders file-search-box in desktop layout", async () => {
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const box = el.shadowRoot.querySelector("file-search-box");
+    expect(box).toBeTruthy();
+    document.body.removeChild(el);
+  });
+
+  it("replaces file-list with file-search-results when search activated", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector("file-search-results")).toBeTruthy();
+    expect(el.shadowRoot.querySelector("file-list")).toBeNull();
+    document.body.removeChild(el);
+  });
+
+  it("shows file-list again after clearFilenameSearch", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    actions.clearFilenameSearch();
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector("file-list")).toBeTruthy();
+    expect(el.shadowRoot.querySelector("file-search-results")).toBeNull();
     document.body.removeChild(el);
   });
 });

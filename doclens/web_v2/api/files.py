@@ -17,6 +17,8 @@ from doclens.web_v2.models.files import (
     AttrsResponse,
     DirStatsResponse,
     Entry,
+    IndexedDocument,
+    IndexedDocumentsResponse,
     ListDirResponse,
     MkdirRequest,
     MoveRequest,
@@ -86,6 +88,33 @@ def _indexed_paths(idx: IndexManager, base: Path) -> set:
             p = Path(abs_path)
             rel = p.relative_to(base.resolve())
             result.add("/".join(rel.parts) if rel.parts else "")
+        except (ValueError, OSError):
+            continue
+    return result
+
+
+def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
+    """从 idx.documents 构建 IndexedDocument 列表（去重、跳过缺失文件）。"""
+    result: list[IndexedDocument] = []
+    seen: set[str] = set()
+    for doc in idx.documents or []:
+        abs_path = doc.metadata.get("source_path", "") if hasattr(doc, "metadata") else ""
+        if not abs_path:
+            continue
+        try:
+            p = Path(abs_path)
+            rel_parts = p.relative_to(base.resolve()).parts
+            rel = "/".join(rel_parts) if rel_parts else ""
+            if rel in seen or not p.is_file():
+                continue
+            seen.add(rel)
+            stat = p.stat()
+            result.append(IndexedDocument(
+                path=rel,
+                name=p.name,
+                size=stat.st_size,
+                modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+            ))
         except (ValueError, OSError):
             continue
     return result
@@ -195,6 +224,19 @@ async def attrs(
         extension=full.suffix.lower() if full.suffix else None,
         is_protected=False,
     )
+
+
+# --- GET /files/documents ---
+
+@router.get("/files/documents", response_model=IndexedDocumentsResponse)
+async def list_indexed_documents(
+    idx: IndexManager = Depends(get_index_manager),
+) -> IndexedDocumentsResponse:
+    """返回所有已索引文档的扁平列表（用于前端文件名搜索）。"""
+    base = Path(idx.search_path)
+    docs = _indexed_documents(idx, base)
+    docs.sort(key=lambda d: d.name.lower())
+    return IndexedDocumentsResponse(documents=docs, total=len(docs))
 
 
 # --- POST /files/mkdir ---
