@@ -12,6 +12,9 @@ import "../components/rename-dialog";
 import "../components/move-dialog";
 import "../components/delete-dialog";
 import "../components/drop-zone";
+import "../components/file-search-box";
+import "../components/file-search-results";
+import { fetchDocuments } from "../api/documents";
 
 type DialogKind = "mkdir" | "rename" | "move" | "delete" | null;
 
@@ -58,6 +61,16 @@ export class FilesView extends LitElement {
       min-height: 0;
     }
     .splitter:hover, .splitter:active { background: var(--cortex-primary); }
+    .tree-pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .tree-pane file-tree {
+      flex: 1;
+      min-height: 0;
+    }
     .mobile-layout {
       /* display:flex 让子元素(file-tree/file-list/.mobile-preview)的
          flex:1 生效，提供明确高度链。缺少这个会导致 .mobile-preview
@@ -160,6 +173,17 @@ export class FilesView extends LitElement {
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     this._ensureLoaded("");
     this._loadPaneWidths();
+    this._loadIndexedDocuments();
+  }
+
+  private async _loadIndexedDocuments() {
+    if (!store.getState().files.filenameSearch.docsLoading) return;
+    try {
+      const docs = await fetchDocuments();
+      actions.loadIndexedDocuments(docs);
+    } catch (e: any) {
+      actions.setFilenameSearchDocsError(e?.message || "文档列表加载失败");
+    }
   }
 
   private _loadPaneWidths() {
@@ -472,15 +496,20 @@ export class FilesView extends LitElement {
       return;
     }
     // 文件：dirty 检查后切换预览
+    await this._previewPathWithDirtyCheck(e.detail.path);
+    if (this._isMobile) {
+      actions.setMobilePane("detail");
+    }
+  }
+
+  /** dirty 检查后切换预览；用户拒绝丢弃时不切换。复用给所有触发预览的入口。 */
+  private async _previewPathWithDirtyCheck(path: string) {
     if (this._previewDirty) {
       const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
       if (!ok) return;
       this._discardPreviewEdits();
     }
-    await this._fetchPreview(e.detail.path);
-    if (this._isMobile) {
-      actions.setMobilePane("detail");
-    }
+    await this._fetchPreview(path);
   }
 
   private async _fetchPreview(path: string) {
@@ -572,6 +601,40 @@ export class FilesView extends LitElement {
     ></preview-pane>`;
   }
 
+  private get _isFilenameSearchActive(): boolean {
+    return store.getState().files.filenameSearch.isActive;
+  }
+
+  private _onFilenameSearch = (e: CustomEvent<{ query: string }>) => {
+    const query = e.detail.query;
+    if (query.trim() === "") {
+      actions.clearFilenameSearch();
+      return;
+    }
+    const { allDocs } = store.getState().files.filenameSearch;
+    const q = query.toLowerCase();
+    const filtered = allDocs.filter(d => d.name.toLowerCase().includes(q));
+    filtered.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase(), "zh", {
+      numeric: true,
+      sensitivity: "base",
+    }));
+    const totalMatches = filtered.length;
+    const results = filtered.slice(0, 100);
+    actions.setFilenameSearchQuery({ query, results, totalMatches });
+    // 选中首项时立即联动 preview（dirty 检查与点击行一致）
+    if (results[0]) {
+      void this._previewPathWithDirtyCheck(results[0].path);
+    }
+  };
+
+  private _onFilenameClear = () => {
+    actions.clearFilenameSearch();
+  };
+
+  private _onFilenameResultActivated = async (e: CustomEvent<{ path: string }>) => {
+    await this._previewPathWithDirtyCheck(e.detail.path);
+  };
+
   private _cancelDialog = () => {
     this._dialog = null;
   };
@@ -588,12 +651,28 @@ export class FilesView extends LitElement {
   }
 
   private _renderDesktop() {
+    const fs = store.getState().files.filenameSearch;
+    const docsEmpty = !fs.docsLoading && fs.allDocs.length === 0;
+    const searchDisabled = fs.docsError !== null || docsEmpty;
+    const searchPlaceholder = fs.docsError !== null
+      ? "文档列表加载失败"
+      : docsEmpty
+        ? "暂无已索引文档"
+        : "按文件名搜索…";
     return html`
       <div
         class="desktop-layout"
         style="--tree-pane-width: ${this._treePaneWidth}px; --preview-pane-width: ${this._previewPaneWidth}px"
       >
-        <file-tree></file-tree>
+        <aside class="tree-pane">
+          <file-search-box
+            ?disabled=${searchDisabled}
+            .placeholder=${searchPlaceholder}
+            @search=${this._onFilenameSearch}
+            @clear=${this._onFilenameClear}
+          ></file-search-box>
+          <file-tree></file-tree>
+        </aside>
         <div
           class="splitter"
           role="separator"
@@ -601,11 +680,16 @@ export class FilesView extends LitElement {
           aria-label="调整文件树栏宽度"
           @mousedown=${this._onTreeSplitterMouseDown}
         ></div>
-        <file-list
-          .activePath=${this._previewPath}
-          @action=${this._onAction}
-          @activated=${this._onFileListActivated}
-        ></file-list>
+        ${this._isFilenameSearchActive
+          ? html`<file-search-results
+              @activated=${this._onFilenameResultActivated}
+              @clear=${this._onFilenameClear}
+            ></file-search-results>`
+          : html`<file-list
+              .activePath=${this._previewPath}
+              @action=${this._onAction}
+              @activated=${this._onFileListActivated}
+            ></file-list>`}
         <div
           class="splitter"
           role="separator"
