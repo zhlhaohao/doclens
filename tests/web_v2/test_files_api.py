@@ -610,3 +610,54 @@ async def test_upload_too_large_returns_413(temp_workdir, env_cortex_config, res
             files={"file": ("big.bin", b"x" * 32, "application/octet-stream")},
         )
     assert res.status_code == 413
+
+
+# === GET /documents ===
+
+@pytest.mark.asyncio
+async def test_documents_returns_indexed_files(populated_workdir, env_cortex_config, reset_deps):
+    """documents 端点返回所有已索引文档（不含目录、不含点文件）。"""
+    await asyncio.to_thread(_init_and_reindex)
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/files/documents")
+    assert res.status_code == 200
+    body = res.json()
+    names = {d["name"] for d in body["documents"]}
+    # populated_workdir + env_cortex_config 实际索引 4 个文件：
+    # - data.csv / doc1.md（temp_workdir 创建）
+    # - docs/report.md / docs/sub/note.md（populated_workdir 创建）
+    # logo.png（二进制）和 doc2.py（CORTEX_ALLOWED_SOURCE_TYPES 过滤）不会被索引
+    assert "report.md" in names
+    assert "note.md" in names
+    assert "doc1.md" in names
+    assert "data.csv" in names
+    assert "logo.png" not in names
+    # 不含点文件路径
+    assert all(not d["path"].startswith(".") for d in body["documents"])
+    # 字段齐全
+    sample = body["documents"][0]
+    assert {"path", "name", "size", "modified_at"} <= set(sample.keys())
+
+
+@pytest.mark.asyncio
+async def test_documents_sorted_by_name_case_insensitive(populated_workdir, env_cortex_config, reset_deps):
+    await asyncio.to_thread(_init_and_reindex)
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/files/documents")
+    names = [d["name"] for d in res.json()["documents"]]
+    assert names == sorted(names, key=str.lower)
+
+
+@pytest.mark.asyncio
+async def test_documents_total_matches_count(populated_workdir, env_cortex_config, reset_deps):
+    await asyncio.to_thread(_init_and_reindex)
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/files/documents")
+    body = res.json()
+    assert body["total"] == len(body["documents"])

@@ -66,3 +66,16 @@ class UploadResponse(BaseModel):
     bytes_written: int
     overwritten: bool
     reindex_triggered: bool
+
+
+class IndexedDocument(BaseModel):
+    """已索引文档的扁平表示（用于前端文件名搜索）。"""
+    path: str          # 相对工作目录的 POSIX 路径
+    name: str          # 文件名（含扩展名）
+    size: int          # bytes
+    modified_at: datetime
+
+
+class IndexedDocumentsResponse(BaseModel):
+    documents: list[IndexedDocument]
+    total: int
