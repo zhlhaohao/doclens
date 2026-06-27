@@ -1147,9 +1147,6 @@ def main():
     """主函数 - 启动 TUI"""
     import logging
     import sqlite3
-    from doclens.config import CortexConfig
-    from doclens.tui.app import CortexApp
-    from treesearch.treesearch import TreeSearch
 
     parser = _build_parser()
     args, unknown = parser.parse_known_args()
@@ -1167,6 +1164,10 @@ def main():
     # 配置日志 → {workdir}/.cortex/logs/debug_YYYYMMDD.log
     from planify.core.logging_config import setup_logging
     setup_logging()
+
+    from doclens.config import CortexConfig
+    from doclens.tui.app import CortexApp
+    from treesearch.treesearch import TreeSearch
 
     if args.command is not None:
         config, idx = _init_components()
