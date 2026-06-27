@@ -66,6 +66,70 @@ export class PreviewPane extends LitElement {
       border-radius: 4px;
       cursor: pointer;
     }
+    .mobile-header {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .mobile-header .mobile-back,
+    .mobile-header .mobile-more {
+      border: none;
+      background: transparent;
+      color: var(--cortex-text);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 10px;
+      border-radius: var(--cortex-radius-sm);
+      min-width: 36px;
+    }
+    .mobile-header .mobile-back:hover,
+    .mobile-header .mobile-more:hover {
+      background: var(--cortex-surface-muted);
+    }
+    .mobile-header .mobile-filename {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mobile-header .mobile-menu {
+      position: absolute;
+      top: 100%;
+      right: var(--cortex-space-2);
+      min-width: 140px;
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-md);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      z-index: 10;
+      padding: 4px 0;
+    }
+    .mobile-header .mobile-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: var(--cortex-text);
+      font-family: inherit;
+      font-size: var(--cortex-fs-sm);
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .mobile-header .mobile-menu button:hover {
+      background: var(--cortex-surface-muted);
+    }
   `;
 
   @property() path = "";
@@ -77,16 +141,101 @@ export class PreviewPane extends LitElement {
   @property() keyword = "";
   @property({ type: Boolean }) writable = false;
   @property({ type: Boolean }) noHeader = false;
+  /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）。与 noHeader 互不冲突：
+   *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
+  @property({ type: Boolean }) mobile = false;
   @property({ attribute: false }) pages: PageMarker[] | null = null;
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
+  @state() private _showMobileMenu = false;
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("content")) {
       this._content = this.content;
       this._mode = "preview";
     }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // 点击 outside 关闭 more 下拉
+    document.addEventListener("click", this._onDocClick, true);
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener("click", this._onDocClick, true);
+    super.disconnectedCallback();
+  }
+
+  /** 移动端返回按钮。父组件监听 @back 自行决定如何导航。 */
+  private _onMobileBackClick = () => {
+    this.dispatchEvent(new CustomEvent("back", {
+      bubbles: true,
+      composed: true,
+    }));
+  };
+
+  private _onMobileMoreClick = (e: Event) => {
+    e.stopPropagation();
+    this._showMobileMenu = !this._showMobileMenu;
+  };
+
+  private _onDocClick = (e: MouseEvent) => {
+    if (!this._showMobileMenu) return;
+    const path = e.composedPath();
+    // 路径中包含 preview-pane 自身或 mobile-menu 即视为 inside
+    if (path.includes(this)) return;
+    this._showMobileMenu = false;
+  };
+
+  private _basename(p: string): string {
+    if (!p) return "";
+    const i = p.lastIndexOf("/");
+    return i >= 0 ? p.slice(i + 1) : p;
+  }
+
+  private _renderMobileHeader() {
+    return html`
+      <div class="mobile-header">
+        <button
+          class="mobile-back"
+          type="button"
+          aria-label="返回"
+          @click=${this._onMobileBackClick}
+        >←</button>
+        <span class="mobile-filename" title=${this.path}>${this._basename(this.path)}</span>
+        <button
+          class="mobile-more"
+          type="button"
+          aria-label="更多操作"
+          @click=${this._onMobileMoreClick}
+        >⋯</button>
+        ${this._showMobileMenu
+          ? html`
+              <div class="mobile-menu" role="menu">
+                ${this.writable
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this.enterEdit(); }}
+                    >✏️ 编辑</button>`
+                  : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
+                >⬇️ 下载</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
+                >⬆️ 上传</button>
+              </div>
+            `
+          : null}
+      </div>
+    `;
   }
 
   enterEdit() {
@@ -188,16 +337,21 @@ export class PreviewPane extends LitElement {
     if (!this._content && !this.content)
       return html`<div class="empty">点击左侧结果查看预览</div>`;
 
+    // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
+    const renderMobileBar = this.mobile ? this._renderMobileHeader() : null;
+    const showDesktopHeader = !this.mobile && !this.noHeader;
+
     if (this.language === "markdown" && this._mode === "edit") {
       return html`
         <input type="file" hidden @change=${this._onFileChange}>
-        ${this.noHeader ? null : html`
+        ${renderMobileBar}
+        ${showDesktopHeader ? html`
           <div class="header">
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
           </div>
-        `}
+        ` : null}
         <md-editor
           .path=${this.path}
           .originalContent=${this._content}
@@ -211,7 +365,8 @@ export class PreviewPane extends LitElement {
     if (this.language === "markdown") {
       return html`
         <input type="file" hidden @change=${this._onFileChange}>
-        ${this.noHeader ? null : html`
+        ${renderMobileBar}
+        ${showDesktopHeader ? html`
           <div class="header">
             <span class="path">${this.path}</span>
             ${this.writable
@@ -220,7 +375,7 @@ export class PreviewPane extends LitElement {
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
           </div>
-        `}
+        ` : null}
         <md-viewer
           .content=${this._content}
           .line=${this.line}
@@ -234,13 +389,14 @@ export class PreviewPane extends LitElement {
     if (this.language === "html") {
       return html`
         <input type="file" hidden @change=${this._onFileChange}>
-        ${this.noHeader ? null : html`
+        ${renderMobileBar}
+        ${showDesktopHeader ? html`
           <div class="header">
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
           </div>
-        `}
+        ` : null}
         <iframe
           class="html-frame"
           srcdoc=${this._content}
@@ -254,13 +410,14 @@ export class PreviewPane extends LitElement {
     const lines = this._content.split("\n");
     return html`
       <input type="file" hidden @change=${this._onFileChange}>
-      ${this.noHeader ? null : html`
+      ${renderMobileBar}
+      ${showDesktopHeader ? html`
         <div class="header">
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
           ${this._renderUploadBtn()}
         </div>
-      `}
+      ` : null}
       <div class="body">
         ${lines.map((line, i) => {
           const lineNo = i + 1;

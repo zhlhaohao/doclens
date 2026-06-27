@@ -316,7 +316,8 @@ describe("files-view mobile filename search", () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    el.shadowRoot.querySelector(".back-btn").click();
+    // detail pane 的返回键移到 preview-pane 内部的 mobile-back
+    el._goBack();
     await el.updateComplete;
     expect(store.getState().files.mobilePane).toBe("tree");
     document.body.removeChild(el);
@@ -327,7 +328,7 @@ describe("files-view mobile filename search", () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    el.shadowRoot.querySelector(".back-btn").click();
+    el._goBack();
     await el.updateComplete;
     expect(store.getState().files.mobilePane).toBe("list");
     document.body.removeChild(el);
@@ -350,6 +351,36 @@ describe("files-view mobile filename search", () => {
     );
     await new Promise(r => setTimeout(r, 0));
     expect(store.getState().files.mobilePane).toBe("detail");
+    document.body.removeChild(el);
+  });
+
+  it("detail pane renders preview-pane with mobile=true and hides floating back-btn", async () => {
+    actions.setMobilePane("detail");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    // 模拟已加载预览，触发 preview-pane 渲染
+    el._previewPath = "a.md";
+    el._previewContent = "# hi";
+    el._previewLanguage = "markdown";
+    await el.updateComplete;
+    const pp = el.shadowRoot.querySelector("preview-pane");
+    expect(pp).toBeTruthy();
+    expect(pp.hasAttribute("mobile")).toBe(true);
+    // 浮动的 .back-btn 不再出现（返回键由 preview-pane 内部 mobile-back 提供）
+    expect(el.shadowRoot.querySelector(".back-btn")).toBeNull();
+    document.body.removeChild(el);
+  });
+
+  it("list pane still shows floating back-btn", async () => {
+    actions.setMobilePane("list");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".back-btn")).toBeTruthy();
+    // list pane 不用 preview-pane 的 mobile bar
+    const pp = el.shadowRoot.querySelector("preview-pane");
+    expect(pp).toBeFalsy();
     document.body.removeChild(el);
   });
 });
