@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type TestInfo } from "@playwright/test";
 
 const FILES_VIEW_HASH = "#/files";
 
@@ -8,7 +8,10 @@ async function gotoFilesViewMobile(page: import("@playwright/test").Page) {
 }
 
 test.describe("mobile filename search", () => {
-  test.skip(({ }, testInfo) => testInfo.project.name !== "mobile-iphone", "Mobile only");
+  test.skip(
+    ((_args: unknown, testInfo: TestInfo) => testInfo.project.name !== "mobile-iphone") as never,
+    "Mobile only",
+  );
 
   test.beforeEach(async ({ page }) => {
     await gotoFilesViewMobile(page);
