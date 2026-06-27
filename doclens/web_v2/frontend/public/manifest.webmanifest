@@ -1,6 +1,6 @@
 {
-  "name": "Cortex",
-  "short_name": "Cortex",
+  "name": "Doclens",
+  "short_name": "Doclens",
   "description": "结构感知文档检索",
   "start_url": "/",
   "scope": "/",

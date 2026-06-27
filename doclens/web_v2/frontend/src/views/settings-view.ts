@@ -457,7 +457,7 @@ export class SettingsView extends LitElement {
       this._original = { ...this._values };
       actions.loadSettings(this._values, true);
       const msg = result.needs_restart
-        ? "已保存。重启 cortex gui 后 AI 配置生效。"
+        ? "已保存。重启 doclens gui 后 AI 配置生效。"
         : "已保存。下次查询立即生效。";
       if (this._isMobile()) {
         this._pushToast(msg, "success", 4000);
@@ -605,7 +605,7 @@ export class SettingsView extends LitElement {
     if (tab === "ai") {
       return html`
         <div class="info-box">
-          本 tab 的所有参数修改后需<strong>重启 cortex gui</strong> 才能生效。
+          本 tab 的所有参数修改后需<strong>重启 doclens gui</strong> 才能生效。
         </div>
       `;
     }
@@ -629,7 +629,7 @@ export class SettingsView extends LitElement {
     if (tab === "terminal") {
       return html`
         <div class="info-box warn">
-          ⚠️ 这些参数仅影响 <code>cortex</code> CLI/TUI 的<strong>终端输出格式</strong>，对 Web UI 没有可见效果。在此处提供编辑仅为了免去手动改 .env 的麻烦。
+          ⚠️ 这些参数仅影响 <code>doclens</code> CLI/TUI 的<strong>终端输出格式</strong>，对 Web UI 没有可见效果。在此处提供编辑仅为了免去手动改 .env 的麻烦。
         </div>
       `;
     }

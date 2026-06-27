@@ -30,7 +30,7 @@ export class ChatStream extends LitElement {
 
   render() {
     if (this.messages.length === 0) {
-      return html`<div class="empty">开始与 Cortex 对话</div>`;
+      return html`<div class="empty">开始与 Doclens 对话</div>`;
     }
     return html`
       ${this.messages.map((m) => html`<chat-message role=${m.role} .message=${m}></chat-message>`)}
