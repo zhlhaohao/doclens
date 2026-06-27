@@ -357,7 +357,6 @@ export class FileList extends LitElement {
 
   private _renderMobileHeader() {
     const { currentDir, selectedPaths } = store.getState().files;
-    const canGoUp = currentDir !== "";
     const canRename = selectedPaths.length === 1;
     const canAct = selectedPaths.length >= 1;
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
@@ -380,12 +379,6 @@ export class FileList extends LitElement {
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  ?disabled=${!canGoUp}
-                  @click=${() => { this._showMobileMenu = false; this._goUp(); }}
-                >↑ 上一级</button>
                 <button
                   type="button"
                   role="menuitem"

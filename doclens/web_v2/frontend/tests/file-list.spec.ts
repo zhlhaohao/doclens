@@ -363,7 +363,7 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking mobile-more opens dropdown with all 6 actions", async () => {
+  it("clicking mobile-more opens dropdown with all 5 actions", async () => {
     actions.setFilesState({
       currentDir: "docs",
       treeCache: { docs: entries },
@@ -379,28 +379,13 @@ describe("file-list mobile header", () => {
     const menu = el.shadowRoot.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
     const items = menu.querySelectorAll("button");
-    // 6 个：↑ 上一级 / + 新目录 / ⬆ 上传 / ✎ 重命名 / → 移动 / 🗑 删除
-    expect(items.length).toBe(6);
-    expect(items[0].textContent).toContain("上一级");
-    expect(items[1].textContent).toContain("新目录");
-    expect(items[2].textContent).toContain("上传");
-    expect(items[3].textContent).toContain("重命名");
-    expect(items[4].textContent).toContain("移动");
-    expect(items[5].textContent).toContain("删除");
-    document.body.removeChild(el);
-  });
-
-  it("'↑ 上一级' item disabled at root; clicking it in subdir navigates up", async () => {
-    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries, docs: [] } });
-    const el = document.createElement("file-list") as any;
-    el.mobile = true;
-    document.body.appendChild(el);
-    await el.updateComplete;
-    (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
-    await el.updateComplete;
-    const upBtn = el.shadowRoot.querySelector(".mobile-menu button") as HTMLButtonElement;
-    upBtn.click();
-    expect(store.getState().files.currentDir).toBe("docs");
+    // 5 个：+ 新目录 / ⬆ 上传 / ✎ 重命名 / → 移动 / 🗑 删除（无"上一级"）
+    expect(items.length).toBe(5);
+    expect(items[0].textContent).toContain("新目录");
+    expect(items[1].textContent).toContain("上传");
+    expect(items[2].textContent).toContain("重命名");
+    expect(items[3].textContent).toContain("移动");
+    expect(items[4].textContent).toContain("删除");
     document.body.removeChild(el);
   });
 
@@ -413,14 +398,14 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中：rename (idx=3) disabled
-    expect((items[3] as HTMLButtonElement).disabled).toBe(true);
+    // 0 选中：rename (idx=2) disabled
+    expect((items[2] as HTMLButtonElement).disabled).toBe(true);
     // 1 选中
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     // 菜单仍展开（state 变化触发 re-render）
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[2] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -434,13 +419,13 @@ describe("file-list mobile header", () => {
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
     // 0 选中
+    expect((items[3] as HTMLButtonElement).disabled).toBe(true);
     expect((items[4] as HTMLButtonElement).disabled).toBe(true);
-    expect((items[5] as HTMLButtonElement).disabled).toBe(true);
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
+    expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
     expect((items2[4] as HTMLButtonElement).disabled).toBe(false);
-    expect((items2[5] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -455,13 +440,13 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 点 + 新目录（idx=1）
-    (items[1] as HTMLElement).click();
+    // 点 + 新目录（idx=0）
+    (items[0] as HTMLElement).click();
     // 重新打开下拉（点 1 次会关闭）
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    (items2[2] as HTMLElement).click(); // 上传
+    (items2[1] as HTMLElement).click(); // 上传
     expect(seen).toEqual(["mkdir", "upload"]);
     document.body.removeChild(el);
   });
