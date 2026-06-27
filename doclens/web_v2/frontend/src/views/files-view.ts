@@ -679,6 +679,7 @@ export class FilesView extends LitElement {
       >
         <aside class="tree-pane">
           <file-search-box
+            .value=${store.getState().files.filenameSearch.query}
             ?disabled=${searchDisabled}
             .placeholder=${searchPlaceholder}
             @search=${this._onFilenameSearch}
@@ -726,6 +727,7 @@ export class FilesView extends LitElement {
         ${pane === "tree"
           ? html`
               <file-search-box
+                .value=${store.getState().files.filenameSearch.query}
                 ?disabled=${searchState.disabled}
                 .placeholder=${searchState.placeholder}
                 @search=${this._onFilenameSearch}

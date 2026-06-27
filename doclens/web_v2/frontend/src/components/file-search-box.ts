@@ -57,8 +57,19 @@ export class FileSearchBox extends LitElement {
   @property({ type: Boolean }) disabled = false;
   /** 父组件根据状态传入提示语（默认值为 "按文件名搜索…"）。 */
   @property() placeholder = DEFAULT_PLACEHOLDER;
+  /** 当前查询词。父组件传入以保证重挂载（如移动端返回 tree 面板）后输入框内容不丢。 */
+  @property({ type: String }) value = "";
 
   private _timer: any = null;
+
+  connectedCallback() {
+    super.connectedCallback();
+    // 重挂载时（如移动端返回 tree 面板）从外部 value 恢复输入框内容。
+    // 避免在 updated/willUpdate 中再设 _value（会触发 Lit 的 change-in-update 警告）。
+    if (this.value) {
+      this._value = this.value;
+    }
+  }
 
   disconnectedCallback() {
     if (this._timer) clearTimeout(this._timer);
