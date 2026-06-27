@@ -7,9 +7,9 @@ test.describe("settings mobile", () => {
   });
 
   test("full edit flow via avatar menu on mobile", async ({ page }) => {
-    // 1. Open avatar menu and click 本地配置
+    // 1. Open avatar menu and click 全局配置
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
     // 2. settings view visible, scope segment visible
     await expect(page.locator("settings-view")).toBeVisible();
@@ -30,18 +30,11 @@ test.describe("settings mobile", () => {
 
     // 6. Save button appears in app-bar
     await expect(page.locator("app-bar .save-btn")).toBeVisible();
-
-    // 7. Switch scope → dirty state clears (loadSettings fires on scope change)
-    await page.locator("settings-scope-segment button:has-text('全局')").tap();
-    await expect(page.locator("app-bar .save-btn")).toBeHidden();
-
-    // 8. Switch back to local
-    await page.locator("settings-scope-segment button:has-text('本地')").tap();
   });
 
   test("slider value chip updates on drag", async ({ page }) => {
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
     // Switch to 评分 tab
     await page.locator(".tab-strip button:has-text('评分')").tap();
@@ -75,7 +68,7 @@ test.describe("settings mobile", () => {
 
   test("revert via avatar menu discards dirty edits", async ({ page }) => {
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
     // Switch to 搜索调优 tab so the number input is in the active panel
     await page.locator(".tab-strip button:has-text('搜索调优')").tap();
@@ -98,7 +91,7 @@ test.describe("settings mobile", () => {
   test("scope segment stays sticky at top of scroll-area when scrolling deep", async ({ page }) => {
     // Open settings
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
     // Switch to 评分 (longest tab: 5 sliders)
     await page.locator(".tab-strip button:has-text('评分')").tap();
     // Scroll .scroll-area to its bottom
@@ -113,7 +106,7 @@ test.describe("settings mobile", () => {
 
   test("section padding is 16px at 390px (tightened from 24px)", async ({ page }) => {
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
     const padding = await page.locator(".section").first()
       .evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));
     expect(padding).toBe(16);  // var(--cortex-space-4) = 16px
@@ -121,7 +114,7 @@ test.describe("settings mobile", () => {
 
   test("tab strip fits without horizontal overflow at 390px", async ({ page }) => {
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
     const overflow = await page.locator(".tab-strip")
       .evaluate((el) => el.scrollWidth > el.clientWidth);
     expect(overflow).toBe(false);
@@ -130,7 +123,7 @@ test.describe("settings mobile", () => {
   test("fields are single-column at tablet width 768px", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.locator("app-bar .avatar-btn").tap();
-    await page.locator("app-bar button.menu-item:has-text('本地配置')").tap();
+    await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
     const gridCols = await page.locator(".field").first()
       .evaluate((el) => getComputedStyle(el).gridTemplateColumns);
     expect(gridCols.split(" ").length).toBe(1);

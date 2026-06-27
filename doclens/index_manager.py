@@ -36,58 +36,140 @@ class IndexManager:
     """TreeSearch 索引管理器"""
 
     def __init__(self, config: CortexConfig):
+        self._config = config
         self.search_path = config.search_path
         self.index_path = config.index_path or os.path.join(self.search_path, ".cortex", "index.db")
-        self.max_results = config.max_results
-        self.max_nodes_per_doc = config.max_nodes_per_doc
-        self.top_k_docs = config.top_k_docs
-        self.max_span = config.max_span
-        self.min_keyword_match = config.min_keyword_match
-        self.min_proximity_score = config.min_proximity_score
-        self.min_keywords_per_line = config.min_keywords_per_line
-        self.min_score_threshold = config.min_score_threshold
-        self.cjk_tokenizer = config.cjk_tokenizer
-        self.max_index_fail_count = config.max_index_fail_count
-        self.enable_shadow_md = config.treesearch_enable_shadow_md
-        self.xlsx_max_rows_per_sheet = config.treesearch_xlsx_max_rows_per_sheet
-        self.xlsx_max_consecutive_empty_rows = config.treesearch_xlsx_max_consecutive_empty_rows
-        self.allowed_source_types = config.allowed_source_types
-
-        # 终端显示参数
-        self.title_width = config.title_width
-        self.line_width = config.line_width
-        self.max_context_lines = config.max_context_lines
-        self.max_anchor_lines = config.max_anchor_lines
-        self.context_expand_range = config.context_expand_range
-
-        # KB 工具字符限制
-        self.max_context_chars_per_result = config.max_context_chars_per_result
-        self.max_total_chars = config.max_total_chars
-        self.max_read_chars = config.max_read_chars
-        self.read_doc_show_toc = config.read_doc_show_toc
-
-        # Ripgrep 降级搜索上下文
-        self.rg_context_before = config.rg_context_before
-        self.rg_context_after = config.rg_context_after
-
-        # Grep 工具配置
-        self.grep_score_threshold = config.grep_score_threshold
-        self.grep_max_results = config.grep_max_results
-
-        self.scoring_weights = {
-            "keyword_match_ratio": config.weight_keyword_match,
-            "file_name_match": config.weight_file_name_match,
-            "fts_score": config.weight_fts_score,
-            "title_match": config.weight_title_match,
-            "proximity_match": config.weight_proximity_match,
-        }
-
         self._ts = None
         self._path_map = {}
         self._pending_swap = None  # (new_ts, new_path_map, doc_count)
         self._needs_reload = False  # 后台 reindex 完成后标记，下次 load 时重新加载
         self._reindexing = False
         self._reindex_lock = threading.Lock()
+
+    def apply_config(self, config: CortexConfig) -> None:
+        """Hot-reload config values. Does NOT touch index or search_path."""
+        self._config = config
+
+    # --- Config-backed properties (hot-reloadable) ---
+
+    @property
+    def max_results(self) -> int:
+        return self._config.max_results
+
+    @property
+    def max_nodes_per_doc(self) -> int:
+        return self._config.max_nodes_per_doc
+
+    @property
+    def top_k_docs(self) -> int:
+        return self._config.top_k_docs
+
+    @property
+    def max_span(self) -> int:
+        return self._config.max_span
+
+    @property
+    def min_keyword_match(self) -> int:
+        return self._config.min_keyword_match
+
+    @property
+    def min_proximity_score(self) -> int:
+        return self._config.min_proximity_score
+
+    @property
+    def min_keywords_per_line(self) -> int:
+        return self._config.min_keywords_per_line
+
+    @property
+    def min_score_threshold(self) -> float:
+        return self._config.min_score_threshold
+
+    @property
+    def cjk_tokenizer(self) -> str:
+        return self._config.cjk_tokenizer
+
+    @property
+    def max_index_fail_count(self) -> int:
+        return self._config.max_index_fail_count
+
+    @property
+    def enable_shadow_md(self) -> bool:
+        return self._config.treesearch_enable_shadow_md
+
+    @property
+    def xlsx_max_rows_per_sheet(self) -> int:
+        return self._config.treesearch_xlsx_max_rows_per_sheet
+
+    @property
+    def xlsx_max_consecutive_empty_rows(self) -> int:
+        return self._config.treesearch_xlsx_max_consecutive_empty_rows
+
+    @property
+    def allowed_source_types(self) -> list:
+        return self._config.allowed_source_types
+
+    @property
+    def title_width(self) -> int:
+        return self._config.title_width
+
+    @property
+    def line_width(self) -> int:
+        return self._config.line_width
+
+    @property
+    def max_context_lines(self) -> int:
+        return self._config.max_context_lines
+
+    @property
+    def max_anchor_lines(self) -> int:
+        return self._config.max_anchor_lines
+
+    @property
+    def context_expand_range(self) -> int:
+        return self._config.context_expand_range
+
+    @property
+    def max_context_chars_per_result(self) -> int:
+        return self._config.max_context_chars_per_result
+
+    @property
+    def max_total_chars(self) -> int:
+        return self._config.max_total_chars
+
+    @property
+    def max_read_chars(self) -> int:
+        return self._config.max_read_chars
+
+    @property
+    def read_doc_show_toc(self) -> bool:
+        return self._config.read_doc_show_toc
+
+    @property
+    def rg_context_before(self) -> int:
+        return self._config.rg_context_before
+
+    @property
+    def rg_context_after(self) -> int:
+        return self._config.rg_context_after
+
+    @property
+    def grep_score_threshold(self) -> float:
+        return self._config.grep_score_threshold
+
+    @property
+    def grep_max_results(self) -> int:
+        return self._config.grep_max_results
+
+    @property
+    def scoring_weights(self) -> dict:
+        c = self._config
+        return {
+            "keyword_match_ratio": c.weight_keyword_match,
+            "file_name_match": c.weight_file_name_match,
+            "fts_score": c.weight_fts_score,
+            "title_match": c.weight_title_match,
+            "proximity_match": c.weight_proximity_match,
+        }
 
     @property
     def ts(self):

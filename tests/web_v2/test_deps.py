@@ -16,3 +16,38 @@ def test_get_index_manager_returns_singleton(env_cortex_config):
     m1 = deps.get_index_manager()
     m2 = deps.get_index_manager()
     assert m1 is m2
+
+
+def test_reload_config_pushes_new_config_to_singletons(env_cortex_config):
+    """reload_config recreates CortexConfig and pushes to live singletons."""
+    from unittest.mock import MagicMock, patch
+
+    deps._config = None
+    deps._idx_manager = None
+    deps._agent = None
+
+    # Initialize
+    original_config = deps.get_config()
+    mgr = deps.get_index_manager()
+
+    # Record original value
+    original_max = mgr.max_results
+
+    # Write a new .env with different max_results
+    import os
+    env_path = os.path.join(os.getcwd(), ".cortex", ".env")
+    os.makedirs(os.path.dirname(env_path), exist_ok=True)
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write(f"CORTEX_MAX_RESULTS={original_max + 500}\n")
+
+    # Reload
+    new_config = deps.reload_config()
+    assert new_config is not original_config
+    assert new_config.max_results == original_max + 500
+    # IndexManager got the push
+    assert mgr.max_results == original_max + 500
+
+    # Cleanup
+    deps._config = None
+    deps._idx_manager = None
+    deps._agent = None

@@ -11,7 +11,7 @@ import {
   type SettingsTab,
 } from "./settings-fields";
 import "../components/settings-scope-segment";
-import { getConfig, putConfig, ConfigApiError, copyFromGlobal } from "../api/config";
+import { getConfig, putConfig, ConfigApiError } from "../api/config";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
@@ -55,9 +55,9 @@ export class SettingsView extends LitElement {
     }
     .scroll-area {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
-      padding: var(--cortex-space-6) var(--cortex-space-8) 120px;
-      position: relative;
+      padding: var(--cortex-space-6) var(--cortex-space-8);
     }
     .tab-panel { display: none; max-width: 880px; margin: 0 auto; }
     .tab-panel.active { display: block; }
@@ -156,10 +156,7 @@ export class SettingsView extends LitElement {
     }
 
     .footer-bar {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      flex-shrink: 0;
       background: var(--cortex-surface);
       border-top: 1px solid var(--cortex-border);
       padding: var(--cortex-space-3) var(--cortex-space-8);
@@ -320,7 +317,7 @@ export class SettingsView extends LitElement {
   @state() private _values: Record<string, string> = {};
   @state() private _original: Record<string, string> = {};
   @state() private _exists = true;
-  @state() private _scope: SettingsScope = "local";
+  @state() private _scope: SettingsScope = "global";
   @state() private _fieldErrors: Record<string, string> = {};
 
   private _unsubscribe?: () => void;
@@ -423,27 +420,6 @@ export class SettingsView extends LitElement {
   private _revert() {
     this._values = { ...this._original };
     actions.revertSettings();
-  }
-
-  private async _copyFromGlobal() {
-    try {
-      await copyFromGlobal();
-      await this._load();
-    } catch (e: unknown) {
-      let msg: string;
-      if (e instanceof ConfigApiError) {
-        msg = `复制失败 (HTTP ${e.status})`;
-      } else if (e instanceof Error) {
-        msg = `复制失败: ${e.message}`;
-      } else {
-        msg = "复制失败: 未知错误";
-      }
-      if (this._isMobile()) {
-        this._pushToast(msg, "error", 5000);
-      } else {
-        this._error = msg;
-      }
-    }
   }
 
   private async _save() {
@@ -637,19 +613,14 @@ export class SettingsView extends LitElement {
   }
 
   render() {
-    const scopeLabel = this._scope === "local" ? "本地" : "全局";
+    const scopeLabel = "全局";
     const existsHint = this._exists ? "" : "（新建）";
     return html`
-      ${this._scope === "local" && !this._exists
-        ? html`
-            <div class="copy-banner">
-              <span>ℹ️</span>
-              <span>当前工作目录尚未创建 <code>.cortex/.env</code>，将使用全局配置。</span>
-              <span class="grow"></span>
-              <button class="btn primary" @click=${this._copyFromGlobal}>📋 从全局复制并编辑</button>
-            </div>
-          `
-        : nothing}
+      <div class="copy-banner">
+        <span>ℹ️</span>
+        <span>正在编辑全局配置。</span>
+        <span class="grow"></span>
+      </div>
       <div class="scroll-area">
         <settings-scope-segment
           .scope=${this._scope}
@@ -687,22 +658,21 @@ export class SettingsView extends LitElement {
             </div>
           `;
         })}
-
-        <div class="footer-bar">
-          <div class="dirty-status">
-            ${this._dirty
-              ? html`<span class="dirty-dot"></span><span>有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
-              : html`<span style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
-            }
-            ${this._error ? html`<span style="color: var(--cortex-danger); margin-left: var(--cortex-space-2);">${this._error}</span>` : nothing}
-            ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
-          </div>
-          <div style="display: flex; gap: var(--cortex-space-2);">
-            <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
-            <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
-              ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}
-            </button>
-          </div>
+      </div>
+      <div class="footer-bar">
+        <div class="dirty-status">
+          ${this._dirty
+            ? html`<span class="dirty-dot"></span><span>有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
+            : html`<span style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
+          }
+          ${this._error ? html`<span style="color: var(--cortex-danger); margin-left: var(--cortex-space-2);">${this._error}</span>` : nothing}
+          ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
+        </div>
+        <div style="display: flex; gap: var(--cortex-space-2);">
+          <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
+          <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
+            ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}
+          </button>
         </div>
       </div>
       <toast-stack></toast-stack>

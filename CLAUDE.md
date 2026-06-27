@@ -258,11 +258,18 @@ planify/
 
 ### 前端开发模式
 
-修改前端代码后需要重新构建：
+修改前端代码后需要**重新构建并重启后端**才能生效：
+
 ```bash
-cd doclens/web_v2/frontend && npm install && npm run dev   # 开发模式
-cd doclens/web_v2/frontend && npm run build                 # 生产构建
+# 1. 重新构建前端（位于 doclens/web_v2/frontend）
+cd doclens/web_v2/frontend && npm install && npm run build
+
+# 2. 重启后端（否则后端仍在服务旧的静态文件）
+# 在 start.ps1 所在目录执行
+pwsh -File ./start.ps1 gui
 ```
+
+> **注意**：修改前端代码后必须执行 `npm run build`（生产构建），仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新。
 
 ### 备用方式（直接调用 Python）
 
