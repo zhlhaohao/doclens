@@ -184,8 +184,13 @@ export class PreviewPane extends LitElement {
   private _onDocClick = (e: MouseEvent) => {
     if (!this._showMobileMenu) return;
     const path = e.composedPath();
-    // 路径中包含 preview-pane 自身或 mobile-menu 即视为 inside
-    if (path.includes(this)) return;
+    // 仅在点击 menu 自身或 more 按钮时不关闭；其它位置（含组件 shadow 内
+    // 的 preview 内容）一律关闭。原先 path.includes(this) 太宽，导致点
+    // preview 内容时不关闭。
+    const menu = this.shadowRoot?.querySelector(".mobile-menu");
+    const more = this.shadowRoot?.querySelector(".mobile-more");
+    if (menu && path.includes(menu)) return;
+    if (more && path.includes(more)) return;
     this._showMobileMenu = false;
   };
 
