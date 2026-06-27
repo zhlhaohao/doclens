@@ -285,6 +285,27 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
+  it("preserves search input value after returning from detail pane on mobile", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    // 进入 detail 面板（搜索框被卸载）
+    actions.setMobilePane("detail");
+    await el.updateComplete;
+    // 返回 tree 面板（搜索框重挂载）
+    actions.setMobilePane("tree");
+    await el.updateComplete;
+    const searchBox = el.shadowRoot.querySelector(".mobile-layout file-search-box") as any;
+    const input = searchBox.shadowRoot.querySelector("input") as HTMLInputElement;
+    expect(input.value).toBe("read");
+    document.body.removeChild(el);
+  });
+
   it("_goBack from detail goes to tree when search active on mobile", async () => {
     actions.setFilenameSearchQuery({
       query: "read",
