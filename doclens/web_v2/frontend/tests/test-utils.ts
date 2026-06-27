@@ -36,3 +36,17 @@ export function resetStore(target: typeof store) {
     error: null,
   });
 }
+
+/** 设置 jsdom 的 innerWidth 为移动端尺寸（390px，模拟 iPhone 13）。 */
+export function setMobileViewport() {
+  Object.defineProperty(window, "innerWidth", {
+    writable: true, configurable: true, value: 390,
+  });
+}
+
+/** 恢复 jsdom 的 innerWidth 为桌面端尺寸（1280px）。 */
+export function setDesktopViewport() {
+  Object.defineProperty(window, "innerWidth", {
+    writable: true, configurable: true, value: 1280,
+  });
+}

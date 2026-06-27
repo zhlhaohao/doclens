@@ -81,6 +81,7 @@ export class FilesView extends LitElement {
     }
     .mobile-layout file-tree,
     .mobile-layout file-list,
+    .mobile-layout file-search-results,
     .mobile-layout .mobile-preview {
       display: flex;
       flex-direction: column;
@@ -601,6 +602,18 @@ export class FilesView extends LitElement {
     ></preview-pane>`;
   }
 
+  private get _searchBoxState() {
+    const fs = store.getState().files.filenameSearch;
+    const docsEmpty = !fs.docsLoading && fs.allDocs.length === 0;
+    const disabled = fs.docsError !== null || docsEmpty;
+    const placeholder = fs.docsError !== null
+      ? "文档列表加载失败"
+      : docsEmpty
+        ? "暂无已索引文档"
+        : "按文件名搜索…";
+    return { disabled, placeholder };
+  }
+
   private get _isFilenameSearchActive(): boolean {
     return store.getState().files.filenameSearch.isActive;
   }
@@ -651,14 +664,7 @@ export class FilesView extends LitElement {
   }
 
   private _renderDesktop() {
-    const fs = store.getState().files.filenameSearch;
-    const docsEmpty = !fs.docsLoading && fs.allDocs.length === 0;
-    const searchDisabled = fs.docsError !== null || docsEmpty;
-    const searchPlaceholder = fs.docsError !== null
-      ? "文档列表加载失败"
-      : docsEmpty
-        ? "暂无已索引文档"
-        : "按文件名搜索…";
+    const { disabled: searchDisabled, placeholder: searchPlaceholder } = this._searchBoxState;
     return html`
       <div
         class="desktop-layout"
@@ -704,20 +710,34 @@ export class FilesView extends LitElement {
 
   private _renderMobile() {
     const pane = this._state.mobilePane;
+    const searchState = this._searchBoxState;
     return html`
       <div class="mobile-layout">
         ${pane !== "tree"
           ? html`<button class="back-btn" @click=${() => this._goBack()}>← 返回</button>`
           : ""}
         ${pane === "tree"
-          ? html`<file-tree
-              @select-dir=${async (e: CustomEvent<{ path: string }>) => {
-                actions.selectDir(e.detail.path);
-                await this._ensureLoaded(e.detail.path);
-                actions.expandDir(e.detail.path);
-                actions.setMobilePane("list");
-              }}
-            ></file-tree>`
+          ? html`
+              <file-search-box
+                ?disabled=${searchState.disabled}
+                .placeholder=${searchState.placeholder}
+                @search=${this._onFilenameSearch}
+                @clear=${this._onFilenameClear}
+              ></file-search-box>
+              ${this._isFilenameSearchActive
+                ? html`<file-search-results
+                    @activated=${this._onFilenameResultActivated}
+                    @clear=${this._onFilenameClear}
+                  ></file-search-results>`
+                : html`<file-tree
+                    @select-dir=${async (e: CustomEvent<{ path: string }>) => {
+                      actions.selectDir(e.detail.path);
+                      await this._ensureLoaded(e.detail.path);
+                      actions.expandDir(e.detail.path);
+                      actions.setMobilePane("list");
+                    }}
+                  ></file-tree>`}
+            `
           : ""}
         ${pane === "list"
           ? html`<file-list
