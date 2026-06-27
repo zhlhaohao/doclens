@@ -4699,6 +4699,12 @@ ${r}</blockquote>
       border-color: var(--cortex-primary);
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      input { font-size: 16px; padding: 10px; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;rs([g()],xt.prototype,"_name",2);rs([g()],xt.prototype,"_err",2);xt=rs([P("mkdir-dialog")],xt);var _l=Object.defineProperty,yl=Object.getOwnPropertyDescriptor,or=(e,t,r,i)=>{for(var s=i>1?void 0:i?yl(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&_l(t,r,s),s};const wl=/[\\/:*?"<>|]/,kl=/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;let Ke=class extends ${constructor(){super(...arguments),this.currentName="",this._name="",this._err=""}connectedCallback(){super.connectedCallback(),this._name=this.currentName,this._err=this._validate(this._name)}_validate(e){return e?e===this.currentName?"名称未变化":e.startsWith(".")?"不能以点开头":wl.test(e)?'含非法字符 / \\ : * ? " < > |':kl.test(e)?"Windows 保留名":"":"名称不能为空"}_onInput(e){this._name=e.target.value,this._err=this._validate(this._name)}_submit(){this._err||this.dispatchEvent(new CustomEvent("submit",{detail:{newName:this._name},bubbles:!0,composed:!0}))}_cancel(){this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))}render(){const e=!!this._err;return c`
       <div class="row">
         <label>重命名</label>
@@ -4751,6 +4757,12 @@ ${r}</blockquote>
       border-color: var(--cortex-primary);
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      input { font-size: 16px; padding: 10px; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;or([d({type:String})],Ke.prototype,"currentName",2);or([g()],Ke.prototype,"_name",2);or([g()],Ke.prototype,"_err",2);Ke=or([P("rename-dialog")],Ke);var $l=Object.defineProperty,Sl=Object.getOwnPropertyDescriptor,ss=(e,t,r,i)=>{for(var s=i>1?void 0:i?Sl(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&$l(t,r,s),s};let _t=class extends ${constructor(){super(...arguments),this._dest="",this._overwrite=!1}get _selectedCount(){return f.getState().files.selectedPaths.length}_onPickDir(e){this._dest=e.detail.path}_onToggle(e){e.stopPropagation()}_submit(){this._dest&&this.dispatchEvent(new CustomEvent("submit",{detail:{destDir:this._dest,overwrite:this._overwrite},bubbles:!0,composed:!0}))}_cancel(){this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))}render(){const{treeCache:e,expandedPaths:t}=f.getState().files,r=(e[""]||[]).filter(s=>s.is_dir),i=new Set(t);return c`
       <h3>移动 ${this._selectedCount} 个项目到</h3>
       <div class="tree">
@@ -4817,6 +4829,12 @@ ${r}</blockquote>
       display: flex; gap: var(--cortex-space-2); align-items: center;
       font-size: var(--cortex-fs-sm);
       padding: var(--cortex-space-2) 0;
+    }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      .tree { max-height: 50vh; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;ss([g()],_t.prototype,"_dest",2);ss([g()],_t.prototype,"_overwrite",2);_t=ss([P("move-dialog")],_t);var Cl=Object.defineProperty,El=Object.getOwnPropertyDescriptor,ar=(e,t,r,i)=>{for(var s=i>1?void 0:i?El(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Cl(t,r,s),s};let Ge=class extends ${constructor(){super(...arguments),this._phase="confirming",this._stats=null,this._confirmed=!1}get _selected(){return f.getState().files.selectedPaths}connectedCallback(){super.connectedCallback(),!this._stats&&this._selected.length>0&&(this._phase="loading-stats",this._loadStats())}async _loadStats(){const e=this._selected;let t=0,r=0,i=0;for(const s of e)try{const o=await de.stats(s);t+=o.file_count,r+=o.dir_count,i+=o.total_size_bytes}catch{}t===0&&r===0&&(t=e.length),this._stats={file_count:t,dir_count:r,total_size_bytes:i},this._phase="confirming"}_fmtSize(e){return e<1024?`${e} B`:e<1024*1024?`${(e/1024).toFixed(1)} KB`:`${(e/1024/1024).toFixed(1)} MB`}_delete(){this._confirmed&&(this._phase="deleting",this.dispatchEvent(new CustomEvent("submit",{detail:{paths:this._selected},bubbles:!0,composed:!0})))}_cancel(){this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))}render(){const e=this._selected.length;return this._phase==="loading-stats"?c`<div class="spinner">统计中…</div>`:c`
       <h3>删除 ${e>1?`${e} 项`:this._selected[0]}？</h3>
@@ -4892,6 +4910,11 @@ ${r}</blockquote>
       font-size: var(--cortex-fs-sm);
     }
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;ar([g()],Ge.prototype,"_phase",2);ar([g()],Ge.prototype,"_stats",2);ar([g()],Ge.prototype,"_confirmed",2);Ge=ar([P("delete-dialog")],Ge);var Pl=Object.defineProperty,Al=Object.getOwnPropertyDescriptor,is=(e,t,r,i)=>{for(var s=i>1?void 0:i?Al(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Pl(t,r,s),s};let yt=class extends ${constructor(){super(...arguments),this.targetDir="",this._active=!1,this._dragCounter=0,this._onDragEnter=e=>{this._hasFilesOnly(e)&&(e.preventDefault(),this._dragCounter++,this._active=!0)},this._onDragOver=e=>{this._hasFilesOnly(e)&&e.preventDefault()},this._onDragLeave=()=>{this._dragCounter--,this._dragCounter<=0&&(this._active=!1,this._dragCounter=0)},this._onDrop=e=>{if(!e.dataTransfer)return;e.preventDefault(),this._active=!1,this._dragCounter=0;const t=Array.from(e.dataTransfer.files||[]);t.length!==0&&this.dispatchEvent(new CustomEvent("drop-files",{detail:{files:t,destDir:this.targetDir},bubbles:!0,composed:!0}))}}connectedCallback(){super.connectedCallback(),window.addEventListener("dragenter",this._onDragEnter),window.addEventListener("dragover",this._onDragOver),window.addEventListener("dragleave",this._onDragLeave),window.addEventListener("drop",this._onDrop)}disconnectedCallback(){window.removeEventListener("dragenter",this._onDragEnter),window.removeEventListener("dragover",this._onDragOver),window.removeEventListener("dragleave",this._onDragLeave),window.removeEventListener("drop",this._onDrop),super.disconnectedCallback()}_hasFilesOnly(e){if(!e.dataTransfer)return!1;const t=Array.from(e.dataTransfer.items||[]);return t.length===0?e.dataTransfer.types.includes("Files"):t.every(r=>r.kind==="file")}render(){return c`
       <div class="overlay ${this._active?"active":""}">
         <div>⬇ 拖放以上传到</div>
@@ -5291,6 +5314,16 @@ ${r}</blockquote>
       box-shadow: 0 12px 32px rgba(0,0,0,0.12);
       min-width: 360px;
       max-width: 90vw;
+    }
+    @media (max-width: 1023px) {
+      dialog {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+        border-radius: var(--cortex-radius-md);
+      }
+      dialog > * { padding: var(--cortex-space-4); }
     }
     dialog::backdrop { background: rgba(0,0,0,0.3); }
     dialog > * { display: block; padding: var(--cortex-space-6); }

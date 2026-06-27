@@ -47,6 +47,12 @@ export class MkdirDialog extends LitElement {
       border-color: var(--cortex-primary);
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      input { font-size: 16px; padding: 10px; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;
 
   @state() private _name = "";

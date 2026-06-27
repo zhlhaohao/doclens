@@ -51,6 +51,11 @@ export class DeleteDialog extends LitElement {
       font-size: var(--cortex-fs-sm);
     }
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;
 
   @state() private _phase: Phase = "confirming";
