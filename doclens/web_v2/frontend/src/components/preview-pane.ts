@@ -355,6 +355,7 @@ export class PreviewPane extends LitElement {
         <md-editor
           .path=${this.path}
           .originalContent=${this._content}
+          ?mobile=${this.mobile}
           @save=${this._onEditorSave}
           @cancel=${this._onEditorCancel}
           @dirty-change=${this._onEditorDirty}
