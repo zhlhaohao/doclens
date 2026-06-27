@@ -285,6 +285,17 @@ class CortexAgent:
         self.session = session
         return self
 
+    def apply_config(self, config) -> None:
+        """Hot-reload AI config: update session client + model."""
+        if self.session is None:
+            return
+        client = init_anthropic_client(
+            config.planify_base_url,
+            config.planify_api_key,
+        )
+        self.session.client = client
+        self.session.model = config.planify_model_id
+
     def run_query(
         self,
         query: str,
