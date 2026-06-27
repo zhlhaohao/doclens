@@ -372,15 +372,32 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
-  it("list pane still shows floating back-btn", async () => {
+  it("list pane renders file-list with mobile=true and hides floating back-btn", async () => {
+    actions.setMobilePane("list");
+    actions.setFilesState({ currentDir: "docs", treeCache: { docs: [] } });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const fl = el.shadowRoot.querySelector("file-list");
+    expect(fl).toBeTruthy();
+    expect(fl.hasAttribute("mobile")).toBe(true);
+    // 浮动的 .back-btn 不再出现（由 file-list 内部 mobile-back 提供）
+    expect(el.shadowRoot.querySelector(".back-btn")).toBeNull();
+    // file-list 渲染 mobile bar
+    expect(fl.shadowRoot.querySelector(".mobile-header")).toBeTruthy();
+    document.body.removeChild(el);
+  });
+
+  it("list pane back event from file-list calls _goBack", async () => {
     actions.setMobilePane("list");
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    expect(el.shadowRoot.querySelector(".back-btn")).toBeTruthy();
-    // list pane 不用 preview-pane 的 mobile bar
-    const pp = el.shadowRoot.querySelector("preview-pane");
-    expect(pp).toBeFalsy();
+    el.shadowRoot.querySelector("file-list").dispatchEvent(
+      new CustomEvent("back", { bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(store.getState().files.mobilePane).toBe("tree");
     document.body.removeChild(el);
   });
 });

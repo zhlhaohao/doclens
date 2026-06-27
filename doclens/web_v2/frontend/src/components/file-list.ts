@@ -57,6 +57,75 @@ export class FileList extends LitElement {
     .toolbar button:hover:not(:disabled) { background: var(--cortex-surface-muted); }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
     .toolbar button.danger { color: var(--cortex-danger); }
+    .mobile-header {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .mobile-header .mobile-back,
+    .mobile-header .mobile-more {
+      border: none;
+      background: transparent;
+      color: var(--cortex-text);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 10px;
+      border-radius: var(--cortex-radius-sm);
+      min-width: 36px;
+    }
+    .mobile-header .mobile-back:hover,
+    .mobile-header .mobile-more:hover {
+      background: var(--cortex-surface-muted);
+    }
+    .mobile-header .mobile-path {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mobile-header .mobile-menu {
+      position: absolute;
+      top: 100%;
+      right: var(--cortex-space-2);
+      min-width: 160px;
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-md);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      z-index: 10;
+      padding: 4px 0;
+    }
+    .mobile-header .mobile-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: var(--cortex-text);
+      font-family: inherit;
+      font-size: var(--cortex-fs-sm);
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .mobile-header .mobile-menu button:hover:not(:disabled) {
+      background: var(--cortex-surface-muted);
+    }
+    .mobile-header .mobile-menu button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .mobile-header .mobile-menu button.danger { color: var(--cortex-danger); }
     .header-row {
       display: grid;
       grid-template-columns:
@@ -140,16 +209,23 @@ export class FileList extends LitElement {
   /** 当前预览/焦点文件路径 —— 该行会加 active 高亮（区别于 checkbox 多选） */
   @property() activePath = "";
 
+  /** 移动端启用顶部 bar（返回 / 路径 / more 下拉）。 */
+  @property({ type: Boolean }) mobile = false;
+
   /** 各列宽度（px），通过 --col-N CSS var 注入到 host，file-row 经继承读取 */
   @state() private _colWidths: number[] = [...DEFAULT_COL_WIDTHS];
+  @state() private _showMobileMenu = false;
 
   connectedCallback() {
     super.connectedCallback();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     this._loadColWidths();
+    // 点击 outside 关闭 more 下拉
+    document.addEventListener("click", this._onDocClick, true);
   }
   disconnectedCallback() {
     this._unsubscribe?.();
+    document.removeEventListener("click", this._onDocClick, true);
     super.disconnectedCallback();
   }
 
@@ -247,6 +323,105 @@ export class FileList extends LitElement {
     actions.selectDir(parent);
   }
 
+  /** 移动端返回按钮。父组件监听 @back 自行决定如何导航。 */
+  private _onMobileBackClick = () => {
+    this._showMobileMenu = false;
+    this.dispatchEvent(new CustomEvent("back", {
+      bubbles: true,
+      composed: true,
+    }));
+  };
+
+  private _onMobileMoreClick = (e: Event) => {
+    e.stopPropagation();
+    this._showMobileMenu = !this._showMobileMenu;
+  };
+
+  private _onDocClick = (e: MouseEvent) => {
+    if (!this._showMobileMenu) return;
+    const path = e.composedPath();
+    if (path.includes(this)) return;
+    this._showMobileMenu = false;
+  };
+
+  private _onMenuItemClick = (name: string) => (e: Event) => {
+    e.stopPropagation();
+    this._showMobileMenu = false;
+    this._action(name);
+  };
+
+  private _renderMobileHeader() {
+    const { currentDir, selectedPaths } = store.getState().files;
+    const canGoUp = currentDir !== "";
+    const canRename = selectedPaths.length === 1;
+    const canAct = selectedPaths.length >= 1;
+    const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
+
+    return html`
+      <div class="mobile-header">
+        <button
+          class="mobile-back"
+          type="button"
+          aria-label="返回"
+          @click=${this._onMobileBackClick}
+        >←</button>
+        <span class="mobile-path" title=${breadcrumb}>${breadcrumb}</span>
+        <button
+          class="mobile-more"
+          type="button"
+          aria-label="更多操作"
+          @click=${this._onMobileMoreClick}
+        >⋯</button>
+        ${this._showMobileMenu
+          ? html`
+              <div class="mobile-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  ?disabled=${!canGoUp}
+                  @click=${() => { this._showMobileMenu = false; this._goUp(); }}
+                >↑ 上一级</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="mkdir"
+                  @click=${this._onMenuItemClick("mkdir")}
+                >+ 新目录</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="upload"
+                  @click=${this._onMenuItemClick("upload")}
+                >⬆ 上传</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="rename"
+                  ?disabled=${!canRename}
+                  @click=${this._onMenuItemClick("rename")}
+                >✎ 重命名</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="move"
+                  ?disabled=${!canAct}
+                  @click=${this._onMenuItemClick("move")}
+                >→ 移动</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="delete"
+                  ?disabled=${!canAct}
+                  class="danger"
+                  @click=${this._onMenuItemClick("delete")}
+                >🗑 删除</button>
+              </div>
+            `
+          : null}
+      </div>
+    `;
+  }
+
   render() {
     const { currentDir, treeCache, selectedPaths } = store.getState().files;
     const entries = treeCache[currentDir] || [];
@@ -256,6 +431,37 @@ export class FileList extends LitElement {
     const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
     const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
+
+    if (this.mobile) {
+      return html`
+        ${this._renderMobileHeader()}
+        ${entries.length === 0
+          ? html`<div class="empty">目录为空</div>`
+          : html`<div class="header-row">
+              <span class="select-all">
+                <input
+                  type="checkbox"
+                  .checked=${allSelected}
+                  @click=${this._onSelectAll}
+                />
+              </span>
+              <span></span>
+              <span>名称</span>
+              <span class="cell-size">大小</span>
+              <span class="cell-time">修改</span>
+              <span class="cell-indexed"></span>
+            </div>`}
+        <div class="rows">
+          ${entries.map(e => html`
+            <file-row
+              .entry=${e}
+              .selected=${sel.has(e.path)}
+              .active=${e.path === this.activePath}
+              @checked=${this._onRowChecked}
+            ></file-row>`)}
+        </div>
+      `;
+    }
 
     return html`
       <div class="breadcrumb">
