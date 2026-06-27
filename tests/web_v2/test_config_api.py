@@ -48,8 +48,8 @@ def test_put_local_config_creates_file_and_writes_values(client, tmp_path):
     assert resp.status_code == 200
     body = resp.json()
     assert body["ok"] is True
-    assert body["needs_restart"] is True
-    assert "PLANIFY_API_KEY" in body["restart_fields"]
+    assert body["needs_restart"] is False
+    assert body["restart_fields"] == []
     saved_path = tmp_path / ".cortex" / ".env"
     assert saved_path.exists()
     assert "CORTEX_MAX_RESULTS=99" in saved_path.read_text(encoding="utf-8")
