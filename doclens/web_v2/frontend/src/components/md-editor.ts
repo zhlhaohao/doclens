@@ -99,6 +99,8 @@ export class MdEditor extends LitElement {
 
   @property() path = "";
   @property() originalContent = "";
+  /** 移动端隐藏文件名（顶部 bar 已经显示）。 */
+  @property({ type: Boolean }) mobile = false;
 
   @state() private _text = "";
   @state() private _dirty = false;
@@ -181,7 +183,9 @@ export class MdEditor extends LitElement {
     for (let i = 1; i <= this._lineCount; i++) lines.push(i);
     return html`
       <div class="toolbar">
-        <span class="path">${this.path}</span>
+        ${this.mobile
+          ? null
+          : html`<span class="path">${this.path}</span>`}
         ${this._error
           ? html`<span class="error-msg">⚠ ${this._error}</span>`
           : this._dirty

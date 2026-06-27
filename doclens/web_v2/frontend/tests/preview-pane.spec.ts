@@ -683,4 +683,48 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeNull();
   });
+
+  it("edit mode in mobile: md-editor hides redundant filename (mobile bar already shows it)", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="docs/readme.md"
+        writable
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    expect(editor).toBeTruthy();
+    // mobile=true 透传给 md-editor
+    expect(editor.hasAttribute("mobile")).toBe(true);
+    // 编辑器 toolbar 不再渲染 .path
+    const toolbarPath = editor.shadowRoot!.querySelector(".toolbar .path");
+    expect(toolbarPath).toBeNull();
+    // 但保存/取消按钮仍在
+    expect(editor.shadowRoot!.querySelector(".save-btn")).toBeTruthy();
+    expect(editor.shadowRoot!.querySelector(".cancel-btn")).toBeTruthy();
+  });
+
+  it("edit mode in desktop: md-editor still shows filename in toolbar", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="docs/readme.md"
+        writable>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    expect(editor.hasAttribute("mobile")).toBe(false);
+    const toolbarPath = editor.shadowRoot!.querySelector(".toolbar .path");
+    expect(toolbarPath).toBeTruthy();
+    expect(toolbarPath!.textContent).toBe("docs/readme.md");
+  });
 });
