@@ -723,9 +723,6 @@ export class FilesView extends LitElement {
     const searchState = this._searchBoxState;
     return html`
       <div class="mobile-layout">
-        ${pane === "list"
-          ? html`<button class="back-btn" @click=${() => this._goBack()}>← 返回</button>`
-          : ""}
         ${pane === "tree"
           ? html`
               <file-search-box
@@ -753,8 +750,10 @@ export class FilesView extends LitElement {
         ${pane === "list"
           ? html`<file-list
               .activePath=${this._previewPath}
+              ?mobile=${true}
               @action=${this._onAction}
               @activated=${this._onFileListActivated}
+              @back=${() => this._goBack()}
             ></file-list>`
           : ""}
         ${pane === "detail"
