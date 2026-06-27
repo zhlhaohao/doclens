@@ -3,6 +3,7 @@
 复制自 cortex/web/deps.py，去除 Gradio 依赖。
 """
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -85,9 +86,24 @@ def reset_singletons() -> None:
 
 
 def reload_config() -> CortexConfig:
-    """重建 CortexConfig 并推送到已存在的单例。"""
+    """重建 CortexConfig 并推送到已存在的单例。
+
+    先用 load_dotenv(override=True) 刷新 os.environ，确保 pydantic-settings
+    读到的环境变量与最新 .env 一致（而非 CortexAgent.initialize() 早期
+    load_dotenv 写入的过期值）。
+    """
     global _config
     with _lock:
+        from dotenv import load_dotenv
+        from doclens.config import get_global_cortex_dir
+
+        global_env = get_global_cortex_dir() / ".env"
+        local_env = Path(os.getcwd()) / ".cortex" / ".env"
+        if global_env.exists():
+            load_dotenv(global_env, override=True)
+        if local_env.exists():
+            load_dotenv(local_env, override=True)
+
         _config = CortexConfig.load()
         if _idx_manager:
             _idx_manager.apply_config(_config)
