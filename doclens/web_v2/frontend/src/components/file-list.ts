@@ -340,7 +340,12 @@ export class FileList extends LitElement {
   private _onDocClick = (e: MouseEvent) => {
     if (!this._showMobileMenu) return;
     const path = e.composedPath();
-    if (path.includes(this)) return;
+    // 仅在点击 menu 自身或 more 按钮时不关闭；其它位置（含 shadow 内的
+    // header-row、rows）一律关闭。原先 path.includes(this) 太宽。
+    const menu = this.shadowRoot?.querySelector(".mobile-menu");
+    const more = this.shadowRoot?.querySelector(".mobile-more");
+    if (menu && path.includes(menu)) return;
+    if (more && path.includes(more)) return;
     this._showMobileMenu = false;
   };
 

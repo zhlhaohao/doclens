@@ -480,4 +480,40 @@ describe("file-list mobile header", () => {
     expect(el.shadowRoot.querySelector(".mobile-menu")).toBeNull();
     document.body.removeChild(el);
   });
+
+  it("clicking on a row (inside shadow but outside menu) closes the dropdown", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    el.mobile = true;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".mobile-menu")).toBeTruthy();
+    // 点击 file-row（shadow 内部但不在 menu 里）
+    const row = el.shadowRoot.querySelector("file-row") as HTMLElement;
+    expect(row).toBeTruthy();
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".mobile-menu")).toBeNull();
+    document.body.removeChild(el);
+  });
+
+  it("clicking on more button (path includes .mobile-more) does NOT force-close via doc handler", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    el.mobile = true;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    // 先打开
+    (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".mobile-menu")).toBeTruthy();
+    // 再点一次 more —— doc 处理器不应抢先关闭（否则按钮 toggle 会重新打开）
+    (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    // 最终状态应该是关闭（按钮 toggle 一次）
+    expect(el.shadowRoot.querySelector(".mobile-menu")).toBeNull();
+    document.body.removeChild(el);
+  });
 });
