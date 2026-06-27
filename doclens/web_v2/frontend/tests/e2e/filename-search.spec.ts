@@ -8,6 +8,8 @@ async function gotoFilesView(page: import("@playwright/test").Page) {
 }
 
 test.describe("filename search", () => {
+  test.skip(({ }, testInfo) => testInfo.project.name !== "desktop-chrome", "Desktop only");
+
   test.beforeEach(async ({ page }) => {
     await gotoFilesView(page);
   });
