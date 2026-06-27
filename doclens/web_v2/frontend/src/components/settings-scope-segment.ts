@@ -53,25 +53,9 @@ export class SettingsScopeSegment extends LitElement {
     }
   `;
 
-  private _onSelect(scope: SettingsScope) {
-    if (this.scope === scope) return;
-    this.dispatchEvent(new CustomEvent("scope-change", {
-      detail: { scope },
-      bubbles: true,
-      composed: true,
-    }));
-  }
-
   render() {
     return html`
-      <button
-        class="pill ${this.scope === "local" ? "active" : ""}"
-        @click=${() => this._onSelect("local")}
-      >📁 本地${!this.exists ? html`<span class="new-tag">（新建）</span>` : ""}</button>
-      <button
-        class="pill ${this.scope === "global" ? "active" : ""}"
-        @click=${() => this._onSelect("global")}
-      >🌍 全局</button>
+      <button class="pill active">🌍 全局</button>
     `;
   }
 }

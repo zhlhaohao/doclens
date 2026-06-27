@@ -74,6 +74,10 @@ async def put_config(
     except PermissionError as e:
         raise CortexAPIError(403, "WRITE_FORBIDDEN", f"无法写入 {path}: {e}")
 
+    # 4. Hot-reload in-memory singletons
+    from doclens.web_v2.deps import reload_config
+    reload_config()
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )

@@ -223,13 +223,6 @@ export class AppBar extends LitElement {
             <div style="font-size: var(--cortex-fs-sm); font-weight: 500;">Liang</div>
             <div class="email">liang@example.com</div>
           </div>
-          <button class="menu-item" type="button" @click=${() => this._onScopeSelect("local")}>
-            <span class="icon">📁</span>
-            <span class="text">
-              <span class="label">本地配置</span>
-              <span class="desc">仅当前工作目录</span>
-            </span>
-          </button>
           <button class="menu-item" type="button" @click=${() => this._onScopeSelect("global")}>
             <span class="icon">🌍</span>
             <span class="text">
