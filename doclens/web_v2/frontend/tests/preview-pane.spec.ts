@@ -459,3 +459,228 @@ describe("<preview-pane> html branch", () => {
     expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeNull();
   });
 });
+
+describe("<preview-pane> mobile header", () => {
+  it("does not render .mobile-header by default", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-header")).toBeNull();
+    // 桌面 .header 仍渲染
+    expect(el.shadowRoot!.querySelector(".header")).toBeTruthy();
+  });
+
+  it("renders .mobile-header with back / filename / more when mobile=true", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="docs/sub/readme.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const mh = el.shadowRoot!.querySelector(".mobile-header");
+    expect(mh).toBeTruthy();
+    // 文件名只取 basename
+    expect(mh!.querySelector(".mobile-filename")!.textContent).toBe("readme.md");
+    expect(mh!.querySelector(".mobile-back")).toBeTruthy();
+    expect(mh!.querySelector(".mobile-more")).toBeTruthy();
+  });
+
+  it("hides desktop .header when mobile=true (no double bar)", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+  });
+
+  it("clicking mobile-back dispatches 'back' event (bubbles+composed)", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    let received = false;
+    el.addEventListener("back", () => (received = true));
+    (el.shadowRoot!.querySelector(".mobile-back") as HTMLElement).click();
+    expect(received).toBe(true);
+  });
+
+  it("clicking mobile-more opens dropdown with edit/download/upload", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        writable
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeNull();
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector(".mobile-menu");
+    expect(menu).toBeTruthy();
+    const items = menu!.querySelectorAll("button");
+    // writable=true: 编辑/下载/上传 三项
+    expect(items.length).toBe(3);
+    expect(items[0].textContent).toContain("编辑");
+    expect(items[1].textContent).toContain("下载");
+    expect(items[2].textContent).toContain("上传");
+  });
+
+  it("dropdown omits edit when writable=false", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain("下载");
+    expect(items[1].textContent).toContain("上传");
+  });
+
+  it("clicking mobile-more twice closes the dropdown", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const more = el.shadowRoot!.querySelector(".mobile-more") as HTMLElement;
+    more.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeTruthy();
+    more.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeNull();
+  });
+
+  it("dropdown item '编辑' enters edit mode", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        writable
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    (items[0] as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+  });
+
+  it("dropdown item '上传' triggers hidden file input click", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    const clickSpy = vi.fn();
+    input.click = clickSpy;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    // 非 writable：菜单 [下载, 上传]
+    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    (items[1] as HTMLElement).click();
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("dropdown item '下载' triggers anchor click with server URL", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="sub/doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+
+    const created: HTMLAnchorElement[] = [];
+    const origCreate = document.createElement.bind(document);
+    const origAppend = document.body.appendChild.bind(document.body);
+    const origRemove = document.body.removeChild.bind(document.body);
+    (document as any).createElement = (tag: string) => {
+      const node = origCreate(tag);
+      if (tag.toLowerCase() === "a") {
+        node.click = () => created.push(node as HTMLAnchorElement);
+        node.setAttribute = function (name: string, value: string) {
+          (HTMLAnchorElement.prototype as any).setAttribute.call(this, name, value);
+        };
+      }
+      return node;
+    };
+    document.body.appendChild = <any>((n: Node) => { origAppend(n); return n; });
+    document.body.removeChild = <any>((n: Node) => { origRemove(n); return n; });
+
+    try {
+      const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+      // 非 writable 时菜单为 [下载, 上传]
+      (items[0] as HTMLElement).click();
+    } finally {
+      (document as any).createElement = origCreate;
+      document.body.appendChild = origAppend;
+      document.body.removeChild = origRemove;
+    }
+    expect(created.length).toBe(1);
+    const href = created[0].getAttribute("href") || "";
+    expect(href).toContain("/api/preview/download");
+    expect(href).toContain(encodeURIComponent("sub/doc.md"));
+  });
+
+  it("outside click closes the dropdown", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeTruthy();
+    // 触发 document 上的 click，composedPath 不含 preview-pane
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeNull();
+  });
+});

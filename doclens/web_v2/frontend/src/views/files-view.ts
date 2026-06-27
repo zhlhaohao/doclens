@@ -584,7 +584,7 @@ export class FilesView extends LitElement {
     </div>`;
   }
 
-  private _renderPreviewPane(noHeader = false) {
+  private _renderPreviewPane(opts: { noHeader?: boolean; mobile?: boolean } = {}) {
     if (this._previewError === "NOT_INDEXED") {
       return this._renderNotIndexedHint();
     }
@@ -592,7 +592,8 @@ export class FilesView extends LitElement {
       return html`<div class="preview-placeholder">点击文件预览</div>`;
     }
     return html`<preview-pane
-      ?noHeader=${noHeader}
+      ?noHeader=${opts.noHeader ?? false}
+      ?mobile=${opts.mobile ?? false}
       path=${this._previewPath}
       language=${this._previewLanguage}
       content=${this._previewContent}
@@ -603,6 +604,7 @@ export class FilesView extends LitElement {
       @save-failed=${this._onPreviewSaveFailed}
       @upload-success=${this._onPreviewUploadSuccess}
       @upload-failed=${this._onPreviewUploadFailed}
+      @back=${() => this._goBack()}
     ></preview-pane>`;
   }
 
@@ -711,7 +713,7 @@ export class FilesView extends LitElement {
           aria-label="调整预览栏宽度"
           @mousedown=${this._onPreviewSplitterMouseDown}
         ></div>
-        <div class="preview-col">${this._renderPreviewPane(false)}</div>
+        <div class="preview-col">${this._renderPreviewPane({ noHeader: false })}</div>
       </div>
     `;
   }
@@ -721,7 +723,7 @@ export class FilesView extends LitElement {
     const searchState = this._searchBoxState;
     return html`
       <div class="mobile-layout">
-        ${pane !== "tree"
+        ${pane === "list"
           ? html`<button class="back-btn" @click=${() => this._goBack()}>← 返回</button>`
           : ""}
         ${pane === "tree"
@@ -756,7 +758,7 @@ export class FilesView extends LitElement {
             ></file-list>`
           : ""}
         ${pane === "detail"
-          ? html`<div class="mobile-preview">${this._renderPreviewPane(true)}</div>`
+          ? html`<div class="mobile-preview">${this._renderPreviewPane({ mobile: true })}</div>`
           : ""}
       </div>
     `;
