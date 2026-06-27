@@ -4316,7 +4316,7 @@ ${r}</blockquote>
       }
       .cell-type { display: none; }
     }
-  `;ir([d({type:Object})],Xe.prototype,"entry",2);ir([d({type:Boolean})],Xe.prototype,"selected",2);ir([d({type:Boolean})],Xe.prototype,"active",2);Xe=ir([P("file-row")],Xe);var fl=Object.defineProperty,bl=Object.getOwnPropertyDescriptor,At=(e,t,r,i)=>{for(var s=i>1?void 0:i?bl(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&fl(t,r,s),s};const Ii=[28,28,240,80,140,70,80],Hs=[20,20,80,50,80,50,50],Ws=[60,60,800,200,300,150,200],Us=Ii.length,js="cortex.files.colWidths";let Oe=class extends ${constructor(){super(...arguments),this.activePath="",this.mobile=!1,this._colWidths=[...Ii],this._showMobileMenu=!1,this._makeColResizeHandler=e=>t=>{t.preventDefault(),t.stopPropagation();const r=t.clientX,i=this._colWidths[e];document.body.style.cursor="col-resize",document.body.style.userSelect="none";const s=a=>{const l=a.clientX-r,n=Math.max(Hs[e],Math.min(Ws[e],i+l)),u=[...this._colWidths];u[e]=n,this._colWidths=u},o=()=>{document.removeEventListener("mousemove",s),document.removeEventListener("mouseup",o),document.body.style.cursor="",document.body.style.userSelect="",localStorage.setItem(js,JSON.stringify(this._colWidths))};document.addEventListener("mousemove",s),document.addEventListener("mouseup",o)},this._onMobileBackClick=()=>{this._showMobileMenu=!1,this.dispatchEvent(new CustomEvent("back",{bubbles:!0,composed:!0}))},this._onMobileMoreClick=e=>{e.stopPropagation(),this._showMobileMenu=!this._showMobileMenu},this._onDocClick=e=>{var s,o;if(!this._showMobileMenu)return;const t=e.composedPath(),r=(s=this.shadowRoot)==null?void 0:s.querySelector(".mobile-menu"),i=(o=this.shadowRoot)==null?void 0:o.querySelector(".mobile-more");r&&t.includes(r)||i&&t.includes(i)||(this._showMobileMenu=!1)},this._onMenuItemClick=e=>t=>{t.stopPropagation(),this._showMobileMenu=!1,this._action(e)}}connectedCallback(){super.connectedCallback(),this._unsubscribe=f.subscribe(()=>this.requestUpdate()),this._loadColWidths(),document.addEventListener("click",this._onDocClick,!0)}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),document.removeEventListener("click",this._onDocClick,!0),super.disconnectedCallback()}willUpdate(){for(let e=0;e<Us;e++)this.style.setProperty(`--col-${e+1}`,`${this._colWidths[e]}px`)}_loadColWidths(){const e=localStorage.getItem(js);if(e)try{const t=JSON.parse(e);Array.isArray(t)&&t.length===Us&&t.every(r=>typeof r=="number"&&Number.isFinite(r))&&(this._colWidths=t.map((r,i)=>Math.max(Hs[i],Math.min(Ws[i],r))))}catch{}}_action(e){this.dispatchEvent(new CustomEvent("action",{detail:{name:e},bubbles:!0,composed:!0}))}_onRowChecked(e){const{path:t,shift:r}=e.detail;m.selectEntry(t,{ctrl:!r,shift:r})}_onSelectAll(e){const t=e.target,{currentDir:r,treeCache:i,selectedPaths:s}=f.getState().files,o=i[r]||[];if(t.checked){const a=o.map(n=>n.path),l=Array.from(new Set([...s,...a]));m.setFilesState({selectedPaths:l})}else{const a=new Set(o.map(l=>l.path));m.setFilesState({selectedPaths:s.filter(l=>!a.has(l))})}}_goUp(){const{currentDir:e}=f.getState().files;if(e==="")return;const t=e.includes("/")?e.slice(0,e.lastIndexOf("/")):"";m.selectDir(t)}_renderMobileHeader(){const{currentDir:e,selectedPaths:t}=f.getState().files,r=e!=="",i=t.length===1,s=t.length>=1,o=e===""?"/":`/${e}/`;return c`
+  `;ir([d({type:Object})],Xe.prototype,"entry",2);ir([d({type:Boolean})],Xe.prototype,"selected",2);ir([d({type:Boolean})],Xe.prototype,"active",2);Xe=ir([P("file-row")],Xe);var fl=Object.defineProperty,bl=Object.getOwnPropertyDescriptor,At=(e,t,r,i)=>{for(var s=i>1?void 0:i?bl(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&fl(t,r,s),s};const Ii=[28,28,240,80,140,70,80],Hs=[20,20,80,50,80,50,50],Ws=[60,60,800,200,300,150,200],Us=Ii.length,js="cortex.files.colWidths";let Oe=class extends ${constructor(){super(...arguments),this.activePath="",this.mobile=!1,this._colWidths=[...Ii],this._showMobileMenu=!1,this._makeColResizeHandler=e=>t=>{t.preventDefault(),t.stopPropagation();const r=t.clientX,i=this._colWidths[e];document.body.style.cursor="col-resize",document.body.style.userSelect="none";const s=a=>{const l=a.clientX-r,n=Math.max(Hs[e],Math.min(Ws[e],i+l)),u=[...this._colWidths];u[e]=n,this._colWidths=u},o=()=>{document.removeEventListener("mousemove",s),document.removeEventListener("mouseup",o),document.body.style.cursor="",document.body.style.userSelect="",localStorage.setItem(js,JSON.stringify(this._colWidths))};document.addEventListener("mousemove",s),document.addEventListener("mouseup",o)},this._onMobileBackClick=()=>{this._showMobileMenu=!1,this.dispatchEvent(new CustomEvent("back",{bubbles:!0,composed:!0}))},this._onMobileMoreClick=e=>{e.stopPropagation(),this._showMobileMenu=!this._showMobileMenu},this._onDocClick=e=>{var s,o;if(!this._showMobileMenu)return;const t=e.composedPath(),r=(s=this.shadowRoot)==null?void 0:s.querySelector(".mobile-menu"),i=(o=this.shadowRoot)==null?void 0:o.querySelector(".mobile-more");r&&t.includes(r)||i&&t.includes(i)||(this._showMobileMenu=!1)},this._onMenuItemClick=e=>t=>{t.stopPropagation(),this._showMobileMenu=!1,this._action(e)}}connectedCallback(){super.connectedCallback(),this._unsubscribe=f.subscribe(()=>this.requestUpdate()),this._loadColWidths(),document.addEventListener("click",this._onDocClick,!0)}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),document.removeEventListener("click",this._onDocClick,!0),super.disconnectedCallback()}willUpdate(){for(let e=0;e<Us;e++)this.style.setProperty(`--col-${e+1}`,`${this._colWidths[e]}px`)}_loadColWidths(){const e=localStorage.getItem(js);if(e)try{const t=JSON.parse(e);Array.isArray(t)&&t.length===Us&&t.every(r=>typeof r=="number"&&Number.isFinite(r))&&(this._colWidths=t.map((r,i)=>Math.max(Hs[i],Math.min(Ws[i],r))))}catch{}}_action(e){this.dispatchEvent(new CustomEvent("action",{detail:{name:e},bubbles:!0,composed:!0}))}_onRowChecked(e){const{path:t,shift:r}=e.detail;m.selectEntry(t,{ctrl:!r,shift:r})}_onSelectAll(e){const t=e.target,{currentDir:r,treeCache:i,selectedPaths:s}=f.getState().files,o=i[r]||[];if(t.checked){const a=o.map(n=>n.path),l=Array.from(new Set([...s,...a]));m.setFilesState({selectedPaths:l})}else{const a=new Set(o.map(l=>l.path));m.setFilesState({selectedPaths:s.filter(l=>!a.has(l))})}}_goUp(){const{currentDir:e}=f.getState().files;if(e==="")return;const t=e.includes("/")?e.slice(0,e.lastIndexOf("/")):"";m.selectDir(t)}_renderMobileHeader(){const{currentDir:e,selectedPaths:t}=f.getState().files,r=t.length===1,i=t.length>=1,s=e===""?"/":`/${e}/`;return c`
       <div class="mobile-header">
         <button
           class="mobile-back"
@@ -4324,7 +4324,7 @@ ${r}</blockquote>
           aria-label="返回"
           @click=${this._onMobileBackClick}
         >←</button>
-        <span class="mobile-path" title=${o}>${o}</span>
+        <span class="mobile-path" title=${s}>${s}</span>
         <button
           class="mobile-more"
           type="button"
@@ -4333,12 +4333,6 @@ ${r}</blockquote>
         >⋯</button>
         ${this._showMobileMenu?c`
               <div class="mobile-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  ?disabled=${!r}
-                  @click=${()=>{this._showMobileMenu=!1,this._goUp()}}
-                >↑ 上一级</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -4355,21 +4349,21 @@ ${r}</blockquote>
                   type="button"
                   role="menuitem"
                   data-action="rename"
-                  ?disabled=${!i}
+                  ?disabled=${!r}
                   @click=${this._onMenuItemClick("rename")}
                 >✎ 重命名</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="move"
-                  ?disabled=${!s}
+                  ?disabled=${!i}
                   @click=${this._onMenuItemClick("move")}
                 >→ 移动</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="delete"
-                  ?disabled=${!s}
+                  ?disabled=${!i}
                   class="danger"
                   @click=${this._onMenuItemClick("delete")}
                 >🗑 删除</button>
