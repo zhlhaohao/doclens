@@ -14,13 +14,11 @@ class ConfigScope:
 
 
 # Fields whose change requires restarting cortex gui to take effect.
+# All fields now hot-reload via deps.reload_config(); kept for API
+# compatibility but always empty.
 # Must stay in sync with the `effect: "restart"` metadata in
 # cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
-RESTART_FIELDS: frozenset[str] = frozenset({
-    "PLANIFY_BASE_URL",
-    "PLANIFY_API_KEY",
-    "PLANIFY_MODEL_ID",
-})
+RESTART_FIELDS: frozenset[str] = frozenset()
 
 
 class ConfigResponse(BaseModel):
