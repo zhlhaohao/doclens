@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "../src/views/files-view";
-import { resetStore } from "./test-utils";
+import { resetStore, setMobileViewport, setDesktopViewport } from "./test-utils";
 import { store, actions } from "../src/state/store";
 import { filesApi } from "../src/api/files";
 import { fetchPreview } from "../src/api/preview";
@@ -221,6 +221,67 @@ describe("files-view filename search", () => {
     await el.updateComplete;
     expect(el.shadowRoot.querySelector("file-list")).toBeTruthy();
     expect(el.shadowRoot.querySelector("file-search-results")).toBeNull();
+    document.body.removeChild(el);
+  });
+});
+
+describe("files-view mobile filename search", () => {
+  beforeEach(() => {
+    resetStore(store);
+    setMobileViewport();
+  });
+  afterEach(() => {
+    setDesktopViewport();
+  });
+
+  it("renders file-search-box in mobile tree pane", async () => {
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".mobile-layout")).toBeTruthy();
+    expect(el.shadowRoot.querySelector(".mobile-layout file-search-box")).toBeTruthy();
+    document.body.removeChild(el);
+  });
+
+  it("shows file-search-results instead of file-tree when search active on mobile", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const mobile = el.shadowRoot.querySelector(".mobile-layout");
+    expect(mobile.querySelector("file-search-results")).toBeTruthy();
+    expect(mobile.querySelector("file-tree")).toBeNull();
+    document.body.removeChild(el);
+  });
+
+  it("shows file-tree when search inactive on mobile", async () => {
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const mobile = el.shadowRoot.querySelector(".mobile-layout");
+    expect(mobile.querySelector("file-tree")).toBeTruthy();
+    expect(mobile.querySelector("file-search-results")).toBeNull();
+    document.body.removeChild(el);
+  });
+
+  it("restores file-tree after clearing search on mobile", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    actions.clearFilenameSearch();
+    await el.updateComplete;
+    const mobile = el.shadowRoot.querySelector(".mobile-layout");
+    expect(mobile.querySelector("file-tree")).toBeTruthy();
+    expect(mobile.querySelector("file-search-results")).toBeNull();
     document.body.removeChild(el);
   });
 });
