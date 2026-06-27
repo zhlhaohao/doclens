@@ -7,7 +7,7 @@ import type { SettingsView } from "../src/views/settings-view";
 // Mock the API client so tests don't hit network
 vi.mock("../src/api/config", () => ({
   getConfig: vi.fn().mockResolvedValue({
-    scope: "local",
+    scope: "global",
     values: { CORTEX_MAX_RESULTS: "42" },
     exists: true,
   }),
@@ -79,9 +79,9 @@ describe("<settings-view>", () => {
     expect(dirty?.textContent).toContain("已修改");
   });
 
-  it("footer save button text reflects scope (本地)", () => {
+  it("footer save button text reflects scope (全局)", () => {
     const saveBtn = el.shadowRoot?.querySelector(".footer-bar .btn.primary") as HTMLButtonElement;
-    expect(saveBtn.textContent).toContain("保存本地配置");
+    expect(saveBtn.textContent).toContain("保存全局配置");
   });
 
   it("clicking save calls putConfig with current values", async () => {

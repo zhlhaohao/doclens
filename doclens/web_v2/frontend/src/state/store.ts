@@ -59,7 +59,7 @@ export const INITIAL_STATE: AppState = {
   status: null,
   error: null,
   settings: {
-    scope: "local",
+    scope: "global",
     values: {},
     original: {},
     dirty: false,
@@ -163,9 +163,8 @@ export const actions = {
     store.setState({ pendingSession: session });
   },
 
-  setSettingsScope(scope: SettingsScope) {
-    const cur = store.getState().settings;
-    store.setState({ settings: { ...cur, scope } });
+  setSettingsScope(_scope: SettingsScope) {
+    // local config disabled, scope is always global
   },
 
   loadSettings(values: SettingsFieldValues, exists: boolean) {
