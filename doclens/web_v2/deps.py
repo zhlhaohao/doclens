@@ -82,3 +82,15 @@ def reset_singletons() -> None:
         _config = None
         _idx_manager = None
         _agent = None
+
+
+def reload_config() -> CortexConfig:
+    """重建 CortexConfig 并推送到已存在的单例。"""
+    global _config
+    with _lock:
+        _config = CortexConfig.load()
+        if _idx_manager:
+            _idx_manager.apply_config(_config)
+        if _agent:
+            _agent.apply_config(_config)
+    return _config
