@@ -12,7 +12,7 @@ describe("<app-bar>", () => {
   });
 
   it("renders brand logo and name", () => {
-    expect(el.shadowRoot?.textContent).toContain("Cortex");
+    expect(el.shadowRoot?.textContent).toContain("Doclens");
   });
 
   it("dropdown is closed initially", () => {

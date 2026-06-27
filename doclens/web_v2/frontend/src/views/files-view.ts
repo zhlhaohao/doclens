@@ -590,7 +590,7 @@ export class FilesView extends LitElement {
   private _renderNotIndexedHint() {
     return html`<div class="preview-placeholder">
       该文件未索引，无法预览。<br>
-      请先执行 cortex index 后重试。
+      请先执行 doclens index 后重试。
     </div>`;
   }
 

@@ -482,7 +482,7 @@ export class SearchView extends LitElement {
   private _renderNotIndexedHint(desktopOnly: boolean) {
     const cls = desktopOnly ? "desktop-only not-indexed-hint" : "not-indexed-hint";
     return html`<div class=${cls}>
-      该文件未索引，无法预览。<br>请先执行 cortex index 后重试。
+      该文件未索引，无法预览。<br>请先执行 doclens index 后重试。
     </div>`;
   }
 
@@ -501,7 +501,7 @@ export class SearchView extends LitElement {
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
-          <welcome-pane heading="Cortex" subheading="结构感知文档检索"></welcome-pane>
+          <welcome-pane heading="Doclens" subheading="结构感知文档检索"></welcome-pane>
           <history-list
             title="历史会话"
             type="search"

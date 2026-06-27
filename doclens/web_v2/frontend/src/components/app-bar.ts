@@ -207,7 +207,7 @@ export class AppBar extends LitElement {
     return html`
       <div class="brand">
         <span class="logo">🧠</span>
-        <span>Cortex</span>
+        <span>Doclens</span>
       </div>
       <div class="right-cluster">
         ${this._showSaveAndRevert ? html`

@@ -17,13 +17,13 @@ function shadowLocator(
   return page.locator(`${host} >> ${inner}`);
 }
 
-test.describe("Cortex Full Flow", () => {
+test.describe("Doclens Full Flow", () => {
   test("desktop: initial state shows welcome + history + input", async ({ page }) => {
     await page.goto("/");
 
     // Welcome pane heading
     const title = shadowLocator(page, "welcome-pane", ".title");
-    await expect(title).toHaveText("Cortex");
+    await expect(title).toHaveText("Doclens");
 
     // Input with inline button
     const input = shadowLocator(page, "input-box", "input");

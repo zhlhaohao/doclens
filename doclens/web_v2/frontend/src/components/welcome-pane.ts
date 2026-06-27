@@ -32,7 +32,7 @@ export class WelcomePane extends LitElement {
     }
   `;
 
-  @property() heading = "Cortex";
+  @property() heading = "Doclens";
   @property() subheading = "";
 
   render() {

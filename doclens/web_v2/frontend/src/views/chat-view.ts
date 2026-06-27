@@ -200,7 +200,7 @@ export class ChatView extends LitElement {
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
-          <welcome-pane heading="Cortex" subheading="与你的知识库对话"></welcome-pane>
+          <welcome-pane heading="Doclens" subheading="与你的知识库对话"></welcome-pane>
           <history-list
             title="历史会话"
             type="chat"
@@ -211,7 +211,7 @@ export class ChatView extends LitElement {
           </history-list>
           <div class="input-row">
             <input-box
-              placeholder="问 Cortex 任何问题..."
+              placeholder="问 Doclens 任何问题..."
               button-label="→"
               multiline
               .value=${this.draft}
