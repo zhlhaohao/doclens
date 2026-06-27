@@ -90,10 +90,10 @@ def _confirm_trust_dir(log_dir: Path) -> bool:
     if cached is not None:
         return cached
 
-    # 交互式提示
-    rel = log_dir.relative_to(Path.cwd()) if log_dir.is_relative_to(Path.cwd()) else log_dir
+    # 交互式提示（显示绝对路径，便于用户确认实际位置）
+    display = log_dir.resolve()
     prompt = (
-        f"\nCortex wants to create a local directory: '{rel}'\n"
+        f"\nCortex wants to create a local directory: '{display}'\n"
         "This directory will store project-specific logs and index data.\n"
         "Do you trust this directory? [Y/n]: "
     )
@@ -217,7 +217,7 @@ def setup_logging(
             if env_dir:
                 log_dir = Path(env_dir)
             else:
-                log_dir = Path(".cortex") / "logs"
+                log_dir = (Path.cwd() / ".cortex" / "logs").resolve()
 
     # 询问用户是否信任该目录
     trusted = _confirm_trust_dir(log_dir)
