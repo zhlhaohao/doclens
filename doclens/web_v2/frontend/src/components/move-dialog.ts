@@ -43,6 +43,12 @@ export class MoveDialog extends LitElement {
       font-size: var(--cortex-fs-sm);
       padding: var(--cortex-space-2) 0;
     }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      .tree { max-height: 50vh; }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
   `;
 
   @state() private _dest = "";

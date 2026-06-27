@@ -118,6 +118,16 @@ export class FilesView extends LitElement {
       min-width: 360px;
       max-width: 90vw;
     }
+    @media (max-width: 1023px) {
+      dialog {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+        border-radius: var(--cortex-radius-md);
+      }
+      dialog > * { padding: var(--cortex-space-4); }
+    }
     dialog::backdrop { background: rgba(0,0,0,0.3); }
     dialog > * { display: block; padding: var(--cortex-space-6); }
     .toast {
