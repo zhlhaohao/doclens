@@ -486,8 +486,12 @@ export class FilesView extends LitElement {
 
   private _goBack() {
     const pane = this._state.mobilePane;
-    if (pane === "detail") actions.setMobilePane("list");
-    else if (pane === "list") actions.setMobilePane("tree");
+    if (pane === "detail") {
+      if (this._isFilenameSearchActive) actions.setMobilePane("tree");
+      else actions.setMobilePane("list");
+    } else if (pane === "list") {
+      actions.setMobilePane("tree");
+    }
   }
 
   private async _onFileListActivated(e: CustomEvent<{ path: string; is_dir: boolean }>) {
@@ -646,6 +650,9 @@ export class FilesView extends LitElement {
 
   private _onFilenameResultActivated = async (e: CustomEvent<{ path: string }>) => {
     await this._previewPathWithDirtyCheck(e.detail.path);
+    if (this._isMobile) {
+      actions.setMobilePane("detail");
+    }
   };
 
   private _cancelDialog = () => {

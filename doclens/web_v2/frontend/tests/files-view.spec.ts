@@ -284,4 +284,51 @@ describe("files-view mobile filename search", () => {
     expect(mobile.querySelector("file-search-results")).toBeNull();
     document.body.removeChild(el);
   });
+
+  it("_goBack from detail goes to tree when search active on mobile", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    actions.setMobilePane("detail");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector(".back-btn").click();
+    await el.updateComplete;
+    expect(store.getState().files.mobilePane).toBe("tree");
+    document.body.removeChild(el);
+  });
+
+  it("_goBack from detail goes to list when search inactive on mobile", async () => {
+    actions.setMobilePane("detail");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector(".back-btn").click();
+    await el.updateComplete;
+    expect(store.getState().files.mobilePane).toBe("list");
+    document.body.removeChild(el);
+  });
+
+  it("filename result activation switches to detail pane on mobile", async () => {
+    actions.setFilenameSearchQuery({
+      query: "read",
+      results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
+      totalMatches: 1,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el.shadowRoot.querySelector("file-search-results").dispatchEvent(
+      new CustomEvent("activated", {
+        detail: { path: "a.md" },
+        bubbles: true, composed: true,
+      }),
+    );
+    await new Promise(r => setTimeout(r, 0));
+    expect(store.getState().files.mobilePane).toBe("detail");
+    document.body.removeChild(el);
+  });
 });
