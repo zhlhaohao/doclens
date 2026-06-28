@@ -49,10 +49,10 @@ async def create_session(req: SessionCreateRequest):
     sid = str(_ulid.new())
     summary = SessionSummary(
         id=sid, type=req.type, title=req.title, preview=req.preview,
-        created_at=now, updated_at=now, message_count=0,
+        mode=req.mode, created_at=now, updated_at=now, message_count=0,
     )
     store.create(summary)
-    return SessionCreatedResponse(id=sid, type=req.type, title=req.title, preview=req.preview)
+    return SessionCreatedResponse(id=sid, type=req.type, title=req.title, preview=req.preview, mode=req.mode)
 
 
 @router.post("/sessions/find-or-create", response_model=SessionCreatedResponse)
@@ -63,9 +63,10 @@ async def find_or_create_session(req: SessionCreateRequest):
     chat 等需要保留每条消息的场景仍应使用 POST /sessions + PATCH /sessions/{id}。
     """
     store = _get_store()
-    summary = store.find_or_create(req.type, req.title, req.preview)
+    summary = store.find_or_create(req.type, req.title, req.preview, req.mode)
     return SessionCreatedResponse(
-        id=summary.id, type=summary.type, title=summary.title, preview=summary.preview,
+        id=summary.id, type=summary.type, title=summary.title,
+        preview=summary.preview, mode=summary.mode,
     )
 
 
