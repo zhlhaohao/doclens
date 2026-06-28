@@ -15,10 +15,10 @@ export default defineConfig({
     { name: "mobile-iphone", use: { ...devices["iPhone 13"] } },
   ],
   webServer: {
-    command:
-      "cd ../../../test_work_dir && ../.venv/Scripts/python.exe -m cortex gui --port 7860",
+    command: "..\\.venv\\Scripts\\python.exe -m doclens gui --port 7860",
+    cwd: "../../../test_work_dir",
     port: 7860,
-    timeout: 30_000,
+    timeout: 60_000,
     reuseExistingServer: true,
   },
 });
