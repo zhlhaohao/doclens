@@ -2512,7 +2512,7 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
     }
   `;kt([d()],Pe.prototype,"title",2);kt([d({attribute:!1})],Pe.prototype,"sessions",2);kt([d()],Pe.prototype,"type",2);kt([d({type:Boolean})],Pe.prototype,"clearing",2);Pe=kt([A("history-list")],Pe);var Ea=Object.defineProperty,Ca=Object.getOwnPropertyDescriptor,mi=(e,t,r,i)=>{for(var s=i>1?void 0:i?Ca(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Ea(t,r,s),s};let jt=class extends ${constructor(){super(...arguments),this.session=null}_select(){this.session&&this.dispatchEvent(new CustomEvent("select",{detail:{session:this.session},bubbles:!0,composed:!0}))}render(){if(!this.session)return null;const e=[];return this.session.type==="chat"&&e.push(String(this.session.message_count)),e.push(new Date(this.session.updated_at).toLocaleDateString()),c`
       <div class="name">
-        ${this.session.mode==="grep"?c`<span class="mode-tag" title="正则 Grep">&lt;/&gt;</span>`:null}
+        ${this.session.mode==="grep"?c`<span class="mode-tag" title="正则 grep">grep</span>`:null}
         ${this.session.title}
       </div>
       <div class="meta">${e.join(" · ")}</div>
@@ -2532,11 +2532,15 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
     .name { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
     .meta { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
     .mode-tag {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       margin-right: 6px;
-      font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-primary);
+      background: var(--cortex-primary-soft);
+      border-radius: 9999px;
+      padding: 1px 8px;
+      line-height: 1.5;
     }
   `;mi([d({attribute:!1})],jt.prototype,"session",2);jt=mi([A("history-item")],jt);var Pa=Object.defineProperty,Aa=Object.getOwnPropertyDescriptor,ie=(e,t,r,i)=>{for(var s=i>1?void 0:i?Aa(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Pa(t,r,s),s};let j=class extends ${constructor(){super(...arguments),this.value="",this.placeholder="",this.buttonLabel="搜索",this.buttonIcon="",this.multiline=!1,this.disabled=!1,this.mode="keyword",this.modes=null,this._menuOpen=!1,this._onDocClick=()=>{this._menuOpen=!1,document.removeEventListener("click",this._onDocClick)}}focus(){var e;(e=this.inputEl)==null||e.focus()}get trimmed(){return this.value.trim()}_onInput(e){const t=e.target;this.value=t.value,this.dispatchEvent(new CustomEvent("input-change",{detail:{value:this.value}}));const r=this.renderRoot.querySelector("button");r&&(r.disabled=!this.trimmed||this.disabled)}_onKeydown(e){e.key==="Enter"&&(e.ctrlKey||e.metaKey)&&(e.preventDefault(),this._submit()),e.key==="Enter"&&!this.multiline&&!e.shiftKey&&(e.preventDefault(),this._submit())}_submit(){!this.trimmed||this.disabled||this.dispatchEvent(new CustomEvent("submit",{detail:{value:this.trimmed}}))}get _hasModes(){return!!this.modes&&this.mode in this.modes}_toggleMenu(e){e.stopPropagation(),this._menuOpen=!this._menuOpen,this._menuOpen&&document.addEventListener("click",this._onDocClick)}_selectMode(e){this._menuOpen=!1,document.removeEventListener("click",this._onDocClick),this.dispatchEvent(new CustomEvent("mode-change",{detail:{mode:e}}))}_renderButton(){if(!this._hasModes)return c`
         <button @click=${this._submit} ?disabled=${!this.trimmed||this.disabled}>
