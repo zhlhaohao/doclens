@@ -3574,7 +3574,7 @@ ${r}</blockquote>
                 @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
         </div>`:null}
-    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"搜索",description:"按关键词匹配（自动拆分单词）"},grep:{label:"grep",description:"用正则表达式匹配"}};C.styles=_`
+    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"搜索",description:"拆分关键词匹配"},grep:{label:"grep",description:"正则表达式匹配"}};C.styles=_`
     :host {
       display: flex;
       flex-direction: column;
