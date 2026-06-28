@@ -6,13 +6,13 @@
 import asyncio
 import logging
 import time
-from pathlib import Path
 
 from fastapi import APIRouter, Depends
 
 from doclens.index_manager import IndexManager
 from doclens.scoring import tokenize_query
 from doclens.scoring_pipeline import score_and_rank, ScoreResult
+from doclens.web_v2.api._pathutil import resolve_preview_path
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.search import SearchRequest, SearchResponse, SearchResult
 
@@ -23,22 +23,6 @@ router = APIRouter()
 # score_and_rank 在此集合上做完整过滤+排序，提供准确 total。
 # 超过该值的匹配不可见（v1 接受）。
 _MAX_FETCH = 1000
-
-
-def _resolve_preview_path(doc_key: str, path_map: dict, search_path: str) -> str:
-    """把 doc_id 或 doc_name 解析为相对 search_path 的可预览路径。
-
-    IndexManager.path_map 同时以 doc_id（可能带 _hash 后缀）和 doc_name 作 key，
-    所以两种 key 都可直接查。
-    """
-    source_abs = path_map.get(doc_key) if path_map else None
-    if not source_abs:
-        return doc_key
-    try:
-        rel = Path(source_abs).resolve().relative_to(Path(search_path).resolve())
-        return rel.as_posix()
-    except (ValueError, OSError):
-        return doc_key
 
 
 def _format_scored_results(
@@ -59,7 +43,7 @@ def _format_scored_results(
 
     if result.source == "fts":
         for composite, (doc_id, node, _matched, _prox, _fts) in result.results:
-            path = _resolve_preview_path(doc_id, path_map, search_path)
+            path = resolve_preview_path(doc_id, path_map, search_path)
             out.append(SearchResult(
                 path=path,
                 snippet=(node.get("text", "") or "")[:300],
@@ -71,7 +55,7 @@ def _format_scored_results(
     elif result.source == "like":
         for item in result.like_raw or []:
             doc_key = item.get("doc_name", "") or item.get("doc_id", "")
-            path = _resolve_preview_path(doc_key, path_map, search_path)
+            path = resolve_preview_path(doc_key, path_map, search_path)
             out.append(SearchResult(
                 path=path,
                 snippet=(item.get("summary", "") or "")[:300],
@@ -82,7 +66,7 @@ def _format_scored_results(
 
     elif result.source == "ripgrep":
         for doc_id, node, _matched, _prox, _fts in result.results:
-            path = _resolve_preview_path(doc_id, path_map, search_path)
+            path = resolve_preview_path(doc_id, path_map, search_path)
             out.append(SearchResult(
                 path=path,
                 snippet=(node.get("text", "") or "")[:300],
