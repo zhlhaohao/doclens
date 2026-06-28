@@ -11,6 +11,7 @@ class SessionCreateRequest(BaseModel):
     type: SessionType
     title: str = Field(min_length=1, max_length=200)
     preview: str = Field(default="", max_length=200)
+    mode: Optional[str] = None  # 搜索模式：'keyword' | 'grep'
 
 
 class SessionAppendRequest(BaseModel):
@@ -24,6 +25,7 @@ class SessionCreatedResponse(BaseModel):
     type: SessionType
     title: str
     preview: str
+    mode: Optional[str] = None
 
 
 class SessionListItem(BaseModel):
@@ -31,6 +33,7 @@ class SessionListItem(BaseModel):
     type: SessionType
     title: str
     preview: str
+    mode: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     message_count: int
@@ -46,6 +49,7 @@ class SessionDetailResponse(BaseModel):
     type: SessionType
     title: str
     preview: str
+    mode: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     message_count: int

@@ -78,3 +78,59 @@ def test_delete_session_cascades_items(store):
     store.delete(s.id)
     assert store.get(s.id) is None
     assert store.get_detail(s.id) == []
+
+
+# ---------------------------------------------------------------------------
+# mode 列（grep 历史标记）测试
+# ---------------------------------------------------------------------------
+
+
+def test_find_or_create_distinguishes_modes(store):
+    """同 title 不同 mode → 两条独立记录。"""
+    kw = store.find_or_create(SessionType.SEARCH, "foo", "p", mode="keyword")
+    gp = store.find_or_create(SessionType.SEARCH, "foo", "p", mode="grep")
+    assert kw.id != gp.id
+
+
+def test_find_or_create_dedup_same_mode(store):
+    """同 title 同 mode → 复用同一条记录。"""
+    a = store.find_or_create(SessionType.SEARCH, "foo", "p", mode="grep")
+    b = store.find_or_create(SessionType.SEARCH, "foo", "p2", mode="grep")
+    assert a.id == b.id
+
+
+def test_find_or_create_persists_and_reads_mode(store):
+    created = store.find_or_create(SessionType.SEARCH, "foo", "p", mode="grep")
+    items = store.list(SessionType.SEARCH)
+    assert items and items[0].mode == "grep"
+    got = store.get(created.id)
+    assert got is not None and got.mode == "grep"
+
+
+def test_legacy_db_migration_adds_mode_column(tmp_path):
+    """旧库 sessions 表无 mode 列时，SessionsStore 初始化应自动补列且不报错。"""
+    import sqlite3
+
+    db = tmp_path / "sessions.db"
+    # 模拟旧库：手动建一个不含 mode 列的 sessions 表并写入一条记录
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, "
+        "preview TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+        "message_count INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, type, title, preview, created_at, updated_at, message_count) "
+        "VALUES ('old1', 'search', 'foo', 'p', '2026-01-01T00:00:00', '2026-01-01T00:00:00', 0)"
+    )
+    conn.commit()
+    conn.close()
+
+    # 重新打开 → 触发迁移
+    store = SessionsStore(db)
+    items = store.list(SessionType.SEARCH)
+    assert items and items[0].mode is None  # 旧记录无 mode
+    # 迁移后写入新记录可带 mode
+    new = store.find_or_create(SessionType.SEARCH, "bar", "p", mode="grep")
+    assert new.mode == "grep"
+

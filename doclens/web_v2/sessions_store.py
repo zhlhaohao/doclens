@@ -30,6 +30,7 @@ class SessionSummary(BaseModel):
     type: SessionType
     title: str
     preview: str
+    mode: Optional[str] = None  # 搜索模式：'keyword' | 'grep'（chat 为 None）
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     type         TEXT NOT NULL,
     title        TEXT NOT NULL,
     preview      TEXT NOT NULL,
+    mode         TEXT,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0
@@ -87,6 +89,10 @@ class SessionsStore:
         with self._lock:
             with self._conn() as conn:
                 conn.executescript(_SCHEMA)
+                # 迁移：旧库 sessions 表无 mode 列时补上（新库 _SCHEMA 已含）
+                cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+                if "mode" not in cols:
+                    conn.execute("ALTER TABLE sessions ADD COLUMN mode TEXT")
 
     # ---- 写入 ----
 
@@ -94,10 +100,10 @@ class SessionsStore:
         with self._lock, self._conn() as conn:
             conn.execute(
                 """INSERT INTO sessions
-                   (id, type, title, preview, created_at, updated_at, message_count)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (id, type, title, preview, mode, created_at, updated_at, message_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    s.id, s.type.value, s.title, s.preview,
+                    s.id, s.type.value, s.title, s.preview, s.mode,
                     s.created_at.isoformat(), s.updated_at.isoformat(), s.message_count,
                 ),
             )
@@ -107,22 +113,26 @@ class SessionsStore:
         type_: SessionType,
         title: str,
         preview: str = "",
+        mode: Optional[str] = None,
     ) -> SessionSummary:
-        """按 (type, title) 原子地查找会话；命中则刷新 updated_at（并更新 preview），
+        """按 (type, title, mode) 原子地查找会话；命中则刷新 updated_at（并更新 preview），
         未命中则新建。整个过程持锁，避免并发条件下的重复创建。
 
         主要服务于 search 历史：相同关键词只保留一条记录，重复搜索时只置顶。
+        mode 仅对 search 有意义；旧记录与 chat 的 mode 为 NULL，COALESCE 视作 'keyword'，
+        使 keyword 与 NULL 不互相误并、grep 与 keyword 不合并。
         """
         now = datetime.utcnow()
         now_iso = now.isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT id, type, title, preview, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
                    FROM sessions
                    WHERE type = ? AND title = ?
+                     AND COALESCE(mode, 'keyword') = COALESCE(?, 'keyword')
                    ORDER BY datetime(updated_at) DESC
                    LIMIT 1""",
-                (type_.value, title),
+                (type_.value, title, mode),
             ).fetchone()
             if row is not None:
                 conn.execute(
@@ -134,6 +144,7 @@ class SessionsStore:
                     type=SessionType(row["type"]),
                     title=row["title"],
                     preview=preview,
+                    mode=row["mode"],
                     created_at=datetime.fromisoformat(row["created_at"]),
                     updated_at=now,
                     message_count=row["message_count"],
@@ -141,12 +152,12 @@ class SessionsStore:
             sid = str(_ulid.new())
             conn.execute(
                 """INSERT INTO sessions
-                   (id, type, title, preview, created_at, updated_at, message_count)
-                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
-                (sid, type_.value, title, preview, now_iso, now_iso),
+                   (id, type, title, preview, mode, created_at, updated_at, message_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0)""",
+                (sid, type_.value, title, preview, mode, now_iso, now_iso),
             )
             return SessionSummary(
-                id=sid, type=type_, title=title, preview=preview,
+                id=sid, type=type_, title=title, preview=preview, mode=mode,
                 created_at=now, updated_at=now, message_count=0,
             )
 
@@ -189,7 +200,7 @@ class SessionsStore:
     def list(self, type_: SessionType, limit: int = 50, offset: int = 0) -> list[SessionSummary]:
         with self._lock, self._conn() as conn:
             rows = conn.execute(
-                """SELECT id, type, title, preview, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
                    FROM sessions
                    WHERE type = ?
                    ORDER BY datetime(updated_at) DESC
@@ -201,7 +212,7 @@ class SessionsStore:
     def get(self, session_id: str) -> Optional[SessionSummary]:
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT id, type, title, preview, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
                    FROM sessions WHERE id = ?""",
                 (session_id,),
             ).fetchone()
@@ -230,6 +241,7 @@ class SessionsStore:
             type=SessionType(row["type"]),
             title=row["title"],
             preview=row["preview"],
+            mode=row["mode"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             message_count=row["message_count"],
