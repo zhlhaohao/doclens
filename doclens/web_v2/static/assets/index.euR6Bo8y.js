@@ -2556,12 +2556,14 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
                 aria-label="切换搜索模式" aria-expanded=${this._menuOpen}>▾</button>
       </div>`}_renderMenu(){return!this._hasModes||!this._menuOpen?null:c`
       <div class="menu" role="menu">
-        ${Object.keys(this.modes).map(e=>c`
-          <div class="menu-item ${e===this.mode?"active":""}" role="menuitem"
-               @click=${()=>this._selectMode(e)}>
-            ${this.modes[e].icon?c`<span aria-hidden="true">${this.modes[e].icon}</span>`:null}
-            <span>${this.modes[e].label}</span>
-          </div>`)}
+        ${Object.keys(this.modes).map(e=>{const t=this.modes[e];return c`
+            <div class="menu-item ${e===this.mode?"active":""}" role="menuitem"
+                 @click=${()=>this._selectMode(e)}>
+              <span class="menu-item-title">
+                ${t.icon?c`<span aria-hidden="true">${t.icon}</span>`:null}${t.label}
+              </span>
+              ${t.description?c`<span class="menu-item-desc">${t.description}</span>`:null}
+            </div>`})}
       </div>`}render(){const e=this.multiline?c`<textarea rows="1" .value=${this.value} placeholder=${this.placeholder}
           @input=${this._onInput} @keydown=${this._onKeydown}></textarea>`:c`<input type="text" .value=${this.value} placeholder=${this.placeholder}
           @input=${this._onInput} @keydown=${this._onKeydown} />`;return c`
@@ -2667,7 +2669,7 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
       bottom: calc(100% + 4px);
       right: 6px;
       z-index: 20;
-      min-width: 140px;
+      min-width: 220px;
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-sm);
@@ -2676,15 +2678,16 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
     }
     .menu-item {
       display: flex;
-      align-items: center;
-      gap: 6px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
       padding: 8px 12px;
-      font-size: var(--cortex-fs-md);
-      color: var(--cortex-text);
       cursor: pointer;
     }
     .menu-item:hover { background: var(--cortex-surface-muted); }
-    .menu-item.active { color: var(--cortex-primary); font-weight: 600; }
+    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
+    .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
+    .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
       :host { --min-h: 44px; }
     }
@@ -3571,7 +3574,7 @@ ${r}</blockquote>
                 @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
         </div>`:null}
-    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"搜索",icon:""},grep:{label:"grep",icon:""}};C.styles=_`
+    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"搜索",description:"按关键词匹配（自动拆分单词）"},grep:{label:"grep",description:"用正则表达式匹配"}};C.styles=_`
     :host {
       display: flex;
       flex-direction: column;
