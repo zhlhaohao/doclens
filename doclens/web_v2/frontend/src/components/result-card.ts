@@ -20,6 +20,15 @@ export class ResultCard extends LitElement {
     }
     :host(:hover) { border-color: var(--cortex-primary); }
     .path { font-size: var(--cortex-fs-xs); color: var(--cortex-text-muted); font-family: var(--cortex-font-mono); }
+    .badge {
+      display: inline-block;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-primary);
+      background: var(--cortex-primary-soft);
+      border-radius: 4px;
+      padding: 0 4px;
+      margin-right: 4px;
+    }
     .snippet {
       font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
@@ -68,7 +77,10 @@ export class ResultCard extends LitElement {
     if (!this.result) return null;
     const scorePct = Math.round(this.result.score * 100);
     return html`
-      <div class="path">${this.result.path}${this.result.line ? `:${this.result.line}` : ""}</div>
+      <div class="path">
+        ${this.result.kind === "path" ? html`<span class="badge">路径</span>` : null}
+        ${this.result.path}${this.result.line ? `:${this.result.line}` : ""}
+      </div>
       <div class="snippet">${this.result.snippet}</div>
       <div class="score">评分: ${scorePct}%</div>
     `;
