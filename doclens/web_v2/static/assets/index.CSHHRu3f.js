@@ -3567,7 +3567,7 @@ ${r}</blockquote>
                 @upload-failed=${this._onPreviewUploadFailed}>
               </preview-pane>`}
         </div>`:null}
-    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"关键词",icon:"🔍"},grep:{label:"Grep",icon:"</>"}};C.styles=_`
+    `}};C.RESULTS_PANE_WIDTH_KEY="cortex.resultsPaneWidth";C.RESULTS_PANE_WIDTH_DEFAULT=360;C.RESULTS_PANE_WIDTH_MIN=280;C.RESULTS_PANE_WIDTH_MAX=800;C.SEARCH_MODE_KEY="cortex.searchMode";C.SEARCH_MODES={keyword:{label:"搜索",icon:"🔍"},grep:{label:"grep",icon:"</>"}};C.styles=_`
     :host {
       display: flex;
       flex-direction: column;
