@@ -337,3 +337,59 @@ describe("<search-view> pagination integration", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("<search-view> grep mode routing", () => {
+  const MODE_KEY = "cortex.searchMode";
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    resetStore(store);
+    localStorage.removeItem(MODE_KEY);
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+    localStorage.removeItem(MODE_KEY);
+    vi.restoreAllMocks();
+  });
+
+  it("persists and restores searchMode from localStorage", async () => {
+    localStorage.setItem(MODE_KEY, "grep");
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    expect((el as any).searchMode).toBe("grep");
+  });
+
+  it("defaults to keyword when no saved mode", async () => {
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    expect((el as any).searchMode).toBe("keyword");
+  });
+
+  it("submit in grep mode calls /api/grep (not /api/search)", async () => {
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    (el as any).searchMode = "grep";
+
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (String(url) === "/api/grep") {
+        return new Response(JSON.stringify({
+          results: [], total: 0, offset: 0, limit: 20, query: "x",
+          query_words: [], elapsed_ms: 1, source: "grep",
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as any;
+    global.fetch = fetchSpy;
+
+    await (el as any)._submit("x");
+    await new Promise((r) => setTimeout(r, 20));
+
+    const grepCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]) === "/api/grep");
+    const searchCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]) === "/api/search");
+    expect(grepCalls.length).toBe(1);
+    expect(searchCalls.length).toBe(0);
+
+    vi.unstubAllGlobals();
+  });
+});
