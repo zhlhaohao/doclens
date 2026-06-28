@@ -4,15 +4,17 @@ import { html } from "lit";
 import "../src/components/history-item";
 
 describe("<history-item> grep marker", () => {
-  it("shows </> marker when mode=grep", async () => {
+  it("shows grep pill when mode=grep", async () => {
     const el = await fixture(html`<history-item .session=${{ id: "1", type: "search", title: "foo", preview: "", updated_at: new Date().toISOString(), message_count: 0, mode: "grep" } as any}></history-item>`);
     await (el as any).updateComplete;
-    expect(el.shadowRoot!.textContent).toContain("</>");
+    const tag = el.shadowRoot!.querySelector(".mode-tag");
+    expect(tag).toBeTruthy();
+    expect(tag!.textContent).toContain("grep");
   });
 
   it("no marker when mode is keyword/absent", async () => {
     const el = await fixture(html`<history-item .session=${{ id: "1", type: "search", title: "foo", preview: "", updated_at: new Date().toISOString(), message_count: 0 } as any}></history-item>`);
     await (el as any).updateComplete;
-    expect(el.shadowRoot!.textContent).not.toContain("</>");
+    expect(el.shadowRoot!.querySelector(".mode-tag")).toBeNull();
   });
 });

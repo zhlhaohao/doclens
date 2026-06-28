@@ -20,11 +20,15 @@ export class HistoryItem extends LitElement {
     .name { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
     .meta { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
     .mode-tag {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       margin-right: 6px;
-      font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-primary);
+      background: var(--cortex-primary-soft);
+      border-radius: 9999px;
+      padding: 1px 8px;
+      line-height: 1.5;
     }
   `;
 
@@ -48,7 +52,7 @@ export class HistoryItem extends LitElement {
     metaParts.push(new Date(this.session.updated_at).toLocaleDateString());
     return html`
       <div class="name">
-        ${this.session.mode === "grep" ? html`<span class="mode-tag" title="正则 Grep">&lt;/&gt;</span>` : null}
+        ${this.session.mode === "grep" ? html`<span class="mode-tag" title="正则 grep">grep</span>` : null}
         ${this.session.title}
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>
