@@ -16,7 +16,7 @@ python -m venv .venv
 # 升级pip
 python.exe -m pip install --upgrade pip setuptools wheel
 
-# 在 windows arm64 环境下，需要给cryptography下载预编译包
+# 在 windows arm64 环境下，需要给cryptography下载预编译包，现在不用了，只有在不成功的时候可以试下
 pip install cryptography --only-binary=:all:
 
 # 以可编辑模式安装 doclens的所有依赖（包括dev可选依赖组）
