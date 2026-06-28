@@ -101,7 +101,7 @@ export class InputBox extends LitElement {
       bottom: calc(100% + 4px);
       right: 6px;
       z-index: 20;
-      min-width: 140px;
+      min-width: 220px;
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-sm);
@@ -110,15 +110,16 @@ export class InputBox extends LitElement {
     }
     .menu-item {
       display: flex;
-      align-items: center;
-      gap: 6px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
       padding: 8px 12px;
-      font-size: var(--cortex-fs-md);
-      color: var(--cortex-text);
       cursor: pointer;
     }
     .menu-item:hover { background: var(--cortex-surface-muted); }
-    .menu-item.active { color: var(--cortex-primary); font-weight: 600; }
+    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
+    .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
+    .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
       :host { --min-h: 44px; }
     }
@@ -134,7 +135,7 @@ export class InputBox extends LitElement {
   /** 模式选择器：提供 .mode + .modes 时渲染分裂按钮 + caret 下拉；
    *  不提供时为遗留单一按钮（chat/files 等消费者不受影响）。 */
   @property() mode: SearchMode = "keyword";
-  @property({ attribute: false }) modes: Record<SearchMode, { label: string; icon: string }> | null = null;
+  @property({ attribute: false }) modes: Record<SearchMode, { label: string; icon?: string; description?: string }> | null = null;
   @state() private _menuOpen = false;
 
   @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
@@ -221,12 +222,17 @@ export class InputBox extends LitElement {
     if (!this._hasModes || !this._menuOpen) return null;
     return html`
       <div class="menu" role="menu">
-        ${(Object.keys(this.modes!) as SearchMode[]).map((key) => html`
-          <div class="menu-item ${key === this.mode ? "active" : ""}" role="menuitem"
-               @click=${() => this._selectMode(key)}>
-            ${this.modes![key].icon ? html`<span aria-hidden="true">${this.modes![key].icon}</span>` : null}
-            <span>${this.modes![key].label}</span>
-          </div>`)}
+        ${(Object.keys(this.modes!) as SearchMode[]).map((key) => {
+          const m = this.modes![key];
+          return html`
+            <div class="menu-item ${key === this.mode ? "active" : ""}" role="menuitem"
+                 @click=${() => this._selectMode(key)}>
+              <span class="menu-item-title">
+                ${m.icon ? html`<span aria-hidden="true">${m.icon}</span>` : null}${m.label}
+              </span>
+              ${m.description ? html`<span class="menu-item-desc">${m.description}</span>` : null}
+            </div>`;
+        })}
       </div>`;
   }
 

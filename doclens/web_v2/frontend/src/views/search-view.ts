@@ -20,9 +20,9 @@ export class SearchView extends LitElement {
   static readonly RESULTS_PANE_WIDTH_MIN = 280;
   static readonly RESULTS_PANE_WIDTH_MAX = 800;
   static readonly SEARCH_MODE_KEY = "cortex.searchMode";
-  static readonly SEARCH_MODES: Record<SearchMode, { label: string; icon: string }> = {
-    keyword: { label: "搜索", icon: "" },
-    grep: { label: "grep", icon: "" },
+  static readonly SEARCH_MODES: Record<SearchMode, { label: string; icon?: string; description?: string }> = {
+    keyword: { label: "搜索", description: "按关键词匹配（自动拆分单词）" },
+    grep: { label: "grep", description: "用正则表达式匹配" },
   };
 
   static styles = css`
