@@ -11,12 +11,19 @@ class SearchRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class GrepRequest(BaseModel):
+    pattern: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
 class SearchResult(BaseModel):
     path: str
     snippet: str
     score: float  # 语义变更：原 FTS5 BM25 原始分 → composite 综合分（0~1 归一化）
     line: Optional[int] = None
     highlights: list[tuple[int, int]] = []
+    kind: str = "content"  # "content" | "path"（grep 路径匹配为 "path"）
 
 
 class SearchResponse(BaseModel):
@@ -27,4 +34,4 @@ class SearchResponse(BaseModel):
     query: str
     query_words: list[str] = []  # 后端分词结果，供前端高亮使用
     elapsed_ms: int
-    source: str = "fts"  # 值 ∈ {"fts", "like", "ripgrep"}
+    source: str = "fts"  # 值 ∈ {"fts", "like", "ripgrep", "grep"}
