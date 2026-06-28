@@ -2658,7 +2658,9 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
     .caret:disabled { opacity: 0.5; cursor: not-allowed; }
     .menu {
       position: absolute;
-      top: calc(100% + 4px);
+      /* 向上展开：input-box（带模式选择器）只用在 search 初始态，位于页面底端，
+         向下展开会落到视口之外不可见。 */
+      bottom: calc(100% + 4px);
       right: 6px;
       z-index: 20;
       min-width: 140px;
