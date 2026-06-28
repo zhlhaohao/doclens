@@ -101,7 +101,6 @@ export class InputBox extends LitElement {
       bottom: calc(100% + 4px);
       right: 6px;
       z-index: 20;
-      min-width: 220px;
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-sm);
@@ -117,8 +116,8 @@ export class InputBox extends LitElement {
       cursor: pointer;
     }
     .menu-item:hover { background: var(--cortex-surface-muted); }
-    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
-    .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
+    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; white-space: nowrap; }
+    .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); white-space: nowrap; }
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
       :host { --min-h: 44px; }
