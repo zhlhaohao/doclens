@@ -1,14 +1,14 @@
 import { request } from "./client";
 import type { Session } from "../state/types";
 
-export interface CreateSessionResponse extends Pick<Session, "id" | "type" | "title" | "preview"> {}
+export interface CreateSessionResponse extends Pick<Session, "id" | "type" | "title" | "preview" | "mode"> {}
 
-export async function createSession(req: { type: "search" | "chat"; title: string; preview?: string }): Promise<CreateSessionResponse> {
+export async function createSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: "keyword" | "grep" }): Promise<CreateSessionResponse> {
   return request<CreateSessionResponse>("/api/sessions", { method: "POST", json: req });
 }
 
-/** 按 (type, title) 原子地查找或新建会话；用于 search 历史去重。 */
-export async function findOrCreateSession(req: { type: "search" | "chat"; title: string; preview?: string }): Promise<CreateSessionResponse> {
+/** 按 (type, title, mode) 原子地查找或新建会话；用于 search 历史去重。 */
+export async function findOrCreateSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: "keyword" | "grep" }): Promise<CreateSessionResponse> {
   return request<CreateSessionResponse>("/api/sessions/find-or-create", { method: "POST", json: req });
 }
 

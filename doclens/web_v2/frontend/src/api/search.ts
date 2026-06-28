@@ -9,7 +9,7 @@ export interface SearchResponse {
   query: string;
   query_words: string[];
   elapsed_ms: number;
-  source: "fts" | "like" | "ripgrep";
+  source: "fts" | "like" | "ripgrep" | "grep";
 }
 
 export async function searchApi(req: { query: string; mode?: string; limit?: number; offset?: number }): Promise<SearchResponse> {

@@ -2,6 +2,7 @@
 
 export type ViewId = "search" | "chat" | "settings" | "files";
 export type FocusState = "initial" | "focus";
+export type SearchMode = "keyword" | "grep";
 
 export interface SearchResult {
   path: string;
@@ -9,6 +10,7 @@ export interface SearchResult {
   score: number;
   line: number | null;
   highlights: [number, number][];
+  kind?: "content" | "path";
 }
 
 export interface ChatMessage {
@@ -23,6 +25,7 @@ export interface Session {
   preview: string;
   updated_at: string;
   message_count: number;
+  mode?: "keyword" | "grep";
 }
 
 export interface SearchViewState {
@@ -33,7 +36,7 @@ export interface SearchViewState {
   queryWords: string[];
   results: SearchResult[];
   total: number;
-  source: "fts" | "like" | "ripgrep";
+  source: "fts" | "like" | "ripgrep" | "grep";
   offset: number;
   limit: number;
 }
