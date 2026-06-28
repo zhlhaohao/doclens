@@ -2,8 +2,9 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
-import type { SearchResult, Session } from "../state/types";
+import type { SearchMode, SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
+import { grepApi } from "../api/grep";
 import { listSessions, clearSessions, findOrCreateSession } from "../api/sessions";
 import { fetchPreview, isFullFilePreview } from "../api/preview";
 import type { PageMarker } from "../api/preview";
@@ -18,6 +19,11 @@ export class SearchView extends LitElement {
   static readonly RESULTS_PANE_WIDTH_DEFAULT = 360;
   static readonly RESULTS_PANE_WIDTH_MIN = 280;
   static readonly RESULTS_PANE_WIDTH_MAX = 800;
+  static readonly SEARCH_MODE_KEY = "cortex.searchMode";
+  static readonly SEARCH_MODES: Record<SearchMode, { label: string; icon: string }> = {
+    keyword: { label: "关键词", icon: "🔍" },
+    grep: { label: "Grep", icon: "</>" },
+  };
 
   static styles = css`
     :host {
@@ -139,6 +145,7 @@ export class SearchView extends LitElement {
   @state() private previewWritable = false;
   @state() private previewPages: PageMarker[] | null = null;
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
+  @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
 
   connectedCallback() {
@@ -146,6 +153,7 @@ export class SearchView extends LitElement {
     this._loadHistory();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     this._loadResultsPaneWidth();
+    this._loadSearchMode();
     // 消费跨视图会话加载请求（来自 history-view）
     const pending = store.getState().pendingSession;
     if (pending && pending.type === "search") {
@@ -165,6 +173,18 @@ export class SearchView extends LitElement {
       );
     }
   }
+
+  private _loadSearchMode() {
+    const saved = localStorage.getItem(SearchView.SEARCH_MODE_KEY);
+    if (saved === "keyword" || saved === "grep") {
+      this.searchMode = saved;
+    }
+  }
+
+  private _onModeChange = (e: CustomEvent<{ mode: SearchMode }>) => {
+    this.searchMode = e.detail.mode;
+    localStorage.setItem(SearchView.SEARCH_MODE_KEY, e.detail.mode);
+  };
 
   /** Drag handler — bound as a class field so `this` is captured and listeners
    *  added to `document` can be removed by reference on mouseup. */
@@ -247,7 +267,9 @@ export class SearchView extends LitElement {
       actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
       try {
-        const res = await searchApi({ query, offset: 0, limit: 20 });
+        const res = this.searchMode === "grep"
+          ? await grepApi({ pattern: query, offset: 0, limit: 20 })
+          : await searchApi({ query, offset: 0, limit: 20 });
         // 立即用搜索结果更新 UI（不等会话写入），避免长时间"空白"
         actions.setSearchState({
           state: "focus",
@@ -263,6 +285,7 @@ export class SearchView extends LitElement {
         // 后台：去重写入历史会话（不阻塞 UI）。即使失败也不影响搜索结果展示。
         void findOrCreateSession({
           type: "search", title: query, preview: query.slice(0, 100),
+          mode: this.searchMode === "grep" ? "grep" : "keyword",
         }).then((created) => {
           actions.setSearchState({
             currentSession: {
@@ -300,7 +323,9 @@ export class SearchView extends LitElement {
     if (newOffset === s.offset) return;  // 已在该页，no-op
     this.loading = true;
     try {
-      const res = await searchApi({ query: s.query, offset: newOffset, limit });
+      const res = this.searchMode === "grep"
+        ? await grepApi({ pattern: s.query, offset: newOffset, limit })
+        : await searchApi({ query: s.query, offset: newOffset, limit });
       actions.setSearchState({
         state: "focus",
         query: s.query,
@@ -487,8 +512,9 @@ export class SearchView extends LitElement {
   }
 
   private async _loadSession(s: Session) {
-    // 历史只保存查询关键词，点击 = 用关键词重新执行搜索（拿到最新结果）。
-    // 委托给 _submit，复用其去重 + 置顶 + 状态更新 + 历史刷新逻辑。
+    // 历史条目携带模式：按其记录的引擎重放（grep → /api/grep，否则关键词搜索）。
+    this.searchMode = s.mode === "grep" ? "grep" : "keyword";
+    localStorage.setItem(SearchView.SEARCH_MODE_KEY, this.searchMode);
     await this._submit(s.title);
   }
 
@@ -512,12 +538,15 @@ export class SearchView extends LitElement {
           </history-list>
           <div class="input-row">
             <input-box
-              placeholder="输入搜索关键词..."
+              placeholder=${this.searchMode === "grep" ? "输入正则表达式..." : "输入搜索关键词..."}
               button-label="搜索"
               button-icon="🔍"
+              .mode=${this.searchMode}
+              .modes=${SearchView.SEARCH_MODES}
               ?disabled=${this.loading}
               .value=${this.localQuery}
               @input-change=${(e: any) => (this.localQuery = e.detail.value)}
+              @mode-change=${this._onModeChange}
               @submit=${this._submit}>
             </input-box>
           </div>
