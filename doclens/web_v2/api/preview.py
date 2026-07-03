@@ -156,8 +156,14 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
             detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
         )
 
-    md_content = render_tree_to_md(doc.structure, doc.source_type)
+    md_content, line_map = render_tree_to_md(doc.structure, doc.source_type)
     pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content)
+    # pdf 分支 _extract_pdf_pages 会剥除 [PAGE N] 标记并重排行号，
+    # 导致 line_map（基于原始 md 行号）失真；此时丢弃映射，避免误导。
+    # docx/xlsx/csv 分支 cleaned_md == md_content，line_map 仍然有效。
+    final_line_map = None if doc.source_type == "pdf" else {
+        str(k): v for k, v in line_map.items()
+    }
     return PreviewResponse(
         path=rel_path,
         language="markdown",
@@ -166,6 +172,7 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         highlights=[],
         writable=False,  # 合成预览不可写
         pages=pages,
+        line_map=final_line_map,
     )
 
 

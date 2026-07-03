@@ -377,7 +377,14 @@ export class SearchView extends LitElement {
       this.previewContent = result.content;
       this.previewPath = result.path;
       this.previewLanguage = result.language;
-      this.previewLine = line;
+      // 二进制合成预览（docx/pdf/xlsx/csv）：node.line_start 是原始解析体系，
+      // 与合成 md 行号不一致。用 result.lineMap 把 r.line 换算成 md 实际行号，
+      // md-viewer 才能定位到对应 heading。映射不到（如 TOC/list-item 降级节点）
+      // 时返回 null，md-viewer 不滚动。普通文本预览 result.lineMap 为 null，
+      // r.line 即文件实际行号，直接使用。
+      this.previewLine = line === null
+        ? null
+        : (result.lineMap ? (result.lineMap[String(line)] ?? null) : line);
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
     } else if (result.notIndexed) {
@@ -394,7 +401,7 @@ export class SearchView extends LitElement {
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -411,6 +418,7 @@ export class SearchView extends LitElement {
           language: body.language,
           writable: body.writable ?? false,
           pages: body.pages ?? null,
+          lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
         };
       }
       const err = await res.json().catch(() => ({}));
@@ -573,8 +581,7 @@ export class SearchView extends LitElement {
             <search-results
               .results=${s.results}
               ?loading=${this.loading}
-              .activePath=${detailTop?.path ?? this.previewPath ?? null}
-              .activeLine=${detailTop?.line ?? this.previewLine ?? null}
+              .activeResult=${detailTop ?? null}
               @select=${this._onResultSelect}>
             </search-results>
             ${s.total > s.limit

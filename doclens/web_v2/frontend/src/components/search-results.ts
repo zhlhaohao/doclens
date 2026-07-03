@@ -59,8 +59,13 @@ export class SearchResults extends LitElement {
   `;
 
   @property({ attribute: false }) results: SearchResult[] = [];
-  @property({ attribute: false }) activePath: string | null = null;
-  @property({ attribute: false }) activeLine: number | null = null;
+  /** 当前激活的 SearchResult 引用（来自父组件 detailStack 顶部）。
+   *  用引用比较而非 path+line，是为了避开 LIKE/ripgrep 降级场景下
+   *  line=null 导致的歧义：null === null 会误激活同文件多卡片；
+   *  而用 r.line != null 守卫又会让被点击的 line=null 卡片永远不加亮。
+   *  引用比较天然唯一：detailTop 就是用户点击的那张 result 引用，
+   *  其他同文件卡片哪怕 line=null，引用也不同，不会被加亮。 */
+  @property({ attribute: false }) activeResult: SearchResult | null = null;
   @property({ type: Boolean }) loading = false;
 
   render() {
@@ -73,7 +78,7 @@ export class SearchResults extends LitElement {
             : this.results.map((r) => html`
                 <result-card
                   .result=${r}
-                  ?active=${this.activePath === r.path && this.activeLine === r.line}>
+                  ?active=${this.activeResult === r}>
                 </result-card>`)}
       </div>
     `;
