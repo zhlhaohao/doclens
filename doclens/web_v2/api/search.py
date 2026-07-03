@@ -24,11 +24,27 @@ router = APIRouter()
 # 超过该值的匹配不可见（v1 接受）。
 _MAX_FETCH = 1000
 
+# snippet 按字符截断的兜底上限（防止单行超长节点把 snippet 撑爆）。
+_SNIPPET_MAX_CHARS = 300
+
+
+def _truncate_snippet_by_lines(text: str, max_lines: int) -> str:
+    """按 max_lines 行数截断 snippet（取前 N 行）；<= 0 时不截断。
+    与 CLI 兜底分支 `max_context_lines` 语义对齐：让 result-card 卡片
+    显示的行数统一受 CORTEX_MAX_CONTEXT_LINES 控制。"""
+    if max_lines <= 0 or not text:
+        return text
+    lines = text.split("\n")
+    if len(lines) <= max_lines:
+        return text
+    return "\n".join(lines[:max_lines])
+
 
 def _format_scored_results(
     result: ScoreResult,
     path_map: dict,
     search_path: str,
+    max_context_lines: int,
 ) -> list[SearchResult]:
     """把 score_and_rank 的 ScoreResult 转成完整 SearchResult 列表（不切片）。
 
@@ -44,9 +60,11 @@ def _format_scored_results(
     if result.source == "fts":
         for composite, (doc_id, node, _matched, _prox, _fts) in result.results:
             path = resolve_preview_path(doc_id, path_map, search_path)
+            text = node.get("text", "") or ""
+            snippet = _truncate_snippet_by_lines(text, max_context_lines)[:_SNIPPET_MAX_CHARS]
             out.append(SearchResult(
                 path=path,
-                snippet=(node.get("text", "") or "")[:300],
+                snippet=snippet,
                 score=round(composite, 4),
                 line=node.get("line_start"),
                 highlights=[],
@@ -56,9 +74,11 @@ def _format_scored_results(
         for item in result.like_raw or []:
             doc_key = item.get("doc_name", "") or item.get("doc_id", "")
             path = resolve_preview_path(doc_key, path_map, search_path)
+            text = item.get("summary", "") or ""
+            snippet = _truncate_snippet_by_lines(text, max_context_lines)[:_SNIPPET_MAX_CHARS]
             out.append(SearchResult(
                 path=path,
-                snippet=(item.get("summary", "") or "")[:300],
+                snippet=snippet,
                 score=0.5,  # 对齐 CLI _convert_like_to_render_items 的固定分
                 line=None,  # like_search 不返回 line_start
                 highlights=[],
@@ -67,9 +87,11 @@ def _format_scored_results(
     elif result.source == "ripgrep":
         for doc_id, node, _matched, _prox, _fts in result.results:
             path = resolve_preview_path(doc_id, path_map, search_path)
+            text = node.get("text", "") or ""
+            snippet = _truncate_snippet_by_lines(text, max_context_lines)[:_SNIPPET_MAX_CHARS]
             out.append(SearchResult(
                 path=path,
-                snippet=(node.get("text", "") or "")[:300],
+                snippet=snippet,
                 score=0.0,  # 对齐 CLI is_ripgrep 的固定分
                 line=node.get("line_start"),
                 highlights=[],
@@ -114,7 +136,7 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    all_results = _format_scored_results(result, idx.path_map, idx.search_path)
+    all_results = _format_scored_results(result, idx.path_map, idx.search_path, idx.max_context_lines)
     total = len(all_results)
     # offset 越界兜底：clamp 到最后一页的起点
     safe_offset = min(req.offset, max(0, total - 1)) if total > 0 else 0

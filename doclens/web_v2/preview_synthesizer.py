@@ -12,7 +12,7 @@ _TABLE_SOURCE_TYPES = frozenset({"csv", "excel"})
 _COLS_RE = re.compile(r"^Columns:\s*(.+)$")
 
 
-def render_tree_to_md(structure: Any, source_type: str) -> str:
+def render_tree_to_md(structure: Any, source_type: str) -> tuple[str, dict[int, int]]:
     """把 Document.structure（list 或 dict）合成为 markdown 字符串。
 
     Args:
@@ -20,23 +20,36 @@ def render_tree_to_md(structure: Any, source_type: str) -> str:
         source_type: Document.source_type，决定节点 text 走段落还是 table。
 
     Returns:
-        markdown 源字符串。每个 heading 所在行 == 该节点的 line_start
-        （通过填白行对齐），便于前端 <md-viewer> 的 data-source-line 定位。
+        (md_str, line_map):
+        - md_str: 合成的 markdown 源字符串。
+        - line_map: {node.line_start: heading 在 md 中的实际行号(1-indexed)}。
+          二进制文档的 node.line_start 是原始解析体系（docx 段落索引/pdf 行号），
+          与合成 md 的行号体系不一致（body 段落用 \\n\\n 分段会膨胀行数）。
+          前端 <md-viewer> 的 data-source-line 基于 md 实际行号，因此需要
+          此映射把搜索结果的 r.line(=node.line_start) 换算成 md 实际行号，
+          才能正确定位到对应 heading。
     """
     out: list[str] = []
+    line_map: dict[int, int] = {}
     roots: Iterable[dict]
     if isinstance(structure, dict):
         roots = [structure]
     elif isinstance(structure, list):
         roots = structure
     else:
-        return ""
+        return "", {}
     for root in roots:
-        _emit_node(out, root, depth=0, source_type=source_type)
-    return "\n".join(out)
+        _emit_node(out, root, depth=0, source_type=source_type, line_map=line_map)
+    return "\n".join(out), line_map
 
 
-def _emit_node(out: list[str], node: dict, depth: int, source_type: str) -> None:
+def _emit_node(
+    out: list[str],
+    node: dict,
+    depth: int,
+    source_type: str,
+    line_map: dict[int, int],
+) -> None:
     """DFS 把单个节点输出为 heading + body。"""
     line_start = node.get("line_start") or 1
     title = node.get("title", "") or ""
@@ -55,17 +68,20 @@ def _emit_node(out: list[str], node: dict, depth: int, source_type: str) -> None
             out.append(body)
             out.append("")
         for child in children:
-            _emit_node(out, child, depth + 1, source_type=source_type)
+            _emit_node(out, child, depth + 1, source_type=source_type, line_map=line_map)
         return
 
     # PDF 列表项（被 indexer 误识别为顶级章节）：降级为有序列表项
     m_list = _RE_LIST_ITEM.match(title.strip()) if title else None
     if m_list:
-        _emit_list_item(out, title, text, m_list, children, depth, source_type)
+        _emit_list_item(out, title, text, m_list, children, depth, source_type, line_map)
         return
 
     level = min(depth + 1, 6)  # md 只有 h1-h6
     out.append("#" * level + " " + title)
+    # 记录 heading 实际所在的 md 行号（1-indexed），供前端定位。
+    # key 用 node.line_start（与搜索结果 r.line 同源），value 为 md 实际行号。
+    line_map[line_start] = len(out)
 
     # csv 根节点：聚合子节点，table 块负责，短路递归避免重复 heading
     if source_type == "csv" and children and text.lstrip().startswith("Columns:"):
@@ -82,7 +98,7 @@ def _emit_node(out: list[str], node: dict, depth: int, source_type: str) -> None
             out.append("")
 
     for child in children:
-        _emit_node(out, child, depth + 1, source_type=source_type)
+        _emit_node(out, child, depth + 1, source_type=source_type, line_map=line_map)
 
 
 # PDF 目录项模式：章节号 + 内容 + 末尾页码，如 "1.1 Definition and Scope of Deep Research 4"
@@ -128,6 +144,7 @@ def _emit_list_item(
     children: list,
     depth: int,
     source_type: str,
+    line_map: dict[int, int],
 ) -> None:
     """把 (N) 开头的列表项节点渲染为 markdown 有序列表项。
 
@@ -168,7 +185,7 @@ def _emit_list_item(
         out.append("")
 
     for child in children or []:
-        _emit_node(out, child, depth + 1, source_type=source_type)
+        _emit_node(out, child, depth + 1, source_type=source_type, line_map=line_map)
 
 
 # 标题尾部页码/行号：如 "Introduction 12" / "2.1 Foundation... 7"

@@ -214,11 +214,11 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
-## 启动脚本 start.ps1
+## 启动脚本 start-app.ps1
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
-使用 `start.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
+使用 `start-app.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
 **测试和验证的工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
 
@@ -226,19 +226,19 @@ planify/
 
 | 场景 | 运行方式 | doclens 代码 | 虚拟环境 |
 |------|----------|-------------|----------|
-| 主分支 | `~/github/doclens/start.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
+| 主分支 | `~/github/doclens/start-app.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
 
 ### 三种运行模式
 
 **1. TUI 界面（交互式终端）**
 ```powershell
-./start.ps1
-./start.ps1 tui
+./start-app.ps1
+./start-app.ps1 tui
 ```
 
 **2. Web UI（GUI PWA）**
 ```powershell
-./start.ps1 gui
+./start-app.ps1 gui
 ```
 > 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：
 > ```
@@ -249,12 +249,12 @@ planify/
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `./start.ps1 search <关键词>` | 搜索文档 | `./start.ps1 search python`<br>`./start.ps1 search "量子 计算"` |
-| `./start.ps1 read_document --path <路径>` | 读取文档 | `./start.ps1 read_document --path '科技/doc.md'` |
-| `./start.ps1 ai <问题>` | AI 问答 | `./start.ps1 ai 你好` |
-| `./start.ps1 index` | 增量索引 | `./start.ps1 index` |
-| `./start.ps1 index --force` | 强制全量重建 | `./start.ps1 index --force` |
-| `./start.ps1 status` | 查看状态 | `./start.ps1 status` |
+| `./start-app.ps1 search <关键词>` | 搜索文档 | `./start-app.ps1 search python`<br>`./start-app.ps1 search "量子 计算"` |
+| `./start-app.ps1 read_document --path <路径>` | 读取文档 | `./start-app.ps1 read_document --path '科技/doc.md'` |
+| `./start-app.ps1 ai <问题>` | AI 问答 | `./start-app.ps1 ai 你好` |
+| `./start-app.ps1 index` | 增量索引 | `./start-app.ps1 index` |
+| `./start-app.ps1 index --force` | 强制全量重建 | `./start-app.ps1 index --force` |
+| `./start-app.ps1 status` | 查看状态 | `./start-app.ps1 status` |
 
 ### 前端开发模式
 
@@ -265,15 +265,15 @@ planify/
 cd doclens/web_v2/frontend && npm install && npm run build
 
 # 2. 重启后端（否则后端仍在服务旧的静态文件）
-# 在 start.ps1 所在目录执行
-pwsh -File ./start.ps1 gui
+# 在 start-app.ps1 所在目录执行
+pwsh -File ./start-app.ps1 gui
 ```
 
 > **注意**：修改前端代码后必须执行 `npm run build`（生产构建），仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新。
 
 ### 备用方式（直接调用 Python）
 
-如果 `start.ps1` 不可用，可直接使用 Python：
+如果 `start-app.ps1` 不可用，可直接使用 Python：
 
 ```bash
 # 在 test_work_dir 目录下执行
