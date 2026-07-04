@@ -232,11 +232,11 @@ class CortexAgent:
         grep_tools, grep_handlers = build_grep_tools(self.idx)
         register_external_tools(grep_tools, grep_handlers)
 
-        # 部署技能文件到 ~/.cortex/skills/
+        # 部署技能文件到 ~/.cortex/skills/（强制覆盖，确保使用最新版本）
         import shutil
         skill_src_dir = Path(__file__).parent / "skills" / "knowledge_base"
         skill_dst_dir = skills_dir / "knowledge_base"
-        if skill_src_dir.exists() and not (skill_dst_dir / "SKILL.md").exists():
+        if skill_src_dir.exists():
             skill_dst_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(skill_src_dir / "SKILL.md", skill_dst_dir / "SKILL.md")
 
