@@ -352,6 +352,12 @@ export class MdViewer extends LitElement {
       </div>`;
     }
     // 回归：单块渲染
+    // 必须重置 currentOffset：分页模式（PDF/PPTX/XLSX）会在每个 chunk 渲染前
+    // 把 currentOffset 设成 chunk 起始偏移，渲染完不会清零。若上一次是分页文档，
+    // 这里不重置会让 lineOf 把单块文档的每个 data-source-line 都加上残留偏移，
+    // 导致 _locateAndHighlight 用正确的 line 找不到匹配块（dsl 全部偏大），
+    // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
+    currentOffset = 0;
     const raw = marked.parse(this.content, { async: false }) as string;
     return html`<div class="md-body" .innerHTML=${raw}></div>`;
   }
