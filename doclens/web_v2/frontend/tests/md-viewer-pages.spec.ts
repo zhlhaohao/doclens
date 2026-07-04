@@ -85,4 +85,33 @@ describe("<md-viewer> pages rendering", () => {
     const p3 = cards[2].textContent ?? "";
     expect(p3).toContain("L5");
   });
+
+  it("resets line offset when switching from paged to single-block (regression)", async () => {
+    // 回归：模拟「先点 PDF（分页）再点 docx/md（单块）」。
+    // 分页模式会把模块级 currentOffset 设成最后一个 chunk 的起始偏移，
+    // 单块分支必须重置为 0，否则 lineOf 把单块文档每个 data-source-line
+    // 都加上残留偏移 → _locateAndHighlight 用正确 line 找不到目标块
+    // → 表现为 PDF 之后再点 docx 预览定位失效。
+    const pagedContent = "L1\nL2\nL3\nL4\nL5";
+    const pages = [
+      { label: "第 1 页", line_start: 1 },
+      { label: "第 2 页", line_start: 3 },
+      { label: "第 3 页", line_start: 5 },
+    ];
+    const el = await fixture(html`
+      <md-viewer .content=${pagedContent} .pages=${pages}></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+
+    // 切换到单块渲染（pages 置空 + docx/md 风格 content）
+    el.pages = null;
+    el.content = "# Heading\n\nparagraph";
+    await el.updateComplete;
+
+    const blocks = el.shadowRoot!.querySelectorAll("[data-source-line]");
+    expect(blocks.length).toBeGreaterThan(0);
+    // # Heading 在第 1 行 → data-source-line 必须是 1，未被分页偏移污染
+    const firstDsl = Number(blocks[0].getAttribute("data-source-line"));
+    expect(firstDsl).toBe(1);
+  });
 });
