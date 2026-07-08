@@ -115,6 +115,8 @@ class CortexConfig(BaseSettings):
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
     planify_model_id: str = Field(default="claude-opus-4-6", alias="PLANIFY_MODEL_ID")
     planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
+    planify_provider: str = Field(default="anthropic", alias="PLANIFY_PROVIDER")
+    planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
 
     @classmethod
     def _init_first_run(cls):

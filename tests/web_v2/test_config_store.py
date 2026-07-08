@@ -86,3 +86,18 @@ def test_write_env_values_blanks_out_a_key_using_unset(tmp_path):
     text = p.read_text(encoding="utf-8")
     assert "PLANIFY_API_KEY" not in text
     assert "CORTEX_MAX_RESULTS=20" in text
+
+
+# ---------------------------------------------------------------------------
+# KNOWN_KEYS must include the LLM-Provider-switching keys
+# ---------------------------------------------------------------------------
+from doclens.web_v2.config_store import KNOWN_KEYS  # noqa: E402
+
+
+def test_known_keys_includes_provider_and_protocol():
+    assert "PLANIFY_PROVIDER" in KNOWN_KEYS
+    assert "PLANIFY_PROTOCOL" in KNOWN_KEYS
+    # 既有 3 个字段不能丢
+    assert "PLANIFY_API_KEY" in KNOWN_KEYS
+    assert "PLANIFY_BASE_URL" in KNOWN_KEYS
+    assert "PLANIFY_MODEL_ID" in KNOWN_KEYS

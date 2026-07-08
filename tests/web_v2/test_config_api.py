@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from doclens.web_v2.app import create_app
+from doclens.web_v2.config_store import KNOWN_KEYS
 
 
 @pytest.fixture
@@ -20,9 +21,12 @@ def test_get_local_config_returns_all_keys_when_file_missing(client, tmp_path):
     body = resp.json()
     assert body["scope"] == "local"
     assert body["exists"] is False
-    # All 18 keys present with empty values
-    assert len(body["values"]) == 18
+    # All KNOWN_KEYS exposed with empty values when file is missing
+    assert len(body["values"]) == len(KNOWN_KEYS)
     assert all(v == "" for v in body["values"].values())
+    # The new LLM-Provider-switching keys are part of the surface
+    assert "PLANIFY_PROVIDER" in body["values"]
+    assert "PLANIFY_PROTOCOL" in body["values"]
 
 
 def test_get_local_config_reads_existing_values(client, tmp_path):
