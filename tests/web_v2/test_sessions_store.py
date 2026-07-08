@@ -134,3 +134,36 @@ def test_legacy_db_migration_adds_mode_column(tmp_path):
     new = store.find_or_create(SessionType.SEARCH, "bar", "p", mode="grep")
     assert new.mode == "grep"
 
+
+def test_message_ai_payload_with_tool_calls_roundtrips(temp_workdir):
+    """message_ai 的 payload 含 tool_calls 时，append_item + get_detail 透传无损。"""
+    from datetime import datetime
+    from doclens.web_v2.sessions_store import SessionsStore, SessionItem, SessionSummary, SessionType
+    import json
+
+    store = SessionsStore(temp_workdir / "s.db")
+    summary = SessionSummary(
+        id="s1", type=SessionType.CHAT, title="t", preview="p",
+        created_at=datetime.utcnow(), updated_at=datetime.utcnow(), message_count=0,
+    )
+    store.create(summary)
+    payload = json.dumps({
+        "content": "answer",
+        "tool_calls": [
+            {"tool_use_id": "t1", "name": "search", "input": {"q": "x"},
+             "output": "ok", "is_error": False, "duration_ms": 50},
+        ],
+    })
+    store.append_item(SessionItem(session_id="s1", seq=1, kind="message_ai", payload=payload))
+
+    items = store.get_detail("s1")
+    assert len(items) == 1
+    parsed = json.loads(items[0].payload)
+    assert parsed["content"] == "answer"
+    assert parsed["tool_calls"][0]["name"] == "search"
+    assert parsed["tool_calls"][0]["duration_ms"] == 50
+
+    # get_chat_history 只取 content，不崩、不丢
+    history = store.get_chat_history("s1")
+    assert history == [{"role": "assistant", "content": "answer"}]
+
