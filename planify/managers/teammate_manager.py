@@ -29,12 +29,16 @@
     }
 """
 
+from __future__ import annotations
+
 import json
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List
-from anthropic import Anthropic
+from typing import Any, Dict, List
+
+from ..core.llm.provider import LLMProvider
+from ..core.llm.types import Tool, ToolUseBlock
 
 
 class TeammateManager:
@@ -47,7 +51,7 @@ class TeammateManager:
         team_dir: Path,
         workdir: Path,
         model: str,
-        client: Anthropic,
+        client: LLMProvider,
         poll_interval: int,
         idle_timeout: int,
         run_bash,
@@ -64,7 +68,7 @@ class TeammateManager:
             team_dir: 团队配置目录
             workdir: 工作目录
             model: 模型 ID
-            client: Anthropic API 客户端
+            client: LLM Provider 实例
             poll_interval: 空闲轮询间隔
             idle_timeout: 空闲超时时间
             run_bash: Bash 执行函数
@@ -79,6 +83,9 @@ class TeammateManager:
         self.workdir = workdir
         self.model = model
         self.client = client
+        # provider 是 client 的别名（LLMProvider 抽象接口），
+        # 用于驱动 LLMProvider 抽象接口。
+        self.provider = client
         self.poll_interval = poll_interval
         self.idle_timeout = idle_timeout
         self.run_bash = run_bash
@@ -287,11 +294,20 @@ class TeammateManager:
                             return
                         messages.append({"role": "user", "content": json.dumps(msg, ensure_ascii=False)})
 
-                    # LLM 调用
+                    # LLM 调用（通过 LLMProvider 抽象接口）
                     try:
-                        response = self.client.messages.create(
-                            model=self.model, system=sys_prompt, messages=messages,
-                            tools=tools, max_tokens=8000
+                        response = self.provider.chat(
+                            messages=messages,
+                            system=sys_prompt,
+                            tools=[
+                                Tool(
+                                    name=t["name"],
+                                    description=t.get("description", ""),
+                                    input_schema=t.get("input_schema", {"type": "object"}),
+                                )
+                                for t in tools
+                            ],
+                            max_tokens=8000,
                         )
                     except Exception:
                         self._set_status(name, "shutdown")
@@ -306,29 +322,41 @@ class TeammateManager:
                     idle_requested = False
                     last_block = None
                     for block in response.content:
-                        if block.type == "tool_use":
-                            last_block = block
-                            if block.name == "idle":
-                                idle_requested = True
-                                output = "Entering idle phase."
-                            elif block.name == "claim_task":
-                                output = self.task_mgr.claim(block.input["task_id"], name)
-                            elif block.name == "send_message":
-                                output = self.bus.send(name, block.input["to"], block.input["content"])
-                            else:
-                                dispatch = {
-                                    "bash": lambda **kw: self.run_bash(kw["command"], self.workdir),
-                                    "read_file": lambda **kw: self.run_read(kw["path"], self.workdir),
-                                    "write_file": lambda **kw: self.run_write(kw["path"], kw["content"], self.workdir),
-                                    "edit_file": lambda **kw: self.run_edit(kw["path"], kw["old_text"], kw["new_text"], self.workdir),
-                                }
-                                output = dispatch.get(block.name, lambda **kw: "Unknown")(**block.input)
-                            print(f"  [{name}] {block.name}: {str(output)[:120]}")
-                            results.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": str(output)
-                            })
+                        # block 可能是 ToolUseBlock dataclass 或 dict
+                        block_type = getattr(block, "type", None) if not isinstance(block, dict) else block.get("type")
+                        if block_type != "tool_use":
+                            continue
+                        if isinstance(block, dict):
+                            block_name = block.get("name", "")
+                            block_id = block.get("id", "")
+                            block_input = block.get("input", {})
+                        else:
+                            assert isinstance(block, ToolUseBlock)
+                            block_name = block.name
+                            block_id = block.id
+                            block_input = dict(block.input)
+                        last_block = block
+                        if block_name == "idle":
+                            idle_requested = True
+                            output = "Entering idle phase."
+                        elif block_name == "claim_task":
+                            output = self.task_mgr.claim(block_input["task_id"], name)
+                        elif block_name == "send_message":
+                            output = self.bus.send(name, block_input["to"], block_input["content"])
+                        else:
+                            dispatch = {
+                                "bash": lambda **kw: self.run_bash(kw["command"], self.workdir),
+                                "read_file": lambda **kw: self.run_read(kw["path"], self.workdir),
+                                "write_file": lambda **kw: self.run_write(kw["path"], kw["content"], self.workdir),
+                                "edit_file": lambda **kw: self.run_edit(kw["path"], kw["old_text"], kw["new_text"], self.workdir),
+                            }
+                            output = dispatch.get(block_name, lambda **kw: "Unknown")(**block_input)
+                        print(f"  [{name}] {block_name}: {str(output)[:120]}")
+                        results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block_id,
+                            "content": str(output)
+                        })
 
                     messages.append({"role": "user", "content": results})
                     if idle_requested:

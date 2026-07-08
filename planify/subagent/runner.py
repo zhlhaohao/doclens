@@ -10,9 +10,13 @@
 - 队友：持久化，空闲后可以继续工作直到显式关闭
 """
 
+from __future__ import annotations
+
 import json
-from anthropic import Anthropic
 from typing import Callable, Dict
+
+from ..core.llm.provider import LLMProvider
+from ..core.llm.types import Tool, ToolUseBlock
 
 # prompts 模块导入（支持直接运行 cli.py 和作为模块运行两种方式）
 try:
@@ -27,7 +31,7 @@ def run_subagent(
     prompt: str,
     agent_type: str,
     workdir,
-    client: Anthropic,
+    client: LLMProvider,
     model: str,
     run_bash: Callable,
     run_read: Callable,
@@ -45,7 +49,7 @@ def run_subagent(
             - "Explore": 只读工具（bash, read_file），用于探索代码库
             - "general-purpose": 读写工具（bash, read_file, write_file, edit_file），用于修改文件
         workdir: 工作目录
-        client: Anthropic API 客户端
+        client: LLM Provider 实例
         model: 模型 ID
         run_bash: Bash 执行函数
         run_read: 文件读取函数
@@ -122,42 +126,75 @@ def run_subagent(
     system_prompt = build_system_prompt(workdir=workdir_str, agent_type="subagent")
     sub_msgs = [{"role": "user", "content": prompt}]
 
+    # 把工具定义转换为 Tool dataclass
+    tool_defs = [
+        Tool(
+            name=t["name"],
+            description=t.get("description", ""),
+            input_schema=t.get("input_schema", {"type": "object"}),
+        )
+        for t in sub_tools
+    ]
+
     # 子代理主循环（最多 30 轮）
     resp = None
     for _ in range(30):  # 最多 30 轮
-        # LLM 调用
+        # LLM 调用（通过 LLMProvider 抽象接口）
         try:
-            resp = client.messages.create(
-                model=model,
-                system=system_prompt,
+            resp = client.chat(
                 messages=sub_msgs,
-                tools=sub_tools,
+                system=system_prompt,
+                tools=tool_defs,
                 max_tokens=8000,
             )
         except Exception:
             return "(subagent failed)"
 
-        sub_msgs.append({"role": "assistant", "content": resp.content})
+        # 把响应内容块序列化为 dict（兼容后续 _execute_tools 风格）
+        assistant_blocks: list[dict] = []
+        for b in resp.content:
+            if isinstance(b, dict):
+                assistant_blocks.append(b)
+                continue
+            block_type = getattr(b, "type", None)
+            if block_type == "text":
+                assistant_blocks.append({"type": "text", "text": getattr(b, "text", "")})
+            elif block_type == "tool_use":
+                assistant_blocks.append({
+                    "type": "tool_use",
+                    "id": b.id,
+                    "name": b.name,
+                    "input": dict(b.input),
+                })
+            else:
+                # 未知类型：降级为 dict 形式
+                assistant_blocks.append({"type": block_type or "unknown", "raw": str(b)})
+        sub_msgs.append({"role": "assistant", "content": assistant_blocks})
+
         if resp.stop_reason != "tool_use":
             break
 
         # 执行工具调用
         results = []
-        for b in resp.content:
-            if b.type == "tool_use":
-                h = sub_handlers.get(b.name, lambda **kw: "Unknown tool")
-                output = h(**b.input) if h else f"Unknown tool: {b.name}"
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": b.id,
-                        "content": str(output)[:50000],
-                    }
-                )
+        for b in assistant_blocks:
+            if b.get("type") != "tool_use":
+                continue
+            block_name = b.get("name", "")
+            block_id = b.get("id", "")
+            block_input = b.get("input", {})
+            h = sub_handlers.get(block_name, lambda **kw: "Unknown tool")
+            output = h(**block_input) if h else f"Unknown tool: {block_name}"
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block_id,
+                    "content": str(output)[:50000],
+                }
+            )
 
         sub_msgs.append({"role": "user", "content": results})
 
         # 返回摘要
         if resp:
-            return "".join(b.text for b in resp.content if hasattr(b, "text"))
+            return "".join(b.get("text", "") for b in assistant_blocks if b.get("type") == "text")
         return "(subagent failed)"

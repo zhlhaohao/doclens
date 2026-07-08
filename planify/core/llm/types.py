@@ -1,4 +1,6 @@
 """LLMProvider 归一化数据类型。"""
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -52,9 +54,16 @@ class LLMResponse:
     model: str
     usage: dict[str, int]
 
+
 @dataclass(frozen=True)
 class StreamEvent:
-    """归一化流式事件。"""
+    """归一化流式事件。
+
+    为支持 streaming 端的事件处理，新增以下可选字段：
+      - block_type: content_block_start 时区分 "text" / "tool_use"
+      - tool_use_id: tool_use block 的 id（在 content_block_start 时填充）
+      - tool_name: tool_use block 的 name（在 content_block_start 时填充）
+    """
 
     type: Literal[
         "message_start",
@@ -69,3 +78,6 @@ class StreamEvent:
     input_json_delta: str | None = None
     stop_reason: str | None = None
     block_index: int | None = None
+    block_type: Literal["text", "tool_use"] | None = None
+    tool_use_id: str | None = None
+    tool_name: str | None = None
