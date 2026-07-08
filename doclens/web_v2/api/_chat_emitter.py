@@ -4,6 +4,7 @@
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from planify.streaming.types import StreamEvent, StreamEventType
@@ -53,22 +54,45 @@ class GradioEventEmitter:
         elif event.event_type == StreamEventType.TOOL_CALL:
             if event.data.get("is_complete", False):
                 self.tool_calls.append({
+                    "tool_use_id": event.data.get("tool_use_id", ""),
                     "name": event.data.get("name", ""),
                     "input": event.data.get("input", {}),
+                    "_t0": time.monotonic(),
                 })
 
         elif event.event_type == StreamEventType.TOOL_RESULT:
+            tool_use_id = event.data.get("tool_use_id", "")
             name = event.data.get("name", "")
             output = event.data.get("output", "")
             is_error = event.data.get("is_error", False)
-            # 更新最后一个同名工具调用的输出
+
+            def _fill(tc: dict) -> None:
+                duration_ms = int((time.monotonic() - tc.pop("_t0", time.monotonic())) * 1000)
+                tc["tool_use_id"] = tool_use_id
+                tc["output"] = output
+                tc["is_error"] = is_error
+                tc["duration_ms"] = duration_ms
+
+            # 优先按 tool_use_id 匹配未回填的调用
+            matched = False
             for tc in reversed(self.tool_calls):
-                if tc["name"] == name and "output" not in tc:
-                    tc["output"] = output
+                if tc.get("tool_use_id") == tool_use_id and tool_use_id and "output" not in tc:
+                    _fill(tc)
+                    matched = True
                     break
-            else:
-                # 没找到对应工具调用，单独记录
-                self.tool_calls.append({"name": name, "output": output, "is_error": is_error})
+            if not matched:
+                # 降级：按 name 匹配未回填的调用
+                for tc in reversed(self.tool_calls):
+                    if tc.get("name") == name and "output" not in tc:
+                        _fill(tc)
+                        matched = True
+                        break
+            if not matched:
+                # 没找到对应调用，单独记录
+                self.tool_calls.append({
+                    "tool_use_id": tool_use_id, "name": name,
+                    "output": output, "is_error": is_error,
+                })
 
         elif event.event_type == StreamEventType.DONE:
             self.done = True
