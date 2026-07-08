@@ -9,8 +9,11 @@
 """
 
 import asyncio
+import dataclasses
 import json
 from typing import Any, Dict, List, Optional
+
+from ..core.llm.types import TextBlock, Tool, ToolUseBlock
 
 
 class Agent:
@@ -63,10 +66,8 @@ class Agent:
             tool_callback: 工具调用回调函数 (name, args) -> None
             tool_result_callback: 工具结果回调函数 (name, result) -> None
         """
-        self.client = client
-        # Task 13: 兼容层 —— provider 是 client 的别名，
-        # 用于驱动 LLMProvider 抽象接口（compact.py 等）。
-        # 待所有调用点迁移完成后，将 self.client 移除。
+        # provider 是 client 的别名（LLMProvider 抽象接口），
+        # 所有调用点（包括 compact）已迁移完成。
         self.provider = client
         self.model = model
         self.tools = tools
@@ -162,9 +163,18 @@ class Agent:
                 })
 
             # === LLM 调用 ===
-            response = self.client.messages.create(
-                model=self.model, system=system, messages=messages,
-                tools=self.tools, max_tokens=8000,
+            response = self.provider.chat(
+                messages=messages,
+                system=system,
+                tools=[
+                    Tool(
+                        name=t["name"],
+                        description=t.get("description", ""),
+                        input_schema=t.get("input_schema", {"type": "object"}),
+                    )
+                    for t in self.tools
+                ],
+                max_tokens=8000,
             )
 
             # === 记录响应 ===
@@ -178,7 +188,13 @@ class Agent:
             except Exception:
                 self.logger.debug(f"[LLM Call #{loop_count}] Response: (encoding error)")
 
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({
+                "role": "assistant",
+                "content": [
+                    b if isinstance(b, dict) else dataclasses.asdict(b)
+                    for b in response.content
+                ],
+            })
             if response.stop_reason != "tool_use":
                 return
 
@@ -188,7 +204,9 @@ class Agent:
             manual_compress = False
 
             for block in response.content:
-                if block.type == "tool_use":
+                if isinstance(block, ToolUseBlock) or (
+                    isinstance(block, dict) and block.get("type") == "tool_use"
+                ):
                     # 触发工具调用回调（用于 CLI 输出）
                     if self.tool_callback:
                         try:
