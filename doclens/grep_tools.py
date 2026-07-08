@@ -49,7 +49,7 @@ GREP_TOOL = {
 
 def build_grep_tools(
     idx: IndexManager,
-    skill_state: "SkillAccessState | None" = None,
+    skill_state: Optional["SkillAccessState"] = None,
 ) -> tuple[list[dict], dict[str, Callable]]:
     """构建 grep 工具定义和处理器。
 

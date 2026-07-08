@@ -70,11 +70,8 @@ def test_contextvar_set_get_reset():
 def test_mark_loaded_if_known_marks_on_real_body():
     state = SkillAccessState()
     set_current_session_id("s1")
-    try:
-        mark_loaded_if_known(state, get_current_session_id(), "knowledge-base", "<skill>...</skill>")
-        assert state.is_loaded("s1", "knowledge-base")
-    finally:
-        reset_current_session_id(set_current_session_id(""))
+    mark_loaded_if_known(state, get_current_session_id(), "knowledge-base", "<skill>...</skill>")
+    assert state.is_loaded("s1", "knowledge-base")
 
 
 def test_mark_loaded_if_known_skips_error_body():

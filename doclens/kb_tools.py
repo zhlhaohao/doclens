@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 import asyncio
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from doclens.index_manager import IndexManager
+
+if TYPE_CHECKING:
+    from planify.skills.access_state import SkillAccessState
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +148,7 @@ MAX_READ_CHARS = 6000
 def build_kb_tools(
     idx_manager: IndexManager,
     workdir: Path,
-    skill_state: "SkillAccessState | None" = None,
+    skill_state: Optional["SkillAccessState"] = None,
 ) -> Tuple[List[Dict], Dict[str, Callable]]:
     """构建知识库工具定义和处理器。
 
