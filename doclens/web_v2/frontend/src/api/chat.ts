@@ -1,6 +1,6 @@
 import { streamSSE } from "./client";
 
-export async function* chatStream(req: { message: string; session_id?: string; history?: Array<{ role: string; content: string }> }) {
+export async function* chatStream(req: { message: string; session_id?: string }) {
   for await (const ev of streamSSE("/api/chat", req)) {
     if (ev.event === "token") {
       try {

@@ -35,6 +35,11 @@ export class InputBox extends LitElement {
       min-height: calc(var(--min-h) - 12px);
       line-height: 1.4;
     }
+    /* multiline 自动扩充：默认单行高度，换行后随内容增高，超出上限内部滚动 */
+    textarea {
+      max-height: 200px;
+      overflow-y: auto;
+    }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
       position: absolute;
@@ -144,6 +149,22 @@ export class InputBox extends LitElement {
     this.inputEl?.focus();
   }
 
+  updated(changedProps: Map<string, unknown>) {
+    super.updated?.(changedProps);
+    // value 外部更新（如提交后清空）或多行态切换时，重新计算高度
+    if (changedProps.has("value") || changedProps.has("multiline")) {
+      this._autoResize();
+    }
+  }
+
+  /** textarea 按内容自动扩充高度：单行起步，换行后增高，超上限内部滚动 */
+  private _autoResize() {
+    const ta = this.renderRoot.querySelector("textarea");
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }
+
   private get trimmed() {
     return this.value.trim();
   }
@@ -155,17 +176,15 @@ export class InputBox extends LitElement {
     // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件
     const btn = this.renderRoot.querySelector("button");
     if (btn) btn.disabled = !this.trimmed || this.disabled;
+    this._autoResize();
   }
 
   private _onKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      this._submit();
-    }
-    if (e.key === "Enter" && !this.multiline && !e.shiftKey) {
-      e.preventDefault();
-      this._submit();
-    }
+    if (e.key !== "Enter") return;
+    // multiline：Enter 发送、Shift+Enter 换行；非 multiline：Enter 始终发送
+    if (e.shiftKey && this.multiline) return;
+    e.preventDefault();
+    this._submit();
   }
 
   private _submit() {
