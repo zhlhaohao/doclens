@@ -191,6 +191,10 @@ class CortexAgent:
         bus = MessageBus(inbox_dir)
         skills = SkillLoader(skills_dir)
 
+        # 技能加载状态（按 session_id 记录），供工具门禁 + load_skill 标记 + 跨轮 body 重注入使用
+        from planify.skills.access_state import SkillAccessState
+        skill_state = SkillAccessState()
+
         # 基础工具
         basic_tools = make_basic_tools(self.workdir)
 
@@ -222,14 +226,14 @@ class CortexAgent:
         self.idx.load_or_build_index()
 
         from doclens.kb_tools import build_kb_tools
-        kb_tools, kb_handlers = build_kb_tools(self.idx, self.workdir)
+        kb_tools, kb_handlers = build_kb_tools(self.idx, self.workdir, skill_state=skill_state)
 
         from planify.tools.registry import register_external_tools
         register_external_tools(kb_tools, kb_handlers)
 
         # --- grep 工具注册 ---
         from doclens.grep_tools import build_grep_tools
-        grep_tools, grep_handlers = build_grep_tools(self.idx)
+        grep_tools, grep_handlers = build_grep_tools(self.idx, skill_state=skill_state)
         register_external_tools(grep_tools, grep_handlers)
 
         # 部署技能文件到 ~/.cortex/skills/（强制覆盖，确保使用最新版本）
@@ -251,6 +255,7 @@ class CortexAgent:
             bus=bus,
             team_mgr=team,
             skills_loader=skills,
+            skill_access_state=skill_state,
             run_subagent=run_subagent,
             model=config.get("model_id"),
             client=client,
@@ -281,6 +286,7 @@ class CortexAgent:
         session.tools = tools
         session.tool_handlers = tool_handlers
         session.logger = logger
+        session.skill_access_state = skill_state
 
         self.session = session
         return self
@@ -435,6 +441,10 @@ class CortexAgent:
         if cmd in ("clear",):
             history.clear()
             self.session.replace_messages_in_place([])
+            # 同步清空技能加载状态，避免状态记忆与已清空的对话上下文错位
+            skill_state = getattr(self.session, "skill_access_state", None)
+            if skill_state is not None:
+                skill_state.clear(self.session.session_id)
             return False, history
 
         return False, history
