@@ -4,7 +4,7 @@
 支持多用户多会话架构，使用 Session 上下文。
 """
 
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Tuple, Optional
 
 from .basic import make_basic_tools
 from .web import make_web_tools
@@ -40,7 +40,10 @@ def get_external_tools() -> Tuple[List[Dict], Dict[str, Any]]:
     return _external_tools, _external_handlers
 
 
-def _build_load_skill_handler(skills_loader, skill_access_state):
+def _build_load_skill_handler(
+    skills_loader: "SkillLoader | None",
+    skill_access_state: "SkillAccessState | None",
+) -> "Callable[[str], str]":
     """构建 load_skill handler：返回 body，成功时标记已加载。
 
     抽成独立函数便于单元测试（隔离重型 build_tool_registry）。
