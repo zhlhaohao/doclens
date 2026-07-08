@@ -119,9 +119,24 @@ class AnthropicProvider:
         if etype == "message_start":
             return StreamEvent(type="message_start")
         if etype == "content_block_start":
+            block = getattr(event, "content_block", None)
+            block_type = getattr(block, "type", None) if block else None
+            tool_use_id = (
+                getattr(block, "id", None)
+                if block and block_type == "tool_use"
+                else None
+            )
+            tool_name = (
+                getattr(block, "name", None)
+                if block and block_type == "tool_use"
+                else None
+            )
             return StreamEvent(
                 type="content_block_start",
                 block_index=getattr(event, "index", None),
+                block_type=block_type,
+                tool_use_id=tool_use_id,
+                tool_name=tool_name,
             )
         if etype == "content_block_delta":
             delta = getattr(event, "delta", None)

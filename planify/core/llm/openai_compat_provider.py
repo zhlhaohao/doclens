@@ -129,7 +129,11 @@ class OpenAICompatProvider:
 
             if getattr(delta, "content", None):
                 if not text_started:
-                    yield StreamEvent(type="content_block_start", block_index=0)
+                    yield StreamEvent(
+                        type="content_block_start",
+                        block_index=0,
+                        block_type="text",
+                    )
                     text_started = True
                 yield StreamEvent(
                     type="content_block_delta",
@@ -147,6 +151,9 @@ class OpenAICompatProvider:
                             yield StreamEvent(
                                 type="content_block_start",
                                 block_index=1,
+                                block_type="tool_use",
+                                tool_use_id=tc.id,
+                                tool_name=tc.function.name,  # type: ignore[union-attr]
                             )
                             tool_started = True
                     if tc.function and tc.function.arguments:

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Planify 核心模块导入
 from planify.core.session import Session, SessionConfig
-from planify.core.client import init_anthropic_client
+from planify.core.llm import create_provider
 from planify.streaming.runner import StreamingAgent
 from planify.streaming.emitter import CLIEventEmitter
 from planify.streaming.waiter import get_global_waiter
@@ -144,6 +144,8 @@ class CortexAgent:
 
         # 从环境变量构建配置
         config = {
+            "provider_name": os.getenv("PLANIFY_PROVIDER", "anthropic"),
+            "protocol": os.getenv("PLANIFY_PROTOCOL", ""),
             "model_id": os.getenv("PLANIFY_MODEL_ID", "claude-opus-4-6"),
             "base_url": os.getenv("PLANIFY_BASE_URL"),
             "api_key": os.getenv("PLANIFY_API_KEY"),
@@ -154,11 +156,8 @@ class CortexAgent:
             "idle_timeout": 60,
         }
 
-        # 初始化 Anthropic 客户端
-        client = init_anthropic_client(
-            config.get("base_url"),
-            config.get("api_key"),
-        )
+        # 初始化 LLM Provider（通过 factory.create_provider）
+        client = create_provider(config)
 
         # 目录
         team_dir = self.workdir / ".cortex/team"
@@ -289,11 +288,18 @@ class CortexAgent:
         """Hot-reload AI config: update session client + model."""
         if self.session is None:
             return
-        client = init_anthropic_client(
-            config.planify_base_url,
-            config.planify_api_key,
-        )
+        # 重建 provider 配置（CortexConfig 暂未暴露 provider/protocol 字段，
+        # 默认 anthropic 以保持向后兼容）
+        provider_config = {
+            "provider_name": getattr(config, "planify_provider", "anthropic"),
+            "protocol": getattr(config, "planify_protocol", ""),
+            "api_key": config.planify_api_key,
+            "model_id": config.planify_model_id,
+            "base_url": config.planify_base_url,
+        }
+        client = create_provider(provider_config)
         self.session.client = client
+        self.session.provider = client
         self.session.model = config.planify_model_id
 
     def run_query(

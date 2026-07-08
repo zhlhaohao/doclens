@@ -1083,7 +1083,7 @@ def _cli_read_document(args, config, idx):
 
 
 def _cli_web(args, config, idx):
-    """Handle `cortex web <query>` — web search via Anthropic server-side search."""
+    """Handle `cortex web <query>` — web search via LLM Provider."""
     query = " ".join(args.query)
 
     allowed = None
@@ -1091,17 +1091,25 @@ def _cli_web(args, config, idx):
         allowed = [d.strip() for d in args.allowed_domains.split(",") if d.strip()]
 
     from planify.tools.web import run_web_search
-    from planify.core.client import init_anthropic_client
+    from planify.core.llm import create_provider
 
     api_key = config.planify_api_key
     base_url = config.planify_base_url
     model_id = config.planify_model_id
+    provider_name = getattr(config, "planify_provider", "anthropic")
+    protocol = getattr(config, "planify_protocol", "")
 
     if not api_key:
         print("错误: 未配置 PLANIFY_API_KEY。请在 .env 中设置。")
         return
 
-    client = init_anthropic_client(base_url, api_key)
+    client = create_provider({
+        "provider_name": provider_name,
+        "protocol": protocol,
+        "api_key": api_key,
+        "model_id": model_id,
+        "base_url": base_url,
+    })
     result = run_web_search(
         query, client, model_id,
         allowed_domains=allowed,
