@@ -431,7 +431,7 @@ export class SettingsView extends LitElement {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
-      this._userEditedBaseUrl = this._isBaseUrlCustomized(resp.values);
+      this._userEditedBaseUrl = false;
       this._exists = resp.exists;
       this._fieldErrors = {};
       actions.loadSettings(resp.values, resp.exists);
@@ -452,12 +452,6 @@ export class SettingsView extends LitElement {
 
   private get _dirty(): boolean {
     return this._dirtyFields.length > 0;
-  }
-
-  private _isBaseUrlCustomized(values: Record<string, string>): boolean {
-    const provider = values["PLANIFY_PROVIDER"] ?? "";
-    const baseUrl = values["PLANIFY_BASE_URL"] ?? "";
-    return baseUrl !== (PRESET_BASE_URLS[provider] ?? "");
   }
 
   private _updateValues(updates: Record<string, string>) {
@@ -533,7 +527,7 @@ export class SettingsView extends LitElement {
 
   private _revert() {
     this._values = { ...this._original };
-    this._userEditedBaseUrl = this._isBaseUrlCustomized(this._original);
+    this._userEditedBaseUrl = false;
     actions.revertSettings();
   }
 
@@ -546,7 +540,7 @@ export class SettingsView extends LitElement {
       const result = await putConfig(this._scope, this._values);
       if (!this.isConnected) return;
       this._original = { ...this._values };
-      this._userEditedBaseUrl = this._isBaseUrlCustomized(this._values);
+      this._userEditedBaseUrl = false;
       actions.loadSettings(this._values, true);
       const msg = result.needs_restart
         ? "已保存。重启 doclens gui 后 AI 配置生效。"
