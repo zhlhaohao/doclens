@@ -54,6 +54,18 @@ class LLMResponse:
 
 @dataclass(frozen=True)
 class StreamEvent:
-    """归一化流式事件（后续 task 完善字段）。"""
+    """归一化流式事件。"""
 
-    type: str
+    type: Literal[
+        "message_start",
+        "content_block_start",
+        "content_block_delta",
+        "content_block_stop",
+        "message_delta",
+        "message_stop",
+    ]
+    # 可选字段
+    text_delta: str | None = None
+    input_json_delta: str | None = None
+    stop_reason: str | None = None
+    block_index: int | None = None
