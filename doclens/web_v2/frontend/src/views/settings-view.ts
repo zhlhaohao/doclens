@@ -28,29 +28,53 @@ export class SettingsView extends LitElement {
       background: var(--cortex-bg);
       font-family: var(--cortex-font);
     }
+    /* ===== 桌面端 F1 布局：左 sidebar（scope+垂直 tab）+ 右 main（panel/footer 居中对齐）===== */
+    .layout {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      min-height: 0;
+    }
+    .sidebar {
+      width: 180px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-4);
+      padding: var(--cortex-space-6) var(--cortex-space-3);
+      background: var(--cortex-surface);
+      border-right: 1px solid var(--cortex-border);
+      overflow-y: auto;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
     .tab-strip {
       display: flex;
-      background: var(--cortex-surface);
-      border-bottom: 1px solid var(--cortex-border);
-      padding: 0 var(--cortex-space-8);
-      overflow-x: auto;
-      flex-shrink: 0;
+      flex-direction: column;
+      gap: var(--cortex-space-1);
     }
     .tab-strip button {
       background: transparent;
       border: none;
-      border-bottom: 2px solid transparent;
-      padding: var(--cortex-space-3) var(--cortex-space-4);
+      border-left: 3px solid transparent;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       font-size: var(--cortex-fs-base);
       color: var(--cortex-text-muted);
       cursor: pointer;
       font-family: inherit;
-      white-space: nowrap;
+      text-align: left;
+      border-radius: var(--cortex-radius-sm);
     }
-    .tab-strip button:hover { color: var(--cortex-text); }
+    .tab-strip button:hover { color: var(--cortex-text); background: var(--cortex-surface-muted); }
     .tab-strip button.active {
       color: var(--cortex-primary);
-      border-bottom-color: var(--cortex-primary);
+      border-left-color: var(--cortex-primary);
+      background: var(--cortex-primary-soft);
       font-weight: 500;
     }
     .scroll-area {
@@ -164,6 +188,11 @@ export class SettingsView extends LitElement {
       align-items: center;
       justify-content: space-between;
       box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+      /* F1：footer 与 panel 对齐（max-width 880 居中），不再通栏 */
+      max-width: 880px;
+      width: 100%;
+      margin: 0 auto;
+      box-sizing: border-box;
     }
     .dirty-status {
       font-size: var(--cortex-fs-sm);
@@ -198,19 +227,51 @@ export class SettingsView extends LitElement {
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .copy-banner {
-      background: var(--cortex-primary-soft);
-      border-bottom: 1px solid var(--cortex-border);
-      padding: var(--cortex-space-3) var(--cortex-space-8);
-      display: flex;
-      align-items: center;
-      gap: var(--cortex-space-3);
-      font-size: var(--cortex-fs-sm);
-    }
+    /* 桌面端：隐藏 copy-banner（scope 已在 sidebar 显示，信息冗余）；移动端 @media 复位显示 */
+    .copy-banner { display: none; }
     .copy-banner .grow { flex: 1; }
 
     /* ===== 移动端 (<1024px) ===== */
     @media (max-width: 1023px) {
+      /* F1 移动端单列回退：scope+tab 回到顶部水平条，整体滚动，footer 隐藏，banner 显示 */
+      :host { overflow-y: auto; }
+      .layout { flex-direction: column; flex: 1; min-height: 0; overflow: visible; }
+      .sidebar {
+        width: 100%;
+        flex-direction: column;
+        gap: var(--cortex-space-2);
+        padding: var(--cortex-space-3) var(--cortex-space-4);
+        border-right: none;
+        border-bottom: 1px solid var(--cortex-border);
+        overflow: visible;
+        flex-shrink: 0;
+      }
+      .main { overflow: visible; min-height: 0; }
+      .scroll-area { overflow: visible; }
+      .tab-strip { flex-direction: row; overflow-x: auto; }
+      .tab-strip button {
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        text-align: center;
+        white-space: nowrap;
+        border-radius: 0;
+      }
+      .tab-strip button:hover { background: transparent; }
+      .tab-strip button.active {
+        border-left-color: transparent;
+        border-bottom-color: var(--cortex-primary);
+        background: transparent;
+      }
+      .copy-banner {
+        display: flex;
+        background: var(--cortex-primary-soft);
+        border-bottom: 1px solid var(--cortex-border);
+        padding: var(--cortex-space-3) var(--cortex-space-4);
+        align-items: center;
+        gap: var(--cortex-space-3);
+        font-size: var(--cortex-fs-sm);
+      }
+
       .field {
         grid-template-columns: 1fr;
         gap: var(--cortex-space-3);
@@ -621,59 +682,64 @@ export class SettingsView extends LitElement {
         <span>正在编辑全局配置。</span>
         <span class="grow"></span>
       </div>
-      <div class="scroll-area">
-        <settings-scope-segment
-          .scope=${this._scope}
-          .exists=${this._exists}
-          @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
-            actions.setSettingsScope(e.detail.scope);
-          }}
-        ></settings-scope-segment>
-        <nav class="tab-strip" role="tablist">
-          ${TAB_ORDER.map((tab) => html`
-            <button
-              class=${this._activeTab === tab ? "active" : ""}
-              @click=${() => { this._activeTab = tab; }}
-            >${SETTINGS_TAB_LABELS[tab]}</button>
-          `)}
-        </nav>
-
-        ${TAB_ORDER.map((tab) => {
-          const fields = SETTINGS_FIELDS.filter((f) => f.tab === tab);
-          const sections: { title: string; desc?: string; fields: SettingsField[] }[] = [];
-          for (const f of fields) {
-            let s = sections.find((x) => x.title === f.section);
-            if (!s) { s = { title: f.section, fields: [] }; sections.push(s); }
-            s.fields.push(f);
-          }
-          return html`
-            <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
-              ${this._renderInfoBox(tab)}
-              ${sections.map((s) => html`
-                <div class="section">
-                  <h2>${s.title}</h2>
-                  ${s.fields.map((f) => this._renderField(f))}
+      <div class="layout">
+        <aside class="sidebar">
+          <settings-scope-segment
+            .scope=${this._scope}
+            .exists=${this._exists}
+            @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
+              actions.setSettingsScope(e.detail.scope);
+            }}
+          ></settings-scope-segment>
+          <nav class="tab-strip" role="tablist">
+            ${TAB_ORDER.map((tab) => html`
+              <button
+                class=${this._activeTab === tab ? "active" : ""}
+                @click=${() => { this._activeTab = tab; }}
+              >${SETTINGS_TAB_LABELS[tab]}</button>
+            `)}
+          </nav>
+        </aside>
+        <main class="main">
+          <div class="scroll-area">
+            ${TAB_ORDER.map((tab) => {
+              const fields = SETTINGS_FIELDS.filter((f) => f.tab === tab);
+              const sections: { title: string; desc?: string; fields: SettingsField[] }[] = [];
+              for (const f of fields) {
+                let s = sections.find((x) => x.title === f.section);
+                if (!s) { s = { title: f.section, fields: [] }; sections.push(s); }
+                s.fields.push(f);
+              }
+              return html`
+                <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
+                  ${this._renderInfoBox(tab)}
+                  ${sections.map((s) => html`
+                    <div class="section">
+                      <h2>${s.title}</h2>
+                      ${s.fields.map((f) => this._renderField(f))}
+                    </div>
+                  `)}
                 </div>
-              `)}
+              `;
+            })}
+          </div>
+          <div class="footer-bar">
+            <div class="dirty-status">
+              ${this._dirty
+                ? html`<span class="dirty-dot"></span><span>有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
+                : html`<span style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
+              }
+              ${this._error ? html`<span style="color: var(--cortex-danger); margin-left: var(--cortex-space-2);">${this._error}</span>` : nothing}
+              ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
             </div>
-          `;
-        })}
-      </div>
-      <div class="footer-bar">
-        <div class="dirty-status">
-          ${this._dirty
-            ? html`<span class="dirty-dot"></span><span>有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
-            : html`<span style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
-          }
-          ${this._error ? html`<span style="color: var(--cortex-danger); margin-left: var(--cortex-space-2);">${this._error}</span>` : nothing}
-          ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
-        </div>
-        <div style="display: flex; gap: var(--cortex-space-2);">
-          <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
-          <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
-            ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}
-          </button>
-        </div>
+            <div style="display: flex; gap: var(--cortex-space-2);">
+              <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
+              <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
+                ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
       <toast-stack></toast-stack>
     `;

@@ -104,18 +104,29 @@ describe("<settings-view>", () => {
     expect(putConfig).toHaveBeenCalled();
   });
 
-  it("scope-segment and tab-strip live inside .scroll-area (template structure)", () => {
-    const scrollArea = el.shadowRoot?.querySelector(".scroll-area");
-    expect(scrollArea, ".scroll-area must exist").toBeTruthy();
-    const scopeInScroll = scrollArea?.querySelector("settings-scope-segment");
-    const tabsInScroll = scrollArea?.querySelector(".tab-strip");
+  it("scope-segment and tab-strip live inside .sidebar (F1 desktop layout structure)", () => {
+    const sidebar = el.shadowRoot?.querySelector(".sidebar");
+    expect(sidebar, ".sidebar must exist").toBeTruthy();
     expect(
-      scopeInScroll,
-      "settings-scope-segment must be inside .scroll-area so position:sticky works"
+      sidebar?.querySelector("settings-scope-segment"),
+      "settings-scope-segment must be inside .sidebar"
     ).toBeTruthy();
     expect(
-      tabsInScroll,
-      ".tab-strip must be inside .scroll-area so it scrolls with the content"
+      sidebar?.querySelector(".tab-strip"),
+      ".tab-strip must be inside .sidebar (vertical tab list on desktop)"
     ).toBeTruthy();
+  });
+
+  it(".layout wraps .sidebar and .main; .footer-bar lives in .main", () => {
+    const layout = el.shadowRoot?.querySelector(".layout");
+    expect(layout, ".layout must exist").toBeTruthy();
+    expect(layout?.querySelector(".sidebar")).toBeTruthy();
+    const main = layout?.querySelector(".main");
+    expect(main, ".main must exist").toBeTruthy();
+    expect(
+      main?.querySelector(".footer-bar"),
+      ".footer-bar must be inside .main so it aligns with panel, not full-width"
+    ).toBeTruthy();
+    expect(main?.querySelector(".scroll-area .tab-panel")).toBeTruthy();
   });
 });
