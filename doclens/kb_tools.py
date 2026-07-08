@@ -145,17 +145,18 @@ MAX_READ_CHARS = 6000
 def build_kb_tools(
     idx_manager: IndexManager,
     workdir: Path,
+    skill_state: "SkillAccessState | None" = None,
 ) -> Tuple[List[Dict], Dict[str, Callable]]:
     """构建知识库工具定义和处理器。
 
     Args:
         idx_manager: 已初始化的 IndexManager 实例
         workdir: 工作目录（知识库搜索路径）
+        skill_state: 可选，技能加载状态；传入则 search_kb/read_document/manage_kb
+            被门禁包裹（未加载 knowledge-base 技能时弹回）。
 
     Returns:
         (tools, handlers) 元组
-        - tools: Anthropic tool use 格式的工具定义列表
-        - handlers: 工具名 -> 处理函数的映射
     """
     # 动态生成 search_kb schema，使用配置中的 max_results
     search_kb_schema = {
@@ -178,12 +179,21 @@ def build_kb_tools(
         },
     }
 
-    handlers = {
+    raw_handlers = {
         "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
-        # "search_kb_v2": lambda **kw: _handle_search_kb_v2(idx_manager, workdir, **kw),
         "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
         "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
     }
+
+    if skill_state is not None:
+        from doclens.skill_gate import KB_SKILL, gate_skill
+        handlers = {
+            name: gate_skill(skill_state, KB_SKILL, name, h)
+            for name, h in raw_handlers.items()
+        }
+    else:
+        handlers = raw_handlers
+
     return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
 
 

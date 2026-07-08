@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from doclens.index_manager import IndexManager
+    from planify.skills.access_state import SkillAccessState
 
 logger = logging.getLogger(__name__)
 
@@ -48,19 +49,24 @@ GREP_TOOL = {
 
 def build_grep_tools(
     idx: IndexManager,
+    skill_state: "SkillAccessState | None" = None,
 ) -> tuple[list[dict], dict[str, Callable]]:
     """构建 grep 工具定义和处理器。
 
     Args:
         idx: IndexManager 实例
+        skill_state: 可选，技能加载状态；传入则 grep 被门禁包裹。
 
     Returns:
         (tools, handlers) 元组
     """
-    handlers = {
-        "grep": lambda **kw: _handle_grep(idx, **kw),
-    }
-    return [GREP_TOOL], handlers
+    raw_handler: Callable = lambda **kw: _handle_grep(idx, **kw)
+    if skill_state is not None:
+        from doclens.skill_gate import KB_SKILL, gate_skill
+        handler = gate_skill(skill_state, KB_SKILL, "grep", raw_handler)
+    else:
+        handler = raw_handler
+    return [GREP_TOOL], {"grep": handler}
 
 
 # ---------------------------------------------------------------------------
