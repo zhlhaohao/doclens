@@ -35,3 +35,21 @@ def test_validate_collects_multiple_errors():
 def test_validate_rejects_unknown_key():
     errors = validate_values({"SOMETHING_UNEXPECTED": "x"})
     assert any("SOMETHING_UNEXPECTED" in f.field for f in errors.fields)
+
+
+def test_validate_skips_empty_string_for_optional_number_field():
+    """空字符串 = 删除/未设置（write_env_values 的 unset_key 语义），
+    不应被当作无效 number 校验失败。
+
+    回归：global .env 里未填的可选 weight 字段（FILE_NAME_MATCH 等）会被
+    getConfig 返回为 ""，保存时全部发送，validator 把 "" 解析为 number
+    失败 → 全局配置保存报「4 个字段校验失败」。
+    """
+    errors = validate_values({
+        "CORTEX_WEIGHT_FILE_NAME_MATCH": "",
+        "CORTEX_WEIGHT_FTS_SCORE": "",
+        "CORTEX_WEIGHT_TITLE_MATCH": "",
+        "CORTEX_WEIGHT_PROXIMITY_MATCH": "",
+        "CORTEX_WEIGHT_KEYWORD_MATCH": "0.5",  # 有值，正常校验
+    })
+    assert errors.fields == []

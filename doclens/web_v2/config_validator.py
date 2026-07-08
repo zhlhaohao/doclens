@@ -64,7 +64,10 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
         for key in KNOWN_KEYS:
             os.environ.pop(key, None)
         for key, value in values.items():
-            if key in KNOWN_KEYS:
+            # 空字符串 = 删除/未设置（write_env_values 的 unset_key 语义），
+            # 不参与校验：让 CortexConfig 用字段默认值，避免未填的可选数值
+            # 字段被当作 "" 解析为 number 失败。
+            if key in KNOWN_KEYS and value != "":
                 os.environ[key] = value
         try:
             CortexConfig(_env_file=None)
