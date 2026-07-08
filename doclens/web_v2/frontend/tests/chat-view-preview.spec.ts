@@ -118,4 +118,12 @@ describe("<chat-view> reference preview", () => {
     await el.updateComplete;
     expect((el as any).previewOpen).toBe(false);
   });
+
+  it("_onPreviewSaved resets previewDirty=false (blocks spurious discard confirm)", async () => {
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    (el as any).previewDirty = true;
+    (el as any)._onPreviewSaved();
+    expect((el as any).previewDirty).toBe(false);
+  });
 });
