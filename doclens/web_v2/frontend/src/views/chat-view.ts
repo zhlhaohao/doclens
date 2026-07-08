@@ -53,6 +53,38 @@ export function finalizeInterruptedMessages(messages: ChatMessage[]): ChatMessag
   });
 }
 
+/** 把后端 session_items 映射为 ChatMessage[]；tool_calls → tool_steps，老数据向后兼容。 */
+export function mapSessionItemsToMessages(
+  items: Array<{ kind: string; payload: string }>,
+): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  for (const it of items) {
+    let payload: any;
+    try {
+      payload = JSON.parse(it.payload);
+    } catch {
+      continue;
+    }
+    if (it.kind === "message_user") {
+      messages.push({ role: "user", content: payload.content ?? "" });
+    } else if (it.kind === "message_ai") {
+      const tool_steps: ToolStep[] = (payload.tool_calls ?? []).map((tc: any) => ({
+        tool_use_id: tc.tool_use_id ?? "",
+        name: tc.name ?? "",
+        input: tc.input ?? {},
+        output: tc.output,
+        is_error: tc.is_error,
+        duration_ms: tc.duration_ms,
+        status: tc.is_error ? ("error" as const) : ("done" as const),
+      }));
+      const msg: ChatMessage = { role: "assistant", content: payload.content ?? "" };
+      if (tool_steps.length) msg.tool_steps = tool_steps;
+      messages.push(msg);
+    }
+  }
+  return messages;
+}
+
 @customElement("chat-view")
 export class ChatView extends LitElement {
   static styles = css`
@@ -221,19 +253,12 @@ export class ChatView extends LitElement {
   }
 
   private async _loadSession(s: Session) {
-    actions.setChatState({
-      state: "focus",
-      currentSession: s,
-      messages: [],
-    });
+    actions.setChatState({ state: "focus", currentSession: s, messages: [] });
     try {
       const res = await fetch(`/api/sessions/${s.id}`);
       if (res.ok) {
         const body = await res.json();
-        const messages = (body.items || []).map((i: any) => {
-          const payload = JSON.parse(i.payload);
-          return { role: i.kind === "message_user" ? "user" : "assistant", content: payload.content };
-        });
+        const messages = mapSessionItemsToMessages(body.items || []);
         actions.setChatState({ messages });
       }
     } catch (e) {
