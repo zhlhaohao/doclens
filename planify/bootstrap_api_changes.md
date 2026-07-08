@@ -84,7 +84,7 @@ session = get_or_create_session(
     user_id="alice",
     user_config={
         "model_id": "claude-opus-4-6",
-        "anthropic_api_key": "your-api-key"
+        "api_key": "your-api-key"
     }
 )
 

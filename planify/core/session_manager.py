@@ -150,7 +150,7 @@ class SessionManager:
 
         Args:
             user_id: 用户 ID
-            user_config: 用户配置字典，包含 model_id, anthropic_api_key 等
+            user_config: 用户配置字典，包含 model_id, api_key 等
             **overrides: 覆盖配置的额外参数
 
         Returns:
@@ -167,8 +167,8 @@ class SessionManager:
                     config_dict = {
                         "workdir": self.base_workdir,
                         "model_id": overrides.get("model_id", user_config.get("model_id", session.config.model_id)),
-                        "anthropic_api_key": overrides.get("anthropic_api_key", user_config.get("anthropic_api_key", session.config.anthropic_api_key)),
-                        "anthropic_base_url": overrides.get("anthropic_base_url", user_config.get("anthropic_base_url", session.config.anthropic_base_url)),
+                        "api_key": overrides.get("api_key", user_config.get("api_key", session.config.api_key)),
+                        "base_url": overrides.get("base_url", user_config.get("base_url", session.config.base_url)),
                         "token_threshold": overrides.get("token_threshold", user_config.get("token_threshold", session.config.token_threshold)),
                         "poll_interval": overrides.get("poll_interval", user_config.get("poll_interval", session.config.poll_interval)),
                         "idle_timeout": overrides.get("idle_timeout", user_config.get("idle_timeout", session.config.idle_timeout)),
@@ -184,8 +184,8 @@ class SessionManager:
             config = SessionConfig(
                 workdir=self.base_workdir,
                 model_id=overrides.get("model_id", user_config.get("model_id")),
-                anthropic_api_key=overrides.get("anthropic_api_key", user_config.get("anthropic_api_key")),
-                anthropic_base_url=overrides.get("anthropic_base_url", user_config.get("anthropic_base_url")),
+                api_key=overrides.get("api_key", user_config.get("api_key")),
+                base_url=overrides.get("base_url", user_config.get("base_url")),
                 token_threshold=overrides.get("token_threshold", user_config.get("token_threshold", 100000)),
                 poll_interval=overrides.get("poll_interval", user_config.get("poll_interval", 5)),
                 idle_timeout=overrides.get("idle_timeout", user_config.get("idle_timeout", 60)),

@@ -12,8 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anthropic import Anthropic
-
 
 @dataclass
 class SessionConfig:
@@ -26,8 +24,10 @@ class SessionConfig:
 
     workdir: Path
     model_id: str
-    anthropic_api_key: str
-    anthropic_base_url: Optional[str] = None
+    api_key: str
+    base_url: Optional[str] = None
+    provider_name: str = "anthropic"
+    protocol: str = "anthropic"
     token_threshold: int = 100000
     poll_interval: int = 5
     idle_timeout: int = 60
@@ -88,7 +88,8 @@ class Session:
     config: SessionConfig = None  # 必须提供
 
     # 核心组件
-    client: Optional[Anthropic] = None
+    client: Optional[Any] = None  # 实际类型为 LLMProvider
+    provider: Optional[Any] = None  # 新增显式字段
     todo_mgr: Optional[Any] = None
     task_mgr: Optional[Any] = None
     bg_mgr: Optional[Any] = None
@@ -150,6 +151,11 @@ class Session:
         """
         with self._messages_lock:
             self._messages[:] = messages
+
+    @property
+    def llm_provider(self) -> Any:
+        """统一访问 LLMProvider，优先用 provider，回退到 client。"""
+        return self.provider or self.client
 
     @property
     def model(self) -> str:

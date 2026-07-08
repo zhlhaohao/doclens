@@ -118,8 +118,8 @@ class REPLCommands:
             app_config = get_config()
             user_config = {
                 "model_id": app_config.get("model_id"),
-                "anthropic_api_key": app_config.get("anthropic_api_key"),
-                "anthropic_base_url": app_config.get("anthropic_base_url"),
+                "api_key": app_config.get("api_key"),
+                "base_url": app_config.get("base_url"),
                 "token_threshold": app_config.get("token_threshold", 100000),
                 "poll_interval": app_config.get("poll_interval", 5),
                 "idle_timeout": app_config.get("idle_timeout", 60),

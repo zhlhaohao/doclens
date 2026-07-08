@@ -145,8 +145,8 @@ class CortexAgent:
         # 从环境变量构建配置
         config = {
             "model_id": os.getenv("PLANIFY_MODEL_ID", "claude-opus-4-6"),
-            "anthropic_base_url": os.getenv("PLANIFY_BASE_URL"),
-            "anthropic_api_key": os.getenv("PLANIFY_API_KEY"),
+            "base_url": os.getenv("PLANIFY_BASE_URL"),
+            "api_key": os.getenv("PLANIFY_API_KEY"),
             "zhipu_api_key": os.getenv("ZHIPUAI_API_KEY"),
             "zhipu_model_id": os.getenv("ZHIPUAI_MODEL_ID", "glm-4"),
             "token_threshold": 100000,
@@ -156,8 +156,8 @@ class CortexAgent:
 
         # 初始化 Anthropic 客户端
         client = init_anthropic_client(
-            config.get("anthropic_base_url"),
-            config.get("anthropic_api_key")
+            config.get("base_url"),
+            config.get("api_key"),
         )
 
         # 目录
@@ -262,8 +262,8 @@ class CortexAgent:
         session_config = SessionConfig(
             workdir=self.workdir,
             model_id=config.get("model_id", "claude-opus-4-6"),
-            anthropic_api_key=config.get("anthropic_api_key"),
-            anthropic_base_url=config.get("anthropic_base_url"),
+            api_key=config.get("api_key"),
+            base_url=config.get("base_url"),
             token_threshold=config.get("token_threshold", 100000),
             poll_interval=config.get("poll_interval", 5),
             idle_timeout=config.get("idle_timeout", 60),

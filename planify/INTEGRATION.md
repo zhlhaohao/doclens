@@ -194,8 +194,8 @@ async def build_planify_session(client, model_id: str, user_id: int, phone: str)
     session_config = SessionConfig(
         workdir=workdir,
         model_id=model_id,
-        anthropic_api_key=settings.PLANIFY_API_KEY,
-        anthropic_base_url=settings.PLANIFY_BASE_URL,
+        api_key=settings.PLANIFY_API_KEY,
+        base_url=settings.PLANIFY_BASE_URL,
         token_threshold=settings.PLANIFY_TOKEN_THRESHOLD,
     )
 

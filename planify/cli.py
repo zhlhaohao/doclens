@@ -300,7 +300,7 @@ def setup_single_user_session():
     from planify.core import init_anthropic_client
 
     client = init_anthropic_client(
-        config.get("anthropic_base_url"), config.get("anthropic_api_key")
+        config.get("base_url"), config.get("api_key")
     )
 
     # 初始化管理器
@@ -349,8 +349,8 @@ def setup_single_user_session():
     session_config = SessionConfig(
         workdir=workdir,
         model_id=config.get("model_id"),
-        anthropic_api_key=config.get("anthropic_api_key"),
-        anthropic_base_url=config.get("anthropic_base_url"),
+        api_key=config.get("api_key"),
+        base_url=config.get("base_url"),
         token_threshold=config.get("token_threshold", 100000),
         poll_interval=config.get("poll_interval", 5),
         idle_timeout=config.get("idle_timeout", 60),
