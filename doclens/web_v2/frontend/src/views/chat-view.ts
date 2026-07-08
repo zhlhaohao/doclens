@@ -2,9 +2,56 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
-import type { Session } from "../state/types";
+import type { Session, ChatMessage, ToolStep } from "../state/types";
 import { chatStream } from "../api/chat";
+import type { ChatStreamEvent } from "../api/chat";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
+
+/** 将一个流式事件不可变地应用到 messages，返回新数组；非 assistant 末条则原样返回。 */
+export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): ChatMessage[] {
+  if (messages.length === 0) return messages;
+  const last = messages[messages.length - 1];
+  if (last.role !== "assistant") return messages;
+  const head = messages.slice(0, -1);
+
+  if (ev.type === "token") {
+    return [...head, { ...last, content: last.content + ev.text }];
+  }
+  if (ev.type === "tool_call") {
+    const step: ToolStep = { tool_use_id: ev.tool_use_id, name: ev.name, input: ev.input, status: "running" };
+    return [...head, { ...last, tool_steps: [...(last.tool_steps ?? []), step] }];
+  }
+  if (ev.type === "tool_result") {
+    const tool_steps = (last.tool_steps ?? []).map((s) =>
+      s.tool_use_id === ev.tool_use_id
+        ? { ...s, output: ev.output, is_error: ev.is_error, duration_ms: ev.duration_ms,
+            status: (ev.is_error ? "error" : "done") as ToolStep["status"] }
+        : s
+    );
+    return [...head, { ...last, tool_steps }];
+  }
+  return messages;
+}
+
+/** 流式中断（连接断开 / 异常）时调用：把残留 running 步骤标记为 error（output「（已中断）」）。
+ *  无 running 步骤则原样返回同一引用。 */
+export function finalizeInterruptedMessages(messages: ChatMessage[]): ChatMessage[] {
+  const hasRunning = messages.some(
+    (m) => m.role === "assistant" && (m.tool_steps ?? []).some((s) => s.status === "running"),
+  );
+  if (!hasRunning) return messages;
+  return messages.map((m) => {
+    if (m.role !== "assistant" || !m.tool_steps) return m;
+    return {
+      ...m,
+      tool_steps: m.tool_steps.map((s) =>
+        s.status === "running"
+          ? { ...s, status: "error" as const, is_error: true, output: s.output ?? "（已中断）" }
+          : s,
+      ),
+    };
+  });
+}
 
 @customElement("chat-view")
 export class ChatView extends LitElement {
@@ -132,33 +179,36 @@ export class ChatView extends LitElement {
 
     const sessionId = store.getState().chat.currentSession!.id;
 
-    // 添加 assistant 占位
-    actions.setChatState({
-      messages: [...store.getState().chat.messages, { role: "assistant", content: "" }],
-    });
+    // assistant 占位 + 起始 messages（不可变）
+    const placeholder: ChatMessage = { role: "assistant", content: "" };
+    let messages = [...store.getState().chat.messages, placeholder];
+    actions.setChatState({ messages });
 
     try {
-      let aiText = "";
       for await (const ev of chatStream({ message, session_id: sessionId })) {
-        if (ev.type === "token") {
-          aiText += ev.text;
-          const msgs = [...store.getState().chat.messages];
-          msgs[msgs.length - 1] = { role: "assistant", content: aiText };
-          actions.setChatState({ messages: msgs });
-        } else if (ev.type === "error") {
-          const msgs = [...store.getState().chat.messages];
-          msgs[msgs.length - 1] = { role: "assistant", content: aiText + `\n\n⚠️ ${ev.detail}` };
-          actions.setChatState({ messages: msgs });
+        if (ev.type === "error") {
+          messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
+          actions.setChatState({ messages });
+        } else if (ev.type !== "done") {
+          messages = applyStreamEvent(messages, ev);
+          actions.setChatState({ messages });
         }
       }
 
-      // 持久化
-      await appendSession(sessionId, [
-        { kind: "message_user", payload: JSON.stringify({ content: message }) },
-        { kind: "message_ai", payload: JSON.stringify({ content: aiText }) },
-      ], store.getState().chat.messages.length);
+      const aiMsg = messages[messages.length - 1];
+      await appendSession(
+        sessionId,
+        [
+          { kind: "message_user", payload: JSON.stringify({ content: message }) },
+          { kind: "message_ai", payload: JSON.stringify({ content: aiMsg.content, tool_calls: aiMsg.tool_steps ?? [] }) },
+        ],
+        messages.length,
+      );
       this._loadHistory();
     } catch (err) {
+      // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断
+      messages = finalizeInterruptedMessages(messages);
+      actions.setChatState({ messages });
       actions.setError(`对话失败: ${(err as Error).message}`);
     } finally {
       actions.setChatState({ streaming: false });
