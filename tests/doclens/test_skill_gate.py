@@ -59,3 +59,40 @@ def get_sid() -> str:
 def test_bounce_msg_contains_load_skill_instruction():
     msg = BOUNCE_MSG.format(tool="grep", skill=KB_SKILL)
     assert 'load_skill(name="knowledge-base")' in msg
+
+
+def test_skip_bounce_load_retry_full_flow():
+    """模拟 LLM 跳过 load_skill 直接调 search_kb → 弹回 → load_skill → 重试放行。"""
+    from planify.skills.access_state import (
+        SkillAccessState,
+        get_current_session_id,
+        mark_loaded_if_known,
+        reset_current_session_id,
+        set_current_session_id,
+    )
+
+    state = SkillAccessState()
+    set_current_session_id("s1")
+    try:
+        called = []
+        gated = gate_skill(
+            state, KB_SKILL, "search_kb", lambda **kw: called.append(kw) or "RESULTS"
+        )
+
+        # 1) 跳过 load_skill 直接调 → 弹回，真实 handler 不执行
+        out1 = gated(query="量子计算")
+        assert "<skill_required>" in out1
+        assert called == []
+
+        # 2) 模拟 LLM 收到弹回后调 load_skill 成功 → 标记
+        mark_loaded_if_known(
+            state, get_current_session_id(), KB_SKILL, "<skill>knowledge-base body</skill>"
+        )
+        assert state.is_loaded("s1", KB_SKILL)
+
+        # 3) 重新调 search_kb → 放行，执行真实 handler
+        out2 = gated(query="量子计算")
+        assert out2 == "RESULTS"
+        assert called == [{"query": "量子计算"}]
+    finally:
+        reset_current_session_id(set_current_session_id(""))
