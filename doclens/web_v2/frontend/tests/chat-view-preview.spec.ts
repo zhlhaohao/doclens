@@ -126,4 +126,35 @@ describe("<chat-view> reference preview", () => {
     (el as any)._onPreviewSaved();
     expect((el as any).previewDirty).toBe(false);
   });
+
+  it("splitter drag RIGHT narrows the (right-side) preview pane", async () => {
+    mockPreviewOk();
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    await (el as any)._onReferenceClick({ detail: { path: "docs/a.md" } } as any);
+    await new Promise((r) => setTimeout(r, 20));
+    await el.updateComplete;
+    const splitter = el.shadowRoot!.querySelector(".focus-main .splitter") as HTMLElement;
+    expect(splitter).toBeTruthy();
+    const widthBefore = (el as any)._previewPaneWidth as number;
+    splitter.dispatchEvent(new MouseEvent("mousedown", { clientX: 100, bubbles: true }));
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 200 })); // 右拖 +100
+    await el.updateComplete;
+    expect((el as any)._previewPaneWidth).toBe(widthBefore - 100);
+  });
+
+  it("splitter drag LEFT widens the (right-side) preview pane", async () => {
+    mockPreviewOk();
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    await (el as any)._onReferenceClick({ detail: { path: "docs/a.md" } } as any);
+    await new Promise((r) => setTimeout(r, 20));
+    await el.updateComplete;
+    const splitter = el.shadowRoot!.querySelector(".focus-main .splitter") as HTMLElement;
+    const widthBefore = (el as any)._previewPaneWidth as number;
+    splitter.dispatchEvent(new MouseEvent("mousedown", { clientX: 200, bubbles: true }));
+    document.dispatchEvent(new MouseEvent("mousemove", { clientX: 120 })); // 左拖 -80
+    await el.updateComplete;
+    expect((el as any)._previewPaneWidth).toBe(widthBefore + 80);
+  });
 });
