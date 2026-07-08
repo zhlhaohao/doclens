@@ -86,6 +86,14 @@ export class ChatMessageEl extends LitElement {
       background: var(--cortex-surface);
       font-weight: 600;
     }
+    .md-body .ref-link {
+      color: var(--cortex-primary);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .md-body .ref-link:hover {
+      opacity: 0.8;
+    }
     .thinking { opacity: 0.6; }
     .error {
       color: var(--cortex-danger);
@@ -97,6 +105,65 @@ export class ChatMessageEl extends LitElement {
   @property({ reflect: true }) role: "user" | "assistant" = "user";
   @property({ attribute: false }) message: ChatMessage | null = null;
   @property() error: string | null = null;
+
+  firstUpdated() {
+    this.addEventListener("click", this._onClick);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.removeEventListener("click", this._onClick);
+  }
+
+  updated(changed: Map<string, unknown>) {
+    if (changed.has("message") && this.role === "assistant") {
+      this._processReferences();
+    }
+  }
+
+  /** 后处理：把「## 参考资料」列表项包裹成可点击 .ref-link。幂等。 */
+  private _processReferences(): void {
+    const body = this.renderRoot.querySelector(".md-body");
+    if (!body) return;
+    const headings = Array.from(body.querySelectorAll("h2"));
+    const refHeading = headings.find((h) => (h.textContent ?? "").includes("参考资料"));
+    if (!refHeading) return;
+    let next: Element | null = refHeading.nextElementSibling;
+    while (next && next.tagName !== "OL" && next.tagName !== "UL") {
+      next = next.nextElementSibling;
+    }
+    if (!next) return;
+    next.querySelectorAll("li").forEach((li) => {
+      if (li.querySelector(".ref-link")) return; // 已处理（幂等）
+      const path = (li.textContent ?? "").trim();
+      if (!path) return;
+      const a = document.createElement("a");
+      a.className = "ref-link";
+      a.setAttribute("data-path", path);
+      a.setAttribute("href", "#");
+      a.textContent = path;
+      li.textContent = "";
+      li.appendChild(a);
+    });
+  }
+
+  /** 事件委托：命中 .ref-link 时派发 reference-click。 */
+  private _onClick = (e: MouseEvent): void => {
+    const target = e.composedPath().find(
+      (n): n is HTMLElement =>
+        n instanceof HTMLElement && n.classList.contains("ref-link"),
+    );
+    if (!target) return;
+    e.preventDefault();
+    const path = target.getAttribute("data-path") ?? "";
+    this.dispatchEvent(
+      new CustomEvent("reference-click", {
+        detail: { path },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
 
   /** assistant: markdown 渲染；user: 纯文本（保留换行）；空内容显示思考占位 */
   private renderBubble(content: string) {
