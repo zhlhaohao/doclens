@@ -21,18 +21,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _stream_agent_response(message: str, session_id: Optional[str]) -> AsyncIterator[str]:
-    """默认实现：用 CortexAgent 流式产生文本块。
+async def _stream_agent_response(message: str, session_id: Optional[str]) -> AsyncIterator[dict]:
+    """流式产生结构化事件 dict 供 SSE 消费。
 
-    设计要点：
-    - 在独立线程运行同步 StreamingAgent
-    - 用 GradioEventEmitter 改造的轻量 emitter 把 text 写入 asyncio.Queue
-    - 主协程从 queue yield，做到 SSE 增量输出
+    事件类型：
+    - {"type":"token","text":...}
+    - {"type":"tool_call","tool_use_id":...,"name":...,"input":...}
+    - {"type":"tool_result","tool_use_id":...,"name":...,"output":...,"is_error":...,"duration_ms":...}
+    - {"type":"error","detail":...}
     """
     agent = get_agent()
     session = agent.session
 
-    # 按 session_id 从 SQLite 加载会话历史（多轮上下文）；失败降级为空，不阻断对话
     history: list[dict] = []
     if session_id:
         try:
@@ -41,11 +41,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
-    # 复用旧 emitter 的 buffer 思路，但直接接 asyncio.Queue
     queue: asyncio.Queue = asyncio.Queue()
     done_event = threading.Event()
 
-    # 复用旧 chat_tab 的线程模式
     def _run_in_thread():
         try:
             from doclens.web_v2.api._chat_emitter import GradioEventEmitter
@@ -61,16 +59,38 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             asyncio.set_event_loop(loop)
 
             async def _feed():
-                # 把 emitter 的 text_parts 增量投递到 queue
-                last_seen = 0
-                while not done_event.is_set() or last_seen < len(emitter.text_parts):
+                last_seen_text = 0
+                delivered_calls: set[int] = set()
+                delivered_results: set[int] = set()
+                while True:
+                    # 文本增量
                     cur = emitter.get_full_text()
-                    if len(cur) > last_seen:
-                        await queue.put(cur[last_seen:])
-                        last_seen = len(cur)
-                    await asyncio.sleep(0.05)
+                    if len(cur) > last_seen_text:
+                        await queue.put({"type": "token", "text": cur[last_seen_text:]})
+                        last_seen_text = len(cur)
+                    # 工具事件（用游标检测新增 / 新回填）
+                    for i, tc in enumerate(emitter.tool_calls):
+                        if i not in delivered_calls:
+                            await queue.put({
+                                "type": "tool_call",
+                                "tool_use_id": tc.get("tool_use_id", ""),
+                                "name": tc.get("name", ""),
+                                "input": tc.get("input", {}),
+                            })
+                            delivered_calls.add(i)
+                        if "output" in tc and i not in delivered_results:
+                            await queue.put({
+                                "type": "tool_result",
+                                "tool_use_id": tc.get("tool_use_id", ""),
+                                "name": tc.get("name", ""),
+                                "output": tc.get("output", ""),
+                                "is_error": tc.get("is_error", False),
+                                "duration_ms": tc.get("duration_ms"),
+                            })
+                            delivered_results.add(i)
                     if emitter.done:
                         break
+                    await asyncio.sleep(0.05)
                 await queue.put(None)  # sentinel
 
             sa = StreamingAgent(
@@ -91,14 +111,13 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             )
             bind_user_interaction_handlers(session.tool_handlers, emitter, get_global_waiter())
 
-            # 跑两件事：agent.run_stream + _feed
             loop.run_until_complete(asyncio.gather(
                 sa.run_stream(history, message, session_id or session.session_id),
                 _feed(),
             ))
         except Exception as e:
             logger.exception("chat thread error: %s", e)
-            asyncio.run(queue.put(f"\n\n**错误:** {e}"))
+            asyncio.run(queue.put({"type": "error", "detail": str(e)}))
             asyncio.run(queue.put(None))
         finally:
             done_event.set()
@@ -117,8 +136,27 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
 async def chat(req: ChatRequest):
     async def event_stream() -> AsyncIterator[dict]:
         try:
-            async for chunk in _stream_agent_response(req.message, req.session_id):
-                yield {"event": "token", "data": json.dumps({"text": chunk})}
+            async for ev in _stream_agent_response(req.message, req.session_id):
+                t = ev.get("type")
+                if t == "token":
+                    yield {"event": "token", "data": json.dumps({"text": ev["text"]}, ensure_ascii=False)}
+                elif t == "tool_call":
+                    yield {"event": "tool_call", "data": json.dumps({
+                        "tool_use_id": ev["tool_use_id"],
+                        "name": ev["name"],
+                        "input": ev["input"],
+                        "is_complete": True,
+                    }, ensure_ascii=False)}
+                elif t == "tool_result":
+                    yield {"event": "tool_result", "data": json.dumps({
+                        "tool_use_id": ev["tool_use_id"],
+                        "name": ev["name"],
+                        "output": ev["output"],
+                        "is_error": ev.get("is_error", False),
+                        "duration_ms": ev.get("duration_ms"),
+                    }, ensure_ascii=False)}
+                elif t == "error":
+                    yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}
             yield {"event": "done", "data": "{}"}
         except Exception as e:
             logger.exception("chat stream error: %s", e)
