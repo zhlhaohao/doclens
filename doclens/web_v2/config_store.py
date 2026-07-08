@@ -13,13 +13,15 @@ from dotenv import dotenv_values, set_key, unset_key
 
 MERGED_VALUES_KEY = "values"  # placeholder; not currently used externally
 
-# 18 keys exposed in the settings UI. Keep in sync with
+# Settings UI keys. Keep in sync with
 # cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
 KNOWN_KEYS: frozenset[str] = frozenset({
     # AI
     "PLANIFY_BASE_URL",
     "PLANIFY_API_KEY",
     "PLANIFY_MODEL_ID",
+    "PLANIFY_PROVIDER",
+    "PLANIFY_PROTOCOL",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_NODES_PER_DOC",
