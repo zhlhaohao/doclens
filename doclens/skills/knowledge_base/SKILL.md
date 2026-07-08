@@ -1,6 +1,6 @@
 ---
 name: knowledge-base
-description: 知识库搜索与文档检索技能。当用户提问与知识库内容相关时，使用 search_kb 搜索相关文档片段，需要管理索引时使用 manage_kb，需要深入阅读某个文档时使用 read_document。
+description: 知识库搜索与文档检索技能。涉及知识库内容的提问需先加载本技能，获取检索策略（多查询/grep 降级）、引文规范（## 参考资料）、深读工具用法。加载方式：load_skill("knowledge-base")。
 ---
 
 # 知识库技能

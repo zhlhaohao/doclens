@@ -121,7 +121,9 @@ def build_system_prompt(
 
 # Skill vs Tool priority
 
-IMPORTANT: When the user's request matches a Skill, always use the Skill tool instead of a regular tool. Skills contain specialized domain knowledge and are designed to handle specific tasks better than generic tools. Check available Skills FIRST before falling back to tools.
+IMPORTANT: Skills 包含领域专属知识（检索策略、引文规范、降级方案）。当用户请求匹配某个 Skill 时，**必须先用 load_skill 工具加载它**，再按其指引使用相关工具，而不是直接调用工具。
+
+调用任何知识库工具（search_kb / read_document / manage_kb / grep）之前，**必须先调用 load_skill(name="knowledge-base")**，按返回的技能内容执行检索与引文。
 
 # Output efficiency
 
