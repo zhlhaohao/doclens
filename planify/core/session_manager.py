@@ -11,14 +11,12 @@ import os
 import shutil
 import threading
 import uuid
+import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from anthropic import Anthropic
-
-from .config import get_settings
-from .client import init_anthropic_client
+from .config import get_config
 from .logging_config import setup_logging
 from .session import Session, SessionConfig
 
@@ -53,10 +51,9 @@ class SessionManager:
     _lock = threading.Lock()
     _base_workdir: Optional[Path] = None  # 用于 get_config()
 
-    # 全局共享的 Anthropic 客户端（所有会话共用）
-    _anthropic_client: Optional[Any] = None
+    # 全局共享的 LLM Provider（所有会话共用）
+    _provider: Optional[Any] = None
     _anthropic_model_id: str = "claude-opus-4-6"
-    _anthropic_base_url: Optional[str] = None
 
     def __init__(self, base_workdir: Path):
         """
@@ -77,36 +74,54 @@ class SessionManager:
         return get_config(workdir=cls._base_workdir)
 
     @classmethod
-    def _init_anthropic_client(cls, base_url: Optional[str] = None) -> Optional[Any]:
-        """初始化全局共享的 Anthropic 客户端"""
-        # 使用 get_settings() 统一读取配置（支持 FastAPI settings 或环境变量兜底）
-        s = get_settings()
-        anthropic_api_key = s.PLANIFY_API_KEY
-        if anthropic_api_key:
-            cls._anthropic_model_id = s.PLANIFY_MODEL_ID
-            cls._anthropic_base_url = base_url or s.PLANIFY_BASE_URL
-            try:
-                masked = anthropic_api_key[:8] + "..." + anthropic_api_key[-4:]
-                print(f"初始化全局 Anthropic 客户端: api_key={masked}, model_id={cls._anthropic_model_id}, base_url={cls._anthropic_base_url}")
-                cls._anthropic_client = init_anthropic_client(cls._anthropic_base_url, anthropic_api_key)
-            except Exception as e:
-                print(f"警告: 无法初始化 Anthropic 客户端: {e}")
-                cls._anthropic_client = None
-        else:
-            print("未配置 PLANIFY_API_KEY")
-            cls._anthropic_client = None
+    def _init_provider(cls, config: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+        """初始化全局共享的 LLM Provider（使用 factory.create_provider）"""
+        from .llm import create_provider
+
+        if config is None:
+            config = cls._get_config()
+        if not config.get("api_key"):
+            print("未配置 api_key")
+            cls._provider = None
+            return None
+        try:
+            provider = create_provider(config)
+            cls._provider = provider
+            cls._anthropic_model_id = config.get("model_id", "")
+            return provider
+        except Exception as e:
+            print(f"警告: 无法初始化 LLM Provider: {e}")
+            cls._provider = None
+            return None
 
     @classmethod
-    def get_anthropic_client(cls) -> tuple[Optional[Any], str]:
+    def get_provider(cls) -> Tuple[Optional[Any], str]:
         """
-        获取全局共享的 Anthropic 客户端。
+        获取全局共享的 LLM Provider。
 
         Returns:
-            (anthropic_client, anthropic_model_id) 元组
+            (provider, model_id) 元组
         """
-        if cls._anthropic_client is None:
-            cls._init_anthropic_client()
-        return cls._anthropic_client, cls._anthropic_model_id
+        if cls._provider is None:
+            cls._init_provider()
+        return cls._provider, cls._anthropic_model_id
+
+    @classmethod
+    def get_anthropic_client(cls) -> Tuple[Optional[Any], str]:
+        """
+        [已弃用] 获取全局共享的 LLM Provider。
+
+        请改用 :meth:`get_provider`。
+
+        Returns:
+            (provider, model_id) 元组
+        """
+        warnings.warn(
+            "get_anthropic_client 已弃用，请改用 get_provider",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.get_provider()
 
     @classmethod
     def get_instance(cls, base_workdir: Optional[Path] = None) -> "SessionManager":
@@ -267,9 +282,9 @@ class SessionManager:
             console_output=False
         )
 
-        # 获取全局共享的 Anthropic 客户端
-        anthropic_client, _ = self.get_anthropic_client()
-        session.client = anthropic_client
+        # 获取全局共享的 LLM Provider
+        provider, _ = self.get_provider()
+        session.client = provider
 
         # 导入管理器（延迟导入避免循环依赖）
         from ..managers import TodoManager, TaskManager, BackgroundManager, TeammateManager

@@ -18,9 +18,9 @@ def test_create_provider_anthropic(monkeypatch):
 
     monkeypatch.setattr(factory, "AnthropicProvider", fake_ctor)
     provider = factory.create_provider({
-        "planify_provider": "anthropic",
-        "planify_api_key": "sk-test",
-        "planify_model_id": "claude-opus-4-6",
+        "provider_name": "anthropic",
+        "api_key": "sk-test",
+        "model_id": "claude-opus-4-6",
     })
     assert captured["api_key"] == "sk-test"
     assert captured["model"] == "claude-opus-4-6"
@@ -36,9 +36,9 @@ def test_create_provider_deepseek(monkeypatch):
 
     monkeypatch.setattr(factory, "OpenAICompatProvider", fake_ctor)
     factory.create_provider({
-        "planify_provider": "deepseek",
-        "planify_api_key": "sk-ds",
-        "planify_model_id": "deepseek-chat",
+        "provider_name": "deepseek",
+        "api_key": "sk-ds",
+        "model_id": "deepseek-chat",
     })
     assert captured["base_url"] == "https://api.deepseek.com/v1"
     assert captured["model"] == "deepseek-chat"
@@ -48,8 +48,8 @@ def test_create_provider_custom_missing_url(monkeypatch):
     monkeypatch.setattr(factory, "AnthropicProvider", lambda **kw: MagicMock())
     with pytest.raises(ValueError):
         factory.create_provider({
-            "planify_provider": "custom",
-            "planify_protocol": "openai_compat",
-            "planify_api_key": "k",
-            "planify_model_id": "m",
+            "provider_name": "custom",
+            "protocol": "openai_compat",
+            "api_key": "k",
+            "model_id": "m",
         })

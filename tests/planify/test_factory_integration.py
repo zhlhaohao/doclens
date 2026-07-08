@@ -8,9 +8,9 @@ from planify.core.llm import create_provider
 
 def test_factory_creates_anthropic_provider():
     p = create_provider({
-        "planify_provider": "anthropic",
-        "planify_api_key": "sk-a",
-        "planify_model_id": "claude-opus-4-6",
+        "provider_name": "anthropic",
+        "api_key": "sk-a",
+        "model_id": "claude-opus-4-6",
     })
     assert p.__class__.__name__ == "AnthropicProvider"
 
@@ -29,9 +29,9 @@ def test_factory_creates_openai_compat_provider_for_deepseek():
         )
     )
     p = create_provider({
-        "planify_provider": "deepseek",
-        "planify_api_key": "sk-ds",
-        "planify_model_id": "deepseek-chat",
+        "provider_name": "deepseek",
+        "api_key": "sk-ds",
+        "model_id": "deepseek-chat",
     })
     assert p.__class__.__name__ == "OpenAICompatProvider"
     resp = p.chat(messages=[{"role": "user", "content": "hi"}], system="", tools=[])
@@ -40,10 +40,10 @@ def test_factory_creates_openai_compat_provider_for_deepseek():
 
 def test_factory_custom_with_anthropic_protocol():
     p = create_provider({
-        "planify_provider": "custom",
-        "planify_base_url": "https://anthropic-proxy.example.com",
-        "planify_protocol": "anthropic",
-        "planify_api_key": "sk-x",
-        "planify_model_id": "custom-model",
+        "provider_name": "custom",
+        "base_url": "https://anthropic-proxy.example.com",
+        "protocol": "anthropic",
+        "api_key": "sk-x",
+        "model_id": "custom-model",
     })
     assert p.__class__.__name__ == "AnthropicProvider"
