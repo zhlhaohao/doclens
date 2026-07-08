@@ -87,6 +87,7 @@ export class ChatMessageEl extends LitElement {
       font-weight: 600;
     }
     .thinking { opacity: 0.6; }
+    .trace-sep { border-top: 1px dashed var(--cortex-border); margin: 7px 0; }
     .error {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);
@@ -110,9 +111,16 @@ export class ChatMessageEl extends LitElement {
 
   render() {
     if (!this.message) return null;
+    const steps = this.message.tool_steps;
+    const showTrace = this.role === "assistant" && steps && steps.length > 0;
     return html`
-      <div class="bubble">${this.renderBubble(this.message.content)}</div>
-      ${this.error ? html`<div class="error">⚠️ ${this.error}</div>` : null}
+      <div class="bubble">
+        ${showTrace
+          ? html`<chat-tool-trace .steps=${steps}></chat-tool-trace><div class="trace-sep"></div>`
+          : null}
+        ${this.renderBubble(this.message.content)}
+        ${this.error ? html`<div class="error">⚠️ ${this.error}</div>` : null}
+      </div>
     `;
   }
 }
