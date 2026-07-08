@@ -1,8 +1,6 @@
 """GET/POST/PATCH/DELETE /api/sessions。"""
-import threading
 from datetime import datetime, timezone
 from itertools import chain
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -20,26 +18,11 @@ from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionTy
 
 router = APIRouter()
 
-_store: Optional[SessionsStore] = None
-_store_lock = threading.RLock()
-
 
 def _get_store() -> SessionsStore:
-    """全局单例 SessionsStore。
-
-    sessions.db 与 index.db 放在同一个 .cortex/ 目录下，跟随当前工作目录，
-    保证不同工作目录的会话相互隔离。
-    """
-    global _store
-    if _store is None:
-        with _store_lock:
-            if _store is None:
-                from doclens.web_v2.deps import get_index_manager
-                idx = get_index_manager()
-                db_path = Path(idx.index_path).parent / "sessions.db"
-                db_path.parent.mkdir(parents=True, exist_ok=True)
-                _store = SessionsStore(db_path)
-    return _store
+    """全局单例 SessionsStore（委托 deps 统一管理，避免多份单例）。"""
+    from doclens.web_v2.deps import get_sessions_store
+    return get_sessions_store()
 
 
 @router.post("/sessions", response_model=SessionCreatedResponse)
