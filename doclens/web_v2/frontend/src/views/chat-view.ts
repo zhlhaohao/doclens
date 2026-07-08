@@ -321,7 +321,7 @@ export class ChatView extends LitElement {
     const onMove = (ev: MouseEvent) => {
       const w = Math.max(
         ChatView.PREVIEW_PANE_WIDTH_MIN,
-        Math.min(ChatView.PREVIEW_PANE_WIDTH_MAX, startWidth + (ev.clientX - startX)),
+        Math.min(ChatView.PREVIEW_PANE_WIDTH_MAX, startWidth - (ev.clientX - startX)),
       );
       if (w !== this._previewPaneWidth) this._previewPaneWidth = w;
     };
