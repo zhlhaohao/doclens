@@ -107,6 +107,14 @@ class SessionManager:
         return cls._provider, cls._anthropic_model_id
 
     @classmethod
+    def invalidate_provider(cls) -> None:
+        """使缓存的 provider 失效；下次 get_provider() 调用时重建。
+
+        reload_config() 在 .env 变更后调用此方法，让新 provider 立即生效。
+        """
+        cls._provider = None
+
+    @classmethod
     def get_anthropic_client(cls) -> Tuple[Optional[Any], str]:
         """
         [已弃用] 获取全局共享的 LLM Provider。

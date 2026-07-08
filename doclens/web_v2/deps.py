@@ -11,6 +11,7 @@ from typing import Optional
 from doclens.config import CortexConfig
 from doclens.index_manager import IndexManager
 from doclens.web_v2.sessions_store import SessionsStore
+from planify.core.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -128,4 +129,6 @@ def reload_config() -> CortexConfig:
             _idx_manager.apply_config(_config)
         if _agent:
             _agent.apply_config(_config)
+    # 让 SessionManager 缓存的 provider 失效，下次 get_provider() 调用时重建
+    SessionManager.invalidate_provider()
     return _config

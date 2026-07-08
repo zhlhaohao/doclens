@@ -51,3 +51,17 @@ def test_reload_config_pushes_new_config_to_singletons(env_cortex_config):
     deps._config = None
     deps._idx_manager = None
     deps._agent = None
+
+
+def test_reload_config_invalidates_session_manager_provider():
+    """reload_config 应调 SessionManager.invalidate_provider，让 provider 失效。"""
+    from unittest.mock import patch, MagicMock
+
+    from doclens.web_v2 import deps
+
+    fake_provider = MagicMock()
+    with patch.object(deps, "SessionManager") as MockSM:
+        MockSM._provider = fake_provider
+        deps.reload_config()
+        # 关键断言：invalidate_provider 被调用过
+        MockSM.invalidate_provider.assert_called_once()
