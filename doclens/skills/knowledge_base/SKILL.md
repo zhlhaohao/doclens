@@ -137,17 +137,13 @@ grep 结果中的 `<path>` 可直接传给 `read_document` 的 `path` 参数获�
 2. **中英文切换**：中文无结果时，尝试对应的英文关键词
 3. **同义词替换**：尝试同义词或近义词
 4. **短语切分**：长句无结果时，切分为多个短词组合
-5. **结果汇总**：多次查询的结果去重合并
+5. **结果汇总**：多次查询的结果去重合并（顺序调用 `search_kb` 即可，每次都是本地 FTS，很快）
 
-**并行查询：** 使用 `Task` 工具并行执行多个搜索查询以加快速度：
+## 边界（强制）
 
-```python
-# 使用 Task 工具并行查询
-Task(description="搜索机器学习",
-     prompt="调用 search_kb(query='机器学习', max_results=5)")
-Task(description="搜索 machine learning",
-     prompt="调用 search_kb(query='machine learning', max_results=5)")
-Task(description="搜索 ML/AI",
-     prompt="调用 search_kb(query='ML AI', max_results=5)")
-# 等待所有结果后合并去重
-```
+本技能**仅用于内部知识库问答**。**禁止**使用任何外部手段，包括：
+- `Task` 子代理（会脱离知识库上下文，且子代理自带外部工具）
+- `webfetch` / web 搜索 / `bash` 联网命令等任何联网或外部检索
+- 仅用 `search_kb` / `grep` / `read_document` / `manage_kb` 在本地知识库内作答
+
+知识库无结果时，告知用户并建议重建索引（`manage_kb(action='reindex')`），**不要**转向外部搜索。
