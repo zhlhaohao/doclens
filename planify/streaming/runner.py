@@ -191,12 +191,11 @@ class StreamingAgent:
             if agent_md_path.exists():
                 agent_md_content = agent_md_path.read_text(encoding="utf-8")
         else:
-            from pathlib import Path as _Path
-            global_agent_md = _Path.home() / ".cortex" / "agent.md"
+            global_agent_md = Path.home() / ".cortex" / "agent.md"
             workdir = "."
             if self.config:
                 workdir = getattr(self.config, "workdir", ".")
-            local_agent_md = _Path(workdir) / ".cortex" / "agent.md"
+            local_agent_md = Path(workdir) / ".cortex" / "agent.md"
             md_parts = []
             if global_agent_md.exists():
                 md_parts.append(global_agent_md.read_text(encoding="utf-8"))
@@ -582,9 +581,10 @@ class StreamingAgent:
                         output = await handler(**input_data)
                     else:
                         # 同步处理器在线程池中执行
-                        output = await asyncio.get_event_loop().run_in_executor(
-                            None, lambda h=handler, i=input_data: h(**i)
-                        )
+                        # 使用 asyncio.to_thread 以传播 contextvars.ContextVar
+                        # （门禁依赖 get_current_session_id()，默认 ThreadPoolExecutor
+                        # 不会跨线程复制上下文，会导致门禁静默失效）
+                        output = await asyncio.to_thread(handler, **input_data)
                 else:
                     output = f"Unknown tool: {name}"
             except Exception as e:
