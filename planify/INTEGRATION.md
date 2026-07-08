@@ -59,12 +59,14 @@ async def lifespan(app: FastAPI):
     # 1. 注册 Planify 配置
     from app.third_party.planify.bootstrap import register_planify_config
     register_planify_config(
-        zhipuai_api_key=settings.ZHIPUAI_API_KEY or "",
-        zhipuai_model_id=settings.ZHIPUAI_MODEL_ID or "glm-4",
-        zhipuai_base_url=settings.ZHIPUAI_BASE_URL or "",
+        provider=settings.PLANIFY_PROVIDER or "anthropic",
         planify_api_key=settings.PLANIFY_API_KEY or "",
         planify_model_id=settings.PLANIFY_MODEL_ID or "claude-opus-4-6",
         planify_base_url=settings.PLANIFY_BASE_URL or "",
+        planify_protocol=settings.PLANIFY_PROTOCOL or "anthropic",
+        zhipuai_api_key=settings.ZHIPUAI_API_KEY or "",
+        zhipuai_model_id=settings.ZHIPUAI_MODEL_ID or "glm-4",
+        zhipuai_base_url=settings.ZHIPUAI_BASE_URL or "",
         baidu_weather_api_url=settings.BAIDU_WEATHER_API_URL or "",
         baidu_weather_ak=settings.BAIDU_WEATHER_AK or "",
         baidu_weather_data_type=settings.BAIDU_WEATHER_DATA_TYPE or "fc",
@@ -498,12 +500,14 @@ StreamingAgent.run_stream()               # 运行时代替 tool_handlers
 
 ```python
 register_planify_config(
-    zhipuai_api_key="",        # 智谱AI API Key
+    provider="anthropic",      # LLM Provider 预设：anthropic / openrouter / qwen / deepseek / glm / custom
+    planify_api_key="",         # Provider API Key
+    planify_model_id="claude-opus-4-6",  # 模型 ID
+    planify_base_url="",        # API 端点（custom 时必填）
+    planify_protocol="",        # 协议：anthropic / openai_compat（preset 会自动填默认值）
+    zhipuai_api_key="",        # 智谱AI API Key（可选，用于 web_search 工具）
     zhipuai_model_id="glm-4",  # 智谱AI 模型
     zhipuai_base_url="",       # 智谱AI 端点
-    planify_api_key="",         # Anthropic API Key
-    planify_model_id="claude-opus-4-6",  # Anthropic 模型
-    planify_base_url="",        # Anthropic API 端点
     baidu_weather_api_url="",   # 百度天气 API URL
     baidu_weather_ak="",        # 百度天气 AK
     baidu_weather_data_type="fc",
@@ -538,9 +542,11 @@ async def lifespan(app: FastAPI):
 
     # 注册配置
     register_planify_config(
+        provider=settings.PLANIFY_PROVIDER or "anthropic",
         planify_api_key=settings.PLANIFY_API_KEY,
         planify_model_id=settings.PLANIFY_MODEL_ID,
         planify_base_url=settings.PLANIFY_BASE_URL,
+        planify_protocol=settings.PLANIFY_PROTOCOL,
     )
 
     # 注册工具
@@ -595,3 +601,59 @@ async def chat_stream(query: str, current_user = Depends(get_current_user)):
 | `TOOL_RESULT` | 工具结果 | `{"tool_use_id": "...", "content": "..."}` |
 | `DONE` | 完成 | `{}` |
 | `ERROR` | 错误 | `{"error": "..."}` |
+
+---
+
+## 7. 切换 LLM Provider
+
+通过 `provider` 参数选择 LLM Provider，或设置环境变量 `PLANIFY_PROVIDER`。
+
+### 7.1 切换到 DeepSeek
+
+```python
+register_planify_config(
+    provider="deepseek",
+    planify_api_key="sk-...",
+    planify_model_id="deepseek-chat",
+)
+```
+
+或环境变量：
+
+```bash
+export PLANIFY_PROVIDER=deepseek
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=deepseek-chat
+```
+
+### 7.2 切换到 Qwen（阿里云通义千问）
+
+```python
+register_planify_config(
+    provider="qwen",
+    planify_api_key="sk-...",
+    planify_model_id="qwen-plus",
+)
+```
+
+### 7.3 自定义 OpenAI 兼容代理
+
+```python
+register_planify_config(
+    provider="custom",
+    planify_api_key="...",
+    planify_model_id="my-model",
+    planify_base_url="https://my-proxy/v1",
+    planify_protocol="openai_compat",
+)
+```
+
+或环境变量：
+
+```bash
+export PLANIFY_PROVIDER=custom
+export PLANIFY_BASE_URL=https://my-proxy/v1
+export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_API_KEY=...
+export PLANIFY_MODEL_ID=...
+```
