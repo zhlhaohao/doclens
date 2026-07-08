@@ -16,6 +16,7 @@ import "./components/result-card";
 import "./components/search-results";
 import "./components/preview-pane";
 import "./components/chat-message";
+import "./components/chat-tool-trace";
 import "./components/chat-stream";
 import "./views/search-view";
 import "./views/chat-view";
