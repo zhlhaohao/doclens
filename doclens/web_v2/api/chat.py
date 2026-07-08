@@ -32,6 +32,15 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
     agent = get_agent()
     session = agent.session
 
+    # 按 session_id 从 SQLite 加载会话历史（多轮上下文）；失败降级为空，不阻断对话
+    history: list[dict] = []
+    if session_id:
+        try:
+            from doclens.web_v2.deps import get_sessions_store
+            history = get_sessions_store().get_chat_history(session_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("load chat history failed for %s: %s", session_id, e)
+
     # 复用旧 emitter 的 buffer 思路，但直接接 asyncio.Queue
     queue: asyncio.Queue = asyncio.Queue()
     done_event = threading.Event()
@@ -84,7 +93,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
 
             # 跑两件事：agent.run_stream + _feed
             loop.run_until_complete(asyncio.gather(
-                sa.run_stream([], message, session.session_id),
+                sa.run_stream(history, message, session_id or session.session_id),
                 _feed(),
             ))
         except Exception as e:

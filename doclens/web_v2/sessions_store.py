@@ -234,6 +234,29 @@ class SessionsStore:
             for r in rows
         ]
 
+    def get_chat_history(self, session_id: str) -> list[dict]:
+        """返回会话对话历史，适配 LLM 上下文格式。
+
+        Returns:
+            [{"role": "user"|"assistant", "content": str}, ...]，按 seq 升序；
+            跳过非 message_* kind、payload 解析失败、空内容。
+        """
+        history: list[dict] = []
+        for it in self.get_detail(session_id):
+            if it.kind == "message_user":
+                role = "user"
+            elif it.kind == "message_ai":
+                role = "assistant"
+            else:
+                continue  # 跳过 result 等非对话项
+            try:
+                content = json.loads(it.payload).get("content", "")
+            except (json.JSONDecodeError, AttributeError):
+                continue
+            if content:
+                history.append({"role": role, "content": content})
+        return history
+
     @staticmethod
     def _row_to_summary(row: sqlite3.Row) -> SessionSummary:
         return SessionSummary(

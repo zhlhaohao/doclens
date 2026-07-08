@@ -29,10 +29,34 @@ if ($venvPythonInScriptRoot) {
 # 若调用方传入自己的 -C，argparse 会取最后一个，从而覆盖默认的 testWorkDir。
 $env:PYTHONPATH = $cortexRoot
 
+# 端口 = 基数 + N，N = 当前目录名横杠后的数字（如 0702-3 → N=3）。
+# 无横杠或横杠后非数字时 N=0。多 worktree 并行跑 gui 时各自独占端口，避免冲突。
+$dirName = Split-Path -Leaf $PSScriptRoot
+$n = 0
+if ($dirName -match '-(\d+)$') {
+    $n = [int]$Matches[1]
+}
+$basePort = 7860
+$port = $basePort + $n
+
 Write-Host "=== Cortex 启动信息 ===" -ForegroundColor Cyan
 Write-Host "  工作目录: $testWorkDir"
 Write-Host "  PYTHONPATH: $env:PYTHONPATH"
 Write-Host "  Venv: $venvPython"
+Write-Host "  端口: $basePort (基数) + $n (目录N, $dirName) = $port"
 Write-Host "========================" -ForegroundColor Cyan
 
-& $venvPython -m doclens -C $testWorkDir $args
+# 仅 gui 子命令注入 --port；用户显式传 --port 时尊重用户。
+$finalArgs = @()
+if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
+    $finalArgs += 'gui'
+    $rest = @($args | Select-Object -Skip 1)
+    if ($rest -notcontains '--port') {
+        $finalArgs += '--port', $port
+    }
+    $finalArgs += $rest
+} else {
+    $finalArgs = @($args)
+}
+
+& $venvPython -m doclens -C $testWorkDir @finalArgs
