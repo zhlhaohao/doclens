@@ -62,15 +62,15 @@ class _PlanifySettings:
 
     @property
     def PLANIFY_API_KEY(self) -> str:
-        return self._get("planify_api_key", "")
+        return self._get("api_key", "")
 
     @property
     def PLANIFY_MODEL_ID(self) -> str:
-        return self._get("planify_model_id", "claude-opus-4-6")
+        return self._get("model_id", "claude-opus-4-6")
 
     @property
     def PLANIFY_BASE_URL(self) -> str:
-        return self._get("planify_base_url", "")
+        return self._get("base_url", "")
 
     @property
     def BAIDU_WEATHER_API_URL(self) -> str:
