@@ -55,6 +55,8 @@ dependencies = [
     # 移至 [ast] 可选依赖组；运行时由 try/except ImportError 保护
     # Background file-system watcher (TUI live reindex)
     "watchdog>=3.0",
+    # LLM provider SDKs (Anthropic native + OpenAI-compatible)
+    "openai>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -66,6 +68,7 @@ dev = [
     "flake8>=7.0.0",
     "mypy>=1.8.0",
     "playwright>=1.40.0",
+    "respx>=0.21",
 ]
 # tree-sitter-languages 在 Windows ARM64 / Python 3.12 上无预编译包（平台无 wheel），
 # 故设为可选依赖。运行时由 try/except ImportError 保护（见 treesearch/parsers/treesitter_parser.py）。
