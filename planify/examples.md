@@ -6,6 +6,7 @@
 
 - [Session 基础使用](#session-基础使用)
 - [FastAPI 集成](#fastapi-集成)
+- [切换 LLM Provider](#切换-llm-provider)
 
 ---
 
@@ -398,3 +399,103 @@ uvicorn examples.fastapi_app:app --host 0.0.0.0 --port 8000 --reload
 - `tests/run_tests.py` - 基础测试示例
 - `tests/test_session.py` - Session 使用测试
 - `tests/test_session_manager.py` - SessionManager 使用测试
+
+---
+
+## 切换 LLM Provider
+
+通过 `provider` 字段或 `PLANIFY_PROVIDER` 环境变量切换不同的 LLM 供应商。下面是一些常用场景示例。
+
+### 切换到 DeepSeek
+
+```python
+from planify.bootstrap import initialize, create_session
+
+manager = initialize(base_workdir=Path.cwd())
+
+user_config = {
+    "provider": "deepseek",
+    "model_id": "deepseek-chat",
+    "api_key": "sk-...",
+    "base_url": None,           # preset 自动填默认值
+    "protocol": None,           # preset 自动填默认值
+    "token_threshold": 100000,
+}
+session = create_session("alice", user_config)
+```
+
+或直接通过环境变量（无需改代码）：
+
+```bash
+export PLANIFY_PROVIDER=deepseek
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=deepseek-chat
+```
+
+### 切换到 Qwen
+
+阿里云通义千问使用 OpenAI 兼容协议，预设自动填充 `base_url` 和 `protocol`：
+
+```python
+user_config = {
+    "provider": "qwen",
+    "model_id": "qwen-plus",
+    "api_key": "sk-...",
+}
+session = create_session("alice", user_config)
+```
+
+或环境变量：
+
+```bash
+export PLANIFY_PROVIDER=qwen
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=qwen-plus
+```
+
+### 通过 OpenRouter 路由多模型
+
+OpenRouter 聚合多种模型，可以在不切换 Provider 的情况下切换具体模型：
+
+```python
+user_config = {
+    "provider": "openrouter",
+    "model_id": "anthropic/claude-3.5-sonnet",  # OpenRouter 模型 ID
+    "api_key": "sk-or-...",
+}
+session = create_session("alice", user_config)
+```
+
+或环境变量：
+
+```bash
+export PLANIFY_PROVIDER=openrouter
+export PLANIFY_API_KEY=sk-or-...
+export PLANIFY_MODEL_ID=anthropic/claude-3.5-sonnet
+```
+
+### 自定义代理
+
+对于 OpenAI 兼容的私有代理，使用 `custom` 预设并手动填写 `base_url` 和 `protocol`：
+
+```python
+user_config = {
+    "provider": "custom",
+    "model_id": "my-model",
+    "api_key": "...",
+    "base_url": "https://my-proxy/v1",
+    "protocol": "openai_compat",
+    "token_threshold": 100000,
+}
+session = create_session("alice", user_config)
+```
+
+或环境变量：
+
+```bash
+export PLANIFY_PROVIDER=custom
+export PLANIFY_BASE_URL=https://my-proxy/v1
+export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_API_KEY=...
+export PLANIFY_MODEL_ID=my-model
+```
