@@ -44,20 +44,20 @@ def resolve_provider_config(
     Raises:
         ValueError: provider 未知 / custom 缺字段
     """
-    provider_name = config.get("planify_provider") or "anthropic"
+    provider_name = config.get("provider_name") or "anthropic"
 
     if provider_name not in PROVIDER_PRESETS and provider_name != "custom":
         raise ValueError(f"unknown provider: {provider_name}")
 
-    base_url = config.get("planify_base_url") or None
-    protocol = config.get("planify_protocol") or None
-    model_id = config.get("planify_model_id", "")
+    base_url = config.get("base_url") or None
+    protocol = config.get("protocol") or None
+    model_id = config.get("model_id", "")
 
     if provider_name == "custom":
         if not base_url:
-            raise ValueError("custom provider requires planify_base_url")
+            raise ValueError("custom provider requires base_url")
         if not protocol:
-            raise ValueError("custom provider requires planify_protocol")
+            raise ValueError("custom provider requires protocol")
     else:
         preset = PROVIDER_PRESETS[provider_name]
         if not base_url:

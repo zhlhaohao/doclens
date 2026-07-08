@@ -8,14 +8,14 @@ def create_provider(config: dict):
     """根据 config 创建 LLMProvider 实例。
 
     Args:
-        config: 配置字典，必须含 planify_provider / planify_api_key / planify_model_id；
-                custom 预设还须含 planify_base_url / planify_protocol。
+        config: 配置字典，必须含 provider_name / api_key / model_id；
+                custom 预设还须含 base_url / protocol。
 
     Returns:
         LLMProvider 实现（AnthropicProvider 或 OpenAICompatProvider，Task 9 引入后者）。
     """
     provider_name, base_url, model_id, protocol = resolve_provider_config(config)
-    api_key = config.get("planify_api_key", "")
+    api_key = config.get("api_key", "")
 
     if protocol == "anthropic":
         return AnthropicProvider(api_key=api_key, base_url=base_url, model=model_id)
