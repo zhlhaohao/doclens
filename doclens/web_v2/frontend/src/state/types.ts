@@ -13,9 +13,22 @@ export interface SearchResult {
   kind?: "content" | "path";
 }
 
+export type ToolStepStatus = "running" | "done" | "error";
+
+export interface ToolStep {
+  tool_use_id: string;
+  name: string;
+  input: Record<string, unknown>;
+  output?: string;
+  is_error?: boolean;
+  duration_ms?: number;
+  status: ToolStepStatus;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  tool_steps?: ToolStep[];
 }
 
 export interface Session {
