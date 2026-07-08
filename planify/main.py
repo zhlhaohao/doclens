@@ -138,7 +138,7 @@ class REPLCommands:
             return "无消息历史可压缩"
 
         compacted = auto_compact(
-            self.state.history, session.client, session.model, session.config.transcript_dir
+            self.state.history, session.client, session.config.transcript_dir
         )
         session.replace_messages_in_place(compacted)
         return f"压缩完成: {len(self.state.history)} 条消息"
