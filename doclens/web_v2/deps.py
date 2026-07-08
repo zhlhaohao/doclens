@@ -10,11 +10,13 @@ from typing import Optional
 
 from doclens.config import CortexConfig
 from doclens.index_manager import IndexManager
+from doclens.web_v2.sessions_store import SessionsStore
 
 logger = logging.getLogger(__name__)
 
 _config: Optional[CortexConfig] = None
 _idx_manager: Optional[IndexManager] = None
+_sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _lock = threading.RLock()
 
@@ -76,12 +78,29 @@ def get_agent():
     return _agent
 
 
+def get_sessions_store() -> SessionsStore:
+    """获取 SessionsStore 单例（懒加载 + 线程安全）。
+
+    sessions.db 与 index.db 同在 .cortex/ 目录，跟随工作目录隔离。
+    """
+    global _sessions_store
+    if _sessions_store is None:
+        with _lock:
+            if _sessions_store is None:
+                idx = get_index_manager()
+                db_path = Path(idx.index_path).parent / "sessions.db"
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                _sessions_store = SessionsStore(db_path)
+    return _sessions_store
+
+
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _agent
+    global _config, _idx_manager, _sessions_store, _agent
     with _lock:
         _config = None
         _idx_manager = None
+        _sessions_store = None
         _agent = None
 
 

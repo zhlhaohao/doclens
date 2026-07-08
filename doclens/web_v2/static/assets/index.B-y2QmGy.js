@@ -2542,7 +2542,7 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
       padding: 1px 8px;
       line-height: 1.5;
     }
-  `;mi([d({attribute:!1})],Ut.prototype,"session",2);Ut=mi([A("history-item")],Ut);var Pa=Object.defineProperty,Aa=Object.getOwnPropertyDescriptor,ie=(e,t,r,i)=>{for(var s=i>1?void 0:i?Aa(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Pa(t,r,s),s};let j=class extends ${constructor(){super(...arguments),this.value="",this.placeholder="",this.buttonLabel="搜索",this.buttonIcon="",this.multiline=!1,this.disabled=!1,this.mode="keyword",this.modes=null,this._menuOpen=!1,this._onDocClick=()=>{this._menuOpen=!1,document.removeEventListener("click",this._onDocClick)}}focus(){var e;(e=this.inputEl)==null||e.focus()}get trimmed(){return this.value.trim()}_onInput(e){const t=e.target;this.value=t.value,this.dispatchEvent(new CustomEvent("input-change",{detail:{value:this.value}}));const r=this.renderRoot.querySelector("button");r&&(r.disabled=!this.trimmed||this.disabled)}_onKeydown(e){e.key==="Enter"&&(e.ctrlKey||e.metaKey)&&(e.preventDefault(),this._submit()),e.key==="Enter"&&!this.multiline&&!e.shiftKey&&(e.preventDefault(),this._submit())}_submit(){!this.trimmed||this.disabled||this.dispatchEvent(new CustomEvent("submit",{detail:{value:this.trimmed}}))}get _hasModes(){return!!this.modes&&this.mode in this.modes}_toggleMenu(e){e.stopPropagation(),this._menuOpen=!this._menuOpen,this._menuOpen&&document.addEventListener("click",this._onDocClick)}_selectMode(e){this._menuOpen=!1,document.removeEventListener("click",this._onDocClick),this.dispatchEvent(new CustomEvent("mode-change",{detail:{mode:e}}))}_renderButton(){if(!this._hasModes)return c`
+  `;mi([d({attribute:!1})],Ut.prototype,"session",2);Ut=mi([A("history-item")],Ut);var Pa=Object.defineProperty,Aa=Object.getOwnPropertyDescriptor,ie=(e,t,r,i)=>{for(var s=i>1?void 0:i?Aa(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&Pa(t,r,s),s};let j=class extends ${constructor(){super(...arguments),this.value="",this.placeholder="",this.buttonLabel="搜索",this.buttonIcon="",this.multiline=!1,this.disabled=!1,this.mode="keyword",this.modes=null,this._menuOpen=!1,this._onDocClick=()=>{this._menuOpen=!1,document.removeEventListener("click",this._onDocClick)}}focus(){var e;(e=this.inputEl)==null||e.focus()}updated(e){var t;(t=super.updated)==null||t.call(this,e),(e.has("value")||e.has("multiline"))&&this._autoResize()}_autoResize(){const e=this.renderRoot.querySelector("textarea");e&&(e.style.height="auto",e.style.height=`${e.scrollHeight}px`)}get trimmed(){return this.value.trim()}_onInput(e){const t=e.target;this.value=t.value,this.dispatchEvent(new CustomEvent("input-change",{detail:{value:this.value}}));const r=this.renderRoot.querySelector("button");r&&(r.disabled=!this.trimmed||this.disabled),this._autoResize()}_onKeydown(e){e.key==="Enter"&&(e.shiftKey&&this.multiline||(e.preventDefault(),this._submit()))}_submit(){!this.trimmed||this.disabled||this.dispatchEvent(new CustomEvent("submit",{detail:{value:this.trimmed}}))}get _hasModes(){return!!this.modes&&this.mode in this.modes}_toggleMenu(e){e.stopPropagation(),this._menuOpen=!this._menuOpen,this._menuOpen&&document.addEventListener("click",this._onDocClick)}_selectMode(e){this._menuOpen=!1,document.removeEventListener("click",this._onDocClick),this.dispatchEvent(new CustomEvent("mode-change",{detail:{mode:e}}))}_renderButton(){if(!this._hasModes)return c`
         <button @click=${this._submit} ?disabled=${!this.trimmed||this.disabled}>
           ${this.buttonIcon?c`<span aria-hidden="true">${this.buttonIcon}</span>`:null}
           <span>${this.buttonLabel}</span>
@@ -2602,6 +2602,11 @@ var Mi=Object.defineProperty;var Fi=(e,t,r)=>t in e?Mi(e,t,{enumerable:!0,config
       resize: none;
       min-height: calc(var(--min-h) - 12px);
       line-height: 1.4;
+    }
+    /* multiline 自动扩充：默认单行高度，换行后随内容增高，超出上限内部滚动 */
+    textarea {
+      max-height: 200px;
+      overflow-y: auto;
     }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
@@ -3382,8 +3387,8 @@ ${r}</blockquote>
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
     }
-  `;H([d()],I.prototype,"path",2);H([d()],I.prototype,"language",2);H([d()],I.prototype,"content",2);H([d({attribute:!1})],I.prototype,"highlights",2);H([d({type:Boolean})],I.prototype,"loading",2);H([d({type:Number})],I.prototype,"line",2);H([d()],I.prototype,"keyword",2);H([d({type:Boolean})],I.prototype,"writable",2);H([d({type:Boolean})],I.prototype,"noHeader",2);H([d({type:Boolean})],I.prototype,"mobile",2);H([d({attribute:!1})],I.prototype,"pages",2);H([g()],I.prototype,"_mode",2);H([g()],I.prototype,"_content",2);H([g()],I.prototype,"_showMobileMenu",2);I=H([A("preview-pane")],I);var In=Object.defineProperty,Rn=Object.getOwnPropertyDescriptor,sr=(e,t,r,i)=>{for(var s=i>1?void 0:i?Rn(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&In(t,r,s),s};let je=class extends ${constructor(){super(...arguments),this.role="user",this.message=null,this.error=null}render(){return this.message?c`
-      <div class="bubble">${this.message.content}${this.message.content===""?c`<span style="opacity:0.6">思考中...</span>`:null}</div>
+  `;H([d()],I.prototype,"path",2);H([d()],I.prototype,"language",2);H([d()],I.prototype,"content",2);H([d({attribute:!1})],I.prototype,"highlights",2);H([d({type:Boolean})],I.prototype,"loading",2);H([d({type:Number})],I.prototype,"line",2);H([d()],I.prototype,"keyword",2);H([d({type:Boolean})],I.prototype,"writable",2);H([d({type:Boolean})],I.prototype,"noHeader",2);H([d({type:Boolean})],I.prototype,"mobile",2);H([d({attribute:!1})],I.prototype,"pages",2);H([g()],I.prototype,"_mode",2);H([g()],I.prototype,"_content",2);H([g()],I.prototype,"_showMobileMenu",2);I=H([A("preview-pane")],I);var In=Object.defineProperty,Rn=Object.getOwnPropertyDescriptor,sr=(e,t,r,i)=>{for(var s=i>1?void 0:i?Rn(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&In(t,r,s),s};let je=class extends ${constructor(){super(...arguments),this.role="user",this.message=null,this.error=null}renderBubble(e){if(e==="")return c`<span class="thinking">思考中...</span>`;if(this.role==="assistant"){const t=T.parse(e,{async:!1});return c`<div class="md-body" .innerHTML=${t}></div>`}return e}render(){return this.message?c`
+      <div class="bubble">${this.renderBubble(this.message.content)}</div>
       ${this.error?c`<div class="error">⚠️ ${this.error}</div>`:null}
     `:null}};je.styles=_`
     :host {
@@ -3397,13 +3402,14 @@ ${r}</blockquote>
       border-radius: 12px;
       font-size: var(--cortex-fs-md);
       line-height: 1.5;
-      white-space: pre-wrap;
       word-break: break-word;
     }
     :host([role="user"]) .bubble {
       background: var(--cortex-primary);
       color: #fff;
       border-bottom-right-radius: 4px;
+      /* 用户输入按纯文本展示：保留换行、不解析 markdown */
+      white-space: pre-wrap;
     }
     :host([role="assistant"]) .bubble {
       background: var(--cortex-surface-muted);
@@ -3411,6 +3417,61 @@ ${r}</blockquote>
       border: 1px solid var(--cortex-border);
       border-bottom-left-radius: 4px;
     }
+    /* assistant 回复的 markdown 渲染（紧凑气泡风格） */
+    .md-body > :first-child { margin-top: 0; }
+    .md-body > :last-child { margin-bottom: 0; }
+    .md-body p { margin: 0.4em 0; }
+    .md-body h1, .md-body h2, .md-body h3 {
+      margin: 0.6em 0 0.3em;
+      line-height: 1.3;
+    }
+    .md-body h1 { font-size: 1.2em; }
+    .md-body h2 { font-size: 1.1em; }
+    .md-body h3 { font-size: 1em; }
+    .md-body ul, .md-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+    .md-body li { margin: 0.15em 0; }
+    .md-body pre {
+      background: var(--cortex-surface);
+      padding: 8px 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      margin: 0.5em 0;
+    }
+    .md-body code {
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+    }
+    .md-body :not(pre) > code {
+      background: var(--cortex-surface);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .md-body blockquote {
+      border-left: 3px solid var(--cortex-border);
+      padding-left: 10px;
+      margin: 0.4em 0;
+      color: var(--cortex-text-muted);
+    }
+    .md-body table {
+      border-collapse: collapse;
+      margin: 0.5em 0;
+      font-size: var(--cortex-fs-sm);
+      display: block;
+      overflow-x: auto;  /* 宽表横向滚动，避免撑破气泡 */
+    }
+    .md-body th, .md-body td {
+      border: 1px solid var(--cortex-border);
+      padding: 4px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .md-body th {
+      background: var(--cortex-surface);
+      font-weight: 600;
+    }
+    .thinking { opacity: 0.6; }
     .error {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);
