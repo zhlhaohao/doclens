@@ -390,6 +390,40 @@ export class ChatView extends LitElement {
     await action();
   }
 
+  private _onPreviewSaved = (): void => {
+    this.previewDirty = false;
+    this._pushToast("已保存", "success", 2500);
+  };
+
+  private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>): void => {
+    this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
+  };
+
+  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>): void => {
+    // 清掉可能残留的编辑脏标志（上传可能发生在 edit 模式下），避免
+    // 后续切换结果时弹出陈旧的"丢弃修改？"确认框
+    this.previewDirty = false;
+    this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
+    // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
+    void this._reloadPreview();
+  };
+
+  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>): void => {
+    this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
+  };
+
+  /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
+  private async _reloadPreview(): Promise<void> {
+    if (!this.previewPath) return;
+    const r = await fetchPreview(this.previewPath);
+    if (r.ok) {
+      this.previewContent = r.content;
+      this.previewLanguage = r.language;
+      this.previewWritable = r.writable;
+      this.previewPages = r.pages;
+    }
+  }
+
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
     stack?.pushToast(message, level, duration);
@@ -437,7 +471,11 @@ export class ChatView extends LitElement {
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
       .pages=${this.previewPages}
-      @dirty-change=${this._onPreviewDirty}>
+      @dirty-change=${this._onPreviewDirty}
+      @saved=${this._onPreviewSaved}
+      @save-failed=${this._onPreviewSaveFailed}
+      @upload-success=${this._onPreviewUploadSuccess}
+      @upload-failed=${this._onPreviewUploadFailed}>
     </preview-pane>`;
     return html`
       <toast-stack></toast-stack>
