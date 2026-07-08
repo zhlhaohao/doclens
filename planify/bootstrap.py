@@ -283,8 +283,8 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
         user_id,
         user_config=get_user_config_dict(
             model_id=app_config.get("model_id"),
-            anthropic_api_key=app_config.get("anthropic_api_key"),
-            anthropic_base_url=app_config.get("anthropic_base_url"),
+            api_key=app_config.get("api_key"),
+            base_url=app_config.get("base_url"),
             token_threshold=app_config.get("token_threshold"),
             poll_interval=app_config.get("poll_interval"),
             idle_timeout=app_config.get("idle_timeout"),

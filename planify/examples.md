@@ -23,8 +23,8 @@ manager = initialize(base_workdir=Path.cwd())
 # 创建会话
 user_config = {
     "model_id": "claude-sonnet-4-6",
-    "anthropic_api_key": "sk-...",
-    "anthropic_base_url": "https://api.anthropic.com",
+    "api_key": "sk-...",
+    "base_url": "https://api.anthropic.com",
     "token_threshold": 100000,
     "poll_interval": 5,
     "idle_timeout": 60,
@@ -176,8 +176,8 @@ async def get_user_config(user_id: str) -> dict:
     # 示例配置
     return {
         "model_id": "claude-sonnet-4-6",
-        "anthropic_api_key": "sk-...",
-        "anthropic_base_url": None,
+        "api_key": "sk-...",
+        "base_url": None,
         "token_threshold": 100000,
         "poll_interval": 5,
         "idle_timeout": 60,
