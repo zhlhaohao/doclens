@@ -480,7 +480,6 @@ def main():
                     history[:] = auto_compact(
                         history,
                         session.client,
-                        session.model,
                         session.config.transcript_dir,
                     )
                     logger.info("手动压缩完成")

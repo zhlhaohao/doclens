@@ -64,6 +64,10 @@ class Agent:
             tool_result_callback: 工具结果回调函数 (name, result) -> None
         """
         self.client = client
+        # Task 13: 兼容层 —— provider 是 client 的别名，
+        # 用于驱动 LLMProvider 抽象接口（compact.py 等）。
+        # 待所有调用点迁移完成后，将 self.client 移除。
+        self.provider = client
         self.model = model
         self.tools = tools
         self.tool_handlers = tool_handlers
@@ -121,7 +125,7 @@ class Agent:
             self._microcompact(messages)
             if self._estimate_tokens(messages) > self.config["token_threshold"]:
                 transcript_dir = self.config.get("transcript_dir", ".transcripts")
-                compacted = self._auto_compact(messages, self.client, self.model, transcript_dir)
+                compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
                 # 如果有 session，使用线程安全的替换
                 if self.session:
@@ -249,7 +253,7 @@ class Agent:
             # === s06: 手动压缩 ===
             if manual_compress:
                 transcript_dir = self.config.get("transcript_dir", ".transcripts")
-                compacted = self._auto_compact(messages, self.client, self.model, transcript_dir)
+                compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
                 # 如果有 session，使用线程安全的替换
                 if self.session:

@@ -68,6 +68,10 @@ class StreamingAgent:
             session: Session 实例
         """
         self.client = client
+        # Task 13 兼容层 —— provider 是 client 的别名，
+        # 用于驱动 LLMProvider 抽象接口（compact.py 等）。
+        # 待所有调用点迁移完成后，将 self.client 移除。
+        self.provider = client
         self.model = model
         self.tools = tools
         self.tool_handlers = tool_handlers
@@ -212,7 +216,7 @@ class StreamingAgent:
                     if self._auto_compact and self.session:
                         transcript_dir = str(self.session.config.transcript_dir)
                         compacted = self._auto_compact(
-                            messages, self.client, self.model, transcript_dir
+                            messages, self.provider, transcript_dir
                         )
                         if self.session:
                             self.session.replace_messages_in_place(compacted)

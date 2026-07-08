@@ -370,7 +370,6 @@ class CortexAgent:
                 compacted = auto_compact(
                     history,
                     self.session.client,
-                    self.session.model,
                     self.workdir / ".cortex/transcripts"
                 )
                 self.session.replace_messages_in_place(compacted)
