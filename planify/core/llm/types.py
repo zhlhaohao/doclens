@@ -51,3 +51,9 @@ class LLMResponse:
     stop_reason: Literal["end_turn", "tool_use", "max_tokens", "error"]
     model: str
     usage: dict[str, int]
+
+@dataclass(frozen=True)
+class StreamEvent:
+    """归一化流式事件（后续 task 完善字段）。"""
+
+    type: str
