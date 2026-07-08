@@ -99,7 +99,79 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
     ) -> Iterator[StreamEvent]:
-        raise NotImplementedError("OpenAICompatProvider.stream 将在 Task 11 实现")
+        openai_messages = [{"role": "system", "content": system}] if system else []
+        # stream 内部不持有跨调用状态
+        mapper = ToolCallMapper()
+        openai_messages.extend(messages_anthropic_to_openai(messages, mapper))
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = tools_anthropic_to_openai(tools)
+
+        # 累积 input_json_delta 用于 tool_call
+        json_deltas: dict[int, list[str]] = {}  # tool_call index -> partial JSON fragments
+        tool_call_ids: dict[int, str] = {}      # tool_call index -> openai id
+        tool_call_names: dict[int, str] = {}    # tool_call index -> function name
+        text_started = False
+        tool_started = False
+
+        yield StreamEvent(type="message_start")
+
+        for chunk in self._client.chat.completions.create(**kwargs):
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+
+            if getattr(delta, "content", None):
+                if not text_started:
+                    yield StreamEvent(type="content_block_start", block_index=0)
+                    text_started = True
+                yield StreamEvent(
+                    type="content_block_delta",
+                    text_delta=delta.content,
+                    block_index=0,
+                )
+
+            if getattr(delta, "tool_calls", None):
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if tc.id:
+                        tool_call_ids[idx] = tc.id
+                        tool_call_names[idx] = tc.function.name  # type: ignore[union-attr]
+                        if not tool_started:
+                            yield StreamEvent(
+                                type="content_block_start",
+                                block_index=1,
+                            )
+                            tool_started = True
+                    if tc.function and tc.function.arguments:
+                        json_deltas.setdefault(idx, []).append(tc.function.arguments)
+                        yield StreamEvent(
+                            type="content_block_delta",
+                            input_json_delta=tc.function.arguments,
+                            block_index=1,
+                        )
+
+            if choice.finish_reason:
+                if text_started:
+                    yield StreamEvent(type="content_block_stop", block_index=0)
+                if tool_started:
+                    # 关闭 tool_use block（input_json_delta 已在前面 yield）
+                    yield StreamEvent(type="content_block_stop", block_index=1)
+                stop_reason_map = {
+                    "stop": "end_turn",
+                    "tool_calls": "tool_use",
+                    "length": "max_tokens",
+                }
+                mapped = stop_reason_map.get(choice.finish_reason, "end_turn")
+                yield StreamEvent(type="message_delta", stop_reason=mapped)
+
+        yield StreamEvent(type="message_stop")
 
     def count_tokens(self, text: str) -> int:
         return len(text) // 4
