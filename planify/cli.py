@@ -296,12 +296,16 @@ def setup_single_user_session():
     )
     logger.info("=" * 50 + " CLI Mode Started " + "=" * 50)
 
-    # 初始化 Anthropic 客户端
-    from planify.core import init_anthropic_client
+    # 初始化 LLM Provider（通过 factory.create_provider）
+    from planify.core.llm import create_provider
 
-    client = init_anthropic_client(
-        config.get("base_url"), config.get("api_key")
-    )
+    client = create_provider({
+        "provider_name": config.get("provider_name", "anthropic"),
+        "api_key": config.get("api_key", ""),
+        "model_id": config.get("model_id", ""),
+        "base_url": config.get("base_url", ""),
+        "protocol": config.get("protocol", ""),
+    })
 
     # 初始化管理器
     todo_mgr = TodoManager()
