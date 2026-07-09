@@ -360,9 +360,29 @@ export class ChatView extends LitElement {
     return "";
   }
 
+  /** 把 AI 给的参考资料格式规范化为 fetchPreview 可解析的 path。
+   *  处理：markdown 链接 [text](url) → url；剥 file:// 前缀；URL decode。
+   *  兼容 AI 偶发用 markdown 链接或 file URL 的情况（治本，让 click 永远能打开）。 */
+  private _normalizeReferencePath(raw: string): string {
+    let p = (raw ?? "").trim();
+    if (!p) return "";
+    // 1) 剥 markdown 链接 [text](url) → url
+    const md = p.match(/^\[.*?\]\((.*?)\)$/);
+    if (md) p = md[1].trim();
+    // 2) 剥 file:// 前缀（file:// 或 file:/// 都处理）
+    p = p.replace(/^file:\/\/\/?/i, "");
+    // 3) URL decode（处理 %20 等）
+    try { p = decodeURIComponent(p); } catch { /* leave as-is */ }
+    return p;
+  }
+
   private async _onReferenceClick(e: CustomEvent<{ path: string }>): Promise<void> {
     await this._safeAction(async () => {
-      const path = e.detail.path;
+      const path = this._normalizeReferencePath(e.detail.path);
+      if (!path) {
+        this._pushToast("参考路径为空", "error", 5000);
+        return;
+      }
       this.previewError = null;
       const result = await fetchPreview(path);
       if (result.ok) {

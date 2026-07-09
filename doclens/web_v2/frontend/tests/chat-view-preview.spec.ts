@@ -173,4 +173,50 @@ describe("<chat-view> reference preview", () => {
     expect((el as any).previewPath).toBe("");
     expect((el as any).previewContent).toBe("");
   });
+
+  it("_normalizeReferencePath strips markdown link + file:// + URL-decodes", async () => {
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    const norm = (p: string) => (el as any)._normalizeReferencePath(p);
+    // AI 偶发的 markdown 链接 + file URL（"海洋深处"对话复现）
+    expect(norm("[深海生物新物种发现.md](file:///C:/Users/lianghao/github/cortex/test_work_dir/生命科学/深海生物新物种发现.md)"))
+      .toBe("C:/Users/lianghao/github/cortex/test_work_dir/生命科学/深海生物新物种发现.md");
+    // file:/// 三斜杠
+    expect(norm("file:///C:/a/b.md")).toBe("C:/a/b.md");
+    // file:// 双斜杠
+    expect(norm("file://relative/x.md")).toBe("relative/x.md");
+    // 纯相对路径（不变）
+    expect(norm("生命科学/x.md")).toBe("生命科学/x.md");
+    // URL decode（中文 %E7%94%9F = 生）
+    expect(norm("file:///C:/.../%E7%94%9F%E5%91%BD%E7%A7%91%E5%AD%A6.md"))
+      .toBe("C:/.../生命科学.md");
+    // 空
+    expect(norm("")).toBe("");
+    expect(norm("   ")).toBe("");
+  });
+
+  it("reference-click normalizes AI markdown link + file:// path before fetchPreview", async () => {
+    // 端到端：AI 给的 [x](file:///...) 经清洗后 fetchPreview 收到正确 path，preview 打开
+    let capturedPath = "";
+    global.fetch = vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/preview")) {
+        // 用字符串 regex 解析（jsdom 下 new URL('/api/preview?...') 无 base 会抛）
+        const m = String(url).match(/[?&]path=([^&]*)/);
+        capturedPath = m ? decodeURIComponent(m[1]) : "";
+        return new Response(
+          JSON.stringify({ path: capturedPath, language: "text", content: "ok", writable: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    await (el as any)._onReferenceClick({
+      detail: { path: "[x.md](file:///C:/test/path/x.md)" },
+    } as any);
+    await new Promise((r) => setTimeout(r, 20));
+    await el.updateComplete;
+    expect(capturedPath).toBe("C:/test/path/x.md");
+    expect((el as any).previewOpen).toBe(true);
+  });
 });
