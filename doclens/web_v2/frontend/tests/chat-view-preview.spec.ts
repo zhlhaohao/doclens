@@ -157,4 +157,20 @@ describe("<chat-view> reference preview", () => {
     await el.updateComplete;
     expect((el as any)._previewPaneWidth).toBe(widthBefore + 80);
   });
+
+  it("_backToInitial clears preview state (no residual pane after returning)", async () => {
+    mockPreviewOk();
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    await (el as any)._onReferenceClick({ detail: { path: "docs/a.md" } } as any);
+    await new Promise((r) => setTimeout(r, 20));
+    await el.updateComplete;
+    expect((el as any).previewOpen).toBe(true);
+    expect((el as any).previewPath).toBe("docs/a.md");
+    (el as any)._backToInitial();
+    await el.updateComplete;
+    expect((el as any).previewOpen).toBe(false);
+    expect((el as any).previewPath).toBe("");
+    expect((el as any).previewContent).toBe("");
+  });
 });
