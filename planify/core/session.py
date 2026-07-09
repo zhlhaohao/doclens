@@ -29,6 +29,7 @@ class SessionConfig:
     anthropic_api_key: str
     anthropic_base_url: Optional[str] = None
     token_threshold: int = 100000
+    planify_context_window: int = 200000
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径
