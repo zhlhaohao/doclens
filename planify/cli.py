@@ -296,12 +296,16 @@ def setup_single_user_session():
     )
     logger.info("=" * 50 + " CLI Mode Started " + "=" * 50)
 
-    # 初始化 Anthropic 客户端
-    from planify.core import init_anthropic_client
+    # 初始化 LLM Provider（通过 factory.create_provider）
+    from planify.core.llm import create_provider
 
-    client = init_anthropic_client(
-        config.get("anthropic_base_url"), config.get("anthropic_api_key")
-    )
+    client = create_provider({
+        "provider_name": config.get("provider_name", "anthropic"),
+        "api_key": config.get("api_key", ""),
+        "model_id": config.get("model_id", ""),
+        "base_url": config.get("base_url", ""),
+        "protocol": config.get("protocol", ""),
+    })
 
     # 初始化管理器
     todo_mgr = TodoManager()
@@ -349,8 +353,8 @@ def setup_single_user_session():
     session_config = SessionConfig(
         workdir=workdir,
         model_id=config.get("model_id"),
-        anthropic_api_key=config.get("anthropic_api_key"),
-        anthropic_base_url=config.get("anthropic_base_url"),
+        api_key=config.get("api_key"),
+        base_url=config.get("base_url"),
         token_threshold=config.get("token_threshold", 100000),
         poll_interval=config.get("poll_interval", 5),
         idle_timeout=config.get("idle_timeout", 60),
@@ -482,7 +486,6 @@ def main():
                     history[:] = auto_compact(
                         history,
                         session.client,
-                        session.model,
                         session.config.transcript_dir,
                     )
                     logger.info("手动压缩完成")

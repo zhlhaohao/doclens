@@ -1,39 +1,56 @@
 """网络搜索工具
-.venv/Scripts/python.exe -m cortex web  "外交部活动 --  search from domain gov.cn, 不要总结，只需要给出网站标题和url" 
+.venv/Scripts/python.exe -m cortex web  "外交部活动 --  search from domain gov.cn, 不要总结，只需要给出网站标题和url"
 
-使用 Anthropic API 的服务端 web_search_20250305 工具获取实时网络信息。
-需要 API 端点支持 web_search_20250305 工具类型。
+使用 LLM Provider 的服务端 web_search 工具获取实时网络信息。
+需要 API 端点支持 web_search 工具类型。
 """
+
+from __future__ import annotations
 
 import json
 from typing import Any, List, Optional, Tuple
 
-from anthropic import Anthropic
+from ..core.llm.provider import LLMProvider
 
 
 def extract_search_results(content_blocks: list) -> list[dict]:
     """
-    从 API 返回的 content blocks 中提取搜索结果
+    从 Provider 返回的 content blocks 中提取搜索结果
+
+    支持 dataclass（TextBlock / ToolUseBlock 等）和 dict 两种格式。
 
     Args:
-        content_blocks: Anthropic API 返回的 content 块列表
+        content_blocks: Provider 返回的 content 块列表
 
     Returns:
         结果字典列表，每项包含 title/url/page_age 或 type:text
     """
     results = []
     for block in content_blocks:
-        if hasattr(block, 'type') and block.type == 'web_search_tool_result':
-            if hasattr(block, 'content') and isinstance(block.content, list):
-                for r in block.content:
-                    if hasattr(r, 'title') and hasattr(r, 'url'):
+        btype = getattr(block, "type", None) if not isinstance(block, dict) else block.get("type")
+        if btype == "web_search_tool_result":
+            inner = getattr(block, "content", None) if not isinstance(block, dict) else block.get("content")
+            if isinstance(inner, list):
+                for r in inner:
+                    if isinstance(r, dict):
+                        title = r.get("title", "")
+                        url = r.get("url", "")
+                        page_age = r.get("page_age")
                         results.append({
-                            "title": r.title,
-                            "url": r.url,
-                            **({"page_age": r.page_age} if hasattr(r, 'page_age') and r.page_age else {}),
+                            "title": title,
+                            "url": url,
+                            **({"page_age": page_age} if page_age else {}),
                         })
-        elif hasattr(block, 'type') and block.type == 'text':
-            results.append({"type": "text", "text": block.text})
+                    else:
+                        if hasattr(r, "title") and hasattr(r, "url"):
+                            results.append({
+                                "title": r.title,
+                                "url": r.url,
+                                **({"page_age": r.page_age} if hasattr(r, "page_age") and r.page_age else {}),
+                            })
+        elif btype == "text":
+            text = getattr(block, "text", None) if not isinstance(block, dict) else block.get("text", "")
+            results.append({"type": "text", "text": text or ""})
     return results
 
 
@@ -77,7 +94,7 @@ def _build_search_query(
 
 def run_web_search(
     query: str,
-    client: Anthropic,
+    client: LLMProvider,
     model_id: str = "claude-opus-4-6",
     thinking_budget: int = 10000,
     allowed_domains: Optional[List[str]] = None,
@@ -86,11 +103,11 @@ def run_web_search(
     location: Optional[str] = None,
 ) -> str:
     """
-    使用 Anthropic API 的服务端 web_search 工具搜索网络信息
+    使用 LLM Provider 的服务端 web_search 工具搜索网络信息
 
     Args:
         query: 搜索查询字符串
-        client: Anthropic 客户端实例
+        client: LLM Provider 实例
         model_id: 模型 ID
         thinking_budget: Thinking 预算 token 数（默认 10000）
         allowed_domains: 只搜索这些域名
@@ -120,30 +137,52 @@ def run_web_search(
     }
     tools = [tool]
 
-    kwargs: dict[str, Any] = {
-        "model": model_id,
-        "max_tokens": 32000,
-        "tools": tools,
-        "messages": [{"role": "user", "content": f"Perform a web search for: {actual_query}"}],
-        "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
-    }
+    messages = [{"role": "user", "content": f"Perform a web search for: {actual_query}"}]
 
     import logging
     logging.getLogger("planify.tools.web").info(
-        "web_search request | model=%s | kwargs=%s",
+        "web_search request | model=%s | tools=%s | messages=%s",
         model_id,
-        kwargs,
+        tools,
+        messages,
     )
 
     try:
-        import httpx
-        kwargs["timeout"] = httpx.Timeout(60.0, connect=10.0)
+        # 通过 LLMProvider 抽象接口调用流式接口，最终汇集结果
+        last_block_index: dict[str, int] = {"text": -1, "tool": -1}
+        text_parts: list[str] = []
+        search_tool_result_blocks: list = []
 
-        # 内部流式调用，获取最终结果
-        with client.messages.stream(**kwargs) as stream:
-            response = stream.get_final_message()
+        for event in client.stream(
+            messages=messages,
+            system="",
+            tools=[],  # web_search 是服务端工具，由 provider 自身处理
+            max_tokens=32000,
+        ):
+            etype = event.type
+            if etype == "content_block_delta" and event.text_delta:
+                text_parts.append(event.text_delta)
+            elif etype == "content_block_stop":
+                # provider 通常会一次性返回完整结果，content_block_stop 只是一个信号
+                pass
+            elif etype == "message_delta":
+                pass
+            elif etype == "message_stop":
+                break
 
-        results = extract_search_results(response.content)
+        # 流式 provider 通常只在 chat 接口返回完整内容；用 chat 兜底获取结构化 content
+        try:
+            response = client.chat(
+                messages=messages,
+                system="",
+                tools=[],
+                max_tokens=32000,
+            )
+            results = extract_search_results(response.content)
+        except Exception:
+            # 若 chat 不可用，降级使用累积的文本
+            results = [{"type": "text", "text": "".join(text_parts)}] if text_parts else []
+
         return _format_results(results)
 
     except Exception as e:
@@ -156,13 +195,13 @@ def run_web_search(
 
 
 def make_web_tools(
-    client: Optional[Anthropic], model_id: str = "claude-opus-4-6"
+    client: Optional[LLMProvider], model_id: str = "claude-opus-4-6"
 ) -> Tuple[List[dict], dict]:
     """
     创建 web_search 工具定义和处理器
 
     Args:
-        client: Anthropic 客户端实例
+        client: LLM Provider 实例
         model_id: 模型 ID
 
     Returns:

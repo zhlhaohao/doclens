@@ -8,10 +8,13 @@
 #   ~/github/cortex/              - 主分支（具备 .venv 和 test_work_dir）
 #   ~/github/cortex-feat-settings/ - worktree
 
-# 检测运行场景
-$venvPythonInScriptRoot = Test-Path (Join-Path $PSScriptRoot ".venv\Scripts\python.exe")
+# 检测运行场景：用 .git 类型判断（主仓库是目录，worktree 是文件）。
+# 不能用 .venv 存在性判断——worktree 里 pip install -e ".[dev]" 也会创建 .venv。
+# 也不能用 test_work_dir 存在性判断——worktree 也可能存在 test_work_dir。
+$gitPath = Join-Path $PSScriptRoot ".git"
+$isMainRepo = Test-Path $gitPath -PathType Container
 
-if ($venvPythonInScriptRoot) {
+if ($isMainRepo) {
     # 场景1：从主分支目录运行
     $cortexRoot = $PSScriptRoot
     $venvPython = Join-Path $cortexRoot ".venv\Scripts\python.exe"

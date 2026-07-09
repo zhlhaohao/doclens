@@ -1,5 +1,19 @@
 """Tests for config_validator: validates a values dict against CortexConfig."""
+import pytest
+
 from doclens.web_v2.config_validator import validate_values, ValidationErrors
+
+
+def _ok(**overrides):
+    base = {
+        "PLANIFY_API_KEY": "sk-test",
+        "PLANIFY_BASE_URL": "https://api.example.com",
+        "PLANIFY_MODEL_ID": "claude-opus-4-6",
+        "PLANIFY_PROVIDER": "anthropic",
+        "PLANIFY_PROTOCOL": "anthropic",
+    }
+    base.update(overrides)
+    return base
 
 
 def test_validate_accepts_known_good_values():
@@ -53,3 +67,67 @@ def test_validate_skips_empty_string_for_optional_number_field():
         "CORTEX_WEIGHT_KEYWORD_MATCH": "0.5",  # 有值，正常校验
     })
     assert errors.fields == []
+
+
+def test_anthropic_provider_minimal_ok():
+    """anthropic + base_url 空 + protocol=anthropic 应通过（用 SDK 默认）。"""
+    values = _ok()
+    del values["PLANIFY_BASE_URL"]
+    values["PLANIFY_BASE_URL"] = ""
+    errors = validate_values(values)
+    assert errors.fields == []
+
+
+def test_known_preset_openai_compat_ok():
+    """已知预设 + openai_compat + base_url https 应通过。"""
+    values = _ok(
+        PLANIFY_PROVIDER="deepseek",
+        PLANIFY_PROTOCOL="openai_compat",
+        PLANIFY_BASE_URL="https://api.deepseek.com/v1",
+    )
+    errors = validate_values(values)
+    assert errors.fields == []
+
+
+def test_custom_requires_base_url():
+    """provider=custom 但 base_url 空应失败。"""
+    values = _ok(
+        PLANIFY_PROVIDER="custom",
+        PLANIFY_PROTOCOL="openai_compat",
+        PLANIFY_BASE_URL="",
+    )
+    errors = validate_values(values)
+    field_names = [f.field for f in errors.fields]
+    assert "PLANIFY_BASE_URL" in field_names
+
+
+def test_custom_requires_protocol():
+    """provider=custom 但 protocol 空应失败。"""
+    values = _ok(
+        PLANIFY_PROVIDER="custom",
+        PLANIFY_PROTOCOL="",
+        PLANIFY_BASE_URL="https://x/v1",
+    )
+    errors = validate_values(values)
+    field_names = [f.field for f in errors.fields]
+    assert "PLANIFY_PROTOCOL" in field_names
+
+
+def test_openai_compat_requires_http_url():
+    """protocol=openai_compat 但 base_url 不是 http(s) 应失败。"""
+    values = _ok(
+        PLANIFY_PROVIDER="custom",
+        PLANIFY_PROTOCOL="openai_compat",
+        PLANIFY_BASE_URL="ftp://x/v1",
+    )
+    errors = validate_values(values)
+    field_names = [f.field for f in errors.fields]
+    assert "PLANIFY_BASE_URL" in field_names
+
+
+def test_unknown_provider_rejected():
+    """未知 provider 名应失败。"""
+    values = _ok(PLANIFY_PROVIDER="bogus-provider")
+    errors = validate_values(values)
+    field_names = [f.field for f in errors.fields]
+    assert "PLANIFY_PROVIDER" in field_names

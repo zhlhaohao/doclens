@@ -7,6 +7,8 @@ import type { SettingsScope } from "../state/types";
 import {
   SETTINGS_FIELDS,
   SETTINGS_TAB_LABELS,
+  PRESET_BASE_URLS,
+  PRESET_PROTOCOLS,
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
@@ -377,6 +379,7 @@ export class SettingsView extends LitElement {
   @state() private _toast: string | null = null;
   @state() private _values: Record<string, string> = {};
   @state() private _original: Record<string, string> = {};
+  @state() private _userEditedBaseUrl = false;
   @state() private _exists = true;
   @state() private _scope: SettingsScope = "global";
   @state() private _fieldErrors: Record<string, string> = {};
@@ -428,6 +431,7 @@ export class SettingsView extends LitElement {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
+      this._userEditedBaseUrl = false;
       this._exists = resp.exists;
       this._fieldErrors = {};
       actions.loadSettings(resp.values, resp.exists);
@@ -450,9 +454,52 @@ export class SettingsView extends LitElement {
     return this._dirtyFields.length > 0;
   }
 
+  private _updateValues(updates: Record<string, string>) {
+    this._values = { ...this._values, ...updates };
+    for (const [envVar, value] of Object.entries(updates)) {
+      actions.updateSetting(envVar, value);
+    }
+  }
+
   private _onInput(envVar: string, value: string) {
-    this._values = { ...this._values, [envVar]: value };
-    actions.updateSetting(envVar, value);
+    if (envVar === "PLANIFY_PROVIDER") {
+      this._onProviderChange(value);
+      return;
+    }
+    if (envVar === "PLANIFY_BASE_URL") {
+      this._onBaseUrlChange(value);
+      return;
+    }
+    this._updateValues({ [envVar]: value });
+  }
+
+  private _onProviderChange(newProvider: string) {
+    if (newProvider === "custom") {
+      const updates: Record<string, string> = this._values["PLANIFY_PROTOCOL"]
+        ? { PLANIFY_PROVIDER: newProvider }
+        : { PLANIFY_PROVIDER: newProvider, PLANIFY_PROTOCOL: "openai_compat" };
+      this._updateValues(updates);
+      return;
+    }
+
+    if (!this._userEditedBaseUrl) {
+      this._updateValues({
+        PLANIFY_PROVIDER: newProvider,
+        PLANIFY_BASE_URL: PRESET_BASE_URLS[newProvider] ?? "",
+        PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
+      });
+      return;
+    }
+
+    this._updateValues({
+      PLANIFY_PROVIDER: newProvider,
+      PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
+    });
+  }
+
+  private _onBaseUrlChange(newBaseUrl: string) {
+    this._userEditedBaseUrl = true;
+    this._updateValues({ PLANIFY_BASE_URL: newBaseUrl });
   }
 
   private _isMobile(): boolean {
@@ -480,6 +527,7 @@ export class SettingsView extends LitElement {
 
   private _revert() {
     this._values = { ...this._original };
+    this._userEditedBaseUrl = false;
     actions.revertSettings();
   }
 
@@ -492,6 +540,7 @@ export class SettingsView extends LitElement {
       const result = await putConfig(this._scope, this._values);
       if (!this.isConnected) return;
       this._original = { ...this._values };
+      this._userEditedBaseUrl = false;
       actions.loadSettings(this._values, true);
       const msg = result.needs_restart
         ? "已保存。重启 doclens gui 后 AI 配置生效。"

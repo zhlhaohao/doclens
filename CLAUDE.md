@@ -279,3 +279,36 @@ pwsh -File ./start-app.ps1 gui
 # 在 test_work_dir 目录下执行
 ../.venv/Scripts/python.exe -m doclens <命令>
 ```
+
+### 切换 LLM Provider
+
+通过环境变量切换底层 LLM（PLANIFY_PROVIDER + 关键三件套）：
+
+```bash
+# Anthropic（默认）
+export PLANIFY_PROVIDER=anthropic
+export PLANIFY_API_KEY=sk-ant-...
+export PLANIFY_MODEL_ID=claude-sonnet-4-6
+
+# DeepSeek
+export PLANIFY_PROVIDER=deepseek
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=deepseek-chat
+
+# Qwen（阿里云通义千问）
+export PLANIFY_PROVIDER=qwen
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=qwen-plus
+
+# OpenRouter
+export PLANIFY_PROVIDER=openrouter
+export PLANIFY_API_KEY=sk-or-...
+export PLANIFY_MODEL_ID=anthropic/claude-3.5-sonnet
+
+# 自定义 OpenAI 兼容代理
+export PLANIFY_PROVIDER=custom
+export PLANIFY_BASE_URL=https://my-proxy/v1
+export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_API_KEY=...
+export PLANIFY_MODEL_ID=my-model
+```

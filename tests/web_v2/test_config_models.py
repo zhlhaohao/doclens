@@ -42,3 +42,29 @@ def test_config_save_result_reports_needs_restart_with_field_list():
     )
     assert result.needs_restart is True
     assert "PLANIFY_API_KEY" in result.restart_fields
+
+
+# ---------------------------------------------------------------------------
+# CortexConfig fields: planify_provider / planify_protocol (LLM Provider switching)
+# ---------------------------------------------------------------------------
+import pytest  # noqa: E402
+
+from doclens.config import CortexConfig  # noqa: E402
+
+
+def test_cortex_config_default_provider_is_anthropic(monkeypatch):
+    # 清除可能影响测试的环境变量
+    for k in ["PLANIFY_PROVIDER", "PLANIFY_PROTOCOL", "PLANIFY_API_KEY",
+              "PLANIFY_BASE_URL", "PLANIFY_MODEL_ID"]:
+        monkeypatch.delenv(k, raising=False)
+    cfg = CortexConfig()
+    assert cfg.planify_provider == "anthropic"
+    assert cfg.planify_protocol is None
+
+
+def test_cortex_config_provider_from_env(monkeypatch):
+    monkeypatch.setenv("PLANIFY_PROVIDER", "deepseek")
+    monkeypatch.setenv("PLANIFY_PROTOCOL", "openai_compat")
+    cfg = CortexConfig()
+    assert cfg.planify_provider == "deepseek"
+    assert cfg.planify_protocol == "openai_compat"

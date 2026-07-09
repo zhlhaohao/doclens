@@ -49,9 +49,11 @@ def register_app_dependencies(
 
 
 def register_planify_config(
-    planify_api_key: str = "",
-    planify_model_id: str = "claude-opus-4-6",
-    planify_base_url: str = "",
+    provider_name: str = "anthropic",
+    api_key: str = "",
+    model_id: str = "claude-opus-4-6",
+    base_url: str = "",
+    protocol: str = "",
     baidu_weather_api_url: str = "https://api.map.com.com/weather/v2/",
     baidu_weather_ak: str = "",
     baidu_weather_data_type: str = "fc",
@@ -66,9 +68,11 @@ def register_planify_config(
     3. 默认值
 
     Args:
-        planify_api_key: Anthropic API Key
-        planify_model_id: Anthropic 模型 ID
-        planify_base_url: Anthropic API 端点
+        provider_name: LLM Provider 名称（如 "anthropic" / "openrouter" / "custom"）
+        api_key: LLM Provider API Key
+        model_id: 模型 ID
+        base_url: 自定义 API 端点（custom 预设必填）
+        protocol: 协议类型（"anthropic" / "openai_compat"，custom 预设必填）
         baidu_weather_api_url: 百度天气 API URL
         baidu_weather_ak: 百度天气 AK
         baidu_weather_data_type: 百度天气数据类型
@@ -76,9 +80,11 @@ def register_planify_config(
     """
     global _registered_config
     _registered_config = {
-        "planify_api_key": planify_api_key,
-        "planify_model_id": planify_model_id,
-        "planify_base_url": planify_base_url,
+        "provider_name": provider_name,
+        "api_key": api_key,
+        "model_id": model_id,
+        "base_url": base_url,
+        "protocol": protocol,
         "baidu_weather_api_url": baidu_weather_api_url,
         "baidu_weather_ak": baidu_weather_ak,
         "baidu_weather_data_type": baidu_weather_data_type,
@@ -283,8 +289,8 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
         user_id,
         user_config=get_user_config_dict(
             model_id=app_config.get("model_id"),
-            anthropic_api_key=app_config.get("anthropic_api_key"),
-            anthropic_base_url=app_config.get("anthropic_base_url"),
+            api_key=app_config.get("api_key"),
+            base_url=app_config.get("base_url"),
             token_threshold=app_config.get("token_threshold"),
             poll_interval=app_config.get("poll_interval"),
             idle_timeout=app_config.get("idle_timeout"),

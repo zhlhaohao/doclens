@@ -16,11 +16,20 @@ def test_apply_config_updates_session_client_and_model():
     config.planify_base_url = "https://new.api.url"
     config.planify_api_key = "sk-new-key"
     config.planify_model_id = "claude-sonnet-4-6"
+    # 默认值：CortexConfig 未暴露 provider/protocol，apply_config 会回退到 anthropic
+    config.planify_provider = "anthropic"
+    config.planify_protocol = ""
 
-    with patch("doclens.agent_integration.init_anthropic_client", return_value="new_client") as mock_init:
+    # apply_config 现已迁移到 factory.create_provider（默认 anthropic）
+    with patch("doclens.agent_integration.create_provider", return_value="new_client") as mock_create:
         agent.apply_config(config)
 
-    mock_init.assert_called_once_with("https://new.api.url", "sk-new-key")
+    mock_create.assert_called_once()
+    cfg_arg = mock_create.call_args.args[0]
+    assert cfg_arg["api_key"] == "sk-new-key"
+    assert cfg_arg["model_id"] == "claude-sonnet-4-6"
+    assert cfg_arg["base_url"] == "https://new.api.url"
+    assert cfg_arg["provider_name"] == "anthropic"
     assert agent.session.client == "new_client"
     assert agent.session.model == "claude-sonnet-4-6"
 

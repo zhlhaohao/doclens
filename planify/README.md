@@ -68,6 +68,35 @@ PLANIFY_BASE_URL=https://api.anthropic.com
 # ZHIPUAI_API_KEY=your-zhipuai-api-key
 ```
 
+## 切换 LLM Provider
+
+通过 `PLANIFY_PROVIDER` 选择预设供应商：
+
+| 预设 | 用途 | 默认 base_url | 默认协议 |
+|------|------|---------------|----------|
+| `anthropic`（默认） | Anthropic 原生 | SDK 默认 | `anthropic` |
+| `openrouter` | OpenRouter 聚合 | `https://openrouter.ai/api/v1` | `openai_compat` |
+| `qwen` | 阿里云通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai_compat` |
+| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | `openai_compat` |
+| `glm` | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/` | `openai_compat` |
+| `custom` | 自定义 | 用户填写 | 用户填写 |
+
+示例（DeepSeek）：
+```bash
+export PLANIFY_PROVIDER=deepseek
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=deepseek-chat
+```
+
+自定义（OpenAI 兼容代理）：
+```bash
+export PLANIFY_PROVIDER=custom
+export PLANIFY_BASE_URL=https://my-proxy/v1
+export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_API_KEY=...
+export PLANIFY_MODEL_ID=...
+```
+
 ## 目录结构
 
 ### 单用户模式

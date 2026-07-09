@@ -45,8 +45,64 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   terminal: "终端",
 };
 
+/** LLM provider 已知预设。必须与 planify/core/llm/presets.py::PROVIDER_PRESETS 同步。 */
+export const PROVIDER_OPTIONS: SettingsFieldOption[] = [
+  { value: "anthropic", label: "Anthropic（默认）" },
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "qwen", label: "阿里通义千问" },
+  { value: "deepseek", label: "DeepSeek" },
+  { value: "glm", label: "智谱 GLM" },
+  { value: "custom", label: "自定义（OpenAI 兼容或 Anthropic 协议）" },
+];
+
+/** LLM provider 协议枚举。 */
+export const PROTOCOL_OPTIONS: SettingsFieldOption[] = [
+  { value: "anthropic", label: "Anthropic 协议" },
+  { value: "openai_compat", label: "OpenAI 兼容" },
+];
+
+/** 已知预设的默认 base_url。空字符串表示使用 SDK 默认（anthropic）。 */
+export const PRESET_BASE_URLS: Record<string, string> = {
+  anthropic: "",
+  openrouter: "https://openrouter.ai/api/v1",
+  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  deepseek: "https://api.deepseek.com/v1",
+  glm: "https://open.bigmodel.cn/api/paas/v4/",
+  custom: "",
+};
+
+/** 已知预设的默认 protocol。 */
+export const PRESET_PROTOCOLS: Record<string, string> = {
+  anthropic: "anthropic",
+  openrouter: "openai_compat",
+  qwen: "openai_compat",
+  deepseek: "openai_compat",
+  glm: "openai_compat",
+  custom: "",
+};
+
 export const SETTINGS_FIELDS: SettingsField[] = [
-  // ===== AI 配置 (3) =====
+  // ===== AI 配置 (5) =====
+  {
+    tab: "ai",
+    section: "🤖 AI 模型与 API",
+    envVar: "PLANIFY_PROVIDER",
+    label: "LLM 提供商",
+    component: "select",
+    effect: "live",
+    options: PROVIDER_OPTIONS,
+    hint: "选择 LLM 提供商。已知预设会自动填入默认 base_url 和 protocol。",
+  },
+  {
+    tab: "ai",
+    section: "🤖 AI 模型与 API",
+    envVar: "PLANIFY_PROTOCOL",
+    label: "API 协议",
+    component: "select",
+    effect: "live",
+    options: PROTOCOL_OPTIONS,
+    hint: "已知预设下会自动选择；custom 时必填。",
+  },
   {
     tab: "ai",
     section: "🤖 AI 模型与 API",
