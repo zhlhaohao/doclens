@@ -115,6 +115,11 @@ class CortexConfig(BaseSettings):
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
     planify_model_id: str = Field(default="claude-opus-4-6", alias="PLANIFY_MODEL_ID")
     planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
+    planify_context_window: int = Field(
+        default=200000,
+        alias="PLANIFY_CONTEXT_WINDOW",
+        description="LLM 上下文窗口大小（tokens）。compact 阈值 = context_window × 0.8。",
+    )
 
     @classmethod
     def _init_first_run(cls):
