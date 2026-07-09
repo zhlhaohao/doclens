@@ -14,6 +14,26 @@ const TOOL_ACTION: Record<string, string> = {
   grep: "正在检索",
 };
 
+/** 构造整个 trace 的完整可拷贝文本（所有步骤的 name + 完整 input + 完整 output，无截断）。 */
+export function buildFullText(steps: ToolStep[]): string {
+  const lines: string[] = [`思考过程（${steps.length} 步）`];
+  steps.forEach((s, i) => {
+    lines.push("");
+    lines.push(`[${i + 1}] ${s.name}`);
+    if (Object.keys(s.input).length) {
+      lines.push("参数：");
+      lines.push(JSON.stringify(s.input, null, 2));
+    }
+    if (s.output != null && s.output !== "") {
+      lines.push("结果：");
+      lines.push(s.output);
+    } else {
+      lines.push("结果：（无输出）");
+    }
+  });
+  return lines.join("\n");
+}
+
 @customElement("chat-tool-trace")
 export class ChatToolTrace extends LitElement {
   static styles = css`
@@ -64,11 +84,26 @@ export class ChatToolTrace extends LitElement {
     .running-text { color: var(--cortex-primary-hover); font-size: var(--cortex-fs-xs); }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+    .copy-btn {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-sm);
+      padding: 2px 8px;
+      font-size: var(--cortex-fs-xs);
+      cursor: pointer;
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font);
+      line-height: 1.2;
+    }
+    .copy-btn:hover { background: var(--cortex-primary-soft); color: var(--cortex-primary-hover); }
+    .copy-btn.copied { border-color: var(--cortex-success); color: var(--cortex-success); }
   `;
 
   @property({ attribute: false }) steps: ToolStep[] = [];
   @state() private _expanded = false;
   @state() private _fullResultIds = new Set<string>();
+  @state() private _copied = false;
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("steps")) {
@@ -88,6 +123,32 @@ export class ChatToolTrace extends LitElement {
     const next = new Set(this._fullResultIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     this._fullResultIds = next;
+  }
+
+  private async _onCopy(e: Event) {
+    e.stopPropagation();
+    const text = buildFullText(this.steps);
+    try {
+      await navigator.clipboard.writeText(text);
+      this._copied = true;
+      setTimeout(() => { this._copied = false; }, 2000);
+    } catch (err) {
+      // clipboard 不可用（权限/非安全上下文）时降级：使用隐藏 textarea + execCommand
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        this._copied = true;
+        setTimeout(() => { this._copied = false; }, 2000);
+      } catch (err2) {
+        console.warn("copy failed:", err2);
+      }
+    }
   }
 
   private _renderArgs(input: Record<string, unknown>): string {
@@ -134,6 +195,7 @@ export class ChatToolTrace extends LitElement {
         <span class="arrow">${this._expanded ? "▾" : "▸"}</span>
         🧠 思考过程 · <span class="count">${this.steps.length} 步</span>
         ${running ? " · 进行中" : ""}
+        <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? "✓ 已复制" : "📋"}</button>
       </div>
       ${this._expanded ? html`<div class="steps">${this.steps.map((s) => this._renderStep(s))}</div>` : null}
     `;
