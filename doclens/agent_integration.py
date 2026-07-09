@@ -340,7 +340,9 @@ class CortexAgent:
             bg_manager=self.session.bg_mgr,
             bus=self.session.bus,
             skills_loader=self.session.skills,
-            config=StreamingConfig(),
+            config=StreamingConfig(
+                compact_threshold=int(round(self.session.config.planify_context_window * 0.8))
+            ),
             logger_instance=self.session.logger,
             session=self.session,
             interrupt_event=_interrupt_event,

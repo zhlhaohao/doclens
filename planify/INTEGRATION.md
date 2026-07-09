@@ -122,6 +122,9 @@ async def planify_chat_stream(query: str, user_id: int, phone: str):
         tools=tools,
         tool_handlers=tool_handlers,
         emitter=emitter,
+        config=StreamingConfig(
+            compact_threshold=160000  # = planify_context_window (200000) × 0.8
+        ),
         skills_loader=None,  # 可传入 SkillLoader 实例
         session=session,
     )

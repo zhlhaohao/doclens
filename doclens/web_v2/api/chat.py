@@ -99,7 +99,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 tools=session.tools,
                 tool_handlers=session.tool_handlers,
                 emitter=emitter,
-                config=StreamingConfig(),
+                config=StreamingConfig(
+                    compact_threshold=int(round(session.config.planify_context_window * 0.8))
+                ),
                 waiter=get_global_waiter(),
                 todo_manager=session.todo_mgr,
                 bg_manager=session.bg_mgr,
