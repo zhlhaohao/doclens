@@ -565,13 +565,8 @@ class StreamingAgent:
                 output = f"Error: {e}"
                 self.logger.exception(f"[StreamingAgent] 工具执行异常: {name}")
 
-            # 截断过长的输出
+            # 不截断：LLM 上下文与前端 SSE 都需要工具的完整输出
             output_str = str(output)
-            if len(output_str) > self.config.truncate_tool_output:
-                output_str = (
-                    output_str[: self.config.truncate_tool_output]
-                    + f"\n... (truncated, total {len(output_str)} chars)"
-                )
 
             # 发射工具结果事件
             is_error = output_str.startswith("Error:")
