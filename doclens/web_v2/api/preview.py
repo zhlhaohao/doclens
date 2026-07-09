@@ -69,6 +69,43 @@ def _safe_resolve(base: Path, requested: str) -> Path:
     return candidate
 
 
+def _resolve_path(base: Path, requested: str, idx: IndexManager) -> tuple[Path, str]:
+    """解析文档路径：先直接拼（相对 workdir），失败则用 path_map 按文件名/endswith 反查。
+
+    AI 偶发只给文件名（如 ``深海生物新物种发现.md``，无目录前缀），直接拼 workdir 找不到；
+    path_map 的 mapped_path 是绝对路径，endswith(filename) 可反查出完整相对路径。
+
+    Returns:
+        (full_path, resolved_rel_path) —— full_path 是绝对路径，resolved_rel_path 是
+        相对 workdir 的路径（用于二进制合成等下游）；若直接拼就命中，resolved_rel_path=requested。
+    """
+    candidate = _safe_resolve(base, requested)
+    if candidate.exists() and candidate.is_file():
+        return candidate, requested
+    rel = _lookup_rel_via_path_map(base, requested, idx)
+    if rel is not None:
+        full = _safe_resolve(base, rel)
+        if full.exists() and full.is_file():
+            return full, rel
+    raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {requested}")
+
+
+def _lookup_rel_via_path_map(base: Path, requested: str, idx: IndexManager) -> str | None:
+    """用 path_map 按文件名/endswith 反查相对 workdir 的路径（不检查文件存在）。
+
+    用于：纯文件名（无目录）→ 反查完整相对路径；binary 文件可能不在磁盘但已在 DB 索引，
+    不能用存在性判断，所以本函数只反查路径。
+    """
+    for mapped in idx.path_map.values():
+        if mapped == requested or mapped.endswith("/" + requested) \
+                or mapped.endswith("\\" + requested) or mapped.endswith(requested):
+            try:
+                return str(Path(mapped).resolve().relative_to(base.resolve())).replace("\\", "/")
+            except ValueError:
+                return requested
+    return None
+
+
 def _build_download_filename(rel_path: str, full: Path) -> str:
     """下载文件名 = 原始文件名 + '_' + sha256(rel_path)[:6] + 后缀。"""
     h = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
@@ -82,10 +119,10 @@ async def download(
 ):
     """以附件形式下载原始文件，文件名带相对路径 hash 防冲突。"""
     base = Path(idx.search_path)
-    full = _safe_resolve(base, path)
+    full, resolved_rel = _resolve_path(base, path, idx)
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    download_name = _build_download_filename(path, full)
+    download_name = _build_download_filename(resolved_rel, full)
     return FileResponse(
         path=str(full),
         filename=download_name,
@@ -101,11 +138,19 @@ async def preview(
     idx: IndexManager = Depends(get_index_manager),
 ):
     base = Path(idx.search_path)
-    full = _safe_resolve(base, path)
-
-    # 二进制文档：走 DB 合成 md 路径
-    if full.suffix.lower() in BINARY_PREVIEW_EXTS:
+    # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
+    # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
+    if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
+        candidate = _safe_resolve(base, path)
+        if candidate.exists() and candidate.is_file():
+            return _synthesize_binary_preview(idx, path)
+        rel = _lookup_rel_via_path_map(base, path, idx)
+        if rel is not None:
+            return _synthesize_binary_preview(idx, rel)
+        # 既不在磁盘也不在 path_map → 走合成（合成内部查 DB，未索引返回 NOT_INDEXED）
         return _synthesize_binary_preview(idx, path)
+
+    full, resolved_rel = _resolve_path(base, path, idx)
 
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
@@ -126,7 +171,7 @@ async def preview(
         line_range = None
 
     return PreviewResponse(
-        path=path,
+        path=resolved_rel,
         language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
         content=content,
         line_range=line_range,
