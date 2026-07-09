@@ -214,6 +214,17 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
+## Skill 维护
+
+**修改 `doclens/skills/` 下任意技能（每个 `<技能名>/SKILL.md`）后，必须立即同步到全局**——`SkillLoader` 运行时从全局 `~/.cortex/skills/` 读取，改源文件不会自动生效：
+
+```bash
+# 同步全部技能（覆盖同名）
+cp -r doclens/skills/* ~/.cortex/skills/
+# 或只同步改动的单个技能
+cp -r doclens/skills/<技能名> ~/.cortex/skills/
+```
+
 ## 启动脚本 start-app.ps1
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。

@@ -236,13 +236,19 @@ class CortexAgent:
         grep_tools, grep_handlers = build_grep_tools(self.idx, skill_state=skill_state)
         register_external_tools(grep_tools, grep_handlers)
 
-        # 部署技能文件到 ~/.cortex/skills/（强制覆盖，确保使用最新版本）
+        # 部署技能文件到 ~/.cortex/skills/（强制覆盖所有技能，确保使用最新版本）
         import shutil
-        skill_src_dir = Path(__file__).parent / "skills" / "knowledge_base"
-        skill_dst_dir = skills_dir / "knowledge_base"
-        if skill_src_dir.exists():
-            skill_dst_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(skill_src_dir / "SKILL.md", skill_dst_dir / "SKILL.md")
+        skills_src_root = Path(__file__).parent / "skills"
+        if skills_src_root.exists():
+            for skill_src_dir in skills_src_root.iterdir():
+                if not skill_src_dir.is_dir():
+                    continue
+                src_skill_md = skill_src_dir / "SKILL.md"
+                if not src_skill_md.exists():
+                    continue
+                skill_dst_dir = skills_dir / skill_src_dir.name
+                skill_dst_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_skill_md, skill_dst_dir / "SKILL.md")
 
         # 工具注册表
         tools, tool_handlers = build_tool_registry(
