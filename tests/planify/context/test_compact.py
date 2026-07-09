@@ -127,3 +127,79 @@ def test_microcompact_non_tool_result_messages_untouched():
     assert msgs[0] == snapshot[0]
     assert msgs[1] == snapshot[1]
     assert msgs[2]["content"][0]["content"] == "x" * 500
+
+
+# ─── auto_compact ───
+
+def test_auto_compact_prompt_contains_summarize_marker(tmp_path, monkeypatch):
+    """传给 LLM 的 prompt 含 'Summarize for continuity'。"""
+    from unittest.mock import MagicMock
+    from planify.context.compact import auto_compact
+
+    captured = {}
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        m = MagicMock()
+        m.content = [MagicMock(text="summary text")]
+        return m
+
+    client = MagicMock()
+    client.messages.create = fake_create
+    messages = [{"role": "user", "content": "hi"}]
+
+    auto_compact(messages, client, "claude-test", tmp_path)
+    prompt = captured["messages"][0]["content"]
+    assert "Summarize for continuity" in prompt
+    assert "hi" in prompt
+
+
+def test_auto_compact_creates_transcript_file(tmp_path):
+    """transcript_dir/transcript_{timestamp}.jsonl 创建 + 每行是原始 message JSON。"""
+    import json
+    from unittest.mock import MagicMock
+    from planify.context.compact import auto_compact
+
+    client = MagicMock()
+    client.messages.create = lambda **kw: MagicMock(content=[MagicMock(text="sum")])
+    messages = [
+        {"role": "user", "content": "a"},
+        {"role": "assistant", "content": "b"},
+    ]
+    auto_compact(messages, client, "claude-test", tmp_path)
+
+    files = list(tmp_path.glob("transcript_*.jsonl"))
+    assert len(files) == 1
+    lines = files[0].read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {"role": "user", "content": "a"}
+    assert json.loads(lines[1]) == {"role": "assistant", "content": "b"}
+
+
+def test_auto_compact_returns_summary_user_message(tmp_path):
+    """返回 list[0] 是 user 消息含 '[Compressed. Transcript:' + summary。"""
+    from unittest.mock import MagicMock
+    from planify.context.compact import auto_compact
+
+    client = MagicMock()
+    client.messages.create = lambda **kw: MagicMock(content=[MagicMock(text="MY-SUMMARY")])
+    messages = [{"role": "user", "content": "x"}]
+
+    result = auto_compact(messages, client, "claude-test", tmp_path)
+    assert result[0]["role"] == "user"
+    assert "[Compressed. Transcript:" in result[0]["content"]
+    assert "MY-SUMMARY" in result[0]["content"]
+    assert str(tmp_path) in result[0]["content"]
+
+
+def test_auto_compact_returns_acknowledgement_assistant_message(tmp_path):
+    """返回 list[1] 是 assistant 确认消息。"""
+    from unittest.mock import MagicMock
+    from planify.context.compact import auto_compact
+
+    client = MagicMock()
+    client.messages.create = lambda **kw: MagicMock(content=[MagicMock(text="sum")])
+    messages = [{"role": "user", "content": "x"}]
+
+    result = auto_compact(messages, client, "claude-test", tmp_path)
+    assert result[1]["role"] == "assistant"
+    assert result[1]["content"] == "Understood. Continuing with summary context."
