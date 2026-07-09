@@ -58,7 +58,7 @@ class SkillLoader:
 
     def descriptions(self) -> str:
         """
-        获取所有技能的描述
+        获取所有技能的描述（含路由指引）。
 
         Returns:
             格式化的技能描述字符串
@@ -66,7 +66,8 @@ class SkillLoader:
         if not self.skills:
             return "(no skills)"
         return "\n".join(
-            f"  - {n}: {s['meta'].get('description', '-')}"
+            f"  - {n}: {s['meta'].get('description', '-')} "
+            f"→ 调用 load_skill(\"{n}\") 获取详细指引"
             for n, s in self.skills.items()
         )
 

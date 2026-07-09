@@ -4,7 +4,7 @@
 支持多用户多会话架构，使用 Session 上下文。
 """
 
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Tuple, Optional
 
 from .basic import make_basic_tools
 from .web import make_web_tools
@@ -40,6 +40,24 @@ def get_external_tools() -> Tuple[List[Dict], Dict[str, Any]]:
     return _external_tools, _external_handlers
 
 
+def _build_load_skill_handler(
+    skills_loader: "SkillLoader | None",
+    skill_access_state: "SkillAccessState | None",
+) -> "Callable[[str], str]":
+    """构建 load_skill handler：返回 body，成功时标记已加载。
+
+    抽成独立函数便于单元测试（隔离重型 build_tool_registry）。
+    """
+    from ..skills.access_state import get_current_session_id, mark_loaded_if_known
+
+    def _handle_load_skill(name: str) -> str:
+        body = skills_loader.load(name) if skills_loader else "Error: no skills_loader"
+        mark_loaded_if_known(skill_access_state, get_current_session_id(), name, body)
+        return body
+
+    return _handle_load_skill
+
+
 def build_tool_registry(
     workdir,
     todo_mgr=None,
@@ -53,6 +71,7 @@ def build_tool_registry(
     client=None,
     transcript_dir=None,
     session=None,
+    skill_access_state=None,
     **kwargs,
 ) -> Tuple[List[Dict], Dict[str, Any]]:
     """
@@ -71,6 +90,7 @@ def build_tool_registry(
         client: Anthropic 客户端
         transcript_dir: 脚本目录
         session: Session 实例（可选，用于会话上下文）
+        skill_access_state: SkillAccessState 实例（可选），用于 load_skill 标记已加载
         **kwargs: 忽略额外的关键字参数（向后兼容）
 
     Returns:
@@ -198,6 +218,8 @@ def build_tool_registry(
     ]
 
     # 创建带 Session 支持的工具处理器
+    _load_skill_handler = _build_load_skill_handler(skills_loader, skill_access_state)
+
     handlers.update(
         {
             "TodoWrite": lambda **kw: todo_mgr.update(kw["items"]) if todo_mgr else None,
@@ -211,7 +233,7 @@ def build_tool_registry(
                 run_subagent,
                 session,
             ),
-            "load_skill": lambda **kw: skills_loader.load(kw["name"]),
+            "load_skill": lambda **kw: _load_skill_handler(kw["name"]),
         }
     )
     tools.extend(todo_subagent_tools)

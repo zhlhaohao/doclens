@@ -21,8 +21,36 @@ from ..core.llm.types import Tool
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
+from ..skills.access_state import (
+    reset_current_session_id,
+    set_current_session_id,
+)
 
 logger = logging.getLogger(__name__)
+
+
+_CONTEXT_MARKER = "The following skills are available for use with the Skill tool"
+
+
+def _refresh_or_insert_context(
+    messages: List[Dict], marker: str, new_content: str
+) -> None:
+    """刷新 messages 开头的 skill-context 消息。
+
+    在前 6 条里找带 marker 的 user 消息则原地替换（新建 dict，不改原对象）；
+    否则 insert 到开头并补一条 assistant 'Noted.'。
+    """
+    for i, msg in enumerate(messages[:6]):
+        content = msg.get("content")
+        if (
+            msg.get("role") == "user"
+            and isinstance(content, str)
+            and marker in content
+        ):
+            messages[i] = {**msg, "content": new_content}
+            return
+    messages.insert(0, {"role": "user", "content": new_content})
+    messages.insert(1, {"role": "assistant", "content": "Noted."})
 
 
 class StreamingAgent:
@@ -134,69 +162,64 @@ class StreamingAgent:
         Returns:
             清理后的消息历史（只保留 user 和 assistant 消息，过滤 tool 链）
         """
-        # 在 messages 头部注入 skills 和 agent.md（仅一次）
-        _SKILLS_MARKER = "The following skills are available for use with the Skill tool"
-        has_context = (
-            len(messages) >= 2
-            and isinstance(messages[0].get("content"), str)
-            and _SKILLS_MARKER in messages[0]["content"]
-        )
+        # 设置当前 session_id（供工具门禁/load_skill 标记使用）
+        ctx_token = set_current_session_id(session_id)
 
-        if not has_context:
-            context_parts = []
+        # 每轮重建 skill-context（descriptions + 已加载 skill body）+ agent.md
+        context_parts: List[str] = []
 
-            # 1. skills description
-            if self.skills:
-                skills_text = self.skills.descriptions()
-                if skills_text:
-                    context_parts.append(
-                        f"<system-reminder>\n"
-                        f"The following skills are available for use with the Skill tool:\n\n"
-                        f"{skills_text}\n"
-                        f"</system-reminder>"
-                    )
-
-            # 2. agent.md 内容
-            agent_md_content = ""
-            if self.session and self.session.config.assets_dir:
-                # Web 模式：从 assets_dir 读取
-                agent_md_path = self.session.config.assets_dir / "agent.md"
-                if agent_md_path.exists():
-                    agent_md_content = agent_md_path.read_text(encoding="utf-8")
-            else:
-                # CLI 模式：合并全局 + 项目级 agent.md
-                from pathlib import Path as _Path
-                import os as _os
-                global_agent_md = _Path.home() / ".cortex" / "agent.md"
-                workdir = "."
-                if self.config:
-                    workdir = getattr(self.config, "workdir", ".")
-                local_agent_md = _Path(workdir) / ".cortex" / "agent.md"
-                parts = []
-                if global_agent_md.exists():
-                    parts.append(global_agent_md.read_text(encoding="utf-8"))
-                if local_agent_md.exists():
-                    parts.append(local_agent_md.read_text(encoding="utf-8"))
-                if parts:
-                    agent_md_content = "\n\n".join(parts)
-
-            if agent_md_content:
+        # 1. skills descriptions + 已加载 skill body
+        if self.skills:
+            skills_lines: List[str] = []
+            desc_text = self.skills.descriptions()
+            if desc_text and desc_text != "(no skills)":
+                skills_lines.append(
+                    "The following skills are available for use with the Skill tool:\n\n"
+                    f"{desc_text}"
+                )
+            skill_state = getattr(self.session, "skill_access_state", None) if self.session else None
+            if skill_state is not None and session_id:
+                for name in sorted(skill_state.loaded_names(session_id)):
+                    body = self.skills.load(name)
+                    if body and not body.startswith("Error:"):
+                        skills_lines.append(body)
+            if skills_lines:
                 context_parts.append(
-                    f"<system-reminder>\n"
-                    f"As you answer the user's questions, you can use the following context:\n"
-                    f"{agent_md_content}\n"
-                    f"</system-reminder>"
+                    "<system-reminder>\n" + "\n\n".join(skills_lines) + "\n</system-reminder>"
                 )
 
-            if context_parts:
-                messages.insert(0, {
-                    "role": "user",
-                    "content": "\n\n".join(context_parts),
-                })
-                messages.insert(1, {
-                    "role": "assistant",
-                    "content": "Noted.",
-                })
+        # 2. agent.md 内容
+        agent_md_content = ""
+        if self.session and self.session.config.assets_dir:
+            agent_md_path = self.session.config.assets_dir / "agent.md"
+            if agent_md_path.exists():
+                agent_md_content = agent_md_path.read_text(encoding="utf-8")
+        else:
+            global_agent_md = Path.home() / ".cortex" / "agent.md"
+            workdir = "."
+            if self.config:
+                workdir = getattr(self.config, "workdir", ".")
+            local_agent_md = Path(workdir) / ".cortex" / "agent.md"
+            md_parts = []
+            if global_agent_md.exists():
+                md_parts.append(global_agent_md.read_text(encoding="utf-8"))
+            if local_agent_md.exists():
+                md_parts.append(local_agent_md.read_text(encoding="utf-8"))
+            if md_parts:
+                agent_md_content = "\n\n".join(md_parts)
+
+        if agent_md_content:
+            context_parts.append(
+                "<system-reminder>\n"
+                "As you answer the user's questions, you can use the following context:\n"
+                f"{agent_md_content}\n"
+                "</system-reminder>"
+            )
+
+        if context_parts:
+            _refresh_or_insert_context(
+                messages, _CONTEXT_MARKER, "\n\n".join(context_parts)
+            )
 
         # 添加用户 query（纯文本，不含 skills/agent.md）
         messages.append({"role": "user", "content": user_message})
@@ -281,6 +304,8 @@ class StreamingAgent:
             self.logger.exception(f"[StreamingAgent] 运行异常: {e}")
             await self.emitter.emit_error(str(e), code="AGENT_ERROR")
             return self._cleanup_messages(messages)
+        finally:
+            reset_current_session_id(ctx_token)
 
     def _cleanup_messages(self, messages: List[Dict]) -> List[Dict]:
         """
@@ -577,9 +602,10 @@ class StreamingAgent:
                         output = await handler(**input_data)
                     else:
                         # 同步处理器在线程池中执行
-                        output = await asyncio.get_event_loop().run_in_executor(
-                            None, lambda h=handler, i=input_data: h(**i)
-                        )
+                        # 使用 asyncio.to_thread 以传播 contextvars.ContextVar
+                        # （门禁依赖 get_current_session_id()，默认 ThreadPoolExecutor
+                        # 不会跨线程复制上下文，会导致门禁静默失效）
+                        output = await asyncio.to_thread(handler, **input_data)
                 else:
                     output = f"Unknown tool: {name}"
             except Exception as e:
