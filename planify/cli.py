@@ -415,7 +415,9 @@ def run_streaming_query(loop, session, query: str, history: list) -> list:
         bg_manager=session.bg_mgr,
         bus=session.bus,
         skills_loader=session.skills,
-        config=StreamingConfig(),
+        config=StreamingConfig(
+            compact_threshold=int(round(session.config.planify_context_window * 0.8))
+        ),
         logger_instance=session.logger,
         session=session,
         interrupt_event=_interrupt_event,
