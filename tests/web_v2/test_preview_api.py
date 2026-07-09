@@ -143,6 +143,27 @@ async def test_preview_txt_still_uses_text_route(temp_workdir, env_cortex_config
 
 
 @pytest.mark.asyncio
+async def test_preview_pure_filename_resolved_via_path_map(temp_workdir, env_cortex_config, reset_deps):
+    """AI 偶发只给文件名（无目录前缀）—— path_map 反查出完整相对路径后能预览。"""
+    # 文档放子目录（模拟 生命科学/xxx.md），AI 只给 xxx.md
+    sub = temp_workdir / "生命科学"
+    sub.mkdir()
+    (sub / "深海生物新物种发现.md").write_text("# 深海生物\n\n正文内容。", encoding="utf-8")
+    await asyncio.to_thread(_init_and_reindex)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 纯文件名（无目录）—— 直接拼 workdir 找不到，靠 path_map 反查
+        res = await client.get("/api/preview", params={"path": "深海生物新物种发现.md"})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    # resolved rel path 应含目录前缀
+    assert body["path"] == "生命科学/深海生物新物种发现.md"
+    assert "深海生物" in body["content"]
+
+
+@pytest.mark.asyncio
 async def test_preview_md_unchanged(temp_workdir, env_cortex_config, reset_deps):
     """回归：.md 仍走 utf-8 直读路径，content 为原文件内容（非 DB 合成）。"""
     app = create_app()
