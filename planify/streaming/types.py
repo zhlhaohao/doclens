@@ -215,8 +215,8 @@ class StreamingConfig:
     model_id: str = "claude-sonnet-4-6"
     max_tokens: int = 8000
 
-    # 上下文配置
-    token_threshold: int = 100000
+    # 上下文配置（阈值由 caller 传入 = model.context_window × 0.8；此处为硬编码兜底）
+    compact_threshold: int = 160000
 
     # 超时配置
     user_response_timeout: float = 300.0  # 5 分钟
