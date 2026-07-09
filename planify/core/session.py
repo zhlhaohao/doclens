@@ -10,7 +10,14 @@ import copy
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from anthropic import Anthropic
+
+if TYPE_CHECKING:
+    from planify.skills.access_state import SkillAccessState
+
+
 
 
 @dataclass
@@ -102,6 +109,10 @@ class Session:
     # 工具
     tools: List[Dict] = field(default_factory=list)
     tool_handlers: Dict[str, Any] = field(default_factory=dict)
+
+    # 技能门禁状态（按 session_id 跟踪已加载 skill）。agent_integration 中赋值，
+    # streaming/runner 通过 getattr 读取以兼容历史 session 实例。
+    skill_access_state: Optional["SkillAccessState"] = None
 
     # 线程安全的消息历史
     _messages_lock: threading.RLock = field(default_factory=threading.RLock)

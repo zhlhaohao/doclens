@@ -214,6 +214,22 @@ planify/
     └── message_bus.py      # 消息总线
 ```
 
+## 工作目录（跨 worktree）
+
+**知识库 cortex 是独立仓库（不在本 doclens worktree 内）：默认按 `../cortex` 约定（同级父目录）发现（`[ -d ../cortex/.git ]` 验证），不在同级时用 `CORTEX_REPO` env 覆盖——禁止硬编码绝对路径。**
+**workdir=`../cortex/test_work_dir/`、DB 在 `.cortex/`；本 worktree 仓库根的 `test_work_dir/` 是 demo 数据，不是 GUI 用的知识库——别搞混。**
+
+## Skill 维护
+
+**修改 `doclens/skills/` 下任意技能（每个 `<技能名>/SKILL.md`）后，必须立即同步到全局**——`SkillLoader` 运行时从全局 `~/.cortex/skills/` 读取，改源文件不会自动生效：
+
+```bash
+# 同步全部技能（覆盖同名）
+cp -r doclens/skills/* ~/.cortex/skills/
+# 或只同步改动的单个技能
+cp -r doclens/skills/<技能名> ~/.cortex/skills/
+```
+
 ## 启动脚本 start-app.ps1
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
