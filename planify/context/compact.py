@@ -16,10 +16,14 @@
 关键洞察："可以无限期继续 —— 只需要偶尔压缩上下文。"
 """
 
+from __future__ import annotations
+
 import json
 import time
 from pathlib import Path
-from anthropic import Anthropic
+from typing import Dict, List
+
+from ..core.llm.provider import LLMProvider
 
 
 def estimate_tokens(messages: list) -> int:
@@ -38,7 +42,7 @@ def estimate_tokens(messages: list) -> int:
     return len(json.dumps(messages, default=str)) // 4
 
 
-def microcompact(messages: list):
+def microcompact(messages: list) -> None:
     """
     微压缩：清理旧的工具结果
 
@@ -64,9 +68,8 @@ def microcompact(messages: list):
 
 def auto_compact(
     messages: list,
-    client: Anthropic,
-    model: str,
-    transcript_dir: Path
+    provider: LLMProvider,
+    transcript_dir: Path,
 ) -> list:
     """
     自动压缩：使用 LLM 生成对话摘要
@@ -77,8 +80,7 @@ def auto_compact(
 
     Args:
         messages: 原始消息列表
-        client: Anthropic API 客户端
-        model: 模型 ID
+        provider: LLM Provider（自带模型信息）
         transcript_dir: 脚本目录
 
     Returns:
@@ -91,17 +93,25 @@ def auto_compact(
         for msg in messages:
             f.write(json.dumps(msg, default=str) + "\n")
 
-    # 生成摘要
+    # 生成摘要 - 通过 LLMProvider 调用（归一化接口）
     conv_text = json.dumps(messages, default=str)[:80000]
-    resp = client.messages.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": f"Summarize for continuity:\n{conv_text}"}
-        ],
+    summary_request_messages: List[Dict] = [
+        {"role": "user", "content": f"Summarize for continuity:\n{conv_text}"}
+    ]
+    summary_system = (
+        "You are a summarization assistant. Produce a concise continuity "
+        "summary preserving decisions, open tasks, key file paths, and "
+        "recent tool results."
+    )
+
+    response = provider.chat(
+        messages=summary_request_messages,
+        system=summary_system,
+        tools=[],  # 压缩阶段不提供工具
         max_tokens=2000,
     )
 
-    summary = resp.content[0].text
+    summary = "".join(b.text for b in response.content if hasattr(b, "text"))
 
     # 返回新的压缩后消息列表
     return [

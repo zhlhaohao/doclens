@@ -62,15 +62,25 @@ class _PlanifySettings:
 
     @property
     def PLANIFY_API_KEY(self) -> str:
-        return self._get("planify_api_key", "")
+        return self._get("api_key", "")
 
     @property
     def PLANIFY_MODEL_ID(self) -> str:
-        return self._get("planify_model_id", "claude-opus-4-6")
+        return self._get("model_id", "claude-opus-4-6")
 
     @property
     def PLANIFY_BASE_URL(self) -> str:
-        return self._get("planify_base_url", "")
+        return self._get("base_url", "")
+
+    @property
+    def PLANIFY_PROVIDER(self) -> str:
+        """LLM provider 名称（默认 "anthropic"）。"""
+        return self._get("provider_name", "anthropic")
+
+    @property
+    def PLANIFY_PROTOCOL(self) -> str:
+        """自定义 provider 的协议（空字符串表示使用预设默认协议）。"""
+        return self._get("protocol", "")
 
     @property
     def BAIDU_WEATHER_API_URL(self) -> str:
@@ -177,9 +187,11 @@ def get_config(
     # 基础配置
     config = {
         # API 配置
+        "provider_name": os.getenv("PLANIFY_PROVIDER") or _get_env_or_default("provider_name", "anthropic"),
+        "protocol": os.getenv("PLANIFY_PROTOCOL") or _get_env_or_default("protocol", ""),
         "model_id": os.getenv("PLANIFY_MODEL_ID"),
-        "anthropic_base_url": os.getenv("PLANIFY_BASE_URL"),
-        "anthropic_api_key": os.getenv("PLANIFY_API_KEY"),
+        "base_url": os.getenv("PLANIFY_BASE_URL"),
+        "api_key": os.getenv("PLANIFY_API_KEY"),
         # 路径配置
         "workdir": workdir,
         "team_dir": team_dir,
@@ -207,8 +219,8 @@ def get_config(
 
 def get_user_config_dict(
     model_id: Optional[str] = None,
-    anthropic_api_key: Optional[str] = None,
-    anthropic_base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
     token_threshold: Optional[int] = None,
     poll_interval: Optional[int] = None,
     idle_timeout: Optional[int] = None,
@@ -219,8 +231,8 @@ def get_user_config_dict(
 
     Args:
         model_id: 模型 ID
-        anthropic_api_key: Anthropic API 密钥
-        anthropic_base_url: 自定义 API 端点
+        api_key: LLM Provider API 密钥
+        base_url: 自定义 API 端点
         token_threshold: token 压缩阈值
         poll_interval: 轮询间隔
         idle_timeout: 空闲超时
@@ -233,10 +245,10 @@ def get_user_config_dict(
 
     if model_id is not None:
         config["model_id"] = model_id
-    if anthropic_api_key is not None:
-        config["anthropic_api_key"] = anthropic_api_key
-    if anthropic_base_url is not None:
-        config["anthropic_base_url"] = anthropic_base_url
+    if api_key is not None:
+        config["api_key"] = api_key
+    if base_url is not None:
+        config["base_url"] = base_url
     if token_threshold is not None:
         config["token_threshold"] = token_threshold
     if poll_interval is not None:
@@ -263,6 +275,6 @@ def validate_config(config: Dict[str, Any]) -> bool:
     """
     if not config.get("model_id"):
         raise ValueError("PLANIFY_MODEL_ID is required. Set it in .env file or environment.")
-    if not config.get("anthropic_api_key"):
+    if not config.get("api_key"):
         raise ValueError("PLANIFY_API_KEY is required. Set it in .env file or environment.")
     return True

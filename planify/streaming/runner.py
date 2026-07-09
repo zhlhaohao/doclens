@@ -3,8 +3,10 @@
 """
 流式代理运行器
 
-基于 Claude API 流式响应的代理运行器，支持实时输出推理过程。
+基于 LLMProvider 流式接口的代理运行器，支持实时输出推理过程。
 """
+
+from __future__ import annotations
 
 import asyncio
 import enum
@@ -15,8 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anthropic import Anthropic
-
+from ..core.llm.types import Tool
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
@@ -29,12 +30,12 @@ class StreamingAgent:
     流式代理类
 
     管理流式代理状态和执行循环。
-    使用 client.messages.stream() 实现流式输出。
+    使用 provider.stream() 实现流式输出（归一化事件）。
     """
 
     def __init__(
         self,
-        client: Anthropic,
+        client: Any,
         model: str,
         tools: List[Dict],
         tool_handlers: Dict[str, Any],
@@ -53,7 +54,7 @@ class StreamingAgent:
         初始化流式代理。
 
         Args:
-            client: Anthropic API 客户端
+            client: LLM Provider 实例（实际类型为 LLMProvider）
             model: 模型名称
             tools: 工具定义列表
             tool_handlers: 工具处理器字典
@@ -68,6 +69,9 @@ class StreamingAgent:
             session: Session 实例
         """
         self.client = client
+        # provider 是 client 的别名（LLMProvider 抽象接口），
+        # 所有调用点已迁移到 provider.*。self.client 保留作为兼容字段。
+        self.provider = client
         self.model = model
         self.tools = tools
         self.tool_handlers = tool_handlers
@@ -212,7 +216,7 @@ class StreamingAgent:
                     if self._auto_compact and self.session:
                         transcript_dir = str(self.session.config.transcript_dir)
                         compacted = self._auto_compact(
-                            messages, self.client, self.model, transcript_dir
+                            messages, self.provider, transcript_dir
                         )
                         if self.session:
                             self.session.replace_messages_in_place(compacted)
@@ -380,6 +384,8 @@ class StreamingAgent:
         """
         执行流式 LLM 调用。
 
+        使用 LLMProvider.stream() 归一化事件接口。
+
         Args:
             messages: 消息历史
             system: 系统提示词
@@ -395,110 +401,125 @@ class StreamingAgent:
         current_text = ""
         stop_reason = "end_turn"
 
+        # 累积每个 block 的状态（按 block_index）
+        block_text_parts: Dict[int, List[str]] = {}
+        block_tool_states: Dict[int, ToolCallState] = {}
+        text_started_index: Optional[int] = None
+
         self.logger.debug(f"[StreamingAgent] 开始流式调用, 消息数: {len(messages)}")
 
         # 记录完整的请求内容（确保 JSON 合法且完整）
         self._log_request_payload(messages, system)
 
+        # 把工具定义转换为 Tool dataclass
+        tool_defs = [
+            Tool(
+                name=t["name"],
+                description=t.get("description", ""),
+                input_schema=t.get("input_schema", {"type": "object"}),
+            )
+            for t in self.tools
+        ]
+
         try:
-            # 使用同步客户端的流式 API
-            with self.client.messages.stream(
-                model=self.model,
-                system=system,
+            # 通过 LLMProvider.stream() 归一化事件流
+            for event in self.provider.stream(
                 messages=messages,
-                tools=self.tools,
+                system=system,
+                tools=tool_defs,
                 max_tokens=self.config.max_tokens,
-            ) as stream:
-                for event in stream:
-                    # self.logger.debug(f"[StreamingAgent] 收到流事件: type={event.type}")
-                    # 检查中断
-                    if self._interrupt_event and self._interrupt_event.is_set():
-                        self.logger.info("[StreamingAgent] 流式调用被中断")
-                        break
+            ):
+                # 检查中断
+                if self._interrupt_event and self._interrupt_event.is_set():
+                    self.logger.info("[StreamingAgent] 流式调用被中断")
+                    break
 
-                    event_type = event.type
+                event_type = event.type
 
-                    if event_type == "content_block_start":
-                        block = event.content_block
-                        self.logger.debug(
-                            f"[StreamingAgent] content_block_start: block={block}"
+                if event_type == "content_block_start":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    block_type = event.block_type
+                    if block_type == "text":
+                        text_started_index = index
+                        block_text_parts.setdefault(index, [])
+                    elif block_type == "tool_use":
+                        # 工具调用开始
+                        self._tool_call_states[index] = ToolCallState(
+                            tool_use_id=event.tool_use_id or "",
+                            name=event.tool_name or "",
                         )
-                        if hasattr(block, "type"):
-                            if block.type == "text":
-                                current_text = ""
-                            elif block.type == "tool_use":
-                                # 工具调用开始
-                                index = event.index
-                                self._tool_call_states[index] = ToolCallState(
-                                    tool_use_id=block.id,
-                                    name=block.name,
-                                )
-                                # 发射工具调用开始事件
-                                asyncio.create_task(
-                                    self.emitter.emit_tool_call(
-                                        tool_use_id=block.id,
-                                        name=block.name,
-                                        input_data={},
-                                        is_complete=False,
-                                    )
-                                )
-
-                    elif event_type == "content_block_delta":
-                        delta = event.delta
-                        index = event.index
-                        # self.logger.debug(f"[StreamingAgent] content_block_delta: delta={delta}, index={index}")
-
-                        if hasattr(delta, "type"):
-                            if delta.type == "text_delta":
-                                # 文本增量
-                                text = delta.text
-                                current_text += text
-                                # 发射文本事件
-                                asyncio.create_task(
-                                    self.emitter.emit_text(text, is_end=False)
-                                )
-
-                            elif delta.type == "input_json_delta":
-                                # 工具参数增量
-                                if index in self._tool_call_states:
-                                    state = self._tool_call_states[index]
-                                    state.append_chunk(delta.partial_json)
-
-                    elif event_type == "content_block_stop":
-                        index = event.index
-
-                        if index in self._tool_call_states:
-                            # 工具调用完成
-                            state = self._tool_call_states[index]
-                            complete_input = state.get_complete_input()
-
-                            # 发射工具调用完成事件
-                            asyncio.create_task(
-                                self.emitter.emit_tool_call(
-                                    tool_use_id=state.tool_use_id,
-                                    name=state.name,
-                                    input_data=complete_input,
-                                    is_complete=True,
-                                )
+                        block_tool_states[index] = self._tool_call_states[index]
+                        # 发射工具调用开始事件
+                        asyncio.create_task(
+                            self.emitter.emit_tool_call(
+                                tool_use_id=event.tool_use_id or "",
+                                name=event.tool_name or "",
+                                input_data={},
+                                is_complete=False,
                             )
+                        )
 
-                    elif event_type == "message_delta":
-                        # 消息级别更新
-                        if hasattr(event, "delta"):
-                            if hasattr(event.delta, "stop_reason"):
-                                stop_reason = event.delta.stop_reason or "end_turn"
+                elif event_type == "content_block_delta":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    if event.text_delta:
+                        text = event.text_delta
+                        current_text += text
+                        block_text_parts.setdefault(index, []).append(text)
+                        # 发射文本事件
+                        asyncio.create_task(
+                            self.emitter.emit_text(text, is_end=False)
+                        )
+                    elif event.input_json_delta:
+                        # 工具参数增量
+                        if index in self._tool_call_states:
+                            state = self._tool_call_states[index]
+                            state.append_chunk(event.input_json_delta)
 
-                    elif event_type == "message_stop":
-                        # 消息结束
-                        break
+                elif event_type == "content_block_stop":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    if index in block_tool_states:
+                        # 工具调用完成
+                        state = block_tool_states[index]
+                        complete_input = state.get_complete_input()
 
-                # 获取完整消息
-                final_message = stream.get_final_message()
-                self.logger.debug(
-                    f"[StreamingAgent] 完整消息: content={final_message.content}, stop_reason={final_message.stop_reason}"
-                )
-                assistant_content = list(final_message.content)
-                stop_reason = final_message.stop_reason or "end_turn"
+                        # 发射工具调用完成事件
+                        asyncio.create_task(
+                            self.emitter.emit_tool_call(
+                                tool_use_id=state.tool_use_id,
+                                name=state.name,
+                                input_data=complete_input,
+                                is_complete=True,
+                            )
+                        )
+                        assistant_content.append({
+                            "type": "tool_use",
+                            "id": state.tool_use_id,
+                            "name": state.name,
+                            "input": complete_input,
+                        })
+                    elif index in block_text_parts:
+                        # 文本块完成
+                        text = "".join(block_text_parts[index])
+                        if text:
+                            assistant_content.append({
+                                "type": "text",
+                                "text": text,
+                            })
+
+                elif event_type == "message_delta":
+                    # 消息级别更新
+                    if event.stop_reason:
+                        stop_reason = event.stop_reason
+
+                elif event_type == "message_stop":
+                    # 消息结束
+                    break
 
         except Exception as e:
             self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")

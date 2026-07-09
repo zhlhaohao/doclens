@@ -873,7 +873,7 @@ class CortexApp(App):
         """后台线程：执行网络搜索"""
         try:
             from planify.tools.web import run_web_search
-            from planify.core.client import init_anthropic_client
+            from planify.core.llm import create_provider
 
             config = self.config
             if not config.planify_api_key:
@@ -882,7 +882,13 @@ class CortexApp(App):
                 )
                 return
 
-            client = init_anthropic_client(config.planify_base_url, config.planify_api_key)
+            client = create_provider({
+                "provider_name": getattr(config, "planify_provider", "anthropic"),
+                "protocol": getattr(config, "planify_protocol", ""),
+                "api_key": config.planify_api_key,
+                "model_id": config.planify_model_id,
+                "base_url": config.planify_base_url,
+            })
             result = run_web_search(query, client, config.planify_model_id)
             self.call_from_thread(self._on_web_done, result)
         except Exception as exc:

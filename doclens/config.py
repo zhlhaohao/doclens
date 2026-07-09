@@ -120,6 +120,8 @@ class CortexConfig(BaseSettings):
         alias="PLANIFY_CONTEXT_WINDOW",
         description="LLM 上下文窗口大小（tokens）。compact 阈值 = context_window × 0.8。",
     )
+    planify_provider: str = Field(default="anthropic", alias="PLANIFY_PROVIDER")
+    planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
 
     @classmethod
     def _init_first_run(cls):
