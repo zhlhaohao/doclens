@@ -212,6 +212,7 @@ export class ChatView extends LitElement {
   }
 
   private async _submit(e: CustomEvent<{ value: string }>) {
+    this._resetPreview();
     const message = e.detail.value;
     this.draft = "";
 
@@ -271,11 +272,26 @@ export class ChatView extends LitElement {
   }
 
   private _backToInitial() {
+    this._resetPreview();
     actions.setChatState({ state: "initial", currentSession: null, messages: [] });
     this._loadHistory();
   }
 
+  /** 清空预览 pane 的全部状态（导航离开当前对话时调用，避免残留旧文档）。
+   *  不重置 _previewPaneWidth（用户偏好，持久）。 */
+  private _resetPreview(): void {
+    this.previewOpen = false;
+    this.previewContent = "";
+    this.previewPath = "";
+    this.previewLanguage = "text";
+    this.previewPages = null;
+    this.previewWritable = false;
+    this.previewError = null;
+    this.previewDirty = false;
+  }
+
   private async _loadSession(s: Session) {
+    this._resetPreview();
     actions.setChatState({
       state: "focus",
       currentSession: s,
