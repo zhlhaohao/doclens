@@ -65,4 +65,30 @@ describe("<chat-message> reference links", () => {
     const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
     expect(links.length).toBe(2);
   });
+
+  it("wraps [N] path paragraph format (AI 偶发非列表格式)", async () => {
+    // AI 偶发给 "[1] a.md\n[2] b.md" 纯文本段落（非 <ol>），前端也要能识别
+    const content = "回答。\n\n## 参考资料\n\n[1] 深海生物新物种发现.md\n[2] 地球已知最深动物生态系统.md\n";
+    const el = await fixture(
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
+    expect(links.length).toBe(2);
+    expect(links[0].getAttribute("data-path")).toBe("深海生物新物种发现.md");
+    expect(links[1].getAttribute("data-path")).toBe("地球已知最深动物生态系统.md");
+  });
+
+  it("wraps [N] path with markdown link inside (file:// variant)", async () => {
+    // AI 给 "[1] [name](file:///C:/x/y.md)" 段落格式，路径抽取 + 清洗交给 chat-view
+    const content = "回答。\n\n## 参考资料\n\n[1] [深海.md](file:///C:/test/深海.md)\n";
+    const el = await fixture(
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
+    expect(links.length).toBe(1);
+    // data-path 取 markdown 链接的 url 部分（chat-view 再清洗 file://）
+    expect(links[0].getAttribute("data-path")).toBe("file:///C:/test/深海.md");
+  });
 });
