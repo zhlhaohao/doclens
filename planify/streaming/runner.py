@@ -208,7 +208,7 @@ class StreamingAgent:
 
                 # === 压缩管道 ===
                 self._microcompact(messages)
-                if self._estimate_tokens(messages) > self.config.token_threshold:
+                if self._estimate_tokens(messages) > self.config.compact_threshold:
                     if self._auto_compact and self.session:
                         transcript_dir = str(self.session.config.transcript_dir)
                         compacted = self._auto_compact(
