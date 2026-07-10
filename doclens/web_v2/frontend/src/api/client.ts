@@ -34,11 +34,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 export async function* streamSSE(
   path: string,
   body: unknown,
+  signal?: AbortSignal,
 ): AsyncGenerator<{ event: string; data: string }> {
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new ApiError(res.status, "stream_failed", "流式请求失败");
