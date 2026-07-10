@@ -256,4 +256,38 @@ describe("<md-viewer>", () => {
       `expect md-viewer styles to include ":host img { max-width ... }" rule, got cssText:\n${cssText}`,
     ).toBe(true);
   });
+
+  it("renders paper-like preview: gray host + white paper + transparent paged container (regression)", async () => {
+    // 纸张效果：:host 灰底让白纸浮起；.md-body 单块白纸；.md-body-paged 透明覆盖
+    // （让分页 page-card 当多张纸，而非一张大纸包多页）；.page-card 去 border 靠阴影。
+    const cssText = (MdViewerClass as any).styles.cssText as string;
+
+    // :host 灰底
+    expect(
+      /:host\s*\{[^}]*background:\s*var\(--cortex-bg\)/.test(cssText),
+      `:host should set background: var(--cortex-bg)\n${cssText}`,
+    ).toBe(true);
+
+    // .md-body 单块 = 白纸 + max-width 居中
+    expect(
+      /\.md-body\s*\{[^}]*background:\s*var\(--cortex-surface\)/.test(cssText),
+      `.md-body should be white paper (background: var(--cortex-surface))\n${cssText}`,
+    ).toBe(true);
+    expect(
+      /\.md-body\s*\{[^}]*max-width:\s*820px/.test(cssText),
+      `.md-body should have max-width: 820px\n${cssText}`,
+    ).toBe(true);
+
+    // .md-body-paged 透明覆盖（注意：必须出现在 .md-body 之后才能覆盖）
+    expect(
+      /\.md-body-paged\s*\{[^}]*background:\s*transparent/.test(cssText),
+      `.md-body-paged must override .md-body to transparent\n${cssText}`,
+    ).toBe(true);
+
+    // .page-card 去 border，靠 box-shadow
+    expect(
+      /\.page-card\s*\{[^}]*border:\s*none/.test(cssText),
+      `.page-card should drop border, rely on shadow\n${cssText}`,
+    ).toBe(true);
+  });
 });
