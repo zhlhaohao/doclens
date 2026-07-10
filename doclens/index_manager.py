@@ -246,11 +246,13 @@ class IndexManager:
         """兼容保留，实际 reload 由 _needs_reload 机制处理"""
         self._pending_swap = None
 
-    def trigger_background_reindex(self, on_complete=None):
-        """供 FileWatcher 调用的后台增量 reindex（使用自身的 _reindex_lock）
+    def trigger_background_reindex(self, force: bool = False, on_progress=None, on_complete=None):
+        """供 FileWatcher / 手动触发的后台 reindex（使用自身的 _reindex_lock）
 
         Args:
-            on_complete: 索引完成后的回调，签名为 (success: bool, doc_count: int, failed_count: int) -> None
+            force: True 时全量重建（清空旧索引重扫）；False 增量更新。
+            on_progress: 每个文件索引完调用，签名 (file_path: str, indexed_count: int) -> None。
+            on_complete: 索引完成回调，签名 (success: bool, doc_count: int, failed_count: int) -> None。
         """
         logger.debug("trigger_background_reindex called")
         def _bg_work():
@@ -281,6 +283,11 @@ class IndexManager:
                         """每索引完一个文件时调用"""
                         current_file[0] = file_path
                         indexed_count[0] += 1
+                        if on_progress:
+                            try:
+                                on_progress(file_path, indexed_count[0])
+                            except Exception as e:  # noqa: BLE001
+                                logger.debug("on_progress callback error: %s", e)
 
                     def publish_progress():
                         """Timer 回调，发布当前索引进度"""
@@ -306,7 +313,7 @@ class IndexManager:
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
                     failed_count = 0
                     try:
-                        new_ts.index(self.search_path, progress_callback=on_file_indexed)
+                        new_ts.index(self.search_path, force=force, progress_callback=on_file_indexed)
                         logger.debug("new_ts.index() completed")
                     except FileNotFoundError:
                         new_ts.documents = []
