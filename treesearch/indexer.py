@@ -14,6 +14,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from tqdm import tqdm
@@ -1469,6 +1470,20 @@ async def build_index(
         db_path = os.path.join(output_dir, "index.db")
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
 
+    # 图片落盘存储（与 index.db 同目录的 images/ 子目录）
+    from .parsers.image_store import ImageStore
+    images_root = Path(db_path).parent / "images"
+    image_store = ImageStore(images_root)
+    if force:
+        image_store.purge_all()
+
+    # 计算 rel_path 用的 base 目录（paths 里第一个目录，即 search_path）
+    base_dir = ""
+    for p in paths:
+        if os.path.isdir(p):
+            base_dir = os.path.abspath(p)
+            break
+
     # Expand globs, files, and directories via resolve_paths
     expanded = resolve_paths(
         paths,
@@ -1586,6 +1601,10 @@ async def build_index(
                         logger.debug("Removed orphan shadow MD: %s", md_path)
                     except OSError as e:
                         logger.debug("Failed to remove shadow MD %s: %s", md_path, e)
+                # 清理被删文档的图片
+                if base_dir:
+                    pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
+                    image_store.purge_doc(pruned_rel)
 
     for fp in expanded:
         abs_fp = os.path.abspath(fp)
@@ -1662,11 +1681,19 @@ async def build_index(
             t0 = time.monotonic()
             try:
                 ext = os.path.splitext(fp)[1].lower()
+                rel_path = ""
+                if base_dir:
+                    rel_path = os.path.relpath(fp, base_dir).replace(os.sep, "/")
+                # 该文件重抽前先清掉它的旧图（幂等；force 模式已 purge_all，此处为空操作）
+                if rel_path:
+                    image_store.purge_doc(rel_path)
                 common = dict(
                     if_add_node_summary=if_add_node_summary,
                     if_add_doc_description=if_add_doc_description,
                     if_add_node_text=if_add_node_text,
                     if_add_node_id=if_add_node_id,
+                    image_store=image_store,
+                    rel_path=rel_path,
                     **kwargs,
                 )
 
