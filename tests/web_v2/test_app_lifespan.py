@@ -1,5 +1,4 @@
 """create_app() lifespan 注入测试。"""
-import pytest
 from fastapi import FastAPI
 
 from doclens.web_v2.app import create_app

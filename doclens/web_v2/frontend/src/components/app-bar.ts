@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import "../components/toast-stack";
+import "./toast-stack";
 import { store } from "../state/store";
 import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
 
