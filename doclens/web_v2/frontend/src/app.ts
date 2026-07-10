@@ -23,6 +23,7 @@ import "./views/chat-view";
 import "./views/settings-view";
 import "./views/files-view";
 import "./components/app-bar";
+import "./components/reindex-dialog";
 import { startWatchPolling, stopWatchPolling } from "./watch-polling";
 
 @customElement("cortex-app")
@@ -105,6 +106,7 @@ export class CortexApp extends LitElement {
         </div>
         <tab-bar .active=${view} @navigate=${this._navigate}></tab-bar>
       </div>
+      <reindex-dialog></reindex-dialog>
     `;
   }
 }
