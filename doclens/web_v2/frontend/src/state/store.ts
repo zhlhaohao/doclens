@@ -164,6 +164,10 @@ export const actions = {
     store.setState({ pendingSession: session });
   },
 
+  setWatcherStatus(w: AppState["watcher"]) {
+    store.setState({ watcher: w });
+  },
+
   setSettingsScope(_scope: SettingsScope) {
     // local config disabled, scope is always global
   },
