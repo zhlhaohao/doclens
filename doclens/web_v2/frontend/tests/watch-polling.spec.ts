@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { store, actions, INITIAL_STATE } from "../src/state/store";
+import { store, INITIAL_STATE } from "../src/state/store";
 import { startWatchPolling, stopWatchPolling } from "../src/watch-polling";
 
 function mockWatch(resp: any) {
