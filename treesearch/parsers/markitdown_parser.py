@@ -203,6 +203,7 @@ async def markitdown_to_tree(
                     if p.source_ref in refs
                 ]
                 slide_mds.append("\n\n".join(mds) if mds else "")
+            md_content = re.sub(r"!\[[^\]]*\]\(Picture[^)]+\)", "", md_content)
             md_content = _inject_slide_images(md_content, slide_mds)
         except ImportError:
             logger.debug("python-pptx not available, skip pptx image extraction")
