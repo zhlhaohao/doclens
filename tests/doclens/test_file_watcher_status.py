@@ -72,3 +72,30 @@ def test_do_reindex_failure_marks_last_success_false():
     assert st["last_doc_count"] == 0
     assert st["reindexing"] is False
     w.stop()
+
+
+def test_changed_count_cleared_on_reindex_complete_when_incremented_during():
+    """reindex 进行中累加的 changed_count 在完成回调里清零（不卡住）。"""
+    pending = []
+
+    class SlowIdx:
+        """trigger 不立即完成，挂起 on_complete 模拟 reindex 进行中。"""
+        search_path = "/tmp/__doclens_test__"
+
+        def trigger_background_reindex(self, on_complete=None):
+            pending.append(on_complete)  # 不立即完成
+
+    w = FileWatcher(SlowIdx())
+    w._do_reindex()  # reindexing=True, changed_count 已在 _do_reindex 清零, trigger 挂起
+    assert w.status()["reindexing"] is True
+    # reindex 进行中文件变化
+    w._on_change("/tmp/a.md")
+    w._on_change("/tmp/b.md")
+    assert w.status()["changed_count"] == 2
+    # reindex 完成
+    pending[0](True, 5, 0)
+    st = w.status()
+    assert st["reindexing"] is False
+    assert st["changed_count"] == 0   # 修复后清零
+    assert st["last_doc_count"] == 5
+    w.stop()

@@ -170,6 +170,7 @@ class FileWatcher:
         """trigger_background_reindex 完成回调：更新状态后转发给外部 on_reindex_done"""
         with self._state_lock:
             self._reindexing = False
+            self._changed_count = 0
             self._last_reindex_at = time.time()
             self._last_doc_count = doc_count
             self._last_success = success
