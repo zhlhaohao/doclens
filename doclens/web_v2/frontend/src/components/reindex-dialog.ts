@@ -88,8 +88,12 @@ export class ReindexDialog extends LitElement {
           actions.setReindexProgress({ current_file: d.current_file, indexed_count: d.indexed_count });
         } else if (ev.event === "done") {
           const d = JSON.parse(ev.data);
-          actions.finishReindex({ success: d.success, doc_count: d.doc_count, failed_count: d.failed_count });
-          this._pushToast(`索引重建完成：${d.doc_count} 文档`, "success", 3000);
+          if (d.success) {
+            actions.finishReindex({ success: d.success, doc_count: d.doc_count, failed_count: d.failed_count });
+            this._pushToast(`索引重建完成：${d.doc_count} 文档`, "success", 3000);
+          } else {
+            actions.failReindex(d.failed_count > 0 ? `重建失败：${d.failed_count} 个文件失败` : "重建失败");
+          }
           break;
         } else if (ev.event === "error") {
           const d = JSON.parse(ev.data);

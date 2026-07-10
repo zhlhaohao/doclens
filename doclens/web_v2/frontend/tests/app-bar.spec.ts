@@ -217,4 +217,17 @@ describe("<app-bar> reindex menu item", () => {
     await elementUpdated(el);
     expect(store.getState().reindex.dialog).toBe("confirm");
   });
+
+  it("reindex menu click is ignored when dialog already open", async () => {
+    actions.openReindexConfirm(); // dialog 已是 confirm
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .find((b) => (b.textContent || "").includes("强制重建索引")) as HTMLButtonElement;
+    btn.click();
+    await elementUpdated(el);
+    // 仍停留在 confirm（未因再次 click 重置/出错）
+    expect(store.getState().reindex.dialog).toBe("confirm");
+  });
 });

@@ -209,6 +209,7 @@ export class AppBar extends LitElement {
   }
 
   private _onReindexClick() {
+    if (store.getState().reindex.dialog !== "closed") return;
     this._menuOpen = false;
     actions.openReindexConfirm();
   }
