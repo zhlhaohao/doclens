@@ -203,3 +203,14 @@ def test_render_table_escapes_pipe_in_cell():
     }]
     md = render_tree_to_md(structure, source_type="excel")
     assert "| 1\\|2 |" in md
+
+
+def test_render_tree_to_md_preserves_image_refs_and_line_map():
+    """节点 text 含图片 md 引用时，合成 md 原样保留，line_map heading 行号正确。"""
+    structure = [{
+        "title": "标题一", "line_start": 1, "nodes": [],
+        "text": "第一段。\n\n![图片 1](/api/preview/asset?path=a.docx&id=1)",
+    }]
+    md, line_map = render_tree_to_md(structure, "docx")
+    assert "/api/preview/asset?path=a.docx&id=1" in md
+    assert line_map.get(1) is not None  # heading 行号映射存在

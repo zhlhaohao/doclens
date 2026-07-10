@@ -264,3 +264,50 @@ def test_docx_table_renders_as_md_table_in_preview(tmp_path: Path):
     assert "| --- | --- |" in md, f"preview md 未包含表格 separator 行，md={md!r}"
     # 数据行也在
     assert "| v1 | v2 |" in md, f"preview md 未包含表格数据行，md={md!r}"
+
+
+# ============================================================================
+# docx 图片提取 + 段落级锚定
+# ============================================================================
+
+from treesearch.parsers.image_store import ImageStore
+from tests.conftest_image_fixtures import make_docx_with_image
+
+
+def _collect_text(structure: list) -> list[str]:
+    out: list[str] = []
+    def walk(node):
+        out.append(node.get("text") or "")
+        for c in node.get("nodes") or []:
+            walk(c)
+    for n in structure:
+        walk(n)
+    return out
+
+
+def test_docx_to_tree_extracts_image_into_node_text(tmp_path: Path):
+    docx_path = make_docx_with_image(str(tmp_path / "sample.docx"))
+    images_root = tmp_path / "images"
+    store = ImageStore(images_root)
+
+    result = _run(docx_to_tree(
+        docx_path,
+        image_store=store,
+        rel_path="sample.docx",
+        if_add_node_text=True,
+    ))
+
+    # 图片 md 引用应出现在某个节点的 text 里
+    all_text = _collect_text(result["structure"])
+    assert any("/api/preview/asset?path=sample.docx&id=1" in t for t in all_text)
+    # 图片文件已落盘
+    from treesearch.parsers.image_store import doc_hash_for
+    assert (images_root / doc_hash_for("sample.docx") / "1.png").exists()
+
+
+def test_docx_to_tree_without_image_store_still_works(tmp_path: Path):
+    """向后兼容：不传 image_store 时行为不变（无图片引用）。"""
+    docx_path = make_docx_with_image(str(tmp_path / "sample.docx"))
+    result = _run(docx_to_tree(docx_path, if_add_node_text=True))
+    all_text = _collect_text(result["structure"])
+    assert not any("/api/preview/asset" in t for t in all_text)
