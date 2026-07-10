@@ -58,6 +58,7 @@ export const INITIAL_STATE: AppState = {
   pendingSession: null,
   status: null,
   watcher: null,
+  reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
   error: null,
   settings: {
     scope: "global",
@@ -166,6 +167,40 @@ export const actions = {
 
   setWatcherStatus(w: AppState["watcher"]) {
     store.setState({ watcher: w });
+  },
+
+  openReindexConfirm() {
+    const r = store.getState().reindex;
+    store.setState({ reindex: { ...r, dialog: "confirm" } });
+  },
+
+  startReindex() {
+    store.setState({
+      reindex: {
+        ...store.getState().reindex,
+        dialog: "running", current_file: null, indexed_count: 0, result: null, error: null,
+      },
+    });
+  },
+
+  setReindexProgress(p: { current_file: string; indexed_count: number }) {
+    const r = store.getState().reindex;
+    if (r.dialog !== "running") return;
+    store.setState({ reindex: { ...r, current_file: p.current_file, indexed_count: p.indexed_count } });
+  },
+
+  finishReindex(res: { success: boolean; doc_count: number; failed_count: number }) {
+    store.setState({ reindex: { ...store.getState().reindex, dialog: "done", result: res } });
+  },
+
+  failReindex(msg: string) {
+    store.setState({ reindex: { ...store.getState().reindex, dialog: "error", error: msg } });
+  },
+
+  closeReindex() {
+    store.setState({
+      reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
+    });
   },
 
   setSettingsScope(_scope: SettingsScope) {
