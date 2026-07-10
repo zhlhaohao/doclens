@@ -96,12 +96,12 @@ class ImageStore:
         幂等：每次调用先清空该文档的图目录，再重新提取（保证重索引时无旧图残留）。
         文档内按 ``sha256(blob)`` 去重，同图只落一份，多个 source_ref 指向同一 seq。
         """
-        if not parts:
-            return {}
         dh = doc_hash_for(rel_path)
         doc_dir = self._doc_dir(dh)
         if doc_dir.exists():
             shutil.rmtree(doc_dir, ignore_errors=True)
+        if not parts:
+            return {}
         doc_dir.mkdir(parents=True, exist_ok=True)
 
         meta: dict[str, dict] = {}
@@ -115,7 +115,6 @@ class ImageStore:
             else:
                 seq += 1
                 s = seq
-                blob_to_seq[sha] = s
                 ext = _normalize_ext(part.ext) or "png"
                 fname = f"{s}.{ext}"
                 try:
@@ -128,6 +127,7 @@ class ImageStore:
                     "media_type": _EXT_TO_MEDIA.get(ext, "application/octet-stream"),
                     "filename": fname,
                 }
+                blob_to_seq[sha] = s
             refs[part.source_ref] = ImageRef(seq=s, inline_md=_inline_md(s, rel_path))
 
         self._write_meta(doc_dir, meta)

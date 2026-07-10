@@ -97,3 +97,79 @@ def test_purge_all_clears_root(tmp_path: Path):
     assert not (tmp_path / dh_a).exists()
     assert not (tmp_path / dh_b).exists()
     assert tmp_path.exists()  # root 自身保留
+
+
+PNG_RED = _png_bytes(b"\xff\x00\x00")
+PNG_GREEN = _png_bytes(b"\x00\xff\x00")
+
+
+def test_extract_for_doc_is_idempotent(tmp_path: Path):
+    """重提同一 rel_path（不同图片）时，旧文件应被清除、新文件应存在。"""
+    store = ImageStore(tmp_path)
+    rel_path = "doc/a.docx"
+    dh = doc_hash_for(rel_path)
+
+    store.extract_for_doc(rel_path, [ImagePart(PNG_RED, "png", "rId1")])
+    assert (tmp_path / dh / "1.png").read_bytes() == PNG_RED
+
+    # 用不同图片重新提取同一 rel_path
+    store.extract_for_doc(rel_path, [ImagePart(PNG_GREEN, "png", "rId1")])
+    assert (tmp_path / dh / "1.png").read_bytes() == PNG_GREEN
+    # 旧红色图片不应残留（只有一个 png 文件）
+    png_files = list((tmp_path / dh).glob("*.png"))
+    assert len(png_files) == 1
+
+
+def test_extract_for_doc_empty_parts_clears_dir(tmp_path: Path):
+    """空 parts 应先清空 doc_dir 再短路，避免旧图残留。"""
+    store = ImageStore(tmp_path)
+    rel_path = "doc/b.docx"
+    dh = doc_hash_for(rel_path)
+
+    store.extract_for_doc(rel_path, [ImagePart(PNG_RED, "png", "rId1")])
+    doc_dir = tmp_path / dh
+    assert (doc_dir / "1.png").exists()
+    assert (doc_dir / "_meta.json").exists()
+
+    # 用空 parts 重新提取 → 应清空目录
+    refs = store.extract_for_doc(rel_path, [])
+    assert refs == {}
+    # 旧图片和 _meta.json 都应被删除
+    assert not (doc_dir / "1.png").exists()
+    assert not (doc_dir / "_meta.json").exists()
+    assert not doc_dir.exists()
+
+
+def test_extract_for_doc_write_failure_no_phantom_seq(tmp_path: Path, monkeypatch):
+    """写失败时不应遗留幽灵 seq，后续相同 blob 应能重试写入。"""
+    store = ImageStore(tmp_path)
+    rel_path = "doc/c.docx"
+    dh = doc_hash_for(rel_path)
+    doc_dir = tmp_path / dh
+
+    # 让第一次 write_bytes 失败，第二次成功
+    original_write_bytes = Path.write_bytes
+    call_count = {"n": 0}
+
+    def flaky_write_bytes(self, data):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise OSError("simulated write failure")
+        return original_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", flaky_write_bytes)
+
+    parts = [
+        ImagePart(PNG_RED, "png", "rId1"),
+        ImagePart(PNG_RED, "png", "rId2"),  # 相同 blob, 不同 source_ref
+    ]
+    refs = store.extract_for_doc(rel_path, parts)
+
+    # 核心断言：每个返回的 ImageRef 指向的文件必须真实存在
+    for source_ref, ref in refs.items():
+        resolved = store.resolve(dh, ref.seq)
+        assert resolved is not None, (
+            f"ImageRef for {source_ref} (seq={ref.seq}) points to missing file"
+        )
+        path, _media = resolved
+        assert path.exists(), f"File {path} for {source_ref} does not exist"
