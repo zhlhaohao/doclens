@@ -57,3 +57,22 @@ def test_build_index_force_purges_all(tmp_path: Path):
 
     _run(build_index([str(workdir)], db_path=str(db_path), force=True, if_add_node_text=True))
     assert not orphan.exists()  # force 清空了全部
+
+
+def test_build_index_indexes_code_file_not_dropped(tmp_path: Path):
+    """Regression: image_store kwargs must not cause treesitter parser TypeError.
+
+    build_index forwards image_store + rel_path to ALL parsers via **common.
+    treesitter_code_to_tree previously lacked **kwargs, raising TypeError that
+    was silently caught -> code files (.py/.go/.ts/...) were dropped from index.
+    """
+    from treesearch.indexer import build_index
+
+    workdir = tmp_path / "kb"
+    workdir.mkdir()
+    (workdir / "add.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+    db_path = workdir / ".cortex" / "index.db"
+
+    docs = _run(build_index([str(workdir)], db_path=str(db_path), if_add_node_text=True))
+
+    assert len(docs) >= 1  # .py file indexed, NOT silently dropped

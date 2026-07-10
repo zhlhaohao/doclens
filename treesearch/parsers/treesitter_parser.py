@@ -348,6 +348,7 @@ async def treesitter_code_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    **kwargs,
 ) -> dict:
     """Build a tree index from a code file using tree-sitter.
 
