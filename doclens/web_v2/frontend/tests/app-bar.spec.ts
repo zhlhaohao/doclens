@@ -3,7 +3,7 @@ import { fixture, html, elementUpdated } from "@open-wc/testing";
 
 import "../src/components/app-bar";
 import type { AppBar } from "../src/components/app-bar";
-import { actions } from "../src/state/store";
+import { store, actions } from "../src/state/store";
 
 describe("<app-bar>", () => {
   let el: AppBar;
@@ -194,5 +194,27 @@ describe("<app-bar> watcher badge", () => {
     await elementUpdated(el);
     expect(stack._toasts.length).toBe(before + 1);
     expect(stack._toasts[stack._toasts.length - 1].message).toContain("42");
+  });
+});
+
+describe("<app-bar> reindex menu item", () => {
+  it("renders 强制重建索引 menu item", async () => {
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .map((i) => i.textContent ?? "");
+    expect(labels.some((l) => l.includes("强制重建索引"))).toBe(true);
+  });
+
+  it("clicking reindex menu opens confirm dialog (store)", async () => {
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .find((b) => (b.textContent ?? "").includes("强制重建索引")) as HTMLButtonElement;
+    btn.click();
+    await elementUpdated(el);
+    expect(store.getState().reindex.dialog).toBe("confirm");
   });
 });

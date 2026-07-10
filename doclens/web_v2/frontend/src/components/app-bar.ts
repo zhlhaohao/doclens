@@ -2,7 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import "./toast-stack";
-import { store } from "../state/store";
+import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
 
 @customElement("app-bar")
@@ -208,6 +208,11 @@ export class AppBar extends LitElement {
     window.dispatchEvent(new CustomEvent("cortex:revert-settings"));
   }
 
+  private _onReindexClick() {
+    this._menuOpen = false;
+    actions.openReindexConfirm();
+  }
+
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener("click", this._onDocClick);
@@ -266,6 +271,13 @@ export class AppBar extends LitElement {
             <span class="text">
               <span class="label">全局配置</span>
               <span class="desc">所有项目共用</span>
+            </span>
+          </button>
+          <button class="menu-item" type="button" @click=${this._onReindexClick}>
+            <span class="icon">🔄</span>
+            <span class="text">
+              <span class="label">强制重建索引</span>
+              <span class="desc">全量重扫工作目录</span>
             </span>
           </button>
           ${this._showSaveAndRevert ? html`
