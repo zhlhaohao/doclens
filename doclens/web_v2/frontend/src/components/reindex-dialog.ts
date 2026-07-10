@@ -1,0 +1,162 @@
+import { LitElement, html, css } from "lit";
+import { customElement } from "lit/decorators.js";
+
+import { store, actions } from "../state/store";
+import type { ReindexState } from "../state/types";
+import { streamSSE } from "../api/client";
+import "./toast-stack";
+import type { ToastStack } from "./toast-stack";
+
+@customElement("reindex-dialog")
+export class ReindexDialog extends LitElement {
+  static styles = css`
+    :host { display: block; min-width: 360px; }
+    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); }
+    .body { font-size: var(--cortex-fs-sm); color: var(--cortex-text); line-height: 1.6; }
+    .progress {
+      font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted); margin-top: var(--cortex-space-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .actions {
+      display: flex; justify-content: flex-end;
+      gap: var(--cortex-space-2); margin-top: var(--cortex-space-4);
+    }
+    button {
+      padding: 6px 16px; border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface); cursor: pointer;
+      border-radius: var(--cortex-radius-sm); font-size: var(--cortex-fs-base);
+    }
+    button.primary { background: var(--cortex-primary); color: #fff; border-color: var(--cortex-primary); }
+    button.warn { background: var(--cortex-danger); color: #fff; border-color: var(--cortex-danger); }
+    dialog {
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-lg);
+      padding: 0; background: var(--cortex-surface);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+      min-width: 360px; max-width: 90vw;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.3); }
+    dialog > * { display: block; padding: var(--cortex-space-6); }
+    @media (max-width: 1023px) {
+      :host { min-width: 0; }
+      dialog {
+        min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+      }
+      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
+      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
+    }
+  `;
+
+  private _abort: AbortController | null = null;
+  private _unsub?: () => void;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._unsub = store.subscribe(() => this.requestUpdate());
+  }
+
+  disconnectedCallback() {
+    this._abort?.abort();
+    this._unsub?.();
+    super.disconnectedCallback();
+  }
+
+  private _pushToast(message: string, level: "success" | "error" | "info" = "info", duration = 2500) {
+    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
+    stack?.pushToast(message, level, duration);
+  }
+
+  private _confirm() {
+    actions.startReindex();
+    void this._runReindex();
+  }
+
+  private _close() {
+    this._abort?.abort();
+    actions.closeReindex();
+  }
+
+  private async _runReindex(): Promise<void> {
+    this._abort = new AbortController();
+    try {
+      for await (const ev of streamSSE("/api/reindex", {}, this._abort.signal)) {
+        if (this._abort.signal.aborted) break;
+        if (ev.event === "progress") {
+          const d = JSON.parse(ev.data);
+          actions.setReindexProgress({ current_file: d.current_file, indexed_count: d.indexed_count });
+        } else if (ev.event === "done") {
+          const d = JSON.parse(ev.data);
+          actions.finishReindex({ success: d.success, doc_count: d.doc_count, failed_count: d.failed_count });
+          this._pushToast(`索引重建完成：${d.doc_count} 文档`, "success", 3000);
+          break;
+        } else if (ev.event === "error") {
+          const d = JSON.parse(ev.data);
+          actions.failReindex(d.detail || "重建失败");
+          break;
+        }
+      }
+    } catch (e) {
+      if (!this._abort?.signal.aborted) {
+        actions.failReindex((e as Error).message || "重建失败");
+      }
+    }
+  }
+
+  private _renderBody(r: ReindexState) {
+    if (r.dialog === "confirm") {
+      return html`
+        <h3>🔄 强制重建索引</h3>
+        <div class="body">⚠️ 将清空当前索引并全量重扫工作目录，期间（数十秒）搜索结果可能不完整。是否继续？</div>
+        <div class="actions">
+          <button @click=${() => actions.closeReindex()}>取消</button>
+          <button class="warn" @click=${this._confirm}>确认重建</button>
+        </div>
+      `;
+    }
+    if (r.dialog === "running") {
+      return html`
+        <h3>⟳ 正在重建索引…</h3>
+        <div class="body">已索引 <strong>${r.indexed_count}</strong> 个文件</div>
+        ${r.current_file ? html`<div class="progress">当前：${r.current_file}</div>` : ""}
+        <div class="actions">
+          <button @click=${this._close}>关闭（后台继续）</button>
+        </div>
+      `;
+    }
+    if (r.dialog === "done") {
+      const res = r.result;
+      return html`
+        <h3>✅ 重建完成</h3>
+        <div class="body">
+          共索引 <strong>${res?.doc_count ?? 0}</strong> 个文档
+          ${res && res.failed_count > 0 ? html`<br />· ${res.failed_count} 个文件失败` : ""}
+        </div>
+        <div class="actions">
+          <button class="primary" @click=${this._close}>关闭</button>
+        </div>
+      `;
+    }
+    return html`
+      <h3>⚠️ 重建失败</h3>
+      <div class="body">${r.error || "未知错误"}</div>
+      <div class="actions">
+        <button class="primary" @click=${this._close}>关闭</button>
+      </div>
+    `;
+  }
+
+  render() {
+    const r = store.getState().reindex;
+    if (r.dialog === "closed") return html`<toast-stack></toast-stack>`;
+    return html`
+      <dialog open>${this._renderBody(r)}</dialog>
+      <toast-stack></toast-stack>
+    `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap { "reindex-dialog": ReindexDialog; }
+}
