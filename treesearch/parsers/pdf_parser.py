@@ -15,7 +15,10 @@ Pipeline:
 import logging
 import os
 import re
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .image_store import ImageStore
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +64,45 @@ _ACADEMIC_HEADINGS = {
     "MOTIVATION", "CONTRIBUTIONS", "PRELIMINARIES",
 }
 
-def extract_pdf_text(file_path: str) -> str:
+def _extract_pdf_page_images(pdf_path: str) -> list[list]:
+    """用 PyMuPDF(fitz) 按页提取内嵌 raster 图片。
+
+    返回 page_parts[page_idx] = list[ImagePart]；每个图片实例一个 ImagePart，
+    source_ref="page{idx}:{ordinal}"（唯一）。矢量图不提取（fitz get_images
+    只列 raster xref）。单图 extract_image 失败 → warning + 跳过，其余继续。
+    需要 PyMuPDF；不可用时由调用方捕获 ImportError 降级。
+    """
+    import fitz
+    from .image_store import ImagePart
+
+    doc = fitz.open(pdf_path)
+    try:
+        page_parts: list[list] = []
+        for page_idx, page in enumerate(doc):
+            parts: list = []
+            for ordinal, img_info in enumerate(page.get_images(full=True)):
+                xref = img_info[0]
+                try:
+                    img_dict = doc.extract_image(xref)
+                    parts.append(ImagePart(
+                        blob=img_dict["image"],
+                        ext=(img_dict.get("ext") or "png").lower().lstrip("."),
+                        source_ref=f"page{page_idx}:{ordinal}",
+                    ))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("skip pdf image page%d xref%s: %s", page_idx, xref, e)
+            page_parts.append(parts)
+        return page_parts
+    finally:
+        doc.close()
+
+
+def extract_pdf_text(file_path: str, page_image_mds: list[str] | None = None) -> str:
     """Extract text from a PDF file using pdfplumber.
 
-    Args:
-        file_path: path to the PDF file.
-
-    Returns page-aware text with [PAGE N] markers. 同一段落内的视觉硬换行
-    会被保留（Markdown 渲染时合并）；段落之间插入空行（\\n\\n），
-    以避免 pdfplumber 默认输出把多个段落挤成一段。
-
-    Returns empty string on failure.
+    可选 page_image_mds：每页正文后追加的图片 md 列表（按页对齐）。
+    关键：纯图页（pdfplumber 提不到文字，如扫描页/纯插图页）只要有图片 md，
+    也必须输出该页块——否则扫描页图片会随空 page_text 一起被丢弃。
     """
     _check_backends()
     try:
@@ -81,8 +112,13 @@ def extract_pdf_text(file_path: str) -> str:
         with pdfplumber.open(file_path) as doc:
             for i, page in enumerate(doc.pages):
                 page_text = _extract_page_text_with_paragraphs(page)
-                if page_text:
-                    parts.append(f"\n[PAGE {i + 1}]\n{page_text}")
+                img_md = (page_image_mds[i]
+                          if page_image_mds and i < len(page_image_mds) else "")
+                if page_text or img_md:
+                    block = f"\n[PAGE {i + 1}]\n{page_text}".rstrip()
+                    if img_md:
+                        block += "\n\n" + img_md
+                    parts.append(block)
         return "\n".join(parts)
     except Exception as e:
         logger.error("Error extracting text from %s: %s", file_path, e)
@@ -279,6 +315,8 @@ async def pdf_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    image_store: "ImageStore | None" = None,
+    rel_path: str | None = None,
     **kwargs,
 ) -> dict:
     """Build a tree index from a PDF file using pdfplumber.
@@ -305,8 +343,26 @@ async def pdf_to_tree(
     doc_name = os.path.splitext(os.path.basename(fp))[0]
     logger.debug("Parsing document: %s", fp)
 
-    # Step 1: Extract text with [PAGE N] markers
-    text = extract_pdf_text(fp)
+    # 图片提取 + 页面级注入（fitz 不可用则降级为纯文字）
+    page_image_mds: list[str] | None = None
+    if image_store is not None and rel_path:
+        try:
+            page_parts = _extract_pdf_page_images(fp)
+            all_parts = [p for parts in page_parts for p in parts]
+            refs = image_store.extract_for_doc(rel_path, all_parts) if all_parts else {}
+            page_image_mds = [
+                "\n\n".join(refs[p.source_ref].inline_md
+                            for p in parts if p.source_ref in refs)
+                or ""
+                for parts in page_parts
+            ]
+        except ImportError:
+            logger.debug("PyMuPDF not available, skip PDF image extraction: %s", fp)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("PDF image extraction failed for %s: %s", fp, e)
+
+    # Step 1: Extract text with [PAGE N] markers (注入每页图片 md)
+    text = extract_pdf_text(fp, page_image_mds=page_image_mds)
 
     if not text.strip():
         logger.warning("No text extracted from document: %s", fp)
