@@ -21,7 +21,11 @@ from doclens.config import CortexConfig
 from doclens.index_manager import IndexManager
 from doclens.web_v2 import deps
 from doclens.web_v2.app import create_app
-from tests.conftest_image_fixtures import make_docx_with_image, make_pptx_with_image
+from tests.conftest_image_fixtures import (
+    make_docx_with_image,
+    make_pdf_with_image,
+    make_pptx_with_image,
+)
 from treesearch.parsers.image_store import doc_hash_for
 
 # 合成 md 中图片内联语法的锚点
@@ -33,21 +37,23 @@ _MARKITDOWN_PICTURE_RESIDUE = "](Picture"
 
 @pytest.fixture
 def e2e_env(tmp_path: Path):
-    """构造含 docx + pptx 图片的临时 KB，索引后注入 deps 单例。
+    """构造含 docx + pptx + pdf 图片的临时 KB，索引后注入 deps 单例。
 
-    make_docx_with_image / make_pptx_with_image 各嵌入 1 张 PNG；
+    make_docx_with_image / make_pptx_with_image / make_pdf_with_image 各嵌入 1 张 PNG；
     load_or_build_index() 索引时 indexer 调用 ImageStore.extract_for_doc
     把图片落盘到 ``<index_path>.parent/images/<doc_hash>/<seq>.<ext>``。
 
     Yields:
-        (client, mgr, docx_rel, pptx_rel, images_root)
+        (client, mgr, docx_rel, pptx_rel, pdf_rel, images_root)
     """
     workdir = tmp_path / "kb"
     workdir.mkdir()
     docx_rel = "报告.docx"
     pptx_rel = "演示.pptx"
+    pdf_rel = "论文.pdf"
     make_docx_with_image(str(workdir / docx_rel))
     make_pptx_with_image(str(workdir / pptx_rel))
+    make_pdf_with_image(str(workdir / pdf_rel))
 
     deps.reset_singletons()
     cfg = CortexConfig(
@@ -61,7 +67,7 @@ def e2e_env(tmp_path: Path):
     app = create_app()
     client = TestClient(app)
     images_root = Path(mgr.index_path).parent / "images"
-    yield client, mgr, docx_rel, pptx_rel, images_root
+    yield client, mgr, docx_rel, pptx_rel, pdf_rel, images_root
     deps.reset_singletons()
 
 
@@ -71,7 +77,7 @@ def e2e_env(tmp_path: Path):
 
 def test_docx_preview_contains_image_markdown(e2e_env):
     """docx 预览合成的 md 必须包含 ![图片 1](/api/preview/asset?...) 内联语法。"""
-    client, _mgr, docx_rel, _pptx_rel, _root = e2e_env
+    client, _mgr, docx_rel, _pptx_rel, _pdf_rel, _root = e2e_env
     r = client.get("/api/preview", params={"path": docx_rel})
     assert r.status_code == 200
     body = r.json()
@@ -86,7 +92,7 @@ def test_docx_asset_returns_real_image_bytes(e2e_env):
 
     真实管线证明：先断言 PNG 已落盘，再断言端点读回的字节非空。
     """
-    client, _mgr, docx_rel, _pptx_rel, images_root = e2e_env
+    client, _mgr, docx_rel, _pptx_rel, _pdf_rel, images_root = e2e_env
     img_file = images_root / doc_hash_for(docx_rel) / "1.png"
     assert img_file.exists(), f"docx 图片未落盘: {img_file}"
 
@@ -102,7 +108,7 @@ def test_docx_asset_returns_real_image_bytes(e2e_env):
 
 def test_pptx_preview_contains_image_markdown(e2e_env):
     """pptx 预览合成的 md 必须包含 ![图片 1](/api/preview/asset?...) 内联语法。"""
-    client, _mgr, _docx_rel, pptx_rel, _root = e2e_env
+    client, _mgr, _docx_rel, pptx_rel, _pdf_rel, _root = e2e_env
     r = client.get("/api/preview", params={"path": pptx_rel})
     assert r.status_code == 200
     content = r.json()["content"]
@@ -112,7 +118,7 @@ def test_pptx_preview_contains_image_markdown(e2e_env):
 
 def test_pptx_preview_no_markitdown_picture_residue(e2e_env):
     """pptx 合成 md 不得残留 markitdown 的 ](Picture 破损语法（Task 3 清理）。"""
-    client, _mgr, _docx_rel, pptx_rel, _root = e2e_env
+    client, _mgr, _docx_rel, pptx_rel, _pdf_rel, _root = e2e_env
     r = client.get("/api/preview", params={"path": pptx_rel})
     assert r.status_code == 200
     content = r.json()["content"]
@@ -123,7 +129,7 @@ def test_pptx_preview_no_markitdown_picture_residue(e2e_env):
 
 def test_pptx_asset_returns_real_image_bytes(e2e_env):
     """pptx 图片端点返回 200 + image/* Content-Type + 非空字节。"""
-    client, _mgr, _docx_rel, pptx_rel, images_root = e2e_env
+    client, _mgr, _docx_rel, pptx_rel, _pdf_rel, images_root = e2e_env
     img_file = images_root / doc_hash_for(pptx_rel) / "1.png"
     assert img_file.exists(), f"pptx 图片未落盘: {img_file}"
 
@@ -143,7 +149,7 @@ def test_force_rebuild_preserves_images(e2e_env):
     doc_hash = sha256(rel_path)[:12] 仅依赖相对路径，与索引内容无关，
     因此重建后图片落盘路径不变，端点仍可读回同一张图片。
     """
-    client, mgr, docx_rel, pptx_rel, _root = e2e_env
+    client, mgr, docx_rel, pptx_rel, _pdf_rel, _root = e2e_env
 
     # 重建前：取基线字节
     before_docx = client.get(
@@ -177,3 +183,29 @@ def test_force_rebuild_preserves_images(e2e_env):
     assert after_pptx.content == before_pptx.content, (
         "pptx 图片字节在 force 重建后不一致"
     )
+
+
+# ---------------------------------------------------------------------------
+# pdf 全链路（Task: PDF image preview）
+# ---------------------------------------------------------------------------
+
+def test_pdf_preview_contains_image_markdown(e2e_env):
+    """pdf 预览合成的 md 必须包含 ![图片 1](/api/preview/asset?...) 内联语法。"""
+    client, _mgr, _docx_rel, _pptx_rel, pdf_rel, _root = e2e_env
+    r = client.get("/api/preview", params={"path": pdf_rel})
+    assert r.status_code == 200
+    content = r.json()["content"]
+    assert _IMG_MARK in content, "pdf 合成 md 缺少图片内联语法 ![图片 1]"
+    assert _ASSET_URL_FRAGMENT in content, "pdf 合成 md 缺少 asset 端点 URL"
+
+
+def test_pdf_asset_returns_real_image_bytes(e2e_env):
+    """pdf 图片端点返回 200 + image/* Content-Type + 非空字节。"""
+    client, _mgr, _docx_rel, _pptx_rel, pdf_rel, images_root = e2e_env
+    img_file = images_root / doc_hash_for(pdf_rel) / "1.png"
+    assert img_file.exists(), f"pdf 图片未落盘: {img_file}"
+
+    r = client.get("/api/preview/asset", params={"path": pdf_rel, "id": 1})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/")
+    assert len(r.content) > 0
