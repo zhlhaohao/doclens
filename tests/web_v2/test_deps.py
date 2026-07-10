@@ -1,5 +1,15 @@
 """deps.py 单例测试。"""
+import pytest
+
 from doclens.web_v2 import deps
+
+
+@pytest.fixture
+def reset_deps():
+    from doclens.web_v2 import deps
+    deps.reset_singletons()
+    yield
+    deps.reset_singletons()
 
 
 def test_get_config_returns_singleton(env_cortex_config):
@@ -65,3 +75,43 @@ def test_reload_config_invalidates_session_manager_provider():
         deps.reload_config()
         # 关键断言：invalidate_provider 被调用过
         MockSM.invalidate_provider.assert_called_once()
+
+
+def test_watcher_singletons_and_lifecycle(env_cortex_config, reset_deps, temp_workdir):
+    """start_watcher 创建并注册 watcher；stop_watcher 清理；reset 清空单例。"""
+    import asyncio
+    from doclens.web_v2 import deps
+
+    async def _init():
+        await asyncio.to_thread(lambda: deps.get_index_manager().reindex(force=True))
+    asyncio.run(_init())
+
+    assert deps.get_watcher() is None
+    started = deps.start_watcher()
+    assert started is True
+    w = deps.get_watcher()
+    assert w is not None
+    assert w.status()["running"] is True
+
+    deps.stop_watcher()
+    assert deps.get_watcher() is None  # stop_watcher 注销单例
+
+    # reset_singletons 也应清空 _watcher
+    deps.set_watcher(object())
+    deps.reset_singletons()
+    assert deps.get_watcher() is None
+
+
+def test_start_watcher_respects_watch_disabled(env_cortex_config, reset_deps, monkeypatch):
+    """watch_enabled=False 时 start_watcher 不创建 watcher，返回 False。"""
+    import asyncio
+    from doclens.web_v2 import deps
+
+    async def _init():
+        await asyncio.to_thread(deps.get_index_manager)
+    asyncio.run(_init())
+
+    monkeypatch.setattr(deps.get_config(), "watch_enabled", False)
+    started = deps.start_watcher()
+    assert started is False
+    assert deps.get_watcher() is None
