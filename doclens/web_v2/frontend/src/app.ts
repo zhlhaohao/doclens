@@ -23,6 +23,7 @@ import "./views/chat-view";
 import "./views/settings-view";
 import "./views/files-view";
 import "./components/app-bar";
+import { startWatchPolling, stopWatchPolling } from "./watch-polling";
 
 @customElement("cortex-app")
 export class CortexApp extends LitElement {
@@ -62,10 +63,14 @@ export class CortexApp extends LitElement {
     router.init();
     // 订阅 store —— view 切换时触发重新渲染
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
+    startWatchPolling();
   }
 
   disconnectedCallback() {
     this._unsubscribe?.();
+    // 停止 watcher 状态轮询
+    stopWatchPolling();
     super.disconnectedCallback();
   }
 
