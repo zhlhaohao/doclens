@@ -57,6 +57,7 @@ export const INITIAL_STATE: AppState = {
   detailStack: [],
   pendingSession: null,
   status: null,
+  watcher: null,
   error: null,
   settings: {
     scope: "global",

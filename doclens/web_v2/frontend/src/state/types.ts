@@ -65,11 +65,22 @@ export interface HistoryEntry {
   session: Session;
 }
 
+export interface WatcherStatus {
+  enabled?: boolean;            // 仅 /api/status 返回；/api/watch/status 顶层才有
+  running: boolean;
+  reindexing: boolean;
+  changed_count: number;
+  last_reindex_at: number | null;
+  last_doc_count: number | null;
+  last_success: boolean | null;
+}
+
 export interface SystemStatus {
   indexed_docs: number;
   index_path: string;
   total_size_bytes: number;
   file_types: Record<string, number>;
+  watcher?: WatcherStatus | null;
 }
 
 /** Settings page */
@@ -145,6 +156,7 @@ export interface AppState {
   /** 跨视图会话加载请求（search-view ↔ chat-view） */
   pendingSession: Session | null;
   status: SystemStatus | null;
+  watcher: WatcherStatus | null;   // 来自 /api/watch/status 的轮询
   error: string | null;
   settings: SettingsViewState;
   files: FileExplorerViewState;
