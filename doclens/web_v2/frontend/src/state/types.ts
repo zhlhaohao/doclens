@@ -75,6 +75,20 @@ export interface WatcherStatus {
   last_success: boolean | null;
 }
 
+export interface ReindexResult {
+  success: boolean;
+  doc_count: number;
+  failed_count: number;
+}
+
+export interface ReindexState {
+  dialog: "closed" | "confirm" | "running" | "done" | "error";
+  current_file: string | null;
+  indexed_count: number;
+  result: ReindexResult | null;
+  error: string | null;
+}
+
 export interface SystemStatus {
   indexed_docs: number;
   index_path: string;
@@ -157,6 +171,7 @@ export interface AppState {
   pendingSession: Session | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 /api/watch/status 的轮询
+  reindex: ReindexState;
   error: string | null;
   settings: SettingsViewState;
   files: FileExplorerViewState;
