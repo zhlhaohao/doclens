@@ -84,4 +84,19 @@ describe("<reindex-dialog>", () => {
     expect(store.getState().reindex.dialog).toBe("error");
     expect(store.getState().reindex.error).toBe("boom");
   });
+
+  it("done with success:false → error stage (not success)", async () => {
+    (streamSSE as any).mockImplementation(makeStream([
+      { event: "done", data: JSON.stringify({ success: false, doc_count: 0, failed_count: 3 }) },
+    ]));
+    actions.openReindexConfirm();
+    const el = await fixture<ReindexDialog>(html`<reindex-dialog></reindex-dialog>`);
+    await elementUpdated(el);
+    (Array.from(el.shadowRoot!.querySelectorAll("button"))
+      .find((b) => (b.textContent || "").includes("确认重建")) as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    await elementUpdated(el);
+    expect(store.getState().reindex.dialog).toBe("error");
+    expect(store.getState().reindex.error).toContain("3");
+  });
 });
