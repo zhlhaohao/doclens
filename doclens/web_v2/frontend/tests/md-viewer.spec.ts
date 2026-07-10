@@ -218,4 +218,42 @@ describe("<md-viewer>", () => {
       `expect md-viewer styles to include table/th/td border rule, got cssText:\n${cssText}`,
     ).toBe(true);
   });
+
+  it("renders <img loading=lazy> for markdown image with /api/preview/asset src", async () => {
+    // Task 6: md-viewer 必须把 ![alt](/api/preview/asset?...) 渲染成带 lazy 加载的 <img>。
+    // marked 默认 image renderer 不加 loading="lazy"，需自定义 renderer。
+    const md = "![图片 1](/api/preview/asset?path=a.docx&id=1)";
+    const el = await fixture(html`<md-viewer .content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    const img = el.shadowRoot!.querySelector("img");
+    expect(img, "expected an <img> element to be rendered").toBeTruthy();
+    expect(img!.getAttribute("loading")).toBe("lazy");
+    expect(img!.getAttribute("src")).toContain("/api/preview/asset");
+    expect(img!.getAttribute("alt")).toBe("图片 1");
+  });
+
+  it("escapes the alt text and includes title attribute on image", async () => {
+    // 安全回归：alt/title 来自 markdown 文本，必须经过 escapeHtml，避免 XSS。
+    const md = '![alt"x](/api/preview/asset?path=b.pdf&id=2 "ti&tle")';
+    const el = await fixture(html`<md-viewer .content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    const img = el.shadowRoot!.querySelector("img");
+    expect(img).toBeTruthy();
+    // alt 中的双引号必须被转义，不能破坏属性边界
+    expect(img!.getAttribute("alt")).toBe('alt"x');
+    expect(img!.getAttribute("title")).toBe("ti&tle");
+    expect(img!.getAttribute("loading")).toBe("lazy");
+  });
+
+  it("styles images with max-width / border-radius rule (regression)", async () => {
+    // 防止未来移除 :host img 自适应样式
+    const cssText = (MdViewerClass as any).styles.cssText as string;
+    const hasImgRule = /:host\s+img\s*\{[^}]*max-width[^}]*\}/.test(cssText);
+    expect(
+      hasImgRule,
+      `expect md-viewer styles to include ":host img { max-width ... }" rule, got cssText:\n${cssText}`,
+    ).toBe(true);
+  });
 });

@@ -73,6 +73,16 @@ const blockRenderer: any = {
   },
 };
 
+/**
+ * 图片 renderer —— 把 ![alt](url) 渲染成带 loading="lazy" 的 <img>。
+ * marked v18 image renderer 接收 token 对象（{href, title, text, tokens}）。
+ * 直接挂在 blockRenderer 上，保持单个 renderer（不新建 marked.use 避免 clobber）。
+ */
+blockRenderer.image = function (token: any) {
+  const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : "";
+  return `<img src="${token.href}" alt="${escapeHtml(token.text || "")}"${titleAttr} loading="lazy">\n`;
+};
+
 /** 标记是否已 use 过（避免重复 use） */
 let mdConfigured = false;
 function ensureMdConfigured(): void {
@@ -155,6 +165,14 @@ export class MdViewer extends LitElement {
     }
     :host tbody tr:nth-child(even) {
       background: var(--cortex-surface-muted);
+    }
+    /* 图片自适应：最大宽度不超出容器，圆角 + 块级居中 */
+    :host img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      margin: 0.5em 0;
+      display: block;
     }
     .empty {
       color: var(--cortex-text-subtle);
