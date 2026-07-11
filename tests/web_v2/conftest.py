@@ -5,6 +5,26 @@ from pathlib import Path
 
 import pytest
 
+# ---- 修正 editable install 的 MAPPING（worktree 共享主仓库 .venv）----
+# doclens 的 editable finder 把 doclens/planify/treesearch 映射到「安装时的源目录」
+# （模块级 MAPPING）。多 worktree 共享同一 .venv 时，该目录可能是已删除的旧 worktree
+# （如 0708-3），失效后 planify 等子包的 find_spec 走 `PathFinder(path=[失效目录])`
+# 返回 None，中断 import。把 MAPPING 强制指向本仓库根，确保测试用本地代码。
+import importlib as _importlib
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+for _finder in sys.meta_path:
+    _mod_name = getattr(_finder, "__module__", "")
+    if "editable" not in _mod_name:
+        continue
+    _mod = sys.modules.get(_mod_name) or _importlib.import_module(_mod_name)
+    _mapping = getattr(_mod, "MAPPING", None)
+    if isinstance(_mapping, dict):
+        for _pkg in ("doclens", "planify", "treesearch"):
+            _sub = _REPO_ROOT / _pkg
+            if _sub.is_dir():
+                _mapping[_pkg] = str(_sub)
+
 
 @pytest.fixture
 def temp_workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

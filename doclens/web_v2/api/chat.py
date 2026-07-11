@@ -16,6 +16,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from doclens.web_v2.deps import get_agent
 from doclens.web_v2.models.chat import ChatRequest
+from doclens.web_v2.references import extract_references
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -91,6 +92,11 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     if emitter.done:
                         break
                     await asyncio.sleep(0.05)
+                # done 后：从检索工具结果提取引用 path，发 references 事件
+                # （前端据此渲染可点击的引用卡片，不再依赖 AI 正文「## 参考资料」格式）
+                refs = extract_references(emitter.tool_calls)
+                if refs:
+                    await queue.put({"type": "references", "items": refs})
                 await queue.put(None)  # sentinel
 
             sa = StreamingAgent(
@@ -157,6 +163,8 @@ async def chat(req: ChatRequest):
                         "is_error": ev.get("is_error", False),
                         "duration_ms": ev.get("duration_ms"),
                     }, ensure_ascii=False)}
+                elif t == "references":
+                    yield {"event": "references", "data": json.dumps({"items": ev["items"]}, ensure_ascii=False)}
                 elif t == "error":
                     yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}
             yield {"event": "done", "data": "{}"}

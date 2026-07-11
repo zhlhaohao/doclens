@@ -89,3 +89,46 @@ async def test_chat_emits_tool_call_and_result_events(env_cortex_config, temp_wo
     assert result_ev["output"] == "found 1"
     assert result_ev["is_error"] is False
     assert result_ev["duration_ms"] == 120
+
+
+def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
+    """解析 SSE 文本为 [(event_type, payload), ...]（sse-starlette 用 \\r\\n，先归一化）。"""
+    events: list[tuple[str, dict]] = []
+    for block in text.replace("\r\n", "\n").split("\n\n"):
+        ev_type, data = None, ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                ev_type = line[6:].strip()
+            elif line.startswith("data:"):
+                data += line[5:].strip()
+        if ev_type:
+            events.append((ev_type, json.loads(data) if data else {}))
+    return events
+
+
+@pytest.mark.asyncio
+async def test_chat_serializes_references_event(env_cortex_config, temp_workdir, monkeypatch):
+    """references 事件 → event:references SSE，items 原样透传给前端。"""
+    from doclens.web_v2 import deps
+
+    class _FakeAgent:
+        def __init__(self):
+            self.session = type("S", (), {"session_id": "test"})()
+
+    async def _fake_stream(message, session_id):
+        yield {"type": "references", "items": [{"path": "a/b.md"}, {"path": "c/d.md"}]}
+
+    monkeypatch.setattr(deps, "get_agent", lambda: _FakeAgent())
+    import doclens.web_v2.api.chat as chat_mod
+    monkeypatch.setattr(chat_mod, "_stream_agent_response", _fake_stream)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/chat", json={"message": "hi", "session_id": "test"})
+
+    assert res.status_code == 200
+    events = _parse_sse_events(res.text)
+    assert "references" in [e[0] for e in events]
+    ref_ev = next(e[1] for e in events if e[0] == "references")
+    assert ref_ev == {"items": [{"path": "a/b.md"}, {"path": "c/d.md"}]}
