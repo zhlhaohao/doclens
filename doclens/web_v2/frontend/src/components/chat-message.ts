@@ -215,21 +215,27 @@ export class ChatMessageEl extends LitElement {
     if (content === "") return html`<span class="thinking">思考中...</span>`;
     if (this.role === "assistant") {
       const htmlstr = marked.parse(content, { async: false }) as string;
-      return html`<div class="md-body" .innerHTML=${htmlstr}></div>`;
+      return html`<div class="md-body" .innerHTML=${this.linkifyReferences(htmlstr)}></div>`;
     }
     return content;
   }
 
-  /** 结构化引用卡片：每条 path 渲染为可点击 .ref-link（点击由 _onClick 委托派发）。 */
-  private renderReferences() {
-    const refs = this.message?.references;
-    if (!refs || refs.length === 0) return null;
-    return html`<div class="references">
-      <div class="references-title">📎 参考资料</div>
-      <ul>
-        ${refs.map((r) => html`<li><a class="ref-link" data-path=${r.path} href="#">${r.path}</a></li>`)}
-      </ul>
-    </div>`;
+  /** 把正文「## 参考资料」章节的路径列表项渲染为可点击 .ref-link。
+   *  marked 把「数字. 路径」渲染为 <h2>参考资料</h2><ol><li>path</li></ol>；
+   *  这里把章节内 <li> 的路径文本包成 <a class="ref-link" data-path>，点击由 _onClick 委托。
+   *  仅处理该章节，不影响正文其它列表；路径合法性由后端 evaluate_round 校验。 */
+  private linkifyReferences(html: string): string {
+    // 匹配 <ol>（数字列表 1.）或 <ul>（破折号列表 -），兼容 AI 不同列表写法；
+    // [^>]* 容忍 marked renderer 给标签加的属性（如 data-source-line）
+    const sectionRe = /(<h2[^>]*>\s*参考资料\s*<\/h2>)\s*(<(?:ol|ul)[^>]*>[\s\S]*?<\/(?:ol|ul)>)/i;
+    return html.replace(sectionRe, (_m, h2: string, list: string) => {
+      const linkified = list.replace(/<li>([^<]+?)<\/li>/g, (_li: string, path: string) => {
+        const p = path.trim();
+        const attr = p.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+        return `<li><a class="ref-link" data-path="${attr}" href="#">${p}</a></li>`;
+      });
+      return `${h2}${linkified}`;
+    });
   }
 
   render() {
@@ -250,7 +256,6 @@ export class ChatMessageEl extends LitElement {
           ? html`<chat-tool-trace .steps=${steps}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
         ${this.renderBubble(this.message.content)}
-        ${this.renderReferences()}
         ${this.error ? html`<div class="error">⚠️ ${this.error}</div>` : null}
       </div>
     `;

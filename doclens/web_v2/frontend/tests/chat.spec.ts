@@ -53,4 +53,20 @@ describe("chatStream", () => {
     for await (const ev of chatStream({ message: "hi" })) out.push(ev);
     expect(out).toEqual([{ type: "error", detail: "boom" }]);
   });
+
+  it("parses toast event", async () => {
+    const chunks = sseChunks([["toast", JSON.stringify({ level: "error", detail: "已兜底" })]]);
+    let call = 0;
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      body: { getReader: () => ({
+        read: async () => call < chunks.length
+          ? { value: chunks[call++], done: false }
+          : { value: undefined, done: true },
+      }) },
+    });
+    const out = [];
+    for await (const ev of chatStream({ message: "hi" })) out.push(ev);
+    expect(out).toEqual([{ type: "toast", level: "error", detail: "已兜底" }]);
+  });
 });

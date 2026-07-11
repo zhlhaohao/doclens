@@ -338,6 +338,8 @@ export class ChatView extends LitElement {
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
+        } else if (ev.type === "toast") {
+          this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });

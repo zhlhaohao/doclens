@@ -9,8 +9,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-# 检索类工具（manage_kb 等非检索工具的 output 不含可引用 path，跳过）
-_RETRIEVAL_TOOLS = frozenset({"search_kb", "grep", "read_document"})
+# 检索类工具（manage_kb 等非检索工具的 output 不含可引用 path，跳过）。
+# 公开供 refs_retry.evaluate_round 复用，避免两处定义漂移。
+RETRIEVAL_TOOLS = frozenset({"search_kb", "grep", "read_document"})
 
 # search_kb / grep：<path>...</path>（非贪婪，一段 output 可能含多个）
 _PATH_TAG_RE = re.compile(r"<path>([^<]+?)</path>")
@@ -50,7 +51,7 @@ def extract_references(tool_calls: list[dict[str, Any]]) -> list[dict[str, str]]
         if tc.get("is_error"):
             continue
         name = tc.get("name", "")
-        if name not in _RETRIEVAL_TOOLS:
+        if name not in RETRIEVAL_TOOLS:
             continue
         for raw in _extract_paths(name, tc.get("output") or ""):
             path = raw.strip()
@@ -78,6 +79,40 @@ def validate_paths(paths: list[str], workdir: Path) -> list[str]:
         if not path or path in seen:
             continue
         seen.add(path)
-        if not (workdir / path).resolve().exists():
+        if not (workdir / path).exists():
             missing.append(path)
     return missing
+
+
+def to_relative_path(path: str, workdir: Path) -> str:
+    """转绝对/反斜杠路径为相对 workdir 的正斜杠路径。
+
+    search_kb/grep/read_document 返回的 path 可能是绝对路径或反斜杠分隔（Windows），
+    统一转为相对 workdir 的正斜杠 —— 否则 marked 会把 ``\\`` 当转义符吃掉，
+    导致前端 data-path 损坏、点击打不开。
+    """
+    try:
+        p = Path(path)
+        if p.is_absolute():
+            return str(p.relative_to(workdir)).replace("\\", "/")
+    except ValueError:
+        # 绝对路径不在 workdir 下：降级为仅替换斜杠
+        pass
+    return str(path).replace("\\", "/")
+
+
+def normalize_paths(paths: list[str], workdir: Path) -> list[str]:
+    """normalize 为相对正斜杠 + 去重保序。
+
+    工具结果可能用绝对/相对、正/反斜杠混指同一文件（如 read_document 返回绝对、
+    search_kb 返回相对），统一为相对 workdir 的正斜杠路径并去重，避免 marked 转义
+    + 重复展示。
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for p in paths:
+        rel = to_relative_path(p, workdir)
+        if rel and rel not in seen:
+            seen.add(rel)
+            result.append(rel)
+    return result

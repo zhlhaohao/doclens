@@ -27,10 +27,17 @@ export class ChatStream extends LitElement {
   `;
 
   @property({ attribute: false }) messages: ChatMessage[] = [];
+  private _scrollRafPending = false;
 
   updated() {
-    // 自动滚动到底部
-    this.scrollTop = this.scrollHeight;
+    // 自动滚动到底部：延迟到下一帧，等子组件（chat-message → chat-tool-trace）
+    // 渲染/展开后再算 scrollHeight；guard 合并同帧多次 updated 为单次 rAF
+    if (this._scrollRafPending) return;
+    this._scrollRafPending = true;
+    requestAnimationFrame(() => {
+      this._scrollRafPending = false;
+      this.scrollTop = this.scrollHeight;
+    });
   }
 
   render() {

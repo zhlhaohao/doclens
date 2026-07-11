@@ -1,5 +1,5 @@
 """refs_parser 单测：从 AI 正文解析「## 参考资料」章节 + 格式诊断。"""
-from doclens.web_v2.refs_parser import parse_references_section
+from doclens.web_v2.refs_parser import parse_references_section, rewrite_references_section
 
 
 def test_compliant_section_extracts_paths():
@@ -66,3 +66,20 @@ def test_section_scoped_until_next_heading():
     md = "## 参考资料\n1. a/b.md\n## 其它\n不应被解析\n"
     r = parse_references_section(md)
     assert r.paths == ["a/b.md"]
+
+
+def test_rewrite_replaces_section_with_tool_paths():
+    content = "回答 [1]。\n\n## 参考资料\n1. 幻觉路径.md\n"
+    out = rewrite_references_section(content, ["正确/a.md", "正确/b.md"])
+    assert "幻觉路径" not in out
+    assert "## 参考资料\n1. 正确/a.md\n2. 正确/b.md\n" in out
+
+
+def test_rewrite_appends_when_section_missing():
+    out = rewrite_references_section("回答 [1]。", ["a.md"])
+    assert out.endswith("## 参考资料\n1. a.md\n")
+
+
+def test_rewrite_empty_paths_returns_unchanged():
+    content = "回答。\n\n## 参考资料\n1. x.md\n"
+    assert rewrite_references_section(content, []) == content
