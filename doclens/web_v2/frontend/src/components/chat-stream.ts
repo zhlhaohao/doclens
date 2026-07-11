@@ -8,9 +8,9 @@ export class ChatStream extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: var(--cortex-space-2);
+      gap: 14px;
       flex: 1;
-      padding: var(--cortex-space-4) var(--cortex-space-6);
+      padding: 20px 18px 12px;
       overflow-y: auto;
     }
     .empty {

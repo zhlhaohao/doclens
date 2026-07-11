@@ -8,66 +8,111 @@ export class ChatMessageEl extends LitElement {
   static styles = css`
     :host {
       display: block;
-      max-width: 75%;
+      max-width: 78%;
     }
     :host([role="user"]) { align-self: flex-end; }
     :host([role="assistant"]) { align-self: flex-start; }
     .bubble {
       padding: 10px 14px;
-      border-radius: 12px;
+      border-radius: 16px;
       font-size: var(--cortex-fs-md);
-      line-height: 1.5;
+      line-height: 1.6;
       word-break: break-word;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
     }
+    /* 用户气泡：薄荷绿底 + 深色字（与示例对齐） */
     :host([role="user"]) .bubble {
-      background: var(--cortex-primary);
-      color: #fff;
-      border-bottom-right-radius: 4px;
+      display: flex;
+      align-items: center;   /* 显式垂直居中：单行文字/匿名文本节点居中显示 */
+      background: var(--cortex-chat-bubble-user);
+      color: var(--cortex-chat-bubble-user-text);
+      border: 1px solid var(--cortex-chat-bubble-user-border);
+      border-bottom-right-radius: 6px;
       /* 用户输入按纯文本展示：保留换行、不解析 markdown */
       white-space: pre-wrap;
     }
+    /* 用户气泡下方的小时间戳（17:08 风格） */
+    .ts {
+      display: block;
+      text-align: right;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      margin-top: 4px;
+      padding-right: 4px;
+    }
+    /* AI 气泡：白底 + 极浅边框（更轻盈）。多子元素（trace / md / error）
+       仍用普通文档流堆叠。 */
     :host([role="assistant"]) .bubble {
-      background: var(--cortex-surface-muted);
+      background: var(--cortex-chat-bubble-ai);
       color: var(--cortex-text);
-      border: 1px solid var(--cortex-border);
-      border-bottom-left-radius: 4px;
+      border: 1px solid var(--cortex-chat-bubble-ai-border);
+      border-bottom-left-radius: 6px;
     }
     /* assistant 回复的 markdown 渲染（紧凑气泡风格） */
     .md-body > :first-child { margin-top: 0; }
     .md-body > :last-child { margin-bottom: 0; }
-    .md-body p { margin: 0.4em 0; }
+    .md-body p { margin: 0.5em 0; }
+    /* 结构化日程里的 section header：示例里是「?【周立松总经理】（今天）日程安排」
+       这种带 ? 前缀的 H2 行内突出渲染为青绿色块标题 */
     .md-body h1, .md-body h2, .md-body h3 {
-      margin: 0.6em 0 0.3em;
-      line-height: 1.3;
+      margin: 0.7em 0 0.4em;
+      line-height: 1.4;
+      color: var(--cortex-chat-section);
+      font-weight: 600;
     }
-    .md-body h1 { font-size: 1.2em; }
-    .md-body h2 { font-size: 1.1em; }
-    .md-body h3 { font-size: 1em; }
+    .md-body h1 { font-size: 1.05em; }
+    .md-body h2 { font-size: 1em; }
+    .md-body h3 { font-size: 0.95em; }
+    /* H2 内若以 ? 开头，去掉 ? 显示 + 让整行更醒目（贴近示例效果） */
+    .md-body h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 1em;
+      background: var(--cortex-chat-section);
+      border-radius: 2px;
+      margin-right: 8px;
+      vertical-align: -2px;
+    }
     .md-body ul, .md-body ol { margin: 0.4em 0; padding-left: 1.4em; }
-    .md-body li { margin: 0.15em 0; }
+    .md-body li { margin: 0.2em 0; }
+    /* 结构化日程的"时间 + 描述"行：示例里是 09:00 日常工作 / 14:00 ... */
+    .md-body li:has(> code),
+    .md-body p > code:first-child {
+      font-family: var(--cortex-font-mono);
+    }
     .md-body pre {
-      background: var(--cortex-surface);
+      background: var(--cortex-surface-muted);
       padding: 8px 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       overflow-x: auto;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
       margin: 0.5em 0;
+      border: 1px solid var(--cortex-border-muted);
     }
     .md-body code {
       font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-sm);
+      font-size: 0.92em;
+      color: var(--cortex-chat-section);
+      background: var(--cortex-primary-soft);
+      padding: 1px 6px;
+      border-radius: 4px;
     }
     .md-body :not(pre) > code {
-      background: var(--cortex-surface);
-      padding: 1px 4px;
-      border-radius: 3px;
+      background: var(--cortex-primary-soft);
+      padding: 1px 6px;
+      border-radius: 4px;
     }
     .md-body blockquote {
-      border-left: 3px solid var(--cortex-border);
-      padding-left: 10px;
-      margin: 0.4em 0;
+      border-left: 3px solid var(--cortex-primary);
+      padding-left: 12px;
+      margin: 0.5em 0;
       color: var(--cortex-text-muted);
+      background: var(--cortex-primary-soft);
+      border-radius: 0 6px 6px 0;
+      padding-top: 6px;
+      padding-bottom: 6px;
     }
     .md-body table {
       border-collapse: collapse;
@@ -83,7 +128,7 @@ export class ChatMessageEl extends LitElement {
       vertical-align: top;
     }
     .md-body th {
-      background: var(--cortex-surface);
+      background: var(--cortex-surface-muted);
       font-weight: 600;
     }
     /* 结构化引用卡片：path 来自检索工具结果（非 AI 正文），任意扩展名/格式都可点 */
@@ -112,9 +157,17 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       word-break: break-all;
     }
-    .ref-link:hover { opacity: 0.8; }
-    .thinking { opacity: 0.6; }
-    .trace-sep { border-top: 1px dashed var(--cortex-border); margin: 7px 0; }
+    .md-body .ref-link:hover {
+      opacity: 0.8;
+    }
+    .thinking {
+      opacity: 0.6;
+      font-style: italic;
+    }
+    .trace-sep {
+      border-top: 1px dashed var(--cortex-border);
+      margin: 8px 0;
+    }
     .error {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);

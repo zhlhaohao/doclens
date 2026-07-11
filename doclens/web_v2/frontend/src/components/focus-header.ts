@@ -14,17 +14,19 @@ export class FocusHeader extends LitElement {
     :host {
       display: flex;
       align-items: center;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-3) var(--cortex-space-4);
-      background: var(--cortex-surface-muted);
-      border-bottom: 1px solid var(--cortex-border);
+      gap: var(--cortex-space-3);
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid transparent;
       flex-shrink: 0;
       position: relative;
     }
     .back {
-      background: none;
+      background: linear-gradient(135deg, #00B894 0%, #00A884 100%);
+      color: #fff;
       border: none;
-      color: var(--cortex-primary);
       cursor: pointer;
       width: 32px;
       height: 32px;
@@ -33,17 +35,18 @@ export class FocusHeader extends LitElement {
       align-items: center;
       justify-content: center;
       padding: 0;
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 500;
       line-height: 1;
-      transition: background 0.15s, opacity 0.1s;
+      box-shadow: 0 2px 6px rgba(0, 184, 148, 0.25);
+      transition: transform 0.15s, opacity 0.1s, box-shadow 0.15s;
       /* Disable iOS Safari double-tap-zoom detection: without this, the first
          tap is held for ~300ms to see if a second tap follows, which surfaces
          as "needs 2 clicks" on touch devices. */
       touch-action: manipulation;
     }
-    .back:hover { background: var(--cortex-primary-soft); }
-    .back:active { opacity: 0.7; }
+    .back:hover { box-shadow: 0 3px 10px rgba(0, 184, 148, 0.35); }
+    .back:active { transform: scale(0.94); opacity: 0.9; }
     .title {
       font-weight: 600;
       color: var(--cortex-text);
@@ -52,8 +55,13 @@ export class FocusHeader extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: center;
     }
-    .meta { color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm); }
+    .meta {
+      color: var(--cortex-text-subtle);
+      font-size: var(--cortex-fs-xs);
+      flex-shrink: 0;
+    }
     .more-wrap { position: relative; }
     .more-btn {
       background: transparent;

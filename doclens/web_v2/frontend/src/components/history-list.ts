@@ -9,7 +9,7 @@ export class HistoryList extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-2);
-      padding: var(--cortex-space-3) var(--cortex-space-6);
+      padding: 6px var(--cortex-space-6) var(--cortex-space-3);
       flex: 1;
       /* min-height:0 允许在 flex column 容器内收缩到 content 以下，
          配合 overflow-y:auto 实现内部滚动。缺少时 min-height 默认为
@@ -17,19 +17,19 @@ export class HistoryList extends LitElement {
          推出视口。 */
       min-height: 0;
       overflow-y: auto;
-      border-bottom: 1px solid var(--cortex-border-muted);
     }
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin: 0 0 var(--cortex-space-2) 0;
+      margin: var(--cortex-space-2) 0 var(--cortex-space-1) 0;
     }
     .title {
       font-size: var(--cortex-fs-xs);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.6px;
       color: var(--cortex-text-subtle);
+      font-weight: 600;
     }
     .clear-btn {
       background: transparent;
@@ -52,7 +52,7 @@ export class HistoryList extends LitElement {
     }
     .empty {
       color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
+      font-size: var(--cortex-fs-sm);
       text-align: center;
       padding: var(--cortex-space-6);
     }
