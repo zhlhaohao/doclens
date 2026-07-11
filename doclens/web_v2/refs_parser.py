@@ -87,3 +87,21 @@ def parse_references_section(markdown: str) -> ParsedRefs:
         diagnostics.append("「## 参考资料」章节未找到「数字. 路径」列表项")
 
     return ParsedRefs(has_section=True, paths=paths, diagnostics=diagnostics)
+
+
+def rewrite_references_section(content: str, paths: list[str]) -> str:
+    """用 paths 重写 content 的「## 参考资料」章节（标准「数字. 路径」格式）。
+
+    用工具结果的真实路径覆盖 AI 正文里的（可能幻觉的）参考资料章节，
+    使落盘的 content 与前端显示一致且路径正确。无该章节则 append；paths 为空则原样返回。
+    """
+    if not paths:
+        return content
+    section = "## 参考资料\n" + "".join(f"{i + 1}. {p}\n" for i, p in enumerate(paths))
+    header = _SECTION_HEADER_RE.search(content)
+    if header is None:
+        return content.rstrip() + "\n\n" + section
+    start = header.start()
+    nxt = _NEXT_HEADING_RE.search(content, pos=header.end())
+    end = nxt.start() if nxt else len(content)
+    return content[:start] + section + content[end:]

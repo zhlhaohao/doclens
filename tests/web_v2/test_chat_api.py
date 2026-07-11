@@ -106,9 +106,10 @@ def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
     return events
 
 
+
 @pytest.mark.asyncio
-async def test_chat_serializes_references_event(env_cortex_config, temp_workdir, monkeypatch):
-    """references 事件 → event:references SSE，items 原样透传给前端。"""
+async def test_chat_serializes_toast_event(env_cortex_config, temp_workdir, monkeypatch):
+    """toast 事件 → event:toast SSE。"""
     from doclens.web_v2 import deps
 
     class _FakeAgent:
@@ -116,7 +117,7 @@ async def test_chat_serializes_references_event(env_cortex_config, temp_workdir,
             self.session = type("S", (), {"session_id": "test"})()
 
     async def _fake_stream(message, session_id):
-        yield {"type": "references", "items": [{"path": "a/b.md"}, {"path": "c/d.md"}]}
+        yield {"type": "toast", "level": "error", "detail": "已兜底"}
 
     monkeypatch.setattr(deps, "get_agent", lambda: _FakeAgent())
     import doclens.web_v2.api.chat as chat_mod
@@ -129,6 +130,6 @@ async def test_chat_serializes_references_event(env_cortex_config, temp_workdir,
 
     assert res.status_code == 200
     events = _parse_sse_events(res.text)
-    assert "references" in [e[0] for e in events]
-    ref_ev = next(e[1] for e in events if e[0] == "references")
-    assert ref_ev == {"items": [{"path": "a/b.md"}, {"path": "c/d.md"}]}
+    assert "toast" in [e[0] for e in events]
+    toast_ev = next(e[1] for e in events if e[0] == "toast")
+    assert toast_ev == {"level": "error", "detail": "已兜底"}
