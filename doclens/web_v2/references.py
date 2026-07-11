@@ -6,6 +6,7 @@
 去重保序。这是治本方案：引用可点击性不再依赖 AI 是否守「## 参考资料」格式。
 """
 import re
+from pathlib import Path
 from typing import Any
 
 # 检索类工具（manage_kb 等非检索工具的 output 不含可引用 path，跳过）
@@ -58,3 +59,25 @@ def extract_references(tool_calls: list[dict[str, Any]]) -> list[dict[str, str]]
             seen.add(path)
             refs.append({"path": path})
     return refs
+
+
+def validate_paths(paths: list[str], workdir: Path) -> list[str]:
+    """返回 workdir 下不存在的路径子集（首次出现顺序，去重）。
+
+    Args:
+        paths: 待校验的相对路径列表。
+        workdir: 知识库根目录，path 相对它解析。
+
+    Returns:
+        不存在的路径列表（去重保序）。空列表表示全部存在。
+    """
+    seen: set[str] = set()
+    missing: list[str] = []
+    for raw in paths:
+        path = raw.strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        if not (workdir / path).resolve().exists():
+            missing.append(path)
+    return missing
