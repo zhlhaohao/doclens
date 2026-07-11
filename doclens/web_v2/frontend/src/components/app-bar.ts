@@ -1,8 +1,9 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import { store } from "../state/store";
-import type { ViewId, SettingsScope } from "../state/types";
+import "./toast-stack";
+import { store, actions } from "../state/store";
+import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
 
 @customElement("app-bar")
 export class AppBar extends LitElement {
@@ -43,6 +44,21 @@ export class AppBar extends LitElement {
       gap: var(--cortex-space-3);
       position: relative;
     }
+    .watch-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+      padding: 4px 10px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      border: 1px solid var(--cortex-border);
+      border-radius: 999px;
+      background: var(--cortex-surface-muted);
+      white-space: nowrap;
+    }
+    .watch-badge.dot { color: #10b981; }
+    .watch-badge.busy { color: var(--cortex-primary); }
+    .watch-badge.warn { color: #d97706; }
     .avatar-btn {
       display: inline-flex;
       align-items: center;
@@ -153,6 +169,14 @@ export class AppBar extends LitElement {
   @state() private _showSaveAndRevert = false;
   private _unsubStore?: () => void;
 
+  private _onWatchReindexed: (e: Event) => void = (e: Event) => {
+    const detail = (e as CustomEvent).detail as { doc_count?: number | null };
+    const stack = this.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
+    const n = detail?.doc_count;
+    stack?.pushToast?.(n != null ? `索引已更新：${n} 文档` : "索引已更新", "success", 3000);
+  };
+
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {
     if (!this._menuOpen) return;
     const path = e.composedPath();
@@ -184,15 +208,23 @@ export class AppBar extends LitElement {
     window.dispatchEvent(new CustomEvent("cortex:revert-settings"));
   }
 
+  private _onReindexClick() {
+    if (store.getState().reindex.dialog !== "closed") return;
+    this._menuOpen = false;
+    actions.openReindexConfirm();
+  }
+
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener("click", this._onDocClick);
+    window.addEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     this._syncFromStore();
     this._unsubStore = store.subscribe(() => this._syncFromStore());
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick);
+    window.removeEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     this._unsubStore?.();
     super.disconnectedCallback();
   }
@@ -203,6 +235,17 @@ export class AppBar extends LitElement {
     this.requestUpdate();
   }
 
+  private _renderWatchBadge(w: WatcherStatus | null) {
+    const n = w?.last_doc_count;
+    const nStr = n != null ? ` ${n}` : "";
+    if (!w || !w.running) return html`<span class="watch-badge">📁${nStr} ○监控关</span>`;
+    if (w.reindexing) return html`<span class="watch-badge busy">📁${nStr} ⟳更新中…</span>`;
+    if (w.changed_count > 0)
+      return html`<span class="watch-badge warn">📁${nStr} ·待更新 ${w.changed_count}</span>`;
+    const warn = w.last_success === false;
+    return html`<span class="watch-badge ${warn ? "warn" : "dot"}">📁${nStr} ●监控</span>`;
+  }
+
   render() {
     return html`
       <div class="brand">
@@ -210,6 +253,7 @@ export class AppBar extends LitElement {
         <span>Doclens</span>
       </div>
       <div class="right-cluster">
+        ${this._renderWatchBadge(store.getState().watcher)}
         ${this._showSaveAndRevert ? html`
           <button class="save-btn" type="button" @click=${this._onSaveClick}>💾 保存</button>
         ` : nothing}
@@ -230,6 +274,13 @@ export class AppBar extends LitElement {
               <span class="desc">所有项目共用</span>
             </span>
           </button>
+          <button class="menu-item" type="button" @click=${this._onReindexClick}>
+            <span class="icon">🔄</span>
+            <span class="text">
+              <span class="label">强制重建索引</span>
+              <span class="desc">全量重扫工作目录</span>
+            </span>
+          </button>
           ${this._showSaveAndRevert ? html`
             <button class="menu-item" type="button" @click=${this._onRevertClick}>
               <span class="icon">↩</span>
@@ -241,6 +292,7 @@ export class AppBar extends LitElement {
           ` : nothing}
         </div>
       </div>
+      <toast-stack></toast-stack>
     `;
   }
 }

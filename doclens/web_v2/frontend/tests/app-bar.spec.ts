@@ -3,7 +3,7 @@ import { fixture, html, elementUpdated } from "@open-wc/testing";
 
 import "../src/components/app-bar";
 import type { AppBar } from "../src/components/app-bar";
-import { actions } from "../src/state/store";
+import { store, actions } from "../src/state/store";
 
 describe("<app-bar>", () => {
   let el: AppBar;
@@ -148,5 +148,86 @@ describe("<app-bar> save button + revert", () => {
     window.removeEventListener("cortex:revert-settings", handler);
 
     expect(captured).toBe(true);
+  });
+});
+
+describe("<app-bar> watcher badge", () => {
+  it("shows ○监控关 when watcher is null", async () => {
+    actions.setWatcherStatus(null);
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    expect(el.shadowRoot?.querySelector(".watch-badge")?.textContent).toContain("监控关");
+  });
+
+  it("shows ●监控 when running and idle", async () => {
+    actions.setWatcherStatus({
+      enabled: true, running: true, reindexing: false, changed_count: 0,
+      last_reindex_at: 123, last_doc_count: 42, last_success: true,
+    });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    const badge = el.shadowRoot?.querySelector(".watch-badge");
+    expect(badge?.textContent).toContain("●");
+    expect(badge?.textContent).toContain("监控");
+  });
+
+  it("shows ⟳更新中 when reindexing", async () => {
+    actions.setWatcherStatus({
+      enabled: true, running: true, reindexing: true, changed_count: 0,
+      last_reindex_at: 123, last_doc_count: 42, last_success: true,
+    });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    expect(el.shadowRoot?.querySelector(".watch-badge")?.textContent).toContain("更新中");
+  });
+
+  it("dispatching cortex:watch-reindexed pushes a toast", async () => {
+    actions.setWatcherStatus({
+      enabled: true, running: true, reindexing: false, changed_count: 0,
+      last_reindex_at: 123, last_doc_count: 42, last_success: true,
+    });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    const stack = el.shadowRoot?.querySelector("toast-stack") as any;
+    const before = stack._toasts.length;
+    window.dispatchEvent(new CustomEvent("cortex:watch-reindexed", { detail: { doc_count: 42 } }));
+    await elementUpdated(el);
+    expect(stack._toasts.length).toBe(before + 1);
+    expect(stack._toasts[stack._toasts.length - 1].message).toContain("42");
+  });
+});
+
+describe("<app-bar> reindex menu item", () => {
+  it("renders 强制重建索引 menu item", async () => {
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .map((i) => i.textContent ?? "");
+    expect(labels.some((l) => l.includes("强制重建索引"))).toBe(true);
+  });
+
+  it("clicking reindex menu opens confirm dialog (store)", async () => {
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .find((b) => (b.textContent ?? "").includes("强制重建索引")) as HTMLButtonElement;
+    btn.click();
+    await elementUpdated(el);
+    expect(store.getState().reindex.dialog).toBe("confirm");
+  });
+
+  it("reindex menu click is ignored when dialog already open", async () => {
+    actions.openReindexConfirm(); // dialog 已是 confirm
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .find((b) => (b.textContent || "").includes("强制重建索引")) as HTMLButtonElement;
+    btn.click();
+    await elementUpdated(el);
+    // 仍停留在 confirm（未因再次 click 重置/出错）
+    expect(store.getState().reindex.dialog).toBe("confirm");
   });
 });
