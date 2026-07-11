@@ -25,10 +25,16 @@ export interface ToolStep {
   status: ToolStepStatus;
 }
 
+export interface Reference {
+  path: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   tool_steps?: ToolStep[];
+  /** 结构化引用：后端从检索工具结果提取，前端渲染为可点击的引用卡片 */
+  references?: Reference[];
 }
 
 export interface Session {

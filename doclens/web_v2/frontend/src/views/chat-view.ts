@@ -35,6 +35,9 @@ export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): 
     );
     return [...head, { ...last, tool_steps }];
   }
+  if (ev.type === "references") {
+    return [...head, { ...last, references: ev.items }];
+  }
   return messages;
 }
 

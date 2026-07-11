@@ -4,43 +4,50 @@ import { html } from "lit";
 import "../src/components/chat-message";
 import { ChatMessageEl } from "../src/components/chat-message";
 
-describe("<chat-message> reference links", () => {
-  it("wraps reference list items as .ref-link with data-path", async () => {
-    const content = "回答正文。\n\n## 参考资料\n\n1. docs/a.md\n2. docs/b.md\n";
+describe("<chat-message> reference cards (structured)", () => {
+  it("renders one .ref-link per reference with data-path", async () => {
+    const message = {
+      role: "assistant",
+      content: "回答正文。",
+      references: [{ path: "科技/a.md" }, { path: "科技/b.pdf" }],
+    } as any;
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+      html`<chat-message role="assistant" .message=${message}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
-    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
+    const links = el.shadowRoot!.querySelectorAll(".ref-link");
     expect(links.length).toBe(2);
-    expect(links[0].getAttribute("data-path")).toBe("docs/a.md");
-    expect(links[1].getAttribute("data-path")).toBe("docs/b.md");
+    expect(links[0].getAttribute("data-path")).toBe("科技/a.md");
+    expect(links[1].getAttribute("data-path")).toBe("科技/b.pdf");
   });
 
-  it("does not touch body lists (only the 参考资料 section)", async () => {
-    const content = "步骤：\n\n1. 第一步\n2. 第二步\n\n## 参考资料\n\n1. x.md\n";
+  it("any file extension is clickable (no longer restricted to .md / dir)", async () => {
+    // 旧正则要求路径含 .md 或 / 才识别；结构化数据来自工具结果，任意路径都可点
+    const message = {
+      role: "assistant",
+      content: "x",
+      references: [{ path: "report.pdf" }, { path: "notes.txt" }, { path: "data.xlsx" }],
+    } as any;
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+      html`<chat-message role="assistant" .message=${message}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
-    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
-    expect(links.length).toBe(1);
-    expect(links[0].getAttribute("data-path")).toBe("x.md");
+    expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(3);
   });
 
-  it("no 参考资料 section → no .ref-link, no error", async () => {
-    const content = "只是普通回答，没有参考资料列表。";
+  it("no references → no reference section, no .ref-link", async () => {
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: "回答" } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelectorAll(".md-body .ref-link").length).toBe(0);
+    expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
+    expect(el.shadowRoot!.querySelector(".references")).toBeNull();
   });
 
   it("click .ref-link dispatches reference-click with path (composed)", async () => {
-    const content = "## 参考资料\n\n1. docs/a.md\n";
+    const message = { role: "assistant", content: "回答", references: [{ path: "docs/a.md" }] } as any;
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
+      html`<chat-message role="assistant" .message=${message}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     const handler = vi.fn();
@@ -53,42 +60,28 @@ describe("<chat-message> reference links", () => {
     expect(ev.composed).toBe(true);
   });
 
-  it("idempotent across streaming updates (no duplicate links)", async () => {
+  it("does NOT parse ## 参考资料 text in body (structured references only)", async () => {
+    // 旧逻辑从正文 ## 参考资料 提取路径包裹成链接；新逻辑只用结构化 references。
+    // 正文里的路径文本保持纯文本，不应产生 .ref-link。
+    const message = {
+      role: "assistant",
+      content: "回答。\n\n## 参考资料\n\n1. docs/a.md\n2. docs/b.md\n",
+    } as any;
+    const el = await fixture(
+      html`<chat-message role="assistant" .message=${message}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
+  });
+
+  it("reference cards update when references arrive after content (streaming)", async () => {
     const el = await fixture(
       html`<chat-message role="assistant" .message=${{ role: "assistant", content: "回答..." } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
-    el.message = { role: "assistant", content: "回答...\n\n## 参考资料\n\n1. a.md\n" };
+    expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
+    el.message = { role: "assistant", content: "回答...", references: [{ path: "a.md" }, { path: "b.md" }] };
     await el.updateComplete;
-    el.message = { role: "assistant", content: "回答...\n\n## 参考资料\n\n1. a.md\n2. b.md\n" };
-    await el.updateComplete;
-    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
-    expect(links.length).toBe(2);
-  });
-
-  it("wraps [N] path paragraph format (AI 偶发非列表格式)", async () => {
-    // AI 偶发给 "[1] a.md\n[2] b.md" 纯文本段落（非 <ol>），前端也要能识别
-    const content = "回答。\n\n## 参考资料\n\n[1] 深海生物新物种发现.md\n[2] 地球已知最深动物生态系统.md\n";
-    const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
-    ) as ChatMessageEl;
-    await el.updateComplete;
-    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
-    expect(links.length).toBe(2);
-    expect(links[0].getAttribute("data-path")).toBe("深海生物新物种发现.md");
-    expect(links[1].getAttribute("data-path")).toBe("地球已知最深动物生态系统.md");
-  });
-
-  it("wraps [N] path with markdown link inside (file:// variant)", async () => {
-    // AI 给 "[1] [name](file:///C:/x/y.md)" 段落格式，路径抽取 + 清洗交给 chat-view
-    const content = "回答。\n\n## 参考资料\n\n[1] [深海.md](file:///C:/test/深海.md)\n";
-    const el = await fixture(
-      html`<chat-message role="assistant" .message=${{ role: "assistant", content } as any}></chat-message>`,
-    ) as ChatMessageEl;
-    await el.updateComplete;
-    const links = el.shadowRoot!.querySelectorAll(".md-body .ref-link");
-    expect(links.length).toBe(1);
-    // data-path 取 markdown 链接的 url 部分（chat-view 再清洗 file://）
-    expect(links[0].getAttribute("data-path")).toBe("file:///C:/test/深海.md");
+    expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(2);
   });
 });
