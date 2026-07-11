@@ -71,6 +71,11 @@ export class ChatToolTrace extends LitElement {
       color: var(--cortex-text-muted);
       white-space: pre-wrap; word-break: break-word;
       max-height: 96px; overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .res::-webkit-scrollbar {
+      display: none;
     }
     .res .more { color: var(--cortex-primary); cursor: pointer; display: inline-block; margin-top: 3px; }
     .spin {

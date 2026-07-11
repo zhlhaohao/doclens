@@ -574,7 +574,8 @@ export class ChatView extends LitElement {
           <div class="input-row">
             <input-box
               placeholder="问 Doclens 任何问题..."
-              button-label="→"
+              .buttonLabel=${"知识库对话"}
+              style="--cortex-input-btn-reserve: 112px"
               multiline
               .value=${this.draft}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
@@ -631,7 +632,8 @@ export class ChatView extends LitElement {
         <div class="input-bar">
           <input-box
             placeholder="继续对话..."
-            button-label="→"
+            .buttonLabel=${"知识库对话"}
+            style="--cortex-input-btn-reserve: 112px"
             multiline
             ?disabled=${s.streaming}
             .value=${this.draft}

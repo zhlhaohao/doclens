@@ -12,6 +12,11 @@ export class ChatStream extends LitElement {
       flex: 1;
       padding: 20px 18px 12px;
       overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    :host::-webkit-scrollbar {
+      display: none;
     }
     .empty {
       color: var(--cortex-text-subtle);
