@@ -27,6 +27,21 @@ describe("mapSessionItemsToMessages", () => {
     expect(msgs[0].tool_steps![0].status).toBe("error");
   });
 
+  it("restores references for assistant messages", () => {
+    const items = [{ kind: "message_ai", payload: JSON.stringify({
+      content: "a",
+      references: [{ path: "a/b.md" }, { path: "c/d.md" }],
+    }) }];
+    const msgs = mapSessionItemsToMessages(items);
+    expect(msgs[0].references).toEqual([{ path: "a/b.md" }, { path: "c/d.md" }]);
+  });
+
+  it("omits references when payload has none (backward compatible)", () => {
+    const items = [{ kind: "message_ai", payload: JSON.stringify({ content: "old answer" }) }];
+    const msgs = mapSessionItemsToMessages(items);
+    expect(msgs[0].references).toBeUndefined();
+  });
+
   it("backward compatible: old payload without tool_calls", () => {
     const items = [{ kind: "message_ai", payload: JSON.stringify({ content: "old answer" }) }];
     const msgs = mapSessionItemsToMessages(items);
