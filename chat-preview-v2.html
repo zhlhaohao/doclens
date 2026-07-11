@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doclens 聊天页优化预览 · Before / After</title>
+  <style>
+    /* ============== 设计 tokens（优化后） ============== */
+    :root {
+      /* 主色：单一品牌色 + 软背景 */
+      --primary: #0D9488;
+      --primary-hover: #0F766E;
+      --primary-soft: #ECFDF5;
+
+      /* 中性：去重后只剩一种底色 */
+      --bg: #F5F5F7;
+      --surface: #FFFFFF;
+      --surface-muted: #F8FAFC;
+      --border: #E4E4E7;
+      --border-strong: #CBD5E1;
+
+      /* 文字：4 级 */
+      --text: #0F172A;
+      --text-muted: #475569;
+      --text-subtle: #94A3B8;
+
+      /* 状态 */
+      --warning: #F59E0B;
+      --danger: #DC2626;
+      --success: #10B981;
+
+      /* 旧版 tokens（before 用） */
+      --old-bg: #F0F2F9;
+      --old-input-bg: #E8F7F2;
+      --old-input-border: #9FE0BF;
+      --old-muted: #FAFAFA;
+
+      /* 间距 / 圆角 / 字号 */
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px;
+      --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
+      --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 24px;
+
+      --sidebar-w: 48px;
+      --appbar-h: 56px;
+
+      --font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: var(--font); color: var(--text); background: #E5E7EB; }
+    body { padding: 24px; min-height: 100vh; }
+
+    /* ============== 页面外壳 ============== */
+    .preview-shell { max-width: 1400px; margin: 0 auto; }
+    .preview-title {
+      font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;
+    }
+    .preview-subtitle {
+      font-size: 14px; color: #6B7280; margin: 0 0 24px;
+    }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 1100px) { .preview-grid { grid-template-columns: 1fr; } }
+
+    .preview-frame {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      overflow: hidden;
+      border: 1px solid #E5E7EB;
+    }
+    .preview-label {
+      padding: 12px 20px;
+      background: #F3F4F6;
+      border-bottom: 1px solid #E5E7EB;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge-before { background: #FEE2E2; color: #B91C1C; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+    .badge-after { background: #D1FAE5; color: #065F46; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+
+    /* ============== App 容器（共用） ============== */
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--appbar-h) 1fr;
+      height: 640px;
+      font-size: var(--fs-md);
+    }
+    .app-bar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--s6);
+      height: var(--appbar-h);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sidebar {
+      grid-column: 1;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--s4) 0;
+      gap: var(--s4);
+      flex-shrink: 0;
+    }
+    .chat-area {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ============== 共用：品牌 logo / 监控徽章 / 头像 ============== */
+    .brand { display: flex; align-items: center; gap: var(--s2); font-weight: 600; font-size: var(--fs-md); }
+    .brand .logo {
+      width: 28px; height: 28px;
+      background: var(--primary);
+      border-radius: var(--r-md);
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff;
+    }
+    .brand .logo svg { width: 16px; height: 16px; }
+    .right-cluster { display: flex; align-items: center; gap: var(--s3); }
+    .watch-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      font-size: var(--fs-xs);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-muted);
+      white-space: nowrap;
+    }
+    .watch-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .avatar-btn {
+      display: inline-flex; align-items: center; gap: var(--s2);
+      padding: 4px 8px 4px 4px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .avatar-btn:hover { background: var(--surface-muted); border-color: var(--border); }
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0D9488, #0F766E);
+      color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: var(--fs-sm);
+    }
+
+    /* ====================================================== */
+    /* ============== BEFORE：当前现状（截图复刻） ============ */
+    /* ====================================================== */
+
+    /* AppBar before：白底 + 1px 灰线 */
+    .before .app-bar { background: var(--surface); }
+
+    /* Sidebar before：纯黑 */
+    .before .sidebar {
+      background: #0F172A;
+      color: #94A3B8;
+    }
+    .before .sidebar button {
+      width: 36px; height: 36px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      border-radius: var(--r-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .before .sidebar button.active { background: var(--primary); color: #fff; }
+    .before .sidebar button:hover:not(.active) { background: rgba(255,255,255,0.08); color: #fff; }
+
+    /* Chat area before：薰衣草灰底 */
+    .before .chat-area { background: var(--old-bg); }
+
+    /* Welcome before：薄荷渐变 */
+    .before .welcome {
+      padding: 36px var(--s6) 22px;
+      text-align: center;
+      background: linear-gradient(180deg,
+        rgba(208, 245, 232, 0.55) 0%,
+        rgba(240, 242, 249, 0) 100%);
+      flex-shrink: 0;
+    }
+    .before .welcome h1 {
+      font-size: 22px; font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      margin: 0;
+    }
+    .before .welcome h1 .accent { color: var(--primary); }
+    .before .welcome h1 .sep { color: var(--text-subtle); margin: 0 6px; font-weight: 400; }
+    .before .welcome p {
+      font-size: var(--fs-sm);
+      color: var(--text-muted);
+      margin: 6px 0 0;
+    }
+
+    /* History list before：无容器，间距 8 */
+    .before .history-list {
+      padding: 6px var(--s6) var(--s3);
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s2);
+    }
+    .before .history-list .header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: var(--s2) 0 var(--s1);
+    }
+    .before .history-list .title {
+      font-size: var(--fs-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-subtle);
+      font-weight: 600;
+    }
+    .before .history-list .clear-btn {
+      background: transparent; border: none;
+      padding: 2px 6px;
+      font-size: var(--fs-xs);
+      color: var(--text-subtle);
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .before .history-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--old-muted);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .before .history-item:hover { border-color: var(--primary); }
+    .before .history-item .name { font-size: var(--fs-md); color: var(--text); font-weight: 500; }
+    .before .history-item .meta { font-size: var(--fs-xs); color: var(--text-subtle); }
+
+    /* Input row before：荧光薄荷 */
+    .before .input-row { padding: 6px var(--s6) 18px; flex-shrink: 0; }
+    .before .input-box {
+      display: flex; align-items: center;
+      border: 1px solid var(--old-input-border);
+      border-radius: var(--r-lg);
+      background: var(--old-input-bg);
+      height: 48px;
+      padding: 0 110px 0 18px;
+      position: relative;
+    }
+    .before .input-box input {
+      flex: 1; border: none; background: transparent;
+      outline: none;
+      font-size: var(--fs-md); color: var(--text);
+      font-family: inherit;
+      height: 100%;
+    }
+    .before .input-box input::placeholder { color: var(--text-subtle); }
+    .before .input-box .btn {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: var(--primary); color: #fff; border: none;
+      border-radius: var(--r-lg);
+      min-width: 100px; height: 36px;
+      padding: 0 14px;
+      font-size: var(--fs-md);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(13, 148, 136, 0.28);
+    }
+
+    /* ====================================================== */
+    /* ============== AFTER：优化方案（推荐） ================ */
+    /* ====================================================== */
+
+    /* AppBar after：白底 + 微投影，明确 elevation */
+    .after .app-bar {
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      position: relative;
+      z-index: 10;
+    }
+
+    /* Sidebar after：深灰渐变 + 右侧软阴影 */
+    .after .sidebar {
+      background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%);
+      color: #94A3B8;
+      box-shadow: 1px 0 0 rgba(15, 23, 42, 0.06);
+    }
+    .after .sidebar button {
+      width: 36px; height: 36px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .after .sidebar button svg { width: 20px; height: 20px; stroke-width: 1.8; }
+    .after .sidebar button:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+    .after .sidebar button.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(13, 148, 136, 0.35);
+    }
+
+    /* Chat area after：单一底色 */
+    .after .chat-area {
+      background: var(--bg);
+      position: relative;
+    }
+    /* 底部吸底渐隐遮罩，让输入框"浮起" */
+    .after .chat-area::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 80px;
+      background: linear-gradient(180deg, transparent, var(--bg) 70%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Welcome after：去掉渐变，简洁 */
+    .after .welcome {
+      padding: 36px var(--s6) 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .after .welcome h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.4px;
+      margin: 0;
+    }
+    .after .welcome h1 .accent {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .after .welcome h1 .sep { color: var(--border-strong); margin: 0 8px; font-weight: 400; }
+    .after .welcome p {
+      font-size: var(--fs-sm);
+      color: var(--text-muted);
+      margin: 8px 0 0;
+    }
+
+    /* History list after：白卡容器 + 内嵌卡片 */
+    .after .history-list {
+      margin: 0 var(--s6) var(--s3);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 14px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      min-height: 0;
+    }
+    .after .history-list .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 4px 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .after .history-list .title {
+      font-size: var(--fs-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .after .history-list .header-actions { display: flex; align-items: center; gap: 4px; }
+    .after .history-list .icon-btn {
+      width: 28px; height: 28px;
+      background: transparent;
+      border: none;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      color: var(--text-subtle);
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .after .history-list .icon-btn:hover { background: var(--surface-muted); color: var(--text); }
+    .after .history-list .clear-btn {
+      background: transparent; border: none;
+      padding: 4px 10px;
+      font-size: var(--fs-xs);
+      color: var(--text-subtle);
+      cursor: pointer;
+      border-radius: var(--r-sm);
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+    }
+    .after .history-list .clear-btn:hover {
+      color: var(--danger);
+      background: rgba(220, 38, 38, 0.08);
+    }
+
+    /* History item after：扁平 + hover 层 + meta 排版 */
+    .after .history-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: var(--r-md);
+      cursor: pointer;
+      transition: background 0.15s;
+      gap: var(--s3);
+    }
+    .after .history-item:hover {
+      background: var(--surface-muted);
+    }
+    .after .history-item .name {
+      font-size: var(--fs-md); color: var(--text); font-weight: 500;
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .after .history-item .meta {
+      font-size: var(--fs-xs); color: var(--text-subtle);
+      font-variant-numeric: tabular-nums;
+      display: flex; align-items: center; gap: 6px;
+      flex-shrink: 0;
+    }
+    .after .history-item .meta .dot { color: var(--border-strong); }
+
+    /* Input row after：白卡 + 灰边 + 焦点光晕 */
+    .after .input-row {
+      padding: 14px var(--s6) 22px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 2;
+    }
+    .after .input-box {
+      display: flex; align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      height: 48px;
+      padding: 0 120px 0 18px;
+      position: relative;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .after .input-box:hover { border-color: var(--border-strong); }
+    .after .input-box:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12),
+                  0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .after .input-box input {
+      flex: 1; border: none; background: transparent;
+      outline: none;
+      font-size: var(--fs-md); color: var(--text);
+      font-family: inherit;
+      height: 100%;
+    }
+    .after .input-box input::placeholder { color: var(--text-subtle); }
+    .after .input-box .btn {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: var(--primary); color: #fff; border: none;
+      border-radius: var(--r-lg);
+      min-width: 104px; height: 36px;
+      padding: 0 16px;
+      font-size: var(--fs-md);
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+    .after .input-box .btn:hover { background: var(--primary-hover); }
+    .after .input-box .btn:active { transform: translateY(-50%) scale(0.97); }
+
+    /* ============== 注释 / 标注 ============== */
+    .preview-notes {
+      margin-top: 24px;
+      padding: 20px 24px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #E5E7EB;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .preview-notes h3 { margin: 0 0 12px; font-size: 15px; color: #111827; }
+    .preview-notes ul { margin: 0; padding-left: 20px; color: #4B5563; font-size: 13px; line-height: 1.8; }
+    .preview-notes li b { color: #111827; }
+    .preview-notes .color-token {
+      display: inline-block; width: 10px; height: 10px;
+      border-radius: 2px; vertical-align: middle; margin: 0 4px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-shell">
+    <h1 class="preview-title">Doclens 聊天页 UI 优化预览</h1>
+    <p class="preview-subtitle">左侧 = 当前实现（截图复刻） · 右侧 = 优化方案 · 同时查看对比差异</p>
+
+    <div class="preview-grid">
+
+      <!-- ============ BEFORE ============ -->
+      <div class="preview-frame">
+        <div class="preview-label">
+          <span class="badge-before">BEFORE</span>
+          <span>当前实现（4 种背景色 + 荧光输入框）</span>
+        </div>
+        <div class="app before">
+          <header class="app-bar">
+            <div class="brand">
+              <span class="logo">🧠</span>
+              <span>Doclens</span>
+            </div>
+            <div class="right-cluster">
+              <span class="watch-badge">📁 69 ●监控</span>
+              <div class="avatar-btn">
+                <span class="avatar">L</span>
+                <span>Liang</span>
+                <span style="color:var(--text-muted);font-size:12px;">▾</span>
+              </div>
+            </div>
+          </header>
+          <aside class="sidebar">
+            <button title="搜索">🔍</button>
+            <button class="active" title="对话">💬</button>
+            <button title="文件">📁</button>
+          </aside>
+          <main class="chat-area">
+            <section class="welcome">
+              <h1>
+                <span class="accent">Doclens</span>
+                <span class="sep">·</span>
+                <span>问日程</span>
+              </h1>
+              <p>与你的知识库对话</p>
+            </section>
+            <div class="history-list">
+              <div class="header">
+                <span class="title">历史会话</span>
+                <button class="clear-btn">清空</button>
+              </div>
+              <div class="history-item">
+                <span class="name">请总结联通应急预案的重点内容</span>
+                <span class="meta">4 · 2026/7/11</span>
+              </div>
+              <div class="history-item">
+                <span class="name">请总结联通应急预案的重点内容</span>
+                <span class="meta">2 · 2026/7/11</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2 · 2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2 · 2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">0 · 2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">0 · 2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">2 · 2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2 · 2026/7/10</span>
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="input-box">
+                <input placeholder="问 Doclens 任何问题...">
+                <button class="btn">知识库对话</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ============ AFTER ============ -->
+      <div class="preview-frame">
+        <div class="preview-label">
+          <span class="badge-after">AFTER</span>
+          <span>优化方案（单一底色 + 卡片层级 + SVG 图标）</span>
+        </div>
+        <div class="app after">
+          <header class="app-bar">
+            <div class="brand">
+              <span class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+                </svg>
+              </span>
+              <span>Doclens</span>
+            </div>
+            <div class="right-cluster">
+              <span class="watch-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/>
+                </svg>
+                69
+                <span class="dot"></span>
+                监控
+              </span>
+              <div class="avatar-btn">
+                <span class="avatar">L</span>
+                <span>Liang</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </div>
+            </div>
+          </header>
+          <aside class="sidebar">
+            <button title="搜索" aria-label="搜索">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="m20 20-3.5-3.5"/>
+              </svg>
+            </button>
+            <button class="active" title="对话" aria-label="对话">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/>
+              </svg>
+            </button>
+            <button title="文件" aria-label="文件">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/>
+              </svg>
+            </button>
+          </aside>
+          <main class="chat-area">
+            <section class="welcome">
+              <h1>
+                <span class="accent">Doclens</span>
+                <span class="sep">·</span>
+                <span>问日程</span>
+              </h1>
+              <p>与你的知识库对话</p>
+            </section>
+            <div class="history-list">
+              <div class="header">
+                <span class="title">历史会话</span>
+                <div class="header-actions">
+                  <button class="icon-btn" title="搜索历史" aria-label="搜索历史">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+                    </svg>
+                  </button>
+                  <button class="clear-btn">清空</button>
+                </div>
+              </div>
+              <div class="history-item">
+                <span class="name">请总结联通应急预案的重点内容</span>
+                <span class="meta">4<span class="dot">·</span>2026/7/11</span>
+              </div>
+              <div class="history-item">
+                <span class="name">请总结联通应急预案的重点内容</span>
+                <span class="meta">2<span class="dot">·</span>2026/7/11</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2<span class="dot">·</span>2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2<span class="dot">·</span>2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">0<span class="dot">·</span>2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">0<span class="dot">·</span>2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">周总今天的日程。</span>
+                <span class="meta">2<span class="dot">·</span>2026/7/10</span>
+              </div>
+              <div class="history-item">
+                <span class="name">深海生物如何适应高压环境？</span>
+                <span class="meta">2<span class="dot">·</span>2026/7/10</span>
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="input-box">
+                <input placeholder="问 Doclens 任何问题...">
+                <button class="btn">知识库对话</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ 设计要点 ============ -->
+    <div class="preview-notes">
+      <h3>核心改动点</h3>
+      <ul>
+        <li><b>单一底色：</b>页面只用 <span class="color-token" style="background:#F5F5F7"></span><code>#F5F5F7</code>，删除旧版 <span class="color-token" style="background:#F0F2F9"></span><code>#F0F2F9</code> 薰衣草灰，靠 elevation 切区。</li>
+        <li><b>sidebar：</b>纯黑 <span class="color-token" style="background:#0F172A"></span> → 深灰渐变 <span class="color-token" style="background:#1E293B"></span>→<span class="color-token" style="background:#0F172A"></span>，emoji 图标 → SVG。</li>
+        <li><b>welcome：</b>去掉薄荷渐变背景，标题"Doclens"用品牌色渐变文字。</li>
+        <li><b>历史列表：</b>从散件拼贴 → 白卡容器（带边框 + 微阴影），item 内扁平 hover。</li>
+        <li><b>输入框：</b>荧光薄荷底 <span class="color-token" style="background:#E8F7F2;border-color:#9FE0BF"></span> → 白底灰边 + 焦点光晕，主次恢复正确。</li>
+        <li><b>history header：</b>增加搜索图标按钮，下划线分隔 "历史会话" 与列表。</li>
+        <li><b>底部吸底：</b>80px 渐隐遮罩，让输入框视觉上"浮起"，与对话区断开。</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

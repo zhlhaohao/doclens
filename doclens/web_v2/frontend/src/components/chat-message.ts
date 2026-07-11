@@ -30,6 +30,10 @@ export class ChatMessageEl extends LitElement {
       border-bottom-right-radius: 6px;
       /* 用户输入按纯文本展示：保留换行、不解析 markdown */
       white-space: pre-wrap;
+      /* user 气泡收紧：单行纯文本不需要 .bubble 通用的 10px 内边距与 1.6 行高，
+         否则短消息气泡偏高（≈44px → ≈35px）。AI 气泡保留宽松值以适配多行 markdown。 */
+      padding: 7px 12px;
+      line-height: 1.4;
     }
     /* 用户气泡下方的小时间戳（17:08 风格） */
     .ts {
@@ -232,13 +236,21 @@ export class ChatMessageEl extends LitElement {
     if (!this.message) return null;
     const steps = this.message.tool_steps;
     const showTrace = this.role === "assistant" && steps && steps.length > 0;
+    // user 气泡走紧凑模板：render() 模板的换行+缩进会被 white-space: pre-wrap
+    // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
+    // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
+    if (this.role === "user") {
+      return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
+        ? html`<div class="error">⚠️ ${this.error}</div>`
+        : null}</div>`;
+    }
     return html`
       <div class="bubble">
         ${showTrace
           ? html`<chat-tool-trace .steps=${steps}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
         ${this.renderBubble(this.message.content)}
-        ${this.role === "assistant" ? this.renderReferences() : null}
+        ${this.renderReferences()}
         ${this.error ? html`<div class="error">⚠️ ${this.error}</div>` : null}
       </div>
     `;

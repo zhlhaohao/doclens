@@ -2606,10 +2606,10 @@ var Xi=Object.defineProperty;var Ki=(e,t,r)=>t in e?Xi(e,t,{enumerable:!0,config
       display: flex;
       align-items: center;
       border: 1px solid var(--cortex-chat-input-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-lg);
       background: var(--cortex-chat-input-bg);
       min-height: var(--min-h);
-      padding: 0 calc(var(--min-h) + 6px) 0 18px;
+      padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
       transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     }
     .wrapper:focus-within {
@@ -2656,6 +2656,11 @@ var Xi=Object.defineProperty;var Ki=(e,t,r)=>t in e?Xi(e,t,{enumerable:!0,config
     textarea {
       max-height: 200px;
       overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    textarea::-webkit-scrollbar {
+      display: none;
     }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
@@ -2666,7 +2671,7 @@ var Xi=Object.defineProperty;var Ki=(e,t,r)=>t in e?Xi(e,t,{enumerable:!0,config
       background: var(--cortex-primary);
       color: #fff;
       border: none;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-lg);
       min-width: calc(var(--min-h) - 12px);
       height: calc(var(--min-h) - 12px);
       padding: 0 14px;
@@ -2696,7 +2701,7 @@ var Xi=Object.defineProperty;var Ki=(e,t,r)=>t in e?Xi(e,t,{enumerable:!0,config
       top: auto;
       right: auto;
       transform: none;
-      border-radius: 999px 0 0 999px;
+      border-radius: var(--cortex-radius-lg) 0 0 var(--cortex-radius-lg);
       box-shadow: none;
     }
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
@@ -2709,7 +2714,7 @@ var Xi=Object.defineProperty;var Ki=(e,t,r)=>t in e?Xi(e,t,{enumerable:!0,config
       color: #fff;
       border: none;
       border-left: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 0 999px 999px 0;
+      border-radius: 0 var(--cortex-radius-lg) var(--cortex-radius-lg) 0;
       height: calc(var(--min-h) - 12px);
       min-width: 28px;
       padding: 0 10px;
@@ -3484,11 +3489,11 @@ ${r}</blockquote>
       <ul>
         ${e.map(r=>c`<li><a class="ref-link" data-path=${r.path} href="#">${r.path}</a></li>`)}
       </ul>
-    </div>`}render(){if(!this.message)return null;const e=this.message.tool_steps,t=this.role==="assistant"&&e&&e.length>0;return c`
+    </div>`}render(){if(!this.message)return null;const e=this.message.tool_steps,t=this.role==="assistant"&&e&&e.length>0;return this.role==="user"?c`<div class="bubble">${this.renderBubble(this.message.content)}${this.error?c`<div class="error">⚠️ ${this.error}</div>`:null}</div>`:c`
       <div class="bubble">
         ${t?c`<chat-tool-trace .steps=${e}></chat-tool-trace><div class="trace-sep"></div>`:null}
         ${this.renderBubble(this.message.content)}
-        ${this.role==="assistant"?this.renderReferences():null}
+        ${this.renderReferences()}
         ${this.error?c`<div class="error">⚠️ ${this.error}</div>`:null}
       </div>
     `}};Ge.styles=_`
@@ -3516,6 +3521,10 @@ ${r}</blockquote>
       border-bottom-right-radius: 6px;
       /* 用户输入按纯文本展示：保留换行、不解析 markdown */
       white-space: pre-wrap;
+      /* user 气泡收紧：单行纯文本不需要 .bubble 通用的 10px 内边距与 1.6 行高，
+         否则短消息气泡偏高（≈44px → ≈35px）。AI 气泡保留宽松值以适配多行 markdown。 */
+      padding: 7px 12px;
+      line-height: 1.4;
     }
     /* 用户气泡下方的小时间戳（17:08 风格） */
     .ts {
@@ -3720,6 +3729,11 @@ ${r}</blockquote>
       color: var(--cortex-text-muted);
       white-space: pre-wrap; word-break: break-word;
       max-height: 96px; overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .res::-webkit-scrollbar {
+      display: none;
     }
     .res .more { color: var(--cortex-primary); cursor: pointer; display: inline-block; margin-top: 3px; }
     .spin {
@@ -3757,6 +3771,11 @@ ${r}</blockquote>
       flex: 1;
       padding: 20px 18px 12px;
       overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    :host::-webkit-scrollbar {
+      display: none;
     }
     .empty {
       color: var(--cortex-text-subtle);
@@ -4091,7 +4110,8 @@ ${r}</blockquote>
           <div class="input-row">
             <input-box
               placeholder="问 Doclens 任何问题..."
-              button-label="→"
+              .buttonLabel=${"知识库对话"}
+              style="--cortex-input-btn-reserve: 112px"
               multiline
               .value=${this.draft}
               @input-change=${i=>this.draft=i.detail.value}
@@ -4142,7 +4162,8 @@ ${r}</blockquote>
         <div class="input-bar">
           <input-box
             placeholder="继续对话..."
-            button-label="→"
+            .buttonLabel=${"知识库对话"}
+            style="--cortex-input-btn-reserve: 112px"
             multiline
             ?disabled=${e.streaming}
             .value=${this.draft}

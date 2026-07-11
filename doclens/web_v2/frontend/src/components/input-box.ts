@@ -14,10 +14,10 @@ export class InputBox extends LitElement {
       display: flex;
       align-items: center;
       border: 1px solid var(--cortex-chat-input-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-lg);
       background: var(--cortex-chat-input-bg);
       min-height: var(--min-h);
-      padding: 0 calc(var(--min-h) + 6px) 0 18px;
+      padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
       transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     }
     .wrapper:focus-within {
@@ -64,6 +64,11 @@ export class InputBox extends LitElement {
     textarea {
       max-height: 200px;
       overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    textarea::-webkit-scrollbar {
+      display: none;
     }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
@@ -74,7 +79,7 @@ export class InputBox extends LitElement {
       background: var(--cortex-primary);
       color: #fff;
       border: none;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-lg);
       min-width: calc(var(--min-h) - 12px);
       height: calc(var(--min-h) - 12px);
       padding: 0 14px;
@@ -104,7 +109,7 @@ export class InputBox extends LitElement {
       top: auto;
       right: auto;
       transform: none;
-      border-radius: 999px 0 0 999px;
+      border-radius: var(--cortex-radius-lg) 0 0 var(--cortex-radius-lg);
       box-shadow: none;
     }
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
@@ -117,7 +122,7 @@ export class InputBox extends LitElement {
       color: #fff;
       border: none;
       border-left: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 0 999px 999px 0;
+      border-radius: 0 var(--cortex-radius-lg) var(--cortex-radius-lg) 0;
       height: calc(var(--min-h) - 12px);
       min-width: 28px;
       padding: 0 10px;
