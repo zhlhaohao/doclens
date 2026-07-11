@@ -24,11 +24,13 @@ export class TabBar extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 2px;
+      gap: 1px;
       font-size: 10px;
+      /* 上多下少：图标视觉重心略偏下，padding 把它往中间拉 */
+      padding: 8px 0 2px;
     }
     .tab.active { color: var(--cortex-primary); font-weight: 600; }
-    .tab .icon { font-size: 18px; }
+    .tab .icon { font-size: 18px; line-height: 1; }
   `;
 
   @property() active: ViewId = "search";

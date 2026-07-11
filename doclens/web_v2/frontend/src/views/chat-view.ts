@@ -103,7 +103,7 @@ export class ChatView extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-chat-bg);
     }
     .initial-stack {
       display: flex;
@@ -112,7 +112,7 @@ export class ChatView extends LitElement {
       min-height: 0;
     }
     .input-row {
-      padding: var(--cortex-space-4) var(--cortex-space-6);
+      padding: 6px var(--cortex-space-6) 18px;
       flex-shrink: 0;
     }
     .focus-body {
@@ -125,6 +125,7 @@ export class ChatView extends LitElement {
       padding: var(--cortex-space-3) var(--cortex-space-6);
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
+      background: var(--cortex-chat-bg);
     }
     .focus-main {
       display: flex;
@@ -135,7 +136,7 @@ export class ChatView extends LitElement {
     /* 桌面 preview 关闭：chat-stream 居中（现状） */
     @media (min-width: 1024px) {
       .focus-main:not(.has-preview) chat-stream {
-        max-width: 800px;
+        max-width: 820px;
         margin: 0 auto;
         width: 100%;
       }
@@ -170,6 +171,9 @@ export class ChatView extends LitElement {
       flex-direction: column;
       min-height: 0;
       position: relative;
+      background: var(--cortex-surface);
+      border-radius: var(--cortex-radius-lg);
+      border: 1px solid var(--cortex-border-muted);
     }
     .focus-main .preview-close {
       position: absolute;
@@ -206,7 +210,7 @@ export class ChatView extends LitElement {
     .preview-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-chat-bg);
       display: flex;
       flex-direction: column;
       z-index: 10;
@@ -219,12 +223,12 @@ export class ChatView extends LitElement {
     @media (min-width: 1024px) {
       /* 桌面端：居中列布局，避免全宽拉伸 */
       .initial-stack {
-        max-width: 720px;
+        max-width: 760px;
         margin: 0 auto;
         width: 100%;
       }
       .input-bar {
-        max-width: 800px;
+        max-width: 820px;
         margin: 0 auto;
         width: 100%;
       }
@@ -555,7 +559,7 @@ export class ChatView extends LitElement {
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
-          <welcome-pane heading="Doclens" subheading="与你的知识库对话"></welcome-pane>
+          <welcome-pane heading="Doclens" suffix="问日程" subheading="与你的知识库对话"></welcome-pane>
           <history-list
             title="历史会话"
             type="chat"

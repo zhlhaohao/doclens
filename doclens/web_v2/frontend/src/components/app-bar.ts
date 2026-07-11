@@ -43,6 +43,51 @@ export class AppBar extends LitElement {
       gap: var(--cortex-space-3);
       position: relative;
     }
+    /* 移动端刷新按钮：圆形描边按钮，点击派发 cortex:refresh 事件，
+       各 view 可监听并自行决定如何刷新（默认不做事，硬刷新由调用方决定）。
+       桌面端默认隐藏，移动端（≤1023px）显示。 */
+    .refresh-btn {
+      display: none;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid var(--cortex-border);
+      border-radius: 50%;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      /* 同 focus-header 返回按钮：disable iOS Safari 双击缩放检测 */
+      touch-action: manipulation;
+    }
+    .refresh-btn:hover {
+      background: var(--cortex-primary-soft);
+      border-color: var(--cortex-primary);
+      color: var(--cortex-primary);
+    }
+    .refresh-btn:active { transform: scale(0.94); }
+    .refresh-btn .icon {
+      font-size: 16px;
+      line-height: 1;
+      font-weight: 600;
+      display: inline-block;
+      transition: transform 0.4s ease;
+    }
+    .refresh-btn.spinning .icon {
+      animation: cortex-refresh-spin 0.6s linear;
+    }
+    @keyframes cortex-refresh-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .refresh-btn.spinning .icon { animation: none; }
+    }
+    @media (max-width: 1023px) {
+      .refresh-btn { display: inline-flex; }
+    }
     .avatar-btn {
       display: inline-flex;
       align-items: center;
@@ -151,6 +196,8 @@ export class AppBar extends LitElement {
 
   @state() private _menuOpen = false;
   @state() private _showSaveAndRevert = false;
+  /** 刷新按钮旋转动画进行中标记：旋转期间禁用再次点击，避免动画错乱 */
+  @state() private _refreshing = false;
   private _unsubStore?: () => void;
 
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {
@@ -164,6 +211,21 @@ export class AppBar extends LitElement {
   private _onAvatarClick(e: Event) {
     e.stopPropagation();
     this._menuOpen = !this._menuOpen;
+  }
+
+  /** 移动端刷新按钮：硬刷新页面（location.reload）。
+   *  - 让 SW 按 network-first 拉新 index.html，再按 cache-first 命中新的 hash 资源
+   *  - 解决"新 build 的 JS 没被加载"的问题（之前只派发 cortex:refresh 事件，
+   *    那是软刷新——只让 view 重载数据，不会重新加载 bundle，所以 tab-bar 标签
+   *    之类写死在 JS 里的内容不会更新）
+   *  - 旋转动画期间禁用按钮，避免动画期间被反复点击 */
+  private _onRefreshClick() {
+    if (this._refreshing) return;
+    this._refreshing = true;
+    window.setTimeout(() => {
+      // 用 location.reload() 而不是 replace()，保留返回栈
+      window.location.reload();
+    }, 400);  // 让用户看到完整旋转动画再触发刷新
   }
 
   private _onScopeSelect(scope: SettingsScope) {
@@ -213,6 +275,16 @@ export class AppBar extends LitElement {
         ${this._showSaveAndRevert ? html`
           <button class="save-btn" type="button" @click=${this._onSaveClick}>💾 保存</button>
         ` : nothing}
+        <button
+          class="refresh-btn ${this._refreshing ? "spinning" : ""}"
+          type="button"
+          aria-label="刷新"
+          title="刷新"
+          ?disabled=${this._refreshing}
+          @click=${this._onRefreshClick}
+        >
+          <span class="icon" aria-hidden="true">↻</span>
+        </button>
         <button class="avatar-btn" @click=${this._onAvatarClick}>
           <span class="avatar">L</span>
           <span class="name">Liang</span>
