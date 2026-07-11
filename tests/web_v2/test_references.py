@@ -102,3 +102,24 @@ class TestFiltering:
 
     def test_output_without_path_returns_empty(self):
         assert extract_references([_tc("search_kb", "未找到包含 'x' 的结果。")]) == []
+
+
+class TestValidatePaths:
+    def test_all_exist(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "b.md").write_text("x", encoding="utf-8")
+        assert validate_paths(["a/b.md"], tmp_path) == []
+
+    def test_returns_missing(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        assert validate_paths(["a/b.md", "c/d.md"], tmp_path) == ["a/b.md", "c/d.md"]
+
+    def test_normalizes_leading_dot(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        (tmp_path / "x.md").write_text("x", encoding="utf-8")
+        assert validate_paths(["./x.md"], tmp_path) == []
+
+    def test_dedup_preserves_order(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        assert validate_paths(["p.md", "p.md", "q.md"], tmp_path) == ["p.md", "q.md"]
