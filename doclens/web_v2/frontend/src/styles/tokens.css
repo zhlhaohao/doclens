@@ -22,6 +22,18 @@
   --cortex-danger: #DC2626;
   --cortex-success: #10B981;
 
+  /* 聊天页专用（与示例 ChatViewEnhanced 风格对齐） */
+  --cortex-chat-bg: #F0F2F9;                  /* 页面背景：极浅薰衣草灰 */
+  --cortex-chat-bubble-user: #D4F5E8;         /* 用户气泡：薄荷绿 */
+  --cortex-chat-bubble-user-border: #B8EBD2;  /* 用户气泡：边框更饱和的薄荷绿 */
+  --cortex-chat-bubble-user-text: #0F172A;    /* 用户气泡：文字深色 */
+  --cortex-chat-bubble-ai: #FFFFFF;           /* AI 气泡：白 */
+  --cortex-chat-bubble-ai-border: #ECEEF3;    /* AI 气泡：极浅边框 */
+  --cortex-chat-section: #0D9488;             /* 结构化小节标题：与 primary 同色 */
+  --cortex-chat-input-bg: #E8F7F2;            /* 输入框淡薄荷背景 */
+  --cortex-chat-input-border: #9FE0BF;        /* 输入框边框：聚焦时更鲜绿 */
+  --cortex-chat-footer: #9CA3AF;              /* 页脚免责声明文字 */
+
   /* 间距（4px 基线） */
   --cortex-space-1: 4px;
   --cortex-space-2: 8px;
@@ -50,7 +62,7 @@
   /* Activity Bar 宽度 */
   --cortex-activity-bar-width: 48px;
   /* Tab Bar 高度（移动） */
-  --cortex-tab-bar-height: 56px;
+  --cortex-tab-bar-height: 44px;
   /* 触控目标 */
   --cortex-touch-target: 44px;
 }

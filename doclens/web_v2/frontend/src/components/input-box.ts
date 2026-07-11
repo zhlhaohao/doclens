@@ -13,17 +13,35 @@ export class InputBox extends LitElement {
       position: relative;
       display: flex;
       align-items: center;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface-muted);
+      border: 1px solid var(--cortex-chat-input-border);
+      border-radius: 999px;
+      background: var(--cortex-chat-input-bg);
       min-height: var(--min-h);
-      padding: 0 calc(var(--min-h) + 8px) 0 14px;
+      padding: 0 calc(var(--min-h) + 6px) 0 18px;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     }
     .wrapper:focus-within {
       border-color: var(--cortex-primary);
-      box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
+      background: #FFFFFF;
+      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
     }
-    input, textarea {
+    input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-md);
+      color: var(--cortex-text);
+      /* Shadow DOM 不继承全局 box-sizing，必须显式声明，否则 padding 会把
+         height 撑大 2 倍（44px height + 22px padding = 66px 高，移动端 ≈ 2.5 字）。 */
+      box-sizing: border-box;
+      /* 单行输入框：显式 height + 等高 line-height → 文字 100% 垂直居中 */
+      height: var(--min-h);
+      line-height: var(--min-h);
+      padding: 0;
+    }
+    textarea {
       flex: 1;
       border: none;
       background: transparent;
@@ -32,8 +50,15 @@ export class InputBox extends LitElement {
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
       resize: none;
-      min-height: calc(var(--min-h) - 12px);
-      line-height: 1.4;
+      /* Shadow DOM 内必须显式声明 box-sizing，否则 min-height 是 content-box
+         高度，padding 会叠加在外部导致总高度 = min-height + padding。 */
+      box-sizing: border-box;
+      /* 多行输入框：min-height 保证 1 行时总高度（含 padding）= wrapper 高度；
+         line-height + padding 组合让单行文本视觉上居中（22.5px 文字在 24px
+         内容区里 ≈ 完美居中）。实际高度由 _autoResize 按 scrollHeight 撑开。 */
+      min-height: var(--min-h);
+      line-height: 1.5;
+      padding: 11px 0;
     }
     /* multiline 自动扩充：默认单行高度，换行后随内容增高，超出上限内部滚动 */
     textarea {
@@ -49,19 +74,22 @@ export class InputBox extends LitElement {
       background: var(--cortex-primary);
       color: #fff;
       border: none;
-      border-radius: var(--cortex-radius-sm);
-      min-width: var(--cortex-touch-target);
-      height: calc(var(--min-h) - 8px);
-      padding: 0 12px;
+      border-radius: 999px;
+      min-width: calc(var(--min-h) - 12px);
+      height: calc(var(--min-h) - 12px);
+      padding: 0 14px;
       font-size: var(--cortex-fs-md);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 4px;
+      box-shadow: 0 2px 6px rgba(13, 148, 136, 0.28);
+      transition: background 0.15s, transform 0.1s;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
     button:hover:not(:disabled) { background: var(--cortex-primary-hover); }
+    button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
     /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
     .actions.split {
       position: absolute;
@@ -76,8 +104,10 @@ export class InputBox extends LitElement {
       top: auto;
       right: auto;
       transform: none;
-      border-radius: var(--cortex-radius-sm) 0 0 var(--cortex-radius-sm);
+      border-radius: 999px 0 0 999px;
+      box-shadow: none;
     }
+    .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
     .caret {
       position: static;
       top: auto;
@@ -87,10 +117,10 @@ export class InputBox extends LitElement {
       color: #fff;
       border: none;
       border-left: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 0 var(--cortex-radius-sm) var(--cortex-radius-sm) 0;
-      height: calc(var(--min-h) - 8px);
-      min-width: 24px;
-      padding: 0 8px;
+      border-radius: 0 999px 999px 0;
+      height: calc(var(--min-h) - 12px);
+      min-width: 28px;
+      padding: 0 10px;
       font-size: var(--cortex-fs-sm);
       cursor: pointer;
       display: flex;
@@ -108,7 +138,7 @@ export class InputBox extends LitElement {
       z-index: 20;
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-md);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
       overflow: hidden;
     }
