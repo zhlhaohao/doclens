@@ -73,6 +73,16 @@ const blockRenderer: any = {
   },
 };
 
+/**
+ * 图片 renderer —— 把 ![alt](url) 渲染成带 loading="lazy" 的 <img>。
+ * marked v18 image renderer 接收 token 对象（{href, title, text, tokens}）。
+ * 直接挂在 blockRenderer 上，保持单个 renderer（不新建 marked.use 避免 clobber）。
+ */
+blockRenderer.image = function (token: any) {
+  const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : "";
+  return `<img src="${token.href}" alt="${escapeHtml(token.text || "")}"${titleAttr} loading="lazy">\n`;
+};
+
 /** 标记是否已 use 过（避免重复 use） */
 let mdConfigured = false;
 function ensureMdConfigured(): void {
@@ -95,7 +105,8 @@ export class MdViewer extends LitElement {
   static styles = css`
     :host {
       display: block;
-      padding: 12px 16px;
+      padding: 20px 16px;
+      background: var(--cortex-bg);   /* 灰底：让白纸浮起 */
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-base);
       line-height: 1.7;
@@ -156,6 +167,34 @@ export class MdViewer extends LitElement {
     :host tbody tr:nth-child(even) {
       background: var(--cortex-surface-muted);
     }
+    /* 图片自适应：最大宽度不超出容器，圆角 + 块级居中 */
+    :host img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      margin: 0.5em 0;
+      display: block;
+    }
+    /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
+    .md-body {
+      background: var(--cortex-surface);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
+      padding: 28px 36px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+    /* 分页容器（pdf/pptx/excel）：覆盖 .md-body 白纸为透明，
+       仅保留居中 —— 让子 .page-card 当"多张纸"而非"一张大纸包多页"。
+       必须在 .md-body 之后定义才能覆盖。 */
+    .md-body-paged {
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+      border-radius: 0;
+      max-width: 820px;
+      margin: 0 auto;
+    }
     .empty {
       color: var(--cortex-text-subtle);
       text-align: center;
@@ -178,14 +217,14 @@ export class MdViewer extends LitElement {
       padding: 0 2px;
       border-radius: 2px;
     }
-    /* 分页卡片 */
+    /* 分页卡片：白纸，靠阴影区分（去 border） */
     .page-card {
       background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: 6px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-      margin: 16px 8px;
-      padding: 14px 20px;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
+      margin: 0 0 20px;
+      padding: 28px 36px;
     }
     .page-card-header {
       font-size: var(--cortex-fs-sm);
@@ -199,6 +238,14 @@ export class MdViewer extends LitElement {
     /* 卡片内部标题更紧凑 */
     .page-card h1, .page-card h2, .page-card h3 {
       margin-top: 0.5em;
+    }
+    /* 移动端：纸张边距收紧 */
+    @media (max-width: 768px) {
+      :host { padding: 12px 8px; }
+      .md-body, .page-card {
+        padding: 18px 16px;
+        border-radius: 6px;
+      }
     }
   `;
 
