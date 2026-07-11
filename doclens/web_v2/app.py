@@ -3,6 +3,7 @@
 `create_app()` 构造 FastAPI 实例；`launch_app()` 用 uvicorn 启动并同时
 服务前端 SPA 静态文件（详见 Task 29）。
 """
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,9 +15,20 @@ from doclens.web_v2.api.errors import register_error_handlers
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期：启动文件监控，退出时停止。"""
+    from doclens.web_v2 import deps
+    deps.start_watcher()
+    try:
+        yield
+    finally:
+        deps.stop_watcher()
+
+
 def create_app() -> FastAPI:
     """构造 FastAPI 应用（注册路由、错误处理器、静态文件）。"""
-    app = FastAPI(title="Cortex", version=CORTEX_VERSION)
+    app = FastAPI(title="Cortex", version=CORTEX_VERSION, lifespan=lifespan)
 
     # 错误处理
     register_error_handlers(app)
@@ -38,6 +50,10 @@ def create_app() -> FastAPI:
     app.include_router(files.router, prefix="/api")
     from doclens.web_v2.api import grep
     app.include_router(grep.router, prefix="/api")
+    from doclens.web_v2.api import watch
+    app.include_router(watch.router, prefix="/api")
+    from doclens.web_v2.api import reindex
+    app.include_router(reindex.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

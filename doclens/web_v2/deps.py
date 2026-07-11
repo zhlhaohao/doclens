@@ -19,6 +19,7 @@ _config: Optional[CortexConfig] = None
 _idx_manager: Optional[IndexManager] = None
 _sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
+_watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
 _lock = threading.RLock()
 
 
@@ -97,12 +98,15 @@ def get_sessions_store() -> SessionsStore:
 
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent
+    global _config, _idx_manager, _sessions_store, _agent, _watcher
+    # 停止可能存在的 watcher，释放 Observer 线程
+    stop_watcher()
     with _lock:
         _config = None
         _idx_manager = None
         _sessions_store = None
         _agent = None
+        _watcher = None
 
 
 def reload_config() -> CortexConfig:
@@ -132,3 +136,54 @@ def reload_config() -> CortexConfig:
     # 让 SessionManager 缓存的 provider 失效，下次 get_provider() 调用时重建
     SessionManager.invalidate_provider()
     return _config
+
+
+def get_watcher():
+    """获取已注册的 FileWatcher 单例（可能为 None）。"""
+    return _watcher
+
+
+def set_watcher(watcher) -> None:
+    """注册/覆盖 watcher 单例（供 lifespan 与测试使用）。"""
+    global _watcher
+    with _lock:
+        _watcher = watcher
+
+
+def start_watcher() -> bool:
+    """根据 config.watch_enabled 创建并启动 FileWatcher。
+
+    Returns:
+        True 表示已启动；False 表示因配置关闭或 watchdog 不可用而未启动。
+    """
+    global _watcher
+    config = get_config()
+    if not config.watch_enabled:
+        logger.info("File watcher disabled by config (watch_enabled=False)")
+        return False
+    idx = get_index_manager()
+    try:
+        from doclens.file_watcher import FileWatcher
+        watcher = FileWatcher(idx, debounce_seconds=config.watch_debounce)
+        if not watcher.start():
+            logger.warning("FileWatcher.start() returned False (watchdog unavailable?)")
+            return False
+        set_watcher(watcher)
+        logger.info("FileWatcher started for %s", idx.search_path)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("start_watcher failed: %s", exc)
+        return False
+
+
+def stop_watcher() -> None:
+    """停止并注销 watcher 单例（幂等）。"""
+    global _watcher
+    with _lock:
+        watcher = _watcher
+        _watcher = None
+    if watcher is not None:
+        try:
+            watcher.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_watcher: %s", exc)
