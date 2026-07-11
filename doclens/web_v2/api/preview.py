@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
+from treesearch.parsers.image_store import ImageStore, doc_hash_for
 from doclens.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
@@ -128,6 +129,29 @@ async def download(
         filename=download_name,
         media_type="application/octet-stream",
     )
+
+
+@router.get("/preview/asset")
+async def preview_asset(
+    path: str = Query(..., description="文档相对路径"),
+    id: int = Query(..., ge=1, description="图片序号（1-indexed）"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """返回文档内某张图片的字节流。
+
+    path 经越权校验（必须在 search_path 内）；图片从
+    ``<index_path>.parent/images/<doc_hash>/<seq>.<ext>`` 读取。
+    """
+    base = Path(idx.search_path)
+    _safe_resolve(base, path)  # 越权校验，不通过则抛 FILE_NOT_FOUND
+
+    images_root = Path(idx.index_path).parent / "images"
+    store = ImageStore(images_root)
+    resolved = store.resolve(doc_hash_for(path), id)
+    if resolved is None:
+        raise CortexAPIError(404, "IMAGE_NOT_FOUND", f"图片不存在: {path} #{id}")
+    file_path, media_type = resolved
+    return FileResponse(path=str(file_path), media_type=media_type)
 
 
 @router.get("/preview", response_model=PreviewResponse)

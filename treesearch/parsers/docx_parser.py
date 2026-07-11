@@ -8,7 +8,10 @@ Extracts paragraphs and headings from DOCX and builds tree structure.
 """
 import logging
 import os
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .image_store import ImagePart, ImageStore
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,38 @@ def _table_to_text(table) -> str:
     return "\n".join([rows[0], separator, *rows[1:]])
 
 
-def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
+def _paragraph_image_rids(para) -> list[str]:
+    """段落内所有图片的 rId（按文档顺序，含 inline + anchor）。"""
+    from docx.oxml.ns import qn
+    return [blip.get(qn("r:embed"))
+            for blip in para._p.findall(".//" + qn("a:blip"))
+            if blip.get(qn("r:embed"))]
+
+
+def _docx_part_blob_ext(doc, rid: str) -> tuple[bytes, str] | None:
+    """按 rId 取 image part 的 (blob, ext)，失败返回 None。"""
+    try:
+        part = doc.part.related_parts.get(rid)
+        if part is None:
+            return None
+        blob = part.blob
+        ext = ""
+        try:
+            ext = part.image.ext
+        except Exception:
+            partname = getattr(part, "partname", None)
+            ext = partname.ext.lstrip(".") if partname and partname.ext else ""
+        return blob, (ext or "png")
+    except Exception as e:
+        logger.warning("Failed to extract docx image part %s: %s", rid, e)
+        return None
+
+
+def _extract_docx_headings(
+    docx_path: str,
+    image_store: "ImageStore | None" = None,
+    rel_path: str | None = None,
+) -> tuple[list[dict], list[str]]:
     """Extract headings and text from a DOCX file.
 
     Iterates document body elements in order so that tables are
@@ -68,6 +102,7 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
     doc = DocxDocument(docx_path)
     lines = []
     headings = []
+    para_image_rids: list[list[str]] = []
 
     for child in doc.element.body:
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -75,8 +110,10 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
         if tag == "p":
             para = Paragraph(child, doc)
             text = para.text.strip()
+            rids = _paragraph_image_rids(para)
             line_num = len(lines) + 1
             lines.append(text)
+            para_image_rids.append(rids)
 
             style_name = (para.style.name if para.style else "") or ""
             style_name = style_name.lower()
@@ -98,6 +135,29 @@ def _extract_docx_headings(docx_path: str) -> tuple[list[dict], list[str]]:
             if table_text.strip():
                 line_num = len(lines) + 1
                 lines.append(table_text)
+                para_image_rids.append([])
+
+    # 图片提取 + 段落级锚定
+    if image_store is not None and rel_path:
+        unique_rids: list[str] = []
+        seen: set[str] = set()
+        for rids in para_image_rids:
+            for r in rids:
+                if r and r not in seen:
+                    seen.add(r)
+                    unique_rids.append(r)
+        parts_list = []
+        for rid in unique_rids:
+            be = _docx_part_blob_ext(doc, rid)
+            if be is not None:
+                from .image_store import ImagePart
+                parts_list.append(ImagePart(blob=be[0], ext=be[1], source_ref=rid))
+        refs = image_store.extract_for_doc(rel_path, parts_list) if parts_list else {}
+        for i, rids in enumerate(para_image_rids):
+            mds = [refs[r].inline_md for r in rids if r in refs]
+            if mds:
+                base = lines[i]
+                lines[i] = (base + "\n\n" + "\n\n".join(mds)) if base else "\n\n".join(mds)
 
     return headings, lines
 
@@ -111,6 +171,8 @@ async def docx_to_tree(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    image_store: "ImageStore | None" = None,
+    rel_path: str | None = None,
     **kwargs,
 ) -> dict:
     """Build a tree index from a DOCX file.
@@ -124,7 +186,7 @@ async def docx_to_tree(
     doc_name = os.path.splitext(os.path.basename(docx_path))[0]
     logger.debug("Parsing DOCX: %s", docx_path)
 
-    headings, lines = _extract_docx_headings(docx_path)
+    headings, lines = _extract_docx_headings(docx_path, image_store=image_store, rel_path=rel_path)
 
     if not headings:
         # No DOCX headings found, fall back to text_to_tree.
