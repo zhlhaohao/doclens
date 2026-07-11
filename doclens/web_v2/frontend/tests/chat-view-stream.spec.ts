@@ -49,6 +49,22 @@ describe("applyStreamEvent", () => {
     const onlyUser: ChatMessage[] = [{ role: "user", content: "q" }];
     expect(applyStreamEvent(onlyUser, { type: "token", text: "x" })).toBe(onlyUser);
   });
+
+  it("attaches references to last assistant message immutably", () => {
+    const next = applyStreamEvent(base, {
+      type: "references", items: [{ path: "a/b.md" }, { path: "c/d.md" }],
+    });
+    expect(next[1].references).toEqual([{ path: "a/b.md" }, { path: "c/d.md" }]);
+    expect(base[1].references).toBeUndefined();
+    expect(next).not.toBe(base);
+    expect(next[1]).not.toBe(base[1]);
+  });
+
+  it("replaces references on subsequent references event", () => {
+    const s1 = applyStreamEvent(base, { type: "references", items: [{ path: "a.md" }] });
+    const next = applyStreamEvent(s1, { type: "references", items: [{ path: "a.md" }, { path: "b.md" }] });
+    expect(next[1].references).toEqual([{ path: "a.md" }, { path: "b.md" }]);
+  });
 });
 
 describe("finalizeInterruptedMessages", () => {

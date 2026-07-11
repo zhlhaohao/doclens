@@ -4,6 +4,7 @@ export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool_call"; tool_use_id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; name: string; output: string; is_error: boolean; duration_ms?: number }
+  | { type: "references"; items: { path: string }[] }
   | { type: "done" }
   | { type: "error"; detail: string };
 
@@ -23,6 +24,11 @@ export async function* chatStream(req: { message: string; session_id?: string })
           type: "tool_result", tool_use_id: d.tool_use_id, name: d.name,
           output: d.output ?? "", is_error: !!d.is_error, duration_ms: d.duration_ms,
         };
+      } catch { /* skip */ }
+    } else if (ev.event === "references") {
+      try {
+        const d = JSON.parse(ev.data);
+        yield { type: "references", items: (d.items ?? []) as { path: string }[] };
       } catch { /* skip */ }
     } else if (ev.event === "done") {
       yield { type: "done" };
