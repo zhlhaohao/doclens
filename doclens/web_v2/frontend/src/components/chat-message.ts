@@ -11,7 +11,7 @@ export class ChatMessageEl extends LitElement {
       max-width: 78%;
     }
     :host([role="user"]) { align-self: flex-end; }
-    :host([role="assistant"]) { align-self: flex-start; }
+    :host([role="assistant"]) { align-self: flex-start; max-width: 100%; }
     .bubble {
       padding: 10px 14px;
       border-radius: var(--cortex-radius-lg);
