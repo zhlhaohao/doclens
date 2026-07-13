@@ -13,37 +13,53 @@ export class PreviewPane extends LitElement {
       display: flex;
       flex-direction: column;
       flex: 1;
+      min-height: 0;
       background: var(--cortex-surface);
       overflow: hidden;
     }
     .header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--cortex-space-2);
       font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--cortex-border);
-      font-family: var(--cortex-font-mono);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
-    .header .path { flex: 1; }
+    .header .path {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .body {
       flex: 1;
       overflow: auto;
-      padding: 12px 14px;
+      padding: var(--cortex-space-3) var(--cortex-space-4);
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
       line-height: 1.7;
       color: var(--cortex-text);
       white-space: pre;
     }
-    .highlight { background: #fef3c7; padding: 0 2px; border-radius: 2px; }
+    /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
+    .highlight {
+      background: rgba(0, 82, 255, 0.15);
+      color: var(--cortex-primary);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
     .html-frame {
       flex: 1;
-      border: 0;
+      border: none;
+      border-radius: 0;
       width: 100%;
-      background: white;
+      background: #fff;
       min-height: 0;
     }
     .empty {
@@ -54,43 +70,78 @@ export class PreviewPane extends LitElement {
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
     }
-    button.edit-btn,
+    /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
     button.upload-btn {
       font-family: inherit;
-      font-size: var(--cortex-fs-sm);
-      padding: 4px 10px;
+      font-size: var(--cortex-fs-xs);
+      padding: var(--cortex-space-1) var(--cortex-space-3);
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: 4px;
+      color: var(--cortex-text-muted);
+      border-radius: var(--cortex-radius-sm);
       cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    button.download-btn:hover,
+    button.upload-btn:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
+      border-color: var(--cortex-text-subtle);
+    }
+    /* 主动作：编辑按钮 = primary gradient + glow */
+    button.edit-btn {
+      font-family: inherit;
+      font-size: var(--cortex-fs-xs);
+      padding: var(--cortex-space-1) var(--cortex-space-3);
+      border: none;
+      background: var(--cortex-primary-gradient);
+      color: #fff;
+      border-radius: var(--cortex-radius-sm);
+      box-shadow: var(--cortex-primary-glow);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button.edit-btn:hover { opacity: 0.9; }
+    button.edit-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring), var(--cortex-primary-glow);
     }
     .mobile-header {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: 8px 10px;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       border-bottom: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       flex-shrink: 0;
       position: relative;
     }
+    /* 圆形返回 / 更多按钮 —— 同 focus-header */
     .mobile-header .mobile-back,
     .mobile-header .mobile-more {
-      border: none;
-      background: transparent;
-      color: var(--cortex-text);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border: 1px solid var(--cortex-border);
       cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
       font-size: 18px;
+      font-weight: 500;
       line-height: 1;
-      padding: 6px 10px;
-      border-radius: var(--cortex-radius-sm);
-      min-width: 36px;
+      touch-action: manipulation;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     .mobile-header .mobile-back:hover,
     .mobile-header .mobile-more:hover {
-      background: var(--cortex-surface-muted);
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
     }
     .mobile-header .mobile-filename {
       flex: 1;
@@ -111,9 +162,9 @@ export class PreviewPane extends LitElement {
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      box-shadow: var(--cortex-shadow-lg);
       z-index: 10;
-      padding: 4px 0;
+      padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {
       display: block;
@@ -124,8 +175,9 @@ export class PreviewPane extends LitElement {
       color: var(--cortex-text);
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
-      padding: 10px 14px;
+      padding: var(--cortex-space-3) var(--cortex-space-4);
       cursor: pointer;
+      transition: background 0.15s;
     }
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);

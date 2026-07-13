@@ -119,44 +119,70 @@ export class MdViewer extends LitElement {
   static styles = css`
     :host {
       display: block;
-      padding: 20px 16px;
+      padding: var(--cortex-space-4);
       background: var(--cortex-bg);   /* 灰底：让白纸浮起 */
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-base);
       line-height: 1.7;
       color: var(--cortex-text);
-      overflow: auto;
+      overflow-y: auto;
       /* 作为 preview-pane (flex column) 的 flex item，必须用 flex 填充
          而非 height: 100%。height: 100% + overflow: auto 在 iOS Safari
          中会触发 flexbox 触摸滚动 bug，导致手指滑动无法滚动内容。 */
       flex: 1 1 0;
       min-height: 0;
     }
-    :host h1, :host h2, :host h3 {
+    :host h1, :host h2, :host h3, :host h4 {
       margin: 1em 0 0.5em;
       line-height: 1.3;
+      color: var(--cortex-text);
+    }
+    :host h1, :host h2 {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    :host h3, :host h4 {
+      font-weight: 600;
     }
     :host h1 { font-size: 1.4em; }
     :host h2 { font-size: 1.2em; }
     :host h3 { font-size: 1.05em; }
-    :host p { margin: 0.5em 0; }
+    :host p { margin: 0.5em 0; color: var(--cortex-text); }
+    /* 链接：primary + 无下划线；hover 下划线 */
+    :host a { color: var(--cortex-primary); text-decoration: none; }
+    :host a:hover { text-decoration: underline; }
     :host ul, :host ol { margin: 0.5em 0; padding-left: 1.5em; }
     :host li { margin: 0.2em 0; }
+    /* 代码块：surface-muted + hairline + radius-md + 横向滚动 */
     :host pre {
       background: var(--cortex-surface-muted);
-      padding: 8px 12px;
-      border-radius: 4px;
+      border: 1px solid var(--cortex-border-muted);
+      border-radius: var(--cortex-radius-md);
+      padding: var(--cortex-space-3) var(--cortex-space-4);
       overflow-x: auto;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
     }
+    /* pre 内 code 重置 inline 样式 */
+    :host pre code {
+      background: transparent;
+      padding: 0;
+      font-size: inherit;
+    }
+    /* inline code：mono + surface-muted + radius-sm */
     :host code {
       font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-sm);
+      font-size: 0.9em;
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-sm);
+      padding: 0 4px;
     }
+    /* 引用：primary 左边框 + primary-soft 底 + radius 右侧 */
     :host blockquote {
-      border-left: 3px solid var(--cortex-border);
-      padding-left: 12px;
+      border-left: 3px solid var(--cortex-primary);
+      background: var(--cortex-primary-soft);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border-radius: 0 var(--cortex-radius-md) var(--cortex-radius-md) 0;
       color: var(--cortex-text-muted);
       margin: 0.5em 0;
     }
@@ -170,7 +196,7 @@ export class MdViewer extends LitElement {
     }
     :host th, :host td {
       border: 1px solid var(--cortex-border);
-      padding: 6px 12px;
+      padding: var(--cortex-space-2);
       text-align: left;
       vertical-align: top;
     }
@@ -187,17 +213,17 @@ export class MdViewer extends LitElement {
     :host img {
       max-width: 100%;
       height: auto;
-      border-radius: 4px;
-      margin: 0 8px 8px 0;
+      border-radius: var(--cortex-radius-md);
+      margin: 0 var(--cortex-space-2) var(--cortex-space-2) 0;
       display: inline-block;
       vertical-align: middle;
     }
     /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
     .md-body {
       background: var(--cortex-surface);
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
-      padding: 28px 36px;
+      border-radius: var(--cortex-radius-lg);
+      box-shadow: var(--cortex-shadow-sm);
+      padding: var(--cortex-space-8) var(--cortex-space-8);
       max-width: 820px;
       margin: 0 auto;
     }
@@ -215,22 +241,24 @@ export class MdViewer extends LitElement {
     .empty {
       color: var(--cortex-text-subtle);
       text-align: center;
-      padding: 24px;
+      padding: var(--cortex-space-6);
     }
     /* 定位块的闪烁动画（"你滚到这里了"指示）
        使用 box-shadow 而不是 background，避免和 <mark class="keyword-hit">
-       的黄色背景叠加产生视觉混乱（xlsx 场景下 scrollTo 可能是 mark）。 */
+       的 primary 底色叠加产生视觉混乱（xlsx 场景下 scrollTo 可能是 mark）。
+       primary-based rgba 对齐 SaaS Boutique Electric Blue。 */
     .highlight-flash {
       animation: highlight-flash 2s ease-out;
     }
     @keyframes highlight-flash {
-      0% { box-shadow: 0 0 0 4px rgba(254, 243, 199, 1); }
+      0% { box-shadow: 0 0 0 4px rgba(0, 82, 255, 0.12); }
       100% { box-shadow: 0 0 0 4px transparent; }
     }
-    /* 搜索关键字命中高亮（持久黄底，类似浏览器 Ctrl+F） */
+    /* 搜索关键字命中高亮（primary-soft 底，类似浏览器 Ctrl+F）
+       SaaS Boutique：旧 amber #FEF3C7 已替换为 primary-based rgba。 */
     :host mark.keyword-hit {
-      background: #FEF3C7;
-      color: inherit;
+      background: rgba(0, 82, 255, 0.15);
+      color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
     }
@@ -238,19 +266,20 @@ export class MdViewer extends LitElement {
     .page-card {
       background: var(--cortex-surface);
       border: none;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 4px 12px rgba(0, 0, 0, 0.05);
-      margin: 0 0 20px;
-      padding: 28px 36px;
+      border-radius: var(--cortex-radius-lg);
+      box-shadow: var(--cortex-shadow-md);
+      margin: 0 0 var(--cortex-space-4);
+      padding: var(--cortex-space-6) var(--cortex-space-8);
     }
     .page-card-header {
-      font-size: var(--cortex-fs-sm);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-subtle);
       font-weight: 500;
       letter-spacing: 0.02em;
-      padding-bottom: 8px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--cortex-border);
+      padding-bottom: var(--cortex-space-2);
+      margin-bottom: var(--cortex-space-3);
+      border-bottom: 1px solid var(--cortex-border-muted);
     }
     /* 卡片内部标题更紧凑 */
     .page-card h1, .page-card h2, .page-card h3 {
@@ -258,10 +287,10 @@ export class MdViewer extends LitElement {
     }
     /* 移动端：纸张边距收紧 */
     @media (max-width: 768px) {
-      :host { padding: 12px 8px; }
+      :host { padding: var(--cortex-space-2); }
       .md-body, .page-card {
-        padding: 18px 16px;
-        border-radius: 6px;
+        padding: var(--cortex-space-4);
+        border-radius: var(--cortex-radius-md);
       }
     }
   `;
