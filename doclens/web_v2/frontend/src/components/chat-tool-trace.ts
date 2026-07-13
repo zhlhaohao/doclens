@@ -37,12 +37,20 @@ export function buildFullText(steps: ToolStep[]): string {
 @customElement("chat-tool-trace")
 export class ChatToolTrace extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host {
+      display: block;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-md);
+      background: var(--cortex-surface-muted);
+      overflow: hidden;
+    }
     .summary {
       display: flex; align-items: center; gap: 6px;
       font-size: var(--cortex-fs-sm); color: var(--cortex-text-muted);
-      cursor: pointer; user-select: none; padding: 2px 0;
+      cursor: pointer; user-select: none;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
     }
+    .summary:hover { background: var(--cortex-surface); }
     .summary .arrow { color: var(--cortex-primary); font-weight: 700; }
     .summary .count { color: var(--cortex-text); font-weight: 600; }
     .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -56,7 +64,7 @@ export class ChatToolTrace extends LitElement {
     .step.error { border-color: var(--cortex-danger); }
     .head { display: flex; align-items: center; gap: 7px; font-size: var(--cortex-fs-sm); color: var(--cortex-text); }
     .head .name { font-weight: 600; font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm); }
-    .head .meta { margin-left: auto; color: var(--cortex-text-subtle); font-size: var(--cortex-fs-xs); }
+    .head .meta { margin-left: auto; color: var(--cortex-text-subtle); font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-xs); }
     .head .ok { color: var(--cortex-success); }
     .head .err { color: var(--cortex-danger); }
     .arg {
@@ -65,7 +73,7 @@ export class ChatToolTrace extends LitElement {
       white-space: pre-wrap; word-break: break-word;
     }
     .res {
-      margin-top: 5px; background: var(--cortex-bg);
+      margin-top: 5px; background: var(--cortex-surface);
       border-radius: var(--cortex-radius-sm); padding: 5px 7px;
       font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -86,12 +94,12 @@ export class ChatToolTrace extends LitElement {
       animation: spin .8s infinite linear;
       display: inline-block;
     }
-    .running-text { color: var(--cortex-primary-hover); font-size: var(--cortex-fs-xs); }
+    .running-text { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
     .copy-btn {
       margin-left: auto;
-      background: transparent;
+      background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-sm);
       padding: 2px 8px;
@@ -101,7 +109,7 @@ export class ChatToolTrace extends LitElement {
       font-family: var(--cortex-font);
       line-height: 1.2;
     }
-    .copy-btn:hover { background: var(--cortex-primary-soft); color: var(--cortex-primary-hover); }
+    .copy-btn:hover { background: var(--cortex-primary-soft); color: var(--cortex-primary); border-color: var(--cortex-primary); }
     .copy-btn.copied { border-color: var(--cortex-success); color: var(--cortex-success); }
   `;
 
