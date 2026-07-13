@@ -116,8 +116,8 @@ export class ResultCard extends LitElement {
       margin-top: 4px;
     }
     mark {
-      background: #FEF3C7;
-      color: inherit;
+      background: rgba(0, 82, 255, 0.15);
+      color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
     }

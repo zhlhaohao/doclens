@@ -41,6 +41,7 @@ export class MoveDialog extends LitElement {
       border-radius: var(--cortex-radius-lg);
       box-shadow: var(--cortex-primary-glow);
     }
+    button.primary:hover:not(:disabled) { opacity: 0.9; }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {
       display: flex; gap: var(--cortex-space-2); align-items: center;

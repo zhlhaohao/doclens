@@ -57,7 +57,7 @@ export class ChatMessageEl extends LitElement {
     .md-body > :last-child { margin-bottom: 0; }
     .md-body p { margin: 0.5em 0; }
     /* 结构化日程里的 section header：示例里是「?【周立松总经理】（今天）日程安排」
-       这种带 ? 前缀的 H2 行内突出渲染为青绿色块标题 */
+       这种带 ? 前缀的 H2 行内突出渲染为蓝色块标题 */
     .md-body h1, .md-body h2, .md-body h3, .md-body h4 {
       margin: 0.7em 0 0.4em;
       line-height: 1.4;

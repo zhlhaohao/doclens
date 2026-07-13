@@ -11,7 +11,7 @@ import type { ToastStack } from "./toast-stack";
 export class ReindexDialog extends LitElement {
   static styles = css`
     :host { display: block; min-width: 360px; }
-    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); }
+    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .body { font-size: var(--cortex-fs-sm); color: var(--cortex-text); line-height: 1.6; }
     .progress {
       font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-xs);
@@ -28,6 +28,7 @@ export class ReindexDialog extends LitElement {
       border-radius: var(--cortex-radius-sm); font-size: var(--cortex-fs-base);
     }
     button.primary { background: var(--cortex-primary-gradient); color: #fff; border: none; border-radius: var(--cortex-radius-lg); box-shadow: var(--cortex-primary-glow); }
+    button.primary:hover:not(:disabled) { opacity: 0.9; }
     button.warn { background: var(--cortex-danger); color: #fff; border: none; border-radius: var(--cortex-radius-lg); }
     dialog {
       border: 1px solid var(--cortex-border);

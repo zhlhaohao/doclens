@@ -9,7 +9,7 @@ type Phase = "loading-stats" | "confirming" | "deleting";
 export class DeleteDialog extends LitElement {
   static styles = css`
     :host { display: block; min-width: 360px; }
-    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; }
+    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .warn {
       padding: var(--cortex-space-3);
       background: rgba(245, 158, 11, 0.08);
