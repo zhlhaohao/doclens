@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
-import type { Session, ChatMessage, ToolStep } from "../state/types";
+import type { Session, ChatMessage, Reference, ToolStep } from "../state/types";
 import { chatStream } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
@@ -85,8 +85,12 @@ export function mapSessionItemsToMessages(
         duration_ms: tc.duration_ms,
         status: tc.is_error ? ("error" as const) : ("done" as const),
       }));
+      const references: Reference[] = (payload.references ?? [])
+        .map((r: any) => ({ path: String(r?.path ?? "") }))
+        .filter((r: Reference) => r.path.length > 0);
       const msg: ChatMessage = { role: "assistant", content: payload.content ?? "" };
       if (tool_steps.length) msg.tool_steps = tool_steps;
+      if (references.length) msg.references = references;
       messages.push(msg);
     }
   }
@@ -334,6 +338,8 @@ export class ChatView extends LitElement {
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
+        } else if (ev.type === "toast") {
+          this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -345,7 +351,7 @@ export class ChatView extends LitElement {
         sessionId,
         [
           { kind: "message_user", payload: JSON.stringify({ content: message }) },
-          { kind: "message_ai", payload: JSON.stringify({ content: aiMsg.content, tool_calls: aiMsg.tool_steps ?? [] }) },
+          { kind: "message_ai", payload: JSON.stringify({ content: aiMsg.content, tool_calls: aiMsg.tool_steps ?? [], references: aiMsg.references ?? [] }) },
         ],
         messages.length,
       );

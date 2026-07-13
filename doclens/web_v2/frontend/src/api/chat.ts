@@ -5,6 +5,7 @@ export type ChatStreamEvent =
   | { type: "tool_call"; tool_use_id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; name: string; output: string; is_error: boolean; duration_ms?: number }
   | { type: "references"; items: { path: string }[] }
+  | { type: "toast"; level: "error" | "info" | "success"; detail: string }
   | { type: "done" }
   | { type: "error"; detail: string };
 
@@ -29,6 +30,15 @@ export async function* chatStream(req: { message: string; session_id?: string })
       try {
         const d = JSON.parse(ev.data);
         yield { type: "references", items: (d.items ?? []) as { path: string }[] };
+      } catch { /* skip */ }
+    } else if (ev.event === "toast") {
+      try {
+        const d = JSON.parse(ev.data);
+        yield {
+          type: "toast",
+          level: (d.level ?? "error") as "error" | "info" | "success",
+          detail: String(d.detail ?? ""),
+        };
       } catch { /* skip */ }
     } else if (ev.event === "done") {
       yield { type: "done" };

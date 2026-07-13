@@ -2,8 +2,8 @@
 
 设计：
 1. 复用 CortexAgent.session（含 tools / tool_handlers）
-2. 在独立线程运行 StreamingAgent.run_stream，emitter 写入 asyncio.Queue
-3. FastAPI handler 把 queue 转成 SSE 流
+2. 独立线程流式跑 StreamingAgent（token/tool 实时推 SSE，「思考过程」可见）
+3. 完成后一次性检查「## 参考资料」：合规 → 正文路径卡片；不合规 → 工具结果兜底 + toast（不重试 LLM）
 """
 import asyncio
 import json
@@ -11,7 +11,7 @@ import logging
 import threading
 from typing import AsyncIterator, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
 from doclens.web_v2.deps import get_agent
@@ -23,14 +23,14 @@ router = APIRouter()
 
 
 async def _stream_agent_response(message: str, session_id: Optional[str]) -> AsyncIterator[dict]:
-    """流式产生结构化事件 dict 供 SSE 消费。
+    """流式跑 StreamingAgent + 完成后检查参考资料。
 
-    事件类型：
-    - {"type":"token","text":...}
-    - {"type":"tool_call","tool_use_id":...,"name":...,"input":...}
-    - {"type":"tool_result","tool_use_id":...,"name":...,"output":...,"is_error":...,"duration_ms":...}
-    - {"type":"error","detail":...}
+    工具调用实时推送（思考过程可见）。AI 完成后一次性检查「## 参考资料」：
+    - 合规（有章节 + 格式合规 + 路径存在）→ 卡片用正文解析的路径
+    - 不合规 → 卡片用工具检索结果兜底 + toast 告警（不再重试 LLM）
     """
+    from doclens.web_v2.refs_retry import RoundResult, evaluate_round, FALLBACK_TOAST
+
     agent = get_agent()
     session = agent.session
 
@@ -43,9 +43,13 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
     queue: asyncio.Queue = asyncio.Queue()
-    done_event = threading.Event()
+    main_loop = asyncio.get_running_loop()
 
-    def _run_in_thread():
+    def _put(ev: dict) -> None:
+        """线程安全的 queue 入队（_feed 在子线程 loop 内，queue 属主是主 loop）。"""
+        main_loop.call_soon_threadsafe(queue.put_nowait, ev)
+
+    def _run_in_thread() -> None:
         try:
             from doclens.web_v2.api._chat_emitter import GradioEventEmitter
             from planify.streaming.runner import StreamingAgent
@@ -55,24 +59,18 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
 
             emitter = GradioEventEmitter()
             interrupt = threading.Event()
-
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
             async def _feed():
-                last_seen_text = 0
                 delivered_calls: set[int] = set()
                 delivered_results: set[int] = set()
                 while True:
-                    # 文本增量
-                    cur = emitter.get_full_text()
-                    if len(cur) > last_seen_text:
-                        await queue.put({"type": "token", "text": cur[last_seen_text:]})
-                        last_seen_text = len(cur)
-                    # 工具事件（用游标检测新增 / 新回填）
+                    # 工具事件实时推送（思考过程的工具调用 trace 可见）；
+                    # 正文 token 缓冲（不实时推），done 后用工具结果重写「## 参考资料」再整体推
                     for i, tc in enumerate(emitter.tool_calls):
                         if i not in delivered_calls:
-                            await queue.put({
+                            _put({
                                 "type": "tool_call",
                                 "tool_use_id": tc.get("tool_use_id", ""),
                                 "name": tc.get("name", ""),
@@ -80,7 +78,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                             })
                             delivered_calls.add(i)
                         if "output" in tc and i not in delivered_results:
-                            await queue.put({
+                            _put({
                                 "type": "tool_result",
                                 "tool_use_id": tc.get("tool_use_id", ""),
                                 "name": tc.get("name", ""),
@@ -92,12 +90,27 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     if emitter.done:
                         break
                     await asyncio.sleep(0.05)
-                # done 后：从检索工具结果提取引用 path，发 references 事件
-                # （前端据此渲染可点击的引用卡片，不再依赖 AI 正文「## 参考资料」格式）
-                refs = extract_references(emitter.tool_calls)
-                if refs:
-                    await queue.put({"type": "references", "items": refs})
-                await queue.put(None)  # sentinel
+                # done：用工具结果的真实路径重写「## 参考资料」章节（覆盖 AI 幻觉）→ corrected content
+                from doclens.web_v2.refs_parser import rewrite_references_section
+                from doclens.web_v2.references import normalize_paths
+                result = RoundResult(
+                    text=emitter.get_full_text(),
+                    tool_calls=list(emitter.tool_calls),
+                )
+                tool_refs = extract_references(result.tool_calls)
+                rel_paths = normalize_paths([r["path"] for r in tool_refs], session.session_workdir)
+                compliant, _diagnostics, _refs = evaluate_round(result, session.session_workdir)
+                corrected = (
+                    rewrite_references_section(result.text, rel_paths)
+                    if rel_paths else result.text
+                )
+                logger.info(
+                    "chat done: tools=%d compliant=%s tool_refs=%d",
+                    len(result.tool_calls), compliant, len(tool_refs),
+                )
+                _put({"type": "token", "text": corrected})
+                if not compliant:
+                    _put({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
 
             sa = StreamingAgent(
                 client=session.client,
@@ -118,17 +131,15 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 interrupt_event=interrupt,
             )
             bind_user_interaction_handlers(session.tool_handlers, emitter, get_global_waiter())
-
             loop.run_until_complete(asyncio.gather(
                 sa.run_stream(history, message, session_id or session.session_id),
                 _feed(),
             ))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.exception("chat thread error: %s", e)
-            asyncio.run(queue.put({"type": "error", "detail": str(e)}))
-            asyncio.run(queue.put(None))
+            _put({"type": "error", "detail": str(e)})
         finally:
-            done_event.set()
+            _put(None)  # sentinel
 
     t = threading.Thread(target=_run_in_thread, daemon=True)
     t.start()
@@ -163,8 +174,11 @@ async def chat(req: ChatRequest):
                         "is_error": ev.get("is_error", False),
                         "duration_ms": ev.get("duration_ms"),
                     }, ensure_ascii=False)}
-                elif t == "references":
-                    yield {"event": "references", "data": json.dumps({"items": ev["items"]}, ensure_ascii=False)}
+                elif t == "toast":
+                    yield {"event": "toast", "data": json.dumps({
+                        "level": ev.get("level", "error"),
+                        "detail": ev.get("detail", ""),
+                    }, ensure_ascii=False)}
                 elif t == "error":
                     yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}
             yield {"event": "done", "data": "{}"}
