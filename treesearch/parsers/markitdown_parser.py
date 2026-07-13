@@ -79,11 +79,16 @@ def _extract_pptx_slide_images(pptx_path: str) -> list[list["ImagePart"]]:
                 continue
             try:
                 img = shape.image
+                disp_w = (
+                    round(shape.width / 9525)
+                    if getattr(shape, "width", None) else None
+                )
                 parts.append(
                     ImagePart(
                         blob=img.blob,
                         ext=img.ext or "png",
                         source_ref=f"slide{idx}:{shape.shape_id}",
+                        disp_w=disp_w,
                     )
                 )
             except Exception as e:  # noqa: BLE001
@@ -202,7 +207,7 @@ async def markitdown_to_tree(
                     for p in parts
                     if p.source_ref in refs
                 ]
-                slide_mds.append("\n\n".join(mds) if mds else "")
+                slide_mds.append(" ".join(mds) if mds else "")
             md_content = re.sub(r"!\[[^\]]*\]\(Picture[^)]+\)", "", md_content)
             md_content = _inject_slide_images(md_content, slide_mds)
         except ImportError:

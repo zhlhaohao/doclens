@@ -173,3 +173,43 @@ def test_extract_for_doc_write_failure_no_phantom_seq(tmp_path: Path, monkeypatc
         )
         path, _media = resolved
         assert path.exists(), f"File {path} for {source_ref} does not exist"
+
+
+def test_inline_md_includes_disp_w_in_url(tmp_path: Path):
+    """方案 B：有 disp_w 时，inline_md 的 URL 应含 &dw=<px>。"""
+    store = ImageStore(tmp_path)
+    blob = _png_bytes(b"\xff\x00\x00")
+    parts = [ImagePart(blob=blob, ext="png", source_ref="r1", disp_w=80)]
+    refs = store.extract_for_doc("a.docx", parts)
+    assert "&dw=80" in refs["r1"].inline_md
+
+
+def test_inline_md_omits_dw_when_disp_w_none(tmp_path: Path):
+    """disp_w=None（默认）时 URL 不应含 &dw（兼容旧调用）。"""
+    store = ImageStore(tmp_path)
+    blob = _png_bytes(b"\xff\x00\x00")
+    parts = [ImagePart(blob=blob, ext="png", source_ref="r1")]
+    refs = store.extract_for_doc("a.docx", parts)
+    assert "&dw=" not in refs["r1"].inline_md
+
+
+def test_meta_json_records_disp_w(tmp_path: Path):
+    """方案 B：_meta.json 应记录 disp_w（供调试/未来直出）。"""
+    import json
+    store = ImageStore(tmp_path)
+    blob = _png_bytes(b"\xff\x00\x00")
+    store.extract_for_doc("a.docx", [ImagePart(blob=blob, ext="png", source_ref="r1", disp_w=38)])
+    dh = doc_hash_for("a.docx")
+    meta = json.loads((tmp_path / dh / "_meta.json").read_text(encoding="utf-8"))
+    assert meta["1"]["disp_w"] == 38
+
+
+def test_meta_json_omits_disp_w_when_none(tmp_path: Path):
+    """disp_w=None 时 _meta.json 不应出现 disp_w 键。"""
+    import json
+    store = ImageStore(tmp_path)
+    blob = _png_bytes(b"\xff\x00\x00")
+    store.extract_for_doc("a.docx", [ImagePart(blob=blob, ext="png", source_ref="r1")])
+    dh = doc_hash_for("a.docx")
+    meta = json.loads((tmp_path / dh / "_meta.json").read_text(encoding="utf-8"))
+    assert "disp_w" not in meta["1"]

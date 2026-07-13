@@ -3,6 +3,7 @@ import { fixture } from "@open-wc/testing";
 import { html } from "lit";
 import type { MdViewer } from "../src/components/md-viewer";
 import { MdViewer as MdViewerClass } from "../src/components/md-viewer";
+import { iconWidthStyle, ICON_PX_THRESHOLD } from "../src/components/md-viewer";
 import "../src/components/md-viewer";
 
 describe("<md-viewer>", () => {
@@ -289,5 +290,95 @@ describe("<md-viewer>", () => {
       /\.page-card\s*\{[^}]*border:\s*none/.test(cssText),
       `.page-card should drop border, rely on shadow\n${cssText}`,
     ).toBe(true);
+  });
+});
+
+describe("iconWidthStyle", () => {
+  it("returns null for naturalWidth=0 (broken/unloaded image)", () => {
+    expect(iconWidthStyle(0)).toBeNull();
+  });
+
+  it("returns '{w}px' for small images within threshold", () => {
+    expect(iconWidthStyle(1)).toBe("1px");
+    expect(iconWidthStyle(100)).toBe("100px");
+  });
+
+  it("includes the threshold boundary (<= threshold)", () => {
+    expect(iconWidthStyle(ICON_PX_THRESHOLD)).toBe(`${ICON_PX_THRESHOLD}px`);
+  });
+
+  it("returns null just above threshold", () => {
+    expect(iconWidthStyle(ICON_PX_THRESHOLD + 1)).toBeNull();
+  });
+
+  it("returns null for large images", () => {
+    expect(iconWidthStyle(1000)).toBeNull();
+  });
+});
+
+describe("<md-viewer> icon sizing (_applyIconSizing)", () => {
+  // jsdom 不加载图片：naturalWidth 恒 0、complete 恒 false。
+  // _applyIconSizing 因此走 addEventListener("load") 分支；
+  // 测试用 Object.defineProperty mock naturalWidth 后手动 dispatch load 触发回调。
+
+  function setNaturalWidth(img: HTMLImageElement, w: number): void {
+    Object.defineProperty(img, "naturalWidth", { configurable: true, value: w });
+  }
+
+  async function mountWithImage(md?: string): Promise<MdViewer> {
+    const content = md ?? "![图片 1](/api/preview/asset?path=a.docx&id=1)";
+    const el = await fixture(html`<md-viewer .content=${content}></md-viewer>`) as MdViewer;
+    await el.updateComplete; // updated() 已跑，_applyIconSizing 已为 img 绑 load
+    return el;
+  }
+
+  it("small image (<=threshold) sets style.width = naturalWidth px", async () => {
+    const el = await mountWithImage();
+    const img = el.shadowRoot!.querySelector("img")!;
+    setNaturalWidth(img, 80);
+    img.dispatchEvent(new Event("load"));
+    await el.updateComplete;
+    expect(img.style.width).toBe("80px");
+  });
+
+  it("large image (>threshold) leaves style.width unset (max-width:100% keeps filling)", async () => {
+    const el = await mountWithImage();
+    const img = el.shadowRoot!.querySelector("img")!;
+    setNaturalWidth(img, 1200);
+    img.dispatchEvent(new Event("load"));
+    await el.updateComplete;
+    expect(img.style.width).toBe("");
+  });
+
+  it("broken image (naturalWidth=0) leaves style.width unset", async () => {
+    const el = await mountWithImage();
+    const img = el.shadowRoot!.querySelector("img")!;
+    // jsdom naturalWidth 默认 0，无需 setNaturalWidth
+    img.dispatchEvent(new Event("load"));
+    await el.updateComplete;
+    expect(img.style.width).toBe("");
+  });
+
+  it("方案 B: src 含 &dw (<=threshold) 立即设 width=dw，无需等 load", async () => {
+    const el = await mountWithImage("![图片 1](/api/preview/asset?path=a.docx&id=1&dw=80)");
+    const img = el.shadowRoot!.querySelector("img")!;
+    // dw=80 → updated() 内立即设 width，不依赖 load 事件（消除 lazy 闪烁）
+    expect(img.style.width).toBe("80px");
+  });
+
+  it("方案 B: src &dw > threshold 不设 width（大图继续铺满）", async () => {
+    const el = await mountWithImage("![图片 1](/api/preview/asset?path=a.docx&id=1&dw=800)");
+    const img = el.shadowRoot!.querySelector("img")!;
+    expect(img.style.width).toBe("");
+  });
+
+  it("方案 B: src dw 优先于 naturalWidth（高分辨率 icon 按 dw 显示）", async () => {
+    // PPTX 真实场景：底层 1024px 但文档显示 38px → 有 dw=38 时按 38px 显示
+    const el = await mountWithImage("![图片 1](/api/preview/asset?path=a.pptx&id=1&dw=38)");
+    const img = el.shadowRoot!.querySelector("img")!;
+    setNaturalWidth(img, 1024);            // 底层高分辨率
+    img.dispatchEvent(new Event("load"));  // 即使 load 触发，dw 仍优先
+    await el.updateComplete;
+    expect(img.style.width).toBe("38px");  // 用 dw=38，忽略 naturalWidth=1024
   });
 });
