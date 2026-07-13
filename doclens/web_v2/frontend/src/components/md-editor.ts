@@ -17,47 +17,81 @@ export class MdEditor extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      background: var(--cortex-surface);
+      border-radius: var(--cortex-radius-lg);
+      overflow: hidden;
       font-family: var(--cortex-font-mono);
       color: var(--cortex-text);
     }
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-bottom: 1px solid var(--cortex-border);
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
     .toolbar .path {
       flex: 1;
-      font-size: var(--cortex-fs-sm);
+      min-width: 0;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .toolbar .dirty {
-      color: #d97706;
+      color: var(--cortex-warning);
       font-size: var(--cortex-fs-sm);
       font-weight: 500;
     }
     .toolbar .error-msg {
-      color: #dc2626;
+      color: var(--cortex-danger);
+      background: rgba(220, 38, 38, 0.06);
       font-size: var(--cortex-fs-sm);
+      padding: var(--cortex-space-1) var(--cortex-space-2);
+      border-radius: var(--cortex-radius-sm);
       flex: 1;
     }
+    /* 次级按钮：hairline + radius-sm + muted */
     button {
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
-      padding: 4px 10px;
+      padding: var(--cortex-space-1) var(--cortex-space-3);
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: 4px;
+      color: var(--cortex-text-muted);
+      border-radius: var(--cortex-radius-sm);
       cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    button:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
+      border-color: var(--cortex-text-subtle);
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring);
+    }
+    /* 主按钮：保存 = primary gradient + glow */
     button.save-btn {
-      background: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
       color: #fff;
-      border-color: var(--cortex-primary);
+      border: none;
+      border-radius: var(--cortex-radius-md);
+      box-shadow: var(--cortex-primary-glow);
+    }
+    button.save-btn:hover {
+      opacity: 0.9;
+      background: var(--cortex-primary-gradient);
+      color: #fff;
+    }
+    button.save-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring), var(--cortex-primary-glow);
     }
     .body {
       display: flex;
@@ -65,11 +99,13 @@ export class MdEditor extends LitElement {
       min-height: 0;
       overflow: hidden;
     }
+    /* 行号列（gutter）：surface-muted + subtle + mono + border-right */
     .line-col {
       flex-shrink: 0;
-      padding: 8px 6px 8px 0;
+      padding: var(--cortex-space-3) var(--cortex-space-2);
       text-align: right;
       color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
       line-height: 1.6;
       user-select: none;
@@ -86,12 +122,12 @@ export class MdEditor extends LitElement {
       resize: none;
       border: none;
       outline: none;
-      padding: 8px 12px;
-      font-family: inherit;
+      padding: var(--cortex-space-3) var(--cortex-space-4);
+      font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
       line-height: 1.6;
       background: var(--cortex-surface);
-      color: inherit;
+      color: var(--cortex-text);
       white-space: pre;
       overflow: auto;
     }
