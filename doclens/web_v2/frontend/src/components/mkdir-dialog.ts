@@ -17,12 +17,19 @@ export class MkdirDialog extends LitElement {
     input {
       width: 100%; padding: 8px;
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-base);
       box-sizing: border-box;
       font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--cortex-primary);
+      box-shadow: var(--cortex-focus-ring);
     }
     input.invalid { border-color: var(--cortex-danger); }
+    input.invalid:focus { box-shadow: var(--cortex-focus-ring-danger); }
     .err {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);
@@ -42,9 +49,11 @@ export class MkdirDialog extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     button.primary {
-      background: var(--cortex-primary);
-      color: white;
-      border-color: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
+      color: #fff;
+      border: none;
+      border-radius: var(--cortex-radius-lg);
+      box-shadow: var(--cortex-primary-glow);
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     @media (max-width: 1023px) {

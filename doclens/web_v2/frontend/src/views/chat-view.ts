@@ -163,7 +163,7 @@ export class ChatView extends LitElement {
     .focus-main .splitter {
       flex: 0 0 4px;
       cursor: col-resize;
-      background: var(--cortex-border);
+      background: var(--cortex-border-muted);
       transition: background 0.15s;
     }
     .focus-main .splitter:hover,
@@ -187,22 +187,36 @@ export class ChatView extends LitElement {
       top: 6px;
       right: 8px;
       z-index: 2;
-      border: none;
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
       cursor: pointer;
       font-size: 14px;
       line-height: 1;
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
+      padding: 0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .focus-main .preview-close:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
     }
     .focus-main .not-indexed-hint {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--cortex-text-subtle);
-      padding: 24px;
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-md);
+      color: var(--cortex-text-muted);
+      padding: var(--cortex-space-6);
+      margin: var(--cortex-space-3);
       text-align: center;
     }
     /* 移动端：桌面 splitter / preview-pane-wrap 隐藏 */
@@ -217,7 +231,7 @@ export class ChatView extends LitElement {
     .preview-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-surface);
       display: flex;
       flex-direction: column;
       z-index: 10;

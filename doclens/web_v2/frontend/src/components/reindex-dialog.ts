@@ -27,13 +27,13 @@ export class ReindexDialog extends LitElement {
       background: var(--cortex-surface); cursor: pointer;
       border-radius: var(--cortex-radius-sm); font-size: var(--cortex-fs-base);
     }
-    button.primary { background: var(--cortex-primary); color: #fff; border-color: var(--cortex-primary); }
-    button.warn { background: var(--cortex-danger); color: #fff; border-color: var(--cortex-danger); }
+    button.primary { background: var(--cortex-primary-gradient); color: #fff; border: none; border-radius: var(--cortex-radius-lg); box-shadow: var(--cortex-primary-glow); }
+    button.warn { background: var(--cortex-danger); color: #fff; border: none; border-radius: var(--cortex-radius-lg); }
     dialog {
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-lg);
+      border-radius: var(--cortex-radius-xl);
       padding: 0; background: var(--cortex-surface);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+      box-shadow: var(--cortex-shadow-lg);
       min-width: 360px; max-width: 90vw;
     }
     dialog::backdrop { background: rgba(0,0,0,0.3); }

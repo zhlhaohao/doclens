@@ -7,7 +7,7 @@ import "./tree-node";
 export class MoveDialog extends LitElement {
   static styles = css`
     :host { display: block; min-width: 360px; }
-    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); }
+    h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .tree {
       max-height: 320px; overflow-y: auto;
       border: 1px solid var(--cortex-border);
@@ -17,8 +17,10 @@ export class MoveDialog extends LitElement {
     }
     .selected {
       color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       margin-bottom: var(--cortex-space-2);
+      word-break: break-all;
     }
     .actions {
       display: flex; justify-content: flex-end;
@@ -33,9 +35,11 @@ export class MoveDialog extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     button.primary {
-      background: var(--cortex-primary);
-      color: white;
-      border-color: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
+      color: #fff;
+      border: none;
+      border-radius: var(--cortex-radius-lg);
+      box-shadow: var(--cortex-primary-glow);
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {

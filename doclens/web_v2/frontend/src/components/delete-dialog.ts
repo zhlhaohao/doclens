@@ -12,16 +12,18 @@ export class DeleteDialog extends LitElement {
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; }
     .warn {
       padding: var(--cortex-space-3);
-      background: #FEF3C7;
-      border: 1px solid #FCD34D;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-left: 3px solid var(--cortex-warning);
       border-radius: var(--cortex-radius-md);
-      color: #92400E;
+      color: var(--cortex-text);
       font-size: var(--cortex-fs-sm);
       margin-bottom: var(--cortex-space-3);
     }
     .stats {
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text);
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font-mono);
       line-height: 1.6;
     }
     .stats ul { list-style: none; padding: 0; margin: var(--cortex-space-2) 0; }
@@ -41,9 +43,11 @@ export class DeleteDialog extends LitElement {
     }
     button.danger {
       background: var(--cortex-danger);
-      color: white;
-      border-color: var(--cortex-danger);
+      color: #fff;
+      border: none;
+      border-radius: var(--cortex-radius-lg);
     }
+    button.danger:hover:not(:disabled) { filter: brightness(1.05); }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {
       display: flex; gap: var(--cortex-space-2); align-items: center;

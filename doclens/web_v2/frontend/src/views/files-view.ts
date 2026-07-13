@@ -56,7 +56,7 @@ export class FilesView extends LitElement {
     }
     .splitter {
       cursor: col-resize;
-      background: var(--cortex-border);
+      background: var(--cortex-border-muted);
       transition: background 0.15s;
       min-height: 0;
     }
@@ -102,6 +102,9 @@ export class FilesView extends LitElement {
       align-items: center;
       justify-content: center;
       padding: var(--cortex-space-8);
+      margin: var(--cortex-space-3);
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-lg);
       color: var(--cortex-text-subtle);
       text-align: center;
       font-size: var(--cortex-fs-base);
@@ -111,10 +114,10 @@ export class FilesView extends LitElement {
     }
     dialog {
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-lg);
+      border-radius: var(--cortex-radius-xl);
       padding: 0;
       background: var(--cortex-surface);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+      box-shadow: var(--cortex-shadow-lg);
       min-width: 360px;
       max-width: 90vw;
     }
@@ -138,7 +141,7 @@ export class FilesView extends LitElement {
       color: var(--cortex-surface);
       border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-sm);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: var(--cortex-shadow-lg);
       z-index: 10000;
       cursor: pointer;
     }
