@@ -10,7 +10,7 @@ export class ChatMessageEl extends LitElement {
       display: block;
       max-width: 78%;
     }
-    :host([role="user"]) { align-self: flex-end; }
+    :host([role="user"]) { align-self: flex-end; max-width: 100%; }
     :host([role="assistant"]) { align-self: flex-start; max-width: 100%; }
     .bubble {
       padding: 10px 14px;
@@ -34,6 +34,7 @@ export class ChatMessageEl extends LitElement {
          否则短消息气泡偏高（≈44px → ≈35px）。AI 气泡保留宽松值以适配多行 markdown。 */
       padding: 7px 12px;
       line-height: 1.4;
+      justify-content: flex-end;  /* 全宽气泡内文字保持右对齐 */
     }
     /* 用户气泡下方的小时间戳（17:08 风格） */
     .ts {
