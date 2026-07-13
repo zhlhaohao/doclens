@@ -21,24 +21,30 @@ export class FileRow extends LitElement {
       align-items: center;
       padding: 6px var(--cortex-space-3);
       cursor: pointer;
-      border-radius: var(--cortex-radius-sm);
-      font-size: var(--cortex-fs-base);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      transition: background 0.1s;
+      font-size: var(--cortex-fs-sm);
     }
     .row:hover { background: var(--cortex-surface-muted); }
     .row.active { background: var(--cortex-primary-soft); }
     .checkbox { display: flex; align-items: center; justify-content: center; }
+    .checkbox input { accent-color: var(--cortex-primary); }
     .cell-icon { font-size: 14px; }
-    .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .name {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: var(--cortex-text); font-size: var(--cortex-fs-sm);
+    }
     .size, .time, .cell-type, .cell-indexed {
       color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
     .badge {
       display: inline-block;
       padding: 1px 6px;
-      font-size: 10px;
+      font-size: var(--cortex-fs-xs);
       border-radius: var(--cortex-radius-sm);
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
@@ -49,12 +55,14 @@ export class FileRow extends LitElement {
       justify-content: center;
       width: 18px;
       height: 18px;
-      border-radius: 50%;
-      font-size: 10px;
+      border-radius: var(--cortex-radius-sm);
+      font-size: var(--cortex-fs-xs);
       font-weight: 700;
       line-height: 1;
       user-select: none;
-      font-family: var(--cortex-font-sans);
+      font-family: var(--cortex-font-mono);
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text-muted);
     }
     @media (max-width: 1023px) {
       .row {

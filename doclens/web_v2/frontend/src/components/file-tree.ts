@@ -14,9 +14,10 @@ export class FileTree extends LitElement {
       overflow-y: auto;
     }
     .header {
-      padding: var(--cortex-space-3);
+      padding: var(--cortex-space-3) var(--cortex-space-4);
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
+      font-weight: 600;
+      color: var(--cortex-text);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       position: sticky; top: 0;

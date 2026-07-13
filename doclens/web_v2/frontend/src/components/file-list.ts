@@ -19,13 +19,18 @@ export class FileList extends LitElement {
     }
     .breadcrumb {
       display: flex; align-items: center; gap: var(--cortex-space-2);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
-    .breadcrumb .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .breadcrumb .path {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+    }
     .up-btn {
       padding: 2px 8px;
       font-size: var(--cortex-fs-sm);
@@ -40,8 +45,9 @@ export class FileList extends LitElement {
     .up-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .toolbar {
       display: flex; gap: var(--cortex-space-2);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-bottom: 1px solid var(--cortex-border);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      background: var(--cortex-surface);
+      border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
       flex-wrap: wrap;
     }
@@ -52,11 +58,18 @@ export class FileList extends LitElement {
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-md);
     }
-    .toolbar button:hover:not(:disabled) { background: var(--cortex-surface-muted); }
+    .toolbar button:hover:not(:disabled) {
+      background: var(--cortex-surface-muted);
+      border-color: var(--cortex-text-subtle);
+    }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
     .toolbar button.danger { color: var(--cortex-danger); }
+    .toolbar button.danger:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.06);
+      border-color: var(--cortex-danger);
+    }
     .mobile-header {
       display: flex;
       align-items: center;
@@ -102,7 +115,7 @@ export class FileList extends LitElement {
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      box-shadow: var(--cortex-shadow-lg);
       z-index: 10;
       padding: 4px 0;
     }
@@ -138,9 +151,11 @@ export class FileList extends LitElement {
         var(--col-7, 80px);
       gap: var(--cortex-space-2);
       padding: 6px var(--cortex-space-3);
-      font-size: var(--cortex-fs-sm);
+      background: var(--cortex-surface-muted);
+      font-size: var(--cortex-fs-xs);
+      font-weight: 500;
       color: var(--cortex-text-muted);
-      border-bottom: 1px solid var(--cortex-border-muted);
+      border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
     }
     @media (max-width: 1023px) {
@@ -194,7 +209,7 @@ export class FileList extends LitElement {
     .header-row .cell-type {
       text-align: center;
       color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
+      font-size: var(--cortex-fs-xs);
     }
     .rows { flex: 1; overflow-y: auto; }
     .empty {
