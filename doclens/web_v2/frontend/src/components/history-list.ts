@@ -25,11 +25,11 @@ export class HistoryList extends LitElement {
       margin: var(--cortex-space-2) 0 var(--cortex-space-1) 0;
     }
     .title {
-      font-size: var(--cortex-fs-xs);
+      font-size: var(--cortex-fs-sm);
       text-transform: uppercase;
       letter-spacing: 0.6px;
-      color: var(--cortex-text-subtle);
-      font-weight: 600;
+      color: var(--cortex-text-muted);
+      font-weight: 500;
     }
     .clear-btn {
       background: transparent;
@@ -38,12 +38,12 @@ export class HistoryList extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-subtle);
       cursor: pointer;
-      border-radius: 4px;
+      border-radius: var(--cortex-radius-sm);
       transition: color 0.15s, background 0.15s;
     }
     .clear-btn:hover {
-      color: #dc2626;
-      background: rgba(220, 38, 38, 0.08);
+      color: var(--cortex-danger);
+      background: var(--cortex-surface-muted);
     }
     .clear-btn:disabled {
       color: var(--cortex-text-subtle);
