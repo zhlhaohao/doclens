@@ -10,7 +10,9 @@ export class ActivityBar extends LitElement {
       flex-direction: column;
       align-items: center;
       width: var(--cortex-activity-bar-width);
-      background: var(--cortex-border-muted);
+      background-color: var(--cortex-border-muted);
+      background-image: radial-gradient(circle, var(--cortex-border) 0.7px, transparent 1px);
+      background-size: 10px 10px;
       color: var(--cortex-text-muted);
       border-right: 1px solid var(--cortex-border);
       padding: var(--cortex-space-4) 0;
