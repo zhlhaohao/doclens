@@ -40,6 +40,20 @@ function escapeHtml(s: string): string {
   })[c]!);
 }
 
+/** 底层像素 ≤ 此值的图片视为 icon，按原始尺寸显示（不放大）。
+ *  依据：样本扫描（6 docx / 90 图）显示 icon 底层像素普遍 ≤400，
+ *  大图通常 1000+，500 是干净断层。 */
+export const ICON_PX_THRESHOLD = 500;
+
+/** 根据图片 naturalWidth 返回应设置的 width 样式值；无需调整时返回 null。
+ *  抽为纯函数便于单元测试。 */
+export function iconWidthStyle(naturalWidth: number): string | null {
+  if (naturalWidth > 0 && naturalWidth <= ICON_PX_THRESHOLD) {
+    return `${naturalWidth}px`;
+  }
+  return null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const blockRenderer: any = {
   heading(token: any) {
@@ -167,13 +181,16 @@ export class MdViewer extends LitElement {
     :host tbody tr:nth-child(even) {
       background: var(--cortex-surface-muted);
     }
-    /* 图片自适应：最大宽度不超出容器，圆角 + 块级居中 */
+    /* 图片：inline-block 流式排列——小图（icon，设了固定 width）从左到右排成行，
+       大图（max-width:100%）自然占满一行。连续图片由后端用空格 join 进同一段落，
+       渲染后成为同 <p> 内的 inline <img>，从而横向流动换行。 */
     :host img {
       max-width: 100%;
       height: auto;
       border-radius: 4px;
-      margin: 0.5em 0;
-      display: block;
+      margin: 0 8px 8px 0;
+      display: inline-block;
+      vertical-align: middle;
     }
     /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
     .md-body {
@@ -263,9 +280,53 @@ export class MdViewer extends LitElement {
     if (changedProps.has("content") || changedProps.has("keyword")) {
       this._highlightKeyword();
     }
+    if (changedProps.has("content") || changedProps.has("pages")) {
+      this._applyIconSizing();
+    }
     if (changedProps.has("line") || changedProps.has("content")) {
       this._locateAndHighlight();
     }
+  }
+
+  /** 从图片 URL 的 dw 查询参数读显示宽（px），无则返回 null。
+   *  方案 B：后端把文档内显示宽编进 src（&dw=<px>），前端据此立即布局，
+   *  无需等图片加载即可判定 icon（消除 lazy 闪烁）。 */
+  private _dispWidthFromSrc(src: string): number | null {
+    try {
+      const dw = new URL(src, window.location.href).searchParams.get("dw");
+      if (!dw) return null;
+      const n = Number(dw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** icon 按文档显示尺寸（dw）或底层像素（naturalWidth）显示，不被 max-width:100% 拉伸。
+   *
+   *  优先用 src 的 dw 查询参数（方案 B：后端注入的显示宽，准确、立即布局无闪烁）；
+   *  无 dw 时退回 naturalWidth（方案 A 兜底，覆盖旧索引，需等图片加载）。
+   *  ≤阈值的设 style.width 固定原尺寸；大图不设 width，继续 max-width:100% 铺满。 */
+  private _applyIconSizing() {
+    const imgs = this.shadowRoot!.querySelectorAll("img");
+    imgs.forEach((img) => {
+      const dw = this._dispWidthFromSrc(img.src);
+      if (dw !== null) {
+        const style = iconWidthStyle(dw);
+        if (style) img.style.width = style;
+        return;
+      }
+      const apply = () => {
+        try {
+          const style = iconWidthStyle(img.naturalWidth);
+          if (style) img.style.width = style;
+        } catch {
+          // naturalWidth 读取异常（同源 /api/preview/asset 场景理论上不会触发）：兜底不设
+        }
+      };
+      if (img.complete && img.naturalWidth > 0) apply();
+      else img.addEventListener("load", apply, { once: true });
+    });
   }
 
   private _locateAndHighlight() {

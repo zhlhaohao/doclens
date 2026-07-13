@@ -82,12 +82,20 @@ def _extract_pdf_page_images(pdf_path: str) -> list[list]:
             parts: list = []
             for ordinal, img_info in enumerate(page.get_images(full=True)):
                 xref = img_info[0]
+                disp_w = None
+                try:
+                    rects = page.get_image_rects(xref)
+                    if rects:
+                        disp_w = round(rects[0].width * 96 / 72)
+                except Exception:  # noqa: BLE001
+                    pass
                 try:
                     img_dict = doc.extract_image(xref)
                     parts.append(ImagePart(
                         blob=img_dict["image"],
                         ext=(img_dict.get("ext") or "png").lower().lstrip("."),
                         source_ref=f"page{page_idx}:{ordinal}",
+                        disp_w=disp_w,
                     ))
                 except Exception as e:  # noqa: BLE001
                     logger.warning("skip pdf image page%d xref%s: %s", page_idx, xref, e)
@@ -351,8 +359,8 @@ async def pdf_to_tree(
             all_parts = [p for parts in page_parts for p in parts]
             refs = image_store.extract_for_doc(rel_path, all_parts) if all_parts else {}
             page_image_mds = [
-                "\n\n".join(refs[p.source_ref].inline_md
-                            for p in parts if p.source_ref in refs)
+                " ".join(refs[p.source_ref].inline_md
+                         for p in parts if p.source_ref in refs)
                 or ""
                 for parts in page_parts
             ]

@@ -42,10 +42,12 @@ class ImagePart:
         blob: 图片二进制。
         ext: 扩展名（不含点，如 "png"）。
         source_ref: 溯源键，docx 用 rId，pptx 用 "slide{idx}:{shape_id}"。
+        disp_w: 文档内显示宽（px），供前端 icon 判定；None=未知（前端退回 naturalWidth）。
     """
     blob: bytes
     ext: str
     source_ref: str
+    disp_w: int | None = None
 
 
 @dataclass(frozen=True)
@@ -64,8 +66,10 @@ def _normalize_ext(ext: str) -> str:
     return (ext or "").lower().lstrip(".")
 
 
-def _inline_md(seq: int, rel_path: str) -> str:
+def _inline_md(seq: int, rel_path: str, disp_w: int | None = None) -> str:
     url = f"/api/preview/asset?path={quote(rel_path, safe='')}&id={seq}"
+    if disp_w is not None:
+        url += f"&dw={disp_w}"
     return f"![图片 {seq}]({url})"
 
 
@@ -122,13 +126,16 @@ class ImageStore:
                 except OSError as e:
                     logger.warning("Failed to write image %s: %s", fname, e)
                     continue
-                meta[str(s)] = {
+                entry = {
                     "sha256": sha,
                     "media_type": _EXT_TO_MEDIA.get(ext, "application/octet-stream"),
                     "filename": fname,
                 }
+                if part.disp_w is not None:
+                    entry["disp_w"] = part.disp_w
+                meta[str(s)] = entry
                 blob_to_seq[sha] = s
-            refs[part.source_ref] = ImageRef(seq=s, inline_md=_inline_md(s, rel_path))
+            refs[part.source_ref] = ImageRef(seq=s, inline_md=_inline_md(s, rel_path, part.disp_w))
 
         self._write_meta(doc_dir, meta)
         return refs
