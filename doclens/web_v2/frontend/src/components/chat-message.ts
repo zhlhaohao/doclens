@@ -52,6 +52,7 @@ export class ChatMessageEl extends LitElement {
       border: 1px solid var(--cortex-chat-bubble-ai-border);
       border-bottom-left-radius: 6px;
       width: 100%;
+      box-sizing: border-box;  /* outer 宽度计入 padding+border，不溢出 host */
     }
     /* assistant 回复的 markdown 渲染（紧凑气泡风格） */
     .md-body > :first-child { margin-top: 0; }
