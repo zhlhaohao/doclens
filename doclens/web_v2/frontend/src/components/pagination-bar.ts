@@ -27,8 +27,10 @@ export class PaginationBar extends LitElement {
       color: var(--cortex-text);
     }
     .meta {
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
       text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
     }
     .pages {
       display: flex;
@@ -46,11 +48,12 @@ export class PaginationBar extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
-      border-radius: 4px;
+      border-radius: var(--cortex-radius-md);
       cursor: pointer;
     }
     button:hover:not(:disabled) {
       background: var(--cortex-surface-muted);
+      border-color: var(--cortex-text-subtle);
     }
     button:disabled {
       opacity: 0.4;
@@ -58,7 +61,7 @@ export class PaginationBar extends LitElement {
     }
     button.current {
       background: var(--cortex-primary);
-      color: white;
+      color: #fff;
       border-color: var(--cortex-primary);
     }
     .ellipsis {

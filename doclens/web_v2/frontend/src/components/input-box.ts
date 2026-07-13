@@ -22,14 +22,15 @@ export class InputBox extends LitElement {
     }
     .wrapper:focus-within {
       border-color: var(--cortex-primary);
-      background: #FFFFFF;
-      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+      background: var(--cortex-surface);
+      box-shadow: var(--cortex-focus-ring);
     }
     input {
       flex: 1;
       border: none;
       background: transparent;
       outline: none;
+      border-radius: var(--cortex-radius-md);
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
@@ -46,6 +47,7 @@ export class InputBox extends LitElement {
       border: none;
       background: transparent;
       outline: none;
+      border-radius: var(--cortex-radius-md);
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
@@ -76,7 +78,7 @@ export class InputBox extends LitElement {
       right: 6px;
       top: 50%;
       transform: translateY(-50%);
-      background: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
       color: #fff;
       border: none;
       border-radius: var(--cortex-radius-lg);
@@ -84,16 +86,17 @@ export class InputBox extends LitElement {
       height: calc(var(--min-h) - 12px);
       padding: 0 14px;
       font-size: var(--cortex-fs-md);
+      font-weight: 500;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 4px;
-      box-shadow: 0 2px 6px rgba(13, 148, 136, 0.28);
-      transition: background 0.15s, transform 0.1s;
+      box-shadow: var(--cortex-primary-glow);
+      transition: filter 0.15s, transform 0.1s;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-    button:hover:not(:disabled) { background: var(--cortex-primary-hover); }
+    button:hover:not(:disabled) { filter: brightness(1.05); }
     button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
     /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
     .actions.split {
@@ -110,6 +113,8 @@ export class InputBox extends LitElement {
       right: auto;
       transform: none;
       border-radius: var(--cortex-radius-lg) 0 0 var(--cortex-radius-lg);
+      /* 分裂按钮：primary 与 caret 拼成单一控件，必须共享同一 elevation；
+         抑制主按钮的 glow，避免左半 "漂浮" 而右半扁平的不对称视觉。 */
       box-shadow: none;
     }
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
@@ -118,11 +123,11 @@ export class InputBox extends LitElement {
       top: auto;
       right: auto;
       transform: none;
-      background: var(--cortex-primary);
-      color: #fff;
-      border: none;
-      border-left: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 0 var(--cortex-radius-lg) var(--cortex-radius-lg) 0;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border: 1px solid var(--cortex-border);
+      border-radius: 0 var(--cortex-radius-md) var(--cortex-radius-md) 0;
+      box-shadow: none;
       height: calc(var(--min-h) - 12px);
       min-width: 28px;
       padding: 0 10px;
@@ -132,7 +137,7 @@ export class InputBox extends LitElement {
       align-items: center;
       justify-content: center;
     }
-    .caret:hover:not(:disabled) { background: var(--cortex-primary-hover); }
+    .caret:hover:not(:disabled) { background: var(--cortex-surface-muted); filter: none; }
     .caret:disabled { opacity: 0.5; cursor: not-allowed; }
     .menu {
       position: absolute;
@@ -144,7 +149,7 @@ export class InputBox extends LitElement {
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      box-shadow: var(--cortex-shadow-lg);
       overflow: hidden;
     }
     .menu-item {
@@ -158,6 +163,8 @@ export class InputBox extends LitElement {
     .menu-item:hover { background: var(--cortex-surface-muted); }
     .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; white-space: nowrap; }
     .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); white-space: nowrap; }
+    .menu-item.active { background: var(--cortex-primary-soft); }
+    .menu-item.active:hover { background: var(--cortex-primary-soft); }
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
       :host { --min-h: 44px; }
