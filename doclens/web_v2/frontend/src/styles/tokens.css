@@ -1,15 +1,19 @@
-/* Cortex 设计 tokens（与 specs/search_page_spec.md Bento Grid 风格对齐） */
+/* Cortex 设计 tokens · SaaS Boutique（Electric Blue）
+ * 真相源：frontend-spec/design-system/MASTER.md */
 :root {
-  /* 主色 */
-  --cortex-primary: #0D9488;        /* teal-600 */
-  --cortex-primary-hover: #0F766E;
-  --cortex-primary-soft: #F0FDFA;
+  /* 主色 · Electric Blue */
+  --cortex-primary: #0052FF;
+  --cortex-primary-hover: #003ECC;
+  --cortex-primary-2: #4D7CFF;
+  --cortex-primary-soft: #EFF4FF;
+  --cortex-primary-gradient: linear-gradient(135deg, #0052FF 0%, #4D7CFF 100%);
+  --cortex-primary-glow: 0 4px 14px rgba(0, 82, 255, 0.25);
 
-  /* 中性色 */
-  --cortex-bg: #F5F5F7;
+  /* 中性色 · Slate */
+  --cortex-bg: #FAFAFA;
   --cortex-surface: #FFFFFF;
-  --cortex-surface-muted: #FAFAFA;
-  --cortex-border: #E4E4E7;
+  --cortex-surface-muted: #F8FAFC;
+  --cortex-border: #E2E8F0;
   --cortex-border-muted: #F1F5F9;
 
   /* 文字 */
@@ -17,22 +21,22 @@
   --cortex-text-muted: #64748B;
   --cortex-text-subtle: #94A3B8;
 
-  /* 状态 */
+  /* 状态色 */
   --cortex-warning: #F59E0B;
   --cortex-danger: #DC2626;
   --cortex-success: #10B981;
 
-  /* 聊天页专用（与示例 ChatViewEnhanced 风格对齐） */
-  --cortex-chat-bg: #F0F2F9;                  /* 页面背景：极浅薰衣草灰 */
-  --cortex-chat-bubble-user: #D4F5E8;         /* 用户气泡：薄荷绿 */
-  --cortex-chat-bubble-user-border: #B8EBD2;  /* 用户气泡：边框更饱和的薄荷绿 */
-  --cortex-chat-bubble-user-text: #0F172A;    /* 用户气泡：文字深色 */
-  --cortex-chat-bubble-ai: #FFFFFF;           /* AI 气泡：白 */
-  --cortex-chat-bubble-ai-border: #ECEEF3;    /* AI 气泡：极浅边框 */
-  --cortex-chat-section: #0D9488;             /* 结构化小节标题：与 primary 同色 */
-  --cortex-chat-input-bg: #E8F7F2;            /* 输入框淡薄荷背景 */
-  --cortex-chat-input-border: #9FE0BF;        /* 输入框边框：聚焦时更鲜绿 */
-  --cortex-chat-footer: #9CA3AF;              /* 页脚免责声明文字 */
+  /* Chat 专用（SaaS Boutique） */
+  --cortex-chat-bg: #F8FAFC;
+  --cortex-chat-bubble-user: #0052FF;
+  --cortex-chat-bubble-user-border: #003ECC;
+  --cortex-chat-bubble-user-text: #FFFFFF;
+  --cortex-chat-bubble-ai: #FFFFFF;
+  --cortex-chat-bubble-ai-border: #E2E8F0;
+  --cortex-chat-section: #0052FF;
+  --cortex-chat-input-bg: #FFFFFF;
+  --cortex-chat-input-border: #E2E8F0;
+  --cortex-chat-footer: #94A3B8;
 
   /* 间距（4px 基线） */
   --cortex-space-1: 4px;
@@ -42,16 +46,26 @@
   --cortex-space-6: 24px;
   --cortex-space-8: 32px;
 
-  /* 圆角 */
-  --cortex-radius-sm: 4px;
-  --cortex-radius-md: 8px;
-  --cortex-radius-lg: 12px;
+  /* 圆角（圆润现代） */
+  --cortex-radius-sm: 6px;
+  --cortex-radius-md: 10px;
+  --cortex-radius-lg: 16px;
+  --cortex-radius-xl: 20px;
+
+  /* 阴影（双层精致） */
+  --cortex-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --cortex-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --cortex-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+
+  /* Focus ring */
+  --cortex-focus-ring: 0 0 0 3px rgba(0, 82, 255, 0.18);
+  --cortex-focus-ring-danger: 0 0 0 3px rgba(220, 38, 38, 0.18);
 
   /* 字体 */
-  --cortex-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --cortex-font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --cortex-font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
 
-  /* 字号（移动端默认值；桌面端在 breakpoints.css 中微调） */
+  /* 字号（移动默认；桌面 breakpoints.css 缩小 ~1px） */
   --cortex-fs-xs: 12px;
   --cortex-fs-sm: 13px;
   --cortex-fs-base: 14px;
@@ -59,10 +73,8 @@
   --cortex-fs-lg: 17px;
   --cortex-fs-xl: 30px;
 
-  /* Activity Bar 宽度 */
+  /* 布局尺寸 */
   --cortex-activity-bar-width: 48px;
-  /* Tab Bar 高度（移动） */
   --cortex-tab-bar-height: 44px;
-  /* 触控目标 */
   --cortex-touch-target: 44px;
 }
