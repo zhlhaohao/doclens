@@ -7,18 +7,19 @@ export class DropZone extends LitElement {
     :host { display: contents; }
     .overlay {
       position: fixed; inset: 0;
-      background: rgba(13, 148, 136, 0.15);
-      border: 4px dashed var(--cortex-primary);
+      background: rgba(0, 82, 255, 0.05);
+      border: 2px dashed var(--cortex-primary);
+      border-radius: var(--cortex-radius-lg);
       display: none;
       align-items: center;
       justify-content: center;
       flex-direction: column;
       gap: var(--cortex-space-2);
       pointer-events: none;
-      z-index: 9999;
+      z-index: 1000;
       font-size: var(--cortex-fs-lg);
       color: var(--cortex-primary);
-      font-weight: 500;
+      font-weight: 600;
     }
     .overlay.active { display: flex; }
     @media (max-width: 1023px) {

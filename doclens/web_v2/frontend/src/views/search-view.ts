@@ -92,7 +92,7 @@ export class SearchView extends LitElement {
     .splitter {
       flex: 0 0 4px;
       cursor: col-resize;
-      background: var(--cortex-border);
+      background: var(--cortex-border-muted);
       transition: background 0.15s;
     }
     .splitter:hover, .splitter:active { background: var(--cortex-primary); }
@@ -113,8 +113,10 @@ export class SearchView extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--cortex-text-subtle);
-      padding: 24px;
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-md);
+      color: var(--cortex-text-muted);
+      padding: var(--cortex-space-6);
       text-align: center;
     }
     /* 移动端（<1024px）：隐藏桌面端独占的预览栏，预览由 detail-overlay 全屏覆盖 */
