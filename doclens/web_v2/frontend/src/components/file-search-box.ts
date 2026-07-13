@@ -11,21 +11,26 @@ export class FileSearchBox extends LitElement {
       display: block;
       padding: var(--cortex-space-2) var(--cortex-space-3);
       border-bottom: 1px solid var(--cortex-border-muted);
+      background: var(--cortex-surface);
       flex-shrink: 0;
     }
     .box {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: 4px 8px;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-md);
       background: var(--cortex-surface);
     }
     .box:focus-within {
       border-color: var(--cortex-primary);
+      box-shadow: var(--cortex-focus-ring);
     }
-    .icon { opacity: 0.6; font-size: 13px; }
+    .box:has(input:disabled) {
+      background: var(--cortex-surface-muted);
+    }
+    .icon { color: var(--cortex-text-subtle); font-size: 13px; }
     input {
       flex: 1;
       min-width: 0;
@@ -37,10 +42,11 @@ export class FileSearchBox extends LitElement {
       font-family: var(--cortex-font);
     }
     input::placeholder { color: var(--cortex-text-subtle); }
+    input:disabled { opacity: 0.5; cursor: not-allowed; }
     button.clear {
       border: none;
       background: transparent;
-      color: var(--cortex-text-muted);
+      color: var(--cortex-text-subtle);
       cursor: pointer;
       font-size: 14px;
       line-height: 1;

@@ -7,10 +7,10 @@ export class TreeNode extends LitElement {
   static styles = css`
     :host { display: block; }
     .row {
-      display: flex; align-items: center; gap: var(--cortex-space-1);
-      padding: 4px 8px; cursor: pointer;
+      display: flex; align-items: center; gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-3); cursor: pointer;
       border-radius: var(--cortex-radius-sm);
-      font-size: var(--cortex-fs-base); color: var(--cortex-text);
+      font-size: var(--cortex-fs-sm); color: var(--cortex-text);
       user-select: none;
     }
     .row:hover { background: var(--cortex-surface-muted); }
@@ -18,13 +18,16 @@ export class TreeNode extends LitElement {
     .arrow {
       width: 16px; height: 16px;
       display: inline-flex; align-items: center; justify-content: center;
-      color: var(--cortex-text-subtle); transition: transform 0.1s;
+      color: var(--cortex-text-subtle); transition: transform 0.15s;
       font-size: 10px;
     }
     .arrow.expanded { transform: rotate(90deg); }
     .arrow.leaf { visibility: hidden; }
     .icon { font-size: 14px; }
-    .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .label {
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm);
+    }
     .children { padding-left: 16px; }
   `;
 

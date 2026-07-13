@@ -59,8 +59,9 @@ export class FileSearchResults extends LitElement {
     }
     .header-bar {
       padding: var(--cortex-space-2) var(--cortex-space-3);
-      color: var(--cortex-primary);
-      font-size: var(--cortex-fs-sm);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      font-size: var(--cortex-fs-xs);
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
@@ -69,7 +70,9 @@ export class FileSearchResults extends LitElement {
       grid-template-columns: 1fr auto;
       gap: var(--cortex-space-2);
       padding: 6px var(--cortex-space-3);
-      font-size: var(--cortex-fs-sm);
+      background: var(--cortex-surface-muted);
+      font-size: var(--cortex-fs-xs);
+      font-weight: 500;
       color: var(--cortex-text-muted);
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
@@ -83,10 +86,10 @@ export class FileSearchResults extends LitElement {
       grid-template-columns: 1fr auto;
       gap: var(--cortex-space-2);
       align-items: center;
-      padding: 6px var(--cortex-space-3);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       cursor: pointer;
       border-bottom: 1px solid var(--cortex-border-muted);
-      font-size: var(--cortex-fs-base);
+      font-size: var(--cortex-fs-sm);
     }
     .row:hover { background: var(--cortex-surface-muted); }
     .row.active { background: var(--cortex-primary-soft); }
@@ -104,22 +107,24 @@ export class FileSearchResults extends LitElement {
       color: var(--cortex-text);
     }
     .dir {
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .meta {
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
       text-align: right;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
     mark {
-      background: var(--cortex-warning-soft, #fff3a8);
-      color: var(--cortex-warning-fg, #1a1a1a);
+      background: rgba(0, 82, 255, 0.15);
+      color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
     }
@@ -129,17 +134,17 @@ export class FileSearchResults extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: var(--cortex-space-8);
+      padding: var(--cortex-space-8) var(--cortex-space-4);
       color: var(--cortex-text-subtle);
       text-align: center;
       gap: var(--cortex-space-2);
     }
     .empty .icon-big { font-size: 32px; opacity: 0.5; }
     .overflow-hint {
-      padding: 6px var(--cortex-space-3);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       background: var(--cortex-surface-muted);
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      font-size: var(--cortex-fs-xs);
       text-align: center;
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
