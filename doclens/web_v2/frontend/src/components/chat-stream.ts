@@ -8,10 +8,11 @@ export class ChatStream extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: var(--cortex-space-4);
       flex: 1;
-      padding: 20px 18px 12px;
+      padding: var(--cortex-space-4);
       overflow-y: auto;
+      background: var(--cortex-chat-bg);
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -22,7 +23,8 @@ export class ChatStream extends LitElement {
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
       text-align: center;
-      margin-top: var(--cortex-space-8);
+      align-self: center;
+      margin: auto;
     }
   `;
 

@@ -14,13 +14,13 @@ export class ChatMessageEl extends LitElement {
     :host([role="assistant"]) { align-self: flex-start; }
     .bubble {
       padding: 10px 14px;
-      border-radius: 16px;
+      border-radius: var(--cortex-radius-lg);
       font-size: var(--cortex-fs-md);
       line-height: 1.6;
       word-break: break-word;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      box-shadow: var(--cortex-shadow-sm);
     }
-    /* 用户气泡：薄荷绿底 + 深色字（与示例对齐） */
+    /* 用户气泡：电蓝色底（--cortex-chat-bubble-user token） */
     :host([role="user"]) .bubble {
       display: flex;
       align-items: center;   /* 显式垂直居中：单行文字/匿名文本节点居中显示 */
@@ -58,7 +58,7 @@ export class ChatMessageEl extends LitElement {
     .md-body p { margin: 0.5em 0; }
     /* 结构化日程里的 section header：示例里是「?【周立松总经理】（今天）日程安排」
        这种带 ? 前缀的 H2 行内突出渲染为青绿色块标题 */
-    .md-body h1, .md-body h2, .md-body h3 {
+    .md-body h1, .md-body h2, .md-body h3, .md-body h4 {
       margin: 0.7em 0 0.4em;
       line-height: 1.4;
       color: var(--cortex-chat-section);
@@ -67,6 +67,7 @@ export class ChatMessageEl extends LitElement {
     .md-body h1 { font-size: 1.05em; }
     .md-body h2 { font-size: 1em; }
     .md-body h3 { font-size: 0.95em; }
+    .md-body h4 { font-size: 0.92em; }
     /* H2 内若以 ? 开头，去掉 ? 显示 + 让整行更醒目（贴近示例效果） */
     .md-body h2::before {
       content: "";
@@ -99,14 +100,14 @@ export class ChatMessageEl extends LitElement {
       font-family: var(--cortex-font-mono);
       font-size: 0.92em;
       color: var(--cortex-chat-section);
-      background: var(--cortex-primary-soft);
+      background: var(--cortex-surface-muted);
       padding: 1px 6px;
-      border-radius: 4px;
+      border-radius: var(--cortex-radius-sm);
     }
     .md-body :not(pre) > code {
-      background: var(--cortex-primary-soft);
-      padding: 1px 6px;
-      border-radius: 4px;
+      background: var(--cortex-surface-muted);
+      padding: 0 3px;
+      border-radius: var(--cortex-radius-sm);
     }
     .md-body blockquote {
       border-left: 3px solid var(--cortex-primary);
@@ -156,16 +157,19 @@ export class ChatMessageEl extends LitElement {
     }
     .ref-link {
       color: var(--cortex-primary);
-      text-decoration: underline;
+      text-decoration: none;
       cursor: pointer;
+      font-weight: 500;
       font-size: var(--cortex-fs-sm);
+      border-radius: var(--cortex-radius-sm);
       word-break: break-all;
     }
     .md-body .ref-link:hover {
-      opacity: 0.8;
+      background: var(--cortex-primary-soft);
+      text-decoration: underline;
     }
     .thinking {
-      opacity: 0.6;
+      color: var(--cortex-text-subtle);
       font-style: italic;
     }
     .trace-sep {
