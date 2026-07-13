@@ -102,3 +102,64 @@ class TestFiltering:
 
     def test_output_without_path_returns_empty(self):
         assert extract_references([_tc("search_kb", "未找到包含 'x' 的结果。")]) == []
+
+
+class TestValidatePaths:
+    def test_all_exist(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "b.md").write_text("x", encoding="utf-8")
+        assert validate_paths(["a/b.md"], tmp_path) == []
+
+    def test_returns_missing(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        assert validate_paths(["a/b.md", "c/d.md"], tmp_path) == ["a/b.md", "c/d.md"]
+
+    def test_normalizes_leading_dot(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        (tmp_path / "x.md").write_text("x", encoding="utf-8")
+        assert validate_paths(["./x.md"], tmp_path) == []
+
+    def test_dedup_preserves_order(self, tmp_path):
+        from doclens.web_v2.references import validate_paths
+        assert validate_paths(["p.md", "p.md", "q.md"], tmp_path) == ["p.md", "q.md"]
+
+
+class TestToRelativePath:
+    def test_absolute_to_relative_forward_slash(self, tmp_path):
+        from doclens.web_v2.references import to_relative_path
+        (tmp_path / "公司").mkdir()
+        (tmp_path / "公司" / "a.docx").write_text("x", encoding="utf-8")
+        abs_path = str(tmp_path / "公司" / "a.docx")
+        assert to_relative_path(abs_path, tmp_path) == "公司/a.docx"
+
+    def test_backslash_to_forward(self, tmp_path):
+        from doclens.web_v2.references import to_relative_path
+        assert to_relative_path("公司\\a.docx", tmp_path) == "公司/a.docx"
+
+    def test_already_relative_forward_unchanged(self, tmp_path):
+        from doclens.web_v2.references import to_relative_path
+        assert to_relative_path("公司/a.docx", tmp_path) == "公司/a.docx"
+
+    def test_absolute_outside_workdir_falls_back_to_forward_slash(self, tmp_path):
+        from doclens.web_v2.references import to_relative_path
+        # 绝对路径不在 workdir 下：relative_to 抛 ValueError，降级为仅替换斜杠
+        assert to_relative_path("D:\\other\\x.md", tmp_path) == "D:/other/x.md"
+
+
+class TestNormalizePaths:
+    def test_dedup_same_file_abs_and_rel(self, tmp_path):
+        from doclens.web_v2.references import normalize_paths
+        (tmp_path / "公司").mkdir()
+        (tmp_path / "公司" / "a.docx").write_text("x", encoding="utf-8")
+        abs_path = str(tmp_path / "公司" / "a.docx")
+        # 绝对 + 相对（反斜杠）指同一文件 → 去重为一条相对正斜杠
+        assert normalize_paths([abs_path, "公司\\a.docx"], tmp_path) == ["公司/a.docx"]
+
+    def test_preserves_first_seen_order(self, tmp_path):
+        from doclens.web_v2.references import normalize_paths
+        assert normalize_paths(["b.md", "a.md", "b.md"], tmp_path) == ["b.md", "a.md"]
+
+    def test_filters_empty(self, tmp_path):
+        from doclens.web_v2.references import normalize_paths
+        assert normalize_paths(["", "a.md"], tmp_path) == ["a.md"]
