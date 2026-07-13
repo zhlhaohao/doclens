@@ -29,19 +29,22 @@ export class ToastStack extends LitElement {
       min-width: 200px;
       max-width: 360px;
       padding: 10px 14px;
-      border-radius: 6px;
+      background: var(--cortex-surface);
+      color: var(--cortex-text);
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-sm);
       font-family: var(--cortex-font);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--cortex-shadow-lg);
       display: flex;
       align-items: center;
       gap: 8px;
       cursor: pointer;
     }
-    .toast.success { background: #10b981; color: #fff; }
-    .toast.error { background: #dc2626; color: #fff; }
-    .toast.info { background: var(--cortex-surface); color: var(--cortex-text); border: 1px solid var(--cortex-border); }
-    .toast .msg { flex: 1; }
+    .toast.success { border-left: 3px solid var(--cortex-success); }
+    .toast.error { border-left: 3px solid var(--cortex-danger); }
+    .toast.info { border-left: 3px solid var(--cortex-primary); }
+    .toast .msg { flex: 1; color: var(--cortex-text-muted); }
   `;
 
   @state() _toasts: ToastItem[] = [];

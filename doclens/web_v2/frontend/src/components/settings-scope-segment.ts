@@ -22,9 +22,9 @@ export class SettingsScopeSegment extends LitElement {
       flex: 1;
       padding: 8px 12px;
       border: 1px solid var(--cortex-border);
-      background: transparent;
+      background: var(--cortex-surface);
       color: var(--cortex-text-muted);
-      border-radius: var(--cortex-radius-md);
+      border-radius: 999px;
       font-family: inherit;
       font-size: var(--cortex-fs-sm);
       cursor: pointer;
@@ -36,7 +36,7 @@ export class SettingsScopeSegment extends LitElement {
       background: var(--cortex-primary-soft);
       border-color: var(--cortex-primary);
       color: var(--cortex-primary);
-      font-weight: 600;
+      font-weight: 500;
     }
     .new-tag {
       font-size: var(--cortex-fs-xs);
