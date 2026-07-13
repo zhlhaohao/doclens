@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doclens 界面重构 · 5 风格设计对比</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --accent: #4f46e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    margin: 0; background: var(--bg); color: var(--text);
+    line-height: 1.6;
+  }
+  header {
+    max-width: 1280px; margin: 0 auto; padding: 48px 24px 24px;
+  }
+  header h1 {
+    font-size: 32px; font-weight: 700; margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  header p { color: var(--muted); margin: 0; font-size: 15px; max-width: 720px; }
+  header .legend {
+    margin-top: 16px; font-size: 13px; color: var(--muted);
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px; display: inline-block;
+  }
+
+  /* 概览卡片网格 */
+  .grid {
+    max-width: 1280px; margin: 24px auto; padding: 0 24px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px; text-decoration: none; color: inherit;
+    transition: transform 0.15s, box-shadow 0.15s; display: block;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+  .card .num {
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .card .name { font-size: 17px; font-weight: 700; margin: 4px 0 8px; letter-spacing: -0.01em; }
+  .card .desc { font-size: 13px; color: var(--muted); min-height: 48px; }
+  .swatches { display: flex; gap: 4px; margin-top: 12px; }
+  .swatch { width: 20px; height: 20px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08); }
+  .tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: #f1f5f9; color: #475569;
+  }
+
+  /* 详细 iframe 区 */
+  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .style-block { margin: 32px 0; scroll-margin-top: 16px; }
+  .style-block h2 {
+    font-size: 22px; font-weight: 700; margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .style-block .open-link {
+    font-size: 13px; color: var(--accent); text-decoration: none;
+    font-weight: 500;
+  }
+  .style-block .open-link:hover { text-decoration: underline; }
+  iframe {
+    width: 100%; height: 1600px; border: 1px solid var(--border);
+    border-radius: 12px; background: #fff; margin-top: 12px;
+  }
+  footer {
+    max-width: 1280px; margin: 48px auto 64px; padding: 24px;
+    color: var(--muted); font-size: 13px; text-align: center;
+  }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Doclens 界面重构 · 5 风格设计</h1>
+  <p>基于 <code>frontend-spec/</code> 的页面结构 spec，产出 5 个差异化视觉风格供挑选。每风格展示「搜索页」(initial 态) 的<strong>桌面 + 移动</strong> mockup —— 搜索页最能代表风格气质 + 含刚做的系统状态区。挑定一个风格后，再把它应用到全部 4 个页面 (search/chat/settings/files)。</p>
+  <div class="legend">📋 5 风格：① 极简瑞士 ② 电影暗色 ③ 纸感阅读 ④ Apple Bento ⑤ 新粗野 · 每个详细页含配色 / 字体 / 效果说明 + 双端 mockup</div>
+</header>
+
+<!-- 概览卡片 -->
+<div class="grid">
+  <a class="card" href="#s1">
+    <div class="num">01</div>
+    <div class="name">极简瑞士派</div>
+    <div class="desc">纯白 + 墨黑 + 靛蓝强调，无阴影渐变，瑞士网格留白。专业克制。</div>
+    <div class="swatches">
+      <span class="swatch" style="background:#FFFFFF"></span>
+      <span class="swatch" style="background:#0F172A"></span>
+      <span class="swatch" style="background:#4F46E5"></span>
+      <span class="swatch" style="background:#64748B"></span>
+      <span class="swatch" style="background:#E2E8F0"></span>
+    </div>
+    <div class="tags"><span class="tag">Inter</span><span class="tag">hairline</span><span class="tag">Linear感</span></div>
+  </a>
+
+  <a class="card" href="#s2">
+    <div class="num">02</div>
+    <div class="name">电影暗色</div>
+    <div class="desc">深渐变 + 玻璃模糊分层 + 紫蓝 ambient 光晕漂浮。高端沉浸。</div>
+    <div class="swatches">
+      <span class="swatch" style="background:#020203"></span>
+      <span class="swatch" style="background:#0a0a0f"></span>
+      <span class="swatch" style="background:#5E6AD2"></span>
+      <span class="swatch" style="background:#EDEDEF"></span>
+      <span class="swatch" style="background:#8A8F98"></span>
+    </div>
+    <div class="tags"><span class="tag">Inter</span><span class="tag">玻璃模糊</span><span class="tag">光晕</span></div>
+  </a>
+
+  <a class="card" href="#s3">
+    <div class="num">03</div>
+    <div class="name">纸感阅读</div>
+    <div class="desc">米白纸底 + 衬线标题 + 墨黑，无动画无阴影。温暖专注阅读。</div>
+    <div class="swatches">
+      <span class="swatch" style="background:#FDFBF7"></span>
+      <span class="swatch" style="background:#1A1A1A"></span>
+      <span class="swatch" style="background:#3F5E3F"></span>
+      <span class="swatch" style="background:#78716C"></span>
+      <span class="swatch" style="background:#E7E5E4"></span>
+    </div>
+    <div class="tags"><span class="tag">衬线标题</span><span class="tag">纸纹理</span><span class="tag">Kindle感</span></div>
+  </a>
+
+  <a class="card" href="#s4">
+    <div class="num">04</div>
+    <div class="name">Apple Bento</div>
+    <div class="desc">浅灰底 + 白大圆角卡 + soft shadow，模块化 bento 网格。时尚现代。</div>
+    <div class="swatches">
+      <span class="swatch" style="background:#F5F5F7"></span>
+      <span class="swatch" style="background:#FFFFFF"></span>
+      <span class="swatch" style="background:#0071E3"></span>
+      <span class="swatch" style="background:#1D1D1F"></span>
+      <span class="swatch" style="background:#6E6E73"></span>
+    </div>
+    <div class="tags"><span class="tag">Inter</span><span class="tag">大圆角</span><span class="tag">模块化</span></div>
+  </a>
+
+  <a class="card" href="#s5">
+    <div class="num">05</div>
+    <div class="name">新粗野 Neubrutalism</div>
+    <div class="desc">米黄底 + 粗黑边 + 厚硬阴影 + 鲜艳 flat 色块。大胆活泼 Gen Z。</div>
+    <div class="swatches">
+      <span class="swatch" style="background:#FAF7F0"></span>
+      <span class="swatch" style="background:#FFEB3B"></span>
+      <span class="swatch" style="background:#FF5252"></span>
+      <span class="swatch" style="background:#2196F3"></span>
+      <span class="swatch" style="background:#000000"></span>
+    </div>
+    <div class="tags"><span class="tag">Inter粗体</span><span class="tag">厚阴影</span><span class="tag">海报感</span></div>
+  </a>
+</div>
+
+<!-- 详细 iframe 对比 -->
+<main>
+  <section class="style-block" id="s1">
+    <h2>① 极简瑞士派 Minimalism &amp; Swiss</h2>
+    <a class="open-link" href="style-1-minimalism.html" target="_blank">↗ 单独打开</a>
+    <iframe src="style-1-minimalism.html" loading="lazy" title="极简瑞士派"></iframe>
+  </section>
+
+  <section class="style-block" id="s2">
+    <h2>② 电影暗色 Cinema Dark</h2>
+    <a class="open-link" href="style-2-cinema-dark.html" target="_blank">↗ 单独打开</a>
+    <iframe src="style-2-cinema-dark.html" loading="lazy" title="电影暗色"></iframe>
+  </section>
+
+  <section class="style-block" id="s3">
+    <h2>③ 纸感阅读 E-Ink / Paper</h2>
+    <a class="open-link" href="style-3-paper.html" target="_blank">↗ 单独打开</a>
+    <iframe src="style-3-paper.html" loading="lazy" title="纸感阅读"></iframe>
+  </section>
+
+  <section class="style-block" id="s4">
+    <h2>④ Apple Bento 网格</h2>
+    <a class="open-link" href="style-4-bento.html" target="_blank">↗ 单独打开</a>
+    <iframe src="style-4-bento.html" loading="lazy" title="Apple Bento"></iframe>
+  </section>
+
+  <section class="style-block" id="s5">
+    <h2>⑤ 新粗野 Neubrutalism</h2>
+    <a class="open-link" href="style-5-neubrutalism.html" target="_blank">↗ 单独打开</a>
+    <iframe src="style-5-neubrutalism.html" loading="lazy" title="新粗野"></iframe>
+  </section>
+</main>
+
+<footer>
+  Doclens 界面重构设计稿 · 5 风格搜索页 mockup · 基于 frontend-spec 结构 spec<br>
+  挑选一个风格后回复编号 (①~⑤)，我会把它应用到全部 4 个页面 (search / chat / settings / files) 的桌面 + 移动双端
+</footer>
+
+</body>
+</html>

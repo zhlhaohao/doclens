@@ -1,0 +1,2276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style 09 · 柔粘土 / Claymorphism — Doclens Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  /* surfaces */
+  --bg:           #FFF5F7;
+  --bg-soft:      #FFEEF2;
+  --ink:          #4A5568;
+  --ink-soft:     #718096;
+  --ink-faint:    #A0AEC0;
+  --white:        #FFFFFF;
+  --line:         rgba(74,85,104,0.08);
+
+  /* accent (grape) */
+  --accent:       #9F7AEA;
+  --accent-dark:  #805AD5;
+  --accent-soft:  #E9D8FD;
+
+  /* pastel cards */
+  --peach:        #FDBCB4;
+  --peach-border: #E8A89E;
+  --peach-deep:   #F4A89F;
+
+  --blue:         #ADD8E6;
+  --blue-border:  #8FC5D9;
+  --blue-deep:    #93C9DC;
+
+  --mint:         #B5F3C9;
+  --mint-border:  #8DD9A8;
+  --mint-deep:    #98E6B3;
+
+  --lavender:     #DCD6F7;
+  --lavender-border: #BFB5E8;
+  --lavender-deep:#C4BBEB;
+
+  --pink:         #FFCFD8;
+  --pink-border:  #E8B0BD;
+  --pink-deep:    #F4B8C5;
+
+  --yellow:       #FFE5A0;
+  --yellow-border:#E8C97A;
+
+  --font: 'Quicksand', -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* clay double-shadow (outer + inset highlight + inset shadow) */
+  --clay:
+    4px 4px 12px rgba(149,117,178,0.18),
+    inset -3px -3px 8px rgba(0,0,0,0.08),
+    inset 3px 3px 8px rgba(255,255,255,0.75);
+  --clay-soft:
+    3px 3px 8px rgba(149,117,178,0.12),
+    inset -2px -2px 6px rgba(0,0,0,0.06),
+    inset 2px 2px 6px rgba(255,255,255,0.7);
+  --clay-press:
+    2px 2px 5px rgba(149,117,178,0.18),
+    inset -2px -2px 6px rgba(0,0,0,0.10),
+    inset 2px 2px 6px rgba(255,255,255,0.5);
+  /* chunky button shadow */
+  --btn:
+    0 5px 0 rgba(119,80,168,0.28),
+    0 7px 14px rgba(149,117,178,0.22);
+  --btn-press:
+    0 2px 0 rgba(119,80,168,0.28),
+    0 3px 8px rgba(149,117,178,0.18);
+}
+
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font);
+  font-weight: 500;
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 8% 18%, rgba(253,188,180,0.28) 0%, transparent 42%),
+    radial-gradient(circle at 92% 78%, rgba(173,216,230,0.30) 0%, transparent 42%),
+    radial-gradient(circle at 50% 55%, rgba(181,243,201,0.18) 0%, transparent 60%),
+    radial-gradient(circle at 25% 85%, rgba(220,214,247,0.22) 0%, transparent 55%);
+  color: var(--ink);
+  line-height: 1.45;
+  padding: 44px 28px 110px;
+  min-height: 100vh;
+}
+
+/* decorative floating blobs */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(40px);
+  z-index: 0;
+}
+body::before {
+  width: 280px; height: 280px;
+  top: -80px; right: -60px;
+  background: radial-gradient(circle, rgba(255,207,216,0.55), transparent 70%);
+}
+body::after {
+  width: 320px; height: 320px;
+  bottom: -120px; left: -80px;
+  background: radial-gradient(circle, rgba(173,216,230,0.5), transparent 70%);
+}
+
+/* ============================================================
+   STYLE HEADER (identity card)
+   ============================================================ */
+.style-header {
+  max-width: 1180px;
+  margin: 0 auto 56px;
+  position: relative;
+  z-index: 2;
+}
+.style-header__top {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.style-number {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border: 2px solid var(--lavender-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  box-shadow: var(--clay-soft);
+}
+.style-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.style-title em {
+  font-style: normal;
+  color: var(--accent-dark);
+}
+.style-tagline {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 18px;
+}
+.style-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--white);
+  border: 2px solid var(--line);
+  box-shadow: var(--clay-soft);
+}
+.chip--peach   { background: var(--peach);     border-color: var(--peach-border); }
+.chip--blue    { background: var(--blue);      border-color: var(--blue-border); }
+.chip--mint    { background: var(--mint);      border-color: var(--mint-border); }
+.chip--lavender{ background: var(--lavender);  border-color: var(--lavender-border); }
+.chip--pink    { background: var(--pink);      border-color: var(--pink-border); }
+.chip--yellow  { background: var(--yellow);    border-color: var(--yellow-border); }
+.chip--accent  { background: var(--accent);    border-color: var(--accent-dark); color: var(--white); }
+.chip-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+
+/* ============================================================
+   SECTION (per page)
+   ============================================================ */
+.section {
+  max-width: 1180px;
+  margin: 0 auto 64px;
+  position: relative;
+  z-index: 2;
+}
+.section__head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 14px 22px;
+  background: var(--white);
+  border: 3px solid var(--lavender-border);
+  border-radius: 22px;
+  box-shadow: var(--clay);
+}
+.section__num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--lavender-border);
+}
+.section__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.section__desc {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-left: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 580px 1fr;
+  gap: 32px;
+  align-items: start;
+  justify-content: center;
+}
+.row-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  align-items: center;
+}
+
+/* ============================================================
+   MOCKUP FRAME
+   ============================================================ */
+.mock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.mock__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  background: var(--white);
+  border: 2px solid var(--line);
+  padding: 4px 12px;
+  border-radius: 999px;
+  box-shadow: var(--clay-soft);
+}
+.mock__label .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(159,122,234,0.18);
+}
+.mock__label.state-focus .dot { background: var(--peach-deep); box-shadow: 0 0 0 3px rgba(244,168,159,0.25); }
+.mock__label.state-init  .dot { background: var(--mint-deep); box-shadow: 0 0 0 3px rgba(152,230,179,0.30); }
+
+/* device chrome */
+.device {
+  position: relative;
+  background: var(--bg-soft);
+  border: 3px solid var(--lavender-border);
+  border-radius: 28px;
+  box-shadow: var(--clay);
+  overflow: hidden;
+}
+.device--desktop { width: 560px; height: 460px; }
+.device--mobile  { width: 300px; height: 560px; border-radius: 36px; }
+
+/* app scaffold */
+.app {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  position: relative;
+}
+
+/* ---- app bar (top) ---- */
+.app-bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: var(--white);
+  border-bottom: 2px solid var(--line);
+  flex-shrink: 0;
+}
+.app-bar__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent-dark);
+}
+.app-bar__logo .logo-dot {
+  width: 22px; height: 22px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--peach));
+  box-shadow: var(--clay-soft);
+}
+.app-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--peach), var(--pink));
+  border: 2px solid var(--peach-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--white);
+  box-shadow: var(--clay-soft);
+}
+
+/* ---- activity bar (desktop left vertical nav) ---- */
+.activity-bar {
+  width: 50px;
+  background: var(--white);
+  border-right: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  flex-shrink: 0;
+}
+.act-btn {
+  width: 36px; height: 36px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  transition: all 0.15s;
+}
+.act-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--lavender-border);
+  color: var(--accent-dark);
+  box-shadow: var(--clay-soft);
+}
+
+/* ---- main content area ---- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* ---- tab bar (mobile bottom) ---- */
+.tab-bar {
+  height: 56px;
+  background: var(--white);
+  border-top: 2px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+}
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+}
+.tab--active {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border-color: var(--lavender-border);
+  box-shadow: var(--clay-soft);
+}
+
+/* ============================================================
+   CLAY CARD BASE
+   ============================================================ */
+.card {
+  border-radius: 20px;
+  border-width: 3px;
+  border-style: solid;
+  box-shadow: var(--clay);
+  padding: 14px;
+}
+.card--peach    { background: linear-gradient(160deg, #FED7D0 0%, var(--peach) 100%);     border-color: var(--peach-border); }
+.card--blue     { background: linear-gradient(160deg, #C8E6F0 0%, var(--blue) 100%);      border-color: var(--blue-border); }
+.card--mint     { background: linear-gradient(160deg, #CFF8DD 0%, var(--mint) 100%);      border-color: var(--mint-border); }
+.card--lavender { background: linear-gradient(160deg, #E5E0FA 0%, var(--lavender) 100%);  border-color: var(--lavender-border); }
+.card--pink     { background: linear-gradient(160deg, #FFDDE4 0%, var(--pink) 100%);      border-color: var(--pink-border); }
+.card--yellow   { background: linear-gradient(160deg, #FFEEB8 0%, var(--yellow) 100%);    border-color: var(--yellow-border); }
+.card--white    { background: var(--white); border-color: var(--lavender-border); }
+
+.card--soft { box-shadow: var(--clay-soft); }
+.card--tight { padding: 10px 12px; }
+
+/* ============================================================
+   WELCOME PANE
+   ============================================================ */
+.welcome {
+  padding: 18px 18px 14px;
+  text-align: center;
+}
+.welcome__eyebrow {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+  background: var(--white);
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--accent-soft);
+  margin-bottom: 8px;
+}
+.welcome__title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.welcome__sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+}
+
+/* status rows */
+.status-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: left;
+  background: rgba(255,255,255,0.55);
+  border: 2px solid rgba(255,255,255,0.7);
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: var(--clay-soft);
+}
+.status-rows .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.status-rows .row .sep { color: var(--ink-faint); }
+.status-rows .live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #38A169;
+  display: inline-block;
+  box-shadow: 0 0 0 3px rgba(56,161,105,0.22);
+}
+
+/* ============================================================
+   HISTORY LIST
+   ============================================================ */
+.history {
+  padding: 12px;
+}
+.history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.history__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.history__pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: rgba(255,255,255,0.6);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,0.7);
+}
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.history__item {
+  background: rgba(255,255,255,0.75);
+  border: 2px solid rgba(255,255,255,0.8);
+  border-radius: 12px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-shadow: var(--clay-soft);
+  cursor: pointer;
+}
+.history__item-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history__item-date {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   INPUT BOX (search)
+   ============================================================ */
+.input-wrap {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.search-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.search-input {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  border: 3px solid var(--lavender-border);
+  border-radius: 16px;
+  padding: 0 12px;
+  height: 38px;
+  box-shadow: var(--clay-soft);
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+.search-input svg { color: var(--ink-faint); flex-shrink: 0; }
+
+.mode-toggle {
+  display: inline-flex;
+  background: var(--white);
+  border: 2px solid var(--lavender-border);
+  border-radius: 999px;
+  padding: 3px;
+  box-shadow: var(--clay-soft);
+}
+.mode-toggle button {
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mode-toggle button.active {
+  background: var(--accent);
+  color: var(--white);
+  box-shadow: 0 2px 0 rgba(119,80,168,0.25);
+}
+
+/* chunky primary button */
+.btn {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 12px;
+  border: 2px solid var(--accent-dark);
+  background: var(--accent);
+  color: var(--white);
+  padding: 0 16px;
+  height: 38px;
+  border-radius: 14px;
+  box-shadow: var(--btn);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.01em;
+}
+.btn--peach  { background: var(--peach-deep); border-color: var(--peach-border); color: var(--white); box-shadow: 0 5px 0 rgba(192,108,98,0.3), 0 7px 14px rgba(192,108,98,0.2); }
+.btn--blue   { background: var(--blue-deep);  border-color: var(--blue-border);  color: var(--white); box-shadow: 0 5px 0 rgba(110,160,180,0.3), 0 7px 14px rgba(110,160,180,0.2); }
+.btn--mint   { background: var(--mint-deep);  border-color: var(--mint-border);  color: var(--ink);   box-shadow: 0 5px 0 rgba(110,180,130,0.3), 0 7px 14px rgba(110,180,130,0.2); }
+.btn--ghost  { background: var(--white); border-color: var(--lavender-border); color: var(--accent-dark); box-shadow: var(--clay-soft); }
+.btn--sm { height: 30px; padding: 0 12px; font-size: 11px; border-radius: 12px; }
+.btn--block { width: 100%; justify-content: center; }
+
+/* textarea */
+.textarea {
+  background: var(--white);
+  border: 3px solid var(--lavender-border);
+  border-radius: 16px;
+  padding: 10px 12px;
+  min-height: 64px;
+  color: var(--ink-faint);
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 12px;
+  box-shadow: var(--clay-soft);
+  display: flex;
+  align-items: flex-start;
+}
+.textarea-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ============================================================
+   FOCUS HEADER
+   ============================================================ */
+.focus-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--white);
+  border-bottom: 2px solid var(--line);
+  flex-shrink: 0;
+}
+.back-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 2px solid var(--lavender-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-dark);
+  box-shadow: var(--clay-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.focus-header__titles {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.focus-header__back-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+}
+.focus-header__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.focus-header__meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--lavender-border);
+  flex-shrink: 0;
+}
+.focus-header__action {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+/* ============================================================
+   SEARCH RESULTS
+   ============================================================ */
+.results-col {
+  flex: 1;
+  overflow: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.result-card {
+  background: var(--white);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 9px 11px;
+  box-shadow: var(--clay-soft);
+}
+.result-card--active {
+  background: linear-gradient(160deg, #F1EBFC 0%, var(--accent-soft) 100%);
+  border: 3px solid var(--accent);
+}
+.result-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.path-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--bg-soft);
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+}
+.result-card--active .path-badge {
+  background: var(--white);
+  border-color: var(--lavender-border);
+  color: var(--accent-dark);
+}
+.result-path {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result-card__snippet {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  line-height: 1.45;
+  margin-bottom: 6px;
+}
+.result-card__snippet .hl {
+  background: rgba(255,229,160,0.7);
+  color: var(--ink);
+  padding: 0 4px;
+  border-radius: 5px;
+  font-weight: 700;
+}
+.result-card__score {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #2F855A;
+  background: rgba(181,243,201,0.6);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--mint-border);
+}
+.result-card__score .bar {
+  width: 28px; height: 5px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--mint-border);
+}
+.result-card__score .bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #68D391, #38A169);
+}
+
+/* ============================================================
+   PREVIEW PANE (markdown)
+   ============================================================ */
+.preview-pane {
+  background: var(--white);
+  border: 3px solid var(--lavender-border);
+  border-radius: 18px;
+  box-shadow: var(--clay);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.preview-pane__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, var(--bg-soft), var(--white));
+  border-bottom: 2px solid var(--line);
+  flex-shrink: 0;
+}
+.preview-path {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-icon-btn {
+  width: 26px; height: 26px;
+  border-radius: 9px;
+  background: var(--white);
+  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  box-shadow: var(--clay-soft);
+}
+.preview-body {
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink);
+  flex: 1;
+  overflow: hidden;
+  background:
+    linear-gradient(to bottom, var(--white) 0%, var(--white) 70%, rgba(255,245,247,0.9) 100%);
+}
+.preview-body h4 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-dark);
+  margin-bottom: 4px;
+}
+.preview-body p { margin-bottom: 6px; color: var(--ink-soft); }
+.preview-body .ln {
+  display: block;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  border-radius: 6px;
+}
+.preview-body .ln--hl {
+  background: rgba(255,229,160,0.6);
+  color: var(--ink);
+  font-weight: 600;
+  border-left: 3px solid var(--yellow-border);
+  padding-left: 6px;
+}
+
+/* ============================================================
+   CHAT STREAM
+   ============================================================ */
+.chat-stream {
+  flex: 1;
+  overflow: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.msg { display: flex; gap: 8px; }
+.msg--user { justify-content: flex-end; }
+.msg__bubble {
+  max-width: 78%;
+  padding: 9px 12px;
+  border-radius: 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  border-width: 2.5px;
+  border-style: solid;
+  box-shadow: var(--clay-soft);
+}
+.msg--user .msg__bubble {
+  background: linear-gradient(160deg, var(--accent), var(--accent-dark));
+  color: var(--white);
+  border-color: var(--accent-dark);
+  border-bottom-right-radius: 6px;
+  font-weight: 600;
+}
+.msg--assistant .msg__bubble {
+  background: linear-gradient(160deg, #FFEEF2 0%, var(--pink) 100%);
+  color: var(--ink);
+  border-color: var(--pink-border);
+  border-bottom-left-radius: 6px;
+}
+.msg__avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--lavender-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--white);
+  box-shadow: var(--clay-soft);
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--mint-deep), var(--mint-border));
+}
+.msg__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.msg__body h5 {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 2px;
+}
+.msg__body p {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-bottom: 3px;
+}
+
+/* reference links block */
+.ref-block {
+  margin-top: 6px;
+  background: rgba(255,255,255,0.7);
+  border: 2px solid var(--lavender-border);
+  border-radius: 12px;
+  padding: 7px 9px;
+  box-shadow: var(--clay-soft);
+}
+.ref-block__title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.ref-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--lavender-border);
+  margin-bottom: 3px;
+}
+.ref-link:last-child { margin-bottom: 0; }
+.ref-link .ref-icon {
+  width: 18px; height: 18px;
+  border-radius: 6px;
+  background: var(--white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--lavender-border);
+}
+
+/* tool trace (collapsible) */
+.tool-trace {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--bg-soft);
+  border: 2px solid var(--lavender-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  box-shadow: var(--clay-soft);
+  cursor: pointer;
+}
+.tool-trace .step-pill {
+  background: var(--white);
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+/* chat input bar (bottom) */
+.chat-input-bar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px;
+  background: var(--white);
+  border-top: 2px solid var(--line);
+  flex-shrink: 0;
+}
+.chat-input {
+  flex: 1;
+  background: var(--bg);
+  border: 2.5px solid var(--lavender-border);
+  border-radius: 14px;
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  box-shadow: var(--clay-soft);
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+}
+.send-btn {
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  border: 2.5px solid var(--accent-dark);
+  background: linear-gradient(160deg, var(--accent), var(--accent-dark));
+  color: var(--white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--btn);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   FILES — TREE / LIST / PREVIEW
+   ============================================================ */
+.tree-pane {
+  width: 130px;
+  background: var(--white);
+  border-right: 2px solid var(--line);
+  padding: 10px 8px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.tree-pane__title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 1px;
+  cursor: pointer;
+}
+.tree-item--active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  border: 1.5px solid var(--lavender-border);
+  box-shadow: var(--clay-soft);
+}
+.tree-item--indent { padding-left: 18px; font-weight: 500; color: var(--ink-soft); }
+.tree-item--indent2 { padding-left: 30px; font-weight: 500; color: var(--ink-soft); font-size: 10px; }
+.tree-item .chev { color: var(--ink-faint); flex-shrink: 0; }
+
+.file-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  min-width: 0;
+}
+.file-list__head {
+  display: grid;
+  grid-template-columns: 1.6fr 0.6fr 0.9fr 0.7fr;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--line);
+  background: var(--white);
+  flex-shrink: 0;
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.6fr 0.9fr 0.7fr;
+  gap: 6px;
+  padding: 7px 10px;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--ink);
+  border-bottom: 1.5px solid rgba(74,85,104,0.05);
+  cursor: pointer;
+}
+.file-row--active {
+  background: linear-gradient(160deg, var(--accent-soft), #F1EBFC);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  box-shadow: var(--clay-soft);
+}
+.file-row__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-row__meta {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.type-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1.5px solid;
+}
+.type-tag--md    { background: var(--blue);      border-color: var(--blue-border);     color: #2C5282; }
+.type-tag--docx  { background: var(--peach);     border-color: var(--peach-border);    color: #9B2C2C; }
+.type-tag--pdf   { background: var(--pink);      border-color: var(--pink-border);     color: #9B2C2C; }
+.type-tag--xlsx  { background: var(--mint);      border-color: var(--mint-border);     color: #276749; }
+.index-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #48BB78;
+  box-shadow: 0 0 0 2px rgba(72,187,120,0.25);
+}
+.index-dot--off { background: var(--ink-faint); box-shadow: 0 0 0 2px rgba(160,174,192,0.25); }
+
+/* preview placeholder (files no selection) */
+.preview-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-soft);
+  padding: 12px;
+}
+.preview-placeholder__icon {
+  width: 56px; height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, var(--lavender), var(--accent-soft));
+  border: 3px solid var(--lavender-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-dark);
+  box-shadow: var(--clay);
+}
+.preview-placeholder__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.preview-placeholder__sub {
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  text-align: center;
+  max-width: 140px;
+}
+
+/* preview column (files focus) */
+.preview-col {
+  width: 230px;
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border-left: 2px solid var(--line);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.preview-col__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-soft);
+  border-bottom: 2px solid var(--line);
+}
+.preview-col__name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-col__body {
+  flex: 1;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow: hidden;
+}
+.preview-col__body .ln-num {
+  display: inline-block;
+  width: 18px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  text-align: right;
+  margin-right: 6px;
+}
+
+/* mobile breadcrumbs */
+.mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--white);
+  border-bottom: 2px solid var(--line);
+  flex-shrink: 0;
+}
+.crumbs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.crumbs .crumb-current { color: var(--accent-dark); font-weight: 700; }
+.icon-btn-soft {
+  width: 28px; height: 28px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+  border: 2px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+}
+
+/* ============================================================
+   FOOTER NOTE
+   ============================================================ */
+.footer-note {
+  max-width: 1180px;
+  margin: 80px auto 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+  position: relative;
+  z-index: 2;
+}
+.footer-note strong { color: var(--accent-dark); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     STYLE HEADER
+     ============================================================ -->
+<header class="style-header">
+  <div class="style-header__top">
+    <span class="style-number">STYLE · 09</span>
+    <h1 class="style-title">柔粘土 <em>Claymorphism</em></h1>
+  </div>
+  <p class="style-tagline">柔软、playful、玩具感 —— 浅粉底上的 pastel 粘土卡片，厚边 + 双阴影 + 大圆角 + chunky 凸按钮，像 Duolingo / Notion 早期 / 儿童 SaaS。</p>
+  <div class="style-chips">
+    <span class="chip-label">PASTEL</span>
+    <span class="chip chip--peach">桃 #FDBCB4</span>
+    <span class="chip chip--blue">婴儿蓝 #ADD8E6</span>
+    <span class="chip chip--mint">薄荷 #B5F3C9</span>
+    <span class="chip chip--lavender">淡紫 #DCD6F7</span>
+    <span class="chip chip--pink">粉 #FFCFD8</span>
+    <span class="chip chip--yellow">奶黄 #FFE5A0</span>
+    <span class="chip-label" style="margin-left:8px;">FONT</span>
+    <span class="chip">Quicksand 500/600/700</span>
+    <span class="chip-label" style="margin-left:8px;">EFFECTS</span>
+    <span class="chip chip--accent">3px 厚边</span>
+    <span class="chip chip--accent">双阴影（外 + inset）</span>
+    <span class="chip chip--accent">大圆角 20–24px</span>
+    <span class="chip chip--accent">chunky 凸按钮</span>
+  </div>
+</header>
+
+
+<!-- ============================================================
+     SECTION 1 · SEARCH
+     ============================================================ -->
+<section class="section">
+  <div class="section__head">
+    <span class="section__num">01</span>
+    <h2 class="section__title">搜索 / Search</h2>
+    <span class="section__desc">welcome-pane + history-list + input-box · focus 时 results-col + preview-pane</span>
+  </div>
+
+  <div class="grid">
+    <!-- ==== INITIAL · DESKTOP ==== -->
+    <div class="row-stack">
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>搜索 · 初始 · 桌面</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <!-- activity bar -->
+            <aside class="activity-bar">
+              <button class="act-btn act-btn--active" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <!-- main -->
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo">
+                  <span class="logo-dot"></span>
+                  Doclens
+                </div>
+                <div class="app-bar__right">
+                  <span class="avatar">L</span>
+                </div>
+              </header>
+              <div style="flex:1; overflow:hidden; padding:14px; display:flex; flex-direction:column; gap:12px;">
+                <!-- welcome -->
+                <div class="card card--lavender welcome">
+                  <span class="welcome__eyebrow">STRUCTURE-AWARE SEARCH</span>
+                  <h3 class="welcome__title">Doclens</h3>
+                  <p class="welcome__sub">结构感知文档检索</p>
+                  <div class="status-rows">
+                    <div class="row">📁 …/cortex/test_work_dir <span class="sep">·</span> 📄 69 文档 <span class="sep">·</span> 💾 12 MB</div>
+                    <div class="row"><span class="live-dot"></span> 👁 ● 监控中 <span class="sep">·</span> 🕒 3 分钟前 <span class="sep">·</span> 🗂 .md 55 · .docx 7 · +2</div>
+                  </div>
+                </div>
+                <!-- history + input -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; flex:1; min-height:0;">
+                  <div class="card card--peach history">
+                    <div class="history__head">
+                      <span class="history__title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                        历史会话
+                      </span>
+                      <span class="history__pill">4</span>
+                    </div>
+                    <div class="history__list">
+                      <div class="history__item"><span class="history__item-text">总结应急预案编写要点</span><span class="history__item-date">7/11</span></div>
+                      <div class="history__item"><span class="history__item-text">海洋深处的生态系统知识点</span><span class="history__item-date">7/11</span></div>
+                      <div class="history__item"><span class="history__item-text">max.poll.interval.ms</span><span class="history__item-date">7/9</span></div>
+                      <div class="history__item"><span class="history__item-text">固态电池原理</span><span class="history__item-date">7/7</span></div>
+                    </div>
+                  </div>
+                  <div class="card card--blue input-wrap" style="justify-content:center;">
+                    <div class="search-row">
+                      <div class="search-input">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        输入搜索关键词...
+                      </div>
+                    </div>
+                    <div class="search-row" style="justify-content:space-between;">
+                      <div class="mode-toggle">
+                        <button class="active">keyword</button>
+                        <button>grep</button>
+                      </div>
+                      <button class="btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        搜索
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==== FOCUS · DESKTOP ==== -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>搜索 · 焦点 · 桌面</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <aside class="activity-bar">
+              <button class="act-btn act-btn--active" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div class="focus-header">
+                <button class="back-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="focus-header__titles">
+                  <span class="focus-header__back-label">新搜索</span>
+                  <span class="focus-header__title">应急预案</span>
+                </div>
+                <span class="focus-header__meta">3 条结果</span>
+              </div>
+              <div style="flex:1; display:flex; gap:8px; padding:10px; overflow:hidden;">
+                <!-- results col -->
+                <div class="results-col" style="flex:1.1; padding:0;">
+                  <div class="result-card result-card--active">
+                    <div class="result-card__head">
+                      <span class="path-badge">路径</span>
+                      <span class="result-path">公司/安全/应急预案.md:42</span>
+                    </div>
+                    <p class="result-card__snippet">… 应急<span class="hl">预案</span>的核心要素：组织机构与职责、风险<span class="hl">评估</span>、响应流程 …</p>
+                    <span class="result-card__score">92% <span class="bar"><i style="width:92%"></i></span></span>
+                  </div>
+                  <div class="result-card">
+                    <div class="result-card__head">
+                      <span class="path-badge">路径</span>
+                      <span class="result-path">公司/安全/安全规范.md:18</span>
+                    </div>
+                    <p class="result-card__snippet">… 按应急<span class="hl">预案</span>分级启动响应，I 级由总指挥签发 …</p>
+                    <span class="result-card__score">86% <span class="bar"><i style="width:86%"></i></span></span>
+                  </div>
+                  <div class="result-card">
+                    <div class="result-card__head">
+                      <span class="path-badge">路径</span>
+                      <span class="result-path">资料/培训/演练记录.docx:7</span>
+                    </div>
+                    <p class="result-card__snippet">… 年度消防<span class="hl">预案</span>演练记录，参训 142 人 …</p>
+                    <span class="result-card__score">74% <span class="bar"><i style="width:74%"></i></span></span>
+                  </div>
+                </div>
+                <!-- preview pane -->
+                <div class="preview-pane" style="flex:1;">
+                  <div class="preview-pane__header">
+                    <span class="preview-path">公司/安全/应急预案.md</span>
+                    <span class="preview-icon-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                    </span>
+                    <span class="preview-icon-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                    </span>
+                  </div>
+                  <div class="preview-body">
+                    <h4># 应急预案</h4>
+                    <span class="ln ln--hl">42 · 应急预案的核心要素包括：</span>
+                    <span class="ln">43 · 1. 组织机构与职责分工</span>
+                    <span class="ln">44 · 2. 风险评估与预警机制</span>
+                    <span class="ln">45 · 3. 响应流程与处置措施</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==== INITIAL · MOBILE + FOCUS · MOBILE ==== -->
+    <div class="row-stack">
+      <!-- INITIAL · MOBILE -->
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>搜索 · 初始 · 移动</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div style="flex:1; overflow:hidden; padding:10px; display:flex; flex-direction:column; gap:10px;">
+                <div class="card card--lavender welcome" style="padding:14px 12px 10px;">
+                  <span class="welcome__eyebrow">SEARCH</span>
+                  <h3 class="welcome__title" style="font-size:22px;">Doclens</h3>
+                  <p class="welcome__sub">结构感知文档检索</p>
+                  <div class="status-rows" style="font-size:9.5px;">
+                    <div class="row">📁 …/test_work_dir <span class="sep">·</span> 📄 69</div>
+                    <div class="row"><span class="live-dot"></span> 👁 监控中 <span class="sep">·</span> 🕒 3 分钟前</div>
+                  </div>
+                </div>
+                <div class="card card--peach history" style="flex:1; min-height:0;">
+                  <div class="history__head">
+                    <span class="history__title">历史会话</span>
+                    <span class="history__pill">4</span>
+                  </div>
+                  <div class="history__list">
+                    <div class="history__item"><span class="history__item-text">总结应急预案编写要点</span><span class="history__item-date">7/11</span></div>
+                    <div class="history__item"><span class="history__item-text">海洋深处的生态系统知识点</span><span class="history__item-date">7/11</span></div>
+                    <div class="history__item"><span class="history__item-text">max.poll.interval.ms</span><span class="history__item-date">7/9</span></div>
+                    <div class="history__item"><span class="history__item-text">固态电池原理</span><span class="history__item-date">7/7</span></div>
+                  </div>
+                </div>
+                <div class="card card--blue input-wrap" style="padding:10px;">
+                  <div class="search-input" style="height:34px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                    输入搜索关键词...
+                  </div>
+                  <div class="search-row" style="justify-content:space-between;">
+                    <div class="mode-toggle"><button class="active">keyword</button><button>grep</button></div>
+                    <button class="btn btn--sm">搜索</button>
+                  </div>
+                </div>
+              </div>
+              <nav class="tab-bar">
+                <span class="tab tab--active">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                  搜索
+                </span>
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+                  对话
+                </span>
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  文件
+                </span>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOCUS · MOBILE -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>搜索 · 焦点 · 移动（全屏 preview）</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <div class="focus-header">
+                <button class="back-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="focus-header__titles">
+                  <span class="focus-header__back-label">结果</span>
+                  <span class="focus-header__title">应急预案.md</span>
+                </div>
+                <span class="focus-header__action">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                  编辑
+                </span>
+              </div>
+              <div class="preview-pane" style="border-radius:0; border:none; flex:1;">
+                <div class="preview-body" style="padding:14px;">
+                  <h4># 应急预案</h4>
+                  <span class="ln">38 · ## 一、总则</span>
+                  <span class="ln">39 · 为有效应对各类突发事件 …</span>
+                  <span class="ln ln--hl">42 · 应急预案的核心要素包括：</span>
+                  <span class="ln">43 · 1. 组织机构与职责分工</span>
+                  <span class="ln">44 · 2. 风险评估与预警机制</span>
+                  <span class="ln">45 · 3. 响应流程与处置措施</span>
+                  <span class="ln">46 · 4. 后期处置与恢复重建</span>
+                  <span class="ln">47 · 5. 保障措施</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================
+     SECTION 2 · CHAT
+     ============================================================ -->
+<section class="section">
+  <div class="section__head">
+    <span class="section__num">02</span>
+    <h2 class="section__title">AI 对话 / Chat</h2>
+    <span class="section__desc">welcome-pane + history + 多行 textarea · focus 时 chat-stream + ref-link + tool-trace</span>
+  </div>
+
+  <div class="grid">
+    <div class="row-stack">
+      <!-- ==== INITIAL · DESKTOP ==== -->
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>对话 · 初始 · 桌面</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <aside class="activity-bar">
+              <button class="act-btn" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn act-btn--active" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div style="flex:1; overflow:hidden; padding:14px; display:flex; flex-direction:column; gap:12px;">
+                <div class="card card--mint welcome">
+                  <span class="welcome__eyebrow">ASK YOUR LIBRARY</span>
+                  <h3 class="welcome__title">Doclens · 问日程</h3>
+                  <p class="welcome__sub">与你的知识库对话</p>
+                  <div class="status-rows">
+                    <div class="row">📁 …/cortex/test_work_dir <span class="sep">·</span> 📄 69 文档 <span class="sep">·</span> 💾 12 MB</div>
+                    <div class="row"><span class="live-dot"></span> 👁 ● 监控中 <span class="sep">·</span> 🕒 3 分钟前 <span class="sep">·</span> 🗂 .md 55 · .docx 7 · +2</div>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; flex:1; min-height:0;">
+                  <div class="card card--pink history">
+                    <div class="history__head">
+                      <span class="history__title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+                        历史会话
+                      </span>
+                      <span class="history__pill">4</span>
+                    </div>
+                    <div class="history__list">
+                      <div class="history__item"><span class="history__item-text">总结应急预案编写要点</span><span class="history__item-date">7/11</span></div>
+                      <div class="history__item"><span class="history__item-text">海洋深处的生态系统知识点</span><span class="history__item-date">7/11</span></div>
+                      <div class="history__item"><span class="history__item-text">max.poll.interval.ms</span><span class="history__item-date">7/9</span></div>
+                      <div class="history__item"><span class="history__item-text">固态电池原理</span><span class="history__item-date">7/7</span></div>
+                    </div>
+                  </div>
+                  <div class="card card--yellow input-wrap" style="justify-content:center;">
+                    <div class="textarea" style="min-height:90px;">
+                      问 Doclens 任何问题...
+                    </div>
+                    <div class="textarea-footer">
+                      <span style="font-size:10px; color:var(--ink-faint); font-family:var(--mono);">⏎ 发送 · ⇧⏎ 换行</span>
+                      <button class="btn btn--peach">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+                        知识库对话
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==== FOCUS · DESKTOP ==== -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>对话 · 焦点 · 桌面（含 preview）</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <aside class="activity-bar">
+              <button class="act-btn" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn act-btn--active" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div class="focus-header">
+                <button class="back-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="focus-header__titles">
+                  <span class="focus-header__back-label">新对话</span>
+                  <span class="focus-header__title">新对话</span>
+                </div>
+                <span class="focus-header__meta">2 条消息</span>
+              </div>
+              <div style="flex:1; display:flex; gap:8px; padding:10px; overflow:hidden;">
+                <!-- chat-stream + input -->
+                <div style="flex:1.4; display:flex; flex-direction:column; min-width:0;">
+                  <div class="chat-stream">
+                    <div class="msg msg--user">
+                      <div class="msg__bubble">应急预案的核心要素有哪些？</div>
+                    </div>
+                    <div class="msg msg--assistant">
+                      <div class="msg__avatar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                      </div>
+                      <div class="msg__body">
+                        <div class="msg__bubble" style="padding:9px 12px;">
+                          <h5>应急预案核心要素</h5>
+                          <p>应急预案通常包含 <strong>5 大核心要素</strong>，结合你的知识库整理如下：</p>
+                          <p>1. <strong>组织机构与职责</strong> — 指挥、执行、救援分层。</p>
+                          <p>2. <strong>风险评估与预警</strong> — 分级响应触发条件。</p>
+                          <div class="ref-block">
+                            <div class="ref-block__title">参考资料</div>
+                            <div class="ref-link">
+                              <span class="ref-icon">📄</span>
+                              应急预案.md
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                            </div>
+                            <div class="ref-link">
+                              <span class="ref-icon">📄</span>
+                              安全规范.docx
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                            </div>
+                          </div>
+                          <div class="tool-trace">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                            搜索了知识库
+                            <span class="step-pill">3 步</span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="chat-input-bar">
+                    <div class="chat-input">继续追问...</div>
+                    <button class="send-btn">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <!-- preview pane -->
+                <div class="preview-pane" style="flex:1;">
+                  <div class="preview-pane__header">
+                    <span class="preview-path">应急预案.md</span>
+                    <span class="preview-icon-btn">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </span>
+                  </div>
+                  <div class="preview-body">
+                    <h4># 应急预案</h4>
+                    <span class="ln ln--hl">42 · 应急预案核心要素：</span>
+                    <span class="ln">43 · 1. 组织机构与职责</span>
+                    <span class="ln">44 · 2. 风险评估预警</span>
+                    <span class="ln">45 · 3. 响应流程</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==== MOBILE COLUMN ==== -->
+    <div class="row-stack">
+      <!-- INITIAL · MOBILE -->
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>对话 · 初始 · 移动</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div style="flex:1; overflow:hidden; padding:10px; display:flex; flex-direction:column; gap:10px;">
+                <div class="card card--mint welcome" style="padding:14px 12px 10px;">
+                  <span class="welcome__eyebrow">CHAT</span>
+                  <h3 class="welcome__title" style="font-size:20px;">Doclens · 问日程</h3>
+                  <p class="welcome__sub">与你的知识库对话</p>
+                  <div class="status-rows" style="font-size:9.5px;">
+                    <div class="row">📁 …/test_work_dir <span class="sep">·</span> 📄 69</div>
+                    <div class="row"><span class="live-dot"></span> 👁 监控中 <span class="sep">·</span> 🗂 .md 55</div>
+                  </div>
+                </div>
+                <div class="card card--pink history" style="flex:1; min-height:0;">
+                  <div class="history__head">
+                    <span class="history__title">历史会话</span>
+                    <span class="history__pill">4</span>
+                  </div>
+                  <div class="history__list">
+                    <div class="history__item"><span class="history__item-text">总结应急预案编写要点</span><span class="history__item-date">7/11</span></div>
+                    <div class="history__item"><span class="history__item-text">海洋深处生态系统</span><span class="history__item-date">7/11</span></div>
+                    <div class="history__item"><span class="history__item-text">max.poll.interval.ms</span><span class="history__item-date">7/9</span></div>
+                    <div class="history__item"><span class="history__item-text">固态电池原理</span><span class="history__item-date">7/7</span></div>
+                  </div>
+                </div>
+                <div class="card card--yellow input-wrap" style="padding:10px;">
+                  <div class="textarea" style="min-height:60px;">问 Doclens 任何问题...</div>
+                  <button class="btn btn--peach btn--block">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+                    知识库对话
+                  </button>
+                </div>
+              </div>
+              <nav class="tab-bar">
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                  搜索
+                </span>
+                <span class="tab tab--active">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+                  对话
+                </span>
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  文件
+                </span>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOCUS · MOBILE -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>对话 · 焦点 · 移动</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <div class="focus-header">
+                <button class="back-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div class="focus-header__titles">
+                  <span class="focus-header__back-label">新对话</span>
+                  <span class="focus-header__title">新对话</span>
+                </div>
+                <span class="focus-header__meta">2</span>
+              </div>
+              <div class="chat-stream">
+                <div class="msg msg--user">
+                  <div class="msg__bubble">应急预案的核心要素有哪些？</div>
+                </div>
+                <div class="msg msg--assistant">
+                  <div class="msg__avatar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4H8"/></svg>
+                  </div>
+                  <div class="msg__body" style="flex:1;">
+                    <div class="msg__bubble" style="padding:9px 11px;">
+                      <h5>应急预案核心要素</h5>
+                      <p>应急预案包含 5 大要素：</p>
+                      <p>1. <strong>组织机构与职责</strong></p>
+                      <p>2. <strong>风险评估与预警</strong></p>
+                      <div class="ref-block">
+                        <div class="ref-block__title">参考资料</div>
+                        <div class="ref-link"><span class="ref-icon">📄</span>应急预案.md</div>
+                        <div class="ref-link"><span class="ref-icon">📄</span>安全规范.docx</div>
+                      </div>
+                      <div class="tool-trace">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                        3 步
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="chat-input-bar">
+                <div class="chat-input">继续追问...</div>
+                <button class="send-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================
+     SECTION 3 · FILES
+     ============================================================ -->
+<section class="section">
+  <div class="section__head">
+    <span class="section__num">03</span>
+    <h2 class="section__title">文件浏览器 / Files</h2>
+    <span class="section__desc">三栏 tree + list + preview · 无选中 vs 有选中（移动单 pane 栈）</span>
+  </div>
+
+  <div class="grid">
+    <div class="row-stack">
+      <!-- ==== NO SELECTION · DESKTOP ==== -->
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>文件 · 无选中 · 桌面</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <aside class="activity-bar">
+              <button class="act-btn" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn act-btn--active" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div style="flex:1; display:flex; overflow:hidden;">
+                <!-- tree -->
+                <div class="tree-pane">
+                  <div class="tree-pane__title">目录</div>
+                  <div class="tree-item tree-item--active">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    📁 公司/
+                  </div>
+                  <div class="tree-item tree-item--indent">📁 安全/</div>
+                  <div class="tree-item tree-item--indent">📁 行政/</div>
+                  <div class="tree-item tree-item--indent">📄 制度.md</div>
+                  <div class="tree-item">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    📁 项目/
+                  </div>
+                  <div class="tree-item">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    📁 资料/
+                  </div>
+                </div>
+                <!-- file list -->
+                <div class="file-list">
+                  <div class="file-list__head">
+                    <span>名称</span><span>大小</span><span>修改</span><span>索引</span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>应急预案.md</span>
+                    <span class="file-row__meta">12 KB</span>
+                    <span class="file-row__meta">7/11</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--docx">DOC</span>安全规范.docx</span>
+                    <span class="file-row__meta">48 KB</span>
+                    <span class="file-row__meta">7/10</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--pdf">PDF</span>消防指南.pdf</span>
+                    <span class="file-row__meta">1.2 MB</span>
+                    <span class="file-row__meta">7/8</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--xlsx">XLS</span>培训计划.xlsx</span>
+                    <span class="file-row__meta">32 KB</span>
+                    <span class="file-row__meta">7/6</span>
+                    <span><span class="index-dot index-dot--off"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>会议纪要.md</span>
+                    <span class="file-row__meta">8 KB</span>
+                    <span class="file-row__meta">7/5</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--docx">DOC</span>合同模板.docx</span>
+                    <span class="file-row__meta">24 KB</span>
+                    <span class="file-row__meta">7/3</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                </div>
+                <!-- preview placeholder -->
+                <div class="preview-col">
+                  <div class="preview-placeholder" style="border-left:none;">
+                    <div class="preview-placeholder__icon">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                    </div>
+                    <div class="preview-placeholder__title">点击文件预览</div>
+                    <div class="preview-placeholder__sub">从左侧列表选择一个文件，自动渲染 Markdown / 文档内容</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==== FOCUS (SELECTED) · DESKTOP ==== -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>文件 · 有选中 · 桌面</span>
+        <div class="device device--desktop">
+          <div class="app">
+            <aside class="activity-bar">
+              <button class="act-btn" title="搜索">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </button>
+              <button class="act-btn" title="对话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+              </button>
+              <button class="act-btn act-btn--active" title="文件">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </button>
+            </aside>
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div style="flex:1; display:flex; overflow:hidden;">
+                <div class="tree-pane">
+                  <div class="tree-pane__title">目录</div>
+                  <div class="tree-item tree-item--active">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    📁 公司/
+                  </div>
+                  <div class="tree-item tree-item--indent tree-item--active" style="margin-left:6px;">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    📁 安全/
+                  </div>
+                  <div class="tree-item tree-item--indent2">📄 应急预案.md</div>
+                  <div class="tree-item tree-item--indent2">📄 安全规范.docx</div>
+                  <div class="tree-item tree-item--indent">📁 行政/</div>
+                  <div class="tree-item">
+                    <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    📁 项目/
+                  </div>
+                </div>
+                <div class="file-list">
+                  <div class="file-list__head">
+                    <span>名称</span><span>大小</span><span>修改</span><span>索引</span>
+                  </div>
+                  <div class="file-row file-row--active">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>应急预案.md</span>
+                    <span class="file-row__meta">12 KB</span>
+                    <span class="file-row__meta">7/11</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--docx">DOC</span>安全规范.docx</span>
+                    <span class="file-row__meta">48 KB</span>
+                    <span class="file-row__meta">7/10</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--pdf">PDF</span>消防指南.pdf</span>
+                    <span class="file-row__meta">1.2 MB</span>
+                    <span class="file-row__meta">7/8</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--xlsx">XLS</span>培训计划.xlsx</span>
+                    <span class="file-row__meta">32 KB</span>
+                    <span class="file-row__meta">7/6</span>
+                    <span><span class="index-dot index-dot--off"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>会议纪要.md</span>
+                    <span class="file-row__meta">8 KB</span>
+                    <span class="file-row__meta">7/5</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                </div>
+                <!-- preview col -->
+                <div class="preview-col">
+                  <div class="preview-col__head">
+                    <button class="btn btn--ghost btn--sm">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                      编辑
+                    </button>
+                    <span class="preview-col__name">应急预案.md</span>
+                    <span class="preview-icon-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                    </span>
+                  </div>
+                  <div class="preview-col__body">
+                    <div><span class="ln-num">38</span>## 一、总则</div>
+                    <div><span class="ln-num">39</span>为有效应对突发 …</div>
+                    <div><span class="ln-num">40</span>&nbsp;</div>
+                    <div><span class="ln-num">41</span>## 二、核心要素</div>
+                    <div style="background:rgba(255,229,160,0.5); border-left:3px solid var(--yellow-border); padding-left:6px; margin-left:-6px; border-radius:0 6px 6px 0;"><span class="ln-num">42</span>应急预案核心要素：</div>
+                    <div><span class="ln-num">43</span>1. 组织机构与职责</div>
+                    <div><span class="ln-num">44</span>2. 风险评估预警</div>
+                    <div><span class="ln-num">45</span>3. 响应流程</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==== MOBILE COLUMN ==== -->
+    <div class="row-stack">
+      <!-- NO SELECTION · MOBILE (list pane) -->
+      <div class="mock">
+        <span class="mock__label state-init"><span class="dot"></span>文件 · 无选中 · 移动</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <header class="app-bar">
+                <div class="app-bar__logo"><span class="logo-dot"></span>Doclens</div>
+                <div class="app-bar__right"><span class="avatar">L</span></div>
+              </header>
+              <div class="mobile-header">
+                <span class="icon-btn-soft">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </span>
+                <div class="crumbs">
+                  <span>公司</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  <span class="crumb-current">安全</span>
+                </div>
+                <span class="icon-btn-soft">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                </span>
+              </div>
+              <div class="file-list" style="background:var(--bg);">
+                <div class="file-list__head">
+                  <span>名称</span><span>大小</span><span>修改</span><span>索引</span>
+                </div>
+                <div style="overflow-y:auto; flex:1;">
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>应急预案.md</span>
+                    <span class="file-row__meta">12 K</span>
+                    <span class="file-row__meta">7/11</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--docx">DOC</span>安全规范.docx</span>
+                    <span class="file-row__meta">48 K</span>
+                    <span class="file-row__meta">7/10</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--pdf">PDF</span>消防指南.pdf</span>
+                    <span class="file-row__meta">1.2 M</span>
+                    <span class="file-row__meta">7/8</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--xlsx">XLS</span>培训计划.xlsx</span>
+                    <span class="file-row__meta">32 K</span>
+                    <span class="file-row__meta">7/6</span>
+                    <span><span class="index-dot index-dot--off"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--md">MD</span>会议纪要.md</span>
+                    <span class="file-row__meta">8 K</span>
+                    <span class="file-row__meta">7/5</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                  <div class="file-row">
+                    <span class="file-row__name"><span class="type-tag type-tag--docx">DOC</span>合同模板.docx</span>
+                    <span class="file-row__meta">24 K</span>
+                    <span class="file-row__meta">7/3</span>
+                    <span><span class="index-dot"></span></span>
+                  </div>
+                </div>
+              </div>
+              <nav class="tab-bar">
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                  搜索
+                </span>
+                <span class="tab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+                  对话
+                </span>
+                <span class="tab tab--active">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                  文件
+                </span>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOCUS · MOBILE (detail pane) -->
+      <div class="mock">
+        <span class="mock__label state-focus"><span class="dot"></span>文件 · 有选中 · 移动</span>
+        <div class="device device--mobile">
+          <div class="app">
+            <div class="main">
+              <div class="mobile-header">
+                <span class="icon-btn-soft">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </span>
+                <div class="crumbs"><span class="crumb-current">应急预案.md</span></div>
+                <span class="icon-btn-soft">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+                </span>
+              </div>
+              <div style="padding:10px; background:var(--bg-soft); flex:1; overflow:hidden;">
+                <div class="card card--lavender" style="padding:8px 10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                  <span class="type-tag type-tag--md">MD</span>
+                  <span style="font-size:11px; font-weight:700; color:var(--ink); flex:1;">应急预案.md</span>
+                  <span style="font-size:9.5px; color:var(--ink-faint); font-family:var(--mono);">12 KB · 7/11</span>
+                  <button class="btn btn--sm btn--peach">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                    编辑
+                  </button>
+                </div>
+                <div class="preview-pane" style="height: calc(100% - 60px);">
+                  <div class="preview-body" style="padding:12px;">
+                    <div style="font-family:var(--mono); font-size:10px; line-height:1.8;">
+                      <div><span class="ln-num">38</span>## 一、总则</div>
+                      <div><span class="ln-num">39</span>为有效应对突发 …</div>
+                      <div><span class="ln-num">40</span>&nbsp;</div>
+                      <div><span class="ln-num">41</span>## 二、核心要素</div>
+                      <div style="background:rgba(255,229,160,0.55); border-left:3px solid var(--yellow-border); padding-left:6px; margin-left:-6px; border-radius:0 6px 6px 0;"><span class="ln-num">42</span>应急预案核心要素：</div>
+                      <div><span class="ln-num">43</span>1. 组织机构与职责</div>
+                      <div><span class="ln-num">44</span>2. 风险评估预警</div>
+                      <div><span class="ln-num">45</span>3. 响应流程</div>
+                      <div><span class="ln-num">46</span>4. 后期处置</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<p class="footer-note">
+  Style 09 · <strong>Claymorphism 柔粘土</strong> · 12 mockups · 浅粉底 + pastel 卡片 + 3px 厚边 + 双阴影（外投影 + inset 高光/暗角）+ 大圆角 20–24px + chunky 凸按钮
+</p>
+
+</body>
+</html>

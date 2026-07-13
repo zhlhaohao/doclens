@@ -1,0 +1,1618 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style 03 · 纸感阅读 / Paper — Doclens 搜索页 Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --paper:        #FDFBF7;
+  --paper-warm:   #F8F4ED;
+  --ink:          #1A1A1A;
+  --ink-soft:     #44403C;
+  --gray:         #78716C;
+  --gray-light:   #A8A29E;
+  --gray-faint:   #D6D3D1;
+  --border:       #E7E5E4;
+  --border-soft:  #F0EDE7;
+  --green:        #3F5E3F;
+  --green-dark:   #345134;
+  --green-soft:   #E8EDE8;
+  --serif:        'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --sans:         'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --mono:         'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--sans);
+  background: #ECE8E1;
+  color: var(--ink);
+  line-height: 1.5;
+  padding: 48px 32px 120px;
+  min-height: 100vh;
+}
+
+/* Paper grain noise overlay (fixed, global) */
+.paper-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   STYLE HEADER (identity card)
+   ============================================================ */
+.style-header {
+  max-width: 1120px;
+  margin: 0 auto 56px;
+  position: relative;
+  z-index: 2;
+}
+
+.style-header__top {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.style-number {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gray);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 3px;
+  background: var(--paper);
+}
+
+.style-header h1 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.style-header h1 em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gray);
+  font-size: 22px;
+}
+
+.style-tagline {
+  font-size: 14px;
+  color: var(--gray);
+  max-width: 620px;
+  line-height: 1.65;
+  margin-bottom: 28px;
+}
+
+/* Meta strip: colors + fonts + effects */
+.style-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  padding: 24px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.meta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meta-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+}
+
+/* Color chips */
+.color-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.chip-hex {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--gray);
+  letter-spacing: 0.02em;
+}
+
+/* Font specs */
+.font-spec {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.font-spec .sample-serif {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.font-spec .sample-sans {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  line-height: 1;
+}
+
+.font-spec .font-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--gray);
+}
+
+/* Effect tags */
+.effect-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.effect-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gray);
+  background: var(--paper-warm);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.effect-tag::before {
+  content: "–";
+  margin-right: 5px;
+  color: var(--gray-light);
+}
+
+/* ============================================================
+   SECTION DIVIDER
+   ============================================================ */
+.section-divider {
+  max-width: 1120px;
+  margin: 0 auto 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.section-divider__line {
+  flex: 1;
+  height: 1px;
+  background: var(--gray-faint);
+}
+
+.section-divider__label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   ANNOTATIONS (shared)
+   ============================================================ */
+.anno {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.anno-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--gray-faint);
+  background: var(--paper);
+  flex-shrink: 0;
+}
+
+.anno-line {
+  height: 1px;
+  background: var(--gray-faint);
+}
+
+/* ============================================================
+   DESKTOP MOCKUP
+   ============================================================ */
+.mockup-desktop {
+  max-width: 1120px;
+  margin: 0 auto 80px;
+  position: relative;
+  z-index: 2;
+}
+
+.browser-frame {
+  background: var(--paper);
+  border: 1px solid var(--gray-faint);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Browser chrome bar */
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  background: var(--paper-warm);
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.browser-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--paper);
+}
+
+.browser-url {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gray);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 12px;
+  margin: 0 16px;
+}
+
+.browser-tabs {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.browser-tab-info {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/* App container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 760px;
+  position: relative;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n2)' opacity='0.018'/%3E%3C/svg%3E");
+  background-color: var(--paper);
+}
+
+/* ---- App Bar ---- */
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 48px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--paper);
+}
+
+.app-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-spine {
+  width: 10px;
+  height: 16px;
+  background: var(--green);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.app-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-bar__icon-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--paper-warm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* ---- App Body ---- */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- Activity Bar ---- */
+.activity-bar {
+  width: 52px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--paper);
+}
+
+.activity-bar__item {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--gray-light);
+  position: relative;
+}
+
+.activity-bar__item svg {
+  width: 19px;
+  height: 19px;
+}
+
+.activity-bar__item.active {
+  color: var(--green);
+}
+
+.activity-bar__item.active::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--green);
+  border-radius: 0 2px 2px 0;
+}
+
+.activity-bar__item.active::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* ---- Main Area ---- */
+.main-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.main-content {
+  max-width: 640px;
+  width: 100%;
+  padding: 52px 40px 36px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ---- Welcome Pane ---- */
+.welcome-pane {
+  margin-bottom: 40px;
+  flex-shrink: 0;
+}
+
+.welcome-pane__title {
+  font-family: var(--serif);
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.welcome-pane__subtitle {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--gray);
+  letter-spacing: 0.01em;
+  margin-bottom: 24px;
+}
+
+.welcome-pane__divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 14px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 2;
+  flex-wrap: wrap;
+}
+
+.status-row + .status-row {
+  color: var(--gray);
+}
+
+.status-sep {
+  color: var(--gray-faint);
+  margin: 0 8px;
+}
+
+.status-dot-live {
+  color: var(--green);
+  font-weight: 500;
+}
+
+/* ---- History List ---- */
+.history-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 32px;
+}
+
+.history-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding-bottom: 0;
+}
+
+.history-list__title {
+  font-family: var(--serif);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.history-list__clear {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--gray-light);
+  background: none;
+  border: none;
+  cursor: default;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+
+.history-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+
+.history-item:last-child {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.history-item__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-item__text {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+.history-item__date {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--gray-light);
+  white-space: nowrap;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+/* ---- Input Row ---- */
+.input-row {
+  flex-shrink: 0;
+}
+
+.input-box {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.input-box__field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  min-width: 0;
+}
+
+.input-box__field input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.input-box__field input::placeholder {
+  color: var(--gray-light);
+}
+
+.search-icon-small {
+  width: 15px;
+  height: 15px;
+  color: var(--gray-light);
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.input-box__divider {
+  width: 1px;
+  background: var(--border);
+}
+
+.input-box__submit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 16px;
+  background: var(--green);
+  border: none;
+  color: #FDFBF7;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.input-box__caret {
+  width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-dark);
+  border: none;
+  color: #FDFBF7;
+  cursor: default;
+}
+
+.input-mode-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 2px;
+}
+
+.input-mode-hint__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.input-mode-hint__text {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gray);
+  letter-spacing: 0.02em;
+}
+
+/* Desktop annotations positioning */
+.anno-desktop { position: absolute; z-index: 10; }
+
+.anno-d-appbar   { top: 60px;  right: -148px; }
+.anno-d-actbar   { top: 140px; left: -128px; }
+.anno-d-welcome  { top: 160px; right: -148px; }
+.anno-d-history  { top: 400px; right: -148px; }
+.anno-d-input    { bottom: 40px; right: -148px; }
+
+/* ============================================================
+   MOBILE MOCKUP
+   ============================================================ */
+.mockup-mobile-wrap {
+  display: flex;
+  justify-content: center;
+  gap: 56px;
+  align-items: flex-start;
+  position: relative;
+  z-index: 2;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.phone-frame {
+  width: 375px;
+  background: var(--paper);
+  border: 1px solid var(--gray-faint);
+  border-radius: 32px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.phone-notch {
+  width: 120px;
+  height: 22px;
+  background: var(--paper-warm);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 0 0 14px 14px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 3;
+}
+
+.phone-screen {
+  display: flex;
+  flex-direction: column;
+  height: 760px;
+  position: relative;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n3'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n3)' opacity='0.018'/%3E%3C/svg%3E");
+  background-color: var(--paper);
+}
+
+/* Mobile app bar */
+.m-app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 0;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.m-app-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.m-app-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.m-refresh-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray);
+}
+
+.m-logo-text {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.m-app-bar__border {
+  height: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Mobile main */
+.m-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 36px 20px 20px;
+}
+
+/* Mobile welcome pane */
+.m-welcome-pane {
+  margin-bottom: 28px;
+  flex-shrink: 0;
+}
+
+.m-welcome-pane__title {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.m-welcome-pane__subtitle {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--gray);
+  margin-bottom: 20px;
+}
+
+.m-welcome-pane__divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 12px;
+}
+
+.m-status-row {
+  display: flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-soft);
+  line-height: 1.9;
+  flex-wrap: wrap;
+}
+
+.m-status-row + .m-status-row {
+  color: var(--gray);
+}
+
+.m-status-sep {
+  color: var(--gray-faint);
+  margin: 0 5px;
+}
+
+/* Mobile history list */
+.m-history-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+.m-history-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.m-history-list__title {
+  font-family: var(--serif);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.m-history-list__clear {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--gray-light);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+
+.m-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 4px;
+}
+
+.m-history-item__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.m-history-item__text {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-mode-tag {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 2px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+
+.m-history-item__date {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--gray-light);
+  white-space: nowrap;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+/* Mobile input box */
+.m-input-row {
+  flex-shrink: 0;
+}
+
+.m-input-box {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--paper);
+  overflow: hidden;
+  min-height: 44px;
+}
+
+.m-input-box__field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  min-width: 0;
+}
+
+.m-input-box__field input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.m-input-box__field input::placeholder {
+  color: var(--gray-light);
+}
+
+.m-input-box__divider {
+  width: 1px;
+  background: var(--border);
+}
+
+.m-input-box__submit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px;
+  background: var(--green);
+  color: #FDFBF7;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.m-input-box__caret {
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-dark);
+  color: #FDFBF7;
+}
+
+/* Mobile tab bar */
+.m-tab-bar {
+  display: flex;
+  border-top: 1px solid var(--border);
+  height: 56px;
+  flex-shrink: 0;
+  background: var(--paper);
+}
+
+.m-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+  color: var(--gray-light);
+}
+
+.m-tab svg {
+  width: 20px;
+  height: 20px;
+}
+
+.m-tab__label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.m-tab.active {
+  color: var(--green);
+}
+
+.m-tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 2px;
+  background: var(--green);
+  border-radius: 0 0 2px 2px;
+}
+
+/* Mobile annotations */
+.mobile-annos {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 22px;
+  position: relative;
+}
+
+.m-anno {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 52px;
+}
+
+.m-anno-line {
+  width: 28px;
+  height: 1px;
+  background: var(--gray-faint);
+}
+
+.m-anno-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--gray-faint);
+  background: var(--paper);
+  flex-shrink: 0;
+}
+
+.m-anno-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.m-anno-desc {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--gray-light);
+  display: block;
+  margin-top: 2px;
+}
+
+/* ============================================================
+   PAGE FOOTER
+   ============================================================ */
+.page-footer {
+  max-width: 1120px;
+  margin: 80px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--gray-faint);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+}
+
+.page-footer__text {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gray-light);
+  letter-spacing: 0.04em;
+}
+
+/* SVG shared */
+svg { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Paper grain overlay -->
+<div class="paper-grain" aria-hidden="true"></div>
+
+<!-- ============================================================
+     STYLE HEADER
+     ============================================================ -->
+<header class="style-header">
+  <div class="style-header__top">
+    <span class="style-number">Style 03</span>
+    <h1>纸感阅读 <em>/ Paper</em></h1>
+  </div>
+  <p class="style-tagline">
+    像翻开一本纸书的阅读感——米白纸底配衬线标题，墨黑文字安静地落在页面上。
+    无动画、无阴影、无渐变，仅以 hairline 线条与极淡纸纹理营造温暖、克制、专注的检索体验。
+  </p>
+
+  <div class="style-meta">
+    <!-- Color palette -->
+    <div class="meta-group">
+      <span class="meta-label">配色 Palette</span>
+      <div class="color-chips">
+        <div class="chip">
+          <div class="chip-swatch" style="background:#FDFBF7"></div>
+          <span class="chip-hex">#FDFBF7</span>
+        </div>
+        <div class="chip">
+          <div class="chip-swatch" style="background:#1A1A1A"></div>
+          <span class="chip-hex">#1A1A1A</span>
+        </div>
+        <div class="chip">
+          <div class="chip-swatch" style="background:#78716C"></div>
+          <span class="chip-hex">#78716C</span>
+        </div>
+        <div class="chip">
+          <div class="chip-swatch" style="background:#E7E5E4"></div>
+          <span class="chip-hex">#E7E5E4</span>
+        </div>
+        <div class="chip">
+          <div class="chip-swatch" style="background:#3F5E3F"></div>
+          <span class="chip-hex">#3F5E3F</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typography -->
+    <div class="meta-group">
+      <span class="meta-label">字体 Typography</span>
+      <div class="font-spec">
+        <span class="sample-serif">Doclens</span>
+        <span class="font-name">Source Serif 4 — 衬线标题</span>
+      </div>
+      <div class="font-spec" style="margin-top:4px">
+        <span class="sample-sans">结构感知文档检索</span>
+        <span class="font-name">Inter — 正文 / JetBrains Mono — 状态</span>
+      </div>
+    </div>
+
+    <!-- Effects -->
+    <div class="meta-group">
+      <span class="meta-label">效果 Effects</span>
+      <div class="effect-tags">
+        <span class="effect-tag">无动画</span>
+        <span class="effect-tag">无阴影</span>
+        <span class="effect-tag">无渐变</span>
+        <span class="effect-tag">hairline 线条</span>
+        <span class="effect-tag">纸纹理 noise</span>
+        <span class="effect-tag">圆角 4-6px</span>
+        <span class="effect-tag">阅读 measure 640px</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+
+<!-- ============================================================
+     DESKTOP MOCKUP
+     ============================================================ -->
+<div class="section-divider">
+  <div class="section-divider__line"></div>
+  <span class="section-divider__label">桌面端 / Desktop · ≥1024px</span>
+  <div class="section-divider__line"></div>
+</div>
+
+<section class="mockup-desktop">
+  <div class="browser-frame">
+
+    <!-- Browser chrome -->
+    <div class="browser-bar">
+      <div class="browser-dots"><span></span><span></span><span></span></div>
+      <div class="browser-url">localhost:7860/#/search</div>
+      <div class="browser-tabs">
+        <div class="browser-tab-info"></div>
+        <div class="browser-tab-info"></div>
+      </div>
+    </div>
+
+    <!-- App container -->
+    <div class="app-container">
+
+      <!-- App Bar -->
+      <div class="app-bar" style="position:relative">
+        <div class="app-bar__left">
+          <div class="logo-spine"></div>
+          <span class="logo-text">Doclens</span>
+        </div>
+        <div class="app-bar__right">
+          <div class="avatar">L</div>
+        </div>
+      </div>
+
+      <!-- App Body -->
+      <div class="app-body">
+
+        <!-- Activity Bar -->
+        <div class="activity-bar">
+          <div class="activity-bar__item active" title="搜索">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m20 20-3.5-3.5"/>
+            </svg>
+          </div>
+          <div class="activity-bar__item" title="对话">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+          </div>
+          <div class="activity-bar__item" title="文件">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <path d="M14 2v6h6"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Main Area -->
+        <div class="main-area">
+          <div class="main-content">
+
+            <!-- Welcome Pane -->
+            <div class="welcome-pane">
+              <h2 class="welcome-pane__title">Doclens</h2>
+              <p class="welcome-pane__subtitle">结构感知文档检索</p>
+              <div class="welcome-pane__divider"></div>
+              <div class="status-row">
+                <span>📁 …/cortex/test_work_dir</span>
+                <span class="status-sep">·</span>
+                <span>📄 69 文档</span>
+                <span class="status-sep">·</span>
+                <span>💾 12 MB</span>
+              </div>
+              <div class="status-row">
+                <span>👁 <span class="status-dot-live">●</span> 监控中</span>
+                <span class="status-sep">·</span>
+                <span>🕒 3 分钟前</span>
+                <span class="status-sep">·</span>
+                <span>🗂 .md 55 · .docx 7 · +2</span>
+              </div>
+            </div>
+
+            <!-- History List -->
+            <div class="history-list">
+              <div class="history-list__header">
+                <span class="history-list__title">历史会话</span>
+                <span class="history-list__clear">清空</span>
+              </div>
+              <div class="history-items">
+                <div class="history-item">
+                  <div class="history-item__left">
+                    <span class="history-item__text">总结应急预案编写要点。</span>
+                  </div>
+                  <span class="history-item__date">2 小时前</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-item__left">
+                    <span class="history-item__text">海洋深处的生态系统知识点</span>
+                  </div>
+                  <span class="history-item__date">昨天</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-item__left">
+                    <span class="history-item__text">max.poll.interval.ms</span>
+                    <span class="mode-tag">grep</span>
+                  </div>
+                  <span class="history-item__date">3 天前</span>
+                </div>
+                <div class="history-item">
+                  <div class="history-item__left">
+                    <span class="history-item__text">固态电池原理</span>
+                  </div>
+                  <span class="history-item__date">1 周前</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Input Box -->
+            <div class="input-row">
+              <div class="input-box">
+                <div class="input-box__field">
+                  <svg class="search-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7"/>
+                    <path d="m20 20-3.5-3.5"/>
+                  </svg>
+                  <input type="text" placeholder="输入搜索关键词..." readonly>
+                </div>
+                <div class="input-box__divider"></div>
+                <button class="input-box__submit">
+                  <span>搜索</span>
+                </button>
+                <button class="input-box__caret">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m6 9 6 6 6-6"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="input-mode-hint">
+                <span class="input-mode-hint__dot"></span>
+                <span class="input-mode-hint__text">keyword 模式 · Enter 提交 · Shift+Enter 换行</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Desktop annotations -->
+  <div class="anno anno-desktop anno-d-appbar">
+    <span class="anno-dot"></span>
+    <span class="anno-line" style="width:40px"></span>
+    <span>app-bar · 衬线 logo + 头像</span>
+  </div>
+  <div class="anno anno-desktop anno-d-actbar">
+    <span>activity-bar · 3 图标 hairline</span>
+    <span class="anno-line" style="width:32px"></span>
+    <span class="anno-dot"></span>
+  </div>
+  <div class="anno anno-desktop anno-d-welcome">
+    <span class="anno-dot"></span>
+    <span class="anno-line" style="width:40px"></span>
+    <span>welcome-pane · 衬线大标题 + 状态区</span>
+  </div>
+  <div class="anno anno-desktop anno-d-history">
+    <span class="anno-dot"></span>
+    <span class="anno-line" style="width:40px"></span>
+    <span>history-list · 历史会话</span>
+  </div>
+  <div class="anno anno-desktop anno-d-input">
+    <span class="anno-dot"></span>
+    <span class="anno-line" style="width:40px"></span>
+    <span>input-box · 搜索 + 模式切换</span>
+  </div>
+</section>
+
+
+<!-- ============================================================
+     MOBILE MOCKUP
+     ============================================================ -->
+<div class="section-divider">
+  <div class="section-divider__line"></div>
+  <span class="section-divider__label">移动端 / Mobile · &lt;1024px · 375px</span>
+  <div class="section-divider__line"></div>
+</div>
+
+<section class="mockup-mobile-wrap">
+
+  <!-- Phone Frame -->
+  <div class="phone-frame">
+    <div class="phone-notch"></div>
+    <div class="phone-screen">
+
+      <!-- Mobile App Bar -->
+      <div class="m-app-bar">
+        <div class="m-app-bar__left">
+          <div class="logo-spine" style="width:8px;height:14px"></div>
+          <span class="m-logo-text">Doclens</span>
+        </div>
+        <div class="m-app-bar__right">
+          <button class="m-refresh-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M8 16H3v5"/>
+            </svg>
+          </button>
+          <div class="avatar" style="width:28px;height:28px;font-size:12px">L</div>
+        </div>
+      </div>
+      <div class="m-app-bar__border"></div>
+
+      <!-- Mobile Main -->
+      <div class="m-main">
+
+        <!-- Welcome Pane -->
+        <div class="m-welcome-pane">
+          <h2 class="m-welcome-pane__title">Doclens</h2>
+          <p class="m-welcome-pane__subtitle">结构感知文档检索</p>
+          <div class="m-welcome-pane__divider"></div>
+          <div class="m-status-row">
+            <span>📁 …/cortex/test_work_dir</span>
+            <span class="m-status-sep">·</span>
+            <span>📄 69</span>
+            <span class="m-status-sep">·</span>
+            <span>💾 12 MB</span>
+          </div>
+          <div class="m-status-row">
+            <span>👁 <span class="status-dot-live">●</span> 监控中</span>
+            <span class="m-status-sep">·</span>
+            <span>🕒 3 分钟前</span>
+            <span class="m-status-sep">·</span>
+            <span>🗂 .md 55 · +2</span>
+          </div>
+        </div>
+
+        <!-- History List -->
+        <div class="m-history-list">
+          <div class="m-history-list__header">
+            <span class="m-history-list__title">历史会话</span>
+            <span class="m-history-list__clear">清空</span>
+          </div>
+          <div class="m-history-item">
+            <div class="m-history-item__left">
+              <span class="m-history-item__text">总结应急预案编写要点。</span>
+            </div>
+            <span class="m-history-item__date">2h 前</span>
+          </div>
+          <div class="m-history-item">
+            <div class="m-history-item__left">
+              <span class="m-history-item__text">海洋深处的生态系统知识点</span>
+            </div>
+            <span class="m-history-item__date">昨天</span>
+          </div>
+          <div class="m-history-item">
+            <div class="m-history-item__left">
+              <span class="m-history-item__text">max.poll.interval.ms</span>
+              <span class="m-mode-tag">grep</span>
+            </div>
+            <span class="m-history-item__date">3 天前</span>
+          </div>
+          <div class="m-history-item">
+            <div class="m-history-item__left">
+              <span class="m-history-item__text">固态电池原理</span>
+            </div>
+            <span class="m-history-item__date">1 周前</span>
+          </div>
+        </div>
+
+        <!-- Mobile Input -->
+        <div class="m-input-row">
+          <div class="m-input-box">
+            <div class="m-input-box__field">
+              <svg class="search-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="m20 20-3.5-3.5"/>
+              </svg>
+              <input type="text" placeholder="输入搜索关键词..." readonly>
+            </div>
+            <div class="m-input-box__divider"></div>
+            <button class="m-input-box__submit">
+              <span>搜索</span>
+            </button>
+            <button class="m-input-box__caret">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m18 15-6-6-6 6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Bar -->
+      <div class="m-tab-bar">
+        <div class="m-tab active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="m20 20-3.5-3.5"/>
+          </svg>
+          <span class="m-tab__label">搜索</span>
+        </div>
+        <div class="m-tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+          <span class="m-tab__label">对话</span>
+        </div>
+        <div class="m-tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 2v6h6"/>
+          </svg>
+          <span class="m-tab__label">文件</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Mobile annotations -->
+  <div class="mobile-annos">
+    <div class="m-anno">
+      <span class="m-anno-label">app-bar</span>
+      <span class="m-anno-line"></span>
+      <span class="m-anno-dot"></span>
+    </div>
+    <div class="m-anno">
+      <span class="m-anno-label">welcome-pane<span class="m-anno-desc">衬线标题 + 状态区</span></span>
+      <span class="m-anno-line"></span>
+      <span class="m-anno-dot"></span>
+    </div>
+    <div class="m-anno">
+      <span class="m-anno-label">history-list<span class="m-anno-desc">4 条历史会话</span></span>
+      <span class="m-anno-line"></span>
+      <span class="m-anno-dot"></span>
+    </div>
+    <div class="m-anno">
+      <span class="m-anno-label">input-box<span class="m-anno-desc">搜索 + 模式切换</span></span>
+      <span class="m-anno-line"></span>
+      <span class="m-anno-dot"></span>
+    </div>
+    <div class="m-anno">
+      <span class="m-anno-label">tab-bar<span class="m-anno-desc">3 tab · 墨绿下划线</span></span>
+      <span class="m-anno-line"></span>
+      <span class="m-anno-dot"></span>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="page-footer">
+  <span class="page-footer__text">Doclens · 搜索页 initial 态 · 纸感阅读 / Paper 风格 Mockup</span>
+  <span class="page-footer__text">2026 · static design spec</span>
+</footer>
+
+</body>
+</html>
