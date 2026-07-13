@@ -119,6 +119,7 @@ export class InputBox extends LitElement {
     }
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
     .caret {
+      box-sizing: border-box;
       position: static;
       top: auto;
       right: auto;
