@@ -6639,7 +6639,32 @@ ${r}</blockquote>
       <dialog open>${this._renderBody(e)}</dialog>
       <toast-stack></toast-stack>
     `}};Nr.styles=_`
-    :host { display: block; min-width: 360px; }
+    :host {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    /* 仅在 dialog 打开时显示 scrim 并捕获点击（modal 行为） */
+    :host(:has(dialog[open])) {
+      background: rgba(0, 0, 0, 0.3);
+      pointer-events: auto;
+    }
+    dialog {
+      pointer-events: auto;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-xl);
+      padding: 0; background: var(--cortex-surface);
+      box-shadow: var(--cortex-shadow-lg);
+      min-width: 360px; max-width: 90vw;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.3); }
+    dialog > * { display: block; padding: var(--cortex-space-6); }
+    /* toast-stack 在 closed 态下仍需可点击 */
+    :host > toast-stack { pointer-events: auto; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .body { font-size: var(--cortex-fs-sm); color: var(--cortex-text); line-height: 1.6; }
     .progress {
@@ -6659,17 +6684,7 @@ ${r}</blockquote>
     button.primary { background: var(--cortex-primary-gradient); color: #fff; border: none; border-radius: var(--cortex-radius-lg); box-shadow: var(--cortex-primary-glow); }
     button.primary:hover:not(:disabled) { opacity: 0.9; }
     button.warn { background: var(--cortex-danger); color: #fff; border: none; border-radius: var(--cortex-radius-lg); }
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0; background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 360px; max-width: 90vw;
-    }
-    dialog::backdrop { background: rgba(0,0,0,0.3); }
-    dialog > * { display: block; padding: var(--cortex-space-6); }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
       dialog {
         min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px);
         max-height: calc(100vh - 16px);
