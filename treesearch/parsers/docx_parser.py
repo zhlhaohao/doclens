@@ -75,6 +75,31 @@ def _docx_part_blob_ext(doc, rid: str) -> tuple[bytes, str] | None:
         return None
 
 
+def _docx_rid_disp_w_map(doc) -> dict[str, int]:
+    """遍历 body 内所有 drawing，返回 {rId: 显示宽 px}（EMU÷9525）。
+
+    每个 ``<w:drawing>`` 内 ``<wp:extent cx>`` 与 ``<a:blip r:embed>`` 关联，
+    覆盖 inline 与 anchor 两种锚定方式；取不到 extent 的图不在映射里（disp_w=None）。
+    """
+    from docx.oxml.ns import qn
+
+    mapping: dict[str, int] = {}
+    for drawing in doc.element.body.findall(".//" + qn("w:drawing")):
+        extent = drawing.find(".//" + qn("wp:extent"))
+        blip = drawing.find(".//" + qn("a:blip"))
+        if extent is None or blip is None:
+            continue
+        rid = blip.get(qn("r:embed"))
+        cx = extent.get("cx")
+        if not rid or not cx:
+            continue
+        try:
+            mapping[rid] = round(int(cx) / 9525)
+        except (ValueError, TypeError):
+            continue
+    return mapping
+
+
 def _extract_docx_headings(
     docx_path: str,
     image_store: "ImageStore | None" = None,
@@ -146,18 +171,24 @@ def _extract_docx_headings(
                 if r and r not in seen:
                     seen.add(r)
                     unique_rids.append(r)
+        disp_map = _docx_rid_disp_w_map(doc)
         parts_list = []
         for rid in unique_rids:
             be = _docx_part_blob_ext(doc, rid)
             if be is not None:
                 from .image_store import ImagePart
-                parts_list.append(ImagePart(blob=be[0], ext=be[1], source_ref=rid))
+                parts_list.append(
+                    ImagePart(
+                        blob=be[0], ext=be[1], source_ref=rid,
+                        disp_w=disp_map.get(rid),
+                    )
+                )
         refs = image_store.extract_for_doc(rel_path, parts_list) if parts_list else {}
         for i, rids in enumerate(para_image_rids):
             mds = [refs[r].inline_md for r in rids if r in refs]
             if mds:
                 base = lines[i]
-                lines[i] = (base + "\n\n" + "\n\n".join(mds)) if base else "\n\n".join(mds)
+                lines[i] = (base + "\n\n" + " ".join(mds)) if base else " ".join(mds)
 
     return headings, lines
 
