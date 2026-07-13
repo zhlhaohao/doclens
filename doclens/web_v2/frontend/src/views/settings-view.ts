@@ -65,12 +65,12 @@ export class SettingsView extends LitElement {
       border: none;
       border-left: 3px solid transparent;
       padding: var(--cortex-space-2) var(--cortex-space-3);
-      font-size: var(--cortex-fs-base);
+      font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
       cursor: pointer;
       font-family: inherit;
       text-align: left;
-      border-radius: var(--cortex-radius-sm);
+      border-radius: 0;
     }
     .tab-strip button:hover { color: var(--cortex-text); background: var(--cortex-surface-muted); }
     .tab-strip button.active {
@@ -83,22 +83,25 @@ export class SettingsView extends LitElement {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      padding: var(--cortex-space-6) var(--cortex-space-8);
+      padding: var(--cortex-space-4);
     }
-    .tab-panel { display: none; max-width: 880px; margin: 0 auto; }
+    .tab-panel { display: none; max-width: 680px; margin: 0 auto; }
     .tab-panel.active { display: block; }
 
     .section {
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
-      padding: var(--cortex-space-6);
+      box-shadow: var(--cortex-shadow-md);
+      padding: var(--cortex-space-4) var(--cortex-space-6);
       margin-bottom: var(--cortex-space-4);
     }
     .section h2 {
-      margin: 0 0 var(--cortex-space-1) 0;
+      margin: 0 0 var(--cortex-space-4);
       font-size: var(--cortex-fs-md);
       font-weight: 600;
+      color: var(--cortex-text);
+      letter-spacing: -0.01em;
     }
     .section-desc {
       color: var(--cortex-text-muted);
@@ -108,15 +111,16 @@ export class SettingsView extends LitElement {
     .field {
       display: grid;
       grid-template-columns: minmax(220px, 280px) 1fr;
-      gap: var(--cortex-space-6);
+      gap: var(--cortex-space-4);
       padding: var(--cortex-space-3) 0;
       border-top: 1px solid var(--cortex-border-muted);
       align-items: start;
     }
     .field:first-of-type { border-top: none; }
     .field-label .name {
-      font-size: var(--cortex-fs-base);
+      font-size: var(--cortex-fs-sm);
       font-weight: 500;
+      color: var(--cortex-text);
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
@@ -124,7 +128,7 @@ export class SettingsView extends LitElement {
     .field-label .env {
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
       margin-top: 2px;
     }
     .field-control { display: flex; flex-direction: column; gap: var(--cortex-space-1); }
@@ -134,14 +138,28 @@ export class SettingsView extends LitElement {
       align-items: center;
       gap: var(--cortex-space-3);
     }
+    .slider-row input[type="range"] {
+      accent-color: var(--cortex-primary);
+      flex: 1;
+    }
     .slider-row .value-chip { display: none; }
+    .value-chip {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      border-radius: var(--cortex-radius-sm);
+      padding: 2px var(--cortex-space-2);
+      font-variant-numeric: tabular-nums;
+    }
     .field-control .hint {
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
+      color: var(--cortex-text-subtle);
+      margin-top: var(--cortex-space-1);
     }
 
     .input, .select {
-      padding: 6px 10px;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       background: var(--cortex-surface);
@@ -154,14 +172,14 @@ export class SettingsView extends LitElement {
     .input:focus, .select:focus {
       outline: none;
       border-color: var(--cortex-primary);
-      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+      box-shadow: var(--cortex-focus-ring);
     }
 
     .effect {
       display: inline-flex;
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 10px;
+      font-size: var(--cortex-fs-xs);
+      padding: 2px var(--cortex-space-2);
+      border-radius: var(--cortex-radius-sm);
       font-weight: 500;
     }
     .effect.restart { background: rgba(245,158,11,0.12); color: var(--cortex-warning); }
@@ -173,6 +191,7 @@ export class SettingsView extends LitElement {
       padding: var(--cortex-space-3) var(--cortex-space-4);
       border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
       margin-bottom: var(--cortex-space-4);
       line-height: 1.7;
     }
@@ -185,13 +204,12 @@ export class SettingsView extends LitElement {
       flex-shrink: 0;
       background: var(--cortex-surface);
       border-top: 1px solid var(--cortex-border);
-      padding: var(--cortex-space-3) var(--cortex-space-8);
+      padding: var(--cortex-space-3) var(--cortex-space-6);
       display: flex;
       align-items: center;
       justify-content: space-between;
       box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
-      /* F1：footer 与 panel 对齐（max-width 880 居中），不再通栏 */
-      max-width: 880px;
+      max-width: 680px;
       width: 100%;
       margin: 0 auto;
       box-sizing: border-box;
@@ -204,15 +222,17 @@ export class SettingsView extends LitElement {
       gap: var(--cortex-space-2);
     }
     .dirty-dot {
+      display: inline-block;
       width: 8px; height: 8px;
       background: var(--cortex-warning);
       border-radius: 50%;
+      margin-right: var(--cortex-space-2);
     }
     .btn {
       display: inline-flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: 6px 12px;
+      padding: var(--cortex-space-2) var(--cortex-space-4);
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
@@ -223,9 +243,11 @@ export class SettingsView extends LitElement {
     }
     .btn:hover { background: var(--cortex-surface-muted); }
     .btn.primary {
-      background: var(--cortex-primary);
-      border-color: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
+      border: none;
       color: #fff;
+      box-shadow: var(--cortex-primary-glow);
+      font-weight: 500;
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -267,8 +289,10 @@ export class SettingsView extends LitElement {
       .copy-banner {
         display: flex;
         background: var(--cortex-primary-soft);
+        color: var(--cortex-primary);
+        font-weight: 500;
         border-bottom: 1px solid var(--cortex-border);
-        padding: var(--cortex-space-3) var(--cortex-space-4);
+        padding: var(--cortex-space-2) var(--cortex-space-4);
         align-items: center;
         gap: var(--cortex-space-3);
         font-size: var(--cortex-fs-sm);
@@ -304,13 +328,8 @@ export class SettingsView extends LitElement {
       .value-chip {
         display: inline-block;
         align-self: flex-start;
-        font-variant-numeric: tabular-nums;
         font-size: var(--cortex-fs-md);
         font-weight: 600;
-        color: var(--cortex-primary);
-        background: var(--cortex-primary-soft);
-        padding: 2px 10px;
-        border-radius: var(--cortex-radius-md);
       }
 
       /* Password "显示" 按钮：从绝对定位改为独立行 */
