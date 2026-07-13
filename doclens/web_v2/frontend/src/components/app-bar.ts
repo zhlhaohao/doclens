@@ -30,13 +30,14 @@ export class AppBar extends LitElement {
     }
     .brand .logo {
       width: 28px; height: 28px;
-      background: var(--cortex-primary);
+      background: var(--cortex-primary-gradient);
       border-radius: var(--cortex-radius-md);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       color: #fff;
       font-size: 16px;
+      box-shadow: var(--cortex-primary-glow);
     }
     .right-cluster {
       display: flex;
@@ -56,9 +57,9 @@ export class AppBar extends LitElement {
       background: var(--cortex-surface-muted);
       white-space: nowrap;
     }
-    .watch-badge.dot { color: #10b981; }
+    .watch-badge.dot { color: var(--cortex-success); }
     .watch-badge.busy { color: var(--cortex-primary); }
-    .watch-badge.warn { color: #d97706; }
+    .watch-badge.warn { color: var(--cortex-warning); }
     /* 移动端刷新按钮：圆形描边按钮，点击派发 cortex:refresh 事件，
        各 view 可监听并自行决定如何刷新（默认不做事，硬刷新由调用方决定）。
        桌面端默认隐藏，移动端（≤1023px）显示。 */
@@ -118,13 +119,13 @@ export class AppBar extends LitElement {
       transition: background 0.15s, border-color 0.15s;
     }
     .avatar-btn:hover {
-      background: var(--cortex-surface-muted);
+      background: var(--cortex-primary-soft);
       border-color: var(--cortex-border);
     }
     .avatar {
       width: 32px; height: 32px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #0D9488, #0F766E);
+      background: var(--cortex-primary-gradient);
       color: #fff;
       display: inline-flex;
       align-items: center;
