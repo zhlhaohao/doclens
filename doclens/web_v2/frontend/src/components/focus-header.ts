@@ -24,9 +24,9 @@ export class FocusHeader extends LitElement {
       position: relative;
     }
     .back {
-      background: linear-gradient(135deg, #00B894 0%, #00A884 100%);
-      color: #fff;
-      border: none;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border: 1px solid var(--cortex-border);
       cursor: pointer;
       width: 32px;
       height: 32px;
@@ -38,17 +38,21 @@ export class FocusHeader extends LitElement {
       font-size: 18px;
       font-weight: 500;
       line-height: 1;
-      box-shadow: 0 2px 6px rgba(0, 184, 148, 0.25);
-      transition: transform 0.15s, opacity 0.1s, box-shadow 0.15s;
+      transition: transform 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
       /* Disable iOS Safari double-tap-zoom detection: without this, the first
          tap is held for ~300ms to see if a second tap follows, which surfaces
          as "needs 2 clicks" on touch devices. */
       touch-action: manipulation;
     }
-    .back:hover { box-shadow: 0 3px 10px rgba(0, 184, 148, 0.35); }
-    .back:active { transform: scale(0.94); opacity: 0.9; }
+    .back:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    .back:active { transform: scale(0.94); }
     .title {
       font-weight: 600;
+      letter-spacing: -0.01em;
       color: var(--cortex-text);
       font-size: var(--cortex-fs-md);
       flex: 1;
@@ -58,15 +62,16 @@ export class FocusHeader extends LitElement {
       text-align: center;
     }
     .meta {
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
       flex-shrink: 0;
     }
     .more-wrap { position: relative; }
     .more-btn {
-      background: transparent;
-      border: none;
-      color: var(--cortex-text);
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      color: var(--cortex-text-muted);
       font-family: inherit;
       cursor: pointer;
       width: 32px;
@@ -76,10 +81,14 @@ export class FocusHeader extends LitElement {
       align-items: center;
       justify-content: center;
       padding: 0;
-      transition: background 0.15s, opacity 0.1s;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
       touch-action: manipulation;
     }
-    .more-btn:hover { background: var(--cortex-surface-muted); }
+    .more-btn:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
     .more-btn:active { opacity: 0.7; }
     .more-btn .kebab {
       font-size: 18px;

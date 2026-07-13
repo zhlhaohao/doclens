@@ -10,8 +10,9 @@ export class ActivityBar extends LitElement {
       flex-direction: column;
       align-items: center;
       width: var(--cortex-activity-bar-width);
-      background: #0F172A;
-      color: #94A3B8;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border-right: 1px solid var(--cortex-border);
       padding: var(--cortex-space-4) 0;
       gap: var(--cortex-space-4);
       flex-shrink: 0;
@@ -20,7 +21,7 @@ export class ActivityBar extends LitElement {
       width: 36px; height: 36px;
       border: none;
       background: transparent;
-      color: inherit;
+      color: var(--cortex-text-muted);
       cursor: pointer;
       border-radius: var(--cortex-radius-sm);
       display: flex;
@@ -29,8 +30,8 @@ export class ActivityBar extends LitElement {
       font-size: 18px;
       transition: background 0.15s, color 0.15s;
     }
-    button:hover { background: rgba(255,255,255,0.08); color: #fff; }
-    button.active { background: var(--cortex-primary); color: #fff; }
+    button:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
+    button.active { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
   `;
 
   @property() active: ViewId = "search";

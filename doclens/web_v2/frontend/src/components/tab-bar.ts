@@ -18,7 +18,7 @@ export class TabBar extends LitElement {
       flex: 1;
       border: none;
       background: transparent;
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
       cursor: pointer;
       display: flex;
       flex-direction: column;
@@ -28,7 +28,9 @@ export class TabBar extends LitElement {
       font-size: 10px;
       /* 上多下少：图标视觉重心略偏下，padding 把它往中间拉 */
       padding: 8px 0 2px;
+      transition: background 0.15s, color 0.15s;
     }
+    .tab:hover { background: var(--cortex-surface-muted); }
     .tab.active { color: var(--cortex-primary); font-weight: 600; }
     .tab .icon { font-size: 18px; line-height: 1; }
   `;
