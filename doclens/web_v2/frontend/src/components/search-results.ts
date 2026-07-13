@@ -30,7 +30,7 @@ export class SearchResults extends LitElement {
       padding: var(--cortex-space-8);
     }
     .loading {
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-8);
