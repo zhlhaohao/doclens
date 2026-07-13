@@ -3703,6 +3703,7 @@ ${r}</blockquote>
       color: var(--cortex-text);
       border: 1px solid var(--cortex-chat-bubble-ai-border);
       border-bottom-left-radius: 6px;
+      width: 100%;
     }
     /* assistant 回复的 markdown 渲染（紧凑气泡风格） */
     .md-body > :first-child { margin-top: 0; }
