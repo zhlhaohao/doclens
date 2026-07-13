@@ -10,16 +10,21 @@ export class ResultCard extends LitElement {
       display: block;
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      padding: 10px 12px;
+      border-radius: var(--cortex-radius-lg);
+      padding: 12px 16px;
       cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
+      box-shadow: var(--cortex-shadow-sm);
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
     }
     :host([active]) {
       border-color: var(--cortex-primary);
       background: var(--cortex-primary-soft);
+      box-shadow: var(--cortex-shadow-md);
     }
-    :host(:hover) { border-color: var(--cortex-primary); }
+    :host(:hover) {
+      border-color: var(--cortex-primary);
+      box-shadow: var(--cortex-shadow-md);
+    }
     .path {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -30,7 +35,7 @@ export class ResultCard extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-primary);
       background: var(--cortex-primary-soft);
-      border-radius: 4px;
+      border-radius: var(--cortex-radius-sm);
       padding: 0 4px;
       margin-right: 4px;
     }
@@ -65,12 +70,12 @@ export class ResultCard extends LitElement {
       font-size: 0.9em;
       background: var(--cortex-surface-muted);
       padding: 0 3px;
-      border-radius: 2px;
+      border-radius: var(--cortex-radius-sm);
     }
     .snippet pre {
       background: var(--cortex-surface-muted);
       padding: 6px 8px;
-      border-radius: 4px;
+      border-radius: var(--cortex-radius-sm);
       overflow-x: auto;
       margin: 4px 0;
       font-family: var(--cortex-font-mono);
@@ -106,7 +111,7 @@ export class ResultCard extends LitElement {
     }
     .score {
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
+      color: var(--cortex-text-muted);
       font-family: var(--cortex-font-mono);
       margin-top: 4px;
     }
