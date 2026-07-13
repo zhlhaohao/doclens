@@ -9,25 +9,37 @@ export class HistoryItem extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--cortex-surface-muted);
+      background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
-      padding: 10px 14px;
+      padding: 10px 12px;
       cursor: pointer;
-      transition: border-color 0.15s;
+      transition: background 0.15s, border-color 0.15s;
     }
-    :host(:hover) { border-color: var(--cortex-primary); }
-    .name { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; }
-    .meta { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); }
+    :host(:hover) {
+      background: var(--cortex-surface-muted);
+      border-color: var(--cortex-text-subtle);
+    }
+    .name {
+      font-size: var(--cortex-fs-base);
+      color: var(--cortex-text);
+      font-weight: 500;
+    }
+    .meta {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font-mono);
+    }
     .mode-tag {
       display: inline-flex;
       align-items: center;
       margin-right: 6px;
       font-size: var(--cortex-fs-xs);
+      font-family: var(--cortex-font-mono);
       color: var(--cortex-primary);
       background: var(--cortex-primary-soft);
-      border-radius: 9999px;
-      padding: 1px 8px;
+      border-radius: var(--cortex-radius-sm);
+      padding: 0 4px;
       line-height: 1.5;
     }
   `;

@@ -10,21 +10,26 @@ export class WelcomePane extends LitElement {
       text-align: center;
       background: linear-gradient(
         180deg,
-        rgba(208, 245, 232, 0.55) 0%,
-        rgba(240, 242, 249, 0) 100%
+        var(--cortex-primary-soft) 0%,
+        var(--cortex-surface) 100%
       );
       flex-shrink: 0;
     }
     .title {
-      font-size: 22px;
+      font-size: var(--cortex-fs-xl);
       font-weight: 700;
       color: var(--cortex-text);
-      letter-spacing: -0.3px;
+      letter-spacing: -0.02em;
       margin: 0;
     }
     .title .accent {
       color: var(--cortex-primary);
       font-weight: 700;
+    }
+    /* suffix（如「问日程」）——紧跟在 .sep 之后的 span */
+    .title .sep + span {
+      color: var(--cortex-primary);
+      font-weight: 600;
     }
     .title .sep {
       color: var(--cortex-text-subtle);
@@ -32,7 +37,7 @@ export class WelcomePane extends LitElement {
       font-weight: 400;
     }
     .subtitle {
-      font-size: var(--cortex-fs-sm);
+      font-size: var(--cortex-fs-md);
       color: var(--cortex-text-muted);
       margin-top: 6px;
     }
@@ -40,7 +45,6 @@ export class WelcomePane extends LitElement {
       :host {
         padding: 28px var(--cortex-space-4) 18px;
       }
-      .title { font-size: 24px; }
     }
   `;
 
