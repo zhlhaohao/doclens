@@ -2226,7 +2226,7 @@ var Yo=Object.defineProperty;var Go=(e,t,r)=>t in e?Yo(e,t,{enumerable:!0,config
       flex-direction: column;
       align-items: center;
       width: var(--cortex-activity-bar-width);
-      background: var(--cortex-bg);
+      background: var(--cortex-border-muted);
       color: var(--cortex-text-muted);
       border-right: 1px solid var(--cortex-border);
       padding: var(--cortex-space-4) 0;
