@@ -27,13 +27,17 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         if ext:
             type_counts[ext] = type_counts.get(ext, 0) + 1
     watcher_obj = get_watcher()
+    cfg = get_config()
     return {
         "indexed_docs": len(docs),
         "index_path": str(idx.index_path),
         "total_size_bytes": total_size,
         "file_types": type_counts,
+        # 当前 AI 模型 id（用于前端展示「{model} 思考中」），可能为空
+        # （用户未设置 PLANIFY_MODEL_ID 时不展示模型名前缀）
+        "model_name": cfg.planify_model_id or "",
         "watcher": {
-            "enabled": get_config().watch_enabled,
+            "enabled": cfg.watch_enabled,
             **(watcher_obj.status() if watcher_obj is not None else {
                 "running": False,
                 "reindexing": False,

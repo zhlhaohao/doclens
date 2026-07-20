@@ -100,6 +100,8 @@ export interface SystemStatus {
   index_path: string;
   total_size_bytes: number;
   file_types: Record<string, number>;
+  /** 当前 AI 模型 id（后端从 CortexConfig.planify_model_id 读）。空字符串表示未配置。 */
+  model_name?: string;
   watcher?: WatcherStatus | null;
 }
 
