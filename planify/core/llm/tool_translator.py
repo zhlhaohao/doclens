@@ -3,13 +3,18 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
 from .types import Tool
 
 
 class ToolCallMapper:
-    """维护 openai_id <-> internal_id（toolu_xxx）映射。"""
+    """维护 openai_id <-> internal_id（toolu_xxx）映射。
+
+    保留以兼容历史用法（外部可能仍 import）。round-trip 当前直接透传
+    block["id"]（不再回查 mapper），避免 mapper 每次 chat/stream 调用
+    重建导致的 tool_result 丢失 + 工具调用无限循环 bug。
+    """
 
     def __init__(self) -> None:
         self._openai_to_internal: dict[str, str] = {}
@@ -44,7 +49,7 @@ def tools_anthropic_to_openai(tools: list[Tool]) -> list[dict]:
 
 
 def messages_anthropic_to_openai(
-    messages: list[dict], mapper: ToolCallMapper
+    messages: list[dict], mapper: Optional[ToolCallMapper] = None,
 ) -> list[dict]:
     """把 Anthropic 风格 messages（含 tool_use / tool_result 块）转成 OpenAI 风格。
 
@@ -69,11 +74,15 @@ def messages_anthropic_to_openai(
                 if btype == "text":
                     text_parts.append(block.get("text", ""))
                 elif btype == "tool_use":
-                    internal_id = block["id"]
-                    openai_id = mapper.to_openai(internal_id) or mapper.register(
-                        # 若 internal_id 不在 mapper 中（异常路径），回退为新生成
-                        internal_id.replace("toolu_", "call_")
-                    )
+                    # 关键：runner 已在 content_block_stop 把模型生成的 tool_use_id
+                    # （OpenAI 风格 call_xxx 或 Anthropic 风格 toolu_xxx）原样写入
+                    # block["id"]。直接复用，**不要**走 mapper——mapper 每次
+                    # chat/stream 调用都重建，回查 to_openai 必然 None，回退
+                    # register() 会生成新的内部 id，导致：
+                    #   1) 工具调用 id 每次轮换，模型识别不到自己的调用；
+                    #   2) 后续 tool_result.tool_use_id 查不到对应映射被丢弃。
+                    # 两者叠加 → 模型永远看不到工具执行结果 → 无限循环重试同一工具。
+                    openai_id = block["id"]
                     tool_calls.append({
                         "id": openai_id,
                         "type": "function",
@@ -89,14 +98,11 @@ def messages_anthropic_to_openai(
         elif role == "user":
             for block in content:
                 if block.get("type") == "tool_result":
-                    internal_id = block["tool_use_id"]
-                    openai_id = mapper.to_openai(internal_id)
-                    if not openai_id:
-                        # 内部 ID 未注册（极端情况），跳过
-                        continue
+                    # 同上：tool_use_id 原样回传给 OpenAI，保证与 assistant
+                    # tool_calls[i].id 完全一致（OpenAI 协议强制要求）。
                     out.append({
                         "role": "tool",
-                        "tool_call_id": openai_id,
+                        "tool_call_id": block["tool_use_id"],
                         "content": str(block.get("content", "")),
                     })
                 else:

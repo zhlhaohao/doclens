@@ -246,16 +246,19 @@ class ToolCallState:
         self.input_json_chunks.append(chunk)
 
     def get_complete_input(self) -> Dict[str, Any]:
-        """
-        获取完整的输入参数。
+        """获取完整的输入参数。
 
         Returns:
-            解析后的参数字典
+            解析后的参数字典。流式累积失败时返回 ``{"_parse_error": <raw>}``
+            而非 ``{}``——后者会丢失调试信息，前者会让 handler 在收到未知
+            kwarg 时明确报错（而不是默默接收 ``raw=...`` 然后语义错乱）。
         """
         import json
 
         full_json = "".join(self.input_json_chunks)
+        if not full_json:
+            return {}
         try:
-            return json.loads(full_json) if full_json else {}
+            return json.loads(full_json)
         except json.JSONDecodeError:
-            return {"raw": full_json}
+            return {"_parse_error": full_json}

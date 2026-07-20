@@ -105,9 +105,15 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     if rel_paths else result.text
                 )
                 logger.info(
-                    "chat done: tools=%d compliant=%s tool_refs=%d",
+                    "chat done: tools=%d compliant=%s tool_refs=%d error=%s",
                     len(result.tool_calls), compliant, len(tool_refs),
+                    bool(emitter.error),
                 )
+                # run_stream 在内部捕获 LLM 异常 → emit_error → emitter.error + done=True。
+                # 此处错误未抛出到 _run_in_thread 的 except，需手动透传给前端，
+                # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
+                if emitter.error:
+                    _put({"type": "error", "detail": emitter.error})
                 _put({"type": "token", "text": corrected})
                 if not compliant:
                     _put({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
