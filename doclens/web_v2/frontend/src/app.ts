@@ -4,6 +4,7 @@ import { customElement } from "lit/decorators.js";
 import { store, actions } from "./state/store";
 import type { ViewId } from "./state/types";
 import { router } from "./router/router";
+import { getStatus } from "./api/status";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -66,6 +67,18 @@ export class CortexApp extends LitElement {
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
     startWatchPolling();
+    // 拉取一次 /api/status（拿到当前模型名，给 chat-view 渲染「思考中」用）。
+    // 失败静默：模型名为空时 UI 仅显示「思考中」，不阻塞。
+    void this._loadStatus();
+  }
+
+  private async _loadStatus() {
+    try {
+      const s = await getStatus();
+      actions.setSystemStatus(s);
+    } catch {
+      /* 静默失败：模型名非关键 */
+    }
   }
 
   disconnectedCallback() {

@@ -169,6 +169,10 @@ export const actions = {
     store.setState({ watcher: w });
   },
 
+  setSystemStatus(s: AppState["status"]) {
+    store.setState({ status: s });
+  },
+
   openReindexConfirm() {
     const r = store.getState().reindex;
     store.setState({ reindex: { ...r, dialog: "confirm" } });

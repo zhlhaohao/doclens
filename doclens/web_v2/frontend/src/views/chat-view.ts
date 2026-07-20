@@ -633,6 +633,7 @@ export class ChatView extends LitElement {
              style="--preview-pane-width: ${this._previewPaneWidth}px">
           <chat-stream
             .messages=${s.messages}
+            .modelName=${store.getState().status?.model_name ?? null}
             @reference-click=${this._onReferenceClick}>
           </chat-stream>
           ${hasPreview ? html`

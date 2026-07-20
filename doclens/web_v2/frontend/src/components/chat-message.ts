@@ -188,6 +188,9 @@ export class ChatMessageEl extends LitElement {
   @property({ reflect: true }) role: "user" | "assistant" = "user";
   @property({ attribute: false }) message: ChatMessage | null = null;
   @property() error: string | null = null;
+  /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
+   *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
+  @property({ attribute: false }) modelName: string | null = null;
 
   firstUpdated() {
     this.addEventListener("click", this._onClick);
@@ -218,7 +221,10 @@ export class ChatMessageEl extends LitElement {
 
   /** assistant: markdown 渲染；user: 纯文本（保留换行）；空内容显示思考占位 */
   private renderBubble(content: string) {
-    if (content === "") return html`<span class="thinking">思考中...</span>`;
+    if (content === "") {
+      const prefix = this.modelName ? `${this.modelName} 思考中` : "思考中";
+      return html`<span class="thinking">${prefix}...</span>`;
+    }
     if (this.role === "assistant") {
       const htmlstr = marked.parse(content, { async: false }) as string;
       return html`<div class="md-body" .innerHTML=${this.linkifyReferences(htmlstr)}></div>`;

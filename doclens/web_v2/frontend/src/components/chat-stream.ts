@@ -29,6 +29,9 @@ export class ChatStream extends LitElement {
   `;
 
   @property({ attribute: false }) messages: ChatMessage[] = [];
+  /** 当前 AI 模型 id（来自 store.getState().status?.model_name）。
+   *  传 null/空串 → 思考中仅显示「思考中...」，不展示模型前缀。 */
+  @property({ attribute: false }) modelName: string | null = null;
   private _scrollRafPending = false;
 
   updated() {
@@ -47,7 +50,7 @@ export class ChatStream extends LitElement {
       return html`<div class="empty">开始与 Doclens 对话</div>`;
     }
     return html`
-      ${this.messages.map((m) => html`<chat-message role=${m.role} .message=${m}></chat-message>`)}
+      ${this.messages.map((m) => html`<chat-message role=${m.role} .message=${m} .modelName=${this.modelName}></chat-message>`)}
     `;
   }
 }
