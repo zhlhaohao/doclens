@@ -32,37 +32,62 @@ def test_mapper_register_and_lookup():
 
 
 def test_messages_with_tool_use_and_tool_result():
-    m = ToolCallMapper()
-    internal_id = m.register("call_x")
+    """Round-trip：assistant tool_use.id 与 tool_result.tool_use_id 必须原样透传
+    （OpenAI 协议强制要求 tool_call_id 匹配 assistant tool_calls[i].id）。
+
+    修复前 mapper 每次调用重建，会把 tool_use.id 换成新的 internal id，
+    同时 tool_result 因查不到映射被丢弃，导致模型永远看不到工具执行结果。
+    """
     messages = [
         {"role": "user", "content": "do it"},
         {
             "role": "assistant",
             "content": [
                 {"type": "text", "text": "ok"},
-                {"type": "tool_use", "id": internal_id, "name": "read", "input": {"path": "/a"}},
+                {"type": "tool_use", "id": "call_x", "name": "read", "input": {"path": "/a"}},
             ],
         },
         {
             "role": "user",
             "content": [
-                {"type": "tool_result", "tool_use_id": internal_id, "content": "file content"},
+                {"type": "tool_result", "tool_use_id": "call_x", "content": "file content"},
             ],
         },
     ]
-    out = messages_anthropic_to_openai(messages, m)
-    # assistant 转 assistant + tool_calls
+    out = messages_anthropic_to_openai(messages)
+    # assistant 转 assistant + tool_calls（id 原样）
     asst = out[1]
     assert asst["role"] == "assistant"
     assert asst["tool_calls"][0]["id"] == "call_x"
     assert asst["tool_calls"][0]["function"]["name"] == "read"
     import json
     assert json.loads(asst["tool_calls"][0]["function"]["arguments"]) == {"path": "/a"}
-    # tool_result 转 role=tool
+    # tool_result 转 role=tool（id 原样）
     tool_msg = out[2]
     assert tool_msg["role"] == "tool"
     assert tool_msg["tool_call_id"] == "call_x"
     assert tool_msg["content"] == "file content"
+
+
+def test_messages_round_trip_preserves_ids_without_mapper():
+    """即使不传 mapper，id 也必须原样保留（兼容 chat/stream 调用方）。"""
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "call_zzz", "name": "x", "input": {}},
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_zzz", "content": "ok"},
+            ],
+        },
+    ]
+    out = messages_anthropic_to_openai(messages)
+    assert out[0]["tool_calls"][0]["id"] == "call_zzz"
+    assert out[1]["tool_call_id"] == "call_zzz"
 
 
 def test_accumulate_input_json_delta_valid():

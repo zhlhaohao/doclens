@@ -7,7 +7,6 @@ from typing import Any, Iterator
 from openai import OpenAI
 
 from .tool_translator import (
-    ToolCallMapper,
     messages_anthropic_to_openai,
     tools_anthropic_to_openai,
 )
@@ -43,10 +42,8 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
     ) -> LLMResponse:
-        # 每次调用创建新 mapper，避免跨请求 ID 状态泄漏
-        mapper = ToolCallMapper()
         openai_messages = [{"role": "system", "content": system}] if system else []
-        openai_messages.extend(messages_anthropic_to_openai(messages, mapper))
+        openai_messages.extend(messages_anthropic_to_openai(messages))
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": openai_messages,
@@ -65,13 +62,14 @@ class OpenAICompatProvider:
 
         if getattr(message, "tool_calls", None):
             for tc in message.tool_calls:
-                internal_id = mapper.register(tc.id)
+                # 直接使用模型生成的 call_xxx 作为 block id，避免 round-trip 映射
+                # 断裂导致下一轮 chat/stream 无法回传 tool_result（参见 tool_translator 注释）。
                 try:
                     args = json.loads(tc.function.arguments or "{}")
                 except (json.JSONDecodeError, TypeError):
                     args = {}
                 content_blocks.append(
-                    ToolUseBlock(id=internal_id, name=tc.function.name, input=args)
+                    ToolUseBlock(id=tc.id, name=tc.function.name, input=args)
                 )
 
         # 映射 finish_reason
@@ -100,9 +98,7 @@ class OpenAICompatProvider:
         max_tokens: int = 8000,
     ) -> Iterator[StreamEvent]:
         openai_messages = [{"role": "system", "content": system}] if system else []
-        # stream 内部不持有跨调用状态
-        mapper = ToolCallMapper()
-        openai_messages.extend(messages_anthropic_to_openai(messages, mapper))
+        openai_messages.extend(messages_anthropic_to_openai(messages))
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": openai_messages,
@@ -116,8 +112,8 @@ class OpenAICompatProvider:
         json_deltas: dict[int, list[str]] = {}  # tool_call index -> partial JSON fragments
         tool_call_ids: dict[int, str] = {}      # tool_call index -> openai id
         tool_call_names: dict[int, str] = {}    # tool_call index -> function name
+        tool_started: set[int] = set()          # 已发 start 事件的 tool_call idx
         text_started = False
-        tool_started = False
 
         yield StreamEvent(type="message_start")
 
@@ -144,32 +140,38 @@ class OpenAICompatProvider:
             if getattr(delta, "tool_calls", None):
                 for tc in delta.tool_calls:
                     idx = tc.index
+                    # OpenAI 的 tool_call.index 用 0/1/2... 标识同一轮里的并行工具。
+                    # Anthropic 风格：text 占用 block 0，tool_use 从 block 1 起递增。
+                    # 用 idx+1 给每个并行工具独立 block，避免：
+                    #   1) 多个工具 JSON 拼接成一坨非法 JSON → ToolCallState.get_complete_input
+                    #      退回 {"raw": "..."} → handler 收到 raw=... 参数报错；
+                    #   2) 后续 content_block_stop 只关 block 1，漏关其他并行工具。
+                    block_index = idx + 1
                     if tc.id:
                         tool_call_ids[idx] = tc.id
                         tool_call_names[idx] = tc.function.name  # type: ignore[union-attr]
-                        if not tool_started:
+                        if idx not in tool_started:
                             yield StreamEvent(
                                 type="content_block_start",
-                                block_index=1,
+                                block_index=block_index,
                                 block_type="tool_use",
                                 tool_use_id=tc.id,
                                 tool_name=tc.function.name,  # type: ignore[union-attr]
                             )
-                            tool_started = True
+                            tool_started.add(idx)
                     if tc.function and tc.function.arguments:
                         json_deltas.setdefault(idx, []).append(tc.function.arguments)
                         yield StreamEvent(
                             type="content_block_delta",
                             input_json_delta=tc.function.arguments,
-                            block_index=1,
+                            block_index=block_index,
                         )
 
             if choice.finish_reason:
                 if text_started:
                     yield StreamEvent(type="content_block_stop", block_index=0)
-                if tool_started:
-                    # 关闭 tool_use block（input_json_delta 已在前面 yield）
-                    yield StreamEvent(type="content_block_stop", block_index=1)
+                for idx in tool_started:
+                    yield StreamEvent(type="content_block_stop", block_index=idx + 1)
                 stop_reason_map = {
                     "stop": "end_turn",
                     "tool_calls": "tool_use",
