@@ -17,12 +17,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动文件监控，退出时停止。"""
+    """应用生命周期：启动文件监控 + MCP server，退出时停止。"""
     from doclens.web_v2 import deps
     deps.start_watcher()
+    await deps.start_mcp_server()
     try:
         yield
     finally:
+        deps.stop_mcp_server()
         deps.stop_watcher()
 
 
@@ -182,6 +184,13 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
 
     # 尝试清理占用端口的进程
     _kill_port_process(port)
+
+    # 启动前：确保 Claude Code kb-ask skill 已安装到 ~/.claude/skills
+    try:
+        from doclens.claude_code_skill import ensure_claude_code_skill
+        ensure_claude_code_skill()
+    except Exception as e:  # noqa: BLE001
+        print(f"[Claude Code skill 同步跳过: {e}]")
 
     app = create_app()
     url = f"http://localhost:{port}" if host in ("127.0.0.1", "0.0.0.0") else f"http://{host}:{port}"

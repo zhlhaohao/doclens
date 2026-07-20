@@ -20,6 +20,7 @@ _idx_manager: Optional[IndexManager] = None
 _sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
+_mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
 _lock = threading.RLock()
 
 
@@ -98,15 +99,17 @@ def get_sessions_store() -> SessionsStore:
 
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent, _watcher
-    # 停止可能存在的 watcher，释放 Observer 线程
+    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle
+    # 停止可能存在的 watcher / MCP server，释放后台线程
     stop_watcher()
+    stop_mcp_server()
     with _lock:
         _config = None
         _idx_manager = None
         _sessions_store = None
         _agent = None
         _watcher = None
+        _mcp_handle = None
 
 
 def reload_config() -> CortexConfig:
@@ -187,3 +190,47 @@ def stop_watcher() -> None:
             watcher.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("stop_watcher: %s", exc)
+
+
+async def start_mcp_server() -> bool:
+    """根据 config.mcp_enabled 在后台启动 MCP HTTP server。
+
+    复用 IndexManager 单例（与 web API、watcher 共享同一份索引）。同步的
+    start_mcp_server（内部有就绪轮询）丢进 to_thread 执行，避免阻塞事件循环。
+    成功则把 URL 打印到 stdout；失败仅记日志。返回是否已启动。
+    """
+    import asyncio
+
+    from doclens.mcp_server import mcp_startup_message, start_mcp_server as _start
+
+    config = get_config()
+    if not config.mcp_enabled:
+        logger.info("MCP server disabled by config (mcp_enabled=False)")
+        return False
+
+    idx = get_index_manager()
+    handle = await asyncio.to_thread(_start, idx, Path(idx.search_path), config)
+    if handle is None:
+        logger.warning("MCP server 未启动（端口占用或鉴权配置问题）")
+        return False
+
+    global _mcp_handle
+    with _lock:
+        _mcp_handle = handle
+    # 显著打印 URL（uvicorn 的 MCP 实例 log_level=warning，自身不打访问日志）。
+    # flush=True 保证输出重定向（非 tty）时也即时可见。
+    print(mcp_startup_message(handle, config), flush=True)
+    return True
+
+
+def stop_mcp_server() -> None:
+    """停止并注销 MCP server 单例（幂等）。"""
+    global _mcp_handle
+    with _lock:
+        handle = _mcp_handle
+        _mcp_handle = None
+    if handle is not None:
+        try:
+            handle.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_mcp_server: %s", exc)
