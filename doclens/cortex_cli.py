@@ -1235,6 +1235,13 @@ def main():
             print(f"索引创建失败: {e}")
             sys.exit(1)
 
+    # 启动 TUI 前：确保 Claude Code kb-ask skill 已安装到 ~/.claude/skills
+    try:
+        from doclens.claude_code_skill import ensure_claude_code_skill
+        ensure_claude_code_skill()
+    except Exception as e:  # noqa: BLE001
+        print(f"[Claude Code skill 同步跳过: {e}]")
+
     app = CortexApp()
     app.run(mouse=True)
 

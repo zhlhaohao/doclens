@@ -67,6 +67,12 @@ class CortexConfig(BaseSettings):
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)
 
+    # MCP server（进程内 Streamable HTTP，TUI/GUI 自动启动）
+    mcp_enabled: bool = Field(default=True, description="是否在 TUI/GUI 启动时自动拉起 MCP HTTP server")
+    mcp_port: int = Field(default=7880, description="MCP server 端口（可用 CORTEX_MCP_PORT 覆盖）")
+    mcp_host: str = Field(default="127.0.0.1", description="MCP server 绑定地址；非环回地址必须配 mcp_token")
+    mcp_token: Optional[str] = Field(default=None, description="MCP bearer token；host 非环回时必填")
+
     # 失败文件自动跳过阈值
     max_index_fail_count: int = Field(default=3)
 
