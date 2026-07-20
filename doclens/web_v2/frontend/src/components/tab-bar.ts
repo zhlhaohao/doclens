@@ -16,6 +16,7 @@ export class TabBar extends LitElement {
     }
     .tab {
       flex: 1;
+      position: relative;
       border: none;
       background: transparent;
       color: var(--cortex-text-muted);
@@ -31,7 +32,27 @@ export class TabBar extends LitElement {
       transition: background 0.15s, color 0.15s;
     }
     .tab:hover { background: var(--cortex-surface-muted); }
-    .tab.active { color: var(--cortex-primary); font-weight: 600; }
+    .tab.active {
+      color: var(--cortex-primary);
+      font-weight: 600;
+      background: var(--cortex-primary-soft);
+    }
+    /* 顶部选中指示条：移动端窄高度下增强"当前 tab"的可识别性 */
+    .tab::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 3px;
+      background: var(--cortex-primary);
+      border-radius: 0 0 2px 2px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .tab.active::before { opacity: 1; }
     .tab .icon { font-size: 18px; line-height: 1; }
   `;
 

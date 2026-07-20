@@ -230,19 +230,20 @@ cp -r doclens/skills/* ~/.cortex/skills/
 cp -r doclens/skills/<技能名> ~/.cortex/skills/
 ```
 
+## 前端代码改动 · 自动构建为完工标准
+
+修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npx vite build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。用 `npx` 不用 `npm run build` 绕开预存 tsc 错误。
+
 ## 启动脚本 start-app.ps1
+
+> 当用户说：启动应用，则调用此脚本，以Web UI模式启动应用的前后端
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
 使用 `start-app.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
-**测试和验证的工作目录固定为 `test_work_dir/`**，脚本会自动切换到该目录。
+**测试和验证的工作目录固定为 `../cortex/test_work_dir/`**，脚本会自动切换到该目录。
 
-### 支持的场景
-
-| 场景 | 运行方式 | doclens 代码 | 虚拟环境 |
-|------|----------|-------------|----------|
-| 主分支 | `~/github/doclens/start-app.ps1` | `$PSScriptRoot` | `$PSScriptRoot/.venv` |
 
 ### 三种运行模式
 
@@ -270,7 +271,6 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 | `./start-app.ps1 ai <问题>` | AI 问答 | `./start-app.ps1 ai 你好` |
 | `./start-app.ps1 index` | 增量索引 | `./start-app.ps1 index` |
 | `./start-app.ps1 index --force` | 强制全量重建 | `./start-app.ps1 index --force` |
-| `./start-app.ps1 status` | 查看状态 | `./start-app.ps1 status` |
 
 ### 前端开发模式
 
@@ -278,53 +278,11 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 ```bash
 # 1. 重新构建前端（位于 doclens/web_v2/frontend）
-cd doclens/web_v2/frontend && npm install && npm run build
+cd doclens/web_v2/frontend && npx vite build
 
 # 2. 重启后端（否则后端仍在服务旧的静态文件）
 # 在 start-app.ps1 所在目录执行
 pwsh -File ./start-app.ps1 gui
 ```
 
-> **注意**：修改前端代码后必须执行 `npm run build`（生产构建），仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新。
-
-### 备用方式（直接调用 Python）
-
-如果 `start-app.ps1` 不可用，可直接使用 Python：
-
-```bash
-# 在 test_work_dir 目录下执行
-../.venv/Scripts/python.exe -m doclens <命令>
-```
-
-### 切换 LLM Provider
-
-通过环境变量切换底层 LLM（PLANIFY_PROVIDER + 关键三件套）：
-
-```bash
-# Anthropic（默认）
-export PLANIFY_PROVIDER=anthropic
-export PLANIFY_API_KEY=sk-ant-...
-export PLANIFY_MODEL_ID=claude-sonnet-4-6
-
-# DeepSeek
-export PLANIFY_PROVIDER=deepseek
-export PLANIFY_API_KEY=sk-...
-export PLANIFY_MODEL_ID=deepseek-chat
-
-# Qwen（阿里云通义千问）
-export PLANIFY_PROVIDER=qwen
-export PLANIFY_API_KEY=sk-...
-export PLANIFY_MODEL_ID=qwen-plus
-
-# OpenRouter
-export PLANIFY_PROVIDER=openrouter
-export PLANIFY_API_KEY=sk-or-...
-export PLANIFY_MODEL_ID=anthropic/claude-3.5-sonnet
-
-# 自定义 OpenAI 兼容代理
-export PLANIFY_PROVIDER=custom
-export PLANIFY_BASE_URL=https://my-proxy/v1
-export PLANIFY_PROTOCOL=openai_compat
-export PLANIFY_API_KEY=...
-export PLANIFY_MODEL_ID=my-model
-```
+> **注意**：用 `npx vite build` 而非 `npm run build`（后者会被预存 tsc 错误阻断），且仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新。

@@ -2274,6 +2274,7 @@ var Yo=Object.defineProperty;var Go=(e,t,r)=>t in e?Yo(e,t,{enumerable:!0,config
     }
     .tab {
       flex: 1;
+      position: relative;
       border: none;
       background: transparent;
       color: var(--cortex-text-muted);
@@ -2289,7 +2290,27 @@ var Yo=Object.defineProperty;var Go=(e,t,r)=>t in e?Yo(e,t,{enumerable:!0,config
       transition: background 0.15s, color 0.15s;
     }
     .tab:hover { background: var(--cortex-surface-muted); }
-    .tab.active { color: var(--cortex-primary); font-weight: 600; }
+    .tab.active {
+      color: var(--cortex-primary);
+      font-weight: 600;
+      background: var(--cortex-primary-soft);
+    }
+    /* 顶部选中指示条：移动端窄高度下增强"当前 tab"的可识别性 */
+    .tab::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 3px;
+      background: var(--cortex-primary);
+      border-radius: 0 0 2px 2px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .tab.active::before { opacity: 1; }
     .tab .icon { font-size: 18px; line-height: 1; }
   `;So([d()],Yt.prototype,"active",2);Yt=So([E("tab-bar")],Yt);var Da=Object.defineProperty,za=Object.getOwnPropertyDescriptor,nr=(e,t,r,o)=>{for(var s=o>1?void 0:o?za(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(s=(o?a(t,r,s):a(s))||s);return o&&s&&Da(t,r,s),s};let Xe=class extends k{constructor(){super(...arguments),this.heading="Doclens",this.subheading="",this.suffix=""}render(){return c`
       <h1 class="title">
