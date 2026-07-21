@@ -75,7 +75,7 @@ export class CortexApp extends LitElement {
   private async _loadStatus() {
     try {
       const s = await getStatus();
-      actions.setSystemStatus(s);
+      actions.setStatus(s);
     } catch {
       /* 静默失败：模型名非关键 */
     }

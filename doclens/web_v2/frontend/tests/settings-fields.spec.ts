@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 18 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(18);
+  it("has exactly 20 fields", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(20);
   });
 
   it("every field has a unique envVar", () => {
@@ -47,10 +47,10 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "scoring", "terminal"]);
   });
 
-  it("AI tab has 3 fields all marked restart", () => {
+  it("AI tab has 5 fields all marked live (hot-reload after apply_config fix)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
-    expect(ai).toHaveLength(3);
-    expect(ai.every((f) => f.effect === "restart")).toBe(true);
+    expect(ai).toHaveLength(5);
+    expect(ai.every((f) => f.effect === "live")).toBe(true);
   });
 
   it("password field is PLANIFY_API_KEY with mono", () => {

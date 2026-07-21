@@ -169,7 +169,7 @@ export const actions = {
     store.setState({ watcher: w });
   },
 
-  setSystemStatus(s: AppState["status"]) {
+  setStatus(s: AppState["status"]) {
     store.setState({ status: s });
   },
 
