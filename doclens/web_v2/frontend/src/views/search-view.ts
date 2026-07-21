@@ -38,11 +38,15 @@ export class SearchView extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      /* 顶部蓝色光晕 + 浅灰底：让白色卡片从背景中浮出，避免白上白 */
+      background:
+        radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%),
+        var(--cortex-bg);
     }
     .input-row {
       padding: var(--cortex-space-4) var(--cortex-space-6);
       flex-shrink: 0;
-      background: var(--cortex-surface);
+      background: transparent;
     }
     .focus-body {
       display: flex;
@@ -537,7 +541,22 @@ export class SearchView extends LitElement {
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
-          <welcome-pane heading="Doclens" subheading="结构感知文档检索"></welcome-pane>
+          <welcome-pane
+            variant="onboarding"
+            heading="在你的文档中搜索"
+            subheading="对当前工作目录的所有文件进行全文检索"
+            .modes=${[
+              { label: "自然语言", icon: "📝" },
+              { label: "正则", icon: "regex" },
+            ]}
+            .examples=${[
+              "「人工智能技术最新发展」",
+              "「tcp.*timeout」",
+              "「量子 计算」",
+              "「Python 装饰器」",
+            ]}
+            .workdir=${store.getState().status?.workdir ?? ""}
+          ></welcome-pane>
           <history-list
             title="历史会话"
             type="search"

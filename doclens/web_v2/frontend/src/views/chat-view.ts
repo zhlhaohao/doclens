@@ -117,6 +117,9 @@ export class ChatView extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      /* 顶部蓝色光晕：让白色卡片从背景中浮出，增加层次感 */
+      background:
+        radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%);
     }
     .input-row {
       padding: 6px var(--cortex-space-6) 18px;
@@ -582,7 +585,21 @@ export class ChatView extends LitElement {
     if (s.state === "initial") {
       return html`
         <div class="initial-stack">
-          <welcome-pane heading="Doclens" suffix="问日程" subheading="与你的知识库对话"></welcome-pane>
+          <welcome-pane
+            variant="onboarding"
+            heading="与你的知识库对话"
+            subheading="用自然语言提问，AI 会自动检索知识库并引用原文回答"
+            .modes=${[
+              { label: "自动检索", icon: "🔍" },
+              { label: "引用原文", icon: "📑" },
+            ]}
+            .examples=${[
+              "总结上周写过的所有技术文档",
+              "找出所有提到 X 的段落并对比",
+              "这篇文章的核心观点是什么？",
+            ]}
+            .workdir=${store.getState().status?.workdir ?? ""}
+          ></welcome-pane>
           <history-list
             title="历史会话"
             type="chat"

@@ -161,6 +161,10 @@ export const actions = {
     store.setState({ error });
   },
 
+  setStatus(s: AppState["status"]) {
+    store.setState({ status: s });
+  },
+
   setPendingSession(session: Session | null) {
     store.setState({ pendingSession: session });
   },

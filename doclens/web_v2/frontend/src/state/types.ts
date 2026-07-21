@@ -98,6 +98,8 @@ export interface ReindexState {
 export interface SystemStatus {
   indexed_docs: number;
   index_path: string;
+  /** 工作目录（绝对路径），welcome-pane 用以展示当前检索范围 */
+  workdir?: string;
   total_size_bytes: number;
   file_types: Record<string, number>;
   watcher?: WatcherStatus | null;
