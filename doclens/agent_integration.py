@@ -297,11 +297,18 @@ class CortexAgent:
         return self
 
     def apply_config(self, config) -> None:
-        """Hot-reload AI config: update session client + model."""
+        """Hot-reload AI config: update session client + model + base URL etc.
+
+        关键修复：不能改 self.session.model —— Session.model 是只读 @property，
+        返回 self.config.model_id。给 property 赋值会抛 AttributeError，导致
+        /api/config PUT 走到 deps.reload_config → 这里 → 异常向上传到 PUT
+        返回 500，hot-reload 实际失败（.env 写成功但 agent session 用旧 model）。
+
+        正确做法：直接修改 SessionConfig（dataclass 字段可写）。Session.model
+        property 会自动反映 self.config.model_id 的新值。
+        """
         if self.session is None:
             return
-        # 重建 provider 配置（CortexConfig 暂未暴露 provider/protocol 字段，
-        # 默认 anthropic 以保持向后兼容）
         provider_config = {
             "provider_name": getattr(config, "planify_provider", "anthropic"),
             "protocol": getattr(config, "planify_protocol", ""),
@@ -310,9 +317,15 @@ class CortexAgent:
             "base_url": config.planify_base_url,
         }
         client = create_provider(provider_config)
+        # LLM provider 双指（client + provider 别名，所有 caller 已迁移到 provider.*）
         self.session.client = client
         self.session.provider = client
-        self.session.model = config.planify_model_id
+        # 配置字段走 SessionConfig（避免 @property model/set 没有 setter）
+        self.session.config.model_id = config.planify_model_id
+        self.session.config.api_key = config.planify_api_key
+        self.session.config.base_url = config.planify_base_url
+        if getattr(config, "planify_context_window", None):
+            self.session.config.planify_context_window = config.planify_context_window
 
     def run_query(
         self,

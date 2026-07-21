@@ -50,10 +50,10 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("scoring");
   });
 
-  it("renders all 3 fields for AI tab", () => {
+  it("renders all 5 fields for AI tab", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(3);
+    expect(fields?.length).toBe(5);
   });
 
   it("renders all 7 fields for search tab", async () => {

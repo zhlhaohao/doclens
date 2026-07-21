@@ -14,6 +14,7 @@ import {
 } from "./settings-fields";
 import "../components/settings-scope-segment";
 import { getConfig, putConfig, ConfigApiError } from "../api/config";
+import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
@@ -544,6 +545,17 @@ export class SettingsView extends LitElement {
   private _onSaveRequest = () => { void this._save(); };
   private _onRevertRequest = () => { this._revert(); };
 
+  /** 重新拉取 /api/status，同步 store 中的 model_name 等展示用字段。
+   *  失败静默：模型名为空时 UI 仅显示「思考中」，不阻塞其它逻辑。 */
+  private async _refreshSystemStatus() {
+    try {
+      const s = await getStatus();
+      actions.setStatus(s);
+    } catch {
+      /* 静默失败 */
+    }
+  }
+
   private _revert() {
     this._values = { ...this._original };
     this._userEditedBaseUrl = false;
@@ -561,6 +573,10 @@ export class SettingsView extends LitElement {
       this._original = { ...this._values };
       this._userEditedBaseUrl = false;
       actions.loadSettings(this._values, true);
+      // 重新拉一次 /api/status：settings-view 和 chat-view 共享 store.status，
+      // 旧值在 connectedCallback 一次性载入后不会自动更新。不刷新的话，
+      // 用户改了 PLANIFY_MODEL_ID 后去 chat 提问，思考中占位仍显示旧 model。
+      void this._refreshSystemStatus();
       const msg = result.needs_restart
         ? "已保存。重启 doclens gui 后 AI 配置生效。"
         : "已保存。下次查询立即生效。";
