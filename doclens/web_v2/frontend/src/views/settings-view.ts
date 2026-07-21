@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing } from "lit";
+import { LitElement, html, css, nothing, render } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store } from "../state/store";
@@ -12,13 +12,32 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import "../components/settings-scope-segment";
 import { getConfig, putConfig, ConfigApiError } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
+
+/** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
+const ICON_EYE = html`
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+`;
+
+/** Lucide 风格眼睛-off 图标（密码可见）：带斜杠 */
+const ICON_EYE_OFF = html`
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+    <line x1="2" x2="22" y1="2" y2="22"/>
+  </svg>
+`;
 
 @customElement("settings-view")
 export class SettingsView extends LitElement {
@@ -46,7 +65,7 @@ export class SettingsView extends LitElement {
       gap: var(--cortex-space-4);
       padding: var(--cortex-space-6) var(--cortex-space-3);
       background: var(--cortex-surface);
-      border-right: 1px solid var(--cortex-border);
+      border-right: 1px solid var(--cortex-border-muted);
       overflow-y: auto;
     }
     .main {
@@ -59,26 +78,30 @@ export class SettingsView extends LitElement {
     .tab-strip {
       display: flex;
       flex-direction: column;
-      gap: var(--cortex-space-1);
+      gap: 4px;
     }
     .tab-strip button {
+      position: relative;
       background: transparent;
       border: none;
-      border-left: 3px solid transparent;
       padding: var(--cortex-space-2) var(--cortex-space-3);
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
       cursor: pointer;
       font-family: inherit;
       text-align: left;
-      border-radius: 0;
+      border-radius: var(--cortex-radius-md);
+      transition: background 0.15s, color 0.15s;
     }
-    .tab-strip button:hover { color: var(--cortex-text); background: var(--cortex-surface-muted); }
+    .tab-strip button:hover {
+      color: var(--cortex-text);
+      background: var(--cortex-surface-muted);
+    }
     .tab-strip button.active {
       color: var(--cortex-primary);
-      border-left-color: var(--cortex-primary);
       background: var(--cortex-primary-soft);
-      font-weight: 500;
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--cortex-primary);
     }
     .scroll-area {
       flex: 1;
@@ -86,23 +109,25 @@ export class SettingsView extends LitElement {
       overflow-y: auto;
       padding: var(--cortex-space-4);
     }
-    .tab-panel { display: none; max-width: 680px; margin: 0 auto; }
+    .tab-panel { display: none; max-width: 880px; margin: 0 auto; }
     .tab-panel.active { display: block; }
 
     .section {
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-lg);
-      box-shadow: var(--cortex-shadow-md);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      margin-bottom: var(--cortex-space-4);
+      padding: 0 0 var(--cortex-space-6);
+      margin-bottom: var(--cortex-space-2);
     }
     .section h2 {
       margin: 0 0 var(--cortex-space-4);
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
+      font-size: var(--cortex-fs-lg);
+      font-weight: 700;
       color: var(--cortex-text);
-      letter-spacing: -0.01em;
+      letter-spacing: -0.015em;
+      line-height: 1.3;
+      padding-bottom: var(--cortex-space-2);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
     }
     .section-desc {
       color: var(--cortex-text-muted);
@@ -111,28 +136,56 @@ export class SettingsView extends LitElement {
     }
     .field {
       display: grid;
-      grid-template-columns: minmax(220px, 280px) 1fr;
-      gap: var(--cortex-space-4);
+      grid-template-columns: minmax(80px, 140px) 1fr;
+      gap: var(--cortex-space-3);
       padding: var(--cortex-space-3) 0;
       border-top: 1px solid var(--cortex-border-muted);
-      align-items: start;
+      align-items: center;
     }
     .field:first-of-type { border-top: none; }
     .field-label .name {
       font-size: var(--cortex-fs-sm);
-      font-weight: 500;
+      font-weight: 600;
       color: var(--cortex-text);
-      display: flex;
-      align-items: center;
-      gap: var(--cortex-space-2);
-    }
-    .field-label .env {
-      font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
-      margin-top: 2px;
+      line-height: 1.5;
     }
     .field-control { display: flex; flex-direction: column; gap: var(--cortex-space-1); }
+    /* password wrapper：撑满父容器 + 让"显示"按钮内嵌右侧 */
+    .password-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 100%;
+    }
+    .password-wrap .input { padding-right: 44px; max-width: 100%; }
+    .password-toggle {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      color: var(--cortex-text-muted);
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .password-toggle:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
+    }
+    /* CSS-only icon swap：模板里两个 span 都在 DOM，class 控制可见性，
+       避免 render() 在 shadow DOM 中因 cached template 不挂载导致 SVG 丢失 */
+    .password-toggle .eye-hide { display: none; }
+    .password-toggle.revealed .eye-show { display: none; }
+    .password-toggle.revealed .eye-hide { display: inline-flex; }
     .field-control .row { display: flex; align-items: center; gap: var(--cortex-space-2); }
     .slider-row {
       display: flex;
@@ -153,67 +206,45 @@ export class SettingsView extends LitElement {
       padding: 2px var(--cortex-space-2);
       font-variant-numeric: tabular-nums;
     }
-    .field-control .hint {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      margin-top: var(--cortex-space-1);
-    }
 
     .input, .select {
-      padding: var(--cortex-space-2) var(--cortex-space-3);
+      padding: 9px 12px;
       border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
+      border-radius: 8px;
       background: var(--cortex-surface);
       font-size: var(--cortex-fs-sm);
       font-family: inherit;
       color: var(--cortex-text);
-      max-width: 420px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    .input:hover:not(:focus), .select:hover:not(:focus) {
+      border-color: var(--cortex-text-muted);
     }
     .input.mono { font-family: var(--cortex-font-mono); }
     .input:focus, .select:focus {
       outline: none;
       border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
-
-    .effect {
-      display: inline-flex;
-      font-size: var(--cortex-fs-xs);
-      padding: 2px var(--cortex-space-2);
-      border-radius: var(--cortex-radius-sm);
-      font-weight: 500;
-    }
-    .effect.restart { background: rgba(245,158,11,0.12); color: var(--cortex-warning); }
-    .effect.live { background: rgba(16,185,129,0.12); color: var(--cortex-success); }
-
-    .info-box {
-      background: var(--cortex-primary-soft);
-      border-left: 3px solid var(--cortex-primary);
-      padding: var(--cortex-space-3) var(--cortex-space-4);
-      border-radius: var(--cortex-radius-md);
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text);
-      margin-bottom: var(--cortex-space-4);
-      line-height: 1.7;
-    }
-    .info-box.warn {
-      background: rgba(245,158,11,0.08);
-      border-left-color: var(--cortex-warning);
+      background: var(--cortex-surface);
+      box-shadow: 0 0 0 3px var(--cortex-primary-soft);
     }
 
     .footer-bar {
       flex-shrink: 0;
       background: var(--cortex-surface);
-      border-top: 1px solid var(--cortex-border);
-      padding: var(--cortex-space-3) var(--cortex-space-6);
+      border-top: 1px solid var(--cortex-border-muted);
+      padding: var(--cortex-space-4) var(--cortex-space-6);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
-      max-width: 680px;
+      box-shadow: 0 -1px 0 var(--cortex-border-muted);
+      max-width: 880px;
       width: 100%;
-      margin: 0 auto;
+      margin: var(--cortex-space-4) auto 0;
       box-sizing: border-box;
+      border-radius: var(--cortex-radius-lg) var(--cortex-radius-lg) 0 0;
     }
     .dirty-status {
       font-size: var(--cortex-fs-sm);
@@ -233,28 +264,28 @@ export class SettingsView extends LitElement {
       display: inline-flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: var(--cortex-space-2) var(--cortex-space-4);
+      padding: 8px 14px;
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       font-size: var(--cortex-fs-sm);
-      border-radius: var(--cortex-radius-md);
+      font-weight: 500;
+      border-radius: 8px;
       cursor: pointer;
       font-family: inherit;
+      transition: background 0.15s, border-color 0.15s, transform 0.05s;
     }
-    .btn:hover { background: var(--cortex-surface-muted); }
+    .btn:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-muted); }
+    .btn:active { transform: translateY(0.5px); }
     .btn.primary {
       background: var(--cortex-primary-gradient);
       border: none;
       color: #fff;
       box-shadow: var(--cortex-primary-glow);
-      font-weight: 500;
+      font-weight: 600;
     }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* 桌面端：隐藏 copy-banner（scope 已在 sidebar 显示，信息冗余）；移动端 @media 复位显示 */
-    .copy-banner { display: none; }
-    .copy-banner .grow { flex: 1; }
+    .btn.primary:hover { filter: brightness(1.05); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     /* ===== 移动端 (<1024px) ===== */
     @media (max-width: 1023px) {
@@ -286,17 +317,6 @@ export class SettingsView extends LitElement {
         border-left-color: transparent;
         border-bottom-color: var(--cortex-primary);
         background: transparent;
-      }
-      .copy-banner {
-        display: flex;
-        background: var(--cortex-primary-soft);
-        color: var(--cortex-primary);
-        font-weight: 500;
-        border-bottom: 1px solid var(--cortex-border);
-        padding: var(--cortex-space-2) var(--cortex-space-4);
-        align-items: center;
-        gap: var(--cortex-space-3);
-        font-size: var(--cortex-fs-sm);
       }
 
       .field {
@@ -333,23 +353,14 @@ export class SettingsView extends LitElement {
         font-weight: 600;
       }
 
-      /* Password "显示" 按钮：从绝对定位改为独立行 */
-      .password-wrap { max-width: 100% !important; position: static !important; }
+      /* Password 显示按钮：mobile 仍嵌在 input 内右侧，与桌面布局一致 */
+      .password-wrap { max-width: 100% !important; position: relative !important; }
       .password-toggle {
-        position: static !important;
-        transform: none !important;
-        margin-top: var(--cortex-space-2);
-        align-self: flex-end;
+        position: absolute !important;
+        right: var(--cortex-space-2) !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
       }
-
-      /* 复制 banner 堆叠 */
-      .copy-banner {
-        flex-direction: column;
-        align-items: stretch;
-        padding: var(--cortex-space-3) var(--cortex-space-4);
-      }
-      .copy-banner .grow { display: none; }
-      .copy-banner button { align-self: flex-end; }
 
       /* Toast-stack 避开移动 tab-bar */
       toast-stack {
@@ -372,12 +383,6 @@ export class SettingsView extends LitElement {
         padding: var(--cortex-space-4);
         margin-bottom: var(--cortex-space-3);
       }
-      .info-box {
-        padding: var(--cortex-space-2) var(--cortex-space-3);
-        line-height: 1.55;
-        font-size: var(--cortex-fs-xs);
-      }
-      .info-box br + br { display: none; }
       .tab-strip {
         padding: 0 var(--cortex-space-3);
         gap: var(--cortex-space-1);
@@ -385,10 +390,6 @@ export class SettingsView extends LitElement {
       .tab-strip button {
         padding: var(--cortex-space-3) var(--cortex-space-2);
         font-size: var(--cortex-fs-sm);
-      }
-      .copy-banner {
-        padding: var(--cortex-space-3);
-        font-size: var(--cortex-fs-xs);
       }
     }
   `;
@@ -609,18 +610,13 @@ export class SettingsView extends LitElement {
 
   private _renderField(f: SettingsField) {
     const value = this._values[f.envVar] ?? "";
-    const effectBadge = f.effect
-      ? html`<span class="effect ${f.effect}">${f.effect === "restart" ? "🔁 需重启" : "● 即时"}</span>`
-      : nothing;
     return html`
       <div class="field">
         <div class="field-label">
-          <div class="name">${f.label} ${effectBadge}</div>
-          <div class="env">${f.envVar}${f.min !== undefined && f.max !== undefined ? ` · 范围 ${f.min}~${f.max}` : ""}</div>
+          <div class="name">${f.label}</div>
         </div>
         <div class="field-control">
           <div class="row">${this._renderInput(f, value)}</div>
-          ${f.hint ? html`<div class="hint">${f.hint}</div>` : nothing}
           ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
         </div>
       </div>
@@ -651,7 +647,7 @@ export class SettingsView extends LitElement {
         `;
       case "password":
         return html`
-          <div style="position: relative; max-width: 420px;">
+          <div class="password-wrap">
             <input
               class="input ${mono}"
               type="password"
@@ -660,14 +656,20 @@ export class SettingsView extends LitElement {
               @input=${onInput}
             />
             <button
-              class="btn"
+              class="password-toggle"
               type="button"
-              style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 2px 8px; font-size: var(--cortex-fs-xs);"
+              aria-label="显示密码"
               @click=${(e: Event) => {
-                const input = (e.target as HTMLButtonElement).previousElementSibling as HTMLInputElement;
-                input.type = input.type === "password" ? "text" : "password";
+                const btn = e.currentTarget as HTMLButtonElement;
+                const input = btn.previousElementSibling as HTMLInputElement;
+                const revealed = btn.classList.toggle("revealed");
+                input.type = revealed ? "text" : "password";
+                btn.setAttribute("aria-label", revealed ? "隐藏密码" : "显示密码");
               }}
-            >显示</button>
+            >
+              <span class="eye-show">${ICON_EYE}</span>
+              <span class="eye-hide">${ICON_EYE_OFF}</span>
+            </button>
           </div>
         `;
       case "number":
@@ -722,59 +724,12 @@ export class SettingsView extends LitElement {
     }
   }
 
-  private _renderInfoBox(tab: SettingsTab) {
-    if (tab === "ai") {
-      return html`
-        <div class="info-box">
-          本 tab 的所有参数修改后需<strong>重启 doclens gui</strong> 才能生效。
-        </div>
-      `;
-    }
-    if (tab === "search") {
-      return html`<div class="info-box">本 tab 的参数保存后下次查询即时生效，<strong>无需重启</strong>。</div>`;
-    }
-    if (tab === "scoring") {
-      return html`
-        <div class="info-box">
-          <strong>📐 评分原理（白话版）</strong><br>
-          最终得分（0~1）= 把下面 5 个信号<strong>按权重做加权平均</strong>（每个信号名对应下方一个"XX 权重"字段）：<br>
-          • <strong>关键词匹配</strong> —— 文档里命中的关键词数 ÷ 你查询的总词数<br>
-          • <strong>文件名匹配</strong> —— 文件名里命中的关键词数 ÷ 总词数<br>
-          • <strong>FTS 原始分</strong> —— FTS5 全文检索给的相关度（0~1 之间）<br>
-          • <strong>标题匹配</strong> —— 段落标题里命中的关键词数 ÷ 总词数<br>
-          • <strong>邻近度</strong> —— 0 / 0.5 / 1 三档（多词紧挨着分数更高）<br><br>
-          每个权重<strong>越大</strong>，对应信号对最终排序的影响越大；权重设为 <code>0</code> = <strong>完全忽略</strong>该信号。推荐区间 <code>0~10</code>。
-        </div>
-      `;
-    }
-    if (tab === "terminal") {
-      return html`
-        <div class="info-box warn">
-          ⚠️ 这些参数仅影响 <code>doclens</code> CLI/TUI 的<strong>终端输出格式</strong>，对 Web UI 没有可见效果。在此处提供编辑仅为了免去手动改 .env 的麻烦。
-        </div>
-      `;
-    }
-    return nothing;
-  }
-
   render() {
     const scopeLabel = "全局";
     const existsHint = this._exists ? "" : "（新建）";
     return html`
-      <div class="copy-banner">
-        <span>ℹ️</span>
-        <span>正在编辑全局配置。</span>
-        <span class="grow"></span>
-      </div>
       <div class="layout">
         <aside class="sidebar">
-          <settings-scope-segment
-            .scope=${this._scope}
-            .exists=${this._exists}
-            @scope-change=${(e: CustomEvent<{ scope: SettingsScope }>) => {
-              actions.setSettingsScope(e.detail.scope);
-            }}
-          ></settings-scope-segment>
           <nav class="tab-strip" role="tablist">
             ${TAB_ORDER.map((tab) => html`
               <button
@@ -796,7 +751,6 @@ export class SettingsView extends LitElement {
               }
               return html`
                 <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
-                  ${this._renderInfoBox(tab)}
                   ${sections.map((s) => html`
                     <div class="section">
                       <h2>${s.title}</h2>

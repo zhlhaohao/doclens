@@ -8,19 +8,21 @@ export class ActivityBar extends LitElement {
     :host {
       display: var(--cortex-show-activity-bar, none);
       flex-direction: column;
-      align-items: center;
-      width: var(--cortex-activity-bar-width);
-      background-color: var(--cortex-border-muted);
-      background-image: radial-gradient(circle, var(--cortex-border) 0.7px, transparent 1px);
-      background-size: 10px 10px;
+      align-items: stretch;
+      width: max-content;
+      min-width: max-content;
+      background: var(--cortex-surface);
       color: var(--cortex-text-muted);
-      border-right: 1px solid var(--cortex-border);
-      padding: var(--cortex-space-4) 0;
-      gap: var(--cortex-space-4);
+      border-right: 1px solid var(--cortex-border-muted);
+      padding: var(--cortex-space-4) var(--cortex-space-2);
+      gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
     button {
-      width: 40px; height: 40px;
+      width: max-content;
+      min-width: 100%;
+      min-height: 40px;
+      padding: var(--cortex-space-2) var(--cortex-space-3);
       border: none;
       background: transparent;
       color: var(--cortex-text-muted);
@@ -28,16 +30,20 @@ export class ActivityBar extends LitElement {
       border-radius: var(--cortex-radius-md);
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 20px;
+      justify-content: flex-start;
+      gap: var(--cortex-space-3);
       transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
     }
     button:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
     button.active {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
-      box-shadow: inset 2px 0 0 var(--cortex-primary);
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--cortex-primary);
     }
+    .icon { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+    .label { font-size: var(--cortex-fs-sm); }
   `;
 
   @property() active: ViewId = "search";
@@ -61,8 +67,10 @@ export class ActivityBar extends LitElement {
         <button
           class=${this.active === it.id ? "active" : ""}
           title=${it.label}
+          aria-label=${it.label}
           @click=${() => this._select(it.id)}>
-          ${it.icon}
+          <span class="icon">${it.icon}</span>
+          <span class="label">${it.label}</span>
         </button>`)}
     `;
   }

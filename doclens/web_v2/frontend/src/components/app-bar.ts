@@ -1,5 +1,8 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { unsafeSVG } from "lit/directives/unsafe-svg.js";
+
+import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
 import { store, actions } from "../state/store";
@@ -30,15 +33,14 @@ export class AppBar extends LitElement {
     }
     .brand .logo {
       width: 28px; height: 28px;
-      background: var(--cortex-primary-gradient);
       border-radius: var(--cortex-radius-md);
+      overflow: hidden;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: #fff;
-      font-size: 16px;
-      box-shadow: var(--cortex-primary-glow);
+      flex-shrink: 0;
     }
+    .brand .logo svg { width: 100%; height: 100%; display: block; }
     .right-cluster {
       display: flex;
       align-items: center;
@@ -312,7 +314,7 @@ export class AppBar extends LitElement {
   render() {
     return html`
       <div class="brand">
-        <span class="logo">🧠</span>
+        <span class="logo">${unsafeSVG(appLogoSvg)}</span>
         <span>Doclens</span>
       </div>
       <div class="right-cluster">
