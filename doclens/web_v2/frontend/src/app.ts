@@ -4,6 +4,8 @@ import { customElement } from "lit/decorators.js";
 import { store, actions } from "./state/store";
 import type { ViewId } from "./state/types";
 import { router } from "./router/router";
+import { startWatchPolling, stopWatchPolling } from "./watch-polling";
+import { getStatus } from "./api/status";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -66,6 +68,9 @@ export class CortexApp extends LitElement {
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
     startWatchPolling();
+    // 加载一次 /api/status —— 把 workdir / indexed_docs / file_types 写入 store，
+    // welcome-pane（onboarding variant）需要 status.workdir 渲染底部胶囊。
+    void getStatus().then((s) => actions.setStatus(s)).catch(() => {});
   }
 
   disconnectedCallback() {
