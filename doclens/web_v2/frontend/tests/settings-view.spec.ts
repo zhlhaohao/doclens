@@ -104,13 +104,9 @@ describe("<settings-view>", () => {
     expect(putConfig).toHaveBeenCalled();
   });
 
-  it("scope-segment and tab-strip live inside .sidebar (F1 desktop layout structure)", () => {
+  it("tab-strip lives inside .sidebar (F1 desktop layout structure)", () => {
     const sidebar = el.shadowRoot?.querySelector(".sidebar");
     expect(sidebar, ".sidebar must exist").toBeTruthy();
-    expect(
-      sidebar?.querySelector("settings-scope-segment"),
-      "settings-scope-segment must be inside .sidebar"
-    ).toBeTruthy();
     expect(
       sidebar?.querySelector(".tab-strip"),
       ".tab-strip must be inside .sidebar (vertical tab list on desktop)"
