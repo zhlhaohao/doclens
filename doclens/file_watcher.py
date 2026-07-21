@@ -20,13 +20,22 @@ from doclens.index_manager import SUPPORTED_FORMATS
 if _HAS_WATCHDOG:
 
     class _ChangeHandler(FileSystemEventHandler):
-        """watchdog 事件处理器，过滤支持的文件扩展名"""
+        """watchdog 事件处理器，过滤支持的文件扩展名。
+
+        on_modified 会做去重：watchdog 在 Windows 上对纯读访问也会报
+        modified（典型为 atime 更新被 ReadDirectoryChangesW 当作修改），
+        仅靠 mtime/size 对比即可过滤这种伪修改，避免 watch-badge 闪动。
+        """
 
         def __init__(self, callback, search_path: str):
             super().__init__()
             self._callback = callback
             self._search_path = os.path.normpath(search_path).lower()
             self._extensions = set(SUPPORTED_FORMATS.keys())
+            # 误报去重快照：normcase 路径 → (mtime_ns, size)。
+            # 首次见到文件时 prev=None，视为真修改（不丢事件）；
+            # 之后 mtime/size 都未变 → atime-only 误报，忽略。
+            self._mod_snapshot: dict[str, tuple[int, int]] = {}
 
         def _should_handle(self, path: str) -> bool:
             norm = os.path.normpath(path)
@@ -36,8 +45,52 @@ if _HAS_WATCHDOG:
             _, ext = os.path.splitext(path)
             return ext.lower() in self._extensions
 
+        @staticmethod
+        def _snapshot_key(path: str) -> str:
+            return os.path.normcase(os.path.normpath(path))
+
+        def _is_real_modification(self, path: str) -> bool:
+            """stat 当前文件，与上次快照对比：相同 → 误报；不同 → 真修改。
+
+            文件刚被删则视为不重复触发，依赖后续 on_deleted 单独处理。
+            """
+            try:
+                st = os.stat(path)
+            except OSError:
+                return False
+            key = self._snapshot_key(path)
+            cur = (st.st_mtime_ns, st.st_size)
+            prev = self._mod_snapshot.get(key)
+            if prev is not None and prev == cur:
+                # 诊断：mtime/size 都未变 → 误报
+                logger.debug(
+                    "FileWatcher DEDUP %s mtime_ns=%d size=%d unchanged",
+                    path, cur[0], cur[1],
+                )
+                return False
+            # 诊断：快照更新
+            logger.debug(
+                "FileWatcher MOD %s prev=%s cur=%s",
+                path, prev, cur,
+            )
+            self._mod_snapshot[key] = cur
+            return True
+
         def on_modified(self, event):
-            if not event.is_directory and self._should_handle(event.src_path):
+            if event.is_directory or not self._should_handle(event.src_path):
+                return
+            # 诊断：on_modified 入口打印原始事件 + stat 全字段
+            try:
+                st = os.stat(event.src_path)
+                logger.debug(
+                    "FileWatcher on_modified %s "
+                    "mtime_ns=%d size=%d ctime_ns=%d atime_ns=%d",
+                    event.src_path,
+                    st.st_mtime_ns, st.st_size, st.st_ctime_ns, st.st_atime_ns,
+                )
+            except OSError as e:
+                logger.debug("FileWatcher on_modified stat failed: %s (%s)", event.src_path, e)
+            if self._is_real_modification(event.src_path):
                 self._callback(event.src_path)
 
         def on_created(self, event):
@@ -46,13 +99,17 @@ if _HAS_WATCHDOG:
 
         def on_deleted(self, event):
             if not event.is_directory and self._should_handle(event.src_path):
+                # 文件已删，清理快照避免下次 on_modified 误命中旧快照
+                self._mod_snapshot.pop(self._snapshot_key(event.src_path), None)
                 self._callback(event.src_path)
 
         def on_moved(self, event):
             if not event.is_directory:
                 if self._should_handle(event.src_path):
+                    self._mod_snapshot.pop(self._snapshot_key(event.src_path), None)
                     self._callback(event.src_path)
                 if self._should_handle(event.dest_path):
+                    self._mod_snapshot.pop(self._snapshot_key(event.dest_path), None)
                     self._callback(event.dest_path)
 
 
