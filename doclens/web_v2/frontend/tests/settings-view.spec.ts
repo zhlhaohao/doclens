@@ -56,12 +56,12 @@ describe("<settings-view>", () => {
     expect(fields?.length).toBe(5);
   });
 
-  it("renders all 7 fields for search tab", async () => {
+  it("renders all 5 fields for search tab", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
     (tabs?.[1] as HTMLButtonElement).click();
     await elementUpdated(el);
     const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
-    expect(panel?.querySelectorAll(".field").length).toBe(7);
+    expect(panel?.querySelectorAll(".field").length).toBe(5);
   });
 
   it("updates a field value via input event and marks dirty", async () => {

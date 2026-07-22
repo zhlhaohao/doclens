@@ -73,44 +73,12 @@ describe("<app-bar>", () => {
 });
 
 describe("<app-bar> save button + revert", () => {
-  it("does NOT show save button when not in settings view", async () => {
-    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
-    await elementUpdated(el);
-    expect(el.shadowRoot?.querySelector(".save-btn")).toBeNull();
-  });
-
-  it("does NOT show save button when in settings view but not dirty", async () => {
-    actions.setView("settings");
-    actions.loadSettings({}, true);
-    const el = await fixture<AppBar>(html`<app-bar .activeView=${"settings"}></app-bar>`);
-    await elementUpdated(el);
-    expect(el.shadowRoot?.querySelector(".save-btn")).toBeNull();
-  });
-
-  it("shows save button when in settings view AND dirty", async () => {
+  it("never shows an app-bar save button (save lives in settings footer)", async () => {
     actions.setView("settings");
     actions.updateSetting("FOO", "bar");
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"settings"}></app-bar>`);
     await elementUpdated(el);
-    const btn = el.shadowRoot?.querySelector(".save-btn") as HTMLButtonElement;
-    expect(btn).toBeTruthy();
-    expect(btn.textContent).toContain("保存");
-  });
-
-  it("clicking save button dispatches cortex:save-settings on window", async () => {
-    actions.setView("settings");
-    actions.updateSetting("FOO", "bar");
-    const el = await fixture<AppBar>(html`<app-bar .activeView=${"settings"}></app-bar>`);
-    await elementUpdated(el);
-
-    let captured = false;
-    const handler = () => { captured = true; };
-    window.addEventListener("cortex:save-settings", handler);
-    (el.shadowRoot?.querySelector(".save-btn") as HTMLButtonElement).click();
-    await elementUpdated(el);
-    window.removeEventListener("cortex:save-settings", handler);
-
-    expect(captured).toBe(true);
+    expect(el.shadowRoot?.querySelector(".save-btn")).toBeNull();
   });
 
   it("shows revert menu item when in settings view AND dirty", async () => {

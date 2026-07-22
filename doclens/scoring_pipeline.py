@@ -42,10 +42,7 @@ def score_and_rank(
     all_candidates = _score_nodes(
         doc_nodes_map, doc_fts_best, query_words, idx_manager
     )
-    filtered = _filter_candidates(
-        all_candidates, query_words, idx_manager.min_keyword_match,
-        idx_manager.min_proximity_score, idx_manager.min_score_threshold,
-    )
+    filtered = _filter_candidates(all_candidates, idx_manager.min_score_threshold)
 
     # ---- 降级到 >= 1 匹配 ----
     if not filtered and query_words:
@@ -124,15 +121,9 @@ def _score_nodes(doc_nodes_map, doc_fts_best, query_words, idx_manager):
     return all_candidates
 
 
-def _filter_candidates(all_candidates, query_words, min_keyword_match,
-                       min_proximity_score, min_score_threshold):
-    """初始过滤：composite >= threshold OR (关键词匹配 AND 邻近度)。"""
-    return [
-        item
-        for item in all_candidates
-        if item[5] >= min_score_threshold
-        or (item[2] >= min_keyword_match and item[3] >= min_proximity_score)
-    ]
+def _filter_candidates(all_candidates, min_score_threshold):
+    """初始过滤：composite >= threshold。"""
+    return [item for item in all_candidates if item[5] >= min_score_threshold]
 
 
 def _rank_results(filtered):

@@ -152,19 +152,6 @@ export class AppBar extends LitElement {
       z-index: 60;
     }
     .user-menu.open { display: block; }
-    .save-btn {
-      padding: 6px 14px;
-      background: var(--cortex-primary);
-      color: #fff;
-      border: 1px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-md);
-      font-family: inherit;
-      font-size: var(--cortex-fs-sm);
-      font-weight: 500;
-      cursor: pointer;
-      min-height: var(--cortex-touch-target, 44px);
-    }
-    .save-btn:hover { background: var(--cortex-primary-hover); border-color: var(--cortex-primary-hover); }
     .menu-header {
       padding: var(--cortex-space-2) var(--cortex-space-3);
       border-bottom: 1px solid var(--cortex-border-muted);
@@ -264,10 +251,6 @@ export class AppBar extends LitElement {
     }));
   }
 
-  private _onSaveClick() {
-    window.dispatchEvent(new CustomEvent("cortex:save-settings"));
-  }
-
   private _onRevertClick() {
     this._menuOpen = false;
     window.dispatchEvent(new CustomEvent("cortex:revert-settings"));
@@ -319,9 +302,6 @@ export class AppBar extends LitElement {
       </div>
       <div class="right-cluster">
         ${this._renderWatchBadge(store.getState().watcher)}
-        ${this._showSaveAndRevert ? html`
-          <button class="save-btn" type="button" @click=${this._onSaveClick}>💾 保存</button>
-        ` : nothing}
         <button
           class="refresh-btn ${this._refreshing ? "spinning" : ""}"
           type="button"

@@ -33,8 +33,6 @@ class CortexConfig(BaseSettings):
 
     # 匹配参数
     max_span: int = Field(default=20)
-    min_keyword_match: int = Field(default=2)
-    min_proximity_score: int = Field(default=1)
     min_keywords_per_line: int = Field(default=2)
 
     # 终端显示参数
