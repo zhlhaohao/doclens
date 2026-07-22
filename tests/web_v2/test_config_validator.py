@@ -40,7 +40,7 @@ def test_validate_rejects_value_out_of_range_implied_by_pydantic():
 def test_validate_collects_multiple_errors():
     errors = validate_values({
         "CORTEX_MAX_RESULTS": "abc",
-        "CORTEX_MIN_PROXIMITY_SCORE": "not-int",
+        "CORTEX_MAX_SPAN": "not-int",
         "UNKNOWN_KEY": "x",
     })
     assert len(errors.fields) >= 3

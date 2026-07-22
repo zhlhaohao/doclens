@@ -289,7 +289,7 @@ export class SettingsView extends LitElement {
 
     /* ===== 移动端 (<1024px) ===== */
     @media (max-width: 1023px) {
-      /* F1 移动端单列回退：scope+tab 回到顶部水平条，整体滚动，footer 隐藏，banner 显示 */
+      /* F1 移动端单列回退：scope+tab 回到顶部水平条，整体滚动，footer 吸底保留 */
       :host { overflow-y: auto; }
       .layout { flex-direction: column; flex: 1; min-height: 0; overflow: visible; }
       .sidebar {
@@ -313,10 +313,12 @@ export class SettingsView extends LitElement {
         border-radius: 0;
       }
       .tab-strip button:hover { background: transparent; }
+      /* 移动端只保留下划线高亮：去掉桌面端的左侧蓝条（box-shadow）和背景色块 */
       .tab-strip button.active {
         border-left-color: transparent;
         border-bottom-color: var(--cortex-primary);
         background: transparent;
+        box-shadow: none;
       }
 
       .field {
@@ -330,7 +332,36 @@ export class SettingsView extends LitElement {
         padding: 0 var(--cortex-space-4) var(--cortex-space-6);
       }
 
-      .footer-bar { display: none; }
+      /* 移动端保留 footer（保存按钮唯一入口）：fixed 吸底，避开全局 tab-bar。
+         不用 sticky —— .layout/.main 被 flex 压缩后盒子包不住内容，sticky 会失效。 */
+      .footer-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: var(--cortex-tab-bar-height, 44px);
+        z-index: 20;
+        margin: 0;
+        border-radius: 0;
+        padding: var(--cortex-space-2) var(--cortex-space-3);
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: var(--cortex-space-2);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+      }
+      /* 给 fixed footer 让位，避免最后的字段被遮挡 */
+      .main { padding-bottom: 110px; }
+      /* 状态区压缩：移动端只留脏标记圆点 + 错误/成功提示，说明文字省略 */
+      .footer-bar .dirty-status { flex: 0 0 auto; font-size: var(--cortex-fs-xs); gap: var(--cortex-space-1); }
+      .footer-bar .dirty-status .dirty-text { display: none; }
+      .footer-bar .dirty-dot { margin-right: 0; }
+      /* 按钮单行不折行：revert 幽灵小按钮，save 主按钮撑满剩余空间 */
+      .footer-bar .footer-actions { flex: 1; display: flex; gap: var(--cortex-space-2); min-width: 0; }
+      .footer-bar .btn {
+        white-space: nowrap;
+        min-height: 40px;
+        padding: 6px var(--cortex-space-3);
+      }
+      .footer-bar .btn.primary { flex: 1; justify-content: center; }
 
       .input, .select { max-width: 100%; }
 
@@ -414,7 +445,6 @@ export class SettingsView extends LitElement {
     const state = store.getState();
     this._scope = state.settings.scope;
     this._unsubscribe = store.subscribe(() => this._onStoreChange());
-    window.addEventListener("cortex:save-settings", this._onSaveRequest);
     window.addEventListener("cortex:revert-settings", this._onRevertRequest);
     this._load();
   }
@@ -428,7 +458,6 @@ export class SettingsView extends LitElement {
     }
     // I1: invalidate any in-flight load so its resolution is a no-op
     this._loadGen += 1;
-    window.removeEventListener("cortex:save-settings", this._onSaveRequest);
     window.removeEventListener("cortex:revert-settings", this._onRevertRequest);
     super.disconnectedCallback();
   }
@@ -543,7 +572,6 @@ export class SettingsView extends LitElement {
     return {};
   }
 
-  private _onSaveRequest = () => { void this._save(); };
   private _onRevertRequest = () => { this._revert(); };
 
   /** 重新拉取 /api/status，同步 store 中的 model_name 等展示用字段。
@@ -764,13 +792,13 @@ export class SettingsView extends LitElement {
           <div class="footer-bar">
             <div class="dirty-status">
               ${this._dirty
-                ? html`<span class="dirty-dot"></span><span>有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
-                : html`<span style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
+                ? html`<span class="dirty-dot"></span><span class="dirty-text">有 <strong>${this._dirtyFields.length}</strong> 个字段已修改</span>`
+                : html`<span class="dirty-text" style="font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle);">所有字段与 .env 一致</span>`
               }
               ${this._error ? html`<span style="color: var(--cortex-danger); margin-left: var(--cortex-space-2);">${this._error}</span>` : nothing}
               ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
             </div>
-            <div style="display: flex; gap: var(--cortex-space-2);">
+            <div class="footer-actions">
               <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
                 ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}

@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 20 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(20);
+  it("has exactly 18 fields", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(18);
   });
 
   it("every field has a unique envVar", () => {

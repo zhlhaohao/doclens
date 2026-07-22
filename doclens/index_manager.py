@@ -69,14 +69,6 @@ class IndexManager:
         return self._config.max_span
 
     @property
-    def min_keyword_match(self) -> int:
-        return self._config.min_keyword_match
-
-    @property
-    def min_proximity_score(self) -> int:
-        return self._config.min_proximity_score
-
-    @property
     def min_keywords_per_line(self) -> int:
         return self._config.min_keywords_per_line
 

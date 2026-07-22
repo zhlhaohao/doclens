@@ -12,8 +12,6 @@ def _make_config(**overrides):
     c.max_nodes_per_doc = 3
     c.top_k_docs = 100
     c.max_span = 20
-    c.min_keyword_match = 2
-    c.min_proximity_score = 1
     c.min_keywords_per_line = 2
     c.min_score_threshold = 0.0
     c.cjk_tokenizer = "jieba"

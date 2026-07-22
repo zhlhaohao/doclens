@@ -920,8 +920,7 @@ def _handle_search_kb(
 
     filtered = [
         item for item in all_candidates
-        if item[5] >= idx_manager.min_score_threshold or
-           (item[2] >= idx_manager.min_keyword_match and item[3] >= idx_manager.min_proximity_score)
+        if item[5] >= idx_manager.min_score_threshold
     ]
     if not filtered and query_words:
         filtered = [
@@ -1069,8 +1068,7 @@ def _handle_search_kb_v2(
     filtered = [
         (did, bn, cnt, prox, fts, composite)
         for did, (bn, cnt, prox, fts, composite) in doc_best.items()
-        if composite >= idx_manager.min_score_threshold or
-           (cnt >= idx_manager.min_keyword_match and prox >= idx_manager.min_proximity_score)
+        if composite >= idx_manager.min_score_threshold
     ]
     if not filtered and query_words:
         filtered = [
