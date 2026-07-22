@@ -35,18 +35,18 @@ test.describe("settings mobile", () => {
     await page.locator("app-bar .avatar-btn").tap();
     await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
-    // Switch to 评分 tab
-    await page.locator(".tab-strip button:has-text('评分')").tap();
+    // Switch to 搜索调优 tab（评分权重 slider 已并入该 tab）
+    await page.locator(".tab-strip button:has-text('搜索调优')").tap();
 
-    // First slider — locate range input inside .slider-row
-    const range = page.locator(".slider-row input[type=range]").first();
+    // First slider — locate range input inside .w-item（权重网格项）
+    const range = page.locator(".w-item input[type=range]").first();
     await range.evaluate((el: HTMLInputElement) => {
       el.value = "3.5";
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
     // value-chip should reflect "3.5"
-    await expect(page.locator(".slider-row .value-chip").first()).toHaveText("3.5");
+    await expect(page.locator(".w-item .value-chip").first()).toHaveText("3.5");
   });
 
   test("save dispatches window event and shows toast", async ({ page }) => {

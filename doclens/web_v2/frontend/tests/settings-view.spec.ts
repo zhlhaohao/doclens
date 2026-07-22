@@ -28,13 +28,11 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  it("renders 4 tab buttons in order: AI / 搜索调优 / 评分 / 终端", () => {
+  it("renders 2 tab buttons in order: AI / 搜索调优", () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    expect(tabs?.length).toBe(4);
+    expect(tabs?.length).toBe(2);
     expect(tabs?.[0].textContent?.trim()).toBe("AI 配置");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索调优");
-    expect(tabs?.[2].textContent?.trim()).toBe("评分");
-    expect(tabs?.[3].textContent?.trim()).toBe("终端");
   });
 
   it("AI tab is active by default", () => {
@@ -42,12 +40,12 @@ describe("<settings-view>", () => {
     expect(active?.textContent?.trim()).toBe("AI 配置");
   });
 
-  it("clicking 评分 tab switches active panel", async () => {
+  it("clicking 搜索调优 tab switches active panel", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[2] as HTMLButtonElement).click();
+    (tabs?.[1] as HTMLButtonElement).click();
     await elementUpdated(el);
     const activePanel = el.shadowRoot?.querySelector(".tab-panel.active");
-    expect(activePanel?.getAttribute("data-panel")).toBe("scoring");
+    expect(activePanel?.getAttribute("data-panel")).toBe("search");
   });
 
   it("renders all 5 fields for AI tab", () => {
@@ -56,12 +54,64 @@ describe("<settings-view>", () => {
     expect(fields?.length).toBe(5);
   });
 
-  it("renders all 5 fields for search tab", async () => {
+  it("renders all 8 fields for search tab (含并入的评分权重)", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
     (tabs?.[1] as HTMLButtonElement).click();
     await elementUpdated(el);
     const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
-    expect(panel?.querySelectorAll(".field").length).toBe(5);
+    expect(panel?.querySelectorAll(".field").length).toBe(3);
+    expect(panel?.querySelectorAll(".weights-grid .w-item").length).toBe(5);
+  });
+
+  it("权重区渲染为 weights-grid 网格", async () => {
+    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
+    (tabs?.[1] as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const grid = el.shadowRoot?.querySelector(".weights-grid");
+    expect(grid).toBeTruthy();
+    expect(grid?.querySelectorAll(".w-item").length).toBe(5);
+    expect(grid?.querySelectorAll('input[type="range"]').length).toBe(5);
+  });
+
+  it("search tab 字段渲染常驻描述行（含取值范围）", async () => {
+    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
+    (tabs?.[1] as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
+    const descs = Array.from(panel?.querySelectorAll(".desc") ?? []);
+    expect(descs.length).toBe(8);  // 3 普通过滤字段 + 5 权重
+    expect(descs[0].textContent).toContain("· 1–200");
+    expect(panel?.querySelector(".w-item .desc")?.textContent).toContain("· 0–10");
+  });
+
+  it("footer 恢复默认把所有字段写回默认值并标 dirty", async () => {
+    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
+    (tabs?.[1] as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = el.shadowRoot?.querySelector(".footer-bar .reset-all") as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    // mock 里 CORTEX_MAX_RESULTS=42 非默认 → 按钮可用
+    expect(btn.disabled).toBe(false);
+
+    btn.click();
+    await elementUpdated(el);
+    // 数值字段清空（空串 = 后端隐式默认），placeholder 显示后端默认值
+    const numInput = el.shadowRoot?.querySelector(
+      'input[data-env="CORTEX_MAX_RESULTS"]'
+    ) as HTMLInputElement;
+    expect(numInput.value).toBe("");
+    expect(numInput.placeholder).toBe("50");
+    // 阈值 slider chip 显示后端默认值（隐式样式）
+    const thresholdChip = el.shadowRoot?.querySelector(".slider-row .value-chip");
+    expect(thresholdChip?.textContent).toBe("0.3");
+    expect(thresholdChip?.classList.contains("implicit")).toBe(true);
+    // 权重 chip 显示隐式默认值
+    const chips = Array.from(el.shadowRoot?.querySelectorAll(".w-item .value-chip") ?? []);
+    expect(chips.map((c) => c.textContent)).toEqual(["4.0", "2.0", "1.0", "2.0", "1.0"]);
+    // 标 dirty，且全部回到默认后按钮禁用
+    const dirty = el.shadowRoot?.querySelector(".dirty-status");
+    expect(dirty?.textContent).toContain("已修改");
+    expect(btn.disabled).toBe(true);
   });
 
   it("updates a field value via input event and marks dirty", async () => {

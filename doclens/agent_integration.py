@@ -146,7 +146,7 @@ class CortexAgent:
         config = {
             "provider_name": os.getenv("PLANIFY_PROVIDER", "anthropic"),
             "protocol": os.getenv("PLANIFY_PROTOCOL", ""),
-            "model_id": os.getenv("PLANIFY_MODEL_ID", "claude-opus-4-6"),
+            "model_id": os.getenv("PLANIFY_MODEL_ID", ""),
             "base_url": os.getenv("PLANIFY_BASE_URL"),
             "api_key": os.getenv("PLANIFY_API_KEY"),
             "zhipu_api_key": os.getenv("ZHIPUAI_API_KEY"),

@@ -1,11 +1,11 @@
 /** Field metadata for the settings form. Drives the metadata-driven rendering
  * in <settings-view>. Hint strings come from specs/settings-page-mockup.html.
  *
- * IMPORTANT: keep the 18 envVar values in sync with KNOWN_KEYS in
+ * IMPORTANT: keep the 13 envVar values in sync with KNOWN_KEYS in
  * cortex/web_v2/config_store.py (backend) — they are the contract between
  * the API and this UI.
  */
-export type SettingsTab = "ai" | "search" | "scoring" | "terminal";
+export type SettingsTab = "ai" | "search";
 export type SettingsFieldComponent =
   | "text"
   | "number"
@@ -21,7 +21,8 @@ export interface SettingsFieldOption {
 
 export interface SettingsField {
   tab: SettingsTab;
-  section: string;
+  /** 分组标题；缺省表示该字段不渲染 section 标题 */
+  section?: string;
   envVar: string;
   label: string;
   component: SettingsFieldComponent;
@@ -36,13 +37,51 @@ export interface SettingsField {
   options?: SettingsFieldOption[];
 }
 
-export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
+export const SETTINGS_TABS: SettingsTab[] = ["ai", "search"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "AI 配置",
   search: "搜索调优",
-  scoring: "评分",
-  terminal: "终端",
+};
+
+/** 评分权重 section 标题（settings-view 据此渲染两列网格 + 恢复默认按钮）。 */
+export const WEIGHT_SECTION = "⚖️ 评分权重";
+
+/** 权重默认值，必须与 doclens/config.py 的 Field default 一致。 */
+export const DEFAULT_WEIGHTS: Record<string, string> = {
+  CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
+  CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
+  CORTEX_WEIGHT_FTS_SCORE: "1.0",
+  CORTEX_WEIGHT_TITLE_MATCH: "2.0",
+  CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
+};
+
+/** footer「恢复默认」使用的全字段出厂值。
+ *  空串 = 后端隐式默认（保存时从 .env 移除该 key）；
+ *  provider/protocol 显式给预设，避免 select 显示空白。 */
+export const FIELD_DEFAULTS: Record<string, string> = {
+  PLANIFY_PROVIDER: "anthropic",
+  PLANIFY_PROTOCOL: "anthropic",
+  PLANIFY_BASE_URL: "",
+  PLANIFY_API_KEY: "",
+  PLANIFY_MODEL_ID: "",
+  CORTEX_MAX_RESULTS: "",
+  CORTEX_MIN_SCORE_THRESHOLD: "",
+  CORTEX_MAX_SPAN: "",
+  CORTEX_WEIGHT_KEYWORD_MATCH: "",
+  CORTEX_WEIGHT_FILE_NAME_MATCH: "",
+  CORTEX_WEIGHT_FTS_SCORE: "",
+  CORTEX_WEIGHT_TITLE_MATCH: "",
+  CORTEX_WEIGHT_PROXIMITY_MATCH: "",
+};
+
+/** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
+ *  用于未设置（空串）时的隐式显示：slider 停在默认位置、chip/placeholder 显示默认值。 */
+export const IMPLICIT_DEFAULTS: Record<string, string> = {
+  CORTEX_MAX_RESULTS: "50",
+  CORTEX_MIN_SCORE_THRESHOLD: "0.3",
+  CORTEX_MAX_SPAN: "50",
+  ...DEFAULT_WEIGHTS,
 };
 
 /** LLM provider 已知预设。必须与 planify/core/llm/presets.py::PROVIDER_PRESETS 同步。 */
@@ -135,68 +174,43 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     hint: "支持自动补全常见模型；也可手动输入自定义模型 ID。",
   },
 
-  // ===== 搜索调优 (7) =====
+  // ===== 搜索调优 · 结果与过滤 (3，无 section 标题) =====
   {
     tab: "search",
-    section: "📊 结果数量",
     envVar: "CORTEX_MAX_RESULTS",
-    label: "最大结果数（跨文档）",
+    label: "最大搜索结果数",
     component: "number",
     effect: "live",
     min: 1,
     max: 200,
-    hint: "search 工具返回的最大文档数量。",
+    hint: "search 工具最多返回多少篇文档",
   },
   {
     tab: "search",
-    section: "📊 结果数量",
-    envVar: "CORTEX_MAX_NODES_PER_DOC",
-    label: "每文档最大节点数",
-    component: "number",
-    effect: "live",
-    min: 1,
-    max: 20,
-    hint: "同一文档返回的最大节点（段落）数。",
-  },
-  {
-    tab: "search",
-    section: "🎯 关键词匹配",
-    envVar: "CORTEX_MAX_SPAN",
-    label: "关键词最大跨度",
-    component: "number",
-    effect: "live",
-    min: 1,
-    max: 100,
-    hint: "窗口内匹配关键词的最大字符跨度。",
-  },
-  {
-    tab: "search",
-    section: "🎯 关键词匹配",
-    envVar: "CORTEX_MIN_KEYWORDS_PER_LINE",
-    label: "行级关键词阈值",
-    component: "number",
-    effect: "live",
-    min: 1,
-    max: 10,
-    hint: "单行至少命中多少关键词才被选为\"最佳行\"。",
-  },
-  {
-    tab: "search",
-    section: "🎯 关键词匹配",
     envVar: "CORTEX_MIN_SCORE_THRESHOLD",
     label: "综合评分阈值",
-    component: "number",
+    component: "slider",
     effect: "live",
     min: 0,
     max: 1,
     step: 0.05,
-    hint: "0 = 不过滤；0.3 = 轻微过滤；0.5+ 容易砍光多关键词结果。",
+    hint: "低于该综合分的结果被过滤，0 = 不过滤",
+  },
+  {
+    tab: "search",
+    envVar: "CORTEX_MAX_SPAN",
+    label: "关键词集中度(字符)",
+    component: "number",
+    effect: "live",
+    min: 1,
+    max: 100,
+    hint: "邻近度统计的关键词最大字符跨度",
   },
 
-  // ===== 评分 (5) =====
+  // ===== 搜索调优 · ⚖️ 评分权重 (5) =====
   {
-    tab: "scoring",
-    section: "⚖️ 权重配置",
+    tab: "search",
+    section: "⚖️ 评分权重",
     envVar: "CORTEX_WEIGHT_KEYWORD_MATCH",
     label: "关键词匹配权重",
     component: "slider",
@@ -204,11 +218,11 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 0,
     max: 10,
     step: 0.1,
-    hint: "权重越大，越偏好'命中的关键词数量多'的文档（多关键词 query 时尤其重要）。",
+    hint: "命中的关键词越多排越前",
   },
   {
-    tab: "scoring",
-    section: "⚖️ 权重配置",
+    tab: "search",
+    section: "⚖️ 评分权重",
     envVar: "CORTEX_WEIGHT_FILE_NAME_MATCH",
     label: "文件名匹配权重",
     component: "slider",
@@ -216,11 +230,11 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 0,
     max: 10,
     step: 0.1,
-    hint: "权重越大，文件名包含关键词的文档排序越靠前。",
+    hint: "文件名含关键词的文档排更前",
   },
   {
-    tab: "scoring",
-    section: "⚖️ 权重配置",
+    tab: "search",
+    section: "⚖️ 评分权重",
     envVar: "CORTEX_WEIGHT_FTS_SCORE",
     label: "FTS 原始分权重",
     component: "slider",
@@ -228,11 +242,11 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 0,
     max: 10,
     step: 0.1,
-    hint: "权重越大，越偏向传统全文检索 BM25 排序（与关键词匹配度正相关）。",
+    hint: "偏向传统 BM25 全文检索排序",
   },
   {
-    tab: "scoring",
-    section: "⚖️ 权重配置",
+    tab: "search",
+    section: "⚖️ 评分权重",
     envVar: "CORTEX_WEIGHT_TITLE_MATCH",
     label: "标题匹配权重",
     component: "slider",
@@ -240,11 +254,11 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 0,
     max: 10,
     step: 0.1,
-    hint: "权重越大，节点标题（如 Markdown 小节标题）含关键词时排序越靠前。",
+    hint: "小节标题含关键词排更前",
   },
   {
-    tab: "scoring",
-    section: "⚖️ 权重配置",
+    tab: "search",
+    section: "⚖️ 评分权重",
     envVar: "CORTEX_WEIGHT_PROXIMITY_MATCH",
     label: "邻近度权重",
     component: "slider",
@@ -252,41 +266,6 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 0,
     max: 10,
     step: 0.1,
-    hint: "权重越大，多关键词在文档中紧邻出现的文档越受偏好。",
-  },
-
-  // ===== 终端 (3) =====
-  {
-    tab: "terminal",
-    section: "🖥️ 终端结果显示",
-    envVar: "CORTEX_MAX_CONTEXT_LINES",
-    label: "上下文行数上限",
-    component: "number",
-    unit: "行",
-    min: 0,
-    max: 100,
-    hint: "每个命中行向上/向下最多各显示多少行原文上下文。",
-  },
-  {
-    tab: "terminal",
-    section: "🖥️ 终端结果显示",
-    envVar: "CORTEX_MAX_ANCHOR_LINES",
-    label: "锚点行数上限",
-    component: "number",
-    unit: "行",
-    min: 1,
-    max: 50,
-    hint: "从同一文档的所有命中行里，挑出多少个'最佳行'作为展示中心（锚点）。锚点越多，结果越完整但输出越长。",
-  },
-  {
-    tab: "terminal",
-    section: "🖥️ 终端结果显示",
-    envVar: "CORTEX_CONTEXT_EXPAND_RANGE",
-    label: "锚点上下文扩展范围",
-    component: "number",
-    unit: "行",
-    min: 0,
-    max: 100,
-    hint: "以每个锚点为中心，向前/向后各展开多少行作为上下文（再与'上下文行数上限'取较小值）。",
+    hint: "关键词紧邻出现的文档排更前",
   },
 ];
