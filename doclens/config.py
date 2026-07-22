@@ -26,13 +26,13 @@ class CortexConfig(BaseSettings):
     index_path: Optional[str] = None
 
     # 搜索参数
-    max_results: int = Field(default=20)
-    max_nodes_per_doc: int = Field(default=3)
+    max_results: int = Field(default=50)
+    max_nodes_per_doc: int = Field(default=50)
     top_k_docs: int = Field(default=100)
-    min_score_threshold: float = Field(default=0.0, description="综合评分阈值，低于此值的结果将被过滤")
+    min_score_threshold: float = Field(default=0.3, description="综合评分阈值，低于此值的结果将被过滤")
 
     # 匹配参数
-    max_span: int = Field(default=20)
+    max_span: int = Field(default=50)
     min_keywords_per_line: int = Field(default=2)
 
     # 终端显示参数
@@ -102,16 +102,16 @@ class CortexConfig(BaseSettings):
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
 
-    # 评分权重（0=禁用，值越大越重要）
-    weight_keyword_match: float = Field(default=3.0)
+    # 评分权重（0=禁用，值越大越重要；加权平均，只有相对比例起作用）
+    weight_keyword_match: float = Field(default=4.0)
     weight_file_name_match: float = Field(default=2.0)
-    weight_fts_score: float = Field(default=2.0)
-    weight_title_match: float = Field(default=1.5)
+    weight_fts_score: float = Field(default=1.0)
+    weight_title_match: float = Field(default=2.0)
     weight_proximity_match: float = Field(default=1.0)
 
     # Planify / Agent 配置
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
-    planify_model_id: str = Field(default="claude-opus-4-6", alias="PLANIFY_MODEL_ID")
+    planify_model_id: str = Field(default="", alias="PLANIFY_MODEL_ID")
     planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
     planify_context_window: int = Field(
         default=200000,

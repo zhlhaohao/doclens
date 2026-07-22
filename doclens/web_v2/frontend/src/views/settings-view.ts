@@ -9,6 +9,10 @@ import {
   SETTINGS_TAB_LABELS,
   PRESET_BASE_URLS,
   PRESET_PROTOCOLS,
+  WEIGHT_SECTION,
+  DEFAULT_WEIGHTS,
+  FIELD_DEFAULTS,
+  IMPLICIT_DEFAULTS,
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
@@ -17,7 +21,7 @@ import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search", "scoring", "terminal"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search"];
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
 const ICON_EYE = html`
@@ -207,6 +211,58 @@ export class SettingsView extends LitElement {
       font-variant-numeric: tabular-nums;
     }
 
+    /* 常驻描述行（仅 search tab 渲染，见 _renderDesc） */
+    .desc {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      line-height: 1.4;
+      margin-top: 2px;
+    }
+    /* .field 是双列 grid，desc 独占一行通栏显示 */
+    .field .desc { grid-column: 1 / -1; }
+
+    /* 权重区：桌面两列网格 */
+    .weights-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--cortex-space-4) var(--cortex-space-6);
+    }
+    .w-item { min-width: 0; }
+    .w-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--cortex-space-2);
+      margin-bottom: 2px;
+    }
+    .w-name {
+      font-size: var(--cortex-fs-sm);
+      font-weight: 600;
+      color: var(--cortex-text);
+    }
+    /* 未显式设置、回显默认值的徽章：弱化样式与显式值区分 */
+    .value-chip.implicit {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text-muted);
+    }
+    .w-slider {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      margin-top: var(--cortex-space-1);
+    }
+    .w-slider input[type="range"] {
+      flex: 1;
+      accent-color: var(--cortex-primary);
+    }
+    .w-end {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
+      min-width: 14px;
+      text-align: center;
+    }
+
     .input, .select {
       padding: 9px 12px;
       border: 1px solid var(--cortex-border);
@@ -289,9 +345,11 @@ export class SettingsView extends LitElement {
 
     /* ===== 移动端 (<1024px) ===== */
     @media (max-width: 1023px) {
-      /* F1 移动端单列回退：scope+tab 回到顶部水平条，整体滚动，footer 吸底保留 */
+      /* F1 移动端单列回退：scope+tab 回到顶部水平条，整体滚动，footer 吸底保留。
+         注意：.layout/.main/.scroll-area 必须 flex: none 让盒子随内容撑高，
+         否则被 flex 压缩后 overflow:visible 只是"看得见"，底部 padding 无效。 */
       :host { overflow-y: auto; }
-      .layout { flex-direction: column; flex: 1; min-height: 0; overflow: visible; }
+      .layout { flex-direction: column; flex: none; min-height: 0; overflow: visible; }
       .sidebar {
         width: 100%;
         flex-direction: column;
@@ -302,8 +360,8 @@ export class SettingsView extends LitElement {
         overflow: visible;
         flex-shrink: 0;
       }
-      .main { overflow: visible; min-height: 0; }
-      .scroll-area { overflow: visible; }
+      .main { overflow: visible; min-height: 0; flex: none; }
+      .scroll-area { overflow: visible; flex: none; }
       .tab-strip { flex-direction: row; overflow-x: auto; }
       .tab-strip button {
         border-left: none;
@@ -348,8 +406,9 @@ export class SettingsView extends LitElement {
         gap: var(--cortex-space-2);
         box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
       }
-      /* 给 fixed footer 让位，避免最后的字段被遮挡 */
-      .main { padding-bottom: 110px; }
+      /* 给 fixed footer 让位：padding 必须加在随内容撑高的 .scroll-area 上，
+         加在 .main 上会像 sticky 一样被 flex 压缩吞掉 */
+      .scroll-area { padding-bottom: 120px; }
       /* 状态区压缩：移动端只留脏标记圆点 + 错误/成功提示，说明文字省略 */
       .footer-bar .dirty-status { flex: 0 0 auto; font-size: var(--cortex-fs-xs); gap: var(--cortex-space-1); }
       .footer-bar .dirty-status .dirty-text { display: none; }
@@ -365,6 +424,9 @@ export class SettingsView extends LitElement {
 
       .input, .select { max-width: 100%; }
 
+      /* 权重区移动端回退单列 */
+      .weights-grid { grid-template-columns: 1fr; }
+
       /* Slider 单控件 + 数值 chip */
       .slider-row {
         display: flex;
@@ -377,7 +439,8 @@ export class SettingsView extends LitElement {
         width: 100%;
         flex: 1;
       }
-      .value-chip {
+      /* 需压过桌面端 .slider-row .value-chip { display: none } 的优先级 */
+      .slider-row .value-chip {
         display: inline-block;
         align-self: flex-start;
         font-size: var(--cortex-fs-md);
@@ -647,8 +710,62 @@ export class SettingsView extends LitElement {
           <div class="row">${this._renderInput(f, value)}</div>
           ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
         </div>
+        ${this._renderDesc(f)}
       </div>
     `;
+  }
+
+  /** 常驻描述行：hint（去末尾句号）+ 取值范围。仅 search tab 渲染。 */
+  private _renderDesc(f: SettingsField) {
+    if (f.tab !== "search" || !f.hint) return nothing;
+    const base = f.hint.replace(/。$/, "");
+    const range = f.min != null && f.max != null ? ` · ${f.min}–${f.max}` : "";
+    return html`<div class="desc">${base}${range}</div>`;
+  }
+
+  /** 权重网格项：名称+值徽章一行、描述一行、拖杆（含端点标注）一行。
+   *  未显式设置（.env 无此键）时回显默认值，徽章用 implicit 样式区分。 */
+  private _renderWeightItem(f: SettingsField) {
+    const raw = this._values[f.envVar] ?? "";
+    const implicit = raw === "";
+    const value = implicit ? (DEFAULT_WEIGHTS[f.envVar] ?? String(f.min ?? 0)) : raw;
+    const onInput = (e: Event) =>
+      this._onInput(f.envVar, (e.target as HTMLInputElement).value);
+    return html`
+      <div class="w-item">
+        <div class="w-head">
+          <span class="w-name">${f.label}</span>
+          <span class="value-chip ${implicit ? "implicit" : ""}" data-role="value-chip">${value}</span>
+        </div>
+        ${this._renderDesc(f)}
+        <div class="w-slider">
+          <span class="w-end">${f.min ?? 0}</span>
+          <input
+            type="range"
+            min=${f.min ?? nothing}
+            max=${f.max ?? nothing}
+            step=${f.step ?? nothing}
+            .value=${value}
+            data-env=${f.envVar}
+            @input=${onInput}
+          />
+          <span class="w-end">${f.max ?? 10}</span>
+        </div>
+        ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
+      </div>
+    `;
+  }
+
+  private _allAtDefault(): boolean {
+    return Object.entries(FIELD_DEFAULTS).every(
+      ([k, v]) => (this._values[k] ?? "") === v
+    );
+  }
+
+  /** 恢复全部默认：清空自定义（空串 = 后端隐式默认），走正常 dirty 流程由 footer 统一保存。 */
+  private _resetAll() {
+    this._updateValues({ ...FIELD_DEFAULTS });
+    this._userEditedBaseUrl = false;
   }
 
   private _renderInput(f: SettingsField, value: string) {
@@ -706,6 +823,7 @@ export class SettingsView extends LitElement {
             class="input"
             type="number"
             .value=${value}
+            placeholder=${IMPLICIT_DEFAULTS[f.envVar] ?? nothing}
             min=${f.min ?? nothing}
             max=${f.max ?? nothing}
             step=${f.step ?? nothing}
@@ -722,13 +840,18 @@ export class SettingsView extends LitElement {
             `)}
           </select>
         `;
-      case "slider":
+      case "slider": {
+        // 未显式设置时回显后端默认值（隐式样式），避免空值拖杆停在中点、chip 空白
+        const implicit = value === "";
+        const eff = implicit
+          ? (IMPLICIT_DEFAULTS[f.envVar] ?? String(f.min ?? 0))
+          : value;
         return html`
           <div class="slider-row">
             <input
               class="input"
               type="number"
-              .value=${value}
+              .value=${eff}
               min=${f.min ?? nothing}
               max=${f.max ?? nothing}
               step=${f.step ?? nothing}
@@ -738,15 +861,16 @@ export class SettingsView extends LitElement {
             />
             <input
               type="range"
-              .value=${value}
               min=${f.min ?? nothing}
               max=${f.max ?? nothing}
               step=${f.step ?? nothing}
+              .value=${eff}
               @input=${onInput}
             />
-            <span class="value-chip" data-role="value-chip">${value}</span>
+            <span class="value-chip ${implicit ? "implicit" : ""}" data-role="value-chip">${eff}</span>
           </div>
         `;
+      }
       default:
         return nothing;
     }
@@ -773,15 +897,23 @@ export class SettingsView extends LitElement {
               const fields = SETTINGS_FIELDS.filter((f) => f.tab === tab);
               const sections: { title: string; desc?: string; fields: SettingsField[] }[] = [];
               for (const f of fields) {
-                let s = sections.find((x) => x.title === f.section);
-                if (!s) { s = { title: f.section, fields: [] }; sections.push(s); }
+                const key = f.section ?? "";
+                let s = sections.find((x) => x.title === key);
+                if (!s) { s = { title: key, fields: [] }; sections.push(s); }
                 s.fields.push(f);
               }
               return html`
                 <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
-                  ${sections.map((s) => html`
+                  ${sections.map((s) => s.title === WEIGHT_SECTION ? html`
                     <div class="section">
                       <h2>${s.title}</h2>
+                      <div class="weights-grid">
+                        ${s.fields.map((f) => this._renderWeightItem(f))}
+                      </div>
+                    </div>
+                  ` : html`
+                    <div class="section">
+                      ${s.title ? html`<h2>${s.title}</h2>` : nothing}
                       ${s.fields.map((f) => this._renderField(f))}
                     </div>
                   `)}
@@ -799,6 +931,7 @@ export class SettingsView extends LitElement {
               ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
             </div>
             <div class="footer-actions">
+              <button class="btn reset-all" ?disabled=${this._allAtDefault() || this._saving} @click=${() => this._resetAll()}>恢复默认</button>
               <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
                 ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}

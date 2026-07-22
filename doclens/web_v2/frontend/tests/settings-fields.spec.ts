@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 18 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(18);
+  it("has exactly 13 fields", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(13);
   });
 
   it("every field has a unique envVar", () => {
@@ -15,10 +15,9 @@ describe("SETTINGS_FIELDS", () => {
     expect(new Set(envVars).size).toBe(envVars.length);
   });
 
-  it("every field has tab/section/envVar/label/component", () => {
+  it("every field has tab/envVar/label/component", () => {
     for (const f of SETTINGS_FIELDS) {
       expect(f.tab).toBeTruthy();
-      expect(f.section).toBeTruthy();
       expect(f.envVar).toMatch(/^[A-Z][A-Z0-9_]*$/);
       expect(f.label).toBeTruthy();
       expect(["text", "number", "select", "password", "slider"]).toContain(f.component);
@@ -43,8 +42,8 @@ describe("SETTINGS_FIELDS", () => {
     }
   });
 
-  it("4 tabs are exposed in SETTINGS_TABS in display order", () => {
-    expect(SETTINGS_TABS).toEqual(["ai", "search", "scoring", "terminal"]);
+  it("2 tabs are exposed in SETTINGS_TABS in display order", () => {
+    expect(SETTINGS_TABS).toEqual(["ai", "search"]);
   });
 
   it("AI tab has 5 fields all marked live (hot-reload after apply_config fix)", () => {
@@ -59,10 +58,14 @@ describe("SETTINGS_FIELDS", () => {
     expect(apiKey?.mono).toBe(true);
   });
 
+  it("search tab 所有字段都有 hint（常驻描述行数据来源）", () => {
+    const search = SETTINGS_FIELDS.filter((f) => f.tab === "search");
+    expect(search).toHaveLength(8);
+    expect(search.every((f) => f.hint && f.hint.length > 0)).toBe(true);
+  });
+
   it("SETTINGS_TAB_LABELS maps each tab to a Chinese label", () => {
     expect(SETTINGS_TAB_LABELS.ai).toBe("AI 配置");
     expect(SETTINGS_TAB_LABELS.search).toBe("搜索调优");
-    expect(SETTINGS_TAB_LABELS.scoring).toBe("评分");
-    expect(SETTINGS_TAB_LABELS.terminal).toBe("终端");
   });
 });
