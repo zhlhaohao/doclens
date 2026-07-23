@@ -118,6 +118,82 @@ doclens first retrieves relevant document sections, then sends them to Anthropic
 
 ---
 
+## Claude Code Integration (MCP KB Q&A)
+
+doclens auto-starts an **MCP server** (Streamable HTTP) inside both the TUI and the GUI, exposing the knowledge base as two MCP tools — `search_kb` and `read_document`. Any MCP-compatible client (Claude Code, Cursor, Cline, …) can connect and answer questions grounded in your indexed documents, with zero embedding / vector DB.
+
+### How it works
+
+- The MCP HTTP server runs in a background thread **in-process**, sharing the same `IndexManager` as the TUI/GUI — so live reindexing via the file watcher applies to MCP queries too.
+- It listens at `http://<host>:<port>/mcp`. The URL is printed in the startup log on every launch.
+- Loopback (`127.0.0.1`) by default, no auth. Binding to a non-loopback address **requires** a bearer token (`CORTEX_MCP_TOKEN`) — the server refuses to start otherwise.
+
+### Setup
+
+**1. Start doclens** (this also starts the MCP server):
+
+```bash
+doclens gui          # Web UI mode
+# or
+doclens              # TUI mode
+```
+
+Read the MCP URL from the startup log:
+
+```
+MCP server: http://127.0.0.1:7880/mcp
+```
+
+**2. Register it in Claude Code** (once per project):
+
+```bash
+claude mcp add --transport http doclens http://127.0.0.1:7880/mcp --scope local
+claude mcp list      # expect: doclens: ... ✔ Connected
+```
+
+Scopes: `local` (default — this project + you, not committed), `user` (global), `project` (`.mcp.json`, committed).
+
+**3. Restart your Claude Code session** if it was already running — MCP servers load only at session start.
+
+**4. Ask.** In Claude Code, ask anything about your indexed docs; it will call `search_kb` / `read_document` automatically. For a focused, KB-only answer, restrict the session to the two tools:
+
+```bash
+claude -p "量子密钥分发 QKD 的基本原理是什么？" \
+  --allowedTools "mcp__doclens__search_kb" "mcp__doclens__read_document"
+```
+
+### Bundled skill: `kb-ask`
+
+doclens ships a Claude Code skill ([source: `doclens/claude_code_skills/kb-ask/skill.md`](doclens/claude_code_skills/kb-ask/skill.md)) that codifies the full KB Q&A workflow: MCP-connected prerequisite check, FTS multi-query strategy, `read_document` deep-read, source-citation rules, and a no-fabrication constraint.
+
+On **TUI/GUI startup**, doclens checks `~/.claude/skills/kb-ask/` and, if the skill is missing or out of date, prompts to install/overwrite it (skipped silently in non-interactive terminals). After the first install, restart your Claude Code session and invoke it anywhere:
+
+```
+/kb-ask 新能源汽车技术有哪些
+```
+
+### Configuration
+
+MCP behavior is controlled by these env vars (same `.env` as the rest of doclens):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CORTEX_MCP_ENABLED` | `true` | Auto-start the MCP server in TUI/GUI. Set `false` to disable. |
+| `CORTEX_MCP_PORT` | `7880` | MCP HTTP port (override via this env var). |
+| `CORTEX_MCP_HOST` | `127.0.0.1` | Bind address. Non-loopback **requires** `CORTEX_MCP_TOKEN`. |
+| `CORTEX_MCP_TOKEN` | — | Bearer token enforced when host is non-loopback. |
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `claude mcp list` shows doclens missing / ✘ | doclens not running, or wrong port. Start doclens, read the URL from its log, re-add. |
+| Tools `mcp__doclens__*` not available in session | MCP loads at session start — **restart the Claude Code session** after adding. |
+| `search_kb` returns nothing | Keywords may not match FTS tokens. Try synonyms, EN↔CN, or rebuild the index: `doclens index --force`. |
+| Non-loopback start refused | Set `CORTEX_MCP_TOKEN`, or bind back to `127.0.0.1`. |
+
+---
+
 ## Configuration
 
 doclens reads `.env` in the project root. Copy and customize:

@@ -42,11 +42,23 @@ if ($dirName -match '-(\d+)$') {
 $basePort = 7860
 $port = $basePort + $n
 
+# MCP server 端口同样 +N（镜像 GUI 约定），多 worktree 并行不撞。
+$mcpBasePort = 7880
+$mcpPort = $mcpBasePort + $n
+$env:CORTEX_MCP_PORT = "$mcpPort"
+
 Write-Host "=== Cortex 启动信息 ===" -ForegroundColor Cyan
 Write-Host "  工作目录: $testWorkDir"
 Write-Host "  PYTHONPATH: $env:PYTHONPATH"
 Write-Host "  Venv: $venvPython"
-Write-Host "  端口: $basePort (基数) + $n (目录N, $dirName) = $port"
+Write-Host "  Web 端口: $port"
+Write-Host "  MCP 端口: $mcpPort"
+Write-Host "------------------------" -ForegroundColor Cyan
+Write-Host "  接入 Claude Code MCP（首次）：" -ForegroundColor Cyan
+Write-Host "    claude mcp add --transport http doclens http://127.0.0.1:$mcpPort/mcp --scope local"
+Write-Host "    claude mcp list        # 看到 doclens ✔ Connected 即成功"
+Write-Host "  然后重启 Claude Code 会话，用 skill 做知识库问答：" -ForegroundColor Cyan
+Write-Host "    /kb-ask 新能源汽车技术有哪些"
 Write-Host "========================" -ForegroundColor Cyan
 
 # 仅 gui 子命令注入 --port；用户显式传 --port 时尊重用户。

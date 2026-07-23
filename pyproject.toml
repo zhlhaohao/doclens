@@ -38,6 +38,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
     "sse-starlette>=2.0.0",
+    # MCP server (Streamable HTTP) — 暴露 KB 检索为 MCP 工具，TUI/GUI 进程内自启。
+    # 纯 Python，传递依赖（starlette/sse-starlette/uvicorn/pydantic/httpx）多数已在。
+    "mcp>=1.10",
     "textual>=0.47.0",
     "tqdm>=4.42",
     "ulid-py>=1.1",
@@ -96,6 +99,7 @@ doclens = [
     "web_v2/static/**/*",
     ".env.example",
     "skills/**/*",
+    "claude_code_skills/**/*",
 ]
 
 [tool.pytest.ini_options]

@@ -23,6 +23,7 @@ from rich.table import Table
 
 from doclens.config import CortexConfig
 from doclens.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
+from doclens.mcp_server import McpServerHandle, mcp_startup_message, start_mcp_server
 from doclens.scoring import tokenize_query
 from doclens import ripgrep as rg_module
 from doclens.scoring_pipeline import score_and_rank
@@ -91,6 +92,9 @@ class CortexApp(App):
         # 文件监控
         self.watcher = None
 
+        # MCP server 句柄（索引就绪后在后台启动）
+        self._mcp_handle: Optional[McpServerHandle] = None
+
         # AI 查询状态
         self._ai_worker: Optional[Worker] = None
         self._ai_pending_query: Optional[str] = None
@@ -148,6 +152,9 @@ class CortexApp(App):
         # 启动文件监控
         self._start_watcher()
 
+        # 后台启动 MCP server（复用同进程索引，失败不阻塞 TUI）
+        self.run_worker(self._start_mcp, thread=True, name="mcp_start")
+
         # 延迟 3 秒后检查索引是否需要增量更新
         self._sync_timer = threading.Timer(3.0, self._startup_sync_check)
         self._sync_timer.daemon = True
@@ -157,6 +164,47 @@ class CortexApp(App):
         """索引加载失败（主线程回调）"""
         content = self.query_one(ContentArea)
         content.write_error(f"索引加载失败: {error_msg}")
+
+    # ------------------------------------------------------------------
+    # MCP server
+    # ------------------------------------------------------------------
+
+    def _start_mcp(self) -> None:
+        """后台线程：启动 MCP server，复用同进程 IndexManager。
+
+        start_mcp_server 内部已做失败隔离（端口占用/鉴权问题返回 None），
+        故此处不抛穿；成功则把 URL 回显到 ContentArea。
+        """
+        if not self.config.mcp_enabled:
+            return
+        try:
+            handle = start_mcp_server(
+                self.idx, Path(self.idx.search_path), self.config
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MCP server 启动异常: %s", exc)
+            handle = None
+
+        if handle is not None:
+            self._mcp_handle = handle
+            self.call_from_thread(
+                self._show_mcp_status, mcp_startup_message(handle, self.config), False
+            )
+        else:
+            # 已启用却启动失败：提示用户看日志（disabled 的情况上面已静默返回）
+            self.call_from_thread(
+                self._show_mcp_status,
+                "MCP server 未启动（端口占用或鉴权配置问题，详见日志）",
+                True,
+            )
+
+    def _show_mcp_status(self, message: str, is_error: bool) -> None:
+        """主线程：把 MCP server 状态写到 ContentArea。"""
+        content = self.query_one(ContentArea)
+        if is_error:
+            content.write_error(message)
+        else:
+            content.write_system(message)
 
     # ------------------------------------------------------------------
     # 启动后增量索引同步
@@ -1140,6 +1188,12 @@ class CortexApp(App):
         if hasattr(self, '_sync_timer') and self._sync_timer:
             self._sync_timer.cancel()
             self._sync_timer = None
+        if self._mcp_handle is not None:
+            try:
+                self._mcp_handle.stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("MCP server 停止失败: %s", exc)
+            self._mcp_handle = None
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
