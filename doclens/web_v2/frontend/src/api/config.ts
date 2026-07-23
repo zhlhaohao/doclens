@@ -63,3 +63,15 @@ export async function copyFromGlobal(): Promise<{ ok: boolean; saved_path: strin
   }
   return body as { ok: boolean; saved_path: string };
 }
+
+/** 重置 .env 为包内 .env.example 默认模板（保留用户 API Key），返回重置后的值。 */
+export async function resetConfigDefault(scope: SettingsScope): Promise<ConfigResponse> {
+  const resp = await fetch(`/api/config/reset-default?scope=${scope}`, {
+    method: "POST",
+  });
+  const body = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new ConfigApiError(resp.status, body);
+  }
+  return body as ConfigResponse;
+}

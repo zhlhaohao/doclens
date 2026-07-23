@@ -9,6 +9,7 @@ from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.config_store import (
     KNOWN_KEYS,
     read_env_values,
+    reset_env_to_example,
     resolve_env_path,
     write_env_values,
 )
@@ -91,7 +92,7 @@ async def put_config(
 
 @router.post("/config/copy-from-global")
 async def copy_from_global():
-    """Copy ~/.cortex/.env to {cwd}/.cortex/.env.
+    """Copy global .env to {cwd} local .env (dirname follows mode: .cortex / .doclens).
 
     Used by the empty-state banner in <settings-view> when the local .env
     does not exist. Returns 404 if the global .env doesn't exist either.
@@ -104,3 +105,22 @@ async def copy_from_global():
     shutil.copyfile(str(global_path), str(local_path))
     logger.info("copied global env -> %s", local_path)
     return {"ok": True, "saved_path": str(local_path)}
+
+
+@router.post("/config/reset-default", response_model=ConfigResponse)
+async def reset_default(scope: Scope = Query("global")):
+    """把 .env 重置为包内 .env.example 默认模板，保留用户已有的 PLANIFY_API_KEY。
+
+    用于设置页「恢复默认」：产出带注释与默认值的规范配置（而非清空）。
+    返回重置后的全部 KNOWN_KEYS 值，供前端刷新表单。
+    """
+    path = resolve_env_path(scope)
+    try:
+        reset_env_to_example(path)
+    except PermissionError as e:
+        raise CortexAPIError(403, "WRITE_FORBIDDEN", f"无法写入 {path}: {e}")
+    from doclens.web_v2.deps import reload_config
+    reload_config()
+    values, exists = read_env_values(path, KNOWN_KEYS)
+    logger.info("config reset to defaults: scope=%s path=%s", scope, path)
+    return ConfigResponse(scope=scope, values=values, exists=exists)

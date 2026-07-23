@@ -13,6 +13,16 @@ from pathlib import Path
 from typing import Optional
 
 
+def _data_dirname() -> str:
+    """数据目录名：优先读 doclens 写入的 CORTEX_DATA_DIRNAME env；未设则回退 .cortex。
+
+    planify 不反向依赖 doclens —— doclens.config 模块加载时把模式决策写入该 env，
+    planify 在此读取即可与 doclens 保持一致（开发 .cortex / 发行版 .doclens）。
+    planify 独立运行时 env 未设 → 回退 .cortex（符合 planify 自身语义）。
+    """
+    return os.environ.get("CORTEX_DATA_DIRNAME", ".cortex")
+
+
 class SafeFileHandler(logging.FileHandler):
     """
     安全的文件日志处理器
@@ -33,7 +43,7 @@ class SafeFileHandler(logging.FileHandler):
 
 def _trust_state_file() -> Path:
     """返回记录已授权目录的 JSON 文件路径。"""
-    return Path.home() / ".cortex" / "allowed_dirs.json"
+    return Path.home() / _data_dirname() / "allowed_dirs.json"
 
 
 def _is_trusted_dir(log_dir: Path) -> Optional[bool]:
@@ -72,7 +82,7 @@ def _set_trusted_dir(log_dir: Path, trusted: bool) -> None:
 
 
 def _confirm_trust_dir(log_dir: Path) -> bool:
-    """询问用户是否信任在当前目录创建 .cortex 文件夹。
+    """询问用户是否信任在当前目录创建数据目录文件夹（开发 .cortex / 发行版 .doclens）。
 
     仅在交互式终端中提示；非交互式环境默认允许。
     如果用户拒绝，回退到不创建文件日志。
@@ -124,7 +134,7 @@ def _cortex_package_dir() -> Optional[Path]:
 
 
 def _init_cortex_workspace(workspace_dir: Path) -> None:
-    """初始化 .cortex 工作区：拷贝 .env.example 和 skills 目录。
+    """初始化数据目录工作区：拷贝 .env.example 和 skills 目录（开发 .cortex / 发行版 .doclens）。
 
     仅在首次创建时执行，已有文件不覆盖。
     完成后提示用户编辑 .env 填写大模型密钥。
@@ -135,7 +145,7 @@ def _init_cortex_workspace(workspace_dir: Path) -> None:
 
     copied_any = False
 
-    # 1. 拷贝 .env.example -> .cortex/.env
+    # 1. 拷贝 .env.example -> 数据目录/.env
     env_example = pkg_dir / ".env.example"
     if env_example.exists():
         target_env = workspace_dir / ".env"
@@ -146,7 +156,7 @@ def _init_cortex_workspace(workspace_dir: Path) -> None:
             except Exception:
                 pass
 
-    # 2. 拷贝 skills 目录 -> .cortex/skills/
+    # 2. 拷贝 skills 目录 -> 数据目录/skills/
     skills_src = pkg_dir / "skills"
     if skills_src.exists() and skills_src.is_dir():
         target_skills = workspace_dir / "skills"
@@ -174,12 +184,12 @@ def _load_cortex_env():
         return
     try:
         from dotenv import load_dotenv
-        # 全局配置: ~/.cortex/.env
-        global_env = Path.home() / ".cortex" / ".env"
+        # 全局配置: ~/.<数据目录>/.env （开发 .cortex / 发行版 .doclens）
+        global_env = Path.home() / _data_dirname() / ".env"
         if global_env.exists():
             load_dotenv(global_env, override=True)
-        # 项目配置: {cwd}/.cortex/.env
-        local_env = Path.cwd() / ".cortex" / ".env"
+        # 项目配置: {cwd}/<数据目录>/.env
+        local_env = Path.cwd() / _data_dirname() / ".env"
         if local_env.exists():
             load_dotenv(local_env, override=True)
         os.environ["CORTEX_ENV_LOADED"] = "1"
@@ -197,7 +207,7 @@ def setup_logging(
     设置应用日志记录。
 
     Args:
-        log_dir: 日志文件目录（默认为 .cortex/logs）
+        log_dir: 日志文件目录（默认为 <数据目录>/logs，即 .cortex 或 .doclens）
         log_level: 日志级别（默认为 DEBUG）
         console_output: 是否输出到控制台（默认为 False）
         console_level: 控制台日志级别（默认为 INFO）
@@ -211,13 +221,13 @@ def setup_logging(
         if env_dir:
             log_dir = Path(env_dir)
         else:
-            # 从 .env 文件读取（支持 ~/.cortex/.env 或 {cwd}/.cortex/.env）
+            # 从 .env 文件读取（支持 ~/<数据目录>/.env 或 {cwd}/<数据目录>/.env）
             _load_cortex_env()
             env_dir = os.environ.get("CORTEX_LOG_DIR")
             if env_dir:
                 log_dir = Path(env_dir)
             else:
-                log_dir = (Path.cwd() / ".cortex" / "logs").resolve()
+                log_dir = (Path.cwd() / _data_dirname() / "logs").resolve()
 
     # 询问用户是否信任该目录
     trusted = _confirm_trust_dir(log_dir)

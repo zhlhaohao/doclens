@@ -19,7 +19,7 @@ import io
 import argparse
 from pathlib import Path
 
-from doclens.config import CortexConfig
+from doclens.config import CortexConfig, data_dirname, get_global_cortex_dir
 from doclens.formatting import hl, truncate_ansi_safe, make_vscode_link
 from doclens.scoring import tokenize_query
 from doclens.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
@@ -146,7 +146,7 @@ class NotebookSearchCLI:
         self.max_results = self.config.max_results
 
         # 命令历史（支持上下箭头导航）
-        history_dir = Path.home() / ".cortex" / "cli_history"
+        history_dir = get_global_cortex_dir() / "cli_history"
         self._history = CommandHistory(history_dir / "history.json")
 
         # Agent 相关（延迟初始化）
@@ -618,19 +618,19 @@ class NotebookSearchCLI:
 """)
 
         # 检查索引状态，按情况决定是否需要提示用户
-        cortex_dir = os.path.join(self.idx.search_path, ".cortex")
+        cortex_dir = os.path.join(self.idx.search_path, data_dirname())
         index_file = os.path.abspath(self.idx.index_path)
         has_cortex_dir = os.path.isdir(cortex_dir)
         has_index_file = os.path.isfile(index_file)
 
         need_prompt = False
         if not has_cortex_dir:
-            print(f"当前目录未找到 .cortex 索引目录。")
+            print(f"当前目录未找到 {data_dirname()} 索引目录。")
             print(f"搜索路径: {self.idx.search_path}")
             prompt_msg = "是否创建索引以启用全文检索? (y/n): "
             need_prompt = True
         elif not has_index_file:
-            print(f".cortex 目录已存在，但未找到索引文件。")
+            print(f"{data_dirname()} 目录已存在，但未找到索引文件。")
             prompt_msg = "是否进行全量索引? (y/n): "
             need_prompt = True
 
@@ -1160,7 +1160,7 @@ def main():
     args, unknown = parser.parse_known_args()
 
     # 切换工作目录。必须在 setup_logging() 和 CortexConfig.load() 之前执行：
-    # 前者用相对路径 .cortex/logs 定位日志文件，后者用 os.getcwd() 定位
+    # 前者用相对路径 <数据目录>/logs 定位日志文件，后者用 os.getcwd() 定位
     # search_path 默认值和本地 .env。顺序颠倒会导致日志/配置写到错误目录。
     if args.workdir:
         workdir = os.path.abspath(args.workdir)
@@ -1169,7 +1169,7 @@ def main():
             sys.exit(1)
         os.chdir(workdir)
 
-    # 配置日志 → {workdir}/.cortex/logs/debug_YYYYMMDD.log
+    # 配置日志 → {workdir}/<数据目录>/logs/debug_YYYYMMDD.log （开发 .cortex / 发行版 .doclens）
     from planify.core.logging_config import setup_logging
     setup_logging()
 
@@ -1184,7 +1184,7 @@ def main():
 
     # ── TUI mode (unchanged original logic) ──
     config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
-    index_path = config.index_path or os.path.join(config.search_path, ".cortex", "index.db")
+    index_path = config.index_path or os.path.join(config.search_path, data_dirname(), "index.db")
 
     # Check if index exists and contains documents
     doc_count = 0

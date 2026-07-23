@@ -112,11 +112,10 @@ export class AppBar extends LitElement {
     .avatar-btn {
       display: inline-flex;
       align-items: center;
-      gap: var(--cortex-space-2);
-      padding: 4px 8px 4px 4px;
+      padding: 4px;
       background: transparent;
       border: 1px solid transparent;
-      border-radius: 999px;
+      border-radius: 50%;
       cursor: pointer;
       font-family: inherit;
       color: var(--cortex-text);
@@ -137,8 +136,6 @@ export class AppBar extends LitElement {
       font-weight: 600;
       font-size: var(--cortex-fs-sm);
     }
-    .name { font-size: var(--cortex-fs-sm); }
-    .chev { color: var(--cortex-text-muted); font-size: 12px; }
 
     .user-menu {
       position: absolute;
@@ -314,10 +311,8 @@ export class AppBar extends LitElement {
         >
           <span class="icon" aria-hidden="true">↻</span>
         </button>
-        <button class="avatar-btn" @click=${this._onAvatarClick}>
+        <button class="avatar-btn" @click=${this._onAvatarClick} aria-label="用户菜单">
           <span class="avatar">L</span>
-          <span class="name">Liang</span>
-          <span class="chev">▾</span>
         </button>
         <div class="user-menu ${this._menuOpen ? "open" : ""}">
           <div class="menu-header">

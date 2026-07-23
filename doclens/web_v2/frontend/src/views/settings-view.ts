@@ -16,7 +16,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, ConfigApiError } from "../api/config";
+import { getConfig, putConfig, resetConfigDefault, ConfigApiError } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
@@ -545,9 +545,26 @@ export class SettingsView extends LitElement {
       this._values = { ...resp.values };
       this._original = { ...resp.values };
       this._userEditedBaseUrl = false;
+      // 已知 provider 预设回填：.env 里 base_url/protocol 为空时展示预设值
+      // （与切换 provider 时 _onProviderChange 行为一致）。回填同步进 _original，
+      // 故不会凭空标 dirty；用户保存才会把这些预设值真正写入 .env。
+      const provider = this._values["PLANIFY_PROVIDER"] ?? "";
+      if (provider && provider !== "custom") {
+        const fill: Record<string, string> = {};
+        if (!(this._values["PLANIFY_BASE_URL"] ?? "")) {
+          fill["PLANIFY_BASE_URL"] = PRESET_BASE_URLS[provider] ?? "";
+        }
+        if (!(this._values["PLANIFY_PROTOCOL"] ?? "")) {
+          fill["PLANIFY_PROTOCOL"] = PRESET_PROTOCOLS[provider] ?? "anthropic";
+        }
+        if (Object.keys(fill).length) {
+          this._values = { ...this._values, ...fill };
+          this._original = { ...this._values };
+        }
+      }
       this._exists = resp.exists;
       this._fieldErrors = {};
-      actions.loadSettings(resp.values, resp.exists);
+      actions.loadSettings(this._values, resp.exists);
     } catch (e: unknown) {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._error = `加载失败: ${(e as Error).message}`;
@@ -762,10 +779,31 @@ export class SettingsView extends LitElement {
     );
   }
 
-  /** 恢复全部默认：清空自定义（空串 = 后端隐式默认），走正常 dirty 流程由 footer 统一保存。 */
-  private _resetAll() {
-    this._updateValues({ ...FIELD_DEFAULTS });
-    this._userEditedBaseUrl = false;
+  /** 恢复默认：调用后端把 .env 重置为 .env.example 模板（保留 API Key），
+   *  直接持久化并刷新表单 —— 不走逐字段清空，避免掏空文件/删密钥。 */
+  private async _resetAll() {
+    if (this._saving) return;
+    this._saving = true;
+    this._error = null;
+    try {
+      const resp = await resetConfigDefault(this._scope);
+      if (!this.isConnected) return;
+      this._values = { ...resp.values };
+      this._original = { ...resp.values };
+      this._userEditedBaseUrl = false;
+      actions.loadSettings(resp.values, true);
+      void this._refreshSystemStatus();
+      const msg = "已恢复默认配置（保留你的 API Key）。";
+      if (this._isMobile()) {
+        this._pushToast(msg, "success", 4000);
+      } else {
+        this._toast = msg;
+      }
+    } catch {
+      this._error = "恢复默认失败，请检查 .env 是否可写。";
+    } finally {
+      this._saving = false;
+    }
   }
 
   private _renderInput(f: SettingsField, value: string) {

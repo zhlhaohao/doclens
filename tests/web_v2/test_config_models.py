@@ -52,13 +52,13 @@ import pytest  # noqa: E402
 from doclens.config import CortexConfig  # noqa: E402
 
 
-def test_cortex_config_default_provider_is_anthropic(monkeypatch):
+def test_cortex_config_default_provider_is_minimax(monkeypatch):
     # 清除可能影响测试的环境变量
     for k in ["PLANIFY_PROVIDER", "PLANIFY_PROTOCOL", "PLANIFY_API_KEY",
               "PLANIFY_BASE_URL", "PLANIFY_MODEL_ID"]:
         monkeypatch.delenv(k, raising=False)
     cfg = CortexConfig()
-    assert cfg.planify_provider == "anthropic"
+    assert cfg.planify_provider == "minimax"
     assert cfg.planify_protocol is None
 
 

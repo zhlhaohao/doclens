@@ -84,7 +84,7 @@ def get_agent():
 def get_sessions_store() -> SessionsStore:
     """获取 SessionsStore 单例（懒加载 + 线程安全）。
 
-    sessions.db 与 index.db 同在 .cortex/ 目录，跟随工作目录隔离。
+    sessions.db 与 index.db 同在数据目录（开发 .cortex / 发行版 .doclens），跟随工作目录隔离。
     """
     global _sessions_store
     if _sessions_store is None:
@@ -122,10 +122,10 @@ def reload_config() -> CortexConfig:
     global _config
     with _lock:
         from dotenv import load_dotenv
-        from doclens.config import get_global_cortex_dir
+        from doclens.config import data_dirname, get_global_cortex_dir
 
         global_env = get_global_cortex_dir() / ".env"
-        local_env = Path(os.getcwd()) / ".cortex" / ".env"
+        local_env = Path(os.getcwd()) / data_dirname() / ".env"
         if global_env.exists():
             load_dotenv(global_env, override=True)
         if local_env.exists():

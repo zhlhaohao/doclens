@@ -44,7 +44,10 @@ def _custom_llm_provider_rules(values: dict[str, str]) -> list[ConfigValidationE
     base_url = values.get("PLANIFY_BASE_URL", "").strip()
 
     # 已知 provider 列表（与 planify/core/llm/presets.py 同步）
-    known_providers = {"anthropic", "openrouter", "qwen", "deepseek", "glm"}
+    known_providers = {
+        "anthropic", "openrouter", "qwen", "deepseek", "glm",
+        "minimax", "kimi", "hunyuan", "doubao", "siliconflow", "openai",
+    }
     if provider and provider not in known_providers and provider != "custom":
         errors.append(ConfigValidationError(
             field="PLANIFY_PROVIDER",
