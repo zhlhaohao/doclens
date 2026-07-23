@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 
+from doclens.config import data_dirname
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
@@ -42,9 +43,9 @@ def _compute_writable(full: Path, search_path: Path) -> bool:
         return False
     if full.suffix.lower() in BINARY_PREVIEW_EXTS:
         return False
-    # .cortex/ 内部不让用户改索引
+    # 数据目录内部不让用户改索引（开发 .cortex / 发行版 .doclens）
     try:
-        full.relative_to(search_path / ".cortex")
+        full.relative_to(search_path / data_dirname())
         return False
     except ValueError:
         pass
@@ -480,9 +481,9 @@ async def upload(
     # 3. 越权与可写性检查
     base = Path(idx.search_path)
     full = _safe_resolve(base, rel)
-    # 显式拒绝 .cortex/ 子目录
+    # 显式拒绝数据目录子目录（开发 .cortex / 发行版 .doclens）
     try:
-        full.relative_to(base / ".cortex")
+        full.relative_to(base / data_dirname())
         raise CortexAPIError(403, "NOT_WRITABLE", "禁止覆盖索引元数据")
     except ValueError:
         pass

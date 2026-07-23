@@ -10,9 +10,13 @@ class PresetSpec(TypedDict):
 
 
 PROVIDER_PRESETS: dict[str, PresetSpec] = {
-    "anthropic": {"base_url": None, "protocol": "anthropic"},
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
+    # ===== 国内供应商 =====
+    "minimax": {
+        "base_url": "https://api.minimaxi.com/v1",
+        "protocol": "openai_compat",
+    },
+    "kimi": {
+        "base_url": "https://api.moonshot.cn/v1",
         "protocol": "openai_compat",
     },
     "qwen": {
@@ -25,6 +29,28 @@ PROVIDER_PRESETS: dict[str, PresetSpec] = {
     },
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+        "protocol": "openai_compat",
+    },
+    "hunyuan": {
+        "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+        "protocol": "openai_compat",
+    },
+    "doubao": {
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "protocol": "openai_compat",
+    },
+    "siliconflow": {
+        "base_url": "https://api.siliconflow.cn/v1",
+        "protocol": "openai_compat",
+    },
+    # ===== 国外供应商 =====
+    "anthropic": {"base_url": None, "protocol": "anthropic"},
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "protocol": "openai_compat",
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
         "protocol": "openai_compat",
     },
 }

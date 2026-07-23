@@ -15,6 +15,7 @@ except ImportError:
     _HAS_WATCHDOG = False
 
 from doclens.index_manager import SUPPORTED_FORMATS
+from doclens.config import data_dirname
 
 
 if _HAS_WATCHDOG:
@@ -40,7 +41,7 @@ if _HAS_WATCHDOG:
         def _should_handle(self, path: str) -> bool:
             norm = os.path.normpath(path)
             parts = norm.split(os.sep)
-            if '.cortex' in (p.lower() for p in parts):
+            if data_dirname() in (p.lower() for p in parts):
                 return False
             _, ext = os.path.splitext(path)
             return ext.lower() in self._extensions

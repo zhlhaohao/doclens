@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 from treesearch.parsers.registry import SOURCE_TYPE_MAP
-from doclens.config import CortexConfig
+from doclens.config import CortexConfig, data_dirname
 
 # 支持的文件类型：直接从 treesearch parser registry 获取，保持单一数据源
 SUPPORTED_FORMATS = {ext: (source_type, None) for ext, source_type in SOURCE_TYPE_MAP.items()}
@@ -38,7 +38,7 @@ class IndexManager:
     def __init__(self, config: CortexConfig):
         self._config = config
         self.search_path = config.search_path
-        self.index_path = config.index_path or os.path.join(self.search_path, ".cortex", "index.db")
+        self.index_path = config.index_path or os.path.join(self.search_path, data_dirname(), "index.db")
         self._ts = None
         self._path_map = {}
         self._pending_swap = None  # (new_ts, new_path_map, doc_count)
@@ -179,7 +179,7 @@ class IndexManager:
         """快速检查是否有文件变化，用于启动同步前置判断。
 
         检测三类变化：已索引文件内容修改、已索引文件被删除、新增文件。
-        排除 .cortex 目录内的文件（索引元数据）和之前索引失败的文件。
+        排除数据目录（开发 .cortex / 发行版 .doclens）内的文件（索引元数据）和之前索引失败的文件。
         """
         try:
             from treesearch.fts import FTS5Index
@@ -190,7 +190,7 @@ class IndexManager:
             failed_files = fts.get_all_failed_files()
             fts.close()
 
-            cortex_dir = os.path.abspath(os.path.join(self.search_path, ".cortex"))
+            cortex_dir = os.path.abspath(os.path.join(self.search_path, data_dirname()))
             supported_exts = set(SUPPORTED_FORMATS.keys())
 
             # Apply allowed_source_types filter to extension check
@@ -199,7 +199,7 @@ class IndexManager:
                 type_exts = get_allowed_extensions_for_source_types(self.allowed_source_types)
                 if type_exts is not None:
                     supported_exts = supported_exts & type_exts
-            ignore_dirs = {".cortex", ".git", "__pycache__", "node_modules", ".venv"}
+            ignore_dirs = {data_dirname(), ".git", "__pycache__", "node_modules", ".venv"}
 
             # 1. 检查已索引文件是否被修改或删除
             for abs_fp, stored_hash in stored_meta.items():

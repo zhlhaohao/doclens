@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from doclens.config import data_dirname, get_global_cortex_dir
+
 # 确保 planify 模块可导入
 import os
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -122,21 +124,20 @@ class CortexAgent:
         self._setup_dirs()
 
     def _setup_dirs(self):
-        """创建 .cortex/ 子目录（skills 不再在工作目录下）"""
+        """创建数据目录子目录（开发 .cortex / 发行版 .doclens；skills 不再在工作目录下）"""
         subdirs = ["team/inbox", "tasks", "transcripts", "logs"]
         for subdir in subdirs:
-            (self.workdir / f".cortex/{subdir}").mkdir(parents=True, exist_ok=True)
+            (self.workdir / f"{data_dirname()}/{subdir}").mkdir(parents=True, exist_ok=True)
 
     def initialize(self):
         """初始化 Agent 会话"""
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        # 从 ~/.cortex/.env 和 {workdir}/.cortex/.env 加载配置，项目级覆盖全局
-        from doclens.config import get_global_cortex_dir
+        # 从 ~/<数据目录>/.env 和 {workdir}/<数据目录>/.env 加载配置，项目级覆盖全局
         from dotenv import load_dotenv
         global_env = get_global_cortex_dir() / ".env"
-        local_env = self.workdir / ".cortex" / ".env"
+        local_env = self.workdir / data_dirname() / ".env"
         if global_env.exists():
             load_dotenv(global_env, override=True)
         if local_env.exists():
@@ -160,12 +161,12 @@ class CortexAgent:
         client = create_provider(config)
 
         # 目录
-        team_dir = self.workdir / ".cortex/team"
-        tasks_dir = self.workdir / ".cortex/tasks"
-        transcript_dir = self.workdir / ".cortex/transcripts"
+        team_dir = self.workdir / data_dirname() / "team"
+        tasks_dir = self.workdir / data_dirname() / "tasks"
+        transcript_dir = self.workdir / data_dirname() / "transcripts"
         inbox_dir = team_dir / "inbox"
         skills_dir = get_global_cortex_dir() / "skills"
-        logs_dir = self.workdir / ".cortex/logs"
+        logs_dir = self.workdir / data_dirname() / "logs"
 
         # 创建目录
         team_dir.mkdir(parents=True, exist_ok=True)
@@ -235,7 +236,7 @@ class CortexAgent:
         grep_tools, grep_handlers = build_grep_tools(self.idx, skill_state=skill_state)
         register_external_tools(grep_tools, grep_handlers)
 
-        # 部署技能文件到 ~/.cortex/skills/（强制覆盖所有技能，确保使用最新版本）
+        # 部署技能文件到 ~/<数据目录>/skills/（开发 .cortex / 发行版 .doclens；强制覆盖所有技能）
         import shutil
         skills_src_root = Path(__file__).parent / "skills"
         if skills_src_root.exists():
@@ -403,7 +404,7 @@ class CortexAgent:
                 compacted = auto_compact(
                     history,
                     self.session.client,
-                    self.workdir / ".cortex/transcripts"
+                    self.workdir / data_dirname() / "transcripts"
                 )
                 self.session.replace_messages_in_place(compacted)
                 history[:] = compacted

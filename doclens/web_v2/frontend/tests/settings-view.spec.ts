@@ -17,6 +17,34 @@ vi.mock("../src/api/config", () => ({
     needs_restart: false,
     restart_fields: [],
   }),
+  resetConfigDefault: vi.fn().mockResolvedValue({
+    scope: "global",
+    values: {
+      PLANIFY_PROVIDER: "minimax",
+      PLANIFY_PROTOCOL: "openai_compat",
+      PLANIFY_BASE_URL: "",
+      PLANIFY_API_KEY: "",
+      PLANIFY_MODEL_ID: "",
+      CORTEX_MAX_RESULTS: "50",
+      CORTEX_MIN_SCORE_THRESHOLD: "0.3",
+      CORTEX_MAX_SPAN: "50",
+      CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
+      CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
+      CORTEX_WEIGHT_FTS_SCORE: "1.0",
+      CORTEX_WEIGHT_TITLE_MATCH: "2.0",
+      CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
+    },
+    exists: true,
+  }),
+  ConfigApiError: class ConfigApiError extends Error {
+    status: number;
+    body: unknown;
+    constructor(status: number, body: unknown) {
+      super(`Config API error ${status}`);
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 describe("<settings-view>", () => {
@@ -84,7 +112,7 @@ describe("<settings-view>", () => {
     expect(panel?.querySelector(".w-item .desc")?.textContent).toContain("· 0–10");
   });
 
-  it("footer 恢复默认把所有字段写回默认值并标 dirty", async () => {
+  it("footer 恢复默认调 reset-default 端点，字段刷成模板默认值（直接持久化、不标 dirty）", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
     (tabs?.[1] as HTMLButtonElement).click();
     await elementUpdated(el);
@@ -95,22 +123,13 @@ describe("<settings-view>", () => {
 
     btn.click();
     await elementUpdated(el);
-    // 数值字段清空（空串 = 后端隐式默认），placeholder 显示后端默认值
+    await new Promise((r) => setTimeout(r, 0)); // 等 async resetConfigDefault 完成
+    // 重置为模板默认值（显式 50，非空串；后端已写盘，前端只是回显）
     const numInput = el.shadowRoot?.querySelector(
       'input[data-env="CORTEX_MAX_RESULTS"]'
     ) as HTMLInputElement;
-    expect(numInput.value).toBe("");
-    expect(numInput.placeholder).toBe("50");
-    // 阈值 slider chip 显示后端默认值（隐式样式）
-    const thresholdChip = el.shadowRoot?.querySelector(".slider-row .value-chip");
-    expect(thresholdChip?.textContent).toBe("0.3");
-    expect(thresholdChip?.classList.contains("implicit")).toBe(true);
-    // 权重 chip 显示隐式默认值
-    const chips = Array.from(el.shadowRoot?.querySelectorAll(".w-item .value-chip") ?? []);
-    expect(chips.map((c) => c.textContent)).toEqual(["4.0", "2.0", "1.0", "2.0", "1.0"]);
-    // 标 dirty，且全部回到默认后按钮禁用
-    const dirty = el.shadowRoot?.querySelector(".dirty-status");
-    expect(dirty?.textContent).toContain("已修改");
+    expect(numInput.value).toBe("50");
+    // 全部回到默认 → 按钮禁用（_allAtDefault=true）
     expect(btn.disabled).toBe(true);
   });
 

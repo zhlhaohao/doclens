@@ -11,6 +11,7 @@ from textual.widgets import Input, Static
 
 from planify.cli_history import CommandHistory
 
+from doclens.config import get_global_cortex_dir
 from doclens.tui.command_registry import Command, CommandRegistry
 
 
@@ -55,7 +56,7 @@ class InputBox(Horizontal):
     def __init__(self, registry: CommandRegistry, **kwargs):
         super().__init__(**kwargs)
         self._registry = registry
-        history_path = Path.home() / ".cortex" / "cli_history" / "history.json"
+        history_path = get_global_cortex_dir() / "cli_history" / "history.json"
         self._history = CommandHistory(history_path)
         self._saved_input = ""
 

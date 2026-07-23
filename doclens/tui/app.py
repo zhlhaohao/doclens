@@ -21,7 +21,7 @@ from textual.worker import Worker, get_current_worker
 from rich.text import Text
 from rich.table import Table
 
-from doclens.config import CortexConfig
+from doclens.config import CortexConfig, get_global_cortex_dir
 from doclens.index_manager import IndexManager, check_dependencies, SUPPORTED_FORMATS
 from doclens.mcp_server import McpServerHandle, mcp_startup_message, start_mcp_server
 from doclens.scoring import tokenize_query
@@ -341,7 +341,7 @@ class CortexApp(App):
         try:
             from planify.skills.skill_loader import SkillLoader
 
-            skills_dir = Path.home() / ".cortex" / "skills"
+            skills_dir = get_global_cortex_dir() / "skills"
             loader = SkillLoader(skills_dir)
 
             for name, info in loader.skills.items():
@@ -762,7 +762,7 @@ class CortexApp(App):
         try:
             from planify.skills.skill_loader import SkillLoader
 
-            skills_dir = Path.home() / ".cortex" / "skills"
+            skills_dir = get_global_cortex_dir() / "skills"
             loader = SkillLoader(skills_dir)
             skill_content = loader.load(skill_name)
         except Exception as exc:

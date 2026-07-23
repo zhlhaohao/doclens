@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..core.llm.types import Tool
+from ..core.logging_config import _data_dirname
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
@@ -195,11 +196,11 @@ class StreamingAgent:
             if agent_md_path.exists():
                 agent_md_content = agent_md_path.read_text(encoding="utf-8")
         else:
-            global_agent_md = Path.home() / ".cortex" / "agent.md"
+            global_agent_md = Path.home() / _data_dirname() / "agent.md"
             workdir = "."
             if self.config:
                 workdir = getattr(self.config, "workdir", ".")
-            local_agent_md = Path(workdir) / ".cortex" / "agent.md"
+            local_agent_md = Path(workdir) / _data_dirname() / "agent.md"
             md_parts = []
             if global_agent_md.exists():
                 md_parts.append(global_agent_md.read_text(encoding="utf-8"))

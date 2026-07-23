@@ -56,23 +56,24 @@ export const DEFAULT_WEIGHTS: Record<string, string> = {
   CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
 };
 
-/** footer「恢复默认」使用的全字段出厂值。
- *  空串 = 后端隐式默认（保存时从 .env 移除该 key）；
- *  provider/protocol 显式给预设，避免 select 显示空白。 */
+/** 「恢复默认」判定的出厂基准值（与包内 .env.example 同步）。
+ *  用于 _allAtDefault：重置为模板后表单值应全部等于此处，按钮据此禁用。
+ *  注意：「恢复默认」实际由 POST /api/config/reset-default 完成（拷贝 .env.example
+ *  并保留 API Key），而非逐字段写这些值 —— 这样能保留注释与空行、避免掏空文件。
+ *  PLANIFY_API_KEY 不在此列（密钥无出厂默认，重置时单独保留）。 */
 export const FIELD_DEFAULTS: Record<string, string> = {
-  PLANIFY_PROVIDER: "anthropic",
-  PLANIFY_PROTOCOL: "anthropic",
+  PLANIFY_PROVIDER: "minimax",
+  PLANIFY_PROTOCOL: "openai_compat",
   PLANIFY_BASE_URL: "",
-  PLANIFY_API_KEY: "",
   PLANIFY_MODEL_ID: "",
-  CORTEX_MAX_RESULTS: "",
-  CORTEX_MIN_SCORE_THRESHOLD: "",
-  CORTEX_MAX_SPAN: "",
-  CORTEX_WEIGHT_KEYWORD_MATCH: "",
-  CORTEX_WEIGHT_FILE_NAME_MATCH: "",
-  CORTEX_WEIGHT_FTS_SCORE: "",
-  CORTEX_WEIGHT_TITLE_MATCH: "",
-  CORTEX_WEIGHT_PROXIMITY_MATCH: "",
+  CORTEX_MAX_RESULTS: "50",
+  CORTEX_MIN_SCORE_THRESHOLD: "0.3",
+  CORTEX_MAX_SPAN: "50",
+  CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
+  CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
+  CORTEX_WEIGHT_FTS_SCORE: "1.0",
+  CORTEX_WEIGHT_TITLE_MATCH: "2.0",
+  CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -86,11 +87,19 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
 
 /** LLM provider 已知预设。必须与 planify/core/llm/presets.py::PROVIDER_PRESETS 同步。 */
 export const PROVIDER_OPTIONS: SettingsFieldOption[] = [
-  { value: "anthropic", label: "Anthropic（默认）" },
-  { value: "openrouter", label: "OpenRouter" },
+  // 国内供应商
+  { value: "minimax", label: "MiniMax（默认）" },
+  { value: "kimi", label: "Kimi（月之暗面）" },
   { value: "qwen", label: "阿里通义千问" },
   { value: "deepseek", label: "DeepSeek" },
   { value: "glm", label: "智谱 GLM" },
+  { value: "hunyuan", label: "腾讯混元" },
+  { value: "doubao", label: "字节豆包" },
+  { value: "siliconflow", label: "硅基流动" },
+  // 国外供应商
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openai", label: "OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
   { value: "custom", label: "自定义（OpenAI 兼容或 Anthropic 协议）" },
 ];
 
@@ -102,21 +111,33 @@ export const PROTOCOL_OPTIONS: SettingsFieldOption[] = [
 
 /** 已知预设的默认 base_url。空字符串表示使用 SDK 默认（anthropic）。 */
 export const PRESET_BASE_URLS: Record<string, string> = {
-  anthropic: "",
-  openrouter: "https://openrouter.ai/api/v1",
+  minimax: "https://api.minimaxi.com/v1",
+  kimi: "https://api.moonshot.cn/v1",
   qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   deepseek: "https://api.deepseek.com/v1",
   glm: "https://open.bigmodel.cn/api/paas/v4/",
+  hunyuan: "https://api.hunyuan.cloud.tencent.com/v1",
+  doubao: "https://ark.cn-beijing.volces.com/api/v3",
+  siliconflow: "https://api.siliconflow.cn/v1",
+  anthropic: "",
+  openai: "https://api.openai.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
   custom: "",
 };
 
 /** 已知预设的默认 protocol。 */
 export const PRESET_PROTOCOLS: Record<string, string> = {
-  anthropic: "anthropic",
-  openrouter: "openai_compat",
+  minimax: "openai_compat",
+  kimi: "openai_compat",
   qwen: "openai_compat",
   deepseek: "openai_compat",
   glm: "openai_compat",
+  hunyuan: "openai_compat",
+  doubao: "openai_compat",
+  siliconflow: "openai_compat",
+  anthropic: "anthropic",
+  openai: "openai_compat",
+  openrouter: "openai_compat",
   custom: "",
 };
 
