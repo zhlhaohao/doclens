@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing, render } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store } from "../state/store";

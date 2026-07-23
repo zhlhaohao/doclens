@@ -3,7 +3,7 @@ import { store, actions, INITIAL_STATE } from "../src/state/store";
 import type { SystemStatus } from "../src/state/types";
 
 const STATUS: SystemStatus = {
-  search_path: "C:/kb",
+  workdir: "C:/kb",
   indexed_docs: 3,
   index_path: "C:/kb/.cortex/index.db",
   total_size_bytes: 1024,

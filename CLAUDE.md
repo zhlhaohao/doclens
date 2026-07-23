@@ -232,7 +232,7 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 ## 前端代码改动 · 自动构建为完工标准
 
-修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npx vite build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。用 `npx` 不用 `npm run build` 绕开预存 tsc 错误。
+修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npm run build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。`npm run build` = `tsc --noEmit && vite build`，类型错误同样会阻断构建。
 
 ## 启动脚本 start-app.ps1
 
@@ -278,11 +278,11 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 ```bash
 # 1. 重新构建前端（位于 doclens/web_v2/frontend）
-cd doclens/web_v2/frontend && npx vite build
+cd doclens/web_v2/frontend && npm run build
 
 # 2. 重启后端（否则后端仍在服务旧的静态文件）
 # 在 start-app.ps1 所在目录执行
 pwsh -File ./start-app.ps1 gui
 ```
 
-> **注意**：用 `npx vite build` 而非 `npm run build`（后者会被预存 tsc 错误阻断），且仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新。
+> **注意**：仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新，必须先 `npm run build` 再重启后端。
