@@ -14,11 +14,14 @@ export class HistoryItem extends LitElement {
       border-radius: var(--cortex-radius-md);
       padding: 10px 12px;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      box-shadow: var(--cortex-shadow-sm);
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
     :host(:hover) {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-subtle);
+      background: var(--cortex-surface);
+      border-color: var(--cortex-primary);
+      box-shadow: var(--cortex-shadow-md);
+      transform: translateY(-1px);
     }
     .name {
       font-size: var(--cortex-fs-base);

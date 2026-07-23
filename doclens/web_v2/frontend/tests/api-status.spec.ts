@@ -45,8 +45,8 @@ describe("api/status", () => {
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({
-        indexed_docs: 3, index_path: "/x", total_size_bytes: 10,
-        file_types: { ".md": 3 },
+        indexed_docs: 3, index_path: "/x", workdir: "/Users/me/docs",
+        total_size_bytes: 10, file_types: { ".md": 3 },
         watcher: { enabled: true, running: false, reindexing: false,
           changed_count: 0, last_reindex_at: null, last_doc_count: null, last_success: null },
       }),
@@ -54,5 +54,6 @@ describe("api/status", () => {
     const res = await getStatus();
     expect(res.indexed_docs).toBe(3);
     expect(res.watcher?.enabled).toBe(true);
+    expect(res.workdir).toBe("/Users/me/docs");
   });
 });

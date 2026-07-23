@@ -31,6 +31,7 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
     return {
         "indexed_docs": len(docs),
         "index_path": str(idx.index_path),
+        "workdir": str(idx.search_path),
         "total_size_bytes": total_size,
         "file_types": type_counts,
         # 当前 AI 模型 id（用于前端展示「{model} 思考中」），可能为空

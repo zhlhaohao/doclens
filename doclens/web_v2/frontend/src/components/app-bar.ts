@@ -106,6 +106,8 @@ export class AppBar extends LitElement {
     }
     @media (max-width: 1023px) {
       .refresh-btn { display: inline-flex; }
+      /* 移动端右侧空间紧张：watch-badge 隐藏（刷新按钮已显示状态）。 */
+      .watch-badge { display: none; }
     }
     .avatar-btn {
       display: inline-flex;

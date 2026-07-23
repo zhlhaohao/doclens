@@ -67,8 +67,10 @@ export class CortexApp extends LitElement {
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
     startWatchPolling();
-    // 拉取一次 /api/status（拿到当前模型名，给 chat-view 渲染「思考中」用）。
-    // 失败静默：模型名为空时 UI 仅显示「思考中」，不阻塞。
+    // 拉取一次 /api/status：
+    //  - 模型名给 chat-view 渲染「思考中」用；
+    //  - workdir / indexed_docs / file_types 给 welcome-pane（onboarding）渲染底部胶囊。
+    // 失败静默：这些字段非关键，不阻塞 UI。
     void this._loadStatus();
   }
 
@@ -77,7 +79,7 @@ export class CortexApp extends LitElement {
       const s = await getStatus();
       actions.setStatus(s);
     } catch {
-      /* 静默失败：模型名非关键 */
+      /* 静默失败：模型名 / workdir 非关键 */
     }
   }
 

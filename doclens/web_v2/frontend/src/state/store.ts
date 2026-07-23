@@ -161,16 +161,16 @@ export const actions = {
     store.setState({ error });
   },
 
+  setStatus(s: AppState["status"]) {
+    store.setState({ status: s });
+  },
+
   setPendingSession(session: Session | null) {
     store.setState({ pendingSession: session });
   },
 
   setWatcherStatus(w: AppState["watcher"]) {
     store.setState({ watcher: w });
-  },
-
-  setStatus(s: AppState["status"]) {
-    store.setState({ status: s });
   },
 
   openReindexConfirm() {
