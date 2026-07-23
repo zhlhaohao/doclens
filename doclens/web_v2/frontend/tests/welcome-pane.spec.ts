@@ -7,7 +7,7 @@ import { store, actions, INITIAL_STATE } from "../src/state/store";
 import type { SystemStatus, WatcherStatus } from "../src/state/types";
 
 const STATUS: SystemStatus = {
-  search_path: "C:/a/b/c/test_work_dir",
+  workdir: "C:/a/b/c/test_work_dir",
   indexed_docs: 69,
   index_path: "x",
   total_size_bytes: 12 * 1024 * 1024,
@@ -79,6 +79,6 @@ describe("<welcome-pane> status area", () => {
     actions.setWatcherStatus(WATCHER);
     const el = await mount();
     const line1 = el.shadowRoot?.querySelector(".status-value[data-kind='line1']") as HTMLElement | null;
-    expect(line1?.title).toBe(STATUS.search_path);
+    expect(line1?.title).toBe(STATUS.workdir);
   });
 });
