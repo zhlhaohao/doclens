@@ -1,5 +1,13 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+
+/** 模式 / 能力 chip（纯展示，不可点击）。 */
+export interface OnboardingChip {
+  label: string;
+  icon?: string;
+}
+
+export type WelcomePaneVariant = "compact" | "onboarding";
 
 @customElement("welcome-pane")
 export class WelcomePane extends LitElement {
@@ -15,6 +23,7 @@ export class WelcomePane extends LitElement {
       );
       flex-shrink: 0;
     }
+    /* compact 模式：保持原来的标题样式 */
     .title {
       font-size: var(--cortex-fs-xl);
       font-weight: 700;
@@ -26,7 +35,6 @@ export class WelcomePane extends LitElement {
       color: var(--cortex-primary);
       font-weight: 700;
     }
-    /* suffix（如「问日程」）——紧跟在 .sep 之后的 span */
     .title .sep + span {
       color: var(--cortex-primary);
       font-weight: 600;
@@ -41,26 +49,198 @@ export class WelcomePane extends LitElement {
       color: var(--cortex-text-muted);
       margin-top: 6px;
     }
+
+    /* onboarding 模式：去掉标题渐变背景，卡片宽度与 history-list/input-row 对齐 */
+    :host([variant="onboarding"]) {
+      background: transparent;
+      padding: 10px var(--cortex-space-4) 6px;
+      text-align: left;
+    }
+    .onboarding-card {
+      /* 跟随 .initial-stack 的 max-width，不强行限制 560px */
+      box-sizing: border-box;  /* shadow DOM 内全局 border-box 不生效，必须显式声明 */
+      width: 100%;
+      margin: 0;
+      padding: 10px 16px;
+      /* 品牌渐变 hero 卡：与白色历史条目形成区块区分 */
+      background: linear-gradient(135deg, var(--cortex-primary-soft) 0%, #FFFFFF 75%);
+      border: 1px solid rgba(0, 82, 255, 0.16);
+      border-radius: var(--cortex-radius-lg);
+      box-shadow: 0 4px 14px rgba(0, 82, 255, 0.07);
+    }
+    /* 头部一行：左标题右模式 chips，节省一行高度 */
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .onboarding-card .card-title {
+      font-size: var(--cortex-fs-md);
+      font-weight: 600;
+      color: var(--cortex-text);
+      margin: 0;
+    }
+    .onboarding-subheading {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      line-height: 1.45;
+      margin: 2px 0 0;
+    }
+    .workdir-row {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      margin: 4px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;       /* "当前目录是" + 胶囊 始终同一行 */
+      min-width: 0;
+    }
+    .workdir-row .workdir-prefix {
+      flex-shrink: 0;          /* "当前目录是" 不被挤压换行 */
+    }
+    .workdir-row .workdir-pill {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-block;
+      font-family: var(--cortex-font-mono);
+      color: var(--cortex-text-muted);
+      background: #FFFFFF;
+      border: 1px solid var(--cortex-border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: ltr;          /* 路径里有 \ 时确保从左到右 */
+    }
+    .modes-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 9px;
+      font-size: var(--cortex-fs-xs);
+      font-weight: 500;
+      color: var(--cortex-primary);
+      background: #FFFFFF;
+      border: 1px solid rgba(0, 82, 255, 0.22);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    /* 示例：两列网格 + 顶部分隔线，替代小节标签，压缩竖向空间 */
+    .examples-list {
+      list-style: none;
+      padding: 8px 0 0;
+      margin: 8px 0 0;
+      border-top: 1px solid var(--cortex-border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px 16px;
+    }
+    .examples-list li {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      padding: 1px 0;
+      line-height: 1.4;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .examples-list li::before {
+      content: "• ";
+      color: var(--cortex-primary);
+      margin-right: 4px;
+    }
     @media (min-width: 1024px) {
+      :host { padding: 20px var(--cortex-space-4) 14px; }
+      /* onboarding：桌面端去掉水平 padding，卡片与 history-list 同宽（720/760px） */
+      :host([variant="onboarding"]) { padding: 10px 0 6px; }
+    }
+    @media (max-width: 1023px) {
+      /* 移动端：去掉渐变背景 + 缩进对齐 hero-card */
       :host {
-        padding: 28px var(--cortex-space-4) 18px;
+        background: transparent;
+        text-align: left;
+        padding: 10px var(--cortex-space-4) 6px;
       }
+      .title { font-size: var(--cortex-fs-lg); }
+      .subtitle { font-size: var(--cortex-fs-sm); }
+      .onboarding-card { padding: 10px 14px; }
+      /* 窄屏示例回退单列 */
+      .examples-list { grid-template-columns: 1fr; }
     }
   `;
 
+  @property() variant: WelcomePaneVariant = "compact";
   @property() heading = "Doclens";
   @property() subheading = "";
-  /** heading 之外的"副品牌 / 标语"，用 .accent + .sep 拼接在主标题后（示例：「Doclens · 问日程」） */
   @property() suffix = "";
 
+  /** 模式 / 能力 chip 列表（仅 onboarding 变体显示） */
+  @property({ attribute: false }) modes: OnboardingChip[] = [];
+  /** 示例问题列表（仅 onboarding 变体显示） */
+  @property({ attribute: false }) examples: string[] = [];
+  /** 当前工作目录绝对路径（仅 onboarding 变体显示；空字符串/缺失则隐藏胶囊） */
+  @property({ attribute: false }) workdir = "";
+
   render() {
+    if (this.variant === "onboarding") return this._renderOnboarding();
+    return this._renderCompact();
+  }
+
+  private _renderCompact() {
     return html`
       <h1 class="title">
         <span class="accent">${this.heading}</span>${this.suffix
           ? html`<span class="sep">·</span><span>${this.suffix}</span>`
-          : null}
+          : nothing}
       </h1>
-      ${this.subheading ? html`<p class="subtitle">${this.subheading}</p>` : null}
+      ${this.subheading ? html`<p class="subtitle">${this.subheading}</p>` : nothing}
+    `;
+  }
+
+  private _renderOnboarding() {
+    return html`
+      <div class="onboarding-card">
+        <div class="card-head">
+          <h2 class="card-title">${this.heading}</h2>
+          ${this.modes.length
+            ? html`
+                <div class="modes-row">
+                  ${this.modes.map(
+                    (m) => html`<span class="chip">${m.icon ? html`${m.icon} ` : nothing}${m.label}</span>`,
+                  )}
+                </div>
+              `
+            : nothing}
+        </div>
+        ${this.subheading
+          ? html`<p class="onboarding-subheading">${this.subheading}</p>`
+          : nothing}
+        ${this.workdir
+          ? html`
+              <p class="workdir-row">
+                <span class="workdir-prefix">当前目录是</span>
+                <span class="workdir-pill" title=${this.workdir}>📂 ${this.workdir}</span>
+              </p>
+            `
+          : nothing}
+        ${this.examples.length
+          ? html`
+              <ul class="examples-list">
+                ${this.examples.map((e) => html`<li>${e}</li>`)}
+              </ul>
+            `
+          : nothing}
+      </div>
     `;
   }
 }

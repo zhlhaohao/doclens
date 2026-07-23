@@ -98,6 +98,8 @@ export interface ReindexState {
 export interface SystemStatus {
   indexed_docs: number;
   index_path: string;
+  /** 工作目录（绝对路径），welcome-pane 用以展示当前检索范围 */
+  workdir?: string;
   total_size_bytes: number;
   file_types: Record<string, number>;
   /** 当前 AI 模型 id（后端从 CortexConfig.planify_model_id 读）。空字符串表示未配置。 */
