@@ -10,6 +10,7 @@ import type {
   Session,
   SettingsFieldValues,
   SettingsScope,
+  WatchChange,
 } from "./types";
 
 function computeDirty(
@@ -58,6 +59,7 @@ export const INITIAL_STATE: AppState = {
   pendingSession: null,
   status: null,
   watcher: null,
+  watchRecentChanges: [],
   reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
   error: null,
   settings: {
@@ -171,6 +173,10 @@ export const actions = {
 
   setWatcherStatus(w: AppState["watcher"]) {
     store.setState({ watcher: w });
+  },
+
+  setWatchRecentChanges(list: WatchChange[]) {
+    store.setState({ watchRecentChanges: list });
   },
 
   openReindexConfirm() {

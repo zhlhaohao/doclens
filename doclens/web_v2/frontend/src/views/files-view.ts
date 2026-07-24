@@ -188,6 +188,8 @@ export class FilesView extends LitElement {
     this._ensureLoaded("");
     this._loadPaneWidths();
     this._loadIndexedDocuments();
+    // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
+    window.addEventListener("cortex:watch-reindexed", this._onIndexUpdated);
   }
 
   private async _loadIndexedDocuments() {
@@ -199,6 +201,20 @@ export class FilesView extends LitElement {
       actions.setFilenameSearchDocsError(e?.message || "文档列表加载失败");
     }
   }
+
+  /** reindex 完成后（cortex:watch-reindexed）：刷新当前目录列表与已索引文档列表，
+   *  让 indexed 标志反映新索引（改名/新增/删除后自动回填）。仅在 files 视图挂载时生效。 */
+  private _onIndexUpdated = async () => {
+    const dir = store.getState().files.currentDir;
+    actions.invalidateDir(dir);
+    void this._ensureLoaded(dir);
+    try {
+      const docs = await fetchDocuments();
+      actions.loadIndexedDocuments(docs);
+    } catch {
+      /* 静默：indexed 标志非关键，不阻塞 */
+    }
+  };
 
   private _loadPaneWidths() {
     const treeSaved = localStorage.getItem(FilesView.TREE_PANE_WIDTH_KEY);
@@ -298,6 +314,7 @@ export class FilesView extends LitElement {
   disconnectedCallback() {
     this._unsubscribe?.();
     if (this._toastTimer) clearTimeout(this._toastTimer);
+    window.removeEventListener("cortex:watch-reindexed", this._onIndexUpdated);
     super.disconnectedCallback();
   }
 

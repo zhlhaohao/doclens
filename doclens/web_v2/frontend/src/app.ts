@@ -25,7 +25,7 @@ import "./views/settings-view";
 import "./views/files-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
-import { startWatchPolling, stopWatchPolling } from "./watch-polling";
+import { startWatchStream, stopWatchStream } from "./watch-stream";
 
 @customElement("cortex-app")
 export class CortexApp extends LitElement {
@@ -65,8 +65,8 @@ export class CortexApp extends LitElement {
     router.init();
     // 订阅 store —— view 切换时触发重新渲染
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
-    // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
-    startWatchPolling();
+    // 启动 watcher 状态 SSE 订阅（/api/watch/events，状态变化实时下发）
+    startWatchStream();
     // 拉取一次 /api/status：
     //  - 模型名给 chat-view 渲染「思考中」用；
     //  - workdir / indexed_docs / file_types 给 welcome-pane（onboarding）渲染底部胶囊。
@@ -85,8 +85,8 @@ export class CortexApp extends LitElement {
 
   disconnectedCallback() {
     this._unsubscribe?.();
-    // 停止 watcher 状态轮询
-    stopWatchPolling();
+    // 停止 watcher 状态 SSE 订阅
+    stopWatchStream();
     super.disconnectedCallback();
   }
 
