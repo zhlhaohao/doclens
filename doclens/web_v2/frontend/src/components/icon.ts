@@ -102,6 +102,10 @@ export class DoclensIcon extends LitElement {
       fill: currentColor;
       stroke: currentColor;
     }
+    /* .thick：加粗描边线条 */
+    :host(.thick) svg {
+      stroke-width: 2.6;
+    }
   `;
 
   /** 图标名（见 ICONS 表）；未知名渲染空。 */

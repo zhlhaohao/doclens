@@ -13,24 +13,24 @@ export class InputBox extends LitElement {
       position: relative;
       display: flex;
       align-items: center;
-      /* 边框效果：钴蓝渐变描边（padding-box 白心 + border-box 渐变），跟随 pill 圆角 */
+      /* 边框效果：绿色渐变描边（padding-box 白心 + border-box 渐变），跟随 pill 圆角 */
       border: 2px solid transparent;
       border-radius: var(--cortex-radius-pill);
       background:
         linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
-        linear-gradient(135deg, rgba(0, 100, 224, 0.50), rgba(0, 145, 255, 0.50)) border-box;
+        linear-gradient(135deg, #16a34a, #22c55e) border-box;
       min-height: var(--min-h);
       padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
-      /* 强化：钴蓝调 elevation 阴影——静止即浮起，作为主动作区 */
-      box-shadow: 0 6px 18px rgba(0, 100, 224, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
+      /* 强化：绿色调 elevation 阴影——静止即浮起，作为主动作区 */
+      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
       transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
     }
     .wrapper:focus-within {
-      /* 聚焦：钴蓝渐变描边加深为满色 + 更强 elevation + 钴蓝光晕环 */
+      /* 聚焦：绿色渐变描边加深为满色 + 更强 elevation + 绿色光晕环 */
       background:
         linear-gradient(var(--cortex-surface), var(--cortex-surface)) padding-box,
-        linear-gradient(135deg, var(--cortex-primary), var(--cortex-primary-2)) border-box;
-      box-shadow: 0 10px 30px rgba(0, 100, 224, 0.20), 0 0 0 4px rgba(0, 100, 224, 0.14);
+        linear-gradient(135deg, #16a34a, #22c55e) border-box;
+      box-shadow: 0 10px 30px rgba(22, 163, 74, 0.20), 0 0 0 4px rgba(22, 163, 74, 0.14);
     }
     input {
       flex: 1;
@@ -85,7 +85,7 @@ export class InputBox extends LitElement {
       right: 6px;
       top: 50%;
       transform: translateY(-50%);
-      background: var(--cortex-primary);
+      background: #16a34a;
       color: #fff;
       border: none;
       border-radius: var(--cortex-radius-pill);
@@ -101,7 +101,7 @@ export class InputBox extends LitElement {
       gap: 4px;
       transition: filter 0.15s, transform 0.1s;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+    button:disabled { filter: saturate(0.4); cursor: not-allowed; box-shadow: none; }
     button:hover:not(:disabled) { filter: brightness(1.05); }
     button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
     /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
@@ -182,6 +182,8 @@ export class InputBox extends LitElement {
   @property() placeholder = "";
   @property() buttonLabel = "搜索";
   @property() buttonIcon = "";
+  /** 图标放在文字右侧（true = 文字在前、图标在后） */
+  @property({ type: Boolean }) iconAfter = false;
   @property({ type: Boolean }) multiline = false;
   @property({ type: Boolean }) disabled = false;
 
@@ -266,11 +268,13 @@ export class InputBox extends LitElement {
 
   private _renderButton() {
     if (!this._hasModes) {
-      // 遗留单一按钮：与改造前完全一致
+      const icon = this.buttonIcon
+        ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
+        : null;
+      const label = html`<span>${this.buttonLabel}</span>`;
       return html`
         <button @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-          ${this.buttonIcon ? html`<doclens-icon name=${this.buttonIcon} aria-hidden="true"></doclens-icon>` : null}
-          <span>${this.buttonLabel}</span>
+          ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
         </button>`;
     }
     const cur = this.modes![this.mode];

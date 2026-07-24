@@ -25,7 +25,7 @@ export const initialStackStyles = css`
   .input-row {
     padding: var(--cortex-space-3) var(--cortex-space-4);
     flex-shrink: 0;
-    background: var(--cortex-primary-soft);
+    background: var(--cortex-surface-muted);
     border-top: 1px solid var(--cortex-border);
   }
   @media (min-width: 1024px) {
