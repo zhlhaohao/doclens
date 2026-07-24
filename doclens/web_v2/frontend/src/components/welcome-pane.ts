@@ -224,8 +224,8 @@ export class WelcomePane extends LitElement {
       .hero-mark { width: 36px; height: 36px; font-size: 18px; }
       .modes-row { display: none; }
       .card-title { font-size: var(--cortex-fs-lg); }
-      /* 窄屏示例回退单列 */
-      .examples-list { grid-template-columns: 1fr; }
+      /* 窄屏也保持 2 列（示例已精简，2×2 排布），收紧列间距防溢出 */
+      .examples-list { grid-template-columns: 1fr 1fr; gap: 2px 10px; }
     }
   `;
 

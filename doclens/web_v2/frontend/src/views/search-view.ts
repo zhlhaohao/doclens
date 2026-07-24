@@ -549,9 +549,10 @@ export class SearchView extends LitElement {
               { label: "正则", icon: "regex" },
             ]}
             .examples=${[
-              "「人工智能技术最新发展」",
-              "「tcp.*timeout」",
+              "「人工智能发展」",
               "「量子 计算」",
+              "「tcp.*timeout」",
+              "「Python 装饰器」",
             ]}
             .workdir=${store.getState().status?.workdir ?? ""}
           ></welcome-pane>
