@@ -35,6 +35,11 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_WEIGHT_FTS_SCORE",
     "CORTEX_WEIGHT_TITLE_MATCH",
     "CORTEX_WEIGHT_PROXIMITY_MATCH",
+    # 网络监听（host/port 改后需重启 gui 才生效）
+    "CORTEX_WEB_HOST",
+    "CORTEX_WEB_PORT",
+    "CORTEX_MCP_HOST",
+    "CORTEX_MCP_PORT",
 })
 
 

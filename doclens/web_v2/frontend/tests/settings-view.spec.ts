@@ -33,6 +33,10 @@ vi.mock("../src/api/config", () => ({
       CORTEX_WEIGHT_FTS_SCORE: "1.0",
       CORTEX_WEIGHT_TITLE_MATCH: "2.0",
       CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
+      CORTEX_WEB_HOST: "127.0.0.1",
+      CORTEX_WEB_PORT: "7860",
+      CORTEX_MCP_HOST: "127.0.0.1",
+      CORTEX_MCP_PORT: "7880",
     },
     exists: true,
   }),
@@ -56,11 +60,12 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  it("renders 2 tab buttons in order: AI / 搜索调优", () => {
+  it("renders 3 tab buttons in order: AI / 搜索调优 / 网络监听", () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    expect(tabs?.length).toBe(2);
+    expect(tabs?.length).toBe(3);
     expect(tabs?.[0].textContent?.trim()).toBe("AI 配置");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索调优");
+    expect(tabs?.[2].textContent?.trim()).toBe("🌐 网络监听");
   });
 
   it("AI tab is active by default", () => {

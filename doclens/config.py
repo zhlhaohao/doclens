@@ -106,15 +106,34 @@ class CortexConfig(BaseSettings):
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)
 
+    # Web UI 监听（FastAPI + uvicorn）；改 host/port 需重启 gui 才生效
+    web_host: str = Field(
+        default="127.0.0.1",
+        alias="CORTEX_WEB_HOST",
+        description="Web UI 绑定地址；0.0.0.0 暴露局域网（无鉴权，慎用）",
+    )
+    web_port: int = Field(
+        default=7860,
+        ge=1,
+        le=65535,
+        alias="CORTEX_WEB_PORT",
+        description="Web UI 端口",
+    )
+
     # MCP server（进程内 Streamable HTTP，TUI/GUI 自动启动）
     mcp_enabled: bool = Field(
         default=True, description="是否在 TUI/GUI 启动时自动拉起 MCP HTTP server"
     )
     mcp_port: int = Field(
-        default=7880, description="MCP server 端口（可用 CORTEX_MCP_PORT 覆盖）"
+        default=7880,
+        ge=1,
+        le=65535,
+        alias="CORTEX_MCP_PORT",
+        description="MCP server 端口",
     )
     mcp_host: str = Field(
         default="127.0.0.1",
+        alias="CORTEX_MCP_HOST",
         description="MCP server 绑定地址；非环回地址必须配 mcp_token",
     )
     mcp_token: Optional[str] = Field(

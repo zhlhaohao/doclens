@@ -1,11 +1,11 @@
 /** Field metadata for the settings form. Drives the metadata-driven rendering
  * in <settings-view>. Hint strings come from specs/settings-page-mockup.html.
  *
- * IMPORTANT: keep the 13 envVar values in sync with KNOWN_KEYS in
+ * IMPORTANT: keep the envVar values in sync with KNOWN_KEYS in
  * cortex/web_v2/config_store.py (backend) — they are the contract between
  * the API and this UI.
  */
-export type SettingsTab = "ai" | "search";
+export type SettingsTab = "ai" | "search" | "network";
 export type SettingsFieldComponent =
   | "text"
   | "number"
@@ -37,11 +37,12 @@ export interface SettingsField {
   options?: SettingsFieldOption[];
 }
 
-export const SETTINGS_TABS: SettingsTab[] = ["ai", "search"];
+export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "AI 配置",
   search: "搜索调优",
+  network: "🌐 网络监听",
 };
 
 /** 评分权重 section 标题（settings-view 据此渲染两列网格 + 恢复默认按钮）。 */
@@ -74,6 +75,10 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_WEIGHT_FTS_SCORE: "1.0",
   CORTEX_WEIGHT_TITLE_MATCH: "2.0",
   CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
+  CORTEX_WEB_HOST: "127.0.0.1",
+  CORTEX_WEB_PORT: "7860",
+  CORTEX_MCP_HOST: "127.0.0.1",
+  CORTEX_MCP_PORT: "7880",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -82,6 +87,10 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   CORTEX_MAX_RESULTS: "50",
   CORTEX_MIN_SCORE_THRESHOLD: "0.3",
   CORTEX_MAX_SPAN: "50",
+  CORTEX_WEB_HOST: "127.0.0.1",
+  CORTEX_WEB_PORT: "7860",
+  CORTEX_MCP_HOST: "127.0.0.1",
+  CORTEX_MCP_PORT: "7880",
   ...DEFAULT_WEIGHTS,
 };
 
@@ -288,5 +297,49 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     max: 10,
     step: 0.1,
     hint: "关键词紧邻出现的文档排更前",
+  },
+
+  // ===== 网络监听 (4，🌐 网络监听 tab；effect restart：改后需重启 gui) =====
+  {
+    tab: "network",
+    section: "🔌 监听地址",
+    envVar: "CORTEX_WEB_HOST",
+    label: "Web 监听地址",
+    component: "text",
+    effect: "restart",
+    mono: true,
+    hint: "Web UI 绑定地址。0.0.0.0 暴露局域网（无鉴权，慎用）。改后需重启；若改了端口，重启后需用新地址重新打开。",
+  },
+  {
+    tab: "network",
+    section: "🔌 监听地址",
+    envVar: "CORTEX_WEB_PORT",
+    label: "Web 监听端口",
+    component: "number",
+    effect: "restart",
+    min: 1,
+    max: 65535,
+    hint: "Web UI 端口（1–65535）。改后需重启，重启后用新端口重新打开。",
+  },
+  {
+    tab: "network",
+    section: "🔌 监听地址",
+    envVar: "CORTEX_MCP_HOST",
+    label: "MCP 监听地址",
+    component: "text",
+    effect: "restart",
+    mono: true,
+    hint: "MCP server 绑定地址。非环回地址（如 0.0.0.0）需在 .env 配 CORTEX_MCP_TOKEN，否则 MCP 拒绝启动。",
+  },
+  {
+    tab: "network",
+    section: "🔌 监听地址",
+    envVar: "CORTEX_MCP_PORT",
+    label: "MCP 监听端口",
+    component: "number",
+    effect: "restart",
+    min: 1,
+    max: 65535,
+    hint: "MCP server 端口（1–65535）。改后需重启。",
   },
 ];

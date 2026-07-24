@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 13 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(13);
+  it("has exactly 17 fields", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(17);
   });
 
   it("every field has a unique envVar", () => {
@@ -42,8 +42,8 @@ describe("SETTINGS_FIELDS", () => {
     }
   });
 
-  it("2 tabs are exposed in SETTINGS_TABS in display order", () => {
-    expect(SETTINGS_TABS).toEqual(["ai", "search"]);
+  it("3 tabs are exposed in SETTINGS_TABS in display order", () => {
+    expect(SETTINGS_TABS).toEqual(["ai", "search", "network"]);
   });
 
   it("AI tab has 5 fields all marked live (hot-reload after apply_config fix)", () => {
