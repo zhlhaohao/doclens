@@ -119,7 +119,7 @@ export class ChatView extends LitElement {
       min-height: 0;
       /* 顶部蓝色光晕：让白色卡片从背景中浮出，增加层次感 */
       background:
-        radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%);
+        radial-gradient(720px 280px at 50% -80px, rgba(0, 100, 224, 0.08), transparent 70%);
     }
     .input-row {
       padding: 6px var(--cortex-space-6) 18px;
@@ -587,11 +587,12 @@ export class ChatView extends LitElement {
         <div class="initial-stack">
           <welcome-pane
             variant="onboarding"
+            heroicon="sparkles"
             heading="与你的知识库对话"
             subheading="用自然语言提问，AI 会自动检索当前工作目录{workdir} 的知识库并引用原文回答"
             .modes=${[
-              { label: "自动检索", icon: "🔍" },
-              { label: "引用原文", icon: "📑" },
+              { label: "自动检索", icon: "search" },
+              { label: "引用原文", icon: "book-open" },
             ]}
             .examples=${[
               "总结上周写过的所有技术文档",
@@ -661,7 +662,7 @@ export class ChatView extends LitElement {
                  @mousedown=${this._onSplitterMouseDown}></div>
             <div class="preview-pane-wrap desktop-only">
               <button class="preview-close" type="button" aria-label="关闭预览"
-                      @click=${this._closePreview}>✕</button>
+                      @click=${this._closePreview}><doclens-icon name="x"></doclens-icon></button>
               ${this.previewError === "NOT_INDEXED"
                 ? this._renderNotIndexedHint()
                 : previewPane(false)}

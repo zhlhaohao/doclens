@@ -48,7 +48,7 @@ export class PaginationBar extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
-      border-radius: var(--cortex-radius-md);
+      border-radius: var(--cortex-radius-pill);
       cursor: pointer;
     }
     button:hover:not(:disabled) {

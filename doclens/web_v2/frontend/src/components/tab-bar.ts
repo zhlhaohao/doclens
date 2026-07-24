@@ -25,43 +25,34 @@ export class TabBar extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1px;
-      font-size: 10px;
-      /* 上多下少：图标视觉重心略偏下，padding 把它往中间拉 */
-      padding: 8px 0 2px;
+      gap: 2px;
+      font-size: 12px;
+      padding: 8px 0 6px;
       transition: background 0.15s, color 0.15s;
     }
     .tab:hover { background: var(--cortex-surface-muted); }
     .tab.active {
-      color: var(--cortex-primary);
-      font-weight: 600;
-      background: var(--cortex-primary-soft);
+      background: transparent;   /* 激活 tab 无底色（覆盖移动端 :hover 残留灰底） */
+      color: #b91c1c;             /* 深红，非纯红 */
+      font-weight: 700;
     }
-    /* 顶部选中指示条：移动端窄高度下增强"当前 tab"的可识别性 */
-    .tab::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 32px;
-      height: 3px;
-      background: var(--cortex-primary);
-      border-radius: 0 0 2px 2px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s;
+    .tab .icon {
+      font-size: 22px;
+      line-height: 1;
+      transition: color var(--cortex-duration-fast);
     }
-    .tab.active::before { opacity: 1; }
-    .tab .icon { font-size: 18px; line-height: 1; }
+    /* 激活 tab：图标也变深红（无背景、无胶囊） */
+    .tab.active .icon {
+      color: #b91c1c;
+    }
   `;
 
   @property() active: ViewId = "search";
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
-    { id: "search", icon: "🔍", label: "搜索" },
-    { id: "chat", icon: "💬", label: "对话" },
-    { id: "files", icon: "📁", label: "文件" },
+    { id: "search", icon: "search", label: "搜索" },
+    { id: "chat", icon: "message-circle", label: "对话" },
+    { id: "files", icon: "folder", label: "文件" },
   ];
 
   private _select(id: ViewId) {
@@ -77,7 +68,7 @@ export class TabBar extends LitElement {
         <button
           class="tab ${this.active === it.id ? "active" : ""}"
           @click=${() => this._select(it.id)}>
-          <span class="icon">${it.icon}</span>
+          <doclens-icon class="icon ${this.active === it.id ? "filled" : ""}" name=${it.icon}></doclens-icon>
           <span>${it.label}</span>
         </button>`)}
     `;

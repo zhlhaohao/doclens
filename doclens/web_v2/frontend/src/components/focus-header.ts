@@ -188,7 +188,7 @@ export class FocusHeader extends LitElement {
             aria-expanded=${this._menuOpen ? "true" : "false"}
             @click=${this._onMoreClick}
           >
-            <span class="kebab" aria-hidden="true">${this._menuOpen ? "⋯" : "⋮"}</span>
+            <doclens-icon class="kebab" aria-hidden="true" name=${this._menuOpen ? "more-horizontal" : "more-vertical"}></doclens-icon>
           </button>
           <div class="menu ${this._menuOpen ? "open" : ""}" role="menu">
             ${this.actions.map((a) => html`
@@ -199,7 +199,7 @@ export class FocusHeader extends LitElement {
                 ?disabled=${a.disabled ?? false}
                 @click=${() => this._onItemClick(a)}
               >
-                ${a.icon ? html`<span class="icon">${a.icon}</span>` : null}
+                ${a.icon ? html`<doclens-icon class="icon" name=${a.icon}></doclens-icon>` : null}
                 <span class="label">${a.label}</span>
               </button>
             `)}

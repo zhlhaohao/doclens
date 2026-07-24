@@ -19,11 +19,11 @@ export class TreeNode extends LitElement {
       width: 16px; height: 16px;
       display: inline-flex; align-items: center; justify-content: center;
       color: var(--cortex-text-subtle); transition: transform 0.15s;
-      font-size: 10px;
+      font-size: 14px;
     }
     .arrow.expanded { transform: rotate(90deg); }
     .arrow.leaf { visibility: hidden; }
-    .icon { font-size: 14px; }
+    .icon { font-size: 16px; }
     .label {
       flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm);
@@ -67,8 +67,8 @@ export class TreeNode extends LitElement {
       <div class="row ${this.selected ? "selected" : ""}" @click=${this._onClick}>
         <span
           class="arrow ${this.expanded ? "expanded" : ""} ${this.entry.has_child_dirs ? "" : "leaf"}"
-          @click=${this._toggle}>▶</span>
-        <span class="icon">${this.entry.is_dir ? "📁" : "📄"}</span>
+          @click=${this._toggle}><doclens-icon name="chevron-right"></doclens-icon></span>
+        <doclens-icon class="icon" name=${this.entry.is_dir ? "folder" : "file"}></doclens-icon>
         <span class="label">${this.entry.name}</span>
       </div>
       ${this.expanded && this.entry.is_dir ? html`

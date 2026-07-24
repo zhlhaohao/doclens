@@ -8,7 +8,7 @@ export class HistoryList extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: var(--cortex-space-2);
+      gap: 0;
       padding: 6px var(--cortex-space-6) var(--cortex-space-3);
       flex: 1;
       /* min-height:0 允许在 flex column 容器内收缩到 content 以下，
@@ -32,10 +32,10 @@ export class HistoryList extends LitElement {
       margin: var(--cortex-space-2) 0 var(--cortex-space-1) 0;
     }
     .title {
-      font-size: var(--cortex-fs-sm);
+      font-size: var(--cortex-fs-xs);
       text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: var(--cortex-text-muted);
+      letter-spacing: 0.8px;
+      color: var(--cortex-text-subtle);
       font-weight: 500;
     }
     .clear-btn {

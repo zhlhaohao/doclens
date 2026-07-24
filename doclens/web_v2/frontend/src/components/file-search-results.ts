@@ -123,7 +123,7 @@ export class FileSearchResults extends LitElement {
       font-variant-numeric: tabular-nums;
     }
     mark {
-      background: rgba(0, 82, 255, 0.15);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
@@ -226,13 +226,13 @@ export class FileSearchResults extends LitElement {
     if (results.length === 0) {
       return html`
         <div class="empty">
-          <div class="icon-big">🔍</div>
+          <doclens-icon class="icon-big" name="search"></doclens-icon>
           <div>未匹配到任何文件名包含 "<b>${query}</b>" 的文档</div>
         </div>
       `;
     }
     return html`
-      <div class="header-bar">📄 文件名搜索结果 · 共 ${totalMatches} 项</div>
+      <div class="header-bar"><doclens-icon name="file"></doclens-icon> 文件名搜索结果 · 共 ${totalMatches} 项</div>
       <div class="columns">
         <span>名称 · 目录</span>
         <span>大小 · 修改</span>
@@ -247,7 +247,7 @@ export class FileSearchResults extends LitElement {
               @click=${() => this._onRowClick(doc)}
             >
               <span class="name-cell">
-                <span class="icon">📄</span>
+                <doclens-icon class="icon" name="file"></doclens-icon>
                 <span class="name">${highlight(doc.name, query)}</span>
                 ${dir ? html`<span class="dir">${dir}</span>` : ""}
               </span>

@@ -91,7 +91,7 @@ export class ChatMessageEl extends LitElement {
     .md-body pre {
       background: var(--cortex-surface-muted);
       padding: 8px 10px;
-      border-radius: 8px;
+      border-radius: var(--cortex-radius-md);
       overflow-x: auto;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
@@ -259,7 +259,7 @@ export class ChatMessageEl extends LitElement {
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
     if (this.role === "user") {
       return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
-        ? html`<div class="error">⚠️ ${this.error}</div>`
+        ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
         : null}</div>`;
     }
     return html`
@@ -268,7 +268,7 @@ export class ChatMessageEl extends LitElement {
           ? html`<chat-tool-trace .steps=${steps}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
         ${this.renderBubble(this.message.content)}
-        ${this.error ? html`<div class="error">⚠️ ${this.error}</div>` : null}
+        ${this.error ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>` : null}
       </div>
     `;
   }

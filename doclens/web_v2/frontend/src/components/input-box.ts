@@ -13,17 +13,24 @@ export class InputBox extends LitElement {
       position: relative;
       display: flex;
       align-items: center;
-      border: 1px solid var(--cortex-chat-input-border);
-      border-radius: var(--cortex-radius-lg);
-      background: var(--cortex-chat-input-bg);
+      /* 边框效果：钴蓝渐变描边（padding-box 白心 + border-box 渐变），跟随 pill 圆角 */
+      border: 2px solid transparent;
+      border-radius: var(--cortex-radius-pill);
+      background:
+        linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
+        linear-gradient(135deg, rgba(0, 100, 224, 0.50), rgba(0, 145, 255, 0.50)) border-box;
       min-height: var(--min-h);
       padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      /* 强化：钴蓝调 elevation 阴影——静止即浮起，作为主动作区 */
+      box-shadow: 0 6px 18px rgba(0, 100, 224, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
+      transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
     }
     .wrapper:focus-within {
-      border-color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-focus-ring);
+      /* 聚焦：钴蓝渐变描边加深为满色 + 更强 elevation + 钴蓝光晕环 */
+      background:
+        linear-gradient(var(--cortex-surface), var(--cortex-surface)) padding-box,
+        linear-gradient(135deg, var(--cortex-primary), var(--cortex-primary-2)) border-box;
+      box-shadow: 0 10px 30px rgba(0, 100, 224, 0.20), 0 0 0 4px rgba(0, 100, 224, 0.14);
     }
     input {
       flex: 1;
@@ -78,10 +85,10 @@ export class InputBox extends LitElement {
       right: 6px;
       top: 50%;
       transform: translateY(-50%);
-      background: var(--cortex-primary-gradient);
+      background: var(--cortex-primary);
       color: #fff;
       border: none;
-      border-radius: var(--cortex-radius-lg);
+      border-radius: var(--cortex-radius-pill);
       min-width: calc(var(--min-h) - 12px);
       height: calc(var(--min-h) - 12px);
       padding: 0 14px;
@@ -92,7 +99,6 @@ export class InputBox extends LitElement {
       align-items: center;
       justify-content: center;
       gap: 4px;
-      box-shadow: var(--cortex-primary-glow);
       transition: filter 0.15s, transform 0.1s;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
@@ -112,7 +118,7 @@ export class InputBox extends LitElement {
       top: auto;
       right: auto;
       transform: none;
-      border-radius: var(--cortex-radius-lg) 0 0 var(--cortex-radius-lg);
+      border-radius: var(--cortex-radius-pill) 0 0 var(--cortex-radius-pill);
       /* 分裂按钮：primary 与 caret 拼成单一控件，必须共享同一 elevation；
          抑制主按钮的 glow，避免左半 "漂浮" 而右半扁平的不对称视觉。 */
       box-shadow: none;
@@ -127,7 +133,7 @@ export class InputBox extends LitElement {
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
-      border-radius: 0 var(--cortex-radius-md) var(--cortex-radius-md) 0;
+      border-radius: 0 var(--cortex-radius-pill) var(--cortex-radius-pill) 0;
       box-shadow: none;
       height: calc(var(--min-h) - 12px);
       min-width: 28px;
@@ -263,7 +269,7 @@ export class InputBox extends LitElement {
       // 遗留单一按钮：与改造前完全一致
       return html`
         <button @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-          ${this.buttonIcon ? html`<span aria-hidden="true">${this.buttonIcon}</span>` : null}
+          ${this.buttonIcon ? html`<doclens-icon name=${this.buttonIcon} aria-hidden="true"></doclens-icon>` : null}
           <span>${this.buttonLabel}</span>
         </button>`;
     }
@@ -271,11 +277,11 @@ export class InputBox extends LitElement {
     return html`
       <div class="actions split">
         <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-          ${cur?.icon ? html`<span aria-hidden="true">${cur.icon}</span>` : null}
+          ${cur?.icon ? html`<doclens-icon name=${cur.icon} aria-hidden="true"></doclens-icon>` : null}
           <span>${cur?.label ?? this.buttonLabel}</span>
         </button>
         <button class="caret" @click=${this._toggleMenu} ?disabled=${this.disabled}
-                aria-label="切换搜索模式" aria-expanded=${this._menuOpen}>▾</button>
+                aria-label="切换搜索模式" aria-expanded=${this._menuOpen}><doclens-icon name="chevron-down"></doclens-icon></button>
       </div>`;
   }
 
