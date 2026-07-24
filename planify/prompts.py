@@ -7,6 +7,8 @@
 按照 system_prompt_example.md 格式生成，包含实时环境信息。
 """
 
+from datetime import date
+
 import platform
 import subprocess
 from pathlib import Path
@@ -138,6 +140,7 @@ Focus text output on:
 
 # Environment
 You have been invoked in the following environment:
+ - Current date: {date.today().isoformat()}
  - Primary working directory: {get_realpath(workdir_path)}
  - Is a git repository: {is_git_repo}
 {" - Git branch: " + git_branch if is_git_repo and git_branch else ""}
