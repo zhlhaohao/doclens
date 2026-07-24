@@ -8,7 +8,7 @@ export class ResultCard extends LitElement {
   static styles = css`
     :host {
       display: block;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
       padding: 12px 16px;

@@ -110,7 +110,7 @@ export class ChatView extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
     }
     .initial-stack {
       display: flex;
@@ -135,7 +135,7 @@ export class ChatView extends LitElement {
       padding: var(--cortex-space-3) var(--cortex-space-6);
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
     }
     .focus-main {
       display: flex;
@@ -181,7 +181,7 @@ export class ChatView extends LitElement {
       flex-direction: column;
       min-height: 0;
       position: relative;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border-radius: var(--cortex-radius-lg);
       border: 1px solid var(--cortex-border-muted);
     }
@@ -234,7 +234,7 @@ export class ChatView extends LitElement {
     .preview-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       display: flex;
       flex-direction: column;
       z-index: 10;
@@ -588,7 +588,7 @@ export class ChatView extends LitElement {
           <welcome-pane
             variant="onboarding"
             heading="与你的知识库对话"
-            subheading="用自然语言提问，AI 会自动检索知识库并引用原文回答"
+            subheading="用自然语言提问，AI 会自动检索当前工作目录{workdir} 的知识库并引用原文回答"
             .modes=${[
               { label: "自动检索", icon: "🔍" },
               { label: "引用原文", icon: "📑" },

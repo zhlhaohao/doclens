@@ -2325,7 +2325,12 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
         <span class="accent">${this.heading}</span>${this.suffix?c`<span class="sep">·</span><span>${this.suffix}</span>`:_}
       </h1>
       ${this.subheading?c`<p class="subtitle">${this.subheading}</p>`:_}
-    `}_renderOnboarding(){return c`
+    `}_renderWorkdirPill(e){return c`<span class="workdir-pill" title=${this.workdir||e}
+      ><span class="pill-icon">📂</span
+      ><span class="pill-path"><bdo dir="ltr">${e}</bdo></span
+    ></span>`}_renderOnboardingSubheading(){if(!this.subheading)return _;const e="{workdir}",t=this.subheading.indexOf(e);if(t<0)return c`<p class="onboarding-subheading">${this.subheading}</p>`;const r=this.subheading.slice(0,t),s=this.subheading.slice(t+e.length);return c`<p class="onboarding-subheading workdir-inline">
+      ${r}${this._renderWorkdirPill(this.workdir||"…")}${s}
+    </p>`}_renderOnboarding(){return c`
       <div class="onboarding-card">
         <div class="card-head">
           <h2 class="card-title">${this.heading}</h2>
@@ -2335,11 +2340,11 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
                 </div>
               `:_}
         </div>
-        ${this.subheading?c`<p class="onboarding-subheading">${this.subheading}</p>`:_}
-        ${this.workdir?c`
+        ${this._renderOnboardingSubheading()}
+        ${this.workdir&&!this.subheading.includes("{workdir}")?c`
               <p class="workdir-row">
                 <span class="workdir-prefix">当前目录是</span>
-                <span class="workdir-pill" title=${this.workdir}>📂 ${this.workdir}</span>
+                ${this._renderWorkdirPill(this.workdir)}
               </p>
             `:_}
         ${this.examples.length?c`
@@ -2438,10 +2443,14 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
     .workdir-row .workdir-prefix {
       flex-shrink: 0;          /* "当前目录是" 不被挤压换行 */
     }
-    .workdir-row .workdir-pill {
-      flex: 1 1 auto;
-      min-width: 0;
-      display: inline-block;
+    /* 路径胶囊基础样式：不限定父容器，workdir-row 和内嵌 subheading 都生效。
+     * inline-flex + max-width:100%：移动端不溢出屏幕右缘。 */
+    .workdir-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      box-sizing: border-box;
       font-family: var(--cortex-font-mono);
       color: var(--cortex-text-muted);
       background: #FFFFFF;
@@ -2449,9 +2458,30 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
       border-radius: 999px;
       padding: 2px 10px;
       overflow: hidden;
+      white-space: nowrap;
+    }
+    .workdir-pill .pill-icon {
+      flex-shrink: 0;
+    }
+    /* 路径过长时截断开头（省略号在左），路径末尾（最有区分度的部分）保持可见：
+     * direction:rtl 让溢出发生在左侧，<bdo dir="ltr"> 保证 Windows 反斜杠路径不 bidi 乱序 */
+    .workdir-pill .pill-path {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      direction: ltr;          /* 路径里有 \ 时确保从左到右 */
+      direction: rtl;
+    }
+    .workdir-row .workdir-pill {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    /* subheading 内嵌路径胶囊（合并为一行）：垂直居中 + 左右小间距 */
+    .workdir-inline .workdir-pill {
+      vertical-align: middle;
+      margin: 0 3px;
+      max-width: 100%;
     }
     .modes-row {
       display: flex;
@@ -2678,7 +2708,7 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
             ${this.clearing?"清空中...":"清空"}
           </button>`:null}
       </div>
-      ${this.sessions.length===0?c`<div class="empty">暂无历史会话</div>`:this.sessions.map(t=>c`<history-item .session=${t}></history-item>`)}
+      ${this.sessions.length===0?c`<div class="empty">暂无历史${this.type==="search"?"搜索":"会话"}</div>`:this.sessions.map(t=>c`<history-item .session=${t}></history-item>`)}
     `}};Re.styles=y`
     :host {
       display: flex;
@@ -2692,6 +2722,13 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
          推出视口。 */
       min-height: 0;
       overflow-y: auto;
+      /* 隐藏滚动条：内容溢出时仍可用鼠标滚轮滚动（scrollbar-width: none
+         + ::-webkit-scrollbar { display: none } 是 Firefox/Chrome 双覆盖） */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    :host::-webkit-scrollbar {
+      display: none;
     }
     .header {
       display: flex;
@@ -2742,7 +2779,7 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       padding: 10px 12px;
@@ -2751,7 +2788,7 @@ var Ji=Object.defineProperty;var Qi=(e,t,r)=>t in e?Ji(e,t,{enumerable:!0,config
       transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
     :host(:hover) {
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-shadow-md);
       transform: translateY(-1px);
@@ -3047,7 +3084,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
     `}};yt.styles=y`
     :host {
       display: block;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
       padding: 12px 16px;
@@ -3661,7 +3698,7 @@ ${r}</blockquote>
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       overflow: hidden;
     }
     .header {
@@ -4124,7 +4161,7 @@ ${r}</blockquote>
       flex: 1;
       padding: var(--cortex-space-4);
       overflow-y: auto;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -4163,7 +4200,7 @@ ${r}</blockquote>
       gap: 8px;
       padding: 12px 16px;
       border-top: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text);
     }
@@ -4255,13 +4292,13 @@ ${r}</blockquote>
           <welcome-pane
             variant="onboarding"
             heading="在你的文档中搜索"
-            subheading="对当前工作目录的所有文件进行全文检索"
+            subheading="对当前工作目录{workdir} 的所有文件进行全文检索"
             .modes=${[{label:"自然语言",icon:"📝"},{label:"正则",icon:"regex"}]}
             .examples=${["「人工智能技术最新发展」","「tcp.*timeout」","「量子 计算」","「Python 装饰器」"]}
             .workdir=${((s=f.getState().status)==null?void 0:s.workdir)??""}
           ></welcome-pane>
           <history-list
-            title="历史会话"
+            title="历史搜索"
             type="search"
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
@@ -4360,17 +4397,15 @@ ${r}</blockquote>
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-view-bg);
     }
     .initial-stack {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      /* 顶部蓝色光晕 + 浅灰底：让白色卡片从背景中浮出，避免白上白 */
-      background:
-        radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%),
-        var(--cortex-bg);
+      /* 顶部蓝色光晕：让白色卡片从 view-bg 中浮出 */
+      background: radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%);
     }
     .input-row {
       padding: var(--cortex-space-4) var(--cortex-space-6);
@@ -4436,7 +4471,7 @@ ${r}</blockquote>
     .detail-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       display: flex;
       flex-direction: column;
       z-index: 10;
@@ -4475,7 +4510,7 @@ ${r}</blockquote>
           <welcome-pane
             variant="onboarding"
             heading="与你的知识库对话"
-            subheading="用自然语言提问，AI 会自动检索知识库并引用原文回答"
+            subheading="用自然语言提问，AI 会自动检索当前工作目录{workdir} 的知识库并引用原文回答"
             .modes=${[{label:"自动检索",icon:"🔍"},{label:"引用原文",icon:"📑"}]}
             .examples=${["总结上周写过的所有技术文档","找出所有提到 X 的段落并对比","这篇文章的核心观点是什么？"]}
             .workdir=${((s=f.getState().status)==null?void 0:s.workdir)??""}
@@ -4569,7 +4604,7 @@ ${r}</blockquote>
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
     }
     .initial-stack {
       display: flex;
@@ -4594,7 +4629,7 @@ ${r}</blockquote>
       padding: var(--cortex-space-3) var(--cortex-space-6);
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
     }
     .focus-main {
       display: flex;
@@ -4640,7 +4675,7 @@ ${r}</blockquote>
       flex-direction: column;
       min-height: 0;
       position: relative;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border-radius: var(--cortex-radius-lg);
       border: 1px solid var(--cortex-border-muted);
     }
@@ -4693,7 +4728,7 @@ ${r}</blockquote>
     .preview-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       display: flex;
       flex-direction: column;
       z-index: 10;
@@ -6269,12 +6304,12 @@ ${r}</blockquote>
       flex: 1;
       min-height: 0;
       min-width: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       overflow: hidden;
     }
     .header-bar {
       padding: var(--cortex-space-2) var(--cortex-space-3);
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-xs);
       border-bottom: 1px solid var(--cortex-border-muted);

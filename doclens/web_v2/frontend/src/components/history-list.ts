@@ -17,6 +17,13 @@ export class HistoryList extends LitElement {
          推出视口。 */
       min-height: 0;
       overflow-y: auto;
+      /* 隐藏滚动条：内容溢出时仍可用鼠标滚轮滚动（scrollbar-width: none
+         + ::-webkit-scrollbar { display: none } 是 Firefox/Chrome 双覆盖） */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    :host::-webkit-scrollbar {
+      display: none;
     }
     .header {
       display: flex;
@@ -86,7 +93,7 @@ export class HistoryList extends LitElement {
           </button>` : null}
       </div>
       ${this.sessions.length === 0
-        ? html`<div class="empty">暂无历史会话</div>`
+        ? html`<div class="empty">暂无历史${this.type === "search" ? "搜索" : "会话"}</div>`
         : this.sessions.map((s) => html`<history-item .session=${s}></history-item>`)}
     `;
   }

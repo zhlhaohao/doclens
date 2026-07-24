@@ -54,12 +54,12 @@ export class FileSearchResults extends LitElement {
       flex: 1;
       min-height: 0;
       min-width: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       overflow: hidden;
     }
     .header-bar {
       padding: var(--cortex-space-2) var(--cortex-space-3);
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-xs);
       border-bottom: 1px solid var(--cortex-border-muted);

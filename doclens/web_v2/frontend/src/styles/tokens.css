@@ -13,6 +13,8 @@
   --cortex-bg: #FAFAFA;
   --cortex-surface: #FFFFFF;
   --cortex-surface-muted: #F8FAFC;
+  --cortex-view-bg: #F8FAFC;       /* view 主区底色（统一 chat/search/files/settings/md-viewer） */
+  --cortex-card-bg: #FFFFFF;       /* 卡片 / 浮层底色（独立白卡浮于 view-bg） */
   --cortex-border: #E2E8F0;
   --cortex-border-muted: #F1F5F9;
 

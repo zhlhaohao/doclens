@@ -26,8 +26,10 @@
 ### 中性色 · Slate
 | Token | 值 | 用途 |
 |------|-----|------|
-| `--cortex-bg` | `#FAFAFA` | 页面底（暖白） |
-| `--cortex-surface` | `#FFFFFF` | 卡片 / 面板 |
+| `--cortex-bg` | `#FAFAFA` | 页面底（暖白，global.css body / app.ts :host） |
+| `--cortex-view-bg` | `#F8FAFC` | view 主区底色（chat / search / files / settings / md-viewer 统一） |
+| `--cortex-surface` | `#FFFFFF` | 卡片 / 面板（保留兼容；新代码优先用 `--cortex-card-bg`） |
+| `--cortex-card-bg` | `#FFFFFF` | 卡片 / 浮层底色（独立白卡浮于 view-bg） |
 | `--cortex-surface-muted` | `#F8FAFC` | 次级面板 / hover 底 |
 | `--cortex-border` | `#E2E8F0` | hairline 边框 |
 | `--cortex-border-muted` | `#F1F5F9` | 弱分隔 |

@@ -101,10 +101,14 @@ export class WelcomePane extends LitElement {
     .workdir-row .workdir-prefix {
       flex-shrink: 0;          /* "当前目录是" 不被挤压换行 */
     }
-    .workdir-row .workdir-pill {
-      flex: 1 1 auto;
-      min-width: 0;
-      display: inline-block;
+    /* 路径胶囊基础样式：不限定父容器，workdir-row 和内嵌 subheading 都生效。
+     * inline-flex + max-width:100%：移动端不溢出屏幕右缘。 */
+    .workdir-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      box-sizing: border-box;
       font-family: var(--cortex-font-mono);
       color: var(--cortex-text-muted);
       background: #FFFFFF;
@@ -112,9 +116,30 @@ export class WelcomePane extends LitElement {
       border-radius: 999px;
       padding: 2px 10px;
       overflow: hidden;
+      white-space: nowrap;
+    }
+    .workdir-pill .pill-icon {
+      flex-shrink: 0;
+    }
+    /* 路径过长时截断开头（省略号在左），路径末尾（最有区分度的部分）保持可见：
+     * direction:rtl 让溢出发生在左侧，<bdo dir="ltr"> 保证 Windows 反斜杠路径不 bidi 乱序 */
+    .workdir-pill .pill-path {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      direction: ltr;          /* 路径里有 \ 时确保从左到右 */
+      direction: rtl;
+    }
+    .workdir-row .workdir-pill {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    /* subheading 内嵌路径胶囊（合并为一行）：垂直居中 + 左右小间距 */
+    .workdir-inline .workdir-pill {
+      vertical-align: middle;
+      margin: 0 3px;
+      max-width: 100%;
     }
     .modes-row {
       display: flex;
@@ -207,6 +232,29 @@ export class WelcomePane extends LitElement {
     `;
   }
 
+  /** 路径胶囊：📂 图标固定不截断，路径过长时截断开头、末尾保持可见。 */
+  private _renderWorkdirPill(dir: string) {
+    return html`<span class="workdir-pill" title=${this.workdir || dir}
+      ><span class="pill-icon">📂</span
+      ><span class="pill-path"><bdo dir="ltr">${dir}</bdo></span
+    ></span>`;
+  }
+
+  /** subheading 渲染：含 {workdir} 占位符时把路径胶囊内嵌进句中（合并为一行）。
+   *  胶囊始终保留——workdir 未就绪时先显示占位符，属性更新后 Lit 自动重渲染填实；
+   *  无 token 时纯文本，独立 workdir-row 由调用方按需保留。 */
+  private _renderOnboardingSubheading() {
+    if (!this.subheading) return nothing;
+    const token = "{workdir}";
+    const idx = this.subheading.indexOf(token);
+    if (idx < 0) return html`<p class="onboarding-subheading">${this.subheading}</p>`;
+    const before = this.subheading.slice(0, idx);
+    const after = this.subheading.slice(idx + token.length);
+    return html`<p class="onboarding-subheading workdir-inline">
+      ${before}${this._renderWorkdirPill(this.workdir || "…")}${after}
+    </p>`;
+  }
+
   private _renderOnboarding() {
     return html`
       <div class="onboarding-card">
@@ -222,14 +270,12 @@ export class WelcomePane extends LitElement {
               `
             : nothing}
         </div>
-        ${this.subheading
-          ? html`<p class="onboarding-subheading">${this.subheading}</p>`
-          : nothing}
-        ${this.workdir
+        ${this._renderOnboardingSubheading()}
+        ${this.workdir && !this.subheading.includes("{workdir}")
           ? html`
               <p class="workdir-row">
                 <span class="workdir-prefix">当前目录是</span>
-                <span class="workdir-pill" title=${this.workdir}>📂 ${this.workdir}</span>
+                ${this._renderWorkdirPill(this.workdir)}
               </p>
             `
           : nothing}
