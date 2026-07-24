@@ -180,6 +180,31 @@ describe("files-view", () => {
     expect(spy).toHaveBeenCalledWith("a.md");
     document.body.removeChild(el);
   });
+
+  it("refreshes current dir after cortex:watch-reindexed (indexed 标志回填)", async () => {
+    // 预置：已在 docs 目录，且该目录已缓存（indexed=false，等 reindex 完成后应刷新）
+    actions.setFilesState({
+      currentDir: "docs",
+      treeCache: {
+        docs: [{
+          name: "a.md", path: "docs/a.md", is_dir: false, size: 1,
+          modified_at: "", indexed: false, writable: true, has_child_dirs: false,
+        }],
+      },
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const listSpy = filesApi.list as ReturnType<typeof vi.fn>;
+    listSpy.mockClear();
+
+    // reindex 完成（FileWatcher 改名/新增后）派发的事件
+    window.dispatchEvent(new CustomEvent("cortex:watch-reindexed", { detail: { doc_count: 5 } }));
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(listSpy).toHaveBeenCalledWith("docs");
+    document.body.removeChild(el);
+  });
 });
 
 describe("files-view filename search", () => {

@@ -81,6 +81,13 @@ export interface WatcherStatus {
   last_success: boolean | null;
 }
 
+/** 近期文件变化条目（来自 FileWatcher 的 on_change 回调，经 SSE status 快照下发）。 */
+export interface WatchChange {
+  path: string;   // 相对 workdir 的路径
+  name: string;   // 文件名
+  ts: number;     // unix 秒
+}
+
 export interface ReindexResult {
   success: boolean;
   doc_count: number;
@@ -180,7 +187,9 @@ export interface AppState {
   /** 跨视图会话加载请求（search-view ↔ chat-view） */
   pendingSession: Session | null;
   status: SystemStatus | null;
-  watcher: WatcherStatus | null;   // 来自 /api/watch/status 的轮询
+  watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
+  /** 近期文件变化（SSE status 快照携带，watch-changes-dialog 展示） */
+  watchRecentChanges: WatchChange[];
   reindex: ReindexState;
   error: string | null;
   settings: SettingsViewState;
