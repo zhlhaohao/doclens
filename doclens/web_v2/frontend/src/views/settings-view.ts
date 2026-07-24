@@ -21,7 +21,7 @@ import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
 const ICON_EYE = html`
@@ -818,6 +818,7 @@ export class SettingsView extends LitElement {
             class="input ${mono}"
             type="text"
             .value=${value}
+            placeholder=${IMPLICIT_DEFAULTS[f.envVar] ?? nothing}
             data-env=${f.envVar}
             @input=${onInput}
             list=${f.datalist ? `${f.envVar}-list` : nothing}

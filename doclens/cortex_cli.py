@@ -893,12 +893,12 @@ def _build_parser():
         "gui", help="Launch Cortex Web UI (PWA)"
     )
     gui_parser.add_argument(
-        "--port", type=int, default=7860,
-        help="Server port (default: 7860)",
+        "--port", type=int, default=None,
+        help="Web UI 端口（未指定时走 config.web_port / CORTEX_WEB_PORT）",
     )
     gui_parser.add_argument(
-        "--host", type=str, default="0.0.0.0",
-        help="Server host (default: 0.0.0.0)",
+        "--host", type=str, default=None,
+        help="Web UI 绑定地址（未指定时走 config.web_host / CORTEX_WEB_HOST）",
     )
     gui_parser.add_argument(
         "--share", action="store_true",
@@ -1148,7 +1148,10 @@ def _cli_gui(args, config, idx):
     setup_logging()
 
     from doclens.web_v2.app import launch_app
-    launch_app(port=args.port, host=args.host, share=args.share)
+    # 优先级：CLI 显式 --port/--host > config（CORTEX_WEB_PORT/HOST）> 字段默认
+    port = args.port if args.port is not None else config.web_port
+    host = args.host if args.host is not None else config.web_host
+    launch_app(port=port, host=host, share=args.share)
 
 
 def main():

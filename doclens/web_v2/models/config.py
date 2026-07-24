@@ -13,12 +13,11 @@ class ConfigScope:
     GLOBAL = "global"
 
 
-# Fields whose change requires restarting cortex gui to take effect.
-# All fields now hot-reload via deps.reload_config(); kept for API
-# compatibility but always empty.
-# Must stay in sync with the `effect: "restart"` metadata in
-# cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
-RESTART_FIELDS: frozenset[str] = frozenset()
+# 改动后需重启 cortex gui 才生效的字段（host/port 在 uvicorn/MCP 启动时绑定，
+# 无法 hot-reload）。需与 settings-fields.ts 的 effect:"restart" 保持一致。
+RESTART_FIELDS: frozenset[str] = frozenset({
+    "CORTEX_WEB_HOST", "CORTEX_WEB_PORT", "CORTEX_MCP_HOST", "CORTEX_MCP_PORT",
+})
 
 
 class ConfigResponse(BaseModel):

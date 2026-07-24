@@ -39,11 +39,22 @@ $n = 0
 if ($dirName -match '-(\d+)$') {
     $n = [int]$Matches[1]
 }
-$basePort = 7860
+# 基线端口优先读 ~/.cortex/.env 的 CORTEX_WEB_PORT / CORTEX_MCP_PORT
+# （设置页改的端口对 start-app 也生效）；缺失则回退 7860 / 7880，再 +N 偏移。
+$envFile = Join-Path $env:USERPROFILE ".cortex/.env"
+function Read-CortexEnvPort($key, $fallback) {
+    if (Test-Path $envFile) {
+        foreach ($l in Get-Content $envFile -ErrorAction SilentlyContinue) {
+            if ($l -match "^\s*$key\s*=\s*(\d+)\s*$") { return [int]$Matches[1] }
+        }
+    }
+    return $fallback
+}
+$basePort = Read-CortexEnvPort "CORTEX_WEB_PORT" 7860
 $port = $basePort + $n
 
 # MCP server 端口同样 +N（镜像 GUI 约定），多 worktree 并行不撞。
-$mcpBasePort = 7880
+$mcpBasePort = Read-CortexEnvPort "CORTEX_MCP_PORT" 7880
 $mcpPort = $mcpBasePort + $n
 $env:CORTEX_MCP_PORT = "$mcpPort"
 
