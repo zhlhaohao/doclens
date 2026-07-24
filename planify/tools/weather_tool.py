@@ -7,7 +7,6 @@
 from typing import List, Tuple
 
 from .baidu_weather import get_weather as baidu_get_weather, format_weather_result
-from .lunar import get_lunar_info
 
 
 # 工具名称常量
@@ -58,27 +57,12 @@ def make_baidu_weather_tools() -> Tuple[List[dict], dict]:
                 "required": ["city", "date"],
             },
         },
-        {
-            "name": "lunar_info",
-            "description": "查询指定日期的农历信息，包括农历月日、节气、节日等",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "date": {
-                        "type": "string",
-                        "description": "日期，优先使用自然语言（今天、明天等）或标准格式 YYYY-MM-DD",
-                    },
-                },
-                "required": ["date"],
-            },
-        },
     ]
 
     handlers = {
         BAIDU_WEATHER_TOOL: lambda **kw: _wrap_async(
             handle_baidu_weather, kw["city"], kw["date"]
         ),
-        "lunar_info": lambda **kw: get_lunar_info(kw["date"]),
     }
 
     return tools, handlers
