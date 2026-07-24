@@ -57,16 +57,35 @@ export class WelcomePane extends LitElement {
       text-align: left;
     }
     .onboarding-card {
-      /* 跟随 .initial-stack 的 max-width，不强行限制 560px */
-      box-sizing: border-box;  /* shadow DOM 内全局 border-box 不生效，必须显式声明 */
+      box-sizing: border-box;
       width: 100%;
       margin: 0;
-      padding: 10px 16px;
-      /* 品牌渐变 hero 卡：与白色历史条目形成区块区分 */
-      background: linear-gradient(135deg, var(--cortex-primary-soft) 0%, #FFFFFF 75%);
-      border: 1px solid rgba(0, 82, 255, 0.16);
-      border-radius: var(--cortex-radius-lg);
-      box-shadow: 0 4px 14px rgba(0, 82, 255, 0.07);
+      padding: var(--cortex-space-6) var(--cortex-space-5);
+      /* 聚光灯 hero（更淡）：亮白热斑 → 浅奶油 → 暖金 → 金 → 柔琥珀向外衰减，
+         保留聚焦光斑但整体更柔和清淡。暖色；文字深色，亮区可读。 */
+      background:
+        radial-gradient(circle at 18% 22%, #fffdf2 0%, #fef3c7 22%, #fde68a 45%, #fcd34d 70%, #f7b928 100%);
+      color: var(--cortex-text);
+      border: none;
+      border-radius: var(--cortex-radius-3xl);
+      box-shadow: var(--cortex-shadow-md);
+    }
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-4);
+      min-width: 0;
+    }
+    .hero-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: var(--cortex-radius-circle);
+      background: var(--cortex-btn-primary-bg);
+      color: #ffffff;
+      font-size: 24px;
     }
     /* 头部一行：左标题右模式 chips，节省一行高度 */
     .card-head {
@@ -77,20 +96,21 @@ export class WelcomePane extends LitElement {
       flex-wrap: wrap;
     }
     .onboarding-card .card-title {
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
+      font-size: var(--cortex-fs-xl);
+      font-weight: 700;
       color: var(--cortex-text);
+      letter-spacing: -0.02em;
       margin: 0;
     }
     .onboarding-subheading {
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      line-height: 1.45;
-      margin: 2px 0 0;
+      color: rgba(10, 19, 23, 0.72);
+      line-height: 1.5;
+      margin: 6px 0 0;
     }
     .workdir-row {
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
+      color: rgba(10, 19, 23, 0.62);
       margin: 4px 0 0;
       display: flex;
       align-items: center;
@@ -110,10 +130,10 @@ export class WelcomePane extends LitElement {
       max-width: 100%;
       box-sizing: border-box;
       font-family: var(--cortex-font-mono);
-      color: var(--cortex-text-muted);
-      background: #FFFFFF;
-      border: 1px solid var(--cortex-border);
-      border-radius: 999px;
+      color: var(--cortex-text);
+      background: rgba(10, 19, 23, 0.08);
+      border: 1px solid rgba(10, 19, 23, 0.14);
+      border-radius: var(--cortex-radius-pill);
       padding: 2px 10px;
       overflow: hidden;
       white-space: nowrap;
@@ -150,13 +170,13 @@ export class WelcomePane extends LitElement {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 2px 9px;
+      padding: 2px 10px;
       font-size: var(--cortex-fs-xs);
-      font-weight: 500;
-      color: var(--cortex-primary);
-      background: #FFFFFF;
-      border: 1px solid rgba(0, 82, 255, 0.22);
-      border-radius: 999px;
+      font-weight: 600;
+      color: var(--cortex-text);
+      background: rgba(10, 19, 23, 0.10);
+      border: 1px solid rgba(10, 19, 23, 0.08);
+      border-radius: var(--cortex-radius-pill);
       white-space: nowrap;
     }
     /* 示例：两列网格 + 顶部分隔线，替代小节标签，压缩竖向空间 */
@@ -164,14 +184,14 @@ export class WelcomePane extends LitElement {
       list-style: none;
       padding: 8px 0 0;
       margin: 8px 0 0;
-      border-top: 1px solid var(--cortex-border);
+      border-top: 1px solid rgba(10, 19, 23, 0.12);
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 2px 16px;
     }
     .examples-list li {
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text);
+      color: rgba(10, 19, 23, 0.85);
       padding: 1px 0;
       line-height: 1.4;
       min-width: 0;
@@ -198,7 +218,12 @@ export class WelcomePane extends LitElement {
       }
       .title { font-size: var(--cortex-fs-lg); }
       .subtitle { font-size: var(--cortex-fs-sm); }
-      .onboarding-card { padding: 10px 14px; }
+      .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); }
+      /* 窄屏：大图标 + 标题并排一行；隐藏模式 chip 胶囊，压缩行数 */
+      .title-group { flex-direction: row; align-items: center; gap: var(--cortex-space-3); }
+      .hero-mark { width: 36px; height: 36px; font-size: 18px; }
+      .modes-row { display: none; }
+      .card-title { font-size: var(--cortex-fs-lg); }
       /* 窄屏示例回退单列 */
       .examples-list { grid-template-columns: 1fr; }
     }
@@ -208,6 +233,8 @@ export class WelcomePane extends LitElement {
   @property() heading = "Doclens";
   @property() subheading = "";
   @property() suffix = "";
+  /** hero 圆盘图标名（仅 onboarding；空则不渲染圆盘） */
+  @property() heroIcon = "";
 
   /** 模式 / 能力 chip 列表（仅 onboarding 变体显示） */
   @property({ attribute: false }) modes: OnboardingChip[] = [];
@@ -235,8 +262,7 @@ export class WelcomePane extends LitElement {
   /** 路径胶囊：📂 图标固定不截断，路径过长时截断开头、末尾保持可见。 */
   private _renderWorkdirPill(dir: string) {
     return html`<span class="workdir-pill" title=${this.workdir || dir}
-      ><span class="pill-icon">📂</span
-      ><span class="pill-path"><bdo dir="ltr">${dir}</bdo></span
+      ><doclens-icon class="pill-icon" name="folder-open"></doclens-icon><span class="pill-path"><bdo dir="ltr">${dir}</bdo></span
     ></span>`;
   }
 
@@ -259,12 +285,17 @@ export class WelcomePane extends LitElement {
     return html`
       <div class="onboarding-card">
         <div class="card-head">
-          <h2 class="card-title">${this.heading}</h2>
+          <div class="title-group">
+            ${this.heroIcon
+              ? html`<div class="hero-mark"><doclens-icon name=${this.heroIcon}></doclens-icon></div>`
+              : nothing}
+            <h2 class="card-title">${this.heading}</h2>
+          </div>
           ${this.modes.length
             ? html`
                 <div class="modes-row">
                   ${this.modes.map(
-                    (m) => html`<span class="chip">${m.icon ? html`${m.icon} ` : nothing}${m.label}</span>`,
+                    (m) => html`<span class="chip">${m.icon ? html`<doclens-icon name=${m.icon}></doclens-icon> ` : nothing}${m.label}</span>`,
                   )}
                 </div>
               `

@@ -61,10 +61,9 @@ export const dialogControlStyles = css`
   button:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-subtle); }
   button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
   button.primary {
-    background: var(--cortex-primary-gradient);
-    color: #fff; border: none;
-    border-radius: var(--cortex-radius-lg);
-    box-shadow: var(--cortex-primary-glow);
+    background: var(--cortex-btn-primary-bg);
+    color: var(--cortex-btn-primary-text); border: none;
+    border-radius: var(--cortex-radius-pill);
   }
   button.primary:hover { opacity: 0.9; }
   input {

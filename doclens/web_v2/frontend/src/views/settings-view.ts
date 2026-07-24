@@ -86,26 +86,26 @@ export class SettingsView extends LitElement {
     }
     .tab-strip button {
       position: relative;
-      background: transparent;
-      border: none;
-      padding: var(--cortex-space-2) var(--cortex-space-3);
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
+      font-weight: 600;
+      color: var(--cortex-text);
       cursor: pointer;
       font-family: inherit;
       text-align: left;
-      border-radius: var(--cortex-radius-md);
-      transition: background 0.15s, color 0.15s;
+      border-radius: var(--cortex-radius-pill);
+      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
     }
     .tab-strip button:hover {
-      color: var(--cortex-text);
       background: var(--cortex-surface-muted);
+      border-color: var(--cortex-text-subtle);
     }
     .tab-strip button.active {
-      color: var(--cortex-primary);
-      background: var(--cortex-primary-soft);
-      font-weight: 600;
-      box-shadow: inset 3px 0 0 var(--cortex-primary);
+      color: var(--cortex-surface);
+      background: var(--cortex-btn-primary-bg);
+      border-color: var(--cortex-btn-primary-bg);
     }
     .scroll-area {
       flex: 1;
@@ -177,7 +177,7 @@ export class SettingsView extends LitElement {
       color: var(--cortex-text-muted);
       background: transparent;
       border: none;
-      border-radius: 6px;
+      border-radius: var(--cortex-radius-sm);
       cursor: pointer;
       transition: background 0.15s, color 0.15s;
     }
@@ -266,7 +266,7 @@ export class SettingsView extends LitElement {
     .input, .select {
       padding: 9px 12px;
       border: 1px solid var(--cortex-border);
-      border-radius: 8px;
+      border-radius: var(--cortex-radius-md);
       background: var(--cortex-surface);
       font-size: var(--cortex-fs-sm);
       font-family: inherit;
@@ -284,7 +284,7 @@ export class SettingsView extends LitElement {
       outline: none;
       border-color: var(--cortex-primary);
       background: var(--cortex-surface);
-      box-shadow: 0 0 0 3px var(--cortex-primary-soft);
+      box-shadow: var(--cortex-focus-ring);
     }
 
     .footer-bar {
@@ -326,7 +326,7 @@ export class SettingsView extends LitElement {
       color: var(--cortex-text);
       font-size: var(--cortex-fs-sm);
       font-weight: 500;
-      border-radius: 8px;
+      border-radius: var(--cortex-radius-pill);
       cursor: pointer;
       font-family: inherit;
       transition: background 0.15s, border-color 0.15s, transform 0.05s;
@@ -334,10 +334,9 @@ export class SettingsView extends LitElement {
     .btn:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-muted); }
     .btn:active { transform: translateY(0.5px); }
     .btn.primary {
-      background: var(--cortex-primary-gradient);
+      background: var(--cortex-btn-primary-bg);
       border: none;
-      color: #fff;
-      box-shadow: var(--cortex-primary-glow);
+      color: var(--cortex-btn-primary-text);
       font-weight: 600;
     }
     .btn.primary:hover { filter: brightness(1.05); }
@@ -364,19 +363,18 @@ export class SettingsView extends LitElement {
       .scroll-area { overflow: visible; flex: none; }
       .tab-strip { flex-direction: row; overflow-x: auto; }
       .tab-strip button {
-        border-left: none;
+        border: none;
         border-bottom: 2px solid transparent;
         text-align: center;
         white-space: nowrap;
         border-radius: 0;
       }
       .tab-strip button:hover { background: transparent; }
-      /* 移动端只保留下划线高亮：去掉桌面端的左侧蓝条（box-shadow）和背景色块 */
+      /* 移动端只保留下划线高亮（墨黑），去掉桌面端的深色填充 */
       .tab-strip button.active {
-        border-left-color: transparent;
-        border-bottom-color: var(--cortex-primary);
+        color: var(--cortex-text);
+        border-bottom-color: var(--cortex-btn-primary-bg);
         background: transparent;
-        box-shadow: none;
       }
 
       .field {
@@ -973,7 +971,7 @@ export class SettingsView extends LitElement {
               <button class="btn reset-all" ?disabled=${this._allAtDefault() || this._saving} @click=${() => this._resetAll()}>恢复默认</button>
               <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
-                ${this._saving ? "保存中…" : `💾 保存${scopeLabel}配置${existsHint}`}
+                ${this._saving ? "保存中…" : html`<doclens-icon name="save"></doclens-icon>保存${scopeLabel}配置${existsHint}`}
               </button>
             </div>
           </div>

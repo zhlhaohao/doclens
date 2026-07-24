@@ -12,8 +12,8 @@ export class DeleteDialog extends LitElement {
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .warn {
       padding: var(--cortex-space-3);
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: rgba(247, 185, 40, 0.10);
+      border: 1px solid rgba(247, 185, 40, 0.35);
       border-left: 3px solid var(--cortex-warning);
       border-radius: var(--cortex-radius-md);
       color: var(--cortex-text);
@@ -38,14 +38,14 @@ export class DeleteDialog extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       cursor: pointer;
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-pill);
       font-size: var(--cortex-fs-base);
     }
     button.danger {
       background: var(--cortex-danger);
       color: #fff;
       border: none;
-      border-radius: var(--cortex-radius-lg);
+      border-radius: var(--cortex-radius-pill);
     }
     button.danger:hover:not(:disabled) { filter: brightness(1.05); }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -125,7 +125,7 @@ export class DeleteDialog extends LitElement {
     }
     return html`
       <h3>删除 ${count > 1 ? `${count} 项` : this._selected[0]}？</h3>
-      <div class="warn">⚠️ 此操作不可恢复</div>
+      <div class="warn"><doclens-icon name="alert-triangle"></doclens-icon> 此操作不可恢复</div>
       ${this._stats ? html`
         <div class="stats">
           将永久删除：

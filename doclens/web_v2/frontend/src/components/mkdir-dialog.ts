@@ -45,15 +45,14 @@ export class MkdirDialog extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       cursor: pointer;
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-pill);
       font-size: var(--cortex-fs-base);
     }
     button.primary {
-      background: var(--cortex-primary-gradient);
-      color: #fff;
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-btn-primary-text);
       border: none;
-      border-radius: var(--cortex-radius-lg);
-      box-shadow: var(--cortex-primary-glow);
+      border-radius: var(--cortex-radius-pill);
     }
     button.primary:hover:not(:disabled) { opacity: 0.9; }
     button:disabled { opacity: 0.4; cursor: not-allowed; }

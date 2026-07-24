@@ -22,25 +22,27 @@ export class ActivityBar extends LitElement {
       width: max-content;
       min-width: 100%;
       min-height: 40px;
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border: none;
-      background: transparent;
-      color: var(--cortex-text-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      color: var(--cortex-text);
       cursor: pointer;
-      border-radius: var(--cortex-radius-md);
+      border-radius: var(--cortex-radius-pill);
       display: flex;
       align-items: center;
       justify-content: flex-start;
       gap: var(--cortex-space-3);
-      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
       white-space: nowrap;
-    }
-    button:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
-    button.active {
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-sm);
       font-weight: 600;
-      box-shadow: inset 3px 0 0 var(--cortex-primary);
+    }
+    button:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-subtle); }
+    button.active {
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-surface);
+      border-color: var(--cortex-btn-primary-bg);
     }
     .icon { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 22px; }
     .label { font-size: var(--cortex-fs-sm); }
@@ -49,9 +51,9 @@ export class ActivityBar extends LitElement {
   @property() active: ViewId = "search";
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
-    { id: "search", icon: "🔍", label: "搜索" },
-    { id: "chat", icon: "💬", label: "对话" },
-    { id: "files", icon: "📁", label: "文件" },
+    { id: "search", icon: "search", label: "搜索" },
+    { id: "chat", icon: "message-circle", label: "对话" },
+    { id: "files", icon: "folder", label: "文件" },
   ];
 
   private _select(id: ViewId) {
@@ -69,7 +71,7 @@ export class ActivityBar extends LitElement {
           title=${it.label}
           aria-label=${it.label}
           @click=${() => this._select(it.id)}>
-          <span class="icon">${it.icon}</span>
+          <doclens-icon class="icon" name=${it.icon}></doclens-icon>
           <span class="label">${it.label}</span>
         </button>`)}
     `;
