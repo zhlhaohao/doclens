@@ -31,17 +31,15 @@ export class SearchView extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-view-bg);
     }
     .initial-stack {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      /* 顶部蓝色光晕 + 浅灰底：让白色卡片从背景中浮出，避免白上白 */
-      background:
-        radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%),
-        var(--cortex-bg);
+      /* 顶部蓝色光晕：让白色卡片从 view-bg 中浮出 */
+      background: radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%);
     }
     .input-row {
       padding: var(--cortex-space-4) var(--cortex-space-6);
@@ -107,7 +105,7 @@ export class SearchView extends LitElement {
     .detail-overlay {
       position: absolute;
       inset: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       display: flex;
       flex-direction: column;
       z-index: 10;
@@ -544,7 +542,7 @@ export class SearchView extends LitElement {
           <welcome-pane
             variant="onboarding"
             heading="在你的文档中搜索"
-            subheading="对当前工作目录的所有文件进行全文检索"
+            subheading="对当前工作目录{workdir} 的所有文件进行全文检索"
             .modes=${[
               { label: "自然语言", icon: "📝" },
               { label: "正则", icon: "regex" },
@@ -558,7 +556,7 @@ export class SearchView extends LitElement {
             .workdir=${store.getState().status?.workdir ?? ""}
           ></welcome-pane>
           <history-list
-            title="历史会话"
+            title="历史搜索"
             type="search"
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}

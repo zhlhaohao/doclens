@@ -12,7 +12,7 @@ export class ChatStream extends LitElement {
       flex: 1;
       padding: var(--cortex-space-4);
       overflow-y: auto;
-      background: var(--cortex-chat-bg);
+      background: var(--cortex-view-bg);
       scrollbar-width: none;
       -ms-overflow-style: none;
     }

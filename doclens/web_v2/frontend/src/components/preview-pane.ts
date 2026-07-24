@@ -14,7 +14,7 @@ export class PreviewPane extends LitElement {
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       overflow: hidden;
     }
     .header {

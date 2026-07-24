@@ -9,7 +9,7 @@ export class HistoryItem extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       padding: 10px 12px;
@@ -18,7 +18,7 @@ export class HistoryItem extends LitElement {
       transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
     :host(:hover) {
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-shadow-md);
       transform: translateY(-1px);

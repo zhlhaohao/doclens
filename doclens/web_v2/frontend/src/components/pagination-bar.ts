@@ -22,7 +22,7 @@ export class PaginationBar extends LitElement {
       gap: 8px;
       padding: 12px 16px;
       border-top: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
+      background: var(--cortex-card-bg);
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text);
     }
