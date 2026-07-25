@@ -110,7 +110,7 @@ class CortexConfig(BaseSettings):
     web_host: str = Field(
         default="127.0.0.1",
         alias="CORTEX_WEB_HOST",
-        description="Web UI 绑定地址；0.0.0.0 暴露局域网（无鉴权，慎用）",
+        description="Web UI 绑定地址；0.0.0.0 暴露局域网（非环回地址将启用密码登录闸门，请先在设置页设置访问密码）",
     )
     web_port: int = Field(
         default=7860,
@@ -118,6 +118,14 @@ class CortexConfig(BaseSettings):
         le=65535,
         alias="CORTEX_WEB_PORT",
         description="Web UI 端口",
+    )
+    # 访问密码哈希（格式 iterations$salt_hex$hash_hex），由设置页 /api/auth/password
+    # 或 `cortex auth reset` 写入全局 .env；不进设置页字段白名单，读 AuthCredentials。
+    # 注册为字段是为了让 pydantic-settings（extra=forbid）容忍 .env 中该键。
+    web_password_hash: str = Field(
+        default="",
+        alias="CORTEX_WEB_PASSWORD_HASH",
+        description="Web UI 访问密码哈希（请勿手工编辑；由密码设置接口维护）",
     )
 
     # MCP server（进程内 Streamable HTTP，TUI/GUI 自动启动）

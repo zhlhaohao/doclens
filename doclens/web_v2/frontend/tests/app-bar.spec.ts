@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fixture, html, elementUpdated } from "@open-wc/testing";
+
+vi.mock("../src/api/auth", () => ({
+  logout: vi.fn().mockResolvedValue({ ok: true }),
+}));
 
 import "../src/components/app-bar";
 import type { AppBar } from "../src/components/app-bar";
 import { store, actions } from "../src/state/store";
+import { router } from "../src/router/router";
+import * as authApi from "../src/api/auth";
 
 describe("<app-bar>", () => {
   let el: AppBar;
@@ -69,6 +75,39 @@ describe("<app-bar>", () => {
     document.body.click();
     await elementUpdated(el);
     expect(el.shadowRoot?.querySelector(".user-menu")?.classList.contains("open")).toBe(false);
+  });
+});
+
+describe("<app-bar> logout menu item", () => {
+  const logoutMock = authApi.logout as ReturnType<typeof vi.fn>;
+
+  it("hidden when auth gate is not required", async () => {
+    actions.setAuthState({ required: false, authenticated: true, hasPassword: false });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .map((i) => i.textContent ?? "");
+    expect(labels.some((l) => l.includes("注销登录"))).toBe(false);
+  });
+
+  it("shown when gate required and authenticated; click logs out and navigates to login", async () => {
+    actions.setAuthState({ required: true, authenticated: true, hasPassword: true });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+
+    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .find((b) => (b.textContent ?? "").includes("注销登录")) as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+
+    const navSpy = vi.spyOn(router, "navigate").mockImplementation(() => {});
+    logoutMock.mockClear();
+    btn.click();
+    await vi.waitFor(() => expect(logoutMock).toHaveBeenCalled());
+    expect(store.getState().auth.authenticated).toBe(false);
+    expect(navSpy).toHaveBeenCalledWith("login");
+    navSpy.mockRestore();
   });
 });
 

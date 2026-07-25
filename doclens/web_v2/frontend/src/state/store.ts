@@ -37,6 +37,7 @@ function dirtyFieldList(
 
 export const INITIAL_STATE: AppState = {
   view: "search",
+  auth: { required: null, authenticated: false, hasPassword: false },
   search: {
     state: "initial",
     currentSession: null,
@@ -134,6 +135,11 @@ export const store = new CortexStore();
 export const actions = {
   setView(view: AppState["view"]) {
     store.setState({ view });
+  },
+
+  setAuthState(patch: Partial<AppState["auth"]>) {
+    const cur = store.getState().auth;
+    store.setState({ auth: { ...cur, ...patch } });
   },
 
   setSearchState(s: Partial<AppState["search"]>) {
