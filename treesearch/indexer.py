@@ -1536,6 +1536,8 @@ async def build_index(
     if force:
         # Full rebuild: clear all failed file records
         fts.clear_all_failed_files()
+        # 视觉解析队列一并清空（重建过程会重新登记）
+        fts.vision_clear()
 
     if not force:
         # Batch fetch all stored hashes in one query (instead of N queries)
@@ -1588,6 +1590,9 @@ async def build_index(
         if prune_doc_ids:
             fts.delete_documents(prune_doc_ids)
             logger.info("Pruned %d orphan document(s) from index", len(prune_doc_ids))
+        # 被 prune 的源文件同步移出视觉解析队列
+        for stored_path in pruned_paths:
+            fts.vision_remove(stored_path)
 
         # Clean up shadow MD files for pruned binary sources
         from .parsers.registry import is_binary_extension
@@ -1709,6 +1714,10 @@ async def build_index(
                 # Tag source_type for search routing
                 source_type = SOURCE_TYPE_MAP.get(ext, "text")
                 result["source_type"] = source_type
+
+                # 图像文件：占位节点已进索引，登记到视觉解析队列（后台 worker 消费）
+                if source_type == "image" and result.get("vision_pending"):
+                    fts.vision_enqueue(os.path.abspath(fp), rel_path)
 
                 # Generate shadow MD for binary files (concurrent with parsing)
                 if cfg.enable_shadow_md:

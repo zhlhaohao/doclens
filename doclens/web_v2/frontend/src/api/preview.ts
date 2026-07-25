@@ -86,6 +86,8 @@ export interface PageMarker {
 /** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐）。 */
 const FULL_FILE_PREVIEW_EXTS = [
   ".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv",
+  // 图像文件：预览 = 顶部原图 + 视觉解析出的 Markdown
+  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif",
 ];
 
 export function isFullFilePreview(path: string): boolean {

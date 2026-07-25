@@ -25,6 +25,10 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "PLANIFY_MODEL_ID",
     "PLANIFY_PROVIDER",
     "PLANIFY_PROTOCOL",
+    # 视觉模型（图像文件解析，独立于 AI 对话配置）
+    "VISION_API_KEY",
+    "VISION_BASE_URL",
+    "VISION_MODEL",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",
@@ -152,10 +156,11 @@ def write_env_values(path: Path, updates: dict[str, str]) -> None:
 
 
 def reset_env_to_example(path: Path) -> None:
-    """把 .env 重置为包内 ``.env.example`` 模板，保留用户已有的 ``PLANIFY_API_KEY``。
+    """把 .env 重置为包内 ``.env.example`` 模板，保留用户已有的 API key。
 
     用于设置页「恢复默认」：得到一份与首次运行一致的、带注释与默认值的规范配置，
-    而不是把文件掏空。仅 API key（密钥无出厂默认）从现有 .env 保留。
+    而不是把文件掏空。仅 API key（密钥无出厂默认）从现有 .env 保留，
+    包括 PLANIFY_API_KEY（AI 对话）与 VISION_API_KEY（视觉模型）。
     """
     from doclens.config import bundled_env_example_path
 
@@ -164,15 +169,14 @@ def reset_env_to_example(path: Path) -> None:
         raise FileNotFoundError(f"包内 .env.example 模板缺失: {src}")
 
     # 保留现有 API key（若有）
-    existing_key = ""
+    preserved: dict[str, str] = {}
     if path.exists():
-        existing_key = read_env_values(path, frozenset({"PLANIFY_API_KEY"}))[0].get(
-            "PLANIFY_API_KEY", ""
-        )
+        existing = read_env_values(path, frozenset({"PLANIFY_API_KEY", "VISION_API_KEY"}))[0]
+        preserved = {k: v for k, v in existing.items() if v}
 
     content = src.read_text(encoding="utf-8")
-    if existing_key:
-        content = _apply_env_updates(content, {"PLANIFY_API_KEY": existing_key})
+    if preserved:
+        content = _apply_env_updates(content, preserved)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")

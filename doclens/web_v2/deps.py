@@ -20,6 +20,7 @@ _idx_manager: Optional[IndexManager] = None
 _sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
+_vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 import 循环
 _mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
 _lock = threading.RLock()
 
@@ -99,9 +100,10 @@ def get_sessions_store() -> SessionsStore:
 
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle
-    # 停止可能存在的 watcher / MCP server，释放后台线程
+    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker
+    # 停止可能存在的 watcher / worker / MCP server，释放后台线程
     stop_watcher()
+    stop_vision_worker()
     stop_mcp_server()
     with _lock:
         _config = None
@@ -110,6 +112,7 @@ def reset_singletons() -> None:
         _agent = None
         _watcher = None
         _mcp_handle = None
+        _vision_worker = None
 
 
 def reload_config() -> CortexConfig:
@@ -190,6 +193,46 @@ def stop_watcher() -> None:
             watcher.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("stop_watcher: %s", exc)
+
+
+def get_vision_worker():
+    """获取已注册的 VisionWorker 单例（可能为 None）。"""
+    return _vision_worker
+
+
+def start_vision_worker() -> bool:
+    """创建并启动 VisionWorker（视觉解析队列的常驻消费者，ADR-0001）。
+
+    无论是否已配置 VISION_API_KEY 都启动：worker 内部在未配置时空转，
+    设置页补上 key 后下一轮循环自动开始消费（配置热生效）。
+    """
+    global _vision_worker
+    idx = get_index_manager()
+    try:
+        from doclens.vision_worker import VisionWorker
+
+        worker = VisionWorker(idx, get_config)
+        worker.start()
+        with _lock:
+            _vision_worker = worker
+        logger.info("VisionWorker started for %s", idx.search_path)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("start_vision_worker failed: %s", exc)
+        return False
+
+
+def stop_vision_worker() -> None:
+    """停止并注销 VisionWorker 单例（幂等）。"""
+    global _vision_worker
+    with _lock:
+        worker = _vision_worker
+        _vision_worker = None
+    if worker is not None:
+        try:
+            worker.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_vision_worker: %s", exc)
 
 
 async def start_mcp_server() -> bool:
