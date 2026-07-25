@@ -15,7 +15,8 @@ from doclens.config import data_dirname
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
-from treesearch.parsers.image_store import ImageStore, doc_hash_for
+from treesearch.parsers.image_store import ImageStore, doc_hash_for, _EXT_TO_MEDIA
+from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 from doclens.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
@@ -31,7 +32,7 @@ BINARY_PREVIEW_EXTS = frozenset({
     ".pdf", ".docx", ".pptx",
     ".xlsx", ".xlsm", ".xltx", ".xltm",
     ".csv",
-})
+}) | IMAGE_EXTENSIONS
 
 
 def _compute_writable(full: Path, search_path: Path) -> bool:
@@ -155,6 +156,26 @@ async def preview_asset(
     return FileResponse(path=str(file_path), media_type=media_type)
 
 
+@router.get("/preview/raw")
+async def preview_raw(
+    path: str = Query(..., description="图像文件相对路径"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """直接返回独立图像文件的字节流（供图像预览顶部嵌入原图）。
+
+    仅限图像扩展名（IMAGE_EXTENSIONS）；path 经越权校验。
+    """
+    base = Path(idx.search_path)
+    full, _resolved_rel = _resolve_path(base, path, idx)
+    ext = full.suffix.lower()
+    if ext not in IMAGE_EXTENSIONS:
+        raise CortexAPIError(400, "NOT_AN_IMAGE", f"非图像文件: {path}")
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+    media_type = _EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
+    return FileResponse(path=str(full), media_type=media_type)
+
+
 @router.get("/preview", response_model=PreviewResponse)
 async def preview(
     path: str = Query(..., description="相对路径"),
@@ -228,6 +249,12 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
 
     md_content, line_map = render_tree_to_md(doc.structure, doc.source_type)
     pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content)
+    # 图像文件：顶部嵌入原图（经 /api/preview/raw 服务源文件），下方为视觉解析结果
+    if doc.source_type == "image":
+        from urllib.parse import quote
+
+        raw_url = f"/api/preview/raw?path={quote(rel_path, safe='')}"
+        cleaned_md = f"![原图]({raw_url})\n\n{cleaned_md}"
     # pdf 分支 _extract_pdf_pages 会剥除 [PAGE N] 标记并重排行号，
     # 导致 line_map（基于原始 md 行号）失真；此时丢弃映射，避免误导。
     # docx/xlsx/csv 分支 cleaned_md == md_content，line_map 仍然有效。

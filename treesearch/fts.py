@@ -376,6 +376,21 @@ class FTS5Index:
             )
         """)
 
+        # Vision parse queue (image files: placeholder first, background vision
+        # worker consumes serially and replaces the placeholder in-place).
+        # status: pending | processing | done | failed
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS vision_queue (
+                source_path TEXT PRIMARY KEY,
+                rel_path TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                model TEXT DEFAULT '',
+                last_error TEXT DEFAULT '',
+                updated_at REAL NOT NULL
+            )
+        """)
+
         # Performance indexes for large-scale document sets (10k+ docs)
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nodes_doc_id ON nodes (doc_id)"
@@ -472,6 +487,103 @@ class FTS5Index:
             "SELECT source_path, fail_count, last_error FROM failed_files ORDER BY fail_count DESC"
         ).fetchall()
         return [(row[0], row[1], row[2]) for row in rows]
+
+    # -------------------------------------------------------------------
+    # Vision parse queue (image files; consumed by doclens VisionWorker)
+    # -------------------------------------------------------------------
+
+    def vision_enqueue(self, source_path: str, rel_path: str = "") -> None:
+        """登记一个待视觉解析的图像文件（重复登记=文件变更，重置为 pending）。"""
+        import time as _time
+        self._conn.execute(
+            """INSERT INTO vision_queue (source_path, rel_path, status, attempts, model, last_error, updated_at)
+               VALUES (?, ?, 'pending', 0, '', '', ?)
+               ON CONFLICT(source_path) DO UPDATE SET
+                   rel_path = excluded.rel_path,
+                   status = 'pending',
+                   attempts = 0,
+                   last_error = '',
+                   updated_at = excluded.updated_at
+            """,
+            (source_path, rel_path, _time.time()),
+        )
+
+    def vision_next_pending(self) -> Optional[dict]:
+        """取出下一个待解析项并置为 processing（原子抢占）。无则返回 None。"""
+        import time as _time
+        row = self._conn.execute(
+            "SELECT source_path, rel_path, attempts FROM vision_queue "
+            "WHERE status = 'pending' ORDER BY updated_at LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        cur = self._conn.execute(
+            "UPDATE vision_queue SET status = 'processing', updated_at = ? "
+            "WHERE source_path = ? AND status = 'pending'",
+            (_time.time(), row[0]),
+        )
+        self._conn.commit()
+        if cur.rowcount == 0:
+            return None  # 被其他消费者抢走
+        return {"source_path": row[0], "rel_path": row[1], "attempts": row[2]}
+
+    def vision_mark_done(self, source_path: str, model: str) -> bool:
+        """标记解析完成。仅当仍处于 processing 时生效（防止与 force 重建竞态）。"""
+        import time as _time
+        cur = self._conn.execute(
+            "UPDATE vision_queue SET status = 'done', model = ?, last_error = '', updated_at = ? "
+            "WHERE source_path = ? AND status = 'processing'",
+            (model, _time.time(), source_path),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def vision_mark_failed(self, source_path: str, error: str, *, final: bool) -> None:
+        """记录一次失败；final=True（达到连败上限）时置 failed，否则回 pending 待重试。"""
+        import time as _time
+        self._conn.execute(
+            "UPDATE vision_queue SET status = ?, attempts = attempts + 1, last_error = ?, updated_at = ? "
+            "WHERE source_path = ?",
+            ("failed" if final else "pending", error[:500], _time.time(), source_path),
+        )
+        self._conn.commit()
+
+    def vision_remove(self, source_path: str) -> None:
+        """从队列移除（源文件被 prune / 删除时调用）。"""
+        self._conn.execute(
+            "DELETE FROM vision_queue WHERE source_path = ?", (source_path,)
+        )
+
+    def vision_clear(self) -> None:
+        """清空队列（force 全量重建时调用；重建过程会重新登记）。"""
+        with self._conn:
+            self._conn.execute("DELETE FROM vision_queue")
+
+    def vision_reset_stale_processing(self) -> int:
+        """启动时把残留的 processing（上次进程崩溃）重置回 pending。"""
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE vision_queue SET status = 'pending' WHERE status = 'processing'"
+            )
+        return cur.rowcount
+
+    def vision_requeue_model_changed(self, current_tag: str) -> int:
+        """模型/prompt 版本变化时，把已完成的项重新置为 pending 以便重解析。"""
+        import time as _time
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE vision_queue SET status = 'pending', attempts = 0, updated_at = ? "
+                "WHERE status = 'done' AND model != ?",
+                (_time.time(), current_tag),
+            )
+        return cur.rowcount
+
+    def vision_counts(self) -> dict[str, int]:
+        """各状态计数，供状态展示。如 ``{"pending": 3, "done": 12}``。"""
+        rows = self._conn.execute(
+            "SELECT status, COUNT(*) FROM vision_queue GROUP BY status"
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
 
     # -------------------------------------------------------------------
     # Indexing (Producer side)

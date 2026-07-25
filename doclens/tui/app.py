@@ -92,6 +92,9 @@ class CortexApp(App):
         # 文件监控
         self.watcher = None
 
+        # 视觉解析 worker（占位图像的后台消费者，ADR-0001）
+        self.vision_worker = None
+
         # MCP server 句柄（索引就绪后在后台启动）
         self._mcp_handle: Optional[McpServerHandle] = None
 
@@ -151,6 +154,9 @@ class CortexApp(App):
 
         # 启动文件监控
         self._start_watcher()
+
+        # 启动视觉解析 worker（未配置 VISION_API_KEY 时内部空转）
+        self._start_vision_worker()
 
         # 后台启动 MCP server（复用同进程索引，失败不阻塞 TUI）
         self.run_worker(self._start_mcp, thread=True, name="mcp_start")
@@ -305,6 +311,22 @@ class CortexApp(App):
         self.idx.load_or_build_index()  # _needs_reload=True，会从磁盘重新加载
         status = self.query_one(StatusBar)
         status.set_index_stats(len(self.idx.documents))
+
+    def _start_vision_worker(self) -> None:
+        """启动视觉解析 worker（ADR-0001）。
+
+        无论是否已配置 VISION_API_KEY 都启动：未配置时 worker 内部空转，
+        配置在下一轮轮询时热生效。
+        """
+        try:
+            from doclens.vision_worker import VisionWorker
+
+            self.vision_worker = VisionWorker(self.idx, lambda: self.config)
+            self.vision_worker.start()
+            logger.info("Vision worker started")
+        except Exception as exc:
+            logger.exception("Vision worker start failed: %s", exc)
+            self.vision_worker = None
 
     # ------------------------------------------------------------------
     # 输入处理
@@ -1197,6 +1219,9 @@ class CortexApp(App):
         if self.watcher:
             self.watcher.stop()
             self.watcher = None
+        if self.vision_worker:
+            self.vision_worker.stop()
+            self.vision_worker = None
 
     def on_unmount(self) -> None:
         """应用卸载时清理"""

@@ -120,6 +120,7 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "docx": ["fts5"],
     "pptx": ["fts5"],
     "excel": ["fts5"],
+    "image": ["fts5"],
 }
 
 
@@ -340,6 +341,17 @@ def _register_builtin_parsers() -> None:
                       len(MARKITDOWN_EXTENSIONS), ", ".join(sorted(MARKITDOWN_EXTENSIONS)))
     except ImportError:
         logger.debug("PPTX parser not available (install 'markitdown' for PPTX support)")
+
+    # 独立图像文件（占位节点 + 视觉解析队列；无外部依赖）
+    from ..parsers.image_parser import image_to_tree, IMAGE_EXTENSIONS
+
+    async def _image_parser(fp, **kw):
+        return await image_to_tree(image_path=fp, **kw)
+
+    for ext in sorted(IMAGE_EXTENSIONS):
+        ParserRegistry.register(ext, _image_parser, source_type="image")
+    logger.debug("Image parser registered for %d extensions: %s",
+                  len(IMAGE_EXTENSIONS), ", ".join(sorted(IMAGE_EXTENSIONS)))
 
 
 # Auto-register built-in parsers on import
