@@ -7,6 +7,12 @@ export class ApiError extends Error {
   }
 }
 
+/** 401 统一处理钩子：由 app.ts 注入（跳登录页）。可注入以避免 client→app 循环依赖。 */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn;
+}
+
 export interface RequestOptions extends RequestInit {
   json?: unknown;
 }
@@ -19,6 +25,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
   const res = await fetch(path, init);
   if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
     let body: any;
     try {
       body = await res.json();
@@ -43,6 +50,7 @@ export async function* streamSSE(
     signal,
   });
   if (!res.ok || !res.body) {
+    if (res.status === 401) onUnauthorized?.();
     throw new ApiError(res.status, "stream_failed", "流式请求失败");
   }
   const reader = res.body.getReader();

@@ -85,13 +85,20 @@ def get_sessions_store() -> SessionsStore:
     """获取 SessionsStore 单例（懒加载 + 线程安全）。
 
     sessions.db 与 index.db 同在数据目录（开发 .cortex / 发行版 .doclens），跟随工作目录隔离。
+    路径由 config 直接推导（与 IndexManager.index_path 同一公式），**故意不经
+    IndexManager**——登录闸门（auth_sessions 表）必须在索引构建完成前就可用。
     """
     global _sessions_store
     if _sessions_store is None:
         with _lock:
             if _sessions_store is None:
-                idx = get_index_manager()
-                db_path = Path(idx.index_path).parent / "sessions.db"
+                from doclens.config import data_dirname
+
+                config = get_config()
+                index_path = config.index_path or os.path.join(
+                    config.search_path, data_dirname(), "index.db"
+                )
+                db_path = Path(index_path).parent / "sessions.db"
                 db_path.parent.mkdir(parents=True, exist_ok=True)
                 _sessions_store = SessionsStore(db_path)
     return _sessions_store

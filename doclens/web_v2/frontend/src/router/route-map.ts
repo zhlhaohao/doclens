@@ -10,6 +10,7 @@ export const VIEW_TO_HASH: Record<ViewId, string> = {
   chat: "#/chat",
   files: "#/files",
   settings: "#/settings",
+  login: "#/login",
 };
 
 export const HASH_TO_VIEW: Record<string, ViewId> = Object.fromEntries(

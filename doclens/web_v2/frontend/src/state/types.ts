@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "settings" | "files";
+export type ViewId = "search" | "chat" | "settings" | "files" | "login";
 export type FocusState = "initial" | "focus";
 export type SearchMode = "keyword" | "grep";
 
@@ -171,8 +171,16 @@ export interface FileExplorerViewState {
   filenameSearch: FilenameSearchState;
 }
 
+/** 登录态：required=null 表示尚未向后端探测（启动瞬间）。 */
+export interface AuthState {
+  required: boolean | null;
+  authenticated: boolean;
+  hasPassword: boolean;
+}
+
 export interface AppState {
   view: ViewId;
+  auth: AuthState;
   search: SearchViewState;
   chat: ChatViewState;
   /** 详情推入栈（移动端整页推入） */
