@@ -84,6 +84,8 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".xlsm": "excel",
     ".xltx": "excel",
     ".xltm": "excel",
+    # Email archives (pst-extract sidecar)
+    ".pst": "pst",
     # Documents
     ".epub": "epub",
     ".xps": "xps",
@@ -123,6 +125,7 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "pptx": ["fts5"],
     "excel": ["fts5"],
     "image": ["fts5"],
+    "pst": ["fts5"],
 }
 
 
@@ -341,6 +344,17 @@ def _register_builtin_parsers() -> None:
         ParserRegistry.register(".mht", _mhtml_parser)
     except ImportError:
         logger.debug("MHTML parser not available (install 'beautifulsoup4' for MHTML support)")
+
+    # PST email archive (Go sidecar pst-extract + streaming JSONL)
+    try:
+        from ..parsers.pst_parser import pst_to_trees
+
+        async def _pst_parser(fp, **kw):
+            return await pst_to_trees(pst_path=fp, **kw)
+
+        ParserRegistry.register(".pst", _pst_parser)
+    except ImportError:
+        logger.debug("PST parser not available")
 
     # PPTX via markitdown (optional dependency)
     try:

@@ -185,6 +185,9 @@ async def preview(
     idx: IndexManager = Depends(get_index_manager),
 ):
     base = Path(idx.search_path)
+    # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md
+    if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
+        return _synthesize_binary_preview(idx, path)
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
