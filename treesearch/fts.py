@@ -1779,6 +1779,26 @@ class FTS5Index:
         ).fetchone()
         return row[0] if row else None
 
+    def get_doc_ids_by_source_prefix(self, prefix: str) -> list[str]:
+        """Return doc_ids whose source_path starts with ``prefix``.
+
+        Used for multi-document sources (e.g. PST archives whose email docs
+        get derived paths ``<file>#<entry_id>``) — cascade delete / replace.
+        """
+        rows = self._conn.execute(
+            "SELECT doc_id FROM documents WHERE instr(source_path, ?) = 1",
+            (prefix,),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def has_docs_with_source_prefix(self, prefix: str) -> bool:
+        """Whether any document's source_path starts with ``prefix``."""
+        row = self._conn.execute(
+            "SELECT 1 FROM documents WHERE instr(source_path, ?) = 1 LIMIT 1",
+            (prefix,),
+        ).fetchone()
+        return row is not None
+
     # -------------------------------------------------------------------
     # Index metadata (replaces _index_meta.json)
     # -------------------------------------------------------------------

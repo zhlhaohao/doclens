@@ -94,6 +94,8 @@ const FULL_FILE_PREVIEW_EXTS = [
 
 export function isFullFilePreview(path: string): boolean {
   const lower = path.toLowerCase();
+  // PST 邮件派生路径（"<pst>#<entry_id>"）：非真实文件，走 DB 合成 md
+  if (lower.includes("#") && lower.split("#")[0].endsWith(".pst")) return true;
   return FULL_FILE_PREVIEW_EXTS.some((ext) => lower.endsWith(ext));
 }
 
