@@ -28,10 +28,11 @@ from doclens.web_v2.preview_synthesizer import render_tree_to_md
 router = APIRouter()
 
 # 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
+# （.mhtml/.mht 是 MIME 打包文本，原始预览无意义，同样走合成）
 BINARY_PREVIEW_EXTS = frozenset({
     ".pdf", ".docx", ".pptx",
     ".xlsx", ".xlsm", ".xltx", ".xltm",
-    ".csv",
+    ".csv", ".mhtml", ".mht",
 }) | IMAGE_EXTENSIONS
 
 

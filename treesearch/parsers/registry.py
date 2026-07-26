@@ -63,6 +63,8 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     # Web / markup
     ".html": "html",
     ".htm": "html",
+    ".mhtml": "html",
+    ".mht": "html",
     ".xml": "xml",
     ".css": "code",
     # Config
@@ -327,6 +329,18 @@ def _register_builtin_parsers() -> None:
         ParserRegistry.register(".htm", _html_parser)
     except ImportError:
         logger.debug("HTML parser not available (install 'beautifulsoup4' for HTML support)")
+
+    # MHTML web archive (stdlib email unpack + BeautifulSoup via html_parser)
+    try:
+        from ..parsers.mhtml_parser import mhtml_to_tree
+
+        async def _mhtml_parser(fp, **kw):
+            return await mhtml_to_tree(mhtml_path=fp, **kw)
+
+        ParserRegistry.register(".mhtml", _mhtml_parser)
+        ParserRegistry.register(".mht", _mhtml_parser)
+    except ImportError:
+        logger.debug("MHTML parser not available (install 'beautifulsoup4' for MHTML support)")
 
     # PPTX via markitdown (optional dependency)
     try:

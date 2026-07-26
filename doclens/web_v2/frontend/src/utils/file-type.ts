@@ -28,6 +28,8 @@ const KNOWN_TYPES: Record<string, FileTypeBadge> = {
   md:   { letter: "M", bg: "#6366F1", fg: "#FFFFFF" },  // indigo
   txt:  { letter: "T", bg: "#6B7280", fg: "#FFFFFF" },  // gray
   html: { letter: "H", bg: "#E34F26", fg: "#FFFFFF" },  // HTML5 orange
+  mhtml: { letter: "W", bg: "#0D9488", fg: "#FFFFFF" }, // teal (W = Web archive)
+  mht:  { letter: "W", bg: "#0D9488", fg: "#FFFFFF" },
   png:  { letter: "I", bg: "#7C3AED", fg: "#FFFFFF" },  // violet (I = Image)
   jpg:  { letter: "I", bg: "#7C3AED", fg: "#FFFFFF" },
   jpeg: { letter: "I", bg: "#7C3AED", fg: "#FFFFFF" },
