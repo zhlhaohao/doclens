@@ -336,6 +336,75 @@ def _truncate_to_paragraphs(text: str, max_chars: int) -> str:
     return truncated.rstrip()
 
 
+def _extract_keyword_window(text: str, query_words: list[str], max_chars: int) -> str:
+    """从超长文本中截取以关键词为中心的窗口。
+
+    大表格/长名单类文档常只有一个巨型节点：固定取开头会漏掉中部、尾部的
+    命中内容（LLM 看不到 → 误判"找不到资料"）。改为在命中密度最高的位置
+    开窗口；窗口外内容以省略标记提示。无命中时回退为开头截断。
+    """
+    if len(text) <= max_chars:
+        return text
+
+    # 收集所有关键词命中位置（大小写不敏感）
+    hits: list[int] = []
+    lowered = text.lower()
+    for w in query_words:
+        if not w:
+            continue
+        start = 0
+        wl = w.lower()
+        while True:
+            idx = lowered.find(wl, start)
+            if idx < 0:
+                break
+            hits.append(idx)
+            start = idx + len(wl)
+
+    if not hits:
+        return _truncate_to_paragraphs(text, max_chars)
+
+    # 以"窗口内命中数最多"选锚点：把窗口左缘对齐到尽量靠前的命中，
+    # 使窗口覆盖尽可能多的后续命中（滑窗取最优，命中位置数通常不多）
+    hits.sort()
+    best_start = hits[0]
+    best_count = -1
+    for h in hits:
+        count = 0
+        limit = h + max_chars
+        for p in hits:
+            if p < h:
+                continue
+            if p > limit:
+                break
+            count += 1
+        if count > best_count:
+            best_count = count
+            best_start = h
+
+    # 窗口向锚点前回退少量上下文（表头/上文更有用），并避免切断词语
+    context_back = min(max_chars // 4, 200)
+    win_start = max(0, best_start - context_back)
+
+    # 窗口不在开头时，预留预算补带文档开头（标题/表头），
+    # 否则大表格中部/尾部的行缺列名，LLM 无法解读
+    head = ""
+    if win_start > 0:
+        head_budget = min(200, max_chars // 4)
+        head_raw = text[:head_budget]
+        nl = head_raw.rfind("\n")
+        head = (head_raw[:nl] if nl > 40 else head_raw).rstrip()
+
+    win_budget = max_chars - (len(head) + 16 if head else 0)
+    win_end = min(len(text), win_start + win_budget)
+    win_start = max(0, win_end - win_budget)
+
+    excerpt = text[win_start:win_end].rstrip()
+    prefix = f"{head}\n…（中部略）\n" if head else ""
+    suffix = "\n…（后文略）" if win_end < len(text) else ""
+    return prefix + excerpt + suffix
+
+
 def _format_kb_results(
     scored_results: list[tuple],
     query_words: list[str],
@@ -365,7 +434,7 @@ def _format_kb_results(
         doc_title = doc_title_map.get(doc_id, doc_id)
         hierarchy = _build_hierarchy_path(node, doc_id, doc_nodes_map, doc_title)
 
-        context = _truncate_to_paragraphs(node_text, max_context_chars_per_result)
+        context = _extract_keyword_window(node_text, query_words, max_context_chars_per_result)
 
         entry = f'<result index="{shown + 1}" score="{int(composite * 100)}%" matches="{matched}/{len(query_words)}">\n'
         entry += "  <meta>\n"
@@ -410,7 +479,7 @@ def _format_ripgrep_results(
         node_text = node.get("text", "") or ""
         path = path_map.get(doc_id, "")
 
-        context = _truncate_to_paragraphs(node_text, max_context_chars_per_result)
+        context = _extract_keyword_window(node_text, query_words, max_context_chars_per_result)
 
         entry = (
             f"\n=== 结果 {i} [匹配: {matched}/{len(query_words)} 词] ===\n"
@@ -574,6 +643,44 @@ def _parse_document(file_path: str, ext: str) -> Optional[dict]:
     structure = raw.get("structure", [])
     nodes = _normalize_nodes(structure)
     return {"title": title, "text": "", "nodes": nodes}
+
+
+def _normalize_nodes_text_first(nodes: list[dict]) -> list[dict]:
+    """同 _normalize_nodes，但正文优先取完整 text（索引中的图像文档节点
+    同时带 summary（≤600 字截断版）与 text（完整版），read_document 要完整内容）。"""
+    result = []
+    for node in nodes:
+        children = node.get("nodes", [])
+        result.append({
+            "title": node.get("title", ""),
+            "text": node.get("text", "") or node.get("summary", "") or node.get("prefix_summary", "") or "",
+            "line_start": node.get("line_start", 0),
+            "line_end": node.get("line_end", 0),
+            "nodes": _normalize_nodes_text_first(children),
+        })
+    return result
+
+
+def _load_indexed_image_tree(idx_manager, abs_path: str) -> Optional[dict]:
+    """从索引中读取图像文件的视觉解析结果（图像不能现场重解析）。
+
+    返回与 _parse_document 相同的 {title, text, nodes} 结构；未进索引返回 None。
+    占位阶段（视觉 worker 未消费）会返回占位节点文本，属如实反馈。
+    """
+    if idx_manager.ts is None or not idx_manager.documents:
+        idx_manager.load_or_build_index()
+
+    target = os.path.normcase(os.path.abspath(abs_path))
+    for doc in idx_manager.documents or []:
+        meta = getattr(doc, "metadata", None) or {}
+        src = meta.get("source_path", "")
+        if src and os.path.normcase(src) == target:
+            return {
+                "title": doc.doc_name,
+                "text": "",
+                "nodes": _normalize_nodes_text_first(doc.structure or []),
+            }
+    return None
 
 
 def _normalize_nodes(nodes: list[dict]) -> list[dict]:
@@ -1221,7 +1328,18 @@ def _handle_read_document(
     ext = os.path.splitext(abs_path)[1].lower()
 
     try:
-        tree = _parse_document(abs_path, ext)
+        # 图像文件不能现场重解析（会得到占位节点）；视觉解析结果在索引里，直接读索引
+        from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
+
+        if ext in IMAGE_EXTENSIONS:
+            tree = _load_indexed_image_tree(idx_manager, abs_path)
+            if tree is None:
+                return (
+                    f"图像文件尚未进索引: {path}。\n"
+                    "请先 manage_kb(action='reindex') 构建索引后重试。"
+                )
+        else:
+            tree = _parse_document(abs_path, ext)
     except ImportError as e:
         return (
             f"文档解析失败: 缺少依赖 {e}。\n"

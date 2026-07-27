@@ -17,14 +17,16 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动文件监控 + MCP server，退出时停止。"""
+    """应用生命周期：启动文件监控 + 视觉解析 worker + MCP server，退出时停止。"""
     from doclens.web_v2 import deps
     deps.start_watcher()
+    deps.start_vision_worker()
     await deps.start_mcp_server()
     try:
         yield
     finally:
         deps.stop_mcp_server()
+        deps.stop_vision_worker()
         deps.stop_watcher()
 
 

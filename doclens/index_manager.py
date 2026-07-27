@@ -50,6 +50,13 @@ class IndexManager:
         """Hot-reload config values. Does NOT touch index or search_path."""
         self._config = config
 
+    def mark_index_dirty(self) -> None:
+        """标记内存中的 documents 已过时，下次 load/search 时从磁盘重新加载。
+
+        供 VisionWorker 等外部写入者在直接更新 FTS 后调用。
+        """
+        self._needs_reload = True
+
     # --- Config-backed properties (hot-reloadable) ---
 
     @property

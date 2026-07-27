@@ -67,6 +67,8 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   PLANIFY_PROTOCOL: "openai_compat",
   PLANIFY_BASE_URL: "",
   PLANIFY_MODEL_ID: "",
+  VISION_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  VISION_MODEL: "qwen-vl-max",
   CORTEX_MAX_RESULTS: "50",
   CORTEX_MIN_SCORE_THRESHOLD: "0.3",
   CORTEX_MAX_SPAN: "50",
@@ -202,6 +204,39 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     mono: true,
     datalist: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"],
     hint: "支持自动补全常见模型；也可手动输入自定义模型 ID。",
+  },
+
+  // ===== 视觉模型（图像文件解析，独立于 AI 对话配置） =====
+  {
+    tab: "ai",
+    section: "🖼️ 视觉模型（图像解析）",
+    envVar: "VISION_API_KEY",
+    label: "API Key",
+    component: "password",
+    effect: "live",
+    mono: true,
+    hint: "视觉模型密钥，与上方 AI 对话配置完全独立。留空时图像文件只做占位索引（文件名可搜索），不做视觉解析。",
+  },
+  {
+    tab: "ai",
+    section: "🖼️ 视觉模型（图像解析）",
+    envVar: "VISION_BASE_URL",
+    label: "API Base URL",
+    component: "text",
+    effect: "live",
+    mono: true,
+    hint: "OpenAI 兼容端点，默认阿里百炼。图像解析由后台 worker 串行执行，不拖慢主索引。",
+  },
+  {
+    tab: "ai",
+    section: "🖼️ 视觉模型（图像解析）",
+    envVar: "VISION_MODEL",
+    label: "模型 ID",
+    component: "text",
+    effect: "live",
+    mono: true,
+    datalist: ["qwen-vl-max", "qwen-vl-plus", "qwen3-vl-plus", "qwen3-vl-flash"],
+    hint: "具备图像识别能力的模型；切换模型后已解析的图像会在下次启动时自动重新解析。",
   },
 
   // ===== 搜索调优 · 结果与过滤 (3，无 section 标题) =====

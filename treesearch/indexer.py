@@ -1536,6 +1536,8 @@ async def build_index(
     if force:
         # Full rebuild: clear all failed file records
         fts.clear_all_failed_files()
+        # 视觉解析队列一并清空（重建过程会重新登记）
+        fts.vision_clear()
 
     if not force:
         # Batch fetch all stored hashes in one query (instead of N queries)
@@ -1581,13 +1583,19 @@ async def build_index(
                 else:
                     continue
             doc_id = fts.get_doc_id_by_source_path(stored_path)
-            if doc_id:
-                prune_doc_ids.append(doc_id)
+            # 多文档来源（PST 派生 "<file>#<entry_id>"）：级联删除派生文档
+            derived_ids = fts.get_doc_ids_by_source_prefix(stored_path + "#")
+            ids = ([doc_id] if doc_id else []) + derived_ids
+            if ids:
+                prune_doc_ids.extend(ids)
                 pruned_paths.append(stored_path)
                 all_meta.pop(stored_path, None)
         if prune_doc_ids:
             fts.delete_documents(prune_doc_ids)
             logger.info("Pruned %d orphan document(s) from index", len(prune_doc_ids))
+        # 被 prune 的源文件同步移出视觉解析队列
+        for stored_path in pruned_paths:
+            fts.vision_remove(stored_path)
 
         # Clean up shadow MD files for pruned binary sources
         from .parsers.registry import is_binary_extension
@@ -1618,7 +1626,10 @@ async def build_index(
             stored_hash = all_meta.get(abs_fp)
             if stored_hash == fh:
                 # source_path lookup catches both same-name and moved files.
-                if fts.get_doc_id_by_source_path(abs_fp) is not None:
+                # Multi-doc sources (e.g. PST: docs keyed "<file>#<entry_id>")
+                # have no doc at the exact path — check the derived prefix.
+                if fts.get_doc_id_by_source_path(abs_fp) is not None \
+                        or fts.has_docs_with_source_prefix(abs_fp + "#"):
                     skipped.append(fp)
                     processed_counter[0] += 1
                     if progress_callback:
@@ -1710,6 +1721,10 @@ async def build_index(
                 source_type = SOURCE_TYPE_MAP.get(ext, "text")
                 result["source_type"] = source_type
 
+                # 图像文件：占位节点已进索引，登记到视觉解析队列（后台 worker 消费）
+                if source_type == "image" and result.get("vision_pending"):
+                    fts.vision_enqueue(os.path.abspath(fp), rel_path)
+
                 # Generate shadow MD for binary files (concurrent with parsing)
                 if cfg.enable_shadow_md:
                     from .parsers.registry import is_binary_extension
@@ -1773,6 +1788,55 @@ async def build_index(
         if fp in result_map:
             _save_bar.set_postfix_str(os.path.basename(fp), refresh=False)
             result = result_map[fp]
+            abs_fp = os.path.abspath(fp)
+            file_h = file_hashes.get(abs_fp, "")
+
+            if result.get("multi_docs") is not None:
+                # 多文档来源（PST 等）：一个文件 → N 个派生文档。
+                # 派生 doc_id = <file_doc_id>__<entry>；source_path = <file>#<entry>。
+                # 已被移除的派生文档（邮件删除）按差集清除；其余走节点级增量。
+                trees = result["multi_docs"]
+                new_docs = []
+                for t in trees:
+                    sp = t.get("source_path", "")
+                    entry = sp.rsplit("#", 1)[-1] if "#" in sp else str(len(new_docs))
+                    new_docs.append(Document(
+                        doc_id=f"{name}__{entry}",
+                        doc_name=t.get("doc_name", name),
+                        structure=t.get("structure", []),
+                        doc_description=t.get("doc_description", ""),
+                        metadata={"source_path": sp},
+                        source_type=result.get("source_type", ""),
+                    ))
+                new_ids = {d.doc_id for d in new_docs}
+                old_ids = set(fts.get_doc_ids_by_source_prefix(abs_fp + "#"))
+                removed_ids = sorted(old_ids - new_ids)
+                if removed_ids:
+                    fts.delete_documents(removed_ids)
+                    logger.info("Removed %d stale derived doc(s) for %s",
+                                len(removed_ids), fp)
+                for doc in new_docs:
+                    fts.index_document(doc, auto_commit=False)
+                    d = fts.last_node_diff
+                    for k in diff_totals:
+                        diff_totals[k] += d[k]
+                    _pending_commits += 1
+                    docs_since_optimize += 1
+                    if _pending_commits >= _COMMIT_BATCH:
+                        fts.commit()
+                        _pending_commits = 0
+                    if optimize_threshold and docs_since_optimize >= optimize_threshold:
+                        fts.optimize()
+                        docs_since_optimize = 0
+                # 文件指纹记在物理文件路径上（派生文档不写 index_meta）
+                fts.set_index_meta(abs_fp, file_h)
+                fts.clear_failed_file(abs_fp)
+                logger.debug("Indexed %d derived docs: %s -> %s",
+                             len(new_docs), fp, db_path)
+                documents.extend(new_docs)
+                _save_bar.update()
+                continue
+
             doc = Document(
                 doc_id=name,
                 doc_name=result.get("doc_name", name),
@@ -1781,8 +1845,6 @@ async def build_index(
                 metadata={"source_path": result.get("source_path", "")},
                 source_type=result.get("source_type", ""),
             )
-            abs_fp = os.path.abspath(fp)
-            file_h = file_hashes.get(abs_fp, "")
             # index_document writes nodes, fts_nodes, documents AND index_meta
             # in a single atomic transaction (auto_commit handles batching).
             fts.index_document(doc, auto_commit=False, file_hash=file_h)
@@ -1805,6 +1867,13 @@ async def build_index(
             abs_fp = os.path.abspath(fp)
             doc = all_docs_from_db.get(abs_fp)
             if doc is None:
+                # 多文档来源（PST 等）：物理路径无精确匹配，按派生前缀收集
+                derived = [d for sp, d in all_docs_from_db.items()
+                           if sp.startswith(abs_fp + "#")]
+                if derived:
+                    documents.extend(derived)
+                    _save_bar.update()
+                    continue
                 logger.debug("Skipped file %s has no document in DB (excluded by failure threshold)", fp)
                 _save_bar.update()
                 continue
@@ -1841,7 +1910,13 @@ async def build_index(
         # Count nodes for this file
         result = result_map.get(fp)
         if result:
-            entry["nodes"] += len(flatten_tree(result.get("structure", [])))
+            if result.get("multi_docs") is not None:
+                entry["nodes"] += sum(
+                    len(flatten_tree(t.get("structure", [])))
+                    for t in result["multi_docs"]
+                )
+            else:
+                entry["nodes"] += len(flatten_tree(result.get("structure", [])))
 
     # Database size
     db_size = 0
