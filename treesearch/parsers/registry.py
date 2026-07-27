@@ -63,6 +63,8 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     # Web / markup
     ".html": "html",
     ".htm": "html",
+    ".mhtml": "html",
+    ".mht": "html",
     ".xml": "xml",
     ".css": "code",
     # Config
@@ -82,6 +84,8 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     ".xlsm": "excel",
     ".xltx": "excel",
     ".xltm": "excel",
+    # Email archives (pst-extract sidecar)
+    ".pst": "pst",
     # Documents
     ".epub": "epub",
     ".xps": "xps",
@@ -120,6 +124,8 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "docx": ["fts5"],
     "pptx": ["fts5"],
     "excel": ["fts5"],
+    "image": ["fts5"],
+    "pst": ["fts5"],
 }
 
 
@@ -327,6 +333,29 @@ def _register_builtin_parsers() -> None:
     except ImportError:
         logger.debug("HTML parser not available (install 'beautifulsoup4' for HTML support)")
 
+    # MHTML web archive (stdlib email unpack + BeautifulSoup via html_parser)
+    try:
+        from ..parsers.mhtml_parser import mhtml_to_tree
+
+        async def _mhtml_parser(fp, **kw):
+            return await mhtml_to_tree(mhtml_path=fp, **kw)
+
+        ParserRegistry.register(".mhtml", _mhtml_parser)
+        ParserRegistry.register(".mht", _mhtml_parser)
+    except ImportError:
+        logger.debug("MHTML parser not available (install 'beautifulsoup4' for MHTML support)")
+
+    # PST email archive (Go sidecar pst-extract + streaming JSONL)
+    try:
+        from ..parsers.pst_parser import pst_to_trees
+
+        async def _pst_parser(fp, **kw):
+            return await pst_to_trees(pst_path=fp, **kw)
+
+        ParserRegistry.register(".pst", _pst_parser)
+    except ImportError:
+        logger.debug("PST parser not available")
+
     # PPTX via markitdown (optional dependency)
     try:
         from ..parsers.markitdown_parser import markitdown_to_tree, MARKITDOWN_EXTENSIONS
@@ -340,6 +369,17 @@ def _register_builtin_parsers() -> None:
                       len(MARKITDOWN_EXTENSIONS), ", ".join(sorted(MARKITDOWN_EXTENSIONS)))
     except ImportError:
         logger.debug("PPTX parser not available (install 'markitdown' for PPTX support)")
+
+    # 独立图像文件（占位节点 + 视觉解析队列；无外部依赖）
+    from ..parsers.image_parser import image_to_tree, IMAGE_EXTENSIONS
+
+    async def _image_parser(fp, **kw):
+        return await image_to_tree(image_path=fp, **kw)
+
+    for ext in sorted(IMAGE_EXTENSIONS):
+        ParserRegistry.register(ext, _image_parser, source_type="image")
+    logger.debug("Image parser registered for %d extensions: %s",
+                  len(IMAGE_EXTENSIONS), ", ".join(sorted(IMAGE_EXTENSIONS)))
 
 
 # Auto-register built-in parsers on import

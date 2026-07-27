@@ -89,6 +89,39 @@ async def html_to_tree(
     with open(html_path, "r", encoding="utf-8", errors="replace") as f:
         html_content = f.read()
 
+    return await html_content_to_tree(
+        html_content,
+        doc_name=doc_name,
+        source_path=os.path.abspath(html_path),
+        model=model,
+        if_add_node_summary=if_add_node_summary,
+        summary_chars_threshold=summary_chars_threshold,
+        if_add_doc_description=if_add_doc_description,
+        if_add_node_text=if_add_node_text,
+        if_add_node_id=if_add_node_id,
+        **kwargs,
+    )
+
+
+async def html_content_to_tree(
+    html_content: str,
+    *,
+    doc_name: str,
+    source_path: str,
+    model: Optional[str] = None,
+    if_add_node_summary: bool = True,
+    summary_chars_threshold: int = 600,
+    if_add_doc_description: bool = False,
+    if_add_node_text: bool = False,
+    if_add_node_id: bool = True,
+    source_type: str = "html",
+    **kwargs,
+) -> dict:
+    """Build a tree index from HTML content in memory.
+
+    Shared core of ``html_to_tree``; also used by the MHTML parser
+    (which unpacks the HTML part from the MIME archive first).
+    """
     headings, plain_text = _extract_html_structure(html_content)
 
     if not headings:
@@ -104,7 +137,7 @@ async def html_to_tree(
             **kwargs,
         )
         result["doc_name"] = doc_name
-        result["source_path"] = os.path.abspath(html_path)
+        result["source_path"] = source_path
         return result
 
     # Build nodes from headings
@@ -129,8 +162,8 @@ async def html_to_tree(
 
     return _finalize_tree(
         tree, doc_name,
-        source_path=os.path.abspath(html_path),
-        source_type="html",
+        source_path=source_path,
+        source_type=source_type,
         if_add_node_id=if_add_node_id,
         if_add_node_summary=if_add_node_summary,
         summary_chars_threshold=summary_chars_threshold,

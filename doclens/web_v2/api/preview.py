@@ -15,7 +15,8 @@ from doclens.config import data_dirname
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
-from treesearch.parsers.image_store import ImageStore, doc_hash_for
+from treesearch.parsers.image_store import ImageStore, doc_hash_for, _EXT_TO_MEDIA
+from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 from doclens.web_v2.models.preview import (
     PreviewResponse,
     PreviewSaveRequest,
@@ -27,11 +28,12 @@ from doclens.web_v2.preview_synthesizer import render_tree_to_md
 router = APIRouter()
 
 # 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
+# （.mhtml/.mht 是 MIME 打包文本，原始预览无意义，同样走合成）
 BINARY_PREVIEW_EXTS = frozenset({
     ".pdf", ".docx", ".pptx",
     ".xlsx", ".xlsm", ".xltx", ".xltm",
-    ".csv",
-})
+    ".csv", ".mhtml", ".mht",
+}) | IMAGE_EXTENSIONS
 
 
 def _compute_writable(full: Path, search_path: Path) -> bool:
@@ -42,6 +44,9 @@ def _compute_writable(full: Path, search_path: Path) -> bool:
     if not full.exists() or not full.is_file():
         return False
     if full.suffix.lower() in BINARY_PREVIEW_EXTS:
+        return False
+    # PST 物理文件：预览是合成的邮件目录页，写回会毁掉 GB 级二进制
+    if full.suffix.lower() == ".pst":
         return False
     # 数据目录内部不让用户改索引（开发 .cortex / 发行版 .doclens）
     try:
@@ -155,6 +160,26 @@ async def preview_asset(
     return FileResponse(path=str(file_path), media_type=media_type)
 
 
+@router.get("/preview/raw")
+async def preview_raw(
+    path: str = Query(..., description="图像文件相对路径"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """直接返回独立图像文件的字节流（供图像预览顶部嵌入原图）。
+
+    仅限图像扩展名（IMAGE_EXTENSIONS）；path 经越权校验。
+    """
+    base = Path(idx.search_path)
+    full, _resolved_rel = _resolve_path(base, path, idx)
+    ext = full.suffix.lower()
+    if ext not in IMAGE_EXTENSIONS:
+        raise CortexAPIError(400, "NOT_AN_IMAGE", f"非图像文件: {path}")
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+    media_type = _EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
+    return FileResponse(path=str(full), media_type=media_type)
+
+
 @router.get("/preview", response_model=PreviewResponse)
 async def preview(
     path: str = Query(..., description="相对路径"),
@@ -163,6 +188,13 @@ async def preview(
     idx: IndexManager = Depends(get_index_manager),
 ):
     base = Path(idx.search_path)
+    # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md
+    if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
+        return _synthesize_binary_preview(idx, path)
+    # PST 物理文件：GB 级二进制，绝不能 read_text（会把事件循环拖死）——
+    # 合成邮件目录页（总数 + 前 N 封主题列表）
+    if path.lower().endswith(".pst"):
+        return _synthesize_pst_overview(idx, path)
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
@@ -205,6 +237,65 @@ async def preview(
     )
 
 
+# PST 目录页列出的邮件主题上限（超出只显示总数）
+_PST_OVERVIEW_LIST_LIMIT = 200
+
+# MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），展示前清除
+_SUBJECT_CONTROL_CHARS = re.compile(r"[\x00-\x1f]")
+
+
+def _clean_subject(name: str) -> str:
+    cleaned = _SUBJECT_CONTROL_CHARS.sub("", name or "").strip()
+    return cleaned or "(无主题)"
+
+
+def _synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewResponse:
+    """PST 物理文件的预览：合成邮件目录页（总数 + 前 N 封主题）。"""
+    from treesearch.fts import FTS5Index
+
+    abs_path = os.path.abspath(os.path.join(idx.search_path, rel_path))
+    prefix = abs_path + "#"
+    fts = FTS5Index(db_path=idx.index_path)
+    try:
+        total = fts.count_docs_with_source_prefix(prefix)
+        names = fts.list_doc_names_by_source_prefix(prefix, _PST_OVERVIEW_LIST_LIMIT)
+    finally:
+        fts.close()
+
+    if total == 0:
+        raise CortexAPIError(
+            status=404,
+            code="NOT_INDEXED",
+            detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
+        )
+
+    name = os.path.basename(rel_path)
+    lines = [
+        f"# {name}",
+        "",
+        f"Outlook 邮件数据文件，共 **{total}** 封邮件已索引。",
+        "",
+        "每封邮件是独立文档（路径形如 `<文件名>#<邮件ID>`），"
+        "可直接搜索发件人、主题、正文与白名单附件内容。",
+        "",
+    ]
+    if names:
+        shown = len(names)
+        heading = f"## 邮件主题（前 {shown} 封）" if total > shown else "## 邮件主题"
+        lines.append(heading)
+        lines.append("")
+        lines.extend(f"- {_clean_subject(n)}" for n in names)
+
+    return PreviewResponse(
+        path=rel_path,
+        language="markdown",
+        content="\n".join(lines),
+        line_range=None,
+        highlights=[],
+        writable=False,
+    )
+
+
 def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewResponse:
     """从 DB 读 structure_json → 合成 md → 返回 language=markdown。"""
     from treesearch.fts import FTS5Index
@@ -228,6 +319,12 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
 
     md_content, line_map = render_tree_to_md(doc.structure, doc.source_type)
     pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content)
+    # 图像文件：顶部嵌入原图（经 /api/preview/raw 服务源文件），下方为视觉解析结果
+    if doc.source_type == "image":
+        from urllib.parse import quote
+
+        raw_url = f"/api/preview/raw?path={quote(rel_path, safe='')}"
+        cleaned_md = f"![原图]({raw_url})\n\n{cleaned_md}"
     # pdf 分支 _extract_pdf_pages 会剥除 [PAGE N] 标记并重排行号，
     # 导致 line_map（基于原始 md 行号）失真；此时丢弃映射，避免误导。
     # docx/xlsx/csv 分支 cleaned_md == md_content，line_map 仍然有效。

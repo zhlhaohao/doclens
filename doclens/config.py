@@ -160,10 +160,12 @@ class CortexConfig(BaseSettings):
     )
 
     # 允许解析的文件类型（逗号分隔；空=全部允许）
-    # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, pptx, excel
-    # 默认仅文档类（markdown/csv/pdf/doc/docx/pptx/excel），排除 code/text/json/html/xml
+    # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, pptx, excel, image, pst
+    # 默认文档类 + 网页存档 + 图像 + 邮件存档，排除 code/text/json/xml
+    # html 涵盖 .html/.htm/.mhtml/.mht（MHTML 解包后复用 HTML 解析）
+    # pst = Outlook 邮件数据文件（经 bin/pst-extract sidecar 解包，每封邮件一个文档）
     allowed_source_types_str: str = Field(
-        default="markdown,csv,pdf,doc,docx,pptx,excel",
+        default="markdown,csv,pdf,doc,docx,pptx,excel,html,image,pst",
         alias="CORTEX_ALLOWED_SOURCE_TYPES",
     )
 
@@ -198,6 +200,23 @@ class CortexConfig(BaseSettings):
     )
     planify_provider: str = Field(default="minimax", alias="PLANIFY_PROVIDER")
     planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
+
+    # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）
+    vision_api_key: Optional[str] = Field(
+        default=None,
+        alias="VISION_API_KEY",
+        description="视觉模型 API Key；为空时图像只进占位节点（文件名可搜索）",
+    )
+    vision_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        alias="VISION_BASE_URL",
+        description="视觉模型 OpenAI-compat 端点（默认阿里百炼）",
+    )
+    vision_model: str = Field(
+        default="qwen-vl-max",
+        alias="VISION_MODEL",
+        description="视觉模型 ID（默认 qwen-vl-max）",
+    )
 
     @classmethod
     def _init_first_run(cls):
