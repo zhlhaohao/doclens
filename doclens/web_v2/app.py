@@ -18,7 +18,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动文件监控 + 视觉解析 worker + MCP server，退出时停止。"""
+    import asyncio
     from doclens.web_v2 import deps
+    from doclens.web_v2.watch_broker import get_watch_broker
+    # 先绑定事件循环，保证 start_watcher 的回调触发时 broadcast 可用
+    get_watch_broker().bind(asyncio.get_running_loop())
     deps.start_watcher()
     deps.start_vision_worker()
     await deps.start_mcp_server()

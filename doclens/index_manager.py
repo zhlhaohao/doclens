@@ -332,11 +332,31 @@ class IndexManager:
                     except Exception as e:
                         logger.debug("failed to get failed file stats: %s", e)
 
-                    new_ts.save_index()
+                    prev_count = len(self._ts.documents) if (self._ts and self._ts.documents) else 0
                     doc_count = len(new_ts.documents)
-                    logger.info("Background reindex completed: %d documents", doc_count)
-                    # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
-                    self._needs_reload = True
+                    if doc_count > 0 or prev_count == 0:
+                        new_ts.save_index()
+                        logger.info("Background reindex completed: %d documents", doc_count)
+                        # 立即刷新内存中的文档列表与 path_map：files API 的 indexed 标志、
+                        # /api/status 的 indexed_docs 都直接读 idx.documents（不经
+                        # load_or_build_index），若不刷新则改名/新增/删除文件的 indexed
+                        # 状态要等到下次搜索触发 reload 才会更新。
+                        # FTS 搜索仍由下面的 _needs_reload 在下次查询时从磁盘重载连接，保持原行为。
+                        if self._ts is not None:
+                            self._ts.documents = new_ts.documents
+                            self.build_path_map()
+                        # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
+                        self._needs_reload = True
+                    else:
+                        # index() 返回 0 但现有索引非空 —— 几乎都是 db 锁冲突导致
+                        # build_index 被跳过（返回 []）。绝不能用空结果覆盖：save 会把
+                        # db 清成 0、刷新 self._ts 会让 files API 的 indexed 全部消失。
+                        # 保留旧索引，本次视为跳过，下次文件变化会重新触发 reindex。
+                        logger.warning(
+                            "Background reindex produced 0 documents (likely db lock conflict); "
+                            "skipped save to preserve existing %d documents.", prev_count,
+                        )
+                        doc_count = prev_count
 
                     # 调用完成回调
                     if on_complete:

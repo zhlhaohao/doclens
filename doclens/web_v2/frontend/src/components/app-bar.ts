@@ -5,6 +5,7 @@ import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
+import "./watch-changes-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
@@ -55,11 +56,24 @@ export class AppBar extends LitElement {
       gap: var(--cortex-space-1);
       padding: 4px 10px;
       font-size: var(--cortex-fs-xs);
+      font-family: inherit;
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
       border-radius: 999px;
       background: var(--cortex-surface-muted);
       white-space: nowrap;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .watch-badge:hover {
+      background: var(--cortex-surface);
+      border-color: var(--cortex-primary);
+    }
+    .watch-badge:focus-visible {
+      outline: 2px solid var(--cortex-primary);
+      outline-offset: 1px;
     }
     .watch-badge.dot { color: var(--cortex-success); }
     .watch-badge.busy { color: var(--cortex-primary); }
@@ -203,8 +217,10 @@ export class AppBar extends LitElement {
 
   @state() private _menuOpen = false;
   @state() private _showSaveAndRevert = false;
-  /** 登录闸门生效且已登录时，菜单显示"注销登录" */
+  /** 登录闸门生效且已登录时，菜单显示“注销登录” */
   @state() private _showLogout = false;
+  /** watch 变化对话框开关（点击 watch 徽标打开） */
+  @state() private _watchDialogOpen = false;
   /** 刷新按钮旋转动画进行中标记：旋转期间禁用再次点击，避免动画错乱 */
   @state() private _refreshing = false;
   private _unsubStore?: () => void;
@@ -298,15 +314,37 @@ export class AppBar extends LitElement {
     this.requestUpdate();
   }
 
+  private _openWatchDialog() {
+    this._watchDialogOpen = true;
+  }
+
   private _renderWatchBadge(w: WatcherStatus | null) {
     const n = w?.last_doc_count;
     const nStr = n != null ? ` ${n}` : "";
-    if (!w || !w.running) return html`<span class="watch-badge">📁${nStr} ○监控关</span>`;
-    if (w.reindexing) return html`<span class="watch-badge busy">📁${nStr} ⟳更新中…</span>`;
-    if (w.changed_count > 0)
-      return html`<span class="watch-badge warn">📁${nStr} ·待更新 ${w.changed_count}</span>`;
-    const warn = w.last_success === false;
-    return html`<span class="watch-badge ${warn ? "warn" : "dot"}">📁${nStr} ●监控</span>`;
+    let cls = "";
+    let label = "";
+    if (!w || !w.running) {
+      cls = "";
+      label = `📁${nStr} ○监控关`;
+    } else if (w.reindexing) {
+      cls = "busy";
+      label = `📁${nStr} ⟳更新中…`;
+    } else if (w.changed_count > 0) {
+      cls = "warn";
+      label = `📁${nStr} ·待更新 ${w.changed_count}`;
+    } else {
+      cls = w.last_success === false ? "warn" : "dot";
+      label = `📁${nStr} ●监控`;
+    }
+    return html`
+      <button
+        class="watch-badge ${cls}"
+        type="button"
+        aria-label="文件监控状态"
+        title="点击查看近期文件变化"
+        @click=${this._openWatchDialog}
+      >${label}</button>
+    `;
   }
 
   render() {
@@ -370,6 +408,10 @@ export class AppBar extends LitElement {
         </div>
       </div>
       <toast-stack></toast-stack>
+      <watch-changes-dialog
+        .open=${this._watchDialogOpen}
+        @close=${() => { this._watchDialogOpen = false; }}
+      ></watch-changes-dialog>
     `;
   }
 }

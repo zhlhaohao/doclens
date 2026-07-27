@@ -5,12 +5,14 @@
 import logging
 import os
 import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from doclens.config import CortexConfig
 from doclens.index_manager import IndexManager
 from doclens.web_v2.sessions_store import SessionsStore
+from doclens.web_v2.watch_broker import get_watch_broker
 from planify.core.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -163,8 +165,26 @@ def set_watcher(watcher) -> None:
         _watcher = watcher
 
 
+def watch_snapshot() -> dict[str, Any]:
+    """当前 watch 状态快照（SSE 首推 / GET /api/watch/status / 回调广播共用）。
+
+    结构与 GET /api/watch/status 返回一致：{enabled, watcher, recent_changes}。
+    """
+    w = get_watcher()
+    return {
+        "enabled": get_config().watch_enabled,
+        "watcher": w.status() if w is not None else None,
+        "recent_changes": get_watch_broker().recent_changes(),
+    }
+
+
 def start_watcher() -> bool:
-    """根据 config.watch_enabled 创建并启动 FileWatcher。
+    """根据 config.watch_enabled 创建并启动 FileWatcher，并接线上报回调。
+
+    三个回调把 watch 状态变化经 WatchBroker fan-out 给所有 SSE 客户端：
+    - on_change: 记录近期变化 + 广播 status 快照（changed_count 已更新）。
+    - on_reindex_start: 广播 status（reindexing=true）。
+    - on_reindex_done: 广播 status（终态）+ reindexed（触发前端 toast）。
 
     Returns:
         True 表示已启动；False 表示因配置关闭或 watchdog 不可用而未启动。
@@ -177,14 +197,48 @@ def start_watcher() -> bool:
     idx = get_index_manager()
     try:
         from doclens.file_watcher import FileWatcher
-        watcher = FileWatcher(idx, debounce_seconds=config.watch_debounce)
+        broker = get_watch_broker()
+        search_path = idx.search_path
+
+        def _on_change(file_path: str) -> None:
+            try:
+                rel = os.path.relpath(file_path, search_path)
+            except ValueError:
+                # Windows 跨盘符 relpath 会抛 ValueError：退回原路径
+                rel = file_path
+            broker.record_change(rel, os.path.basename(rel), time.time())
+            broker.broadcast("status", watch_snapshot())
+
+        def _on_reindex_start() -> None:
+            broker.broadcast("status", watch_snapshot())
+
+        def _on_reindex_done(success: bool, doc_count: int, failed_count: int) -> None:
+            broker.broadcast("status", watch_snapshot())
+            broker.broadcast("reindexed", {
+                "success": success,
+                "doc_count": doc_count,
+                "failed_count": failed_count,
+            })
+
+        watcher = FileWatcher(
+            idx,
+            debounce_seconds=config.watch_debounce,
+            on_change_callback=_on_change,
+            on_reindex_start=_on_reindex_start,
+            on_reindex_done=_on_reindex_done,
+        )
+        # 先注册单例，保证回调触发时 get_watcher()（watch_snapshot 内）可见
+        set_watcher(watcher)
         if not watcher.start():
+            set_watcher(None)
             logger.warning("FileWatcher.start() returned False (watchdog unavailable?)")
             return False
-        set_watcher(watcher)
-        logger.info("FileWatcher started for %s", idx.search_path)
+        logger.info("FileWatcher started for %s", search_path)
+        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态
+        broker.broadcast("status", watch_snapshot())
         return True
     except Exception as exc:  # noqa: BLE001
+        set_watcher(None)
         logger.exception("start_watcher failed: %s", exc)
         return False
 
