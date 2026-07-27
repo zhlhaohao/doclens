@@ -1217,13 +1217,20 @@ def _acquire_index_lock(db_path: str):
                     self._fh.close()
                     self._fh = None
 
-    try:
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-        return _WindowsHandle(f)
-    except (OSError, IOError) as e:
-        f.close()
-        logger.warning("Failed to acquire Windows index lock %s: %s", lock_path, e)
-        return _NullLock()
+    import time as _time
+    # 重试：瞬态锁冲突（同进程内并发的 build_index）不该让本次索引直接放弃并返回 []
+    # （会把 documents 清空，导致 files API 的 indexed 标志全部消失）。
+    last_err = None
+    for _attempt in range(10):
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            return _WindowsHandle(f)
+        except (OSError, IOError) as e:
+            last_err = e
+            _time.sleep(0.2)
+    f.close()
+    logger.warning("Failed to acquire Windows index lock %s after retries: %s", lock_path, last_err)
+    return _NullLock()
 
 
 def _file_hash(fp: str, mode: Optional[str] = None) -> str:
