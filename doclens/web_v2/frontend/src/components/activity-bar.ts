@@ -23,28 +23,40 @@ export class ActivityBar extends LitElement {
       min-width: 100%;
       min-height: 40px;
       padding: var(--cortex-space-2) var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
+      /* 对齐 tab-bar：无边框、透明底、muted 文字 */
+      border: none;
+      background: transparent;
+      color: var(--cortex-text-muted);
       cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
+      border-radius: var(--cortex-radius-md);
       display: flex;
       align-items: center;
       justify-content: flex-start;
       gap: var(--cortex-space-3);
-      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
+      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast);
       white-space: nowrap;
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-sm);
       font-weight: 600;
     }
-    button:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-subtle); }
+    button:hover { background: var(--cortex-surface-muted); }
     button.active {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-surface);
-      border-color: var(--cortex-btn-primary-bg);
+      /* 对齐 tab-bar：激活无底色，深红文字 + 加粗（写在 :hover 之后以覆盖残留灰底） */
+      background: transparent;
+      color: var(--cortex-nav-active);
+      font-weight: 700;
     }
-    .icon { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+    .icon {
+      font-size: 22px;        /* 对齐 tab-bar 图标尺寸 */
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      transition: color var(--cortex-duration-fast);
+    }
+    /* 激活项图标：深红（搭配 .filled 实心填充，与 tab-bar 完全一致） */
+    button.active .icon { color: var(--cortex-nav-active); }
     .label { font-size: var(--cortex-fs-sm); }
   `;
 
@@ -71,7 +83,7 @@ export class ActivityBar extends LitElement {
           title=${it.label}
           aria-label=${it.label}
           @click=${() => this._select(it.id)}>
-          <doclens-icon class="icon" name=${it.icon}></doclens-icon>
+          <doclens-icon class="icon ${this.active === it.id ? "filled" : ""}" name=${it.icon}></doclens-icon>
           <span class="label">${it.label}</span>
         </button>`)}
     `;

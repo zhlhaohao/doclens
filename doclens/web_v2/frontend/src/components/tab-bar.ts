@@ -33,7 +33,7 @@ export class TabBar extends LitElement {
     .tab:hover { background: var(--cortex-surface-muted); }
     .tab.active {
       background: transparent;   /* 激活 tab 无底色（覆盖移动端 :hover 残留灰底） */
-      color: #b91c1c;             /* 深红，非纯红 */
+      color: var(--cortex-nav-active);  /* 深红，非纯红 */
       font-weight: 700;
     }
     .tab .icon {
@@ -43,7 +43,7 @@ export class TabBar extends LitElement {
     }
     /* 激活 tab：图标也变深红（无背景、无胶囊） */
     .tab.active .icon {
-      color: #b91c1c;
+      color: var(--cortex-nav-active);
     }
   `;
 

@@ -2219,7 +2219,7 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
           title=${e.label}
           aria-label=${e.label}
           @click=${()=>this._select(e.id)}>
-          <doclens-icon class="icon" name=${e.icon}></doclens-icon>
+          <doclens-icon class="icon ${this.active===e.id?"filled":""}" name=${e.icon}></doclens-icon>
           <span class="label">${e.label}</span>
         </button>`)}
     `}};Zt.styles=_`
@@ -2241,28 +2241,40 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
       min-width: 100%;
       min-height: 40px;
       padding: var(--cortex-space-2) var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
+      /* 对齐 tab-bar：无边框、透明底、muted 文字 */
+      border: none;
+      background: transparent;
+      color: var(--cortex-text-muted);
       cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
+      border-radius: var(--cortex-radius-md);
       display: flex;
       align-items: center;
       justify-content: flex-start;
       gap: var(--cortex-space-3);
-      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
+      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast);
       white-space: nowrap;
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-sm);
       font-weight: 600;
     }
-    button:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-subtle); }
+    button:hover { background: var(--cortex-surface-muted); }
     button.active {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-surface);
-      border-color: var(--cortex-btn-primary-bg);
+      /* 对齐 tab-bar：激活无底色，深红文字 + 加粗（写在 :hover 之后以覆盖残留灰底） */
+      background: transparent;
+      color: var(--cortex-nav-active);
+      font-weight: 700;
     }
-    .icon { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+    .icon {
+      font-size: 22px;        /* 对齐 tab-bar 图标尺寸 */
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      transition: color var(--cortex-duration-fast);
+    }
+    /* 激活项图标：深红（搭配 .filled 实心填充，与 tab-bar 完全一致） */
+    button.active .icon { color: var(--cortex-nav-active); }
     .label { font-size: var(--cortex-fs-sm); }
   `;To([d()],Zt.prototype,"active",2);Zt=To([C("activity-bar")],Zt);var Ma=Object.defineProperty,Na=Object.getOwnPropertyDescriptor,Ao=(e,t,r,s)=>{for(var o=s>1?void 0:s?Na(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(o=(s?a(t,r,o):a(o))||o);return s&&o&&Ma(t,r,o),o};let Jt=class extends k{constructor(){super(...arguments),this.active="search",this._items=[{id:"search",icon:"search",label:"搜索"},{id:"chat",icon:"message-circle",label:"对话"},{id:"files",icon:"folder",label:"文件"}]}_select(e){this.dispatchEvent(new CustomEvent("navigate",{detail:{view:e},bubbles:!0,composed:!0}))}render(){return c`
       ${this._items.map(e=>c`
@@ -2301,7 +2313,7 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
     .tab:hover { background: var(--cortex-surface-muted); }
     .tab.active {
       background: transparent;   /* 激活 tab 无底色（覆盖移动端 :hover 残留灰底） */
-      color: #b91c1c;             /* 深红，非纯红 */
+      color: var(--cortex-nav-active);  /* 深红，非纯红 */
       font-weight: 700;
     }
     .tab .icon {
@@ -2311,7 +2323,7 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
     }
     /* 激活 tab：图标也变深红（无背景、无胶囊） */
     .tab.active .icon {
-      color: #b91c1c;
+      color: var(--cortex-nav-active);
     }
   `;Ao([d()],Jt.prototype,"active",2);Jt=Ao([C("tab-bar")],Jt);var Fa=Object.defineProperty,Ba=Object.getOwnPropertyDescriptor,ue=(e,t,r,s)=>{for(var o=s>1?void 0:s?Ba(t,r):t,i=e.length-1,a;i>=0;i--)(a=e[i])&&(o=(s?a(t,r,o):a(o))||o);return s&&o&&Fa(t,r,o),o};let ie=class extends k{constructor(){super(...arguments),this.variant="compact",this.heading="Doclens",this.subheading="",this.suffix="",this.heroIcon="",this.modes=[],this.examples=[],this.workdir=""}render(){return this.variant==="onboarding"?this._renderOnboarding():this._renderCompact()}_renderCompact(){return c`
       <h1 class="title">
@@ -2398,19 +2410,20 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
       width: 100%;
       margin: 0;
       padding: var(--cortex-space-6) var(--cortex-space-5);
-      /* 聚光灯 hero（更淡）：亮白热斑 → 浅奶油 → 暖金 → 金 → 柔琥珀向外衰减，
-         保留聚焦光斑但整体更柔和清淡。暖色；文字深色，亮区可读。 */
+      /* 聚光灯 hero（极淡蓝）：亮白热斑 → 极淡蓝向外微衰减，清淡通透；文字深色可读。 */
       background:
-        radial-gradient(circle at 18% 22%, #fffdf2 0%, #fef3c7 22%, #fde68a 45%, #fcd34d 70%, #f7b928 100%);
+        radial-gradient(circle at 18% 22%, #ffffff 0%, #f5f9ff 30%, #edf3fd 60%, #e4eefb 100%);
       color: var(--cortex-text);
       border: none;
       border-radius: var(--cortex-radius-3xl);
       box-shadow: var(--cortex-shadow-md);
     }
     .title-group {
+      /* 图标 + 标题同一行（避免列堆叠把 card-head 撑高），桌面/移动一致 */
       display: flex;
-      flex-direction: column;
-      gap: var(--cortex-space-4);
+      flex-direction: row;
+      align-items: center;
+      gap: var(--cortex-space-3);
       min-width: 0;
     }
     .hero-mark {
@@ -2430,14 +2443,20 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      flex-wrap: wrap;
+      /* 标题组 + 模式 chips 始终同一行；标题过长由 card-title 省略号兜底 */
+      flex-wrap: nowrap;
     }
     .onboarding-card .card-title {
-      font-size: var(--cortex-fs-xl);
+      /* 桌面 hero 标题：介于 fs-lg(17) 与 fs-xl(30) 之间的 22px，仍是标题级别但不再过大 */
+      font-size: 22px;
       font-weight: 700;
       color: var(--cortex-text);
       letter-spacing: -0.02em;
       margin: 0;
+      /* card-head nowrap 兜底：标题过长时省略号，避免挤压右侧 modes chips */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .onboarding-subheading {
       font-size: var(--cortex-fs-sm);
@@ -2502,6 +2521,7 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      flex-shrink: 0;
     }
     .chip {
       display: inline-flex;
@@ -2556,8 +2576,7 @@ var ri=Object.defineProperty;var si=(e,t,r)=>t in e?ri(e,t,{enumerable:!0,config
       .title { font-size: var(--cortex-fs-lg); }
       .subtitle { font-size: var(--cortex-fs-sm); }
       .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); }
-      /* 窄屏：大图标 + 标题并排一行；隐藏模式 chip 胶囊，压缩行数 */
-      .title-group { flex-direction: row; align-items: center; gap: var(--cortex-space-3); }
+      /* 窄屏：缩小 hero 圆盘 + 隐藏模式 chip 胶囊（title-group 已默认同行） */
       .hero-mark { width: 36px; height: 36px; font-size: 18px; }
       .modes-row { display: none; }
       .card-title { font-size: var(--cortex-fs-lg); }

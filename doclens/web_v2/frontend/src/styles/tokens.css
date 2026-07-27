@@ -43,6 +43,7 @@
   --cortex-attention: #f2a918;
   --cortex-danger: #e41e3f;          /* critical */
   --cortex-danger-strong: #f0284a;   /* 表单错误边框（critical-strong） */
+  --cortex-nav-active: #b91c1c;      /* 导航激活：深红文字 + 实心图标（activity-bar / tab-bar 共用，保证两端风格一致） */
 
   /* ── Chat 专用（Meta 化）── */
   --cortex-chat-bg: #ffffff;
