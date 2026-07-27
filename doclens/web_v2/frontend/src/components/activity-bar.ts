@@ -22,7 +22,8 @@ export class ActivityBar extends LitElement {
       width: max-content;
       min-width: 100%;
       min-height: 40px;
-      padding: var(--cortex-space-2) var(--cortex-space-3);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      /* 对齐 tab-bar：无边框、透明底、muted 文字 */
       border: none;
       background: transparent;
       color: var(--cortex-text-muted);
@@ -32,26 +33,39 @@ export class ActivityBar extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: var(--cortex-space-3);
-      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast);
       white-space: nowrap;
-    }
-    button:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
-    button.active {
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-sm);
       font-weight: 600;
-      box-shadow: inset 3px 0 0 var(--cortex-primary);
     }
-    .icon { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+    button:hover { background: var(--cortex-surface-muted); }
+    button.active {
+      /* 对齐 tab-bar：激活无底色，深红文字 + 加粗（写在 :hover 之后以覆盖残留灰底） */
+      background: transparent;
+      color: var(--cortex-nav-active);
+      font-weight: 700;
+    }
+    .icon {
+      font-size: 22px;        /* 对齐 tab-bar 图标尺寸 */
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      transition: color var(--cortex-duration-fast);
+    }
+    /* 激活项图标：深红（搭配 .filled 实心填充，与 tab-bar 完全一致） */
+    button.active .icon { color: var(--cortex-nav-active); }
     .label { font-size: var(--cortex-fs-sm); }
   `;
 
   @property() active: ViewId = "search";
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
-    { id: "search", icon: "🔍", label: "搜索" },
-    { id: "chat", icon: "💬", label: "对话" },
-    { id: "files", icon: "📁", label: "文件" },
+    { id: "search", icon: "search", label: "搜索" },
+    { id: "chat", icon: "message-circle", label: "对话" },
+    { id: "files", icon: "folder", label: "文件" },
   ];
 
   private _select(id: ViewId) {
@@ -69,7 +83,7 @@ export class ActivityBar extends LitElement {
           title=${it.label}
           aria-label=${it.label}
           @click=${() => this._select(it.id)}>
-          <span class="icon">${it.icon}</span>
+          <doclens-icon class="icon ${this.active === it.id ? "filled" : ""}" name=${it.icon}></doclens-icon>
           <span class="label">${it.label}</span>
         </button>`)}
     `;

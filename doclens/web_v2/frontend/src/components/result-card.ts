@@ -19,11 +19,9 @@ export class ResultCard extends LitElement {
     :host([active]) {
       border-color: var(--cortex-primary);
       background: var(--cortex-primary-soft);
-      box-shadow: var(--cortex-shadow-md);
     }
     :host(:hover) {
       border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-shadow-md);
     }
     .path {
       font-size: var(--cortex-fs-xs);
@@ -116,7 +114,7 @@ export class ResultCard extends LitElement {
       margin-top: 4px;
     }
     mark {
-      background: rgba(0, 82, 255, 0.15);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;

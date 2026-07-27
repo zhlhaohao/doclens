@@ -33,12 +33,15 @@ export class FileList extends LitElement {
     }
     .up-btn {
       padding: 2px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: var(--cortex-fs-sm);
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-pill);
       line-height: 1.4;
     }
     .up-btn:hover:not(:disabled) { background: var(--cortex-surface-muted); }
@@ -53,12 +56,15 @@ export class FileList extends LitElement {
     }
     .toolbar button {
       padding: 6px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: var(--cortex-fs-sm);
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      border-radius: var(--cortex-radius-md);
+      border-radius: var(--cortex-radius-pill);
     }
     .toolbar button:hover:not(:disabled) {
       background: var(--cortex-surface-muted);
@@ -88,9 +94,13 @@ export class FileList extends LitElement {
       cursor: pointer;
       font-size: 18px;
       line-height: 1;
-      padding: 6px 10px;
-      border-radius: var(--cortex-radius-sm);
-      min-width: 36px;
+      padding: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     .mobile-header .mobile-back:hover,
     .mobile-header .mobile-more:hover {
@@ -120,7 +130,9 @@ export class FileList extends LitElement {
       padding: 4px 0;
     }
     .mobile-header .mobile-menu button {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       width: 100%;
       text-align: left;
       border: none;
@@ -383,14 +395,14 @@ export class FileList extends LitElement {
           type="button"
           aria-label="返回"
           @click=${this._onMobileBackClick}
-        >←</button>
+        ><doclens-icon name="arrow-left"></doclens-icon></button>
         <span class="mobile-path" title=${breadcrumb}>${breadcrumb}</span>
         <button
           class="mobile-more"
           type="button"
           aria-label="更多操作"
           @click=${this._onMobileMoreClick}
-        >⋯</button>
+        ><doclens-icon name="more-horizontal"></doclens-icon></button>
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
@@ -399,27 +411,27 @@ export class FileList extends LitElement {
                   role="menuitem"
                   data-action="mkdir"
                   @click=${this._onMenuItemClick("mkdir")}
-                >+ 新目录</button>
+                ><doclens-icon name="folder-plus"></doclens-icon>新目录</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="upload"
                   @click=${this._onMenuItemClick("upload")}
-                >⬆ 上传</button>
+                ><doclens-icon name="upload"></doclens-icon>上传</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="rename"
                   ?disabled=${!canRename}
                   @click=${this._onMenuItemClick("rename")}
-                >✎ 重命名</button>
+                ><doclens-icon name="pencil"></doclens-icon>重命名</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="move"
                   ?disabled=${!canAct}
                   @click=${this._onMenuItemClick("move")}
-                >→ 移动</button>
+                ><doclens-icon name="arrow-right"></doclens-icon>移动</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -427,7 +439,7 @@ export class FileList extends LitElement {
                   ?disabled=${!canAct}
                   class="danger"
                   @click=${this._onMenuItemClick("delete")}
-                >🗑 删除</button>
+                ><doclens-icon name="trash-2"></doclens-icon>删除</button>
               </div>
             `
           : null}
@@ -483,15 +495,15 @@ export class FileList extends LitElement {
           title="返回上一级目录"
           ?disabled=${!canGoUp}
           @click=${this._goUp}
-        >↑</button>
+        ><doclens-icon name="arrow-up"></doclens-icon></button>
         <span class="path">${breadcrumb}</span>
       </div>
       <div class="toolbar">
-        <button data-action="mkdir" @click=${() => this._action("mkdir")}>+ 新目录</button>
-        <button data-action="upload" @click=${() => this._action("upload")}>⬆ 上传</button>
-        <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}>✎ 重命名</button>
-        <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}>→ 移动</button>
-        <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}>🗑 删除</button>
+        <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon>新目录</button>
+        <button data-action="upload" @click=${() => this._action("upload")}><doclens-icon name="upload"></doclens-icon>上传</button>
+        <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon>重命名</button>
+        <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon>移动</button>
+        <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon>删除</button>
       </div>
       ${entries.length === 0
         ? html`<div class="empty">目录为空</div>`

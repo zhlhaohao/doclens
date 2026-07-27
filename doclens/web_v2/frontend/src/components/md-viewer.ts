@@ -120,7 +120,7 @@ export class MdViewer extends LitElement {
     :host {
       display: block;
       padding: var(--cortex-space-4);
-      background: var(--cortex-bg);   /* 灰底：让白纸浮起 */
+      background: var(--cortex-surface-muted);   /* surface-soft 底：白画布上让白纸浮起 */
       font-family: var(--cortex-font);
       font-size: var(--cortex-fs-base);
       line-height: 1.7;
@@ -251,13 +251,13 @@ export class MdViewer extends LitElement {
       animation: highlight-flash 2s ease-out;
     }
     @keyframes highlight-flash {
-      0% { box-shadow: 0 0 0 4px rgba(0, 82, 255, 0.12); }
+      0% { box-shadow: 0 0 0 4px rgba(0, 100, 224, 0.12); }
       100% { box-shadow: 0 0 0 4px transparent; }
     }
     /* 搜索关键字命中高亮（primary-soft 底，类似浏览器 Ctrl+F）
        SaaS Boutique：旧 amber #FEF3C7 已替换为 primary-based rgba。 */
     :host mark.keyword-hit {
-      background: rgba(0, 82, 255, 0.15);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;

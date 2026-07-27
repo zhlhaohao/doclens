@@ -42,11 +42,11 @@ export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network"];
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "AI 配置",
   search: "搜索调优",
-  network: "🌐 网络监听",
+  network: "网络监听",
 };
 
 /** 评分权重 section 标题（settings-view 据此渲染两列网格 + 恢复默认按钮）。 */
-export const WEIGHT_SECTION = "⚖️ 评分权重";
+export const WEIGHT_SECTION = "评分权重";
 
 /** 权重默认值，必须与 doclens/config.py 的 Field default 一致。 */
 export const DEFAULT_WEIGHTS: Record<string, string> = {
@@ -156,7 +156,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   // ===== AI 配置 (5) =====
   {
     tab: "ai",
-    section: "🤖 AI 模型与 API",
+    section: "AI 模型与 API",
     envVar: "PLANIFY_PROVIDER",
     label: "LLM 提供商",
     component: "select",
@@ -166,7 +166,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "ai",
-    section: "🤖 AI 模型与 API",
+    section: "AI 模型与 API",
     envVar: "PLANIFY_PROTOCOL",
     label: "API 协议",
     component: "select",
@@ -176,7 +176,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "ai",
-    section: "🤖 AI 模型与 API",
+    section: "AI 模型与 API",
     envVar: "PLANIFY_BASE_URL",
     label: "API Base URL",
     component: "text",
@@ -186,7 +186,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "ai",
-    section: "🤖 AI 模型与 API",
+    section: "AI 模型与 API",
     envVar: "PLANIFY_API_KEY",
     label: "API Key",
     component: "password",
@@ -196,7 +196,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "ai",
-    section: "🤖 AI 模型与 API",
+    section: "AI 模型与 API",
     envVar: "PLANIFY_MODEL_ID",
     label: "模型 ID",
     component: "text",
@@ -272,10 +272,10 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     hint: "邻近度统计的关键词最大字符跨度",
   },
 
-  // ===== 搜索调优 · ⚖️ 评分权重 (5) =====
+  // ===== 搜索调优 · 评分权重 (5) =====
   {
     tab: "search",
-    section: "⚖️ 评分权重",
+    section: "评分权重",
     envVar: "CORTEX_WEIGHT_KEYWORD_MATCH",
     label: "关键词匹配权重",
     component: "slider",
@@ -287,7 +287,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "search",
-    section: "⚖️ 评分权重",
+    section: "评分权重",
     envVar: "CORTEX_WEIGHT_FILE_NAME_MATCH",
     label: "文件名匹配权重",
     component: "slider",
@@ -299,7 +299,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "search",
-    section: "⚖️ 评分权重",
+    section: "评分权重",
     envVar: "CORTEX_WEIGHT_FTS_SCORE",
     label: "FTS 原始分权重",
     component: "slider",
@@ -311,7 +311,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "search",
-    section: "⚖️ 评分权重",
+    section: "评分权重",
     envVar: "CORTEX_WEIGHT_TITLE_MATCH",
     label: "标题匹配权重",
     component: "slider",
@@ -323,7 +323,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "search",
-    section: "⚖️ 评分权重",
+    section: "评分权重",
     envVar: "CORTEX_WEIGHT_PROXIMITY_MATCH",
     label: "邻近度权重",
     component: "slider",
@@ -334,10 +334,10 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     hint: "关键词紧邻出现的文档排更前",
   },
 
-  // ===== 网络监听 (4，🌐 网络监听 tab；effect restart：改后需重启 gui) =====
+  // ===== 网络监听 (4，网络监听 tab；effect restart：改后需重启 gui) =====
   {
     tab: "network",
-    section: "🔌 监听地址",
+    section: "监听地址",
     envVar: "CORTEX_WEB_HOST",
     label: "Web 监听地址",
     component: "text",
@@ -347,7 +347,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "network",
-    section: "🔌 监听地址",
+    section: "监听地址",
     envVar: "CORTEX_WEB_PORT",
     label: "Web 监听端口",
     component: "number",
@@ -358,7 +358,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "network",
-    section: "🔌 监听地址",
+    section: "监听地址",
     envVar: "CORTEX_MCP_HOST",
     label: "MCP 监听地址",
     component: "text",
@@ -368,7 +368,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   },
   {
     tab: "network",
-    section: "🔌 监听地址",
+    section: "监听地址",
     envVar: "CORTEX_MCP_PORT",
     label: "MCP 监听端口",
     component: "number",

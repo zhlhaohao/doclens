@@ -19,6 +19,9 @@ html, body {
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Meta 排版：body 行高 1.5 + 轻微负字距（可继承；标题/mono 各自覆盖） */
+  line-height: var(--cortex-lh-body);
+  letter-spacing: var(--cortex-tracking-body);
 }
 
 /* PWA standalone 模式优化 */

@@ -7,7 +7,7 @@ export class DropZone extends LitElement {
     :host { display: contents; }
     .overlay {
       position: fixed; inset: 0;
-      background: rgba(0, 82, 255, 0.05);
+      background: rgba(0, 100, 224, 0.05);
       border: 2px dashed var(--cortex-primary);
       border-radius: var(--cortex-radius-lg);
       display: none;
@@ -89,8 +89,8 @@ export class DropZone extends LitElement {
   render() {
     return html`
       <div class="overlay ${this._active ? "active" : ""}">
-        <div>⬇ 拖放以上传到</div>
-        <div>📁 ${this.targetDir || "/"}</div>
+        <div><doclens-icon name="upload"></doclens-icon> 拖放以上传到</div>
+        <div><doclens-icon name="folder"></doclens-icon> ${this.targetDir || "/"}</div>
       </div>
     `;
   }

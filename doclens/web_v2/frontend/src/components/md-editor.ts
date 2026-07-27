@@ -62,7 +62,7 @@ export class MdEditor extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-pill);
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
@@ -78,20 +78,19 @@ export class MdEditor extends LitElement {
     }
     /* 主按钮：保存 = primary gradient + glow */
     button.save-btn {
-      background: var(--cortex-primary-gradient);
-      color: #fff;
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-btn-primary-text);
       border: none;
-      border-radius: var(--cortex-radius-md);
-      box-shadow: var(--cortex-primary-glow);
+      border-radius: var(--cortex-radius-pill);
     }
     button.save-btn:hover {
       opacity: 0.9;
-      background: var(--cortex-primary-gradient);
-      color: #fff;
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-btn-primary-text);
     }
     button.save-btn:focus-visible {
       outline: none;
-      box-shadow: var(--cortex-focus-ring), var(--cortex-primary-glow);
+      box-shadow: var(--cortex-focus-ring);
     }
     .body {
       display: flex;
@@ -223,14 +222,14 @@ export class MdEditor extends LitElement {
           ? null
           : html`<span class="path">${this.path}</span>`}
         ${this._error
-          ? html`<span class="error-msg">⚠ ${this._error}</span>`
+          ? html`<span class="error-msg"><doclens-icon name="alert-triangle"></doclens-icon> ${this._error}</span>`
           : this._dirty
           ? html`<span class="dirty">●未保存</span>`
           : null}
         <button class="save-btn" ?disabled=${!this._dirty} @click=${this._onSaveClick}>
-          💾 保存
+          <doclens-icon name="save"></doclens-icon>保存
         </button>
-        <button class="cancel-btn" @click=${this._onCancelClick}>✖ 取消</button>
+        <button class="cancel-btn" @click=${this._onCancelClick}><doclens-icon name="x"></doclens-icon>取消</button>
       </div>
       <div class="body">
         <div class="line-col">
