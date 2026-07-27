@@ -906,6 +906,12 @@ def _build_parser():
     )
     gui_parser.set_defaults(func=_cli_gui)
 
+    # cortex auth reset
+    auth_parser = sub.add_parser("auth", help="GUI 访问密码管理")
+    auth_sub = auth_parser.add_subparsers(dest="auth_action", required=True)
+    auth_sub.add_parser("reset", help="清除访问密码并吊销所有会话（忘记密码时使用）")
+    auth_parser.set_defaults(func=_cli_auth_reset)
+
     return parser
 
 
@@ -1154,6 +1160,28 @@ def _cli_gui(args, config, idx):
     launch_app(port=port, host=host, share=args.share)
 
 
+def _cli_auth_reset(args, config, idx):
+    """Handle `cortex auth reset` — 清除访问密码并吊销所有会话（忘记密码时）。
+
+    不依赖索引组件（main 中特判跳过 _init_components），
+    确保索引损坏或工作目录异常时也能恢复访问。
+    """
+    from doclens.web_v2 import auth_credentials
+    from doclens.web_v2.sessions_store import SessionsStore
+
+    auth_credentials.clear_password()
+
+    # 吊销当前工作目录 sessions.db 中的登录会话（库不存在则跳过）
+    cfg = CortexConfig.load()
+    index_path = cfg.index_path or os.path.join(cfg.search_path, data_dirname(), "index.db")
+    db_path = Path(index_path).parent / "sessions.db"
+    revoked = 0
+    if db_path.exists():
+        revoked = SessionsStore(db_path).revoke_all_auth_sessions()
+
+    print(f"已清除访问密码，吊销 {revoked} 个登录会话。下次启动 GUI 无需登录。")
+
+
 def main():
     """主函数 - 启动 TUI"""
     import logging
@@ -1181,6 +1209,10 @@ def main():
     from treesearch.treesearch import TreeSearch
 
     if args.command is not None:
+        if args.command == "auth":
+            # auth reset 不需要索引/配置组件（索引损坏时也必须可用）
+            args.func(args, None, None)
+            return
         config, idx = _init_components()
         args.func(args, config, idx)
         return

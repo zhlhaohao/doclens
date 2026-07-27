@@ -7,6 +7,8 @@ import appLogoSvg from "../assets/app_icon.svg?raw";
 import "./toast-stack";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
+import { logout } from "../api/auth";
+import { router } from "../router/router";
 
 @customElement("app-bar")
 export class AppBar extends LitElement {
@@ -201,6 +203,8 @@ export class AppBar extends LitElement {
 
   @state() private _menuOpen = false;
   @state() private _showSaveAndRevert = false;
+  /** 登录闸门生效且已登录时，菜单显示"注销登录" */
+  @state() private _showLogout = false;
   /** 刷新按钮旋转动画进行中标记：旋转期间禁用再次点击，避免动画错乱 */
   @state() private _refreshing = false;
   private _unsubStore?: () => void;
@@ -261,6 +265,17 @@ export class AppBar extends LitElement {
     actions.openReindexConfirm();
   }
 
+  private async _onLogoutClick() {
+    this._menuOpen = false;
+    try {
+      await logout();
+    } catch {
+      /* 网络错误也照旧跳登录页 */
+    }
+    actions.setAuthState({ authenticated: false });
+    router.navigate("login");
+  }
+
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener("click", this._onDocClick);
@@ -279,6 +294,7 @@ export class AppBar extends LitElement {
   private _syncFromStore() {
     const s = store.getState();
     this._showSaveAndRevert = s.view === "settings" && s.settings.dirty;
+    this._showLogout = s.auth.required === true && s.auth.authenticated;
     this.requestUpdate();
   }
 
@@ -339,6 +355,15 @@ export class AppBar extends LitElement {
               <span class="text">
                 <span class="label">放弃修改</span>
                 <span class="desc">恢复到 .env 当前值</span>
+              </span>
+            </button>
+          ` : nothing}
+          ${this._showLogout ? html`
+            <button class="menu-item" type="button" data-testid="logout-item" @click=${this._onLogoutClick}>
+              <span class="icon">⏻</span>
+              <span class="text">
+                <span class="label">注销登录</span>
+                <span class="desc">结束当前会话，返回登录页</span>
               </span>
             </button>
           ` : nothing}

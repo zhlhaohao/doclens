@@ -5,6 +5,8 @@ import { store, actions } from "./state/store";
 import type { ViewId } from "./state/types";
 import { router } from "./router/router";
 import { getStatus } from "./api/status";
+import { setUnauthorizedHandler } from "./api/client";
+import { getAuthStatus } from "./api/auth";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -23,6 +25,7 @@ import "./views/search-view";
 import "./views/chat-view";
 import "./views/settings-view";
 import "./views/files-view";
+import "./views/login-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
 import { startWatchPolling, stopWatchPolling } from "./watch-polling";
@@ -58,6 +61,9 @@ export class CortexApp extends LitElement {
   `;
 
   private _unsubscribe?: () => void;
+  private _unsubAuth?: () => void;
+  /** 主界面轮询/状态是否已启动（登录前不启动，登录成功后由订阅触发一次） */
+  private _mainStarted = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -65,6 +71,44 @@ export class CortexApp extends LitElement {
     router.init();
     // 订阅 store —— view 切换时触发重新渲染
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    // 401 统一处理：除登录页外，任何请求 401 → 跳登录页
+    setUnauthorizedHandler(() => {
+      if (store.getState().view !== "login") {
+        actions.setAuthState({ authenticated: false });
+        router.navigate("login");
+      }
+    });
+    // 登录成功（authenticated false→true）后启动主界面轮询（幂等）
+    this._unsubAuth = store.subscribeSelector(
+      (s) => s.auth.authenticated,
+      (authed) => { if (authed) this._startMain(); },
+    );
+    // 启动时探测登录闸门：需要登录且未认证 → 只渲染登录页，不启动轮询
+    void this._probeAuth();
+  }
+
+  private async _probeAuth() {
+    try {
+      const s = await getAuthStatus();
+      actions.setAuthState({
+        required: s.required,
+        authenticated: s.authenticated,
+        hasPassword: s.has_password,
+      });
+      if (s.required && !s.authenticated) {
+        router.navigate("login");
+        return;
+      }
+    } catch {
+      // 探测失败按免登录处理（后端异常时不把用户锁在门外）
+      actions.setAuthState({ required: false, authenticated: true });
+    }
+    this._startMain();
+  }
+
+  private _startMain() {
+    if (this._mainStarted) return;
+    this._mainStarted = true;
     // 启动 watcher 状态轮询（每 5s 拉取 /api/watch/status）
     startWatchPolling();
     // 拉取一次 /api/status：
@@ -85,6 +129,8 @@ export class CortexApp extends LitElement {
 
   disconnectedCallback() {
     this._unsubscribe?.();
+    this._unsubAuth?.();
+    setUnauthorizedHandler(null);
     // 停止 watcher 状态轮询
     stopWatchPolling();
     super.disconnectedCallback();
@@ -109,6 +155,10 @@ export class CortexApp extends LitElement {
 
   render() {
     const view = store.getState().view;
+    // 登录页全屏独占：不渲染 app-bar / activity-bar / tab-bar / reindex-dialog
+    if (view === "login") {
+      return html`<login-view></login-view>`;
+    }
     return html`
       <app-bar
         .activeView=${view}

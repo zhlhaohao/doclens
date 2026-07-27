@@ -1,18 +1,20 @@
-"""SQLite 持久化历史会话存储。
+"""SQLite 持久化历史会话存储 + 登录会话（auth_sessions）。
 
 Schema:
     sessions(id, type, title, preview, created_at, updated_at, message_count)
     session_items(id, session_id, seq, kind, payload, created_at)
+    auth_sessions(token, created_at, expires_at)   -- Web 登录会话（24h 滑动过期）
 
 WAL 模式；session_items 通过外键 ON DELETE CASCADE 跟随 sessions 删除。
 """
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 import threading
 import ulid as _ulid
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -67,7 +69,17 @@ CREATE TABLE IF NOT EXISTS session_items (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_items_session ON session_items(session_id, seq);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token      TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
 """
+
+# 登录会话滑动续期节流阈值：剩余有效期超过该值时不写库（避免每个 API 请求都写 SQLite）
+_AUTH_TOUCH_REFRESH_THRESHOLD = timedelta(hours=23)
 
 
 class SessionsStore:
@@ -269,3 +281,67 @@ class SessionsStore:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             message_count=row["message_count"],
         )
+
+    # ---- 登录会话（auth_sessions）----
+
+    def create_auth_session(self, ttl_hours: int = 24) -> str:
+        """签发登录会话，返回 token。"""
+        token = secrets.token_urlsafe(32)
+        now = datetime.utcnow()
+        expires = now + timedelta(hours=ttl_hours)
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "INSERT INTO auth_sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
+                (token, now.isoformat(), expires.isoformat()),
+            )
+        self.purge_expired_auth_sessions()
+        return token
+
+    def validate_auth_session(
+        self,
+        token: str,
+        *,
+        touch: bool = True,
+        ttl_hours: int = 24,
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """校验登录会话存在且未过期。
+
+        touch=True 时滑动续期：剩余有效期不足阈值才把 expires_at 顺延为
+        now + ttl（节流，避免每个请求都写库）。now 可注入以便测试。
+        """
+        now = now or datetime.utcnow()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT expires_at FROM auth_sessions WHERE token = ?", (token,)
+            ).fetchone()
+            if row is None:
+                return False
+            expires = datetime.fromisoformat(row["expires_at"])
+            if expires <= now:
+                conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+                return False
+            if touch and expires - now < _AUTH_TOUCH_REFRESH_THRESHOLD:
+                new_expires = now + timedelta(hours=ttl_hours)
+                conn.execute(
+                    "UPDATE auth_sessions SET expires_at = ? WHERE token = ?",
+                    (new_expires.isoformat(), token),
+                )
+            return True
+
+    def delete_auth_session(self, token: str) -> None:
+        with self._lock, self._conn() as conn:
+            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+
+    def revoke_all_auth_sessions(self) -> int:
+        """吊销全部登录会话，返回删除条数。"""
+        with self._lock, self._conn() as conn:
+            cur = conn.execute("DELETE FROM auth_sessions")
+            return cur.rowcount
+
+    def purge_expired_auth_sessions(self) -> int:
+        """清理已过期登录会话，返回删除条数。"""
+        now = datetime.utcnow().isoformat()
+        with self._lock, self._conn() as conn:
+            cur = conn.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now,))
+            return cur.rowcount
