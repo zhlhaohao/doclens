@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import tempfile
@@ -155,7 +156,8 @@ def _email_to_tree(email: dict, attachment_sections: list[tuple[str, str]],
     """把一封邮件建成单节点树文档。"""
     from ..indexer import _build_tree, _finalize_tree
 
-    subject = (email.get("subject") or "").strip() or "(无主题)"
+    # MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），建树前清除
+    subject = re.sub(r"[\x00-\x1f]", "", email.get("subject") or "").strip() or "(无主题)"
     text = _build_email_text(email, attachment_sections)
     lines = text.count("\n") + 1
     node = {

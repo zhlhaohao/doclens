@@ -1799,6 +1799,23 @@ class FTS5Index:
         ).fetchone()
         return row is not None
 
+    def count_docs_with_source_prefix(self, prefix: str) -> int:
+        """Count documents whose source_path starts with ``prefix``."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE instr(source_path, ?) = 1",
+            (prefix,),
+        ).fetchone()
+        return row[0] if row else 0
+
+    def list_doc_names_by_source_prefix(self, prefix: str, limit: int) -> list[str]:
+        """List doc_names whose source_path starts with ``prefix`` (ordered, capped)."""
+        rows = self._conn.execute(
+            "SELECT doc_name FROM documents WHERE instr(source_path, ?) = 1 "
+            "ORDER BY doc_name LIMIT ?",
+            (prefix, limit),
+        ).fetchall()
+        return [r[0] for r in rows]
+
     # -------------------------------------------------------------------
     # Index metadata (replaces _index_meta.json)
     # -------------------------------------------------------------------
