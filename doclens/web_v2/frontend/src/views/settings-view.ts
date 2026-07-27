@@ -19,6 +19,7 @@ import {
 import { getConfig, putConfig, resetConfigDefault, ConfigApiError } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
+import "../components/password-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
@@ -956,6 +957,7 @@ export class SettingsView extends LitElement {
                       ${s.fields.map((f) => this._renderField(f))}
                     </div>
                   `)}
+                  ${tab === "network" ? html`<password-section></password-section>` : nothing}
                 </div>
               `;
             })}

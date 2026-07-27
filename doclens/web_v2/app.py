@@ -30,14 +30,25 @@ async def lifespan(app: FastAPI):
         deps.stop_watcher()
 
 
-def create_app() -> FastAPI:
-    """构造 FastAPI 应用（注册路由、错误处理器、静态文件）。"""
+def create_app(host: str = "127.0.0.1") -> FastAPI:
+    """构造 FastAPI 应用（注册路由、错误处理器、静态文件）。
+
+    host 为最终生效的绑定地址（CLI --host > CORTEX_WEB_HOST > 默认），
+    登录闸门据此判定是否启用密码保护（非环回且已设密码时生效）。
+    """
     app = FastAPI(title="Cortex", version=CORTEX_VERSION, lifespan=lifespan)
+    app.state.auth_host = host
 
     # 错误处理
     register_error_handlers(app)
 
+    # 登录闸门（须在 router 注册前；只拦 /api/*，豁免 /api/health 与 /api/auth/*）
+    from doclens.web_v2.auth_middleware import register_auth_middleware
+    register_auth_middleware(app)
+
     # API 路由（后续任务逐步挂载）
+    from doclens.web_v2.api import auth
+    app.include_router(auth.router, prefix="/api")
     from doclens.web_v2.api import search
     app.include_router(search.router, prefix="/api")
     from doclens.web_v2.api import preview
@@ -194,7 +205,7 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     except Exception as e:  # noqa: BLE001
         print(f"[Claude Code skill 同步跳过: {e}]")
 
-    app = create_app()
+    app = create_app(host=host)
     url = f"http://localhost:{port}" if host in ("127.0.0.1", "0.0.0.0") else f"http://{host}:{port}"
     # 延迟 1 秒打开浏览器，等 uvicorn 就绪
     threading.Timer(1.0, lambda: webbrowser.open(url)).start()
