@@ -18,8 +18,8 @@ doclens 需要支持 Outlook 邮件数据文件（.pst）的解析索引。单�
 
 `tools/pst-extract/`（Go CLI，基于 go-pst v6.0.2）把 PST 解包为流式 JSONL
 （stdout 每行一封邮件），Python 端 `treesearch/parsers/pst_parser.py` 逐行消费建树。
-**Go 源码与编译产物 `bin/pst-extract.exe` 都提交进仓库**——用户开箱即用，
-重新编译只需 `cd tools/pst-extract && go build -o ../../bin/pst-extract.exe .`。
+**Go 源码与编译产物 `treesearch/_bin/pst-extract.exe` 都提交进仓库**（随 treesearch 包经 package-data 打进 wheel，`pip install` 后开箱即用）——
+重新编译只需 `cd tools/pst-extract && go build -o ../../treesearch/_bin/pst-extract.exe .`。
 
 ### 2. 索引粒度：每封邮件一个文档（打破 1 文件 = 1 文档）
 

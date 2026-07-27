@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """PST (Outlook 邮件数据文件) parser for TreeSearch.
 
-架构：Go sidecar（bin/pst-extract.exe，go-pst 库）把 PST 解包为流式
+架构：Go sidecar（treesearch/_bin/pst-extract.exe，go-pst 库）把 PST 解包为流式
 JSONL（每行一封邮件，白名单附件提取到临时目录），本模块逐行消费并建树。
 
 索引粒度：**每封邮件一个文档**（打破 1 文件 = 1 文档惯例）。派生文档的
@@ -44,19 +44,21 @@ class PstExtractNotFoundError(RuntimeError):
 def _find_sidecar() -> str:
     """定位 pst-extract 可执行文件。
 
-    优先环境变量 ``TREESEARCH_PST_EXTRACT``；否则取仓库根 bin/ 目录
-    （treesearch/parsers/pst_parser.py → 上两级为仓库根）。
+    优先环境变量 ``TREESEARCH_PST_EXTRACT``；否则取 treesearch 包内 ``_bin/``
+    目录（与 doclens 定位 .env.example 的模式一致，editable / wheel 安装皆可用）。
     """
     env = os.environ.get("TREESEARCH_PST_EXTRACT")
     if env and os.path.isfile(env):
         return env
-    repo_root = Path(__file__).resolve().parents[2]
-    exe = repo_root / "bin" / ("pst-extract.exe" if os.name == "nt" else "pst-extract")
+    exe_name = "pst-extract.exe" if os.name == "nt" else "pst-extract"
+    # treesearch/parsers/pst_parser.py → 上两级 = treesearch 包根 → _bin/
+    exe = Path(__file__).resolve().parent.parent / "_bin" / exe_name
     if exe.is_file():
         return str(exe)
     raise PstExtractNotFoundError(
         f"pst-extract sidecar not found at {exe}; "
-        "build it via tools/pst-extract (go build) or set TREESEARCH_PST_EXTRACT"
+        "build via: cd tools/pst-extract && go build -o ../../treesearch/_bin/pst-extract.exe . ; "
+        "or set TREESEARCH_PST_EXTRACT"
     )
 
 
