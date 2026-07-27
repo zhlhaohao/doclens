@@ -39,7 +39,7 @@ export class SearchView extends LitElement {
       flex: 1;
       min-height: 0;
       /* 顶部蓝色光晕：让白色卡片从 view-bg 中浮出 */
-      background: radial-gradient(720px 280px at 50% -80px, rgba(0, 82, 255, 0.08), transparent 70%);
+      background: radial-gradient(720px 280px at 50% -80px, rgba(0, 100, 224, 0.08), transparent 70%);
     }
     .input-row {
       padding: var(--cortex-space-4) var(--cortex-space-6);
@@ -541,16 +541,17 @@ export class SearchView extends LitElement {
         <div class="initial-stack">
           <welcome-pane
             variant="onboarding"
+            heroicon="search"
             heading="在你的文档中搜索"
             subheading="对当前工作目录{workdir} 的所有文件进行全文检索"
             .modes=${[
-              { label: "自然语言", icon: "📝" },
+              { label: "自然语言", icon: "sparkles" },
               { label: "正则", icon: "regex" },
             ]}
             .examples=${[
-              "「人工智能技术最新发展」",
-              "「tcp.*timeout」",
+              "「人工智能发展」",
               "「量子 计算」",
+              "「tcp.*timeout」",
               "「Python 装饰器」",
             ]}
             .workdir=${store.getState().status?.workdir ?? ""}
@@ -567,7 +568,7 @@ export class SearchView extends LitElement {
             <input-box
               placeholder=${this.searchMode === "grep" ? "输入正则表达式..." : "输入搜索关键词..."}
               button-label="搜索"
-              button-icon="🔍"
+              button-icon="search"
               .mode=${this.searchMode}
               .modes=${SearchView.SEARCH_MODES}
               ?disabled=${this.loading}
@@ -643,7 +644,7 @@ export class SearchView extends LitElement {
             back-label="结果"
             title=${detailTop.path}
             .actions=${this.previewWritable
-              ? [{ label: "编辑", icon: "✏️", onClick: () => this._enterPreviewEdit() }]
+              ? [{ label: "编辑", icon: "pencil", onClick: () => this._enterPreviewEdit() }]
               : []}
             @back=${this._popDetail}>
           </focus-header>

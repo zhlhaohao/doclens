@@ -50,9 +50,9 @@ export class ReindexDialog extends LitElement {
     button {
       padding: 6px 16px; border: 1px solid var(--cortex-border);
       background: var(--cortex-surface); cursor: pointer;
-      border-radius: var(--cortex-radius-sm); font-size: var(--cortex-fs-base);
+      border-radius: var(--cortex-radius-pill); font-size: var(--cortex-fs-base);
     }
-    button.primary { background: var(--cortex-primary-gradient); color: #fff; border: none; border-radius: var(--cortex-radius-lg); box-shadow: var(--cortex-primary-glow); }
+    button.primary { background: var(--cortex-btn-primary-bg); color: var(--cortex-btn-primary-text); border: none; border-radius: var(--cortex-radius-pill); }
     button.primary:hover:not(:disabled) { opacity: 0.9; }
     button.warn { background: var(--cortex-danger); color: #fff; border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
@@ -127,8 +127,8 @@ export class ReindexDialog extends LitElement {
   private _renderBody(r: ReindexState) {
     if (r.dialog === "confirm") {
       return html`
-        <h3>🔄 强制重建索引</h3>
-        <div class="body">⚠️ 将清空当前索引并全量重扫工作目录，期间（数十秒）搜索结果可能不完整。是否继续？</div>
+        <h3><doclens-icon name="refresh-ccw"></doclens-icon> 强制重建索引</h3>
+        <div class="body"><doclens-icon name="alert-triangle"></doclens-icon> 将清空当前索引并全量重扫工作目录，期间（数十秒）搜索结果可能不完整。是否继续？</div>
         <div class="actions">
           <button @click=${() => actions.closeReindex()}>取消</button>
           <button class="warn" @click=${this._confirm}>确认重建</button>
@@ -137,7 +137,7 @@ export class ReindexDialog extends LitElement {
     }
     if (r.dialog === "running") {
       return html`
-        <h3>⟳ 正在重建索引…</h3>
+        <h3><doclens-icon name="refresh-cw"></doclens-icon> 正在重建索引…</h3>
         <div class="body">已索引 <strong>${r.indexed_count}</strong> 个文件</div>
         ${r.current_file ? html`<div class="progress">当前：${r.current_file}</div>` : ""}
         <div class="actions">
@@ -148,7 +148,7 @@ export class ReindexDialog extends LitElement {
     if (r.dialog === "done") {
       const res = r.result;
       return html`
-        <h3>✅ 重建完成</h3>
+        <h3><doclens-icon name="check"></doclens-icon> 重建完成</h3>
         <div class="body">
           共索引 <strong>${res?.doc_count ?? 0}</strong> 个文档
           ${res && res.failed_count > 0 ? html`<br />· ${res.failed_count} 个文件失败` : ""}
@@ -159,7 +159,7 @@ export class ReindexDialog extends LitElement {
       `;
     }
     return html`
-      <h3>⚠️ 重建失败</h3>
+      <h3><doclens-icon name="alert-triangle"></doclens-icon> 重建失败</h3>
       <div class="body">${r.error || "未知错误"}</div>
       <div class="actions">
         <button class="primary" @click=${this._close}>关闭</button>

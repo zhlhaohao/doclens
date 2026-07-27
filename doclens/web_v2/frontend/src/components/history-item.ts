@@ -9,29 +9,37 @@ export class HistoryItem extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--cortex-card-bg);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      padding: 10px 12px;
+      /* 弱化：去卡片化，改透明行 + 细分隔线 */
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--cortex-border-muted);
+      border-radius: 0;
+      padding: 7px 4px;
       cursor: pointer;
-      box-shadow: var(--cortex-shadow-sm);
-      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+      transition: background var(--cortex-duration-fast);
     }
     :host(:hover) {
-      background: var(--cortex-card-bg);
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-shadow-md);
-      transform: translateY(-1px);
+      background: var(--cortex-surface-muted);
+    }
+    :host(:last-child) {
+      border-bottom: none;
     }
     .name {
-      font-size: var(--cortex-fs-base);
-      color: var(--cortex-text);
-      font-weight: 500;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      font-weight: 400;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .meta {
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
+      color: var(--cortex-text-subtle);
       font-family: var(--cortex-font-mono);
+      flex-shrink: 0;
+      margin-left: var(--cortex-space-2);
     }
     .mode-tag {
       display: inline-flex;
@@ -39,8 +47,8 @@ export class HistoryItem extends LitElement {
       margin-right: 6px;
       font-size: var(--cortex-fs-xs);
       font-family: var(--cortex-font-mono);
-      color: var(--cortex-primary);
-      background: var(--cortex-primary-soft);
+      color: var(--cortex-text-muted);
+      background: var(--cortex-surface-muted);
       border-radius: var(--cortex-radius-sm);
       padding: 0 4px;
       line-height: 1.5;

@@ -30,7 +30,7 @@ export class FileSearchBox extends LitElement {
     .box:has(input:disabled) {
       background: var(--cortex-surface-muted);
     }
-    .icon { color: var(--cortex-text-subtle); font-size: 13px; }
+    .icon { color: var(--cortex-text-subtle); font-size: 16px; }
     input {
       flex: 1;
       min-width: 0;
@@ -151,7 +151,7 @@ export class FileSearchBox extends LitElement {
   render() {
     return html`
       <div class="box">
-        <span class="icon">🔍</span>
+        <doclens-icon class="icon" name="search"></doclens-icon>
         <input
           type="text"
           ?disabled=${this.disabled}

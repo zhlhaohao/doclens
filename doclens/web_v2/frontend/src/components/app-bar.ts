@@ -144,7 +144,7 @@ export class AppBar extends LitElement {
     .avatar {
       width: 32px; height: 32px;
       border-radius: 50%;
-      background: var(--cortex-primary-gradient);
+      background: var(--cortex-primary);
       color: #fff;
       display: inline-flex;
       align-items: center;
@@ -161,7 +161,7 @@ export class AppBar extends LitElement {
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+      box-shadow: var(--cortex-shadow-md);
       padding: var(--cortex-space-2);
       display: none;
       z-index: 60;
@@ -325,16 +325,16 @@ export class AppBar extends LitElement {
     let label = "";
     if (!w || !w.running) {
       cls = "";
-      label = `📁${nStr} ○监控关`;
+      label = `${nStr} ○监控关`;
     } else if (w.reindexing) {
       cls = "busy";
-      label = `📁${nStr} ⟳更新中…`;
+      label = `${nStr} ⟳更新中…`;
     } else if (w.changed_count > 0) {
       cls = "warn";
-      label = `📁${nStr} ·待更新 ${w.changed_count}`;
+      label = `${nStr} ·待更新 ${w.changed_count}`;
     } else {
       cls = w.last_success === false ? "warn" : "dot";
-      label = `📁${nStr} ●监控`;
+      label = `${nStr} ●监控`;
     }
     return html`
       <button
@@ -343,7 +343,7 @@ export class AppBar extends LitElement {
         aria-label="文件监控状态"
         title="点击查看近期文件变化"
         @click=${this._openWatchDialog}
-      >${label}</button>
+      ><doclens-icon name="folder"></doclens-icon>${label}</button>
     `;
   }
 
@@ -363,7 +363,7 @@ export class AppBar extends LitElement {
           ?disabled=${this._refreshing}
           @click=${this._onRefreshClick}
         >
-          <span class="icon" aria-hidden="true">↻</span>
+          <doclens-icon class="icon" name="refresh-cw" aria-hidden="true"></doclens-icon>
         </button>
         <button class="avatar-btn" @click=${this._onAvatarClick} aria-label="用户菜单">
           <span class="avatar">L</span>
@@ -374,14 +374,14 @@ export class AppBar extends LitElement {
             <div class="email">liang@example.com</div>
           </div>
           <button class="menu-item" type="button" @click=${() => this._onScopeSelect("global")}>
-            <span class="icon">🌍</span>
+            <doclens-icon class="icon" name="globe"></doclens-icon>
             <span class="text">
               <span class="label">全局配置</span>
               <span class="desc">所有项目共用</span>
             </span>
           </button>
           <button class="menu-item" type="button" @click=${this._onReindexClick}>
-            <span class="icon">🔄</span>
+            <doclens-icon class="icon" name="refresh-ccw"></doclens-icon>
             <span class="text">
               <span class="label">强制重建索引</span>
               <span class="desc">全量重扫工作目录</span>
@@ -389,7 +389,7 @@ export class AppBar extends LitElement {
           </button>
           ${this._showSaveAndRevert ? html`
             <button class="menu-item" type="button" @click=${this._onRevertClick}>
-              <span class="icon">↩</span>
+              <doclens-icon class="icon" name="rotate-ccw"></doclens-icon>
               <span class="text">
                 <span class="label">放弃修改</span>
                 <span class="desc">恢复到 .env 当前值</span>

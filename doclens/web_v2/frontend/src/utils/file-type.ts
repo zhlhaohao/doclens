@@ -17,16 +17,17 @@ export interface FileTypeBadge {
  * Keys are lowercase extensions (no leading dot).
  */
 const KNOWN_TYPES: Record<string, FileTypeBadge> = {
-  pdf:  { letter: "P", bg: "#DC2626", fg: "#FFFFFF" },  // red
-  doc:  { letter: "D", bg: "#2563EB", fg: "#FFFFFF" },  // blue
-  docx: { letter: "D", bg: "#2563EB", fg: "#FFFFFF" },
-  xls:  { letter: "X", bg: "#16A34A", fg: "#FFFFFF" },  // green
-  xlsx: { letter: "X", bg: "#16A34A", fg: "#FFFFFF" },
-  csv:  { letter: "C", bg: "#16A34A", fg: "#FFFFFF" },
+  // 色彩对齐 Meta 语义调色板：红=critical、蓝=cobalt、绿=success、紫=oculus、灰=steel
+  pdf:  { letter: "P", bg: "#E41E3F", fg: "#FFFFFF" },  // critical red
+  doc:  { letter: "D", bg: "#0064E0", fg: "#FFFFFF" },  // cobalt
+  docx: { letter: "D", bg: "#0064E0", fg: "#FFFFFF" },
+  xls:  { letter: "X", bg: "#31A24C", fg: "#FFFFFF" },  // success green
+  xlsx: { letter: "X", bg: "#31A24C", fg: "#FFFFFF" },
+  csv:  { letter: "C", bg: "#31A24C", fg: "#FFFFFF" },
   ppt:  { letter: "S", bg: "#EA580C", fg: "#FFFFFF" },  // orange (S = Slides, avoid clash with PDF's P)
   pptx: { letter: "S", bg: "#EA580C", fg: "#FFFFFF" },
-  md:   { letter: "M", bg: "#6366F1", fg: "#FFFFFF" },  // indigo
-  txt:  { letter: "T", bg: "#6B7280", fg: "#FFFFFF" },  // gray
+  md:   { letter: "M", bg: "#A121CE", fg: "#FFFFFF" },  // oculus purple
+  txt:  { letter: "T", bg: "#5D6C7B", fg: "#FFFFFF" },  // steel gray
   html: { letter: "H", bg: "#E34F26", fg: "#FFFFFF" },  // HTML5 orange
   mhtml: { letter: "W", bg: "#0D9488", fg: "#FFFFFF" }, // teal (W = Web archive)
   mht:  { letter: "W", bg: "#0D9488", fg: "#FFFFFF" },
@@ -63,7 +64,7 @@ export function getExtension(name: string): string {
  * (or the entry is a directory).
  *
  *  - directory             → null  (caller renders 📁)
- *  - "report.pdf"          → { letter: "P", bg: "#DC2626", fg: "#FFFFFF" }
+ *  - "report.pdf"          → { letter: "P", bg: "#E41E3F", fg: "#FFFFFF" }
  *  - "archive.zip" / "script.py" / "README" → null  (caller renders 📄)
  */
 export function getFileTypeBadge(name: string, isDir: boolean): FileTypeBadge | null {

@@ -3,9 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { ToolStep } from "../state/types";
 
 const TOOL_ICON: Record<string, string> = {
-  search: "🔍",
-  read_document: "📄",
-  grep: "🔎",
+  search: "search",
+  read_document: "file",
+  grep: "search",
 };
 
 const TOOL_ACTION: Record<string, string> = {
@@ -173,7 +173,7 @@ export class ChatToolTrace extends LitElement {
   private _renderStep(s: ToolStep) {
     const running = s.status === "running";
     const error = s.status === "error";
-    const icon = TOOL_ICON[s.name] ?? "🔧";
+    const icon = TOOL_ICON[s.name] ?? "settings";
     const showFull = this._fullResultIds.has(s.tool_use_id);
     const outputLines = (s.output ?? "").split("\n");
     const truncated = !showFull && outputLines.length > 5;
@@ -182,11 +182,11 @@ export class ChatToolTrace extends LitElement {
     return html`
       <div class="step ${running ? "running" : ""} ${error ? "error" : ""}">
         <div class="head">
-          ${running ? html`<span class="spin"></span>` : html`<span>${icon}</span>`}
+          ${running ? html`<span class="spin"></span>` : html`<doclens-icon name=${icon}></doclens-icon>`}
           <span class="name">${s.name}</span>
           ${running ? html`<span class="running-text">${TOOL_ACTION[s.name] ?? "正在调用"}...</span>` : null}
           <span class="meta">
-            ${!running ? (error ? html`<span class="err">✗</span>` : html`<span class="ok">✓</span>`) : null}
+            ${!running ? (error ? html`<doclens-icon class="err" name="x"></doclens-icon>` : html`<doclens-icon class="ok" name="check"></doclens-icon>`) : null}
             ${s.duration_ms != null ? html` ${Math.round(s.duration_ms)}ms` : null}
           </span>
         </div>
@@ -205,10 +205,10 @@ export class ChatToolTrace extends LitElement {
     const running = this.steps.some((s) => s.status === "running");
     return html`
       <div class="summary" @click=${this._toggle}>
-        <span class="arrow">${this._expanded ? "▾" : "▸"}</span>
-        🧠 思考过程 · <span class="count">${this.steps.length} 步</span>
+        <doclens-icon class="arrow" name=${this._expanded ? "chevron-down" : "chevron-right"}></doclens-icon>
+        <doclens-icon name="brain"></doclens-icon> 思考过程 · <span class="count">${this.steps.length} 步</span>
         ${running ? " · 进行中" : ""}
-        <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? "✓ 已复制" : "📋"}</button>
+        <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? html`<doclens-icon name="check"></doclens-icon> 已复制` : html`<doclens-icon name="clipboard"></doclens-icon>`}</button>
       </div>
       ${this._expanded ? html`<div class="steps">${this.steps.map((s) => this._renderStep(s))}</div>` : null}
     `;

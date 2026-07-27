@@ -1,73 +1,110 @@
-/* Cortex 设计 tokens · SaaS Boutique（Electric Blue）
- * 真相源：frontend-spec/design-system/MASTER.md */
+/* Cortex 设计 tokens · Meta 设计系统
+ *   白画布 · 钴蓝(#0064E0)强调 + 黑色 pill 主按钮 · Montserrat · 极简平铺
+ * 参考：awesome-design-md/design-md/meta/DESIGN.md
+ * 真相源：frontend-spec/design-system/MASTER.md
+ *
+ * 混合按钮策略：
+ *   搜索/发送 = 钴蓝 pill（buy-CTA 等价，用 --cortex-primary）
+ *   对话框/设置确认 = 黑色 pill（marketing primary，用 --cortex-btn-primary-*）
+ *   钴蓝同时作强调色：链接/active 导航/聚焦环/<mark>高亮/选中态 */
 :root {
-  /* 主色 · Electric Blue */
-  --cortex-primary: #0052FF;
-  --cortex-primary-hover: #003ECC;
-  --cortex-primary-2: #4D7CFF;
-  --cortex-primary-soft: #EFF4FF;
-  --cortex-primary-gradient: linear-gradient(135deg, #0052FF 0%, #4D7CFF 100%);
-  --cortex-primary-glow: 0 4px 14px rgba(0, 82, 255, 0.25);
+  /* ── 品牌与强调色 · 钴蓝（Cobalt）── */
+  --cortex-primary: #0064e0;          /* 钴蓝：hero 提交按钮 + 强调色 */
+  --cortex-primary-hover: #0457cb;    /* primary-deep：按下/链接 active */
+  --cortex-primary-2: #0091ff;        /* primary-soft 钴蓝 */
+  --cortex-primary-soft: #e8f0fe;     /* 钴蓝浅底（~12% tint） */
+  --cortex-fb-blue: #1876f2;          /* 选中态/表单激活（Meta fb-blue） */
+  --cortex-meta-link: #385898;        /* 遗留链接色（预留） */
 
-  /* 中性色 · Slate */
-  --cortex-bg: #FAFAFA;
-  --cortex-surface: #FFFFFF;
-  --cortex-surface-muted: #F8FAFC;
-  --cortex-view-bg: #F8FAFC;       /* view 主区底色（统一 chat/search/files/settings/md-viewer） */
-  --cortex-card-bg: #FFFFFF;       /* 卡片 / 浮层底色（独立白卡浮于 view-bg） */
-  --cortex-border: #E2E8F0;
-  --cortex-border-muted: #F1F5F9;
+  /* ── 黑色主按钮（marketing-surface primary）── */
+  --cortex-btn-primary-bg: #0a1317;       /* ink-deep */
+  --cortex-btn-primary-text: #ffffff;
+  --cortex-btn-primary-pressed: #444950;  /* charcoal */
+  --cortex-btn-primary-disabled: #bcc0c4; /* disabled-text */
 
-  /* 文字 */
-  --cortex-text: #0F172A;
-  --cortex-text-muted: #64748B;
-  --cortex-text-subtle: #94A3B8;
+  /* ── 中性色 · Meta Ink/Steel/Hairline ── */
+  --cortex-bg: #ffffff;              /* 画布纯白（canvas） */
+  --cortex-surface: #ffffff;         /* 卡片/面板 */
+  --cortex-surface-muted: #f1f4f7;   /* surface-soft：缩略图/次级面板/搜索 pill 静止 */
+  --cortex-view-bg: #ffffff;         /* view 主区底色 */
+  --cortex-card-bg: #ffffff;         /* 卡片/浮层 */
+  --cortex-border: #ced0d4;          /* hairline：输入边框/分隔 */
+  --cortex-border-muted: #dee3e9;    /* hairline-soft：卡片/分区弱分隔 */
 
-  /* 状态色 */
-  --cortex-warning: #F59E0B;
-  --cortex-danger: #DC2626;
-  --cortex-success: #10B981;
+  /* ── 文字 ── */
+  --cortex-text: #0a1317;            /* ink-deep：标题/正文 */
+  --cortex-text-muted: #4b4c4f;      /* slate：次要正文/小节标题 */
+  --cortex-text-subtle: #8595a4;     /* stone：caption/placeholder */
+  --cortex-text-caption: #5d6c7b;    /* steel：footer/最静音 */
 
-  /* Chat 专用（SaaS Boutique） */
-  --cortex-chat-bg: #F8FAFC;
-  --cortex-chat-bubble-user: #0052FF;
-  --cortex-chat-bubble-user-border: #003ECC;
-  --cortex-chat-bubble-user-text: #FFFFFF;
-  --cortex-chat-bubble-ai: #FFFFFF;
-  --cortex-chat-bubble-ai-border: #E2E8F0;
-  --cortex-chat-section: #0052FF;
-  --cortex-chat-input-bg: #FFFFFF;
-  --cortex-chat-input-border: #E2E8F0;
-  --cortex-chat-footer: #94A3B8;
+  /* ── 语义色 ── */
+  --cortex-success: #31a24c;
+  --cortex-warning: #f7b928;
+  --cortex-attention: #f2a918;
+  --cortex-danger: #e41e3f;          /* critical */
+  --cortex-danger-strong: #f0284a;   /* 表单错误边框（critical-strong） */
+  --cortex-nav-active: #b91c1c;      /* 导航激活：深红文字 + 实心图标（activity-bar / tab-bar 共用，保证两端风格一致） */
 
-  /* 间距（4px 基线） */
-  --cortex-space-1: 4px;
-  --cortex-space-2: 8px;
-  --cortex-space-3: 12px;
-  --cortex-space-4: 16px;
-  --cortex-space-6: 24px;
-  --cortex-space-8: 32px;
+  /* ── Chat 专用（Meta 化）── */
+  --cortex-chat-bg: #ffffff;
+  --cortex-chat-bubble-user: #0064e0;        /* 钴蓝用户气泡，与发送按钮品牌统一 */
+  --cortex-chat-bubble-user-border: #0457cb;
+  --cortex-chat-bubble-user-text: #ffffff;
+  --cortex-chat-bubble-ai: #ffffff;
+  --cortex-chat-bubble-ai-border: #ced0d4;
+  --cortex-chat-section: #0064e0;
+  --cortex-chat-input-bg: #ffffff;
+  --cortex-chat-input-border: #ced0d4;
+  --cortex-chat-footer: #8595a4;
 
-  /* 圆角（圆润现代） */
-  --cortex-radius-sm: 6px;
-  --cortex-radius-md: 10px;
-  --cortex-radius-lg: 16px;
-  --cortex-radius-xl: 20px;
+  /* ── 间距（4px 基线，Meta 对齐）── */
+  --cortex-space-1: 4px;   /* xxs */
+  --cortex-space-2: 8px;   /* xs */
+  --cortex-space-3: 12px;  /* md */
+  --cortex-space-4: 16px;  /* base */
+  --cortex-space-5: 20px;  /* lg */
+  --cortex-space-6: 24px;  /* xl */
+  --cortex-space-8: 32px;  /* xxl */
+  --cortex-space-10: 40px; /* xxxl */
 
-  /* 阴影（双层精致） */
-  --cortex-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --cortex-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --cortex-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  /* ── 圆角 · Meta 阶梯 ──
+   * 保留 sm/md/lg 语义：lg=16 仍是标准卡片（原用 radius-lg 的卡片无需逐站迁移）；
+   * md=8 对齐 Meta text-input；新增 xl/2xl 给大卡与对话框，pill 给按钮/徽章/导航。 */
+  --cortex-radius-xs: 2px;       /* mark、细 UI */
+  --cortex-radius-sm: 4px;       /* 标签、微控件 */
+  --cortex-radius-md: 8px;       /* 输入/下拉/小卡（Meta text-input 8） */
+  --cortex-radius-lg: 16px;      /* 标准卡片（Meta rounded.xl，保持原值） */
+  --cortex-radius-xl: 24px;      /* 大卡片（Meta rounded.xxl） */
+  --cortex-radius-2xl: 32px;     /* 特性/对话框卡片（Meta rounded.xxxl） */
+  --cortex-radius-3xl: 32px;     /* alias，兼容引用 */
+  --cortex-radius-pill: 100px;   /* 按钮/徽章/chip/导航/搜索输入（Meta rounded.full） */
+  --cortex-radius-circle: 9999px;/* 头像/色板（Meta rounded.circle） */
 
-  /* Focus ring */
-  --cortex-focus-ring: 0 0 0 3px rgba(0, 82, 255, 0.18);
-  --cortex-focus-ring-danger: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  /* ── 阴影 · 极简平铺（Meta elevation）── */
+  --cortex-shadow-sm: none;                               /* level 0：卡片纯边框无阴影 */
+  --cortex-shadow-md: 0 1px 4px 0 rgba(20, 22, 26, 0.18); /* level 2：dialog/toast/下拉/粘性面板 */
+  --cortex-shadow-lg: 0 1px 4px 0 rgba(20, 22, 26, 0.18); /* 大浮层 */
 
-  /* 字体 */
-  --cortex-font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  /* ── Focus ring（钴蓝）── */
+  --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
+  --cortex-focus-ring-danger: 0 0 0 3px rgba(228, 30, 63, 0.18);
+
+  /* ── 字体 · Optimistic VF（私有）→ Montserrat 首选回退 ── */
+  --cortex-font: "Optimistic VF", "Montserrat", "Helvetica Neue", Helvetica, Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --cortex-font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
 
-  /* 字号（移动默认；桌面 breakpoints.css 缩小 ~1px） */
+  /* ── 排版（Meta：body 负字距、行高 1.5）── */
+  --cortex-lh-heading: 1.25;
+  --cortex-lh-body: 1.5;
+  --cortex-tracking-body: -0.14px;
+  --cortex-tracking-heading: 0;
+
+  /* ── 动效 ── */
+  --cortex-duration-fast: 0.15s;
+  --cortex-duration: 0.2s;
+  --cortex-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── 字号（移动默认；桌面 breakpoints.css 缩小 ~1px）── */
   --cortex-fs-xs: 12px;
   --cortex-fs-sm: 13px;
   --cortex-fs-base: 14px;
@@ -75,8 +112,58 @@
   --cortex-fs-lg: 17px;
   --cortex-fs-xl: 30px;
 
-  /* 布局尺寸 */
+  /* ── 布局尺寸 ── */
   --cortex-activity-bar-width: 48px;
-  --cortex-tab-bar-height: 44px;
+  --cortex-tab-bar-height: 56px;
   --cortex-touch-target: 44px;
+
+  /* ── hero 区最大宽度（search/chat initial 居中卡，shared-styles 消费）── */
+  --hero-max-width: 720px;
+
+  /* ────────────────────────────────────────────────────────────
+   * Shoelace --sl-* 主题映射（构建产物内联进 index.[hash].css）
+   * 让任意 Shoelace 组件跟随 Meta 主题（钴蓝主色 + Meta 中性 + pill 圆角）
+   * ──────────────────────────────────────────────────────────── */
+  --sl-color-primary-50: #e8f0fe;
+  --sl-color-primary-100: #cfe3fd;
+  --sl-color-primary-200: #9ec9fb;
+  --sl-color-primary-300: #6daef9;
+  --sl-color-primary-400: #3c94f7;
+  --sl-color-primary-500: #0064e0;
+  --sl-color-primary-600: #0064e0;   /* Shoelace 主按钮填充 = 钴蓝 */
+  --sl-color-primary-700: #0457cb;
+  --sl-color-primary-800: #0346a8;
+  --sl-color-primary-900: #023680;
+  --sl-color-primary-950: #01224f;
+
+  --sl-color-gray-50: #ffffff;
+  --sl-color-gray-100: #f1f4f7;
+  --sl-color-gray-200: #dee3e9;
+  --sl-color-gray-300: #ced0d4;
+  --sl-color-gray-400: #8595a4;
+  --sl-color-gray-500: #5d6c7b;
+  --sl-color-gray-600: #4b4c4f;
+  --sl-color-gray-700: #1c1e21;
+  --sl-color-gray-800: #0a1317;
+  --sl-color-gray-900: #0a1317;
+  --sl-color-gray-950: #0a1317;
+
+  --sl-color-success-600: #31a24c;
+  --sl-color-warning-600: #f7b928;
+  --sl-color-danger-600: #e41e3f;
+
+  --sl-input-color: #0a1317;
+  --sl-input-color-hover: #0a1317;
+  --sl-input-color-focus: #0a1317;
+  --sl-input-border-color: #ced0d4;
+  --sl-input-border-color-hover: #8595a4;
+  --sl-input-border-color-focus: #0064e0;
+  --sl-input-focus-ring-color: rgba(0, 100, 224, 0.18);
+
+  --sl-border-radius-small: 8px;
+  --sl-border-radius-medium: 8px;
+  --sl-border-radius-large: 16px;
+  --sl-border-radius-x-large: 24px;
+  --sl-border-radius-circle: 9999px;
+  --sl-border-radius-pill: 100px;
 }

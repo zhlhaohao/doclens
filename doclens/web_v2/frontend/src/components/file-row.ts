@@ -29,7 +29,7 @@ export class FileRow extends LitElement {
     .row.active { background: var(--cortex-primary-soft); }
     .checkbox { display: flex; align-items: center; justify-content: center; }
     .checkbox input { accent-color: var(--cortex-primary); }
-    .cell-icon { font-size: 14px; }
+    .cell-icon { font-size: 16px; }
     .name {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       color: var(--cortex-text); font-size: var(--cortex-fs-sm);
@@ -135,11 +135,11 @@ export class FileRow extends LitElement {
         </span>
         <span class="cell-icon">
           ${this.entry.is_dir
-            ? "📁"
+            ? html`<doclens-icon name="folder"></doclens-icon>`
             : badge
               ? html`<span class="type-badge"
                   style="background:${badge.bg};color:${badge.fg}">${badge.letter}</span>`
-              : "📄"}
+              : html`<doclens-icon name="file"></doclens-icon>`}
         </span>
         <span class="name">${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>

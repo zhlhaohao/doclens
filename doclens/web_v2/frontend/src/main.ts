@@ -9,6 +9,7 @@ import "@shoelace-style/shoelace/dist/components/drawer/drawer.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 
 import "./app";
+import "./components/icon";
 import "./styles/global.css";
 import "./styles/tokens.css";
 import "./styles/breakpoints.css";

@@ -49,7 +49,7 @@ export class PreviewPane extends LitElement {
     }
     /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
     .highlight {
-      background: rgba(0, 82, 255, 0.15);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
@@ -79,7 +79,7 @@ export class PreviewPane extends LitElement {
       border: 1px solid var(--cortex-border);
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
-      border-radius: var(--cortex-radius-sm);
+      border-radius: var(--cortex-radius-pill);
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
@@ -95,17 +95,16 @@ export class PreviewPane extends LitElement {
       font-size: var(--cortex-fs-xs);
       padding: var(--cortex-space-1) var(--cortex-space-3);
       border: none;
-      background: var(--cortex-primary-gradient);
-      color: #fff;
-      border-radius: var(--cortex-radius-sm);
-      box-shadow: var(--cortex-primary-glow);
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-btn-primary-text);
+      border-radius: var(--cortex-radius-pill);
       cursor: pointer;
       transition: opacity 0.15s;
     }
     button.edit-btn:hover { opacity: 0.9; }
     button.edit-btn:focus-visible {
       outline: none;
-      box-shadow: var(--cortex-focus-ring), var(--cortex-primary-glow);
+      box-shadow: var(--cortex-focus-ring);
     }
     .mobile-header {
       display: flex;
@@ -260,14 +259,14 @@ export class PreviewPane extends LitElement {
           type="button"
           aria-label="返回"
           @click=${this._onMobileBackClick}
-        >←</button>
+        ><doclens-icon name="arrow-left"></doclens-icon></button>
         <span class="mobile-filename" title=${this.path}>${this._basename(this.path)}</span>
         <button
           class="mobile-more"
           type="button"
           aria-label="更多操作"
           @click=${this._onMobileMoreClick}
-        >⋯</button>
+        ><doclens-icon name="more-horizontal"></doclens-icon></button>
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
@@ -276,18 +275,18 @@ export class PreviewPane extends LitElement {
                       type="button"
                       role="menuitem"
                       @click=${() => { this._showMobileMenu = false; this.enterEdit(); }}
-                    >✏️ 编辑</button>`
+                    ><doclens-icon name="pencil"></doclens-icon>编辑</button>`
                   : null}
                 <button
                   type="button"
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                >⬇️ 下载</button>
+                ><doclens-icon name="download"></doclens-icon>下载</button>
                 <button
                   type="button"
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
-                >⬆️ 上传</button>
+                ><doclens-icon name="upload"></doclens-icon>上传</button>
               </div>
             `
           : null}
@@ -351,7 +350,7 @@ export class PreviewPane extends LitElement {
   };
 
   private _renderDownloadBtn() {
-    return html`<button class="download-btn" @click=${this._onDownloadClick}>⬇️ 下载</button>`;
+    return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon>下载</button>`;
   }
 
   private _onUploadClick = () => {
@@ -386,7 +385,7 @@ export class PreviewPane extends LitElement {
   }
 
   private _renderUploadBtn() {
-    return html`<button class="upload-btn" @click=${this._onUploadClick}>⬆️ 上传</button>`;
+    return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon>上传</button>`;
   }
 
   render() {
@@ -428,7 +427,7 @@ export class PreviewPane extends LitElement {
           <div class="header">
             <span class="path">${this.path}</span>
             ${this.writable
-              ? html`<button class="edit-btn" @click=${() => this.enterEdit()}>✏️ 编辑</button>`
+              ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon>编辑</button>`
               : null}
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
