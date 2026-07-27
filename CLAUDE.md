@@ -234,6 +234,12 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npm run build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。`npm run build` = `tsc --noEmit && vite build`，类型错误同样会阻断构建。
 
+## 前端设计标尺
+
+前端美化 / 视觉改造（色彩、字体、圆角、按钮、卡片、阴影等）以 `doclens/web_v2/frontend/docs/DESIGN.md` 为视觉标尺。该文件拷贝自仓库同级的 `awesome-design-md/design-md/meta/DESIGN.md`（META 硬件电商设计系统：白色画布、Optimistic VF / Montserrat 字体、钴蓝 `#0064E0` 仅用于购买 CTA、黑色 pill 主按钮、`rounded.full`(100px) 按钮 / `rounded.xxxl`(32px) 卡片、极简平铺无重阴影）。
+
+改造前端视觉时须对照该标尺保持一致；如需调整设计取向，先更新本标尺文件再改组件，避免组件与设计系统脱节。
+
 ## 启动脚本 start-app.ps1
 
 > 当用户说：启动应用，则调用此脚本，以Web UI模式启动应用的前后端

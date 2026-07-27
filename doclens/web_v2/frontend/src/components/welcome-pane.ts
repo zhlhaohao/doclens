@@ -61,19 +61,20 @@ export class WelcomePane extends LitElement {
       width: 100%;
       margin: 0;
       padding: var(--cortex-space-6) var(--cortex-space-5);
-      /* 聚光灯 hero（更淡）：亮白热斑 → 浅奶油 → 暖金 → 金 → 柔琥珀向外衰减，
-         保留聚焦光斑但整体更柔和清淡。暖色；文字深色，亮区可读。 */
+      /* 聚光灯 hero（极淡蓝）：亮白热斑 → 极淡蓝向外微衰减，清淡通透；文字深色可读。 */
       background:
-        radial-gradient(circle at 18% 22%, #fffdf2 0%, #fef3c7 22%, #fde68a 45%, #fcd34d 70%, #f7b928 100%);
+        radial-gradient(circle at 18% 22%, #ffffff 0%, #f5f9ff 30%, #edf3fd 60%, #e4eefb 100%);
       color: var(--cortex-text);
       border: none;
       border-radius: var(--cortex-radius-3xl);
       box-shadow: var(--cortex-shadow-md);
     }
     .title-group {
+      /* 图标 + 标题同一行（避免列堆叠把 card-head 撑高），桌面/移动一致 */
       display: flex;
-      flex-direction: column;
-      gap: var(--cortex-space-4);
+      flex-direction: row;
+      align-items: center;
+      gap: var(--cortex-space-3);
       min-width: 0;
     }
     .hero-mark {
@@ -93,14 +94,20 @@ export class WelcomePane extends LitElement {
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      flex-wrap: wrap;
+      /* 标题组 + 模式 chips 始终同一行；标题过长由 card-title 省略号兜底 */
+      flex-wrap: nowrap;
     }
     .onboarding-card .card-title {
-      font-size: var(--cortex-fs-xl);
+      /* 桌面 hero 标题：介于 fs-lg(17) 与 fs-xl(30) 之间的 22px，仍是标题级别但不再过大 */
+      font-size: 22px;
       font-weight: 700;
       color: var(--cortex-text);
       letter-spacing: -0.02em;
       margin: 0;
+      /* card-head nowrap 兜底：标题过长时省略号，避免挤压右侧 modes chips */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .onboarding-subheading {
       font-size: var(--cortex-fs-sm);
@@ -165,6 +172,7 @@ export class WelcomePane extends LitElement {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      flex-shrink: 0;
     }
     .chip {
       display: inline-flex;
@@ -219,8 +227,7 @@ export class WelcomePane extends LitElement {
       .title { font-size: var(--cortex-fs-lg); }
       .subtitle { font-size: var(--cortex-fs-sm); }
       .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); }
-      /* 窄屏：大图标 + 标题并排一行；隐藏模式 chip 胶囊，压缩行数 */
-      .title-group { flex-direction: row; align-items: center; gap: var(--cortex-space-3); }
+      /* 窄屏：缩小 hero 圆盘 + 隐藏模式 chip 胶囊（title-group 已默认同行） */
       .hero-mark { width: 36px; height: 36px; font-size: 18px; }
       .modes-row { display: none; }
       .card-title { font-size: var(--cortex-fs-lg); }
