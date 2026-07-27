@@ -45,6 +45,9 @@ def _compute_writable(full: Path, search_path: Path) -> bool:
         return False
     if full.suffix.lower() in BINARY_PREVIEW_EXTS:
         return False
+    # PST 物理文件：预览是合成的邮件目录页，写回会毁掉 GB 级二进制
+    if full.suffix.lower() == ".pst":
+        return False
     # 数据目录内部不让用户改索引（开发 .cortex / 发行版 .doclens）
     try:
         full.relative_to(search_path / data_dirname())
@@ -188,6 +191,10 @@ async def preview(
     # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md
     if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
         return _synthesize_binary_preview(idx, path)
+    # PST 物理文件：GB 级二进制，绝不能 read_text（会把事件循环拖死）——
+    # 合成邮件目录页（总数 + 前 N 封主题列表）
+    if path.lower().endswith(".pst"):
+        return _synthesize_pst_overview(idx, path)
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
@@ -227,6 +234,65 @@ async def preview(
         line_range=line_range,
         highlights=[],
         writable=_compute_writable(full, base),
+    )
+
+
+# PST 目录页列出的邮件主题上限（超出只显示总数）
+_PST_OVERVIEW_LIST_LIMIT = 200
+
+# MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），展示前清除
+_SUBJECT_CONTROL_CHARS = re.compile(r"[\x00-\x1f]")
+
+
+def _clean_subject(name: str) -> str:
+    cleaned = _SUBJECT_CONTROL_CHARS.sub("", name or "").strip()
+    return cleaned or "(无主题)"
+
+
+def _synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewResponse:
+    """PST 物理文件的预览：合成邮件目录页（总数 + 前 N 封主题）。"""
+    from treesearch.fts import FTS5Index
+
+    abs_path = os.path.abspath(os.path.join(idx.search_path, rel_path))
+    prefix = abs_path + "#"
+    fts = FTS5Index(db_path=idx.index_path)
+    try:
+        total = fts.count_docs_with_source_prefix(prefix)
+        names = fts.list_doc_names_by_source_prefix(prefix, _PST_OVERVIEW_LIST_LIMIT)
+    finally:
+        fts.close()
+
+    if total == 0:
+        raise CortexAPIError(
+            status=404,
+            code="NOT_INDEXED",
+            detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
+        )
+
+    name = os.path.basename(rel_path)
+    lines = [
+        f"# {name}",
+        "",
+        f"Outlook 邮件数据文件，共 **{total}** 封邮件已索引。",
+        "",
+        "每封邮件是独立文档（路径形如 `<文件名>#<邮件ID>`），"
+        "可直接搜索发件人、主题、正文与白名单附件内容。",
+        "",
+    ]
+    if names:
+        shown = len(names)
+        heading = f"## 邮件主题（前 {shown} 封）" if total > shown else "## 邮件主题"
+        lines.append(heading)
+        lines.append("")
+        lines.extend(f"- {_clean_subject(n)}" for n in names)
+
+    return PreviewResponse(
+        path=rel_path,
+        language="markdown",
+        content="\n".join(lines),
+        line_range=None,
+        highlights=[],
+        writable=False,
     )
 
 

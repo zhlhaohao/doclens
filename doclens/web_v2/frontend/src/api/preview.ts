@@ -88,6 +88,8 @@ const FULL_FILE_PREVIEW_EXTS = [
   ".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv",
   // MHTML 网页存档：原始 MIME 文本无意义，预览走 DB 合成 md
   ".mhtml", ".mht",
+  // PST 物理文件：GB 级二进制，预览 = DB 合成的邮件目录页
+  ".pst",
   // 图像文件：预览 = 顶部原图 + 视觉解析出的 Markdown
   ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif",
 ];
