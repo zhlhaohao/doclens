@@ -79,6 +79,14 @@ export interface PageMarker {
   line_start: number;
 }
 
+/** PST 派生邮件预览附带的附件项（与后端 PstAttachmentInfo 对齐）。 */
+export interface PstAttachmentInfo {
+  name: string;
+  size: number;
+  stored: boolean;
+  download_url: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/preview
 // ---------------------------------------------------------------------------
@@ -113,6 +121,8 @@ export type PreviewFetchResult =
        *  key = node.line_start(原始体系, string)，value = heading 在合成 md 中的实际行号。
        *  null 表示无映射（普通文本预览，r.line 即文件实际行号）。 */
       lineMap: Record<string, number> | null;
+      /** 仅 PST 派生邮件预览（<pst>#<entry_id>）非空：附件清单 + 下载 URL。 */
+      attachments: PstAttachmentInfo[] | null;
     }
   | { ok: false; notIndexed: boolean; message: string };
 
@@ -139,6 +149,7 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
         writable: body.writable ?? false,
         pages: body.pages ?? null,
         lineMap: body.line_map ?? null,
+        attachments: body.attachments ?? null,
       };
     }
     const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));

@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from doclens.web_v2.models.pst import PstAttachmentInfo
+
 
 class PageMarker(BaseModel):
     """预览分页标记（PDF 页 / PPTX slide / XLSX sheet）。"""
@@ -23,6 +25,8 @@ class PreviewResponse(BaseModel):
     # JSON 对象 key 必须是 str；前端用 String(r.line) 查表换算 md 行号。
     # None / {} 表示无映射（普通文本预览，r.line 即文件实际行号）。
     line_map: Optional[dict[str, int]] = None
+    # 仅 PST 派生邮件预览（<pst>#<entry_id>）返回：附件清单 + 下载 URL
+    attachments: Optional[list[PstAttachmentInfo]] = None
 
 
 class PreviewSaveRequest(BaseModel):
