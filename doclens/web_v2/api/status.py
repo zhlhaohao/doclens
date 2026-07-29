@@ -4,7 +4,7 @@ import os
 from fastapi import APIRouter, Depends
 
 from doclens.index_manager import IndexManager
-from doclens.web_v2.deps import get_config, get_index_manager, get_watcher
+from doclens.web_v2.deps import get_config, get_index_manager, get_watcher, sync_snapshot
 
 router = APIRouter()
 
@@ -48,4 +48,6 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
                 "last_success": None,
             }),
         },
+        # Git 同步快照（ADR-0003）；None = 同步循环未注册（配置关闭）
+        "sync": sync_snapshot(),
     }

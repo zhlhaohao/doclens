@@ -106,6 +106,11 @@ class CortexConfig(BaseSettings):
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)
 
+    # Git 同步（仅 GUI 进程运行；工作目录为 git 根且已配置 remote 时生效，
+    # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0003）
+    sync_enabled: bool = Field(default=True)
+    sync_interval_minutes: float = Field(default=5.0, gt=0)
+
     # Web UI 监听（FastAPI + uvicorn）；改 host/port 需重启 gui 才生效
     web_host: str = Field(
         default="127.0.0.1",
