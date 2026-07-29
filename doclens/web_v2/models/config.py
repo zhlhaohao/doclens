@@ -14,9 +14,11 @@ class ConfigScope:
 
 
 # 改动后需重启 cortex gui 才生效的字段（host/port 在 uvicorn/MCP 启动时绑定，
-# 无法 hot-reload）。需与 settings-fields.ts 的 effect:"restart" 保持一致。
+# GitSync 循环在 lifespan 启动时创建，均无法 hot-reload）。
+# 需与 settings-fields.ts 的 effect:"restart" 保持一致。
 RESTART_FIELDS: frozenset[str] = frozenset({
     "CORTEX_WEB_HOST", "CORTEX_WEB_PORT", "CORTEX_MCP_HOST", "CORTEX_MCP_PORT",
+    "CORTEX_SYNC_ENABLED",
 })
 
 
