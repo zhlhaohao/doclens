@@ -57,6 +57,8 @@ def create_app(host: str = "127.0.0.1") -> FastAPI:
     app.include_router(search.router, prefix="/api")
     from doclens.web_v2.api import preview
     app.include_router(preview.router, prefix="/api")
+    from doclens.web_v2.api import pst
+    app.include_router(pst.router, prefix="/api")
     from doclens.web_v2.api import sessions
     app.include_router(sessions.router, prefix="/api")
     from doclens.web_v2.api import status

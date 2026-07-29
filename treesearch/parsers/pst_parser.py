@@ -2,14 +2,23 @@
 """PST (Outlook 邮件数据文件) parser for TreeSearch.
 
 架构：Go sidecar（treesearch/_bin/pst-extract.exe，go-pst 库）把 PST 解包为流式
-JSONL（每行一封邮件，白名单附件提取到临时目录），本模块逐行消费并建树。
+JSONL（每行一封邮件，附件提取到临时目录），本模块逐行消费并建树。
 
 索引粒度：**每封邮件一个文档**（打破 1 文件 = 1 文档惯例）。派生文档的
 ``source_path`` = ``<pst绝对路径>#<entry_id>``；索引器据此做级联删除与
 增量替换（PST hash 变化 → 全量重建该 PST 的全部邮件文档）。
 
 仅邮件（IPM.Note 等）进索引；联系人/日历/任务由 sidecar 跳过。
-附件内容并入所属邮件正文（不产出独立文档、不持久落盘）。
+
+附件（ADR-0003，2026-07-29）：**全部** ≤100MB 的附件（不限类型）落盘到
+``pst_attachments/<doc_hash>/<entry_id>/`` 供预览下载；白名单文档类附件
+额外解析为文本并入正文（ADR-0002 的附件并入逻辑不变）。
+
+正文（ADR-0003）：``body_html`` 存在时优先转写为 Markdown（保持标题/列表/
+表格结构），无 HTML 或转写失败时退回纯文本。
+
+每棵树附带 ``email_meta``（主题/发件人/日期/文件夹/附件清单），索引器写入
+``pst_email_meta`` 表供邮件列表分页查询。
 """
 import asyncio
 import json
@@ -23,15 +32,19 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from .email_html_md import email_html_to_md
 from .html_parser import _extract_html_structure
 
 logger = logging.getLogger(__name__)
 
-# 参与解析的附件类型（其余只记文件名）。与 sidecar 的 --attachment-exts 保持一致。
+# 参与解析并入正文的附件类型（其余只落盘供下载）。白名单语义同 ADR-0002。
 ATTACHMENT_PARSE_EXTS = ("pdf", "docx", "doc", "xlsx", "pptx", "csv", "txt", "md", "html")
 
 # 单个附件解析文本并入正文时的字符上限
 ATTACHMENT_TEXT_MAX_CHARS = 200_000
+
+# 附件落盘大小上限（ADR-0003：100MB，超限只记文件名）
+ATTACHMENT_STORE_MAX_BYTES = 100 * 1024 * 1024
 
 # sidecar 输出队列上限（背压：sidecar 快、消费慢时防止内存膨胀）
 _QUEUE_MAXSIZE = 32
@@ -120,6 +133,16 @@ def _email_body_text(email: dict) -> str:
     return ""
 
 
+def _email_body_markdown(email: dict) -> str:
+    """邮件正文 → Markdown（ADR-0003）：body_html 优先转写，退回纯文本。"""
+    html = (email.get("body_html") or "").strip()
+    if html:
+        md = email_html_to_md(html)
+        if md:
+            return md
+    return _email_body_text(email)
+
+
 def _build_email_text(email: dict, attachment_sections: list[tuple[str, str]]) -> str:
     """组装邮件文档正文：头部块 + 正文 + 附件章节。"""
     header_lines = []
@@ -145,7 +168,7 @@ def _build_email_text(email: dict, attachment_sections: list[tuple[str, str]]) -
         header_lines.append(f"附件: {att_list}")
 
     parts = ["\n".join(header_lines)] if header_lines else []
-    body = _email_body_text(email)
+    body = _email_body_markdown(email)
     if body:
         parts.append(body)
     for name, text in attachment_sections:
@@ -227,6 +250,22 @@ def _drain_stderr(proc: subprocess.Popen, sink: list) -> None:
         pass
 
 
+# MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），入库前清除
+_SUBJECT_CONTROL_CHARS = re.compile(r"[\x00-\x1f]")
+
+
+def _clean_subject(raw: str) -> str:
+    return _SUBJECT_CONTROL_CHARS.sub("", raw or "").strip() or "(无主题)"
+
+
+def _sender_display(email: dict) -> str:
+    from_part = email.get("from_name") or ""
+    from_addr = email.get("from_addr") or ""
+    if from_addr and from_addr not in from_part:
+        return f"{from_part} <{from_addr}>" if from_part else from_addr
+    return from_part or from_addr
+
+
 async def pst_to_trees(
     pst_path: str,
     *,
@@ -236,12 +275,19 @@ async def pst_to_trees(
     if_add_doc_description: bool = False,
     if_add_node_text: bool = False,
     if_add_node_id: bool = True,
+    pst_attachment_store=None,
+    rel_path: str = "",
     **kwargs,
 ) -> dict:
     """解析 PST，返回 ``{"multi_docs": [tree, ...]}``（每封邮件一个树）。
 
     与普通 parser 的返回值约定不同——索引器对 multi_docs 特殊处理，
     为每个树建一个 Document（source_path = ``<pst>#<entry_id>``）。
+
+    Args:
+        pst_attachment_store: PstAttachmentStore 实例（索引器经 kwargs 传入）；
+            为 None 时附件不持久化（兼容直接调用/测试），白名单附件解析后即删。
+        rel_path: PST 相对 search_path 的 POSIX 路径（附件落盘目录命名依据）。
     """
     abs_pst = os.path.abspath(pst_path)
     sidecar = _find_sidecar()
@@ -252,7 +298,9 @@ async def pst_to_trees(
         sidecar,
         "--pst", abs_pst,
         "--tmp-dir", tmp_dir,
-        "--attachment-exts", ",".join(ATTACHMENT_PARSE_EXTS),
+        # "*" = 全部类型附件都提取（落盘供下载）；白名单只控制"解析并入正文"
+        "--attachment-exts", "*",
+        "--max-attachment-bytes", str(ATTACHMENT_STORE_MAX_BYTES),
     ]
     # Windows 下用 Popen + 生产者线程读管道（对事件循环实现无要求）
     proc = subprocess.Popen(
@@ -270,6 +318,7 @@ async def pst_to_trees(
     trees: list[dict] = []
     parsed_attachments = 0
     failed_attachments = 0
+    stored_attachments = 0
     build_kwargs = dict(
         if_add_node_summary=if_add_node_summary,
         summary_chars_threshold=summary_chars_threshold,
@@ -284,15 +333,34 @@ async def pst_to_trees(
                 break
             entry_id = email.get("entry_id")
             source_path = f"{abs_pst}#{entry_id}"
+            raw_atts = email.get("attachments") or []
+
+            # 1) 附件全量落盘（≤100MB 且 sidecar 已提取的）；白名单随后从
+            #    落盘位置解析并入正文。无 store 时退回旧行为（解析后即删）。
+            extracted = [(a.get("path") or "", a.get("name") or "unnamed")
+                         for a in raw_atts if a.get("path")]
+            stored: list = []
+            if pst_attachment_store is not None and rel_path:
+                stored = pst_attachment_store.store_for_email(
+                    rel_path, str(entry_id), extracted
+                )
+                stored_attachments += sum(1 for s in stored if s is not None)
+                email_dir = pst_attachment_store.email_dir_for(rel_path, str(entry_id))
 
             attachment_sections: list[tuple[str, str]] = []
-            for att in (email.get("attachments") or []):
-                tmp_path = att.get("path") or ""
-                name = att.get("name") or "unnamed"
-                if not tmp_path:
+            for idx_att, (tmp_path, name) in enumerate(extracted):
+                ext = os.path.splitext(name)[1].lower().lstrip(".")
+                if ext not in ATTACHMENT_PARSE_EXTS:
                     continue
+                # 优先从落盘位置解析；未落盘（无 store）则从临时文件解析
+                if stored and stored[idx_att] is not None:
+                    parse_from = str(email_dir / stored[idx_att].filename)
+                    cleanup = False
+                else:
+                    parse_from = tmp_path
+                    cleanup = pst_attachment_store is None
                 try:
-                    text = await _parse_attachment_text(tmp_path)
+                    text = await _parse_attachment_text(parse_from)
                     if text:
                         if len(text) > ATTACHMENT_TEXT_MAX_CHARS:
                             text = text[:ATTACHMENT_TEXT_MAX_CHARS] + "\n\n[附件内容已截断]"
@@ -302,13 +370,48 @@ async def pst_to_trees(
                     failed_attachments += 1
                     logger.warning("Attachment parse failed (%s): %s", name, e)
                 finally:
+                    if cleanup:
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
+            # 无 store 时清理未参与解析的临时文件（有 store 时已 move 走）
+            if pst_attachment_store is None:
+                for tmp_path, _name in extracted:
                     try:
                         os.remove(tmp_path)
                     except OSError:
                         pass
 
+            # 2) 邮件元数据（索引器写入 pst_email_meta 表，供列表分页查询）
+            stored_by_name: dict[str, list] = {}
+            for s in stored:
+                if s is not None:
+                    stored_by_name.setdefault(s.name, []).append(s)
+            meta_atts = []
+            for a in raw_atts:
+                name = a.get("name") or "unnamed"
+                cand = stored_by_name.get(name) or []
+                s = cand.pop(0) if cand else None
+                meta_atts.append({
+                    "name": name,
+                    "size": a.get("size") or 0,
+                    "stored": s is not None,
+                    "filename": s.filename if s else None,
+                })
+            email_meta = {
+                "entry_id": str(entry_id),
+                "subject": _clean_subject(email.get("subject") or ""),
+                "sender": _sender_display(email),
+                "date": email.get("date") or "",
+                "folder": _strip_root_prefix(email.get("folder") or ""),
+                "attachments": meta_atts,
+            }
+
             try:
-                trees.append(_email_to_tree(email, attachment_sections, source_path, **build_kwargs))
+                tree = _email_to_tree(email, attachment_sections, source_path, **build_kwargs)
+                tree["email_meta"] = email_meta
+                trees.append(tree)
             except Exception as e:
                 logger.warning("Failed to build tree for email %s: %s", entry_id, e)
 
@@ -331,8 +434,8 @@ async def pst_to_trees(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     logger.info(
-        "PST parsed: %s -> %d email docs (attachments parsed=%d failed=%d)",
-        pst_path, len(trees), parsed_attachments, failed_attachments,
+        "PST parsed: %s -> %d email docs (attachments parsed=%d failed=%d stored=%d)",
+        pst_path, len(trees), parsed_attachments, failed_attachments, stored_attachments,
     )
     return {
         "multi_docs": trees,

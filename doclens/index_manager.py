@@ -190,7 +190,7 @@ class IndexManager:
         """
         try:
             from treesearch.fts import FTS5Index
-            from treesearch.indexer import _file_hash
+            from treesearch.indexer import _file_hash_with_salts
 
             fts = FTS5Index(db_path=self.index_path)
             stored_meta = fts.get_all_index_meta()
@@ -215,7 +215,7 @@ class IndexManager:
                 if not os.path.isfile(abs_fp):
                     logger.debug("File deleted: %s", abs_fp)
                     return True
-                current_hash = _file_hash(abs_fp)
+                current_hash = _file_hash_with_salts(abs_fp)
                 if current_hash != stored_hash:
                     logger.debug("File changed: %s", abs_fp)
                     return True

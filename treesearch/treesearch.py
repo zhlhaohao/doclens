@@ -116,7 +116,7 @@ class TreeSearch:
             (indicating a move, rename, or deletion that requires full-scope
             re-indexing with orphan pruning).
         """
-        from .indexer import _file_hash
+        from .indexer import _file_hash_with_salts
 
         if stored_meta is None:
             from .fts import FTS5Index
@@ -130,7 +130,7 @@ class TreeSearch:
         changed = []
         for fp in resolved:
             abs_fp = os.path.abspath(fp)
-            current_hash = _file_hash(abs_fp)
+            current_hash = _file_hash_with_salts(abs_fp)
             if not current_hash:
                 continue
             if stored_meta.get(abs_fp) != current_hash:
