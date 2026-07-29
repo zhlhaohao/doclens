@@ -94,6 +94,19 @@ export interface ReindexResult {
   failed_count: number;
 }
 
+/** Git 同步状态快照（ADR-0003，后端 doclens/git_sync.py）。
+ *  经 /api/status 与 SSE status 快照下发；message 非空 = 状态栏弱提醒。 */
+export interface GitSyncStatus {
+  running: boolean;
+  /** 未启动原因："" | "not_git_root" | "no_remote" */
+  reason: string;
+  last_sync_at: number | null;
+  last_success: boolean | null;
+  /** 弱提醒文案（"" = 无提醒） */
+  message: string;
+  fail_count: number;
+}
+
 export interface ReindexState {
   dialog: "closed" | "confirm" | "running" | "done" | "error";
   current_file: string | null;
@@ -112,6 +125,8 @@ export interface SystemStatus {
   /** 当前 AI 模型 id（后端从 CortexConfig.planify_model_id 读）。空字符串表示未配置。 */
   model_name?: string;
   watcher?: WatcherStatus | null;
+  /** Git 同步快照；null/undefined = 同步循环未注册 */
+  sync?: GitSyncStatus | null;
 }
 
 /** Settings page */
@@ -196,6 +211,8 @@ export interface AppState {
   pendingSession: Session | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
+  /** Git 同步状态（SSE status 快照 / /api/status 携带；null = 未注册） */
+  syncStatus: GitSyncStatus | null;
   /** 近期文件变化（SSE status 快照携带，watch-changes-dialog 展示） */
   watchRecentChanges: WatchChange[];
   reindex: ReindexState;

@@ -6,7 +6,7 @@
  * 「流结束/出错 → 等 RECONNECT_DELAY_MS → 重新订阅」循环。 */
 import { streamSSE } from "./api/client";
 import { actions } from "./state/store";
-import type { WatchChange, WatcherStatus } from "./state/types";
+import type { GitSyncStatus, WatchChange, WatcherStatus } from "./state/types";
 
 const RECONNECT_DELAY_MS = 3000;
 
@@ -14,6 +14,7 @@ interface StatusSnapshot {
   enabled?: boolean;
   watcher?: WatcherStatus | null;
   recent_changes?: WatchChange[];
+  sync?: GitSyncStatus | null;
 }
 
 interface ReindexedPayload {
@@ -37,6 +38,7 @@ function safeParse<T>(raw: string): T | null {
 function applyStatus(s: StatusSnapshot): void {
   actions.setWatcherStatus(s.watcher ?? null);
   actions.setWatchRecentChanges(s.recent_changes ?? []);
+  actions.setSyncStatus(s.sync ?? null);
 }
 
 function dispatchReindexedToast(d: ReindexedPayload): void {

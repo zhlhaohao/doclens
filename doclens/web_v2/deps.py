@@ -23,6 +23,7 @@ _sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
 _vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 import 循环
+_git_sync: Optional["object"] = None  # GitSync，懒加载避免 import 循环
 _mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
 _lock = threading.RLock()
 
@@ -109,10 +110,11 @@ def get_sessions_store() -> SessionsStore:
 
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker
-    # 停止可能存在的 watcher / worker / MCP server，释放后台线程
+    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker, _git_sync
+    # 停止可能存在的 watcher / worker / 同步循环 / MCP server，释放后台线程
     stop_watcher()
     stop_vision_worker()
+    stop_git_sync()
     stop_mcp_server()
     with _lock:
         _config = None
@@ -122,6 +124,7 @@ def reset_singletons() -> None:
         _watcher = None
         _mcp_handle = None
         _vision_worker = None
+        _git_sync = None
 
 
 def reload_config() -> CortexConfig:
@@ -168,13 +171,15 @@ def set_watcher(watcher) -> None:
 def watch_snapshot() -> dict[str, Any]:
     """当前 watch 状态快照（SSE 首推 / GET /api/watch/status / 回调广播共用）。
 
-    结构与 GET /api/watch/status 返回一致：{enabled, watcher, recent_changes}。
+    结构与 GET /api/watch/status 返回一致：{enabled, watcher, recent_changes, sync}。
+    sync 为 GitSync 快照（未注册时为 None），随 status 事件同通道下发。
     """
     w = get_watcher()
     return {
         "enabled": get_config().watch_enabled,
         "watcher": w.status() if w is not None else None,
         "recent_changes": get_watch_broker().recent_changes(),
+        "sync": sync_snapshot(),
     }
 
 
@@ -294,6 +299,77 @@ def stop_vision_worker() -> None:
             worker.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("stop_vision_worker: %s", exc)
+
+
+def get_git_sync():
+    """获取已注册的 GitSync 单例（可能为 None）。"""
+    return _git_sync
+
+
+def sync_snapshot() -> Optional[dict]:
+    """Git 同步状态快照；同步循环未注册（非 git 根/无 remote/配置关闭）时为 None。"""
+    gs = get_git_sync()
+    return gs.status() if gs is not None else None
+
+
+def start_git_sync() -> bool:
+    """根据 config.sync_enabled 创建并启动 GitSync 同步循环（仅 GUI 调用）。
+
+    每轮结束（成功/失败/跳过）经 on_cycle_done 回调把 sync 快照
+    经 WatchBroker 广播给所有 SSE 客户端（复用 status 事件通道）。
+
+    Returns:
+        True 表示已启动；False 表示配置关闭、非 git 根或无 remote（整体停摆）。
+    """
+    global _git_sync
+    config = get_config()
+    if not config.sync_enabled:
+        logger.info("Git sync disabled by config (sync_enabled=False)")
+        return False
+    try:
+        from doclens.config import data_dirname
+        from doclens.git_sync import GitSync
+
+        broker = get_watch_broker()
+
+        def _on_cycle_done(_status: dict) -> None:
+            # sync 快照已并入 watch_snapshot()，广播 status 即可让前端拿到最新态
+            broker.broadcast("status", watch_snapshot())
+
+        gs = GitSync(
+            config.search_path,
+            interval_seconds=config.sync_interval_minutes * 60.0,
+            data_dir=data_dirname(),
+            on_cycle_done=_on_cycle_done,
+        )
+        started = gs.start()
+        # 无论是否启动都注册单例：未启动时 status() 带 reason（not_git_root/no_remote），
+        # 供 /api/status 向前端说明同步为何停摆
+        with _lock:
+            _git_sync = gs
+        if not started:
+            logger.info("GitSync 整体停摆: %s", gs.status()["reason"])
+            return False
+        logger.info("GitSync started for %s", config.search_path)
+        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态
+        broker.broadcast("status", watch_snapshot())
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("start_git_sync failed: %s", exc)
+        return False
+
+
+def stop_git_sync() -> None:
+    """停止并注销 GitSync 单例（幂等）。"""
+    global _git_sync
+    with _lock:
+        gs = _git_sync
+        _git_sync = None
+    if gs is not None:
+        try:
+            gs.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_git_sync: %s", exc)
 
 
 async def start_mcp_server() -> bool:

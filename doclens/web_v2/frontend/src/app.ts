@@ -122,6 +122,8 @@ export class CortexApp extends LitElement {
     try {
       const s = await getStatus();
       actions.setStatus(s);
+      // 同步状态在 SSE 首推到达前先填一次初值（SSE status 快照会持续覆盖）
+      if (s.sync !== undefined) actions.setSyncStatus(s.sync ?? null);
     } catch {
       /* 静默失败：模型名 / workdir 非关键 */
     }

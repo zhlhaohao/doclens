@@ -7,7 +7,7 @@ import appLogoSvg from "../assets/app_icon.svg?raw";
 import "./toast-stack";
 import "./watch-changes-dialog";
 import { store, actions } from "../state/store";
-import type { ViewId, SettingsScope, WatcherStatus } from "../state/types";
+import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
 import { router } from "../router/router";
 
@@ -78,6 +78,9 @@ export class AppBar extends LitElement {
     .watch-badge.dot { color: var(--cortex-success); }
     .watch-badge.busy { color: var(--cortex-primary); }
     .watch-badge.warn { color: var(--cortex-warning); }
+    /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
+    .sync-badge { cursor: default; }
+    .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
     /* 移动端刷新按钮：圆形描边按钮，点击派发 cortex:refresh 事件，
        各 view 可监听并自行决定如何刷新（默认不做事，硬刷新由调用方决定）。
        桌面端默认隐藏，移动端（≤1023px）显示。 */
@@ -318,6 +321,23 @@ export class AppBar extends LitElement {
     this._watchDialogOpen = true;
   }
 
+  /** Git 同步徽标（ADR-0003）：仅同步循环运行中或有弱提醒时出现；
+   *  整体停摆（非 git 根/无 remote）不渲染——功能关闭不是错误，不制造噪音。 */
+  private _renderSyncBadge(s: GitSyncStatus | null) {
+    if (!s || (!s.running && !s.message)) return nothing;
+    const warn = s.message !== "" || s.last_success === false;
+    const cls = warn ? "warn" : "dot";
+    const label = warn ? `⚠${s.message || "同步失败"}` : "●同步";
+    return html`
+      <span
+        class="watch-badge sync-badge ${cls}"
+        role="status"
+        aria-label="Git 同步状态"
+        title=${s.message || "知识库 Git 同步运行中"}
+      ><doclens-icon name="globe"></doclens-icon>${label}</span>
+    `;
+  }
+
   private _renderWatchBadge(w: WatcherStatus | null) {
     const n = w?.last_doc_count;
     const nStr = n != null ? ` ${n}` : "";
@@ -354,6 +374,7 @@ export class AppBar extends LitElement {
         <span>Doclens</span>
       </div>
       <div class="right-cluster">
+        ${this._renderSyncBadge(store.getState().syncStatus)}
         ${this._renderWatchBadge(store.getState().watcher)}
         <button
           class="refresh-btn ${this._refreshing ? "spinning" : ""}"

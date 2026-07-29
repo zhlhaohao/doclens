@@ -60,6 +60,7 @@ export const INITIAL_STATE: AppState = {
   pendingSession: null,
   status: null,
   watcher: null,
+  syncStatus: null,
   watchRecentChanges: [],
   reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
   error: null,
@@ -179,6 +180,10 @@ export const actions = {
 
   setWatcherStatus(w: AppState["watcher"]) {
     store.setState({ watcher: w });
+  },
+
+  setSyncStatus(s: AppState["syncStatus"]) {
+    store.setState({ syncStatus: s });
   },
 
   setWatchRecentChanges(list: WatchChange[]) {
