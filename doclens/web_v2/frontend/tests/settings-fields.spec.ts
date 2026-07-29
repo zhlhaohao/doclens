@@ -20,7 +20,7 @@ describe("SETTINGS_FIELDS", () => {
       expect(f.tab).toBeTruthy();
       expect(f.envVar).toMatch(/^[A-Z][A-Z0-9_]*$/);
       expect(f.label).toBeTruthy();
-      expect(["text", "number", "select", "password", "slider"]).toContain(f.component);
+      expect(["text", "number", "select", "password", "slider", "switch"]).toContain(f.component);
     }
   });
 
