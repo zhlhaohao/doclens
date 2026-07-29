@@ -265,3 +265,6 @@ doclens/web_v2/frontend/.playwright-cli/
 .playwright-cli/
 
 node_modules/
+
+# Claude Code 本地状态（Stop hook 防抖时间戳，勿提交）
+.claude/.last-app-restart

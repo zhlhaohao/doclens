@@ -292,3 +292,15 @@ pwsh -File ./start-app.ps1 gui
 ```
 
 > **注意**：仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新，必须先 `npm run build` 再重启后端。
+
+### 代码改动自动重启（Stop hook）
+
+仓库已配项目级 Stop hook（`.claude/settings.json` + `.claude/hooks/restart-app-on-change.sh`）：Claude 每轮响应结束（Stop）时，若检测到**自上次重启后**有前后端代码改动，自动重启应用，无需手动重启。
+
+- **前端改动**（`doclens/web_v2/frontend/src/**`）：先 `npm run build` 再重启。
+- **后端改动**（`doclens/`、`treesearch/`、`planify/` 下 `*.py`）：直接重启（`start-app.ps1` 自带 `_kill_port_process` 停旧）。
+- **无改动**（纯对话）：静默跳过。
+- 重启用 `CORTEX_NO_BROWSER=1`，**不弹浏览器**（避免反复弹窗）；仅手动 `start-app.ps1 gui` 才弹。
+- 防抖时间戳：`.claude/.last-app-restart`（已 gitignore）。
+
+> hook 只负责「改完重启」，不负责首次启动——首次仍需手动 `pwsh -File ./start-app.ps1 gui`。
