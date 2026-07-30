@@ -392,7 +392,7 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     hint: "MCP server 端口（1–65535）。改后需重启。",
   },
 
-  // ===== 知识库 Git 同步（ADR-0003；改后需重启 gui 才生效） =====
+  // ===== 知识库 Git 同步（ADR-0006；改后需重启 gui 才生效） =====
   {
     tab: "network",
     section: "知识库 Git 同步",

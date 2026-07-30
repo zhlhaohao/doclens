@@ -27,10 +27,10 @@ from .pathutil import resolve_paths, DEFAULT_IGNORE_DIRS, MAX_DIR_FILES, shadow_
 logger = logging.getLogger(__name__)
 
 # PST 解析器输出格式版本盐（折进 PST 文件的指纹）：pst_parser 的输出格式
-# 变化（正文转写/元数据/附件落盘，ADR-0003）时 bump，让旧 PST 索引在下次
+# 变化（正文转写/元数据/附件落盘，ADR-0005）时 bump，让旧 PST 索引在下次
 # 增量索引自动重建——只影响 PST，不像 INDEX_SCHEMA_VERSION 那样连累全库。
 # 历史：
-#   ":pst2" — 2026-07-29 ADR-0003：HTML 正文转写 + 附件全量落盘 + 邮件元数据。
+#   ":pst2" — 2026-07-29 ADR-0005：HTML 正文转写 + 附件全量落盘 + 邮件元数据。
 #   ":pst3" — 2026-07-30：邮件头转储正文（Outlook 系统报告类）可读化重排
 #             （_reformat_header_dump：解码 encoded-word、折叠超长地址列表）。
 #   ":pst4" — 2026-07-30：头转储检测前移到 HTML 转写之前 + 逻辑块解析
@@ -1301,7 +1301,7 @@ def _file_hash(fp: str, mode: Optional[str] = None) -> str:
 def _file_hash_with_salts(fp: str, mode: Optional[str] = None) -> str:
     """``_file_hash`` + 解析器格式盐（插在版本号后，保持末尾 size 可解析）。
 
-    PST 解析器输出格式变化（ADR-0003）时 bump PST_PARSER_FINGERPRINT_SALT，
+    PST 解析器输出格式变化（ADR-0005）时 bump PST_PARSER_FINGERPRINT_SALT，
     旧 PST 索引自动重建，不像 INDEX_SCHEMA_VERSION 那样连累全库。
     增量比较与移动检测都必须用本函数（口径一致才能匹配）。
     """
@@ -1508,7 +1508,7 @@ async def build_index(
     from .parsers.image_store import ImageStore
     images_root = Path(db_path).parent / "images"
     image_store = ImageStore(images_root)
-    # PST 附件落盘存储（与 index.db 同目录的 pst_attachments/ 子目录，ADR-0003）
+    # PST 附件落盘存储（与 index.db 同目录的 pst_attachments/ 子目录，ADR-0005）
     from .parsers.pst_attachment_store import PstAttachmentStore
     pst_att_store = PstAttachmentStore(Path(db_path).parent / "pst_attachments")
     if force:
@@ -1651,14 +1651,14 @@ async def build_index(
                 if base_dir:
                     pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
                     image_store.purge_doc(pruned_rel)
-                # 清理被删 PST 的落盘附件（ADR-0003）
+                # 清理被删 PST 的落盘附件（ADR-0005）
                 if ext == ".pst" and base_dir:
                     pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
                     pst_att_store.purge_doc(pruned_rel)
 
     for fp in expanded:
         abs_fp = os.path.abspath(fp)
-        # 指纹含解析器格式盐（PST：ADR-0003 输出格式变化时自动重建）
+        # 指纹含解析器格式盐（PST：ADR-0005 输出格式变化时自动重建）
         fh = _file_hash_with_salts(abs_fp)
         if not fh:
             # File disappeared after glob expansion (e.g. broken symlink)
@@ -1860,7 +1860,7 @@ async def build_index(
                 removed_ids = sorted(old_ids - new_ids)
                 if removed_ids:
                     fts.delete_documents(removed_ids)
-                    # 被移除派生文档（邮件删除）的落盘附件级联清理（ADR-0003）
+                    # 被移除派生文档（邮件删除）的落盘附件级联清理（ADR-0005）
                     if base_dir:
                         pst_rel = os.path.relpath(abs_fp, base_dir).replace(os.sep, "/")
                         for rid in removed_ids:
@@ -1881,7 +1881,7 @@ async def build_index(
                     if optimize_threshold and docs_since_optimize >= optimize_threshold:
                         fts.optimize()
                         docs_since_optimize = 0
-                # 邮件元数据入库（pst_email_meta 表，供列表分页查询，ADR-0003）
+                # 邮件元数据入库（pst_email_meta 表，供列表分页查询，ADR-0005）
                 for t, doc in zip(trees, new_docs):
                     meta = t.get("email_meta")
                     if meta:

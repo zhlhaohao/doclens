@@ -321,7 +321,7 @@ export class AppBar extends LitElement {
     this._watchDialogOpen = true;
   }
 
-  /** Git 同步徽标（ADR-0003）：仅同步循环运行中或有弱提醒时出现；
+  /** Git 同步徽标（ADR-0006）：仅同步循环运行中或有弱提醒时出现；
    *  整体停摆（非 git 根/无 remote）不渲染——功能关闭不是错误，不制造噪音。 */
   private _renderSyncBadge(s: GitSyncStatus | null) {
     if (!s || (!s.running && !s.message)) return nothing;

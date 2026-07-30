@@ -1,4 +1,4 @@
-# Git 同步的合并冲突自动解决 = 偏向本地（ours-wins）
+# ADR-0006: Git 同步的合并冲突自动解决 = 偏向本地（ours-wins）
 
 知识库 Git 同步（auto-commit → pull → merge → push）在遇到合并冲突时自动偏向本地：本机内容胜出，远端机器的改动从工作区静默消失（git 历史中仍可捞回）。
 

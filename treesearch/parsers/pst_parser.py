@@ -10,11 +10,11 @@ JSONL（每行一封邮件，附件提取到临时目录），本模块逐行消
 
 仅邮件（IPM.Note 等）进索引；联系人/日历/任务由 sidecar 跳过。
 
-附件（ADR-0003，2026-07-29）：**全部** ≤100MB 的附件（不限类型）落盘到
+附件（ADR-0005，2026-07-29）：**全部** ≤100MB 的附件（不限类型）落盘到
 ``pst_attachments/<doc_hash>/<entry_id>/`` 供预览下载；白名单文档类附件
 额外解析为文本并入正文（ADR-0002 的附件并入逻辑不变）。
 
-正文（ADR-0003）：``body_html`` 存在时优先转写为 Markdown（保持标题/列表/
+正文（ADR-0005）：``body_html`` 存在时优先转写为 Markdown（保持标题/列表/
 表格结构），无 HTML 或转写失败时退回纯文本。
 
 每棵树附带 ``email_meta``（主题/发件人/日期/文件夹/附件清单），索引器写入
@@ -43,7 +43,7 @@ ATTACHMENT_PARSE_EXTS = ("pdf", "docx", "doc", "xlsx", "pptx", "csv", "txt", "md
 # 单个附件解析文本并入正文时的字符上限
 ATTACHMENT_TEXT_MAX_CHARS = 200_000
 
-# 附件落盘大小上限（ADR-0003：100MB，超限只记文件名）
+# 附件落盘大小上限（ADR-0005：100MB，超限只记文件名）
 ATTACHMENT_STORE_MAX_BYTES = 100 * 1024 * 1024
 
 # sidecar 输出队列上限（背压：sidecar 快、消费慢时防止内存膨胀）
@@ -310,7 +310,7 @@ def _email_body_text(email: dict) -> str:
 
 
 def _email_body_markdown(email: dict) -> str:
-    """邮件正文 → Markdown（ADR-0003）：body_html 优先转写，退回纯文本。
+    """邮件正文 → Markdown（ADR-0005）：body_html 优先转写，退回纯文本。
 
     Outlook 系统报告类邮件（如"无效收件人"报告）的 body / body_html
     都是原始邮件头转储、无真实正文——先按纯文本形态识别并可读化重排；

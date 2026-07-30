@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""邮件 HTML 正文 → Markdown 转写（ADR-0003 决策 3）。
+"""邮件 HTML 正文 → Markdown 转写（ADR-0005 决策 3）。
 
 body_html 存在时优先转写为 Markdown 作为邮件文档正文（保持标题/列表/表格
 结构），搜索语料与预览同源。转换复用项目已有依赖 markitdown。
 
 图片一律剥除（留 alt 占位文字）：
-- ``cid:`` 内嵌图——本期不做 cid→附件映射重写（ADR-0003 决策 4）
+- ``cid:`` 内嵌图——本期不做 cid→附件映射重写（ADR-0005 决策 4）
 - ``data:`` base64 图——避免 MB 级 base64 混进索引文本
 - 远程图——预览时加载外联图会向发件方泄漏已读回执（tracking pixel）
 """

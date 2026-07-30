@@ -1,6 +1,6 @@
 """Git 同步模块 - 知识库目录为 git 根时的定期 auto-commit → pull → merge → push 循环。
 
-设计决议（CONTEXT.md / ADR-0003）：
+设计决议（CONTEXT.md / ADR-0006）：
 - 仅 GUI 进程运行；纯固定间隔，无启动立即触发、无变更驱动。
 - app 全自动 auto-commit：机器人身份 doclens-sync（逐命令 -c 指定，不污染用户 git 配置）。
 - 合并冲突偏向本地（-X ours）：远端改动静默从工作区消失，git 历史仍可捞回。
