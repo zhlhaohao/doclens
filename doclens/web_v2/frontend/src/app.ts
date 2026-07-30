@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "./state/store";
 import type { ViewId } from "./state/types";
@@ -54,6 +54,10 @@ export class CortexApp extends LitElement {
       min-height: 0;
       position: relative;
     }
+    /* keep-alive：各 view 常驻 DOM，用 [hidden] 切换显隐。
+       各 view 自身 :host { display:flex } 与 UA [hidden]{display:none}
+       特异度相同会覆盖掉 hidden，这里用 !important 压住，确保隐藏生效。 */
+    .main > [hidden] { display: none !important; }
     /* 移动端：纵向布局（activity-bar 隐藏，tab-bar 在底部） */
     @media (max-width: 1023px) {
       .app-body { flex-direction: column; }
@@ -64,6 +68,17 @@ export class CortexApp extends LitElement {
   private _unsubAuth?: () => void;
   /** 主界面轮询/状态是否已启动（登录前不启动，登录成功后由订阅触发一次） */
   private _mainStarted = false;
+  /** keep-alive：已挂载过的 view 集合。首次访问某 view 才挂载，之后常驻 DOM
+   *  用 [hidden] 切换，view 实例不销毁 → 本地状态（预览内容/滚动位置/草稿等）保留。 */
+  @state() private _mountedViews = new Set<ViewId>();
+
+  protected willUpdate() {
+    // 首次访问某 view 时才加入挂载集合（惰性：未访问的 view 不触发其 connectedCallback 副作用）
+    const view = store.getState().view;
+    if (view !== "login" && !this._mountedViews.has(view)) {
+      this._mountedViews = new Set(this._mountedViews).add(view);
+    }
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -147,10 +162,14 @@ export class CortexApp extends LitElement {
 
   private _renderView() {
     const view = store.getState().view;
-    if (view === "chat") return html`<chat-view></chat-view>`;
-    if (view === "settings") return html`<settings-view></settings-view>`;
-    if (view === "files") return html`<files-view></files-view>`;
-    return html`<search-view></search-view>`;
+    // keep-alive：已挂载的 view 全部常驻 DOM，用 [hidden] 切换；
+    // 未挂载的（首次未访问）不输出，保持惰性。
+    return html`
+      ${this._mountedViews.has("search") ? html`<search-view ?hidden=${view !== "search"}></search-view>` : null}
+      ${this._mountedViews.has("chat") ? html`<chat-view ?hidden=${view !== "chat"}></chat-view>` : null}
+      ${this._mountedViews.has("files") ? html`<files-view ?hidden=${view !== "files"}></files-view>` : null}
+      ${this._mountedViews.has("settings") ? html`<settings-view ?hidden=${view !== "settings"}></settings-view>` : null}
+    `;
   }
 
   render() {

@@ -130,7 +130,7 @@ class CortexConfig(BaseSettings):
 
     # MCP server（进程内 Streamable HTTP，TUI/GUI 自动启动）
     mcp_enabled: bool = Field(
-        default=True, description="是否在 TUI/GUI 启动时自动拉起 MCP HTTP server"
+        default=False, description="是否在 TUI/GUI 启动时自动拉起 MCP HTTP server（默认关闭，可在设置页开启）"
     )
     mcp_port: int = Field(
         default=7880,

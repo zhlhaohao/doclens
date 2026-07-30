@@ -206,7 +206,6 @@ class IndexManager:
                 type_exts = get_allowed_extensions_for_source_types(self.allowed_source_types)
                 if type_exts is not None:
                     supported_exts = supported_exts & type_exts
-            ignore_dirs = {data_dirname(), ".git", "__pycache__", "node_modules", ".venv"}
 
             # 1. 检查已索引文件是否被修改或删除
             for abs_fp, stored_hash in stored_meta.items():
@@ -221,14 +220,14 @@ class IndexManager:
                     return True
 
             # 2. 检查是否有新增文件（在 supported_exts 中、不在 stored_meta、不在 failed_files）
-            disk_files = set()
-            for root, dirs, files in os.walk(self.search_path):
-                dirs[:] = [d for d in dirs if d not in ignore_dirs]
-                for fname in files:
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext not in supported_exts:
-                        continue
-                    disk_files.add(os.path.abspath(os.path.join(root, fname)))
+            # 复用 treesearch 的目录遍历：与索引链路保持同一套忽略规则
+            # （DEFAULT_IGNORE_DIRS + .gitignore + 扩展名白名单 + 跳过 ._*md 影子文件），
+            # 避免 gitignore 内的文件被误判为"新增"而空转 reindex。
+            from treesearch.pathutil import resolve_paths
+            disk_files = set(resolve_paths(
+                [self.search_path],
+                allowed_extensions=supported_exts,
+            ))
 
             known = set(stored_meta.keys()) | set(failed_files.keys())
             new_files = disk_files - known
