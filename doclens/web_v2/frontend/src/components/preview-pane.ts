@@ -4,6 +4,7 @@ import "./md-viewer";
 import "./md-editor";
 import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import type { MdEditor } from "./md-editor";
 
 @customElement("preview-pane")
@@ -315,6 +316,11 @@ export class PreviewPane extends LitElement {
     return i >= 0 ? p.slice(i + 1) : p;
   }
 
+  /** PST 路径（物理 .pst 或派生邮件 xxx.pst#entry）：原始文件下载/上传无意义。 */
+  private get _isPst(): boolean {
+    return isPstEmailPath(this.path) || isPstFilePath(this.path);
+  }
+
   private _renderMobileHeader() {
     return html`
       <div class="mobile-header">
@@ -341,16 +347,18 @@ export class PreviewPane extends LitElement {
                       @click=${() => { this._showMobileMenu = false; this.enterEdit(); }}
                     ><doclens-icon name="pencil"></doclens-icon>编辑</button>`
                   : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                ><doclens-icon name="download"></doclens-icon>下载</button>
+                ${this._isPst
+                  ? null
+                  : html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
+                    ><doclens-icon name="download"></doclens-icon>下载</button>
                 <button
                   type="button"
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
-                ><doclens-icon name="upload"></doclens-icon>上传</button>
+                ><doclens-icon name="upload"></doclens-icon>上传</button>`}
               </div>
             `
           : null}
@@ -414,6 +422,7 @@ export class PreviewPane extends LitElement {
   };
 
   private _renderDownloadBtn() {
+    if (this._isPst) return null;
     return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon>下载</button>`;
   }
 
@@ -455,6 +464,7 @@ export class PreviewPane extends LitElement {
   }
 
   private _renderUploadBtn() {
+    if (this._isPst) return null;
     return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon>上传</button>`;
   }
 
