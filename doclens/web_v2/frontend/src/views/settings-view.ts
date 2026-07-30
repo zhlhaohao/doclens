@@ -197,6 +197,49 @@ export class SettingsView extends LitElement {
       align-items: center;
       gap: var(--cortex-space-3);
     }
+    /* 布尔开关（switch 组件）：轨道 + 滑块，选中态用主色 */
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .switch .track {
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: var(--cortex-border);
+      position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .switch .thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.15s;
+    }
+    .switch input:checked + .track { background: var(--cortex-primary); }
+    .switch input:checked + .track .thumb { transform: translateX(16px); }
+    .switch input:focus-visible + .track {
+      outline: 2px solid var(--cortex-primary);
+      outline-offset: 1px;
+    }
+    .switch .switch-text {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+    }
     .slider-row input[type="range"] {
       accent-color: var(--cortex-primary);
       flex: 1;
@@ -899,6 +942,28 @@ export class SettingsView extends LitElement {
             `)}
           </select>
         `;
+      case "switch": {
+        // 布尔开关：值域 "true"/"false"；未显式设置（.env 无此键）时
+        // 回显出厂默认（FIELD_DEFAULTS），并标注（默认）
+        const implicit = value === "";
+        const on = implicit
+          ? (FIELD_DEFAULTS[f.envVar] ?? "true") === "true"
+          : value === "true";
+        const onChange = (e: Event) =>
+          this._onInput(f.envVar, (e.target as HTMLInputElement).checked ? "true" : "false");
+        return html`
+          <label class="switch">
+            <input
+              type="checkbox"
+              .checked=${on}
+              data-env=${f.envVar}
+              @change=${onChange}
+            />
+            <span class="track"><span class="thumb"></span></span>
+            <span class="switch-text">${on ? "已启用" : "已停用"}${implicit ? "（默认）" : ""}</span>
+          </label>
+        `;
+      }
       case "slider": {
         // 未显式设置时回显后端默认值（隐式样式），避免空值拖杆停在中点、chip 空白
         const implicit = value === "";
