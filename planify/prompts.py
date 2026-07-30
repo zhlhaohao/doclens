@@ -153,7 +153,7 @@ You have been invoked in the following environment:
  - Is a git repository: {is_git_repo}
 {" - Git branch: " + git_branch if is_git_repo and git_branch else ""}
  - Platform: {platform.system().lower()}
- - Shell: bash (use Unix shell syntax, not Windows — e.g., /dev/null not NUL, forward slashes in paths)
+ - Shell: {"Git Bash (MSYS2/MinGW)" if platform.system().lower() == "windows" else "bash"} — use Unix shell syntax (/dev/null not NUL, forward slashes in paths). On Windows this is Git Bash, not WSL or cmd/PowerShell.
  - OS Version: {os_version}
 
 When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.
@@ -161,6 +161,8 @@ When working with tool results, write down any important information you might n
 # Working Directory Constraint
 
 **Current working directory**: {get_realpath(workdir_path)}
+
+This working directory is also the **knowledge base root** — every indexed/searchable document lives within this directory or its subdirectories. When the user asks about indexed content, use the knowledge base tools (search_kb / read_document) to retrieve it.
 
 **IMPORTANT security constraint**: Never perform any operations outside the working directory!
 

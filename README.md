@@ -49,7 +49,7 @@ doclens gui
 ## CLI Reference
 
 ```
-doclens [--workdir DIR] <command>
+doclens <command> [--workdir DIR]
 ```
 
 | Command | Description |
@@ -76,7 +76,7 @@ doclens [--workdir DIR] <command>
 doclens index --force
 
 # Or specify a working directory
-doclens --workdir /path/to/project index
+doclens index --workdir /path/to/project
 ```
 
 doclens automatically discovers supported files (`.md`, `.py`, `.pdf`, `.docx`, `.xlsx`, …) and skips common ignore patterns (`.git`, `node_modules`, `__pycache__`, `.venv`).

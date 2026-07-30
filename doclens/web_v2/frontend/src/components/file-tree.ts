@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
+import type { FileEntry } from "../api/files";
 import "./tree-node";
 
 @customElement("file-tree")
@@ -76,21 +77,32 @@ export class FileTree extends LitElement {
     const { treeCache, expandedPaths, currentDir } = store.getState().files;
     const rootEntries = treeCache[""] || [];
     const expanded = new Set(expandedPaths);
+    // 根节点：取工作目录名（回退"根目录"），点击 selectDir("") 回到根目录文件列表。
+    const workdir = store.getState().status?.workdir;
+    const rootName = (workdir?.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop()) || "根目录";
+    const rootEntry: FileEntry = {
+      name: rootName,
+      path: "",
+      is_dir: true,
+      has_child_dirs: rootEntries.some(e => e.is_dir),
+      size: 0,
+      modified_at: "",
+      indexed: false,
+      writable: false,
+    };
 
     return html`
       <div class="header">文件</div>
-      ${rootEntries.filter(e => e.is_dir).map(e => html`
-        <tree-node
-          .entry=${e}
-          .depth=${0}
-          .expanded=${expanded.has(e.path)}
-          .selected=${e.path === currentDir}
-          .childEntries=${treeCache[e.path] || []}
-          .loading=""
-          @toggle=${this._onToggle}
-          @select-dir=${this._onSelectDir}
-        ></tree-node>
-      `)}
+      <tree-node
+        .entry=${rootEntry}
+        .depth=${0}
+        .expanded=${expanded.has("")}
+        .selected=${currentDir === ""}
+        .childEntries=${rootEntries}
+        .loading=""
+        @toggle=${this._onToggle}
+        @select-dir=${this._onSelectDir}
+      ></tree-node>
     `;
   }
 }

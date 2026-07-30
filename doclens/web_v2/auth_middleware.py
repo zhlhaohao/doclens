@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from doclens.web_v2 import deps
 from doclens.web_v2.auth_credentials import has_password
-from doclens.web_v2.auth_gate import COOKIE_MAX_AGE, COOKIE_NAME, SESSION_TTL_HOURS, gate_enabled
+from doclens.web_v2.auth_gate import COOKIE_MAX_AGE, COOKIE_NAME, SESSION_TTL_HOURS, gate_enabled_for_client
 
 _EXEMPT_PATHS = frozenset({"/api/health"})
 _EXEMPT_PREFIXES = ("/api/auth",)
@@ -38,9 +38,9 @@ def register_auth_middleware(app: FastAPI) -> None:
         # 2) 豁免路径
         if path in _EXEMPT_PATHS or path.startswith(_EXEMPT_PREFIXES):
             return await call_next(request)
-        # 3) 生效条件（逐请求判定：host 非环回 且 已设密码）
-        host = getattr(request.app.state, "auth_host", "127.0.0.1")
-        if not gate_enabled(host, has_password()):
+        # 3) 生效条件（逐请求判定：请求来源 IP 非环回 且 已设密码）
+        client_ip = request.client.host if request.client else None
+        if not gate_enabled_for_client(client_ip, has_password()):
             return await call_next(request)
         # 4) 校验 cookie 会话（touch 滑动续期）
         token = request.cookies.get(COOKIE_NAME)

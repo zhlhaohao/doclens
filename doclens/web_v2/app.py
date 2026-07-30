@@ -34,14 +34,13 @@ async def lifespan(app: FastAPI):
         deps.stop_watcher()
 
 
-def create_app(host: str = "127.0.0.1") -> FastAPI:
+def create_app() -> FastAPI:
     """构造 FastAPI 应用（注册路由、错误处理器、静态文件）。
 
-    host 为最终生效的绑定地址（CLI --host > CORTEX_WEB_HOST > 默认），
-    登录闸门据此判定是否启用密码保护（非环回且已设密码时生效）。
+    登录闸门按**请求来源 IP** 判定（见 ``auth_gate``），与绑定地址无关；
+    监听地址由 ``launch_app`` 的 ``uvicorn.run(host=...)`` 负责。
     """
     app = FastAPI(title="Cortex", version=CORTEX_VERSION, lifespan=lifespan)
-    app.state.auth_host = host
 
     # 错误处理
     register_error_handlers(app)
@@ -209,8 +208,11 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     except Exception as e:  # noqa: BLE001
         print(f"[Claude Code skill 同步跳过: {e}]")
 
-    app = create_app(host=host)
+    app = create_app()
     url = f"http://localhost:{port}" if host in ("127.0.0.1", "0.0.0.0") else f"http://{host}:{port}"
-    # 延迟 1 秒打开浏览器，等 uvicorn 就绪
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    # CORTEX_NO_BROWSER=1 时不弹浏览器（供 Stop hook 自动重启使用，避免反复弹窗）
+    import os
+    if not os.environ.get("CORTEX_NO_BROWSER"):
+        # 延迟 1 秒打开浏览器，等 uvicorn 就绪
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=host, port=port)

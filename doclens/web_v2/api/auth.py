@@ -21,7 +21,7 @@ from doclens.web_v2.auth_gate import (
     COOKIE_MAX_AGE,
     COOKIE_NAME,
     SESSION_TTL_HOURS,
-    gate_enabled,
+    gate_enabled_for_client,
 )
 from doclens.web_v2.auth_password import validate_pin_format
 from doclens.web_v2.auth_rate_limit import LOGIN_DELAY_S, get_rate_limiter
@@ -55,8 +55,8 @@ def _clear_auth_cookie(response: JSONResponse) -> None:
 
 
 def _gate_on(request: Request) -> bool:
-    host = getattr(request.app.state, "auth_host", "127.0.0.1")
-    return gate_enabled(host, auth_credentials.has_password())
+    client_ip = request.client.host if request.client else None
+    return gate_enabled_for_client(client_ip, auth_credentials.has_password())
 
 
 def _require_session_if_enabled(request: Request) -> None:

@@ -11,7 +11,8 @@ export type SettingsFieldComponent =
   | "number"
   | "select"
   | "password"
-  | "slider";
+  | "slider"
+  | "toggle";
 export type SettingsFieldEffect = "live" | "restart";
 
 export interface SettingsFieldOption {
@@ -79,6 +80,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
   CORTEX_WEB_HOST: "127.0.0.1",
   CORTEX_WEB_PORT: "7860",
+  CORTEX_MCP_ENABLED: "false",
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
 };
@@ -91,6 +93,7 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   CORTEX_MAX_SPAN: "50",
   CORTEX_WEB_HOST: "127.0.0.1",
   CORTEX_WEB_PORT: "7860",
+  CORTEX_MCP_ENABLED: "false",
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
   ...DEFAULT_WEIGHTS,
@@ -355,6 +358,15 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 1,
     max: 65535,
     hint: "Web UI 端口（1–65535）。改后需重启，重启后用新端口重新打开。",
+  },
+  {
+    tab: "network",
+    section: "监听地址",
+    envVar: "CORTEX_MCP_ENABLED",
+    label: "启用 MCP server",
+    component: "toggle",
+    effect: "restart",
+    hint: "关闭时不启动 MCP HTTP server（Claude Code 的 kb-ask 等经 MCP 接入的功能将不可用）。改后需重启。",
   },
   {
     tab: "network",

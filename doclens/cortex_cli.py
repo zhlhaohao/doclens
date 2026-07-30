@@ -754,12 +754,13 @@ def _build_parser():
         prog="doclens",
         description="Cortex CLI — structure-aware document retrieval"
     )
-    # 全局参数：工作目录。必须在子命令之前传入，例如：
-    #   cortex -C /path/to/docs search "关键词"
-    #   cortex --workdir /path/to/docs gui
+    # 子命令通用参数：工作目录（每个子命令都支持，写在子命令之后），例如：
+    #   cortex gui -C /path/to/docs
+    #   cortex search "关键词" -C /path/to/docs
     # os.chdir 在 main() 中、CortexConfig.load() 之前执行，
     # 因此 search_path 默认值、.env 查找、索引/预览路径都会跟随此目录。
-    parser.add_argument(
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
         "--workdir", "-C",
         default=None, metavar="DIR",
         help="工作目录（默认: 当前目录）。索引/搜索/预览都基于此目录",
@@ -768,7 +769,8 @@ def _build_parser():
 
     # cortex search <query>
     search_parser = sub.add_parser(
-        "search", help="Search for a query string in the indexed documents"
+        "search", help="Search for a query string in the indexed documents",
+        parents=[common],
     )
     search_parser.add_argument("query", nargs="+", help="Search query keywords")
     search_parser.add_argument(
@@ -779,21 +781,24 @@ def _build_parser():
 
     # cortex search_kb <query>
     search_kb_parser = sub.add_parser(
-        "search_kb", help="Search KB in LLM-friendly format (same as search_kb tool)"
+        "search_kb", help="Search KB in LLM-friendly format (same as search_kb tool)",
+        parents=[common],
     )
     search_kb_parser.add_argument("query", nargs="+", help="Search query keywords")
     search_kb_parser.set_defaults(func=_cli_search_kb)
 
     # cortex ai <message>
     ai_parser = sub.add_parser(
-        "ai", help="Send a message to the LLM agent"
+        "ai", help="Send a message to the LLM agent",
+        parents=[common],
     )
     ai_parser.add_argument("message", nargs="+", help="Message to send")
     ai_parser.set_defaults(func=_cli_ai)
 
     # cortex index [--force]
     index_parser = sub.add_parser(
-        "index", help="Build or update the document index"
+        "index", help="Build or update the document index",
+        parents=[common],
     )
     index_parser.add_argument(
         "--force", "-f", action="store_true",
@@ -802,7 +807,7 @@ def _build_parser():
     index_parser.set_defaults(func=_cli_index)
 
     # cortex status
-    sub.add_parser("status", help="Show index and system status").set_defaults(
+    sub.add_parser("status", help="Show index and system status", parents=[common]).set_defaults(
         func=_cli_status
     )
 
@@ -810,6 +815,7 @@ def _build_parser():
     search_v2_parser = sub.add_parser(
         "search_v2",
         help="Structured search with AND/OR/NOT/PHRASE operators (JSON input)",
+        parents=[common],
     )
     search_v2_parser.add_argument(
         "query_tokens", type=str,
@@ -823,7 +829,8 @@ def _build_parser():
 
     # cortex web <query> [--allowed-domains DOMAINS] [--recency FILTER] [--content-size SIZE] [--location LOC]
     web_parser = sub.add_parser(
-        "web", help="Web search using Anthropic server-side search"
+        "web", help="Web search using Anthropic server-side search",
+        parents=[common],
     )
     web_parser.add_argument("query", nargs="+", help="Search query keywords")
     web_parser.add_argument(
@@ -849,7 +856,8 @@ def _build_parser():
 
     # cortex webfetch <url> [--no-meta]
     webfetch_parser = sub.add_parser(
-        "webfetch", help="Fetch and extract web page content as Markdown"
+        "webfetch", help="Fetch and extract web page content as Markdown",
+        parents=[common],
     )
     webfetch_parser.add_argument("url", type=str, help="URL to fetch")
     webfetch_parser.add_argument(
@@ -862,6 +870,7 @@ def _build_parser():
     read_parser = sub.add_parser(
         "read_document",
         help="Read a document with structure info (supports md/pdf/docx/pptx/xlsx/html)",
+        parents=[common],
     )
     read_parser.add_argument(
         "--path", required=True, type=str,
@@ -883,14 +892,16 @@ def _build_parser():
 
     # cortex grep <pattern>
     grep_parser = sub.add_parser(
-        "grep", help="Search file content with ripgrep regex"
+        "grep", help="Search file content with ripgrep regex",
+        parents=[common],
     )
     grep_parser.add_argument("pattern", help="Regex search pattern (ripgrep syntax)")
     grep_parser.set_defaults(func=_cli_grep)
 
     # cortex gui [--port PORT] [--host HOST] [--share]
     gui_parser = sub.add_parser(
-        "gui", help="Launch Cortex Web UI (PWA)"
+        "gui", help="Launch Cortex Web UI (PWA)",
+        parents=[common],
     )
     gui_parser.add_argument(
         "--port", type=int, default=None,
@@ -907,7 +918,7 @@ def _build_parser():
     gui_parser.set_defaults(func=_cli_gui)
 
     # cortex auth reset
-    auth_parser = sub.add_parser("auth", help="GUI 访问密码管理")
+    auth_parser = sub.add_parser("auth", help="GUI 访问密码管理", parents=[common])
     auth_sub = auth_parser.add_subparsers(dest="auth_action", required=True)
     auth_sub.add_parser("reset", help="清除访问密码并吊销所有会话（忘记密码时使用）")
     auth_parser.set_defaults(func=_cli_auth_reset)
