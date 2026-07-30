@@ -48,6 +48,6 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
                 "last_success": None,
             }),
         },
-        # Git 同步快照（ADR-0003）；None = 同步循环未注册（配置关闭）
+        # Git 同步快照（ADR-0006）；None = 同步循环未注册（配置关闭）
         "sync": sync_snapshot(),
     }

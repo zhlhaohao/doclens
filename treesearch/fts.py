@@ -391,7 +391,7 @@ class FTS5Index:
             )
         """)
 
-        # PST 邮件元数据（ADR-0003）：每封派生邮件文档一行，供物理 PST 的
+        # PST 邮件元数据（ADR-0005）：每封派生邮件文档一行，供物理 PST 的
         # 邮件列表分页查询（主题/发件人/日期/文件夹 + 附件下载清单）。
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS pst_email_meta (
@@ -1838,7 +1838,7 @@ class FTS5Index:
         return [r[0] for r in rows]
 
     # -------------------------------------------------------------------
-    # PST 邮件元数据（ADR-0003：邮件列表分页 + 附件下载清单）
+    # PST 邮件元数据（ADR-0005：邮件列表分页 + 附件下载清单）
     # -------------------------------------------------------------------
 
     def upsert_email_meta(self, doc_id: str, pst_path: str, meta: dict) -> None:

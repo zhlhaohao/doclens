@@ -94,7 +94,7 @@ export interface ReindexResult {
   failed_count: number;
 }
 
-/** Git 同步状态快照（ADR-0003，后端 doclens/git_sync.py）。
+/** Git 同步状态快照（ADR-0006，后端 doclens/git_sync.py）。
  *  经 /api/status 与 SSE status 快照下发；message 非空 = 状态栏弱提醒。 */
 export interface GitSyncStatus {
   running: boolean;

@@ -189,7 +189,7 @@ async def preview(
 ):
     base = Path(idx.search_path)
     # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md，
-    # 并附附件清单（含下载 URL，ADR-0003）
+    # 并附附件清单（含下载 URL，ADR-0005）
     if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
         resp = _synthesize_binary_preview(idx, path)
         atts = _pst_email_attachments(idx, path)

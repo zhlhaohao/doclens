@@ -107,7 +107,7 @@ class CortexConfig(BaseSettings):
     watch_debounce: float = Field(default=5.0)
 
     # Git 同步（仅 GUI 进程运行；工作目录为 git 根且已配置 remote 时生效，
-    # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0003）
+    # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0006）
     sync_enabled: bool = Field(default=True)
     sync_interval_minutes: float = Field(default=5.0, gt=0)
 
