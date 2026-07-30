@@ -45,6 +45,8 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_MCP_ENABLED",
     "CORTEX_MCP_HOST",
     "CORTEX_MCP_PORT",
+    # 知识库 Git 同步开关（改后需重启 gui 才生效）
+    "CORTEX_SYNC_ENABLED",
 })
 
 

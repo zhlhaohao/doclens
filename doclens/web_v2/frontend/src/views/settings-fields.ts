@@ -12,7 +12,8 @@ export type SettingsFieldComponent =
   | "select"
   | "password"
   | "slider"
-  | "toggle";
+  | "toggle"
+  | "switch";
 export type SettingsFieldEffect = "live" | "restart";
 
 export interface SettingsFieldOption {
@@ -83,6 +84,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_ENABLED: "false",
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
+  CORTEX_SYNC_ENABLED: "true",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -388,5 +390,16 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     min: 1,
     max: 65535,
     hint: "MCP server 端口（1–65535）。改后需重启。",
+  },
+
+  // ===== 知识库 Git 同步（ADR-0003；改后需重启 gui 才生效） =====
+  {
+    tab: "network",
+    section: "知识库 Git 同步",
+    envVar: "CORTEX_SYNC_ENABLED",
+    label: "启用 Git 同步",
+    component: "switch",
+    effect: "restart",
+    hint: "工作目录为 git 根且已配置 remote 时，定期 auto-commit → pull → push。改后需重启。",
   },
 ];
