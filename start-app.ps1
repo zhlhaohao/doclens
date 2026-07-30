@@ -29,7 +29,7 @@ if ($isMainRepo) {
 
 # 用 cortex 代码 + 虚拟环境运行。
 # -C 指定工作目录为 test_work_dir（替代旧的 Set-Location），不改变调用者的当前目录。
-# 若调用方传入自己的 -C，argparse 会取最后一个，从而覆盖默认的 testWorkDir。
+# -C 是子命令参数（写在 gui 之后）；用户显式传 -C/--workdir 时尊重用户，不注入默认。
 $env:PYTHONPATH = $cortexRoot
 
 # 端口 = 基数 + N，N = 当前目录名横杠后的数字（如 0702-3 → N=3）。
@@ -80,9 +80,13 @@ if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
     if ($rest -notcontains '--port') {
         $finalArgs += '--port', $port
     }
+    # -C 工作目录（默认 test_work_dir，置于子命令之后；用户显式传 -C/--workdir 时尊重用户，不注入默认）
+    if ($rest -notcontains '-C' -and $rest -notcontains '--workdir') {
+        $finalArgs += '-C', $testWorkDir
+    }
     $finalArgs += $rest
 } else {
     $finalArgs = @($args)
 }
 
-& $venvPython -m doclens -C $testWorkDir @finalArgs
+& $venvPython -m doclens @finalArgs
