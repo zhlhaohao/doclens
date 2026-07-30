@@ -3,7 +3,6 @@
 提供安全的文件日志记录，支持编码错误处理。
 """
 
-import json
 import logging
 import os
 import shutil
@@ -39,86 +38,6 @@ class SafeFileHandler(logging.FileHandler):
             # 通过移除问题字符来处理编码错误
             record.msg = record.msg.encode('utf-8', errors='replace').decode('utf-8')
             super().emit(record)
-
-
-def _trust_state_file() -> Path:
-    """返回记录已授权目录的 JSON 文件路径。"""
-    return Path.home() / _data_dirname() / "allowed_dirs.json"
-
-
-def _is_trusted_dir(log_dir: Path) -> Optional[bool]:
-    """检查目录是否已被用户授权。
-
-    Returns:
-        True  已授权
-        False 已拒绝
-        None  尚未询问
-    """
-    state_file = _trust_state_file()
-    if not state_file.exists():
-        return None
-    try:
-        state = json.loads(state_file.read_text(encoding="utf-8"))
-        dirs = state.get("dirs", {})
-        key = str(log_dir.resolve())
-        return dirs.get(key)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def _set_trusted_dir(log_dir: Path, trusted: bool) -> None:
-    """记录用户对目录的授权选择。"""
-    state_file = _trust_state_file()
-    state_file.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        if state_file.exists():
-            state = json.loads(state_file.read_text(encoding="utf-8"))
-        else:
-            state = {"dirs": {}}
-    except (json.JSONDecodeError, OSError):
-        state = {"dirs": {}}
-    state["dirs"][str(log_dir.resolve())] = trusted
-    state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _confirm_trust_dir(log_dir: Path) -> bool:
-    """询问用户是否信任在当前目录创建数据目录文件夹（开发 .cortex / 发行版 .doclens）。
-
-    仅在交互式终端中提示；非交互式环境默认允许。
-    如果用户拒绝，回退到不创建文件日志。
-    """
-    # 目录已存在视为已授权
-    if log_dir.exists():
-        return True
-
-    # 非交互式环境直接允许（CI / 脚本）
-    if not (hasattr(sys.stdin, "isatty") and sys.stdin.isatty()):
-        return True
-
-    # 检查缓存
-    cached = _is_trusted_dir(log_dir)
-    if cached is not None:
-        return cached
-
-    # 交互式提示（显示绝对路径，便于用户确认实际位置）
-    display = log_dir.resolve()
-    prompt = (
-        f"\nCortex wants to create a local directory: '{display}'\n"
-        "This directory will store project-specific logs and index data.\n"
-        "Do you trust this directory? [Y/n]: "
-    )
-    try:
-        answer = input(prompt).strip().lower()
-    except (EOFError, OSError):
-        answer = "n"
-
-    trusted = answer in ("", "y", "yes")
-    _set_trusted_dir(log_dir, trusted)
-
-    if not trusted:
-        print("Skipping local log directory. Logs will go to console only.")
-
-    return trusted
 
 
 def _cortex_package_dir() -> Optional[Path]:
@@ -229,11 +148,8 @@ def setup_logging(
             else:
                 log_dir = (Path.cwd() / _data_dirname() / "logs").resolve()
 
-    # 询问用户是否信任该目录
-    trusted = _confirm_trust_dir(log_dir)
-
-    if trusted:
-        log_dir.mkdir(parents=True, exist_ok=True)
+    # 创建日志目录（默认信任，不再询问）
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     # 格式化器
     fmt = '%(asctime)s | %(levelname)s | %(message)s'
@@ -242,11 +158,10 @@ def setup_logging(
     # 创建处理器列表
     handlers = []
 
-    if trusted:
-        log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = SafeFileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(formatter)
-        handlers.append(file_handler)
+    log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
+    file_handler = SafeFileHandler(log_file, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    handlers.append(file_handler)
 
     # 仅在显式要求时添加控制台处理器
     if console_output and hasattr(sys, 'stdout'):
