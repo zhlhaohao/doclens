@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doclens"
-version = "1.1.7"
+version = "1.1.8"
 description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -59,6 +59,8 @@ dependencies = [
     # 移至 [ast] 可选依赖组；运行时由 try/except ImportError 保护
     # Background file-system watcher (TUI live reindex)
     "watchdog>=3.0",
+    # Planify agent tools: lunar/weather 工具依赖 borax（农历计算）
+    "borax>=4.1.0",
     # LLM provider SDKs (Anthropic native + OpenAI-compatible)
     "openai>=1.0",
 ]
