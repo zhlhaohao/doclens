@@ -188,9 +188,14 @@ async def preview(
     idx: IndexManager = Depends(get_index_manager),
 ):
     base = Path(idx.search_path)
-    # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md
+    # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md，
+    # 并附附件清单（含下载 URL，ADR-0003）
     if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
-        return _synthesize_binary_preview(idx, path)
+        resp = _synthesize_binary_preview(idx, path)
+        atts = _pst_email_attachments(idx, path)
+        if atts is not None:
+            resp = resp.model_copy(update={"attachments": atts})
+        return resp
     # PST 物理文件：GB 级二进制，绝不能 read_text（会把事件循环拖死）——
     # 合成邮件目录页（总数 + 前 N 封主题列表）
     if path.lower().endswith(".pst"):
@@ -239,6 +244,48 @@ async def preview(
 
 # PST 目录页列出的邮件主题上限（超出只显示总数）
 _PST_OVERVIEW_LIST_LIMIT = 200
+
+
+def _pst_email_attachments(idx: IndexManager, derived_path: str):
+    """取 PST 派生邮件（<pst_rel>#<entry_id>）的附件清单，附下载 URL。
+
+    Returns:
+        list[PstAttachmentInfo]；pst_email_meta 无记录（旧索引）返回 None。
+    """
+    from urllib.parse import quote
+
+    from doclens.web_v2.models.pst import PstAttachmentInfo
+    from treesearch.fts import FTS5Index
+
+    pst_rel, sep, entry_id = derived_path.partition("#")
+    if not sep:
+        return None
+    abs_pst = os.path.abspath(os.path.join(idx.search_path, pst_rel))
+    fts = FTS5Index(db_path=idx.index_path)
+    try:
+        atts = fts.get_email_attachments_by_entry(abs_pst, entry_id)
+    finally:
+        fts.close()
+    if atts is None:
+        return None
+
+    out = []
+    for a in atts:
+        stored = bool(a.get("stored")) and bool(a.get("filename"))
+        url = None
+        if stored:
+            url = (
+                f"/api/pst/attachment?path={quote(pst_rel, safe='')}"
+                f"&entry={quote(entry_id, safe='')}"
+                f"&file={quote(a['filename'], safe='')}"
+            )
+        out.append(PstAttachmentInfo(
+            name=a.get("name") or "unnamed",
+            size=a.get("size") or 0,
+            stored=stored,
+            download_url=url,
+        ))
+    return out
 
 # MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），展示前清除
 _SUBJECT_CONTROL_CHARS = re.compile(r"[\x00-\x1f]")

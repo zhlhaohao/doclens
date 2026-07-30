@@ -7,7 +7,9 @@ import { searchApi } from "../api/search";
 import { grepApi } from "../api/grep";
 import { listSessions, clearSessions, findOrCreateSession } from "../api/sessions";
 import { fetchPreview, isFullFilePreview } from "../api/preview";
-import type { PageMarker } from "../api/preview";
+import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { isPstFilePath, isPstEmailPath } from "../api/pst";
+import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
@@ -148,6 +150,7 @@ export class SearchView extends LitElement {
   @state() private previewDirty = false;
   @state() private previewWritable = false;
   @state() private previewPages: PageMarker[] | null = null;
+  @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -267,6 +270,7 @@ export class SearchView extends LitElement {
       this.previewPath = "";
       this.previewError = null;
       this.previewPages = null;
+      this.previewAttachments = null;
       // 新搜索始终从第 0 页开始（重置 offset）
       actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
@@ -367,6 +371,17 @@ export class SearchView extends LitElement {
    *  (which doesn't go through the user-click path). */
   private async _fetchAndShowPreview(r: SearchResult) {
     this.previewError = null;
+    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
+    if (isPstFilePath(r.path)) {
+      this.previewContent = "";
+      this.previewPath = r.path;
+      this.previewLanguage = "text";
+      this.previewLine = null;
+      this.previewWritable = false;
+      this.previewPages = null;
+      this.previewAttachments = null;
+      return;
+    }
     const line = (r.line as number | null) ?? null;
     const fullFile = isFullFilePreview(r.path);
     // search-hit 范围预览（非 full-file 时只取 line ±10/+20 行）—— fetchPreview
@@ -391,12 +406,14 @@ export class SearchView extends LitElement {
         : (result.lineMap ? (result.lineMap[String(line)] ?? null) : line);
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
+      this.previewAttachments = result.attachments;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
       this.previewContent = "";
       this.previewPath = r.path;
       this.previewWritable = false;
       this.previewPages = null;
+      this.previewAttachments = null;
     }
   }
 
@@ -405,7 +422,7 @@ export class SearchView extends LitElement {
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; attachments: null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -423,6 +440,7 @@ export class SearchView extends LitElement {
           writable: body.writable ?? false,
           pages: body.pages ?? null,
           lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
+          attachments: null, // 范围预览只用于文本文件，无附件
         };
       }
       const err = await res.json().catch(() => ({}));
@@ -504,8 +522,39 @@ export class SearchView extends LitElement {
       this.previewLanguage = r.language;
       this.previewWritable = r.writable;
       this.previewPages = r.pages;
+      this.previewAttachments = r.attachments;
     }
   }
+
+  /** PST 邮件列表行点击 → 打开派生邮件预览（与点击搜索结果同路径）。 */
+  private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
+    await this._safeAction(async () => {
+      const result: SearchResult = {
+        path: e.detail.path,
+        snippet: "",
+        score: 0,
+        line: null,
+        highlights: [],
+      };
+      actions.pushDetail(result);
+      await this._fetchAndShowPreview(result);
+    });
+  };
+
+  /** 桌面预览区返回：PST 派生邮件 → 回到该 PST 的邮件列表（页码由组件缓存恢复）。 */
+  private _onBackToPstList = async () => {
+    if (!isPstEmailPath(this.previewPath)) return;
+    await this._safeAction(async () => {
+      actions.popDetail();
+      await this._fetchAndShowPreview({
+        path: this.previewPath.split("#")[0],
+        snippet: "",
+        score: 0,
+        line: null,
+        highlights: [],
+      });
+    });
+  };
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number) {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
@@ -621,7 +670,13 @@ export class SearchView extends LitElement {
                @mousedown=${this._onSplitterMouseDown}></div>
           ${this.previewError === "NOT_INDEXED"
             ? this._renderNotIndexedHint(true)
-            : html`<preview-pane
+            : isPstFilePath(this.previewPath)
+              ? html`<pst-email-list
+                  class="desktop-only"
+                  .pstPath=${this.previewPath}
+                  @open-email=${this._onOpenPstEmail}>
+                </pst-email-list>`
+              : html`<preview-pane
                 class="desktop-only"
                 path=${this.previewPath}
                 language=${this.previewLanguage}
@@ -630,6 +685,10 @@ export class SearchView extends LitElement {
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
+                .attachments=${this.previewAttachments}
+                ?showBack=${isPstEmailPath(this.previewPath)}
+                backLabel="邮件列表"
+                @back=${this._onBackToPstList}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
@@ -650,7 +709,12 @@ export class SearchView extends LitElement {
           </focus-header>
           ${this.previewError === "NOT_INDEXED"
             ? this._renderNotIndexedHint(false)
-            : html`<preview-pane
+            : isPstFilePath(this.previewPath)
+              ? html`<pst-email-list
+                  .pstPath=${this.previewPath}
+                  @open-email=${this._onOpenPstEmail}>
+                </pst-email-list>`
+              : html`<preview-pane
                 ?noHeader=${true}
                 path=${this.previewPath}
                 language=${this.previewLanguage}
@@ -659,6 +723,7 @@ export class SearchView extends LitElement {
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
+                .attachments=${this.previewAttachments}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}

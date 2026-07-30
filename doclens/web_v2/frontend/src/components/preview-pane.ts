@@ -3,7 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
 import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from "../api/preview";
-import type { PageMarker } from "../api/preview";
+import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import type { MdEditor } from "./md-editor";
 
 @customElement("preview-pane")
@@ -62,6 +63,57 @@ export class PreviewPane extends LitElement {
       background: #fff;
       min-height: 0;
     }
+    /* PST 邮件附件下载区（markdown 预览底部） */
+    .attachments {
+      flex-shrink: 0;
+      max-height: 30%;
+      overflow: auto;
+      border-top: 1px solid var(--cortex-border-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-1);
+    }
+    .attachments-title {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      font-weight: 500;
+      padding: var(--cortex-space-1) 0;
+    }
+    .attachment {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-primary);
+      text-decoration: none;
+      padding: var(--cortex-space-1) var(--cortex-space-2);
+      border-radius: var(--cortex-radius-md);
+      transition: background 0.12s;
+      min-width: 0;
+    }
+    .attachment:hover {
+      background: var(--cortex-primary-soft);
+    }
+    .attachment .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .attachment .size {
+      flex-shrink: 0;
+      margin-left: auto;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+    }
+    .attachment.disabled {
+      color: var(--cortex-text-muted);
+      cursor: default;
+    }
+    .attachment.disabled:hover {
+      background: transparent;
+    }
     .empty {
       flex: 1;
       display: flex;
@@ -72,7 +124,8 @@ export class PreviewPane extends LitElement {
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
-    button.upload-btn {
+    button.upload-btn,
+    button.back-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-xs);
       padding: var(--cortex-space-1) var(--cortex-space-3);
@@ -84,10 +137,17 @@ export class PreviewPane extends LitElement {
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     button.download-btn:hover,
-    button.upload-btn:hover {
+    button.upload-btn:hover,
+    button.back-btn:hover {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text);
       border-color: var(--cortex-text-subtle);
+    }
+    button.back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+      flex-shrink: 0;
     }
     /* 主动作：编辑按钮 = primary gradient + glow */
     button.edit-btn {
@@ -196,6 +256,11 @@ export class PreviewPane extends LitElement {
    *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
   @property({ type: Boolean }) mobile = false;
   @property({ attribute: false }) pages: PageMarker[] | null = null;
+  /** PST 派生邮件预览的附件清单（null = 非邮件预览或无元数据）。 */
+  @property({ attribute: false }) attachments: PstAttachmentInfo[] | null = null;
+  /** 桌面 header 显示返回按钮（如 PST 邮件预览 → 返回邮件列表）。 */
+  @property({ type: Boolean }) showBack = false;
+  @property() backLabel = "返回";
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
@@ -251,6 +316,11 @@ export class PreviewPane extends LitElement {
     return i >= 0 ? p.slice(i + 1) : p;
   }
 
+  /** PST 路径（物理 .pst 或派生邮件 xxx.pst#entry）：原始文件下载/上传无意义。 */
+  private get _isPst(): boolean {
+    return isPstEmailPath(this.path) || isPstFilePath(this.path);
+  }
+
   private _renderMobileHeader() {
     return html`
       <div class="mobile-header">
@@ -277,16 +347,18 @@ export class PreviewPane extends LitElement {
                       @click=${() => { this._showMobileMenu = false; this.enterEdit(); }}
                     ><doclens-icon name="pencil"></doclens-icon>编辑</button>`
                   : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                ><doclens-icon name="download"></doclens-icon>下载</button>
+                ${this._isPst
+                  ? null
+                  : html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
+                    ><doclens-icon name="download"></doclens-icon>下载</button>
                 <button
                   type="button"
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
-                ><doclens-icon name="upload"></doclens-icon>上传</button>
+                ><doclens-icon name="upload"></doclens-icon>上传</button>`}
               </div>
             `
           : null}
@@ -350,7 +422,14 @@ export class PreviewPane extends LitElement {
   };
 
   private _renderDownloadBtn() {
+    if (this._isPst) return null;
     return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon>下载</button>`;
+  }
+
+  /** 桌面 header 返回按钮（复用 mobile back 事件，父组件统一监听 @back）。 */
+  private _renderBackBtn() {
+    if (!this.showBack) return null;
+    return html`<button class="back-btn" @click=${this._onMobileBackClick}><doclens-icon name="arrow-left"></doclens-icon>${this.backLabel}</button>`;
   }
 
   private _onUploadClick = () => {
@@ -385,7 +464,39 @@ export class PreviewPane extends LitElement {
   }
 
   private _renderUploadBtn() {
+    if (this._isPst) return null;
     return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon>上传</button>`;
+  }
+
+  private _formatSize(size: number): string {
+    if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+    return `${size} B`;
+  }
+
+  /** PST 邮件附件下载区：stored 的可点击下载，未落盘的仅展示名称。 */
+  private _renderAttachments() {
+    if (!this.attachments || this.attachments.length === 0) return null;
+    return html`
+      <div class="attachments">
+        <div class="attachments-title">附件（${this.attachments.length}）</div>
+        ${this.attachments.map((a) =>
+          a.stored && a.download_url
+            ? html`<a
+                class="attachment"
+                href=${a.download_url}
+                title=${a.name}
+              ><doclens-icon name="download"></doclens-icon>
+                <span class="name">${a.name}</span>
+                <span class="size">${this._formatSize(a.size)}</span>
+              </a>`
+            : html`<span class="attachment disabled" title=${a.name}>
+                <span class="name">${a.name}</span>
+                <span class="size">${this._formatSize(a.size)} · 未落盘</span>
+              </span>`,
+        )}
+      </div>
+    `;
   }
 
   render() {
@@ -403,6 +514,7 @@ export class PreviewPane extends LitElement {
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
+            ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
@@ -425,6 +537,7 @@ export class PreviewPane extends LitElement {
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
+            ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this.writable
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon>编辑</button>`
@@ -439,6 +552,7 @@ export class PreviewPane extends LitElement {
           .keyword=${this.keyword}
           .pages=${this.pages}
         ></md-viewer>
+        ${this._renderAttachments()}
       `;
     }
 
@@ -449,6 +563,7 @@ export class PreviewPane extends LitElement {
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
+            ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
@@ -470,6 +585,7 @@ export class PreviewPane extends LitElement {
       ${renderMobileBar}
       ${showDesktopHeader ? html`
         <div class="header">
+          ${this._renderBackBtn()}
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
           ${this._renderUploadBtn()}

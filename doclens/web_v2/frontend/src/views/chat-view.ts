@@ -7,7 +7,9 @@ import { chatStream } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
-import type { PageMarker } from "../api/preview";
+import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { isPstFilePath, isPstEmailPath } from "../api/pst";
+import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
@@ -267,6 +269,7 @@ export class ChatView extends LitElement {
   @state() private previewPath = "";
   @state() private previewLanguage = "text";
   @state() private previewPages: PageMarker[] | null = null;
+  @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
@@ -397,6 +400,7 @@ export class ChatView extends LitElement {
     this.previewPath = "";
     this.previewLanguage = "text";
     this.previewPages = null;
+    this.previewAttachments = null;
     this.previewWritable = false;
     this.previewError = null;
     this.previewDirty = false;
@@ -492,26 +496,51 @@ export class ChatView extends LitElement {
         this._pushToast("参考路径为空", "error", 5000);
         return;
       }
-      this.previewError = null;
-      const result = await fetchPreview(path);
-      if (result.ok) {
-        this.previewContent = result.content;
-        this.previewPath = result.path;
-        this.previewLanguage = result.language;
-        this.previewWritable = result.writable;
-        this.previewPages = result.pages;
-        this.previewOpen = true;
-      } else if (result.notIndexed) {
-        this.previewError = "NOT_INDEXED";
-        this.previewContent = "";
-        this.previewPath = path;
-        this.previewWritable = false;
-        this.previewPages = null;
-        this.previewOpen = true;
-      } else {
-        this._pushToast(`预览失败：${result.message}`, "error", 5000);
-      }
+      await this._openPreviewPath(path);
     });
+  }
+
+  /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
+  private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>): Promise<void> => {
+    await this._safeAction(async () => {
+      await this._openPreviewPath(e.detail.path);
+    });
+  };
+
+  /** 按路径加载预览并打开预览栏（引用点击与 PST 邮件行点击共用）。 */
+  private async _openPreviewPath(path: string): Promise<void> {
+    this.previewError = null;
+    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
+    if (isPstFilePath(path)) {
+      this.previewContent = "";
+      this.previewPath = path;
+      this.previewLanguage = "text";
+      this.previewWritable = false;
+      this.previewPages = null;
+      this.previewAttachments = null;
+      this.previewOpen = true;
+      return;
+    }
+    const result = await fetchPreview(path);
+    if (result.ok) {
+      this.previewContent = result.content;
+      this.previewPath = result.path;
+      this.previewLanguage = result.language;
+      this.previewWritable = result.writable;
+      this.previewPages = result.pages;
+      this.previewAttachments = result.attachments;
+      this.previewOpen = true;
+    } else if (result.notIndexed) {
+      this.previewError = "NOT_INDEXED";
+      this.previewContent = "";
+      this.previewPath = path;
+      this.previewWritable = false;
+      this.previewPages = null;
+      this.previewAttachments = null;
+      this.previewOpen = true;
+    } else {
+      this._pushToast(`预览失败：${result.message}`, "error", 5000);
+    }
   }
 
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>): void => {
@@ -522,6 +551,17 @@ export class ChatView extends LitElement {
     await this._safeAction(() => {
       this.previewOpen = false;
     });
+  };
+
+  /** 预览区返回：PST 派生邮件 → 回到该 PST 的邮件列表；其余关闭预览。 */
+  private _onPreviewBack = async (): Promise<void> => {
+    if (isPstEmailPath(this.previewPath)) {
+      await this._safeAction(async () => {
+        await this._openPreviewPath(this.previewPath.split("#")[0]);
+      });
+      return;
+    }
+    await this._closePreview();
   };
 
   private async _safeAction(action: () => void | Promise<void>): Promise<void> {
@@ -566,6 +606,7 @@ export class ChatView extends LitElement {
       this.previewLanguage = r.language;
       this.previewWritable = r.writable;
       this.previewPages = r.pages;
+      this.previewAttachments = r.attachments;
     }
   }
 
@@ -626,7 +667,12 @@ export class ChatView extends LitElement {
       `;
     }
     const hasPreview = this.previewOpen;
-    const previewPane = (noHeader: boolean) => html`<preview-pane
+    const previewPane = (noHeader: boolean) => isPstFilePath(this.previewPath)
+      ? html`<pst-email-list
+          .pstPath=${this.previewPath}
+          @open-email=${this._onOpenPstEmail}>
+        </pst-email-list>`
+      : html`<preview-pane
       ?noHeader=${noHeader}
       path=${this.previewPath}
       language=${this.previewLanguage}
@@ -634,6 +680,10 @@ export class ChatView extends LitElement {
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
       .pages=${this.previewPages}
+      .attachments=${this.previewAttachments}
+      ?showBack=${isPstEmailPath(this.previewPath)}
+      backLabel="邮件列表"
+      @back=${this._onPreviewBack}
       @dirty-change=${this._onPreviewDirty}
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
@@ -690,7 +740,7 @@ export class ChatView extends LitElement {
           <focus-header
             back-label="返回"
             title=${this.previewPath}
-            @back=${this._closePreview}>
+            @back=${this._onPreviewBack}>
           </focus-header>
           ${this.previewError === "NOT_INDEXED"
             ? this._renderNotIndexedHint()
