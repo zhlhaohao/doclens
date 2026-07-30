@@ -1,0 +1,2 @@
+# 忽略运行时生成的隐藏目录（.playwright-cli/、.cortex/、.doclens/ 等）
+.*/
