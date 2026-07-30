@@ -31,7 +31,13 @@ logger = logging.getLogger(__name__)
 # 增量索引自动重建——只影响 PST，不像 INDEX_SCHEMA_VERSION 那样连累全库。
 # 历史：
 #   ":pst2" — 2026-07-29 ADR-0003：HTML 正文转写 + 附件全量落盘 + 邮件元数据。
-PST_PARSER_FINGERPRINT_SALT = ":pst2"
+#   ":pst3" — 2026-07-30：邮件头转储正文（Outlook 系统报告类）可读化重排
+#             （_reformat_header_dump：解码 encoded-word、折叠超长地址列表）。
+#   ":pst4" — 2026-07-30：头转储检测前移到 HTML 转写之前 + 逻辑块解析
+#             （body_html 装天书的路径不再漏检）。
+#   ":pst5" — 2026-07-30：头转储带完整 RFC822 源码时按 MIME 解析提取内嵌
+#             正文（base64 附件只列名）；头行正则兼容空值头（Subject:）。
+PST_PARSER_FINGERPRINT_SALT = ":pst5"
 
 
 # ============================================================================
