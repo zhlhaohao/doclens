@@ -391,6 +391,24 @@ class FTS5Index:
             )
         """)
 
+        # PST 邮件元数据（ADR-0003）：每封派生邮件文档一行，供物理 PST 的
+        # 邮件列表分页查询（主题/发件人/日期/文件夹 + 附件下载清单）。
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS pst_email_meta (
+                doc_id TEXT PRIMARY KEY,
+                pst_path TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                subject TEXT DEFAULT '',
+                sender TEXT DEFAULT '',
+                date TEXT DEFAULT '',
+                folder TEXT DEFAULT '',
+                attachments_json TEXT DEFAULT '[]'
+            )
+        """)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pst_email_meta_pst ON pst_email_meta (pst_path)"
+        )
+
         # Performance indexes for large-scale document sets (10k+ docs)
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nodes_doc_id ON nodes (doc_id)"
@@ -1753,6 +1771,9 @@ class FTS5Index:
             self._conn.execute(
                 f"DELETE FROM documents WHERE doc_id IN ({ph_e})", existing_ids
             )
+            self._conn.execute(
+                f"DELETE FROM pst_email_meta WHERE doc_id IN ({ph_e})", existing_ids
+            )
             if existing_paths:
                 ph_p = ",".join("?" for _ in existing_paths)
                 self._conn.execute(
@@ -1815,6 +1836,94 @@ class FTS5Index:
             (prefix, limit),
         ).fetchall()
         return [r[0] for r in rows]
+
+    # -------------------------------------------------------------------
+    # PST 邮件元数据（ADR-0003：邮件列表分页 + 附件下载清单）
+    # -------------------------------------------------------------------
+
+    def upsert_email_meta(self, doc_id: str, pst_path: str, meta: dict) -> None:
+        """写入一封邮件的元数据（随派生文档同事务批次提交）。
+
+        Args:
+            doc_id: 派生文档 id（``<pst文档id>__<entry_id>``）
+            pst_path: 物理 PST 绝对路径（列表查询的分组键）
+            meta: pst_parser 产出的 email_meta dict
+        """
+        import json as _json
+
+        self._conn.execute(
+            """INSERT OR REPLACE INTO pst_email_meta
+               (doc_id, pst_path, entry_id, subject, sender, date, folder, attachments_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                doc_id,
+                pst_path,
+                str(meta.get("entry_id", "")),
+                meta.get("subject", ""),
+                meta.get("sender", ""),
+                meta.get("date", ""),
+                meta.get("folder", ""),
+                _json.dumps(meta.get("attachments") or [], ensure_ascii=False),
+            ),
+        )
+
+    def list_email_meta(
+        self, pst_path: str, offset: int = 0, limit: int = 50
+    ) -> tuple[int, list[dict]]:
+        """分页列出一个 PST 的邮件元数据（日期倒序，无日期排尾）。
+
+        Returns:
+            (total, rows)：rows 含 entry_id/subject/sender/date/folder/doc_id。
+        """
+        total = self._conn.execute(
+            "SELECT COUNT(*) FROM pst_email_meta WHERE pst_path = ?", (pst_path,)
+        ).fetchone()[0]
+        rows = self._conn.execute(
+            """SELECT entry_id, subject, sender, date, folder, doc_id
+               FROM pst_email_meta WHERE pst_path = ?
+               ORDER BY CASE WHEN date = '' THEN 1 ELSE 0 END, date DESC, entry_id DESC
+               LIMIT ? OFFSET ?""",
+            (pst_path, limit, offset),
+        ).fetchall()
+        return total, [
+            {
+                "entry_id": r[0],
+                "subject": r[1],
+                "sender": r[2],
+                "date": r[3],
+                "folder": r[4],
+                "doc_id": r[5],
+            }
+            for r in rows
+        ]
+
+    def get_email_attachments(self, doc_id: str) -> list[dict] | None:
+        """按派生 doc_id 取附件清单（[{name,size,stored,filename}]）；无记录返回 None。"""
+        row = self._conn.execute(
+            "SELECT attachments_json FROM pst_email_meta WHERE doc_id = ?", (doc_id,)
+        ).fetchone()
+        return self._attachments_from_row(row)
+
+    def get_email_attachments_by_entry(
+        self, pst_path: str, entry_id: str
+    ) -> list[dict] | None:
+        """按 (PST 绝对路径, entry_id) 取附件清单（web 层不知道 doc_id 时用）。"""
+        row = self._conn.execute(
+            "SELECT attachments_json FROM pst_email_meta WHERE pst_path = ? AND entry_id = ?",
+            (pst_path, str(entry_id)),
+        ).fetchone()
+        return self._attachments_from_row(row)
+
+    @staticmethod
+    def _attachments_from_row(row) -> list[dict] | None:
+        import json as _json
+
+        if row is None:
+            return None
+        try:
+            return _json.loads(row[0] or "[]")
+        except _json.JSONDecodeError:
+            return []
 
     # -------------------------------------------------------------------
     # Index metadata (replaces _index_meta.json)

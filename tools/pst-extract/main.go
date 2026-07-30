@@ -68,6 +68,10 @@ func sanitizeFilename(name string) string {
 }
 
 func extWhitelisted(name string, whitelist map[string]bool) bool {
+	// "*" 通配：提取全部类型（2026-07-29 附件全量落盘供预览下载，ADR-0003）
+	if whitelist["*"] {
+		return true
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 	return whitelist[ext]
 }

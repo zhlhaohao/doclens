@@ -3,7 +3,9 @@ import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
 import { fetchPreview } from "../api/preview";
-import type { PageMarker } from "../api/preview";
+import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { isPstFilePath, isPstEmailPath } from "../api/pst";
+import "../components/pst-email-list";
 import "../components/file-tree";
 import "../components/file-list";
 import "../components/preview-pane";
@@ -173,6 +175,7 @@ export class FilesView extends LitElement {
   @state() private _previewLanguage = "text";
   @state() private _previewWritable = false;
   @state() private _previewPages: PageMarker[] | null = null;
+  @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private _previewError: "NOT_INDEXED" | null = null;
   @state() private _previewDirty = false;
 
@@ -474,6 +477,7 @@ export class FilesView extends LitElement {
       this._previewError = null;
       this._previewWritable = false;
       this._previewPages = null;
+      this._previewAttachments = null;
       this._previewDirty = false;
     }
     actions.clearSelection();
@@ -548,6 +552,16 @@ export class FilesView extends LitElement {
   }
 
   private async _fetchPreview(path: string) {
+    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
+    if (isPstFilePath(path)) {
+      this._previewError = null;
+      this._previewPath = path;
+      this._previewContent = "";
+      this._previewWritable = false;
+      this._previewPages = null;
+      this._previewAttachments = null;
+      return;
+    }
     const result = await fetchPreview(path);
     if (result.ok) {
       this._previewError = null;
@@ -556,12 +570,14 @@ export class FilesView extends LitElement {
       this._previewLanguage = result.language;
       this._previewWritable = result.writable;
       this._previewPages = result.pages;
+      this._previewAttachments = result.attachments;
     } else if (result.notIndexed) {
       this._previewError = "NOT_INDEXED";
       this._previewPath = path;
       this._previewContent = "";
       this._previewWritable = false;
       this._previewPages = null;
+      this._previewAttachments = null;
     } else {
       this._showToast(result.message || "预览失败");
     }
@@ -575,8 +591,17 @@ export class FilesView extends LitElement {
       this._previewLanguage = r.language;
       this._previewWritable = r.writable;
       this._previewPages = r.pages;
+      this._previewAttachments = r.attachments;
     }
   }
+
+  /** PST 邮件列表行点击 → 打开派生邮件预览（走普通 preview 流程，含附件清单）。 */
+  private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
+    await this._previewPathWithDirtyCheck(e.detail.path);
+    if (this._isMobile) {
+      actions.setMobilePane("detail");
+    }
+  };
 
   private _discardPreviewEdits() {
     const pp = this.shadowRoot?.querySelector("preview-pane") as any;
@@ -621,6 +646,15 @@ export class FilesView extends LitElement {
     if (!this._previewPath) {
       return html`<div class="preview-placeholder">点击文件预览</div>`;
     }
+    // PST 物理文件：分页邮件列表（点击行进派生邮件预览）
+    if (isPstFilePath(this._previewPath)) {
+      return html`<pst-email-list
+        .pstPath=${this._previewPath}
+        ?showBack=${opts.mobile ?? false}
+        @open-email=${this._onOpenPstEmail}
+        @back=${() => this._goBack()}
+      ></pst-email-list>`;
+    }
     return html`<preview-pane
       ?noHeader=${opts.noHeader ?? false}
       ?mobile=${opts.mobile ?? false}
@@ -629,14 +663,26 @@ export class FilesView extends LitElement {
       content=${this._previewContent}
       ?writable=${this._previewWritable}
       .pages=${this._previewPages}
+      .attachments=${this._previewAttachments}
+      ?showBack=${isPstEmailPath(this._previewPath)}
+      backLabel="邮件列表"
       @dirty-change=${this._onPreviewDirty}
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
       @upload-success=${this._onPreviewUploadSuccess}
       @upload-failed=${this._onPreviewUploadFailed}
-      @back=${() => this._goBack()}
+      @back=${this._onPreviewBack}
     ></preview-pane>`;
   }
+
+  /** 预览区返回：PST 派生邮件 → 回到该 PST 的邮件列表；其余走原导航。 */
+  private _onPreviewBack = async () => {
+    if (isPstEmailPath(this._previewPath)) {
+      await this._previewPathWithDirtyCheck(this._previewPath.split("#")[0]);
+      return;
+    }
+    this._goBack();
+  };
 
   private get _searchBoxState() {
     const fs = store.getState().files.filenameSearch;
