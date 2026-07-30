@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
+import { store } from "../state/store";
 
 @customElement("tree-node")
 export class TreeNode extends LitElement {
@@ -39,6 +40,19 @@ export class TreeNode extends LitElement {
   @property({ type: Array }) childEntries: FileEntry[] = [];
   @property({ type: String }) loading = "";
 
+  private _unsubscribe?: () => void;
+
+  connectedCallback() {
+    super.connectedCallback();
+    // 订阅 store：expandedPaths / currentDir / treeCache 变化时重渲染，
+    // 让递归子节点的展开/选中/子项状态实时反映 store。
+    this._unsubscribe = store.subscribe(() => this.requestUpdate());
+  }
+  disconnectedCallback() {
+    this._unsubscribe?.();
+    super.disconnectedCallback();
+  }
+
   private _onClick() {
     if (this.readonly) {
       this.dispatchEvent(new CustomEvent("pick-dir", {
@@ -63,6 +77,8 @@ export class TreeNode extends LitElement {
   }
 
   render() {
+    const { treeCache, expandedPaths, currentDir } = store.getState().files;
+    const expanded = new Set(expandedPaths);
     return html`
       <div class="row ${this.selected ? "selected" : ""}" @click=${this._onClick}>
         <span
@@ -73,12 +89,15 @@ export class TreeNode extends LitElement {
       </div>
       ${this.expanded && this.entry.is_dir ? html`
         <div class="children">
-          ${this.loading === this.entry.path
+          ${this.loading && this.loading === this.entry.path
             ? html`<div style="padding: 4px 8px; color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm);">加载中…</div>`
             : this.childEntries.filter(c => c.is_dir).map(c => html`
               <tree-node
                 .entry=${c}
                 .depth=${this.depth + 1}
+                .expanded=${expanded.has(c.path)}
+                .selected=${c.path === currentDir}
+                .childEntries=${treeCache[c.path] || []}
                 .readonly=${this.readonly}
                 @select-dir=${(e: Event) => this._relay("select-dir", e)}
                 @toggle=${(e: Event) => this._relay("toggle", e)}
