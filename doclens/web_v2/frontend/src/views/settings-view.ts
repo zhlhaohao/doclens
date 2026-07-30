@@ -277,6 +277,27 @@ export class SettingsView extends LitElement {
       box-sizing: border-box;
       transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     }
+    /* toggle 开关（bool 配置项，如「启用 MCP server」） */
+    .toggle {
+      display: inline-flex; align-items: center; gap: var(--cortex-space-2);
+      cursor: pointer; user-select: none;
+    }
+    .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      width: 36px; height: 20px; border-radius: 10px;
+      background: var(--cortex-border-muted);
+      position: relative; transition: background 0.15s; flex-shrink: 0;
+    }
+    .toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--cortex-surface);
+      transition: transform 0.15s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--cortex-primary); }
+    .toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(16px); }
+    .toggle input:focus-visible + .toggle-track { box-shadow: var(--cortex-focus-ring); }
+    .toggle-label { font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle); }
     .input:hover:not(:focus), .select:hover:not(:focus) {
       border-color: var(--cortex-text-muted);
     }
@@ -909,6 +930,20 @@ export class SettingsView extends LitElement {
           </div>
         `;
       }
+      case "toggle":
+        return html`
+          <label class="toggle">
+            <input
+              type="checkbox"
+              ?checked=${value === "true"}
+              data-env=${f.envVar}
+              @change=${(e: Event) =>
+                this._onInput(f.envVar, (e.target as HTMLInputElement).checked ? "true" : "false")}
+            />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">${value === "true" ? "开启" : "关闭"}</span>
+          </label>
+        `;
       default:
         return nothing;
     }
