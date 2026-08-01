@@ -1,6 +1,7 @@
 """日记总结 Worker —— 常驻后台，把「片段态」的过去日小节交给 AI 归纳重写（ADR-0007）。
 
-触发模型：启动时检查 + 定期复查（默认 30 分钟）。状态即队列——
+触发模型：每日 00:05 定点总结前一天（避开零点整）；启动时补扫一次——
+进程在 00:05 未运行而错过的总结立即补上。状态即队列——
 年度 md 中小节头部的 <!-- diary:raw --> 标记就是待总结信号，
 无需额外数据库表；进程崩溃重启后重扫文件即可恢复。
 
@@ -12,7 +13,8 @@
    以第一人称叙事体归纳成文；
 4. diary.rewrite_day 整体替换小节并移除 raw 标记 → 触发重建索引。
 
-失败策略：整日保留片段态，指数退避下轮重试（上限 6 小时），
+失败策略：整日保留片段态，指数退避重试（上限 6 小时；唤醒点取
+「下一个 00:05」与「最近重试时间」的较早者），
 绝不覆盖原文、不标 failed（原文必须保留到总结成功）。
 未配置 PLANIFY_API_KEY 时空转（日记停在片段态，原文保底）。
 """
@@ -26,6 +28,8 @@ import threading
 import time
 import urllib.request
 from datetime import date as date_type
+from datetime import datetime as datetime_type
+from datetime import timedelta
 from pathlib import Path
 
 from doclens import diary
@@ -33,8 +37,19 @@ from treesearch.parsers.image_store import _EXT_TO_MEDIA
 
 logger = logging.getLogger(__name__)
 
-# 定期复查间隔（启动时总是先查一次）
-_POLL_INTERVAL_S = 30 * 60.0
+# 每日定点总结时刻：00:05（零点过 5 分钟）
+_DAILY_RUN_HOUR = 0
+_DAILY_RUN_MINUTE = 5
+
+
+def seconds_until_next_run(now: datetime_type) -> float:
+    """距下一个 00:05 的秒数。00:05 整点也算「已过」，排到下一天。"""
+    target = now.replace(
+        hour=_DAILY_RUN_HOUR, minute=_DAILY_RUN_MINUTE, second=0, microsecond=0
+    )
+    if now >= target:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
 
 # 整日总结失败的重试退避：5min 起步指数增长，上限 6h
 _RETRY_BASE_S = 300.0
@@ -167,10 +182,9 @@ def summarize_day_text(user_input: str, config) -> str:
 class DiaryWorker:
     """常驻日记总结消费者（串行，一次一天）。"""
 
-    def __init__(self, idx_manager, get_config, poll_interval: float = _POLL_INTERVAL_S):
+    def __init__(self, idx_manager, get_config):
         self._idx = idx_manager
         self._get_config = get_config
-        self._poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         # 每个失败日的 (attempts, 下次可重试时间)
@@ -187,7 +201,7 @@ class DiaryWorker:
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """启动后台线程（幂等）。启动即扫描一次，之后定期复查。"""
+        """启动后台线程（幂等）。启动即补扫一次，之后每日 00:05 定点总结。"""
         if self._thread is not None:
             return True
         self._stop_event.clear()
@@ -195,7 +209,9 @@ class DiaryWorker:
         self._thread.start()
         with self._state_lock:
             self._running = True
-        logger.info("DiaryWorker started (poll=%.0fs)", self._poll_interval)
+        logger.info(
+            "DiaryWorker started (daily at %02d:%02d)", _DAILY_RUN_HOUR, _DAILY_RUN_MINUTE
+        )
         return True
 
     def stop(self) -> None:
@@ -226,12 +242,26 @@ class DiaryWorker:
         return Path(self._idx.search_path)
 
     def _run(self) -> None:
+        # 启动即补扫一次：进程在 00:05 未运行而错过的总结立即补上
+        self._scan_safely()
         while not self._stop_event.is_set():
-            try:
-                self._scan_once()
-            except Exception as e:  # 兜底：任何意外都不让 worker 线程死掉
-                logger.exception("DiaryWorker loop error: %s", e)
-            self._stop_event.wait(self._poll_interval)
+            if self._stop_event.wait(self._next_wakeup_s()):
+                break
+            self._scan_safely()
+
+    def _scan_safely(self) -> None:
+        try:
+            self._scan_once()
+        except Exception as e:  # 兜底：任何意外都不让 worker 线程死掉
+            logger.exception("DiaryWorker loop error: %s", e)
+
+    def _next_wakeup_s(self) -> float:
+        """距下次扫描的秒数：下一个 00:05；有退避中的失败日则取两者较早。"""
+        wait = seconds_until_next_run(datetime_type.now())
+        if self._retry_after:
+            earliest = min(deadline for _, deadline in self._retry_after.values())
+            wait = min(wait, max(0.0, earliest - time.monotonic()))
+        return wait
 
     def _scan_once(self) -> None:
         config = self._get_config()
