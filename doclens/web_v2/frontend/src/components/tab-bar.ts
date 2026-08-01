@@ -52,6 +52,7 @@ export class TabBar extends LitElement {
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
     { id: "search", icon: "search", label: "搜索" },
     { id: "chat", icon: "message-circle", label: "对话" },
+    { id: "diary", icon: "book-open", label: "日记" },
     { id: "files", icon: "folder", label: "文件" },
   ];
 

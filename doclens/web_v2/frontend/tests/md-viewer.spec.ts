@@ -4,6 +4,7 @@ import { html } from "lit";
 import type { MdViewer } from "../src/components/md-viewer";
 import { MdViewer as MdViewerClass } from "../src/components/md-viewer";
 import { iconWidthStyle, ICON_PX_THRESHOLD } from "../src/components/md-viewer";
+import { resolveDocImageUrl } from "../src/components/md-viewer";
 import "../src/components/md-viewer";
 
 describe("<md-viewer>", () => {
@@ -313,6 +314,47 @@ describe("iconWidthStyle", () => {
 
   it("returns null for large images", () => {
     expect(iconWidthStyle(1000)).toBeNull();
+  });
+});
+
+describe("resolveDocImageUrl", () => {
+  const doc = "日记/2026.md";
+
+  it("rewrites relative src against the doc directory", () => {
+    expect(resolveDocImageUrl(doc, "images/2026-08-01/x.webp")).toBe(
+      `/api/preview/raw?path=${encodeURIComponent("日记")}/images/2026-08-01/x.webp`,
+    );
+  });
+
+  it("handles ./ prefix and .. segments", () => {
+    expect(resolveDocImageUrl(doc, "./images/x.png")).toBe(
+      `/api/preview/raw?path=${encodeURIComponent("日记")}/images/x.png`,
+    );
+    expect(resolveDocImageUrl("a/b/c.md", "../shared/x.png")).toBe(
+      "/api/preview/raw?path=a/shared/x.png",
+    );
+  });
+
+  it("encodes each path segment but keeps slashes", () => {
+    const url = resolveDocImageUrl(doc, "我的 图片/x y.png")!;
+    expect(url).toContain("/api/preview/raw?path=");
+    expect(url).toContain(encodeURIComponent("我的 图片"));
+    expect(url).not.toContain(" ");
+  });
+
+  it("keeps query string / fragment on the rewritten URL", () => {
+    expect(resolveDocImageUrl(doc, "images/x.png?dw=100")).toBe(
+      `/api/preview/raw?path=${encodeURIComponent("日记")}/images/x.png?dw=100`,
+    );
+  });
+
+  it("returns null for absolute / scheme / anchor / escaping-root src", () => {
+    expect(resolveDocImageUrl(doc, "/api/preview/asset?path=a&id=1")).toBeNull();
+    expect(resolveDocImageUrl(doc, "https://example.com/x.png")).toBeNull();
+    expect(resolveDocImageUrl(doc, "data:image/png;base64,xx")).toBeNull();
+    expect(resolveDocImageUrl(doc, "#frag")).toBeNull();
+    expect(resolveDocImageUrl("c.md", "../x.png")).toBeNull();
+    expect(resolveDocImageUrl("", "images/x.png")).toBeNull();
   });
 });
 

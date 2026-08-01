@@ -45,6 +45,10 @@ import bookOpenIcon from "lucide-static/icons/book-open.svg?raw";
 import rotateCcwIcon from "lucide-static/icons/rotate-ccw.svg?raw";
 import sparklesIcon from "lucide-static/icons/sparkles.svg?raw";
 import regexIcon from "lucide-static/icons/regex.svg?raw";
+import cameraIcon from "lucide-static/icons/camera.svg?raw";
+import imageIcon from "lucide-static/icons/image.svg?raw";
+import calendarIcon from "lucide-static/icons/calendar.svg?raw";
+import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -79,6 +83,10 @@ const ICONS: Record<string, string> = {
   "rotate-ccw": rotateCcwIcon,
   sparkles: sparklesIcon,
   regex: regexIcon,
+  camera: cameraIcon,
+  image: imageIcon,
+  calendar: calendarIcon,
+  "chevron-left": chevronLeftIcon,
 };
 
 @customElement("doclens-icon")

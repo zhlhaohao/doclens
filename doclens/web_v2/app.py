@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     get_watch_broker().bind(asyncio.get_running_loop())
     deps.start_watcher()
     deps.start_vision_worker()
+    deps.start_diary_worker()
     deps.start_git_sync()
     await deps.start_mcp_server()
     try:
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
     finally:
         deps.stop_mcp_server()
         deps.stop_git_sync()
+        deps.stop_diary_worker()
         deps.stop_vision_worker()
         deps.stop_watcher()
 
@@ -76,6 +78,8 @@ def create_app() -> FastAPI:
     app.include_router(watch.router, prefix="/api")
     from doclens.web_v2.api import reindex
     app.include_router(reindex.router, prefix="/api")
+    from doclens.web_v2.api import diary
+    app.include_router(diary.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

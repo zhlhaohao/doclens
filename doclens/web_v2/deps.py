@@ -23,6 +23,7 @@ _sessions_store: Optional[SessionsStore] = None
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
 _vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 import 循环
+_diary_worker: Optional["object"] = None  # DiaryWorker，懒加载避免 import 循环
 _git_sync: Optional["object"] = None  # GitSync，懒加载避免 import 循环
 _mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
 _lock = threading.RLock()
@@ -110,10 +111,11 @@ def get_sessions_store() -> SessionsStore:
 
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker, _git_sync
+    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker, _diary_worker, _git_sync
     # 停止可能存在的 watcher / worker / 同步循环 / MCP server，释放后台线程
     stop_watcher()
     stop_vision_worker()
+    stop_diary_worker()
     stop_git_sync()
     stop_mcp_server()
     with _lock:
@@ -124,6 +126,7 @@ def reset_singletons() -> None:
         _watcher = None
         _mcp_handle = None
         _vision_worker = None
+        _diary_worker = None
         _git_sync = None
 
 
@@ -299,6 +302,46 @@ def stop_vision_worker() -> None:
             worker.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("stop_vision_worker: %s", exc)
+
+
+def get_diary_worker():
+    """获取已注册的 DiaryWorker 单例（可能为 None）。"""
+    return _diary_worker
+
+
+def start_diary_worker() -> bool:
+    """创建并启动 DiaryWorker（日记片段态小节的常驻总结者，ADR-0007）。
+
+    无论是否已配置 PLANIFY_API_KEY 都启动：worker 内部在未配置时空转，
+    设置页补上 key 后下一轮循环自动开始总结（配置热生效）。
+    """
+    global _diary_worker
+    idx = get_index_manager()
+    try:
+        from doclens.diary_worker import DiaryWorker
+
+        worker = DiaryWorker(idx, get_config)
+        worker.start()
+        with _lock:
+            _diary_worker = worker
+        logger.info("DiaryWorker started for %s", idx.search_path)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("start_diary_worker failed: %s", exc)
+        return False
+
+
+def stop_diary_worker() -> None:
+    """停止并注销 DiaryWorker 单例（幂等）。"""
+    global _diary_worker
+    with _lock:
+        worker = _diary_worker
+        _diary_worker = None
+    if worker is not None:
+        try:
+            worker.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_diary_worker: %s", exc)
 
 
 def get_git_sync():
