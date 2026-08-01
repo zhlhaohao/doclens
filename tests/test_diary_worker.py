@@ -1,5 +1,6 @@
 """doclens.diary_worker 测试：总结流程（mock 视觉与对话模型）。"""
 from datetime import date
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -7,7 +8,12 @@ from unittest.mock import patch
 import pytest
 
 from doclens import diary
-from doclens.diary_worker import DiaryWorker, _strip_thinking, build_summary_input
+from doclens.diary_worker import (
+    DiaryWorker,
+    _strip_thinking,
+    build_summary_input,
+    seconds_until_next_run,
+)
 
 
 def _config(**overrides):
@@ -48,6 +54,38 @@ def workdir(tmp_path: Path) -> Path:
 def _raw_day(workdir: Path, date_str: str) -> None:
     diary.append_text(workdir, date_str, "09:15", "091500", "早上喝了咖啡")
     diary.append_text(workdir, date_str, "18:30", "183000", "晚上散步")
+
+
+class TestSecondsUntilNextRun:
+    def test_before_0005_targets_today(self):
+        # 00:00 → 5 分钟后
+        assert seconds_until_next_run(datetime(2026, 8, 2, 0, 0, 0)) == 300.0
+        # 23:59 → 6 分钟
+        assert seconds_until_next_run(datetime(2026, 8, 2, 23, 59, 0)) == 360.0
+
+    def test_after_0005_targets_tomorrow(self):
+        # 00:06 → 23h59m
+        assert seconds_until_next_run(datetime(2026, 8, 2, 0, 6, 0)) == 24 * 3600 - 60
+        # 正午 → 12h05m
+        assert seconds_until_next_run(datetime(2026, 8, 2, 12, 0, 0)) == 12 * 3600 + 300
+
+    def test_exactly_0005_counts_as_past(self):
+        # 整 00:05 也排到下一天（避免刚跑完又立刻再跑）
+        assert seconds_until_next_run(datetime(2026, 8, 2, 0, 5, 0)) == 24 * 3600.0
+
+
+class TestNextWakeup:
+    def test_no_retry_waits_until_0005(self, workdir: Path):
+        worker = DiaryWorker(_FakeIdx(workdir), lambda: _config())
+        wait = worker._next_wakeup_s()
+        assert 0 < wait <= 24 * 3600
+
+    def test_pending_retry_wakes_earlier(self, workdir: Path):
+        import time
+
+        worker = DiaryWorker(_FakeIdx(workdir), lambda: _config())
+        worker._retry_after["2026-08-01"] = (1, time.monotonic() + 60)
+        assert worker._next_wakeup_s() <= 60.0
 
 
 class TestBuildSummaryInput:
