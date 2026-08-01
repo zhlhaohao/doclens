@@ -54,6 +54,39 @@ export function iconWidthStyle(naturalWidth: number): string | null {
   return null;
 }
 
+/** 协议/绝对 URL 判定（http:、https:、data:、blob: 等） */
+const _HAS_SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+/** 把 md 里的相对图片 src 解析为 /api/preview/raw 可服务的 URL。
+ *
+ *  md 原文写的是相对文档的路径（如 `![备注](images/2026-08-01/x.webp)`），
+ *  浏览器会相对页面 URL 解析 → 404。这里相对**文档所在目录**解析成
+ *  workdir 相对路径，再交给 /api/preview/raw 服务原文件。
+ *
+ *  返回 null 表示无需重写（绝对路径、带协议、锚点、或越出 workdir 根）。 */
+export function resolveDocImageUrl(docPath: string, src: string): string | null {
+  if (!docPath || !src) return null;
+  if (src.startsWith("/") || src.startsWith("#") || _HAS_SCHEME_RE.test(src)) return null;
+  // 剥掉查询串/锚点参与路径解析，重写时再拼回
+  const m = src.match(/^([^?#]*)([?#].*)?$/);
+  const relPath = m?.[1] ?? src;
+  const suffix = m?.[2] ?? "";
+  if (!relPath) return null;
+
+  const dirSegs = docPath.split("/").slice(0, -1); // 文档所在目录
+  for (const seg of relPath.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (dirSegs.length === 0) return null; // 越出 workdir 根，不重写
+      dirSegs.pop();
+    } else {
+      dirSegs.push(seg);
+    }
+  }
+  const resolved = dirSegs.map(encodeURIComponent).join("/");
+  return `/api/preview/raw?path=${resolved}${suffix}`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const blockRenderer: any = {
   heading(token: any) {
@@ -302,6 +335,8 @@ export class MdViewer extends LitElement {
   @property() keyword = "";
   /** 分页标记（PDF/PPTX/XLSX）；为 null 时走单块渲染 */
   @property({ attribute: false }) pages: PageMarker[] | null = null;
+  /** 文档相对 workdir 的路径（如 日记/2026.md）；设置后相对图片 src 重写到 /api/preview/raw */
+  @property({ attribute: "doc-path" }) docPath = "";
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
@@ -309,12 +344,29 @@ export class MdViewer extends LitElement {
     if (changedProps.has("content") || changedProps.has("keyword")) {
       this._highlightKeyword();
     }
-    if (changedProps.has("content") || changedProps.has("pages")) {
+    if (
+      changedProps.has("content") ||
+      changedProps.has("pages") ||
+      changedProps.has("docPath")
+    ) {
+      this._resolveImageUrls();
       this._applyIconSizing();
     }
     if (changedProps.has("line") || changedProps.has("content")) {
       this._locateAndHighlight();
     }
+  }
+
+  /** 相对文档目录的图片 src → /api/preview/raw URL（仅当 docPath 已设置）。
+   *  在 _applyIconSizing 之前执行：重写后的 URL 不带 dw，自然走 naturalWidth 兜底。 */
+  private _resolveImageUrls() {
+    if (!this.docPath) return;
+    const imgs = this.shadowRoot!.querySelectorAll<HTMLImageElement>("img");
+    imgs.forEach((img) => {
+      const raw = img.getAttribute("src") ?? "";
+      const url = resolveDocImageUrl(this.docPath, raw);
+      if (url) img.src = url;
+    });
   }
 
   /** 从图片 URL 的 dw 查询参数读显示宽（px），无则返回 null。

@@ -96,6 +96,20 @@ export const INITIAL_STATE: AppState = {
       totalMatches: 0,
     },
   },
+  diary: {
+    tab: "record",
+    today: "",
+    todayEntry: null,
+    recordLoading: false,
+    submitting: false,
+    reviewDate: "",
+    reviewEntry: null,
+    reviewLoading: false,
+    calendarMonth: "",
+    calendarDates: [],
+    calendarOpen: false,
+    error: null,
+  },
 };
 
 type Listener = (state: AppState) => void;
@@ -268,6 +282,11 @@ export const actions = {
   setFilesState(s: Partial<AppState["files"]>) {
     const cur = store.getState().files;
     store.setState({ files: { ...cur, ...s } });
+  },
+
+  setDiaryState(s: Partial<AppState["diary"]>) {
+    const cur = store.getState().diary;
+    store.setState({ diary: { ...cur, ...s } });
   },
 
   expandDir(path: string) {

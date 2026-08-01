@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "settings" | "files" | "login";
+export type ViewId = "search" | "chat" | "settings" | "files" | "diary" | "login";
 export type FocusState = "initial" | "focus";
 export type SearchMode = "keyword" | "grep";
 
@@ -200,6 +200,40 @@ export interface AuthState {
   hasPassword: boolean;
 }
 
+/** Diary page（日记：记录 / 回顾 两个子页，ADR-0007） */
+export interface DiaryFragment {
+  fid: string;
+  time: string;                 // HH:MM
+  kind: "text" | "photo";
+  text: string;                 // 文字内容，或图片备注
+  image_url: string | null;     // 可直接用于 <img src>（仅 photo）
+}
+
+export interface DiaryEntry {
+  date: string;                 // YYYY-MM-DD
+  state: "raw" | "summarized" | "empty";
+  fragments: DiaryFragment[];
+  /** 成品 md（图片引用已被后端重写为 /api/preview/raw URL） */
+  content: string;
+}
+
+export interface DiaryViewState {
+  tab: "record" | "review";
+  /** 服务器本地今天（记录页的录入归属日） */
+  today: string;
+  todayEntry: DiaryEntry | null;
+  recordLoading: boolean;
+  submitting: boolean;
+  reviewDate: string;
+  reviewEntry: DiaryEntry | null;
+  reviewLoading: boolean;
+  /** 日历打点面板：当前展示月份 + 该月有内容的日期 */
+  calendarMonth: string;        // YYYY-MM
+  calendarDates: string[];
+  calendarOpen: boolean;
+  error: string | null;
+}
+
 export interface AppState {
   view: ViewId;
   auth: AuthState;
@@ -219,4 +253,5 @@ export interface AppState {
   error: string | null;
   settings: SettingsViewState;
   files: FileExplorerViewState;
+  diary: DiaryViewState;
 }

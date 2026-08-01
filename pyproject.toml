@@ -61,6 +61,8 @@ dependencies = [
     "watchdog>=3.0",
     # Planify agent tools: lunar/weather 工具依赖 borax（农历计算）
     "borax>=4.1.0",
+    # 日记照片上传压缩（1600px/q80 WebP，ADR-0007）
+    "Pillow>=10.0.0",
     # LLM provider SDKs (Anthropic native + OpenAI-compatible)
     "openai>=1.0",
 ]

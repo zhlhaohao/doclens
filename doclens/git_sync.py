@@ -123,6 +123,34 @@ class GitSync:
         except OSError as e:
             logger.warning("GitSync 写入 .gitignore 失败: %s", e)
 
+    def _ensure_gitattributes(self) -> None:
+        """把日记目录的 union 合并例外写入知识库 .gitattributes（幂等，ADR-0008）。
+
+        日记年度 md 是多设备高频追加文件，全局 ours-wins 会静默丢失他端片段；
+        `日记/** merge=union` 让冲突时双方追加的行都保留。
+        """
+        gitattributes = os.path.join(self._path, ".gitattributes")
+        entry = "日记/** merge=union"
+        try:
+            existing = ""
+            if os.path.exists(gitattributes):
+                with open(gitattributes, "r", encoding="utf-8", errors="replace") as f:
+                    existing = f.read()
+            covered = {
+                line.strip()
+                for line in existing.splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            }
+            if entry in covered:
+                return
+            with open(gitattributes, "a", encoding="utf-8") as f:
+                if existing and not existing.endswith("\n"):
+                    f.write("\n")
+                f.write(f"# 日记目录：多设备追加冲突时双方保留（ADR-0008，ours-wins 的按路径例外）\n{entry}\n")
+            logger.info("GitSync 已将 %s 写入 %s", entry, gitattributes)
+        except OSError as e:
+            logger.warning("GitSync 写入 .gitattributes 失败: %s", e)
+
     # ------------------------------------------------------------------ 生命周期
 
     def start(self) -> bool:
@@ -139,6 +167,7 @@ class GitSync:
             return False
 
         self._ensure_gitignore()
+        self._ensure_gitattributes()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, name="doclens-git-sync", daemon=True)
         self._thread.start()

@@ -23,9 +23,9 @@ beforeEach(() => {
 });
 
 describe("route-map", () => {
-  it("VIEW_TO_HASH covers all 5 views", () => {
+  it("VIEW_TO_HASH covers all 6 views", () => {
     expect(Object.keys(VIEW_TO_HASH).sort()).toEqual(
-      ["chat", "files", "login", "search", "settings"].sort(),
+      ["chat", "diary", "files", "login", "search", "settings"].sort(),
     );
   });
 
@@ -47,6 +47,7 @@ describe("parseHash", () => {
     expect(parseHash("#/files")).toBe("files");
     expect(parseHash("#/settings")).toBe("settings");
     expect(parseHash("#/login")).toBe("login");
+    expect(parseHash("#/diary")).toBe("diary");
   });
 
   it("returns null for empty string", () => {

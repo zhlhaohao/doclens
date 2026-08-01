@@ -551,6 +551,7 @@ export class PreviewPane extends LitElement {
           .line=${this.line}
           .keyword=${this.keyword}
           .pages=${this.pages}
+          .docPath=${this.path}
         ></md-viewer>
         ${this._renderAttachments()}
       `;

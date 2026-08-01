@@ -48,7 +48,11 @@ class AnthropicProvider:
             tools=[self._tool_to_anthropic(t) for t in tools],
             max_tokens=max_tokens,
         )
-        content = [self._block_from_anthropic(b) for b in response.content]
+        content = [
+            b
+            for b in (self._block_from_anthropic(x) for x in response.content)
+            if b is not None
+        ]
         return LLMResponse(
             content=content,
             stop_reason=response.stop_reason or "end_turn",
@@ -94,7 +98,7 @@ class AnthropicProvider:
         }
 
     @staticmethod
-    def _block_from_anthropic(block: Any) -> TextBlock | ToolUseBlock | ToolResultBlock:
+    def _block_from_anthropic(block: Any) -> TextBlock | ToolUseBlock | ToolResultBlock | None:
         btype = getattr(block, "type", None)
         if btype == "text":
             return TextBlock(text=getattr(block, "text", ""))
@@ -110,6 +114,10 @@ class AnthropicProvider:
                 content=str(getattr(block, "content", "")),
                 is_error=bool(getattr(block, "is_error", False)),
             )
+        if btype in ("thinking", "redacted_thinking"):
+            # 思考块不是对外文本：丢弃。否则 str(block) 的 repr
+            # （ThinkingBlock(signature=..., thinking='...')）会泄漏进正文
+            return None
         # 未知类型降级为文本
         return TextBlock(text=str(block))
 

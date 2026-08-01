@@ -4,7 +4,19 @@
       "Bash(python -c ' *)",
       "Bash(python _fix.py)",
       "Bash(python _fix_watch.py)",
-      "Bash(rm _fix_watch.py)"
+      "Bash(rm _fix_watch.py)",
+      "Bash(/c/Users/lianghao/github/cortex/.venv/Scripts/python.exe *)",
+      "Read(//c/Users/lianghao/github/0801-2/doclens/web_v2/frontend/**)",
+      "Bash(sed -i 's/const CACHE_VERSION = \"doclens-v3\";/const CACHE_VERSION = \"doclens-v4\";/' public/sw.js)",
+      "Bash(npm run *)",
+      "Bash(npx vitest *)",
+      "Bash(npm test *)",
+      "Bash(C:/Users/lianghao/github/cortex/.venv/Scripts/python.exe -m pytest tests/test_diary.py tests/test_diary_worker.py -q)",
+      "Bash(CORTEX_NO_BROWSER=1 pwsh -File ./start-app.ps1 gui 2>&1)",
+      "Skill(playwright-cli)",
+      "Read(//c/Users/lianghao/github/cortex/test_work_dir/日记//**)",
+      "Read(//c/Users/lianghao/github/cortex/test_work_dir/日记/**)",
+      "Bash(rm -rf \"/c/Users/lianghao/github/cortex/test_work_dir/日记\")"
     ]
   }
 }
