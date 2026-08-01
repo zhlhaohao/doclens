@@ -28,6 +28,8 @@ import saveIcon from "lucide-static/icons/save.svg?raw";
 import xIcon from "lucide-static/icons/x.svg?raw";
 import arrowLeftIcon from "lucide-static/icons/arrow-left.svg?raw";
 import arrowUpIcon from "lucide-static/icons/arrow-up.svg?raw";
+import arrowUpToLineIcon from "lucide-static/icons/arrow-up-to-line.svg?raw";
+import arrowDownToLineIcon from "lucide-static/icons/arrow-down-to-line.svg?raw";
 import moreHorizontalIcon from "lucide-static/icons/more-horizontal.svg?raw";
 import moreVerticalIcon from "lucide-static/icons/more-vertical.svg?raw";
 import chevronDownIcon from "lucide-static/icons/chevron-down.svg?raw";
@@ -62,6 +64,8 @@ const ICONS: Record<string, string> = {
   x: xIcon,
   "arrow-left": arrowLeftIcon,
   "arrow-up": arrowUpIcon,
+  "arrow-up-to-line": arrowUpToLineIcon,
+  "arrow-down-to-line": arrowDownToLineIcon,
   "more-horizontal": moreHorizontalIcon,
   "more-vertical": moreVerticalIcon,
   "chevron-down": chevronDownIcon,

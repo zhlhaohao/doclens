@@ -2,6 +2,11 @@ import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { marked } from "marked";
 import type { PageMarker } from "../api/preview";
+import {
+  ScrollJumpController,
+  scrollJumpFabStyles,
+  renderScrollJumpFabs,
+} from "../utils/scroll-jump";
 
 /**
  * 块级元素 renderer —— 给每个块注入 data-source-line（1-indexed）
@@ -116,7 +121,9 @@ function ensureMdConfigured(): void {
 
 @customElement("md-viewer")
 export class MdViewer extends LitElement {
-  static styles = css`
+  static styles = [
+    scrollJumpFabStyles,
+    css`
     :host {
       display: block;
       padding: var(--cortex-space-4);
@@ -153,13 +160,15 @@ export class MdViewer extends LitElement {
     :host a:hover { text-decoration: underline; }
     :host ul, :host ol { margin: 0.5em 0; padding-left: 1.5em; }
     :host li { margin: 0.2em 0; }
-    /* 代码块：surface-muted + hairline + radius-md + 横向滚动 */
+    /* 代码块：surface-muted + hairline + radius-md；长行自动折行不横向滚动 */
     :host pre {
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border-muted);
       border-radius: var(--cortex-radius-md);
       padding: var(--cortex-space-3) var(--cortex-space-4);
-      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      overflow-x: hidden;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
     }
@@ -293,7 +302,8 @@ export class MdViewer extends LitElement {
         border-radius: var(--cortex-radius-md);
       }
     }
-  `;
+  `,
+  ];
 
   @property() content = "";
   /** 1-indexed 目标行；用于滚动到命中块并闪烁定位 */
@@ -302,6 +312,16 @@ export class MdViewer extends LitElement {
   @property() keyword = "";
   /** 分页标记（PDF/PPTX/XLSX）；为 null 时走单块渲染 */
   @property({ attribute: false }) pages: PageMarker[] | null = null;
+  /** 跳过 line/content 变化触发的命中行定位（preview-pane 模式切换做
+   *  位置恢复期间置 true，避免定位打架） */
+  @property({ type: Boolean }) suppressLocate = false;
+
+  /** 悬浮跳转按钮（跳首行/跳尾行）：scroller = :host 自身 */
+  private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
+
+  firstUpdated() {
+    this._scrollJump.attach(this);
+  }
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
@@ -313,8 +333,10 @@ export class MdViewer extends LitElement {
       this._applyIconSizing();
     }
     if (changedProps.has("line") || changedProps.has("content")) {
-      this._locateAndHighlight();
+      if (!this.suppressLocate) this._locateAndHighlight();
     }
+    // 内容变化后滚动范围可能改变 → 重算悬浮按钮显隐
+    this._scrollJump.refresh();
   }
 
   /** 从图片 URL 的 dw 查询参数读显示宽（px），无则返回 null。
@@ -358,36 +380,61 @@ export class MdViewer extends LitElement {
     });
   }
 
-  private _locateAndHighlight() {
-    if (this.line === null || this.line === undefined) return;
+  /** 找 data-source-line <= line 的最后一个块 = 该源行所在的 markdown 块 */
+  private _findBlockAtLine(line: number): HTMLElement | null {
     const blocks = Array.from(
-      this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]")
+      this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"),
     );
-    if (blocks.length === 0) return;
-
-    // 找 data-source-line <= this.line 的最后一个块 = 节点第一行所在的 markdown 块
-    const target = blocks.reduce<HTMLElement | null>((best, el) => {
+    if (blocks.length === 0) return null;
+    return blocks.reduce<HTMLElement | null>((best, el) => {
       const ls = Number(el.getAttribute("data-source-line"));
-      if (ls <= this.line! && (!best || ls > Number(best.getAttribute("data-source-line")))) {
+      if (ls <= line && (!best || ls > Number(best.getAttribute("data-source-line")))) {
         return el;
       }
       return best;
     }, null);
-    if (!target) return;
+  }
 
+  /** 视口顶部第一个可见块的源行号（1-indexed）；无块时返回 1。
+   *  供 preview-pane 在预览→编辑切换时捕获位置锚点。 */
+  topSourceLine(): number {
+    const blocks = Array.from(
+      this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"),
+    );
+    if (blocks.length === 0) return 1;
+    const hostRect = this.getBoundingClientRect();
+    for (const el of blocks) {
+      if (el.getBoundingClientRect().bottom > hostRect.top + 1) {
+        return Number(el.getAttribute("data-source-line")) || 1;
+      }
+    }
+    const last = blocks[blocks.length - 1];
+    return Number(last.getAttribute("data-source-line")) || 1;
+  }
+
+  /** 滚动使源行 line 所在块贴顶（默认瞬跳）。供 preview-pane 在编辑→预览
+   *  切换时恢复位置锚点；不触发闪烁动画。 */
+  scrollToSourceLine(line: number, behavior: ScrollBehavior = "auto") {
+    const target = this._findBlockAtLine(line);
+    if (!target) return;
     // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
     // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
     // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
-    // 滚动到节点第一行所在的块贴顶（host 的 12px padding 提供自然留白）。
     const hostRect = this.getBoundingClientRect();
-    if (hostRect.height > 0) {
-      const targetRect = target.getBoundingClientRect();
-      const targetContentTop = targetRect.top - hostRect.top + this.scrollTop;
-      this.scrollTo({
-        top: targetContentTop,
-        behavior: "smooth",
-      });
-    }
+    if (hostRect.height <= 0) return;
+    const targetRect = target.getBoundingClientRect();
+    this.scrollTo({
+      top: targetRect.top - hostRect.top + this.scrollTop,
+      behavior,
+    });
+  }
+
+  private _locateAndHighlight() {
+    if (this.line === null || this.line === undefined) return;
+    const target = this._findBlockAtLine(this.line);
+    if (!target) return;
+
+    this.scrollToSourceLine(this.line, "smooth");
     // 闪烁节点第一行所在的块（不再回退到 <mark.keyword-hit>：
     // 即便 target 不含 keyword——典型如 xlsx 的 sheet 标题，
     // keyword 命中在内部 table 单元格——闪烁位置始终锚定在节点起始处，
@@ -486,7 +533,8 @@ export class MdViewer extends LitElement {
             </section>
           `;
         })}
-      </div>`;
+      </div>
+      <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>`;
     }
     // 回归：单块渲染
     // 必须重置 currentOffset：分页模式（PDF/PPTX/XLSX）会在每个 chunk 渲染前
@@ -496,7 +544,8 @@ export class MdViewer extends LitElement {
     // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
     currentOffset = 0;
     const raw = marked.parse(this.content, { async: false }) as string;
-    return html`<div class="md-body" .innerHTML=${raw}></div>`;
+    return html`<div class="md-body" .innerHTML=${raw}></div>
+    <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>`;
   }
 }
 

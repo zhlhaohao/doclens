@@ -6,10 +6,18 @@ import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import type { MdEditor } from "./md-editor";
+import type { MdViewer } from "./md-viewer";
+import {
+  ScrollJumpController,
+  scrollJumpFabStyles,
+  renderScrollJumpFabs,
+} from "../utils/scroll-jump";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
-  static styles = css`
+  static styles = [
+    scrollJumpFabStyles,
+    css`
     :host {
       display: flex;
       flex-direction: column;
@@ -46,7 +54,18 @@ export class PreviewPane extends LitElement {
       font-size: var(--cortex-fs-sm);
       line-height: 1.7;
       color: var(--cortex-text);
-      white-space: pre;
+      white-space: pre-wrap;      /* 长行自动折回，不横向滚动 */
+      overflow-wrap: anywhere;
+    }
+    /* 行号悬挂缩进：折行的续行对齐到正文列，不压行号列 */
+    .body .line {
+      padding-left: 48px;
+      text-indent: -48px;
+    }
+    .body .line-no {
+      color: var(--cortex-text-subtle);
+      display: inline-block;
+      width: 40px;
     }
     /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
     .highlight {
@@ -241,7 +260,8 @@ export class PreviewPane extends LitElement {
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
     }
-  `;
+  `,
+  ];
 
   @property() path = "";
   @property() language = "text";
@@ -266,11 +286,55 @@ export class PreviewPane extends LitElement {
   @state() private _content = "";
   @state() private _showMobileMenu = false;
 
+  /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
+  private _anchorLine = 1;
+  /** 切回预览时抑制 md-viewer 的命中行定位（避免与锚点恢复打架） */
+  private _suppressLocate = false;
+  /** 外部新文档到达（content prop 变化）→ 跳过一次锚点恢复 */
+  private _skipRestoreOnce = false;
+
+  /** 悬浮跳转按钮（纯文本预览分支；markdown 分支由 md-viewer 自治） */
+  private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
+
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("content")) {
       this._content = this.content;
       this._mode = "preview";
+      // 新文档：锚点失效，不做位置恢复，命中行定位照常
+      this._skipRestoreOnce = true;
+      this._suppressLocate = false;
+      this._anchorLine = 1;
     }
+  }
+
+  async updated(changed: Map<string, unknown>) {
+    super.updated?.(changed);
+    // 纯文本分支的滚动容器 .body 只在该分支存在：在则绑定，不在则解绑
+    const body = this.shadowRoot!.querySelector(".body") as HTMLElement | null;
+    if (body) this._scrollJump.attach(body);
+    else this._scrollJump.detach();
+
+    if (!changed.has("_mode")) return;
+    if (this._mode === "edit") {
+      // 预览 → 编辑：把锚点行恢复为编辑器视口顶部（瞬跳）
+      const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+      if (editor) {
+        await editor.updateComplete;
+        editor.scrollToLine(this._anchorLine);
+      }
+      return;
+    }
+    // 编辑 → 预览
+    if (this._skipRestoreOnce) {
+      this._skipRestoreOnce = false;
+      return;
+    }
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (viewer) {
+      await viewer.updateComplete;
+      viewer.scrollToSourceLine(this._anchorLine, "auto");
+    }
+    this._suppressLocate = false;
   }
 
   connectedCallback() {
@@ -367,10 +431,22 @@ export class PreviewPane extends LitElement {
   }
 
   enterEdit() {
+    // 捕获预览视口顶部的源行号作为锚点（块级精度）
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (viewer) this._anchorLine = viewer.topSourceLine();
     this._mode = "edit";
   }
 
+  /** 退出编辑前捕获编辑器视口顶部的源行号（编辑后新文本的行号），
+   *  并抑制切回预览时 md-viewer 的命中行定位（避免与锚点恢复打架）。 */
+  private _captureEditorAnchor() {
+    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    if (editor) this._anchorLine = editor.topLine();
+    this._suppressLocate = true;
+  }
+
   private _onEditorCancel = () => {
+    this._captureEditorAnchor();
     this._mode = "preview";
   };
 
@@ -382,6 +458,7 @@ export class PreviewPane extends LitElement {
 
   private async _onEditorSave(e: CustomEvent<{ content: string }>) {
     const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    this._captureEditorAnchor();
     try {
       await savePreview(this.path, e.detail.content);
       this._content = e.detail.content;
@@ -551,6 +628,7 @@ export class PreviewPane extends LitElement {
           .line=${this.line}
           .keyword=${this.keyword}
           .pages=${this.pages}
+          ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
       `;
@@ -595,8 +673,9 @@ export class PreviewPane extends LitElement {
         ${lines.map((line, i) => {
           const lineNo = i + 1;
           const cls = this.highlights.includes(lineNo) ? "highlight" : "";
-          return html`<div class=${cls}><span style="color:var(--cortex-text-subtle);display:inline-block;width:40px;">${lineNo}</span>${line}</div>`;
+          return html`<div class="line ${cls}"><span class="line-no">${lineNo}</span>${line}</div>`;
         })}
+        <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       </div>
     `;
   }
