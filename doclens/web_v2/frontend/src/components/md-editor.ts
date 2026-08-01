@@ -1,17 +1,29 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import {
+  ScrollJumpController,
+  scrollJumpFabStyles,
+  renderScrollJumpFabs,
+} from "../utils/scroll-jump";
 
 /**
- * <md-editor> — textarea + 行号 + dirty 状态 + 键盘事件。
+ * <md-editor> — textarea（自动折行）+ dirty 状态 + 键盘事件。
  *
  * 设计为纯 UI 组件：
  * - 不调用任何 API（save 由父组件处理）
  * - 不弹任何 confirm 对话框
  * - 通过事件向父组件汇报 dirty / save / cancel
+ *
+ * 折行（pre-wrap）决策（2026-08-01）：长行自动折回不横向滚动；
+ * 因此移除了旧行号列（折行后「一源行 = 一固定行高」不成立，行号必然错位）。
+ * 位置锚点改用隐藏镜像 div 测量：topLine() / scrollToLine() 供
+ * preview-pane 做预览↔编辑切换的位置保持。
  */
 @customElement("md-editor")
 export class MdEditor extends LitElement {
-  static styles = css`
+  static styles = [
+    scrollJumpFabStyles,
+    css`
     :host {
       display: flex;
       flex-direction: column;
@@ -97,24 +109,24 @@ export class MdEditor extends LitElement {
       flex: 1;
       min-height: 0;
       overflow: hidden;
+      position: relative;  /* FAB absolute 定位上下文 */
     }
-    /* 行号列（gutter）：surface-muted + subtle + mono + border-right */
-    .line-col {
-      flex-shrink: 0;
-      padding: var(--cortex-space-3) var(--cortex-space-2);
-      text-align: right;
-      color: var(--cortex-text-subtle);
-      font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-sm);
-      line-height: 1.6;
-      user-select: none;
-      overflow: hidden;
-      background: var(--cortex-surface-muted);
-      border-right: 1px solid var(--cortex-border-muted);
-      min-width: 32px;
+    /* 悬浮跳转按钮：覆盖在 textarea 右下角 */
+    .body > .scroll-jump-fabs {
+      position: absolute;
+      right: var(--cortex-space-3);
+      bottom: var(--cortex-space-3);
     }
-    .line-col .line-no {
-      display: block;
+    /* 隐藏镜像 div：与 textarea 同宽同字体，用于折行下的行号↔像素换算 */
+    .mirror {
+      position: absolute;
+      top: 0;
+      left: 0;
+      visibility: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      z-index: -1;
     }
     textarea {
       flex: 1;
@@ -127,10 +139,11 @@ export class MdEditor extends LitElement {
       line-height: 1.6;
       background: var(--cortex-surface);
       color: var(--cortex-text);
-      white-space: pre;
+      white-space: pre-wrap;  /* 长行自动折回，不横向滚动 */
       overflow: auto;
     }
-  `;
+  `,
+  ];
 
   @property() path = "";
   @property() originalContent = "";
@@ -141,6 +154,16 @@ export class MdEditor extends LitElement {
   @state() private _dirty = false;
   @state() private _error: string | null = null;
 
+  /** 悬浮跳转按钮：瞬跳 + 光标移动到文首/文末（对齐 Ctrl+Home/Ctrl+End 手感） */
+  private _scrollJump = new ScrollJumpController(this, {
+    behavior: "auto",
+    onJumpTop: (el) => this._jumpToEdge(el as HTMLTextAreaElement, 0),
+    onJumpBottom: (el) => {
+      const ta = el as HTMLTextAreaElement;
+      this._jumpToEdge(ta, ta.value.length);
+    },
+  });
+
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("originalContent")) {
       this._text = this.originalContent;
@@ -149,10 +172,84 @@ export class MdEditor extends LitElement {
     }
   }
 
-  private get _lineCount(): number {
-    // "a\nb\nc" → 3 行；"a\nb" → 2 行；"" → 1 行
-    if (this._text === "") return 1;
-    return (this._text.match(/\n/g) ?? []).length + 1;
+  firstUpdated() {
+    const ta = this.shadowRoot!.querySelector("textarea");
+    if (ta) this._scrollJump.attach(ta);
+  }
+
+  updated() {
+    // 内容/尺寸变化后重算悬浮按钮显隐
+    this._scrollJump.refresh();
+  }
+
+  private get _textarea(): HTMLTextAreaElement | null {
+    return this.shadowRoot!.querySelector("textarea");
+  }
+
+  private _jumpToEdge(ta: HTMLTextAreaElement, pos: number) {
+    ta.focus();
+    ta.setSelectionRange(pos, pos);
+    // 光标就位后浏览器会把 caret 滚进视口；显式设定确保贴边
+    ta.scrollTop = pos === 0 ? 0 : ta.scrollHeight - ta.clientHeight;
+  }
+
+  private get _lines(): string[] {
+    return this._text.split("\n");
+  }
+
+  /** 同步镜像 div 的宽度/字体到 textarea 内容区，返回镜像元素 */
+  private _syncMirror(): HTMLDivElement | null {
+    const ta = this._textarea;
+    const m = this.shadowRoot!.querySelector(".mirror") as HTMLDivElement | null;
+    if (!ta || !m) return null;
+    const cs = getComputedStyle(ta);
+    const contentWidth =
+      ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    m.style.width = `${contentWidth}px`;
+    m.style.fontFamily = cs.fontFamily;
+    m.style.fontSize = cs.fontSize;
+    m.style.lineHeight = cs.lineHeight;
+    m.style.letterSpacing = cs.letterSpacing;
+    return m;
+  }
+
+  /** 源行 n（1-indexed）之前的所有行在折行渲染下的视觉总高度（px）。
+   *  join 不含尾换行：pre-wrap 下每条源行的视觉高度自然累加。 */
+  private _heightBeforeLine(n: number): number {
+    if (n <= 1) return 0;
+    const m = this._syncMirror();
+    if (!m) return 0;
+    const lines = this._lines;
+    m.textContent = lines.slice(0, Math.min(n - 1, lines.length)).join("\n");
+    const h = m.offsetHeight;
+    m.textContent = "";
+    return h;
+  }
+
+  /** 视口顶部所在的源行号（1-indexed）。折行下行高不固定，用二分反查。
+   *  供 preview-pane 在编辑→预览切换时捕获位置锚点。 */
+  topLine(): number {
+    const ta = this._textarea;
+    if (!ta) return 1;
+    const st = ta.scrollTop;
+    const total = this._lines.length;
+    let lo = 1;
+    let hi = total;
+    // 找最大 n 使 heightBeforeLine(n) <= scrollTop，即顶部落在第 n 行
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this._heightBeforeLine(mid) <= st) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  /** 滚动使源行 n（1-indexed）贴顶（瞬跳）。
+   *  供 preview-pane 在预览→编辑切换时恢复位置锚点。 */
+  scrollToLine(n: number) {
+    const ta = this._textarea;
+    if (!ta) return;
+    ta.scrollTop = this._heightBeforeLine(n);
   }
 
   private _onInput(e: Event) {
@@ -160,12 +257,6 @@ export class MdEditor extends LitElement {
     this._text = ta.value;
     this._error = null;
     this._updateDirty();
-  }
-
-  private _onScroll(e: Event) {
-    const ta = e.target as HTMLTextAreaElement;
-    const lineCol = this.shadowRoot!.querySelector(".line-col") as HTMLElement;
-    if (lineCol) lineCol.scrollTop = ta.scrollTop;
   }
 
   private _onKeyDown(e: KeyboardEvent) {
@@ -214,8 +305,6 @@ export class MdEditor extends LitElement {
   }
 
   render() {
-    const lines: number[] = [];
-    for (let i = 1; i <= this._lineCount; i++) lines.push(i);
     return html`
       <div class="toolbar">
         ${this.mobile
@@ -232,16 +321,14 @@ export class MdEditor extends LitElement {
         <button class="cancel-btn" @click=${this._onCancelClick}><doclens-icon name="x"></doclens-icon>取消</button>
       </div>
       <div class="body">
-        <div class="line-col">
-          ${lines.map((n) => html`<span class="line-no">${n}</span>`)}
-        </div>
+        <div class="mirror" aria-hidden="true"></div>
         <textarea
           spellcheck="false"
           .value=${this._text}
           @input=${this._onInput}
-          @scroll=${this._onScroll}
           @keydown=${this._onKeyDown}
         ></textarea>
+        ${renderScrollJumpFabs(this._scrollJump)}
       </div>
     `;
   }
