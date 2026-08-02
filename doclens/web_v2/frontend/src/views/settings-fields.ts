@@ -71,6 +71,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   PLANIFY_MODEL_ID: "",
   VISION_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   VISION_MODEL: "qwen-vl-max",
+  VISION_PROTOCOL: "",
   CORTEX_MAX_RESULTS: "50",
   CORTEX_MIN_SCORE_THRESHOLD: "0.3",
   CORTEX_MAX_SPAN: "50",
@@ -242,6 +243,19 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     mono: true,
     datalist: ["qwen-vl-max", "qwen-vl-plus", "qwen3-vl-plus", "qwen3-vl-flash"],
     hint: "具备图像识别能力的模型；切换模型后已解析的图像会在下次启动时自动重新解析。",
+  },
+  {
+    tab: "ai",
+    section: "🖼️ 视觉模型（图像解析）",
+    envVar: "VISION_PROTOCOL",
+    label: "协议",
+    component: "select",
+    effect: "live",
+    options: [
+      { value: "", label: "OpenAI 兼容（默认）" },
+      { value: "anthropic", label: "Anthropic（/v1/messages，minimax /anthropic + M3）" },
+    ],
+    hint: "Anthropic 协议走 /v1/messages（minimax coding plan 的 /anthropic + MiniMax-M3 选此项）；其余选 OpenAI 兼容。",
   },
 
   // ===== 搜索调优 · 结果与过滤 (3，无 section 标题) =====

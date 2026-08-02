@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 17 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(17);
+  it("has exactly 23 fields", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(23);
   });
 
   it("every field has a unique envVar", () => {
@@ -20,7 +20,7 @@ describe("SETTINGS_FIELDS", () => {
       expect(f.tab).toBeTruthy();
       expect(f.envVar).toMatch(/^[A-Z][A-Z0-9_]*$/);
       expect(f.label).toBeTruthy();
-      expect(["text", "number", "select", "password", "slider", "switch"]).toContain(f.component);
+      expect(["text", "number", "select", "password", "slider", "switch", "toggle"]).toContain(f.component);
     }
   });
 
@@ -46,9 +46,9 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network"]);
   });
 
-  it("AI tab has 5 fields all marked live (hot-reload after apply_config fix)", () => {
+  it("AI tab has 9 fields all marked live (5 PLANIFY + 4 视觉)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
-    expect(ai).toHaveLength(5);
+    expect(ai).toHaveLength(9);
     expect(ai.every((f) => f.effect === "live")).toBe(true);
   });
 

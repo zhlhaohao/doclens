@@ -52,8 +52,13 @@ _POLL_INTERVAL_S = 5.0
 
 
 def vision_model_tag(config) -> str:
-    """模型 + prompt 版本的复合标签，写入 vision_queue.model 用于变更检测。"""
-    return f"{config.vision_model}|pv{PROMPT_VERSION}"
+    """模型 + prompt + 协议的复合标签，写入 vision_queue.model 用于变更检测。
+
+    含协议：改 vision_protocol（如 OpenAI-compat → anthropic）会改变 tag，
+    触发 vision_requeue_model_changed 把旧协议下的 done/failed 重新入队重解析。
+    """
+    proto = getattr(config, "vision_protocol", None) or "openai"
+    return f"{config.vision_model}|pv{PROMPT_VERSION}|proto={proto}"
 
 
 def _strip_code_fence(text: str) -> str:
@@ -256,40 +261,21 @@ class VisionWorker:
             logger.info("VisionWorker: queue row vanished, result discarded: %s", rel)
 
     def _call_vision_api(self, path: str, config) -> str:
-        """OpenAI-compat chat/completions 调用（base64 data URL），返回 Markdown。"""
+        """调视觉模型（按 vision_protocol 分流），返回 Markdown。
+
+        复用 diary_worker 的 _vision_openai/_vision_anthropic（同协议细节），
+        文档转写 max_tokens=4096（远大于日记照片描述的 512/1024）。
+        """
         ext = os.path.splitext(path)[1].lower().lstrip(".")
         media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
         with open(path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("ascii")
 
-        base_url = (config.vision_base_url or "").rstrip("/")
-        body = {
-            "model": config.vision_model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
-                        {"type": "text", "text": VISION_PROMPT},
-                    ],
-                }
-            ],
-            "max_tokens": 4096,
-        }
-        req = urllib.request.Request(
-            f"{base_url}/chat/completions",
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {config.vision_api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_S) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-        try:
-            return payload["choices"][0]["message"]["content"] or ""
-        except (KeyError, IndexError, TypeError) as e:
-            raise RuntimeError(f"unexpected vision API response shape: {e}") from e
+        from doclens.diary_worker import _vision_anthropic, _vision_openai
+
+        if getattr(config, "vision_protocol", None) == "anthropic":
+            return _vision_anthropic(b64, media, VISION_PROMPT, config, max_tokens=4096)
+        return _vision_openai(b64, media, VISION_PROMPT, config, max_tokens=4096)
 
     def _replace_placeholder(self, fts, path: str, md: str, config) -> None:
         """把视觉模型输出的 Markdown 建树并原位替换该文档的占位节点。"""

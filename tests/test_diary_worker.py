@@ -12,6 +12,7 @@ from doclens.diary_worker import (
     DiaryWorker,
     _strip_thinking,
     build_summary_input,
+    describe_photo,
     seconds_until_next_run,
 )
 
@@ -26,9 +27,91 @@ def _config(**overrides):
         vision_api_key=None,
         vision_base_url="https://example.invalid/v1",
         vision_model="vl-test",
+        vision_protocol=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
+
+
+class TestDescribePhotoProtocol:
+    """describe_photo 按 vision_protocol 分流（openai-compat / anthropic）。"""
+
+    def test_default_calls_openai_path(self, tmp_path, monkeypatch):
+        img = tmp_path / "x.webp"
+        img.write_bytes(b"\x00")
+        called = {}
+
+        def fake_openai(b64, media, prompt, c):
+            called["path"] = "openai"
+            return "openai-desc"
+
+        monkeypatch.setattr("doclens.diary_worker._vision_openai", fake_openai)
+        assert describe_photo(img, _config(vision_protocol=None)) == "openai-desc"
+        assert called["path"] == "openai"
+
+    def test_anthropic_calls_anthropic_path(self, tmp_path, monkeypatch):
+        img = tmp_path / "x.webp"
+        img.write_bytes(b"\x00")
+        called = {}
+
+        def fake_anthropic(b64, media, prompt, c):
+            called["path"] = "anthropic"
+            return "anthropic-desc"
+
+        monkeypatch.setattr("doclens.diary_worker._vision_anthropic", fake_anthropic)
+        assert describe_photo(img, _config(vision_protocol="anthropic")) == "anthropic-desc"
+        assert called["path"] == "anthropic"
+
+    def test_vision_anthropic_uses_planify_provider(self, tmp_path, monkeypatch):
+        """anthropic 分支：构造 image source block，经 planify provider，提取 text。"""
+        import base64 as _b64
+
+        from doclens.diary_worker import _vision_anthropic
+
+        img = tmp_path / "x.webp"
+        img.write_bytes(b"\x00")
+        cfg = _config(
+            vision_protocol="anthropic",
+            vision_api_key="mk",
+            vision_base_url="https://api.minimaxi.com/anthropic",
+            vision_model="MiniMax-M3",
+        )
+        captured = {}
+
+        class _FakeResp:
+            def __init__(self):
+                self.content = [SimpleNamespace(text="一只橘猫在长椅上")]
+
+        class _FakeProvider:
+            def chat(self, messages, system, tools, max_tokens):
+                captured["messages"] = messages
+                captured["max_tokens"] = max_tokens
+                return _FakeResp()
+
+        def fake_create(provider_cfg):
+            captured["provider_cfg"] = provider_cfg
+            return _FakeProvider()
+
+        monkeypatch.setattr("planify.core.llm.create_provider", fake_create)
+        result = _vision_anthropic(
+            _b64.b64encode(img.read_bytes()).decode("ascii"),
+            "image/webp",
+            "描述这张照片",
+            cfg,
+        )
+        assert result == "一只橘猫在长椅上"
+        # image source block（Anthropic 格式）
+        content = captured["messages"][0]["content"]
+        assert any(
+            b.get("type") == "image"
+            and b["source"]["type"] == "base64"
+            and b["source"]["media_type"] == "image/webp"
+            for b in content
+        )
+        # provider 用 vision_* 配置（非 planify_*）
+        assert captured["provider_cfg"]["base_url"] == "https://api.minimaxi.com/anthropic"
+        assert captured["provider_cfg"]["model_id"] == "MiniMax-M3"
+        assert captured["provider_cfg"]["api_key"] == "mk"
 
 
 class _FakeIdx:

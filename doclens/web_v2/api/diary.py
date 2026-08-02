@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from doclens import diary
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.deps import get_index_manager
+from doclens.web_v2.deps import get_config, get_index_manager
 from doclens.web_v2.models.diary import (
     AddTextRequest,
     CalendarResponse,
@@ -152,6 +152,18 @@ async def add_photo_fragment(
         rel = diary.save_photo(_workdir(idx), date_str, now.strftime("%H%M%S"), data)
     except Exception as e:  # noqa: BLE001 — PIL 解码失败等统一按非法图片处理
         raise CortexAPIError(400, "INVALID_IMAGE", f"图片无法解析: {e}") from e
+    caption = (caption or "").strip()
+    # 无备注时，用视觉模型生成简要备注（逐图降级：未配置/失败则留空 → append_photo 退默认"照片"）
+    if not caption:
+        try:
+            config = get_config()
+            if getattr(config, "vision_api_key", None):
+                from doclens.diary_worker import describe_photo
+
+                caption = describe_photo(diary.diary_dir(_workdir(idx)) / rel, config)
+        except Exception as e:  # noqa: BLE001 — 视觉失败不阻断上传，降级为无备注
+            logging.getLogger(__name__).info("auto caption failed for %s: %s", rel, e)
+            caption = ""
     try:
         frag = diary.append_photo(
             _workdir(idx), date_str, now.strftime("%H:%M"), now.strftime("%H%M%S"), rel, caption
