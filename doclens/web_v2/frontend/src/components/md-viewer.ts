@@ -1,7 +1,9 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
 import type { PageMarker } from "../api/preview";
+import "./image-viewer";
+import "./icon";
 
 /**
  * 块级元素 renderer —— 给每个块注入 data-source-line（1-indexed）
@@ -103,7 +105,7 @@ const blockRenderer: any = {
     const line = lineOf(token.raw);
     const escaped = escapeHtml(token.text);
     const langAttr = token.lang ? ` class="language-${escapeHtml(token.lang)}"` : "";
-    return `<pre data-source-line="${line}"><code${langAttr}>${escaped}</code></pre>\n`;
+    return `<pre data-source-line="${line}"><button class="copy-btn" title="复制代码">复制</button><code${langAttr}>${escaped}</code></pre>\n`;
   },
   list(token: any) {
     const line = lineOf(token.raw);
@@ -190,6 +192,7 @@ export class MdViewer extends LitElement {
     :host li { margin: 0.2em 0; }
     /* 代码块：surface-muted + hairline + radius-md + 横向滚动 */
     :host pre {
+      position: relative;
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border-muted);
       border-radius: var(--cortex-radius-md);
@@ -198,6 +201,23 @@ export class MdViewer extends LitElement {
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
     }
+    .copy-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 2px 10px;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-sm, 6px);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--cortex-font);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    pre:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
     /* pre 内 code 重置 inline 样式 */
     :host pre code {
       background: transparent;
@@ -256,6 +276,7 @@ export class MdViewer extends LitElement {
     }
     /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
     .md-body {
+      position: relative;
       background: var(--cortex-surface);
       border-radius: var(--cortex-radius-lg);
       box-shadow: var(--cortex-shadow-sm);
@@ -279,6 +300,36 @@ export class MdViewer extends LitElement {
       text-align: center;
       padding: var(--cortex-space-6);
     }
+    /* 全文复制按钮：贴纸面右上/右下角（absolute，不受 padding 影响） */
+    .copy-bar-top {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 5;
+    }
+    .copy-bar-bottom {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      z-index: 5;
+    }
+    .doc-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-pill, 100px);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: var(--cortex-font);
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+    .doc-copy:hover { opacity: 1; color: var(--cortex-primary); }
     /* 定位块的闪烁动画（"你滚到这里了"指示）
        使用 box-shadow 而不是 background，避免和 <mark class="keyword-hit">
        的 primary 底色叠加产生视觉混乱（xlsx 场景下 scrollTo 可能是 mark）。
@@ -340,6 +391,10 @@ export class MdViewer extends LitElement {
   @property({ attribute: false }) pages: PageMarker[] | null = null;
   /** 文档相对 workdir 的路径（如 日记/2026.md）；设置后相对图片 src 重写到 /api/preview/raw */
   @property({ attribute: "doc-path" }) docPath = "";
+  /** 全屏图片查看 */
+  @state() private _viewerSrc = "";
+  /** 全文复制反馈 */
+  @state() private _copied = false;
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
@@ -354,6 +409,8 @@ export class MdViewer extends LitElement {
     ) {
       this._resolveImageUrls();
       this._applyIconSizing();
+      this._bindImageClicks();
+      this._bindCopyButtons();
     }
     if (changedProps.has("line") || changedProps.has("content")) {
       this._locateAndHighlight();
@@ -369,6 +426,37 @@ export class MdViewer extends LitElement {
       const raw = img.getAttribute("src") ?? "";
       const url = resolveDocImageUrl(this.docPath, raw);
       if (url) img.src = url;
+    });
+  }
+
+  /** 为渲染后的 img 绑定点击 → 全屏查看（marked innerHTML 的图片无法用 @click 模板绑定） */
+  private _bindImageClicks() {
+    const imgs = this.shadowRoot!.querySelectorAll<HTMLImageElement>("img");
+    imgs.forEach((img) => {
+      if (img.dataset.bound) return;
+      img.dataset.bound = "true";
+      img.style.cursor = "zoom-in";
+      img.addEventListener("click", () => {
+        this._viewerSrc = img.src;
+      });
+    });
+  }
+
+  /** 为代码块的复制按钮绑定点击 → 写入剪贴板 */
+  private _bindCopyButtons() {
+    const btns = this.shadowRoot!.querySelectorAll<HTMLButtonElement>(".copy-btn");
+    btns.forEach((btn) => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "true";
+      btn.addEventListener("click", () => {
+        const code = btn.parentElement?.querySelector("code");
+        if (code) {
+          navigator.clipboard.writeText(code.textContent || "").then(() => {
+            btn.textContent = "已复制";
+            setTimeout(() => { btn.textContent = "复制"; }, 1500);
+          }).catch(() => {});
+        }
+      });
     });
   }
 
@@ -529,19 +617,23 @@ export class MdViewer extends LitElement {
     // 分页模式：每段 = 一张卡片
     if (this.pages && this.pages.length > 0) {
       const chunks = this._splitByPages(this.content, this.pages);
-      return html`<div class="md-body md-body-paged">
-        ${chunks.map((c) => {
-          // 在调 marked.parse 前先设偏移，renderer 把分块内行号加上 offset 得绝对行号
-          currentOffset = c.offset;
-          const chunkHtml = marked.parse(c.md, { async: false }) as string;
-          return html`
-            <section class="page-card">
-              <header class="page-card-header">${c.label}</header>
-              <div .innerHTML=${chunkHtml}></div>
-            </section>
-          `;
-        })}
-      </div>`;
+      return html`
+        <div class="md-body md-body-paged">
+          <div class="copy-bar-top">${this._renderCopyBtn()}</div>
+          ${chunks.map((c) => {
+            currentOffset = c.offset;
+            const chunkHtml = marked.parse(c.md, { async: false }) as string;
+            return html`
+              <section class="page-card">
+                <header class="page-card-header">${c.label}</header>
+                <div .innerHTML=${chunkHtml}></div>
+              </section>
+            `;
+          })}
+          <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
+        </div>
+        ${this._viewerSrc ? html`<image-viewer .src=${this._viewerSrc} @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
+      `;
     }
     // 回归：单块渲染
     // 必须重置 currentOffset：分页模式（PDF/PPTX/XLSX）会在每个 chunk 渲染前
@@ -551,8 +643,32 @@ export class MdViewer extends LitElement {
     // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
     currentOffset = 0;
     const raw = marked.parse(this.content, { async: false }) as string;
-    return html`<div class="md-body" .innerHTML=${raw}></div>`;
+    return html`
+      <div class="md-body">
+        <div class="copy-bar-top">${this._renderCopyBtn()}</div>
+        <div .innerHTML=${raw}></div>
+        <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
+      </div>
+      ${this._viewerSrc ? html`<image-viewer
+        .src=${this._viewerSrc}
+        @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
+    `;
   }
+
+  private _renderCopyBtn() {
+    return html`<button class="doc-copy" @click=${this._copyAll}>
+      ${this._copied
+        ? "✓ 已复制"
+        : html`<doclens-icon name="copy" style="font-size:14px"></doclens-icon> 复制全文`}
+    </button>`;
+  }
+
+  private _copyAll = () => {
+    navigator.clipboard.writeText(this.content).then(() => {
+      this._copied = true;
+      setTimeout(() => { this._copied = false; }, 1500);
+    }).catch(() => {});
+  };
 }
 
 declare global {

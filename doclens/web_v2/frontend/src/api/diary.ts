@@ -58,6 +58,10 @@ export const diaryApi = {
       qs(`/fragments/${encodeURIComponent(fid)}?date=${encodeURIComponent(date)}`),
       { method: "PUT", json: { text } },
     ),
+
+  /** 设置某日城市标记（md 标题 📍city），后端自动抓天气 */
+  setCity: (date: string, city: string) =>
+    request<DiaryEntry>(qs(`/city?date=${encodeURIComponent(date)}&city=${encodeURIComponent(city)}`), { method: "POST" }),
 };
 
 export { ApiError };

@@ -23,6 +23,7 @@ class DayEntryResponse(BaseModel):
     state: str
     fragments: list[FragmentModel] = []
     content: str = ""
+    city: str = ""
 
 
 class TodayResponse(BaseModel):

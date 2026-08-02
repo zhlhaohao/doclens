@@ -215,6 +215,8 @@ export interface DiaryEntry {
   fragments: DiaryFragment[];
   /** 成品 md（图片引用已被后端重写为 /api/preview/raw URL） */
   content: string;
+  /** 当日城市（md 标题 📍city） */
+  city: string;
 }
 
 export interface DiaryViewState {
@@ -231,6 +233,8 @@ export interface DiaryViewState {
   calendarMonth: string;        // YYYY-MM
   calendarDates: string[];
   calendarOpen: boolean;
+  /** 城市选择对话框（录入时当天无城市则弹） */
+  cityDialogOpen: boolean;
   error: string | null;
 }
 

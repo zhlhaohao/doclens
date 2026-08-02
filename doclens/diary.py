@@ -35,6 +35,7 @@ from pathlib import Path
 
 DIARY_DIRNAME = "日记"
 RAW_MARKER = "<!-- diary:raw -->"
+WEATHER_MARKER = "<!-- diary:weather:"
 
 # 图片压缩参数（ADR-0007：不保留原图）
 IMAGE_MAX_EDGE = 1600
@@ -42,6 +43,8 @@ IMAGE_WEBP_QUALITY = 80
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})", re.M)
+# 小节标题行的城市标记（## date weekday 📍城市）
+_CITY_TAG_RE = re.compile(r"(📍\s*)([^\n]+)$")
 _FRAGMENT_RE = re.compile(
     r"(?ms)^- (\d{2}:\d{2}) (.*?)<!--\s*fid:([\w-]+)\s*-->[^\S\n]*$"
 )
@@ -360,6 +363,112 @@ def list_month_dates(workdir: Path, month: str) -> list[str]:
         if not _is_raw(body) and body.strip():
             dates.append(m.group(1))
     return sorted(dates)
+
+
+_WEATHER_TAG_RE = re.compile(r"<!--\s*diary:weather:\s*(.*?)\s*-->")
+
+
+def set_weather(workdir: Path, date_str: str, weather_text: str) -> bool:
+    """在 raw 小节头部设置天气标记（raw 标记后插/换，幂等）。
+
+    仅片段态小节设标记——成文态的天气由成文 body 前缀承载，无需标记。
+    weather_text 为空或无小节/成品小节返回 False。
+    """
+    validate_date(date_str)
+    text = weather_text.strip()
+    if not text:
+        return False
+    path = year_path(workdir, int(date_str[:4]))
+    if not path.exists():
+        return False
+    new_tag = f"{WEATHER_MARKER} {text} -->"
+    with _FILE_LOCK:
+        content = _read(path)
+        bounds = _find_section(content, date_str)
+        if bounds is None:
+            return False
+        body = content[bounds[0]:bounds[1]]
+        if not _is_raw(body):
+            return False  # 成品小节：天气由成文 body 前缀承载，不设标记
+        if _WEATHER_TAG_RE.search(body):
+            body = _WEATHER_TAG_RE.sub(new_tag, body, count=1)
+        else:
+            body = body.replace(RAW_MARKER, RAW_MARKER + "\n" + new_tag, 1)
+        content = content[:bounds[0]] + body + content[bounds[1]:]
+        _write(path, content)
+    return True
+
+
+def get_weather_of_day(workdir: Path, date_str: str) -> str:
+    """读某日小节的天气标记内容；无标记返回空串。"""
+    validate_date(date_str)
+    path = year_path(workdir, int(date_str[:4]))
+    if not path.exists():
+        return ""
+    with _FILE_LOCK:
+        content = _read(path)
+    bounds = _find_section(content, date_str)
+    if bounds is None:
+        return ""
+    m = _WEATHER_TAG_RE.search(content[bounds[0]:bounds[1]])
+    return m.group(1).strip() if m else ""
+
+
+def set_city(workdir: Path, date_str: str, city: str) -> bool:
+    """在小节标题行加/换城市标记（`## date weekday 📍city`，幂等）。
+
+    无小节或空 city 返回 False。城市随 md 文件同步（跨设备）。
+    """
+    validate_date(date_str)
+    city = city.strip()
+    if not city:
+        return False
+    path = year_path(workdir, int(date_str[:4]))
+    if not path.exists():
+        return False
+    with _FILE_LOCK:
+        content = _read(path)
+        # 找标题行（## date ... 所在行）
+        heading_match = None
+        for m in _HEADING_RE.finditer(content):
+            if m.group(1) == date_str:
+                heading_match = m
+                break
+        if heading_match is None:
+            return False
+        # 标题行范围（行首到行尾）
+        line_start = heading_match.start()
+        line_end = content.index("\n", line_start) if "\n" in content[line_start:] else len(content)
+        heading_line = content[line_start:line_end]
+        new_tag = f"📍{city}"
+        if _CITY_TAG_RE.search(heading_line):
+            # 已有 📍xxx → 替换
+            heading_line = _CITY_TAG_RE.sub(new_tag, heading_line)
+        else:
+            # 无 → 行尾加
+            heading_line = heading_line.rstrip() + f" {new_tag}"
+        content = content[:line_start] + heading_line + content[line_end:]
+        _write(path, content)
+    return True
+
+
+def get_city_of_day(workdir: Path, date_str: str) -> str:
+    """读某日小节标题的城市（📍后）；无返回空串。"""
+    validate_date(date_str)
+    path = year_path(workdir, int(date_str[:4]))
+    if not path.exists():
+        return ""
+    with _FILE_LOCK:
+        content = _read(path)
+    for m in _HEADING_RE.finditer(content):
+        if m.group(1) != date_str:
+            continue
+        line_start = m.start()
+        line_end = content.index("\n", line_start) if "\n" in content[line_start:] else len(content)
+        heading_line = content[line_start:line_end]
+        cm = _CITY_TAG_RE.search(heading_line)
+        return cm.group(2).strip() if cm else ""
+    return ""
 
 
 def find_pending_raw(workdir: Path, today: date_type) -> list[str]:

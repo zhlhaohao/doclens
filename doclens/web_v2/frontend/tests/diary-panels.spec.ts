@@ -14,6 +14,7 @@ const rawEntry: DiaryEntry = {
     { fid: "b", time: "18:30", kind: "photo", text: "晚霞", image_url: "/api/preview/raw?path=x" },
   ],
   content: "",
+  city: "",
 };
 
 const summarizedEntry: DiaryEntry = {
@@ -21,6 +22,7 @@ const summarizedEntry: DiaryEntry = {
   state: "summarized",
   fragments: [],
   content: "今天过得很充实。",
+  city: "",
 };
 
 describe("diary-record-panel", () => {

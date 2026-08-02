@@ -317,3 +317,4 @@ class CortexConfig(BaseSettings):
         env_prefix = "CORTEX_"
         env_file = None  # 初始为 None，运行时动态设置
         populate_by_name = True  # 允许使用 alias 填充字段
+        extra = "ignore"  # 忽略 .env 中非 doclens 字段（如 BAIDU_WEATHER_* 等 planify 配置）

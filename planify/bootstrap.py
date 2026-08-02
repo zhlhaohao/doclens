@@ -54,7 +54,7 @@ def register_planify_config(
     model_id: str = "claude-opus-4-6",
     base_url: str = "",
     protocol: str = "",
-    baidu_weather_api_url: str = "https://api.map.com.com/weather/v2/",
+    baidu_weather_api_url: str = "https://api.map.baidu.com/weather/v1/",
     baidu_weather_ak: str = "",
     baidu_weather_data_type: str = "fc",
     **extra: Any,

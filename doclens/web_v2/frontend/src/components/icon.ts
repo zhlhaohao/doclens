@@ -26,6 +26,8 @@ import arrowRightIcon from "lucide-static/icons/arrow-right.svg?raw";
 import trash2Icon from "lucide-static/icons/trash-2.svg?raw";
 import saveIcon from "lucide-static/icons/save.svg?raw";
 import xIcon from "lucide-static/icons/x.svg?raw";
+import maximize2Icon from "lucide-static/icons/maximize-2.svg?raw";
+import copyIcon from "lucide-static/icons/copy.svg?raw";
 import arrowLeftIcon from "lucide-static/icons/arrow-left.svg?raw";
 import arrowUpIcon from "lucide-static/icons/arrow-up.svg?raw";
 import moreHorizontalIcon from "lucide-static/icons/more-horizontal.svg?raw";
@@ -87,6 +89,8 @@ const ICONS: Record<string, string> = {
   image: imageIcon,
   calendar: calendarIcon,
   "chevron-left": chevronLeftIcon,
+  "maximize-2": maximize2Icon,
+  copy: copyIcon,
 };
 
 @customElement("doclens-icon")

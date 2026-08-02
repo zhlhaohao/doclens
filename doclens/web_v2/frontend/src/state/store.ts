@@ -108,6 +108,7 @@ export const INITIAL_STATE: AppState = {
     calendarMonth: "",
     calendarDates: [],
     calendarOpen: false,
+    cityDialogOpen: false,
     error: null,
   },
 };
