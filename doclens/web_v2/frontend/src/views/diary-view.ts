@@ -6,7 +6,7 @@
  * 领域规则（ADR-0007）：录入永远只写今天；成品态只读。
  */
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
 import { diaryApi, ApiError } from "../api/diary";
@@ -18,6 +18,7 @@ import {
 } from "../components/diary-calendar";
 import "../components/diary-record-panel";
 import "../components/diary-review-panel";
+import "../components/city-dialog";
 import "../components/icon";
 
 @customElement("diary-view")
@@ -80,10 +81,25 @@ export class DiaryView extends LitElement {
       color: var(--cortex-nav-active);
       font-size: 13px;
     }
+    dialog {
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-xl);
+      padding: 0;
+      background: var(--cortex-surface);
+      box-shadow: var(--cortex-shadow-lg);
+      max-width: 90vw;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
+    dialog > * { display: block; padding: var(--cortex-space-6); }
   `;
 
   private _unsubscribe?: () => void;
   private _initialized = false;
+  /** 被城市选择拦截的待提交片段（选完城市后自动续录） */
+  @state() private _pendingSubmit:
+    | { type: "text"; value: string }
+    | { type: "photo"; file: File; caption: string }
+    | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -92,6 +108,14 @@ export class DiaryView extends LitElement {
       this._initialized = true;
       void this._init();
     }
+  }
+
+  protected updated(changedProps: Map<string, unknown>) {
+    super.updated(changedProps);
+    // 城市对话框用 showModal（top-layer + backdrop + ESC）；<dialog open> 是非模态
+    // inline，会落在页面底部（top: 3000+）不可见
+    const dlg = this.shadowRoot?.querySelector("dialog");
+    if (dlg && !dlg.open) dlg.showModal();
   }
 
   disconnectedCallback() {
@@ -167,9 +191,28 @@ export class DiaryView extends LitElement {
 
   private async _onSubmitText(e: CustomEvent<{ value: string }>) {
     if (this._diary.submitting) return;
+    if (!this._diary.todayEntry?.city) {
+      this._pendingSubmit = { type: "text", value: e.detail.value };
+      actions.setDiaryState({ cityDialogOpen: true });
+      return;
+    }
+    void this._submitText(e.detail.value);
+  }
+
+  private async _onUploadPhoto(e: CustomEvent<{ file: File; caption: string }>) {
+    if (this._diary.submitting) return;
+    if (!this._diary.todayEntry?.city) {
+      this._pendingSubmit = { type: "photo", file: e.detail.file, caption: e.detail.caption };
+      actions.setDiaryState({ cityDialogOpen: true });
+      return;
+    }
+    void this._uploadPhoto(e.detail.file, e.detail.caption);
+  }
+
+  private async _submitText(value: string) {
     actions.setDiaryState({ submitting: true, error: null });
     try {
-      await diaryApi.addText(e.detail.value);
+      await diaryApi.addText(value);
       await this._loadToday();
     } catch (e2) {
       actions.setDiaryState({
@@ -180,11 +223,10 @@ export class DiaryView extends LitElement {
     }
   }
 
-  private async _onUploadPhoto(e: CustomEvent<{ file: File; caption: string }>) {
-    if (this._diary.submitting) return;
+  private async _uploadPhoto(file: File, caption: string) {
     actions.setDiaryState({ submitting: true, error: null });
     try {
-      await diaryApi.uploadPhoto(e.detail.file, e.detail.caption);
+      await diaryApi.uploadPhoto(file, caption);
       await this._loadToday();
     } catch (e2) {
       actions.setDiaryState({
@@ -267,6 +309,30 @@ export class DiaryView extends LitElement {
     }
   }
 
+  private async _onCitySubmit(e: CustomEvent<{ city: string }>) {
+    const city = e.detail.city;
+    const today = this._diary.today || this._localToday();
+    actions.setDiaryState({ cityDialogOpen: false });
+    try {
+      // 写城市到 md 标题 + 后端自动抓天气 + 返回更新后 entry
+      const entry = await diaryApi.setCity(today, city);
+      actions.setDiaryState({ todayEntry: entry });
+    } catch { /* 写失败不阻断 */ }
+    // 选完城市后，自动提交被拦截的片段
+    const pending = this._pendingSubmit;
+    this._pendingSubmit = null;
+    if (pending?.type === "text") {
+      void this._submitText(pending.value);
+    } else if (pending?.type === "photo" && pending.file) {
+      void this._uploadPhoto(pending.file, pending.caption);
+    }
+  }
+
+  private _onCityCancel() {
+    actions.setDiaryState({ cityDialogOpen: false });
+    localStorage.setItem("doclens.diary.citySelected", "true");
+  }
+
   render() {
     const d = this._diary;
     return html`
@@ -296,7 +362,9 @@ export class DiaryView extends LitElement {
           ? html`
               <diary-record-panel
                 .entry=${d.todayEntry}
-                .submitting=${d.submitting}></diary-record-panel>`
+                .submitting=${d.submitting}
+                .city=${d.todayEntry?.city || ""}
+                @city-change=${() => actions.setDiaryState({ cityDialogOpen: true })}></diary-record-panel>`
           : html`
               <diary-review-panel
                 .date=${d.reviewDate}
@@ -306,6 +374,12 @@ export class DiaryView extends LitElement {
                 .calendarOpen=${d.calendarOpen}
                 .calendarMonth=${d.calendarMonth}
                 .calendarDates=${d.calendarDates}></diary-review-panel>`}
+        ${d.tab === "record" && d.cityDialogOpen ? html`
+          <dialog @cancel=${this._onCityCancel}>
+            <city-dialog
+              @submit=${this._onCitySubmit}
+              @cancel=${this._onCityCancel}></city-dialog>
+          </dialog>` : null}
       </div>
     `;
   }

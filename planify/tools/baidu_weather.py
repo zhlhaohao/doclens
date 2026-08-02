@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # 百度天气 API 配置（从环境变量读取）
 BAIDU_WEATHER_API_URL = os.getenv(
     "BAIDU_WEATHER_API_URL",
-    "https://api.map.com.com/weather/v2/"
+    "https://api.map.baidu.com/weather/v1/"
 )
 BAIDU_WEATHER_AK = os.getenv("BAIDU_WEATHER_AK", "")
 BAIDU_WEATHER_DATA_TYPE = os.getenv("BAIDU_WEATHER_DATA_TYPE", "fc")
@@ -199,9 +199,9 @@ async def _call_baidu_weather_api(city: str, date_str: str) -> Optional[dict]:
     Returns:
         API 返回的原始数据，失败返回 None
     """
-    api_url = BAIDU_WEATHER_API_URL
-    ak = BAIDU_WEATHER_AK
-    data_type = BAIDU_WEATHER_DATA_TYPE
+    api_url = os.getenv("BAIDU_WEATHER_API_URL", BAIDU_WEATHER_API_URL)
+    ak = os.getenv("BAIDU_WEATHER_AK", BAIDU_WEATHER_AK)
+    data_type = os.getenv("BAIDU_WEATHER_DATA_TYPE", BAIDU_WEATHER_DATA_TYPE)
 
     if not api_url or not ak:
         return None

@@ -257,3 +257,30 @@ class TestPhoto:
         rel = diary.save_photo(workdir, "2026-08-01", "183012", self._make_jpeg())
         diary.append_photo(workdir, "2026-08-01", "18:30", "183012", rel, "")
         assert diary.get_day(workdir, "2026-08-01").fragments[0].text == "照片"
+
+
+class TestWeather:
+    def test_set_and_get_weather(self, workdir: Path):
+        diary.append_text(workdir, "2026-08-01", "09:00", "090000", "a")
+        assert diary.set_weather(workdir, "2026-08-01", "☀️晴 25℃") is True
+        assert diary.get_weather_of_day(workdir, "2026-08-01") == "☀️晴 25℃"
+        # weather 标记不干扰片段解析
+        day = diary.get_day(workdir, "2026-08-01")
+        assert day.state == "raw"
+        assert day.fragments[0].text == "a"
+
+    def test_set_weather_replaces(self, workdir: Path):
+        diary.append_text(workdir, "2026-08-01", "09:00", "090000", "a")
+        diary.set_weather(workdir, "2026-08-01", "旧天气")
+        diary.set_weather(workdir, "2026-08-01", "新天气")
+        assert diary.get_weather_of_day(workdir, "2026-08-01") == "新天气"
+
+    def test_set_weather_summarized_rejected(self, workdir: Path):
+        diary.append_text(workdir, "2026-08-01", "09:00", "090000", "a")
+        diary.rewrite_day(workdir, "2026-08-01", "成品")
+        assert diary.set_weather(workdir, "2026-08-01", "晴") is False  # 成品不设标记
+        assert diary.get_weather_of_day(workdir, "2026-08-01") == ""
+
+    def test_get_weather_empty(self, workdir: Path):
+        diary.append_text(workdir, "2026-08-01", "09:00", "090000", "a")
+        assert diary.get_weather_of_day(workdir, "2026-08-01") == ""

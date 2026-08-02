@@ -409,6 +409,11 @@ class DiaryWorker:
         if not body:
             raise RuntimeError("empty response from chat model")
 
+        # 天气前缀（从当天 raw 小节的缓存标记读，blockquote 加在成文首行）
+        weather = diary.get_weather_of_day(workdir, date_str)
+        if weather:
+            body = f"> {weather}\n\n{body}"
+
         # 3. 整体替换小节（rewrite_day 内部再确认仍为片段态）
         if not diary.rewrite_day(workdir, date_str, body):
             logger.info("Diary day already summarized elsewhere, result discarded: %s", date_str)

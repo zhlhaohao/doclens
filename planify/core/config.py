@@ -86,7 +86,7 @@ class _PlanifySettings:
     def BAIDU_WEATHER_API_URL(self) -> str:
         return self._get(
             "baidu_weather_api_url",
-            "https://api.map.com.com/weather/v2/"
+            "https://api.map.baidu.com/weather/v1/"
         )
 
     @property

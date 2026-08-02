@@ -49,7 +49,7 @@ def _to_fragment_model(f: diary.Fragment) -> FragmentModel:
     )
 
 
-def _to_entry_response(entry: diary.DayEntry) -> DayEntryResponse:
+def _to_entry_response(entry: diary.DayEntry, workdir: Path) -> DayEntryResponse:
     content = entry.content
     if entry.state == "summarized":
         # 成品 md 中的图片相对路径重写为可渲染 URL
@@ -61,6 +61,7 @@ def _to_entry_response(entry: diary.DayEntry) -> DayEntryResponse:
         state=entry.state,
         fragments=[_to_fragment_model(f) for f in entry.fragments],
         content=content,
+        city=diary.get_city_of_day(workdir, entry.date),
     )
 
 
@@ -88,7 +89,7 @@ def _bad_request(e: ValueError) -> CortexAPIError:
 @router.get("/diary/today", response_model=TodayResponse)
 async def get_today(idx: IndexManager = Depends(get_index_manager)) -> TodayResponse:
     today = _now().date().isoformat()
-    return TodayResponse(today=today, entry=_to_entry_response(diary.get_day(_workdir(idx), today)))
+    return TodayResponse(today=today, entry=_to_entry_response(diary.get_day(_workdir(idx), today), _workdir(idx)))
 
 
 # --- GET /diary/entry?date= ---
@@ -99,7 +100,7 @@ async def get_entry(
     idx: IndexManager = Depends(get_index_manager),
 ) -> DayEntryResponse:
     try:
-        return _to_entry_response(diary.get_day(_workdir(idx), date))
+        return _to_entry_response(diary.get_day(_workdir(idx), date), _workdir(idx))
     except ValueError as e:
         raise _bad_request(e) from e
 
@@ -119,6 +120,47 @@ async def get_calendar(
 
 # --- POST /diary/fragments ---
 
+async def _maybe_set_weather(idx: IndexManager, date_str: str) -> None:
+    """当天小节无天气标记时，从 md 标题读城市 → 抓百度天气缓存。
+
+    降级：当天无城市 / 已有 weather 标记 / 抓取失败 → 不存，不阻断录入。
+    """
+    try:
+        workdir = _workdir(idx)
+        city = diary.get_city_of_day(workdir, date_str)
+        if not city:
+            return  # 当天没设城市，跳过天气
+        if diary.get_weather_of_day(workdir, date_str):
+            return  # 当天已抓过，不重复
+        from planify.tools.baidu_weather import get_weather
+
+        result = await get_weather(city, date_str)
+        w = (result.get("weather") or "").strip()
+        if w and "失败" not in w:
+            diary.set_weather(workdir, date_str, w)
+    except Exception as e:  # noqa: BLE001 — 天气是锦上添花，失败不影响录入
+        logging.getLogger(__name__).info("diary weather fetch failed for %s: %s", date_str, e)
+
+
+# --- POST /diary/city ---
+
+@router.post("/diary/city", response_model=DayEntryResponse)
+async def set_city(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    city: str = Query(..., description="城市名"),
+    idx: IndexManager = Depends(get_index_manager),
+) -> DayEntryResponse:
+    """设置某日小节的城市标记（md 标题 📍city），返回更新后的小节。"""
+    try:
+        diary.set_city(_workdir(idx), date, city)
+    except ValueError as e:
+        raise _bad_request(e) from e
+    _trigger_reindex(idx)
+    # 城市设好后，尝试抓当天天气
+    await _maybe_set_weather(idx, date)
+    return _to_entry_response(diary.get_day(_workdir(idx), date), _workdir(idx))
+
+
 @router.post("/diary/fragments", response_model=FragmentResponse)
 async def add_text_fragment(
     req: AddTextRequest,
@@ -132,6 +174,7 @@ async def add_text_fragment(
     except ValueError as e:
         raise _bad_request(e) from e
     _trigger_reindex(idx)
+    await _maybe_set_weather(idx, now.date().isoformat())
     return FragmentResponse(fragment=_to_fragment_model(frag))
 
 
@@ -171,6 +214,7 @@ async def add_photo_fragment(
     except ValueError as e:
         raise _bad_request(e) from e
     _trigger_reindex(idx)
+    await _maybe_set_weather(idx, date_str)
     return FragmentResponse(fragment=_to_fragment_model(frag))
 
 

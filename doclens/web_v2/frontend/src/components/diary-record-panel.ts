@@ -12,6 +12,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { DiaryEntry, DiaryFragment } from "../state/types";
 import "./icon";
 import "./input-box";
+import "./image-viewer";
 
 @customElement("diary-record-panel")
 export class DiaryRecordPanel extends LitElement {
@@ -26,10 +27,22 @@ export class DiaryRecordPanel extends LitElement {
     }
     .photo-btns {
       display: flex;
+      align-items: center;
       justify-content: center;
       gap: var(--cortex-space-2, 8px);
       margin-top: var(--cortex-space-2, 8px);
     }
+    .city-tag {
+      margin-right: auto;
+      border: none;
+      background: transparent;
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0;
+      white-space: nowrap;
+    }
+    .city-tag:hover { color: var(--cortex-primary); }
     .photo-btn {
       display: inline-flex;
       align-items: center;
@@ -176,6 +189,29 @@ export class DiaryRecordPanel extends LitElement {
       margin-top: var(--cortex-space-1, 4px);
       border-radius: var(--cortex-radius-md, 8px);
       display: block;
+      cursor: zoom-in;
+    }
+    .photo-wrap {
+      position: relative;
+      display: inline-block;
+      margin-top: var(--cortex-space-1, 4px);
+      white-space: normal; /* 覆盖 .frag-body 的 pre-wrap，避免模板空白撑高 */
+    }
+    .photo-wrap img { margin-top: 0; }
+    .expand-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .frag-body .caption {
       font-size: 13px;
@@ -272,6 +308,7 @@ export class DiaryRecordPanel extends LitElement {
 
   @property({ attribute: false }) entry: DiaryEntry | null = null;
   @property({ type: Boolean }) submitting = false;
+  @property() city = "";
 
   /** 待上传的照片（已选未确认）：预览 + 备注输入 */
   @state() private _pendingFile: File | null = null;
@@ -281,6 +318,8 @@ export class DiaryRecordPanel extends LitElement {
   /** inline 编辑：当前编辑中的 fid + 编辑文本 */
   @state() private _editingFid = "";
   @state() private _editText = "";
+  /** 全屏图片查看 */
+  @state() private _viewerSrc = "";
 
   private _onSubmitText(e: CustomEvent<{ value: string }>) {
     this.dispatchEvent(new CustomEvent("submit-text", {
@@ -290,6 +329,10 @@ export class DiaryRecordPanel extends LitElement {
     // 清空输入框（input-box 是 controlled 的，这里直接置空其 value）
     const box = e.target as HTMLElement & { value: string };
     box.value = "";
+  }
+
+  private _onCityTag() {
+    this.dispatchEvent(new CustomEvent("city-change", { bubbles: true, composed: true }));
   }
 
   private _pickPhoto(capture: boolean) {
@@ -393,7 +436,15 @@ export class DiaryRecordPanel extends LitElement {
                   <button class="cancel-btn" ?disabled=${this.submitting} @click=${() => this._onCancelEdit()}>取消</button>
                 </div>`
             : f.kind === "photo" && f.image_url
-              ? html`<img src=${f.image_url} alt=${f.text} loading="lazy" />${f.text && f.text !== "照片" ? html`<div class="caption">${f.text}</div>` : null}`
+              ? html`<div class="photo-wrap">
+                  <img src=${f.image_url} alt=${f.text} loading="lazy"
+                       @click=${() => this._viewerSrc = f.image_url!} />
+                  <button class="expand-btn" title="全屏查看"
+                          @click=${() => this._viewerSrc = f.image_url!}>
+                    <doclens-icon name="maximize-2" style="font-size:14px"></doclens-icon>
+                  </button>
+                </div>
+                ${f.text && f.text !== "照片" ? html`<div class="caption">${f.text}</div>` : null}`
               : f.text}</div>
         </div>
       </li>
@@ -412,6 +463,7 @@ export class DiaryRecordPanel extends LitElement {
         ?disabled=${this.submitting}
         @submit=${this._onSubmitText}></input-box>
       <div class="photo-btns">
+        ${this.city ? html`<button class="city-tag" title="更换城市" @click=${() => this._onCityTag()}>📍 ${this.city}</button>` : null}
         <button class="photo-btn" ?disabled=${this.submitting} @click=${() => this._pickPhoto(true)}>
           <doclens-icon name="camera" style="font-size:18px"></doclens-icon>拍照
         </button>
@@ -439,6 +491,10 @@ export class DiaryRecordPanel extends LitElement {
             ${fragments.map((f) => this._renderFragment(f))}
           </ul>`
         : html`<div class="empty-hint">今天还没有记录，写下第一条吧</div>`}
+
+      ${this._viewerSrc ? html`<image-viewer
+        .src=${this._viewerSrc}
+        @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
     `;
   }
 }
