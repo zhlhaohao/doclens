@@ -230,6 +230,14 @@ class CortexConfig(BaseSettings):
         alias="VISION_MODEL",
         description="视觉模型 ID（默认 qwen-vl-max）",
     )
+    vision_protocol: Optional[str] = Field(
+        default=None,
+        alias="VISION_PROTOCOL",
+        description=(
+            "视觉模型协议：留空=OpenAI-compat（默认，/chat/completions + image_url）；"
+            "anthropic=Anthropic 格式（/v1/messages + image source，如 minimax /anthropic + M3）"
+        ),
+    )
 
     @classmethod
     def _init_first_run(cls):

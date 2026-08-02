@@ -95,14 +95,21 @@ def _strip_thinking(text: str) -> str:
 
 
 def describe_photo(path: Path, config) -> str:
-    """调视觉模型描述一张照片（OpenAI-compat，base64 内联）。
+    """调视觉模型描述一张照片。
 
-    与 VisionWorker._call_vision_api 同构，但 prompt 面向日记场景。
+    vision_protocol=anthropic 走 Anthropic /v1/messages（如 minimax /anthropic + M3）；
+    默认 OpenAI-compat /chat/completions。逐图降级：失败抛出，上层退化为用备注。
     """
     ext = path.suffix.lower().lstrip(".")
     media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
     b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    if getattr(config, "vision_protocol", None) == "anthropic":
+        return _vision_anthropic(b64, media, _PHOTO_PROMPT, config)
+    return _vision_openai(b64, media, _PHOTO_PROMPT, config)
 
+
+def _vision_openai(b64: str, media: str, prompt: str, config, *, max_tokens: int = 512) -> str:
+    """OpenAI-compat: /chat/completions + image_url（base64 data URL）。"""
     base_url = (config.vision_base_url or "").rstrip("/")
     body = {
         "model": config.vision_model,
@@ -111,11 +118,11 @@ def describe_photo(path: Path, config) -> str:
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
-                    {"type": "text", "text": _PHOTO_PROMPT},
+                    {"type": "text", "text": prompt},
                 ],
             }
         ],
-        "max_tokens": 512,
+        "max_tokens": max_tokens,
     }
     req = urllib.request.Request(
         f"{base_url}/chat/completions",
@@ -131,6 +138,37 @@ def describe_photo(path: Path, config) -> str:
         return _strip_thinking(payload["choices"][0]["message"]["content"] or "")
     except (KeyError, IndexError, TypeError) as e:
         raise RuntimeError(f"unexpected vision API response shape: {e}") from e
+
+
+def _vision_anthropic(b64: str, media: str, prompt: str, config, *, max_tokens: int = 1024) -> str:
+    """Anthropic 格式: /v1/messages + image source block（如 minimax /anthropic + M3）。
+
+    复用 planify 的 anthropic provider 处理 base_url / 鉴权 / 响应解析
+    （与对话模型同源，避免手写 urllib 重复 Anthropic 协议细节）。
+    """
+    from planify.core.llm import create_provider
+
+    provider = create_provider({
+        "provider_name": "anthropic",
+        "protocol": "",
+        "api_key": config.vision_api_key,
+        "model_id": config.vision_model,
+        "base_url": config.vision_base_url,
+    })
+    resp = provider.chat(
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+        system="",
+        tools=[],
+        max_tokens=max_tokens,
+    )
+    text = "".join(b.text for b in resp.content if hasattr(b, "text"))
+    return _strip_thinking(text)
 
 
 def build_summary_input(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:

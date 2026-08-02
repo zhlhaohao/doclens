@@ -586,12 +586,16 @@ class FTS5Index:
         return cur.rowcount
 
     def vision_requeue_model_changed(self, current_tag: str) -> int:
-        """模型/prompt 版本变化时，把已完成的项重新置为 pending 以便重解析。"""
+        """模型/prompt/协议版本变化时，把已完成或失败的项重新置为 pending 以便重解析。
+
+        失败项也纳入：改协议（如 OpenAI-compat → anthropic）后，旧协议下失败的
+        图像应在启动时自动重试，而不是永远卡在 failed。
+        """
         import time as _time
         with self._conn:
             cur = self._conn.execute(
-                "UPDATE vision_queue SET status = 'pending', attempts = 0, updated_at = ? "
-                "WHERE status = 'done' AND model != ?",
+                "UPDATE vision_queue SET status = 'pending', attempts = 0, last_error = '', updated_at = ? "
+                "WHERE status IN ('done', 'failed') AND model != ?",
                 (_time.time(), current_tag),
             )
         return cur.rowcount

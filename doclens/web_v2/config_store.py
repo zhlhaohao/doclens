@@ -29,6 +29,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "VISION_API_KEY",
     "VISION_BASE_URL",
     "VISION_MODEL",
+    "VISION_PROTOCOL",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",
