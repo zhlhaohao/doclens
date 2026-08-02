@@ -51,6 +51,13 @@ export const diaryApi = {
       qs(`/fragments/${encodeURIComponent(fid)}?date=${encodeURIComponent(date)}`),
       { method: "DELETE" },
     ),
+
+  /** 编辑文字片段正文（保留时间戳与 fid；照片片段不支持） */
+  editFragment: (date: string, fid: string, text: string) =>
+    request<FragmentResponse>(
+      qs(`/fragments/${encodeURIComponent(fid)}?date=${encodeURIComponent(date)}`),
+      { method: "PUT", json: { text } },
+    ),
 };
 
 export { ApiError };

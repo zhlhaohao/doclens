@@ -89,7 +89,7 @@ class TestNextWakeup:
 
 
 class TestBuildSummaryInput:
-    def test_text_and_photo_lines(self):
+    def test_text_and_photo_as_entries(self):
         frags = [
             diary.Fragment(fid="a", time="09:15", kind="text", text="早上喝了咖啡"),
             diary.Fragment(
@@ -98,10 +98,54 @@ class TestBuildSummaryInput:
             ),
         ]
         s = build_summary_input(frags, {"b": "天边大片橙红色晚霞"})
+        assert "条目1（文字，09:15）" in s
         assert "09:15 早上喝了咖啡" in s
-        assert "18:30 [照片 images/2026-08-01/x.webp]" in s
+        assert "条目2（照片，18:30）" in s
+        assert "![晚霞](images/2026-08-01/x.webp)" in s
         assert "备注：晚霞" in s
         assert "照片内容：天边大片橙红色晚霞" in s
+
+    def test_text_fragments_within_1h_merged(self):
+        """相邻间隔 ≤60min 的文字片段合为一个编号条目。"""
+        frags = [
+            diary.Fragment(fid="a", time="10:12", kind="text", text="开始工作"),
+            diary.Fragment(fid="b", time="10:30", kind="text", text="开了个会"),
+            diary.Fragment(fid="c", time="11:00", kind="text", text="继续写代码"),
+            diary.Fragment(fid="d", time="12:30", kind="text", text="吃午饭"),
+        ]
+        s = build_summary_input(frags, {})
+        # 10:12→10:30(18)→11:00(30) 相邻 ≤60 → 条目1（10:12~11:00）；11:00→12:30(90)>60 → 条目2
+        assert "条目1（文字，10:12~11:00）" in s
+        assert "条目2（文字，12:30）" in s
+        assert s.count("条目") == 2
+
+    def test_text_fragments_boundary_60min_merged(self):
+        """恰好 60min 间隔仍合并（含端点）。"""
+        frags = [
+            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
+            diary.Fragment(fid="b", time="11:00", kind="text", text="b"),
+        ]
+        s = build_summary_input(frags, {})
+        assert s.count("条目") == 1
+        assert "条目1（文字，10:00~11:00）" in s
+
+    def test_text_fragments_over_1h_split(self):
+        frags = [
+            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
+            diary.Fragment(fid="b", time="11:01", kind="text", text="b"),
+        ]
+        s = build_summary_input(frags, {})
+        assert s.count("条目") == 2  # 61min > 60 → 分组
+
+    def test_photo_breaks_text_group(self):
+        """图片片段独立成条目，中断文字组（即使前后文字在 1h 内）。"""
+        frags = [
+            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
+            diary.Fragment(fid="b", time="10:30", kind="photo", text="照片", image="images/x.webp"),
+            diary.Fragment(fid="c", time="10:45", kind="text", text="c"),
+        ]
+        s = build_summary_input(frags, {})
+        assert s.count("条目") == 3  # a | photo | c 三条目
 
     def test_photo_without_description_or_caption(self):
         frags = [

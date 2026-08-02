@@ -67,7 +67,7 @@ export class InputBox extends LitElement {
          内容区里 ≈ 完美居中）。实际高度由 _autoResize 按 scrollHeight 撑开。 */
       min-height: var(--min-h);
       line-height: 1.5;
-      padding: 11px 0;
+      padding: var(--cortex-input-pad-y, 11px) 0;
     }
     /* multiline 自动扩充：默认单行高度，换行后随内容增高，超出上限内部滚动 */
     textarea {

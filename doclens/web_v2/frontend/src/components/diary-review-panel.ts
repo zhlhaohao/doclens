@@ -1,8 +1,7 @@
-/** 日记「回顾」子页：单日预览。
+/** 日记「回顾」子页：成文日记浏览器（只看已总结成文的日）。
  *
- * 顶部：◀ 前一天 | 日期按钮（点开日历打点面板）| 后一天 ▶（到今天禁用）。
- * 内容：成品态 → md-viewer 渲染；片段态 → 原始片段时间线 + 整理提示；
- *       空 → 「这一天没有日记」。
+ * 顶部：◀ 前一天 | 日期按钮（点开日历打点面板，只标成文日）| 后一天 ▶（到今天禁用）。
+ * 内容：成品态 → md-viewer 渲染；片段态/空态 → 空态提示（不展示原始片段）。
  *
  * 纯 UI 组件；事件向上冒泡给 diary-view：
  *   navigate-day {delta} / open-calendar / select-date（经 diary-calendar 透传）。
@@ -19,7 +18,8 @@ import "./md-viewer";
 @customElement("diary-review-panel")
 export class DiaryReviewPanel extends LitElement {
   static styles = css`
-    :host { display: block; position: relative; }
+    :host { display: block; position: relative; box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
     .nav-row {
       display: flex;
       align-items: center;
@@ -77,39 +77,6 @@ export class DiaryReviewPanel extends LitElement {
       padding: var(--cortex-space-8, 32px) 0;
       font-size: 15px;
     }
-    .raw-hint {
-      font-size: 13px;
-      color: var(--cortex-text-muted);
-      margin: 0 0 var(--cortex-space-3, 12px);
-      padding: var(--cortex-space-2, 8px) var(--cortex-space-3, 12px);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-md, 8px);
-    }
-    .frag {
-      display: flex;
-      gap: var(--cortex-space-3, 12px);
-      align-items: flex-start;
-      padding: var(--cortex-space-3, 12px);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-lg, 16px);
-      background: var(--cortex-surface);
-      margin-bottom: var(--cortex-space-2, 8px);
-    }
-    .frag .time {
-      flex-shrink: 0;
-      font-size: 13px;
-      color: var(--cortex-text-muted);
-      font-variant-numeric: tabular-nums;
-      padding-top: 2px;
-    }
-    .frag .body { flex: 1; min-width: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-    .frag img {
-      max-width: 200px;
-      max-height: 200px;
-      border-radius: var(--cortex-radius-md, 8px);
-      display: block;
-    }
-    .frag .caption { font-size: 13px; color: var(--cortex-text-muted); margin-top: 4px; }
   `;
 
   @property() date = "";
@@ -135,28 +102,12 @@ export class DiaryReviewPanel extends LitElement {
     if (this.loading) {
       return html`<div class="content loading">加载中…</div>`;
     }
-    if (!this.entry || this.entry.state === "empty") {
-      return html`<div class="empty">这一天没有日记</div>`;
-    }
-    if (this.entry.state === "raw") {
-      const isToday = this.date === this.today;
-      return html`
-        <p class="raw-hint">
-          ${isToday
-            ? "今天的片段将在明天自动整理成日记"
-            : "这些片段尚未整理——将在下次应用运行时自动整理成日记"}
-        </p>
-        ${this.entry.fragments.map((f) => html`
-          <div class="frag">
-            <span class="time">${f.time}</span>
-            <div class="body">
-              ${f.kind === "photo" && f.image_url
-                ? html`<img src=${f.image_url} alt=${f.text} loading="lazy" />
-                       ${f.text && f.text !== "照片" ? html`<div class="caption">${f.text}</div>` : null}`
-                : html`${f.text}`}
-            </div>
-          </div>`)}
-      `;
+    // 回顾页只展示已整理成文的日记；片段态/空态都不展示原始片段
+    if (!this.entry || this.entry.state !== "summarized") {
+      const msg = this.entry?.state === "raw"
+        ? "这一天的日记尚未整理成文"
+        : "这一天没有日记";
+      return html`<div class="empty">${msg}</div>`;
     }
     // 成品态：md-viewer 渲染（图片 URL 已被后端重写为 /api/preview/raw）
     return html`<md-viewer .content=${this.entry.content}></md-viewer>`;

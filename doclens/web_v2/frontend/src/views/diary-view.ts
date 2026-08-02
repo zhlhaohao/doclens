@@ -23,6 +23,8 @@ import "../components/icon";
 @customElement("diary-view")
 export class DiaryView extends LitElement {
   static styles = css`
+    :host { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
     :host {
       display: flex;
       flex-direction: column;
@@ -41,31 +43,34 @@ export class DiaryView extends LitElement {
     }
     .tab-strip {
       display: flex;
-      gap: var(--cortex-space-2, 8px);
+      gap: 4px;
+      padding: 4px;
       margin-bottom: var(--cortex-space-4, 16px);
+      border-radius: var(--cortex-radius-pill, 100px);
+      background: var(--cortex-surface-muted);
     }
     .sub-tab {
-      min-height: 44px;
-      padding: 0 20px;
-      border: 1px solid var(--cortex-border);
+      flex: 1;
+      min-height: 40px;
+      padding: 0 16px;
+      border: none;
       border-radius: var(--cortex-radius-pill, 100px);
-      background: var(--cortex-surface);
+      background: transparent;
       color: var(--cortex-text-muted);
       cursor: pointer;
       font-size: 14px;
       font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s ease, color 0.15s ease;
     }
-    .sub-tab:hover { background: var(--cortex-surface-muted); }
+    .sub-tab:hover { color: var(--cortex-text); }
+    .sub-tab doclens-icon { font-size: 16px; }
     .sub-tab.active {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: #fff;
-    }
-    .today-head {
-      margin: 0 0 var(--cortex-space-3, 12px);
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--cortex-text);
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
     }
     .error-bar {
       margin-bottom: var(--cortex-space-3, 12px);
@@ -107,10 +112,12 @@ export class DiaryView extends LitElement {
   private async _init() {
     await this._loadToday();
     const today = this._diary.today || this._localToday();
-    actions.setDiaryState({ reviewDate: today });
+    // 回顾页默认显示昨天的成文日记（今天尚未总结，恒为空态）
+    const yesterday = shiftDate(today, -1);
+    actions.setDiaryState({ reviewDate: yesterday });
     await Promise.all([
-      this._loadReview(today),
-      this._loadCalendar(formatMonth(parseLocalDate(today))),
+      this._loadReview(yesterday),
+      this._loadCalendar(formatMonth(parseLocalDate(yesterday))),
     ]);
   }
 
@@ -164,11 +171,6 @@ export class DiaryView extends LitElement {
     try {
       await diaryApi.addText(e.detail.value);
       await this._loadToday();
-      // 今天的小节变化也可能影响回顾页（若正在看今天）
-      if (this._diary.reviewDate === this._diary.today) {
-        void this._loadReview(this._diary.reviewDate);
-      }
-      void this._loadCalendar(this._diary.calendarMonth || formatMonth(new Date()));
     } catch (e2) {
       actions.setDiaryState({
         error: e2 instanceof ApiError ? e2.message : "记录失败，请重试",
@@ -184,10 +186,6 @@ export class DiaryView extends LitElement {
     try {
       await diaryApi.uploadPhoto(e.detail.file, e.detail.caption);
       await this._loadToday();
-      if (this._diary.reviewDate === this._diary.today) {
-        void this._loadReview(this._diary.reviewDate);
-      }
-      void this._loadCalendar(this._diary.calendarMonth || formatMonth(new Date()));
     } catch (e2) {
       actions.setDiaryState({
         error: e2 instanceof ApiError ? e2.message : "照片上传失败，请重试",
@@ -203,13 +201,25 @@ export class DiaryView extends LitElement {
     try {
       await diaryApi.removeFragment(today, e.detail.fid);
       await this._loadToday();
-      if (this._diary.reviewDate === today) {
-        void this._loadReview(today);
-      }
     } catch (e2) {
       actions.setDiaryState({
         error: e2 instanceof ApiError ? e2.message : "删除失败，请重试",
       });
+    }
+  }
+
+  private async _onEditFragment(e: CustomEvent<{ fid: string; text: string }>) {
+    const today = this._diary.today || this._localToday();
+    actions.setDiaryState({ submitting: true, error: null });
+    try {
+      await diaryApi.editFragment(today, e.detail.fid, e.detail.text);
+      await this._loadToday();
+    } catch (e2) {
+      actions.setDiaryState({
+        error: e2 instanceof ApiError ? e2.message : "保存失败，请重试",
+      });
+    } finally {
+      actions.setDiaryState({ submitting: false });
     }
   }
 
@@ -250,8 +260,10 @@ export class DiaryView extends LitElement {
     if (tab === "record") {
       void this._loadToday();
     } else {
-      // 回到回顾页时刷新（可能刚录了新片段 / 总结 worker 刚重写过）
-      void this._loadReview(this._diary.reviewDate);
+      // 回到回顾页：刷新成文与日历打点（后台 worker 可能刚总结完昨天）
+      const date = this._diary.reviewDate;
+      void this._loadReview(date);
+      void this._loadCalendar(formatMonth(parseLocalDate(date)));
     }
   }
 
@@ -262,6 +274,7 @@ export class DiaryView extends LitElement {
         @submit-text=${this._onSubmitText}
         @upload-photo=${this._onUploadPhoto}
         @delete-fragment=${this._onDeleteFragment}
+        @edit-fragment=${this._onEditFragment}
         @navigate-day=${this._onNavigateDay}
         @toggle-calendar=${this._onToggleCalendar}
         @select-date=${this._onSelectDate}
@@ -269,15 +282,18 @@ export class DiaryView extends LitElement {
         <div class="tab-strip">
           <button
             class="sub-tab ${d.tab === "record" ? "active" : ""}"
-            @click=${() => this._switchTab("record")}>记录</button>
+            @click=${() => this._switchTab("record")}>
+            <doclens-icon name="pencil"></doclens-icon>记录
+          </button>
           <button
             class="sub-tab ${d.tab === "review" ? "active" : ""}"
-            @click=${() => this._switchTab("review")}>回顾</button>
+            @click=${() => this._switchTab("review")}>
+            <doclens-icon name="book-open"></doclens-icon>回顾
+          </button>
         </div>
         ${d.error ? html`<div class="error-bar">${d.error}</div>` : null}
         ${d.tab === "record"
           ? html`
-              <p class="today-head">今天 ${d.today || this._localToday()}</p>
               <diary-record-panel
                 .entry=${d.todayEntry}
                 .submitting=${d.submitting}></diary-record-panel>`
