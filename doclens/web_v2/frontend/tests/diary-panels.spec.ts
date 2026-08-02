@@ -57,15 +57,16 @@ describe("diary-record-panel", () => {
 });
 
 describe("diary-review-panel", () => {
-  it("renders raw entry as fragment timeline with hint", async () => {
+  it("renders raw entry as 'not yet summarized' empty state (no fragments)", async () => {
     const el = await fixture<DiaryReviewPanel>(html`
       <diary-review-panel
         date="2026-08-01"
         today="2026-08-01"
         .entry=${rawEntry}></diary-review-panel>
     `);
-    expect(el.shadowRoot!.textContent).toContain("今天的片段将在明天自动整理成日记");
-    expect(el.shadowRoot!.querySelectorAll(".frag").length).toBe(2);
+    // 回顾页只看成文：raw 不展示原始片段，仅空态提示
+    expect(el.shadowRoot!.textContent).toContain("尚未整理成文");
+    expect(el.shadowRoot!.querySelectorAll(".frag").length).toBe(0);
   });
 
   it("renders summarized entry via md-viewer", async () => {

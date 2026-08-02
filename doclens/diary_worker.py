@@ -65,13 +65,15 @@ _PHOTO_PROMPT = (
 )
 
 _SUMMARY_SYSTEM = (
-    "你是日记整理助手。用户会给你一天中零散记录的片段（文字、照片备注、照片内容描述），"
-    "请把它们整理成一篇第一人称的日记正文。要求：\n"
-    "1) 以「我」的视角书写，语言自然流畅，把片段串成有叙事感的文字，不要流水账；\n"
-    "2) 按时间线组织，可适当分段；片段较多时可加粗体小标题（**加粗**，不用 # 标题）；\n"
-    "3) 照片必须保留在文中合适的位置，引用格式原样照抄 ![备注](图片路径)，不得修改路径；\n"
-    "4) 忠实于片段内容，不要虚构片段中没有的事件；\n"
-    "5) 只输出日记正文的 Markdown，不要标题（如「## 某日」）、不要解释、不要代码围栏。"
+    "你是日记整理助手。用户给你一天中按时间聚类好的记录条目（1 小时内连续的文字片段"
+    "已合并为同一编号条目，照片片段各自独立成一个条目）。请整理成一篇日记。要求：\n"
+    "1) 忠实于片段原意，绝不虚构、补充、渲染或扩写——目标只是把零散片段串成通顺的文字；\n"
+    "2) 严格保留输入的编号结构：每个「条目N」输出为一个编号项（1. 2. 3. …），"
+    "以该条目的时间点开头（单条片段用 HH:MM，合并组用 HH:MM~HH:MM 范围），"
+    "按输入顺序，不要把多个条目合并成一个无编号的故事段落；\n"
+    "3) 文字条目：把组内片段串成通顺的一句话或几句话即可，不要添加片段里没有的内容；\n"
+    "4) 照片条目：原样保留图片引用 ![备注](图片路径)（路径不得修改），可附一句话说明；\n"
+    "5) 只输出编号列表的 Markdown，不要标题（如「## 某日」）、不要解释、不要代码围栏。"
 )
 
 _SUMMARY_MAX_TOKENS = 4000
@@ -132,21 +134,63 @@ def describe_photo(path: Path, config) -> str:
 
 
 def build_summary_input(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:
-    """把片段列表组装成给对话模型的用户消息。"""
-    lines = []
+    """把片段聚类成编号条目（相邻间隔 ≤60min 的文字片段合为一组；照片独立成条目并
+    中断文字组），组装给对话模型。
+
+    输出按时间顺序的「条目N」结构，prompt 据此输出带编号的日记——保留结构、不塌成
+    无编号故事。聚类在后端做（而非交给 LLM）以保证 1 小时规则可控。
+    """
+    def _to_min(hhmm: str) -> int:
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+
+    entries: list[dict] = []
+    text_group: dict | None = None
     for f in fragments:
         if f.kind == "photo":
-            desc = photo_descriptions.get(f.fid, "")
+            if text_group is not None:
+                entries.append(text_group)
+                text_group = None
             caption = f.text if f.text != "照片" else ""
-            parts = [f"{f.time} [照片 {f.image}]"]
-            if caption:
-                parts.append(f"备注：{caption}")
-            if desc:
-                parts.append(f"照片内容：{desc}")
-            lines.append("；".join(parts))
+            entries.append({
+                "type": "photo",
+                "time": f.time,
+                "image": f.image,
+                "caption": caption,
+                "desc": photo_descriptions.get(f.fid, ""),
+            })
         else:
-            lines.append(f"{f.time} {f.text}")
-    return "以下是这一天的记录片段，请整理成日记：\n\n" + "\n".join(lines)
+            t = _to_min(f.time)
+            if text_group is not None and t - text_group["last_min"] <= 60:
+                text_group["items"].append((f.time, f.text))
+                text_group["last_min"] = t
+            else:
+                if text_group is not None:
+                    entries.append(text_group)
+                text_group = {"type": "text_group", "items": [(f.time, f.text)], "last_min": t}
+    if text_group is not None:
+        entries.append(text_group)
+
+    lines = []
+    for i, e in enumerate(entries, 1):
+        if e["type"] == "text_group":
+            times = [it[0] for it in e["items"]]
+            span = times[0] if len(times) == 1 else f"{times[0]}~{times[-1]}"
+            lines.append(f"条目{i}（文字，{span}）：")
+            for t, text in e["items"]:
+                lines.append(f"  {t} {text}")
+        else:
+            lines.append(f"条目{i}（照片，{e['time']}）：")
+            lines.append(f"  图片：![{e['caption'] or '照片'}]({e['image']})")
+            if e["caption"]:
+                lines.append(f"  备注：{e['caption']}")
+            if e["desc"]:
+                lines.append(f"  照片内容：{e['desc']}")
+    header = (
+        "以下是这一天的记录，已按时间聚类（1 小时内连续的文字片段合并为同一编号项，"
+        "照片各自独立成项）。请整理成日记：\n\n"
+    )
+    return header + "\n".join(lines)
 
 
 def summarize_day_text(user_input: str, config) -> str:

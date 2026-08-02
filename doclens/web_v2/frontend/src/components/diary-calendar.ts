@@ -47,6 +47,8 @@ export function weekdayCn(dateStr: string): string {
 @customElement("diary-calendar")
 export class DiaryCalendar extends LitElement {
   static styles = css`
+    :host { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
     :host {
       display: block;
       background: var(--cortex-surface);

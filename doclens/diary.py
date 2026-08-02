@@ -256,8 +256,10 @@ def remove_fragment(workdir: Path, date_str: str, fid: str) -> bool:
     path = year_path(workdir, int(date_str[:4]))
     if not path.exists():
         return False
+    # 续行是两空格缩进（见 _format_fragment_line），其他片段首行以「- HH:MM」开头——
+    # 用 [^\n]（不跨行）+ 续行模式 \n  锁定目标片段块，避免 .*? 跨行吞掉前方片段。
     pattern = re.compile(
-        r"(?ms)^- \d{2}:\d{2} .*?<!--\s*fid:" + re.escape(fid) + r"\s*-->[^\S\n]*$\n?"
+        r"(?m)^- \d{2}:\d{2} (?:[^\n]*\n  )*?[^\n]*<!--\s*fid:" + re.escape(fid) + r"\s*-->[^\S\n]*$\n?"
     )
     with _FILE_LOCK:
         content = _read(path)
@@ -269,6 +271,44 @@ def remove_fragment(workdir: Path, date_str: str, fid: str) -> bool:
         # 删光片段后移除空小节，避免空 raw 小节进入待总结队列
         new_content = _drop_empty_raw_sections(new_content)
         _write(path, new_content)
+    return True
+
+
+def update_fragment(workdir: Path, date_str: str, fid: str, new_text: str) -> bool:
+    """更新片段正文（保留时间戳与 fid 标记）。
+
+    文字片段：替换正文；照片片段：替换备注（图片 alt），保留图片路径。
+    仅片段态小节可编辑（成品不可变，ADR-0007）。找不到返回 False。
+    """
+    validate_date(date_str)
+    text = new_text.strip()
+    path = year_path(workdir, int(date_str[:4]))
+    if not path.exists():
+        return False
+    # 同 remove_fragment 的片段块定位（不吞末尾换行，保留与下一条的分隔）
+    pattern = re.compile(
+        r"(?m)^- (\d{2}:\d{2}) (?:[^\n]*\n  )*?[^\n]*<!--\s*fid:"
+        + re.escape(fid) + r"\s*-->[^\S\n]*$"
+    )
+    with _FILE_LOCK:
+        content = _read(path)
+        m = pattern.search(content)
+        if m is None:
+            return False
+        bounds = _find_section(content, date_str)
+        if bounds is None or not _is_raw(content[bounds[0]:bounds[1]]):
+            return False  # 成品小节不可编辑
+        img = re.search(r"!\[([^\]]*)\]\(([^)]+)\)", m.group(0))
+        if img:
+            # 照片：替换 caption（图片 alt），保留图片路径；caption 允许清空
+            payload = f"![{text}]({img.group(2)})"
+        else:
+            if not text:
+                raise ValueError("片段内容为空")
+            payload = text
+        new_line = _format_fragment_line(m.group(1), payload, fid)
+        content = content[:m.start()] + new_line + content[m.end():]
+        _write(path, content)
     return True
 
 
@@ -297,7 +337,10 @@ def rewrite_day(workdir: Path, date_str: str, new_body: str) -> bool:
 
 
 def list_month_dates(workdir: Path, month: str) -> list[str]:
-    """该月有内容（任意状态）的日期列表，升序。month 格式 YYYY-MM。"""
+    """该月已整理成文的日期列表（仅 summarized），升序。month 格式 YYYY-MM。
+
+    回顾页只看成文日记，日历打点也只标成文日；片段态/空小节不计入。
+    """
     if not re.match(r"^\d{4}-\d{2}$", month):
         raise ValueError(f"非法月份格式: {month!r}（应为 YYYY-MM）")
     path = year_path(workdir, int(month[:4]))
@@ -305,7 +348,18 @@ def list_month_dates(workdir: Path, month: str) -> list[str]:
         return []
     with _FILE_LOCK:
         content = _read(path)
-    return sorted(m.group(1) for m in _HEADING_RE.finditer(content) if m.group(1).startswith(month))
+    matches = list(_HEADING_RE.finditer(content))
+    dates: list[str] = []
+    for i, m in enumerate(matches):
+        if not m.group(1).startswith(month):
+            continue
+        body_start = content.index("\n", m.start()) + 1
+        body_end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        body = content[body_start:body_end]
+        # 成文 = 非 raw 且有正文内容（空小节不计）
+        if not _is_raw(body) and body.strip():
+            dates.append(m.group(1))
+    return sorted(dates)
 
 
 def find_pending_raw(workdir: Path, today: date_type) -> list[str]:

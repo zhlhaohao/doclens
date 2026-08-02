@@ -150,6 +150,8 @@ function ensureMdConfigured(): void {
 @customElement("md-viewer")
 export class MdViewer extends LitElement {
   static styles = css`
+    :host { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
     :host {
       display: block;
       padding: var(--cortex-space-4);
@@ -247,7 +249,8 @@ export class MdViewer extends LitElement {
       max-width: 100%;
       height: auto;
       border-radius: var(--cortex-radius-md);
-      margin: 0 var(--cortex-space-2) var(--cortex-space-2) 0;
+      /* 仅留下 margin：水平 margin 会叠加在 max-width:100% 之外撑破父容器 */
+      margin: 0 0 var(--cortex-space-2) 0;
       display: inline-block;
       vertical-align: middle;
     }

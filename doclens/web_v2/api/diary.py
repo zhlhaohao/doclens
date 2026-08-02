@@ -178,3 +178,24 @@ async def delete_fragment(
         raise CortexAPIError(404, "FRAGMENT_NOT_FOUND", f"片段不存在: {fid}")
     _trigger_reindex(idx)
     return DeleteFragmentResponse(deleted=True)
+
+
+@router.put("/diary/fragments/{fid}", response_model=FragmentResponse)
+async def update_text_fragment(
+    fid: str,
+    req: AddTextRequest,
+    date: str = Query(..., description="片段所属日期 YYYY-MM-DD"),
+    idx: IndexManager = Depends(get_index_manager),
+) -> FragmentResponse:
+    try:
+        updated = diary.update_fragment(_workdir(idx), date, fid, req.text)
+    except ValueError as e:
+        raise _bad_request(e) from e
+    if not updated:
+        raise CortexAPIError(404, "FRAGMENT_NOT_FOUND", f"片段不存在或不可编辑: {fid}")
+    _trigger_reindex(idx)
+    day = diary.get_day(_workdir(idx), date)
+    frag = next((f for f in day.fragments if f.fid == fid), None)
+    if frag is None:
+        raise CortexAPIError(404, "FRAGMENT_NOT_FOUND", f"片段不存在: {fid}")
+    return FragmentResponse(fragment=_to_fragment_model(frag))

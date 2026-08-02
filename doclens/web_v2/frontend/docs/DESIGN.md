@@ -508,6 +508,8 @@ The system runs predominantly flat. Elevation is reserved for two interaction la
 - Inactive: background `{colors.canvas}`, text `{colors.ink}`, border `1px solid {colors.hairline}`, padding `8px 16px`, rounded `{rounded.full}`.
 - Active: background `{colors.ink-deep}`, text `{colors.canvas}`. No border in active state — the dark fill replaces it.
 
+**`segmented-control`** — In-app section switcher for tool-style views (e.g. diary 记录/回顾). Sits in a `{colors.surface-soft}` pill trough; inactive tabs transparent with muted `{colors.ink}` text + icon; the active tab uses a `{colors.primary-soft}` (~12% cobalt tint) fill with `{colors.primary}` text/icon — a tint selected-state, distinct from the solid-cobalt buy-CTA and the ink-deep marketing pill-tab. No shadow (flat per Meta language).
+
 **`button-icon-circular`** — 40×40px circular utility buttons (carousel arrows, share, favorite).
 - Background `{colors.canvas}`, icon color `{colors.ink}`, rounded `{rounded.circle}`.
 

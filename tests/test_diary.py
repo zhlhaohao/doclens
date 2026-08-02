@@ -74,6 +74,20 @@ class TestRemoveFragment:
         day = diary.get_day(workdir, "2026-08-01")
         assert [f.text for f in day.fragments] == ["b"]
 
+    def test_remove_multiline_after_others_keeps_them(self, workdir: Path):
+        """回归：多行片段在最后、前方有片段时，删多行不能吞掉前方片段。
+
+        旧正则 (?ms)^- HH:MM .*?<!-- fid:xxx --> 的 .*? 跨行（s 模式）会从
+        更早的片段行起点跨越匹配到目标 fid，误删中间所有片段。
+        """
+        diary.append_text(workdir, "2026-08-01", "08:08", "080800", "第一段")
+        diary.append_text(workdir, "2026-08-01", "09:11", "091100", "第二段")
+        f3 = diary.append_text(workdir, "2026-08-01", "09:12", "091200", "多行\n第二行\n第三行")
+        assert diary.remove_fragment(workdir, "2026-08-01", f3.fid) is True
+        day = diary.get_day(workdir, "2026-08-01")
+        assert day.state == "raw"
+        assert [f.text for f in day.fragments] == ["第一段", "第二段"]
+
     def test_remove_missing_returns_false(self, workdir: Path):
         diary.append_text(workdir, "2026-08-01", "09:15", "091500", "a")
         assert diary.remove_fragment(workdir, "2026-08-01", "999999-none") is False
@@ -108,6 +122,55 @@ class TestRemoveFragment:
             encoding="utf-8",
         )
         assert diary.find_pending_raw(workdir, date(2026, 8, 1)) == ["2026-07-31"]
+
+
+class TestUpdateFragment:
+    def test_update_text_keeps_others(self, workdir: Path):
+        f1 = diary.append_text(workdir, "2026-08-01", "09:15", "091500", "第一段")
+        diary.append_text(workdir, "2026-08-01", "18:30", "183000", "第二段")
+        assert diary.update_fragment(workdir, "2026-08-01", f1.fid, "改后的第一段") is True
+        day = diary.get_day(workdir, "2026-08-01")
+        assert [f.text for f in day.fragments] == ["改后的第一段", "第二段"]
+        assert day.fragments[0].time == "09:15"   # 时间戳保留
+        assert day.fragments[0].fid == f1.fid     # fid 保留
+
+    def test_update_single_to_multiline(self, workdir: Path):
+        f = diary.append_text(workdir, "2026-08-01", "09:15", "091500", "单行")
+        assert diary.update_fragment(workdir, "2026-08-01", f.fid, "第一行\n第二行") is True
+        assert diary.get_day(workdir, "2026-08-01").fragments[0].text == "第一行\n第二行"
+
+    def test_update_multiline_to_single(self, workdir: Path):
+        f = diary.append_text(workdir, "2026-08-01", "09:15", "091500", "多行\n第二行")
+        assert diary.update_fragment(workdir, "2026-08-01", f.fid, "改成单行") is True
+        assert diary.get_day(workdir, "2026-08-01").fragments[0].text == "改成单行"
+
+    def test_update_photo_caption(self, workdir: Path):
+        import io
+        from PIL import Image
+        img = Image.new("RGB", (100, 80), (1, 2, 3))
+        buf = io.BytesIO()
+        img.save(buf, "JPEG")
+        rel = diary.save_photo(workdir, "2026-08-01", "183012", buf.getvalue())
+        f = diary.append_photo(workdir, "2026-08-01", "18:30", "183012", rel, "原备注")
+        assert diary.update_fragment(workdir, "2026-08-01", f.fid, "新备注") is True
+        frag = diary.get_day(workdir, "2026-08-01").fragments[0]
+        assert frag.kind == "photo"
+        assert frag.text == "新备注"  # caption 更新
+        assert frag.image == rel       # 图片路径保留
+
+    def test_update_summarized_rejected(self, workdir: Path):
+        f = diary.append_text(workdir, "2026-08-01", "09:15", "091500", "a")
+        diary.rewrite_day(workdir, "2026-08-01", "成品")
+        assert diary.update_fragment(workdir, "2026-08-01", f.fid, "改") is False
+
+    def test_update_empty_rejected(self, workdir: Path):
+        f = diary.append_text(workdir, "2026-08-01", "09:15", "091500", "a")
+        with pytest.raises(ValueError):
+            diary.update_fragment(workdir, "2026-08-01", f.fid, "   ")
+
+    def test_update_missing_returns_false(self, workdir: Path):
+        diary.append_text(workdir, "2026-08-01", "09:15", "091500", "a")
+        assert diary.update_fragment(workdir, "2026-08-01", "999999-none", "x") is False
 
 
 class TestRewriteDay:
@@ -147,9 +210,11 @@ class TestScanAndCalendar:
 
     def test_list_month_dates(self, workdir: Path):
         diary.append_text(workdir, "2026-08-01", "09:00", "090000", "a")
-        diary.append_text(workdir, "2026-08-15", "09:00", "090000", "b")
-        diary.append_text(workdir, "2026-09-01", "09:00", "090000", "c")
-        assert diary.list_month_dates(workdir, "2026-08") == ["2026-08-01", "2026-08-15"]
+        diary.rewrite_day(workdir, "2026-08-01", "成文内容")  # → summarized
+        diary.append_text(workdir, "2026-08-15", "09:00", "090000", "b")  # 仍 raw
+        diary.append_text(workdir, "2026-09-01", "09:00", "090000", "c")  # raw
+        # 回顾打点只标成文日；raw 的 08-15 / 09-01 不计入
+        assert diary.list_month_dates(workdir, "2026-08") == ["2026-08-01"]
         assert diary.list_month_dates(workdir, "2026-10") == []
 
     def test_list_month_invalid(self, workdir: Path):
