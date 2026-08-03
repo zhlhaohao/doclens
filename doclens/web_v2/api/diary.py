@@ -201,9 +201,9 @@ async def add_photo_fragment(
         try:
             config = get_config()
             if getattr(config, "vision_api_key", None):
-                from doclens.diary_worker import describe_photo
+                from doclens.diary_worker import _CAPTION_PROMPT, describe_photo
 
-                caption = describe_photo(diary.diary_dir(_workdir(idx)) / rel, config)
+                caption = describe_photo(diary.diary_dir(_workdir(idx)) / rel, config, prompt=_CAPTION_PROMPT)
         except Exception as e:  # noqa: BLE001 — 视觉失败不阻断上传，降级为无备注
             logging.getLogger(__name__).info("auto caption failed for %s: %s", rel, e)
             caption = ""

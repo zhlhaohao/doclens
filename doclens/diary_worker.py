@@ -64,6 +64,16 @@ _PHOTO_PROMPT = (
     "供整理日记时引用。只输出描述本身，不要标题、不要解释。"
 )
 
+# 照片备注 prompt（上传时自动生成 caption，比总结用的描述更精简）
+_CAPTION_PROMPT = (
+    "请根据图片类型生成简短备注：\n"
+    "如果是文字/截图/文档/资料类图片，只输出一个简短的标题"
+    "（如「补钾资料」「日记功能设计稿」），不要描述内容；\n"
+    "如果是风景/人物/食物/生活类图片，用不超过20个字概括"
+    "（如「珠海晚霞」「麦当劳吃早餐」）。\n"
+    "只输出备注文字本身，不要解释、不要引号。"
+)
+
 _SUMMARY_SYSTEM = (
     "你是日记整理助手。用户给你一天中按时间聚类好的记录条目（1 小时内连续的文字片段"
     "已合并为同一编号条目，照片片段各自独立成一个条目）。请整理成一篇日记。要求：\n"
@@ -94,18 +104,18 @@ def _strip_thinking(text: str) -> str:
     return text.strip()
 
 
-def describe_photo(path: Path, config) -> str:
+def describe_photo(path: Path, config, *, prompt: str = _PHOTO_PROMPT) -> str:
     """调视觉模型描述一张照片。
 
-    vision_protocol=anthropic 走 Anthropic /v1/messages（如 minimax /anthropic + M3）；
-    默认 OpenAI-compat /chat/completions。逐图降级：失败抛出，上层退化为用备注。
+    prompt 参数：默认用 _PHOTO_PROMPT（详细描述，供总结引用）；
+    上传自动备注时传 _CAPTION_PROMPT（简短标题/≤20字）。
     """
     ext = path.suffix.lower().lstrip(".")
     media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
     b64 = base64.b64encode(path.read_bytes()).decode("ascii")
     if getattr(config, "vision_protocol", None) == "anthropic":
-        return _vision_anthropic(b64, media, _PHOTO_PROMPT, config)
-    return _vision_openai(b64, media, _PHOTO_PROMPT, config)
+        return _vision_anthropic(b64, media, prompt, config)
+    return _vision_openai(b64, media, prompt, config)
 
 
 def _vision_openai(b64: str, media: str, prompt: str, config, *, max_tokens: int = 512) -> str:
