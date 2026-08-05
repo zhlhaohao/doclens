@@ -4036,7 +4036,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
 ${r}</${s}>
 `},blockquote(e){const t=Lt(e.raw),r=this.parser.parse(e.tokens);return`<blockquote data-source-line="${t}">
 ${r}</blockquote>
-`}};Eo.image=function(e){const t=e.title?` title="${Tr(e.title)}"`:"";return`<img src="${e.href}" alt="${Tr(e.text||"")}"${t} loading="lazy">
+`}};Eo.image=function(e){const t=e.title?` title="${Tr(e.title)}"`:"",r=Tr(e.text||""),s=r&&r!=="照片"?`<figcaption>${r}</figcaption>`:"";return`<figure><img src="${e.href}" alt="${r}"${t} loading="lazy">${s}</figure>
 `};let Es=!1;function yc(){Es||(Es=!0,T.use({hooks:{preprocess(e){return Nt=e,bi=0,e}},renderer:Eo}))}let ue=class extends y{constructor(){super(...arguments),this.content="",this.line=null,this.keyword="",this.pages=null,this.docPath="",this._viewerSrc="",this._copied=!1,this._copyAll=()=>{navigator.clipboard.writeText(this.content).then(()=>{this._copied=!0,setTimeout(()=>{this._copied=!1},1500)}).catch(()=>{})}}updated(e){var t;(t=super.updated)==null||t.call(this,e),(e.has("content")||e.has("keyword"))&&this._highlightKeyword(),(e.has("content")||e.has("pages")||e.has("docPath"))&&(this._resolveImageUrls(),this._applyIconSizing(),this._bindImageClicks(),this._bindCopyButtons()),(e.has("line")||e.has("content"))&&this._locateAndHighlight()}_resolveImageUrls(){if(!this.docPath)return;this.shadowRoot.querySelectorAll("img").forEach(t=>{const r=t.getAttribute("src")??"",s=wc(this.docPath,r);s&&(t.src=s)})}_bindImageClicks(){this.shadowRoot.querySelectorAll("img").forEach(t=>{t.dataset.bound||(t.dataset.bound="true",t.style.cursor="zoom-in",t.addEventListener("click",()=>{this._viewerSrc=t.src}))})}_bindCopyButtons(){this.shadowRoot.querySelectorAll(".copy-btn").forEach(t=>{t.dataset.bound||(t.dataset.bound="true",t.addEventListener("click",()=>{var s;const r=(s=t.parentElement)==null?void 0:s.querySelector("code");r&&navigator.clipboard.writeText(r.textContent||"").then(()=>{t.textContent="已复制",setTimeout(()=>{t.textContent="复制"},1500)}).catch(()=>{})}))})}_dispWidthFromSrc(e){try{const t=new URL(e,window.location.href).searchParams.get("dw");if(!t)return null;const r=Number(t);return Number.isFinite(r)&&r>0?r:null}catch{return null}}_applyIconSizing(){this.shadowRoot.querySelectorAll("img").forEach(t=>{const r=this._dispWidthFromSrc(t.src);if(r!==null){const i=Cs(r);i&&(t.style.width=i);return}const s=()=>{try{const i=Cs(t.naturalWidth);i&&(t.style.width=i)}catch{}};t.complete&&t.naturalWidth>0?s():t.addEventListener("load",s,{once:!0})})}_locateAndHighlight(){if(this.line===null||this.line===void 0)return;const e=Array.from(this.shadowRoot.querySelectorAll("[data-source-line]"));if(e.length===0)return;const t=e.reduce((s,i)=>{const o=Number(i.getAttribute("data-source-line"));return o<=this.line&&(!s||o>Number(s.getAttribute("data-source-line")))?i:s},null);if(!t)return;const r=this.getBoundingClientRect();if(r.height>0){const i=t.getBoundingClientRect().top-r.top+this.scrollTop;this.scrollTo({top:i,behavior:"smooth"})}t.classList.remove("highlight-flash"),t.offsetWidth,t.classList.add("highlight-flash")}_highlightKeyword(){var a,l;const e=(a=this.shadowRoot)==null?void 0:a.querySelector(".md-body-paged, .md-body");if(!e)return;const t=(this.keyword??"").split(/\s+/).filter(c=>c.length>0);if(t.length===0)return;const r=new RegExp(t.map(c=>this._escapeRegExp(c)).join("|"),"gi"),s=document.createTreeWalker(e,NodeFilter.SHOW_TEXT,{acceptNode(c){const p=c.parentElement;if(!p)return NodeFilter.FILTER_REJECT;const h=p.tagName;return h==="SCRIPT"||h==="STYLE"||h==="MARK"?NodeFilter.FILTER_REJECT:r.test(c.nodeValue??"")?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}}),i=[];let o;for(;o=s.nextNode();)i.push(o);for(const c of i){r.lastIndex=0;const p=c.nodeValue??"",h=document.createDocumentFragment();let m=0,_;for(;(_=r.exec(p))!==null;){_.index>m&&h.appendChild(document.createTextNode(p.slice(m,_.index)));const C=document.createElement("mark");C.textContent=_[0],C.className="keyword-hit",h.appendChild(C),m=_.index+_[0].length,_[0].length===0&&r.lastIndex++}m<p.length&&h.appendChild(document.createTextNode(p.slice(m))),(l=c.parentNode)==null||l.replaceChild(h,c)}}_escapeRegExp(e){return e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}_splitByPages(e,t){const r=e.split(`
 `),s=[];for(let i=0;i<t.length;i++){const o=t[i].line_start-1,a=i+1<t.length?t[i+1].line_start-1:r.length,l=r.slice(Math.max(0,o),Math.max(0,a)).join(`
 `);s.push({label:t[i].label,md:l,offset:o})}return s}render(){if(yc(),!this.content)return n`<div class="empty">无内容</div>`;if(this.pages&&this.pages.length>0){const t=this._splitByPages(this.content,this.pages);return n`
@@ -4176,14 +4176,22 @@ ${r}</blockquote>
     /* 图片：inline-block 流式排列——小图（icon，设了固定 width）从左到右排成行，
        大图（max-width:100%）自然占满一行。连续图片由后端用空格 join 进同一段落，
        渲染后成为同 <p> 内的 inline <img>，从而横向流动换行。 */
+    :host figure {
+      margin: 0 0 var(--cortex-space-2) 0;
+      display: inline-block;
+    }
     :host img {
       max-width: 100%;
       height: auto;
       border-radius: var(--cortex-radius-md);
-      /* 仅留下 margin：水平 margin 会叠加在 max-width:100% 之外撑破父容器 */
-      margin: 0 0 var(--cortex-space-2) 0;
-      display: inline-block;
-      vertical-align: middle;
+      display: block;
+    }
+    :host figcaption {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      text-align: center;
+      margin-top: var(--cortex-space-1, 4px);
+      line-height: 1.4;
     }
     /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
     .md-body {
@@ -8549,7 +8557,7 @@ ${r}</blockquote>
       .actions { flex-direction: column-reverse; }
       .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
-  `;gi=ph([k("city-dialog")],gi);var fh=Object.defineProperty,bh=Object.getOwnPropertyDescriptor,Mo=(e,t,r,s)=>{for(var i=s>1?void 0:s?bh(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&fh(t,r,i),i};let Or=class extends y{constructor(){super(...arguments),this._initialized=!1,this._pendingSubmit=null}connectedCallback(){super.connectedCallback(),this._unsubscribe=u.subscribe(()=>this.requestUpdate()),this._initialized||(this._initialized=!0,this._init())}updated(e){var r;super.updated(e);const t=(r=this.shadowRoot)==null?void 0:r.querySelector("dialog");t&&!t.open&&t.showModal()}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),super.disconnectedCallback()}get _diary(){return u.getState().diary}_localToday(){return Lo(new Date)}async _init(){await this._loadToday();const e=this._diary.today||this._localToday(),t=Bs(e,-1);f.setDiaryState({reviewDate:t}),await Promise.all([this._loadReview(t),this._loadCalendar(Bt(Ae(t)))])}async _loadToday(){f.setDiaryState({recordLoading:!0,error:null});try{const e=await Se.today();f.setDiaryState({today:e.today,todayEntry:e.entry,recordLoading:!1})}catch(e){f.setDiaryState({recordLoading:!1,today:this._localToday(),error:e instanceof pe?e.message:"加载今日记录失败"})}}async _loadReview(e){f.setDiaryState({reviewLoading:!0,error:null});try{const t=await Se.entry(e);f.setDiaryState({reviewEntry:t,reviewLoading:!1})}catch(t){f.setDiaryState({reviewEntry:null,reviewLoading:!1,error:t instanceof pe?t.message:"加载日记失败"})}}async _loadCalendar(e){try{const t=await Se.calendar(e);f.setDiaryState({calendarMonth:e,calendarDates:t.dates})}catch{f.setDiaryState({calendarMonth:e,calendarDates:[]})}}async _onSubmitText(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"text",value:e.detail.value},f.setDiaryState({cityDialogOpen:!0});return}this._submitText(e.detail.value)}}async _onUploadPhoto(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"photo",file:e.detail.file,caption:e.detail.caption},f.setDiaryState({cityDialogOpen:!0});return}this._uploadPhoto(e.detail.file,e.detail.caption)}}async _submitText(e){f.setDiaryState({submitting:!0,error:null});try{await Se.addText(e),await this._loadToday()}catch(t){f.setDiaryState({error:t instanceof pe?t.message:"记录失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _uploadPhoto(e,t){f.setDiaryState({submitting:!0,error:null});try{await Se.uploadPhoto(e,t),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"照片上传失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _onDeleteFragment(e){const t=this._diary.today||this._localToday();f.setDiaryState({error:null});try{await Se.removeFragment(t,e.detail.fid),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"删除失败，请重试"})}}async _onEditFragment(e){const t=this._diary.today||this._localToday();f.setDiaryState({submitting:!0,error:null});try{await Se.editFragment(t,e.detail.fid,e.detail.text),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"保存失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _onNavigateDay(e){const t=Bs(this._diary.reviewDate,e.detail.delta);f.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t);const r=Bt(Ae(t));r!==this._diary.calendarMonth&&this._loadCalendar(r)}_onToggleCalendar(){const e=!this._diary.calendarOpen;f.setDiaryState({calendarOpen:e}),e&&this._loadCalendar(Bt(Ae(this._diary.reviewDate)))}async _onSelectDate(e){const t=e.detail.date;f.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t)}_onMonthChange(e){this._loadCalendar(e.detail.month)}_switchTab(e){if(f.setDiaryState({tab:e,calendarOpen:!1}),e==="record")this._loadToday();else{const t=this._diary.reviewDate;this._loadReview(t),this._loadCalendar(Bt(Ae(t)))}}async _onCitySubmit(e){const t=e.detail.city,r=this._diary.today||this._localToday();f.setDiaryState({cityDialogOpen:!1});try{const i=await Se.setCity(r,t);f.setDiaryState({todayEntry:i})}catch{}const s=this._pendingSubmit;this._pendingSubmit=null,(s==null?void 0:s.type)==="text"?this._submitText(s.value):(s==null?void 0:s.type)==="photo"&&s.file&&this._uploadPhoto(s.file,s.caption)}_onCityCancel(){f.setDiaryState({cityDialogOpen:!1}),localStorage.setItem("doclens.diary.citySelected","true")}render(){var t;const e=this._diary;return n`
+  `;gi=ph([k("city-dialog")],gi);var fh=Object.defineProperty,bh=Object.getOwnPropertyDescriptor,Mo=(e,t,r,s)=>{for(var i=s>1?void 0:s?bh(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&fh(t,r,i),i};let Or=class extends y{constructor(){super(...arguments),this._initialized=!1,this._pendingSubmit=null}connectedCallback(){super.connectedCallback(),this._unsubscribe=u.subscribe(()=>this.requestUpdate()),this._initialized||(this._initialized=!0,this._init())}updated(e){var r;super.updated(e);const t=(r=this.shadowRoot)==null?void 0:r.querySelector("dialog");t&&!t.open&&t.showModal()}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),super.disconnectedCallback()}get _diary(){return u.getState().diary}_localToday(){return Lo(new Date)}async _init(){await this._loadToday();const e=this._diary.today||this._localToday(),t=Bs(e,-1);f.setDiaryState({reviewDate:t}),await Promise.all([this._loadReview(t),this._loadCalendar(Bt(Ae(t)))])}async _loadToday(){f.setDiaryState({recordLoading:!0,error:null});try{const e=await Se.today();f.setDiaryState({today:e.today,todayEntry:e.entry,recordLoading:!1})}catch(e){f.setDiaryState({recordLoading:!1,today:this._localToday(),error:e instanceof pe?e.message:"加载今日记录失败"})}}async _loadReview(e){f.setDiaryState({reviewLoading:!0,error:null});try{const t=await Se.entry(e);f.setDiaryState({reviewEntry:t,reviewLoading:!1})}catch(t){f.setDiaryState({reviewEntry:null,reviewLoading:!1,error:t instanceof pe?t.message:"加载日记失败"})}}async _loadCalendar(e){try{const t=await Se.calendar(e);f.setDiaryState({calendarMonth:e,calendarDates:t.dates})}catch{f.setDiaryState({calendarMonth:e,calendarDates:[]})}}async _onSubmitText(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"text",value:e.detail.value},f.setDiaryState({cityDialogOpen:!0});return}this._submitText(e.detail.value)}}async _onUploadPhoto(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"photo",file:e.detail.file,caption:e.detail.caption},f.setDiaryState({cityDialogOpen:!0});return}this._uploadPhoto(e.detail.file,e.detail.caption)}}async _submitText(e){f.setDiaryState({submitting:!0,error:null});try{await Se.addText(e),await this._loadToday()}catch(t){f.setDiaryState({error:t instanceof pe?t.message:"记录失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _uploadPhoto(e,t){f.setDiaryState({submitting:!0,error:null});try{await Se.uploadPhoto(e,t),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"照片上传失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _onDeleteFragment(e){const t=this._diary.today||this._localToday();f.setDiaryState({error:null});try{await Se.removeFragment(t,e.detail.fid),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"删除失败，请重试"})}}async _onEditFragment(e){const t=this._diary.today||this._localToday();f.setDiaryState({submitting:!0,error:null});try{await Se.editFragment(t,e.detail.fid,e.detail.text),await this._loadToday()}catch(r){f.setDiaryState({error:r instanceof pe?r.message:"保存失败，请重试"})}finally{f.setDiaryState({submitting:!1})}}async _onNavigateDay(e){const t=Bs(this._diary.reviewDate,e.detail.delta);f.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t);const r=Bt(Ae(t));r!==this._diary.calendarMonth&&this._loadCalendar(r)}_onToggleCalendar(){const e=!this._diary.calendarOpen;f.setDiaryState({calendarOpen:e}),e&&this._loadCalendar(Bt(Ae(this._diary.reviewDate)))}async _onSelectDate(e){const t=e.detail.date;f.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t)}_onMonthChange(e){this._loadCalendar(e.detail.month)}_switchTab(e){if(f.setDiaryState({tab:e,calendarOpen:!1}),e==="record")this._loadToday();else{const t=this._diary.reviewDate;this._loadReview(t),this._loadCalendar(Bt(Ae(t)))}}async _onCitySubmit(e){const t=e.detail.city,r=this._diary.today||this._localToday();f.setDiaryState({cityDialogOpen:!1});const s=this._pendingSubmit;this._pendingSubmit=null,(s==null?void 0:s.type)==="text"?await this._submitText(s.value):(s==null?void 0:s.type)==="photo"&&s.file&&await this._uploadPhoto(s.file,s.caption);try{const i=await Se.setCity(r,t);f.setDiaryState({todayEntry:i})}catch{}}_onCityCancel(){f.setDiaryState({cityDialogOpen:!1}),localStorage.setItem("doclens.diary.citySelected","true")}render(){var t;const e=this._diary;return n`
       <div class="page"
         @submit-text=${this._onSubmitText}
         @upload-photo=${this._onUploadPhoto}
@@ -8572,20 +8580,22 @@ ${r}</blockquote>
           </button>
         </div>
         ${e.error?n`<div class="error-bar">${e.error}</div>`:null}
-        ${e.tab==="record"?n`
-              <diary-record-panel
-                .entry=${e.todayEntry}
-                .submitting=${e.submitting}
-                .city=${((t=e.todayEntry)==null?void 0:t.city)||""}
-                @city-change=${()=>f.setDiaryState({cityDialogOpen:!0})}></diary-record-panel>`:n`
-              <diary-review-panel
-                .date=${e.reviewDate}
-                .today=${e.today||this._localToday()}
-                .entry=${e.reviewEntry}
-                .loading=${e.reviewLoading}
-                .calendarOpen=${e.calendarOpen}
-                .calendarMonth=${e.calendarMonth}
-                .calendarDates=${e.calendarDates}></diary-review-panel>`}
+        <div class="tab-content">
+          ${e.tab==="record"?n`
+                <diary-record-panel
+                  .entry=${e.todayEntry}
+                  .submitting=${e.submitting}
+                  .city=${((t=e.todayEntry)==null?void 0:t.city)||""}
+                  @city-change=${()=>f.setDiaryState({cityDialogOpen:!0})}></diary-record-panel>`:n`
+                <diary-review-panel
+                  .date=${e.reviewDate}
+                  .today=${e.today||this._localToday()}
+                  .entry=${e.reviewEntry}
+                  .loading=${e.reviewLoading}
+                  .calendarOpen=${e.calendarOpen}
+                  .calendarMonth=${e.calendarMonth}
+                  .calendarDates=${e.calendarDates}></diary-review-panel>`}
+        </div>
         ${e.tab==="record"&&e.cityDialogOpen?n`
           <dialog @cancel=${this._onCityCancel}>
             <city-dialog
@@ -8640,8 +8650,15 @@ ${r}</blockquote>
     .sub-tab:hover { color: var(--cortex-text); }
     .sub-tab doclens-icon { font-size: 16px; }
     .sub-tab.active {
-      background: var(--cortex-primary-soft);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
+    }
+    @keyframes tab-enter {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .tab-content {
+      animation: tab-enter 0.25s ease;
     }
     .error-bar {
       margin-bottom: var(--cortex-space-3, 12px);

@@ -129,7 +129,9 @@ const blockRenderer: any = {
  */
 blockRenderer.image = function (token: any) {
   const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : "";
-  return `<img src="${token.href}" alt="${escapeHtml(token.text || "")}"${titleAttr} loading="lazy">\n`;
+  const alt = escapeHtml(token.text || "");
+  const caption = alt && alt !== "照片" ? `<figcaption>${alt}</figcaption>` : "";
+  return `<figure><img src="${token.href}" alt="${alt}"${titleAttr} loading="lazy">${caption}</figure>\n`;
 };
 
 /** 标记是否已 use 过（避免重复 use） */
@@ -265,14 +267,22 @@ export class MdViewer extends LitElement {
     /* 图片：inline-block 流式排列——小图（icon，设了固定 width）从左到右排成行，
        大图（max-width:100%）自然占满一行。连续图片由后端用空格 join 进同一段落，
        渲染后成为同 <p> 内的 inline <img>，从而横向流动换行。 */
+    :host figure {
+      margin: 0 0 var(--cortex-space-2) 0;
+      display: inline-block;
+    }
     :host img {
       max-width: 100%;
       height: auto;
       border-radius: var(--cortex-radius-md);
-      /* 仅留下 margin：水平 margin 会叠加在 max-width:100% 之外撑破父容器 */
-      margin: 0 0 var(--cortex-space-2) 0;
-      display: inline-block;
-      vertical-align: middle;
+      display: block;
+    }
+    :host figcaption {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      text-align: center;
+      margin-top: var(--cortex-space-1, 4px);
+      line-height: 1.4;
     }
     /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
     .md-body {
