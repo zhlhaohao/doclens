@@ -4149,7 +4149,6 @@ ${r}</blockquote>
                 <div .innerHTML=${i}></div>
               </section>
             `})}
-          <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
         </div>
         <div class="scroll-jump-anchor">${Tr(this._scrollJump)}</div>
         ${this._viewerSrc?n`<image-viewer .src=${this._viewerSrc} @close=${()=>this._viewerSrc=""}></image-viewer>`:null}
@@ -4157,7 +4156,6 @@ ${r}</blockquote>
       <div class="md-body">
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>
         <div .innerHTML=${e}></div>
-        <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
       </div>
       <div class="scroll-jump-anchor">${Tr(this._scrollJump)}</div>
       ${this._viewerSrc?n`<image-viewer
@@ -4324,16 +4322,10 @@ ${r}</blockquote>
       text-align: center;
       padding: var(--cortex-space-6);
     }
-    /* 全文复制按钮：贴纸面右上/右下角（absolute，不受 padding 影响） */
+    /* 全文复制按钮：贴纸面右上角（absolute，不受 padding 影响） */
     .copy-bar-top {
       position: absolute;
       top: 8px;
-      right: 12px;
-      z-index: 5;
-    }
-    .copy-bar-bottom {
-      position: absolute;
-      bottom: 8px;
       right: 12px;
       z-index: 5;
     }
