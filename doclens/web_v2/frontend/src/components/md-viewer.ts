@@ -319,16 +319,10 @@ export class MdViewer extends LitElement {
       text-align: center;
       padding: var(--cortex-space-6);
     }
-    /* 全文复制按钮：贴纸面右上/右下角（absolute，不受 padding 影响） */
+    /* 全文复制按钮：贴纸面右上角（absolute，不受 padding 影响） */
     .copy-bar-top {
       position: absolute;
       top: 8px;
-      right: 12px;
-      z-index: 5;
-    }
-    .copy-bar-bottom {
-      position: absolute;
-      bottom: 8px;
       right: 12px;
       z-index: 5;
     }
@@ -688,7 +682,6 @@ export class MdViewer extends LitElement {
               </section>
             `;
           })}
-          <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
         </div>
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
         ${this._viewerSrc ? html`<image-viewer .src=${this._viewerSrc} @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
@@ -706,7 +699,6 @@ export class MdViewer extends LitElement {
       <div class="md-body">
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>
         <div .innerHTML=${raw}></div>
-        <div class="copy-bar-bottom">${this._renderCopyBtn()}</div>
       </div>
       <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       ${this._viewerSrc ? html`<image-viewer
