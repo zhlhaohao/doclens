@@ -70,7 +70,7 @@ export class DiaryView extends LitElement {
     .sub-tab:hover { color: var(--cortex-text); }
     .sub-tab doclens-icon { font-size: 16px; }
     .sub-tab.active {
-      background: var(--cortex-primary-soft);
+      background: rgba(0, 100, 224, 0.15);
       color: var(--cortex-primary);
     }
     .error-bar {
@@ -313,19 +313,19 @@ export class DiaryView extends LitElement {
     const city = e.detail.city;
     const today = this._diary.today || this._localToday();
     actions.setDiaryState({ cityDialogOpen: false });
-    try {
-      // 写城市到 md 标题 + 后端自动抓天气 + 返回更新后 entry
-      const entry = await diaryApi.setCity(today, city);
-      actions.setDiaryState({ todayEntry: entry });
-    } catch { /* 写失败不阻断 */ }
-    // 选完城市后，自动提交被拦截的片段
+    // 先提交被拦截的片段（创建当天小节），再设城市（小节标题存在才能写 📍city）
     const pending = this._pendingSubmit;
     this._pendingSubmit = null;
     if (pending?.type === "text") {
-      void this._submitText(pending.value);
+      await this._submitText(pending.value);
     } else if (pending?.type === "photo" && pending.file) {
-      void this._uploadPhoto(pending.file, pending.caption);
+      await this._uploadPhoto(pending.file, pending.caption);
     }
+    // 小节已创建，现在写城市到标题 + 抓天气
+    try {
+      const entry = await diaryApi.setCity(today, city);
+      actions.setDiaryState({ todayEntry: entry });
+    } catch { /* 写失败不阻断 */ }
   }
 
   private _onCityCancel() {
