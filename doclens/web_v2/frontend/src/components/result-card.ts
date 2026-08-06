@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { marked } from "marked";
+import { sanitizeHtml } from "../utils/sanitize";
 import type { SearchResult } from "../state/types";
 
 @customElement("result-card")
@@ -141,13 +142,12 @@ export class ResultCard extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** 把 snippet 当 markdown 渲染。snippet 来源于用户索引的文档，
-   *  与 md-viewer 一致：信任来源，不做额外 sanitization
-   *  （marked 本身会转义 markdown 中的 HTML 字符如 `<script>`）。 */
+  /** 把 snippet 当 markdown 渲染，再经 sanitizeHtml 清洗后注入（V1 XSS 修复）。
+   *  snippet 来源于用户索引的文档；marked 默认不转义内联 HTML，必须 sanitize。 */
   private _renderSnippet() {
     const snippet = this.result?.snippet ?? "";
     if (!snippet) return null;
-    const rendered = marked.parse(snippet, { async: false }) as string;
+    const rendered = sanitizeHtml(marked.parse(snippet, { async: false }) as string);
     return html`<div class="snippet" .innerHTML=${rendered}></div>`;
   }
 

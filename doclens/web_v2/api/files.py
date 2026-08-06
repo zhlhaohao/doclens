@@ -42,6 +42,14 @@ router = APIRouter()
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
+# 上传扩展名白名单（V4）：覆盖知识库支持的文档/图片类型，拒绝可执行脚本等。
+# 不含 .svg（SVG 可携带 <script>，存在 XSS 风险）。
+_ALLOWED_UPLOAD_EXT = frozenset({
+    ".md", ".markdown", ".txt", ".pdf", ".docx", ".doc", ".pptx",
+    ".xlsx", ".xls", ".xlsm", ".csv", ".html", ".htm",
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+})
+
 
 def _posix_rel(full: Path, base: Path) -> str:
     """绝对路径 → 相对 base 的 POSIX 字符串。"""
@@ -380,6 +388,9 @@ async def upload(
 
     filename = file.filename or ""
     validate_name(filename)
+    ext = Path(filename).suffix.lower()
+    if ext not in _ALLOWED_UPLOAD_EXT:
+        raise CortexAPIError(400, "INVALID_TYPE", f"不允许的文件类型: {ext or '(无后缀)'}")
 
     target = dest_full / filename
     assert_not_protected(target, base)

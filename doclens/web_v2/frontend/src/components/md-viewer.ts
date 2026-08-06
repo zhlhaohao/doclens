@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
+import { sanitizeHtml } from "../utils/sanitize";
 import type { PageMarker } from "../api/preview";
 import "./image-viewer";
 import "./icon";
@@ -133,10 +134,11 @@ const blockRenderer: any = {
  * 直接挂在 blockRenderer 上，保持单个 renderer（不新建 marked.use 避免 clobber）。
  */
 blockRenderer.image = function (token: any) {
+  const href = escapeHtml(token.href || "");
   const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : "";
   const alt = escapeHtml(token.text || "");
   const caption = alt && alt !== "照片" ? `<figcaption>${alt}</figcaption>` : "";
-  return `<figure><img src="${token.href}" alt="${alt}"${titleAttr} loading="lazy">${caption}</figure>\n`;
+  return `<figure><img src="${href}" alt="${alt}"${titleAttr} loading="lazy">${caption}</figure>\n`;
 };
 
 /** 标记是否已 use 过（避免重复 use） */
@@ -674,7 +676,7 @@ export class MdViewer extends LitElement {
           ${chunks.map((c) => {
             // 在调 marked.parse 前先设偏移，renderer 把分块内行号加上 offset 得绝对行号
             currentOffset = c.offset;
-            const chunkHtml = marked.parse(c.md, { async: false }) as string;
+            const chunkHtml = sanitizeHtml(marked.parse(c.md, { async: false }) as string);
             return html`
               <section class="page-card">
                 <header class="page-card-header">${c.label}</header>
@@ -694,7 +696,7 @@ export class MdViewer extends LitElement {
     // 导致 _locateAndHighlight 用正确的 line 找不到匹配块（dsl 全部偏大），
     // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
     currentOffset = 0;
-    const raw = marked.parse(this.content, { async: false }) as string;
+    const raw = sanitizeHtml(marked.parse(this.content, { async: false }) as string);
     return html`
       <div class="md-body">
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>
