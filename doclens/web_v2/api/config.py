@@ -8,9 +8,11 @@ from fastapi import APIRouter, Query
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.config_store import (
     KNOWN_KEYS,
+    mask_secret_values,
     read_env_values,
     reset_env_to_example,
     resolve_env_path,
+    strip_unchanged_secrets,
     write_env_values,
 )
 from doclens.web_v2.config_validator import validate_values
@@ -36,7 +38,7 @@ async def get_config(scope: Scope = Query(...)):
     """
     path = resolve_env_path(scope)
     values, exists = read_env_values(path, KNOWN_KEYS)
-    return ConfigResponse(scope=scope, values=values, exists=exists)
+    return ConfigResponse(scope=scope, values=mask_secret_values(values), exists=exists)
 
 
 @router.put("/config", response_model=ConfigSaveResult)
@@ -50,9 +52,11 @@ async def put_config(
     require a cortex gui restart to take effect.
     """
     path = resolve_env_path(scope)
+    # 跳过未改动的密钥占位符（前端保存时会把 GET 返回的 "***" 原样回传）
+    updates = strip_unchanged_secrets(req.values)
 
     # 1. Validate
-    errors = validate_values(req.values)
+    errors = validate_values(updates)
     if errors.fields:
         raise CortexAPIError(
             status=400,
@@ -64,14 +68,14 @@ async def put_config(
     # 2. Diff against current to compute needs_restart
     current_values, _ = read_env_values(path, KNOWN_KEYS)
     changed_fields = sorted(
-        k for k, v in req.values.items()
+        k for k, v in updates.items()
         if (current_values.get(k, "") != v)
     )
     restart_fields = [f for f in changed_fields if f in RESTART_FIELDS]
 
     # 3. Write
     try:
-        write_env_values(path, req.values)
+        write_env_values(path, updates)
     except PermissionError as e:
         raise CortexAPIError(403, "WRITE_FORBIDDEN", f"无法写入 {path}: {e}")
 
@@ -123,4 +127,4 @@ async def reset_default(scope: Scope = Query("global")):
     reload_config()
     values, exists = read_env_values(path, KNOWN_KEYS)
     logger.info("config reset to defaults: scope=%s path=%s", scope, path)
-    return ConfigResponse(scope=scope, values=values, exists=exists)
+    return ConfigResponse(scope=scope, values=mask_secret_values(values), exists=exists)

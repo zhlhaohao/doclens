@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { marked } from "marked";
+import { sanitizeHtml } from "../utils/sanitize";
 import type { ChatMessage } from "../state/types";
 
 @customElement("chat-message")
@@ -227,7 +228,10 @@ export class ChatMessageEl extends LitElement {
     }
     if (this.role === "assistant") {
       const htmlstr = marked.parse(content, { async: false }) as string;
-      return html`<div class="md-body" .innerHTML=${this.linkifyReferences(htmlstr)}></div>`;
+      // sanitize 放在 linkifyReferences 之后兜底：清除 LLM 输出里的恶意 HTML，
+      // 同时保留注入的 ref-link（class/data-*/href="#" 均在白名单内）
+      const clean = sanitizeHtml(this.linkifyReferences(htmlstr));
+      return html`<div class="md-body" .innerHTML=${clean}></div>`;
     }
     return content;
   }

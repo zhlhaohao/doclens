@@ -50,6 +50,34 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_SYNC_ENABLED",
 })
 
+# 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
+SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY"})
+SECRET_MASK = "***"
+
+
+def mask_secret_values(values: dict[str, str]) -> dict[str, str]:
+    """对 SECRET_KEYS 中的非空值用固定占位符替代，避免经 GET /api/config 泄露明文。
+
+    空值（未配置）保持 ""——前端据此显示"未设置"，且不影响 PUT 的占位符跳过逻辑。
+    """
+    return {
+        k: (SECRET_MASK if k in SECRET_KEYS and v else v)
+        for k, v in values.items()
+    }
+
+
+def strip_unchanged_secrets(updates: dict[str, str]) -> dict[str, str]:
+    """从 PUT updates 中剔除"未改动的密钥"。
+
+    前端设置页保存时提交全部字段（含 GET 返回的占位符）；占位符表示用户未改动
+    该密钥，必须跳过，以免用占位符覆盖真值。空串（用户主动清空=删除）与非占位符
+    值（用户改成新 key=更新）保留。
+    """
+    return {
+        k: v for k, v in updates.items()
+        if not (k in SECRET_KEYS and v == SECRET_MASK)
+    }
+
 
 def resolve_env_path(scope: str) -> Path:
     """Return the .env file path for the given scope.
