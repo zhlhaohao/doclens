@@ -320,6 +320,19 @@ class VisionWorker:
         # file_hash 是主索引阶段写入的文件指纹；文件本身没变，原样恢复即可
         fts.index_document(new_doc, force=True, file_hash=stored_hash)
 
+        # 把解读 Markdown 写回图像文件元数据（ADR-0009 / 工单 04）：让解读结果「跟文件走」，
+        # 下次 force 重建可从元数据 read_back、不重花 API。写回失败降级（索引已建立）。
+        try:
+            from treesearch.parsers import image_metadata
+            if os.path.splitext(path)[1].lower() in image_metadata.INTERPRETED_IMAGE_EXTS:
+                image_metadata.write_back(
+                    path, md,
+                    model_tag=vision_model_tag(config),
+                    prompt_version=str(PROMPT_VERSION),
+                )
+        except Exception as e:
+            logger.warning("write_back 失败，索引已建（降级） %s: %s", path, e)
+
     def _publish_event(self, event_type: str, rel_path: str) -> None:
         """向 EventBus 发布状态事件（TUI/GUI 状态栏可订阅；无订阅者时为空操作）。"""
         try:

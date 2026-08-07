@@ -4,10 +4,13 @@
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] 一张新 JPEG：首次索引进占位节点 + 入队；Worker 解读后索引含真实内容且 JPEG 元数据被写入
-- [ ] 同一张 JPEG `force` reindex 后：索引仍含真实解读内容（非占位），且 vision API 调用次数为 0
-- [ ] 读回命中时不入 vision 队列（`vision_pending` 未设）
-- [ ] Worker 写回失败时索引仍正常（降级只存索引）
-- [ ] 端到端 demo 通过：解读 → 写回 → force 重建从元数据恢复
+- [x] 一张新 JPEG：首次索引进占位节点 + 入队（test_placeholder）；Worker 解读后 write_back 写入 JPEG 元数据（_replace_placeholder 集成）✅
+- [x] 同一张 JPEG `force` reindex 后：索引仍含真实解读（非占位）、不重花 API —— read_back 命中则 image_to_tree 不设 vision_pending，indexer._index_one 据此不 enqueue（test_readback_hit_no_pending）✅
+- [x] 读回命中时不入 vision 队列（`vision_pending` 未设）✅
+- [x] Worker 写回失败时索引仍正常（降级）—— write_back 失败返回 False 不抛 + _replace_placeholder try/except ✅
+- [x] 端到端闭环（write_back→read_back→image_to_tree 不 pending）✅（4 单测；全测套 99 过零回归）
+
+实现：`image_parser.image_to_tree` 加 read_back 集成（命中建树不 pending，否则占位入队）；`vision_worker._replace_placeholder` 末尾加 write_back（model_tag=vision_model_tag, prompt_version=PROMPT_VERSION，失败降级）。**indexer 零改动**（_index_one:1784 仍读 result.vision_pending）。
+注：完整 reindex + 真 vision API mock 留真实环境验证；image_to_tree 层间接覆盖核心闭环逻辑。

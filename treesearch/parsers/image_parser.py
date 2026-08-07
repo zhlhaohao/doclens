@@ -25,19 +25,33 @@ PLACEHOLDER_TEXT = "（图像文件已登记，等待后台视觉解析；当前
 
 
 async def image_to_tree(image_path: str, **kwargs) -> dict:
-    """为图像文件构建占位树。
+    """为图像文件构建树：已有解读就读回、否则占位入队。
 
-    结构：单个 ``# <文件名>`` 根节点 + 占位正文。走 ``md_to_tree`` 以获得
-    与其他类型一致的 node_id / summary 后处理。
+    - **已有 vision 解读元数据**（``read_back`` 命中）：用解读 Markdown 走 ``md_to_tree``
+      建树，**不设** ``vision_pending``（indexer 据此跳过入队）——这是 force 重建不重花
+      API 的闭环（ADR-0009 / 工单 04）。
+    - **无解读**：单个 ``# <文件名>`` 根节点 + 占位正文，设 ``vision_pending`` 入队
+      让 Vision Worker 后台解析。
+
+    走 ``md_to_tree`` 以获得与其他类型一致的 node_id / summary 后处理。
     """
-    doc_name = os.path.splitext(os.path.basename(image_path))[0]
-    md = f"# {doc_name}\n\n{PLACEHOLDER_TEXT}\n"
+    from .image_metadata import read_back
 
-    result = await md_to_tree(md_content=md, **kwargs)
+    abs_path = os.path.abspath(image_path)
+    doc_name = os.path.splitext(os.path.basename(image_path))[0]
+
+    payload = read_back(abs_path)
+    markdown = payload["markdown"] if payload and payload.get("markdown") else None
+    pending = markdown is None
+    if pending:
+        markdown = f"# {doc_name}\n\n{PLACEHOLDER_TEXT}\n"
+
+    result = await md_to_tree(md_content=markdown, **kwargs)
     # md_to_tree(md_content=...) 的 doc_name 是 "untitled"，且没有 source_path，
     # 这里补上真实值，保证增量索引 / preview 反查正常工作。
     result["doc_name"] = doc_name
-    result["source_path"] = os.path.abspath(image_path)
-    # 通知 indexer._index_one 写入 vision_queue（worker 据此后台解析）
-    result["vision_pending"] = True
+    result["source_path"] = abs_path
+    if pending:
+        # 通知 indexer._index_one 写入 vision_queue（worker 据此后台解析）
+        result["vision_pending"] = True
     return result
