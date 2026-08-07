@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
 import { sanitizeHtml } from "../utils/sanitize";
 import type { ChatMessage } from "../state/types";
@@ -11,8 +11,22 @@ export class ChatMessageEl extends LitElement {
       display: block;
       max-width: 78%;
     }
-    :host([role="user"]) { align-self: flex-end; }
-    :host([role="assistant"]) { align-self: flex-start; width: 100%; max-width: 100%; }
+    :host([role="user"]) {
+      align-self: flex-end;
+      /* 气泡 + 重问钮 纵向堆叠并靠右对齐 */
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    :host([role="assistant"]) {
+      align-self: flex-start;
+      width: 100%;
+      max-width: 100%;
+      /* 气泡 + 复制钮 纵向堆叠并靠左对齐 */
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
     .bubble {
       padding: 10px 14px;
       border-radius: var(--cortex-radius-lg);
@@ -184,6 +198,37 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
+    /* 消息操作钮（user 重问 / assistant 复制）：默认隐藏，hover/focus 消息时浮现（移动端常显） */
+    .reask, .copy {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-top: 2px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: var(--cortex-radius-sm);
+      color: var(--cortex-text-subtle);
+      font-size: 13px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity var(--cortex-duration-fast), color var(--cortex-duration-fast),
+        background var(--cortex-duration-fast);
+    }
+    :host(.hovered) .reask,
+    :host(.hovered) .copy,
+    :host(:focus-within) .reask,
+    :host(:focus-within) .copy,
+    .reask:focus,
+    .copy:focus { opacity: 1; }
+    .reask:hover, .copy:hover {
+      color: var(--cortex-primary);
+      background: var(--cortex-surface-muted);
+    }
+    /* AI 复制钮靠右（与 user 重问钮左右对称） */
+    .copy { align-self: flex-end; }
   `;
 
   @property({ reflect: true }) role: "user" | "assistant" = "user";
@@ -192,15 +237,29 @@ export class ChatMessageEl extends LitElement {
   /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
    *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
+  /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
+  @state() private _copied = false;
+  private _copyTimer?: number;
 
   firstUpdated() {
     this.addEventListener("click", this._onClick);
+    /* mouseenter/leave 不冒泡且进入后代不重复触发：保证鼠标在整条消息范围内
+       （气泡 + 按钮）持续显示按钮，避免移向按钮途中 CSS :hover 丢失导致消失。 */
+    this.addEventListener("mouseenter", this._onHoverChange);
+    this.addEventListener("mouseleave", this._onHoverChange);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener("click", this._onClick);
+    this.removeEventListener("mouseenter", this._onHoverChange);
+    this.removeEventListener("mouseleave", this._onHoverChange);
+    if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
   }
+
+  private _onHoverChange = (e: MouseEvent): void => {
+    this.classList.toggle("hovered", e.type === "mouseenter");
+  };
 
   /** 事件委托：命中 .ref-link 时派发 reference-click（供 chat-view 打开预览）。 */
   private _onClick = (e: MouseEvent): void => {
@@ -218,6 +277,32 @@ export class ChatMessageEl extends LitElement {
         composed: true,
       }),
     );
+  };
+
+  /** 点击「重问」：把该用户问题内容冒泡给上层（chat-view 写入输入框）。 */
+  private _emitReask = (e: Event): void => {
+    e.stopPropagation();
+    const content = this.message?.content ?? "";
+    this.dispatchEvent(
+      new CustomEvent("reask", { detail: { content }, bubbles: true, composed: true }),
+    );
+  };
+
+  /** 点击「复制」：把 AI 回复原文写入剪贴板，图标短暂变 check 反馈；失败冒泡 toast。 */
+  private _onCopy = async (e: Event): Promise<void> => {
+    e.stopPropagation();
+    const text = this.message?.content ?? "";
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this._copied = true;
+      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
+    } catch {
+      this.dispatchEvent(
+        new CustomEvent("copy-failed", { bubbles: true, composed: true }),
+      );
+    }
   };
 
   /** assistant: markdown 渲染；user: 纯文本（保留换行）；空内容显示思考占位 */
@@ -264,8 +349,9 @@ export class ChatMessageEl extends LitElement {
     if (this.role === "user") {
       return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
-        : null}</div>`;
+        : null}</div><button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>`;
     }
+    const canCopy = !!this.message.content;
     return html`
       <div class="bubble">
         ${showTrace
@@ -274,6 +360,9 @@ export class ChatMessageEl extends LitElement {
         ${this.renderBubble(this.message.content)}
         ${this.error ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>` : null}
       </div>
+      ${canCopy
+        ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+        : null}
     `;
   }
 }

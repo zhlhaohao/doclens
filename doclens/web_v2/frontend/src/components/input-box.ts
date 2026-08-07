@@ -104,6 +104,22 @@ export class InputBox extends LitElement {
     button:disabled { filter: saturate(0.4); cursor: not-allowed; box-shadow: none; }
     button:hover:not(:disabled) { filter: brightness(1.05); }
     button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
+    /* 停止态：流式中发送键原地变身为「停止」（红色方形图标钮，区别于绿色发送），始终可点 */
+    button.stop { background: #dc2626; padding: 0; }
+    /* 停止态动画：白色方块呼吸 + 红色光晕扩散，错开节奏传达"正在思考/输出" */
+    button.stop { animation: cortex-stop-glow 1.4s ease-in-out infinite; }
+    button.stop doclens-icon { animation: cortex-stop-pulse 0.9s ease-in-out infinite; }
+    @keyframes cortex-stop-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+      50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.28); }
+    }
+    @keyframes cortex-stop-pulse {
+      0%, 100% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button.stop, button.stop doclens-icon { animation: none; }
+    }
     /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
     .actions.split {
       position: absolute;
@@ -186,6 +202,8 @@ export class InputBox extends LitElement {
   @property({ type: Boolean }) iconAfter = false;
   @property({ type: Boolean }) multiline = false;
   @property({ type: Boolean }) disabled = false;
+  /** 流式中：按钮原地变身为「停止」（发 stop 事件），输入框禁用。仅 chat 用。 */
+  @property({ type: Boolean }) streaming = false;
 
   /** 模式选择器：提供 .mode + .modes 时渲染分裂按钮 + caret 下拉；
    *  不提供时为遗留单一按钮（chat/files 等消费者不受影响）。 */
@@ -239,8 +257,14 @@ export class InputBox extends LitElement {
   }
 
   private _submit() {
-    if (!this.trimmed || this.disabled) return;
+    // 流式中由停止键接管，submit 不触发（textarea 已禁用，此为双保险）
+    if (this.streaming || !this.trimmed || this.disabled) return;
     this.dispatchEvent(new CustomEvent("submit", { detail: { value: this.trimmed } }));
+  }
+
+  /** 流式中按钮变身停止键：发 stop 事件（不 submit），始终可点。 */
+  private _emitStop() {
+    this.dispatchEvent(new CustomEvent("stop"));
   }
 
   private get _hasModes(): boolean {
@@ -267,6 +291,13 @@ export class InputBox extends LitElement {
   }
 
   private _renderButton() {
+    // 停止态：流式中按钮原地变身为「停止」（红色方形 + 白色实心方块），始终可点
+    if (this.streaming) {
+      return html`
+        <button class="stop" @click=${this._emitStop} aria-label="停止生成">
+          <doclens-icon class="filled" name="square" aria-hidden="true"></doclens-icon>
+        </button>`;
+    }
     if (!this._hasModes) {
       const icon = this.buttonIcon
         ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
@@ -308,11 +339,13 @@ export class InputBox extends LitElement {
   }
 
   render() {
+    // 流式期间禁用输入（不能打字/回车），由停止键接管
+    const fieldDisabled = this.disabled || this.streaming;
     const field = this.multiline
       ? html`<textarea rows="1" .value=${this.value} placeholder=${this.placeholder}
-          @input=${this._onInput} @keydown=${this._onKeydown}></textarea>`
+          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}></textarea>`
       : html`<input type="text" .value=${this.value} placeholder=${this.placeholder}
-          @input=${this._onInput} @keydown=${this._onKeydown} />`;
+          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown} />`;
     return html`
       <div class="wrapper">
         ${field}

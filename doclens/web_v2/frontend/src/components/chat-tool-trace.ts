@@ -99,18 +99,19 @@ export class ChatToolTrace extends LitElement {
     @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
     .copy-btn {
       margin-left: auto;
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
+      /* 背景融入 .summary 容器（transparent + 无边框），仅 hover/已复制 给轻反馈 */
+      background: transparent;
+      border: none;
       border-radius: var(--cortex-radius-sm);
-      padding: 2px 8px;
+      padding: 2px 6px;
       font-size: var(--cortex-fs-xs);
       cursor: pointer;
       color: var(--cortex-text-muted);
       font-family: var(--cortex-font);
       line-height: 1.2;
     }
-    .copy-btn:hover { background: var(--cortex-primary-soft); color: var(--cortex-primary); border-color: var(--cortex-primary); }
-    .copy-btn.copied { border-color: var(--cortex-success); color: var(--cortex-success); }
+    .copy-btn:hover { background: var(--cortex-surface); color: var(--cortex-primary); }
+    .copy-btn.copied { color: var(--cortex-success); }
   `;
 
   @property({ attribute: false }) steps: ToolStep[] = [];
@@ -206,9 +207,9 @@ export class ChatToolTrace extends LitElement {
     return html`
       <div class="summary" @click=${this._toggle}>
         <doclens-icon class="arrow" name=${this._expanded ? "chevron-down" : "chevron-right"}></doclens-icon>
-        <doclens-icon name="brain"></doclens-icon> 思考过程 · <span class="count">${this.steps.length} 步</span>
+        <doclens-icon name="sparkles"></doclens-icon> 思考过程 · <span class="count">${this.steps.length} 步</span>
         ${running ? " · 进行中" : ""}
-        <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? html`<doclens-icon name="check"></doclens-icon> 已复制` : html`<doclens-icon name="clipboard"></doclens-icon>`}</button>
+        <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? html`<doclens-icon name="check"></doclens-icon> 已复制` : html`<doclens-icon name="copy"></doclens-icon>`}</button>
       </div>
       ${this._expanded ? html`<div class="steps">${this.steps.map((s) => this._renderStep(s))}</div>` : null}
     `;

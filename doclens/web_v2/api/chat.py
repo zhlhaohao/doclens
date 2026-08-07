@@ -15,8 +15,13 @@ from typing import AsyncIterator, Optional
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
+from doclens.web_v2.chat_interrupt import (
+    register_interrupt,
+    request_stop,
+    unregister_interrupt,
+)
 from doclens.web_v2.deps import get_agent
-from doclens.web_v2.models.chat import ChatRequest
+from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,6 +50,11 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
     queue: asyncio.Queue = asyncio.Queue()
     main_loop = asyncio.get_running_loop()
 
+    # 在主协程登记中断事件（在线程启动前完成，杜绝「stop 早于 register」竞态）。
+    # session_id 为 None 时不登记（无法被 /chat/stop 寻址；前端总会传 DB session id）。
+    session_key = session_id or None
+    interrupt = register_interrupt(session_key) if session_key else threading.Event()
+
     def _put(ev: dict) -> None:
         """线程安全的 queue 入队（_feed 在子线程 loop 内，queue 属主是主 loop）。"""
         main_loop.call_soon_threadsafe(queue.put_nowait, ev)
@@ -58,7 +68,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             from planify.tools import bind_user_interaction_handlers
 
             emitter = GradioEventEmitter()
-            interrupt = threading.Event()
+            # interrupt 由主协程 register_interrupt 创建并登记（见外层），闭包捕获。
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -139,6 +149,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             logger.exception("chat thread error: %s", e)
             _put({"type": "error", "detail": str(e)})
         finally:
+            # 摘除中断事件（仅当表里仍是本线程的 event 才删，防「停→重发」竞态误删新流）
+            if session_key:
+                unregister_interrupt(session_key, interrupt)
             _put(None)  # sentinel
 
     t = threading.Thread(target=_run_in_thread, daemon=True)
@@ -182,8 +195,25 @@ async def chat(req: ChatRequest):
                 elif t == "error":
                     yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}
             yield {"event": "done", "data": "{}"}
+        except asyncio.CancelledError:
+            # 客户端断开（关页 / 切走 / 断网 / 主动 abort）→ 通知生成线程停，
+            # 堵住「前端不读了，后端继续烧 token」的泄漏。重抛以正常收尾 SSE。
+            if req.session_id:
+                request_stop(req.session_id)
+            raise
         except Exception as e:
             logger.exception("chat stream error: %s", e)
             yield {"event": "error", "data": json.dumps({"detail": str(e)})}
 
     return EventSourceResponse(event_stream())
+
+
+@router.post("/chat/stop")
+async def chat_stop(req: ChatStopRequest):
+    """请求中断指定 session 的 AI 生成。
+
+    命中（已发出中断信号）或未命中（流已结束 / 不存在）都返回 ``ok=True``，
+    让前端可以 fire-and-forget 而无需关心时序。``stopped`` 仅作诊断用。
+    """
+    stopped = request_stop(req.session_id)
+    return {"ok": True, "stopped": stopped}
