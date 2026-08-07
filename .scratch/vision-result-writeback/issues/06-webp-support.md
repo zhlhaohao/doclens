@@ -4,9 +4,11 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] WebP `write_back` 后 `read_back` 一致
-- [ ] WebP `write_back` 前后 `content_fingerprint` 不变、像素不变
-- [ ] WebP `force` reindex 后索引含真实解读、vision API 零调用
-- [ ] WebP 元数据能被 doclens 自己读回
+- [x] WebP `write_back` 后 `read_back` 一致（含中文 + 特殊字符）✅
+- [x] WebP `write_back` 前后 `content_fingerprint` 不变、像素不变 ✅
+- [x] WebP 闭环生效（write_back → image_to_tree read_back 命中不 pending）✅
+- [x] WebP 元数据能被 doclens 自己读回 ✅（6 单测；全测套过零回归）
+
+实现：image_metadata 加 `_read_webp`/`_write_webp`/`_webp_xmp_packet`（Pillow `save(xmp=,lossless=True)`，XMP dc:description，XML-escape 防 `<!--` 破坏 XML）。

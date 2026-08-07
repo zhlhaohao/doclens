@@ -100,8 +100,10 @@ def read_back(
         text = _read_jpeg_xpcomment(image_path)
     elif ext == ".png":
         text = _read_png(image_path)
+    elif ext == ".webp":
+        text = _read_webp(image_path)
     else:
-        # WebP 工单 06；其他格式不解读
+        # 其他格式不解读
         return None
     if not text:
         return None
@@ -146,7 +148,9 @@ def write_back(
         return _write_jpeg(image_path, markdown, model_tag, prompt_version)
     if ext == ".png":
         return _write_png(image_path, markdown, model_tag, prompt_version)
-    logger.warning("write_back 暂不支持 %s（WebP 工单 06）", ext)
+    if ext == ".webp":
+        return _write_webp(image_path, markdown, model_tag, prompt_version)
+    logger.warning("write_back 暂不支持 %s", ext)
     return False
 
 
@@ -211,6 +215,65 @@ def _write_png(
         return True
     except Exception as e:
         logger.warning("write_back PNG 失败 %s: %s", image_path, e)
+        return False
+
+
+def _webp_xmp_packet(payload: str) -> bytes:
+    """把 payload 包成 XMP packet（dc:description）。XML-escape 防止 payload 里的
+    ``<!--`` 破坏 XML 结构；``getxmp`` 读回时自动 unescape。"""
+    import xml.sax.saxutils as su
+    desc = su.escape(payload)
+    return (
+        b'<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+        b'<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        b'<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        b'<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        b'<dc:description><rdf:Alt>'
+        b'<rdf:li xml:lang="x-default">' + desc.encode("utf-8") + b'</rdf:li>'
+        b'</rdf:Alt></dc:description>'
+        b'</rdf:Description></rdf:RDF></x:xmpmeta>'
+        b'<?xpacket end="w"?>'
+    )
+
+
+def _read_webp(image_path: str) -> Optional[str]:
+    """读 WebP XMP 的 dc:description 文本（getxmp 自动 unescape）。"""
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            img.load()
+            try:
+                xmp = img.getxmp()
+            except Exception:
+                return None
+        li = (
+            (((xmp.get("xmpmeta") or {}).get("RDF") or {}).get("Description") or {})
+            .get("description", {}).get("Alt", {}).get("li")
+        )
+        if isinstance(li, dict):
+            t = li.get("text")
+            if isinstance(t, str):
+                return t
+        return None
+    except Exception as e:
+        logger.debug("读 WebP XMP 失败 %s: %s", image_path, e)
+        return None
+
+
+def _write_webp(
+    image_path: str, markdown: str, model_tag: str, prompt_version: str
+) -> bool:
+    """WebP：Pillow ``save(xmp=, lossless=True)``。lossless 保像素 → content_fingerprint 不变。"""
+    try:
+        from PIL import Image
+        payload = _format_payload(markdown, model_tag, prompt_version)
+        xmp = _webp_xmp_packet(payload)
+        with Image.open(image_path) as img:
+            img.load()
+            img.save(image_path, "WEBP", lossless=True, xmp=xmp)
+        return True
+    except Exception as e:
+        logger.warning("write_back WebP 失败 %s: %s", image_path, e)
         return False
 
 
