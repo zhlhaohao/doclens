@@ -248,7 +248,8 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 使用 `start-app.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
-**测试和验证的工作目录固定为 `../cortex/test_work_dir/`**，脚本会自动切换到该目录。
+**默认工作目录 `../cortex/test_work_dir/`**；以其他目录启动加 `-C <目录>`：`./start-app.ps1 gui -C D:\知识库`（search/index 等命令行同理）。
+`-C` 写在子命令后，进程 `os.chdir` 到该目录——索引/预览/日记/`.env` 全部跟随；目录不存在会报错退出。
 
 
 ### 三种运行模式

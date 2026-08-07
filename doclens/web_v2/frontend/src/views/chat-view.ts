@@ -3,7 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
 import type { Session, ChatMessage, Reference, ToolStep } from "../state/types";
-import { chatStream } from "../api/chat";
+import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
@@ -275,6 +275,8 @@ export class ChatView extends LitElement {
   @state() private previewDirty = false;
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
   private _unsubscribe?: () => void;
+  /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
+  private _abortController: AbortController | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -353,8 +355,11 @@ export class ChatView extends LitElement {
     let messages = [...store.getState().chat.messages, placeholder];
     actions.setChatState({ messages });
 
+    // 建立中断控制器：_stop() 会 abort 它 + 通知后端停（abort 抛 AbortError 走静默路径）
+    this._abortController = new AbortController();
+
     try {
-      for await (const ev of chatStream({ message, session_id: sessionId })) {
+      for await (const ev of chatStream({ message, session_id: sessionId }, this._abortController.signal)) {
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
@@ -377,13 +382,48 @@ export class ChatView extends LitElement {
       );
       this._loadHistory();
     } catch (err) {
-      // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断
-      messages = finalizeInterruptedMessages(messages);
-      actions.setChatState({ messages });
-      actions.setError(`对话失败: ${(err as Error).message}`);
+      if (this._isAbortError(err)) {
+        // 用户主动停止：丢弃半截 AI 回答（屏幕 + DB 都只留用户问题），不弹错误 toast
+        messages = this._dropTrailingAssistant(messages);
+        actions.setChatState({ messages });
+        await appendSession(
+          sessionId,
+          [{ kind: "message_user", payload: JSON.stringify({ content: message }) }],
+          messages.length,
+        );
+        this._loadHistory();
+      } else {
+        // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断
+        messages = finalizeInterruptedMessages(messages);
+        actions.setChatState({ messages });
+        actions.setError(`对话失败: ${(err as Error).message}`);
+      }
     } finally {
+      this._abortController = null;
       actions.setChatState({ streaming: false });
     }
+  }
+
+  /** 用户点击停止：abort 前端读取 + 通知后端停生成（fire-and-forget）。 */
+  private async _stop(): Promise<void> {
+    const sessionId = store.getState().chat.currentSession?.id;
+    this._abortController?.abort();
+    if (sessionId) {
+      void stopChat(sessionId);
+    }
+  }
+
+  /** 判定是否为用户主动 abort（AbortController.abort 抛 AbortError）。 */
+  private _isAbortError(err: unknown): boolean {
+    return !!err && (err as Error).name === "AbortError";
+  }
+
+  /** 移除末尾的 assistant 占位/半截回答，保留用户问题（UI==DB）。 */
+  private _dropTrailingAssistant(messages: ChatMessage[]): ChatMessage[] {
+    if (messages.length && messages[messages.length - 1].role === "assistant") {
+      return messages.slice(0, -1);
+    }
+    return messages;
   }
 
   private _backToInitial() {
@@ -498,6 +538,19 @@ export class ChatView extends LitElement {
       }
       await this._openPreviewPath(path);
     });
+  }
+
+  /** 点击 user 气泡的「重问」：把问题内容拷回输入框（不自动发送，留给用户编辑/发送）。 */
+  private _onReask(e: CustomEvent<{ content: string }>): void {
+    const content = e.detail?.content ?? "";
+    if (!content) return;
+    this.draft = content;
+    this.requestUpdate();
+    // 流式期间输入框禁用，不抢焦点；停止后再点重问可聚焦编辑
+    if (!this.viewState.streaming) {
+      const ib = this.renderRoot.querySelector("input-box") as { focus?: () => void } | null;
+      ib?.focus?.();
+    }
   }
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
@@ -704,7 +757,9 @@ export class ChatView extends LitElement {
           <chat-stream
             .messages=${s.messages}
             .modelName=${store.getState().status?.model_name ?? null}
-            @reference-click=${this._onReferenceClick}>
+            @reference-click=${this._onReferenceClick}
+            @reask=${this._onReask}
+            @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
           ${hasPreview ? html`
             <div class="splitter desktop-only"
@@ -728,10 +783,11 @@ export class ChatView extends LitElement {
             .iconAfter=${true}
             style="--cortex-input-btn-reserve: 96px"
             multiline
-            ?disabled=${s.streaming}
+            ?streaming=${s.streaming}
             .value=${this.draft}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
-            @submit=${this._submit}>
+            @submit=${this._submit}
+            @stop=${this._stop}>
           </input-box>
         </div>
       </div>

@@ -53,6 +53,7 @@ import cameraIcon from "lucide-static/icons/camera.svg?raw";
 import imageIcon from "lucide-static/icons/image.svg?raw";
 import calendarIcon from "lucide-static/icons/calendar.svg?raw";
 import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
+import squareIcon from "lucide-static/icons/square.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -95,6 +96,7 @@ const ICONS: Record<string, string> = {
   "chevron-left": chevronLeftIcon,
   "maximize-2": maximize2Icon,
   copy: copyIcon,
+  square: squareIcon,
 };
 
 @customElement("doclens-icon")

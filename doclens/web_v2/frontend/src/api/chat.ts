@@ -1,4 +1,4 @@
-import { streamSSE } from "./client";
+import { request, streamSSE } from "./client";
 
 export type ChatStreamEvent =
   | { type: "token"; text: string }
@@ -9,8 +9,11 @@ export type ChatStreamEvent =
   | { type: "done" }
   | { type: "error"; detail: string };
 
-export async function* chatStream(req: { message: string; session_id?: string }): AsyncGenerator<ChatStreamEvent> {
-  for await (const ev of streamSSE("/api/chat", req)) {
+export async function* chatStream(
+  req: { message: string; session_id?: string },
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent> {
+  for await (const ev of streamSSE("/api/chat", req, signal)) {
     if (ev.event === "token") {
       try { yield { type: "token", text: JSON.parse(ev.data).text }; } catch { /* skip */ }
     } else if (ev.event === "tool_call") {
@@ -46,5 +49,17 @@ export async function* chatStream(req: { message: string; session_id?: string })
       try { yield { type: "error", detail: JSON.parse(ev.data).detail }; }
       catch { yield { type: "error", detail: "未知错误" }; }
     }
+  }
+}
+
+/** 请求中断指定 session 的 AI 生成（fire-and-forget；失败静默，不阻塞前端收尾）。 */
+export async function stopChat(sessionId: string): Promise<void> {
+  try {
+    await request<{ ok: boolean }>("/api/chat/stop", {
+      method: "POST",
+      json: { session_id: sessionId },
+    });
+  } catch {
+    /* 停止是尽力而为：网络/鉴权失败不影响前端把对话收尾 */
   }
 }
