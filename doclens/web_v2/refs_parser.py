@@ -1,7 +1,7 @@
 """从 AI 正文解析「## 参考资料」章节，产出路径列表 + 格式诊断。
 
 与 doclens/skills/knowledge_base/SKILL.md 的「机器解析契约」逐字一致。
-解析结果供 refs_retry 校验：不合规 → chat.py 静默重答。
+解析结果供 refs_curator 策展：合规 → 保留 AI 精选列表；不合规 → 工具结果兜底。
 """
 from __future__ import annotations
 
@@ -87,6 +87,14 @@ def parse_references_section(markdown: str) -> ParsedRefs:
         diagnostics.append("「## 参考资料」章节未找到「数字. 路径」列表项")
 
     return ParsedRefs(has_section=True, paths=paths, diagnostics=diagnostics)
+
+
+def split_references_section(markdown: str) -> tuple[str, str]:
+    """拆分为 (正文章节前的内容, 「## 参考资料」章节及以后)。无该章节则后者为空串。"""
+    m = _SECTION_HEADER_RE.search(markdown)
+    if m is None:
+        return markdown, ""
+    return markdown[: m.start()], markdown[m.start() :]
 
 
 def rewrite_references_section(content: str, paths: list[str]) -> str:

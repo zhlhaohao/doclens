@@ -1,8 +1,8 @@
-"""参考资料合规判定（A 方案：不重试 LLM）。
+"""参考资料合规判定工具（A 方案：不重试 LLM）。
 
-chat.py 在 AI 完成后调用 evaluate_round 判定「## 参考资料」是否合规
-（有章节 + 格式合规 + 路径存在）；不合规时由 chat.py toast 告警。
-AI 正文里的幻觉路径由 chat.py 用工具检索结果重写覆盖，不在此处处理。
+FALLBACK_TOAST 供 chat.py 在 refs_curator 走兜底分支时告警用。
+evaluate_round 为早期合规判定实现，现由 refs_curator.curate_references 取代
+（保留兼容，新代码请用 refs_curator）。
 """
 from __future__ import annotations
 

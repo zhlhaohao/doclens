@@ -15,6 +15,11 @@ RETRIEVAL_TOOLS = frozenset({"search_kb", "grep", "read_document"})
 
 # search_kb / grep：<path>...</path>（非贪婪，一段 output 可能含多个）
 _PATH_TAG_RE = re.compile(r"<path>([^<]+?)</path>")
+# search_kb / grep 的 <result> 条目：path + 对应 content 片段（DOTALL 跨行）。
+# search_kb 的 path 在 <meta> 内、content 在其后；grep 的 path 带可选 :行号 后缀。
+_RESULT_SNIP_RE = re.compile(
+    r"<result\b.*?<path>([^<]+?)</path>.*?<content>(.*?)</content>", re.DOTALL
+)
 # grep 行号后缀：末尾 `:数字`（相对路径不含盘符，安全）
 _LINE_SUFFIX_RE = re.compile(r":\d+$")
 # read_document 成功输出首行 `文档: <path>`；`文档不存在:` / `文档解析...` 不匹配
@@ -60,6 +65,60 @@ def extract_references(tool_calls: list[dict[str, Any]]) -> list[dict[str, str]]
             seen.add(path)
             refs.append({"path": path})
     return refs
+
+
+def extract_paths_by_tool(
+    tool_calls: list[dict[str, Any]], workdir: Path
+) -> dict[str, list[str]]:
+    """按工具类型分组提取归一化 path（各组内去重保序）。
+
+    供 refs_curator 分级兜底用：read_document（AI 主动深读）相关性信号强于
+    search_kb/grep 命中，需分组以便排序。path 统一为相对 workdir 的正斜杠形式。
+    """
+    by_tool: dict[str, list[str]] = {}
+    for tc in tool_calls:
+        if tc.get("is_error"):
+            continue
+        name = tc.get("name", "")
+        if name not in RETRIEVAL_TOOLS:
+            continue
+        paths = normalize_paths(_extract_paths(name, tc.get("output") or ""), workdir)
+        group = by_tool.setdefault(name, [])
+        for p in paths:
+            if p not in group:
+                group.append(p)
+    return by_tool
+
+
+def extract_snippets_by_path(
+    tool_calls: list[dict[str, Any]], workdir: Path
+) -> dict[str, list[str]]:
+    """提取每个 path 对应的内容片段（供 refs_curator 内容佐证评分）。
+
+    - search_kb / grep：``<result>`` 条目内 ``<content>`` 片段（path 归一化，
+      grep 的 ``:行号`` 后缀剥掉；同 path 多条目合并为多个片段）
+    - read_document：整个 output 作为该 path 的片段
+    path 统一为相对 workdir 的正斜杠形式。
+    """
+    snippets: dict[str, list[str]] = {}
+    for tc in tool_calls:
+        if tc.get("is_error"):
+            continue
+        name = tc.get("name", "")
+        output = tc.get("output") or ""
+        if name in ("search_kb", "grep"):
+            for m in _RESULT_SNIP_RE.finditer(output):
+                path = to_relative_path(_clean_path(m.group(1)), workdir)
+                snippet = m.group(2).strip()
+                if path and snippet:
+                    snippets.setdefault(path, []).append(snippet)
+        elif name == "read_document":
+            m = _DOC_HEADER_RE.search(output)
+            if m:
+                path = to_relative_path(_clean_path(m.group(1)), workdir)
+                if path and output.strip():
+                    snippets.setdefault(path, []).append(output)
+    return snippets
 
 
 def validate_paths(paths: list[str], workdir: Path) -> list[str]:
