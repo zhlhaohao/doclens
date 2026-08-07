@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from doclens.index_manager import IndexManager
@@ -127,8 +127,12 @@ def _format_agent_output(
     path_map: dict[str, str],
     total_terms: int,
     query_words: list[str],
+    on_miss: Optional[Callable[[str], str]] = None,
 ) -> str:
     """将搜索结果格式化为结构化 XML，与 search_kb 输出格式对齐。
+
+    on_miss: path_map 未命中 doc_id 时的兜底解析（IndexManager.resolve_doc_path，
+    应对后台重索引导致的 doc_id 漂移）；None 时未命中输出 doc_id 本身（旧行为）。
 
     格式:
         Found N results in M files:
@@ -142,6 +146,9 @@ def _format_agent_output(
 
         Paths matched: path1, path2
     """
+    def _resolve(doc_id: str) -> str:
+        return path_map.get(doc_id) or (on_miss(doc_id) if on_miss else doc_id)
+
     if not content_results and not path_results:
         return ""
 
@@ -150,7 +157,7 @@ def _format_agent_output(
     output_lines: list[str] = []
 
     if content_results:
-        unique_files = len({path_map.get(doc_id, doc_id) for doc_id, _, _, _, _ in content_results})
+        unique_files = len({_resolve(doc_id) for doc_id, _, _, _, _ in content_results})
         output_lines.append(f"Found {len(content_results)} results in {unique_files} files:")
         output_lines.append("Use read_document tool to read full content: path=<path value>.")
 
@@ -158,7 +165,7 @@ def _format_agent_output(
         shown = 0
 
         for doc_id, node, matched, _prox, _fts in content_results:
-            path = path_map.get(doc_id, doc_id)
+            path = _resolve(doc_id)
             line_start = node.get("line_start")
             full_text = node.get("text", "") or ""
 
@@ -187,7 +194,7 @@ def _format_agent_output(
             shown += 1
 
     if path_results:
-        path_strs = [path_map.get(doc_id, doc_id) for doc_id, _, _, _, _ in path_results]
+        path_strs = [_resolve(doc_id) for doc_id, _, _, _, _ in path_results]
         output_lines.append(f"\nPaths matched: {', '.join(path_strs)}")
 
     return "\n\n".join(output_lines)
@@ -216,6 +223,7 @@ def _handle_grep(
         path_map=idx.path_map,
         total_terms=len(result.query_words),
         query_words=result.query_words,
+        on_miss=idx.resolve_doc_path,
     )
 
     if not output:

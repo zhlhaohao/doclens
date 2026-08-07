@@ -3,7 +3,8 @@
 设计：
 1. 复用 CortexAgent.session（含 tools / tool_handlers）
 2. 独立线程流式跑 StreamingAgent（token/tool 实时推 SSE，「思考过程」可见）
-3. 完成后一次性检查「## 参考资料」：合规 → 正文路径卡片；不合规 → 工具结果兜底 + toast（不重试 LLM）
+3. 完成后由 refs_curator 策展「## 参考资料」：AI 章节合规 → 保留精选列表
+  （清洗+重编号对齐 [N]）；不合规 → 工具结果分级兜底 + toast（不重试 LLM）
 """
 import asyncio
 import json
@@ -16,20 +17,19 @@ from sse_starlette.sse import EventSourceResponse
 
 from doclens.web_v2.deps import get_agent
 from doclens.web_v2.models.chat import ChatRequest
-from doclens.web_v2.references import extract_references
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 async def _stream_agent_response(message: str, session_id: Optional[str]) -> AsyncIterator[dict]:
-    """流式跑 StreamingAgent + 完成后检查参考资料。
+    """流式跑 StreamingAgent + 完成后策展参考资料。
 
-    工具调用实时推送（思考过程可见）。AI 完成后一次性检查「## 参考资料」：
-    - 合规（有章节 + 格式合规 + 路径存在）→ 卡片用正文解析的路径
-    - 不合规 → 卡片用工具检索结果兜底 + toast 告警（不再重试 LLM）
+    工具调用实时推送（思考过程可见）。AI 完成后一次性策展「## 参考资料」：
+    - 合规 → 保留 AI 精选列表（剔除不存在/未被引用条目，重编号对齐 [N]）
+    - 不合规 → 工具检索结果分级兜底（read_document 优先，封顶上限）+ toast 告警
     """
-    from doclens.web_v2.refs_retry import RoundResult, evaluate_round, FALLBACK_TOAST
+    from doclens.web_v2.refs_retry import FALLBACK_TOAST
 
     agent = get_agent()
     session = agent.session
@@ -90,23 +90,17 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     if emitter.done:
                         break
                     await asyncio.sleep(0.05)
-                # done：用工具结果的真实路径重写「## 参考资料」章节（覆盖 AI 幻觉）→ corrected content
-                from doclens.web_v2.refs_parser import rewrite_references_section
-                from doclens.web_v2.references import normalize_paths
-                result = RoundResult(
-                    text=emitter.get_full_text(),
-                    tool_calls=list(emitter.tool_calls),
-                )
-                tool_refs = extract_references(result.tool_calls)
-                rel_paths = normalize_paths([r["path"] for r in tool_refs], session.session_workdir)
-                compliant, _diagnostics, _refs = evaluate_round(result, session.session_workdir)
-                corrected = (
-                    rewrite_references_section(result.text, rel_paths)
-                    if rel_paths else result.text
+                # done：策展参考资料章节——AI 章节合规则保留精选列表（清洗+重编号），
+                # 不合规则工具结果分级兜底（不再无条件全量重写，避免引文膨胀与 [N] 错位）
+                from doclens.web_v2.refs_curator import curate_references
+                curation = curate_references(
+                    emitter.get_full_text(),
+                    list(emitter.tool_calls),
+                    session.session_workdir,
                 )
                 logger.info(
-                    "chat done: tools=%d compliant=%s tool_refs=%d error=%s",
-                    len(result.tool_calls), compliant, len(tool_refs),
+                    "chat done: tools=%d fallback=%s refs=%d error=%s",
+                    len(emitter.tool_calls), curation.fallback, len(curation.paths),
                     bool(emitter.error),
                 )
                 # run_stream 在内部捕获 LLM 异常 → emit_error → emitter.error + done=True。
@@ -114,8 +108,8 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
                 if emitter.error:
                     _put({"type": "error", "detail": emitter.error})
-                _put({"type": "token", "text": corrected})
-                if not compliant:
+                _put({"type": "token", "text": curation.text})
+                if curation.fallback:
                     _put({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
 
             sa = StreamingAgent(

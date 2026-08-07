@@ -414,8 +414,13 @@ def _format_kb_results(
     max_results: int,
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
     max_total_chars: int = MAX_TOTAL_CHARS,
+    on_miss: Optional[Callable[[str], str]] = None,
 ) -> str:
-    """格式化 FTS 搜索结果为 XML 结构化文本，便于 LLM 区分元信息和原始内容。"""
+    """格式化 FTS 搜索结果为 XML 结构化文本，便于 LLM 区分元信息和原始内容。
+
+    on_miss: path_map 未命中 doc_id 时的兜底解析（如 IndexManager.resolve_doc_path，
+    应对后台重索引导致的 doc_id 漂移），None 时未命中即空 path。
+    """
     total_hits = len(scored_results)
     display = scored_results[:max_results]
 
@@ -430,7 +435,7 @@ def _format_kb_results(
 
     for composite, (doc_id, node, matched, prox, fts) in display:
         node_text = node.get("text", "") or ""
-        path = path_map.get(doc_id, "")
+        path = path_map.get(doc_id) or (on_miss(doc_id) if on_miss else "")
         doc_title = doc_title_map.get(doc_id, doc_id)
         hierarchy = _build_hierarchy_path(node, doc_id, doc_nodes_map, doc_title)
 
@@ -469,15 +474,16 @@ def _format_ripgrep_results(
     path_map: dict[str, str],
     max_results: int,
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
+    on_miss: Optional[Callable[[str], str]] = None,
 ) -> str:
-    """格式化 ripgrep 降级搜索结果。"""
+    """格式化 ripgrep 降级搜索结果。on_miss 同 _format_kb_results。"""
     display = results[:max_results]
     lines = [f"搜索到 {len(results)} 个结果 (ripgrep 降级)："]
 
     for i, (doc_id, node, matched, prox, fts) in enumerate(display, 1):
         node_title = node.get("title", "")
         node_text = node.get("text", "") or ""
-        path = path_map.get(doc_id, "")
+        path = path_map.get(doc_id) or (on_miss(doc_id) if on_miss else "")
 
         context = _extract_keyword_window(node_text, query_words, max_context_chars_per_result)
 
@@ -1054,6 +1060,7 @@ def _handle_search_kb(
         scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
+        on_miss=idx_manager.resolve_doc_path,
     )
 
 
@@ -1127,7 +1134,10 @@ def _handle_search_kb_v2(
                 "2. 用 manage_kb(action='reindex') 重建索引\n"
                 "3. 用 bash grep 搜索文件名或内容"
             )
-        return _format_ripgrep_results(filtered, query_words, idx_manager.path_map, max_results)
+        return _format_ripgrep_results(
+            filtered, query_words, idx_manager.path_map, max_results,
+            on_miss=idx_manager.resolve_doc_path,
+        )
 
     doc_nodes_map: dict[str, list[dict]] = {}
     doc_title_map: dict[str, str] = {}
@@ -1209,6 +1219,7 @@ def _handle_search_kb_v2(
         scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
+        on_miss=idx_manager.resolve_doc_path,
     )
 
 def _handle_not_query(

@@ -178,6 +178,28 @@ class IndexManager:
     def path_map(self):
         return self._path_map
 
+    def resolve_doc_path(self, doc_id: str) -> str:
+        """doc_id → 源文件路径。内存 path_map 优先；未命中时查索引库兜底。
+
+        内存 path_map 可能滞后：diary worker 等后台重索引会改变 doc_id（哈希
+        后缀），新 doc_id 不在旧 path_map 中。若此时把 doc_id 本身当 path 输出
+        给工具/AI，引用就是无意义的字符串（真实案例：日记 doc_id "2025_53285d70"
+        被当作路径输出，AI 无法引用真实来源 日记/2025.md）。
+        仍解析不到则返回 doc_id 本身（保持旧行为）。
+        """
+        path = self._path_map.get(doc_id)
+        if path:
+            return path
+        try:
+            from treesearch.fts import get_fts_index
+
+            doc = get_fts_index(db_path=self.index_path).load_document(doc_id)
+            if doc is not None:
+                return (doc.metadata or {}).get("source_path", "") or doc_id
+        except Exception as e:  # noqa: BLE001
+            logger.warning("resolve_doc_path(%s) failed: %s", doc_id, e)
+        return doc_id
+
     @property
     def documents(self):
         return self._ts.documents if self._ts else []
