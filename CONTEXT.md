@@ -36,6 +36,10 @@
 - **片段态 / 成品态 (Raw / Summarized)**：日记中某一天小节的两种状态，以当日小节头部的 HTML 注释 `<!-- diary:raw -->` 标记片段态。片段态 = 当天录入的原始片段堆积；成品态 = 次日由 AI 以第一人称叙事体归纳重写后的成稿，**此后不可变**（UI 只读，改就去改 md 源文件，不会触发重总结）。总结触发 = 每日 00:05 定点总结前一天（启动时补扫错过的）；对话模型总结失败 → 整日保留片段态、指数退避重试（2026-08-01 决议，00:05 定点为 2026-08-02 调整）。
 - **逐图降级 (Per-image Degradation)**：日记总结中视觉描述失败的处置——单张图视觉调用失败（或未配置视觉 API），仅该图退化为用备注参与归纳，**不阻塞整日总结**（2026-08-01 决议）。
 - **日记合并例外 (Diary Union Merge)**：`日记/` 目录在 Git 同步中使用 `.gitattributes merge=union` 合并——冲突时双方追加的行都保留，是 ADR-0006 偏向本地（ours-wins）全局策略的**按路径显式例外**（2026-08-01 决议）。动机：年度 md 是多设备高频追加文件，ours-wins 会静默丢失他端片段。
+- **图像元数据写回 (Image Metadata Writeback)**：vision 解读出的 Markdown 写入图像文件本身的元数据（JPEG→XMP `dc:description` UTF-8；PNG→`tEXt`/`iTXt`；WebP→XMP/EXIF ancillary），使结果「跟文件走」——Windows 资源管理器可读、随文件备份/迁移、force 重建从元数据读回不重花 API。仅限 JPG/JPEG/PNG/WebP；其他图像格式（HEIC/TIFF/BMP/GIF/SVG）不解读不写回。_Avoid_: 只存 index.db documents 表（结果不跟文件走，换机/删库即丢）。
+- **内容指纹 (Content Fingerprint)**：file_hash 对图像格式的新口径——剥离元数据段后对文件核心内容算 hash，使「写回元数据」不改变指纹、不触发增量重解析死循环。仅图像格式启用剥离；非图像文件（PDF/Word/code…）指纹口径不变。_Avoid_: 全文件字节 md5（写回元数据会改变它 → 死循环）。
+- **写回-读回闭环 (Writeback-Readback Loop)**：force 重建不重花 vision API 的机制——indexer 在 `vision_enqueue` 前先读图像元数据，已有解读则直接重建节点树，无则入队让 Vision Worker 调 API。解读结果的 source of truth 从 index.db documents 表迁到图像文件元数据，索引内容由元数据派生（2026-08-07 决议，ADR-0009）。
+- **格式可达性 (Format Readability)**：Windows 资源管理器能否读出写回的元数据，按格式分级——JPEG 经 WIC 原生可达；PNG property 映射不可靠；WebP 依赖 Win 版本/codec。四格式统一写回（换 force 省钱闭环 + 可移植），但「Windows 能读」仅在 JPEG 可靠达成，其余为尽力而为。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -62,3 +66,7 @@
 - 2026-07-29：同步降级 = 没 remote 整体停摆；异常状态/网络/认证失败本轮跳过 + 弱提醒 + 下轮重试，不自动修复。
 - 2026-08-01：日记功能数据模型（ADR-0007）= 知识库内 `日记/` 年度 md（索引+同步）+ 片段态/成品态两态（录入仅当天、成品不可变）+ 总结=每日 00:05 定点+启动补扫、逐图降级整日重试 + 图片压缩不保留原图 + 第一人称叙事体；录入/总结仅 GUI 进程。
 - 2026-08-01：`日记/` 目录 Git 合并 = union（`.gitattributes merge=union`），ADR-0006 ours-wins 的按路径例外（ADR-0008）。
+- 2026-08-07：图像 vision 解读结果写回图像文件元数据（JPEG XMP `dc:description` / PNG `tEXt`·`iTXt` / WebP XMP·EXIF），取代只存 index.db documents 表；解读结果跟文件走——Windows 可读 + 可备份/迁移 + force 重建从元数据读回不重花 API（ADR-0009）。
+- 2026-08-07：file_hash 改「内容指纹」口径——图像格式剥离元数据段后算 hash（使写回不死循环），非图像指纹口径不变；代价：口径切换首迁移让四格式已解读图片全部重索引、重花一次全量 vision API。
+- 2026-08-07：图像写回格式范围 = 仅 JPG/JPEG/PNG/WebP；HEIC/TIFF/BMP/GIF/SVG 等其他图像格式不解读不写回；PDF/Word/code 等非图像文档照常索引（doclens 仍是文档检索工具）。
+- 2026-08-07：原件污染被接受（写回永久改写图像文件、不提供备份/还原）；Windows 能读仅在 JPEG 可靠达成（PNG 不可靠、WebP 看 codec），四格式统一写回以换 force 省钱闭环 + 可移植。
