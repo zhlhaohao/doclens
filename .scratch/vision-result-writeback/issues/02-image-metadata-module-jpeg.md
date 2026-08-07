@@ -6,11 +6,15 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] JPEG `write_back` 后 `read_back` 读回的 markdown 与写入一致（含中文、含 model_tag/prompt 版本）
-- [ ] JPEG `write_back` 前后 `content_fingerprint` 不变
-- [ ] JPEG `write_back` 前后像素/核心视觉内容不变
-- [ ] `read_back` 对无元数据 / 版本不符的图返回 None
-- [ ] `write_back` 对只读/损坏文件返回 False 不抛异常
-- [ ] 格式范围常量定义，供后续工单复用
+- [x] JPEG `write_back` 后 `read_back` 读回的 markdown 与写入一致（含中文、含 model_tag/prompt 版本）✅
+- [x] JPEG `write_back` 前后 `content_fingerprint` 不变 ✅
+- [x] JPEG `write_back` 前后像素/核心视觉内容不变 ✅
+- [x] `read_back` 对无元数据 / 版本不符的图返回 None ✅
+- [x] `write_back` 对只读/损坏文件返回 False 不抛异常 ✅
+- [x] 格式范围常量定义，供后续工单复用 ✅
+- [x] 已有 EXIF 不被覆盖（合并写入）✅
+
+实现：`treesearch/parsers/image_metadata.py` + `tests/test_image_metadata.py`（9 单测全过；全测套 90 过零回归；mypy 模块零错）。
+已知限制（docstring 已记）：piexif.insert 会移除原图 APP0/JFIF 段（像素不变）；payload 的 model/prompt 不含空格；像素 hash 大图占内存（可流式优化）。
