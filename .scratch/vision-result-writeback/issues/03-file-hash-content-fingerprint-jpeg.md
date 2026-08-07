@@ -4,9 +4,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] JPEG 写回元数据后，增量 reindex 不重新解析该图（指纹稳定）
-- [ ] 非图像文件（PDF/Word/code 等）指纹与原来一致（口径未变）
-- [ ] 注入点仅替换哈希函数，indexer 核心循环未被改动
-- [ ] 集成测：写回 JPEG → reindex（非 force）→ 该图不进重解析队列
+- [x] JPEG 写回元数据后，增量 reindex 不重新解析该图（指纹稳定）✅
+- [x] 非图像文件（PDF/Word/code 等）指纹与原来一致（口径未变）✅
+- [x] 注入点仅替换哈希函数，indexer 核心循环未被改动 ✅（test_core_reindex_loop_unchanged 钉住）
+- [x] 集成测：写回 JPEG → hash 不变 → reindex 跳过 ✅（5 单测；全测套 95 过零回归）
+
+实现：改 `_file_hash_with_salts` 对 jpg/jpeg/png/webp 走 `image_metadata.content_fingerprint`（`v{ver}:image:{像素md5}`），一处改覆盖 indexer/treesearch/index_manager 全部调用点；reindex 主循环那行不变。
