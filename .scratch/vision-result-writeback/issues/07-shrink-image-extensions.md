@@ -4,9 +4,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] gif/bmp/tiff/tif 文件不再进索引、不产占位节点、不入 vision 队列
-- [ ] jpg/jpeg/png/webp 行为不受影响（仍解读 + 写回 + 读回）
-- [ ] 非图像文档（PDF/Word/code 等）索引行为与原来一致
-- [ ] 格式范围常量为单一来源（与 02 一致）
+- [x] gif/bmp/tiff/tif 不再注册 image parser、不产占位、不入队 ✅
+- [x] jpg/jpeg/png/webp 仍是 image（解读 + 写回 + 读回）✅
+- [x] 非图像文档照常索引（全测套 114 过，markdown/code 等测试零回归）✅
+- [x] 格式范围单一来源（IMAGE_EXTENSIONS 收缩为四格式）✅（3 单测）
+
+实现：`image_parser.IMAGE_EXTENSIONS` 收缩为 `{jpg,jpeg,png,webp}`。gif/bmp/tiff/tif 不再 register → 走 registry 默认（非 image，不 image_to_tree/不占位/不入队/不写回）。
