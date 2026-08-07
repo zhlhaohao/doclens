@@ -1304,7 +1304,19 @@ def _file_hash_with_salts(fp: str, mode: Optional[str] = None) -> str:
     PST 解析器输出格式变化（ADR-0005）时 bump PST_PARSER_FINGERPRINT_SALT，
     旧 PST 索引自动重建，不像 INDEX_SCHEMA_VERSION 那样连累全库。
     增量比较与移动检测都必须用本函数（口径一致才能匹配）。
+
+    图像文件（jpg/jpeg/png/webp）改用解码像素指纹：写回 EXIF/XMP 元数据不改像素，
+    故不触发「写回 → hash 变 → 增量重解析」死循环（ADR-0009 / 工单 03）。解码失败
+    回退到 stat/content。注：口径切换使旧图像 hash 失效 → 首迁移重索引（已知代价）。
     """
+    ext = os.path.splitext(fp)[1].lower()
+    if ext in (".jpg", ".jpeg", ".png", ".webp"):  # 与 image_metadata.INTERPRETED_IMAGE_EXTS 一致
+        try:
+            from .config import INDEX_SCHEMA_VERSION
+            from .parsers.image_metadata import content_fingerprint
+            return f"v{INDEX_SCHEMA_VERSION}:image:{content_fingerprint(fp)}"
+        except Exception:
+            pass  # 解码失败回退到 stat/content
     h = _file_hash(fp, mode)
     if h and fp.lower().endswith(".pst"):
         ver, sep, rest = h.partition(":")
