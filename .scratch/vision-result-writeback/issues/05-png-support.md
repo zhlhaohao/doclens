@@ -4,9 +4,11 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] PNG `write_back` 后 `read_back` 一致（UTF-8 中文）
-- [ ] PNG `write_back` 前后 `content_fingerprint` 不变、像素不变
-- [ ] PNG `force` reindex 后索引含真实解读、vision API 零调用（闭环生效）
-- [ ] PNG 写入的 `tEXt`/`iTXt` 能被 doclens 自己读回（Windows 可读性不作为验收项）
+- [x] PNG `write_back` 后 `read_back` 一致（UTF-8 中文）✅
+- [x] PNG `write_back` 前后 `content_fingerprint` 不变、像素不变 ✅
+- [x] PNG 闭环生效（write_back → image_to_tree read_back 命中 → 不 pending → 不入队 → 不调 API）✅
+- [x] PNG iTXt 能被 doclens 自己读回（Windows 可读性不作为验收项）✅（6 单测；全测套 105 过零回归）
+
+实现：image_metadata 加 `_read_png`/`_write_png`（Pillow `PngInfo` iTXt，UTF-8）。复用 03（file_hash 注入已含 .png）+ 04（image_to_tree 闭环自动生效）。

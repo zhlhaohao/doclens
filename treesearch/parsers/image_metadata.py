@@ -98,8 +98,10 @@ def read_back(
     ext = _ext(image_path)
     if ext in _JPEG_EXTS:
         text = _read_jpeg_xpcomment(image_path)
+    elif ext == ".png":
+        text = _read_png(image_path)
     else:
-        # PNG / WebP 工单 05/06；其他格式不解读
+        # WebP 工单 06；其他格式不解读
         return None
     if not text:
         return None
@@ -142,7 +144,9 @@ def write_back(
     ext = _ext(image_path)
     if ext in _JPEG_EXTS:
         return _write_jpeg(image_path, markdown, model_tag, prompt_version)
-    logger.warning("write_back 暂不支持 %s（仅 JPEG，工单 05/06 扩展）", ext)
+    if ext == ".png":
+        return _write_png(image_path, markdown, model_tag, prompt_version)
+    logger.warning("write_back 暂不支持 %s（WebP 工单 06）", ext)
     return False
 
 
@@ -168,6 +172,45 @@ def _write_jpeg(
         return True
     except Exception as e:
         logger.warning("write_back JPEG 失败 %s: %s", image_path, e)
+        return False
+
+
+# PNG iTXt chunk 的 key（UTF-8，doclens 自读自写；Windows 资源管理器不读 PNG 元数据）
+_PNG_KEY = "Description"
+
+
+def _read_png(image_path: str) -> Optional[str]:
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            img.load()
+            text = img.info.get(_PNG_KEY)
+        return text if isinstance(text, str) else None
+    except Exception as e:
+        logger.debug("读 PNG 元数据失败 %s: %s", image_path, e)
+        return None
+
+
+def _write_png(
+    image_path: str, markdown: str, model_tag: str, prompt_version: str
+) -> bool:
+    """PNG：Pillow ``PngInfo`` iTXt（UTF-8）。
+
+    ``save`` 会重编码，但 PNG 无损 → 像素不变 → ``content_fingerprint`` 不变（不死循环）。
+    仅写 ``_PNG_KEY``，不保留原图其他 tEXt（PNG 的 tEXt 多为软件元信息，可接受丢失）。
+    """
+    try:
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+        payload = _format_payload(markdown, model_tag, prompt_version)
+        with Image.open(image_path) as img:
+            img.load()
+            pi = PngInfo()
+            pi.add_itxt(_PNG_KEY, payload)
+            img.save(image_path, "PNG", pnginfo=pi)
+        return True
+    except Exception as e:
+        logger.warning("write_back PNG 失败 %s: %s", image_path, e)
         return False
 
 
