@@ -15,9 +15,11 @@ from ..indexer import md_to_tree
 
 logger = logging.getLogger(__name__)
 
-# 独立图像文件扩展名（svg 是文本，走 code/xml，不在此列）
+# 独立图像文件扩展名 —— 仅这四种走 vision 解读 + 元数据写回（ADR-0009 / 工单 07）。
+# gif/bmp/tiff/tif 不再作为图像处理（不 image_to_tree、不占位、不入 vision 队列）；
+# svg 是文本走 code/xml，不在此列。
 IMAGE_EXTENSIONS: frozenset[str] = frozenset({
-    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif",
+    ".png", ".jpg", ".jpeg", ".webp",
 })
 
 # 占位节点正文（解析完成后被视觉模型输出的 Markdown 原位替换）
