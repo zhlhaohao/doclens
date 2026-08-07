@@ -84,6 +84,21 @@ def _parse_payload(text: str) -> dict:
     }
 
 
+# 期望版本：doclens 在 reindex 前经 set_expected_version 设置；read_back 默认据此校验，
+# payload 版本不符则当无解读 → image_to_tree 占位入队重解读（工单 08）。
+_expected_model_tag: Optional[str] = None
+_expected_prompt_version: Optional[str] = None
+
+
+def set_expected_version(
+    model_tag: Optional[str] = None, prompt_version: Optional[str] = None
+) -> None:
+    """设置当前期望的解读版本（doclens 在 reindex 前调用）。"""
+    global _expected_model_tag, _expected_prompt_version
+    _expected_model_tag = model_tag
+    _expected_prompt_version = prompt_version
+
+
 def read_back(
     image_path: str,
     *,
@@ -108,9 +123,11 @@ def read_back(
     if not text:
         return None
     payload = _parse_payload(text)
-    if model_tag is not None and payload["model_tag"] != model_tag:
+    mt = model_tag if model_tag is not None else _expected_model_tag
+    pv = prompt_version if prompt_version is not None else _expected_prompt_version
+    if mt is not None and payload["model_tag"] != mt:
         return None
-    if prompt_version is not None and payload["prompt_version"] != prompt_version:
+    if pv is not None and payload["prompt_version"] != pv:
         return None
     return payload
 

@@ -4,9 +4,11 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] `read_back` 对 model_tag 或 prompt_version 不符的图返回 None
-- [ ] 版本不符的图重新入队、Worker 重解读后元数据被更新为新版本
-- [ ] 与现有 PROMPT_VERSION / `vision_requeue_model_changed` 协调一致，无重复或冲突
-- [ ] 版本一致时走正常读回闭环（不重解读）
+- [x] `read_back` 版本校验（不符返回 None）✅
+- [x] 版本不符 → image_to_tree 占位入队重解读 ✅（test_image_to_tree_reparse_on_version_mismatch）
+- [x] 与 PROMPT_VERSION / `vision_requeue_model_changed` 协调 ✅（vision_model_tag 含 pv；启动 requeue + read_back 校验双保险）
+- [x] 版本一致走闭环（不重解读）✅（4 单测；全测套 118 过零回归）
+
+实现：`image_metadata` 加 `set_expected_version` + 全局期望版本；`read_back` 默认据此校验。doclens `IndexManager.load_or_build_index`/`_reindex_internal` 前 `_sync_image_version_expectation` 接线（`vision_model_tag(config)` + `PROMPT_VERSION`）。**避开跨层 kwargs 透传**（全局版本更简洁，image_to_tree 零改动）。

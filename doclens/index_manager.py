@@ -390,8 +390,19 @@ class IndexManager:
         t.start()
         return t
 
+    def _sync_image_version_expectation(self):
+        """把当前 vision 版本同步给 image_metadata（工单 08：read_back 版本校验，
+        payload 版本不符则当无解读 → 占位入队重解读）。失败静默（不影响索引）。"""
+        try:
+            from doclens.vision_worker import PROMPT_VERSION, vision_model_tag
+            from treesearch.parsers.image_metadata import set_expected_version
+            set_expected_version(vision_model_tag(self.config), str(PROMPT_VERSION))
+        except Exception:
+            pass
+
     def load_or_build_index(self):
         """加载或构建索引"""
+        self._sync_image_version_expectation()
         if self._ts is not None and not self._needs_reload:
             return True
         self._needs_reload = False
@@ -461,6 +472,7 @@ class IndexManager:
 
     def _reindex_internal(self, force=False):
         """内部 reindex（已持有锁）"""
+        self._sync_image_version_expectation()
         if self._ts is None:
             set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types))
             self._ts = TreeSearch(db_path=self.index_path)
