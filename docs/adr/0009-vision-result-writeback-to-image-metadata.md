@@ -26,3 +26,14 @@ vision 解读出的 Markdown 不再只存进 `index.db` 的 documents 表，而�
 ## 备注
 
 代码 `treesearch/parsers/image_parser.py:4` 注释引用了 `docs/adr/0001-vision-image-indexing.md`，但该文件在仓库中缺失（`docs/adr/` 实际从 0002 起；且 CONTEXT.md 历史摘要中 0001 编号被重复引用指代不同主题，存在编号混乱）。本 ADR 不擅自补建有争议的 0001，仅记录 vision 图像索引机制的当前状态与本次演进。
+
+## Spike 修正（工单 01，2026-08-07）
+
+工单 01 选型探针实证后，本 ADR 的 **JPEG 载体**决策需修正（PNG/WebP 不变）：
+
+- **原决策**：JPEG 写 XMP `dc:description`。
+- **实证发现**：Windows 11 的 WIC **不**把 XMP `dc:description` 映射到任何可见属性（资源管理器读不到）；`dc:title` 可读为「标题」但语义不适合长文本解读。
+- **修正为**：JPEG 写 **EXIF `XPComment` (0x9c9c, UTF-16LE)**——实测映射到 `System.Comment`，即资源管理器「备注」列，完整中文长文本可读。EXIF 经 **piexif**（`piexif.insert`，无损、不重编码、纯 Python）写入，保像素不变。**新增依赖 piexif。**
+- `dc:title` 可附带写入（让「标题」列也有内容），但解读主体载体是 EXIF `XPComment`。
+
+详见 `.scratch/vision-result-writeback/spike/findings.md`。

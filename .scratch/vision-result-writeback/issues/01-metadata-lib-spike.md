@@ -4,10 +4,10 @@
 
 **Blocked by:** None — 可立即开始
 
-**Status:** ready-for-agent
+**Status:** done（2026-08-07）
 
-- [ ] JPEG 写入 XMP `dc:description`（含中文）后，Windows 资源管理器「属性-详细信息」或 exiftool 能读出正确文本（无乱码）
-- [ ] PNG `tEXt`/`iTXt` 写入后能读回一致（UTF-8）
-- [ ] WebP XMP/EXIF 写入后能读回一致
-- [ ] 写入不改变图像像素/核心视觉内容
-- [ ] 输出选型结论（各格式的库选型 + 理由 + 已知限制），后续工单据此实现
+- [x] ~~JPEG 写入 XMP `dc:description`（含中文）后 Windows 能读~~ → **实证 `dc:description` 读不到**；改验证 **EXIF `XPComment` (UTF-16LE) → Windows「备注」列读出完整中文** ✅
+- [x] PNG `tEXt`/`iTXt` 写入后能读回一致（UTF-8）✅
+- [x] WebP XMP 写入后能读回一致 ✅
+- [x] 写入不改变像素（JPEG piexif 无损 / PNG 无损 / WebP lossless 均验证）✅
+- [x] 输出选型结论 → `spike/findings.md`（并据此回写 ADR-0009 / spec / 工单 02）✅
