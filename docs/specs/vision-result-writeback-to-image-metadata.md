@@ -9,14 +9,14 @@
 
 ## 方案（Solution）
 
-让图像文件本身成为解读结果的 source of truth：vision 解读出的 Markdown 写入图像文件元数据（JPEG→XMP `dc:description` UTF-8；PNG→`tEXt`/`iTXt`；WebP→XMP/EXIF ancillary）。indexer 在重建时先从元数据「读回」，有则直接建树、不调 vision API；无则维持占位节点入队。为避免「写回改字节 → 指纹变 → 死循环」，`file_hash` 对图像格式改为「内容指纹」口径（剥离元数据段后算）。仅 jpg/jpeg/png/webp 解读+写回；其他图像格式不解读不写回；非图像文档照常索引。
+让图像文件本身成为解读结果的 source of truth：vision 解读出的 Markdown 写入图像文件元数据（JPEG→EXIF `XPComment` UTF-16LE，piexif 无损写入；PNG→`tEXt`/`iTXt`；WebP→XMP ancillary）——注：原设计 JPEG 用 XMP `dc:description`，工单 01 spike 实证 Windows 读不到，改用 EXIF `XPComment`（见 ADR-0009 Spike 修正）。indexer 在重建时先从元数据「读回」，有则直接建树、不调 vision API；无则维持占位节点入队。为避免「写回改字节 → 指纹变 → 死循环」，`file_hash` 对图像格式改为「内容指纹」口径（剥离元数据段后算）。仅 jpg/jpeg/png/webp 解读+写回；其他图像格式不解读不写回；非图像文档照常索引。
 
 ## 用户故事（User Stories）
 
 **写回**
 1. 作为知识库用户，我希望 vision 解读完一张图后解读文本自动写进该图像文件元数据，这样结果跟文件走、不依赖 `index.db`。
 2. 作为知识库用户，我希望写回只改元数据、不改图像像素内容，这样图像视觉效果不变。
-3. 作为知识库用户，我希望 JPEG 的解读写进 XMP `dc:description`（UTF-8），这样中文不乱码、Windows 资源管理器「备注」能读到。
+3. 作为知识库用户，我希望 JPEG 的解读写进 EXIF `XPComment`（UTF-16LE、piexif 无损写入），这样中文不乱码、Windows 资源管理器「备注」能读到。
 4. 作为知识库用户，我希望 PNG 的解读写进 `tEXt`/`iTXt`，这样 doclens 自己能读回。
 5. 作为知识库用户，我希望 WebP 的解读写进 XMP/EXIF ancillary，这样 doclens 自己能读回。
 6. 作为知识库用户，我希望写回的 payload 带 model_tag 与 prompt 版本，这样换 prompt/模型后能识别需要重新解读的图。
@@ -58,7 +58,7 @@
   - `write_back(image_path, markdown, *, model_tag, prompt_version) -> bool`：按格式分流写入；失败返回 False（不抛）。
   - `content_fingerprint(image_path) -> str`：剥离该格式元数据段后对核心内容算指纹。
   - 格式范围常量：解读+写回集合 = `{jpg, jpeg, png, webp}`；全图像集合（用于「其他图像格式跳过」判断）。
-  - 元数据载体：JPEG→XMP `dc:description`（UTF-8）；PNG→`tEXt`/`iTXt`（UTF-8）；WebP→XMP/EXIF ancillary。payload 为带版本头的结构化封装。
+  - 元数据载体：JPEG→EXIF `XPComment` (0x9c9c UTF-16LE，经 piexif 无损写入)；PNG→`tEXt`/`iTXt`（UTF-8）；WebP→XMP ancillary。payload 为带版本头的结构化封装（JPEG 的 `XPComment` 同时供 Windows 人看 + doclens 机器读，格式见工单 02）。
 - **`file_hash` 改内容指纹口径，走现有 `file_hash_fn` 注入点**：注入一个新哈希函数——图像格式（按解读+写回集合）→ `content_fingerprint`；其余格式 → 现有 `_file_hash_with_salts`。一个函数内分流，**非图像零影响、不动 indexer 核心循环**。
 - **格式范围收缩**：解读+写回集合 = jpg/jpeg/png/webp。gif/bmp/tiff/tif **不再进 vision 流程**（不产占位、不入队、不写回）——这是对现状「这些格式进占位节点」的显式行为变更。svg 仍归 code（不变）。
 - **读回闭环**：image 解析入口在产出占位节点前先调 `read_back`；命中且版本匹配 → 用解读 Markdown 走 `md_to_tree` 建树、**不设 `vision_pending`（不入队）**；未命中/版本不符 → 维持占位 + `vision_pending`（入队）。
@@ -67,7 +67,7 @@
 - **首迁移时序（关键陷阱）**：口径切换首轮，旧图元数据为空（从未写回过）→ 必然重花一次全量 vision API 完成「解读 + 首次写回」；**从第二轮 `force` 重建起才享读回红利**。须在迁移/发布文档明示。
 - **配置**：复用现有 `vision_*` 配置（`vision_api_key` / `vision_base_url` / `vision_model` / `vision_protocol`）。无需新增「是否写回」开关——写回是默认行为，失败降级。
 - **可观测**：复用 `vision_queue` 状态 + 状态 API 展示；写回失败计入现有 failed 机制或单独计数（实现时定）。
-- **依赖风险**：JPEG XMP 写入 Pillow 原生支持有限，可能需 `piexif`、`pillow-heif` 或 `exiftool` 子进程——实现阶段评估选型，属本 spec 最大实现风险点。
+- **依赖**：JPEG 用 **piexif**（纯 Python、无损 EXIF 写入、spike 验证通过）；PNG/WebP 用已装的 Pillow。新增依赖仅 piexif。（原风险点「JPEG XMP 写入选型」已由工单 01 spike 消除。）
 
 ## 测试决策（Testing Decisions）
 
