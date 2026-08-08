@@ -400,6 +400,26 @@ class IndexManager:
         except Exception:
             pass
 
+    def vision_status(self) -> dict:
+        """vision 处理状态：队列计数（待解析/已写回/失败）+ write_back 失败计数。工单 09。"""
+        from treesearch.parsers import image_metadata
+        counts: dict = {}
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                counts = fts.vision_counts()
+            finally:
+                close = getattr(fts, "close", None)
+                if callable(close):
+                    close()
+        except Exception:
+            pass
+        return {
+            "queue": counts,
+            "writeback_failures": image_metadata.writeback_failure_count(),
+        }
+
     def load_or_build_index(self):
         """加载或构建索引"""
         self._sync_image_version_expectation()
