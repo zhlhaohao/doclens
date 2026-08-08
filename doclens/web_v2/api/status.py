@@ -50,4 +50,6 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         },
         # Git 同步快照（ADR-0006）；None = 同步循环未注册（配置关闭）
         "sync": sync_snapshot(),
+        # vision 处理状态（工单 09）：队列计数 + write_back 失败计数
+        "vision": idx.vision_status(),
     }

@@ -99,6 +99,20 @@ def set_expected_version(
     _expected_prompt_version = prompt_version
 
 
+# write_back 失败计数（工单 09 可观测；经 writeback_failure_count 读、reset 清零）
+_writeback_failures: int = 0
+
+
+def writeback_failure_count() -> int:
+    """返回累计的 write_back 失败次数（供 status API 展示）。"""
+    return _writeback_failures
+
+
+def reset_writeback_failures() -> None:
+    global _writeback_failures
+    _writeback_failures = 0
+
+
 def read_back(
     image_path: str,
     *,
@@ -156,19 +170,24 @@ def write_back(
     model_tag: str,
     prompt_version: str,
 ) -> bool:
-    """无损写入解读 payload 到图像元数据。失败返回 False（不抛）。
+    """无损写入解读 payload 到图像元数据。失败返回 False（不抛），并计入失败计数（工单 09）。
 
     JPEG：合并已有 EXIF（只改 XPComment，不覆盖其他字段），piexif 无损 insert。
     """
     ext = _ext(image_path)
     if ext in _JPEG_EXTS:
-        return _write_jpeg(image_path, markdown, model_tag, prompt_version)
-    if ext == ".png":
-        return _write_png(image_path, markdown, model_tag, prompt_version)
-    if ext == ".webp":
-        return _write_webp(image_path, markdown, model_tag, prompt_version)
-    logger.warning("write_back 暂不支持 %s", ext)
-    return False
+        ok = _write_jpeg(image_path, markdown, model_tag, prompt_version)
+    elif ext == ".png":
+        ok = _write_png(image_path, markdown, model_tag, prompt_version)
+    elif ext == ".webp":
+        ok = _write_webp(image_path, markdown, model_tag, prompt_version)
+    else:
+        logger.warning("write_back 暂不支持 %s", ext)
+        ok = False
+    if not ok:
+        global _writeback_failures
+        _writeback_failures += 1
+    return ok
 
 
 def _write_jpeg(
