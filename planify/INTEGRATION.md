@@ -59,7 +59,6 @@ async def lifespan(app: FastAPI):
     # 1. 注册 Planify 配置
     from app.third_party.planify.bootstrap import register_planify_config
     register_planify_config(
-        provider=settings.PLANIFY_PROVIDER or "anthropic",
         planify_api_key=settings.PLANIFY_API_KEY or "",
         planify_model_id=settings.PLANIFY_MODEL_ID or "claude-opus-4-6",
         planify_base_url=settings.PLANIFY_BASE_URL or "",
@@ -545,7 +544,6 @@ async def lifespan(app: FastAPI):
 
     # 注册配置
     register_planify_config(
-        provider=settings.PLANIFY_PROVIDER or "anthropic",
         planify_api_key=settings.PLANIFY_API_KEY,
         planify_model_id=settings.PLANIFY_MODEL_ID,
         planify_base_url=settings.PLANIFY_BASE_URL,
@@ -607,46 +605,18 @@ async def chat_stream(query: str, current_user = Depends(get_current_user)):
 
 ---
 
-## 7. 切换 LLM Provider
+## 7. 切换 LLM 端点
 
-通过 `provider` 参数选择 LLM Provider，或设置环境变量 `PLANIFY_PROVIDER`。
+通过 `protocol` + `base_url` 指定 LLM 端点（不再有 provider 预设；选 SDK 仅由 `protocol` 决定）：
 
-### 7.1 切换到 DeepSeek
+- `protocol`：`anthropic`（默认，走 `/v1/messages`）或 `openai_compat`（走 `/chat/completions`）
+- `base_url`：端点 URL；留空则用 SDK 默认（Anthropic 原生）
 
 ```python
 register_planify_config(
-    provider="deepseek",
     planify_api_key="sk-...",
     planify_model_id="deepseek-chat",
-)
-```
-
-或环境变量：
-
-```bash
-export PLANIFY_PROVIDER=deepseek
-export PLANIFY_API_KEY=sk-...
-export PLANIFY_MODEL_ID=deepseek-chat
-```
-
-### 7.2 切换到 Qwen（阿里云通义千问）
-
-```python
-register_planify_config(
-    provider="qwen",
-    planify_api_key="sk-...",
-    planify_model_id="qwen-plus",
-)
-```
-
-### 7.3 自定义 OpenAI 兼容代理
-
-```python
-register_planify_config(
-    provider="custom",
-    planify_api_key="...",
-    planify_model_id="my-model",
-    planify_base_url="https://my-proxy/v1",
+    planify_base_url="https://api.deepseek.com/v1",
     planify_protocol="openai_compat",
 )
 ```
@@ -654,9 +624,10 @@ register_planify_config(
 或环境变量：
 
 ```bash
-export PLANIFY_PROVIDER=custom
-export PLANIFY_BASE_URL=https://my-proxy/v1
 export PLANIFY_PROTOCOL=openai_compat
-export PLANIFY_API_KEY=...
-export PLANIFY_MODEL_ID=...
+export PLANIFY_BASE_URL=https://api.deepseek.com/v1
+export PLANIFY_API_KEY=sk-...
+export PLANIFY_MODEL_ID=deepseek-chat
 ```
+
+Anthropic 原生（默认）只需 `PLANIFY_API_KEY` + `PLANIFY_MODEL_ID`。

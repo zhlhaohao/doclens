@@ -73,13 +73,8 @@ class _PlanifySettings:
         return self._get("base_url", "")
 
     @property
-    def PLANIFY_PROVIDER(self) -> str:
-        """LLM provider 名称（默认 "anthropic"）。"""
-        return self._get("provider_name", "anthropic")
-
-    @property
     def PLANIFY_PROTOCOL(self) -> str:
-        """自定义 provider 的协议（空字符串表示使用预设默认协议）。"""
+        """协议（"anthropic" / "openai_compat"，空表示默认 anthropic）。"""
         return self._get("protocol", "")
 
     @property
@@ -187,7 +182,6 @@ def get_config(
     # 基础配置
     config = {
         # API 配置
-        "provider_name": os.getenv("PLANIFY_PROVIDER") or _get_env_or_default("provider_name", "anthropic"),
         "protocol": os.getenv("PLANIFY_PROTOCOL") or _get_env_or_default("protocol", ""),
         "model_id": os.getenv("PLANIFY_MODEL_ID"),
         "base_url": os.getenv("PLANIFY_BASE_URL"),
