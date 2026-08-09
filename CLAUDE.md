@@ -32,6 +32,8 @@ pip install -e ".[dev]"
 
 > 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
 
+> **worktree 开发复用主仓库 `../cortex/.venv`**（依赖共享；doclens 源码经 PYTHONPATH 取 worktree 本地）——无需在 worktree 重建 venv，直接用 `../cortex/.venv/Scripts/python.exe`。
+
 ## doclens 技术栈
 
 ### 核心技术
