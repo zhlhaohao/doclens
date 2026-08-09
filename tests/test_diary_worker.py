@@ -21,7 +21,6 @@ def _config(**overrides):
     base = dict(
         planify_api_key="sk-test",
         planify_model_id="test-model",
-        planify_provider="anthropic",
         planify_protocol="",
         planify_base_url=None,
         vision_api_key=None,
@@ -62,7 +61,7 @@ class TestDescribePhotoProtocol:
         assert describe_photo(img, _config(vision_protocol="anthropic")) == "anthropic-desc"
         assert called["path"] == "anthropic"
 
-    def test_vision_anthropic_uses_planify_provider(self, tmp_path, monkeypatch):
+    def test_vision_anthropic_uses_planify_create_provider(self, tmp_path, monkeypatch):
         """anthropic 分支：构造 image source block，经 planify provider，提取 text。"""
         import base64 as _b64
 

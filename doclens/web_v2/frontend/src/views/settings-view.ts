@@ -7,8 +7,6 @@ import type { SettingsScope } from "../state/types";
 import {
   SETTINGS_FIELDS,
   SETTINGS_TAB_LABELS,
-  PRESET_BASE_URLS,
-  PRESET_PROTOCOLS,
   WEIGHT_SECTION,
   DEFAULT_WEIGHTS,
   FIELD_DEFAULTS,
@@ -20,6 +18,7 @@ import { getConfig, putConfig, resetConfigDefault, ConfigApiError } from "../api
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
+import "../components/model-presets-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
@@ -557,7 +556,6 @@ export class SettingsView extends LitElement {
   @state() private _toast: string | null = null;
   @state() private _values: Record<string, string> = {};
   @state() private _original: Record<string, string> = {};
-  @state() private _userEditedBaseUrl = false;
   @state() private _exists = true;
   @state() private _scope: SettingsScope = "global";
   @state() private _fieldErrors: Record<string, string> = {};
@@ -607,24 +605,6 @@ export class SettingsView extends LitElement {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
-      this._userEditedBaseUrl = false;
-      // 已知 provider 预设回填：.env 里 base_url/protocol 为空时展示预设值
-      // （与切换 provider 时 _onProviderChange 行为一致）。回填同步进 _original，
-      // 故不会凭空标 dirty；用户保存才会把这些预设值真正写入 .env。
-      const provider = this._values["PLANIFY_PROVIDER"] ?? "";
-      if (provider && provider !== "custom") {
-        const fill: Record<string, string> = {};
-        if (!(this._values["PLANIFY_BASE_URL"] ?? "")) {
-          fill["PLANIFY_BASE_URL"] = PRESET_BASE_URLS[provider] ?? "";
-        }
-        if (!(this._values["PLANIFY_PROTOCOL"] ?? "")) {
-          fill["PLANIFY_PROTOCOL"] = PRESET_PROTOCOLS[provider] ?? "anthropic";
-        }
-        if (Object.keys(fill).length) {
-          this._values = { ...this._values, ...fill };
-          this._original = { ...this._values };
-        }
-      }
       this._exists = resp.exists;
       this._fieldErrors = {};
       actions.loadSettings(this._values, resp.exists);
@@ -655,44 +635,7 @@ export class SettingsView extends LitElement {
   }
 
   private _onInput(envVar: string, value: string) {
-    if (envVar === "PLANIFY_PROVIDER") {
-      this._onProviderChange(value);
-      return;
-    }
-    if (envVar === "PLANIFY_BASE_URL") {
-      this._onBaseUrlChange(value);
-      return;
-    }
     this._updateValues({ [envVar]: value });
-  }
-
-  private _onProviderChange(newProvider: string) {
-    if (newProvider === "custom") {
-      const updates: Record<string, string> = this._values["PLANIFY_PROTOCOL"]
-        ? { PLANIFY_PROVIDER: newProvider }
-        : { PLANIFY_PROVIDER: newProvider, PLANIFY_PROTOCOL: "openai_compat" };
-      this._updateValues(updates);
-      return;
-    }
-
-    if (!this._userEditedBaseUrl) {
-      this._updateValues({
-        PLANIFY_PROVIDER: newProvider,
-        PLANIFY_BASE_URL: PRESET_BASE_URLS[newProvider] ?? "",
-        PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
-      });
-      return;
-    }
-
-    this._updateValues({
-      PLANIFY_PROVIDER: newProvider,
-      PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
-    });
-  }
-
-  private _onBaseUrlChange(newBaseUrl: string) {
-    this._userEditedBaseUrl = true;
-    this._updateValues({ PLANIFY_BASE_URL: newBaseUrl });
   }
 
   private _isMobile(): boolean {
@@ -730,7 +673,6 @@ export class SettingsView extends LitElement {
 
   private _revert() {
     this._values = { ...this._original };
-    this._userEditedBaseUrl = false;
     actions.revertSettings();
   }
 
@@ -743,7 +685,6 @@ export class SettingsView extends LitElement {
       const result = await putConfig(this._scope, this._values);
       if (!this.isConnected) return;
       this._original = { ...this._values };
-      this._userEditedBaseUrl = false;
       actions.loadSettings(this._values, true);
       // 重新拉一次 /api/status：settings-view 和 chat-view 共享 store.status，
       // 旧值在 connectedCallback 一次性载入后不会自动更新。不刷新的话，
@@ -853,7 +794,6 @@ export class SettingsView extends LitElement {
       if (!this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
-      this._userEditedBaseUrl = false;
       actions.loadSettings(resp.values, true);
       void this._refreshSystemStatus();
       const msg = "已恢复默认配置（保留你的 API Key）。";
@@ -1042,6 +982,13 @@ export class SettingsView extends LitElement {
               }
               return html`
                 <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
+                  ${tab === "ai" ? html`
+                    <model-presets-section
+                      .activeLlm=${this._values["CORTEX_ACTIVE_LLM_PRESET"] ?? ""}
+                      .activeVision=${this._values["CORTEX_ACTIVE_VISION_PRESET"] ?? ""}
+                      @presets-activated=${() => this._load()}
+                    ></model-presets-section>
+                  ` : nothing}
                   ${sections.map((s) => s.title === WEIGHT_SECTION ? html`
                     <div class="section">
                       <h2>${s.title}</h2>

@@ -8,18 +8,16 @@ def create_provider(config: dict):
     """根据 config 创建 LLMProvider 实例。
 
     Args:
-        config: 配置字典，必须含 provider_name / api_key / model_id；
-                custom 预设还须含 base_url / protocol。
+        config: 配置字典，含 ``api_key`` / ``model_id``；可选 ``base_url`` / ``protocol``
+                （``protocol`` 默认 ``"anthropic"``，``base_url`` 默认 None 用 SDK 端点）。
 
     Returns:
-        LLMProvider 实现（AnthropicProvider 或 OpenAICompatProvider，Task 9 引入后者）。
+        LLMProvider 实现（AnthropicProvider 或 OpenAICompatProvider）。
     """
-    provider_name, base_url, model_id, protocol = resolve_provider_config(config)
+    base_url, model_id, protocol = resolve_provider_config(config)
     api_key = config.get("api_key", "")
-
     if protocol == "anthropic":
         return AnthropicProvider(api_key=api_key, base_url=base_url, model=model_id)
     elif protocol == "openai_compat":
         return OpenAICompatProvider(api_key=api_key, base_url=base_url, model=model_id)
-    else:
-        raise ValueError(f"unknown protocol: {protocol}")
+    raise ValueError(f"unknown protocol: {protocol}")

@@ -20,11 +20,13 @@ vi.mock("../src/api/config", () => ({
   resetConfigDefault: vi.fn().mockResolvedValue({
     scope: "global",
     values: {
-      PLANIFY_PROVIDER: "minimax",
       PLANIFY_PROTOCOL: "openai_compat",
       PLANIFY_BASE_URL: "",
       PLANIFY_API_KEY: "",
       PLANIFY_MODEL_ID: "",
+      VISION_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      VISION_MODEL: "qwen-vl-max",
+      VISION_PROTOCOL: "",
       CORTEX_MAX_RESULTS: "50",
       CORTEX_MIN_SCORE_THRESHOLD: "0.3",
       CORTEX_MAX_SPAN: "50",
@@ -35,8 +37,10 @@ vi.mock("../src/api/config", () => ({
       CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
       CORTEX_WEB_HOST: "127.0.0.1",
       CORTEX_WEB_PORT: "7860",
+      CORTEX_MCP_ENABLED: "false",
       CORTEX_MCP_HOST: "127.0.0.1",
       CORTEX_MCP_PORT: "7880",
+      CORTEX_SYNC_ENABLED: "true",
     },
     exists: true,
   }),
@@ -65,7 +69,7 @@ describe("<settings-view>", () => {
     expect(tabs?.length).toBe(3);
     expect(tabs?.[0].textContent?.trim()).toBe("AI 配置");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索调优");
-    expect(tabs?.[2].textContent?.trim()).toBe("🌐 网络监听");
+    expect(tabs?.[2].textContent?.trim()).toBe("网络监听");
   });
 
   it("AI tab is active by default", () => {
@@ -81,10 +85,10 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("search");
   });
 
-  it("renders all 5 fields for AI tab", () => {
+  it("renders 0 .field for AI tab (模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(5);
+    expect(fields?.length).toBe(0);
   });
 
   it("renders all 8 fields for search tab (含并入的评分权重)", async () => {

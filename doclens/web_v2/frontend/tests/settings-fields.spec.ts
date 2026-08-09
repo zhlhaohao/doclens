@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 23 fields", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(23);
+  it("has exactly 14 fields (AI 模型字段已移除，由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(14);
   });
 
   it("every field has a unique envVar", () => {
@@ -46,16 +46,9 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network"]);
   });
 
-  it("AI tab has 9 fields all marked live (5 PLANIFY + 4 视觉)", () => {
+  it("AI tab has no SETTINGS_FIELDS (模型配置由 <model-presets-section> 接管)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
-    expect(ai).toHaveLength(9);
-    expect(ai.every((f) => f.effect === "live")).toBe(true);
-  });
-
-  it("password field is PLANIFY_API_KEY with mono", () => {
-    const apiKey = SETTINGS_FIELDS.find((f) => f.envVar === "PLANIFY_API_KEY");
-    expect(apiKey?.component).toBe("password");
-    expect(apiKey?.mono).toBe(true);
+    expect(ai).toHaveLength(0);
   });
 
   it("search tab 所有字段都有 hint（常驻描述行数据来源）", () => {
