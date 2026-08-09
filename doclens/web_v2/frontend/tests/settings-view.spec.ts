@@ -4,11 +4,13 @@ import { fixture, html, elementUpdated } from "@open-wc/testing";
 import "../src/views/settings-view";
 import type { SettingsView } from "../src/views/settings-view";
 
-// Mock the API client so tests don't hit network
+// Mock the API client so tests don't hit network.
+// 搜索/AI 字段已移除（由预设区块接管），设置页只剩 network 字段；mock 用 WEB_PORT
+// 作为可调字段（非默认值让 reset 按钮启用）。
 vi.mock("../src/api/config", () => ({
   getConfig: vi.fn().mockResolvedValue({
     scope: "global",
-    values: { CORTEX_MAX_RESULTS: "42" },
+    values: { CORTEX_WEB_PORT: "8888" },
     exists: true,
   }),
   putConfig: vi.fn().mockResolvedValue({
@@ -20,21 +22,6 @@ vi.mock("../src/api/config", () => ({
   resetConfigDefault: vi.fn().mockResolvedValue({
     scope: "global",
     values: {
-      PLANIFY_PROTOCOL: "openai_compat",
-      PLANIFY_BASE_URL: "",
-      PLANIFY_API_KEY: "",
-      PLANIFY_MODEL_ID: "",
-      VISION_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      VISION_MODEL: "qwen-vl-max",
-      VISION_PROTOCOL: "",
-      CORTEX_MAX_RESULTS: "50",
-      CORTEX_MIN_SCORE_THRESHOLD: "0.3",
-      CORTEX_MAX_SPAN: "50",
-      CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
-      CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
-      CORTEX_WEIGHT_FTS_SCORE: "1.0",
-      CORTEX_WEIGHT_TITLE_MATCH: "2.0",
-      CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
       CORTEX_WEB_HOST: "127.0.0.1",
       CORTEX_WEB_PORT: "7860",
       CORTEX_MCP_ENABLED: "false",
@@ -77,12 +64,12 @@ describe("<settings-view>", () => {
     expect(active?.textContent?.trim()).toBe("AI 配置");
   });
 
-  it("clicking 搜索调优 tab switches active panel", async () => {
+  it("clicking 网络监听 tab switches active panel", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click();
+    (tabs?.[2] as HTMLButtonElement).click();
     await elementUpdated(el);
     const activePanel = el.shadowRoot?.querySelector(".tab-panel.active");
-    expect(activePanel?.getAttribute("data-panel")).toBe("search");
+    expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
   it("renders 0 .field for AI tab (模型配置由预设区块接管)", () => {
@@ -91,65 +78,42 @@ describe("<settings-view>", () => {
     expect(fields?.length).toBe(0);
   });
 
-  it("renders all 8 fields for search tab (含并入的评分权重)", async () => {
+  it("renders 0 .field for search tab (搜索参数由预设区块接管)", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
     (tabs?.[1] as HTMLButtonElement).click();
     await elementUpdated(el);
     const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
-    expect(panel?.querySelectorAll(".field").length).toBe(3);
-    expect(panel?.querySelectorAll(".weights-grid .w-item").length).toBe(5);
+    expect(panel?.querySelectorAll(".field").length).toBe(0);
   });
 
-  it("权重区渲染为 weights-grid 网格", async () => {
+  it("footer 恢复默认调 reset-default，字段刷成默认值（network tab）", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click();
-    await elementUpdated(el);
-    const grid = el.shadowRoot?.querySelector(".weights-grid");
-    expect(grid).toBeTruthy();
-    expect(grid?.querySelectorAll(".w-item").length).toBe(5);
-    expect(grid?.querySelectorAll('input[type="range"]').length).toBe(5);
-  });
-
-  it("search tab 字段渲染常驻描述行（含取值范围）", async () => {
-    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click();
-    await elementUpdated(el);
-    const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
-    const descs = Array.from(panel?.querySelectorAll(".desc") ?? []);
-    expect(descs.length).toBe(8);  // 3 普通过滤字段 + 5 权重
-    expect(descs[0].textContent).toContain("· 1–200");
-    expect(panel?.querySelector(".w-item .desc")?.textContent).toContain("· 0–10");
-  });
-
-  it("footer 恢复默认调 reset-default 端点，字段刷成模板默认值（直接持久化、不标 dirty）", async () => {
-    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click();
+    (tabs?.[2] as HTMLButtonElement).click(); // network tab
     await elementUpdated(el);
     const btn = el.shadowRoot?.querySelector(".footer-bar .reset-all") as HTMLButtonElement;
     expect(btn).toBeTruthy();
-    // mock 里 CORTEX_MAX_RESULTS=42 非默认 → 按钮可用
+    // mock 里 CORTEX_WEB_PORT=8888 非默认 → 按钮可用
     expect(btn.disabled).toBe(false);
 
     btn.click();
     await elementUpdated(el);
     await new Promise((r) => setTimeout(r, 0)); // 等 async resetConfigDefault 完成
-    // 重置为模板默认值（显式 50，非空串；后端已写盘，前端只是回显）
     const numInput = el.shadowRoot?.querySelector(
-      'input[data-env="CORTEX_MAX_RESULTS"]'
+      'input[data-env="CORTEX_WEB_PORT"]'
     ) as HTMLInputElement;
-    expect(numInput.value).toBe("50");
+    expect(numInput.value).toBe("7860");
     // 全部回到默认 → 按钮禁用（_allAtDefault=true）
     expect(btn.disabled).toBe(true);
   });
 
   it("updates a field value via input event and marks dirty", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click();  // search tab
+    (tabs?.[2] as HTMLButtonElement).click(); // network tab
     await elementUpdated(el);
     const input = el.shadowRoot?.querySelector(
-      'input[data-env="CORTEX_MAX_RESULTS"]'
+      'input[data-env="CORTEX_WEB_PORT"]'
     ) as HTMLInputElement;
-    input.value = "99";
+    input.value = "9999";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     await elementUpdated(el);
 
@@ -164,14 +128,13 @@ describe("<settings-view>", () => {
 
   it("clicking save calls putConfig with current values", async () => {
     const { putConfig } = await import("../src/api/config");
-    // Make a field dirty so the save button is enabled and _save() proceeds
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[1] as HTMLButtonElement).click(); // search tab
+    (tabs?.[2] as HTMLButtonElement).click(); // network tab
     await elementUpdated(el);
     const input = el.shadowRoot?.querySelector(
-      'input[data-env="CORTEX_MAX_RESULTS"]'
+      'input[data-env="CORTEX_WEB_PORT"]'
     ) as HTMLInputElement;
-    input.value = "99";
+    input.value = "9999";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     await elementUpdated(el);
 

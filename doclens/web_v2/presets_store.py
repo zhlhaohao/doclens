@@ -19,8 +19,16 @@ _LOCK = threading.Lock()
 _FILENAME = "model_presets.json"
 _SCHEMA_VERSION = 1
 
-# 预设持久化字段白名单（与 Preset 模型对齐）
-_FIELDS = ("name", "kind", "protocol", "base_url", "model_id", "api_key", "context_window")
+# 预设持久化字段白名单（与 Preset 模型对齐；模型字段=llm|vision，搜索字段=search）
+_FIELDS = (
+    "name", "kind",
+    # 模型连接（llm|vision）
+    "protocol", "base_url", "model_id", "api_key", "context_window",
+    # 搜索调优（search）
+    "max_results", "min_score_threshold", "max_span",
+    "weight_keyword_match", "weight_file_name_match", "weight_fts_score",
+    "weight_title_match", "weight_proximity_match",
+)
 
 
 class PresetError(Exception):
@@ -125,17 +133,12 @@ def create_preset(fields: dict) -> dict:
         data = _load_raw()
         if _find_by_name(data["presets"], name, kind):
             raise PresetError(f"同名预设已存在: {name}")
-        preset = {
-            "id": uuid.uuid4().hex,
-            "name": name,
-            "kind": kind,
-            "protocol": fields.get("protocol", ""),
-            "base_url": fields.get("base_url", ""),
-            "model_id": fields.get("model_id", ""),
-            "api_key": fields.get("api_key", ""),
-        }
-        if kind == "llm":
-            preset["context_window"] = fields.get("context_window")
+        preset = {"id": uuid.uuid4().hex, "name": name, "kind": kind}
+        for f in _FIELDS:
+            if f in ("name", "kind"):
+                continue
+            if f in fields and fields[f] is not None:
+                preset[f] = fields[f]
         new_data = {**data, "presets": [*data["presets"], preset]}
         _save_raw(new_data)
     return _mask(_project(preset))

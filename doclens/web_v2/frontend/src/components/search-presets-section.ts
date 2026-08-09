@@ -8,56 +8,62 @@ import {
   listPresets,
   updatePreset,
   PresetsApiError,
-  type NewPresetInput,
   type Preset,
-  type PresetKind,
-  type PresetProtocol,
 } from "../api/presets";
 
-/** 空表单初值（新建用）。 */
-function emptyForm(kind: PresetKind): FormState {
+/** 搜索预设表单初值（新建用，预填出厂默认）。 */
+function emptyForm(): FormState {
   return {
     name: "",
-    kind,
-    protocol: "openai_compat",
-    base_url: "",
-    model_id: "",
-    api_key: "",
-    context_window: "",
+    max_results: "50",
+    min_score_threshold: "0.3",
+    max_span: "50",
+    weight_keyword_match: "4.0",
+    weight_file_name_match: "2.0",
+    weight_fts_score: "1.0",
+    weight_title_match: "2.0",
+    weight_proximity_match: "1.0",
   };
 }
 
 interface FormState {
   name: string;
-  kind: PresetKind;
-  protocol: PresetProtocol;
-  base_url: string;
-  model_id: string;
-  api_key: string;
-  context_window: string;
+  max_results: string;
+  min_score_threshold: string;
+  max_span: string;
+  weight_keyword_match: string;
+  weight_file_name_match: string;
+  weight_fts_score: string;
+  weight_title_match: string;
+  weight_proximity_match: string;
 }
 
 interface EditingState {
   mode: "new" | "edit";
-  kind: PresetKind;
-  presetId?: string; // edit 模式下被编辑预设 id
+  presetId?: string;
   form: FormState;
 }
 
-const PROTOCOL_OPTIONS: { value: PresetProtocol; label: string }[] = [
-  { value: "openai_compat", label: "OpenAI 兼容" },
-  { value: "anthropic", label: "Anthropic" },
+// 表单字段 → 数字字段元数据（label / hint 意义 / min / max / step）
+const FIELDS: { key: keyof Omit<FormState, "name">; label: string; hint: string; min: number; max: number; step: number }[] = [
+  { key: "max_results", label: "最大结果数", hint: "search 工具最多返回多少篇文档", min: 1, max: 500, step: 1 },
+  { key: "min_score_threshold", label: "评分阈值", hint: "低于该综合分的结果被过滤，0 = 不过滤", min: 0, max: 1, step: 0.05 },
+  { key: "max_span", label: "关键词集中度", hint: "邻近度统计的关键词最大字符跨度", min: 1, max: 100, step: 1 },
+  { key: "weight_keyword_match", label: "关键词权重", hint: "命中的关键词越多排越前", min: 0, max: 10, step: 0.1 },
+  { key: "weight_file_name_match", label: "文件名权重", hint: "文件名含关键词的文档排更前", min: 0, max: 10, step: 0.1 },
+  { key: "weight_fts_score", label: "FTS 分权重", hint: "偏向传统 BM25 全文检索排序", min: 0, max: 10, step: 0.1 },
+  { key: "weight_title_match", label: "标题权重", hint: "小节标题含关键词排更前", min: 0, max: 10, step: 0.1 },
+  { key: "weight_proximity_match", label: "邻近度权重", hint: "关键词紧邻出现的文档排更前", min: 0, max: 10, step: 0.1 },
 ];
 
 /**
- * 模型预设管理区块（ADR-0009）。挂在设置页 AI tab 顶部。
+ * 搜索预设管理区块（ADR-0010）。挂在设置页 search tab 顶部。
  *
- * 一键切换 = 后端把预设全部字段物化写进 global .env（+ 清 local 残留）+ reload_config；
- * 切换成功后派发 `presets-activated` 事件，由 <settings-view> 监听并重新
- * 拉取 .env，从而刷新「当前激活预设」高亮与下方字段散填区。
+ * 复用模型预设的整套机制（同一 model_presets.json / presets_store / /api/presets /
+ * 物化写 global .env），kind=search。切换即时热生效（无副作用）。
  */
-@customElement("model-presets-section")
-export class ModelPresetsSection extends LitElement {
+@customElement("search-presets-section")
+export class SearchPresetsSection extends LitElement {
   static styles = css`
     :host {
       display: block;
@@ -88,9 +94,7 @@ export class ModelPresetsSection extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
     }
-    .group {
-      margin-top: var(--cortex-space-4);
-    }
+    .group { margin-top: var(--cortex-space-3); }
     .group-title {
       font-size: var(--cortex-fs-sm);
       font-weight: 600;
@@ -144,10 +148,7 @@ export class ModelPresetsSection extends LitElement {
     .preset-meta {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
-      font-family: var(--cortex-font-mono);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
     }
     .row-actions {
       display: flex;
@@ -165,10 +166,7 @@ export class ModelPresetsSection extends LitElement {
       font-family: inherit;
       transition: background 0.15s, border-color 0.15s;
     }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
+    .icon-btn:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-muted); }
     .icon-btn.primary {
       background: var(--cortex-btn-primary-bg);
       border-color: var(--cortex-btn-primary-bg);
@@ -188,7 +186,6 @@ export class ModelPresetsSection extends LitElement {
       padding: var(--cortex-space-2) 0;
     }
 
-    /* ===== 内联编辑表单 ===== */
     .form {
       margin-top: var(--cortex-space-3);
       padding: var(--cortex-space-4);
@@ -206,7 +203,19 @@ export class ModelPresetsSection extends LitElement {
       color: var(--cortex-text-muted);
       margin-bottom: 2px;
     }
-    .input, .select {
+    .field-label .field-range {
+      font-weight: 400;
+      color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
+      margin-left: var(--cortex-space-2);
+    }
+    .field-hint {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+    .input {
       padding: 8px 10px;
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
@@ -216,9 +225,9 @@ export class ModelPresetsSection extends LitElement {
       color: var(--cortex-text);
       width: 100%;
       box-sizing: border-box;
+      font-variant-numeric: tabular-nums;
     }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus {
+    .input:focus {
       outline: none;
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-focus-ring);
@@ -234,7 +243,6 @@ export class ModelPresetsSection extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-danger);
     }
-
     .msg {
       font-size: var(--cortex-fs-xs);
       padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -249,9 +257,8 @@ export class ModelPresetsSection extends LitElement {
     }
   `;
 
-  /** 当前激活预设名（来自 .env 的 CORTEX_ACTIVE_*_PRESET，由 settings-view 传入）。 */
-  @property() activeLlm = "";
-  @property() activeVision = "";
+  /** 当前激活搜索预设名（来自 .env CORTEX_ACTIVE_SEARCH_PRESET）。 */
+  @property() activeSearch = "";
 
   @state() private _presets: Preset[] = [];
   @state() private _loading = true;
@@ -277,7 +284,7 @@ export class ModelPresetsSection extends LitElement {
   private async _load() {
     this._error = null;
     try {
-      this._presets = await listPresets();
+      this._presets = await listPresets("search");
     } catch (e) {
       this._error = `加载预设失败: ${(e as Error).message}`;
     } finally {
@@ -285,12 +292,8 @@ export class ModelPresetsSection extends LitElement {
     }
   }
 
-  private _byKind(kind: PresetKind): Preset[] {
-    return this._presets.filter((p) => p.kind === kind);
-  }
-
   private _isActive(p: Preset): boolean {
-    return (p.kind === "llm" ? this.activeLlm : this.activeVision) === p.name;
+    return this.activeSearch === p.name;
   }
 
   private _setFlash(msg: string) {
@@ -307,25 +310,26 @@ export class ModelPresetsSection extends LitElement {
     return (e as Error).message;
   }
 
-  private _openNew(kind: PresetKind) {
+  private _openNew() {
     this._formError = null;
-    this._editing = { mode: "new", kind, form: emptyForm(kind) };
+    this._editing = { mode: "new", form: emptyForm() };
   }
 
   private _openEdit(p: Preset) {
     this._formError = null;
     this._editing = {
       mode: "edit",
-      kind: p.kind,
       presetId: p.id,
       form: {
         name: p.name,
-        kind: p.kind,
-        protocol: p.protocol ?? "openai_compat",
-        base_url: p.base_url ?? "",
-        model_id: p.model_id ?? "",
-        api_key: "", // 留空=不改动（编辑时密钥已脱敏）
-        context_window: p.context_window ? String(p.context_window) : "",
+        max_results: p.max_results != null ? String(p.max_results) : "",
+        min_score_threshold: p.min_score_threshold != null ? String(p.min_score_threshold) : "",
+        max_span: p.max_span != null ? String(p.max_span) : "",
+        weight_keyword_match: p.weight_keyword_match != null ? String(p.weight_keyword_match) : "",
+        weight_file_name_match: p.weight_file_name_match != null ? String(p.weight_file_name_match) : "",
+        weight_fts_score: p.weight_fts_score != null ? String(p.weight_fts_score) : "",
+        weight_title_match: p.weight_title_match != null ? String(p.weight_title_match) : "",
+        weight_proximity_match: p.weight_proximity_match != null ? String(p.weight_proximity_match) : "",
       },
     };
   }
@@ -335,9 +339,19 @@ export class ModelPresetsSection extends LitElement {
     this._formError = null;
   }
 
-  private _setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+  private _setField(key: keyof FormState, value: string) {
     if (!this._editing) return;
     this._editing = { ...this._editing, form: { ...this._editing.form, [key]: value } };
+  }
+
+  /** 把表单字符串字段收集为后端 search 输入（数字字段；空串→null=不写该键）。 */
+  private _collect(f: FormState): Record<string, number | null> {
+    const out: Record<string, number | null> = {};
+    for (const fd of FIELDS) {
+      const raw = f[fd.key].trim();
+      out[fd.key] = raw === "" ? null : Number(raw);
+    }
+    return out;
   }
 
   private async _submit() {
@@ -348,37 +362,23 @@ export class ModelPresetsSection extends LitElement {
       this._formError = "请填写预设名称";
       return;
     }
-    if (!f.base_url.trim() || !f.model_id.trim()) {
-      this._formError = "base_url 与模型 ID 必填";
-      return;
+    // 校验数字字段（空允许=不写；非空须是有效数字）
+    for (const fd of FIELDS) {
+      const raw = f[fd.key].trim();
+      if (raw !== "" && Number.isNaN(Number(raw))) {
+        this._formError = `${fd.label} 不是有效数字`;
+        return;
+      }
     }
     this._busy = true;
     this._formError = null;
     try {
+      const collected = this._collect(f);
       if (ed.mode === "new") {
-        const input: NewPresetInput = {
-          name: f.name.trim(),
-          kind: f.kind,
-          protocol: f.protocol,
-          base_url: f.base_url.trim(),
-          model_id: f.model_id.trim(),
-          api_key: f.api_key,
-          context_window: f.kind === "llm" && f.context_window ? Number(f.context_window) : null,
-        };
-        await createPreset(input);
-        this._setFlash(`已创建预设「${input.name}」`);
+        await createPreset({ name: f.name.trim(), kind: "search", ...collected });
+        this._setFlash(`已创建预设「${f.name.trim()}」`);
       } else if (ed.presetId) {
-        const cw = f.kind === "llm" && f.context_window ? Number(f.context_window) : null;
-        const updates: Record<string, unknown> = {
-          name: f.name.trim(),
-          protocol: f.protocol,
-          base_url: f.base_url.trim(),
-          model_id: f.model_id.trim(),
-          context_window: cw,
-        };
-        // api_key 仅在用户输入了新值时才传（空=不改动）
-        if (f.api_key) updates.api_key = f.api_key;
-        await updatePreset(ed.presetId, updates);
+        await updatePreset(ed.presetId, { name: f.name.trim(), ...collected });
         this._setFlash(`已更新预设「${f.name.trim()}」`);
       }
       this._editing = null;
@@ -394,9 +394,8 @@ export class ModelPresetsSection extends LitElement {
     this._busy = true;
     this._error = null;
     try {
-      const r = await activatePreset(p.id);
-      this._setFlash(r.note ?? `已切换到「${p.name}」`);
-      // 通知 settings-view 重新拉取 .env（激活键 + 物化字段都已更新）
+      await activatePreset(p.id);
+      this._setFlash(`已切换到「${p.name}」`);
       this.dispatchEvent(new CustomEvent("presets-activated", { bubbles: true, composed: true }));
     } catch (e) {
       this._error = `切换失败: ${this._errMsg(e)}`;
@@ -424,41 +423,41 @@ export class ModelPresetsSection extends LitElement {
     }
   }
 
+  private _summary(p: Preset): string {
+    const parts = [
+      `结果≤${p.max_results ?? "?"}`,
+      `阈值${p.min_score_threshold ?? "?"}`,
+      `权[${p.weight_keyword_match ?? "?"}/${p.weight_file_name_match ?? "?"}/${p.weight_fts_score ?? "?"}/${p.weight_title_match ?? "?"}/${p.weight_proximity_match ?? "?"}]`,
+    ];
+    return parts.join(" · ");
+  }
+
   private _renderForm() {
     const ed = this._editing;
     if (!ed) return nothing;
     const f = ed.form;
-    const isLlm = f.kind === "llm";
     return html`
       <div class="form">
-        <div>
+        <div class="full">
           <div class="field-label">名称</div>
           <input class="input" autocomplete="off" .value=${f.name} @input=${(e: Event) => this._setField("name", (e.target as HTMLInputElement).value)} />
         </div>
-        <div>
-          <div class="field-label">协议</div>
-          <select class="select" .value=${f.protocol} @change=${(e: Event) => this._setField("protocol", (e.target as HTMLSelectElement).value as PresetProtocol)}>
-            ${PROTOCOL_OPTIONS.map((o) => html`<option value=${o.value} ?selected=${o.value === f.protocol}>${o.label}</option>`)}
-          </select>
-        </div>
-        <div class="full">
-          <div class="field-label">API Base URL</div>
-          <input class="input mono" autocomplete="off" placeholder="https://..." .value=${f.base_url} @input=${(e: Event) => this._setField("base_url", (e.target as HTMLInputElement).value)} />
-        </div>
-        <div>
-          <div class="field-label">模型 ID</div>
-          <input class="input mono" autocomplete="off" .value=${f.model_id} @input=${(e: Event) => this._setField("model_id", (e.target as HTMLInputElement).value)} />
-        </div>
-        <div>
-          <div class="field-label">API Key ${ed.mode === "edit" ? html`（留空=不改动）` : nothing}</div>
-          <input class="input mono" type="password" autocomplete="new-password" placeholder=${ed.mode === "edit" ? "••••••" : "可留空"} .value=${f.api_key} @input=${(e: Event) => this._setField("api_key", (e.target as HTMLInputElement).value)} />
-        </div>
-        ${isLlm ? html`
+        ${FIELDS.map((fd) => html`
           <div>
-            <div class="field-label">上下文窗口（tokens，留空用默认 200000）</div>
-            <input class="input" type="number" min="1" autocomplete="off" .value=${f.context_window} @input=${(e: Event) => this._setField("context_window", (e.target as HTMLInputElement).value)} />
+            <div class="field-label">${fd.label} <span class="field-range">${fd.min}–${fd.max}</span></div>
+            <input
+              class="input"
+              type="number"
+              autocomplete="off"
+              min=${fd.min}
+              max=${fd.max}
+              step=${fd.step}
+              .value=${f[fd.key]}
+              @input=${(e: Event) => this._setField(fd.key, (e.target as HTMLInputElement).value)}
+            />
+            <div class="field-hint">${fd.hint}</div>
           </div>
-        ` : nothing}
+        `)}
         ${this._formError ? html`<div class="form-error">${this._formError}</div>` : nothing}
         <div class="form-actions">
           <button class="icon-btn" ?disabled=${this._busy} @click=${() => this._cancelEdit()}>取消</button>
@@ -466,24 +465,6 @@ export class ModelPresetsSection extends LitElement {
             ${this._busy ? "保存中…" : ed.mode === "new" ? "创建" : "保存"}
           </button>
         </div>
-      </div>
-    `;
-  }
-
-  private _renderGroup(kind: PresetKind, title: string) {
-    const list = this._byKind(kind);
-    return html`
-      <div class="group">
-        <div class="group-title">
-          ${title}
-          <button class="icon-btn" @click=${() => this._openNew(kind)}>+ 新建</button>
-        </div>
-        ${list.length === 0
-          ? html`<div class="empty">暂无预设，点「新建」创建一个。</div>`
-          : html`<div class="preset-list">
-              ${list.map((p) => this._renderRow(p))}
-            </div>`}
-        ${this._editing?.kind === kind ? this._renderForm() : nothing}
       </div>
     `;
   }
@@ -498,7 +479,7 @@ export class ModelPresetsSection extends LitElement {
             ${p.name}
             ${active ? html`<span class="badge">当前</span>` : nothing}
           </div>
-          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}</div>
+          <div class="preset-meta">${this._summary(p)}</div>
         </div>
         <div class="row-actions">
           ${active
@@ -517,12 +498,23 @@ export class ModelPresetsSection extends LitElement {
     return html`
       <div class="wrap">
         <div class="head">
-          <h2>模型预设</h2>
-          <span class="hint">命名后一键切换全部参数（含密钥）；切换即写入 .env 并即时生效。</span>
+          <h2>搜索预设</h2>
+          <span class="hint">一键切换搜索调优参数（结果过滤 + 评分权重）；切换即时生效。</span>
         </div>
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
-          : html`${this._renderGroup("llm", "LLM（AI 对话）")}${this._renderGroup("vision", "视觉模型（图像解析）")}`}
+          : html`
+            <div class="group">
+              <div class="group-title">
+                搜索调优
+                <button class="icon-btn" @click=${() => this._openNew()}>+ 新建</button>
+              </div>
+              ${this._presets.length === 0
+                ? html`<div class="empty">暂无预设，点「新建」创建一个。</div>`
+                : html`<div class="preset-list">${this._presets.map((p) => this._renderRow(p))}</div>`}
+              ${this._editing ? this._renderForm() : nothing}
+            </div>
+          `}
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
       </div>
@@ -532,6 +524,6 @@ export class ModelPresetsSection extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "model-presets-section": ModelPresetsSection;
+    "search-presets-section": SearchPresetsSection;
   }
 }

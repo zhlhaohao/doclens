@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 14 fields (AI 模型字段已移除，由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(14);
+  it("has exactly 6 fields (仅 network；AI/搜索由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(6);
   });
 
   it("every field has a unique envVar", () => {
@@ -51,10 +51,9 @@ describe("SETTINGS_FIELDS", () => {
     expect(ai).toHaveLength(0);
   });
 
-  it("search tab 所有字段都有 hint（常驻描述行数据来源）", () => {
+  it("search tab has no SETTINGS_FIELDS (由 <search-presets-section> 接管)", () => {
     const search = SETTINGS_FIELDS.filter((f) => f.tab === "search");
-    expect(search).toHaveLength(8);
-    expect(search.every((f) => f.hint && f.hint.length > 0)).toBe(true);
+    expect(search).toHaveLength(0);
   });
 
   it("SETTINGS_TAB_LABELS maps each tab to a Chinese label", () => {

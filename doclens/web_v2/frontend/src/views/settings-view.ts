@@ -7,8 +7,6 @@ import type { SettingsScope } from "../state/types";
 import {
   SETTINGS_FIELDS,
   SETTINGS_TAB_LABELS,
-  WEIGHT_SECTION,
-  DEFAULT_WEIGHTS,
   FIELD_DEFAULTS,
   IMPLICIT_DEFAULTS,
   type SettingsField,
@@ -19,9 +17,17 @@ import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
 import "../components/model-presets-section";
+import "../components/search-presets-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
+
+/** 三个 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
+const TAB_ICONS: Record<SettingsTab, string> = {
+  ai: "sparkles",
+  search: "search",
+  network: "globe",
+};
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
 const ICON_EYE = html`
@@ -86,26 +92,31 @@ export class SettingsView extends LitElement {
     }
     .tab-strip button {
       position: relative;
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      background: transparent;
+      border: none;
       padding: var(--cortex-space-2) var(--cortex-space-4);
-      font-size: var(--cortex-fs-sm);
+      font-size: 14px;
       font-weight: 600;
-      color: var(--cortex-text);
+      color: var(--cortex-text-muted);
       cursor: pointer;
       font-family: inherit;
       text-align: left;
-      border-radius: var(--cortex-radius-pill);
-      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
+      border-radius: var(--cortex-radius-lg);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .tab-strip button doclens-icon {
+      font-size: 16px;
+      flex-shrink: 0;
     }
     .tab-strip button:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-subtle);
+      color: var(--cortex-text);
     }
     .tab-strip button.active {
-      color: var(--cortex-surface);
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
+      background: rgba(0, 100, 224, 0.15);
+      color: var(--cortex-primary);
     }
     .scroll-area {
       flex: 1;
@@ -427,18 +438,9 @@ export class SettingsView extends LitElement {
       .scroll-area { overflow: visible; flex: none; }
       .tab-strip { flex-direction: row; overflow-x: auto; }
       .tab-strip button {
-        border: none;
-        border-bottom: 2px solid transparent;
+        justify-content: center;
         text-align: center;
         white-space: nowrap;
-        border-radius: 0;
-      }
-      .tab-strip button:hover { background: transparent; }
-      /* 移动端只保留下划线高亮（墨黑），去掉桌面端的深色填充 */
-      .tab-strip button.active {
-        color: var(--cortex-text);
-        border-bottom-color: var(--cortex-btn-primary-bg);
-        background: transparent;
       }
 
       .field {
@@ -540,8 +542,7 @@ export class SettingsView extends LitElement {
         margin-bottom: var(--cortex-space-3);
       }
       .tab-strip {
-        padding: 0 var(--cortex-space-3);
-        gap: var(--cortex-space-1);
+        gap: 4px;
       }
       .tab-strip button {
         padding: var(--cortex-space-3) var(--cortex-space-2);
@@ -746,37 +747,6 @@ export class SettingsView extends LitElement {
 
   /** 权重网格项：名称+值徽章一行、描述一行、拖杆（含端点标注）一行。
    *  未显式设置（.env 无此键）时回显默认值，徽章用 implicit 样式区分。 */
-  private _renderWeightItem(f: SettingsField) {
-    const raw = this._values[f.envVar] ?? "";
-    const implicit = raw === "";
-    const value = implicit ? (DEFAULT_WEIGHTS[f.envVar] ?? String(f.min ?? 0)) : raw;
-    const onInput = (e: Event) =>
-      this._onInput(f.envVar, (e.target as HTMLInputElement).value);
-    return html`
-      <div class="w-item">
-        <div class="w-head">
-          <span class="w-name">${f.label}</span>
-          <span class="value-chip ${implicit ? "implicit" : ""}" data-role="value-chip">${value}</span>
-        </div>
-        ${this._renderDesc(f)}
-        <div class="w-slider">
-          <span class="w-end">${f.min ?? 0}</span>
-          <input
-            type="range"
-            min=${f.min ?? nothing}
-            max=${f.max ?? nothing}
-            step=${f.step ?? nothing}
-            .value=${value}
-            data-env=${f.envVar}
-            @input=${onInput}
-          />
-          <span class="w-end">${f.max ?? 10}</span>
-        </div>
-        ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
-      </div>
-    `;
-  }
-
   private _allAtDefault(): boolean {
     return Object.entries(FIELD_DEFAULTS).every(
       ([k, v]) => (this._values[k] ?? "") === v
@@ -965,7 +935,7 @@ export class SettingsView extends LitElement {
               <button
                 class=${this._activeTab === tab ? "active" : ""}
                 @click=${() => { this._activeTab = tab; }}
-              >${SETTINGS_TAB_LABELS[tab]}</button>
+              ><doclens-icon name=${TAB_ICONS[tab]}></doclens-icon>${SETTINGS_TAB_LABELS[tab]}</button>
             `)}
           </nav>
         </aside>
@@ -989,14 +959,13 @@ export class SettingsView extends LitElement {
                       @presets-activated=${() => this._load()}
                     ></model-presets-section>
                   ` : nothing}
-                  ${sections.map((s) => s.title === WEIGHT_SECTION ? html`
-                    <div class="section">
-                      <h2>${s.title}</h2>
-                      <div class="weights-grid">
-                        ${s.fields.map((f) => this._renderWeightItem(f))}
-                      </div>
-                    </div>
-                  ` : html`
+                  ${tab === "search" ? html`
+                    <search-presets-section
+                      .activeSearch=${this._values["CORTEX_ACTIVE_SEARCH_PRESET"] ?? ""}
+                      @presets-activated=${() => this._load()}
+                    ></search-presets-section>
+                  ` : nothing}
+                  ${sections.map((s) => html`
                     <div class="section">
                       ${s.title ? html`<h2>${s.title}</h2>` : nothing}
                       ${s.fields.map((f) => this._renderField(f))}
