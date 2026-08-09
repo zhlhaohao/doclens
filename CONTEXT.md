@@ -38,6 +38,7 @@
 - **日记合并例外 (Diary Union Merge)**：`日记/` 目录在 Git 同步中使用 `.gitattributes merge=union` 合并——冲突时双方追加的行都保留，是 ADR-0006 偏向本地（ours-wins）全局策略的**按路径显式例外**（2026-08-01 决议）。动机：年度 md 是多设备高频追加文件，ours-wins 会静默丢失他端片段。
 
 - **模型预设 (Model Profile)**：一份命名后可一键切换的完整模型连接档案，打包 `protocol + base_url + model_id + api_key`（LLM 另含 `context_window`），**不含 provider**——切换即一次性应用全部参数，无需逐字段重填。涵盖两类：LLM 预设（AI 对话，切换即时热生效）与视觉预设（图像解析，切换后已解析图像将在下次启动重新解析）。是本系统中「模型」的可切换单位，与旧的字段散填形态区分。预设库为机器级本地资产（各机器各自维护），含明文凭据，**不参与知识库 Git 同步**，与 `.env` 同等保护。
+- **搜索预设 (Search Preset)**：搜索调优参数的命名档案，打包设置页 search tab 暴露的全部 8 个参数（3 过滤：`max_results` / `min_score_threshold` / `max_span` + 5 评分权重），`kind=search`，复用「模型预设」整套机制（同一 `model_presets.json` / `presets_store` / 物化写 global `.env` / 激活键 `CORTEX_ACTIVE_SEARCH_PRESET`）。切换即时热生效（`IndexManager.apply_config` 只更新 `_config`、不碰索引，搜索时按新参数运行，**无副作用**）。不含密钥，无需脱敏。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -65,3 +66,4 @@
 - 2026-08-01：日记功能数据模型（ADR-0007）= 知识库内 `日记/` 年度 md（索引+同步）+ 片段态/成品态两态（录入仅当天、成品不可变）+ 总结=每日 00:05 定点+启动补扫、逐图降级整日重试 + 图片压缩不保留原图 + 第一人称叙事体；录入/总结仅 GUI 进程。
 - 2026-08-01：`日记/` 目录 Git 合并 = union（`.gitattributes merge=union`），ADR-0006 ours-wins 的按路径例外（ADR-0008）。
 - 2026-08-08：模型预设体系（ADR-0009）= 命名档案一键切换（`protocol+base_url+model_id+api_key`，LLM 另含 `context_window`，不含 provider），LLM/视觉统一 `kind` 区分；切换物化进 local .env、运行时只读 .env；废弃 `PLANIFY_PROVIDER` 与随包供应商表；预设存明文 key 与 .env 同等保护；全局单层 `model_presets.json` 不参与 Git 同步；不预置、空列表自建。
+- 2026-08-09：搜索预设（ADR-0010）= 搜索调优参数（3 过滤 + 5 权重）命名档案一键切换，复用模型预设整套机制（`kind=search` 扩展同一 `model_presets.json`/`presets_store`/`/api/presets`/物化）；切换即时热生效无副作用；search tab 移除散填、只留预设区块。

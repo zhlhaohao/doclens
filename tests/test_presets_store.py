@@ -157,3 +157,30 @@ def test_materialize_llm_without_context_window_omits_key():
         "context_window": None,
     })
     assert "PLANIFY_CONTEXT_WINDOW" not in out
+
+
+def test_materialize_search():
+    out = _materialize({
+        "kind": "search",
+        "name": "精准",
+        "max_results": 30,
+        "min_score_threshold": 0.5,
+        "max_span": 40,
+        "weight_keyword_match": 5.0,
+        "weight_file_name_match": 2.0,
+        "weight_fts_score": 1.0,
+        "weight_title_match": 3.0,
+        "weight_proximity_match": 1.0,
+    })
+    assert out["CORTEX_MAX_RESULTS"] == "30"
+    assert out["CORTEX_MIN_SCORE_THRESHOLD"] == "0.5"
+    assert out["CORTEX_WEIGHT_KEYWORD_MATCH"] == "5.0"
+    assert out["CORTEX_ACTIVE_SEARCH_PRESET"] == "精准"
+    assert "PLANIFY_PROTOCOL" not in out  # search 不碰模型键
+
+
+def test_materialize_search_skips_none_fields():
+    out = _materialize({"kind": "search", "name": "N", "max_results": 30})
+    assert out["CORTEX_MAX_RESULTS"] == "30"
+    assert "CORTEX_MIN_SCORE_THRESHOLD" not in out  # None 字段跳过
+    assert out["CORTEX_ACTIVE_SEARCH_PRESET"] == "N"

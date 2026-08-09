@@ -27,6 +27,18 @@ from doclens.web_v2 import presets_store
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# 搜索预设字段 → .env 键映射（物化 kind=search 时用；None 字段跳过）
+_SEARCH_FIELD_MAP: dict[str, str] = {
+    "max_results": "CORTEX_MAX_RESULTS",
+    "min_score_threshold": "CORTEX_MIN_SCORE_THRESHOLD",
+    "max_span": "CORTEX_MAX_SPAN",
+    "weight_keyword_match": "CORTEX_WEIGHT_KEYWORD_MATCH",
+    "weight_file_name_match": "CORTEX_WEIGHT_FILE_NAME_MATCH",
+    "weight_fts_score": "CORTEX_WEIGHT_FTS_SCORE",
+    "weight_title_match": "CORTEX_WEIGHT_TITLE_MATCH",
+    "weight_proximity_match": "CORTEX_WEIGHT_PROXIMITY_MATCH",
+}
+
 
 def _materialize(preset: dict) -> dict:
     """把预设字段映射为 .env key→value（用于物化写 global .env）。"""
@@ -43,6 +55,13 @@ def _materialize(preset: dict) -> dict:
         }
         if preset.get("context_window"):
             updates["PLANIFY_CONTEXT_WINDOW"] = str(preset["context_window"])
+        return updates
+    if kind == "search":
+        updates = {"CORTEX_ACTIVE_SEARCH_PRESET": name}
+        for src, dst in _SEARCH_FIELD_MAP.items():
+            v = preset.get(src)
+            if v is not None:
+                updates[dst] = str(v)
         return updates
     # vision：协议直接写原值（openai_compat / anthropic）
     return {

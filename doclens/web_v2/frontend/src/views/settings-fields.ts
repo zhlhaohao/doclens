@@ -47,32 +47,13 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   network: "网络监听",
 };
 
-/** 评分权重 section 标题（settings-view 据此渲染两列网格 + 恢复默认按钮）。 */
-export const WEIGHT_SECTION = "评分权重";
-
-/** 权重默认值，必须与 doclens/config.py 的 Field default 一致。 */
-export const DEFAULT_WEIGHTS: Record<string, string> = {
-  CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
-  CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
-  CORTEX_WEIGHT_FTS_SCORE: "1.0",
-  CORTEX_WEIGHT_TITLE_MATCH: "2.0",
-  CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
-};
-
 /** 「恢复默认」判定的出厂基准值（与包内 .env.example 同步）。
  *  用于 _allAtDefault：重置为模板后表单值应全部等于此处，按钮据此禁用。
  *  注意：「恢复默认」实际由 POST /api/config/reset-default 完成（拷贝 .env.example
  *  并保留 API Key），而非逐字段写这些值 —— 这样能保留注释与空行、避免掏空文件。
- *  模型参数（PLANIFY_* 与 VISION_* 系列）不在设置页字段内，由「模型预设」区块管理；故不在此列。 */
+ *  模型参数（PLANIFY_* / VISION_*）由「模型预设」管理；搜索参数（CORTEX_MAX_RESULTS
+ *  等 + 5 权重）由「搜索预设」管理；均不在设置页字段内，故不在此列。 */
 export const FIELD_DEFAULTS: Record<string, string> = {
-  CORTEX_MAX_RESULTS: "50",
-  CORTEX_MIN_SCORE_THRESHOLD: "0.3",
-  CORTEX_MAX_SPAN: "50",
-  CORTEX_WEIGHT_KEYWORD_MATCH: "4.0",
-  CORTEX_WEIGHT_FILE_NAME_MATCH: "2.0",
-  CORTEX_WEIGHT_FTS_SCORE: "1.0",
-  CORTEX_WEIGHT_TITLE_MATCH: "2.0",
-  CORTEX_WEIGHT_PROXIMITY_MATCH: "1.0",
   CORTEX_WEB_HOST: "127.0.0.1",
   CORTEX_WEB_PORT: "7860",
   CORTEX_MCP_ENABLED: "false",
@@ -82,119 +63,21 @@ export const FIELD_DEFAULTS: Record<string, string> = {
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
- *  用于未设置（空串）时的隐式显示：slider 停在默认位置、chip/placeholder 显示默认值。 */
+ *  用于未设置（空串）时的隐式显示：number 字段 placeholder / chip 显示默认值。 */
 export const IMPLICIT_DEFAULTS: Record<string, string> = {
-  CORTEX_MAX_RESULTS: "50",
-  CORTEX_MIN_SCORE_THRESHOLD: "0.3",
-  CORTEX_MAX_SPAN: "50",
   CORTEX_WEB_HOST: "127.0.0.1",
   CORTEX_WEB_PORT: "7860",
   CORTEX_MCP_ENABLED: "false",
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
-  ...DEFAULT_WEIGHTS,
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
-  // AI 配置 tab 的模型参数由「模型预设」区块（<model-presets-section>）接管，
-  // 不再有 LLM/视觉字段散填——一律通过预设一键切换（ADR-0009）。
+  // AI 配置 tab：模型参数由「模型预设」区块（<model-presets-section>）接管（ADR-0009）。
+  // 搜索调优 tab：搜索参数由「搜索预设」区块（<search-presets-section>）接管（ADR-0010）。
+  // 两者均不再有字段散填——一律通过预设一键切换。
 
-  // ===== 搜索调优 · 结果与过滤 (3，无 section 标题) =====
-  {
-    tab: "search",
-    envVar: "CORTEX_MAX_RESULTS",
-    label: "最大搜索结果数",
-    component: "number",
-    effect: "live",
-    min: 1,
-    max: 200,
-    hint: "search 工具最多返回多少篇文档",
-  },
-  {
-    tab: "search",
-    envVar: "CORTEX_MIN_SCORE_THRESHOLD",
-    label: "综合评分阈值",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 1,
-    step: 0.05,
-    hint: "低于该综合分的结果被过滤，0 = 不过滤",
-  },
-  {
-    tab: "search",
-    envVar: "CORTEX_MAX_SPAN",
-    label: "关键词集中度(字符)",
-    component: "number",
-    effect: "live",
-    min: 1,
-    max: 100,
-    hint: "邻近度统计的关键词最大字符跨度",
-  },
-
-  // ===== 搜索调优 · 评分权重 (5) =====
-  {
-    tab: "search",
-    section: "评分权重",
-    envVar: "CORTEX_WEIGHT_KEYWORD_MATCH",
-    label: "关键词匹配权重",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "命中的关键词越多排越前",
-  },
-  {
-    tab: "search",
-    section: "评分权重",
-    envVar: "CORTEX_WEIGHT_FILE_NAME_MATCH",
-    label: "文件名匹配权重",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "文件名含关键词的文档排更前",
-  },
-  {
-    tab: "search",
-    section: "评分权重",
-    envVar: "CORTEX_WEIGHT_FTS_SCORE",
-    label: "FTS 原始分权重",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "偏向传统 BM25 全文检索排序",
-  },
-  {
-    tab: "search",
-    section: "评分权重",
-    envVar: "CORTEX_WEIGHT_TITLE_MATCH",
-    label: "标题匹配权重",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "小节标题含关键词排更前",
-  },
-  {
-    tab: "search",
-    section: "评分权重",
-    envVar: "CORTEX_WEIGHT_PROXIMITY_MATCH",
-    label: "邻近度权重",
-    component: "slider",
-    effect: "live",
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "关键词紧邻出现的文档排更前",
-  },
-
-  // ===== 网络监听 (4，网络监听 tab；effect restart：改后需重启 gui) =====
+  // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====
   {
     tab: "network",
     section: "监听地址",
