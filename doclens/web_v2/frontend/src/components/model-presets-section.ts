@@ -23,7 +23,7 @@ function emptyForm(kind: PresetKind): FormState {
     base_url: "",
     model_id: "",
     api_key: "",
-    context_window: "200000",
+    context_window: "",
   };
 }
 
@@ -433,7 +433,7 @@ export class ModelPresetsSection extends LitElement {
       <div class="form">
         <div>
           <div class="field-label">名称</div>
-          <input class="input" .value=${f.name} @input=${(e: Event) => this._setField("name", (e.target as HTMLInputElement).value)} />
+          <input class="input" autocomplete="off" .value=${f.name} @input=${(e: Event) => this._setField("name", (e.target as HTMLInputElement).value)} />
         </div>
         <div>
           <div class="field-label">协议</div>
@@ -443,20 +443,20 @@ export class ModelPresetsSection extends LitElement {
         </div>
         <div class="full">
           <div class="field-label">API Base URL</div>
-          <input class="input mono" placeholder="https://..." .value=${f.base_url} @input=${(e: Event) => this._setField("base_url", (e.target as HTMLInputElement).value)} />
+          <input class="input mono" autocomplete="off" placeholder="https://..." .value=${f.base_url} @input=${(e: Event) => this._setField("base_url", (e.target as HTMLInputElement).value)} />
         </div>
         <div>
           <div class="field-label">模型 ID</div>
-          <input class="input mono" .value=${f.model_id} @input=${(e: Event) => this._setField("model_id", (e.target as HTMLInputElement).value)} />
+          <input class="input mono" autocomplete="off" .value=${f.model_id} @input=${(e: Event) => this._setField("model_id", (e.target as HTMLInputElement).value)} />
         </div>
         <div>
           <div class="field-label">API Key ${ed.mode === "edit" ? html`（留空=不改动）` : nothing}</div>
-          <input class="input mono" type="password" placeholder=${ed.mode === "edit" ? "••••••" : "可留空"} .value=${f.api_key} @input=${(e: Event) => this._setField("api_key", (e.target as HTMLInputElement).value)} />
+          <input class="input mono" type="password" autocomplete="new-password" placeholder=${ed.mode === "edit" ? "••••••" : "可留空"} .value=${f.api_key} @input=${(e: Event) => this._setField("api_key", (e.target as HTMLInputElement).value)} />
         </div>
         ${isLlm ? html`
           <div>
-            <div class="field-label">上下文窗口（tokens）</div>
-            <input class="input" type="number" min="1" .value=${f.context_window} @input=${(e: Event) => this._setField("context_window", (e.target as HTMLInputElement).value)} />
+            <div class="field-label">上下文窗口（tokens，留空用默认 200000）</div>
+            <input class="input" type="number" min="1" autocomplete="off" .value=${f.context_window} @input=${(e: Event) => this._setField("context_window", (e.target as HTMLInputElement).value)} />
           </div>
         ` : nothing}
         ${this._formError ? html`<div class="form-error">${this._formError}</div>` : nothing}

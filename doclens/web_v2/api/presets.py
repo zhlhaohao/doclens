@@ -4,9 +4,10 @@
 ``reload_config()``。运行时照旧只读 .env（CortexConfig / planify /
 vision_worker 读取链路零改动）。
 
-视觉预设的 protocol 物化时：``openai_compat`` → 写空串（向后兼容：
-``VISION_PROTOCOL`` 空串语义即 OpenAI 兼容，且避免 ``vision_model_tag``
-的 proto 段无谓变化触发全量重解析）；``anthropic`` 原样写。
+视觉预设的 protocol 直接写原值（``openai_compat`` / ``anthropic``）——
+``write_env_values`` 的空串语义是"删除键"，写空串会把 ``VISION_PROTOCOL``
+从 .env 删掉，故不再做 openai_compat→空串转换。``vision_worker`` 对
+``openai_compat`` 与空都走 OpenAI 兼容分支，行为一致。
 """
 import logging
 
@@ -43,10 +44,9 @@ def _materialize(preset: dict) -> dict:
         if preset.get("context_window"):
             updates["PLANIFY_CONTEXT_WINDOW"] = str(preset["context_window"])
         return updates
-    # vision：openai_compat 写空串（见模块 docstring）
-    vision_proto = "" if proto == "openai_compat" else proto
+    # vision：协议直接写原值（openai_compat / anthropic）
     return {
-        "VISION_PROTOCOL": vision_proto,
+        "VISION_PROTOCOL": proto,
         "VISION_BASE_URL": preset.get("base_url", ""),
         "VISION_API_KEY": preset.get("api_key", ""),
         "VISION_MODEL": preset.get("model_id", ""),
