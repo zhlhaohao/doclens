@@ -117,7 +117,7 @@ def test_materialize_llm():
     assert out["CORTEX_ACTIVE_LLM_PRESET"] == "N"
 
 
-def test_materialize_vision_openai_compat_writes_empty_protocol():
+def test_materialize_vision_openai_compat_writes_protocol():
     out = _materialize({
         "kind": "vision",
         "protocol": "openai_compat",
@@ -126,9 +126,9 @@ def test_materialize_vision_openai_compat_writes_empty_protocol():
         "api_key": "sk",
         "name": "N",
     })
-    # 向后兼容：openai_compat → 空串（vision_protocol 空串语义即 OpenAI 兼容，
-    # 且避免 vision_model_tag 的 proto 段无谓变化触发全量重解析）
-    assert out["VISION_PROTOCOL"] == ""
+    # 协议直接写原值（空串=删除键会丢协议；vision_worker 对 openai_compat
+    # 与空都走 OpenAI 兼容分支，行为一致）
+    assert out["VISION_PROTOCOL"] == "openai_compat"
     assert out["VISION_MODEL"] == "vl"
     assert out["CORTEX_ACTIVE_VISION_PRESET"] == "N"
     assert "PLANIFY_CONTEXT_WINDOW" not in out
