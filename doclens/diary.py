@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import date as date_type
 from pathlib import Path
 
-DIARY_DIRNAME = "日记"
+DIARY_DIRNAME = "diary"
 RAW_MARKER = "<!-- diary:raw -->"
 WEATHER_MARKER = "<!-- diary:weather:"
 
