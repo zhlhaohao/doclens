@@ -49,7 +49,6 @@ def register_app_dependencies(
 
 
 def register_planify_config(
-    provider_name: str = "anthropic",
     api_key: str = "",
     model_id: str = "claude-opus-4-6",
     base_url: str = "",
@@ -68,11 +67,10 @@ def register_planify_config(
     3. 默认值
 
     Args:
-        provider_name: LLM Provider 名称（如 "anthropic" / "openrouter" / "custom"）
         api_key: LLM Provider API Key
         model_id: 模型 ID
-        base_url: 自定义 API 端点（custom 预设必填）
-        protocol: 协议类型（"anthropic" / "openai_compat"，custom 预设必填）
+        base_url: API 端点（留空则用 SDK 默认）
+        protocol: 协议类型（"anthropic" / "openai_compat"，默认 "anthropic"）
         baidu_weather_api_url: 百度天气 API URL
         baidu_weather_ak: 百度天气 AK
         baidu_weather_data_type: 百度天气数据类型
@@ -80,7 +78,6 @@ def register_planify_config(
     """
     global _registered_config
     _registered_config = {
-        "provider_name": provider_name,
         "api_key": api_key,
         "model_id": model_id,
         "base_url": base_url,

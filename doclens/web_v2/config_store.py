@@ -19,17 +19,20 @@ MERGED_VALUES_KEY = "values"  # placeholder; not currently used externally
 # Settings UI keys. Keep in sync with
 # cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
 KNOWN_KEYS: frozenset[str] = frozenset({
-    # AI
+    # AI（LLM）— 字段散填入口仍保留，供设置页微调；模型预设切换会物化覆盖这些键
     "PLANIFY_BASE_URL",
     "PLANIFY_API_KEY",
     "PLANIFY_MODEL_ID",
-    "PLANIFY_PROVIDER",
     "PLANIFY_PROTOCOL",
+    "PLANIFY_CONTEXT_WINDOW",
+    "CORTEX_ACTIVE_LLM_PRESET",
     # 视觉模型（图像文件解析，独立于 AI 对话配置）
     "VISION_API_KEY",
     "VISION_BASE_URL",
     "VISION_MODEL",
     "VISION_PROTOCOL",
+    "CORTEX_ACTIVE_VISION_PRESET",
+    "CORTEX_ACTIVE_SEARCH_PRESET",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",

@@ -84,7 +84,7 @@ export class WelcomePane extends LitElement {
       width: 48px;
       height: 48px;
       border-radius: var(--cortex-radius-circle);
-      background: var(--cortex-btn-primary-bg);
+      background: var(--cortex-primary);
       color: #ffffff;
       font-size: 24px;
     }
@@ -111,13 +111,13 @@ export class WelcomePane extends LitElement {
     }
     .onboarding-subheading {
       font-size: var(--cortex-fs-sm);
-      color: rgba(10, 19, 23, 0.72);
+      color: var(--cortex-text-caption);
       line-height: 1.5;
       margin: 6px 0 0;
     }
     .workdir-row {
       font-size: var(--cortex-fs-xs);
-      color: rgba(10, 19, 23, 0.62);
+      color: var(--cortex-text-subtle);
       margin: 4px 0 0;
       display: flex;
       align-items: center;
@@ -199,7 +199,7 @@ export class WelcomePane extends LitElement {
     }
     .examples-list li {
       font-size: var(--cortex-fs-sm);
-      color: rgba(10, 19, 23, 0.85);
+      color: var(--cortex-text-muted);
       padding: 1px 0;
       line-height: 1.4;
       min-width: 0;
@@ -222,11 +222,14 @@ export class WelcomePane extends LitElement {
       :host {
         background: transparent;
         text-align: left;
-        padding: 10px var(--cortex-space-4) 6px;
+        padding: 0 0 6px;
+      }
+      :host([variant="onboarding"]) {
+        padding: 0 0 6px;
       }
       .title { font-size: var(--cortex-fs-lg); }
       .subtitle { font-size: var(--cortex-fs-sm); }
-      .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); }
+      .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); border-radius: 0; }
       /* 窄屏：缩小 hero 圆盘 + 隐藏模式 chip 胶囊（title-group 已默认同行） */
       .hero-mark { width: 36px; height: 36px; font-size: 18px; }
       .modes-row { display: none; }

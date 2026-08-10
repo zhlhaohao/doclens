@@ -145,7 +145,6 @@ class CortexAgent:
 
         # 从环境变量构建配置
         config = {
-            "provider_name": os.getenv("PLANIFY_PROVIDER", "anthropic"),
             "protocol": os.getenv("PLANIFY_PROTOCOL", ""),
             "model_id": os.getenv("PLANIFY_MODEL_ID", ""),
             "base_url": os.getenv("PLANIFY_BASE_URL"),
@@ -311,7 +310,6 @@ class CortexAgent:
         if self.session is None:
             return
         provider_config = {
-            "provider_name": getattr(config, "planify_provider", "anthropic"),
             "protocol": getattr(config, "planify_protocol", ""),
             "api_key": config.planify_api_key,
             "model_id": config.planify_model_id,

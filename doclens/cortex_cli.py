@@ -1113,7 +1113,6 @@ def _cli_web(args, config, idx):
     api_key = config.planify_api_key
     base_url = config.planify_base_url
     model_id = config.planify_model_id
-    provider_name = getattr(config, "planify_provider", "anthropic")
     protocol = getattr(config, "planify_protocol", "")
 
     if not api_key:
@@ -1121,7 +1120,6 @@ def _cli_web(args, config, idx):
         return
 
     client = create_provider({
-        "provider_name": provider_name,
         "protocol": protocol,
         "api_key": api_key,
         "model_id": model_id,

@@ -68,33 +68,25 @@ PLANIFY_BASE_URL=https://api.anthropic.com
 # ZHIPUAI_API_KEY=your-zhipuai-api-key
 ```
 
-## 切换 LLM Provider
+## 切换 LLM 端点
 
-通过 `PLANIFY_PROVIDER` 选择预设供应商：
+通过 `PLANIFY_PROTOCOL` + `PLANIFY_BASE_URL` 指定 LLM 端点（不再有 provider 预设）：
 
-| 预设 | 用途 | 默认 base_url | 默认协议 |
-|------|------|---------------|----------|
-| `anthropic`（默认） | Anthropic 原生 | SDK 默认 | `anthropic` |
-| `openrouter` | OpenRouter 聚合 | `https://openrouter.ai/api/v1` | `openai_compat` |
-| `qwen` | 阿里云通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai_compat` |
-| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | `openai_compat` |
-| `glm` | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/` | `openai_compat` |
-| `custom` | 自定义 | 用户填写 | 用户填写 |
+- `PLANIFY_PROTOCOL`：`anthropic`（默认，走 Anthropic `/v1/messages`）或 `openai_compat`（走 OpenAI 兼容 `/chat/completions`）
+- `PLANIFY_BASE_URL`：端点 URL；留空则用 SDK 默认（Anthropic 原生）
 
-示例（DeepSeek）：
+示例（OpenAI 兼容端点）：
 ```bash
-export PLANIFY_PROVIDER=deepseek
+export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_BASE_URL=https://api.deepseek.com/v1
 export PLANIFY_API_KEY=sk-...
 export PLANIFY_MODEL_ID=deepseek-chat
 ```
 
-自定义（OpenAI 兼容代理）：
+Anthropic 原生（默认，无需 BASE_URL）：
 ```bash
-export PLANIFY_PROVIDER=custom
-export PLANIFY_BASE_URL=https://my-proxy/v1
-export PLANIFY_PROTOCOL=openai_compat
-export PLANIFY_API_KEY=...
-export PLANIFY_MODEL_ID=...
+export PLANIFY_API_KEY=sk-ant-...
+export PLANIFY_MODEL_ID=claude-sonnet-4-6
 ```
 
 ## 目录结构

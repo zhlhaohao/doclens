@@ -33,7 +33,6 @@ class SessionConfig:
     model_id: str
     api_key: str
     base_url: Optional[str] = None
-    provider_name: str = "anthropic"
     protocol: str = "anthropic"
     token_threshold: int = 100000
     planify_context_window: int = 200000
