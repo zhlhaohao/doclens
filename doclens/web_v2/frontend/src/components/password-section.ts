@@ -19,14 +19,19 @@ export class PasswordSection extends LitElement {
   static styles = css`
     :host { display: block; }
     .section {
-      border-top: 1px solid var(--cortex-border-muted);
       margin-top: var(--cortex-space-4, 16px);
       padding-top: var(--cortex-space-4, 16px);
     }
     h2 {
-      margin: 0 0 8px;
-      font-size: var(--cortex-fs-md);
-      color: var(--cortex-text);
+      margin: 0 0 var(--cortex-space-3);
+      font-size: var(--cortex-fs-lg);
+      font-weight: 700;
+      color: var(--cortex-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--cortex-surface-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-radius: var(--cortex-radius-md);
     }
     .hint {
       margin: 4px 0 12px;
@@ -53,15 +58,22 @@ export class PasswordSection extends LitElement {
       margin-left: 8px;
       vertical-align: middle;
     }
-    .row {
-      display: flex;
-      gap: 8px;
+    /* 垂直 label + 全宽 input（DESIGN form 风格） */
+    .field {
+      display: grid;
+      grid-template-columns: minmax(80px, 140px) 1fr;
+      gap: var(--cortex-space-3);
+      padding: var(--cortex-space-2) 0;
       align-items: center;
-      margin-bottom: 8px;
-      flex-wrap: wrap;
+    }
+    .field-label {
+      font-size: var(--cortex-fs-sm);
+      font-weight: 400;
+      color: var(--cortex-text-muted);
     }
     input {
-      width: 160px;
+      width: 100%;
+      box-sizing: border-box;
       padding: 8px 10px;
       font-size: var(--cortex-fs-base);
       font-family: var(--cortex-font-mono);
@@ -74,6 +86,12 @@ export class PasswordSection extends LitElement {
     input:focus {
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-focus-ring);
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 4px 0 14px;
     }
     button {
       padding: 8px 16px;
@@ -118,9 +136,22 @@ export class PasswordSection extends LitElement {
   @state() private _ok = "";
   @state() private _busy = false;
 
+  /** keep-alive view 下 connectedCallback 仅首次触发；可见时再 _refresh，
+   *  确保密码设置/清除后不显示陈旧的旧密码框。 */
+  private _observer?: IntersectionObserver;
+
   connectedCallback() {
     super.connectedCallback();
     void this._refresh();
+    this._observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) void this._refresh();
+    });
+    this._observer.observe(this);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._observer?.disconnect();
   }
 
   private async _refresh() {
@@ -206,47 +237,63 @@ export class PasswordSection extends LitElement {
 
   render() {
     if (this._hasPassword === null) return nothing;
+    const hasOld = this._hasPassword === true;
     return html`
       <div class="section">
         <h2>
           🔒 访问密码
-          ${this._hasPassword ? html`<span class="badge">已设置</span>` : nothing}
+          ${hasOld ? html`<span class="badge">已设置</span>` : nothing}
         </h2>
         <p class="hint">
           仅当 GUI 绑定非环回地址（如 0.0.0.0 暴露局域网）时生效；本机 127.0.0.1 访问始终免登录。
           登录状态 24 小时内有效（使用中自动续期）。
         </p>
-        ${!this._hasPassword
+        ${!hasOld
           ? html`<p class="warning">尚未设置访问密码——若将 Web UI 绑定到非环回地址，局域网内任何人都可访问。</p>`
           : nothing}
 
-        ${this._hasPassword
+        ${hasOld
           ? html`
-              <div class="row">
+              <div class="field">
+                <span class="field-label">旧密码</span>
                 <input type="password" inputmode="numeric" maxlength=${PIN_LENGTH}
-                  placeholder="旧密码" .value=${this._old}
+                  autocomplete="current-password" placeholder="6 位数字"
+                  .value=${this._old}
                   @input=${(e: InputEvent) => (this._old = (e.target as HTMLInputElement).value)} />
               </div>
             `
           : nothing}
-        <div class="row">
+
+        <div class="field">
+          <span class="field-label">新密码（6 位数字）</span>
           <input type="password" inputmode="numeric" maxlength=${PIN_LENGTH}
-            placeholder="新密码（6 位数字）" .value=${this._next}
+            autocomplete="new-password" placeholder="6 位数字"
+            .value=${this._next}
             @input=${(e: InputEvent) => (this._next = (e.target as HTMLInputElement).value)} />
+        </div>
+        <div class="field">
+          <span class="field-label">确认新密码</span>
           <input type="password" inputmode="numeric" maxlength=${PIN_LENGTH}
-            placeholder="确认新密码" .value=${this._confirm}
+            autocomplete="new-password" placeholder="再次输入"
+            .value=${this._confirm}
             @input=${(e: InputEvent) => (this._confirm = (e.target as HTMLInputElement).value)} />
+        </div>
+        <div class="actions">
           <button class="primary" ?disabled=${this._busy} @click=${this._submitSet}>
-            ${this._hasPassword ? "修改密码" : "设置密码"}
+            ${hasOld ? "修改密码" : "设置密码"}
           </button>
         </div>
 
-        ${this._hasPassword
+        ${hasOld
           ? html`
-              <div class="row">
+              <div class="field">
+                <span class="field-label">当前密码</span>
                 <input type="password" inputmode="numeric" maxlength=${PIN_LENGTH}
-                  placeholder="当前密码" .value=${this._clearPin}
+                  autocomplete="current-password" placeholder="6 位数字"
+                  .value=${this._clearPin}
                   @input=${(e: InputEvent) => (this._clearPin = (e.target as HTMLInputElement).value)} />
+              </div>
+              <div class="actions">
                 <button class="danger" ?disabled=${this._busy} @click=${this._submitClear}>清除密码</button>
                 ${this._required
                   ? html`<button ?disabled=${this._busy} @click=${this._logout}>退出登录</button>`
