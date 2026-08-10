@@ -6,7 +6,7 @@ import type { SettingsView } from "../src/views/settings-view";
 
 // Mock the API client so tests don't hit network.
 // 搜索/AI 字段已移除（由预设区块接管），设置页只剩 network 字段；mock 用 WEB_PORT
-// 作为可调字段（非默认值让 reset 按钮启用）。
+// 作为可调字段（非默认值用于 dirty/save 测试）。
 vi.mock("../src/api/config", () => ({
   getConfig: vi.fn().mockResolvedValue({
     scope: "global",
@@ -18,18 +18,6 @@ vi.mock("../src/api/config", () => ({
     saved_path: "/tmp/.env",
     needs_restart: false,
     restart_fields: [],
-  }),
-  resetConfigDefault: vi.fn().mockResolvedValue({
-    scope: "global",
-    values: {
-      CORTEX_WEB_HOST: "127.0.0.1",
-      CORTEX_WEB_PORT: "7860",
-      CORTEX_MCP_ENABLED: "false",
-      CORTEX_MCP_HOST: "127.0.0.1",
-      CORTEX_MCP_PORT: "7880",
-      CORTEX_SYNC_ENABLED: "true",
-    },
-    exists: true,
   }),
   ConfigApiError: class ConfigApiError extends Error {
     status: number;
@@ -84,26 +72,6 @@ describe("<settings-view>", () => {
     await elementUpdated(el);
     const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
     expect(panel?.querySelectorAll(".field").length).toBe(0);
-  });
-
-  it("footer 恢复默认调 reset-default，字段刷成默认值（network tab）", async () => {
-    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    (tabs?.[2] as HTMLButtonElement).click(); // network tab
-    await elementUpdated(el);
-    const btn = el.shadowRoot?.querySelector(".footer-bar .reset-all") as HTMLButtonElement;
-    expect(btn).toBeTruthy();
-    // mock 里 CORTEX_WEB_PORT=8888 非默认 → 按钮可用
-    expect(btn.disabled).toBe(false);
-
-    btn.click();
-    await elementUpdated(el);
-    await new Promise((r) => setTimeout(r, 0)); // 等 async resetConfigDefault 完成
-    const numInput = el.shadowRoot?.querySelector(
-      'input[data-env="CORTEX_WEB_PORT"]'
-    ) as HTMLInputElement;
-    expect(numInput.value).toBe("7860");
-    // 全部回到默认 → 按钮禁用（_allAtDefault=true）
-    expect(btn.disabled).toBe(true);
   });
 
   it("updates a field value via input event and marks dirty", async () => {

@@ -12,7 +12,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, resetConfigDefault, ConfigApiError } from "../api/config";
+import { getConfig, putConfig, ConfigApiError } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
@@ -131,18 +131,23 @@ export class SettingsView extends LitElement {
       padding: 0 0 var(--cortex-space-6);
       margin-bottom: var(--cortex-space-2);
     }
+    .section + .section {
+      padding-top: var(--cortex-space-5);
+    }
     .section h2 {
-      margin: 0 0 var(--cortex-space-4);
+      margin: 0 0 var(--cortex-space-3);
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
-      color: var(--cortex-text);
-      letter-spacing: -0.015em;
+      color: var(--cortex-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       line-height: 1.3;
-      padding-bottom: var(--cortex-space-2);
-      border-bottom: 1px solid var(--cortex-border-muted);
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
+      background: var(--cortex-surface-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-radius: var(--cortex-radius-md);
     }
     .section-desc {
       color: var(--cortex-text-muted);
@@ -153,14 +158,13 @@ export class SettingsView extends LitElement {
       display: grid;
       grid-template-columns: minmax(80px, 140px) 1fr;
       gap: var(--cortex-space-3);
-      padding: var(--cortex-space-3) 0;
-      border-top: 1px solid var(--cortex-border-muted);
+      padding: var(--cortex-space-2) 0;
       align-items: center;
     }
     .field:first-of-type { border-top: none; }
     .field-label .name {
       font-size: var(--cortex-fs-sm);
-      font-weight: 600;
+      font-weight: 400;
       color: var(--cortex-text);
       line-height: 1.5;
     }
@@ -443,13 +447,10 @@ export class SettingsView extends LitElement {
         white-space: nowrap;
       }
 
-      .field {
-        grid-template-columns: 1fr;
-        gap: var(--cortex-space-3);
-        padding: var(--cortex-space-4) 0;
+      .section h2 {
+        margin-left: calc(-1 * var(--cortex-space-4));
+        margin-right: calc(-1 * var(--cortex-space-4));
       }
-      .field-label .name { font-size: var(--cortex-fs-md); }
-
       .scroll-area {
         padding: 0 var(--cortex-space-4) var(--cortex-space-6);
       }
@@ -745,40 +746,6 @@ export class SettingsView extends LitElement {
     return html`<div class="desc">${base}${range}</div>`;
   }
 
-  /** 权重网格项：名称+值徽章一行、描述一行、拖杆（含端点标注）一行。
-   *  未显式设置（.env 无此键）时回显默认值，徽章用 implicit 样式区分。 */
-  private _allAtDefault(): boolean {
-    return Object.entries(FIELD_DEFAULTS).every(
-      ([k, v]) => (this._values[k] ?? "") === v
-    );
-  }
-
-  /** 恢复默认：调用后端把 .env 重置为 .env.example 模板（保留 API Key），
-   *  直接持久化并刷新表单 —— 不走逐字段清空，避免掏空文件/删密钥。 */
-  private async _resetAll() {
-    if (this._saving) return;
-    this._saving = true;
-    this._error = null;
-    try {
-      const resp = await resetConfigDefault(this._scope);
-      if (!this.isConnected) return;
-      this._values = { ...resp.values };
-      this._original = { ...resp.values };
-      actions.loadSettings(resp.values, true);
-      void this._refreshSystemStatus();
-      const msg = "已恢复默认配置（保留你的 API Key）。";
-      if (this._isMobile()) {
-        this._pushToast(msg, "success", 4000);
-      } else {
-        this._toast = msg;
-      }
-    } catch {
-      this._error = "恢复默认失败，请检查 .env 是否可写。";
-    } finally {
-      this._saving = false;
-    }
-  }
-
   private _renderInput(f: SettingsField, value: string) {
     const mono = f.mono ? "mono" : "";
     const onInput = (e: Event) =>
@@ -986,8 +953,7 @@ export class SettingsView extends LitElement {
               ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
             </div>
             <div class="footer-actions">
-              <button class="btn reset-all" ?disabled=${this._allAtDefault() || this._saving} @click=${() => this._resetAll()}>恢复默认</button>
-              <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
+              ${this._dirty ? html`<button class="btn" ?disabled=${this._saving} @click=${() => this._revert()}>放弃修改</button>` : nothing}
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
                 ${this._saving ? "保存中…" : html`<doclens-icon name="save"></doclens-icon>保存${scopeLabel}配置${existsHint}`}
               </button>

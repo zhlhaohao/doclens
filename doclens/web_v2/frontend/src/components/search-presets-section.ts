@@ -71,10 +71,6 @@ export class SearchPresetsSection extends LitElement {
       color: var(--cortex-text);
     }
     .wrap {
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border-muted);
-      border-radius: var(--cortex-radius-lg);
-      padding: var(--cortex-space-5);
       margin-bottom: var(--cortex-space-6);
     }
     .head {
@@ -94,15 +90,27 @@ export class SearchPresetsSection extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
     }
-    .group { margin-top: var(--cortex-space-3); }
+    .group {
+      margin-top: var(--cortex-space-5);
+    }
+    .group + .group {
+      margin-top: var(--cortex-space-6);
+      padding-top: var(--cortex-space-5);
+    }
     .group-title {
-      font-size: var(--cortex-fs-sm);
-      font-weight: 600;
-      color: var(--cortex-text-subtle);
-      margin: 0 0 var(--cortex-space-2);
+      font-size: var(--cortex-fs-lg);
+      font-weight: 700;
+      color: var(--cortex-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 0 0 var(--cortex-space-3);
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: var(--cortex-space-2);
+      background: var(--cortex-surface-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-radius: var(--cortex-radius-md);
     }
     .preset-list {
       display: flex;
@@ -114,13 +122,13 @@ export class SearchPresetsSection extends LitElement {
       align-items: center;
       gap: var(--cortex-space-3);
       padding: var(--cortex-space-3);
-      border: 1px solid var(--cortex-border-muted);
+      border: none;
       border-radius: var(--cortex-radius-md);
       background: var(--cortex-bg);
     }
     .preset-row.active {
       border-color: var(--cortex-primary);
-      background: var(--cortex-primary-soft);
+      background: rgba(49, 162, 76, 0.15);
     }
     .preset-main {
       flex: 1;
@@ -477,7 +485,6 @@ export class SearchPresetsSection extends LitElement {
         <div class="preset-main">
           <div class="preset-name">
             ${p.name}
-            ${active ? html`<span class="badge">当前</span>` : nothing}
           </div>
           <div class="preset-meta">${this._summary(p)}</div>
         </div>
@@ -497,10 +504,6 @@ export class SearchPresetsSection extends LitElement {
   render() {
     return html`
       <div class="wrap">
-        <div class="head">
-          <h2>搜索预设</h2>
-          <span class="hint">一键切换搜索调优参数（结果过滤 + 评分权重）；切换即时生效。</span>
-        </div>
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
           : html`
