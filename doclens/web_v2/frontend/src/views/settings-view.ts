@@ -923,7 +923,12 @@ export class SettingsView extends LitElement {
                     <model-presets-section
                       .activeLlm=${this._values["CORTEX_ACTIVE_LLM_PRESET"] ?? ""}
                       .activeVision=${this._values["CORTEX_ACTIVE_VISION_PRESET"] ?? ""}
-                      @presets-activated=${() => this._load()}
+                      @presets-activated=${() => {
+                        this._load();
+                        // 切换 LLM/视觉预设后后端已 reload_config，重拉 /api/status
+                        // 同步 store.status.model_name，否则 chat 思考占位仍显示旧模型
+                        void this._refreshSystemStatus();
+                      }}
                     ></model-presets-section>
                   ` : nothing}
                   ${tab === "search" ? html`
