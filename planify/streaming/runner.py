@@ -371,7 +371,7 @@ class StreamingAgent:
             }
             # 使用 ensure_ascii=False 支持中文
             json_str = json.dumps(payload, ensure_ascii=False, indent=None)
-            self.logger.info(f"[StreamingAgent] 请求负载(JSON): {json_str}")
+            self.logger.debug(f"[StreamingAgent] 请求负载(JSON): {json_str}")
         except Exception as e:
             self.logger.warning(f"[StreamingAgent] 请求负载记录失败: {e}")
 

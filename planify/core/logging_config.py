@@ -176,8 +176,11 @@ def setup_logging(
     )
 
     # Suppress noisy third-party loggers to WARNING (they spam DEBUG millions of lines)
+    # sse_starlette: 每个 SSE chunk/ping 都 debug 一次（watch/chat 流），刷屏且无用
+    # PIL: 读 PNG 每个数据块（IDAT 等）都 debug 一次（STREAM ...），图像解析时刷屏
     for _name in ("pdfminer", "pdfplumber", "markitdown",
-                  "urllib3", "httpx", "httpcore", "asyncio", "filelock"):
+                  "urllib3", "httpx", "httpcore", "asyncio", "filelock",
+                  "sse_starlette", "PIL"):
         logging.getLogger(_name).setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
