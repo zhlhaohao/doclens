@@ -595,7 +595,7 @@ class FTS5Index:
         with self._conn:
             cur = self._conn.execute(
                 "UPDATE vision_queue SET status = 'pending', attempts = 0, last_error = '', updated_at = ? "
-                "WHERE status IN ('done', 'failed') AND model != ?",
+                "WHERE status IN ('done', 'failed') AND model != ? AND model != 'manual'",
                 (_time.time(), current_tag),
             )
         return cur.rowcount

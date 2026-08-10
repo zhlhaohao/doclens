@@ -262,11 +262,14 @@ class VisionWorker:
             # 队列行被并发清掉（如 force 重建），本次结果丢弃，由重建流程兜底
             logger.info("VisionWorker: queue row vanished, result discarded: %s", rel)
 
-    def _call_vision_api(self, path: str, config) -> str:
+    def _call_vision_api(self, path: str, config, *, prompt: str = VISION_PROMPT) -> str:
         """调视觉模型（按 vision_protocol 分流），返回 Markdown。
 
         复用 diary_worker 的 _vision_openai/_vision_anthropic（同协议细节），
         文档转写 max_tokens=4096（远大于日记照片描述的 512/1024）。
+
+        ``prompt`` 默认走模块常量 ``VISION_PROMPT``（后台 worker 消费队列时用）；
+        ``POST /api/vision/reparse`` 端点可传入用户自定义提示词覆盖默认。
         """
         ext = os.path.splitext(path)[1].lower().lstrip(".")
         media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
@@ -276,11 +279,17 @@ class VisionWorker:
         from doclens.diary_worker import _vision_anthropic, _vision_openai
 
         if getattr(config, "vision_protocol", None) == "anthropic":
-            return _vision_anthropic(b64, media, VISION_PROMPT, config, max_tokens=4096)
-        return _vision_openai(b64, media, VISION_PROMPT, config, max_tokens=4096)
+            return _vision_anthropic(b64, media, prompt, config, max_tokens=4096)
+        return _vision_openai(b64, media, prompt, config, max_tokens=4096)
 
-    def _replace_placeholder(self, fts, path: str, md: str, config) -> None:
-        """把视觉模型输出的 Markdown 建树并原位替换该文档的占位节点。"""
+    def _replace_placeholder(self, fts, path: str, md: str, config, *,
+                             model_tag: str | None = None,
+                             prompt_version: str | None = None) -> None:
+        """把 Markdown 建树并原位替换该文档的占位节点。
+
+        model_tag/prompt_version 默认取当前视觉模型版本（写回元数据 + 版本校验）；
+        手动备注传入 ``"manual"`` 以跳过版本过期校验、不被 worker 重解析覆盖。
+        """
         from treesearch.indexer import md_to_tree
         from treesearch.tree import Document
 
@@ -329,8 +338,8 @@ class VisionWorker:
             if os.path.splitext(path)[1].lower() in image_metadata.INTERPRETED_IMAGE_EXTS:
                 image_metadata.write_back(
                     path, md,
-                    model_tag=vision_model_tag(config),
-                    prompt_version=str(PROMPT_VERSION),
+                    model_tag=model_tag or vision_model_tag(config),
+                    prompt_version=prompt_version or str(PROMPT_VERSION),
                 )
         except Exception as e:
             logger.warning("write_back 失败，索引已建（降级） %s: %s", path, e)

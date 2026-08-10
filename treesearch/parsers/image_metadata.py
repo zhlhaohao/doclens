@@ -137,6 +137,10 @@ def read_back(
     if not text:
         return None
     payload = _parse_payload(text)
+    # 手动备注（model_tag == "manual"）是用户显式覆盖，不参与版本过期校验，
+    # 持久保留——否则切模型/重建会被 read_back 判过期 → 占位重解析覆盖。
+    if payload.get("model_tag") == "manual":
+        return payload
     mt = model_tag if model_tag is not None else _expected_model_tag
     pv = prompt_version if prompt_version is not None else _expected_prompt_version
     if mt is not None and payload["model_tag"] != mt:

@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
-import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError } from "../api/preview";
+import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import type { MdEditor } from "./md-editor";
@@ -281,6 +281,8 @@ export class PreviewPane extends LitElement {
   /** 桌面 header 显示返回按钮（如 PST 邮件预览 → 返回邮件列表）。 */
   @property({ type: Boolean }) showBack = false;
   @property() backLabel = "返回";
+  /** files-view 启用「重新解析」入口（仅图像文件预览）；search/chat 不传 → 不显示。 */
+  @property({ type: Boolean }) enableReparse = false;
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
@@ -422,7 +424,14 @@ export class PreviewPane extends LitElement {
                   type="button"
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
-                ><doclens-icon name="upload"></doclens-icon>上传</button>`}
+                ><doclens-icon name="upload"></doclens-icon>上传</button>
+                ${this.enableReparse && isImageFile(this.path)
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this._onReparseClick(); }}
+                    ><doclens-icon name="refresh-cw"></doclens-icon>重新解析</button>`
+                  : null}`}
               </div>
             `
           : null}
@@ -501,6 +510,22 @@ export class PreviewPane extends LitElement {
   private _renderDownloadBtn() {
     if (this._isPst) return null;
     return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon>下载</button>`;
+  }
+
+  /** 触发「重新解析」：冒泡 reparse 事件给父组件（files-view 挂 reparse-dialog）。 */
+  private _onReparseClick = () => {
+    if (!this.path) return;
+    this.dispatchEvent(new CustomEvent("reparse", {
+      detail: { path: this.path },
+      bubbles: true,
+      composed: true,
+    }));
+  };
+
+  /** 图像文件 + enableReparse 时显示「重新解析」按钮（复用 download-btn 样式）。 */
+  private _renderReparseBtn() {
+    if (!this.enableReparse || this._isPst || !isImageFile(this.path)) return null;
+    return html`<button class="download-btn" @click=${this._onReparseClick}><doclens-icon name="refresh-cw"></doclens-icon>重新解析</button>`;
   }
 
   /** 桌面 header 返回按钮（复用 mobile back 事件，父组件统一监听 @back）。 */
@@ -595,6 +620,7 @@ export class PreviewPane extends LitElement {
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
+            ${this._renderReparseBtn()}
           </div>
         ` : null}
         <md-editor
@@ -621,6 +647,7 @@ export class PreviewPane extends LitElement {
               : null}
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
+            ${this._renderReparseBtn()}
           </div>
         ` : null}
         <md-viewer
@@ -646,6 +673,7 @@ export class PreviewPane extends LitElement {
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
+            ${this._renderReparseBtn()}
           </div>
         ` : null}
         <iframe
@@ -668,6 +696,7 @@ export class PreviewPane extends LitElement {
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
           ${this._renderUploadBtn()}
+            ${this._renderReparseBtn()}
         </div>
       ` : null}
       <div class="body">
