@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -191,6 +191,36 @@ class CortexConfig(BaseSettings):
         return [
             t.strip() for t in self.allowed_source_types_str.split(",") if t.strip()
         ]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _empty_means_default(cls, values):
+        """preset 风格 .env：空值 = 未配置 → 回退字段默认。
+
+        pydantic-settings 会把 .env 里的空字符串原样传入；对 int/float/bool 等
+        强类型字段（如 ``PLANIFY_CONTEXT_WINDOW=``）会解析失败、阻断首次运行。
+        这里对**非 ``str`` 字段**剔除空值，使其回退默认（与设置页"留空用默认"
+        的约定一致）。
+
+        纯 ``str`` 字段保留空串——空串本身有语义，例如
+        ``CORTEX_ALLOWED_SOURCE_TYPES=`` 表示「全部允许」、
+        ``CORTEX_WEB_PASSWORD_HASH=`` 表示「未设密码」。
+        ``Optional[str]`` 的空值会被剔除（回退 ``None``，与空串同为 falsy，行为一致）。
+        """
+        if not isinstance(values, dict):
+            return values
+
+        fields = cls.model_fields
+        alias_to_field = {f.alias: f for f in fields.values() if f.alias}
+
+        cleaned: dict = {}
+        for key, value in values.items():
+            field = fields.get(key, alias_to_field.get(key))
+            is_plain_str = field is not None and field.annotation is str
+            if value == "" and not is_plain_str:
+                continue  # 视为未设置 → 字段默认生效
+            cleaned[key] = value
+        return cleaned
 
     # 分词器
     cjk_tokenizer: str = Field(default="jieba")
