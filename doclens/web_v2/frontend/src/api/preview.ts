@@ -109,6 +109,15 @@ export function isFullFilePreview(path: string): boolean {
   return FULL_FILE_PREVIEW_EXTS.some((ext) => lower.endsWith(ext));
 }
 
+/** 可被视觉模型解读的图像后缀（与后端 INTERPRETED_IMAGE_EXTS 对齐，仅这 4 种）。
+ *  只有这些图像支持「重新解析」——gif/bmp/tiff 不走 vision 索引。 */
+const REPARSE_IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".webp"];
+
+export function isImageFile(path: string): boolean {
+  const lower = path.toLowerCase();
+  return REPARSE_IMAGE_EXTS.some((ext) => lower.endsWith(ext));
+}
+
 export type PreviewFetchResult =
   | {
       ok: true;

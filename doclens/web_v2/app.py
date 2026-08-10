@@ -82,6 +82,8 @@ def create_app() -> FastAPI:
     app.include_router(reindex.router, prefix="/api")
     from doclens.web_v2.api import diary
     app.include_router(diary.router, prefix="/api")
+    from doclens.web_v2.api import vision
+    app.include_router(vision.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

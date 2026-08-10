@@ -11,6 +11,7 @@ import "../components/file-list";
 import "../components/preview-pane";
 import "../components/mkdir-dialog";
 import "../components/rename-dialog";
+import "../components/reparse-dialog";
 import "../components/move-dialog";
 import "../components/delete-dialog";
 import "../components/drop-zone";
@@ -18,7 +19,7 @@ import "../components/file-search-box";
 import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
 
-type DialogKind = "mkdir" | "rename" | "move" | "delete" | null;
+type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | null;
 
 @customElement("files-view")
 export class FilesView extends LitElement {
@@ -166,6 +167,7 @@ export class FilesView extends LitElement {
   `;
 
   @state() private _dialog: DialogKind = null;
+  @state() private _reparsePath = ""; // 重新解析目标图像路径
   @state() private _toast: string | null = null;
   private _toastTimer: any = null;
 
@@ -658,6 +660,7 @@ export class FilesView extends LitElement {
     return html`<preview-pane
       ?noHeader=${opts.noHeader ?? false}
       ?mobile=${opts.mobile ?? false}
+      ?enableReparse=${true}
       path=${this._previewPath}
       language=${this._previewLanguage}
       content=${this._previewContent}
@@ -671,9 +674,23 @@ export class FilesView extends LitElement {
       @save-failed=${this._onPreviewSaveFailed}
       @upload-success=${this._onPreviewUploadSuccess}
       @upload-failed=${this._onPreviewUploadFailed}
+      @reparse=${this._onReparse}
       @back=${this._onPreviewBack}
     ></preview-pane>`;
   }
+
+  /** preview-pane「重新解析」按钮 → 打开 reparse-dialog。 */
+  private _onReparse = (e: CustomEvent<{ path: string }>) => {
+    this._reparsePath = e.detail.path;
+    this._dialog = "reparse";
+  };
+
+  /** reparse-dialog 解析成功 → 关 dialog + toast + 重载预览。 */
+  private _onReparseDone = () => {
+    this._dialog = null;
+    this._showToast("已重新解析");
+    void this._reloadPreview();
+  };
 
   /** 预览区返回：PST 派生邮件 → 回到该 PST 的邮件列表；其余走原导航。 */
   private _onPreviewBack = async () => {
@@ -873,6 +890,15 @@ export class FilesView extends LitElement {
           @submit=${this._onDeleteSubmit}
           @cancel=${this._cancelDialog}
         ></delete-dialog>
+      </dialog>`;
+    }
+    if (this._dialog === "reparse") {
+      return html`<dialog open>
+        <reparse-dialog
+          .path=${this._reparsePath}
+          @done=${this._onReparseDone}
+          @cancel=${this._cancelDialog}
+        ></reparse-dialog>
       </dialog>`;
     }
     return html``;
