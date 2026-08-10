@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
-import { getFileTypeBadge, getTypeLabel } from "../utils/file-type";
+import { getFileTypeBadge } from "../utils/file-type";
 
 @customElement("file-row")
 export class FileRow extends LitElement {
@@ -15,8 +15,7 @@ export class FileRow extends LitElement {
         var(--col-3, 240px)
         var(--col-4, 80px)
         var(--col-5, 140px)
-        var(--col-6, 70px)
-        var(--col-7, 80px);
+        var(--col-6, 70px);
       gap: var(--cortex-space-2);
       align-items: center;
       padding: 6px var(--cortex-space-3);
@@ -63,18 +62,6 @@ export class FileRow extends LitElement {
       font-family: var(--cortex-font-mono);
       background: var(--cortex-surface-muted);
       color: var(--cortex-text-muted);
-    }
-    @media (max-width: 1023px) {
-      .row {
-        grid-template-columns:
-          var(--col-1, 28px)
-          var(--col-2, 28px)
-          var(--col-3, 240px)
-          var(--col-4, 80px)
-          var(--col-5, 140px)
-          var(--col-6, 70px);
-      }
-      .cell-type { display: none; }
     }
   `;
 
@@ -145,7 +132,6 @@ export class FileRow extends LitElement {
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
         <span class="cell-indexed">${!this.entry.is_dir && this.entry.indexed ? html`<span class="badge">已索引</span>` : ""}</span>
-        <span class="cell-type">${getTypeLabel(this.entry)}</span>
       </div>
     `;
   }

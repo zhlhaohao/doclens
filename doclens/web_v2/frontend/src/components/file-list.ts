@@ -3,9 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import "./file-row";
 
-const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140, 70, 80] as const;
-const COL_MINS = [20, 20, 80, 50, 80, 50, 50];
-const COL_MAXS = [60, 60, 800, 200, 300, 150, 200];
+const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140, 70] as const;
+const COL_MINS = [20, 20, 80, 50, 80, 50];
+const COL_MAXS = [60, 60, 800, 200, 300, 150];
 const COL_COUNT = DEFAULT_COL_WIDTHS.length;
 const COL_WIDTHS_KEY = "cortex.files.colWidths";
 
@@ -159,8 +159,7 @@ export class FileList extends LitElement {
         var(--col-3, 240px)
         var(--col-4, 80px)
         var(--col-5, 140px)
-        var(--col-6, 70px)
-        var(--col-7, 80px);
+        var(--col-6, 70px);
       gap: var(--cortex-space-2);
       padding: 6px var(--cortex-space-3);
       background: var(--cortex-surface-muted);
@@ -171,16 +170,6 @@ export class FileList extends LitElement {
       flex-shrink: 0;
     }
     @media (max-width: 1023px) {
-      .header-row {
-        grid-template-columns:
-          var(--col-1, 28px)
-          var(--col-2, 28px)
-          var(--col-3, 240px)
-          var(--col-4, 80px)
-          var(--col-5, 140px)
-          var(--col-6, 70px);
-      }
-      .header-row .cell-type { display: none; }
       .col-resize { display: none !important; }
     }
     .header-row > span { position: relative; }
@@ -202,17 +191,16 @@ export class FileList extends LitElement {
       left: 50%;
       transform: translateX(-50%);
       width: 1px;
-      height: 100%;
-      background: linear-gradient(
-        to bottom,
-        var(--cortex-primary-soft),
-        var(--cortex-primary)
-      );
+      /* 贯穿整个列表：100vh 延伸由 file-list overflow:hidden 裁剪到底；
+         pointer-events:none 让视觉线不拦截行点击（拖动热区仍是 col-resize 主体，仅表头） */
+      height: 100vh;
+      background: var(--cortex-border-muted);
       transition: background 0.15s;
+      pointer-events: none;
     }
     .col-resize:hover::before,
     .col-resize:active::before {
-      background: var(--cortex-primary);
+      background: var(--cortex-text-muted);
     }
     .select-all { display: flex; align-items: center; justify-content: center; }
     .header-row .cell-size,
@@ -536,7 +524,6 @@ export class FileList extends LitElement {
                 title="拖动调整列宽"
                 @mousedown=${this._makeColResizeHandler(5)}
               ></span></span>
-            <span class="cell-type">类型</span>
           </div>`}
       <div class="rows">
         ${entries.map(e => html`
