@@ -34,9 +34,11 @@ if _HAS_WATCHDOG:
             self._search_path = os.path.normpath(search_path).lower()
             self._extensions = set(SUPPORTED_FORMATS.keys())
             # 误报去重快照：normcase 路径 → (mtime_ns, size)。
-            # 首次见到文件时 prev=None，视为真修改（不丢事件）；
-            # 之后 mtime/size 都未变 → atime-only 误报，忽略。
+            # 启动时用各文件当前 mtime/size 建立基线（_init_baseline），使后续
+            # on_modified 能用 prev==cur 去重 Windows 读访问触发的伪事件（仅 atime
+            # 变、mtime/size 不变），同时保留对真修改的捕获——不丢事件。
             self._mod_snapshot: dict[str, tuple[int, int]] = {}
+            self._init_baseline(search_path)
 
         def _should_handle(self, path: str) -> bool:
             norm = os.path.normpath(path)
@@ -50,10 +52,47 @@ if _HAS_WATCHDOG:
         def _snapshot_key(path: str) -> str:
             return os.path.normcase(os.path.normpath(path))
 
-        def _is_real_modification(self, path: str) -> bool:
-            """stat 当前文件，与上次快照对比：相同 → 误报；不同 → 真修改。
+        def _record_baseline(self, path: str) -> None:
+            """stat 单个文件，记录 (mtime_ns, size) 基线快照（已存在则覆盖）。"""
+            try:
+                st = os.stat(path)
+            except OSError:
+                return
+            self._mod_snapshot[self._snapshot_key(path)] = (st.st_mtime_ns, st.st_size)
 
-            文件刚被删则视为不重复触发，依赖后续 on_deleted 单独处理。
+        def _init_baseline(self, search_path: str) -> None:
+            """启动时遍历 search_path，对所有支持文件 stat 建立基线快照。
+
+            目的：让 on_modified 的去重（prev==cur）从 watcher 启动一开始就生效——
+            Windows 读访问会触发伪 on_modified（仅 atime 变），有了基线即可直接过滤，
+            不必等到文件"首次出现"才被动建档（那会吞掉启动后的首次真修改）。
+            跳过数据目录（.cortex / .doclens）；仅 stat 不读内容，开销很小。
+            """
+            for root, _dirs, files in os.walk(search_path):
+                if data_dirname() in (
+                    p.lower() for p in os.path.normpath(root).split(os.sep)
+                ):
+                    continue
+                for name in files:
+                    _, ext = os.path.splitext(name)
+                    if ext.lower() not in self._extensions:
+                        continue
+                    self._record_baseline(os.path.join(root, name))
+
+        def _is_real_modification(self, path: str) -> bool:
+            """stat 当前文件，与上次快照对比，过滤读访问触发的伪 on_modified。
+
+            Windows 上读取文件会更新 atime，ReadDirectoryChangesW 会把它当成
+            modified 报给 watchdog——表现为 mtime/size 不变但事件源源不断。
+            用 (mtime_ns, size) 快照去重：
+
+            - prev is None（竞态：on_created 未到先 on_modified，启动基线未覆盖）：
+              建立基线快照，不触发。正常情况下 _init_baseline / on_created 已建档，
+              此分支仅兜底，避免漏网的首次伪报误触发 reindex。
+            - prev == cur（mtime/size 未变）：atime-only 误报，忽略。
+            - 否则（mtime/size 真变）：真修改，更新快照并触发。
+
+            文件刚被删（stat 失败）返回 False，依赖后续 on_deleted 单独处理。
             """
             try:
                 st = os.stat(path)
@@ -62,14 +101,23 @@ if _HAS_WATCHDOG:
             key = self._snapshot_key(path)
             cur = (st.st_mtime_ns, st.st_size)
             prev = self._mod_snapshot.get(key)
-            if prev is not None and prev == cur:
-                # 诊断：mtime/size 都未变 → 误报
+            if prev is None:
+                # 竞态兜底：基线未覆盖（启动后新增文件 on_created 之前先到 on_modified），
+                # 只记基线不触发，避免读访问的伪 on_modified 误触发 reindex
+                logger.debug(
+                    "FileWatcher BASELINE %s mtime_ns=%d size=%d",
+                    path, cur[0], cur[1],
+                )
+                self._mod_snapshot[key] = cur
+                return False
+            if prev == cur:
+                # mtime/size 都未变 → atime-only 误报
                 logger.debug(
                     "FileWatcher DEDUP %s mtime_ns=%d size=%d unchanged",
                     path, cur[0], cur[1],
                 )
                 return False
-            # 诊断：快照更新
+            # mtime/size 真变 → 真修改，更新快照并触发
             logger.debug(
                 "FileWatcher MOD %s prev=%s cur=%s",
                 path, prev, cur,
@@ -96,6 +144,8 @@ if _HAS_WATCHDOG:
 
         def on_created(self, event):
             if not event.is_directory and self._should_handle(event.src_path):
+                # 新文件入快照，避免后续读访问的 on_modified 因 prev=None 被误判
+                self._record_baseline(event.src_path)
                 self._callback(event.src_path)
 
         def on_deleted(self, event):
