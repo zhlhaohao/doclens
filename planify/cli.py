@@ -300,7 +300,6 @@ def setup_single_user_session():
     from planify.core.llm import create_provider
 
     client = create_provider({
-        "provider_name": config.get("provider_name", "anthropic"),
         "api_key": config.get("api_key", ""),
         "model_id": config.get("model_id", ""),
         "base_url": config.get("base_url", ""),

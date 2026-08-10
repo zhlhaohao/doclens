@@ -168,7 +168,6 @@ def _vision_anthropic(b64: str, media: str, prompt: str, config, *, max_tokens: 
     from planify.core.llm import create_provider
 
     provider = create_provider({
-        "provider_name": "anthropic",
         "protocol": "",
         "api_key": config.vision_api_key,
         "model_id": config.vision_model,
@@ -255,7 +254,6 @@ def summarize_day_text(user_input: str, config) -> str:
     from planify.core.llm import create_provider
 
     provider = create_provider({
-        "provider_name": getattr(config, "planify_provider", "anthropic"),
         "protocol": getattr(config, "planify_protocol", "") or "",
         "api_key": config.planify_api_key,
         "model_id": config.planify_model_id,

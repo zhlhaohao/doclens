@@ -36,36 +36,11 @@ class ValidationErrors(Exception):
         super().__init__("; ".join(f"{f.field}: {f.error}" for f in fields))
 
 
-def _custom_llm_provider_rules(values: dict[str, str]) -> list[ConfigValidationError]:
-    """自定义 LLM provider 验证规则。"""
+def _llm_endpoint_rules(values: dict[str, str]) -> list[ConfigValidationError]:
+    """LLM 端点校验（provider 概念已废弃，ADR-0009；预设切换时也走此校验）。"""
     errors: list[ConfigValidationError] = []
-    provider = values.get("PLANIFY_PROVIDER", "anthropic").strip()
     protocol = values.get("PLANIFY_PROTOCOL", "").strip()
     base_url = values.get("PLANIFY_BASE_URL", "").strip()
-
-    # 已知 provider 列表（与 planify/core/llm/presets.py 同步）
-    known_providers = {
-        "anthropic", "openrouter", "qwen", "deepseek", "glm",
-        "minimax", "kimi", "hunyuan", "doubao", "siliconflow", "openai",
-    }
-    if provider and provider not in known_providers and provider != "custom":
-        errors.append(ConfigValidationError(
-            field="PLANIFY_PROVIDER",
-            error=f"未知 provider: {provider}",
-        ))
-        return errors
-
-    if provider == "custom":
-        if not base_url:
-            errors.append(ConfigValidationError(
-                field="PLANIFY_BASE_URL",
-                error="custom provider 需要 base_url",
-            ))
-        if not protocol:
-            errors.append(ConfigValidationError(
-                field="PLANIFY_PROTOCOL",
-                error="custom provider 需要 protocol",
-            ))
 
     if protocol == "openai_compat" and base_url and not base_url.startswith(("http://", "https://")):
         errors.append(ConfigValidationError(
@@ -127,7 +102,7 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
         os.environ.clear()
         os.environ.update(env_backup)
 
-    # 自定义 LLM provider 规则
-    errors.extend(_custom_llm_provider_rules(values))
+    # LLM 端点规则（provider 概念已废弃，ADR-0009）
+    errors.extend(_llm_endpoint_rules(values))
 
     return ValidationErrors(fields=errors)

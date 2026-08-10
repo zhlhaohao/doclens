@@ -953,7 +953,6 @@ class CortexApp(App):
                 return
 
             client = create_provider({
-                "provider_name": getattr(config, "planify_provider", "anthropic"),
                 "protocol": getattr(config, "planify_protocol", ""),
                 "api_key": config.planify_api_key,
                 "model_id": config.planify_model_id,

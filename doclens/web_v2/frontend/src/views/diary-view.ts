@@ -45,17 +45,14 @@ export class DiaryView extends LitElement {
     .tab-strip {
       display: flex;
       gap: 4px;
-      padding: 4px;
       margin-bottom: var(--cortex-space-4, 16px);
-      border-radius: var(--cortex-radius-pill, 100px);
-      background: var(--cortex-surface-muted);
     }
     .sub-tab {
       flex: 1;
       min-height: 40px;
       padding: 0 16px;
       border: none;
-      border-radius: var(--cortex-radius-pill, 100px);
+      border-radius: var(--cortex-radius-lg, 16px);
       background: transparent;
       color: var(--cortex-text-muted);
       cursor: pointer;

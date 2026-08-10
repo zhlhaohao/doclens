@@ -41,6 +41,9 @@
 - **写回-读回闭环 (Writeback-Readback Loop)**：force 重建不重花 vision API 的机制——indexer 在 `vision_enqueue` 前先读图像元数据，已有解读则直接重建节点树，无则入队让 Vision Worker 调 API。解读结果的 source of truth 从 index.db documents 表迁到图像文件元数据，索引内容由元数据派生（2026-08-07 决议，ADR-0009）。
 - **格式可达性 (Format Readability)**：Windows 资源管理器能否读出写回的元数据，按格式分级——JPEG 经 WIC 原生可达；PNG property 映射不可靠；WebP 依赖 Win 版本/codec。四格式统一写回（换 force 省钱闭环 + 可移植），但「Windows 能读」仅在 JPEG 可靠达成，其余为尽力而为。
 
+- **模型预设 (Model Profile)**：一份命名后可一键切换的完整模型连接档案，打包 `protocol + base_url + model_id + api_key`（LLM 另含 `context_window`），**不含 provider**——切换即一次性应用全部参数，无需逐字段重填。涵盖两类：LLM 预设（AI 对话，切换即时热生效）与视觉预设（图像解析，切换后已解析图像将在下次启动重新解析）。是本系统中「模型」的可切换单位，与旧的字段散填形态区分。预设库为机器级本地资产（各机器各自维护），含明文凭据，**不参与知识库 Git 同步**，与 `.env` 同等保护。
+- **搜索预设 (Search Preset)**：搜索调优参数的命名档案，打包设置页 search tab 暴露的全部 8 个参数（3 过滤：`max_results` / `min_score_threshold` / `max_span` + 5 评分权重），`kind=search`，复用「模型预设」整套机制（同一 `model_presets.json` / `presets_store` / 物化写 global `.env` / 激活键 `CORTEX_ACTIVE_SEARCH_PRESET`）。切换即时热生效（`IndexManager.apply_config` 只更新 `_config`、不碰索引，搜索时按新参数运行，**无副作用**）。不含密钥，无需脱敏。
+
 ## 决议摘要（详见 docs/adr/）
 
 - 2026-07-25：图像解析索引的边界 = 仅独立图像文件；内嵌图片不送视觉模型。
@@ -70,3 +73,5 @@
 - 2026-08-07：file_hash 改「内容指纹」口径——图像格式剥离元数据段后算 hash（使写回不死循环），非图像指纹口径不变；代价：口径切换首迁移让四格式已解读图片全部重索引、重花一次全量 vision API。
 - 2026-08-07：图像写回格式范围 = 仅 JPG/JPEG/PNG/WebP；HEIC/TIFF/BMP/GIF/SVG 等其他图像格式不解读不写回；PDF/Word/code 等非图像文档照常索引（doclens 仍是文档检索工具）。
 - 2026-08-07：原件污染被接受（写回永久改写图像文件、不提供备份/还原）；Windows 能读仅在 JPEG 可靠达成（PNG 不可靠、WebP 看 codec），四格式统一写回以换 force 省钱闭环 + 可移植。
+- 2026-08-08：模型预设体系（ADR-0011）= 命名档案一键切换（`protocol+base_url+model_id+api_key`，LLM 另含 `context_window`，不含 provider），LLM/视觉统一 `kind` 区分；切换物化进 local .env、运行时只读 .env；废弃 `PLANIFY_PROVIDER` 与随包供应商表；预设存明文 key 与 .env 同等保护；全局单层 `model_presets.json` 不参与 Git 同步；不预置、空列表自建。
+- 2026-08-09：搜索预设（ADR-0012）= 搜索调优参数（3 过滤 + 5 权重）命名档案一键切换，复用模型预设整套机制（`kind=search` 扩展同一 `model_presets.json`/`presets_store`/`/api/presets`/物化）；切换即时热生效无副作用；search tab 移除散填、只留预设区块。

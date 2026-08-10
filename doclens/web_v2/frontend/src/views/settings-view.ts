@@ -7,22 +7,27 @@ import type { SettingsScope } from "../state/types";
 import {
   SETTINGS_FIELDS,
   SETTINGS_TAB_LABELS,
-  PRESET_BASE_URLS,
-  PRESET_PROTOCOLS,
-  WEIGHT_SECTION,
-  DEFAULT_WEIGHTS,
   FIELD_DEFAULTS,
   IMPLICIT_DEFAULTS,
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, resetConfigDefault, ConfigApiError } from "../api/config";
+import { getConfig, putConfig, ConfigApiError } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
+import "../components/model-presets-section";
+import "../components/search-presets-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
+
+/** 三个 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
+const TAB_ICONS: Record<SettingsTab, string> = {
+  ai: "sparkles",
+  search: "search",
+  network: "globe",
+};
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
 const ICON_EYE = html`
@@ -87,26 +92,31 @@ export class SettingsView extends LitElement {
     }
     .tab-strip button {
       position: relative;
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      background: transparent;
+      border: none;
       padding: var(--cortex-space-2) var(--cortex-space-4);
-      font-size: var(--cortex-fs-sm);
+      font-size: 14px;
       font-weight: 600;
-      color: var(--cortex-text);
+      color: var(--cortex-text-muted);
       cursor: pointer;
       font-family: inherit;
       text-align: left;
-      border-radius: var(--cortex-radius-pill);
-      transition: background var(--cortex-duration-fast), color var(--cortex-duration-fast), border-color var(--cortex-duration-fast);
+      border-radius: var(--cortex-radius-lg);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .tab-strip button doclens-icon {
+      font-size: 16px;
+      flex-shrink: 0;
     }
     .tab-strip button:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-subtle);
+      color: var(--cortex-text);
     }
     .tab-strip button.active {
-      color: var(--cortex-surface);
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
+      background: rgba(0, 100, 224, 0.15);
+      color: var(--cortex-primary);
     }
     .scroll-area {
       flex: 1;
@@ -121,18 +131,23 @@ export class SettingsView extends LitElement {
       padding: 0 0 var(--cortex-space-6);
       margin-bottom: var(--cortex-space-2);
     }
+    .section + .section {
+      padding-top: var(--cortex-space-5);
+    }
     .section h2 {
-      margin: 0 0 var(--cortex-space-4);
+      margin: 0 0 var(--cortex-space-3);
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
-      color: var(--cortex-text);
-      letter-spacing: -0.015em;
+      color: var(--cortex-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       line-height: 1.3;
-      padding-bottom: var(--cortex-space-2);
-      border-bottom: 1px solid var(--cortex-border-muted);
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
+      background: var(--cortex-surface-muted);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-radius: var(--cortex-radius-md);
     }
     .section-desc {
       color: var(--cortex-text-muted);
@@ -143,14 +158,13 @@ export class SettingsView extends LitElement {
       display: grid;
       grid-template-columns: minmax(80px, 140px) 1fr;
       gap: var(--cortex-space-3);
-      padding: var(--cortex-space-3) 0;
-      border-top: 1px solid var(--cortex-border-muted);
+      padding: var(--cortex-space-2) 0;
       align-items: center;
     }
     .field:first-of-type { border-top: none; }
     .field-label .name {
       font-size: var(--cortex-fs-sm);
-      font-weight: 600;
+      font-weight: 400;
       color: var(--cortex-text);
       line-height: 1.5;
     }
@@ -428,27 +442,15 @@ export class SettingsView extends LitElement {
       .scroll-area { overflow: visible; flex: none; }
       .tab-strip { flex-direction: row; overflow-x: auto; }
       .tab-strip button {
-        border: none;
-        border-bottom: 2px solid transparent;
+        justify-content: center;
         text-align: center;
         white-space: nowrap;
-        border-radius: 0;
-      }
-      .tab-strip button:hover { background: transparent; }
-      /* 移动端只保留下划线高亮（墨黑），去掉桌面端的深色填充 */
-      .tab-strip button.active {
-        color: var(--cortex-text);
-        border-bottom-color: var(--cortex-btn-primary-bg);
-        background: transparent;
       }
 
-      .field {
-        grid-template-columns: 1fr;
-        gap: var(--cortex-space-3);
-        padding: var(--cortex-space-4) 0;
+      .section h2 {
+        margin-left: calc(-1 * var(--cortex-space-4));
+        margin-right: calc(-1 * var(--cortex-space-4));
       }
-      .field-label .name { font-size: var(--cortex-fs-md); }
-
       .scroll-area {
         padding: 0 var(--cortex-space-4) var(--cortex-space-6);
       }
@@ -541,8 +543,7 @@ export class SettingsView extends LitElement {
         margin-bottom: var(--cortex-space-3);
       }
       .tab-strip {
-        padding: 0 var(--cortex-space-3);
-        gap: var(--cortex-space-1);
+        gap: 4px;
       }
       .tab-strip button {
         padding: var(--cortex-space-3) var(--cortex-space-2);
@@ -557,7 +558,6 @@ export class SettingsView extends LitElement {
   @state() private _toast: string | null = null;
   @state() private _values: Record<string, string> = {};
   @state() private _original: Record<string, string> = {};
-  @state() private _userEditedBaseUrl = false;
   @state() private _exists = true;
   @state() private _scope: SettingsScope = "global";
   @state() private _fieldErrors: Record<string, string> = {};
@@ -607,24 +607,6 @@ export class SettingsView extends LitElement {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._values = { ...resp.values };
       this._original = { ...resp.values };
-      this._userEditedBaseUrl = false;
-      // 已知 provider 预设回填：.env 里 base_url/protocol 为空时展示预设值
-      // （与切换 provider 时 _onProviderChange 行为一致）。回填同步进 _original，
-      // 故不会凭空标 dirty；用户保存才会把这些预设值真正写入 .env。
-      const provider = this._values["PLANIFY_PROVIDER"] ?? "";
-      if (provider && provider !== "custom") {
-        const fill: Record<string, string> = {};
-        if (!(this._values["PLANIFY_BASE_URL"] ?? "")) {
-          fill["PLANIFY_BASE_URL"] = PRESET_BASE_URLS[provider] ?? "";
-        }
-        if (!(this._values["PLANIFY_PROTOCOL"] ?? "")) {
-          fill["PLANIFY_PROTOCOL"] = PRESET_PROTOCOLS[provider] ?? "anthropic";
-        }
-        if (Object.keys(fill).length) {
-          this._values = { ...this._values, ...fill };
-          this._original = { ...this._values };
-        }
-      }
       this._exists = resp.exists;
       this._fieldErrors = {};
       actions.loadSettings(this._values, resp.exists);
@@ -655,44 +637,7 @@ export class SettingsView extends LitElement {
   }
 
   private _onInput(envVar: string, value: string) {
-    if (envVar === "PLANIFY_PROVIDER") {
-      this._onProviderChange(value);
-      return;
-    }
-    if (envVar === "PLANIFY_BASE_URL") {
-      this._onBaseUrlChange(value);
-      return;
-    }
     this._updateValues({ [envVar]: value });
-  }
-
-  private _onProviderChange(newProvider: string) {
-    if (newProvider === "custom") {
-      const updates: Record<string, string> = this._values["PLANIFY_PROTOCOL"]
-        ? { PLANIFY_PROVIDER: newProvider }
-        : { PLANIFY_PROVIDER: newProvider, PLANIFY_PROTOCOL: "openai_compat" };
-      this._updateValues(updates);
-      return;
-    }
-
-    if (!this._userEditedBaseUrl) {
-      this._updateValues({
-        PLANIFY_PROVIDER: newProvider,
-        PLANIFY_BASE_URL: PRESET_BASE_URLS[newProvider] ?? "",
-        PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
-      });
-      return;
-    }
-
-    this._updateValues({
-      PLANIFY_PROVIDER: newProvider,
-      PLANIFY_PROTOCOL: PRESET_PROTOCOLS[newProvider] ?? "anthropic",
-    });
-  }
-
-  private _onBaseUrlChange(newBaseUrl: string) {
-    this._userEditedBaseUrl = true;
-    this._updateValues({ PLANIFY_BASE_URL: newBaseUrl });
   }
 
   private _isMobile(): boolean {
@@ -730,7 +675,6 @@ export class SettingsView extends LitElement {
 
   private _revert() {
     this._values = { ...this._original };
-    this._userEditedBaseUrl = false;
     actions.revertSettings();
   }
 
@@ -743,7 +687,6 @@ export class SettingsView extends LitElement {
       const result = await putConfig(this._scope, this._values);
       if (!this.isConnected) return;
       this._original = { ...this._values };
-      this._userEditedBaseUrl = false;
       actions.loadSettings(this._values, true);
       // 重新拉一次 /api/status：settings-view 和 chat-view 共享 store.status，
       // 旧值在 connectedCallback 一次性载入后不会自动更新。不刷新的话，
@@ -801,72 +744,6 @@ export class SettingsView extends LitElement {
     const base = f.hint.replace(/。$/, "");
     const range = f.min != null && f.max != null ? ` · ${f.min}–${f.max}` : "";
     return html`<div class="desc">${base}${range}</div>`;
-  }
-
-  /** 权重网格项：名称+值徽章一行、描述一行、拖杆（含端点标注）一行。
-   *  未显式设置（.env 无此键）时回显默认值，徽章用 implicit 样式区分。 */
-  private _renderWeightItem(f: SettingsField) {
-    const raw = this._values[f.envVar] ?? "";
-    const implicit = raw === "";
-    const value = implicit ? (DEFAULT_WEIGHTS[f.envVar] ?? String(f.min ?? 0)) : raw;
-    const onInput = (e: Event) =>
-      this._onInput(f.envVar, (e.target as HTMLInputElement).value);
-    return html`
-      <div class="w-item">
-        <div class="w-head">
-          <span class="w-name">${f.label}</span>
-          <span class="value-chip ${implicit ? "implicit" : ""}" data-role="value-chip">${value}</span>
-        </div>
-        ${this._renderDesc(f)}
-        <div class="w-slider">
-          <span class="w-end">${f.min ?? 0}</span>
-          <input
-            type="range"
-            min=${f.min ?? nothing}
-            max=${f.max ?? nothing}
-            step=${f.step ?? nothing}
-            .value=${value}
-            data-env=${f.envVar}
-            @input=${onInput}
-          />
-          <span class="w-end">${f.max ?? 10}</span>
-        </div>
-        ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
-      </div>
-    `;
-  }
-
-  private _allAtDefault(): boolean {
-    return Object.entries(FIELD_DEFAULTS).every(
-      ([k, v]) => (this._values[k] ?? "") === v
-    );
-  }
-
-  /** 恢复默认：调用后端把 .env 重置为 .env.example 模板（保留 API Key），
-   *  直接持久化并刷新表单 —— 不走逐字段清空，避免掏空文件/删密钥。 */
-  private async _resetAll() {
-    if (this._saving) return;
-    this._saving = true;
-    this._error = null;
-    try {
-      const resp = await resetConfigDefault(this._scope);
-      if (!this.isConnected) return;
-      this._values = { ...resp.values };
-      this._original = { ...resp.values };
-      this._userEditedBaseUrl = false;
-      actions.loadSettings(resp.values, true);
-      void this._refreshSystemStatus();
-      const msg = "已恢复默认配置（保留你的 API Key）。";
-      if (this._isMobile()) {
-        this._pushToast(msg, "success", 4000);
-      } else {
-        this._toast = msg;
-      }
-    } catch {
-      this._error = "恢复默认失败，请检查 .env 是否可写。";
-    } finally {
-      this._saving = false;
-    }
   }
 
   private _renderInput(f: SettingsField, value: string) {
@@ -1025,7 +902,7 @@ export class SettingsView extends LitElement {
               <button
                 class=${this._activeTab === tab ? "active" : ""}
                 @click=${() => { this._activeTab = tab; }}
-              >${SETTINGS_TAB_LABELS[tab]}</button>
+              ><doclens-icon name=${TAB_ICONS[tab]}></doclens-icon>${SETTINGS_TAB_LABELS[tab]}</button>
             `)}
           </nav>
         </aside>
@@ -1042,14 +919,20 @@ export class SettingsView extends LitElement {
               }
               return html`
                 <div class="tab-panel ${this._activeTab === tab ? "active" : ""}" data-panel=${tab}>
-                  ${sections.map((s) => s.title === WEIGHT_SECTION ? html`
-                    <div class="section">
-                      <h2>${s.title}</h2>
-                      <div class="weights-grid">
-                        ${s.fields.map((f) => this._renderWeightItem(f))}
-                      </div>
-                    </div>
-                  ` : html`
+                  ${tab === "ai" ? html`
+                    <model-presets-section
+                      .activeLlm=${this._values["CORTEX_ACTIVE_LLM_PRESET"] ?? ""}
+                      .activeVision=${this._values["CORTEX_ACTIVE_VISION_PRESET"] ?? ""}
+                      @presets-activated=${() => this._load()}
+                    ></model-presets-section>
+                  ` : nothing}
+                  ${tab === "search" ? html`
+                    <search-presets-section
+                      .activeSearch=${this._values["CORTEX_ACTIVE_SEARCH_PRESET"] ?? ""}
+                      @presets-activated=${() => this._load()}
+                    ></search-presets-section>
+                  ` : nothing}
+                  ${sections.map((s) => html`
                     <div class="section">
                       ${s.title ? html`<h2>${s.title}</h2>` : nothing}
                       ${s.fields.map((f) => this._renderField(f))}
@@ -1070,8 +953,7 @@ export class SettingsView extends LitElement {
               ${this._toast ? html`<span style="color: var(--cortex-success); margin-left: var(--cortex-space-2);">${this._toast}</span>` : nothing}
             </div>
             <div class="footer-actions">
-              <button class="btn reset-all" ?disabled=${this._allAtDefault() || this._saving} @click=${() => this._resetAll()}>恢复默认</button>
-              <button class="btn" ?disabled=${!this._dirty || this._saving} @click=${() => this._revert()}>放弃修改</button>
+              ${this._dirty ? html`<button class="btn" ?disabled=${this._saving} @click=${() => this._revert()}>放弃修改</button>` : nothing}
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
                 ${this._saving ? "保存中…" : html`<doclens-icon name="save"></doclens-icon>保存${scopeLabel}配置${existsHint}`}
               </button>
