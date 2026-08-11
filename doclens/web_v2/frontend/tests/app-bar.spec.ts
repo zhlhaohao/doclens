@@ -34,23 +34,6 @@ describe("<app-bar>", () => {
     expect(menu?.classList.contains("open")).toBe(true);
   });
 
-  it("clicking 本地配置 menu item dispatches navigate event with settings+local", async () => {
-    const btn = el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement;
-    btn.click();
-    await elementUpdated(el);
-
-    const events: CustomEvent[] = [];
-    el.addEventListener("navigate", (e: Event) => events.push(e as CustomEvent));
-
-    const items = el.shadowRoot?.querySelectorAll(".menu-item");
-    // First item is 本地配置
-    (items?.[0] as HTMLButtonElement).click();
-    await elementUpdated(el);
-
-    expect(events).toHaveLength(1);
-    expect(events[0].detail).toEqual({ view: "settings", scope: "local" });
-  });
-
   it("clicking 全局配置 menu item dispatches navigate with settings+global", async () => {
     const btn = el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement;
     btn.click();
@@ -60,9 +43,11 @@ describe("<app-bar>", () => {
     el.addEventListener("navigate", (e: Event) => events.push(e as CustomEvent));
 
     const items = el.shadowRoot?.querySelectorAll(".menu-item");
-    (items?.[1] as HTMLButtonElement).click();
+    // 首个菜单项即 全局配置
+    (items?.[0] as HTMLButtonElement).click();
     await elementUpdated(el);
 
+    expect(events).toHaveLength(1);
     expect(events[0].detail).toEqual({ view: "settings", scope: "global" });
   });
 
