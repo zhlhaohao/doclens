@@ -21,6 +21,19 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 
+# 危险命令：含空格的按子串匹配，单词按整词匹配（避免 "dd" 误伤 "yyyy-MM-dd"）
+_DANGEROUS_SUBSTRINGS = ["rm -rf /", "> /dev/"]
+_DANGEROUS_WORDS = {"sudo", "shutdown", "reboot", "mkfs", "dd"}
+
+
+def _is_dangerous(command: str) -> bool:
+    """检查命令是否命中危险命令过滤"""
+    if any(s in command for s in _DANGEROUS_SUBSTRINGS):
+        return True
+    tokens = set(command.replace(";", " ").replace("&", " ").replace("|", " ").split())
+    return bool(tokens & _DANGEROUS_WORDS)
+
+
 def _find_bash_path() -> str:
     """查找 bash 可执行文件路径
 
@@ -45,6 +58,63 @@ def _find_bash_path() -> str:
         return bash_path
 
     return None
+
+
+def _find_windows_shell() -> tuple:
+    """查找 Windows 原生 shell 可执行文件
+
+    按优先级依次尝试：
+    1. PowerShell 7 (pwsh.exe)
+    2. Windows PowerShell 5.1 (powershell.exe)
+    3. cmd.exe（必然存在）
+
+    Returns:
+        (exe_path, kind) 元组，kind ∈ {"pwsh", "powershell", "cmd"}；
+        非 Windows 平台返回 None
+    """
+    if platform.system() != "Windows":
+        return None
+
+    # 1. PowerShell 7
+    pwsh_path = shutil.which("pwsh") or shutil.which("pwsh.exe")
+    if not pwsh_path:
+        candidate = r"C:\Program Files\PowerShell\7\pwsh.exe"
+        if os.path.isfile(candidate):
+            pwsh_path = candidate
+    if pwsh_path:
+        return (pwsh_path, "pwsh")
+
+    # 2. Windows PowerShell 5.1（固定在 SystemRoot 下，PATH 不一定包含）
+    powershell_path = shutil.which("powershell") or shutil.which("powershell.exe")
+    if not powershell_path:
+        candidate = os.path.join(
+            os.environ.get("SystemRoot", r"C:\Windows"),
+            r"System32\WindowsPowerShell\v1.0\powershell.exe",
+        )
+        if os.path.isfile(candidate):
+            powershell_path = candidate
+    if powershell_path:
+        return (powershell_path, "powershell")
+
+    # 3. cmd 兜底
+    return (os.environ.get("COMSPEC", "cmd.exe"), "cmd")
+
+
+def _build_shell_argv(exe_path: str, kind: str, command: str) -> list:
+    """按 shell 类型构建命令行参数
+
+    统一强制 UTF-8 输出，避免中文系统 GBK 代码页导致解码乱码；
+    PowerShell 7 同时关闭 ANSI 颜色渲染，保证输出为纯文本。
+    """
+    if kind in ("pwsh", "powershell"):
+        wrapped = (
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+            "if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText' }; "
+            f"{command}"
+        )
+        return [exe_path, "-NoProfile", "-NonInteractive", "-Command", wrapped]
+    # cmd：先切 UTF-8 代码页再执行
+    return [exe_path, "/c", f"chcp 65001>nul & {command}"]
 
 
 def safe_path(p: str, workdir: Path) -> Path:
@@ -86,8 +156,7 @@ def run_bash(command: str, workdir: Path) -> str:
     Returns:
         命令的 stdout 和 stderr，或错误信息
     """
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/", "mkfs", "dd"]
-    if any(d in command for d in dangerous):
+    if _is_dangerous(command):
         return "Error: Dangerous command blocked"
 
     try:
@@ -99,7 +168,8 @@ def run_bash(command: str, workdir: Path) -> str:
         if platform.system() == "Windows":
             bash_path = _find_bash_path()
             if not bash_path:
-                return "Error: bash not found on Windows"
+                # 没有 Git Bash，回退到 Windows 原生 shell（pwsh → powershell → cmd）
+                return run_powershell(command, workdir)
             # 使用 bash -c 包装命令
             logger.debug("[bash] Executing: %s -c '%s' in %s", bash_path, command, workdir)
             r = subprocess.run(
@@ -128,6 +198,61 @@ def run_bash(command: str, workdir: Path) -> str:
                 r.stdout.decode("utf-8", errors="replace")
                 + r.stderr.decode("utf-8", errors="replace")
             ).strip()[:50000]
+        return out if out else "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: Timeout (20s)"
+    except Exception as e:
+        return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
+
+
+def run_powershell(command: str, workdir: Path) -> str:
+    """
+    执行 Windows 原生 shell 命令
+
+    按优先级选择 shell：PowerShell 7 (pwsh) → Windows PowerShell → cmd。
+    安全措施与 run_bash 一致：
+    - 危险命令过滤
+    - 超时保护（20 秒）
+    - 输出截断（50000 字符）
+
+    Args:
+        command: 要执行的命令（PowerShell 或 cmd 语法，取决于解析到的 shell）
+        workdir: 命令执行的工作目录
+
+    Returns:
+        命令的 stdout 和 stderr，或错误信息
+    """
+    if platform.system() != "Windows":
+        return "Error: powershell tool is only available on Windows"
+
+    if _is_dangerous(command):
+        return "Error: Dangerous command blocked"
+
+    shell = _find_windows_shell()
+    if not shell:
+        return "Error: no Windows shell found"
+    exe_path, kind = shell
+
+    try:
+        workdir = Path(workdir)
+        if not workdir.exists():
+            workdir.mkdir(parents=True, exist_ok=True)
+
+        argv = _build_shell_argv(exe_path, kind, command)
+        logger.debug("[powershell] Executing: %s (%s) in %s", argv, kind, workdir)
+        r = subprocess.run(
+            argv,
+            shell=False,
+            cwd=str(workdir),
+            capture_output=True,
+            timeout=20,
+        )
+
+        # 确保输出使用 UTF-8 解码，失败时替换不可编码字符
+        out = (
+            r.stdout.decode("utf-8", errors="replace")
+            + r.stderr.decode("utf-8", errors="replace")
+        ).strip()[:50000]
         return out if out else "(no output)"
     except subprocess.TimeoutExpired:
         return "Error: Timeout (20s)"
@@ -228,6 +353,7 @@ def make_basic_tools(workdir: Path) -> dict:
     """
     return {
         "bash": lambda **kw: run_bash(kw["command"], workdir),
+        "powershell": lambda **kw: run_powershell(kw["command"], workdir),
         "read_file": lambda **kw: run_read(kw["path"], workdir, kw.get("limit")),
         "write_file": lambda **kw: run_write(kw["path"], kw["content"], workdir),
         "edit_file": lambda **kw: run_edit(

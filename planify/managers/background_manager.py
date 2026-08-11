@@ -23,7 +23,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, List
 
-from ..tools.basic import _find_bash_path
+from ..tools.basic import _build_shell_argv, _find_bash_path, _find_windows_shell
 
 
 class BackgroundManager:
@@ -78,11 +78,21 @@ class BackgroundManager:
                         capture_output=True, text=True, timeout=timeout
                     )
                 else:
-                    # 没有 bash，回退到 cmd.exe（可能失败）
-                    r = subprocess.run(
-                        command, shell=True, cwd=str(self.workdir),
-                        capture_output=True, text=True, timeout=timeout
-                    )
+                    # 没有 Git Bash，回退 Windows 原生 shell（pwsh → powershell → cmd）
+                    shell = _find_windows_shell()
+                    if shell:
+                        exe_path, kind = shell
+                        r = subprocess.run(
+                            _build_shell_argv(exe_path, kind, command),
+                            shell=False, cwd=str(self.workdir),
+                            capture_output=True, text=True, timeout=timeout
+                        )
+                    else:
+                        # 最后兜底：cmd.exe via shell=True（可能失败）
+                        r = subprocess.run(
+                            command, shell=True, cwd=str(self.workdir),
+                            capture_output=True, text=True, timeout=timeout
+                        )
             else:
                 # Unix 环境直接使用 shell
                 r = subprocess.run(
