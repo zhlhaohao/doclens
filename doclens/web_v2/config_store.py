@@ -33,6 +33,8 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "VISION_PROTOCOL",
     "CORTEX_ACTIVE_VISION_PRESET",
     "CORTEX_ACTIVE_SEARCH_PRESET",
+    # 百度天气 API（日记录入时抓城市天气；空 = 不带天气，不阻断日记）
+    "BAIDU_WEATHER_AK",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",
@@ -54,7 +56,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
-SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY"})
+SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK"})
 SECRET_MASK = "***"
 
 
@@ -194,8 +196,9 @@ def reset_env_to_example(path: Path) -> None:
     """把 .env 重置为包内 ``.env.example`` 模板，保留用户已有的 API key。
 
     用于设置页「恢复默认」：得到一份与首次运行一致的、带注释与默认值的规范配置，
-    而不是把文件掏空。仅 API key（密钥无出厂默认）从现有 .env 保留，
-    包括 PLANIFY_API_KEY（AI 对话）与 VISION_API_KEY（视觉模型）。
+    而不是把文件掏空。仅密钥类（无出厂默认）从现有 .env 保留，
+    包括 PLANIFY_API_KEY（AI 对话）、VISION_API_KEY（视觉模型）与
+    BAIDU_WEATHER_AK（百度天气）。
     """
     from doclens.config import bundled_env_example_path
 
@@ -203,10 +206,10 @@ def reset_env_to_example(path: Path) -> None:
     if not src.exists():
         raise FileNotFoundError(f"包内 .env.example 模板缺失: {src}")
 
-    # 保留现有 API key（若有）
+    # 保留现有密钥（若有）
     preserved: dict[str, str] = {}
     if path.exists():
-        existing = read_env_values(path, frozenset({"PLANIFY_API_KEY", "VISION_API_KEY"}))[0]
+        existing = read_env_values(path, SECRET_KEYS)[0]
         preserved = {k: v for k, v in existing.items() if v}
 
     content = src.read_text(encoding="utf-8")
