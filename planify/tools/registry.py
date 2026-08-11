@@ -6,6 +6,8 @@
 
 from typing import Any, Callable, Dict, List, Tuple, Optional
 
+import platform
+
 from .basic import make_basic_tools
 from .web import make_web_tools
 from .file_tasks import get_file_task_definitions, get_file_task_handlers
@@ -119,6 +121,27 @@ def build_tool_registry(
                 "required": ["command"],
             },
         },
+        # Windows 原生 shell 工具（仅 Windows 注册，避免 Unix 下模型误用）
+        *(
+            [
+                {
+                    "name": "powershell",
+                    "description": (
+                        "运行 Windows 原生命令（优先 PowerShell 7，"
+                        "回退 Windows PowerShell / cmd）。"
+                        "适合注册表、服务、系统等 Windows 原生操作；"
+                        "一般文件/文本命令请用 bash 工具"
+                    ),
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"command": {"type": "string"}},
+                        "required": ["command"],
+                    },
+                }
+            ]
+            if platform.system() == "Windows"
+            else []
+        ),
         {
             "name": "read_file",
             "description": "读取文件内容",
