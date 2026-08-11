@@ -77,6 +77,16 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   // 搜索调优 tab：搜索参数由「搜索预设」区块（<search-presets-section>）接管（ADR-0010）。
   // 两者均不再有字段散填——一律通过预设一键切换。
 
+  // ===== 百度天气 API（ai tab，模型预设区块下方；日记录入时抓城市天气用） =====
+  {
+    tab: "ai",
+    section: "百度天气 API",
+    envVar: "BAIDU_WEATHER_AK",
+    label: "百度地图开放平台 AK",
+    component: "password",
+    hint: "供日记录入时抓取城市天气。需在百度地图开放平台申请；留空则日记不带天气（不影响其他功能）。保存后即时生效。",
+  },
+
   // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====
   {
     tab: "network",
