@@ -19,7 +19,7 @@ export class AppBar extends LitElement {
       align-items: center;
       justify-content: space-between;
       height: 56px;
-      padding: 0 var(--cortex-space-6);
+      padding: 0 calc(var(--cortex-space-2) + 4px);
       background: var(--cortex-surface);
       border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
@@ -81,51 +81,8 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
-    /* 移动端刷新按钮：圆形描边按钮，点击派发 cortex:refresh 事件，
-       各 view 可监听并自行决定如何刷新（默认不做事，硬刷新由调用方决定）。
-       桌面端默认隐藏，移动端（≤1023px）显示。 */
-    .refresh-btn {
-      display: none;
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      border: 1px solid var(--cortex-border);
-      border-radius: 50%;
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
-      /* 同 focus-header 返回按钮：disable iOS Safari 双击缩放检测 */
-      touch-action: manipulation;
-    }
-    .refresh-btn:hover {
-      background: var(--cortex-primary-soft);
-      border-color: var(--cortex-primary);
-      color: var(--cortex-primary);
-    }
-    .refresh-btn:active { transform: scale(0.94); }
-    .refresh-btn .icon {
-      font-size: 16px;
-      line-height: 1;
-      font-weight: 600;
-      display: inline-block;
-      transition: transform 0.4s ease;
-    }
-    .refresh-btn.spinning .icon {
-      animation: cortex-refresh-spin 0.6s linear;
-    }
-    @keyframes cortex-refresh-spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .refresh-btn.spinning .icon { animation: none; }
-    }
     @media (max-width: 1023px) {
-      .refresh-btn { display: inline-flex; }
-      /* 移动端右侧空间紧张：watch-badge 隐藏（刷新按钮已显示状态）。 */
+      /* 移动端右侧空间紧张：watch-badge 隐藏（状态移入用户菜单）。 */
       .watch-badge { display: none; }
     }
     .avatar-btn {
@@ -170,16 +127,6 @@ export class AppBar extends LitElement {
       z-index: 60;
     }
     .user-menu.open { display: block; }
-    .menu-header {
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-bottom: 1px solid var(--cortex-border-muted);
-      margin-bottom: var(--cortex-space-2);
-    }
-    .menu-header .email {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
-      font-family: var(--cortex-font-mono);
-    }
     .menu-item {
       display: flex;
       align-items: flex-start;
@@ -208,12 +155,14 @@ export class AppBar extends LitElement {
       color: var(--cortex-text);
       display: block;
     }
-    .menu-item .desc {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
-      display: block;
-      margin-top: 2px;
+    /* 移动端专属菜单项（watch 状态 / 刷新）：桌面端顶栏已有徽标与空间，不重复 */
+    @media (min-width: 1024px) {
+      .menu-item.mobile-only { display: none; }
     }
+    /* watch 菜单项状态色（与徽标同语义） */
+    .menu-item .label.dot { color: var(--cortex-success); }
+    .menu-item .label.busy { color: var(--cortex-primary); }
+    .menu-item .label.warn { color: var(--cortex-warning); }
   `;
 
   @property() activeView: ViewId = "search";
@@ -224,8 +173,6 @@ export class AppBar extends LitElement {
   @state() private _showLogout = false;
   /** watch 变化对话框开关（点击 watch 徽标打开） */
   @state() private _watchDialogOpen = false;
-  /** 刷新按钮旋转动画进行中标记：旋转期间禁用再次点击，避免动画错乱 */
-  @state() private _refreshing = false;
   private _unsubStore?: () => void;
 
   private _onWatchReindexed: (e: Event) => void = (e: Event) => {
@@ -249,19 +196,18 @@ export class AppBar extends LitElement {
     this._menuOpen = !this._menuOpen;
   }
 
-  /** 移动端刷新按钮：硬刷新页面（location.reload）。
-   *  - 让 SW 按 network-first 拉新 index.html，再按 cache-first 命中新的 hash 资源
-   *  - 解决"新 build 的 JS 没被加载"的问题（之前只派发 cortex:refresh 事件，
-   *    那是软刷新——只让 view 重载数据，不会重新加载 bundle，所以 tab-bar 标签
-   *    之类写死在 JS 里的内容不会更新）
-   *  - 旋转动画期间禁用按钮，避免动画期间被反复点击 */
-  private _onRefreshClick() {
-    if (this._refreshing) return;
-    this._refreshing = true;
-    window.setTimeout(() => {
-      // 用 location.reload() 而不是 replace()，保留返回栈
-      window.location.reload();
-    }, 400);  // 让用户看到完整旋转动画再触发刷新
+  /** 菜单「刷新」（移动端）：硬刷新页面（location.reload）。
+   *  让 SW 按 network-first 拉新 index.html，再按 cache-first 命中新的 hash 资源，
+   *  解决"新 build 的 JS 没被加载"的问题（软刷新只重载数据，不会更新 bundle）。 */
+  private _onRefreshMenuClick() {
+    this._menuOpen = false;
+    window.location.reload();
+  }
+
+  /** 菜单「文件监控」（移动端）：关闭菜单并打开 watch 变化对话框。 */
+  private _onWatchMenuClick() {
+    this._menuOpen = false;
+    this._watchDialogOpen = true;
   }
 
   private _onScopeSelect(scope: SettingsScope) {
@@ -338,24 +284,21 @@ export class AppBar extends LitElement {
     `;
   }
 
-  private _renderWatchBadge(w: WatcherStatus | null) {
+  /** watch 状态文案/色调：顶栏徽标与移动端菜单项共用。 */
+  private _watchStatus(w: WatcherStatus | null): { cls: string; label: string } {
     const n = w?.last_doc_count;
     const nStr = n != null ? ` ${n}` : "";
-    let cls = "";
-    let label = "";
-    if (!w || !w.running) {
-      cls = "";
-      label = `${nStr} ○监控关`;
-    } else if (w.reindexing) {
-      cls = "busy";
-      label = `${nStr} ⟳更新中…`;
-    } else if (w.changed_count > 0) {
-      cls = "warn";
-      label = `${nStr} ·待更新 ${w.changed_count}`;
-    } else {
-      cls = w.last_success === false ? "warn" : "dot";
-      label = `${nStr} ●监控`;
-    }
+    if (!w || !w.running) return { cls: "", label: `${nStr} ○监控关` };
+    if (w.reindexing) return { cls: "busy", label: `${nStr} ⟳更新中…` };
+    if (w.changed_count > 0) return { cls: "warn", label: `${nStr} ·待更新 ${w.changed_count}` };
+    return {
+      cls: w.last_success === false ? "warn" : "dot",
+      label: `${nStr} ●监控`,
+    };
+  }
+
+  private _renderWatchBadge(w: WatcherStatus | null) {
+    const { cls, label } = this._watchStatus(w);
     return html`
       <button
         class="watch-badge ${cls}"
@@ -376,36 +319,34 @@ export class AppBar extends LitElement {
       <div class="right-cluster">
         ${this._renderSyncBadge(store.getState().syncStatus)}
         ${this._renderWatchBadge(store.getState().watcher)}
-        <button
-          class="refresh-btn ${this._refreshing ? "spinning" : ""}"
-          type="button"
-          aria-label="刷新"
-          title="刷新"
-          ?disabled=${this._refreshing}
-          @click=${this._onRefreshClick}
-        >
-          <doclens-icon class="icon" name="refresh-cw" aria-hidden="true"></doclens-icon>
-        </button>
         <button class="avatar-btn" @click=${this._onAvatarClick} aria-label="用户菜单">
-          <span class="avatar">L</span>
+          <span class="avatar"><doclens-icon name="user" style="font-size:18px"></doclens-icon></span>
         </button>
         <div class="user-menu ${this._menuOpen ? "open" : ""}">
-          <div class="menu-header">
-            <div style="font-size: var(--cortex-fs-sm); font-weight: 500;">Liang</div>
-            <div class="email">liang@example.com</div>
-          </div>
           <button class="menu-item" type="button" @click=${() => this._onScopeSelect("global")}>
             <doclens-icon class="icon" name="globe"></doclens-icon>
             <span class="text">
               <span class="label">全局配置</span>
-              <span class="desc">所有项目共用</span>
             </span>
           </button>
           <button class="menu-item" type="button" @click=${this._onReindexClick}>
             <doclens-icon class="icon" name="refresh-ccw"></doclens-icon>
             <span class="text">
               <span class="label">强制重建索引</span>
-              <span class="desc">全量重扫工作目录</span>
+            </span>
+          </button>
+          <button class="menu-item mobile-only" type="button" @click=${this._onWatchMenuClick}>
+            <doclens-icon class="icon" name="folder"></doclens-icon>
+            <span class="text">
+              <span class="label ${this._watchStatus(store.getState().watcher).cls}">
+                文件监控${this._watchStatus(store.getState().watcher).label}
+              </span>
+            </span>
+          </button>
+          <button class="menu-item mobile-only" type="button" @click=${this._onRefreshMenuClick}>
+            <doclens-icon class="icon" name="refresh-cw"></doclens-icon>
+            <span class="text">
+              <span class="label">刷新</span>
             </span>
           </button>
           ${this._showSaveAndRevert ? html`
@@ -413,7 +354,6 @@ export class AppBar extends LitElement {
               <doclens-icon class="icon" name="rotate-ccw"></doclens-icon>
               <span class="text">
                 <span class="label">放弃修改</span>
-                <span class="desc">恢复到 .env 当前值</span>
               </span>
             </button>
           ` : nothing}
@@ -422,7 +362,6 @@ export class AppBar extends LitElement {
               <span class="icon">⏻</span>
               <span class="text">
                 <span class="label">注销登录</span>
-                <span class="desc">结束当前会话，返回登录页</span>
               </span>
             </button>
           ` : nothing}
