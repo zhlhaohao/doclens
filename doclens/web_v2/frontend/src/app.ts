@@ -59,6 +59,8 @@ export class CortexApp extends LitElement {
        各 view 自身 :host { display:flex } 与 UA [hidden]{display:none}
        特异度相同会覆盖掉 hidden，这里用 !important 压住，确保隐藏生效。 */
     .main > [hidden] { display: none !important; }
+    /* 设置页覆盖 app-bar 以下全屏（移动端隐藏底部 tab-bar） */
+    .app-body > [hidden] { display: none !important; }
     /* 移动端：纵向布局（activity-bar 隐藏，tab-bar 在底部） */
     @media (max-width: 1023px) {
       .app-body { flex-direction: column; }
@@ -192,7 +194,7 @@ export class CortexApp extends LitElement {
         <div class="main">
           ${this._renderView()}
         </div>
-        <tab-bar .active=${view} @navigate=${this._navigate}></tab-bar>
+        <tab-bar .active=${view} @navigate=${this._navigate} ?hidden=${view === "settings"}></tab-bar>
       </div>
       <reindex-dialog></reindex-dialog>
     `;

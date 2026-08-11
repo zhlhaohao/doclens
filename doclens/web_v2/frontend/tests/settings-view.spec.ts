@@ -60,10 +60,11 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
-  it("renders 0 .field for AI tab (模型配置由预设区块接管)", () => {
+  it("renders 1 .field for AI tab (仅百度天气 AK；模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(0);
+    expect(fields?.length).toBe(1);
+    expect(aiPanel?.querySelector('input[data-env="BAIDU_WEATHER_AK"]')).toBeTruthy();
   });
 
   it("renders 0 .field for search tab (搜索参数由预设区块接管)", async () => {
@@ -133,5 +134,15 @@ describe("<settings-view>", () => {
       ".footer-bar must be inside .main so it aligns with panel, not full-width"
     ).toBeTruthy();
     expect(main?.querySelector(".scroll-area .tab-panel")).toBeTruthy();
+  });
+
+  it("footer has a close button next to save that navigates back to the last main view", () => {
+    const actions = el.shadowRoot?.querySelector(".footer-bar .footer-actions");
+    const btns = [...(actions?.querySelectorAll("button.btn") ?? [])] as HTMLButtonElement[];
+    const closeBtn = btns.find((b) => b.textContent?.trim() === "关闭");
+    expect(closeBtn, "页脚应有与保存按钮并列的「关闭」按钮").toBeTruthy();
+    closeBtn!.click();
+    // 未初始化导航历史时返回目标为默认视图 search
+    expect(window.location.hash).toBe("#/search");
   });
 });
