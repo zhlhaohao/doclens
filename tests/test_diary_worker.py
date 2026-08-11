@@ -1,4 +1,4 @@
-"""doclens.diary_worker 测试：总结流程（mock 视觉与对话模型）。"""
+"""doclens.diary_worker 测试：确定性合成流程（仅 mock 视觉模型）。"""
 from datetime import date
 from datetime import datetime
 from pathlib import Path
@@ -11,7 +11,7 @@ from doclens import diary
 from doclens.diary_worker import (
     DiaryWorker,
     _strip_thinking,
-    build_summary_input,
+    compose_day_body,
     describe_photo,
     seconds_until_next_run,
 )
@@ -170,8 +170,8 @@ class TestNextWakeup:
         assert worker._next_wakeup_s() <= 60.0
 
 
-class TestBuildSummaryInput:
-    def test_text_and_photo_as_entries(self):
+class TestComposeDayBody:
+    def test_text_and_photo_timeline(self):
         frags = [
             diary.Fragment(fid="a", time="09:15", kind="text", text="早上喝了咖啡"),
             diary.Fragment(
@@ -179,65 +179,58 @@ class TestBuildSummaryInput:
                 image="images/2026-08-01/x.webp",
             ),
         ]
-        s = build_summary_input(frags, {"b": "天边大片橙红色晚霞"})
-        assert "条目1（文字，09:15）" in s
-        assert "09:15 早上喝了咖啡" in s
-        assert "条目2（照片，18:30）" in s
-        assert "![晚霞](images/2026-08-01/x.webp)" in s
-        assert "备注：晚霞" in s
-        assert "照片内容：天边大片橙红色晚霞" in s
+        s = compose_day_body(frags, {"b": "天边大片橙红色晚霞"})
+        assert s.splitlines() == [
+            "- 09:15 早上喝了咖啡",
+            "- 18:30 ![晚霞](images/2026-08-01/x.webp) 天边大片橙红色晚霞",
+        ]
 
-    def test_text_fragments_within_1h_merged(self):
-        """相邻间隔 ≤60min 的文字片段合为一个编号条目。"""
+    def test_text_fragments_not_clustered(self):
+        """逐条时间线：相邻文字片段不合并，每条独立一行。"""
         frags = [
             diary.Fragment(fid="a", time="10:12", kind="text", text="开始工作"),
             diary.Fragment(fid="b", time="10:30", kind="text", text="开了个会"),
             diary.Fragment(fid="c", time="11:00", kind="text", text="继续写代码"),
-            diary.Fragment(fid="d", time="12:30", kind="text", text="吃午饭"),
         ]
-        s = build_summary_input(frags, {})
-        # 10:12→10:30(18)→11:00(30) 相邻 ≤60 → 条目1（10:12~11:00）；11:00→12:30(90)>60 → 条目2
-        assert "条目1（文字，10:12~11:00）" in s
-        assert "条目2（文字，12:30）" in s
-        assert s.count("条目") == 2
+        s = compose_day_body(frags, {})
+        assert s.splitlines() == [
+            "- 10:12 开始工作",
+            "- 10:30 开了个会",
+            "- 11:00 继续写代码",
+        ]
 
-    def test_text_fragments_boundary_60min_merged(self):
-        """恰好 60min 间隔仍合并（含端点）。"""
+    def test_photo_without_description_keeps_caption_only(self):
+        """视觉描述缺失：仅图片引用（备注在 alt 文本里），不阻塞。"""
         frags = [
-            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
-            diary.Fragment(fid="b", time="11:00", kind="text", text="b"),
+            diary.Fragment(
+                fid="b", time="18:30", kind="photo", text="晚霞",
+                image="images/2026-08-01/x.webp",
+            ),
         ]
-        s = build_summary_input(frags, {})
-        assert s.count("条目") == 1
-        assert "条目1（文字，10:00~11:00）" in s
+        s = compose_day_body(frags, {})
+        assert s == "- 18:30 ![晚霞](images/2026-08-01/x.webp)"
 
-    def test_text_fragments_over_1h_split(self):
-        frags = [
-            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
-            diary.Fragment(fid="b", time="11:01", kind="text", text="b"),
-        ]
-        s = build_summary_input(frags, {})
-        assert s.count("条目") == 2  # 61min > 60 → 分组
-
-    def test_photo_breaks_text_group(self):
-        """图片片段独立成条目，中断文字组（即使前后文字在 1h 内）。"""
-        frags = [
-            diary.Fragment(fid="a", time="10:00", kind="text", text="a"),
-            diary.Fragment(fid="b", time="10:30", kind="photo", text="照片", image="images/x.webp"),
-            diary.Fragment(fid="c", time="10:45", kind="text", text="c"),
-        ]
-        s = build_summary_input(frags, {})
-        assert s.count("条目") == 3  # a | photo | c 三条目
-
-    def test_photo_without_description_or_caption(self):
+    def test_photo_default_caption_alt(self):
+        """备注为默认「照片」时 alt 文本用「照片」，不产生重复描述。"""
         frags = [
             diary.Fragment(
                 fid="b", time="18:30", kind="photo", text="照片",
                 image="images/2026-08-01/x.webp",
             ),
         ]
-        s = build_summary_input(frags, {})
-        assert "备注" not in s and "照片内容" not in s
+        s = compose_day_body(frags, {})
+        assert s == "- 18:30 ![照片](images/2026-08-01/x.webp)"
+
+    def test_photo_description_appended_after_ref(self):
+        """有视觉描述时拼接在图片引用之后。"""
+        frags = [
+            diary.Fragment(
+                fid="b", time="18:30", kind="photo", text="照片",
+                image="images/2026-08-01/x.webp",
+            ),
+        ]
+        s = compose_day_body(frags, {"b": "一只橘猫"})
+        assert s == "- 18:30 ![照片](images/2026-08-01/x.webp) 一只橘猫"
 
 
 class TestStripThinking:
@@ -263,12 +256,11 @@ class TestSummarizeDay:
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config())
 
-        with patch("doclens.diary_worker.summarize_day_text", return_value="今天很充实。"):
-            worker._summarize_day("2026-07-31", _config())
+        worker._summarize_day("2026-07-31", _config())
 
         day = diary.get_day(workdir, "2026-07-31")
         assert day.state == "summarized"
-        assert day.content == "今天很充实。"
+        assert day.content == "- 09:15 早上喝了咖啡\n- 18:30 晚上散步"
         assert idx.dirty and idx.reindexed
         assert worker.status()["summarized_count"] == 1
 
@@ -278,28 +270,11 @@ class TestSummarizeDay:
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config())
 
-        with patch("doclens.diary_worker.summarize_day_text") as m:
-            worker._summarize_day("2026-07-31", _config())
-            m.assert_not_called()
+        worker._summarize_day("2026-07-31", _config())
         assert diary.get_day(workdir, "2026-07-31").content == "已有成品"
 
-    def test_chat_failure_keeps_raw(self, workdir: Path):
-        """整日重试：对话模型失败 → 原文保留在片段态，不覆盖。"""
-        _raw_day(workdir, "2026-07-31")
-        idx = _FakeIdx(workdir)
-        worker = DiaryWorker(idx, lambda: _config())
-
-        with patch(
-            "doclens.diary_worker.summarize_day_text", side_effect=RuntimeError("api down")
-        ), pytest.raises(RuntimeError):
-            worker._summarize_day("2026-07-31", _config())
-
-        day = diary.get_day(workdir, "2026-07-31")
-        assert day.state == "raw"
-        assert len(day.fragments) == 2
-
     def test_vision_failure_degrades_per_image(self, workdir: Path):
-        """逐图降级：视觉失败仅该图退化为备注，整日总结照常完成。"""
+        """逐图降级：视觉失败仅该图退化为备注（alt 文本），整日合成照常完成。"""
         import io
 
         from PIL import Image
@@ -312,55 +287,48 @@ class TestSummarizeDay:
 
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config(vision_api_key="vk"))
-        captured = {}
-
-        def fake_input(frags, descriptions):
-            captured["descriptions"] = descriptions
-            return build_summary_input(frags, descriptions)
 
         with patch(
             "doclens.diary_worker.describe_photo", side_effect=RuntimeError("vision down")
-        ), patch(
-            "doclens.diary_worker.build_summary_input", side_effect=fake_input
-        ), patch(
-            "doclens.diary_worker.summarize_day_text", return_value="看到了晚霞。"
         ):
             worker._summarize_day("2026-07-31", _config(vision_api_key="vk"))
 
-        assert captured["descriptions"] == {}  # 降级：无描述，但不阻塞
-        assert diary.get_day(workdir, "2026-07-31").state == "summarized"
+        day = diary.get_day(workdir, "2026-07-31")
+        assert day.state == "summarized"
+        assert day.content == f"- 18:30 ![晚霞]({rel})"
 
 
 class TestScanOnce:
     def test_scan_summarizes_all_pending(self, workdir: Path):
         _raw_day(workdir, "2026-07-30")
         _raw_day(workdir, "2026-07-31")
-        _raw_day(workdir, date.today().isoformat())  # 今天的不总结
+        _raw_day(workdir, date.today().isoformat())  # 今天的不合成
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config())
 
-        with patch("doclens.diary_worker.summarize_day_text", return_value="成品"):
-            worker._scan_once()
+        worker._scan_once()
 
-        assert diary.get_day(workdir, "2026-07-30").state == "summarized"
-        assert diary.get_day(workdir, "2026-07-31").state == "summarized"
+        expected = "- 09:15 早上喝了咖啡\n- 18:30 晚上散步"
+        assert diary.get_day(workdir, "2026-07-30").content == expected
+        assert diary.get_day(workdir, "2026-07-31").content == expected
         assert diary.get_day(workdir, date.today().isoformat()).state == "raw"
 
-    def test_scan_idle_without_api_key(self, workdir: Path):
+    def test_scan_composes_without_planify_key(self, workdir: Path):
+        """合成不需要对话模型：未配置 PLANIFY_API_KEY 也照常合成。"""
         _raw_day(workdir, "2026-07-31")
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config(planify_api_key=None))
-        with patch("doclens.diary_worker.summarize_day_text") as m:
-            worker._scan_once()
-            m.assert_not_called()
-        assert diary.get_day(workdir, "2026-07-31").state == "raw"
+        worker._scan_once()
+        day = diary.get_day(workdir, "2026-07-31")
+        assert day.state == "summarized"
+        assert day.content == "- 09:15 早上喝了咖啡\n- 18:30 晚上散步"
 
     def test_failure_backoff_skips_next_round(self, workdir: Path):
         _raw_day(workdir, "2026-07-31")
         idx = _FakeIdx(workdir)
         worker = DiaryWorker(idx, lambda: _config())
         with patch(
-            "doclens.diary_worker.summarize_day_text", side_effect=RuntimeError("down")
+            "doclens.diary_worker.compose_day_body", side_effect=RuntimeError("io error")
         ) as m:
             worker._scan_once()
             assert m.call_count == 1
