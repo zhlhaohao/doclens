@@ -55,6 +55,7 @@ import calendarIcon from "lucide-static/icons/calendar.svg?raw";
 import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
 import squareIcon from "lucide-static/icons/square.svg?raw";
 import userIcon from "lucide-static/icons/user.svg?raw";
+import logOutIcon from "lucide-static/icons/log-out.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -99,6 +100,7 @@ const ICONS: Record<string, string> = {
   copy: copyIcon,
   square: squareIcon,
   user: userIcon,
+  "log-out": logOutIcon,
 };
 
 @customElement("doclens-icon")

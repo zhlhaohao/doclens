@@ -359,7 +359,7 @@ export class AppBar extends LitElement {
           ` : nothing}
           ${this._showLogout ? html`
             <button class="menu-item" type="button" data-testid="logout-item" @click=${this._onLogoutClick}>
-              <span class="icon">⏻</span>
+              <doclens-icon class="icon" name="log-out"></doclens-icon>
               <span class="text">
                 <span class="label">注销登录</span>
               </span>
