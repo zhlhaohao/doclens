@@ -1,22 +1,21 @@
-"""日记总结 Worker —— 常驻后台，把「片段态」的过去日小节交给 AI 归纳重写（ADR-0007）。
+"""日记合成 Worker —— 常驻后台，把「片段态」的过去日小节确定性合成为成品（ADR-0007）。
 
-触发模型：每日 00:05 定点总结前一天（避开零点整）；启动时补扫一次——
-进程在 00:05 未运行而错过的总结立即补上。状态即队列——
-年度 md 中小节头部的 <!-- diary:raw --> 标记就是待总结信号，
+触发模型：每日 00:05 定点合成前一天（避开零点整）；启动时补扫一次——
+进程在 00:05 未运行而错过的合成立即补上。状态即队列——
+年度 md 中小节头部的 <!-- diary:raw --> 标记就是待合成信号，
 无需额外数据库表；进程崩溃重启后重扫文件即可恢复。
 
-单日消息处理：
-1. 重读文件确认仍为片段态（防双设备/重入重复总结，见 ADR-0008 Consequences）；
+单日消息处理（无对话模型参与，合成结果完全确定）：
+1. 重读文件确认仍为片段态（防双设备/重入重复合成，见 ADR-0008 Consequences）；
 2. 图片片段逐张调视觉模型描述（复用 VISION_* 配置）；
    单张失败/未配置 → 仅该图退化为用备注（逐图降级，不阻塞整日）；
-3. 「文字片段 + 备注 + 图片描述」交对话模型（复用 PLANIFY_* 配置），
-   忠实整理成文（信息零丢失：逐字保留电话/数字/地址等事实，不概括不提炼，见 _SUMMARY_SYSTEM）；
+3. compose_day_body 把片段按时间逐条拼接为时间线（- HH:MM 内容，
+   照片行附视觉描述），信息零丢失、无改写；
 4. diary.rewrite_day 整体替换小节并移除 raw 标记 → 触发重建索引。
 
 失败策略：整日保留片段态，指数退避重试（上限 6 小时；唤醒点取
 「下一个 00:05」与「最近重试时间」的较早者），
-绝不覆盖原文、不标 failed（原文必须保留到总结成功）。
-未配置 PLANIFY_API_KEY 时空转（日记停在片段态，原文保底）。
+绝不覆盖原文、不标 failed（原文必须保留到合成成功）。
 """
 from __future__ import annotations
 
@@ -37,7 +36,7 @@ from treesearch.parsers.image_store import _EXT_TO_MEDIA
 
 logger = logging.getLogger(__name__)
 
-# 每日定点总结时刻：00:05（零点过 5 分钟）
+# 每日定点合成时刻：00:05（零点过 5 分钟）
 _DAILY_RUN_HOUR = 0
 _DAILY_RUN_MINUTE = 5
 
@@ -51,7 +50,7 @@ def seconds_until_next_run(now: datetime_type) -> float:
         target += timedelta(days=1)
     return (target - now).total_seconds()
 
-# 整日总结失败的重试退避：5min 起步指数增长，上限 6h
+# 整日合成失败的重试退避：5min 起步指数增长，上限 6h
 _RETRY_BASE_S = 300.0
 _RETRY_MAX_S = 6 * 3600.0
 
@@ -64,7 +63,7 @@ _PHOTO_PROMPT = (
     "供整理日记时引用。只输出描述本身，不要标题、不要解释。"
 )
 
-# 照片备注 prompt（上传时自动生成 caption，比总结用的描述更精简）
+# 照片备注 prompt（上传时自动生成 caption，比合成用的描述更精简）
 _CAPTION_PROMPT = (
     "请根据图片类型生成简短备注：\n"
     "如果是文字/截图/文档/资料类图片，只输出一个简短的标题"
@@ -73,29 +72,6 @@ _CAPTION_PROMPT = (
     "（如「珠海晚霞」「麦当劳吃早餐」）。\n"
     "只输出备注文字本身，不要解释、不要引号。"
 )
-
-_SUMMARY_SYSTEM = (
-    "你是日记整理助手。用户给你一天中按时间聚类好的记录条目（1 小时内连续的文字片段"
-    "已合并为同一编号条目，照片片段各自独立成一个条目）。请整理成一篇日记。\n"
-    "你的任务是把零散片段衔接成通顺的文字，只允许：重组语序、修正错别字、补齐标点、"
-    "衔接生硬处。除此之外不得对内容做任何改动。\n"
-    "铁律（违反任何一条即失败）：\n"
-    "1) 信息零丢失：必须逐字保留所有具体事实——电话/手机号、数字、金额、地址、网址、"
-    "邮箱、人名、日期、时间、卡号、编号、型号等，原样照抄，一个字符都不许改写、"
-    "转写或省略（如「138-1234-5678」不得写成「某电话」「联系方式」或「138…」；"
-    "「35 元」不得写成「买了点东西」）。\n"
-    "2) 不得概括、提炼、归纳或合并语义：输出信息量必须 100% 等于原文。宁可逐字啰嗦，"
-    "不可遗漏任何细节；拿不准是否重要的内容一律保留。\n"
-    "3) 严格保留输入的编号结构：每个「条目N」输出为一个编号项（1. 2. 3. …），"
-    "以该条目的时间点开头（单条片段用 HH:MM，合并组用 HH:MM~HH:MM 范围），"
-    "按输入顺序，不要把多个条目合并成一个无编号的故事段落。\n"
-    "4) 文字条目：把组内片段串成通顺的话即可，但不得添加片段里没有的内容，"
-    "也不得删除或改写片段里已有的任何信息。\n"
-    "5) 照片条目：原样保留图片引用 ![备注](图片路径)（路径不得修改），可附一句话说明。\n"
-    "6) 只输出编号列表的 Markdown，不要标题（如「## 某日」）、不要解释、不要代码围栏。"
-)
-
-_SUMMARY_MAX_TOKENS = 4000
 
 # 推理模型经 OpenAI-compat 网关时，常把 <think>…</think> 内联进正文
 _THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
@@ -116,7 +92,7 @@ def _strip_thinking(text: str) -> str:
 def describe_photo(path: Path, config, *, prompt: str = _PHOTO_PROMPT) -> str:
     """调视觉模型描述一张照片。
 
-    prompt 参数：默认用 _PHOTO_PROMPT（详细描述，供总结引用）；
+    prompt 参数：默认用 _PHOTO_PROMPT（详细描述，供合成引用）；
     上传自动备注时传 _CAPTION_PROMPT（简短标题/≤20字）。
     """
     ext = path.suffix.lower().lstrip(".")
@@ -189,97 +165,26 @@ def _vision_anthropic(b64: str, media: str, prompt: str, config, *, max_tokens: 
     return _strip_thinking(text)
 
 
-def build_summary_input(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:
-    """把片段聚类成编号条目（相邻间隔 ≤60min 的文字片段合为一组；照片独立成条目并
-    中断文字组），组装给对话模型。
+def compose_day_body(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:
+    """确定性拼接片段为逐条时间线（无对话模型参与，输出完全确定）。
 
-    输出按时间顺序的「条目N」结构，prompt 据此输出带编号的日记——保留结构、不塌成
-    无编号故事。聚类在后端做（而非交给 LLM）以保证 1 小时规则可控。
+    每个片段一行「- HH:MM 内容」；照片行附视觉描述（无描述时仅图片引用，
+    备注已在 alt 文本里）。不聚类、不改写，信息零丢失。
     """
-    def _to_min(hhmm: str) -> int:
-        h, m = hhmm.split(":")
-        return int(h) * 60 + int(m)
-
-    entries: list[dict] = []
-    text_group: dict | None = None
+    lines = []
     for f in fragments:
         if f.kind == "photo":
-            if text_group is not None:
-                entries.append(text_group)
-                text_group = None
-            caption = f.text if f.text != "照片" else ""
-            entries.append({
-                "type": "photo",
-                "time": f.time,
-                "image": f.image,
-                "caption": caption,
-                "desc": photo_descriptions.get(f.fid, ""),
-            })
+            caption = "" if f.text == "照片" else f.text
+            ref = f"![{caption or '照片'}]({f.image})"
+            desc = photo_descriptions.get(f.fid, "")
+            lines.append(f"- {f.time} {ref}" + (f" {desc}" if desc else ""))
         else:
-            t = _to_min(f.time)
-            if text_group is not None and t - text_group["last_min"] <= 60:
-                text_group["items"].append((f.time, f.text))
-                text_group["last_min"] = t
-            else:
-                if text_group is not None:
-                    entries.append(text_group)
-                text_group = {"type": "text_group", "items": [(f.time, f.text)], "last_min": t}
-    if text_group is not None:
-        entries.append(text_group)
-
-    lines = []
-    for i, e in enumerate(entries, 1):
-        if e["type"] == "text_group":
-            times = [it[0] for it in e["items"]]
-            span = times[0] if len(times) == 1 else f"{times[0]}~{times[-1]}"
-            lines.append(f"条目{i}（文字，{span}）：")
-            for t, text in e["items"]:
-                lines.append(f"  {t} {text}")
-        else:
-            lines.append(f"条目{i}（照片，{e['time']}）：")
-            lines.append(f"  图片：![{e['caption'] or '照片'}]({e['image']})")
-            if e["caption"]:
-                lines.append(f"  备注：{e['caption']}")
-            if e["desc"]:
-                lines.append(f"  照片内容：{e['desc']}")
-    header = (
-        "以下是这一天的记录，已按时间聚类（1 小时内连续的文字片段合并为同一编号项，"
-        "照片各自独立成项）。请整理成日记：\n\n"
-    )
-    return header + "\n".join(lines)
-
-
-def summarize_day_text(user_input: str, config) -> str:
-    """一次性调对话模型归纳成文（仿 planify/context/compact.py 的最小调用）。"""
-    from planify.core.llm import create_provider
-
-    provider = create_provider({
-        "protocol": getattr(config, "planify_protocol", "") or "",
-        "api_key": config.planify_api_key,
-        "model_id": config.planify_model_id,
-        "base_url": config.planify_base_url,
-    })
-    resp = provider.chat(
-        messages=[{"role": "user", "content": user_input}],
-        system=_SUMMARY_SYSTEM,
-        tools=[],
-        max_tokens=_SUMMARY_MAX_TOKENS,
-    )
-    text = "".join(b.text for b in resp.content if hasattr(b, "text")).strip()
-    text = _strip_thinking(text)
-    # 防御性剥除模型可能输出的 ```markdown 围栏
-    if text.startswith("```"):
-        lines = text.split("\n")
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    return text
+            lines.append(f"- {f.time} {f.text}")
+    return "\n".join(lines)
 
 
 class DiaryWorker:
-    """常驻日记总结消费者（串行，一次一天）。"""
+    """常驻日记合成消费者（串行，一次一天）。"""
 
     def __init__(self, idx_manager, get_config):
         self._idx = idx_manager
@@ -300,7 +205,7 @@ class DiaryWorker:
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """启动后台线程（幂等）。启动即补扫一次，之后每日 00:05 定点总结。"""
+        """启动后台线程（幂等）。启动即补扫一次，之后每日 00:05 定点合成。"""
         if self._thread is not None:
             return True
         self._stop_event.clear()
@@ -341,7 +246,7 @@ class DiaryWorker:
         return Path(self._idx.search_path)
 
     def _run(self) -> None:
-        # 启动即补扫一次：进程在 00:05 未运行而错过的总结立即补上
+        # 启动即补扫一次：进程在 00:05 未运行而错过的合成立即补上
         self._scan_safely()
         while not self._stop_event.is_set():
             if self._stop_event.wait(self._next_wakeup_s()):
@@ -364,9 +269,6 @@ class DiaryWorker:
 
     def _scan_once(self) -> None:
         config = self._get_config()
-        if not config.planify_api_key:
-            # 未配置对话模型：日记停在片段态（原文保底），空转
-            return
         today = date_type.today()
         pending = diary.find_pending_raw(self._workdir(), today)
         now = time.monotonic()
@@ -397,14 +299,14 @@ class DiaryWorker:
                     self._current_date = None
 
     # ------------------------------------------------------------------
-    # 单日总结
+    # 单日合成
     # ------------------------------------------------------------------
 
     def _summarize_day(self, date_str: str, config) -> None:
         workdir = self._workdir()
         entry = diary.get_day(workdir, date_str)
         if entry.state != "raw":
-            return  # 已被（另一进程/设备）总结，或小节消失
+            return  # 已被（另一进程/设备）合成，或小节消失
 
         # 1. 逐图视觉描述（逐图降级：失败仅该图退化为备注）
         descriptions: dict[str, str] = {}
@@ -420,11 +322,10 @@ class DiaryWorker:
                 except Exception as e:  # noqa: BLE001
                     logger.info("Diary photo description degraded to caption: %s: %s", f.image, e)
 
-        # 2. 对话模型归纳成文
-        user_input = build_summary_input(list(entry.fragments), descriptions)
-        body = summarize_day_text(user_input, config)
+        # 2. 确定性拼接为逐条时间线（无对话模型参与）
+        body = compose_day_body(list(entry.fragments), descriptions)
         if not body:
-            raise RuntimeError("empty response from chat model")
+            raise RuntimeError("empty composed body")
 
         # 天气前缀（从当天 raw 小节的缓存标记读，blockquote 加在成文首行）
         weather = diary.get_weather_of_day(workdir, date_str)
