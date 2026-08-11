@@ -25,15 +25,10 @@ def _find_bash_path() -> str:
     """查找 bash 可执行文件路径
 
     Windows 环境下依次尝试：
-    1. shutil.which() 查找 PATH 中的 bash
-    2. 常见 Git Bash 安装路径
+    1. 常见 Git Bash 安装路径
+    2. shutil.which() 查找 PATH 中的 bash（兜底，可能命中 WSL 的 bash）
     """
-    # 1. 优先使用 shutil.which 查找
-    bash_path = shutil.which("bash") or shutil.which("bash.exe")
-    if bash_path:
-        return bash_path
-
-    # 3. Windows 下常见 Git Bash 安装路径
+    # 1. 优先匹配常见 Git Bash 安装路径（避免误用 WSL 的 bash.exe）
     possible_paths = [
         r"C:\Program Files\Git\usr\bin\bash.exe",
         r"C:\Program Files\Git\bin\bash.exe",
@@ -43,6 +38,11 @@ def _find_bash_path() -> str:
     for path in possible_paths:
         if os.path.isfile(path):
             return path
+
+    # 2. 兜底：PATH 查找，排除 WSL 的 bash（System32 下的 bash.exe 是 WSL 启动器）
+    bash_path = shutil.which("bash") or shutil.which("bash.exe")
+    if bash_path and "system32" not in bash_path.lower():
+        return bash_path
 
     return None
 
