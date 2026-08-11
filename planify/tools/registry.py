@@ -6,6 +6,8 @@
 
 from typing import Any, Callable, Dict, List, Tuple, Optional
 
+import logging
+import os
 import platform
 
 from .basic import make_basic_tools
@@ -16,6 +18,8 @@ from .protocols import get_protocol_definitions, get_protocol_handlers
 from .user_interaction import get_user_interaction_tools
 from .weather_tool import make_baidu_weather_tools
 from .webfetch import make_webfetch_tools
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== 外部工具注册表 ====================
@@ -343,6 +347,23 @@ def build_tool_registry(
     webfetch_tools, webfetch_handlers = make_webfetch_tools()
     tools.extend(webfetch_tools)
     handlers.update(webfetch_handlers)
+
+    # 工具白名单：PLANIFY_ENABLED_TOOLS=bash,read_file,...（未设置/为空 = 全部注册）
+    enabled_raw = os.getenv("PLANIFY_ENABLED_TOOLS", "").strip()
+    if enabled_raw:
+        enabled = {name.strip() for name in enabled_raw.split(",") if name.strip()}
+        all_names = {t["name"] for t in tools}
+        unknown = enabled - all_names
+        if unknown:
+            logger.warning("[tools] 白名单中的未知工具名将被忽略: %s", sorted(unknown))
+        removed = all_names - enabled
+        tools = [t for t in tools if t["name"] in enabled]
+        for name in removed:
+            handlers.pop(name, None)
+        logger.info(
+            "[tools] 白名单生效：启用 %d 个，过滤 %d 个: %s",
+            len(tools), len(removed), sorted(removed),
+        )
 
     return tools, handlers
 
