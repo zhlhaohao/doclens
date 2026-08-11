@@ -3,6 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 
 import { store } from "../state/store";
 import { actions } from "../state/store";
+import { router } from "../router/router";
 import type { SettingsScope } from "../state/types";
 import {
   SETTINGS_FIELDS,
@@ -420,6 +421,8 @@ export class SettingsView extends LitElement {
     }
     .btn.primary:hover { filter: brightness(1.05); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    /* 关闭按钮加宽：与保存并列时点击目标更大 */
+    .btn.close { padding-left: var(--cortex-space-6); padding-right: var(--cortex-space-6); }
 
     /* ===== 移动端 (<1024px) ===== */
     @media (max-width: 1023px) {
@@ -455,17 +458,20 @@ export class SettingsView extends LitElement {
         padding: 0 var(--cortex-space-4) var(--cortex-space-6);
       }
 
-      /* 移动端保留 footer（保存按钮唯一入口）：fixed 吸底，避开全局 tab-bar。
+      /* 移动端保留 footer（保存按钮唯一入口）：fixed 吸底。
+         设置页全屏覆盖 tab-bar 区域（app.ts 在 settings 视图隐藏 tab-bar），
+         故 bottom: 0，并为刘海屏留出安全区。
          不用 sticky —— .layout/.main 被 flex 压缩后盒子包不住内容，sticky 会失效。 */
       .footer-bar {
         position: fixed;
         left: 0;
         right: 0;
-        bottom: var(--cortex-tab-bar-height, 44px);
+        bottom: 0;
         z-index: 20;
         margin: 0;
         border-radius: 0;
         padding: var(--cortex-space-2) var(--cortex-space-3);
+        padding-bottom: calc(var(--cortex-space-2) + env(safe-area-inset-bottom, 0px));
         flex-wrap: nowrap;
         align-items: center;
         gap: var(--cortex-space-2);
@@ -486,6 +492,8 @@ export class SettingsView extends LitElement {
         padding: 6px var(--cortex-space-3);
       }
       .footer-bar .btn.primary { flex: 1; justify-content: center; }
+      /* 移动端关闭按钮与保存等宽分摊剩余空间 */
+      .footer-bar .btn.close { flex: 1; justify-content: center; }
 
       .input, .select { max-width: 100%; }
 
@@ -661,6 +669,11 @@ export class SettingsView extends LitElement {
   }
 
   private _onRevertRequest = () => { this._revert(); };
+
+  /** 关闭设置页：返回进入设置前的主视图（未访问过则回默认 search）。 */
+  private _close() {
+    router.navigate(router.lastMain());
+  }
 
   /** 重新拉取 /api/status，同步 store 中的 model_name 等展示用字段。
    *  失败静默：模型名为空时 UI 仅显示「思考中」，不阻塞其它逻辑。 */
@@ -959,6 +972,7 @@ export class SettingsView extends LitElement {
             </div>
             <div class="footer-actions">
               ${this._dirty ? html`<button class="btn" ?disabled=${this._saving} @click=${() => this._revert()}>放弃修改</button>` : nothing}
+              <button class="btn close" type="button" @click=${() => this._close()}>关闭</button>
               <button class="btn primary" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
                 ${this._saving ? "保存中…" : html`<doclens-icon name="save"></doclens-icon>保存${scopeLabel}配置${existsHint}`}
               </button>

@@ -16,6 +16,13 @@ import { VIEW_TO_HASH, parseHash, DEFAULT_VIEW } from "./route-map";
 
 let initialized = false;
 
+/** 最近访问的主视图（settings/login 之外的页面）——设置页「关闭」按钮的返回目标。 */
+let lastMainView: ViewId = DEFAULT_VIEW;
+
+function trackMainView(view: ViewId): void {
+  if (view !== "settings" && view !== "login") lastMainView = view;
+}
+
 function currentHash(): string {
   return typeof window !== "undefined" ? window.location.hash : "";
 }
@@ -41,6 +48,7 @@ function onHashChange(): void {
     replaceHash(expected);
   }
   actions.setView(view);
+  trackMainView(view);
 }
 
 export const router = {
@@ -58,6 +66,7 @@ export const router = {
       replaceHash(expected);
     }
     actions.setView(view);
+    trackMainView(view);
 
     if (typeof window !== "undefined") {
       window.addEventListener("hashchange", onHashChange);
@@ -81,11 +90,17 @@ export const router = {
     return normalizeView();
   },
 
+  /** 设置页「关闭」的返回目标：最近访问的主视图（未访问过则为 DEFAULT_VIEW）。 */
+  lastMain(): ViewId {
+    return lastMainView;
+  },
+
   /** 测试专用：移除监听 + 清 initialized 标志。生产代码不应调用。 */
   _reset(): void {
     if (typeof window !== "undefined") {
       window.removeEventListener("hashchange", onHashChange);
     }
     initialized = false;
+    lastMainView = DEFAULT_VIEW;
   },
 };

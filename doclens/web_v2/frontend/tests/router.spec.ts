@@ -167,3 +167,34 @@ describe("router.navigate", () => {
     });
   });
 });
+
+describe("router.lastMain", () => {
+  it("defaults to DEFAULT_VIEW before any navigation", () => {
+    expect(router.lastMain()).toBe("search");
+  });
+
+  it("tracks the last non-settings view across navigations", async () => {
+    router.init();
+    router.navigate("chat");
+    await vi.waitFor(() => expect(store.getState().view).toBe("chat"));
+    router.navigate("settings");
+    await vi.waitFor(() => expect(store.getState().view).toBe("settings"));
+    // 进入设置页后，返回目标仍是 chat
+    expect(router.lastMain()).toBe("chat");
+  });
+
+  it("does not treat login as a main view", async () => {
+    router.init();
+    router.navigate("diary");
+    await vi.waitFor(() => expect(store.getState().view).toBe("diary"));
+    router.navigate("login");
+    await vi.waitFor(() => expect(store.getState().view).toBe("login"));
+    expect(router.lastMain()).toBe("diary");
+  });
+
+  it("init on a main view records it as return target", () => {
+    window.history.replaceState(null, "", "#/files");
+    router.init();
+    expect(router.lastMain()).toBe("files");
+  });
+});
