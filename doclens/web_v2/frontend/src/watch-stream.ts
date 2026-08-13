@@ -44,7 +44,7 @@ function applyStatus(s: StatusSnapshot): void {
 function dispatchReindexedToast(d: ReindexedPayload): void {
   // reindexed 仅在实际 reindex 完成时触发（连接首推只有 status），无需去抖。
   window.dispatchEvent(new CustomEvent("cortex:watch-reindexed", {
-    detail: { doc_count: d.doc_count ?? null },
+    detail: { doc_count: d.doc_count ?? null, failed_count: d.failed_count ?? 0 },
   }));
 }
 

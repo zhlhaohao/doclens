@@ -106,7 +106,12 @@ export class ReindexDialog extends LitElement {
           const d = JSON.parse(ev.data);
           if (d.success) {
             actions.finishReindex({ success: d.success, doc_count: d.doc_count, failed_count: d.failed_count });
-            this._pushToast(`索引重建完成：${d.doc_count} 文档`, "success", 3000);
+            this._pushToast(
+              d.failed_count > 0
+                ? `索引重建完成：${d.doc_count} 文档，${d.failed_count} 个文件失败`
+                : `索引重建完成：${d.doc_count} 文档`,
+              d.failed_count > 0 ? "error" : "success", 3000,
+            );
           } else {
             actions.failReindex(d.failed_count > 0 ? `重建失败：${d.failed_count} 个文件失败` : "重建失败");
           }
@@ -148,10 +153,15 @@ export class ReindexDialog extends LitElement {
     if (r.dialog === "done") {
       const res = r.result;
       return html`
-        <h3><doclens-icon name="check"></doclens-icon> 重建完成</h3>
+        <h3 style="${res && res.failed_count > 0 ? "color: var(--cortex-danger)" : ""}">
+          <doclens-icon name="${res && res.failed_count > 0 ? "alert-triangle" : "check"}"></doclens-icon>
+          ${res && res.failed_count > 0 ? "重建完成（部分失败）" : "重建完成"}
+        </h3>
         <div class="body">
           共索引 <strong>${res?.doc_count ?? 0}</strong> 个文档
-          ${res && res.failed_count > 0 ? html`<br />· ${res.failed_count} 个文件失败` : ""}
+          ${res && res.failed_count > 0
+            ? html`<br /><span style="color: var(--cortex-danger); font-weight: 600;">· ${res.failed_count} 个文件失败</span>`
+            : ""}
         </div>
         <div class="actions">
           <button class="primary" @click=${this._close}>关闭</button>

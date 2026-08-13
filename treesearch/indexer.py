@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -1733,6 +1734,10 @@ async def build_index(
 
     build_start = time.monotonic()
     semaphore = asyncio.Semaphore(max_concurrency)
+    # PST 专用并发上限：PST 解析启 sidecar 子进程 + 加载 GB 级文件 + 全量附件提取，
+    # 多个并发会耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。单独低并发限流，
+    # 同时缓解"极度缓慢"和"崩溃"两个根因。
+    pst_semaphore = asyncio.Semaphore(getattr(cfg, "max_pst_concurrency", 1))
     # Collect per-file timing and source_type for stats
     _file_timings: dict[str, tuple[str, float]] = {}  # fp -> (source_type, elapsed_s)
     _failed_paths: list[str] = []
@@ -1742,12 +1747,15 @@ async def build_index(
                       dynamic_ncols=True, disable=not to_index)
 
     async def _index_one(fp: str) -> dict | None:
-        async with semaphore:
+        ext = os.path.splitext(fp)[1].lower()
+        # PST 重量级（sidecar 子进程 + GB 级文件 + 全量附件提取）：先过 pst_semaphore
+        # 限流（等待时不占通用 semaphore 槽），再过通用并发信号量。
+        pst_gate = pst_semaphore if ext == ".pst" else nullcontext()
+        async with pst_gate, semaphore:
             fname = os.path.basename(fp)
             _parse_bar.set_postfix_str(fname, refresh=False)
             t0 = time.monotonic()
             try:
-                ext = os.path.splitext(fp)[1].lower()
                 rel_path = ""
                 if base_dir:
                     rel_path = os.path.relpath(fp, base_dir).replace(os.sep, "/")
