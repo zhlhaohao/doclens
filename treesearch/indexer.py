@@ -1469,6 +1469,7 @@ async def build_index(
     max_files: int = MAX_DIR_FILES,
     prune: Optional[bool] = None,
     progress_callback: Optional[callable] = None,
+    sub_progress_callback: Optional[callable] = None,
     **kwargs,
 ) -> list[Document]:
     """
@@ -1764,6 +1765,10 @@ async def build_index(
                     image_store=image_store,
                     rel_path=rel_path,
                     pst_attachment_store=pst_att_store,
+                    sub_progress_callback=(
+                        (lambda n: sub_progress_callback(fp, n))
+                        if sub_progress_callback else None
+                    ),
                     **kwargs,
                 )
 

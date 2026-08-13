@@ -3,7 +3,7 @@ import { store, actions, INITIAL_STATE } from "../src/state/store";
 import type { ReindexState } from "../src/state/types";
 
 const FRESH: ReindexState = {
-  dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null,
+  dialog: "closed", current_file: null, indexed_count: 0, sub_label: null, result: null, error: null,
 };
 
 describe("reindex store slice", () => {
@@ -37,6 +37,18 @@ describe("reindex store slice", () => {
     actions.finishReindex({ success: true, doc_count: 5, failed_count: 0 });
     actions.setReindexProgress({ current_file: "x.md", indexed_count: 9 });
     expect(store.getState().reindex.current_file).toBe("a.md");
+  });
+
+  it("setReindexProgress carries sub_label (PST 邮件级子进度)", () => {
+    actions.startReindex();
+    actions.setReindexProgress({ current_file: "x.pst", indexed_count: 0, sub_label: "已解析 100 封邮件" });
+    expect(store.getState().reindex).toMatchObject({
+      current_file: "x.pst",
+      sub_label: "已解析 100 封邮件",
+    });
+    // 文件完成事件带 sub_label: null → 清空
+    actions.setReindexProgress({ current_file: "x.pst", indexed_count: 1, sub_label: null });
+    expect(store.getState().reindex.sub_label).toBeNull();
   });
 
   it("finishReindex → done with result", () => {

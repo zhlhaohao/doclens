@@ -101,7 +101,7 @@ export class ReindexDialog extends LitElement {
         if (this._abort.signal.aborted) break;
         if (ev.event === "progress") {
           const d = JSON.parse(ev.data);
-          actions.setReindexProgress({ current_file: d.current_file, indexed_count: d.indexed_count });
+          actions.setReindexProgress({ current_file: d.current_file, indexed_count: d.indexed_count, sub_label: d.sub_label });
         } else if (ev.event === "done") {
           const d = JSON.parse(ev.data);
           if (d.success) {
@@ -139,7 +139,7 @@ export class ReindexDialog extends LitElement {
       return html`
         <h3><doclens-icon name="refresh-cw"></doclens-icon> 正在重建索引…</h3>
         <div class="body">已索引 <strong>${r.indexed_count}</strong> 个文件</div>
-        ${r.current_file ? html`<div class="progress">当前：${r.current_file}</div>` : ""}
+        ${r.current_file ? html`<div class="progress">当前：${r.current_file}${r.sub_label ? ` · ${r.sub_label}` : ""}</div>` : ""}
         <div class="actions">
           <button @click=${this._close}>关闭（后台继续）</button>
         </div>
