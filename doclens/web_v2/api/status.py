@@ -30,6 +30,7 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
     cfg = get_config()
     return {
         "indexed_docs": len(docs),
+        "index_failed_count": idx.last_failed_count,
         "index_path": str(idx.index_path),
         "workdir": str(idx.search_path),
         "total_size_bytes": total_size,

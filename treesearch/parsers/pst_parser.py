@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -57,6 +58,10 @@ _ATTACHMENT_PARSE_TIMEOUT_S = 60
 
 # 消费者循环进度日志间隔（每 N 封邮件打一次 info），让长时间 PST 解析可观测。
 _PROGRESS_LOG_INTERVAL = 100
+
+# 消费者进度日志的时间兜底（秒）：sidecar 慢或崩溃前可能很久不到 _PROGRESS_LOG_INTERVAL，
+# 按时间额外打一次，避免长时间无日志让用户误判卡死。
+_PROGRESS_LOG_SECS = 30
 
 # 附件解析独立线程池：与 indexer 主并发池隔离。卡死的附件解析线程不阻塞
 # 主事件循环；max_workers=2 下最坏泄漏 2 个线程、吞吐降级，但主流程不卡死。
@@ -478,15 +483,23 @@ def _produce_jsonl(proc: subprocess.Popen, q: "queue.Queue") -> None:
 
 
 def _drain_stderr(proc: subprocess.Popen, sink: list) -> None:
-    """收集 sidecar stderr（progress/warn），保留尾部供错误诊断。"""
+    """收集 sidecar stderr（progress/warn），保留尾部供错误诊断。
+
+    sidecar 的 ``progress:`` / ``done:`` 行提到 INFO——长时间 PST 解析中它是 sidecar
+    唯一的进度信号，降级到 debug 会让用户完全看不到 sidecar 在干什么（"卡死"感来源之一）。
+    """
     try:
         for raw in proc.stderr:
             line = raw.decode("utf-8", errors="replace").rstrip()
-            if line:
+            if not line:
+                continue
+            if line.startswith(("progress:", "done:")):
+                logger.info("pst-extract: %s", line)
+            else:
                 logger.debug("pst-extract: %s", line)
-                sink.append(line)
-                if len(sink) > 20:
-                    del sink[:10]
+            sink.append(line)
+            if len(sink) > 20:
+                del sink[:10]
     except Exception:
         pass
 
@@ -569,18 +582,23 @@ async def pst_to_trees(
     )
 
     processed = 0
+    last_progress_log = time.monotonic()
     try:
         while True:
             email = await loop.run_in_executor(None, q.get)
             if email is None:
                 break
             processed += 1
-            if processed % _PROGRESS_LOG_INTERVAL == 0:
+            now = time.monotonic()
+            # 按计数或时间间隔（_PROGRESS_LOG_SECS）打进度：sidecar 慢或崩溃前可能很久
+            # 不到 _PROGRESS_LOG_INTERVAL，纯按计数会长时间无日志 → 用户误判卡死。
+            if processed % _PROGRESS_LOG_INTERVAL == 0 or now - last_progress_log > _PROGRESS_LOG_SECS:
                 logger.info(
                     "pst-extract progress %s: %d emails (att ok=%d fail=%d)",
                     os.path.basename(pst_path), processed,
                     parsed_attachments, failed_attachments,
                 )
+                last_progress_log = now
                 if sub_progress_callback:
                     try:
                         sub_progress_callback(processed)
@@ -683,7 +701,19 @@ async def pst_to_trees(
             )
         if ret != 0:
             tail = "\n".join(stderr_tail[-5:])
-            raise RuntimeError(f"pst-extract exited with code {ret}: {tail}")
+            if trees:
+                # sidecar 中途崩溃（如 go-pst panic / 资源耗尽）：已解析的邮件仍入库，
+                # 不让一个崩溃的 sidecar 把整封 PST 的成果清零（部分成功优于 0 文档）；
+                # 缺失邮件由增量索引下次补齐。
+                logger.warning(
+                    "pst-extract crashed (code %s) — returning %d partial email(s) "
+                    "(att ok=%d fail=%d). tail: %s",
+                    ret, len(trees), parsed_attachments, failed_attachments, tail,
+                )
+            else:
+                raise RuntimeError(
+                    f"pst-extract exited with code {ret}, 0 emails parsed: {tail}"
+                )
     finally:
         await producer
         await stderr_reader

@@ -78,6 +78,10 @@ class TreeSearchConfig:
     min_thinning_chars: int = 15000  # min chars to keep a sub-tree during thinning
     summary_chars_threshold: int = 600  # nodes shorter than this use full text as summary
     max_concurrency: int = field(default_factory=lambda: min(os.cpu_count() or 4, 256))
+    # PST 解析的并发上限。PST 重量级：每文件启 sidecar 子进程 + 加载 GB 级文件 +
+    # 全量附件提取，多个并发易耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。
+    # 1 = PST 串行索引（最稳）；调大可加速但会增加资源压力。
+    max_pst_concurrency: int = 1
     max_dir_files: int = 10_000  # safety cap for directory walk
 
     # Text length limits

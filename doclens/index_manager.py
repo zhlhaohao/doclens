@@ -45,6 +45,15 @@ class IndexManager:
         self._needs_reload = False  # 后台 reindex 完成后标记，下次 load 时重新加载
         self._reindexing = False
         self._reindex_lock = threading.Lock()
+        # 最近一次索引（启动同步或后台 reindex）失败的文件数；0 = 全部成功。
+        # 供 /api/status 暴露给前端——启动同步索引不走 reindexed 广播，
+        # 前端只能靠此字段看到失败数。
+        self._last_failed_count = 0
+
+    @property
+    def last_failed_count(self) -> int:
+        """最近一次索引失败的文件数（0 = 全部成功）。"""
+        return self._last_failed_count
 
     def apply_config(self, config: CortexConfig) -> None:
         """Hot-reload config values. Does NOT touch index or search_path."""
@@ -389,7 +398,8 @@ class IndexManager:
                         )
                         doc_count = prev_count
 
-                    # 调用完成回调
+                    # 调用完成回调（先记失败数，供 /api/status）
+                    self._last_failed_count = failed_count
                     if on_complete:
                         on_complete(True, doc_count, failed_count)
             except Exception as e:
@@ -481,8 +491,13 @@ class IndexManager:
             return True
         os.makedirs(os.path.dirname(os.path.abspath(self.index_path)), exist_ok=True)
         self._ts.save_index()
+        # 读本次索引的 IndexStats（失败文件数），暴露给 /api/status；启动同步索引
+        # 不走 reindexed 广播，前端只能靠此字段看到失败数。
+        stats = self._ts.get_index_stats()
+        self._last_failed_count = stats.failed_files if stats else 0
         self.build_path_map()
-        print(f"[索引完成: {len(self._ts.documents)} 个文档]")
+        fail_hint = f"，{self._last_failed_count} 个文件失败" if self._last_failed_count else ""
+        print(f"[索引完成: {len(self._ts.documents)} 个文档{fail_hint}]")
         return True
 
     def build_path_map(self):

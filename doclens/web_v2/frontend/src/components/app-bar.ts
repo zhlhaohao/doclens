@@ -176,11 +176,19 @@ export class AppBar extends LitElement {
   private _unsubStore?: () => void;
 
   private _onWatchReindexed: (e: Event) => void = (e: Event) => {
-    const detail = (e as CustomEvent).detail as { doc_count?: number | null };
+    const detail = (e as CustomEvent).detail as { doc_count?: number | null; failed_count?: number };
     const stack = this.shadowRoot?.querySelector("toast-stack") as
       (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
     const n = detail?.doc_count;
-    stack?.pushToast?.(n != null ? `索引已更新：${n} 文档` : "索引已更新", "success", 3000);
+    const failed = detail?.failed_count ?? 0;
+    if (failed > 0) {
+      stack?.pushToast?.(
+        n != null ? `索引完成：${n} 文档，${failed} 个文件失败` : `索引完成：${failed} 个文件失败`,
+        "error", 5000,
+      );
+    } else {
+      stack?.pushToast?.(n != null ? `索引已更新：${n} 文档` : "索引已更新", "success", 3000);
+    }
   };
 
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {
