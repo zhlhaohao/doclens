@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from doclens.index_manager import IndexManager
 from doclens.kb_tools import _handle_read_document, _handle_search_kb
@@ -60,13 +60,16 @@ class McpServerHandle:
             thread.join(timeout=timeout)
 
 
-def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> FastMCP:
-    """构建 FastMCP 实例，注册 search_kb / read_document 工具。
+def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
+    """构建 MCPServer 实例，注册 search_kb / read_document 工具。
 
-    工具实现直接委派给 kb_tools 的同步 handler（FastMCP 自动丢进 threadpool
+    工具实现直接委派给 kb_tools 的同步 handler（MCPServer 自动丢进 threadpool
     执行），与 CLI `search_kb` 子命令、Agent tool-use 走完全相同的代码路径。
+
+    注：mcp 2.0 起 FastMCP 改名为 MCPServer（import 路径 mcp.server.fastmcp
+    → mcp.server.mcpserver），@tool() / streamable_http_app() 签名不变。
     """
-    mcp = FastMCP("doclens-kb")
+    mcp = MCPServer("doclens-kb")
 
     @mcp.tool()
     async def search_kb(query: str, max_results: Optional[int] = None) -> str:
