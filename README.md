@@ -213,6 +213,35 @@ Key variables:
 
 ---
 
+## Troubleshooting
+
+### PST indexing fails on Windows (`WinError 225`)
+
+When indexing Outlook `.pst` archives, Microsoft Defender may block the parser sidecar with:
+
+```
+[WinError 225] 无法成功完成操作，因为文件包含病毒或潜在的垃圾软件
+```
+
+**Cause:** the sidecar (`pst-extract.exe`) extracts email attachments to a temp dir; once any attachment is flagged as malware, Defender **cascades and blocks `pst-extract.exe` itself**, so every subsequent PST fails instantly — while the index still reports "complete".
+
+**Fix** — run in an **admin PowerShell 7**:
+
+```powershell
+# Exclude the sidecar by process name to stop the cascade (works regardless of install location)
+Add-MpPreference -ExclusionProcess "pst-extract.exe"
+# Optional: stop extracted attachments from being scanned/quarantined
+Add-MpPreference -ExclusionPath "<your-pst-directory>"
+```
+
+Then rebuild: `doclens index --force --workdir <your-pst-directory>`
+
+> ⚠️ Real mail archives can contain **malicious attachments**. With the exclusion in place, those files land in `<workdir>/.cortex/pst_attachments/` unscanned — use them for search only, **never open or execute** them.
+
+> PST indexing is **serialized** (`max_pst_concurrency=1`): each PST launches a heavy sidecar, so they run one at a time to avoid the memory/IO contention that previously crashed the sidecar. A 10+ GB archive takes a few minutes; progress is logged every 30 s.
+
+---
+
 ## Architecture
 
 ```
