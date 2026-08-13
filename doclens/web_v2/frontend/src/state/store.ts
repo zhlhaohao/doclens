@@ -62,7 +62,7 @@ export const INITIAL_STATE: AppState = {
   watcher: null,
   syncStatus: null,
   watchRecentChanges: [],
-  reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
+  reindex: { dialog: "closed", current_file: null, indexed_count: 0, sub_label: null, result: null, error: null },
   error: null,
   settings: {
     scope: "global",
@@ -214,15 +214,15 @@ export const actions = {
     store.setState({
       reindex: {
         ...store.getState().reindex,
-        dialog: "running", current_file: null, indexed_count: 0, result: null, error: null,
+        dialog: "running", current_file: null, indexed_count: 0, sub_label: null, result: null, error: null,
       },
     });
   },
 
-  setReindexProgress(p: { current_file: string; indexed_count: number }) {
+  setReindexProgress(p: { current_file: string; indexed_count: number; sub_label?: string | null }) {
     const r = store.getState().reindex;
     if (r.dialog !== "running") return;
-    store.setState({ reindex: { ...r, current_file: p.current_file, indexed_count: p.indexed_count } });
+    store.setState({ reindex: { ...r, current_file: p.current_file, indexed_count: p.indexed_count, sub_label: p.sub_label ?? null } });
   },
 
   finishReindex(res: { success: boolean; doc_count: number; failed_count: number }) {
@@ -235,7 +235,7 @@ export const actions = {
 
   closeReindex() {
     store.setState({
-      reindex: { dialog: "closed", current_file: null, indexed_count: 0, result: null, error: null },
+      reindex: { dialog: "closed", current_file: null, indexed_count: 0, sub_label: null, result: null, error: null },
     });
   },
 

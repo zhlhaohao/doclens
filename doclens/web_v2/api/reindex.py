@@ -26,7 +26,22 @@ async def force_reindex(idx: IndexManager = Depends(get_index_manager)):
     def on_progress(file_path: str, n: int):
         q.put_nowait({
             "event": "progress",
-            "data": {"current_file": os.path.basename(file_path), "indexed_count": n},
+            "data": {
+                "current_file": os.path.basename(file_path),
+                "indexed_count": n,
+                "sub_label": None,  # 文件完成，清空子进度
+            },
+        })
+
+    def on_sub_progress(file_path: str, parsed_count: int, indexed_count: int):
+        """流式 parser（如 PST）解析期间上报子进度（已解析邮件数）。"""
+        q.put_nowait({
+            "event": "progress",
+            "data": {
+                "current_file": os.path.basename(file_path),
+                "indexed_count": indexed_count,
+                "sub_label": f"已解析 {parsed_count} 封邮件",
+            },
         })
 
     def on_complete(success: bool, doc_count: int, failed_count: int):
@@ -35,7 +50,10 @@ async def force_reindex(idx: IndexManager = Depends(get_index_manager)):
             "data": {"success": success, "doc_count": doc_count, "failed_count": failed_count},
         })
 
-    idx.trigger_background_reindex(force=True, on_progress=on_progress, on_complete=on_complete)
+    idx.trigger_background_reindex(
+        force=True, on_progress=on_progress, on_complete=on_complete,
+        on_sub_progress=on_sub_progress,
+    )
 
     async def event_stream():
         while True:

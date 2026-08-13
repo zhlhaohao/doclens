@@ -111,6 +111,7 @@ export interface ReindexState {
   dialog: "closed" | "confirm" | "running" | "done" | "error";
   current_file: string | null;
   indexed_count: number;
+  sub_label: string | null;
   result: ReindexResult | null;
   error: string | null;
 }
