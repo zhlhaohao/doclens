@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,20 @@ ATTACHMENT_STORE_MAX_BYTES = 100 * 1024 * 1024
 
 # sidecar 输出队列上限（背压：sidecar 快、消费慢时防止内存膨胀）
 _QUEUE_MAXSIZE = 32
+
+# 单个附件解析超时（秒）：pdf/docx 等 parser 虽声明 async def 但内部同步阻塞
+# （pdfplumber/fitz/openpyxl），遇到构造恶劣的附件会卡死。超时即放弃该附件、
+# 记 failed、继续下一封邮件，避免一个坏附件拖死整个 PST 解析（ADR: PST 卡死修复）。
+_ATTACHMENT_PARSE_TIMEOUT_S = 60
+
+# 消费者循环进度日志间隔（每 N 封邮件打一次 info），让长时间 PST 解析可观测。
+_PROGRESS_LOG_INTERVAL = 100
+
+# 附件解析独立线程池：与 indexer 主并发池隔离。卡死的附件解析线程不阻塞
+# 主事件循环；max_workers=2 下最坏泄漏 2 个线程、吞吐降级，但主流程不卡死。
+# ThreadPoolExecutor 超时后无法强杀线程（Python 限制），权衡优于 ProcessPoolExecutor
+# （可杀进程但序列化/开销大）。
+_ATTACHMENT_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pst-att")
 
 
 class PstExtractNotFoundError(RuntimeError):
@@ -89,22 +104,50 @@ def _strip_root_prefix(folder: str) -> str:
     return parts[-1] if parts else folder
 
 
-async def _parse_attachment_text(tmp_path: str, **kwargs) -> str:
-    """用现有 parser 解析附件临时文件，返回拍平的纯文本。"""
+def _parse_attachment_sync(tmp_path: str) -> dict:
+    """同步包装：在 executor 线程的独立事件循环里跑 async parser。
+
+    pdf_to_tree / docx_to_tree 等声明 ``async def`` 但内部是同步阻塞调用
+    （pdfplumber/fitz/openpyxl），在主事件循环里直接 ``await`` 会阻塞循环。
+    放到独立线程跑 ``asyncio.run`` → 不阻塞主循环；外层再加超时即可兜底坏附件。
+    无对应 parser 返回 ``{}``（等价原 ``parser_fn is None`` 的空结果）。
+    """
     from .registry import get_parser
-    from ..tree import flatten_tree
 
     ext = os.path.splitext(tmp_path)[1].lower()
     parser_fn = get_parser(ext)
     if parser_fn is None:
-        return ""
-    tree = await parser_fn(
+        return {}
+    return asyncio.run(parser_fn(
         tmp_path,
         if_add_node_summary=False,
         if_add_doc_description=False,
         if_add_node_text=True,
         if_add_node_id=True,
-    )
+    ))
+
+
+async def _parse_attachment_text(tmp_path: str, **kwargs) -> str:
+    """用现有 parser 解析附件临时文件，返回拍平的纯文本。
+
+    解析在独立线程池执行 + 单附件超时（``_ATTACHMENT_PARSE_TIMEOUT_S``），
+    避免一个坏附件卡死整个 PST 解析。超时抛 ``asyncio.TimeoutError``，
+    由上层 ``pst_to_trees`` 消费者循环捕获并记 ``failed_attachments``。
+    """
+    from ..tree import flatten_tree
+
+    loop = asyncio.get_running_loop()
+    try:
+        tree = await asyncio.wait_for(
+            loop.run_in_executor(_ATTACHMENT_POOL, _parse_attachment_sync, tmp_path),
+            timeout=_ATTACHMENT_PARSE_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Attachment parse timed out (%ds), skipped: %s",
+            _ATTACHMENT_PARSE_TIMEOUT_S, tmp_path,
+        )
+        raise
     texts = []
     for node in flatten_tree(tree.get("structure", [])):
         title = (node.get("title") or "").strip()
@@ -475,6 +518,7 @@ async def pst_to_trees(
     if_add_node_id: bool = True,
     pst_attachment_store=None,
     rel_path: str = "",
+    sub_progress_callback=None,
     **kwargs,
 ) -> dict:
     """解析 PST，返回 ``{"multi_docs": [tree, ...]}``（每封邮件一个树）。
@@ -524,11 +568,24 @@ async def pst_to_trees(
         if_add_node_id=if_add_node_id,
     )
 
+    processed = 0
     try:
         while True:
             email = await loop.run_in_executor(None, q.get)
             if email is None:
                 break
+            processed += 1
+            if processed % _PROGRESS_LOG_INTERVAL == 0:
+                logger.info(
+                    "pst-extract progress %s: %d emails (att ok=%d fail=%d)",
+                    os.path.basename(pst_path), processed,
+                    parsed_attachments, failed_attachments,
+                )
+                if sub_progress_callback:
+                    try:
+                        sub_progress_callback(processed)
+                    except Exception:  # noqa: BLE001
+                        logger.debug("sub_progress_callback error", exc_info=True)
             entry_id = email.get("entry_id")
             source_path = f"{abs_pst}#{entry_id}"
             raw_atts = email.get("attachments") or []
@@ -564,6 +621,9 @@ async def pst_to_trees(
                             text = text[:ATTACHMENT_TEXT_MAX_CHARS] + "\n\n[附件内容已截断]"
                         attachment_sections.append((name, text))
                         parsed_attachments += 1
+                except asyncio.TimeoutError:
+                    # 超时已在 _parse_attachment_text 记 warning，这里仅计数
+                    failed_attachments += 1
                 except Exception as e:
                     failed_attachments += 1
                     logger.warning("Attachment parse failed (%s): %s", name, e)
