@@ -15,6 +15,30 @@ from doclens.web_v2.api.errors import register_error_handlers
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _enable_treesearch_console_logging() -> None:
+    """gui 启动时让 treesearch 的 INFO+ 日志额外输出到 stderr（命令行可见）。
+
+    setup_logging 默认 console_output=False，索引进度只写日志文件；这里为
+    treesearch 单独挂一个控制台 handler，PST 解析等细粒度进度（如
+    ``pst-extract progress ... N emails``、``Building indexes for N file(s)``）
+    在命令行实时可见，不波及其他模块（uvicorn / 第三方库仍只进文件）。
+    """
+    import logging
+    import sys
+
+    ts_logger = logging.getLogger("treesearch")
+    if any(getattr(h, "_cortex_ts_console", False) for h in ts_logger.handlers):
+        return  # 幂等：launch_app 重复调用（如 Stop hook 自动重启）不重复挂 handler
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    )
+    handler._cortex_ts_console = True  # 标记防重复
+    ts_logger.addHandler(handler)
+    ts_logger.setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动文件监控 + 视觉解析 worker + Git 同步 + MCP server，退出时停止。"""
@@ -204,6 +228,9 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     if share:
         import warnings
         warnings.warn("`--share` 在 v2 中不再支持；请用 `--host 0.0.0.0` 暴露局域网。")
+
+    # treesearch 进度日志（含 PST 邮件级细粒度进度）输出到命令行 stderr
+    _enable_treesearch_console_logging()
 
     import threading
     import webbrowser
