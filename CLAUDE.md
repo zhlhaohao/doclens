@@ -34,6 +34,8 @@ pip install -e ".[dev]"
 
 > **worktree 开发复用主仓库 `../cortex/.venv`**（依赖共享；doclens 源码经 PYTHONPATH 取 worktree 本地）——无需在 worktree 重建 venv，直接用 `../cortex/.venv/Scripts/python.exe`。
 
+> **editable install：改源码即生效，无需重装**。`doclens`、`treesearch` 均为 `pip install -e` 安装——系统 Python 的 `doclens.exe` 入口与 `.venv` 的 `python -m doclens` **都解析到本仓库源码**（`doclens/`、`treesearch/`，非 site-packages 副本）。修改这两个目录下任意 `.py` 立即对两种入口生效；排查问题时**勿假设 `doclens.exe` 跑的是旧代码副本**。验证方式：`python -c "import doclens,treesearch; print(doclens.__file__, treesearch.__file__)"`，应指向仓库源码而非 `site-packages`。
+
 ## doclens 技术栈
 
 ### 核心技术

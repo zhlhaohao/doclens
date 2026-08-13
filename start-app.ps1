@@ -58,8 +58,17 @@ $mcpBasePort = Read-CortexEnvPort "CORTEX_MCP_PORT" 7880
 $mcpPort = $mcpBasePort + $n
 $env:CORTEX_MCP_PORT = "$mcpPort"
 
+# 从 $args 提取用户显式传的 -C/--workdir，显示真实工作目录（默认 test_work_dir）。
+# 避免用户传了 -C 却看到"工作目录: test_work_dir"的误导（实际 doclens 已按 -C 运行）。
+$workDir = $testWorkDir
+for ($i = 0; $i -lt $args.Count; $i++) {
+    if (($args[$i] -eq '-C' -or $args[$i] -eq '--workdir') -and ($i + 1) -lt $args.Count) {
+        $workDir = $args[$i + 1]
+        break
+    }
+}
 Write-Host "=== Cortex 启动信息 ===" -ForegroundColor Cyan
-Write-Host "  工作目录: $testWorkDir"
+Write-Host "  工作目录: $workDir"
 Write-Host "  PYTHONPATH: $env:PYTHONPATH"
 Write-Host "  Venv: $venvPython"
 Write-Host "  Web 端口: $port"
