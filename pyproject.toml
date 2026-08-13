@@ -40,7 +40,8 @@ dependencies = [
     "sse-starlette>=2.0.0",
     # MCP server (Streamable HTTP) — 暴露 KB 检索为 MCP 工具，TUI/GUI 进程内自启。
     # 纯 Python，传递依赖（starlette/sse-starlette/uvicorn/pydantic/httpx）多数已在。
-    "mcp>=1.10",
+    # mcp 2.0 起 FastMCP 改名为 MCPServer（见 doclens/mcp_server.py），故下限 2.0。
+    "mcp>=2.0",
     "textual>=0.47.0",
     "tqdm>=4.42",
     "ulid-py>=1.1",
