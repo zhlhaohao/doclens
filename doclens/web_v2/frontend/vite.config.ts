@@ -5,6 +5,7 @@ export default defineConfig({
   base: "/",
   test: {
     environment: "jsdom",
+    setupFiles: ["tests/setup.ts"],
   },
   build: {
     // 输出到 web_v2/static/，供 FastAPI StaticFiles 服务

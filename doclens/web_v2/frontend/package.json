@@ -15,9 +15,11 @@
   "dependencies": {
     "@shoelace-style/shoelace": "^2.15.0",
     "dompurify": "^3.4.13",
+    "katex": "^0.17.0",
     "lit": "^3.2.0",
     "lucide-static": "^1.26.0",
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "marked-katex-extension": "^5.1.10"
   },
   "devDependencies": {
     "@open-wc/testing": "^4.0.0",
