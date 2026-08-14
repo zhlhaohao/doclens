@@ -220,13 +220,16 @@ def start_watcher() -> bool:
         def _on_reindex_start() -> None:
             broker.broadcast("status", watch_snapshot())
 
-        def _on_reindex_done(success: bool, doc_count: int, failed_count: int) -> None:
+        def _on_reindex_done(success: bool, doc_count: int, failed_count: int, indexed_files: int = 0) -> None:
             broker.broadcast("status", watch_snapshot())
-            broker.broadcast("reindexed", {
-                "success": success,
-                "doc_count": doc_count,
-                "failed_count": failed_count,
-            })
+            # 只在本次实际有变化（新索引文件或失败）时广播 reindexed，
+            # 避免启动增量扫描无变化时每次都弹 toast 打扰用户。
+            if indexed_files > 0 or failed_count > 0:
+                broker.broadcast("reindexed", {
+                    "success": success,
+                    "doc_count": doc_count,
+                    "failed_count": failed_count,
+                })
 
         watcher = FileWatcher(
             idx,

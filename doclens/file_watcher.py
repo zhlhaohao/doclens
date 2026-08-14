@@ -203,6 +203,15 @@ class FileWatcher:
         self._observer.start()
         with self._state_lock:
             self._running = True
+        # 启动增量扫描：watchdog 是事件驱动，无法捕获应用关闭期间的文件变化。
+        # 启动时主动触发一次增量 reindex（fingerprint 默认 stat 模式，只比对
+        # mtime/size 不读内容），补上离线期间新增/修改/删除的文件。防抖后执行，
+        # 与文件变化事件共用 _do_reindex（无变化时 build_index 增量快速返回）。
+        if self._timer:
+            self._timer.cancel()
+        self._timer = threading.Timer(self._debounce, self._do_reindex)
+        self._timer.daemon = True
+        self._timer.start()
         return True
 
     def stop(self):
@@ -274,7 +283,7 @@ class FileWatcher:
                 self._last_success = False
                 self._last_reindex_at = time.time()
 
-    def _on_reindex_complete(self, success: bool, doc_count: int, failed_count: int):
+    def _on_reindex_complete(self, success: bool, doc_count: int, failed_count: int, indexed_files: int = 0):
         """trigger_background_reindex 完成回调：更新状态后转发给外部 on_reindex_done"""
         with self._state_lock:
             self._reindexing = False
@@ -283,4 +292,4 @@ class FileWatcher:
             self._last_doc_count = doc_count
             self._last_success = success
         if self._on_reindex_done:
-            self._on_reindex_done(success, doc_count, failed_count)
+            self._on_reindex_done(success, doc_count, failed_count, indexed_files)

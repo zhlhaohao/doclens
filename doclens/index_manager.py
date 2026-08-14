@@ -281,7 +281,7 @@ class IndexManager:
         Args:
             force: True 时全量重建（清空旧索引重扫）；False 增量更新。
             on_progress: 每个文件索引完调用，签名 (file_path: str, indexed_count: int) -> None。
-            on_complete: 索引完成回调，签名 (success: bool, doc_count: int, failed_count: int) -> None。
+            on_complete: 索引完成回调，签名 (success: bool, doc_count: int, failed_count: int, indexed_files: int) -> None。
             on_sub_progress: 流式 parser（如 PST）解析期间上报子进度，
                 签名 (file_path: str, parsed_count: int, indexed_count: int) -> None。
         """
@@ -400,12 +400,14 @@ class IndexManager:
 
                     # 调用完成回调（先记失败数，供 /api/status）
                     self._last_failed_count = failed_count
+                    _stats = new_ts.get_index_stats() if new_ts else None
+                    _indexed = _stats.indexed_files if _stats else 0
                     if on_complete:
-                        on_complete(True, doc_count, failed_count)
+                        on_complete(True, doc_count, failed_count, _indexed)
             except Exception as e:
                 logger.exception("_bg_work exception: %s", e)
                 if on_complete:
-                    on_complete(False, 0, 0)
+                    on_complete(False, 0, 0, 0)
         t = threading.Thread(target=_bg_work, daemon=True)
         t.start()
         return t
