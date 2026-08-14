@@ -49,6 +49,10 @@ dependencies = [
     "ripgrep-bin>=15.1.0",
     # Multi-format document parsers (PDF / DOCX / PPTX / Excel / HTML / code AST / gitignore)
     "beautifulsoup4>=4.12.0",
+    # firecrawl-anydoc：doc/docm/ppt/pps/pot/xls/rtf/epub → Markdown（纯 Rust 绑定，ADR-0013）。
+    # PyPI 无 win_arm64 wheel（仅 win_amd64/macOS/linux），win_arm64 需 Rust 工具链从 sdist 构建；
+    # 运行时由 try/except ImportError 保护（未装时这些扩展名落回 text 兜底）。
+    "firecrawl-anydoc>=0.1.9",
     "markitdown>=0.1.0",
     "openpyxl>=3.1.0",
     "pathspec>=0.11",

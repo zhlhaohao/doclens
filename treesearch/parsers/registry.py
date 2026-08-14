@@ -76,14 +76,22 @@ SOURCE_TYPE_MAP: dict[str, str] = {
     # Documents
     ".pdf": "pdf",
     ".doc": "doc",
+    ".docm": "doc",
     ".docx": "docx",
+    ".rtf": "rtf",
     # Presentations (markitdown)
     ".pptx": "pptx",
+    # Legacy presentations (anydoc)
+    ".ppt": "ppt",
+    ".pps": "ppt",
+    ".pot": "ppt",
     # Spreadsheets (openpyxl)
     ".xlsx": "excel",
     ".xlsm": "excel",
     ".xltx": "excel",
     ".xltm": "excel",
+    # Legacy spreadsheets (anydoc)
+    ".xls": "excel",
     # Email archives (pst-extract sidecar)
     ".pst": "pst",
     # Documents
@@ -122,8 +130,11 @@ PREFILTER_ROUTING: dict[str, list[str]] = {
     "pdf": ["fts5"],
     "doc": ["fts5"],
     "docx": ["fts5"],
+    "rtf": ["fts5"],
     "pptx": ["fts5"],
+    "ppt": ["fts5"],
     "excel": ["fts5"],
+    "epub": ["fts5"],
     "image": ["fts5"],
     "pst": ["fts5"],
 }
@@ -140,8 +151,8 @@ def get_prefilters_for_source_type(source_type: str) -> list[str]:
 
 SHADOW_MD_EXTENSIONS: frozenset[str] = frozenset({
     ".pdf", ".epub", ".xps", ".oxps", ".fb2", ".cbz", ".cbr",
-    ".doc", ".docx", ".pptx",
-    ".xlsx", ".xlsm", ".xltx", ".xltm",
+    ".doc", ".docm", ".docx", ".rtf", ".pptx", ".ppt", ".pps", ".pot",
+    ".xlsx", ".xlsm", ".xltx", ".xltm", ".xls",
 })
 
 
@@ -298,13 +309,21 @@ def _register_builtin_parsers() -> None:
     except ImportError:
         logger.debug("DOCX parser not available (install 'python-docx' for DOCX support)")
 
-    # DOC (Word 97-2003, uses system tools: textutil/antiword/catdoc/LibreOffice)
-    from ..parsers.doc_parser import doc_to_tree
+    # Legacy office formats via anydoc (doc/docm/ppt/pps/pot/xls/rtf/epub, ADR-0013)。
+    # anydoc 是 Rust 扩展（PyPI 无 win_arm64 wheel），装不上时不注册 → 落 text 兜底。
+    try:
+        import anydoc as _anydoc  # noqa: F401
+        from ..parsers.anydoc_parser import anydoc_to_tree, ANYDOC_EXTENSIONS
 
-    async def _doc_parser(fp, **kw):
-        return await doc_to_tree(doc_path=fp, **kw)
+        async def _anydoc_parser(fp, **kw):
+            return await anydoc_to_tree(file_path=fp, **kw)
 
-    ParserRegistry.register(".doc", _doc_parser)
+        for ext in sorted(ANYDOC_EXTENSIONS):
+            ParserRegistry.register(ext, _anydoc_parser)
+        logger.debug("anydoc parser registered for %d extensions: %s",
+                      len(ANYDOC_EXTENSIONS), ", ".join(sorted(ANYDOC_EXTENSIONS)))
+    except ImportError:
+        logger.debug("anydoc parser not available (install 'firecrawl-anydoc' for doc/ppt/xls/rtf/epub support)")
 
     # Excel/Spreadsheet (optional dependency, uses openpyxl)
     try:

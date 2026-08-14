@@ -44,9 +44,11 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # 上传扩展名白名单（V4）：覆盖知识库支持的文档/图片类型，拒绝可执行脚本等。
 # 不含 .svg（SVG 可携带 <script>，存在 XSS 风险）。
+# doc/docm/ppt/pps/pot/xls/rtf/epub 由 anydoc 解析（ADR-0013）。
 _ALLOWED_UPLOAD_EXT = frozenset({
-    ".md", ".markdown", ".txt", ".pdf", ".docx", ".doc", ".pptx",
-    ".xlsx", ".xls", ".xlsm", ".csv", ".html", ".htm",
+    ".md", ".markdown", ".txt", ".pdf", ".docx", ".doc", ".docm",
+    ".pptx", ".ppt", ".pps", ".pot",
+    ".xlsx", ".xls", ".xlsm", ".csv", ".rtf", ".epub", ".html", ".htm",
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff",
 })
 
