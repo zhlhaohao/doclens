@@ -14,7 +14,7 @@ from .registry import (
     get_prefilters_for_source_type,
 )
 from .ast_parser import parse_python_structure
-from .doc_parser import extract_doc_text
+from .anydoc_parser import anydoc_to_tree, ANYDOC_EXTENSIONS
 
 # PDF parser (optional)
 try:
@@ -48,7 +48,8 @@ __all__ = [
     "PREFILTER_ROUTING",
     "get_prefilters_for_source_type",
     "parse_python_structure",
-    "extract_doc_text",
+    "anydoc_to_tree",
+    "ANYDOC_EXTENSIONS",
 ]
 
 if _has_pdf:

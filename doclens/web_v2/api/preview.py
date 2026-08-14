@@ -29,10 +29,11 @@ router = APIRouter()
 
 # 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
 # （.mhtml/.mht 是 MIME 打包文本，原始预览无意义，同样走合成）
+# doc/docm/ppt/pps/pot/xls/rtf/epub 由 anydoc 解析（ADR-0013），同属二进制合成预览。
 BINARY_PREVIEW_EXTS = frozenset({
-    ".pdf", ".docx", ".pptx",
-    ".xlsx", ".xlsm", ".xltx", ".xltm",
-    ".csv", ".mhtml", ".mht",
+    ".pdf", ".docx", ".doc", ".docm", ".pptx", ".ppt", ".pps", ".pot",
+    ".xlsx", ".xlsm", ".xltx", ".xltm", ".xls",
+    ".rtf", ".epub", ".csv", ".mhtml", ".mht",
 }) | IMAGE_EXTENSIONS
 
 
