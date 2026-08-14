@@ -56,6 +56,35 @@ def _paragraph_image_rids(para) -> list[str]:
             if blip.get(qn("r:embed"))]
 
 
+def _list_marker(para) -> str:
+    """列表段落 → md 列表符号前缀（按 ilvl 缩进）；非列表 → ''。
+
+    ``para.text`` 不含项目符号/编号（numPr 由 Word 渲染期生成），导致 docx
+    列表在索引与预览里退化为普通段落。检测段落级 ``w:numPr``（Word 列表的
+    常规编码）或 List 系样式名，补回 ``- `` 前缀——与 anydoc 的 docx→md
+    输出口径一致（统一 ``-``，不区分有序/无序）。标题样式直接跳过（编号
+    标题不应变成列表项）。
+    """
+    from docx.oxml.ns import qn
+
+    style_name = ((para.style.name if para.style else "") or "").lower()
+    if style_name.startswith("heading"):
+        return ""
+
+    pPr = para._p.pPr
+    numPr = pPr.find(qn("w:numPr")) if pPr is not None else None
+    if numPr is None:
+        return "- " if "list" in style_name else ""
+    ilvl = 0
+    ilvl_el = numPr.find(qn("w:ilvl"))
+    if ilvl_el is not None:
+        try:
+            ilvl = int(ilvl_el.get(qn("w:val"), 0))
+        except (ValueError, TypeError):
+            ilvl = 0
+    return "  " * ilvl + "- "
+
+
 def _docx_part_blob_ext(doc, rid: str) -> tuple[bytes, str] | None:
     """按 rId 取 image part 的 (blob, ext)，失败返回 None。"""
     try:
@@ -135,6 +164,8 @@ def _extract_docx_headings(
         if tag == "p":
             para = Paragraph(child, doc)
             text = para.text.strip()
+            if text:
+                text = _list_marker(para) + text
             rids = _paragraph_image_rids(para)
             line_num = len(lines) + 1
             lines.append(text)
