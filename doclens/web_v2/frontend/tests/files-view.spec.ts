@@ -47,6 +47,40 @@ describe("files-view", () => {
     vi.clearAllMocks();
   });
 
+  it("copy-path action copies selected paths (newline-joined) and toasts", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    actions.setFilesState({ selectedPaths: ["docs/a.md", "b.md"] });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    el._onAction(new CustomEvent("action", { detail: { name: "copy-path" } }));
+    expect(writeText).toHaveBeenCalledWith("docs/a.md\nb.md");
+    await vi.waitFor(() => {
+      expect(el.shadowRoot.textContent).toContain("已复制 2 个路径");
+    });
+    document.body.removeChild(el);
+  });
+
+  it("copy-path action with 0 selected does nothing", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    el._onAction(new CustomEvent("action", { detail: { name: "copy-path" } }));
+    expect(writeText).not.toHaveBeenCalled();
+    document.body.removeChild(el);
+  });
+
   it("renders desktop-layout when viewport is wide", async () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
