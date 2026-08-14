@@ -44,10 +44,10 @@ async def force_reindex(idx: IndexManager = Depends(get_index_manager)):
             },
         })
 
-    def on_complete(success: bool, doc_count: int, failed_count: int):
+    def on_complete(success: bool, doc_count: int, failed_count: int, indexed_files: int = 0):
         q.put_nowait({
             "event": "done",
-            "data": {"success": success, "doc_count": doc_count, "failed_count": failed_count},
+            "data": {"success": success, "doc_count": doc_count, "failed_count": failed_count, "indexed_files": indexed_files},
         })
 
     idx.trigger_background_reindex(
