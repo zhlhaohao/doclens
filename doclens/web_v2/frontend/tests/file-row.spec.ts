@@ -33,6 +33,33 @@ describe("file-row", () => {
     expect(captured).toEqual({ path: "a.md", is_dir: false });
   });
 
+  it("unindexed file name gets .unindexed class + hint title; indexed does not", async () => {
+    const indexed = makeRow(fileEntry); // indexed: true
+    await indexed.updateComplete;
+    const nameEl = indexed.shadowRoot.querySelector(".name") as HTMLElement;
+    expect(nameEl.classList.contains("unindexed")).toBe(false);
+
+    const unindexed = makeRow({ ...fileEntry, name: "b.md", path: "b.md", indexed: false });
+    await unindexed.updateComplete;
+    const nameEl2 = unindexed.shadowRoot.querySelector(".name") as HTMLElement;
+    expect(nameEl2.classList.contains("unindexed")).toBe(true);
+    expect(nameEl2.getAttribute("title")).toContain("未索引");
+  });
+
+  it("dir row never gets .unindexed (indexed 标志对目录无意义)", async () => {
+    const el = makeRow(dirEntry); // is_dir: true, indexed: false
+    await el.updateComplete;
+    const nameEl = el.shadowRoot.querySelector(".name") as HTMLElement;
+    expect(nameEl.classList.contains("unindexed")).toBe(false);
+  });
+
+  it("no 已索引 badge column anymore (grid 只有 5 列)", async () => {
+    const el = makeRow(fileEntry);
+    await el.updateComplete;
+    expect(el.shadowRoot.querySelector(".cell-indexed")).toBeNull();
+    expect(el.shadowRoot.querySelectorAll(".row > span").length).toBe(5);
+  });
+
   it("row body click dispatches activated with is_dir=true for folders", async () => {
     const el = makeRow(dirEntry);
     await el.updateComplete;

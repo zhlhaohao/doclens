@@ -83,6 +83,58 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
+  it("desktop toolbar buttons are icon-only with hover-tooltip labels", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const btns = el.shadowRoot.querySelectorAll(".toolbar button");
+    expect(btns.length).toBe(6);
+    // 每个按钮 = icon + .btn-label 文字（hover 才显示）
+    for (const btn of btns) {
+      expect(btn.querySelector("doclens-icon")).toBeTruthy();
+      expect(btn.querySelector(".btn-label")?.textContent?.trim().length).toBeGreaterThan(0);
+    }
+    // 样式规则：默认隐藏、hover 浮现为 tooltip
+    const cssText = (el.constructor as any).styles.cssText as string;
+    expect(cssText).toMatch(/\.toolbar button \.btn-label\s*\{[^}]*display:\s*none/);
+    expect(cssText).toMatch(/\.toolbar button:hover[^\{]*\.btn-label\s*\{/);
+    document.body.removeChild(el);
+  });
+
+  it("toolbar copy-path disabled when 0 selected, enabled when 1+ selected", async () => {
+    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const btn = () => el.shadowRoot.querySelector('[data-action="copy-path"]') as HTMLButtonElement;
+    expect(btn().disabled).toBe(true);
+    actions.setFilesState({ selectedPaths: ["a.md"] });
+    await el.updateComplete;
+    expect(btn().disabled).toBe(false);
+    // 多选同样可用
+    actions.setFilesState({ selectedPaths: ["a.md", "b.md"] });
+    await el.updateComplete;
+    expect(btn().disabled).toBe(false);
+    document.body.removeChild(el);
+  });
+
+  it("toolbar copy-path click dispatches action event", async () => {
+    actions.setFilesState({
+      currentDir: "",
+      treeCache: { "": entries },
+      selectedPaths: ["a.md"],
+    });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    let captured: any = null;
+    el.addEventListener("action", (e: Event) => captured = (e as CustomEvent).detail);
+    el.shadowRoot.querySelector('[data-action="copy-path"]').click();
+    expect(captured).toEqual({ name: "copy-path" });
+    document.body.removeChild(el);
+  });
+
   it("up button disabled at root", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
@@ -181,75 +233,29 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
-  it("header row renders 7 columns including 类型", async () => {
+  it("header row renders 5 columns (勾选/图标/名称/大小/修改)", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
     const headerCells = el.shadowRoot.querySelectorAll(".header-row > *");
-    expect(headerCells.length).toBe(7);
-    const typeHeader = Array.from(headerCells).find(
-      (c) => (c as HTMLElement).textContent?.trim() === "类型",
+    expect(headerCells.length).toBe(5);
+    const labels = Array.from(headerCells).map((c) =>
+      (c as HTMLElement).textContent?.trim(),
     );
-    expect(typeHeader).toBeTruthy();
+    expect(labels[2]).toBe("名称");
+    expect(labels[3]).toBe("大小");
+    expect(labels[4]).toBe("修改");
     document.body.removeChild(el);
   });
 
-  it("header uses 7-column grid template (desktop default)", async () => {
-    actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
-    const el = document.createElement("file-list") as any;
-    document.body.appendChild(el);
-    await el.updateComplete;
-    const header = el.shadowRoot.querySelector(".header-row") as HTMLElement;
-    // jsdom exposes style.gridTemplateColumns only if explicitly set; rely on computed style check
-    // on the stylesheet. Verify presence of 7 children instead — covered by previous test.
-    // The mobile test below verifies the breakpoint logic.
-    expect(header).toBeTruthy();
-    document.body.removeChild(el);
-  });
-
-  it("header row uses 7-column grid template (cell-type hidden on ≤1023px)", async () => {
-    // Match media query for mobile
-    const origMatchMedia = window.matchMedia;
-    window.matchMedia = (query: string) => ({
-      matches: query.includes("max-width: 1023"),
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }) as MediaQueryList;
-    let el: any;
-    try {
-      actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
-      el = document.createElement("file-list") as any;
-      document.body.appendChild(el);
-      await el.updateComplete;
-      const typeHeader = Array.from(
-        el.shadowRoot.querySelectorAll(".header-row > *"),
-      ).find((c) => (c as HTMLElement).textContent?.trim() === "类型") as HTMLElement;
-      expect(typeHeader).toBeTruthy();
-      // The CSS rule for @media (max-width: 1023px) hides .cell-type via display: none.
-      // jsdom doesn't compute CSS rules from adopted stylesheets, so we verify
-      // that .cell-type has the *class* and that the stylesheet contains the rule.
-      const cssText = (el.constructor as any).styles.cssText as string;
-      expect(cssText).toMatch(/@media\s*\(max-width:\s*1023px\)/);
-      expect(cssText).toMatch(/\.cell-type\s*\{\s*display:\s*none/);
-    } finally {
-      window.matchMedia = origMatchMedia;
-      if (el && el.parentNode) document.body.removeChild(el);
-    }
-  });
-
-  it("header-row has 4 col-resize handles (only adjustable columns)", async () => {
+  it("header-row has 3 col-resize handles (名称/大小/修改)", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
     const handles = el.shadowRoot.querySelectorAll(".header-row .col-resize");
-    expect(handles.length).toBe(4);
+    expect(handles.length).toBe(3);
     document.body.removeChild(el);
   });
 
@@ -294,7 +300,7 @@ describe("file-list", () => {
   it("loads col widths from localStorage on connect", async () => {
     localStorage.setItem(
       "cortex.files.colWidths",
-      JSON.stringify([30, 30, 300, 100, 150, 80, 100]),
+      JSON.stringify([30, 30, 300, 100, 150]),
     );
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
@@ -363,7 +369,7 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking mobile-more opens dropdown with all 5 actions", async () => {
+  it("clicking mobile-more opens dropdown with all 6 actions", async () => {
     actions.setFilesState({
       currentDir: "docs",
       treeCache: { docs: entries },
@@ -379,13 +385,14 @@ describe("file-list mobile header", () => {
     const menu = el.shadowRoot.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
     const items = menu.querySelectorAll("button");
-    // 5 个：+ 新目录 / ⬆ 上传 / ✎ 重命名 / → 移动 / 🗑 删除（无"上一级"）
-    expect(items.length).toBe(5);
+    // 6 个：+ 新目录 / ⬆ 上传 / ✎ 重命名 / → 移动 / ⧉ 拷贝路径 / 🗑 删除
+    expect(items.length).toBe(6);
     expect(items[0].textContent).toContain("新目录");
     expect(items[1].textContent).toContain("上传");
     expect(items[2].textContent).toContain("重命名");
     expect(items[3].textContent).toContain("移动");
-    expect(items[4].textContent).toContain("删除");
+    expect(items[4].textContent).toContain("拷贝路径");
+    expect(items[5].textContent).toContain("删除");
     document.body.removeChild(el);
   });
 
@@ -418,14 +425,14 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中
+    // 0 选中（idx: 3=移动, 5=删除）
     expect((items[3] as HTMLButtonElement).disabled).toBe(true);
-    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[5] as HTMLButtonElement).disabled).toBe(true);
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
     expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
-    expect((items2[4] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[5] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 

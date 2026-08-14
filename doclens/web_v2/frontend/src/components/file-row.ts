@@ -14,8 +14,7 @@ export class FileRow extends LitElement {
         var(--col-2, 28px)
         var(--col-3, 240px)
         var(--col-4, 80px)
-        var(--col-5, 140px)
-        var(--col-6, 70px);
+        var(--col-5, 140px);
       gap: var(--cortex-space-2);
       align-items: center;
       padding: 6px var(--cortex-space-3);
@@ -33,7 +32,9 @@ export class FileRow extends LitElement {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       color: var(--cortex-text); font-size: var(--cortex-fs-sm);
     }
-    .size, .time, .cell-type, .cell-indexed {
+    /* 未索引文件：名称用 subtle 灰色区别（替代原"已索引"列徽标） */
+    .name.unindexed { color: var(--cortex-text-subtle); }
+    .size, .time, .cell-type {
       color: var(--cortex-text-muted);
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
@@ -128,10 +129,11 @@ export class FileRow extends LitElement {
                   style="background:${badge.bg};color:${badge.fg}">${badge.letter}</span>`
               : html`<doclens-icon name="file"></doclens-icon>`}
         </span>
-        <span class="name">${this.entry.name}</span>
+        <span class="name ${!this.entry.is_dir && !this.entry.indexed ? "unindexed" : ""}"
+          title=${!this.entry.is_dir && !this.entry.indexed ? "未索引（不参与搜索）" : ""}
+        >${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
-        <span class="cell-indexed">${!this.entry.is_dir && this.entry.indexed ? html`<span class="badge">已索引</span>` : ""}</span>
       </div>
     `;
   }

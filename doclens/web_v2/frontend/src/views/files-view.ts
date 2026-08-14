@@ -371,11 +371,26 @@ export class FilesView extends LitElement {
       this._openFilePicker();
       return;
     }
+    if (name === "copy-path") {
+      this._copySelectedPaths();
+      return;
+    }
     if (["mkdir", "rename", "move", "delete"].includes(name)) {
       if (name === "rename" && this._state.selectedPaths.length !== 1) return;
       if ((name === "move" || name === "delete") && this._state.selectedPaths.length === 0) return;
       this._dialog = name as DialogKind;
     }
+  }
+
+  /** 拷贝选中项路径到剪贴板（相对 workdir，多选时每行一个）。 */
+  private _copySelectedPaths() {
+    const paths = this._state.selectedPaths;
+    if (paths.length === 0) return;
+    const text = paths.join("\n");
+    navigator.clipboard.writeText(text).then(
+      () => this._showToast(`已复制 ${paths.length} 个路径`),
+      () => this._showToast("复制失败（剪贴板不可用）"),
+    );
   }
 
   private _openFilePicker() {

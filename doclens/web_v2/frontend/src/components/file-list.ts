@@ -3,9 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import "./file-row";
 
-const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140, 70] as const;
-const COL_MINS = [20, 20, 80, 50, 80, 50];
-const COL_MAXS = [60, 60, 800, 200, 300, 150];
+const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140] as const;
+const COL_MINS = [20, 20, 80, 50, 80];
+const COL_MAXS = [60, 60, 800, 200, 300];
 const COL_COUNT = DEFAULT_COL_WIDTHS.length;
 const COL_WIDTHS_KEY = "cortex.files.colWidths";
 
@@ -55,7 +55,8 @@ export class FileList extends LitElement {
       flex-wrap: wrap;
     }
     .toolbar button {
-      padding: 6px 12px;
+      position: relative;
+      padding: 6px 8px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -75,6 +76,27 @@ export class FileList extends LitElement {
     .toolbar button.danger:hover:not(:disabled) {
       background: rgba(220, 38, 38, 0.06);
       border-color: var(--cortex-danger);
+    }
+    /* 桌面省空间：按钮只显图标，文字在 hover 时以 tooltip 浮现（上方，
+       覆盖面包屑区域，z-index 保证在上），不撑宽按钮、无布局抖动 */
+    .toolbar button .btn-label {
+      display: none;
+    }
+    .toolbar button:hover:not(:disabled) .btn-label {
+      display: block;
+      position: absolute;
+      bottom: calc(100% + 5px);
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      background: var(--cortex-text);
+      color: var(--cortex-surface);
+      font-size: var(--cortex-fs-xs);
+      line-height: 1.4;
+      padding: 2px 10px;
+      border-radius: var(--cortex-radius-pill);
+      z-index: 20;
+      pointer-events: none;
     }
     .mobile-header {
       display: flex;
@@ -158,8 +180,7 @@ export class FileList extends LitElement {
         var(--col-2, 28px)
         var(--col-3, 240px)
         var(--col-4, 80px)
-        var(--col-5, 140px)
-        var(--col-6, 70px);
+        var(--col-5, 140px);
       gap: var(--cortex-space-2);
       padding: 6px var(--cortex-space-3);
       background: var(--cortex-surface-muted);
@@ -205,7 +226,6 @@ export class FileList extends LitElement {
     .select-all { display: flex; align-items: center; justify-content: center; }
     .header-row .cell-size,
     .header-row .cell-time,
-    .header-row .cell-indexed,
     .header-row .cell-type {
       text-align: center;
       color: var(--cortex-text-muted);
@@ -423,6 +443,13 @@ export class FileList extends LitElement {
                 <button
                   type="button"
                   role="menuitem"
+                  data-action="copy-path"
+                  ?disabled=${!canAct}
+                  @click=${this._onMenuItemClick("copy-path")}
+                ><doclens-icon name="copy"></doclens-icon>拷贝路径</button>
+                <button
+                  type="button"
+                  role="menuitem"
                   data-action="delete"
                   ?disabled=${!canAct}
                   class="danger"
@@ -462,7 +489,6 @@ export class FileList extends LitElement {
               <span>名称</span>
               <span class="cell-size">大小</span>
               <span class="cell-time">修改</span>
-              <span class="cell-indexed"></span>
             </div>`}
         <div class="rows">
           ${entries.map(e => html`
@@ -487,11 +513,12 @@ export class FileList extends LitElement {
         <span class="path">${breadcrumb}</span>
       </div>
       <div class="toolbar">
-        <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon>新目录</button>
-        <button data-action="upload" @click=${() => this._action("upload")}><doclens-icon name="upload"></doclens-icon>上传</button>
-        <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon>重命名</button>
-        <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon>移动</button>
-        <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon>删除</button>
+        <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
+        <button data-action="upload" @click=${() => this._action("upload")}><doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span></button>
+        <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
+        <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
+        <button data-action="copy-path" ?disabled=${!canAct} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
+        <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon><span class="btn-label">删除</span></button>
       </div>
       ${entries.length === 0
         ? html`<div class="empty">目录为空</div>`
@@ -518,11 +545,6 @@ export class FileList extends LitElement {
                 class="col-resize"
                 title="拖动调整列宽"
                 @mousedown=${this._makeColResizeHandler(4)}
-              ></span></span>
-            <span class="cell-indexed"><span
-                class="col-resize"
-                title="拖动调整列宽"
-                @mousedown=${this._makeColResizeHandler(5)}
               ></span></span>
           </div>`}
       <div class="rows">
