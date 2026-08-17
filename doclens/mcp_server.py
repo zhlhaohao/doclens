@@ -5,7 +5,7 @@ TUI / GUI 在进程内后台线程启动此 server，复用同一 IndexManager �
 
 工具面（与 Agent 现用 kb_tools 三件套对齐，去掉 manage_kb）：
   - search_kb(query, max_results)
-  - read_document(path, section, start_line, end_line)
+  - read_document(path, section, start_word, end_word)
 """
 from __future__ import annotations
 

@@ -260,26 +260,131 @@ def run_powershell(command: str, workdir: Path) -> str:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 
 
-def run_read(path: str, workdir: Path, limit: int = None) -> str:
+# CJK 统一表意文字 + 扩展A + 兼容表意 + 日文假名 + 谚文（中文一字一词的判定范围）
+_CJK_RANGES = (
+    (0x4E00, 0x9FFF),    # CJK 统一表意文字
+    (0x3400, 0x4DBF),    # 扩展 A
+    (0xF900, 0xFAFF),    # 兼容表意
+    (0x3040, 0x30FF),    # 日文假名
+    (0xAC00, 0xD7AF),    # 谚文音节
+)
+
+
+def _is_cjk(ch: str) -> bool:
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _CJK_RANGES)
+
+
+def split_words_with_seps(text: str) -> list[tuple[str, str]]:
+    """切词（保留分隔符）：CJK 每字一词；非 CJK 连续段按空白切分。
+
+    返回 (word, sep) 列表，sep 为该词后随的原始空白串（含换行/缩进）——
+    切片后 join 可无损还原原文格式。序号对同一文本确定（无词典依赖）。
+    doclens 的 read_document 与本模块共用此定义，两工具词序号语义一致。
     """
-    读取文件内容
+    words: list[tuple[str, str]] = []
+    n = len(text)
+    i = 0
+    while i < n:
+        if text[i].isspace():
+            i += 1
+            continue
+        start = i
+        if _is_cjk(text[i]):
+            i += 1
+        else:
+            while i < n and not text[i].isspace() and not _is_cjk(text[i]):
+                i += 1
+        j = i
+        while j < n and text[j].isspace():
+            j += 1
+        words.append((text[start:i], text[i:j]))
+        i = j
+    return words
+
+
+def join_word_slice(pairs: list[tuple[str, str]]) -> str:
+    """把 (word, sep) 切片拼回文本：词间保留原始分隔符，无损还原格式。"""
+    return "".join(w + s for w, s in pairs).rstrip()
+
+
+# read_file 输出字符预算（防超长文件撑爆上下文）
+READ_FILE_MAX_CHARS = 50000
+
+
+def run_read(
+    path: str,
+    workdir: Path,
+    start_word: int = None,
+    end_word: int = None,
+) -> str:
+    """
+    读取文件内容（纯文本），支持按词序号切片。
+
+    词的定义：中日韩文字每字算一词，其余按空白切分（英文单词/数字各一词）。
+    序号 1-based 闭区间。不传词参数时读全文（超预算按词边界截断并给续读提示）。
 
     Args:
         path: 相对文件路径
         workdir: 工作目录，用于路径解析
-        limit: 可选的行数限制
+        start_word: 起始词序号（可选）
+        end_word: 结束词序号（可选，含该词）
 
     Returns:
-        文件内容（可能被截断）
+        文件内容（可能被截断，截断时附续读提示）
     """
     try:
         # 显式指定 UTF-8 编码，遇到错误时替换
         file_path = safe_path(path, workdir)
         content = file_path.read_text(encoding="utf-8", errors="replace")
-        lines = content.splitlines()
-        if limit and limit < len(lines):
-            lines = lines[:limit] + [f"... ({len(lines) - limit} more)"]
-        return "\n".join(lines)[:50000]
+        pairs = split_words_with_seps(content)
+        total = len(pairs)
+
+        if start_word is None and end_word is None:
+            if len(content) <= READ_FILE_MAX_CHARS:
+                return content
+            # 按词边界截到预算内（保留原文格式），并给续读提示
+            acc_len = 0
+            keep = 0
+            for idx, (w, s) in enumerate(pairs):
+                if acc_len + len(w) + len(s) > READ_FILE_MAX_CHARS:
+                    break
+                acc_len += len(w) + len(s)
+                keep = idx + 1
+            out = join_word_slice(pairs[:keep])
+            return (
+                out
+                + f"\n\n（内容已截断。使用 start_word={keep + 1} 续读后续内容。全文共 {total} 词。）"
+            )
+
+        start_idx = max((start_word or 1) - 1, 0)
+        end_idx = min(end_word if end_word is not None else total, total)
+        if start_idx >= total or end_idx <= start_idx:
+            return f"（指定范围内无内容。全文共 {total} 词，start_word 应 ≤ {total}。）"
+
+        sliced = pairs[start_idx:end_idx]
+        joined = join_word_slice(sliced)
+        extra = ""
+        shown = len(sliced)
+        if len(joined) > READ_FILE_MAX_CHARS:
+            acc: list[tuple[str, str]] = []
+            size = 0
+            for w, s in sliced:
+                if size + len(w) + len(s) > READ_FILE_MAX_CHARS:
+                    break
+                acc.append((w, s))
+                size += len(w) + len(s)
+            joined = join_word_slice(acc)
+            shown = len(acc)
+            extra = (
+                f"\n\n（内容已截断。使用 start_word={start_idx + len(acc) + 1} 续读后续内容。）"
+            )
+
+        return (
+            f"[第 {start_idx + 1}-{start_idx + shown} 词 / 共 {total} 词]\n"
+            + joined
+            + extra
+        )
     except Exception as e:
         error_msg = f"Error: {e}".encode("utf-8", errors="replace").decode("utf-8")
         return error_msg
@@ -354,7 +459,9 @@ def make_basic_tools(workdir: Path) -> dict:
     return {
         "bash": lambda **kw: run_bash(kw["command"], workdir),
         "powershell": lambda **kw: run_powershell(kw["command"], workdir),
-        "read_file": lambda **kw: run_read(kw["path"], workdir, kw.get("limit")),
+        "read_file": lambda **kw: run_read(
+            kw["path"], workdir, kw.get("start_word"), kw.get("end_word")
+        ),
         "write_file": lambda **kw: run_write(kw["path"], kw["content"], workdir),
         "edit_file": lambda **kw: run_edit(
             kw["path"], kw["old_text"], kw["new_text"], workdir
