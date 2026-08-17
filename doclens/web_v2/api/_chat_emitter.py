@@ -18,11 +18,16 @@ class GradioEventEmitter:
 
     不直接打印，而是将文本增量和工具信息追加到内部缓冲区。
     chat.py 的生成器函数定时读取缓冲区内容来产出 SSE token。
+
+    ask_user_question 事件（input_type="questions"）收集到 pending_asks，
+    由 _feed 转发为 SSE "ask" 事件；其余 ask_user 形态（旧工具）在 GUI
+    工具集中已被过滤，正常不会到达这里，到达时记录告警。
     """
 
     def __init__(self):
         self.text_parts: list[str] = []
         self.tool_calls: list[dict] = []
+        self.pending_asks: list[dict] = []
         self.done: bool = False
         self.error: Optional[str] = None
 
@@ -151,8 +156,15 @@ class GradioEventEmitter:
         options: Optional[List[Dict[str, str]]] = None,
         default: Optional[str] = None,
     ) -> None:
-        # SSE 模式暂不支持 ask_user，记录日志
-        logger.warning("ask_user not supported in SSE mode: %s", question)
+        # 结构化问答（input_type="questions"）：question 携带 JSON 化的 questions
+        if input_type == "questions":
+            self.pending_asks.append({
+                "request_id": request_id,
+                "question": question,
+            })
+            return
+        # 旧工具形态不应出现在 GUI（工具集已过滤），兜底告警不吞细节
+        logger.warning("legacy ask_user not supported in SSE mode: %s", question)
 
     async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
         await self.emit(StreamEvent(event_type=StreamEventType.DONE, data={"session_id": session_id}))

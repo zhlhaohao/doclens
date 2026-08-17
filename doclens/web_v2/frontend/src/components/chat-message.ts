@@ -2,7 +2,8 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
 import { sanitizeHtml } from "../utils/sanitize";
-import type { ChatMessage } from "../state/types";
+import type { ChatMessage, ToolStep } from "../state/types";
+import "./ask-card";
 
 @customElement("chat-message")
 export class ChatMessageEl extends LitElement {
@@ -342,7 +343,11 @@ export class ChatMessageEl extends LitElement {
   render() {
     if (!this.message) return null;
     const steps = this.message.tool_steps;
-    const showTrace = this.role === "assistant" && steps && steps.length > 0;
+    // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
+    // 不进 tool trace
+    const askStep = steps?.find((s) => s.name === "ask_user_question");
+    const traceSteps: ToolStep[] | undefined = steps?.filter((s) => s.name !== "ask_user_question");
+    const showTrace = this.role === "assistant" && traceSteps && traceSteps.length > 0;
     // user 气泡走紧凑模板：render() 模板的换行+缩进会被 white-space: pre-wrap
     // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
@@ -355,8 +360,9 @@ export class ChatMessageEl extends LitElement {
     return html`
       <div class="bubble">
         ${showTrace
-          ? html`<chat-tool-trace .steps=${steps}></chat-tool-trace><div class="trace-sep"></div>`
+          ? html`<chat-tool-trace .steps=${traceSteps}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
+        ${askStep ? this._renderAskSummary(askStep) : null}
         ${this.renderBubble(this.message.content)}
         ${this.error ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>` : null}
       </div>
@@ -364,6 +370,20 @@ export class ChatMessageEl extends LitElement {
         ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
         : null}
     `;
+  }
+
+  /** 历史 ask_user_question step → 折叠问答卡片（tool_result output 为 JSON 答案）。
+   *  解析失败（老数据/超时形态）静默跳过——trace 已剔除该 step，避免空白。 */
+  private _renderAskSummary(step: ToolStep) {
+    if (!step.output) return null;
+    try {
+      const d = JSON.parse(step.output);
+      const answers = Array.isArray(d?.answers) ? d.answers : null;
+      if (!answers) return null;
+      return html`<ask-card .resolvedAnswers=${answers}></ask-card><div class="trace-sep"></div>`;
+    } catch {
+      return null;
+    }
   }
 }
 
