@@ -43,10 +43,14 @@ def _enable_treesearch_console_logging() -> None:
 async def lifespan(app: FastAPI):
     """应用生命周期：启动文件监控 + 视觉解析 worker + Git 同步 + MCP server，退出时停止。"""
     import asyncio
+    from pathlib import Path
     from doclens.web_v2 import deps
+    from doclens.web_v2.tmp_workspace import cleanup_all_tmp
     from doclens.web_v2.watch_broker import get_watch_broker
     # 先绑定事件循环，保证 start_watcher 的回调触发时 broadcast 可用
     get_watch_broker().bind(asyncio.get_running_loop())
+    # 启动时清空 AI 会话临时工作区（.cortex/tmp/）——上轮运行残留的脚本/中间产物
+    cleanup_all_tmp(Path(deps.get_index_manager().search_path))
     deps.start_watcher()
     deps.start_vision_worker()
     deps.start_diary_worker()
@@ -108,6 +112,8 @@ def create_app() -> FastAPI:
     app.include_router(diary.router, prefix="/api")
     from doclens.web_v2.api import vision
     app.include_router(vision.router, prefix="/api")
+    from doclens.web_v2.api import skills
+    app.include_router(skills.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

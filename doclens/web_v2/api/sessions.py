@@ -1,6 +1,7 @@
 """GET/POST/PATCH/DELETE /api/sessions。"""
 from datetime import datetime, timezone
 from itertools import chain
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -15,6 +16,7 @@ from doclens.web_v2.models.session import (
     SessionListResponse,
 )
 from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionType, SessionsStore
+from doclens.web_v2.tmp_workspace import cleanup_all_tmp, cleanup_session_tmp
 
 router = APIRouter()
 
@@ -23,6 +25,12 @@ def _get_store() -> SessionsStore:
     """全局单例 SessionsStore（委托 deps 统一管理，避免多份单例）。"""
     from doclens.web_v2.deps import get_sessions_store
     return get_sessions_store()
+
+
+def _get_workdir() -> Path:
+    """知识库根目录（临时工作区 .cortex/tmp/ 的父目录）。"""
+    from doclens.web_v2.deps import get_index_manager
+    return Path(get_index_manager().search_path)
 
 
 @router.post("/sessions", response_model=SessionCreatedResponse)
@@ -116,6 +124,8 @@ async def delete_session(session_id: str):
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     store.delete(session_id)
+    # 顺带清理该会话的 AI 临时工作区（.cortex/tmp/<session_id>/）
+    cleanup_session_tmp(_get_workdir(), session_id)
     return {"ok": True}
 
 
@@ -126,4 +136,7 @@ async def clear_sessions(
     """批量删除会话。type=None 清全部。"""
     store = _get_store()
     deleted = store.delete_by_type(type)
+    # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
+    if type is None or type == SessionType.CHAT:
+        cleanup_all_tmp(_get_workdir())
     return {"ok": True, "deleted_count": deleted}
