@@ -14,12 +14,15 @@ import "../components/rename-dialog";
 import "../components/reparse-dialog";
 import "../components/move-dialog";
 import "../components/delete-dialog";
+import "../components/skill-toolbox-dialog";
+import "../components/skill-run-dialog";
+import type { SkillInfo } from "../api/skills";
 import "../components/drop-zone";
 import "../components/file-search-box";
 import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
 
-type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | null;
+type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
 @customElement("files-view")
 export class FilesView extends LitElement {
@@ -168,6 +171,7 @@ export class FilesView extends LitElement {
 
   @state() private _dialog: DialogKind = null;
   @state() private _reparsePath = ""; // 重新解析目标图像路径
+  @state() private _pickedSkill: SkillInfo | null = null; // 工具箱中选中的技能
   @state() private _toast: string | null = null;
   private _toastTimer: any = null;
 
@@ -357,6 +361,11 @@ export class FilesView extends LitElement {
 
   updated() {
     // preview 由 _onFileListActivated 主动驱动，无需在 update 中被动触发
+    // 所有对话框用 showModal（top-layer + backdrop + ESC 关闭）：<dialog open>
+    // 是非模态 inline 元素，不进 top layer，列表内带 z-index 的元素（如表头
+    // 列分隔线 .col-resize z-index:1）会穿透压在对话框之上
+    const dlg = this.shadowRoot?.querySelector("dialog");
+    if (dlg && !dlg.open) dlg.showModal();
   }
 
   private _showToast(msg: string) {
@@ -375,11 +384,66 @@ export class FilesView extends LitElement {
       this._copySelectedPaths();
       return;
     }
+    if (name === "skill-toolbox") {
+      // 全是目录时无可处理文件，不弹窗（按钮已置灰，此为兜底）
+      if (this._selectedFilePaths().length === 0) return;
+      this._pickedSkill = null;
+      this._dialog = "skill-toolbox";
+      return;
+    }
     if (["mkdir", "rename", "move", "delete"].includes(name)) {
       if (name === "rename" && this._state.selectedPaths.length !== 1) return;
       if ((name === "move" || name === "delete") && this._state.selectedPaths.length === 0) return;
       this._dialog = name as DialogKind;
     }
+  }
+
+  /** 选中项里过滤掉目录，只留文件（技能 read_document 只能读文件）。 */
+  private _selectedFilePaths(): string[] {
+    const { treeCache, selectedPaths } = this._state;
+    // 多选可跨目录：从各目录缓存收集 entry 判定 is_dir
+    const entryByPath = new Map<string, { path: string; is_dir: boolean }>();
+    for (const entries of Object.values(treeCache)) {
+      for (const en of entries) entryByPath.set(en.path, en);
+    }
+    return selectedPaths.filter((p) => {
+      const en = entryByPath.get(p);
+      return en ? !en.is_dir : true; // 缓存未知时保留（宁可传错不漏选）
+    });
+  }
+
+  /** 工具箱中点选技能 → 进入确认对话框。 */
+  private _onSkillPick(e: CustomEvent<{ skill: SkillInfo }>) {
+    this._pickedSkill = e.detail.skill;
+    this._dialog = "skill-run";
+  }
+
+  /** 确认对话框「开始对话」：拼消息 → pendingSkillChat → 切 chat 视图。 */
+  private _onSkillRunSubmit(e: CustomEvent<{ prompt: string }>) {
+    const skill = this._pickedSkill;
+    const paths = this._selectedFilePaths();
+    this._dialog = null;
+    if (!skill || paths.length === 0) return;
+
+    const lines = [
+      `[调用技能: ${skill.name}]`,
+      "",
+      `请先 load_skill("${skill.name}") 加载技能，然后按技能指引处理以下文件。`,
+      "",
+      "文件：",
+      ...paths.map((p) => `- ${p}`),
+      "",
+      `补充要求：${e.detail.prompt || "无"}`,
+    ];
+    const firstFile = paths[0].split("/").pop() ?? paths[0];
+    // 技能对话总是新建会话：重置 chat 视图态（旧对话保留在历史列表，可回）
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setPendingSkillChat({
+      message: lines.join("\n"),
+      title: `${skill.name} · ${firstFile}`,
+    });
+    actions.clearSelection();
+    actions.setView("chat");
   }
 
   /** 拷贝选中项路径到剪贴板（相对 workdir，多选时每行一个）。 */
@@ -873,7 +937,7 @@ export class FilesView extends LitElement {
 
   private _renderDialogs() {
     if (this._dialog === "mkdir") {
-      return html`<dialog open>
+      return html`<dialog @cancel=${this._cancelDialog}>
         <mkdir-dialog
           @submit=${this._onMkdirSubmit}
           @cancel=${this._cancelDialog}
@@ -883,7 +947,7 @@ export class FilesView extends LitElement {
     if (this._dialog === "rename") {
       const sel = this._state.selectedPaths[0] || "";
       const name = sel.split("/").pop() || "";
-      return html`<dialog open>
+      return html`<dialog @cancel=${this._cancelDialog}>
         <rename-dialog
           .currentName=${name}
           @submit=${this._onRenameSubmit}
@@ -892,7 +956,7 @@ export class FilesView extends LitElement {
       </dialog>`;
     }
     if (this._dialog === "move") {
-      return html`<dialog open>
+      return html`<dialog @cancel=${this._cancelDialog}>
         <move-dialog
           @submit=${this._onMoveSubmit}
           @cancel=${this._cancelDialog}
@@ -900,7 +964,7 @@ export class FilesView extends LitElement {
       </dialog>`;
     }
     if (this._dialog === "delete") {
-      return html`<dialog open>
+      return html`<dialog @cancel=${this._cancelDialog}>
         <delete-dialog
           @submit=${this._onDeleteSubmit}
           @cancel=${this._cancelDialog}
@@ -908,12 +972,30 @@ export class FilesView extends LitElement {
       </dialog>`;
     }
     if (this._dialog === "reparse") {
-      return html`<dialog open>
+      return html`<dialog @cancel=${this._cancelDialog}>
         <reparse-dialog
           .path=${this._reparsePath}
           @done=${this._onReparseDone}
           @cancel=${this._cancelDialog}
         ></reparse-dialog>
+      </dialog>`;
+    }
+    if (this._dialog === "skill-toolbox") {
+      return html`<dialog @cancel=${this._cancelDialog}>
+        <skill-toolbox-dialog
+          @pick=${this._onSkillPick}
+          @cancel=${this._cancelDialog}
+        ></skill-toolbox-dialog>
+      </dialog>`;
+    }
+    if (this._dialog === "skill-run") {
+      return html`<dialog @cancel=${this._cancelDialog}>
+        <skill-run-dialog
+          .skill=${this._pickedSkill}
+          .filePaths=${this._selectedFilePaths()}
+          @submit=${this._onSkillRunSubmit}
+          @cancel=${this._cancelDialog}
+        ></skill-run-dialog>
       </dialog>`;
     }
     return html``;

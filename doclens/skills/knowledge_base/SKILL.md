@@ -47,7 +47,7 @@ description: 知识库搜索与文档检索技能。涉及知识库内容的提�
 ## 搜索策略
 
 1. `search_kb` 检索 → 基于结果回答（引用路径）
-2. 深度研究：`search_kb` 定位 → `read_document` 读关键章节（`section="第三章 实验方法"` 返回该节及子节点；或 `start_line/end_line` 按行读）→ 必要时 `grep` 补搜
+2. 深度研究：`search_kb` 定位 → `read_document` 读关键章节（`section="第三章 实验方法"` 返回该节及子节点；或 `start_word/end_word` 按词序号读，如 `start_word=100, end_word=300`）→ 必要时 `grep` 补搜
 3. 无结果：`manage_kb(action='reindex')` 重建索引后重试
 
 `search_kb` 调用示例：`search_kb(query="机器学习 深度学习", max_results=10)`
@@ -64,7 +64,7 @@ description: 知识库搜索与文档检索技能。涉及知识库内容的提�
 ## 多格式读取
 
 - PDF/DOCX/PPTX/XLSX 等二进制格式**必须用 `read_document`**（非 `read_file`）
-- `section` 按章节标题定位（多层嵌套结构完整提取）；`start_line/end_line` 按行读
+- `section` 按章节标题定位（多层嵌套结构完整提取）；`start_word/end_word` 按词序号读（1-based 闭区间；**中日韩文字每字算一词**，英文/数字按空白切分；输出标注当前词位置与总词数，截断时按提示的 start_word 续读）
 
 ## 边界（强制）
 

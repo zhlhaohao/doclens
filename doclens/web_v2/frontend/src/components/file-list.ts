@@ -212,9 +212,10 @@ export class FileList extends LitElement {
       left: 50%;
       transform: translateX(-50%);
       width: 1px;
-      /* 贯穿整个列表：100vh 延伸由 file-list overflow:hidden 裁剪到底；
-         pointer-events:none 让视觉线不拦截行点击（拖动热区仍是 col-resize 主体，仅表头） */
-      height: 100vh;
+      /* 2026-08-17 决议：竖线不再 100vh 贯穿整个列表（会从模态 dialog 旁
+         穿出、列表区视觉突兀），仅表头行高内可见作列分隔指示；
+         pointer-events:none 让视觉线不拦截行点击（拖动热区仍是 col-resize 主体） */
+      height: 100%;
       background: var(--cortex-border-muted);
       transition: background 0.15s;
       pointer-events: none;
@@ -443,6 +444,13 @@ export class FileList extends LitElement {
                 <button
                   type="button"
                   role="menuitem"
+                  data-action="skill-toolbox"
+                  ?disabled=${!canAct}
+                  @click=${this._onMenuItemClick("skill-toolbox")}
+                ><doclens-icon name="sparkles"></doclens-icon>技能工具箱</button>
+                <button
+                  type="button"
+                  role="menuitem"
                   data-action="copy-path"
                   ?disabled=${!canAct}
                   @click=${this._onMenuItemClick("copy-path")}
@@ -518,6 +526,7 @@ export class FileList extends LitElement {
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
         <button data-action="copy-path" ?disabled=${!canAct} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
+        <button data-action="skill-toolbox" ?disabled=${!canAct} title="对选中文件运行技能（AI 对话）" @click=${() => this._action("skill-toolbox")}><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">技能工具箱</span></button>
         <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon><span class="btn-label">删除</span></button>
       </div>
       ${entries.length === 0

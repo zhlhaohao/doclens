@@ -29,6 +29,14 @@ export interface Reference {
   path: string;
 }
 
+/** 技能对话待发送请求（files 工具箱确认后写入，chat-view 消费一次）。 */
+export interface PendingSkillChat {
+  /** 完整拼好的用户消息（技能标记 + 文件清单 + 补充 prompt） */
+  message: string;
+  /** 新会话标题（技能名 + 首文件名） */
+  title: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -248,6 +256,8 @@ export interface AppState {
   detailStack: SearchResult[];
   /** 跨视图会话加载请求（search-view ↔ chat-view） */
   pendingSession: Session | null;
+  /** 跨视图技能对话发送请求（files 工具箱 → chat-view 自动新建会话并发送） */
+  pendingSkillChat: PendingSkillChat | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
   /** Git 同步状态（SSE status 快照 / /api/status 携带；null = 未注册） */
