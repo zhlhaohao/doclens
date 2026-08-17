@@ -148,12 +148,19 @@ def build_tool_registry(
         ),
         {
             "name": "read_file",
-            "description": "读取文件内容",
+            "description": "读取文件内容（纯文本）。支持按词序号切片：中日韩文字每字算一词，其余按空白切分。",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "start_word": {
+                        "type": "integer",
+                        "description": "起始词序号（可选，1-based）。不传词参数读全文（超长截断并提示续读位置）。",
+                    },
+                    "end_word": {
+                        "type": "integer",
+                        "description": "结束词序号（可选，1-based，含该词）。",
+                    },
                 },
                 "required": ["path"],
             },

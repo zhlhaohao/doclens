@@ -866,7 +866,7 @@ def _build_parser():
     )
     webfetch_parser.set_defaults(func=_cli_webfetch)
 
-    # cortex read_document --path <path> [--start-line N] [--end-line N] [--section T]
+    # cortex read_document --path <path> [--start-word N] [--end-word N] [--section T]
     read_parser = sub.add_parser(
         "read_document",
         help="Read a document with structure info (supports md/pdf/docx/pptx/xlsx/html)",
@@ -877,16 +877,16 @@ def _build_parser():
         help="Document path (relative to search path or absolute)",
     )
     read_parser.add_argument(
-        "--start-line", type=int, default=None,
-        help="Start line number",
+        "--start-word", type=int, default=None,
+        help="Start word number (1-based)",
     )
     read_parser.add_argument(
-        "--end-line", type=int, default=None,
-        help="End line number",
+        "--end-word", type=int, default=None,
+        help="End word number (1-based, inclusive)",
     )
     read_parser.add_argument(
         "--section", type=str, default=None,
-        help="Section title to read (takes priority over line numbers)",
+        help="Section title to read (takes priority over word numbers)",
     )
     read_parser.set_defaults(func=_cli_read_document)
 
@@ -1092,8 +1092,8 @@ def _cli_read_document(args, config, idx):
         idx,
         workdir,
         path=args.path,
-        start_line=args.start_line,
-        end_line=args.end_line,
+        start_word=args.start_word,
+        end_word=args.end_word,
         section=args.section,
     )
     print(result)

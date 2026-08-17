@@ -346,7 +346,10 @@ class TeammateManager:
                         else:
                             dispatch = {
                                 "bash": lambda **kw: self.run_bash(kw["command"], self.workdir),
-                                "read_file": lambda **kw: self.run_read(kw["path"], self.workdir),
+                                "read_file": lambda **kw: self.run_read(
+                                    kw["path"], self.workdir,
+                                    kw.get("start_word"), kw.get("end_word"),
+                                ),
                                 "write_file": lambda **kw: self.run_write(kw["path"], kw["content"], self.workdir),
                                 "edit_file": lambda **kw: self.run_edit(kw["path"], kw["old_text"], kw["new_text"], self.workdir),
                             }

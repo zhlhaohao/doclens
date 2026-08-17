@@ -126,6 +126,20 @@ READ_DOCUMENT_TOOL = {
                     "传入较大章节可获得更宽泛的内容，传入较小章节可获得更精确的内容。"
                 ),
             },
+            "start_word": {
+                "type": "integer",
+                "description": (
+                    "起始词序号（可选，1-based，与 end_word 配合按词读取；被 section 覆盖）。"
+                    "词的定义：中日韩文字每字算一词，其余按空白切分（英文单词/数字各算一词）。"
+                    "内容被截断时用于续读后续部分。"
+                ),
+            },
+            "end_word": {
+                "type": "integer",
+                "description": (
+                    "结束词序号（可选，1-based，含该词；被 section 覆盖）。"
+                ),
+            },
         },
         "required": ["path"],
     },
@@ -836,8 +850,8 @@ def _format_document_output(
     abs_path: str,
     ext: str,
     file_size: int,
-    start_line: Optional[int],
-    end_line: Optional[int],
+    start_word: Optional[int],
+    end_word: Optional[int],
     section: Optional[str],
     max_read_chars: int = MAX_READ_CHARS,
     show_toc: bool = False,
@@ -870,7 +884,7 @@ def _format_document_output(
         content_header = f"\n## 内容（{hierarchy}）\n"
         output = header + content_header + "\n" + content
         if len(matched_text) > max_read_chars:
-            output += f"\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
+            output += f"\n\n（内容已截断。使用 start_word/end_word 读取后续内容。）"
         return output
 
     all_text_parts = _collect_all_text(nodes)
@@ -881,19 +895,14 @@ def _format_document_output(
             content = _truncate_to_paragraphs(root_text, max_read_chars)
             output = header + f"\n## 内容\n\n" + content
             if len(root_text) > max_read_chars:
-                output += "\n\n（内容已截断。使用 start_line/end_line 读取后续内容。）"
+                output += "\n\n（内容已截断。使用 start_word/end_word 读取后续内容。）"
             return output
         return header + "\n（文档内容为空）"
 
-    if start_line is not None or end_line is not None:
-        filtered = []
-        for title, text, ls, le in all_text_parts:
-            if end_line is not None and ls > end_line:
-                continue
-            if start_line is not None and le < start_line:
-                continue
-            filtered.append((title, text, ls, le))
-        all_text_parts = filtered
+    if start_word is not None or end_word is not None:
+        return _format_word_range(
+            header, all_text_parts, ext, start_word, end_word, max_read_chars
+        )
 
     content_parts = []
     total_chars = 0
@@ -926,9 +935,76 @@ def _format_document_output(
 
     total_text_len = sum(len(t) for _, t, _, _ in all_text_parts)
     if total_text_len > max_read_chars:
-        output += "\n\n（内容已截断。使用 start_line/end_line 或 section 参数读取后续内容。）"
+        output += "\n\n（内容已截断。使用 start_word/end_word 或 section 参数读取后续内容。）"
 
     return output
+
+
+# 词切分器与 planify.read_file 共用（单一真相源：两工具的词序号语义必须一致）
+from planify.tools.basic import split_words_with_seps  # noqa: E402
+
+
+def _split_words_cjk(text: str) -> list[str]:
+    """切词（仅词，不含分隔符）：委托 planify 的共享实现。"""
+    return [w for w, _s in split_words_with_seps(text)]
+
+
+def _format_word_range(
+    header: str,
+    all_text_parts: list[tuple[str, str, int, int]],
+    ext: str,
+    start_word: Optional[int],
+    end_word: Optional[int],
+    max_read_chars: int,
+) -> str:
+    """按词序号切片输出（1-based 闭区间）。
+
+    词的定义：CJK 字符（含中文）每字一词；连续的非 CJK 字符序列按空白切分
+    为一词（英文单词、数字、标点串等）。序号对同一文档稳定可复现。
+
+    在拼接后的纯文本流上计算（不依赖节点块结构），单块文档也能精确切片。
+    越界：start_word 超过总词数 → 无内容；end_word 超过 → 读到结尾。
+    输出附词总数与当前位置，供 AI 续读翻页。
+    """
+    parts = []
+    for title, text, _ls, _le in all_text_parts:
+        if title and not text.lstrip().startswith("#"):
+            parts.append(f"### {title}\n\n{text}")
+        elif ext == ".pptx":
+            parts.append(_bump_heading_levels(text, 2))
+        else:
+            parts.append(text)
+    full_text = "\n\n".join(parts)
+    words = _split_words_cjk(full_text)
+    total = len(words)
+
+    start_idx = max((start_word or 1) - 1, 0)      # 1-based → 0-based
+    end_idx = end_word if end_word is not None else total  # end_word 是 1-based 含端点 = 切片上界
+    end_idx = min(end_idx, total)
+    if start_idx >= total or end_idx <= start_idx:
+        return header + f"\n（指定范围内无内容。全文共 {total} 词，start_word 应 ≤ {total}。）"
+
+    sliced = words[start_idx:end_idx]
+    shown = sliced
+    truncated = ""
+    if len("".join(sliced)) > max_read_chars:
+        # 按词截断到预算内，并告知实际读到的词位置，供下一轮续读
+        acc: list[str] = []
+        size = 0
+        for w in sliced:
+            if size + len(w) > max_read_chars:
+                break
+            acc.append(w)
+            size += len(w)
+        shown = acc
+        truncated = (
+            f"\n\n（内容已截断。使用 start_word={start_idx + len(acc) + 1} 续读后续内容。）"
+        )
+
+    first_word_no = start_idx + 1
+    last_word_no = start_idx + len(shown)
+    range_info = f" [第 {first_word_no}-{last_word_no} 词 / 共 {total} 词]"
+    return header + f"\n## 内容{range_info}\n\n{' '.join(shown)}{truncated}"
 
 
 # ---------------------------------------------------------------------------
@@ -1327,8 +1403,8 @@ def _handle_read_document(
     workdir: Path,
     *,
     path: str,
-    start_line: Optional[int] = None,
-    end_line: Optional[int] = None,
+    start_word: Optional[int] = None,
+    end_word: Optional[int] = None,
     section: Optional[str] = None,
 ) -> str:
     """读取知识库文档内容，支持多种文件格式。"""
@@ -1372,8 +1448,8 @@ def _handle_read_document(
         abs_path=abs_path,
         ext=ext,
         file_size=file_size,
-        start_line=start_line,
-        end_line=end_line,
+        start_word=start_word,
+        end_word=end_word,
         section=section,
         max_read_chars=idx_manager.max_read_chars,
         show_toc=idx_manager.read_doc_show_toc,
