@@ -92,6 +92,8 @@ def create_app() -> FastAPI:
     app.include_router(status.router, prefix="/api")
     from doclens.web_v2.api import chat
     app.include_router(chat.router, prefix="/api")
+    from doclens.web_v2.api import ask
+    app.include_router(ask.router, prefix="/api")
     from doclens.web_v2.api import config
     app.include_router(config.router, prefix="/api")
     from doclens.web_v2.api import presets
