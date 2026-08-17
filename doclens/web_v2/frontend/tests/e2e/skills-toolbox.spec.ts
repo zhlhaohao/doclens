@@ -28,9 +28,11 @@ const SKILLS_RESPONSE = {
     },
     {
       // 第二个技能：移动端列表断言需要非末行（末行无分隔线）
-      name: "kb-ask",
+      // accept_dirs: 目录可入选进清单（目录范围问答）
+      name: "knowledge-base",
       description: "基于知识库内容回答问题。",
       icon: "search",
+      accept_dirs: true,
     },
   ],
 };
@@ -232,6 +234,64 @@ test.describe("Skills toolbox (mock)", () => {
     // list item 可点选（键盘可达：role=button + tabindex）
     await expect(items.first()).toHaveAttribute("role", "button");
     await expect(items.first()).toHaveAttribute("tabindex", "0");
+  });
+
+  test("accept_dirs skill keeps directories in the run list", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "desktop 用例仅跑 desktop-chrome project");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/#/files");
+
+    await page.locator("file-row").filter({ hasText: "医疗" }).first().click();
+    await expect(page.locator("file-row")).toHaveCount(3);
+
+    // 只勾选一个目录（无文件）——accept_dirs 技能下工具箱可用
+    await page.locator("file-row").nth(2).locator("input[type=checkbox]").click();
+
+    const toolboxBtn = page.locator("file-list").locator('[data-action="skill-toolbox"]');
+    await expect(toolboxBtn).toBeEnabled();
+    await toolboxBtn.click();
+
+    // 点选 knowledge-base（第二个技能，accept_dirs: true）
+    await shadowLocator(page, "skill-toolbox-dialog", "button.skill").nth(1).click();
+    const runDialog = page.locator("skill-run-dialog");
+    await expect(runDialog).toBeVisible();
+
+    // 目录保留在清单里（对比 summarize-files 用例：目录被过滤）
+    await expect(shadowLocator(page, "skill-run-dialog", ".files li")).toHaveCount(1);
+    await expect(shadowLocator(page, "skill-run-dialog", ".files")).toContainText("医疗/子目录");
+
+    // mock 会话与 SSE，提交后断言消息含目录路径
+    await page.route("**/api/sessions**", async (r) => {
+      const m = r.request().method();
+      if (m === "POST") {
+        await r.fulfill({ status: 200, json: { id: "skill-2", type: "chat", title: "t", preview: "p" } });
+      } else if (m === "PATCH") {
+        await r.fulfill({ status: 200, json: { ok: true, message_count: 2 } });
+      } else if (m === "GET" && r.request().url().includes("?")) {
+        await r.fulfill({ status: 200, json: { sessions: [], total: 0 } });
+      } else {
+        await r.fulfill({ status: 200, json: { items: [] } });
+      }
+    });
+    let sentBody: any = null;
+    await page.route("**/api/chat", async (r) => {
+      sentBody = r.request().postDataJSON();
+      await r.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: [
+          "event: token\r\ndata: " + JSON.stringify({ text: "回答。" }),
+          "event: done\r\ndata: {}",
+        ].join("\r\n\r\n") + "\r\n\r\n",
+      });
+    });
+
+    await shadowLocator(page, "skill-run-dialog", "button.primary").click();
+
+    await expect(page.locator("chat-view")).toBeVisible();
+    expect(sentBody).not.toBeNull();
+    expect(sentBody.message).toContain("[调用技能: knowledge-base]");
+    expect(sentBody.message).toContain("医疗/子目录");
   });
 
   test("toolbox button disabled with no selection", async ({ page, browserName }) => {

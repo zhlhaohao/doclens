@@ -9,10 +9,16 @@ logger = logging.getLogger(__name__)
 
 import asyncio
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from doclens.index_manager import IndexManager
+from doclens.search_targets import (
+    SEARCH_PATHS_PROPERTY,
+    format_missed_note,
+    resolve_search_targets,
+)
 
 if TYPE_CHECKING:
     from planify.skills.access_state import SkillAccessState
@@ -41,6 +47,7 @@ SEARCH_KB_TOOL = {
                 "description": "返回的最大结果数，默认 10",
                 "default": 10,
             },
+            "paths": SEARCH_PATHS_PROPERTY,
         },
         "required": ["query"],
     },
@@ -99,6 +106,25 @@ MANAGE_KB_TOOL = {
             },
         },
         "required": ["action"],
+    },
+}
+
+FILE_INFO_TOOL = {
+    "name": "file_info",
+    "description": (
+        "获取单个文件的概况信息（大小、总词数、章节数、章节清单、修改时间、是否已索引），"
+        "不返回正文内容。在 read_document 之前调用，用于判断文件规模、"
+        "选择要读取的章节（section）或词区间（start_word/end_word），避免盲目读取浪费 token。"
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "文档路径（相对知识库根目录，从搜索结果中获取）",
+            },
+        },
+        "required": ["path"],
     },
 }
 
@@ -191,6 +217,7 @@ def build_kb_tools(
                     "description": "返回的最大结果数",
                     "default": idx_manager.max_results,
                 },
+                "paths": SEARCH_PATHS_PROPERTY,
             },
             "required": ["query"],
         },
@@ -200,6 +227,7 @@ def build_kb_tools(
         "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
         "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
         "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
+        "file_info": lambda **kw: _handle_file_info(idx_manager, workdir, **kw),
     }
 
     if skill_state is not None:
@@ -211,7 +239,7 @@ def build_kb_tools(
     else:
         handlers = raw_handlers
 
-    return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL], handlers
+    return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL, FILE_INFO_TOOL], handlers
 
 
 # ---------------------------------------------------------------------------
@@ -844,6 +872,15 @@ def _find_section_text(
     return (best[0], best[1], hierarchy)
 
 
+def fmt_size(s: int) -> str:
+    """文件大小人性化格式化（B/KB/MB）。"""
+    if s >= 1024 * 1024:
+        return f"{s / (1024*1024):.2f} MB"
+    elif s >= 1024:
+        return f"{s / 1024:.2f} KB"
+    return f"{s} B"
+
+
 def _format_document_output(
     tree: dict,
     path: str,
@@ -857,13 +894,6 @@ def _format_document_output(
     show_toc: bool = False,
 ) -> str:
     """格式化文档内容输出。"""
-    def fmt_size(s):
-        if s >= 1024 * 1024:
-            return f"{s / (1024*1024):.2f} MB"
-        elif s >= 1024:
-            return f"{s / 1024:.2f} KB"
-        return f"{s} B"
-
     doc_title = tree.get("title", os.path.basename(path))
     nodes = tree.get("nodes", [])
 
@@ -1017,8 +1047,12 @@ def _handle_search_kb(
     *,
     query: str,
     max_results: Optional[int] = None,
+    paths: Optional[List[str]] = None,
 ) -> str:
-    """搜索知识库，返回带层次结构的格式化结果。"""
+    """搜索知识库，返回带层次结构的格式化结果。
+
+    paths: 可选搜索目标列表（相对目录 / 相对文件路径），只在命中的文档内搜索。
+    """
     if max_results is None:
         max_results = idx_manager.max_results
 
@@ -1032,16 +1066,32 @@ def _handle_search_kb(
             "或确认知识库路径下有文件。"
         )
 
+    # 搜索目标过滤：目录前缀 / 文件精确匹配 → 命中的文档键集合
+    allowed: Optional[set] = None
+    note = ""
+    if paths:
+        allowed, missed = resolve_search_targets(workdir, paths, idx_manager.path_map)
+        note = format_missed_note(missed)
+        if not allowed:
+            return note + f"所有搜索目标均未命中已索引文档（query='{query}'），未执行搜索。"
+        # 截断在前过滤在后会丢结果：放大候选量，过滤后再截到 max_results
+        effective_limit = max(200, max_results * 4)
+    else:
+        effective_limit = max_results
+
     from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score
 
-    nodes, docs = idx_manager.search(query, max_results=max_results)
+    nodes, docs = idx_manager.search(query, max_results=effective_limit)
+    if allowed is not None:
+        nodes = [n for n in nodes if n.get("doc_id", "") in allowed]
+        docs = [d for d in docs if d.get("doc_id", "") in allowed]
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
     logger.debug("query=%r, query_words=%s, FTS nodes=%d, docs=%d", query, query_words, len(nodes), len(docs))
 
     if not nodes:
-        return (
+        return note + (
             f"未找到包含 '{query}' 的结果。\n"
             "建议：\n"
             "1. 尝试不同的关键词\n"
@@ -1117,7 +1167,7 @@ def _handle_search_kb(
             if item[2] >= 1
         ]
     if not filtered:
-        return f"未找到包含 '{query}' 的结果。请尝试不同的关键词或重建索引。"
+        return note + f"未找到包含 '{query}' 的结果。请尝试不同的关键词或重建索引。"
 
     scored_results = []
     for item in filtered:
@@ -1132,7 +1182,7 @@ def _handle_search_kb(
     if idx_manager.min_score_threshold > 0.0:
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
-    return _format_kb_results(
+    return note + _format_kb_results(
         scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
@@ -1454,3 +1504,157 @@ def _handle_read_document(
         max_read_chars=idx_manager.max_read_chars,
         show_toc=idx_manager.read_doc_show_toc,
     )
+
+
+# ---------------------------------------------------------------------------
+# file_info：read_document 之前的文件概况探查
+# ---------------------------------------------------------------------------
+
+# 目录清单输出上限（节数过多时截断，避免概况本身变成长文）
+MAX_INFO_TOC_ENTRIES = 60
+
+
+def _load_tree_for_info(
+    idx_manager: IndexManager, abs_path: str, ext: str
+) -> Tuple[Optional[dict], bool]:
+    """获取文档结构树用于概况统计，返回 (tree, 是否来自索引)。
+
+    优先读索引（structure 已在库中，避免重复解析二进制）；未命中索引时
+    回退现场解析。不触发索引构建（load_or_build_index）——未索引文件
+    直接现场解析，避免一次概况查询引发全量建索引。
+    """
+    from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
+
+    if ext in IMAGE_EXTENSIONS:
+        # 图像不能现场重解析，视觉解析结果只在索引里
+        tree = _load_indexed_image_tree(idx_manager, abs_path)
+        return tree, tree is not None
+
+    if getattr(idx_manager, "ts", None) is not None:
+        target = os.path.normcase(os.path.abspath(abs_path))
+        for doc in idx_manager.documents or []:
+            meta = getattr(doc, "metadata", None) or {}
+            src = meta.get("source_path", "")
+            if src and os.path.normcase(src) == target:
+                # 词数统计要准确：索引节点同时带 summary（截断版）与 text（完整版），
+                # 用 text 优先的标准化
+                return {
+                    "title": doc.doc_name,
+                    "text": "",
+                    "nodes": _normalize_nodes_text_first(doc.structure or []),
+                }, True
+
+    return _parse_document(abs_path, ext), False
+
+
+def _count_words(text: str) -> int:
+    """词数统计，与 read_document 的 start_word/end_word 词序号语义一致。"""
+    return len(_split_words_cjk(text)) if text else 0
+
+
+def _subtree_text(node: dict) -> str:
+    """拼接节点子树的全部文本（用于顶层章节词数估算）。"""
+    parts = [node.get("text", "") or ""]
+    for child in node.get("nodes", []):
+        parts.append(_subtree_text(child))
+    return "\n".join(p for p in parts if p)
+
+
+def _assemble_full_text(tree: dict) -> str:
+    """拼装全文（与 _format_word_range 的拼接方式一致，保证词数与词序号对得上）。"""
+    nodes = tree.get("nodes", [])
+    all_text_parts = _collect_all_text(nodes)
+    if not all_text_parts:
+        return tree.get("text", "") or ""
+    parts = []
+    for title, text, _ls, _le in all_text_parts:
+        if title and not text.lstrip().startswith("#"):
+            parts.append(f"### {title}\n\n{text}")
+        else:
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
+def _build_info_toc(nodes: list[dict], depth: int = 0) -> Tuple[list[str], int]:
+    """生成目录清单，返回 (行列表, 有标题的节点总数)。
+
+    顶层章节（depth 0）附子树词数估算，帮助 AI 挑选 section；子章节只列标题。
+    """
+    lines: list[str] = []
+    count = 0
+    for node in nodes:
+        title = node.get("title", "")
+        children = node.get("nodes", [])
+        if title:
+            count += 1
+            line = f"{'  ' * depth}- {title}"
+            if depth == 0:
+                wc = _count_words(_subtree_text(node))
+                if wc:
+                    line += f"（约 {wc} 词）"
+            lines.append(line)
+        child_lines, child_count = _build_info_toc(
+            children, depth + 1 if title else depth
+        )
+        lines.extend(child_lines)
+        count += child_count
+    return lines, count
+
+
+def _handle_file_info(
+    idx_manager: IndexManager,
+    workdir: Path,
+    *,
+    path: str,
+) -> str:
+    """返回单个文件的概况信息（不返回正文），供 read_document 之前探查。"""
+    abs_path = _resolve_doc_path(path, workdir, idx_manager)
+    if not abs_path or not os.path.exists(abs_path):
+        return f"文档不存在: {path}。请确认路径是否正确。"
+
+    ext = os.path.splitext(abs_path)[1].lower()
+
+    try:
+        tree, indexed = _load_tree_for_info(idx_manager, abs_path, ext)
+    except ImportError as e:
+        return f"文档解析失败: 缺少依赖 {e}。请安装对应的解析库后重试。"
+    except Exception as e:
+        return f"文档解析失败: {e}。"
+
+    if not tree:
+        return (
+            f"文件尚未进索引或解析结果为空: {path}。\n"
+            "如是图像文件，请先 manage_kb(action='reindex') 构建索引后重试。"
+        )
+
+    stat = os.stat(abs_path)
+    mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+    total_words = _count_words(_assemble_full_text(tree))
+
+    nodes = tree.get("nodes", [])
+    # text_to_tree 对无结构文本/部分格式会包一层与文档同名的伪根节点——
+    # 它是文档本身而非章节：无子节点视为无章节，有子节点则提升子节点
+    if len(nodes) == 1 and nodes[0].get("title") == tree.get("title"):
+        nodes = nodes[0].get("nodes", [])
+
+    toc_lines, section_count = _build_info_toc(nodes)
+
+    header = (
+        f"文档: {path}\n"
+        f"格式: {ext} ({fmt_size(stat.st_size)})\n"
+        f"修改时间: {mtime}\n"
+        f"已索引: {'是' if indexed else '否'}\n"
+        f"总词数: {total_words}"
+        f"（read_document 可用 start_word/end_word 按词区间读取）\n"
+        f"章节数: {section_count}"
+    )
+
+    if not toc_lines:
+        return header
+
+    truncated = ""
+    if len(toc_lines) > MAX_INFO_TOC_ENTRIES:
+        truncated = f"\n（仅显示前 {MAX_INFO_TOC_ENTRIES} 节，其余 {len(toc_lines) - MAX_INFO_TOC_ENTRIES} 节略）"
+        toc_lines = toc_lines[:MAX_INFO_TOC_ENTRIES]
+
+    return header + "\n\n## 目录结构\n" + "\n".join(toc_lines) + truncated

@@ -1,8 +1,9 @@
 """GET /api/skills —— 技能工具箱列表。
 
 只返回声明 context_menu: true 的白名单技能（工具箱技能），
-每项含 name / description / icon。icon 为前端图标注册表名字，
-前端渲染 <doclens-icon name=...>。
+每项含 name / description / icon / accept_dirs。icon 为前端图标注册表名字，
+前端渲染 <doclens-icon name=...>。accept_dirs: true 表示技能可处理目录
+（如 knowledge-base 用 paths 限定目录范围问答），前端勾选项可保留目录。
 """
 import logging
 
@@ -27,5 +28,6 @@ async def list_skills():
             "name": name,
             "description": meta.get("description", ""),
             "icon": meta.get("icon", "sparkles"),
+            "accept_dirs": str(meta.get("accept_dirs", "")).strip().lower() == "true",
         })
     return {"skills": skills}

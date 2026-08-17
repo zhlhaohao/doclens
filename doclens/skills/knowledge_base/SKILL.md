@@ -1,16 +1,18 @@
 ---
 name: knowledge-base
-description: 知识库搜索与文档检索技能。涉及知识库内容的提问需先加载本技能，获取检索策略（多查询/grep 降级）、引文规范（## 参考资料）、深读工具用法。加载方式：load_skill("knowledge-base")。
+description: 知识库搜索与文档检索技能。涉及知识库内容的提问需先加载本技能，获取检索策略（多查询/grep 降级）、引文规范（## 参考资料）、深读工具用法。也支持对用户勾选的文件/目录做限定范围问答（paths 锁定范围）。加载方式：load_skill("knowledge-base")。
 icon: search
 context_menu: true
+accept_dirs: true
 ---
 
 # 知识库技能
 
 ## 工具
 
-- **search_kb**: FTS5 全文检索文档片段（自然语言关键词，自动中英文分词）。返回 XML（`<meta>` 含路径/层级 + `<content>`）。**结果用于回答必须加引文**。
-- **grep**: 正则搜索文件内容（含未索引文件）。`search_kb` 无结果或需精确匹配（代码/正则模式）时用。结果 `<path>` 可直接传给 `read_document`。
+- **search_kb**: FTS5 全文检索文档片段（自然语言关键词，自动中英文分词）。返回 XML（`<meta>` 含路径/层级 + `<content>`）。**结果用于回答必须加引文**。可选 `paths` 缩小范围：相对目录（如 `"科技"`）或相对文件路径（如 `"科技/量子计算.md"`）的数组。
+- **grep**: 正则搜索文件内容（含未索引文件）。`search_kb` 无结果或需精确匹配（代码/正则模式）时用。结果 `<path>` 可直接传给 `read_document`。可选 `paths` 同 search_kb。
+- **file_info**: 单文件概况探查（大小/总词数/章节数/章节清单/修改时间），**不返回正文**。**read_document 之前先调它**：判断文件规模、挑选 section 或词区间，避免盲读浪费 token。
 - **read_document**: 读文档完整/部分内容（md/pdf/docx/pptx/xlsx/html/代码等）。**结果用于回答必须加引文**。
 - **manage_kb**: 索引管理（`reindex` 重建 / `stats` 统计）。
 
@@ -46,13 +48,23 @@ context_menu: true
 3. 路径 = 纯相对路径，禁止 `[t](u)` / `file://` / 行号 `:数字` / `<...>`
 4. 用了 `search_kb`/`grep`/`read_document` 必须有本章节；路径必须真实存在
 
+## 指定范围模式（消息含「文件：」清单时）
+
+用户从文件列表勾选文件/目录后调用本技能时，消息带「文件：」清单一节（相对路径，**文件与目录可混合**）。此时问答范围**限定在清单内**：
+
+1. **检索必带 `paths`**：`search_kb` / `grep` 调用必须传 `paths=[清单原样数组]`（目录与文件条目都合法），只在清单范围内搜。
+2. **清单中的具体文件**：可直接 `file_info` → `read_document` 深读。
+3. **清单中的目录**：目录不能 `read_document`——先 `search_kb(query, paths=["该目录"])` 定位其中文档，再对命中文档 `file_info` / `read_document`。
+4. 引文规范不变（`## 参考资料`，路径仍是相对 workdir 的文档路径）。
+5. 清单内找不到答案时，明说"所选范围内未找到相关内容"，**不得**改用清单外内容回答（除非用户后续明确放开范围）。
+
 ## 搜索策略
 
 1. `search_kb` 检索 → 基于结果回答（引用路径）
-2. 深度研究：`search_kb` 定位 → `read_document` 读关键章节（`section="第三章 实验方法"` 返回该节及子节点；或 `start_word/end_word` 按词序号读，如 `start_word=100, end_word=300`）→ 必要时 `grep` 补搜
+2. 深度研究：`search_kb` 定位 → `file_info` 探概况（规模/章节清单）→ `read_document` 读关键章节（`section="第三章 实验方法"` 返回该节及子节点；或 `start_word/end_word` 按词序号读，如 `start_word=100, end_word=300`）→ 必要时 `grep` 补搜
 3. 无结果：`manage_kb(action='reindex')` 重建索引后重试
 
-`search_kb` 调用示例：`search_kb(query="机器学习 深度学习", max_results=10)`
+`search_kb` 调用示例：`search_kb(query="机器学习 深度学习", max_results=10)`；限定范围：`search_kb(query="机器学习", paths=["科技", "编程/ai.md"])`
 
 ### FTS 查询策略（关键）
 
@@ -70,4 +82,4 @@ context_menu: true
 
 ## 边界（强制）
 
-**仅用于内部知识库问答**。**禁止**：`Task` 子代理（脱离上下文 + 自带外部工具）、`webfetch` / web 搜索 / `bash` 联网。仅用上述 4 个工具在本地作答。无结果告知用户并建议重建索引，**不转向外部搜索**。
+**仅用于内部知识库问答**。**禁止**：`Task` 子代理（脱离上下文 + 自带外部工具）、`webfetch` / web 搜索 / `bash` 联网。仅用上述 5 个工具在本地作答。无结果告知用户并建议重建索引，**不转向外部搜索**。

@@ -11,8 +11,9 @@ context_menu: true
 
 ## 执行流程
 
-1. 对清单中**每个文件**调用 `read_document(path=...)` 读取内容——**优先且默认使用 read_document**（唯一能解析 PDF/DOCX/PPTX/XLSX 等二进制格式的工具，且支持 section/start_word/end_word 精确续读）。仅当文件是纯文本且 read_document 解析失败时，才回退 `read_file`。
-2. 全部读完后输出总结（见输出格式）。文件较多时可分批读取；单文件内容被截断时按提示的 start_word 续读。
+1. 对清单中**每个文件**先调用 `file_info(path=...)` 探概况（大小/总词数/章节清单）——小文件直接全读；大文件（词数多、章节多）据此规划：优先读与"重点"最相关的章节（`section`）或按词区间（`start_word/end_word`）分段读，避免盲读全文浪费 token。
+2. 调用 `read_document(path=...)` 读取内容——**优先且默认使用 read_document**（唯一能解析 PDF/DOCX/PPTX/XLSX 等二进制格式的工具，且支持 section/start_word/end_word 精确续读）。仅当文件是纯文本且 read_document 解析失败时，才回退 `read_file`。
+3. 全部读完后输出总结（见输出格式）。文件较多时可分批读取；单文件内容被截断时按提示的 start_word 续读。
 
 ## 输出格式
 
@@ -36,6 +37,6 @@ context_menu: true
 ## 约束
 
 - 只总结清单内文件，不主动扩展读取其他文档。
-- **读取工具优先级：`read_document` > `read_file`**。禁止对清单内文件直接用 `read_file` 读二进制格式（会得到乱码）。
+- **工具使用顺序：`file_info`（探概况）→ `read_document`（读内容）> `read_file`（仅纯文本回退）**。禁止对清单内文件直接用 `read_file` 读二进制格式（会得到乱码）。
 - 提到某个文件时**直接在正文中写它的相对路径**（如 `医疗/癌症治疗.md`）——系统会从正文提取真实路径构建引文，无需手写「## 参考资料」章节。
 - 内容以原文为准，不编造文件中不存在的信息。

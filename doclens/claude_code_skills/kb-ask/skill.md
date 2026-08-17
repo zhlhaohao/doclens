@@ -9,7 +9,7 @@ description: 通过 doclens MCP server 对本地知识库做检索问答。当�
 
 ## 前置检查（每次先做）
 
-确认当前会话有 `mcp__doclens__search_kb` 与 `mcp__doclens__read_document` 两个工具：
+确认当前会话有 `mcp__doclens__search_kb`、`mcp__doclens__read_document`、`mcp__doclens__file_info` 三个工具：
 
 - **有** → 继续。
 - **没有** → doclens MCP 未配置或未运行。**不要硬答**，把以下步骤交给用户：
@@ -28,19 +28,21 @@ description: 通过 doclens MCP server 对本地知识库做检索问答。当�
 
 ## 工具
 
-- **`mcp__doclens__search_kb(query, max_results?)`**：FTS5 全文检索，返回带 `<path>` / `<hierarchy>` / `<content>` 的结构化结果。自然语言关键词，自动中英文分词。
+- **`mcp__doclens__search_kb(query, max_results?, paths?)`**：FTS5 全文检索，返回带 `<path>` / `<hierarchy>` / `<content>` 的结构化结果。自然语言关键词，自动中英文分词。`paths` 可选：搜索目标数组（相对目录如 `"科技"`，或相对文件路径如 `"科技/xx.md"`），传入则只搜目标范围。
+- **`mcp__doclens__file_info(path)`**：单文件概况（大小/总词数/章节数/章节清单），不返回正文。**read_document 之前先调它**判断规模、挑选章节或词区间。
 - **`mcp__doclens__read_document(path, section?)`**：读文档完整或部分内容（md / pdf / docx / pptx / xlsx / html / 代码等）。
   - `path` 取自 `search_kb` 结果的 `<path>`。
   - `section` 传**单个**章节标题（如 `3.4.2. 变更流程`），**不要**拼层级路径（错：`第三章 > 3.4.2. 变更流程`）。传大章节=内容更宽泛，传小章节=更精确。
   - 二进制格式（pdf/docx/pptx/xlsx 等）**必须**用它，不要尝试通用文件读取。
 
-> doclens MCP 只暴露这两个工具。索引重建 / 统计（reindex / stats）不在 MCP 范围内——需要时让用户在 doclens 端做：`doclens index --force`，或 TUI/GUI 里操作。
+> doclens MCP 只暴露这三个工具。索引重建 / 统计（reindex / stats）不在 MCP 范围内——需要时让用户在 doclens 端做：`doclens index --force`，或 TUI/GUI 里操作。
 
 ## 问答流程
 
 1. **检索**：`search_kb` 找候选片段。
-2. **深读**：对最相关的 1–3 条，用 `read_document` 按章节读（传 `section` 单个章节标题）。
-3. **作答**：基于读到的内容回答，**标注来源**。
+2. **探查**：对候选文档调 `file_info` 看规模与章节清单（大文件必做）。
+3. **深读**：对最相关的 1–3 条，用 `read_document` 按章节读（传 `section` 单个章节标题）。
+4. **作答**：基于读到的内容回答，**标注来源**。
 
 ### FTS 查询策略（关键，否则易漏）
 
