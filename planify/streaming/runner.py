@@ -217,6 +217,22 @@ class StreamingAgent:
                 "</system-reminder>"
             )
 
+        # 3. 临时文件工作区指引（仅 prompt 软引导，工具层不做硬重定向）：
+        # 临时脚本写到 <数据目录>/tmp/<session_id>/，该目录已被索引器/watcher 排除，
+        # 由 web 层在应用启动 / 会话删除时清理（doclens/web_v2/tmp_workspace.py）
+        if session_id:
+            tmp_rel = f"{_data_dirname()}/tmp/{session_id}"
+            context_parts.append(
+                "<system-reminder>\n"
+                "# Temporary Files\n\n"
+                f"为完成任务而临时生成并运行的代码/脚本文件，必须写入 `{tmp_rel}/` 目录"
+                "（相对工作目录，不存在时用 write_file 直接写入即可，父目录会自动创建），"
+                "并在该目录内运行；禁止把临时脚本写到知识库根目录或其他文档目录；"
+                "运行产生的中间输出（日志、临时数据等）也放在该目录。\n"
+                "只有用户明确要求保存的成果文件（文档、报告等）才可写入知识库的正常位置。\n"
+                "</system-reminder>"
+            )
+
         if context_parts:
             _refresh_or_insert_context(
                 messages, _CONTEXT_MARKER, "\n\n".join(context_parts)
