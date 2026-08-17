@@ -2,9 +2,11 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
-import type { Session, ChatMessage, Reference, ToolStep } from "../state/types";
+import type { Session, ChatMessage, Reference, ToolStep, PendingAsk } from "../state/types";
 import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
+import { parseAskQuestions } from "../api/ask";
+import "../components/ask-card";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
@@ -145,9 +147,10 @@ export class ChatView extends LitElement {
       min-height: 0;
       flex-direction: column;
     }
-    /* 桌面 preview 关闭：chat-stream 居中（现状） */
+    /* 桌面 preview 关闭：chat-stream 与 ask-card 同步居中限宽（卡片不超消息区） */
     @media (min-width: 1024px) {
-      .focus-main:not(.has-preview) chat-stream {
+      .focus-main:not(.has-preview) chat-stream,
+      .focus-main:not(.has-preview) ask-card {
         max-width: 820px;
         margin: 0 auto;
         width: 100%;
@@ -159,7 +162,8 @@ export class ChatView extends LitElement {
         flex-direction: row;
         padding: var(--cortex-space-3);
       }
-      .focus-main.has-preview chat-stream {
+      .focus-main.has-preview chat-stream,
+      .focus-main.has-preview ask-card {
         flex: 1 1 0;
         min-width: 0;
         max-width: none;
@@ -262,6 +266,9 @@ export class ChatView extends LitElement {
   `;
 
   @state() private draft = "";
+  /** 当前渲染的 ask 卡片载荷（交互态→摘要态由卡片内部管理；
+   *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
+  @state() private _activeAsk: PendingAsk | null = null;
   @state() private historySessions: Session[] = [];
   @state() private _clearing = false;
   @state() private previewOpen = false;
@@ -363,6 +370,13 @@ export class ChatView extends LitElement {
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
+        } else if (ev.type === "ask") {
+          const questions = parseAskQuestions(ev.questions_json);
+          if (questions) {
+            const pending: PendingAsk = { requestId: ev.request_id, questions };
+            this._activeAsk = pending;
+            actions.setChatState({ pendingAsk: pending });
+          }
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type !== "done") {
@@ -400,7 +414,10 @@ export class ChatView extends LitElement {
       }
     } finally {
       this._abortController = null;
-      actions.setChatState({ streaming: false });
+      // 流结束即撤下交互卡片：问答已由消息内 tool trace 持久化展示，
+      // 外挂卡片（_activeAsk）只服务悬置期交互，留着会重复/残留
+      this._activeAsk = null;
+      actions.setChatState({ streaming: false, pendingAsk: null });
     }
   }
 
@@ -410,6 +427,14 @@ export class ChatView extends LitElement {
     this._abortController?.abort();
     if (sessionId) {
       void stopChat(sessionId);
+    }
+  }
+
+  /** ask 卡片完成（已答/失效）：解除输入禁用；摘要卡片保留至流结束。
+   *  注意 pendingAsk 清空而 streaming 仍为 true——流在等待答案唤醒后继续。 */
+  private _onAskDone(e: CustomEvent<{ requestId: string }>) {
+    if (store.getState().chat.pendingAsk?.requestId === e.detail.requestId) {
+      actions.setChatState({ pendingAsk: null });
     }
   }
 
@@ -428,7 +453,8 @@ export class ChatView extends LitElement {
 
   private _backToInitial() {
     this._resetPreview();
-    actions.setChatState({ state: "initial", currentSession: null, messages: [] });
+    this._activeAsk = null;
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
   }
 
@@ -448,10 +474,12 @@ export class ChatView extends LitElement {
 
   private async _loadSession(s: Session) {
     this._resetPreview();
+    this._activeAsk = null;
     actions.setChatState({
       state: "focus",
       currentSession: s,
       messages: [],
+      pendingAsk: null,
     });
     try {
       const res = await fetch(`/api/sessions/${s.id}`);
@@ -761,6 +789,15 @@ export class ChatView extends LitElement {
             @reask=${this._onReask}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
+          ${this._activeAsk
+            ? html`<ask-card
+                .ask=${{
+                  requestId: this._activeAsk.requestId,
+                  questions: this._activeAsk.questions,
+                }}
+                @ask-done=${this._onAskDone}>
+              </ask-card>`
+            : null}
           ${hasPreview ? html`
             <div class="splitter desktop-only"
                  role="separator"
@@ -777,13 +814,13 @@ export class ChatView extends LitElement {
         </div>
         <div class="input-bar">
           <input-box
-            placeholder="继续对话..."
+            placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续对话..."}
             .buttonLabel=${"发送"}
             .buttonIcon=${"arrow-up"}
             .iconAfter=${true}
             style="--cortex-input-btn-reserve: 96px"
             multiline
-            ?streaming=${s.streaming}
+            ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
             @submit=${this._submit}

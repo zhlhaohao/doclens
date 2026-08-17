@@ -65,7 +65,10 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             from planify.streaming.runner import StreamingAgent
             from planify.streaming.types import StreamingConfig
             from planify.streaming.waiter import get_global_waiter
-            from planify.tools import bind_user_interaction_handlers
+            from planify.tools import (
+                bind_ask_user_question_handler,
+                bind_user_interaction_handlers,
+            )
 
             emitter = GradioEventEmitter()
             # interrupt 由主协程 register_interrupt 创建并登记（见外层），闭包捕获。
@@ -75,6 +78,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             async def _feed():
                 delivered_calls: set[int] = set()
                 delivered_results: set[int] = set()
+                delivered_asks: set[int] = set()
                 while True:
                     # 工具事件实时推送（思考过程的工具调用 trace 可见）；
                     # 正文 token 缓冲（不实时推），done 后用工具结果重写「## 参考资料」再整体推
@@ -97,6 +101,16 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                                 "duration_ms": tc.get("duration_ms"),
                             })
                             delivered_results.add(i)
+                    # ask_user_question 悬置问题实时推送（前端渲染交互卡片，
+                    # 答案经 POST /api/ask/respond 回传 waiter 唤醒阻塞的 handler）
+                    for i, ask_ev in enumerate(emitter.pending_asks):
+                        if i not in delivered_asks:
+                            _put({
+                                "type": "ask",
+                                "request_id": ask_ev.get("request_id", ""),
+                                "questions_json": ask_ev.get("question", ""),
+                            })
+                            delivered_asks.add(i)
                     if emitter.done:
                         break
                     await asyncio.sleep(0.05)
@@ -141,6 +155,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 interrupt_event=interrupt,
             )
             bind_user_interaction_handlers(session.tool_handlers, emitter, get_global_waiter())
+            # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
+            # session 工具集过滤，此处无需绑定）
+            bind_ask_user_question_handler(session.tool_handlers, emitter, get_global_waiter())
             loop.run_until_complete(asyncio.gather(
                 sa.run_stream(history, message, session_id or session.session_id),
                 _feed(),
@@ -191,6 +208,11 @@ async def chat(req: ChatRequest):
                     yield {"event": "toast", "data": json.dumps({
                         "level": ev.get("level", "error"),
                         "detail": ev.get("detail", ""),
+                    }, ensure_ascii=False)}
+                elif t == "ask":
+                    yield {"event": "ask", "data": json.dumps({
+                        "request_id": ev.get("request_id", ""),
+                        "questions_json": ev.get("questions_json", ""),
                     }, ensure_ascii=False)}
                 elif t == "error":
                     yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}

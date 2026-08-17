@@ -37,6 +37,17 @@ export interface ChatMessage {
   references?: Reference[];
 }
 
+/** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */
+export interface PendingAsk {
+  requestId: string;
+  questions: {
+    question: string;
+    header: string;
+    multiSelect: boolean;
+    options: { label: string; description: string }[];
+  }[];
+}
+
 export interface Session {
   id: string;
   type: "search" | "chat";
@@ -65,6 +76,8 @@ export interface ChatViewState {
   currentSession: Session | null;
   messages: ChatMessage[];
   streaming: boolean;
+  /** ask_user_question 悬置问题（null = 无）；悬置期间禁用发送 */
+  pendingAsk: PendingAsk | null;
 }
 
 export interface HistoryEntry {
