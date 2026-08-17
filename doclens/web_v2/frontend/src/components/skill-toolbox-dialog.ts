@@ -6,7 +6,9 @@ import "../components/icon";
 
 /** 技能工具箱选择对话框：列出 context_menu 白名单技能。
  *
- * 桌面端 3 列网格矩阵、移动端纵向列表（断点 1023px）。
+ * 桌面端：3 列卡片网格（button 卡片，浮起效果）。
+ * 移动端：list item 列表（ul/li 语义，通栏行 + 分隔线，无 button/网格），
+ * 通过 matchMedia(1023px) 切换两套结构（2026-08-17 决议）。
  * 每项含图标 + 简介；点选即确认（无需二次确认按钮）。
  */
 @customElement("skill-toolbox-dialog")
@@ -22,11 +24,6 @@ export class SkillToolboxDialog extends LitElement {
       margin: 0 0 var(--cortex-space-2) 0;
       font-size: var(--cortex-fs-md); font-weight: 600;
       letter-spacing: -0.01em; color: var(--cortex-text);
-    }
-    .hint {
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
-      margin-bottom: var(--cortex-space-3);
     }
     .grid {
       display: grid;
@@ -59,14 +56,14 @@ export class SkillToolboxDialog extends LitElement {
     }
     .skill:active:not(:disabled) { transform: translateY(0); }
     .skill:disabled { opacity: 0.4; cursor: not-allowed; }
-    .skill .head {
+    .head {
       display: flex; align-items: center; gap: var(--cortex-space-2);
       font-size: var(--cortex-fs-sm); font-weight: 600;
       color: var(--cortex-text);
       word-break: break-all;
     }
-    .skill .head doclens-icon { flex-shrink: 0; }
-    .skill .desc {
+    .head doclens-icon { flex-shrink: 0; }
+    .desc {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
       line-height: 1.5;
@@ -74,6 +71,35 @@ export class SkillToolboxDialog extends LitElement {
       -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    /* 移动端 list item 列表（仅移动端渲染，无需媒体查询） */
+    .list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    .item {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--cortex-space-1);
+      padding: var(--cortex-space-3) var(--cortex-space-2);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      cursor: pointer;
+    }
+    .item:last-child { border-bottom: none; }
+    .item:hover,
+    .item:focus-visible {
+      background: var(--cortex-surface-muted);
+      outline: none;
+    }
+    .item .desc {
+      -webkit-line-clamp: 2;
+      width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     .empty {
       padding: var(--cortex-space-8);
@@ -101,23 +127,33 @@ export class SkillToolboxDialog extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     @media (max-width: 1023px) {
-      :host { width: 100%; }
-      .grid {
-        grid-template-columns: 1fr;
-        max-height: 50vh;
-      }
-      .skill { flex-direction: row; align-items: center; border-radius: var(--cortex-radius-lg); }
-      .skill .desc { -webkit-line-clamp: 2; }
+      /* border-box：dialog > * 注入的 16px 内边距计入 100% 宽度，
+         否则内容比对话框宽 32px，出现横向滚动条 */
+      :host { width: 100%; box-sizing: border-box; }
     }
   `;
 
   @state() private _skills: SkillInfo[] = [];
   @state() private _loading = true;
   @state() private _error: string | null = null;
+  @state() private _isMobile = false;
+
+  private _mql?: MediaQueryList;
+  private _onMqlChange = (e: MediaQueryListEvent) => {
+    this._isMobile = e.matches;
+  };
 
   connectedCallback() {
     super.connectedCallback();
+    this._mql = window.matchMedia("(max-width: 1023px)");
+    this._isMobile = this._mql.matches;
+    this._mql.addEventListener("change", this._onMqlChange);
     this._load();
+  }
+
+  disconnectedCallback() {
+    this._mql?.removeEventListener("change", this._onMqlChange);
+    super.disconnectedCallback();
   }
 
   private async _load() {
@@ -139,35 +175,60 @@ export class SkillToolboxDialog extends LitElement {
     }));
   }
 
+  private _onItemKeydown(e: KeyboardEvent, skill: SkillInfo) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      this._onPick(skill);
+    }
+  }
+
   private _cancel() {
     this.dispatchEvent(new CustomEvent("cancel", {
       bubbles: true, composed: true,
     }));
   }
 
+  private _renderBody() {
+    if (this._loading) return html`<div class="empty">加载中…</div>`;
+    if (this._error) return html`<div class="err">${this._error}</div>`;
+    if (this._skills.length === 0) return html`<div class="empty">暂无可用技能</div>`;
+    if (this._isMobile) {
+      // 移动端：list item 语义列表（ul/li，无 button）
+      return html`<ul class="list">
+        ${this._skills.map((s) => html`
+          <li
+            class="item"
+            role="button"
+            tabindex="0"
+            @click=${() => this._onPick(s)}
+            @keydown=${(e: KeyboardEvent) => this._onItemKeydown(e, s)}
+          >
+            <span class="head"><doclens-icon name=${s.icon}></doclens-icon>${s.name}</span>
+            <span class="desc">${s.description}</span>
+          </li>
+        `)}
+      </ul>`;
+    }
+    // 桌面端：3 列按钮卡片网格
+    return html`<div class="grid" role="listbox">
+      ${this._skills.map((s) => html`
+        <button
+          type="button"
+          role="option"
+          class="skill"
+          @click=${() => this._onPick(s)}
+        >
+          <span class="head"><doclens-icon name=${s.icon}></doclens-icon>${s.name}</span>
+          <span class="desc">${s.description}</span>
+        </button>
+      `)}
+    </div>`;
+  }
+
   render() {
     return html`
       <h3>选择技能</h3>
-      <div class="hint">将对选中的文件执行所选技能</div>
-      ${this._loading
-        ? html`<div class="empty">加载中…</div>`
-        : this._error
-          ? html`<div class="err">${this._error}</div>`
-          : this._skills.length === 0
-            ? html`<div class="empty">暂无可用技能</div>`
-            : html`<div class="grid" role="listbox">
-                ${this._skills.map((s) => html`
-                  <button
-                    type="button"
-                    role="option"
-                    class="skill"
-                    @click=${() => this._onPick(s)}
-                  >
-                    <span class="head"><doclens-icon name=${s.icon}></doclens-icon>${s.name}</span>
-                    <span class="desc">${s.description}</span>
-                  </button>
-                `)}
-              </div>`}
+      ${this._renderBody()}
       <div class="actions">
         <button type="button" class="cancel" @click=${this._cancel}>取消</button>
       </div>
