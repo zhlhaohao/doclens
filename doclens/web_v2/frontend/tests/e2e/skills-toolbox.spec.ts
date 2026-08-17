@@ -26,6 +26,12 @@ const SKILLS_RESPONSE = {
       description: "总结用户指定文件的重点内容，逐个读取后输出结构化总结。",
       icon: "brain",
     },
+    {
+      // 第二个技能：移动端列表断言需要非末行（末行无分隔线）
+      name: "kb-ask",
+      description: "基于知识库内容回答问题。",
+      icon: "search",
+    },
   ],
 };
 
@@ -120,11 +126,12 @@ test.describe("Skills toolbox (mock)", () => {
     expect(cols.split(" ").length).toBe(3);
     // 卡片浮起效果：大圆角（radius-xl 24px）
     const cardRadius = await shadowLocator(page, "skill-toolbox-dialog", "button.skill")
+      .first()
       .evaluate((el) => getComputedStyle(el).borderRadius);
     expect(cardRadius).toBe("24px");
 
     // 点选技能 → 确认对话框
-    await shadowLocator(page, "skill-toolbox-dialog", "button.skill").click();
+    await shadowLocator(page, "skill-toolbox-dialog", "button.skill").first().click();
     const runDialog = page.locator("skill-run-dialog");
     await expect(runDialog).toBeVisible();
 
@@ -189,10 +196,42 @@ test.describe("Skills toolbox (mock)", () => {
     await shadowLocator(page, "file-list", ".mobile-more").click();
     await shadowLocator(page, "file-list", '[data-action="skill-toolbox"]').click();
 
-    const grid = shadowLocator(page, "skill-toolbox-dialog", ".grid");
-    await expect(grid).toBeVisible();
-    const cols = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns);
-    expect(cols.split(" ").length).toBe(1);
+    // 移动端对话框占满屏幕宽度（2026-08-17 决议）
+    const dlgWidth = await page
+      .locator("skill-toolbox-dialog")
+      .evaluate((el) => el.closest("dialog")!.getBoundingClientRect().width);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(dlgWidth).toBe(viewportWidth);
+    // 移动端必须是 list item 语义列表（ul/li），不能是 grid + button（2026-08-17 决议）
+    const list = shadowLocator(page, "skill-toolbox-dialog", "ul.list");
+    await expect(list).toBeVisible();
+    await expect(shadowLocator(page, "skill-toolbox-dialog", "button.skill")).toHaveCount(0);
+    await expect(shadowLocator(page, "skill-toolbox-dialog", ".grid")).toHaveCount(0);
+    const items = shadowLocator(page, "skill-toolbox-dialog", "li.item");
+    await expect(items).toHaveCount(2);
+    // 通栏行 + 分隔线：纵向堆叠（图标+名称一行、描述整行折返）
+    const itemStyle = await items.first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { flexDir: cs.flexDirection, borderBottom: cs.borderBottomWidth };
+    });
+    expect(itemStyle.flexDir).toBe("column");
+    expect(itemStyle.borderBottom).toBe("1px");
+    // 描述文字必须折返不超出屏幕（scrollWidth 不超过可视宽度）
+    const descOverflow = await shadowLocator(page, "skill-toolbox-dialog", "li.item .desc")
+      .first()
+      .evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(descOverflow).toBe(false);
+    // 对话框自身不得出现横向滚动条（host 100% + 注入 padding 需 border-box 抵消）
+    const dlgHScroll = await page
+      .locator("skill-toolbox-dialog")
+      .evaluate((el) => {
+        const dlg = el.closest("dialog")!;
+        return dlg.scrollWidth > dlg.clientWidth + 1;
+      });
+    expect(dlgHScroll).toBe(false);
+    // list item 可点选（键盘可达：role=button + tabindex）
+    await expect(items.first()).toHaveAttribute("role", "button");
+    await expect(items.first()).toHaveAttribute("tabindex", "0");
   });
 
   test("toolbox button disabled with no selection", async ({ page, browserName }) => {

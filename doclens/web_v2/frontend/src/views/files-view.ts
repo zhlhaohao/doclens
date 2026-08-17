@@ -121,6 +121,8 @@ export class FilesView extends LitElement {
     dialog {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-xl);
+      /* border-box：移动端 width:100vw 时边框不额外撑出屏幕 */
+      box-sizing: border-box;
       padding: 0;
       background: var(--cortex-surface);
       box-shadow: var(--cortex-shadow-lg);
@@ -130,8 +132,9 @@ export class FilesView extends LitElement {
     @media (max-width: 1023px) {
       dialog {
         min-width: 0;
-        width: calc(100vw - 16px);
-        max-width: calc(100vw - 16px);
+        /* 移动端对话框占满屏幕宽度（2026-08-17 决议） */
+        width: 100vw;
+        max-width: 100vw;
         max-height: calc(100vh - 16px);
         border-radius: var(--cortex-radius-md);
       }
