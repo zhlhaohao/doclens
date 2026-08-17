@@ -3,9 +3,10 @@
 TUI / GUI 在进程内后台线程启动此 server，复用同一 IndexManager 单例，
 与 FileWatcher 实时索引共享同一份索引数据。
 
-工具面（与 Agent 现用 kb_tools 三件套对齐，去掉 manage_kb）：
+工具面（与 Agent 现用 kb_tools 对齐，去掉 manage_kb）：
   - search_kb(query, max_results)
   - read_document(path, section, start_word, end_word)
+  - file_info(path)
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 
 from doclens.index_manager import IndexManager
-from doclens.kb_tools import _handle_read_document, _handle_search_kb
+from doclens.kb_tools import _handle_file_info, _handle_read_document, _handle_search_kb
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +73,16 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
     mcp = MCPServer("doclens-kb")
 
     @mcp.tool()
-    async def search_kb(query: str, max_results: Optional[int] = None) -> str:
+    async def search_kb(
+        query: str,
+        max_results: Optional[int] = None,
+        paths: Optional[list[str]] = None,
+    ) -> str:
         """在知识库索引中搜索相关文档片段，返回带层次结构的搜索结果。
 
         支持中英文混合查询。当用户的提问与知识库内容相关时使用此工具。
+        paths 可选：搜索目标列表（相对目录如 '科技'，或相对文件路径如
+        '科技/量子计算.md'），传入则只在目标范围内搜索。
         """
         # 必须丢进 worker 线程：sync handler 链路（_handle_search_kb →
         # IndexManager.search → TreeSearch.search）含 asyncio.get_running_loop()
@@ -86,6 +93,7 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
             workdir,
             query=query,
             max_results=max_results,
+            paths=paths,
         )
 
     @mcp.tool()
@@ -100,6 +108,20 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
             workdir,
             path=path,
             section=section,
+        )
+
+    @mcp.tool()
+    async def file_info(path: str) -> str:
+        """获取单个文件的概况信息（大小、总词数、章节数、章节清单、修改时间），不返回正文。
+
+        在 read_document 之前调用，用于判断文件规模、选择要读取的章节或词区间。
+        path 为相对知识库根目录的文件路径（从 search_kb 结果中获取）。
+        """
+        return await asyncio.to_thread(
+            _handle_file_info,
+            idx_manager,
+            workdir,
+            path=path,
         )
 
     return mcp

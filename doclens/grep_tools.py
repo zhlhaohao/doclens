@@ -6,7 +6,14 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
+
+from doclens.search_targets import (
+    SEARCH_PATHS_PROPERTY,
+    format_missed_note,
+    resolve_search_targets,
+)
 
 if TYPE_CHECKING:
     from doclens.index_manager import IndexManager
@@ -38,6 +45,7 @@ GREP_TOOL = {
                 "type": "string",
                 "description": "正则表达式搜索模式（ripgrep 语法）",
             },
+            "paths": SEARCH_PATHS_PROPERTY,
         },
         "required": ["pattern"],
     },
@@ -208,14 +216,27 @@ def _handle_grep(
     idx: IndexManager,
     *,
     pattern: str,
+    paths: Optional[list[str]] = None,
 ) -> str:
-    """在工作目录中搜索文件内容。"""
+    """在工作目录中搜索文件内容。
+
+    paths: 可选搜索目标列表（相对目录 / 相对文件路径），只在命中的文档内搜索。
+    """
     if not pattern:
         return "搜索模式不能为空。"
 
+    # 搜索目标过滤（与 search_kb 同一语义：目录前缀 / 文件精确匹配）
+    allowed: Optional[set] = None
+    note = ""
+    if paths:
+        allowed, missed = resolve_search_targets(Path(idx.search_path), paths, idx.path_map)
+        note = format_missed_note(missed)
+        if not allowed:
+            return note + f"所有搜索目标均未命中任何文档（pattern='{pattern}'），未执行搜索。"
+
     from doclens.ripgrep import execute_grep_search
 
-    result = execute_grep_search(idx, pattern)
+    result = execute_grep_search(idx, pattern, allowed=allowed)
 
     output = _format_agent_output(
         content_results=result.content_results,
@@ -227,8 +248,8 @@ def _handle_grep(
     )
 
     if not output:
-        return f"未找到匹配 '{pattern}' 的结果。"
+        return note + f"未找到匹配 '{pattern}' 的结果。"
 
     logger.debug("grep pattern=%r, content=%d, paths=%d", pattern, len(result.content_results), len(result.path_results))
 
-    return output
+    return note + output

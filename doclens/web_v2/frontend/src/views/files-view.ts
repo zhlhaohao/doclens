@@ -388,8 +388,9 @@ export class FilesView extends LitElement {
       return;
     }
     if (name === "skill-toolbox") {
-      // 全是目录时无可处理文件，不弹窗（按钮已置灰，此为兜底）
-      if (this._selectedFilePaths().length === 0) return;
+      // 目录也可入选（accept_dirs 技能如 knowledge-base 可做目录范围问答），
+      // 只要勾选非空即可开工具箱
+      if (this._state.selectedPaths.length === 0) return;
       this._pickedSkill = null;
       this._dialog = "skill-toolbox";
       return;
@@ -415,6 +416,13 @@ export class FilesView extends LitElement {
     });
   }
 
+  /** 按技能能力决定清单：accept_dirs 技能保留目录（目录范围问答），否则只留文件。 */
+  private _pathsForSkill(skill: SkillInfo): string[] {
+    return skill.accept_dirs
+      ? [...this._state.selectedPaths]
+      : this._selectedFilePaths();
+  }
+
   /** 工具箱中点选技能 → 进入确认对话框。 */
   private _onSkillPick(e: CustomEvent<{ skill: SkillInfo }>) {
     this._pickedSkill = e.detail.skill;
@@ -424,7 +432,7 @@ export class FilesView extends LitElement {
   /** 确认对话框「开始对话」：拼消息 → pendingSkillChat → 切 chat 视图。 */
   private _onSkillRunSubmit(e: CustomEvent<{ prompt: string }>) {
     const skill = this._pickedSkill;
-    const paths = this._selectedFilePaths();
+    const paths = skill ? this._pathsForSkill(skill) : [];
     this._dialog = null;
     if (!skill || paths.length === 0) return;
 
@@ -995,7 +1003,7 @@ export class FilesView extends LitElement {
       return html`<dialog @cancel=${this._cancelDialog}>
         <skill-run-dialog
           .skill=${this._pickedSkill}
-          .filePaths=${this._selectedFilePaths()}
+          .filePaths=${this._pickedSkill ? this._pathsForSkill(this._pickedSkill) : []}
           @submit=${this._onSkillRunSubmit}
           @cancel=${this._cancelDialog}
         ></skill-run-dialog>

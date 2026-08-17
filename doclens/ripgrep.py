@@ -246,6 +246,7 @@ def execute_grep_search(
     idx,
     query: str,
     max_results: int = 50,
+    allowed: set[str] | None = None,
 ) -> GrepResult:
     """执行统一的 grep 搜索流程。
 
@@ -259,6 +260,8 @@ def execute_grep_search(
         idx: IndexManager 实例
         query: 正则表达式
         max_results: 最大结果数
+        allowed: 可选，搜索目标命中的 path_map 键集合
+            （resolve_search_targets 的结果）；传入则三条路径只保留目标内文档
 
     Returns:
         GrepResult 包含内容结果、路径结果和查询词
@@ -266,10 +269,18 @@ def execute_grep_search(
     terms = _extract_terms(query)
     query_words = terms if terms else [query]
 
-    # 步骤 1: like_search
-    like_results = idx.like_search(query, max_results=max_results, use_regex=True)
+    # 目标过滤：path_map 收敛到 allowed（rg 降级 / 路径匹配共用）
+    path_map = idx.path_map
+    if allowed is not None:
+        path_map = {k: v for k, v in path_map.items() if k in allowed}
+
+    # 步骤 1: like_search（有目标过滤时放大候选量，避免截断在前过滤在后丢结果）
+    like_limit = max(200, max_results * 4) if allowed is not None else max_results
+    like_results = idx.like_search(query, max_results=like_limit, use_regex=True)
 
     if like_results:
+        if allowed is not None:
+            like_results = [r for r in like_results if r.get("doc_id", "") in allowed]
         # like_search 返回 dict 列表，转为 tuple 格式
         content_results = [
             (item["doc_id"], {"title": item.get("title", ""), "text": item.get("summary", "")}, 1, 0, item.get("fts_score", 0.0))
@@ -279,7 +290,7 @@ def execute_grep_search(
         # 步骤 2: ripgrep 降级
         content_results = rg_fallback_search(
             query,
-            idx.path_map,
+            path_map,
             {},
             query_words,
             context_before=idx.rg_context_before,
@@ -290,7 +301,7 @@ def execute_grep_search(
     # 步骤 3: 路径搜索
     path_results = search_paths_by_regex(
         query,
-        idx.path_map,
+        path_map,
         max_results=max_results,
     )
 

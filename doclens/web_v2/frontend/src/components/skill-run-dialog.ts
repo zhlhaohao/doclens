@@ -119,7 +119,7 @@ export class SkillRunDialog extends LitElement {
         ${skill?.name ?? ""}
       </h3>
       <div class="files">
-        <div class="count">将处理 ${this.filePaths.length} 个文件：</div>
+        <div class="count">将处理 ${this.filePaths.length} 项：</div>
         <ul>
           ${this.filePaths.map((p) => html`<li title=${p}>${p}</li>`)}
         </ul>

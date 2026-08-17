@@ -1,6 +1,6 @@
 """技能门禁：KB 工具执行前确认所属 skill 已加载，否则弹回。
 
-强制 LLM 在使用 search_kb / read_document / manage_kb / grep 前先
+强制 LLM 在使用 search_kb / read_document / manage_kb / grep / file_info 前先
 load_skill("knowledge-base") 获取检索策略与引文规范。
 
 2026-08-17：GATE_ENABLED 临时关闭（技能工具箱场景 AI 已被用户显式指定技能，
@@ -20,7 +20,7 @@ GATE_ENABLED = os.environ.get("CORTEX_SKILL_GATE", "").strip().lower() not in {
 
 # knowledge-base 技能"拥有"的工具集合
 KB_SKILL = "knowledge-base"
-KB_GATED_TOOLS = {"search_kb", "read_document", "manage_kb", "grep"}
+KB_GATED_TOOLS = {"search_kb", "read_document", "manage_kb", "grep", "file_info"}
 
 BOUNCE_MSG = (
     "<skill_required>\n"
