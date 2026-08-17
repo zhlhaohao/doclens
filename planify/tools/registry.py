@@ -15,7 +15,7 @@ from .web import make_web_tools
 from .file_tasks import get_file_task_definitions, get_file_task_handlers
 from .team_tools import get_team_tools_definitions, get_team_tools_handlers
 from .protocols import get_protocol_definitions, get_protocol_handlers
-from .user_interaction import get_user_interaction_tools
+from .user_interaction import get_ask_user_question_tool, get_user_interaction_tools
 from .weather_tool import make_baidu_weather_tools
 from .webfetch import make_webfetch_tools
 
@@ -336,9 +336,12 @@ def build_tool_registry(
     handlers.update({"compress": lambda **kw: "压缩中..."})
 
     # 用户交互工具
-    # 注意：处理器需要在运行时通过 bind_user_interaction_handlers 绑定
+    # 注意：处理器需要在运行时通过 bind_user_interaction_handlers 绑定；
+    # ask_user_question 为 GUI 结构化问答专用（include_ask_question=True 时注册）
     user_tools = get_user_interaction_tools()
     tools.extend(user_tools)
+    if kwargs.get("gui_mode"):
+        tools.append(get_ask_user_question_tool())
 
     # 外部工具（由主应用注册）
     external_tools, external_handlers = get_external_tools()

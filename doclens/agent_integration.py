@@ -249,7 +249,9 @@ class CortexAgent:
                 skill_dst_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src_skill_md, skill_dst_dir / "SKILL.md")
 
-        # 工具注册表
+        # 工具注册表（gui_mode=True：注册 ask_user_question，GUI 真实交互；
+        # 旧 ask_user/user_confirm 在 GUI 下随即被过滤——emitter 不支持旧形态，
+        # 模型若调用会悬置 300s 假死）
         tools, tool_handlers = build_tool_registry(
             workdir=self.workdir,
             zhipu_client=None,
@@ -266,7 +268,12 @@ class CortexAgent:
             client=client,
             transcript_dir=transcript_dir,
             session=None,
+            gui_mode=True,
         )
+        legacy_ask = {"ask_user", "user_confirm"}
+        tools = [t for t in tools if t["name"] not in legacy_ask]
+        for name in legacy_ask & set(tool_handlers):
+            tool_handlers.pop(name, None)
 
         # Session
         session_config = SessionConfig(
