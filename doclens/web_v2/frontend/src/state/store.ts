@@ -58,6 +58,7 @@ export const INITIAL_STATE: AppState = {
   },
   detailStack: [],
   pendingSession: null,
+  pendingSkillChat: null,
   status: null,
   watcher: null,
   syncStatus: null,
@@ -191,6 +192,10 @@ export const actions = {
 
   setPendingSession(session: Session | null) {
     store.setState({ pendingSession: session });
+  },
+
+  setPendingSkillChat(chat: AppState["pendingSkillChat"]) {
+    store.setState({ pendingSkillChat: chat });
   },
 
   setWatcherStatus(w: AppState["watcher"]) {

@@ -44,6 +44,12 @@
 - **模型预设 (Model Profile)**：一份命名后可一键切换的完整模型连接档案，打包 `protocol + base_url + model_id + api_key`（LLM 另含 `context_window`），**不含 provider**——切换即一次性应用全部参数，无需逐字段重填。涵盖两类：LLM 预设（AI 对话，切换即时热生效）与视觉预设（图像解析，切换后已解析图像将在下次启动重新解析）。是本系统中「模型」的可切换单位，与旧的字段散填形态区分。预设库为机器级本地资产（各机器各自维护），含明文凭据，**不参与知识库 Git 同步**，与 `.env` 同等保护。
 - **搜索预设 (Search Preset)**：搜索调优参数的命名档案，打包设置页 search tab 暴露的全部 8 个参数（3 过滤：`max_results` / `min_score_threshold` / `max_span` + 5 评分权重），`kind=search`，复用「模型预设」整套机制（同一 `model_presets.json` / `presets_store` / 物化写 global `.env` / 激活键 `CORTEX_ACTIVE_SEARCH_PRESET`）。切换即时热生效（`IndexManager.apply_config` 只更新 `_config`、不碰索引，搜索时按新参数运行，**无副作用**）。不含密钥，无需脱敏。
 
+- **技能工具箱 (Skill Toolbox)**：files 页对**多选文件**的快捷 AI 处理入口（toolbar 工具箱按钮 / 移动端 more 菜单）。未选中文件时置灰；多选中的**目录静默过滤**，只把文件传给技能。桌面端技能选择以 3 列网格矩阵展示、移动端以列表展示（断点 1023px）。
+- **工具箱技能 (Toolbox Skill)**：声明 `context_menu: true`（frontmatter）从而进入技能工具箱的技能——工具箱是 opt-in 白名单，不是全部技能的展示位。图标由 frontmatter `icon` 字段指定，取值限前端图标注册表已有名字（缺则补注册表）。_Avoid_: 全量罗列所有技能。
+- **技能会话 (Skill Session)**：以 `[调用技能: <name>]` 标记开头的 chat 会话，身份每轮从 DB 首条 message_user 推导（零 schema）。总是新建（不续用已有对话），标题=技能名+首文件名。会话内**所有** AI 回答走提取式引文、不走 [N] 策展。
+- **提取式引文 (Extraction References)**：技能会话的引文机制——从回答**正文**提取所有路径模式串（如 `医疗/癌症治疗.md`），校验 workdir 下真实存在，去重保序后重建「## 参考资料」章节。AI 自写引文章节先剥除；一个都没提取到则不追加。与「声明式引文」（AI 写 [N] + curator 校验）相对。
+- **KB 门禁 (KB Skill Gate)**：KB 工具（search_kb/read_document/manage_kb/grep）执行前强制先 load_skill("knowledge-base") 的弹回机制。**当前临时关闭**（GATE_ENABLED=False 开关式，代码路径保留可恢复）——副作用：普通对话不再强制注入引文规范，由 refs_curator 机器校验兜底（2026-08-17 决议）。
+
 ## 决议摘要（详见 docs/adr/）
 
 - 2026-07-25：图像解析索引的边界 = 仅独立图像文件；内嵌图片不送视觉模型。
@@ -76,3 +82,4 @@
 - 2026-08-08：模型预设体系（ADR-0011）= 命名档案一键切换（`protocol+base_url+model_id+api_key`，LLM 另含 `context_window`，不含 provider），LLM/视觉统一 `kind` 区分；切换物化进 local .env、运行时只读 .env；废弃 `PLANIFY_PROVIDER` 与随包供应商表；预设存明文 key 与 .env 同等保护；全局单层 `model_presets.json` 不参与 Git 同步；不预置、空列表自建。
 - 2026-08-09：搜索预设（ADR-0012）= 搜索调优参数（3 过滤 + 5 权重）命名档案一键切换，复用模型预设整套机制（`kind=search` 扩展同一 `model_presets.json`/`presets_store`/`/api/presets`/物化）；切换即时热生效无副作用；search tab 移除散填、只留预设区块。
 - 2026-08-14：遗留 Office 格式解析引擎 = anydoc（纯 Rust，主依赖；ADR-0013）——doc/docm/ppt/pps/pot/xls/rtf/epub 统一走 anydoc→md_to_tree，废除旧 doc 外部工具链；pptx/xlsx/docx 不动（markitdown 与 anydoc 两引擎有意共存）；内嵌图片经 assets 接 ImageStore、附加文档末尾；ppt 扁平输出不做 slide 包裹；win_arm64 无 wheel，未装时落 text 兜底。
+- 2026-08-17：技能工具箱 = files 多选文件 → 选白名单技能（context_menu: true）→ 确认（只读文件清单+可选补充 prompt）→ 新建技能会话自动发送；技能加载走现有 load_skill 工具（AI 收指令自调，ChatRequest 不加字段）；KB 门禁临时关闭（开关式）；技能会话全程提取式引文（正文提路径+存在性校验重建参考资料，替代 [N] 策展）。

@@ -281,7 +281,10 @@ export class ChatView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._loadHistory();
-    this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    this._unsubscribe = store.subscribe(() => {
+      this.requestUpdate();
+      this._consumePendingSkillChat();
+    });
     this._loadPreviewPaneWidth();
     // 消费跨视图会话加载请求（来自 history-view）
     const pending = store.getState().pendingSession;
@@ -289,6 +292,7 @@ export class ChatView extends LitElement {
       actions.setPendingSession(null);
       this._loadSession(pending);
     }
+    this._consumePendingSkillChat();
   }
 
   disconnectedCallback() {
@@ -328,24 +332,52 @@ export class ChatView extends LitElement {
     const message = e.detail.value;
     this.draft = "";
 
-    // 转入 focus 态
+    // initial 态时消息发送前先建会话（与技能对话共用路径）
     if (this.viewState.state === "initial") {
-      const created = await createSession({ type: "chat", title: message.slice(0, 60), preview: message.slice(0, 100) });
-      actions.setChatState({
-        state: "focus",
-        currentSession: {
-          id: created.id, type: "chat", title: message.slice(0, 60),
-          preview: message.slice(0, 100), updated_at: new Date().toISOString(),
-          message_count: 0,
-        },
-        messages: [{ role: "user", content: message }],
-        streaming: true,
-      });
-    } else {
+      await this._ensureSession(message, message);
+      await this._sendMessage(message, true);
+      return;
+    }
+    await this._sendMessage(message);
+  }
+
+  /** 消费跨视图技能对话请求（files 工具箱）：initial 态新建技能会话后自动发送。
+   *  keep-alive 下 store 订阅持续触发；非 initial 态（已有对话）时忽略——
+   *  技能对话总是新建会话，由写入方保证切视图前重置。 */
+  private async _consumePendingSkillChat(): Promise<void> {
+    const pending = store.getState().pendingSkillChat;
+    if (!pending) return;
+    actions.setPendingSkillChat(null); // 先消费，防重入
+    if (this.viewState.state !== "initial") return;
+    await this._ensureSession(pending.title, pending.message);
+    await this._sendMessage(pending.message, true);
+  }
+
+  /** initial 态下创建新会话并转入 focus 态（用户气泡先行）。 */
+  private async _ensureSession(title: string, message: string): Promise<void> {
+    const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100) });
+    actions.setChatState({
+      state: "focus",
+      currentSession: {
+        id: created.id, type: "chat", title: title.slice(0, 60),
+        preview: message.slice(0, 100), updated_at: new Date().toISOString(),
+        message_count: 0,
+      },
+      messages: [{ role: "user", content: message }],
+      streaming: true,
+    });
+  }
+
+  /** 追加用户消息并发起流式请求（会话已就位）。
+   *  firstOfSession=true 时用户气泡已由 _ensureSession 加入，不重复追加。 */
+  private async _sendMessage(message: string, firstOfSession = false): Promise<void> {
+    if (!firstOfSession) {
       actions.setChatState({
         messages: [...this.viewState.messages, { role: "user", content: message }],
         streaming: true,
       });
+    } else {
+      actions.setChatState({ streaming: true });
     }
 
     const sessionId = store.getState().chat.currentSession!.id;

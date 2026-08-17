@@ -31,19 +31,30 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
     """流式跑 StreamingAgent + 完成后策展参考资料。
 
     工具调用实时推送（思考过程可见）。AI 完成后一次性策展「## 参考资料」：
-    - 合规 → 保留 AI 精选列表（剔除不存在/未被引用条目，重编号对齐 [N]）
-    - 不合规 → 工具检索结果分级兜底（read_document 优先，封顶上限）+ toast 告警
+    - 技能会话（首条用户消息含「[调用技能: …]」标记）→ 提取式：从正文提取
+      真实路径重建章节，不用 [N] 策展
+    - 普通会话 → 声明式策展：合规 → 保留 AI 精选列表（剔除不存在/未被引用
+      条目，重编号对齐 [N]）；不合规 → 工具检索结果分级兜底 + toast 告警
     """
     from doclens.web_v2.refs_retry import FALLBACK_TOAST
+    from doclens.web_v2.skill_refs import curate_skill_references, is_skill_message
 
     agent = get_agent()
     session = agent.session
 
     history: list[dict] = []
+    skill_session = is_skill_message(message)
     if session_id:
         try:
             from doclens.web_v2.deps import get_sessions_store
             history = get_sessions_store().get_chat_history(session_id)
+            # 技能会话身份：从 DB 首条 message_user 推导（本轮消息尚不在历史中，
+            # 首轮时 history 为空 → 看 message 自身；后续轮 history 已含首条）
+            first_user = next(
+                (m["content"] for m in history if m.get("role") == "user"), ""
+            )
+            if first_user and is_skill_message(first_user):
+                skill_session = True
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
@@ -100,26 +111,40 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     if emitter.done:
                         break
                     await asyncio.sleep(0.05)
-                # done：策展参考资料章节——AI 章节合规则保留精选列表（清洗+重编号），
-                # 不合规则工具结果分级兜底（不再无条件全量重写，避免引文膨胀与 [N] 错位）
-                from doclens.web_v2.refs_curator import curate_references
-                curation = curate_references(
-                    emitter.get_full_text(),
-                    list(emitter.tool_calls),
-                    session.session_workdir,
-                )
-                logger.info(
-                    "chat done: tools=%d fallback=%s refs=%d error=%s",
-                    len(emitter.tool_calls), curation.fallback, len(curation.paths),
-                    bool(emitter.error),
-                )
+                # done：策展参考资料章节。
+                # 技能会话 → 提取式（正文提路径+存在性校验重建章节，无 toast）；
+                # 普通会话 → 声明式（合规则保留精选列表清洗+重编号，
+                # 不合规则工具结果分级兜底，不再无条件全量重写，避免引文膨胀与 [N] 错位）
+                if skill_session:
+                    curated_text = curate_skill_references(
+                        emitter.get_full_text(), session.session_workdir
+                    )
+                    logger.info(
+                        "chat done(skill): tools=%d error=%s",
+                        len(emitter.tool_calls), bool(emitter.error),
+                    )
+                    curated_fallback = False
+                else:
+                    from doclens.web_v2.refs_curator import curate_references
+                    curation = curate_references(
+                        emitter.get_full_text(),
+                        list(emitter.tool_calls),
+                        session.session_workdir,
+                    )
+                    curated_text = curation.text
+                    curated_fallback = curation.fallback
+                    logger.info(
+                        "chat done: tools=%d fallback=%s refs=%d error=%s",
+                        len(emitter.tool_calls), curation.fallback, len(curation.paths),
+                        bool(emitter.error),
+                    )
                 # run_stream 在内部捕获 LLM 异常 → emit_error → emitter.error + done=True。
                 # 此处错误未抛出到 _run_in_thread 的 except，需手动透传给前端，
                 # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
                 if emitter.error:
                     _put({"type": "error", "detail": emitter.error})
-                _put({"type": "token", "text": curation.text})
-                if curation.fallback:
+                _put({"type": "token", "text": curated_text})
+                if curated_fallback:
                     _put({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
 
             sa = StreamingAgent(
