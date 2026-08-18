@@ -145,8 +145,8 @@ class IndexManager:
         return self._config.max_total_chars
 
     @property
-    def max_read_chars(self) -> int:
-        return self._config.max_read_chars
+    def max_read_words(self) -> int:
+        return self._config.max_read_words
 
     @property
     def read_doc_show_toc(self) -> bool:

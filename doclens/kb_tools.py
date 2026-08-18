@@ -20,6 +20,9 @@ from doclens.search_targets import (
     resolve_search_targets,
 )
 
+# 词切分器与 planify.read_file 共用（单一真相源：两工具的词序号语义必须一致）
+from planify.tools.basic import split_words_with_seps
+
 if TYPE_CHECKING:
     from planify.skills.access_state import SkillAccessState
 
@@ -178,7 +181,7 @@ READ_DOCUMENT_TOOL = {
 
 MAX_CONTEXT_CHARS_PER_RESULT = 800
 MAX_TOTAL_CHARS = 10000
-MAX_READ_CHARS = 6000
+MAX_READ_WORDS = 4000
 
 
 # ---------------------------------------------------------------------------
@@ -890,7 +893,7 @@ def _format_document_output(
     start_word: Optional[int],
     end_word: Optional[int],
     section: Optional[str],
-    max_read_chars: int = MAX_READ_CHARS,
+    max_read_words: int = MAX_READ_WORDS,
     show_toc: bool = False,
 ) -> str:
     """格式化文档内容输出。"""
@@ -907,14 +910,22 @@ def _format_document_output(
     if section:
         match = _find_section_text(nodes, section)
         if not match:
-            return header + f"\n（未找到章节: {section}）"
+            return header + (
+                f"\n（未找到章节: {section}。请勿臆造章节标题——"
+                f"先调用 file_info(path=\"{path}\") 获取该文档的目录清单，"
+                "再从清单中选择确切的 section 重试。）"
+            )
         matched_title, matched_text, hierarchy = match
         display_text = _bump_heading_levels(matched_text, 2) if ext == ".pptx" else matched_text
-        content = _truncate_to_paragraphs(display_text, max_read_chars)
+        content, truncated = _truncate_to_word_budget(display_text, max_read_words)
         content_header = f"\n## 内容（{hierarchy}）\n"
         output = header + content_header + "\n" + content
-        if len(matched_text) > max_read_chars:
-            output += f"\n\n（内容已截断。使用 start_word/end_word 读取后续内容。）"
+        if truncated:
+            output += (
+                "\n\n（内容已截断：该章节超出单次输出上限。"
+                "可用 file_info 查看其子章节清单，改用更小的 section 分段精读；"
+                "或用 start_word/end_word 按全文词序号定位续读。）"
+            )
         return output
 
     all_text_parts = _collect_all_text(nodes)
@@ -922,20 +933,20 @@ def _format_document_output(
     if not all_text_parts:
         root_text = tree.get("text", "")
         if root_text:
-            content = _truncate_to_paragraphs(root_text, max_read_chars)
+            content, truncated = _truncate_to_word_budget(root_text, max_read_words)
             output = header + f"\n## 内容\n\n" + content
-            if len(root_text) > max_read_chars:
+            if truncated:
                 output += "\n\n（内容已截断。使用 start_word/end_word 读取后续内容。）"
             return output
         return header + "\n（文档内容为空）"
 
     if start_word is not None or end_word is not None:
         return _format_word_range(
-            header, all_text_parts, ext, start_word, end_word, max_read_chars
+            header, all_text_parts, ext, start_word, end_word, max_read_words
         )
 
     content_parts = []
-    total_chars = 0
+    total_words = 0
     for title, text, ls, le in all_text_parts:
         if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
@@ -945,13 +956,14 @@ def _format_document_output(
         else:
             part = text
 
-        if total_chars + len(part) > max_read_chars:
-            remaining = max_read_chars - total_chars
+        part_words = _count_words(part)
+        if total_words + part_words > max_read_words:
+            remaining = max_read_words - total_words
             if remaining > 200:
-                content_parts.append(_truncate_to_paragraphs(part, remaining))
+                content_parts.append(_truncate_to_word_budget(part, remaining)[0])
             break
         content_parts.append(part)
-        total_chars += len(part)
+        total_words += part_words
 
     if not content_parts:
         return header + "\n（指定范围内无内容）"
@@ -963,20 +975,35 @@ def _format_document_output(
 
     output = header + f"\n## 内容{line_info}\n\n" + content
 
-    total_text_len = sum(len(t) for _, t, _, _ in all_text_parts)
-    if total_text_len > max_read_chars:
+    total_doc_words = sum(_count_words(t) for _, t, _, _ in all_text_parts)
+    if total_doc_words > max_read_words:
         output += "\n\n（内容已截断。使用 start_word/end_word 或 section 参数读取后续内容。）"
 
     return output
 
 
-# 词切分器与 planify.read_file 共用（单一真相源：两工具的词序号语义必须一致）
-from planify.tools.basic import split_words_with_seps  # noqa: E402
-
-
 def _split_words_cjk(text: str) -> list[str]:
     """切词（仅词，不含分隔符）：委托 planify 的共享实现。"""
     return [w for w, _s in split_words_with_seps(text)]
+
+
+def _truncate_to_word_budget(text: str, max_words: int) -> Tuple[str, bool]:
+    """按词数预算截断（词：CJK 每字一词，其余按空白切分），尽量落在段落边界。
+
+    Returns: (截断后文本, 是否发生了截断)
+    """
+    pieces = split_words_with_seps(text)
+    if len(pieces) <= max_words:
+        return text, False
+    kept = "".join(w + s for w, s in pieces[:max_words])
+    # 优先落在段落边界，其次行边界（与 _truncate_to_paragraphs 同一策略）
+    last_para = kept.rfind("\n\n")
+    if last_para > len(kept) // 2:
+        return kept[:last_para].rstrip(), True
+    last_nl = kept.rfind("\n")
+    if last_nl > len(kept) // 2:
+        return kept[:last_nl].rstrip(), True
+    return kept.rstrip(), True
 
 
 def _format_word_range(
@@ -985,7 +1012,7 @@ def _format_word_range(
     ext: str,
     start_word: Optional[int],
     end_word: Optional[int],
-    max_read_chars: int,
+    max_read_words: int,
 ) -> str:
     """按词序号切片输出（1-based 闭区间）。
 
@@ -1017,18 +1044,11 @@ def _format_word_range(
     sliced = words[start_idx:end_idx]
     shown = sliced
     truncated = ""
-    if len("".join(sliced)) > max_read_chars:
-        # 按词截断到预算内，并告知实际读到的词位置，供下一轮续读
-        acc: list[str] = []
-        size = 0
-        for w in sliced:
-            if size + len(w) > max_read_chars:
-                break
-            acc.append(w)
-            size += len(w)
-        shown = acc
+    if len(sliced) > max_read_words:
+        # 按词数预算截断，并告知实际读到的词位置，供下一轮续读
+        shown = sliced[:max_read_words]
         truncated = (
-            f"\n\n（内容已截断。使用 start_word={start_idx + len(acc) + 1} 续读后续内容。）"
+            f"\n\n（内容已截断。使用 start_word={start_idx + len(shown) + 1} 续读后续内容。）"
         )
 
     first_word_no = start_idx + 1
@@ -1465,18 +1485,10 @@ def _handle_read_document(
     ext = os.path.splitext(abs_path)[1].lower()
 
     try:
-        # 图像文件不能现场重解析（会得到占位节点）；视觉解析结果在索引里，直接读索引
-        from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
-
-        if ext in IMAGE_EXTENSIONS:
-            tree = _load_indexed_image_tree(idx_manager, abs_path)
-            if tree is None:
-                return (
-                    f"图像文件尚未进索引: {path}。\n"
-                    "请先 manage_kb(action='reindex') 构建索引后重试。"
-                )
-        else:
-            tree = _parse_document(abs_path, ext)
+        # 索引优先（text-first 取完整正文）：部分格式（如 PDF）现场解析只产出
+        # summary 截断摘要，完整 text 只在索引里；读索引还省掉重复解析。
+        # 未命中索引回退现场解析（不触发全量建索引）；图像视觉解析结果只在索引里。
+        tree, _indexed = _load_tree_for_info(idx_manager, abs_path, ext)
     except ImportError as e:
         return (
             f"文档解析失败: 缺少依赖 {e}。\n"
@@ -1489,6 +1501,13 @@ def _handle_read_document(
         )
 
     if not tree:
+        from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
+
+        if ext in IMAGE_EXTENSIONS:
+            return (
+                f"图像文件尚未进索引: {path}。\n"
+                "请先 manage_kb(action='reindex') 构建索引后重试。"
+            )
         return f"文档解析结果为空: {path}"
 
     file_size = os.path.getsize(abs_path)
@@ -1501,7 +1520,7 @@ def _handle_read_document(
         start_word=start_word,
         end_word=end_word,
         section=section,
-        max_read_chars=idx_manager.max_read_chars,
+        max_read_words=idx_manager.max_read_words,
         show_toc=idx_manager.read_doc_show_toc,
     )
 
@@ -1509,9 +1528,6 @@ def _handle_read_document(
 # ---------------------------------------------------------------------------
 # file_info：read_document 之前的文件概况探查
 # ---------------------------------------------------------------------------
-
-# 目录清单输出上限（节数过多时截断，避免概况本身变成长文）
-MAX_INFO_TOC_ENTRIES = 60
 
 
 def _load_tree_for_info(
@@ -1652,9 +1668,4 @@ def _handle_file_info(
     if not toc_lines:
         return header
 
-    truncated = ""
-    if len(toc_lines) > MAX_INFO_TOC_ENTRIES:
-        truncated = f"\n（仅显示前 {MAX_INFO_TOC_ENTRIES} 节，其余 {len(toc_lines) - MAX_INFO_TOC_ENTRIES} 节略）"
-        toc_lines = toc_lines[:MAX_INFO_TOC_ENTRIES]
-
-    return header + "\n\n## 目录结构\n" + "\n".join(toc_lines) + truncated
+    return header + "\n\n## 目录结构\n" + "\n".join(toc_lines)
