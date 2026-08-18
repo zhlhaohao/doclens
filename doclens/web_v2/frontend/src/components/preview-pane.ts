@@ -144,6 +144,8 @@ export class PreviewPane extends LitElement {
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
     button.upload-btn,
+    button.highlight-btn,
+    button.edit-btn,
     button.back-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-xs);
@@ -155,35 +157,100 @@ export class PreviewPane extends LitElement {
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
+    /* icon + hover 文字（参照 file-list 工具栏）：默认只显图标，hover 时
+       文字以 tooltip 浮现于按钮左下方（上方被 app-bar 遮挡），
+       不撑宽按钮、无布局抖动 */
+    .header button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+    }
+    .header button doclens-icon {
+      font-size: 14px;
+    }
+    .header button .btn-label {
+      display: none;
+    }
+    .header button:hover:not(:disabled) .btn-label {
+      display: block;
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      white-space: nowrap;
+      background: var(--cortex-text);
+      color: var(--cortex-surface);
+      font-size: var(--cortex-fs-xs);
+      line-height: 1.4;
+      padding: 2px 10px;
+      border-radius: var(--cortex-radius-pill);
+      z-index: 20;
+      pointer-events: none;
+    }
     button.download-btn:hover,
     button.upload-btn:hover,
+    button.highlight-btn:hover,
+    button.edit-btn:hover,
     button.back-btn:hover {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text);
       border-color: var(--cortex-text-subtle);
+    }
+    /* 高亮输入条展开中的激活态 */
+    button.highlight-btn.active {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    /* 关键词高亮输入条（header / mobile-header 下方展开） */
+    .highlight-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      font-size: var(--cortex-fs-sm);
+      flex-shrink: 0;
+    }
+    .highlight-bar input {
+      flex: 1;
+      min-width: 0;
+      font-family: inherit;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      background: var(--cortex-card-bg);
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-pill);
+      padding: var(--cortex-space-1) var(--cortex-space-3);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .highlight-bar input:focus {
+      border-color: var(--cortex-primary);
+    }
+    .highlight-bar .highlight-clear {
+      border: none;
+      background: transparent;
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      padding: var(--cortex-space-1);
+      border-radius: 50%;
+      font-size: var(--cortex-fs-base);
+      transition: background 0.15s, color 0.15s;
+    }
+    .highlight-bar .highlight-clear:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
     }
     button.back-btn {
       display: inline-flex;
       align-items: center;
       gap: var(--cortex-space-1);
       flex-shrink: 0;
-    }
-    /* 主动作：编辑按钮 = primary gradient + glow */
-    button.edit-btn {
-      font-family: inherit;
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-1) var(--cortex-space-3);
-      border: none;
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border-radius: var(--cortex-radius-pill);
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    button.edit-btn:hover { opacity: 0.9; }
-    button.edit-btn:focus-visible {
-      outline: none;
-      box-shadow: var(--cortex-focus-ring);
     }
     .mobile-header {
       display: flex;
@@ -195,8 +262,9 @@ export class PreviewPane extends LitElement {
       flex-shrink: 0;
       position: relative;
     }
-    /* 圆形返回 / 更多按钮 —— 同 focus-header */
+    /* 圆形返回 / 更多 / 高亮按钮 —— 同 focus-header */
     .mobile-header .mobile-back,
+    .mobile-header .mobile-highlight,
     .mobile-header .mobile-more {
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
@@ -216,7 +284,14 @@ export class PreviewPane extends LitElement {
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     .mobile-header .mobile-back:hover,
+    .mobile-header .mobile-highlight:hover,
     .mobile-header .mobile-more:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    /* 高亮输入条展开中的激活态（移动端圆形按钮） */
+    .mobile-header .mobile-highlight.active {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
@@ -287,6 +362,10 @@ export class PreviewPane extends LitElement {
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
   @state() private _showMobileMenu = false;
+  /** 关键词高亮输入条（仅 markdown 预览分支可用） */
+  @state() private _showHighlightBar = false;
+  @state() private _highlightInput = "";
+  private _highlightDebounce: number | undefined;
 
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
@@ -299,6 +378,12 @@ export class PreviewPane extends LitElement {
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
 
   willUpdate(changed: Map<string, unknown>) {
+    if (changed.has("path")) {
+      // 换文档：清空高亮输入并收起输入条，不残留旧文档的高亮
+      this._highlightInput = "";
+      this._showHighlightBar = false;
+      this._clearHighlightDebounce();
+    }
     if (changed.has("content")) {
       this._content = this.content;
       this._mode = "preview";
@@ -347,6 +432,7 @@ export class PreviewPane extends LitElement {
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
+    this._clearHighlightDebounce();
     super.disconnectedCallback();
   }
 
@@ -397,6 +483,14 @@ export class PreviewPane extends LitElement {
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
         <span class="mobile-filename" title=${this.path}>${this._basename(this.path)}</span>
+        ${this.language === "markdown" && this._mode === "preview"
+          ? html`<button
+              class="mobile-highlight ${this._showHighlightBar ? "active" : ""}"
+              type="button"
+              aria-label="关键词高亮"
+              @click=${this._onHighlightToggle}
+            ><doclens-icon name="highlighter"></doclens-icon></button>`
+          : null}
         <button
           class="mobile-more"
           type="button"
@@ -509,7 +603,7 @@ export class PreviewPane extends LitElement {
 
   private _renderDownloadBtn() {
     if (this._isPst) return null;
-    return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon>下载</button>`;
+    return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>`;
   }
 
   /** 触发「重新解析」：冒泡 reparse 事件给父组件（files-view 挂 reparse-dialog）。 */
@@ -525,13 +619,13 @@ export class PreviewPane extends LitElement {
   /** 图像文件 + enableReparse 时显示「重新解析」按钮（复用 download-btn 样式）。 */
   private _renderReparseBtn() {
     if (!this.enableReparse || this._isPst || !isImageFile(this.path)) return null;
-    return html`<button class="download-btn" @click=${this._onReparseClick}><doclens-icon name="refresh-cw"></doclens-icon>重新解析</button>`;
+    return html`<button class="download-btn" @click=${this._onReparseClick}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">重新解析</span></button>`;
   }
 
   /** 桌面 header 返回按钮（复用 mobile back 事件，父组件统一监听 @back）。 */
   private _renderBackBtn() {
     if (!this.showBack) return null;
-    return html`<button class="back-btn" @click=${this._onMobileBackClick}><doclens-icon name="arrow-left"></doclens-icon>${this.backLabel}</button>`;
+    return html`<button class="back-btn" @click=${this._onMobileBackClick}><doclens-icon name="arrow-left"></doclens-icon><span class="btn-label">${this.backLabel}</span></button>`;
   }
 
   private _onUploadClick = () => {
@@ -567,7 +661,95 @@ export class PreviewPane extends LitElement {
 
   private _renderUploadBtn() {
     if (this._isPst) return null;
-    return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon>上传</button>`;
+    return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span></button>`;
+  }
+
+  // ------------------------------------------------------------------
+  // 关键词高亮（仅 markdown 预览分支）：输入整词（空格分隔多个）→
+  // 透传 md-viewer keyword 高亮全部命中，并自动滚动到第一个命中。
+  // ------------------------------------------------------------------
+
+  /** 桌面 header 的高亮按钮（图标 + hover 文字）。 */
+  private _renderHighlightBtn() {
+    return html`<button
+      class="highlight-btn ${this._showHighlightBar ? "active" : ""}"
+      @click=${this._onHighlightToggle}
+    ><doclens-icon name="highlighter"></doclens-icon><span class="btn-label">高亮</span></button>`;
+  }
+
+  /** 高亮输入条（桌面 header 下方 / 移动端 mobile-header 下方共用）。 */
+  private _renderHighlightBar() {
+    if (!this._showHighlightBar) return null;
+    return html`
+      <div class="highlight-bar">
+        <doclens-icon name="highlighter"></doclens-icon>
+        <input
+          type="text"
+          placeholder="输入关键字高亮，空格分隔多个…"
+          .value=${this._highlightInput}
+          @input=${this._onHighlightInput}
+          @keydown=${this._onHighlightKeydown}
+        />
+        <button
+          class="highlight-clear"
+          aria-label="清除并关闭"
+          @click=${this._onHighlightClear}
+        ><doclens-icon name="x"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  private _onHighlightToggle = async () => {
+    this._showHighlightBar = !this._showHighlightBar;
+    if (this._showHighlightBar) {
+      await this.updateComplete;
+      const input = this.shadowRoot?.querySelector(
+        ".highlight-bar input",
+      ) as HTMLInputElement | null;
+      input?.focus();
+    }
+  };
+
+  private _onHighlightInput = (e: Event) => {
+    this._highlightInput = (e.target as HTMLInputElement).value;
+    // 输入停顿 300ms 后自动跳到第一个命中（Enter 立即跳）
+    this._clearHighlightDebounce();
+    if (!this._highlightInput.trim()) return;
+    this._highlightDebounce = window.setTimeout(() => {
+      this._highlightDebounce = undefined;
+      void this._jumpToFirstHit();
+    }, 300);
+  };
+
+  private _onHighlightKeydown = (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      this._clearHighlightDebounce();
+      void this._jumpToFirstHit();
+    } else if (e.key === "Escape") {
+      this._onHighlightClear();
+    }
+  };
+
+  private _onHighlightClear = () => {
+    this._clearHighlightDebounce();
+    this._highlightInput = "";
+    this._showHighlightBar = false;
+  };
+
+  private _clearHighlightDebounce() {
+    if (this._highlightDebounce !== undefined) {
+      window.clearTimeout(this._highlightDebounce);
+      this._highlightDebounce = undefined;
+    }
+  }
+
+  /** 等 md-viewer 重渲染并完成关键词高亮后，滚动到第一个命中。 */
+  private async _jumpToFirstHit() {
+    await this.updateComplete;
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (!viewer) return;
+    await viewer.updateComplete;
+    viewer.scrollToFirstKeywordHit();
   }
 
   private _formatSize(size: number): string {
@@ -643,17 +825,19 @@ export class PreviewPane extends LitElement {
             ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this.writable
-              ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon>编辑</button>`
+              ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
               : null}
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
+            ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
           </div>
         ` : null}
+        ${this._renderHighlightBar()}
         <md-viewer
           .content=${this._content}
           .line=${this.line}
-          .keyword=${this.keyword}
+          .keyword=${this._highlightInput || this.keyword}
           .pages=${this.pages}
           .docPath=${this.path}
           ?suppressLocate=${this._suppressLocate}
