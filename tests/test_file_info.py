@@ -73,6 +73,14 @@ class TestStructuredMd:
         assert m, read
         assert int(m.group(1)) == total
 
+    def test_plain_full_read_no_params(self, kb: Path):
+        """无参全文读取（不走 section/start_word 分支）回归：曾残留 start_line/end_line
+        死代码，普通 read_document(path) 直接 NameError。"""
+        out = _handle_read_document(_fake_idx(), kb, path="structured.md")
+        assert "## 内容" in out
+        assert "量子 计算 基础 知识" in out
+        assert "[第" not in out  # 行号区间信息已随 start_line/end_line 参数一并移除
+
 
 class TestPlainText:
     def test_no_sections(self, kb: Path):
