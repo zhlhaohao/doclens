@@ -375,6 +375,7 @@ export class MdViewer extends LitElement {
       z-index: 5;
     }
     .doc-copy {
+      position: relative;
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -391,6 +392,25 @@ export class MdViewer extends LitElement {
       transition: opacity 0.15s;
     }
     .doc-copy:hover { opacity: 1; color: var(--cortex-primary); }
+    /* icon-only：文字 hover 时以 tooltip 浮现于按钮左下方（同 preview-pane header） */
+    .doc-copy .btn-label {
+      display: none;
+    }
+    .doc-copy:hover .btn-label {
+      display: block;
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      white-space: nowrap;
+      background: var(--cortex-text);
+      color: var(--cortex-surface);
+      font-size: var(--cortex-fs-xs);
+      line-height: 1.4;
+      padding: 2px 10px;
+      border-radius: var(--cortex-radius-pill);
+      z-index: 20;
+      pointer-events: none;
+    }
     /* 定位块的闪烁动画（"你滚到这里了"指示）
        使用 box-shadow 而不是 background，避免和 <mark class="keyword-hit">
        的 primary 底色叠加产生视觉混乱（xlsx 场景下 scrollTo 可能是 mark）。
@@ -470,8 +490,13 @@ export class MdViewer extends LitElement {
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
-    // content/keyword 变化都需重新高亮（render 会重建 .md-body，旧 <mark> 随之销毁）
+    // content/keyword 变化都需重新高亮（content 变化时 render 重建 .md-body，
+    // 旧 <mark> 随之销毁；仅 keyword 变化时 .innerHTML 绑定同值跳过、DOM 不重建，
+    // 需先剥掉旧 <mark>——否则残留旧高亮且 TreeWalker 跳过 MARK 子树会漏判）
     if (changedProps.has("content") || changedProps.has("keyword")) {
+      if (changedProps.has("keyword") && !changedProps.has("content")) {
+        this._stripKeywordMarks();
+      }
       this._highlightKeyword();
     }
     if (
@@ -624,6 +649,28 @@ export class MdViewer extends LitElement {
     });
   }
 
+  /** 滚动到第一个关键词命中（<mark class="keyword-hit">），并闪烁其所在块。
+   *  供 preview-pane 的高亮输入条在用户输入后自动定位。无命中时静默返回。 */
+  scrollToFirstKeywordHit(behavior: ScrollBehavior = "smooth") {
+    const mark = this.shadowRoot?.querySelector("mark.keyword-hit") as HTMLElement | null;
+    if (!mark) return;
+    // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器），
+    // 不能用 scrollIntoView —— 会沿滚动链传播把外层容器顶出去。
+    const hostRect = this.getBoundingClientRect();
+    if (hostRect.height <= 0) return;
+    const markRect = mark.getBoundingClientRect();
+    this.scrollTo({
+      top: markRect.top - hostRect.top + this.scrollTop,
+      behavior,
+    });
+    // 闪烁首个命中所在的块级元素，增强定位感知
+    const block = mark.closest("[data-source-line]") as HTMLElement | null;
+    const flashTarget = block ?? mark;
+    flashTarget.classList.remove("highlight-flash"); // 重置以便动画重放
+    void flashTarget.offsetWidth;                    // 强制 reflow，让 animation 重新触发
+    flashTarget.classList.add("highlight-flash");
+  }
+
   private _locateAndHighlight() {
     if (this.line === null || this.line === undefined) return;
     const target = this._findBlockAtLine(this.line);
@@ -684,6 +731,17 @@ export class MdViewer extends LitElement {
       }
       text.parentNode?.replaceChild(frag, text);
     }
+  }
+
+  /** 剥掉正文里的全部 <mark class="keyword-hit">（还原为纯文本节点并 normalize 合并）。
+   *  mark 只包裹单个文本节点片段（_highlightKeyword 逐文本节点替换），剥离安全。 */
+  private _stripKeywordMarks() {
+    const root = this.shadowRoot?.querySelector(".md-body-paged, .md-body") as HTMLElement | null;
+    if (!root) return;
+    root.querySelectorAll("mark.keyword-hit").forEach((m) => {
+      m.replaceWith(document.createTextNode(m.textContent ?? ""));
+    });
+    root.normalize();
   }
 
   private _escapeRegExp(s: string): string {
@@ -759,7 +817,7 @@ export class MdViewer extends LitElement {
     return html`<button class="doc-copy" @click=${this._copyAll}>
       ${this._copied
         ? "✓ 已复制"
-        : html`<doclens-icon name="copy" style="font-size:14px"></doclens-icon> 复制全文`}
+        : html`<doclens-icon name="copy" style="font-size:14px"></doclens-icon><span class="btn-label">复制全文</span>`}
     </button>`;
   }
 

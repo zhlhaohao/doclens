@@ -56,6 +56,7 @@ import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
 import squareIcon from "lucide-static/icons/square.svg?raw";
 import userIcon from "lucide-static/icons/user.svg?raw";
 import logOutIcon from "lucide-static/icons/log-out.svg?raw";
+import highlighterIcon from "lucide-static/icons/highlighter.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -101,6 +102,7 @@ const ICONS: Record<string, string> = {
   square: squareIcon,
   user: userIcon,
   "log-out": logOutIcon,
+  highlighter: highlighterIcon,
 };
 
 @customElement("doclens-icon")

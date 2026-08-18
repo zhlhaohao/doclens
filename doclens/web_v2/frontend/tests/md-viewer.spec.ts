@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fixture } from "@open-wc/testing";
 import { html } from "lit";
 import type { MdViewer } from "../src/components/md-viewer";
@@ -133,6 +133,71 @@ describe("<md-viewer>", () => {
     expect(flash).toBeTruthy();
     expect(flash!.getAttribute("data-source-line")).toBe("5");
     expect(flash!.textContent).toContain("邓寅");
+  });
+
+  it("scrollToFirstKeywordHit scrolls host to first mark and flashes its block", async () => {
+    // preview-pane 高亮输入条的核心定位方法：无 line 属性，纯 keyword 场景。
+    const md = "# Title\n\nfoo\n\nbar 邓寅 baz\n\nqux 邓寅 quux\n";
+    const el = await fixture(html`
+      <md-viewer content=${md} .keyword=${"邓寅"}></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("mark.keyword-hit").length).toBe(2);
+
+    // jsdom 未实现 scrollTo / getBoundingClientRect 返回全 0 —— stub 后验证调用
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    // hostRect.height > 0 才会滚动：stub getBoundingClientRect
+    const origGetRect = el.getBoundingClientRect.bind(el);
+    (el as any).getBoundingClientRect = () => ({ ...origGetRect(), height: 400, top: 0 });
+
+    el.scrollToFirstKeywordHit();
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+    const arg = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+    expect(arg.top).toBeGreaterThanOrEqual(0);
+
+    // 首个命中所在块带闪烁动画
+    const flash = el.shadowRoot!.querySelector(".highlight-flash");
+    expect(flash).toBeTruthy();
+    expect(flash!.textContent).toContain("邓寅");
+  });
+
+  it("scrollToFirstKeywordHit is a no-op when no keyword hit", async () => {
+    const el = await fixture(html`
+      <md-viewer content=${"# T\n\nfoo\n"} .keyword=${"不存在词"}></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    el.scrollToFirstKeywordHit();
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+
+  it("copy button is icon-only with hover tooltip label (icon + btn-label)", async () => {
+    // preview 右上角「复制全文」按钮图标化：默认只显示 copy 图标，
+    // 文字「复制全文」藏在 .btn-label（CSS 默认 display:none，hover 浮现为 tooltip）。
+    const el = await fixture(html`<md-viewer content="# T\n\nfoo"></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    const btn = el.shadowRoot!.querySelector("button.doc-copy") as HTMLButtonElement;
+    expect(btn, "expected .doc-copy button in copy-bar-top").toBeTruthy();
+    const icon = btn.querySelector("doclens-icon");
+    expect(icon?.getAttribute("name")).toBe("copy");
+    const label = btn.querySelector(".btn-label");
+    expect(label?.textContent?.trim()).toBe("复制全文");
+    // 按钮自身不再直接含文字（文字只在 .btn-label 里）
+    expect(btn.textContent?.replace(label?.textContent ?? "", "").trim()).toBe("");
+  });
+
+  it("copy button shows ✓ 已复制 text while in copied state", async () => {
+    // 复制成功后的即时反馈仍用文字（1.5s 后恢复 icon-only）。
+    const el = await fixture(html`<md-viewer content="# T\n\nfoo"></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    (el as any)._copied = true;
+    await el.updateComplete;
+    const btn = el.shadowRoot!.querySelector("button.doc-copy")!;
+    expect(btn.textContent?.trim()).toBe("✓ 已复制");
+    expect(btn.querySelector("doclens-icon")).toBeNull();
   });
 
   it("scopes the keyword mark fallback to the same page as the target (multi-sheet xlsx)", async () => {

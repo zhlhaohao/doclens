@@ -728,3 +728,146 @@ describe("<preview-pane> mobile header", () => {
     expect(toolbarPath!.textContent).toBe("docs/readme.md");
   });
 });
+
+describe("<preview-pane> keyword highlight", () => {
+  it("renders highlight button in markdown preview header", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-btn")).toBeTruthy();
+  });
+
+  it("header buttons carry icon + .btn-label (hover tooltip pattern)", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const cases: Array<[string, string]> = [
+      [".edit-btn", "编辑"],
+      [".download-btn", "下载"],
+      [".upload-btn", "上传"],
+      [".highlight-btn", "高亮"],
+    ];
+    for (const [sel, label] of cases) {
+      const btn = el.shadowRoot!.querySelector(sel);
+      expect(btn, sel).toBeTruthy();
+      expect(btn!.querySelector("doclens-icon"), sel).toBeTruthy();
+      const span = btn!.querySelector(".btn-label");
+      expect(span, sel).toBeTruthy();
+      expect(span!.textContent, sel).toBe(label);
+    }
+  });
+
+  it("does not render highlight button for html / plain-text branches", async () => {
+    const htmlEl = await fixture(html`
+      <preview-pane language="html" content="<p>x</p>" path="page.html"></preview-pane>
+    `) as PreviewPane;
+    await htmlEl.updateComplete;
+    expect(htmlEl.shadowRoot!.querySelector(".highlight-btn")).toBeNull();
+
+    const textEl = await fixture(html`
+      <preview-pane language="python" content="print('hi')" path="a.py"></preview-pane>
+    `) as PreviewPane;
+    await textEl.updateComplete;
+    expect(textEl.shadowRoot!.querySelector(".highlight-btn")).toBeNull();
+  });
+
+  it("does not render highlight button in edit mode header", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-btn")).toBeNull();
+  });
+
+  it("clicking highlight button opens input bar; input syncs to md-viewer keyword", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# 物联网 平台" path="doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-bar")).toBeNull();
+
+    (el.shadowRoot!.querySelector(".highlight-btn") as HTMLElement).click();
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector(".highlight-bar input") as HTMLInputElement;
+    expect(input).toBeTruthy();
+
+    input.value = "物联网";
+    input.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+    const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
+    await mdv.updateComplete;
+    expect(mdv.keyword).toBe("物联网");
+    expect(mdv.shadowRoot!.querySelectorAll("mark.keyword-hit").length).toBeGreaterThan(0);
+  });
+
+  it("clear button empties keyword and closes the bar", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# 物联网" path="doc.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".highlight-btn") as HTMLElement).click();
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector(".highlight-bar input") as HTMLInputElement;
+    input.value = "物联网";
+    input.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+
+    (el.shadowRoot!.querySelector(".highlight-clear") as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-bar")).toBeNull();
+    const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
+    await mdv.updateComplete;
+    expect(mdv.keyword).toBe("");
+    expect(mdv.shadowRoot!.querySelectorAll("mark.keyword-hit").length).toBe(0);
+  });
+
+  it("path change resets highlight input and closes the bar", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# 物联网" path="a.md"></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".highlight-btn") as HTMLElement).click();
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector(".highlight-bar input") as HTMLInputElement;
+    input.value = "物联网";
+    input.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+
+    el.path = "b.md";
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-bar")).toBeNull();
+    const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
+    expect(mdv.keyword).toBe("");
+  });
+
+  it("mobile: highlight button sits left of mobile-more, toggles the same bar", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T" path="doc.md" ?mobile=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const mh = el.shadowRoot!.querySelector(".mobile-header")!;
+    const hl = mh.querySelector(".mobile-highlight") as HTMLElement;
+    const more = mh.querySelector(".mobile-more") as HTMLElement;
+    expect(hl).toBeTruthy();
+    // DOM 顺序：highlight 在 more 之前
+    expect(
+      hl.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    hl.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".highlight-bar")).toBeTruthy();
+  });
+
+  it("mobile: hides highlight button for non-markdown content", async () => {
+    const el = await fixture(html`
+      <preview-pane language="python" content="print(1)" path="a.py" ?mobile=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".mobile-highlight")).toBeNull();
+  });
+});
