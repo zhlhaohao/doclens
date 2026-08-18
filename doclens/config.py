@@ -244,6 +244,12 @@ class CortexConfig(BaseSettings):
         alias="PLANIFY_CONTEXT_WINDOW",
         description="LLM 上下文窗口大小（tokens）。compact 阈值 = context_window × 0.8。",
     )
+    planify_max_tokens: int = Field(
+        default=8000,
+        alias="PLANIFY_MAX_TOKENS",
+        description="LLM 单次响应最大输出 tokens。主代理与子代理共用；"
+        "子代理并发拆分读取时，每组读取量建议 ≤ max_tokens × 0.8 词（留 20% 余量）。",
+    )
     planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）

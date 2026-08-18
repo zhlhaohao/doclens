@@ -36,6 +36,7 @@ class SessionConfig:
     protocol: str = "anthropic"
     token_threshold: int = 100000
     planify_context_window: int = 200000
+    planify_max_tokens: int = 8000
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径

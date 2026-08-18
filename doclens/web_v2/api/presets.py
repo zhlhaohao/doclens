@@ -16,13 +16,17 @@ from fastapi import APIRouter
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.config_store import resolve_env_path, write_env_values
 from doclens.web_v2.models.preset import (
+    PRESET_SECRET_MASK,
     ActivateResult,
     Preset,
     PresetCreate,
     PresetListResponse,
     PresetUpdate,
+    ProbeMaxTokensRequest,
+    ProbeMaxTokensResult,
 )
 from doclens.web_v2 import presets_store
+from doclens.web_v2.probe_max_tokens import ProbeError, probe_max_tokens
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,6 +59,8 @@ def _materialize(preset: dict) -> dict:
         }
         if preset.get("context_window"):
             updates["PLANIFY_CONTEXT_WINDOW"] = str(preset["context_window"])
+        if preset.get("max_tokens"):
+            updates["PLANIFY_MAX_TOKENS"] = str(preset["max_tokens"])
         return updates
     if kind == "search":
         updates = {"CORTEX_ACTIVE_SEARCH_PRESET": name}
@@ -107,6 +113,29 @@ async def delete_preset(preset_id: str):
     if not deleted:
         raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {preset_id}")
     return {"ok": True}
+
+
+@router.post("/presets/probe-max-tokens", response_model=ProbeMaxTokensResult)
+def probe_max_tokens_endpoint(req: ProbeMaxTokensRequest):
+    """二分探测服务端允许的 max_tokens 上限（同步函数 → FastAPI 线程池执行）。
+
+    api_key 留空或传脱敏占位符时，从 preset_id 对应的预设取已存密钥。
+    """
+    api_key = req.api_key
+    if not api_key or api_key == PRESET_SECRET_MASK:
+        if not req.preset_id:
+            raise CortexAPIError(400, "PROBE_KEY_REQUIRED", "未提供 API Key；编辑既有预设时请传 preset_id")
+        raw = presets_store.get_preset_raw(req.preset_id)
+        if raw is None:
+            raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {req.preset_id}")
+        api_key = raw.get("api_key", "")
+    try:
+        answer, attempts = probe_max_tokens(
+            req.protocol, req.base_url, req.model_id, api_key
+        )
+    except ProbeError as e:
+        raise CortexAPIError(502, "PROBE_FAILED", str(e))
+    return ProbeMaxTokensResult(max_tokens=answer, attempts=attempts)
 
 
 @router.post("/presets/{preset_id}/activate", response_model=ActivateResult)

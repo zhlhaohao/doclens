@@ -25,6 +25,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "PLANIFY_MODEL_ID",
     "PLANIFY_PROTOCOL",
     "PLANIFY_CONTEXT_WINDOW",
+    "PLANIFY_MAX_TOKENS",
     "CORTEX_ACTIVE_LLM_PRESET",
     # 视觉模型（图像文件解析，独立于 AI 对话配置）
     "VISION_API_KEY",

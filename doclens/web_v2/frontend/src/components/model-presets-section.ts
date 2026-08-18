@@ -6,6 +6,7 @@ import {
   createPreset,
   deletePreset,
   listPresets,
+  probeMaxTokens,
   updatePreset,
   PresetsApiError,
   type NewPresetInput,
@@ -24,6 +25,7 @@ function emptyForm(kind: PresetKind): FormState {
     model_id: "",
     api_key: "",
     context_window: "",
+    max_tokens: "",
   };
 }
 
@@ -35,6 +37,7 @@ interface FormState {
   model_id: string;
   api_key: string;
   context_window: string;
+  max_tokens: string;
 }
 
 interface EditingState {
@@ -240,6 +243,18 @@ export class ModelPresetsSection extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-danger);
     }
+    .probe-row {
+      display: flex;
+      gap: var(--cortex-space-2);
+      align-items: center;
+    }
+    .probe-row .input { flex: 1; }
+    .probe-row .icon-btn { flex-shrink: 0; white-space: nowrap; }
+    .probe-msg {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-primary);
+      margin-top: 4px;
+    }
 
     .msg {
       font-size: var(--cortex-fs-xs);
@@ -267,6 +282,8 @@ export class ModelPresetsSection extends LitElement {
   @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
+  @state() private _probing = false;
+  @state() private _probeMsg: string | null = null;
 
   private _toastTimer?: number;
 
@@ -332,6 +349,7 @@ export class ModelPresetsSection extends LitElement {
         model_id: p.model_id ?? "",
         api_key: "", // 留空=不改动（编辑时密钥已脱敏）
         context_window: p.context_window ? String(p.context_window) : "",
+        max_tokens: p.max_tokens ? String(p.max_tokens) : "",
       },
     };
   }
@@ -370,17 +388,20 @@ export class ModelPresetsSection extends LitElement {
           model_id: f.model_id.trim(),
           api_key: f.api_key,
           context_window: f.kind === "llm" && f.context_window ? Number(f.context_window) : null,
+          max_tokens: f.kind === "llm" && f.max_tokens ? Number(f.max_tokens) : null,
         };
         await createPreset(input);
         this._setFlash(`已创建预设「${input.name}」`);
       } else if (ed.presetId) {
         const cw = f.kind === "llm" && f.context_window ? Number(f.context_window) : null;
+        const mt = f.kind === "llm" && f.max_tokens ? Number(f.max_tokens) : null;
         const updates: Record<string, unknown> = {
           name: f.name.trim(),
           protocol: f.protocol,
           base_url: f.base_url.trim(),
           model_id: f.model_id.trim(),
           context_window: cw,
+          max_tokens: mt,
         };
         // api_key 仅在用户输入了新值时才传（空=不改动）
         if (f.api_key) updates.api_key = f.api_key;
@@ -430,6 +451,38 @@ export class ModelPresetsSection extends LitElement {
     }
   }
 
+  private async _probe() {
+    const ed = this._editing;
+    if (!ed) return;
+    const f = ed.form;
+    if (!f.base_url.trim() || !f.model_id.trim()) {
+      this._formError = "探测前请先填写 Base URL 与模型 ID";
+      return;
+    }
+    if (!f.api_key && ed.mode === "new") {
+      this._formError = "探测前请先填写 API Key";
+      return;
+    }
+    this._probing = true;
+    this._formError = null;
+    this._probeMsg = null;
+    try {
+      const r = await probeMaxTokens({
+        protocol: f.protocol,
+        base_url: f.base_url.trim(),
+        model_id: f.model_id.trim(),
+        api_key: f.api_key || undefined,
+        preset_id: ed.mode === "edit" ? ed.presetId : undefined,
+      });
+      this._setField("max_tokens", String(r.max_tokens));
+      this._probeMsg = `探测成功：服务端上限 ${r.max_tokens} tokens（${r.attempts} 次请求），已填入输入框`;
+    } catch (e) {
+      this._formError = this._errMsg(e);
+    } finally {
+      this._probing = false;
+    }
+  }
+
   private _renderForm() {
     const ed = this._editing;
     if (!ed) return nothing;
@@ -463,6 +516,17 @@ export class ModelPresetsSection extends LitElement {
           <div>
             <div class="field-label">上下文窗口（tokens，留空用默认 200000）</div>
             <input class="input" type="number" min="1" autocomplete="off" .value=${f.context_window} @input=${(e: Event) => this._setField("context_window", (e.target as HTMLInputElement).value)} />
+          </div>
+          <div>
+            <div class="field-label">最大输出 tokens（留空用默认 8000；不确定可点探测）</div>
+            <div class="probe-row">
+              <input class="input" type="number" min="1" autocomplete="off" .value=${f.max_tokens} @input=${(e: Event) => this._setField("max_tokens", (e.target as HTMLInputElement).value)} />
+              <button class="icon-btn" ?disabled=${this._busy || this._probing} @click=${() => this._probe()}>
+                ${this._probing ? "探测中…" : "探测上限"}
+              </button>
+            </div>
+            ${this._probing ? html`<div class="probe-msg">二分探测中，约 18 次请求，可能需要数十秒…</div>` : nothing}
+            ${this._probeMsg ? html`<div class="probe-msg">${this._probeMsg}</div>` : nothing}
           </div>
         ` : nothing}
         ${this._formError ? html`<div class="form-error">${this._formError}</div>` : nothing}
@@ -503,7 +567,7 @@ export class ModelPresetsSection extends LitElement {
           <div class="preset-name">
             ${p.name}
           </div>
-          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}</div>
+          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}</div>
         </div>
         <div class="row-actions">
           ${active

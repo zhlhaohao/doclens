@@ -42,26 +42,47 @@ def estimate_tokens(messages: list) -> int:
     return len(json.dumps(messages, default=str)) // 4
 
 
+# microcompact 豁免清单：这些工具的结果不受"只留最近 3 个"清理。
+# task（子代理）结果是主代理汇总用的最终摘要——并发派出 N 个子代理后，
+# 下一轮 microcompact 会把排在前面的 task 结果清成 "[cleared]"，
+# 主代理便丢失大部分子代理产出（summarize-files 并发模式实测踩中）。
+MICROCOMPACT_EXEMPT_TOOLS = frozenset({"task"})
+
+
 def microcompact(messages: list) -> None:
     """
     微压缩：清理旧的工具结果
 
     在每次循环开始时自动执行，清理旧的工具结果内容。
     只保留最近 3 个，超过的用 "[cleared]" 替换。
+    MICROCOMPACT_EXEMPT_TOOLS 中的工具结果（task 子代理摘要）永不清理。
 
     Args:
         messages: 消息列表（会被原地修改）
     """
+    # tool_use_id → 工具名（从 assistant 消息的 tool_use 块建立映射）
+    tool_names: Dict[str, str] = {}
+    for msg in messages:
+        if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
+            for part in msg["content"]:
+                if isinstance(part, dict) and part.get("type") == "tool_use":
+                    tool_names[part.get("id", "")] = part.get("name", "")
+
     indices = []
     for i, msg in enumerate(messages):
         if msg["role"] == "user" and isinstance(msg.get("content"), list):
             for part in msg["content"]:
                 if isinstance(part, dict) and part.get("type") == "tool_result":
                     indices.append(part)
-    if len(indices) <= 3:
+    # 豁免工具的结果不参与"最近 3 个"计数与清理
+    cleanable = [
+        p for p in indices
+        if tool_names.get(p.get("tool_use_id", "")) not in MICROCOMPACT_EXEMPT_TOOLS
+    ]
+    if len(cleanable) <= 3:
         return
     # 清理所有 tool_result 内容，只保留最近 3 个
-    for part in indices[:-3]:
+    for part in cleanable[:-3]:
         if isinstance(part.get("content"), str) and len(part["content"]) > 100:
             part["content"] = "[cleared]"
 

@@ -15,6 +15,7 @@ export interface Preset {
   model_id?: string;
   api_key?: string;
   context_window?: number | null;
+  max_tokens?: number | null;
   // 搜索调优（search 有值；llm|vision 缺省）
   max_results?: number | null;
   min_score_threshold?: number | null;
@@ -60,6 +61,7 @@ export interface NewPresetInput {
   model_id?: string;
   api_key?: string;
   context_window?: number | null;
+  max_tokens?: number | null;
   // 搜索调优（search）
   max_results?: number | null;
   min_score_threshold?: number | null;
@@ -106,5 +108,32 @@ export async function deletePreset(id: string): Promise<void> {
 export async function activatePreset(id: string): Promise<ActivateResult> {
   return handle<ActivateResult>(
     await fetch(`/api/presets/${id}/activate`, { method: "POST" }),
+  );
+}
+
+export interface ProbeMaxTokensInput {
+  protocol: PresetProtocol;
+  base_url: string;
+  model_id: string;
+  /** 留空（编辑既有预设时）须传 preset_id，后端用已存密钥 */
+  api_key?: string;
+  preset_id?: string;
+}
+
+export interface ProbeMaxTokensResult {
+  max_tokens: number;
+  attempts: number;
+}
+
+/** 二分探测服务端允许的 max_tokens 上限（约 18 次请求，可能耗时数十秒）。 */
+export async function probeMaxTokens(
+  input: ProbeMaxTokensInput,
+): Promise<ProbeMaxTokensResult> {
+  return handle<ProbeMaxTokensResult>(
+    await fetch("/api/presets/probe-max-tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
   );
 }

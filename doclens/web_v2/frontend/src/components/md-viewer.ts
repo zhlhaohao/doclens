@@ -7,6 +7,7 @@ import katex from "katex";
 // Vite 会重写其中字体 url() 为构建产物路径（woff2 按 @font-face 按需加载）。
 import katexStyles from "katex/dist/katex.min.css?inline";
 import { sanitizeHtml } from "../utils/sanitize";
+import { cjkInlineMath } from "../utils/marked-math";
 import type { PageMarker } from "../api/preview";
 import "./image-viewer";
 import "./icon";
@@ -194,6 +195,10 @@ function ensureMdConfigured(): void {
   // 红色源码而非抛错。扩展 tokenizer 先于默认规则命中，可阻止公式内 `_` 被
   // emphasis 误解析。
   marked.use(markedKatex({ throwOnError: false }));
+  // CJK 语境行内公式兜底（type-$l$ / $...$（ / $...$； 等标准规则漏判的写法，
+  // 见 marked-math.ts）。须在 markedKatex 之后注册（marked 同级扩展 unshift，
+  // 后注册先尝试）。
+  marked.use({ extensions: [cjkInlineMath] });
   // 单行 $$...$$ 兜底（扩展 tokenizer 返回 undefined 才轮到它，不抢标准块级语法）
   marked.use({ extensions: [singleLineDisplayMath] });
 }

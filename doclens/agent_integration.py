@@ -213,8 +213,8 @@ class CortexAgent:
             run_edit=run_edit,
         )
 
-        # 子代理运行器
-        from planify.subagent.runner import run_subagent
+        # 子代理运行器（KB 只读工具注入包装在下方 KB 工具注册之后）
+        from planify.subagent.runner import run_subagent as _run_subagent
 
         # --- 知识库工具注册 ---
         from doclens.index_manager import IndexManager
@@ -223,6 +223,8 @@ class CortexAgent:
         kb_config = CortexConfig.load()
         self.idx = IndexManager(kb_config)
         self.idx.load_or_build_index()
+        # 对话模型单次输出上限：主代理 StreamingConfig 与子代理共用
+        _max_tokens = kb_config.planify_max_tokens
 
         from doclens.kb_tools import build_kb_tools
         kb_tools, kb_handlers = build_kb_tools(self.idx, self.workdir, skill_state=skill_state)
@@ -234,6 +236,25 @@ class CortexAgent:
         from doclens.grep_tools import build_grep_tools
         grep_tools, grep_handlers = build_grep_tools(self.idx, skill_state=skill_state)
         register_external_tools(grep_tools, grep_handlers)
+
+        # 子代理运行器包装：注入 KB 只读工具（read_document/file_info）。
+        # 子代理默认只有 bash/read_file/write_file/edit_file，无法解析 PDF/DOCX
+        # 等二进制格式；summarize-files 等技能的并发子代理需要它们读知识库文档。
+        _kb_readonly_names = ("read_document", "file_info")
+        _kb_readonly_tools = [t for t in kb_tools if t["name"] in _kb_readonly_names]
+        _kb_readonly_handlers = {
+            n: kb_handlers[n] for n in _kb_readonly_names if n in kb_handlers
+        }
+
+        def run_subagent(prompt, agent_type, workdir, client, model,
+                         run_bash, run_read, run_write, run_edit):
+            return _run_subagent(
+                prompt, agent_type, workdir, client, model,
+                run_bash, run_read, run_write, run_edit,
+                extra_tools=_kb_readonly_tools,
+                extra_handlers=_kb_readonly_handlers,
+                max_tokens=_max_tokens,
+            )
 
         # 部署技能文件到 ~/<数据目录>/skills/（开发 .cortex / 发行版 .doclens；强制覆盖所有技能）
         import shutil
@@ -269,6 +290,7 @@ class CortexAgent:
             transcript_dir=transcript_dir,
             session=None,
             gui_mode=True,
+            max_tokens=_max_tokens,
         )
         legacy_ask = {"ask_user", "user_confirm"}
         tools = [t for t in tools if t["name"] not in legacy_ask]
@@ -282,6 +304,8 @@ class CortexAgent:
             api_key=config.get("api_key"),
             base_url=config.get("base_url"),
             token_threshold=config.get("token_threshold", 100000),
+            planify_context_window=kb_config.planify_context_window,
+            planify_max_tokens=_max_tokens,
             poll_interval=config.get("poll_interval", 5),
             idle_timeout=config.get("idle_timeout", 60),
         )
@@ -332,6 +356,8 @@ class CortexAgent:
         self.session.config.base_url = config.planify_base_url
         if getattr(config, "planify_context_window", None):
             self.session.config.planify_context_window = config.planify_context_window
+        if getattr(config, "planify_max_tokens", None):
+            self.session.config.planify_max_tokens = config.planify_max_tokens
 
     def run_query(
         self,
@@ -378,7 +404,8 @@ class CortexAgent:
             bus=self.session.bus,
             skills_loader=self.session.skills,
             config=StreamingConfig(
-                compact_threshold=int(round(self.session.config.planify_context_window * 0.8))
+                compact_threshold=int(round(self.session.config.planify_context_window * 0.8)),
+                max_tokens=self.session.config.planify_max_tokens,
             ),
             logger_instance=self.session.logger,
             session=self.session,
