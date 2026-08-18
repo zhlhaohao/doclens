@@ -592,42 +592,63 @@ class StreamingAgent:
         results = []
         used_todo = False
 
+        # 先解析本轮全部工具调用（保持块顺序）
+        pending: List[tuple] = []  # (tool_use_id, name, input_data)
         for block in assistant_content:
             if not isinstance(block, dict):
                 # 可能是 Pydantic 模型或其他类型
                 if hasattr(block, "type") and block.type == "tool_use":
-                    tool_use_id = block.id
-                    name = block.name
-                    input_data = block.input if hasattr(block, "input") else {}
-                else:
-                    continue
+                    pending.append((
+                        block.id, block.name,
+                        block.input if hasattr(block, "input") else {},
+                    ))
+                continue
             elif block.get("type") != "tool_use":
                 continue
             else:
-                tool_use_id = block.get("id", "")
-                name = block.get("name", "")
-                input_data = block.get("input", {})
+                pending.append((
+                    block.get("id", ""),
+                    block.get("name", ""),
+                    block.get("input", {}),
+                ))
 
+        async def _run_handler(name: str, input_data: dict):
+            handler = self.tool_handlers.get(name)
+            if not handler:
+                return f"Unknown tool: {name}"
+            try:
+                # 检查是否是异步处理器
+                if asyncio.iscoroutinefunction(handler):
+                    return await handler(**input_data)
+                # 同步处理器在线程池中执行
+                # 使用 asyncio.to_thread 以传播 contextvars.ContextVar
+                # （门禁依赖 get_current_session_id()，默认 ThreadPoolExecutor
+                # 不会跨线程复制上下文，会导致门禁静默失效）
+                return await asyncio.to_thread(handler, **input_data)
+            except Exception as e:
+                self.logger.exception(f"[StreamingAgent] 工具执行异常: {name}")
+                return f"Error: {e}"
+
+        # task（子代理）并发：一轮消息中 ≥2 个 task 调用时 gather 并发执行
+        # （summarize-files 等技能按文件并发派子代理）；其余工具保持顺序执行
+        # （TodoWrite / ask_user_question 等依赖顺序与阻塞语义）。
+        precomputed: Dict[str, Any] = {}
+        task_calls = [p for p in pending if p[1] == "task"]
+        if len(task_calls) >= 2:
+            self.logger.info(f"[StreamingAgent] 并发执行 {len(task_calls)} 个 task 子代理")
+            outputs = await asyncio.gather(
+                *[_run_handler(name, inp) for _tid, name, inp in task_calls]
+            )
+            for (tid, _name, _inp), out in zip(task_calls, outputs):
+                precomputed[tid] = out
+
+        for tool_use_id, name, input_data in pending:
             self.logger.info(f"[StreamingAgent] 执行工具: {name}")
 
-            # 执行工具
-            try:
-                handler = self.tool_handlers.get(name)
-                if handler:
-                    # 检查是否是异步处理器
-                    if asyncio.iscoroutinefunction(handler):
-                        output = await handler(**input_data)
-                    else:
-                        # 同步处理器在线程池中执行
-                        # 使用 asyncio.to_thread 以传播 contextvars.ContextVar
-                        # （门禁依赖 get_current_session_id()，默认 ThreadPoolExecutor
-                        # 不会跨线程复制上下文，会导致门禁静默失效）
-                        output = await asyncio.to_thread(handler, **input_data)
-                else:
-                    output = f"Unknown tool: {name}"
-            except Exception as e:
-                output = f"Error: {e}"
-                self.logger.exception(f"[StreamingAgent] 工具执行异常: {name}")
+            if tool_use_id in precomputed:
+                output = precomputed[tool_use_id]
+            else:
+                output = await _run_handler(name, input_data)
 
             # 不截断：LLM 上下文与前端 SSE 都需要工具的完整输出
             output_str = str(output)

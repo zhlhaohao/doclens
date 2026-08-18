@@ -168,7 +168,8 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 tool_handlers=session.tool_handlers,
                 emitter=emitter,
                 config=StreamingConfig(
-                    compact_threshold=int(round(session.config.planify_context_window * 0.8))
+                    compact_threshold=int(round(session.config.planify_context_window * 0.8)),
+                    max_tokens=session.config.planify_max_tokens,
                 ),
                 waiter=get_global_waiter(),
                 todo_manager=session.todo_mgr,

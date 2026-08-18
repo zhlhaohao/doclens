@@ -40,14 +40,26 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
     ) -> LLMResponse:
-        """单次非流式调用。"""
-        response = self._client.messages.create(
-            model=self.model,
-            system=system,
-            messages=messages,
-            tools=[self._tool_to_anthropic(t) for t in tools],
-            max_tokens=max_tokens,
-        )
+        """单次非流式调用。
+
+        大 max_tokens 兜底：anthropic SDK 对预估耗时 >10 分钟的非流式请求
+        在客户端直接抛 ValueError("Streaming is required ...")，请求根本
+        没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
+        """
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "system": system,
+            "messages": messages,
+            "tools": [self._tool_to_anthropic(t) for t in tools],
+            "max_tokens": max_tokens,
+        }
+        try:
+            response = self._client.messages.create(**kwargs)
+        except ValueError as e:
+            if "Streaming is required" not in str(e):
+                raise
+            with self._client.messages.stream(**kwargs) as stream:
+                response = stream.get_final_message()
         content = [
             b
             for b in (self._block_from_anthropic(x) for x in response.content)

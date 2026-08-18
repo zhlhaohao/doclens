@@ -1,13 +1,22 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { marked } from "marked";
 import { sanitizeHtml } from "../utils/sanitize";
+import { createMathMarked } from "../utils/marked-math";
+// shadow DOM 隔离全局样式，KaTeX CSS 必须内联注入组件 styles（同 md-viewer）
+import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
 import "./ask-card";
 
+/** AI 气泡专用 marked 实例（模块级单例）。不能用全局 marked：
+ *  其 KaTeX 扩展注册在 md-viewer.ensureMdConfigured()，只在打开过
+ *  文档预览后才生效，聊天页不能依赖那个时序。 */
+const chatMarked = createMathMarked();
+
 @customElement("chat-message")
 export class ChatMessageEl extends LitElement {
-  static styles = css`
+  static styles = [
+    unsafeCSS(katexStyles),
+    css`
     :host {
       display: block;
       max-width: 78%;
@@ -230,7 +239,8 @@ export class ChatMessageEl extends LitElement {
     }
     /* AI 复制钮靠右（与 user 重问钮左右对称） */
     .copy { align-self: flex-end; }
-  `;
+  `,
+  ];
 
   @property({ reflect: true }) role: "user" | "assistant" = "user";
   @property({ attribute: false }) message: ChatMessage | null = null;
@@ -313,7 +323,7 @@ export class ChatMessageEl extends LitElement {
       return html`<span class="thinking">${prefix}...</span>`;
     }
     if (this.role === "assistant") {
-      const htmlstr = marked.parse(content, { async: false }) as string;
+      const htmlstr = chatMarked.parse(content, { async: false }) as string;
       // sanitize 放在 linkifyReferences 之后兜底：清除 LLM 输出里的恶意 HTML，
       // 同时保留注入的 ref-link（class/data-*/href="#" 均在白名单内）
       const clean = sanitizeHtml(this.linkifyReferences(htmlstr));

@@ -13,7 +13,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Callable, Dict
+
+logger = logging.getLogger("planify.subagent")
 
 from ..core.llm.provider import LLMProvider
 from ..core.llm.types import Tool, ToolUseBlock
@@ -37,6 +40,9 @@ def run_subagent(
     run_read: Callable,
     run_write: Callable,
     run_edit: Callable,
+    extra_tools: list | None = None,
+    extra_handlers: Dict[str, Callable] | None = None,
+    max_tokens: int = 8000,
 ) -> str:
     """
     启动子代理执行隔离任务
@@ -55,6 +61,10 @@ def run_subagent(
         run_read: 文件读取函数
         run_write: 文件写入函数
         run_edit: 文件编辑函数
+        extra_tools: 追加的工具定义（如宿主应用注入的 read_document/file_info）
+        extra_handlers: extra_tools 对应的处理器
+        max_tokens: 子代理每轮 LLM 调用的最大输出 tokens（由宿主应用按对话模型参数传入；
+            过小会截断子代理的最终摘要，表现为"只总结了前几章"）
 
     Returns:
         任务执行摘要
@@ -131,6 +141,13 @@ def run_subagent(
         "edit_file": run_edit,
     }
 
+    # 宿主应用注入的额外工具（如 doclens 的 read_document/file_info——
+    # 子代理读 PDF/DOCX 等二进制格式的唯一途径）
+    if extra_tools:
+        sub_tools.extend(extra_tools)
+    if extra_handlers:
+        sub_handlers.update(extra_handlers)
+
     # 子代理消息循环
     workdir_str = str(workdir)
     system_prompt = build_system_prompt(workdir=workdir_str, agent_type="subagent")
@@ -155,10 +172,16 @@ def run_subagent(
                 messages=sub_msgs,
                 system=system_prompt,
                 tools=tool_defs,
-                max_tokens=8000,
+                max_tokens=max_tokens,
             )
-        except Exception:
-            return "(subagent failed)"
+        except Exception as e:
+            # 不能静默吞掉：子代理失败时主代理只会看到 "(subagent failed)"，
+            # 没有异常内容就完全无法排查（如模型拒绝 max_tokens、上下文超长等）
+            logger.exception(
+                "子代理 LLM 调用失败 (agent_type=%s, max_tokens=%d, 已累积消息=%d): %s",
+                agent_type, max_tokens, len(sub_msgs), e,
+            )
+            return f"(subagent failed: {type(e).__name__}: {e})"
 
         # 把响应内容块序列化为 dict（兼容后续 _execute_tools 风格）
         assistant_blocks: list[dict] = []
@@ -204,7 +227,8 @@ def run_subagent(
 
         sub_msgs.append({"role": "user", "content": results})
 
-        # 返回摘要
-        if resp:
-            return "".join(b.get("text", "") for b in assistant_blocks if b.get("type") == "text")
-        return "(subagent failed)"
+    # 返回摘要（循环正常结束 = 最后一轮无工具调用的 assistant 文本；
+    # 跑满 30 轮仍要工具时，返回最后一轮文本，可能不完整）
+    if resp:
+        return "".join(b.get("text", "") for b in assistant_blocks if b.get("type") == "text")
+    return "(subagent failed)"

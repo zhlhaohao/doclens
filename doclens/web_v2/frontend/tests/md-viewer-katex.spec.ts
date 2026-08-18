@@ -59,6 +59,19 @@ describe("<md-viewer> KaTeX 公式", () => {
     expect(body!.textContent).toContain("\\badcmd");
   });
 
+  it("renders CJK-adjacent inline math (type-$l$ / $...$（)", async () => {
+    // marked-katex 标准规则要求开 $ 前是空格、闭 $ 后是西文标点，
+    // 中文语境的 type-$l$、$...$（ 会漏判（cjkInlineMath 兜底）
+    const el = await fixture(html`
+      <md-viewer content="每个 type-$l$ 张量为 $(2l+1)$ 维；方程 $\\mathbf{A}\\mathbf{X}=0$（齐次）"></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+
+    const body = el.shadowRoot!.querySelector(".md-body")!;
+    expect(body.querySelectorAll(".katex").length).toBe(3);
+    expect(body.textContent).not.toContain("$");
+  });
+
   it("keeps currency-like dollar signs as plain text", async () => {
     // 单个 $ 或不成对的 $ 不应触发公式解析
     const el = await fixture(html`

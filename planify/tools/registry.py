@@ -78,6 +78,7 @@ def build_tool_registry(
     transcript_dir=None,
     session=None,
     skill_access_state=None,
+    max_tokens: int = 8000,
     **kwargs,
 ) -> Tuple[List[Dict], Dict[str, Any]]:
     """
@@ -97,6 +98,8 @@ def build_tool_registry(
         transcript_dir: 脚本目录
         session: Session 实例（可选，用于会话上下文）
         skill_access_state: SkillAccessState 实例（可选），用于 load_skill 标记已加载
+        max_tokens: 对话模型单次输出上限（tokens），写入 task 工具描述，
+            供主代理拆分子代理任务时按 max_tokens × 0.8 估算每组读取量
         **kwargs: 忽略额外的关键字参数（向后兼容）
 
     Returns:
@@ -227,7 +230,13 @@ def build_tool_registry(
         },
         {
             "name": "task",
-            "description": "生成子代理进行隔离探索或工作",
+            "description": (
+                "生成子代理进行隔离探索或工作。"
+                f"当前对话模型单次输出上限 max_tokens={max_tokens} tokens；"
+                "把读取/探索任务拆给多个并发子代理时，每个子代理分配的内容量"
+                f"（按词数估算）建议 ≤ {int(max_tokens * 0.8)} 词"
+                "（约 80%，为子代理的最终摘要输出留余量，超载会导致摘要被截断、章节缺失）"
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {

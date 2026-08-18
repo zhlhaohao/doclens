@@ -193,7 +193,7 @@ def get_or_create_session(user_id: str, user_config: dict, **overrides):
         session.client,
         session.model,
         session.tool_handlers,
-        run_subagent=session,
+        run_subagent=run_subagent,
         session=session
     )
 

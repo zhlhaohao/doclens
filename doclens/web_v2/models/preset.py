@@ -36,6 +36,11 @@ class PresetCreate(BaseModel):
         ge=1,
         description="LLM 上下文窗口（仅 kind=llm）",
     )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="LLM 单次输出最大 tokens（仅 kind=llm；可用探测接口二分实测）",
+    )
     # 搜索调优字段（kind=search）
     max_results: Optional[int] = Field(default=None, ge=1, le=500)
     min_score_threshold: Optional[float] = Field(default=None, ge=0, le=1)
@@ -59,6 +64,7 @@ class PresetUpdate(BaseModel):
     model_id: Optional[str] = None
     api_key: Optional[str] = None
     context_window: Optional[int] = Field(default=None, ge=1)
+    max_tokens: Optional[int] = Field(default=None, ge=1)
     # 搜索调优字段
     max_results: Optional[int] = Field(default=None, ge=1, le=500)
     min_score_threshold: Optional[float] = Field(default=None, ge=0, le=1)
@@ -82,6 +88,7 @@ class Preset(BaseModel):
     model_id: str = ""
     api_key: str = ""
     context_window: Optional[int] = None
+    max_tokens: Optional[int] = None
     # 搜索调优字段（search 有值；llm|vision 为 None）
     max_results: Optional[int] = None
     min_score_threshold: Optional[float] = None
@@ -103,3 +110,21 @@ class ActivateResult(BaseModel):
     ok: bool = True
     preset: Preset
     note: Optional[str] = None
+
+
+class ProbeMaxTokensRequest(BaseModel):
+    """探测 max_tokens 上限请求体（二分法实测服务端允许的最大值）。"""
+
+    protocol: PresetProtocol = "openai_compat"
+    base_url: str = ""
+    model_id: str = Field(..., min_length=1)
+    api_key: str = Field(
+        default="",
+        description="留空或 *** 时须传 preset_id，使用预设已存储的密钥",
+    )
+    preset_id: Optional[str] = None
+
+
+class ProbeMaxTokensResult(BaseModel):
+    max_tokens: int
+    attempts: int
