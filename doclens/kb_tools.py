@@ -969,11 +969,7 @@ def _format_document_output(
         return header + "\n（指定范围内无内容）"
 
     content = "\n\n".join(content_parts)
-    line_info = ""
-    if start_line is not None or end_line is not None:
-        line_info = f" [第 {start_line or '?'}-{end_line or '?'} 行]"
-
-    output = header + f"\n## 内容{line_info}\n\n" + content
+    output = header + "\n## 内容\n\n" + content
 
     total_doc_words = sum(_count_words(t) for _, t, _, _ in all_text_parts)
     if total_doc_words > max_read_words:
