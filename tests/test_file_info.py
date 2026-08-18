@@ -1,7 +1,7 @@
 """file_info 工具测试：_handle_file_info 概况输出。
 
 覆盖：多级标题 md（章节清单 + 顶层词数）、词数与 read_document 词序号一致性、
-无标题纯文本、索引分支（不重解析）、未索引回退、不存在路径、目录截断。
+无标题纯文本、索引分支（不重解析）、未索引回退、不存在路径、目录完整列出（不截断）。
 """
 import re
 from pathlib import Path
@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 
 from doclens.kb_tools import (
-    MAX_INFO_TOC_ENTRIES,
     _handle_file_info,
     _handle_read_document,
 )
@@ -37,7 +36,7 @@ def _fake_idx(**over):
         path_map={},
         ts=None,
         documents=[],
-        max_read_chars=6000,
+        max_read_words=4000,
         read_doc_show_toc=False,
     )
     base.update(over)
@@ -109,11 +108,12 @@ class TestErrors:
         assert "文档不存在" in out
 
 
-class TestTocTruncation:
-    def test_over_limit_truncated(self, kb: Path):
+class TestTocListing:
+    def test_all_sections_listed(self, kb: Path):
+        """目录清单不做条数截断：65 节全部列出，无「仅显示前 N 节」提示。"""
         out = _handle_file_info(_fake_idx(), kb, path="big.md")
         assert "章节数: 65" in out
-        assert f"仅显示前 {MAX_INFO_TOC_ENTRIES} 节" in out
+        assert "仅显示前" not in out
         toc = out.split("## 目录结构", 1)[1]
         entry_lines = [l for l in toc.splitlines() if l.startswith("- ")]
-        assert len(entry_lines) == MAX_INFO_TOC_ENTRIES
+        assert len(entry_lines) == 65

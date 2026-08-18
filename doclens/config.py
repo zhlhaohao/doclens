@@ -83,7 +83,8 @@ class CortexConfig(BaseSettings):
     # KB 工具字符限制（影响 LLM token 消耗）
     max_context_chars_per_result: int = Field(default=800)
     max_total_chars: int = Field(default=10000)
-    max_read_chars: int = Field(default=6000)
+    # read_document 单次输出词数预算（词：CJK 每字一词，其余按空白切分）
+    max_read_words: int = Field(default=4000)
 
     # read_document 输出选项
     read_doc_show_toc: bool = Field(
