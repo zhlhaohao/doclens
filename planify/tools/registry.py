@@ -376,7 +376,16 @@ def build_tool_registry(
         if unknown:
             logger.warning("[tools] 白名单中的未知工具名将被忽略: %s", sorted(unknown))
         removed = all_names - enabled
-        tools = [t for t in tools if t["name"] in enabled]
+        # gui_mode 下 ask_user_question 是 GUI 唯一的用户交互通道（旧 ask_user/
+        # user_confirm 会被 session 层过滤），被白名单误删会导致模型要求提问时
+        # 无工具可用、静默卡死——强制保留并告警
+        if kwargs.get("gui_mode") and "ask_user_question" in removed:
+            removed.discard("ask_user_question")
+            logger.warning(
+                "[tools] 白名单未包含 ask_user_question，GUI 模式下强制保留；"
+                "如需彻底禁用请修改 PLANIFY_ENABLED_TOOLS 后使用 TUI"
+            )
+        tools = [t for t in tools if t["name"] in enabled or t["name"] not in removed]
         for name in removed:
             handlers.pop(name, None)
         logger.info(
