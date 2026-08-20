@@ -141,6 +141,18 @@ def create_app() -> FastAPI:
             return FileResponse(p, media_type="application/javascript")
         return JSONResponse(status_code=404, content={"code": "SW_MISSING"})
 
+    @app.get("/jsbridge.js")
+    async def _jsbridge():
+        """NexBox JSBridge 封装（public/ 拷入 static/ 根的全局脚本）。
+
+        必须显式路由：否则落进 SPA fallback 返回 index.html（text/html），
+        浏览器当 JS 解析静默失败，window.jsbridge 永不出现。
+        """
+        p = STATIC_DIR / "jsbridge.js"
+        if p.exists():
+            return FileResponse(p, media_type="application/javascript")
+        return JSONResponse(status_code=404, content={"code": "JSBRIDGE_MISSING"})
+
     @app.get("/{full_path:path}")
     async def spa(full_path: str):
         """SPA fallback：所有非 /api 路径都返回 index.html（若存在）。"""

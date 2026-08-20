@@ -3,16 +3,32 @@
  * 纯 UI 组件，不直接调 API；事件向上冒泡给 diary-view：
  *   submit-text {value} / upload-photo {file, caption} / delete-fragment {fid}
  *
- * 拍摄实现（ADR-0007）：「拍照」用 capture="environment"（手机唤起相机，
- * 桌面端浏览器忽略 capture 自然降级为文件选择）；「相册」只用 accept。
+ * 拍摄实现（ADR-0007）：浏览器用 <input type=file>（「拍照」加
+ * capture="environment"，手机唤起相机，桌面端忽略 capture 自然降级为
+ * 文件选择；「相册」只用 accept）；NexBox WebView 内 JSBridge 不可用
+ * （X5 内核不弹文件选择器），改走 jsbridge takePhoto/pickPhotos 原生
+ * 通道，base64 转 File 后复用同一预览/备注/上传链路。
+ *
+ * 事件补充：photo-error {message}——jsbridge 通道失败时冒泡给 diary-view
+ * 显示 error-bar（cancel 静默，不算错误）。
  */
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { DiaryEntry, DiaryFragment } from "../state/types";
+import {
+  jsbridgePhotoAvailable,
+  jsbridgeDebugSummary,
+  JSBRIDGE_DEBUG_TAG,
+  takePhotoAsFile,
+  pickPhotoAsFile,
+  JsbridgePhotoError,
+} from "../utils/jsbridge";
 import "./icon";
 import "./input-box";
 import "./image-viewer";
+import "./toast-stack";
+import type { ToastStack } from "./toast-stack";
 
 @customElement("diary-record-panel")
 export class DiaryRecordPanel extends LitElement {
@@ -321,6 +337,22 @@ export class DiaryRecordPanel extends LitElement {
   /** 全屏图片查看 */
   @state() private _viewerSrc = "";
 
+  connectedCallback() {
+    super.connectedCallback();
+    if (!this._dbgShown) {
+      this._dbgShown = true;
+      // 调试：进入记录页即弹环境诊断（点 toast 可提前关闭）
+      this.updateComplete.then(() => this._debugToast(jsbridgeDebugSummary(), "info", 6000));
+    }
+  }
+  private _dbgShown = false;
+
+  /** 调试 toast：右下角展示（真机 webview 无 devtools 时的眼睛） */
+  private _debugToast(message: string, level: "success" | "error" | "info" = "info", duration = 4000) {
+    const stack = this.renderRoot?.querySelector("toast-stack") as ToastStack | null;
+    stack?.pushToast(message, level, duration);
+  }
+
   private _onSubmitText(e: CustomEvent<{ value: string }>) {
     this.dispatchEvent(new CustomEvent("submit-text", {
       detail: { value: e.detail.value },
@@ -336,10 +368,50 @@ export class DiaryRecordPanel extends LitElement {
   }
 
   private _pickPhoto(capture: boolean) {
+    if (jsbridgePhotoAvailable()) {
+      this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 点${capture ? "拍照" : "相册"}→调jsbridge ${capture ? "takePhoto" : "pickPhotos"}…`);
+      this._toastCalledJsbridge(capture);
+      void this._pickPhotoViaJsbridge(capture);
+      return;
+    }
+    this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 点${capture ? "拍照" : "相册"}→降级input：${jsbridgeDebugSummary()}`, "error", 6000);
     const input = this.renderRoot.querySelector<HTMLInputElement>(
       capture ? "input[data-capture]" : "input[data-gallery]",
     );
     input?.click();
+  }
+
+  /** webview 内走原生通道；失败冒泡 photo-error，取消静默 */
+  private async _pickPhotoViaJsbridge(capture: boolean) {
+    try {
+      const file = await (capture ? takePhotoAsFile() : pickPhotoAsFile());
+      if (file) {
+        this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 原生回调success：${file.name} ${(file.size / 1024).toFixed(0)}KB`, "success");
+        this._setPendingFile(file);
+      } else {
+        this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 原生回调cancel（用户取消）`);
+      }
+    } catch (e) {
+      const message = e instanceof JsbridgePhotoError
+        ? `[${JSBRIDGE_DEBUG_TAG}] 原生回调fail code=${e.code}：${e.message}`
+        : "拍照失败，请重试";
+      this._debugToast(message, "error", 6000);
+      this.dispatchEvent(new CustomEvent("photo-error", {
+        detail: { message },
+        bubbles: true, composed: true,
+      }));
+    }
+  }
+
+  /** 调用已发出（takePhotoAsFile 内部已挂回调等原生），用于确认 messageSend 未抛异常 */
+  private _toastCalledJsbridge(capture: boolean) {
+    this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] messageSend已发出(${capture ? "takePhoto" : "pickPhotos"})，等原生回调（15s超时）…`, "info", 5000);
+  }
+
+  private _setPendingFile(file: File) {
+    if (this._pendingPreviewUrl) URL.revokeObjectURL(this._pendingPreviewUrl);
+    this._pendingFile = file;
+    this._pendingPreviewUrl = URL.createObjectURL(file);
   }
 
   private _onFileChange(e: Event) {
@@ -347,9 +419,7 @@ export class DiaryRecordPanel extends LitElement {
     const file = input.files?.[0];
     input.value = "";  // 允许重选同一文件
     if (!file) return;
-    if (this._pendingPreviewUrl) URL.revokeObjectURL(this._pendingPreviewUrl);
-    this._pendingFile = file;
-    this._pendingPreviewUrl = URL.createObjectURL(file);
+    this._setPendingFile(file);
   }
 
   private _cancelPending() {
@@ -495,6 +565,8 @@ export class DiaryRecordPanel extends LitElement {
       ${this._viewerSrc ? html`<image-viewer
         .src=${this._viewerSrc}
         @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
+
+      <toast-stack></toast-stack>
     `;
   }
 }
