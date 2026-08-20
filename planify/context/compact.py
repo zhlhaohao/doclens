@@ -133,6 +133,7 @@ def auto_compact(
     Returns:
         新消息列表，包含摘要和确认消息
     """
+    transcript_dir = Path(transcript_dir)  # 防御：调用方可能传 str
     # 保存原始对话记录
     transcript_dir.mkdir(exist_ok=True)
     path = transcript_dir / f"transcript_{int(time.time())}.jsonl"

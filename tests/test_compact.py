@@ -115,3 +115,35 @@ class TestMicrocompact:
 
         microcompact(msgs, min_estimated_tokens=1)  # 立即触发
         assert _collect(msgs)["r0"] == "[cleared]"
+
+
+class _FakeProvider:
+    """auto_compact 摘要调用的最小桩。"""
+
+    model = "fake"
+
+    def chat(self, messages, system, tools, max_tokens=8000):
+        from planify.core.llm.types import LLMResponse, TextBlock
+
+        return LLMResponse(
+            content=[TextBlock(text="对话摘要")],
+            stop_reason="end_turn",
+            model="fake",
+            usage={},
+        )
+
+
+class TestAutoCompact:
+    def test_accepts_str_transcript_dir(self, tmp_path):
+        """transcript_dir 传 str（历史调用方行为）也能正常建目录写 transcript。"""
+        from planify.context.compact import auto_compact
+
+        msgs = [
+            {"role": "user", "content": "问题"},
+            {"role": "assistant", "content": "回答"},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), str(tmp_path / ".transcripts"))
+        transcripts = list((tmp_path / ".transcripts").glob("transcript_*.jsonl"))
+        assert len(transcripts) == 1
+        assert "对话摘要" in out[0]["content"]
+        assert out[1]["role"] == "assistant"

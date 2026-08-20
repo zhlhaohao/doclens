@@ -48,6 +48,15 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
         try:
             from doclens.web_v2.deps import get_sessions_store
             history = get_sessions_store().get_chat_history(session_id)
+            # 前端在发送时已把本轮 message_user 落库（会出现在 history 末尾），
+            # run_stream 内部还会再追加一次 user_message —— 弹出避免重复。
+            # （appendSession 失败时前端不会发起本请求，故末尾必是本轮消息）
+            if (
+                history
+                and history[-1].get("role") == "user"
+                and history[-1].get("content") == message
+            ):
+                history.pop()
             # 技能会话身份：从 DB 首条 message_user 推导（本轮消息尚不在历史中，
             # 首轮时 history 为空 → 看 message 自身；后续轮 history 已含首条）
             first_user = next(

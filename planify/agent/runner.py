@@ -11,6 +11,7 @@
 import asyncio
 import dataclasses
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..core.llm.types import TextBlock, Tool, ToolUseBlock
@@ -134,14 +135,17 @@ class Agent:
                 ),
             )
             if self._estimate_tokens(messages) > self.config["token_threshold"]:
-                transcript_dir = self.config.get("transcript_dir", ".transcripts")
+                # 压缩 transcript 目录：注意 config["transcript_dir"] 是
+                # .planify/transcript.json 文件路径（语义不符），统一用
+                # <workdir>/.transcripts/
+                transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
                 compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
-                # 如果有 session，使用线程安全的替换
+                # 本地列表必须就地替换（session 路径下两者可能是不同列表）；
+                # 若本就是同一列表，二次替换幂等无害
+                messages[:] = compacted
                 if self.session:
                     self.session.replace_messages_in_place(compacted)
-                else:
-                    messages[:] = compacted
 
             # === s08: 后台通知 ===
             notifs = self.bg_manager.drain()
@@ -279,14 +283,13 @@ class Agent:
 
             # === s06: 手动压缩 ===
             if manual_compress:
-                transcript_dir = self.config.get("transcript_dir", ".transcripts")
+                transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
                 compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
-                # 如果有 session，使用线程安全的替换
+                # 同上：本地列表 + session 双写（同一列表时幂等）
+                messages[:] = compacted
                 if self.session:
                     self.session.replace_messages_in_place(compacted)
-                else:
-                    messages[:] = compacted
 
     @property
     def has_session(self) -> bool:
