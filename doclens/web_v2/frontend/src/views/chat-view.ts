@@ -389,6 +389,14 @@ export class ChatView extends LitElement {
 
     const sessionId = store.getState().chat.currentSession!.id;
 
+    // 用户消息先落库：后端本轮的 tool_trace/message_ai_raw 在流结束后写入，
+    // message_user 必须先于它们入库，get_chat_history 才能按轮正确回放
+    await appendSession(
+      sessionId,
+      [{ kind: "message_user", payload: JSON.stringify({ content: message }) }],
+      store.getState().chat.messages.length,
+    );
+
     // assistant 占位 + 起始 messages（不可变）
     const placeholder: ChatMessage = { role: "assistant", content: "" };
     let messages = [...store.getState().chat.messages, placeholder];
@@ -418,10 +426,10 @@ export class ChatView extends LitElement {
       }
 
       const aiMsg = messages[messages.length - 1];
+      // message_user 已在发送时落库，这里只补 AI 展示条目
       await appendSession(
         sessionId,
         [
-          { kind: "message_user", payload: JSON.stringify({ content: message }) },
           { kind: "message_ai", payload: JSON.stringify({ content: aiMsg.content, tool_calls: aiMsg.tool_steps ?? [], references: aiMsg.references ?? [] }) },
         ],
         messages.length,
@@ -430,13 +438,10 @@ export class ChatView extends LitElement {
     } catch (err) {
       if (this._isAbortError(err)) {
         // 用户主动停止：丢弃半截 AI 回答（屏幕 + DB 都只留用户问题），不弹错误 toast
+        // message_user 已在发送时落库，这里只刷新计数/时间
         messages = this._dropTrailingAssistant(messages);
         actions.setChatState({ messages });
-        await appendSession(
-          sessionId,
-          [{ kind: "message_user", payload: JSON.stringify({ content: message }) }],
-          messages.length,
-        );
+        await appendSession(sessionId, [], messages.length);
         this._loadHistory();
       } else {
         // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断

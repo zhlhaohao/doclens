@@ -191,6 +191,43 @@ class SessionsStore:
                 (message_count, datetime.utcnow().isoformat(), session_id),
             )
 
+    def append_chat_turn_raw(
+        self,
+        session_id: str,
+        tool_traces: list[dict],
+        raw_text: str,
+    ) -> None:
+        """追加一轮对话的原始数据，供 LLM 上下文回放（与展示层条目分离）。
+
+        - 每个已完成的工具调用写一条 tool_trace（input+output 成对，未完成的
+          调用由调用方过滤，不落库）；
+        - 模型原始输出写一条 message_ai_raw（未策展文本；策展仅作用于展示层
+          的 message_ai，由前端写入）。
+
+        seq 在同一事务内按 MAX(seq) 续排，与前端 PATCH 写入无冲突。
+        """
+        now = datetime.utcnow().isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(seq), -1) FROM session_items WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            seq = row[0]
+            for tc in tool_traces:
+                seq += 1
+                conn.execute(
+                    """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
+                       VALUES (?, ?, 'tool_trace', ?, ?)""",
+                    (session_id, seq, json.dumps(tc, ensure_ascii=False), now),
+                )
+            if raw_text:
+                seq += 1
+                conn.execute(
+                    """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
+                       VALUES (?, ?, 'message_ai_raw', ?, ?)""",
+                    (session_id, seq, json.dumps({"content": raw_text}, ensure_ascii=False), now),
+                )
+
     def delete(self, session_id: str) -> None:
         with self._lock, self._conn() as conn:
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
@@ -247,26 +284,74 @@ class SessionsStore:
         ]
 
     def get_chat_history(self, session_id: str) -> list[dict]:
-        """返回会话对话历史，适配 LLM 上下文格式。
+        """返回会话对话历史，适配 LLM 上下文格式（Anthropic messages）。
+
+        回放规则：
+        - message_user → user 文本消息（每轮开头，由前端在发送时写入）；
+        - tool_trace → assistant(tool_use) + user(tool_result) 成对回放，
+          恢复模型实际见过的工具链（prefix 缓存友好的关键）；
+        - message_ai_raw（模型原始输出）优先于 message_ai（策展展示文本）；
+        - 旧会话无 raw/tool_trace 条目时行为与之前一致。
 
         Returns:
-            [{"role": "user"|"assistant", "content": str}, ...]，按 seq 升序；
-            跳过非 message_* kind、payload 解析失败、空内容。
+            [{"role": "user"|"assistant", "content": str | list}, ...]，按 seq 升序。
         """
-        history: list[dict] = []
+        # 按轮分组：message_user 是一轮的起点（前端在发送时写入，同轮的
+        # tool_trace / message_ai_raw / message_ai 都排在它之后）
+        turns: list[list[SessionItem]] = []
         for it in self.get_detail(session_id):
-            if it.kind == "message_user":
-                role = "user"
-            elif it.kind == "message_ai":
-                role = "assistant"
+            if it.kind == "message_user" or not turns:
+                turns.append([it])
             else:
-                continue  # 跳过 result 等非对话项
-            try:
-                content = json.loads(it.payload).get("content", "")
-            except (json.JSONDecodeError, AttributeError):
-                continue
-            if content:
-                history.append({"role": role, "content": content})
+                turns[-1].append(it)
+
+        history: list[dict] = []
+
+        def _append(role: str, content) -> None:
+            # Anthropic 要求 role 严格交替；同角色相邻时补一条最小填充消息，
+            # 避免中断轮（只有 message_user 没有 AI 回复）导致 400
+            if history and history[-1]["role"] == role:
+                filler = "user" if role == "assistant" else "assistant"
+                history.append({"role": filler, "content": "(interrupted)"})
+            history.append({"role": role, "content": content})
+
+        for turn in turns:
+            ai_raw = ""
+            ai_display = ""
+            for it in turn:
+                try:
+                    payload = json.loads(it.payload)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                if it.kind == "message_user":
+                    content = payload.get("content", "")
+                    if content:
+                        _append("user", content)
+                elif it.kind == "tool_trace":
+                    tu_id = payload.get("tool_use_id", "")
+                    if not tu_id:
+                        continue
+                    _append("assistant", [{
+                        "type": "tool_use",
+                        "id": tu_id,
+                        "name": payload.get("name", ""),
+                        "input": payload.get("input") or {},
+                    }])
+                    _append("user", [{
+                        "type": "tool_result",
+                        "tool_use_id": tu_id,
+                        "content": str(payload.get("output", "")),
+                        "is_error": bool(payload.get("is_error", False)),
+                    }])
+                elif it.kind == "message_ai_raw":
+                    ai_raw = payload.get("content", "") or ai_raw
+                elif it.kind == "message_ai":
+                    ai_display = payload.get("content", "") or ai_display
+            final = ai_raw or ai_display
+            if final:
+                _append("assistant", final)
         return history
 
     @staticmethod

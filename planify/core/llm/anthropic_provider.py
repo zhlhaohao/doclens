@@ -46,11 +46,12 @@ class AnthropicProvider:
         在客户端直接抛 ValueError("Streaming is required ...")，请求根本
         没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
         """
+        tools_payload = self._tools_with_cache_breakpoint(tools)
         kwargs: dict[str, Any] = {
             "model": self.model,
-            "system": system,
-            "messages": messages,
-            "tools": [self._tool_to_anthropic(t) for t in tools],
+            "system": self._system_blocks(system),
+            "messages": self._mark_cache_tail(messages),
+            "tools": tools_payload,
             "max_tokens": max_tokens,
         }
         try:
@@ -72,6 +73,12 @@ class AnthropicProvider:
             usage={
                 "input_tokens": getattr(response.usage, "input_tokens", 0),
                 "output_tokens": getattr(response.usage, "output_tokens", 0),
+                "cache_creation_input_tokens": getattr(
+                    response.usage, "cache_creation_input_tokens", 0
+                ),
+                "cache_read_input_tokens": getattr(
+                    response.usage, "cache_read_input_tokens", 0
+                ),
             },
         )
 
@@ -85,9 +92,9 @@ class AnthropicProvider:
         """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
         with self._client.messages.stream(
             model=self.model,
-            system=system,
-            messages=messages,
-            tools=[self._tool_to_anthropic(t) for t in tools],
+            system=self._system_blocks(system),
+            messages=self._mark_cache_tail(messages),
+            tools=self._tools_with_cache_breakpoint(tools),
             max_tokens=max_tokens,
         ) as stream:
             for event in stream:
@@ -98,6 +105,58 @@ class AnthropicProvider:
     def count_tokens(self, text: str) -> int:
         """粗估 token 数（每 4 字符 1 token）。"""
         return len(text) // 4
+
+    # ---------- prompt caching ----------
+
+    _EPHEMERAL = {"type": "ephemeral"}
+
+    @classmethod
+    def _system_blocks(cls, system: str) -> list[dict]:
+        """system 转 block 形式并打 ephemeral 断点（显式启用 prompt caching）。"""
+        if not system:
+            return []
+        return [{"type": "text", "text": system, "cache_control": dict(cls._EPHEMERAL)}]
+
+    @classmethod
+    def _tools_with_cache_breakpoint(cls, tools: list[Tool]) -> list[dict]:
+        """工具表整体稳定，在最后一个工具上打断点以缓存整个 tools 前缀。"""
+        payload = [cls._tool_to_anthropic(t) for t in tools]
+        if payload:
+            payload[-1]["cache_control"] = dict(cls._EPHEMERAL)
+        return payload
+
+    @classmethod
+    def _mark_cache_tail(cls, messages: list[dict]) -> list[dict]:
+        """在最后一条 user 消息的最后一个 content block 上打 ephemeral 断点。
+
+        返回拷贝，不修改传入的历史（cache_control 不随历史回传，每轮重打）。
+        该断点把断点之前的全部前缀（历史 + 工具结果）写入/复用缓存，
+        下一轮请求的前缀与之相同即可整段命中。
+        """
+        out = list(messages)
+        for i in range(len(out) - 1, -1, -1):
+            msg = out[i]
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                if not content:
+                    break
+                out[i] = {
+                    **msg,
+                    "content": [
+                        {"type": "text", "text": content, "cache_control": dict(cls._EPHEMERAL)}
+                    ],
+                }
+            elif isinstance(content, list) and content:
+                blocks = [dict(b) if isinstance(b, dict) else b for b in content]
+                last = blocks[-1]
+                if isinstance(last, dict):
+                    last = {**last, "cache_control": dict(cls._EPHEMERAL)}
+                    blocks[-1] = last
+                    out[i] = {**msg, "content": blocks}
+            break
+        return out
 
     # ---------- 转换工具 ----------
 

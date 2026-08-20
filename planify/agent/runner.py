@@ -84,11 +84,13 @@ class Agent:
 
         # 延迟导入以避免循环依赖（使用相对导入）
         from ..context import estimate_tokens, microcompact, auto_compact
+        from ..context.compact import MICROCOMPACT_GATE_RATIO
         from ..prompts import SystemPromptBuilder
 
         self._estimate_tokens = estimate_tokens
         self._microcompact = microcompact
         self._auto_compact = auto_compact
+        self._microcompact_gate_ratio = MICROCOMPACT_GATE_RATIO
         self._prompt_builder = SystemPromptBuilder()
 
     def get_system_prompt(self) -> str:
@@ -123,7 +125,14 @@ class Agent:
                 self.logger.info(f"[LLM Call #{loop_count}] Input messages: (encoding error)")
 
             # === s06: 压缩管道 ===
-            self._microcompact(messages)
+            # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
+            # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
+            self._microcompact(
+                messages,
+                min_estimated_tokens=int(
+                    self.config["token_threshold"] * self._microcompact_gate_ratio
+                ),
+            )
             if self._estimate_tokens(messages) > self.config["token_threshold"]:
                 transcript_dir = self.config.get("transcript_dir", ".transcripts")
                 compacted = self._auto_compact(messages, self.provider, transcript_dir)
