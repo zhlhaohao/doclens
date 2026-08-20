@@ -122,7 +122,7 @@ export class DiaryReviewPanel extends LitElement {
         </button>
         <button class="date-btn" @click=${this._toggleCalendar}>
           <doclens-icon name="calendar" style="font-size:16px"></doclens-icon>
-          ${this.date} ${weekdayCn(this.date)}${isToday ? "（今天）" : ""}
+          ${this.date.slice(5)} ${weekdayCn(this.date).replace("星期", "周")}${isToday ? "（今天）" : ""}
         </button>
         <button class="nav-btn" ?disabled=${isToday} @click=${() => this._nav(1)}>
           后一天<doclens-icon name="chevron-right" style="font-size:16px"></doclens-icon>
