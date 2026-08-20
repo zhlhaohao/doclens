@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fixture } from "@open-wc/testing";
 import { html } from "lit";
 import "../src/components/preview-pane";
 import "../src/components/md-editor";
+import { MdViewer } from "../src/components/md-viewer";
 import type { PreviewPane } from "../src/components/preview-pane";
 
 describe("<preview-pane> markdown branch", () => {
@@ -869,5 +870,111 @@ describe("<preview-pane> keyword highlight", () => {
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".mobile-highlight")).toBeNull();
+  });
+});
+
+describe("<preview-pane> scroll memory (rememberScroll)", () => {
+  const KEY = "cortex.files.previewScroll";
+  const md = "# T\n\nfoo\n\nbar\n\nbaz\n";
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** fixture 一个 rememberScroll 的 markdown preview-pane，返回 el 和 viewer。 */
+  async function mountScrollPane(path: string, content = md) {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        path=${path}
+        content=${content}
+        ?rememberScroll=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    return { el, viewer };
+  }
+
+  it("restores saved line on open (scrollToSourceLine with saved line, auto)", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "a.md": 12 }));
+    const spy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    await mountScrollPane("a.md");
+    // updated() 里 await viewer.updateComplete 后才恢复 —— 等一拍宏任务
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).toHaveBeenCalledWith(12, "auto");
+  });
+
+  it("does not restore when no record exists", async () => {
+    const spy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    await mountScrollPane("no-record.md");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not restore when saved line is 1 (top)", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "a.md": 1 }));
+    const spy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    await mountScrollPane("a.md");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not restore when rememberScroll is off (search/chat 不受影响)", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "a.md": 12 }));
+    const spy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    const el = await fixture(html`
+      <preview-pane language="markdown" path="a.md" content=${md}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not restore for non-markdown content", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "a.py": 12 }));
+    const spy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    const el = await fixture(html`
+      <preview-pane language="python" path="a.py" content="print(1)" ?rememberScroll=${true}></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("saves topSourceLine to localStorage after 300ms debounce on scroll", async () => {
+    const { viewer } = await mountScrollPane("a.md");
+    viewer.topSourceLine = () => 20;
+    vi.useFakeTimers();
+    viewer.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(300);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual({ "a.md": 20 });
+  });
+
+  it("flushes pending scroll position immediately when path changes", async () => {
+    const { el, viewer } = await mountScrollPane("a.md");
+    viewer.topSourceLine = () => 33;
+    vi.useFakeTimers();
+    viewer.dispatchEvent(new Event("scroll"));
+    // debounce 未到期就切文件 → willUpdate path 分支应立即落盘旧文档
+    el.path = "b.md";
+    el.content = "# B\n\nx\n";
+    await el.updateComplete;
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual({ "a.md": 33 });
+  });
+
+  it("scrolling back to top removes the entry (回顶部 = 清除记忆)", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ "a.md": 12 }));
+    const { viewer } = await mountScrollPane("a.md");
+    viewer.topSourceLine = () => 1;
+    vi.useFakeTimers();
+    viewer.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(300);
+    expect(JSON.parse(localStorage.getItem(KEY) ?? "{}")).toEqual({});
   });
 });

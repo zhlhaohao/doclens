@@ -12,6 +12,7 @@ import {
   scrollJumpFabStyles,
   renderScrollJumpFabs,
 } from "../utils/scroll-jump";
+import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
@@ -358,6 +359,9 @@ export class PreviewPane extends LitElement {
   @property() backLabel = "返回";
   /** files-view 启用「重新解析」入口（仅图像文件预览）；search/chat 不传 → 不显示。 */
   @property({ type: Boolean }) enableReparse = false;
+  /** files-view 开启「记住上次滚动位置」（localStorage，按 path 记忆源行号锚点）；
+   *  search/chat 不传 → 不影响其 line 命中定位。 */
+  @property({ type: Boolean }) rememberScroll = false;
 
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
@@ -377,12 +381,20 @@ export class PreviewPane extends LitElement {
   /** 悬浮跳转按钮（纯文本预览分支；markdown 分支由 md-viewer 自治） */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
 
+  /** 滚动位置记忆：当前挂监听器的 md-viewer（随分支生灭，需重复挂/摘） */
+  private _scrollBoundViewer: MdViewer | null = null;
+  private _scrollSaveTimer: number | undefined;
+  /** 待落盘写入所属的 path（滚动发生时的旧 path，flush 时 this.path 可能已切走） */
+  private _pendingScrollPath = "";
+
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("path")) {
       // 换文档：清空高亮输入并收起输入条，不残留旧文档的高亮
       this._highlightInput = "";
       this._showHighlightBar = false;
       this._clearHighlightDebounce();
+      // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
+      this._flushScrollMemory();
     }
     if (changed.has("content")) {
       this._content = this.content;
@@ -401,6 +413,30 @@ export class PreviewPane extends LitElement {
     if (body) this._scrollJump.attach(body);
     else this._scrollJump.detach();
 
+    // 滚动位置记忆：md-viewer 只在 markdown 预览分支存在，跟随分支挂/摘
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (this.rememberScroll && viewer && this._mode === "preview") {
+      if (this._scrollBoundViewer !== viewer) {
+        this._detachScrollMemory(); // 先摘旧的（含 flush）
+        viewer.addEventListener("scroll", this._onViewerScroll, { passive: true });
+        this._scrollBoundViewer = viewer;
+      }
+    } else if (this._scrollBoundViewer) {
+      this._detachScrollMemory();
+    }
+
+    // 位置恢复：独立分支（打开新文件时 _mode 不变，下面的 _mode 分支不执行）。
+    // files-view 从不传 .line → 无需 _suppressLocate；行号锚点是尽力而为语义。
+    if (this.rememberScroll && changed.has("path")) {
+      const saved = readScrollLine(this.path);
+      if (saved !== null && saved > 1 && this.language === "markdown" && viewer) {
+        const pathAtRestore = this.path;
+        await viewer.updateComplete;
+        if (this.path !== pathAtRestore) return; // 快速连点：放弃过期恢复
+        viewer.scrollToSourceLine(saved, "auto"); // 瞬跳，与锚点恢复一致
+      }
+    }
+
     if (!changed.has("_mode")) return;
     if (this._mode === "edit") {
       // 预览 → 编辑：把锚点行恢复为编辑器视口顶部（瞬跳）
@@ -416,7 +452,6 @@ export class PreviewPane extends LitElement {
       this._skipRestoreOnce = false;
       return;
     }
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     if (viewer) {
       await viewer.updateComplete;
       viewer.scrollToSourceLine(this._anchorLine, "auto");
@@ -433,7 +468,36 @@ export class PreviewPane extends LitElement {
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
     this._clearHighlightDebounce();
+    this._detachScrollMemory();
     super.disconnectedCallback();
+  }
+
+  // ------------------------------------------------------------ 滚动位置记忆
+
+  private _onViewerScroll = () => {
+    this._pendingScrollPath = this.path;
+    window.clearTimeout(this._scrollSaveTimer);
+    this._scrollSaveTimer = window.setTimeout(() => this._flushScrollMemory(), 300);
+  };
+
+  /** 把待落盘的滚动位置写入 localStorage（幂等；line<=1 时由 writeScrollLine 删条目）。 */
+  private _flushScrollMemory() {
+    window.clearTimeout(this._scrollSaveTimer);
+    this._scrollSaveTimer = undefined;
+    const viewer = this._scrollBoundViewer;
+    const path = this._pendingScrollPath;
+    this._pendingScrollPath = "";
+    if (!viewer || !path) return;
+    writeScrollLine(path, viewer.topSourceLine());
+  }
+
+  /** 摘除 scroll 监听并 flush 未落盘的写入（幂等）。 */
+  private _detachScrollMemory() {
+    if (this._scrollBoundViewer) {
+      this._scrollBoundViewer.removeEventListener("scroll", this._onViewerScroll);
+    }
+    this._flushScrollMemory();
+    this._scrollBoundViewer = null;
   }
 
   /** 移动端返回按钮。父组件监听 @back 自行决定如何导航。 */
