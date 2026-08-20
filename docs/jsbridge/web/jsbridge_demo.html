@@ -1,0 +1,136 @@
+<html>
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type">
+    <script src='jsbridge.js'></script>
+    <title>
+        Hybrid接口测试
+    </title>
+</head>
+
+<body>
+<p>
+    <xmp id="show">
+    </xmp>
+</p>
+<p>
+    <xmp id="init">
+    </xmp>
+</p>
+<p>
+    <input type="button" id="enter" value="获取位置信息" onclick="getGps();"
+    />
+</p>
+<p>
+    <input type="button" id="enter1" value="获取缓存数据(同步)" onclick="getMemoryCache();"/>
+</p>
+<p>
+    <input type="button" id="rotate" value="旋转屏幕" onclick="rotateScreen();"
+    />
+</p>
+<p>
+    <input type="button" id="scanQrCode" value="扫描二维码" onclick="scanQrCode();"
+    />
+</p>
+<p>
+    <input type="button" id="takePhoto" value="拍照" onclick="takePhoto();"
+    />
+</p>
+<p>
+    <input type="button" id="pickPhotos" value="选照片" onclick="pickPhotosDemo();"
+    />
+</p>
+<p>
+    <img id="photoPreview" style="max-width:100%;display:none;"/>
+</p>
+<div id="galleryPreview"></div>
+<!--<p>-->
+<!--    <a href="https://aizj.unicomgd.com:9602/jueydrgj737dj7289mdh/index.html#/aiqi-web/watch">跳转</a>-->
+<!--</p>-->
+</body>
+<script>
+
+        function getMemoryCache() {
+            var cacheData = jsbridge.getMemoryCache("aaaa");
+            alert(cacheData);
+        }
+
+        function getGps() {
+             jsbridge.getLocation({
+                success: function (res) {
+                     alert(res.latitude+" , "+res.longitude)
+                },
+                cancel: function(res) {
+                    alert("cancel")
+                }
+
+            });
+        }
+
+        function scanQrCode() {
+             jsbridge.scanQrCode({
+                success: function (res) {
+                     alert(res.code)
+                },
+                fail: function(res) {
+                    alert("fail")
+                }
+            });
+        }
+
+        function rotateScreen() {
+            var retval = jsbridge.rotateScreen("landscape");
+            alert(retval.result);
+        }
+
+        function takePhoto() {
+            jsbridge.takePhoto({
+                success: function (res) {
+                    alert("size=" + res.size + "B, " + res.width + "x" + res.height
+                        + ", base64len=" + res.base64.length);
+                    var img = document.getElementById("photoPreview");
+                    img.src = "data:image/jpeg;base64," + res.base64;
+                    img.style.display = "";
+                },
+                fail: function (res) {
+                    alert("fail: " + JSON.stringify(res));
+                },
+                cancel: function (res) {
+                    alert("已取消拍照");
+                }
+            });
+        }
+
+        function pickPhotosDemo() {
+            jsbridge.pickPhotos({
+                maxCount: 3,
+                success: function (res) {
+                    alert("count=" + res.count + ", picked=" + res.pickedCount
+                        + ", truncated=" + res.truncated);
+                    var box = document.getElementById("galleryPreview");
+                    box.innerHTML = "";
+                    res.photos.forEach(function (p) {
+                        if (p.error) {
+                            alert("一张图片读取失败: " + p.error);
+                            return;
+                        }
+                        var img = document.createElement("img");
+                        img.src = "data:image/jpeg;base64," + p.base64;
+                        img.style.maxWidth = "45%";
+                        box.appendChild(img);
+                    });
+                },
+                fail: function (res) {
+                    alert("fail: " + JSON.stringify(res));
+                },
+                cancel: function (res) {
+                    alert("已取消选择");
+                }
+            });
+        }
+
+
+
+
+</script>
+
+</html>
