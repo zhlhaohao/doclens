@@ -19,6 +19,7 @@ import type { DiaryEntry, DiaryFragment } from "../state/types";
 import {
   jsbridgePhotoAvailable,
   jsbridgeDebugSummary,
+  JSBRIDGE_DEBUG,
   JSBRIDGE_DEBUG_TAG,
   takePhotoAsFile,
   pickPhotoAsFile,
@@ -347,8 +348,9 @@ export class DiaryRecordPanel extends LitElement {
   }
   private _dbgShown = false;
 
-  /** 调试 toast：右下角展示（真机 webview 无 devtools 时的眼睛） */
+  /** 调试 toast：右下角展示（真机 webview 无 devtools 时的眼睛）；JSBRIDGE_DEBUG=false 时静默 */
   private _debugToast(message: string, level: "success" | "error" | "info" = "info", duration = 4000) {
+    if (!JSBRIDGE_DEBUG) return;
     const stack = this.renderRoot?.querySelector("toast-stack") as ToastStack | null;
     stack?.pushToast(message, level, duration);
   }

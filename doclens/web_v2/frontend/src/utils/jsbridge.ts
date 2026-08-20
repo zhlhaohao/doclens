@@ -86,6 +86,9 @@ export function isNexBoxWebview(): boolean {
   return uaHit || typeof window !== "undefined" && !!window.Android;
 }
 
+/** 诊断开关：true 时 _debugToast 弹出 jsbridge 环境/调用链诊断（真机调试后应关掉） */
+export const JSBRIDGE_DEBUG = false;
+
 /** 调试标记：toast 出现即证明新构建已生效（被 App 缓存旧页时不会有任何 toast） */
 export const JSBRIDGE_DEBUG_TAG = "dbg1";
 
