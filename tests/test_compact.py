@@ -34,7 +34,7 @@ class TestMicrocompact:
         for i in range(5):
             msgs.append(_assistant_tool_use(f"r{i}", "read_document"))
             msgs.append(_user_tool_result(f"r{i}", _LONG))
-        microcompact(msgs)
+        microcompact(msgs, keep=3)
         results = _collect(msgs)
         assert results["r0"] == "[cleared]"
         assert results["r1"] == "[cleared]"
@@ -64,7 +64,7 @@ class TestMicrocompact:
             msgs.append(_assistant_tool_use(f"r{i}", "read_document"))
             msgs.append(_user_tool_result(f"r{i}", _LONG))
 
-        microcompact(msgs)
+        microcompact(msgs, keep=3)
         results = _collect(msgs)
         # 全部 6 个 task 结果原样保留
         for i in range(6):
@@ -78,6 +78,40 @@ class TestMicrocompact:
         for i in range(5):
             msgs.append(_assistant_tool_use(f"r{i}", "bash"))
             msgs.append(_user_tool_result(f"r{i}", "ok"))  # ≤100 字符不清
-        microcompact(msgs)
+        microcompact(msgs, keep=3)
         results = _collect(msgs)
         assert results["r0"] == "ok"
+
+    def test_default_keep_10(self):
+        """默认保留 10 个（缓存友好）：5 个结果全留；12 个结果只清最老 2 个。"""
+        msgs = []
+        for i in range(5):
+            msgs.append(_assistant_tool_use(f"r{i}", "read_document"))
+            msgs.append(_user_tool_result(f"r{i}", _LONG))
+        microcompact(msgs)
+        assert all(v == _LONG for v in _collect(msgs).values())
+
+        msgs = []
+        for i in range(12):
+            msgs.append(_assistant_tool_use(f"r{i}", "read_document"))
+            msgs.append(_user_tool_result(f"r{i}", _LONG))
+        microcompact(msgs)
+        results = _collect(msgs)
+        assert results["r0"] == "[cleared]"
+        assert results["r1"] == "[cleared]"
+        assert results["r2"] == _LONG
+        assert results["r11"] == _LONG
+
+    def test_min_estimated_tokens_gate(self):
+        """低于 token 下限完全不动历史（小上下文保持前缀绝对稳定）。"""
+        msgs = []
+        for i in range(12):
+            msgs.append(_assistant_tool_use(f"r{i}", "read_document"))
+            msgs.append(_user_tool_result(f"r{i}", _LONG))
+
+        gated = [dict(m) for m in msgs]
+        microcompact(gated, min_estimated_tokens=10**9)  # 永远达不到
+        assert all(v == _LONG for v in _collect(gated).values())
+
+        microcompact(msgs, min_estimated_tokens=1)  # 立即触发
+        assert _collect(msgs)["r0"] == "[cleared]"

@@ -51,7 +51,12 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             # 技能会话身份：从 DB 首条 message_user 推导（本轮消息尚不在历史中，
             # 首轮时 history 为空 → 看 message 自身；后续轮 history 已含首条）
             first_user = next(
-                (m["content"] for m in history if m.get("role") == "user"), ""
+                (
+                    m["content"]
+                    for m in history
+                    if m.get("role") == "user" and isinstance(m.get("content"), str)
+                ),
+                "",
             )
             if first_user and is_skill_message(first_user):
                 skill_session = True
@@ -188,6 +193,30 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 sa.run_stream(history, message, session_id or session.session_id),
                 _feed(),
             ))
+            # 持久化原始轮次（tool 链 + 模型原始输出），供下一轮 LLM 上下文回放。
+            # 与展示层分离：前端另写 message_user/message_ai（策展文本），
+            # get_chat_history 回放时优先 message_ai_raw。
+            if session_key:
+                try:
+                    from doclens.web_v2.deps import get_sessions_store
+                    traces = [
+                        {
+                            "tool_use_id": tc.get("tool_use_id", ""),
+                            "name": tc.get("name", ""),
+                            "input": tc.get("input", {}),
+                            "output": tc.get("output", ""),
+                            "is_error": tc.get("is_error", False),
+                        }
+                        for tc in emitter.tool_calls
+                        if "output" in tc  # 只落库已完成的调用对（中断残留不配对的丢弃）
+                    ]
+                    get_sessions_store().append_chat_turn_raw(
+                        session_key, traces, emitter.get_full_text()
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "persist raw chat turn failed for %s: %s", session_key, e
+                    )
         except Exception as e:  # noqa: BLE001
             logger.exception("chat thread error: %s", e)
             _put({"type": "error", "detail": str(e)})

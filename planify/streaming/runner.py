@@ -120,11 +120,13 @@ class StreamingAgent:
 
         # 延迟导入压缩模块和提示词构建器（必需组件，导入失败应直接报错）
         from ..context import estimate_tokens, microcompact, auto_compact
+        from ..context.compact import MICROCOMPACT_GATE_RATIO
         from ..prompts import SystemPromptBuilder
 
         self._estimate_tokens = estimate_tokens
         self._microcompact = microcompact
         self._auto_compact = auto_compact
+        self._microcompact_gate_ratio = MICROCOMPACT_GATE_RATIO
         self._prompt_builder = SystemPromptBuilder()
 
     def get_system_prompt(self) -> str:
@@ -166,27 +168,20 @@ class StreamingAgent:
         # 设置当前 session_id（供工具门禁/load_skill 标记使用）
         ctx_token = set_current_session_id(session_id)
 
-        # 每轮重建 skill-context（descriptions + 已加载 skill body）+ agent.md
+        # 每轮重建 skill-context：只放稳定部分（skills 描述 + agent.md + tmp 指引）。
+        # 已加载的 skill body 不放在这里——它随 Skill 工具调用而变，改写
+        # messages[0] 会打废 prompt 前缀缓存；改为在尾部注入（见下方 user query 之前）。
         context_parts: List[str] = []
 
-        # 1. skills descriptions + 已加载 skill body
+        # 1. skills descriptions（稳定：仅安装/卸载技能时变化）
         if self.skills:
-            skills_lines: List[str] = []
             desc_text = self.skills.descriptions()
             if desc_text and desc_text != "(no skills)":
-                skills_lines.append(
-                    "The following skills are available for use with the Skill tool:\n\n"
-                    f"{desc_text}"
-                )
-            skill_state = getattr(self.session, "skill_access_state", None) if self.session else None
-            if skill_state is not None and session_id:
-                for name in sorted(skill_state.loaded_names(session_id)):
-                    body = self.skills.load(name)
-                    if body and not body.startswith("Error:"):
-                        skills_lines.append(body)
-            if skills_lines:
                 context_parts.append(
-                    "<system-reminder>\n" + "\n\n".join(skills_lines) + "\n</system-reminder>"
+                    "<system-reminder>\n"
+                    "The following skills are available for use with the Skill tool:\n\n"
+                    f"{desc_text}\n"
+                    "</system-reminder>"
                 )
 
         # 2. agent.md 内容
@@ -234,9 +229,40 @@ class StreamingAgent:
             )
 
         if context_parts:
-            _refresh_or_insert_context(
-                messages, _CONTEXT_MARKER, "\n\n".join(context_parts)
-            )
+            combined = "\n\n".join(context_parts)
+            if _CONTEXT_MARKER not in combined:
+                # 保证 marker 存在：否则 _refresh_or_insert_context 找不到旧消息，
+                # 会每轮重复 insert 导致历史无限增长
+                combined = f"{_CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
+            _refresh_or_insert_context(messages, _CONTEXT_MARKER, combined)
+
+        # 已加载 skill body → 尾部消息对注入（保持 messages[0] 与历史前缀稳定）。
+        # web 层每轮从 DB 重建历史（不含注入消息），故每轮重注；若调用方复用
+        # 返回的历史（含注入消息），按 <loaded-skill name="..."> marker 去重。
+        if self.skills and session_id and self.session:
+            skill_state = getattr(self.session, "skill_access_state", None)
+            if skill_state is not None:
+                for name in sorted(skill_state.loaded_names(session_id)):
+                    skill_marker = f'<loaded-skill name="{name}">'
+                    already = any(
+                        m.get("role") == "user"
+                        and isinstance(m.get("content"), str)
+                        and skill_marker in m["content"]
+                        for m in messages
+                    )
+                    if already:
+                        continue
+                    body = self.skills.load(name)
+                    if body and not body.startswith("Error:"):
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                "<system-reminder>\n"
+                                f"{skill_marker}\n{body}\n</loaded-skill>\n"
+                                "</system-reminder>"
+                            ),
+                        })
+                        messages.append({"role": "assistant", "content": "Noted."})
 
         # 添加用户 query（纯文本，不含 skills/agent.md）
         messages.append({"role": "user", "content": user_message})
@@ -251,7 +277,14 @@ class StreamingAgent:
                 self.logger.info(f"[StreamingAgent] 开始循环 #{loop_count}")
 
                 # === 压缩管道 ===
-                self._microcompact(messages)
+                # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
+                # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
+                self._microcompact(
+                    messages,
+                    min_estimated_tokens=int(
+                        self.config.compact_threshold * self._microcompact_gate_ratio
+                    ),
+                )
                 if self._estimate_tokens(messages) > self.config.compact_threshold:
                     if self._auto_compact and self.session:
                         transcript_dir = str(self.session.config.transcript_dir)
