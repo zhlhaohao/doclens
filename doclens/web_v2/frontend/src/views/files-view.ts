@@ -751,6 +751,7 @@ export class FilesView extends LitElement {
       ?noHeader=${opts.noHeader ?? false}
       ?mobile=${opts.mobile ?? false}
       ?enableReparse=${true}
+      ?rememberScroll=${true}
       path=${this._previewPath}
       language=${this._previewLanguage}
       content=${this._previewContent}
