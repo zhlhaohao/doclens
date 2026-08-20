@@ -287,14 +287,18 @@ class StreamingAgent:
                 )
                 if self._estimate_tokens(messages) > self.config.compact_threshold:
                     if self._auto_compact and self.session:
-                        transcript_dir = str(self.session.config.transcript_dir)
+                        # 压缩 transcript 目录：session.config.transcript_dir 是
+                        # .planify/transcript.json 文件路径（语义不符），统一用
+                        # <workdir>/.transcripts/
+                        transcript_dir = Path(self.session.config.workdir) / ".transcripts"
                         compacted = self._auto_compact(
                             messages, self.provider, transcript_dir
                         )
+                        # 必须就地替换本地循环列表，否则本轮后续循环仍用
+                        # 未压缩历史（每轮重复触发压缩、transcript 越写越大）
+                        messages[:] = compacted
                         if self.session:
                             self.session.replace_messages_in_place(compacted)
-                        else:
-                            messages[:] = compacted
 
                 # === 后台通知 ===
                 if self.bg_manager:
