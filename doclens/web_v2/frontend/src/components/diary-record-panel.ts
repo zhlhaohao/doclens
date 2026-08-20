@@ -459,7 +459,7 @@ export class DiaryRecordPanel extends LitElement {
         class="text-input"
         multiline
         buttonLabel="记录"
-        placeholder="记录此刻…（Enter 发送，Shift+Enter 换行）"
+        placeholder="记录此刻…"
         ?disabled=${this.submitting}
         @submit=${this._onSubmitText}></input-box>
       <div class="photo-btns">
