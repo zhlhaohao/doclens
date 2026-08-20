@@ -13,7 +13,12 @@
     rel="stylesheet"
   />
   <title>Doclens</title>
-  <script type="module" crossorigin src="/assets/index.BAmgVsmj.js"></script>
+  <!-- NexBox JSBridge 封装（ES5 IIFE，浏览器加载无害；仅 webview 内调用）。
+       版本化引用防 App 内 CacheWebView 强缓存；升级 jsbridge.js 或后端路由变化后必须改 ?v= 号
+       （v1 曾被 App 缓存过错误响应——SPA fallback 返回的 HTML 冒充 JS，URL 不变永远不回源）。
+       来源：../cortex/docs/jsbridge/web/jsbridge.js（与 App 内置 assets/webpage/jsbridge.js 同源） -->
+  <script src="/jsbridge.js?v=2"></script>
+  <script type="module" crossorigin src="/assets/index.DF2RJZVq.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index.DSGowbFc.css">
 </head>
 <body>

@@ -186,6 +186,11 @@ export class DiaryView extends LitElement {
 
   // ---------------------------------------------------------------- 记录页事件
 
+  /** jsbridge 拍照/选图失败（权限拒绝等；用户取消不触发） */
+  private _onPhotoError(e: CustomEvent<{ message: string }>) {
+    actions.setDiaryState({ error: e.detail.message });
+  }
+
   private async _onSubmitText(e: CustomEvent<{ value: string }>) {
     if (this._diary.submitting) return;
     if (!this._diary.todayEntry?.city) {
@@ -336,6 +341,7 @@ export class DiaryView extends LitElement {
       <div class="page"
         @submit-text=${this._onSubmitText}
         @upload-photo=${this._onUploadPhoto}
+        @photo-error=${this._onPhotoError}
         @delete-fragment=${this._onDeleteFragment}
         @edit-fragment=${this._onEditFragment}
         @navigate-day=${this._onNavigateDay}

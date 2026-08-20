@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { fixture, html } from "@open-wc/testing";
 import "../src/components/diary-record-panel";
 import "../src/components/diary-review-panel";
@@ -55,6 +55,71 @@ describe("diary-record-panel", () => {
       <diary-record-panel .entry=${{ ...rawEntry, fragments: [] }}></diary-record-panel>
     `);
     expect(el.shadowRoot!.textContent).toContain("今天还没有记录");
+  });
+
+  // ---- 拍照/相册双路径（浏览器 input vs webview jsbridge） ----
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { jsbridge?: unknown }).jsbridge;
+    delete (window as unknown as { Android?: unknown }).Android;
+  });
+
+  it("browser: photo buttons click hidden file inputs", async () => {
+    const el = await fixture<DiaryRecordPanel>(html`
+      <diary-record-panel .entry=${rawEntry}></diary-record-panel>
+    `);
+    const captureInput = el.shadowRoot!.querySelector<HTMLInputElement>("input[data-capture]")!;
+    const galleryInput = el.shadowRoot!.querySelector<HTMLInputElement>("input[data-gallery]")!;
+    const captureClick = vi.spyOn(captureInput, "click").mockImplementation(() => {});
+    const galleryClick = vi.spyOn(galleryInput, "click").mockImplementation(() => {});
+    [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".photo-btn")]
+      .find((b) => b.textContent!.includes("拍照"))!.click();
+    [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".photo-btn")]
+      .find((b) => b.textContent!.includes("相册"))!.click();
+    expect(captureClick).toHaveBeenCalledTimes(1);
+    expect(galleryClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("webview: photo buttons route to jsbridge instead of file inputs", async () => {
+    (window as unknown as { Android: unknown }).Android = { messageSend: vi.fn() };
+    const takePhoto = vi.fn((h: { success?: (r: unknown) => void }) =>
+      h.success?.({ code: 0, base64: "AAAA", mimeType: "image/jpeg", width: 1, height: 1, size: 3 }));
+    const pickPhotos = vi.fn();
+    (window as unknown as { jsbridge?: unknown }).jsbridge = { takePhoto, pickPhotos };
+
+    const el = await fixture<DiaryRecordPanel>(html`
+      <diary-record-panel .entry=${rawEntry}></diary-record-panel>
+    `);
+    const captureInput = el.shadowRoot!.querySelector<HTMLInputElement>("input[data-capture]")!;
+    const captureClick = vi.spyOn(captureInput, "click").mockImplementation(() => {});
+    [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".photo-btn")]
+      .find((b) => b.textContent!.includes("拍照"))!.click();
+
+    expect(takePhoto).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r));  // 等 async success 分支
+    await el.updateComplete;
+    expect(captureClick).not.toHaveBeenCalled();  // 不走 input
+    expect(el.shadowRoot!.querySelector(".pending-photo")).toBeTruthy();  // 已进待传预览
+  });
+
+  it("webview: jsbridge fail bubbles photo-error event", async () => {
+    (window as unknown as { Android: unknown }).Android = { messageSend: vi.fn() };
+    const takePhoto = vi.fn((h: { fail?: (r: unknown) => void }) =>
+      h.fail?.({ code: 2, error: "denied" }));
+    (window as unknown as { jsbridge?: unknown }).jsbridge = { takePhoto, pickPhotos: vi.fn() };
+
+    const errors: string[] = [];
+    const el = await fixture<DiaryRecordPanel>(html`
+      <diary-record-panel .entry=${rawEntry} @photo-error=${(e: Event) => {
+        errors.push((e as CustomEvent<{ message: string }>).detail.message);
+      }}></diary-record-panel>
+    `);
+    [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".photo-btn")]
+      .find((b) => b.textContent!.includes("拍照"))!.click();
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r));  // 等 async 分支
+    expect(errors[0]).toContain("权限");
   });
 });
 
