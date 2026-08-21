@@ -671,12 +671,14 @@ export class MdViewer extends LitElement {
     flashTarget.classList.add("highlight-flash");
   }
 
-  private _locateAndHighlight() {
-    if (this.line === null || this.line === undefined) return;
-    const target = this._findBlockAtLine(this.line);
+  /** 滚动到源行所在块并闪烁定位（目录抽屉跳转用）。
+   *  与 _locateAndHighlight 的差别只在入口：这是父组件主动触发的一次性跳转，
+   *  不经过 line property。 */
+  jumpToSourceLine(line: number, behavior: ScrollBehavior = "smooth") {
+    const target = this._findBlockAtLine(line);
     if (!target) return;
 
-    this.scrollToSourceLine(this.line, "smooth");
+    this.scrollToSourceLine(line, behavior);
     // 闪烁节点第一行所在的块（不再回退到 <mark.keyword-hit>：
     // 即便 target 不含 keyword——典型如 xlsx 的 sheet 标题，
     // keyword 命中在内部 table 单元格——闪烁位置始终锚定在节点起始处，
@@ -684,6 +686,11 @@ export class MdViewer extends LitElement {
     target.classList.remove("highlight-flash");  // 重置以便动画重放
     void target.offsetWidth;                     // 强制 reflow，让 animation 重新触发
     target.classList.add("highlight-flash");
+  }
+
+  private _locateAndHighlight() {
+    if (this.line === null || this.line === undefined) return;
+    this.jumpToSourceLine(this.line, "smooth");
   }
 
   /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
