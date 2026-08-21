@@ -48,6 +48,11 @@ export class SearchView extends LitElement {
       flex-shrink: 0;
       background: transparent;
     }
+    /* 输入框对齐日记记录页的紧凑尺寸（默认 ≈48px/11px 偏大） */
+    .text-input {
+      --min-h: calc(var(--cortex-fs-md) * 1.5 + 14px);   /* ≈36px，随字号缩放 */
+      --cortex-input-pad-y: 6px;
+    }
     .focus-body {
       display: flex;
       flex-direction: column;
@@ -126,6 +131,8 @@ export class SearchView extends LitElement {
     /* 移动端（<1024px）：隐藏桌面端独占的预览栏，预览由 detail-overlay 全屏覆盖 */
     @media (max-width: 1023px) {
       .desktop-only { display: none; }
+      /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽） */
+      .input-row { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
     }
     @media (min-width: 1024px) {
       .detail-overlay { display: none; }
@@ -615,6 +622,7 @@ export class SearchView extends LitElement {
           </history-list>
           <div class="input-row">
             <input-box
+              class="text-input"
               placeholder=${this.searchMode === "grep" ? "输入正则表达式..." : "输入搜索关键词..."}
               button-label="搜索"
               button-icon="search"

@@ -62,7 +62,7 @@ export class WatchChangesDialog extends LitElement {
       border: none;
       background: transparent;
       cursor: pointer;
-      font-size: 16px;
+      font-size: var(--cortex-fs-lg);
       line-height: 1;
       color: var(--cortex-text-muted);
       padding: 4px 8px;

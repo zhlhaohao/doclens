@@ -112,6 +112,13 @@
   --cortex-fs-lg: 17px;
   --cortex-fs-xl: 30px;
 
+  /* ── 按钮水平内边距（与字号同缩放；日记页等文字按钮消费）── */
+  --cortex-btn-pad-x: 14px;
+
+  /* ── 文字按钮高度基准（= fs-md + 2×padding-y；随字号缩放）── */
+  --cortex-btn-h-sm: calc(var(--cortex-fs-md) * 1.4 + 12px);   /* ≈33px：导航/保存等紧凑按钮 */
+  --cortex-btn-h-md: calc(var(--cortex-fs-md) * 1.4 + 16px);   /* ≈37px：记录/回顾 sub-tab */
+
   /* ── 布局尺寸 ── */
   --cortex-activity-bar-width: 48px;
   --cortex-tab-bar-height: 56px;

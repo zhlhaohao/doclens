@@ -4,10 +4,29 @@
  *
  * 注意：CSS 原生不支持 @media (--var)，所以这里直接写像素值。
  *       断点定义参考：
+ *         <360px    : 小屏手机（基础字号缩至 90%）
  *         <640px    : 移动（手机）
  *         640-1023  : 平板（与移动同行为）
  *         ≥1024px   : 桌面（含 Activity Bar + 双栏）
  */
+
+/* 小屏手机（<360px CSS 像素，如 319×677 物理分辨率的设备）：
+ * 基础字号整体缩至 90%。App 字号几乎全部走 --cortex-fs-*（px），
+ * 仅 Shoelace 组件用 rem——故 token 与 html 根字号需同时覆盖。 */
+@media (max-width: 359px) {
+  html {
+    font-size: 90%;
+  }
+  :root {
+    --cortex-fs-xs: 10.8px;
+    --cortex-fs-sm: 11.7px;
+    --cortex-fs-base: 12.6px;
+    --cortex-fs-md: 13.5px;
+    --cortex-fs-lg: 15.3px;
+    --cortex-fs-xl: 27px;
+    --cortex-btn-pad-x: 12.6px;
+  }
+}
 
 /* 移动/平板（<1024px）：单栏 + 底部 Tab Bar */
 @media (max-width: 1023px) {

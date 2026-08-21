@@ -7,7 +7,9 @@ export class InputBox extends LitElement {
   static styles = css`
     :host {
       display: block;
-      --min-h: 48px;
+      /* 输入框高度基准（= fs-md 行高 + 2×上下留白；随字号缩放。
+         消费方可用 --min-h 覆盖为更紧凑的值，如日记记录页 36px） */
+      --min-h: calc(var(--cortex-fs-md) * 1.5 + 26px);   /* ≈48px */
     }
     .wrapper {
       position: relative;
@@ -82,15 +84,16 @@ export class InputBox extends LitElement {
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
       position: absolute;
-      right: 6px;
+      right: 3px;
       top: 50%;
       transform: translateY(-50%);
       background: #16a34a;
       color: #fff;
       border: none;
       border-radius: var(--cortex-radius-pill);
-      min-width: calc(var(--min-h) - 12px);
-      height: calc(var(--min-h) - 12px);
+      /* 上下左右各留 3px（原 12px 高度差致上下 6px，与右边 3px 不对称） */
+      min-width: calc(var(--min-h) - 6px);
+      height: calc(var(--min-h) - 6px);
       padding: 0 14px;
       font-size: var(--cortex-fs-md);
       font-weight: 500;
@@ -123,7 +126,7 @@ export class InputBox extends LitElement {
     /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
     .actions.split {
       position: absolute;
-      right: 6px;
+      right: 3px;
       top: 50%;
       transform: translateY(-50%);
       display: flex;
@@ -151,7 +154,8 @@ export class InputBox extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: 0 var(--cortex-radius-pill) var(--cortex-radius-pill) 0;
       box-shadow: none;
-      height: calc(var(--min-h) - 12px);
+      /* 与主按钮同高：上下各留 3px，对齐 wrapper 边缘 */
+      height: calc(var(--min-h) - 6px);
       min-width: 28px;
       padding: 0 10px;
       font-size: var(--cortex-fs-sm);
@@ -190,7 +194,8 @@ export class InputBox extends LitElement {
     .menu-item.active:hover { background: var(--cortex-primary-soft); }
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
-      :host { --min-h: 44px; }
+      /* 移动端稍矮（≈44px），仍随字号缩放 */
+      :host { --min-h: calc(var(--cortex-fs-md) * 1.5 + 20px); }
     }
   `;
 

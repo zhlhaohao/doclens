@@ -168,16 +168,20 @@ def _vision_anthropic(b64: str, media: str, prompt: str, config, *, max_tokens: 
 def compose_day_body(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:
     """确定性拼接片段为逐条时间线（无对话模型参与，输出完全确定）。
 
-    每个片段一行「- HH:MM 内容」；照片行附视觉描述（无描述时仅图片引用，
-    备注已在 alt 文本里）。不聚类、不改写，信息零丢失。
+    每个片段一行「- HH:MM 内容」。照片行：用户备注优先（只写备注，不插
+    AI 视觉描述）；无备注时才附 AI 描述。不聚类、不改写，信息零丢失。
     """
     lines = []
     for f in fragments:
         if f.kind == "photo":
             caption = "" if f.text == "照片" else f.text
             ref = f"![{caption or '照片'}]({f.image})"
-            desc = photo_descriptions.get(f.fid, "")
-            lines.append(f"- {f.time} {ref}" + (f" {desc}" if desc else ""))
+            if caption:
+                # 用户手动备注为主：不再追加 AI 视觉解读，避免成文里重复/冲突
+                lines.append(f"- {f.time} {ref}")
+            else:
+                desc = photo_descriptions.get(f.fid, "")
+                lines.append(f"- {f.time} {ref}" + (f" {desc}" if desc else ""))
         else:
             lines.append(f"- {f.time} {f.text}")
     return "\n".join(lines)

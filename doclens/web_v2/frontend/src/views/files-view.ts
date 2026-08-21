@@ -54,7 +54,9 @@ export class FilesView extends LitElement {
       grid-template-columns:
         var(--tree-pane-width, 240px)
         4px
-        minmax(0, 1fr)
+        /* 中间栏（file-list）硬性最小宽度：与 JS 拖动上限 MIDDLE_PANE_MIN(300) 对齐，
+           防止恢复的两侧栏宽在窄窗口把中间列压没 */
+        minmax(300px, 1fr)
         4px
         var(--preview-pane-width, 320px);
       min-height: 0;

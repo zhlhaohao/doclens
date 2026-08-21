@@ -129,6 +129,11 @@ export class ChatView extends LitElement {
       padding: 6px var(--cortex-space-6) 18px;
       flex-shrink: 0;
     }
+    /* 输入框对齐日记记录页的紧凑尺寸（默认 ≈48px/11px 偏大） */
+    .text-input {
+      --min-h: calc(var(--cortex-fs-md) * 1.5 + 14px);   /* ≈36px，随字号缩放 */
+      --cortex-input-pad-y: 6px;
+    }
     .focus-body {
       display: flex;
       flex-direction: column;
@@ -235,6 +240,8 @@ export class ChatView extends LitElement {
       .focus-main .desktop-only {
         display: none;
       }
+      /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽） */
+      .input-row { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
     }
     /* 移动端预览 overlay */
     .preview-overlay {
@@ -770,9 +777,10 @@ export class ChatView extends LitElement {
           </history-list>
           <div class="input-row">
             <input-box
+              class="text-input"
               placeholder="问 Doclens 任何问题..."
               .buttonLabel=${"发送"}
-              .buttonIcon=${"arrow-up"}
+              .buttonIcon=${"send"}
               .iconAfter=${true}
               style="--cortex-input-btn-reserve: 96px"
               multiline

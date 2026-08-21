@@ -33,30 +33,64 @@ export class DiaryView extends LitElement {
       min-height: 0;
       overflow-y: auto;
       background: var(--cortex-bg);
+      /* 页面字号基准：em 留白（.page/.tab-strip）以此为锚随字号缩放 */
+      font-size: var(--cortex-fs-base);
     }
     .page {
       flex: 1;
       width: 100%;
       max-width: 820px;
       margin: 0 auto;
-      padding: var(--cortex-space-4, 16px) var(--cortex-space-4, 16px)
-        calc(var(--cortex-space-6, 24px) + env(safe-area-inset-bottom));
+      /* 上下留白用 em：随字号缩放（小屏 90% 字号时同步收紧）；
+         顶部与 tab 条分割线下方的间距对称（0.6em）；
+         左右保持固定 space-4 */
+      padding: 0.6em var(--cortex-space-4, 16px)
+        calc(1.6em + env(safe-area-inset-bottom));
+    }
+    /* 回顾页 md 正文贴屏幕边缘：tab 以下区域取消 .page 的水平留白，
+       由 md-viewer 白纸自身的 padding 控制内容边距 */
+    .page.review-tab {
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .page.review-tab .tab-strip,
+    .page.review-tab .error-bar {
+      margin-left: var(--cortex-space-4, 16px);
+      margin-right: var(--cortex-space-4, 16px);
+    }
+    /* 前一天/后一天/日期导航行（在 diary-review-panel 内，非 .page 直接子元素）
+       用外层选择器穿透 light DOM 补回边距，避免按钮贴屏幕边缘 */
+    .page.review-tab diary-review-panel {
+      display: block;
+      padding-left: var(--cortex-space-4, 16px);
+      padding-right: var(--cortex-space-4, 16px);
+    }
+    /* md-viewer 是 diary-review-panel 的子元素，反向抵消其继承的 padding，
+       白纸仍贴屏幕边缘 */
+    .page.review-tab diary-review-panel md-viewer {
+      margin-left: calc(-1 * var(--cortex-space-4, 16px));
+      margin-right: calc(-1 * var(--cortex-space-4, 16px));
     }
     .tab-strip {
       display: flex;
       gap: 4px;
-      margin-bottom: var(--cortex-space-4, 16px);
+      /* tab 条与下方内容间距随字号缩放 */
+      margin-bottom: 1.1em;
+      /* 下边缘分割线（hairline-soft，与卡片弱分隔同款） */
+      border-bottom: 1px solid var(--cortex-border-muted);
+      padding-bottom: 0.6em;
     }
     .sub-tab {
       flex: 1;
-      min-height: 40px;
-      padding: 0 16px;
+      min-height: var(--cortex-btn-h-md, 40px);
+      padding: 0 calc(var(--cortex-btn-pad-x, 14px) + 2px);
       border: none;
       border-radius: var(--cortex-radius-lg, 16px);
       background: transparent;
-      color: var(--cortex-text-muted);
+      /* 非激活态用最静音灰（stone），hover 回升 muted，active 钴蓝 */
+      color: var(--cortex-text-subtle);
       cursor: pointer;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       font-weight: 600;
       display: inline-flex;
       align-items: center;
@@ -64,6 +98,7 @@ export class DiaryView extends LitElement {
       gap: 6px;
       transition: background 0.15s ease, color 0.15s ease;
     }
+    .sub-tab doclens-icon { transition: color 0.15s ease; }
     .sub-tab:hover { color: var(--cortex-text); }
     .sub-tab doclens-icon { font-size: 16px; }
     .sub-tab.active {
@@ -76,7 +111,7 @@ export class DiaryView extends LitElement {
       border-radius: var(--cortex-radius-md, 8px);
       background: #fef2f2;
       color: var(--cortex-nav-active);
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
     }
     dialog {
       border: 1px solid var(--cortex-border);
@@ -338,7 +373,7 @@ export class DiaryView extends LitElement {
   render() {
     const d = this._diary;
     return html`
-      <div class="page"
+      <div class="page ${d.tab === "review" ? "review-tab" : ""}"
         @submit-text=${this._onSubmitText}
         @upload-photo=${this._onUploadPhoto}
         @photo-error=${this._onPhotoError}

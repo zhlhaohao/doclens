@@ -65,12 +65,12 @@ export class DiaryCalendar extends LitElement {
     }
     .cal-title {
       font-weight: 600;
-      font-size: 15px;
+      font-size: var(--cortex-fs-md);
       border: none;
       background: transparent;
       color: var(--cortex-text);
       cursor: pointer;
-      padding: 6px 14px;
+      padding: 6px var(--cortex-btn-pad-x, 14px);
       border-radius: var(--cortex-radius-pill, 100px);
     }
     .cal-title:hover { background: var(--cortex-surface-muted); }
@@ -94,7 +94,7 @@ export class DiaryCalendar extends LitElement {
     }
     .wd {
       text-align: center;
-      font-size: 12px;
+      font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
       padding: 4px 0;
     }
@@ -105,7 +105,7 @@ export class DiaryCalendar extends LitElement {
       cursor: pointer;
       min-height: 44px;             /* 触控目标 ≥44px */
       border-radius: var(--cortex-radius-md, 8px);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       display: flex;
       align-items: center;
@@ -140,7 +140,7 @@ export class DiaryCalendar extends LitElement {
       background: transparent;
       cursor: pointer;
       border-radius: var(--cortex-radius-md, 8px);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
       display: flex;
       align-items: center;

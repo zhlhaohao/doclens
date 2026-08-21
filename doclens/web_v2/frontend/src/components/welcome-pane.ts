@@ -112,8 +112,8 @@ export class WelcomePane extends LitElement {
     .onboarding-subheading {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-caption);
-      line-height: 1.5;
-      margin: 6px 0 0;
+      line-height: 1.8;
+      margin: 8px 0 0;
     }
     .workdir-row {
       font-size: var(--cortex-fs-xs);
@@ -229,13 +229,14 @@ export class WelcomePane extends LitElement {
       }
       .title { font-size: var(--cortex-fs-lg); }
       .subtitle { font-size: var(--cortex-fs-sm); }
-      .onboarding-card { padding: var(--cortex-space-5) var(--cortex-space-4); border-radius: 0; }
+      /* 移动端卡片上下 padding 收紧（示例已隐藏，卡片只剩标题区） */
+      .onboarding-card { padding: var(--cortex-space-3) var(--cortex-space-4); border-radius: 0; }
       /* 窄屏：缩小 hero 圆盘 + 隐藏模式 chip 胶囊（title-group 已默认同行） */
       .hero-mark { width: 36px; height: 36px; font-size: 18px; }
       .modes-row { display: none; }
-      .card-title { font-size: var(--cortex-fs-lg); }
-      /* 窄屏也保持 2 列（示例已精简，2×2 排布），收紧列间距防溢出 */
-      .examples-list { grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+      .onboarding-card .card-title { font-size: var(--cortex-fs-lg); }
+      /* 移动浏览器省屏幕：隐藏问答示例列表（桌面保留） */
+      .examples-list { display: none; }
     }
   `;
 

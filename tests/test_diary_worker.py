@@ -175,15 +175,26 @@ class TestComposeDayBody:
         frags = [
             diary.Fragment(fid="a", time="09:15", kind="text", text="早上喝了咖啡"),
             diary.Fragment(
-                fid="b", time="18:30", kind="photo", text="晚霞",
+                fid="b", time="18:30", kind="photo", text="照片",
                 image="images/2026-08-01/x.webp",
             ),
         ]
         s = compose_day_body(frags, {"b": "天边大片橙红色晚霞"})
         assert s.splitlines() == [
             "- 09:15 早上喝了咖啡",
-            "- 18:30 ![晚霞](images/2026-08-01/x.webp) 天边大片橙红色晚霞",
+            "- 18:30 ![照片](images/2026-08-01/x.webp) 天边大片橙红色晚霞",
         ]
+
+    def test_photo_caption_overrides_description(self):
+        """用户手动备注优先：不再追加 AI 视觉解读，避免成文重复/冲突。"""
+        frags = [
+            diary.Fragment(
+                fid="b", time="18:30", kind="photo", text="晚霞",
+                image="images/2026-08-01/x.webp",
+            ),
+        ]
+        s = compose_day_body(frags, {"b": "天边大片橙红色晚霞"})
+        assert s == "- 18:30 ![晚霞](images/2026-08-01/x.webp)"
 
     def test_text_fragments_not_clustered(self):
         """逐条时间线：相邻文字片段不合并，每条独立一行。"""

@@ -38,8 +38,8 @@ export class DiaryRecordPanel extends LitElement {
     *, *::before, *::after { box-sizing: border-box; }
     .text-input {
       display: block;
-      /* 记录页输入框更紧凑：矮一点 + 上下 padding 收窄（默认 48px/11px 偏空旷） */
-      --min-h: 36px;
+      /* 记录页输入框更紧凑：矮一点 + 上下 padding 收窄（默认 ≈48px/11px 偏空旷） */
+      --min-h: calc(var(--cortex-fs-md) * 1.5 + 14px);   /* ≈36px，随字号缩放 */
       --cortex-input-pad-y: 6px;
     }
     .photo-btns {
@@ -55,7 +55,7 @@ export class DiaryRecordPanel extends LitElement {
       background: transparent;
       color: var(--cortex-text-muted);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
       padding: 0;
       white-space: nowrap;
     }
@@ -66,14 +66,14 @@ export class DiaryRecordPanel extends LitElement {
       justify-content: center;
       gap: 6px;
       min-width: 44px;
-      min-height: 44px;
+      min-height: var(--cortex-btn-h-md, 44px);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      padding: 0 14px;
-      font-size: 14px;
+      padding: 0 var(--cortex-btn-pad-x, 14px);
+      font-size: var(--cortex-fs-base);
     }
     .photo-btn:hover { background: var(--cortex-surface-muted); }
     .photo-btn:disabled { opacity: 0.5; cursor: default; }
@@ -103,7 +103,7 @@ export class DiaryRecordPanel extends LitElement {
       padding: 0 12px;
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md, 8px);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       background: var(--cortex-bg);
       color: var(--cortex-text);
     }
@@ -113,13 +113,13 @@ export class DiaryRecordPanel extends LitElement {
       box-shadow: var(--cortex-focus-ring);
     }
     .confirm-btn {
-      min-height: 44px;
-      padding: 0 18px;
+      min-height: var(--cortex-btn-h-md, 44px);
+      padding: 0 calc(var(--cortex-btn-pad-x, 14px) + 4px);
       border: none;
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-primary);
       color: #fff;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
@@ -187,14 +187,14 @@ export class DiaryRecordPanel extends LitElement {
       margin-bottom: 2px;
     }
     .frag-meta .time {
-      font-size: 12px;
+      font-size: var(--cortex-fs-xs);
       font-weight: 600;
       color: var(--cortex-text-muted);
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.02em;
     }
     .frag-body {
-      font-size: 15px;
+      font-size: var(--cortex-fs-md);
       line-height: 1.7;
       color: var(--cortex-text);
       white-space: pre-wrap;
@@ -231,7 +231,7 @@ export class DiaryRecordPanel extends LitElement {
       justify-content: center;
     }
     .frag-body .caption {
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
       margin-top: var(--cortex-space-1, 4px);
     }
@@ -248,7 +248,7 @@ export class DiaryRecordPanel extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
     }
     .del-btn:hover { background: var(--cortex-surface-muted); color: var(--cortex-nav-active); }
     .del-btn.confirming { color: #fff; background: var(--cortex-nav-active); padding: 0 12px; }
@@ -276,7 +276,7 @@ export class DiaryRecordPanel extends LitElement {
       background: var(--cortex-bg);
       color: var(--cortex-text);
       font-family: var(--cortex-font);
-      font-size: 15px;
+      font-size: var(--cortex-fs-md);
       line-height: 1.6;
       resize: vertical;
     }
@@ -290,13 +290,13 @@ export class DiaryRecordPanel extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 36px;
-      padding: 0 14px;
+      min-height: var(--cortex-btn-h-sm, 36px);
+      padding: 0 var(--cortex-btn-pad-x, 14px);
       border: none;
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-primary);
       color: #fff;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       font-weight: 600;
       cursor: pointer;
     }
@@ -305,19 +305,19 @@ export class DiaryRecordPanel extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 36px;
-      padding: 0 14px;
+      min-height: var(--cortex-btn-h-sm, 36px);
+      padding: 0 var(--cortex-btn-pad-x, 14px);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-surface);
       color: var(--cortex-text);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       cursor: pointer;
     }
     .cancel-btn:disabled { opacity: 0.5; cursor: default; }
     .empty-hint {
       color: var(--cortex-text-muted);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-6, 24px) 0;
     }
