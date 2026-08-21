@@ -2,9 +2,11 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
+import "./toc-drawer";
 import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
+import { extractHeadings, type TocItem } from "../utils/toc";
 import type { MdEditor } from "./md-editor";
 import type { MdViewer } from "./md-viewer";
 import {
@@ -26,6 +28,8 @@ export class PreviewPane extends LitElement {
       min-height: 0;
       background: var(--cortex-card-bg);
       overflow: hidden;
+      /* toc-drawer 浮层（absolute inset 0）的定位基准 */
+      position: relative;
     }
     /* 移动端全宽预览：内嵌 md-viewer 去掉自身留白与灰底，
        白纸贴屏幕边缘（白纸 padding 控制内容边距）；
@@ -161,6 +165,7 @@ export class PreviewPane extends LitElement {
     button.download-btn,
     button.upload-btn,
     button.highlight-btn,
+    button.toc-btn,
     button.edit-btn,
     button.back-btn {
       font-family: inherit;
@@ -206,14 +211,16 @@ export class PreviewPane extends LitElement {
     button.download-btn:hover,
     button.upload-btn:hover,
     button.highlight-btn:hover,
+    button.toc-btn:hover,
     button.edit-btn:hover,
     button.back-btn:hover {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text);
       border-color: var(--cortex-text-subtle);
     }
-    /* 高亮输入条展开中的激活态 */
-    button.highlight-btn.active {
+    /* 高亮输入条/目录抽屉展开中的激活态 */
+    button.highlight-btn.active,
+    button.toc-btn.active {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
@@ -278,9 +285,10 @@ export class PreviewPane extends LitElement {
       flex-shrink: 0;
       position: relative;
     }
-    /* 圆形返回 / 更多 / 高亮按钮 —— 同 focus-header */
+    /* 圆形返回 / 更多 / 高亮 / 目录按钮 —— 同 focus-header */
     .mobile-header .mobile-back,
     .mobile-header .mobile-highlight,
+    .mobile-header .mobile-toc,
     .mobile-header .mobile-more {
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
@@ -301,13 +309,15 @@ export class PreviewPane extends LitElement {
     }
     .mobile-header .mobile-back:hover,
     .mobile-header .mobile-highlight:hover,
+    .mobile-header .mobile-toc:hover,
     .mobile-header .mobile-more:hover {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
     }
-    /* 高亮输入条展开中的激活态（移动端圆形按钮） */
-    .mobile-header .mobile-highlight.active {
+    /* 高亮输入条/目录抽屉展开中的激活态（移动端圆形按钮） */
+    .mobile-header .mobile-highlight.active,
+    .mobile-header .mobile-toc.active {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
@@ -386,6 +396,12 @@ export class PreviewPane extends LitElement {
   @state() private _highlightInput = "";
   private _highlightDebounce: number | undefined;
 
+  /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
+  @state() private _showToc = false;
+  @state() private _tocItems: TocItem[] = [];
+  /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
+  @state() private _tocCurrentLine = 1;
+
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
   /** 切回预览时抑制 md-viewer 的命中行定位（避免与锚点恢复打架） */
@@ -408,11 +424,15 @@ export class PreviewPane extends LitElement {
       this._highlightInput = "";
       this._showHighlightBar = false;
       this._clearHighlightDebounce();
+      // 目录抽屉同样不跨文档残留
+      this._showToc = false;
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
     if (changed.has("content")) {
       this._content = this.content;
+      this._tocItems = extractHeadings(this._content);
+      this._showToc = false;
       this._mode = "preview";
       // 新文档：锚点失效，不做位置恢复，命中行定位照常
       this._skipRestoreOnce = true;
@@ -562,6 +582,14 @@ export class PreviewPane extends LitElement {
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
         <span class="mobile-filename" title=${this.path}>${this._basename(this.path)}</span>
+        ${this._tocAvailable
+          ? html`<button
+              class="mobile-toc ${this._showToc ? "active" : ""}"
+              type="button"
+              aria-label="目录"
+              @click=${this._onTocToggle}
+            ><doclens-icon name="list-tree"></doclens-icon></button>`
+          : null}
         ${this.language === "markdown" && this._mode === "preview"
           ? html`<button
               class="mobile-highlight ${this._showHighlightBar ? "active" : ""}"
@@ -644,6 +672,7 @@ export class PreviewPane extends LitElement {
     try {
       await savePreview(this.path, e.detail.content);
       this._content = e.detail.content;
+      this._tocItems = extractHeadings(this._content);
       this._mode = "preview";
       this.dispatchEvent(
         new CustomEvent("saved", { detail: { content: e.detail.content } }),
@@ -831,6 +860,66 @@ export class PreviewPane extends LitElement {
     viewer.scrollToFirstKeywordHit();
   }
 
+  // ------------------------------------------------------------------
+  // 目录抽屉（md/docx/pdf 的 markdown 预览分支）：header 按钮 →
+  // toc-drawer 浮层列出 heading 扁平缩进列表 → 点击平滑滚动跳转并关闭。
+  // ------------------------------------------------------------------
+
+  /** 目录抽屉支持的预览类型：md / docx / pdf
+   * （pptx/xlsx/邮件/图像解读的 md 不提供——2026-08-21 决议）。 */
+  private get _tocSupported(): boolean {
+    return /\.(md|markdown|docx|pdf)$/i.test(this.path);
+  }
+
+  /** 目录按钮显隐：markdown 预览模式 + 支持的文档类型 + 文档含 heading。 */
+  private get _tocAvailable(): boolean {
+    return (
+      this.language === "markdown" &&
+      this._mode === "preview" &&
+      this._tocSupported &&
+      this._tocItems.length > 0
+    );
+  }
+
+  /** 桌面 header 的目录按钮（图标 + hover 文字，同 highlight-btn）。 */
+  private _renderTocBtn() {
+    if (!this._tocAvailable) return null;
+    return html`<button
+      class="toc-btn ${this._showToc ? "active" : ""}"
+      @click=${this._onTocToggle}
+    ><doclens-icon name="list-tree"></doclens-icon><span class="btn-label">目录</span></button>`;
+  }
+
+  private _onTocToggle = () => {
+    if (!this._showToc) {
+      // 打开前捕获阅读位置，抽屉据此高亮当前章节
+      const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+      this._tocCurrentLine = viewer?.topSourceLine() ?? 1;
+    }
+    this._showToc = !this._showToc;
+  };
+
+  private _onTocClose = () => {
+    this._showToc = false;
+  };
+
+  /** 点击目录节点：关闭抽屉 + 平滑滚动到标题位置并闪烁定位。 */
+  private _onTocJump = (e: CustomEvent<{ line: number }>) => {
+    this._showToc = false;
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    viewer?.jumpToSourceLine(e.detail.line, "smooth");
+  };
+
+  private _renderTocDrawer() {
+    if (!this._showToc) return null;
+    return html`<toc-drawer
+      .items=${this._tocItems}
+      .currentLine=${this._tocCurrentLine}
+      @jump=${this._onTocJump}
+      @close=${this._onTocClose}
+    ></toc-drawer>`;
+  }
+
   private _formatSize(size: number): string {
     if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
     if (size >= 1024) return `${Math.round(size / 1024)} KB`;
@@ -908,6 +997,7 @@ export class PreviewPane extends LitElement {
               : null}
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
+            ${this._renderTocBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
           </div>
@@ -922,6 +1012,7 @@ export class PreviewPane extends LitElement {
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
+        ${this._renderTocDrawer()}
       `;
     }
 

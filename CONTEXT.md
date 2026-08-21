@@ -49,6 +49,7 @@
 - **技能会话 (Skill Session)**：以 `[调用技能: <name>]` 标记开头的 chat 会话，身份每轮从 DB 首条 message_user 推导（零 schema）。总是新建（不续用已有对话），标题=技能名+首文件名。会话内**所有** AI 回答走提取式引文、不走 [N] 策展。
 - **提取式引文 (Extraction References)**：技能会话的引文机制——从回答**正文**提取所有路径模式串（如 `医疗/癌症治疗.md`），校验 workdir 下真实存在，去重保序后重建「## 参考资料」章节。AI 自写引文章节先剥除；一个都没提取到则不追加。与「声明式引文」（AI 写 [N] + curator 校验）相对。
 - **KB 门禁 (KB Skill Gate)**：KB 工具（search_kb/read_document/manage_kb/grep）执行前强制先 load_skill("knowledge-base") 的弹回机制。**当前临时关闭**（GATE_ENABLED=False 开关式，代码路径保留可恢复）——副作用：普通对话不再强制注入引文规范，由 refs_curator 机器校验兜底（2026-08-17 决议）。
+- **目录抽屉 (TOC Drawer)**：md 预览的快速导航形态——header 按钮 + 抽屉浮层，列出文档 heading 结构的扁平缩进列表；点击节点平滑滚动到对应位置并闪烁定位、抽屉自动关闭；打开抽屉时高亮当前阅读位置所在章节。适用范围 = md / docx / pdf 三类预览（分页 pdf 跳转到对应 page-card 内标题）；pptx / xlsx / 邮件 / 图像解读的 md 不提供（2026-08-21 决议）。文档无 heading 时按钮隐藏。桌面 header 与移动端 mobile-header 均直接放置按钮。_Avoid_: 侧边常驻栏、可折叠树、scrollspy。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -83,3 +84,4 @@
 - 2026-08-09：搜索预设（ADR-0012）= 搜索调优参数（3 过滤 + 5 权重）命名档案一键切换，复用模型预设整套机制（`kind=search` 扩展同一 `model_presets.json`/`presets_store`/`/api/presets`/物化）；切换即时热生效无副作用；search tab 移除散填、只留预设区块。
 - 2026-08-14：遗留 Office 格式解析引擎 = anydoc（纯 Rust，主依赖；ADR-0013）——doc/docm/ppt/pps/pot/xls/rtf/epub 统一走 anydoc→md_to_tree，废除旧 doc 外部工具链；pptx/xlsx/docx 不动（markitdown 与 anydoc 两引擎有意共存）；内嵌图片经 assets 接 ImageStore、附加文档末尾；ppt 扁平输出不做 slide 包裹；win_arm64 无 wheel，未装时落 text 兜底。
 - 2026-08-17：技能工具箱 = files 多选文件 → 选白名单技能（context_menu: true）→ 确认（只读文件清单+可选补充 prompt）→ 新建技能会话自动发送；技能加载走现有 load_skill 工具（AI 收指令自调，ChatRequest 不加字段）；KB 门禁临时关闭（开关式）；技能会话全程提取式引文（正文提路径+存在性校验重建参考资料，替代 [N] 策展）。
+- 2026-08-21：预览目录抽屉 = md/docx/pdf 预览提供 heading 目录快速跳转（按钮 + 抽屉浮层 + 扁平缩进列表 + 点击跳转即关闭 + 打开时高亮当前章节）；pptx/xlsx/邮件/图像解读 md 不提供；无 heading 隐藏按钮。
