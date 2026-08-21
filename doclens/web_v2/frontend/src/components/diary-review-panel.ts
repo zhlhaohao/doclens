@@ -18,26 +18,41 @@ import "./md-viewer";
 @customElement("diary-review-panel")
 export class DiaryReviewPanel extends LitElement {
   static styles = css`
-    :host { display: block; position: relative; box-sizing: border-box; }
+    :host {
+      display: block;
+      position: relative;
+      box-sizing: border-box;
+      /* em 留白锚点：随字号缩放（小屏 90% 同步收紧） */
+      font-size: var(--cortex-fs-base);
+    }
     *, *::before, *::after { box-sizing: border-box; }
+    /* 内嵌 md-viewer：去掉自身留白与灰底，让白纸贴满宿主宽度
+       （.page.review-tab 已取消水平 padding，白纸 max-width 820px 与
+       宿主 .page 相同，无需突破；白纸 padding 控制内容边距） */
+    md-viewer {
+      display: block;
+      padding: 0;
+      background: transparent;
+    }
     .nav-row {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2, 8px);
-      margin-bottom: var(--cortex-space-4, 16px);
+      /* 导航行与 md 正文间距收紧（原 space-4=16px 偏空） */
+      margin-bottom: 0.4em;
     }
     .nav-btn {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      min-height: 44px;
-      padding: 0 14px;
+      min-height: var(--cortex-btn-h-sm, 36px);
+      padding: 0 calc(var(--cortex-btn-pad-x, 14px) - 6px);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       white-space: nowrap;
     }
     .nav-btn:hover:not(:disabled) { background: var(--cortex-surface-muted); }
@@ -48,13 +63,13 @@ export class DiaryReviewPanel extends LitElement {
       align-items: center;
       justify-content: center;
       gap: 8px;
-      min-height: 44px;
+      min-height: var(--cortex-btn-h-sm, 36px);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-surface);
       color: var(--cortex-text);
       cursor: pointer;
-      font-size: 15px;
+      font-size: var(--cortex-fs-md);
       font-weight: 600;
     }
     .date-btn:hover { background: var(--cortex-surface-muted); }
@@ -75,7 +90,7 @@ export class DiaryReviewPanel extends LitElement {
       text-align: center;
       color: var(--cortex-text-muted);
       padding: var(--cortex-space-8, 32px) 0;
-      font-size: 15px;
+      font-size: var(--cortex-fs-md);
     }
   `;
 

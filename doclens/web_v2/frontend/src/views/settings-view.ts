@@ -99,7 +99,7 @@ export class SettingsView extends LitElement {
       background: transparent;
       border: none;
       padding: var(--cortex-space-2) var(--cortex-space-4);
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       font-weight: 600;
       color: var(--cortex-text-muted);
       cursor: pointer;

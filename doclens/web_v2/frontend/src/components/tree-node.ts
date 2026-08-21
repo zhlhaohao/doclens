@@ -20,7 +20,7 @@ export class TreeNode extends LitElement {
       width: 16px; height: 16px;
       display: inline-flex; align-items: center; justify-content: center;
       color: var(--cortex-text-subtle); transition: transform 0.15s;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
     }
     .arrow.expanded { transform: rotate(90deg); }
     .arrow.leaf { visibility: hidden; }

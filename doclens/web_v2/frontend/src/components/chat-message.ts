@@ -221,7 +221,7 @@ export class ChatMessageEl extends LitElement {
       border: none;
       border-radius: var(--cortex-radius-sm);
       color: var(--cortex-text-subtle);
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
       cursor: pointer;
       opacity: 0;
       transition: opacity var(--cortex-duration-fast), color var(--cortex-duration-fast),

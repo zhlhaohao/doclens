@@ -27,6 +27,21 @@ export class PreviewPane extends LitElement {
       background: var(--cortex-card-bg);
       overflow: hidden;
     }
+    /* 移动端全宽预览：内嵌 md-viewer 去掉自身留白与灰底，
+       白纸贴屏幕边缘（白纸 padding 控制内容边距）；
+       纯文本 .body / 附件区同理收零水平 padding */
+    :host([mobile]) md-viewer {
+      padding: 0;
+      background: transparent;
+    }
+    :host([mobile]) .body {
+      padding-left: var(--cortex-space-3);
+      padding-right: var(--cortex-space-3);
+    }
+    :host([mobile]) .attachments {
+      padding-left: var(--cortex-space-3);
+      padding-right: var(--cortex-space-3);
+    }
     .header {
       display: flex;
       align-items: center;

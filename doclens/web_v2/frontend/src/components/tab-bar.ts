@@ -26,7 +26,7 @@ export class TabBar extends LitElement {
       align-items: center;
       justify-content: center;
       gap: 2px;
-      font-size: 12px;
+      font-size: var(--cortex-fs-xs);
       padding: 8px 0 6px;
       transition: background 0.15s, color 0.15s;
     }

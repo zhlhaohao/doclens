@@ -270,7 +270,7 @@ export class MdViewer extends LitElement {
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--cortex-fs-xs);
       font-family: var(--cortex-font);
       opacity: 0;
       transition: opacity 0.15s;
@@ -386,7 +386,7 @@ export class MdViewer extends LitElement {
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--cortex-fs-sm);
       font-family: var(--cortex-font);
       opacity: 0.7;
       transition: opacity 0.15s;

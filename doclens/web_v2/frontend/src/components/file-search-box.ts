@@ -48,7 +48,7 @@ export class FileSearchBox extends LitElement {
       background: transparent;
       color: var(--cortex-text-subtle);
       cursor: pointer;
-      font-size: 14px;
+      font-size: var(--cortex-fs-base);
       line-height: 1;
       padding: 0 4px;
       border-radius: var(--cortex-radius-sm);
