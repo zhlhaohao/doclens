@@ -98,6 +98,23 @@
 			"cancel":  params["cancel"]
 		});
 	}
+
+	//选文件并直传服务器（契约见 doclens docs/jsbridge/upload_bridge.md）；
+	//uploadUrl 缺失原生回 fail 1，封装层不兜底（漏传是契约错误应当暴露）
+	function pickAndUploadFiles(params) {
+		params = params || {};
+		sendToNative("pickAndUploadFiles", {
+			"uploadUrl": params.uploadUrl || "",
+			"destDir":   params.destDir   || "",
+			"overwrite": !!params.overwrite,
+			"maxCount":  params.maxCount  || 9,
+			"cookieName": params.cookieName || ""
+		}, {
+			"success": params["success"],
+			"fail":    params["fail"],
+			"cancel":  params["cancel"]
+		});
+	}
 	window.jsbridge = {
 		syncSendToNative		: syncSendToNative,
 		sendToNative 			: sendToNative,
@@ -108,6 +125,7 @@
 		scanQrCode			    : scanQrCode,
 		takePhoto				: takePhoto,
 		pickPhotos				: pickPhotos,
+		pickAndUploadFiles		: pickAndUploadFiles,
 	};
 
 })();

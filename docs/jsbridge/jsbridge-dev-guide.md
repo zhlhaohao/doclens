@@ -69,6 +69,7 @@ XxxPlugin（继承 BaseJSPlugin / BaseJSPluginSync）
 | `clearWebViewCache` | JsClearWebViewCache | **同步** | `{}` | return `{code:"success"}`；清 WebView 缓存 |
 | `takePhoto` | JsTakePhoto | 异步 | `{quality=70, maxWidth=1280, maxHeight=1280}` | success `{code,base64,mimeType,path,width,height,size}`；仅拍照，详见 `docs/camera_bridge.md` |
 | `pickPhotos` | JsPickPhotos | 异步 | `{maxCount=1, quality=70, maxWidth=1080, maxHeight=1080}` | success `{code,count,pickedCount,truncated,photos[]}`；相册多选，详见 `docs/pickphotos_bridge.md` |
+| `pickAndUploadFiles` | JsPickAndUploadFiles | 异步 | `{uploadUrl(必填), destDir="", overwrite=false, maxCount=9, cookieName="cortex_auth"}` | success `{code,pickedCount,truncated,uploadedCount,skippedCount,failedCount,unauthorized,results[]}`；**Android 侧待实现**（契约已冻结），详见 `docs/upload_bridge.md` |
 
 注意类型标注以插件实际继承为准（`extends BaseJSPluginSync` 即同步），与直觉无关：`openHtmlPage`、`getScreenInfo`、`clearWebViewCache`、`getMemoryCache` 都是同步。
 

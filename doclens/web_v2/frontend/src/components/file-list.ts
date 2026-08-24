@@ -72,6 +72,24 @@ export class FileList extends LitElement {
       border-color: var(--cortex-text-subtle);
     }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* 上传中：图标换成旋转圆环动画（"上传中"感知，无进度通道的补偿 UX）；
+       min-width 锚定原 1em 图标宽度，避免替换时按钮抖动 */
+    .toolbar button.uploading { opacity: 1; }
+    .toolbar button.uploading::after { min-width: 1em; }
+    .toolbar button.uploading doclens-icon { display: none; }
+    .toolbar button.uploading::after {
+      content: "";
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: cortex-upload-spin 0.8s linear infinite;
+    }
+    @keyframes cortex-upload-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .toolbar button.uploading::after { animation: none; }
+    }
     .toolbar button.danger { color: var(--cortex-danger); }
     .toolbar button.danger:hover:not(:disabled) {
       background: rgba(220, 38, 38, 0.06);
@@ -172,6 +190,19 @@ export class FileList extends LitElement {
       opacity: 0.4;
       cursor: not-allowed;
     }
+    /* 上传中：菜单项图标换旋转圆环 + 文案（移动端主路径，App 内上传入口） */
+    .mobile-header .mobile-menu button.uploading { opacity: 1; }
+    .mobile-header .mobile-menu button.uploading doclens-icon { display: none; }
+    .mobile-header .mobile-menu button.uploading::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      border: 2px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: cortex-upload-spin 0.8s linear infinite;
+    }
     .mobile-header .mobile-menu button.danger { color: var(--cortex-danger); }
     .header-row {
       display: grid;
@@ -247,6 +278,9 @@ export class FileList extends LitElement {
 
   /** 移动端启用顶部 bar（返回 / 路径 / more 下拉）。 */
   @property({ type: Boolean }) mobile = false;
+
+  /** 上传进行中（App 内 jsbridge 通道）——禁用上传入口防重复触发 */
+  @property({ type: Boolean }) uploading = false;
 
   /** 各列宽度（px），通过 --col-N CSS var 注入到 host，file-row 经继承读取 */
   @state() private _colWidths: number[] = [...DEFAULT_COL_WIDTHS];
@@ -425,8 +459,10 @@ export class FileList extends LitElement {
                   type="button"
                   role="menuitem"
                   data-action="upload"
+                  class=${this.uploading ? "uploading" : ""}
+                  ?disabled=${this.uploading}
                   @click=${this._onMenuItemClick("upload")}
-                ><doclens-icon name="upload"></doclens-icon>上传</button>
+                >${this.uploading ? "上传中…" : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -522,7 +558,7 @@ export class FileList extends LitElement {
       </div>
       <div class="toolbar">
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
-        <button data-action="upload" @click=${() => this._action("upload")}><doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span></button>
+        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
         <button data-action="copy-path" ?disabled=${!canAct} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
