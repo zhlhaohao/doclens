@@ -14,6 +14,13 @@
 interface JsbridgeGlobal {
   takePhoto(params: JsbridgeCallbackDict): void;
   pickPhotos(params: JsbridgeCallbackDict & { maxCount?: number }): void;
+  pickAndUploadFiles(params: JsbridgeCallbackDict & {
+    uploadUrl: string;
+    destDir?: string;
+    overwrite?: boolean;
+    maxCount?: number;
+    cookieName?: string;
+  }): void;
 }
 
 interface JsbridgeCallbackDict {
@@ -55,6 +62,33 @@ interface PickPhotosResult {
   photos: Array<{ base64: string; mimeType: string; width: number; height: number; size: number } | { error: string }>;
 }
 
+/** pickAndUploadFiles success 回调的逐文件结果项（upload_bridge.md §2.2） */
+export interface UploadResultItem {
+  name: string;
+  ok: boolean;
+  /** 成功项：服务端返回的相对路径 */
+  path?: string;
+  bytes_written?: number;
+  overwritten?: boolean;
+  /** 失败项：服务端码透传或原生合成码（ALREADY_EXISTS/INVALID_TYPE/NETWORK_ERROR…） */
+  code?: string;
+  detail?: string;
+}
+
+/** pickAndUploadFiles success 回调结构（upload_bridge.md §2.2） */
+export interface PickAndUploadResult {
+  code: number;
+  pickedCount: number;
+  truncated: boolean;
+  uploadedCount: number;
+  /** ALREADY_EXISTS 计数——与 Web 端「跳过」语义对齐，不算失败 */
+  skippedCount: number;
+  failedCount: number;
+  /** 任一文件 401 → true 且剩余文件已中止，调用方应跳登录页 */
+  unauthorized: boolean;
+  results: UploadResultItem[];
+}
+
 /** fail 回调结构（错误码含义见两份接口文档 §2.3） */
 interface JsbridgeFail {
   code: number;
@@ -76,6 +110,16 @@ export class JsbridgePhotoError extends Error {
   constructor(code: number, message: string) {
     super(message);
     this.name = "JsbridgePhotoError";
+    this.code = code;
+  }
+}
+
+/** 选文件并上传整体失败（插件级 fail；code 含义见 upload_bridge.md §2.3） */
+export class JsbridgeUploadError extends Error {
+  readonly code: number;
+  constructor(code: number, message: string) {
+    super(message);
+    this.name = "JsbridgeUploadError";
     this.code = code;
   }
 }
@@ -123,6 +167,21 @@ export function jsbridgePhotoAvailable(): boolean {
     !!window.jsbridge &&
     typeof window.jsbridge.takePhoto === "function" &&
     typeof window.jsbridge.pickPhotos === "function"
+  );
+}
+
+/**
+ * 文件上传能否走 jsbridge 通道（pickAndUploadFiles）。
+ *
+ * App 版本过旧（未实现本接口）时返回 false，Files tab 降级回 input 方案
+ * ——H5 先行上线无兼容风险。
+ */
+export function jsbridgeUploadAvailable(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.Android &&
+    !!window.jsbridge &&
+    typeof window.jsbridge.pickAndUploadFiles === "function"
   );
 }
 
@@ -233,6 +292,61 @@ export function pickPhotoAsFile(): Promise<File | null> {
       fail: done((raw: unknown) => {
         const f = raw as JsbridgeFail;
         reject(new JsbridgePhotoError(f.code ?? -1, pickFailMessage(f.code ?? -1)));
+      }),
+      cancel: done(() => resolve(null)),
+    });
+  });
+}
+
+/** 上传回调等待上限（ms）——不能复用拍照的 15s：用户在文件选择器里挑选、
+ *  多文件串行上传都可能远超 15s，只做挂死兜底（原生没注册/没回调） */
+const UPLOAD_CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** 选文件并上传（webview 内）的失败码 → 用户文案（upload_bridge.md §2.3） */
+function uploadFailMessage(code: number): string {
+  switch (code) {
+    case 1: return "上传参数缺失（uploadUrl），请更新 App 后重试";
+    case 3: return "未找到可用的文件选择器";
+    case 7: return "已有上传在进行中";
+    default: return "上传失败，请重试";
+  }
+}
+
+/**
+ * 原生选文件并直传服务器（webview 内）。用户取消 resolve null；
+ * 插件级失败 reject JsbridgeUploadError；逐文件成败在 res.results 里
+ * （全部失败也走 success 聚合——见 upload_bridge.md §2.5）。
+ * 调用前须 jsbridgeUploadAvailable() 为 true。
+ */
+export function pickAndUploadFiles(params: {
+  destDir: string;
+  uploadUrl: string;
+  overwrite?: boolean;
+  maxCount?: number;
+}): Promise<PickAndUploadResult | null> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new JsbridgeUploadError(-1,
+        "原生10分钟无回调：App 内可能未注册 pickAndUploadFiles 插件（需 Android 侧按 upload_bridge.md 实现后的构建）"));
+    }, UPLOAD_CALLBACK_TIMEOUT_MS);
+    const done = <T,>(fn: (v: T) => void) => (v: T) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      fn(v);
+    };
+    window.jsbridge!.pickAndUploadFiles({
+      uploadUrl: params.uploadUrl,
+      destDir: params.destDir,
+      overwrite: params.overwrite ?? false,
+      maxCount: params.maxCount,
+      success: done((raw: unknown) => resolve(raw as PickAndUploadResult)),
+      fail: done((raw: unknown) => {
+        const f = raw as JsbridgeFail;
+        reject(new JsbridgeUploadError(f.code ?? -1, uploadFailMessage(f.code ?? -1)));
       }),
       cancel: done(() => resolve(null)),
     });
