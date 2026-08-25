@@ -13,6 +13,13 @@ import {
   renderScrollJumpFabs,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
+import {
+  jsbridgeDownloadAvailable,
+  downloadFile,
+  JsbridgeDownloadError,
+} from "../utils/jsbridge";
+import { actions } from "../state/store";
+import { router } from "../router/router";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
@@ -156,6 +163,31 @@ export class PreviewPane extends LitElement {
       justify-content: center;
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
+    }
+    /* 下载中：屏幕中心遮罩（与 files-view 上传遮罩同款视觉）；fixed 覆盖整个视口 */
+    .download-overlay {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: var(--cortex-space-4);
+      background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
+      backdrop-filter: blur(2px);
+      z-index: 9999;
+    }
+    .download-overlay .ring {
+      width: 40px; height: 40px;
+      border: 4px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: cortex-download-spin 0.8s linear infinite;
+    }
+    .download-overlay .label {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+    }
+    @keyframes cortex-download-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .download-overlay .ring { animation: none; }
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
@@ -381,6 +413,8 @@ export class PreviewPane extends LitElement {
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
   @state() private _showMobileMenu = false;
+  /** 下载进行中（App 内 jsbridge 通道）——屏幕中心遮罩动画 */
+  @state() private _downloading = false;
   /** 关键词高亮输入条（仅 markdown 预览分支可用） */
   @state() private _showHighlightBar = false;
   @state() private _highlightInput = "";
@@ -591,8 +625,9 @@ export class PreviewPane extends LitElement {
                   : html`<button
                       type="button"
                       role="menuitem"
+                      ?disabled=${this._downloading}
                       @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                    ><doclens-icon name="download"></doclens-icon>下载</button>
+                >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -669,8 +704,13 @@ export class PreviewPane extends LitElement {
 
   /** 触发原始文件下载；文件名由后端 Content-Disposition 决定。 */
   private _onDownloadClick = () => {
-    if (!this.path) return;
+    if (!this.path || this._downloading) return;
     const url = `/api/preview/download?path=${encodeURIComponent(this.path)}`;
+    // NexBox WebView 内 <a> 下载不可靠（无下载 UI/路径不可见）→ jsbridge 原生通道
+    if (jsbridgeDownloadAvailable()) {
+      void this._downloadViaJsbridge(url);
+      return;
+    }
     const a = document.createElement("a");
     a.href = url;
     a.rel = "noopener";
@@ -680,9 +720,32 @@ export class PreviewPane extends LitElement {
     document.body.removeChild(a);
   };
 
+  /** App 内下载：原生 GET → 流式写 Downloads 目录 + 系统通知（契约见 download_bridge.md） */
+  private async _downloadViaJsbridge(url: string) {
+    if (this._downloading) return;
+    this._downloading = true;
+    try {
+      const res = await downloadFile({ downloadUrl: `${window.location.origin}${url}` });
+      this.dispatchEvent(
+        new CustomEvent("download-success", { detail: { name: res.name } }),
+      );
+    } catch (e) {
+      if (e instanceof JsbridgeDownloadError && e.unauthorized) {
+        // 与 client.ts 401 钩子行为对齐：跳登录页
+        actions.setAuthState({ authenticated: false });
+        router.navigate("login");
+        return;
+      }
+      const msg = e instanceof Error ? e.message : "下载失败";
+      this.dispatchEvent(new CustomEvent("download-failed", { detail: { message: msg } }));
+    } finally {
+      this._downloading = false;
+    }
+  }
+
   private _renderDownloadBtn() {
     if (this._isPst) return null;
-    return html`<button class="download-btn" @click=${this._onDownloadClick}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>`;
+    return html`<button class="download-btn" ?disabled=${this._downloading} @click=${this._onDownloadClick}>${this._downloading ? html`<span class="btn-label">下载中</span>` : html`<doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span>`}</button>`;
   }
 
   /** 触发「重新解析」：冒泡 reparse 事件给父组件（files-view 挂 reparse-dialog）。 */
@@ -892,6 +955,7 @@ export class PreviewPane extends LitElement {
           @cancel=${this._onEditorCancel}
           @dirty-change=${this._onEditorDirty}
         ></md-editor>
+        ${this._renderDownloadOverlay()}
       `;
     }
 
@@ -922,6 +986,7 @@ export class PreviewPane extends LitElement {
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
+        ${this._renderDownloadOverlay()}
       `;
     }
 
@@ -945,6 +1010,7 @@ export class PreviewPane extends LitElement {
           sandbox="allow-scripts"
           title="HTML 预览"
         ></iframe>
+        ${this._renderDownloadOverlay()}
       `;
     }
 
@@ -970,7 +1036,17 @@ export class PreviewPane extends LitElement {
         })}
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       </div>
+      ${this._renderDownloadOverlay()}
     `;
+  }
+
+  /** 下载中屏幕中心遮罩（与 files-view 上传遮罩同款视觉） */
+  private _renderDownloadOverlay() {
+    if (!this._downloading) return null;
+    return html`<div class="download-overlay" role="status" aria-live="polite">
+      <div class="ring"></div>
+      <div class="label">下载中…</div>
+    </div>`;
   }
 }
 

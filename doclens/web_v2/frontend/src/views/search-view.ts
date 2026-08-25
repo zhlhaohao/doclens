@@ -520,6 +520,15 @@ export class SearchView extends LitElement {
     this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
   };
 
+  /** 预览 pane 下载成功（App 内 jsbridge 通道） */
+  private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
+    this._pushToast(`已保存到下载目录：${e.detail.name}`, "success", 2500);
+  };
+
+  private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
+    this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
+  };
+
   /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
   private async _reloadPreview() {
     if (!this.previewPath) return;
@@ -701,7 +710,9 @@ export class SearchView extends LitElement {
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
                 @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}>
+                @upload-failed=${this._onPreviewUploadFailed}
+                @download-success=${this._onPreviewDownloadSuccess}
+                @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>
       </div>
@@ -736,7 +747,9 @@ export class SearchView extends LitElement {
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
                 @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}>
+                @upload-failed=${this._onPreviewUploadFailed}
+                @download-success=${this._onPreviewDownloadSuccess}
+                @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>` : null}
     `;

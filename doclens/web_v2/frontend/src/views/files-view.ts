@@ -806,6 +806,15 @@ export class FilesView extends LitElement {
     this._showToast(`上传失败：${e.detail.message}`);
   };
 
+  /** 预览 pane 下载成功（App 内 jsbridge 通道） */
+  private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
+    this._showToast(`已保存到下载目录：${e.detail.name}`);
+  };
+
+  private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
+    this._showToast(`下载失败：${e.detail.message}`);
+  };
+
   private _renderNotIndexedHint() {
     return html`<div class="preview-placeholder">
       该文件未索引，无法预览。<br>
@@ -847,6 +856,8 @@ export class FilesView extends LitElement {
       @save-failed=${this._onPreviewSaveFailed}
       @upload-success=${this._onPreviewUploadSuccess}
       @upload-failed=${this._onPreviewUploadFailed}
+      @download-success=${this._onPreviewDownloadSuccess}
+      @download-failed=${this._onPreviewDownloadFailed}
       @reparse=${this._onReparse}
       @back=${this._onPreviewBack}
     ></preview-pane>`;
