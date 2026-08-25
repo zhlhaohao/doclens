@@ -21,6 +21,8 @@ import "../components/drop-zone";
 import "../components/file-search-box";
 import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
+import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
+import { router } from "../router/router";
 
 type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
@@ -156,6 +158,31 @@ export class FilesView extends LitElement {
       z-index: 10000;
       cursor: pointer;
     }
+    /* 上传中：屏幕中心遮罩（大转圈 + 文案），两条上传路径共用 */
+    .upload-overlay {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: var(--cortex-space-4);
+      background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
+      backdrop-filter: blur(2px);
+      z-index: 9999;
+    }
+    .upload-overlay .ring {
+      width: 40px; height: 40px;
+      border: 4px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: cortex-upload-overlay-spin 0.8s linear infinite;
+    }
+    .upload-overlay .label {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+    }
+    @keyframes cortex-upload-overlay-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .upload-overlay .ring { animation: none; }
+    }
     .back-btn {
       position: absolute; top: var(--cortex-space-2); left: var(--cortex-space-2);
       padding: 6px 12px;
@@ -192,6 +219,9 @@ export class FilesView extends LitElement {
 
   @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
   @state() private _previewPaneWidth = FilesView.PREVIEW_PANE_WIDTH_DEFAULT;
+
+  /** jsbridge 上传进行中（App 内）：禁用上传入口，防重复触发 */
+  @state() private _uploading = false;
 
   private _unsubscribe?: () => void;
   private _fileInput: HTMLInputElement | null = null;
@@ -471,6 +501,12 @@ export class FilesView extends LitElement {
   }
 
   private _openFilePicker() {
+    // NexBox WebView 内 X5 内核不弹 input file 选择器 → 走 jsbridge 原生通道
+    //（App 版本过旧未实现该接口时自动降级回 input 方案）
+    if (jsbridgeUploadAvailable()) {
+      void this._uploadViaJsbridge(this._state.currentDir);
+      return;
+    }
     if (!this._fileInput) {
       this._fileInput = document.createElement("input");
       this._fileInput.type = "file";
@@ -585,21 +621,32 @@ export class FilesView extends LitElement {
   }
 
   private async _uploadFiles(files: File[], destDir: string) {
+    if (this._uploading) return;
+    this._uploading = true;
     let ok = 0;
     let skipped = 0;
     let lastError = "";
-    for (const f of files) {
-      try {
-        await filesApi.upload(f, destDir, false);
-        ok++;
-      } catch (e: any) {
-        if (e?.code === "ALREADY_EXISTS") {
-          skipped++;
-        } else {
-          lastError = e?.message || "上传失败";
+    try {
+      for (const f of files) {
+        try {
+          await filesApi.upload(f, destDir, false);
+          ok++;
+        } catch (e: any) {
+          if (e?.code === "ALREADY_EXISTS") {
+            skipped++;
+          } else {
+            lastError = e?.message || "上传失败";
+          }
         }
       }
+      await this._finishUpload(destDir, ok, skipped, lastError);
+    } finally {
+      this._uploading = false;
     }
+  }
+
+  /** 上传收尾：失效缓存 + 刷新目录 + toast 汇总（input 路径与 jsbridge 路径共用） */
+  private async _finishUpload(destDir: string, ok: number, skipped: number, lastError: string) {
     actions.invalidateDir(destDir);
     await this._ensureLoaded(destDir);
     if (lastError && ok === 0) {
@@ -609,6 +656,39 @@ export class FilesView extends LitElement {
       if (skipped > 0) parts.push(`跳过 ${skipped}`);
       if (lastError) parts.push(`部分失败`);
       this._showToast(parts.join("，"));
+    }
+  }
+
+  /**
+   * App 内上传（jsbridge 通道）：原生选文件并直传服务器（大文件不走 base64 回传）。
+   * 契约见 docs/jsbridge/upload_bridge.md；用户取消静默；401 跳登录页。
+   */
+  private async _uploadViaJsbridge(destDir: string) {
+    if (this._uploading) return;
+    this._uploading = true;
+    try {
+      const res = await pickAndUploadFiles({
+        destDir,
+        uploadUrl: `${window.location.origin}/api/files/upload`,
+      });
+      if (!res) return; // 用户在选择器取消
+      if (res.unauthorized) {
+        // 原生上传遇 401：与 client.ts 的 401 统一钩子行为对齐（app.ts 注入）
+        actions.setAuthState({ authenticated: false });
+        router.navigate("login");
+        return;
+      }
+      let lastError = "";
+      for (const r of res.results) {
+        if (!r.ok && r.code !== "ALREADY_EXISTS") {
+          lastError = r.detail || r.code || "上传失败";
+        }
+      }
+      await this._finishUpload(destDir, res.uploadedCount, res.skippedCount, lastError);
+    } catch (e) {
+      this._showToast(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      this._uploading = false;
     }
   }
 
@@ -726,6 +806,15 @@ export class FilesView extends LitElement {
     this._showToast(`上传失败：${e.detail.message}`);
   };
 
+  /** 预览 pane 下载成功（App 内 jsbridge 通道） */
+  private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
+    this._showToast(`已保存到下载目录：${e.detail.name}`);
+  };
+
+  private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
+    this._showToast(`下载失败：${e.detail.message}`);
+  };
+
   private _renderNotIndexedHint() {
     return html`<div class="preview-placeholder">
       该文件未索引，无法预览。<br>
@@ -767,6 +856,8 @@ export class FilesView extends LitElement {
       @save-failed=${this._onPreviewSaveFailed}
       @upload-success=${this._onPreviewUploadSuccess}
       @upload-failed=${this._onPreviewUploadFailed}
+      @download-success=${this._onPreviewDownloadSuccess}
+      @download-failed=${this._onPreviewDownloadFailed}
       @reparse=${this._onReparse}
       @back=${this._onPreviewBack}
     ></preview-pane>`;
@@ -852,6 +943,12 @@ export class FilesView extends LitElement {
       ${this._isMobile ? this._renderMobile() : this._renderDesktop()}
       ${this._renderDialogs()}
       <drop-zone .targetDir=${this._state.currentDir} @drop-files=${this._onDropFiles}></drop-zone>
+      ${this._uploading
+        ? html`<div class="upload-overlay" role="status" aria-live="polite">
+            <div class="ring"></div>
+            <div class="label">上传中…</div>
+          </div>`
+        : ""}
       ${this._toast
         ? html`<div class="toast" @click=${() => this._toast = null}>${this._toast}</div>`
         : ""}
@@ -889,6 +986,7 @@ export class FilesView extends LitElement {
             ></file-search-results>`
           : html`<file-list
               .activePath=${this._previewPath}
+              .uploading=${this._uploading}
               @action=${this._onAction}
               @activated=${this._onFileListActivated}
             ></file-list>`}
@@ -936,6 +1034,7 @@ export class FilesView extends LitElement {
         ${pane === "list"
           ? html`<file-list
               .activePath=${this._previewPath}
+              .uploading=${this._uploading}
               ?mobile=${true}
               @action=${this._onAction}
               @activated=${this._onFileListActivated}

@@ -14,6 +14,18 @@
 interface JsbridgeGlobal {
   takePhoto(params: JsbridgeCallbackDict): void;
   pickPhotos(params: JsbridgeCallbackDict & { maxCount?: number }): void;
+  pickAndUploadFiles(params: JsbridgeCallbackDict & {
+    uploadUrl: string;
+    destDir?: string;
+    overwrite?: boolean;
+    maxCount?: number;
+    cookieName?: string;
+  }): void;
+  downloadFile(params: JsbridgeCallbackDict & {
+    downloadUrl: string;
+    fileName?: string;
+    cookieName?: string;
+  }): void;
 }
 
 interface JsbridgeCallbackDict {
@@ -55,6 +67,45 @@ interface PickPhotosResult {
   photos: Array<{ base64: string; mimeType: string; width: number; height: number; size: number } | { error: string }>;
 }
 
+/** pickAndUploadFiles success 回调的逐文件结果项（upload_bridge.md §2.2） */
+export interface UploadResultItem {
+  name: string;
+  ok: boolean;
+  /** 成功项：服务端返回的相对路径 */
+  path?: string;
+  bytes_written?: number;
+  overwritten?: boolean;
+  /** 失败项：服务端码透传或原生合成码（ALREADY_EXISTS/INVALID_TYPE/NETWORK_ERROR…） */
+  code?: string;
+  detail?: string;
+}
+
+/** pickAndUploadFiles success 回调结构（upload_bridge.md §2.2） */
+export interface PickAndUploadResult {
+  code: number;
+  pickedCount: number;
+  truncated: boolean;
+  uploadedCount: number;
+  /** ALREADY_EXISTS 计数——与 Web 端「跳过」语义对齐，不算失败 */
+  skippedCount: number;
+  failedCount: number;
+  /** 任一文件 401 → true 且剩余文件已中止，调用方应跳登录页 */
+  unauthorized: boolean;
+  results: UploadResultItem[];
+}
+
+/** downloadFile success 回调结构（download_bridge.md §2.2） */
+export interface DownloadFileResult {
+  code: number;
+  /** 实际保存的文件名（重名自动去重后） */
+  name: string;
+  /** 保存位置（展示用；Android 10+ 可能是 content Uri） */
+  savedTo: string;
+  bytes: number;
+  /** 系统通知是否发出（权限未授予时 false，文件仍保存成功） */
+  notified: boolean;
+}
+
 /** fail 回调结构（错误码含义见两份接口文档 §2.3） */
 interface JsbridgeFail {
   code: number;
@@ -77,6 +128,28 @@ export class JsbridgePhotoError extends Error {
     super(message);
     this.name = "JsbridgePhotoError";
     this.code = code;
+  }
+}
+
+/** 选文件并上传整体失败（插件级 fail；code 含义见 upload_bridge.md §2.3） */
+export class JsbridgeUploadError extends Error {
+  readonly code: number;
+  constructor(code: number, message: string) {
+    super(message);
+    this.name = "JsbridgeUploadError";
+    this.code = code;
+  }
+}
+
+/** 下载失败（code 含义见 download_bridge.md §2.3）；unauthorized=true 时调用方应跳登录页 */
+export class JsbridgeDownloadError extends Error {
+  readonly code: number;
+  readonly unauthorized: boolean;
+  constructor(code: number, message: string, unauthorized = false) {
+    super(message);
+    this.name = "JsbridgeDownloadError";
+    this.code = code;
+    this.unauthorized = unauthorized;
   }
 }
 
@@ -123,6 +196,35 @@ export function jsbridgePhotoAvailable(): boolean {
     !!window.jsbridge &&
     typeof window.jsbridge.takePhoto === "function" &&
     typeof window.jsbridge.pickPhotos === "function"
+  );
+}
+
+/**
+ * 文件上传能否走 jsbridge 通道（pickAndUploadFiles）。
+ *
+ * App 版本过旧（未实现本接口）时返回 false，Files tab 降级回 input 方案
+ * ——H5 先行上线无兼容风险。
+ */
+export function jsbridgeUploadAvailable(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.Android &&
+    !!window.jsbridge &&
+    typeof window.jsbridge.pickAndUploadFiles === "function"
+  );
+}
+
+/**
+ * 文件下载能否走 jsbridge 通道（downloadFile）。
+ *
+ * App 未实现本接口时返回 false，预览 pane 降级回 <a> 下载。
+ */
+export function jsbridgeDownloadAvailable(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.Android &&
+    !!window.jsbridge &&
+    typeof window.jsbridge.downloadFile === "function"
   );
 }
 
@@ -235,6 +337,112 @@ export function pickPhotoAsFile(): Promise<File | null> {
         reject(new JsbridgePhotoError(f.code ?? -1, pickFailMessage(f.code ?? -1)));
       }),
       cancel: done(() => resolve(null)),
+    });
+  });
+}
+
+/** 上传回调等待上限（ms）——不能复用拍照的 15s：用户在文件选择器里挑选、
+ *  多文件串行上传都可能远超 15s，只做挂死兜底（原生没注册/没回调） */
+const UPLOAD_CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** 选文件并上传（webview 内）的失败码 → 用户文案（upload_bridge.md §2.3） */
+function uploadFailMessage(code: number): string {
+  switch (code) {
+    case 1: return "上传参数缺失（uploadUrl），请更新 App 后重试";
+    case 3: return "未找到可用的文件选择器";
+    case 7: return "已有上传在进行中";
+    default: return "上传失败，请重试";
+  }
+}
+
+/**
+ * 原生选文件并直传服务器（webview 内）。用户取消 resolve null；
+ * 插件级失败 reject JsbridgeUploadError；逐文件成败在 res.results 里
+ * （全部失败也走 success 聚合——见 upload_bridge.md §2.5）。
+ * 调用前须 jsbridgeUploadAvailable() 为 true。
+ */
+export function pickAndUploadFiles(params: {
+  destDir: string;
+  uploadUrl: string;
+  overwrite?: boolean;
+  maxCount?: number;
+}): Promise<PickAndUploadResult | null> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new JsbridgeUploadError(-1,
+        "原生10分钟无回调：App 内可能未注册 pickAndUploadFiles 插件（需 Android 侧按 upload_bridge.md 实现后的构建）"));
+    }, UPLOAD_CALLBACK_TIMEOUT_MS);
+    const done = <T,>(fn: (v: T) => void) => (v: T) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      fn(v);
+    };
+    window.jsbridge!.pickAndUploadFiles({
+      uploadUrl: params.uploadUrl,
+      destDir: params.destDir,
+      overwrite: params.overwrite ?? false,
+      maxCount: params.maxCount,
+      success: done((raw: unknown) => resolve(raw as PickAndUploadResult)),
+      fail: done((raw: unknown) => {
+        const f = raw as JsbridgeFail;
+        reject(new JsbridgeUploadError(f.code ?? -1, uploadFailMessage(f.code ?? -1)));
+      }),
+      cancel: done(() => resolve(null)),
+    });
+  });
+}
+
+/** 下载等待上限（ms）——大文件慢网络余量，只做原生无回调的挂死兜底 */
+const DOWNLOAD_CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** 下载失败 detail → 用户文案（code=5 场景映射见 download_bridge.md §2.4） */
+function downloadFailMessage(detail: string): string {
+  if (detail.includes("UNAUTHORIZED")) return "登录已过期，请重新登录";
+  if (detail.includes("FILE_NOT_FOUND")) return "文件不存在（可能已被删除）";
+  if (detail.includes("NETWORK_ERROR")) return "网络错误，请检查连接";
+  if (detail.includes("WRITE_FAILED")) return "保存失败（存储空间不足？）";
+  return "下载失败，请重试";
+}
+
+/**
+ * 原生下载服务器文件到本机 Downloads（webview 内）。成功 resolve 结果；
+ * 失败 reject JsbridgeDownloadError（unauthorized=true 时调用方应跳登录页）。
+ * 调用前须 jsbridgeDownloadAvailable() 为 true。
+ */
+export function downloadFile(params: {
+  downloadUrl: string;
+  fileName?: string;
+}): Promise<DownloadFileResult> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new JsbridgeDownloadError(-1,
+        "原生10分钟无回调：App 内可能未注册 downloadFile 插件（需 Android 侧按 download_bridge.md 实现后的构建）"));
+    }, DOWNLOAD_CALLBACK_TIMEOUT_MS);
+    const done = <T,>(fn: (v: T) => void) => (v: T) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      fn(v);
+    };
+    window.jsbridge!.downloadFile({
+      downloadUrl: params.downloadUrl,
+      fileName: params.fileName,
+      success: done((raw: unknown) => resolve(raw as DownloadFileResult)),
+      fail: done((raw: unknown) => {
+        const f = raw as JsbridgeFail & { unauthorized?: boolean; detail?: string };
+        reject(new JsbridgeDownloadError(
+          f.code ?? -1,
+          downloadFailMessage(f.detail || ""),
+          f.unauthorized === true,
+        ));
+      }),
     });
   });
 }
