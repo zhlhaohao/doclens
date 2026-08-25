@@ -115,6 +115,20 @@
 			"cancel":  params["cancel"]
 		});
 	}
+
+	//下载服务器文件到本机 Downloads（契约见 doclens docs/jsbridge/download_bridge.md）；
+	//无 cancel 态（全程无用户交互），downloadUrl 缺失原生回 fail 1
+	function downloadFile(params) {
+		params = params || {};
+		sendToNative("downloadFile", {
+			"downloadUrl": params.downloadUrl || "",
+			"fileName":    params.fileName    || "",
+			"cookieName":  params.cookieName  || ""
+		}, {
+			"success": params["success"],
+			"fail":    params["fail"]
+		});
+	}
 	window.jsbridge = {
 		syncSendToNative		: syncSendToNative,
 		sendToNative 			: sendToNative,
@@ -126,6 +140,7 @@
 		takePhoto				: takePhoto,
 		pickPhotos				: pickPhotos,
 		pickAndUploadFiles		: pickAndUploadFiles,
+		downloadFile			: downloadFile,
 	};
 
 })();
