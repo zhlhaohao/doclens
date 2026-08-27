@@ -158,6 +158,56 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
   });
 });
 
+describe("<preview-pane> 预览↔编辑选区保持（源行区间）", () => {
+  const md = "# A\n\npara one\n\n# B\n\npara two\n";
+
+  it("预览→编辑：enterEdit 捕获 viewer.selectionLineRange，恢复后 editor.selectLines 收到同行区间", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content=${md} writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    vi.spyOn(viewer, "selectionLineRange").mockReturnValue({ start: 3, end: 5 });
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    expect(editor).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 0));
+    const lines = (el as any)._selLines;
+    expect(lines).toEqual({ start: 3, end: 5 });
+    expect(editor.selectionLineRange()).toEqual({ start: 3, end: 5 });
+  });
+
+  it("预览无选区 → 编辑器不设选区（selectionLineRange 为 null）", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content=${md} writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    vi.spyOn(viewer, "selectionLineRange").mockReturnValue(null);
+    el.enterEdit();
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect((el as any)._selLines).toBeNull();
+  });
+
+  it("编辑→预览（cancel）：文本回滚后不恢复选区", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content=${md} writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    vi.spyOn(viewer, "selectionLineRange").mockReturnValue({ start: 3, end: 5 });
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    editor.dispatchEvent(new CustomEvent("cancel", {}));
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect((el as any)._selLines).toBeNull();
+  });
+});
+
 describe("<preview-pane> noHeader prop", () => {
   it("does not render .header in markdown preview branch when noHeader=true", async () => {
     const el = await fixture(html`

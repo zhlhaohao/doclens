@@ -165,3 +165,34 @@ describe("<md-editor> WebView 行高校准（scrollHeight 比例修正内核取�
     expect(ta.scrollTop).toBe(200);
   });
 });
+
+describe("<md-editor> 选区保持（源行区间 ↔ selectionStart/End）", () => {
+  it("selectLines: 选中行首到行尾（含区间归一与钳制）", async () => {
+    const el = await makeFixture("a\nbb\nccc\ndd");
+    const ta = el.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!;
+    // 行 2..3：offset 2（"a\n"）→ offset 8（"a\nbb\nccc" 末）
+    el.selectLines(2, 3);
+    expect(ta.selectionStart).toBe(2);
+    expect(ta.selectionEnd).toBe(8);
+    // 方向反转自动归一；超出末行钳制到末行行尾（offset 9..11）
+    el.selectLines(4, 99);
+    expect(ta.selectionStart).toBe(9);
+    expect(ta.selectionEnd).toBe(11);
+  });
+
+  it("selectionLineRange: 无选区返回 null", async () => {
+    const el = await makeFixture("a\nbb\nccc");
+    expect(el.selectionLineRange()).toBeNull();
+  });
+
+  it("selectionLineRange: 有选区返回源行闭区间（selectionEnd 落换行归前行）", async () => {
+    const el = await makeFixture("a\nbb\nccc\ndd");
+    const ta = el.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!;
+    // 选中 "bb\ncc"（offset 2..7）：跨行 2-3
+    ta.setSelectionRange(2, 7);
+    expect(el.selectionLineRange()).toEqual({ start: 2, end: 3 });
+    // 选到行 2 末尾含换行（offset 2..5，5 是 "bb" 后的 \n 位置）→ 归行 2
+    ta.setSelectionRange(2, 5);
+    expect(el.selectionLineRange()).toEqual({ start: 2, end: 2 });
+  });
+});

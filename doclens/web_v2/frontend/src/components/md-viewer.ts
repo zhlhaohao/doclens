@@ -711,6 +711,52 @@ export class MdViewer extends LitElement {
     });
   }
 
+  /** 组件渲染树内的 Selection（Chromium 提供 ShadowRoot.getSelection，
+   *  标准 TS DOM lib 未收录——运行时探测）；回退 window 级（open shadow
+   *  的选区节点同样暴露在 document selection 中）。 */
+  private _shadowSelection(): Selection | null {
+    const shadowSel = (this.shadowRoot as unknown as {
+      getSelection?: () => Selection | null;
+    })?.getSelection?.();
+    return shadowSel ?? window.getSelection();
+  }
+
+  /** 当前 DOM 选区映射为源行范围（起止块 data-source-line，1-indexed）。
+   *  选区不在本组件渲染树内（如选到 header）或已 collapse 返回 null。
+   *  供 preview-pane 在预览→编辑切换时捕获选区锚点。 */
+  selectionLineRange(): { start: number; end: number } | null {
+    const sel = this._shadowSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+    const root = this.shadowRoot!;
+    const lineOf = (node: Node | null): number | null => {
+      for (let n: Node | null = node; n && n !== root; n = n.parentNode) {
+        const ls = (n as Element).getAttribute?.("data-source-line");
+        if (ls) return Number(ls);
+      }
+      return null; // 走到 shadowRoot 边界仍未命中锚块
+    };
+    const a = lineOf(range.startContainer);
+    const b = lineOf(range.endContainer);
+    if (a === null || b === null) return null;
+    return a <= b ? { start: a, end: b } : { start: b, end: a };
+  }
+
+  /** 选中源行范围对应的渲染块区间（起块首 → 止块尾）。
+   *  供 preview-pane 在编辑→预览切换时恢复文本选择。 */
+  selectSourceLineRange(start: number, end: number) {
+    const a = this._findBlockAtLine(Math.min(start, end));
+    const b = this._findBlockAtLine(Math.max(start, end));
+    if (!a || !b) return;
+    const sel = this._shadowSelection();
+    if (!sel) return;
+    const range = document.createRange();
+    range.setStart(a, 0);
+    range.setEnd(b, b.childNodes.length);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
    *  目标行下方内容不足一屏时贴顶物理上不可能，改为对齐文档尾部视野。
    *  无需滚动（内容不足一屏）时不算贴底——行号锚点本来就可达。 */
