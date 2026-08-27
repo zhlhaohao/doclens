@@ -5473,30 +5473,29 @@ ${r}</blockquote>
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
     }
-    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色 */
-    .mobile-menu .font-scale-row {
+    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色。
+       选择器须带 .mobile-header 前缀——与 .mobile-header .mobile-menu button
+       的 (0,2,1) 同优先级且定义在后，才能覆盖其 display:block / width:100% /
+       padding，保住按钮的 inline-flex 垂直居中。 */
+    .mobile-header .mobile-menu .font-scale-row {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: 0 var(--cortex-space-4);
-      /* 固定行高 32px（按钮 26px + 上下各 3px 余量）：四元素在等高的行盒里
-         垂直对中，字形中线自然重合——不依赖 align-items:center 对不同字号
-         盒子的「盒子对中」近似（盒子对中 ≠ 字形对中，混字号时错位）。 */
-      height: 32px;
+      padding: var(--cortex-space-2) var(--cortex-space-4);
       border-bottom: 1px solid var(--cortex-border-muted);
       margin-bottom: var(--cortex-space-1);
     }
-    .mobile-menu .font-scale-label {
+    .mobile-header .mobile-menu .font-scale-label {
       flex: 1;
       /* 小屏窄菜单下不被压缩换行（"字号"两字竖排）；nowrap 让绝对定位的
          menu 按 max-content 撑宽，而非把 label 挤成两行 */
       flex-shrink: 0;
       white-space: nowrap;
       font-size: var(--cortex-fs-sm);
-      line-height: 32px;  /* = 行高：文本在行盒内精确垂直居中 */
       color: var(--cortex-text);
     }
-    .mobile-menu .font-scale-btn {
+    .mobile-header .mobile-menu .font-scale-btn {
+      flex-shrink: 0;
       width: 26px;
       height: 26px;
       padding: 0;
@@ -5508,28 +5507,25 @@ ${r}</blockquote>
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      /* 图标尺寸对齐 label 字号：四元素同号数字形视觉中心自然对齐 */
-      font-size: var(--cortex-fs-sm);
+      font-size: 13px;
       line-height: 1;
       touch-action: manipulation;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .mobile-menu .font-scale-btn:hover:not(:disabled) {
+    .mobile-header .mobile-menu .font-scale-btn:hover:not(:disabled) {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
     }
-    .mobile-menu .font-scale-btn:disabled {
+    .mobile-header .mobile-menu .font-scale-btn:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .mobile-menu .font-scale-value {
+    .mobile-header .mobile-menu .font-scale-value {
       min-width: 44px;
       text-align: center;
       font-family: var(--cortex-font-mono);
-      /* 与 label 同字号、行高 = 行盒高：百分比数字与"字号"汉字视觉中心对齐 */
-      font-size: var(--cortex-fs-sm);
-      line-height: 32px;
+      font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
     }
   `];Ie([y()],ze.prototype,"path",2);Ie([y()],ze.prototype,"language",2);Ie([y()],ze.prototype,"content",2);Ie([y({attribute:!1})],ze.prototype,"highlights",2);Ie([y({type:Boolean})],ze.prototype,"loading",2);Ie([y({type:Number})],ze.prototype,"line",2);Ie([y()],ze.prototype,"keyword",2);Ie([y({type:Boolean})],ze.prototype,"writable",2);Ie([y({type:Boolean})],ze.prototype,"noHeader",2);Ie([y({type:Boolean})],ze.prototype,"mobile",2);Ie([y({attribute:!1})],ze.prototype,"pages",2);Ie([y({attribute:!1})],ze.prototype,"attachments",2);Ie([y({type:Boolean})],ze.prototype,"showBack",2);Ie([y()],ze.prototype,"backLabel",2);Ie([y({type:Boolean})],ze.prototype,"enableReparse",2);Ie([y({type:Boolean})],ze.prototype,"rememberScroll",2);Ie([S()],ze.prototype,"_mode",2);Ie([S()],ze.prototype,"_content",2);Ie([S()],ze.prototype,"_showMobileMenu",2);Ie([S()],ze.prototype,"_fontScalePct",2);Ie([S()],ze.prototype,"_showHighlightBar",2);Ie([S()],ze.prototype,"_highlightInput",2);ze=Ie([K("preview-pane")],ze);const p2="modulepreload",f2=function(t){return"/"+t},Md={},m2=function(e,r,i){let s=Promise.resolve();if(r&&r.length>0){document.getElementsByTagName("link");const o=document.querySelector("meta[property=csp-nonce]"),l=(o==null?void 0:o.nonce)||(o==null?void 0:o.getAttribute("nonce"));s=Promise.allSettled(r.map(c=>{if(c=f2(c),c in Md)return;Md[c]=!0;const p=c.endsWith(".css"),f=p?'[rel="stylesheet"]':"";if(document.querySelector(`link[href="${c}"]${f}`))return;const b=document.createElement("link");if(b.rel=p?"stylesheet":p2,p||(b.as="script"),b.crossOrigin="",b.href=c,l&&b.setAttribute("nonce",l),document.head.appendChild(b),p)return new Promise((w,k)=>{b.addEventListener("load",w),b.addEventListener("error",()=>k(new Error(`Unable to preload CSS for ${c}`)))})}))}function a(o){const l=new Event("vite:preloadError",{cancelable:!0});if(l.payload=o,window.dispatchEvent(l),!l.defaultPrevented)throw o}return s.then(o=>{for(const l of o||[])l.status==="rejected"&&a(l.reason);return e().catch(a)})},v2=1e4;async function b2(t){const e=new AbortController,r=setTimeout(()=>e.abort(),v2);try{return await de("/api/ask/respond",{method:"POST",json:t,signal:e.signal})}finally{clearTimeout(r)}}function Rh(t){try{const e=JSON.parse(t);if(!Array.isArray(e==null?void 0:e.questions))return null;const r=e.questions;return r.length===0?null:r.every(s=>typeof(s==null?void 0:s.question)=="string"&&typeof(s==null?void 0:s.header)=="string"&&Array.isArray(s==null?void 0:s.options)&&s.options.length>=2&&s.options.every(a=>typeof(a==null?void 0:a.label)=="string"))?r:null}catch{return null}}function Lh(t){const e=t.match(/^\((?:Recommended|推荐)\)\s*/);return e?[t.slice(e[0].length),!0]:t.endsWith("（推荐）")?[t.slice(0,-4),!0]:t.endsWith("(推荐)")?[t.slice(0,-4),!0]:[t,!1]}const g2=Object.freeze(Object.defineProperty({__proto__:null,parseAskQuestions:Rh,respondAsk:b2,splitRecommended:Lh},Symbol.toStringTag,{value:"Module"}));var x2=Object.defineProperty,y2=Object.getOwnPropertyDescriptor,li=(t,e,r,i)=>{for(var s=i>1?void 0:i?y2(e,r):e,a=t.length-1,o;a>=0;a--)(o=t[a])&&(s=(i?o(e,r,s):o(s))||s);return i&&s&&x2(e,r,s),s};let ar=class extends G{constructor(){super(...arguments),this.ask=null,this.resolvedAnswers=null,this._selected=[],this._others=[],this._status="pending",this._answers=[],this._submitting=!1}willUpdate(t){t.has("ask")&&this.ask&&(this._selected=this.ask.questions.map(()=>[]),this._others=this.ask.questions.map(()=>null),this._status="pending",this._answers=[]),t.has("resolvedAnswers")&&this.resolvedAnswers&&(this._status="answered",this._answers=this.resolvedAnswers)}get _canSubmit(){return this.ask?this.ask.questions.every((t,e)=>{var a;const r=((a=this._selected[e])==null?void 0:a.length)??0,i=(this._others[e]??"").trim(),s=this._others[e]!==null&&i.length>0;return r>0||s}):!1}_toggle(t,e,r){const i=[...this._selected],s=i[t]??[];i[t]=r?s.includes(e)?s.filter(a=>a!==e):[...s,e]:s.includes(e)?[]:[e],this._selected=i}_onOtherInput(t,e){const r=[...this._others];r[t]=e,this._others=r}async _submit(){if(!this.ask||!this._canSubmit||this._submitting)return;this._submitting=!0;const t=this.ask.questions.map((r,i)=>({question:r.question,selected:this._selected[i]??[],other:(this._others[i]??"").trim()||null}));let e=!1;try{const{respondAsk:r}=await m2(async()=>{const{respondAsk:s}=await Promise.resolve().then(()=>g2);return{respondAsk:s}},void 0),{submitted:i}=await r({request_id:this.ask.requestId,answers:t});this._status=i?"answered":"expired",this._answers=t,e=!0}catch(r){console.warn("[ask-card] respond failed:",r),this._status="expired",this._answers=t,e=!0}finally{this._submitting=!1,e&&this._dispatchDone()}}_dispatchDone(){var t;this.dispatchEvent(new CustomEvent("ask-done",{detail:{requestId:((t=this.ask)==null?void 0:t.requestId)??""},bubbles:!0,composed:!0}))}_renderQuestion(t,e){const r=this._selected[e]??[],i=this._others[e]??null;return h`
