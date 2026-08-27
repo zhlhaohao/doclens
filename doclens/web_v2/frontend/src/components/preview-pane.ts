@@ -364,11 +364,7 @@ export class PreviewPane extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-      padding: 0 var(--cortex-space-4);
-      /* 固定行高 32px（按钮 26px + 上下各 3px 余量）：四元素在等高的行盒里
-         垂直对中，字形中线自然重合——不依赖 align-items:center 对不同字号
-         盒子的「盒子对中」近似（盒子对中 ≠ 字形对中，混字号时错位）。 */
-      height: 32px;
+      padding: var(--cortex-space-2) var(--cortex-space-4);
       border-bottom: 1px solid var(--cortex-border-muted);
       margin-bottom: var(--cortex-space-1);
     }
@@ -379,7 +375,6 @@ export class PreviewPane extends LitElement {
       flex-shrink: 0;
       white-space: nowrap;
       font-size: var(--cortex-fs-sm);
-      line-height: 32px;  /* = 行高：文本在行盒内精确垂直居中 */
       color: var(--cortex-text);
     }
     .mobile-menu .font-scale-btn {
@@ -394,8 +389,7 @@ export class PreviewPane extends LitElement {
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      /* 图标尺寸对齐 label 字号：四元素同号数字形视觉中心自然对齐 */
-      font-size: var(--cortex-fs-sm);
+      font-size: 13px;
       line-height: 1;
       touch-action: manipulation;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -413,9 +407,7 @@ export class PreviewPane extends LitElement {
       min-width: 44px;
       text-align: center;
       font-family: var(--cortex-font-mono);
-      /* 与 label 同字号、行高 = 行盒高：百分比数字与"字号"汉字视觉中心对齐 */
-      font-size: var(--cortex-fs-sm);
-      line-height: 32px;
+      font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
     }
   `,
