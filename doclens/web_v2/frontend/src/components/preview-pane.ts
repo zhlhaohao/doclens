@@ -511,6 +511,9 @@ export class PreviewPane extends LitElement {
   /** 锚点语义为「贴底」：目标行在对方视口无法贴顶时（下方内容不足一屏），
    *  改为对齐文档尾部视野——否则行号锚点在文末附近必然漂移。 */
   private _anchorAtBottom = false;
+  /** 模式切换的选区锚点（源行闭区间）：预览 DOM 选区 ↔ 编辑器行集合。
+   *  cancel/discard 回滚文本后不恢复（行号已失配）；换文档清空。 */
+  private _selLines: { start: number; end: number } | null = null;
   /** 切回预览时抑制 md-viewer 的命中行定位（避免与锚点恢复打架） */
   private _suppressLocate = false;
   /** 外部新文档到达（content prop 变化）→ 跳过一次锚点恢复 */
@@ -546,6 +549,7 @@ export class PreviewPane extends LitElement {
       this._suppressLocate = false;
       this._anchorLine = 1;
       this._anchorAtBottom = false;
+      this._selLines = null;
     }
   }
 
@@ -588,6 +592,7 @@ export class PreviewPane extends LitElement {
         await editor.updateComplete;
         if (this._anchorAtBottom) editor.scrollToBottom();
         else editor.scrollToLine(this._anchorLine);
+        if (this._selLines) editor.selectLines(this._selLines.start, this._selLines.end);
       }
       return;
     }
@@ -600,6 +605,7 @@ export class PreviewPane extends LitElement {
       await viewer.updateComplete;
       if (this._anchorAtBottom) viewer.scrollToBottom("auto");
       else viewer.scrollToSourceLine(this._anchorLine, "auto");
+      if (this._selLines) viewer.selectSourceLineRange(this._selLines.start, this._selLines.end);
     }
     this._suppressLocate = false;
   }
@@ -792,27 +798,38 @@ export class PreviewPane extends LitElement {
 
   enterEdit() {
     // 捕获预览视口顶部的源行号作为锚点（行级精度；贴底时记录底部锚点）
+    // 与文本选区（起止块映射为源行区间），切换后两侧各自恢复
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     if (viewer) {
       this._anchorLine = viewer.topSourceLine();
       this._anchorAtBottom = viewer.isAtBottom();
+      this._selLines = viewer.selectionLineRange();
     }
     this._mode = "edit";
   }
 
-  /** 退出编辑前捕获编辑器视口顶部的源行号（编辑后新文本的行号），
-   *  并抑制切回预览时 md-viewer 的命中行定位（避免与锚点恢复打架）。 */
+  /** 退出编辑前捕获编辑器视口顶部的源行号（编辑后新文本的行号）与
+   *  文本选区，并抑制切回预览时 md-viewer 的命中行定位（避免与锚点恢复打架）。 */
   private _captureEditorAnchor() {
     const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
     if (editor) {
       this._anchorLine = editor.topLine();
       this._anchorAtBottom = editor.isAtBottom();
+      this._selLines = editor.selectionLineRange();
     }
     this._suppressLocate = true;
   }
 
   private _onEditorCancel = () => {
-    this._captureEditorAnchor();
+    // cancel 回滚文本：放弃选区保持（编辑文本的行号已与原文失配），
+    // 但保留锚点（视野位置按原文本行号尽力恢复）
+    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    if (editor) {
+      this._anchorLine = editor.topLine();
+      this._anchorAtBottom = editor.isAtBottom();
+    }
+    this._selLines = null;
+    this._suppressLocate = true;
     this._mode = "preview";
   };
 
