@@ -508,6 +508,9 @@ export class PreviewPane extends LitElement {
 
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
+  /** 锚点语义为「贴底」：目标行在对方视口无法贴顶时（下方内容不足一屏），
+   *  改为对齐文档尾部视野——否则行号锚点在文末附近必然漂移。 */
+  private _anchorAtBottom = false;
   /** 切回预览时抑制 md-viewer 的命中行定位（避免与锚点恢复打架） */
   private _suppressLocate = false;
   /** 外部新文档到达（content prop 变化）→ 跳过一次锚点恢复 */
@@ -542,6 +545,7 @@ export class PreviewPane extends LitElement {
       this._skipRestoreOnce = true;
       this._suppressLocate = false;
       this._anchorLine = 1;
+      this._anchorAtBottom = false;
     }
   }
 
@@ -578,11 +582,12 @@ export class PreviewPane extends LitElement {
 
     if (!changed.has("_mode")) return;
     if (this._mode === "edit") {
-      // 预览 → 编辑：把锚点行恢复为编辑器视口顶部（瞬跳）
+      // 预览 → 编辑：把锚点行恢复为编辑器视口顶部（瞬跳；贴底锚点则对齐尾部视野）
       const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
       if (editor) {
         await editor.updateComplete;
-        editor.scrollToLine(this._anchorLine);
+        if (this._anchorAtBottom) editor.scrollToBottom();
+        else editor.scrollToLine(this._anchorLine);
       }
       return;
     }
@@ -593,7 +598,8 @@ export class PreviewPane extends LitElement {
     }
     if (viewer) {
       await viewer.updateComplete;
-      viewer.scrollToSourceLine(this._anchorLine, "auto");
+      if (this._anchorAtBottom) viewer.scrollToBottom("auto");
+      else viewer.scrollToSourceLine(this._anchorLine, "auto");
     }
     this._suppressLocate = false;
   }
@@ -785,9 +791,12 @@ export class PreviewPane extends LitElement {
   }
 
   enterEdit() {
-    // 捕获预览视口顶部的源行号作为锚点（块级精度）
+    // 捕获预览视口顶部的源行号作为锚点（行级精度；贴底时记录底部锚点）
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    if (viewer) this._anchorLine = viewer.topSourceLine();
+    if (viewer) {
+      this._anchorLine = viewer.topSourceLine();
+      this._anchorAtBottom = viewer.isAtBottom();
+    }
     this._mode = "edit";
   }
 
@@ -795,7 +804,10 @@ export class PreviewPane extends LitElement {
    *  并抑制切回预览时 md-viewer 的命中行定位（避免与锚点恢复打架）。 */
   private _captureEditorAnchor() {
     const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
-    if (editor) this._anchorLine = editor.topLine();
+    if (editor) {
+      this._anchorLine = editor.topLine();
+      this._anchorAtBottom = editor.isAtBottom();
+    }
     this._suppressLocate = true;
   }
 

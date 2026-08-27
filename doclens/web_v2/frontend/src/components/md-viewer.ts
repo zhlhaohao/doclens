@@ -132,6 +132,28 @@ const blockRenderer: any = {
     const body = (this as any).parser.parse(token.tokens);
     return `<blockquote data-source-line="${line}">\n${body}</blockquote>\n`;
   },
+  /* table / hr 与 marked 默认 renderer 同构，仅注入 data-source-line 锚点。
+   * 缺锚点的块（默认 renderer 输出）会从锚点序列中消失，导致 _blockSpan
+   * 把其行跨度并入前一个锚块——高大表格下 topSourceLine 插值严重 overshoot
+   * （预览↔编辑切换首行漂移）。html 块是原文透传，无法安全注入，保持无锚点。 */
+  table(token: any) {
+    const line = lineOf(token.raw);
+    let cell = "";
+    for (const headerCell of token.header) cell += (this as any).tablecell(headerCell);
+    const header = (this as any).tablerow({ text: cell });
+    let body = "";
+    for (const row of token.rows) {
+      cell = "";
+      for (const rowCell of row) cell += (this as any).tablecell(rowCell);
+      body += (this as any).tablerow({ text: cell });
+    }
+    if (body) body = `<tbody>${body}</tbody>`;
+    return `<table data-source-line="${line}">\n<thead>\n${header}</thead>\n${body}</table>\n`;
+  },
+  hr(token: any) {
+    const line = lineOf(token.raw);
+    return `<hr data-source-line="${line}">\n`;
+  },
 };
 
 /**
@@ -687,6 +709,19 @@ export class MdViewer extends LitElement {
       top: targetRect.top + pxInto - hostRect.top + this.scrollTop,
       behavior,
     });
+  }
+
+  /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
+   *  目标行下方内容不足一屏时贴顶物理上不可能，改为对齐文档尾部视野。
+   *  无需滚动（内容不足一屏）时不算贴底——行号锚点本来就可达。 */
+  isAtBottom(): boolean {
+    if (this.scrollHeight <= this.clientHeight) return false;
+    return this.scrollTop + this.clientHeight >= this.scrollHeight - 8;
+  }
+
+  /** 滚到底部。配合 isAtBottom 实现预览↔编辑的底部锚点互通。 */
+  scrollToBottom(behavior: ScrollBehavior = "auto") {
+    this.scrollTo({ top: this.scrollHeight - this.clientHeight, behavior });
   }
 
   /** 滚动到第一个关键词命中（<mark class="keyword-hit">），并闪烁其所在块。

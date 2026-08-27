@@ -270,6 +270,37 @@ describe("<md-viewer>", () => {
     expect(cells[0].textContent).toContain("Alice");
   });
 
+  it("adds data-source-line to table and hr blocks (anchor coverage)", async () => {
+    // 回归：table/hr 曾走 marked 默认 renderer 无 data-source-line，从锚点序列消失，
+    // 导致 _blockSpan 把其行跨度并入前一锚块——高大表格下 topSourceLine 插值
+    // 严重 overshoot（预览↔编辑切换首行漂移）。
+    const md = [
+      "intro para",      // line 1
+      "",
+      "| a | b |",       // line 3
+      "| --- | --- |",
+      "| 1 | 2 |",
+      "",
+      "after table",     // line 7
+      "",
+      "---",             // line 9
+      "",
+      "tail para",       // line 11
+    ].join("\n");
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+
+    const table = el.shadowRoot!.querySelector("table");
+    expect(table?.getAttribute("data-source-line")).toBe("3");
+    const hr = el.shadowRoot!.querySelector("hr");
+    expect(hr?.getAttribute("data-source-line")).toBe("9");
+    // 锚点序列完整且行号单调：1 (p) → 3 (table) → 7 (p) → 9 (hr) → 11 (p)
+    const lines = Array.from(
+      el.shadowRoot!.querySelectorAll("[data-source-line]"),
+    ).map((n) => Number(n.getAttribute("data-source-line")));
+    expect(lines).toEqual([1, 3, 7, 9, 11]);
+  });
+
   it("styles table cells with visible borders (regression: separators missing)", async () => {
     // 用户报告：md 表格没有分隔线。根因是 CSS 没有 table 规则，浏览器默认无边框。
     // 本测试断言 md-viewer 的 scoped styles 包含 table/th/td 边框规则，
@@ -547,6 +578,32 @@ describe("<md-viewer> 行级锚点（预览↔编辑切换视野一致）", () =
       { line: 26, top: 800, height: 40 },     // p after（含代码块尾空行）
     ]);
     expect(el.topSourceLine()).toBe(15);
+  });
+
+  it("topSourceLine: 表格块参与锚点序列，文末插值不 overshoot（回归：table 缺锚点）", async () => {
+    // 回归：table 曾走 marked 默认 renderer 无 data-source-line，其行跨度被并入
+    // 前一锚块——表格又高又长时 topSourceLine 插值直接冲到文档末行，
+    // 预览→编辑切换后首行漂移几十行。
+    const md = [
+      "# A", "",
+      "p text", "",
+      "| a | b |",
+      "| --- | --- |",
+      "| 1 | 2 |", "",
+      "tail",
+    ].join("\n");
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    // 布局：h1(1) / p(3) / table(5, 高 300) / p(9)；视口顶 410 侵入 table 290px
+    stubLayout(el, { top: 410, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 40 },
+      { line: 5, top: 120, height: 300 },
+      { line: 9, top: 440, height: 40 },
+    ]);
+    // span = 9-5 = 4；offset = round(290/300*4)=4 → 钳到 span-1=3 → line 5+3=8
+    // 若无 table 锚点：p(3) 的 span 会被算成 9-3=6，同位置插值出更大行号
+    expect(el.topSourceLine()).toBe(8);
   });
 
   it("scrollToSourceLine: 块起始行 → 滚到块顶（旧行为兼容）", async () => {
