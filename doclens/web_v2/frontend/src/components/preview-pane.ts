@@ -359,8 +359,11 @@ export class PreviewPane extends LitElement {
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
     }
-    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色 */
-    .mobile-menu .font-scale-row {
+    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色。
+       选择器须带 .mobile-header 前缀——与 .mobile-header .mobile-menu button
+       的 (0,2,1) 同优先级且定义在后，才能覆盖其 display:block / width:100% /
+       padding，保住按钮的 inline-flex 垂直居中。 */
+    .mobile-header .mobile-menu .font-scale-row {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
@@ -368,7 +371,7 @@ export class PreviewPane extends LitElement {
       border-bottom: 1px solid var(--cortex-border-muted);
       margin-bottom: var(--cortex-space-1);
     }
-    .mobile-menu .font-scale-label {
+    .mobile-header .mobile-menu .font-scale-label {
       flex: 1;
       /* 小屏窄菜单下不被压缩换行（"字号"两字竖排）；nowrap 让绝对定位的
          menu 按 max-content 撑宽，而非把 label 挤成两行 */
@@ -377,7 +380,8 @@ export class PreviewPane extends LitElement {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text);
     }
-    .mobile-menu .font-scale-btn {
+    .mobile-header .mobile-menu .font-scale-btn {
+      flex-shrink: 0;
       width: 26px;
       height: 26px;
       padding: 0;
@@ -394,16 +398,16 @@ export class PreviewPane extends LitElement {
       touch-action: manipulation;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .mobile-menu .font-scale-btn:hover:not(:disabled) {
+    .mobile-header .mobile-menu .font-scale-btn:hover:not(:disabled) {
       background: var(--cortex-primary-soft);
       color: var(--cortex-primary);
       border-color: var(--cortex-primary);
     }
-    .mobile-menu .font-scale-btn:disabled {
+    .mobile-header .mobile-menu .font-scale-btn:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .mobile-menu .font-scale-value {
+    .mobile-header .mobile-menu .font-scale-value {
       min-width: 44px;
       text-align: center;
       font-family: var(--cortex-font-mono);
