@@ -5458,7 +5458,10 @@ ${r}</blockquote>
       padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {
-      display: block;
+      /* flex 行布局：icon 与文字间以 gap 留出间距（原为 block 内联，两者紧贴） */
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
       width: 100%;
       text-align: left;
       border: none;
