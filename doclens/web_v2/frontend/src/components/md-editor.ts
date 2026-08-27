@@ -169,6 +169,7 @@ export class MdEditor extends LitElement {
       this._text = this.originalContent;
       this._dirty = false;
       this._error = null;
+      this._scaleCache = null;
     }
   }
 
@@ -203,8 +204,9 @@ export class MdEditor extends LitElement {
     const m = this.shadowRoot!.querySelector(".mirror") as HTMLDivElement | null;
     if (!ta || !m) return null;
     const cs = getComputedStyle(ta);
+    // parseFloat("") = NaN（部分引擎/jsdom 对未布局属性返回空串）：按 0 兜底
     const contentWidth =
-      ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      ta.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
     m.style.width = `${contentWidth}px`;
     m.style.fontFamily = cs.fontFamily;
     m.style.fontSize = cs.fontSize;
@@ -226,30 +228,78 @@ export class MdEditor extends LitElement {
     return h;
   }
 
+  /** 行高比例校准：textarea 实际渲染总高 / 镜像 div 测量总高。
+   *
+   *  WebView 内核对 textarea（表单控件独立渲染路径）的行高做取整/规范化，
+   *  与普通 div（保留小数行高）每行差零点几像素，随行数线性累积——
+   *  千行文档 scrollToLine 会往后漂移几十行。桌面 Chromium 两者一致，
+   *  比值恒为 1，行为不变。
+   *
+   *  实际总高取 ta.scrollHeight - 上下 padding（可滚动时 scrollHeight 即
+   *  内容总高 + padding）；镜像总高用 ta.value 完整渲染（与 textarea
+   *  逐字节一致，含尾换行产生的空行盒）。内容不足一屏时 scrollHeight
+   *  = clientHeight 无参考意义（短文档行号锚点本就可达），返回 1。 */
+  private _measureLineHeightScale(): number {
+    const ta = this._textarea;
+    const m = this._syncMirror();
+    if (!ta || !m) return 1;
+    if (ta.scrollHeight <= ta.clientHeight + 1) return 1;
+    const cs = getComputedStyle(ta);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const actual = ta.scrollHeight - padY;
+    if (!(actual > 0)) return 1;
+    m.textContent = ta.value;
+    const mirror = m.offsetHeight;
+    m.textContent = "";
+    if (!(mirror > 0)) return 1;
+    const scale = actual / mirror;
+    return Math.min(1.5, Math.max(0.5, scale));
+  }
+
+  /** 缓存的行高比例：scrollToLine/topLine 复用同一系数保持互逆——
+   *  逐次重测的亚像素舍入抖动会让「滚到行 n」反查出 n-1。
+   *  文本变化时失效（originalContent 更新 / 用户输入）。 */
+  private _scaleCache: number | null = null;
+
+  private _lineHeightScale(): number {
+    if (this._scaleCache === null) {
+      this._scaleCache = this._measureLineHeightScale();
+    }
+    return this._scaleCache;
+  }
+
+  /** 校准后的行前高度（整数像素）。scrollTop 只存整数：小数换算值赋给
+   *  scrollTop 会被内核舍入，破坏 scrollToLine/topLine 的相等性互逆
+   *  （滚到行 n 反查出 n-1），两处统一在此取整。 */
+  private _scaledHeightBeforeLine(n: number): number {
+    return Math.round(this._heightBeforeLine(n) * this._lineHeightScale());
+  }
+
   /** 视口顶部所在的源行号（1-indexed）。折行下行高不固定，用二分反查。
+   *  与 scrollToLine 共用 _scaledHeightBeforeLine（同系数同取整，保持互逆）。
    *  供 preview-pane 在编辑→预览切换时捕获位置锚点。 */
   topLine(): number {
     const ta = this._textarea;
     if (!ta) return 1;
     const st = ta.scrollTop;
-    const total = this._lines.length;
     let lo = 1;
-    let hi = total;
+    let hi = this._lines.length;
     // 找最大 n 使 heightBeforeLine(n) <= scrollTop，即顶部落在第 n 行
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
-      if (this._heightBeforeLine(mid) <= st) lo = mid;
+      if (this._scaledHeightBeforeLine(mid) <= st) lo = mid;
       else hi = mid - 1;
     }
     return lo;
   }
 
   /** 滚动使源行 n（1-indexed）贴顶（瞬跳）。
+   *  与 topLine 共用 _scaledHeightBeforeLine（同系数同取整，保持互逆）。
    *  供 preview-pane 在预览→编辑切换时恢复位置锚点。 */
   scrollToLine(n: number) {
     const ta = this._textarea;
     if (!ta) return;
-    ta.scrollTop = this._heightBeforeLine(n);
+    ta.scrollTop = this._scaledHeightBeforeLine(n);
   }
 
   /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
@@ -273,6 +323,7 @@ export class MdEditor extends LitElement {
     const ta = e.target as HTMLTextAreaElement;
     this._text = ta.value;
     this._error = null;
+    this._scaleCache = null;
     this._updateDirty();
   }
 
