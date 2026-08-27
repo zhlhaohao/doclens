@@ -610,41 +610,66 @@ export class MdViewer extends LitElement {
     });
   }
 
-  /** 找 data-source-line <= line 的最后一个块 = 该源行所在的 markdown 块 */
-  private _findBlockAtLine(line: number): HTMLElement | null {
-    const blocks = Array.from(
+  /** 收集全部锚点块（DOM 顺序；块级元素 renderer 注入 data-source-line）。 */
+  private _anchorBlocks(): HTMLElement[] {
+    return Array.from(
       this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"),
     );
-    if (blocks.length === 0) return null;
-    return blocks.reduce<HTMLElement | null>((best, el) => {
-      const ls = Number(el.getAttribute("data-source-line"));
-      if (ls <= line && (!best || ls > Number(best.getAttribute("data-source-line")))) {
-        return el;
-      }
-      return best;
-    }, null);
   }
 
-  /** 视口顶部第一个可见块的源行号（1-indexed）；无块时返回 1。
-   *  供 preview-pane 在预览→编辑切换时捕获位置锚点。 */
+  /** 找 data-source-line <= line 的最后一个块 = 该源行所在的 markdown 块 */
+  private _findBlockAtLine(line: number): HTMLElement | null {
+    const blocks = this._anchorBlocks();
+    let best: HTMLElement | null = null;
+    for (const el of blocks) {
+      const ls = Number(el.getAttribute("data-source-line"));
+      if (ls <= line && (!best || ls > Number(best.getAttribute("data-source-line")))) {
+        best = el;
+      }
+    }
+    return best;
+  }
+
+  /** 块覆盖的源行跨度 = 该块起始行 → 下一块起始行（末块 → 文档末行 +1）。
+   *  行级锚点插值的分母：块内像素位置按此跨度换算源行偏移。 */
+  private _blockSpan(el: HTMLElement, blocks: HTMLElement[]): number {
+    const start = Number(el.getAttribute("data-source-line")) || 1;
+    const idx = blocks.indexOf(el);
+    const next =
+      idx >= 0 && idx + 1 < blocks.length
+        ? Number(blocks[idx + 1].getAttribute("data-source-line")) || start
+        : this.content.split("\n").length + 1;
+    return Math.max(1, next - start);
+  }
+
+  /** 视口顶部所在的源行号（1-indexed，行级精度）；无块时返回 1。
+   *  视口顶侵入块内部时按像素比例插值（折行/图片按视觉比例），否则为块起始行。
+   *  供 preview-pane 在预览→编辑切换时捕获位置锚点，与 md-editor.topLine() 同精度。 */
   topSourceLine(): number {
-    const blocks = Array.from(
-      this.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"),
-    );
+    const blocks = this._anchorBlocks();
     if (blocks.length === 0) return 1;
     const hostRect = this.getBoundingClientRect();
     for (const el of blocks) {
-      if (el.getBoundingClientRect().bottom > hostRect.top + 1) {
-        return Number(el.getAttribute("data-source-line")) || 1;
+      const elRect = el.getBoundingClientRect();
+      if (elRect.bottom > hostRect.top + 1) {
+        const start = Number(el.getAttribute("data-source-line")) || 1;
+        if (elRect.height <= 0) return start;
+        const pxInto = Math.max(0, hostRect.top - elRect.top);
+        if (pxInto <= 0) return start;
+        const span = this._blockSpan(el, blocks);
+        const offset = Math.min(span - 1, Math.round((pxInto / elRect.height) * span));
+        return start + offset;
       }
     }
     const last = blocks[blocks.length - 1];
     return Number(last.getAttribute("data-source-line")) || 1;
   }
 
-  /** 滚动使源行 line 所在块贴顶（默认瞬跳）。供 preview-pane 在编辑→预览
-   *  切换时恢复位置锚点；不触发闪烁动画。 */
+  /** 滚动使源行 line 贴顶（默认瞬跳，行级精度：块内按跨度比例像素偏移）。
+   *  供 preview-pane 在编辑→预览切换时恢复位置锚点，与 md-editor.scrollToLine()
+   *  同精度；不触发闪烁动画。 */
   scrollToSourceLine(line: number, behavior: ScrollBehavior = "auto") {
+    const blocks = this._anchorBlocks();
     const target = this._findBlockAtLine(line);
     if (!target) return;
     // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
@@ -653,8 +678,13 @@ export class MdViewer extends LitElement {
     const hostRect = this.getBoundingClientRect();
     if (hostRect.height <= 0) return;
     const targetRect = target.getBoundingClientRect();
+    // 块内行偏移 → 像素偏移（与 topSourceLine 的插值互逆，保证切换往返一致）
+    const start = Number(target.getAttribute("data-source-line")) || 1;
+    const span = this._blockSpan(target, blocks);
+    const offset = Math.max(0, Math.min(span - 1, line - start));
+    const pxInto = targetRect.height > 0 ? (offset / span) * targetRect.height : 0;
     this.scrollTo({
-      top: targetRect.top - hostRect.top + this.scrollTop,
+      top: targetRect.top + pxInto - hostRect.top + this.scrollTop,
       behavior,
     });
   }

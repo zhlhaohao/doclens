@@ -118,6 +118,46 @@ describe("<preview-pane> edit mode", () => {
   });
 });
 
+describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () => {
+  const md = "# A\n\npara one\n\n# B\n\npara two\n";
+
+  it("预览→编辑：enterEdit 用 viewer.topSourceLine() 捕获锚点，editor.scrollToLine 恢复同源行", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content=${md} writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    // 视野首行 = 4（para one 块内插值行）：stub 捕获结果
+    const topSpy = vi.spyOn(viewer, "topSourceLine").mockReturnValue(4);
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    expect(editor).toBeTruthy();
+    // updated() 异步 await editor.updateComplete 后才调 scrollToLine —— 等一拍
+    await new Promise((r) => setTimeout(r, 0));
+    expect(topSpy).toHaveBeenCalled();
+    // 锚点已传递：编辑器侧滚到的行 = 捕获的视野首行
+    const anchor = topSpy.mock.results[0]?.value;
+    expect((el as any)._anchorLine).toBe(anchor);
+  });
+
+  it("编辑→预览：退出编辑用 editor.topLine() 捕获，viewer.scrollToSourceLine 恢复同源行", async () => {
+    const scrollSpy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
+    const el = await fixture(html`
+      <preview-pane language="markdown" content=${md} writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    el.enterEdit();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    editor.topLine = () => 4; // 视野首行 = 源行 4
+    editor.dispatchEvent(new CustomEvent("cancel", {}));
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(scrollSpy).toHaveBeenCalledWith(4, "auto");
+  });
+});
+
 describe("<preview-pane> noHeader prop", () => {
   it("does not render .header in markdown preview branch when noHeader=true", async () => {
     const el = await fixture(html`
