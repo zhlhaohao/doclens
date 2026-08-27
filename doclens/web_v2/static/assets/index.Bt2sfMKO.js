@@ -5480,7 +5480,8 @@ ${r}</blockquote>
     .mobile-header .mobile-menu .font-scale-row {
       display: flex;
       align-items: center;
-      gap: var(--cortex-space-2);
+      /* −/%/+ 三件套紧凑成组：gap 用 space-1（space-2 视觉上太散） */
+      gap: var(--cortex-space-1);
       padding: var(--cortex-space-2) var(--cortex-space-4);
       border-bottom: 1px solid var(--cortex-border-muted);
       margin-bottom: var(--cortex-space-1);
@@ -5522,7 +5523,8 @@ ${r}</blockquote>
       cursor: default;
     }
     .mobile-header .mobile-menu .font-scale-value {
-      min-width: 44px;
+      /* 最小宽度刚好容纳 3 位百分比（"200%"），避免与两侧按钮产生过大空隙 */
+      min-width: 34px;
       text-align: center;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
