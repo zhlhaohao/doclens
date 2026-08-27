@@ -252,6 +252,23 @@ export class MdEditor extends LitElement {
     ta.scrollTop = this._heightBeforeLine(n);
   }
 
+  /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
+   *  目标行下方内容不足一屏时贴顶物理上不可能，改为对齐文档尾部视野。
+   *  无需滚动（内容不足一屏）时不算贴底——行号锚点本来就可达。 */
+  isAtBottom(): boolean {
+    const ta = this._textarea;
+    if (!ta) return false;
+    if (ta.scrollHeight <= ta.clientHeight) return false;
+    return ta.scrollTop + ta.clientHeight >= ta.scrollHeight - 8;
+  }
+
+  /** 滚到底部（瞬跳）。配合 isAtBottom 实现预览↔编辑的底部锚点互通。 */
+  scrollToBottom() {
+    const ta = this._textarea;
+    if (!ta) return;
+    ta.scrollTop = ta.scrollHeight - ta.clientHeight;
+  }
+
   private _onInput(e: Event) {
     const ta = e.target as HTMLTextAreaElement;
     this._text = ta.value;
