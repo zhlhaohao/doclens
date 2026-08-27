@@ -85,3 +85,4 @@
 - 2026-08-14：遗留 Office 格式解析引擎 = anydoc（纯 Rust，主依赖；ADR-0013）——doc/docm/ppt/pps/pot/xls/rtf/epub 统一走 anydoc→md_to_tree，废除旧 doc 外部工具链；pptx/xlsx/docx 不动（markitdown 与 anydoc 两引擎有意共存）；内嵌图片经 assets 接 ImageStore、附加文档末尾；ppt 扁平输出不做 slide 包裹；win_arm64 无 wheel，未装时落 text 兜底。
 - 2026-08-17：技能工具箱 = files 多选文件 → 选白名单技能（context_menu: true）→ 确认（只读文件清单+可选补充 prompt）→ 新建技能会话自动发送；技能加载走现有 load_skill 工具（AI 收指令自调，ChatRequest 不加字段）；KB 门禁临时关闭（开关式）；技能会话全程提取式引文（正文提路径+存在性校验重建参考资料，替代 [N] 策展）。
 - 2026-08-21：预览目录抽屉 = md/docx/pdf 预览提供 heading 目录快速跳转（按钮 + 抽屉浮层 + 扁平缩进列表 + 点击跳转即关闭 + 打开时高亮当前章节）；pptx/xlsx/邮件/图像解读 md 不提供；无 heading 隐藏按钮。
+- 2026-08-27：预览↔编辑切换锚点升级为行级精度——md-viewer 的 topSourceLine/scrollToSourceLine 从块级（data-source-line 贴块顶）升级为按块内像素比例插值（块源行跨度 = 下一块起始行 − 本块起始行，末块到文档末行），与 md-editor 的镜像 div 行级测量对称；视野首行落在长代码块/长列表中部时不再跳回块开头。搜索命中定位（line property → 块起始行）与滚动记忆的行为不变（记忆值更精确）。

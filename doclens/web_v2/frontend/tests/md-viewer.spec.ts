@@ -489,3 +489,146 @@ describe("<md-viewer> icon sizing (_applyIconSizing)", () => {
     expect(img.style.width).toBe("38px");  // 用 dw=38，忽略 naturalWidth=1024
   });
 });
+
+describe("<md-viewer> 行级锚点（预览↔编辑切换视野一致）", () => {
+  /** stub 元素 rect：jsdom 无布局，getBoundingClientRect 全 0，需手工赋形。
+   *  blocks: 每块 {line, top, height}（视口坐标系）；host: {top, height}。 */
+  function stubLayout(el: MdViewer, host: { top: number; height: number }, blocks: { line: number; top: number; height: number }[]) {
+    (el as any).getBoundingClientRect = () => ({ top: host.top, height: host.height, bottom: host.top + host.height, left: 0, right: 800, width: 800, x: 0, y: host.top, toJSON: () => ({}) });
+    const nodes = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"));
+    // DOM 顺序对应 blocks 顺序（fixture 内容按此约定构造）
+    blocks.forEach((b, i) => {
+      const n = nodes[i];
+      if (!n) return;
+      (n as any).getBoundingClientRect = () => ({ top: b.top, height: b.height, bottom: b.top + b.height, left: 0, right: 800, width: 800, x: 0, y: b.top, toJSON: () => ({}) });
+    });
+    return nodes;
+  }
+
+  it("topSourceLine: 视口顶在块开头上方 → 返回块起始行", async () => {
+    const md = "# A\n\nfoo\n\n# B\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    // 布局：h1(line1) top=0 h=40；p(line3) top=60 h=80；h1(line5) top=180 h=40
+    stubLayout(el, { top: 0, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ]);
+    expect(el.topSourceLine()).toBe(1);
+  });
+
+  it("topSourceLine: 视口顶侵入块内部 → 按像素比例行内插值", async () => {
+    const md = "# A\n\nfoo\n\n# B\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    // 视口顶 = 100：p(line3, top=60, h=80) 侵入 40px = 50% → line3 跨度=2（到 line5）
+    // 50% * 2 = 偏移 1 → 返回 4
+    stubLayout(el, { top: 100, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ]);
+    expect(el.topSourceLine()).toBe(4);
+  });
+
+  it("topSourceLine: 长代码块中部 → 大跨度插值（修复原块级精度的主场景）", async () => {
+    // 20 行代码块：token.raw 吞掉围栏后的两个空行，下一块 P=26（实测 dump）。
+    // pre 跨度 = 26 - 3 = 23；视口顶侵到块高 50% → 3 + round(0.5*23) = 15
+    const code = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n");
+    const md = `# A\n\n\`\`\`\n${code}\n\`\`\`\n\nafter\n`;
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    stubLayout(el, { top: 410, height: 400 }, [
+      { line: 1, top: 0, height: 40 },        // h1
+      { line: 3, top: 60, height: 700 },      // pre：line3 起，跨度 23（下一块 line 26）
+      { line: 26, top: 800, height: 40 },     // p after（含代码块尾空行）
+    ]);
+    expect(el.topSourceLine()).toBe(15);
+  });
+
+  it("scrollToSourceLine: 块起始行 → 滚到块顶（旧行为兼容）", async () => {
+    const md = "# A\n\nfoo\n\n# B\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    (el as any).scrollTop = 0;
+    stubLayout(el, { top: 0, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ]);
+    el.scrollToSourceLine(3, "auto");
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 60, behavior: "auto" });
+  });
+
+  it("scrollToSourceLine: 块内行 → 块顶 + 跨度比例像素偏移（与 topSourceLine 插值互逆）", async () => {
+    const md = "# A\n\nfoo\n\n# B\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    (el as any).scrollTop = 0;
+    stubLayout(el, { top: 0, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ]);
+    // line 4 = p(line3) 内偏移 1，跨度 2 → pxInto = 1/2 * 80 = 40 → top = 60+40 = 100
+    el.scrollToSourceLine(4, "auto");
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 100, behavior: "auto" });
+  });
+
+  it("往返一致：topSourceLine 捕获 → scrollToSourceLine 恢复同位置", async () => {
+    const md = "# A\n\nfoo\n\n# B\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    // 捕获阶段：视口顶 = 100，p(line3, top=60, h=80) 侵入 40px = 50% → 偏移 1 → line 4
+    const layout = [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ];
+    stubLayout(el, { top: 100, height: 400 }, layout);
+    const captured = el.topSourceLine();
+    expect(captured).toBe(4);
+
+    // 恢复阶段：重 stub 为「未滚动」状态（hostRect.top=0、块坐标同布局），
+    // scrollToSourceLine(4) 应滚到 p 顶 + 1/2*80 = 100，让 line 4 贴住视口顶
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    (el as any).scrollTop = 0;
+    stubLayout(el, { top: 0, height: 400 }, layout);
+    el.scrollToSourceLine(captured, "auto");
+    const arg = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+    expect(arg.top).toBe(100);
+  });
+
+  it("行级锚点不破坏既有调用方：line property 定位仍贴块顶 + 闪烁", async () => {
+    // search-view 命中行定位：块起始行定位应与旧行为一致（偏移 0）
+    const md = "# T\n\nfoo\n\nbar\n";
+    const el = await fixture(html`<md-viewer content=${md} .line=${3}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    const scrollSpy = vi.fn();
+    (el as any).scrollTo = scrollSpy;
+    (el as any).scrollTop = 0;
+    stubLayout(el, { top: 0, height: 400 }, [
+      { line: 1, top: 0, height: 40 },
+      { line: 3, top: 60, height: 80 },
+      { line: 5, top: 180, height: 40 },
+      { line: 7, top: 260, height: 40 },
+    ]);
+    el.scrollToSourceLine(3, "smooth");
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 60, behavior: "smooth" });
+    // 闪烁类仍在目标块上
+    const flash = el.shadowRoot!.querySelector(".highlight-flash");
+    expect(flash?.getAttribute("data-source-line")).toBe("3");
+  });
+});
