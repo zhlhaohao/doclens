@@ -13,6 +13,14 @@ import {
   renderScrollJumpFabs,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
+import {
+  FONT_SCALE_MIN_PCT,
+  FONT_SCALE_MAX_PCT,
+  FONT_SCALE_STEP_PCT,
+  readFontScalePct,
+  writeFontScalePct,
+  fontScaleFromPct,
+} from "../utils/font-scale";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
@@ -351,6 +359,65 @@ export class PreviewPane extends LitElement {
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
     }
+    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色 */
+    .mobile-menu .font-scale-row {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: 0 var(--cortex-space-4);
+      /* 固定行高 32px（按钮 26px + 上下各 3px 余量）：四元素在等高的行盒里
+         垂直对中，字形中线自然重合——不依赖 align-items:center 对不同字号
+         盒子的「盒子对中」近似（盒子对中 ≠ 字形对中，混字号时错位）。 */
+      height: 32px;
+      border-bottom: 1px solid var(--cortex-border-muted);
+      margin-bottom: var(--cortex-space-1);
+    }
+    .mobile-menu .font-scale-label {
+      flex: 1;
+      /* 小屏窄菜单下不被压缩换行（"字号"两字竖排）；nowrap 让绝对定位的
+         menu 按 max-content 撑宽，而非把 label 挤成两行 */
+      flex-shrink: 0;
+      white-space: nowrap;
+      font-size: var(--cortex-fs-sm);
+      line-height: 32px;  /* = 行高：文本在行盒内精确垂直居中 */
+      color: var(--cortex-text);
+    }
+    .mobile-menu .font-scale-btn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid var(--cortex-border);
+      border-radius: 50%;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      /* 图标尺寸对齐 label 字号：四元素同号数字形视觉中心自然对齐 */
+      font-size: var(--cortex-fs-sm);
+      line-height: 1;
+      touch-action: manipulation;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mobile-menu .font-scale-btn:hover:not(:disabled) {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    .mobile-menu .font-scale-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .mobile-menu .font-scale-value {
+      min-width: 44px;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      /* 与 label 同字号、行高 = 行盒高：百分比数字与"字号"汉字视觉中心对齐 */
+      font-size: var(--cortex-fs-sm);
+      line-height: 32px;
+      color: var(--cortex-text-muted);
+    }
   `,
   ];
 
@@ -381,6 +448,8 @@ export class PreviewPane extends LitElement {
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
   @state() private _showMobileMenu = false;
+  /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
+  @state() private _fontScalePct = readFontScalePct();
   /** 关键词高亮输入条（仅 markdown 预览分支可用） */
   @state() private _showHighlightBar = false;
   @state() private _highlightInput = "";
@@ -528,6 +597,42 @@ export class PreviewPane extends LitElement {
     this._showMobileMenu = !this._showMobileMenu;
   };
 
+  /** 字号 stepper（mobile-menu 内一行）：− 当前% +，连点不关菜单，边界 disabled。 */
+  private _renderFontScaleStepper() {
+    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
+    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
+    return html`
+      <div class="font-scale-row" role="group" aria-label="正文字号">
+        <span class="font-scale-label">字号</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="缩小字号"
+          ?disabled=${atMin}
+          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <span class="font-scale-value">${this._fontScalePct}%</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="放大字号"
+          ?disabled=${atMax}
+          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  private _bumpFontScale(delta: number) {
+    const next = Math.min(
+      FONT_SCALE_MAX_PCT,
+      Math.max(FONT_SCALE_MIN_PCT, this._fontScalePct + delta),
+    );
+    if (next === this._fontScalePct) return;
+    this._fontScalePct = next;
+    writeFontScalePct(next);
+  }
+
   private _onDocClick = (e: MouseEvent) => {
     if (!this._showMobileMenu) return;
     const path = e.composedPath();
@@ -579,6 +684,9 @@ export class PreviewPane extends LitElement {
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
+                ${this.language === "markdown" && this._mode === "preview"
+                  ? this._renderFontScaleStepper()
+                  : null}
                 ${this.writable
                   ? html`<button
                       type="button"
@@ -919,6 +1027,7 @@ export class PreviewPane extends LitElement {
           .keyword=${this._highlightInput || this.keyword}
           .pages=${this.pages}
           .docPath=${this.path}
+          .fontScale=${fontScaleFromPct(this._fontScalePct)}
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
