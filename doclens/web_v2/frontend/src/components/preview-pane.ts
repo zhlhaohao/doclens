@@ -736,7 +736,7 @@ export class PreviewPane extends LitElement {
               type="button"
               aria-label="关键词高亮"
               @click=${this._onHighlightToggle}
-            ><doclens-icon name="highlighter"></doclens-icon></button>`
+            ><doclens-icon name="search"></doclens-icon></button>`
           : null}
         <button
           class="mobile-more"
@@ -954,7 +954,7 @@ export class PreviewPane extends LitElement {
     return html`<button
       class="highlight-btn ${this._showHighlightBar ? "active" : ""}"
       @click=${this._onHighlightToggle}
-    ><doclens-icon name="highlighter"></doclens-icon><span class="btn-label">高亮</span></button>`;
+    ><doclens-icon name="search"></doclens-icon><span class="btn-label">高亮</span></button>`;
   }
 
   /** 高亮输入条（桌面 header 下方 / 移动端 mobile-header 下方共用）。 */
@@ -962,7 +962,7 @@ export class PreviewPane extends LitElement {
     if (!this._showHighlightBar) return null;
     return html`
       <div class="highlight-bar">
-        <doclens-icon name="highlighter"></doclens-icon>
+        <doclens-icon name="search"></doclens-icon>
         <input
           type="text"
           placeholder="输入关键字高亮，空格分隔多个…"
