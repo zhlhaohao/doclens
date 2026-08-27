@@ -56,7 +56,6 @@ import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
 import squareIcon from "lucide-static/icons/square.svg?raw";
 import userIcon from "lucide-static/icons/user.svg?raw";
 import logOutIcon from "lucide-static/icons/log-out.svg?raw";
-import highlighterIcon from "lucide-static/icons/highlighter.svg?raw";
 import sendIcon from "lucide-static/icons/send.svg?raw";
 import listTreeIcon from "lucide-static/icons/list-tree.svg?raw";
 import plusIcon from "lucide-static/icons/plus.svg?raw";
@@ -106,7 +105,6 @@ const ICONS: Record<string, string> = {
   square: squareIcon,
   user: userIcon,
   "log-out": logOutIcon,
-  highlighter: highlighterIcon,
   send: sendIcon,
   "list-tree": listTreeIcon,
   plus: plusIcon,
