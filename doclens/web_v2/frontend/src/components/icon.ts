@@ -58,6 +58,8 @@ import userIcon from "lucide-static/icons/user.svg?raw";
 import logOutIcon from "lucide-static/icons/log-out.svg?raw";
 import highlighterIcon from "lucide-static/icons/highlighter.svg?raw";
 import sendIcon from "lucide-static/icons/send.svg?raw";
+import plusIcon from "lucide-static/icons/plus.svg?raw";
+import minusIcon from "lucide-static/icons/minus.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -105,6 +107,8 @@ const ICONS: Record<string, string> = {
   "log-out": logOutIcon,
   highlighter: highlighterIcon,
   send: sendIcon,
+  plus: plusIcon,
+  minus: minusIcon,
 };
 
 @customElement("doclens-icon")

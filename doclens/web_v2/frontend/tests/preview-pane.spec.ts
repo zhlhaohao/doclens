@@ -6,6 +6,8 @@ import "../src/components/md-editor";
 import { MdViewer } from "../src/components/md-viewer";
 import type { PreviewPane } from "../src/components/preview-pane";
 
+const FONT_SCALE_KEY = "cortex.files.mdFontScalePct";
+
 describe("<preview-pane> markdown branch", () => {
   it("renders <md-viewer> when language is markdown", async () => {
     const el = await fixture(html`
@@ -535,7 +537,8 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     const menu = el.shadowRoot!.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
-    const items = menu!.querySelectorAll("button");
+    // menuitem 三项（字号 stepper 的 ± 按钮带 role=menuitem 之外的 group）
+    const items = menu!.querySelectorAll('button[role="menuitem"]');
     // writable=true: 编辑/下载/上传 三项
     expect(items.length).toBe(3);
     expect(items[0].textContent).toContain("编辑");
@@ -555,7 +558,7 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
-    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
     expect(items.length).toBe(2);
     expect(items[0].textContent).toContain("下载");
     expect(items[1].textContent).toContain("上传");
@@ -593,7 +596,7 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
-    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
     (items[0] as HTMLElement).click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
@@ -615,8 +618,8 @@ describe("<preview-pane> mobile header", () => {
     input.click = clickSpy;
     (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
-    // 非 writable：菜单 [下载, 上传]
-    const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
+    // 非 writable：菜单 menuitem [下载, 上传]
+    const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
     (items[1] as HTMLElement).click();
     expect(clickSpy).toHaveBeenCalledTimes(1);
   });
@@ -652,8 +655,8 @@ describe("<preview-pane> mobile header", () => {
     document.body.removeChild = <any>((n: Node) => { origRemove(n); return n; });
 
     try {
-      const items = el.shadowRoot!.querySelectorAll(".mobile-menu button");
-      // 非 writable 时菜单为 [下载, 上传]
+      const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
+      // 非 writable 时菜单 menuitem 为 [下载, 上传]
       (items[0] as HTMLElement).click();
     } finally {
       (document as any).createElement = origCreate;
@@ -976,5 +979,126 @@ describe("<preview-pane> scroll memory (rememberScroll)", () => {
     viewer.dispatchEvent(new Event("scroll"));
     vi.advanceTimersByTime(300);
     expect(JSON.parse(localStorage.getItem(KEY) ?? "{}")).toEqual({});
+  });
+});
+
+describe("<preview-pane> mobile font scale stepper", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  /** fixture 一个移动端 markdown 预览并打开 More 菜单。 */
+  async function mountMenu(lang = "markdown", content = "# T") {
+    const el = await fixture(html`
+      <preview-pane
+        language=${lang}
+        content=${content}
+        path="doc.md"
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    return el;
+  }
+
+  it("markdown preview: menu contains stepper row with default 100%", async () => {
+    const el = await mountMenu();
+    const row = el.shadowRoot!.querySelector(".font-scale-row");
+    expect(row).toBeTruthy();
+    expect(row!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("100%");
+  });
+
+  it("non-markdown preview: no stepper row", async () => {
+    const el = await mountMenu("python", "print(1)");
+    expect(el.shadowRoot!.querySelector(".font-scale-row")).toBeNull();
+  });
+
+  it("edit mode: no stepper row", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="doc.md"
+        writable
+        ?mobile=${true}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".font-scale-row")).toBeTruthy();
+    el.enterEdit();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".font-scale-row")).toBeNull();
+  });
+
+  it("clicking + increases by 10%, updates value & md-viewer, keeps menu open", async () => {
+    const el = await mountMenu();
+    const plus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="放大字号"]',
+    ) as HTMLButtonElement;
+    plus.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("110%");
+    // 菜单不关闭，可连点
+    expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeTruthy();
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    expect(viewer.fontScale).toBe(1.1);
+    expect(viewer.style.getPropertyValue("--md-font-scale")).toBe("1.1");
+  });
+
+  it("clicking − decreases by 10% and persists to localStorage", async () => {
+    const el = await mountMenu();
+    const minus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="缩小字号"]',
+    ) as HTMLButtonElement;
+    minus.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("90%");
+    expect(localStorage.getItem(FONT_SCALE_KEY)).toBe("90");
+  });
+
+  it("consecutive clicks accumulate (连点)", async () => {
+    const el = await mountMenu();
+    const plus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="放大字号"]',
+    ) as HTMLButtonElement;
+    plus.click();
+    await el.updateComplete;
+    plus.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("120%");
+  });
+
+  it("boundary 200% disables + button", async () => {
+    localStorage.setItem(FONT_SCALE_KEY, "200");
+    const el = await mountMenu();
+    const plus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="放大字号"]',
+    ) as HTMLButtonElement;
+    expect(plus.disabled).toBe(true);
+    const minus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="缩小字号"]',
+    ) as HTMLButtonElement;
+    expect(minus.disabled).toBe(false);
+  });
+
+  it("boundary 60% disables − button", async () => {
+    localStorage.setItem(FONT_SCALE_KEY, "60");
+    const el = await mountMenu();
+    const minus = el.shadowRoot!.querySelector(
+      '.font-scale-btn[aria-label="缩小字号"]',
+    ) as HTMLButtonElement;
+    expect(minus.disabled).toBe(true);
+  });
+
+  it("saved preference restores on mount and applies to md-viewer", async () => {
+    localStorage.setItem(FONT_SCALE_KEY, "130");
+    const el = await mountMenu();
+    const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
+    expect(viewer.fontScale).toBe(1.3);
+    expect(el.shadowRoot!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("130%");
   });
 });
