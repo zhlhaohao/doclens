@@ -216,7 +216,11 @@ export class MdViewer extends LitElement {
       padding: var(--cortex-space-4);
       background: var(--cortex-surface-muted);   /* surface-soft 底：白画布上让白纸浮起 */
       font-family: var(--cortex-font);
-      font-size: var(--cortex-fs-base);
+      /* 正文字号基准：随 --md-font-scale 缩放（移动端 More 菜单字号控制）。
+         标题 h1-h4 用 em 相对字号、inline code 0.9em、line-height 无单位，
+         均基于此基准自动等比缩放；copy-btn 等按钮 chrome 用固定 token 不缩放。 */
+      --md-font-scale: 1;
+      font-size: calc(var(--cortex-fs-base) * var(--md-font-scale));
       line-height: 1.7;
       color: var(--cortex-text);
       overflow-y: auto;
@@ -258,7 +262,7 @@ export class MdViewer extends LitElement {
       overflow-wrap: anywhere;
       overflow-x: hidden;
       font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-sm);
+      font-size: calc(var(--cortex-fs-sm) * var(--md-font-scale));
     }
     .copy-btn {
       position: absolute;
@@ -304,7 +308,7 @@ export class MdViewer extends LitElement {
     :host table {
       border-collapse: collapse;
       margin: 0.75em 0;
-      font-size: var(--cortex-fs-sm);
+      font-size: calc(var(--cortex-fs-sm) * var(--md-font-scale));
       display: block;
       overflow-x: auto;  /* 宽表横向滚动，避免撑破预览面板 */
     }
@@ -335,7 +339,7 @@ export class MdViewer extends LitElement {
       display: block;
     }
     :host figcaption {
-      font-size: var(--cortex-fs-sm);
+      font-size: calc(var(--cortex-fs-sm) * var(--md-font-scale));
       color: var(--cortex-text-muted);
       text-align: center;
       margin-top: var(--cortex-space-1, 4px);
@@ -473,6 +477,9 @@ export class MdViewer extends LitElement {
   @property({ attribute: false }) pages: PageMarker[] | null = null;
   /** 文档相对 workdir 的路径（如 日记/2026.md）；设置后相对图片 src 重写到 /api/preview/raw */
   @property({ attribute: "doc-path" }) docPath = "";
+  /** 正文字号缩放系数（1 = 默认）；经 --md-font-scale 乘进正文/代码块/表格/图注，
+   *  标题等 em 相对字号自动跟随；按钮等 UI chrome 不缩放。 */
+  @property({ attribute: "font-scale", type: Number }) fontScale = 1;
   /** 全屏图片查看 */
   @state() private _viewerSrc = "";
   /** 全文复制反馈 */
@@ -490,6 +497,9 @@ export class MdViewer extends LitElement {
 
   updated(changedProps: Map<string, unknown>) {
     super.updated?.(changedProps);
+    if (changedProps.has("fontScale")) {
+      this.style.setProperty("--md-font-scale", String(this.fontScale || 1));
+    }
     // content/keyword 变化都需重新高亮（content 变化时 render 重建 .md-body，
     // 旧 <mark> 随之销毁；仅 keyword 变化时 .innerHTML 绑定同值跳过、DOM 不重建，
     // 需先剥掉旧 <mark>——否则残留旧高亮且 TreeWalker 跳过 MARK 子树会漏判）

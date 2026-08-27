@@ -22,6 +22,14 @@ import {
 } from "../utils/jsbridge";
 import { actions } from "../state/store";
 import { router } from "../router/router";
+import {
+  FONT_SCALE_MIN_PCT,
+  FONT_SCALE_MAX_PCT,
+  FONT_SCALE_STEP_PCT,
+  readFontScalePct,
+  writeFontScalePct,
+  fontScaleFromPct,
+} from "../utils/font-scale";
 
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
@@ -378,7 +386,10 @@ export class PreviewPane extends LitElement {
       padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {
-      display: block;
+      /* flex 行布局：icon 与文字间以 gap 留出间距（原为 block 内联，两者紧贴） */
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
       width: 100%;
       text-align: left;
       border: none;
@@ -392,6 +403,63 @@ export class PreviewPane extends LitElement {
     }
     .mobile-header .mobile-menu button:hover {
       background: var(--cortex-surface-muted);
+    }
+    /* 字号 stepper 行：与 menu button 同高的行内组合，按钮圆形单色。
+       选择器须带 .mobile-header 前缀——与 .mobile-header .mobile-menu button
+       的 (0,2,1) 同优先级且定义在后，才能覆盖其 display:block / width:100% /
+       padding，保住按钮的 inline-flex 垂直居中。 */
+    .mobile-header .mobile-menu .font-scale-row {
+      display: flex;
+      align-items: center;
+      /* −/%/+ 三件套紧凑成组：gap 用 space-1（space-2 视觉上太散） */
+      gap: var(--cortex-space-1);
+      padding: var(--cortex-space-2) var(--cortex-space-4);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      margin-bottom: var(--cortex-space-1);
+    }
+    .mobile-header .mobile-menu .font-scale-label {
+      flex: 1;
+      /* 小屏窄菜单下不被压缩换行（"字号"两字竖排）；nowrap 让绝对定位的
+         menu 按 max-content 撑宽，而非把 label 挤成两行 */
+      flex-shrink: 0;
+      white-space: nowrap;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+    }
+    .mobile-header .mobile-menu .font-scale-btn {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid var(--cortex-border);
+      border-radius: 50%;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      touch-action: manipulation;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mobile-header .mobile-menu .font-scale-btn:hover:not(:disabled) {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    .mobile-header .mobile-menu .font-scale-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .mobile-header .mobile-menu .font-scale-value {
+      /* 最小宽度刚好容纳 3 位百分比（"200%"），避免与两侧按钮产生过大空隙 */
+      min-width: 34px;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
     }
   `,
   ];
@@ -425,6 +493,8 @@ export class PreviewPane extends LitElement {
   @state() private _showMobileMenu = false;
   /** 下载进行中（App 内 jsbridge 通道）——屏幕中心遮罩动画 */
   @state() private _downloading = false;
+  /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
+  @state() private _fontScalePct = readFontScalePct();
   /** 关键词高亮输入条（仅 markdown 预览分支可用） */
   @state() private _showHighlightBar = false;
   @state() private _highlightInput = "";
@@ -582,6 +652,42 @@ export class PreviewPane extends LitElement {
     this._showMobileMenu = !this._showMobileMenu;
   };
 
+  /** 字号 stepper（mobile-menu 内一行）：− 当前% +，连点不关菜单，边界 disabled。 */
+  private _renderFontScaleStepper() {
+    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
+    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
+    return html`
+      <div class="font-scale-row" role="group" aria-label="正文字号">
+        <span class="font-scale-label">字号</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="缩小字号"
+          ?disabled=${atMin}
+          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <span class="font-scale-value">${this._fontScalePct}%</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="放大字号"
+          ?disabled=${atMax}
+          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  private _bumpFontScale(delta: number) {
+    const next = Math.min(
+      FONT_SCALE_MAX_PCT,
+      Math.max(FONT_SCALE_MIN_PCT, this._fontScalePct + delta),
+    );
+    if (next === this._fontScalePct) return;
+    this._fontScalePct = next;
+    writeFontScalePct(next);
+  }
+
   private _onDocClick = (e: MouseEvent) => {
     if (!this._showMobileMenu) return;
     const path = e.composedPath();
@@ -641,6 +747,9 @@ export class PreviewPane extends LitElement {
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
+                ${this.language === "markdown" && this._mode === "preview"
+                  ? this._renderFontScaleStepper()
+                  : null}
                 ${this.writable
                   ? html`<button
                       type="button"
@@ -1073,6 +1182,7 @@ export class PreviewPane extends LitElement {
           .keyword=${this._highlightInput || this.keyword}
           .pages=${this.pages}
           .docPath=${this.path}
+          .fontScale=${fontScaleFromPct(this._fontScalePct)}
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
