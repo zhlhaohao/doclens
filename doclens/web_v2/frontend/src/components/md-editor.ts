@@ -302,42 +302,28 @@ export class MdEditor extends LitElement {
     ta.scrollTop = this._scaledHeightBeforeLine(n);
   }
 
-  /** 行号（1-indexed）→ 行首字符偏移：前 n-1 行长度 + 各自换行符。 */
-  private _lineStartOffset(n: number): number {
-    const lines = this._lines;
-    let off = 0;
-    for (let i = 0; i < Math.min(n - 1, lines.length); i++) off += lines[i].length + 1;
-    return off;
-  }
-
-  /** 选中源行范围 [start, end]（1-indexed 闭区间，行首到行尾）。
-   *  供 preview-pane 在预览→编辑切换时保持文本选择
-   *  （预览侧 DOM 选区按起止块映射为行集合）。 */
-  selectLines(start: number, end: number) {
+  /** 选中源文本字符偏移区间（与 md-viewer.selectionSourceOffsets 同一
+   *  坐标系，字符级精度——修复行级映射的「选区放大」：预览选一个词切到
+   *  编辑器不再变成整块几十行）。
+   *  focus 使选区高亮可见（部分 WebView 失焦不渲染选区）；随后恢复
+   *  scrollTop，避免 focus 把 caret 滚进视口破坏视野锚点。 */
+  selectOffsets(start: number, end: number) {
     const ta = this._textarea;
     if (!ta) return;
-    const lines = this._lines;
-    const s = Math.max(1, Math.min(start, end));
-    const e = Math.min(lines.length, Math.max(start, end));
-    ta.setSelectionRange(this._lineStartOffset(s), this._lineStartOffset(e) + lines[e - 1].length);
-    // focus 使选区高亮可见（部分 WebView 失焦不渲染选区）；随后恢复
-    // scrollTop，避免 focus 把 caret 滚进视口破坏视野锚点
+    const s = Math.max(0, Math.min(start, end));
+    const e = Math.min(this._text.length, Math.max(start, end));
+    ta.setSelectionRange(s, e);
     const st = ta.scrollTop;
     ta.focus();
     ta.scrollTop = st;
   }
 
-  /** 当前选区映射为源行范围（1-indexed 闭区间）；无选区返回 null。
-   *  selectionEnd 落在换行符上归前一行（选到行尾含换行 = 该行）。
+  /** 当前选区偏移（selectionStart/End 原值）；无选区返回 null。
    *  供 preview-pane 在编辑→预览切换时捕获选区锚点。 */
-  selectionLineRange(): { start: number; end: number } | null {
+  selectionOffsets(): { start: number; end: number } | null {
     const ta = this._textarea;
     if (!ta || ta.selectionStart === ta.selectionEnd) return null;
-    const lineAt = (x: number): number =>
-      (this._text.slice(0, x).match(/\n/g)?.length ?? 0) + 1;
-    const start = lineAt(ta.selectionStart);
-    const end = lineAt(Math.max(0, ta.selectionEnd - 1));
-    return start <= end ? { start, end } : { start: end, end: start };
+    return { start: ta.selectionStart, end: ta.selectionEnd };
   }
 
   /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
