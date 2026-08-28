@@ -17,6 +17,7 @@ import {
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
 import {
   jsbridgeDownloadAvailable,
+  isWebviewContainer,
   downloadFile,
   JsbridgeDownloadError,
 } from "../utils/jsbridge";
@@ -593,7 +594,10 @@ export class PreviewPane extends LitElement {
         await editor.updateComplete;
         if (this._anchorAtBottom) editor.scrollToBottom();
         else editor.scrollToLine(this._anchorLine);
-        if (this._selOffsets) editor.selectOffsets(this._selOffsets.start, this._selOffsets.end);
+        if (this._selOffsets) {
+          // WebView：reveal 保留 focus 原生 reveal-selection 兜底视野
+          editor.selectOffsets(this._selOffsets.start, this._selOffsets.end, isWebviewContainer());
+        }
       }
       return;
     }
@@ -804,6 +808,12 @@ export class PreviewPane extends LitElement {
     if (viewer) {
       this._anchorLine = viewer.topSourceLine();
       this._anchorAtBottom = viewer.isAtBottom();
+      // WebView：用户未选文字时在视野中央自动选 1 字——编辑器侧用
+      // focus 的原生 reveal-selection 兜底视野（浏览器自己的坐标计算，
+      // 免疫镜像行高测量在 WebView 内核的累积偏差）
+      if (isWebviewContainer() && viewer.selectionSourceOffsets() === null) {
+        viewer.selectCharAtViewportCenter();
+      }
       this._selOffsets = viewer.selectionSourceOffsets();
     }
     this._mode = "edit";

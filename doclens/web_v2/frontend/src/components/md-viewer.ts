@@ -814,6 +814,50 @@ export class MdViewer extends LitElement {
     return s <= e ? { start: s, end: e } : { start: e, end: s };
   }
 
+  /** 在视口中央选 1 个字符（WebView 模式的编辑切换视野锚点兜底）。
+   *
+   *  背景：WebView 内核对 textarea 行高取整与镜像 div 不一致，镜像
+   *  测量的 scrollTop 锚点有累积偏差。此方法在切编辑前于视野中央
+   *  造一个单字符选区，走既有选区保持链路（selectionSourceOffsets →
+   *  md-editor.selectOffsets + focus 原生 reveal-selection）——滚动
+   *  执行者是浏览器自己（同引擎坐标），免疫测量误差。
+   *  视野中央所在块的文本中部定位；失败（无块/无文本）静默返回 false。 */
+  selectCharAtViewportCenter(): boolean {
+    const blocks = this._anchorBlocks();
+    if (blocks.length === 0) return false;
+    const hostRect = this.getBoundingClientRect();
+    if (hostRect.height <= 0) return false;
+    const cy = hostRect.top + hostRect.height / 2;
+    let target: HTMLElement | null = null;
+    for (const el of blocks) {
+      if (el.getBoundingClientRect().bottom > cy) {
+        target = el;
+        break;
+      }
+    }
+    target ??= blocks[blocks.length - 1]; // 中央在全块之上（文首）的防御
+    const lDom = this._domTextLength(target);
+    if (lDom <= 0) return false;
+    const pos = this._domLocate(target, Math.min(Math.floor(lDom / 2), lDom - 1));
+    if (!pos) return false;
+    const node = pos.node as Text;
+    if (node.length === 0) return false;
+    const sel = this._shadowSelection();
+    if (!sel) return false;
+    try {
+      const range = document.createRange();
+      // 单字符选区（offset 钳到节点末字符内）
+      const at = Math.min(pos.offset, node.length - 1);
+      range.setStart(node, at);
+      range.setEnd(node, at + 1);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** 源文本字符偏移 → DOM 选区（比例映射逆运算，与
    *  selectionSourceOffsets 尽力互逆；误差字符级）。 */
   selectSourceOffsets(start: number, end: number) {

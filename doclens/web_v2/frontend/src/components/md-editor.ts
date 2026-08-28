@@ -306,8 +306,12 @@ export class MdEditor extends LitElement {
    *  坐标系，字符级精度——修复行级映射的「选区放大」：预览选一个词切到
    *  编辑器不再变成整块几十行）。
    *  focus 使选区高亮可见（部分 WebView 失焦不渲染选区）；随后恢复
-   *  scrollTop，避免 focus 把 caret 滚进视口破坏视野锚点。 */
-  selectOffsets(start: number, end: number) {
+   *  scrollTop，避免 focus 把 caret 滚进视口破坏视野锚点。
+   *  reveal=true（WebView 中央字锚点）时不恢复 scrollTop——保留 focus
+   *  的原生 reveal-selection，把选区滚进视口（浏览器自己的坐标计算，
+   *  免疫镜像行高测量的累积偏差；与先行的 scrollToLine 近似定位配合：
+   *  偏差小于一屏不动，漂出视野则拉回）。 */
+  selectOffsets(start: number, end: number, reveal = false) {
     const ta = this._textarea;
     if (!ta) return;
     const s = Math.max(0, Math.min(start, end));
@@ -315,7 +319,7 @@ export class MdEditor extends LitElement {
     ta.setSelectionRange(s, e);
     const st = ta.scrollTop;
     ta.focus();
-    ta.scrollTop = st;
+    if (!reveal) ta.scrollTop = st;
   }
 
   /** 当前选区偏移（selectionStart/End 原值）；无选区返回 null。

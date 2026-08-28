@@ -157,6 +157,9 @@ export class LoginView extends LitElement {
     this._pin = el.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
     el.value = this._pin;
     this._error = "";
+    // 输满即自动提交（与触屏 pin-pad 的 _onDigit 行为对齐——输完最后
+    // 一位无需再点「登 录」；密码对错由后端判定，错误会清空重输）
+    if (this._pin.length === PIN_LENGTH) void this._submit();
   }
 
   private _onKeydown(e: KeyboardEvent) {

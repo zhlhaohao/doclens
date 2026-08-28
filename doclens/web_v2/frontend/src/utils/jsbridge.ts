@@ -162,6 +162,16 @@ export function isNexBoxWebview(): boolean {
 /** 诊断开关：true 时 _debugToast 弹出 jsbridge 环境/调用链诊断（真机调试后应关掉） */
 export const JSBRIDGE_DEBUG = false;
 
+/** 是否运行在 App WebView 容器内（Android 原生注入 + jsbridge 就绪）。
+ *  供 WebView 特有的行为分支使用，如预览→编辑切换的视野中央选字锚点。 */
+export function isWebviewContainer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.Android &&
+    !!window.jsbridge
+  );
+}
+
 /** 调试标记：toast 出现即证明新构建已生效（被 App 缓存旧页时不会有任何 toast） */
 export const JSBRIDGE_DEBUG_TAG = "dbg1";
 
