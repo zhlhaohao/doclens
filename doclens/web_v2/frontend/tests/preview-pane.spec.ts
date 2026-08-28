@@ -158,37 +158,36 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
   });
 });
 
-describe("<preview-pane> 预览↔编辑选区保持（源行区间）", () => {
+describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）", () => {
   const md = "# A\n\npara one\n\n# B\n\npara two\n";
 
-  it("预览→编辑：enterEdit 捕获 viewer.selectionLineRange，恢复后 editor.selectLines 收到同行区间", async () => {
+  it("预览→编辑：enterEdit 捕获 viewer.selectionSourceOffsets，恢复后编辑器选区同偏移", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
-    vi.spyOn(viewer, "selectionLineRange").mockReturnValue({ start: 3, end: 5 });
+    vi.spyOn(viewer, "selectionSourceOffsets").mockReturnValue({ start: 6, end: 12 });
     el.enterEdit();
     await el.updateComplete;
     const editor = el.shadowRoot!.querySelector("md-editor") as any;
     expect(editor).toBeTruthy();
     await new Promise((r) => setTimeout(r, 0));
-    const lines = (el as any)._selLines;
-    expect(lines).toEqual({ start: 3, end: 5 });
-    expect(editor.selectionLineRange()).toEqual({ start: 3, end: 5 });
+    expect((el as any)._selOffsets).toEqual({ start: 6, end: 12 });
+    expect(editor.selectionOffsets()).toEqual({ start: 6, end: 12 });
   });
 
-  it("预览无选区 → 编辑器不设选区（selectionLineRange 为 null）", async () => {
+  it("预览无选区 → 编辑器不设选区（selectionSourceOffsets 为 null）", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
-    vi.spyOn(viewer, "selectionLineRange").mockReturnValue(null);
+    vi.spyOn(viewer, "selectionSourceOffsets").mockReturnValue(null);
     el.enterEdit();
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
-    expect((el as any)._selLines).toBeNull();
+    expect((el as any)._selOffsets).toBeNull();
   });
 
   it("编辑→预览（cancel）：文本回滚后不恢复选区", async () => {
@@ -197,14 +196,14 @@ describe("<preview-pane> 预览↔编辑选区保持（源行区间）", () => {
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
-    vi.spyOn(viewer, "selectionLineRange").mockReturnValue({ start: 3, end: 5 });
+    vi.spyOn(viewer, "selectionSourceOffsets").mockReturnValue({ start: 6, end: 12 });
     el.enterEdit();
     await el.updateComplete;
     const editor = el.shadowRoot!.querySelector("md-editor") as any;
     editor.dispatchEvent(new CustomEvent("cancel", {}));
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
-    expect((el as any)._selLines).toBeNull();
+    expect((el as any)._selOffsets).toBeNull();
   });
 });
 

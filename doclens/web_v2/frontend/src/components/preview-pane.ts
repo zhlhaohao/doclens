@@ -511,9 +511,10 @@ export class PreviewPane extends LitElement {
   /** 锚点语义为「贴底」：目标行在对方视口无法贴顶时（下方内容不足一屏），
    *  改为对齐文档尾部视野——否则行号锚点在文末附近必然漂移。 */
   private _anchorAtBottom = false;
-  /** 模式切换的选区锚点（源行闭区间）：预览 DOM 选区 ↔ 编辑器行集合。
-   *  cancel/discard 回滚文本后不恢复（行号已失配）；换文档清空。 */
-  private _selLines: { start: number; end: number } | null = null;
+  /** 模式切换的选区锚点（源文本字符偏移，字符级）：预览侧块内比例映射 ↔
+   *  编辑器 selectionStart/End 精确落地。cancel/discard 回滚文本后不恢复
+   *  （偏移已失配）；换文档清空。 */
+  private _selOffsets: { start: number; end: number } | null = null;
   /** 切回预览时抑制 md-viewer 的命中行定位（避免与锚点恢复打架） */
   private _suppressLocate = false;
   /** 外部新文档到达（content prop 变化）→ 跳过一次锚点恢复 */
@@ -549,7 +550,7 @@ export class PreviewPane extends LitElement {
       this._suppressLocate = false;
       this._anchorLine = 1;
       this._anchorAtBottom = false;
-      this._selLines = null;
+      this._selOffsets = null;
     }
   }
 
@@ -592,7 +593,7 @@ export class PreviewPane extends LitElement {
         await editor.updateComplete;
         if (this._anchorAtBottom) editor.scrollToBottom();
         else editor.scrollToLine(this._anchorLine);
-        if (this._selLines) editor.selectLines(this._selLines.start, this._selLines.end);
+        if (this._selOffsets) editor.selectOffsets(this._selOffsets.start, this._selOffsets.end);
       }
       return;
     }
@@ -605,7 +606,7 @@ export class PreviewPane extends LitElement {
       await viewer.updateComplete;
       if (this._anchorAtBottom) viewer.scrollToBottom("auto");
       else viewer.scrollToSourceLine(this._anchorLine, "auto");
-      if (this._selLines) viewer.selectSourceLineRange(this._selLines.start, this._selLines.end);
+      if (this._selOffsets) viewer.selectSourceOffsets(this._selOffsets.start, this._selOffsets.end);
     }
     this._suppressLocate = false;
   }
@@ -798,12 +799,12 @@ export class PreviewPane extends LitElement {
 
   enterEdit() {
     // 捕获预览视口顶部的源行号作为锚点（行级精度；贴底时记录底部锚点）
-    // 与文本选区（起止块映射为源行区间），切换后两侧各自恢复
+    // 与文本选区（源文本字符偏移），切换后两侧各自恢复
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     if (viewer) {
       this._anchorLine = viewer.topSourceLine();
       this._anchorAtBottom = viewer.isAtBottom();
-      this._selLines = viewer.selectionLineRange();
+      this._selOffsets = viewer.selectionSourceOffsets();
     }
     this._mode = "edit";
   }
@@ -815,7 +816,7 @@ export class PreviewPane extends LitElement {
     if (editor) {
       this._anchorLine = editor.topLine();
       this._anchorAtBottom = editor.isAtBottom();
-      this._selLines = editor.selectionLineRange();
+      this._selOffsets = editor.selectionOffsets();
     }
     this._suppressLocate = true;
   }
@@ -828,7 +829,7 @@ export class PreviewPane extends LitElement {
       this._anchorLine = editor.topLine();
       this._anchorAtBottom = editor.isAtBottom();
     }
-    this._selLines = null;
+    this._selOffsets = null;
     this._suppressLocate = true;
     this._mode = "preview";
   };

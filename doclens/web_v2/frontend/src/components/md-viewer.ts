@@ -721,40 +721,127 @@ export class MdViewer extends LitElement {
     return shadowSel ?? window.getSelection();
   }
 
-  /** 当前 DOM 选区映射为源行范围（起止块 data-source-line，1-indexed）。
-   *  选区不在本组件渲染树内（如选到 header）或已 collapse 返回 null。
-   *  供 preview-pane 在预览→编辑切换时捕获选区锚点。 */
-  selectionLineRange(): { start: number; end: number } | null {
+  /** 块覆盖的源行闭区间（from = 锚行，to = 下一锚块起始行-1 / 文档末行）。 */
+  private _blockSourceLines(el: HTMLElement): { from: number; to: number } {
+    const from = Number(el.getAttribute("data-source-line")) || 1;
+    const blocks = this._anchorBlocks();
+    const idx = blocks.indexOf(el);
+    const next =
+      idx >= 0 && idx + 1 < blocks.length
+        ? Number(blocks[idx + 1].getAttribute("data-source-line")) || from
+        : this.content.split("\n").length + 1;
+    return { from, to: Math.max(from, next - 1) };
+  }
+
+  /** 行号（1-indexed）行首在 content 中的绝对字符偏移。 */
+  private _lineStartOffset(n: number): number {
+    const lines = this.content.split("\n");
+    let off = 0;
+    for (let i = 0; i < Math.min(n - 1, lines.length); i++) off += lines[i].length + 1;
+    return off;
+  }
+
+  /** 块内渲染文本总长（TreeWalker 累计文本节点；含 copy-btn 文本，
+   *  与捕获方向的 Range.toString 对称）。 */
+  private _domTextLength(el: HTMLElement): number {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let len = 0;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) len += (n as Text).length;
+    return len;
+  }
+
+  /** 块渲染文本第 k 字符的 DOM 位置（(node, offset)；超界钳块尾文本节点）。 */
+  private _domLocate(el: HTMLElement, k: number): { node: Node; offset: number } | null {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let remain = Math.max(0, k);
+    let last: Text | null = null;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n as Text;
+      if (remain <= t.length) return { node: t, offset: remain };
+      remain -= t.length;
+      last = t;
+    }
+    return last ? { node: last, offset: last.length } : null;
+  }
+
+  /** 块内源文本（覆盖行 join）；同时返回块首绝对偏移。 */
+  private _blockSourceText(el: HTMLElement): { abs: number; text: string } {
+    const { from, to } = this._blockSourceLines(el);
+    return {
+      abs: this._lineStartOffset(from),
+      text: this.content.split("\n").slice(from - 1, to).join("\n"),
+    };
+  }
+
+  /** 当前 DOM 选区 → 源文本字符偏移（与 md-editor 的 selectionStart/End
+   *  同一坐标系，字符级精度——修复行级映射的「选区放大」：选一个词切到
+   *  编辑器不再变成整块几十行）。块内偏移按 渲染文本/源文本 长度比例
+   *  映射，吸收行内语法（**、`、链接渲染后消失）的长度差。选区不在
+   *  渲染树内或已 collapse 返回 null。 */
+  selectionSourceOffsets(): { start: number; end: number } | null {
     const sel = this._shadowSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
     const range = sel.getRangeAt(0);
     const root = this.shadowRoot!;
-    const lineOf = (node: Node | null): number | null => {
+    const blockOf = (node: Node | null): HTMLElement | null => {
       for (let n: Node | null = node; n && n !== root; n = n.parentNode) {
-        const ls = (n as Element).getAttribute?.("data-source-line");
-        if (ls) return Number(ls);
+        const el = n as Element;
+        if (el.getAttribute?.("data-source-line")) return el as HTMLElement;
       }
       return null; // 走到 shadowRoot 边界仍未命中锚块
     };
-    const a = lineOf(range.startContainer);
-    const b = lineOf(range.endContainer);
-    if (a === null || b === null) return null;
-    return a <= b ? { start: a, end: b } : { start: b, end: a };
+    const a = blockOf(range.startContainer);
+    const b = blockOf(range.endContainer);
+    if (!a || !b) return null;
+    const toSrc = (block: HTMLElement, container: Node, off: number): number => {
+      const { abs, text } = this._blockSourceText(block);
+      let k = 0;
+      try {
+        const r = document.createRange();
+        r.setStart(block, 0);
+        r.setEnd(container, off);
+        k = r.toString().length;
+      } catch {
+        return abs; // 边界异常兜底：块首
+      }
+      const lDom = this._domTextLength(block);
+      if (lDom <= 0 || text.length <= 0) return abs;
+      const kSrc = Math.min(text.length, Math.round((k / lDom) * text.length));
+      return abs + kSrc;
+    };
+    const s = toSrc(a, range.startContainer, range.startOffset);
+    const e = toSrc(b, range.endContainer, range.endOffset);
+    return s <= e ? { start: s, end: e } : { start: e, end: s };
   }
 
-  /** 选中源行范围对应的渲染块区间（起块首 → 止块尾）。
-   *  供 preview-pane 在编辑→预览切换时恢复文本选择。 */
-  selectSourceLineRange(start: number, end: number) {
-    const a = this._findBlockAtLine(Math.min(start, end));
-    const b = this._findBlockAtLine(Math.max(start, end));
-    if (!a || !b) return;
+  /** 源文本字符偏移 → DOM 选区（比例映射逆运算，与
+   *  selectionSourceOffsets 尽力互逆；误差字符级）。 */
+  selectSourceOffsets(start: number, end: number) {
+    const text = this.content;
+    const lineOf = (x: number): number =>
+      (text.slice(0, Math.min(x, text.length)).match(/\n/g)?.length ?? 0) + 1;
+    const locate = (x: number): { node: Node; offset: number } | null => {
+      const block = this._findBlockAtLine(lineOf(x));
+      if (!block) return null;
+      const { abs, text: srcText } = this._blockSourceText(block);
+      const lDom = this._domTextLength(block);
+      if (lDom <= 0 || srcText.length <= 0) return null;
+      const k = Math.max(0, Math.min(srcText.length, x - abs));
+      return this._domLocate(
+        block,
+        Math.min(lDom, Math.round((k / srcText.length) * lDom)),
+      );
+    };
+    const s = locate(Math.min(start, end));
+    const e = locate(Math.max(start, end));
+    if (!s || !e) return;
     const sel = this._shadowSelection();
     if (!sel) return;
-    const range = document.createRange();
-    range.setStart(a, 0);
-    range.setEnd(b, b.childNodes.length);
+    const r = document.createRange();
+    r.setStart(s.node, s.offset);
+    r.setEnd(e.node, e.offset);
     sel.removeAllRanges();
-    sel.addRange(range);
+    sel.addRange(r);
   }
 
   /** 视口是否已滚到底部。供 preview-pane 的「底部锚点」语义：
