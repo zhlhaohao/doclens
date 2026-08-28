@@ -54,13 +54,15 @@ function onHashChange(): void {
 export const router = {
   /** 应用启动时调用一次：规范化初始 hash + 订阅 hashchange + 同步 store。
    *
-   * 重复调用安全（内部 `initialized` 标志保护）。
+   * fallbackView：hash 为空/非法时的回退视图（会话恢复的上次 tab）。
+   * URL 显式带 hash 时天然优先；恢复后 replaceState 物化为 #/<view>，
+   * 后续刷新走 URL 分支。重复调用安全（内部 `initialized` 标志保护）。
    */
-  init(): void {
+  init(fallbackView?: ViewId): void {
     if (initialized) return;
     initialized = true;
 
-    const view = normalizeView();
+    const view = parseHash(currentHash()) ?? fallbackView ?? DEFAULT_VIEW;
     const expected = VIEW_TO_HASH[view];
     if (currentHash() !== expected) {
       replaceHash(expected);

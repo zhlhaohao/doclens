@@ -232,8 +232,40 @@ export class FilesView extends LitElement {
     this._ensureLoaded("");
     this._loadPaneWidths();
     this._loadIndexedDocuments();
+    // 启动恢复：上次所在目录 + 选中文件（选择恢复，预览不自动拉）
+    void this._restoreSelection();
     // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
     window.addEventListener("cortex:watch-reindexed", this._onIndexUpdated);
+  }
+
+  /** 祖先前缀链："a/b/c" → ["", "a", "a/b", "a/b/c"]。 */
+  private _dirPrefixChain(dir: string): string[] {
+    const parts = dir.split("/").filter(Boolean);
+    return ["", ...parts.map((_, i) => parts.slice(0, i + 1).join("/"))];
+  }
+
+  /** 启动恢复（幂等）：展开并加载 currentDir 祖先链，让 file-tree 定位到
+   *  上次目录、file-list 显示其内容；目录失效回退根目录并清选择；已删
+   *  文件的幽灵选择按 live 列表过滤。预览 pane 不拉内容（用户点行触发）。
+   *  login 卸载重挂载后重跑无害：treeCache 命中时 _ensureLoaded no-op。 */
+  private async _restoreSelection() {
+    const { currentDir, selectedPaths } = store.getState().files;
+    if (!currentDir) return;
+    for (const p of this._dirPrefixChain(currentDir)) {
+      await this._ensureLoaded(p);
+      if (!(p in store.getState().files.treeCache)) {
+        // 目录已删/workdir 变更（_ensureLoaded 吞错，用 cache 缺 key 判定失效）
+        actions.setFilesState({ currentDir: "", selectedPaths: [], error: null });
+        return;
+      }
+      actions.expandDir(p);
+    }
+    const entries = store.getState().files.treeCache[currentDir] ?? [];
+    const live = new Set(entries.map((e) => e.path));
+    const kept = selectedPaths.filter((p) => live.has(p));
+    if (kept.length !== selectedPaths.length) {
+      actions.setFilesState({ selectedPaths: kept });
+    }
   }
 
   private async _loadIndexedDocuments() {

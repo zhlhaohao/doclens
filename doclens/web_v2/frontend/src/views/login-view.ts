@@ -127,7 +127,9 @@ export class LoginView extends LitElement {
     try {
       await login(this._pin);
       actions.setAuthState({ authenticated: true });
-      router.navigate("search");
+      // 回登录前的主视图（401 中途登出/恢复后登录不再强制回搜索页）；
+      // 直接打开 #/login 时 lastMain() 为默认视图，行为不变
+      router.navigate(router.lastMain());
     } catch (e) {
       this._pin = "";
       // 后端 401/429 的 detail 已是用户可读文案（"密码错误" / "已锁定，请 N 秒后再试"）

@@ -121,6 +121,25 @@ describe("router.init", () => {
     window.location.hash = "#/chat";
     await vi.waitFor(() => expect(store.getState().view).toBe("chat"));
   });
+
+  it("fallbackView：hash 为空时用作恢复视图并物化 URL", () => {
+    router.init("diary");
+    expect(window.location.hash).toBe("#/diary");
+    expect(store.getState().view).toBe("diary");
+  });
+
+  it("URL 显式 hash 优先于 fallbackView", () => {
+    window.history.replaceState(null, "", "#/chat");
+    router.init("diary");
+    expect(store.getState().view).toBe("chat");
+  });
+
+  it("非法 hash 也优先 fallbackView（覆盖 DEFAULT_VIEW）", () => {
+    window.history.replaceState(null, "", "#/foobar");
+    router.init("files");
+    expect(window.location.hash).toBe("#/files");
+    expect(store.getState().view).toBe("files");
+  });
 });
 
 describe("router.navigate", () => {

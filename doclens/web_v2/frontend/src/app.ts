@@ -2,6 +2,10 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "./state/store";
+import {
+  applySessionRestore,
+  installSessionMemoryWriter,
+} from "./state/session-persistence";
 import type { ViewId } from "./state/types";
 import { router } from "./router/router";
 import { getStatus } from "./api/status";
@@ -69,6 +73,7 @@ export class CortexApp extends LitElement {
 
   private _unsubscribe?: () => void;
   private _unsubAuth?: () => void;
+  private _unsubMemory?: () => void;
   /** 主界面轮询/状态是否已启动（登录前不启动，登录成功后由订阅触发一次） */
   private _mainStarted = false;
   /** keep-alive：已挂载过的 view 集合。首次访问某 view 才挂载，之后常驻 DOM
@@ -85,8 +90,13 @@ export class CortexApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // 会话恢复先于路由/写入器：恢复值落 store 后各 view 挂载时可见；
+    // 上次主视图作为 hash 为空时的路由 fallback（URL 显式 hash 优先）
+    const restored = applySessionRestore();
     // 启动 URL ↔ store 双向同步：初始 hash 规范化 + 订阅 hashchange
-    router.init();
+    router.init(restored?.view);
+    // 集中持久化四 tab 的最后选择（目录/选中/关键词/会话/子tab/日期/view）
+    this._unsubMemory = installSessionMemoryWriter();
     // 订阅 store —— view 切换时触发重新渲染
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
     // 401 统一处理：除登录页外，任何请求 401 → 跳登录页
@@ -150,6 +160,7 @@ export class CortexApp extends LitElement {
   disconnectedCallback() {
     this._unsubscribe?.();
     this._unsubAuth?.();
+    this._unsubMemory?.();
     setUnauthorizedHandler(null);
     // 停止 watcher 状态 SSE 订阅
     stopWatchStream();

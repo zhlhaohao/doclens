@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
+import { loadSessionMemory } from "../utils/session-memory";
 import type { Session, ChatMessage, Reference, ToolStep, PendingAsk } from "../state/types";
 import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
@@ -277,6 +278,9 @@ export class ChatView extends LitElement {
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
   @state() private historySessions: Session[] = [];
+  /** 会话列表高亮 id：重启恢复的「上次会话」（纯展示，不拉消息流）；
+   *  进入会话后跟随真实 id，返回 initial 清空。 */
+  @state() private _highlightSessionId: string | null = null;
   @state() private _clearing = false;
   @state() private previewOpen = false;
   @state() private previewContent = "";
@@ -306,6 +310,8 @@ export class ChatView extends LitElement {
       actions.setPendingSession(null);
       this._loadSession(pending);
     }
+    // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）
+    this._highlightSessionId = loadSessionMemory().chat?.sessionId ?? null;
     this._consumePendingSkillChat();
   }
 
@@ -498,6 +504,7 @@ export class ChatView extends LitElement {
   private _backToInitial() {
     this._resetPreview();
     this._activeAsk = null;
+    this._highlightSessionId = null; // 「新对话」返回后不残留旧高亮
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
   }
@@ -519,6 +526,7 @@ export class ChatView extends LitElement {
   private async _loadSession(s: Session) {
     this._resetPreview();
     this._activeAsk = null;
+    this._highlightSessionId = s.id;
     actions.setChatState({
       state: "focus",
       currentSession: s,
@@ -772,6 +780,7 @@ export class ChatView extends LitElement {
             type="chat"
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
+            .activeId=${this._highlightSessionId}
             @select=${this._onHistorySelect}
             @clear=${this._onClearHistory}>
           </history-list>

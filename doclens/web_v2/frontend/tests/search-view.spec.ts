@@ -393,3 +393,32 @@ describe("<search-view> grep mode routing", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("<search-view> 启动恢复：关键词回填不自动搜索", () => {
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    resetStore(store);
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("store.search.query 恢复值回填输入框，且不触发 /api/search", async () => {
+    // 模拟 applySessionRestore 已写入 query（state 保持 initial）
+    actions.setSearchState({ query: "量子" });
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ sessions: [] }), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const el = await fixture(html`<search-view></search-view>`) as SearchView;
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 20));
+    expect((el as any).localQuery).toBe("量子"); // 输入框草稿回填
+    const searchCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]) === "/api/search");
+    expect(searchCalls.length).toBe(0); // 不自动搜索
+  });
+});
