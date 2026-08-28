@@ -12,7 +12,48 @@ from fastapi.responses import FileResponse, JSONResponse
 from doclens import __version__ as CORTEX_VERSION
 from doclens.web_v2.api.errors import register_error_handlers
 
+# 后端进程启动时刻（模块导入时）：/api/health 返回给关于弹窗——
+# 测试者据此确认后端重启过（version 相同时仍有新旧进程之别）。
+from datetime import datetime, timezone
+
+_STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
 STATIC_DIR = Path(__file__).parent / "static"
+
+# 后端源码目录（editable/源码运行 = 仓库源码；pip 安装 = site-packages 副本）
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SOURCE_DIRS = [
+    _REPO_ROOT / "doclens",
+    _REPO_ROOT / "treesearch",
+    _REPO_ROOT / "planify",
+]
+# 开发模式 = 源码树运行（仓库根有 pyproject.toml）。pip 安装的
+# site-packages 副本无 pyproject → 发行版。关于页据此只显示版本号、
+# 裁剪调试信息（前端构建 / bundle / 代码状态）。
+_DEV_MODE = (_REPO_ROOT / "pyproject.toml").exists()
+
+
+def _code_mtime() -> str:
+    """后端 .py 源码的最后修改时间（doclens/treesearch/planify 全量扫描）。
+
+    与启动时间对比即可回答「后端跑的是不是最新代码」：
+    启动晚于修改 = 已加载；启动早于修改 = 改了代码没重启（editable
+    install 改源码立即生效的前提是重启进程）。每次 health 请求实时
+    扫描（~百个文件的 stat，ms 级），能反映打开关于页那一刻的状态。
+    发行版（site-packages）mtime = 安装时刻，恒早于启动 → 恒为已加载。
+    """
+    latest = 0.0
+    try:
+        for d in _SOURCE_DIRS:
+            for py in d.rglob("*.py"):
+                m = py.stat().st_mtime
+                if m > latest:
+                    latest = m
+    except OSError:
+        pass
+    if latest <= 0:
+        return "?"
+    return datetime.fromtimestamp(latest, tz=timezone.utc).isoformat(timespec="seconds")
 
 
 def _enable_treesearch_console_logging() -> None:
@@ -119,7 +160,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health():
-        return {"ok": True, "version": CORTEX_VERSION}
+        return {
+            "ok": True,
+            "version": CORTEX_VERSION,
+            "dev": _DEV_MODE,
+            # 调试字段仅开发模式返回（发行版 mtime=安装时刻，无意义）
+            **({"started_at": _STARTED_AT, "code_mtime": _code_mtime()} if _DEV_MODE else {}),
+        }
 
     # 前端 SPA 静态文件（仅当 static/ 存在时挂载；详见 Task 29）
     assets_dir = STATIC_DIR / "assets"

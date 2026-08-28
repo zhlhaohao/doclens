@@ -199,6 +199,19 @@ describe("<app-bar> reindex menu item", () => {
     expect(labels.some((l) => l.includes("强制重建索引"))).toBe(true);
   });
 
+  it("renders 关于 menu item and clicking opens about-dialog", async () => {
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = el.shadowRoot?.querySelector('[data-testid="about-item"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    const about = el.shadowRoot?.querySelector("about-dialog") as HTMLElement & { open: boolean };
+    expect(about?.open).toBe(false);
+    btn.click();
+    await elementUpdated(el);
+    expect(about.open).toBe(true);
+  });
+
   it("clicking reindex menu opens confirm dialog (store)", async () => {
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
     (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
