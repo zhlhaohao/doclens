@@ -689,3 +689,39 @@ describe("<md-viewer> 行级锚点（预览↔编辑切换视野一致）", () =
     expect(flash?.getAttribute("data-source-line")).toBe("3");
   });
 });
+
+describe("<md-viewer> selectCharAtViewportCenter（WebView 视野中央选字锚点）", () => {
+  it("在视野中央块文本中部造单字符选区，selectionSourceOffsets 可捕获", async () => {
+    const md = "# A\n\n" + Array.from({ length: 30 }, (_, i) => `第${i}行内容`).join("\n") + "\n";
+    const el = await fixture(html`<md-viewer content=${md}></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    // stub 布局：h1 顶行；大段 p(line3) 覆盖视野中央
+    (el as any).getBoundingClientRect = () => ({ top: 0, height: 400, bottom: 400, left: 0, right: 800, width: 800, x: 0, y: 0, toJSON: () => ({}) });
+    const nodes = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>("[data-source-line]"));
+    (nodes[1] as any).getBoundingClientRect = () => ({ top: 40, height: 1000, bottom: 1040, left: 0, right: 800, width: 800, x: 0, y: 40, toJSON: () => ({}) });
+    // jsdom 的 Selection addRange 半残（isCollapsed 不更新）：mock 可控 fake
+    const ranges: Range[] = [];
+    const fakeSel = {
+      rangeCount: 0,
+      isCollapsed: false,
+      getRangeAt: () => ranges[0],
+      removeAllRanges: () => { ranges.length = 0; fakeSel.rangeCount = 0; },
+      addRange: (r: Range) => { ranges.push(r); fakeSel.rangeCount = 1; },
+    };
+    vi.spyOn(el as any, "_shadowSelection").mockReturnValue(fakeSel as unknown as Selection);
+    const ok = el.selectCharAtViewportCenter();
+    expect(ok).toBe(true);
+    expect(ranges.length).toBe(1);
+    expect(ranges[0].toString().length).toBe(1); // 单字符选区
+    // 建立的选区能被捕获为源偏移（起始 < 结束 = 1 字符量级）
+    const sel = el.selectionSourceOffsets();
+    expect(sel).not.toBeNull();
+    expect(sel!.end - sel!.start).toBeLessThanOrEqual(4); // 比例映射误差内
+  });
+
+  it("无锚块/无文本时静默返回 false", async () => {
+    const el = await fixture(html`<md-viewer content=""></md-viewer>`) as MdViewer;
+    await el.updateComplete;
+    expect(el.selectCharAtViewportCenter()).toBe(false);
+  });
+});

@@ -191,3 +191,25 @@ describe("<md-editor> 选区保持（源文本字符偏移 ↔ selectionStart/En
     expect(el.selectionOffsets()).toEqual({ start: 2, end: 7 });
   });
 });
+
+describe("<md-editor> selectOffsets reveal（WebView 原生 reveal-selection）", () => {
+  it("默认（reveal=false）focus 后恢复 scrollTop", async () => {
+    const el = await makeFixture("a\nbb\nccc\ndd");
+    const ta = el.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!;
+    ta.scrollTop = 100;
+    el.selectOffsets(2, 5);
+    expect(ta.scrollTop).toBe(100);
+  });
+
+  it("reveal=true 不恢复 scrollTop（保留 focus 原生滚动）", async () => {
+    const el = await makeFixture("a\nbb\nccc\ndd");
+    const ta = el.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!;
+    ta.scrollTop = 100;
+    el.selectOffsets(2, 5, true);
+    // jsdom 的 focus 不产生滚动：scrollTop 保持 focus 前的 100
+    // （真实浏览器中此处由原生 reveal 决定——测试仅验证「不回写」）
+    expect(ta.scrollTop).toBe(100);
+    expect(ta.selectionStart).toBe(2);
+    expect(ta.selectionEnd).toBe(5);
+  });
+});

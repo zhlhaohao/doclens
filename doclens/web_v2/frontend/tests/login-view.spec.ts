@@ -149,3 +149,25 @@ describe("<login-view> 移动键盘流", () => {
     expect(el.shadowRoot?.querySelectorAll(".dot.filled").length).toBe(1);
   });
 });
+
+describe("<login-view> 桌面自动提交边界", () => {
+  it("未满 6 位输入不触发提交", async () => {
+    const el = await mount(false);
+    const input = el.shadowRoot?.querySelector("input.pin-input") as HTMLInputElement;
+    input.value = "12345";
+    input.dispatchEvent(new Event("input"));
+    await elementUpdated(el);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(loginMock).not.toHaveBeenCalled();
+  });
+
+  it("输满含非数字的输入（过滤后不足 6 位）不提交", async () => {
+    const el = await mount(false);
+    const input = el.shadowRoot?.querySelector("input.pin-input") as HTMLInputElement;
+    input.value = "12345a";
+    input.dispatchEvent(new Event("input"));
+    await elementUpdated(el);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(loginMock).not.toHaveBeenCalled();
+  });
+});
