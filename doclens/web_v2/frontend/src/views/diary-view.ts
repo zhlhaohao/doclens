@@ -168,12 +168,16 @@ export class DiaryView extends LitElement {
   private async _init() {
     await this._loadToday();
     const today = this._diary.today || this._localToday();
-    // 回顾页默认显示昨天的成文日记（今天尚未总结，恒为空态）
-    const yesterday = shiftDate(today, -1);
-    actions.setDiaryState({ reviewDate: yesterday });
+    // reviewDate 优先沿用 store 已有值（启动恢复写入 / 用户已选日期——
+    // 附带修复 login 卸载重挂载后把用户已选日期重置为昨天）；空则默认
+    // 昨天（回顾页默认显示昨天的成文日记，今天尚未总结恒为空态）。
+    const reviewDate = this._diary.reviewDate || shiftDate(today, -1);
+    if (this._diary.reviewDate !== reviewDate) {
+      actions.setDiaryState({ reviewDate });
+    }
     await Promise.all([
-      this._loadReview(yesterday),
-      this._loadCalendar(formatMonth(parseLocalDate(yesterday))),
+      this._loadReview(reviewDate),
+      this._loadCalendar(formatMonth(parseLocalDate(reviewDate))),
     ]);
   }
 

@@ -71,6 +71,8 @@ export class HistoryList extends LitElement {
   @property() type?: "search" | "chat";
   /** 清空中状态：禁用按钮 + 文字变化 */
   @property({ type: Boolean }) clearing = false;
+  /** 高亮条目 id（重启恢复的「上次会话」纯展示高亮） */
+  @property({ attribute: false }) activeId: string | null = null;
 
   private _onClear() {
     if (this.clearing) return;
@@ -94,7 +96,7 @@ export class HistoryList extends LitElement {
       </div>
       ${this.sessions.length === 0
         ? html`<div class="empty">暂无历史${this.type === "search" ? "搜索" : "会话"}</div>`
-        : this.sessions.map((s) => html`<history-item .session=${s}></history-item>`)}
+        : this.sessions.map((s) => html`<history-item .session=${s} ?active=${s.id === this.activeId}></history-item>`)}
     `;
   }
 }

@@ -459,4 +459,59 @@ describe("files-view mobile filename search", () => {
     expect(store.getState().files.mobilePane).toBe("tree");
     document.body.removeChild(el);
   });
+
+  it("启动恢复：深层目录祖先链展开 + 幽灵选择过滤 + 预览不自动拉", async () => {
+    const entriesByDir: Record<string, { path: string; name: string; is_dir: boolean }[]> = {
+      "": [{ path: "docs", name: "docs", is_dir: true }],
+      docs: [{ path: "docs/arch", name: "arch", is_dir: true }],
+      "docs/arch": [
+        { path: "docs/arch/a.md", name: "a.md", is_dir: false },
+        { path: "docs/arch/b.md", name: "b.md", is_dir: false },
+      ],
+    };
+    (filesApi.list as ReturnType<typeof vi.fn>).mockImplementation(
+      (p: string) => Promise.resolve({ path: p, entries: entriesByDir[p] ?? [], total: 0 }),
+    );
+    // 模拟 applySessionRestore 已写入的选择（含一个幽灵文件）
+    actions.setFilesState({
+      currentDir: "docs/arch",
+      selectedPaths: ["docs/arch/a.md", "docs/arch/ghost.md"],
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    await vi.waitFor(() => {
+      const f = store.getState().files;
+      expect(f.expandedPaths).toContain("docs");
+      expect(f.expandedPaths).toContain("docs/arch");
+      expect(f.selectedPaths).toEqual(["docs/arch/a.md"]); // ghost 被过滤
+    });
+    // 选择恢复但内容不拉：恢复路径未被 fetchPreview。
+    // （不断言全局 not-called：文件内存量失败用例泄漏的组件实例可能在
+    // 任意时刻触发无关的 mock 调用——单跑本用例时全局断言亦通过）
+    expect(fetchPreview).not.toHaveBeenCalledWith("docs/arch/a.md");
+    expect(fetchPreview).not.toHaveBeenCalledWith("docs/arch/ghost.md");
+    document.body.removeChild(el);
+  });
+
+  it("启动恢复：目录失效回退根目录并清选择", async () => {
+    (filesApi.list as ReturnType<typeof vi.fn>).mockImplementation(
+      (p: string) => p === ""
+        ? Promise.resolve({ path: "", entries: [], total: 0 })
+        : Promise.reject(new Error("not found")),
+    );
+    actions.setFilesState({
+      currentDir: "gone/dir",
+      selectedPaths: ["gone/dir/a.md"],
+    });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    await vi.waitFor(() => {
+      const f = store.getState().files;
+      expect(f.currentDir).toBe("");
+      expect(f.selectedPaths).toEqual([]);
+    });
+    document.body.removeChild(el);
+  });
 });

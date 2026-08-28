@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { fixture, html } from "@open-wc/testing";
 import "../src/components/diary-record-panel";
 import "../src/components/diary-review-panel";
+import "../src/views/diary-view";
 import type { DiaryRecordPanel } from "../src/components/diary-record-panel";
 import type { DiaryReviewPanel } from "../src/components/diary-review-panel";
 import type { DiaryEntry } from "../src/state/types";
+import { store, actions, INITIAL_STATE } from "../src/state/store";
 
 const rawEntry: DiaryEntry = {
   date: "2026-08-01",
@@ -168,5 +170,54 @@ describe("diary-review-panel", () => {
     const navBtns = [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".nav-btn")];
     expect(navBtns[0].disabled).toBe(false); // 前一天可用
     expect(navBtns[1].disabled).toBe(true);  // 后一天禁用（已是今天）
+  });
+});
+describe("diary-view 启动恢复：reviewDate 让位逻辑", () => {
+  let originalFetch: typeof fetch;
+  let entryCalls: string[];
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    entryCalls = [];
+    global.fetch = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes("/api/diary/today")) {
+        return new Response(JSON.stringify({ today: "2026-08-28", entry: null }), {
+          status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (/\/api\/diary\/entry\?/.test(u)) {
+        entryCalls.push(new URL(u, "http://x").searchParams.get("date") ?? "");
+        return new Response(JSON.stringify({ date: "2026-08-20", deleted: false, fragments: [] }), {
+          status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ month: "2026-08", dates: [] }), {
+        status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+    // 完整重置 store（resetStore 不含 diary slice）
+    store.setState({ ...INITIAL_STATE });
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("store 已有 reviewDate（恢复值）→ 用恢复日期而非昨天", async () => {
+    actions.setDiaryState({ reviewDate: "2026-08-20" });
+    const el = document.createElement("diary-view");
+    document.body.appendChild(el);
+    await (el as any).updateComplete;
+    await new Promise((r) => setTimeout(r, 30));
+    document.body.removeChild(el);
+    expect(entryCalls).toContain("2026-08-20");
+    expect(entryCalls).not.toContain("2026-08-27"); // 不是默认昨天
+  });
+
+  it("reviewDate 为空 → 默认昨天（today-1）", async () => {
+    const el = document.createElement("diary-view");
+    document.body.appendChild(el);
+    await (el as any).updateComplete;
+    await new Promise((r) => setTimeout(r, 30));
+    document.body.removeChild(el);
+    expect(entryCalls).toContain("2026-08-27");
   });
 });

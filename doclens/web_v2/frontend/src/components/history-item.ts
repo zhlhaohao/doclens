@@ -21,6 +21,14 @@ export class HistoryItem extends LitElement {
     :host(:hover) {
       background: var(--cortex-surface-muted);
     }
+    /* 上次会话高亮（重启恢复的纯展示态，与 diary 子 tab active 视觉一致） */
+    :host([active]) {
+      background: var(--cortex-primary-soft);
+    }
+    :host([active]) .name {
+      color: var(--cortex-primary);
+      font-weight: 500;
+    }
     :host(:last-child) {
       border-bottom: none;
     }
@@ -56,6 +64,8 @@ export class HistoryItem extends LitElement {
   `;
 
   @property({ attribute: false }) session: Session | null = null;
+  /** 上次会话高亮（重启恢复态；非当前打开的会话） */
+  @property({ type: Boolean, reflect: true }) active = false;
 
   private _select() {
     if (!this.session) return;

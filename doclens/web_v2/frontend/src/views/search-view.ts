@@ -174,6 +174,11 @@ export class SearchView extends LitElement {
       actions.setPendingSession(null);
       this._loadSession(pending);
     }
+    // 启动恢复：上次提交的关键词回填输入框（从 store 读——恢复值已由
+    // applySessionRestore 写入；不自动搜索，用户点「搜索」才执行）
+    if (!this.localQuery) {
+      this.localQuery = store.getState().search.query || "";
+    }
   }
 
   private _loadResultsPaneWidth() {
