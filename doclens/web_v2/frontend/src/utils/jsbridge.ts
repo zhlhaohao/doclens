@@ -262,8 +262,10 @@ function asPhotoItem(p: PickPhotosResult["photos"][number]): { base64: string; m
   return p;
 }
 
-/** 回调等待上限（ms）：超时说明原生插件没注册/没回调（文档 §7「调用无任何反应」） */
-const CALLBACK_TIMEOUT_MS = 15000;
+/** 拍照/选图回调等待上限（ms）——不能 15s：用户取景、翻选相册都可能
+ *  远超 15s（实测报告：拍照稍久即误报超时），只做挂死兜底（原生没
+ *  注册/没回调；与 upload/download 同策略 10 分钟） */
+const CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * 拍照（webview 内）：resolve File（时间戳文件名）；用户取消 resolve null；
@@ -276,7 +278,7 @@ export function takePhotoAsFile(): Promise<File | null> {
       if (settled) return;
       settled = true;
       reject(new JsbridgePhotoError(-1,
-        "原生15秒无回调：App 内可能未注册 takePhoto 插件（需 Android 仓库 2026-08-20 后的构建）"));
+        "原生10分钟无回调：App 内可能未注册 takePhoto 插件（需 Android 仓库 2026-08-20 后的构建）"));
     }, CALLBACK_TIMEOUT_MS);
     const done = <T,>(fn: (v: T) => void) => (v: T) => {
       if (settled) return;
@@ -313,7 +315,7 @@ export function pickPhotoAsFile(): Promise<File | null> {
       if (settled) return;
       settled = true;
       reject(new JsbridgePhotoError(-1,
-        "原生15秒无回调：App 内可能未注册 pickPhotos 插件（需 Android 仓库 2026-08-20 后的构建）"));
+        "原生10分钟无回调：App 内可能未注册 pickPhotos 插件（需 Android 仓库 2026-08-20 后的构建）"));
     }, CALLBACK_TIMEOUT_MS);
     const done = <T,>(fn: (v: T) => void) => (v: T) => {
       if (settled) return;
