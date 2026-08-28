@@ -78,16 +78,28 @@ export class DiaryRecordPanel extends LitElement {
     .photo-btn:hover { background: var(--cortex-surface-muted); }
     .photo-btn:disabled { opacity: 0.5; cursor: default; }
 
-    /* 待上传照片：备注输入条 */
+    /* 待上传照片：两行布局——预览+备注一行，操作按钮一行右对齐。
+     *  单行布局在手机上输入框仅剩 ~130px（图 72 + 两按钮 + 间距），
+     *  备注基本不可用；两行后输入框占满剩余宽度。 */
     .pending-photo {
       margin-top: var(--cortex-space-3, 12px);
       display: flex;
-      gap: var(--cortex-space-3, 12px);
-      align-items: center;
+      flex-direction: column;
+      gap: var(--cortex-space-2, 8px);
       padding: var(--cortex-space-3, 12px);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg, 16px);
       background: var(--cortex-surface);
+    }
+    .pending-main {
+      display: flex;
+      gap: var(--cortex-space-3, 12px);
+      align-items: center;
+    }
+    .pending-actions {
+      display: flex;
+      gap: var(--cortex-space-2, 8px);
+      justify-content: flex-end;
     }
     .pending-photo img {
       width: 72px;
@@ -548,14 +560,18 @@ export class DiaryRecordPanel extends LitElement {
 
       ${this._pendingFile ? html`
         <div class="pending-photo">
-          <img src=${this._pendingPreviewUrl} alt="待上传照片" />
-          <input class="caption" placeholder="给照片加条备注（可选）" maxlength="200" />
-          <button class="confirm-btn" ?disabled=${this.submitting} @click=${this._confirmPending}>
-            ${this.submitting ? "上传中…" : "上传"}
-          </button>
-          <button class="cancel-btn" title="取消" @click=${this._cancelPending}>
-            <doclens-icon name="x" style="font-size:18px"></doclens-icon>
-          </button>
+          <div class="pending-main">
+            <img src=${this._pendingPreviewUrl} alt="待上传照片" />
+            <input class="caption" placeholder="给照片加条备注（可选）" maxlength="200" />
+          </div>
+          <div class="pending-actions">
+            <button class="confirm-btn" ?disabled=${this.submitting} @click=${this._confirmPending}>
+              ${this.submitting ? "上传中…" : "上传"}
+            </button>
+            <button class="cancel-btn" title="取消" @click=${this._cancelPending}>
+              <doclens-icon name="x" style="font-size:18px"></doclens-icon>
+            </button>
+          </div>
         </div>` : null}
 
       ${fragments.length > 0
