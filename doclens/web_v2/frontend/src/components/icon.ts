@@ -58,6 +58,7 @@ import userIcon from "lucide-static/icons/user.svg?raw";
 import logOutIcon from "lucide-static/icons/log-out.svg?raw";
 import sendIcon from "lucide-static/icons/send.svg?raw";
 import listTreeIcon from "lucide-static/icons/list-tree.svg?raw";
+import infoIcon from "lucide-static/icons/info.svg?raw";
 import plusIcon from "lucide-static/icons/plus.svg?raw";
 import minusIcon from "lucide-static/icons/minus.svg?raw";
 
@@ -107,6 +108,7 @@ const ICONS: Record<string, string> = {
   "log-out": logOutIcon,
   send: sendIcon,
   "list-tree": listTreeIcon,
+  info: infoIcon,
   plus: plusIcon,
   minus: minusIcon,
 };

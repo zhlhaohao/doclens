@@ -6,6 +6,7 @@ import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
 import "./watch-changes-dialog";
+import "./about-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
@@ -173,6 +174,8 @@ export class AppBar extends LitElement {
   @state() private _showLogout = false;
   /** watch 变化对话框开关（点击 watch 徽标打开） */
   @state() private _watchDialogOpen = false;
+  /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
+  @state() private _aboutOpen = false;
   private _unsubStore?: () => void;
 
   private _onWatchReindexed: (e: Event) => void = (e: Event) => {
@@ -216,6 +219,12 @@ export class AppBar extends LitElement {
   private _onWatchMenuClick() {
     this._menuOpen = false;
     this._watchDialogOpen = true;
+  }
+
+  /** 菜单「关于」：打开构建版本对话框（测试时确认前后端均为最新构建）。 */
+  private _onAboutMenuClick() {
+    this._menuOpen = false;
+    this._aboutOpen = true;
   }
 
   private _onScopeSelect(scope: SettingsScope) {
@@ -357,6 +366,12 @@ export class AppBar extends LitElement {
               <span class="label">刷新</span>
             </span>
           </button>
+          <button class="menu-item" type="button" data-testid="about-item" @click=${this._onAboutMenuClick}>
+            <doclens-icon class="icon" name="info"></doclens-icon>
+            <span class="text">
+              <span class="label">关于</span>
+            </span>
+          </button>
           ${this._showSaveAndRevert ? html`
             <button class="menu-item" type="button" @click=${this._onRevertClick}>
               <doclens-icon class="icon" name="rotate-ccw"></doclens-icon>
@@ -380,6 +395,10 @@ export class AppBar extends LitElement {
         .open=${this._watchDialogOpen}
         @close=${() => { this._watchDialogOpen = false; }}
       ></watch-changes-dialog>
+      <about-dialog
+        .open=${this._aboutOpen}
+        @close=${() => { this._aboutOpen = false; }}
+      ></about-dialog>
     `;
   }
 }
