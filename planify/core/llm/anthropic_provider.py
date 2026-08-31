@@ -1,14 +1,16 @@
 """Anthropic 原生 Provider。
 
 包装 anthropic SDK，事件/响应直通归一化。
+同步 chat/stream 与异步 achat/astream 共享全部转换逻辑；async 客户端
+惰性初始化（同步-only 调用方零开销）。
 """
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 import httpx
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 
 from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolResultBlock, ToolUseBlock
 
@@ -29,9 +31,36 @@ class AnthropicProvider:
         if base_url:
             kwargs["base_url"] = base_url
         self._client = Anthropic(**kwargs)
+        self._aclient: AsyncAnthropic | None = None
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
+
+    def _ensure_async_client(self) -> AsyncAnthropic:
+        """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
+        if self._aclient is None:
+            http_client = httpx.AsyncClient(verify=False)
+            kwargs: dict[str, Any] = {"api_key": self.api_key, "http_client": http_client}
+            if self.base_url:
+                kwargs["base_url"] = self.base_url
+            self._aclient = AsyncAnthropic(**kwargs)
+        return self._aclient
+
+    def _request_kwargs(
+        self,
+        messages: list[dict],
+        system: str,
+        tools: list[Tool],
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        """chat/stream/achat/astream 共用的请求参数（含 prompt caching 断点）。"""
+        return {
+            "model": self.model,
+            "system": self._system_blocks(system),
+            "messages": self._mark_cache_tail(messages),
+            "tools": self._tools_with_cache_breakpoint(tools),
+            "max_tokens": max_tokens,
+        }
 
     def chat(
         self,
@@ -46,14 +75,7 @@ class AnthropicProvider:
         在客户端直接抛 ValueError("Streaming is required ...")，请求根本
         没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
         """
-        tools_payload = self._tools_with_cache_breakpoint(tools)
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "system": self._system_blocks(system),
-            "messages": self._mark_cache_tail(messages),
-            "tools": tools_payload,
-            "max_tokens": max_tokens,
-        }
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
         try:
             response = self._client.messages.create(**kwargs)
         except ValueError as e:
@@ -61,9 +83,67 @@ class AnthropicProvider:
                 raise
             with self._client.messages.stream(**kwargs) as stream:
                 response = stream.get_final_message()
+        return self._response_to_llm(response)
+
+    def stream(
+        self,
+        messages: list[dict],
+        system: str,
+        tools: list[Tool],
+        max_tokens: int = 8000,
+    ) -> Iterator[StreamEvent]:
+        """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        with self._client.messages.stream(**kwargs) as stream:
+            for event in stream:
+                normalized = self._event_from_anthropic(event)
+                if normalized is not None:
+                    yield normalized
+
+    async def achat(
+        self,
+        messages: list[dict],
+        system: str,
+        tools: list[Tool],
+        max_tokens: int = 8000,
+    ) -> LLMResponse:
+        """单次非流式调用（async 客户端，不阻塞事件循环）。
+
+        与 chat() 同一套兜底：非流式预估超时被 SDK 拒发时降级流式聚合。
+        """
+        client = self._ensure_async_client()
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        try:
+            response = await client.messages.create(**kwargs)
+        except ValueError as e:
+            if "Streaming is required" not in str(e):
+                raise
+            async with client.messages.stream(**kwargs) as stream:
+                response = await stream.get_final_message()
+        return self._response_to_llm(response)
+
+    async def astream(
+        self,
+        messages: list[dict],
+        system: str,
+        tools: list[Tool],
+        max_tokens: int = 8000,
+    ) -> AsyncIterator[StreamEvent]:
+        """流式调用（async 客户端），事件转换与同步版共用。"""
+        client = self._ensure_async_client()
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        async with client.messages.stream(**kwargs) as stream:
+            async for event in stream:
+                normalized = self._event_from_anthropic(event)
+                if normalized is not None:
+                    yield normalized
+
+    @staticmethod
+    def _response_to_llm(response: Any) -> LLMResponse:
+        """SDK 响应 → 归一化 LLMResponse（chat/achat 共用）。"""
         content = [
             b
-            for b in (self._block_from_anthropic(x) for x in response.content)
+            for b in (AnthropicProvider._block_from_anthropic(x) for x in response.content)
             if b is not None
         ]
         return LLMResponse(
@@ -81,26 +161,6 @@ class AnthropicProvider:
                 ),
             },
         )
-
-    def stream(
-        self,
-        messages: list[dict],
-        system: str,
-        tools: list[Tool],
-        max_tokens: int = 8000,
-    ) -> Iterator[StreamEvent]:
-        """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
-        with self._client.messages.stream(
-            model=self.model,
-            system=self._system_blocks(system),
-            messages=self._mark_cache_tail(messages),
-            tools=self._tools_with_cache_breakpoint(tools),
-            max_tokens=max_tokens,
-        ) as stream:
-            for event in stream:
-                normalized = self._event_from_anthropic(event)
-                if normalized is not None:
-                    yield normalized
 
     def count_tokens(self, text: str) -> int:
         """粗估 token 数（每 4 字符 1 token）。"""

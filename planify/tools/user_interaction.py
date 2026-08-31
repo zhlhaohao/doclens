@@ -316,6 +316,12 @@ def bind_user_interaction_handlers(
             # 等待用户响应
             response = await waiter.wait_for_response(request_id, timeout=300.0)
 
+            # 中断传播：停止生成时 waiter 主动唤醒，返回中断说明（agent 在
+            # 下一个检查点退出，不再干等 300s 超时）
+            if response.get("interrupted"):
+                logger.info(f"[ask_user] 等待被中断: {request_id}")
+                return "用户中断了本次提问（生成已停止）"
+
             # 根据输入类型处理响应
             if input_type == "confirm":
                 confirmed = response.get("confirmed", False)
@@ -373,6 +379,10 @@ def bind_user_interaction_handlers(
         try:
             # 等待用户响应
             response = await waiter.wait_for_response(request_id, timeout=300.0)
+
+            if response.get("interrupted"):
+                logger.info(f"[user_confirm] 等待被中断: {request_id}")
+                return "用户中断了本次确认（生成已停止）"
 
             confirmed = response.get("confirmed", default_yes)
             result = "用户确认: 是" if confirmed else "用户确认: 否"
@@ -455,6 +465,15 @@ def bind_ask_user_question_handler(
             response = await waiter.wait_for_response(
                 request_id, timeout=ASK_TIMEOUT_SECONDS
             )
+            if response.get("interrupted"):
+                # 停止生成时 waiter 主动唤醒：返回中断说明，agent 在下一个
+                # 检查点退出——修复「ask 挂起期间点停止无效、干等 300s」缺口
+                result = json.dumps(
+                    {"error": "interrupted", "request_id": request_id},
+                    ensure_ascii=False,
+                )
+                logger.info("[ask_user_question] 等待被中断: %s", request_id)
+                return result
             answers = response.get("answers")
             if not isinstance(answers, list):
                 # 响应结构异常：原样回传，让模型看到真实数据
