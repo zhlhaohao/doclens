@@ -14,12 +14,24 @@ import secrets
 import sqlite3
 import threading
 import ulid as _ulid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
+
+
+def _parse_db_ts(value: str) -> datetime:
+    """DB 时间戳 → aware UTC。
+
+    历史数据混存两种格式（POST /api/sessions 写 aware，旧 find_or_create/
+    update_count_and_time 写 naive），naive/aware 直接比较会抛 TypeError
+    （GET /api/sessions 合并排序 500 的根因）。此处统一归一：naive 视为
+    UTC 补 tzinfo，aware 原样返回。
+    """
+    dt = datetime.fromisoformat(value)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 class SessionType(str, Enum):
@@ -134,7 +146,7 @@ class SessionsStore:
         mode 仅对 search 有意义；旧记录与 chat 的 mode 为 NULL，COALESCE 视作 'keyword'，
         使 keyword 与 NULL 不互相误并、grep 与 keyword 不合并。
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
@@ -157,7 +169,7 @@ class SessionsStore:
                     title=row["title"],
                     preview=preview,
                     mode=row["mode"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
+                    created_at=_parse_db_ts(row["created_at"]),
                     updated_at=now,
                     message_count=row["message_count"],
                 )
@@ -174,7 +186,12 @@ class SessionsStore:
             )
 
     def append_item(self, item: SessionItem) -> None:
-        now = (item.created_at or datetime.utcnow()).isoformat()
+        # 调用方未显式传时间时取当前 aware UTC；传入 naive 一并归一，
+        # 保证库内 session_items.created_at 全为 aware 格式
+        ts = item.created_at or datetime.now(timezone.utc)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        now = ts.isoformat()
         with self._lock, self._conn() as conn:
             conn.execute(
                 """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
@@ -188,7 +205,7 @@ class SessionsStore:
                 """UPDATE sessions
                    SET message_count = ?, updated_at = ?
                    WHERE id = ?""",
-                (message_count, datetime.utcnow().isoformat(), session_id),
+                (message_count, datetime.now(timezone.utc).isoformat(), session_id),
             )
 
     def append_chat_turn_raw(
@@ -206,7 +223,7 @@ class SessionsStore:
 
         seq 在同一事务内按 MAX(seq) 续排，与前端 PATCH 写入无冲突。
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
                 "SELECT COALESCE(MAX(seq), -1) FROM session_items WHERE session_id = ?",
@@ -278,7 +295,7 @@ class SessionsStore:
         return [
             SessionItem(
                 session_id=r["session_id"], seq=r["seq"], kind=r["kind"],
-                payload=r["payload"], created_at=datetime.fromisoformat(r["created_at"]),
+                payload=r["payload"], created_at=_parse_db_ts(r["created_at"]),
             )
             for r in rows
         ]
@@ -362,8 +379,8 @@ class SessionsStore:
             title=row["title"],
             preview=row["preview"],
             mode=row["mode"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
+            created_at=_parse_db_ts(row["created_at"]),
+            updated_at=_parse_db_ts(row["updated_at"]),
             message_count=row["message_count"],
         )
 
