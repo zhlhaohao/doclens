@@ -48,7 +48,7 @@ pip install -e ".[dev]"
 | Pydantic + pydantic-settings | 配置管理（.env 环境变量） |
 | TreeSearch | 索引引擎（SQLite FTS5 + BM25） |
 | Watchdog | 文件监控（后台检测变化） |
-| Planify | AI Agent 框架（Anthropic API 集成） |
+| Planify | AI Agent 框架（LLMProvider 协议，Anthropic / OpenAI 兼容双后端） |
 | Rich | 终端格式化（语法高亮、链接） |
 | Jieba | 中日韩分词器 |
 | uvicorn | ASGI 服务器 |
@@ -197,25 +197,65 @@ treesearch/
 ```
 
 ### planify/ - AI Agent 框架
+
+> 详细架构分析见 `planify/docs/ARCHITECTURE.md`（分层/调用链/技术债清单）。
+
 ```
 planify/
-├── cli.py                   # CLI 入口
-├── cli_history.py           # 命令历史
-├── main.py                 # 主入口
-├── prompts.py              # Prompt 模板
+├── bootstrap.py            # 装配入口（SessionManager 单例 + 依赖注册）
+├── cli.py                  # 流式 CLI 入口（当前主力）
+├── cli_history.py          # 命令历史
+├── main.py                 # 旧版同步 REPL 入口
+├── prompts.py              # System Prompt 模板（按 agent_type 分支）
 ├── agent/
-│   └── runner.py           # Agent 运行器
+│   └── runner.py           # 同步 Agent 主循环（服务旧 REPL）
+├── context/
+│   └── compact.py          # 两级上下文压缩（microcompact / auto_compact）
 ├── core/
-│   ├── client.py           # LLM 客户端
-│   ├── config.py           # 配置
-│   ├── encoding.py         # 编码处理
-│   └── session.py         # 会话管理
+│   ├── client.py           # 遗留客户端初始化（死代码，勿用）
+│   ├── config.py           # 配置（.env 多级加载 + 宿主注入双通路）
+│   ├── encoding.py         # Windows GBK/UTF-8 编码处理
+│   ├── logging_config.py   # 日志 + 首启工作区初始化
+│   ├── session.py          # Session 组件包（数据层）
+│   ├── session_manager.py  # 会话生命周期 / 组件装配层（单例）
+│   └── llm/                # LLM Provider 抽象层
+│       ├── provider.py     # LLMProvider 协议（chat/stream/count_tokens）
+│       ├── types.py        # 归一化消息/工具/流事件类型
+│       ├── factory.py      # create_provider 工厂（按 protocol 选后端）
+│       ├── presets.py      # provider 配置解析
+│       ├── anthropic_provider.py       # Anthropic 后端（prompt caching）
+│       ├── openai_compat_provider.py   # OpenAI 兼容后端
+│       ├── tool_translator.py          # Anthropic↔OpenAI 工具格式翻译
+│       └── errors.py       # LLM 异常层级（retryable 标志）
 ├── managers/
-│   ├── task_manager.py     # 任务管理
-│   ├── teammate_manager.py  # 团队成员管理
-│   └── todo_manager.py     # Todo 管理
-└── messaging/
-    └── message_bus.py      # 消息总线
+│   ├── background_manager.py # 后台 shell 命令（线程 + 通知队列）
+│   ├── task_manager.py     # 持久化任务板（.tasks/*.json，跨 agent 认领）
+│   ├── teammate_manager.py # teammate 线程管理（独立 agent loop）
+│   └── todo_manager.py     # 内存 Todo（单 agent 私有）
+├── messaging/
+│   └── message_bus.py      # 文件级 per-recipient 收件箱（.team/inbox/）
+├── skills/
+│   ├── access_state.py     # 技能加载状态（contextvars 门禁）
+│   └── skill_loader.py     # SKILL.md 扫描/加载（两段式 prompt 注入）
+├── streaming/
+│   ├── runner.py           # StreamingAgent 异步主循环（主力路径）
+│   ├── emitter.py          # EventEmitter 实现（SSE/Queue/CLI/TUI）
+│   ├── waiter.py           # 用户响应等待器（全局单例）
+│   └── types.py            # 事件类型 / 协议 / StreamingConfig
+├── subagent/
+│   └── runner.py           # 一次性子代理（task 工具，≤30 轮）
+└── tools/
+    ├── registry.py         # 工具注册表（build_tool_registry + 外部注入）
+    ├── basic.py            # bash/powershell/read/write/edit（safe_path）
+    ├── web.py              # web_search（Provider 服务端工具）
+    ├── webfetch.py         # 网页抓取（trafilatura → Playwright）
+    ├── user_interaction.py # ask_user* 定义（运行时绑 emitter/waiter）
+    ├── team_tools.py       # 团队协作工具（spawn/send_message 等）
+    ├── protocols.py        # shutdown/plan_approval 协议工具（非 typing.Protocol）
+    ├── file_tasks.py       # 任务板工具（转发 TaskManager）
+    ├── weather_tool.py     # 天气工具入口
+    ├── baidu_weather.py    # 百度地图天气 API
+    └── lunar.py            # 农历/节气/节日
 ```
 
 ## 工作目录（跨 worktree）

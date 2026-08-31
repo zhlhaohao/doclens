@@ -1158,7 +1158,7 @@ def _cli_webfetch(args, config, idx):
 
 
 def _cli_gui(args, config, idx):
-    """Handle `cortex gui` — launch Gradio Web UI."""
+    """Handle `cortex gui` — launch FastAPI Web UI."""
     from planify.core.logging_config import setup_logging
     setup_logging()
 
