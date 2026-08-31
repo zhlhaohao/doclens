@@ -1,6 +1,18 @@
-"""Chat SSE 专用 EventEmitter — 收集流式文本供 /api/chat SSE 端点消费。
+"""Chat SSE 专用 EventEmitter — 收集流式事件并直推 SSE 队列。
 
-从旧 cortex/web/emitter.py 内联而来，移除对 Gradio 的依赖。
+双职责：
+1. 积累（tool_calls 配对回填、正文 text_parts、pending_asks）——供
+   chat.py 完成后的参考资料策展与原始轮次落库使用；
+2. 运输（emit 即 asyncio.Queue.put_nowait）——与 StreamingAgent 跑在
+   同一个 ASGI 事件循环上，事件发生处直接入队，天然保序，
+   无需旧版的「生成线程 + _feed 轮询 diff」桥接。
+
+token 不实时推（缓冲到 done 后整体推策展文本）——与旧版一致的
+展示取舍：正文要过参考资料策展重写，边流边推会造成内容跳变。
+
+ask_user_question 事件（input_type="questions"）收集到 pending_asks
+并直推 SSE "ask" 事件；其余 ask_user 形态（旧工具）在 GUI 工具集中
+已被过滤，正常不会到达这里，到达时记录告警。
 """
 
 import logging
@@ -12,24 +24,22 @@ from planify.streaming.types import StreamEvent, StreamEventType
 logger = logging.getLogger(__name__)
 
 
-class GradioEventEmitter:
-    """
-    收集流式事件到缓冲区，供 chat SSE generator 读取。
+class ChatEventEmitter:
+    """收集 + 直推：emit 在事件循环上被 await 调用，put_nowait 安全。"""
 
-    不直接打印，而是将文本增量和工具信息追加到内部缓冲区。
-    chat.py 的生成器函数定时读取缓冲区内容来产出 SSE token。
-
-    ask_user_question 事件（input_type="questions"）收集到 pending_asks，
-    由 _feed 转发为 SSE "ask" 事件；其余 ask_user 形态（旧工具）在 GUI
-    工具集中已被过滤，正常不会到达这里，到达时记录告警。
-    """
-
-    def __init__(self):
+    def __init__(self, queue: Optional[Any] = None):
+        # queue: asyncio.Queue，属主与 emit 调用方同为 ASGI 主 loop
+        self.queue = queue
         self.text_parts: list[str] = []
         self.tool_calls: list[dict] = []
         self.pending_asks: list[dict] = []
         self.done: bool = False
         self.error: Optional[str] = None
+
+    def _push(self, ev: dict) -> None:
+        """事件直达 SSE 队列（emit 处同步入队，顺序与发生顺序一致）。"""
+        if self.queue is not None:
+            self.queue.put_nowait(ev)
 
     def get_full_text(self) -> str:
         """获取当前累积的全部文本"""
@@ -58,11 +68,18 @@ class GradioEventEmitter:
 
         elif event.event_type == StreamEventType.TOOL_CALL:
             if event.data.get("is_complete", False):
-                self.tool_calls.append({
+                call = {
                     "tool_use_id": event.data.get("tool_use_id", ""),
                     "name": event.data.get("name", ""),
                     "input": event.data.get("input", {}),
                     "_t0": time.monotonic(),
+                }
+                self.tool_calls.append(call)
+                self._push({
+                    "type": "tool_call",
+                    "tool_use_id": call["tool_use_id"],
+                    "name": call["name"],
+                    "input": call["input"],
                 })
 
         elif event.event_type == StreamEventType.TOOL_RESULT:
@@ -71,25 +88,26 @@ class GradioEventEmitter:
             output = event.data.get("output", "")
             is_error = event.data.get("is_error", False)
 
-            def _fill(tc: dict) -> None:
+            def _fill(tc: dict) -> int:
                 duration_ms = int((time.monotonic() - tc.pop("_t0", time.monotonic())) * 1000)
                 tc["tool_use_id"] = tool_use_id
                 tc["output"] = output
                 tc["is_error"] = is_error
                 tc["duration_ms"] = duration_ms
+                return duration_ms
 
             # 优先按 tool_use_id 匹配未回填的调用
             matched = False
             for tc in reversed(self.tool_calls):
                 if tc.get("tool_use_id") == tool_use_id and tool_use_id and "output" not in tc:
-                    _fill(tc)
+                    duration_ms = _fill(tc)
                     matched = True
                     break
             if not matched:
                 # 降级：按 name 匹配未回填的调用
                 for tc in reversed(self.tool_calls):
                     if tc.get("name") == name and "output" not in tc:
-                        _fill(tc)
+                        duration_ms = _fill(tc)
                         matched = True
                         break
             if not matched:
@@ -98,6 +116,16 @@ class GradioEventEmitter:
                     "tool_use_id": tool_use_id, "name": name,
                     "output": output, "is_error": is_error,
                 })
+                duration_ms = None
+
+            self._push({
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "name": name,
+                "output": output,
+                "is_error": is_error,
+                "duration_ms": duration_ms,
+            })
 
         elif event.event_type == StreamEventType.DONE:
             self.done = True
@@ -158,9 +186,15 @@ class GradioEventEmitter:
     ) -> None:
         # 结构化问答（input_type="questions"）：question 携带 JSON 化的 questions
         if input_type == "questions":
-            self.pending_asks.append({
+            ask_ev = {
                 "request_id": request_id,
                 "question": question,
+            }
+            self.pending_asks.append(ask_ev)
+            self._push({
+                "type": "ask",
+                "request_id": request_id,
+                "questions_json": question,
             })
             return
         # 旧工具形态不应出现在 GUI（工具集已过滤），兜底告警不吞细节

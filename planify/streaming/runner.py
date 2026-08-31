@@ -59,7 +59,7 @@ class StreamingAgent:
     流式代理类
 
     管理流式代理状态和执行循环。
-    使用 provider.stream() 实现流式输出（归一化事件）。
+    使用 provider.astream() 实现流式输出（归一化事件，async 客户端不阻塞事件循环）。
     """
 
     def __init__(
@@ -119,13 +119,15 @@ class StreamingAgent:
         self._tool_call_states: Dict[int, ToolCallState] = {}
 
         # 延迟导入压缩模块和提示词构建器（必需组件，导入失败应直接报错）
-        from ..context import estimate_tokens, microcompact, auto_compact
+        from ..context import estimate_tokens, microcompact, auto_compact, aauto_compact
         from ..context.compact import MICROCOMPACT_GATE_RATIO
         from ..prompts import SystemPromptBuilder
 
         self._estimate_tokens = estimate_tokens
         self._microcompact = microcompact
         self._auto_compact = auto_compact
+        # 事件循环上直跑必须用异步压缩（同步 chat 会阻塞整个 loop 数秒~数十秒）
+        self._aauto_compact = aauto_compact
         self._microcompact_gate_ratio = MICROCOMPACT_GATE_RATIO
         self._prompt_builder = SystemPromptBuilder()
 
@@ -286,12 +288,12 @@ class StreamingAgent:
                     ),
                 )
                 if self._estimate_tokens(messages) > self.config.compact_threshold:
-                    if self._auto_compact and self.session:
+                    if self._aauto_compact and self.session:
                         # 压缩 transcript 目录：session.config.transcript_dir 是
                         # .planify/transcript.json 文件路径（语义不符），统一用
                         # <workdir>/.transcripts/
                         transcript_dir = Path(self.session.config.workdir) / ".transcripts"
-                        compacted = self._auto_compact(
+                        compacted = await self._aauto_compact(
                             messages, self.provider, transcript_dir
                         )
                         # 必须就地替换本地循环列表，否则本轮后续循环仍用
@@ -337,9 +339,6 @@ class StreamingAgent:
 
                 # === LLM 流式调用 ===
                 stop_reason = await self._stream_llm_call(messages, system)
-
-                # 等待队列中的事件被处理（修复事件时序问题）
-                await asyncio.sleep(0.1)
 
                 # 检查停止原因
                 if stop_reason != "tool_use":
@@ -463,7 +462,7 @@ class StreamingAgent:
         """
         执行流式 LLM 调用。
 
-        使用 LLMProvider.stream() 归一化事件接口。
+        使用 LLMProvider.astream() 归一化事件接口（async 迭代）。
 
         Args:
             messages: 消息历史
@@ -501,8 +500,8 @@ class StreamingAgent:
         ]
 
         try:
-            # 通过 LLMProvider.stream() 归一化事件流
-            for event in self.provider.stream(
+            # 通过 LLMProvider.astream() 归一化事件流（async 客户端，不阻塞事件循环）
+            async for event in self.provider.astream(
                 messages=messages,
                 system=system,
                 tools=tool_defs,
@@ -530,14 +529,12 @@ class StreamingAgent:
                             name=event.tool_name or "",
                         )
                         block_tool_states[index] = self._tool_call_states[index]
-                        # 发射工具调用开始事件
-                        asyncio.create_task(
-                            self.emitter.emit_tool_call(
-                                tool_use_id=event.tool_use_id or "",
-                                name=event.tool_name or "",
-                                input_data={},
-                                is_complete=False,
-                            )
+                        # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
+                        await self.emitter.emit_tool_call(
+                            tool_use_id=event.tool_use_id or "",
+                            name=event.tool_name or "",
+                            input_data={},
+                            is_complete=False,
                         )
 
                 elif event_type == "content_block_delta":
@@ -549,9 +546,7 @@ class StreamingAgent:
                         current_text += text
                         block_text_parts.setdefault(index, []).append(text)
                         # 发射文本事件
-                        asyncio.create_task(
-                            self.emitter.emit_text(text, is_end=False)
-                        )
+                        await self.emitter.emit_text(text, is_end=False)
                     elif event.input_json_delta:
                         # 工具参数增量
                         if index in self._tool_call_states:
@@ -568,13 +563,11 @@ class StreamingAgent:
                         complete_input = state.get_complete_input()
 
                         # 发射工具调用完成事件
-                        asyncio.create_task(
-                            self.emitter.emit_tool_call(
-                                tool_use_id=state.tool_use_id,
-                                name=state.name,
-                                input_data=complete_input,
-                                is_complete=True,
-                            )
+                        await self.emitter.emit_tool_call(
+                            tool_use_id=state.tool_use_id,
+                            name=state.name,
+                            input_data=complete_input,
+                            is_complete=True,
                         )
                         assistant_content.append({
                             "type": "tool_use",
@@ -609,7 +602,7 @@ class StreamingAgent:
 
         # 发射文本结束事件（如果有文本）
         if current_text:
-            asyncio.create_task(self.emitter.emit_text("", is_end=True))
+            await self.emitter.emit_text("", is_end=True)
 
         self.logger.info(f"[StreamingAgent] LLM 调用完成: stop_reason={stop_reason}")
         return stop_reason

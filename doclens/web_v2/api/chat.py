@@ -2,9 +2,14 @@
 
 设计：
 1. 复用 CortexAgent.session（含 tools / tool_handlers）
-2. 独立线程流式跑 StreamingAgent（token/tool 实时推 SSE，「思考过程」可见）
+2. StreamingAgent 直接跑在本 ASGI 事件循环上（provider.astream 不阻塞
+   loop，无需生成线程/双 loop 桥接）：事件在发生处经 ChatEventEmitter
+   直推 asyncio.Queue，本生成器按序转 SSE——工具 trace 实时可见
 3. 完成后由 refs_curator 策展「## 参考资料」：AI 章节合规 → 保留精选列表
   （清洗+重编号对齐 [N]）；不合规 → 工具结果分级兜底 + toast（不重试 LLM）
+4. 停止/断开：request_stop set Event（agent 在流式检查点退出）+ 中断
+   hook 唤醒挂起的 ask 等待 + 取消 agent 任务——三层兜底，覆盖旧版
+   「ask 挂起期间停止无效」缺口
 """
 import asyncio
 import json
@@ -17,8 +22,10 @@ from sse_starlette.sse import EventSourceResponse
 
 from doclens.web_v2.chat_interrupt import (
     register_interrupt,
+    register_interrupt_hook,
     request_stop,
     unregister_interrupt,
+    unregister_interrupt_hook,
 )
 from doclens.web_v2.deps import get_agent
 from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
@@ -72,77 +79,71 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
-    queue: asyncio.Queue = asyncio.Queue()
-    main_loop = asyncio.get_running_loop()
+    from doclens.web_v2.api._chat_emitter import ChatEventEmitter
 
-    # 在主协程登记中断事件（在线程启动前完成，杜绝「stop 早于 register」竞态）。
+    queue: asyncio.Queue = asyncio.Queue()
+    emitter = ChatEventEmitter(queue)
+
+    # 在消费开始前登记中断（杜绝「stop 早于 register」竞态）。
     # session_id 为 None 时不登记（无法被 /chat/stop 寻址；前端总会传 DB session id）。
     session_key = session_id or None
     interrupt = register_interrupt(session_key) if session_key else threading.Event()
 
-    def _put(ev: dict) -> None:
-        """线程安全的 queue 入队（_feed 在子线程 loop 内，queue 属主是主 loop）。"""
-        main_loop.call_soon_threadsafe(queue.put_nowait, ev)
+    from planify.streaming.runner import StreamingAgent
+    from planify.streaming.types import StreamingConfig
+    from planify.streaming.waiter import get_global_waiter
+    from planify.tools import (
+        bind_ask_user_question_handler,
+        bind_user_interaction_handlers,
+    )
 
-    def _run_in_thread() -> None:
+    waiter = get_global_waiter()
+
+    def _interrupt_pending_asks() -> None:
+        """中断 hook：唤醒该会话挂起的 ask 等待（Event 检查点覆盖不到工具挂起期）。"""
+        for ask_ev in emitter.pending_asks:
+            request_id = ask_ev.get("request_id", "")
+            if request_id:
+                waiter.interrupt(request_id)
+
+    if session_key:
+        register_interrupt_hook(session_key, _interrupt_pending_asks)
+
+    bind_user_interaction_handlers(session.tool_handlers, emitter, waiter)
+    # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
+    # session 工具集过滤，此处无需绑定）
+    bind_ask_user_question_handler(session.tool_handlers, emitter, waiter)
+
+    sa = StreamingAgent(
+        client=session.client,
+        model=session.model,
+        tools=session.tools,
+        tool_handlers=session.tool_handlers,
+        emitter=emitter,
+        config=StreamingConfig(
+            compact_threshold=int(round(session.config.planify_context_window * 0.8)),
+            max_tokens=session.config.planify_max_tokens,
+        ),
+        waiter=waiter,
+        todo_manager=session.todo_mgr,
+        bg_manager=session.bg_mgr,
+        bus=session.bus,
+        skills_loader=session.skills,
+        logger_instance=session.logger,
+        session=session,
+        interrupt_event=interrupt,
+    )
+
+    async def _run_and_finalize() -> None:
+        """跑 agent + 完成后策展推送 + 落库（断开/取消时落库仍执行，与旧行为一致）。"""
         try:
-            from doclens.web_v2.api._chat_emitter import GradioEventEmitter
-            from planify.streaming.runner import StreamingAgent
-            from planify.streaming.types import StreamingConfig
-            from planify.streaming.waiter import get_global_waiter
-            from planify.tools import (
-                bind_ask_user_question_handler,
-                bind_user_interaction_handlers,
-            )
+            await sa.run_stream(history, message, session_id or session.session_id)
 
-            emitter = GradioEventEmitter()
-            # interrupt 由主协程 register_interrupt 创建并登记（见外层），闭包捕获。
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            async def _feed():
-                delivered_calls: set[int] = set()
-                delivered_results: set[int] = set()
-                delivered_asks: set[int] = set()
-                while True:
-                    # 工具事件实时推送（思考过程的工具调用 trace 可见）；
-                    # 正文 token 缓冲（不实时推），done 后用工具结果重写「## 参考资料」再整体推
-                    for i, tc in enumerate(emitter.tool_calls):
-                        if i not in delivered_calls:
-                            _put({
-                                "type": "tool_call",
-                                "tool_use_id": tc.get("tool_use_id", ""),
-                                "name": tc.get("name", ""),
-                                "input": tc.get("input", {}),
-                            })
-                            delivered_calls.add(i)
-                        if "output" in tc and i not in delivered_results:
-                            _put({
-                                "type": "tool_result",
-                                "tool_use_id": tc.get("tool_use_id", ""),
-                                "name": tc.get("name", ""),
-                                "output": tc.get("output", ""),
-                                "is_error": tc.get("is_error", False),
-                                "duration_ms": tc.get("duration_ms"),
-                            })
-                            delivered_results.add(i)
-                    # ask_user_question 悬置问题实时推送（前端渲染交互卡片，
-                    # 答案经 POST /api/ask/respond 回传 waiter 唤醒阻塞的 handler）
-                    for i, ask_ev in enumerate(emitter.pending_asks):
-                        if i not in delivered_asks:
-                            _put({
-                                "type": "ask",
-                                "request_id": ask_ev.get("request_id", ""),
-                                "questions_json": ask_ev.get("question", ""),
-                            })
-                            delivered_asks.add(i)
-                    if emitter.done:
-                        break
-                    await asyncio.sleep(0.05)
-                # done：策展参考资料章节。
-                # 技能会话 → 提取式（正文提路径+存在性校验重建章节，无 toast）；
-                # 普通会话 → 声明式（合规则保留精选列表清洗+重编号，
-                # 不合规则工具结果分级兜底，不再无条件全量重写，避免引文膨胀与 [N] 错位）
+            # done：策展参考资料章节。
+            # 技能会话 → 提取式（正文提路径+存在性校验重建章节，无 toast）；
+            # 普通会话 → 声明式（合规则保留精选列表清洗+重编号，
+            # 不合规则工具结果分级兜底，不再无条件全量重写，避免引文膨胀与 [N] 错位）
+            try:
                 if skill_session:
                     curated_text = curate_skill_references(
                         emitter.get_full_text(), session.session_workdir
@@ -166,42 +167,21 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                         len(emitter.tool_calls), curation.fallback, len(curation.paths),
                         bool(emitter.error),
                     )
-                # run_stream 在内部捕获 LLM 异常 → emit_error → emitter.error + done=True。
-                # 此处错误未抛出到 _run_in_thread 的 except，需手动透传给前端，
-                # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
-                if emitter.error:
-                    _put({"type": "error", "detail": emitter.error})
-                _put({"type": "token", "text": curated_text})
-                if curated_fallback:
-                    _put({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
+            except Exception as e:  # noqa: BLE001
+                # 策展失败降级为原文（不阻断 token 推送）
+                logger.exception("curate references failed: %s", e)
+                curated_text = emitter.get_full_text()
+                curated_fallback = False
 
-            sa = StreamingAgent(
-                client=session.client,
-                model=session.model,
-                tools=session.tools,
-                tool_handlers=session.tool_handlers,
-                emitter=emitter,
-                config=StreamingConfig(
-                    compact_threshold=int(round(session.config.planify_context_window * 0.8)),
-                    max_tokens=session.config.planify_max_tokens,
-                ),
-                waiter=get_global_waiter(),
-                todo_manager=session.todo_mgr,
-                bg_manager=session.bg_mgr,
-                bus=session.bus,
-                skills_loader=session.skills,
-                logger_instance=session.logger,
-                session=session,
-                interrupt_event=interrupt,
-            )
-            bind_user_interaction_handlers(session.tool_handlers, emitter, get_global_waiter())
-            # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
-            # session 工具集过滤，此处无需绑定）
-            bind_ask_user_question_handler(session.tool_handlers, emitter, get_global_waiter())
-            loop.run_until_complete(asyncio.gather(
-                sa.run_stream(history, message, session_id or session.session_id),
-                _feed(),
-            ))
+            # run_stream 在内部捕获 LLM 异常 → emit_error → emitter.error + done=True。
+            # 此处错误未抛出到本协程，需手动透传给前端，
+            # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
+            if emitter.error:
+                queue.put_nowait({"type": "error", "detail": emitter.error})
+            queue.put_nowait({"type": "token", "text": curated_text})
+            if curated_fallback:
+                queue.put_nowait({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
+        finally:
             # 持久化原始轮次（tool 链 + 模型原始输出），供下一轮 LLM 上下文回放。
             # 与展示层分离：前端另写 message_user/message_ai（策展文本），
             # get_chat_history 回放时优先 message_ai_raw。
@@ -226,23 +206,38 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     logger.warning(
                         "persist raw chat turn failed for %s: %s", session_key, e
                     )
-        except Exception as e:  # noqa: BLE001
-            logger.exception("chat thread error: %s", e)
-            _put({"type": "error", "detail": str(e)})
-        finally:
-            # 摘除中断事件（仅当表里仍是本线程的 event 才删，防「停→重发」竞态误删新流）
+            queue.put_nowait(None)  # 哨兵：SSE 生成器终结（无论成败）
+
+    agent_task = asyncio.create_task(_run_and_finalize())
+
+    try:
+        while True:
+            chunk = await queue.get()
+            if chunk is None:
+                break
+            yield chunk
+        # 哨兵已到：agent 收尾（落库/策展）完成或异常，透传未捕获异常
+        if agent_task.done() and not agent_task.cancelled():
+            exc = agent_task.exception()
+            if exc is not None:
+                logger.exception("chat task error: %s", exc)
+                yield {"type": "error", "detail": str(exc)}
+    finally:
+        if session_key:
+            unregister_interrupt(session_key, interrupt)
+            unregister_interrupt_hook(session_key, _interrupt_pending_asks)
+        if not agent_task.done():
+            # 消费端早退（断开/异常）：三层兜底停止 agent
+            # 1) Event → agent 在流式检查点退出
+            # 2) hook → 唤醒挂起的 ask 等待
+            # 3) cancel → CancelledError 沿 await 链传播（astream/工具 await）
             if session_key:
-                unregister_interrupt(session_key, interrupt)
-            _put(None)  # sentinel
-
-    t = threading.Thread(target=_run_in_thread, daemon=True)
-    t.start()
-
-    while True:
-        chunk = await queue.get()
-        if chunk is None:
-            break
-        yield chunk
+                request_stop(session_key)
+            agent_task.cancel()
+        try:
+            await agent_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
 
 
 @router.post("/chat")

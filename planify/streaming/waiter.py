@@ -4,11 +4,16 @@
 用户响应等待器
 
 实现用户通过 Web 界面提交响应的等待机制。
-使用 asyncio.Event 实现阻塞等待。
+使用 asyncio.Future（Deferred 模式）实现阻塞等待：唤醒与传值一步完成。
+
+跨线程安全：PendingRequest 记录属主 loop，submit/interrupt 一律经
+``loop.call_soon_threadsafe`` resolve——同步上下文（CLI 输入线程、
+ASGI handler）与非属主线程调用均安全，不依赖 GIL。
 """
 
 import asyncio
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -24,8 +29,14 @@ class PendingRequest:
     """待处理的用户请求"""
 
     request_id: str
-    event: asyncio.Event = field(default_factory=asyncio.Event)
-    response: Optional[Dict[str, Any]] = None
+    # future 与 loop 在 create_request 的 running loop 上创建/捕获，
+    # 供跨线程安全 resolve
+    future: Optional["asyncio.Future[Dict[str, Any]]"] = None
+    loop: Optional[asyncio.AbstractEventLoop] = None
+    # 一次性消费标记：submit/interrupt/cancel 互斥（先标记者生效）。
+    # 不在 submit 时摘除条目——等待方可能尚未开始 wait（submit 早于
+    # wait_for_response 的窗口），摘除会让等待方 KeyError。
+    consumed: bool = False
     created_at: float = field(default_factory=time.time)
 
 
@@ -43,7 +54,9 @@ class GlobalResponseWaiter:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._pending: Dict[str, PendingRequest] = {}
-            cls._instance._data_lock = asyncio.Lock()
+            # 线程锁统一保护 _pending 访问 + consumed 标记（跨线程调用方：
+            # CLI 输入线程 / ASGI handler / 后台线程；async 侧短临界区同样适用）
+            cls._instance._lock = threading.Lock()
         return cls._instance
 
     @classmethod
@@ -64,8 +77,13 @@ class GlobalResponseWaiter:
         if request_id is None:
             request_id = f"req_{uuid.uuid4().hex[:8]}"
 
-        async with self._data_lock:
-            self._pending[request_id] = PendingRequest(request_id=request_id)
+        loop = asyncio.get_running_loop()
+        with self._lock:
+            self._pending[request_id] = PendingRequest(
+                request_id=request_id,
+                future=loop.create_future(),
+                loop=loop,
+            )
 
         logger.debug(f"[Waiter] 创建等待请求: {request_id}")
         return request_id
@@ -83,13 +101,14 @@ class GlobalResponseWaiter:
             timeout: 超时时间（秒）
 
         Returns:
-            用户响应数据
+            用户响应数据（submit 侧写入 future 的 payload；
+            中断时为 {"interrupted": True}）
 
         Raises:
             TimeoutError: 等待超时
             KeyError: 请求不存在
         """
-        async with self._data_lock:
+        with self._lock:
             pending = self._pending.get(request_id)
 
         if pending is None:
@@ -98,30 +117,28 @@ class GlobalResponseWaiter:
         logger.debug(f"[Waiter] 开始等待响应: {request_id}, 超时: {timeout}s")
 
         try:
-            await asyncio.wait_for(pending.event.wait(), timeout=timeout)
+            await asyncio.wait_for(pending.future, timeout=timeout)
         except asyncio.TimeoutError:
-            # 清理超时的请求
-            async with self._data_lock:
+            # 清理超时的请求（与 submit 持同一把锁互斥：submit 先到则条目
+            # 已标 consumed，此处 pop 只是移除残留）
+            with self._lock:
                 self._pending.pop(request_id, None)
             logger.warning(f"[Waiter] 等待响应超时: {request_id}")
             raise TimeoutError(f"等待用户响应超时: {request_id}")
 
-        # 获取响应并清理
-        async with self._data_lock:
-            pending = self._pending.pop(request_id, None)
-
-        if pending is None:
-            raise KeyError(f"请求已被清理: {request_id}")
-
+        # 醒来后摘除（submit 只标记 consumed 不摘除，条目由等待方收尾）
+        with self._lock:
+            self._pending.pop(request_id, None)
         logger.info(f"[Waiter] 收到响应: {request_id}")
-        return pending.response or {}
+        return pending.future.result() or {}
 
     def submit_response(self, request_id: str, response: Dict[str, Any]) -> bool:
         """
-        提交用户响应（同步方法）。
+        提交用户响应（同步方法，可从任意线程/同步上下文调用）。
 
-        Note: 不使用 _data_lock，因为此方法需要被同步上下文（CLI）调用，
-        且 dict.get + 属性赋值在 CPython GIL 下是原子的。
+        一次性消费：consumed 标记互斥（重复提交/中断后提交均返回 False）；
+        条目不在此摘除（等待方可能尚未开始 wait），由等待方醒来后收尾；
+        resolve 经属主 loop 的 call_soon_threadsafe（同 loop 调用等价排队）。
 
         Args:
             request_id: 请求 ID
@@ -130,19 +147,48 @@ class GlobalResponseWaiter:
         Returns:
             是否成功提交
         """
-        pending = self._pending.get(request_id)
-        if pending is None:
-            logger.warning(f"[Waiter] 提交响应失败，请求不存在: {request_id}")
-            return False
+        with self._lock:
+            pending = self._pending.get(request_id)
+            if pending is None or pending.consumed:
+                logger.warning(f"[Waiter] 提交响应失败，请求不存在或已消费: {request_id}")
+                return False
+            pending.consumed = True
 
-        pending.response = response
-        pending.event.set()
+        pending.loop.call_soon_threadsafe(self._resolve, pending, response)
         logger.info(f"[Waiter] 响应已提交: {request_id}")
         return True
 
+    def interrupt(self, request_id: str) -> bool:
+        """
+        中断挂起的等待（停止生成/客户端断开时唤醒阻塞的 ask handler）。
+
+        等待方收到 {"interrupted": True}，由 handler 转成中断说明回填模型。
+
+        Args:
+            request_id: 请求 ID
+
+        Returns:
+            是否命中挂起中的请求
+        """
+        with self._lock:
+            pending = self._pending.get(request_id)
+            if pending is None or pending.consumed:
+                return False
+            pending.consumed = True
+
+        pending.loop.call_soon_threadsafe(self._resolve, pending, {"interrupted": True})
+        logger.info(f"[Waiter] 请求被中断: {request_id}")
+        return True
+
+    @staticmethod
+    def _resolve(pending: PendingRequest, response: Dict[str, Any]) -> None:
+        """在属主 loop 上完成 future（future 已被取消则跳过）。"""
+        if pending.future is not None and not pending.future.done():
+            pending.future.set_result(response)
+
     async def cancel_request(self, request_id: str) -> bool:
         """
-        取消等待请求。
+        取消等待请求（等待方收到 {"cancelled": True}）。
 
         Args:
             request_id: 请求 ID
@@ -150,36 +196,40 @@ class GlobalResponseWaiter:
         Returns:
             是否成功取消
         """
-        async with self._data_lock:
-            pending = self._pending.pop(request_id, None)
-
-        if pending is None:
-            return False
-
-        pending.event.set()
+        with self._lock:
+            pending = self._pending.get(request_id)
+            if pending is None or pending.consumed:
+                return False
+            pending.consumed = True
+        if pending.loop is not None:
+            pending.loop.call_soon_threadsafe(self._resolve, pending, {"cancelled": True})
         logger.debug(f"[Waiter] 请求已取消: {request_id}")
         return True
 
     async def cleanup_expired(self, max_age: float = 600.0) -> int:
         """
-        清理过期的等待请求。
+        清理过期的等待请求（等待方收到 {"error": "expired"}，不再干等超时）。
 
         Args:
             max_age: 最大存活时间（秒）
 
         Returns:
-            清理的请求数量
+            清理的请求数
         """
         now = time.time()
         expired = []
-
-        async with self._data_lock:
+        with self._lock:
             for request_id, pending in list(self._pending.items()):
                 if now - pending.created_at > max_age:
-                    expired.append(request_id)
+                    expired.append((request_id, pending))
                     del self._pending[request_id]
 
-        for request_id in expired:
+        # resolve 被清理的 future，等待方立刻拿到 expired 而非干等超时
+        for request_id, pending in expired:
+            if pending.loop is not None:
+                pending.loop.call_soon_threadsafe(
+                    self._resolve, pending, {"error": "expired"}
+                )
             logger.debug(f"[Waiter] 清理过期请求: {request_id}")
 
         return len(expired)
@@ -189,7 +239,7 @@ class GlobalResponseWaiter:
         return request_id in self._pending
 
     def get_pending_count(self) -> int:
-        """获取等待中的请求数量"""
+        """获取等待中的请求数"""
         return len(self._pending)
 
 
@@ -210,7 +260,7 @@ class SessionWaiter:
 
         Args:
             global_waiter: 全局等待器实例，默认使用单例
-            default_timeout: 默认超时时间
+            default_timeout: 默认超时时间（秒）
         """
         self._global = global_waiter or GlobalResponseWaiter.get_instance()
         self._default_timeout = default_timeout
