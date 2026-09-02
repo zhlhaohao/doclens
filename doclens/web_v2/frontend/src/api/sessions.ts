@@ -1,14 +1,17 @@
 import { request } from "./client";
 import type { Session } from "../state/types";
 
+/** 会话模式：search 用 "keyword" | "grep"；chat 技能会话用 "skill"（提取式引文策展） */
+export type SessionMode = "keyword" | "grep" | "skill";
+
 export interface CreateSessionResponse extends Pick<Session, "id" | "type" | "title" | "preview" | "mode"> {}
 
-export async function createSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: "keyword" | "grep" }): Promise<CreateSessionResponse> {
+export async function createSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: SessionMode }): Promise<CreateSessionResponse> {
   return request<CreateSessionResponse>("/api/sessions", { method: "POST", json: req });
 }
 
 /** 按 (type, title, mode) 原子地查找或新建会话；用于 search 历史去重。 */
-export async function findOrCreateSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: "keyword" | "grep" }): Promise<CreateSessionResponse> {
+export async function findOrCreateSession(req: { type: "search" | "chat"; title: string; preview?: string; mode?: SessionMode }): Promise<CreateSessionResponse> {
   return request<CreateSessionResponse>("/api/sessions/find-or-create", { method: "POST", json: req });
 }
 

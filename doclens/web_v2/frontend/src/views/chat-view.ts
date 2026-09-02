@@ -369,18 +369,19 @@ export class ChatView extends LitElement {
     if (!pending) return;
     actions.setPendingSkillChat(null); // 先消费，防重入
     if (this.viewState.state !== "initial") return;
-    await this._ensureSession(pending.title, pending.message);
+    await this._ensureSession(pending.title, pending.message, pending.isSkill ? "skill" : undefined);
     await this._sendMessage(pending.message, true);
   }
 
-  /** initial 态下创建新会话并转入 focus 态（用户气泡先行）。 */
-  private async _ensureSession(title: string, message: string): Promise<void> {
-    const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100) });
+  /** initial 态下创建新会话并转入 focus 态（用户气泡先行）。
+   *  mode="skill" 声明技能会话（后端据此切换提取式引文策展）。 */
+  private async _ensureSession(title: string, message: string, mode?: "skill"): Promise<void> {
+    const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100), mode });
     actions.setChatState({
       state: "focus",
       currentSession: {
         id: created.id, type: "chat", title: title.slice(0, 60),
-        preview: message.slice(0, 100), updated_at: new Date().toISOString(),
+        preview: message.slice(0, 100), mode, updated_at: new Date().toISOString(),
         message_count: 0,
       },
       messages: [{ role: "user", content: message }],

@@ -44,7 +44,7 @@ class SessionSummary(BaseModel):
     type: SessionType
     title: str
     preview: str
-    mode: Optional[str] = None  # 搜索模式：'keyword' | 'grep'（chat 为 None）
+    mode: Optional[str] = None  # search: 'keyword' | 'grep'；chat: 'skill'（技能会话，提取式引文策展）；其余 None
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
@@ -117,6 +117,26 @@ class SessionsStore:
                 cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
                 if "mode" not in cols:
                     conn.execute("ALTER TABLE sessions ADD COLUMN mode TEXT")
+                # 迁移：mode='skill' 上线前的存量技能会话——首条 message_user
+                # （按 seq 最小）以「[调用技能:」开头的 chat 会话补 mode。
+                # 幂等：已有非空 mode 或首条不匹配的不会被更新；新库无数据 no-op
+                conn.execute(
+                    """
+                    UPDATE sessions SET mode = 'skill'
+                    WHERE type = 'chat' AND (mode IS NULL OR mode = '')
+                      AND id IN (
+                          SELECT session_id FROM (
+                              SELECT session_id,
+                                     json_extract(payload, '$.content') AS content,
+                                     ROW_NUMBER() OVER (
+                                         PARTITION BY session_id ORDER BY seq
+                                     ) AS rn
+                              FROM session_items WHERE kind = 'message_user'
+                          )
+                          WHERE rn = 1 AND content LIKE '[调用技能:%'
+                      )
+                    """
+                )
 
     # ---- 写入 ----
 

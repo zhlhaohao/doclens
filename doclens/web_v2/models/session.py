@@ -11,7 +11,7 @@ class SessionCreateRequest(BaseModel):
     type: SessionType
     title: str = Field(min_length=1, max_length=200)
     preview: str = Field(default="", max_length=200)
-    mode: Optional[str] = None  # 搜索模式：'keyword' | 'grep'
+    mode: Optional[str] = None  # search: 'keyword' | 'grep'；chat: 'skill'（技能会话）
 
 
 class SessionAppendRequest(BaseModel):
