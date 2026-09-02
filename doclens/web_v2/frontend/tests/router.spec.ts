@@ -6,7 +6,7 @@ import {
   DEFAULT_VIEW,
 } from "../src/router/route-map";
 import { router } from "../src/router/router";
-import { store, INITIAL_STATE } from "../src/state/store";
+import { store, actions, INITIAL_STATE } from "../src/state/store";
 
 /** 测试夹具：每个用例前重置 router / location.hash / store 单例。 */
 function resetLocationHash() {
@@ -169,6 +169,20 @@ describe("router.navigate", () => {
     expect(viewSetCalls.length).toBe(0);
     expect(window.location.hash).toBe("#/search");
     setStateSpy.mockRestore();
+  });
+
+  it("resyncs store when store.view drifted from current hash", () => {
+    // 回归：业务代码绕过 router 直接 setView（如技能对话旧实现），hash 停在
+    // 原视图；之后点该 tab 时旧实现因 hash 未变提前 return，表现为无响应
+    router.init();
+    expect(window.location.hash).toBe("#/search");
+    actions.setView("chat");
+    expect(store.getState().view).toBe("chat");
+    expect(window.location.hash).toBe("#/search");
+
+    router.navigate("search");
+    expect(store.getState().view).toBe("search");
+    expect(window.location.hash).toBe("#/search");
   });
 
   it("supports browser back via history by leaving a trail", async () => {

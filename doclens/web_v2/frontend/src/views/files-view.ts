@@ -519,7 +519,10 @@ export class FilesView extends LitElement {
       isSkill: true,
     });
     actions.clearSelection();
-    actions.setView("chat");
+    // 必须走 router：hash 是 view 的唯一真相源。直接 actions.setView 会让
+    // hash 停留在 #/files，之后点 files tab 时 navigate() 因 hash 未变
+    // 提前 return，表现为「tab 点击无响应」
+    router.navigate("chat");
   }
 
   /** 拷贝选中项路径到剪贴板（相对 workdir，多选时每行一个）。 */
