@@ -316,6 +316,9 @@ class CortexAgent:
             planify_max_tokens=_max_tokens,
             poll_interval=config.get("poll_interval", 5),
             idle_timeout=config.get("idle_timeout", 60),
+            # 压缩 transcript 落到 .cortex/transcripts（上面已 mkdir）：
+            # .cortex 被索引器/FileWatcher 排除，杜绝落盘→watch→reindex 回路
+            compact_transcript_dir=transcript_dir,
         )
 
         session = Session(user_id="default", phone="", config=session_config)

@@ -109,6 +109,8 @@ def request_stop(session_id) -> bool:
 
 chat.py 在请求开始时注册 hook = `lambda: [waiter.interrupt(a["request_id"]) for a in emitter.pending_asks]`，结束注销。`/chat/stop` 与 SSE 断开两条路径都经 `request_stop` 走到 hook——**中断缺口修复**。
 
+> 2026-09-02 更新：hook 已改为 `waiter.interrupt_session(session_id)`——`PendingRequest` 携带 session_id（handler 经 contextvar 透传），会话维度的 pending 枚举由 waiter 自持，`emitter.pending_asks` 影子表废除。详见 `doclens/web_v2/docs/ARCHITECTURE-ask-loopback.md` §2.5。
+
 ### `planify/tools/user_interaction.py`
 
 `handle_ask_user_question` / `handle_ask_user` 的响应处理加 interrupted 分支（超时分支旁）：返回 `{"error": "interrupted", "request_id": ...}`。

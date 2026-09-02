@@ -1,14 +1,25 @@
 import { request, streamSSE } from "./client";
+import type { AskQuestionPayload } from "./ask";
 
 export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool_call"; tool_use_id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; name: string; output: string; is_error: boolean; duration_ms?: number }
-  | { type: "ask"; request_id: string; questions_json: string }
+  | { type: "ask"; request_id: string; questions: AskQuestionPayload[] }
   | { type: "references"; items: { path: string }[] }
   | { type: "toast"; level: "error" | "info" | "success"; detail: string }
   | { type: "done" }
   | { type: "error"; detail: string };
+
+/** 解析失败不中断流，但至少留 warning——契约错误不应双向隐形 */
+function parseData(eventName: string, raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (e) {
+    console.warn(`[chat] SSE ${eventName} 事件 data 解析失败，跳过:`, e);
+    return null;
+  }
+}
 
 export async function* chatStream(
   req: { message: string; session_id?: string },
@@ -16,44 +27,59 @@ export async function* chatStream(
 ): AsyncGenerator<ChatStreamEvent> {
   for await (const ev of streamSSE("/api/chat", req, signal)) {
     if (ev.event === "token") {
-      try { yield { type: "token", text: JSON.parse(ev.data).text }; } catch { /* skip */ }
+      const d = parseData("token", ev.data);
+      if (d) yield { type: "token", text: String(d.text ?? "") };
     } else if (ev.event === "tool_call") {
-      try {
-        const d = JSON.parse(ev.data);
-        yield { type: "tool_call", tool_use_id: d.tool_use_id, name: d.name, input: d.input ?? {} };
-      } catch { /* skip */ }
-    } else if (ev.event === "tool_result") {
-      try {
-        const d = JSON.parse(ev.data);
+      const d = parseData("tool_call", ev.data);
+      if (d) {
         yield {
-          type: "tool_result", tool_use_id: d.tool_use_id, name: d.name,
-          output: d.output ?? "", is_error: !!d.is_error, duration_ms: d.duration_ms,
+          type: "tool_call",
+          tool_use_id: String(d.tool_use_id ?? ""),
+          name: String(d.name ?? ""),
+          input: (d.input ?? {}) as Record<string, unknown>,
         };
-      } catch { /* skip */ }
+      }
+    } else if (ev.event === "tool_result") {
+      const d = parseData("tool_result", ev.data);
+      if (d) {
+        yield {
+          type: "tool_result",
+          tool_use_id: String(d.tool_use_id ?? ""),
+          name: String(d.name ?? ""),
+          output: String(d.output ?? ""),
+          is_error: !!d.is_error,
+          duration_ms: d.duration_ms as number | undefined,
+        };
+      }
     } else if (ev.event === "ask") {
-      try {
-        const d = JSON.parse(ev.data);
-        yield { type: "ask", request_id: d.request_id ?? "", questions_json: d.questions_json ?? "" };
-      } catch { /* skip */ }
+      const d = parseData("ask", ev.data);
+      if (d) {
+        // questions 为结构化数组直传（后端已校验），免二次 JSON.parse
+        yield {
+          type: "ask",
+          request_id: String(d.request_id ?? ""),
+          questions: (d.questions ?? []) as AskQuestionPayload[],
+        };
+      }
     } else if (ev.event === "references") {
-      try {
-        const d = JSON.parse(ev.data);
-        yield { type: "references", items: (d.items ?? []) as { path: string }[] };
-      } catch { /* skip */ }
+      const d = parseData("references", ev.data);
+      if (d) yield { type: "references", items: (d.items ?? []) as { path: string }[] };
     } else if (ev.event === "toast") {
-      try {
-        const d = JSON.parse(ev.data);
+      const d = parseData("toast", ev.data);
+      if (d) {
         yield {
           type: "toast",
           level: (d.level ?? "error") as "error" | "info" | "success",
           detail: String(d.detail ?? ""),
         };
-      } catch { /* skip */ }
+      }
     } else if (ev.event === "done") {
       yield { type: "done" };
     } else if (ev.event === "error") {
-      try { yield { type: "error", detail: JSON.parse(ev.data).detail }; }
-      catch { yield { type: "error", detail: "未知错误" }; }
+      const d = parseData("error", ev.data);
+      yield { type: "error", detail: String(d?.detail ?? "未知错误") };
+    } else {
+      console.warn(`[chat] 未知 SSE 事件类型，跳过: ${ev.event}`);
     }
   }
 }

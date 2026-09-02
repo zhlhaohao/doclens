@@ -68,92 +68,6 @@ class SSEEmitter(EventEmitter):
         elif event.event_type == StreamEventType.DONE:
             logger.info("[SSE] 发射完成事件")
 
-    async def emit_text(self, content: str, is_end: bool = False) -> None:
-        """发射文本事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TEXT,
-                data={"content": content, "is_end": is_end},
-            )
-        )
-
-    async def emit_tool_call(
-        self,
-        tool_use_id: str,
-        name: str,
-        input_data: Dict[str, Any],
-        is_complete: bool = False,
-    ) -> None:
-        """发射工具调用事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_CALL,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "input": input_data,
-                    "is_complete": is_complete,
-                },
-            )
-        )
-
-    async def emit_tool_result(
-        self,
-        tool_use_id: str,
-        name: str,
-        output: str,
-        is_error: bool = False,
-    ) -> None:
-        """发射工具结果事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_RESULT,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "output": output,
-                    "is_error": is_error,
-                },
-            )
-        )
-
-    async def emit_ask_user(
-        self,
-        request_id: str,
-        question: str,
-        input_type: str = "text",
-        options: Optional[List[Dict[str, str]]] = None,
-        default: Optional[str] = None,
-    ) -> None:
-        """发射用户输入请求事件"""
-        data: Dict[str, Any] = {
-            "request_id": request_id,
-            "question": question,
-            "input_type": input_type,
-        }
-        if options is not None:
-            data["options"] = options
-        if default is not None:
-            data["default"] = default
-
-        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
-
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
-        """发射完成事件"""
-        data: Dict[str, Any] = {"session_id": session_id}
-        if summary is not None:
-            data["summary"] = summary
-
-        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
-
-    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
-        """发射错误事件"""
-        data: Dict[str, Any] = {"error": error}
-        if code is not None:
-            data["code"] = code
-
-        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
-
     async def emit_heartbeat(self) -> None:
         """发射心跳事件"""
         await self.emit(StreamEvent(event_type=StreamEventType.HEARTBEAT))
@@ -222,104 +136,6 @@ class SSEEmitter(EventEmitter):
             except Exception as e:
                 logger.exception(f"[SSE] 事件流异常: {e}")
                 break
-
-
-class QueueEmitter(EventEmitter):
-    """
-    队列发射器
-
-    简化版发射器，只将事件放入队列，不处理 SSE 格式化。
-    适用于内部事件传递或测试。
-    """
-
-    def __init__(self):
-        """初始化队列发射器"""
-        self._queue: asyncio.Queue[StreamEvent] = asyncio.Queue()
-
-    async def emit(self, event: StreamEvent) -> None:
-        """发射事件到队列"""
-        await self._queue.put(event)
-
-    async def emit_text(self, content: str, is_end: bool = False) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TEXT,
-                data={"content": content, "is_end": is_end},
-            )
-        )
-
-    async def emit_tool_call(
-        self,
-        tool_use_id: str,
-        name: str,
-        input_data: Dict[str, Any],
-        is_complete: bool = False,
-    ) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_CALL,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "input": input_data,
-                    "is_complete": is_complete,
-                },
-            )
-        )
-
-    async def emit_tool_result(
-        self,
-        tool_use_id: str,
-        name: str,
-        output: str,
-        is_error: bool = False,
-    ) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_RESULT,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "output": output,
-                    "is_error": is_error,
-                },
-            )
-        )
-
-    async def emit_ask_user(
-        self,
-        request_id: str,
-        question: str,
-        input_type: str = "text",
-        options: Optional[List[Dict[str, str]]] = None,
-        default: Optional[str] = None,
-    ) -> None:
-        data: Dict[str, Any] = {
-            "request_id": request_id,
-            "question": question,
-            "input_type": input_type,
-        }
-        if options is not None:
-            data["options"] = options
-        if default is not None:
-            data["default"] = default
-        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
-
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
-        data: Dict[str, Any] = {"session_id": session_id}
-        if summary is not None:
-            data["summary"] = summary
-        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
-
-    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
-        data: Dict[str, Any] = {"error": error}
-        if code is not None:
-            data["code"] = code
-        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
-
-    def get_queue(self) -> asyncio.Queue[StreamEvent]:
-        """获取内部队列"""
-        return self._queue
 
 
 class CLIEventEmitter(EventEmitter):
@@ -469,88 +285,40 @@ class CLIEventEmitter(EventEmitter):
             self.waiter.submit_response(request_id, {"response": response})
 
     # 实现 EventEmitter 协议的便捷方法
-    async def emit_text(self, content: str, is_end: bool = False) -> None:
-        """发射文本事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TEXT,
-                data={"content": content, "is_end": is_end},
-            )
-        )
-
-    async def emit_tool_call(
-        self,
-        tool_use_id: str,
-        name: str,
-        input_data: Dict[str, Any],
-        is_complete: bool = False,
-    ) -> None:
-        """发射工具调用事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_CALL,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "input": input_data,
-                    "is_complete": is_complete,
-                },
-            )
-        )
-
-    async def emit_tool_result(
-        self,
-        tool_use_id: str,
-        name: str,
-        output: str,
-        is_error: bool = False,
-    ) -> None:
-        """发射工具结果事件"""
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_RESULT,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "output": output,
-                    "is_error": is_error,
-                },
-            )
-        )
-
-    async def emit_ask_user(
+    async def emit_ask_questions(
         self,
         request_id: str,
-        question: str,
-        input_type: str = "text",
-        options: Optional[List[Dict[str, str]]] = None,
-        default: Optional[str] = None,
+        questions: List[Dict[str, Any]],
     ) -> None:
-        """发射用户输入请求事件"""
-        data: Dict[str, Any] = {
-            "request_id": request_id,
-            "question": question,
-            "input_type": input_type,
-        }
-        if options is not None:
-            data["options"] = options
-        if default is not None:
-            data["default"] = default
-        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
+        """结构化问答的 CLI 兜底：逐问打印选项并读取编号/自由文本作答。
 
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
-        """发射完成事件"""
-        data: Dict[str, Any] = {"session_id": session_id}
-        if summary is not None:
-            data["summary"] = summary
-        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
-
-    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
-        """发射错误事件"""
-        data: Dict[str, Any] = {"error": error}
-        if code is not None:
-            data["code"] = code
-        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
+        （ask_user_question 默认只在 GUI 工具集注册；此处为兼容路径。）
+        提交格式与 GUI 一致：answers=[{question, selected, other}]。
+        """
+        answers = []
+        for q in questions:
+            print(
+                f"\n{self.colors.USER}{self.colors.BOLD}"
+                f"{q.get('header', '问题')}:{self.colors.RESET} {q.get('question', '')}"
+            )
+            options = q.get("options") or []
+            for i, opt in enumerate(options):
+                print(f"  {i + 1}. {opt.get('label', '')} — {opt.get('description', '')}")
+            prompt = "选择(可多选,逗号分隔)或直接输入 > " if q.get("multiSelect") else "选择编号或直接输入 > "
+            raw = input(prompt).strip()
+            selected: List[str] = []
+            other = None
+            if raw and all(part.strip().isdigit() for part in raw.split(",")):
+                for part in raw.split(","):
+                    idx = int(part.strip()) - 1
+                    if 0 <= idx < len(options):
+                        selected.append(options[idx].get("label", ""))
+            elif raw:
+                other = raw
+            answers.append(
+                {"question": q.get("question", ""), "selected": selected, "other": other}
+            )
+        self.waiter.submit_response(request_id, {"answers": answers})
 
 
 class TUIEventEmitter(EventEmitter):
@@ -615,79 +383,21 @@ class TUIEventEmitter(EventEmitter):
             if cb:
                 cb(event.data.get("error", "未知错误"))
 
-    async def emit_text(self, content: str, is_end: bool = False) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TEXT,
-                data={"content": content, "is_end": is_end},
-            )
-        )
-
-    async def emit_tool_call(
-        self,
-        tool_use_id: str,
-        name: str,
-        input_data: Dict[str, Any],
-        is_complete: bool = False,
-    ) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_CALL,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "input": input_data,
-                    "is_complete": is_complete,
-                },
-            )
-        )
-
-    async def emit_tool_result(
-        self,
-        tool_use_id: str,
-        name: str,
-        output: str,
-        is_error: bool = False,
-    ) -> None:
-        await self.emit(
-            StreamEvent(
-                event_type=StreamEventType.TOOL_RESULT,
-                data={
-                    "tool_use_id": tool_use_id,
-                    "name": name,
-                    "output": output,
-                    "is_error": is_error,
-                },
-            )
-        )
-
-    async def emit_ask_user(
+    async def emit_ask_questions(
         self,
         request_id: str,
-        question: str,
-        input_type: str = "text",
-        options: Optional[List[Dict[str, str]]] = None,
-        default: Optional[str] = None,
+        questions: List[Dict[str, Any]],
     ) -> None:
-        data: Dict[str, Any] = {
-            "request_id": request_id,
-            "question": question,
-            "input_type": input_type,
-        }
-        if options is not None:
-            data["options"] = options
-        if default is not None:
-            data["default"] = default
-        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
+        """结构化问答：路由到 on_ask_questions 回调（缺回调时告警不吞细节）。
 
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
-        data: Dict[str, Any] = {"session_id": session_id}
-        if summary is not None:
-            data["summary"] = summary
-        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
-
-    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
-        data: Dict[str, Any] = {"error": error}
-        if code is not None:
-            data["code"] = code
-        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
+        回调签名：on_ask_questions(request_id, questions)；答案由 TUI 层
+        经 waiter.submit_response 回传。
+        """
+        cb = self._callbacks.get("on_ask_questions")
+        if cb:
+            cb(request_id, questions)
+        else:
+            logger.warning(
+                "[TUIEventEmitter] 无 on_ask_questions 回调，结构化问答无法呈现: %s",
+                request_id,
+            )

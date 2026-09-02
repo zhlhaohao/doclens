@@ -29,6 +29,10 @@ class PendingRequest:
     """待处理的用户请求"""
 
     request_id: str
+    # 属主会话：run_stream 入口经 contextvar 注入，工具 handler 创建请求时
+    # 透传——供 interrupt_session 按会话枚举 pending（中断不再依赖
+    # emitter 侧的影子表）
+    session_id: str = ""
     # future 与 loop 在 create_request 的 running loop 上创建/捕获，
     # 供跨线程安全 resolve
     future: Optional["asyncio.Future[Dict[str, Any]]"] = None
@@ -64,12 +68,16 @@ class GlobalResponseWaiter:
         """获取单例实例"""
         return cls()
 
-    async def create_request(self, request_id: Optional[str] = None) -> str:
+    async def create_request(
+        self, request_id: Optional[str] = None, session_id: str = ""
+    ) -> str:
         """
         创建一个新的等待请求。
 
         Args:
             request_id: 可选的请求 ID，不提供则自动生成
+            session_id: 属主会话 ID（供 interrupt_session 按会话中断；
+                工具 handler 一般经 contextvar get_current_session_id() 透传）
 
         Returns:
             请求 ID
@@ -81,11 +89,12 @@ class GlobalResponseWaiter:
         with self._lock:
             self._pending[request_id] = PendingRequest(
                 request_id=request_id,
+                session_id=session_id,
                 future=loop.create_future(),
                 loop=loop,
             )
 
-        logger.debug(f"[Waiter] 创建等待请求: {request_id}")
+        logger.debug(f"[Waiter] 创建等待请求: {request_id} (session={session_id})")
         return request_id
 
     async def wait_for_response(
@@ -179,6 +188,39 @@ class GlobalResponseWaiter:
         pending.loop.call_soon_threadsafe(self._resolve, pending, {"interrupted": True})
         logger.info(f"[Waiter] 请求被中断: {request_id}")
         return True
+
+    def interrupt_session(self, session_id: str) -> int:
+        """
+        中断某会话的全部挂起等待（停止生成时唤醒该会话阻塞的 ask handler）。
+
+        会话作用域的 pending 索引是 waiter 的职责（waiter 是全局跨会话单例，
+        没有 session 维度时宿主只能维护影子表反向索引）。
+
+        Args:
+            session_id: 会话 ID；空串不匹配任何请求（安全 no-op）
+
+        Returns:
+            实际中断的请求数
+        """
+        if not session_id:
+            return 0
+        with self._lock:
+            targets = [
+                p for p in self._pending.values()
+                if p.session_id == session_id and not p.consumed
+            ]
+            for pending in targets:
+                pending.consumed = True
+
+        for pending in targets:
+            pending.loop.call_soon_threadsafe(
+                self._resolve, pending, {"interrupted": True}
+            )
+        if targets:
+            logger.info(
+                f"[Waiter] 会话中断: {session_id}, 唤醒 {len(targets)} 个挂起请求"
+            )
+        return len(targets)
 
     @staticmethod
     def _resolve(pending: PendingRequest, response: Dict[str, Any]) -> None:

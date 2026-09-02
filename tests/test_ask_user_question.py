@@ -96,7 +96,20 @@ def test_validate_rejects(bad, reason):
 # ---------- handler 契约（bind + waiter 链路） ----------
 
 class _StubEmitter:
-    """记录 emit_ask_user 调用的桩 emitter。"""
+    """记录 emit_ask_questions 调用的桩 emitter（一等协议）。"""
+
+    def __init__(self):
+        self.calls = []
+
+    async def emit_ask_questions(self, request_id, questions):
+        self.calls.append({
+            "request_id": request_id,
+            "questions": questions,
+        })
+
+
+class _LegacyStubEmitter:
+    """只实现旧协议 emit_ask_user 的桩 emitter（验证回退路径）。"""
 
     def __init__(self):
         self.calls = []
@@ -139,7 +152,31 @@ async def test_handler_returns_json_answer():
 
     payload = json.loads(result)
     assert payload["answers"][0]["selected"] == ["A（推荐）"]
-    # emit 走旧协议：input_type 判别 + question 携带 JSON
+    # emit 走一等协议：结构化 questions 数组直传（非 JSON 字符串）
+    assert emitter.calls[0]["questions"][0]["header"] == "方案"
+
+
+@pytest.mark.asyncio
+async def test_handler_legacy_emitter_fallback():
+    """emitter 未实现 emit_ask_questions 时回退旧协议（兼容第三方实现）。"""
+    from planify.tools.user_interaction import bind_ask_user_question_handler
+
+    waiter = _fresh_waiter()
+    emitter = _LegacyStubEmitter()
+    handlers = {}
+    bind_ask_user_question_handler(handlers, emitter, waiter)
+
+    async def _answer_later():
+        await asyncio.sleep(0.05)
+        rid = emitter.calls[0]["request_id"]
+        waiter.submit_response(rid, {"answers": []})
+
+    task = asyncio.ensure_future(_answer_later())
+    result = await handlers["ask_user_question"](questions=[_valid_question()])
+    await task
+
+    assert json.loads(result)["answers"] == []
+    # 回退路径：input_type 判别 + question 携带 JSON
     assert emitter.calls[0]["input_type"] == "questions"
     assert json.loads(emitter.calls[0]["question"])["questions"][0]["header"] == "方案"
 
@@ -223,3 +260,24 @@ async def test_waiter_timeout_cleanup():
         await waiter.wait_for_response("req_to1", timeout=0.05)
     # 超时后请求被清理：再次提交应失败
     assert waiter.submit_response("req_to1", {}) is False
+
+
+@pytest.mark.asyncio
+async def test_waiter_interrupt_session_scoped():
+    """interrupt_session 只中断指定会话的 pending，其他会话不受影响。"""
+    waiter = _fresh_waiter()
+    await waiter.create_request("req_s1a", session_id="s1")
+    await waiter.create_request("req_s1b", session_id="s1")
+    await waiter.create_request("req_s2", session_id="s2")
+
+    assert waiter.interrupt_session("s1") == 2
+
+    # s1 的两个请求收到 interrupted
+    assert (await waiter.wait_for_response("req_s1a", timeout=1))["interrupted"] is True
+    assert (await waiter.wait_for_response("req_s1b", timeout=1))["interrupted"] is True
+    # s2 未被波及：仍可正常提交
+    assert waiter.submit_response("req_s2", {"answers": []}) is True
+    assert await waiter.wait_for_response("req_s2", timeout=1) == {"answers": []}
+    # 空 session_id 安全 no-op；重复中断返回 0
+    assert waiter.interrupt_session("") == 0
+    assert waiter.interrupt_session("s1") == 0

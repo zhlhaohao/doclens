@@ -63,6 +63,10 @@ class StreamEvent:
       - block_type: content_block_start 时区分 "text" / "tool_use"
       - tool_use_id: tool_use block 的 id（在 content_block_start 时填充）
       - tool_name: tool_use block 的 name（在 content_block_start 时填充）
+      - usage: token 用量（Anthropic: message_start 带全量四字段、message_delta
+        带 output_tokens；OpenAI 兼容: include_usage 尾 chunk 归一化后挂在
+        message_delta）。键归一化为 input_tokens / output_tokens /
+        cache_read_input_tokens / cache_creation_input_tokens。
     """
 
     type: Literal[
@@ -81,3 +85,4 @@ class StreamEvent:
     block_type: Literal["text", "tool_use"] | None = None
     tool_use_id: str | None = None
     tool_name: str | None = None
+    usage: dict[str, int] | None = None

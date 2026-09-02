@@ -68,7 +68,7 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 ### 3. streaming 事件系统（`streaming/`）
 
 - `types.py`：`EventEmitter` 协议（`@runtime_checkable`）+ 7 种事件类型（TEXT / TOOL_CALL / TOOL_RESULT / ASK_USER / DONE / ERROR / HEARTBEAT）+ `StreamingConfig` + `ToolCallState`（累积 `input_json_delta` 片段，解析失败返回 `{"_parse_error": raw}` 而非 `{}`）
-- `emitter.py`：4 个实现——`SSEEmitter`（`asyncio.Queue` 生产者-消费者 + SSE 文本格式化，30s 心跳，`None` 哨兵关闭）、`QueueEmitter`、`CLIEventEmitter`（ask_user 直接 `input()`）、`TUIEventEmitter`（回调字典路由）；Web 侧另有 `ChatEventEmitter`（`doclens/web_v2/api/_chat_emitter.py`，缓冲收集器，供 chat.py 轮询搬运）
+- `emitter.py`：3 个实现——`SSEEmitter`（`asyncio.Queue` 生产者-消费者 + SSE 文本格式化，30s 心跳，`None` 哨兵关闭）、`CLIEventEmitter`（ask_user 直接 `input()`）、`TUIEventEmitter`（回调字典路由）；协议便捷方法（emit_text 等）在 `EventEmitter` 上有默认实现，实现类只需写 `emit()`；Web 侧另有 `ChatEventEmitter`（`doclens/web_v2/api/_chat_emitter.py`，缓冲收集器，供 chat.py 轮询搬运）
 - `waiter.py`：`GlobalResponseWaiter` 单例（`__new__` 单例）实现「agent 提问 → 用户回答」跨线程阻塞等待——`PendingRequest` 持 `asyncio.Event`，等待侧 `asyncio.wait_for`，提交侧同步 `submit_response()`（刻意不加锁靠 GIL，供 CLI/线程调用）
 - 关键取舍：`provider.stream()` 是**同步迭代器**，流式 runner 用普通 `for` 消费 + `asyncio.create_task` fire-and-forget 发射事件，循环后 `await asyncio.sleep(0.1)` 排空队列修时序；Web 侧用「子线程私有 loop + `call_soon_threadsafe`」桥接
 

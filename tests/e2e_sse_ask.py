@@ -130,7 +130,7 @@ def t2_ask_roundtrip() -> dict:
     for ev, data in sse_chat(ASK_TRIGGER, sid):
         if ev == "ask" and ask_ev is None:
             ask_ev = data
-            questions = json.loads(data["questions_json"])["questions"]
+            questions = data["questions"]  # 结构化数组直传（一等协议）
             first = questions[0]
             label = first["options"][0]["label"]
             r = requests.post(f"{BASE}/api/ask/respond", json={
@@ -155,7 +155,7 @@ def t2_ask_roundtrip() -> dict:
     if ask_ev is None:
         return {"session_id": sid}
 
-    questions = json.loads(ask_ev["questions_json"])["questions"]
+    questions = ask_ev["questions"]
     q0 = questions[0]
     record("T2a-1 问题结构 question/header/options 齐备",
            bool(q0.get("question")) and bool(q0.get("header"))

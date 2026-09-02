@@ -253,10 +253,28 @@ class AnthropicProvider:
         return TextBlock(text=str(block))
 
     @staticmethod
+    def _usage_from(usage_obj: Any) -> dict[str, int]:
+        """SDK usage 对象 → 归一化四字段（缺失字段补 0）。"""
+        return {
+            "input_tokens": getattr(usage_obj, "input_tokens", 0) or 0,
+            "output_tokens": getattr(usage_obj, "output_tokens", 0) or 0,
+            "cache_creation_input_tokens": getattr(
+                usage_obj, "cache_creation_input_tokens", 0
+            ) or 0,
+            "cache_read_input_tokens": getattr(
+                usage_obj, "cache_read_input_tokens", 0
+            ) or 0,
+        }
+
+    @staticmethod
     def _event_from_anthropic(event: Any) -> StreamEvent | None:
         etype = getattr(event, "type", None)
         if etype == "message_start":
-            return StreamEvent(type="message_start")
+            # usage（含 cache_read/cache_creation）挂在 message 上：
+            # 透传给 runner 做缓存命中率观测（此前整个丢弃）
+            message = getattr(event, "message", None)
+            usage = AnthropicProvider._usage_from(getattr(message, "usage", None))
+            return StreamEvent(type="message_start", usage=usage)
         if etype == "content_block_start":
             block = getattr(event, "content_block", None)
             block_type = getattr(block, "type", None) if block else None
@@ -301,7 +319,11 @@ class AnthropicProvider:
         if etype == "message_delta":
             delta = getattr(event, "delta", None)
             stop_reason = getattr(delta, "stop_reason", None) if delta else None
-            return StreamEvent(type="message_delta", stop_reason=stop_reason)
+            # message_delta 的 usage 主要带 output_tokens（缓存字段为 0/缺失）
+            usage = AnthropicProvider._usage_from(getattr(event, "usage", None))
+            return StreamEvent(
+                type="message_delta", stop_reason=stop_reason, usage=usage
+            )
         if etype == "message_stop":
             return StreamEvent(type="message_stop")
         return None

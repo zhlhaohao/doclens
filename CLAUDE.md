@@ -239,7 +239,7 @@ planify/
 │   └── skill_loader.py     # SKILL.md 扫描/加载（两段式 prompt 注入）
 ├── streaming/
 │   ├── runner.py           # StreamingAgent 异步主循环（主力路径）
-│   ├── emitter.py          # EventEmitter 实现（SSE/Queue/CLI/TUI）
+│   ├── emitter.py          # EventEmitter 实现（SSE/CLI/TUI；便捷方法默认实现上移到协议）
 │   ├── waiter.py           # 用户响应等待器（全局单例）
 │   └── types.py            # 事件类型 / 协议 / StreamingConfig
 ├── subagent/

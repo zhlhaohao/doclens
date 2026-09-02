@@ -265,6 +265,115 @@ class SessionsStore:
                     (session_id, seq, json.dumps({"content": raw_text}, ensure_ascii=False), now),
                 )
 
+    def append_raw_messages(self, session_id: str, messages: list[dict]) -> None:
+        """追加一轮的原始消息序列（按 runner 轮内真实累积结构逐字节保存）。
+
+        与 tool_trace 的拆对重建不同：单条 assistant 含全部 text/tool_use block、
+        单条 user 含全部 tool_result——多工具/文本交错轮的回放与真实请求
+        逐字节一致，跨轮前缀缓存不被结构差异打断。get_chat_history 对含
+        本条目的轮优先回放 raw_messages，tool_trace/message_ai_raw 退为
+        展示层与旧会话兜底。
+
+        seq 按 MAX(seq) 续排；调用方在本轮 message_user 落库后调用即可。
+        """
+        if not messages:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'raw_messages', ?, ?)""",
+                (session_id, row[0] + 1,
+                 json.dumps({"messages": messages}, ensure_ascii=False, default=str),
+                 now),
+            )
+
+    def upsert_skill_contexts(
+        self,
+        session_id: str,
+        contexts: list[tuple[str, str]],
+    ) -> int:
+        """持久化 run_stream 注入的 skill body（<loaded-skill> 消息对）。
+
+        动机（prompt 前缀缓存）：web 路径每轮从 DB 重建历史，注入消息若只在
+        内存追加，skill body 每轮漂到当轮末尾 → 漂移点之后的全部前缀缓存失效。落库后回放
+        出现在首次注入位置，跨轮请求变为纯尾部追加。
+
+        - 按 (session_id, name) 幂等：同名条目已存在则跳过（内容变化原地 UPDATE——技能正文被编辑
+          后回放与 runner 注入保持一致）；
+        - 新条目插入到当前尾部条目（本轮 message_user，由前端在发送时写入）
+          之前，复现 run_stream「注入在历史末尾、user query 之前」的内存位置。
+
+        Args:
+            contexts: (skill_name, 完整消息内容) 列表，按注入顺序；调用方须在本轮的
+                append_chat_turn_raw 之前调用（此时尾部条目是本轮 message_user）。
+        Returns: 新插入的条目数。
+        """
+        if not contexts:
+            return 0
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                """SELECT seq, payload FROM session_items
+                   WHERE session_id = ? AND kind = 'skill_context'""",
+                (session_id,),
+            ).fetchall()
+            existing: dict[str, tuple[int, str]] = {}
+            for r in rows:
+                try:
+                    p = json.loads(r["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(p, dict):
+                    existing[p.get("name", "")] = (r["seq"], p.get("content", ""))
+
+            fresh: list[tuple[str, str]] = []
+            for name, content in contexts:
+                if name in existing:
+                    seq, old_content = existing[name]
+                    if old_content != content:
+                        conn.execute(
+                            """UPDATE session_items SET payload = ?
+                               WHERE session_id = ? AND kind = 'skill_context'
+                                 AND seq = ?""",
+                            (json.dumps({"name": name, "content": content},
+                                        ensure_ascii=False), session_id, seq),
+                        )
+                    continue
+                fresh.append((name, content))
+            if not fresh:
+                return 0
+
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            tail_seq = row[0]
+            k = len(fresh)
+            # 尾部条目（本轮 message_user）后移 k 位，新条目占据它之前的位置
+            conn.execute(
+                """UPDATE session_items SET seq = seq + ?
+                   WHERE session_id = ? AND seq >= ?""",
+                (k, session_id, tail_seq),
+            )
+            now = datetime.now(timezone.utc).isoformat()
+            for i, (name, content) in enumerate(fresh):
+                conn.execute(
+                    """INSERT INTO session_items
+                       (session_id, seq, kind, payload, created_at)
+                       VALUES (?, ?, 'skill_context', ?, ?)""",
+                    (session_id, tail_seq + i,
+                     json.dumps({"name": name, "content": content},
+                                ensure_ascii=False), now),
+                )
+            return k
+
     def delete(self, session_id: str) -> None:
         with self._lock, self._conn() as conn:
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
@@ -325,8 +434,13 @@ class SessionsStore:
 
         回放规则：
         - message_user → user 文本消息（每轮开头，由前端在发送时写入）；
-        - tool_trace → assistant(tool_use) + user(tool_result) 成对回放，
-          恢复模型实际见过的工具链（prefix 缓存友好的关键）；
+        - raw_messages → 本轮原始消息序列原样拼接（runner 真实累积结构，
+          跨轮前缀缓存友好的关键）；含 raw_messages 的轮忽略其
+          tool_trace / message_ai_raw / message_ai（展示层冗余副本）；
+        - tool_trace → assistant(tool_use) + user(tool_result) 成对回放
+          （无 raw_messages 的旧轮兜底）；
+        - skill_context → run_stream 注入的 skill body 原样回放（见
+          upsert_skill_contexts）；
         - message_ai_raw（模型原始输出）优先于 message_ai（策展展示文本）；
         - 旧会话无 raw/tool_trace 条目时行为与之前一致。
 
@@ -353,8 +467,10 @@ class SessionsStore:
             history.append({"role": role, "content": content})
 
         for turn in turns:
-            ai_raw = ""
-            ai_display = ""
+            # 含 raw_messages 的轮：原始结构原样回放，tool_trace/AI 文本忽略
+            has_raw_messages = any(it.kind == "raw_messages" for it in turn)
+            ai_emitted = False
+            ai_display_fallback = ""
             for it in turn:
                 try:
                     payload = json.loads(it.payload)
@@ -366,7 +482,16 @@ class SessionsStore:
                     content = payload.get("content", "")
                     if content:
                         _append("user", content)
+                elif it.kind == "raw_messages":
+                    for rm in payload.get("messages", []):
+                        if not isinstance(rm, dict):
+                            continue
+                        r, c = rm.get("role"), rm.get("content")
+                        if r in ("user", "assistant") and c:
+                            _append(r, c)
                 elif it.kind == "tool_trace":
+                    if has_raw_messages:
+                        continue
                     tu_id = payload.get("tool_use_id", "")
                     if not tu_id:
                         continue
@@ -382,13 +507,30 @@ class SessionsStore:
                         "content": str(payload.get("output", "")),
                         "is_error": bool(payload.get("is_error", False)),
                     }])
+                elif it.kind == "skill_context":
+                    # run_stream 注入的 skill body（见 upsert_skill_contexts）：
+                    # 原样回放在首次注入位置，跨轮请求前缀稳定（缓存友好）
+                    content = payload.get("content", "")
+                    if content:
+                        _append("user", content)
+                        _append("assistant", "Noted.")
                 elif it.kind == "message_ai_raw":
-                    ai_raw = payload.get("content", "") or ai_raw
+                    if has_raw_messages:
+                        continue
+                    # raw 按 seq 位置回放（旧逻辑推迟到轮末，会把 seq 位置
+                    # 介于其间的 skill_context 挤到 AI 文本之前，破坏前缀）
+                    content = payload.get("content", "")
+                    if content and not ai_emitted:
+                        _append("assistant", content)
+                        ai_emitted = True
                 elif it.kind == "message_ai":
-                    ai_display = payload.get("content", "") or ai_display
-            final = ai_raw or ai_display
-            if final:
-                _append("assistant", final)
+                    # 策展展示文本只做兜底：raw 无论 seq 先后都优先（与旧逻辑一致）；
+                    # 无 raw 时在轮末回放（legacy 会话无 skill_context，位置无影响）
+                    content = payload.get("content", "")
+                    if content and not ai_display_fallback:
+                        ai_display_fallback = content
+            if not ai_emitted and not has_raw_messages and ai_display_fallback:
+                _append("assistant", ai_display_fallback)
         return history
 
     @staticmethod

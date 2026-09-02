@@ -4,7 +4,7 @@ import { html } from "lit";
 import "../src/components/ask-card";
 import type { AskCard } from "../src/components/ask-card";
 import type { AskQuestionPayload } from "../src/api/ask";
-import { splitRecommended, parseAskQuestions } from "../src/api/ask";
+import { splitRecommended, validateAskQuestions } from "../src/api/ask";
 
 const singleQ: AskQuestionPayload = {
   question: "选哪个方案?",
@@ -158,18 +158,18 @@ describe("splitRecommended", () => {
   });
 });
 
-describe("parseAskQuestions", () => {
-  it("parses valid payload", () => {
-    const qs = parseAskQuestions(JSON.stringify({ questions: [singleQ, multiQ] }));
+describe("validateAskQuestions", () => {
+  it("accepts valid payload", () => {
+    const qs = validateAskQuestions([singleQ, multiQ]);
     expect(qs!.length).toBe(2);
     expect(qs![1].multiSelect).toBe(true);
   });
-  it("rejects malformed json / structure", () => {
-    expect(parseAskQuestions("not json")).toBeNull();
-    expect(parseAskQuestions(JSON.stringify({ questions: [] }))).toBeNull();
-    expect(parseAskQuestions(JSON.stringify({ questions: [{ question: "q" }] }))).toBeNull();
+  it("rejects malformed structure", () => {
+    expect(validateAskQuestions("not array")).toBeNull();
+    expect(validateAskQuestions([])).toBeNull();
+    expect(validateAskQuestions([{ question: "q" }])).toBeNull();
     expect(
-      parseAskQuestions(JSON.stringify({ questions: [{ question: "q", header: "h", options: [{ label: "A" }] }] })),
+      validateAskQuestions([{ question: "q", header: "h", options: [{ label: "A" }] }]),
     ).toBeNull(); // 少于 2 选项
   });
 });

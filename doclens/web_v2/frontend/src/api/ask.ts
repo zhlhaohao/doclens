@@ -28,7 +28,7 @@ export async function respondAsk(
   }
 }
 
-/** SSE ask 事件携带的 questions 结构（handler 校验后经 JSON 序列化下发） */
+/** SSE ask 事件携带的 questions 结构（后端 handler 校验后结构化直发） */
 export interface AskQuestionPayload {
   question: string;
   header: string;
@@ -36,25 +36,20 @@ export interface AskQuestionPayload {
   options: { label: string; description: string }[];
 }
 
-/** 解析 SSE ask 事件的 questions_json；解析失败返回 null（事件作废）。 */
-export function parseAskQuestions(questionsJson: string): AskQuestionPayload[] | null {
-  try {
-    const d = JSON.parse(questionsJson);
-    if (!Array.isArray(d?.questions)) return null;
-    const qs = d.questions as AskQuestionPayload[];
-    if (qs.length === 0) return null;
-    const valid = qs.every(
-      (q) =>
-        typeof q?.question === "string" &&
-        typeof q?.header === "string" &&
-        Array.isArray(q?.options) &&
-        q.options.length >= 2 &&
-        q.options.every((o) => typeof o?.label === "string"),
-    );
-    return valid ? qs : null;
-  } catch {
-    return null;
-  }
+/** 校验 SSE ask 事件的 questions 数组；结构非法返回 null（事件作废）。 */
+export function validateAskQuestions(raw: unknown): AskQuestionPayload[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const qs = raw as AskQuestionPayload[];
+  const valid = qs.every(
+    (q) =>
+      typeof q?.question === "string" &&
+      typeof q?.header === "string" &&
+      Array.isArray(q?.options) &&
+      q.options.length >= 2 &&
+      q.options.every((o) => typeof o?.label === "string"),
+  );
+  if (!valid) console.warn("[ask] questions 结构非法，事件作废:", raw);
+  return valid ? qs : null;
 }
 
 /** 剥离推荐前缀（(Recommended) / （推荐）），返回 [净 label, 是否推荐]。 */

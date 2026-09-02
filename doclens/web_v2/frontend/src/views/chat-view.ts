@@ -6,7 +6,7 @@ import { loadSessionMemory } from "../utils/session-memory";
 import type { Session, ChatMessage, Reference, ToolStep, PendingAsk } from "../state/types";
 import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
-import { parseAskQuestions } from "../api/ask";
+import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
 import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
@@ -425,7 +425,7 @@ export class ChatView extends LitElement {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
         } else if (ev.type === "ask") {
-          const questions = parseAskQuestions(ev.questions_json);
+          const questions = validateAskQuestions(ev.questions);
           if (questions) {
             const pending: PendingAsk = { requestId: ev.request_id, questions };
             this._activeAsk = pending;

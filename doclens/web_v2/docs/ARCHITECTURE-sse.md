@@ -67,7 +67,7 @@ flowchart TB
 | TEXT | `text_parts.append` | ❌ 不推（缓冲到 done 整体推，见下） |
 | TOOL_CALL（is_complete） | `tool_calls.append`（含 `_t0` 计时） | ✅ `_push` |
 | TOOL_RESULT | 三级降级配对回填（tool_use_id → name → 孤儿记录） | ✅ `_push`（带 `duration_ms`） |
-| ASK（questions） | `pending_asks.append` | ✅ `_push` |
+| ASK（questions） | —（2026-09-02 起不再积累；pending 索引归 waiter） | ✅ `_push`（`questions` 结构化数组直传） |
 | DONE / ERROR | 置 `done`/`error` 标志 | ❌（由收尾逻辑转 token/error 事件） |
 
 **为什么不再需要 planify 的 `SSEEmitter`**：那个的 queue 绑定创建它的 loop（旧架构里是生成线程私有 loop，主 loop 消费不了）；现在单 loop，`ChatEventEmitter(queue)` 的 emit 即 put，积累职责保留（策展与落库需要完整快照）。
@@ -102,7 +102,7 @@ if summary is not None and summary.mode == "skill": # 主判据：创建时写�
 | 层 | 机制 | 覆盖场景 |
 |---|---|---|
 | 1 Event | agent 在 `astream` 循环检查点退出（`streaming/runner.py:512`） | 正在流式生成 |
-| 2 hook | `waiter.interrupt(request_id)` 唤醒挂起的 ask 等待（`chat.py:102-107`） | **ask 挂起期间**（旧架构的缺口，改造后修复） |
+| 2 hook | `waiter.interrupt_session(session_id)` 按会话唤醒全部挂起的 ask 等待（2026-09-02 起；原 `interrupt(request_id)` 逐条 + emitter pending_asks 影子表已废除） | **ask 挂起期间**（旧架构的缺口，改造后修复） |
 | 3 cancel | `agent_task.cancel()`，CancelledError 沿 await 链传播 | 消费端早退（断开）时的兜底 |
 
 防竞态细节：
@@ -110,7 +110,7 @@ if summary is not None and summary.mode == "skill": # 主判据：创建时写�
 - unregister 仅当表里是**同一个** event 才删（`chat_interrupt.py:50`：防「停→迅速重发」时旧请求误删新事件）；
 - `request_stop` 未命中也执行 hook（流已收尾但 ask 悬置的窗口期可被唤醒）、hook 抛错不阻断停止（`:86-89`）。
 
-waiter 侧配合（`planify/streaming/waiter.py`）：`interrupt(request_id)` 摘除 pending 并 resolve `{"interrupted": True}`（`:161-179`）；ask handler 醒来检查该标志返回中断说明（`planify/tools/user_interaction.py`），模型看到后配合退出。
+waiter 侧配合（`planify/streaming/waiter.py`）：`interrupt(request_id)` 按条摘除并 resolve `{"interrupted": True}`；`interrupt_session(session_id)` 按会话批量中断（consumed 互斥，幂等返回中断条数）。ask handler 醒来检查该标志返回中断说明（`planify/tools/user_interaction.py`），模型看到后配合退出。
 
 触发源两个：`POST /chat/stop`（`chat.py:292`）和 SSE 客户端断开（`:279-284`）。
 
@@ -125,9 +125,9 @@ sequenceDiagram
     participant B as 浏览器<br/>(chatStream + ask-card)
     participant W as GlobalResponseWaiter
 
-    H->>W: create_request(request_id)
-    H->>E: emit_ask_user(questions)
-    E-->>B: SSE "ask" 事件（request_id + questions_json）
+    H->>W: create_request(request_id, session_id)
+    H->>E: emit_ask_questions(questions)
+    E-->>B: SSE "ask" 事件（request_id + questions 结构化数组）
     H->>W: wait_for_response(request_id, 300s) — 挂起
     B->>B: 渲染交互卡片，用户作答
     B--)W: POST /api/ask/respond(answers)
@@ -160,7 +160,7 @@ sequenceDiagram
 |---|---|---|
 | 1 | **正文非真流式**（token 缓冲到 done 整体推） | 长回答无打字机效果；架构已支持实时推（改 TEXT 分支即可），当前是策展完整性优先的展示策略 |
 | 2 | agent 与 SSE 消费共享同一 loop | CPU 密集型同步代码（如策展正则、大 JSON 序列化）会短暂阻塞事件运输——策展实测为毫秒级，暂无需 worker 化 |
-| 3 | 复用全局单例 `agent.session` + 每请求 `bind_user_interaction_handlers` 重绑（`:106-109`） | 隐含「单会话单流」假设；同 session 并发两流会互相覆盖 handler 绑定 |
+| 3 | ~~复用全局单例 `agent.session` + 每请求 `bind_user_interaction_handlers` 重绑~~ | ✅ 已修复（2026-09-02 边界修复）：每请求对 `session.tool_handlers` 做浅拷贝再 bind，同 session 并发两流不再互相覆盖；残留假设仅剩「单会话单流」本身 |
 | 4 | `history[-1]` 弹出防重复依赖前端落库约定（`:64-72`） | 约定破坏（如手动 curl 带 session_id）会双写本轮消息 |
 | 5 | 中断的半截文本仍会走策展 + 推送 | `emitter.error` 先于 token 推 error 事件，前端可据此弃用该 token；落库保留半截对话（有意的） |
 | 6 | `threading.Event` 而非纯 asyncio 取消 | 兼容 CLI/TUI 同步路径的统一中断接口；检查点粒度 = 事件粒度（每个 astream 事件检查一次，足够细） |
