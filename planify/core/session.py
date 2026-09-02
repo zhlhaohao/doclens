@@ -38,6 +38,10 @@ class SessionConfig:
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径
+    # 压缩 transcript 输出目录（宿主注入；None 时 runner 退回 <workdir>/.transcripts/）。
+    # 宿主（doclens）注入 <workdir>/.cortex/transcripts——.cortex 被索引器与
+    # FileWatcher 排除，避免压缩落盘触发 watch 回路、transcript 混入检索结果。
+    compact_transcript_dir: Optional[Path] = None
 
     # 隔离目录路径
     @property

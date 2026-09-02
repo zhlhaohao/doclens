@@ -126,3 +126,121 @@ class TestGetChatHistory:
             {"role": "user", "content": "q2"},
             {"role": "assistant", "content": "raw2"},
         ]
+
+
+SKILL_MSG = (
+    "<system-reminder>\n<loaded-skill name=\"demo\">\n# Demo\n</loaded-skill>\n</system-reminder>"
+)
+
+
+class TestUpsertSkillContexts:
+    def test_inserted_before_tail_message_user_and_replayed_in_position(self, store):
+        """skill_context 插到本轮 message_user 之前，回放在首次注入位置。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        inserted = store.upsert_skill_contexts("s1", [("demo", SKILL_MSG)])
+        assert inserted == 1
+        store.append_chat_turn_raw("s1", [], "a1")
+        # seq 重排后唯一且有序
+        seqs = [it.seq for it in store.get_detail("s1")]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+        history = store.get_chat_history("s1")
+        assert history == [
+            {"role": "user", "content": SKILL_MSG},
+            {"role": "assistant", "content": "Noted."},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+
+    def test_idempotent_by_name(self, store):
+        """同名重复注入跳过；seq 不变。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        assert store.upsert_skill_contexts("s1", [("demo", SKILL_MSG)]) == 1
+        assert store.upsert_skill_contexts("s1", [("demo", SKILL_MSG)]) == 0
+        items = [it for it in store.get_detail("s1") if it.kind == "skill_context"]
+        assert len(items) == 1
+
+    def test_content_update_in_place(self, store):
+        """技能正文编辑后原地 UPDATE（位置不变，内容跟上 runner 注入）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        store.upsert_skill_contexts("s1", [("demo", SKILL_MSG)])
+        new_msg = SKILL_MSG.replace("# Demo", "# Demo v2")
+        assert store.upsert_skill_contexts("s1", [("demo", new_msg)]) == 0
+        history = store.get_chat_history("s1")
+        assert history[0] == {"role": "user", "content": new_msg}
+
+    def test_multiple_skills_preserve_order(self, store):
+        """多个新技能一次插入，顺序与注入顺序一致。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        msg_b = SKILL_MSG.replace("demo", "bbb")
+        inserted = store.upsert_skill_contexts(
+            "s1", [("aaa", SKILL_MSG), ("bbb", msg_b)]
+        )
+        assert inserted == 2
+        history = store.get_chat_history("s1")
+        assert [m["content"] for m in history if m["role"] == "user"] == [
+            SKILL_MSG, msg_b, "q1",
+        ]
+
+
+class TestRawMessagesReplay:
+    def test_replayed_verbatim(self, store):
+        """raw_messages 按原始结构原样回放（单条 assistant 多 block）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "先查。"},
+                {"type": "tool_use", "id": "tu1", "name": "t", "input": {"q": "x"}},
+                {"type": "tool_use", "id": "tu2", "name": "t", "input": {"q": "y"}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu1", "content": "r1",
+                 "is_error": False},
+                {"type": "tool_result", "tool_use_id": "tu2", "content": "r2",
+                 "is_error": False},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "最终回答"}],
+        }])
+        history = store.get_chat_history("s1")
+        assert history[0] == {"role": "user", "content": "q1"}
+        assert history[1]["role"] == "assistant"
+        assert [b["type"] for b in history[1]["content"]] == [
+            "text", "tool_use", "tool_use",
+        ]
+        assert history[2]["role"] == "user"
+        assert [b["type"] for b in history[2]["content"]] == [
+            "tool_result", "tool_result",
+        ]
+        assert history[3] == {
+            "role": "assistant", "content": [{"type": "text", "text": "最终回答"}],
+        }
+
+    def test_raw_messages_preferred_over_tool_trace(self, store):
+        """同轮有 raw_messages 与 tool_trace 时，回放忽略拆对副本。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu1", "name": "t", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu1", "content": "r",
+                 "is_error": False},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "raw 回答"}]},
+        ])
+        # 展示层冗余副本（旧通道），不应影响回放
+        store.append_chat_turn_raw("s1", [
+            {"tool_use_id": "tu1", "name": "t", "input": {},
+             "output": "r", "is_error": False},
+        ], "raw 回答")
+        history = store.get_chat_history("s1")
+        assert [m["role"] for m in history] == ["user", "assistant", "user", "assistant"]
+        assert history[1]["content"] == [
+            {"type": "tool_use", "id": "tu1", "name": "t", "input": {}},
+        ]
+        assert history[-1]["content"] == [{"type": "text", "text": "raw 回答"}]

@@ -17,7 +17,7 @@
 flowchart LR
     R["runner（事件发生处）<br/>await emitter.emit_tool_result(...)"]
     E["ChatEventEmitter.emit()"]
-    A["积累器（实例属性）<br/>text_parts / tool_calls<br/>pending_asks / done / error"]
+    A["积累器（实例属性）<br/>text_parts / tool_calls<br/>done / error"]
     Q[("asyncio.Queue")]
     S["SSE 生成器<br/>await queue.get()"]
 
@@ -44,10 +44,13 @@ agent_task = asyncio.create_task(_run_and_finalize())   # chat.py:205
 ```python
 self.text_parts: list[str] = []     # 正文增量片段
 self.tool_calls:  list[dict] = []   # 调用记录（先骨架后回填）
-self.pending_asks: list[dict] = []  # 悬置问题（request_id + questions JSON）
 self.done: bool = False             # DONE 标志
 self.error: Optional[str] = None    # ERROR 消息（同时置 done）
 ```
+
+> 2026-09-02 前还有第五个属性 `pending_asks`（悬置 ask 的 request_id 影子表）——
+> 会话维度的 pending 枚举改由 waiter 自持（`PendingRequest.session_id` +
+> `interrupt_session`），影子表废除（见 ARCHITECTURE-ask-loopback.md §2.5）。
 
 ### 1. `text_parts`：只进不改的碎片流
 
@@ -103,7 +106,7 @@ done 后 _run_and_finalize：
 └── （前端另写 message_ai 策展展示文本，与 raw 分离）
 ```
 
-中途唯一读积累器的是中断 hook（`chat.py:102`）——`pending_asks` 里的 request_id 用来唤醒挂起的 ask。
+中断 hook（`chat.py`）不读积累器——改调 `waiter.interrupt_session(session_key)`，由 waiter 按 session_id 枚举并唤醒本会话全部挂起的 ask（2026-09-02 起，影子表废除）。
 
 ## 四、queue：为什么存在 + 它保证什么
 
@@ -138,7 +141,7 @@ flowchart TB
         P3["t3 文本增量到达<br/>await emitter.emit_text → 只积累（不推）"]
         P4["t4 工具调用完整<br/>emit_tool_call → 积累骨架 + 推 queue"]
         P5["t5 工具执行完<br/>emit_tool_result → 回填 + 推 queue"]
-        P6["t6 ask 悬置<br/>emit_ask_user → pending_asks + 推 queue"]
+        P6["t6 ask 悬置<br/>emit_ask_questions → 推 queue"]
         P7["t7 stop_reason≠tool_use 退出循环<br/>返回清洗后历史（被丢弃）"]
         P8["t8 策展<br/>get_full_text + tool_calls → curate_*"]
         P9["t9 收尾三连<br/>error? / token(策展文本) / toast? → queue"]
@@ -191,7 +194,7 @@ flowchart TB
         direction TB
         C0["c0 挂起等待 await queue.get()（:221）<br/>queue 空时协程挂起，loop 去跑生产者"]
         C1["c1 被唤醒：拿到事件 dict<br/>yield ev → 内层生成器产出"]
-        C2["c2 外层 event_stream 接住<br/>dict → {event, data: json}（:254-313 七分支）"]
+        C2["c2 外层 event_stream 接住<br/>剥 type 整体透传 → {event, data: json}（:254 起）"]
         C3["c3 EventSourceResponse 接住<br/>→ 'event: xxx\\ndata: {...}\\n\\n' 字节"]
         C4["c4 ASGI send → TCP → 浏览器<br/>streamSSE 解析 → 渲染"]
         C5["c5 回到 c0 等下一件"]
@@ -209,7 +212,7 @@ flowchart TB
 
 消费者的三个关键行为：
 
-**行为 1：被动驱动**——整个生命周期是"挂起 → 被生产者的 `put_nowait` 经 `future.set_result` 唤醒 → 处理一件 → 再挂起"。不轮询、不询问生产者状态、不知道 agent 存在——queue 之外的任何对象都不引用。每件货的处理是纯函数式 dict 变换（c2 的 if/elif 链，7 种类型 → 7 种 SSE 事件）。
+**行为 1：被动驱动**——整个生命周期是"挂起 → 被生产者的 `put_nowait` 经 `future.set_result` 唤醒 → 处理一件 → 再挂起"。不轮询、不询问生产者状态、不知道 agent 存在——queue 之外的任何对象都不引用。每件货的处理是近无变换的透传（c2：队列事件与 SSE 线格式同构，剥掉 `type` 作事件名、其余字段整体 JSON 直出——字段名契约的单一真相源在 `_chat_events.py` 的 TypedDict + 构造函数；不在 `KNOWN_EVENT_TYPES` 的未知类型记 warning 丢弃，2026-09-02 起不再静默）。
 
 **行为 2：终态依赖哨兵而非推断（c6-c8）**——判断"结束"的唯一依据是 `None`。拿到哨兵后：问一句 `agent_task.exception()`（哨兵到了但生产者抛了未处理异常时补一条 error——消费者不替生产者隐瞒）；补发 `done`（给前端协议层的句号，无论前面发生了什么）。
 

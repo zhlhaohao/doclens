@@ -15,6 +15,7 @@
 import asyncio
 import json
 import logging
+import re
 import threading
 from typing import AsyncIterator, Optional
 
@@ -30,9 +31,31 @@ from doclens.web_v2.chat_interrupt import (
 )
 from doclens.web_v2.deps import get_agent
 from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
+from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_LOADED_SKILL_RE = re.compile(r'<loaded-skill name="([^"]+)">')
+
+
+def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str]]:
+    """从 run_stream 原地修改后的 history 提取注入的 skill body（按出现顺序去重）。
+
+    Returns:
+        [(skill_name, 完整消息内容), ...]，与 runner 注入顺序一致。
+    """
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for m in history:
+        content = m.get("content")
+        if m.get("role") != "user" or not isinstance(content, str):
+            continue
+        match = _LOADED_SKILL_RE.search(content)
+        if match and match.group(1) not in seen:
+            seen.add(match.group(1))
+            out.append((match.group(1), content))
+    return out
 
 
 async def _stream_agent_response(
@@ -95,15 +118,18 @@ async def _stream_agent_response(
         bind_user_interaction_handlers,
     )
     from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA
+    from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
 
     waiter = get_global_waiter()
 
     def _interrupt_pending_asks() -> None:
-        """中断 hook：唤醒该会话挂起的 ask 等待（Event 检查点覆盖不到工具挂起期）。"""
-        for ask_ev in emitter.pending_asks:
-            request_id = ask_ev.get("request_id", "")
-            if request_id:
-                waiter.interrupt(request_id)
+        """中断 hook：唤醒该会话挂起的 ask 等待（Event 检查点覆盖不到工具挂起期）。
+
+        会话维度的 pending 索引由 waiter 自持（interrupt_session），
+        不再依赖 emitter 侧的 pending_asks 影子表。
+        """
+        if session_key:
+            waiter.interrupt_session(session_key)
 
     if session_key:
         register_interrupt_hook(session_key, _interrupt_pending_asks)
@@ -139,6 +165,9 @@ async def _stream_agent_response(
 
     async def _run_and_finalize() -> None:
         """跑 agent + 完成后策展推送 + 落库（断开/取消时落库仍执行，与旧行为一致）。"""
+        # 本轮开始前 history 长度（pop 本轮 user 消息后）：run_stream 原地追加
+        # 的本轮消息从该下标起，供 raw_messages 落库提取
+        round_start = len(history)
         try:
             await sa.run_stream(history, message, session_id or session.session_id)
 
@@ -184,13 +213,49 @@ async def _stream_agent_response(
             # 此处错误未抛出到本协程，需手动透传给前端，
             # 否则 SSE 只产空 token + done（用户看到"无返回结果"）。
             if emitter.error:
-                queue.put_nowait({"type": "error", "detail": emitter.error})
-            queue.put_nowait({"type": "token", "text": curated_text})
+                queue.put_nowait(error_event(emitter.error))
+            queue.put_nowait(token_event(curated_text))
             if curated_fallback:
-                queue.put_nowait(
-                    {"type": "toast", "level": "error", "detail": FALLBACK_TOAST}
-                )
+                queue.put_nowait(toast_event("error", FALLBACK_TOAST))
         finally:
+            # 持久化 run_stream 注入的 skill body（按 name 幂等）：
+            # 回放时出现在首次注入位置，跨轮请求保持纯尾部追加
+            # （prompt 前缀缓存友好）。必须在 append_chat_turn_raw 之前——
+            # 新条目要插到本轮 message_user 之前，复现内存中的注入位置。
+            if session_key:
+                try:
+                    from doclens.web_v2.deps import get_sessions_store
+
+                    injected = _extract_injected_skill_contexts(history)
+                    if injected:
+                        get_sessions_store().upsert_skill_contexts(
+                            session_key, injected
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "persist skill contexts failed for %s: %s", session_key, e
+                    )
+            # 持久化本轮原始消息序列（assistant/tool_result 按 runner 真实累积
+            # 结构）：tool_trace 拆对回放与真实结构不等价，多工具/文本交错轮
+            # 前缀会从该轮首条 assistant 起分叉；raw_messages 回放逐字节一致。
+            if session_key:
+                try:
+                    from doclens.web_v2.api._chat_raw import (
+                        extract_round_raw_messages,
+                    )
+                    from doclens.web_v2.deps import get_sessions_store
+
+                    raw_msgs = extract_round_raw_messages(
+                        history, round_start, message
+                    )
+                    if raw_msgs:
+                        get_sessions_store().append_raw_messages(
+                            session_key, raw_msgs
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "persist raw messages failed for %s: %s", session_key, e
+                    )
             # 持久化原始轮次（tool 链 + 模型原始输出），供下一轮 LLM 上下文回放。
             # 与展示层分离：前端另写 message_user/message_ai（策展文本），
             # get_chat_history 回放时优先 message_ai_raw。
@@ -255,67 +320,20 @@ async def _stream_agent_response(
 async def chat(req: ChatRequest):
     async def event_stream() -> AsyncIterator[dict]:
         try:
+            # 队列事件与线格式同构（_chat_events 单一真相源）：剥掉 type 作
+            # event 名，其余字段整体透传；未知类型记 warning（不静默丢弃）。
             async for ev in _stream_agent_response(req.message, req.session_id):
                 t = ev.get("type")
-                if t == "token":
-                    yield {
-                        "event": "token",
-                        "data": json.dumps({"text": ev["text"]}, ensure_ascii=False),
-                    }
-                elif t == "tool_call":
-                    yield {
-                        "event": "tool_call",
-                        "data": json.dumps(
-                            {
-                                "tool_use_id": ev["tool_use_id"],
-                                "name": ev["name"],
-                                "input": ev["input"],
-                                "is_complete": True,
-                            },
-                            ensure_ascii=False,
-                        ),
-                    }
-                elif t == "tool_result":
-                    yield {
-                        "event": "tool_result",
-                        "data": json.dumps(
-                            {
-                                "tool_use_id": ev["tool_use_id"],
-                                "name": ev["name"],
-                                "output": ev["output"],
-                                "is_error": ev.get("is_error", False),
-                                "duration_ms": ev.get("duration_ms"),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    }
-                elif t == "toast":
-                    yield {
-                        "event": "toast",
-                        "data": json.dumps(
-                            {
-                                "level": ev.get("level", "error"),
-                                "detail": ev.get("detail", ""),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    }
-                elif t == "ask":
-                    yield {
-                        "event": "ask",
-                        "data": json.dumps(
-                            {
-                                "request_id": ev.get("request_id", ""),
-                                "questions_json": ev.get("questions_json", ""),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    }
-                elif t == "error":
-                    yield {
-                        "event": "error",
-                        "data": json.dumps({"detail": ev.get("detail", "")}),
-                    }
+                if t not in KNOWN_EVENT_TYPES:
+                    logger.warning("chat stream: 未知队列事件类型 %r，丢弃: %s", t, ev)
+                    continue
+                yield {
+                    "event": t,
+                    "data": json.dumps(
+                        {k: v for k, v in ev.items() if k != "type"},
+                        ensure_ascii=False,
+                    ),
+                }
             yield {"event": "done", "data": "{}"}
         except asyncio.CancelledError:
             # 客户端断开（关页 / 切走 / 断网 / 主动 abort）→ 通知生成线程停，

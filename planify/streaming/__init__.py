@@ -14,7 +14,7 @@ from .types import (
     StreamingConfig,
     ToolCallState,
 )
-from .emitter import SSEEmitter, QueueEmitter, CLIEventEmitter
+from .emitter import SSEEmitter, CLIEventEmitter
 from .waiter import GlobalResponseWaiter, SessionWaiter, get_global_waiter
 from .runner import StreamingAgent
 
@@ -28,7 +28,6 @@ __all__ = [
     "ToolCallState",
     # 发射器
     "SSEEmitter",
-    "QueueEmitter",
     "CLIEventEmitter",
     # 等待器
     "GlobalResponseWaiter",

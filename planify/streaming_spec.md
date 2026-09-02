@@ -75,7 +75,7 @@ SSE 事件流:
 backend/app/planify/streaming/     # 流式模块
 ├── __init__.py                    # 模块导出
 ├── types.py                       # StreamEvent, EventEmitter 协议, StreamingConfig
-├── emitter.py                     # SSEEmitter, QueueEmitter
+├── emitter.py                     # SSEEmitter, CLIEventEmitter, TUIEventEmitter
 ├── waiter.py                      # GlobalResponseWaiter, SessionWaiter
 ├── user_tools.py                  # ask_user, user_confirm 工具定义
 └── runner.py                      # StreamingAgent 流式代理

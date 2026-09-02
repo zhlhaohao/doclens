@@ -15,6 +15,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from ..skills.access_state import get_current_session_id
+
 logger = logging.getLogger(__name__)
 
 # 结构化问答常量（与 AskUserQuestion 原版对齐）
@@ -24,8 +26,8 @@ ASK_MAX_OPTIONS = 4
 ASK_MIN_OPTIONS = 2
 ASK_MAX_HEADER_CHARS = 12
 ASK_TIMEOUT_SECONDS = 300.0
-# input_type 判别值：旧协议 emit_ask_user(question, input_type, options, default)
-# 以此标记 question 字段携带 JSON 序列化的 questions 数组
+# input_type 判别值：仅用于旧协议回退路径（emitter 未实现
+# emit_ask_questions 时），question 字段携带 JSON 序列化的 questions 数组
 ASK_INPUT_TYPE_QUESTIONS = "questions"
 
 
@@ -298,8 +300,8 @@ def bind_user_interaction_handlers(
         # 生成请求 ID
         request_id = f"req_{uuid.uuid4().hex[:8]}"
 
-        # 创建等待请求
-        await waiter.create_request(request_id)
+        # 创建等待请求（session_id 供 waiter.interrupt_session 按会话中断）
+        await waiter.create_request(request_id, session_id=get_current_session_id())
 
         # 发射 ask_user 事件
         await emitter.emit_ask_user(
@@ -364,8 +366,8 @@ def bind_user_interaction_handlers(
         # 生成请求 ID
         request_id = f"req_{uuid.uuid4().hex[:8]}"
 
-        # 创建等待请求
-        await waiter.create_request(request_id)
+        # 创建等待请求（session_id 供 waiter.interrupt_session 按会话中断）
+        await waiter.create_request(request_id, session_id=get_current_session_id())
 
         # 发射 ask_user 事件（使用 confirm 类型）
         await emitter.emit_ask_user(
@@ -413,13 +415,13 @@ def bind_ask_user_question_handler(
     """
     绑定 ask_user_question 处理器（GUI 结构化问答）。
 
-    事件经旧协议 emit_ask_user 传递：input_type="questions" 作为判别标记，
-    question 字段携带 JSON 序列化的 questions 数组。响应经 waiter 回传，
-    以结构化 JSON 作为 tool_result 回填给模型。
+    事件经一等协议 ``emit_ask_questions(request_id, questions)`` 传递——
+    结构化数组直传，不再蹭旧 ``emit_ask_user`` 通道塞 JSON 字符串。
+    响应经 waiter 回传，以结构化 JSON 作为 tool_result 回填给模型。
 
     Args:
         tool_handlers: 工具处理器字典（将被修改）
-        emitter: 事件发射器实例（需实现 emit_ask_user）
+        emitter: 事件发射器实例（需实现 emit_ask_questions；缺失时回退旧协议并记告警）
         waiter: 响应等待器实例
     """
     import uuid
@@ -445,16 +447,23 @@ def bind_ask_user_question_handler(
             return error_msg
 
         request_id = f"req_{uuid.uuid4().hex[:8]}"
-        await waiter.create_request(request_id)
+        # session_id 供 waiter.interrupt_session 按会话中断
+        await waiter.create_request(request_id, session_id=get_current_session_id())
 
-        # 旧协议传递：question 字段携带 JSON 化的 questions
-        await emitter.emit_ask_user(
-            request_id=request_id,
-            question=json.dumps(
-                {"questions": questions}, ensure_ascii=False
-            ),
-            input_type=ASK_INPUT_TYPE_QUESTIONS,
-        )
+        emit_questions = getattr(emitter, "emit_ask_questions", None)
+        if emit_questions is not None:
+            await emit_questions(request_id=request_id, questions=questions)
+        else:
+            # 兼容未实现新协议的 emitter：回退旧通道（deprecated，question
+            # 字段塞 JSON 序列化的 questions 数组 + input_type 判别标记）
+            logger.warning(
+                "[ask_user_question] emitter 未实现 emit_ask_questions，回退旧协议"
+            )
+            await emitter.emit_ask_user(
+                request_id=request_id,
+                question=json.dumps({"questions": questions}, ensure_ascii=False),
+                input_type=ASK_INPUT_TYPE_QUESTIONS,
+            )
 
         logger.info(
             "[ask_user_question] 等待用户响应: %s, %d 个问题",

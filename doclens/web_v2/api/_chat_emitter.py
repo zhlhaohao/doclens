@@ -1,8 +1,8 @@
 """Chat SSE 专用 EventEmitter — 收集流式事件并直推 SSE 队列。
 
 双职责：
-1. 积累（tool_calls 配对回填、正文 text_parts、pending_asks）——供
-   chat.py 完成后的参考资料策展与原始轮次落库使用；
+1. 积累（tool_calls 配对回填、正文 text_parts）——供 chat.py 完成后的
+   参考资料策展与原始轮次落库使用；
 2. 运输（emit 即 asyncio.Queue.put_nowait）——与 StreamingAgent 跑在
    同一个 ASGI 事件循环上，事件发生处直接入队，天然保序，
    无需旧版的「生成线程 + _feed 轮询 diff」桥接。
@@ -10,29 +10,41 @@
 token 不实时推（缓冲到 done 后整体推策展文本）——与旧版一致的
 展示取舍：正文要过参考资料策展重写，边流边推会造成内容跳变。
 
-ask_user_question 事件（input_type="questions"）收集到 pending_asks
-并直推 SSE "ask" 事件；其余 ask_user 形态（旧工具）在 GUI 工具集中
-已被过滤，正常不会到达这里，到达时记录告警。
+推送的事件字典一律经 ``_chat_events`` 构造函数生成（字段名单一真相源）。
+
+ask_user_question 结构化问答经一等协议 ``emit_ask_questions`` 到达：
+questions 为结构化数组直推 SSE "ask" 事件（前端免二次 JSON.parse）。
+悬置 ask 的中断唤醒由 waiter.interrupt_session 负责（会话维度索引在
+waiter 侧），emitter 不再维护 pending_asks 影子表。
+旧 ask_user 形态（旧工具）在 GUI 工具集中已被过滤，正常不会到达这里，
+到达时记录告警。
 """
 
 import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from planify.streaming.types import StreamEvent, StreamEventType
+from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
+
+from ._chat_events import ask_event, tool_call_event, tool_result_event
 
 logger = logging.getLogger(__name__)
 
 
-class ChatEventEmitter:
-    """收集 + 直推：emit 在事件循环上被 await 调用，put_nowait 安全。"""
+class ChatEventEmitter(EventEmitter):
+    """收集 + 直推：emit 在事件循环上被 await 调用，put_nowait 安全。
+
+    协议的便捷方法（emit_text/emit_tool_call/emit_tool_result/emit_done/
+    emit_error）用 EventEmitter 默认实现（包 StreamEvent 走 self.emit）；
+    只保留三个真实定制：emit（积累+直推）、emit_ask_questions（直推
+    ask_event）、emit_ask_user（legacy 告警）。
+    """
 
     def __init__(self, queue: Optional[Any] = None):
         # queue: asyncio.Queue，属主与 emit 调用方同为 ASGI 主 loop
         self.queue = queue
         self.text_parts: list[str] = []
         self.tool_calls: list[dict] = []
-        self.pending_asks: list[dict] = []
         self.done: bool = False
         self.error: Optional[str] = None
 
@@ -75,12 +87,16 @@ class ChatEventEmitter:
                     "_t0": time.monotonic(),
                 }
                 self.tool_calls.append(call)
-                self._push({
-                    "type": "tool_call",
-                    "tool_use_id": call["tool_use_id"],
-                    "name": call["name"],
-                    "input": call["input"],
-                })
+                # 线格式与 StreamEvent.data 同构（to_sse_dict 等价形态，
+                # 经共享构造函数成形）
+                self._push(
+                    tool_call_event(
+                        tool_use_id=call["tool_use_id"],
+                        name=call["name"],
+                        input_data=call["input"],
+                        is_complete=True,
+                    )
+                )
 
         elif event.event_type == StreamEventType.TOOL_RESULT:
             tool_use_id = event.data.get("tool_use_id", "")
@@ -118,14 +134,15 @@ class ChatEventEmitter:
                 })
                 duration_ms = None
 
-            self._push({
-                "type": "tool_result",
-                "tool_use_id": tool_use_id,
-                "name": name,
-                "output": output,
-                "is_error": is_error,
-                "duration_ms": duration_ms,
-            })
+            self._push(
+                tool_result_event(
+                    tool_use_id=tool_use_id,
+                    name=name,
+                    output=output,
+                    is_error=is_error,
+                    duration_ms=duration_ms,
+                )
+            )
 
         elif event.event_type == StreamEventType.DONE:
             self.done = True
@@ -134,47 +151,15 @@ class ChatEventEmitter:
             self.error = event.data.get("error", "未知错误")
             self.done = True
 
-    # ---- EventEmitter 协议便捷方法 ----
+    # ---- EventEmitter 协议定制（其余便捷方法用协议默认实现） ----
 
-    async def emit_text(self, content: str, is_end: bool = False) -> None:
-        await self.emit(StreamEvent(
-            event_type=StreamEventType.TEXT,
-            data={"content": content, "is_end": is_end},
-        ))
-
-    async def emit_tool_call(
+    async def emit_ask_questions(
         self,
-        tool_use_id: str,
-        name: str,
-        input_data: Dict[str, Any],
-        is_complete: bool = False,
+        request_id: str,
+        questions: List[Dict[str, Any]],
     ) -> None:
-        await self.emit(StreamEvent(
-            event_type=StreamEventType.TOOL_CALL,
-            data={
-                "tool_use_id": tool_use_id,
-                "name": name,
-                "input": input_data,
-                "is_complete": is_complete,
-            },
-        ))
-
-    async def emit_tool_result(
-        self,
-        tool_use_id: str,
-        name: str,
-        output: str,
-        is_error: bool = False,
-    ) -> None:
-        await self.emit(StreamEvent(
-            event_type=StreamEventType.TOOL_RESULT,
-            data={
-                "tool_use_id": tool_use_id,
-                "name": name,
-                "output": output,
-                "is_error": is_error,
-            },
-        ))
+        """结构化问答（ask_user_question 一等协议）：questions 数组直推。"""
+        self._push(ask_event(request_id, questions))
 
     async def emit_ask_user(
         self,
@@ -184,24 +169,6 @@ class ChatEventEmitter:
         options: Optional[List[Dict[str, str]]] = None,
         default: Optional[str] = None,
     ) -> None:
-        # 结构化问答（input_type="questions"）：question 携带 JSON 化的 questions
-        if input_type == "questions":
-            ask_ev = {
-                "request_id": request_id,
-                "question": question,
-            }
-            self.pending_asks.append(ask_ev)
-            self._push({
-                "type": "ask",
-                "request_id": request_id,
-                "questions_json": question,
-            })
-            return
-        # 旧工具形态不应出现在 GUI（工具集已过滤），兜底告警不吞细节
+        # 旧工具形态不应出现在 GUI（工具集已过滤），兜底告警不吞细节。
+        # （ask_user_question 已迁一等协议 emit_ask_questions，不再走此通道）
         logger.warning("legacy ask_user not supported in SSE mode: %s", question)
-
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
-        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data={"session_id": session_id}))
-
-    async def emit_error(self, error: str, code: Optional[str] = None) -> None:
-        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data={"error": error, "code": code}))

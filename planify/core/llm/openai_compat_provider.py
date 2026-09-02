@@ -25,6 +25,22 @@ _STOP_REASON_MAP = {
 }
 
 
+def _usage_from_openai(u: Any) -> dict[str, int] | None:
+    """OpenAI usage 对象 → 归一化四字段（None 输入返回 None）。
+
+    DeepSeek 系缓存字段 prompt_cache_hit_tokens / prompt_cache_miss_tokens
+    归一到 cache_read / cache_creation；无缓存概念的端点两字段为 0。
+    """
+    if u is None:
+        return None
+    return {
+        "input_tokens": getattr(u, "prompt_tokens", 0) or 0,
+        "output_tokens": getattr(u, "completion_tokens", 0) or 0,
+        "cache_read_input_tokens": getattr(u, "prompt_cache_hit_tokens", 0) or 0,
+        "cache_creation_input_tokens": getattr(u, "prompt_cache_miss_tokens", 0) or 0,
+    }
+
+
 class _StreamTranslator:
     """OpenAI stream chunk → 归一化 StreamEvent 的状态机（同步/异步壳共用）。
 
@@ -46,7 +62,12 @@ class _StreamTranslator:
     def feed(self, chunk: Any) -> list[StreamEvent]:
         """处理一个 chunk，返回该 chunk 产生的归一化事件。"""
         events: list[StreamEvent] = []
+        usage = _usage_from_openai(getattr(chunk, "usage", None))
         if not chunk.choices:
+            # stream_options.include_usage 的尾 chunk：choices 为空、只带 usage
+            # （此前直接丢弃，命中率无法观测）
+            if usage:
+                events.append(StreamEvent(type="message_delta", usage=usage))
             return events
         choice = chunk.choices[0]
         delta = choice.delta
@@ -93,6 +114,7 @@ class _StreamTranslator:
             events.append(StreamEvent(
                 type="message_delta",
                 stop_reason=_STOP_REASON_MAP.get(choice.finish_reason, "end_turn"),
+                usage=usage,
             ))
         return events
 
@@ -146,6 +168,9 @@ class OpenAICompatProvider:
         }
         if stream:
             kwargs["stream"] = True
+            # 尾 chunk 带 usage（prompt/completion tokens；DeepSeek 系含缓存命中
+            # 字段），供 runner 观测前缀缓存命中率
+            kwargs["stream_options"] = {"include_usage": True}
         if tools:
             kwargs["tools"] = tools_anthropic_to_openai(tools)
         return kwargs

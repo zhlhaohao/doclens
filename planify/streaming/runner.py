@@ -166,12 +166,18 @@ class StreamingAgent:
         流式运行代理循环。
 
         Args:
-            messages: 消息历史列表
+            messages: 消息历史列表。**注意：就地 mutate**（追加注入消息 /
+                user query / assistant 响应 / tool_result），调用方若要保留
+                入参原样需自行拷贝。
             user_message: 用户输入消息
             session_id: 会话 ID
 
         Returns:
-            清理后的消息历史（只保留 user 和 assistant 消息，过滤 tool 链）
+            清理后的消息历史（只保留 user/assistant 文本消息，过滤 tool 链）。
+            两种消费语义：
+            - CLI/TUI 路径以返回值为下一轮输入（doclens run_query / planify cli.py）；
+            - Web 路径（doclens chat.py）**丢弃返回值**——历史真相在宿主 SQLite，
+              每轮从 DB 重建（tool_trace + message_ai_raw 成对回放）。
         """
         # 设置当前 session_id（供工具门禁/load_skill 标记使用）
         ctx_token = set_current_session_id(session_id)
@@ -295,10 +301,15 @@ class StreamingAgent:
                 )
                 if self._estimate_tokens(messages) > self.config.compact_threshold:
                     if self._aauto_compact and self.session:
-                        # 压缩 transcript 目录：session.config.transcript_dir 是
-                        # .planify/transcript.json 文件路径（语义不符），统一用
-                        # <workdir>/.transcripts/
-                        transcript_dir = Path(self.session.config.workdir) / ".transcripts"
+                        # 压缩 transcript 目录：宿主注入优先（doclens 注入
+                        # .cortex/transcripts，避免落盘触发 FileWatcher 回路）；
+                        # 未注入时退回 <workdir>/.transcripts/
+                        # （session.config.transcript_dir 是 .planify/transcript.json
+                        # 文件路径，语义不符，勿用）
+                        transcript_dir = (
+                            getattr(self.session.config, "compact_transcript_dir", None)
+                            or Path(self.session.config.workdir) / ".transcripts"
+                        )
                         compacted = await self._aauto_compact(
                             messages, self.provider, transcript_dir
                         )
@@ -372,7 +383,12 @@ class StreamingAgent:
 
         规则：
         - user 消息：content 是字符串（系统注入的 skills/agent.md）保留，列表（tool_result）跳过
-        - assistant 消息：content 是字符串（纯文本回复）保留，列表中有 tool_use block 则跳过
+        - assistant 消息：content 是字符串（纯文本回复）保留；
+          列表为空（中断残留）跳过；列表中有 tool_use block 则跳过
+
+        tool_use 检测必须同时兼容 dict（本 runner 自己 append 的形态）与
+        Pydantic 模型（属性访问）——只查 getattr 会让 dict block 永远漏检，
+        孤儿 tool_use（无配对 tool_result）进入下轮历史，触发 Anthropic 400。
 
         Args:
             messages: 完整消息历史
@@ -395,10 +411,15 @@ class StreamingAgent:
                     # 纯文本回复保留
                     cleaned.append(msg)
                 elif isinstance(content, list):
+                    if not content:
+                        # 中断残留的空 assistant（content=[]）：回放无意义，
+                        # 且空 content 数组可能触发 API 400
+                        continue
                     # 列表类型：检查是否包含 tool_use block
-                    # 注意：block 可能是 Pydantic 模型，不是 dict
+                    # 注意：block 可能是 dict（本 runner append 的）或 Pydantic 模型
                     has_tool_use = any(
-                        getattr(block, "type", None) == "tool_use"
+                        (isinstance(block, dict) and block.get("type") == "tool_use")
+                        or getattr(block, "type", None) == "tool_use"
                         for block in content
                     )
                     if not has_tool_use:
@@ -489,6 +510,10 @@ class StreamingAgent:
         block_text_parts: Dict[int, List[str]] = {}
         block_tool_states: Dict[int, ToolCallState] = {}
         text_started_index: Optional[int] = None
+        # token 用量（缓存命中率观测）：message_start 带输入/缓存字段，
+        # message_delta 带 output_tokens；同键取最大（字段单调不减，避免
+        # message_delta 的 0 值覆盖 message_start 的缓存计数）
+        call_usage: Dict[str, int] = {}
 
         self.logger.debug(f"[StreamingAgent] 开始流式调用, 消息数: {len(messages)}")
 
@@ -519,6 +544,11 @@ class StreamingAgent:
                     break
 
                 event_type = event.type
+
+                if event.usage:
+                    for k, v in event.usage.items():
+                        if v and v > call_usage.get(k, 0):
+                            call_usage[k] = v
 
                 if event_type == "content_block_start":
                     index = event.block_index
@@ -605,6 +635,23 @@ class StreamingAgent:
 
         # 添加助手响应到消息历史
         messages.append({"role": "assistant", "content": assistant_content})
+
+        # token 用量日志：前缀缓存命中率观测（cache_read / 总输入）
+        if call_usage:
+            cache_read = call_usage.get("cache_read_input_tokens", 0)
+            total_in = (
+                call_usage.get("input_tokens", 0)
+                + cache_read
+                + call_usage.get("cache_creation_input_tokens", 0)
+            )
+            hit_pct = cache_read * 100 // total_in if total_in else 0
+            self.logger.info(
+                f"[StreamingAgent] usage: input={call_usage.get('input_tokens', 0)} "
+                f"cache_read={cache_read} "
+                f"cache_creation={call_usage.get('cache_creation_input_tokens', 0)} "
+                f"output={call_usage.get('output_tokens', 0)} "
+                f"(前缀命中率 {hit_pct}%)"
+            )
 
         # 发射文本结束事件（如果有文本）
         if current_text:
@@ -703,6 +750,9 @@ class StreamingAgent:
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
                     "content": output_str,
+                    # is_error 与 web 端 DB 回放块（sessions_store.get_chat_history）
+                    # 同形同序：跨轮请求逐字节一致，prompt 前缀缓存不被回放差异打断
+                    "is_error": is_error,
                 }
             )
 

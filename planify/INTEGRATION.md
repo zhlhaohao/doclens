@@ -85,6 +85,21 @@ async def lifespan(app: FastAPI):
 import asyncio
 from pathlib import Path
 
+
+class QueueEmitter:
+    """最简事件发射器：只把 StreamEvent 放进队列。
+
+    EventEmitter 协议的便捷方法（emit_text/emit_tool_call/...）自带默认实现，
+    自定义 emitter 只需实现 emit() 一个方法。
+    """
+
+    def __init__(self):
+        self._queue: asyncio.Queue = asyncio.Queue()
+
+    async def emit(self, event) -> None:
+        await self._queue.put(event)
+
+
 async def planify_chat_stream(query: str, user_id: int, phone: str):
     """
     使用 Planify StreamingAgent 进行流式对话。
@@ -99,7 +114,6 @@ async def planify_chat_stream(query: str, user_id: int, phone: str):
         dict: 工具调用事件 {"type": "tool_call", ...}
     """
     from app.third_party.planify.streaming.runner import StreamingAgent
-    from app.third_party.planify.streaming.emitter import QueueEmitter
     from app.third_party.planify.streaming.types import StreamEventType
     from app.third_party.planify.core.session_manager import SessionManager
 

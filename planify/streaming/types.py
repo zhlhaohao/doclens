@@ -63,6 +63,11 @@ class EventEmitter(Protocol):
 
     定义如何发射流式事件。实现此协议的类可以将事件
     发送到不同的目标（SSE、WebSocket、内存队列等）。
+
+    便捷方法（emit_text / emit_tool_call 等）自带默认实现——统一包成
+    StreamEvent 后调 ``self.emit``。显式继承本协议的实现类只需实现
+    ``emit()`` 一个方法；有特殊逻辑的便捷方法（如 CLI/TUI 的
+    emit_ask_questions）按需覆盖。
     """
 
     async def emit(self, event: StreamEvent) -> None:
@@ -82,7 +87,12 @@ class EventEmitter(Protocol):
             content: 文本内容
             is_end: 是否为最后一个文本块
         """
-        ...
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TEXT,
+                data={"content": content, "is_end": is_end},
+            )
+        )
 
     async def emit_tool_call(
         self,
@@ -100,7 +110,17 @@ class EventEmitter(Protocol):
             input_data: 输入参数
             is_complete: 参数是否完整
         """
-        ...
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TOOL_CALL,
+                data={
+                    "tool_use_id": tool_use_id,
+                    "name": name,
+                    "input": input_data,
+                    "is_complete": is_complete,
+                },
+            )
+        )
 
     async def emit_tool_result(
         self,
@@ -118,7 +138,17 @@ class EventEmitter(Protocol):
             output: 输出结果
             is_error: 是否为错误
         """
-        ...
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.TOOL_RESULT,
+                data={
+                    "tool_use_id": tool_use_id,
+                    "name": name,
+                    "output": output,
+                    "is_error": is_error,
+                },
+            )
+        )
 
     async def emit_ask_user(
         self,
@@ -129,7 +159,7 @@ class EventEmitter(Protocol):
         default: Optional[str] = None,
     ) -> None:
         """
-        发射用户输入请求事件的便捷方法。
+        发射用户输入请求事件的便捷方法（旧 ask_user / user_confirm 工具用）。
 
         Args:
             request_id: 请求 ID
@@ -138,7 +168,42 @@ class EventEmitter(Protocol):
             options: 选项列表
             default: 默认值
         """
-        ...
+        data: Dict[str, Any] = {
+            "request_id": request_id,
+            "question": question,
+            "input_type": input_type,
+        }
+        if options is not None:
+            data["options"] = options
+        if default is not None:
+            data["default"] = default
+        await self.emit(StreamEvent(event_type=StreamEventType.ASK_USER, data=data))
+
+    async def emit_ask_questions(
+        self,
+        request_id: str,
+        questions: List[Dict[str, Any]],
+    ) -> None:
+        """
+        发射结构化问答请求（ask_user_question 工具的一等协议）。
+
+        questions 为校验后的结构化数组（question/header/multiSelect/options），
+        直接以数据结构传递——不再经旧 emit_ask_user 通道塞 JSON 字符串。
+
+        Args:
+            request_id: 请求 ID
+            questions: 结构化问题数组（1-4 问，每问 2-4 选项）
+        """
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.ASK_USER,
+                data={
+                    "request_id": request_id,
+                    "questions": questions,
+                    "input_type": "questions",
+                },
+            )
+        )
 
     async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
         """
@@ -148,7 +213,10 @@ class EventEmitter(Protocol):
             session_id: 会话 ID
             summary: 执行摘要
         """
-        ...
+        data: Dict[str, Any] = {"session_id": session_id}
+        if summary is not None:
+            data["summary"] = summary
+        await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
 
     async def emit_error(self, error: str, code: Optional[str] = None) -> None:
         """
@@ -158,7 +226,10 @@ class EventEmitter(Protocol):
             error: 错误信息
             code: 错误码
         """
-        ...
+        data: Dict[str, Any] = {"error": error}
+        if code is not None:
+            data["code"] = code
+        await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
 
 
 @runtime_checkable
