@@ -11,6 +11,7 @@
    hook 唤醒挂起的 ask 等待 + 取消 agent 任务——三层兜底，覆盖旧版
    「ask 挂起期间停止无效」缺口
 """
+
 import asyncio
 import json
 import logging
@@ -34,7 +35,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _stream_agent_response(message: str, session_id: Optional[str]) -> AsyncIterator[dict]:
+async def _stream_agent_response(
+    message: str, session_id: Optional[str]
+) -> AsyncIterator[dict]:
     """流式跑 StreamingAgent + 完成后策展参考资料。
 
     工具调用实时推送（思考过程可见）。AI 完成后一次性策展「## 参考资料」：
@@ -54,7 +57,14 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
     if session_id:
         try:
             from doclens.web_v2.deps import get_sessions_store
-            history = get_sessions_store().get_chat_history(session_id)
+
+            store = get_sessions_store()
+            # 技能会话身份：会话级显式声明（sessions.mode == 'skill'，由前端
+            # 创建技能会话时写入），与消息内容无关、不受历史压缩影响。
+            summary = store.get(session_id)
+            if summary is not None and summary.mode == "skill":
+                skill_session = True
+            history = store.get_chat_history(session_id)
             # 前端在发送时已把本轮 message_user 落库（会出现在 history 末尾），
             # run_stream 内部还会再追加一次 user_message —— 弹出避免重复。
             # （appendSession 失败时前端不会发起本请求，故末尾必是本轮消息）
@@ -64,18 +74,6 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 and history[-1].get("content") == message
             ):
                 history.pop()
-            # 技能会话身份：从 DB 首条 message_user 推导（本轮消息尚不在历史中，
-            # 首轮时 history 为空 → 看 message 自身；后续轮 history 已含首条）
-            first_user = next(
-                (
-                    m["content"]
-                    for m in history
-                    if m.get("role") == "user" and isinstance(m.get("content"), str)
-                ),
-                "",
-            )
-            if first_user and is_skill_message(first_user):
-                skill_session = True
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
@@ -140,7 +138,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             await sa.run_stream(history, message, session_id or session.session_id)
 
             # done：策展参考资料章节。
-            # 技能会话 → 提取式（正文提路径+存在性校验重建章节，无 toast）；
+            # 技能会话 → 即选择文件再点右键选择技能执行，例如总结文件技能，提取式（正文提路径+存在性校验重建章节，无 toast）；
             # 普通会话 → 声明式（合规则保留精选列表清洗+重编号，
             # 不合规则工具结果分级兜底，不再无条件全量重写，避免引文膨胀与 [N] 错位）
             try:
@@ -150,11 +148,13 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     )
                     logger.info(
                         "chat done(skill): tools=%d error=%s",
-                        len(emitter.tool_calls), bool(emitter.error),
+                        len(emitter.tool_calls),
+                        bool(emitter.error),
                     )
                     curated_fallback = False
                 else:
                     from doclens.web_v2.refs_curator import curate_references
+
                     curation = curate_references(
                         emitter.get_full_text(),
                         list(emitter.tool_calls),
@@ -164,7 +164,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                     curated_fallback = curation.fallback
                     logger.info(
                         "chat done: tools=%d fallback=%s refs=%d error=%s",
-                        len(emitter.tool_calls), curation.fallback, len(curation.paths),
+                        len(emitter.tool_calls),
+                        curation.fallback,
+                        len(curation.paths),
                         bool(emitter.error),
                     )
             except Exception as e:  # noqa: BLE001
@@ -180,7 +182,9 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                 queue.put_nowait({"type": "error", "detail": emitter.error})
             queue.put_nowait({"type": "token", "text": curated_text})
             if curated_fallback:
-                queue.put_nowait({"type": "toast", "level": "error", "detail": FALLBACK_TOAST})
+                queue.put_nowait(
+                    {"type": "toast", "level": "error", "detail": FALLBACK_TOAST}
+                )
         finally:
             # 持久化原始轮次（tool 链 + 模型原始输出），供下一轮 LLM 上下文回放。
             # 与展示层分离：前端另写 message_user/message_ai（策展文本），
@@ -188,6 +192,7 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
             if session_key:
                 try:
                     from doclens.web_v2.deps import get_sessions_store
+
                     traces = [
                         {
                             "tool_use_id": tc.get("tool_use_id", ""),
@@ -197,7 +202,8 @@ async def _stream_agent_response(message: str, session_id: Optional[str]) -> Asy
                             "is_error": tc.get("is_error", False),
                         }
                         for tc in emitter.tool_calls
-                        if "output" in tc  # 只落库已完成的调用对（中断残留不配对的丢弃）
+                        if "output"
+                        in tc  # 只落库已完成的调用对（中断残留不配对的丢弃）
                     ]
                     get_sessions_store().append_chat_turn_raw(
                         session_key, traces, emitter.get_full_text()
@@ -247,34 +253,64 @@ async def chat(req: ChatRequest):
             async for ev in _stream_agent_response(req.message, req.session_id):
                 t = ev.get("type")
                 if t == "token":
-                    yield {"event": "token", "data": json.dumps({"text": ev["text"]}, ensure_ascii=False)}
+                    yield {
+                        "event": "token",
+                        "data": json.dumps({"text": ev["text"]}, ensure_ascii=False),
+                    }
                 elif t == "tool_call":
-                    yield {"event": "tool_call", "data": json.dumps({
-                        "tool_use_id": ev["tool_use_id"],
-                        "name": ev["name"],
-                        "input": ev["input"],
-                        "is_complete": True,
-                    }, ensure_ascii=False)}
+                    yield {
+                        "event": "tool_call",
+                        "data": json.dumps(
+                            {
+                                "tool_use_id": ev["tool_use_id"],
+                                "name": ev["name"],
+                                "input": ev["input"],
+                                "is_complete": True,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
                 elif t == "tool_result":
-                    yield {"event": "tool_result", "data": json.dumps({
-                        "tool_use_id": ev["tool_use_id"],
-                        "name": ev["name"],
-                        "output": ev["output"],
-                        "is_error": ev.get("is_error", False),
-                        "duration_ms": ev.get("duration_ms"),
-                    }, ensure_ascii=False)}
+                    yield {
+                        "event": "tool_result",
+                        "data": json.dumps(
+                            {
+                                "tool_use_id": ev["tool_use_id"],
+                                "name": ev["name"],
+                                "output": ev["output"],
+                                "is_error": ev.get("is_error", False),
+                                "duration_ms": ev.get("duration_ms"),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
                 elif t == "toast":
-                    yield {"event": "toast", "data": json.dumps({
-                        "level": ev.get("level", "error"),
-                        "detail": ev.get("detail", ""),
-                    }, ensure_ascii=False)}
+                    yield {
+                        "event": "toast",
+                        "data": json.dumps(
+                            {
+                                "level": ev.get("level", "error"),
+                                "detail": ev.get("detail", ""),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
                 elif t == "ask":
-                    yield {"event": "ask", "data": json.dumps({
-                        "request_id": ev.get("request_id", ""),
-                        "questions_json": ev.get("questions_json", ""),
-                    }, ensure_ascii=False)}
+                    yield {
+                        "event": "ask",
+                        "data": json.dumps(
+                            {
+                                "request_id": ev.get("request_id", ""),
+                                "questions_json": ev.get("questions_json", ""),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
                 elif t == "error":
-                    yield {"event": "error", "data": json.dumps({"detail": ev.get("detail", "")})}
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"detail": ev.get("detail", "")}),
+                    }
             yield {"event": "done", "data": "{}"}
         except asyncio.CancelledError:
             # 客户端断开（关页 / 切走 / 断网 / 主动 abort）→ 通知生成线程停，

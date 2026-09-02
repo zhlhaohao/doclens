@@ -35,6 +35,8 @@ export interface PendingSkillChat {
   message: string;
   /** 新会话标题（技能名 + 首文件名） */
   title: string;
+  /** 技能会话声明：创建 session 时写 mode="skill"（后端据此切换提取式引文策展） */
+  isSkill: boolean;
 }
 
 export interface ChatMessage {
@@ -63,7 +65,8 @@ export interface Session {
   preview: string;
   updated_at: string;
   message_count: number;
-  mode?: "keyword" | "grep";
+  /** search: "keyword" | "grep"；chat 技能会话: "skill" */
+  mode?: "keyword" | "grep" | "skill";
 }
 
 export interface SearchViewState {

@@ -1,6 +1,6 @@
 # ask 双向回环详解（SSE 单向的补丁）
 
-> 生成日期：2026-08-31 · 基于仓库 `release` 分支实际代码
+> 生成日期：2026-08-31 · 2026-09-01 随全 async 化改造更新（`0ebb0853` 之后）
 > 覆盖文件：`planify/tools/user_interaction.py`、`planify/streaming/waiter.py`、`doclens/web_v2/api/ask.py`、`doclens/web_v2/api/chat.py`、`doclens/web_v2/api/_chat_emitter.py`、`frontend/src/api/ask.ts`、`frontend/src/views/chat-view.ts`、`frontend/src/components/ask-card.ts`
 
 ## 一、要解决的问题
@@ -12,44 +12,40 @@ SSE 是纯单向流（服务端→客户端），而 `ask_user_question` 是**�
 | 层 | 组件 | 职责 |
 |---|---|---|
 | planify 工具层 | `handle_ask_user_question`（`planify/tools/user_interaction.py:417`） | 校验入参、登记等待、发事件、**挂起**、包装答案为 tool_result |
-| 等待器 | `GlobalResponseWaiter`（`planify/streaming/waiter.py:32`） | 进程级字典：request_id → `PendingRequest(event, response)` |
-| SSE 正向 | `ChatEventEmitter.pending_asks` + `_feed` | 收集悬置问题，50ms 轮询搬运为 SSE `ask` 事件 |
+| 等待器 | `GlobalResponseWaiter`（`planify/streaming/waiter.py:32`） | 进程级字典：request_id → `PendingRequest(future, loop, consumed)` |
+| SSE 正向 | `ChatEventEmitter.pending_asks` + 直推 | 积累悬置问题 + emit 即入队为 SSE `ask` 事件 |
 | Web 反向 | `POST /api/ask/respond`（`doclens/web_v2/api/ask.py:25`） | 接收答案，调 `waiter.submit_response` |
 | 前端 | `chat-view.ts:426` + `ask-card.ts` | 解析问题、渲染交互卡片、提交答案 |
 
 ## 三、完整时序
 
-```
-生成线程 loop                          ASGI 主 loop                        浏览器
-══════════════                         ═════════════                       ═══════
-① 模型返回 tool_use: ask_user_question
-② handler 校验 questions（1-4 问×2-4 选项）
-   违规 → 直接返回错误字符串（模型自纠重试）
-③ request_id = req_{uuid8}            user_interaction.py:437
-   waiter.create_request(id)          → _pending 字典登记 PendingRequest
-④ emitter.emit_ask_user(
-     input_type="questions",          ← 复用旧协议，question 字段携带 JSON
-     question=json.dumps(questions))  → ChatEventEmitter.pending_asks 收集
-⑤ await waiter.wait_for_response(id, 300s)
-   ── handler 挂起，agent loop 整体暂停 ──
-                                        ⑥ _feed tick 发现 pending_asks 新增
-                                           → SSE "ask" 事件 ──────────────► ⑦ chatStream yield {type:"ask"}
-                                                                           parseAskQuestions 校验
-                                                                           setChatState({pendingAsk})
-                                                                           ask-card 渲染 radio/checkbox
-                                                                           用户作答 → _submit()
-                                                                        ◄── ⑧ POST /api/ask/respond
-                                        ⑨ ask_respond → waiter.submit_response(id, {answers})
-                                           pending.response = 响应
-                                           pending.event.set()   ← 跨线程唤醒生成线程
-⑩ wait_for_response 被唤醒
-   持锁 pop(id)  ← 一次性消费
-⑪ 返回 JSON: {"answers":[...], "request_id": id}
-⑫ StreamingAgent 把它打包为 tool_result
-   user 消息 → 下一轮 LLM 调用带上答案 → 对话继续
+全 async 化后全部参与者跑在**同一个 ASGI 主 loop** 上（无生成线程、无轮询）：
+
+```mermaid
+sequenceDiagram
+    participant M as 模型
+    participant H as ask handler<br/>(user_interaction.py:417)
+    participant W as waiter._pending<br/>(Future 本体)
+    participant S as SSE 消费协程<br/>(同 loop 独立协程)
+    participant FE as 浏览器<br/>(chatStream + ask-card)
+
+    M->>H: ① tool_use: ask_user_question
+    H->>H: ② 校验 questions（1-4 问×2-4 选项）<br/>违规 → 直接返回错误字符串（模型自纠重试）
+    H->>W: ③ create_request(req_x)<br/>登记 PendingRequest(future, loop)
+    H->>S: ④ emit_ask_user(questions)<br/>pending_asks.append + queue.put_nowait("ask")
+    H->>W: ⑤ await wait_for_response(req_x, 300s)
+    Note over H,W: handler 挂起（await Future），agent loop 暂停
+
+    S-->>FE: ⑥⑦ SSE "ask" 事件<br/>（消费协程独立运行，不受 ⑤ 影响）
+    FE->>FE: parseAskQuestions 校验 → ask-card 渲染<br/>用户作答 → _submit()
+    FE--)H: ⑧ POST /api/ask/respond（同 loop 另一 HTTP handler）
+    FE->>W: ⑨ submit_response(req_x, {answers})<br/>consumed=True → threadsafe future.set_result
+    W-->>H: ⑩ 唤醒，pop(req_x) 等待方收尾摘除
+    H->>H: ⑪ 返回 JSON {answers, request_id}
+    H->>M: ⑫ tool_result 打包为 user 消息<br/>→ 下一轮 LLM 调用带上答案，对话继续
 ```
 
-关键点：⑤挂起时 `run_stream` 协程暂停，但 `_feed` 是 `asyncio.gather` 里的**独立协程**，仍在轮询——所以④发出的问题依然能经⑥⑦到达前端。挂起不堵运输。
+关键点：⑤挂起的只是 ask handler 协程本身——SSE 消费协程是**独立协程**，④的 ask 事件已经（或即将）被它取走；⑧的 respond 是同一 loop 上的另一个 HTTP handler，与挂起的 handler 互不阻塞。挂起不堵运输、不堵应答。
 
 ## 四、逐环节细节
 
@@ -57,12 +53,58 @@ SSE 是纯单向流（服务端→客户端），而 `ask_user_question` 是**�
 
 - **入参校验前置**（`:429-435`）：`validate_ask_questions` 不通过就直接返回错误字符串作为 tool_result——模型看到错误描述可自行修正参数重试，不占用等待通道。
 - **request_id 生成**：`req_` + uuid 前 8 位（`:437`），由 handler 侧生成而非前端，保证两端持有同一个 id。
-- **复用旧协议**（`:440-447`）：`ask_user_question` 不新增 EventEmitter 方法，蹭 `emit_ask_user` 通道——`input_type="questions"` 作判别标记，`question` 字段装 JSON 序列化的 questions 数组。`ChatEventEmitter.emit_ask_user` 只认这个类型收进 `pending_asks`（`_chat_emitter.py:160-165`），旧形态到达只记告警不吞细节（`:167`）。
+- **复用旧协议**（`:440-447`）：`ask_user_question` 不新增 EventEmitter 方法，蹭 `emit_ask_user` 通道——`input_type="questions"` 作判别标记，`question` 字段装 JSON 序列化的 questions 数组。`ChatEventEmitter.emit_ask_user` 只认这个类型收进 `pending_asks` 并直推 SSE（`_chat_emitter.py:188-199`），旧形态到达只记告警不吞细节（`:201`）。
 - **挂起**（`:455-457`）：`await waiter.wait_for_response(request_id, timeout=300.0)`（`ASK_TIMEOUT_SECONDS`，`:26`）。
 
 ### 2. 正向运输（SSE ask 事件）
 
-`_feed` 每 50ms tick 用 `delivered_asks` 索引集合 diff `pending_asks`，新增即推 `{"type":"ask", "request_id", "questions_json"}`（`chat.py:131-138`）→ `_put` → `call_soon_threadsafe` → 主 loop queue → `event_stream` 转成 SSE 命名事件 `ask`（`chat.py:276-280`）。
+单 loop 直推：`emit_ask_user` 内 `pending_asks.append`（积累）+ `_push → queue.put_nowait`（运输，`_chat_emitter.py:193-198`）同一次调用完成 → SSE 消费协程被 `future.set_result` 唤醒 → `event_stream` 转 SSE 命名事件 `ask`（`chat.py:298-308`）。无轮询、无跨线程调度。
+
+### 2.5 pending_asks：全局状态的请求作用域投影
+
+`pending_asks` 不是一套独立机制，就是 emit_ask_user 里的一个 append + 三处读者。"pending" 状态的真相是三件事同时成立：
+
+```
+① waiter._pending 字典里有条目      ← 真正的"挂起"本体（Future 在等 set_result）
+② emitter.pending_asks 列表里有快照  ← ①的镜像记录（request_id + questions JSON）
+③ SSE "ask" 事件已推给前端          ← 用户侧的可见性
+```
+
+**①是本体，②是影子**——list 本身无状态机、无清理、append-only。它存在的核心价值：**waiter 是跨会话的全局单例，pending_asks 挂在每请求新建的 emitter 上，天然会话作用域**——中断 hook（`chat.py:100-105`）遍历它即可唤醒"本会话"挂起的 ask，无需反向索引全局字典。
+
+```mermaid
+sequenceDiagram
+    participant M as 模型
+    participant H as ask handler
+    participant W as waiter._pending<br/>（全局·本体）
+    participant E as pending_asks<br/>（请求作用域·影子）
+    participant FE as 前端卡片
+
+    M->>H: tool_use: ask_user_question
+    H->>W: create_request(req_x) ①登记 Future
+    H->>E: emit_ask_user → append 影子 ②
+    H->>FE: _push → SSE "ask" ③卡片渲染
+    H->>W: await wait_for_response(req_x, 300s) 挂起
+
+    alt 用户作答
+        FE--)W: POST /ask/respond → set_result
+        W-->>H: 唤醒，返回答案
+        Note over E: 影子条目留在列表里（已成历史）
+    else 用户点停止
+        FE--)W: /chat/stop → hook 遍历影子 → interrupt
+        W-->>H: set_result({"interrupted": true})
+        H-->>M: tool_result: interrupted
+    else 300s 超时
+        W-->>H: TimeoutError → 返回 timeout JSON
+    end
+
+    Note over E,W: 轮末 emitter 随请求 GC 整体消亡<br/>waiter 条目由 wait/超时回收
+```
+
+两个设计细节：
+
+- **影子从不清除**：答案到达后条目不删除，随 emitter 实例轮末整体 GC；
+- **无害的不对称**：影子里可能含已答完的条目——中断 hook 粗放遍历会对它们调 `waiter.interrupt()`，但本体已 pop，interrupt 返回 False no-op。一致性责任全部交给唯一本体（waiter），影子可以简单到不做任何维护。
 
 ### 3. 前端（`chat-view.ts:426` + `ask-card.ts`）
 
@@ -80,33 +122,36 @@ SSE 是纯单向流（服务端→客户端），而 `ask_user_question` 是**�
 2. **不存在即失效**：查不到 id 说明已超时/已答，返回 `{ok:false, submitted:false}`，前端据此置卡片失效态；
 3. **答案不过滤**：selected 里的未知 label、other 自由文本原样回传——静默过滤会丢用户真实意图，模型需要完整信息。
 
-### 5. 唤醒机制——跨线程 `event.set()`（全链路最微妙的一步）
+### 5. 唤醒机制——Future + 属主 loop threadsafe resolve（改造后）
 
-`submit_response` 是**同步方法**（`waiter.py:119`），运行在 ASGI 主 loop 线程；而被 set 的 `asyncio.Event` 属于**生成线程的私有 loop**（`wait_for_response` 正 await 它）。它不做 `call_soon_threadsafe`，直接 `pending.event.set()`（`:139`）：
+`submit_response` 保持**同步签名**（`waiter.py:135`，CLI 输入线程仍可直接调），但内部两步走：
 
-- `asyncio.Event.set()` 内部对等待 future 调 `set_result` → 触发 `loop.call_soon` 排回调 + 写 self-pipe 唤醒 selector；
-- 严格按官方口径，从非属主线程调 `call_soon` 不是线程安全的（正确姿势是 `call_soon_threadsafe`）；
-- 但 CPython 中 GIL 使 deque append 和 socket write 各自原子，实践中可靠——这正是 `:123-124` 注释「**不使用 _data_lock，因为此方法需要被同步上下文（CLI）调用，且 dict.get + 属性赋值在 CPython GIL 下是原子的**」的设计语境。`_data_lock`（asyncio.Lock）只保护 async 侧的字典操作，且它本身也不能跨 loop 使用，所以同步侧只能靠 GIL。
-- 工具顺序执行的同轮约束顺带保证了：同一时刻最多一个悬置 ask（第二个 ask 的 handler 要等第一个答完才进入）。
+1. `consumed = True` 标记互斥（线程锁内，一次性消费，重复提交/中断后提交均 False）；
+2. `pending.loop.call_soon_threadsafe(_resolve, pending, response)`——经属主 loop 调度 `future.set_result`，唤醒与传值一步完成。
+
+改造前的隐患已消除：旧版跨线程直接 `asyncio.Event.set()` 靠 GIL 兜底（理论竞态，注释自述）；旧版"submit 先摘除条目"在 submit 早于 wait 开始时会让等待方 KeyError（实测暴露），`consumed` 标记 + 等待方醒来后摘除的新设计修复了这一竞态。
+
+Web 路径下回环两侧（ask handler 与 respond 端点）同在 ASGI 主 loop，`call_soon_threadsafe` 等价于排队执行，行为一致且安全。
 
 ### 6. 一次性消费与超时回收
 
-- **消费即摘除**：`wait_for_response` 被唤醒后持锁 `pop(request_id)`（`:110-111`）——答案取走即失效，重复提交自然失败；
+- **consumed 互斥**：submit / interrupt / cancel 三者先标记者生效（`waiter.py:155/177/203`）；条目由等待方醒来后 `pop` 收尾（不提前摘除，防 submit-早于-wait 竞态）；
+- **中断唤醒**：`interrupt(request_id)` 摘除并 resolve `{"interrupted": True}`（`:161-179`），ask handler 醒来返回 `{"error": "interrupted"}` 给模型；
 - **超时三重回收**：
-  - handler 侧 300s 超时 → 返回 `{"error":"timeout", "request_id"}` 给模型（`user_interaction.py:470-476`），同时 waiter 清理 pending（`waiter.py:104-105`）；
-  - `cleanup_expired(max_age=600)` 兜底清扫陈旧条目（`:163`）；
+  - handler 侧 300s 超时 → 返回 `{"error":"timeout", "request_id"}` 给模型（`user_interaction.py`），同时 waiter 清理 pending；
+  - `cleanup_expired(max_age=600)` 兜底清扫，且会 resolve `{"error": "expired"}` 让等待方立刻拿到结果（不再干等超时）；
   - 前端 10s respond 超时只管 HTTP 请求本身，不影响后端等待。
 
 ## 五、边界情况与缺口
 
 | 场景 | 行为 | 评估 |
 |---|---|---|
-| **挂起期间用户点「停止」** | `interrupt_event` 的唯一检查点在 LLM 流式调用循环（`streaming/runner.py:512`），**工具执行/ask 挂起期间没有检查点** → 中断不生效，生成线程要等作答或 300s 超时才收尾 | 真实缺口：前端 abort 后 SSE 已断、界面已收尾，但后端线程仍挂着（最多 5 分钟），期间 token 不再产生但线程占用 |
+| ~~挂起期间用户点「停止」~~ | ~~中断检查点覆盖不到工具挂起期~~ | ✅ **已修复**（全 async 化）：`chat_interrupt` 中断 hook 注册表 + `waiter.interrupt`——`request_stop` 时遍历本会话 `pending_asks` 唤醒挂起的 ask，秒级退出（见 2.5 节时序图「用户点停止」分支） |
+| ~~跨线程 `event.set()`~~ | ~~GIL 兜底的理论竞态~~ | ✅ **已修复**（waiter Future 化）：`call_soon_threadsafe` resolve + `consumed` 一次性标记（见 4.5 节） |
 | **页面刷新** | `pendingAsk` 是前端内存态，刷新后卡片消失、request_id 丢失，用户无法作答 | 靠 300s 超时自然回收；历史回看时 `resolvedAnswers` 预填 answered 态（`ask-card.ts:166`） |
-| **跨线程 `event.set()`** | 见 4.5 节 | 理论竞态，GIL 实践兜底，未观察到问题 |
-| **用户不想回答** | 卡片没有「跳过/取消」按钮，`_canSubmit` 强制每问至少一个选择 | UX 缺口：只能干等超时，或选一个并非本意的选项 |
+| **用户不想回答** | 卡片没有「跳过/取消」按钮，`_canSubmit` 强制每问至少一个选择 | UX 缺口：只能干等超时，或选一个并非本意的选项（现在可点「停止」触发 interrupt 提前结束，但会终止整轮生成而非仅跳过问题） |
 | **模型同轮连发两个 ask** | 工具顺序执行，第二个 ask 在第一个答完后才登记 | 安全，但同时只有一个悬置也是**能力上限**（无法并行提问） |
 
 ## 六、一句话总结
 
-这是一个用「全局字典 + 跨线程 Event + 一次性 request_id」实现的进程内 RPC——SSE 负责把问题送出去，一个普通 POST 负责把答案带回来，waiter 是两者的会合点，协议靠 request_id 的唯一性与一次性保证安全。
+这是一个用「全局字典 + 属主 loop Future + 一次性 request_id」实现的进程内 RPC——SSE 负责把问题送出去，一个普通 POST 负责把答案带回来，waiter（本体）是两者的会合点、`pending_asks`（影子）是它会话作用域的投影；协议靠 request_id 的唯一性与一次性（consumed 互斥）保证安全。
