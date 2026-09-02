@@ -142,9 +142,13 @@ export class FileList extends LitElement {
       align-items: center;
       justify-content: center;
     }
-    .mobile-header .mobile-back:hover,
+    .mobile-header .mobile-back:hover:not(:disabled),
     .mobile-header .mobile-more:hover {
       background: var(--cortex-surface-muted);
+    }
+    .mobile-header .mobile-back:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
     .mobile-header .mobile-path {
       flex: 1;
@@ -393,7 +397,7 @@ export class FileList extends LitElement {
     actions.selectDir(parent);
   }
 
-  /** 移动端返回按钮。父组件监听 @back 自行决定如何导航。 */
+  /** 移动端返回按钮（语义 = 返回上级目录，根目录禁用）。父组件监听 @back 自行导航。 */
   private _onMobileBackClick = () => {
     this._showMobileMenu = false;
     this.dispatchEvent(new CustomEvent("back", {
@@ -436,7 +440,9 @@ export class FileList extends LitElement {
         <button
           class="mobile-back"
           type="button"
-          aria-label="返回"
+          aria-label="返回上级目录"
+          title="返回上级目录"
+          ?disabled=${currentDir === ""}
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
         <span class="mobile-path" title=${breadcrumb}>${breadcrumb}</span>

@@ -212,7 +212,7 @@ export interface FileExplorerViewState {
   detail: FileAttrs | null;
   detailLoading: boolean;
   listing: boolean;
-  mobilePane: "tree" | "list" | "detail";
+  mobilePane: "list" | "detail";
   pendingAction: "mkdir" | "delete" | "move" | "rename" | "upload" | null;
   error: string | null;
   filenameSearch: FilenameSearchState;

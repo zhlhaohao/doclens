@@ -17,15 +17,15 @@ test.describe("mobile filename search", () => {
     await gotoFilesViewMobile(page);
   });
 
-  test("MFILENAME-001: search box visible in mobile tree pane", async ({ page }) => {
+  test("MFILENAME-001: search box visible in mobile list pane", async ({ page }) => {
     await expect(page.locator("file-search-box input")).toBeVisible();
-    await expect(page.locator("file-tree")).toBeVisible();
+    await expect(page.locator("file-list")).toBeVisible();
   });
 
-  test("MFILENAME-002: typing shows results, file-tree hidden", async ({ page }) => {
+  test("MFILENAME-002: typing shows results, file-list hidden", async ({ page }) => {
     await page.locator("file-search-box input").fill("doc");
     await expect(page.locator("file-search-results")).toBeVisible();
-    await expect(page.locator("file-tree")).toHaveCount(0);
+    await expect(page.locator("file-list")).toHaveCount(0);
     await expect(page.locator("file-search-results .row").first()).toBeVisible();
   });
 
@@ -40,16 +40,16 @@ test.describe("mobile filename search", () => {
     await page.locator("file-search-box input").fill("doc");
     await page.locator("file-search-results .row").first().click();
     await expect(page.locator("preview-pane")).toBeVisible();
-    await page.locator(".back-btn").click();
-    // 返回 tree 面板，搜索结果仍在
+    await page.locator("preview-pane .mobile-back").click();
+    // 返回 list 面板，搜索结果仍在
     await expect(page.locator("file-search-results")).toBeVisible();
   });
 
-  test("MFILENAME-005: clearing search restores file-tree", async ({ page }) => {
+  test("MFILENAME-005: clearing search restores file-list", async ({ page }) => {
     await page.locator("file-search-box input").fill("doc");
     await expect(page.locator("file-search-results")).toBeVisible();
     await page.locator("file-search-box input").fill("");
-    await expect(page.locator("file-tree")).toBeVisible();
+    await expect(page.locator("file-list")).toBeVisible();
     await expect(page.locator("file-search-results")).toHaveCount(0);
   });
 });
