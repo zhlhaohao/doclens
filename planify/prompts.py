@@ -76,6 +76,7 @@ def get_realpath(workdir: Path) -> str:
 def build_system_prompt(
     workdir: str = ".",
     agent_type: str = "agent",
+    extra_prompt: Optional[str] = None,
 ) -> str:
     """
     构建系统提示词
@@ -86,6 +87,8 @@ def build_system_prompt(
             - "agent": 主代理（默认）
             - "streaming": 流式代理
             - "subagent": 子代理
+        extra_prompt: 宿主应用注入的额外 prompt 段（追加在末尾）。
+            planify 自身保持通用，领域策略（如知识库优先）由宿主经此参数注入。
 
     Returns:
         系统提示词字符串
@@ -125,21 +128,11 @@ def build_system_prompt(
 
 IMPORTANT: Skills 包含领域专属知识（检索策略、引文规范、降级方案）。当用户请求匹配某个 Skill 时，**必须先用 load_skill 工具加载它**，再按其指引使用相关工具，而不是直接调用工具。
 
-调用任何知识库工具（search_kb / read_document / manage_kb / grep）之前，**必须先调用 load_skill(name="knowledge-base")**，按返回的技能内容执行检索与引文。
-
 # Tool use mandate
 
 IMPORTANT: 凡是需要**执行命令或获取实时系统状态**的请求（查看日期时间、列目录、查进程/服务/注册表、运行脚本等），**必须调用相应工具**（bash / powershell）实际执行，并把工具返回的真实输出作为回答依据。禁止在未调用工具的情况下编造"执行结果"或"目录内容"——没有工具输出的所谓执行结果一律视为错误回答。
 
 **该要求在对话的每一轮都生效**：即使前文已经成功调用过工具，后续追问涉及时也必须重新调用，不得凭记忆或猜测作答。
-
-# Knowledge base first
-
-IMPORTANT: 本应用是知识库问答工具，本地知识库（search_kb 可检索）是回答事实性/资料性问题的**第一信息源**。用户提出事实性提问（机构、产品、技术、数据、名单、规范等）时：
-
-1. **必须先查知识库**：load_skill("knowledge-base") → search_kb（按技能指引多组关键词重试）。
-2. 知识库**确实无结果**（已换关键词/同义词重试）后，才可用 web_search 补充，并在回答中说明「知识库未收录，以下来自网络」。
-3. 禁止跳过知识库直接用 web_search 或凭模型记忆回答资料性问题。
 
 # Output efficiency
 
@@ -174,8 +167,6 @@ When working with tool results, write down any important information you might n
 
 **Current working directory**: {get_realpath(workdir_path)}
 
-This working directory is also the **knowledge base root** — every indexed/searchable document lives within this directory or its subdirectories. When the user asks about indexed content, use the knowledge base tools (search_kb / read_document) to retrieve it.
-
 **IMPORTANT security constraint**: Never perform any operations outside the working directory!
 
 All file read/write and command execution must be limited to the working directory. The system has implemented path security checks at the tool level, and any attempt to access outside the working directory will be blocked.
@@ -203,7 +194,10 @@ You are a coding agent. Use tools to solve tasks.
         if agent_type == "streaming":
             specific_prompt += "- Use ask_user to request user input when needed\n"
 
-    return base_prompt + specific_prompt
+    prompt = base_prompt + specific_prompt
+    if extra_prompt:
+        prompt += f"\n{extra_prompt}\n"
+    return prompt
 
 
 class SystemPromptBuilder:
@@ -217,11 +211,13 @@ class SystemPromptBuilder:
         self._cached_prompt: Optional[str] = None
         self._cached_workdir: Optional[str] = None
         self._cached_agent_type: Optional[str] = None
+        self._cached_extra_prompt: Optional[str] = None
 
     def get(
         self,
         workdir: str = ".",
         agent_type: str = "agent",
+        extra_prompt: Optional[str] = None,
     ) -> str:
         """
         获取系统提示词（带缓存）
@@ -229,6 +225,7 @@ class SystemPromptBuilder:
         Args:
             workdir: 工作目录路径
             agent_type: 代理类型
+            extra_prompt: 宿主应用注入的额外 prompt 段（纳入缓存键）
 
         Returns:
             系统提示词字符串
@@ -238,13 +235,15 @@ class SystemPromptBuilder:
             self._cached_prompt is not None
             and self._cached_workdir == workdir
             and self._cached_agent_type == agent_type
+            and self._cached_extra_prompt == extra_prompt
         ):
             return self._cached_prompt
 
         # 生成新的提示词并缓存
-        self._cached_prompt = build_system_prompt(workdir, agent_type)
+        self._cached_prompt = build_system_prompt(workdir, agent_type, extra_prompt)
         self._cached_workdir = workdir
         self._cached_agent_type = agent_type
+        self._cached_extra_prompt = extra_prompt
 
         return self._cached_prompt
 
@@ -253,3 +252,4 @@ class SystemPromptBuilder:
         self._cached_prompt = None
         self._cached_workdir = None
         self._cached_agent_type = None
+        self._cached_extra_prompt = None

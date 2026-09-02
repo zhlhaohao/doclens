@@ -5,19 +5,17 @@
 
 import logging
 import os
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 
-def _data_dirname() -> str:
-    """数据目录名：优先读 doclens 写入的 CORTEX_DATA_DIRNAME env；未设则回退 .cortex。
+def data_dirname() -> str:
+    """数据目录名：读宿主应用设置的 CORTEX_DATA_DIRNAME env；未设则回退 .cortex。
 
-    planify 不反向依赖 doclens —— doclens.config 模块加载时把模式决策写入该 env，
-    planify 在此读取即可与 doclens 保持一致（开发 .cortex / 发行版 .doclens）。
-    planify 独立运行时 env 未设 → 回退 .cortex（符合 planify 自身语义）。
+    宿主（如 doclens）在模块加载时把模式决策写入该 env，planify 读取即可与
+    宿主保持一致；planify 独立运行时 env 未设 → 回退 .cortex。
     """
     return os.environ.get("CORTEX_DATA_DIRNAME", ".cortex")
 
@@ -40,63 +38,6 @@ class SafeFileHandler(logging.FileHandler):
             super().emit(record)
 
 
-def _cortex_package_dir() -> Optional[Path]:
-    """定位 cortex 包安装目录，用于拷贝模板文件。"""
-    try:
-        # planify/core/logging_config.py -> site-packages/cortex/
-        pkg = Path(__file__).parent.parent.parent / "doclens"
-        if pkg.exists():
-            return pkg
-    except Exception:
-        pass
-    return None
-
-
-def _init_cortex_workspace(workspace_dir: Path) -> None:
-    """初始化数据目录工作区：拷贝 .env.example 和 skills 目录（开发 .cortex / 发行版 .doclens）。
-
-    仅在首次创建时执行，已有文件不覆盖。
-    完成后提示用户编辑 .env 填写大模型密钥。
-    """
-    pkg_dir = _cortex_package_dir()
-    if pkg_dir is None:
-        return
-
-    copied_any = False
-
-    # 1. 拷贝 .env.example -> 数据目录/.env
-    env_example = pkg_dir / ".env.example"
-    if env_example.exists():
-        target_env = workspace_dir / ".env"
-        if not target_env.exists():
-            try:
-                shutil.copy2(env_example, target_env)
-                copied_any = True
-            except Exception:
-                pass
-
-    # 2. 拷贝 skills 目录 -> 数据目录/skills/
-    skills_src = pkg_dir / "skills"
-    if skills_src.exists() and skills_src.is_dir():
-        target_skills = workspace_dir / "skills"
-        if not target_skills.exists():
-            try:
-                shutil.copytree(skills_src, target_skills)
-                copied_any = True
-            except Exception:
-                pass
-
-    # 3. 提示用户编辑 .env
-    if copied_any:
-        print(
-            f"\n📋 已初始化工作区: '{workspace_dir}'\n"
-            f"   - 已创建 {workspace_dir / '.env'}\n"
-            f"   - 已拷贝 skills 目录\n"
-            f"\n⚠️  请先编辑 '{workspace_dir / '.env'}' 填写你的大模型 API 密钥，"
-            f"然后重新运行 cortex。\n"
-        )
-
-
 def _load_cortex_env():
     """从 .env 文件加载环境变量（如果尚未加载）"""
     if os.environ.get("CORTEX_ENV_LOADED"):
@@ -104,11 +45,11 @@ def _load_cortex_env():
     try:
         from dotenv import load_dotenv
         # 全局配置: ~/.<数据目录>/.env （开发 .cortex / 发行版 .doclens）
-        global_env = Path.home() / _data_dirname() / ".env"
+        global_env = Path.home() / data_dirname() / ".env"
         if global_env.exists():
             load_dotenv(global_env, override=True)
         # 项目配置: {cwd}/<数据目录>/.env
-        local_env = Path.cwd() / _data_dirname() / ".env"
+        local_env = Path.cwd() / data_dirname() / ".env"
         if local_env.exists():
             load_dotenv(local_env, override=True)
         os.environ["CORTEX_ENV_LOADED"] = "1"
@@ -146,7 +87,7 @@ def setup_logging(
             if env_dir:
                 log_dir = Path(env_dir)
             else:
-                log_dir = (Path.cwd() / _data_dirname() / "logs").resolve()
+                log_dir = (Path.cwd() / data_dirname() / "logs").resolve()
 
     # 创建日志目录（默认信任，不再询问）
     log_dir.mkdir(parents=True, exist_ok=True)

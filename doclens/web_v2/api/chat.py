@@ -94,6 +94,7 @@ async def _stream_agent_response(
         bind_ask_user_question_handler,
         bind_user_interaction_handlers,
     )
+    from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA
 
     waiter = get_global_waiter()
 
@@ -107,16 +108,19 @@ async def _stream_agent_response(
     if session_key:
         register_interrupt_hook(session_key, _interrupt_pending_asks)
 
-    bind_user_interaction_handlers(session.tool_handlers, emitter, waiter)
+    # 用户交互工具的 handler 捕获本请求的 emitter——必须绑在每请求浅拷贝上，
+    # 不能写回共享单例 session.tool_handlers（同 session 并发两流会互相覆盖绑定）。
+    tool_handlers = {**session.tool_handlers}
+    bind_user_interaction_handlers(tool_handlers, emitter, waiter)
     # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
     # session 工具集过滤，此处无需绑定）
-    bind_ask_user_question_handler(session.tool_handlers, emitter, waiter)
+    bind_ask_user_question_handler(tool_handlers, emitter, waiter)
 
     sa = StreamingAgent(
         client=session.client,
         model=session.model,
         tools=session.tools,
-        tool_handlers=session.tool_handlers,
+        tool_handlers=tool_handlers,
         emitter=emitter,
         config=StreamingConfig(
             compact_threshold=int(round(session.config.planify_context_window * 0.8)),
@@ -130,6 +134,7 @@ async def _stream_agent_response(
         logger_instance=session.logger,
         session=session,
         interrupt_event=interrupt,
+        system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
     )
 
     async def _run_and_finalize() -> None:

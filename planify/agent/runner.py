@@ -48,6 +48,7 @@ class Agent:
         session: Optional[Any] = None,
         tool_callback: Optional[callable] = None,
         tool_result_callback: Optional[callable] = None,
+        system_prompt_extra: Optional[str] = None,
     ):
         """
         初始化代理。
@@ -66,6 +67,7 @@ class Agent:
             session: Session 实例（可选）
             tool_callback: 工具调用回调函数 (name, args) -> None
             tool_result_callback: 工具结果回调函数 (name, result) -> None
+            system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选）
         """
         # provider 是 client 的别名（LLMProvider 抽象接口），
         # 所有调用点（包括 compact）已迁移完成。
@@ -82,6 +84,7 @@ class Agent:
         self.session = session
         self.tool_callback = tool_callback
         self.tool_result_callback = tool_result_callback
+        self._system_prompt_extra = system_prompt_extra
 
         # 延迟导入以避免循环依赖（使用相对导入）
         from ..context import estimate_tokens, microcompact, auto_compact
@@ -102,7 +105,9 @@ class Agent:
             系统提示词字符串
         """
         workdir = self.config.get("workdir", ".")
-        return self._prompt_builder.get(workdir, agent_type="agent")
+        return self._prompt_builder.get(
+            workdir, agent_type="agent", extra_prompt=self._system_prompt_extra
+        )
 
     def run(self, messages: List[Dict]) -> None:
         """

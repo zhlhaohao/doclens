@@ -12,8 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from anthropic import Anthropic
-
 if TYPE_CHECKING:
     from planify.skills.access_state import SkillAccessState
 
@@ -168,6 +166,56 @@ class Session:
     def llm_provider(self) -> Any:
         """统一访问 LLMProvider，优先用 provider，回退到 client。"""
         return self.provider or self.client
+
+    def update_llm_config(
+        self,
+        *,
+        protocol: str = "",
+        api_key: Optional[str] = None,
+        model_id: Optional[str] = None,
+        base_url: Optional[str] = None,
+        planify_context_window: Optional[int] = None,
+        planify_max_tokens: Optional[int] = None,
+    ) -> None:
+        """热更新 LLM 配置：重建 Provider 并更新 SessionConfig 字段。
+
+        planify 官方的配置热更新入口——宿主应用（如 doclens 的 /api/config
+        PUT 与预设切换）应调用本方法，而非直接写 session.config 内部字段。
+        新建的 Provider 与旧实例互不影响；已构造的 Agent 不受影响（它们在
+        构造时捕获 client/model），下次构造时读到新值。
+
+        Args:
+            protocol: 协议类型（"anthropic" / "openai_compat"），空串表示沿用
+                      create_provider 的默认判定
+            api_key: 新 API Key；None 表示不更新
+            model_id: 新模型 ID；None 表示不更新
+            base_url: 新 API 端点；None 表示不更新
+            planify_context_window: 上下文窗口；None 表示不更新
+            planify_max_tokens: 单次输出上限；None 表示不更新
+        """
+        from .llm import create_provider
+
+        client = create_provider(
+            {
+                "protocol": protocol,
+                "api_key": api_key,
+                "model_id": model_id,
+                "base_url": base_url,
+            }
+        )
+        # client 与 provider 双指同一实例（client 为历史兼容字段）
+        self.client = client
+        self.provider = client
+        if model_id is not None:
+            self.config.model_id = model_id
+        if api_key is not None:
+            self.config.api_key = api_key
+        if base_url is not None:
+            self.config.base_url = base_url
+        if planify_context_window is not None:
+            self.config.planify_context_window = planify_context_window
+        if planify_max_tokens is not None:
+            self.config.planify_max_tokens = planify_max_tokens
 
     @property
     def model(self) -> str:
