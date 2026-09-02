@@ -16,7 +16,7 @@ export function resetStore(target: typeof store) {
       detail: null,
       detailLoading: false,
       listing: false,
-      mobilePane: "tree",
+      mobilePane: "list",
       pendingAction: null,
       error: null,
       filenameSearch: {

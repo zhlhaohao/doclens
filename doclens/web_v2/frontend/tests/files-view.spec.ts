@@ -293,7 +293,7 @@ describe("files-view mobile filename search", () => {
     setDesktopViewport();
   });
 
-  it("renders file-search-box in mobile tree pane", async () => {
+  it("renders file-search-box in mobile list pane", async () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
@@ -302,7 +302,7 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
-  it("shows file-search-results instead of file-tree when search active on mobile", async () => {
+  it("shows file-search-results instead of file-list when search active on mobile", async () => {
     actions.setFilenameSearchQuery({
       query: "read",
       results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
@@ -313,21 +313,21 @@ describe("files-view mobile filename search", () => {
     await el.updateComplete;
     const mobile = el.shadowRoot.querySelector(".mobile-layout");
     expect(mobile.querySelector("file-search-results")).toBeTruthy();
-    expect(mobile.querySelector("file-tree")).toBeNull();
+    expect(mobile.querySelector("file-list")).toBeNull();
     document.body.removeChild(el);
   });
 
-  it("shows file-tree when search inactive on mobile", async () => {
+  it("shows file-list when search inactive on mobile", async () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
     const mobile = el.shadowRoot.querySelector(".mobile-layout");
-    expect(mobile.querySelector("file-tree")).toBeTruthy();
+    expect(mobile.querySelector("file-list")).toBeTruthy();
     expect(mobile.querySelector("file-search-results")).toBeNull();
     document.body.removeChild(el);
   });
 
-  it("restores file-tree after clearing search on mobile", async () => {
+  it("restores file-list after clearing search on mobile", async () => {
     actions.setFilenameSearchQuery({
       query: "read",
       results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
@@ -339,7 +339,7 @@ describe("files-view mobile filename search", () => {
     actions.clearFilenameSearch();
     await el.updateComplete;
     const mobile = el.shadowRoot.querySelector(".mobile-layout");
-    expect(mobile.querySelector("file-tree")).toBeTruthy();
+    expect(mobile.querySelector("file-list")).toBeTruthy();
     expect(mobile.querySelector("file-search-results")).toBeNull();
     document.body.removeChild(el);
   });
@@ -356,8 +356,8 @@ describe("files-view mobile filename search", () => {
     // 进入 detail 面板（搜索框被卸载）
     actions.setMobilePane("detail");
     await el.updateComplete;
-    // 返回 tree 面板（搜索框重挂载）
-    actions.setMobilePane("tree");
+    // 返回 list 面板（搜索框重挂载）
+    actions.setMobilePane("list");
     await el.updateComplete;
     const searchBox = el.shadowRoot.querySelector(".mobile-layout file-search-box") as any;
     const input = searchBox.shadowRoot.querySelector("input") as HTMLInputElement;
@@ -365,7 +365,7 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
-  it("_goBack from detail goes to tree when search active on mobile", async () => {
+  it("_goBack from detail goes to list when search active on mobile", async () => {
     actions.setFilenameSearchQuery({
       query: "read",
       results: [{ path: "a.md", name: "a.md", size: 1, modifiedAt: "2026-06-24T00:00:00Z" }],
@@ -378,7 +378,7 @@ describe("files-view mobile filename search", () => {
     // detail pane 的返回键移到 preview-pane 内部的 mobile-back
     el._goBack();
     await el.updateComplete;
-    expect(store.getState().files.mobilePane).toBe("tree");
+    expect(store.getState().files.mobilePane).toBe("list");
     document.body.removeChild(el);
   });
 
@@ -447,8 +447,9 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
-  it("list pane back event from file-list calls _goBack", async () => {
+  it("list pane back event from file-list goes up one directory", async () => {
     actions.setMobilePane("list");
+    actions.setFilesState({ currentDir: "docs", treeCache: { docs: [], "": [] } });
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
@@ -456,7 +457,22 @@ describe("files-view mobile filename search", () => {
       new CustomEvent("back", { bubbles: true, composed: true }),
     );
     await el.updateComplete;
-    expect(store.getState().files.mobilePane).toBe("tree");
+    // 第一层 list 的返回 = 上溯一级目录，面板保持在 list
+    expect(store.getState().files.currentDir).toBe("");
+    expect(store.getState().files.mobilePane).toBe("list");
+    document.body.removeChild(el);
+  });
+
+  it("list pane back at root directory is a no-op", async () => {
+    actions.setMobilePane("list");
+    actions.setFilesState({ currentDir: "", treeCache: { "": [] } });
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    el._goBack();
+    await el.updateComplete;
+    expect(store.getState().files.currentDir).toBe("");
+    expect(store.getState().files.mobilePane).toBe("list");
     document.body.removeChild(el);
   });
 

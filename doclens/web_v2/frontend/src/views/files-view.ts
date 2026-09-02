@@ -516,6 +516,7 @@ export class FilesView extends LitElement {
     actions.setPendingSkillChat({
       message: lines.join("\n"),
       title: `${skill.name} · ${firstFile}`,
+      isSkill: true,
     });
     actions.clearSelection();
     actions.setView("chat");
@@ -727,10 +728,17 @@ export class FilesView extends LitElement {
   private _goBack() {
     const pane = this._state.mobilePane;
     if (pane === "detail") {
-      if (this._isFilenameSearchActive) actions.setMobilePane("tree");
-      else actions.setMobilePane("list");
-    } else if (pane === "list") {
-      actions.setMobilePane("tree");
+      // detail → list（文件名搜索结果也渲染在 list 层，无独立 tree 层）
+      actions.setMobilePane("list");
+    } else {
+      // list 是第一层：返回 = 上溯一级目录；根目录无可返回
+      const { currentDir } = this._state;
+      if (currentDir === "") return;
+      const parent = currentDir.includes("/")
+        ? currentDir.slice(0, currentDir.lastIndexOf("/"))
+        : "";
+      actions.selectDir(parent);
+      void this._ensureLoaded(parent);
     }
   }
 
@@ -1039,7 +1047,7 @@ export class FilesView extends LitElement {
     const searchState = this._searchBoxState;
     return html`
       <div class="mobile-layout">
-        ${pane === "tree"
+        ${pane === "list"
           ? html`
               <file-search-box
                 .value=${store.getState().files.filenameSearch.query}
@@ -1053,25 +1061,15 @@ export class FilesView extends LitElement {
                     @activated=${this._onFilenameResultActivated}
                     @clear=${this._onFilenameClear}
                   ></file-search-results>`
-                : html`<file-tree
-                    @select-dir=${async (e: CustomEvent<{ path: string }>) => {
-                      actions.selectDir(e.detail.path);
-                      await this._ensureLoaded(e.detail.path);
-                      actions.expandDir(e.detail.path);
-                      actions.setMobilePane("list");
-                    }}
-                  ></file-tree>`}
+                : html`<file-list
+                    .activePath=${this._previewPath}
+                    .uploading=${this._uploading}
+                    ?mobile=${true}
+                    @action=${this._onAction}
+                    @activated=${this._onFileListActivated}
+                    @back=${() => this._goBack()}
+                  ></file-list>`}
             `
-          : ""}
-        ${pane === "list"
-          ? html`<file-list
-              .activePath=${this._previewPath}
-              .uploading=${this._uploading}
-              ?mobile=${true}
-              @action=${this._onAction}
-              @activated=${this._onFileListActivated}
-              @back=${() => this._goBack()}
-            ></file-list>`
           : ""}
         ${pane === "detail"
           ? html`<div class="mobile-preview">${this._renderPreviewPane({ mobile: true })}</div>`

@@ -84,7 +84,7 @@ export const INITIAL_STATE: AppState = {
     detail: null,
     detailLoading: false,
     listing: false,
-    mobilePane: "tree",
+    mobilePane: "list",
     pendingAction: null,
     error: null,
     filenameSearch: {
@@ -316,7 +316,6 @@ export const actions = {
         selectedPaths: [],
         lastSelectedAnchor: null,
         detail: null,
-        mobilePane: cur.mobilePane === "tree" ? "list" : cur.mobilePane,
       },
     });
   },
@@ -374,7 +373,7 @@ export const actions = {
     store.setState({ files: { ...cur, treeCache: nextCache } });
   },
 
-  setMobilePane(pane: "tree" | "list" | "detail") {
+  setMobilePane(pane: "list" | "detail") {
     const cur = store.getState().files;
     store.setState({ files: { ...cur, mobilePane: pane } });
   },
