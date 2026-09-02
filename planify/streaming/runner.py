@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..core.llm.types import Tool
-from ..core.logging_config import _data_dirname
+from ..core.logging_config import data_dirname
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
@@ -78,6 +78,7 @@ class StreamingAgent:
         logger_instance: Optional[logging.Logger] = None,
         session: Optional[Any] = None,
         interrupt_event: Optional[threading.Event] = None,
+        system_prompt_extra: Optional[str] = None,
     ):
         """
         初始化流式代理。
@@ -96,6 +97,8 @@ class StreamingAgent:
             skills_loader: 技能加载器
             logger_instance: 日志记录器
             session: Session 实例
+            system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选，
+                领域策略如知识库优先由宿主经此注入，planify 自身保持通用）
         """
         self.client = client
         # provider 是 client 的别名（LLMProvider 抽象接口），
@@ -114,6 +117,7 @@ class StreamingAgent:
         self.logger = logger_instance or logger
         self.session = session
         self._interrupt_event = interrupt_event
+        self._system_prompt_extra = system_prompt_extra
 
         # 工具调用状态追踪
         self._tool_call_states: Dict[int, ToolCallState] = {}
@@ -146,7 +150,9 @@ class StreamingAgent:
 
         # logger.info("System prompt start generate:\n")
 
-        prompt = self._prompt_builder.get(workdir, agent_type="streaming")
+        prompt = self._prompt_builder.get(
+            workdir, agent_type="streaming", extra_prompt=self._system_prompt_extra
+        )
         # logger.info(f"System prompt:\n{prompt}")
         return prompt
 
@@ -193,11 +199,11 @@ class StreamingAgent:
             if agent_md_path.exists():
                 agent_md_content = agent_md_path.read_text(encoding="utf-8")
         else:
-            global_agent_md = Path.home() / _data_dirname() / "agent.md"
+            global_agent_md = Path.home() / data_dirname() / "agent.md"
             workdir = "."
             if self.config:
                 workdir = getattr(self.config, "workdir", ".")
-            local_agent_md = Path(workdir) / _data_dirname() / "agent.md"
+            local_agent_md = Path(workdir) / data_dirname() / "agent.md"
             md_parts = []
             if global_agent_md.exists():
                 md_parts.append(global_agent_md.read_text(encoding="utf-8"))
@@ -215,10 +221,10 @@ class StreamingAgent:
             )
 
         # 3. 临时文件工作区指引（仅 prompt 软引导，工具层不做硬重定向）：
-        # 临时脚本写到 <数据目录>/tmp/<session_id>/，该目录已被索引器/watcher 排除，
-        # 由 web 层在应用启动 / 会话删除时清理（doclens/web_v2/tmp_workspace.py）
+        # 临时脚本写到 <数据目录>/tmp/<session_id>/，该目录由宿主应用负责
+        # 从索引/监控中排除并定期清理。
         if session_id:
-            tmp_rel = f"{_data_dirname()}/tmp/{session_id}"
+            tmp_rel = f"{data_dirname()}/tmp/{session_id}"
             context_parts.append(
                 "<system-reminder>\n"
                 "# Temporary Files\n\n"

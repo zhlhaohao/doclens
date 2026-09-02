@@ -128,19 +128,19 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 
 ### 8. prompts.py
 
-`build_system_prompt(workdir, agent_type)`（`:76`）唯一模板入口：通用 base（行为规范 / 先读后改 / 专用工具优先 / Skill 门禁优先 / Tool use mandate / Knowledge base first / 精简语气 / 实时环境注入）+ agent_type 分支（`subagent` / `agent` / `streaming`）。`SystemPromptBuilder` 按 (workdir, agent_type) 缓存。体系外 prompt 两处：teammate 内联拼接、compact 摘要 prompt。
+`build_system_prompt(workdir, agent_type, extra_prompt=None)`（`:76`）唯一模板入口：通用 base（行为规范 / 先读后改 / 专用工具优先 / Skill 优先 / Tool use mandate / 精简语气 / 实时环境注入）+ agent_type 分支（`subagent` / `agent` / `streaming`）。`extra_prompt` 是宿主注入扩展点——领域策略（如 doclens 的「Knowledge base first」）由宿主经 `StreamingAgent`/`Agent` 的 `system_prompt_extra` 构造参数传入，planify base prompt 不含任何宿主业务语义（2026-09-02 边界修复）。`SystemPromptBuilder` 按 (workdir, agent_type, extra_prompt) 缓存。体系外 prompt 两处：teammate 内联拼接、compact 摘要 prompt。
 
 ### 9. 配置与编码
 
 - 配置双通路：`get_config()` dict（优先级 user_config > 环境变量 > `.planify/.env` > `.env.local` > `.env` > 默认值，被 SessionManager 使用）与 `register_config()` / `_PlanifySettings`（宿主注入）。检测到 `PLANIFY_BASE_URL` 时 pop `ANTHROPIC_AUTH_TOKEN` 防认证冲突
 - `encoding.py`：专治 Windows GBK 控制台与 UTF-8 冲突——`SetConsoleCP(65001)`、stdio reconfigure、`safe_print/safe_input`
-- `Session`（`core/session.py:86`）：内存态组件包，消息历史由 `threading.RLock` 保护，`replace_messages_in_place` 服务压缩后就地替换；`SessionManager` 是线程安全单例，多用户每用户单会话
+- `Session`（`core/session.py:86`）：内存态组件包，消息历史由 `threading.RLock` 保护，`replace_messages_in_place` 服务压缩后就地替换；`update_llm_config()` 是官方配置热更新入口（重建 Provider + 更新 SessionConfig 字段，宿主勿直写内部）；`SessionManager` 是线程安全单例，多用户每用户单会话
 
 ## 四、发现的技术债
 
-1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）
+1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）。另：**双装配器**为已接受决策——`SessionManager.initialize_session_components` 仅服务 legacy REPL，doclens 以 `CortexAgent.initialize` 为官方装配根（理由与同步约定见 `doclens/web_v2/docs/ARCHITECTURE-planify-boundary.md` §六 #2）
 2. **teammate 无压缩管道**：`teammate_manager.py` 的 `_loop` 未接 compact，上下文无界增长；`:394` 的 identity 重注入是预留补丁位
-3. **死代码**：`core/client.py` 的 `init_anthropic_client` 无任何调用方（已被 `AnthropicProvider.__init__` 内联取代，且残留修改全局 `os.environ` 的隐患）；`session.py:15` 死导入 `Anthropic`
+3. **死代码**：`core/client.py` 的 `init_anthropic_client` 无任何调用方（已被 `AnthropicProvider.__init__` 内联取代，且残留修改全局 `os.environ` 的隐患）；~~`session.py:15` 死导入 `Anthropic`~~（2026-09-02 已删）
 4. **`transcript_dir` 语义混乱**：config 中实际是文件路径却被当目录用，runner 已防御性改用 `workdir/.transcripts`
 5. **会话持久化缺位**：消息历史纯内存，唯一落盘是 auto_compact 触发时的 transcript；doclens 侧靠 `sessions_store.py`（SQLite）自建持久化补位
 6. **配置双通路**：`get_config()` dict 与 `register_config()` / `_PlanifySettings` 并存，后者混入与 LLM 层无关的百度天气配置

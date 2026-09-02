@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from doclens.config import data_dirname, get_global_cortex_dir
+from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA
 
 # 确保 planify 模块可导入
 import os
@@ -130,7 +131,14 @@ class CortexAgent:
             (self.workdir / f"{data_dirname()}/{subdir}").mkdir(parents=True, exist_ok=True)
 
     def initialize(self):
-        """初始化 Agent 会话"""
+        """初始化 Agent 会话。
+
+        CortexAgent.initialize 是 doclens 的官方装配根——刻意不复用
+        planify 的 SessionManager.initialize_session_components（该路径仅服务
+        planify 自带 legacy REPL main.py，且缺少 gui_mode / skill_access_state /
+        自定义 skills_dir 等 doclens 必需插槽）。代价：planify 装配逻辑演进时
+        需人工同步此处（详见 web_v2/docs/ARCHITECTURE-planify-boundary.md）。
+        """
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
@@ -328,36 +336,23 @@ class CortexAgent:
         return self
 
     def apply_config(self, config) -> None:
-        """Hot-reload AI config: update session client + model + base URL etc.
+        """Hot-reload AI config: 经 planify 官方热更新 API 更新 session。
 
-        关键修复：不能改 self.session.model —— Session.model 是只读 @property，
-        返回 self.config.model_id。给 property 赋值会抛 AttributeError，导致
-        /api/config PUT 走到 deps.reload_config → 这里 → 异常向上传到 PUT
-        返回 500，hot-reload 实际失败（.env 写成功但 agent session 用旧 model）。
-
-        正确做法：直接修改 SessionConfig（dataclass 字段可写）。Session.model
-        property 会自动反映 self.config.model_id 的新值。
+        历史教训：不能改 self.session.model —— Session.model 是只读 @property
+        （返回 self.config.model_id），赋值会抛 AttributeError 导致
+        /api/config PUT 500。正确通路是 Session.update_llm_config()，
+        由 planify 自己负责重建 Provider 并更新 SessionConfig 字段。
         """
         if self.session is None:
             return
-        provider_config = {
-            "protocol": getattr(config, "planify_protocol", ""),
-            "api_key": config.planify_api_key,
-            "model_id": config.planify_model_id,
-            "base_url": config.planify_base_url,
-        }
-        client = create_provider(provider_config)
-        # LLM provider 双指（client + provider 别名，所有 caller 已迁移到 provider.*）
-        self.session.client = client
-        self.session.provider = client
-        # 配置字段走 SessionConfig（避免 @property model/set 没有 setter）
-        self.session.config.model_id = config.planify_model_id
-        self.session.config.api_key = config.planify_api_key
-        self.session.config.base_url = config.planify_base_url
-        if getattr(config, "planify_context_window", None):
-            self.session.config.planify_context_window = config.planify_context_window
-        if getattr(config, "planify_max_tokens", None):
-            self.session.config.planify_max_tokens = config.planify_max_tokens
+        self.session.update_llm_config(
+            protocol=getattr(config, "planify_protocol", ""),
+            api_key=config.planify_api_key,
+            model_id=config.planify_model_id,
+            base_url=config.planify_base_url,
+            planify_context_window=getattr(config, "planify_context_window", None) or None,
+            planify_max_tokens=getattr(config, "planify_max_tokens", None) or None,
+        )
 
     def run_query(
         self,
@@ -387,17 +382,20 @@ class CortexAgent:
                 callbacks=emitter_callbacks,
                 interrupt_event=_interrupt_event,
             )
+            tool_handlers = self.session.tool_handlers
         else:
             emitter = CLIEventEmitter(
                 colors=Colors, waiter=waiter, interrupt_event=_interrupt_event,
             )
-            bind_user_interaction_handlers(self.session.tool_handlers, emitter, waiter)
+            # handler 捕获本次查询的 emitter——绑在浅拷贝上，不改共享 session 字典
+            tool_handlers = {**self.session.tool_handlers}
+            bind_user_interaction_handlers(tool_handlers, emitter, waiter)
 
         agent = StreamingAgent(
             client=self.session.client,
             model=self.session.model,
             tools=self.session.tools,
-            tool_handlers=self.session.tool_handlers,
+            tool_handlers=tool_handlers,
             emitter=emitter,
             todo_manager=self.session.todo_mgr,
             bg_manager=self.session.bg_mgr,
@@ -410,6 +408,7 @@ class CortexAgent:
             logger_instance=self.session.logger,
             session=self.session,
             interrupt_event=_interrupt_event,
+            system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
         )
 
         try:
