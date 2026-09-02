@@ -11,7 +11,7 @@
  *     完成 store 更新
  */
 import type { ViewId } from "../state/types";
-import { actions } from "../state/store";
+import { actions, store } from "../state/store";
 import { VIEW_TO_HASH, parseHash, DEFAULT_VIEW } from "./route-map";
 
 let initialized = false;
@@ -77,11 +77,16 @@ export const router = {
 
   /** 切换视图：写入 hash，由 hashchange 监听器完成 store 更新。
    *
-   * 若 hash 未变，直接 return（天然 no-op，浏览器也不触发 hashchange）。
+   * hash 未变时浏览器不触发 hashchange：此时若 store.view 与目标不一致
+   * （曾有调用方绕过 router 直接 setView 造成漂移），兜底直接同步 store，
+   * 保证「点当前 hash 对应的 tab」永远不会无响应。
    */
   navigate(view: ViewId): void {
     const hash = VIEW_TO_HASH[view];
-    if (currentHash() === hash) return;
+    if (currentHash() === hash) {
+      if (store.getState().view !== view) actions.setView(view);
+      return;
+    }
     if (typeof window !== "undefined") {
       window.location.hash = hash;
     }
