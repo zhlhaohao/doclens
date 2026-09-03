@@ -60,6 +60,24 @@ pip install -e ".[dev]"
 | SQLite | FTS5 索引 + 历史会话存储（.cortex/sessions.db） |
 | Anthropic API | AI 对话（可替换本地模型） |
 
+## 模块边界规则（红线，AI 编码必须遵守）
+
+分层与依赖方向——**只允许上层依赖下层，严禁反向**：
+
+```
+doclens（业务宿主）→ planify（AI 框架）＋ treesearch（索引引擎）
+planify ↔ treesearch 互不依赖
+```
+
+1. **底层不得 import 高层**：`treesearch/`、`planify/` 源码禁止 `import doclens`；`treesearch/` 与 `planify/` 互相禁止 import。底层需要通知宿主时用回调/注入（如 vision_pending 协议），不反向调用。
+2. **禁止跨模块引用私有成员**：`from treesearch.xxx import _name` / `from planify.xxx import _name` 一律禁止——确需使用先公共化（去下划线导出），并全仓同步消费方（含 tests 的 monkeypatch 目标字符串）。
+3. **配置命名空间隔离**：treesearch 只认 `TREESEARCH_*` env，planify 只认 `PLANIFY_*` 与 `register_config()` 宿主注入通路；底层不得读写 `CORTEX_*`（doclens 专属命名空间）。
+4. **数据目录归属**：`.cortex/` 是 doclens 的；treesearch 产物在 `.treesearch/`（index.db）。底层不写宿主数据目录。
+5. **引擎/框架代码中性化**：treesearch、planify 内的注释、常量、元数据格式不得出现 "doclens" 等宿主名——用「宿主 / host」表述，机制保持中性（历史遗留如 pathutil 的 `.doclens` 排除项除外）。
+6. **doclens 内部同样守规矩**：`web_v2/api/` 与各 worker 之间只走公共接口，不 import 对方下划线私有成员。
+
+规则 1、2 由 `tests/test_architecture.py` 机械化守护——违规测试即红，任何改动必须先过这两条再做别的。
+
 ## doclens 架构
 
 ### 分层架构
