@@ -15,15 +15,12 @@
 """
 
 import asyncio
-import base64
-import json
 import logging
 import os
 import threading
 import time
-import urllib.request
 
-from treesearch.parsers.image_store import _EXT_TO_MEDIA
+from doclens.vision_client import call_vision, encode_image
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +42,6 @@ PROMPT_VERSION = 3
 
 # DashScope 等 OpenAI-compat 端点对 base64 图像的大小限制（防御性上限）
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
-# 单次 API 调用超时（视觉识别耗时较长）
-_REQUEST_TIMEOUT_S = 180
 
 # 队列空转时的轮询间隔
 _POLL_INTERVAL_S = 5.0
@@ -205,9 +199,9 @@ class VisionWorker:
             if final:
                 # 记入 failed_files，让失败在索引统计/UI 中可见
                 try:
-                    from treesearch.indexer import _file_hash
+                    from treesearch.indexer import file_hash
 
-                    fts.upsert_failed_file(path, error, _file_hash(path))
+                    fts.upsert_failed_file(path, error, file_hash(path))
                     fts.commit()
                 except Exception as e:
                     logger.debug("VisionWorker upsert_failed_file failed: %s", e)
@@ -263,24 +257,15 @@ class VisionWorker:
             logger.info("VisionWorker: queue row vanished, result discarded: %s", rel)
 
     def _call_vision_api(self, path: str, config, *, prompt: str = VISION_PROMPT) -> str:
-        """调视觉模型（按 vision_protocol 分流），返回 Markdown。
+        """调视觉模型（vision_client 双协议分流），返回 Markdown。
 
-        复用 diary_worker 的 _vision_openai/_vision_anthropic（同协议细节），
         文档转写 max_tokens=4096（远大于日记照片描述的 512/1024）。
 
         ``prompt`` 默认走模块常量 ``VISION_PROMPT``（后台 worker 消费队列时用）；
         ``POST /api/vision/reparse`` 端点可传入用户自定义提示词覆盖默认。
         """
-        ext = os.path.splitext(path)[1].lower().lstrip(".")
-        media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
-        with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-
-        from doclens.diary_worker import _vision_anthropic, _vision_openai
-
-        if getattr(config, "vision_protocol", None) == "anthropic":
-            return _vision_anthropic(b64, media, prompt, config, max_tokens=4096)
-        return _vision_openai(b64, media, prompt, config, max_tokens=4096)
+        b64, media = encode_image(path)
+        return call_vision(b64, media, prompt, config, max_tokens=4096)
 
     def _replace_placeholder(self, fts, path: str, md: str, config, *,
                              model_tag: str | None = None,

@@ -96,8 +96,13 @@ def messages_anthropic_to_openai(
                 asst["tool_calls"] = tool_calls
             out.append(asst)
         elif role == "user":
+            # tool_result → 独立 role=tool 消息（保持块顺序，OpenAI 协议强制要求）；
+            # 其余块聚合为一条 user 消息：含 image 时 content 为 OpenAI 多模态数组
+            # （image_url + text），纯文本时保持字符串（对话主链路行为不变）。
+            rest: list[dict[str, Any]] = []
             for block in content:
-                if block.get("type") == "tool_result":
+                btype = block.get("type")
+                if btype == "tool_result":
                     # 同上：tool_use_id 原样回传给 OpenAI，保证与 assistant
                     # tool_calls[i].id 完全一致（OpenAI 协议强制要求）。
                     out.append({
@@ -105,8 +110,29 @@ def messages_anthropic_to_openai(
                         "tool_call_id": block["tool_use_id"],
                         "content": str(block.get("content", "")),
                     })
+                elif btype == "image":
+                    # Anthropic base64 image block → OpenAI image_url（data URL）。
+                    # vision 调用（doclens.vision_client）经此翻译统一走 provider。
+                    source = block.get("source") or {}
+                    if source.get("type") == "base64":
+                        rest.append({
+                            "type": "image_url",
+                            "image_url": {"url": "data:{};base64,{}".format(
+                                source.get("media_type", "application/octet-stream"),
+                                source.get("data", ""),
+                            )},
+                        })
+                    else:
+                        rest.append({"type": "text", "text": str(block)})
+                elif btype == "text":
+                    rest.append({"type": "text", "text": block.get("text", "")})
                 else:
-                    out.append({"role": "user", "content": str(block)})
+                    rest.append({"type": "text", "text": str(block)})
+            if rest:
+                if len(rest) == 1 and rest[0]["type"] == "text":
+                    out.append({"role": "user", "content": rest[0]["text"]})
+                else:
+                    out.append({"role": "user", "content": rest})
         else:
             out.append({"role": role, "content": str(content)})
     return out

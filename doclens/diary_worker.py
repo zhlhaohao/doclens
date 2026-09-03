@@ -19,20 +19,16 @@
 """
 from __future__ import annotations
 
-import base64
-import json
 import logging
-import re
 import threading
 import time
-import urllib.request
 from datetime import date as date_type
 from datetime import datetime as datetime_type
 from datetime import timedelta
 from pathlib import Path
 
 from doclens import diary
-from treesearch.parsers.image_store import _EXT_TO_MEDIA
+from doclens.vision_client import call_vision, encode_image
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +50,14 @@ def seconds_until_next_run(now: datetime_type) -> float:
 _RETRY_BASE_S = 300.0
 _RETRY_MAX_S = 6 * 3600.0
 
-# 视觉调用超时（与 vision_worker 一致，视觉识别耗时长）
-_VISION_TIMEOUT_S = 180
-
 # 图片描述 prompt（供日记归纳用，与 vision_worker 的文档转写 prompt 不同）
 _PHOTO_PROMPT = (
     "请用一两句话描述这张照片的内容（场景、人物、动作、氛围），"
     "供整理日记时引用。只输出描述本身，不要标题、不要解释。"
 )
 
-# 照片备注 prompt（上传时自动生成 caption，比合成用的描述更精简）
-_CAPTION_PROMPT = (
+# 照片备注 prompt（上传时自动生成 caption，比合成用的描述更精简；供上传端点用）
+CAPTION_PROMPT = (
     "请根据图片类型生成简短备注：\n"
     "如果是文字/截图/文档/资料类图片，只输出一个简短的标题"
     "（如「补钾资料」「日记功能设计稿」），不要描述内容；\n"
@@ -73,96 +66,15 @@ _CAPTION_PROMPT = (
     "只输出备注文字本身，不要解释、不要引号。"
 )
 
-# 推理模型经 OpenAI-compat 网关时，常把 <think>…</think> 内联进正文
-_THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
-_THINK_OPEN_RE = re.compile(r"<think(?:ing)?>", re.I)
-
-
-def _strip_thinking(text: str) -> str:
-    """剥除推理模型泄漏进正文的思考段（闭合的 <think>…</think> 与未闭合的尾部 <think>…）。"""
-    text = _THINK_RE.sub("", text)
-    m = _THINK_OPEN_RE.search(text)
-    if m:
-        # 响应被 max_tokens 截断导致思考段未闭合：思考在前正文在后，
-        # 未闭合即正文没写出来，只能整体丢弃（上层按空响应重试）
-        text = text[: m.start()]
-    return text.strip()
-
 
 def describe_photo(path: Path, config, *, prompt: str = _PHOTO_PROMPT) -> str:
-    """调视觉模型描述一张照片。
+    """调视觉模型描述一张照片（协议分流见 doclens.vision_client）。
 
     prompt 参数：默认用 _PHOTO_PROMPT（详细描述，供合成引用）；
-    上传自动备注时传 _CAPTION_PROMPT（简短标题/≤20字）。
+    上传自动备注时传 CAPTION_PROMPT（简短标题/≤20字）。
     """
-    ext = path.suffix.lower().lstrip(".")
-    media = _EXT_TO_MEDIA.get(ext, "application/octet-stream")
-    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
-    if getattr(config, "vision_protocol", None) == "anthropic":
-        return _vision_anthropic(b64, media, prompt, config)
-    return _vision_openai(b64, media, prompt, config)
-
-
-def _vision_openai(b64: str, media: str, prompt: str, config, *, max_tokens: int = 512) -> str:
-    """OpenAI-compat: /chat/completions + image_url（base64 data URL）。"""
-    base_url = (config.vision_base_url or "").rstrip("/")
-    body = {
-        "model": config.vision_model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ],
-        "max_tokens": max_tokens,
-    }
-    req = urllib.request.Request(
-        f"{base_url}/chat/completions",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.vision_api_key}",
-            "Content-Type": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=_VISION_TIMEOUT_S) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-    try:
-        return _strip_thinking(payload["choices"][0]["message"]["content"] or "")
-    except (KeyError, IndexError, TypeError) as e:
-        raise RuntimeError(f"unexpected vision API response shape: {e}") from e
-
-
-def _vision_anthropic(b64: str, media: str, prompt: str, config, *, max_tokens: int = 1024) -> str:
-    """Anthropic 格式: /v1/messages + image source block（如 minimax /anthropic + M3）。
-
-    复用 planify 的 anthropic provider 处理 base_url / 鉴权 / 响应解析
-    （与对话模型同源，避免手写 urllib 重复 Anthropic 协议细节）。
-    """
-    from planify.core.llm import create_provider
-
-    provider = create_provider({
-        "protocol": "",
-        "api_key": config.vision_api_key,
-        "model_id": config.vision_model,
-        "base_url": config.vision_base_url,
-    })
-    resp = provider.chat(
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
-                {"type": "text", "text": prompt},
-            ],
-        }],
-        system="",
-        tools=[],
-        max_tokens=max_tokens,
-    )
-    text = "".join(b.text for b in resp.content if hasattr(b, "text"))
-    return _strip_thinking(text)
+    b64, media = encode_image(path)
+    return call_vision(b64, media, prompt, config)
 
 
 def compose_day_body(fragments: list[diary.Fragment], photo_descriptions: dict[str, str]) -> str:

@@ -1247,7 +1247,7 @@ def _acquire_index_lock(db_path: str):
     return _NullLock()
 
 
-def _file_hash(fp: str, mode: Optional[str] = None) -> str:
+def file_hash(fp: str, mode: Optional[str] = None) -> str:
     """Compute a fingerprint for incremental indexing.
 
     Format: ``"v{INDEX_SCHEMA_VERSION}:{mode}:{payload}"`` so that:
@@ -1299,8 +1299,8 @@ def _file_hash(fp: str, mode: Optional[str] = None) -> str:
     return f"v{INDEX_SCHEMA_VERSION}:{mode}:{payload}"
 
 
-def _file_hash_with_salts(fp: str, mode: Optional[str] = None) -> str:
-    """``_file_hash`` + 解析器格式盐（插在版本号后，保持末尾 size 可解析）。
+def file_hash_with_salts(fp: str, mode: Optional[str] = None) -> str:
+    """``file_hash`` + 解析器格式盐（插在版本号后，保持末尾 size 可解析）。
 
     PST 解析器输出格式变化（ADR-0005）时 bump PST_PARSER_FINGERPRINT_SALT，
     旧 PST 索引自动重建，不像 INDEX_SCHEMA_VERSION 那样连累全库。
@@ -1318,7 +1318,7 @@ def _file_hash_with_salts(fp: str, mode: Optional[str] = None) -> str:
             return f"v{INDEX_SCHEMA_VERSION}:image:{content_fingerprint(fp)}"
         except Exception:
             pass  # 解码失败回退到 stat/content
-    h = _file_hash(fp, mode)
+    h = file_hash(fp, mode)
     if h and fp.lower().endswith(".pst"):
         ver, sep, rest = h.partition(":")
         return f"{ver}{sep}{PST_PARSER_FINGERPRINT_SALT.strip(':')}:{rest}"
@@ -1604,7 +1604,7 @@ async def build_index(
     # so the orphan cleanup below doesn't drop a doc whose file just moved.
     if not force:
         _detect_and_apply_moves(
-            expanded, all_meta, fts, _fp_to_doc_id, _file_hash_with_salts
+            expanded, all_meta, fts, _fp_to_doc_id, file_hash_with_salts
         )
 
     # Orphan cleanup: docs in DB whose source_path is not in the new scope.
@@ -1673,7 +1673,7 @@ async def build_index(
     for fp in expanded:
         abs_fp = os.path.abspath(fp)
         # 指纹含解析器格式盐（PST：ADR-0005 输出格式变化时自动重建）
-        fh = _file_hash_with_salts(abs_fp)
+        fh = file_hash_with_salts(abs_fp)
         if not fh:
             # File disappeared after glob expansion (e.g. broken symlink)
             logger.debug("Skipping missing file: %s", abs_fp)

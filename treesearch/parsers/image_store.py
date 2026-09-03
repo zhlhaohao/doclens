@@ -15,8 +15,8 @@ from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
-# 扩展名 → MIME（缺省 application/octet-stream）
-_EXT_TO_MEDIA: dict[str, str] = {
+# 扩展名 → MIME（公共 API：宿主按扩展名取 media type；缺省 application/octet-stream）
+EXT_TO_MEDIA: dict[str, str] = {
     "png": "image/png",
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
@@ -128,7 +128,7 @@ class ImageStore:
                     continue
                 entry = {
                     "sha256": sha,
-                    "media_type": _EXT_TO_MEDIA.get(ext, "application/octet-stream"),
+                    "media_type": EXT_TO_MEDIA.get(ext, "application/octet-stream"),
                     "filename": fname,
                 }
                 if part.disp_w is not None:

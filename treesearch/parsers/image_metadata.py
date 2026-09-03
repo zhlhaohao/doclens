@@ -7,7 +7,7 @@
 - PNG / WebP：工单 05/06 实现，本期 ``read_back`` 返回 None、其余抛 NotImplementedError。
 
 ``XPComment`` payload 为「markdown 主体 + 末尾 HTML 注释元数据」，人机共用——
-Windows「备注」里人眼能看到描述主体，doclens 解析末尾注释取版本::
+Windows「备注」里人眼能看到描述主体，宿主解析末尾注释取版本::
 
     {markdown}
 
@@ -84,7 +84,7 @@ def _parse_payload(text: str) -> dict:
     }
 
 
-# 期望版本：doclens 在 reindex 前经 set_expected_version 设置；read_back 默认据此校验，
+# 期望版本：宿主在 reindex 前经 set_expected_version 设置；read_back 默认据此校验，
 # payload 版本不符则当无解读 → image_to_tree 占位入队重解读（工单 08）。
 _expected_model_tag: Optional[str] = None
 _expected_prompt_version: Optional[str] = None
@@ -93,7 +93,7 @@ _expected_prompt_version: Optional[str] = None
 def set_expected_version(
     model_tag: Optional[str] = None, prompt_version: Optional[str] = None
 ) -> None:
-    """设置当前期望的解读版本（doclens 在 reindex 前调用）。"""
+    """设置当前期望的解读版本（宿主在 reindex 前调用）。"""
     global _expected_model_tag, _expected_prompt_version
     _expected_model_tag = model_tag
     _expected_prompt_version = prompt_version

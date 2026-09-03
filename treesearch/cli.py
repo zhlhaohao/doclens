@@ -22,6 +22,19 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _configure_cli_logging(level: int) -> None:
+    """CLI 日志走标准 logging（输出 stderr），不落文件、不依赖宿主日志设施。
+
+    解析链路三方库（pdfminer/PIL 等）DEBUG 刷屏，统一压到 WARNING。
+    """
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
+    for _name in ("pdfminer", "pdfplumber", "markitdown", "urllib3", "PIL"):
+        logging.getLogger(_name).setLevel(logging.WARNING)
+
+
 class _DefaultArgumentParser(argparse.ArgumentParser):
     """Default parser with small normalization for explicit query flags."""
 
@@ -486,8 +499,7 @@ def main(argv: list[str] | None = None):
         parser = _build_index_parser()
         args = parser.parse_args(idx_argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
-        from planify.core.logging_config import setup_logging
-        setup_logging(console_output=False)
+        _configure_cli_logging(level)
         asyncio.run(_run_index(args))
 
     elif subcmd == "search":
@@ -501,8 +513,7 @@ def main(argv: list[str] | None = None):
         parser = _build_search_parser()
         args = parser.parse_args(sch_argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
-        from planify.core.logging_config import setup_logging
-        setup_logging(console_output=False)
+        _configure_cli_logging(level)
         asyncio.run(_run_search(args))
 
     elif subcmd in ("verify", "watch"):
@@ -521,8 +532,7 @@ def main(argv: list[str] | None = None):
             _add_watch_args(p)
         args = p.parse_args(sub_argv)
         level = logging.INFO if args.verbose else logging.WARNING
-        from planify.core.logging_config import setup_logging
-        setup_logging(console_output=False)
+        _configure_cli_logging(level)
         if subcmd == "verify":
             _run_verify(args)
         else:
@@ -532,8 +542,7 @@ def main(argv: list[str] | None = None):
         parser = _build_default_parser()
         args = parser.parse_args(argv)
         level = logging.DEBUG if args.verbose else logging.WARNING
-        from planify.core.logging_config import setup_logging
-        setup_logging(console_output=False)
+        _configure_cli_logging(level)
         if args.query or args.fts_expression:
             _run_default(args)
         else:
