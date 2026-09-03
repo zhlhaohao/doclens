@@ -58,7 +58,18 @@ fi
 echo "$NOW" > "$STAMP"
 
 # 重启（后台脱离；CORTEX_NO_BROWSER 不弹浏览器）
+# 复用上次 gui 启动的工作目录（start-app.ps1 写入 .claude/.last-app-workdir），
+# 避免 hook 重启掉回默认 test_work_dir 顶掉手动 -C 指定的目录。
+WORKDIR_ARGS=()
+WORKDIR_STAMP=".claude/.last-app-workdir"
+if [ -f "$WORKDIR_STAMP" ]; then
+  WD="$(tr -d '\r\n' < "$WORKDIR_STAMP" 2>/dev/null || true)"
+  if [ -n "$WD" ] && [ -d "$WD" ]; then
+    WORKDIR_ARGS=(-C "$WD")
+    echo "[restart-hook] 复用上次工作目录: $WD"
+  fi
+fi
 echo "[restart-hook] 检测到代码改动，重启应用（不弹浏览器）..."
-CORTEX_NO_BROWSER=1 nohup pwsh -File ./start-app.ps1 gui >/dev/null 2>&1 &
+CORTEX_NO_BROWSER=1 nohup pwsh -File ./start-app.ps1 gui ${WORKDIR_ARGS[@]+"${WORKDIR_ARGS[@]}"} >/dev/null 2>&1 &
 disown 2>/dev/null || true
 echo "[restart-hook] 已触发重启"
