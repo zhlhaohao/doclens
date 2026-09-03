@@ -5,7 +5,7 @@
 视觉识别耗时长，不能拖慢主索引。本 parser 不调任何视觉 API，只产出
 「占位节点」树（标题=文件名，保证文件名立即可搜索），并通过
 ``result["vision_pending"]`` 标记通知 indexer 把文件写入 vision_queue 表；
-doclens 侧的 VisionWorker 后台串行消费队列，拿到视觉模型输出的
+宿主侧的 VisionWorker（如 doclens）后台串行消费队列，拿到视觉模型输出的
 Markdown 后复用 ``md_to_tree`` 建树，原位替换占位节点。
 """
 import logging

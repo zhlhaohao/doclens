@@ -10,11 +10,11 @@ import pytest
 from doclens import diary
 from doclens.diary_worker import (
     DiaryWorker,
-    _strip_thinking,
     compose_day_body,
     describe_photo,
     seconds_until_next_run,
 )
+from doclens.vision_client import strip_thinking
 
 
 def _config(**overrides):
@@ -44,7 +44,7 @@ class TestDescribePhotoProtocol:
             called["path"] = "openai"
             return "openai-desc"
 
-        monkeypatch.setattr("doclens.diary_worker._vision_openai", fake_openai)
+        monkeypatch.setattr("doclens.vision_client._vision_openai", fake_openai)
         assert describe_photo(img, _config(vision_protocol=None)) == "openai-desc"
         assert called["path"] == "openai"
 
@@ -57,7 +57,7 @@ class TestDescribePhotoProtocol:
             called["path"] = "anthropic"
             return "anthropic-desc"
 
-        monkeypatch.setattr("doclens.diary_worker._vision_anthropic", fake_anthropic)
+        monkeypatch.setattr("doclens.vision_client._vision_anthropic", fake_anthropic)
         assert describe_photo(img, _config(vision_protocol="anthropic")) == "anthropic-desc"
         assert called["path"] == "anthropic"
 
@@ -65,7 +65,7 @@ class TestDescribePhotoProtocol:
         """anthropic 分支：构造 image source block，经 planify provider，提取 text。"""
         import base64 as _b64
 
-        from doclens.diary_worker import _vision_anthropic
+        from doclens.vision_client import _vision_anthropic
 
         img = tmp_path / "x.webp"
         img.write_bytes(b"\x00")
@@ -108,9 +108,49 @@ class TestDescribePhotoProtocol:
             for b in content
         )
         # provider 用 vision_* 配置（非 planify_*）
-        assert captured["provider_cfg"]["base_url"] == "https://api.minimaxi.com/anthropic"
-        assert captured["provider_cfg"]["model_id"] == "MiniMax-M3"
         assert captured["provider_cfg"]["api_key"] == "mk"
+        assert captured["provider_cfg"]["model_id"] == "MiniMax-M3"
+        assert captured["provider_cfg"]["base_url"] == "https://api.minimaxi.com/anthropic"
+
+    def test_vision_openai_uses_planify_create_provider(self, monkeypatch):
+        """openai 分支：同样经 planify provider（openai_compat 协议），无手写 urllib。"""
+        from doclens.vision_client import _vision_openai
+
+        cfg = _config(
+            vision_protocol=None,
+            vision_api_key="sk",
+            vision_base_url="https://dashscope.example/v1",
+            vision_model="qwen-vl-max",
+        )
+        captured = {}
+
+        class _FakeResp:
+            def __init__(self):
+                self.content = [SimpleNamespace(text="一张表格的图")]
+
+        class _FakeProvider:
+            def chat(self, messages, system, tools, max_tokens):
+                captured["messages"] = messages
+                captured["max_tokens"] = max_tokens
+                return _FakeResp()
+
+        def fake_create(provider_cfg):
+            captured["provider_cfg"] = provider_cfg
+            return _FakeProvider()
+
+        monkeypatch.setattr("planify.core.llm.create_provider", fake_create)
+        result = _vision_openai("QUJD", "image/webp", "描述这张图", cfg, max_tokens=777)
+        assert result == "一张表格的图"
+        # openai_compat 协议 + vision_* 配置 + max_tokens 透传
+        assert captured["provider_cfg"]["protocol"] == "openai_compat"
+        assert captured["provider_cfg"]["api_key"] == "sk"
+        assert captured["provider_cfg"]["model_id"] == "qwen-vl-max"
+        assert captured["max_tokens"] == 777
+        # 消息仍是 Anthropic 风格 image source block（翻译在 provider 内部完成）
+        assert any(
+            b.get("type") == "image" and b["source"]["type"] == "base64"
+            for b in captured["messages"][0]["content"]
+        )
 
 
 class _FakeIdx:
@@ -247,18 +287,18 @@ class TestComposeDayBody:
 class TestStripThinking:
     def test_closed_think_block_removed(self):
         text = "<think>让我想想…</think>今天很充实。"
-        assert _strip_thinking(text) == "今天很充实。"
+        assert strip_thinking(text) == "今天很充实。"
 
     def test_thinking_variant_and_multiline(self):
         text = "<thinking>\n多行\n推理\n</thinking>\n\n正文"
-        assert _strip_thinking(text) == "正文"
+        assert strip_thinking(text) == "正文"
 
     def test_unclosed_think_truncates(self):
         """思考段未闭合（响应截断）：正文没写出来，整体丢弃为空。"""
-        assert _strip_thinking("<think>推理到一半") == ""
+        assert strip_thinking("<think>推理到一半") == ""
 
     def test_no_think_passthrough(self):
-        assert _strip_thinking("普通正文") == "普通正文"
+        assert strip_thinking("普通正文") == "普通正文"
 
 
 class TestSummarizeDay:

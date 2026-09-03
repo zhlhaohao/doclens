@@ -507,7 +507,7 @@ class FTS5Index:
         return [(row[0], row[1], row[2]) for row in rows]
 
     # -------------------------------------------------------------------
-    # Vision parse queue (image files; consumed by doclens VisionWorker)
+    # Vision parse queue (image files; consumed by host-side vision worker)
     # -------------------------------------------------------------------
 
     def vision_enqueue(self, source_path: str, rel_path: str = "") -> None:

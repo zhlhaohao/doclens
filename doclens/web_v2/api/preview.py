@@ -15,7 +15,7 @@ from doclens.config import data_dirname
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
-from treesearch.parsers.image_store import ImageStore, doc_hash_for, _EXT_TO_MEDIA
+from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 from doclens.web_v2.models.preview import (
     PreviewResponse,
@@ -177,7 +177,7 @@ async def preview_raw(
         raise CortexAPIError(400, "NOT_AN_IMAGE", f"非图像文件: {path}")
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    media_type = _EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
+    media_type = EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
     return FileResponse(path=str(full), media_type=media_type)
 
 
