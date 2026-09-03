@@ -22,6 +22,7 @@ description: 发版全流程：提交代码 → publish-pypi.ps1 发 PyPI → �
 git add -A
 git commit -m "<type>: <描述今天的改动>"
 git push            # 顺带把已有 pypi/* tag 推上去
+git push github 0902-1 --tags   # 同步到 GitHub 双远端（zhlhaohao/doclens）
 ```
 
 commit message 遵循仓库规范（`<type>: <description>`，禁止 Co-Authored-By）。
@@ -47,6 +48,7 @@ git add -A
 git commit -m "chore: release <pkg> <版本>"
 git push
 git push origin pypi/<pkg>-<版本>    # 若上一步 push 未把新 tag 带上
+git push github 0902-1 --tags       # GitHub 双远端同步
 ```
 
 ## 第 4 步：验证
