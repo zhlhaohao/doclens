@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SessionManager - 会话管理器
+RuntimeManager - 运行时管理器
 
-管理所有活跃会话，提供会话创建、查询和关闭功能。
-支持多用户多会话架构。
+管理所有活跃 AgentRuntime（进程级组件容器），提供创建、查询和关闭功能。
+对话身份（session_id）由宿主应用管理，不在此处。
 """
 
 import os
@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .config import get_config
 from .logging_config import setup_logging
-from .session import Session, SessionConfig
+from .runtime import AgentRuntime, RuntimeConfig
 
 
 def _get_default_assets_dir() -> Path:
@@ -37,34 +37,34 @@ def _get_default_assets_dir() -> Path:
     return Path(__file__).parent.parent.parent / "assets"
 
 
-class SessionManager:
+class RuntimeManager:
     """
-    会话管理器
+    运行时管理器
 
-    使用单例模式，管理所有活跃会话。
-    提供线程安全的会话操作。
+    使用单例模式，管理所有活跃 AgentRuntime（按 user_id 一键一实例）。
+    提供线程安全的运行时操作。
 
-    Anthropic 客户端作为全局共享资源，所有会话共用同一个实例。
+    LLM Provider 作为全局共享资源，所有运行时共用同一个实例。
     """
 
-    _instance: Optional["SessionManager"] = None
+    _instance: Optional["RuntimeManager"] = None
     _lock = threading.Lock()
     _base_workdir: Optional[Path] = None  # 用于 get_config()
 
-    # 全局共享的 LLM Provider（所有会话共用）
+    # 全局共享的 LLM Provider（所有运行时共用）
     _provider: Optional[Any] = None
     _anthropic_model_id: str = "claude-opus-4-6"
 
     def __init__(self, base_workdir: Path):
         """
-        初始化会话管理器。
+        初始化运行时管理器。
 
         Args:
             base_workdir: 基础工作目录
         """
         self.base_workdir = base_workdir
-        self._sessions_lock = threading.RLock()
-        self._sessions: Dict[str, Session] = {}  # {user_id: Session}
+        self._runtimes_lock = threading.RLock()
+        self._runtimes: Dict[str, AgentRuntime] = {}  # {user_id: AgentRuntime}
 
     @classmethod
     def _get_config(cls) -> dict:
@@ -132,15 +132,15 @@ class SessionManager:
         return cls.get_provider()
 
     @classmethod
-    def get_instance(cls, base_workdir: Optional[Path] = None) -> "SessionManager":
+    def get_instance(cls, base_workdir: Optional[Path] = None) -> "RuntimeManager":
         """
-        获取 SessionManager 单例实例。
+        获取 RuntimeManager 单例实例。
 
         Args:
             base_workdir: 基础工作目录（仅在首次创建时需要）
 
         Returns:
-            SessionManager 实例
+            RuntimeManager 实例
         """
         with cls._lock:
             if cls._instance is None:
@@ -160,16 +160,16 @@ class SessionManager:
         """获取用户的工作目录"""
         return self.base_workdir / user_id
 
-    def get_or_create_session(
+    def get_or_create_runtime(
         self,
         user_id: str,
         user_config: Dict,
         **overrides
-    ) -> Session:
+    ) -> AgentRuntime:
         """
-        获取或创建用户的默认会话。
+        获取或创建用户的默认运行时。
 
-        每个用户只有一个默认会话，如果不存在则自动创建。
+        每个用户只有一个默认运行时，如果不存在则自动创建。
 
         Args:
             user_id: 用户 ID
@@ -177,34 +177,34 @@ class SessionManager:
             **overrides: 覆盖配置的额外参数
 
         Returns:
-            用户的 Session 实例
+            用户的 AgentRuntime 实例
         """
-        with self._sessions_lock:
-            # 检查是否已存在用户的会话
-            if user_id in self._sessions:
-                session = self._sessions[user_id]
+        with self._runtimes_lock:
+            # 检查是否已存在用户的运行时
+            if user_id in self._runtimes:
+                runtime = self._runtimes[user_id]
                 # 更新配置（如果有覆盖）
                 if overrides:
                     # 默认 assets 目录
                     default_assets_dir = _get_default_assets_dir()
                     config_dict = {
                         "workdir": self.base_workdir,
-                        "model_id": overrides.get("model_id", user_config.get("model_id", session.config.model_id)),
-                        "api_key": overrides.get("api_key", user_config.get("api_key", session.config.api_key)),
-                        "base_url": overrides.get("base_url", user_config.get("base_url", session.config.base_url)),
-                        "token_threshold": overrides.get("token_threshold", user_config.get("token_threshold", session.config.token_threshold)),
-                        "poll_interval": overrides.get("poll_interval", user_config.get("poll_interval", session.config.poll_interval)),
-                        "idle_timeout": overrides.get("idle_timeout", user_config.get("idle_timeout", session.config.idle_timeout)),
+                        "model_id": overrides.get("model_id", user_config.get("model_id", runtime.config.model_id)),
+                        "api_key": overrides.get("api_key", user_config.get("api_key", runtime.config.api_key)),
+                        "base_url": overrides.get("base_url", user_config.get("base_url", runtime.config.base_url)),
+                        "token_threshold": overrides.get("token_threshold", user_config.get("token_threshold", runtime.config.token_threshold)),
+                        "poll_interval": overrides.get("poll_interval", user_config.get("poll_interval", runtime.config.poll_interval)),
+                        "idle_timeout": overrides.get("idle_timeout", user_config.get("idle_timeout", runtime.config.idle_timeout)),
                         "assets_dir": overrides.get("assets_dir", user_config.get("assets_dir", default_assets_dir)),
                     }
-                    session.config = SessionConfig(**config_dict)
-                return session
+                    runtime.config = RuntimeConfig(**config_dict)
+                return runtime
 
-            # 创建新会话
+            # 创建新运行时
             # 合并配置：overrides > user_config > 默认值
             # 默认 assets 目录
             default_assets_dir = _get_default_assets_dir()
-            config = SessionConfig(
+            config = RuntimeConfig(
                 workdir=self.base_workdir,
                 model_id=overrides.get("model_id", user_config.get("model_id")),
                 api_key=overrides.get("api_key", user_config.get("api_key")),
@@ -215,26 +215,26 @@ class SessionManager:
                 assets_dir=overrides.get("assets_dir", user_config.get("assets_dir", default_assets_dir)),
             )
 
-            session = Session(user_id=user_id, phone=user_config.get("phone", ""), config=config)
-            self._sessions[user_id] = session
-            return session
+            runtime = AgentRuntime(user_id=user_id, phone=user_config.get("phone", ""), config=config)
+            self._runtimes[user_id] = runtime
+            return runtime
 
-    def get_session_simple(self, user_id: str) -> Optional[Session]:
+    def get_runtime_simple(self, user_id: str) -> Optional[AgentRuntime]:
         """
-        获取用户的默认会话。
+        获取用户的默认运行时。
 
         Args:
             user_id: 用户 ID
 
         Returns:
-            Session 实例，如果不存在则返回 None
+            AgentRuntime 实例，如果不存在则返回 None
         """
-        with self._sessions_lock:
-            return self._sessions.get(user_id)
+        with self._runtimes_lock:
+            return self._runtimes.get(user_id)
 
-    def close_session(self, user_id: str) -> bool:
+    def close_runtime(self, user_id: str) -> bool:
         """
-        关闭并移除用户的默认会话。
+        关闭并移除用户的默认运行时。
 
         Args:
             user_id: 用户 ID
@@ -242,57 +242,57 @@ class SessionManager:
         Returns:
             是否成功关闭
         """
-        with self._sessions_lock:
-            if user_id in self._sessions:
-                session = self._sessions[user_id]
-                session.status = "closed"
-                del self._sessions[user_id]
+        with self._runtimes_lock:
+            if user_id in self._runtimes:
+                runtime = self._runtimes[user_id]
+                runtime.status = "closed"
+                del self._runtimes[user_id]
                 return True
             return False
 
-    def list_user_sessions(self, user_id: str) -> List[Session]:
+    def list_user_runtimes(self, user_id: str) -> List[AgentRuntime]:
         """
-        列出用户的会话。
+        列出用户的运行时。
 
         Args:
             user_id: 用户 ID
 
         Returns:
-            该用户的会话列表（最多一个）
+            该用户的运行时列表（最多一个）
         """
-        with self._sessions_lock:
-            session = self._sessions.get(user_id)
-            return [session] if session else []
+        with self._runtimes_lock:
+            runtime = self._runtimes.get(user_id)
+            return [runtime] if runtime else []
 
-    def list_all_sessions(self) -> List[Session]:
+    def list_all_runtimes(self) -> List[AgentRuntime]:
         """
-        列出所有会话。
+        列出所有运行时。
 
         Returns:
-            所有活跃会话列表
+            所有活跃运行时列表
         """
-        with self._sessions_lock:
-            return list(self._sessions.values())
+        with self._runtimes_lock:
+            return list(self._runtimes.values())
 
-    def initialize_session_components(self, session: Session) -> None:
+    def initialize_runtime_components(self, runtime: AgentRuntime) -> None:
         """
-        初始化会话的所有组件。
+        初始化运行时的所有组件。
 
         Args:
-            session: 要初始化的 Session 实例
+            runtime: 要初始化的 AgentRuntime 实例
         """
         # 确保目录存在
-        session.ensure_dirs()
+        runtime.ensure_dirs()
 
         # 初始化日志
-        session.logger = setup_logging(
-            log_dir=session.config.logs_dir,
+        runtime.logger = setup_logging(
+            log_dir=runtime.config.logs_dir,
             console_output=False
         )
 
         # 获取全局共享的 LLM Provider
         provider, _ = self.get_provider()
-        session.client = provider
+        runtime.client = provider
 
         # 导入管理器（延迟导入避免循环依赖）
         from ..managers import TodoManager, TaskManager, BackgroundManager, TeammateManager
@@ -302,27 +302,27 @@ class SessionManager:
         from ..tools.basic import make_basic_tools, run_bash, run_read, run_write, run_edit
 
         # 初始化管理器
-        session.todo_mgr = TodoManager()
-        session.task_mgr = TaskManager(session.config.tasks_dir)
-        # 使用用户级别的工作目录（简化：每个用户只有一个会话）
-        user_workdir = self._get_user_workdir(session.user_id)
-        session.bg_mgr = BackgroundManager(user_workdir)
-        session.bus = MessageBus(session.config.inbox_dir)
-        session.skills = SkillLoader(session.config.skills_dir)
+        runtime.todo_mgr = TodoManager()
+        runtime.task_mgr = TaskManager(runtime.config.tasks_dir)
+        # 使用用户级别的工作目录（简化：每个用户只有一个运行时）
+        user_workdir = self._get_user_workdir(runtime.user_id)
+        runtime.bg_mgr = BackgroundManager(user_workdir)
+        runtime.bus = MessageBus(runtime.config.inbox_dir)
+        runtime.skills = SkillLoader(runtime.config.skills_dir)
 
         # 初始化队友管理器
         # 使用用户级别的工作目录
         basic_tools = make_basic_tools(user_workdir)
-        session.team = TeammateManager(
-            bus=session.bus,
-            task_mgr=session.task_mgr,
-            team_dir=session.config.team_dir,
+        runtime.team = TeammateManager(
+            bus=runtime.bus,
+            task_mgr=runtime.task_mgr,
+            team_dir=runtime.config.team_dir,
             # 使用用户级别的工作目录（简化）
             workdir=user_workdir,
-            model=session.model,
-            client=session.client,
-            poll_interval=session.poll_interval,
-            idle_timeout=session.idle_timeout,
+            model=runtime.model,
+            client=runtime.client,
+            poll_interval=runtime.poll_interval,
+            idle_timeout=runtime.idle_timeout,
             run_bash=run_bash,
             run_read=run_read,
             run_write=run_write,
@@ -330,30 +330,30 @@ class SessionManager:
         )
 
         # 构建工具注册表
-        session.tools, session.tool_handlers = build_tool_registry(
+        runtime.tools, runtime.tool_handlers = build_tool_registry(
             workdir=user_workdir,
-            todo_mgr=session.todo_mgr,
-            task_mgr=session.task_mgr,
-            bg_mgr=session.bg_mgr,
-            bus=session.bus,
-            team_mgr=session.team,
-            skills_loader=session.skills,
+            todo_mgr=runtime.todo_mgr,
+            task_mgr=runtime.task_mgr,
+            bg_mgr=runtime.bg_mgr,
+            bus=runtime.bus,
+            team_mgr=runtime.team,
+            skills_loader=runtime.skills,
             run_subagent=None,  # 稍后设置
-            model=session.model,
-            client=session.client,
-            transcript_dir=session.config.transcript_dir,
-            session=session,
+            model=runtime.model,
+            client=runtime.client,
+            transcript_dir=runtime.config.transcript_dir,
+            runtime=runtime,
         )
 
     def __len__(self) -> int:
-        """返回活跃会话数量"""
-        with self._sessions_lock:
-            return len(self._sessions)
+        """返回活跃运行时数量"""
+        with self._runtimes_lock:
+            return len(self._runtimes)
 
     def __repr__(self) -> str:
         """返回管理器表示"""
-        with self._sessions_lock:
-            return f"SessionManager(users={len(self._sessions)}, base_workdir={self.base_workdir})"
+        with self._runtimes_lock:
+            return f"RuntimeManager(users={len(self._runtimes)}, base_workdir={self.base_workdir})"
 
     def migrate_user_sessions(self, user_id: str) -> bool:
         """

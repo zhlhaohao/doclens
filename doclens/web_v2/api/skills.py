@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/skills")
 async def list_skills():
     agent = get_agent()
-    skills_loader = agent.session.skills
+    skills_loader = agent.runtime.skills
     skills = []
     for name, info in skills_loader.skills.items():
         meta = info.get("meta", {})

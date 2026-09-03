@@ -19,7 +19,7 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Planify 核心模块导入
-from planify.core.session import Session, SessionConfig
+from planify.core.runtime import AgentRuntime, RuntimeConfig
 from planify.core.llm import create_provider
 from planify.streaming.runner import StreamingAgent
 from planify.streaming.emitter import CLIEventEmitter
@@ -119,7 +119,7 @@ class CortexAgent:
     def __init__(self, workdir: Path):
         self.workdir = workdir
         self.loop = None
-        self.session = None
+        self.runtime = None
         self.idx = None
         self._escape_watcher = None
         self._setup_dirs()
@@ -134,7 +134,7 @@ class CortexAgent:
         """初始化 Agent 会话。
 
         CortexAgent.initialize 是 doclens 的官方装配根——刻意不复用
-        planify 的 SessionManager.initialize_session_components（该路径仅服务
+        planify 的 RuntimeManager.initialize_runtime_components（该路径仅服务
         planify 自带 legacy REPL main.py，且缺少 gui_mode / skill_access_state /
         自定义 skills_dir 等 doclens 必需插槽）。代价：planify 装配逻辑演进时
         需人工同步此处（详见 web_v2/docs/ARCHITECTURE-planify-boundary.md）。
@@ -296,7 +296,7 @@ class CortexAgent:
             model=config.get("model_id"),
             client=client,
             transcript_dir=transcript_dir,
-            session=None,
+            runtime=None,
             gui_mode=True,
             max_tokens=_max_tokens,
         )
@@ -305,8 +305,9 @@ class CortexAgent:
         for name in legacy_ask & set(tool_handlers):
             tool_handlers.pop(name, None)
 
-        # Session
-        session_config = SessionConfig(
+        # AgentRuntime（进程级组件容器；runtime_id 仅作兜底标识，
+        # 对话身份由 doclens DB 会话承担并穿透传入）
+        runtime_config = RuntimeConfig(
             workdir=self.workdir,
             model_id=config.get("model_id", "claude-opus-4-6"),
             api_key=config.get("api_key"),
@@ -321,34 +322,38 @@ class CortexAgent:
             compact_transcript_dir=transcript_dir,
         )
 
-        session = Session(user_id="default", phone="", config=session_config)
-        session.session_id = str(uuid.uuid4())[:8]
-        session.client = client
-        session.todo_mgr = todo_mgr
-        session.task_mgr = task_mgr
-        session.bg_mgr = bg_mgr
-        session.bus = bus
-        session.team = team
-        session.skills = skills
-        session.tools = tools
-        session.tool_handlers = tool_handlers
-        session.logger = logger
-        session.skill_access_state = skill_state
+        runtime = AgentRuntime(
+            user_id="default",
+            phone="",
+            config=runtime_config,
+            runtime_id=str(uuid.uuid4())[:8],
+        )
+        runtime.client = client
+        runtime.todo_mgr = todo_mgr
+        runtime.task_mgr = task_mgr
+        runtime.bg_mgr = bg_mgr
+        runtime.bus = bus
+        runtime.team = team
+        runtime.skills = skills
+        runtime.tools = tools
+        runtime.tool_handlers = tool_handlers
+        runtime.logger = logger
+        runtime.skill_access_state = skill_state
 
-        self.session = session
+        self.runtime = runtime
         return self
 
     def apply_config(self, config) -> None:
-        """Hot-reload AI config: 经 planify 官方热更新 API 更新 session。
+        """Hot-reload AI config: 经 planify 官方热更新 API 更新 runtime。
 
-        历史教训：不能改 self.session.model —— Session.model 是只读 @property
-        （返回 self.config.model_id），赋值会抛 AttributeError 导致
-        /api/config PUT 500。正确通路是 Session.update_llm_config()，
-        由 planify 自己负责重建 Provider 并更新 SessionConfig 字段。
+        历史教训：不能改 self.runtime.model —— AgentRuntime.model 是只读
+        @property（返回 self.config.model_id），赋值会抛 AttributeError 导致
+        /api/config PUT 500。正确通路是 AgentRuntime.update_llm_config()，
+        由 planify 自己负责重建 Provider 并更新 RuntimeConfig 字段。
         """
-        if self.session is None:
+        if self.runtime is None:
             return
-        self.session.update_llm_config(
+        self.runtime.update_llm_config(
             protocol=getattr(config, "planify_protocol", ""),
             api_key=config.planify_api_key,
             model_id=config.planify_model_id,
@@ -385,31 +390,31 @@ class CortexAgent:
                 callbacks=emitter_callbacks,
                 interrupt_event=_interrupt_event,
             )
-            tool_handlers = self.session.tool_handlers
+            tool_handlers = self.runtime.tool_handlers
         else:
             emitter = CLIEventEmitter(
                 colors=Colors, waiter=waiter, interrupt_event=_interrupt_event,
             )
-            # handler 捕获本次查询的 emitter——绑在浅拷贝上，不改共享 session 字典
-            tool_handlers = {**self.session.tool_handlers}
+            # handler 捕获本次查询的 emitter——绑在浅拷贝上，不改共享 runtime 字典
+            tool_handlers = {**self.runtime.tool_handlers}
             bind_user_interaction_handlers(tool_handlers, emitter, waiter)
 
         agent = StreamingAgent(
-            client=self.session.client,
-            model=self.session.model,
-            tools=self.session.tools,
+            client=self.runtime.client,
+            model=self.runtime.model,
+            tools=self.runtime.tools,
             tool_handlers=tool_handlers,
             emitter=emitter,
-            todo_manager=self.session.todo_mgr,
-            bg_manager=self.session.bg_mgr,
-            bus=self.session.bus,
-            skills_loader=self.session.skills,
+            todo_manager=self.runtime.todo_mgr,
+            bg_manager=self.runtime.bg_mgr,
+            bus=self.runtime.bus,
+            skills_loader=self.runtime.skills,
             config=StreamingConfig(
-                compact_threshold=int(round(self.session.config.planify_context_window * 0.8)),
-                max_tokens=self.session.config.planify_max_tokens,
+                compact_threshold=int(round(self.runtime.config.planify_context_window * 0.8)),
+                max_tokens=self.runtime.config.planify_max_tokens,
             ),
-            logger_instance=self.session.logger,
-            session=self.session,
+            logger_instance=self.runtime.logger,
+            runtime=self.runtime,
             interrupt_event=_interrupt_event,
             system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
         )
@@ -419,7 +424,7 @@ class CortexAgent:
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
             return self.loop.run_until_complete(
-                agent.run_stream(history, query, self.session.session_id)
+                agent.run_stream(history, query, self.runtime.runtime_id)
             )
         except Exception:
             # ESC 中断：丢弃残留循环，下次 run_query 会创建新的
@@ -437,23 +442,23 @@ class CortexAgent:
             if history:
                 compacted = auto_compact(
                     history,
-                    self.session.client,
+                    self.runtime.client,
                     self.workdir / data_dirname() / "transcripts"
                 )
-                self.session.replace_messages_in_place(compacted)
+                self.runtime.replace_messages_in_place(compacted)
                 history[:] = compacted
             return False, history
 
         if cmd in ("tasks", "task"):
-            print(self.session.task_mgr.list_all())
+            print(self.runtime.task_mgr.list_all())
             return False, history
 
         if cmd in ("team",):
-            print(self.session.team.list_all())
+            print(self.runtime.team.list_all())
             return False, history
 
         if cmd in ("inbox",):
-            inbox = self.session.bus.read_inbox("lead")
+            inbox = self.runtime.bus.read_inbox("lead")
             print(json.dumps(inbox, indent=2, ensure_ascii=False))
             return False, history
 
@@ -501,11 +506,11 @@ class CortexAgent:
 
         if cmd in ("clear",):
             history.clear()
-            self.session.replace_messages_in_place([])
+            self.runtime.replace_messages_in_place([])
             # 同步清空技能加载状态，避免状态记忆与已清空的对话上下文错位
-            skill_state = getattr(self.session, "skill_access_state", None)
+            skill_state = getattr(self.runtime, "skill_access_state", None)
             if skill_state is not None:
-                skill_state.clear(self.session.session_id)
+                skill_state.clear(self.runtime.runtime_id)
             return False, history
 
         return False, history

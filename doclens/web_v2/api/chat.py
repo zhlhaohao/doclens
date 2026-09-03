@@ -1,7 +1,7 @@
 """POST /api/chat —— AI 对话（SSE 流）。
 
 设计：
-1. 复用 CortexAgent.session（含 tools / tool_handlers）
+1. 复用 CortexAgent.runtime（含 tools / tool_handlers）
 2. StreamingAgent 直接跑在本 ASGI 事件循环上（provider.astream 不阻塞
    loop，无需生成线程/双 loop 桥接）：事件在发生处经 ChatEventEmitter
    直推 asyncio.Queue，本生成器按序转 SSE——工具 trace 实时可见
@@ -73,7 +73,7 @@ async def _stream_agent_response(
     from doclens.web_v2.skill_refs import curate_skill_references, is_skill_message
 
     agent = get_agent()
-    session = agent.session
+    runtime = agent.runtime
 
     history: list[dict] = []
     skill_session = is_skill_message(message)
@@ -135,30 +135,30 @@ async def _stream_agent_response(
         register_interrupt_hook(session_key, _interrupt_pending_asks)
 
     # 用户交互工具的 handler 捕获本请求的 emitter——必须绑在每请求浅拷贝上，
-    # 不能写回共享单例 session.tool_handlers（同 session 并发两流会互相覆盖绑定）。
-    tool_handlers = {**session.tool_handlers}
+    # 不能写回共享单例 runtime.tool_handlers（同 runtime 并发两流会互相覆盖绑定）。
+    tool_handlers = {**runtime.tool_handlers}
     bind_user_interaction_handlers(tool_handlers, emitter, waiter)
     # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
-    # session 工具集过滤，此处无需绑定）
+    # runtime 工具集过滤，此处无需绑定）
     bind_ask_user_question_handler(tool_handlers, emitter, waiter)
 
     sa = StreamingAgent(
-        client=session.client,
-        model=session.model,
-        tools=session.tools,
+        client=runtime.client,
+        model=runtime.model,
+        tools=runtime.tools,
         tool_handlers=tool_handlers,
         emitter=emitter,
         config=StreamingConfig(
-            compact_threshold=int(round(session.config.planify_context_window * 0.8)),
-            max_tokens=session.config.planify_max_tokens,
+            compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
+            max_tokens=runtime.config.planify_max_tokens,
         ),
         waiter=waiter,
-        todo_manager=session.todo_mgr,
-        bg_manager=session.bg_mgr,
-        bus=session.bus,
-        skills_loader=session.skills,
-        logger_instance=session.logger,
-        session=session,
+        todo_manager=runtime.todo_mgr,
+        bg_manager=runtime.bg_mgr,
+        bus=runtime.bus,
+        skills_loader=runtime.skills,
+        logger_instance=runtime.logger,
+        runtime=runtime,
         interrupt_event=interrupt,
         system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
     )
@@ -169,7 +169,7 @@ async def _stream_agent_response(
         # 的本轮消息从该下标起，供 raw_messages 落库提取
         round_start = len(history)
         try:
-            await sa.run_stream(history, message, session_id or session.session_id)
+            await sa.run_stream(history, message, session_id or runtime.runtime_id)
 
             # done：策展参考资料章节。
             # 技能会话 → 即选择文件再点右键选择技能执行，例如总结文件技能，提取式（正文提路径+存在性校验重建章节，无 toast）；
@@ -178,7 +178,7 @@ async def _stream_agent_response(
             try:
                 if skill_session:
                     curated_text = curate_skill_references(
-                        emitter.get_full_text(), session.session_workdir
+                        emitter.get_full_text(), runtime.config.workdir
                     )
                     logger.info(
                         "chat done(skill): tools=%d error=%s",
@@ -192,7 +192,7 @@ async def _stream_agent_response(
                     curation = curate_references(
                         emitter.get_full_text(),
                         list(emitter.tool_calls),
-                        session.session_workdir,
+                        runtime.config.workdir,
                     )
                     curated_text = curation.text
                     curated_fallback = curation.fallback

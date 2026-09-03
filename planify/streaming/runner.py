@@ -76,7 +76,7 @@ class StreamingAgent:
         bus: Optional[Any] = None,
         skills_loader: Optional[Any] = None,
         logger_instance: Optional[logging.Logger] = None,
-        session: Optional[Any] = None,
+        runtime: Optional[Any] = None,
         interrupt_event: Optional[threading.Event] = None,
         system_prompt_extra: Optional[str] = None,
     ):
@@ -96,7 +96,7 @@ class StreamingAgent:
             bus: 消息总线
             skills_loader: 技能加载器
             logger_instance: 日志记录器
-            session: Session 实例
+            runtime: AgentRuntime 实例
             system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选，
                 领域策略如知识库优先由宿主经此注入，planify 自身保持通用）
         """
@@ -115,7 +115,7 @@ class StreamingAgent:
         self.bus = bus
         self.skills = skills_loader
         self.logger = logger_instance or logger
-        self.session = session
+        self.runtime = runtime
         self._interrupt_event = interrupt_event
         self._system_prompt_extra = system_prompt_extra
 
@@ -143,8 +143,8 @@ class StreamingAgent:
             系统提示词字符串
         """
         workdir = "."
-        if self.session:
-            workdir = str(self.session.config.workdir)
+        if self.runtime:
+            workdir = str(self.runtime.config.workdir)
         elif self.config:
             workdir = getattr(self.config, "workdir", ".")
 
@@ -200,8 +200,8 @@ class StreamingAgent:
 
         # 2. agent.md 内容
         agent_md_content = ""
-        if self.session and self.session.config.assets_dir:
-            agent_md_path = self.session.config.assets_dir / "agent.md"
+        if self.runtime and self.runtime.config.assets_dir:
+            agent_md_path = self.runtime.config.assets_dir / "agent.md"
             if agent_md_path.exists():
                 agent_md_content = agent_md_path.read_text(encoding="utf-8")
         else:
@@ -253,8 +253,8 @@ class StreamingAgent:
         # 已加载 skill body → 尾部消息对注入（保持 messages[0] 与历史前缀稳定）。
         # web 层每轮从 DB 重建历史（不含注入消息），故每轮重注；若调用方复用
         # 返回的历史（含注入消息），按 <loaded-skill name="..."> marker 去重。
-        if self.skills and session_id and self.session:
-            skill_state = getattr(self.session, "skill_access_state", None)
+        if self.skills and session_id and self.runtime:
+            skill_state = getattr(self.runtime, "skill_access_state", None)
             if skill_state is not None:
                 for name in sorted(skill_state.loaded_names(session_id)):
                     skill_marker = f'<loaded-skill name="{name}">'
@@ -300,15 +300,15 @@ class StreamingAgent:
                     ),
                 )
                 if self._estimate_tokens(messages) > self.config.compact_threshold:
-                    if self._aauto_compact and self.session:
+                    if self._aauto_compact and self.runtime:
                         # 压缩 transcript 目录：宿主注入优先（doclens 注入
                         # .cortex/transcripts，避免落盘触发 FileWatcher 回路）；
                         # 未注入时退回 <workdir>/.transcripts/
-                        # （session.config.transcript_dir 是 .planify/transcript.json
+                        # （runtime.config.transcript_dir 是 .planify/transcript.json
                         # 文件路径，语义不符，勿用）
                         transcript_dir = (
-                            getattr(self.session.config, "compact_transcript_dir", None)
-                            or Path(self.session.config.workdir) / ".transcripts"
+                            getattr(self.runtime.config, "compact_transcript_dir", None)
+                            or Path(self.runtime.config.workdir) / ".transcripts"
                         )
                         compacted = await self._aauto_compact(
                             messages, self.provider, transcript_dir
@@ -316,8 +316,8 @@ class StreamingAgent:
                         # 必须就地替换本地循环列表，否则本轮后续循环仍用
                         # 未压缩历史（每轮重复触发压缩、transcript 越写越大）
                         messages[:] = compacted
-                        if self.session:
-                            self.session.replace_messages_in_place(compacted)
+                        if self.runtime:
+                            self.runtime.replace_messages_in_place(compacted)
 
                 # === 后台通知 ===
                 if self.bg_manager:

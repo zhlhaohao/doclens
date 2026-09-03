@@ -1,6 +1,6 @@
 """压缩 transcript 目录注入回归。
 
-宿主（doclens）经 SessionConfig.compact_transcript_dir 注入 .cortex/transcripts 后，
+宿主（doclens）经 RuntimeConfig.compact_transcript_dir 注入 .cortex/transcripts 后，
 StreamingAgent 的 auto_compact 必须把 transcript 写到注入目录，而不是
 <workdir>/.transcripts——后者在被 FileWatcher 监控的工作目录内，每次压缩落盘
 都会触发「watch → reindex」回路，且 transcript jsonl 会被索引进知识库。
@@ -49,7 +49,7 @@ class _NullEmitter:
         raise AssertionError(error)
 
 
-def _run_with_capturing_compact(session_config, tmp_path):
+def _run_with_capturing_compact(runtime_config, tmp_path):
     """跑一轮 run_stream（compact_threshold=1 必触发压缩），返回捕获的目录。"""
     captured = {}
 
@@ -65,8 +65,8 @@ def _run_with_capturing_compact(session_config, tmp_path):
         emitter=_NullEmitter(),
         config=StreamingConfig(compact_threshold=1),  # 必触发 auto_compact
         skills_loader=None,
-        session=SimpleNamespace(
-            config=session_config,
+        runtime=SimpleNamespace(
+            config=runtime_config,
             skill_access_state=None,
             replace_messages_in_place=lambda msgs: None,
         ),

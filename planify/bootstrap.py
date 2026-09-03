@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-应用初始化模块（多用户多会话架构）
+应用初始化模块
 
-负责初始化 SessionManager 并提供会话管理接口。
+负责初始化 RuntimeManager 并提供运行时（AgentRuntime）管理接口。
 不再使用全局单例模式，支持多用户并发访问。
 """
 
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .core import SessionManager, get_config, get_user_config_dict
+from .core import RuntimeManager, get_config, get_user_config_dict
 from .subagent.runner import run_subagent
 
 
-# SessionManager 单例（通过 get_instance() 访问）
-_manager: Optional[SessionManager] = None
+# RuntimeManager 单例（通过 get_instance() 访问）
+_manager: Optional[RuntimeManager] = None
 
 # Planify 配置注册表（由主应用注入）
 _registered_config: Dict[str, Any] = {}
@@ -88,7 +88,7 @@ def register_planify_config(
         **extra,
     }
 
-    # 将配置同步到 core/config.py，使其对 SessionManager 可见
+    # 将配置同步到 core/config.py，使其对 RuntimeManager 可见
     from .core.config import register_config
     register_config(_registered_config)
 
@@ -100,12 +100,12 @@ def get_registered_config() -> Dict[str, Any]:
     return _registered_config
 
 
-def get_manager() -> SessionManager:
+def get_manager() -> RuntimeManager:
     """
-    获取 SessionManager 单例实例。
+    获取 RuntimeManager 单例实例。
 
     Returns:
-        SessionManager 实例
+        RuntimeManager 实例
 
     Raises:
         RuntimeError: 如果应用尚未初始化
@@ -116,18 +116,18 @@ def get_manager() -> SessionManager:
     return _manager
 
 
-def initialize(base_workdir: Optional[Path] = None) -> SessionManager:
+def initialize(base_workdir: Optional[Path] = None) -> RuntimeManager:
     """
-    初始化应用并返回 SessionManager 单例。
+    初始化应用并返回 RuntimeManager 单例。
 
-    此函数创建 SessionManager 单例，用于管理所有用户会话。
+    此函数创建 RuntimeManager 单例，用于管理所有用户运行时。
     在初始化时自动检查并迁移旧的多会话数据。
 
     Args:
         base_workdir: 基础工作目录（默认为当前目录）
 
     Returns:
-        SessionManager 实例
+        RuntimeManager 实例
     """
     global _manager
 
@@ -137,7 +137,7 @@ def initialize(base_workdir: Optional[Path] = None) -> SessionManager:
     if base_workdir is None:
         base_workdir = Path.cwd()
 
-    _manager = SessionManager(base_workdir)
+    _manager = RuntimeManager(base_workdir)
 
     # 自动检查并迁移数据
     print("检查并迁移用户数据...")
@@ -155,22 +155,22 @@ def reset():
     """
     重置应用状态（主要用于测试）。
 
-    清除 SessionManager 单例，允许重新初始化。
+    清除 RuntimeManager 单例，允许重新初始化。
     """
     global _manager
     _manager = None
-    SessionManager.reset()
+    RuntimeManager.reset()
 
 
 # ============================================================================
-# 简化的会话管理 API
+# 简化的运行时管理 API
 # ============================================================================
 
-def get_or_create_session(user_id: str, user_config: dict, **overrides):
+def get_or_create_runtime(user_id: str, user_config: dict, **overrides):
     """
-    获取或创建用户的默认会话。
+    获取或创建用户的默认运行时。
 
-    每个用户只有一个默认会话，如果不存在则自动创建。
+    每个用户只有一个默认运行时，如果不存在则自动创建。
 
     Args:
         user_id: 用户 ID
@@ -178,60 +178,60 @@ def get_or_create_session(user_id: str, user_config: dict, **overrides):
         **overrides: 覆盖配置的额外参数
 
     Returns:
-        Session 实例
+        AgentRuntime 实例
     """
     manager = get_manager()
-    session = manager.get_or_create_session(user_id, user_config, **overrides)
-    manager.initialize_session_components(session)
+    runtime = manager.get_or_create_runtime(user_id, user_config, **overrides)
+    manager.initialize_runtime_components(runtime)
 
-    # 设置子代理处理器（使用会话隔离的工作目录）
+    # 设置子代理处理器（使用运行时隔离的工作目录）
     from .tools import handle_task
-    session.tool_handlers["task"] = lambda **kw: handle_task(
+    runtime.tool_handlers["task"] = lambda **kw: handle_task(
         kw["prompt"],
         kw.get("agent_type", "Explore"),
-        session.config.session_workdir,
-        session.client,
-        session.model,
-        session.tool_handlers,
+        runtime.config.workdir,
+        runtime.client,
+        runtime.model,
+        runtime.tool_handlers,
         run_subagent=run_subagent,
-        session=session
+        runtime=runtime
     )
 
-    return session
+    return runtime
 
 
-def list_all_sessions():
+def list_all_runtimes():
     """
-    列出所有会话。
+    列出所有运行时。
 
     Returns:
-        所有活跃会话列表
+        所有活跃运行时列表
     """
     manager = get_manager()
-    return manager.list_all_sessions()
+    return manager.list_all_runtimes()
 
 
 # ============================================================================
-# 简化的会话管理 API（别名）
+# 简化的运行时管理 API（别名）
 # ============================================================================
 
-def get_session_simple(user_id: str):
+def get_runtime_simple(user_id: str):
     """
-    获取用户的默认会话。
+    获取用户的默认运行时。
 
     Args:
         user_id: 用户 ID
 
     Returns:
-        Session 实例，如果不存在则返回 None
+        AgentRuntime 实例，如果不存在则返回 None
     """
     manager = get_manager()
-    return manager.get_session_simple(user_id)
+    return manager.get_runtime_simple(user_id)
 
 
-def close_session_simple(user_id: str) -> bool:
+def close_runtime_simple(user_id: str) -> bool:
     """
-    关闭并移除用户的默认会话。
+    关闭并移除用户的默认运行时。
 
     Args:
         user_id: 用户 ID
@@ -240,7 +240,7 @@ def close_session_simple(user_id: str) -> bool:
         是否成功关闭
     """
     manager = get_manager()
-    return manager.close_session(user_id)
+    return manager.close_runtime(user_id)
 
 
 # ============================================================================
@@ -264,13 +264,13 @@ model = None
 token_threshold = None
 
 
-def init_legacy_session(user_id: str = "default", session_id: str = "default"):
+def init_legacy_runtime(user_id: str = "default", session_id: str = "default"):
     """
-    初始化旧版单用户模式的会话（向后兼容）。
+    初始化旧版单用户模式的运行时（向后兼容）。
 
-    此函数创建一个会话并将其状态同步到全局变量。
+    此函数创建一个运行时并将其组件同步到全局变量。
 
-    现在使用新的简化 API 自动创建用户的默认会话。
+    现在使用新的简化 API 自动创建用户的默认运行时。
 
     Args:
         user_id: 用户 ID
@@ -280,9 +280,9 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
     global todo_mgr, task_mgr, bg_mgr, bus, team, skills
     global tools, tool_handlers, workdir, model, token_threshold
 
-    # 使用新的简化 API 创建默认会话
+    # 使用新的简化 API 创建默认运行时
     app_config = get_config()
-    session = get_or_create_session(
+    runtime = get_or_create_runtime(
         user_id,
         user_config=get_user_config_dict(
             model_id=app_config.get("model_id"),
@@ -295,19 +295,19 @@ def init_legacy_session(user_id: str = "default", session_id: str = "default"):
     )
 
     # 同步到全局变量
-    config = session.config
-    logger = session.logger
-    client = session.client
-    todo_mgr = session.todo_mgr
-    task_mgr = session.task_mgr
-    bg_mgr = session.bg_mgr
-    bus = session.bus
-    team = session.team
-    skills = session.skills
-    tools = session.tools
-    tool_handlers = session.tool_handlers
-    workdir = session.config.workdir
-    model = session.model
-    token_threshold = session.token_threshold
+    config = runtime.config
+    logger = runtime.logger
+    client = runtime.client
+    todo_mgr = runtime.todo_mgr
+    task_mgr = runtime.task_mgr
+    bg_mgr = runtime.bg_mgr
+    bus = runtime.bus
+    team = runtime.team
+    skills = runtime.skills
+    tools = runtime.tools
+    tool_handlers = runtime.tool_handlers
+    workdir = runtime.config.workdir
+    model = runtime.model
+    token_threshold = runtime.token_threshold
 
-    return session
+    return runtime

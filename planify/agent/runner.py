@@ -45,7 +45,7 @@ class Agent:
         skills_loader: Any,
         config: Dict[str, Any],
         logger: Any,
-        session: Optional[Any] = None,
+        runtime: Optional[Any] = None,
         tool_callback: Optional[callable] = None,
         tool_result_callback: Optional[callable] = None,
         system_prompt_extra: Optional[str] = None,
@@ -64,7 +64,7 @@ class Agent:
             skills_loader: 技能加载器
             config: 配置字典
             logger: 日志记录器
-            session: Session 实例（可选）
+            runtime: AgentRuntime 实例（可选）
             tool_callback: 工具调用回调函数 (name, args) -> None
             tool_result_callback: 工具结果回调函数 (name, result) -> None
             system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选）
@@ -81,7 +81,7 @@ class Agent:
         self.skills = skills_loader
         self.config = config
         self.logger = logger
-        self.session = session
+        self.runtime = runtime
         self.tool_callback = tool_callback
         self.tool_result_callback = tool_result_callback
         self._system_prompt_extra = system_prompt_extra
@@ -146,11 +146,11 @@ class Agent:
                 transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
                 compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
-                # 本地列表必须就地替换（session 路径下两者可能是不同列表）；
+                # 本地列表必须就地替换（runtime 路径下两者可能是不同列表）；
                 # 若本就是同一列表，二次替换幂等无害
                 messages[:] = compacted
-                if self.session:
-                    self.session.replace_messages_in_place(compacted)
+                if self.runtime:
+                    self.runtime.replace_messages_in_place(compacted)
 
             # === s08: 后台通知 ===
             notifs = self.bg_manager.drain()
@@ -291,15 +291,15 @@ class Agent:
                 transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
                 compacted = self._auto_compact(messages, self.provider, transcript_dir)
 
-                # 同上：本地列表 + session 双写（同一列表时幂等）
+                # 同上：本地列表 + runtime 双写（同一列表时幂等）
                 messages[:] = compacted
-                if self.session:
-                    self.session.replace_messages_in_place(compacted)
+                if self.runtime:
+                    self.runtime.replace_messages_in_place(compacted)
 
     @property
-    def has_session(self) -> bool:
-        """是否绑定了 Session"""
-        return self.session is not None
+    def has_runtime(self) -> bool:
+        """是否绑定了 AgentRuntime"""
+        return self.runtime is not None
 
 
 def run_agent_loop(
@@ -314,7 +314,7 @@ def run_agent_loop(
     skills_loader: Any,
     config: Dict[str, Any],
     logger: Any,
-    session: Optional[Any] = None,
+    runtime: Optional[Any] = None,
     tool_callback: Optional[callable] = None,
     tool_result_callback: Optional[callable] = None,
 ) -> None:
@@ -335,7 +335,7 @@ def run_agent_loop(
         skills_loader: 技能加载器
         config: 配置字典
         logger: 日志记录器
-        session: Session 实例（可选）
+        runtime: AgentRuntime 实例（可选）
         tool_callback: 工具调用回调函数 (name, args) -> None
         tool_result_callback: 工具结果回调函数 (name, result) -> None
     """
@@ -350,7 +350,7 @@ def run_agent_loop(
         skills_loader=skills_loader,
         config=config,
         logger=logger,
-        session=session,
+        runtime=runtime,
         tool_callback=tool_callback,
         tool_result_callback=tool_result_callback,
     )

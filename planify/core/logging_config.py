@@ -125,6 +125,6 @@ def setup_logging(
         logging.getLogger(_name).setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
-    logger.info("=" * 50 + " Session Started " + "=" * 50)
+    logger.info("=" * 50 + " Runtime Started " + "=" * 50)
 
     return logger

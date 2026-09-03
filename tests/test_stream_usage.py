@@ -189,7 +189,7 @@ def test_runner_logs_cache_hit_ratio(tmp_path, caplog):
         emitter=_NullEmitter(),
         config=StreamingConfig(compact_threshold=10**9),
         skills_loader=None,
-        session=SimpleNamespace(
+        runtime=SimpleNamespace(
             config=SimpleNamespace(workdir=tmp_path, assets_dir=tmp_path / "none"),
             skill_access_state=None,
         ),
