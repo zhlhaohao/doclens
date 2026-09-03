@@ -30,7 +30,8 @@ from ..skills.access_state import (
 logger = logging.getLogger(__name__)
 
 
-_CONTEXT_MARKER = "The following skills are available for use with the Skill tool"
+# head-context 注入消息的标记（公共常量：宿主落库/回放时靠它识别注入消息对）
+CONTEXT_MARKER = "The following skills are available for use with the Skill tool"
 
 
 def _refresh_or_insert_context(
@@ -244,11 +245,11 @@ class StreamingAgent:
 
         if context_parts:
             combined = "\n\n".join(context_parts)
-            if _CONTEXT_MARKER not in combined:
+            if CONTEXT_MARKER not in combined:
                 # 保证 marker 存在：否则 _refresh_or_insert_context 找不到旧消息，
                 # 会每轮重复 insert 导致历史无限增长
-                combined = f"{_CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
-            _refresh_or_insert_context(messages, _CONTEXT_MARKER, combined)
+                combined = f"{CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
+            _refresh_or_insert_context(messages, CONTEXT_MARKER, combined)
 
         # 已加载 skill body → 尾部消息对注入（保持 messages[0] 与历史前缀稳定）。
         # web 层每轮从 DB 重建历史（不含注入消息），故每轮重注；若调用方复用
