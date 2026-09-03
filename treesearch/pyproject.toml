@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# 说明：pyproject.toml 位于包目录内部（treesearch/ 即包本体），属非标准布局——
+# 通过 package-dir 把包名映射到当前目录，packages 显式列出全部子包。
+# _bin/（pst-extract sidecar，约 10MB）经 package-data 随包分发；
+# __pycache__ 等不在 packages/package-data 内，天然被排除。
+
+[project]
+# 分发名 treesearchlib；import 名仍为 treesearch（两者可不同，如 beautifulsoup4/bs4）。
+# 纯 "treesearch" 被 PyPI 相似性规则拦截（与既有项目 tree-search 仅差连字符）。
+name = "treesearchlib"
+dynamic = ["version"]
+description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees. No vector embeddings, no chunk splitting."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Lianghao", email = "zhlhao@163.com"},
+]
+keywords = ["search", "retrieval", "bm25", "fts5", "document-indexing", "tree-search", "rag", "full-text-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Indexing",
+    "Topic :: Text Processing :: Filters",
+]
+# 唯一模块级第三方依赖（indexer 进度条）。其余依赖全部为函数内惰性 import，
+# 缺失时对应能力降级（格式回退 text 兜底 / 分词回退），按需经 extras 安装。
+dependencies = [
+    "tqdm>=4.42",
+]
+
+[project.optional-dependencies]
+# 中日韩分词（无则 CJK 文本检索质量显著下降，函数内惰性加载）
+cjk = ["jieba>=0.42"]
+# 主流格式解析器：PDF / DOCX / PPTX / XLSX / HTML
+parsers = [
+    "pdfplumber>=0.10.0",
+    "PyMuPDF>=1.23",
+    "python-docx>=1.0.0",
+    "python-pptx>=1.0.0",
+    "openpyxl>=3.1.0",
+    "beautifulsoup4>=4.12.0",
+]
+# 图像文件支持：占位节点 + EXIF/XMP 元数据读写回（vision 解读结果跟文件走）
+image = [
+    "Pillow>=10.0.0",
+    "piexif>=1.1.3",
+]
+# 老格式 doc/ppt/xls/rtf/epub → Markdown（Rust 绑定；win_arm64 无 wheel，
+# 该平台装此组需 Rust 工具链从 sdist 构建——故不并入 all）
+legacy = [
+    "firecrawl-anydoc>=0.1.9",
+]
+# email 等杂项格式 → Markdown 转换
+convert = [
+    "markitdown>=0.1.0",
+]
+# 扩展代码语言解析（tree-sitter；部分平台/Python 版本无预编译 wheel，
+# 运行时由 try/except ImportError 保护）
+ast = [
+    "tree-sitter-languages>=1.10",
+]
+# 英文词干归一（PorterStemmer，缺失时降级为原词）
+nlp = [
+    "nltk>=3.8",
+]
+# .gitignore 规则匹配（缺失时跳过 gitignore 过滤）
+gitignore = [
+    "pathspec>=0.11",
+]
+# 全家桶（legacy 除外——见上；win_arm64 用户请按需自行加装）
+all = [
+    "treesearch[cjk]",
+    "treesearch[parsers]",
+    "treesearch[image]",
+    "treesearch[convert]",
+    "treesearch[ast]",
+    "treesearch[nlp]",
+    "treesearch[gitignore]",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhlhaohao/doclens"
+Repository = "https://github.com/zhlhaohao/doclens"
+
+[project.scripts]
+treesearch = "treesearch.cli:main"
+
+[tool.setuptools]
+package-dir = {"treesearch" = "."}
+packages = [
+    "treesearch",
+    "treesearch.parsers",
+]
+
+[tool.setuptools.package-data]
+treesearch = ["_bin/*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "treesearch.__version__"}

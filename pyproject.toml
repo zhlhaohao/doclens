@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doclens"
-version = "1.1.42"
+version = "1.1.43"
 description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -28,11 +28,8 @@ classifiers = [
 ]
 dependencies = [
     # Core
-    "anthropic>=0.25.0",
     "fastapi>=0.110.0",
-    "httpx>=0.27.1",
     "cryptography>=42.0.0,<47",  # 47+ 在 PyPI 上没有 win_arm64 wheel（只有 46.0.0-46.0.3 有）
-    "jieba>=0.42",
     "pydantic>=2.11.0,<3.0.0",
     "pydantic-settings>=2.5.2",
     "python-dotenv>=1.0.0",
@@ -43,35 +40,23 @@ dependencies = [
     # mcp 2.0 起 FastMCP 改名为 MCPServer（见 doclens/mcp_server.py），故下限 2.0。
     "mcp>=2.0",
     "textual>=0.47.0",
-    "tqdm>=4.42",
     "ulid-py>=1.1",
     "uvicorn[standard]>=0.27.0",
     "ripgrep-bin>=15.1.0",
-    # Multi-format document parsers (PDF / DOCX / PPTX / Excel / HTML / code AST / gitignore)
-    "beautifulsoup4>=4.12.0",
-    # firecrawl-anydoc：doc/docm/ppt/pps/pot/xls/rtf/epub → Markdown（纯 Rust 绑定，ADR-0013）。
-    # PyPI 无 win_arm64 wheel（仅 win_amd64/macOS/linux），win_arm64 需 Rust 工具链从 sdist 构建；
-    # 运行时由 try/except ImportError 保护（未装时这些扩展名落回 text 兜底）。
-    "firecrawl-anydoc>=0.1.9",
-    "markitdown>=0.1.0",
-    "openpyxl>=3.1.0",
-    "pathspec>=0.11",
-    "pdfplumber>=0.10.0",
-    "PyMuPDF>=1.23",
-    "python-docx>=1.0.0",
-    "python-pptx>=1.0.0",
-    # tree-sitter-languages 在 Windows ARM64 / Python 3.12 上无预编译包（平台无 wheel），
-    # 移至 [ast] 可选依赖组；运行时由 try/except ImportError 保护
+    # 索引引擎经 PyPI 分发（treesearchlib，import 名 treesearch）——发行版不再内嵌源码；
+    # 开发态用 `pip install -e ./treesearch` 以本地源码覆盖（见 CLAUDE.md 安装节）。
+    # extras 对应原内嵌时的依赖清单：cjk=jieba、parsers=PDF/DOCX/PPTX/XLSX/HTML、
+    # image=Pillow+piexif、convert=markitdown、gitignore=pathspec、
+    # legacy=firecrawl-anydoc（win_arm64 无 wheel，需 Rust 工具链从 sdist 构建）
+    "treesearchlib[cjk,parsers,image,convert,gitignore,legacy]>=1.1.0",
+    # AI Agent 框架经 PyPI 分发（import 名 planify）——发行版不再内嵌源码；
+    # 开发态用 `pip install -e ./planify` 以本地源码覆盖（见 CLAUDE.md 安装节）。
+    # anthropic/openai/httpx/borax 均为其传递依赖，doclens 零直接使用
+    "planify>=1.0.0",
     # Background file-system watcher (TUI live reindex)
     "watchdog>=3.0",
-    # Planify agent tools: lunar/weather 工具依赖 borax（农历计算）
-    "borax>=4.1.0",
-    # 日记照片上传压缩（1600px/q80 WebP，ADR-0007）
+    # 日记照片上传压缩（1600px/q80 WebP，ADR-0007；doclens/diary.py 直接使用）
     "Pillow>=10.0.0",
-    # 图像 EXIF 元数据无损读写（vision 解读结果写回图像文件，ADR-0009）
-    "piexif>=1.1.3",
-    # LLM provider SDKs (Anthropic native + OpenAI-compatible)
-    "openai>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -88,7 +73,7 @@ dev = [
 # tree-sitter-languages 在 Windows ARM64 / Python 3.12 上无预编译包（平台无 wheel），
 # 故设为可选依赖。运行时由 try/except ImportError 保护（见 treesearch/parsers/treesitter_parser.py）。
 ast = [
-    "tree-sitter-languages>=1.10",
+    "treesearchlib[ast]>=1.1.0",
 ]
 
 [project.urls]
@@ -97,11 +82,13 @@ Repository = "https://github.com/zhlhaohao/doclens"
 Issues = "https://github.com/zhlhaohao/doclens/issues"
 
 [project.scripts]
-treesearch = "treesearch.cli:main"
 doclens = "doclens.cortex_cli:main"
 
+# treesearch / planify 均不内嵌（发行版分别经 treesearchlib / planify 依赖安装；
+# 两者的 CLI 入口由各自分发包自带）。开发态 `pip install -e ./treesearch`、
+# `pip install -e ./planify` 以本地源码覆盖。
 [tool.setuptools.packages.find]
-include = ["treesearch*", "doclens*", "planify*"]
+include = ["doclens*"]
 
 # 非 .py 资源：前端 PWA 构建产物、配置模板、Agent skills。
 # 缺少这个会导致 pip install 后 gui 找不到前端页面。
@@ -112,7 +99,6 @@ doclens = [
     "skills/**/*",
     "claude_code_skills/**/*",
 ]
-treesearch = ["_bin/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
