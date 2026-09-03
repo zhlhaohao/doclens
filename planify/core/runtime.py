@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Session 模块 - 会话状态容器和配置
+Runtime 模块 - Agent 运行时组件容器和配置
 
-支持多用户单会话架构，每个用户只有一个默认会话，提供线程安全的会话隔离。
+AgentRuntime 是进程级组件容器（client/tools/managers/config），
+不承担对话身份与历史（对话维度的 session_id 由宿主应用管理并穿透传入）。
 """
 
 import copy
@@ -19,12 +20,12 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class SessionConfig:
+class RuntimeConfig:
     """
-    会话配置
+    运行时配置
 
-    包含会话的所有配置参数和隔离目录路径。
-    注意：user_id 和 phone 应存储在 Session 对象上，而非此处。
+    包含运行时的所有配置参数和目录路径。
+    注意：user_id 和 phone 应存储在 AgentRuntime 对象上，而非此处。
     """
 
     workdir: Path
@@ -79,23 +80,21 @@ class SessionConfig:
         """获取日志目录"""
         return self.planify_dir / "logs"
 
-    @property
-    def session_workdir(self) -> Path:
-        """获取用户工作目录"""
-        return self.workdir
-
-
 @dataclass
-class Session:
+class AgentRuntime:
     """
-    会话状态容器
+    Agent 运行时组件容器
 
-    封装所有会话相关的状态和组件，提供线程安全的消息历史管理。
+    封装一次进程运行所需的全部组件与配置（client/tools/managers），
+    提供线程安全的消息历史管理。不承载对话身份——对话维度的
+    session_id 由宿主应用（如 doclens 的 DB 会话）管理并穿透传入；
+    runtime_id 仅作运行时兜底标识（CLI 单会话场景）。
     """
 
-    user_id: str  # 用户 ID，直接存储在 Session 上
-    phone: str = ""  # 手机号，直接存储在 Session 上
-    config: SessionConfig = None  # 必须提供
+    user_id: str  # 用户 ID，直接存储在 AgentRuntime 上
+    phone: str = ""  # 手机号，直接存储在 AgentRuntime 上
+    config: RuntimeConfig = None  # 必须提供
+    runtime_id: str = ""  # 运行时标识（兜底用；Web 模式对话身份用宿主的 session_id）
 
     # 核心组件
     client: Optional[Any] = None  # 实际类型为 LLMProvider
@@ -112,8 +111,8 @@ class Session:
     tools: List[Dict] = field(default_factory=list)
     tool_handlers: Dict[str, Any] = field(default_factory=dict)
 
-    # 技能门禁状态（按 session_id 跟踪已加载 skill）。agent_integration 中赋值，
-    # streaming/runner 通过 getattr 读取以兼容历史 session 实例。
+    # 技能门禁状态（按对话 session_id 跟踪已加载 skill）。宿主装配时赋值，
+    # streaming/runner 通过 getattr 读取以兼容历史 runtime 实例。
     skill_access_state: Optional["SkillAccessState"] = None
 
     # 线程安全的消息历史
@@ -181,10 +180,10 @@ class Session:
         planify_context_window: Optional[int] = None,
         planify_max_tokens: Optional[int] = None,
     ) -> None:
-        """热更新 LLM 配置：重建 Provider 并更新 SessionConfig 字段。
+        """热更新 LLM 配置：重建 Provider 并更新 RuntimeConfig 字段。
 
         planify 官方的配置热更新入口——宿主应用（如 doclens 的 /api/config
-        PUT 与预设切换）应调用本方法，而非直接写 session.config 内部字段。
+        PUT 与预设切换）应调用本方法，而非直接写 runtime.config 内部字段。
         新建的 Provider 与旧实例互不影响；已构造的 Agent 不受影响（它们在
         构造时捕获 client/model），下次构造时读到新值。
 
@@ -241,17 +240,12 @@ class Session:
         """获取空闲超时"""
         return self.config.idle_timeout
 
-    @property
-    def session_workdir(self) -> Path:
-        """获取会话专用工作目录（会话间隔离）"""
-        return self.config.session_workdir
-
     def ensure_dirs(self) -> None:
         """
         确保所有必需的目录存在。
         """
         # 创建用户级别的工作目录和子目录
-        self.config.session_workdir.mkdir(parents=True, exist_ok=True)
+        self.config.workdir.mkdir(parents=True, exist_ok=True)
         self.config.team_dir.mkdir(parents=True, exist_ok=True)
         self.config.tasks_dir.mkdir(parents=True, exist_ok=True)
         self.config.inbox_dir.mkdir(parents=True, exist_ok=True)
@@ -262,7 +256,7 @@ class Session:
         self.config.transcript_dir.parent.mkdir(parents=True, exist_ok=True)
 
     def __str__(self) -> str:
-        """返回会话描述字符串"""
-        return f"Session(user={self.user_id}, status={self.status})"
+        """返回运行时描述字符串"""
+        return f"AgentRuntime(user={self.user_id}, status={self.status})"
 
 

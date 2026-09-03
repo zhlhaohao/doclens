@@ -6,8 +6,9 @@ Planify CLI - 单用户模式入口
 单用户模式：当前工作目录直接作为会话目录，无 .sessions/ 子目录。
 适合个人开发、本地使用场景。
 
-使用方法:
-    python cli.py
+使用方法（需先安装包：pip install -e .）:
+    planify                    # console script
+    python -m planify.cli      # 模块方式
 """
 
 import json
@@ -18,25 +19,6 @@ import threading
 import time
 
 from pathlib import Path
-
-# 确保父目录和当前目录在导入路径中（必须在任何其他导入之前）
-# cli.py 直接运行时需要把 backend/app/ 加到 sys.path，这样 `from planify.xxx import yyy` 才能正确解析
-planify_dir = Path(__file__).parent
-backend_app_dir = planify_dir.parent
-backend_dir = backend_app_dir.parent
-project_root = backend_dir.parent
-
-# 移除已存在的路径避免重复
-for p in [str(project_root), str(backend_dir), str(backend_app_dir), str(planify_dir)]:
-    if p in sys.path:
-        sys.path.remove(p)
-
-# 按正确顺序添加（后添加的优先级高）
-# 顺序：planify_dir, backend_app_dir, backend, project_root
-# 确保 local 模块（third_party/planify）优先于 E:\github\planify 被找到
-for p in [str(planify_dir), str(backend_app_dir), str(backend_dir), str(project_root)]:
-    if p:
-        sys.path.append(p)
 
 # 命令历史（自实现，不依赖 readline）
 from planify.cli_history import CommandHistory, input_with_history
@@ -231,8 +213,8 @@ _sql_logger.addHandler(logging.NullHandler())
 from planify.core import (
     get_config,
     setup_logging,
-    SessionConfig,
-    Session,
+    RuntimeConfig,
+    AgentRuntime,
 )  # noqa: E402
 from planify.managers import (
     TodoManager,
@@ -345,11 +327,11 @@ def setup_single_user_session():
         model=config.get("model_id"),
         client=client,
         transcript_dir=transcript_dir,
-        session=None,  # 单用户模式不需要 Session 对象
+        runtime=None,  # 单用户模式不需要 AgentRuntime 对象
     )
 
-    # 创建单用户 SessionConfig（用于 Session 类）
-    session_config = SessionConfig(
+    # 创建单用户 RuntimeConfig（用于 AgentRuntime 类）
+    runtime_config = RuntimeConfig(
         workdir=workdir,
         model_id=config.get("model_id"),
         api_key=config.get("api_key"),
@@ -359,30 +341,31 @@ def setup_single_user_session():
         idle_timeout=config.get("idle_timeout", 60),
     )
 
-    # 创建会话
-    session = Session(user_id="default", phone="", config=session_config)
-    session.session_id = "default"  # 单用户单会话模式
-    session.client = client
-    session.todo_mgr = todo_mgr
-    session.task_mgr = task_mgr
-    session.bg_mgr = bg_mgr
-    session.bus = bus
-    session.team = team
-    session.skills = skills
-    session.logger = logger
-    session.tools = tools
-    session.tool_handlers = tool_handlers
+    # 创建运行时（单用户单会话模式，runtime_id 兜底标识）
+    runtime = AgentRuntime(
+        user_id="default", phone="", config=runtime_config, runtime_id="default"
+    )
+    runtime.client = client
+    runtime.todo_mgr = todo_mgr
+    runtime.task_mgr = task_mgr
+    runtime.bg_mgr = bg_mgr
+    runtime.bus = bus
+    runtime.team = team
+    runtime.skills = skills
+    runtime.logger = logger
+    runtime.tools = tools
+    runtime.tool_handlers = tool_handlers
 
-    return session, logger
+    return runtime, logger
 
 
-def run_streaming_query(loop, session, query: str, history: list) -> list:
+def run_streaming_query(loop, runtime, query: str, history: list) -> list:
     """
     使用流式代理运行查询。
 
     Args:
         loop: 持久的事件循环
-        session: 会话对象
+        runtime: 运行时对象
         query: 用户输入
         history: 消息历史
 
@@ -405,31 +388,31 @@ def run_streaming_query(loop, session, query: str, history: list) -> list:
     )
 
     # 绑定用户交互工具处理器到已存在的工具处理器
-    bind_user_interaction_handlers(session.tool_handlers, emitter, waiter)
+    bind_user_interaction_handlers(runtime.tool_handlers, emitter, waiter)
 
     # 创建流式代理
     agent = StreamingAgent(
-        client=session.client,
-        model=session.model,
-        tools=session.tools,
-        tool_handlers=session.tool_handlers,
+        client=runtime.client,
+        model=runtime.model,
+        tools=runtime.tools,
+        tool_handlers=runtime.tool_handlers,
         emitter=emitter,
-        todo_manager=session.todo_mgr,
-        bg_manager=session.bg_mgr,
-        bus=session.bus,
-        skills_loader=session.skills,
+        todo_manager=runtime.todo_mgr,
+        bg_manager=runtime.bg_mgr,
+        bus=runtime.bus,
+        skills_loader=runtime.skills,
         config=StreamingConfig(
-            compact_threshold=int(round(session.config.planify_context_window * 0.8))
+            compact_threshold=int(round(runtime.config.planify_context_window * 0.8))
         ),
-        logger_instance=session.logger,
-        session=session,
+        logger_instance=runtime.logger,
+        runtime=runtime,
         interrupt_event=_interrupt_event,
     )
 
     try:
         # 运行流式代理（使用持久的事件循环），接收返回的清理后消息
         return loop.run_until_complete(
-            agent.run_stream(history, query, session.session_id)
+            agent.run_stream(history, query, runtime.runtime_id)
         )
     finally:
         escape_watcher.stop()
@@ -443,8 +426,8 @@ def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # 设置单用户会话
-    session, logger = setup_single_user_session()
+    # 设置单用户运行时
+    runtime, logger = setup_single_user_session()
 
     # 显示欢迎信息
     print(f"\n{'=' * 50}")
@@ -484,8 +467,8 @@ def main():
                 if history:
                     history[:] = auto_compact(
                         history,
-                        session.client,
-                        session.config.transcript_dir,
+                        runtime.client,
+                        runtime.config.transcript_dir,
                     )
                     logger.info("手动压缩完成")
                     print("压缩完成")
@@ -495,24 +478,24 @@ def main():
 
             # /tasks - 列出任务
             if query == "/tasks":
-                print(session.task_mgr.list_all())
+                print(runtime.task_mgr.list_all())
                 continue
 
             # /team - 列出队友
             if query == "/team":
-                print(session.team.list_all())
+                print(runtime.team.list_all())
                 continue
 
             # /inbox - 读取收件箱
             if query == "/inbox":
-                inbox = session.bus.read_inbox("lead")
+                inbox = runtime.bus.read_inbox("lead")
                 print(json.dumps(inbox, indent=2, ensure_ascii=False))
                 continue
 
             # /clear - 清空对话历史
             if query == "/clear":
                 history.clear()
-                session.replace_messages_in_place([])
+                runtime.replace_messages_in_place([])
                 logger.info("对话历史已清空")
                 print("对话历史已清空")
                 continue
@@ -523,7 +506,7 @@ def main():
 
             # 使用流式代理运行查询（传入持久的事件循环）
             # run_stream 内部会处理消息的添加和清理
-            history = run_streaming_query(loop, session, query, history)
+            history = run_streaming_query(loop, runtime, query, history)
             print()  # 结束后换行
 
     except Exception as e:
@@ -536,7 +519,7 @@ def main():
         # 关闭事件循环
         loop.close()
 
-    logger.info("=" * 50 + " Session Ended " + "=" * 50)
+    logger.info("=" * 50 + " Runtime Ended " + "=" * 50)
     return 0
 
 

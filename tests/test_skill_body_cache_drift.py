@@ -116,7 +116,7 @@ class FakeSkills:
         return SKILL_BODY if name == "demo-skill" else f"Error: unknown {name}"
 
 
-def _make_session(tmp_path):
+def _make_runtime(tmp_path):
     config = SimpleNamespace(
         workdir=tmp_path,
         assets_dir=tmp_path / "assets",  # 不存在 → 不读 agent.md，环境隔离
@@ -143,7 +143,7 @@ def _make_agent(provider, emitter, tmp_path):
         emitter=emitter,
         config=StreamingConfig(compact_threshold=10**9),  # 不触发压缩
         skills_loader=FakeSkills(),
-        session=_make_session(tmp_path),
+        runtime=_make_runtime(tmp_path),
     )
 
 

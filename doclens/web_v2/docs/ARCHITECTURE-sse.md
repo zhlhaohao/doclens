@@ -160,7 +160,7 @@ sequenceDiagram
 |---|---|---|
 | 1 | **正文非真流式**（token 缓冲到 done 整体推） | 长回答无打字机效果；架构已支持实时推（改 TEXT 分支即可），当前是策展完整性优先的展示策略 |
 | 2 | agent 与 SSE 消费共享同一 loop | CPU 密集型同步代码（如策展正则、大 JSON 序列化）会短暂阻塞事件运输——策展实测为毫秒级，暂无需 worker 化 |
-| 3 | ~~复用全局单例 `agent.session` + 每请求 `bind_user_interaction_handlers` 重绑~~ | ✅ 已修复（2026-09-02 边界修复）：每请求对 `session.tool_handlers` 做浅拷贝再 bind，同 session 并发两流不再互相覆盖；残留假设仅剩「单会话单流」本身 |
+| 3 | ~~复用全局单例 `agent.session` + 每请求 `bind_user_interaction_handlers` 重绑~~ | ✅ 已修复（2026-09-02 边界修复）：每请求对 `runtime.tool_handlers` 做浅拷贝再 bind，同 runtime 并发两流不再互相覆盖（`agent.session` 已改名 `agent.runtime`，2026-09-03）；残留假设仅剩「单会话单流」本身 |
 | 4 | `history[-1]` 弹出防重复依赖前端落库约定（`:64-72`） | 约定破坏（如手动 curl 带 session_id）会双写本轮消息 |
 | 5 | 中断的半截文本仍会走策展 + 推送 | `emitter.error` 先于 token 推 error 事件，前端可据此弃用该 token；落库保留半截对话（有意的） |
 | 6 | `threading.Event` 而非纯 asyncio 取消 | 兼容 CLI/TUI 同步路径的统一中断接口；检查点粒度 = 事件粒度（每个 astream 事件检查一次，足够细） |

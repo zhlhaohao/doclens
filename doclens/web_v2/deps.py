@@ -154,7 +154,7 @@ def reload_config() -> CortexConfig:
         if _agent:
             _agent.apply_config(_config)
     # planify 侧的 provider 热更新由 CortexAgent.apply_config →
-    # Session.update_llm_config 完成；SessionManager 装配线仅服务 planify
+    # AgentRuntime.update_llm_config 完成；RuntimeManager 装配线仅服务 planify
     # 自带 legacy REPL（main.py），与 doclens 的会话无关。
     return _config
 

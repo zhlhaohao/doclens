@@ -13,7 +13,7 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 ```
 入口层   planify/main.py(旧REPL) | planify/cli.py(流式CLI) | doclens/web_v2/api/chat.py(Web SSE)
               ↓                         ↓                            ↓
-装配层   planify/bootstrap.py → core/session_manager.py → core/session.py(Session 组件包)
+装配层   planify/bootstrap.py → core/runtime_manager.py → core/runtime.py(AgentRuntime 组件容器)
                                         ↓ build_tool_registry
 执行层   agent/runner.py(同步)    streaming/runner.py(异步流式，主路径)    subagent/runner.py(一次性)
               └──────────────── 三者共享同一 LLMProvider 协议与压缩管道 ────────────────┘
@@ -34,9 +34,9 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 
 1. **注册表/回调注入**：`register_app_dependencies()` / `register_planify_config()`（`bootstrap.py:28,51`）——宿主反向注入，优先级最高
 2. **单例 Service Locator**：模块级 `_manager` + `get_manager()`（`bootstrap.py:103`）
-3. **构造函数注入（主体）**：`Session` 是组件属性包，显式拆传给 `Agent` / `StreamingAgent` 构造器
+3. **构造函数注入（主体）**：`AgentRuntime` 是组件属性包，显式拆传给 `Agent` / `StreamingAgent` 构造器
 
-真正装配点在 `core/session_manager.py:277` `initialize_session_components()`：logger、全局共享 Provider、五个 Manager、MessageBus、SkillLoader、工具注册表。
+真正装配点在 `core/runtime_manager.py:277` `initialize_runtime_components()`：logger、全局共享 Provider、五个 Manager、MessageBus、SkillLoader、工具注册表。
 
 ## 三、核心子系统
 
@@ -132,16 +132,15 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 
 ### 9. 配置与编码
 
-- 配置双通路：`get_config()` dict（优先级 user_config > 环境变量 > `.planify/.env` > `.env.local` > `.env` > 默认值，被 SessionManager 使用）与 `register_config()` / `_PlanifySettings`（宿主注入）。检测到 `PLANIFY_BASE_URL` 时 pop `ANTHROPIC_AUTH_TOKEN` 防认证冲突
+- 配置双通路：`get_config()` dict（优先级 user_config > 环境变量 > `.planify/.env` > `.env.local` > `.env` > 默认值，被 RuntimeManager 使用）与 `register_config()` / `_PlanifySettings`（宿主注入）。检测到 `PLANIFY_BASE_URL` 时 pop `ANTHROPIC_AUTH_TOKEN` 防认证冲突
 - `encoding.py`：专治 Windows GBK 控制台与 UTF-8 冲突——`SetConsoleCP(65001)`、stdio reconfigure、`safe_print/safe_input`
-- `Session`（`core/session.py:86`）：内存态组件包，消息历史由 `threading.RLock` 保护，`replace_messages_in_place` 服务压缩后就地替换；`update_llm_config()` 是官方配置热更新入口（重建 Provider + 更新 SessionConfig 字段，宿主勿直写内部）；`SessionManager` 是线程安全单例，多用户每用户单会话
+- `AgentRuntime`（`core/runtime.py:84`）：进程级组件容器（client/tools/managers/config），**不承载对话身份**——对话维度的 `session_id` 由宿主（doclens DB 会话）管理并经 `run_stream(session_id)` 穿透传入，`runtime_id` 仅作 CLI 单会话兜底标识。消息历史由 `threading.RLock` 保护，`replace_messages_in_place` 服务压缩后就地替换；`update_llm_config()` 是官方配置热更新入口（重建 Provider + 更新 RuntimeConfig 字段，宿主勿直写内部）；`RuntimeManager` 是线程安全单例，多用户每用户单运行时。原名 `Session`/`SessionManager`/`SessionConfig`（2026-09-03 改名——旧名误导读者以为它承载对话状态，实际对话身份与历史都在 doclens 侧）
 
 ## 四、发现的技术债
 
-1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）。另：**双装配器**为已接受决策——`SessionManager.initialize_session_components` 仅服务 legacy REPL，doclens 以 `CortexAgent.initialize` 为官方装配根（理由与同步约定见 `doclens/web_v2/docs/ARCHITECTURE-planify-boundary.md` §六 #2）
+1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）。另：**双装配器**为已接受决策——`RuntimeManager.initialize_runtime_components` 仅服务 legacy REPL，doclens 以 `CortexAgent.initialize` 为官方装配根（理由与同步约定见 `doclens/web_v2/docs/ARCHITECTURE-planify-boundary.md` §六 #2）
 2. **teammate 无压缩管道**：`teammate_manager.py` 的 `_loop` 未接 compact，上下文无界增长；`:394` 的 identity 重注入是预留补丁位
-3. **死代码**：`core/client.py` 的 `init_anthropic_client` 无任何调用方（已被 `AnthropicProvider.__init__` 内联取代，且残留修改全局 `os.environ` 的隐患）；~~`session.py:15` 死导入 `Anthropic`~~（2026-09-02 已删）
-4. **`transcript_dir` 语义混乱**：config 中实际是文件路径却被当目录用，runner 已防御性改用 `workdir/.transcripts`
+3. **死代码**：`core/client.py` 的 `init_anthropic_client` 无任何调用方（已被 `AnthropicProvider.__init__` 内联取代，且残留修改全局 `os.environ` 的隐患）；~~`session.py:15` 死导入 `Anthropic`~~（2026-09-02 已删）4. **`transcript_dir` 语义混乱**：config 中实际是文件路径却被当目录用，runner 已防御性改用 `workdir/.transcripts`
 5. **会话持久化缺位**：消息历史纯内存，唯一落盘是 auto_compact 触发时的 transcript；doclens 侧靠 `sessions_store.py`（SQLite）自建持久化补位
 6. **配置双通路**：`get_config()` dict 与 `register_config()` / `_PlanifySettings` 并存，后者混入与 LLM 层无关的百度天气配置
 7. **命名易混**：`task` 工具是子代理，`task_create` 是任务板，`background_run` 才是后台执行；`tools/protocols.py` 不是 typing.Protocol 而是团队协议工具

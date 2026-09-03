@@ -202,7 +202,7 @@ treesearch/
 
 ```
 planify/
-├── bootstrap.py            # 装配入口（SessionManager 单例 + 依赖注册）
+├── bootstrap.py            # 装配入口（RuntimeManager 单例 + 依赖注册）
 ├── cli.py                  # 流式 CLI 入口（当前主力）
 ├── cli_history.py          # 命令历史
 ├── main.py                 # 旧版同步 REPL 入口
@@ -216,8 +216,8 @@ planify/
 │   ├── config.py           # 配置（.env 多级加载 + 宿主注入双通路）
 │   ├── encoding.py         # Windows GBK/UTF-8 编码处理
 │   ├── logging_config.py   # 日志 + 首启工作区初始化
-│   ├── session.py          # Session 组件包（数据层）
-│   ├── session_manager.py  # 会话生命周期 / 组件装配层（单例）
+│   ├── runtime.py          # AgentRuntime 组件容器（原 session.py；对话身份在 doclens 侧）
+│   ├── runtime_manager.py  # 运行时生命周期 / 组件装配层（单例，原 session_manager.py）
 │   └── llm/                # LLM Provider 抽象层
 │       ├── provider.py     # LLMProvider 协议（chat/stream/count_tokens）
 │       ├── types.py        # 归一化消息/工具/流事件类型

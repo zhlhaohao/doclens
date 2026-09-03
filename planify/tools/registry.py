@@ -1,7 +1,7 @@
 """工具注册中心
 
 从所有模块构建完整的工具定义和处理器。
-支持多用户多会话架构，使用 Session 上下文。
+组件经 AgentRuntime（运行时容器）装配注入。
 """
 
 from typing import Any, Callable, Dict, List, Tuple, Optional
@@ -76,7 +76,7 @@ def build_tool_registry(
     model=None,
     client=None,
     transcript_dir=None,
-    session=None,
+    runtime=None,
     skill_access_state=None,
     max_tokens: int = 8000,
     **kwargs,
@@ -96,7 +96,7 @@ def build_tool_registry(
         model: 模型 ID
         client: Anthropic 客户端
         transcript_dir: 脚本目录
-        session: Session 实例（可选，用于会话上下文）
+        runtime: AgentRuntime 实例（可选，用于运行时上下文）
         skill_access_state: SkillAccessState 实例（可选），用于 load_skill 标记已加载
         max_tokens: 对话模型单次输出上限（tokens），写入 task 工具描述，
             供主代理拆分子代理任务时按 max_tokens × 0.8 估算每组读取量
@@ -260,7 +260,7 @@ def build_tool_registry(
         },
     ]
 
-    # 创建带 Session 支持的工具处理器
+    # 创建带运行时支持的工具处理器
     _load_skill_handler = _build_load_skill_handler(skills_loader, skill_access_state)
 
     handlers.update(
@@ -274,7 +274,7 @@ def build_tool_registry(
                 model,
                 handlers,
                 run_subagent,
-                session,
+                runtime,
             ),
             "load_skill": lambda **kw: _load_skill_handler(kw["name"]),
         }
@@ -377,7 +377,7 @@ def build_tool_registry(
             logger.warning("[tools] 白名单中的未知工具名将被忽略: %s", sorted(unknown))
         removed = all_names - enabled
         # gui_mode 下 ask_user_question 是 GUI 唯一的用户交互通道（旧 ask_user/
-        # user_confirm 会被 session 层过滤），被白名单误删会导致模型要求提问时
+        # user_confirm 会被宿主会话层过滤），被白名单误删会导致模型要求提问时
         # 无工具可用、静默卡死——强制保留并告警
         if kwargs.get("gui_mode") and "ask_user_question" in removed:
             removed.discard("ask_user_question")
@@ -404,10 +404,10 @@ def handle_task(
     model,
     handlers: Dict[str, Any],
     run_subagent,
-    session: Optional[Any] = None,
+    runtime: Optional[Any] = None,
 ) -> str:
     """
-    处理 task 工具调用（带 Session 支持）
+    处理 task 工具调用（带运行时支持）
 
     Args:
         prompt: 子代理提示
@@ -417,15 +417,15 @@ def handle_task(
         model: 模型 ID
         handlers: 工具处理器字典
         run_subagent: 子代理运行器函数
-        session: Session 实例（可选）
+        runtime: AgentRuntime 实例（可选）
 
     Returns:
         执行结果
     """
-    # 如果提供了 session，传递子代理的 workdir 配置
+    # 如果提供了 runtime，传递子代理的 workdir 配置
     subagent_workdir = workdir
-    if session is not None:
-        # 子代理可以在会话的隔离目录中工作
+    if runtime is not None:
+        # 子代理可以在运行时的隔离目录中工作
         # 这里使用相同的工作目录，但可以配置为独立的临时目录
         pass
 

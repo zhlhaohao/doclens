@@ -1,6 +1,6 @@
 """技能加载状态：按 session_id 记录已加载的 skill，供工具门禁使用。
 
-并发安全（web 多请求多线程共享同一 Session 上的实例）。内存态——进程重启
+并发安全（web 多请求多线程共享同一 AgentRuntime 上的实例）。内存态——进程重启
 后丢失，每个会话首次 KB 提问会重新加载一次 skill，可接受。
 """
 from __future__ import annotations
