@@ -1,0 +1,5 @@
+# PyPI 发包凭据模板——复制为 .pypirc 并填入真实 token（.pypirc 已 gitignore，不会入库）
+# token 创建：pypi.org → Account settings → API tokens
+[pypi]
+username = __token__
+password = pypi-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

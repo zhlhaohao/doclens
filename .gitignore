@@ -270,3 +270,6 @@ node_modules/
 .claude/.last-app-restart
 # Stop hook 自动重启复用的工作目录（start-app.ps1 gui 每次启动时写入）
 .claude/.last-app-workdir
+
+# PyPI 发包凭据（真实 token，严禁入库；模板见 .pypirc.example）
+.pypirc

@@ -21,6 +21,10 @@ pip install cryptography --only-binary=:all:
 
 # 以可编辑模式安装 doclens的所有依赖（包括dev可选依赖组）
 pip install -e ".[dev]"
+
+# 开发态用本地源码覆盖 PyPI 的 treesearchlib / planify（改 treesearch/、planify/ 即生效）
+pip install -e ./treesearch
+pip install -e ./planify
 ```
 
 **运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
@@ -35,6 +39,22 @@ pip install -e ".[dev]"
 > **worktree 开发复用主仓库 `../cortex/.venv`**（依赖共享；doclens 源码经 PYTHONPATH 取 worktree 本地）——无需在 worktree 重建 venv，直接用 `../cortex/.venv/Scripts/python.exe`。
 
 > **editable install：改源码即生效，无需重装**。`doclens`、`treesearch` 均为 `pip install -e` 安装——系统 Python 的 `doclens.exe` 入口与 `.venv` 的 `python -m doclens` **都解析到本仓库源码**（`doclens/`、`treesearch/`，非 site-packages 副本）。修改这两个目录下任意 `.py` 立即对两种入口生效；排查问题时**勿假设 `doclens.exe` 跑的是旧代码副本**。验证方式：`python -c "import doclens,treesearch; print(doclens.__file__, treesearch.__file__)"`，应指向仓库源码而非 `site-packages`。
+
+> **treesearch / planify 的双形态分发**：开发调试用仓库内源码（`pip install -e ./treesearch`、`pip install -e ./planify`）；发行版 doclens 不内嵌两者，经 PyPI 依赖——`treesearchlib`（import 名仍为 `treesearch`，extras：cjk/parsers/image/convert/ast/nlp/gitignore/legacy）与 `planify`。
+>
+> **⚠️ 改 `treesearch/**` 或 `planify/**` 后的发布纪律**：发行版用的是 PyPI 上的包——源码改动若不发新版，发行版会停在旧版。
+>
+> **统一发包入口 `publish-pypi.ps1`**（repo 根，pwsh 7；自动定位 venv、修中文乱码、自动判断代码是否有变化、无变化跳过、有变化自动 bump patch、treesearch/planify 发后自动提升根 pyproject 依赖下限；实现见 `publish_pypi.py`）：
+>
+> ```powershell
+> ./publish-pypi.ps1 treesearch --dry-run   # 先预演
+> ./publish-pypi.ps1 treesearch             # 实际发包
+> ```
+>
+> 凭据已固化在 repo 根 `.pypirc`（**gitignored，严禁入库**；模板 `.pypirc.example`），
+> 优先级：`TWINE_PASSWORD` 环境变量 → `.pypirc` → `~/.pypirc`。
+>
+> 可发包：`doclens`（首发需 `--first`）/ `treesearch` / `planify`。发布点以 git tag `pypi/<pkg>-<ver>` 记录（随 commit 一起 push）。脚本**不自动 commit**——bump 产生的版本文件/根 pyproject 改动需人工确认后提交。
 
 ## doclens 技术栈
 

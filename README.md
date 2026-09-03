@@ -31,6 +31,19 @@ pip install doclens
 
 Requires Python ≥ 3.10.
 
+> **⚠️ Upgrading from ≤ 1.1.42** — the distribution layout changed in 1.1.43: the
+> `treesearch` / `planify` modules are no longer vendored (they now come from the
+> `treesearchlib` / `planify` PyPI packages). A plain `pip install --upgrade doclens`
+> leaves a **broken install** (pip installs the new package first, then the old
+> package's uninstall deletes the freshly installed `treesearch/` and `planify/`
+> module directories). Upgrade cleanly instead:
+>
+> ```bash
+> pip uninstall doclens && pip install doclens
+> # already broken? repair with:
+> pip install --force-reinstall --no-deps treesearchlib planify
+> ```
+
 **Quick setup:**
 
 ```bash
