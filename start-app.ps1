@@ -81,6 +81,14 @@ Write-Host "  然后重启 Claude Code 会话，用 skill 做知识库问答："
 Write-Host "    /kb-ask 新能源汽车技术有哪些"
 Write-Host "========================" -ForegroundColor Cyan
 
+# gui 启动时记忆本次工作目录，供 Stop hook 自动重启时复用
+# （否则 hook 重启会用默认 test_work_dir，顶掉手动 -C 指定的目录）。
+# stamp 文件已 gitignore。
+if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
+    $workdirStamp = Join-Path $PSScriptRoot ".claude/.last-app-workdir"
+    Set-Content -Path $workdirStamp -Value $workDir -NoNewline -Encoding utf8
+}
+
 # 仅 gui 子命令注入 --port；用户显式传 --port 时尊重用户。
 $finalArgs = @()
 if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
