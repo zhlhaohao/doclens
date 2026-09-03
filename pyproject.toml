@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doclens"
-version = "1.1.43"
+version = "1.1.44"
 description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -48,7 +48,7 @@ dependencies = [
     # extras 对应原内嵌时的依赖清单：cjk=jieba、parsers=PDF/DOCX/PPTX/XLSX/HTML、
     # image=Pillow+piexif、convert=markitdown、gitignore=pathspec、
     # legacy=firecrawl-anydoc（win_arm64 无 wheel，需 Rust 工具链从 sdist 构建）
-    "treesearchlib[cjk,parsers,image,convert,gitignore,legacy]>=1.1.0",
+    "treesearchlib[cjk,parsers,image,convert,gitignore,legacy]>=1.1.1",
     # AI Agent 框架经 PyPI 分发（import 名 planify）——发行版不再内嵌源码；
     # 开发态用 `pip install -e ./planify` 以本地源码覆盖（见 CLAUDE.md 安装节）。
     # anthropic/openai/httpx/borax 均为其传递依赖，doclens 零直接使用
@@ -73,7 +73,7 @@ dev = [
 # tree-sitter-languages 在 Windows ARM64 / Python 3.12 上无预编译包（平台无 wheel），
 # 故设为可选依赖。运行时由 try/except ImportError 保护（见 treesearch/parsers/treesitter_parser.py）。
 ast = [
-    "treesearchlib[ast]>=1.1.0",
+    "treesearchlib[ast]>=1.1.1",
 ]
 
 [project.urls]
