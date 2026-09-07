@@ -21,11 +21,19 @@ description: 发版全流程：提交代码 → publish-pypi.ps1 发 PyPI → �
 ```bash
 git add -A
 git commit -m "<type>: <描述今天的改动>"
-git push            # 顺带把已有 pypi/* tag 推上去
-git push github 0902-1 --tags   # 同步到 GitHub 双远端（zhlhaohao/doclens）
+git push origin HEAD            # 当前分支（不依赖 upstream 配置），顺带把已有 pypi/* tag 推上去
+git push github HEAD --tags     # 同步到 GitHub 双远端（zhlhaohao/doclens）
 ```
 
 commit message 遵循仓库规范（`<type>: <description>`，禁止 Co-Authored-By）。
+
+## 推送容错（两处 push 块通用）
+
+两个远端（origin=内网 GitLab、github）网络路径独立，**任一推送失败都不阻断发版**：
+
+- commit 与 tag 均为本地操作，PyPI 上传直传 pypi.org，均不依赖 git 远端
+- 推送命令**逐行独立执行，禁止用 `&&` 串联**——某条失败继续下一条与后续步骤
+- 失败的推送记入完成汇报：列出远端名与补救命令（如 `git push origin HEAD --tags`），提醒用户网络恢复后补推
 
 ## 第 2 步：发包
 
@@ -46,9 +54,9 @@ commit message 遵循仓库规范（`<type>: <description>`，禁止 Co-Authored
 ```bash
 git add -A
 git commit -m "chore: release <pkg> <版本>"
-git push
+git push origin HEAD
 git push origin pypi/<pkg>-<版本>    # 若上一步 push 未把新 tag 带上
-git push github 0902-1 --tags       # GitHub 双远端同步
+git push github HEAD --tags         # GitHub 双远端同步
 ```
 
 ## 第 4 步：验证
