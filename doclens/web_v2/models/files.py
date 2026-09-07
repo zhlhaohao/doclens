@@ -66,6 +66,7 @@ class UploadResponse(BaseModel):
     bytes_written: int
     overwritten: bool
     reindex_triggered: bool
+    recompressed: bool = False  # 图像超阈值已自动压缩（适配视觉解析体积上限）
 
 
 class IndexedDocument(BaseModel):

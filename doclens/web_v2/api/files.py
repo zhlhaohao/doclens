@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.api.image_compress import compress_image_bytes
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.files import (
     AttrsResponse,
@@ -406,6 +407,10 @@ async def upload(
     if len(data) > _MAX_UPLOAD_BYTES:
         raise CortexAPIError(413, "CONTENT_TOO_LARGE", f"超过 {_MAX_UPLOAD_BYTES // 1024 // 1024}MB 上限")
 
+    # 图像超阈值（9MB）先压缩再落盘：防止落盘文件超过 VisionWorker 的 10MB
+    # base64 上限而 permanent failed（上传即死路）。失败降级写原图。
+    data, recompressed = compress_image_bytes(data, ext)
+
     try:
         target.write_bytes(data)
     except OSError as e:
@@ -415,5 +420,6 @@ async def upload(
         path=_posix_rel(target, base),
         bytes_written=len(data),
         overwritten=overwritten,
+        recompressed=recompressed,
         reindex_triggered=_trigger_reindex(idx),
     )

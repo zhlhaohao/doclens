@@ -38,6 +38,7 @@ export interface UploadResponse {
   bytes_written: number;
   overwritten: boolean;
   reindex_triggered: boolean;
+  recompressed?: boolean;
 }
 
 const qs = (p: string) => `/api/files${p}`;
