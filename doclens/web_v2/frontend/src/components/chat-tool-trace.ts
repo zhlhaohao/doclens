@@ -14,6 +14,15 @@ const TOOL_ACTION: Record<string, string> = {
   grep: "正在检索",
 };
 
+/** MCP 工具显示名：mcp__<server>__<tool> → server / tool。 */
+function mcpDisplayName(name: string): string | null {
+  if (!name.startsWith("mcp__")) return null;
+  const rest = name.slice(5);
+  const sep = rest.indexOf("__");
+  if (sep <= 0) return null;
+  return `${rest.slice(0, sep)} / ${rest.slice(sep + 2)}`;
+}
+
 /** 构造整个 trace 的完整可拷贝文本（所有步骤的 name + 完整 input + 完整 output，无截断）。 */
 export function buildFullText(steps: ToolStep[]): string {
   const lines: string[] = [`思考过程（${steps.length} 步）`];
@@ -174,7 +183,8 @@ export class ChatToolTrace extends LitElement {
   private _renderStep(s: ToolStep) {
     const running = s.status === "running";
     const error = s.status === "error";
-    const icon = TOOL_ICON[s.name] ?? "settings";
+    const mcpName = mcpDisplayName(s.name);
+    const icon = mcpName ? "plug" : (TOOL_ICON[s.name] ?? "settings");
     const showFull = this._fullResultIds.has(s.tool_use_id);
     const outputLines = (s.output ?? "").split("\n");
     const truncated = !showFull && outputLines.length > 5;
@@ -184,8 +194,8 @@ export class ChatToolTrace extends LitElement {
       <div class="step ${running ? "running" : ""} ${error ? "error" : ""}">
         <div class="head">
           ${running ? html`<span class="spin"></span>` : html`<doclens-icon name=${icon}></doclens-icon>`}
-          <span class="name">${s.name}</span>
-          ${running ? html`<span class="running-text">${TOOL_ACTION[s.name] ?? "正在调用"}...</span>` : null}
+          <span class="name" title=${s.name}>${mcpName ?? s.name}</span>
+          ${running ? html`<span class="running-text">${mcpName ? `正在调用 ${mcpName.split(" / ")[0]}` : (TOOL_ACTION[s.name] ?? "正在调用")}...</span>` : null}
           <span class="meta">
             ${!running ? (error ? html`<doclens-icon class="err" name="x"></doclens-icon>` : html`<doclens-icon class="ok" name="check"></doclens-icon>`) : null}
             ${s.duration_ms != null ? html` ${Math.round(s.duration_ms)}ms` : null}

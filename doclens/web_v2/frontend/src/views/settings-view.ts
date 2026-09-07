@@ -19,15 +19,17 @@ import "../components/toast-stack";
 import "../components/password-section";
 import "../components/model-presets-section";
 import "../components/search-presets-section";
+import "../components/mcp-servers-section";
 import type { ToastStack } from "../components/toast-stack";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search", "network"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp"];
 
-/** 三个 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
+/** 各 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
 const TAB_ICONS: Record<SettingsTab, string> = {
   ai: "sparkles",
   search: "search",
   network: "globe",
+  mcp: "plug",
 };
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
@@ -957,6 +959,7 @@ export class SettingsView extends LitElement {
                     </div>
                   `)}
                   ${tab === "network" ? html`<password-section></password-section>` : nothing}
+                  ${tab === "mcp" ? html`<mcp-servers-section></mcp-servers-section>` : nothing}
                 </div>
               `;
             })}

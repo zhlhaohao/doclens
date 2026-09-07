@@ -97,9 +97,11 @@ async def lifespan(app: FastAPI):
     deps.start_diary_worker()
     deps.start_git_sync()
     await deps.start_mcp_server()
+    deps.start_mcp_client()
     try:
         yield
     finally:
+        deps.stop_mcp_client()
         deps.stop_mcp_server()
         deps.stop_git_sync()
         deps.stop_diary_worker()
@@ -157,6 +159,8 @@ def create_app() -> FastAPI:
     app.include_router(vision.router, prefix="/api")
     from doclens.web_v2.api import skills
     app.include_router(skills.router, prefix="/api")
+    from doclens.web_v2.api import mcp
+    app.include_router(mcp.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

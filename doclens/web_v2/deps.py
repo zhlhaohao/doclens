@@ -25,6 +25,7 @@ _vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 impo
 _diary_worker: Optional["object"] = None  # DiaryWorker，懒加载避免 import 循环
 _git_sync: Optional["object"] = None  # GitSync，懒加载避免 import 循环
 _mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
+_mcp_client: Optional["object"] = None  # McpClientManager（client 侧，ADR-0014）
 _lock = threading.RLock()
 
 
@@ -117,6 +118,7 @@ def reset_singletons() -> None:
     stop_diary_worker()
     stop_git_sync()
     stop_mcp_server()
+    stop_mcp_client()
     with _lock:
         _config = None
         _idx_manager = None
@@ -124,6 +126,7 @@ def reset_singletons() -> None:
         _agent = None
         _watcher = None
         _mcp_handle = None
+        _mcp_client = None
         _vision_worker = None
         _diary_worker = None
         _git_sync = None
@@ -460,3 +463,40 @@ def stop_mcp_server() -> None:
             handle.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("stop_mcp_server: %s", exc)
+
+
+def start_mcp_client() -> bool:
+    """启动 MCP client 管理器（消费外部 MCP 服务器工具，ADR-0014）。
+
+    拉起专属后台线程 + event loop，拉起 CortexAgent 单例并把工具注入目标
+    绑到其 runtime——首个启用的 server 连接成功后 ``runtime.tools`` 原位
+    更新（chat 每请求现读，下一轮对话即生效）。配置为空时同样启动（线程
+    空转对账，配置出现即自动连接）。仅 GUI 进程调用（lifespan）。
+    """
+    global _mcp_client
+    agent = get_agent()  # 确保 CortexAgent/runtime 已装配
+    try:
+        from doclens.mcp_client import get_mcp_client_manager
+
+        manager = get_mcp_client_manager()
+        manager.start(runtime=agent.runtime)
+        with _lock:
+            _mcp_client = manager
+        logger.info("MCP client manager started")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("start_mcp_client failed: %s", exc)
+        return False
+
+
+def stop_mcp_client() -> None:
+    """停止 MCP client 管理器（收割全部外部会话，幂等）。"""
+    global _mcp_client
+    with _lock:
+        manager = _mcp_client
+        _mcp_client = None
+    if manager is not None:
+        try:
+            manager.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stop_mcp_client: %s", exc)
