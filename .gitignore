@@ -273,3 +273,4 @@ node_modules/
 
 # PyPI 发包凭据（真实 token，严禁入库；模板见 .pypirc.example）
 .pypirc
+.backup-before-filter-repo/
