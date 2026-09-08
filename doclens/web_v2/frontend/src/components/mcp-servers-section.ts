@@ -120,6 +120,7 @@ export class McpServersSection extends LitElement {
     .server-row {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--cortex-space-3);
       padding: var(--cortex-space-3);
       border: 1px solid var(--cortex-border);
@@ -183,8 +184,17 @@ export class McpServersSection extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* 底部行：连接状态在左、操作按钮在右，同一排 */
+    .status-row {
+      flex-basis: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--cortex-space-2);
+    }
     .row-actions {
       display: flex;
+      justify-content: flex-end;
       gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
@@ -617,6 +627,8 @@ export class McpServersSection extends LitElement {
               ? `${s.command} ${s.args.join(" ")}`
               : s.url}
           </div>
+        </div>
+        <div class="status-row">
           <div class="status">
             <span class="dot ${st.status}"></span>
             ${STATUS_LABEL[st.status] ?? st.status}
@@ -624,15 +636,15 @@ export class McpServersSection extends LitElement {
               ? html`<span class="err-text" title=${st.error}>${st.error}</span>`
               : nothing}
           </div>
-        </div>
-        <div class="row-actions">
-          ${st.status === "failed" || st.status === "ok"
-            ? html`<button class="icon-btn" ?disabled=${this._busy} @click=${() => this._reconnect(s)}>重连</button>`
-            : nothing}
-          <button class="icon-btn" ?disabled=${this._busy} @click=${() => this._openEdit(s)}>编辑</button>
-          <button class="icon-btn danger" ?disabled=${this._busy} @click=${() => this._delete(s)}>
-            ${confirming ? "确认删除" : "删除"}
-          </button>
+          <div class="row-actions">
+            ${st.status === "failed" || st.status === "ok"
+              ? html`<button class="icon-btn" ?disabled=${this._busy} @click=${() => this._reconnect(s)}>重连</button>`
+              : nothing}
+            <button class="icon-btn" ?disabled=${this._busy} @click=${() => this._openEdit(s)}>编辑</button>
+            <button class="icon-btn danger" ?disabled=${this._busy} @click=${() => this._delete(s)}>
+              ${confirming ? "确认删除" : "删除"}
+            </button>
+          </div>
         </div>
       </div>
       ${this._renderToolsPanel(s)}
