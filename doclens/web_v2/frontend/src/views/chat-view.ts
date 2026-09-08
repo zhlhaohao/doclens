@@ -249,7 +249,28 @@ export class ChatView extends LitElement {
       }
       /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽） */
       .input-row { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
+      /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
+      dialog {
+        width: 100vw;
+        max-width: 100vw;
+        max-height: calc(100vh - 16px);
+        border-radius: var(--cortex-radius-md);
+      }
+      dialog > * { padding: var(--cortex-space-4); }
     }
+    /* 技能选择对话框宿主 chrome（Meta 平铺浮层：hairline 边框 + 24px 圆角 + level-2 阴影），
+       与 files-view/diary-view 的 dialog 规格一致；此前无样式，吃的是浏览器默认外观 */
+    dialog {
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-xl);
+      box-sizing: border-box;
+      padding: 0;
+      background: var(--cortex-surface);
+      box-shadow: var(--cortex-shadow-lg);
+      max-width: 90vw;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
+    dialog > * { display: block; padding: var(--cortex-space-6); }
     /* 移动端预览 overlay */
     .preview-overlay {
       position: absolute;

@@ -7046,8 +7046,11 @@ ${s}</table>
             @click=${()=>this._onPick(t)}
             @keydown=${r=>this._onItemKeydown(r,t)}
           >
-            <span class="head"><doclens-icon name=${t.icon}></doclens-icon>${t.name}</span>
-            <span class="desc">${t.description}</span>
+            <span class="tile"><doclens-icon name=${t.icon}></doclens-icon></span>
+            <span class="body">
+              <span class="name">${t.name}</span>
+              <span class="desc">${t.description}</span>
+            </span>
           </li>
         `)}
       </ul>`:u`<div class="grid" role="listbox">
@@ -7058,12 +7061,24 @@ ${s}</table>
           class="skill"
           @click=${()=>this._onPick(t)}
         >
-          <span class="head"><doclens-icon name=${t.icon}></doclens-icon>${t.name}</span>
+          <span class="tile"><doclens-icon name=${t.icon}></doclens-icon></span>
+          <span class="name">${t.name}</span>
           <span class="desc">${t.description}</span>
         </button>
       `)}
     </div>`}render(){return u`
-      <h3>选择技能</h3>
+      <div class="dlg-head">
+        <div class="title-wrap">
+          <span class="title-icon"><doclens-icon name="sparkles"></doclens-icon></span>
+          <div>
+            <h3>选择技能</h3>
+            <p class="subtitle">点选一个技能，立即使用</p>
+          </div>
+        </div>
+        <button type="button" class="close" aria-label="关闭" @click=${this._cancel}>
+          <doclens-icon name="x"></doclens-icon>
+        </button>
+      </div>
       ${this._renderBody()}
       <div class="actions">
         <button type="button" class="cancel" @click=${this._cancel}>取消</button>
@@ -7075,49 +7090,101 @@ ${s}</table>
       width: 50vw;
       max-width: 100%;
     }
-    h3 {
-      margin: 0 0 var(--cortex-space-2) 0;
-      font-size: var(--cortex-fs-md); font-weight: 600;
-      letter-spacing: -0.01em; color: var(--cortex-text);
+
+    /* ── 头部：标题块 + 右上关闭 ── */
+    .dlg-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: var(--cortex-space-3);
+      margin-bottom: var(--cortex-space-5);
     }
+    .title-wrap {
+      display: flex; align-items: center; gap: var(--cortex-space-3);
+      min-width: 0;
+    }
+    .title-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: var(--cortex-radius-circle);
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      font-size: 20px;
+    }
+    h3 {
+      margin: 0;
+      font-size: var(--cortex-fs-lg); font-weight: 600;
+      letter-spacing: -0.01em; color: var(--cortex-text);
+      line-height: var(--cortex-lh-heading);
+    }
+    .subtitle {
+      margin: 2px 0 0 0;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      line-height: 1.4;
+    }
+    .close {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; flex-shrink: 0;
+      border: none; border-radius: var(--cortex-radius-circle);
+      background: transparent; color: var(--cortex-text-caption);
+      font-size: 16px; cursor: pointer;
+      transition: background var(--cortex-duration-fast) var(--cortex-ease),
+                  color var(--cortex-duration-fast) var(--cortex-ease);
+    }
+    .close:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
+    .close:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring);
+    }
+
+    /* ── 桌面：3 列卡片网格（card-icon-feature）── */
     .grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: 1fr; /* 同行卡片等高，视觉对齐 */
       gap: var(--cortex-space-3);
       max-height: 380px;
       overflow-y: auto;
-      padding: var(--cortex-space-1); /* 给卡片 hover 阴影留呼吸空间 */
+      padding: var(--cortex-space-1); /* 给 focus ring 留呼吸空间 */
     }
-    /* 浮起卡片（Meta card-product-feature 风格）：大圆角 + 静态细边框平面，
-       hover 抬升阴影 + 上移 2px，focus-visible 同步 */
     .skill {
       display: flex; flex-direction: column; align-items: flex-start;
       gap: var(--cortex-space-2);
       padding: var(--cortex-space-4);
       border: 1px solid var(--cortex-border-muted);
-      border-radius: var(--cortex-radius-xl);
+      border-radius: var(--cortex-radius-lg);
       background: var(--cortex-surface);
       cursor: pointer;
       text-align: left;
       font-family: inherit;
-      transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+      /* 平铺：hover 仅换底/深边，无抬升无阴影（Meta no-elevation 政策） */
+      transition: background var(--cortex-duration-fast) var(--cortex-ease),
+                  border-color var(--cortex-duration-fast) var(--cortex-ease);
     }
-    .skill:hover:not(:disabled),
-    .skill:focus-visible {
+    .skill:hover:not(:disabled) {
+      background: var(--cortex-surface-muted);
       border-color: var(--cortex-border);
-      box-shadow: var(--cortex-shadow-md);
-      transform: translateY(-2px);
-      outline: none;
     }
-    .skill:active:not(:disabled) { transform: translateY(0); }
+    .skill:focus-visible {
+      outline: none;
+      border-color: var(--cortex-primary);
+      box-shadow: var(--cortex-focus-ring);
+    }
     .skill:disabled { opacity: 0.4; cursor: not-allowed; }
-    .head {
-      display: flex; align-items: center; gap: var(--cortex-space-2);
+    /* 图标 tile：钴蓝浅底圆角块，与 segmented-control 选中态同一 tint 语言 */
+    .tile {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; flex-shrink: 0;
+      border-radius: var(--cortex-radius-md);
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      font-size: 18px;
+    }
+    .name {
       font-size: var(--cortex-fs-sm); font-weight: 600;
       color: var(--cortex-text);
+      letter-spacing: var(--cortex-tracking-body);
       word-break: break-all;
     }
-    .head doclens-icon { flex-shrink: 0; }
     .desc {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -7127,7 +7194,8 @@ ${s}</table>
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    /* 移动端 list item 列表（仅移动端渲染，无需媒体查询） */
+
+    /* ── 移动端 list item 列表（仅移动端渲染，无需媒体查询）── */
     .list {
       list-style: none;
       margin: 0;
@@ -7137,9 +7205,8 @@ ${s}</table>
     }
     .item {
       display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      gap: var(--cortex-space-1);
+      align-items: flex-start;
+      gap: var(--cortex-space-3);
       padding: var(--cortex-space-3) var(--cortex-space-2);
       border-bottom: 1px solid var(--cortex-border-muted);
       cursor: pointer;
@@ -7150,12 +7217,16 @@ ${s}</table>
       background: var(--cortex-surface-muted);
       outline: none;
     }
+    .item .tile { width: 32px; height: 32px; font-size: 16px; margin-top: 2px; }
+    .item .body { display: flex; flex-direction: column; gap: var(--cortex-space-1); min-width: 0; }
     .item .desc {
       -webkit-line-clamp: 2;
       width: 100%;
       min-width: 0;
       overflow-wrap: anywhere;
     }
+
+    /* ── 状态与动作 ── */
     .empty {
       padding: var(--cortex-space-8);
       text-align: center;
@@ -7170,21 +7241,32 @@ ${s}</table>
     }
     .actions {
       display: flex; justify-content: flex-end;
-      margin-top: var(--cortex-space-4);
+      margin-top: var(--cortex-space-5);
     }
+    /* ghost pill：透明底 + hairline 边框，hover 浅灰底 */
     button.cancel {
-      padding: 6px 16px;
+      padding: 8px 20px;
       border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
+      background: transparent;
       color: var(--cortex-text);
       cursor: pointer;
       border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
+      font-size: var(--cortex-fs-sm);
+      font-weight: 600;
+      letter-spacing: var(--cortex-tracking-body);
+      transition: background var(--cortex-duration-fast) var(--cortex-ease),
+                  border-color var(--cortex-duration-fast) var(--cortex-ease);
+    }
+    button.cancel:hover { background: var(--cortex-surface-muted); }
+    button.cancel:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring);
     }
     @media (max-width: 1023px) {
       /* border-box：dialog > * 注入的 16px 内边距计入 100% 宽度，
          否则内容比对话框宽 32px，出现横向滚动条 */
       :host { width: 100%; box-sizing: border-box; }
+      button.cancel { padding: 12px 20px; min-height: var(--cortex-touch-target); }
     }
   `;on([w({attribute:!1})],$s.prototype,"skills",2);on([w()],$s.prototype,"error",2);on([k()],$s.prototype,"_isMobile",2);$s=on([G("skill-toolbox-dialog")],$s);var m4=Object.defineProperty,v4=Object.getOwnPropertyDescriptor,je=(e,t,r,i)=>{for(var s=i>1?void 0:i?v4(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&m4(t,r,s),s};function nu(e,t){if(e.length===0)return e;const r=e[e.length-1];if(r.role!=="assistant")return e;const i=e.slice(0,-1);if(t.type==="token")return[...i,{...r,content:r.content+t.text}];if(t.type==="tool_call"){const s={tool_use_id:t.tool_use_id,name:t.name,input:t.input,status:"running"};return[...i,{...r,tool_steps:[...r.tool_steps??[],s]}]}if(t.type==="tool_result"){const s=(r.tool_steps??[]).map(a=>a.tool_use_id===t.tool_use_id?{...a,output:t.output,is_error:t.is_error,duration_ms:t.duration_ms,status:t.is_error?"error":"done"}:a);return[...i,{...r,tool_steps:s}]}return t.type==="references"?[...i,{...r,references:t.items}]:e}function g4(e){return e.some(r=>r.role==="assistant"&&(r.tool_steps??[]).some(i=>i.status==="running"))?e.map(r=>r.role!=="assistant"||!r.tool_steps?r:{...r,tool_steps:r.tool_steps.map(i=>i.status==="running"?{...i,status:"error",is_error:!0,output:i.output??"（已中断）"}:i)}):e}function b4(e){const t=[];for(const r of e){let i;try{i=JSON.parse(r.payload)}catch{continue}if(r.kind==="message_user")t.push({role:"user",content:i.content??""});else if(r.kind==="message_ai"){const s=(i.tool_calls??[]).map(n=>({tool_use_id:n.tool_use_id??"",name:n.name??"",input:n.input??{},output:n.output,is_error:n.is_error,duration_ms:n.duration_ms,status:n.is_error?"error":"done"})),a=(i.references??[]).map(n=>({path:String((n==null?void 0:n.path)??"")})).filter(n=>n.path.length>0),o={role:"assistant",content:i.content??""};s.length&&(o.tool_steps=s),a.length&&(o.references=a),t.push(o)}}return t}let me=class extends U{constructor(){super(...arguments),this.draft="",this._activeAsk=null,this.historySessions=[],this._highlightSessionId=null,this._clearing=!1,this.previewOpen=!1,this.previewContent="",this.previewPath="",this.previewLanguage="text",this.previewPages=null,this.previewAttachments=null,this.previewWritable=!1,this.previewError=null,this.previewDirty=!1,this._previewPaneWidth=me.PREVIEW_PANE_WIDTH_DEFAULT,this._skillCandidates=null,this._skillCandidatesError=null,this._skillDialogOpen=!1,this._abortController=null,this._onSkillMenuOpen=()=>{this._loadSkillCandidates()},this._onSkillBrowse=()=>{this._skillDialogOpen=!0,this._loadSkillCandidates()},this._onSkillDialogPick=e=>{this._skillDialogOpen=!1,this._sendWithSkill(e.detail.skill.name)},this._onSkillDialogCancel=()=>{this._skillDialogOpen=!1},this._onSkillMenuPick=e=>{this._sendWithSkill(e.detail.name)},this._onSplitterMouseDown=e=>{e.preventDefault();const t=e.clientX,r=this._previewPaneWidth;document.body.style.cursor="col-resize",document.body.style.userSelect="none";const i=a=>{const o=Math.max(me.PREVIEW_PANE_WIDTH_MIN,Math.min(me.PREVIEW_PANE_WIDTH_MAX,r-(a.clientX-t)));o!==this._previewPaneWidth&&(this._previewPaneWidth=o)},s=()=>{document.removeEventListener("mousemove",i),document.removeEventListener("mouseup",s),document.body.style.cursor="",document.body.style.userSelect="",localStorage.setItem(me.PREVIEW_PANE_WIDTH_KEY,String(this._previewPaneWidth))};document.addEventListener("mousemove",i),document.addEventListener("mouseup",s)},this._onOpenPstEmail=async e=>{await this._safeAction(async()=>{await this._openPreviewPath(e.detail.path)})},this._onPreviewDirty=e=>{this.previewDirty=e.detail.dirty},this._closePreview=async()=>{await this._safeAction(()=>{this.previewOpen=!1})},this._onPreviewBack=async()=>{if(Wi(this.previewPath)){await this._safeAction(async()=>{await this._openPreviewPath(this.previewPath.split("#")[0])});return}await this._closePreview()},this._onPreviewSaved=()=>{this.previewDirty=!1,this._pushToast("已保存","success",2500)},this._onPreviewSaveFailed=e=>{this._pushToast(`保存失败：${e.detail.message}`,"error",5e3)},this._onPreviewUploadSuccess=e=>{this.previewDirty=!1,this._pushToast(`已覆盖：${e.detail.path}`,"success",2500),this._reloadPreview()},this._onPreviewUploadFailed=e=>{this._pushToast(`上传失败：${e.detail.message}`,"error",5e3)}}connectedCallback(){var t;super.connectedCallback(),this._loadHistory(),this._unsubscribe=T.subscribe(()=>{this.requestUpdate(),this._consumePendingSkillChat()}),this._loadPreviewPaneWidth();const e=T.getState().pendingSession;e&&e.type==="chat"&&(C.setPendingSession(null),this._loadSession(e)),this._highlightSessionId=((t=uc().chat)==null?void 0:t.sessionId)??null,this._consumePendingSkillChat(),this._loadSkillCandidates()}updated(){const e=this.renderRoot.querySelector("dialog");e&&!e.open&&e.showModal()}async _loadSkillCandidates(){try{const e=await xp();this._skillCandidates=e.filter(t=>t.enabled&&!t.deleted).map(t=>({name:t.name,description:t.description,icon:t.icon})),this._skillCandidatesError=null}catch(e){this._skillCandidatesError=(e==null?void 0:e.message)||"技能列表加载失败"}}get _recentSkillItems(){const e=this._skillCandidates;if(e!==null&&e.length===0)return null;if(!e)return[];const t=new Map(e.map(r=>[r.name,r]));return h4().filter(r=>t.has(r)).slice(0,d4).map(r=>({name:r,icon:t.get(r).icon}))}async _sendWithSkill(e){const t=this.draft.trim();if(!t)return;_p(e);const r=[`[调用技能: ${e}]`,"",`请先 load_skill("${e}") 加载技能，然后按技能指引处理。`,"",t].join(`
 `);if(this.draft="",this.viewState.state==="initial"){await this._ensureSession(`${e} · ${t.slice(0,30)}`,r,"skill"),await this._sendMessage(r,!0);return}await this._sendMessage(r)}disconnectedCallback(){var e;super.disconnectedCallback(),(e=this._unsubscribe)==null||e.call(this)}async _loadHistory(){try{const{sessions:e}=await vp({type:"chat",limit:20});this.historySessions=e}catch(e){console.warn("load history failed",e)}}async _onClearHistory(){this._clearing=!0,this.requestUpdate();try{await gp("chat"),this.historySessions=[]}catch(e){console.warn("clear sessions failed",e)}finally{this._clearing=!1,this.requestUpdate()}}get viewState(){return T.getState().chat}async _submit(e){this._resetPreview();const t=e.detail.value;if(this.draft="",this.viewState.state==="initial"){await this._ensureSession(t,t),await this._sendMessage(t,!0);return}await this._sendMessage(t)}async _consumePendingSkillChat(){const e=T.getState().pendingSkillChat;e&&(C.setPendingSkillChat(null),this.viewState.state==="initial"&&(await this._ensureSession(e.title,e.message,e.isSkill?"skill":void 0),await this._sendMessage(e.message,!0)))}async _ensureSession(e,t,r){const i=await W2({type:"chat",title:e.slice(0,60),preview:t.slice(0,100),mode:r});C.setChatState({state:"focus",currentSession:{id:i.id,type:"chat",title:e.slice(0,60),preview:t.slice(0,100),mode:r,updated_at:new Date().toISOString(),message_count:0},messages:[{role:"user",content:t}],streaming:!0})}async _sendMessage(e,t=!1){t?C.setChatState({streaming:!0}):C.setChatState({messages:[...this.viewState.messages,{role:"user",content:e}],streaming:!0});const r=T.getState().chat.currentSession.id;await ol(r,[{kind:"message_user",payload:JSON.stringify({content:e})}],T.getState().chat.messages.length);const i={role:"assistant",content:""};let s=[...T.getState().chat.messages,i];C.setChatState({messages:s}),this._abortController=new AbortController;try{for await(const o of t4({message:e,session_id:r},this._abortController.signal))if(o.type==="error")s=nu(s,{type:"token",text:`
@@ -7455,7 +7537,28 @@ ${s}</table>
       }
       /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽） */
       .input-row { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
+      /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
+      dialog {
+        width: 100vw;
+        max-width: 100vw;
+        max-height: calc(100vh - 16px);
+        border-radius: var(--cortex-radius-md);
+      }
+      dialog > * { padding: var(--cortex-space-4); }
     }
+    /* 技能选择对话框宿主 chrome（Meta 平铺浮层：hairline 边框 + 24px 圆角 + level-2 阴影），
+       与 files-view/diary-view 的 dialog 规格一致；此前无样式，吃的是浏览器默认外观 */
+    dialog {
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-xl);
+      box-sizing: border-box;
+      padding: 0;
+      background: var(--cortex-surface);
+      box-shadow: var(--cortex-shadow-lg);
+      max-width: 90vw;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
+    dialog > * { display: block; padding: var(--cortex-space-6); }
     /* 移动端预览 overlay */
     .preview-overlay {
       position: absolute;
@@ -12413,7 +12516,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;Ip([w({type:Boolean,reflect:!0})],Fo.prototype,"open",2);Fo=Ip([G("watch-changes-dialog")],Fo);var l3=Object.defineProperty,c3=Object.getOwnPropertyDescriptor,hn=(e,t,r,i)=>{for(var s=i>1?void 0:i?c3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&l3(t,r,s),s};let Ms=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 ba49e66 · 2026-09-08 15:07 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
+  `;Ip([w({type:Boolean,reflect:!0})],Fo.prototype,"open",2);Fo=Ip([G("watch-changes-dialog")],Fo);var l3=Object.defineProperty,c3=Object.getOwnPropertyDescriptor,hn=(e,t,r,i)=>{for(var s=i>1?void 0:i?c3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&l3(t,r,s),s};let Ms=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 017572f · 2026-09-08 15:45 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -12428,7 +12531,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?u`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"ba49e66 · 2026-09-08 15:07"}</span>
+            <span class="value">${"017572f · 2026-09-08 15:45"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
