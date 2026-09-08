@@ -62,6 +62,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
   CORTEX_SYNC_ENABLED: "true",
+  VISION_AUTO_ROTATE: "true",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -87,6 +88,16 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     label: "百度地图开放平台 AK",
     component: "password",
     hint: "供日记录入时抓取城市天气。需在百度地图开放平台申请；留空则日记不带天气（不影响其他功能）。保存后即时生效。",
+  },
+
+  // ===== 图像自动旋转（ai tab，视觉模型相关；ADR-0017） =====
+  {
+    tab: "ai",
+    section: "图像自动旋转",
+    envVar: "VISION_AUTO_ROTATE",
+    label: "上传图片自动转正",
+    component: "switch",
+    hint: "文件管理/日记上传的图片在后台用视觉模型判断方向，歪斜时自动旋转落盘并重新解析。需已配置视觉模型；关闭则上传图保持原样。保存后即时生效。",
   },
 
   // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====

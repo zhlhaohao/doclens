@@ -48,6 +48,20 @@ function dispatchReindexedToast(d: ReindexedPayload): void {
   }));
 }
 
+/** 上传图片后台判向旋转完成（ADR-0017）：派发 toast 事件（app-bar 消费）。 */
+function dispatchImageRotated(d: { path?: string }): void {
+  window.dispatchEvent(new CustomEvent("cortex:image-rotated", {
+    detail: { path: d.path ?? "" },
+  }));
+}
+
+/** 日记照片 caption 后台回写完成（ADR-0017）：通知 diary 视图刷新当日记录。 */
+function dispatchDiaryUpdated(d: { date?: string }): void {
+  window.dispatchEvent(new CustomEvent("cortex:diary-updated", {
+    detail: { date: d.date ?? "" },
+  }));
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     reconnectTimer = window.setTimeout(() => {
@@ -70,6 +84,12 @@ async function run(): Promise<void> {
         } else if (ev.event === "reindexed") {
           const d = safeParse<ReindexedPayload>(ev.data);
           if (d) dispatchReindexedToast(d);
+        } else if (ev.event === "image_rotated") {
+          const d = safeParse<{ path?: string }>(ev.data);
+          if (d) dispatchImageRotated(d);
+        } else if (ev.event === "diary_updated") {
+          const d = safeParse<{ date?: string }>(ev.data);
+          if (d) dispatchDiaryUpdated(d);
         }
       }
       // 流正常结束（服务端关闭）→ 若未主动停止则重连

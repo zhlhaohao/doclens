@@ -190,6 +190,15 @@ export class AppBar extends LitElement {
     }
   };
 
+  /** 上传图片后台判向旋转完成（ADR-0017）：toast 告知用户文件已被自动转正。 */
+  private _onImageRotated: (e: Event) => void = (e: Event) => {
+    const detail = (e as CustomEvent).detail as { path?: string };
+    const stack = this.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
+    const name = (detail?.path ?? "").split("/").pop() || "图片";
+    stack?.pushToast?.(`已自动旋转：${name}`, "info", 4000);
+  };
+
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {
     if (!this._menuOpen) return;
     const path = e.composedPath();
@@ -250,6 +259,7 @@ export class AppBar extends LitElement {
     super.connectedCallback();
     document.addEventListener("click", this._onDocClick);
     window.addEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
+    window.addEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
     this._syncFromStore();
     this._unsubStore = store.subscribe(() => this._syncFromStore());
   }
@@ -257,6 +267,7 @@ export class AppBar extends LitElement {
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick);
     window.removeEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
+    window.removeEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
     this._unsubStore?.();
     super.disconnectedCallback();
   }

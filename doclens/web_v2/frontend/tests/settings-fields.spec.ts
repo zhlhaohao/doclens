@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 7 fields (network + MCP + 百度天气 AK；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(7);
+  it("has exactly 8 fields (network + MCP + 百度天气 AK + 图像自动旋转；模型/搜索参数由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(8);
   });
 
   it("every field has a unique envVar", () => {
@@ -46,9 +46,9 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills"]);
   });
 
-  it("AI tab only has 百度天气 AK 字段 (模型配置由 <model-presets-section> 接管)", () => {
+  it("AI tab has 百度天气 AK + 图像自动旋转字段 (模型配置由 <model-presets-section> 接管)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
-    expect(ai.map((f) => f.envVar)).toEqual(["BAIDU_WEATHER_AK"]);
+    expect(ai.map((f) => f.envVar)).toEqual(["BAIDU_WEATHER_AK", "VISION_AUTO_ROTATE"]);
   });
 
   it("search tab has no SETTINGS_FIELDS (由 <search-presets-section> 接管)", () => {

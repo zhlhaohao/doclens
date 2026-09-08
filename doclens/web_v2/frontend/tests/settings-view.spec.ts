@@ -62,10 +62,10 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
-  it("renders 1 .field for AI tab (仅百度天气 AK；模型配置由预设区块接管)", () => {
+  it("renders 2 .field for AI tab (百度天气 AK + 图像自动旋转；模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(1);
+    expect(fields?.length).toBe(2);
     expect(aiPanel?.querySelector('input[data-env="BAIDU_WEATHER_AK"]')).toBeTruthy();
   });
 

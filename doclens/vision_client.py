@@ -13,11 +13,16 @@ import base64
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 
 from treesearch.parsers.image_store import EXT_TO_MEDIA
 
 logger = logging.getLogger(__name__)
+
+# 视觉 API 全局串行锁（ADR-0017）：VisionWorker 转写 / 上传判向 / 日记 caption
+# 共享同一视觉端点，并发调用可能撞 DashScope 等限流——所有 call_vision 互斥排队。
+_VISION_CALL_LOCK = threading.Lock()
 
 # 推理模型经 OpenAI-compat 网关时，常把 <think>…</think> 内联进正文
 _THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
@@ -90,8 +95,10 @@ def call_vision(b64: str, media: str, prompt: str, config, *, max_tokens: int | 
     """按 vision_protocol 分流调视觉模型，返回剥除思考段后的文本。
 
     max_tokens 省略时用各协议默认（openai-compat 512 / anthropic 1024）。
+    所有调用经全局串行锁互斥（ADR-0017：防并发撞限流）。
     """
     kw = {"max_tokens": max_tokens} if max_tokens is not None else {}
-    if getattr(config, "vision_protocol", None) == "anthropic":
-        return _vision_anthropic(b64, media, prompt, config, **kw)
-    return _vision_openai(b64, media, prompt, config, **kw)
+    with _VISION_CALL_LOCK:
+        if getattr(config, "vision_protocol", None) == "anthropic":
+            return _vision_anthropic(b64, media, prompt, config, **kw)
+        return _vision_openai(b64, media, prompt, config, **kw)

@@ -8,12 +8,13 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 
 from doclens.index_manager import IndexManager
+from doclens.web_v2.api._auto_rotate import schedule_auto_rotate
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.api.image_compress import compress_image_bytes
-from doclens.web_v2.deps import get_index_manager
+from doclens.web_v2.deps import get_config, get_index_manager
 from doclens.web_v2.models.files import (
     AttrsResponse,
     DirStatsResponse,
@@ -378,6 +379,7 @@ async def rename(
 
 @router.post("/files/upload", response_model=UploadResponse)
 async def upload(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     dest_dir: str = Form(default=""),
     overwrite: bool = Form(default=False),
@@ -415,6 +417,11 @@ async def upload(
         target.write_bytes(data)
     except OSError as e:
         raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
+
+    # 图像后台判向自动转正（ADR-0017）：开关/密钥/格式不满足时静默跳过
+    schedule_auto_rotate(
+        background_tasks, target, _posix_rel(target, base), idx.index_path, get_config()
+    )
 
     return UploadResponse(
         path=_posix_rel(target, base),

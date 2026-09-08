@@ -136,6 +136,7 @@ export class DiaryView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    window.addEventListener("cortex:diary-updated", this._onDiaryUpdated as EventListener);
     if (!this._initialized) {
       this._initialized = true;
       void this._init();
@@ -152,8 +153,18 @@ export class DiaryView extends LitElement {
 
   disconnectedCallback() {
     this._unsubscribe?.();
+    window.removeEventListener("cortex:diary-updated", this._onDiaryUpdated as EventListener);
     super.disconnectedCallback();
   }
+
+  /** 照片 caption 后台回写完成（ADR-0017）：录入提交中不干扰，否则重拉当日记录。 */
+  private _onDiaryUpdated: (e: Event) => void = (e: Event) => {
+    const date = (e as CustomEvent).detail?.date;
+    if (this._diary.submitting) return;
+    if (date && date === this._diary.today) {
+      void this._loadToday();
+    }
+  };
 
   private get _diary() {
     return store.getState().diary;

@@ -9,12 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 
 from doclens import diary
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.deps import get_config, get_index_manager
+from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.diary import (
     AddTextRequest,
     CalendarResponse,
@@ -180,8 +180,72 @@ async def add_text_fragment(
 
 # --- POST /diary/photos ---
 
+def _photo_postprocess(workdir: Path, date_str: str, fid: str, rel: str,
+                       index_path, need_caption: bool) -> None:
+    """照片后台处理链（ADR-0017，threadpool 执行）：
+    判向旋转 →（旋转则清 vision_queue 残留 + 广播事件）→ 正向图生成 caption
+    → update_fragment 回写 md 备注。
+
+    caption 必须排在旋转之后：备注直接写进日记 md，不会被 watcher 联动重做，
+    在歪图上生成的 caption 会永久留档。小节已转成品时 update_fragment 返回
+    False，caption 放弃（降级，不阻断）。
+    """
+    from doclens.web_v2.api._auto_rotate import (
+        auto_rotate_enabled,
+        broadcast_rotated,
+        drop_vision_queue_row,
+    )
+    from doclens.web_v2.deps import get_config
+
+    config = get_config()
+    if not getattr(config, "vision_api_key", None):
+        return
+    abs_path = diary.diary_dir(workdir) / rel
+
+    # 1. 判向旋转（开关打开时；失败/0 度/格式不符均不动文件）
+    if auto_rotate_enabled(config):
+        try:
+            from doclens.image_orienter import auto_rotate_image
+
+            rotated = auto_rotate_image(abs_path, config)
+        except Exception as e:  # noqa: BLE001 — 后台任务兜底
+            logger.info("auto-rotate failed for %s: %s", rel, e)
+            rotated = False
+        if rotated:
+            drop_vision_queue_row(abs_path, index_path)
+            broadcast_rotated(rel)
+
+    # 2. caption：用户没填备注时在（可能已转正的）图上生成
+    if not need_caption:
+        return
+    try:
+        from doclens.diary_worker import CAPTION_PROMPT, describe_photo
+
+        caption = describe_photo(abs_path, config, prompt=CAPTION_PROMPT)
+    except Exception as e:  # noqa: BLE001 — 视觉失败降级为无备注
+        logger.info("auto caption failed for %s: %s", rel, e)
+        return
+    caption = (caption or "").strip()
+    if not caption:
+        return
+    try:
+        if diary.update_fragment(workdir, date_str, fid, caption):
+            # caption 回写成功 → 通知前端 diary 视图刷新当日记录（SSE 通道）
+            try:
+                from doclens.web_v2.watch_broker import get_watch_broker
+
+                get_watch_broker().broadcast("diary_updated", {"date": date_str})
+            except Exception as e:  # noqa: BLE001
+                logger.debug("broadcast diary_updated failed: %s", e)
+        else:
+            logger.info("caption writeback skipped (day finalized?): %s", rel)
+    except Exception as e:  # noqa: BLE001
+        logger.info("caption writeback failed for %s: %s", rel, e)
+
+
 @router.post("/diary/photos", response_model=FragmentResponse)
 async def add_photo_fragment(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     caption: str = Form(default=""),
     idx: IndexManager = Depends(get_index_manager),
@@ -196,23 +260,19 @@ async def add_photo_fragment(
     except Exception as e:  # noqa: BLE001 — PIL 解码失败等统一按非法图片处理
         raise CortexAPIError(400, "INVALID_IMAGE", f"图片无法解析: {e}") from e
     caption = (caption or "").strip()
-    # 无备注时，用视觉模型生成简要备注（逐图降级：未配置/失败则留空 → append_photo 退默认"照片"）
-    if not caption:
-        try:
-            config = get_config()
-            if getattr(config, "vision_api_key", None):
-                from doclens.diary_worker import CAPTION_PROMPT, describe_photo
-
-                caption = describe_photo(diary.diary_dir(_workdir(idx)) / rel, config, prompt=CAPTION_PROMPT)
-        except Exception as e:  # noqa: BLE001 — 视觉失败不阻断上传，降级为无备注
-            logging.getLogger(__name__).info("auto caption failed for %s: %s", rel, e)
-            caption = ""
+    # caption 与判向旋转都挪到后台链（ADR-0017）：上传立即返回占位备注，
+    # 视觉调用不再阻塞响应；caption 在（可能已转正的）正向图上生成后回写 md
     try:
         frag = diary.append_photo(
             _workdir(idx), date_str, now.strftime("%H:%M"), now.strftime("%H%M%S"), rel, caption
         )
     except ValueError as e:
         raise _bad_request(e) from e
+    background_tasks.add_task(
+        _photo_postprocess,
+        _workdir(idx), date_str, frag.fid, rel, idx.index_path,
+        need_caption=not caption,
+    )
     _trigger_reindex(idx)
     await _maybe_set_weather(idx, date_str)
     return FragmentResponse(fragment=_to_fragment_model(frag))

@@ -276,6 +276,12 @@ class CortexConfig(BaseSettings):
             "anthropic=Anthropic 格式（/v1/messages + image source，如 minimax /anthropic + M3）"
         ),
     )
+    vision_auto_rotate: bool = Field(
+        default=True,
+        alias="VISION_AUTO_ROTATE",
+        description="上传图片（文件管理/日记）后台视觉判向自动转正（ADR-0017）；"
+        "需已配置视觉 API，关闭则保持原样",
+    )
 
     @classmethod
     def _init_first_run(cls):

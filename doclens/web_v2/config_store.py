@@ -32,6 +32,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "VISION_BASE_URL",
     "VISION_MODEL",
     "VISION_PROTOCOL",
+    "VISION_AUTO_ROTATE",
     "CORTEX_ACTIVE_VISION_PRESET",
     "CORTEX_ACTIVE_SEARCH_PRESET",
     # 百度天气 API（日记录入时抓城市天气；空 = 不带天气，不阻断日记）
