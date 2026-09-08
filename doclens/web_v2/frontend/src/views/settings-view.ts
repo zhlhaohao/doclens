@@ -20,9 +20,10 @@ import "../components/password-section";
 import "../components/model-presets-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
+import "../components/skills-section";
 import type { ToastStack } from "../components/toast-stack";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills"];
 
 /** 各 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
 const TAB_ICONS: Record<SettingsTab, string> = {
@@ -30,6 +31,7 @@ const TAB_ICONS: Record<SettingsTab, string> = {
   search: "search",
   network: "globe",
   mcp: "plug",
+  skills: "brain",
 };
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
@@ -72,6 +74,9 @@ export class SettingsView extends LitElement {
     }
     .sidebar {
       width: 180px;
+      /* shadow DOM 不继承 global.css 的 box-sizing——移动端 width:100% + padding
+         若为 content-box 会把 sidebar 撑出视口（100% + 2×16px） */
+      box-sizing: border-box;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -435,6 +440,9 @@ export class SettingsView extends LitElement {
       .layout { flex-direction: column; flex: none; min-height: 0; overflow: visible; }
       .sidebar {
         width: 100%;
+        /* min-width: 0 —— 关键：flex item 默认 min-width:auto，会被水平 tab 条的
+           min-content 撑破视口，overflow-x:auto 失效、整页跟着横向滚动 */
+        min-width: 0;
         flex-direction: column;
         gap: var(--cortex-space-2);
         padding: var(--cortex-space-3) var(--cortex-space-4);
@@ -445,7 +453,7 @@ export class SettingsView extends LitElement {
       }
       .main { overflow: visible; min-height: 0; flex: none; }
       .scroll-area { overflow: visible; flex: none; }
-      .tab-strip { flex-direction: row; overflow-x: auto; }
+      .tab-strip { flex-direction: row; overflow-x: auto; min-width: 0; }
       .tab-strip button {
         justify-content: center;
         text-align: center;
@@ -960,6 +968,7 @@ export class SettingsView extends LitElement {
                   `)}
                   ${tab === "network" ? html`<password-section></password-section>` : nothing}
                   ${tab === "mcp" ? html`<mcp-servers-section></mcp-servers-section>` : nothing}
+                  ${tab === "skills" ? html`<skills-section></skills-section>` : nothing}
                 </div>
               `;
             })}

@@ -365,8 +365,12 @@ class CortexApp(App):
 
             skills_dir = get_global_cortex_dir() / "skills"
             loader = SkillLoader(skills_dir)
+            from doclens import skills_config
+            loader.set_disabled(skills_config.disabled_names(loader.skills.keys()))
 
             for name, info in loader.skills.items():
+                if loader.is_disabled(name):  # 命令注册同样走路由隔断
+                    continue
                 description = info["meta"].get("description", "Skill")
                 self._cmd_registry.register(Command(
                     name=name,

@@ -2,7 +2,6 @@
 name: summarize-files
 description: 总结用户指定文件的重点内容。当消息列出明确文件清单并要求总结时使用：大文件按章节拆分、并发派子代理分头精读，主代理汇总输出结构化重点总结。
 icon: brain
-context_menu: true
 ---
 
 # 文件重点总结技能（章节并发模式）

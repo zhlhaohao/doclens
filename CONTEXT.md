@@ -45,7 +45,11 @@
 - **搜索预设 (Search Preset)**：搜索调优参数的命名档案，打包设置页 search tab 暴露的全部 8 个参数（3 过滤：`max_results` / `min_score_threshold` / `max_span` + 5 评分权重），`kind=search`，复用「模型预设」整套机制（同一 `model_presets.json` / `presets_store` / 物化写 global `.env` / 激活键 `CORTEX_ACTIVE_SEARCH_PRESET`）。切换即时热生效（`IndexManager.apply_config` 只更新 `_config`、不碰索引，搜索时按新参数运行，**无副作用**）。不含密钥，无需脱敏。
 
 - **技能工具箱 (Skill Toolbox)**：files 页对**多选文件**的快捷 AI 处理入口（toolbar 工具箱按钮 / 移动端 more 菜单）。未选中文件时置灰；多选中的**目录静默过滤**，只把文件传给技能。桌面端技能选择以 3 列网格矩阵展示、移动端以列表展示（断点 1023px）。
-- **工具箱技能 (Toolbox Skill)**：声明 `context_menu: true`（frontmatter）从而进入技能工具箱的技能——工具箱是 opt-in 白名单，不是全部技能的展示位。图标由 frontmatter `icon` 字段指定，取值限前端图标注册表已有名字（缺则补注册表）。_Avoid_: 全量罗列所有技能。
+- **工具箱技能 (Toolbox Skill)**：有效 `context_menu` 为 true 从而进入技能工具箱的技能——工具箱是 opt-in 白名单，不是全部技能的展示位。**2026-09-08 起 context_menu / accept_dirs 不再存 frontmatter**，统一归「技能配置档案」sidecar 管理（有效值 = sidecar 覆盖 ?? 内置默认 ?? false）；frontmatter 只留静态身份字段（name/description/icon），icon 取值限前端图标注册表已有名字（缺则补注册表）。_Avoid_: 全量罗列所有技能。
+- **技能配置档案 (Skills Config)**：机器级本地资产 `skills_config.json`（类比 `mcp_servers.json`），以技能名为键存全部可变状态的稀疏覆盖——`enabled` / `context_menu` / `accept_dirs` / `deleted` / 安装来源。SKILL.md 永不被运行时改写，故内置技能的「启动强制覆盖部署」与用户设置零冲突。**不参与知识库 Git 同步**（2026-09-08 决议）。
+- **技能状态 (Skill State)**：三分状态——启用（出现在 system prompt 技能清单）/ 停用（**仅路由层隔断**：从清单剔除使 AI 感知不到；load_skill 与工具箱不受停用影响）/ 已删除。状态变更**热生效**（保存即原位更新内存 SkillLoader，无需重启），与 MCP 对账、模型预设的即时生效先例一致（2026-09-08 决议）。
+- **内置技能默认表 (Builtin Skill Defaults)**：内置技能的 context_menu/accept_dirs 出厂默认存于 doclens 代码常量表（随发行版演进），sidecar 只存用户显式覆盖——发行版调整默认值不被各机器旧快照钉死（2026-09-08 决议）。
+- **技能安装 (Skill Install)**：设置页技能 tab 从 GitHub 安装外部技能——接受任意 GitHub URL（repo 根 / tree 子目录），codeload zip 纯 HTTP 下载（零 git 依赖），落盘机器级 skills 目录。信任在安装确认时一次授予（展示 name/description/source），运行时零摩擦；无更新检查，同名重装 = 覆盖更新且保留用户设置；与内置技能同名**拒绝安装**（防顶替发行版技能的注入风险）。内置技能不可真删（删=标记 deleted + 停止部署，列表灰置可恢复）；外部技能删除=真删目录，不可恢复（2026-09-08 决议）。
 - **技能会话 (Skill Session)**：以 `[调用技能: <name>]` 标记开头的 chat 会话，身份每轮从 DB 首条 message_user 推导（零 schema）。总是新建（不续用已有对话），标题=技能名+首文件名。会话内**所有** AI 回答走提取式引文、不走 [N] 策展。
 - **提取式引文 (Extraction References)**：技能会话的引文机制——从回答**正文**提取所有路径模式串（如 `医疗/癌症治疗.md`），校验 workdir 下真实存在，去重保序后重建「## 参考资料」章节。AI 自写引文章节先剥除；一个都没提取到则不追加。与「声明式引文」（AI 写 [N] + curator 校验）相对。
 - **KB 门禁 (KB Skill Gate)**：KB 工具（search_kb/read_document/manage_kb/grep）执行前强制先 load_skill("knowledge-base") 的弹回机制。**当前临时关闭**（GATE_ENABLED=False 开关式，代码路径保留可恢复）——副作用：普通对话不再强制注入引文规范，由 refs_curator 机器校验兜底（2026-08-17 决议）。
@@ -90,4 +94,5 @@
 - 2026-08-17：技能工具箱 = files 多选文件 → 选白名单技能（context_menu: true）→ 确认（只读文件清单+可选补充 prompt）→ 新建技能会话自动发送；技能加载走现有 load_skill 工具（AI 收指令自调，ChatRequest 不加字段）；KB 门禁临时关闭（开关式）；技能会话全程提取式引文（正文提路径+存在性校验重建参考资料，替代 [N] 策展）。
 - 2026-08-21：预览目录抽屉 = md/docx/pdf 预览提供 heading 目录快速跳转（按钮 + 抽屉浮层 + 扁平缩进列表 + 点击跳转即关闭 + 打开时高亮当前章节）；pptx/xlsx/邮件/图像解读 md 不提供；无 heading 隐藏按钮。
 - 2026-09-07：MCP client = doclens 侧实现经 register_external_tools 注入 planify（planify 零改动）；三传输全做（stdio/Streamable HTTP/旧 SSE）；仅消费 Tools；仅 GUI 生效；机器级配置 `mcp_servers.json`；stdio 子进程常驻、专属后台线程 + 专属 event loop；异步 reconcile 热更新；信任在配置时一次授予、运行时零摩擦（ADR-0014）。
+- 2026-09-08：技能管理（设置页技能 tab）= 可变状态全归机器级 sidecar `skills_config.json`（enabled/context_menu/accept_dirs/deleted/来源，稀疏覆盖），frontmatter 退出可变属性只留静态身份；内置默认入代码常量表；停用=仅路由层隔断（剔除 system prompt 清单）+ 热生效；内置技能删=标记+灰置可恢复，外部技能（GitHub codeload zip 安装，任意 URL，确认时一次授予信任）真删；内置同名拒装、外部同名覆盖保留设置。
 - 2026-08-27：预览↔编辑切换锚点升级为行级精度——md-viewer 的 topSourceLine/scrollToSourceLine 从块级（data-source-line 贴块顶）升级为按块内像素比例插值（块源行跨度 = 下一块起始行 − 本块起始行，末块到文档末行），与 md-editor 的镜像 div 行级测量对称；视野首行落在长代码块/长列表中部时不再跳回块开头。搜索命中定位（line property → 块起始行）与滚动记忆的行为不变（记忆值更精确）。

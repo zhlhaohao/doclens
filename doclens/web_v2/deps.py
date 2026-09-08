@@ -86,6 +86,14 @@ def get_agent():
     return _agent
 
 
+def get_agent_if_ready():
+    """已装配则返回 CortexAgent 单例，否则 None（不触发初始化）。
+
+    供技能管理等「agent 未启动时跳过热生效、下次启动自然生效」的场景。
+    """
+    return _agent
+
+
 def get_sessions_store() -> SessionsStore:
     """获取 SessionsStore 单例（懒加载 + 线程安全）。
 

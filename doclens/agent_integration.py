@@ -196,7 +196,14 @@ class CortexAgent:
         task_mgr = TaskManager(tasks_dir)
         bg_mgr = BackgroundManager(self.workdir)
         bus = MessageBus(inbox_dir)
+
+        # 先部署内置技能再扫描（部署跳过 sidecar 标记 deleted 的技能；
+        # 扫描须在部署之后，否则首启时 loader 看到的是空目录）
+        from doclens.skills_deploy import deploy_builtin_skills
+        from doclens import skills_config
+        deploy_builtin_skills(skills_dir)
         skills = SkillLoader(skills_dir)
+        skills.set_disabled(skills_config.disabled_names(skills.skills.keys()))
 
         # 技能加载状态（按 session_id 记录），供工具门禁 + load_skill 标记 + 跨轮 body 重注入使用
         from planify.skills.access_state import SkillAccessState
@@ -264,19 +271,8 @@ class CortexAgent:
                 max_tokens=_max_tokens,
             )
 
-        # 部署技能文件到 ~/<数据目录>/skills/（开发 .cortex / 发行版 .doclens；强制覆盖所有技能）
-        import shutil
-        skills_src_root = Path(__file__).parent / "skills"
-        if skills_src_root.exists():
-            for skill_src_dir in skills_src_root.iterdir():
-                if not skill_src_dir.is_dir():
-                    continue
-                src_skill_md = skill_src_dir / "SKILL.md"
-                if not src_skill_md.exists():
-                    continue
-                skill_dst_dir = skills_dir / skill_src_dir.name
-                skill_dst_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_skill_md, skill_dst_dir / "SKILL.md")
+        # 内置技能部署已前移至 SkillLoader 构造之前（跳过 sidecar 标记 deleted
+        # 的技能；发行版升级时内置技能自动覆盖更新，用户可变状态存 sidecar 不受影响）
 
         # 工具注册表（gui_mode=True：注册 ask_user_question，GUI 真实交互；
         # 旧 ask_user/user_confirm 在 GUI 下随即被过滤——emitter 不支持旧形态，

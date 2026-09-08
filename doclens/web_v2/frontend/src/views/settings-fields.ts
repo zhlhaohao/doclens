@@ -5,7 +5,7 @@
  * cortex/web_v2/config_store.py (backend) — they are the contract between
  * the API and this UI.
  */
-export type SettingsTab = "ai" | "search" | "network" | "mcp";
+export type SettingsTab = "ai" | "search" | "network" | "mcp" | "skills";
 export type SettingsFieldComponent =
   | "text"
   | "number"
@@ -39,13 +39,14 @@ export interface SettingsField {
   options?: SettingsFieldOption[];
 }
 
-export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp"];
+export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "AI 配置",
   search: "搜索调优",
   network: "网络监听",
   mcp: "MCP",
+  skills: "技能",
 };
 
 /** 「恢复默认」判定的出厂基准值（与包内 .env.example 同步）。

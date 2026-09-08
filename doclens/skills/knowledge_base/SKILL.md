@@ -2,8 +2,6 @@
 name: knowledge-base
 description: 知识库搜索与文档检索技能。涉及知识库内容的提问需先加载本技能，获取检索策略（多查询/grep 降级）、引文规范（## 参考资料）、深读工具用法。也支持对用户勾选的文件/目录做限定范围问答（paths 锁定范围）。加载方式：load_skill("knowledge-base")。
 icon: search
-context_menu: true
-accept_dirs: true
 ---
 
 # 知识库技能
