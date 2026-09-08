@@ -114,11 +114,13 @@ describe("buildFullText", () => {
 });
 
 describe("<chat-tool-trace> copy button", () => {
-  it("renders copy button in summary with default label", async () => {
+  it("renders icon-only copy button in summary (Lucide copy icon)", async () => {
     const el = await trace([done]);
     const btn = el.shadowRoot!.querySelector("button.copy-btn");
     expect(btn).toBeTruthy();
-    expect(btn!.textContent?.trim()).toBe("📋");
+    expect(btn!.querySelector("doclens-icon")?.getAttribute("name")).toBe("copy");
+    // icon-only：按钮默认无文字（title 提供提示）
+    expect(btn!.textContent?.trim()).toBe("");
   });
 
   it("clicking copy writes the full untruncated text to clipboard and flips to 已复制", async () => {
@@ -140,7 +142,9 @@ describe("<chat-tool-trace> copy button", () => {
     expect(written).toContain(longOutput); // 全文未截断
     expect(written).toContain("[1] search");
     expect(written).toContain("\"q\""); // JSON 序列化后的参数
-    expect(btn.textContent?.trim()).toBe("✓ 已复制");
+    // 复制成功：图标翻转为 check + 文字「已复制」
+    expect(btn.textContent?.trim()).toContain("已复制");
+    expect(btn.querySelector("doclens-icon")?.getAttribute("name")).toBe("check");
     expect(btn.classList.contains("copied")).toBe(true);
   });
 });

@@ -43,14 +43,17 @@ describe("<welcome-pane> onboarding variant", () => {
       heading: "快速上手",
       subheading: "x",
       modes: [
-        { label: "自然语言", icon: "📝" },
+        { label: "自然语言", icon: "message-circle" },
         { label: "正则", icon: "regex" },
       ],
     });
     const chips = el.shadowRoot?.querySelectorAll(".modes-row .chip");
     expect(chips?.length).toBe(2);
-    expect(chips?.[0].textContent?.trim()).toBe("📝 自然语言");
-    expect(chips?.[1].textContent?.trim()).toBe("regex 正则");
+    // chip = Lucide 图标（doclens-icon）+ 纯文字 label
+    expect(chips?.[0].querySelector("doclens-icon")?.getAttribute("name")).toBe("message-circle");
+    expect(chips?.[0].textContent?.trim()).toBe("自然语言");
+    expect(chips?.[1].querySelector("doclens-icon")?.getAttribute("name")).toBe("regex");
+    expect(chips?.[1].textContent?.trim()).toBe("正则");
   });
 
   it("renders example list when examples prop is non-empty", async () => {

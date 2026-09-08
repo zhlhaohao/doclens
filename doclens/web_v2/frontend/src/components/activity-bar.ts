@@ -55,7 +55,7 @@ export class ActivityBar extends LitElement {
       width: 22px;
       transition: color var(--cortex-duration-fast);
     }
-    /* 激活项图标：深红（搭配 .filled 实心填充，与 tab-bar 完全一致） */
+    /* 激活项图标：深红粗线条（.thick，与 tab-bar 完全一致） */
     button.active .icon { color: var(--cortex-nav-active); }
     .label { font-size: var(--cortex-fs-sm); }
   `;
@@ -84,7 +84,7 @@ export class ActivityBar extends LitElement {
           title=${it.label}
           aria-label=${it.label}
           @click=${() => this._select(it.id)}>
-          <doclens-icon class="icon ${this.active === it.id ? "filled" : ""}" name=${it.icon}></doclens-icon>
+          <doclens-icon class="icon ${this.active === it.id ? "thick" : ""}" name=${it.icon}></doclens-icon>
           <span class="label">${it.label}</span>
         </button>`)}
     `;

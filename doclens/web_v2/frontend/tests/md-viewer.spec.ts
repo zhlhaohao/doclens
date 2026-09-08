@@ -82,12 +82,10 @@ describe("<md-viewer>", () => {
     expect(highlighted!.textContent).toContain("p3-b");
   });
 
-  it("scrolls to first keyword mark when line points to a heading that doesn't contain the keyword (xlsx coarse line)", async () => {
-    // 真实场景：xlsx 合成 md —— search-hit 的 line_start 是 sheet 起始（行 1），
-    // 而 keyword（如 "邓寅"）实际出现在 sheet 内部的表格单元格里。
-    // _locateAndHighlight 用 line 找到的 target 只是 sheet 标题，文本里不含 keyword；
-    // 此时应该退而求其次，滚到第一个 <mark class="keyword-hit"> 所在的元素，
-    // 否则用户看不到任何滚动动作（heading 已在视口顶部，scrollTo target 不会有位移）。
+  it("flashes the line-based target block even when target doesn't contain the keyword (xlsx coarse line)", async () => {
+    // f51f1fb 起的语义：jumpToSourceLine 的 flash 始终锚定 line 命中的节点起始处
+    //（即便 target 不含 keyword——典型如 xlsx sheet 标题，keyword 在内部 table
+    // 单元格——用户感知「这里就是节点开头」），不再回退到首个 keyword mark。
     const md = [
       "# 通讯录 (3 rows)",
       "",
@@ -108,21 +106,19 @@ describe("<md-viewer>", () => {
     `) as MdViewer;
     await el.updateComplete;
 
-    // 验证：能找到 keyword 的 mark
+    // keyword 仍然被标记（供人眼扫描）
     const marks = el.shadowRoot!.querySelectorAll("mark.keyword-hit");
     expect(marks.length).toBeGreaterThan(0);
 
-    // 验证：line=1 命中的 heading 不含 keyword，flash/scroll 应该指向第一个 mark，
-    // 而不是 data-source-line="1" 的 heading。
+    // flash 锚定 line=1 的 heading（节点开头），而不是 mark
     const flash = el.shadowRoot!.querySelector(".highlight-flash");
     expect(flash).toBeTruthy();
-    expect(flash!.tagName).toBe("MARK");
-    expect(flash!.textContent).toContain("邓寅");
+    expect(flash!.tagName).toBe("H1");
+    expect(flash!.getAttribute("data-source-line")).toBe("1");
   });
 
   it("flashes the line-based target when target text contains the keyword (markdown normal case)", async () => {
-    // 与上一个测试互补：md 普通场景下，line 精确指向包含 keyword 的块，
-    // 应该闪那个块，而不是退到 firstMark（避免误指其它早期出现的 keyword）。
+    // md 普通场景：line 精确指向包含 keyword 的块，flash 指向该块。
     const md = "# Title\n\nfoo\n\nbar 邓寅 baz\n\nqux\n";
     const el = await fixture(html`
       <md-viewer content=${md} .line=${5} .keyword=${"邓寅"}></md-viewer>
@@ -200,10 +196,9 @@ describe("<md-viewer>", () => {
     expect(btn.querySelector("doclens-icon")).toBeNull();
   });
 
-  it("scopes the keyword mark fallback to the same page as the target (multi-sheet xlsx)", async () => {
-    // 多 sheet xlsx：r.line 指向 sheet 2 起始（行 6），sheet 1 也有 邓寅。
-    // 不应滚到 sheet 1 的 邓寅_1，而应滚到 sheet 2 内的第一个 邓寅_1。
-    // 验证方法：flash 的祖先 page-card 的 header 应为「工作表 2」。
+  it("scopes the flash to the same page as the line target (multi-sheet xlsx)", async () => {
+    // 多 sheet xlsx：r.line 指向 sheet 2 起始（行 6）。flash 锚定 line 命中的
+    // 节点（sheet 2 标题），绝不应落到 sheet 1。
     const md = [
       "# Sheet 1 (2 rows)",
       "",
@@ -236,7 +231,6 @@ describe("<md-viewer>", () => {
 
     const flash = el.shadowRoot!.querySelector(".highlight-flash");
     expect(flash).toBeTruthy();
-    expect(flash!.tagName).toBe("MARK");
     // flash 所在 page-card 的 header.label 应该是 "工作表 2"（不是 "工作表 1"）
     const card = flash!.closest(".page-card") as HTMLElement;
     expect(card).toBeTruthy();
@@ -304,8 +298,9 @@ describe("<md-viewer>", () => {
   it("styles table cells with visible borders (regression: separators missing)", async () => {
     // 用户报告：md 表格没有分隔线。根因是 CSS 没有 table 规则，浏览器默认无边框。
     // 本测试断言 md-viewer 的 scoped styles 包含 table/th/td 边框规则，
-    // 防止未来再次回归。Lit CSSResult 的 cssText 是源 CSS 字符串。
-    const cssText = (MdViewerClass as any).styles.cssText as string;
+    // 防止未来再次回归。styles 是数组（katex/fab + 主体 css），
+    // CSSResult 的 cssText 是源 CSS 字符串。
+    const cssText = (MdViewerClass as any).styles.map((s: any) => s.cssText ?? "").join("\n");
 
     // 至少一条规则同时提到 table/th/td 和 border
     const hasTableBorder = /(^|\})[\s]*[^{]*\b(table|th|td|thead|tbody)\b[^{]*\{[^}]*\bborder\b/.test(
@@ -347,7 +342,7 @@ describe("<md-viewer>", () => {
 
   it("styles images with max-width / border-radius rule (regression)", async () => {
     // 防止未来移除 :host img 自适应样式
-    const cssText = (MdViewerClass as any).styles.cssText as string;
+    const cssText = (MdViewerClass as any).styles.map((s: any) => s.cssText ?? "").join("\n");
     const hasImgRule = /:host\s+img\s*\{[^}]*max-width[^}]*\}/.test(cssText);
     expect(
       hasImgRule,
@@ -355,15 +350,17 @@ describe("<md-viewer>", () => {
     ).toBe(true);
   });
 
-  it("renders paper-like preview: gray host + white paper + transparent paged container (regression)", async () => {
-    // 纸张效果：:host 灰底让白纸浮起；.md-body 单块白纸；.md-body-paged 透明覆盖
-    // （让分页 page-card 当多张纸，而非一张大纸包多页）；.page-card 去 border 靠阴影。
-    const cssText = (MdViewerClass as any).styles.cssText as string;
+  it("renders paper-like preview: soft host + white paper + transparent paged container (regression)", async () => {
+    // 纸张效果：:host surface-soft 底（Meta 改造后从 --cortex-bg 换
+    // --cortex-surface-muted）让白纸浮起；.md-body 单块白纸；
+    // .md-body-paged 透明覆盖（让分页 page-card 当多张纸）；
+    // .page-card 去 border 靠阴影。
+    const cssText = (MdViewerClass as any).styles.map((s: any) => s.cssText ?? "").join("\n");
 
-    // :host 灰底
+    // :host surface-soft 底
     expect(
-      /:host\s*\{[^}]*background:\s*var\(--cortex-bg\)/.test(cssText),
-      `:host should set background: var(--cortex-bg)\n${cssText}`,
+      /:host\s*\{[^}]*background:\s*var\(--cortex-surface-muted\)/.test(cssText),
+      `:host should set background: var(--cortex-surface-muted)\n${cssText}`,
     ).toBe(true);
 
     // .md-body 单块 = 白纸 + max-width 居中

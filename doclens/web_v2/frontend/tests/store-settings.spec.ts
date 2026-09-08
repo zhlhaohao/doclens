@@ -9,11 +9,11 @@ describe("settings store slice", () => {
     store.setState({ ...INITIAL_STATE, settings: { ...INITIAL_STATE.settings } });
   });
 
-  it("starts with scope=local and empty values", () => {
-    // sanity: SETTINGS_FIELDS placeholder is exported (filled in Task 6)
+  it("starts with scope=global and empty values (local scope 已废弃)", () => {
+    // de7b699: 设置页不再提供本地配置，scope 固定 global
     expect(Array.isArray(SETTINGS_FIELDS)).toBe(true);
     const s = store.getState();
-    expect(s.settings.scope).toBe("local");
+    expect(s.settings.scope).toBe("global");
     expect(s.settings.values).toEqual({});
     expect(s.settings.dirty).toBe(false);
   });
@@ -52,8 +52,8 @@ describe("settings store slice", () => {
     expect(s.settings.dirty).toBe(false);
   });
 
-  it("setSettingsScope changes scope", () => {
-    actions.setSettingsScope("global");
+  it("setSettingsScope is a no-op (scope 恒为 global)", () => {
+    actions.setSettingsScope("local");
     expect(store.getState().settings.scope).toBe("global");
   });
 

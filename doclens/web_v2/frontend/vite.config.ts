@@ -37,6 +37,9 @@ export default defineConfig({
     define: {
       __BUILD_INFO__: JSON.stringify(BUILD_INFO),
     },
+    // e2e/ 是 Playwright 脚本（npm run test:e2e），vitest 收集必报
+    // "test.describe() not expected here" —— 排除，单元/E2E 各走各的 runner
+    exclude: ["**/node_modules/**", "**/dist/**", "tests/e2e/**"],
   },
   build: {
     // 输出到 web_v2/static/，供 FastAPI StaticFiles 服务

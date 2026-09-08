@@ -107,7 +107,7 @@ export class McpServersSection extends LitElement {
     }
     .head {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: var(--cortex-space-3);
       margin-bottom: var(--cortex-space-2);
@@ -117,10 +117,6 @@ export class McpServersSection extends LitElement {
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
       letter-spacing: -0.015em;
-    }
-    .head .hint {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
     }
     .server-list {
       display: flex;
@@ -183,7 +179,7 @@ export class McpServersSection extends LitElement {
       border-radius: 50%;
       background: var(--cortex-text-subtle);
     }
-    .dot.ok { background: var(--cortex-primary); }
+    .dot.ok { background: var(--cortex-success); }
     .dot.connecting { background: #d97706; animation: pulse 1.2s infinite; }
     .dot.failed { background: var(--cortex-danger); }
     @keyframes pulse { 50% { opacity: 0.4; } }
@@ -360,6 +356,8 @@ export class McpServersSection extends LitElement {
       line-height: 1.6;
     }
     @media (max-width: 1023px) {
+      /* 移动端 scroll-area 无顶 padding，补齐与 .section 一致的顶部间距，避免标题行顶到 tab 条分隔线 */
+      .wrap { margin-top: var(--cortex-space-4); }
       .form { grid-template-columns: 1fr; }
       .status .err-text { max-width: 120px; }
     }
@@ -594,9 +592,9 @@ export class McpServersSection extends LitElement {
     return html`
       <div class="tools-panel">
         ${tools === undefined
-          ? html`<div>加载工具清单中…</div>`
+          ? html`<div>加载中…</div>`
           : tools.length === 0
-            ? html`<div>暂无已注册工具（${STATUS_LABEL[s.runtime.status] ?? s.runtime.status}）</div>`
+            ? html`<div>暂无工具</div>`
             : tools.map((t) => html`
                 <div class="tool-row">
                   <span class="tool-name">${t.registered_name}</span>
@@ -635,7 +633,6 @@ export class McpServersSection extends LitElement {
           <div class="status">
             <span class="dot ${st.status}"></span>
             ${STATUS_LABEL[st.status] ?? st.status}
-            ${st.status === "ok" ? html` · ${st.tool_count} 个工具` : nothing}
             ${st.status === "failed" && st.error
               ? html`<span class="err-text" title=${st.error}>${st.error}</span>`
               : nothing}
@@ -663,7 +660,7 @@ export class McpServersSection extends LitElement {
     return html`
       <div class="form">
         <div>
-          <div class="field-label">名称（= 工具前缀 mcp__&lt;名称&gt;__*）</div>
+          <div class="field-label">名称（工具前缀 mcp__&lt;名称&gt;__）</div>
           <input class="input mono" autocomplete="off" placeholder="context7"
             .value=${f.name} @input=${(e: Event) => this._setField("name", (e.target as HTMLInputElement).value)} />
         </div>
@@ -702,13 +699,13 @@ export class McpServersSection extends LitElement {
               .value=${f.url} @input=${(e: Event) => this._setField("url", (e.target as HTMLInputElement).value)} />
           </div>
           <div class="full">
-            <div class="field-label">请求头（每行 KEY: VALUE → 转为 KEY=VALUE 输入）</div>
+            <div class="field-label">请求头（每行 KEY=VALUE）</div>
             <textarea class="textarea" placeholder="Authorization=Bearer xxx"
               .value=${f.headersText} @input=${(e: Event) => this._setField("headersText", (e.target as HTMLTextAreaElement).value)}></textarea>
           </div>
         `}
         <div>
-          <div class="field-label">工具调用超时（秒）</div>
+          <div class="field-label">超时（秒）</div>
           <input class="input" type="number" min="1" max="600" .value=${f.timeout}
             @input=${(e: Event) => this._setField("timeout", (e.target as HTMLInputElement).value)} />
         </div>
@@ -733,13 +730,12 @@ export class McpServersSection extends LitElement {
       <div class="wrap">
         <div class="head">
           <h2>MCP 服务器</h2>
-          <span class="hint">外部工具源 · 配置存本机 · 保存后异步生效</span>
+          <button class="icon-btn primary" @click=${() => this._openNew()}>+ 添加服务器</button>
         </div>
-        <button class="icon-btn primary" @click=${() => this._openNew()}>+ 添加服务器</button>
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
           : this._servers.length === 0
-            ? html`<div class="empty">暂无服务器。添加一个 MCP 服务器，其工具将可被 AI 对话直接调用。</div>`
+            ? html`<div class="empty">暂无服务器</div>`
             : html`<div class="server-list">
                 ${this._servers.map((s) => this._renderRow(s))}
               </div>`}
@@ -747,8 +743,7 @@ export class McpServersSection extends LitElement {
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
         <div class="risk-note">
-          启用的服务器所暴露的工具将可被 AI 直接调用（不经逐次确认），请仅添加信任的服务器。
-          工具由其提供方定义，内容不经本应用审查。
+          启用服务器的工具可被 AI 直接调用，请仅添加信任来源。
         </div>
       </div>
     `;
