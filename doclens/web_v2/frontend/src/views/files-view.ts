@@ -20,6 +20,7 @@ import type { SkillInfo } from "../api/skills";
 import { fetchSkills } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
 import "../components/drop-zone";
+import "../components/icon";
 import "../components/file-search-box";
 import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
@@ -123,6 +124,50 @@ export class FilesView extends LitElement {
     }
     .mobile-preview {
       flex: 1; min-height: 0; display: flex; flex-direction: column;
+    }
+    /* 移动端「未索引」提示页自带的返回条（对齐 preview-pane 的 mobile-header） */
+    .preview-mobile-header {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-bottom: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      flex-shrink: 0;
+    }
+    .preview-mobile-header .mobile-back {
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border: 1px solid var(--cortex-border);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 18px;
+      touch-action: manipulation;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .preview-mobile-header .mobile-back:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    .preview-mobile-header .mobile-filename {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      /* 与左侧 32px 返回钮对称，保证文件名视觉居中 */
+      margin-right: 32px;
     }
     dialog {
       border: 1px solid var(--cortex-border);
@@ -888,16 +933,32 @@ export class FilesView extends LitElement {
     this._showToast(`下载失败：${e.detail.message}`);
   };
 
-  private _renderNotIndexedHint() {
-    return html`<div class="preview-placeholder">
+  private _renderNotIndexedHint(mobile = false) {
+    const hint = html`<div class="preview-placeholder">
       该文件未索引，无法预览。<br>
       请先执行 doclens index 后重试。
     </div>`;
+    // 移动端 detail 层无 preview-pane 的 mobile-header，须自带返回条，
+    // 否则用户卡在「未索引」提示页无法回文件列表
+    if (!mobile) return hint;
+    const name = this._previewPath?.split("/").pop() ?? "";
+    return html`
+      <div class="preview-mobile-header">
+        <button
+          class="mobile-back"
+          type="button"
+          aria-label="返回"
+          @click=${() => this._goBack()}
+        ><doclens-icon name="arrow-left"></doclens-icon></button>
+        <span class="mobile-filename" title=${this._previewPath}>${name}</span>
+      </div>
+      ${hint}
+    `;
   }
 
   private _renderPreviewPane(opts: { noHeader?: boolean; mobile?: boolean } = {}) {
     if (this._previewError === "NOT_INDEXED") {
-      return this._renderNotIndexedHint();
+      return this._renderNotIndexedHint(opts.mobile ?? false);
     }
     if (!this._previewPath) {
       return html`<div class="preview-placeholder">点击文件预览</div>`;

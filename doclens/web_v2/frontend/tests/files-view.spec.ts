@@ -415,6 +415,24 @@ describe("files-view mobile filename search", () => {
     document.body.removeChild(el);
   });
 
+  it("mobile detail pane with NOT_INDEXED error renders back button returning to list", async () => {
+    actions.setMobilePane("detail");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    // 模拟预览未索引文件（如未入库的图片）
+    el._previewError = "NOT_INDEXED";
+    el._previewPath = "photos/a.jpg";
+    await el.updateComplete;
+    const back = el.shadowRoot.querySelector(".preview-mobile-header .mobile-back") as HTMLButtonElement;
+    expect(back, "未索引提示页必须有返回按钮").toBeTruthy();
+    expect(el.shadowRoot.textContent).toContain("该文件未索引");
+    back.click();
+    await el.updateComplete;
+    expect(store.getState().files.mobilePane).toBe("list");
+    document.body.removeChild(el);
+  });
+
   it("detail pane renders preview-pane with mobile=true and hides floating back-btn", async () => {
     actions.setMobilePane("detail");
     const el = document.createElement("files-view") as any;
