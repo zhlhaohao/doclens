@@ -4,15 +4,16 @@ import { html } from "lit";
 import "../src/components/chat-message";
 import { ChatMessageEl } from "../src/components/chat-message";
 
-describe("<chat-message> reference cards (structured)", () => {
-  it("renders one .ref-link per reference with data-path", async () => {
-    const message = {
-      role: "assistant",
-      content: "回答正文。",
-      references: [{ path: "科技/a.md" }, { path: "科技/b.pdf" }],
-    } as any;
+/** A 方案（01e38d1）：引用不再是结构化 references 属性，而是后端把工具检索结果
+ *  重写进正文「## 参考资料」章节，前端 linkify 该章节的 <li> 为 .ref-link。 */
+describe("<chat-message> reference links (## 参考资料 linkify)", () => {
+  function refsBody(paths: string[]): string {
+    return `回答正文。\n\n## 参考资料\n\n${paths.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n`;
+  }
+
+  it("renders one .ref-link per list item under ## 参考资料 with data-path", async () => {
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${message}></chat-message>`,
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: refsBody(["科技/a.md", "科技/b.pdf"]) } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     const links = el.shadowRoot!.querySelectorAll(".ref-link");
@@ -21,33 +22,25 @@ describe("<chat-message> reference cards (structured)", () => {
     expect(links[1].getAttribute("data-path")).toBe("科技/b.pdf");
   });
 
-  it("any file extension is clickable (no longer restricted to .md / dir)", async () => {
-    // 旧正则要求路径含 .md 或 / 才识别；结构化数据来自工具结果，任意路径都可点
-    const message = {
-      role: "assistant",
-      content: "x",
-      references: [{ path: "report.pdf" }, { path: "notes.txt" }, { path: "data.xlsx" }],
-    } as any;
+  it("any file extension is clickable (not restricted to .md / dir)", async () => {
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${message}></chat-message>`,
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: refsBody(["report.pdf", "notes.txt", "data.xlsx"]) } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(3);
   });
 
-  it("no references → no reference section, no .ref-link", async () => {
+  it("no 参考资料 section → no .ref-link", async () => {
     const el = await fixture(
       html`<chat-message role="assistant" .message=${{ role: "assistant", content: "回答" } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
-    expect(el.shadowRoot!.querySelector(".references")).toBeNull();
   });
 
   it("click .ref-link dispatches reference-click with path (composed)", async () => {
-    const message = { role: "assistant", content: "回答", references: [{ path: "docs/a.md" }] } as any;
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${message}></chat-message>`,
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: refsBody(["docs/a.md"]) } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     const handler = vi.fn();
@@ -60,27 +53,21 @@ describe("<chat-message> reference cards (structured)", () => {
     expect(ev.composed).toBe(true);
   });
 
-  it("does NOT parse ## 参考资料 text in body (structured references only)", async () => {
-    // 旧逻辑从正文 ## 参考资料 提取路径包裹成链接；新逻辑只用结构化 references。
-    // 正文里的路径文本保持纯文本，不应产生 .ref-link。
-    const message = {
-      role: "assistant",
-      content: "回答。\n\n## 参考资料\n\n1. docs/a.md\n2. docs/b.md\n",
-    } as any;
+  it("body text outside ## 参考资料 stays plain (no .ref-link)", async () => {
     const el = await fixture(
-      html`<chat-message role="assistant" .message=${message}></chat-message>`,
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: "见 docs/a.md 与 docs/b.md 的对比。" } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
   });
 
-  it("reference cards update when references arrive after content (streaming)", async () => {
+  it("linkified content updates on message change (streaming append)", async () => {
     const el = await fixture(
       html`<chat-message role="assistant" .message=${{ role: "assistant", content: "回答..." } as any}></chat-message>`,
     ) as ChatMessageEl;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(0);
-    el.message = { role: "assistant", content: "回答...", references: [{ path: "a.md" }, { path: "b.md" }] };
+    el.message = { role: "assistant", content: refsBody(["a.md", "b.md"]) };
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".ref-link").length).toBe(2);
   });

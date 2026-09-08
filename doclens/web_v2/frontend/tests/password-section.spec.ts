@@ -44,11 +44,14 @@ async function mount(required: boolean, hasPassword: boolean): Promise<PasswordS
   return el;
 }
 
-function setInput(el: PasswordSection, placeholder: string, value: string) {
-  const input = Array.from(el.shadowRoot?.querySelectorAll("input") ?? []).find(
-    (i) => i.placeholder === placeholder,
-  ) as HTMLInputElement | undefined;
-  if (!input) throw new Error(`input "${placeholder}" not found`);
+/** 按字段 label 定位 input（6e587c1 起表单为垂直 label + input 结构，
+ *  各 input 的 placeholder 均为「6 位数字」类提示，不再能按 placeholder 区分）。 */
+function setInput(el: PasswordSection, label: string, value: string) {
+  const field = Array.from(el.shadowRoot?.querySelectorAll(".field") ?? []).find(
+    (f) => f.querySelector(".field-label")?.textContent?.trim() === label,
+  );
+  const input = field?.querySelector("input") as HTMLInputElement | undefined;
+  if (!input) throw new Error(`input for label "${label}" not found`);
   input.value = value;
   input.dispatchEvent(new Event("input"));
 }
@@ -58,11 +61,11 @@ describe("<password-section> 未设密码", () => {
     const el = await mount(false, false);
     expect(el.shadowRoot?.querySelector(".warning")?.textContent).toContain("尚未设置");
     expect(el.shadowRoot?.querySelector(".badge")).toBeNull();
-    const placeholders = Array.from(el.shadowRoot?.querySelectorAll("input") ?? []).map(
-      (i) => i.placeholder,
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".field-label") ?? []).map(
+      (l) => l.textContent?.trim(),
     );
-    expect(placeholders).not.toContain("旧密码");
-    expect(placeholders).not.toContain("当前密码");
+    expect(labels).not.toContain("旧密码");
+    expect(labels).not.toContain("当前密码");
     const buttons = Array.from(el.shadowRoot?.querySelectorAll("button") ?? []).map(
       (b) => b.textContent?.trim(),
     );
@@ -75,6 +78,8 @@ describe("<password-section> 未设密码", () => {
     const el = await mount(false, false);
     setInput(el, "新密码（6 位数字）", "123456");
     setInput(el, "确认新密码", "123456");
+    // 未设密码时没有旧密码框
+    expect(el.shadowRoot?.querySelectorAll(".field").length).toBe(2);
     await elementUpdated(el);
     const btn = Array.from(el.shadowRoot?.querySelectorAll("button") ?? []).find(
       (b) => b.textContent?.trim() === "设置密码",
@@ -116,11 +121,11 @@ describe("<password-section> 已设密码", () => {
   it("显示徽标 + 旧密码框 + 清除按钮", async () => {
     const el = await mount(true, true);
     expect(el.shadowRoot?.querySelector(".badge")?.textContent).toContain("已设置");
-    const placeholders = Array.from(el.shadowRoot?.querySelectorAll("input") ?? []).map(
-      (i) => i.placeholder,
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".field-label") ?? []).map(
+      (l) => l.textContent?.trim(),
     );
-    expect(placeholders).toContain("旧密码");
-    expect(placeholders).toContain("当前密码");
+    expect(labels).toContain("旧密码");
+    expect(labels).toContain("当前密码");
   });
 
   it("修改密码：setPassword(old, next)", async () => {

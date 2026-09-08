@@ -45,6 +45,8 @@ describe("<settings-view>", () => {
     expect(tabs?.[0].textContent?.trim()).toBe("模型");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索");
     expect(tabs?.[2].textContent?.trim()).toBe("网络");
+    expect(tabs?.[3].textContent?.trim()).toBe("MCP");
+    expect(tabs?.[4].textContent?.trim()).toBe("技能");
   });
 
   it("AI tab is active by default", () => {

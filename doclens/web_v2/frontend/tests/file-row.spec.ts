@@ -104,7 +104,7 @@ describe("file-row", () => {
     const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
     expect(badge).toBeTruthy();
     expect(badge.textContent).toBe("P");
-    expect(badge.style.background).toBe("rgb(220, 38, 38)");  // #DC2626
+    expect(badge.style.background).toBe("rgb(228, 30, 63)");  // #E41E3F Meta critical
     expect(badge.style.color).toBe("rgb(255, 255, 255)");
   });
 
@@ -113,7 +113,7 @@ describe("file-row", () => {
     await el.updateComplete;
     const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
     expect(badge?.textContent).toBe("D");
-    expect(badge?.style.background).toBe("rgb(37, 99, 235)");  // #2563EB
+    expect(badge?.style.background).toBe("rgb(0, 100, 224)");  // #0064E0 cobalt
   });
 
   it("renders green X badge for .xlsx files", async () => {
@@ -121,7 +121,7 @@ describe("file-row", () => {
     await el.updateComplete;
     const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
     expect(badge?.textContent).toBe("X");
-    expect(badge?.style.background).toBe("rgb(22, 163, 74)");  // #16A34A
+    expect(badge?.style.background).toBe("rgb(49, 162, 76)");  // #31A24C success
   });
 
   it("renders indigo M badge for .md files", async () => {
@@ -129,7 +129,7 @@ describe("file-row", () => {
     await el.updateComplete;
     const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
     expect(badge?.textContent).toBe("M");
-    expect(badge?.style.background).toBe("rgb(99, 102, 241)");  // #6366F1
+    expect(badge?.style.background).toBe("rgb(161, 33, 206)");  // #A121CE oculus
   });
 
   it("renders gray T badge for .txt files", async () => {
@@ -137,55 +137,41 @@ describe("file-row", () => {
     await el.updateComplete;
     const badge = el.shadowRoot.querySelector(".type-badge") as HTMLElement;
     expect(badge?.textContent).toBe("T");
-    expect(badge?.style.background).toBe("rgb(107, 114, 128)");  // #6B7280
+    expect(badge?.style.background).toBe("rgb(93, 108, 123)");  // #5D6C7B steel
   });
 
-  it("falls back to 📄 for unknown file types", async () => {
+  it("falls back to file icon for unknown file types", async () => {
     const el = makeRow({ ...fileEntry, name: "archive.zip" });
     await el.updateComplete;
     expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
-    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📄");
+    expect(el.shadowRoot.querySelector(".cell-icon doclens-icon")?.getAttribute("name")).toBe("file");
   });
 
-  it("falls back to 📄 for files without extension", async () => {
+  it("falls back to file icon for files without extension", async () => {
     const el = makeRow({ ...fileEntry, name: "README" });
     await el.updateComplete;
     expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
-    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📄");
+    expect(el.shadowRoot.querySelector(".cell-icon doclens-icon")?.getAttribute("name")).toBe("file");
   });
 
-  it("renders 📁 for directory rows (no badge)", async () => {
+  it("renders folder icon for directory rows (no badge)", async () => {
     const el = makeRow(dirEntry);
     await el.updateComplete;
     expect(el.shadowRoot.querySelector(".type-badge")).toBeNull();
-    expect(el.shadowRoot.querySelector(".cell-icon")?.textContent).toContain("📁");
+    expect(el.shadowRoot.querySelector(".cell-icon doclens-icon")?.getAttribute("name")).toBe("folder");
   });
 
-  it("type cell shows the lowercase extension for files", async () => {
+  it("no type column anymore (类型列 2026-08-10 移除，扩展名信息由图标徽标承担)", async () => {
     const el = makeRow({ ...fileEntry, name: "Sales.XLSX" });
     await el.updateComplete;
-    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("xlsx");
+    expect(el.shadowRoot.querySelector(".cell-type")).toBeNull();
   });
 
-  it("type cell shows 文件夹 for directories", async () => {
-    const el = makeRow(dirEntry);
-    await el.updateComplete;
-    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("文件夹");
-  });
-
-  it("type cell is blank for files without extension", async () => {
-    const el = makeRow({ ...fileEntry, name: "README" });
-    await el.updateComplete;
-    expect(el.shadowRoot.querySelector(".cell-type")?.textContent).toBe("");
-  });
-
-  it("row uses 7-column grid template (icon column grows from 20px to 28px)", async () => {
+  it("row uses 5-column grid (checkbox/icon/name/size/time)", async () => {
     const el = makeRow(fileEntry);
     await el.updateComplete;
     const row = el.shadowRoot.querySelector(".row") as HTMLElement;
-    // grid-template-columns is exposed via :host style; we verify 7 tokens are present
-    // The class .row is shadow-scoped, but the column count shows in the count of children
     const cells = row.children;
-    expect(cells.length).toBe(7);
+    expect(cells.length).toBe(5);
   });
 });

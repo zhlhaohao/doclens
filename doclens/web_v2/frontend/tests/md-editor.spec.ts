@@ -18,12 +18,10 @@ describe("<md-editor>", () => {
     expect(ta.value).toBe("hello\nworld");
   });
 
-  it("shows correct number of line numbers", async () => {
+  it("no line-number column anymore (折行下行号必然错位，2026-08-01 移除)", async () => {
     const el = await makeFixture("a\nb\nc");
     await el.updateComplete;
-    const lineNos = el.shadowRoot!.querySelectorAll(".line-no");
-    // "a\nb\nc" 包含 2 个 \n → 3 行
-    expect(lineNos.length).toBe(3);
+    expect(el.shadowRoot!.querySelectorAll(".line-no").length).toBe(0);
   });
 
   it("emits dirty-change(true) on input", async () => {

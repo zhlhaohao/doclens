@@ -216,7 +216,9 @@ class McpClientManager:
                 continue
             if conn is None:
                 self._spawn(server_id, cfg)
-            elif conn.status != STATUS_DISABLED and conn.fingerprint() != _ServerConnection(cfg).fingerprint():
+            # disabled 壳 = 停用后遗留的状态壳；重新启用时必须重建连接
+            #（指纹不含 enabled，单靠指纹比对发现不了 enable 翻转）
+            elif conn.status == STATUS_DISABLED or conn.fingerprint() != _ServerConnection(cfg).fingerprint():
                 logger.info("[mcp-client] 配置变更，重连: %s", cfg.get("name"))
                 await self._reap(server_id, conn)
                 self._spawn(server_id, cfg)

@@ -100,6 +100,35 @@ def test_stdio_full_lifecycle(manager):
 
 
 
+def test_reenable_after_disable_reconnects(manager):
+    """停用 → 再启用必须重建连接（回归：disabled 壳曾被对账逻辑跳过，永远卡 disabled）。"""
+    created = mcp_servers_store.create_server({
+        "name": "echo",
+        "transport": "stdio",
+        "command": sys.executable,
+        "args": ["-X", "utf8", str(FIXTURE)],
+        "env": {},
+        "timeout": 15,
+    })
+    sid = created["id"]
+    assert _wait_status(manager, sid, "ok") is not None, manager.status_snapshot()
+
+    # 停用 → 状态转 disabled（配置直读，先于收割）+ 工具下架（等 reconcile 异步收割）
+    mcp_servers_store.set_enabled(sid, False)
+    assert _wait_status(manager, sid, "disabled") is not None, manager.status_snapshot()
+    deadline = time.time() + 15
+    while time.time() < deadline and "mcp__echo__echo" in [t["name"] for t in manager._runtime.tools]:
+        time.sleep(0.3)
+    assert "mcp__echo__echo" not in [t["name"] for t in manager._runtime.tools]
+
+    # 再启用 → 重连回 ok + 工具重新上架
+    mcp_servers_store.set_enabled(sid, True)
+    snap = _wait_status(manager, sid, "ok")
+    assert snap is not None, manager.status_snapshot()
+    assert snap["tool_count"] == 1
+    assert "mcp__echo__echo" in [t["name"] for t in manager._runtime.tools]
+
+
 def test_failed_server_does_not_block(manager):
     """坏命令的 server 降级 failed，不阻塞其他工具。"""
     bad = mcp_servers_store.create_server({

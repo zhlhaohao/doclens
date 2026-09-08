@@ -89,7 +89,7 @@ describe("file-list", () => {
     document.body.appendChild(el);
     await el.updateComplete;
     const btns = el.shadowRoot.querySelectorAll(".toolbar button");
-    expect(btns.length).toBe(6);
+    expect(btns.length).toBe(7); // mkdir/upload/rename/move/copy-path/skill-toolbox/delete
     // 每个按钮 = icon + .btn-label 文字（hover 才显示）
     for (const btn of btns) {
       expect(btn.querySelector("doclens-icon")).toBeTruthy();
@@ -369,7 +369,7 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking mobile-more opens dropdown with all 6 actions", async () => {
+  it("clicking mobile-more opens dropdown with all 7 actions", async () => {
     actions.setFilesState({
       currentDir: "docs",
       treeCache: { docs: entries },
@@ -385,14 +385,15 @@ describe("file-list mobile header", () => {
     const menu = el.shadowRoot.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
     const items = menu.querySelectorAll("button");
-    // 6 个：+ 新目录 / ⬆ 上传 / ✎ 重命名 / → 移动 / ⧉ 拷贝路径 / 🗑 删除
-    expect(items.length).toBe(6);
+    // 7 个：新目录 / 上传 / 重命名 / 移动 / 技能工具箱 / 拷贝路径 / 删除
+    expect(items.length).toBe(7);
     expect(items[0].textContent).toContain("新目录");
     expect(items[1].textContent).toContain("上传");
     expect(items[2].textContent).toContain("重命名");
     expect(items[3].textContent).toContain("移动");
-    expect(items[4].textContent).toContain("拷贝路径");
-    expect(items[5].textContent).toContain("删除");
+    expect(items[4].textContent).toContain("技能工具箱");
+    expect(items[5].textContent).toContain("拷贝路径");
+    expect(items[6].textContent).toContain("删除");
     document.body.removeChild(el);
   });
 
@@ -416,7 +417,7 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("dropdown move/delete disabled when 0 selected; enabled when 1+ selected", async () => {
+  it("dropdown move/skill/copy/delete disabled when 0 selected; enabled when 1+ selected", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
     el.mobile = true;
@@ -425,14 +426,16 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中（idx: 3=移动, 5=删除）
+    // 0 选中（idx: 3=移动, 4=技能工具箱, 6=删除）
     expect((items[3] as HTMLButtonElement).disabled).toBe(true);
-    expect((items[5] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[6] as HTMLButtonElement).disabled).toBe(true);
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
     expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
-    expect((items2[5] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[4] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[6] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 

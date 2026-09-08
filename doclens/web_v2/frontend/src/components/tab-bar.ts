@@ -41,10 +41,11 @@ export class TabBar extends LitElement {
       line-height: 1;
       transition: color var(--cortex-duration-fast);
     }
-    /* 激活 tab：图标也变深红（无背景、无胶囊） */
+    /* 激活 tab：图标也变深红（无背景、无胶囊；.thick 加粗描边更醒目） */
     .tab.active .icon {
       color: var(--cortex-nav-active);
     }
+    /* 激活态不加 .filled：保持 Lucide 线性描边——红色线条 + 白色背景，避免实心红块 */
   `;
 
   @property() active: ViewId = "search";
@@ -69,7 +70,7 @@ export class TabBar extends LitElement {
         <button
           class="tab ${this.active === it.id ? "active" : ""}"
           @click=${() => this._select(it.id)}>
-          <doclens-icon class="icon ${this.active === it.id ? "filled" : ""}" name=${it.icon}></doclens-icon>
+          <doclens-icon class="icon ${this.active === it.id ? "thick" : ""}" name=${it.icon}></doclens-icon>
           <span>${it.label}</span>
         </button>`)}
     `;

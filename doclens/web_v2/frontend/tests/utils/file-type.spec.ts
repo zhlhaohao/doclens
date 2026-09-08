@@ -31,34 +31,36 @@ describe("getExtension", () => {
 });
 
 describe("getFileTypeBadge", () => {
+  // 色值对齐 Meta 语义调色板（src/utils/file-type.ts KNOWN_TYPES）：
+  // 红=critical、蓝=cobalt、绿=success、紫=oculus、灰=steel
   it("returns red P badge for pdf", () => {
     expect(getFileTypeBadge("report.pdf", false)).toEqual({
-      letter: "P", bg: "#DC2626", fg: "#FFFFFF",
+      letter: "P", bg: "#E41E3F", fg: "#FFFFFF",
     });
   });
   it("returns blue D badge for docx", () => {
     expect(getFileTypeBadge("notes.docx", false)).toEqual({
-      letter: "D", bg: "#2563EB", fg: "#FFFFFF",
+      letter: "D", bg: "#0064E0", fg: "#FFFFFF",
     });
   });
   it("returns blue D badge for doc", () => {
     expect(getFileTypeBadge("legacy.doc", false)).toEqual({
-      letter: "D", bg: "#2563EB", fg: "#FFFFFF",
+      letter: "D", bg: "#0064E0", fg: "#FFFFFF",
     });
   });
   it("returns green X badge for xlsx", () => {
     expect(getFileTypeBadge("sales.xlsx", false)).toEqual({
-      letter: "X", bg: "#16A34A", fg: "#FFFFFF",
+      letter: "X", bg: "#31A24C", fg: "#FFFFFF",
     });
   });
   it("returns green X badge for xls", () => {
     expect(getFileTypeBadge("old.xls", false)).toEqual({
-      letter: "X", bg: "#16A34A", fg: "#FFFFFF",
+      letter: "X", bg: "#31A24C", fg: "#FFFFFF",
     });
   });
   it("returns green C badge for csv", () => {
     expect(getFileTypeBadge("data.csv", false)).toEqual({
-      letter: "C", bg: "#16A34A", fg: "#FFFFFF",
+      letter: "C", bg: "#31A24C", fg: "#FFFFFF",
     });
   });
   it("returns orange S badge for pptx", () => {
@@ -78,12 +80,20 @@ describe("getFileTypeBadge", () => {
   });
   it("returns indigo M badge for md", () => {
     expect(getFileTypeBadge("readme.md", false)).toEqual({
-      letter: "M", bg: "#6366F1", fg: "#FFFFFF",
+      letter: "M", bg: "#A121CE", fg: "#FFFFFF",
     });
   });
   it("returns gray T badge for txt", () => {
     expect(getFileTypeBadge("notes.txt", false)).toEqual({
-      letter: "T", bg: "#6B7280", fg: "#FFFFFF",
+      letter: "T", bg: "#5D6C7B", fg: "#FFFFFF",
+    });
+  });
+  it("returns violet I badge for images (png/jpg/webp)", () => {
+    expect(getFileTypeBadge("icon.png", false)).toEqual({
+      letter: "I", bg: "#7C3AED", fg: "#FFFFFF",
+    });
+    expect(getFileTypeBadge("photo.jpg", false)).toEqual({
+      letter: "I", bg: "#7C3AED", fg: "#FFFFFF",
     });
   });
   it("returns null for archive.zip (unknown type)", () => {
@@ -91,9 +101,6 @@ describe("getFileTypeBadge", () => {
   });
   it("returns null for script.py (unknown type)", () => {
     expect(getFileTypeBadge("script.py", false)).toBeNull();
-  });
-  it("returns null for photo.jpg (unknown type)", () => {
-    expect(getFileTypeBadge("photo.jpg", false)).toBeNull();
   });
   it("returns null for README (no extension)", () => {
     expect(getFileTypeBadge("README", false)).toBeNull();
@@ -103,7 +110,7 @@ describe("getFileTypeBadge", () => {
   });
   it("matches case-insensitively (uppercase extension)", () => {
     expect(getFileTypeBadge("REPORT.PDF", false)).toEqual({
-      letter: "P", bg: "#DC2626", fg: "#FFFFFF",
+      letter: "P", bg: "#E41E3F", fg: "#FFFFFF",
     });
   });
 });

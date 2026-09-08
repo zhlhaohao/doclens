@@ -227,7 +227,7 @@ describe("<search-view> pagination integration", () => {
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
 
-    // mock fetch 拦截 searchApi + sessionsApi
+    // mock fetch 拦截 searchApi + preview + sessionsApi
     const fetchSpy = vi.fn(async (url: string, init?: any) => {
       const u = String(url);
       if (u === "/api/search") {
@@ -242,6 +242,15 @@ describe("<search-view> pagination integration", () => {
             elapsed_ms: 10,
             source: "fts",
           }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      // 桌面端 auto-preview 会拉首个结果的 /api/preview（带 start_line 参数）；
+      // 缺这个分支时 mock 落到 sessions 响应 → body.path undefined →
+      // previewPath=undefined → isPstFilePath 崩成 unhandled rejection
+      if (u.startsWith("/api/preview")) {
+        return new Response(
+          JSON.stringify({ ok: true, path: "x.md", content: "# x", language: "markdown", writable: false, pages: null }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }

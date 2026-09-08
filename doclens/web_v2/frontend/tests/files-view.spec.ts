@@ -34,6 +34,8 @@ vi.mock("../src/api/preview", () => ({
     pages: null,
   }),
   isFullFilePreview: vi.fn(() => false),
+  // preview-pane 渲染期调用（图片重解析入口判断）；缺导出会 unhandled rejection
+  isImageFile: vi.fn(() => false),
 }));
 
 // Mock fetchDocuments (避免真实网络请求；返回空数组即可让 _loadIndexedDocuments 走完)
