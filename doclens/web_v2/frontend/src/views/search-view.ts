@@ -370,6 +370,43 @@ export class SearchView extends LitElement {
     void this._goToPage(e.detail.page);
   };
 
+  /** 以当前 offset 重取结果页（下拉刷新用；_goToPage 同页是 no-op 不能复用）。 */
+  private async _reloadResults(): Promise<void> {
+    const s = store.getState().search;
+    if (!s.query || s.state !== "focus") return;
+    const limit = s.limit || 20;
+    this.loading = true;
+    try {
+      const res = this.searchMode === "grep"
+        ? await grepApi({ pattern: s.query, offset: s.offset, limit })
+        : await searchApi({ query: s.query, offset: s.offset, limit });
+      actions.setSearchState({
+        state: "focus",
+        query: s.query,
+        results: res.results,
+        total: res.total,
+        offset: res.offset,
+        limit,
+        source: res.source,
+      });
+    } catch (err) {
+      actions.setError(`刷新失败: ${(err as Error).message}`);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /** 下拉刷新（移动端 pull-to-refresh）：focus 态重取当前页结果，
+   *  initial 态重拉历史（detail-overlay 已被 data-ptr-off 拦截）。 */
+  async refresh(): Promise<void> {
+    const s = store.getState().search;
+    if (s.state === "focus" && s.query) {
+      await this._reloadResults();
+      return;
+    }
+    await this._loadHistory();
+  }
+
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
     await this._safeAction(async () => {
       const r = e.detail.result;
@@ -722,7 +759,7 @@ export class SearchView extends LitElement {
         </div>
       </div>
       ${detailTop ? html`
-        <div class="detail-overlay">
+        <div class="detail-overlay" data-ptr-off>
           <focus-header
             back-label="结果"
             title=${detailTop.path}

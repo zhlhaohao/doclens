@@ -280,7 +280,12 @@ export class FilesView extends LitElement {
 
   /** reindex 完成后（cortex:watch-reindexed）：刷新当前目录列表与已索引文档列表，
    *  让 indexed 标志反映新索引（改名/新增/删除后自动回填）。仅在 files 视图挂载时生效。 */
-  private _onIndexUpdated = async () => {
+  private _onIndexUpdated = () => {
+    void this._refreshFileList();
+  };
+
+  /** 失效当前目录缓存并重拉目录列表 + 已索引文档清单（下拉刷新与 reindex 回调共用）。 */
+  private async _refreshFileList(): Promise<void> {
     const dir = store.getState().files.currentDir;
     actions.invalidateDir(dir);
     void this._ensureLoaded(dir);
@@ -290,7 +295,14 @@ export class FilesView extends LitElement {
     } catch {
       /* 静默：indexed 标志非关键，不阻塞 */
     }
-  };
+  }
+
+  /** 下拉刷新（移动端 pull-to-refresh）：list 层刷新当前目录与文档清单；
+   *  detail 层正常已被 data-ptr-off 拦截，这里双保险直接跳过。 */
+  async refresh(): Promise<void> {
+    if (this._state.mobilePane === "detail") return;
+    await this._refreshFileList();
+  }
 
   private _loadPaneWidths() {
     const treeSaved = localStorage.getItem(FilesView.TREE_PANE_WIDTH_KEY);
@@ -1075,7 +1087,7 @@ export class FilesView extends LitElement {
             `
           : ""}
         ${pane === "detail"
-          ? html`<div class="mobile-preview">${this._renderPreviewPane({ mobile: true })}</div>`
+          ? html`<div class="mobile-preview" data-ptr-off>${this._renderPreviewPane({ mobile: true })}</div>`
           : ""}
       </div>
     `;

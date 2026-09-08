@@ -550,6 +550,23 @@ export class ChatView extends LitElement {
     this._loadSession(e.detail.session);
   }
 
+  /** 下拉刷新闸门：流式/悬置问答进行中禁止（_loadSession 会清掉流式消息）。 */
+  canRefresh(): boolean {
+    const s = store.getState().chat;
+    return !s.streaming && !s.pendingAsk;
+  }
+
+  /** 下拉刷新（移动端 pull-to-refresh）：focus 态重拉当前会话消息，
+   *  initial 态重拉历史（preview-overlay 已被 data-ptr-off 拦截）。 */
+  async refresh(): Promise<void> {
+    const s = store.getState().chat;
+    if (s.state === "focus" && s.currentSession) {
+      await this._loadSession(s.currentSession);
+      return;
+    }
+    await this._loadHistory();
+  }
+
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
     if (!saved) return;
@@ -884,7 +901,7 @@ export class ChatView extends LitElement {
         </div>
       </div>
       ${hasPreview ? html`
-        <div class="preview-overlay">
+        <div class="preview-overlay" data-ptr-off>
           <focus-header
             back-label="返回"
             title=${this.previewPath}
