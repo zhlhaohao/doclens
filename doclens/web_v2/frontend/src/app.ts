@@ -33,6 +33,8 @@ import "./views/diary-view";
 import "./views/login-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
+import "./components/pull-refresh-indicator";
+import { PullToRefreshController } from "./utils/pull-to-refresh";
 import { startWatchStream, stopWatchStream } from "./watch-stream";
 
 @customElement("cortex-app")
@@ -79,6 +81,12 @@ export class CortexApp extends LitElement {
   /** keep-alive：已挂载过的 view 集合。首次访问某 view 才挂载，之后常驻 DOM
    *  用 [hidden] 切换，view 实例不销毁 → 本地状态（预览内容/滚动位置/草稿等）保留。 */
   @state() private _mountedViews = new Set<ViewId>();
+  /** 移动端下拉刷新：全局手势管理（指示器渲染在 .main 内）。
+   *  构造时 addController 自注册；指示器 getter 惰性查询 renderRoot。 */
+  private _ptr: PullToRefreshController = new PullToRefreshController(
+    this,
+    () => this.renderRoot.querySelector("ptr-indicator"),
+  );
 
   protected willUpdate() {
     // 首次访问某 view 时才加入挂载集合（惰性：未访问的 view 不触发其 connectedCallback 副作用）
@@ -174,6 +182,8 @@ export class CortexApp extends LitElement {
       // scope 不进 URL（用户已确认"仅 tab 子路径"），仍走 store
       actions.setSettingsScope(e.detail.scope);
     }
+    // 下拉刷新手势按当前激活 view 路由，切换时丢弃进行中的候选手势
+    this._ptr.hostRequestUpdate();
   }
 
   private _renderView() {
@@ -204,6 +214,7 @@ export class CortexApp extends LitElement {
         <activity-bar .active=${view} @navigate=${this._navigate}></activity-bar>
         <div class="main">
           ${this._renderView()}
+          <ptr-indicator role="status" aria-live="polite"></ptr-indicator>
         </div>
         <tab-bar .active=${view} @navigate=${this._navigate} ?hidden=${view === "settings"}></tab-bar>
       </div>
