@@ -20,8 +20,8 @@ test.describe("settings mobile", () => {
     // Single column → single value, no space-separated second track
     expect(gridCols.split(" ").length).toBe(1);
 
-    // 4. Switch to 搜索调优 tab (contains first number input)
-    await page.locator(".tab-strip button:has-text('搜索调优')").tap();
+    // 4. Switch to 搜索 tab (contains first number input)
+    await page.locator(".tab-strip button:has-text('搜索')").tap();
 
     // 5. Edit a number field in the active tab
     const numInput = page.locator(".tab-panel.active input[type=number]").first();
@@ -35,8 +35,8 @@ test.describe("settings mobile", () => {
     await page.locator("app-bar .avatar-btn").tap();
     await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
-    // Switch to 搜索调优 tab（评分权重 slider 已并入该 tab）
-    await page.locator(".tab-strip button:has-text('搜索调优')").tap();
+    // Switch to 搜索 tab（评分权重 slider 已并入该 tab）
+    await page.locator(".tab-strip button:has-text('搜索')").tap();
 
     // First slider — locate range input inside .w-item（权重网格项）
     const range = page.locator(".w-item input[type=range]").first();
@@ -53,8 +53,8 @@ test.describe("settings mobile", () => {
     await page.locator("app-bar .avatar-btn").tap();
     await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
-    // Switch to 搜索调优 tab so the number input is in the active panel
-    await page.locator(".tab-strip button:has-text('搜索调优')").tap();
+    // Switch to 搜索 tab so the number input is in the active panel
+    await page.locator(".tab-strip button:has-text('搜索')").tap();
 
     const numInput = page.locator(".tab-panel.active input[type=number]").first();
     await numInput.fill("77");
@@ -69,8 +69,8 @@ test.describe("settings mobile", () => {
     await page.locator("app-bar .avatar-btn").tap();
     await page.locator("app-bar button.menu-item:has-text('全局配置')").tap();
 
-    // Switch to 搜索调优 tab so the number input is in the active panel
-    await page.locator(".tab-strip button:has-text('搜索调优')").tap();
+    // Switch to 搜索 tab so the number input is in the active panel
+    await page.locator(".tab-strip button:has-text('搜索')").tap();
 
     const numInput = page.locator(".tab-panel.active input[type=number]").first();
     const original = await numInput.inputValue();

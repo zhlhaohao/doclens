@@ -42,9 +42,9 @@ export interface SettingsField {
 export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
-  ai: "AI 配置",
-  search: "搜索调优",
-  network: "网络监听",
+  ai: "模型",
+  search: "搜索",
+  network: "网络",
   mcp: "MCP",
   skills: "技能",
 };

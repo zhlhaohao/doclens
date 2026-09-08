@@ -39,20 +39,20 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  it("renders 3 tab buttons in order: AI / 搜索调优 / 网络监听", () => {
+  it("renders 5 tab buttons in order: 模型 / 搜索 / 网络 / MCP / 技能", () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    expect(tabs?.length).toBe(3);
-    expect(tabs?.[0].textContent?.trim()).toBe("AI 配置");
-    expect(tabs?.[1].textContent?.trim()).toBe("搜索调优");
-    expect(tabs?.[2].textContent?.trim()).toBe("网络监听");
+    expect(tabs?.length).toBe(5);
+    expect(tabs?.[0].textContent?.trim()).toBe("模型");
+    expect(tabs?.[1].textContent?.trim()).toBe("搜索");
+    expect(tabs?.[2].textContent?.trim()).toBe("网络");
   });
 
   it("AI tab is active by default", () => {
     const active = el.shadowRoot?.querySelector(".tab-strip button.active");
-    expect(active?.textContent?.trim()).toBe("AI 配置");
+    expect(active?.textContent?.trim()).toBe("模型");
   });
 
-  it("clicking 网络监听 tab switches active panel", async () => {
+  it("clicking 网络 tab switches active panel", async () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
     (tabs?.[2] as HTMLButtonElement).click();
     await elementUpdated(el);
