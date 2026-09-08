@@ -2,7 +2,3 @@
 .*/
 
 # 测试上传的私人照片（含病历），不入库
-examples/IMG*.jpg
-examples/IMG*.jpeg
-examples/IMG*.png
-examples/IMG*.webp
