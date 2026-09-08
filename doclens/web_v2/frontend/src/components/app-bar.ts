@@ -5,12 +5,14 @@ import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
+import "./control-panel-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
 import { router } from "../router/router";
+import { watchStatusLabel } from "../utils/watch-status";
 
 @customElement("app-bar")
 export class AppBar extends LitElement {
@@ -156,14 +158,6 @@ export class AppBar extends LitElement {
       color: var(--cortex-text);
       display: block;
     }
-    /* 移动端专属菜单项（watch 状态 / 刷新）：桌面端顶栏已有徽标与空间，不重复 */
-    @media (min-width: 1024px) {
-      .menu-item.mobile-only { display: none; }
-    }
-    /* watch 菜单项状态色（与徽标同语义） */
-    .menu-item .label.dot { color: var(--cortex-success); }
-    .menu-item .label.busy { color: var(--cortex-primary); }
-    .menu-item .label.warn { color: var(--cortex-warning); }
   `;
 
   @property() activeView: ViewId = "search";
@@ -172,8 +166,10 @@ export class AppBar extends LitElement {
   @state() private _showSaveAndRevert = false;
   /** 登录闸门生效且已登录时，菜单显示“注销登录” */
   @state() private _showLogout = false;
-  /** watch 变化对话框开关（点击 watch 徽标打开） */
+  /** watch 变化对话框开关（点击 watch 徽标打开 / 控制面板「文件监控」行） */
   @state() private _watchDialogOpen = false;
+  /** 控制面板对话框开关（用户菜单「控制面板」：收纳刷新/重建索引/文件监控） */
+  @state() private _panelOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
   private _unsubStore?: () => void;
@@ -207,17 +203,15 @@ export class AppBar extends LitElement {
     this._menuOpen = !this._menuOpen;
   }
 
-  /** 菜单「刷新」（移动端）：硬刷新页面（location.reload）。
-   *  让 SW 按 network-first 拉新 index.html，再按 cache-first 命中新的 hash 资源，
-   *  解决"新 build 的 JS 没被加载"的问题（软刷新只重载数据，不会更新 bundle）。 */
-  private _onRefreshMenuClick() {
+  /** 菜单「控制面板」：打开维护操作面板（刷新 / 强制重建索引 / 文件监控）。 */
+  private _onControlPanelClick() {
     this._menuOpen = false;
-    window.location.reload();
+    this._panelOpen = true;
   }
 
-  /** 菜单「文件监控」（移动端）：关闭菜单并打开 watch 变化对话框。 */
-  private _onWatchMenuClick() {
-    this._menuOpen = false;
+  /** 面板「文件监控」行 → 关面板开 watch 变化对话框。 */
+  private _onPanelOpenWatch() {
+    this._panelOpen = false;
     this._watchDialogOpen = true;
   }
 
@@ -239,12 +233,6 @@ export class AppBar extends LitElement {
   private _onRevertClick() {
     this._menuOpen = false;
     window.dispatchEvent(new CustomEvent("cortex:revert-settings"));
-  }
-
-  private _onReindexClick() {
-    if (store.getState().reindex.dialog !== "closed") return;
-    this._menuOpen = false;
-    actions.openReindexConfirm();
   }
 
   private async _onLogoutClick() {
@@ -301,17 +289,9 @@ export class AppBar extends LitElement {
     `;
   }
 
-  /** watch 状态文案/色调：顶栏徽标与移动端菜单项共用。 */
+  /** watch 状态文案/色调：顶栏徽标用（与控制面板文件监控行共用 utils/watch-status）。 */
   private _watchStatus(w: WatcherStatus | null): { cls: string; label: string } {
-    const n = w?.last_doc_count;
-    const nStr = n != null ? ` ${n}` : "";
-    if (!w || !w.running) return { cls: "", label: `${nStr} ○监控关` };
-    if (w.reindexing) return { cls: "busy", label: `${nStr} ⟳更新中…` };
-    if (w.changed_count > 0) return { cls: "warn", label: `${nStr} ·待更新 ${w.changed_count}` };
-    return {
-      cls: w.last_success === false ? "warn" : "dot",
-      label: `${nStr} ●监控`,
-    };
+    return watchStatusLabel(w);
   }
 
   private _renderWatchBadge(w: WatcherStatus | null) {
@@ -346,24 +326,10 @@ export class AppBar extends LitElement {
               <span class="label">全局配置</span>
             </span>
           </button>
-          <button class="menu-item" type="button" @click=${this._onReindexClick}>
-            <doclens-icon class="icon" name="refresh-ccw"></doclens-icon>
+          <button class="menu-item" type="button" data-testid="control-panel-item" @click=${this._onControlPanelClick}>
+            <doclens-icon class="icon" name="sliders-horizontal"></doclens-icon>
             <span class="text">
-              <span class="label">强制重建索引</span>
-            </span>
-          </button>
-          <button class="menu-item mobile-only" type="button" @click=${this._onWatchMenuClick}>
-            <doclens-icon class="icon" name="folder"></doclens-icon>
-            <span class="text">
-              <span class="label ${this._watchStatus(store.getState().watcher).cls}">
-                文件监控${this._watchStatus(store.getState().watcher).label}
-              </span>
-            </span>
-          </button>
-          <button class="menu-item mobile-only" type="button" @click=${this._onRefreshMenuClick}>
-            <doclens-icon class="icon" name="refresh-cw"></doclens-icon>
-            <span class="text">
-              <span class="label">刷新</span>
+              <span class="label">控制面板</span>
             </span>
           </button>
           <button class="menu-item" type="button" data-testid="about-item" @click=${this._onAboutMenuClick}>
@@ -391,6 +357,11 @@ export class AppBar extends LitElement {
         </div>
       </div>
       <toast-stack></toast-stack>
+      <control-panel-dialog
+        .open=${this._panelOpen}
+        @close=${() => { this._panelOpen = false; }}
+        @open-watch=${this._onPanelOpenWatch}
+      ></control-panel-dialog>
       <watch-changes-dialog
         .open=${this._watchDialogOpen}
         @close=${() => { this._watchDialogOpen = false; }}

@@ -105,18 +105,11 @@ export class McpServersSection extends LitElement {
     .wrap {
       margin-bottom: var(--cortex-space-6);
     }
-    .head {
+    /* 列表底部工具条：添加按钮靠右（顶替原 head/risk-note 区域） */
+    .toolbar {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-3);
-      margin-bottom: var(--cortex-space-2);
-    }
-    .head h2 {
-      margin: 0;
-      font-size: var(--cortex-fs-lg);
-      font-weight: 700;
-      letter-spacing: -0.015em;
+      justify-content: flex-end;
+      margin-top: var(--cortex-space-3);
     }
     .server-list {
       display: flex;
@@ -349,12 +342,6 @@ export class McpServersSection extends LitElement {
     }
     .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
     .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
-    .risk-note {
-      margin-top: var(--cortex-space-3);
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      line-height: 1.6;
-    }
     @media (max-width: 1023px) {
       /* 移动端 scroll-area 无顶 padding，补齐与 .section 一致的顶部间距，避免标题行顶到 tab 条分隔线 */
       .wrap { margin-top: var(--cortex-space-4); }
@@ -728,10 +715,6 @@ export class McpServersSection extends LitElement {
   render() {
     return html`
       <div class="wrap">
-        <div class="head">
-          <h2>MCP 服务器</h2>
-          <button class="icon-btn primary" @click=${() => this._openNew()}>+ 添加服务器</button>
-        </div>
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
           : this._servers.length === 0
@@ -742,8 +725,8 @@ export class McpServersSection extends LitElement {
         ${this._editing ? this._renderForm() : nothing}
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
-        <div class="risk-note">
-          启用服务器的工具可被 AI 直接调用，请仅添加信任来源。
+        <div class="toolbar">
+          <button class="icon-btn primary" @click=${() => this._openNew()}>+ 添加服务器</button>
         </div>
       </div>
     `;

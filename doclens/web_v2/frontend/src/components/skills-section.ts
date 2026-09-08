@@ -40,22 +40,11 @@ export class SkillsSection extends LitElement {
       color: var(--cortex-text);
     }
     .wrap { margin-bottom: var(--cortex-space-6); }
-    .head {
+    /* 列表底部工具条：安装按钮靠右（顶替原 risk-note 区域） */
+    .toolbar {
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--cortex-space-3);
-      margin-bottom: var(--cortex-space-2);
-    }
-    .head h2 {
-      margin: 0;
-      font-size: var(--cortex-fs-lg);
-      font-weight: 700;
-      letter-spacing: -0.015em;
-    }
-    .head .hint {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
+      justify-content: flex-end;
+      margin-top: var(--cortex-space-3);
     }
     .skill-list {
       display: flex;
@@ -252,12 +241,6 @@ export class SkillsSection extends LitElement {
     }
     .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
     .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
-    .risk-note {
-      margin-top: var(--cortex-space-3);
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      line-height: 1.6;
-    }
     /* 安装弹窗：桌面居中卡片 / 移动端全屏 */
     .overlay {
       position: fixed;
@@ -654,13 +637,6 @@ export class SkillsSection extends LitElement {
   render() {
     return html`
       <div class="wrap">
-        <div class="head">
-          <h2>技能</h2>
-          <span class="hint">AI 能力扩展 · 配置存本机 · 改动即时生效</span>
-        </div>
-        <button class="icon-btn primary" @click=${() => this._openInstall()}>
-          <doclens-icon name="download"></doclens-icon>从 GitHub 安装
-        </button>
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
           : this._skills.length === 0
@@ -670,9 +646,10 @@ export class SkillsSection extends LitElement {
               </div>`}
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
-        <div class="risk-note">
-          技能是注入 AI 的指令文本。请仅安装信任来源的技能，其内容不经本应用审查。
-          「停用」仅把技能移出 AI 可见清单；「进工具箱」控制 files 页多选文件时的快捷入口。
+        <div class="toolbar">
+          <button class="icon-btn primary" @click=${() => this._openInstall()}>
+            <doclens-icon name="download"></doclens-icon>从 GitHub 安装
+          </button>
         </div>
         ${this._renderInstallDialog()}
       </div>

@@ -62,6 +62,7 @@ import plugIcon from "lucide-static/icons/plug.svg?raw";
 import infoIcon from "lucide-static/icons/info.svg?raw";
 import plusIcon from "lucide-static/icons/plus.svg?raw";
 import minusIcon from "lucide-static/icons/minus.svg?raw";
+import slidersHorizontalIcon from "lucide-static/icons/sliders-horizontal.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -112,6 +113,7 @@ const ICONS: Record<string, string> = {
   info: infoIcon,
   plus: plusIcon,
   minus: minusIcon,
+  "sliders-horizontal": slidersHorizontalIcon,
   plug: plugIcon,
 };
 

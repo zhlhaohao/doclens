@@ -189,14 +189,17 @@ describe("<app-bar> watcher badge", () => {
   });
 });
 
-describe("<app-bar> reindex menu item", () => {
-  it("renders 强制重建索引 menu item", async () => {
+describe("<app-bar> 控制面板 menu item", () => {
+  it("维护操作已收敛：菜单不含 重建索引/文件监控/刷新，含 控制面板", async () => {
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
     (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
     await elementUpdated(el);
     const labels = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
       .map((i) => i.textContent ?? "");
-    expect(labels.some((l) => l.includes("强制重建索引"))).toBe(true);
+    expect(labels.some((l) => l.includes("强制重建索引"))).toBe(false);
+    expect(labels.some((l) => l.includes("文件监控"))).toBe(false);
+    expect(labels.some((l) => l === "刷新" || l.trim() === "刷新")).toBe(false);
+    expect(labels.some((l) => l.includes("控制面板"))).toBe(true);
   });
 
   it("renders 关于 menu item and clicking opens about-dialog", async () => {
@@ -212,27 +215,27 @@ describe("<app-bar> reindex menu item", () => {
     expect(about.open).toBe(true);
   });
 
-  it("clicking reindex menu opens confirm dialog (store)", async () => {
+  it("clicking control-panel-item opens control-panel-dialog", async () => {
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
     (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
     await elementUpdated(el);
-    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
-      .find((b) => (b.textContent ?? "").includes("强制重建索引")) as HTMLButtonElement;
+    const btn = el.shadowRoot?.querySelector('[data-testid="control-panel-item"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    const panel = el.shadowRoot?.querySelector("control-panel-dialog") as HTMLElement & { open: boolean };
+    expect(panel?.open).toBe(false);
     btn.click();
     await elementUpdated(el);
-    expect(store.getState().reindex.dialog).toBe("confirm");
+    expect(panel.open).toBe(true);
   });
 
-  it("reindex menu click is ignored when dialog already open", async () => {
-    actions.openReindexConfirm(); // dialog 已是 confirm
+  it("panel open-watch event closes panel and opens watch-changes-dialog", async () => {
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
-    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    const panel = el.shadowRoot?.querySelector("control-panel-dialog") as HTMLElement;
+    const watch = el.shadowRoot?.querySelector("watch-changes-dialog") as HTMLElement & { open: boolean };
+    panel.dispatchEvent(new CustomEvent("open-watch", { bubbles: true, composed: true }));
     await elementUpdated(el);
-    const btn = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
-      .find((b) => (b.textContent || "").includes("强制重建索引")) as HTMLButtonElement;
-    btn.click();
-    await elementUpdated(el);
-    // 仍停留在 confirm（未因再次 click 重置/出错）
-    expect(store.getState().reindex.dialog).toBe("confirm");
+    expect(watch.open).toBe(true);
+    const panelAgain = el.shadowRoot?.querySelector("control-panel-dialog") as HTMLElement & { open: boolean };
+    expect(panelAgain.open).toBe(false);
   });
 });
