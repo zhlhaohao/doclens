@@ -188,14 +188,20 @@ export class InputBox extends LitElement {
       cursor: pointer;
     }
     .menu-item:hover { background: var(--cortex-surface-muted); }
-    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; white-space: nowrap; }
+    .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: var(--cortex-space-2); }
     .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); white-space: nowrap; }
+    /* 菜单分隔线：技能菜单的「选择技能…」与最近技能之间 */
+    .menu-divider { border-top: 1px solid var(--cortex-border-muted); margin: 2px 0; }
     .menu-item.active { background: var(--cortex-primary-soft); }
     .menu-item.active:hover { background: var(--cortex-primary-soft); }
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     @media (max-width: 1023px) {
       /* 移动端稍矮（≈44px），仍随字号缩放 */
       :host { --min-h: calc(var(--cortex-fs-md) * 1.5 + 20px); }
+      /* 触屏命中区 ≥44px（ADR-0016 §5 移动端适配） */
+      .caret { min-width: 44px; }
+      .menu-item { min-height: 44px; justify-content: center; }
     }
   `;
 
@@ -214,6 +220,11 @@ export class InputBox extends LitElement {
    *  不提供时为遗留单一按钮（chat/files 等消费者不受影响）。 */
   @property() mode: SearchMode = "keyword";
   @property({ attribute: false }) modes: Record<SearchMode, { label: string; icon?: string; description?: string }> | null = null;
+
+  /** 技能菜单（ADR-0016）：非 null 时渲染分裂按钮 + caret 技能菜单（与 modes 互斥，modes 优先）。
+   *  数组 = 最近技能（可为空，菜单只显示「选择技能…」）；null = 不启用（普通单按钮）。
+   *  caret 在输入为空时禁用（先输入问题才能选技能）；点技能项发 skill-pick，点「选择技能…」发 skill-browse。 */
+  @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
   @state() private _menuOpen = false;
 
   @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
@@ -276,11 +287,32 @@ export class InputBox extends LitElement {
     return !!this.modes && this.mode in this.modes;
   }
 
+  /** 技能菜单启用 = skillItems 非 null 且非 modes 模式（modes 优先，两者不共存）。 */
+  private get _hasSkillMenu(): boolean {
+    return !this._hasModes && this.skillItems !== null;
+  }
+
+  private _pickSkill(item: { name: string; icon?: string }) {
+    if (!this.trimmed || this.disabled || this.streaming) return;
+    this._menuOpen = false;
+    document.removeEventListener("click", this._onDocClick);
+    this.dispatchEvent(new CustomEvent("skill-pick", { detail: { name: item.name } }));
+  }
+
+  private _browseSkills() {
+    if (!this.trimmed || this.disabled || this.streaming) return;
+    this._menuOpen = false;
+    document.removeEventListener("click", this._onDocClick);
+    this.dispatchEvent(new CustomEvent("skill-browse"));
+  }
+
   private _toggleMenu(e: Event) {
     e.stopPropagation();
     this._menuOpen = !this._menuOpen;
     if (this._menuOpen) {
       document.addEventListener("click", this._onDocClick);
+      // 技能菜单打开时通知宿主刷新候选（设置页可能刚改过启用状态）
+      if (this._hasSkillMenu) this.dispatchEvent(new CustomEvent("skill-menu-open"));
     }
   }
 
@@ -303,7 +335,7 @@ export class InputBox extends LitElement {
           <doclens-icon class="filled" name="square" aria-hidden="true"></doclens-icon>
         </button>`;
     }
-    if (!this._hasModes) {
+    if (!this._hasModes && !this._hasSkillMenu) {
       const icon = this.buttonIcon
         ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
         : null;
@@ -312,6 +344,21 @@ export class InputBox extends LitElement {
         <button @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
           ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
         </button>`;
+    }
+    if (this._hasSkillMenu) {
+      // 技能菜单分裂按钮：主键 = 普通发送；caret 弹出技能菜单（空输入禁用——先输入问题才能选技能）
+      const icon = this.buttonIcon
+        ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
+        : null;
+      const label = html`<span>${this.buttonLabel}</span>`;
+      return html`
+        <div class="actions split">
+          <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
+          </button>
+          <button class="caret" @click=${this._toggleMenu} ?disabled=${!this.trimmed || this.disabled}
+                  aria-label="选择技能" aria-expanded=${this._menuOpen}><doclens-icon name="chevron-down"></doclens-icon></button>
+        </div>`;
     }
     const cur = this.modes![this.mode];
     return html`
@@ -326,6 +373,7 @@ export class InputBox extends LitElement {
   }
 
   private _renderMenu() {
+    if (this._hasSkillMenu) return this._renderSkillMenu();
     if (!this._hasModes || !this._menuOpen) return null;
     return html`
       <div class="menu" role="menu">
@@ -340,6 +388,26 @@ export class InputBox extends LitElement {
               ${m.description ? html`<span class="menu-item-desc">${m.description}</span>` : null}
             </div>`;
         })}
+      </div>`;
+  }
+
+  /** 技能菜单：第 1 项固定「选择技能…」（弹对话框），其下为最近 ≤3 个技能。 */
+  private _renderSkillMenu() {
+    if (!this._menuOpen) return null;
+    const items = this.skillItems ?? [];
+    return html`
+      <div class="menu" role="menu">
+        <div class="menu-item" role="menuitem" @click=${this._browseSkills}>
+          <span class="menu-item-title"><doclens-icon name="sparkles" aria-hidden="true"></doclens-icon>选择技能…</span>
+          <span class="menu-item-desc">从全部启用技能中选择</span>
+        </div>
+        ${items.length > 0 ? html`<div class="menu-divider" role="separator"></div>` : null}
+        ${items.map((item) => html`
+          <div class="menu-item" role="menuitem" @click=${() => this._pickSkill(item)}>
+            <span class="menu-item-title">
+              ${item.icon ? html`<doclens-icon name=${item.icon} aria-hidden="true"></doclens-icon>` : null}${item.name}
+            </span>
+          </div>`)}
       </div>`;
   }
 

@@ -50,7 +50,10 @@
 - **技能状态 (Skill State)**：三分状态——启用（出现在 system prompt 技能清单）/ 停用（**仅路由层隔断**：从清单剔除使 AI 感知不到；load_skill 与工具箱不受停用影响）/ 已删除。状态变更**热生效**（保存即原位更新内存 SkillLoader，无需重启），与 MCP 对账、模型预设的即时生效先例一致（2026-09-08 决议）。
 - **内置技能默认表 (Builtin Skill Defaults)**：内置技能的 context_menu/accept_dirs 出厂默认存于 doclens 代码常量表（随发行版演进），sidecar 只存用户显式覆盖——发行版调整默认值不被各机器旧快照钉死（2026-09-08 决议）。
 - **技能安装 (Skill Install)**：设置页技能 tab 从 GitHub 安装外部技能——接受任意 GitHub URL（repo 根 / tree 子目录），codeload zip 纯 HTTP 下载（零 git 依赖），落盘机器级 skills 目录。信任在安装确认时一次授予（展示 name/description/source），运行时零摩擦；无更新检查，同名重装 = 覆盖更新且保留用户设置；与内置技能同名**拒绝安装**（防顶替发行版技能的注入风险）。内置技能不可真删（删=标记 deleted + 停止部署，列表灰置可恢复）；外部技能删除=真删目录，不可恢复（2026-09-08 决议）。
-- **技能会话 (Skill Session)**：以 `[调用技能: <name>]` 标记开头的 chat 会话，身份每轮从 DB 首条 message_user 推导（零 schema）。总是新建（不续用已有对话），标题=技能名+首文件名。会话内**所有** AI 回答走提取式引文、不走 [N] 策展。
+- **技能会话 (Skill Session)**：以 `[调用技能: <name>]` 标记开头的 chat 会话，身份每轮从 DB 首条 message_user 推导（零 schema）。标题=技能名+首文件名。会话内**所有** AI 回答走提取式引文、不走 [N] 策展。两个入口的新建语义不同：files 工具箱**总是新建**；对话页复合按钮选技能则**发到当前会话**保持对话连续（仅在无当前会话时新建——此时首条消息带标记，自然成为技能会话）（2026-09-08 决议）。
+- **对话技能直发 (Chat Skill Send)**：对话页输入问题后从发送按钮菜单/对话框点选技能，**立即**把问题发往当前会话（不停留在草稿、不需再点发送）；技能仅作本条消息的引导，不改变已有会话的身份（2026-09-08 决议）。
+- **对话技能候选 (Chat Skill Candidates)**：对话页选择技能时的候选集合 = **全部启用状态的技能**，与「工具箱技能」白名单（context_menu，files 页文件场景）相互独立——两个入口各管各的显隐，停用是唯一共同过滤（2026-09-08 决议）。_Avoid_: 复用工具箱白名单当对话候选。
+- **最近技能 (Recent Skills)**：对话页技能菜单展示的最多 3 个技能，按用户**显式选择**的最后时间倒序去重——只记用户主动点选（对话页菜单/对话框、files 工具箱），AI 在对话中自主 load_skill **不**记账。存浏览器本地（机器级便利性数据，不同步、不进技能配置档案）（2026-09-08 决议）。
 - **提取式引文 (Extraction References)**：技能会话的引文机制——从回答**正文**提取所有路径模式串（如 `医疗/癌症治疗.md`），校验 workdir 下真实存在，去重保序后重建「## 参考资料」章节。AI 自写引文章节先剥除；一个都没提取到则不追加。与「声明式引文」（AI 写 [N] + curator 校验）相对。
 - **KB 门禁 (KB Skill Gate)**：KB 工具（search_kb/read_document/manage_kb/grep）执行前强制先 load_skill("knowledge-base") 的弹回机制。**当前临时关闭**（GATE_ENABLED=False 开关式，代码路径保留可恢复）——副作用：普通对话不再强制注入引文规范，由 refs_curator 机器校验兜底（2026-08-17 决议）。
 - **目录抽屉 (TOC Drawer)**：md 预览的快速导航形态——header 按钮 + 抽屉浮层，列出文档 heading 结构的扁平缩进列表；点击节点平滑滚动到对应位置并闪烁定位、抽屉自动关闭；打开抽屉时高亮当前阅读位置所在章节。适用范围 = md / docx / pdf 三类预览（分页 pdf 跳转到对应 page-card 内标题）；pptx / xlsx / 邮件 / 图像解读的 md 不提供（2026-08-21 决议）。文档无 heading 时按钮隐藏。桌面 header 与移动端 mobile-header 均直接放置按钮。_Avoid_: 侧边常驻栏、可折叠树、scrollspy。
@@ -95,4 +98,5 @@
 - 2026-08-21：预览目录抽屉 = md/docx/pdf 预览提供 heading 目录快速跳转（按钮 + 抽屉浮层 + 扁平缩进列表 + 点击跳转即关闭 + 打开时高亮当前章节）；pptx/xlsx/邮件/图像解读 md 不提供；无 heading 隐藏按钮。
 - 2026-09-07：MCP client = doclens 侧实现经 register_external_tools 注入 planify（planify 零改动）；三传输全做（stdio/Streamable HTTP/旧 SSE）；仅消费 Tools；仅 GUI 生效；机器级配置 `mcp_servers.json`；stdio 子进程常驻、专属后台线程 + 专属 event loop；异步 reconcile 热更新；信任在配置时一次授予、运行时零摩擦（ADR-0014）。
 - 2026-09-08：技能管理（设置页技能 tab）= 可变状态全归机器级 sidecar `skills_config.json`（enabled/context_menu/accept_dirs/deleted/来源，稀疏覆盖），frontmatter 退出可变属性只留静态身份；内置默认入代码常量表；停用=仅路由层隔断（剔除 system prompt 清单）+ 热生效；内置技能删=标记+灰置可恢复，外部技能（GitHub codeload zip 安装，任意 URL，确认时一次授予信任）真删；内置同名拒装、外部同名覆盖保留设置。
+- 2026-09-08：对话页技能直发（ADR-0016）= 发送按钮复合化（主键发送 + caret 菜单），候选=全部启用技能（与工具箱白名单独立）；菜单=「选择技能…」弹复用的 toolbox 对话框 + 最近 ≤3 个（用户显式选择、localStorage 记账、AI 自主 load 不记）；须先输入问题，点选技能即发往当前会话（仅 initial 态新建，自然成技能会话）；信封复用 `[调用技能:]` 格式；空输入禁 caret、流式藏 caret、失效条目求交静默消失、候选空退化为普通按钮。
 - 2026-08-27：预览↔编辑切换锚点升级为行级精度——md-viewer 的 topSourceLine/scrollToSourceLine 从块级（data-source-line 贴块顶）升级为按块内像素比例插值（块源行跨度 = 下一块起始行 − 本块起始行，末块到文档末行），与 md-editor 的镜像 div 行级测量对称；视野首行落在长代码块/长列表中部时不再跳回块开头。搜索命中定位（line property → 块起始行）与滚动记忆的行为不变（记忆值更精确）。

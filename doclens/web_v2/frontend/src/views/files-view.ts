@@ -17,6 +17,8 @@ import "../components/delete-dialog";
 import "../components/skill-toolbox-dialog";
 import "../components/skill-run-dialog";
 import type { SkillInfo } from "../api/skills";
+import { fetchSkills } from "../api/skills";
+import { recordSkillUse } from "../state/recent-skills";
 import "../components/drop-zone";
 import "../components/file-search-box";
 import "../components/file-search-results";
@@ -204,6 +206,8 @@ export class FilesView extends LitElement {
   @state() private _dialog: DialogKind = null;
   @state() private _reparsePath = ""; // 重新解析目标图像路径
   @state() private _pickedSkill: SkillInfo | null = null; // 工具箱中选中的技能
+  @state() private _toolboxSkills: SkillInfo[] | null = null; // 工具箱候选（null=加载中）
+  @state() private _toolboxSkillsError: string | null = null;
   @state() private _toast: string | null = null;
   private _toastTimer: any = null;
 
@@ -457,6 +461,7 @@ export class FilesView extends LitElement {
       if (this._state.selectedPaths.length === 0) return;
       this._pickedSkill = null;
       this._dialog = "skill-toolbox";
+      void this._loadToolboxSkills();
       return;
     }
     if (["mkdir", "rename", "move", "delete"].includes(name)) {
@@ -487,6 +492,17 @@ export class FilesView extends LitElement {
       : this._selectedFilePaths();
   }
 
+  /** 拉取工具箱白名单技能（对话框数据源，ADR-0016 §5 起由调用方供给）。 */
+  private async _loadToolboxSkills() {
+    this._toolboxSkills = null;
+    this._toolboxSkillsError = null;
+    try {
+      this._toolboxSkills = await fetchSkills();
+    } catch (e) {
+      this._toolboxSkillsError = (e as Error)?.message || "技能列表加载失败";
+    }
+  }
+
   /** 工具箱中点选技能 → 进入确认对话框。 */
   private _onSkillPick(e: CustomEvent<{ skill: SkillInfo }>) {
     this._pickedSkill = e.detail.skill;
@@ -510,6 +526,8 @@ export class FilesView extends LitElement {
       "",
       `补充要求：${e.detail.prompt || "无"}`,
     ];
+    // 用户显式点选技能 → 记入最近技能（ADR-0016 §2，与对话页直发同一账本）
+    recordSkillUse(skill.name);
     const firstFile = paths[0].split("/").pop() ?? paths[0];
     // 技能对话总是新建会话：重置 chat 视图态（旧对话保留在历史列表，可回）
     actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
@@ -1129,6 +1147,8 @@ export class FilesView extends LitElement {
     if (this._dialog === "skill-toolbox") {
       return html`<dialog @cancel=${this._cancelDialog}>
         <skill-toolbox-dialog
+          .skills=${this._toolboxSkills}
+          .error=${this._toolboxSkillsError}
           @pick=${this._onSkillPick}
           @cancel=${this._cancelDialog}
         ></skill-toolbox-dialog>

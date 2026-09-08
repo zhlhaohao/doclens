@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
@@ -12,6 +12,10 @@ import { createSession, appendSession, listSessions, clearSessions } from "../ap
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
+import { listSkillsManage } from "../api/skills";
+import type { SkillInfo } from "../api/skills";
+import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
+import "../components/skill-toolbox-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -127,7 +131,8 @@ export class ChatView extends LitElement {
         radial-gradient(720px 280px at 50% -80px, rgba(0, 100, 224, 0.08), transparent 70%);
     }
     .input-row {
-      padding: 6px var(--cortex-space-6) 18px;
+      /* 底部留白与搜索页 .input-row 一致（space-4=16px），保证两页输入框距底边等高 */
+      padding: 6px var(--cortex-space-6) var(--cortex-space-4);
       flex-shrink: 0;
     }
     /* 输入框对齐日记记录页的紧凑尺寸（默认 ≈48px/11px 偏大） */
@@ -142,7 +147,8 @@ export class ChatView extends LitElement {
       min-height: 0;
     }
     .input-bar {
-      padding: var(--cortex-space-3) var(--cortex-space-6);
+      /* 底部留白与搜索页输入框一致（space-4=16px），顶部保持 space-3 */
+      padding: var(--cortex-space-3) var(--cortex-space-6) var(--cortex-space-4);
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
       background: var(--cortex-view-bg);
@@ -292,6 +298,11 @@ export class ChatView extends LitElement {
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
+  /** 对话技能候选（ADR-0016 §1：全部启用技能）；null = 未加载/加载中 */
+  @state() private _skillCandidates: SkillInfo[] | null = null;
+  @state() private _skillCandidatesError: string | null = null;
+  /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
+  @state() private _skillDialogOpen = false;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -313,6 +324,86 @@ export class ChatView extends LitElement {
     // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）
     this._highlightSessionId = loadSessionMemory().chat?.sessionId ?? null;
     this._consumePendingSkillChat();
+    // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
+    void this._loadSkillCandidates();
+  }
+
+  updated() {
+    // 技能选择对话框用 showModal（top-layer + backdrop + ESC 关闭），与 files-view 一致
+    const dlg = this.renderRoot.querySelector("dialog");
+    if (dlg && !dlg.open) dlg.showModal();
+  }
+
+  /** 拉取对话技能候选 = 全部启用且未删除的技能（ADR-0016 §1，与工具箱白名单独立）。 */
+  private async _loadSkillCandidates() {
+    try {
+      const items = await listSkillsManage();
+      this._skillCandidates = items
+        .filter((s) => s.enabled && !s.deleted)
+        .map((s) => ({ name: s.name, description: s.description, icon: s.icon }));
+      this._skillCandidatesError = null;
+    } catch (e) {
+      this._skillCandidatesError = (e as Error)?.message || "技能列表加载失败";
+    }
+  }
+
+  /** 传给 input-box 的最近技能项：与候选求交（停用/删除静默消失）取前 3；
+   *  候选全空 → null（caret 隐藏，退化为普通发送按钮，ADR-0016 §5）。 */
+  private get _recentSkillItems(): { name: string; icon?: string }[] | null {
+    const cands = this._skillCandidates;
+    if (cands !== null && cands.length === 0) return null;
+    if (!cands) return []; // 未加载：caret 可用，菜单暂只显示「选择技能…」
+    const byName = new Map(cands.map((c) => [c.name, c]));
+    return getRecentSkillNames()
+      .filter((n) => byName.has(n))
+      .slice(0, RECENT_SKILLS_MENU_CAP)
+      .map((n) => ({ name: n, icon: byName.get(n)!.icon }));
+  }
+
+  /** caret 菜单打开：刷新候选（设置页可能刚改过启用状态），recents 重算随之更新。 */
+  private _onSkillMenuOpen = () => {
+    void this._loadSkillCandidates();
+  };
+
+  /** 菜单「选择技能…」→ 弹技能选择对话框（刷新候选保证最新）。 */
+  private _onSkillBrowse = () => {
+    this._skillDialogOpen = true;
+    void this._loadSkillCandidates();
+  };
+
+  private _onSkillDialogPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
+    this._skillDialogOpen = false;
+    void this._sendWithSkill(e.detail.skill.name);
+  };
+
+  private _onSkillDialogCancel = () => {
+    this._skillDialogOpen = false;
+  };
+
+  private _onSkillMenuPick = (e: CustomEvent<{ name: string }>) => {
+    void this._sendWithSkill(e.detail.name);
+  };
+
+  /** 技能直发（ADR-0016 §3/§4）：信封消息立即发往当前会话；
+   *  initial 态新建会话（首条消息带标记，自然成为技能会话）。 */
+  private async _sendWithSkill(name: string) {
+    const question = this.draft.trim();
+    if (!question) return;
+    recordSkillUse(name);
+    const message = [
+      `[调用技能: ${name}]`,
+      "",
+      `请先 load_skill("${name}") 加载技能，然后按技能指引处理。`,
+      "",
+      question,
+    ].join("\n");
+    this.draft = "";
+    if (this.viewState.state === "initial") {
+      await this._ensureSession(`${name} · ${question.slice(0, 30)}`, message, "skill");
+      await this._sendMessage(message, true);
+      return;
+    }
+    await this._sendMessage(message);
   }
 
   disconnectedCallback() {
@@ -790,16 +881,18 @@ export class ChatView extends LitElement {
               class="text-input"
               placeholder="问 Doclens 任何问题..."
               .buttonLabel=${"发送"}
-              .buttonIcon=${"send"}
-              .iconAfter=${true}
-              style="--cortex-input-btn-reserve: 96px"
               multiline
               .value=${this.draft}
+              .skillItems=${this._recentSkillItems}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
+              @skill-menu-open=${this._onSkillMenuOpen}
+              @skill-pick=${this._onSkillMenuPick}
+              @skill-browse=${this._onSkillBrowse}
               @submit=${this._submit}>
             </input-box>
           </div>
         </div>
+        ${this._renderSkillDialog()}
       `;
     }
     const hasPreview = this.previewOpen;
@@ -869,15 +962,17 @@ export class ChatView extends LitElement {
         </div>
         <div class="input-bar">
           <input-box
+            class="text-input"
             placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续对话..."}
             .buttonLabel=${"发送"}
-            .buttonIcon=${"arrow-up"}
-            .iconAfter=${true}
-            style="--cortex-input-btn-reserve: 96px"
             multiline
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
+            .skillItems=${this._recentSkillItems}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
+            @skill-menu-open=${this._onSkillMenuOpen}
+            @skill-pick=${this._onSkillMenuPick}
+            @skill-browse=${this._onSkillBrowse}
             @submit=${this._submit}
             @stop=${this._stop}>
           </input-box>
@@ -894,7 +989,22 @@ export class ChatView extends LitElement {
             ? this._renderNotIndexedHint()
             : previewPane(true)}
         </div>` : null}
+      ${this._renderSkillDialog()}
     `;
+  }
+
+  /** 技能选择对话框宿主（两分支共用；<dialog> 由 updated() showModal）。 */
+  private _renderSkillDialog() {
+    if (!this._skillDialogOpen) return nothing;
+    return html`
+      <dialog @cancel=${this._onSkillDialogCancel}>
+        <skill-toolbox-dialog
+          .skills=${this._skillCandidates}
+          .error=${this._skillCandidatesError}
+          @pick=${this._onSkillDialogPick}
+          @cancel=${this._onSkillDialogCancel}
+        ></skill-toolbox-dialog>
+      </dialog>`;
   }
 }
 

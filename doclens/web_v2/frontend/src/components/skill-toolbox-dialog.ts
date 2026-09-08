@@ -1,10 +1,13 @@
 import { LitElement, html, css } from "lit";
-import { customElement, state } from "lit/decorators.js";
-import { fetchSkills } from "../api/skills";
+import { customElement, property, state } from "lit/decorators.js";
 import type { SkillInfo } from "../api/skills";
 import "../components/icon";
 
-/** 技能工具箱选择对话框：列出 context_menu 白名单技能。
+/** 技能选择对话框：列出调用方传入的技能清单，点选即确认（pick 事件）。
+ *
+ * 清单由调用方供给（ADR-0016 §5）：files 页传工具箱白名单（GET /api/skills），
+ * 对话页传全部启用技能（GET /api/skills/manage 过滤）——对话框不再自取数据。
+ * skills=null 表示加载中；error 由调用方在加载失败时传入。
  *
  * 桌面端：3 列卡片网格（button 卡片，浮起效果）。
  * 移动端：list item 列表（ul/li 语义，通栏行 + 分隔线，无 button/网格），
@@ -133,9 +136,10 @@ export class SkillToolboxDialog extends LitElement {
     }
   `;
 
-  @state() private _skills: SkillInfo[] = [];
-  @state() private _loading = true;
-  @state() private _error: string | null = null;
+  /** 技能清单，调用方供给；null = 加载中。 */
+  @property({ attribute: false }) skills: SkillInfo[] | null = null;
+  /** 加载失败时由调用方传入的错误文案。 */
+  @property() error: string | null = null;
   @state() private _isMobile = false;
 
   private _mql?: MediaQueryList;
@@ -148,24 +152,11 @@ export class SkillToolboxDialog extends LitElement {
     this._mql = window.matchMedia("(max-width: 1023px)");
     this._isMobile = this._mql.matches;
     this._mql.addEventListener("change", this._onMqlChange);
-    this._load();
   }
 
   disconnectedCallback() {
     this._mql?.removeEventListener("change", this._onMqlChange);
     super.disconnectedCallback();
-  }
-
-  private async _load() {
-    this._loading = true;
-    this._error = null;
-    try {
-      this._skills = await fetchSkills();
-    } catch (e) {
-      this._error = (e as Error)?.message || "技能列表加载失败";
-    } finally {
-      this._loading = false;
-    }
   }
 
   private _onPick(skill: SkillInfo) {
@@ -189,13 +180,14 @@ export class SkillToolboxDialog extends LitElement {
   }
 
   private _renderBody() {
-    if (this._loading) return html`<div class="empty">加载中…</div>`;
-    if (this._error) return html`<div class="err">${this._error}</div>`;
-    if (this._skills.length === 0) return html`<div class="empty">暂无可用技能</div>`;
+    if (this.error) return html`<div class="err">${this.error}</div>`;
+    const skills = this.skills;
+    if (skills === null) return html`<div class="empty">加载中…</div>`;
+    if (skills.length === 0) return html`<div class="empty">暂无可用技能</div>`;
     if (this._isMobile) {
       // 移动端：list item 语义列表（ul/li，无 button）
       return html`<ul class="list">
-        ${this._skills.map((s) => html`
+        ${skills.map((s) => html`
           <li
             class="item"
             role="button"
@@ -211,7 +203,7 @@ export class SkillToolboxDialog extends LitElement {
     }
     // 桌面端：3 列按钮卡片网格
     return html`<div class="grid" role="listbox">
-      ${this._skills.map((s) => html`
+      ${skills.map((s) => html`
         <button
           type="button"
           role="option"
