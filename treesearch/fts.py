@@ -2233,16 +2233,24 @@ class FTS5Index:
 
 
 def _extract_match_snippet(text: str, query: str, use_regex: bool, size: int = 300) -> str:
-    """Extract a snippet of *size* chars centered around the first match."""
+    """Extract a snippet of *size* chars led by the first match.
+
+    Regex mode: the snippet starts at the beginning of the actual match body
+    (so patterns like ``foo[\\s\\S]{0,N}`` surface the requested span), and the
+    match itself may exceed *size* up to a hard cap. Literal mode centers the
+    window on the whole hit.
+    """
     if len(text) <= size:
         return text
-    pos = -1
     if use_regex:
         m = re.search(query, text, re.IGNORECASE)
-        if m:
-            pos = m.start()
-    else:
-        pos = text.lower().find(query.lower())
+        if not m:
+            return text[:size]
+        match_len = m.end() - m.start()
+        # 匹配体本身给到 size 的两倍预算（{0,N} 跨度类模式需要完整后文）
+        end = min(len(text), m.start() + max(size, match_len, 2 * size))
+        return text[m.start():end]
+    pos = text.lower().find(query.lower())
     if pos < 0:
         pos = 0
     half = size // 2

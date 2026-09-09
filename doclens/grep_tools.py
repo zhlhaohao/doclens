@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -81,6 +82,14 @@ def build_grep_tools(
 # Agent 输出格式化
 # ---------------------------------------------------------------------------
 
+def _match_in_line(line: str, term: str) -> bool:
+    """判断词项是否命中该行：先按正则（grep 词项来自正则切分），失败退字面量子串。"""
+    try:
+        return re.search(term, line, re.IGNORECASE) is not None
+    except re.error:
+        return term.lower() in line.lower()
+
+
 def _select_keyword_lines(
     text: str,
     kw_lower: list[str],
@@ -90,7 +99,7 @@ def _select_keyword_lines(
     """从文本中选取包含关键词的行及其上下文。
 
     逻辑与 TUI render_search_result 的锚点选择一致：
-    1. 遍历所有行，统计每行包含的关键词数
+    1. 遍历所有行，统计每行命中的词项数（词项为正则片段，按 re.search 匹配）
     2. 按命中数降序取锚点行
     3. 向前后各扩展 context_range 行
     4. 拼接并截断
@@ -100,11 +109,10 @@ def _select_keyword_lines(
 
     all_lines = text.split("\n")
 
-    # 统计每行命中关键词数
+    # 统计每行命中词项数
     line_hits: list[tuple[int, int]] = []  # (count, line_index)
     for j, line in enumerate(all_lines):
-        l_lower = line.lower()
-        cnt = sum(1 for w in kw_lower if w in l_lower)
+        cnt = sum(1 for w in kw_lower if _match_in_line(line, w))
         if cnt > 0:
             line_hits.append((cnt, j))
 
@@ -162,6 +170,9 @@ def _format_agent_output(
 
     total_terms = max(total_terms, 1)
     kw_lower = [w.lower() for w in query_words if w]
+    # grep 词项是正则片段：优先按正则取命中先导窗口（能呈现 {0,N} 跨度），
+    # 不合法/无命中再退回行锚点选择
+    regex_terms = query_words if query_words else []
     output_lines: list[str] = []
 
     if content_results:
@@ -177,7 +188,13 @@ def _format_agent_output(
             line_start = node.get("line_start")
             full_text = node.get("text", "") or ""
 
-            snippet = _select_keyword_lines(full_text, kw_lower)
+            snippet = (
+                _regex_led_snippet(full_text, regex_terms)
+                if regex_terms
+                else None
+            )
+            if snippet is None:
+                snippet = _select_keyword_lines(full_text, kw_lower)
 
             path_note = path
             if line_start is not None:
@@ -206,6 +223,28 @@ def _format_agent_output(
         output_lines.append(f"\nPaths matched: {', '.join(path_strs)}")
 
     return "\n\n".join(output_lines)
+
+
+def _regex_led_snippet(text: str, terms: list[str], size: int = 400) -> str | None:
+    """对全文跑词项正则，返回以首个命中体为先导的窗口（正则不合法时返回 None）。
+
+    grep 的词项来自正则按顶层 | 切分，如 ``第29题[\\s\\S]{0,300}``；
+    直接把词项当字面子串去选行永远选不中，必须按正则匹配。
+    """
+    compiled = []
+    for term in terms:
+        try:
+            compiled.append(re.compile(term, re.IGNORECASE))
+        except re.error:
+            return None
+    for pat in compiled:
+        m = pat.search(text)
+        if not m:
+            continue
+        match_len = m.end() - m.start()
+        end = min(len(text), m.start() + max(size, match_len))
+        return text[m.start():end]
+    return None
 
 
 # ---------------------------------------------------------------------------

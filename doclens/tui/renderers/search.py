@@ -111,11 +111,21 @@ def render_search_result(
     lines = display_text.split("\n")
     kw_lower = [kw.lower() for kw in query_words if kw]
 
-    # 给每行计算包含几个关键词
+    # 给每行计算包含几个关键词（grep/rg 的词项是正则片段，按 re.search 匹配）
+    regex_mode = is_ripgrep or is_like
+
+    def _word_in_line(word: str, line: str, line_lower: str) -> bool:
+        if regex_mode:
+            try:
+                return re.search(word, line, re.IGNORECASE) is not None
+            except re.error:
+                return word in line_lower
+        return word in line_lower
+
     line_keyword_counts: list[tuple[int, int, str]] = []
     for j, l in enumerate(lines):
         l_lower = l.lower()
-        cnt = sum(1 for w in kw_lower if w in l_lower)
+        cnt = sum(1 for w in kw_lower if _word_in_line(w, l, l_lower))
         if cnt > 0:
             line_keyword_counts.append((cnt, j, l))
 
