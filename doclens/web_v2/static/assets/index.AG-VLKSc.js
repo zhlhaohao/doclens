@@ -3987,7 +3987,8 @@ var Jp=Object.defineProperty;var Qp=(e,t,r)=>t in e?Jp(e,t,{enumerable:!0,config
         linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
         linear-gradient(135deg, #16a34a, #22c55e) border-box;
       min-height: var(--min-h);
-      padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
+      /* 右侧只留边距：按钮在文档流中占据实际宽度，文本换行点自然落在按钮前 */
+      padding: 0 3px 0 18px;
       /* 强化：绿色调 elevation 阴影——静止即浮起，作为主动作区 */
       box-shadow: 0 6px 18px rgba(22, 163, 74, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
       transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
@@ -4048,15 +4049,14 @@ var Jp=Object.defineProperty;var Qp=(e,t,r)=>t in e?Jp(e,t,{enumerable:!0,config
     }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
-      position: absolute;
-      right: 3px;
-      top: 50%;
-      transform: translateY(-50%);
+      /* 文档流内按钮：flex: 0 保证不收缩，文本区域（flex:1）自动让位——
+         换行点自然落在按钮前，长文不再钻到按钮底下 */
+      flex: 0 0 auto;
       background: #16a34a;
       color: #fff;
       border: none;
       border-radius: var(--cortex-radius-pill);
-      /* 上下左右各留 3px（原 12px 高度差致上下 6px，与右边 3px 不对称） */
+      /* 上下左右各留 3px（wrapper padding 右 3px，按钮自身贴齐） */
       min-width: calc(var(--min-h) - 6px);
       height: calc(var(--min-h) - 6px);
       padding: 0 14px;
@@ -4071,7 +4071,7 @@ var Jp=Object.defineProperty;var Qp=(e,t,r)=>t in e?Jp(e,t,{enumerable:!0,config
     }
     button:disabled { filter: saturate(0.4); cursor: not-allowed; box-shadow: none; }
     button:hover:not(:disabled) { filter: brightness(1.05); }
-    button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
+    button:active:not(:disabled) { transform: scale(0.96); }
     /* 停止态：流式中发送键原地变身为「停止」（红色方形图标钮，区别于绿色发送），始终可点 */
     button.stop { background: #dc2626; padding: 0; }
     /* 停止态动画：白色方块呼吸 + 红色光晕扩散，错开节奏传达"正在思考/输出" */
@@ -4088,20 +4088,14 @@ var Jp=Object.defineProperty;var Qp=(e,t,r)=>t in e?Jp(e,t,{enumerable:!0,config
     @media (prefers-reduced-motion: reduce) {
       button.stop, button.stop doclens-icon { animation: none; }
     }
-    /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
+    /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器/技能菜单）——文档流内右对齐 */
     .actions.split {
-      position: absolute;
-      right: 3px;
-      top: 50%;
-      transform: translateY(-50%);
       display: flex;
       align-items: center;
+      flex: 0 0 auto;
+      margin-left: 8px;
     }
     .actions.split .primary {
-      position: static;
-      top: auto;
-      right: auto;
-      transform: none;
       border-radius: var(--cortex-radius-pill) 0 0 var(--cortex-radius-pill);
       /* 分裂按钮：primary 与 caret 拼成单一控件，必须共享同一 elevation；
          抑制主按钮的 glow，避免左半 "漂浮" 而右半扁平的不对称视觉。 */
@@ -4110,10 +4104,6 @@ var Jp=Object.defineProperty;var Qp=(e,t,r)=>t in e?Jp(e,t,{enumerable:!0,config
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
     .caret {
       box-sizing: border-box;
-      position: static;
-      top: auto;
-      right: auto;
-      transform: none;
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
@@ -12609,7 +12599,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;Ip([w({type:Boolean,reflect:!0})],Ho.prototype,"open",2);Ho=Ip([G("watch-changes-dialog")],Ho);var lw=Object.defineProperty,cw=Object.getOwnPropertyDescriptor,pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?cw(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&lw(t,r,s),s};let As=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 9230db5 · 2026-09-09 18:02 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
+  `;Ip([w({type:Boolean,reflect:!0})],Ho.prototype,"open",2);Ho=Ip([G("watch-changes-dialog")],Ho);var lw=Object.defineProperty,cw=Object.getOwnPropertyDescriptor,pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?cw(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&lw(t,r,s),s};let As=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 3a77e82 · 2026-09-09 20:43 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -12624,7 +12614,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?u`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"9230db5 · 2026-09-09 18:02"}</span>
+            <span class="value">${"3a77e82 · 2026-09-09 20:43"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

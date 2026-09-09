@@ -22,7 +22,8 @@ export class InputBox extends LitElement {
         linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
         linear-gradient(135deg, #16a34a, #22c55e) border-box;
       min-height: var(--min-h);
-      padding: 0 var(--cortex-input-btn-reserve, calc(var(--min-h) + 6px)) 0 18px;
+      /* 右侧只留边距：按钮在文档流中占据实际宽度，文本换行点自然落在按钮前 */
+      padding: 0 3px 0 18px;
       /* 强化：绿色调 elevation 阴影——静止即浮起，作为主动作区 */
       box-shadow: 0 6px 18px rgba(22, 163, 74, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
       transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
@@ -83,15 +84,14 @@ export class InputBox extends LitElement {
     }
     input::placeholder, textarea::placeholder { color: var(--cortex-text-subtle); }
     button {
-      position: absolute;
-      right: 3px;
-      top: 50%;
-      transform: translateY(-50%);
+      /* 文档流内按钮：flex: 0 保证不收缩，文本区域（flex:1）自动让位——
+         换行点自然落在按钮前，长文不再钻到按钮底下 */
+      flex: 0 0 auto;
       background: #16a34a;
       color: #fff;
       border: none;
       border-radius: var(--cortex-radius-pill);
-      /* 上下左右各留 3px（原 12px 高度差致上下 6px，与右边 3px 不对称） */
+      /* 上下左右各留 3px（wrapper padding 右 3px，按钮自身贴齐） */
       min-width: calc(var(--min-h) - 6px);
       height: calc(var(--min-h) - 6px);
       padding: 0 14px;
@@ -106,7 +106,7 @@ export class InputBox extends LitElement {
     }
     button:disabled { filter: saturate(0.4); cursor: not-allowed; box-shadow: none; }
     button:hover:not(:disabled) { filter: brightness(1.05); }
-    button:active:not(:disabled) { transform: translateY(-50%) scale(0.96); }
+    button:active:not(:disabled) { transform: scale(0.96); }
     /* 停止态：流式中发送键原地变身为「停止」（红色方形图标钮，区别于绿色发送），始终可点 */
     button.stop { background: #dc2626; padding: 0; }
     /* 停止态动画：白色方块呼吸 + 红色光晕扩散，错开节奏传达"正在思考/输出" */
@@ -123,20 +123,14 @@ export class InputBox extends LitElement {
     @media (prefers-reduced-motion: reduce) {
       button.stop, button.stop doclens-icon { animation: none; }
     }
-    /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器） */
+    /* 分裂按钮：主体 + caret 拼成单一控件（模式选择器/技能菜单）——文档流内右对齐 */
     .actions.split {
-      position: absolute;
-      right: 3px;
-      top: 50%;
-      transform: translateY(-50%);
       display: flex;
       align-items: center;
+      flex: 0 0 auto;
+      margin-left: 8px;
     }
     .actions.split .primary {
-      position: static;
-      top: auto;
-      right: auto;
-      transform: none;
       border-radius: var(--cortex-radius-pill) 0 0 var(--cortex-radius-pill);
       /* 分裂按钮：primary 与 caret 拼成单一控件，必须共享同一 elevation；
          抑制主按钮的 glow，避免左半 "漂浮" 而右半扁平的不对称视觉。 */
@@ -145,10 +139,6 @@ export class InputBox extends LitElement {
     .actions.split .primary:active:not(:disabled) { transform: scale(0.96); }
     .caret {
       box-sizing: border-box;
-      position: static;
-      top: auto;
-      right: auto;
-      transform: none;
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
