@@ -153,6 +153,48 @@ class TestTuiRenderRegexAnchor:
 
 
 # ---------------------------------------------------------------------------
+# 引擎一致性：SQLite REGEXP 与 rg --ignore-case 大小写口径对齐
+# ---------------------------------------------------------------------------
+
+class TestRegexpCaseAlignment:
+    def test_sqlite_regexp_case_insensitive(self):
+        from treesearch.fts import _sqlite_regexp
+
+        assert _sqlite_regexp("needle", "Foo NEEDLE bar") is True
+        assert _sqlite_regexp("NEEDLE", "foo needle bar") is True
+
+    def test_sqlite_regexp_invalid_pattern_false(self):
+        from treesearch.fts import _sqlite_regexp
+
+        assert _sqlite_regexp("[", "any") is False
+        assert _sqlite_regexp(None, "any") is False
+        assert _sqlite_regexp("a", None) is False
+
+    def test_like_search_regex_case_insensitive(self, tmp_path: Path):
+        """DB 引擎对小写 pattern 命中大写内容——与 rg --ignore-case 同覆盖。"""
+        from treesearch.fts import FTS5Index
+
+        fts = FTS5Index(db_path=str(tmp_path / "t.db"))
+        try:
+            from treesearch.tree import Document
+
+            doc = Document(
+                doc_id="d1",
+                doc_name="case.md",
+                structure=[{
+                    "node_id": "n1", "title": "NEEDLE Title",
+                    "summary": "Foo NEEDLE bar", "depth": 0,
+                }],
+            )
+            fts.index_document(doc)
+            hits = fts.like_search("needle", top_k=10, use_regex=True)
+            assert len(hits) == 1
+            assert hits[0]["doc_id"] == "d1"
+        finally:
+            fts.close()
+
+
+# ---------------------------------------------------------------------------
 # handler 端到端（真实 like_search → REGEXP → 片段）
 # ---------------------------------------------------------------------------
 

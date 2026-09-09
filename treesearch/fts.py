@@ -88,11 +88,15 @@ def _check_fts5() -> bool:
 
 
 def _sqlite_regexp(pattern: str, string: str) -> bool:
-    """SQLite REGEXP callback — registered via create_function."""
+    """SQLite REGEXP callback — registered via create_function.
+
+    Case-insensitive to match rg's ``--ignore-case`` default in the grep
+    fallback path, so both engines return the same coverage for a pattern.
+    """
     if string is None or pattern is None:
         return False
     try:
-        return bool(re.search(pattern, string))
+        return bool(re.search(pattern, string, re.IGNORECASE))
     except re.error:
         return False
 
