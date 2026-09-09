@@ -7,7 +7,11 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from treesearch.fts import _extract_match_snippet
+from treesearch.fts import (
+    SNIPPET_BASE_CHARS,
+    SNIPPET_MATCH_MAX_CHARS,
+    _extract_match_snippet,
+)
 
 PAT = r"第29题[\s\S]{0,300}"
 TEXT = (
@@ -29,6 +33,20 @@ class TestExtractMatchSnippetRegex:
         s = _extract_match_snippet(text, PAT, use_regex=True, size=300)
         assert s.startswith("第29题")
         assert len(s) >= 300  # {0,300} 跨度完整可见
+
+    def test_greedy_match_capped(self):
+        # 贪婪正则 [\s\S]* 匹配体被截到 SNIPPET_MATCH_MAX_CHARS，另加尾随上下文 size
+        text = "第29题" + "A" * 5000
+        s = _extract_match_snippet(text, r"第29题[\s\S]*", use_regex=True, size=300)
+        assert s.startswith("第29题")
+        assert len(s) <= SNIPPET_MATCH_MAX_CHARS + 300
+
+    def test_trailing_context_appended(self):
+        # 短匹配体之后还应有 size 预算的尾随上下文
+        text = "第29题" + "B" * 1000
+        s = _extract_match_snippet(text, r"第29题", use_regex=True, size=300)
+        assert s.startswith("第29题")
+        assert len(s) == len("第29题") + 300
 
     def test_short_text_returned_as_is(self):
         assert _extract_match_snippet("第29题短文", PAT, use_regex=True) == "第29题短文"
@@ -84,6 +102,16 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         assert _regex_led_snippet(TEXT, ["不存在的词"]) is None
+
+    def test_regex_led_snippet_greedy_capped_same_as_fts(self):
+        # 与 fts._extract_match_snippet 同一预算口径：匹配体 cap + 尾随 size
+        from doclens.grep_tools import _regex_led_snippet
+
+        text = "第29题" + "A" * 5000
+        led = _regex_led_snippet(text, [r"第29题[\s\S]*"])
+        fts_s = _extract_match_snippet(text, r"第29题[\s\S]*", use_regex=True)
+        assert led == fts_s
+        assert len(led) <= SNIPPET_MATCH_MAX_CHARS + SNIPPET_BASE_CHARS
 
     def test_format_agent_output_contains_match_span(self):
         from doclens.grep_tools import _format_agent_output

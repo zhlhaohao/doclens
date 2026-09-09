@@ -41,6 +41,15 @@ _DEFAULT_WEIGHTS = {
 }
 
 # ---------------------------------------------------------------------------
+# Snippet extraction（片段提取共享常量，宿主 grep 工具可复用）
+# ---------------------------------------------------------------------------
+
+# 片段基础预算（历史值）：regex 模式的尾随上下文 / 字面模式的窗口宽度
+SNIPPET_BASE_CHARS = 300
+# 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果
+SNIPPET_MATCH_MAX_CHARS = 2000
+
+# ---------------------------------------------------------------------------
 # FTS5 availability detection
 # ---------------------------------------------------------------------------
 
@@ -2232,12 +2241,17 @@ class FTS5Index:
         return set(doc_ids) - indexed
 
 
-def _extract_match_snippet(text: str, query: str, use_regex: bool, size: int = 300) -> str:
-    """Extract a snippet of *size* chars led by the first match.
+def _extract_match_snippet(
+    text: str,
+    query: str,
+    use_regex: bool,
+    size: int = SNIPPET_BASE_CHARS,
+    match_max: int = SNIPPET_MATCH_MAX_CHARS,
+) -> str:
+    """Extract a snippet led by the first match.
 
-    Regex mode: the snippet starts at the beginning of the actual match body
-    (so patterns like ``foo[\\s\\S]{0,N}`` surface the requested span), and the
-    match itself may exceed *size* up to a hard cap. Literal mode centers the
+    Regex mode: starts at the match beginning, budget = match body (capped at
+    *match_max*) + trailing context up to *size*. Literal mode centers the
     window on the whole hit.
     """
     if len(text) <= size:
@@ -2246,9 +2260,8 @@ def _extract_match_snippet(text: str, query: str, use_regex: bool, size: int = 3
         m = re.search(query, text, re.IGNORECASE)
         if not m:
             return text[:size]
-        match_len = m.end() - m.start()
-        # 匹配体本身给到 size 的两倍预算（{0,N} 跨度类模式需要完整后文）
-        end = min(len(text), m.start() + max(size, match_len, 2 * size))
+        capped = min(m.end() - m.start(), match_max)
+        end = min(len(text), m.start() + capped + size)
         return text[m.start():end]
     pos = text.lower().find(query.lower())
     if pos < 0:

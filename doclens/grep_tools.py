@@ -15,6 +15,7 @@ from doclens.search_targets import (
     format_missed_note,
     resolve_search_targets,
 )
+from treesearch.fts import SNIPPET_BASE_CHARS, SNIPPET_MATCH_MAX_CHARS
 
 if TYPE_CHECKING:
     from doclens.index_manager import IndexManager
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MAX_TOTAL_CHARS = 8000
+
+# 片段预算复用 treesearch.fts 的共享常量（口径见 SNIPPET_BASE_CHARS）
 
 # ---------------------------------------------------------------------------
 # Anthropic tool use schema
@@ -225,11 +228,18 @@ def _format_agent_output(
     return "\n\n".join(output_lines)
 
 
-def _regex_led_snippet(text: str, terms: list[str], size: int = 400) -> str | None:
+def _regex_led_snippet(
+    text: str,
+    terms: list[str],
+    size: int = SNIPPET_BASE_CHARS,
+    match_max: int = SNIPPET_MATCH_MAX_CHARS,
+) -> str | None:
     """对全文跑词项正则，返回以首个命中体为先导的窗口（正则不合法时返回 None）。
 
     grep 的词项来自正则按顶层 | 切分，如 ``第29题[\\s\\S]{0,300}``；
     直接把词项当字面子串去选行永远选不中，必须按正则匹配。
+    预算口径与 treesearch.fts._extract_match_snippet 一致：
+    匹配体（capped）+ 尾随上下文 size。
     """
     compiled = []
     for term in terms:
@@ -241,8 +251,8 @@ def _regex_led_snippet(text: str, terms: list[str], size: int = 400) -> str | No
         m = pat.search(text)
         if not m:
             continue
-        match_len = m.end() - m.start()
-        end = min(len(text), m.start() + max(size, match_len))
+        capped = min(m.end() - m.start(), match_max)
+        end = min(len(text), m.start() + capped + size)
         return text[m.start():end]
     return None
 
