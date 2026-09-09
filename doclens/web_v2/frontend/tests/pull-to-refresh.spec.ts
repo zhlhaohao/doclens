@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "../src/components/pull-refresh-indicator";
-import "../src/views/search-view";
+import "../src/views/files-view";
 import "../src/views/settings-view";
 import {
   PullToRefreshController,
@@ -36,8 +36,8 @@ function fakeTouchEvent(
   } as unknown as TouchEvent;
 }
 
-/** 构造带 refresh 能力的 view 宿主元素 */
-function fakeView(tag = "search-view", overrides: Partial<RefreshableView> = {}) {
+/** 构造带 refresh 能力的 view 宿主元素（files-view 在 VIEW_TAGS 白名单内） */
+function fakeView(tag = "files-view", overrides: Partial<RefreshableView> = {}) {
   const el = document.createElement(tag);
   const refresh = vi.fn().mockResolvedValue(undefined);
   Object.assign(el, { refresh, canRefresh: () => true, ...overrides });
@@ -46,7 +46,7 @@ function fakeView(tag = "search-view", overrides: Partial<RefreshableView> = {})
 
 /** 每个测试结束后清理 makePath 挂进 document 的临时节点 */
 function cleanupPaths() {
-  document.body.querySelectorAll("div > search-view, div > chat-view").forEach(
+  document.body.querySelectorAll("div > files-view").forEach(
     (v) => v.parentElement?.remove(),
   );
 }
@@ -129,13 +129,21 @@ describe("PullToRefreshController（seam 判定）", () => {
     expect(ctrl.findView([el])).toBeNull();
   });
 
+  it("findView 对不在白名单的 view（search/chat/diary 已关闭下拉刷新）返回 null", () => {
+    // 即使元素被强行赋予 refresh 能力（如热更新残留），白名单外一律不 arm
+    for (const tag of ["search-view", "chat-view", "diary-view"]) {
+      const { el } = fakeView(tag);
+      expect(ctrl.findView([el])).toBeNull();
+    }
+  });
+
   it("isBlockedPath 拦截 dialog / 输入控件 / image-viewer / data-ptr-off", () => {
     const dialog = document.createElement("dialog");
     const textarea = document.createElement("textarea");
     const viewer = document.createElement("image-viewer");
     const off = document.createElement("div");
     off.setAttribute("data-ptr-off", "");
-    const view = document.createElement("search-view");
+    const view = document.createElement("files-view");
     expect(ctrl.isBlockedPath([dialog, view])).toBe(true);
     expect(ctrl.isBlockedPath([textarea, view])).toBe(true);
     expect(ctrl.isBlockedPath([viewer, view])).toBe(true);
@@ -151,9 +159,9 @@ describe("PullToRefreshController（seam 判定）", () => {
     const path = makePath(scroller, view);
 
     (ctrl as any)._onTouchStart(fakeTouchEvent("touchstart", 200, 300, path));
-    // 下拉 100px（阻尼后 50，超过指示器行程 44 封顶）
+    // 下拉 150px（超过 120px 触发阈值；阻尼后 75，超过指示器行程 44 封顶）
     (ctrl as any)._onTouchMove(
-      fakeTouchEvent("touchmove", 200, 400, path),
+      fakeTouchEvent("touchmove", 200, 450, path),
     );
     (ctrl as any)._onTouchEnd();
 
@@ -164,7 +172,7 @@ describe("PullToRefreshController（seam 判定）", () => {
     expect(indicator.hide).toHaveBeenCalled();
   });
 
-  it("未达阈值（touchend 拉距 < 64px）不触发 refresh", () => {
+  it("未达阈值（touchend 拉距 < 120px）不触发 refresh", () => {
     vi.spyOn(ctrl as any, "_isMobile").mockReturnValue(true);
     const { el: view, refresh } = fakeView();
     const scroller = fakeScroller();
@@ -181,7 +189,7 @@ describe("PullToRefreshController（seam 判定）", () => {
 
   it("canRefresh() === false 时手势不成立", () => {
     vi.spyOn(ctrl as any, "_isMobile").mockReturnValue(true);
-    const { el: view, refresh } = fakeView("chat-view", {
+    const { el: view, refresh } = fakeView("files-view", {
       canRefresh: () => false,
     });
     const scroller = fakeScroller();

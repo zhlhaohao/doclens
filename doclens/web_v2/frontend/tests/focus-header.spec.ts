@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fixture } from "@open-wc/testing";
 import { html } from "lit";
-import type { FocusHeader, FocusHeaderAction } from "../src/components/focus-header";
-import "../src/components/focus-header";
+import { FocusHeader } from "../src/components/focus-header";
+import type { FocusHeaderAction } from "../src/components/focus-header";
 
 describe("<focus-header> actions prop", () => {
   afterEach(() => {
@@ -66,5 +66,13 @@ describe("<focus-header> actions prop", () => {
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".menu.open")).toBeNull();
+  });
+
+  it("styles：:host 显式 z-index，保证菜单不被后序 positioned 兄弟遮盖", () => {
+    // 回归：detail-overlay 中 preview-pane（position:relative）DOM 序在
+    // focus-header 之后；backdrop-filter 已使 :host 成为层叠上下文，
+    // 缺 z-index 时菜单会被 preview-pane 整体盖住。
+    const cssText = FocusHeader.styles.cssText;
+    expect(cssText).toContain("z-index: 10");
   });
 });

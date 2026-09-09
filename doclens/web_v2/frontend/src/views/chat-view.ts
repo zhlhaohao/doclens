@@ -120,7 +120,12 @@ export class ChatView extends LitElement {
       flex: 1;
       min-height: 0;
       background: var(--cortex-view-bg);
+      /* shadow 内不受全局 border-box reset 影响，须显式声明：
+         content-box 下 .input-bar 的 max-width:820px 不含 padding(48px)，
+         输入框比 initial 态 .input-row 里的宽 48px，两态切换时跳动 */
+      box-sizing: border-box;
     }
+    *, *::before, *::after { box-sizing: border-box; }
     .initial-stack {
       display: flex;
       flex-direction: column;
@@ -247,8 +252,10 @@ export class ChatView extends LitElement {
       .focus-main .desktop-only {
         display: none;
       }
-      /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽） */
-      .input-row { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
+      /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽）；
+         initial 态 .input-row 与 focus 态 .input-bar 同步收紧，保证两态等宽 */
+      .input-row,
+      .input-bar { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
       /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
       dialog {
         width: 100vw;
@@ -286,9 +293,10 @@ export class ChatView extends LitElement {
       }
     }
     @media (min-width: 1024px) {
-      /* 桌面端：居中列布局，避免全宽拉伸 */
+      /* 桌面端：居中列布局，避免全宽拉伸。initial 与 focus 两态共用同一
+         列宽（820px），保证发送首条消息切换状态时输入框不跳动 */
       .initial-stack {
-        max-width: 760px;
+        max-width: 820px;
         margin: 0 auto;
         width: 100%;
       }
@@ -662,23 +670,6 @@ export class ChatView extends LitElement {
     this._loadSession(e.detail.session);
   }
 
-  /** 下拉刷新闸门：流式/悬置问答进行中禁止（_loadSession 会清掉流式消息）。 */
-  canRefresh(): boolean {
-    const s = store.getState().chat;
-    return !s.streaming && !s.pendingAsk;
-  }
-
-  /** 下拉刷新（移动端 pull-to-refresh）：focus 态重拉当前会话消息，
-   *  initial 态重拉历史（preview-overlay 已被 data-ptr-off 拦截）。 */
-  async refresh(): Promise<void> {
-    const s = store.getState().chat;
-    if (s.state === "focus" && s.currentSession) {
-      await this._loadSession(s.currentSession);
-      return;
-    }
-    await this._loadHistory();
-  }
-
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
     if (!saved) return;
@@ -934,13 +925,16 @@ export class ChatView extends LitElement {
       `;
     }
     const hasPreview = this.previewOpen;
-    const previewPane = (noHeader: boolean) => isPstFilePath(this.previewPath)
+    // mobile=true 时 preview-pane 渲染自带 mobile-header（返回/目录/高亮/
+    // more=字号·编辑·下载·上传），与文件/搜索 tab 移动端对齐；桌面端传
+    // false 保留常规 header。mobile 模式下 noHeader 属性被忽略，无需传。
+    const previewPane = (mobile: boolean) => isPstFilePath(this.previewPath)
       ? html`<pst-email-list
           .pstPath=${this.previewPath}
           @open-email=${this._onOpenPstEmail}>
         </pst-email-list>`
       : html`<preview-pane
-      ?noHeader=${noHeader}
+      ?mobile=${mobile}
       path=${this.previewPath}
       language=${this.previewLanguage}
       content=${this.previewContent}
@@ -1018,13 +1012,18 @@ export class ChatView extends LitElement {
       </div>
       ${hasPreview ? html`
         <div class="preview-overlay" data-ptr-off>
-          <focus-header
-            back-label="返回"
-            title=${this.previewPath}
-            @back=${this._onPreviewBack}>
-          </focus-header>
-          ${this.previewError === "NOT_INDEXED"
-            ? this._renderNotIndexedHint()
+          ${this.previewError === "NOT_INDEXED" || isPstFilePath(this.previewPath)
+            /* 未索引 / PST 邮件列表没有 preview-pane 托管头部，
+               保留 focus-header 提供返回导航 */
+            ? html`
+                <focus-header
+                  back-label="返回"
+                  title=${this.previewPath}
+                  @back=${this._onPreviewBack}>
+                </focus-header>
+                ${this.previewError === "NOT_INDEXED"
+                  ? this._renderNotIndexedHint()
+                  : previewPane(false)}`
             : previewPane(true)}
         </div>` : null}
       ${this._renderSkillDialog()}

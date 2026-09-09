@@ -370,43 +370,6 @@ export class SearchView extends LitElement {
     void this._goToPage(e.detail.page);
   };
 
-  /** 以当前 offset 重取结果页（下拉刷新用；_goToPage 同页是 no-op 不能复用）。 */
-  private async _reloadResults(): Promise<void> {
-    const s = store.getState().search;
-    if (!s.query || s.state !== "focus") return;
-    const limit = s.limit || 20;
-    this.loading = true;
-    try {
-      const res = this.searchMode === "grep"
-        ? await grepApi({ pattern: s.query, offset: s.offset, limit })
-        : await searchApi({ query: s.query, offset: s.offset, limit });
-      actions.setSearchState({
-        state: "focus",
-        query: s.query,
-        results: res.results,
-        total: res.total,
-        offset: res.offset,
-        limit,
-        source: res.source,
-      });
-    } catch (err) {
-      actions.setError(`刷新失败: ${(err as Error).message}`);
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  /** 下拉刷新（移动端 pull-to-refresh）：focus 态重取当前页结果，
-   *  initial 态重拉历史（detail-overlay 已被 data-ptr-off 拦截）。 */
-  async refresh(): Promise<void> {
-    const s = store.getState().search;
-    if (s.state === "focus" && s.query) {
-      await this._reloadResults();
-      return;
-    }
-    await this._loadHistory();
-  }
-
   private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
     await this._safeAction(async () => {
       const r = e.detail.result;
@@ -520,11 +483,6 @@ export class SearchView extends LitElement {
     const pp = this.shadowRoot?.querySelector("preview-pane") as any;
     pp?.discard?.();
     this.previewDirty = false;
-  }
-
-  private _enterPreviewEdit() {
-    const pp = this.shadowRoot?.querySelector(".detail-overlay preview-pane") as any;
-    pp?.enterEdit?.();
   }
 
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
@@ -760,23 +718,31 @@ export class SearchView extends LitElement {
       </div>
       ${detailTop ? html`
         <div class="detail-overlay" data-ptr-off>
-          <focus-header
-            back-label="结果"
-            title=${detailTop.path}
-            .actions=${this.previewWritable
-              ? [{ label: "编辑", icon: "pencil", onClick: () => this._enterPreviewEdit() }]
-              : []}
-            @back=${this._popDetail}>
-          </focus-header>
           ${this.previewError === "NOT_INDEXED"
-            ? this._renderNotIndexedHint(false)
+            ? html`
+                <focus-header
+                  back-label="结果"
+                  title=${detailTop.path}
+                  @back=${this._popDetail}>
+                </focus-header>
+                ${this._renderNotIndexedHint(false)}`
             : isPstFilePath(this.previewPath)
-              ? html`<pst-email-list
-                  .pstPath=${this.previewPath}
-                  @open-email=${this._onOpenPstEmail}>
-                </pst-email-list>`
+              ? html`
+                  <focus-header
+                    back-label="结果"
+                    title=${detailTop.path}
+                    @back=${this._popDetail}>
+                  </focus-header>
+                  <pst-email-list
+                    .pstPath=${this.previewPath}
+                    @open-email=${this._onOpenPstEmail}>
+                  </pst-email-list>`
+              /* 常规预览：移动端用 preview-pane 自带的 mobile-header
+                 （返回/目录/高亮/more=字号·编辑·下载·上传），与文件 tab
+                 移动端、桌面端头部能力对齐；不再用 focus-header + noHeader
+                 的组合（那样只剩「编辑」一个入口） */
               : html`<preview-pane
-                ?noHeader=${true}
+                ?mobile=${true}
                 path=${this.previewPath}
                 language=${this.previewLanguage}
                 content=${this.previewContent}
@@ -785,6 +751,7 @@ export class SearchView extends LitElement {
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
                 .attachments=${this.previewAttachments}
+                @back=${this._popDetail}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}

@@ -3,7 +3,7 @@ import { isCoarsePointer } from "./device";
 import type { PullRefreshIndicator } from "../components/pull-refresh-indicator";
 
 /** 下拉刷新触发阈值（px，阻尼前手势位移） */
-export const PTR_THRESHOLD = 64;
+export const PTR_THRESHOLD = 120;
 /** 下拉阻尼：指示器行程 = 手势位移 × 0.5 */
 const PTR_DAMPING = 0.5;
 /** 指示器最大行程（px，阻尼后） */
@@ -23,12 +23,9 @@ export interface RefreshableView extends HTMLElement {
   canRefresh?(): boolean;
 }
 
-/** view 宿主标签（app.ts keep-alive 常驻的五个 view） */
+/** view 宿主标签（保留下拉刷新的 view；搜索/对话/日记已关闭该能力） */
 const VIEW_TAGS = new Set([
-  "search-view",
-  "chat-view",
   "files-view",
-  "diary-view",
   "settings-view",
 ]);
 

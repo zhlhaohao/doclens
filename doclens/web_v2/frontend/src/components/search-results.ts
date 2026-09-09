@@ -10,7 +10,12 @@ export class SearchResults extends LitElement {
       gap: var(--cortex-space-4);
       flex: 0 0 auto;
       min-height: 0;
+      /* shadow 内不受全局 border-box reset 影响，须显式声明：
+         content-box 下 .list-pane 的 flex-basis 不含 padding/border，
+         面板会右溢 25px，卡片右边框被相邻预览区裁掉 */
+      box-sizing: border-box;
     }
+    *, *::before, *::after { box-sizing: border-box; }
     .list-pane {
       flex: 0 0 var(--results-pane-width, 360px);
       min-width: 280px;

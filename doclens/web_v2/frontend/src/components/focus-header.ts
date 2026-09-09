@@ -19,9 +19,14 @@ export class FocusHeader extends LitElement {
       background: rgba(255, 255, 255, 0.6);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
-      border-bottom: 1px solid transparent;
+      border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
+      /* backdrop-filter 使 :host 成为层叠上下文；须显式给 z-index，
+         否则层叠级别为 0，会被 DOM 序靠后的 position:relative 兄弟
+         （如 detail-overlay 里的 preview-pane）整体盖住——more 菜单
+         即便内部 z-index:60 也抬不出本上下文。 */
       position: relative;
+      z-index: 10;
     }
     .back {
       background: var(--cortex-surface);

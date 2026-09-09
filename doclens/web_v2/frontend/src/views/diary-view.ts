@@ -234,21 +234,6 @@ export class DiaryView extends LitElement {
     }
   }
 
-  /** 下拉刷新（移动端 pull-to-refresh）：录入提交中不干扰；
-   *  当前 tab 是 record 拉今日记录，review 拉成文日记 + 当月打点。 */
-  async refresh(): Promise<void> {
-    if (this._diary.submitting) return;
-    if (this._diary.tab === "record") {
-      await this._loadToday();
-      return;
-    }
-    const date = this._diary.reviewDate;
-    await Promise.all([
-      this._loadReview(date),
-      this._loadCalendar(formatMonth(parseLocalDate(date))),
-    ]);
-  }
-
   // ---------------------------------------------------------------- 记录页事件
 
   /** jsbridge 拍照/选图失败（权限拒绝等；用户取消不触发） */
