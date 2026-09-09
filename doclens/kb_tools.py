@@ -381,13 +381,24 @@ def _truncate_to_paragraphs(text: str, max_chars: int) -> str:
     return truncated.rstrip()
 
 
-def _extract_keyword_window(text: str, query_words: list[str], max_chars: int) -> str:
-    """从超长文本中截取以关键词为中心的窗口。
+def _extract_keyword_window(
+    text: str,
+    query_words: list[str],
+    before: int,
+    after: int,
+    max_chars: int | None = None,
+) -> str:
+    """从超长文本中截取统一锚点窗口：前 *before* 字符 + 锚点 + 后 *after* 字符。
 
     大表格/长名单类文档常只有一个巨型节点：固定取开头会漏掉中部、尾部的
     命中内容（LLM 看不到 → 误判"找不到资料"）。改为在命中密度最高的位置
     开窗口；窗口外内容以省略标记提示。无命中时回退为开头截断。
+    max_chars 为总预算上限兜底（窗口不超过它），None 时取 before+after。
+
+    与 grep 的 _regex_led_snippet 同口径（统一窗口模型）。
     """
+    if max_chars is None:
+        max_chars = before + after
     if len(text) <= max_chars:
         return text
 
@@ -427,23 +438,22 @@ def _extract_keyword_window(text: str, query_words: list[str], max_chars: int) -
             best_count = count
             best_start = h
 
-    # 窗口向锚点前回退少量上下文（表头/上文更有用），并避免切断词语
-    context_back = min(max_chars // 4, 200)
+    # 窗口向锚点前回退上下文（表头/上文更有用），并避免切断词语
+    context_back = min(before, max_chars // 2)
     win_start = max(0, best_start - context_back)
 
     # 窗口不在开头时，预留预算补带文档开头（标题/表头），
     # 否则大表格中部/尾部的行缺列名，LLM 无法解读
     head = ""
     if win_start > 0:
-        head_budget = min(200, max_chars // 4)
+        head_budget = min(200, before)
         head_raw = text[:head_budget]
         nl = head_raw.rfind("\n")
         head = (head_raw[:nl] if nl > 40 else head_raw).rstrip()
 
-    win_budget = max_chars - (len(head) + 16 if head else 0)
-    win_end = min(len(text), win_start + win_budget)
-    win_start = max(0, win_end - win_budget)
-
+    # 统一窗口：终点 = 锚点 + after（head 只补表头不挤占后文预算），
+    # 总宽仍受 max_chars 兜底
+    win_end = min(len(text), best_start + after, win_start + max_chars)
     excerpt = text[win_start:win_end].rstrip()
     prefix = f"{head}\n…（中部略）\n" if head else ""
     suffix = "\n…（后文略）" if win_end < len(text) else ""
@@ -460,11 +470,14 @@ def _format_kb_results(
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
     max_total_chars: int = MAX_TOTAL_CHARS,
     on_miss: Optional[Callable[[str], str]] = None,
+    context_before: int = 200,
+    context_after: int = 600,
 ) -> str:
     """格式化 FTS 搜索结果为 XML 结构化文本，便于 LLM 区分元信息和原始内容。
 
     on_miss: path_map 未命中 doc_id 时的兜底解析（如 IndexManager.resolve_doc_path，
     应对后台重索引导致的 doc_id 漂移），None 时未命中即空 path。
+    context_before/after: 统一窗口模型的锚点前/后字符数（来自 config）。
     """
     total_hits = len(scored_results)
     display = scored_results[:max_results]
@@ -484,7 +497,10 @@ def _format_kb_results(
         doc_title = doc_title_map.get(doc_id, doc_id)
         hierarchy = _build_hierarchy_path(node, doc_id, doc_nodes_map, doc_title)
 
-        context = _extract_keyword_window(node_text, query_words, max_context_chars_per_result)
+        context = _extract_keyword_window(
+            node_text, query_words, context_before, context_after,
+            max_chars=max_context_chars_per_result,
+        )
 
         entry = f'<result index="{shown + 1}" score="{int(composite * 100)}%" matches="{matched}/{len(query_words)}">\n'
         entry += "  <meta>\n"
@@ -520,6 +536,8 @@ def _format_ripgrep_results(
     max_results: int,
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
     on_miss: Optional[Callable[[str], str]] = None,
+    context_before: int = 200,
+    context_after: int = 600,
 ) -> str:
     """格式化 ripgrep 降级搜索结果。on_miss 同 _format_kb_results。"""
     display = results[:max_results]
@@ -530,7 +548,10 @@ def _format_ripgrep_results(
         node_text = node.get("text", "") or ""
         path = path_map.get(doc_id) or (on_miss(doc_id) if on_miss else "")
 
-        context = _extract_keyword_window(node_text, query_words, max_context_chars_per_result)
+        context = _extract_keyword_window(
+            node_text, query_words, context_before, context_after,
+            max_chars=max_context_chars_per_result,
+        )
 
         entry = (
             f"\n=== 结果 {i} [匹配: {matched}/{len(query_words)} 词] ===\n"
@@ -1203,6 +1224,8 @@ def _handle_search_kb(
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
         on_miss=idx_manager.resolve_doc_path,
+        context_before=idx_manager.search_context_before,
+        context_after=idx_manager.search_context_after,
     )
 
 
@@ -1278,7 +1301,10 @@ def _handle_search_kb_v2(
             )
         return _format_ripgrep_results(
             filtered, query_words, idx_manager.path_map, max_results,
+            max_context_chars_per_result=idx_manager.max_context_chars_per_result,
             on_miss=idx_manager.resolve_doc_path,
+            context_before=idx_manager.search_context_before,
+            context_after=idx_manager.search_context_after,
         )
 
     doc_nodes_map: dict[str, list[dict]] = {}
@@ -1362,6 +1388,8 @@ def _handle_search_kb_v2(
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_chars=idx_manager.max_total_chars,
         on_miss=idx_manager.resolve_doc_path,
+        context_before=idx_manager.search_context_before,
+        context_after=idx_manager.search_context_after,
     )
 
 def _handle_not_query(

@@ -36,6 +36,8 @@ _SEARCH_FIELD_MAP: dict[str, str] = {
     "max_results": "CORTEX_MAX_RESULTS",
     "min_score_threshold": "CORTEX_MIN_SCORE_THRESHOLD",
     "max_span": "CORTEX_MAX_SPAN",
+    "search_context_before": "CORTEX_SEARCH_CONTEXT_BEFORE",
+    "search_context_after": "CORTEX_SEARCH_CONTEXT_AFTER",
     "weight_keyword_match": "CORTEX_WEIGHT_KEYWORD_MATCH",
     "weight_file_name_match": "CORTEX_WEIGHT_FILE_NAME_MATCH",
     "weight_fts_score": "CORTEX_WEIGHT_FTS_SCORE",

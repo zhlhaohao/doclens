@@ -18,6 +18,8 @@ function emptyForm(): FormState {
     max_results: "50",
     min_score_threshold: "0.3",
     max_span: "50",
+    search_context_before: "200",
+    search_context_after: "600",
     weight_keyword_match: "4.0",
     weight_file_name_match: "2.0",
     weight_fts_score: "1.0",
@@ -31,6 +33,8 @@ interface FormState {
   max_results: string;
   min_score_threshold: string;
   max_span: string;
+  search_context_before: string;
+  search_context_after: string;
   weight_keyword_match: string;
   weight_file_name_match: string;
   weight_fts_score: string;
@@ -49,6 +53,8 @@ const FIELDS: { key: keyof Omit<FormState, "name">; label: string; hint: string;
   { key: "max_results", label: "最大结果数", hint: "search 工具最多返回多少篇文档", min: 1, max: 500, step: 1 },
   { key: "min_score_threshold", label: "评分阈值", hint: "低于该综合分的结果被过滤，0 = 不过滤", min: 0, max: 1, step: 0.05 },
   { key: "max_span", label: "关键词集中度", hint: "邻近度统计的关键词最大字符跨度", min: 1, max: 100, step: 1 },
+  { key: "search_context_before", label: "片段前文字符数", hint: "结果片段锚点前的上下文字符（grep 与 search 统一窗口）", min: 0, max: 2000, step: 10 },
+  { key: "search_context_after", label: "片段后文字符数", hint: "结果片段锚点后的上下文字符（grep 正则自声明跨度时另计）", min: 0, max: 4000, step: 10 },
   { key: "weight_keyword_match", label: "关键词权重", hint: "命中的关键词越多排越前", min: 0, max: 10, step: 0.1 },
   { key: "weight_file_name_match", label: "文件名权重", hint: "文件名含关键词的文档排更前", min: 0, max: 10, step: 0.1 },
   { key: "weight_fts_score", label: "FTS 分权重", hint: "偏向传统 BM25 全文检索排序", min: 0, max: 10, step: 0.1 },
@@ -333,6 +339,8 @@ export class SearchPresetsSection extends LitElement {
         max_results: p.max_results != null ? String(p.max_results) : "",
         min_score_threshold: p.min_score_threshold != null ? String(p.min_score_threshold) : "",
         max_span: p.max_span != null ? String(p.max_span) : "",
+        search_context_before: p.search_context_before != null ? String(p.search_context_before) : "",
+        search_context_after: p.search_context_after != null ? String(p.search_context_after) : "",
         weight_keyword_match: p.weight_keyword_match != null ? String(p.weight_keyword_match) : "",
         weight_file_name_match: p.weight_file_name_match != null ? String(p.weight_file_name_match) : "",
         weight_fts_score: p.weight_fts_score != null ? String(p.weight_fts_score) : "",
@@ -435,6 +443,7 @@ export class SearchPresetsSection extends LitElement {
     const parts = [
       `结果≤${p.max_results ?? "?"}`,
       `阈值${p.min_score_threshold ?? "?"}`,
+      `窗口±${p.search_context_before ?? "?"}/${p.search_context_after ?? "?"}`,
       `权[${p.weight_keyword_match ?? "?"}/${p.weight_file_name_match ?? "?"}/${p.weight_fts_score ?? "?"}/${p.weight_title_match ?? "?"}/${p.weight_proximity_match ?? "?"}]`,
     ];
     return parts.join(" · ");

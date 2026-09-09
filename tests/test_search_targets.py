@@ -104,6 +104,9 @@ def _fake_idx(kb: Path, path_map: dict[str, str]):
         path_map=path_map,
         rg_context_before=2,
         rg_context_after=2,
+        search_context_before=200,
+        search_context_after=600,
+        grep_match_max_chars=2000,
         grep_score_threshold=0.0,
         grep_max_results=50,
         like_search=lambda query, max_results=50, use_regex=True: [
@@ -146,6 +149,8 @@ class TestSearchKbHandlePaths:
             scoring_weights={"keyword_match_ratio": 1.0},
             min_score_threshold=0.0,
             max_context_chars_per_result=500,
+            search_context_before=200,
+            search_context_after=600,
             max_total_chars=8000,
             path_map=path_map,
             search=lambda query, max_results: (

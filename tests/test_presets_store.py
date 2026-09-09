@@ -166,6 +166,8 @@ def test_materialize_search():
         "max_results": 30,
         "min_score_threshold": 0.5,
         "max_span": 40,
+        "search_context_before": 150,
+        "search_context_after": 450,
         "weight_keyword_match": 5.0,
         "weight_file_name_match": 2.0,
         "weight_fts_score": 1.0,
@@ -174,6 +176,8 @@ def test_materialize_search():
     })
     assert out["CORTEX_MAX_RESULTS"] == "30"
     assert out["CORTEX_MIN_SCORE_THRESHOLD"] == "0.5"
+    assert out["CORTEX_SEARCH_CONTEXT_BEFORE"] == "150"
+    assert out["CORTEX_SEARCH_CONTEXT_AFTER"] == "450"
     assert out["CORTEX_WEIGHT_KEYWORD_MATCH"] == "5.0"
     assert out["CORTEX_ACTIVE_SEARCH_PRESET"] == "精准"
     assert "PLANIFY_PROTOCOL" not in out  # search 不碰模型键

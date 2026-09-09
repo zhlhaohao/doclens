@@ -147,11 +147,16 @@ def _format_agent_output(
     total_terms: int,
     query_words: list[str],
     on_miss: Optional[Callable[[str], str]] = None,
+    context_before: int = SNIPPET_BASE_CHARS,
+    context_after: int = 2 * SNIPPET_BASE_CHARS,
+    match_max: int = SNIPPET_MATCH_MAX_CHARS,
 ) -> str:
     """将搜索结果格式化为结构化 XML，与 search_kb 输出格式对齐。
 
     on_miss: path_map 未命中 doc_id 时的兜底解析（IndexManager.resolve_doc_path，
     应对后台重索引导致的 doc_id 漂移）；None 时未命中输出 doc_id 本身（旧行为）。
+    context_before/after: 统一窗口模型的锚点前/后字符数（来自 config）。
+    match_max: 匹配体硬上限（config.grep_match_max_chars，防贪婪正则）。
 
     格式:
         Found N results in M files:
@@ -165,7 +170,11 @@ def _format_agent_output(
 
         Paths matched: path1, path2
     """
-    def _resolve(doc_id: str) -> str:
+    def _resolve(doc_id: str, node: dict | None = None) -> str:
+        # 未索引文件的合成节点自带 source_path（伪 doc_id 查 path_map/on_miss
+        # 都会落空，直接输出伪 id 对引用无意义）
+        if node and node.get("source_path"):
+            return node["source_path"]
         return path_map.get(doc_id) or (on_miss(doc_id) if on_miss else doc_id)
 
     if not content_results and not path_results:
@@ -179,7 +188,7 @@ def _format_agent_output(
     output_lines: list[str] = []
 
     if content_results:
-        unique_files = len({_resolve(doc_id) for doc_id, _, _, _, _ in content_results})
+        unique_files = len({_resolve(doc_id, node) for doc_id, node, _, _, _ in content_results})
         output_lines.append(f"Found {len(content_results)} results in {unique_files} files:")
         output_lines.append("Use read_document tool to read full content: path=<path value>.")
 
@@ -187,12 +196,12 @@ def _format_agent_output(
         shown = 0
 
         for doc_id, node, matched, _prox, _fts in content_results:
-            path = _resolve(doc_id)
+            path = _resolve(doc_id, node)
             line_start = node.get("line_start")
             full_text = node.get("text", "") or ""
 
             snippet = (
-                _regex_led_snippet(full_text, regex_terms)
+                _regex_led_snippet(full_text, regex_terms, before=context_before, after=context_after, match_max=match_max)
                 if regex_terms
                 else None
             )
@@ -231,15 +240,16 @@ def _format_agent_output(
 def _regex_led_snippet(
     text: str,
     terms: list[str],
-    size: int = SNIPPET_BASE_CHARS,
+    before: int = SNIPPET_BASE_CHARS,
+    after: int = 2 * SNIPPET_BASE_CHARS,
     match_max: int = SNIPPET_MATCH_MAX_CHARS,
 ) -> str | None:
-    """对全文跑词项正则，返回以首个命中体为先导的窗口（正则不合法时返回 None）。
+    """对全文跑词项正则，返回统一锚点窗口（正则不合法时返回 None）。
 
-    grep 的词项来自正则按顶层 | 切分，如 ``第29题[\\s\\S]{0,300}``；
-    直接把词项当字面子串去选行永远选不中，必须按正则匹配。
-    预算口径与 treesearch.fts._extract_match_snippet 一致：
-    匹配体（capped）+ 尾随上下文 size。
+    统一窗口模型（与 search 的 _extract_keyword_window 同口径）：
+    ``[锚点前 before 字符] + [命中体(≤match_max)] + [锚点后 after 字符]``。
+    正则自声明跨度时（如 ``第29题[\\s\\S]{0,300}``）命中体本身即跨度，
+    前后窗口再补上下文；纯字面词项退化为关键词窗口。
     """
     compiled = []
     for term in terms:
@@ -252,8 +262,9 @@ def _regex_led_snippet(
         if not m:
             continue
         capped = min(m.end() - m.start(), match_max)
-        end = min(len(text), m.start() + capped + size)
-        return text[m.start():end]
+        start = max(0, m.start() - before)
+        end = min(len(text), m.start() + capped + after)
+        return text[start:end]
     return None
 
 
@@ -294,6 +305,9 @@ def _handle_grep(
         total_terms=len(result.query_words),
         query_words=result.query_words,
         on_miss=idx.resolve_doc_path,
+        context_before=idx.search_context_before,
+        context_after=idx.search_context_after,
+        match_max=idx.grep_match_max_chars,
     )
 
     if not output:

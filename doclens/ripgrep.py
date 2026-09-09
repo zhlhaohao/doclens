@@ -1,9 +1,12 @@
 """统一的 ripgrep 降级搜索逻辑"""
 
+import logging
 import os
 import re
 from dataclasses import dataclass
 from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 
 def build_rg_paths(
@@ -149,6 +152,7 @@ def rg_fallback_search(
                 "title": title,
                 "text": text,
                 "line_start": matched_line,
+                "source_path": display_path,
             }
             results.append((doc_id, synthetic_node, len(query_words), 0, 0.0))
 
@@ -242,6 +246,77 @@ def _count_term_hits(text: str, terms: list[str]) -> int:
     return count
 
 
+def _discover_disk_files(search_path: str, allowed_exts: set[str]) -> list[str]:
+    """递归发现搜索根目录下的可解析文件（含未索引的）。
+
+    复用 treesearch.pathutil.resolve_paths —— 与索引链路同一套忽略规则
+    （DEFAULT_IGNORE_DIRS + .gitignore + 扩展名白名单 + 跳过影子 MD），
+    保证 rg 兜底覆盖的磁盘范围与索引器眼中的"应索引范围"一致。
+    """
+    from treesearch.pathutil import resolve_paths
+
+    try:
+        return resolve_paths([search_path], allowed_extensions=allowed_exts)
+    except (OSError, ValueError) as e:
+        logger.warning("disk file discovery failed for %s: %s", search_path, e)
+        return []
+
+
+def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:
+    """构建 rg 兜底用的 path_map：索引内文档 + 磁盘上未索引的文件。
+
+    未索引文件以文件名（去扩展名）为伪 doc_id 入表，rg 命中后由
+    rg_fallback_search 的合成节点逻辑产出结果（此时 reverse_map 查不到
+    该路径的已索引 doc_id，自然落到 os.path.splitext 分支）。
+    """
+    from doclens.index_manager import SUPPORTED_FORMATS
+
+    supported_exts = set(SUPPORTED_FORMATS.keys())
+    if getattr(idx, "allowed_source_types", None):
+        from treesearch.pathutil import get_allowed_extensions_for_source_types
+        type_exts = get_allowed_extensions_for_source_types(idx.allowed_source_types)
+        if type_exts is not None:
+            supported_exts = supported_exts & type_exts
+
+    indexed = {os.path.abspath(p) for p in path_map.values()}
+    merged = dict(path_map)
+    for fp in _discover_disk_files(idx.search_path, supported_exts):
+        if os.path.abspath(fp) in indexed:
+            continue
+        pseudo_id = os.path.splitext(os.path.basename(fp))[0]
+        merged.setdefault(pseudo_id, fp)
+    return merged
+
+
+def _fulltext_for_node(idx, like_item: dict) -> str:
+    """like_search 命中节点回填全文（structure_json 反序列化）。
+
+    nodes.summary 是索引期截断的窗口（长节点仅头尾摘要），锚点前文可能
+    已在截断时丢失。按 node_id 从 structure_json 找回完整 text；失败时
+    退回 summary（旧行为）。
+    """
+    summary = like_item.get("summary", "") or ""
+    node_id = like_item.get("node_id", "")
+    doc_id = like_item.get("doc_id", "")
+    if not node_id or not doc_id:
+        return summary
+    try:
+        from treesearch.fts import FTS5Index
+
+        fts = FTS5Index(db_path=idx.index_path)
+        try:
+            doc = fts.load_document(doc_id)
+        finally:
+            fts.close()
+        if doc is None:
+            return summary
+        node = doc.get_node_by_id(node_id)
+        return (node or {}).get("text", "") or summary
+    except Exception as e:  # noqa: BLE001
+        logger.warning("fulltext backfill failed for %s/%s: %s", doc_id, node_id, e)
+        return summary
+
+
 def execute_grep_search(
     idx,
     query: str,
@@ -252,7 +327,8 @@ def execute_grep_search(
 
     搜索流程:
     1. like_search(use_regex=True) — SQLite REGEXP 搜索
-    2. 若无结果: rg_fallback_search — ripgrep 降级搜索
+    2. 若无结果: rg_fallback_search — ripgrep 降级搜索（覆盖磁盘上
+       未索引文件，与 grep 工具"搜索所有文件（包括未索引的）"的承诺一致）
     3. search_paths_by_regex — 路径正则匹配
     4. 对内容结果评分排序（按词项命中数降序）
 
@@ -281,16 +357,18 @@ def execute_grep_search(
     if like_results:
         if allowed is not None:
             like_results = [r for r in like_results if r.get("doc_id", "") in allowed]
-        # like_search 返回 dict 列表，转为 tuple 格式
+        # like_search 返回 dict 列表，转为 tuple 格式；summary 可能是索引期
+        # 截断的 300 字符窗口（锚点前文丢失），回填 structure_json 中的节点全文
         content_results = [
-            (item["doc_id"], {"title": item.get("title", ""), "text": item.get("summary", "")}, 1, 0, item.get("fts_score", 0.0))
+            (item["doc_id"], {"title": item.get("title", ""), "text": _fulltext_for_node(idx, item)}, 1, 0, item.get("fts_score", 0.0))
             for item in like_results
         ]
     else:
-        # 步骤 2: ripgrep 降级
+        # 步骤 2: ripgrep 降级（无目标过滤时合并磁盘未索引文件）
+        rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
         content_results = rg_fallback_search(
             query,
-            path_map,
+            rg_path_map,
             {},
             query_words,
             context_before=idx.rg_context_before,

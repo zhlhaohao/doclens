@@ -1206,7 +1206,7 @@ class FTS5Index:
                         continue
                     seen.add(key)
                     # 提取包含匹配关键词的片段
-                    snippet = _extract_match_snippet(text, query, use_regex, size=300)
+                    snippet = _extract_match_snippet(text, query, use_regex, size=SNIPPET_BASE_CHARS)
                     results.append({
                         "node_id": nid,
                         "doc_id": doc_id,

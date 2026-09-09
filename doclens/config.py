@@ -83,6 +83,17 @@ class CortexConfig(BaseSettings):
     # KB 工具字符限制（影响 LLM token 消耗）
     max_context_chars_per_result: int = Field(default=800)
     max_total_chars: int = Field(default=10000)
+    # 搜索结果片段统一窗口：锚点前/后字符数（grep 与 search 同口径；
+    # grep 正则自声明跨度时保留跨度语义，另加前后窗口）
+    search_context_before: int = Field(
+        default=200, description="搜索结果片段：锚点前字符数"
+    )
+    search_context_after: int = Field(
+        default=600, description="搜索结果片段：锚点后字符数"
+    )
+    # grep 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果。
+    # 高级项，仅 env 可调，不在设置页/预设中暴露。
+    grep_match_max_chars: int = Field(default=2000)
     # read_document 单次输出词数预算（词：CJK 每字一词，其余按空白切分）
     max_read_words: int = Field(default=4000)
 

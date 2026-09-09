@@ -27,7 +27,9 @@ router = APIRouter()
 _MAX_FETCH = 1000
 
 # snippet 按字符截断的兜底上限（防止单行超长节点把 snippet 撑爆）。
-_SNIPPET_MAX_CHARS = 300
+# 与统一窗口模型对齐：锚点前 + 后（CORTEX_SEARCH_CONTEXT_BEFORE/AFTER），
+# 由 endpoint 从 idx 读取后传入 _make_snippet。
+_SNIPPET_MAX_CHARS = 800
 
 
 def _truncate_snippet_by_lines(text: str, max_lines: int) -> str:
@@ -67,7 +69,7 @@ def _compose_pdf_snippet(text: str, title: str, max_lines: int) -> str:
          搜索路径原先泄漏，卡片直接显示 ``[PAGE 3]`` 这种标记。
 
     body 行数受 max_lines 控制；heading 行额外附加，不挤占正文配额。
-    最后按 _SNIPPET_MAX_CHARS 字符兜底截断。
+    （字符兜底由调用方 _make_snippet 统一处理。）
     """
     body = _strip_leading_title(text, title)
     body = "\n".join(
@@ -78,20 +80,21 @@ def _compose_pdf_snippet(text: str, title: str, max_lines: int) -> str:
     if not body:
         return f"# {title}" if title else ""
     if not title:
-        return body[:_SNIPPET_MAX_CHARS]
-    return f"# {title}\n\n{body}"[:_SNIPPET_MAX_CHARS]
+        return body
+    return f"# {title}\n\n{body}"
 
 
-def _make_snippet(text: str, title: str, path: str, max_lines: int) -> str:
+def _make_snippet(text: str, title: str, path: str, max_lines: int, max_chars: int = _SNIPPET_MAX_CHARS) -> str:
     """合成 SearchResult.snippet。
 
     PDF 走 _compose_pdf_snippet（结构化合成 + 清洗 [PAGE N]/首行重复）；
     其他类型保持裸 node.text —— md/docx 等的 node.text 本身已含 markdown 语法，
     直接 marked.parse 即可正确渲染，无需额外处理。
+    max_chars 为字符兜底上限（统一窗口模型：锚点前+后）。
     """
     if _is_pdf_path(path):
-        return _compose_pdf_snippet(text, title, max_lines)
-    return _truncate_snippet_by_lines(text, max_lines)[:_SNIPPET_MAX_CHARS]
+        return _compose_pdf_snippet(text, title, max_lines)[:max_chars]
+    return _truncate_snippet_by_lines(text, max_lines)[:max_chars]
 
 
 def _format_scored_results(
@@ -99,10 +102,12 @@ def _format_scored_results(
     path_map: dict,
     search_path: str,
     max_context_lines: int,
+    max_chars: int = _SNIPPET_MAX_CHARS,
 ) -> list[SearchResult]:
     """把 score_and_rank 的 ScoreResult 转成完整 SearchResult 列表（不切片）。
 
     切片由调用方（endpoint）按 offset/limit 处理。
+    max_chars 为 snippet 字符兜底（统一窗口模型：锚点前+后）。
 
     三个分支：
       - source="fts":     result.results = [(composite, (doc_id, node, matched, prox, fts))]
@@ -116,7 +121,7 @@ def _format_scored_results(
             path = resolve_preview_path(doc_id, path_map, search_path)
             text = node.get("text", "") or ""
             title = node.get("title", "") or ""
-            snippet = _make_snippet(text, title, path, max_context_lines)
+            snippet = _make_snippet(text, title, path, max_context_lines, max_chars)
             out.append(SearchResult(
                 path=path,
                 snippet=snippet,
@@ -131,7 +136,7 @@ def _format_scored_results(
             path = resolve_preview_path(doc_key, path_map, search_path)
             text = item.get("summary", "") or ""
             title = item.get("title", "") or ""
-            snippet = _make_snippet(text, title, path, max_context_lines)
+            snippet = _make_snippet(text, title, path, max_context_lines, max_chars)
             out.append(SearchResult(
                 path=path,
                 snippet=snippet,
@@ -145,7 +150,7 @@ def _format_scored_results(
             path = resolve_preview_path(doc_id, path_map, search_path)
             text = node.get("text", "") or ""
             title = node.get("title", "") or ""
-            snippet = _make_snippet(text, title, path, max_context_lines)
+            snippet = _make_snippet(text, title, path, max_context_lines, max_chars)
             out.append(SearchResult(
                 path=path,
                 snippet=snippet,
@@ -193,7 +198,11 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    all_results = _format_scored_results(result, idx.path_map, idx.search_path, idx.max_context_lines)
+    # snippet 字符兜底 = 统一窗口模型（锚点前 + 后），与工具层同口径
+    snippet_max = idx.search_context_before + idx.search_context_after
+    all_results = _format_scored_results(
+        result, idx.path_map, idx.search_path, idx.max_context_lines, snippet_max
+    )
     total = len(all_results)
     # offset 越界兜底：clamp 到最后一页的起点
     safe_offset = min(req.offset, max(0, total - 1)) if total > 0 else 0

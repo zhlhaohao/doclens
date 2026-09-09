@@ -26,6 +26,7 @@ _FIELDS = (
     "protocol", "base_url", "model_id", "api_key", "context_window", "max_tokens",
     # 搜索调优（search）
     "max_results", "min_score_threshold", "max_span",
+    "search_context_before", "search_context_after",
     "weight_keyword_match", "weight_file_name_match", "weight_fts_score",
     "weight_title_match", "weight_proximity_match",
 )

@@ -45,6 +45,14 @@ class PresetCreate(BaseModel):
     max_results: Optional[int] = Field(default=None, ge=1, le=500)
     min_score_threshold: Optional[float] = Field(default=None, ge=0, le=1)
     max_span: Optional[int] = Field(default=None, ge=1)
+    search_context_before: Optional[int] = Field(
+        default=None, ge=0, le=2000,
+        description="搜索结果片段：锚点前字符数（grep 与 search 统一窗口）",
+    )
+    search_context_after: Optional[int] = Field(
+        default=None, ge=0, le=4000,
+        description="搜索结果片段：锚点后字符数（grep 与 search 统一窗口）",
+    )
     weight_keyword_match: Optional[float] = None
     weight_file_name_match: Optional[float] = None
     weight_fts_score: Optional[float] = None
@@ -69,6 +77,8 @@ class PresetUpdate(BaseModel):
     max_results: Optional[int] = Field(default=None, ge=1, le=500)
     min_score_threshold: Optional[float] = Field(default=None, ge=0, le=1)
     max_span: Optional[int] = Field(default=None, ge=1)
+    search_context_before: Optional[int] = Field(default=None, ge=0, le=2000)
+    search_context_after: Optional[int] = Field(default=None, ge=0, le=4000)
     weight_keyword_match: Optional[float] = None
     weight_file_name_match: Optional[float] = None
     weight_fts_score: Optional[float] = None
@@ -93,6 +103,8 @@ class Preset(BaseModel):
     max_results: Optional[int] = None
     min_score_threshold: Optional[float] = None
     max_span: Optional[int] = None
+    search_context_before: Optional[int] = None
+    search_context_after: Optional[int] = None
     weight_keyword_match: Optional[float] = None
     weight_file_name_match: Optional[float] = None
     weight_fts_score: Optional[float] = None

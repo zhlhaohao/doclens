@@ -20,6 +20,8 @@ export interface Preset {
   max_results?: number | null;
   min_score_threshold?: number | null;
   max_span?: number | null;
+  search_context_before?: number | null;
+  search_context_after?: number | null;
   weight_keyword_match?: number | null;
   weight_file_name_match?: number | null;
   weight_fts_score?: number | null;
@@ -66,6 +68,8 @@ export interface NewPresetInput {
   max_results?: number | null;
   min_score_threshold?: number | null;
   max_span?: number | null;
+  search_context_before?: number | null;
+  search_context_after?: number | null;
   weight_keyword_match?: number | null;
   weight_file_name_match?: number | null;
   weight_fts_score?: number | null;
