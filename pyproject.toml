@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doclens"
-version = "1.2.5"
+version = "1.2.6"
 description = "Structure-aware document retrieval. FTS5/BM25 keyword matching over document trees."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -52,7 +52,7 @@ dependencies = [
     # AI Agent 框架经 PyPI 分发（import 名 planify）——发行版不再内嵌源码；
     # 开发态用 `pip install -e ./planify` 以本地源码覆盖（见 CLAUDE.md 安装节）。
     # anthropic/openai/httpx/borax 均为其传递依赖，doclens 零直接使用
-    "planify>=1.2.1",
+    "planify>=1.2.2",
     # Background file-system watcher (TUI live reindex)
     "watchdog>=3.0",
     # 日记照片上传压缩（1600px/q80 WebP，ADR-0007；doclens/diary.py 直接使用）
