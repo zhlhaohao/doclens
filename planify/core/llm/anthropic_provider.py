@@ -7,12 +7,31 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any, AsyncIterator, Iterator
 
-import httpx
 from anthropic import Anthropic, AsyncAnthropic
 
 from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolResultBlock, ToolUseBlock
+
+
+def _sdk_httpx() -> Any:
+    """SDK 内部使用的 httpx 模块。
+
+    anthropic SDK ≥1.4 已迁移到 httpx2（传入旧 httpx.Client 会被拒绝），
+    旧版仍用 httpx——探测 SDK 自身 import 的模块，两代 SDK 兼容。
+    """
+    sdk = sys.modules.get("anthropic._base_client")
+    if sdk is not None and getattr(sdk, "httpx", None) is not None:
+        return sdk.httpx  # 旧 SDK：`import httpx` 留在模块属性上
+    try:
+        import httpx2
+
+        return httpx2
+    except ImportError:
+        import httpx
+
+        return httpx
 
 
 class AnthropicProvider:
@@ -26,6 +45,7 @@ class AnthropicProvider:
         model: str,
     ) -> None:
         # 禁用 SSL 验证以适配自签名证书环境（与旧 init_anthropic_client 一致）
+        httpx = _sdk_httpx()
         http_client = httpx.Client(verify=False)
         kwargs: dict[str, Any] = {"api_key": api_key, "http_client": http_client}
         if base_url:
@@ -39,6 +59,7 @@ class AnthropicProvider:
     def _ensure_async_client(self) -> AsyncAnthropic:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
         if self._aclient is None:
+            httpx = _sdk_httpx()
             http_client = httpx.AsyncClient(verify=False)
             kwargs: dict[str, Any] = {"api_key": self.api_key, "http_client": http_client}
             if self.base_url:

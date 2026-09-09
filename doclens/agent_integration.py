@@ -237,7 +237,21 @@ class CortexAgent:
 
         kb_config = CortexConfig.load()
         self.idx = IndexManager(kb_config)
-        self.idx.load_or_build_index()
+        # GUI lifespan 内初始化 agent 时事件循环已运行，TreeSearch.index()
+        # 会拒绝执行（见 deps.get_index_manager 同因）——子线程构建规避
+        _init_err: list = []
+
+        def _build_index():
+            try:
+                self.idx.load_or_build_index()
+            except Exception as e:  # noqa: BLE001
+                _init_err.append(e)
+
+        _t = threading.Thread(target=_build_index, daemon=True)
+        _t.start()
+        _t.join()
+        if _init_err:
+            raise _init_err[0]
         # 对话模型单次输出上限：主代理 StreamingConfig 与子代理共用
         _max_tokens = kb_config.planify_max_tokens
 
