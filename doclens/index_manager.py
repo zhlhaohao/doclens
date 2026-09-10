@@ -217,7 +217,12 @@ class IndexManager:
             return 0
 
     def indexed_source_paths(self) -> list[str]:
-        """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。"""
+        """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。
+
+        ⚠️ 全表返回（O(库内文档数)）——50 万级语料上单次调用秒级、每次
+        请求调用会拖垮 API。目录页/单文件场景请用 indexed_paths_under()。
+        仅保留给 /files/documents（自身就是全量语义）与低频管理场景。
+        """
         try:
             from treesearch.fts import FTS5Index
             fts = FTS5Index(db_path=self.index_path)
@@ -228,6 +233,59 @@ class IndexManager:
         except Exception as e:  # noqa: BLE001
             logger.debug("indexed_source_paths failed: %s", e)
             return []
+
+    def indexed_paths_under(self, dir_abs_path: str) -> set[str]:
+        """某目录（含子目录）下已索引文档的绝对路径集合（索引化前缀查询）。
+
+        LIKE 'dir%' 走 idx_documents_source_path 索引：50 万文档库上
+        DB 查询 ~0.4s，但返回集合仍达全子树规模——目录页请改用
+        is_path_indexed()（逐条目常数时间探测，不在 Python 侧物化集合）。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.search_source_paths_under(dir_abs_path)
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("indexed_paths_under failed: %s", e)
+            return set()
+
+    def is_path_indexed(self, abs_path: str, is_dir: bool = False) -> bool:
+        """单个路径是否已索引（索引化探测）。
+
+        目录：前缀 EXISTS（子树里有任一文档即 True）；文件：精确匹配。
+        ⚠️ 每次调用开关一个 DB 连接 + 一次索引范围扫（9.4GB 库上目录前缀
+        ~0.1s）——目录页批量判定请用 indexed_children_of（单查合并）。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.has_docs_under(abs_path) if is_dir else fts.has_doc_at(abs_path)
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("is_path_indexed(%s) failed: %s", abs_path, e)
+            return False
+
+    def indexed_children_of(self, dir_abs_path: str) -> set[str]:
+        """目录的直接子项中含已索引文档的子项名集合（单次前缀查询）。
+
+        目录页一次调用替代逐条目探测：81 条目 27s → 0.3s（50 万文档库）。
+        子项名不含路径；文件 = 直接子文件已索引，子目录 = 其子树含文档。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.indexed_children_of(dir_abs_path)
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("indexed_children_of(%s) failed: %s", dir_abs_path, e)
+            return set()
 
     @property
     def scoring_weights(self) -> dict:

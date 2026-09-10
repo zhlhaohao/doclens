@@ -4,6 +4,7 @@
 路径安全 + 点文件保护统一走 path_safety 模块。
 """
 import logging
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,46 +63,49 @@ def _posix_rel(full: Path, base: Path) -> str:
 
 
 def _has_child_dirs(full: Path, base: Path) -> bool:
-    """目录是否包含至少一个非受保护的子目录（向前看一层，用于树形控件的箭头显示）。"""
+    """目录是否包含至少一个非受保护的子目录（向前看一层，用于树形控件的箭头显示）。
+
+    os.scandir 读目录项自带的类型信息（零额外 stat）——pathlib 的
+    iterdir().is_dir() 每条一次 stat，50 万文件大目录上一层扫描从
+    ~0.2s/目录恶化到分钟级（ADR-0018 后续修复实测 81 目录 17.7s → <0.5s）。
+    """
     try:
-        for child in full.iterdir():
-            if child.is_dir() and not is_protected(child, base):
-                return True
+        with os.scandir(full) as it:
+            for entry in it:
+                try:
+                    if entry.is_dir() and not is_protected(Path(entry.path), base):
+                        return True
+                except OSError:
+                    continue
     except (PermissionError, OSError):
         return False
     return False
 
 
-def _build_entry(full: Path, base: Path, indexed_paths: set) -> Entry:
+def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = None,
+                 idx: IndexManager | None = None) -> Entry:
     stat = full.stat()
     rel = _posix_rel(full, base)
     is_dir = full.is_dir()
     has_child_dirs = _has_child_dirs(full, base) if is_dir else False
+    # ADR-0018：目录页传 indexed_children（单次前缀查询单，~0.3s/页）；
+    # 单条目场景（rename 回包等）传 idx 逐条探测
+    if indexed_children is not None:
+        indexed = full.name in indexed_children
+    elif idx is not None:
+        indexed = idx.is_path_indexed(str(full), is_dir=is_dir)
+    else:
+        indexed = False
     return Entry(
         name=full.name,
         path=rel,
         is_dir=is_dir,
         size=0 if is_dir else stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-        indexed=(not is_dir) and (rel in indexed_paths),
+        indexed=indexed,
         writable=compute_writable(full, base),
         has_child_dirs=has_child_dirs,
     )
-
-
-def _indexed_paths(idx: IndexManager, base: Path) -> set:
-    """从索引库构建"相对 POSIX 路径"集合（仅文件，DB 轻量查询——ADR-0018）。"""
-    result = set()
-    for abs_path in idx.indexed_source_paths():
-        if not abs_path:
-            continue
-        try:
-            p = Path(abs_path)
-            rel = p.relative_to(base.resolve())
-            result.add("/".join(rel.parts) if rel.parts else "")
-        except (ValueError, OSError):
-            continue
-    return result
 
 
 def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
@@ -179,12 +183,12 @@ async def list_dir(
     if not full.is_dir():
         raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
 
-    indexed = _indexed_paths(idx, base)
     all_entries = []
+    indexed_children = idx.indexed_children_of(str(full))
     for child in full.iterdir():
         if is_protected(child, base):
             continue
-        all_entries.append(_build_entry(child, base, indexed))
+        all_entries.append(_build_entry(child, base, indexed_children=indexed_children))
     all_entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
     page = all_entries[offset:offset + limit]
     return ListDirResponse(path=path, entries=page, total=len(all_entries))
@@ -220,7 +224,6 @@ async def attrs(
     assert_not_protected(full, base)
     if not full.exists():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
-    indexed = _indexed_paths(idx, base)
     stat = full.stat()
     return AttrsResponse(
         name=full.name,
@@ -228,7 +231,7 @@ async def attrs(
         is_dir=full.is_dir(),
         size=0 if full.is_dir() else stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-        indexed=(not full.is_dir()) and (_posix_rel(full, base) in indexed),
+        indexed=idx.is_path_indexed(str(full), is_dir=full.is_dir()),
         writable=compute_writable(full, base),
         created_at=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
         extension=full.suffix.lower() if full.suffix else None,
@@ -369,8 +372,7 @@ async def rename(
     except OSError as e:
         raise CortexAPIError(500, "WRITE_FAILED", f"重命名失败: {e}") from e
     _trigger_reindex(idx)
-    indexed = _indexed_paths(idx, base)
-    return _build_entry(target, base, indexed)
+    return _build_entry(target, base, idx=idx)
 
 
 # --- POST /files/upload ---
