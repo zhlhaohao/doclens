@@ -246,17 +246,19 @@ def _count_term_hits(text: str, terms: list[str]) -> int:
     return count
 
 
-def _discover_disk_files(search_path: str, allowed_exts: set[str]) -> list[str]:
+def _discover_disk_files(search_path: str, allowed_exts: set[str], max_files: int = 0) -> list[str]:
     """递归发现搜索根目录下的可解析文件（含未索引的）。
 
     复用 treesearch.pathutil.resolve_paths —— 与索引链路同一套忽略规则
     （DEFAULT_IGNORE_DIRS + .gitignore + 扩展名白名单 + 跳过影子 MD），
     保证 rg 兜底覆盖的磁盘范围与索引器眼中的"应索引范围"一致。
+    max_files 默认 0（不设限）——rg 兜底是尽力而为的降级路径，
+    索引已建起来的大库不应在搜索时被同一上限二次卡断。
     """
     from treesearch.pathutil import resolve_paths
 
     try:
-        return resolve_paths([search_path], allowed_extensions=allowed_exts)
+        return resolve_paths([search_path], allowed_extensions=allowed_exts, max_files=max_files)
     except (OSError, ValueError) as e:
         logger.warning("disk file discovery failed for %s: %s", search_path, e)
         return []

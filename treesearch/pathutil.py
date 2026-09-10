@@ -108,7 +108,10 @@ def _walk_directory(
     max_files: int = MAX_DIR_FILES,
     follow_symlinks: bool = False,
 ) -> list[str]:
-    """Recursively walk *directory* and return matching file paths."""
+    """Recursively walk *directory* and return matching file paths.
+
+    ``max_files <= 0`` means no cap.
+    """
     directory = os.path.abspath(directory)
     gitignore_spec, gitignore_base = _load_gitignore_spec(directory) if respect_gitignore else (None, directory)
 
@@ -141,7 +144,7 @@ def _walk_directory(
                     continue
 
             results.append(full_path)
-            if len(results) > max_files:
+            if max_files > 0 and len(results) > max_files:
                 raise ValueError(
                     f"Directory '{directory}' contains more than {max_files} matching files. "
                     f"Use a more specific path or increase max_files."
@@ -176,6 +179,7 @@ def resolve_paths(
         respect_gitignore: if True and ``pathspec`` is installed, honour
             ``.gitignore`` files found at the root of walked directories.
         max_files: safety cap on total files from a single directory walk.
+            ``<= 0`` means no cap (walk everything).
         follow_symlinks: follow symbolic links during directory walk.
 
     Returns:

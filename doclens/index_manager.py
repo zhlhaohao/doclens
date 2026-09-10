@@ -181,6 +181,11 @@ class IndexManager:
         return self._config.grep_max_results
 
     @property
+    def max_dir_files(self) -> int:
+        """单目录遍历文件数上限（0 = 不设限；防误扫巨型目录）。"""
+        return self._config.treesearch_max_dir_files
+
+    @property
     def scoring_weights(self) -> dict:
         c = self._config
         return {
@@ -270,6 +275,7 @@ class IndexManager:
             disk_files = set(resolve_paths(
                 [self.search_path],
                 allowed_extensions=supported_exts,
+                max_files=self.max_dir_files,
             ))
 
             known = set(stored_meta.keys()) | set(failed_files.keys())
@@ -308,7 +314,7 @@ class IndexManager:
                     import time as time_module
 
                     abs_path = os.path.abspath(self.index_path)
-                    set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types))
+                    set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
                     new_ts = TreeSearch(db_path=self.index_path)
                     if os.path.exists(abs_path):
                         try:
@@ -462,7 +468,7 @@ class IndexManager:
         self._needs_reload = False
 
         # 设置 CJK 分词
-        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types))
+        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
         self._ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
@@ -491,7 +497,7 @@ class IndexManager:
                             import time
                             time.sleep(0.2)
                             gc.collect()
-                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types))
+                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
                 self._ts = TreeSearch(db_path=self.index_path)
 
         # 构建新索引
@@ -533,7 +539,7 @@ class IndexManager:
         """内部 reindex（已持有锁）"""
         self._sync_image_version_expectation()
         if self._ts is None:
-            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types))
+            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
             self._ts = TreeSearch(db_path=self.index_path)
 
         mode = "全量重建" if force else "增量更新"

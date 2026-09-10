@@ -184,6 +184,13 @@ class CortexConfig(BaseSettings):
         alias="TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS",
     )
 
+    # 单目录遍历文件数上限（0=不设限，默认）。防误扫巨型目录可设为正整数；
+    # >10000 文件的企业级语料在设限时启动索引报 ValueError 退出。
+    treesearch_max_dir_files: int = Field(
+        default=0,
+        alias="TREESEARCH_MAX_DIR_FILES",
+    )
+
     # 允许解析的文件类型（逗号分隔；空=全部允许）
     # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, rtf,
     #         pptx, ppt, excel, image, pst, epub

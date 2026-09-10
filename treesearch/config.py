@@ -41,6 +41,7 @@ _ENV_FINGERPRINT_MODE = "TREESEARCH_FINGERPRINT_MODE"
 _ENV_PRUNE = "TREESEARCH_PRUNE"
 _ENV_SHADOW_MD = "TREESEARCH_ENABLE_SHADOW_MD"
 _ENV_ALLOWED_SOURCE_TYPES = "TREESEARCH_ALLOWED_SOURCE_TYPES"
+_ENV_MAX_DIR_FILES = "TREESEARCH_MAX_DIR_FILES"
 
 
 def _env_int(cfg: "TreeSearchConfig", attr: str, min_val: int, env_name: str) -> None:
@@ -82,7 +83,7 @@ class TreeSearchConfig:
     # 全量附件提取，多个并发易耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。
     # 1 = PST 串行索引（最稳）；调大可加速但会增加资源压力。
     max_pst_concurrency: int = 1
-    max_dir_files: int = 10_000  # safety cap for directory walk
+    max_dir_files: int = 10_000  # safety cap for directory walk (<=0 = unlimited)
 
     # Text length limits
     max_node_chars: int = 8000  # max characters per node text when indexing into FTS5
@@ -167,6 +168,8 @@ class TreeSearchConfig:
 
         _env_int(config, "xlsx_max_rows_per_sheet", 1, "TREESEARCH_XLSX_MAX_ROWS_PER_SHEET")
         _env_int(config, "xlsx_max_consecutive_empty_rows", 1, "TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS")
+        # max_dir_files 允许 0（=不设限），min_val 传 0
+        _env_int(config, "max_dir_files", 0, _ENV_MAX_DIR_FILES)
 
         env_source_types = os.getenv(_ENV_ALLOWED_SOURCE_TYPES)
         if env_source_types:
