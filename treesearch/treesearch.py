@@ -148,8 +148,16 @@ class TreeSearch:
     # Index
     # ------------------------------------------------------------------
 
-    async def aindex(self, *paths: str, force: bool = False, **kwargs) -> List[Document]:
-        """Async: Build tree indexes from files, directories, or glob patterns."""
+    async def aindex(self, *paths: str, force: bool = False, return_documents: bool = True, **kwargs) -> List[Document]:
+        """Async: Build tree indexes from files, directories, or glob patterns.
+
+        Args:
+            return_documents: when False, skip materializing parsed documents
+                into ``self.documents`` (memory stays O(chunk) for huge
+                corpora; counts are available via ``get_index_stats()``).
+                Search will then require a separate ``load_index()`` call or
+                the DB-backed lazy path (ADR-0018).
+        """
         from .indexer import build_index
 
         result = await build_index(
@@ -159,15 +167,17 @@ class TreeSearch:
             ignore_dirs=self._ignore_dirs,
             respect_gitignore=self._respect_gitignore,
             max_files=self._max_files,
+            return_documents=return_documents,
             progress_callback=kwargs.pop("progress_callback", None),
             sub_progress_callback=kwargs.pop("sub_progress_callback", None),
             **kwargs
         )
-        self.documents = list(result)
+        if return_documents:
+            self.documents = list(result)
         # Capture IndexStats if available
         if hasattr(result, 'stats'):
             self._last_index_stats = result.stats
-        return self.documents
+        return self.documents if return_documents else list(result)
 
     def index(self, *paths: str, force: bool = False, **kwargs) -> List[Document]:
         """Sync: Build tree indexes from files. Supports glob patterns like 'docs/*.md'.

@@ -90,10 +90,9 @@ def _build_entry(full: Path, base: Path, indexed_paths: set) -> Entry:
 
 
 def _indexed_paths(idx: IndexManager, base: Path) -> set:
-    """从 idx.documents 构建"相对 POSIX 路径"集合（仅文件）。"""
+    """从索引库构建"相对 POSIX 路径"集合（仅文件，DB 轻量查询——ADR-0018）。"""
     result = set()
-    for doc in idx.documents or []:
-        abs_path = doc.metadata.get("source_path", "") if hasattr(doc, "metadata") else ""
+    for abs_path in idx.indexed_source_paths():
         if not abs_path:
             continue
         try:
@@ -106,11 +105,10 @@ def _indexed_paths(idx: IndexManager, base: Path) -> set:
 
 
 def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
-    """从 idx.documents 构建 IndexedDocument 列表（去重、跳过缺失文件）。"""
+    """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件；DB 轻量查询）。"""
     result: list[IndexedDocument] = []
     seen: set[str] = set()
-    for doc in idx.documents or []:
-        abs_path = doc.metadata.get("source_path", "") if hasattr(doc, "metadata") else ""
+    for abs_path in idx.indexed_source_paths():
         if not abs_path:
             continue
         try:

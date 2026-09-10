@@ -111,8 +111,8 @@ class TestTxtIndexing:
         monkeypatch.chdir(tmp_path)
 
         idx = _make_idx(tmp_path, **_BASE_W)
-        doc_names = {d.doc_name for d in idx.documents}
-        assert doc_names == {"note", "memo"}, f".txt 未进索引: {doc_names}"
+        doc_names = set(idx.indexed_source_paths())
+        assert len(doc_names) == 2, f".txt 未进索引: {doc_names}"
 
         rows = _run(idx)
         by_doc = {r[0]: r for r in rows}
@@ -147,7 +147,7 @@ class TestTxtIndexing:
         )
         monkeypatch.chdir(tmp_path)
         idx = _make_idx(tmp_path, **_BASE_W)
-        assert {d.doc_name for d in idx.documents} == {"a", "b"}
+        assert len(idx.indexed_source_paths()) == 2
         rows = _run(idx)
         assert {r[0] for r in rows} == {"a", "b"}
 

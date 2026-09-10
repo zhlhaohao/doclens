@@ -136,7 +136,7 @@ class CortexApp(App):
 
         try:
             self.idx.load_or_build_index()
-            doc_count = len(self.idx.documents)
+            doc_count = self.idx.indexed_doc_count()
             self.call_from_thread(self._on_index_loaded, doc_count)
         except Exception as exc:
             self.call_from_thread(self._on_index_error, str(exc))
@@ -237,7 +237,7 @@ class CortexApp(App):
         if success and doc_count > 0:
             from doclens.event_bus import EventBus
             status = self.query_one(StatusBar)
-            status.set_index_stats(len(self.idx.documents))
+            status.set_index_stats(self.idx.indexed_doc_count())
 
     # ------------------------------------------------------------------
     # 文件监控
@@ -310,7 +310,7 @@ class CortexApp(App):
         """文件监控触发 reindex 完成后重新加载索引并更新状态栏"""
         self.idx.load_or_build_index()  # _needs_reload=True，会从磁盘重新加载
         status = self.query_one(StatusBar)
-        status.set_index_stats(len(self.idx.documents))
+        status.set_index_stats(self.idx.indexed_doc_count())
 
     def _start_vision_worker(self) -> None:
         """启动视觉解析 worker（ADR-0001）。
@@ -469,16 +469,18 @@ class CortexApp(App):
         if os.path.exists(index_abs_path):
             index_size = os.path.getsize(index_abs_path)
 
-        docs = self.idx.documents
-        total_files = len(docs)
+        # DB 轻量查询（ADR-0018）
+        source_paths = self.idx.indexed_source_paths()
+        total_files = len(source_paths)
         total_size = 0
         file_type_counts: dict[str, int] = {}
 
-        for doc in docs:
-            if hasattr(doc, "metadata") and doc.metadata:
-                size = doc.metadata.get("file_size", 0)
-                total_size += size
-                source_path = doc.metadata.get("source_path", "")
+        for source_path in source_paths:
+            if source_path:
+                try:
+                    total_size += os.path.getsize(source_path)
+                except OSError:
+                    pass
                 ext = os.path.splitext(source_path)[1].lower() if source_path else ""
                 if ext:
                     file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
@@ -542,7 +544,7 @@ class CortexApp(App):
                 return
             try:
                 self.idx.reindex(force=force)
-                doc_count = len(self.idx.documents)
+                doc_count = self.idx.indexed_doc_count()
                 self.call_from_thread(self._on_reindex_done, doc_count)
             except Exception as exc:
                 self.call_from_thread(self._on_reindex_error, str(exc))

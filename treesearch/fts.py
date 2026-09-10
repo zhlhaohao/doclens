@@ -1529,6 +1529,17 @@ class FTS5Index:
             metadata={"source_path": sp or ""},
         )
 
+    def load_doc_id_source_paths(self) -> dict[str, str]:
+        """Load only ``doc_id → source_path`` pairs (no structures).
+
+        Lightweight companion to ``load_all_documents`` for hosts that keep
+        an id→path map without materializing whole trees (ADR-0018).
+        """
+        rows = self._conn.execute(
+            "SELECT doc_id, source_path FROM documents"
+        ).fetchall()
+        return {r[0]: (r[1] or "") for r in rows if r[1]}
+
     def load_all_documents(self) -> list:
         """Load all Documents stored in the DB.
 

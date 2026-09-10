@@ -11,12 +11,11 @@ router = APIRouter()
 
 @router.get("/status")
 async def status(idx: IndexManager = Depends(get_index_manager)):
-    docs = idx.documents or []
+    # DB 轻量查询（ADR-0018）：不物化 documents，避免百万级语料全量载入。
+    indexed_docs = idx.indexed_doc_count()
     total_size = 0
     type_counts: dict[str, int] = {}
-    for doc in docs:
-        meta = getattr(doc, "metadata", None) or {}
-        src = meta.get("source_path", "")
+    for src in idx.indexed_source_paths():
         # file_size is not populated by treesearch; compute at query time.
         try:
             size = os.path.getsize(src) if src else 0
@@ -29,7 +28,7 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
     watcher_obj = get_watcher()
     cfg = get_config()
     return {
-        "indexed_docs": len(docs),
+        "indexed_docs": indexed_docs,
         "index_failed_count": idx.last_failed_count,
         "index_path": str(idx.index_path),
         "workdir": str(idx.search_path),

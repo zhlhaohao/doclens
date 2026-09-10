@@ -191,6 +191,14 @@ class CortexConfig(BaseSettings):
         alias="TREESEARCH_MAX_DIR_FILES",
     )
 
+    # 分块索引的块大小（文件数，默认 500）。每块「解析→落库→释放」，
+    # 百万级语料内存峰值 = 单块，不再 OOM（ADR-0018）。
+    # ⚠️ 0 = 不分块（旧行为全量攒内存）——与上面 max_dir_files 的 0=不设限**有意相反**。
+    treesearch_index_chunk_size: int = Field(
+        default=500,
+        alias="TREESEARCH_INDEX_CHUNK_SIZE",
+    )
+
     # 允许解析的文件类型（逗号分隔；空=全部允许）
     # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, rtf,
     #         pptx, ppt, excel, image, pst, epub

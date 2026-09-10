@@ -579,19 +579,20 @@ def _kb_stats(idx_manager: IndexManager) -> str:
 
     from doclens.index_manager import SUPPORTED_FORMATS
 
-    docs = idx_manager.documents
-    total_files = len(docs)
+    # DB 轻量查询（ADR-0018）：计数/类型分布不物化 documents
+    source_paths = idx_manager.indexed_source_paths()
+    total_files = len(source_paths)
     total_size = 0
     file_type_counts: dict[str, int] = {}
 
-    for doc in docs:
-        if hasattr(doc, 'metadata') and doc.metadata:
-            size = doc.metadata.get('file_size', 0)
-            total_size += size
-            source_path = doc.metadata.get('source_path', '')
-            ext = os.path.splitext(source_path)[1].lower() if source_path else ''
-            if ext:
-                file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
+    for source_path in source_paths:
+        try:
+            total_size += os.path.getsize(source_path) if source_path else 0
+        except OSError:
+            pass
+        ext = os.path.splitext(source_path)[1].lower() if source_path else ''
+        if ext:
+            file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
 
     index_abs = os.path.abspath(idx_manager.index_path)
     index_size = os.path.getsize(index_abs) if os.path.exists(index_abs) else 0
@@ -640,8 +641,7 @@ def _kb_reindex(idx_manager: IndexManager, force: bool = False) -> str:
 
     idx_manager.reindex(force=force)
 
-    docs = idx_manager.documents
-    total = len(docs)
+    total = idx_manager.indexed_doc_count()
 
     return (
         f"索引重建完成 (mode={'全量' if force else '增量'}):\n"
@@ -738,21 +738,38 @@ def _load_indexed_image_tree(idx_manager, abs_path: str) -> Optional[dict]:
 
     返回与 _parse_document 相同的 {title, text, nodes} 结构；未进索引返回 None。
     占位阶段（视觉 worker 未消费）会返回占位节点文本，属如实反馈。
+    DB 精确加载单个文档（ADR-0018），不迭代全量 documents。
     """
-    if idx_manager.ts is None or not idx_manager.documents:
+    if idx_manager.ts is None:
         idx_manager.load_or_build_index()
 
-    target = os.path.normcase(os.path.abspath(abs_path))
-    for doc in idx_manager.documents or []:
-        meta = getattr(doc, "metadata", None) or {}
-        src = meta.get("source_path", "")
-        if src and os.path.normcase(src) == target:
-            return {
-                "title": doc.doc_name,
-                "text": "",
-                "nodes": _normalize_nodes_text_first(doc.structure or []),
-            }
+    doc = _load_doc_by_source_path(idx_manager, abs_path)
+    if doc is not None:
+        return {
+            "title": doc.doc_name,
+            "text": "",
+            "nodes": _normalize_nodes_text_first(doc.structure or []),
+        }
     return None
+
+
+def _load_doc_by_source_path(idx_manager, abs_path: str):
+    """按 source_path 从索引库精确加载单个 Document（未命中返回 None）。"""
+    try:
+        from treesearch.fts import FTS5Index
+
+        target = os.path.abspath(abs_path)
+        fts = FTS5Index(db_path=idx_manager.index_path)
+        try:
+            doc_id = fts.get_doc_id_by_source_path(target)
+            if doc_id is None:
+                return None
+            return fts.load_document(doc_id)
+        finally:
+            fts.close()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("load_doc_by_source_path(%s) failed: %s", abs_path, e)
+        return None
 
 
 def _normalize_nodes(nodes: list[dict]) -> list[dict]:
@@ -1095,6 +1112,10 @@ def _handle_search_kb(
 
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
+    # 搜索路径按需物化 documents（ADR-0018 分期：搜索仍吃全量列表）
+    _ensure = getattr(idx_manager, "_ensure_search_documents", None)
+    if callable(_ensure):
+        _ensure()
 
     if idx_manager.ts is None or not idx_manager.documents:
         return (
@@ -1258,6 +1279,10 @@ def _handle_search_kb_v2(
 
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
+    # 搜索路径按需物化 documents（ADR-0018 分期：搜索仍吃全量列表）
+    _ensure = getattr(idx_manager, "_ensure_search_documents", None)
+    if callable(_ensure):
+        _ensure()
 
     if idx_manager.ts is None or not idx_manager.documents:
         return (
@@ -1571,18 +1596,25 @@ def _load_tree_for_info(
         return tree, tree is not None
 
     if getattr(idx_manager, "ts", None) is not None:
+        # 已物化的 documents 优先（搜索后缓存）；未物化则 DB 精确加载（ADR-0018）
         target = os.path.normcase(os.path.abspath(abs_path))
-        for doc in idx_manager.documents or []:
-            meta = getattr(doc, "metadata", None) or {}
+        doc = None
+        for d in (idx_manager.documents or []):
+            meta = getattr(d, "metadata", None) or {}
             src = meta.get("source_path", "")
             if src and os.path.normcase(src) == target:
-                # 词数统计要准确：索引节点同时带 summary（截断版）与 text（完整版），
-                # 用 text 优先的标准化
-                return {
-                    "title": doc.doc_name,
-                    "text": "",
-                    "nodes": _normalize_nodes_text_first(doc.structure or []),
-                }, True
+                doc = d
+                break
+        if doc is None:
+            doc = _load_doc_by_source_path(idx_manager, abs_path)
+        if doc is not None:
+            # 词数统计要准确：索引节点同时带 summary（截断版）与 text（完整版），
+            # 用 text 优先的标准化
+            return {
+                "title": doc.doc_name,
+                "text": "",
+                "nodes": _normalize_nodes_text_first(doc.structure or []),
+            }, True
 
     return _parse_document(abs_path, ext), False
 

@@ -466,17 +466,18 @@ class NotebookSearchCLI:
         if os.path.exists(index_abs_path):
             index_size = os.path.getsize(index_abs_path)
 
-        # 计算文档统计
-        docs = self.idx.documents
-        total_files = len(docs)
+        # 计算文档统计（DB 轻量查询，ADR-0018）
+        source_paths = self.idx.indexed_source_paths()
+        total_files = len(source_paths)
         total_size = 0
         file_type_counts = {}
 
-        for doc in docs:
-            if hasattr(doc, "metadata") and doc.metadata:
-                size = doc.metadata.get("file_size", 0)
-                total_size += size
-                source_path = doc.metadata.get("source_path", "")
+        for source_path in source_paths:
+            if source_path:
+                try:
+                    total_size += os.path.getsize(source_path)
+                except OSError:
+                    pass
                 ext = os.path.splitext(source_path)[1].lower() if source_path else ""
                 if ext:
                     file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
@@ -643,14 +644,14 @@ class NotebookSearchCLI:
             if answer in ("y", "yes", "是"):
                 print()
                 self.load_or_build_index()
-                print(f"[已加载 {len(self.idx.documents)} 个文档]")
+                print(f"[已加载 {self.idx.indexed_doc_count()} 个文档]")
                 self._start_watcher()
                 print()
             else:
                 print("[跳过索引创建，可使用 /index 命令稍后创建]\n")
         else:
             self.load_or_build_index()
-            print(f"[已加载 {len(self.idx.documents)} 个文档]")
+            print(f"[已加载 {self.idx.indexed_doc_count()} 个文档]")
             self._start_watcher()
             print()
 
@@ -994,12 +995,12 @@ def _cli_index(args, config, idx):
     if force:
         print("正在执行全量重建索引...")
         idx.reindex(force=True)
-        doc_count = len(idx.documents)
+        doc_count = idx.indexed_doc_count()
         print(f"索引全量重建完成: {doc_count} 个文档")
     else:
         print("正在执行增量更新索引...")
         idx.reindex(force=False)
-        doc_count = len(idx.documents)
+        doc_count = idx.indexed_doc_count()
         print(f"索引增量更新完成: {doc_count} 个文档")
 
 
@@ -1012,16 +1013,18 @@ def _cli_status(args, config, idx):
     if os.path.exists(index_abs_path):
         index_size = os.path.getsize(index_abs_path)
 
-    docs = idx.documents
-    total_files = len(docs)
+    # DB 轻量查询（ADR-0018）
+    source_paths = idx.indexed_source_paths()
+    total_files = len(source_paths)
     total_size = 0
     file_type_counts: dict[str, int] = {}
 
-    for doc in docs:
-        if hasattr(doc, "metadata") and doc.metadata:
-            size = doc.metadata.get("file_size", 0)
-            total_size += size
-            source_path = doc.metadata.get("source_path", "")
+    for source_path in source_paths:
+        if source_path:
+            try:
+                total_size += os.path.getsize(source_path)
+            except OSError:
+                pass
             ext = os.path.splitext(source_path)[1].lower() if source_path else ""
             if ext:
                 file_type_counts[ext] = file_type_counts.get(ext, 0) + 1

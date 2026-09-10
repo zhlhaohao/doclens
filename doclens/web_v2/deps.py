@@ -68,7 +68,8 @@ def get_index_manager() -> IndexManager:
                     raise err[0]
                 # 构建成功后再发布单例，避免半初始化实例泄漏到后续调用
                 _idx_manager = mgr
-                logger.info("IndexManager initialized: %d documents", len(mgr.documents))
+                logger.info("IndexManager initialized: %d documents (DB count)",
+                            mgr.indexed_doc_count())
     return _idx_manager
 
 

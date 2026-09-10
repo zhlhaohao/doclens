@@ -570,8 +570,7 @@ def _resolve_upload_target(idx, stem: str, hash6: str):
     """
     base = Path(idx.search_path)
     matches = []
-    for doc in idx.documents:
-        abs_path = doc.metadata.get("source_path", "")
+    for abs_path in idx.indexed_source_paths():
         if not abs_path:
             continue
         try:

@@ -1469,6 +1469,8 @@ async def build_index(
     respect_gitignore: bool = True,
     max_files: int = MAX_DIR_FILES,
     prune: Optional[bool] = None,
+    index_chunk_size: Optional[int] = None,
+    return_documents: bool = True,
     progress_callback: Optional[callable] = None,
     sub_progress_callback: Optional[callable] = None,
     **kwargs,
@@ -1492,14 +1494,27 @@ async def build_index(
             reachable through ``paths`` (orphan cleanup). When ``None``,
             defaults to True iff at least one entry of ``paths`` is a directory
             or recursive glob (full-scope reindex), False otherwise.
+        index_chunk_size: chunked indexing — files per chunk. Each chunk is
+            parsed → committed → released before the next starts, so peak
+            memory stays at one chunk regardless of corpus size (ADR-0018).
+            ``0`` disables chunking (legacy behaviour: gather everything).
+            Defaults to ``get_config().index_chunk_size``.
+        return_documents: when False, skip materializing the full Document
+            list (skipped files are not re-loaded from DB; return value is an
+            empty carrier list with only ``.stats`` attached). For huge
+            corpora where callers derive counts from ``IndexStats`` / SQL
+            instead of the in-memory list.
         **kwargs: passed through to individual parsers
 
     Returns:
-        list of Document objects (directly usable with search())
+        list of Document objects (directly usable with search()).
+        With ``return_documents=False`` the list is empty — read ``.stats``.
     """
     from .config import get_config
     from .fts import FTS5Index
     cfg = get_config()
+    if index_chunk_size is None:
+        index_chunk_size = cfg.index_chunk_size
 
     # Resolve defaults from config
     if if_add_node_summary is None:
@@ -1579,322 +1594,369 @@ async def build_index(
         logger.warning("Index is locked by another process, skipping this indexing run")
         return []
 
-    # Incremental indexing: batch check file hashes via DB
-    to_index = []
-    skipped = []
-    file_hashes = {}
-    pruned_paths: list[str] = []
+    # 异常安全：索引中途失败也必须释放锁/连接，否则同进程后续
+    # build_index 永远拿不到锁（_NullLock 跳过），表现为静默零结果。
+    try:
+        # Incremental indexing: batch check file hashes via DB
+        to_index = []
+        skipped = []
+        file_hashes = {}
+        pruned_paths: list[str] = []
 
-    if force:
-        # Full rebuild: clear all failed file records
-        fts.clear_all_failed_files()
-        # 视觉解析队列一并清空（重建过程会重新登记）
-        fts.vision_clear()
+        if force:
+            # Full rebuild: clear all failed file records
+            fts.clear_all_failed_files()
+            # 视觉解析队列一并清空（重建过程会重新登记）
+            fts.vision_clear()
 
-    if not force:
-        # Batch fetch all stored hashes in one query (instead of N queries)
-        all_meta = fts.get_all_index_meta()
-    elif cfg.allowed_source_types:
-        # force=True with source_type filter: still need all_meta for orphan cleanup
-        all_meta = fts.get_all_index_meta()
-    else:
-        all_meta = {}
+        if not force:
+            # Batch fetch all stored hashes in one query (instead of N queries)
+            all_meta = fts.get_all_index_meta()
+        elif cfg.allowed_source_types:
+            # force=True with source_type filter: still need all_meta for orphan cleanup
+            all_meta = fts.get_all_index_meta()
+        else:
+            all_meta = {}
 
-    # Pre-pass: detect moves/renames and remap source_path BEFORE pruning,
-    # so the orphan cleanup below doesn't drop a doc whose file just moved.
-    if not force:
-        _detect_and_apply_moves(
-            expanded, all_meta, fts, _fp_to_doc_id, file_hash_with_salts
-        )
+        # Pre-pass: detect moves/renames and remap source_path BEFORE pruning,
+        # so the orphan cleanup below doesn't drop a doc whose file just moved.
+        if not force:
+            _detect_and_apply_moves(
+                expanded, all_meta, fts, _fp_to_doc_id, file_hash_with_salts
+            )
 
-    # Orphan cleanup: docs in DB whose source_path is not in the new scope.
-    # Implicit prune (defaulted from a directory walk): only drop docs whose
-    # files are also gone from disk — preserves unrelated files for partial
-    # reindexes.
-    # Explicit `prune=True`: reduce the index to exactly `paths`.
-    if prune and all_meta:
-        expanded_abs = {os.path.abspath(p) for p in expanded}
-        # Pre-compute allowed extensions from source_type filter (if any)
-        source_type_exts = None
-        if cfg.allowed_source_types:
-            from .pathutil import get_allowed_extensions_for_source_types
-            source_type_exts = get_allowed_extensions_for_source_types(cfg.allowed_source_types)
-        prune_doc_ids: list[str] = []
-        for stored_path in list(all_meta.keys()):
-            if stored_path in expanded_abs:
-                continue
-            if not explicit_prune and os.path.isfile(stored_path):
-                # File exists on disk but was filtered out — only keep it if
-                # it would have been included WITHOUT the source_type filter.
-                if source_type_exts is not None:
-                    ext = os.path.splitext(stored_path)[1].lower()
-                    if ext not in source_type_exts:
-                        pass  # excluded by source_type → prune
+        # Orphan cleanup: docs in DB whose source_path is not in the new scope.
+        # Implicit prune (defaulted from a directory walk): only drop docs whose
+        # files are also gone from disk — preserves unrelated files for partial
+        # reindexes.
+        # Explicit `prune=True`: reduce the index to exactly `paths`.
+        if prune and all_meta:
+            expanded_abs = {os.path.abspath(p) for p in expanded}
+            # Pre-compute allowed extensions from source_type filter (if any)
+            source_type_exts = None
+            if cfg.allowed_source_types:
+                from .pathutil import get_allowed_extensions_for_source_types
+                source_type_exts = get_allowed_extensions_for_source_types(cfg.allowed_source_types)
+            prune_doc_ids: list[str] = []
+            for stored_path in list(all_meta.keys()):
+                if stored_path in expanded_abs:
+                    continue
+                if not explicit_prune and os.path.isfile(stored_path):
+                    # File exists on disk but was filtered out — only keep it if
+                    # it would have been included WITHOUT the source_type filter.
+                    if source_type_exts is not None:
+                        ext = os.path.splitext(stored_path)[1].lower()
+                        if ext not in source_type_exts:
+                            pass  # excluded by source_type → prune
+                        else:
+                            continue
                     else:
                         continue
-                else:
-                    continue
-            doc_id = fts.get_doc_id_by_source_path(stored_path)
-            # 多文档来源（PST 派生 "<file>#<entry_id>"）：级联删除派生文档
-            derived_ids = fts.get_doc_ids_by_source_prefix(stored_path + "#")
-            ids = ([doc_id] if doc_id else []) + derived_ids
-            if ids:
-                prune_doc_ids.extend(ids)
-                pruned_paths.append(stored_path)
-                all_meta.pop(stored_path, None)
-        if prune_doc_ids:
-            fts.delete_documents(prune_doc_ids)
-            logger.info("Pruned %d orphan document(s) from index", len(prune_doc_ids))
-        # 被 prune 的源文件同步移出视觉解析队列
-        for stored_path in pruned_paths:
-            fts.vision_remove(stored_path)
+                doc_id = fts.get_doc_id_by_source_path(stored_path)
+                # 多文档来源（PST 派生 "<file>#<entry_id>"）：级联删除派生文档
+                derived_ids = fts.get_doc_ids_by_source_prefix(stored_path + "#")
+                ids = ([doc_id] if doc_id else []) + derived_ids
+                if ids:
+                    prune_doc_ids.extend(ids)
+                    pruned_paths.append(stored_path)
+                    all_meta.pop(stored_path, None)
+            if prune_doc_ids:
+                fts.delete_documents(prune_doc_ids)
+                logger.info("Pruned %d orphan document(s) from index", len(prune_doc_ids))
+            # 被 prune 的源文件同步移出视觉解析队列
+            for stored_path in pruned_paths:
+                fts.vision_remove(stored_path)
 
-        # Clean up shadow MD files for pruned binary sources
-        from .parsers.registry import is_binary_extension
-        for pruned_path in pruned_paths:
-            ext = os.path.splitext(pruned_path)[1].lower()
-            if is_binary_extension(ext):
-                md_path = shadow_md_path(pruned_path)
-                if os.path.exists(md_path):
-                    try:
-                        os.remove(md_path)
-                        logger.debug("Removed orphan shadow MD: %s", md_path)
-                    except OSError as e:
-                        logger.debug("Failed to remove shadow MD %s: %s", md_path, e)
-                # 清理被删文档的图片
-                if base_dir:
-                    pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
-                    image_store.purge_doc(pruned_rel)
-                # 清理被删 PST 的落盘附件（ADR-0005）
-                if ext == ".pst" and base_dir:
-                    pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
-                    pst_att_store.purge_doc(pruned_rel)
+            # Clean up shadow MD files for pruned binary sources
+            from .parsers.registry import is_binary_extension
+            for pruned_path in pruned_paths:
+                ext = os.path.splitext(pruned_path)[1].lower()
+                if is_binary_extension(ext):
+                    md_path = shadow_md_path(pruned_path)
+                    if os.path.exists(md_path):
+                        try:
+                            os.remove(md_path)
+                            logger.debug("Removed orphan shadow MD: %s", md_path)
+                        except OSError as e:
+                            logger.debug("Failed to remove shadow MD %s: %s", md_path, e)
+                    # 清理被删文档的图片
+                    if base_dir:
+                        pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
+                        image_store.purge_doc(pruned_rel)
+                    # 清理被删 PST 的落盘附件（ADR-0005）
+                    if ext == ".pst" and base_dir:
+                        pruned_rel = os.path.relpath(pruned_path, base_dir).replace(os.sep, "/")
+                        pst_att_store.purge_doc(pruned_rel)
 
-    for fp in expanded:
-        abs_fp = os.path.abspath(fp)
-        # 指纹含解析器格式盐（PST：ADR-0005 输出格式变化时自动重建）
-        fh = file_hash_with_salts(abs_fp)
-        if not fh:
-            # File disappeared after glob expansion (e.g. broken symlink)
-            logger.debug("Skipping missing file: %s", abs_fp)
-            continue
-        file_hashes[abs_fp] = fh
-        if not force:
-            stored_hash = all_meta.get(abs_fp)
-            if stored_hash == fh:
-                # source_path lookup catches both same-name and moved files.
-                # Multi-doc sources (e.g. PST: docs keyed "<file>#<entry_id>")
-                # have no doc at the exact path — check the derived prefix.
-                if fts.get_doc_id_by_source_path(abs_fp) is not None \
-                        or fts.has_docs_with_source_prefix(abs_fp + "#"):
-                    skipped.append(fp)
-                    processed_counter[0] += 1
-                    if progress_callback:
-                        progress_callback(fp, processed_counter[0], total_files)
-                    continue
-        to_index.append(fp)
-
-    if skipped:
-        logger.info("Skipped %d unchanged file(s)", len(skipped))
-
-    # Filter out files that have exceeded the consecutive failure threshold
-    excluded_count = 0
-    if not force and to_index:
-        failed_records = fts.get_all_failed_files()  # {path: (fail_count, file_hash, last_error)}
-        max_fail_count = cfg.max_index_fail_count
-        excluded = []
-        remaining = []
-        for fp in to_index:
+        for fp in expanded:
             abs_fp = os.path.abspath(fp)
-            record = failed_records.get(abs_fp)
-            if record and record[0] >= max_fail_count:
-                # Check if file content has changed since last failure
-                current_hash = file_hashes.get(abs_fp, "")
-                if record[1] and record[1] == current_hash:
-                    excluded.append(fp)
-                    continue
-            remaining.append(fp)
-        to_index = remaining
-        if excluded:
-            excluded_count = len(excluded)
-            logger.warning("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
-            for fp in excluded:
+            # 指纹含解析器格式盐（PST：ADR-0005 输出格式变化时自动重建）
+            fh = file_hash_with_salts(abs_fp)
+            if not fh:
+                # File disappeared after glob expansion (e.g. broken symlink)
+                logger.debug("Skipping missing file: %s", abs_fp)
+                continue
+            file_hashes[abs_fp] = fh
+            if not force:
+                stored_hash = all_meta.get(abs_fp)
+                if stored_hash == fh:
+                    # source_path lookup catches both same-name and moved files.
+                    # Multi-doc sources (e.g. PST: docs keyed "<file>#<entry_id>")
+                    # have no doc at the exact path — check the derived prefix.
+                    if fts.get_doc_id_by_source_path(abs_fp) is not None \
+                            or fts.has_docs_with_source_prefix(abs_fp + "#"):
+                        skipped.append(fp)
+                        processed_counter[0] += 1
+                        if progress_callback:
+                            progress_callback(fp, processed_counter[0], total_files)
+                        continue
+            to_index.append(fp)
+
+        if skipped:
+            logger.info("Skipped %d unchanged file(s)", len(skipped))
+
+        # Filter out files that have exceeded the consecutive failure threshold
+        excluded_count = 0
+        if not force and to_index:
+            failed_records = fts.get_all_failed_files()  # {path: (fail_count, file_hash, last_error)}
+            max_fail_count = cfg.max_index_fail_count
+            excluded = []
+            remaining = []
+            for fp in to_index:
                 abs_fp = os.path.abspath(fp)
                 record = failed_records.get(abs_fp)
-                last_error = record[2] if record else ""
-                if last_error:
-                    logger.warning("  Skipped %s: %s", fp, last_error)
-                else:
-                    logger.warning("  Skipped %s: unknown error", fp)
-                processed_counter[0] += 1
-                if progress_callback:
-                    progress_callback(fp, processed_counter[0], total_files)
-
-    logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
-
-    build_start = time.monotonic()
-    semaphore = asyncio.Semaphore(max_concurrency)
-    # PST 专用并发上限：PST 解析启 sidecar 子进程 + 加载 GB 级文件 + 全量附件提取，
-    # 多个并发会耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。单独低并发限流，
-    # 同时缓解"极度缓慢"和"崩溃"两个根因。
-    pst_semaphore = asyncio.Semaphore(getattr(cfg, "max_pst_concurrency", 1))
-    # Collect per-file timing and source_type for stats
-    _file_timings: dict[str, tuple[str, float]] = {}  # fp -> (source_type, elapsed_s)
-    _failed_paths: list[str] = []
-
-    # Progress bar for parsing stage
-    _parse_bar = tqdm(total=len(to_index), desc="Parsing", unit="file",
-                      dynamic_ncols=True, disable=not to_index)
-
-    async def _index_one(fp: str) -> dict | None:
-        ext = os.path.splitext(fp)[1].lower()
-        # PST 重量级（sidecar 子进程 + GB 级文件 + 全量附件提取）：先过 pst_semaphore
-        # 限流（等待时不占通用 semaphore 槽），再过通用并发信号量。
-        pst_gate = pst_semaphore if ext == ".pst" else nullcontext()
-        async with pst_gate, semaphore:
-            fname = os.path.basename(fp)
-            _parse_bar.set_postfix_str(fname, refresh=False)
-            t0 = time.monotonic()
-            try:
-                rel_path = ""
-                if base_dir:
-                    rel_path = os.path.relpath(fp, base_dir).replace(os.sep, "/")
-                # 该文件重抽前先清掉它的旧图（幂等；force 模式已 purge_all，此处为空操作）
-                if rel_path:
-                    image_store.purge_doc(rel_path)
-                    # PST 重索引：清掉旧落盘附件（幂等，重新提取）
-                    if ext == ".pst":
-                        pst_att_store.purge_doc(rel_path)
-                common = dict(
-                    if_add_node_summary=if_add_node_summary,
-                    if_add_doc_description=if_add_doc_description,
-                    if_add_node_text=if_add_node_text,
-                    if_add_node_id=if_add_node_id,
-                    image_store=image_store,
-                    rel_path=rel_path,
-                    pst_attachment_store=pst_att_store,
-                    sub_progress_callback=(
-                        (lambda n: sub_progress_callback(fp, n))
-                        if sub_progress_callback else None
-                    ),
-                    **kwargs,
-                )
-
-                # Use ParserRegistry for dispatch (built-in parsers auto-registered)
-                from .parsers import get_parser, SOURCE_TYPE_MAP
-                parser_fn = get_parser(ext)
-                if parser_fn is not None:
-                    result = await parser_fn(fp, **common)
-                else:
-                    # Unknown extension: fall back to text_to_tree
-                    result = await text_to_tree(text_path=fp, **common)
-
-                # Tag source_type for search routing
-                source_type = SOURCE_TYPE_MAP.get(ext, "text")
-                result["source_type"] = source_type
-
-                # 图像文件：占位节点已进索引，登记到视觉解析队列（后台 worker 消费）
-                if source_type == "image" and result.get("vision_pending"):
-                    fts.vision_enqueue(os.path.abspath(fp), rel_path)
-
-                # Generate shadow MD for binary files (concurrent with parsing)
-                if cfg.enable_shadow_md:
-                    from .parsers.registry import is_binary_extension
-                    if is_binary_extension(ext):
-                        try:
-                            _generate_shadow_md(os.path.abspath(fp))
-                        except Exception as e:
-                            logger.debug("Shadow MD generation failed for %s: %s", fp, e)
-
-                _file_timings[fp] = (source_type, time.monotonic() - t0)
-                # Call progress callback if provided
-                async with _progress_lock:
+                if record and record[0] >= max_fail_count:
+                    # Check if file content has changed since last failure
+                    current_hash = file_hashes.get(abs_fp, "")
+                    if record[1] and record[1] == current_hash:
+                        excluded.append(fp)
+                        continue
+                remaining.append(fp)
+            to_index = remaining
+            if excluded:
+                excluded_count = len(excluded)
+                logger.warning("Skipped %d file(s) with %d+ consecutive failures", excluded_count, max_fail_count)
+                for fp in excluded:
+                    abs_fp = os.path.abspath(fp)
+                    record = failed_records.get(abs_fp)
+                    last_error = record[2] if record else ""
+                    if last_error:
+                        logger.warning("  Skipped %s: %s", fp, last_error)
+                    else:
+                        logger.warning("  Skipped %s: unknown error", fp)
                     processed_counter[0] += 1
                     if progress_callback:
                         progress_callback(fp, processed_counter[0], total_files)
-                return result
-            except Exception as e:
-                logger.warning("Failed to index %s: %s", fp, e)
-                _failed_paths.append(fp)
-                abs_fp = os.path.abspath(fp)
-                fts.upsert_failed_file(abs_fp, str(e), file_hashes.get(abs_fp, ""))
-                _file_timings[fp] = ("(failed)", time.monotonic() - t0)
-                async with _progress_lock:
-                    processed_counter[0] += 1
-                    if progress_callback:
-                        progress_callback(fp, processed_counter[0], total_files)
-                return None
-            finally:
-                _parse_bar.update()
 
-    raw_results = await asyncio.gather(*(_index_one(fp) for fp in to_index))
-    _parse_bar.close()
+        logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
 
-    # Save results to DB and collect Document objects
-    result_map = {fp: r for fp, r in zip(to_index, raw_results) if r is not None}
-    documents = []
+        build_start = time.monotonic()
+        semaphore = asyncio.Semaphore(max_concurrency)
+        # PST 专用并发上限：PST 解析启 sidecar 子进程 + 加载 GB 级文件 + 全量附件提取，
+        # 多个并发会耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。单独低并发限流，
+        # 同时缓解"极度缓慢"和"崩溃"两个根因。
+        pst_semaphore = asyncio.Semaphore(getattr(cfg, "max_pst_concurrency", 1))
+        # Collect per-file timing and source_type for stats
+        _file_timings: dict[str, tuple[str, float]] = {}  # fp -> (source_type, elapsed_s)
+        _failed_paths: list[str] = []
 
-    # Batch load all skipped documents in one query (instead of N individual loads)
-    # Key by source_path (unique and stable) instead of doc_id (may change)
-    if skipped:
-        all_docs_from_db = {
-            d.metadata.get("source_path", ""): d
-            for d in fts.load_all_documents()
-            if d.metadata.get("source_path")
-        }
-    else:
-        all_docs_from_db = {}
+        # Progress bar for parsing stage (ETA from tqdm's built-in smoothing)
+        _parse_bar = tqdm(total=len(to_index), desc="Parsing", unit="file",
+                          dynamic_ncols=True, disable=not to_index,
+                          bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
 
-    # Progress bar for Indexing stage (batch commit every N files to reduce fsync)
-    _COMMIT_BATCH = 500
-    _has_work = bool(result_map)
-    _save_bar = tqdm(total=len(expanded), desc="Indexing", unit="file",
-                     dynamic_ncols=True, disable=not _has_work)
-    _pending_commits = 0
-    # Aggregate node-level diff stats across all reindexed docs.
-    diff_totals = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
-    optimize_threshold = cfg.auto_optimize_threshold
-    docs_since_optimize = 0
-    for fp in expanded:
-        name = _fp_to_doc_id[fp]
-        if fp in result_map:
-            _save_bar.set_postfix_str(os.path.basename(fp), refresh=False)
-            result = result_map[fp]
-            abs_fp = os.path.abspath(fp)
-            file_h = file_hashes.get(abs_fp, "")
-
-            if result.get("multi_docs") is not None:
-                # 多文档来源（PST 等）：一个文件 → N 个派生文档。
-                # 派生 doc_id = <file_doc_id>__<entry>；source_path = <file>#<entry>。
-                # 已被移除的派生文档（邮件删除）按差集清除；其余走节点级增量。
-                trees = result["multi_docs"]
-                new_docs = []
-                for t in trees:
-                    sp = t.get("source_path", "")
-                    entry = sp.rsplit("#", 1)[-1] if "#" in sp else str(len(new_docs))
-                    new_docs.append(Document(
-                        doc_id=f"{name}__{entry}",
-                        doc_name=t.get("doc_name", name),
-                        structure=t.get("structure", []),
-                        doc_description=t.get("doc_description", ""),
-                        metadata={"source_path": sp},
-                        source_type=result.get("source_type", ""),
-                    ))
-                new_ids = {d.doc_id for d in new_docs}
-                old_ids = set(fts.get_doc_ids_by_source_prefix(abs_fp + "#"))
-                removed_ids = sorted(old_ids - new_ids)
-                if removed_ids:
-                    fts.delete_documents(removed_ids)
-                    # 被移除派生文档（邮件删除）的落盘附件级联清理（ADR-0005）
+        async def _index_one(fp: str) -> dict | None:
+            ext = os.path.splitext(fp)[1].lower()
+            # PST 重量级（sidecar 子进程 + GB 级文件 + 全量附件提取）：先过 pst_semaphore
+            # 限流（等待时不占通用 semaphore 槽），再过通用并发信号量。
+            pst_gate = pst_semaphore if ext == ".pst" else nullcontext()
+            async with pst_gate, semaphore:
+                fname = os.path.basename(fp)
+                _parse_bar.set_postfix_str(fname, refresh=False)
+                t0 = time.monotonic()
+                try:
+                    rel_path = ""
                     if base_dir:
-                        pst_rel = os.path.relpath(abs_fp, base_dir).replace(os.sep, "/")
-                        for rid in removed_ids:
-                            entry = rid.rsplit("__", 1)[-1]
-                            pst_att_store.purge_email(pst_rel, entry)
-                    logger.info("Removed %d stale derived doc(s) for %s",
-                                len(removed_ids), fp)
-                for doc in new_docs:
-                    fts.index_document(doc, auto_commit=False)
+                        rel_path = os.path.relpath(fp, base_dir).replace(os.sep, "/")
+                    # 该文件重抽前先清掉它的旧图（幂等；force 模式已 purge_all，此处为空操作）
+                    if rel_path:
+                        image_store.purge_doc(rel_path)
+                        # PST 重索引：清掉旧落盘附件（幂等，重新提取）
+                        if ext == ".pst":
+                            pst_att_store.purge_doc(rel_path)
+                    common = dict(
+                        if_add_node_summary=if_add_node_summary,
+                        if_add_doc_description=if_add_doc_description,
+                        if_add_node_text=if_add_node_text,
+                        if_add_node_id=if_add_node_id,
+                        image_store=image_store,
+                        rel_path=rel_path,
+                        pst_attachment_store=pst_att_store,
+                        sub_progress_callback=(
+                            (lambda n: sub_progress_callback(fp, n))
+                            if sub_progress_callback else None
+                        ),
+                        **kwargs,
+                    )
+
+                    # Use ParserRegistry for dispatch (built-in parsers auto-registered)
+                    from .parsers import get_parser, SOURCE_TYPE_MAP
+                    parser_fn = get_parser(ext)
+                    if parser_fn is not None:
+                        result = await parser_fn(fp, **common)
+                    else:
+                        # Unknown extension: fall back to text_to_tree
+                        result = await text_to_tree(text_path=fp, **common)
+
+                    # Tag source_type for search routing
+                    source_type = SOURCE_TYPE_MAP.get(ext, "text")
+                    result["source_type"] = source_type
+
+                    # 图像文件：占位节点已进索引，登记到视觉解析队列（后台 worker 消费）
+                    if source_type == "image" and result.get("vision_pending"):
+                        fts.vision_enqueue(os.path.abspath(fp), rel_path)
+
+                    # Generate shadow MD for binary files (concurrent with parsing)
+                    if cfg.enable_shadow_md:
+                        from .parsers.registry import is_binary_extension
+                        if is_binary_extension(ext):
+                            try:
+                                _generate_shadow_md(os.path.abspath(fp))
+                            except Exception as e:
+                                logger.debug("Shadow MD generation failed for %s: %s", fp, e)
+
+                    _file_timings[fp] = (source_type, time.monotonic() - t0)
+                    # Call progress callback if provided
+                    async with _progress_lock:
+                        processed_counter[0] += 1
+                        if progress_callback:
+                            progress_callback(fp, processed_counter[0], total_files)
+                    return result
+                except Exception as e:
+                    logger.warning("Failed to index %s: %s", fp, e)
+                    _failed_paths.append(fp)
+                    abs_fp = os.path.abspath(fp)
+                    fts.upsert_failed_file(abs_fp, str(e), file_hashes.get(abs_fp, ""))
+                    _file_timings[fp] = ("(failed)", time.monotonic() - t0)
+                    async with _progress_lock:
+                        processed_counter[0] += 1
+                        if progress_callback:
+                            progress_callback(fp, processed_counter[0], total_files)
+                    return None
+                finally:
+                    _parse_bar.update()
+
+        # ---------------------------------------------------------------
+        # Chunked parse-commit loop (ADR-0018): parse a chunk of files,
+        # commit them to the DB, release the memory, then move to the next
+        # chunk. Peak memory = one chunk regardless of corpus size.
+        # index_chunk_size <= 0 disables chunking (legacy gather-all).
+        # ---------------------------------------------------------------
+        documents = []
+        # Per-file parse result → flattened node count, for stats without
+        # keeping every result alive across chunks.
+        _result_node_counts: dict[str, int] = {}
+        # Aggregate node-level diff stats across all reindexed docs.
+        diff_totals = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
+        optimize_threshold = cfg.auto_optimize_threshold
+        _COMMIT_BATCH = 500  # batch commit every N files to reduce fsync
+
+        _total_chunks = ((len(to_index) + index_chunk_size - 1) // index_chunk_size
+                         if index_chunk_size > 0 else 1)
+        _chunks_done = 0
+
+        async def _commit_chunk(chunk: list[str]) -> None:
+            """Parse *chunk* concurrently, then write results to the DB.
+
+            Runs the exact legacy save loop (multi_docs handling, node diff,
+            batched commits, auto-optimize) over this chunk's parse results only.
+            """
+            nonlocal _chunks_done
+            raw_results = await asyncio.gather(*(_index_one(fp) for fp in chunk))
+            result_map = {fp: r for fp, r in zip(chunk, raw_results) if r is not None}
+
+            _pending_commits = 0
+            docs_since_optimize = 0
+            for fp in chunk:
+                name = _fp_to_doc_id[fp]
+                if fp in result_map:
+                    result = result_map[fp]
+                    abs_fp = os.path.abspath(fp)
+                    file_h = file_hashes.get(abs_fp, "")
+
+                    if result.get("multi_docs") is not None:
+                        # 多文档来源（PST 等）：一个文件 → N 个派生文档。
+                        # 派生 doc_id = <file_doc_id>__<entry>；source_path = <file>#<entry>。
+                        # 已被移除的派生文档（邮件删除）按差集清除；其余走节点级增量。
+                        trees = result["multi_docs"]
+                        new_docs = []
+                        for t in trees:
+                            sp = t.get("source_path", "")
+                            entry = sp.rsplit("#", 1)[-1] if "#" in sp else str(len(new_docs))
+                            new_docs.append(Document(
+                                doc_id=f"{name}__{entry}",
+                                doc_name=t.get("doc_name", name),
+                                structure=t.get("structure", []),
+                                doc_description=t.get("doc_description", ""),
+                                metadata={"source_path": sp},
+                                source_type=result.get("source_type", ""),
+                            ))
+                        _result_node_counts[fp] = sum(
+                            len(flatten_tree(t.get("structure", []))) for t in trees
+                        )
+                        new_ids = {d.doc_id for d in new_docs}
+                        old_ids = set(fts.get_doc_ids_by_source_prefix(abs_fp + "#"))
+                        removed_ids = sorted(old_ids - new_ids)
+                        if removed_ids:
+                            fts.delete_documents(removed_ids)
+                            # 被移除派生文档（邮件删除）的落盘附件级联清理（ADR-0005）
+                            if base_dir:
+                                pst_rel = os.path.relpath(abs_fp, base_dir).replace(os.sep, "/")
+                                for rid in removed_ids:
+                                    entry = rid.rsplit("__", 1)[-1]
+                                    pst_att_store.purge_email(pst_rel, entry)
+                            logger.info("Removed %d stale derived doc(s) for %s",
+                                        len(removed_ids), fp)
+                        for doc in new_docs:
+                            fts.index_document(doc, auto_commit=False)
+                            d = fts.last_node_diff
+                            for k in diff_totals:
+                                diff_totals[k] += d[k]
+                            _pending_commits += 1
+                            docs_since_optimize += 1
+                            if _pending_commits >= _COMMIT_BATCH:
+                                fts.commit()
+                                _pending_commits = 0
+                            if optimize_threshold and docs_since_optimize >= optimize_threshold:
+                                fts.optimize()
+                                docs_since_optimize = 0
+                        # 邮件元数据入库（pst_email_meta 表，供列表分页查询，ADR-0005）
+                        for t, doc in zip(trees, new_docs):
+                            meta = t.get("email_meta")
+                            if meta:
+                                fts.upsert_email_meta(doc.doc_id, abs_fp, meta)
+                        # 文件指纹记在物理文件路径上（派生文档不写 index_meta）
+                        fts.set_index_meta(abs_fp, file_h)
+                        fts.clear_failed_file(abs_fp)
+                        logger.debug("Indexed %d derived docs: %s -> %s",
+                                     len(new_docs), fp, db_path)
+                        documents.extend(new_docs)
+                        continue
+
+                    doc = Document(
+                        doc_id=name,
+                        doc_name=result.get("doc_name", name),
+                        structure=result.get("structure", []),
+                        doc_description=result.get("doc_description", ""),
+                        metadata={"source_path": result.get("source_path", "")},
+                        source_type=result.get("source_type", ""),
+                    )
+                    _result_node_counts[fp] = len(flatten_tree(doc.structure))
+                    # index_document writes nodes, fts_nodes, documents AND index_meta
+                    # in a single atomic transaction (auto_commit handles batching).
+                    fts.index_document(doc, auto_commit=False, file_hash=file_h)
+                    # Clear any prior failure record for this file
+                    fts.clear_failed_file(abs_fp)
                     d = fts.last_node_diff
                     for k in diff_totals:
                         diff_totals[k] += d[k]
@@ -1906,133 +1968,115 @@ async def build_index(
                     if optimize_threshold and docs_since_optimize >= optimize_threshold:
                         fts.optimize()
                         docs_since_optimize = 0
-                # 邮件元数据入库（pst_email_meta 表，供列表分页查询，ADR-0005）
-                for t, doc in zip(trees, new_docs):
-                    meta = t.get("email_meta")
-                    if meta:
-                        fts.upsert_email_meta(doc.doc_id, abs_fp, meta)
-                # 文件指纹记在物理文件路径上（派生文档不写 index_meta）
-                fts.set_index_meta(abs_fp, file_h)
-                fts.clear_failed_file(abs_fp)
-                logger.debug("Indexed %d derived docs: %s -> %s",
-                             len(new_docs), fp, db_path)
-                documents.extend(new_docs)
-                _save_bar.update()
-                continue
-
-            doc = Document(
-                doc_id=name,
-                doc_name=result.get("doc_name", name),
-                structure=result.get("structure", []),
-                doc_description=result.get("doc_description", ""),
-                metadata={"source_path": result.get("source_path", "")},
-                source_type=result.get("source_type", ""),
-            )
-            # index_document writes nodes, fts_nodes, documents AND index_meta
-            # in a single atomic transaction (auto_commit handles batching).
-            fts.index_document(doc, auto_commit=False, file_hash=file_h)
-            # Clear any prior failure record for this file
-            fts.clear_failed_file(abs_fp)
-            d = fts.last_node_diff
-            for k in diff_totals:
-                diff_totals[k] += d[k]
-            _pending_commits += 1
-            docs_since_optimize += 1
-            if _pending_commits >= _COMMIT_BATCH:
+                    logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
+                    documents.append(doc)
+            # Final commit for this chunk's remaining pending writes
+            if _pending_commits > 0:
                 fts.commit()
-                _pending_commits = 0
-            if optimize_threshold and docs_since_optimize >= optimize_threshold:
-                fts.optimize()
-                docs_since_optimize = 0
-            logger.debug("Indexed: %s -> %s (doc_id=%s)", fp, db_path, name)
-        else:
-            # Skipped file: use batch-loaded docs (lookup by source_path, not doc_id)
-            abs_fp = os.path.abspath(fp)
-            doc = all_docs_from_db.get(abs_fp)
-            if doc is None:
-                # 多文档来源（PST 等）：物理路径无精确匹配，按派生前缀收集
-                derived = [d for sp, d in all_docs_from_db.items()
-                           if sp.startswith(abs_fp + "#")]
-                if derived:
-                    documents.extend(derived)
-                    _save_bar.update()
-                    continue
-                logger.debug("Skipped file %s has no document in DB (excluded by failure threshold)", fp)
-                _save_bar.update()
-                continue
-        documents.append(doc)
-        _save_bar.update()
-    # Final commit for remaining pending writes
-    if _pending_commits > 0:
-        logger.info("Committing remaining %d documents to database...", _pending_commits)
-        fts.commit()
-    _save_bar.close()
-
-    # Fold WAL sidecar back into the main DB so long-running daemons don't
-    # accumulate a multi-GB -wal file across many incremental builds.
-    fts.wal_checkpoint("TRUNCATE")
-
-    # ---------------------------------------------------------------
-    # Build IndexStats
-    # ---------------------------------------------------------------
-    build_elapsed = time.monotonic() - build_start
-
-    # Count total nodes in newly indexed documents
-    total_nodes = 0
-    for doc in documents:
-        total_nodes += len(flatten_tree(doc.structure))
-
-    # Per source_type aggregation
-    per_type: dict[str, dict] = {}
-    for fp, (stype, elapsed) in _file_timings.items():
-        if stype == "(failed)":
-            continue
-        entry = per_type.setdefault(stype, {"count": 0, "nodes": 0, "time_s": 0.0})
-        entry["count"] += 1
-        entry["time_s"] += elapsed
-        # Count nodes for this file
-        result = result_map.get(fp)
-        if result:
-            if result.get("multi_docs") is not None:
-                entry["nodes"] += sum(
-                    len(flatten_tree(t.get("structure", [])))
-                    for t in result["multi_docs"]
+            _chunks_done += 1
+            if _total_chunks > 1:
+                logger.info(
+                    "[chunk %d/%d] committed %d/%d files",
+                    _chunks_done, _total_chunks,
+                    min(_chunks_done * index_chunk_size, len(to_index)), len(to_index),
                 )
-            else:
-                entry["nodes"] += len(flatten_tree(result.get("structure", [])))
 
-    # Database size
-    db_size = 0
-    if db_path and os.path.isfile(db_path):
-        try:
-            db_size = os.path.getsize(db_path)
-        except OSError:
-            pass
+        _chunk_step = index_chunk_size if index_chunk_size > 0 else (len(to_index) or 1)
+        for _i in range(0, len(to_index), _chunk_step):
+            await _commit_chunk(to_index[_i:_i + _chunk_step])
+        _parse_bar.close()
 
-    stats = IndexStats(
-        total_files=len(expanded),
-        indexed_files=len(to_index) - len(_failed_paths),
-        skipped_files=len(skipped),
-        failed_files=len(_failed_paths),
-        excluded_files=excluded_count,
-        total_nodes=total_nodes,
-        total_time_s=build_elapsed,
-        per_type=per_type,
-        db_path=db_path,
-        db_size_bytes=db_size,
-        failed_paths=_failed_paths,
-        node_diff=diff_totals,
-        pruned_paths=pruned_paths,
-    )
+        # Batch load all skipped documents in one query (instead of N individual loads)
+        # Key by source_path (unique and stable) instead of doc_id (may change).
+        # Skipped entirely with return_documents=False: re-loading the whole DB
+        # just to echo already-committed docs would materialize O(corpus) memory —
+        # exactly what chunked indexing avoids (ADR-0018).
+        if skipped and return_documents:
+            all_docs_from_db = {
+                d.metadata.get("source_path", ""): d
+                for d in fts.load_all_documents()
+                if d.metadata.get("source_path")
+            }
+        else:
+            all_docs_from_db = {}
 
-    # Attach stats to the returned list for easy access
-    class _DocumentList(list):
-        """List subclass that carries IndexStats."""
-        stats: IndexStats = None  # type: ignore[assignment]
+        # Skipped files: append their existing documents (best effort, DB-backed)
+        if return_documents:
+            _save_bar = tqdm(total=len(skipped), desc="Loading", unit="file",
+                             dynamic_ncols=True, disable=not skipped)
+            for fp in skipped:
+                abs_fp = os.path.abspath(fp)
+                doc = all_docs_from_db.get(abs_fp)
+                if doc is None:
+                    # 多文档来源（PST 等）：物理路径无精确匹配，按派生前缀收集
+                    derived = [d for sp, d in all_docs_from_db.items()
+                               if sp.startswith(abs_fp + "#")]
+                    if derived:
+                        documents.extend(derived)
+                else:
+                    documents.append(doc)
+                _save_bar.update()
+            _save_bar.close()
 
-    doc_list = _DocumentList(documents)
-    doc_list.stats = stats
+        # Fold WAL sidecar back into the main DB so long-running daemons don't
+        # accumulate a multi-GB -wal file across many incremental builds.
+        fts.wal_checkpoint("TRUNCATE")
 
-    fts.close()
-    _lock_handle.release()
-    return doc_list
+        # ---------------------------------------------------------------
+        # Build IndexStats
+        # ---------------------------------------------------------------
+        build_elapsed = time.monotonic() - build_start
+
+        # Count total nodes in newly indexed documents (from per-file counts,
+        # independent of whether the Document list was materialized)
+        total_nodes = sum(_result_node_counts.values())
+
+        # Per source_type aggregation
+        per_type: dict[str, dict] = {}
+        for fp, (stype, elapsed) in _file_timings.items():
+            if stype == "(failed)":
+                continue
+            entry = per_type.setdefault(stype, {"count": 0, "nodes": 0, "time_s": 0.0})
+            entry["count"] += 1
+            entry["time_s"] += elapsed
+            entry["nodes"] += _result_node_counts.get(fp, 0)
+
+        # Database size
+        db_size = 0
+        if db_path and os.path.isfile(db_path):
+            try:
+                db_size = os.path.getsize(db_path)
+            except OSError:
+                pass
+
+        stats = IndexStats(
+            total_files=len(expanded),
+            indexed_files=len(to_index) - len(_failed_paths),
+            skipped_files=len(skipped),
+            failed_files=len(_failed_paths),
+            excluded_files=excluded_count,
+            total_nodes=total_nodes,
+            total_time_s=build_elapsed,
+            per_type=per_type,
+            db_path=db_path,
+            db_size_bytes=db_size,
+            failed_paths=_failed_paths,
+            node_diff=diff_totals,
+            pruned_paths=pruned_paths,
+        )
+
+        # Attach stats to the returned list for easy access
+        class _DocumentList(list):
+            """List subclass that carries IndexStats."""
+            stats: IndexStats = None  # type: ignore[assignment]
+
+        doc_list = _DocumentList(documents)
+        doc_list.stats = stats
+        if not return_documents:
+            # Caller opted out of materialization: the list is a stats carrier only.
+            doc_list.clear()
+
+        return doc_list
+    finally:
+        fts.close()
+        _lock_handle.release()

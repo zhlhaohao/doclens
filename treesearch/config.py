@@ -42,6 +42,7 @@ _ENV_PRUNE = "TREESEARCH_PRUNE"
 _ENV_SHADOW_MD = "TREESEARCH_ENABLE_SHADOW_MD"
 _ENV_ALLOWED_SOURCE_TYPES = "TREESEARCH_ALLOWED_SOURCE_TYPES"
 _ENV_MAX_DIR_FILES = "TREESEARCH_MAX_DIR_FILES"
+_ENV_INDEX_CHUNK_SIZE = "TREESEARCH_INDEX_CHUNK_SIZE"
 
 
 def _env_int(cfg: "TreeSearchConfig", attr: str, min_val: int, env_name: str) -> None:
@@ -84,6 +85,10 @@ class TreeSearchConfig:
     # 1 = PST 串行索引（最稳）；调大可加速但会增加资源压力。
     max_pst_concurrency: int = 1
     max_dir_files: int = 10_000  # safety cap for directory walk (<=0 = unlimited)
+    # 分块索引的块大小（文件数）。每块「解析 → 落库 commit → 释放内存 → 下一块」，
+    # 内存峰值 = 单块，百万级语料不再 OOM（ADR-0018）。
+    # ⚠️ 0 = 不分块（旧行为，全量攒内存）——与 max_dir_files 的 0=不设限**有意相反**。
+    index_chunk_size: int = 500
 
     # Text length limits
     max_node_chars: int = 8000  # max characters per node text when indexing into FTS5
@@ -170,6 +175,8 @@ class TreeSearchConfig:
         _env_int(config, "xlsx_max_consecutive_empty_rows", 1, "TREESEARCH_XLSX_MAX_CONSECUTIVE_EMPTY_ROWS")
         # max_dir_files 允许 0（=不设限），min_val 传 0
         _env_int(config, "max_dir_files", 0, _ENV_MAX_DIR_FILES)
+        # index_chunk_size 允许 0（=不分块，旧行为；ADR-0018）
+        _env_int(config, "index_chunk_size", 0, _ENV_INDEX_CHUNK_SIZE)
 
         env_source_types = os.getenv(_ENV_ALLOWED_SOURCE_TYPES)
         if env_source_types:

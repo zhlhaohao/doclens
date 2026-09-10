@@ -186,6 +186,50 @@ class IndexManager:
         return self._config.treesearch_max_dir_files
 
     @property
+    def index_chunk_size(self) -> int:
+        """分块索引块大小（文件数；0 = 不分块，旧行为。ADR-0018）。"""
+        return self._config.treesearch_index_chunk_size
+
+    def _ts_config(self):
+        """构造 treesearch 配置（集中一处，避免 4 处 set_config 漂移）。"""
+        return TreeSearchConfig(
+            cjk_tokenizer=self.cjk_tokenizer,
+            max_index_fail_count=self.max_index_fail_count,
+            enable_shadow_md=self.enable_shadow_md,
+            xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet,
+            xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows,
+            allowed_source_types=self.allowed_source_types,
+            max_dir_files=self.max_dir_files,
+            index_chunk_size=self.index_chunk_size,
+        )
+
+    def indexed_doc_count(self) -> int:
+        """索引文档总数（DB COUNT，不物化 documents——ADR-0018）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return int(fts.get_stats().get("document_count", 0))
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("indexed_doc_count failed: %s", e)
+            return 0
+
+    def indexed_source_paths(self) -> list[str]:
+        """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return sorted(set(fts.load_doc_id_source_paths().values()))
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("indexed_source_paths failed: %s", e)
+            return []
+
+    @property
     def scoring_weights(self) -> dict:
         c = self._config
         return {
@@ -228,6 +272,11 @@ class IndexManager:
 
     @property
     def documents(self):
+        """已物化的文档列表（搜索后缓存）；计数场景请用 indexed_doc_count()。
+
+        ADR-0018：启动/索引路径不再预加载全量 documents——本属性在搜索
+        首次触发 _ensure_search_documents() 前可能为空。
+        """
         return self._ts.documents if self._ts else []
 
     def has_changed_files(self) -> bool:
@@ -309,20 +358,14 @@ class IndexManager:
                 logger.debug("_bg_work started, search_path=%s", self.search_path)
                 with self._reindex_lock:
                     logger.debug("_bg_work got lock")
-                    # 创建临时 TreeSearch 实例完成索引构建
-                    from treesearch import TreeSearch, set_config, TreeSearchConfig
+                    # 创建临时 TreeSearch 实例完成索引构建。
+                    # 不预热 load_index、不物化 documents（百万级语料 OOM 根因，
+                    # ADR-0018）：build_index 直写 DB，计数走 IndexStats / DB COUNT。
+                    from treesearch import TreeSearch, set_config
                     import time as time_module
 
-                    abs_path = os.path.abspath(self.index_path)
-                    set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
+                    set_config(self._ts_config())
                     new_ts = TreeSearch(db_path=self.index_path)
-                    if os.path.exists(abs_path):
-                        try:
-                            docs = new_ts.load_index(abs_path)
-                            if docs:
-                                new_ts.documents = docs
-                        except Exception:
-                            pass
 
                     # 线程安全的共享状态用于追踪进度
                     current_file = [None]  # 使用列表存储，模拟可变引用
@@ -368,12 +411,10 @@ class IndexManager:
                     publish_progress()
 
                     logger.debug("about to call new_ts.index(), search_path=%s", self.search_path)
-                    failed_count = 0
                     try:
-                        new_ts.index(self.search_path, force=force, progress_callback=on_file_indexed, sub_progress_callback=on_sub_progress_cb)
+                        new_ts.index(self.search_path, force=force, return_documents=False, progress_callback=on_file_indexed, sub_progress_callback=on_sub_progress_cb)
                         logger.debug("new_ts.index() completed")
                     except FileNotFoundError:
-                        new_ts.documents = []
                         logger.debug("new_ts.index() caught FileNotFoundError")
                     finally:
                         progress_timer.cancel()
@@ -390,35 +431,30 @@ class IndexManager:
                     except Exception as e:
                         logger.debug("failed to get failed file stats: %s", e)
 
-                    prev_count = len(self._ts.documents) if (self._ts and self._ts.documents) else 0
-                    doc_count = len(new_ts.documents)
-                    if doc_count > 0 or prev_count == 0:
-                        new_ts.save_index()
+                    # 索引后判定：documents 不再物化（ADR-0018），改读 IndexStats +
+                    # DB COUNT。锁冲突（build_index 被跳过返回 []）以 IndexStats 缺失
+                    # + 全零为特征——保留旧索引，本次视为跳过，下次文件变化重新触发。
+                    prev_count = self.indexed_doc_count()
+                    _stats = new_ts.get_index_stats() if new_ts else None
+                    doc_count = self.indexed_doc_count()
+                    if (_stats is not None and _stats.total_files > 0) or prev_count == 0:
                         logger.info("Background reindex completed: %d documents", doc_count)
-                        # 立即刷新内存中的文档列表与 path_map：files API 的 indexed 标志、
-                        # /api/status 的 indexed_docs 都直接读 idx.documents（不经
-                        # load_or_build_index），若不刷新则改名/新增/删除文件的 indexed
-                        # 状态要等到下次搜索触发 reload 才会更新。
-                        # FTS 搜索仍由下面的 _needs_reload 在下次查询时从磁盘重载连接，保持原行为。
-                        if self._ts is not None:
-                            self._ts.documents = new_ts.documents
-                            self.build_path_map()
+                        # 刷新内存 path_map（轻量：仅 doc_id→path 映射，不载树结构）；
+                        # _ts.documents 保持不物化——files/status 计数已走 DB 查询。
+                        self.refresh_path_map_from_db()
                         # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
                         self._needs_reload = True
                     else:
-                        # index() 返回 0 但现有索引非空 —— 几乎都是 db 锁冲突导致
-                        # build_index 被跳过（返回 []）。绝不能用空结果覆盖：save 会把
-                        # db 清成 0、刷新 self._ts 会让 files API 的 indexed 全部消失。
-                        # 保留旧索引，本次视为跳过，下次文件变化会重新触发 reindex。
+                        # 无 IndexStats 且现有索引非空 —— 几乎都是 db 锁冲突导致
+                        # build_index 被跳过（返回 []）。保留旧索引，下次重试。
                         logger.warning(
-                            "Background reindex produced 0 documents (likely db lock conflict); "
-                            "skipped save to preserve existing %d documents.", prev_count,
+                            "Background reindex produced no stats (likely db lock conflict); "
+                            "keeping existing %d documents.", prev_count,
                         )
                         doc_count = prev_count
 
                     # 调用完成回调（先记失败数，供 /api/status）
                     self._last_failed_count = failed_count
-                    _stats = new_ts.get_index_stats() if new_ts else None
                     _indexed = _stats.indexed_files if _stats else 0
                     if on_complete:
                         on_complete(True, doc_count, failed_count, _indexed)
@@ -461,74 +497,87 @@ class IndexManager:
         }
 
     def load_or_build_index(self):
-        """加载或构建索引"""
+        """加载或构建索引。
+
+        ADR-0018：不再把全量 documents 物化进内存（百万级语料 OOM 根因）。
+        启动时只做「存在性 + 变更检测」：索引库已存在且无变化 → 只建轻量
+        path_map 即返回；有变化/不存在 → 增量/全量索引（build_index 直写
+        DB，return_documents=False）。搜索时才按需从 DB 加载。
+        """
         self._sync_image_version_expectation()
         if self._ts is not None and not self._needs_reload:
             return True
         self._needs_reload = False
 
-        # 设置 CJK 分词
-        set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
+        set_config(self._ts_config())
         self._ts = TreeSearch(db_path=self.index_path)
         abs_path = os.path.abspath(self.index_path)
 
         if os.path.exists(abs_path):
+            # 索引库已存在：无变化则不物化、不全量 load（ADR-0018）
+            if not self.has_changed_files():
+                self.build_path_map()
+                logger.debug("Index unchanged, loaded path_map only (%d docs)",
+                             len(self._path_map))
+                return True
+            # 有变化：走增量索引（不清空 _ts，build_index 直写 DB）
+            print(f"[增量索引: {self.search_path}]")
             try:
-                docs = self._ts.load_index(abs_path)
-                if docs:
-                    self._ts.documents = docs
-                    self.build_path_map()
-                    return True
-            except Exception:
-                # 索引文件损坏，删除并重建 TreeSearch 实例
-                print("[警告] 索引文件损坏，正在重建...")
-                self._ts = None  # 释放旧实例引用，帮助 GC 回收 SQLite 连接
-                import gc
-                gc.collect()
-                # 删除损坏的索引文件及 WAL/SHM 文件
-                for suffix in ("", "-wal", "-shm"):
-                    p = abs_path + suffix
-                    for _ in range(3):
-                        try:
-                            if os.path.exists(p):
-                                os.remove(p)
-                            break
-                        except PermissionError:
-                            import time
-                            time.sleep(0.2)
-                            gc.collect()
-                set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
-                self._ts = TreeSearch(db_path=self.index_path)
+                self._ts.index(self.search_path, return_documents=False)
+            except FileNotFoundError:
+                print(f"[警告] 路径不存在或为空: {self.search_path}")
+                self._path_map = {}
+                return True
+            stats = self._ts.get_index_stats()
+            self._last_failed_count = stats.failed_files if stats else 0
+            self.build_path_map()
+            doc_count = self.indexed_doc_count()
+            fail_hint = f"，{self._last_failed_count} 个文件失败" if self._last_failed_count else ""
+            print(f"[索引完成: {doc_count} 个文档{fail_hint}]")
+            return True
 
-        # 构建新索引
+        # 构建新索引（首次）
         print(f"[正在构建索引: {self.search_path}]")
         try:
-            self._ts.index(self.search_path)
+            self._ts.index(self.search_path, return_documents=False)
         except FileNotFoundError:
             print(f"[警告] 路径不存在或为空: {self.search_path}")
             self._ts.documents = []
             self._path_map = {}
             return True
-        os.makedirs(os.path.dirname(os.path.abspath(self.index_path)), exist_ok=True)
-        self._ts.save_index()
         # 读本次索引的 IndexStats（失败文件数），暴露给 /api/status；启动同步索引
         # 不走 reindexed 广播，前端只能靠此字段看到失败数。
         stats = self._ts.get_index_stats()
         self._last_failed_count = stats.failed_files if stats else 0
         self.build_path_map()
+        doc_count = self.indexed_doc_count()
         fail_hint = f"，{self._last_failed_count} 个文件失败" if self._last_failed_count else ""
-        print(f"[索引完成: {len(self._ts.documents)} 个文档{fail_hint}]")
+        print(f"[索引完成: {doc_count} 个文档{fail_hint}]")
         return True
 
     def build_path_map(self):
-        """构建路径映射"""
-        self._path_map = {}
-        for doc in self._ts.documents:
+        """构建路径映射（从 DB 轻量加载 doc_id/source_path，不物化树结构）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                pairs = fts.load_doc_id_source_paths()
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("build_path_map DB load failed: %s", e)
+            pairs = {}
+        self._path_map = dict(pairs)
+        # doc_name → path 兜底映射（旧文件名查找路径仍可用）
+        for doc in (self._ts.documents if self._ts else []):
             if hasattr(doc, 'metadata') and doc.metadata:
                 path = doc.metadata.get('source_path', '')
                 if path:
-                    self._path_map[doc.doc_id] = path
                     self._path_map[doc.doc_name] = path
+
+    def refresh_path_map_from_db(self):
+        """后台 reindex 完成后刷新 path_map（build_path_map 的别名入口）。"""
+        self.build_path_map()
 
     def reindex(self, force=False):
         """增量更新索引（force=True 时全量重建）"""
@@ -539,7 +588,7 @@ class IndexManager:
         """内部 reindex（已持有锁）"""
         self._sync_image_version_expectation()
         if self._ts is None:
-            set_config(TreeSearchConfig(cjk_tokenizer=self.cjk_tokenizer, max_index_fail_count=self.max_index_fail_count, enable_shadow_md=self.enable_shadow_md, xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet, xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows, allowed_source_types=self.allowed_source_types, max_dir_files=self.max_dir_files))
+            set_config(self._ts_config())
             self._ts = TreeSearch(db_path=self.index_path)
 
         mode = "全量重建" if force else "增量更新"
@@ -580,7 +629,7 @@ class IndexManager:
 
         print(f"[正在{mode}: {self.search_path}]")
         try:
-            self._ts.index(self.search_path, force=force)
+            self._ts.index(self.search_path, force=force, return_documents=False)
         except FileNotFoundError:
             print(f"[警告] 路径不存在或为空: {self.search_path}")
             self._ts.documents = []
@@ -593,18 +642,32 @@ class IndexManager:
                 progress_timer.cancel()
         self.build_path_map()
 
-        # 展示增量统计
+        # 展示增量统计（文档计数走 DB COUNT，ADR-0018）
         stats = self._ts.get_index_stats()
+        doc_count = self.indexed_doc_count()
         if stats:
             excluded_info = f", {stats.excluded_files} 个失败跳过" if stats.excluded_files else ""
             print(f"[{mode}完成: "
                   f"{stats.indexed_files} 个文件已索引, "
                   f"{stats.skipped_files} 个未变更, "
                   f"{len(stats.pruned_paths)} 个已清理{excluded_info} | "
-                  f"共 {len(self._ts.documents)} 个文档, "
+                  f"共 {doc_count} 个文档, "
                   f"{stats.total_time_s:.2f}s]")
         else:
-            print(f"[索引已更新: {len(self._ts.documents)} 个文档]")
+            print(f"[索引已更新: {doc_count} 个文档]")
+
+    def _ensure_search_documents(self):
+        """搜索前的按需加载：_ts.documents 为空且库里有文档时才全量 load。
+
+        ADR-0018 的分期边界：启动/索引路径已去物化，搜索路径仍需完整
+        documents（treesearch search 路由吃全量列表）；全惰性化（FTS 路由
+        先查 DB 只载 top-k）排下期。这里按需加载一次后缓存复用。
+        """
+        if self._ts is not None and not self._ts.documents and self.indexed_doc_count() > 0:
+            try:
+                self._ts.load_index(os.path.abspath(self.index_path))
+            except Exception as e:  # noqa: BLE001
+                logger.warning("search-time document load failed: %s", e)
 
     def search(self, query, max_results=None, fts_expression=None):
         """执行搜索，返回 (flat_nodes, documents)"""
@@ -613,6 +676,7 @@ class IndexManager:
 
         self._check_swap()
         self.load_or_build_index()
+        self._ensure_search_documents()
 
         if not self._ts.documents:
             return [], []
@@ -638,7 +702,8 @@ class IndexManager:
 
         self.load_or_build_index()
 
-        if not self._ts.documents:
+        # 直接查 DB（ADR-0018）：documents 不物化，空库以 DB 计数判定
+        if self.indexed_doc_count() == 0:
             return []
 
         from treesearch.fts import FTS5Index

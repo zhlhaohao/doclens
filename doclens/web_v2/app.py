@@ -295,6 +295,11 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
 
     `share` 参数保留向后兼容，但 v2 不再支持公网分享。
     如果端口被占用，自动尝试杀死占用进程后启动。
+
+    先索引后开浏览器（ADR-0018）：启动即后台线程跑索引（终端进度 +
+    tqdm ETA），完成后才打开浏览器；索引失败仍开浏览器（应用可用、
+    可看 status 排查）+ 终端警告。期间进来的 HTTP 请求在
+    get_index_manager 的 join 上挂起等待。
     """
     if share:
         import warnings
@@ -303,6 +308,7 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     # treesearch 进度日志（含 PST 邮件级细粒度进度）输出到命令行 stderr
     _enable_treesearch_console_logging()
 
+    import os
     import threading
     import webbrowser
 
@@ -320,9 +326,23 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
 
     app = create_app()
     url = f"http://localhost:{port}" if host in ("127.0.0.1", "0.0.0.0") else f"http://{host}:{port}"
+
     # CORTEX_NO_BROWSER=1 时不弹浏览器（供 Stop hook 自动重启使用，避免反复弹窗）
-    import os
-    if not os.environ.get("CORTEX_NO_BROWSER"):
-        # 延迟 1 秒打开浏览器，等 uvicorn 就绪
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    open_browser = not os.environ.get("CORTEX_NO_BROWSER")
+
+    def _startup_index_then_open_browser() -> None:
+        """后台线程：先建索引（增量/全量），完成后开浏览器（ADR-0018）。"""
+        from doclens.web_v2 import deps
+        try:
+            # get_index_manager 内部完成 load_or_build_index 并发布单例；
+            # 期间进来的 HTTP 请求在同函数的锁 + join 上挂起等待
+            deps.get_index_manager()
+        except Exception as e:  # noqa: BLE001
+            print(f"\n[警告] 启动索引失败: {e}（应用仍将打开，可在设置页排查）\n", flush=True)
+        finally:
+            if open_browser:
+                # 延迟 1 秒等 uvicorn 完全就绪（小语料下索引先于服务器完成）
+                threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
+    threading.Thread(target=_startup_index_then_open_browser, daemon=True).start()
     uvicorn.run(app, host=host, port=port)

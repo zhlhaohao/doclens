@@ -109,9 +109,9 @@ class TestEnvPlumbing:
         with pytest.raises(ValueError):
             resolve_paths([str(tmp_path)], max_files=idx.max_dir_files)
 
-        # 调大后成功
+        # 调大后成功（ADR-0018：documents 不物化，计数走 DB COUNT）
         monkeypatch.setenv("TREESEARCH_MAX_DIR_FILES", "20")
         idx2 = IndexManager(CortexConfig())
         assert idx2.max_dir_files == 20
         idx2.reindex(force=True)
-        assert len(idx2.documents) == 11
+        assert idx2.indexed_doc_count() == 11
