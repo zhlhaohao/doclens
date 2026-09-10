@@ -187,12 +187,13 @@ class CortexConfig(BaseSettings):
     # 允许解析的文件类型（逗号分隔；空=全部允许）
     # 可选值: markdown, code, text, json, jsonl, csv, html, xml, pdf, doc, docx, rtf,
     #         pptx, ppt, excel, image, pst, epub
-    # 默认文档类 + 网页存档 + 图像 + 邮件存档，排除 code/text/json/xml
+    # 默认文档类 + 网页存档 + 图像 + 邮件存档 + 纯文本，排除 code/json/xml
     # html 涵盖 .html/.htm/.mhtml/.mht（MHTML 解包后复用 HTML 解析）
     # pst = Outlook 邮件数据文件（经 bin/pst-extract sidecar 解包，每封邮件一个文档）
     # ppt/rtf/epub = anydoc 解析的遗留格式（.ppt/.pps/.pot、.rtf、.epub，ADR-0013）
+    # text = 纯文本（.txt/.log/.rst，规则切树无 heading 时单节点兜底）
     allowed_source_types_str: str = Field(
-        default="markdown,csv,pdf,doc,docx,rtf,pptx,ppt,excel,html,image,pst,epub",
+        default="markdown,text,csv,pdf,doc,docx,rtf,pptx,ppt,excel,html,image,pst,epub",
         alias="CORTEX_ALLOWED_SOURCE_TYPES",
     )
 
