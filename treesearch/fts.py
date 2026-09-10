@@ -2243,16 +2243,23 @@ class FTS5Index:
     def get_unindexed_doc_ids(self, doc_ids: list[str]) -> set[str]:
         """Return the subset of doc_ids that are NOT yet indexed.
 
-        Uses a single SQL query instead of per-document checks.
+        Batched SQL query instead of per-document checks. Batches stay under
+        SQLite's host-variable limit (32766) so 500k-doc corpora don't blow up
+        the IN clause (uncovered pre-existing defect, surfaced by ADR-0018
+        chunked indexing making such corpora reachable).
         """
         if not doc_ids:
             return set()
-        placeholders = ",".join("?" for _ in doc_ids)
-        rows = self._conn.execute(
-            f"SELECT doc_id FROM documents WHERE doc_id IN ({placeholders})",
-            doc_ids,
-        ).fetchall()
-        indexed = {r[0] for r in rows}
+        _BATCH = 30_000
+        indexed: set[str] = set()
+        for i in range(0, len(doc_ids), _BATCH):
+            batch = doc_ids[i:i + _BATCH]
+            placeholders = ",".join("?" for _ in batch)
+            rows = self._conn.execute(
+                f"SELECT doc_id FROM documents WHERE doc_id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            indexed.update(r[0] for r in rows)
         return set(doc_ids) - indexed
 
 
