@@ -2114,6 +2114,58 @@ class FTS5Index:
         rows = self._conn.execute("SELECT source_path, file_hash FROM index_meta").fetchall()
         return {r[0]: r[1] for r in rows}
 
+    def iter_index_meta(self, batch_size: int = 1000):
+        """Iterate all ``(source_path, file_hash)`` pairs in bounded batches.
+
+        Keyset pagination on the ``source_path`` primary key — unlike
+        :meth:`get_all_index_meta`, memory stays O(batch_size) regardless of
+        corpus size. Batches are fully fetched (no open cursor), so other
+        statements may run on this connection between yields.
+
+        Args:
+            batch_size: rows per keyset page (default 1000).
+
+        Yields:
+            ``(source_path, file_hash)`` tuples in source_path order.
+        """
+        cursor: Optional[str] = None
+        while True:
+            if cursor is None:
+                rows = self._conn.execute(
+                    "SELECT source_path, file_hash FROM index_meta "
+                    "ORDER BY source_path LIMIT ?",
+                    (batch_size,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT source_path, file_hash FROM index_meta "
+                    "WHERE source_path > ? ORDER BY source_path LIMIT ?",
+                    (cursor, batch_size),
+                ).fetchall()
+            if not rows:
+                return
+            yield from rows
+            cursor = rows[-1][0]
+
+    def filter_known_source_paths(self, source_paths: list[str]) -> set[str]:
+        """Return the subset of *source_paths* tracked in ``index_meta``.
+
+        Batched ``IN`` probes on the primary key (chunks of 500, under the
+        SQLite host-variable limit) — the membership-check counterpart to a
+        streaming directory walk: no full-table dict, O(probe batch) memory.
+        Exact-string matching, same as the old set-difference semantics.
+        """
+        known: set[str] = set()
+        for i in range(0, len(source_paths), 500):
+            batch = source_paths[i:i + 500]
+            placeholders = ",".join("?" * len(batch))
+            rows = self._conn.execute(
+                f"SELECT source_path FROM index_meta WHERE source_path IN ({placeholders})",
+                batch,
+            ).fetchall()
+            known.update(r[0] for r in rows)
+        return known
+
     # -------------------------------------------------------------------
     # FTS5 query expression builder
     # -------------------------------------------------------------------

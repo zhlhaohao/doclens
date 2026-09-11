@@ -99,7 +99,7 @@ def shadow_md_path(source_path: str) -> str:
     return os.path.join(dirname, "._" + basename + ".md")
 
 
-def _walk_directory(
+def _iter_walk_directory(
     directory: str,
     *,
     allowed_extensions: set[str] | None = None,
@@ -107,15 +107,18 @@ def _walk_directory(
     respect_gitignore: bool = True,
     max_files: int = MAX_DIR_FILES,
     follow_symlinks: bool = False,
-) -> list[str]:
-    """Recursively walk *directory* and return matching file paths.
+):
+    """Recursively walk *directory*, yielding matching file paths one by one.
 
-    ``max_files <= 0`` means no cap.
+    Streaming core of ``_walk_directory`` — same filters (ignored dirs /
+    shadow MD / extensions / .gitignore), O(1) memory. ``max_files <= 0``
+    means no cap; exceeding the cap raises like the list variant, at the
+    (max_files + 1)-th match.
     """
     directory = os.path.abspath(directory)
     gitignore_spec, gitignore_base = _load_gitignore_spec(directory) if respect_gitignore else (None, directory)
 
-    results: list[str] = []
+    count = 0
     for dirpath, dirnames, filenames in os.walk(directory, followlinks=follow_symlinks):
         # Filter out ignored directories (in-place to prevent os.walk descent)
         dirnames[:] = [
@@ -143,14 +146,39 @@ def _walk_directory(
                 if gitignore_spec.match_file(rel):
                     continue
 
-            results.append(full_path)
-            if max_files > 0 and len(results) > max_files:
+            count += 1
+            if max_files > 0 and count > max_files:
                 raise ValueError(
                     f"Directory '{directory}' contains more than {max_files} matching files. "
                     f"Use a more specific path or increase max_files."
                 )
+            yield full_path
 
-    return results
+
+def _walk_directory(
+    directory: str,
+    *,
+    allowed_extensions: set[str] | None = None,
+    ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
+    respect_gitignore: bool = True,
+    max_files: int = MAX_DIR_FILES,
+    follow_symlinks: bool = False,
+) -> list[str]:
+    """Recursively walk *directory* and return matching file paths.
+
+    List wrapper over the streaming ``_iter_walk_directory`` (single filter
+    implementation, no copy drift). ``max_files <= 0`` means no cap.
+    """
+    return list(
+        _iter_walk_directory(
+            directory,
+            allowed_extensions=allowed_extensions,
+            ignore_dirs=ignore_dirs,
+            respect_gitignore=respect_gitignore,
+            max_files=max_files,
+            follow_symlinks=follow_symlinks,
+        )
+    )
 
 
 def resolve_paths(
@@ -213,7 +241,7 @@ def resolve_paths(
                     _add(match)
         elif os.path.isdir(p):
             # Directory → recursive walk
-            for fp in _walk_directory(
+            for fp in _iter_walk_directory(
                 p,
                 allowed_extensions=allowed_extensions,
                 ignore_dirs=ignore_dirs,
@@ -229,3 +257,56 @@ def resolve_paths(
             logger.warning("Path not found: %s", p)
 
     return resolved
+
+
+def iter_resolve_paths(
+    patterns: list[str],
+    *,
+    allowed_extensions: set[str] | None = None,
+    ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
+    respect_gitignore: bool = True,
+    max_files: int = MAX_DIR_FILES,
+    follow_symlinks: bool = False,
+):
+    """Streaming variant of :func:`resolve_paths` — yields paths one by one.
+
+    Same resolution rules and filters (globs / regular files / recursive
+    directory walks with ignore dirs, shadow-MD skip, extension whitelist,
+    ``.gitignore``), but with **no deduplication and no materialization** —
+    O(1) memory regardless of corpus size. Intended for single-root audits
+    over huge corpora where the caller consumes incrementally and
+    early-exits (e.g. change detection); pass one directory pattern when
+    duplicate suppression matters.
+
+    Yields:
+        File paths in walk order (absolute for directory walks).
+    """
+    if allowed_extensions is None:
+        allowed_extensions = _get_default_extensions()
+
+    # Overlay source_type filter from global config (same as resolve_paths)
+    from .config import get_config
+    source_type_exts = get_allowed_extensions_for_source_types(
+        get_config().allowed_source_types
+    )
+    if source_type_exts is not None:
+        allowed_extensions = allowed_extensions & source_type_exts
+
+    for p in patterns:
+        if "*" in p or "?" in p:
+            for match in sorted(globmod.glob(p, recursive=True)):
+                if os.path.isfile(match):
+                    yield match
+        elif os.path.isdir(p):
+            yield from _iter_walk_directory(
+                p,
+                allowed_extensions=allowed_extensions,
+                ignore_dirs=ignore_dirs,
+                respect_gitignore=respect_gitignore,
+                max_files=max_files,
+                follow_symlinks=follow_symlinks,
+            )
+        elif os.path.isfile(p):
+            yield p
+        else:
+            logger.warning("Path not found: %s", p)

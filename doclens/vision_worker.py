@@ -311,7 +311,8 @@ class VisionWorker:
         # 不会清理占位阶段留下的旧节点；因此先整体删除旧文档再重建。
         # 注意 delete_documents 会连带删除 index_meta 指纹——先读出、重建时原样写回，
         # 否则下一轮增量索引会把图像当成"新文件"再次生成占位节点并重新入队（死循环）。
-        stored_hash = fts.get_all_index_meta().get(path)
+        # 单点读取（ADR-0020 rider）——勿用 get_all_index_meta()（百万库整表载入）。
+        stored_hash = fts.get_index_meta(path)
         fts.delete_documents([old_doc.doc_id])
         # file_hash 是主索引阶段写入的文件指纹；文件本身没变，原样恢复即可
         fts.index_document(new_doc, force=True, file_hash=stored_hash)

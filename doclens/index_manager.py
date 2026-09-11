@@ -384,56 +384,71 @@ class IndexManager:
 
         检测三类变化：已索引文件内容修改、已索引文件被删除、新增文件。
         排除数据目录（开发 .cortex / 发行版 .doclens）内的文件（索引元数据）和之前索引失败的文件。
+
+        流式化（ADR-0020）：键集分页读 index_meta + 生成器目录遍历 + 批量
+        PK 探测，全程 O(batch) 内存——百万语料上不再物化四份全量路径集合
+        （旧实现 ~1GB 峰值 / 1.35GB 进程驻留）。早退语义与旧实现逐点一致。
         """
         try:
             from treesearch.fts import FTS5Index
             from treesearch.indexer import file_hash_with_salts
+            from treesearch.pathutil import iter_resolve_paths
 
             fts = FTS5Index(db_path=self.index_path)
-            stored_meta = fts.get_all_index_meta()
-            failed_files = fts.get_all_failed_files()
-            fts.close()
+            try:
+                failed_files = fts.get_all_failed_files()  # 小表，驻内存
+                cortex_dir = os.path.abspath(os.path.join(self.search_path, data_dirname()))
+                supported_exts = set(SUPPORTED_FORMATS.keys())
 
-            cortex_dir = os.path.abspath(os.path.join(self.search_path, data_dirname()))
-            supported_exts = set(SUPPORTED_FORMATS.keys())
+                # Apply allowed_source_types filter to extension check
+                if self.allowed_source_types:
+                    from treesearch.pathutil import get_allowed_extensions_for_source_types
+                    type_exts = get_allowed_extensions_for_source_types(self.allowed_source_types)
+                    if type_exts is not None:
+                        supported_exts = supported_exts & type_exts
 
-            # Apply allowed_source_types filter to extension check
-            if self.allowed_source_types:
-                from treesearch.pathutil import get_allowed_extensions_for_source_types
-                type_exts = get_allowed_extensions_for_source_types(self.allowed_source_types)
-                if type_exts is not None:
-                    supported_exts = supported_exts & type_exts
+                # 1. 已索引文件是否被修改或删除：键集分页流式读，命中即早退
+                for abs_fp, stored_hash in fts.iter_index_meta():
+                    if abs_fp.startswith(cortex_dir):
+                        continue
+                    if not os.path.isfile(abs_fp):
+                        logger.debug("File deleted: %s", abs_fp)
+                        return True
+                    if file_hash_with_salts(abs_fp) != stored_hash:
+                        logger.debug("File changed: %s", abs_fp)
+                        return True
 
-            # 1. 检查已索引文件是否被修改或删除
-            for abs_fp, stored_hash in stored_meta.items():
-                if abs_fp.startswith(cortex_dir):
-                    continue
-                if not os.path.isfile(abs_fp):
-                    logger.debug("File deleted: %s", abs_fp)
+                # 2. 是否有新增文件（supported_exts 中、index_meta/failed 均未收录）：
+                # 生成器 walk（与索引链路同一套忽略规则——DEFAULT_IGNORE_DIRS +
+                # .gitignore + 扩展名白名单 + 跳过 ._*md 影子文件）攒批 PK 探测，
+                # 批内出现未知路径即早退。
+                probe_batch: list[str] = []
+
+                def _batch_has_unknown(paths: list[str]) -> bool:
+                    known = fts.filter_known_source_paths(paths)
+                    return any(
+                        p not in known and p not in failed_files
+                        for p in paths
+                    )
+
+                for fp in iter_resolve_paths(
+                    [self.search_path],
+                    allowed_extensions=supported_exts,
+                    max_files=self.max_dir_files,
+                ):
+                    probe_batch.append(fp)
+                    if len(probe_batch) >= 500:
+                        if _batch_has_unknown(probe_batch):
+                            logger.debug("New files detected (probe batch)")
+                            return True
+                        probe_batch = []
+                if probe_batch and _batch_has_unknown(probe_batch):
+                    logger.debug("New files detected (probe tail)")
                     return True
-                current_hash = file_hash_with_salts(abs_fp)
-                if current_hash != stored_hash:
-                    logger.debug("File changed: %s", abs_fp)
-                    return True
 
-            # 2. 检查是否有新增文件（在 supported_exts 中、不在 stored_meta、不在 failed_files）
-            # 复用 treesearch 的目录遍历：与索引链路保持同一套忽略规则
-            # （DEFAULT_IGNORE_DIRS + .gitignore + 扩展名白名单 + 跳过 ._*md 影子文件），
-            # 避免 gitignore 内的文件被误判为"新增"而空转 reindex。
-            from treesearch.pathutil import resolve_paths
-            disk_files = set(resolve_paths(
-                [self.search_path],
-                allowed_extensions=supported_exts,
-                max_files=self.max_dir_files,
-            ))
-
-            known = set(stored_meta.keys()) | set(failed_files.keys())
-            new_files = disk_files - known
-            if new_files:
-                logger.debug("New files detected: %d", len(new_files))
-                return True
-
-            return False
+                return False
+            finally:
+                fts.close()
         except Exception as e:
             logger.debug("has_changed_files exception: %s", e)
             return True

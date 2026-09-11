@@ -75,14 +75,16 @@ def test_no_cross_module_private_imports():
     assert not violations, "跨模块私有成员引用（应公共化）：\n" + "\n".join(violations)
 
 
-# 红线 3（ADR-0019）：全量物化调用——把全库 structure_json 读进内存，
-# 百万语料 OOM 根因。doclens 搜索链路必须走 DB 路由惰性路径。
+# 红线 3（ADR-0019/0020）：全量物化调用——把全库 structure_json / index_meta
+# 读进内存，百万语料 OOM / 驻留根因。doclens 搜索与变更检测链路必须走流式路径。
 # 注意：单文档精确加载（load_document / load_document_by_source_path /
-# load_doc_structures / load_doc_id_source_paths）不在禁止之列。
+# load_doc_structures / load_doc_id_source_paths）与小表 get_all_failed_files
+# 不在禁止之列；index_meta 单点读取用 get_index_meta(path)。
 _FORBIDDEN_FULL_LOADS = (
     re.compile(r"\.load_index\("),
     re.compile(r"\.load_all_documents\("),
     re.compile(r"\bload_documents\("),
+    re.compile(r"\.get_all_index_meta\("),
 )
 
 
