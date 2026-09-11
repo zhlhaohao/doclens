@@ -86,6 +86,70 @@ def _route_regex_documents(
     return selected, GrepFilter(selected, use_regex=True)
 
 
+def route_documents_db(
+    query: str,
+    top_k_docs: int,
+    fts_expression: Optional[str] = None,
+    regex: bool = False,
+    db_path: Optional[str] = None,
+) -> list[str]:
+    """DB-side document routing for lazy search: return top-k doc_ids via SQL only.
+
+    Mirrors the routing stage of :func:`search` without any in-memory document
+    list — the caller then loads only these documents' trees and feeds them to
+    ``search()`` as the routing result.
+
+    - Plain / prefix / explicit FTS queries: one ``score_nodes_batch`` SQL call
+      with ``ancestor_decay=0`` — routing only needs each document's max node
+      score, and skipping ancestor propagation avoids the parent-map fetch
+      (which would pull every node of every affected document into Python on
+      large corpora). Edge-case ranking differences vs decayed routing are
+      accepted (ancestor bonuses can flip near-tie document order).
+    - ``*foo*`` wildcard / ``regex=True`` queries: single structure_json LIKE
+      scan (full recall, approximate order — see
+      ``FTS5Index.route_docs_by_pattern``); the loaded top-k get precise
+      GrepFilter scoring inside ``search()``.
+
+    Returns:
+        ``(top_k_doc_ids, raw_scores)`` where *raw_scores* is the per-doc node
+        score map computed with ``ancestor_decay=0`` (no parent-map fetch).
+        Callers should feed it back as ``search(..., fts_prescored=raw_scores)``
+        so the scoring stage reuses it instead of re-scanning the FTS index —
+        a ``doc_id IN`` filter does not shrink the inverted-index scan, so
+        re-scoring k documents costs the same posting-list walk as scoring
+        the whole corpus. Regex routing returns empty scores (GrepFilter
+        scores the loaded docs precisely).
+    """
+    query_mode = (
+        QueryMode(
+            original_query=query,
+            effective_query=query,
+            regex_pattern=query,
+        )
+        if regex
+        else _classify_query_mode(query, fts_expression=fts_expression)
+    )
+
+    from .fts import get_fts_index
+    fts = get_fts_index(db_path=db_path)
+
+    if query_mode.regex_pattern:
+        return fts.route_docs_by_pattern(query_mode.effective_query, top_k=top_k_docs), {}
+
+    scores = fts.score_nodes_batch(
+        query_mode.effective_query,
+        ancestor_decay=0.0,
+        fts_expression=query_mode.fts_expression,
+    )
+    doc_max_scores = [
+        (did, max(nscores.values()))
+        for did, nscores in scores.items()
+        if nscores
+    ]
+    doc_max_scores.sort(key=lambda x: -x[1])
+    return [did for did, _ in doc_max_scores[:top_k_docs]], scores
+
+
 # ---------------------------------------------------------------------------
 # PreFilter protocol
 # ---------------------------------------------------------------------------
@@ -417,6 +481,7 @@ async def search(
     search_mode: Optional[str] = None,
     fts_expression: Optional[str] = None,
     regex: bool = False,
+    fts_prescored: Optional[dict[str, dict[str, float]]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -461,6 +526,13 @@ async def search(
                              ["fts", "python"], prefix=True, operator="OR"
                          )
                          await search(query, docs, fts_expression=expr)
+        fts_prescored: pre-computed raw per-doc node scores
+                     ``{doc_id: {node_id: score}}`` (as returned by
+                     ``route_documents_db``) — lets the scoring stage reuse
+                     routing scores instead of re-scanning the FTS index.
+                     Ancestor propagation (decay 0.6, same as the default
+                     scoring pass) is applied in Python over the supplied
+                     docs only.
 
     Returns:
         dict with 'documents' (list), 'query' (str), 'flat_nodes' (list),
@@ -493,6 +565,17 @@ async def search(
         max_nodes_per_doc = cfg.max_nodes_per_doc
     if search_mode is None:
         search_mode = cfg.search_mode
+
+    # Pre-computed routing scores (lazy path): apply ancestor propagation once
+    # in Python, then serve every downstream scorer from the cache — no
+    # second FTS posting-list walk (a doc_id IN filter does not shrink it).
+    prescored_scorer: Optional[_PrescoredScorer] = None
+    propagated_scores: dict[str, dict[str, float]] = {}
+    if fts_prescored:
+        from .fts import get_fts_index as _get_fts_prescored
+        fts_pre = _get_fts_prescored(db_path=cfg.fts_db_path or None)
+        propagated_scores = fts_pre.propagate_scores(dict(fts_prescored), ancestor_decay=0.6)
+        prescored_scorer = _PrescoredScorer(propagated_scores)
 
     selected: list[Document] | None = None
     scorer = pre_filter
@@ -545,11 +628,17 @@ async def search(
                     "front_matter": cfg.fts_front_matter_weight,
                 }
                 scorer_fts = get_fts_index(db_path=cfg.fts_db_path or None, weights=weights)
-                # Batch score ALL docs in one SQL query (no doc_id filter)
-                all_doc_ids = list(doc_map.keys())
-                all_scores = scorer_fts.score_nodes_batch(
-                    effective_query, doc_ids=all_doc_ids, fts_expression=effective_fts_expression
-                )
+                if fts_prescored is not None:
+                    # Routing scores supplied by the caller (lazy path) — reuse.
+                    all_scores = {
+                        did: ns for did, ns in propagated_scores.items() if did in doc_map
+                    }
+                else:
+                    # Batch score ALL docs in one SQL query (no doc_id filter)
+                    all_doc_ids = list(doc_map.keys())
+                    all_scores = scorer_fts.score_nodes_batch(
+                        effective_query, doc_ids=all_doc_ids, fts_expression=effective_fts_expression
+                    )
 
                 # Derive routing from batch results: rank docs by max node score
                 doc_max_scores = []
@@ -585,7 +674,7 @@ async def search(
                 # else fall through to flat mode below
 
                 # For flat mode, we still have the scorer ready
-                scorer = scorer_fts
+                scorer = prescored_scorer if fts_prescored is not None else scorer_fts
 
                 logger.debug("Selected %d documents: %s", len(selected), [d.doc_name for d in selected])
 
@@ -601,18 +690,23 @@ async def search(
                 return result
 
         # Standard routing path (for non-tree modes or grep-needing docs)
-        agg = fts_index.search_with_aggregation(
-            effective_query,
-            top_k=top_k_docs,
-            fts_expression=effective_fts_expression,
-        )
-        if agg:
-            relevant_ids = {a["doc_id"] for a in agg}
-            selected = [d for d in documents if d.doc_id in relevant_ids]
-            if not selected:
-                selected = documents[:top_k_docs]
+        if fts_prescored is not None:
+            # Routing already done by the caller (lazy path): documents ARE
+            # the routed top-k — skip the aggregation query.
+            selected = documents
         else:
-            selected = documents[:top_k_docs]
+            agg = fts_index.search_with_aggregation(
+                effective_query,
+                top_k=top_k_docs,
+                fts_expression=effective_fts_expression,
+            )
+            if agg:
+                relevant_ids = {a["doc_id"] for a in agg}
+                selected = [d for d in documents if d.doc_id in relevant_ids]
+                if not selected:
+                    selected = documents[:top_k_docs]
+            else:
+                selected = documents[:top_k_docs]
 
     logger.debug("Selected %d documents: %s", len(selected), [d.doc_name for d in selected])
 
@@ -628,10 +722,10 @@ async def search(
 
         if use_grep:
             grep_filter = GrepFilter(selected)
-            fts_scorer = _get_fts_scorer(selected, cfg)
+            fts_scorer = prescored_scorer if prescored_scorer is not None else _get_fts_scorer(selected, cfg)
             scorer = _CombinedScorer(grep_filter, fts_scorer) if fts_scorer else grep_filter
         else:
-            scorer = _get_fts_scorer(selected, cfg)
+            scorer = prescored_scorer if prescored_scorer is not None else _get_fts_scorer(selected, cfg)
 
     # Branch: resolve effective search mode
     # - "auto": picks tree vs flat based on proportion of tree-benefiting docs
@@ -911,6 +1005,32 @@ def _get_fts_scorer(documents: list[Document], cfg) -> Optional[PreFilter]:
     for doc_id in unindexed:
         fts_index.index_document(doc_map[doc_id])
     return fts_index
+
+
+class _PrescoredScorer:
+    """PreFilter serving pre-computed node scores.
+
+    Lets the lazy path reuse routing scores inside ``search()`` without a
+    second FTS index scan (a ``doc_id IN`` filter does not shrink the
+    inverted-index posting walk, so re-scoring k docs costs the same as
+    scoring the whole corpus).
+    """
+
+    def __init__(self, scores: dict[str, dict[str, float]]):
+        self._scores = scores
+
+    def score_nodes(self, query: str, doc_id: str) -> dict[str, float]:
+        return dict(self._scores.get(doc_id, {}))
+
+    def score_nodes_batch(
+        self,
+        query: str,
+        doc_ids: list[str] | None = None,
+        ancestor_decay: float = 0.6,
+        fts_expression: Optional[str] = None,
+    ) -> dict[str, dict[str, float]]:
+        wanted = doc_ids if doc_ids is not None else list(self._scores)
+        return {d: dict(self._scores[d]) for d in wanted if d in self._scores}
 
 
 class _CombinedScorer:

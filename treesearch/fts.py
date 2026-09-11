@@ -1372,7 +1372,23 @@ class FTS5Index:
             old = per_doc_raw[doc_id].get(node_id, 0.0)
             per_doc_raw[doc_id][node_id] = max(old, fts_score)
 
-        # Per-doc: normalize + ancestor propagation in one pass
+        return self.propagate_scores(per_doc_raw, ancestor_decay=ancestor_decay)
+
+    def propagate_scores(
+        self,
+        per_doc_raw: dict[str, dict[str, float]],
+        ancestor_decay: float = 0.6,
+    ) -> dict[str, dict[str, float]]:
+        """Normalize per-doc raw bm25 scores and propagate ancestor bonuses.
+
+        Post-processing half of :meth:`score_nodes_batch`, public so callers
+        that already hold raw routing scores (e.g. lazy search routing, which
+        scores with ``ancestor_decay=0`` to skip the parent-map fetch) can
+        apply the identical normalize → propagate → renormalize pass without
+        re-querying the FTS index — a ``doc_id IN`` filter does not shrink
+        the inverted-index scan, so re-scoring k documents costs the same
+        full posting-list walk as scoring the whole corpus.
+        """
         result: dict[str, dict[str, float]] = {}
         doc_children_map: dict[str, dict[str, list[str]]] = {}
         if ancestor_decay > 0 and per_doc_raw:
@@ -1577,6 +1593,43 @@ class FTS5Index:
             (file_path,),
         ).fetchone()
         return row is not None
+
+    def has_documents(self) -> bool:
+        """Whether the documents table has at least one row.
+
+        Constant-time EXISTS probe via the PK index — unlike ``COUNT(*)``,
+        which walks every row (100ms+ on million-row blob tables). Use this
+        for "is the index empty" guards on the search path.
+        """
+        return self._conn.execute("SELECT 1 FROM documents LIMIT 1").fetchone() is not None
+
+    def route_docs_by_pattern(self, pattern: str, top_k: int = 10) -> list[str]:
+        """Route documents for a literal substring pattern via a single SQL scan.
+
+        ``SELECT doc_id FROM documents WHERE structure_json LIKE ? LIMIT k`` —
+        structure_json carries the full original text (title/summary/body),
+        so this is full-recall: any occurrence anywhere in a document routes
+        it. The scan is unindexable (leading-wildcard LIKE) and therefore a
+        full table scan at worst — the same cost class as like_search's
+        phase-2 fallback, accepted for wildcard/regex queries.
+
+        Ranking is approximate by design: SQL returns the first *top_k*
+        matches with no score order; the caller re-scores the loaded top-k
+        precisely (e.g. GrepFilter). ``%``/``_``/``\\`` in *pattern* are
+        escaped so they match literally.
+
+        A nodes-table two-phase variant (title/summary first) was rejected:
+        nodes has ~doc_count × nodes_per_doc rows (an order of magnitude
+        more than documents), making its scan slower, and node summaries
+        are truncated — phase-1 hits would silently miss deep-body matches.
+        """
+        esc = pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{esc}%"
+        rows = self._conn.execute(
+            "SELECT doc_id FROM documents WHERE structure_json LIKE ? ESCAPE '\\' LIMIT ?",
+            (like, top_k),
+        ).fetchall()
+        return [r[0] for r in rows]
 
     def indexed_children_of(self, dir_path: str, sep: str = os.sep) -> set[str]:
         """Names of *dir_path*'s direct children that hold indexed documents.

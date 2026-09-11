@@ -62,6 +62,7 @@ class TreeSearch:
         ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
         respect_gitignore: bool = True,
         max_files: int | None = None,
+        lazy_search: bool = False,
         **kwargs
     ):
         """
@@ -77,10 +78,19 @@ class TreeSearch:
             respect_gitignore: Honour .gitignore files when walking directories (requires ``pathspec``).
             max_files: Safety cap on files discovered per directory walk.
                 Defaults to ``get_config().max_dir_files`` (10,000).
+            lazy_search: Never materialize ``self.documents`` for search — route
+                top-k documents via SQL on the index DB and load only their
+                trees (memory peak = O(top_k_docs), designed for million-doc
+                corpora). The instance then trusts the DB: the incremental
+                self-heal reindex on empty ``documents`` is skipped, so the
+                **host owns index freshness**. Requires an existing ``db_path``
+                database at search time. Default: ``False`` (materializing,
+                backward-compatible behavior).
             **kwargs: Additional default arguments for search().
         """
         self._pending_paths: List[str] = list(paths)
         self.db_path = db_path
+        self._lazy_search = lazy_search
         self.documents: List[Document] = []
         self._last_index_stats = None  # IndexStats from last index() call
         self.config = get_config()
@@ -203,6 +213,10 @@ class TreeSearch:
     async def asearch(self, query: str, **kwargs) -> dict:
         """Async: Search across indexed documents. Auto-builds index if pending paths exist.
 
+        With ``lazy_search=True`` the instance never materializes
+        ``self.documents``: routing happens on the index DB and only the
+        top-k documents' trees are loaded (see ``_asearch_lazy``).
+
         Args:
             query: user query
             top_k_docs: max documents to search (routing stage)
@@ -215,6 +229,10 @@ class TreeSearch:
         Returns:
             dict with 'documents', 'query', and 'flat_nodes'.
         """
+        search_kwargs = {**self.kwargs, **kwargs}
+        if self._lazy_search:
+            return await self._asearch_lazy(query, **search_kwargs)
+
         if not self.documents and self._pending_paths:
             if self.db_path and os.path.isfile(self.db_path):
                 from .fts import FTS5Index, get_fts_index, set_fts_index
@@ -250,11 +268,62 @@ class TreeSearch:
                 "No documents available. Pass file paths to TreeSearch() or call index() first."
             )
 
-        search_kwargs = {
-            **self.kwargs,
-            **kwargs
-        }
         return await search(query, self.documents, **search_kwargs)
+
+    async def _asearch_lazy(self, query: str, **kwargs) -> dict:
+        """DB-routed lazy search: route top-k doc_ids via SQL, load only those trees.
+
+        Contract (host-managed freshness): no self-heal incremental reindex —
+        this path trusts the index DB as-is; the host keeps it up to date
+        (e.g. via its own change detection / file watching before searching).
+
+        Raises:
+            ValueError: if the index database does not exist or the query
+                combines ``regex`` with ``fts_expression``.
+        """
+        if kwargs.get("regex") and kwargs.get("fts_expression") is not None:
+            raise ValueError("regex and fts_expression cannot be used together")
+        if not self.db_path or not os.path.isfile(self.db_path):
+            raise ValueError(
+                "lazy_search requires an existing index database; "
+                "call index() first or pass an existing db_path."
+            )
+
+        from .fts import get_fts_index
+        from .search import route_documents_db
+
+        top_k_docs = kwargs.get("top_k_docs") or self.config.top_k_docs
+        routed_ids, prescored = route_documents_db(
+            query,
+            top_k_docs=top_k_docs,
+            fts_expression=kwargs.get("fts_expression"),
+            regex=kwargs.get("regex", False),
+            db_path=self.db_path,
+        )
+
+        def _empty_result() -> dict:
+            mode = kwargs.get("search_mode") or self.config.search_mode
+            return {
+                "documents": [],
+                "query": query,
+                "flat_nodes": [],
+                "mode": "tree" if mode == "tree" else "flat",
+            }
+
+        if not routed_ids:
+            return _empty_result()
+
+        fts = get_fts_index(db_path=self.db_path)
+        selected = [
+            doc for doc in (fts.load_document(did) for did in routed_ids)
+            if doc is not None
+        ]
+        if not selected:
+            return _empty_result()
+
+        # Routing scores flow back into the pipeline (fts_prescored) so the
+        # scoring stage never re-walks the FTS posting lists.
+        return await search(query, selected, fts_prescored=prescored or None, **kwargs)
 
     def search(self, query: str, **kwargs) -> dict:
         """Sync: Search across indexed documents.
@@ -315,6 +384,13 @@ class TreeSearch:
         """
         if not queries:
             return []
+
+        # Lazy instances never materialize: each query routes on the DB
+        # independently (routing is a single SQL call per query).
+        if self._lazy_search:
+            search_kwargs = {**self.kwargs, **kwargs}
+            tasks = [self._asearch_lazy(q, **search_kwargs) for q in queries]
+            return list(await asyncio.gather(*tasks))
 
         # Ensure documents are loaded once (not once per query)
         if not self.documents and self._pending_paths:

@@ -138,11 +138,10 @@ class TestGrepHandlePaths:
 
 class TestSearchKbHandlePaths:
     def _fake_kb_idx(self, kb: Path, path_map: dict):
-        doc1 = SimpleNamespace(doc_id="d1", structure=[])
-        doc2 = SimpleNamespace(doc_id="d3", structure=[])
         return SimpleNamespace(
             ts=object(),
-            documents=[doc1, doc2],
+            has_indexed_docs=lambda: True,
+            load_doc_structures=lambda doc_ids: {i: [] for i in doc_ids},
             max_results=10,
             max_nodes_per_doc=3,
             max_span=50,

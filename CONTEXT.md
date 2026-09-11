@@ -65,6 +65,8 @@
 - **分块索引 (Chunked Indexing)**：海量语料（百万级文件）的索引执行形态——按文件数切块（默认 500/块），每块「解析 → 落库 commit → 释放内存 → 下一块」，内存峰值 = 单块。崩溃容忍是**容错属性**而非运行机制：进程死後重跑，指纹机制自动跳过已完成文件续扫（粒度 = 块）。_Avoid_: 重启应用续传（原始提案，已否决——见 ADR-0018）、按内存预算切块。
 - **索引块 (Index Chunk)**：分块索引的计量单位 = 文件数（非内存估算）。配置 `TREESEARCH_INDEX_CHUNK_SIZE`，**0 = 不分块（旧行为全量攒）**——与目录遍历上限「max_dir_files 0 = 不设限」**有意相反**，注释与文档双声明防踩坑。块内攒满才落盘（不做边解析边落的滑动窗口，效率优先；崩溃丢 ≤1 块的解析工作，重跑即补）。
 - **先索引后开浏览器 (Index-before-Browser)**：GUI 启动时序——启动即后台线程建索引（终端 tqdm 跨块 + ETA），**完成后**才自动打开浏览器；索引失败仍开浏览器（应用可用来排查）+ 终端警告。索引期间 HTTP 请求挂起等待（join 语义）。取代旧的「uvicorn 起来 1 秒后就开浏览器、首请求转圈一小时」。
+- **惰性搜索 (Lazy Search)**：搜索的执行形态——文档路由在索引库 SQL 上完成（见「DB 路由」），仅 top-k 文档的树结构进内存，内存峰值 = O(top-k)。开启方式为实例级声明（`lazy_search=True`），开启方即承担**索引新鲜度**责任（引擎不做自愈增量索引）。_Avoid_: 全量物化 documents 后再搜索（百万语料 OOM 根因，ADR-0018 时期搜索链路的已知缺口）。
+- **DB 路由 (DB Routing)**：多文档搜索的「选哪些文档」步骤的实现位置——在索引库上以单条 SQL（FTS5 MATCH，或通配/正则查询的 structure_json LIKE）选出 top-k 文档 id，不依赖内存中的文档列表；名次细节由载入后的管线精化。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -106,3 +108,4 @@
 - 2026-09-08：上传图片判向自动旋转（ADR-0017）= 仅两条上传入口（files/diary）后台视觉判向（独立轻量调用，严格解析 0/90/180/270，存疑不动、失败不重试），非 0 则 PIL 像素旋转同格式重编码；索引联动靠 FileWatcher + 旋转前清 vision_queue 残留；视觉 API 全局串行锁（转写/判向/caption 互斥防限流）；日记 caption 挪后台串在判向后回写 md；开关 VISION_AUTO_ROTATE 默认开；旋转 toast + caption 回写刷新经 watch SSE 下发。
 - 2026-08-27：预览↔编辑切换锚点升级为行级精度——md-viewer 的 topSourceLine/scrollToSourceLine 从块级（data-source-line 贴块顶）升级为按块内像素比例插值（块源行跨度 = 下一块起始行 − 本块起始行，末块到文档末行），与 md-editor 的镜像 div 行级测量对称；视野首行落在长代码块/长列表中部时不再跳回块开头。搜索命中定位（line property → 块起始行）与滚动记忆的行为不变（记忆值更精确）。
 - 2026-09-10：海量语料分块索引（ADR-0018）= 进程内按文件数切块流式（默认 500，`TREESEARCH_INDEX_CHUNK_SIZE`，**0=不分块=旧行为**，与 max_dir_files 的 0=不设限有意相反）；否决重启应用/子进程方案（指纹续扫免费提供崩溃容忍）；`build_index` 加 `return_documents` opt-out（默认 True 零破坏，doclens 全链传 False 去物化，计数走 IndexStats）；doclens 删 _bg_work 预热/重写两处全量 IO；GUI 改先索引后开浏览器（失败仍开 + 警告）；搜索全惰性化（FTS 路由先查 DB 只载 top-k）独立 ADR 排下期。
+- 2026-09-11：搜索全惰性化（ADR-0019）= DB 路由出 top-k（FTS 单条 SQL `ancestor_decay=0`；通配/正则走 structure_json LIKE 单段扫，全召回）→ 只载 top-k 树结构 → 路由分数经 `fts_prescored` 复用（`propagate_scores` Python 侧补祖先传播，不重扫倒排）→ 现有管线原样跑；`TreeSearch(lazy_search=True)` 实例级 opt-in（默认 False，2.0 与 return_documents 捆绑翻默认），索引新鲜度归宿主；doclens 删 `_ensure_search_documents`/`documents` 属性，kb_tools doc_tree_map 改按结果 doc_id 加载；验收实测通过（51.2 万文档/9.3GB 库：RSS 增量 47.4MB、暖态 p95 0.56s）+ 双路径对照 + 架构守卫红线。

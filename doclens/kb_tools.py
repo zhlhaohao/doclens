@@ -1112,12 +1112,8 @@ def _handle_search_kb(
 
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
-    # 搜索路径按需物化 documents（ADR-0018 分期：搜索仍吃全量列表）
-    _ensure = getattr(idx_manager, "_ensure_search_documents", None)
-    if callable(_ensure):
-        _ensure()
 
-    if idx_manager.ts is None or not idx_manager.documents:
+    if idx_manager.ts is None or not idx_manager.has_indexed_docs():
         return (
             "知识库索引未就绪或为空。\n"
             "请用 manage_kb(action='reindex') 构建索引，"
@@ -1164,10 +1160,11 @@ def _handle_search_kb(
         doc_title_map[doc_id] = doc_name
         doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
-    # 嵌套树映射：用于构建层级路径（搜索结果的 nodes 是扁平列表，缺少中间层级）
-    doc_tree_map: dict[str, list[dict]] = {
-        d.doc_id: d.structure for d in idx_manager.documents
-    }
+    # 嵌套树映射：用于构建层级路径（搜索结果的 nodes 是扁平列表，缺少中间层级）。
+    # 仅载结果文档的树结构（ADR-0019 惰性化），不物化全量 documents。
+    doc_tree_map: dict[str, list[dict]] = idx_manager.load_doc_structures(
+        [d.get("doc_id", "") for d in docs]
+    )
 
     logger.debug("max_nodes_per_doc=%d, FTS nodes=%d, docs=%d", idx_manager.max_nodes_per_doc, len(nodes), len(docs))
     doc_best: dict[str, list[tuple]] = {}
@@ -1279,12 +1276,8 @@ def _handle_search_kb_v2(
 
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
-    # 搜索路径按需物化 documents（ADR-0018 分期：搜索仍吃全量列表）
-    _ensure = getattr(idx_manager, "_ensure_search_documents", None)
-    if callable(_ensure):
-        _ensure()
 
-    if idx_manager.ts is None or not idx_manager.documents:
+    if idx_manager.ts is None or not idx_manager.has_indexed_docs():
         return (
             "知识库索引未就绪或为空。\n"
             "请用 manage_kb(action='reindex') 构建索引，"
@@ -1340,9 +1333,9 @@ def _handle_search_kb_v2(
         doc_title_map[doc_id] = doc_name
         doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
-    doc_tree_map: dict[str, list[dict]] = {
-        d.doc_id: d.structure for d in idx_manager.documents
-    }
+    doc_tree_map: dict[str, list[dict]] = idx_manager.load_doc_structures(
+        [d.get("doc_id", "") for d in docs]
+    )
 
     doc_best: dict[str, tuple] = {}
     doc_fts_best: dict[str, float] = {}
@@ -1596,17 +1589,8 @@ def _load_tree_for_info(
         return tree, tree is not None
 
     if getattr(idx_manager, "ts", None) is not None:
-        # 已物化的 documents 优先（搜索后缓存）；未物化则 DB 精确加载（ADR-0018）
-        target = os.path.normcase(os.path.abspath(abs_path))
-        doc = None
-        for d in (idx_manager.documents or []):
-            meta = getattr(d, "metadata", None) or {}
-            src = meta.get("source_path", "")
-            if src and os.path.normcase(src) == target:
-                doc = d
-                break
-        if doc is None:
-            doc = _load_doc_by_source_path(idx_manager, abs_path)
+        # DB 精确加载单个文档（ADR-0019：documents 不再物化，无内存缓存可优先）
+        doc = _load_doc_by_source_path(idx_manager, abs_path)
         if doc is not None:
             # 词数统计要准确：索引节点同时带 summary（截断版）与 text（完整版），
             # 用 text 优先的标准化

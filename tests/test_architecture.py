@@ -73,3 +73,26 @@ def test_no_cross_module_private_imports():
                 rel = py.relative_to(REPO).as_posix()
                 violations.append(f"{rel}: from {m.group('mod')} import {', '.join(bad)}")
     assert not violations, "跨模块私有成员引用（应公共化）：\n" + "\n".join(violations)
+
+
+# 红线 3（ADR-0019）：全量物化调用——把全库 structure_json 读进内存，
+# 百万语料 OOM 根因。doclens 搜索链路必须走 DB 路由惰性路径。
+# 注意：单文档精确加载（load_document / load_document_by_source_path /
+# load_doc_structures / load_doc_id_source_paths）不在禁止之列。
+_FORBIDDEN_FULL_LOADS = (
+    re.compile(r"\.load_index\("),
+    re.compile(r"\.load_all_documents\("),
+    re.compile(r"\bload_documents\("),
+)
+
+
+def test_doclens_no_full_document_materialization():
+    """红线 3：doclens/ 下不得出现全量物化调用（含注释与文档字符串，防回潮）。"""
+    violations: list[str] = []
+    for py in _py_sources("doclens"):
+        src = py.read_text(encoding="utf-8", errors="replace")
+        for pat in _FORBIDDEN_FULL_LOADS:
+            for m in pat.finditer(src):
+                rel = py.relative_to(REPO).as_posix()
+                violations.append(f"{rel}: {m.group(0)!r}（ADR-0019 红线：全量物化）")
+    assert not violations, "doclens 全量物化回潮（ADR-0019）：\n" + "\n".join(violations)

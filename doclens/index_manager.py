@@ -330,12 +330,54 @@ class IndexManager:
 
     @property
     def documents(self):
-        """已物化的文档列表（搜索后缓存）；计数场景请用 indexed_doc_count()。
+        """已废弃：搜索链路已全惰性化（ADR-0019），不再物化全量 documents。
 
-        ADR-0018：启动/索引路径不再预加载全量 documents——本属性在搜索
-        首次触发 _ensure_search_documents() 前可能为空。
+        计数用 indexed_doc_count() / has_indexed_docs()；结果文档树结构用
+        load_doc_structures()。故意不留返回空列表的兼容形态——漏改的
+        消费方应在此 AttributeError 响亮报错，而非静默拿到空列表误判
+        「索引未就绪」。
         """
-        return self._ts.documents if self._ts else []
+        raise AttributeError(
+            "IndexManager.documents 已删除（ADR-0019 搜索全惰性化）："
+            "计数用 indexed_doc_count()/has_indexed_docs()，"
+            "结果文档树结构用 load_doc_structures(doc_ids)"
+        )
+
+    def has_indexed_docs(self) -> bool:
+        """索引库是否有文档（EXISTS 探测，常数时间——ADR-0019 搜索空库守卫）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.has_documents()
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("has_indexed_docs failed: %s", e)
+            return False
+
+    def load_doc_structures(self, doc_ids: list) -> dict:
+        """按 doc_id 批量加载文档树结构（仅结果文档，不物化全量——ADR-0019）。
+
+        Returns:
+            {doc_id: structure}，加载失败的 doc_id 不出现在结果里。
+        """
+        out: dict = {}
+        if not doc_ids:
+            return out
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                for did in doc_ids:
+                    doc = fts.load_document(did)
+                    if doc is not None:
+                        out[did] = doc.structure or []
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("load_doc_structures failed: %s", e)
+        return out
 
     def has_changed_files(self) -> bool:
         """快速检查是否有文件变化，用于启动同步前置判断。
@@ -560,7 +602,8 @@ class IndexManager:
         ADR-0018：不再把全量 documents 物化进内存（百万级语料 OOM 根因）。
         启动时只做「存在性 + 变更检测」：索引库已存在且无变化 → 只建轻量
         path_map 即返回；有变化/不存在 → 增量/全量索引（build_index 直写
-        DB，return_documents=False）。搜索时才按需从 DB 加载。
+        DB，return_documents=False）。搜索走 DB 路由惰性路径（ADR-0019），
+        全程不物化 documents。
         """
         self._sync_image_version_expectation()
         if self._ts is not None and not self._needs_reload:
@@ -568,7 +611,7 @@ class IndexManager:
         self._needs_reload = False
 
         set_config(self._ts_config())
-        self._ts = TreeSearch(db_path=self.index_path)
+        self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
         abs_path = os.path.abspath(self.index_path)
 
         if os.path.exists(abs_path):
@@ -600,7 +643,6 @@ class IndexManager:
             self._ts.index(self.search_path, return_documents=False)
         except FileNotFoundError:
             print(f"[警告] 路径不存在或为空: {self.search_path}")
-            self._ts.documents = []
             self._path_map = {}
             return True
         # 读本次索引的 IndexStats（失败文件数），暴露给 /api/status；启动同步索引
@@ -626,12 +668,6 @@ class IndexManager:
             logger.debug("build_path_map DB load failed: %s", e)
             pairs = {}
         self._path_map = dict(pairs)
-        # doc_name → path 兜底映射（旧文件名查找路径仍可用）
-        for doc in (self._ts.documents if self._ts else []):
-            if hasattr(doc, 'metadata') and doc.metadata:
-                path = doc.metadata.get('source_path', '')
-                if path:
-                    self._path_map[doc.doc_name] = path
 
     def refresh_path_map_from_db(self):
         """后台 reindex 完成后刷新 path_map（build_path_map 的别名入口）。"""
@@ -647,7 +683,7 @@ class IndexManager:
         self._sync_image_version_expectation()
         if self._ts is None:
             set_config(self._ts_config())
-            self._ts = TreeSearch(db_path=self.index_path)
+            self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
 
         mode = "全量重建" if force else "增量更新"
 
@@ -690,7 +726,6 @@ class IndexManager:
             self._ts.index(self.search_path, force=force, return_documents=False)
         except FileNotFoundError:
             print(f"[警告] 路径不存在或为空: {self.search_path}")
-            self._ts.documents = []
             self._path_map = {}
             return
         finally:
@@ -714,29 +749,19 @@ class IndexManager:
         else:
             print(f"[索引已更新: {doc_count} 个文档]")
 
-    def _ensure_search_documents(self):
-        """搜索前的按需加载：_ts.documents 为空且库里有文档时才全量 load。
-
-        ADR-0018 的分期边界：启动/索引路径已去物化，搜索路径仍需完整
-        documents（treesearch search 路由吃全量列表）；全惰性化（FTS 路由
-        先查 DB 只载 top-k）排下期。这里按需加载一次后缓存复用。
-        """
-        if self._ts is not None and not self._ts.documents and self.indexed_doc_count() > 0:
-            try:
-                self._ts.load_index(os.path.abspath(self.index_path))
-            except Exception as e:  # noqa: BLE001
-                logger.warning("search-time document load failed: %s", e)
-
     def search(self, query, max_results=None, fts_expression=None):
-        """执行搜索，返回 (flat_nodes, documents)"""
+        """执行搜索，返回 (flat_nodes, documents)。
+
+        ADR-0019：全惰性——DB 路由出 top-k、只载 top-k 树结构，全程不物化
+        全量 documents（百万语料 OOM 根因清除）。
+        """
         if max_results is None:
             max_results = self.max_results
 
         self._check_swap()
         self.load_or_build_index()
-        self._ensure_search_documents()
 
-        if not self._ts.documents:
+        if not self._ts or not self.has_indexed_docs():
             return [], []
 
         result = self._ts.search(

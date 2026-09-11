@@ -31,11 +31,10 @@ def kb(tmp_path: Path) -> Path:
 
 
 def _fake_idx(**over):
-    """最小 IndexManager 替身：path_map 空、ts=None（不查索引）、documents 空。"""
+    """最小 IndexManager 替身：path_map 空、ts=None（不查索引）。"""
     base = dict(
         path_map={},
         ts=None,
-        documents=[],
         max_read_words=4000,
         read_doc_show_toc=False,
     )
@@ -91,19 +90,33 @@ class TestPlainText:
 
 
 class TestIndexedBranch:
-    def test_uses_index_structure_without_parsing(self, kb: Path):
-        """已索引文件走索引 structure（.fakeext 无 parser，若重解析只会得到 0 节）。"""
+    def test_uses_index_structure_without_parsing(self, kb: Path, tmp_path_factory):
+        """已索引文件走索引 structure（.fakeext 无 parser，若重解析只会得到 0 节）。
+
+        ADR-0019：documents 不再物化——索引分支经 index_path 按 source_path
+        DB 精确加载，替身提供真实迷你索引库。
+        """
         f = kb / "a.fakeext"
         f.write_text("garbage", encoding="utf-8")
-        doc = SimpleNamespace(
-            doc_name="a",
-            metadata={"source_path": str(f)},
-            structure=[
-                {"title": "索引章一", "text": "甲 乙 丙", "summary": "甲 乙 丙", "nodes": []},
-                {"title": "索引章二", "text": "丁 戊", "summary": "丁 戊", "nodes": []},
-            ],
-        )
-        idx = _fake_idx(ts=object(), documents=[doc])
+        from treesearch.fts import FTS5Index
+
+        db = tmp_path_factory.mktemp("idx") / "index.db"
+        fts = FTS5Index(db_path=str(db))
+        try:
+            fts.save_document(SimpleNamespace(
+                doc_id="d0",
+                doc_name="a",
+                doc_description="",
+                source_type="text",
+                metadata={"source_path": str(f)},
+                structure=[
+                    {"title": "索引章一", "text": "甲 乙 丙", "summary": "甲 乙 丙", "nodes": []},
+                    {"title": "索引章二", "text": "丁 戊", "summary": "丁 戊", "nodes": []},
+                ],
+            ))
+        finally:
+            fts.close()
+        idx = _fake_idx(ts=object(), index_path=str(db))
         out = _handle_file_info(idx, kb, path="a.fakeext")
         assert "已索引: 是" in out
         assert "章节数: 2" in out
