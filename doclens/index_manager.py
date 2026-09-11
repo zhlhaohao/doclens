@@ -684,10 +684,10 @@ class IndexManager:
 
         if os.path.exists(abs_path):
             # 索引库已存在：无变化则不物化、不全量 load（ADR-0018）
-            print(f"[变更检测中: {self.search_path}]（百万级语料可能需要数分钟）")
+            print(f"[变更检测中: {self.search_path}]（百万级语料可能需要数分钟）", flush=True)
             _t_audit = time.time()
             _changed = self.has_changed_files()
-            print(f"[变更检测完成: {'有变化' if _changed else '无变化'}，用时 {time.time() - _t_audit:.1f}s]")
+            print(f"[变更检测完成: {'有变化' if _changed else '无变化'}，用时 {time.time() - _t_audit:.1f}s]", flush=True)
             if not _changed:
                 self.build_path_map()
                 logger.debug("Index unchanged, loaded path_map only (%d docs)",

@@ -82,22 +82,37 @@ def _enable_treesearch_console_logging() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动文件监控 + 视觉解析 worker + Git 同步 + MCP server，退出时停止。"""
+    """应用生命周期：启动文件监控 + 视觉解析 worker + Git 同步 + MCP server，退出时停止。
+
+    组件启动放后台线程、lifespan 立即 yield——bind 后立刻能 accept 请求。
+    （旧版在事件循环上同步调 get_index_manager 等 20s+ 启动审计，百万语料
+    下 socket 已监听但 accept 循环被堵死，浏览器无限转圈。）
+    """
     import asyncio
-    from pathlib import Path
+    import threading
     from doclens.web_v2 import deps
-    from doclens.web_v2.tmp_workspace import cleanup_all_tmp
     from doclens.web_v2.watch_broker import get_watch_broker
     # 先绑定事件循环，保证 start_watcher 的回调触发时 broadcast 可用
     get_watch_broker().bind(asyncio.get_running_loop())
-    # 启动时清空 AI 会话临时工作区（.cortex/tmp/）——上轮运行残留的脚本/中间产物
-    cleanup_all_tmp(Path(deps.get_index_manager().search_path))
-    deps.start_watcher()
-    deps.start_vision_worker()
-    deps.start_diary_worker()
-    deps.start_git_sync()
-    await deps.start_mcp_server()
-    deps.start_mcp_client()
+
+    def _start_components() -> None:
+        from pathlib import Path
+        from doclens.web_v2.tmp_workspace import cleanup_all_tmp
+        # 启动时清空 AI 会话临时工作区（.cortex/tmp/）——上轮运行残留的脚本/中间产物
+        cleanup_all_tmp(Path(deps.get_index_manager().search_path))
+        deps.start_watcher()
+        deps.start_vision_worker()
+        deps.start_diary_worker()
+        deps.start_git_sync()
+        try:
+            import asyncio as _aio
+            _aio.run(deps.start_mcp_server())
+        except Exception as e:  # noqa: BLE001
+            from doclens.web_v2.app import logger
+            logger.warning("start_mcp_server failed: %s", e)
+        deps.start_mcp_client()
+
+    threading.Thread(target=_start_components, daemon=True).start()
     try:
         yield
     finally:
@@ -330,8 +345,39 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     # CORTEX_NO_BROWSER=1 时不弹浏览器（供 Stop hook 自动重启使用，避免反复弹窗）
     open_browser = not os.environ.get("CORTEX_NO_BROWSER")
 
+    def _verify_gui_ready() -> bool:
+        """实测用户链路：SPA 根页 + files 列表 + status 均 200 才算真可用。
+
+        横幅/开浏览器以此为准——不是「我认为好了」，是探针真打通过
+        （浏览器打开后加载的就是这三个东西：页面本身、文件列表、状态栏）。
+        标准库 http.client（不引依赖），每个探针最多 5 次 × 10s 超时。
+        """
+        import http.client
+        probe_host = "127.0.0.1" if host in ("127.0.0.1", "0.0.0.0", "") else host
+        probes = ("/", "/api/files/list?path=&limit=1", "/api/status")
+        for path in probes:
+            for _attempt in range(5):
+                try:
+                    conn = http.client.HTTPConnection(probe_host, port, timeout=10)
+                    conn.request("GET", path)
+                    status = conn.getresponse().status
+                    conn.close()
+                    if status == 200:
+                        break
+                except OSError:
+                    pass
+                import time as _time
+                _time.sleep(1)
+            else:
+                print(f"[就绪探针失败: GET {path} 未在重试内返回 200]", flush=True)
+                return False
+        return True
+
     def _startup_index_then_open_browser() -> None:
-        """后台线程：先建索引（增量/全量），完成后开浏览器（ADR-0018）。"""
+        """后台线程：先建索引（增量/全量），实测就绪后开浏览器（ADR-0018）。
+
+        就绪 = 审计 + 预热 + 探针实测（files/status 均 200）。
+        """
         from doclens.web_v2 import deps
         try:
             # get_index_manager 内部完成 load_or_build_index 并发布单例；
@@ -344,11 +390,38 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
             except Exception:  # noqa: BLE001
                 pass
         except Exception as e:  # noqa: BLE001
-            print(f"\n[警告] 启动索引失败: {e}（应用仍将打开，可在设置页排查）\n", flush=True)
-        finally:
+            print(f"\n[警告] 启动索引失败: {e}（请查看日志排查）\n", flush=True)
+            return
+        # 实测验证后才宣布就绪——横幅即承诺：文件列表/搜索/对话此刻全部可用
+        if _verify_gui_ready():
+            print(f"\n[GUI 就绪: {url} — 已实测验证可用，浏览器即将打开]\n", flush=True)
             if open_browser:
-                # 延迟 1 秒等 uvicorn 完全就绪（小语料下索引先于服务器完成）
                 threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        else:
+            print(f"\n[警告: GUI 未能在预期时间内就绪（{url}），浏览器暂不打开——请查看日志排查]\n", flush=True)
 
     threading.Thread(target=_startup_index_then_open_browser, daemon=True).start()
-    uvicorn.run(app, host=host, port=port)
+    # INFO 日志带时间戳（uvicorn 默认无时间戳，百万语料启动窗口里无法对时序）
+    uvicorn.run(app, host=host, port=port, log_config={
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s | %(levelname)s | %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+            "access": {
+                "format": "%(asctime)s | %(levelname)s | %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+        },
+        "handlers": {
+            "default": {"class": "logging.StreamHandler", "formatter": "default", "stream": "ext://sys.stderr"},
+            "access": {"class": "logging.StreamHandler", "formatter": "access", "stream": "ext://sys.stdout"},
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+        },
+    })
