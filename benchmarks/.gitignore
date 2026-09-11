@@ -1,0 +1,6 @@
+# 冒烟/实测产物与运行日志不入库（results/ 保留目录结构）
+results*/
+results_smoke/
+gui_out.log
+gui_err.log
+smoke_questions.jsonl
