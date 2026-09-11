@@ -81,9 +81,15 @@ function hmacSha256(key: Uint8Array, msg: Uint8Array): Uint8Array {
   return sha256(outer);
 }
 
-function pbkdf2Js(password: Uint8Array, salt: Uint8Array, iterations: number): Uint8Array {
-  // 单块输出（32 字节）= 恰好 HMAC-SHA256 的自然长度，无需多块 DK 拼接
-  let u = hmacSha256(password, salt);
+/** 纯 JS PBKDF2（导出供标准向量测试；运行时经 pbkdf2Hex 自动选择路径）。 */
+export function pbkdf2Js(password: Uint8Array, salt: Uint8Array, iterations: number): Uint8Array {
+  // 单块输出（32 字节）= 恰好 HMAC-SHA256 的自然长度，无需多块 DK 拼接。
+  // U1 = HMAC(P, Salt || INT(1))——4 字节大端块序号不可省略（曾漏：JS 回退
+  // 路径推出与服务端不同的哈希，正确密码也 401；标准向量测试覆盖）
+  const saltInt = new Uint8Array(salt.length + 4);
+  saltInt.set(salt);
+  saltInt[saltInt.length - 1] = 1;
+  let u = hmacSha256(password, saltInt);
   const dk = new Uint8Array(u);
   for (let i = 1; i < iterations; i++) {
     u = hmacSha256(password, u);
@@ -102,6 +108,8 @@ function bytesToHex(b: Uint8Array): string {
   return Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
+export { bytesToHex };
+
 /** PBKDF2(PIN, salt, iterations) → hex。优先 Web Crypto，回退纯 JS。 */
 export async function pbkdf2Hex(pin: string, saltHex: string, iterations: number): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
@@ -117,17 +125,21 @@ export async function pbkdf2Hex(pin: string, saltHex: string, iterations: number
   return bytesToHex(pbkdf2Js(new TextEncoder().encode(pin), hexToBytes(saltHex), iterations));
 }
 
-/** proof = HMAC-SHA256(nonce, PBKDF2 输出) → hex（与后端 auth_challenge.compute_proof 同式）。 */
+/** proof = HMAC-SHA256(key=nonce, msg=PBKDF2 输出) → hex——与后端
+ * auth_challenge.compute_proof 严格同向（key/message 位置不可对调，HMAC
+ * 不满足交换律；曾因方向反转正确密码 401）。 */
 export async function computeProof(nonce: string, pbkdf2HexStr: string): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
-  const keyBytes = hexToBytes(pbkdf2HexStr);
+  const nonceBytes = new TextEncoder().encode(nonce);
+  const msgBuf = hexToBytes(pbkdf2HexStr).slice().buffer as ArrayBuffer;
   if (subtle) {
-    const keyBuf = keyBytes.slice().buffer as ArrayBuffer;
-    const key = await subtle.importKey("raw", keyBuf, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const sig = await subtle.sign("HMAC", key, new TextEncoder().encode(nonce));
+    const key = await subtle.importKey(
+      "raw", nonceBytes.slice().buffer as ArrayBuffer, { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    );
+    const sig = await subtle.sign("HMAC", key, msgBuf);
     return bytesToHex(new Uint8Array(sig));
   }
-  return bytesToHex(hmacSha256(keyBytes, new TextEncoder().encode(nonce)));
+  return bytesToHex(hmacSha256(nonceBytes, hexToBytes(pbkdf2HexStr)));
 }
 
 /** 生成客户端 salt（设置密码的挑战化路径用）。 */
