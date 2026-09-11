@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from doclens.web_v2 import auth_credentials, deps
 from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.auth_challenge import consume_nonce, issue_nonce, verify_proof
 from doclens.web_v2.auth_gate import (
     COOKIE_MAX_AGE,
     COOKIE_NAME,
@@ -27,6 +28,7 @@ from doclens.web_v2.auth_password import validate_pin_format
 from doclens.web_v2.auth_rate_limit import LOGIN_DELAY_S, get_rate_limiter
 from doclens.web_v2.models.auth import (
     AuthStatusResponse,
+    ChallengeResponse,
     LoginRequest,
     LoginResponse,
     PasswordClearRequest,
@@ -87,9 +89,43 @@ async def auth_status(request: Request):
     )
 
 
+@router.get("/auth/challenge", response_model=ChallengeResponse)
+async def auth_challenge(request: Request):
+    """登录挑战：salt/iterations（公开无害）+ 一次性 nonce。
+
+    前端据此本地算 PBKDF2(PIN) 并以 HMAC(nonce, ·) 提交——明文 PIN 不上线
+    （挑战-响应，2026-09-11）。未设密码时 400（无挑战可言）。
+    """
+    stored = auth_credentials.stored_params()
+    if stored is None:
+        raise CortexAPIError(400, "NO_PASSWORD_SET", "尚未设置密码")
+    iterations, salt_hex, _ = stored
+    return ChallengeResponse(
+        salt=salt_hex,
+        iterations=iterations,
+        nonce=issue_nonce(_client_ip(request)),
+    )
+
+
+def _verify_login_credential(request: Request, body) -> bool:
+    """挑战 proof 优先、明文兼容兜底（环回/调试）。"""
+    if body.proof and body.nonce:
+        stored = auth_credentials.stored_params()
+        if stored is None:
+            return False
+        _, _, stored_hash = stored
+        if not consume_nonce(body.nonce, _client_ip(request)):
+            return False
+        return verify_proof(body.nonce, stored_hash, body.proof)
+    return auth_credentials.verify(body.password or "")
+
+
 @router.post("/auth/login", response_model=LoginResponse)
 async def login(request: Request, body: LoginRequest):
-    """验证密码并签发会话 cookie。按来源 IP 限速 + 统一人为延时。"""
+    """验证密码并签发会话 cookie。按来源 IP 限速 + 统一人为延时。
+
+    挑战路径（proof+nonce）或兼容明文路径（password）二选一。
+    """
     ip = _client_ip(request)
     limiter = get_rate_limiter()
 
@@ -102,7 +138,7 @@ async def login(request: Request, body: LoginRequest):
 
     await asyncio.sleep(LOGIN_DELAY_S)  # 成功/失败统一延时，拖慢在线爆破
 
-    if not auth_credentials.verify(body.password):
+    if not _verify_login_credential(request, body):
         locked = limiter.record_failure(ip)
         if locked > 0:
             raise CortexAPIError(
@@ -133,16 +169,27 @@ async def logout(request: Request):
 async def update_password(request: Request, body: PasswordUpdateRequest):
     """设置/修改密码。
 
-    已设密码时必须验证旧密码（计入限速器）；成功后吊销全部会话，
-    并为当前操作者重签新会话（本人不掉线，其余设备全部重新登录）。
+    已设密码时必须验证旧密码（明文兼容或挑战 proof，计入限速器）；成功后
+    吊销全部会话，并为当前操作者重签新会话（本人不掉线，其余设备全部重新
+    登录）。新密码支持两种形式：明文（兼容）或客户端预哈希（挑战化，
+    明文新 PIN 同样不上线）。
     """
     _require_session_if_enabled(request)
 
-    if not validate_pin_format(body.new_password):
-        raise CortexAPIError(400, "INVALID_PASSWORD_FORMAT", "密码必须是 6 位数字")
+    hashed_mode = bool(body.new_salt and body.new_hash)
+    if not hashed_mode:
+        if not body.new_password or not validate_pin_format(body.new_password):
+            raise CortexAPIError(400, "INVALID_PASSWORD_FORMAT", "密码必须是 6 位数字")
 
     if auth_credentials.has_password():
-        if not body.old_password or not auth_credentials.verify(body.old_password):
+        old_ok = _verify_login_credential(
+            request,
+            type("Cred", (), {
+                "proof": body.old_proof, "nonce": body.old_nonce,
+                "password": body.old_password,
+            })(),
+        )
+        if not old_ok:
             locked = get_rate_limiter().record_failure(_client_ip(request))
             if locked > 0:
                 raise CortexAPIError(
@@ -151,7 +198,14 @@ async def update_password(request: Request, body: PasswordUpdateRequest):
                 )
             raise CortexAPIError(401, "INVALID_PASSWORD", "旧密码错误")
 
-    auth_credentials.set_password(body.new_password)
+    try:
+        if hashed_mode:
+            auth_credentials.set_password_hashed(body.new_salt, body.new_hash)
+        else:
+            auth_credentials.set_password(body.new_password)
+    except ValueError as e:
+        raise CortexAPIError(400, "INVALID_PASSWORD_FORMAT", str(e)) from e
+
     store = deps.get_sessions_store()
     store.revoke_all_auth_sessions()
     get_rate_limiter().record_success(_client_ip(request))
@@ -165,12 +219,12 @@ async def update_password(request: Request, body: PasswordUpdateRequest):
 
 @router.delete("/auth/password", response_model=LoginResponse)
 async def clear_password(request: Request, body: PasswordClearRequest):
-    """清除密码（须验证当前密码）。清除后闸门关闭、会话全部吊销。"""
+    """清除密码（须验证当前密码，明文兼容或挑战 proof）。清除后闸门关闭、会话全部吊销。"""
     _require_session_if_enabled(request)
 
     if not auth_credentials.has_password():
         raise CortexAPIError(400, "NO_PASSWORD_SET", "尚未设置密码")
-    if not auth_credentials.verify(body.password):
+    if not _verify_login_credential(request, body):
         raise CortexAPIError(401, "INVALID_PASSWORD", "密码错误")
 
     auth_credentials.clear_password()

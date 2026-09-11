@@ -49,12 +49,32 @@ def has_password() -> bool:
     return _read_stored() is not None
 
 
+def stored_params() -> Optional[tuple[int, str, str]]:
+    """(iterations, salt_hex, hash_hex) 只读副本——挑战端点发 salt/iterations，
+    登录校验用 hash_hex 算期望 proof（挑战-响应，2026-09-11）。"""
+    return _read_stored()
+
+
 def set_password(pin: str) -> None:
     """设置/覆盖密码（写全局 .env）。格式非法抛 ValueError。"""
     if not validate_pin_format(pin):
         raise ValueError("密码必须是 6 位数字")
     salt_hex, hash_hex = hash_password(pin)
     write_env_values(_env_path(), {ENV_KEY: f"{PBKDF2_ITERATIONS}${salt_hex}${hash_hex}"})
+
+
+def set_password_hashed(salt_hex: str, hash_hex: str, iterations: int = PBKDF2_ITERATIONS) -> None:
+    """以客户端预哈希直接落库（设置密码的挑战化路径）。
+
+    明文 PIN 校验无法做（没上线过），6 位格式的约束由客户端保证；
+    服务端只做 hex 长度/字符健全性检查。
+    """
+    import re as _re
+    if not _re.fullmatch(r"[0-9a-fA-F]+", salt_hex or "") or not _re.fullmatch(r"[0-9a-fA-F]+", hash_hex or ""):
+        raise ValueError("哈希必须是 hex 字符串")
+    if iterations <= 0 or iterations > 10_000_000:
+        raise ValueError("iterations 越界")
+    write_env_values(_env_path(), {ENV_KEY: f"{iterations}${salt_hex.lower()}${hash_hex.lower()}"})
 
 
 def verify(pin: str) -> bool:

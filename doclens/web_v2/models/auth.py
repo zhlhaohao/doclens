@@ -1,13 +1,25 @@
-"""Auth API 的请求/响应模型。"""
+"""Auth API 的请求/响应模型。
+
+挑战-响应（2026-09-11，方案 C）：proof 字段 = HMAC-SHA256(nonce,
+PBKDF2(PIN, salt, iterations))；携带 proof+nonce 的请求走无明文路径，
+携带 password 的为兼容路径（环回/调试，前端已全部切挑战）。
+"""
 from __future__ import annotations
 
 from typing import Optional
-
 from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    password: str
+    password: Optional[str] = None          # 兼容路径：明文 PIN（环回/调试）
+    proof: Optional[str] = None             # 挑战路径：HMAC(nonce, PBKDF2)
+    nonce: Optional[str] = None
+
+
+class ChallengeResponse(BaseModel):
+    salt: str
+    iterations: int
+    nonce: str
 
 
 class LoginResponse(BaseModel):
@@ -21,9 +33,15 @@ class AuthStatusResponse(BaseModel):
 
 
 class PasswordUpdateRequest(BaseModel):
-    old_password: Optional[str] = None
-    new_password: str
+    old_password: Optional[str] = None      # 兼容路径：明文旧密码
+    old_proof: Optional[str] = None         # 挑战路径：旧密码的 proof
+    old_nonce: Optional[str] = None
+    new_password: Optional[str] = None      # 兼容路径：明文新 PIN
+    new_salt: Optional[str] = None          # 挑战路径：客户端自生成 salt
+    new_hash: Optional[str] = None          # 挑战路径：PBKDF2(new_PIN, new_salt)
 
 
 class PasswordClearRequest(BaseModel):
-    password: str
+    password: Optional[str] = None          # 兼容路径
+    proof: Optional[str] = None             # 挑战路径
+    nonce: Optional[str] = None
