@@ -37,6 +37,10 @@ export class InputBox extends LitElement {
     }
     input {
       flex: 1;
+      /* flex 项默认 min-width:auto——input 会被固有宽度（size=20 ≈ 163px）顶住，
+         窄屏移动端（≈300 CSS px，如安卓调大显示大小）把右侧分裂按钮挤出 wrapper。
+         显式 min-width:0 允许收缩到固有宽度以下。 */
+      min-width: 0;
       border: none;
       background: transparent;
       outline: none;
@@ -54,6 +58,8 @@ export class InputBox extends LitElement {
     }
     textarea {
       flex: 1;
+      /* 同 input：允许收缩到固有宽度（cols=20）以下，防窄屏挤出右侧按钮 */
+      min-width: 0;
       border: none;
       background: transparent;
       outline: none;
