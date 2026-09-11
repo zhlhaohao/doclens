@@ -14,14 +14,30 @@ description: Run the EnterpriseRAG benchmark (GUI 对话 E2E 测试) against the
 - **judge LLM**：读 `~/.cortex/.env` 的激活预设（当前 GLM-5.1），无需额外配置
 - **每题耗时 1–3 分钟**（LLM 多轮检索），单题超时默认 180s 判失败
 
-## 第 1 步：确认被测服务在跑
+## 第 1 步：判断被测服务状态（进程级 + 语料级双重判定）
 
-```bash
-curl -s -m 10 "http://127.0.0.1:7860/" -o /dev/null -w "%{http_code}"
+仅探端口 200 **不够**——进程可能活着但跑在错误语料上（如 test_work_dir），benchmark 必须对准 500k 语料。按顺序判定：
+
+```powershell
+$corpus = "C:\Users\lianghao\EnterpriseRAG-Bench-Data\all_documents"
+
+# 1.1 进程级：有没有 doclens gui 进程、-C 指向哪
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+  ? { $_.CommandLine -match 'doclens' -and $_.CommandLine -match 'gui' } |
+  Select ProcessId, CommandLine
+
+# 1.2 语料级：服务在跑时核对 workdir（不在跑则跳过）
+try { (Invoke-RestMethod "http://127.0.0.1:7860/api/status" -TimeoutSec 10).workdir } catch { "DOWN" }
 ```
 
-- `200` → 服务健康，跳到第 3 步。
-- 连不上 → 先清残留实例再启动（见第 2 步）。残留实例症状：端口被占 / bind 失败 / 索引锁 Permission denied。
+判定表：
+
+| 进程 | /api/status | workdir == 语料 | 动作 |
+|------|-------------|-----------------|------|
+| 无 | — | — | → 第 2 步启动 |
+| 有 | 200 | ✅ | → 第 3 步 |
+| 有 | 200 | ❌（如 test_work_dir） | 杀进程 → 第 2 步以 `-C 语料` 重启 |
+| 有 | DOWN / 非 200 | — | 残留实例（端口被占 / bind 失败 / 索引锁 Permission denied）→ 清残留 → 第 2 步 |
 
 ## 第 2 步：启动被测服务（detached）
 
@@ -31,10 +47,10 @@ curl -s -m 10 "http://127.0.0.1:7860/" -o /dev/null -w "%{http_code}"
 # 2.1 清残留：杀 7860 占用者 + 大内存 python
 $l = Get-NetTCPConnection -LocalPort 7860 -State Listen -EA SilentlyContinue | Select -ExpandProperty OwningProcess -Unique
 if ($l) { $l | % { Stop-Process -Id $_ -Force } }
-Get-Process python -EA SilentlyContinue | ? { $_.WorkingSet64 -gt 400MB } | % { Stop-Process -Id $_.Force }
+Get-Process python -EA SilentlyContinue | ? { $_.WorkingSet64 -gt 400MB } | Stop-Process -Force
 Start-Sleep 3
 
-# 2.2 detached 启动（PYTHONPATH 必须；CORTEX_NO_BROWSER=1 防弹窗）
+# 2.2 detached 启动（PYTHONPATH 必须；CORTEX_NO_BROWSER=1 防弹窗；-C 指向语料库）
 $env:PYTHONPATH = "C:\Users\lianghao\github\cortex"
 $env:CORTEX_NO_BROWSER = "1"
 Start-Process -FilePath "C:\Users\lianghao\github\cortex\.venv\Scripts\python.exe" `
@@ -109,5 +125,6 @@ print(f'AI评分均值 {sum(sc)/len(sc):.1f} | recall均值 {sum(rc)/len(rc):.2f
 
 - **judge 报 ModuleNotFoundError: planify** → 程序已内置 sys.path 自举，若仍报说明跑在别的解释器上，必须用 repo 的 `.venv/Scripts/python.exe`。
 - **服务起了但请求 000** → 旧实例残留占端口（第 2.1 步清掉）。
+- **端口 200 但结果全对不上** → 进程跑在错误语料上（如 test_work_dir）。这就是第 1 步必须核对 `/api/status` 的 workdir 的原因——杀了用 `-C 语料` 重启。
 - **bench 客户端崩了要杀后台任务** → 先 TaskStop，服务不用重启（客户端断流会自动停生成）。
 - **跑完 benchmark 别忘关服务**（用户没说要留着就问一句）。
