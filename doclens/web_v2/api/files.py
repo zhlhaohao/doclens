@@ -3,6 +3,7 @@
 所有写操作成功后调用 idx.trigger_background_reindex()。
 路径安全 + 点文件保护统一走 path_safety 模块。
 """
+import asyncio
 import logging
 import os
 import shutil
@@ -175,23 +176,28 @@ async def list_dir(
     offset: int = Query(default=0, ge=0),
     idx: IndexManager = Depends(get_index_manager),
 ) -> ListDirResponse:
-    base = Path(idx.search_path)
-    full = safe_resolve(base, path)
-    assert_not_protected(full, base)
-    if not full.exists():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
-    if not full.is_dir():
-        raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
+    def _work() -> ListDirResponse:
+        base = Path(idx.search_path)
+        full = safe_resolve(base, path)
+        assert_not_protected(full, base)
+        if not full.exists():
+            raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+        if not full.is_dir():
+            raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
 
-    all_entries = []
-    indexed_children = idx.indexed_children_of(str(full))
-    for child in full.iterdir():
-        if is_protected(child, base):
-            continue
-        all_entries.append(_build_entry(child, base, indexed_children=indexed_children))
-    all_entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
-    page = all_entries[offset:offset + limit]
-    return ListDirResponse(path=path, entries=page, total=len(all_entries))
+        all_entries = []
+        indexed_children = idx.indexed_children_of(str(full))
+        for child in full.iterdir():
+            if is_protected(child, base):
+                continue
+            all_entries.append(_build_entry(child, base, indexed_children=indexed_children))
+        all_entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
+        page = all_entries[offset:offset + limit]
+        return ListDirResponse(path=path, entries=page, total=len(all_entries))
+
+    # 同步重 IO（目录扫描 + stat + DB 探测）丢线程池——async handler 里直接跑
+    # 会阻塞事件循环，冻结期间所有请求（子目录「目录为空」bug 根因之一）
+    return await asyncio.to_thread(_work)
 
 
 # --- GET /files/stats ---
@@ -201,15 +207,19 @@ async def stats(
     path: str = Query(...),
     idx: IndexManager = Depends(get_index_manager),
 ) -> DirStatsResponse:
-    base = Path(idx.search_path)
-    full = safe_resolve(base, path)
-    assert_not_protected(full, base)
-    if not full.exists():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
-    if not full.is_dir():
-        raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
-    files, dirs, total = _walk_for_stats(full, base)
-    return DirStatsResponse(path=path, file_count=files, dir_count=dirs, total_size_bytes=total)
+    def _work() -> DirStatsResponse:
+        base = Path(idx.search_path)
+        full = safe_resolve(base, path)
+        assert_not_protected(full, base)
+        if not full.exists():
+            raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+        if not full.is_dir():
+            raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
+        files, dirs, total = _walk_for_stats(full, base)
+        return DirStatsResponse(path=path, file_count=files, dir_count=dirs, total_size_bytes=total)
+
+    # 递归整棵子树的 walk + stat——同 to_thread 理由（见 /files/list）
+    return await asyncio.to_thread(_work)
 
 
 # --- GET /files/attrs ---
@@ -245,11 +255,19 @@ async def attrs(
 async def list_indexed_documents(
     idx: IndexManager = Depends(get_index_manager),
 ) -> IndexedDocumentsResponse:
-    """返回所有已索引文档的扁平列表（用于前端文件名搜索）。"""
-    base = Path(idx.search_path)
-    docs = _indexed_documents(idx, base)
-    docs.sort(key=lambda d: d.name.lower())
-    return IndexedDocumentsResponse(documents=docs, total=len(docs))
+    """返回所有已索引文档的扁平列表（用于前端文件名搜索）。
+
+    全量语义：50 万语料上 51 万次 is_file+stat，实测 ~110s。必须走线程池
+    ——曾在事件循环上同步跑，期间所有请求（含 /files/list）冻结，前端
+    currentDir 已切换 + treeCache 未写入 → 永久显示「目录为空」。
+    """
+    def _work() -> IndexedDocumentsResponse:
+        base = Path(idx.search_path)
+        docs = _indexed_documents(idx, base)
+        docs.sort(key=lambda d: d.name.lower())
+        return IndexedDocumentsResponse(documents=docs, total=len(docs))
+
+    return await asyncio.to_thread(_work)
 
 
 # --- POST /files/mkdir ---
