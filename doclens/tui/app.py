@@ -1105,7 +1105,7 @@ class CortexApp(App):
         """确保 Agent 已初始化"""
         if self.agent is None:
             from doclens.agent_integration import CortexAgent
-            self.agent = CortexAgent(Path(self.idx.search_path)).initialize()
+            self.agent = CortexAgent(Path(self.idx.search_path), idx_manager=self.idx).initialize()
 
     # ------------------------------------------------------------------
     # Actions

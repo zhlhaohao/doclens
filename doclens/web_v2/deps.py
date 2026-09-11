@@ -82,7 +82,7 @@ def get_agent():
                 from doclens.agent_integration import CortexAgent
                 idx = get_index_manager()
                 workdir = Path(idx.search_path)
-                _agent = CortexAgent(workdir).initialize()
+                _agent = CortexAgent(workdir, idx_manager=idx).initialize()
                 logger.info("CortexAgent initialized")
     return _agent
 

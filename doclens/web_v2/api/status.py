@@ -1,6 +1,4 @@
 """GET /api/status -- 系统状态。"""
-import os
-
 from fastapi import APIRouter, Depends
 
 from doclens.index_manager import IndexManager
@@ -11,20 +9,10 @@ router = APIRouter()
 
 @router.get("/status")
 async def status(idx: IndexManager = Depends(get_index_manager)):
-    # DB 轻量查询（ADR-0018）：不物化 documents，避免百万级语料全量载入。
+    # DB 轻量查询 + 进程内缓存（ADR-0018）：50 万语料全量 stat 要 90s+，
+    # 缓存键 = DB 文档计数，索引变化才重算。
     indexed_docs = idx.indexed_doc_count()
-    total_size = 0
-    type_counts: dict[str, int] = {}
-    for src in idx.indexed_source_paths():
-        # file_size is not populated by treesearch; compute at query time.
-        try:
-            size = os.path.getsize(src) if src else 0
-        except OSError:
-            size = 0
-        total_size += size
-        ext = os.path.splitext(src)[1].lower() if src else ""
-        if ext:
-            type_counts[ext] = type_counts.get(ext, 0) + 1
+    total_size, type_counts = idx.file_stats()
     watcher_obj = get_watcher()
     cfg = get_config()
     return {

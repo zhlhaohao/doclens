@@ -382,7 +382,7 @@ class NotebookSearchCLI:
         if self.agent is None:
             from doclens.agent_integration import CortexAgent
 
-            self.agent = CortexAgent(Path(self.idx.search_path)).initialize()
+            self.agent = CortexAgent(Path(self.idx.search_path), idx_manager=self.idx).initialize()
 
     def cmd_ai(self, arg: str):
         """AI 对话命令"""
@@ -967,7 +967,7 @@ def _cli_ai(args, config, idx):
 
     # Initialize agent
     from doclens.agent_integration import CortexAgent
-    agent = CortexAgent(Path(idx.search_path)).initialize()
+    agent = CortexAgent(Path(idx.search_path), idx_manager=idx).initialize()
 
     # Capture stdout from agent
     old_stdout = sys.stdout

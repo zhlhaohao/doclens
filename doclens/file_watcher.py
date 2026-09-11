@@ -207,6 +207,11 @@ class FileWatcher:
         # 启动时主动触发一次增量 reindex（fingerprint 默认 stat 模式，只比对
         # mtime/size 不读内容），补上离线期间新增/修改/删除的文件。防抖后执行，
         # 与文件变化事件共用 _do_reindex（无变化时 build_index 增量快速返回）。
+        # 本进程已完成启动审计（load_or_build_index 的 has_changed_files 本就
+        # 补离线变化）时跳过——重复扫描在百万语料上多耗一轮分钟级审计。
+        if getattr(self._idx, "startup_audit_done", False):
+            print("[文件监控：启动审计已完成，跳过启动增量扫描]")
+            return True
         if self._timer:
             self._timer.cancel()
         self._timer = threading.Timer(self._debounce, self._do_reindex)

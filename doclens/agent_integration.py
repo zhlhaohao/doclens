@@ -116,11 +116,14 @@ class Colors:
 class CortexAgent:
     """Cortex Agent 会话"""
 
-    def __init__(self, workdir: Path):
+    def __init__(self, workdir: Path, idx_manager=None):
         self.workdir = workdir
         self.loop = None
         self.runtime = None
-        self.idx = None
+        # 注入宿主已有的 IndexManager（GUI=deps 单例 / CLI/TUI=各自实例），
+        # 避免自建第二实例重复跑启动审计（双轮审计 bug，2026-09-11）。
+        self.idx = idx_manager
+        self._injected_idx = idx_manager is not None
         self._escape_watcher = None
         self._setup_dirs()
 
@@ -235,23 +238,29 @@ class CortexAgent:
         from doclens.index_manager import IndexManager
         from doclens.config import CortexConfig
 
-        kb_config = CortexConfig.load()
-        self.idx = IndexManager(kb_config)
-        # GUI lifespan 内初始化 agent 时事件循环已运行，TreeSearch.index()
-        # 会拒绝执行（见 deps.get_index_manager 同因）——子线程构建规避
-        _init_err: list = []
+        if self._injected_idx:
+            # 宿主注入的 IndexManager 已完成启动审计（deps 单例 / CLI/TUI 实例
+            # 都先于 agent 初始化），直接复用——自建第二实例会重复跑全量审计
+            # （百万语料双轮审计 bug，2026-09-11）。
+            kb_config = CortexConfig.load()
+        else:
+            kb_config = CortexConfig.load()
+            self.idx = IndexManager(kb_config)
+            # GUI lifespan 内初始化 agent 时事件循环已运行，TreeSearch.index()
+            # 会拒绝执行（见 deps.get_index_manager 同因）——子线程构建规避
+            _init_err: list = []
 
-        def _build_index():
-            try:
-                self.idx.load_or_build_index()
-            except Exception as e:  # noqa: BLE001
-                _init_err.append(e)
+            def _build_index():
+                try:
+                    self.idx.load_or_build_index()
+                except Exception as e:  # noqa: BLE001
+                    _init_err.append(e)
 
-        _t = threading.Thread(target=_build_index, daemon=True)
-        _t.start()
-        _t.join()
-        if _init_err:
-            raise _init_err[0]
+            _t = threading.Thread(target=_build_index, daemon=True)
+            _t.start()
+            _t.join()
+            if _init_err:
+                raise _init_err[0]
         # 对话模型单次输出上限：主代理 StreamingConfig 与子代理共用
         _max_tokens = kb_config.planify_max_tokens
 

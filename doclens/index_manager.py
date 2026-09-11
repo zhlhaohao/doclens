@@ -3,6 +3,7 @@
 import logging
 import os
 import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,11 @@ class IndexManager:
         # 供 /api/status 暴露给前端——启动同步索引不走 reindexed 广播，
         # 前端只能靠此字段看到失败数。
         self._last_failed_count = 0
+        # 本进程是否已跑过启动审计（load_or_build_index）——watcher 启动扫描
+        # 据此跳过重复一轮（双轮审计 bug，2026-09-11）
+        self._startup_audit_done = False
+        # /api/status 的 (总字节, 扩展名分布) 缓存：(doc_count, value)
+        self._file_stats_cache: tuple[int, tuple[int, dict[str, int]]] | None = None
 
     @property
     def last_failed_count(self) -> int:
@@ -65,6 +71,16 @@ class IndexManager:
         供 VisionWorker 等外部写入者在直接更新 FTS 后调用。
         """
         self._needs_reload = True
+
+    @property
+    def startup_audit_done(self) -> bool:
+        """本进程是否已完成启动审计（load_or_build_index 跑过至少一次）。
+
+        FileWatcher 的启动增量扫描用它判断是否可以跳过：启动审计
+        （has_changed_files）本身就会补离线变化，刚审计完就再扫一遍是
+        纯重复（百万语料多耗一轮分钟级审计，双轮审计 bug 根因）。
+        """
+        return self._startup_audit_done
 
     # --- Config-backed properties (hot-reloadable) ---
 
@@ -215,6 +231,31 @@ class IndexManager:
         except Exception as e:  # noqa: BLE001
             logger.debug("indexed_doc_count failed: %s", e)
             return 0
+
+    def file_stats(self) -> tuple[int, dict[str, int]]:
+        """(总字节数, 扩展名分布)——供 /api/status，带缓存。
+
+        50 万语料全量 stat 要 90s+；缓存键 = DB 文档计数（COUNT，毫秒级），
+        计数变化（索引增删）才重算。同数替换（改内容不改文件数）下显示值
+        可能略滞后，status 展示可接受。
+        """
+        n = self.indexed_doc_count()
+        if self._file_stats_cache and self._file_stats_cache[0] == n:
+            return self._file_stats_cache[1]
+        total = 0
+        ext_counts: dict[str, int] = {}
+        for src in self.indexed_source_paths():
+            if not src:
+                continue
+            try:
+                total += os.path.getsize(src)
+            except OSError:
+                pass
+            ext = os.path.splitext(src)[1].lower()
+            if ext:
+                ext_counts[ext] = ext_counts.get(ext, 0) + 1
+        self._file_stats_cache = (n, (total, ext_counts))
+        return total, ext_counts
 
     def indexed_source_paths(self) -> list[str]:
         """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。
@@ -557,8 +598,19 @@ class IndexManager:
                         # 刷新内存 path_map（轻量：仅 doc_id→path 映射，不载树结构）；
                         # _ts.documents 保持不物化——files/status 计数已走 DB 查询。
                         self.refresh_path_map_from_db()
-                        # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引
-                        self._needs_reload = True
+                        # 标记需要重新加载，下次搜索/查询时会从磁盘重新加载索引。
+                        # 仅在索引实际发生变化时标记（indexed>0 或 prune>0）——
+                        # 零变化的空转 reindex 不标记，否则触发又一轮全量审计
+                        # （启动双轮审计 bug：watcher 启动扫描空转 → 无条件
+                        # _needs_reload → 下个请求重跑 50 万文件审计）。
+                        _index_touched = (
+                            _stats is not None
+                            and (_stats.indexed_files > 0 or len(_stats.pruned_paths) > 0)
+                        )
+                        if _index_touched:
+                            self._needs_reload = True
+                        else:
+                            logger.debug("Background reindex touched nothing; skip reload mark")
                     else:
                         # 无 IndexStats 且现有索引非空 —— 几乎都是 db 锁冲突导致
                         # build_index 被跳过（返回 []）。保留旧索引，下次重试。
@@ -628,10 +680,15 @@ class IndexManager:
         set_config(self._ts_config())
         self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
         abs_path = os.path.abspath(self.index_path)
+        self._startup_audit_done = True
 
         if os.path.exists(abs_path):
             # 索引库已存在：无变化则不物化、不全量 load（ADR-0018）
-            if not self.has_changed_files():
+            print(f"[变更检测中: {self.search_path}]（百万级语料可能需要数分钟）")
+            _t_audit = time.time()
+            _changed = self.has_changed_files()
+            print(f"[变更检测完成: {'有变化' if _changed else '无变化'}，用时 {time.time() - _t_audit:.1f}s]")
+            if not _changed:
                 self.build_path_map()
                 logger.debug("Index unchanged, loaded path_map only (%d docs)",
                              len(self._path_map))

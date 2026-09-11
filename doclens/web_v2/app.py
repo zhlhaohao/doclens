@@ -336,7 +336,13 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
         try:
             # get_index_manager 内部完成 load_or_build_index 并发布单例；
             # 期间进来的 HTTP 请求在同函数的锁 + join 上挂起等待
-            deps.get_index_manager()
+            mgr = deps.get_index_manager()
+            # 预热 /api/status 的文件统计缓存（50 万语料首次全量 stat ~20s，
+            # 不预热则用户打开页面的首个 status 请求承担这次耗时）
+            try:
+                mgr.file_stats()
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:  # noqa: BLE001
             print(f"\n[警告] 启动索引失败: {e}（应用仍将打开，可在设置页排查）\n", flush=True)
         finally:
