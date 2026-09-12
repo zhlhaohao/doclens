@@ -41,11 +41,13 @@ SKILL_MESSAGE_TEMPLATE = (
     "[调用技能: {name}]\n"
     '请先 load_skill("{name}") 加载技能，然后按技能指引处理。\n'
     "\n"
-    "{question}"
+    "{question}\n"
+    "\n"
+    "（语料为全英文，请全程使用英文回答 / Answer entirely in English.）"
 )
 # 参考资料章节行：`1. 相对路径`
 REFS_LINE_RE = re.compile(r"^\s*\d+\.\s+(.+?)\s*$", re.M)
-_REFS_SECTION_RE = re.compile(r"^##\s+参考资料\s*$", re.M)
+_REFS_SECTION_RE = re.compile(r"^##\s+(参考资料|References)\s*$", re.M)
 
 
 # ---------------------------------------------------------------------------
@@ -360,14 +362,26 @@ def judge_answer(question: dict, candidate: str) -> dict:
                 messages=[{"role": "user", "content": user}],
                 system=JUDGE_SYSTEM,
                 tools=[],
-                max_tokens=300,
+                # GLM 类推理模型会先消耗 reasoning token：300 会被推理吃完
+                # 导致正文为空（stop_reason=max_tokens），给足余量
+                max_tokens=2000,
             )
             text = "".join(
                 getattr(b, "text", "") for b in resp.content
             )
             jm = re.search(r"\{[^{}]*\"score\"[^{}]*\}", text, re.S)
             if jm:
-                data = json.loads(jm.group(0))
+                try:
+                    data = json.loads(jm.group(0))
+                except json.JSONDecodeError:
+                    data = None  # 截断 JSON → 走下面的分数兜底
+            else:
+                data = None
+            if data is None:
+                # 兜底：从（可能截断的）文本里直接抓 "score": N
+                sm = re.search(r'"score"\s*:\s*(\d{1,2})', text)
+                data = {"score": int(sm.group(1)), "reason": ""} if sm else None
+            if data is not None:
                 score = int(data["score"])
                 if 1 <= score <= 10:
                     return {"score": score, "reason": str(data.get("reason", ""))}
