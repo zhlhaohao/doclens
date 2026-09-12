@@ -117,7 +117,7 @@ async def _stream_agent_response(
         bind_ask_user_question_handler,
         bind_user_interaction_handlers,
     )
-    from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA
+    from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA, tool_round_limit_kwargs
     from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
 
     waiter = get_global_waiter()
@@ -151,6 +151,7 @@ async def _stream_agent_response(
         config=StreamingConfig(
             compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
             max_tokens=runtime.config.planify_max_tokens,
+            **tool_round_limit_kwargs(runtime.config),
         ),
         waiter=waiter,
         todo_manager=runtime.todo_mgr,

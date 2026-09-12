@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from doclens.config import data_dirname, get_global_cortex_dir
-from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA
+from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA, tool_round_limit_kwargs
 
 # 确保 planify 模块可导入
 import os
@@ -431,6 +431,7 @@ class CortexAgent:
             config=StreamingConfig(
                 compact_threshold=int(round(self.runtime.config.planify_context_window * 0.8)),
                 max_tokens=self.runtime.config.planify_max_tokens,
+                **tool_round_limit_kwargs(self.runtime.config),
             ),
             logger_instance=self.runtime.logger,
             runtime=self.runtime,

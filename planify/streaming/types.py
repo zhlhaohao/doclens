@@ -299,6 +299,12 @@ class StreamingConfig:
     # 输出配置
     truncate_tool_output: int = 5000  # 工具输出截断长度
 
+    # 工具轮次兜底（默认 None = 不限，保持框架中性；由宿主按场景注入）
+    # 与 interrupt_event 完全独立：不 set event、不 break 循环，只引导/强制收尾
+    max_tool_rounds: Optional[int] = None  # 软阈值：超过后每轮注入"停止工具、如实作答"提醒
+    tool_round_limit_reminder: Optional[str] = None  # 提醒文案；None 用中性默认
+    force_answer_rounds: Optional[int] = None  # 硬阈值：达到后以 tools=[] 强制终答
+
 
 @dataclass
 class ToolCallState:

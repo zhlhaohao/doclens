@@ -92,7 +92,7 @@ MANAGE_KB_TOOL = {
     "name": "manage_kb",
     "description": (
         "管理知识库索引。支持 reindex（重建索引）和 stats（查看统计）两种操作。"
-        "搜索无结果时可用 reindex 重建索引。"
+        "reindex 用于索引损坏或语料更新后重建，非常规检索重试手段。"
     ),
     "input_schema": {
         "type": "object",
@@ -1147,9 +1147,8 @@ def _handle_search_kb(
     if not nodes:
         return note + (
             f"未找到包含 '{query}' 的结果。\n"
-            "建议：\n"
-            "1. 尝试不同的关键词\n"
-            "2. 用 manage_kb(action='reindex') 重建索引"
+            "建议换一个角度重试（同义词/上下位词/中英文）；"
+            "若多角度检索均无结果，请如实告知用户未找到。"
         )
 
     doc_nodes_map: dict[str, list[dict]] = {}
@@ -1222,7 +1221,7 @@ def _handle_search_kb(
             if item[2] >= 1
         ]
     if not filtered:
-        return note + f"未找到包含 '{query}' 的结果。请尝试不同的关键词或重建索引。"
+        return note + f"未找到包含 '{query}' 的结果。可换一个角度（同义词/上下位词/中英文）再试；若多角度检索均无结果，请如实告知用户未找到。"
 
     scored_results = []
     for item in filtered:
@@ -1312,10 +1311,8 @@ def _handle_search_kb_v2(
         if not filtered:
             return (
                 f"未找到包含 '{fts_query}' 的结果。\n"
-                "建议：\n"
-                "1. 尝试不同的关键词\n"
-                "2. 用 manage_kb(action='reindex') 重建索引\n"
-                "3. 用 bash grep 搜索文件名或内容"
+                "建议换一个角度重试（同义词/上下位词/中英文），或用 grep 补搜；"
+                "若多角度检索均无结果，请如实告知用户未找到。"
             )
         return _format_ripgrep_results(
             filtered, query_words, idx_manager.path_map, max_results,
@@ -1386,7 +1383,7 @@ def _handle_search_kb_v2(
         )
 
     if not filtered:
-        return f"未找到包含 '{fts_query}' 的结果。请尝试不同的关键词或重建索引。"
+        return f"未找到包含 '{fts_query}' 的结果。可换一个角度（同义词/上下位词/中英文）再试；若多角度检索均无结果，请如实告知用户未找到。"
 
     scored_results = []
     for item in filtered:

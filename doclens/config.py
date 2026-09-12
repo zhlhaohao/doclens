@@ -278,6 +278,12 @@ class CortexConfig(BaseSettings):
         "子代理并发拆分读取时，每组读取量建议 ≤ max_tokens × 0.8 词（留 20% 余量）。",
     )
     planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
+    planify_max_tool_rounds: int = Field(
+        default=15,
+        alias="PLANIFY_MAX_TOOL_ROUNDS",
+        description="单轮问答工具调用轮数软上限：超过后每轮注入停止提醒；"
+        "硬阈值 = 本值 + 10，达到后强制终答；0=不限。",
+    )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）
     vision_api_key: Optional[str] = Field(

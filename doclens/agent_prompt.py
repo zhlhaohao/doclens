@@ -19,3 +19,22 @@ IMPORTANT: 本应用是知识库问答工具，本地知识库（search_kb 可�
 
 当前工作目录同时也是**知识库根目录**——所有已索引/可检索的文档都在该目录或其子目录内。用户询问已索引内容时，使用知识库工具（search_kb / read_document）检索。\
 """
+
+# 工具轮次兜底注入（宿主措辞；planify 侧 StreamingConfig 保持中性）
+KB_TOOL_ROUND_LIMIT_REMINDER = (
+    "你已进行了多轮检索仍未找到答案。请立即停止调用工具，基于已获得的信息如实作答；"
+    "若知识库中确实没有相关内容，明确告知用户「未找到」，不要编造，也不要再尝试新的检索。"
+)
+
+
+def tool_round_limit_kwargs(config) -> dict:
+    """从 doclens Config 派生 StreamingConfig 的工具轮次兜底参数。
+
+    软阈值 = planify_max_tool_rounds（默认 15），硬阈值 = 软 + 10；0 = 不限。
+    """
+    soft = getattr(config, "planify_max_tool_rounds", 15) or 0
+    return {
+        "max_tool_rounds": soft or None,
+        "force_answer_rounds": (soft + 10) if soft else None,
+        "tool_round_limit_reminder": KB_TOOL_ROUND_LIMIT_REMINDER,
+    }

@@ -284,6 +284,7 @@ class StreamingAgent:
 
         system = self.get_system_prompt()
         loop_count = 0
+        tool_rounds = 0  # 工具轮次（含 tool_use 的轮数），供 max_tool_rounds/force_answer_rounds 兜底
         full_text_output = ""
 
         try:
@@ -370,6 +371,47 @@ class StreamingAgent:
 
                 # === 工具执行 ===
                 await self._execute_tools(messages)
+
+                # === 工具轮次兜底（宿主经 StreamingConfig 注入；默认 None 不限）===
+                # 与 interrupt_event 完全独立：不 set event、不 break，
+                # 软阈值注入提醒引导收尾，硬阈值以 tools=[] 强制终答
+                tool_rounds += 1
+                if (
+                    self.config.force_answer_rounds
+                    and tool_rounds >= self.config.force_answer_rounds
+                ):
+                    self.logger.warning(
+                        f"[StreamingAgent] 工具轮数达硬阈值 "
+                        f"{self.config.force_answer_rounds}，强制终答"
+                    )
+                    await self._stream_llm_call(messages, system, suppress_tools=True)
+                    summary = full_text_output[:500] if full_text_output else None
+                    await self.emitter.emit_done(session_id, summary)
+                    return self._cleanup_messages(messages)
+                if (
+                    self.config.max_tool_rounds
+                    and tool_rounds > self.config.max_tool_rounds
+                ):
+                    reminder = (
+                        self.config.tool_round_limit_reminder
+                        or "You have made many tool calls without converging. "
+                        "Stop calling tools now and give your best final answer "
+                        "based on what you have; if the information was not found, "
+                        "say so honestly."
+                    )
+                    # 追加在消息尾部，不破坏前缀缓存（与 bg/inbox 注入同理）
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"<system-reminder>\n{reminder}\n</system-reminder>",
+                        }
+                    )
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": "Understood. I will stop calling tools and answer now.",
+                        }
+                    )
 
         except Exception as e:
             self.logger.exception(f"[StreamingAgent] 运行异常: {e}")
@@ -486,6 +528,7 @@ class StreamingAgent:
         self,
         messages: List[Dict],
         system: str,
+        suppress_tools: bool = False,
     ) -> str:
         """
         执行流式 LLM 调用。
@@ -495,6 +538,7 @@ class StreamingAgent:
         Args:
             messages: 消息历史
             system: 系统提示词
+            suppress_tools: True 时置空工具定义（强制文本作答，硬阈值终答用）
 
         Returns:
             停止原因
@@ -521,8 +565,8 @@ class StreamingAgent:
         # 记录完整的请求内容（确保 JSON 合法且完整）
         self._log_request_payload(messages, system)
 
-        # 把工具定义转换为 Tool dataclass
-        tool_defs = [
+        # 把工具定义转换为 Tool dataclass（suppress_tools 时置空强制文本作答）
+        tool_defs = [] if suppress_tools else [
             Tool(
                 name=t["name"],
                 description=t.get("description", ""),
