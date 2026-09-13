@@ -126,5 +126,6 @@ print(f'AI评分均值 {sum(sc)/len(sc):.1f} | recall均值 {sum(rc)/len(rc):.2f
 - **judge 报 ModuleNotFoundError: planify** → 程序已内置 sys.path 自举，若仍报说明跑在别的解释器上，必须用 repo 的 `.venv/Scripts/python.exe`。
 - **服务起了但请求 000** → 旧实例残留占端口（第 2.1 步清掉）。
 - **端口 200 但结果全对不上** → 进程跑在错误语料上（如 test_work_dir）。这就是第 1 步必须核对 `/api/status` 的 workdir 的原因——杀了用 `-C 语料` 重启。
+- **改了 doclens 技能文件（SKILL.md）但行为没变化** → SkillLoader 启动时把技能扫进内存、之后只读内存不读磁盘；`cp` 同步到 `~/.cortex/skills/` 后**必须重启应用**才生效（仅 skills 管理 API 的 install/delete/restore 会热重扫）。改技能 → 同步 → 重启，三者缺一不可，否则整轮 benchmark 跑的是旧技能（结果作废）。
 - **bench 客户端崩了要杀后台任务** → 先 TaskStop，服务不用重启（客户端断流会自动停生成）。
 - **跑完 benchmark 别忘关服务**（用户没说要留着就问一句）。

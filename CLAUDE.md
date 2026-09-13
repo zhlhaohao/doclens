@@ -312,6 +312,8 @@ cp -r doclens/skills/* ~/.cortex/skills/
 cp -r doclens/skills/<技能名> ~/.cortex/skills/
 ```
 
+**⚠️ 同步只是第一步——必须重启应用才真正生效**：`SkillLoader.__init__` 启动时把 SKILL.md 全部扫进内存 dict，`load_skill` 只读内存不读磁盘；磁盘改动不触发 `rescan()`（仅 skills 管理 API 的 install/delete/restore 会触发热重扫）。benchmark 前尤其要确认：改了技能文件 → 同步全局 → 重启服务，三者缺一不可。
+
 ## 前端代码改动 · 自动构建为完工标准
 
 修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npm run build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。`npm run build` = `tsc --noEmit && vite build`，类型错误同样会阻断构建。
