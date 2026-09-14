@@ -273,6 +273,13 @@ export class FileList extends LitElement {
       text-align: center;
       color: var(--cortex-text-subtle);
     }
+    /* 加载中态：呼吸动画给「正在干活」的感知（区别于确定性的「目录为空」） */
+    .empty.loading {
+      animation: empty-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes empty-pulse {
+      50% { opacity: 0.45; }
+    }
   `;
 
   private _unsubscribe?: () => void;
@@ -513,7 +520,7 @@ export class FileList extends LitElement {
   }
 
   render() {
-    const { currentDir, treeCache, selectedPaths } = store.getState().files;
+    const { currentDir, treeCache, selectedPaths, listing } = store.getState().files;
     const entries = treeCache[currentDir] || [];
     const sel = new Set(selectedPaths);
     const canRename = selectedPaths.length === 1;
@@ -521,12 +528,16 @@ export class FileList extends LitElement {
     const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
     const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
+    // 加载中判定：请求进行中且当前目录尚未进 cache（首次进入/切换目录）——
+    // 与「已加载但为空」区分，避免加载期间闪现误导性的「目录为空」
+    const loading = listing && !(currentDir in treeCache);
+    const emptyBlock = html`<div class="empty ${loading ? "loading" : ""}">${loading ? "加载中…" : "目录为空"}</div>`;
 
     if (this.mobile) {
       return html`
         ${this._renderMobileHeader()}
         ${entries.length === 0
-          ? html`<div class="empty">目录为空</div>`
+          ? emptyBlock
           : html`<div class="header-row">
               <span class="select-all">
                 <input
@@ -572,7 +583,7 @@ export class FileList extends LitElement {
         <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon><span class="btn-label">删除</span></button>
       </div>
       ${entries.length === 0
-        ? html`<div class="empty">目录为空</div>`
+        ? emptyBlock
         : html`<div class="header-row">
             <span class="select-all">
               <input

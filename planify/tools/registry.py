@@ -195,7 +195,11 @@ def build_tool_registry(
         },
     ]
     tools.extend(basic_tools)
-    handlers.update(make_basic_tools(workdir))
+    # 外部访问门禁（ADR-0021）：gui_mode 链路启用——结构化工具路径逃逸
+    # 从硬拒绝改为三态处置；shell 工具在白名单过滤后统一包装（见下）。
+    # TUI/CLI 不传 gui_mode，行为不变。
+    guard_on = bool(kwargs.get("gui_mode"))
+    handlers.update(make_basic_tools(workdir, guard_enabled=guard_on))
 
     # 网络工具
     web_tools, web_handlers = make_web_tools(client, model or "claude-opus-4-6")
@@ -392,6 +396,19 @@ def build_tool_registry(
             "[tools] 白名单生效：启用 %d 个，过滤 %d 个: %s",
             len(tools), len(removed), sorted(removed),
         )
+
+    # 外部访问门禁：shell 工具包装（gui_mode 链路）。放在白名单过滤之后——
+    # 被过滤掉的工具不包装。task 工具运行时按名取 handlers["bash"] 等，
+    # 子代理因此拿到带门禁的函数（未授权外部访问在无交互上下文 fail-closed）。
+    if guard_on:
+        from .guard import wrap_shell_handler_fail_closed
+
+        for shell_name in ("bash", "powershell", "background_run"):
+            if shell_name in handlers:
+                handlers[shell_name] = wrap_shell_handler_fail_closed(
+                    handlers[shell_name], workdir, shell_name
+                )
+        logger.info("[tools] 外部访问门禁已启用（gui_mode）")
 
     return tools, handlers
 

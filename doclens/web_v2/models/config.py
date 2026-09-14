@@ -18,7 +18,7 @@ class ConfigScope:
 # 需与 settings-fields.ts 的 effect:"restart" 保持一致。
 RESTART_FIELDS: frozenset[str] = frozenset({
     "CORTEX_WEB_HOST", "CORTEX_WEB_PORT", "CORTEX_MCP_ENABLED", "CORTEX_MCP_HOST", "CORTEX_MCP_PORT",
-    "CORTEX_SYNC_ENABLED",
+    "CORTEX_SYNC_ENABLED", "CORTEX_WORKDIR",
 })
 
 

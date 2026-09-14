@@ -63,6 +63,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_PORT: "7880",
   CORTEX_SYNC_ENABLED: "true",
   VISION_AUTO_ROTATE: "true",
+  PLANIFY_OUTSIDE_WORKDIR: "ask",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -98,6 +99,21 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     label: "上传图片自动转正",
     component: "switch",
     hint: "文件管理/日记上传的图片在后台用视觉模型判断方向，歪斜时自动旋转落盘并重新解析。需已配置视觉模型；关闭则上传图保持原样。保存后即时生效。",
+  },
+
+  // ===== AI 工具安全（ai tab；ADR-0021 外部访问门禁，保存即时生效） =====
+  {
+    tab: "ai",
+    section: "AI 工具安全",
+    envVar: "PLANIFY_OUTSIDE_WORKDIR",
+    label: "工作目录外访问确认",
+    component: "select",
+    options: [
+      { value: "ask", label: "每次确认（推荐）" },
+      { value: "allow", label: "直接放行（不确认）" },
+      { value: "block", label: "一律拦截" },
+    ],
+    hint: "AI 工具（读写文件 / shell 命令）访问工作目录以外路径时的处置：确认后本会话内同目录免再问（读/写分开记账）。子代理等无交互场景未授权一律拦截。保存后即时生效。",
   },
 
   // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====
@@ -162,5 +178,17 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     component: "switch",
     effect: "restart",
     hint: "工作目录为 git 根且已配置 remote 时，定期 auto-commit → pull → push。改后需重启。",
+  },
+
+  // ===== 工作目录（次优先级，仅未显式传 -C 时生效；改后需重启） =====
+  {
+    tab: "network",
+    section: "工作目录",
+    envVar: "CORTEX_WORKDIR",
+    label: "工作目录",
+    component: "text",
+    effect: "restart",
+    mono: true,
+    hint: "未显式传 -C 参数时生效：重启后索引/.env/日志/AI 工具切换到该目录（显式 -C 优先于本配置）。留空 = 按启动目录。目录必须已存在（否则启动失败）。",
   },
 ];

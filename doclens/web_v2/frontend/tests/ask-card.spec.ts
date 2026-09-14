@@ -138,6 +138,92 @@ describe("<ask-card>", () => {
       expect.objectContaining({ detail: { requestId: "r7" } }),
     );
   });
+
+  it("does not revive answered card on re-render with same requestId", async () => {
+    // 复现 ADR-0021 门禁确认场景：提交后 SSE 流恢复（tool_result/token 密集
+    // 事件触发父组件重渲染），ask property 被赋同 requestId 的新引用——
+    // 卡片不得复活成 pending（否则选项仍可再选）
+    const respondAsk = vi.fn().mockResolvedValue({ ok: true, submitted: true });
+    vi.doMock("../src/api/ask", () => ({ respondAsk }));
+    const el = await card({ requestId: "r8", questions: [singleQ] });
+    (el.shadowRoot!.querySelector('input[type="radio"]') as HTMLInputElement).click();
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector("button.primary") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".summary")).toBeTruthy();
+
+    // 模拟父组件重渲染：同一 requestId、新对象引用
+    el.ask = { requestId: "r8", questions: [{ ...singleQ }] };
+    await el.updateComplete;
+
+    // 仍是摘要态，无交互选项、无提交按钮
+    expect(el.shadowRoot!.querySelector(".summary")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector('input[type="radio"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("button.primary")).toBeNull();
+
+    // 不同 requestId 才重置为 pending（新悬置问题）
+    el.ask = { requestId: "r9", questions: [{ ...singleQ }] };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('input[type="radio"]')).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("button.primary")).toBeTruthy();
+  });
+
+  it("renders guard card with banner, distinct style, and no Other input", async () => {
+    const guardQ: AskQuestionPayload = { ...singleQ, guard: true };
+    const el = await card({ requestId: "g1", questions: [guardQ] });
+    expect(el.shadowRoot!.querySelector(".card.guard")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".guard-banner")!.textContent)
+      .toContain("安全确认");
+    // guard 问题不提供 Other 自由文本输入（防歧义授权）
+    expect(el.shadowRoot!.querySelector(".other-row input")).toBeNull();
+    // 非 guard 卡片保留 Other
+    const plain = await card({ requestId: "g2", questions: [singleQ] });
+    expect(plain.shadowRoot!.querySelector(".other-row input")).toBeTruthy();
+  });
+
+  it("guard card times out to explicit rejected summary (not silent vanish)", async () => {
+    vi.useFakeTimers();
+    try {
+      const onDone = vi.fn();
+      const guardQ: AskQuestionPayload = { ...singleQ, guard: true };
+      const el = await fixture(html`
+        <ask-card .ask=${{ requestId: "gd1", questions: [guardQ] }} @ask-done=${onDone}></ask-card>
+      `) as AskCard;
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".card.guard")).toBeTruthy();
+
+      // 超时到点：交互卡转为「已按拒绝处理」摘要（明确交代结果），不可再交互
+      await vi.advanceTimersByTimeAsync(122_000);
+      await el.updateComplete;
+      const summary = el.shadowRoot!.querySelector(".summary")!;
+      expect(summary).toBeTruthy();
+      expect(el.shadowRoot!.querySelector('input[type="radio"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("button.primary")).toBeNull();
+      expect(summary.textContent).toContain("已按拒绝处理");
+      expect(summary.textContent).toContain("并未同意");
+      // 派发 ask-done（解除输入禁用；不带 dismiss——摘要保留至流结束）
+      expect(onDone).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: { requestId: "gd1" } }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("plain (non-guard) card has no auto-dismiss timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const el = await card({ requestId: "pd1", questions: [singleQ] });
+      await vi.advanceTimersByTimeAsync(122_000);
+      await el.updateComplete;
+      // 普通卡片不受门禁超时影响，仍为交互态
+      expect(el.shadowRoot!.querySelector(".card")).toBeTruthy();
+      expect(el.shadowRoot!.querySelector("button.primary")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("splitRecommended", () => {

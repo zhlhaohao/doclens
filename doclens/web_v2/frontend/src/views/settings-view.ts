@@ -834,14 +834,19 @@ export class SettingsView extends LitElement {
           />
           ${f.unit ? html`<span style="font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle);">${f.unit}</span>` : nothing}
         `;
-      case "select":
+      case "select": {
+        // 未显式设置（.env 无此键）时回显出厂默认（与 switch/slider 的
+        // implicit 回显同模式），避免空值让 select 停在浏览器默认项、
+        // 表单值与显示不一致
+        const eff = value === "" ? (FIELD_DEFAULTS[f.envVar] ?? value) : value;
         return html`
-          <select class="select" .value=${value} data-env=${f.envVar} @change=${onInput}>
+          <select class="select" .value=${eff} data-env=${f.envVar} @change=${onInput}>
             ${(f.options ?? []).map((opt) => html`
-              <option value=${opt.value} ?selected=${opt.value === value}>${opt.label}</option>
+              <option value=${opt.value} ?selected=${opt.value === eff}>${opt.label}</option>
             `)}
           </select>
         `;
+      }
       case "switch": {
         // 布尔开关：值域 "true"/"false"；未显式设置（.env 无此键）时
         // 回显出厂默认（FIELD_DEFAULTS），并标注（默认）

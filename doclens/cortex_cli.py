@@ -751,20 +751,22 @@ def _init_components():
 
 def _build_parser():
     """Build argparse parser with subcommands."""
-    parser = argparse.ArgumentParser(
-        prog="doclens",
-        description="Cortex CLI — structure-aware document retrieval"
-    )
-    # 子命令通用参数：工作目录（每个子命令都支持，写在子命令之后），例如：
-    #   cortex gui -C /path/to/docs
-    #   cortex search "关键词" -C /path/to/docs
+    # 工作目录参数（common）：主 parser 与所有子命令共用——TUI 模式（无子
+    # 命令）的 Namespace 也有 workdir 属性（修复既有 AttributeError），且
+    # 支持 python -m doclens -C X 直接进 TUI。default=SUPPRESS：未提供时
+    # 不设属性（子命令 default 不覆盖主 parser 已解析值），main() 用 getattr 兜底。
     # os.chdir 在 main() 中、CortexConfig.load() 之前执行，
     # 因此 search_path 默认值、.env 查找、索引/预览路径都会跟随此目录。
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--workdir", "-C",
-        default=None, metavar="DIR",
-        help="工作目录（默认: 当前目录）。索引/搜索/预览都基于此目录",
+        default=argparse.SUPPRESS, metavar="DIR",
+        help="工作目录（默认: global CORTEX_WORKDIR 配置或当前目录）。索引/搜索/预览都基于此目录",
+    )
+    parser = argparse.ArgumentParser(
+        prog="doclens",
+        description="Cortex CLI — structure-aware document retrieval",
+        parents=[common],
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -1194,6 +1196,33 @@ def _cli_auth_reset(args, config, idx):
     print(f"已清除访问密码，吊销 {revoked} 个登录会话。下次启动 GUI 无需登录。")
 
 
+def _apply_workdir_override():
+    """按 CORTEX_WORKDIR 配置切换工作目录（次优先级，仅在未传 -C 时生效）。
+
+    解析顺序见 doclens.config.resolve_workdir_override。目标目录与当前
+    cwd 相同则静默跳过；目录不存在则报错退出（fail-fast，与 -C 行为一致，
+    配错立刻暴露而不是静默落到错误目录）。
+    """
+    from doclens.config import WORKDIR_ENV_KEY, resolve_workdir_override
+
+    raw = resolve_workdir_override()
+    if not raw:
+        return
+    target = os.path.abspath(os.path.expanduser(raw))
+    if os.path.normcase(target) == os.path.normcase(os.getcwd()):
+        return
+    if not os.path.isdir(target):
+        print(
+            f"错误: {WORKDIR_ENV_KEY}={target} 目录不存在，已退出。"
+            f"请修正该配置（环境变量、当前目录 <数据目录>/.env 或全局"
+            f" {WORKDIR_ENV_KEY} 配置）后重试。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"工作目录已按 {WORKDIR_ENV_KEY} 切换: {target}", file=sys.stderr)
+    os.chdir(target)
+
+
 def main():
     """主函数 - 启动 TUI"""
     import logging
@@ -1205,12 +1234,21 @@ def main():
     # 切换工作目录。必须在 setup_logging() 和 CortexConfig.load() 之前执行：
     # 前者用相对路径 <数据目录>/logs 定位日志文件，后者用 os.getcwd() 定位
     # search_path 默认值和本地 .env。顺序颠倒会导致日志/配置写到错误目录。
-    if args.workdir:
-        workdir = os.path.abspath(args.workdir)
+    # 优先级：显式 -C > CORTEX_WORKDIR 配置项 > 进程启动目录。
+    # getattr 兜底：workdir 经 default=SUPPRESS，未提供时 Namespace 无此属性
+    # （TUI 无子命令等场景）。
+    cli_workdir = getattr(args, "workdir", None)
+    if cli_workdir:
+        workdir = os.path.abspath(cli_workdir)
         if not os.path.isdir(workdir):
             print(f"错误: 工作目录不存在: {workdir}", file=sys.stderr)
             sys.exit(1)
         os.chdir(workdir)
+    else:
+        # CORTEX_WORKDIR 配置项（次优先级）：env > 启动目录 local .env >
+        # global .env。只跳转一次（跳转后不再读新目录的该键，防级联）；
+        # 同样必须发生在 setup_logging 与 CortexConfig.load 之前。
+        _apply_workdir_override()
 
     # 配置日志 → {workdir}/<数据目录>/logs/debug_YYYYMMDD.log （开发 .cortex / 发行版 .doclens）
     from planify.core.logging_config import setup_logging

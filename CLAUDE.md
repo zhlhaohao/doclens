@@ -299,7 +299,8 @@ planify/
 ## 工作目录（跨 worktree）
 
 **知识库 cortex 是独立仓库（不在本 doclens worktree 内）：默认按 `../cortex` 约定（同级父目录）发现（`[ -d ../cortex/.git ]` 验证），不在同级时用 `CORTEX_REPO` env 覆盖——禁止硬编码绝对路径。**
-**workdir=`../cortex/test_work_dir/`、DB 在 `.cortex/`；本 worktree 仓库根的 `test_work_dir/` 是 demo 数据，不是 GUI 用的知识库——别搞混。**
+**开发测试的默认工作目录（`../cortex/test_work_dir/`）由 global env 配置：`~/.cortex/.env` 写 `CORTEX_WORKDIR=<绝对路径>`（2026-09-14 起，start-app.ps1 不再自动发现/注入默认 `-C`，读取链 `显式 -C > CORTEX_WORKDIR env > local .env > global .env`）。**
+**workdir 落定后 DB 在 `.cortex/`；本 worktree 仓库根的 `test_work_dir/` 是 demo 数据，不是 GUI 用的知识库——别搞混。**
 
 ## Skill 维护
 
@@ -332,8 +333,8 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 使用 `start-app.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
 
-**默认工作目录 `../cortex/test_work_dir/`**；以其他目录启动加 `-C <目录>`：`./start-app.ps1 gui -C D:\知识库`（search/index 等命令行同理）。
-`-C` 写在子命令后，进程 `os.chdir` 到该目录——索引/预览/日记/`.env` 全部跟随；目录不存在会报错退出。
+**工作目录优先级：显式 `-C` > global `CORTEX_WORKDIR` > 启动目录**。开发测试的默认工作目录统一在 global 配置：`~/.cortex/.env` 的 `CORTEX_WORKDIR`（如 `CORTEX_WORKDIR=C:\Users\lianghao\github\cortex\test_work_dir`）——不带 `-C` 启动时由 doclens 启动早期自动跳转；以其他目录临时启动加 `-C <目录>`：`./start-app.ps1 gui -C D:\知识库`（search/index 等命令行同理，`-C` 写在子命令后）。
+未传 `-C` 且 global 未配置 `CORTEX_WORKDIR` 时启动报错并给出配置指引（不静默落启动目录，防在仓库根建索引脏目录）。
 
 
 ### 三种运行模式

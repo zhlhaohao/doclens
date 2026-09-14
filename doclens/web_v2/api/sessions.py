@@ -17,6 +17,7 @@ from doclens.web_v2.models.session import (
 )
 from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionType, SessionsStore
 from doclens.web_v2.tmp_workspace import cleanup_all_tmp, cleanup_session_tmp
+from planify.tools.guard import grant_clear_all, grant_session_clear
 
 router = APIRouter()
 
@@ -126,6 +127,8 @@ async def delete_session(session_id: str):
     store.delete(session_id)
     # 顺带清理该会话的 AI 临时工作区（.cortex/tmp/<session_id>/）
     cleanup_session_tmp(_get_workdir(), session_id)
+    # 清理外部访问门禁的会话目录授权账本（ADR-0021，内存态）
+    grant_session_clear(session_id)
     return {"ok": True}
 
 
@@ -139,4 +142,5 @@ async def clear_sessions(
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:
         cleanup_all_tmp(_get_workdir())
+        grant_clear_all()
     return {"ok": True, "deleted_count": deleted}

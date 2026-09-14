@@ -4,6 +4,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { splitRecommended } from "../api/ask";
 import type { AskAnswer, AskQuestionPayload } from "../api/ask";
 
+/** 门禁确认卡本地超时（毫秒）：比后端 GUARD_TIMEOUT_SECONDS（120s）多 2s
+ *  缓冲——后端先超时（fail-closed 拒绝、流恢复），前端到点把交互卡转为
+ *  「已超时拒绝」摘要（保留至流结束，明确交代结果而非无声消失）。
+ *  仅 guard 卡片适用（模型提问保持 300s）。 */
+const GUARD_CARD_DISMISS_MS = 122_000;
+
 /**
  * ask_user_question 交互卡片。
  *
@@ -29,6 +35,21 @@ export class AskCard extends LitElement {
       padding: 12px 14px;
       background: var(--cortex-surface, #fafbfc);
       font-size: var(--cortex-fs-md, 14px);
+    }
+    /* 外部访问门禁确认（ADR-0021）：与模型提问严格视觉区分——
+       guard 载荷只由后端门禁代码构造，模型无法伪造此形态 */
+    .card.guard {
+      border: 2px solid var(--cortex-danger, #c62828);
+      background: var(--cortex-surface, #fafbfc);
+    }
+    .guard-banner {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--cortex-fs-xs, 11px);
+      font-weight: 600;
+      color: var(--cortex-danger, #c62828);
+      margin-bottom: 10px;
     }
     .q {
       margin: 0 0 10px;
@@ -170,18 +191,57 @@ export class AskCard extends LitElement {
   @state() private _status: "pending" | "answered" | "expired" = "pending";
   @state() private _answers: AskAnswer[] = [];
   @state() private _submitting = false;
+  private _dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("ask") && this.ask) {
-      // 新悬置问题重置内部状态
-      this._selected = this.ask.questions.map(() => []);
-      this._others = this.ask.questions.map(() => null);
-      this._status = "pending";
-      this._answers = [];
+      // 仅「新悬置问题」（requestId 变化）才重置内部状态。
+      // 同一 requestId 的重复赋值（父组件重渲染导致引用变化，如流恢复后
+      // 的密集 token/tool_result 事件）不得把已 answered 的卡片复活成
+      // pending——否则提交后选项仍可再选。
+      const prev = changed.get("ask") as { requestId?: string } | null | undefined;
+      if (!prev || prev.requestId !== this.ask.requestId) {
+        this._selected = this.ask.questions.map(() => []);
+        this._others = this.ask.questions.map(() => null);
+        this._status = "pending";
+        this._answers = [];
+        this._armGuardTimeout();
+      }
     }
     if (changed.has("resolvedAnswers") && this.resolvedAnswers) {
       this._status = "answered";
       this._answers = this.resolvedAnswers;
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._clearTimeoutTimer();
+  }
+
+  /** guard 卡超时计时：到点仍在 pending（用户未交互）则转超时摘要。 */
+  private _armGuardTimeout() {
+    this._clearTimeoutTimer();
+    if (!this.ask?.questions.some((q) => q.guard)) return;
+    this._dismissTimer = setTimeout(() => {
+      this._dismissTimer = null;
+      if (this._status !== "pending") return; // 已提交/失效，不覆盖
+      this._status = "expired";
+      // 通知 chat-view 解除输入禁用（卡片保留超时摘要至流结束）
+      this.dispatchEvent(
+        new CustomEvent("ask-done", {
+          detail: { requestId: this.ask?.requestId ?? "" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }, GUARD_CARD_DISMISS_MS);
+  }
+
+  private _clearTimeoutTimer() {
+    if (this._dismissTimer !== null) {
+      clearTimeout(this._dismissTimer);
+      this._dismissTimer = null;
     }
   }
 
@@ -284,20 +344,25 @@ export class AskCard extends LitElement {
             </label>
           `;
         })}
-        <div class="other-row">
-          <input
-            type="text"
-            placeholder="或输入其他答案…"
-            .value=${other ?? ""}
-            @input=${(e: InputEvent) => this._onOtherInput(i, (e.target as HTMLInputElement).value)}
-          />
-        </div>
+        ${q.guard
+          ? nothing
+          : html`
+              <div class="other-row">
+                <input
+                  type="text"
+                  placeholder="或输入其他答案…"
+                  .value=${other ?? ""}
+                  @input=${(e: InputEvent) => this._onOtherInput(i, (e.target as HTMLInputElement).value)}
+                />
+              </div>
+            `}
       </div>
     `;
   }
 
   private _renderSummary() {
     const expired = this._status === "expired";
+    const isGuard = this.ask?.questions.some((q) => q.guard) ?? false;
     return html`
       <div class="summary">
         <span class="icon">${expired ? "⚠️" : "✅"}</span>
@@ -313,7 +378,9 @@ export class AskCard extends LitElement {
             `;
           })}
           ${expired
-            ? html`<div class="expired-note">提交未确认（网络异常或问题已失效），答案可能未送达 AI。</div>`
+            ? isGuard
+              ? html`<div class="expired-note">安全确认超时，已按拒绝处理——AI 收到的是「未获授权」，并未同意访问。</div>`
+              : html`<div class="expired-note">提交未确认（网络异常或问题已失效），答案可能未送达 AI。</div>`
             : nothing}
         </div>
       </div>
@@ -324,8 +391,12 @@ export class AskCard extends LitElement {
     if (!this.ask && !this.resolvedAnswers) return nothing;
     if (this._status !== "pending") return this._renderSummary();
     if (!this.ask) return nothing;
+    const isGuard = this.ask.questions.some((q) => q.guard);
     return html`
-      <div class="card">
+      <div class="card ${isGuard ? "guard" : ""}">
+        ${isGuard
+          ? html`<div class="guard-banner">🛡 安全确认 · 系统发起，AI 无法伪造此卡片</div>`
+          : nothing}
         ${this.ask.questions.map((q, i) => this._renderQuestion(q, i))}
         <div class="actions">
           <button

@@ -163,13 +163,11 @@ You have been invoked in the following environment:
 
 When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.
 
-# Working Directory Constraint
+# Working Directory Guard
 
 **Current working directory**: {get_realpath(workdir_path)}
 
-**IMPORTANT security constraint**: Never perform any operations outside the working directory!
-
-All file read/write and command execution must be limited to the working directory. The system has implemented path security checks at the tool level, and any attempt to access outside the working directory will be blocked.
+Prefer completing tasks within the working directory. Access to paths outside it is guarded by user authorization, NOT forbidden: when the task genuinely requires an outside path (the user asked for it, e.g. "list files on my Desktop"), call the tool normally — the system will ask the user to confirm, and the tool result (granted or denied) will come back to you. Do NOT preemptively refuse a user request just because the target is outside the working directory; let the guard decide.
 """
 
     # 根据代理类型添加特定部分

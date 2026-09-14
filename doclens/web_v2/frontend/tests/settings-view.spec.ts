@@ -62,11 +62,16 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
-  it("renders 2 .field for AI tab (百度天气 AK + 图像自动旋转；模型配置由预设区块接管)", () => {
+  it("renders 3 .field for AI tab (百度天气 AK + 图像自动旋转 + 外部访问门禁；模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(2);
+    expect(fields?.length).toBe(3);
     expect(aiPanel?.querySelector('input[data-env="BAIDU_WEATHER_AK"]')).toBeTruthy();
+    // 门禁三态下拉存在；未设置（空串）时回显出厂默认 ask
+    const select = aiPanel?.querySelector('select[data-env="PLANIFY_OUTSIDE_WORKDIR"]');
+    expect(select).toBeTruthy();
+    const selected = select?.querySelector("option:checked") as HTMLOptionElement | null;
+    expect(selected?.value).toBe("ask");
   });
 
   it("renders 0 .field for search tab (搜索参数由预设区块接管)", async () => {

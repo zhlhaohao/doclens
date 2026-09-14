@@ -140,6 +140,32 @@ def safe_path(p: str, workdir: Path) -> Path:
     return path
 
 
+def _resolve_tool_path(
+    path: str,
+    workdir: Path,
+    resolve,
+    write: bool,
+) -> tuple:
+    """结构化工具的路径解析（含门禁注入通路）。
+
+    Args:
+        path: 工具入参路径
+        workdir: 工作目录
+        resolve: 门禁解析函数（guard.resolve_guarded_path）；None = 旧
+            safe_path 硬拒绝行为（默认，非门禁链路保持不变）
+        write: 是否写语义（门禁查写账本）
+
+    Returns:
+        (Path, None) 放行；(None, error_msg) 拒绝
+    """
+    if resolve is not None:
+        return resolve(path, workdir, write)
+    try:
+        return safe_path(path, workdir), None
+    except Exception as e:
+        return None, f"Error: {e}".encode("utf-8", errors="replace").decode("utf-8")
+
+
 def run_bash(command: str, workdir: Path) -> str:
     """
     执行 shell 命令
@@ -317,6 +343,7 @@ def run_read(
     workdir: Path,
     start_word: int = None,
     end_word: int = None,
+    resolve=None,
 ) -> str:
     """
     读取文件内容（纯文本），支持按词序号切片。
@@ -329,13 +356,16 @@ def run_read(
         workdir: 工作目录，用于路径解析
         start_word: 起始词序号（可选）
         end_word: 结束词序号（可选，含该词）
+        resolve: 门禁路径解析函数（可选；None = safe_path 硬拒绝逃逸）
 
     Returns:
         文件内容（可能被截断，截断时附续读提示）
     """
     try:
         # 显式指定 UTF-8 编码，遇到错误时替换
-        file_path = safe_path(path, workdir)
+        file_path, err = _resolve_tool_path(path, workdir, resolve, write=False)
+        if err:
+            return err
         content = file_path.read_text(encoding="utf-8", errors="replace")
         pairs = split_words_with_seps(content)
         total = len(pairs)
@@ -390,7 +420,7 @@ def run_read(
         return error_msg
 
 
-def run_write(path: str, content: str, workdir: Path) -> str:
+def run_write(path: str, content: str, workdir: Path, resolve=None) -> str:
     """
     写入文件内容
 
@@ -400,12 +430,15 @@ def run_write(path: str, content: str, workdir: Path) -> str:
         path: 相对文件路径
         content: 要写入的内容
         workdir: 工作目录，用于路径解析
+        resolve: 门禁路径解析函数（可选；None = safe_path 硬拒绝逃逸）
 
     Returns:
         操作结果信息
     """
     try:
-        fp = safe_path(path, workdir)
+        fp, err = _resolve_tool_path(path, workdir, resolve, write=True)
+        if err:
+            return err
         fp.parent.mkdir(parents=True, exist_ok=True)
         # 确保内容是字符串，使用 UTF-8 编码
         if isinstance(content, bytes):
@@ -417,7 +450,7 @@ def run_write(path: str, content: str, workdir: Path) -> str:
         return error_msg
 
 
-def run_edit(path: str, old_text: str, new_text: str, workdir: Path) -> str:
+def run_edit(path: str, old_text: str, new_text: str, workdir: Path, resolve=None) -> str:
     """
     编辑文件
 
@@ -428,12 +461,15 @@ def run_edit(path: str, old_text: str, new_text: str, workdir: Path) -> str:
         old_text: 要替换的文本
         new_text: 新文本
         workdir: 工作目录，用于路径解析
+        resolve: 门禁路径解析函数（可选；None = safe_path 硬拒绝逃逸）
 
     Returns:
         操作结果信息
     """
     try:
-        fp = safe_path(path, workdir)
+        fp, err = _resolve_tool_path(path, workdir, resolve, write=True)
+        if err:
+            return err
         # 显式指定 UTF-8 编码读取
         c = fp.read_text(encoding="utf-8", errors="replace")
         if old_text not in c:
@@ -446,24 +482,33 @@ def run_edit(path: str, old_text: str, new_text: str, workdir: Path) -> str:
         return error_msg
 
 
-def make_basic_tools(workdir: Path) -> dict:
+def make_basic_tools(workdir: Path, guard_enabled: bool = False) -> dict:
     """
     创建基础工具处理器字典
 
     Args:
         workdir: 工作目录，用于操作
+        guard_enabled: 是否启用外部访问门禁（ADR-0021）——True 时结构化
+            工具的路径逃逸从「safe_path 硬拒绝」改为「门禁三态处置」
+            （宿主 GUI 链路传入；False 保持旧行为，TUI/CLI 不变）
 
     Returns:
         工具名称到处理器函数的字典
     """
+    resolve = None
+    if guard_enabled:
+        from .guard import resolve_guarded_path
+
+        resolve = resolve_guarded_path
+
     return {
         "bash": lambda **kw: run_bash(kw["command"], workdir),
         "powershell": lambda **kw: run_powershell(kw["command"], workdir),
         "read_file": lambda **kw: run_read(
-            kw["path"], workdir, kw.get("start_word"), kw.get("end_word")
+            kw["path"], workdir, kw.get("start_word"), kw.get("end_word"), resolve
         ),
-        "write_file": lambda **kw: run_write(kw["path"], kw["content"], workdir),
+        "write_file": lambda **kw: run_write(kw["path"], kw["content"], workdir, resolve),
         "edit_file": lambda **kw: run_edit(
-            kw["path"], kw["old_text"], kw["new_text"], workdir
+            kw["path"], kw["old_text"], kw["new_text"], workdir, resolve
         ),
     }

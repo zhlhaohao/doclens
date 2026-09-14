@@ -50,12 +50,7 @@ export interface ChatMessage {
 /** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */
 export interface PendingAsk {
   requestId: string;
-  questions: {
-    question: string;
-    header: string;
-    multiSelect: boolean;
-    options: { label: string; description: string }[];
-  }[];
+  questions: import("../api/ask").AskQuestionPayload[];
 }
 
 export interface Session {

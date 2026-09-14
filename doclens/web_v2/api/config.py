@@ -83,6 +83,17 @@ async def put_config(
     from doclens.web_v2.deps import reload_config
     reload_config()
 
+    # 4.5 外部访问门禁热生效（ADR-0021）：guard 每次 os.getenv 惰性读，
+    # .env 落盘不自动反映到进程环境——显式同步该键（空串 = 删除回落默认 ask）
+    if "PLANIFY_OUTSIDE_WORKDIR" in updates:
+        v = updates["PLANIFY_OUTSIDE_WORKDIR"].strip().lower()
+        import os as _os
+        if v:
+            _os.environ["PLANIFY_OUTSIDE_WORKDIR"] = v
+        else:
+            _os.environ.pop("PLANIFY_OUTSIDE_WORKDIR", None)
+        logger.info("guard mode hot-applied: %r", v or "ask(default)")
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )

@@ -34,6 +34,10 @@ export interface AskQuestionPayload {
   header: string;
   multiSelect: boolean;
   options: { label: string; description: string }[];
+  /** 外部访问门禁标志（ADR-0021）：后端门禁代码直接构造的确认载荷才有；
+   *  模型自调 ask_user_question 经 validate_ask_questions 白名单清洗永远带不上——
+   *  前端据此做视觉区分，防仿冒门禁卡片骗授权。可选字段，旧载荷无此位。 */
+  guard?: boolean;
 }
 
 /** 校验 SSE ask 事件的 questions 数组；结构非法返回 null（事件作废）。 */

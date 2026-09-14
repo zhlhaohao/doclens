@@ -27,6 +27,8 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "PLANIFY_CONTEXT_WINDOW",
     "PLANIFY_MAX_TOKENS",
     "CORTEX_ACTIVE_LLM_PRESET",
+    # AI 工具外部访问门禁（ADR-0021；空串 = 未设置 = 默认 ask）
+    "PLANIFY_OUTSIDE_WORKDIR",
     # 视觉模型（图像文件解析，独立于 AI 对话配置）
     "VISION_API_KEY",
     "VISION_BASE_URL",
@@ -57,6 +59,9 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_MCP_PORT",
     # 知识库 Git 同步开关（改后需重启 gui 才生效）
     "CORTEX_SYNC_ENABLED",
+    # 工作目录配置（次优先级：显式 -C > 本配置 env/local/global > 启动目录；
+    # 改后需重启，空 = 按启动目录）
+    "CORTEX_WORKDIR",
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）

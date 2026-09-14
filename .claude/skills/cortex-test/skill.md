@@ -23,7 +23,7 @@ description: Execute Cortex CLI E2E test cases from tests/test_case.json. Use wh
 ## 前置检查（每个用例前验证）
 
 1. **Python 路径**：**Windows Git Bash 环境下 `python` 命令不可用**，必须使用绝对路径 `.venv/Scripts/python.exe`
-2. **工作目录**：`test_work_dir/` 存在且包含子目录（科技/、健康/ 等）
+2. **工作目录**：`test_work_dir/` 存在且包含子目录（科技/、健康/ 等）。**默认工作目录由 global env 配置**（`~/.cortex/.env` 的 `CORTEX_WORKDIR`，2026-09-14 起）——不带 `-C` 的 CLI 命令会自动跳转过去；带 `-C` 则显式优先
 3. **测试报告**：按 `tests/test_report_MMDD_NNN.md` 命名，用模板初始化
 
 ## CLI 命令

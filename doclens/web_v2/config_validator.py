@@ -51,6 +51,30 @@ def _llm_endpoint_rules(values: dict[str, str]) -> list[ConfigValidationError]:
     return errors
 
 
+def _outside_workdir_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """外部访问门禁三态校验（ADR-0021；空串 = 未设置 = 默认 ask，跳过）。"""
+    raw = values.get("PLANIFY_OUTSIDE_WORKDIR", "").strip().lower()
+    if raw and raw not in ("ask", "allow", "block"):
+        return [ConfigValidationError(
+            field="PLANIFY_OUTSIDE_WORKDIR",
+            error="合法值：ask / allow / block",
+        )]
+    return []
+
+
+def _workdir_dir_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """CORTEX_WORKDIR 非空时必须是已存在的目录（启动时目录不存在会退出）。"""
+    import os
+
+    raw = values.get("CORTEX_WORKDIR", "").strip()
+    if raw and not os.path.isdir(os.path.expanduser(raw)):
+        return [ConfigValidationError(
+            field="CORTEX_WORKDIR",
+            error=f"目录不存在: {raw}",
+        )]
+    return []
+
+
 def validate_values(values: dict[str, str]) -> ValidationErrors:
     """Return ValidationErrors (possibly empty) for the given values dict.
 
@@ -104,5 +128,9 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
 
     # LLM 端点规则（provider 概念已废弃，ADR-0009）
     errors.extend(_llm_endpoint_rules(values))
+    # 外部访问门禁三态规则（ADR-0021）
+    errors.extend(_outside_workdir_rule(values))
+    # 工作目录覆盖规则（目录存在性）
+    errors.extend(_workdir_dir_rule(values))
 
     return ValidationErrors(fields=errors)

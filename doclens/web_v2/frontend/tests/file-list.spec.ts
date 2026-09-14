@@ -21,6 +21,42 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
+  it("shows loading (not empty) while listing and dir not yet cached", async () => {
+    // 首次进入/切换目录：请求进行中，当前目录尚未进 treeCache
+    actions.setFilesState({ currentDir: "docs", treeCache: {}, listing: true });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const empty = el.shadowRoot.querySelector(".empty") as HTMLElement;
+    expect(empty.textContent).toContain("加载中");
+    expect(empty.textContent).not.toContain("目录为空");
+    expect(empty.classList.contains("loading")).toBe(true);
+    document.body.removeChild(el);
+  });
+
+  it("keeps 'empty' wording when dir is cached as empty even if listing elsewhere", async () => {
+    // 其他目录在加载（listing=true），但本目录已加载完且为空 → 确定性空态
+    actions.setFilesState({ currentDir: "docs", treeCache: { docs: [] }, listing: true });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const empty = el.shadowRoot.querySelector(".empty") as HTMLElement;
+    expect(empty.textContent).toContain("目录为空");
+    expect(empty.classList.contains("loading")).toBe(false);
+    document.body.removeChild(el);
+  });
+
+  it("mobile branch also shows loading during listing", async () => {
+    actions.setFilesState({ currentDir: "docs", treeCache: {}, listing: true });
+    const el = document.createElement("file-list") as any;
+    el.mobile = true;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const empty = el.shadowRoot.querySelector(".empty") as HTMLElement;
+    expect(empty.textContent).toContain("加载中");
+    document.body.removeChild(el);
+  });
+
   it("renders rows from store treeCache[currentDir]", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;

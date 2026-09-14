@@ -601,7 +601,8 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** ask 卡片完成（已答/失效）：解除输入禁用；摘要卡片保留至流结束。
+  /** ask 卡片完成（已答/失效/超时）：解除输入禁用；摘要卡片保留至流结束
+   *  （门禁超时摘要明确交代「已按拒绝处理」）。
    *  注意 pendingAsk 清空而 streaming 仍为 true——流在等待答案唤醒后继续。 */
   private _onAskDone(e: CustomEvent<{ requestId: string }>) {
     if (store.getState().chat.pendingAsk?.requestId === e.detail.requestId) {
@@ -971,10 +972,7 @@ export class ChatView extends LitElement {
           </chat-stream>
           ${this._activeAsk
             ? html`<ask-card
-                .ask=${{
-                  requestId: this._activeAsk.requestId,
-                  questions: this._activeAsk.questions,
-                }}
+                .ask=${this._activeAsk}
                 @ask-done=${this._onAskDone}>
               </ask-card>`
             : null}

@@ -39,6 +39,34 @@ def get_global_cortex_dir() -> Path:
     return Path.home() / data_dirname()
 
 
+# 工作目录覆盖配置键：优先级最高（覆盖 -C 参数与启动目录）。
+# 读取顺序：process env > 启动目录 local .env > global .env。
+WORKDIR_ENV_KEY = "CORTEX_WORKDIR"
+
+
+def resolve_workdir_override() -> Optional[str]:
+    """解析 CORTEX_WORKDIR 工作目录覆盖值（None = 未配置，走 -C/启动目录）。
+
+    只做解析不跳转；跳转由 CLI 入口（cortex_cli.main）统一处理——必须
+    在 setup_logging 与 CortexConfig.load 之前完成（两者都按 cwd 定位）。
+    local = 当前 cwd（-C 已 chdir 后）下的 <数据目录>/.env：配在 global
+    是机器级钉死（任何启动方式生效），配在某个目录则该目录成为「入口」。
+    """
+    val = os.environ.get(WORKDIR_ENV_KEY, "").strip()
+    if val:
+        return val
+    from dotenv import dotenv_values
+
+    cwd_env = Path.cwd() / data_dirname() / ".env"
+    global_env = get_global_cortex_dir() / ".env"
+    for env_path in (cwd_env, global_env):
+        if env_path.exists():
+            val = (dotenv_values(str(env_path)).get(WORKDIR_ENV_KEY) or "").strip()
+            if val:
+                return val
+    return None
+
+
 def bundled_env_example_path() -> Path:
     """包内 ``.env.example`` 模板路径（dev 源码树 / release site-packages 均可用）。
 

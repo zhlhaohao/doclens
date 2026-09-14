@@ -23,8 +23,18 @@ from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
 from ..skills.access_state import (
+    get_current_session_id,
     reset_current_session_id,
     set_current_session_id,
+)
+from ..tools.guard import (
+    ACTION_CONFIRM,
+    GUARD_TIMEOUT_SECONDS,
+    classify_tool_call,
+    denied_message,
+    make_guard_question,
+    parse_grant_response,
+    record_grant,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +129,14 @@ class StreamingAgent:
         self.runtime = runtime
         self._interrupt_event = interrupt_event
         self._system_prompt_extra = system_prompt_extra
+
+        # 本轮消息起点下标（run_stream 内全部头部/尾部注入完成、追加 user
+        # query 之后记录）：web 链路落库 raw_messages 时以此切片。
+        # 不能用调用方在 run_stream 前捕获的 len(messages)——头部注入
+        # （_refresh_or_insert_context 无 marker 时 insert 消息对）会把
+        # 既有消息整体后移，旧下标切片会漏进上一轮末尾的消息（孤儿
+        # tool_result → OpenAI 兼容后端 400）。
+        self.round_start_index: Optional[int] = None
 
         # 工具调用状态追踪
         self._tool_call_states: Dict[int, ToolCallState] = {}
@@ -281,6 +299,9 @@ class StreamingAgent:
 
         # 添加用户 query（纯文本，不含 skills/agent.md）
         messages.append({"role": "user", "content": user_message})
+        # 全部注入（头部 context / 尾部 skill body）已完成，此后追加的才是
+        # 本轮消息；记录起点供宿主落库切片（见 __init__ 注释）。
+        self.round_start_index = len(messages) - 1
 
         system = self.get_system_prompt()
         loop_count = 0
@@ -757,6 +778,71 @@ class StreamingAgent:
                 self.logger.exception(f"[StreamingAgent] 工具执行异常: {name}")
                 return f"Error: {e}"
 
+        # ---- 外部访问门禁（ADR-0021）：confirm 判定走交互确认 ----
+        # deny/allow/未授权-无渠道等场景由各 handler 内的判定兜底（注册层
+        # 包装），此处只负责「有渠道时把 confirm 变成用户决策」。
+
+        def _guard_workdir() -> Path:
+            if self.runtime:
+                return Path(self.runtime.config.workdir)
+            if self.config:
+                return Path(getattr(self.config, "workdir", "."))
+            return Path(".")
+
+        async def _guard_confirm(verdict) -> bool:
+            """经 emitter/waiter 弹门禁确认；通过则记账。
+
+            无 emit_ask_questions 渠道、超时、中断、未选允许——一律
+            False（fail-closed，与子代理无渠道行为对齐）。
+            """
+            emit_questions = getattr(self.emitter, "emit_ask_questions", None)
+            if emit_questions is None or self.waiter is None:
+                self.logger.warning(
+                    "[StreamingAgent] 门禁确认无交互渠道（emitter 未实现 "
+                    "emit_ask_questions），fail-closed 拒绝: %s", verdict.tool
+                )
+                return False
+            request_id = f"guard_{uuid.uuid4().hex[:8]}"
+            sid = get_current_session_id()
+            await self.waiter.create_request(request_id, session_id=sid)
+            await emit_questions(
+                request_id=request_id, questions=[make_guard_question(verdict)]
+            )
+            self.logger.info(
+                "[StreamingAgent] 门禁确认等待用户响应: %s (%s, %s)",
+                request_id, verdict.tool, verdict.mode,
+            )
+            try:
+                response = await self.waiter.wait_for_response(
+                    request_id, timeout=GUARD_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                self.logger.warning("[StreamingAgent] 门禁确认超时: %s", request_id)
+                return False
+            except Exception as e:  # noqa: BLE001
+                self.logger.exception("[StreamingAgent] 门禁确认异常: %s", e)
+                return False
+            if response.get("interrupted"):
+                self.logger.info("[StreamingAgent] 门禁确认被中断: %s", request_id)
+                return False
+            if parse_grant_response(response):
+                record_grant(sid, list(verdict.targets), verdict.mode)
+                self.logger.info(
+                    "[StreamingAgent] 门禁确认通过: %s -> %s",
+                    request_id, [str(t) for t in verdict.targets],
+                )
+                return True
+            self.logger.info("[StreamingAgent] 门禁确认被拒绝: %s", request_id)
+            return False
+
+        async def _run_guarded(name: str, input_data: dict):
+            workdir = _guard_workdir()
+            verdict = classify_tool_call(name, input_data, workdir)
+            if verdict.action == ACTION_CONFIRM:
+                if not await _guard_confirm(verdict):
+                    return denied_message(verdict)
+            return await _run_handler(name, input_data)
+
         # task（子代理）并发：一轮消息中 ≥2 个 task 调用时 gather 并发执行
         # （summarize-files 等技能按文件并发派子代理）；其余工具保持顺序执行
         # （TodoWrite / ask_user_question 等依赖顺序与阻塞语义）。
@@ -776,7 +862,7 @@ class StreamingAgent:
             if tool_use_id in precomputed:
                 output = precomputed[tool_use_id]
             else:
-                output = await _run_handler(name, input_data)
+                output = await _run_guarded(name, input_data)
 
             # 不截断：LLM 上下文与前端 SSE 都需要工具的完整输出
             output_str = str(output)

@@ -60,8 +60,9 @@ fi
 echo "$NOW" > "$STAMP"
 
 # 重启（后台脱离；CORTEX_NO_BROWSER 不弹浏览器）
-# 复用上次 gui 启动的工作目录（start-app.ps1 写入 .claude/.last-app-workdir），
-# 避免 hook 重启掉回默认 test_work_dir 顶掉手动 -C 指定的目录。
+# 工作目录：stamp（.claude/.last-app-workdir）只记录用户显式传的 -C——有则
+# 复用（显式 -C 压过一切）；无 stamp 则不带 -C，由 global CORTEX_WORKDIR
+# （~/.cortex/.env，开发测试默认工作目录的统一配置处）接管。
 WORKDIR_ARGS=()
 WORKDIR_STAMP=".claude/.last-app-workdir"
 if [ -f "$WORKDIR_STAMP" ]; then
