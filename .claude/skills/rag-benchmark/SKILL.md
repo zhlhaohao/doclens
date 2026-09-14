@@ -72,13 +72,35 @@ grep -a "GUI 就绪\|探针失败" benchmarks/gui_out.log | tail -1
 
 ## 第 3 步：确认测试范围（必问，不许默认全跑）
 
-⚠️ **全 500 题 = 数小时 + 真实 LLM API 花费**。启动前必须向用户确认三件事（用户没说就问）：
+⚠️ **全 500 题 = 数小时 + 真实 LLM API 花费**。启动前必须向用户确认三个维度。
 
-1. **source_types**（9 选多：confluence/jira/slack/gmail/google_drive/github/linear/hubspot/fireflies）
-2. **question_type**（10 选多：basic/semantic/intra_document_reasoning/project_related/constrained/conflicting_info/completeness/miscellaneous/info_not_found/high_level）
-3. **最多条数**（试水建议 ≤10 题）
+**询问方式：三轮文本询问，不用 AskUserQuestion**（选项 9/10 项超出单问 4 选项上限，拆组点选又零碎）。每轮发一条文本消息，完整列出该维度所有选项，等用户手动输入回复后再问下一轮：
 
-用户只说"启动 benchmark"没给范围 → AskUserQuestion 三连问。用户给了部分（如"slack 测 20 题"）→ 其余维度默认全选。
+**第 1 轮 source_types**（9 选多），文本列出全部选项：
+
+```
+confluence / jira / slack / gmail / google_drive / github / linear / hubspot / fireflies
+```
+
+用户回复逗号分隔的名称（如 `slack,gmail`）；回复 `all` / `全选` = 全部 9 项。
+
+**第 2 轮 question_type**（10 选多），文本列出全部选项：
+
+```
+basic / semantic / intra_document_reasoning / project_related / constrained / conflicting_info / completeness / miscellaneous / info_not_found / high_level
+```
+
+用户回复逗号分隔的名称；`all` / `全选` = 全部 10 项。
+
+**第 3 轮 scope 最多条数**（单选），文本列出：
+
+```
+10（试水，约 10-30 分钟，推荐）/ 20（约 20-60 分钟）/ 50（约 1-2.5 小时 + API 费用）/ 500（全部，数小时 + API 费用）
+```
+
+**输入校验**：用户回复的名称逐个核对有效选项，拼错/不存在的项当场指出让用户重输，不许静默忽略或猜测匹配。
+
+用户只说"启动 benchmark"没给范围 → 三轮全问。用户给了部分（如"slack 测 20 题"）→ 只问缺失的维度，其余默认全选。三轮结束后汇总为逗号分隔清单，供第 4 步 printf 使用。
 
 ## 第 4 步：非交互启动
 
