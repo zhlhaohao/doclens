@@ -41,7 +41,7 @@ try { (Invoke-RestMethod "http://127.0.0.1:7860/api/status" -TimeoutSec 10).work
 
 ## 第 2 步：启动被测服务（detached）
 
-今天实测过的可靠序列（PowerShell）：
+**必须经 worktree 的 `start-app.ps1` 启动**（2026-09-14 起）——裸 `python -m doclens` + PYTHONPATH 指主仓库跑的是旧码；`start-app.ps1` 会把 PYTHONPATH 指到所在 worktree 源码（最新代码），并自动处理 venv/端口/workdir 链。实测过的可靠序列（PowerShell 7）：
 
 ```powershell
 # 2.1 清残留：杀 7860 占用者 + 大内存 python
@@ -50,18 +50,22 @@ if ($l) { $l | % { Stop-Process -Id $_ -Force } }
 Get-Process python -EA SilentlyContinue | ? { $_.WorkingSet64 -gt 400MB } | Stop-Process -Force
 Start-Sleep 3
 
-# 2.2 detached 启动（PYTHONPATH 必须；CORTEX_NO_BROWSER=1 防弹窗；-C 指向语料库）
-$env:PYTHONPATH = "C:\Users\lianghao\github\cortex"
+# 2.2 detached 启动（CORTEX_NO_BROWSER=1 防弹窗；显式 --port 7860 + -C 语料库）
 $env:CORTEX_NO_BROWSER = "1"
-Start-Process -FilePath "C:\Users\lianghao\github\cortex\.venv\Scripts\python.exe" `
-  -ArgumentList "-m","doclens","gui","-C","C:\Users\lianghao\EnterpriseRAG-Bench-Data\all_documents" `
-  -WorkingDirectory "C:\Users\lianghao\EnterpriseRAG-Bench-Data\all_documents" `
+Start-Process -FilePath "pwsh" `
+  -ArgumentList "-NoProfile","-File","C:\Users\lianghao\github\0914-1\start-app.ps1","gui","--port","7860","-C","C:\Users\lianghao\EnterpriseRAG-Bench-Data\all_documents" `
+  -WorkingDirectory "C:\Users\lianghao\github\0914-1" `
   -RedirectStandardOutput "C:\Users\lianghao\github\cortex\benchmarks\gui_out.log" `
   -RedirectStandardError "C:\Users\lianghao\github\cortex\benchmarks\gui_err.log" `
   -PassThru -WindowStyle Hidden
 ```
 
-**等待就绪的唯一可信信号**：`benchmarks/gui_out.log` 出现 `[GUI 就绪: ... — 已实测验证可用]` 横幅（启动审计 ~30–60s + 探针验证）。轮询：
+三个参数缺一不可：
+- **`--port 7860` 必须显式传**：start-app.ps1 按目录名 `0914-1` 偏移默认端口（7860+1=7861），不传则 bench 默认 `--base-url` 7860 打不到；
+- **`-C <语料库>` 必须显式传**：显式 -C 是最高优先级，压过 global `CORTEX_WORKDIR`（test_work_dir）——不传会跑到开发语料上，整轮结果作废；
+- **`pwsh -NoProfile -File`**：脚本要求 PowerShell 7；NoProfile 避免用户 profile 干扰。
+
+**等待就绪的唯一可信信号**：`benchmarks/gui_out.log` 出现 `[GUI 就绪: ... — 已实测验证可用]` 横幅（app.py 就绪探针打印，start-app.ps1 透传；启动审计 ~30–60s）。轮询：
 
 ```bash
 for i in $(seq 1 40); do sleep 3; grep -aq "GUI 就绪\|探针失败" benchmarks/gui_out.log && break; done
@@ -148,6 +152,7 @@ print(f'AI评分均值 {sum(sc)/len(sc):.1f} | recall均值 {sum(rc)/len(rc):.2f
 - **judge 报 ModuleNotFoundError: planify** → 程序已内置 sys.path 自举，若仍报说明跑在别的解释器上，必须用 repo 的 `.venv/Scripts/python.exe`。
 - **服务起了但请求 000** → 旧实例残留占端口（第 2.1 步清掉）。
 - **端口 200 但结果全对不上** → 进程跑在错误语料上（如 test_work_dir）。这就是第 1 步必须核对 `/api/status` 的 workdir 的原因——杀了用 `-C 语料` 重启。
-- **改了 doclens 技能文件（SKILL.md）但行为没变化** → SkillLoader 启动时把技能扫进内存、之后只读内存不读磁盘；`cp` 同步到 `~/.cortex/skills/` 后**必须重启应用**才生效（仅 skills 管理 API 的 install/delete/restore 会热重扫）。改技能 → 同步 → 重启，三者缺一不可，否则整轮 benchmark 跑的是旧技能（结果作废）。
+- **改了 doclens 技能文件（SKILL.md）但行为没变化** → 技能运行时从全局 `~/.cortex/skills/` 读取，改源文件不会自动生效：`cp -r doclens/skills/<技能名> ~/.cortex/skills/` 同步后**下一轮对话自动生效**（SkillLoader 惰性热重载，逐文件 mtime+size 签名，≥2s 节流；坏文件沿用旧内容下轮重试）。「改技能 → 同步全局」两步即可；但保险起见，开跑前确认全局副本就是待测版本，否则整轮 benchmark 跑的是旧技能（结果作废）。
+- **benchmark 期间不要在本仓库改代码** → Stop hook（restart-app-on-change）检测到改动会自动重启被测服务（start-app.ps1 的 -C stamp 会保持语料 workdir），断流打断在跑的题。要改代码，先停 bench。
 - **bench 客户端崩了要杀后台任务** → 先 TaskStop，服务不用重启（客户端断流会自动停生成）。
 - **跑完 benchmark 别忘关服务**（用户没说要留着就问一句）。
