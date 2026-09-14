@@ -24,7 +24,9 @@ if [ ! -f "$STAMP" ]; then
   exit 0
 fi
 
-LAST="$(cat "$STAMP" 2>/dev/null || echo 0)"
+# 提取数字时间戳；空/损坏（如 0 字节文件）回落 0 = 判定全部改动为新，宁可多重启一次
+LAST="$(tr -cd '0-9' < "$STAMP" 2>/dev/null || true)"
+[ -n "$LAST" ] || LAST=0
 
 # 前端 src 改动（ts/tsx/js/css/html）
 FRONT_CHG=""

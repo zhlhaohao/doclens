@@ -7,6 +7,7 @@ import {
   listSkillsManage,
   patchSkill,
   previewSkillInstall,
+  refreshSkills,
   restoreSkill,
   type SkillInstallPreview,
   type SkillManageItem,
@@ -40,10 +41,13 @@ export class SkillsSection extends LitElement {
       color: var(--cortex-text);
     }
     .wrap { margin-bottom: var(--cortex-space-6); }
-    /* 列表底部工具条：安装按钮靠右（顶替原 risk-note 区域） */
+    /* 列表底部工具条：刷新靠左、安装靠右（顶替原 risk-note 区域） */
     .toolbar {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      flex-wrap: wrap;
       margin-top: var(--cortex-space-3);
     }
     .skill-list {
@@ -454,6 +458,21 @@ export class SkillsSection extends LitElement {
     }
   }
 
+  /** 手动刷新：重扫磁盘 + 热更新内存 SkillLoader，直改技能文件后立即生效。 */
+  private async _refresh() {
+    this._busy = true;
+    this._error = null;
+    try {
+      const refreshed = await refreshSkills();
+      this._setFlash(`已刷新（${refreshed} 个技能）`);
+      await this._load();
+    } catch (e) {
+      this._error = `刷新失败: ${(e as Error).message}`;
+    } finally {
+      this._busy = false;
+    }
+  }
+
   private _openInstall() {
     this._install = { url: "", preview: null, busy: false, error: null };
   }
@@ -647,6 +666,11 @@ export class SkillsSection extends LitElement {
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
         <div class="toolbar">
+          <button class="icon-btn" ?disabled=${this._busy}
+            title="重扫磁盘技能目录并立即生效（直改 SKILL.md 后无需重启或等下一轮对话）"
+            @click=${() => this._refresh()}>
+            <doclens-icon name="refresh-cw"></doclens-icon>刷新技能
+          </button>
           <button class="icon-btn primary" @click=${() => this._openInstall()}>
             <doclens-icon name="download"></doclens-icon>从 GitHub 安装
           </button>

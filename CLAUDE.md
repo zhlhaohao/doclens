@@ -312,7 +312,7 @@ cp -r doclens/skills/* ~/.cortex/skills/
 cp -r doclens/skills/<技能名> ~/.cortex/skills/
 ```
 
-**⚠️ 同步只是第一步——必须重启应用才真正生效**：`SkillLoader.__init__` 启动时把 SKILL.md 全部扫进内存 dict，`load_skill` 只读内存不读磁盘；磁盘改动不触发 `rescan()`（仅 skills 管理 API 的 install/delete/restore 会触发热重扫）。benchmark 前尤其要确认：改了技能文件 → 同步全局 → 重启服务，三者缺一不可。
+**同步后下一轮对话自动生效（无需重启）**：SkillLoader 内建惰性热重载——每轮对话开始时（`descriptions()` 入口）stat 检查技能目录（逐文件 mtime+size 签名，≥2s 节流），磁盘有变化才原位 `rescan()`；坏文件（编码错/文件锁/半写）沿用旧内容并下轮自动重试。改技能文件 → 同步全局，两步即可；轮内一致性 = 轮首快照（`load_skill` 只读内存，清单与内容同一时点）；skills 管理 API 的 install/delete/restore 热生效不变。
 
 ## 前端代码改动 · 自动构建为完工标准
 

@@ -35,6 +35,7 @@ from doclens.web_v2.models.skill import (
     SkillManageItem,
     SkillManageListResponse,
     SkillPatchRequest,
+    SkillRefreshResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,17 @@ async def restore_skill(name: str):
     _hot_apply(rescan=True)
     meta = skills_config.builtin_skill_meta().get(name, {})
     return _manage_item(name, meta, True)
+
+
+@router.post("/skills/refresh", response_model=SkillRefreshResponse)
+async def refresh_skills():
+    """手动刷新：重扫磁盘技能目录 + 原位更新内存 SkillLoader（热生效）。
+
+    直改 ~/.cortex/skills/（cp / 编辑器保存）后立即生效，不等下一轮对话的
+    惰性热重载；agent 未装配时跳过内存同步（管理列表本身直读磁盘）。
+    """
+    _hot_apply(rescan=True)
+    return SkillRefreshResponse(refreshed=len(_scan_loader().skills))
 
 
 def _find_skill_dir(name: str):

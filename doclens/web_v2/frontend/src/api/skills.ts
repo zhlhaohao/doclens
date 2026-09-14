@@ -83,3 +83,11 @@ export async function restoreSkill(name: string): Promise<SkillManageItem> {
     method: "POST",
   });
 }
+
+/** 手动刷新：重扫磁盘技能目录 + 热更新 AI 对话用的内存技能表。返回技能数。 */
+export async function refreshSkills(): Promise<number> {
+  const data = await request<{ refreshed: number }>("/api/skills/refresh", {
+    method: "POST",
+  });
+  return data.refreshed ?? 0;
+}

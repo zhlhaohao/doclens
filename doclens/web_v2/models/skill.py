@@ -51,3 +51,9 @@ class SkillInstallRequest(BaseModel):
 
 class SkillInstallResponse(BaseModel):
     installed: list[str]
+
+
+class SkillRefreshResponse(BaseModel):
+    """手动刷新结果：重扫后磁盘上的技能数。"""
+
+    refreshed: int
