@@ -29,6 +29,12 @@ def rg_available() -> bool:
     return _rg_path is not None
 
 
+def rg_path() -> Optional[str]:
+    """rg 可执行文件路径（未安装返回 None；公共访问器，宿主可直接组 rg 命令）。"""
+    rg_available()
+    return _rg_path
+
+
 def _reset_cache() -> None:
     """Reset the cached rg check (for testing only)."""
     global _rg_path, _rg_checked

@@ -3,10 +3,55 @@
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Iterable
 
 logger = logging.getLogger(__name__)
+
+# 大语料 like_search(REGEXP) 旁路阈值：nodes 行数超过此值时跳过 SQLite
+# 正则预筛，全权交给 ripgrep。REGEXP 是逐行 Python UDF（每行跨语言回调
+# 一次 re.search），百万行级全表扫是分钟~十分钟级（实测 51 万文档语料
+# 单次 grep 卡死对话流）；rg 子进程原生扫盘同规模仅数十秒。
+REGEXP_SKIP_NODES_THRESHOLD = 1_000_000
+# nodes 计数缓存（db_path -> (count, 抓取时间戳)）：COUNT(*) 在大表上
+# 也要全 B-tree 扫描（秒级），TTL 内复用
+_NODES_COUNT_TTL_S = 600
+_nodes_count_cache: dict[str, tuple[int, float]] = {}
+
+
+def _nodes_count_bypass(idx, threshold: int = REGEXP_SKIP_NODES_THRESHOLD) -> bool:
+    """判定是否旁路 like_search 正则路径（大语料直通 rg）。
+
+    nodes 行数超阈值即旁路；计数结果按 db_path 缓存（TTL 10min）。
+    COUNT 失败（表缺失/锁）按小语料处理（保守，维持旧行为）。
+    threshold 参数仅供测试缩小规模，生产恒用 REGEXP_SKIP_NODES_THRESHOLD。
+    """
+    db_path = str(getattr(idx, "index_path", ""))
+    now = time.monotonic()
+    cached = _nodes_count_cache.get(db_path)
+    if cached and now - cached[1] < _NODES_COUNT_TTL_S:
+        count = cached[0]
+        if count > threshold:
+            logger.debug("[grep] nodes=%d 超阈值（缓存），直通 rg", count)
+            return True
+        return False
+    try:
+        import sqlite3
+
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[grep] nodes 计数失败（按小语料处理）: %s", e)
+        return False
+    _nodes_count_cache[db_path] = (count, now)
+    if count > threshold:
+        logger.info(
+            "[grep] nodes=%d 超阈值 %d，跳过 SQLite REGEXP 预筛直通 rg",
+            count, threshold,
+        )
+        return True
+    return False
 
 
 def build_rg_paths(
@@ -58,11 +103,16 @@ def rg_fallback_search(
     context_before: int = 6,
     context_after: int = 5,
     use_regex: bool = False,
+    pre_hits: dict[str, list[int]] | None = None,
 ) -> list[tuple[str, dict, int, int, float]]:
     """执行 ripgrep 降级搜索。
 
     doc_nodes_map 为空时：创建合成节点（原 _ripgrep_fallback 逻辑）。
     doc_nodes_map 非空时：匹配已有节点（原 format_results 内联逻辑）。
+
+    pre_hits 给定时跳过内部逐文件扫描（大语料目录模式由调用方预取，
+    见 _rg_search_root_hits——逐文件分批在数十万文件下要数千次进程
+    启动，不可行），key 为绝对文件路径。
 
     Returns:
         [(doc_id, node_dict, matched_count, proximity, fts_score)]
@@ -72,24 +122,29 @@ def rg_fallback_search(
     if not rg_available():
         return []
 
-    # 根据是否有 doc_nodes_map 决定路径构建方式
-    if doc_nodes_map:
-        doc_ids = doc_nodes_map.keys()
+    shadow_to_original: dict[str, str] = {}
+    if pre_hits is not None:
+        hits = pre_hits
     else:
-        doc_ids = path_map.keys()
+        # 根据是否有 doc_nodes_map 决定路径构建方式
+        if doc_nodes_map:
+            doc_ids = doc_nodes_map.keys()
+        else:
+            doc_ids = path_map.keys()
 
-    rg_paths, shadow_to_original = build_rg_paths(path_map, doc_ids)
-    if not rg_paths:
-        return []
+        rg_paths, shadow_to_original = build_rg_paths(path_map, doc_ids)
+        if not rg_paths:
+            return []
 
-    hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=use_regex)
+        hits = rg_search(query, rg_paths, case_sensitive=False, use_regex=use_regex)
     if not hits:
         return []
 
-    # 反向映射: source_path -> [doc_ids]
+    # 反向映射: source_path -> [doc_ids]（normpath 统一形态，目录模式的
+    # rg 输出路径与 path_map 的分隔符/相对形态可能不同）
     reverse_map: dict[str, list[str]] = {}
     for key, path in path_map.items():
-        reverse_map.setdefault(path, []).append(key)
+        reverse_map.setdefault(os.path.normpath(path), []).append(key)
 
     results: list[tuple[str, dict, int, int, float]] = []
 
@@ -126,7 +181,7 @@ def rg_fallback_search(
         # 模式 2：创建合成节点（原 _ripgrep_fallback 逻辑）
         for file_path, line_nums in hits.items():
             display_path = shadow_to_original.get(file_path, file_path)
-            doc_ids = reverse_map.get(display_path, [])
+            doc_ids = reverse_map.get(os.path.normpath(display_path), [])
             doc_id = doc_ids[0] if doc_ids else os.path.splitext(os.path.basename(display_path))[0]
 
             matched_line = line_nums[0]  # 1-based
@@ -157,6 +212,77 @@ def rg_fallback_search(
             results.append((doc_id, synthetic_node, len(query_words), 0, 0.0))
 
     return results
+
+
+def _rg_search_root_hits(
+    pattern: str,
+    root: str,
+    *,
+    use_regex: bool,
+    timeout: float = 120.0,
+) -> dict[str, list[int]]:
+    """rg 单进程递归扫描根目录（大语料目录模式）。
+
+    与逐文件 rg_search（treesearch）的分批模式相对：数十万文件分批要
+    数千次进程启动（每次 ≤10s 超时预算），而 rg 递归扫目录一次进程原生
+    并行完成（51 万文件实测 10-30s）。代价：不经 path_map 逐文件过滤，
+    会扫到未索引文件（与 grep 工具「搜索所有文件」的承诺一致）；二进制
+    文档的 shadow md 在数据目录内、被排除 glob 跳过（FTS 检索仍覆盖）。
+
+    Returns:
+        {绝对文件路径: [1-based 行号]}
+    """
+    import json as _json
+    import subprocess
+
+    from treesearch.ripgrep import rg_available
+
+    if not rg_available():
+        return {}
+    from treesearch.ripgrep import rg_path as _ts_rg_path
+
+    exe = _ts_rg_path()
+    if not exe:
+        return {}
+
+    # 排除数据/版本目录（索引、会话、shadow md 都不该进 grep 结果）
+    exclude_globs = [
+        "!.cortex/**", "!.doclens/**", "!.treesearch/**", "!.git/**",
+    ]
+    cmd = [exe, "--json", "--ignore-case", "--max-count", "100"]
+    if not use_regex:
+        cmd.append("--fixed-strings")
+    for g in exclude_globs:
+        cmd.extend(["-g", g])
+    cmd.extend(["--", pattern, os.path.abspath(root)])
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("[grep] rg 目录扫描超时 %.0fs（root=%s）", timeout, root)
+        return {}
+    except OSError as e:  # noqa: BLE001
+        logger.warning("[grep] rg 目录扫描失败: %s", e)
+        return {}
+
+    hits: dict[str, list[int]] = {}
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = _json.loads(line)
+        except ValueError:
+            continue
+        if obj.get("type") != "match":
+            continue
+        data = obj.get("data", {})
+        fp = data.get("path", {}).get("text", "")
+        ln = data.get("line_number")
+        if fp and ln:
+            hits.setdefault(fp, []).append(ln)
+    return hits
 
 
 def search_paths_by_regex(
@@ -353,8 +479,14 @@ def execute_grep_search(
         path_map = {k: v for k, v in path_map.items() if k in allowed}
 
     # 步骤 1: like_search（有目标过滤时放大候选量，避免截断在前过滤在后丢结果）
+    # 大语料旁路：REGEXP 逐行 Python 扫描在百万节点级是分钟级（见
+    # _nodes_count_bypass 注释），直接走 rg 目录扫描（原生速度同规模数十秒）
     like_limit = max(200, max_results * 4) if allowed is not None else max_results
-    like_results = idx.like_search(query, max_results=like_limit, use_regex=True)
+    corpus_bypass = _nodes_count_bypass(idx)
+    if corpus_bypass:
+        like_results = []
+    else:
+        like_results = idx.like_search(query, max_results=like_limit, use_regex=True)
 
     if like_results:
         if allowed is not None:
@@ -366,17 +498,32 @@ def execute_grep_search(
             for item in like_results
         ]
     else:
-        # 步骤 2: ripgrep 降级（无目标过滤时合并磁盘未索引文件）
-        rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
-        content_results = rg_fallback_search(
-            query,
-            rg_path_map,
-            {},
-            query_words,
-            context_before=idx.rg_context_before,
-            context_after=idx.rg_context_after,
-            use_regex=True,
-        )
+        # 步骤 2: ripgrep 降级（无目标过滤时合并磁盘未索引文件；
+        # 大语料旁路也落此处——like_results 被置空，且用目录扫描模式
+        # 取代逐文件分批：数十万文件的分批 = 数千次进程启动，不可行）
+        if corpus_bypass and allowed is None:
+            pre_hits = _rg_search_root_hits(query, str(idx.search_path), use_regex=True)
+            content_results = rg_fallback_search(
+                query,
+                path_map,
+                {},
+                query_words,
+                context_before=idx.rg_context_before,
+                context_after=idx.rg_context_after,
+                use_regex=True,
+                pre_hits=pre_hits,
+            )
+        else:
+            rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
+            content_results = rg_fallback_search(
+                query,
+                rg_path_map,
+                {},
+                query_words,
+                context_before=idx.rg_context_before,
+                context_after=idx.rg_context_after,
+                use_regex=True,
+            )
 
     # 步骤 3: 路径搜索
     path_results = search_paths_by_regex(
