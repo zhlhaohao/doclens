@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from doclens.web_v2.api._chat_raw import extract_round_raw_messages
 from doclens.web_v2.sessions_store import SessionItem, SessionsStore, SessionType
-from planify.streaming.runner import StreamingAgent
+from planify.streaming.runner import CONTEXT_MARKER, StreamingAgent
 from planify.streaming.types import StreamingConfig
 
 # 模拟真实体量：一次检索工具的输出 + 一份技能正文
@@ -216,14 +216,23 @@ def _run_web_rounds(store, sid, sa, emitter, provider, rounds):
         ))
         history = store.get_chat_history(sid)
         history.pop()  # 末尾即本轮消息，弹出防重复（chat.py:72-77）
-        round_start = len(history)
+        round_start = len(history)  # fallback，见下
         await sa.run_stream(history, msg, sid)
         # 修复点 1：skill body 落库（在 append_chat_turn_raw 之前）
         injected = _extract_injected(history)
         if injected:
             store.upsert_skill_contexts(sid, injected)
-        # 修复点 2：本轮原始消息序列落库（多工具/交错文本轮结构等价）
-        raw_msgs = extract_round_raw_messages(history, round_start, msg)
+        # 修复点 2：本轮原始消息序列落库（多工具/交错文本轮结构等价）。
+        # 轮起点必须用 runner 注入完成后的真实下标：run_stream 头部注入
+        # context 消息对会把历史整体后移 2 条，用事前的 len(history) 切片
+        # 会把上一轮末尾的 [tool_result, text] 漏进 raw_messages（孤儿
+        # tool_result），下轮回放触发 OpenAI 兼容后端 400（chat.py 同款修复）
+        raw_start = (
+            sa.round_start_index
+            if sa.round_start_index is not None
+            else round_start
+        )
+        raw_msgs = extract_round_raw_messages(history, raw_start, msg)
         if raw_msgs:
             store.append_raw_messages(sid, raw_msgs)
         # 落库 raw 轮次：tool traces + AI 原文（chat.py:203-217，展示层用）
@@ -233,6 +242,119 @@ def _run_web_rounds(store, sid, sa, emitter, provider, rounds):
 
     for msg in rounds:
         asyncio.run(web_round(msg))
+
+
+def _orphan_tool_results(messages):
+    """返回请求消息序列中的孤儿 tool_result id（前一条 assistant 无对应
+    tool_use）——OpenAI 兼容后端对此直接 400。"""
+    orphans = []
+    prev = None
+    for m in messages:
+        content = m.get("content")
+        if m.get("role") == "user" and isinstance(content, list):
+            tr_ids = [
+                b.get("tool_use_id")
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "tool_result"
+            ]
+            if tr_ids:
+                tu_ids = set()
+                if prev and prev.get("role") == "assistant" and isinstance(
+                    prev.get("content"), list
+                ):
+                    tu_ids = {
+                        b.get("id")
+                        for b in prev["content"]
+                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                    }
+                orphans.extend(t for t in tr_ids if t not in tu_ids)
+        prev = m
+    return orphans
+
+
+def test_web_path_no_orphan_tool_result_round3(tmp_path):
+    """三轮回归：轮 2 落库的 raw_messages 不得漏进轮 1 末尾的
+    [tool_result, text]（旧 bug：轮起点下标未计入头部注入的 +2 偏移，
+    轮 3 重建历史含孤儿 tool_result → DeepSeek 等 400）。
+
+    两轮测试覆盖不到——轮 2 的污染 raw 要到轮 3 才被回放。
+    """
+    store = SessionsStore(tmp_path / "sessions.db")
+    sid = store.find_or_create(SessionType.CHAT, "孤儿回归").id
+
+    provider = MockProvider()
+    emitter = StubEmitter()
+    sa = _make_agent(provider, emitter, tmp_path)
+    _run_web_rounds(
+        store, sid, sa, emitter, provider, ["第一轮", "第二轮", "第三轮"]
+    )
+
+    # 轮 2 落库的 raw_messages 首条必须是轮 2 自己的消息（无轮 1 泄漏）
+    items = store.get_detail(sid)
+    raws = [it for it in items if it.kind == "raw_messages"]
+    assert len(raws) == 3
+    round2_raw = json.loads(raws[1].payload)["messages"]
+    first = round2_raw[0]
+    assert not (
+        first.get("role") == "user"
+        and isinstance(first.get("content"), list)
+        and first["content"][0].get("type") == "tool_result"
+        and first["content"][0].get("tool_use_id") == "tu_1"
+    ), f"轮 2 raw 漏进轮 1 的 tool_result：{first}"
+
+    # 轮 3 的每次 LLM 请求都无孤儿 tool_result（重建历史干净）
+    r3_records = provider.records[3:]  # 轮1两次 + 轮2两次之后
+    assert r3_records, "轮 3 应至少调用一次 LLM"
+    for req in r3_records:
+        assert _orphan_tool_results(req) == []
+
+
+def test_extract_uses_post_injection_round_start():
+    """契约测试：头部注入 context 消息对后移历史 2 条，切片起点必须用
+    注入后的真实下标（runner.round_start_index），否则漏进前轮末尾消息。"""
+    seed = [
+        {"role": "user", "content": "桌面上有哪些pdf"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "c1", "name": "bash", "input": {}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "c1", "content": "3pdfs"},
+        ]},
+        {"role": "assistant", "content": [{"type": "text", "text": "3 个 PDF"}]},
+    ]
+    history = list(seed)
+    pre_run_len = len(history)  # 旧契约：run_stream 前捕获
+    # 模拟 run_stream 头部注入（重建历史无 marker → insert 消息对到 0/1）
+    history.insert(0, {"role": "user", "content": f"{CONTEXT_MARKER}: x"})
+    history.insert(1, {"role": "assistant", "content": "Noted."})
+    # 新契约：注入完成后、追加 user query 时的真实下标
+    round_start_index = len(history)
+    history.append({"role": "user", "content": "读一下"})
+    history.append({"role": "assistant", "content": [
+        {"type": "tool_use", "id": "c2", "name": "bash", "input": {}},
+    ]})
+    history.append({"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "c2", "content": "ok"},
+    ]})
+    history.append({"role": "assistant", "content": [
+        {"type": "text", "text": "done"},
+    ]})
+
+    # 旧下标复现 bug：漏进前轮 [tool_result c1, text]，c1 成孤儿
+    leaked = extract_round_raw_messages(history, pre_run_len, "读一下")
+    assert _orphan_tool_results(leaked) == ["c1"]
+
+    # 新下标：只含本轮消息，无泄漏
+    out = extract_round_raw_messages(history, round_start_index, "读一下")
+    assert _orphan_tool_results(out) == []
+    ids = [
+        b.get("id") or b.get("tool_use_id")
+        for m in out
+        if isinstance(m.get("content"), list)
+        for b in m["content"]
+        if b.get("type") in ("tool_use", "tool_result")
+    ]
+    assert ids == ["c2", "c2"]
 
 
 def test_web_path_skill_body_position_stable(tmp_path):

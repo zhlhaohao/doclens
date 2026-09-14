@@ -159,3 +159,58 @@ def test_normalize_truncates_long_output():
 
 def test_tool_registered_name():
     assert tool_registered_name("ctx", "query-docs") == "mcp__ctx__query-docs"
+
+
+# ---------- reconcile 脏标记（日志刷屏修复） ----------
+
+
+def _make_manager_with_sync_counter(monkeypatch):
+    """McpClientManager + _sync_runtime_tools 调用计数。"""
+    from doclens.mcp_client import McpClientManager, _ServerConnection
+
+    mgr = McpClientManager()
+    calls = []
+    monkeypatch.setattr(mgr, "_sync_runtime_tools", lambda: calls.append(1))
+    return mgr, calls, _ServerConnection
+
+
+def test_reconcile_no_change_no_sync(monkeypatch):
+    """无配置变化时不同步工具表（修复前每轮轮询刷一条 INFO 日志）。"""
+    import asyncio
+
+    mgr, calls, _ = _make_manager_with_sync_counter(monkeypatch)
+    monkeypatch.setattr(mcp_servers_store, "get_all_raw", lambda: [])
+    for _ in range(5):
+        asyncio.run(mgr._reconcile_once())  # noqa: SLF001
+    assert calls == []
+
+
+def test_reconcile_disabled_first_seen_no_sync(monkeypatch):
+    """首次见到 disabled server（不建连接只补壳）：工具表未变，不同步。"""
+    import asyncio
+
+    mgr, calls, _ = _make_manager_with_sync_counter(monkeypatch)
+    cfg = {"id": "srv1", "name": "echo", "transport": "stdio",
+           "command": "python", "enabled": False}
+    monkeypatch.setattr(mcp_servers_store, "get_all_raw", lambda: [dict(cfg)])
+    asyncio.run(mgr._reconcile_once())  # noqa: SLF001
+    asyncio.run(mgr._reconcile_once())  # noqa: SLF001
+    assert calls == []
+    assert mgr._connections["srv1"].status == "disabled"  # noqa: SLF001
+
+
+def test_reconcile_reap_triggers_sync(monkeypatch):
+    """配置删除 → 收割连接 → 同步一次（工具表真变了）。"""
+    import asyncio
+
+    mgr, calls, conn_cls = _make_manager_with_sync_counter(monkeypatch)
+    cfg = {"id": "srv1", "name": "echo", "transport": "stdio", "command": "python"}
+    mgr._connections["srv1"] = conn_cls(cfg)  # noqa: SLF001
+    monkeypatch.setattr(mcp_servers_store, "get_all_raw", lambda: [])
+    asyncio.run(mgr._reconcile_once())  # noqa: SLF001
+    assert len(calls) == 1
+    assert mgr._connections == {}  # noqa: SLF001
+    # 第二轮无变化 → 不再同步
+    asyncio.run(mgr._reconcile_once())  # noqa: SLF001
+    assert len(calls) == 1
+

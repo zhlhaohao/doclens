@@ -244,3 +244,147 @@ class TestRawMessagesReplay:
             {"type": "tool_use", "id": "tu1", "name": "t", "input": {}},
         ]
         assert history[-1]["content"] == [{"type": "text", "text": "raw 回答"}]
+
+
+class TestToolPairingSanitizer:
+    """回放侧消毒：剥除存量污染 raw_messages 中的孤儿 tool_result。
+
+    旧版轮起点下标偏移（run_stream 头部注入 context 消息对后移历史 2 条）
+    导致每轮 raw 多带上一轮末尾的 [user(tool_result), assistant(text)]，
+    tool_result 无父 → OpenAI 兼容后端 400（tool_calls 配对校验）。
+    """
+
+    @staticmethod
+    def _orphans(history):
+        orphans = []
+        prev = None
+        for m in history:
+            content = m.get("content")
+            if m.get("role") == "user" and isinstance(content, list):
+                tr_ids = [
+                    b.get("tool_use_id")
+                    for b in content
+                    if isinstance(b, dict) and b.get("type") == "tool_result"
+                ]
+                if tr_ids:
+                    tu_ids = set()
+                    if prev and prev.get("role") == "assistant" and isinstance(
+                        prev.get("content"), list
+                    ):
+                        tu_ids = {
+                            b.get("id")
+                            for b in prev["content"]
+                            if isinstance(b, dict) and b.get("type") == "tool_use"
+                        }
+                    orphans.extend(t for t in tr_ids if t not in tu_ids)
+            prev = m
+        return orphans
+
+    def test_orphan_tool_result_stripped(self, store):
+        """复现真实污染结构：轮 2 raw 开头漏进轮 1 的 [tool_result, text]。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "桌面上有哪些pdf"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "c1", "name": "bash", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "c1", "content": "r1"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "3 个 PDF"}]},
+        ])
+        _append(store, "s1", "message_user", {"content": "读取其中一份"}, 5)
+        # 污染的轮 2 raw：开头是轮 1 末尾的 [user(tool_result c1), asst text]
+        store.append_raw_messages("s1", [
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "c1", "content": "r1"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "3 个 PDF"}]},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "c2", "name": "read_file", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "c2", "content": "r2"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "读取结果"}]},
+        ])
+        history = store.get_chat_history("s1")
+        assert self._orphans(history) == []
+        # 合法配对逐字节保留（前缀缓存友好）
+        assert {"type": "tool_use", "id": "c2", "name": "read_file", "input": {}} in [
+            b for m in history if isinstance(m.get("content"), list)
+            for b in m["content"]
+        ]
+        # 角色严格交替
+        roles = [m["role"] for m in history]
+        assert all(a != b for a, b in zip(roles, roles[1:]))
+
+    def test_orphan_only_message_dropped(self, store):
+        """整条都是孤儿 tool_result 的 user 消息整条丢弃，交替由填充补上。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "ghost", "content": "x"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "回答"}]},
+        ])
+        history = store.get_chat_history("s1")
+        assert self._orphans(history) == []
+        assert all(
+            not (isinstance(m.get("content"), list)
+                 and any(b.get("tool_use_id") == "ghost"
+                         for b in m["content"] if isinstance(b, dict)))
+            for m in history
+        )
+        roles = [m["role"] for m in history]
+        assert all(a != b for a, b in zip(roles, roles[1:]))
+
+    def test_mixed_blocks_keep_valid(self, store):
+        """user 消息混合合法/孤儿 tool_result：只剥孤儿，合法块保留。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "ok1", "name": "t", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "ghost", "content": "x"},
+                {"type": "tool_result", "tool_use_id": "ok1", "content": "r"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "a"}]},
+        ])
+        history = store.get_chat_history("s1")
+        assert self._orphans(history) == []
+        user_msg = next(
+            m for m in history
+            if m["role"] == "user" and isinstance(m.get("content"), list)
+        )
+        assert [b["tool_use_id"] for b in user_msg["content"]] == ["ok1"]
+
+    def test_clean_history_byte_identical(self, store):
+        """无污染的合法历史：消毒是恒等变换（逐字节不变）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu1", "name": "t", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu1", "content": "r",
+                 "is_error": True},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "a"}]},
+        ])
+        history = store.get_chat_history("s1")
+        assert history == [
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu1", "name": "t", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu1", "content": "r",
+                 "is_error": True},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "a"}]},
+        ]

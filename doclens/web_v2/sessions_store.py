@@ -39,6 +39,53 @@ class SessionType(str, Enum):
     CHAT = "chat"
 
 
+def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
+    """剥除孤儿 tool_result 并维持角色交替（存量污染数据修复）。
+
+    背景：旧版 raw_messages 落库因轮起点下标偏移（run_stream 头部注入
+    context 消息对后移了历史），每轮多带了上一轮末尾的 2 条消息；当上一轮
+    以工具链收尾时漏进的恰是 [user(tool_result), assistant(text)]，其
+    tool_result 的 assistant tool_use 父消息在窗口之外——回放即产生孤儿
+    tool_result，OpenAI 兼容后端（DeepSeek 等）直接 400：
+    "messages with role 'tool' must be a response to a preceeding message
+    with 'tool_calls'"。
+
+    规则：user 消息中的 tool_result block 仅当其 tool_use_id 出现在紧邻的
+    前一条 assistant 消息的 tool_use 集合中时保留，其余剥除；剥空的消息
+    整条丢弃。丢弃后产生的同角色相邻用 "(interrupted)" 填充（与
+    get_chat_history._append 同款）。合法配对消息逐字节不动（前缀缓存）。
+    """
+    out: list[dict] = []
+    for m in history:
+        role = m.get("role")
+        content = m.get("content")
+        if role == "user" and isinstance(content, list):
+            valid_ids: set = set()
+            if out and out[-1].get("role") == "assistant":
+                prev_content = out[-1].get("content")
+                if isinstance(prev_content, list):
+                    valid_ids = {
+                        b.get("id")
+                        for b in prev_content
+                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                    }
+            blocks = [
+                b
+                for b in content
+                if not (isinstance(b, dict) and b.get("type") == "tool_result")
+                or b.get("tool_use_id") in valid_ids
+            ]
+            if content and not blocks:
+                continue  # 整条都是孤儿 tool_result → 丢弃
+            if len(blocks) != len(content):
+                m = {**m, "content": blocks}
+        if out and out[-1].get("role") == m.get("role"):
+            filler = "user" if m.get("role") == "assistant" else "assistant"
+            out.append({"role": filler, "content": "(interrupted)"})
+        out.append(m)
+    return out
+
+
 class SessionSummary(BaseModel):
     id: str
     type: SessionType
@@ -531,7 +578,7 @@ class SessionsStore:
                         ai_display_fallback = content
             if not ai_emitted and not has_raw_messages and ai_display_fallback:
                 _append("assistant", ai_display_fallback)
-        return history
+        return _sanitize_tool_pairing(history)
 
     @staticmethod
     def _row_to_summary(row: sqlite3.Row) -> SessionSummary:

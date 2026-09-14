@@ -166,8 +166,9 @@ async def _stream_agent_response(
 
     async def _run_and_finalize() -> None:
         """跑 agent + 完成后策展推送 + 落库（断开/取消时落库仍执行，与旧行为一致）。"""
-        # 本轮开始前 history 长度（pop 本轮 user 消息后）：run_stream 原地追加
-        # 的本轮消息从该下标起，供 raw_messages 落库提取
+        # 本轮开始前 history 长度（pop 本轮 user 消息后）：仅作 fallback——
+        # run_stream 头部注入会移动下标，raw_messages 落库切片优先用
+        # sa.round_start_index（见下方 finally 段注释）
         round_start = len(history)
         try:
             await sa.run_stream(history, message, session_id or runtime.runtime_id)
@@ -246,8 +247,18 @@ async def _stream_agent_response(
                     )
                     from doclens.web_v2.deps import get_sessions_store
 
+                    # 轮起点必须用 runner 注入完成后的真实下标：run_stream 头部
+                    # 注入 context 消息对会把历史整体后移 2 条，用事前捕获的
+                    # len(history) 切片会把上一轮末尾消息（孤儿 tool_result）
+                    # 漏进 raw_messages，下轮回放触发 400（tool_calls 配对校验）
+                    raw_start = (
+                        sa.round_start_index
+                        if sa.round_start_index is not None
+                        else round_start
+                    )
+
                     raw_msgs = extract_round_raw_messages(
-                        history, round_start, message
+                        history, raw_start, message
                     )
                     if raw_msgs:
                         get_sessions_store().append_raw_messages(

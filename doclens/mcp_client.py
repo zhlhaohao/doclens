@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 HANDSHAKE_TIMEOUT = 20.0       # initialize 握手超时（秒）
 REAP_GRACE = 5.0               # reconcile 收割单个会话的宽限（秒）
 RESULT_MAX_CHARS = 30_000      # 工具结果截断上限（字符）
+RECONCILE_INTERVAL = 10.0      # 配置对账轮询间隔（秒）；热更新延迟上限即为此值
 
 # 状态机：disabled → connecting → ok / failed（failed 等下次变更或手动重连）
 STATUS_DISABLED = "disabled"
@@ -166,7 +167,7 @@ class McpClientManager:
         try:
             while not self._stop_requested.is_set():
                 await self._reconcile_once()
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(RECONCILE_INTERVAL)
         finally:
             await self._reap_all()
             self._loop = None
@@ -179,13 +180,19 @@ class McpClientManager:
     def request_reconcile(self) -> None:
         """外部（API 层）通知配置已变更；专属 loop 下轮 diff 时生效。
 
-        reconcile 由轮询 store 快照驱动（每 0.2s 对账一次），无需显式信号——
+        reconcile 由轮询 store 快照驱动（每 RECONCILE_INTERVAL 对账一次），无需显式信号——
         本方法仅为语义明确保留（当前实现等价于 no-op + debug 日志）。
         """
         logger.debug("[mcp-client] reconcile requested")
 
     async def _reconcile_once(self) -> None:
-        """对账一轮：store 快照 vs 当前连接。未动跳过 / 改动重连 / 删除收割。"""
+        """对账一轮：store 快照 vs 当前连接。未动跳过 / 改动重连 / 删除收割。
+
+        仅在实际增删连接时才同步 runtime 工具表（脏标记）——本轮按
+        RECONCILE_INTERVAL 轮询，无条件同步会把 INFO 日志刷爆（无变化时
+        工具表逐字节相同）。
+        连接 ok/failed 的工具表更新由 _run_connection 自行触发同步。
+        """
         from doclens.web_v2 import mcp_servers_store
 
         try:
@@ -195,33 +202,38 @@ class McpClientManager:
             return
 
         by_id = {s.get("id"): s for s in snapshot}
+        dirty = False
 
         # 收割：已删除的
         for server_id, conn in list(self._connections.items()):
             if server_id not in by_id:
                 await self._reap(server_id, conn)
+                dirty = True
 
         # 对账：新增 / 改动 / 未动
         for server_id, cfg in by_id.items():
             conn = self._connections.get(server_id)
             if cfg.get("enabled", True) is False:
-                if conn is not None:
+                if conn is not None and conn.status != STATUS_DISABLED:
                     await self._reap(server_id, conn)
+                    dirty = True
                     # 留一个 disabled 状态壳供轮询展示
                     shell = _ServerConnection(cfg)
                     shell.status = STATUS_DISABLED
                     self._connections[server_id] = shell
-                elif conn is None:
-                    pass  # 首次见且 disabled：不建连接，轮询时动态补壳
+                # conn 已是 disabled 壳：无需每轮收割重建（旧行为会反复
+                # reap 壳，纯属空转）；conn 为 None：不建连接，下方补壳
                 continue
             if conn is None:
                 self._spawn(server_id, cfg)
+                dirty = True
             # disabled 壳 = 停用后遗留的状态壳；重新启用时必须重建连接
             #（指纹不含 enabled，单靠指纹比对发现不了 enable 翻转）
             elif conn.status == STATUS_DISABLED or conn.fingerprint() != _ServerConnection(cfg).fingerprint():
                 logger.info("[mcp-client] 配置变更，重连: %s", cfg.get("name"))
                 await self._reap(server_id, conn)
                 self._spawn(server_id, cfg)
+                dirty = True
 
         # disabled 且从未建连的补壳（轮询展示 disabled 状态）
         for server_id, cfg in by_id.items():
@@ -230,7 +242,8 @@ class McpClientManager:
                 shell.status = STATUS_DISABLED
                 self._connections[server_id] = shell
 
-        self._sync_runtime_tools()
+        if dirty:
+            self._sync_runtime_tools()
 
     def _spawn(self, server_id: str, cfg: dict) -> None:
         conn = _ServerConnection(cfg)

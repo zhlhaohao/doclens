@@ -40,8 +40,13 @@ def _wait_status(mgr, server_id, want, timeout=30.0):
 
 
 @pytest.fixture
-def manager():
+def manager(monkeypatch):
+    from doclens import mcp_client
     from doclens.mcp_client import McpClientManager
+
+    # 生产轮询间隔 10s，e2e 每次配置变更都要等对账——收窄回 0.2s 保测试速度
+    # （_loop_main 每轮现读模块常量，monkeypatch 即生效）
+    monkeypatch.setattr(mcp_client, "RECONCILE_INTERVAL", 0.2)
 
     mgr = McpClientManager()
     mgr.start(runtime=_FakeRuntime())
