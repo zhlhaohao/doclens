@@ -274,3 +274,8 @@ node_modules/
 # PyPI 发包凭据（真实 token，严禁入库；模板见 .pypirc.example）
 .pypirc
 .backup-before-filter-repo/
+
+# RAG benchmark 产物（随 worktree 落盘，不入库；对齐 master 的 results/ 规则）
+benchmarks/results/
+benchmarks/gui_out.log
+benchmarks/gui_err.log
