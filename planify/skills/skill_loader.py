@@ -165,23 +165,31 @@ class SkillLoader:
 
     def descriptions(self) -> str:
         """
-        获取所有启用技能的描述（含路由指引）。停用技能不出现在清单中。
+        获取所有启用技能的描述（含路由指引与技能根目录事实）。停用技能不出现在清单中。
 
         入口先做惰性新鲜度检查（热重载）——磁盘直改 SKILL.md 后，
         下一轮对话（本方法被调用时）自动重扫生效。
 
+        清单可为空，但技能根目录事实**恒输出**（含空清单场景）——
+        供对话安装技能/询问技能目录时以该路径为准，不依赖模型猜测。
+
         Returns:
-            格式化的技能描述字符串
+            格式化的技能描述字符串（恒非空）
         """
         self._maybe_stale()
         items = [(n, s) for n, s in self.skills.items() if n not in self._disabled]
-        if not items:
-            return "(no skills)"
-        return "\n".join(
+        lines = [
             f"  - {n}: {s['meta'].get('description', '-')} "
             f"→ 调用 load_skill(\"{n}\") 获取详细指引"
             for n, s in items
+        ]
+        dir_fact = (
+            f"技能根目录（skills dir）：{self.skills_dir}\n"
+            "安装/新增技能 = 把 <技能名>/SKILL.md 放入上述目录（支持热重载，"
+            "下一轮对话自动生效，无需重启）；回答「技能装在哪里 / 技能目录」"
+            "一律以该路径为准，禁止将技能安装到其他工具的配置目录。"
         )
+        return ("\n".join(lines) + "\n\n" if lines else "") + dir_fact
 
     def load(self, name: str) -> str:
         """

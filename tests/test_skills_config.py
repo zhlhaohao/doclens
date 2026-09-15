@@ -124,7 +124,10 @@ class TestSkillLoaderDisabled:
     def test_all_disabled_shows_no_skills(self, tmp_path):
         _write_skill(tmp_path, "a", "a")
         loader = SkillLoader(tmp_path, disabled=["a"])
-        assert loader.descriptions() == "(no skills)"
+        desc = loader.descriptions()
+        # 全停用：无技能条目，但目录事实恒输出
+        assert "load_skill" not in desc
+        assert "技能根目录" in desc
 
 
 class TestDeploySkipDeleted:

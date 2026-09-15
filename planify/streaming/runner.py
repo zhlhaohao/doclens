@@ -206,10 +206,11 @@ class StreamingAgent:
         # messages[0] 会打废 prompt 前缀缓存；改为在尾部注入（见下方 user query 之前）。
         context_parts: List[str] = []
 
-        # 1. skills descriptions（稳定：仅安装/卸载技能时变化）
+        # 1. skills descriptions（稳定：仅安装/卸载技能时变化；含技能根目录事实，
+        #    恒非空——空清单也注入目录，防对话安装时装错地方）
         if self.skills:
             desc_text = self.skills.descriptions()
-            if desc_text and desc_text != "(no skills)":
+            if desc_text:
                 context_parts.append(
                     "<system-reminder>\n"
                     "The following skills are available for use with the Skill tool:\n\n"

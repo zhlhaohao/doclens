@@ -47,7 +47,10 @@ class TestHotReload:
 
     def test_added_skill_appears(self, tmp_path):
         loader = SkillLoader(tmp_path)
-        assert loader.descriptions() == "(no skills)"
+        desc = loader.descriptions()
+        # 空清单：无技能条目，但目录事实恒输出
+        assert "load_skill" not in desc
+        assert "技能根目录" in desc and str(tmp_path) in desc
         _write_skill(tmp_path, "new", mtime=1.0)
         loader.descriptions()
         assert "new" in loader.skills
