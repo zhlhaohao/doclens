@@ -3,6 +3,9 @@
 背景：like_search(use_regex=True) 的 REGEXP 是逐行 Python UDF，nodes 表
 百万行级（51 万文档实测 118.8 万节点）全表扫是分钟~十分钟级，单次 grep
 即可卡死对话流（2026-09-14 实测）；rg 递归扫同规模目录 10-30s。
+
+二进制文档（pdf/docx 等）分流：rg 搜不了磁盘原文（shadow md 机制已废弃），
+解析文本只在索引库——走 REGEXP 限定二进制子集扫描，与 rg 文本结果并集。
 """
 import sqlite3
 from pathlib import Path
@@ -12,6 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from doclens.ripgrep import (
+    _binary_doc_ids,
     _nodes_count_bypass,
     _rg_search_root_hits,
     rg_fallback_search,
@@ -23,8 +27,10 @@ def _clear_cache():
     from doclens import ripgrep
 
     ripgrep._nodes_count_cache.clear()
+    ripgrep._binary_doc_ids_cache.clear()
     yield
     ripgrep._nodes_count_cache.clear()
+    ripgrep._binary_doc_ids_cache.clear()
 
 
 def _fake_idx(tmp_path: Path, rows: int) -> SimpleNamespace:
@@ -122,3 +128,89 @@ class TestRgFallbackWithPreHits:
             pre_hits={str(doc): [1]},
         )
         assert results[0][0] == "wild"  # basename（无扩展名）兜底
+
+    def test_stale_shadow_md_excluded_from_rg(self, tmp_path):
+        """历史遗留 shadow md（._*.md）被排除 glob 跳过，不进 rg 结果。"""
+        (tmp_path / "._legacy.pdf.md").write_text(
+            "needle-in-stale-shadow", encoding="utf-8"
+        )
+        (tmp_path / "ok.txt").write_text("needle-fresh", encoding="utf-8")
+        hits = _rg_search_root_hits("needle", str(tmp_path), use_regex=False)
+        assert list(hits) == [str(tmp_path / "ok.txt")]
+
+
+class TestBinaryDocIds:
+    def _idx_with_docs(self, tmp_path: Path, docs: dict) -> SimpleNamespace:
+        db = tmp_path / "index.db"
+        con = sqlite3.connect(db)
+        con.execute(
+            "CREATE TABLE documents (doc_id TEXT PRIMARY KEY, source_path TEXT)"
+        )
+        con.executemany(
+            "INSERT INTO documents VALUES (?, ?)", list(docs.items())
+        )
+        con.commit()
+        con.close()
+        return SimpleNamespace(index_path=db, search_path=tmp_path)
+
+    def test_binary_docs_collected(self, tmp_path):
+        idx = self._idx_with_docs(tmp_path, {
+            "d_txt": r"C:\kb\a.txt", "d_md": r"C:\kb\b.md",
+            "d_pdf": r"C:\kb\c.pdf", "d_docx": r"C:\kb\d.docx",
+            "d_xlsx": r"C:\kb\e.xlsx",
+        })
+        assert _binary_doc_ids(idx) == {"d_pdf", "d_docx", "d_xlsx"}
+
+    def test_no_binary_returns_empty(self, tmp_path):
+        idx = self._idx_with_docs(tmp_path, {"d1": "a.txt", "d2": "b.md"})
+        assert _binary_doc_ids(idx) == set()
+
+    def test_missing_db_returns_empty(self, tmp_path):
+        idx = SimpleNamespace(index_path=tmp_path / "missing.db")
+        assert _binary_doc_ids(idx) == set()
+
+
+class TestLikeSearchDocSubset:
+    """treesearch like_search 的 doc_ids 子集过滤（REGEXP 兜底的目标收敛）。"""
+
+    @pytest.fixture()
+    def fts(self, tmp_path):
+        from treesearch.fts import FTS5Index
+        from treesearch.tree import Document, assign_node_ids
+
+        idx = FTS5Index(db_path=tmp_path / "i.db")
+        for doc_id, text in (
+            ("doc_bin", "alpha needle inside pdf"),
+            ("doc_txt", "needle inside txt"),
+            ("doc_other", "nothing here"),
+        ):
+            structure = [{"title": "t", "text": text}]
+            assign_node_ids(structure)
+            idx.index_document(
+                Document(
+                    doc_id=doc_id, doc_name=doc_id, structure=structure,
+                    source_type="text",
+                ),
+            )
+        idx.close()
+        return FTS5Index(db_path=tmp_path / "i.db")  # 重开（模拟生产只读使用）
+
+    def test_subset_limits_results(self, fts):
+        try:
+            hits = fts.like_search("needle", use_regex=True, doc_ids={"doc_bin"})
+            assert {h["doc_id"] for h in hits} == {"doc_bin"}
+        finally:
+            fts.close()
+
+    def test_subset_empty_returns_nothing(self, fts):
+        try:
+            assert fts.like_search("needle", use_regex=True, doc_ids=set()) == []
+        finally:
+            fts.close()
+
+    def test_none_scans_all(self, fts):
+        try:
+            hits = fts.like_search("needle", use_regex=True)
+            assert {h["doc_id"] for h in hits} == {"doc_bin", "doc_txt"}
+        finally:
+            fts.close()

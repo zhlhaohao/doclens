@@ -1106,7 +1106,7 @@ class FTS5Index:
         scored.sort(key=lambda x: -x[0])
         return [item[1] for item in scored[:top_k]]
 
-    def like_search(self, query: str, top_k: int = 20, use_regex: bool = False) -> list[dict]:
+    def like_search(self, query: str, top_k: int = 20, use_regex: bool = False, doc_ids: Optional[set] = None) -> list[dict]:
         """Substring or regex search on nodes.summary/title (original text, not tokenized).
 
         Fallback when FTS5 tokenization causes query mismatches.
@@ -1117,6 +1117,10 @@ class FTS5Index:
             query: search string or regex pattern (when use_regex=True).
             top_k: max results.
             use_regex: if True, treat query as a regular expression (SQLite REGEXP).
+            doc_ids: optional doc-id subset — only these docs are scanned
+                (REGEXP is a per-row Python UDF; subset filtering via temp table
+                keeps the full-table scan but limits UDF callbacks to the subset,
+                AND short-circuit evaluates the indexed IN first).
 
         If ``nodes`` yields no matches, searches ``documents.structure_json``
         which contains the full original document structure.
@@ -1136,11 +1140,26 @@ class FTS5Index:
             where_clause = "n.summary LIKE ? OR n.title LIKE ?"
             params = (pattern, pattern)
 
+        # 子集过滤：doc_ids 进临时表（有索引），JOIN 进主查询——REGEXP
+        # UDF 回调只对子集行发生（JOIN 先收敛行集，WHERE 才逐行求值）
+        subset_join = ""
+        if doc_ids is not None:
+            self._conn.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS _like_filter(doc_id TEXT PRIMARY KEY)"
+            )
+            self._conn.execute("DELETE FROM _like_filter")
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO _like_filter(doc_id) VALUES (?)",
+                [(d,) for d in doc_ids],
+            )
+            subset_join = "JOIN _like_filter f ON n.doc_id = f.doc_id"
+
         # Phase 1: Search nodes.summary and nodes.title (original text)
         rows = self._conn.execute(
             f"""SELECT n.node_id, n.doc_id, n.title, n.summary, n.depth,
                       d.doc_name, d.source_path
                FROM nodes n
+               {subset_join}
                JOIN documents d ON n.doc_id = d.doc_id
                WHERE {where_clause}
                ORDER BY n.depth ASC""",
@@ -1173,14 +1192,22 @@ class FTS5Index:
             match_fn = lambda t: query_lower in t.lower() if t else False
 
         try:
+            subset_doc_join = (
+                "JOIN _like_filter f ON documents.doc_id = f.doc_id"
+                if doc_ids is not None else ""
+            )
             if use_regex:
                 doc_rows = self._conn.execute(
-                    "SELECT doc_id, structure_json FROM documents WHERE structure_json REGEXP ?",
+                    f"""SELECT documents.doc_id, documents.structure_json FROM documents
+                        {subset_doc_join}
+                        WHERE structure_json REGEXP ?""",
                     (query,),
                 ).fetchall()
             else:
                 doc_rows = self._conn.execute(
-                    "SELECT doc_id, structure_json FROM documents WHERE structure_json LIKE ?",
+                    f"""SELECT documents.doc_id, documents.structure_json FROM documents
+                        {subset_doc_join}
+                        WHERE structure_json LIKE ?""",
                     (pattern,),
                 ).fetchall()
         except Exception:

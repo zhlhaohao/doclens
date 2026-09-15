@@ -19,6 +19,8 @@ REGEXP_SKIP_NODES_THRESHOLD = 100_000
 # 也要全 B-tree 扫描（秒级），TTL 内复用
 _NODES_COUNT_TTL_S = 600
 _nodes_count_cache: dict[str, tuple[int, float]] = {}
+# 二进制文档集合缓存（同 TTL 语义）
+_binary_doc_ids_cache: dict[str, tuple[set[str], float]] = {}
 
 
 def _nodes_count_bypass(idx, threshold: int = REGEXP_SKIP_NODES_THRESHOLD) -> bool:
@@ -228,7 +230,8 @@ def _rg_search_root_hits(
     数千次进程启动（每次 ≤10s 超时预算），而 rg 递归扫目录一次进程原生
     并行完成（51 万文件实测 10-30s）。代价：不经 path_map 逐文件过滤，
     会扫到未索引文件（与 grep 工具「搜索所有文件」的承诺一致）；二进制
-    文档的 shadow md 在数据目录内、被排除 glob 跳过（FTS 检索仍覆盖）。
+    文档（pdf/docx 等）rg 搜不了磁盘原文，由调用方经 REGEXP 子集扫描
+    兜底并集（见 execute_grep_search 大语料分支）。
 
     Returns:
         {绝对文件路径: [1-based 行号]}
@@ -246,9 +249,11 @@ def _rg_search_root_hits(
     if not exe:
         return {}
 
-    # 排除数据/版本目录（索引、会话、shadow md 都不该进 grep 结果）
+    # 排除数据/版本目录（索引、会话都不该进 grep 结果）与历史遗留的
+    # shadow md（._*.md，机制已废弃；磁盘若有残留不该被当作语料命中）
     exclude_globs = [
         "!.cortex/**", "!.doclens/**", "!.treesearch/**", "!.git/**",
+        "!._*.md",
     ]
     cmd = [exe, "--json", "--ignore-case", "--max-count", "100"]
     if not use_regex:
@@ -284,6 +289,42 @@ def _rg_search_root_hits(
         if fp and ln:
             hits.setdefault(fp, []).append(ln)
     return hits
+
+
+def _binary_doc_ids(idx) -> set[str]:
+    """二进制文档（pdf/docx 等）的 doc_id 集合——REGEXP 兜底扫描的目标子集。
+
+    rg 搜不了二进制源文件的磁盘原文；shadow md 机制已废弃（宿主默认
+    enable_shadow_md=False，磁盘无 ._*.md），解析文本只存在于索引库
+    （nodes/structure_json），故二进制文档整体走 SQLite REGEXP 限定子集
+    扫描（UDF 回调只对子集行发生），与 rg 的文本结果并集。集合按
+    db_path 缓存（TTL 与 nodes 计数一致）。
+    """
+    from treesearch.parsers.registry import SHADOW_MD_EXTENSIONS
+
+    db_path = str(getattr(idx, "index_path", ""))
+    cached = _binary_doc_ids_cache.get(db_path)
+    now = time.monotonic()
+    if cached and now - cached[1] < _NODES_COUNT_TTL_S:
+        return cached[0]
+    binary: set[str] = set()
+    try:
+        import sqlite3
+
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            for doc_id, source_path in conn.execute(
+                "SELECT doc_id, source_path FROM documents"
+            ):
+                ext = os.path.splitext(source_path or "")[1].lower()
+                if ext in SHADOW_MD_EXTENSIONS:
+                    binary.add(doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[grep] 二进制文档集合扫描失败（跳过兜底）: %s", e)
+        return set()
+    _binary_doc_ids_cache[db_path] = (binary, now)
+    if binary:
+        logger.info("[grep] %d 个二进制文档走 REGEXP 子集扫描（rg 搜不了原文）", len(binary))
+    return binary
 
 
 def search_paths_by_regex(
@@ -514,6 +555,26 @@ def execute_grep_search(
                 use_regex=True,
                 pre_hits=pre_hits,
             )
+            # 二进制文档兜底：rg 搜不了 pdf/docx 等磁盘原文（shadow md 机制
+            # 已废弃，默认不生成），解析文本只在索引库里——用 REGEXP 限定
+            # 二进制子集扫描（UDF 回调只对子集行发生），与 rg 文本结果并集
+            # 去重（doc_id 相同保留 rg 结果，上下文来自磁盘更可信）
+            binary_docs = _binary_doc_ids(idx)
+            if binary_docs:
+                bin_results = idx.like_search(
+                    query, max_results=like_limit, use_regex=True,
+                    doc_ids=binary_docs,
+                )
+                if bin_results:
+                    rg_docs = {c[0] for c in content_results}
+                    content_results = content_results + [
+                        (item["doc_id"],
+                         {"title": item.get("title", ""),
+                          "text": _fulltext_for_node(idx, item)},
+                         1, 0, item.get("fts_score", 0.0))
+                        for item in bin_results
+                        if item["doc_id"] not in rg_docs
+                    ]
         else:
             rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
             content_results = rg_fallback_search(
