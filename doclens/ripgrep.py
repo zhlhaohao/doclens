@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 
 # 大语料 like_search(REGEXP) 旁路阈值：nodes 行数超过此值时跳过 SQLite
 # 正则预筛，全权交给 ripgrep。REGEXP 是逐行 Python UDF（每行跨语言回调
-# 一次 re.search），百万行级全表扫是分钟~十分钟级（实测 51 万文档语料
-# 单次 grep 卡死对话流）；rg 子进程原生扫盘同规模仅数十秒。
-REGEXP_SKIP_NODES_THRESHOLD = 1_000_000
+# 一次 re.search），十万行级全表扫即秒级起步、百万行级分钟~十分钟级
+# （实测 51 万文档语料单次 grep 卡死对话流）；rg 子进程原生扫盘同规模
+# 仅数十秒。10 万取「Phase 1 单次扫描开始可感（>1s）」的保守下界。
+REGEXP_SKIP_NODES_THRESHOLD = 100_000
 # nodes 计数缓存（db_path -> (count, 抓取时间戳)）：COUNT(*) 在大表上
 # 也要全 B-tree 扫描（秒级），TTL 内复用
 _NODES_COUNT_TTL_S = 600

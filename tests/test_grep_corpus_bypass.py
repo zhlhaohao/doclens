@@ -40,7 +40,7 @@ def _fake_idx(tmp_path: Path, rows: int) -> SimpleNamespace:
 
 class TestNodesCountBypass:
     def test_over_threshold_bypasses(self, tmp_path):
-        # 阈值缩小到 5（测试规模）；生产用 REGEXP_SKIP_NODES_THRESHOLD（百万级）
+        # 阈值缩小到 5（测试规模）；生产用 REGEXP_SKIP_NODES_THRESHOLD（十万级）
         idx = _fake_idx(tmp_path, rows=10)
         assert _nodes_count_bypass(idx, threshold=5) is True
 
