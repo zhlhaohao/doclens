@@ -81,20 +81,21 @@ describe("<ask-card>", () => {
     expect(boxes[2].checked).toBe(true);
   });
 
-  it("submits answers via respondAsk and collapses to summary", async () => {
+  it("submits answers via respondAsk and card vanishes (toast instead)", async () => {
     const respondAsk = vi.fn().mockResolvedValue({ ok: true, submitted: true });
     vi.doMock("../src/api/ask", () => ({ respondAsk }));
     const el = await card({ requestId: "r5", questions: [singleQ] });
     (el.shadowRoot!.querySelector('input[type="radio"]') as HTMLInputElement).click();
     await el.updateComplete;
     (el.shadowRoot!.querySelector("button.primary") as HTMLButtonElement).click();
-    // 动态 import 的 mock 生效于组件内部的 await import()；等待摘要渲染
+    // 动态 import 的 mock 生效于组件内部的 await import()；等待状态落定
     await new Promise((r) => setTimeout(r, 50));
     await el.updateComplete;
     expect(respondAsk).toHaveBeenCalledWith(expect.objectContaining({ request_id: "r5" }));
-    const summary = el.shadowRoot!.querySelector(".summary");
-    expect(summary).toBeTruthy();
-    expect(summary!.textContent).toContain("方案A");
+    // 实时条幅已答：卡片整体消失（结果走 toast，无摘要、无交互残留）
+    expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".card")).toBeNull();
+    expect(el.shadowRoot!.querySelector("button.primary")).toBeNull();
   });
 
   it("marks expired when respond returns submitted=false", async () => {
@@ -135,7 +136,9 @@ describe("<ask-card>", () => {
     (el.shadowRoot!.querySelector("button.primary") as HTMLButtonElement).click();
     await new Promise((r) => setTimeout(r, 50));
     expect(onDone).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: { requestId: "r7" } }),
+      expect.objectContaining({
+        detail: expect.objectContaining({ requestId: "r7", toast: "已回答" }),
+      }),
     );
   });
 
@@ -151,14 +154,15 @@ describe("<ask-card>", () => {
     (el.shadowRoot!.querySelector("button.primary") as HTMLButtonElement).click();
     await new Promise((r) => setTimeout(r, 50));
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".summary")).toBeTruthy();
+    // 已答卡片整体消失（toast 承担结果提示）
+    expect(el.shadowRoot!.querySelector(".card")).toBeNull();
 
     // 模拟父组件重渲染：同一 requestId、新对象引用
     el.ask = { requestId: "r8", questions: [{ ...singleQ }] };
     await el.updateComplete;
 
-    // 仍是摘要态，无交互选项、无提交按钮
-    expect(el.shadowRoot!.querySelector(".summary")).toBeTruthy();
+    // 不得复活：无交互选项、无提交按钮、无卡片
+    expect(el.shadowRoot!.querySelector(".card")).toBeNull();
     expect(el.shadowRoot!.querySelector('input[type="radio"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("button.primary")).toBeNull();
 
@@ -180,6 +184,36 @@ describe("<ask-card>", () => {
     // 非 guard 卡片保留 Other
     const plain = await card({ requestId: "g2", questions: [singleQ] });
     expect(plain.shadowRoot!.querySelector(".other-row input")).toBeTruthy();
+  });
+
+  it("answered card vanishes; ask-done carries toast text (plain vs guard)", async () => {
+    // 实时条幅已答：卡片消失，结果经 ask-done detail.toast 由宿主弹轻提示
+    // ——普通卡「已回答」、guard 卡「安全确认已处理」，不再回显问题与所选
+    const respondAsk = vi.fn().mockResolvedValue({ ok: true, submitted: true });
+    vi.doMock("../src/api/ask", () => ({ respondAsk }));
+    for (const [rid, guard, expectToast] of [
+      ["pa1", false, "已回答"],
+      ["ga1", true, "安全确认已处理"],
+    ] as const) {
+      const q: AskQuestionPayload = guard ? { ...singleQ, guard: true } : singleQ;
+      const onDone = vi.fn();
+      const el = await fixture(html`
+        <ask-card .ask=${{ requestId: rid, questions: [q] }} @ask-done=${onDone}></ask-card>
+      `) as AskCard;
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector('input[type="radio"]') as HTMLInputElement).click();
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector("button.primary") as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 50));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".card")).toBeNull();
+      expect(onDone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({ requestId: rid, toast: expectToast }),
+        }),
+      );
+    }
   });
 
   it("guard card times out to explicit rejected summary (not silent vanish)", async () => {

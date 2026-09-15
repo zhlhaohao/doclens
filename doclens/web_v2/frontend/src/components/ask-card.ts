@@ -16,8 +16,11 @@ const GUARD_CARD_DISMISS_MS = 122_000;
  * 三态：
  * - pending   悬置中：渲染问题列表（单选 radio / 多选 checkbox / Other 兜底输入），
  *             提交按钮在「每问至少有一个选择或 Other 非空」前禁用
- * - answered  已回答：折叠为一行摘要（问题 → 所选答案），流继续
- * - expired   已失效：request_id 已超时/被消费（respond 返回 submitted=false）
+ * - answered  已回答：实时条幅（ask 载荷仍在）卡片消失，结果经 ask-done 事件
+ *             （detail.toast）由宿主弹 toast 轻提示；历史回看（仅
+ *             resolvedAnswers）保留完整「问题 → 所选答案」记录
+ * - expired   已失效：request_id 已超时/被消费（respond 返回 submitted=false），
+ *             guard 超时态明确交代「已按拒绝处理」（fail-closed）
  *
  * 历史回看复用 answered 态（只读渲染用户当次的选择）。
  */
@@ -285,7 +288,7 @@ export class AskCard extends LitElement {
       selected: this._selected[i] ?? [],
       other: (this._others[i] ?? "").trim() || null,
     }));
-    let done = false;
+    let toast: string | null = null;
     try {
       const { respondAsk } = await import("../api/ask");
       const { submitted } = await respondAsk({
@@ -294,23 +297,27 @@ export class AskCard extends LitElement {
       });
       this._status = submitted ? "answered" : "expired";
       this._answers = answers;
-      done = true;
+      // 已答结果走 toast 轻提示（由宿主弹出）——卡片本身不再保留摘要
+      if (submitted) {
+        toast = this.ask.questions.some((q) => q.guard)
+          ? "安全确认已处理"
+          : "已回答";
+      }
     } catch (err) {
       console.warn("[ask-card] respond failed:", err);
       this._status = "expired";
       this._answers = answers;
-      done = true;
     } finally {
       this._submitting = false;
       // 事件派发放到状态落定之后，且只派一次（避免 catch/finally 重入）
-      if (done) this._dispatchDone();
+      this._dispatchDone(toast);
     }
   }
 
-  private _dispatchDone() {
+  private _dispatchDone(toast: string | null = null) {
     this.dispatchEvent(
       new CustomEvent("ask-done", {
-        detail: { requestId: this.ask?.requestId ?? "" },
+        detail: { requestId: this.ask?.requestId ?? "", toast },
         bubbles: true,
         composed: true,
       }),
@@ -363,6 +370,8 @@ export class AskCard extends LitElement {
   private _renderSummary() {
     const expired = this._status === "expired";
     const isGuard = this.ask?.questions.some((q) => q.guard) ?? false;
+    // 仅服务 expired（实时失效/超时——明确交代，保留至流结束）与历史回看
+    // （resolvedAnswers → answered，完整「问题 → 所选答案」记录）
     return html`
       <div class="summary">
         <span class="icon">${expired ? "⚠️" : "✅"}</span>
@@ -389,6 +398,9 @@ export class AskCard extends LitElement {
 
   render() {
     if (!this.ask && !this.resolvedAnswers) return nothing;
+    // 实时条幅已答：卡片消失，结果经 ask-done 事件由宿主弹 toast 轻提示；
+    // 历史/失效态仍渲染摘要（resolvedAnswers 完整记录 / expired 明确交代）
+    if (this._status === "answered" && this.ask) return nothing;
     if (this._status !== "pending") return this._renderSummary();
     if (!this.ask) return nothing;
     const isGuard = this.ask.questions.some((q) => q.guard);

@@ -604,10 +604,12 @@ export class ChatView extends LitElement {
   /** ask 卡片完成（已答/失效/超时）：解除输入禁用；摘要卡片保留至流结束
    *  （门禁超时摘要明确交代「已按拒绝处理」）。
    *  注意 pendingAsk 清空而 streaming 仍为 true——流在等待答案唤醒后继续。 */
-  private _onAskDone(e: CustomEvent<{ requestId: string }>) {
+  private _onAskDone(e: CustomEvent<{ requestId: string; toast?: string | null }>) {
     if (store.getState().chat.pendingAsk?.requestId === e.detail.requestId) {
       actions.setChatState({ pendingAsk: null });
     }
+    // 已答结果 toast 轻提示（3s 自动消失）——超时/失效路径 toast 为空（摘要卡保留）
+    if (e.detail.toast) this._pushToast(e.detail.toast, "info", 3000);
   }
 
   /** 判定是否为用户主动 abort（AbortController.abort 抛 AbortError）。 */
