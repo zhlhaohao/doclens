@@ -97,6 +97,37 @@ def build_system_prompt(
     is_git_repo, git_branch = get_git_info(workdir_path)
     os_version = get_os_version()
 
+    # 门禁规则段与 guard 实际行为同源联动（延迟 import 避免模块级依赖；
+    # 每轮调用重读 env，运行中改配置下一轮 prompt 自然生效）
+    from .tools.guard import get_guard_mode
+
+    guard_mode = get_guard_mode()
+    if guard_mode == "allow":
+        guard_rules = (
+            "**当前配置：外部访问直接放行（allow）**——用户已选择关闭外部访问确认。"
+            "外部路径访问不会弹确认，也无需事前询问。唯一要求：执行了访问工作目录"
+            "以外路径的脚本/命令后，在回复中简要说明访问了哪些路径（事后透明）。"
+        )
+    elif guard_mode == "block":
+        guard_rules = (
+            "**当前配置：外部访问一律拦截（block）**——外部路径访问已被策略禁止："
+            "直接工具调用会被拒绝；执行脚本/内联代码前若发现内容会访问工作目录以外"
+            "路径，不要执行、不要尝试改写绕过，也不要用 ask_user_question 请求例外"
+            "（对话授权无法豁免该策略）。任务确需外部路径时，向用户说明此限制由 "
+            "PLANIFY_OUTSIDE_WORKDIR=block 配置所致，由用户决定是否调整配置。"
+        )
+    else:  # ask（默认）
+        guard_rules = (
+            "**当前配置：外部访问需用户确认（ask）**。任务确实需要外部路径时照常调用"
+            "工具——系统会向用户确认，结果（批准/拒绝）会返回给你。因此：\n"
+            "- 执行任何脚本或内联代码**之前**，检查其内容是否会读/写工作目录以外的路径；\n"
+            "- 会 → 先用 ask_user_question 向用户说明（要访问哪些外部路径、为什么），"
+            "获得同意后再执行；\n"
+            "- 不会 → 直接执行，无需打扰用户；\n"
+            "- 明知脚本将访问外部路径却不询问就执行，属于安全违规；\n"
+            "- 本会话用户已批准过的目录不必重复询问。"
+        )
+
     # 基础部分（所有代理通用）
     base_prompt = f"""# System
  - All text you output outside of tool use is displayed to the user. Output text to communicate with the user. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification.
@@ -163,12 +194,16 @@ You have been invoked in the following environment:
 
 When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.
 
-# Working Directory Guard
+# Working Directory Guard（外部访问门禁）
 
-**Current working directory**: {get_realpath(workdir_path)}
+**当前工作目录**：{get_realpath(workdir_path)}
 
-Prefer completing tasks within the working directory. Access to paths outside it is guarded by user authorization, NOT forbidden: when the task genuinely requires an outside path (the user asked for it, e.g. "list files on my Desktop"), call the tool normally — the system will ask the user to confirm, and the tool result (granted or denied) will come back to you. Do NOT preemptively refuse a user request just because the target is outside the working directory; let the guard decide.
-"""
+优先在工作目录内完成任务。不要因为目标在工作目录外就预先拒绝用户请求。
+
+**门禁只检查直接工具调用里的路径，脚本内容由你自审**。通过生成代码访问外部路径（写 .py/.js/.ps1 等脚本再运行、`python -c` / `node -e` 内联代码、路径拼接或环境变量组装）与直接调工具效果相同，不会被自动拦截。
+
+{guard_rules}"""
+
 
     # 根据代理类型添加特定部分
     if agent_type == "subagent":
