@@ -197,15 +197,13 @@ class TestUnifiedWindowModel:
         assert "NEEDLE" + "后" * 100 in k  # 锚点后至少 100 字符
         assert "前" * 50 + "NEEDLE" in k  # 锚点前至少 50 字符
 
-    def test_window_from_config_properties(self, tmp_path: Path):
+    def test_window_from_config_properties(self, tmp_path: Path, monkeypatch):
         """配置字段 → IndexManager property 透传（默认 200/600/2000）。"""
-        import os
-
         from doclens.config import CortexConfig
         from doclens.index_manager import IndexManager
 
         (tmp_path / "a.md").write_text("# t\n\n内容\n", encoding="utf-8")
-        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
         idx = IndexManager(CortexConfig())
         assert idx.search_context_before == 200
         assert idx.search_context_after == 600
@@ -220,7 +218,7 @@ class TestUnifiedWindowModel:
         from doclens.index_manager import IndexManager
 
         (tmp_path / "a.md").write_text("# t\n\n内容\n", encoding="utf-8")
-        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
         idx = IndexManager(CortexConfig())
         assert idx.grep_match_max_chars == 500
 
@@ -291,10 +289,8 @@ class TestRegexpCaseAlignment:
 # handler 端到端（真实 like_search → REGEXP → 片段）
 # ---------------------------------------------------------------------------
 
-def _real_idx(kb: Path):
+def _real_idx(kb: Path, monkeypatch):
     """真实 IndexManager：构建小型索引库（含超长节点，触发摘要截断路径）。"""
-    import os
-
     from doclens.config import CortexConfig
     from doclens.index_manager import IndexManager
 
@@ -307,7 +303,7 @@ def _real_idx(kb: Path):
     )
     (kb / "题库.md").write_text(f"# 单选题\n\n{long_text}\n", encoding="utf-8")
 
-    os.chdir(kb)
+    monkeypatch.chdir(kb)
     cfg = CortexConfig()
     idx = IndexManager(cfg)
     idx.reindex(force=True)
@@ -315,25 +311,25 @@ def _real_idx(kb: Path):
 
 
 class TestHandleGrepEndToEnd:
-    def test_output_contains_match_body(self, tmp_path: Path):
+    def test_output_contains_match_body(self, tmp_path: Path, monkeypatch):
         from doclens.grep_tools import _handle_grep
 
-        idx = _real_idx(tmp_path)
+        idx = _real_idx(tmp_path, monkeypatch)
         out = _handle_grep(idx, pattern=PAT)
 
         assert "第29题" in out, f"输出未含匹配体:\n{out[:400]}"
         assert "医疗" in out, f"输出未含跨度后文:\n{out[:400]}"
 
-    def test_db_hit_backfills_fulltext_with_leading_context(self, tmp_path: Path):
+    def test_db_hit_backfills_fulltext_with_leading_context(
+        self, tmp_path: Path, monkeypatch
+    ):
         """DB（like_search）命中路径：node text 回填全文，锚点前文可见。"""
-        import os
-
         from doclens.config import CortexConfig
         from doclens.index_manager import IndexManager
 
         long_text = "前置填充。" * 80 + "第29题, 题干内容\n\nA、 医疗\n\n参考答案：A\n"
         (tmp_path / "full.md").write_text(f"# 节\n\n{long_text}\n", encoding="utf-8")
-        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
         idx = IndexManager(CortexConfig())
         idx.reindex(force=True)
 
@@ -348,20 +344,18 @@ class TestHandleGrepEndToEnd:
 class TestGrepUnindexedFiles:
     """rg 兜底应覆盖磁盘上未索引的文件（与 grep 工具描述一致）。"""
 
-    def _make_idx(self, kb: Path):
-        import os
-
+    def _make_idx(self, kb: Path, monkeypatch):
         from doclens.config import CortexConfig
         from doclens.index_manager import IndexManager
 
         (kb / "indexed.md").write_text("# 已索引\n\nNEEDLE_INDEXED 内容\n", encoding="utf-8")
-        os.chdir(kb)
+        monkeypatch.chdir(kb)
         idx = IndexManager(CortexConfig())
         idx.reindex(force=True)
         return idx
 
-    def test_unindexed_file_found_by_rg_fallback(self, tmp_path: Path):
-        idx = self._make_idx(tmp_path)
+    def test_unindexed_file_found_by_rg_fallback(self, tmp_path: Path, monkeypatch):
+        idx = self._make_idx(tmp_path, monkeypatch)
         # 索引后新增文件 → 未索引状态
         (tmp_path / "untracked.md").write_text(
             "# 新增\n\nNEEDLE_UNINDEXED 新文件内容\n", encoding="utf-8"
@@ -373,8 +367,8 @@ class TestGrepUnindexedFiles:
         assert "untracked.md" in out, f"未索引文件未被搜到:\n{out[:300]}"
         assert "新文件内容" in out
 
-    def test_gitignored_file_excluded(self, tmp_path: Path):
-        idx = self._make_idx(tmp_path)
+    def test_gitignored_file_excluded(self, tmp_path: Path, monkeypatch):
+        idx = self._make_idx(tmp_path, monkeypatch)
         (tmp_path / "ignored.md").write_text("NEEDLE_IGNORED 不应被搜到\n", encoding="utf-8")
         (tmp_path / ".gitignore").write_text("ignored.md\n", encoding="utf-8")
 
@@ -383,11 +377,11 @@ class TestGrepUnindexedFiles:
         out = _handle_grep(idx, pattern="NEEDLE_IGNORED")
         assert "未找到" in out or "ignored.md" not in out
 
-    def test_indexed_file_still_uses_db(self, tmp_path: Path):
+    def test_indexed_file_still_uses_db(self, tmp_path: Path, monkeypatch):
         import doclens.ripgrep as rgmod
         from doclens.ripgrep import execute_grep_search
 
-        idx = self._make_idx(tmp_path)
+        idx = self._make_idx(tmp_path, monkeypatch)
         called = {"n": 0}
         orig = rgmod.rg_fallback_search
         rgmod.rg_fallback_search = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
@@ -398,8 +392,8 @@ class TestGrepUnindexedFiles:
         assert len(r.content_results) == 1
         assert called["n"] == 0  # DB 命中，rg 不触发
 
-    def test_synthetic_node_carries_source_path(self, tmp_path: Path):
-        idx = self._make_idx(tmp_path)
+    def test_synthetic_node_carries_source_path(self, tmp_path: Path, monkeypatch):
+        idx = self._make_idx(tmp_path, monkeypatch)
         (tmp_path / "untracked2.md").write_text("NEEDLE_SYN_2 内容\n", encoding="utf-8")
 
         from doclens.ripgrep import execute_grep_search

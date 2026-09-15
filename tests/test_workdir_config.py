@@ -132,6 +132,9 @@ def test_workdir_key_in_known_keys_and_restart_fields():
 # ---- CLI 端到端：子进程实测优先级 ----
 
 
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+
+
 def _run_status(tmp_path, env, extra_args):
     """status 子命令：读配置后退出——main() 的 chdir 链在它之前执行。
     stderr 丢弃（venv 审计钩子会灌海量 AUDIT 流）；UTF-8 解码防 GBK 崩。"""
@@ -149,7 +152,7 @@ def test_cli_explicit_dash_c_beats_config(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir(); b.mkdir()
     env = {**os.environ, WORKDIR_ENV_KEY: str(b),
-           "PYTHONPATH": os.getcwd()}
+           "PYTHONPATH": _REPO_ROOT}
     r = _run_status(tmp_path, env, ["-C", str(a)])
     assert str(a) in (r.stdout or "")
     assert r.returncode == 0
@@ -160,7 +163,7 @@ def test_cli_config_used_when_no_dash_c(tmp_path):
     launch_dir, b = tmp_path / "launch", tmp_path / "b"
     launch_dir.mkdir(); b.mkdir()
     env = {**os.environ, WORKDIR_ENV_KEY: str(b),
-           "PYTHONPATH": os.getcwd()}
+           "PYTHONPATH": _REPO_ROOT}
     r = _run_status(launch_dir, env, [])
     assert str(b) in (r.stdout or "")
     assert r.returncode == 0
