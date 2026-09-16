@@ -10027,7 +10027,12 @@ ${s}</table>
       background: var(--cortex-surface-muted);
       color: var(--cortex-text-muted);
     }
-  `;hn([w({type:Object})],zs.prototype,"entry",2);hn([w({type:Boolean})],zs.prototype,"selected",2);hn([w({type:Boolean})],zs.prototype,"active",2);zs=hn([K("file-row")],zs);var y3=Object.defineProperty,w3=Object.getOwnPropertyDescriptor,Fs=(e,t,r,i)=>{for(var s=i>1?void 0:i?w3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&y3(t,r,s),s};const Bp=[28,28,240,80,140],wu=[20,20,80,50,80],_u=[60,60,800,200,300],ku=Bp.length,Su="cortex.files.colWidths";let fi=class extends W{constructor(){super(...arguments),this.activePath="",this.mobile=!1,this.uploading=!1,this._colWidths=[...Bp],this._showMobileMenu=!1,this._makeColResizeHandler=e=>t=>{t.preventDefault(),t.stopPropagation();const r=t.clientX,i=this._colWidths[e];document.body.style.cursor="col-resize",document.body.style.userSelect="none";const s=o=>{const n=o.clientX-r,c=Math.max(wu[e],Math.min(_u[e],i+n)),h=[...this._colWidths];h[e]=c,this._colWidths=h},a=()=>{document.removeEventListener("mousemove",s),document.removeEventListener("mouseup",a),document.body.style.cursor="",document.body.style.userSelect="",localStorage.setItem(Su,JSON.stringify(this._colWidths))};document.addEventListener("mousemove",s),document.addEventListener("mouseup",a)},this._onMobileBackClick=()=>{this._showMobileMenu=!1,this.dispatchEvent(new CustomEvent("back",{bubbles:!0,composed:!0}))},this._onMobileMoreClick=e=>{e.stopPropagation(),this._showMobileMenu=!this._showMobileMenu},this._onDocClick=e=>{var s,a;if(!this._showMobileMenu)return;const t=e.composedPath(),r=(s=this.shadowRoot)==null?void 0:s.querySelector(".mobile-menu"),i=(a=this.shadowRoot)==null?void 0:a.querySelector(".mobile-more");r&&t.includes(r)||i&&t.includes(i)||(this._showMobileMenu=!1)},this._onMenuItemClick=e=>t=>{t.stopPropagation(),this._showMobileMenu=!1,this._action(e)}}connectedCallback(){super.connectedCallback(),this._unsubscribe=T.subscribe(()=>this.requestUpdate()),this._loadColWidths(),document.addEventListener("click",this._onDocClick,!0)}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),document.removeEventListener("click",this._onDocClick,!0),super.disconnectedCallback()}willUpdate(){for(let e=0;e<ku;e++)this.style.setProperty(`--col-${e+1}`,`${this._colWidths[e]}px`)}_loadColWidths(){const e=localStorage.getItem(Su);if(e)try{const t=JSON.parse(e);Array.isArray(t)&&t.length===ku&&t.every(r=>typeof r=="number"&&Number.isFinite(r))&&(this._colWidths=t.map((r,i)=>Math.max(wu[i],Math.min(_u[i],r))))}catch{}}_action(e){this.dispatchEvent(new CustomEvent("action",{detail:{name:e},bubbles:!0,composed:!0}))}_onRowChecked(e){const{path:t,shift:r}=e.detail;C.selectEntry(t,{ctrl:!r,shift:r})}_onSelectAll(e){const t=e.target,{currentDir:r,treeCache:i,selectedPaths:s}=T.getState().files,a=i[r]||[];if(t.checked){const o=a.map(c=>c.path),n=Array.from(new Set([...s,...o]));C.setFilesState({selectedPaths:n})}else{const o=new Set(a.map(n=>n.path));C.setFilesState({selectedPaths:s.filter(n=>!o.has(n))})}}_goUp(){const{currentDir:e}=T.getState().files;if(e==="")return;const t=e.includes("/")?e.slice(0,e.lastIndexOf("/")):"";C.selectDir(t)}_renderMobileHeader(){const{currentDir:e,selectedPaths:t}=T.getState().files,r=t.length===1,i=t.length>=1,s=e===""?"/":`/${e}/`;return u`
+  `;hn([w({type:Object})],zs.prototype,"entry",2);hn([w({type:Boolean})],zs.prototype,"selected",2);hn([w({type:Boolean})],zs.prototype,"active",2);zs=hn([K("file-row")],zs);var y3=Object.defineProperty,w3=Object.getOwnPropertyDescriptor,Fs=(e,t,r,i)=>{for(var s=i>1?void 0:i?w3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&y3(t,r,s),s};const Bp=[28,28,240,80,140],wu=[20,20,80,50,80],_u=[60,60,800,200,300],ku=Bp.length,Su="cortex.files.colWidths";let fi=class extends W{constructor(){super(...arguments),this.activePath="",this.mobile=!1,this.uploading=!1,this._colWidths=[...Bp],this._showMobileMenu=!1,this._makeColResizeHandler=e=>t=>{t.preventDefault(),t.stopPropagation();const r=t.clientX,i=this._colWidths[e];document.body.style.cursor="col-resize",document.body.style.userSelect="none";const s=o=>{const n=o.clientX-r,c=Math.max(wu[e],Math.min(_u[e],i+n)),h=[...this._colWidths];h[e]=c,this._colWidths=h},a=()=>{document.removeEventListener("mousemove",s),document.removeEventListener("mouseup",a),document.body.style.cursor="",document.body.style.userSelect="",localStorage.setItem(Su,JSON.stringify(this._colWidths))};document.addEventListener("mousemove",s),document.addEventListener("mouseup",a)},this._onMobileBackClick=()=>{this._showMobileMenu=!1,this.dispatchEvent(new CustomEvent("back",{bubbles:!0,composed:!0}))},this._onMobileMoreClick=e=>{e.stopPropagation(),this._showMobileMenu=!this._showMobileMenu},this._onDocClick=e=>{var s,a;if(!this._showMobileMenu)return;const t=e.composedPath(),r=(s=this.shadowRoot)==null?void 0:s.querySelector(".mobile-menu"),i=(a=this.shadowRoot)==null?void 0:a.querySelector(".mobile-more");r&&t.includes(r)||i&&t.includes(i)||(this._showMobileMenu=!1)},this._onMenuItemClick=e=>t=>{t.stopPropagation(),this._showMobileMenu=!1,this._action(e)}}connectedCallback(){super.connectedCallback(),this._unsubscribe=T.subscribe(()=>this.requestUpdate()),this._loadColWidths(),document.addEventListener("click",this._onDocClick,!0)}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),document.removeEventListener("click",this._onDocClick,!0),super.disconnectedCallback()}willUpdate(){for(let e=0;e<ku;e++)this.style.setProperty(`--col-${e+1}`,`${this._colWidths[e]}px`)}_loadColWidths(){const e=localStorage.getItem(Su);if(e)try{const t=JSON.parse(e);Array.isArray(t)&&t.length===ku&&t.every(r=>typeof r=="number"&&Number.isFinite(r))&&(this._colWidths=t.map((r,i)=>Math.max(wu[i],Math.min(_u[i],r))))}catch{}}_action(e){this.dispatchEvent(new CustomEvent("action",{detail:{name:e},bubbles:!0,composed:!0}))}_onRowChecked(e){const{path:t,shift:r}=e.detail;C.selectEntry(t,{ctrl:!r,shift:r})}_onSelectAll(e){const t=e.target,{currentDir:r,treeCache:i,selectedPaths:s}=T.getState().files,a=i[r]||[];if(t.checked){const o=a.map(c=>c.path),n=Array.from(new Set([...s,...o]));C.setFilesState({selectedPaths:n})}else{const o=new Set(a.map(n=>n.path));C.setFilesState({selectedPaths:s.filter(n=>!o.has(n))})}}_goUp(){const{currentDir:e}=T.getState().files;if(e==="")return;const t=e.includes("/")?e.slice(0,e.lastIndexOf("/")):"";C.selectDir(t)}_breadcrumbSegments(e){const t=e.split("/").filter(Boolean);return[{label:"根目录",path:""},...t.map((r,i)=>({label:r,path:t.slice(0,i+1).join("/")}))]}_goToDir(e){e!==T.getState().files.currentDir&&C.selectDir(e)}_renderBreadcrumbTrail(e){const t=this._breadcrumbSegments(e);return t.map((r,i)=>{const s=i===t.length-1?u`<span class="crumb-current">${r.label}</span>`:u`<button
+            class="crumb"
+            type="button"
+            title=${r.path||"根目录"}
+            @click=${()=>this._goToDir(r.path)}
+          >${r.label}</button>`;return u`${i>0?u`<span class="crumb-sep">›</span>`:null}${s}`})}_renderMobileHeader(){const{currentDir:e,selectedPaths:t}=T.getState().files,r=t.length===1,i=t.length>=1,s=e===""?"/":`/${e}/`;return u`
       <div class="mobile-header">
         <button
           class="mobile-back"
@@ -10037,7 +10042,7 @@ ${s}</table>
           ?disabled=${e===""}
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
-        <span class="mobile-path" title=${s}>${s}</span>
+        <nav class="mobile-crumbs" title=${s}>${this._renderBreadcrumbTrail(e)}</nav>
         <button
           class="mobile-more"
           type="button"
@@ -10131,7 +10136,7 @@ ${s}</table>
           ?disabled=${!c}
           @click=${this._goUp}
         ><doclens-icon name="arrow-up"></doclens-icon></button>
-        <span class="path">${h}</span>
+        <nav class="crumb-trail" title=${h}>${this._renderBreadcrumbTrail(e)}</nav>
       </div>
       <div class="toolbar">
         <button data-action="mkdir" @click=${()=>this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
@@ -10191,11 +10196,20 @@ ${s}</table>
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
-    .breadcrumb .path {
-      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    .breadcrumb .crumb-trail {
+      flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
       font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
     }
+    .crumb {
+      border: none; background: none; cursor: pointer;
+      color: var(--cortex-text-muted);
+      font: inherit; font-family: inherit;
+      padding: 0 var(--cortex-space-1);
+      border-radius: var(--cortex-radius-sm);
+    }
+    .crumb:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
+    .crumb-current { color: var(--cortex-text); padding: 0 var(--cortex-space-1); }
+    .crumb-sep { color: var(--cortex-text-subtle); margin: 0 2px; }
     .up-btn {
       padding: 2px 8px;
       display: inline-flex;
@@ -10315,15 +10329,12 @@ ${s}</table>
       opacity: 0.4;
       cursor: not-allowed;
     }
-    .mobile-header .mobile-path {
+    .mobile-header .mobile-crumbs {
       flex: 1;
       min-width: 0;
-      text-align: center;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text);
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow-x: auto;
       white-space: nowrap;
     }
     .mobile-header .mobile-menu {
@@ -12638,7 +12649,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;jp([w({type:Boolean,reflect:!0})],Wo.prototype,"open",2);Wo=jp([K("watch-changes-dialog")],Wo);var yy=Object.defineProperty,wy=Object.getOwnPropertyDescriptor,bn=(e,t,r,i)=>{for(var s=i>1?void 0:i?wy(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&yy(t,r,s),s};let Ms=class extends W{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 6da3d29 · 2026-09-16 16:15 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
+  `;jp([w({type:Boolean,reflect:!0})],Wo.prototype,"open",2);Wo=jp([K("watch-changes-dialog")],Wo);var yy=Object.defineProperty,wy=Object.getOwnPropertyDescriptor,bn=(e,t,r,i)=>{for(var s=i>1?void 0:i?wy(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&yy(t,r,s),s};let Ms=class extends W{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 37d642c · 2026-09-16 16:42 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -12653,7 +12664,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?u`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"6da3d29 · 2026-09-16 16:15"}</span>
+            <span class="value">${"37d642c · 2026-09-16 16:42"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

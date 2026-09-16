@@ -26,11 +26,20 @@ export class FileList extends LitElement {
       border-bottom: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
-    .breadcrumb .path {
-      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    .breadcrumb .crumb-trail {
+      flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
       font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
     }
+    .crumb {
+      border: none; background: none; cursor: pointer;
+      color: var(--cortex-text-muted);
+      font: inherit; font-family: inherit;
+      padding: 0 var(--cortex-space-1);
+      border-radius: var(--cortex-radius-sm);
+    }
+    .crumb:hover { background: var(--cortex-surface-muted); color: var(--cortex-text); }
+    .crumb-current { color: var(--cortex-text); padding: 0 var(--cortex-space-1); }
+    .crumb-sep { color: var(--cortex-text-subtle); margin: 0 2px; }
     .up-btn {
       padding: 2px 8px;
       display: inline-flex;
@@ -150,15 +159,12 @@ export class FileList extends LitElement {
       opacity: 0.4;
       cursor: not-allowed;
     }
-    .mobile-header .mobile-path {
+    .mobile-header .mobile-crumbs {
       flex: 1;
       min-width: 0;
-      text-align: center;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text);
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow-x: auto;
       white-space: nowrap;
     }
     .mobile-header .mobile-menu {
@@ -404,6 +410,39 @@ export class FileList extends LitElement {
     actions.selectDir(parent);
   }
 
+  /** currentDir 拆成可导航分段：[{label: "根目录", path: ""}, {label: "a", path: "a"}, ...]。
+   *  与 files-view._dirPrefixChain 同构（不跨组件复用私有方法）。 */
+  private _breadcrumbSegments(currentDir: string): { label: string; path: string }[] {
+    const parts = currentDir.split("/").filter(Boolean);
+    return [
+      { label: "根目录", path: "" },
+      ...parts.map((name, i) => ({ label: name, path: parts.slice(0, i + 1).join("/") })),
+    ];
+  }
+
+  /** 面包屑分段点击跳转。目标段必是当前目录祖先，treeCache 必然已缓存
+   * （下钻逐级 _ensureLoaded / 启动恢复预载祖先链），直接 selectDir 即可。 */
+  private _goToDir(path: string) {
+    if (path === store.getState().files.currentDir) return;
+    actions.selectDir(path);
+  }
+
+  /** 分段面包屑：非末段可点击按钮，末段（当前目录）为静态文本。桌面/移动端共用。 */
+  private _renderBreadcrumbTrail(currentDir: string) {
+    const segs = this._breadcrumbSegments(currentDir);
+    return segs.map((seg, i) => {
+      const node = i === segs.length - 1
+        ? html`<span class="crumb-current">${seg.label}</span>`
+        : html`<button
+            class="crumb"
+            type="button"
+            title=${seg.path || "根目录"}
+            @click=${() => this._goToDir(seg.path)}
+          >${seg.label}</button>`;
+      return html`${i > 0 ? html`<span class="crumb-sep">›</span>` : null}${node}`;
+    });
+  }
+
   /** 移动端返回按钮（语义 = 返回上级目录，根目录禁用）。父组件监听 @back 自行导航。 */
   private _onMobileBackClick = () => {
     this._showMobileMenu = false;
@@ -452,7 +491,7 @@ export class FileList extends LitElement {
           ?disabled=${currentDir === ""}
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
-        <span class="mobile-path" title=${breadcrumb}>${breadcrumb}</span>
+        <nav class="mobile-crumbs" title=${breadcrumb}>${this._renderBreadcrumbTrail(currentDir)}</nav>
         <button
           class="mobile-more"
           type="button"
@@ -571,7 +610,7 @@ export class FileList extends LitElement {
           ?disabled=${!canGoUp}
           @click=${this._goUp}
         ><doclens-icon name="arrow-up"></doclens-icon></button>
-        <span class="path">${breadcrumb}</span>
+        <nav class="crumb-trail" title=${breadcrumb}>${this._renderBreadcrumbTrail(currentDir)}</nav>
       </div>
       <div class="toolbar">
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>

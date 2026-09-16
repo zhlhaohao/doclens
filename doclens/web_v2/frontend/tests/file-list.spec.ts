@@ -211,6 +211,58 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
+  it("breadcrumb renders 根目录 + dir segments, current dir as non-clickable leaf", async () => {
+    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const trail = el.shadowRoot.querySelector(".breadcrumb .crumb-trail");
+    const crumbs = [...trail.querySelectorAll(".crumb")].map((b: any) => b.textContent);
+    expect(crumbs).toEqual(["根目录", "docs"]);
+    expect(trail.querySelectorAll(".crumb-sep").length).toBe(2);
+    expect(trail.querySelector(".crumb-current").textContent).toBe("sub");
+    document.body.removeChild(el);
+  });
+
+  it("clicking breadcrumb root segment navigates to root", async () => {
+    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const rootCrumb = [...el.shadowRoot.querySelectorAll(".crumb")]
+      .find((b: any) => b.textContent === "根目录") as HTMLElement;
+    rootCrumb.click();
+    expect(store.getState().files.currentDir).toBe("");
+    document.body.removeChild(el);
+  });
+
+  it("clicking breadcrumb middle segment navigates to that dir", async () => {
+    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
+    const el = document.createElement("file-list") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const midCrumb = [...el.shadowRoot.querySelectorAll(".crumb")]
+      .find((b: any) => b.textContent === "docs") as HTMLElement;
+    midCrumb.click();
+    expect(store.getState().files.currentDir).toBe("docs");
+    document.body.removeChild(el);
+  });
+
+  it("mobile breadcrumb segments are clickable too", async () => {
+    actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
+    const el = document.createElement("file-list") as any;
+    el.mobile = true;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const trail = el.shadowRoot.querySelector(".mobile-crumbs");
+    const midCrumb = [...trail.querySelectorAll(".crumb")]
+      .find((b: any) => b.textContent === "docs") as HTMLElement;
+    expect(midCrumb).toBeTruthy();
+    midCrumb.click();
+    expect(store.getState().files.currentDir).toBe("docs");
+    document.body.removeChild(el);
+  });
+
   it("forwards row 'checked' event to actions.selectEntry", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
@@ -373,8 +425,10 @@ describe("file-list mobile header", () => {
     expect(mh).toBeTruthy();
     expect(mh.querySelector(".mobile-back")).toBeTruthy();
     expect(mh.querySelector(".mobile-more")).toBeTruthy();
-    // 路径以 / 包裹
-    expect(mh.querySelector(".mobile-path").textContent).toBe("/docs/");
+    // 可导航面包屑：根段 + 当前目录段
+    const crumbs = mh.querySelector(".mobile-crumbs");
+    expect(crumbs.textContent).toContain("根目录");
+    expect(crumbs.textContent).toContain("docs");
     // 桌面 .toolbar 不再渲染
     expect(el.shadowRoot.querySelector(".toolbar")).toBeNull();
     // 桌面 breadcrumb 也不渲染
@@ -382,13 +436,16 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("root dir shows '/' as path", async () => {
+  it("root dir shows only 根目录 as current crumb (mobile)", async () => {
     actions.setFilesState({ currentDir: "", treeCache: { "": entries } });
     const el = document.createElement("file-list") as any;
     el.mobile = true;
     document.body.appendChild(el);
     await el.updateComplete;
-    expect(el.shadowRoot.querySelector(".mobile-path").textContent).toBe("/");
+    const crumbs = el.shadowRoot.querySelector(".mobile-crumbs");
+    expect(crumbs.querySelectorAll(".crumb").length).toBe(0);
+    expect(crumbs.querySelectorAll(".crumb-sep").length).toBe(0);
+    expect(crumbs.querySelector(".crumb-current").textContent).toBe("根目录");
     document.body.removeChild(el);
   });
 
