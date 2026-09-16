@@ -11,6 +11,8 @@ import os
 import platform
 
 from .basic import make_basic_tools
+from .glob_tool import make_glob_tools
+from .grep import make_grep_tools, rg_available
 from .web import make_web_tools
 from .file_tasks import get_file_task_definitions, get_file_task_handlers
 from .team_tools import get_team_tools_definitions, get_team_tools_handlers
@@ -200,6 +202,17 @@ def build_tool_registry(
     # TUI/CLI 不传 gui_mode，行为不变。
     guard_on = bool(kwargs.get("gui_mode"))
     handlers.update(make_basic_tools(workdir, guard_enabled=guard_on))
+
+    # grep/glob 工具：基于系统 rg 的结构化搜索（对齐 Claude Code GrepTool /
+    # GlobTool，ADR-0022/0023）。条件注册：rg 缺失则不注册——模型自然降级
+    # bash，避免注册必败工具浪费调用轮次
+    if rg_available():
+        grep_tools, grep_handlers = make_grep_tools(workdir, guard_enabled=guard_on)
+        tools.extend(grep_tools)
+        handlers.update(grep_handlers)
+        glob_tools, glob_handlers = make_glob_tools(workdir, guard_enabled=guard_on)
+        tools.extend(glob_tools)
+        handlers.update(glob_handlers)
 
     # 网络工具
     web_tools, web_handlers = make_web_tools(client, model or "claude-opus-4-6")
