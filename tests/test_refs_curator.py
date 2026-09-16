@@ -90,13 +90,13 @@ class TestCompliantPath:
 
 
 def _grep_tc(*path_snippet: tuple[str, str]) -> dict:
-    """构造 grep output: (path, content) 对。"""
+    """构造 kb_grep output: (path, content) 对。"""
     entries = "".join(
         f'<result index="{i}" score="50%" matches="1/1">\n'
         f"  <path>{p}</path>\n  <content>{s}</content>\n</result>\n"
         for i, (p, s) in enumerate(path_snippet, 1)
     )
-    return {"name": "grep", "output": f"Found {len(path_snippet)} results:\n{entries}"}
+    return {"name": "kb_grep", "output": f"Found {len(path_snippet)} results:\n{entries}"}
 
 
 class TestEvidenceCuration:

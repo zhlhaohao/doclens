@@ -54,10 +54,11 @@ VCS_DIRS_TO_EXCLUDE = (".git", ".svn", ".hg", ".bzr", ".jj", ".sl")
 
 TOOL_NAME = "grep"
 
-TOOL_DESCRIPTION = """基于 ripgrep 的文件内容搜索。
+TOOL_DESCRIPTION = """基于 ripgrep 的文件内容搜索——直接搜索磁盘上的原始文本文件（代码、配置、日志、markdown 等），不经过任何索引。
 
 使用指引：
-- 搜索文件内容一律优先用本工具，不要用 bash/powershell 调 grep/rg（本工具已处理好路径权限、超时与结果截断）
+- 需要 glob/类型过滤、行号、上下文行、分页等精确控制时用本工具；不要用 bash/powershell 调 grep/rg（本工具已处理好路径权限、超时与结果截断）
+- 搜不了 PDF/DOCX 等二进制文档的内容；宿主若提供知识库检索类工具（索引检索/文档解析），知识库内容提问优先用它们
 - pattern 支持完整正则（ripgrep 语法；字面花括号需转义，如 interface\\{\\}）
 - output_mode："content" 显示匹配行（支持 -A/-B/-C/context 上下文行、-n 行号、head_limit/offset 分页）；"files_with_matches"（默认）只列文件路径；"count" 显示每文件匹配数
 - 用 glob（如 "*.py"、"*.{ts,tsx}"，可空格/逗号分隔多个）或 type（如 py、js、rust）过滤文件

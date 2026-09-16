@@ -1311,7 +1311,7 @@ def _handle_search_kb_v2(
         if not filtered:
             return (
                 f"未找到包含 '{fts_query}' 的结果。\n"
-                "建议换一个角度重试（同义词/上下位词/中英文），或用 grep 补搜；"
+                "建议换一个角度重试（同义词/上下位词/中英文），或用 kb_grep 补搜；"
                 "若多角度检索均无结果，请如实告知用户未找到。"
             )
         return _format_ripgrep_results(

@@ -351,6 +351,30 @@ class TestRegistration:
         assert "grep" not in names
         assert "grep" not in handlers
 
+    def test_external_name_collision_deduped(self, tmp_path, monkeypatch, caplog):
+        """外部工具与内置同名：tools 列表去重（外部覆盖内置）+ 告警。
+
+        防御 doclens grep / planify grep 同名事故重演：handlers.update 本就
+        覆盖，但 tools 列表留两个同名定义会让模型看到两套矛盾 schema。
+        """
+        from planify.tools import registry as reg
+
+        monkeypatch.delenv("PLANIFY_ENABLED_TOOLS", raising=False)
+        monkeypatch.setattr(reg, "rg_available", lambda: True)
+        sentinel = lambda **kw: "external"  # noqa: E731
+        monkeypatch.setattr(
+            reg, "_external_tools",
+            [{"name": "grep", "description": "宿主版", "input_schema": {"type": "object"}}],
+        )
+        monkeypatch.setattr(reg, "_external_handlers", {"grep": sentinel})
+        with caplog.at_level("WARNING", logger="planify.tools.registry"):
+            tools, handlers = reg.build_tool_registry(workdir=tmp_path)
+        grep_defs = [t for t in tools if t["name"] == "grep"]
+        assert len(grep_defs) == 1
+        assert grep_defs[0]["description"] == "宿主版"
+        assert handlers["grep"] is sentinel
+        assert any("同名" in r.message for r in caplog.records)
+
 
 # ==================== 真实 rg 集成测试（条件执行） ====================
 

@@ -6,12 +6,14 @@ const TOOL_ICON: Record<string, string> = {
   search: "search",
   read_document: "file",
   grep: "search",
+  kb_grep: "search",
 };
 
 const TOOL_ACTION: Record<string, string> = {
   search: "正在搜索",
   read_document: "正在读取",
   grep: "正在检索",
+  kb_grep: "正在检索",
 };
 
 /** MCP 工具显示名：mcp__<server>__<tool> → server / tool。 */

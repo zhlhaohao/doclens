@@ -36,11 +36,14 @@ MAX_TOTAL_CHARS = 8000
 # ---------------------------------------------------------------------------
 
 GREP_TOOL = {
-    "name": "grep",
+    "name": "kb_grep",
     "description": (
-        "在工作目录中使用正则表达式搜索文件内容。"
-        "支持 ripgrep 正则语法，搜索所有文件（包括未索引的）。"
-        "当 search_kb 未找到结果，或需要精确匹配代码/配置中的特定模式时使用。"
+        "在知识库中使用正则表达式搜索文档内容（ripgrep 语法）。"
+        "覆盖所有文件（包括未索引的），且能命中 PDF/DOCX/PPTX 等已索引二进制文档的解析文本。"
+        "结果中的 <path> 可直接传给 read_document 深读。"
+        "当 search_kb 未找到结果，或需要在知识库文档中精确匹配特定模式时使用。"
+        "注意：若目标是工作目录里的代码/配置等原始文本文件的精确检索"
+        "（需要 glob 过滤、行号、分页、files_with_matches/count 模式），改用 grep 工具。"
     ),
     "input_schema": {
         "type": "object",
@@ -75,10 +78,10 @@ def build_grep_tools(
     raw_handler: Callable = lambda **kw: _handle_grep(idx, **kw)
     if skill_state is not None:
         from doclens.skill_gate import KB_SKILL, gate_skill
-        handler = gate_skill(skill_state, KB_SKILL, "grep", raw_handler)
+        handler = gate_skill(skill_state, KB_SKILL, "kb_grep", raw_handler)
     else:
         handler = raw_handler
-    return [GREP_TOOL], {"grep": handler}
+    return [GREP_TOOL], {"kb_grep": handler}
 
 
 # ---------------------------------------------------------------------------

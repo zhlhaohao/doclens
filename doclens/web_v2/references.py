@@ -11,7 +11,7 @@ from typing import Any
 
 # 检索类工具（manage_kb 等非检索工具的 output 不含可引用 path，跳过）。
 # 公开供 refs_retry.evaluate_round 复用，避免两处定义漂移。
-RETRIEVAL_TOOLS = frozenset({"search_kb", "grep", "read_document"})
+RETRIEVAL_TOOLS = frozenset({"search_kb", "kb_grep", "read_document"})
 
 # search_kb / grep：<path>...</path>（非贪婪，一段 output 可能含多个）
 _PATH_TAG_RE = re.compile(r"<path>([^<]+?)</path>")
@@ -33,7 +33,7 @@ def _clean_path(raw: str) -> str:
 
 def _extract_paths(name: str, output: str) -> list[str]:
     """按工具类型从 output 提取 path 列表（未去重）。"""
-    if name in ("search_kb", "grep"):
+    if name in ("search_kb", "kb_grep"):
         return [_clean_path(m) for m in _PATH_TAG_RE.findall(output)]
     if name == "read_document":
         m = _DOC_HEADER_RE.search(output)
@@ -106,7 +106,7 @@ def extract_snippets_by_path(
             continue
         name = tc.get("name", "")
         output = tc.get("output") or ""
-        if name in ("search_kb", "grep"):
+        if name in ("search_kb", "kb_grep"):
             for m in _RESULT_SNIP_RE.finditer(output):
                 path = to_relative_path(_clean_path(m.group(1)), workdir)
                 snippet = m.group(2).strip()

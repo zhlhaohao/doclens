@@ -1,6 +1,6 @@
 ---
 name: knowledge-base
-description: Knowledge-base search and document retrieval skill. Any question about knowledge-base content must load this skill first to get the retrieval strategy (multi-query / grep fallback), citation rules (## 参考资料), and deep-read tool usage. Also supports scoped Q&A over user-selected files/directories (paths-locked scope). Load via load_skill("knowledge-base").
+description: Knowledge-base search and document retrieval skill. Any question about knowledge-base content must load this skill first to get the retrieval strategy (multi-query / kb_grep fallback), citation rules (## 参考资料), and deep-read tool usage. Also supports scoped Q&A over user-selected files/directories (paths-locked scope). Load via load_skill("knowledge-base").
 icon: search
 ---
 
@@ -9,19 +9,19 @@ icon: search
 ## Tools
 
 - **search_kb**: FTS5 full-text search over document snippets (natural-language keywords, automatic CJK/EN tokenization). Returns XML (`<meta>` with path/hierarchy + `<content>`). **Any result used in an answer must be cited.** Optional `paths` narrows scope: an array of relative directories (e.g. `"tech"`) or relative file paths (e.g. `"tech/quantum.md"`).
-- **grep**: Regex search over file contents (includes unindexed files). Use when `search_kb` returns nothing or exact matching is needed (code / regex patterns). Result `<path>` values feed directly into `read_document`. Optional `paths` same as search_kb.
+- **kb_grep**: Regex search over knowledge-base document contents (includes unindexed files; can hit parsed text of indexed binary documents like PDF/DOCX). Use when `search_kb` returns nothing or exact matching is needed (code / regex patterns). Result `<path>` values feed directly into `read_document`. Optional `paths` same as search_kb.
 - **file_info**: Single-file overview (size / total words / section count / section list / mtime); **does not return body text**. **Always call it before `read_document`**: gauge file size and pick a section or word range instead of blind-reading and wasting tokens.
 - **read_document**: Read full/partial document content (md/pdf/docx/pptx/xlsx/html/code etc.). **Any result used in an answer must be cited.**
 - **manage_kb**: Index management (`reindex` rebuild / `stats` statistics). reindex is only for suspected index corruption or right after corpus updates — it is NOT a routine retry tactic.
 
 ## ⚠️ Answer Rules (Highest Priority)
 
-Whenever you answer the user after calling `search_kb` / `read_document` / `grep`, the answer **must include both**:
+Whenever you answer the user after calling `search_kb` / `read_document` / `kb_grep`, the answer **must include both**:
 
 1. **Inline markers**: insert `[N]` at citation points (e.g. `[1]`, `[1][2]`), right after the statement, before punctuation.
 2. **Trailing citation section**: append `## 参考资料`, entries numbered `1.` `2.` (**do not use `[N]` as list prefix**), each entry containing **only the document path relative to workdir** (e.g. `生命科学/xxx.md`).
    - **Format constraints**: paths must NOT be markdown links `[text](url)`, must NOT be `file://` absolute URLs, must not contain `<hierarchy>` or line numbers. Violations → the user clicks and "cannot open" the file.
-   - From `search_kb`/`grep` take the `<path>`; from `read_document` take the path after the `文档:` line. List each document only once, in order.
+   - From `search_kb`/`kb_grep` take the `<path>`; from `read_document` take the path after the `文档:` line. List each document only once, in order.
    - **Only cite `<result>` entries that actually sourced the answer**: cite the `<path>` of whichever hit provided the data/conclusion; do NOT list irrelevant hits (better too few than too many). Every key claim in the body must be traceable to a cited document.
 
 Using the tools above without a `## 参考资料` section = non-compliant; complete it before output. Procedural replies (reindex/stats notices) are exempt.
@@ -44,13 +44,13 @@ The system **machine-parses** the `## 参考资料` section and **validates that
 1. The section heading must be exactly `## 参考资料` (two #, one space, these exact four characters — do NOT translate it)
 2. Each line: `number. path` (e.g. `1. 量子计算/第一章.md`), one dot and one space after the number
 3. Path = pure relative path; no `[t](u)` / `file://` / line number `:N` / `<...>`
-4. After using `search_kb`/`grep`/`read_document` this section is mandatory; paths must actually exist
+4. After using `search_kb`/`kb_grep`/`read_document` this section is mandatory; paths must actually exist
 
 ## Scoped Mode (when the message contains a「文件：」list)
 
 When the user selects files/directories from the file list and invokes this skill, the message carries a「文件：」section (relative paths; **files and directories may be mixed**). The Q&A scope is then **locked to that list**:
 
-1. **Searches must carry `paths`**: `search_kb` / `grep` calls must pass `paths=[the list verbatim]` (both directory and file entries are valid) and search only within it.
+1. **Searches must carry `paths`**: `search_kb` / `kb_grep` calls must pass `paths=[the list verbatim]` (both directory and file entries are valid) and search only within it.
 2. **Concrete files in the list**: may be deep-read directly via `file_info` → `read_document`.
 3. **Directories in the list**: directories cannot be `read_document` — first `search_kb(query, paths=["that directory"])` to locate documents inside, then `file_info` / `read_document` on hits.
 4. Citation rules unchanged (`## 参考资料`, paths still relative to workdir).
@@ -77,11 +77,11 @@ When the user selects files/directories from the file list and invokes this skil
 ### Step 3: Broad to narrow, deep-read on hit
 
 On hits: `file_info` for the overview (size / section list) → `read_document` for key sections (`section="Chapter 3 Methods"` returns that section and its children; or `start_word/end_word` by word index, e.g. `start_word=100, end_word=300`).
-On no hits: fall back to `grep` (exact strings / regex); on hits, likewise `file_info` → `read_document`.
+On no hits: fall back to `kb_grep` (exact strings / regex); on hits, likewise `file_info` → `read_document`.
 
 ### Retrieval Budget & Stop-Loss (Mandatory)
 
-- **Budget**: if `search_kb` + `grep` together have run about **6 rounds** with no useful result → **STOP searching and answer honestly that the content was not found in the knowledge base**; you may state in one sentence which angles were tried; do NOT fabricate content.
+- **Budget**: if `search_kb` + `kb_grep` together have run about **6 rounds** with no useful result → **STOP searching and answer honestly that the content was not found in the knowledge base**; you may state in one sentence which angles were tried; do NOT fabricate content.
 - **Stop on convergence**: once the hits sufficiently support an answer, answer immediately. Do not chase "perfect" results or run confirmatory repeat searches.
 - **No reworded repeats**: every new query round must introduce a **new angle** (new entity / new language / new word forms); re-issuing semantically identical near-synonym queries counts against the budget.
 - **reindex is not a retry tactic**: only use `manage_kb(action='reindex')` when index corruption is suspected or the corpus was just updated, at most once per Q&A.

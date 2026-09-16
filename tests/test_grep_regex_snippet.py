@@ -311,6 +311,15 @@ def _real_idx(kb: Path, monkeypatch):
 
 
 class TestHandleGrepEndToEnd:
+    def test_tool_registered_as_kb_grep(self):
+        """doclens 的 grep 工具对外名是 kb_grep（与 planify 内置 grep 区分：
+        撞名会导致 tools 列表同名冲突 + handler 静默覆盖）。"""
+        from doclens.grep_tools import build_grep_tools
+
+        tools, handlers = build_grep_tools(idx=None)  # handler 惰性闭包，构建不触 idx
+        assert [t["name"] for t in tools] == ["kb_grep"]
+        assert set(handlers) == {"kb_grep"}
+
     def test_output_contains_match_body(self, tmp_path: Path, monkeypatch):
         from doclens.grep_tools import _handle_grep
 

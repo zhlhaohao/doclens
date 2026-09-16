@@ -369,10 +369,20 @@ def build_tool_registry(
     if kwargs.get("gui_mode"):
         tools.append(get_ask_user_question_tool())
 
-    # 外部工具（由主应用注册）
+    # 外部工具（由主应用注册）。同名撞车防御：外部工具覆盖内置——handlers
+    # 的 update 本就会覆盖，但 tools 列表若留两个同名定义，模型会看到两套
+    # 矛盾 schema（且 API 侧工具名唯一性校验可能直接报错），此处同步去重并告警
     external_tools, external_handlers = get_external_tools()
-    tools.extend(external_tools)
-    handlers.update(external_handlers)
+    if external_tools:
+        collided = {t["name"] for t in external_tools} & {t["name"] for t in tools}
+        if collided:
+            logger.warning(
+                "[tools] 外部工具与内置工具同名，内置定义被外部覆盖: %s",
+                sorted(collided),
+            )
+            tools = [t for t in tools if t["name"] not in collided]
+        tools.extend(external_tools)
+        handlers.update(external_handlers)
 
     # 百度天气工具
     baidu_weather_tools, baidu_weather_handlers = make_baidu_weather_tools()

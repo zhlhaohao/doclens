@@ -1145,7 +1145,7 @@ def _cli_grep(args, config, idx):
     from doclens.grep_tools import build_grep_tools
 
     _, handlers = build_grep_tools(idx)
-    result = handlers["grep"](
+    result = handlers["kb_grep"](
         pattern=args.pattern,
     )
     print(result)
