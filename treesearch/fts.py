@@ -49,6 +49,12 @@ SNIPPET_BASE_CHARS = 300
 # 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果
 SNIPPET_MATCH_MAX_CHARS = 2000
 
+# like_search Phase 2 的 regex 慢路径（loads 后逐节点精筛）节点数护栏：
+# SQL 预筛在 structure_json 源码上匹配，控制字符（\n 等）与 ensure_ascii
+# 转义（\uXXXX）会打断正则边界——需要反序列化后对节点原文精筛兜底；但
+# 全文档反序列化在大语料上是重建级成本，超限放弃（宁可漏配不卡死）。
+PHASE2_RESCAN_NODES_LIMIT = 100_000
+
 # ---------------------------------------------------------------------------
 # FTS5 availability detection
 # ---------------------------------------------------------------------------
@@ -1155,6 +1161,9 @@ class FTS5Index:
             subset_join = "JOIN _like_filter f ON n.doc_id = f.doc_id"
 
         # Phase 1: Search nodes.summary and nodes.title (original text)
+        # LIMIT 下推：REGEXP 的逐行 UDF 求值省不掉（无正则索引），但高频
+        # 词的命中行全量 fetchall 再 Python 截断是纯浪费——传输/组装在
+        # SQL 层截住（ORDER BY depth 语义与原 Python 截断一致）
         rows = self._conn.execute(
             f"""SELECT n.node_id, n.doc_id, n.title, n.summary, n.depth,
                       d.doc_name, d.source_path
@@ -1162,8 +1171,9 @@ class FTS5Index:
                {subset_join}
                JOIN documents d ON n.doc_id = d.doc_id
                WHERE {where_clause}
-               ORDER BY n.depth ASC""",
-            params,
+               ORDER BY n.depth ASC
+               LIMIT ?""",
+            (*params, top_k),
         ).fetchall()
 
         for row in rows:
@@ -1203,6 +1213,15 @@ class FTS5Index:
                         WHERE structure_json REGEXP ?""",
                     (query,),
                 ).fetchall()
+                # 转义边界兜底：SQL 预筛在 JSON 源码上跑，控制字符（\n
+                # 等）与 \uXXXX 转义会打断正则边界（\s 匹配不了字面
+                # "\n" 两字符）——预筛无命中时反序列化后对节点原文精筛
+                # （护栏见 _phase2_rescan_allowed / PHASE2_RESCAN_NODES_LIMIT）
+                if not doc_rows and self._phase2_rescan_allowed():
+                    doc_rows = self._conn.execute(
+                        f"""SELECT documents.doc_id, documents.structure_json FROM documents
+                            {subset_doc_join}""",
+                    ).fetchall()
             else:
                 doc_rows = self._conn.execute(
                     f"""SELECT documents.doc_id, documents.structure_json FROM documents
@@ -1244,6 +1263,18 @@ class FTS5Index:
                     })
 
         return results[:top_k]
+
+    def _phase2_rescan_allowed(self) -> bool:
+        """Phase 2 慢路径护栏：节点数在 PHASE2_RESCAN_NODES_LIMIT 内才放行。
+
+        慢路径 = 全文档（或子集）反序列化后逐节点精筛，成本≈重建级，
+        大语料上宁可漏配不可卡死；计数失败也按不放行处理（保守）。
+        """
+        try:
+            n_nodes = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+        except Exception:  # noqa: BLE001
+            return False
+        return n_nodes <= PHASE2_RESCAN_NODES_LIMIT
 
     def search_with_aggregation(
         self,

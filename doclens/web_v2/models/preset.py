@@ -47,11 +47,11 @@ class PresetCreate(BaseModel):
     max_span: Optional[int] = Field(default=None, ge=1)
     search_context_before: Optional[int] = Field(
         default=None, ge=0, le=2000,
-        description="搜索结果片段：锚点前字符数（grep 与 search 统一窗口）",
+        description="搜索结果片段：锚点前词数（CJK 每字一词，其余按空白切分；grep 与 search 统一窗口）",
     )
     search_context_after: Optional[int] = Field(
         default=None, ge=0, le=4000,
-        description="搜索结果片段：锚点后字符数（grep 与 search 统一窗口）",
+        description="搜索结果片段：锚点后词数（CJK 每字一词，其余按空白切分；grep 与 search 统一窗口）",
     )
     weight_keyword_match: Optional[float] = None
     weight_file_name_match: Optional[float] = None

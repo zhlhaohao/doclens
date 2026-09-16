@@ -290,6 +290,13 @@ export class SearchView extends LitElement {
         const res = this.searchMode === "grep"
           ? await grepApi({ pattern: query, offset: 0, limit: 20 })
           : await searchApi({ query, offset: 0, limit: 20 });
+        // 引擎层异常（HTTP 200 但 error 非空）与结果不完整附注（notes）
+        // 透出到错误区——区分「无结果」与「出错了/不完整」
+        if (res.error) {
+          actions.setError(`搜索失败: ${res.error}`);
+        } else if (res.notes?.length) {
+          actions.setError(`注意: ${res.notes.join(" ")}`);
+        }
         // 立即用搜索结果更新 UI（不等会话写入），避免长时间"空白"
         actions.setSearchState({
           state: "focus",
@@ -346,6 +353,11 @@ export class SearchView extends LitElement {
       const res = this.searchMode === "grep"
         ? await grepApi({ pattern: s.query, offset: newOffset, limit })
         : await searchApi({ query: s.query, offset: newOffset, limit });
+      if (res.error) {
+        actions.setError(`翻页失败: ${res.error}`);
+      } else if (res.notes?.length) {
+        actions.setError(`注意: ${res.notes.join(" ")}`);
+      }
       actions.setSearchState({
         state: "focus",
         query: s.query,

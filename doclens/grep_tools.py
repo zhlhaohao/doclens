@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 MAX_TOTAL_CHARS = 8000
 
+# Agent 侧 max_results 参数上限（防一次灌爆上下文；输出另有 8000 字符预算）
+MAX_RESULTS_CAP = 500
+
 # 片段预算复用 treesearch.fts 的共享常量（口径见 SNIPPET_BASE_CHARS）
 
 # ---------------------------------------------------------------------------
@@ -50,6 +53,10 @@ GREP_TOOL = {
                 "description": "正则表达式搜索模式（ripgrep 语法）",
             },
             "paths": SEARCH_PATHS_PROPERTY,
+            "max_results": {
+                "type": "integer",
+                "description": f"最大返回结果数（默认 50，上限 {MAX_RESULTS_CAP}）",
+            },
         },
         "required": ["pattern"],
     },
@@ -246,11 +253,16 @@ def _regex_led_snippet(
 ) -> str | None:
     """对全文跑词项正则，返回统一锚点窗口（正则不合法时返回 None）。
 
-    统一窗口模型（与 search 的 _extract_keyword_window 同口径）：
-    ``[锚点前 before 字符] + [命中体(≤match_max)] + [锚点后 after 字符]``。
+    统一窗口模型（与 search 的 _extract_keyword_window 同口径，词单位）：
+    ``[锚点前 before 词] + [命中体(≤match_max 字符)] + [锚点后 after 词]``。
+    词定义与 read_document/max_read_words 同源（CJK 每字一词，其余按空白
+    切分）——中英语料下窗口内词量一致（字符口径对英文仅约 1/6 信息量）。
     正则自声明跨度时（如 ``第29题[\\s\\S]{0,300}``）命中体本身即跨度，
-    前后窗口再补上下文；纯字面词项退化为关键词窗口。
+    前后窗口再补上下文；纯字面词项退化为关键词窗口。match_max 保持字符
+    单位（防贪婪正则的匹配体硬上限）。
     """
+    from doclens.word_window import end_after_words, start_before_words
+
     compiled = []
     for term in terms:
         try:
@@ -262,8 +274,11 @@ def _regex_led_snippet(
         if not m:
             continue
         capped = min(m.end() - m.start(), match_max)
-        start = max(0, m.start() - before)
-        end = min(len(text), m.start() + capped + after)
+        start = start_before_words(text, m.start(), before)
+        end = end_after_words(text, m.start() + capped, after)
+        if end <= start:
+            # 防御：极端参数（before/after=0 且命中体被 cap 到 0）下保底
+            end = min(len(text), max(m.end(), start + 1))
         return text[start:end]
     return None
 
@@ -277,10 +292,12 @@ def _handle_grep(
     *,
     pattern: str,
     paths: Optional[list[str]] = None,
+    max_results: Optional[int] = None,
 ) -> str:
     """在工作目录中搜索文件内容。
 
     paths: 可选搜索目标列表（相对目录 / 相对文件路径），只在命中的文档内搜索。
+    max_results: 可选最大返回结果数（默认 50，上限 MAX_RESULTS_CAP）。
     """
     if not pattern:
         return "搜索模式不能为空。"
@@ -296,7 +313,14 @@ def _handle_grep(
 
     from doclens.ripgrep import execute_grep_search
 
-    result = execute_grep_search(idx, pattern, allowed=allowed)
+    capped_results = 50
+    if max_results is not None:
+        try:
+            capped_results = max(1, min(int(max_results), MAX_RESULTS_CAP))
+        except (TypeError, ValueError):
+            capped_results = 50
+
+    result = execute_grep_search(idx, pattern, max_results=capped_results, allowed=allowed)
 
     output = _format_agent_output(
         content_results=result.content_results,
@@ -310,9 +334,14 @@ def _handle_grep(
         match_max=idx.grep_match_max_chars,
     )
 
+    # 引擎附注（rg 超时/二进制超限未覆盖）——「结果可能不完整」必须显式
+    # 告知，不能静默当作「无结果」
+    if result.notes:
+        note = "\n".join([note] + [f"[注意] {n}" for n in result.notes]).strip()
+
     if not output:
         return note + f"未找到匹配 '{pattern}' 的结果。"
 
     logger.debug("grep pattern=%r, content=%d, paths=%d", pattern, len(result.content_results), len(result.path_results))
 
-    return note + output
+    return (note + "\n" + output) if note else output

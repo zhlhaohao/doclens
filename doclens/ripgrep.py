@@ -4,7 +4,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,8 @@ REGEXP_SKIP_NODES_THRESHOLD = 100_000
 # 也要全 B-tree 扫描（秒级），TTL 内复用
 _NODES_COUNT_TTL_S = 600
 _nodes_count_cache: dict[str, tuple[int, float]] = {}
-# 二进制文档集合缓存（同 TTL 语义）
-_binary_doc_ids_cache: dict[str, tuple[set[str], float]] = {}
+# 二进制文档缓存（db_path -> (doc_id 集合, 子集节点行数, 抓取时间戳)，同 TTL 语义）
+_binary_doc_ids_cache: dict[str, tuple[set[str], int, float]] = {}
 
 
 def _nodes_count_bypass(idx, threshold: int = REGEXP_SKIP_NODES_THRESHOLD) -> bool:
@@ -107,6 +107,7 @@ def rg_fallback_search(
     context_after: int = 5,
     use_regex: bool = False,
     pre_hits: dict[str, list[int]] | None = None,
+    window_words: tuple[int, int] | None = None,
 ) -> list[tuple[str, dict, int, int, float]]:
     """执行 ripgrep 降级搜索。
 
@@ -116,6 +117,12 @@ def rg_fallback_search(
     pre_hits 给定时跳过内部逐文件扫描（大语料目录模式由调用方预取，
     见 _rg_search_root_hits——逐文件分批在数十万文件下要数千次进程
     启动，不可行），key 为绝对文件路径。
+
+    window_words: 可选 (before, after) **词**预算——给定时合成节点文本
+    按词窗口截取（word_window 同源词定义），替代 context_before/after
+    的行窗口。行窗口（±6/5 行）在代码类文件上远小于词预算对应的文本量
+    （200 词 ≈ 15-40 行代码），未索引文件的片段被行窗口卡短；词窗口与
+    search/grep 的统一窗口模型同口径。None 时保持旧行为（兼容既有调用方）。
 
     Returns:
         [(doc_id, node_dict, matched_count, proximity, fts_score)]
@@ -195,9 +202,22 @@ def rg_fallback_search(
                 continue
 
             matched_idx = matched_line - 1  # convert to 0-based
-            context_start = max(0, matched_idx - context_before)
-            context_end = min(len(all_lines), matched_idx + context_after + 1)
-            text = ''.join(all_lines[context_start:context_end]).rstrip()
+            if window_words is not None:
+                # 词口径：命中行首尾为锚，按词预算截全文（行窗口只做粗读，
+                # 合成节点文本量与 search/grep 统一窗口同口径——行窗口在
+                # 代码类文件上远小于词预算对应的文本量）
+                from doclens.word_window import end_after_words, start_before_words
+
+                full_text = ''.join(all_lines)
+                line_start_off = sum(len(l) for l in all_lines[:matched_idx])
+                line_end_off = line_start_off + len(all_lines[matched_idx])
+                win_start = start_before_words(full_text, line_start_off, window_words[0])
+                win_end = end_after_words(full_text, line_end_off, window_words[1])
+                text = full_text[win_start:win_end].rstrip()
+            else:
+                context_start = max(0, matched_idx - context_before)
+                context_end = min(len(all_lines), matched_idx + context_after + 1)
+                text = ''.join(all_lines[context_start:context_end]).rstrip()
 
             title = os.path.splitext(os.path.basename(display_path))[0]
             for did in doc_ids:
@@ -223,7 +243,7 @@ def _rg_search_root_hits(
     *,
     use_regex: bool,
     timeout: float = 120.0,
-) -> dict[str, list[int]]:
+) -> tuple[dict[str, list[int]], bool]:
     """rg 单进程递归扫描根目录（大语料目录模式）。
 
     与逐文件 rg_search（treesearch）的分批模式相对：数十万文件分批要
@@ -234,7 +254,9 @@ def _rg_search_root_hits(
     兜底并集（见 execute_grep_search 大语料分支）。
 
     Returns:
-        {绝对文件路径: [1-based 行号]}
+        (hits, timed_out): hits 为 {绝对文件路径: [1-based 行号]}；
+        timed_out 为 True 表示扫描超时被截断，结果不完整（调用方须向
+        用户透出，不能静默当作「无结果」）。
     """
     import json as _json
     import subprocess
@@ -268,10 +290,10 @@ def _rg_search_root_hits(
         )
     except subprocess.TimeoutExpired:
         logger.warning("[grep] rg 目录扫描超时 %.0fs（root=%s）", timeout, root)
-        return {}
+        return {}, True
     except OSError as e:  # noqa: BLE001
         logger.warning("[grep] rg 目录扫描失败: %s", e)
-        return {}
+        return {}, False
 
     hits: dict[str, list[int]] = {}
     for line in result.stdout.splitlines():
@@ -288,26 +310,29 @@ def _rg_search_root_hits(
         ln = data.get("line_number")
         if fp and ln:
             hits.setdefault(fp, []).append(ln)
-    return hits
+    return hits, False
 
 
-def _binary_doc_ids(idx) -> set[str]:
-    """二进制文档（pdf/docx 等）的 doc_id 集合——REGEXP 兜底扫描的目标子集。
+def _binary_doc_profile(idx) -> tuple[set[str], int]:
+    """二进制文档（pdf/docx 等）的 (doc_id 集合, 子集节点行数)——REGEXP 兜底扫描的目标画像。
 
     rg 搜不了二进制源文件的磁盘原文；shadow md 机制已废弃（宿主默认
     enable_shadow_md=False，磁盘无 ._*.md），解析文本只存在于索引库
     （nodes/structure_json），故二进制文档整体走 SQLite REGEXP 限定子集
-    扫描（UDF 回调只对子集行发生），与 rg 的文本结果并集。集合按
-    db_path 缓存（TTL 与 nodes 计数一致）。
+    扫描（UDF 回调只对子集行发生），与 rg 的文本结果并集。子集节点数
+    用于规模护栏：全二进制语料（如 50 万 PDF）的子集≈全表，REGEXP
+    逐行 UDF 会回到分钟级（旁路机制失效），超 REGEXP_SKIP_NODES_THRESHOLD
+    时调用方应放弃兜底并注明。按 db_path 缓存（TTL 与 nodes 计数一致）。
     """
     from treesearch.parsers.registry import SHADOW_MD_EXTENSIONS
 
     db_path = str(getattr(idx, "index_path", ""))
     cached = _binary_doc_ids_cache.get(db_path)
     now = time.monotonic()
-    if cached and now - cached[1] < _NODES_COUNT_TTL_S:
-        return cached[0]
+    if cached and now - cached[2] < _NODES_COUNT_TTL_S:
+        return cached[0], cached[1]
     binary: set[str] = set()
+    nodes_count = 0
     try:
         import sqlite3
 
@@ -318,13 +343,38 @@ def _binary_doc_ids(idx) -> set[str]:
                 ext = os.path.splitext(source_path or "")[1].lower()
                 if ext in SHADOW_MD_EXTENSIONS:
                     binary.add(doc_id)
+            # 节点计数单独兜底：计数失败（如表缺失/锁）只降级为「规模未知
+            # （按 0 处理）」，不抹掉已成功收集的二进制集合
+            if binary:
+                try:
+                    conn.execute(
+                        "CREATE TEMP TABLE IF NOT EXISTS _bin_filter(doc_id TEXT PRIMARY KEY)"
+                    )
+                    conn.execute("DELETE FROM _bin_filter")
+                    conn.executemany(
+                        "INSERT OR IGNORE INTO _bin_filter(doc_id) VALUES (?)",
+                        [(d,) for d in binary],
+                    )
+                    nodes_count = conn.execute(
+                        "SELECT COUNT(*) FROM nodes n JOIN _bin_filter f ON n.doc_id = f.doc_id"
+                    ).fetchone()[0]
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[grep] 二进制子集节点计数失败（按 0 处理）: %s", e)
     except Exception as e:  # noqa: BLE001
         logger.warning("[grep] 二进制文档集合扫描失败（跳过兜底）: %s", e)
-        return set()
-    _binary_doc_ids_cache[db_path] = (binary, now)
+        return set(), 0
+    _binary_doc_ids_cache[db_path] = (binary, nodes_count, now)
     if binary:
-        logger.info("[grep] %d 个二进制文档走 REGEXP 子集扫描（rg 搜不了原文）", len(binary))
-    return binary
+        logger.info(
+            "[grep] %d 个二进制文档走 REGEXP 子集扫描（rg 搜不了原文，%d 节点）",
+            len(binary), nodes_count,
+        )
+    return binary, nodes_count
+
+
+def _binary_doc_ids(idx) -> set[str]:
+    """二进制文档 doc_id 集合（_binary_doc_profile 的集合视图）。"""
+    return _binary_doc_profile(idx)[0]
 
 
 def search_paths_by_regex(
@@ -374,10 +424,13 @@ class GrepResult:
                          已按 matched（命中词项数）降序排序
         path_results: 路径匹配，格式同上
         query_words: 提取的词项列表（从正则 | 分割）
+        notes: 引擎附注（rg 超时截断、二进制子集超限未覆盖等）——
+               描述「结果为什么可能不完整」，供输出层透出给用户/Agent
     """
     content_results: list[tuple[str, dict, int, int, float]]
     path_results: list[tuple[str, dict, int, int, float]]
     query_words: list[str]
+    notes: list[str] = field(default_factory=list)
 
 
 def _extract_terms(pattern: str) -> list[str]:
@@ -417,17 +470,24 @@ def _count_term_hits(text: str, terms: list[str]) -> int:
 def _discover_disk_files(search_path: str, allowed_exts: set[str], max_files: int = 0) -> list[str]:
     """递归发现搜索根目录下的可解析文件（含未索引的）。
 
-    复用 treesearch.pathutil.resolve_paths —— 与索引链路同一套忽略规则
+    复用 treesearch.pathutil.resolve_paths —— 忽略规则与索引链路同一套
     （DEFAULT_IGNORE_DIRS + .gitignore + 扩展名白名单 + 跳过影子 MD），
-    保证 rg 兜底覆盖的磁盘范围与索引器眼中的"应索引范围"一致。
+    但**不做 source_type 收缩**（apply_source_type_filter=False）：grep
+    承诺「搜索所有文件（包括未索引的）」，被类型配置排除的代码文件
+    （如 .kt，source_type=code 默认未启用）不索引但仍应被 rg 搜到。
     max_files 默认 0（不设限）——rg 兜底是尽力而为的降级路径，
     索引已建起来的大库不应在搜索时被同一上限二次卡断。
     """
     from treesearch.pathutil import resolve_paths
 
     try:
-        return resolve_paths([search_path], allowed_extensions=allowed_exts, max_files=max_files)
-    except (OSError, ValueError) as e:
+        return resolve_paths(
+            [str(search_path)],
+            allowed_extensions=allowed_exts,
+            max_files=max_files,
+            apply_source_type_filter=False,
+        )
+    except (OSError, ValueError, TypeError) as e:
         logger.warning("disk file discovery failed for %s: %s", search_path, e)
         return []
 
@@ -438,15 +498,15 @@ def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:
     未索引文件以文件名（去扩展名）为伪 doc_id 入表，rg 命中后由
     rg_fallback_search 的合成节点逻辑产出结果（此时 reverse_map 查不到
     该路径的已索引 doc_id，自然落到 os.path.splitext 分支）。
+
+    磁盘发现用完整 SUPPORTED_FORMATS 白名单、不做 allowed_source_types
+    收缩：grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的
+    代码文件（如 .kt）不索引，但 rg 是纯文本搜索无解析成本，理应能搜到
+    （与大语料目录扫描 _rg_search_root_hits 直扫磁盘的口径一致）。
     """
     from doclens.index_manager import SUPPORTED_FORMATS
 
     supported_exts = set(SUPPORTED_FORMATS.keys())
-    if getattr(idx, "allowed_source_types", None):
-        from treesearch.pathutil import get_allowed_extensions_for_source_types
-        type_exts = get_allowed_extensions_for_source_types(idx.allowed_source_types)
-        if type_exts is not None:
-            supported_exts = supported_exts & type_exts
 
     indexed = {os.path.abspath(p) for p in path_map.values()}
     merged = dict(path_map)
@@ -454,37 +514,70 @@ def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:
         if os.path.abspath(fp) in indexed:
             continue
         pseudo_id = os.path.splitext(os.path.basename(fp))[0]
-        merged.setdefault(pseudo_id, fp)
+        if pseudo_id in merged:
+            # 同名（去扩展名）文件撞伪 id：加序号后缀保唯一。直接 setdefault
+            # 会让位给先到者——后来者不进 rg_paths，同名文件被整批漏搜
+            # （docs/readme.md 与 src/readme.md 极常见）。
+            n = 2
+            while f"{pseudo_id}#{n}" in merged:
+                n += 1
+            pseudo_id = f"{pseudo_id}#{n}"
+        merged[pseudo_id] = fp
     return merged
 
 
-def _fulltext_for_node(idx, like_item: dict) -> str:
-    """like_search 命中节点回填全文（structure_json 反序列化）。
+def _attach_fulltext(
+    idx,
+    like_items: list[dict],
+) -> list[tuple[str, dict, int, int, float]]:
+    """LIKE 命中条目批量回填全文，转 grep 结果 tuple。
 
     nodes.summary 是索引期截断的窗口（长节点仅头尾摘要），锚点前文可能
-    已在截断时丢失。按 node_id 从 structure_json 找回完整 text；失败时
-    退回 summary（旧行为）。
+    已在截断时丢失——按 node_id 从 structure_json 找回完整 text。批量化
+    关键点：单连接贯穿全部条目 + 文档级缓存（同文档多节点只 load/反序列化
+    一次；逐条开关连接 + 全文档 loads 在 like_limit=200 时是秒级热点）。
+    单条失败退回 summary（旧行为）。FTS5Index 打不开时整体退 summary。
     """
-    summary = like_item.get("summary", "") or ""
-    node_id = like_item.get("node_id", "")
-    doc_id = like_item.get("doc_id", "")
-    if not node_id or not doc_id:
-        return summary
-    try:
-        from treesearch.fts import FTS5Index
+    out: list[tuple[str, dict, int, int, float]] = []
+    if not like_items:
+        return out
 
+    from treesearch.fts import FTS5Index
+
+    try:
         fts = FTS5Index(db_path=idx.index_path)
-        try:
-            doc = fts.load_document(doc_id)
-        finally:
-            fts.close()
-        if doc is None:
-            return summary
-        node = doc.get_node_by_id(node_id)
-        return (node or {}).get("text", "") or summary
     except Exception as e:  # noqa: BLE001
-        logger.warning("fulltext backfill failed for %s/%s: %s", doc_id, node_id, e)
-        return summary
+        logger.warning("fulltext backfill init failed: %s", e)
+        fts = None
+
+    doc_cache: dict = {}
+    node_text: dict[tuple[str, str], str] = {}
+    try:
+        for item in like_items:
+            summary = item.get("summary", "") or ""
+            doc_id = item.get("doc_id", "")
+            node_id = item.get("node_id", "")
+            text = summary
+            if fts is not None and doc_id and node_id:
+                key = (doc_id, node_id)
+                if key not in node_text:
+                    if doc_id not in doc_cache:
+                        try:
+                            doc_cache[doc_id] = fts.load_document(doc_id)
+                        except Exception as e:  # noqa: BLE001
+                            logger.warning("fulltext backfill failed for %s: %s", doc_id, e)
+                            doc_cache[doc_id] = None
+                    doc = doc_cache[doc_id]
+                    node = doc.get_node_by_id(node_id) if doc is not None else None
+                    node_text[key] = (node or {}).get("text", "") or summary
+                text = node_text[key]
+            out.append(
+                (doc_id, {"title": item.get("title", ""), "text": text}, 1, 0, item.get("fts_score", 0.0))
+            )
+    finally:
+        if fts is not None:
+            fts.close()
+    return out
 
 
 def execute_grep_search(
@@ -514,6 +607,7 @@ def execute_grep_search(
     """
     terms = _extract_terms(query)
     query_words = terms if terms else [query]
+    notes: list[str] = []
 
     # 目标过滤：path_map 收敛到 allowed（rg 降级 / 路径匹配共用）
     path_map = idx.path_map
@@ -534,17 +628,16 @@ def execute_grep_search(
         if allowed is not None:
             like_results = [r for r in like_results if r.get("doc_id", "") in allowed]
         # like_search 返回 dict 列表，转为 tuple 格式；summary 可能是索引期
-        # 截断的 300 字符窗口（锚点前文丢失），回填 structure_json 中的节点全文
-        content_results = [
-            (item["doc_id"], {"title": item.get("title", ""), "text": _fulltext_for_node(idx, item)}, 1, 0, item.get("fts_score", 0.0))
-            for item in like_results
-        ]
+        # 截断的 300 字符窗口（锚点前文丢失），批量回填 structure_json 全文
+        content_results = _attach_fulltext(idx, like_results)
     else:
         # 步骤 2: ripgrep 降级（无目标过滤时合并磁盘未索引文件；
         # 大语料旁路也落此处——like_results 被置空，且用目录扫描模式
         # 取代逐文件分批：数十万文件的分批 = 数千次进程启动，不可行）
         if corpus_bypass and allowed is None:
-            pre_hits = _rg_search_root_hits(query, str(idx.search_path), use_regex=True)
+            pre_hits, rg_timed_out = _rg_search_root_hits(query, str(idx.search_path), use_regex=True)
+            if rg_timed_out:
+                notes.append("rg 目录扫描超时被截断，本次结果可能不完整（部分文本文件未覆盖）。")
             content_results = rg_fallback_search(
                 query,
                 path_map,
@@ -554,27 +647,32 @@ def execute_grep_search(
                 context_after=idx.rg_context_after,
                 use_regex=True,
                 pre_hits=pre_hits,
+                window_words=(idx.search_context_before, idx.search_context_after),
             )
             # 二进制文档兜底：rg 搜不了 pdf/docx 等磁盘原文（shadow md 机制
             # 已废弃，默认不生成），解析文本只在索引库里——用 REGEXP 限定
             # 二进制子集扫描（UDF 回调只对子集行发生），与 rg 文本结果并集
-            # 去重（doc_id 相同保留 rg 结果，上下文来自磁盘更可信）
-            binary_docs = _binary_doc_ids(idx)
+            # 去重（doc_id 相同保留 rg 结果，上下文来自磁盘更可信）。
+            # 规模护栏：全二进制语料（子集≈全表）的 REGEXP 会回到分钟级
+            # （旁路失效），超阈值放弃兜底并注明——宁可声明不完整，不卡死
+            binary_docs, binary_nodes = _binary_doc_profile(idx)
             if binary_docs:
-                bin_results = idx.like_search(
-                    query, max_results=like_limit, use_regex=True,
-                    doc_ids=binary_docs,
-                )
-                if bin_results:
-                    rg_docs = {c[0] for c in content_results}
-                    content_results = content_results + [
-                        (item["doc_id"],
-                         {"title": item.get("title", ""),
-                          "text": _fulltext_for_node(idx, item)},
-                         1, 0, item.get("fts_score", 0.0))
-                        for item in bin_results
-                        if item["doc_id"] not in rg_docs
-                    ]
+                if binary_nodes > REGEXP_SKIP_NODES_THRESHOLD:
+                    notes.append(
+                        f"{len(binary_docs)} 个二进制文档（pdf/docx 等）因规模过大"
+                        f"（{binary_nodes} 节点）未纳入本次搜索。"
+                    )
+                else:
+                    bin_results = idx.like_search(
+                        query, max_results=like_limit, use_regex=True,
+                        doc_ids=binary_docs,
+                    )
+                    if bin_results:
+                        rg_docs = {c[0] for c in content_results}
+                        content_results = content_results + [
+                            item for item in _attach_fulltext(idx, bin_results)
+                            if item[0] not in rg_docs
+                        ]
         else:
             rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
             content_results = rg_fallback_search(
@@ -585,6 +683,7 @@ def execute_grep_search(
                 context_before=idx.rg_context_before,
                 context_after=idx.rg_context_after,
                 use_regex=True,
+                window_words=(idx.search_context_before, idx.search_context_after),
             )
 
     # 步骤 3: 路径搜索
@@ -606,20 +705,18 @@ def execute_grep_search(
         scored.sort(key=lambda x: -x[0])
         content_results = [item for _, item in scored]
 
-    # 步骤 5: 评分阈值过滤（同时过滤内容和路径结果）
+    # 步骤 5: 评分阈值过滤（仅内容结果——路径结果 matched 恒 1，多词项
+    # 下 1/N 比例必然低于阈值，属系统性误杀；路径命中任一词项即足够相关）
     score_threshold = getattr(idx, "grep_score_threshold", 0.0)
     if score_threshold > 0 and total_terms > 0:
         content_results = [
             item for item in content_results
             if item[2] / total_terms >= score_threshold
         ]
-        path_results = [
-            item for item in path_results
-            if item[2] / total_terms >= score_threshold
-        ]
 
-    # 步骤 6: 限制最大结果数
-    grep_max = getattr(idx, "grep_max_results", max_results)
+    # 步骤 6: 限制最大结果数——显式请求量优先于全局默认（Web 翻页下推
+    # offset+limit 时不应被默认 50 卡住）
+    grep_max = max(getattr(idx, "grep_max_results", max_results), max_results)
     if len(content_results) > grep_max:
         content_results = content_results[:grep_max]
 
@@ -627,4 +724,5 @@ def execute_grep_search(
         content_results=content_results,
         path_results=path_results,
         query_words=query_words,
+        notes=notes,
     )
