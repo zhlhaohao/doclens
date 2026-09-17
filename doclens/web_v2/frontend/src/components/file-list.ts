@@ -613,6 +613,7 @@ export class FileList extends LitElement {
         <nav class="crumb-trail" title=${breadcrumb}>${this._renderBreadcrumbTrail(currentDir)}</nav>
       </div>
       <div class="toolbar">
+        <button data-action="refresh" title="刷新当前目录（与移动端下拉刷新等效）" @click=${() => this._action("refresh")}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">刷新</span></button>
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>

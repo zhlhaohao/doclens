@@ -504,6 +504,11 @@ export class FilesView extends LitElement {
 
   private _onAction(e: CustomEvent<{ name: string }>) {
     const name = e.detail.name;
+    if (name === "refresh") {
+      // 桌面工具栏刷新按钮：与移动端下拉刷新同一路径
+      void this._refreshFileList();
+      return;
+    }
     if (name === "upload") {
       this._openFilePicker();
       return;
