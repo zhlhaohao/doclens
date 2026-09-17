@@ -120,7 +120,11 @@ async def _stream_agent_response(
         bind_ask_user_question_handler,
         bind_user_interaction_handlers,
     )
-    from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA, tool_round_limit_kwargs
+    from doclens.agent_prompt import (
+        KB_SYSTEM_PROMPT_EXTRA,
+        kb_root_guidance,
+        tool_round_limit_kwargs,
+    )
     from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
 
     waiter = get_global_waiter()
@@ -164,7 +168,10 @@ async def _stream_agent_response(
         logger_instance=runtime.logger,
         runtime=runtime,
         interrupt_event=interrupt,
-        system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
+        # 知识库根指导文件（CLAUDE.md/AGENTS.md）自动注入：每请求重读，
+        # 文件不变则 system 前缀缓存稳定
+        system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA
+        + kb_root_guidance(agent.workdir),
         # LLM 追踪（调试/缓存命中率观测）：聊天会话 id 作会话键——
         # 同会话跨输入/跨进程追加同 trace 文件；开关未开时为 None
         tracer=LLMTracer.create(label="main", session_key=session_id),
@@ -300,13 +307,16 @@ async def _stream_agent_response(
                     logger.warning(
                         "persist raw chat turn failed for %s: %s", session_key, e
                     )
-            # 落库本轮 token 用量（kind="usage"，2026-09-17）：会话信息弹窗的
-            # 上下文占用在刷新/重进后仍可显示；每轮一条，取该轮最后一次调用。
-            if session_key and emitter.usage:
+            # 落库本轮 token 用量（kind="usage"，2026-09-17）：每次 LLM 调用
+            # 一条全量落库——弹窗累计命中率与 trace 文件 / 实时 SSE 同口径
+            # （工具循环的中间调用也进累计）；末条即该轮上下文峰值占用。
+            if session_key and emitter.usages:
                 try:
                     from doclens.web_v2.deps import get_sessions_store
 
-                    get_sessions_store().append_usage(session_key, emitter.usage)
+                    store = get_sessions_store()
+                    for usage in emitter.usages:
+                        store.append_usage(session_key, usage)
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         "persist usage failed for %s: %s", session_key, e

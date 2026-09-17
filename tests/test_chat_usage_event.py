@@ -1,7 +1,7 @@
 """usage 事件链路（2026-09-17 会话信息弹窗）：
 
 - planify EventEmitter.emit_usage 默认实现 → StreamEvent(USAGE)
-- ChatEventEmitter 收集最新 usage（含宿主注入的 context_window）并直推队列
+- ChatEventEmitter 逐条收集全量 usage（含宿主注入的 context_window）并直推队列
 """
 import asyncio
 
@@ -44,7 +44,7 @@ def test_usage_event_known_type_and_shape():
     assert ev["cache_read_input_tokens"] == 0
 
 
-def test_chat_emitter_collects_latest_usage_and_pushes():
+def test_chat_emitter_collects_all_usages_and_pushes():
     q: asyncio.Queue = asyncio.Queue()
     em = ChatEventEmitter(q, context_window=200000)
     first = {"input_tokens": 100, "output_tokens": 10,
@@ -57,10 +57,12 @@ def test_chat_emitter_collects_latest_usage_and_pushes():
         await em.emit_usage(second)
 
     asyncio.run(go())
-    # self.usage 为最后一次调用（该轮峰值占用）
-    assert em.usage is not None
-    assert em.usage["input_tokens"] == 300
-    assert em.usage["context_window"] == 200000
+    # 逐条全量收集（工具循环的中间调用也进累计，弹窗与 trace 同口径）；
+    # 末条即该轮峰值占用
+    assert len(em.usages) == 2
+    assert em.usages[0]["input_tokens"] == 100
+    assert em.usages[-1]["input_tokens"] == 300
+    assert em.usages[-1]["context_window"] == 200000
     # 队列两次入队，线格式与 usage_event 同构
     ev1 = q.get_nowait()
     ev2 = q.get_nowait()

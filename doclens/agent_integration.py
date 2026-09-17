@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from doclens.config import data_dirname, get_global_cortex_dir
-from doclens.agent_prompt import KB_SYSTEM_PROMPT_EXTRA, tool_round_limit_kwargs
+from doclens.agent_prompt import (
+    KB_SYSTEM_PROMPT_EXTRA,
+    kb_root_guidance,
+    tool_round_limit_kwargs,
+)
 
 # 确保 planify 模块可导入
 import os
@@ -445,7 +449,8 @@ class CortexAgent:
             logger_instance=self.runtime.logger,
             runtime=self.runtime,
             interrupt_event=_interrupt_event,
-            system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
+            # 知识库根指导文件（CLAUDE.md/AGENTS.md）自动注入
+            system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA + kb_root_guidance(self.workdir),
             tracer=self._get_llm_tracer(),
         )
 

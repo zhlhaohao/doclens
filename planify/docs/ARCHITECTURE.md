@@ -4,7 +4,7 @@
 
 ## 一、定位
 
-planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（docstring 自述源自 `agents/s_full.py` 重构，按 s01–s11 场景增量演进）。它被 doclens 作为 AI 引擎集成——`doclens/agent_integration.py` 的 `CortexAgent` 是组装根，KB 检索工具（`read_document` / `file_info` / grep）经 `register_external_tools()` 反向注入。
+planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（docstring 自述源自 `agents/s_full.py` 重构，按 s01–s11 场景增量演进）。它被 doclens 作为 AI 引擎集成——`doclens/agent_integration.py` 的 `CortexAgent` 是组装根，KB 检索工具（`read_document` / `file_info` / `kb_grep`）经 `register_external_tools()` 反向注入。
 
 实际规模远大于 CLAUDE.md 中记录的结构（缺 `streaming/`、`tools/`、`skills/`、`subagent/`、`context/`、`core/llm/` 六个子包）。
 

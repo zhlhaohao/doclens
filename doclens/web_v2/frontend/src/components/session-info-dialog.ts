@@ -104,11 +104,11 @@ export class SessionInfoDialog extends LitElement {
     }
     const pct = this.used / this.contextWindow;
     const warn = pct >= SessionInfoDialog.COMPACT_RATIO;
-    // 累计缓存命中率 = Σcache_read ÷ Σ总输入（每条 usage 一个样本）；
-    // 缓存概念缺失的端点两字段为 0，比率显示 0%（如实反映）
+    // 累计缓存命中率 = Σcache_read ÷ Σ总输入（每条 usage 一个样本），
+    // 精确到小数点后两位；缓存概念缺失的端点两字段为 0，比率如实显示
     const hitPct =
       this.cacheReadTotal !== null && this.inputTotal
-        ? Math.round((this.cacheReadTotal / this.inputTotal) * 100)
+        ? ((this.cacheReadTotal * 100) / this.inputTotal).toFixed(2)
         : null;
     return html`
       <div class="row">

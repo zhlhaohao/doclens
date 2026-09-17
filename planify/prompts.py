@@ -240,9 +240,12 @@ You are a coding agent. Use tools to solve tasks.
 - Use load_skill for specialized knowledge
 """
 
-        # 流式代理额外添加 ask_user 提示
+        # 流式代理额外添加 ask_user_question 提示（GUI 唯一用户交互通道；
+        # 旧名 ask_user 已被宿主会话层过滤，工具表里不存在）
         if agent_type == "streaming":
-            specific_prompt += "- Use ask_user to request user input when needed\n"
+            specific_prompt += (
+                "- Use ask_user_question to request user input when needed\n"
+            )
 
     prompt = base_prompt + specific_prompt
     if extra_prompt:

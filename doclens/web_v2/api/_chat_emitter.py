@@ -49,8 +49,10 @@ class ChatEventEmitter(EventEmitter):
         self.tool_calls: list[dict] = []
         self.done: bool = False
         self.error: Optional[str] = None
-        # 本轮最新 token 用量（2026-09-17）：每次 LLM 调用覆盖，轮末落库
-        self.usage: Optional[dict] = None
+        # 本轮全部 token 用量（每次 LLM 调用一条，逐次追加）：落库走全量，
+        # 弹窗累计命中率与 trace 文件 / 实时 SSE 同口径（2026-09-17 修正：
+        # 此前只留最后一条，工具循环的中间调用进不了累计）；末条即峰值占用
+        self.usages: list[dict] = []
 
     def _push(self, ev: dict) -> None:
         """事件直达 SSE 队列（emit 处同步入队，顺序与发生顺序一致）。"""
@@ -156,9 +158,9 @@ class ChatEventEmitter(EventEmitter):
             self.done = True
 
         elif event.event_type == StreamEventType.USAGE:
-            # 一轮多次调用各发一次，整体覆盖——轮末 self.usage 即峰值占用
+            # 一轮多次调用各发一次，逐条收集全量；SSE 同步直推
             ev = usage_event(event.data, self.context_window)
-            self.usage = {k: v for k, v in ev.items() if k != "type"}
+            self.usages.append({k: v for k, v in ev.items() if k != "type"})
             self._push(ev)
 
     # ---- EventEmitter 协议定制（其余便捷方法用协议默认实现） ----
