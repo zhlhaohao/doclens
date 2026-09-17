@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
 
-from ._chat_events import ask_event, tool_call_event, tool_result_event
+from ._chat_events import ask_event, tool_call_event, tool_result_event, usage_event
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +40,17 @@ class ChatEventEmitter(EventEmitter):
     ask_event）、emit_ask_user（legacy 告警）。
     """
 
-    def __init__(self, queue: Optional[Any] = None):
+    def __init__(self, queue: Optional[Any] = None, context_window: int = 0):
         # queue: asyncio.Queue，属主与 emit 调用方同为 ASGI 主 loop
         self.queue = queue
+        # 宿主配置注入：usage 事件/落库条目携带，供前端算占用百分比
+        self.context_window = context_window
         self.text_parts: list[str] = []
         self.tool_calls: list[dict] = []
         self.done: bool = False
         self.error: Optional[str] = None
+        # 本轮最新 token 用量（2026-09-17）：每次 LLM 调用覆盖，轮末落库
+        self.usage: Optional[dict] = None
 
     def _push(self, ev: dict) -> None:
         """事件直达 SSE 队列（emit 处同步入队，顺序与发生顺序一致）。"""
@@ -150,6 +154,12 @@ class ChatEventEmitter(EventEmitter):
         elif event.event_type == StreamEventType.ERROR:
             self.error = event.data.get("error", "未知错误")
             self.done = True
+
+        elif event.event_type == StreamEventType.USAGE:
+            # 一轮多次调用各发一次，整体覆盖——轮末 self.usage 即峰值占用
+            ev = usage_event(event.data, self.context_window)
+            self.usage = {k: v for k, v in ev.items() if k != "type"}
+            self._push(ev)
 
     # ---- EventEmitter 协议定制（其余便捷方法用协议默认实现） ----
 

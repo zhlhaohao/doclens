@@ -369,6 +369,28 @@ class SessionsStore:
                  now),
             )
 
+    def append_usage(self, session_id: str, usage: dict) -> None:
+        """落库一轮的 token 用量（kind='usage'，2026-09-17），seq 按 MAX 续排。
+
+        payload 含 input/output/cache_creation/cache_read 四字段 +
+        context_window（宿主注入）；回放（get_chat_history）对未知 kind
+        天然跳过，不进 LLM 上下文。
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'usage', ?, ?)""",
+                (session_id, row[0] + 1,
+                 json.dumps(usage, ensure_ascii=False), now),
+            )
+
     def upsert_skill_contexts(
         self,
         session_id: str,

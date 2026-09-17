@@ -103,7 +103,9 @@ async def _stream_agent_response(
     from doclens.web_v2.api._chat_emitter import ChatEventEmitter
 
     queue: asyncio.Queue = asyncio.Queue()
-    emitter = ChatEventEmitter(queue)
+    emitter = ChatEventEmitter(
+        queue, context_window=runtime.config.planify_context_window
+    )
 
     # 在消费开始前登记中断（杜绝「stop 早于 register」竞态）。
     # session_id 为 None 时不登记（无法被 /chat/stop 寻址；前端总会传 DB session id）。
@@ -293,6 +295,17 @@ async def _stream_agent_response(
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         "persist raw chat turn failed for %s: %s", session_key, e
+                    )
+            # 落库本轮 token 用量（kind="usage"，2026-09-17）：会话信息弹窗的
+            # 上下文占用在刷新/重进后仍可显示；每轮一条，取该轮最后一次调用。
+            if session_key and emitter.usage:
+                try:
+                    from doclens.web_v2.deps import get_sessions_store
+
+                    get_sessions_store().append_usage(session_key, emitter.usage)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "persist usage failed for %s: %s", session_key, e
                     )
             queue.put_nowait(None)  # 哨兵：SSE 生成器终结（无论成败）
 

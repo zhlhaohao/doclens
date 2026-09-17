@@ -390,6 +390,34 @@ class TestToolPairingSanitizer:
         ]
 
 
+class TestUsageItems:
+    """kind='usage' 条目（2026-09-17 会话信息弹窗）：落库续排 + 回放免疫。"""
+
+    def test_append_usage_seq_continues_and_ignored_by_replay(self, store):
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_chat_turn_raw("s1", [], "a1")
+        store.append_usage("s1", {
+            "input_tokens": 100, "output_tokens": 10,
+            "cache_creation_input_tokens": 5, "cache_read_input_tokens": 20,
+            "context_window": 200000,
+        })
+        items = store.get_detail("s1")
+        seqs = [it.seq for it in items]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+        usage_items = [it for it in items if it.kind == "usage"]
+        assert len(usage_items) == 1
+        payload = json.loads(usage_items[0].payload)
+        assert payload["input_tokens"] == 100
+        assert payload["context_window"] == 200000
+        # 回放不受 usage 条目影响
+        history = store.get_chat_history("s1")
+        assert history == [
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "a1"},
+        ]
+
+
 class TestUpdateTitle:
     """人工改名（2026-09-17）：仅改 title，不刷新 updated_at。"""
 

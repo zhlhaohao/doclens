@@ -5,7 +5,7 @@
 定义与构造函数——字段名只在此定义一次，加事件类型改一处。
 
 队列事件全集（另加 None 哨兵终止）：
-token / tool_call / tool_result / ask / toast / error
+token / tool_call / tool_result / ask / toast / error / usage
 
 线格式（SSE data JSON）与队列事件同构，chat.py 透传字段不做改名。
 """
@@ -52,13 +52,25 @@ class ErrorEvent(TypedDict):
     detail: str
 
 
+class UsageEvent(TypedDict):
+    """token 用量（2026-09-17）：每次 LLM 调用后发，最后一条即该轮上下文
+    峰值占用；前端会话信息弹窗据此展示 input/context_window 占比。"""
+    type: str  # "usage"
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    context_window: int
+
+
 ChatQueueEvent = Union[
-    TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent
+    TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
+    UsageEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
-    {"token", "tool_call", "tool_result", "ask", "toast", "error"}
+    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage"}
 )
 
 
@@ -105,3 +117,15 @@ def toast_event(level: str, detail: str) -> ToastEvent:
 
 def error_event(detail: str) -> ErrorEvent:
     return {"type": "error", "detail": detail}
+
+
+def usage_event(usage: Dict[str, Any], context_window: int) -> UsageEvent:
+    """usage 四字段（runner 透传）+ 宿主侧补充的 context_window。"""
+    return {
+        "type": "usage",
+        "input_tokens": int(usage.get("input_tokens", 0)),
+        "output_tokens": int(usage.get("output_tokens", 0)),
+        "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens", 0)),
+        "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0)),
+        "context_window": int(context_window),
+    }
