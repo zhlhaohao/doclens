@@ -80,7 +80,7 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 
 | 类别 | 工具 | 实现要点 |
 |---|---|---|
-| 文件/命令 | `bash`、`powershell`、`read_file`、`write_file`、`edit_file` | `safe_path` 防路径逃逸、危险命令过滤、20s 超时、5 万字符截断、CJK 按词切片 |
+| 文件/命令 | `bash`、`powershell`、`read_file`、`write_file`、`edit_file` | `safe_path` 防路径逃逸、危险命令过滤、20s 超时、5 万字符截断、read 行号输出+offset/limit 按行分块、edit 唯一性校验+replace_all（ADR-0024） |
 | 网络搜索 | `web_search` | 走 Provider 服务端 `web_search_20250305` |
 | 网页抓取 | `webfetch` | trafilatura → Playwright 降级，含 SSRF 校验 |
 | 用户交互 | `ask_user`、`user_confirm`、`ask_user_question` | Claude Code AskUserQuestion 复刻（1-4 问 × 2-4 选项） |

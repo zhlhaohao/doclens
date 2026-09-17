@@ -222,10 +222,14 @@ class TeammateManager:
             },
             {
                 "name": "read_file",
-                "description": "Read file.",
+                "description": "Read file. Output has line-number prefixes (1-based, '<line>\\t<content>'). Use offset/limit to page large files.",
                 "input_schema": {
                     "type": "object",
-                    "properties": {"path": {"type": "string"}},
+                    "properties": {
+                        "path": {"type": "string"},
+                        "offset": {"type": "integer"},
+                        "limit": {"type": "integer"}
+                    },
                     "required": ["path"]
                 }
             },
@@ -243,13 +247,14 @@ class TeammateManager:
             },
             {
                 "name": "edit_file",
-                "description": "Edit file.",
+                "description": "Edit file. old_text must be unique in the file (otherwise the call fails: add more context or pass replace_all=true). Do not include line-number prefixes from read_file output.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
                         "path": {"type": "string"},
                         "old_text": {"type": "string"},
-                        "new_text": {"type": "string"}
+                        "new_text": {"type": "string"},
+                        "replace_all": {"type": "boolean"}
                     },
                     "required": ["path", "old_text", "new_text"]
                 }
@@ -348,10 +353,13 @@ class TeammateManager:
                                 "bash": lambda **kw: self.run_bash(kw["command"], self.workdir),
                                 "read_file": lambda **kw: self.run_read(
                                     kw["path"], self.workdir,
-                                    kw.get("start_word"), kw.get("end_word"),
+                                    kw.get("offset"), kw.get("limit"),
                                 ),
                                 "write_file": lambda **kw: self.run_write(kw["path"], kw["content"], self.workdir),
-                                "edit_file": lambda **kw: self.run_edit(kw["path"], kw["old_text"], kw["new_text"], self.workdir),
+                                "edit_file": lambda **kw: self.run_edit(
+                                    kw["path"], kw["old_text"], kw["new_text"], self.workdir,
+                                    None, kw.get("replace_all", False),
+                                ),
                             }
                             output = dispatch.get(block_name, lambda **kw: "Unknown")(**block_input)
                         print(f"  [{name}] {block_name}: {str(output)[:120]}")

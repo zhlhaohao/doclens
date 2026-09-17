@@ -171,18 +171,22 @@ def build_tool_registry(
         ),
         {
             "name": "read_file",
-            "description": "读取文件内容（纯文本）。支持按词序号切片：中日韩文字每字算一词，其余按空白切分。",
+            "description": (
+                "读取文件内容（纯文本），输出带行号前缀（行号<TAB>内容，1-based）。"
+                "大文件用 offset/limit 按行分块读取；不传时从头读，"
+                "超输出预算按行截断并提示续读位置。"
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
-                    "start_word": {
+                    "offset": {
                         "type": "integer",
-                        "description": "起始词序号（可选，1-based）。不传词参数读全文（超长截断并提示续读位置）。",
+                        "description": "起始行号（可选，1-based，默认 1）。文件过大分批读时用它续读。",
                     },
-                    "end_word": {
+                    "limit": {
                         "type": "integer",
-                        "description": "结束词序号（可选，1-based，含该词）。",
+                        "description": "读取行数（可选）。不传则读到输出预算上限。",
                     },
                 },
                 "required": ["path"],
@@ -202,13 +206,22 @@ def build_tool_registry(
         },
         {
             "name": "edit_file",
-            "description": "替换文件中的文本",
+            "description": (
+                "替换文件中的文本。old_text 必须在文件中唯一（出现多次会报错："
+                "补充更多上下文使其唯一，或传 replace_all=true 全部替换）。"
+                "old_text/new_text 均不得包含 read_file 输出的行号前缀"
+                "（行号<TAB>部分），只取前缀之后的实际内容。"
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
                     "old_text": {"type": "string"},
                     "new_text": {"type": "string"},
+                    "replace_all": {
+                        "type": "boolean",
+                        "description": "替换全部出现位置（默认 false，仅允许唯一匹配）。",
+                    },
                 },
                 "required": ["path", "old_text", "new_text"],
             },

@@ -306,7 +306,10 @@ def split_words_with_seps(text: str) -> list[tuple[str, str]]:
 
     返回 (word, sep) 列表，sep 为该词后随的原始空白串（含换行/缩进）——
     切片后 join 可无损还原原文格式。序号对同一文本确定（无词典依赖）。
-    doclens 的 read_document 与本模块共用此定义，两工具词序号语义一致。
+
+    注意：planify 的 read_file 已改用 offset/limit 按行分块（2026-09-17，
+    ADR-0024），本函数仅供 doclens 的 read_document 词序号体系使用
+    （doclens/kb_tools.py 导入，属有意的单一真相源），planify 内部勿新增消费方。
     """
     words: list[tuple[str, str]] = []
     n = len(text)
@@ -341,80 +344,63 @@ READ_FILE_MAX_CHARS = 50000
 def run_read(
     path: str,
     workdir: Path,
-    start_word: int = None,
-    end_word: int = None,
+    offset: int = None,
+    limit: int = None,
     resolve=None,
 ) -> str:
     """
-    读取文件内容（纯文本），支持按词序号切片。
+    读取文件内容（纯文本），输出带行号前缀（``行号<TAB>内容``，1-based）。
 
-    词的定义：中日韩文字每字算一词，其余按空白切分（英文单词/数字各一词）。
-    序号 1-based 闭区间。不传词参数时读全文（超预算按词边界截断并给续读提示）。
+    offset/limit 按行分块（offset 为起始行号，1-based；limit 为行数），
+    均不传时从头读。输出超字符预算时按行截断并给续读提示。
 
     Args:
         path: 相对文件路径
         workdir: 工作目录，用于路径解析
-        start_word: 起始词序号（可选）
-        end_word: 结束词序号（可选，含该词）
+        offset: 起始行号（可选，1-based，默认 1）
+        limit: 读取行数（可选，默认读到预算上限）
         resolve: 门禁路径解析函数（可选；None = safe_path 硬拒绝逃逸）
 
     Returns:
-        文件内容（可能被截断，截断时附续读提示）
+        带行号的文件内容（可能被截断，截断时附续读提示）
     """
     try:
-        # 显式指定 UTF-8 编码，遇到错误时替换
         file_path, err = _resolve_tool_path(path, workdir, resolve, write=False)
         if err:
             return err
         content = file_path.read_text(encoding="utf-8", errors="replace")
-        pairs = split_words_with_seps(content)
-        total = len(pairs)
+        if content == "":
+            return "（文件为空。）"
+        lines = content.splitlines()
+        total = len(lines)
 
-        if start_word is None and end_word is None:
-            if len(content) <= READ_FILE_MAX_CHARS:
-                return content
-            # 按词边界截到预算内（保留原文格式），并给续读提示
-            acc_len = 0
-            keep = 0
-            for idx, (w, s) in enumerate(pairs):
-                if acc_len + len(w) + len(s) > READ_FILE_MAX_CHARS:
-                    break
-                acc_len += len(w) + len(s)
-                keep = idx + 1
-            out = join_word_slice(pairs[:keep])
-            return (
-                out
-                + f"\n\n（内容已截断。使用 start_word={keep + 1} 续读后续内容。全文共 {total} 词。）"
+        start = max(offset or 1, 1)
+        if start > total:
+            return f"（起始行号超出文件范围。文件共 {total} 行，offset 应 ≤ {total}。）"
+        limit = max(limit, 1) if limit is not None else None
+        end = total if limit is None else min(start + limit - 1, total)
+
+        # 字符预算：逐行累计（含行号+Tab 前缀开销），超预算按行截断。
+        # 仅在「未显式给 limit 而被预算截断」时附续读提示——显式 limit 是
+        # 调用方自己开的窗，不打扰（对齐 Claude Code）。
+        shown: list[str] = []
+        acc = 0
+        budget_truncated = False
+        for i, line in enumerate(lines[start - 1 : end]):
+            acc += len(str(start + i)) + 1 + len(line)
+            if acc > READ_FILE_MAX_CHARS:
+                budget_truncated = True
+                break
+            shown.append(line)
+
+        out = "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
+        if budget_truncated:
+            next_offset = start + len(shown)
+            out += (
+                f"\n\n（内容已截断：已显示第 {start}-{next_offset - 1} 行 / 共 {total} 行。"
+                f"使用 offset={next_offset} 续读后续内容。）"
             )
-
-        start_idx = max((start_word or 1) - 1, 0)
-        end_idx = min(end_word if end_word is not None else total, total)
-        if start_idx >= total or end_idx <= start_idx:
-            return f"（指定范围内无内容。全文共 {total} 词，start_word 应 ≤ {total}。）"
-
-        sliced = pairs[start_idx:end_idx]
-        joined = join_word_slice(sliced)
-        extra = ""
-        shown = len(sliced)
-        if len(joined) > READ_FILE_MAX_CHARS:
-            acc: list[tuple[str, str]] = []
-            size = 0
-            for w, s in sliced:
-                if size + len(w) + len(s) > READ_FILE_MAX_CHARS:
-                    break
-                acc.append((w, s))
-                size += len(w) + len(s)
-            joined = join_word_slice(acc)
-            shown = len(acc)
-            extra = (
-                f"\n\n（内容已截断。使用 start_word={start_idx + len(acc) + 1} 续读后续内容。）"
-            )
-
-        return (
-            f"[第 {start_idx + 1}-{start_idx + shown} 词 / 共 {total} 词]\n"
-            + joined
-            + extra
-        )
+        return out
     except Exception as e:
         error_msg = f"Error: {e}".encode("utf-8", errors="replace").decode("utf-8")
         return error_msg
@@ -450,11 +436,20 @@ def run_write(path: str, content: str, workdir: Path, resolve=None) -> str:
         return error_msg
 
 
-def run_edit(path: str, old_text: str, new_text: str, workdir: Path, resolve=None) -> str:
+def run_edit(
+    path: str,
+    old_text: str,
+    new_text: str,
+    workdir: Path,
+    resolve=None,
+    replace_all: bool = False,
+) -> str:
     """
-    编辑文件
+    编辑文件（精确字符串替换）
 
-    完全匹配并替换文本的第一个出现位置。
+    默认要求 old_text 在文件中**唯一**——出现多次时报错，提示补充上下文
+    或改用 replace_all 全部替换。old_text/new_text 不得包含 read_file
+    输出的行号前缀（``行号<TAB>``）。
 
     Args:
         path: 相对文件路径
@@ -462,6 +457,7 @@ def run_edit(path: str, old_text: str, new_text: str, workdir: Path, resolve=Non
         new_text: 新文本
         workdir: 工作目录，用于路径解析
         resolve: 门禁路径解析函数（可选；None = safe_path 硬拒绝逃逸）
+        replace_all: 替换全部出现位置（默认 False，仅允许唯一匹配）
 
     Returns:
         操作结果信息
@@ -472,10 +468,18 @@ def run_edit(path: str, old_text: str, new_text: str, workdir: Path, resolve=Non
             return err
         # 显式指定 UTF-8 编码读取
         c = fp.read_text(encoding="utf-8", errors="replace")
-        if old_text not in c:
+        count = c.count(old_text)
+        if count == 0:
             return f"Error: Text not found in {path}"
+        if not replace_all and count > 1:
+            return (
+                f"Error: old_text 在 {path} 中出现 {count} 次，不唯一。"
+                "请补充更多上下文使其唯一，或传 replace_all=True 全部替换。"
+            )
         # 显式指定 UTF-8 编码写入
-        fp.write_text(c.replace(old_text, new_text, 1), encoding="utf-8")
+        fp.write_text(c.replace(old_text, new_text), encoding="utf-8")
+        if replace_all and count > 1:
+            return f"Edited {path}（替换 {count} 处）"
         return f"Edited {path}"
     except Exception as e:
         error_msg = f"Error: {e}".encode("utf-8", errors="replace").decode("utf-8")
@@ -505,10 +509,15 @@ def make_basic_tools(workdir: Path, guard_enabled: bool = False) -> dict:
         "bash": lambda **kw: run_bash(kw["command"], workdir),
         "powershell": lambda **kw: run_powershell(kw["command"], workdir),
         "read_file": lambda **kw: run_read(
-            kw["path"], workdir, kw.get("start_word"), kw.get("end_word"), resolve
+            kw["path"], workdir, kw.get("offset"), kw.get("limit"), resolve
         ),
         "write_file": lambda **kw: run_write(kw["path"], kw["content"], workdir, resolve),
         "edit_file": lambda **kw: run_edit(
-            kw["path"], kw["old_text"], kw["new_text"], workdir, resolve
+            kw["path"],
+            kw["old_text"],
+            kw["new_text"],
+            workdir,
+            resolve,
+            kw.get("replace_all", False),
         ),
     }
