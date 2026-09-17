@@ -128,6 +128,23 @@ def build_system_prompt(
             "- 本会话用户已批准过的目录不必重复询问。"
         )
 
+    # grep/glob 是条件注册（rg 缺失不注册）——提示词只在工具真实存在时
+    # 才引导使用，避免模型去找不存在的工具（延迟 import 防模块级依赖）
+    from .tools.grep import rg_available
+
+    if rg_available():
+        search_tool_rules = (
+            "  - To search file contents use grep instead of running grep/rg via Bash\n"
+            "  - To find files by name/pattern use glob instead of running find/ls via Bash\n"
+        )
+        search_mandate_note = (
+            "注意：搜索文件内容用 grep 工具、按文件名找文件用 glob 工具，"
+            "不属于本条（不得用 bash 跑 rg/find 替代）。"
+        )
+    else:
+        search_tool_rules = ""
+        search_mandate_note = ""
+
     # 基础部分（所有代理通用）
     base_prompt = f"""# System
  - All text you output outside of tool use is displayed to the user. Output text to communicate with the user. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification.
@@ -145,7 +162,7 @@ def build_system_prompt(
   - To read files use read_file instead of cat, head, tail, or sed
   - To edit files use edit_file instead of sed or awk
   - To create files use write_file instead of cat with heredoc or echo redirection
-  - Reserve using the Bash exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on the Bash tool for these if it is absolutely necessary.
+{search_tool_rules}  - Reserve using the Bash exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on the Bash tool for these if it is absolutely necessary.
  - Break down and manage your work with the TaskCreate tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.
  - You can call multiple tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some operations must complete before others start, run them sequentially instead.
 
@@ -161,7 +178,7 @@ IMPORTANT: Skills 包含领域专属知识（检索策略、引文规范、降�
 
 # Tool use mandate
 
-IMPORTANT: 凡是需要**执行命令或获取实时系统状态**的请求（查看日期时间、列目录、查进程/服务/注册表、运行脚本等），**必须调用相应工具**（bash / powershell）实际执行，并把工具返回的真实输出作为回答依据。禁止在未调用工具的情况下编造"执行结果"或"目录内容"——没有工具输出的所谓执行结果一律视为错误回答。
+IMPORTANT: 凡是需要**执行命令或获取实时系统状态**的请求（查看日期时间、查进程/服务/注册表、运行脚本等），**必须调用相应工具**（bash / powershell）实际执行，并把工具返回的真实输出作为回答依据。禁止在未调用工具的情况下编造"执行结果"或"目录内容"——没有工具输出的所谓执行结果一律视为错误回答。{search_mandate_note}
 
 **该要求在对话的每一轮都生效**：即使前文已经成功调用过工具，后续追问涉及时也必须重新调用，不得凭记忆或猜测作答。
 

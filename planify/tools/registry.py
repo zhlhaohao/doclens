@@ -119,11 +119,29 @@ def build_tool_registry(
         "plan_approval_response",
     ]
 
+    # bash/powershell 的描述承担「工具路由」职责：模型在决策点读的是工具描述，
+    # 仅靠系统提示词不足以纠正其 bash 习惯（训练语料里 grep/find 是默认动作）。
+    # 路由规则按 rg 是否可用动态拼接（grep/glob 是条件注册，见下）
+    shell_donts = (
+        "不要用本工具读/改/写文件——读文件用 read_file、改文件用 edit_file、"
+        "写文件用 write_file。"
+    )
+    if rg_available():
+        shell_donts += (
+            "不要用本工具跑 grep/rg/find/ls 做检索——"
+            "搜索文件内容用 grep 工具、按文件名/模式找文件用 glob 工具。"
+        )
+    bash_description = (
+        "运行 shell 命令（系统命令、脚本执行、构建、包管理等终端操作）。"
+        + shell_donts
+        + "仅当没有对应的专用工具时才用本工具。"
+    )
+
     # 基础文件和命令工具
     basic_tools = [
         {
             "name": "bash",
-            "description": "运行 shell 命令",
+            "description": bash_description,
             "input_schema": {
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
@@ -138,8 +156,8 @@ def build_tool_registry(
                     "description": (
                         "运行 Windows 原生命令（优先 PowerShell 7，"
                         "回退 Windows PowerShell / cmd）。"
-                        "适合注册表、服务、系统等 Windows 原生操作；"
-                        "一般文件/文本命令请用 bash 工具"
+                        "仅适合注册表、服务、系统等 Windows 原生操作；"
+                        + shell_donts
                     ),
                     "input_schema": {
                         "type": "object",
