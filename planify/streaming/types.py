@@ -25,6 +25,7 @@ class StreamEventType(Enum):
     DONE = "done"
     ERROR = "error"
     HEARTBEAT = "heartbeat"
+    USAGE = "usage"
 
 
 @dataclass
@@ -230,6 +231,21 @@ class EventEmitter(Protocol):
         if code is not None:
             data["code"] = code
         await self.emit(StreamEvent(event_type=StreamEventType.ERROR, data=data))
+
+    async def emit_usage(self, usage: Dict[str, int]) -> None:
+        """
+        发射 token 用量事件（2026-09-17：宿主用于展示上下文占用）。
+
+        每次 LLM 调用完成后发射；同键字段单调不减，消费方整体覆盖即可——
+        一轮工具链的最后一次事件即该轮上下文峰值占用。
+
+        Args:
+            usage: 归一化四字段（input_tokens / output_tokens /
+                cache_creation_input_tokens / cache_read_input_tokens）
+        """
+        await self.emit(
+            StreamEvent(event_type=StreamEventType.USAGE, data=dict(usage))
+        )
 
 
 @runtime_checkable

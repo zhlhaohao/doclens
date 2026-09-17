@@ -179,6 +179,9 @@ class _NullEmitter:
     async def emit_error(self, error, code=None):
         raise AssertionError(error)
 
+    async def emit_usage(self, usage):
+        pass
+
 
 def test_runner_logs_cache_hit_ratio(tmp_path, caplog):
     sa = StreamingAgent(

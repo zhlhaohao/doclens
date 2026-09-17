@@ -719,6 +719,9 @@ class StreamingAgent:
                 f"output={call_usage.get('output_tokens', 0)} "
                 f"(前缀命中率 {hit_pct}%)"
             )
+            # 透传给宿主（2026-09-17：GUI 会话信息弹窗展示上下文占用）；
+            # 一轮工具链多次调用各发一次，最后一次即该轮峰值占用
+            await self.emitter.emit_usage(call_usage)
 
         # 发射文本结束事件（如果有文本）
         if current_text:
