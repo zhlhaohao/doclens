@@ -17,6 +17,7 @@ import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import "../components/skill-toolbox-dialog";
 import "../components/session-rename-dialog";
+import "../components/session-info-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -105,6 +106,28 @@ export function mapSessionItemsToMessages(
     }
   }
   return messages;
+}
+
+/** 从 session_items 自筛最后一条 kind="usage"（2026-09-17 会话信息弹窗）：
+ *  总输入 = input + cache_read + cache_creation（上下文窗口真实占用）。 */
+export function extractLastUsage(
+  items: Array<{ kind: string; payload: string }>,
+): { used: number; contextWindow: number } | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].kind !== "usage") continue;
+    try {
+      const p = JSON.parse(items[i].payload);
+      return {
+        used: Number(p.input_tokens ?? 0)
+          + Number(p.cache_read_input_tokens ?? 0)
+          + Number(p.cache_creation_input_tokens ?? 0),
+        contextWindow: Number(p.context_window ?? 0),
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 @customElement("chat-view")
@@ -334,6 +357,10 @@ export class ChatView extends LitElement {
   /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
   @state() private _skillDialogOpen = false;
   @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
+  @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
+  /** 当前会话上下文占用（最近一次 LLM 调用的总输入 / 窗口上限）；
+   *  SSE usage 事件实时更新，恢复会话时从 items 的 kind="usage" 条目自筛。 */
+  @state() private _sessionUsage: { used: number; contextWindow: number } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -417,14 +444,21 @@ export class ChatView extends LitElement {
     void this._sendWithSkill(e.detail.name);
   };
 
-  /** focus-header more 菜单动作：会话改名（仅当前会话存在时出现）。 */
+  /** focus-header more 菜单动作：会话改名/会话信息（仅当前会话存在时出现）。 */
   private get _headerActions() {
     if (!this.viewState.currentSession) return [];
-    return [{
-      label: "重命名会话",
-      icon: "pencil",
-      onClick: () => { this._renameDialogOpen = true; },
-    }];
+    return [
+      {
+        label: "重命名会话",
+        icon: "pencil",
+        onClick: () => { this._renameDialogOpen = true; },
+      },
+      {
+        label: "会话信息",
+        icon: "info",
+        onClick: () => { this._infoDialogOpen = true; },
+      },
+    ];
   }
 
   private _onRenameSubmit = async (e: CustomEvent<{ title: string }>) => {
@@ -487,6 +521,23 @@ export class ChatView extends LitElement {
         ></session-rename-dialog>
       </dialog>`;
   }
+
+  /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
+  private _renderInfoDialog() {
+    if (!this._infoDialogOpen || !this.viewState.currentSession) return nothing;
+    return html`
+      <dialog @cancel=${this._onInfoClose}>
+        <session-info-dialog
+          .used=${this._sessionUsage?.used ?? null}
+          .contextWindow=${this._sessionUsage?.contextWindow ?? 0}
+          @close=${this._onInfoClose}
+        ></session-info-dialog>
+      </dialog>`;
+  }
+
+  private _onInfoClose = () => {
+    this._infoDialogOpen = false;
+  };
 
   /** 技能直发（ADR-0016 §3/§4）：信封消息立即发往当前会话；
    *  initial 态新建会话（首条消息带标记，自然成为技能会话）。 */
@@ -578,6 +629,7 @@ export class ChatView extends LitElement {
    *  mode="skill" 声明技能会话（后端据此切换提取式引文策展）。 */
   private async _ensureSession(title: string, message: string, mode?: "skill"): Promise<void> {
     const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100), mode });
+    this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     actions.setChatState({
       state: "focus",
       currentSession: {
@@ -634,6 +686,12 @@ export class ChatView extends LitElement {
           }
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
+        } else if (ev.type === "usage") {
+          // 总输入 = input + cache_read + cache_creation（上下文窗口真实占用）
+          this._sessionUsage = {
+            used: ev.input_tokens + ev.cache_read_input_tokens + ev.cache_creation_input_tokens,
+            contextWindow: ev.context_window,
+          };
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -744,6 +802,7 @@ export class ChatView extends LitElement {
         const body = await res.json();
         const messages = mapSessionItemsToMessages(body.items || []);
         actions.setChatState({ messages });
+        this._sessionUsage = extractLastUsage(body.items || []);
       }
     } catch (e) {
       console.warn("load session failed", e);
@@ -1111,6 +1170,7 @@ export class ChatView extends LitElement {
         </div>` : null}
       ${this._renderSkillDialog()}
       ${this._renderRenameDialog()}
+      ${this._renderInfoDialog()}
     `;
   }
 

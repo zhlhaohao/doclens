@@ -1,6 +1,15 @@
 import { request, streamSSE } from "./client";
 import type { AskQuestionPayload } from "./ask";
 
+/** token 用量（2026-09-17）：每次 LLM 调用后发，最后一条即该轮上下文峰值占用。 */
+export interface UsagePayload {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  context_window: number;
+}
+
 export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool_call"; tool_use_id: string; name: string; input: Record<string, unknown> }
@@ -8,6 +17,7 @@ export type ChatStreamEvent =
   | { type: "ask"; request_id: string; questions: AskQuestionPayload[] }
   | { type: "references"; items: { path: string }[] }
   | { type: "toast"; level: "error" | "info" | "success"; detail: string }
+  | { type: "usage" } & UsagePayload
   | { type: "done" }
   | { type: "error"; detail: string };
 
@@ -71,6 +81,18 @@ export async function* chatStream(
           type: "toast",
           level: (d.level ?? "error") as "error" | "info" | "success",
           detail: String(d.detail ?? ""),
+        };
+      }
+    } else if (ev.event === "usage") {
+      const d = parseData("usage", ev.data);
+      if (d) {
+        yield {
+          type: "usage",
+          input_tokens: Number(d.input_tokens ?? 0),
+          output_tokens: Number(d.output_tokens ?? 0),
+          cache_creation_input_tokens: Number(d.cache_creation_input_tokens ?? 0),
+          cache_read_input_tokens: Number(d.cache_read_input_tokens ?? 0),
+          context_window: Number(d.context_window ?? 0),
         };
       }
     } else if (ev.event === "done") {
