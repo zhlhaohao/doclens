@@ -1,6 +1,9 @@
 """GET /api/status -- 系统状态。"""
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 
+from doclens.diary import diary_dir
 from doclens.index_manager import IndexManager
 from doclens.web_v2.deps import get_config, get_index_manager, get_watcher, sync_snapshot
 
@@ -22,6 +25,9 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         "workdir": str(idx.search_path),
         "total_size_bytes": total_size,
         "file_types": type_counts,
+        # 日记启用事实源（ADR-0022）：目录存在即启用（空目录也算——
+        # 入口先于内容）；启动判定一次，前端据此显隐日记 tab
+        "diary_enabled": diary_dir(Path(idx.search_path)).is_dir(),
         # 当前 AI 模型 id（用于前端展示「{model} 思考中」），可能为空
         # （用户未设置 PLANIFY_MODEL_ID 时不展示模型名前缀）
         "model_name": cfg.planify_model_id or "",

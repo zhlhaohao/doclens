@@ -231,3 +231,34 @@ describe("router.lastMain", () => {
     expect(router.lastMain()).toBe("files");
   });
 });
+
+describe("diary view guard (ADR-0022)", () => {
+  it("redirects #/diary to files when diary_enabled is false", async () => {
+    window.history.replaceState(null, "", "#/diary");
+    store.setState({ status: { ...INITIAL_STATE.status!, diary_enabled: false } });
+    router.init();
+    expect(store.getState().view).toBe("files");
+    // URL 也被守卫修正（replaceState，不触发二次 hashchange）
+    expect(window.location.hash).toBe(VIEW_TO_HASH["files"]);
+  });
+
+  it("keeps diary when diary_enabled is true", async () => {
+    window.history.replaceState(null, "", "#/diary");
+    store.setState({ status: { ...INITIAL_STATE.status!, diary_enabled: true } });
+    router.init();
+    expect(store.getState().view).toBe("diary");
+  });
+
+  it("keeps diary while status is unknown (late-status window)", () => {
+    window.history.replaceState(null, "", "#/diary");
+    router.init(); // status === null → diary_enabled undefined → 放行
+    expect(store.getState().view).toBe("diary");
+  });
+
+  it("guards hashchange navigation too", async () => {
+    store.setState({ status: { ...INITIAL_STATE.status!, diary_enabled: false } });
+    router.init();
+    window.location.hash = VIEW_TO_HASH["diary"]; // 模拟 URL 直达
+    await vi.waitFor(() => expect(store.getState().view).toBe("files"));
+  });
+});
