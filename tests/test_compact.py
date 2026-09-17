@@ -122,7 +122,7 @@ class _FakeProvider:
 
     model = "fake"
 
-    def chat(self, messages, system, tools, max_tokens=8000):
+    def chat(self, messages, system, tools, max_tokens=8000, tracer=None):
         from planify.core.llm.types import LLMResponse, TextBlock
 
         return LLMResponse(

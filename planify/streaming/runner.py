@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..core.llm.trace import LLMTracer
 from ..core.llm.types import Tool
 from ..core.logging_config import data_dirname
 from .emitter import EventEmitter, SSEEmitter
@@ -90,6 +91,7 @@ class StreamingAgent:
         runtime: Optional[Any] = None,
         interrupt_event: Optional[threading.Event] = None,
         system_prompt_extra: Optional[str] = None,
+        tracer: Optional[LLMTracer] = None,
     ):
         """
         初始化流式代理。
@@ -110,6 +112,7 @@ class StreamingAgent:
             runtime: AgentRuntime 实例
             system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选，
                 领域策略如知识库优先由宿主经此注入，planify 自身保持通用）
+            tracer: LLM 追踪器（可选，按会话创建；None 即不落盘）
         """
         self.client = client
         # provider 是 client 的别名（LLMProvider 抽象接口），
@@ -129,6 +132,8 @@ class StreamingAgent:
         self.runtime = runtime
         self._interrupt_event = interrupt_event
         self._system_prompt_extra = system_prompt_extra
+        # LLM 追踪（调试/缓存命中率观测）：由调用方按会话创建，None 即不落盘
+        self.tracer = tracer
 
         # 本轮消息起点下标（run_stream 内全部头部/尾部注入完成、追加 user
         # query 之后记录）：web 链路落库 raw_messages 时以此切片。
@@ -335,7 +340,7 @@ class StreamingAgent:
                             or Path(self.runtime.config.workdir) / ".transcripts"
                         )
                         compacted = await self._aauto_compact(
-                            messages, self.provider, transcript_dir
+                            messages, self.provider, transcript_dir, tracer=self.tracer
                         )
                         # 必须就地替换本地循环列表，否则本轮后续循环仍用
                         # 未压缩历史（每轮重复触发压缩、transcript 越写越大）
@@ -604,6 +609,7 @@ class StreamingAgent:
                 system=system,
                 tools=tool_defs,
                 max_tokens=self.config.max_tokens,
+                tracer=self.tracer,
             ):
                 # 检查中断
                 if self._interrupt_event and self._interrupt_event.is_set():

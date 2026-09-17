@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, AsyncIterator, Iterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from anthropic import Anthropic, AsyncAnthropic
 
 from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolResultBlock, ToolUseBlock
+
+if TYPE_CHECKING:
+    from .trace import LLMTracer
 
 
 def _sdk_httpx() -> Any:
@@ -89,6 +92,7 @@ class AnthropicProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> LLMResponse:
         """单次非流式调用。
 
@@ -97,13 +101,21 @@ class AnthropicProvider:
         没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
         """
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        turn = tracer.trace_request(kwargs) if tracer else None
         try:
-            response = self._client.messages.create(**kwargs)
-        except ValueError as e:
-            if "Streaming is required" not in str(e):
-                raise
-            with self._client.messages.stream(**kwargs) as stream:
-                response = stream.get_final_message()
+            try:
+                response = self._client.messages.create(**kwargs)
+            except ValueError as e:
+                if "Streaming is required" not in str(e):
+                    raise
+                with self._client.messages.stream(**kwargs) as stream:
+                    response = stream.get_final_message()
+        except Exception as e:
+            if tracer:
+                tracer.trace_error(turn, e)
+            raise
+        if tracer:
+            tracer.trace_response(turn, response)
         return self._response_to_llm(response)
 
     def stream(
@@ -112,14 +124,31 @@ class AnthropicProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> Iterator[StreamEvent]:
         """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        turn = tracer.trace_request(kwargs) if tracer else None
         with self._client.messages.stream(**kwargs) as stream:
-            for event in stream:
-                normalized = self._event_from_anthropic(event)
-                if normalized is not None:
+            done = False
+            try:
+                for event in stream:
+                    normalized = self._event_from_anthropic(event)
+                    if normalized is None:
+                        continue
+                    if tracer and normalized.type == "message_stop":
+                        # 调用方（runner）在 message_stop 即中断消费，循环后
+                        # 代码不会执行——答节必须在 yield 它之前落盘
+                        done = True
+                        try:
+                            tracer.trace_response(turn, stream.get_final_message())
+                        except Exception as e:  # noqa: BLE001
+                            tracer.trace_error(turn, f"get_final_message 失败: {e}")
                     yield normalized
+            except BaseException as e:  # 含 GeneratorExit（调用方中断生成器）
+                if tracer and not done:
+                    tracer.trace_error(turn, e)
+                raise
 
     async def achat(
         self,
@@ -127,6 +156,7 @@ class AnthropicProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> LLMResponse:
         """单次非流式调用（async 客户端，不阻塞事件循环）。
 
@@ -134,13 +164,21 @@ class AnthropicProvider:
         """
         client = self._ensure_async_client()
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        turn = tracer.trace_request(kwargs) if tracer else None
         try:
-            response = await client.messages.create(**kwargs)
-        except ValueError as e:
-            if "Streaming is required" not in str(e):
-                raise
-            async with client.messages.stream(**kwargs) as stream:
-                response = await stream.get_final_message()
+            try:
+                response = await client.messages.create(**kwargs)
+            except ValueError as e:
+                if "Streaming is required" not in str(e):
+                    raise
+                async with client.messages.stream(**kwargs) as stream:
+                    response = await stream.get_final_message()
+        except Exception as e:
+            if tracer:
+                tracer.trace_error(turn, e)
+            raise
+        if tracer:
+            tracer.trace_response(turn, response)
         return self._response_to_llm(response)
 
     async def astream(
@@ -149,15 +187,32 @@ class AnthropicProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> AsyncIterator[StreamEvent]:
         """流式调用（async 客户端），事件转换与同步版共用。"""
         client = self._ensure_async_client()
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        turn = tracer.trace_request(kwargs) if tracer else None
         async with client.messages.stream(**kwargs) as stream:
-            async for event in stream:
-                normalized = self._event_from_anthropic(event)
-                if normalized is not None:
+            done = False
+            try:
+                async for event in stream:
+                    normalized = self._event_from_anthropic(event)
+                    if normalized is None:
+                        continue
+                    if tracer and normalized.type == "message_stop":
+                        # 调用方（runner）在 message_stop 即中断消费，循环后
+                        # 代码不会执行——答节必须在 yield 它之前落盘
+                        done = True
+                        try:
+                            tracer.trace_response(turn, await stream.get_final_message())
+                        except Exception as e:  # noqa: BLE001
+                            tracer.trace_error(turn, f"get_final_message 失败: {e}")
                     yield normalized
+            except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
+                if tracer and not done:
+                    tracer.trace_error(turn, e)
+                raise
 
     @staticmethod
     def _response_to_llm(response: Any) -> LLMResponse:

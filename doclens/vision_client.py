@@ -57,7 +57,7 @@ def _call_planify_provider(
     openai_compat 后端由 tool_translator 译为 image_url（data URL）——
     协议细节与对话模型同源一份，无手写 urllib。
     """
-    from planify.core.llm import create_provider
+    from planify.core.llm import LLMTracer, create_provider
 
     provider = create_provider({
         "protocol": protocol,
@@ -65,6 +65,9 @@ def _call_planify_provider(
         "model_id": config.vision_model,
         "base_url": config.vision_base_url,
     })
+    # LLM 追踪：稳定会话键 "vision" 追加同文件（转写/判向/caption 全进，
+    # 图像 base64 由 tracer 换占位符防撑爆文件）；全局串行锁下无并发写
+    tracer = LLMTracer.create(label="vision", session_key="vision")
     resp = provider.chat(
         messages=[{
             "role": "user",
@@ -76,6 +79,7 @@ def _call_planify_provider(
         system="",
         tools=[],
         max_tokens=max_tokens,
+        tracer=tracer,
     )
     text = "".join(b.text for b in resp.content if hasattr(b, "text"))
     return strip_thinking(text)

@@ -209,6 +209,14 @@ class TeammateManager:
         )
         messages = [{"role": "user", "content": prompt}]
 
+        # LLM 追踪（调试/缓存命中率观测）：teammate 名作会话键——
+        # 长寿命线程跨天/重启追加同文件
+        from ..core.llm.trace import LLMTracer
+
+        tracer = LLMTracer.create(
+            label="teammate", session_key=f"teammate-{name}", workdir=self.workdir
+        )
+
         # 队友可用工具
         tools = [
             {
@@ -313,6 +321,7 @@ class TeammateManager:
                                 for t in tools
                             ],
                             max_tokens=8000,
+                            tracer=tracer,
                         )
                     except Exception:
                         self._set_status(name, "shutdown")

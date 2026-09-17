@@ -30,6 +30,8 @@ from planify.core import setup_encoding, apply_safe_stdio
 # 全局中断事件
 # ============================================================================
 _interrupt_event = threading.Event()
+# LLM 追踪进程级缓存（run_streaming_query 内惰性初始化）
+_cli_tracer = None
 
 
 class EscapeKeyWatcher:
@@ -374,6 +376,15 @@ def run_streaming_query(loop, runtime, query: str, history: list) -> list:
     """
     import asyncio
 
+    # LLM 追踪（进程级缓存：一次 CLI 运行一个时间戳文件，跨输入追加；
+    # 开关未开时每次重试 create，开销仅两次 getenv）
+    global _cli_tracer
+    if _cli_tracer is None:
+        from planify.core.llm import LLMTracer
+
+        _cli_tracer = LLMTracer.create(label="cli")
+
+
     # 重置中断事件
     _interrupt_event.clear()
 
@@ -407,6 +418,7 @@ def run_streaming_query(loop, runtime, query: str, history: list) -> list:
         logger_instance=runtime.logger,
         runtime=runtime,
         interrupt_event=_interrupt_event,
+        tracer=_cli_tracer,
     )
 
     try:

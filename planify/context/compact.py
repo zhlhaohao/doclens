@@ -21,9 +21,12 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from ..core.llm.provider import LLMProvider
+
+if TYPE_CHECKING:
+    from ..core.llm.trace import LLMTracer
 
 
 def estimate_tokens(messages: list) -> int:
@@ -152,6 +155,8 @@ def auto_compact(
     messages: list,
     provider: LLMProvider,
     transcript_dir: Path,
+    *,
+    tracer: Optional["LLMTracer"] = None,
 ) -> list:
     """
     自动压缩：使用 LLM 生成对话摘要（同步版，服务旧 Agent 循环与 /compact 命令）
@@ -164,6 +169,7 @@ def auto_compact(
         messages: 原始消息列表
         provider: LLM Provider（自带模型信息）
         transcript_dir: 脚本目录
+        tracer: LLM 追踪器（可选）——摘要调用也落 trace
 
     Returns:
         新消息列表，包含摘要和确认消息
@@ -175,6 +181,7 @@ def auto_compact(
         system=summary_system,
         tools=[],  # 压缩阶段不提供工具
         max_tokens=2000,
+        tracer=tracer,
     )
 
     summary = "".join(b.text for b in response.content if hasattr(b, "text"))
@@ -185,6 +192,8 @@ async def aauto_compact(
     messages: list,
     provider: LLMProvider,
     transcript_dir: Path,
+    *,
+    tracer: Optional["LLMTracer"] = None,
 ) -> list:
     """auto_compact 的异步版（StreamingAgent 在事件循环上直跑时使用，
     经 provider.achat 调摘要，不阻塞事件循环）。行为与同步版一致。"""
@@ -195,6 +204,7 @@ async def aauto_compact(
         system=summary_system,
         tools=[],  # 压缩阶段不提供工具
         max_tokens=2000,
+        tracer=tracer,
     )
 
     summary = "".join(b.text for b in response.content if hasattr(b, "text"))

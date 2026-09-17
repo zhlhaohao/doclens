@@ -123,7 +123,7 @@ class _UsageProvider:
     def __init__(self):
         self._called = False
 
-    async def astream(self, *, messages, system, tools, max_tokens):
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
         yield _ns(
             type="message_start", usage={
                 "input_tokens": 100,

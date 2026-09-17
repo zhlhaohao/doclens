@@ -108,26 +108,60 @@ export function mapSessionItemsToMessages(
   return messages;
 }
 
-/** 从 session_items 自筛最后一条 kind="usage"（2026-09-17 会话信息弹窗）：
- *  总输入 = input + cache_read + cache_creation（上下文窗口真实占用）。 */
-export function extractLastUsage(
+/** 会话 usage 状态：占用口径（最近一次调用）+ 命中率口径（全会话累计）。 */
+export interface SessionUsageState {
+  /** 最近一次调用的总输入 = input + cache_read + cache_creation（上下文峰值占用） */
+  used: number;
+  contextWindow: number;
+  /** 全会话累计 cache_read tokens（命中率分子） */
+  cacheReadTotal: number;
+  /** 全会话累计总输入 tokens（命中率分母） */
+  inputTotal: number;
+  /** 全会话 LLM 调用次数 */
+  calls: number;
+}
+
+/** 从 session_items 聚合全部 kind="usage" 条目（会话信息弹窗）：
+ *  used 取最后一条（上下文占用），cache_read/总输入/调用次数全程累加
+ *  （累计缓存命中率，2026-09-17 与 LLM trace 落盘同期加）；
+ *  单条坏 JSON 跳过，不影响其余聚合。 */
+export function aggregateUsage(
   items: Array<{ kind: string; payload: string }>,
-): { used: number; contextWindow: number } | null {
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (items[i].kind !== "usage") continue;
+): SessionUsageState | null {
+  let cacheReadTotal = 0;
+  let inputTotal = 0;
+  let calls = 0;
+  let last: { input: number; read: number; creation: number; contextWindow: number } | null =
+    null;
+  for (const item of items) {
+    if (item.kind !== "usage") continue;
+    let p: Record<string, unknown>;
     try {
-      const p = JSON.parse(items[i].payload);
-      return {
-        used: Number(p.input_tokens ?? 0)
-          + Number(p.cache_read_input_tokens ?? 0)
-          + Number(p.cache_creation_input_tokens ?? 0),
-        contextWindow: Number(p.context_window ?? 0),
-      };
+      p = JSON.parse(item.payload) as Record<string, unknown>;
     } catch {
-      return null;
+      continue;
     }
+    const input = Number(p.input_tokens ?? 0);
+    const read = Number(p.cache_read_input_tokens ?? 0);
+    const creation = Number(p.cache_creation_input_tokens ?? 0);
+    cacheReadTotal += read;
+    inputTotal += input + read + creation;
+    calls += 1;
+    last = {
+      input,
+      read,
+      creation,
+      contextWindow: Number(p.context_window ?? 0),
+    };
   }
-  return null;
+  if (last === null) return null;
+  return {
+    used: last.input + last.read + last.creation,
+    contextWindow: last.contextWindow,
+    cacheReadTotal,
+    inputTotal,
+    calls,
+  };
 }
 
 @customElement("chat-view")
@@ -358,9 +392,9 @@ export class ChatView extends LitElement {
   @state() private _skillDialogOpen = false;
   @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
-  /** 当前会话上下文占用（最近一次 LLM 调用的总输入 / 窗口上限）；
-   *  SSE usage 事件实时更新，恢复会话时从 items 的 kind="usage" 条目自筛。 */
-  @state() private _sessionUsage: { used: number; contextWindow: number } | null = null;
+  /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
+   *  SSE usage 事件逐条累加，恢复会话时从 items 的 kind="usage" 条目聚合。 */
+  @state() private _sessionUsage: SessionUsageState | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -530,6 +564,9 @@ export class ChatView extends LitElement {
         <session-info-dialog
           .used=${this._sessionUsage?.used ?? null}
           .contextWindow=${this._sessionUsage?.contextWindow ?? 0}
+          .cacheReadTotal=${this._sessionUsage?.cacheReadTotal ?? null}
+          .inputTotal=${this._sessionUsage?.inputTotal ?? null}
+          .calls=${this._sessionUsage?.calls ?? 0}
           @close=${this._onInfoClose}
         ></session-info-dialog>
       </dialog>`;
@@ -687,11 +724,26 @@ export class ChatView extends LitElement {
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type === "usage") {
-          // 总输入 = input + cache_read + cache_creation（上下文窗口真实占用）
-          this._sessionUsage = {
-            used: ev.input_tokens + ev.cache_read_input_tokens + ev.cache_creation_input_tokens,
-            contextWindow: ev.context_window,
-          };
+          // 总输入 = input + cache_read + cache_creation（上下文窗口真实占用）；
+          // 每次调用一条事件，累加出全会话命中率口径（不可变更新）
+          const used =
+            ev.input_tokens + ev.cache_read_input_tokens + ev.cache_creation_input_tokens;
+          const prev = this._sessionUsage;
+          this._sessionUsage = prev === null
+            ? {
+                used,
+                contextWindow: ev.context_window,
+                cacheReadTotal: ev.cache_read_input_tokens,
+                inputTotal: used,
+                calls: 1,
+              }
+            : {
+                ...prev,
+                used,
+                cacheReadTotal: prev.cacheReadTotal + ev.cache_read_input_tokens,
+                inputTotal: prev.inputTotal + used,
+                calls: prev.calls + 1,
+              };
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -802,7 +854,7 @@ export class ChatView extends LitElement {
         const body = await res.json();
         const messages = mapSessionItemsToMessages(body.items || []);
         actions.setChatState({ messages });
-        this._sessionUsage = extractLastUsage(body.items || []);
+        this._sessionUsage = aggregateUsage(body.items || []);
       }
     } catch (e) {
       console.warn("load session failed", e);

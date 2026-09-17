@@ -112,6 +112,7 @@ async def _stream_agent_response(
     session_key = session_id or None
     interrupt = register_interrupt(session_key) if session_key else threading.Event()
 
+    from planify.core.llm import LLMTracer
     from planify.streaming.runner import StreamingAgent
     from planify.streaming.types import StreamingConfig
     from planify.streaming.waiter import get_global_waiter
@@ -164,6 +165,9 @@ async def _stream_agent_response(
         runtime=runtime,
         interrupt_event=interrupt,
         system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
+        # LLM 追踪（调试/缓存命中率观测）：聊天会话 id 作会话键——
+        # 同会话跨输入/跨进程追加同 trace 文件；开关未开时为 None
+        tracer=LLMTracer.create(label="main", session_key=session_id),
     )
 
     async def _run_and_finalize() -> None:

@@ -51,7 +51,7 @@ class MockProvider:
         self.records = []  # 每次 LLM 调用的 messages 快照（请求体）
         self._call = 0
 
-    async def astream(self, *, messages, system, tools, max_tokens):
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
         self.records.append(copy.deepcopy(messages))
         self._call += 1
         if self._call == 1:
@@ -444,7 +444,7 @@ class MultiToolProvider:
         self.records = []
         self._call = 0
 
-    async def astream(self, *, messages, system, tools, max_tokens):
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
         self.records.append(copy.deepcopy(messages))
         self._call += 1
         if self._call == 1:

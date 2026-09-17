@@ -8,7 +8,7 @@ _response_to_llm）；async 客户端惰性初始化（同步-only 调用方零�
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Iterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from openai import AsyncOpenAI, OpenAI
 
@@ -17,6 +17,9 @@ from .tool_translator import (
     tools_anthropic_to_openai,
 )
 from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolUseBlock
+
+if TYPE_CHECKING:
+    from .trace import LLMTracer
 
 _STOP_REASON_MAP = {
     "stop": "end_turn",
@@ -122,6 +125,83 @@ class _StreamTranslator:
         return StreamEvent(type="message_stop")
 
 
+class _StreamTraceAccumulator:
+    """流式 chunk → 原生风格响应（供 LLM trace 落盘）。
+
+    与 _StreamTranslator（归一化事件）并行消费同一批 chunk：translator
+    服务运行时事件流，本器只在 tracer 开启时还原原生 ChatCompletion 形态
+    （content 拼接 / tool_calls 按 index 聚合 / 尾 chunk usage）。
+    """
+
+    def __init__(self) -> None:
+        self._id = ""
+        self._model = ""
+        self._content_parts: list[str] = []
+        self._tool_calls: dict[int, dict] = {}  # index → {id, name, arguments}
+        self._finish_reason: Any = None
+        self._usage: Any = None
+
+    def feed(self, chunk: Any) -> None:
+        if getattr(chunk, "id", None):
+            self._id = chunk.id
+        if getattr(chunk, "model", None):
+            self._model = chunk.model
+        if getattr(chunk, "usage", None) is not None:
+            self._usage = chunk.usage
+        if not chunk.choices:
+            return  # include_usage 尾 chunk
+        choice = chunk.choices[0]
+        delta = choice.delta
+        if getattr(delta, "content", None):
+            self._content_parts.append(delta.content)
+        for tc in getattr(delta, "tool_calls", None) or []:
+            slot = self._tool_calls.setdefault(
+                tc.index, {"id": "", "name": "", "arguments": ""}
+            )
+            if tc.id:
+                slot["id"] = tc.id
+            if tc.function is not None:
+                if tc.function.name:
+                    slot["name"] = tc.function.name
+                if tc.function.arguments:
+                    slot["arguments"] += tc.function.arguments
+        if choice.finish_reason:
+            self._finish_reason = choice.finish_reason
+
+    def dump(self) -> dict:
+        """聚合为原生 ChatCompletion 风格 dict（usage 留原对象交 tracer 序列化）。"""
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": "".join(self._content_parts) or None,
+        }
+        if self._tool_calls:
+            message["tool_calls"] = [
+                {
+                    "index": i,
+                    "id": slot["id"],
+                    "type": "function",
+                    "function": {
+                        "name": slot["name"],
+                        "arguments": slot["arguments"],
+                    },
+                }
+                for i, slot in sorted(self._tool_calls.items())
+            ]
+        return {
+            "id": self._id,
+            "model": self._model,
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": self._finish_reason,
+                    "message": message,
+                }
+            ],
+            "usage": self._usage,
+            "stream_aggregated": True,
+        }
+
+
 class OpenAICompatProvider:
     """LLMProvider 的 OpenAI Chat Completions 实现。"""
 
@@ -181,9 +261,18 @@ class OpenAICompatProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> LLMResponse:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
-        response = self._client.chat.completions.create(**kwargs)
+        turn = tracer.trace_request(kwargs) if tracer else None
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if tracer:
+                tracer.trace_error(turn, e)
+            raise
+        if tracer:
+            tracer.trace_response(turn, response)
         return self._response_to_llm(response)
 
     def stream(
@@ -192,13 +281,29 @@ class OpenAICompatProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> Iterator[StreamEvent]:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True)
+        turn = tracer.trace_request(kwargs) if tracer else None
+        accumulator = _StreamTraceAccumulator() if tracer else None
         translator = _StreamTranslator()
         yield translator.start()
-        for chunk in self._client.chat.completions.create(**kwargs):
-            for event in translator.feed(chunk):
-                yield event
+        done = False
+        try:
+            for chunk in self._client.chat.completions.create(**kwargs):
+                if accumulator:
+                    accumulator.feed(chunk)
+                for event in translator.feed(chunk):
+                    yield event
+        except BaseException as e:  # 含 GeneratorExit（调用方中断生成器）
+            if tracer and not done:
+                tracer.trace_error(turn, e)
+            raise
+        # 调用方（runner）在 message_stop（finish）即中断消费——答节必须在
+        # yield 它之前落盘；done 先置位，break 触发的 GeneratorExit 不算异常
+        if tracer and accumulator:
+            tracer.trace_response(turn, accumulator.dump())
+        done = True
         yield translator.finish()
 
     async def achat(
@@ -207,9 +312,18 @@ class OpenAICompatProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> LLMResponse:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens)
-        response = await self._ensure_async_client().chat.completions.create(**kwargs)
+        turn = tracer.trace_request(kwargs) if tracer else None
+        try:
+            response = await self._ensure_async_client().chat.completions.create(**kwargs)
+        except Exception as e:
+            if tracer:
+                tracer.trace_error(turn, e)
+            raise
+        if tracer:
+            tracer.trace_response(turn, response)
         return self._response_to_llm(response)
 
     async def astream(
@@ -218,14 +332,30 @@ class OpenAICompatProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int = 8000,
+        tracer: Optional["LLMTracer"] = None,
     ) -> AsyncIterator[StreamEvent]:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True)
+        turn = tracer.trace_request(kwargs) if tracer else None
+        accumulator = _StreamTraceAccumulator() if tracer else None
         translator = _StreamTranslator()
         yield translator.start()
-        stream = await self._ensure_async_client().chat.completions.create(**kwargs)
-        async for chunk in stream:
-            for event in translator.feed(chunk):
-                yield event
+        done = False
+        try:
+            stream = await self._ensure_async_client().chat.completions.create(**kwargs)
+            async for chunk in stream:
+                if accumulator:
+                    accumulator.feed(chunk)
+                for event in translator.feed(chunk):
+                    yield event
+        except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
+            if tracer and not done:
+                tracer.trace_error(turn, e)
+            raise
+        # 调用方（runner）在 message_stop（finish）即中断消费——答节必须在
+        # yield 它之前落盘；done 先置位，break 触发的 GeneratorExit 不算异常
+        if tracer and accumulator:
+            tracer.trace_response(turn, accumulator.dump())
+        done = True
         yield translator.finish()
 
     def count_tokens(self, text: str) -> int:

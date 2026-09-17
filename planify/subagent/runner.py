@@ -166,6 +166,11 @@ def run_subagent(
     system_prompt = build_system_prompt(workdir=workdir_str, agent_type="subagent")
     sub_msgs = [{"role": "user", "content": prompt}]
 
+    # LLM 追踪（调试/缓存命中率观测）：子代理独立文件（时间戳命名）
+    from ..core.llm.trace import LLMTracer
+
+    tracer = LLMTracer.create(label=f"subagent-{agent_type}", workdir=workdir)
+
     # 把工具定义转换为 Tool dataclass
     tool_defs = [
         Tool(
@@ -186,6 +191,7 @@ def run_subagent(
                 system=system_prompt,
                 tools=tool_defs,
                 max_tokens=max_tokens,
+                tracer=tracer,
             )
         except Exception as e:
             # 不能静默吞掉：子代理失败时主代理只会看到 "(subagent failed)"，

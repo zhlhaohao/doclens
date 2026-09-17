@@ -24,7 +24,7 @@ def _ev(type_, **kw):
 
 
 class _TextProvider:
-    async def astream(self, *, messages, system, tools, max_tokens):
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
         yield _ev("content_block_start", block_index=0, block_type="text")
         yield _ev("content_block_delta", block_index=0, text_delta="回答")
         yield _ev("content_block_stop", block_index=0)
@@ -53,7 +53,7 @@ def _run_with_capturing_compact(runtime_config, tmp_path):
     """跑一轮 run_stream（compact_threshold=1 必触发压缩），返回捕获的目录。"""
     captured = {}
 
-    async def fake_compact(messages, provider, transcript_dir):
+    async def fake_compact(messages, provider, transcript_dir, *, tracer=None):
         captured["dir"] = transcript_dir
         return messages
 

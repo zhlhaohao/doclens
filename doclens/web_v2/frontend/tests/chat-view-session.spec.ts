@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapSessionItemsToMessages, extractLastUsage } from "../src/views/chat-view";
+import { mapSessionItemsToMessages, aggregateUsage } from "../src/views/chat-view";
 
 describe("mapSessionItemsToMessages", () => {
   it("maps tool_calls to tool_steps for assistant messages", () => {
@@ -60,8 +60,8 @@ describe("mapSessionItemsToMessages", () => {
   });
 });
 
-describe("extractLastUsage（会话信息弹窗，2026-09-17）", () => {
-  it("取最后一条 usage 条目，used = input + cache_read + cache_creation", () => {
+describe("aggregateUsage（会话信息弹窗，2026-09-17）", () => {
+  it("used 取最后一条；命中率口径全程累计（cache_read/总输入/调用次数）", () => {
     const items = [
       { kind: "message_user", payload: JSON.stringify({ content: "q" }) },
       { kind: "usage", payload: JSON.stringify({
@@ -75,12 +75,17 @@ describe("extractLastUsage（会话信息弹窗，2026-09-17）", () => {
         context_window: 200000,
       }) },
     ];
-    expect(extractLastUsage(items)).toEqual({ used: 375, contextWindow: 200000 });
+    // used = 最后一条 300+60+15 = 375；累计 cache_read = 80，
+    // 累计总输入 = 125 + 375 = 500，调用 2 次
+    expect(aggregateUsage(items)).toEqual({
+      used: 375, contextWindow: 200000,
+      cacheReadTotal: 80, inputTotal: 500, calls: 2,
+    });
   });
 
   it("无 usage 条目返回 null", () => {
     const items = [{ kind: "message_user", payload: JSON.stringify({ content: "q" }) }];
-    expect(extractLastUsage(items)).toBeNull();
+    expect(aggregateUsage(items)).toBeNull();
   });
 
   it("usage 条目不影响消息映射", () => {
@@ -93,8 +98,17 @@ describe("extractLastUsage（会话信息弹窗，2026-09-17）", () => {
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
   });
 
-  it("坏 JSON 的 usage 条目安全返回 null", () => {
-    const items = [{ kind: "usage", payload: "{broken" }];
-    expect(extractLastUsage(items)).toBeNull();
+  it("坏 JSON 的 usage 条目跳过，不影响其余聚合", () => {
+    const items = [
+      { kind: "usage", payload: "{broken" },
+      { kind: "usage", payload: JSON.stringify({
+        input_tokens: 100, cache_read_input_tokens: 40,
+        cache_creation_input_tokens: 10, context_window: 200000,
+      }) },
+    ];
+    expect(aggregateUsage(items)).toEqual({
+      used: 150, contextWindow: 200000,
+      cacheReadTotal: 40, inputTotal: 150, calls: 1,
+    });
   });
 });

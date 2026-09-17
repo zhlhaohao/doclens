@@ -100,9 +100,16 @@ class GitSync:
         return ""
 
     def _ensure_gitignore(self) -> None:
-        """把本地状态目录（.cortex / .doclens）写入知识库 .gitignore（幂等）。"""
+        """把本地状态目录写入知识库 .gitignore（幂等）。
+
+        排除两类：doclens 数据目录（.cortex / .doclens，索引/会话/密钥）与
+        planify 框架目录（.planify/，LLM trace 含对话全文等隐私载荷）。
+        """
         gitignore = os.path.join(self._path, ".gitignore")
-        entry = f"{self._data_dir}/"
+        entries = [
+            (f"{self._data_dir}/", "# doclens 本地状态（索引/会话/密钥），不随知识库同步"),
+            (".planify/", "# planify 框架目录（LLM trace 含对话全文），不随知识库同步"),
+        ]
         try:
             existing = ""
             if os.path.exists(gitignore):
@@ -113,13 +120,21 @@ class GitSync:
                 for line in existing.splitlines()
                 if line.strip() and not line.strip().startswith("#")
             }
-            if entry in covered or entry.rstrip("/") in covered or f"/{entry}" in covered:
+
+            def _covered(entry: str) -> bool:
+                return entry in covered or entry.rstrip("/") in covered or f"/{entry}" in covered
+
+            missing = [(e, c) for e, c in entries if not _covered(e)]
+            if not missing:
                 return
             with open(gitignore, "a", encoding="utf-8") as f:
                 if existing and not existing.endswith("\n"):
                     f.write("\n")
-                f.write(f"# doclens 本地状态（索引/会话/密钥），不随知识库同步\n{entry}\n")
-            logger.info("GitSync 已将 %s 写入 %s", entry, gitignore)
+                for entry, comment in missing:
+                    f.write(f"{comment}\n{entry}\n")
+            logger.info(
+                "GitSync 已将 %s 写入 %s", ", ".join(e for e, _ in missing), gitignore
+            )
         except OSError as e:
             logger.warning("GitSync 写入 .gitignore 失败: %s", e)
 

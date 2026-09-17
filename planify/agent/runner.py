@@ -85,6 +85,13 @@ class Agent:
         self.tool_callback = tool_callback
         self.tool_result_callback = tool_result_callback
         self._system_prompt_extra = system_prompt_extra
+        # LLM 追踪（调试/缓存命中率观测）：旧 REPL 无人传 tracer，按 config
+        # 的 workdir 自建；开关未开时为 None（零开销）
+        from ..core.llm.trace import LLMTracer
+
+        self.tracer = LLMTracer.create(
+            label="agent", workdir=self.config.get("workdir")
+        )
 
         # 延迟导入以避免循环依赖（使用相对导入）
         from ..context import estimate_tokens, microcompact, auto_compact
@@ -144,7 +151,9 @@ class Agent:
                 # .planify/transcript.json 文件路径（语义不符），统一用
                 # <workdir>/.transcripts/
                 transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
-                compacted = self._auto_compact(messages, self.provider, transcript_dir)
+                compacted = self._auto_compact(
+                    messages, self.provider, transcript_dir, tracer=self.tracer
+                )
 
                 # 本地列表必须就地替换（runtime 路径下两者可能是不同列表）；
                 # 若本就是同一列表，二次替换幂等无害
@@ -193,6 +202,7 @@ class Agent:
                     for t in self.tools
                 ],
                 max_tokens=8000,
+                tracer=self.tracer,
             )
 
             # === 记录响应 ===
@@ -289,7 +299,9 @@ class Agent:
             # === s06: 手动压缩 ===
             if manual_compress:
                 transcript_dir = Path(self.config.get("workdir", ".")) / ".transcripts"
-                compacted = self._auto_compact(messages, self.provider, transcript_dir)
+                compacted = self._auto_compact(
+                    messages, self.provider, transcript_dir, tracer=self.tracer
+                )
 
                 # 同上：本地列表 + runtime 双写（同一列表时幂等）
                 messages[:] = compacted

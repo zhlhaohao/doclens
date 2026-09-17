@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Planify 核心模块导入
 from planify.core.runtime import AgentRuntime, RuntimeConfig
-from planify.core.llm import create_provider
+from planify.core.llm import LLMTracer, create_provider
 from planify.streaming.runner import StreamingAgent
 from planify.streaming.emitter import CLIEventEmitter
 from planify.streaming.waiter import get_global_waiter
@@ -125,6 +125,9 @@ class CortexAgent:
         self.idx = idx_manager
         self._injected_idx = idx_manager is not None
         self._escape_watcher = None
+        # LLM 追踪（CLI/TUI 会话级，时间戳命名一次、跨输入追加同一文件；
+        # 开关未开时保持 None，每次查询重试 create（开销仅两次 getenv））
+        self._llm_tracer = None
         self._setup_dirs()
 
     def _setup_dirs(self):
@@ -381,6 +384,12 @@ class CortexAgent:
             planify_max_tokens=getattr(config, "planify_max_tokens", None) or None,
         )
 
+    def _get_llm_tracer(self):
+        """LLM 追踪器（CLI/TUI 会话级惰性单例；开关未开为 None）。"""
+        if self._llm_tracer is None:
+            self._llm_tracer = LLMTracer.create(label="cli")
+        return self._llm_tracer
+
     def run_query(
         self,
         query: str,
@@ -437,6 +446,7 @@ class CortexAgent:
             runtime=self.runtime,
             interrupt_event=_interrupt_event,
             system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA,
+            tracer=self._get_llm_tracer(),
         )
 
         try:
@@ -463,7 +473,8 @@ class CortexAgent:
                 compacted = auto_compact(
                     history,
                     self.runtime.client,
-                    self.workdir / data_dirname() / "transcripts"
+                    self.workdir / data_dirname() / "transcripts",
+                    tracer=self._get_llm_tracer(),
                 )
                 self.runtime.replace_messages_in_place(compacted)
                 history[:] = compacted

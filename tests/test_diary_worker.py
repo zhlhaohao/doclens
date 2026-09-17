@@ -82,7 +82,7 @@ class TestDescribePhotoProtocol:
                 self.content = [SimpleNamespace(text="一只橘猫在长椅上")]
 
         class _FakeProvider:
-            def chat(self, messages, system, tools, max_tokens):
+            def chat(self, messages, system, tools, max_tokens, tracer=None):
                 captured["messages"] = messages
                 captured["max_tokens"] = max_tokens
                 return _FakeResp()
@@ -129,7 +129,7 @@ class TestDescribePhotoProtocol:
                 self.content = [SimpleNamespace(text="一张表格的图")]
 
         class _FakeProvider:
-            def chat(self, messages, system, tools, max_tokens):
+            def chat(self, messages, system, tools, max_tokens, tracer=None):
                 captured["messages"] = messages
                 captured["max_tokens"] = max_tokens
                 return _FakeResp()
