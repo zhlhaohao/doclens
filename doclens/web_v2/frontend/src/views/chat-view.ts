@@ -119,6 +119,8 @@ export interface SessionUsageState {
   inputTotal: number;
   /** 全会话 LLM 调用次数 */
   calls: number;
+  /** 最后一条 usage 条目的 seq（压缩晚于此值 → 占用显示压缩后估算） */
+  lastSeq: number;
 }
 
 /** 从 session_items 聚合全部 kind="usage" 条目（会话信息弹窗）：
@@ -126,13 +128,14 @@ export interface SessionUsageState {
  *  （累计缓存命中率，2026-09-17 与 LLM trace 落盘同期加）；
  *  单条坏 JSON 跳过，不影响其余聚合。 */
 export function aggregateUsage(
-  items: Array<{ kind: string; payload: string }>,
+  items: Array<{ kind: string; payload: string; seq?: number }>,
 ): SessionUsageState | null {
   let cacheReadTotal = 0;
   let inputTotal = 0;
   let calls = 0;
   let last: { input: number; read: number; creation: number; contextWindow: number } | null =
     null;
+  let lastSeq = -1;
   for (const item of items) {
     if (item.kind !== "usage") continue;
     let p: Record<string, unknown>;
@@ -153,6 +156,7 @@ export function aggregateUsage(
       creation,
       contextWindow: Number(p.context_window ?? 0),
     };
+    lastSeq = Math.max(lastSeq, Number(item.seq ?? -1));
   }
   if (last === null) return null;
   return {
@@ -161,7 +165,50 @@ export function aggregateUsage(
     cacheReadTotal,
     inputTotal,
     calls,
+    lastSeq,
   };
+}
+
+/** 会话压缩信息（会话信息弹窗，ADR-0026）： */
+export interface SessionCompactionState {
+  /** 全会话压缩次数（kind="compacted" 条目数） */
+  count: number;
+  /** 最近一次压缩时间（条目 created_at，ISO 字符串；旧后端无此字段为 null） */
+  lastAt: string | null;
+  /** 最近一次压缩前的估算 tokens */
+  lastPreTokens: number;
+  /** 最近一次压缩后的消息负载估算 tokens（不含 system prompt/工具表） */
+  lastPostTokens: number;
+  /** 最后一条 compacted 条目的 seq（晚于 usage.lastSeq → 占用显示估算） */
+  lastSeq: number;
+}
+
+/** 从 session_items 聚合全部 kind="compacted" 条目（会话信息弹窗）：
+ *  计数 + 最后一条（按 seq 序遍历取最后，含 created_at / pre_tokens /
+ *  post_tokens / seq）；单条坏 JSON 计数但跳过元数据读取；无条目返回 null。 */
+export function aggregateCompaction(
+  items: Array<{ kind: string; payload: string; created_at?: string | null; seq?: number }>,
+): SessionCompactionState | null {
+  let count = 0;
+  let lastAt: string | null = null;
+  let lastPreTokens = 0;
+  let lastPostTokens = 0;
+  let lastSeq = -1;
+  for (const item of items) {
+    if (item.kind !== "compacted") continue;
+    count += 1;
+    try {
+      const p = JSON.parse(item.payload) as Record<string, unknown>;
+      lastPreTokens = Number(p.pre_tokens ?? 0);
+      lastPostTokens = Number(p.post_tokens ?? 0);
+    } catch {
+      // 坏 JSON 仍计数，元数据沿用上一条
+    }
+    lastAt = item.created_at ?? lastAt;
+    lastSeq = Math.max(lastSeq, Number(item.seq ?? -1));
+  }
+  if (count === 0) return null;
+  return { count, lastAt, lastPreTokens, lastPostTokens, lastSeq };
 }
 
 @customElement("chat-view")
@@ -392,9 +439,14 @@ export class ChatView extends LitElement {
   @state() private _skillDialogOpen = false;
   @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
+  /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
+  private _compacting = false;
   /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
    *  SSE usage 事件逐条累加，恢复会话时从 items 的 kind="usage" 条目聚合。 */
   @state() private _sessionUsage: SessionUsageState | null = null;
+  /** 当前会话压缩信息（ADR-0026）：无 SSE，恢复会话 / 打开弹窗时从
+   *  items 的 kind="compacted" 条目聚合刷新。 */
+  @state() private _sessionCompaction: SessionCompactionState | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -488,11 +540,65 @@ export class ChatView extends LitElement {
         onClick: () => { this._renameDialogOpen = true; },
       },
       {
+        label: "压缩历史",
+        icon: "archive",
+        onClick: () => { void this._compactSession(); },
+      },
+      {
         label: "会话信息",
         icon: "info",
-        onClick: () => { this._infoDialogOpen = true; },
+        // 打开时顺带刷新压缩信息（无 SSE 通道，打开时 re-fetch 聚合补偿实时性）
+        onClick: () => {
+          this._refreshCompaction();
+          this._infoDialogOpen = true;
+        },
       },
     ];
+  }
+
+  /** 手动压缩当前会话历史（ADR-0026 手动入口）：LLM 摘要落库 compacted
+   *  条目，下轮起上下文从摘要开始；对话流展示不受影响。 */
+  private async _compactSession() {
+    const session = this.viewState.currentSession;
+    if (!session || this._compacting) return;
+    this._compacting = true;
+    this._pushToast("正在压缩会话历史…", "info", 60000);
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/compact`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        this._pushToast(
+          `压缩失败：${body.detail || res.status}`, "error", 5000,
+        );
+        return;
+      }
+      const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+      this._pushToast(
+        `已压缩（约 ${fmt(body.pre_tokens ?? 0)} → ${fmt(body.post_tokens ?? 0)} tokens）`,
+        "success", 4000,
+      );
+      void this._refreshCompaction();
+    } catch (err) {
+      this._pushToast(`压缩失败：${(err as Error)?.message || err}`, "error", 5000);
+    } finally {
+      this._compacting = false;
+    }
+  }
+
+  /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
+  private async _refreshCompaction() {
+    const session = this.viewState.currentSession;
+    if (!session) return;
+    try {
+      const res = await fetch(`/api/sessions/${session.id}`);
+      if (!res.ok) return;
+      const body = await res.json();
+      this._sessionCompaction = aggregateCompaction(body.items || []);
+    } catch {
+      // 拉取失败保留上次聚合结果
+    }
   }
 
   private _onRenameSubmit = async (e: CustomEvent<{ title: string }>) => {
@@ -559,14 +665,29 @@ export class ChatView extends LitElement {
   /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
   private _renderInfoDialog() {
     if (!this._infoDialogOpen || !this.viewState.currentSession) return nothing;
+    // 占用口径：压缩晚于最近一次 LLM 调用时，最近实测已不代表当前上下文
+    // （历史已被摘要替换）——显示压缩后估算并标注；下轮对话实测覆盖
+    const usage = this._sessionUsage;
+    const compaction = this._sessionCompaction;
+    const useEstimate =
+      compaction !== null &&
+      compaction.lastPostTokens > 0 &&
+      compaction.lastSeq > (usage?.lastSeq ?? -1);
+    const used = useEstimate
+      ? compaction!.lastPostTokens
+      : usage?.used ?? null;
     return html`
       <dialog @cancel=${this._onInfoClose}>
         <session-info-dialog
-          .used=${this._sessionUsage?.used ?? null}
-          .contextWindow=${this._sessionUsage?.contextWindow ?? 0}
-          .cacheReadTotal=${this._sessionUsage?.cacheReadTotal ?? null}
-          .inputTotal=${this._sessionUsage?.inputTotal ?? null}
-          .calls=${this._sessionUsage?.calls ?? 0}
+          .used=${used}
+          .usedIsEstimate=${useEstimate}
+          .contextWindow=${usage?.contextWindow ?? 0}
+          .cacheReadTotal=${usage?.cacheReadTotal ?? null}
+          .inputTotal=${usage?.inputTotal ?? null}
+          .calls=${usage?.calls ?? 0}
+          .compactionCount=${compaction?.count ?? 0}
+          .lastCompactedAt=${compaction?.lastAt ?? null}
+          .lastPreTokens=${compaction?.lastPreTokens ?? null}
           @close=${this._onInfoClose}
         ></session-info-dialog>
       </dialog>`;
@@ -736,6 +857,7 @@ export class ChatView extends LitElement {
                 cacheReadTotal: ev.cache_read_input_tokens,
                 inputTotal: used,
                 calls: 1,
+                lastSeq: Number.MAX_SAFE_INTEGER,
               }
             : {
                 ...prev,
@@ -743,6 +865,8 @@ export class ChatView extends LitElement {
                 cacheReadTotal: prev.cacheReadTotal + ev.cache_read_input_tokens,
                 inputTotal: prev.inputTotal + used,
                 calls: prev.calls + 1,
+                // 新实测必然晚于已知 compacted 条目——占用切回实测口径
+                lastSeq: Number.MAX_SAFE_INTEGER,
               };
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
@@ -855,6 +979,7 @@ export class ChatView extends LitElement {
         const messages = mapSessionItemsToMessages(body.items || []);
         actions.setChatState({ messages });
         this._sessionUsage = aggregateUsage(body.items || []);
+        this._sessionCompaction = aggregateCompaction(body.items || []);
       }
     } catch (e) {
       console.warn("load session failed", e);

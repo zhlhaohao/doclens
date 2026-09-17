@@ -96,7 +96,17 @@ async def get_session(session_id: str):
     items = store.get_detail(session_id)
     return SessionDetailResponse(
         **summary.model_dump(mode="json"),
-        items=[{"kind": i.kind, "payload": i.payload, "seq": i.seq} for i in items],
+        # created_at 供前端压缩信息聚合取「最近压缩时间」（ADR-0026）；
+        # 条目级时间戳此前未透传，新增字段对旧前端无感
+        items=[
+            {
+                "kind": i.kind,
+                "payload": i.payload,
+                "seq": i.seq,
+                "created_at": i.created_at.isoformat() if i.created_at else None,
+            }
+            for i in items
+        ],
     )
 
 
@@ -145,6 +155,59 @@ async def star_session(session_id: str, req: SessionStarRequest):
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     store.set_starred(session_id, req.starred)
     return {"ok": True, "id": session_id, "starred": req.starred}
+
+
+@router.post("/sessions/{session_id}/compact")
+async def compact_session(session_id: str):
+    """手动压缩会话历史（ADR-0026 压缩即事实的手动入口，2026-09-17）。
+
+    全量摘要落库为 compacted 条目（回放截断投影，下轮起 LLM 上下文从摘要
+    开始）；原文双备份在 DB 条目（展示层不受影响）与 .transcripts/ 文件。
+    - 仅 chat 会话；流式生成中 409（与 run_stream 的历史 mutate 互斥）；
+    - 历史过短 400（无摘要意义，白付一次 LLM 调用）。
+    """
+    store = _get_store()
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    if summary.type is not SessionType.CHAT:
+        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持压缩")
+    from doclens.web_v2.chat_interrupt import is_streaming
+    if is_streaming(session_id):
+        raise CortexAPIError(409, "SESSION_STREAMING", "对话生成中，请等待完成后再压缩")
+
+    history = store.get_chat_history(session_id)
+    if len(history) < 2:
+        raise CortexAPIError(400, "NOTHING_TO_COMPACT", "会话历史太短，无需压缩")
+
+    from planify.context.compact import aauto_compact, estimate_tokens
+    from doclens.web_v2.deps import get_agent
+
+    runtime = get_agent().runtime
+    transcript_dir = (
+        getattr(runtime.config, "compact_transcript_dir", None)
+        or Path(runtime.config.workdir) / ".transcripts"
+    )
+    pre_tokens = estimate_tokens(history)
+    try:
+        from planify.core.llm import LLMTracer
+        compacted = await aauto_compact(
+            history, runtime.client, transcript_dir,
+            tracer=LLMTracer.create(label="compact", session_key=session_id),
+        )
+    except CortexAPIError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise CortexAPIError(
+            502, "COMPACT_FAILED", f"压缩失败（LLM 摘要调用出错）: {e}"
+        ) from e
+    store.append_compacted(session_id, compacted, pre_tokens)
+    return {
+        "ok": True,
+        "id": session_id,
+        "pre_tokens": pre_tokens,
+        "post_tokens": estimate_tokens(compacted),
+    }
 
 
 @router.delete("/sessions/{session_id}")

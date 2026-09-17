@@ -52,8 +52,11 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
 
     规则：user 消息中的 tool_result block 仅当其 tool_use_id 出现在紧邻的
     前一条 assistant 消息的 tool_use 集合中时保留，其余剥除；剥空的消息
-    整条丢弃。丢弃后产生的同角色相邻用 "(interrupted)" 填充（与
-    get_chat_history._append 同款）。合法配对消息逐字节不动（前缀缓存）。
+    整条丢弃。连续同角色处置（与 get_chat_history._append 同款）：user/user
+    相邻补 "(interrupted)" 填充（中断轮 400 防护）；assistant/assistant
+    放行——压缩边界后摘要确认（"Understood."）紧跟 LLM 响应是真实请求
+    形态，插填充反而使回放与真实请求前缀分叉（ADR-0026）。合法配对
+    消息逐字节不动（前缀缓存）。
     """
     out: list[dict] = []
     for m in history:
@@ -79,9 +82,8 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
                 continue  # 整条都是孤儿 tool_result → 丢弃
             if len(blocks) != len(content):
                 m = {**m, "content": blocks}
-        if out and out[-1].get("role") == m.get("role"):
-            filler = "user" if m.get("role") == "assistant" else "assistant"
-            out.append({"role": filler, "content": "(interrupted)"})
+        if out and m.get("role") == "user" and out[-1].get("role") == "user":
+            out.append({"role": "assistant", "content": "(interrupted)"})
         out.append(m)
     return out
 
@@ -391,6 +393,64 @@ class SessionsStore:
                  json.dumps(usage, ensure_ascii=False), now),
             )
 
+    def append_compacted(self, session_id: str, messages: list[dict], pre_tokens: int) -> None:
+        """落库一次上下文压缩（kind='compacted'，ADR-0026 压缩即事实），seq 按 MAX 续排。
+
+        payload 与 raw_messages 同构（{"messages": [...]}）另加 pre_tokens
+        （压缩前估算）与 post_tokens（压缩后消息负载估算——公式与
+        planify.context.compact.estimate_tokens 同式 len(json)//4，仅消息
+        部分、不含 system prompt 与工具表，前端在「压缩晚于最近一次调用」
+        时作为上下文占用的估算显示，下轮对话实测覆盖）。回放
+        （get_chat_history）遇到本条目即**清空此前全部历史**再拼接
+        messages——截断标记与压缩内容二合一；同会话多个边界只最后一个
+        生效。调用方须在本轮 append_raw_messages 之前调用（回放顺序：
+        compacted → 本轮 raw_messages）。
+        """
+        post_tokens = len(json.dumps(messages, default=str)) // 4
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'compacted', ?, ?)""",
+                (session_id, row[0] + 1,
+                 json.dumps({"messages": messages,
+                             "pre_tokens": pre_tokens,
+                             "post_tokens": post_tokens},
+                            ensure_ascii=False, default=str), now),
+            )
+
+    def append_microcompact(self, session_id: str, cleared_tool_use_ids: list[str]) -> None:
+        """落库一轮微压缩（kind='microcompact'，ADR-0026），seq 按 MAX 续排。
+
+        payload 存本轮实际清理的 tool_use_id 清单；回放按 id 把已回放消息
+        中对应 tool_result 的内容替换为 "[cleared]"——重放与真实请求逐字节
+        一致（80%–100% 阈值窗口内跨轮前缀不再分叉）。目标 id 不在回放
+        历史（已被压缩边界清掉 / 本轮 raw 已是清理后内容）时为幂等 no-op。
+        """
+        if not cleared_tool_use_ids:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'microcompact', ?, ?)""",
+                (session_id, row[0] + 1,
+                 json.dumps({"cleared_tool_use_ids": list(cleared_tool_use_ids)},
+                            ensure_ascii=False), now),
+            )
+
     def upsert_skill_contexts(
         self,
         session_id: str,
@@ -403,7 +463,9 @@ class SessionsStore:
         出现在首次注入位置，跨轮请求变为纯尾部追加。
 
         - 按 (session_id, name) 幂等：同名条目已存在则跳过（内容变化原地 UPDATE——技能正文被编辑
-          后回放与 runner 注入保持一致）；
+          后回放与 runner 注入保持一致）；**压缩边界感知**——仅统计最后一个
+          compacted 条目之后的 skill_context（边界前的条目回放已丢弃，视为
+          不存在，压缩后同名技能以新 seq 重插，见 ADR-0026）；
         - 新条目插入到当前尾部条目（本轮 message_user，由前端在发送时写入）
           之前，复现 run_stream「注入在历史末尾、user query 之前」的内存位置。
 
@@ -415,10 +477,22 @@ class SessionsStore:
         if not contexts:
             return 0
         with self._lock, self._conn() as conn:
+            # 压缩边界感知（ADR-0026）：边界（kind='compacted'）之前的旧
+            # skill_context 条目在回放中已被截断投影丢弃，但对下面的去重
+            # 而言"仍存在"——若不排除，压缩后同名技能永远匹配旧条目而跳过
+            # 插入，skill body 每轮漂到当轮末尾（前缀缓存漂移修复失效）。
+            # 存在性只统计边界之后的条目；无 compacted 会话 boundary=-1，
+            # 行为与历史版本一致。
+            boundary_row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ? AND kind = 'compacted'""",
+                (session_id,),
+            ).fetchone()
+            boundary = boundary_row[0]
             rows = conn.execute(
                 """SELECT seq, payload FROM session_items
-                   WHERE session_id = ? AND kind = 'skill_context'""",
-                (session_id,),
+                   WHERE session_id = ? AND kind = 'skill_context' AND seq > ?""",
+                (session_id, boundary),
             ).fetchall()
             existing: dict[str, tuple[int, str]] = {}
             for r in rows:
@@ -551,20 +625,49 @@ class SessionsStore:
         - raw_messages → 本轮原始消息序列原样拼接（runner 真实累积结构，
           跨轮前缀缓存友好的关键）；含 raw_messages 的轮忽略其
           tool_trace / message_ai_raw / message_ai（展示层冗余副本）；
+        - compacted → **压缩边界（截断投影，ADR-0026）**：清空此前全部
+          回放（含本轮 message_user / skill_context——摘要覆盖全部历史），
+          再拼接压缩后消息序列；同会话多个边界只最后一个生效；含
+          compacted 的轮同样抑制 tool_trace/message_ai_raw 兜底（压缩
+          中断轮 raw 为空时不得"复活"压缩前的旧工具链）；
+        - microcompact → 微压缩重放（ADR-0026）：预扫描收集边界之后的
+          cleared_tool_use_ids，回放中对已回放 tool_result 按 id 替换
+          "[cleared]"——与 runner 真实请求逐字节一致；目标不存在时幂等 no-op；
         - tool_trace → assistant(tool_use) + user(tool_result) 成对回放
           （无 raw_messages 的旧轮兜底）；
         - skill_context → run_stream 注入的 skill body 原样回放（见
           upsert_skill_contexts）；
         - message_ai_raw（模型原始输出）优先于 message_ai（策展展示文本）；
-        - 旧会话无 raw/tool_trace 条目时行为与之前一致。
+        - 旧会话无 raw/tool_trace/compacted 条目时行为与之前一致。
 
         Returns:
             [{"role": "user"|"assistant", "content": str | list}, ...]，按 seq 升序。
         """
+        items = self.get_detail(session_id)
+        # 预扫描：最后一个压缩边界 + 边界之后的微压缩清理 id 并集。
+        # 遇新边界清空已收集 ids——更早的清理目标已被截断投影丢弃。
+        last_compacted_seq = -1
+        cleared_ids: set[str] = set()
+        for it in items:
+            if it.kind == "compacted":
+                last_compacted_seq = it.seq
+                cleared_ids.clear()
+            elif it.kind == "microcompact":
+                try:
+                    p = json.loads(it.payload)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(p, dict):
+                    ids = p.get("cleared_tool_use_ids")
+                    if isinstance(ids, list):
+                        cleared_ids.update(
+                            i for i in ids if isinstance(i, str)
+                        )
+
         # 按轮分组：message_user 是一轮的起点（前端在发送时写入，同轮的
         # tool_trace / message_ai_raw / message_ai 都排在它之后）
         turns: list[list[SessionItem]] = []
-        for it in self.get_detail(session_id):
+        for it in items:
             if it.kind == "message_user" or not turns:
                 turns.append([it])
             else:
@@ -572,17 +675,37 @@ class SessionsStore:
 
         history: list[dict] = []
 
+        def _apply_cleared(role: str, content):
+            """微压缩重放：被清理 id 的 tool_result 内容替换 "[cleared]"。"""
+            if role != "user" or not isinstance(content, list) or not cleared_ids:
+                return content
+            return [
+                {**b, "content": "[cleared]"}
+                if isinstance(b, dict)
+                and b.get("type") == "tool_result"
+                and b.get("tool_use_id") in cleared_ids
+                else b
+                for b in content
+            ]
+
         def _append(role: str, content) -> None:
-            # Anthropic 要求 role 严格交替；同角色相邻时补一条最小填充消息，
-            # 避免中断轮（只有 message_user 没有 AI 回复）导致 400
-            if history and history[-1]["role"] == role:
-                filler = "user" if role == "assistant" else "assistant"
-                history.append({"role": filler, "content": "(interrupted)"})
+            # 连续同角色：user/user 补 assistant 填充（中断轮「只有
+            # message_user 没有 AI 回复」的 400 防护）；assistant/assistant
+            # 放行——压缩边界后摘要确认紧跟 LLM 响应是真实请求形态，
+            # 插填充反而使回放与真实请求前缀分叉（ADR-0026）。
+            if history and history[-1]["role"] == role == "user":
+                history.append({"role": "assistant", "content": "(interrupted)"})
             history.append({"role": role, "content": content})
 
         for turn in turns:
             # 含 raw_messages 的轮：原始结构原样回放，tool_trace/AI 文本忽略
             has_raw_messages = any(it.kind == "raw_messages" for it in turn)
+            # 含 compacted 的轮：压缩边界（截断投影）。轮内更早的
+            # message_user / skill_context 已被摘要覆盖（compacted 分支清空）；
+            # 压缩轮的 tool_trace / message_ai_raw 是压缩前的旧数据，即使
+            # raw 为空（压缩后立刻中断）也不得兜底复活（ADR-0026）。
+            has_compacted = any(it.kind == "compacted" for it in turn)
+            suppress_fallback = has_raw_messages or has_compacted
             ai_emitted = False
             ai_display_fallback = ""
             for it in turn:
@@ -602,9 +725,22 @@ class SessionsStore:
                             continue
                         r, c = rm.get("role"), rm.get("content")
                         if r in ("user", "assistant") and c:
+                            _append(r, _apply_cleared(r, c))
+                elif it.kind == "compacted":
+                    # 截断投影：清空此前全部回放再拼压缩后消息序列
+                    # （payload 与 raw_messages 同构）
+                    history.clear()
+                    for rm in payload.get("messages", []):
+                        if not isinstance(rm, dict):
+                            continue
+                        r, c = rm.get("role"), rm.get("content")
+                        if r in ("user", "assistant") and c:
                             _append(r, c)
+                elif it.kind == "microcompact":
+                    # 预扫描已按 id 重放（_apply_cleared），无逐条回放动作
+                    continue
                 elif it.kind == "tool_trace":
-                    if has_raw_messages:
+                    if suppress_fallback:
                         continue
                     tu_id = payload.get("tool_use_id", "")
                     if not tu_id:
@@ -618,7 +754,11 @@ class SessionsStore:
                     _append("user", [{
                         "type": "tool_result",
                         "tool_use_id": tu_id,
-                        "content": str(payload.get("output", "")),
+                        "content": (
+                            "[cleared]"
+                            if tu_id in cleared_ids
+                            else str(payload.get("output", ""))
+                        ),
                         "is_error": bool(payload.get("is_error", False)),
                     }])
                 elif it.kind == "skill_context":
@@ -629,7 +769,7 @@ class SessionsStore:
                         _append("user", content)
                         _append("assistant", "Noted.")
                 elif it.kind == "message_ai_raw":
-                    if has_raw_messages:
+                    if suppress_fallback:
                         continue
                     # raw 按 seq 位置回放（旧逻辑推迟到轮末，会把 seq 位置
                     # 介于其间的 skill_context 挤到 AI 文本之前，破坏前缀）
@@ -643,7 +783,7 @@ class SessionsStore:
                     content = payload.get("content", "")
                     if content and not ai_display_fallback:
                         ai_display_fallback = content
-            if not ai_emitted and not has_raw_messages and ai_display_fallback:
+            if not ai_emitted and not suppress_fallback and ai_display_fallback:
                 _append("assistant", ai_display_fallback)
         return _sanitize_tool_pairing(history)
 

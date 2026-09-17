@@ -121,10 +121,14 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 ### 7. 上下文压缩（`context/compact.py`）
 
 - token 估算：`len(json.dumps(messages)) // 4` 启发式（`:29`）
-- **microcompact**（截断式，`:64`）：只保留最近 10 个 tool_result、其余置 `"[cleared]"`；豁免集 `{"task"}`——子代理摘要清掉会丢失并发子代理结果（实测踩坑记录在 `:45-49` 注释）
+- **microcompact**（截断式，`:64`）：只保留最近 10 个 tool_result、其余置 `"[cleared]"`；豁免集 `{"task"}`——子代理摘要清掉会丢失并发子代理结果（实测踩坑记录在 `:45-49` 注释）；**返回值 = 实际被清理的 tool_use_id 列表**（宿主持久化以在回放侧重放同一清理；planify 自身不感知存储）
 - **auto_compact**（LLM 摘要式，`:116`）：先把原始对话落盘 `.transcripts/transcript_<ts>.jsonl`，再无工具调用生成 continuity 摘要，替换为 `[Compressed...]` + `Understood...` 两条消息
 - **0.8 门控**（`MICROCOMPACT_GATE_RATIO`）：上下文未达 auto_compact 阈值 80% 时**完全不动历史**——历史中段任何单点突变会使之后的 prompt 前缀缓存全部失效（GLM/MiniMax 等整体前缀匹配端点双倍代价）
 - 触发点 5 处：两个 runner 各自内嵌（micro 0.8 门控 / auto 超阈值）+ 模型手动 `compress` 工具 + 用户 `/compact` 命令
+- **streaming runner 压缩打标**（宿主「压缩即事实」持久化的框架侧契约，2026-09-17）：
+  - `microcompact` 返回的 id 累积到 `round_cleared_tool_use_ids`（循环每转幂等——`"[cleared]"` 长度<100 不重复清理；`run_stream` 开头重置防复用实例串轮）
+  - auto_compact 后打标 `last_compaction = {"messages": 压缩后消息序列, "pre_tokens": 压缩前估算}`（同轮多次压缩自然覆盖），**立即重注入**头部 context 与已加载 skill body（`_inject_head_context` / `_inject_loaded_skill_bodies` 均可重入——压缩吃掉注入消息，本轮后续循环需要它们在场），最后把 `round_start_index` 重置到全部重注入完成之后（摘要对不进宿主 raw_messages 切片区间，防与压缩条目重复落库）
+  - 框架不落库：宿主轮末读两个标记属性自行持久化（如 doclens `kind="compacted"` / `kind="microcompact"` 条目，回放侧做截断投影与按 id 重放）
 
 ### 8. prompts.py
 

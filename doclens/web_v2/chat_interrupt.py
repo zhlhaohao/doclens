@@ -27,6 +27,7 @@ __all__ = [
     "register_interrupt_hook",
     "unregister_interrupt_hook",
     "request_stop",
+    "is_streaming",
 ]
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,15 @@ def register_interrupt(session_id: str) -> threading.Event:
     with _lock:
         _interrupts[session_id] = ev
     return ev
+
+
+def is_streaming(session_id: str) -> bool:
+    """该会话是否有活跃的流式生成（chat 请求登记 interrupt 的生命周期内）。
+
+    供手动压缩等互斥操作拒绝并发（2026-09-17，ADR-0026 手动压缩入口）。
+    """
+    with _lock:
+        return session_id in _interrupts
 
 
 def unregister_interrupt(session_id: str, event: threading.Event) -> None:

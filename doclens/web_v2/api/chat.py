@@ -250,6 +250,33 @@ async def _stream_agent_response(
                     logger.warning(
                         "persist skill contexts failed for %s: %s", session_key, e
                     )
+            # 持久化压缩事件（ADR-0026 压缩即事实）：runner 打标 → 轮末落库。
+            # 落库顺序 load-bearing——必须在 append_raw_messages 之前（回放
+            # 顺序 compacted → 本轮 raw_messages），且必须在
+            # upsert_skill_contexts 之后（upsert 的插入位置是当前 MAX(seq)
+            # 条目之前，compacted 先落库会把新 skill 条目插进已被截断投影
+            # 丢弃的死前缀）。getattr 防御 PyPI 旧版 planify（无打标属性时
+            # 静默跳过，退化为旧行为：下轮重新压缩一次）。
+            if session_key:
+                try:
+                    from doclens.web_v2.deps import get_sessions_store
+
+                    compaction = getattr(sa, "last_compaction", None)
+                    if compaction:
+                        get_sessions_store().append_compacted(
+                            session_key,
+                            compaction["messages"],
+                            compaction.get("pre_tokens", 0),
+                        )
+                    cleared_ids = getattr(sa, "round_cleared_tool_use_ids", None)
+                    if cleared_ids:
+                        get_sessions_store().append_microcompact(
+                            session_key, cleared_ids
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "persist compaction failed for %s: %s", session_key, e
+                    )
             # 持久化本轮原始消息序列（assistant/tool_result 按 runner 真实累积
             # 结构）：tool_trace 拆对回放与真实结构不等价，多工具/文本交错轮
             # 前缀会从该轮首条 assistant 起分叉；raw_messages 回放逐字节一致。

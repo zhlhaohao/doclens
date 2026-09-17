@@ -315,9 +315,10 @@ class TestToolPairingSanitizer:
             b for m in history if isinstance(m.get("content"), list)
             for b in m["content"]
         ]
-        # 角色严格交替
+        # 角色交替契约（ADR-0026）：user/user 不相邻（400 防护）；
+        # assistant/assistant 允许（压缩边界后真实请求形态，不再插填充）
         roles = [m["role"] for m in history]
-        assert all(a != b for a, b in zip(roles, roles[1:]))
+        assert not any(a == b == "user" for a, b in zip(roles, roles[1:]))
 
     def test_orphan_only_message_dropped(self, store):
         """整条都是孤儿 tool_result 的 user 消息整条丢弃，交替由填充补上。"""
@@ -337,8 +338,9 @@ class TestToolPairingSanitizer:
                          for b in m["content"] if isinstance(b, dict)))
             for m in history
         )
+        # 角色交替契约（ADR-0026）：user/user 不相邻；assistant/assistant 允许
         roles = [m["role"] for m in history]
-        assert all(a != b for a, b in zip(roles, roles[1:]))
+        assert not any(a == b == "user" for a, b in zip(roles, roles[1:]))
 
     def test_mixed_blocks_keep_valid(self, store):
         """user 消息混合合法/孤儿 tool_result：只剥孤儿，合法块保留。"""
@@ -416,6 +418,218 @@ class TestUsageItems:
             {"role": "user", "content": "q"},
             {"role": "assistant", "content": "a1"},
         ]
+
+
+# === ADR-0026 压缩即事实：compacted / microcompact 回放投影 ===
+
+_SUMMARY_PAIR = [
+    {"role": "user", "content": "[Compressed. Transcript: t.jsonl]\n摘要"},
+    {"role": "assistant", "content": "Understood. Continuing with summary context."},
+]
+
+
+class TestCompactedReplay:
+    """kind='compacted' 截断投影：清空前缀、多边界取最后、抑制兜底复活。"""
+
+    def test_clears_prefix_including_same_turn_user(self, store):
+        """边界之前的全部条目（含同轮 message_user / skill_context）被摘要覆盖。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "旧问题"}, 0)
+        _append(store, "s1", "message_ai", {"content": "旧回答"}, 1)
+        _append(store, "s1", "message_user", {"content": "压缩轮问题"}, 2)
+        _append(store, "s1", "skill_context",
+                {"name": "demo", "content": "skill body"}, 3)
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [{"type": "text", "text": "压缩后回答"}]},
+        ])
+        history = store.get_chat_history("s1")
+        assert history == [
+            *_SUMMARY_PAIR,
+            {"role": "assistant", "content": [{"type": "text", "text": "压缩后回答"}]},
+        ]
+
+    def test_multiple_boundaries_last_wins(self, store):
+        """多次压缩：只最后一个边界生效（更早的摘要也被覆盖）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        store.append_compacted("s1", _SUMMARY_PAIR, 190000)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": "边界1后回答"},
+            {"role": "user", "content": "q2"},
+        ])
+        store.append_compacted(
+            "s1",
+            [
+                {"role": "user", "content": "[Compressed. Transcript: t2]\n摘要2"},
+                {"role": "assistant", "content": "Understood."},
+            ],
+            170000,
+        )
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": "边界2后回答"},
+        ])
+        history = store.get_chat_history("s1")
+        assert history == [
+            {"role": "user", "content": "[Compressed. Transcript: t2]\n摘要2"},
+            {"role": "assistant", "content": "Understood."},
+            {"role": "assistant", "content": "边界2后回答"},
+        ]
+
+    def test_compacted_turn_suppresses_fallback_revival(self, store):
+        """压缩轮 raw 为空（压缩后立刻中断）时，tool_trace/message_ai_raw
+        不得兜底复活压缩前的旧工具链（ADR-0026 审查问题 2）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        # 压缩前的工具链 + AI 原文（旧格式条目）
+        _append(store, "s1", "tool_trace",
+                {"tool_use_id": "tu_old", "name": "bash", "input": {},
+                 "output": "旧结果", "is_error": False}, 1)
+        _append(store, "s1", "message_ai_raw", {"content": "旧回答"}, 2)
+        # 压缩边界（无后续 raw —— 中断）
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        history = store.get_chat_history("s1")
+        assert history == _SUMMARY_PAIR
+
+    def test_consecutive_assistant_after_boundary_no_filler(self, store):
+        """摘要确认（assistant）后紧跟 LLM 回复（assistant）不插 "(interrupted)"
+        填充——真实请求形态，回放须逐字节一致（ADR-0026 审查问题 3）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": "压缩后回答"},
+        ])
+        history = store.get_chat_history("s1")
+        roles = [m["role"] for m in history]
+        assert roles == ["user", "assistant", "assistant"]
+        assert all(m["content"] != "(interrupted)" for m in history)
+
+    def test_interrupted_user_filler_still_applies(self, store):
+        """中断轮 user/user 填充保留（400 防护，契约另一半）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        _append(store, "s1", "message_user", {"content": "q2"}, 1)
+        _append(store, "s1", "message_ai", {"content": "a2"}, 2)
+        history = store.get_chat_history("s1")
+        assert history == [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "(interrupted)"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+
+
+class TestMicrocompactReplay:
+    """kind='microcompact' 按 tool_use_id 重放 "[cleared]"。"""
+
+    def test_cross_turn_tool_trace_replaced(self, store):
+        """跨轮旧格式 tool_trace 原文被替换为 "[cleared]"（真正生效场景）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        _append(store, "s1", "tool_trace",
+                {"tool_use_id": "tu_a", "name": "bash", "input": {},
+                 "output": "长输出" * 100, "is_error": False}, 1)
+        _append(store, "s1", "message_ai_raw", {"content": "a1"}, 2)
+        _append(store, "s1", "message_user", {"content": "q2"}, 3)
+        store.append_microcompact("s1", ["tu_a"])
+        history = store.get_chat_history("s1")
+        # q1 → assistant(tool_use) → user(tool_result "[cleared]") → a1 → q2
+        assert history[2]["content"][0]["content"] == "[cleared]"
+        assert history[0]["content"] == "q1"
+        assert history[4]["content"] == "q2"
+
+    def test_raw_messages_cleared_idempotent(self, store):
+        """raw_messages 内已是 "[cleared]" 的 tool_result 重放替换幂等。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu_b", "name": "bash", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu_b", "content": "[cleared]"},
+            ]},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu_keep", "name": "bash", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu_keep", "content": "保留"},
+            ]},
+        ])
+        store.append_microcompact("s1", ["tu_b"])
+        history = store.get_chat_history("s1")
+        # tu_b 仍 "[cleared]"；tu_keep 原文不受影响
+        blocks = [b for m in history if isinstance(m.get("content"), list)
+                  for b in m["content"]
+                  if isinstance(b, dict) and b.get("type") == "tool_result"]
+        by_id = {b["tool_use_id"]: b["content"] for b in blocks}
+        assert by_id == {"tu_b": "[cleared]", "tu_keep": "保留"}
+
+    def test_entry_before_boundary_ignored(self, store):
+        """边界（compacted）之前的 microcompact 条目不生效——其目标已被
+        截断投影清掉。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        _append(store, "s1", "tool_trace",
+                {"tool_use_id": "tu_dead", "name": "bash", "input": {},
+                 "output": "原文", "is_error": False}, 1)
+        _append(store, "s1", "message_user", {"content": "q2"}, 2)
+        store.append_microcompact("s1", ["tu_dead"])
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": "新回答"},
+        ])
+        history = store.get_chat_history("s1")
+        # 边界清掉一切（tu_dead 连同其 tool_trace 均不在回放中）
+        assert history == [*_SUMMARY_PAIR, {"role": "assistant", "content": "新回答"}]
+
+
+class TestUpsertBoundaryAware:
+    """upsert_skill_contexts 压缩边界感知（ADR-0026 审查问题 1）。"""
+
+    def test_reinsert_after_boundary(self, store):
+        """边界前的同名 skill_context 视为不存在 → 压缩后重插新条目。
+
+        真实时序（chat.py finally）：压缩轮 upsert 先跑（旧条目尚存活→跳过）
+        → compacted 落库 → 下轮前端先落 message_user → 下轮 upsert 重插。
+        """
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        # 压缩前的 skill_context
+        assert store.upsert_skill_contexts("s1", [("demo", "skill body")]) == 1
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        # 下轮：前端先落 message_user，再 upsert（旧条目在边界前不算存在）
+        _append(store, "s1", "message_user", {"content": "q2"},
+                max(it.seq for it in store.get_detail("s1")) + 1)
+        assert store.upsert_skill_contexts("s1", [("demo", "skill body")]) == 1
+        items = store.get_detail("s1")
+        skills = sorted(it.seq for it in items if it.kind == "skill_context")
+        compacted = [it.seq for it in items if it.kind == "compacted"]
+        assert len(skills) == 2
+        assert skills[1] > compacted[0]
+
+    def test_boundary_dedupe_same_turn(self, store):
+        """边界后已有同名条目时仍去重（边界感知只改存在性范围）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q1"}, 0)
+        store.append_compacted("s1", _SUMMARY_PAIR, 180000)
+        # 下轮：message_user 先落，upsert 两次（第二次去重）
+        _append(store, "s1", "message_user", {"content": "q2"},
+                max(it.seq for it in store.get_detail("s1")) + 1)
+        assert store.upsert_skill_contexts("s1", [("demo", "v1")]) == 1
+        assert store.upsert_skill_contexts("s1", [("demo", "v1")]) == 0
+
+    def test_dedupe_without_boundary_unchanged(self, store):
+        """无 compacted 会话（boundary=-1）：同名去重行为与历史版本一致。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "q"}, 0)
+        assert store.upsert_skill_contexts("s1", [("demo", "v1")]) == 1
+        assert store.upsert_skill_contexts("s1", [("demo", "v1")]) == 0  # 去重
+        assert store.upsert_skill_contexts("s1", [("demo", "v2")]) == 0  # 原地 UPDATE
+        items = [it for it in store.get_detail("s1") if it.kind == "skill_context"]
+        assert len(items) == 1
+        assert json.loads(items[0].payload)["content"] == "v2"
 
 
 class TestUpdateTitle:

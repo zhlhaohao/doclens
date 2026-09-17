@@ -143,6 +143,16 @@ class StreamingAgent:
         # tool_result → OpenAI 兼容后端 400）。
         self.round_start_index: Optional[int] = None
 
+        # 压缩事件打标（宿主轮末读取持久化，planify 不感知存储）：
+        # - last_compaction：本轮最后一次 auto compact 的结果，形状
+        #   {"messages": [压缩后消息序列], "pre_tokens": 压缩前估算 token}；
+        #   同轮多次压缩自然覆盖（前一次已被后一次摘要）。
+        # - round_cleared_tool_use_ids：本轮 microcompact 实际清理的
+        #   tool_use_id 累积（循环每转幂等，"[cleared]" 长度<100 不重复清理）。
+        # 均在 run_stream 开头重置（CLI/TUI 复用实例时防串轮）。
+        self.last_compaction: Optional[Dict[str, Any]] = None
+        self.round_cleared_tool_use_ids: List[str] = []
+
         # 工具调用状态追踪
         self._tool_call_states: Dict[int, ToolCallState] = {}
 
@@ -180,35 +190,15 @@ class StreamingAgent:
         # logger.info(f"System prompt:\n{prompt}")
         return prompt
 
-    async def run_stream(
-        self,
-        messages: List[Dict],
-        user_message: str,
-        session_id: str,
-    ) -> List[Dict]:
+    def _inject_head_context(self, messages: List[Dict], session_id: str) -> None:
+        """重建/刷新头部 skill-context 消息对（可重入）。
+
+        每轮 run_stream 开头调用；auto compact 把历史整体替换后也重新
+        调用（压缩吃掉头部注入，本轮后续循环需要 KB 指导在场）。
+        内容三部分（均稳定部分）：skills 描述清单 + agent.md + 临时文件
+        工作区指引——已加载 skill body 不放这里（见
+        _inject_loaded_skill_bodies）。
         """
-        流式运行代理循环。
-
-        Args:
-            messages: 消息历史列表。**注意：就地 mutate**（追加注入消息 /
-                user query / assistant 响应 / tool_result），调用方若要保留
-                入参原样需自行拷贝。
-            user_message: 用户输入消息
-            session_id: 会话 ID
-
-        Returns:
-            清理后的消息历史（只保留 user/assistant 文本消息，过滤 tool 链）。
-            两种消费语义：
-            - CLI/TUI 路径以返回值为下一轮输入（doclens run_query / planify cli.py）；
-            - Web 路径（doclens chat.py）**丢弃返回值**——历史真相在宿主 SQLite，
-              每轮从 DB 重建（tool_trace + message_ai_raw 成对回放）。
-        """
-        # 设置当前 session_id（供工具门禁/load_skill 标记使用）
-        ctx_token = set_current_session_id(session_id)
-
-        # 每轮重建 skill-context：只放稳定部分（skills 描述 + agent.md + tmp 指引）。
-        # 已加载的 skill body 不放在这里——它随 Skill 工具调用而变，改写
-        # messages[0] 会打废 prompt 前缀缓存；改为在尾部注入（见下方 user query 之前）。
         context_parts: List[str] = []
 
         # 1. skills descriptions（稳定：仅安装/卸载技能时变化；含技能根目录事实，
@@ -275,9 +265,14 @@ class StreamingAgent:
                 combined = f"{CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
             _refresh_or_insert_context(messages, CONTEXT_MARKER, combined)
 
-        # 已加载 skill body → 尾部消息对注入（保持 messages[0] 与历史前缀稳定）。
-        # web 层每轮从 DB 重建历史（不含注入消息），故每轮重注；若调用方复用
-        # 返回的历史（含注入消息），按 <loaded-skill name="..."> marker 去重。
+    def _inject_loaded_skill_bodies(self, messages: List[Dict], session_id: str) -> None:
+        """已加载 skill body → 尾部消息对注入（可重入）。
+
+        每轮 run_stream 开头调用；auto compact 替换历史后也重新调用
+        （压缩吃掉已注入的 skill body）。按 <loaded-skill name="...">
+        marker 去重：web 层每轮从 DB 重建历史（不含注入消息），故每轮
+        重注；若调用方复用返回的历史（含注入消息），marker 已在则跳过。
+        """
         if self.skills and session_id and self.runtime:
             skill_state = getattr(self.runtime, "skill_access_state", None)
             if skill_state is not None:
@@ -303,6 +298,42 @@ class StreamingAgent:
                         })
                         messages.append({"role": "assistant", "content": "Noted."})
 
+    async def run_stream(
+        self,
+        messages: List[Dict],
+        user_message: str,
+        session_id: str,
+    ) -> List[Dict]:
+        """
+        流式运行代理循环。
+
+        Args:
+            messages: 消息历史列表。**注意：就地 mutate**（追加注入消息 /
+                user query / assistant 响应 / tool_result），调用方若要保留
+                入参原样需自行拷贝。
+            user_message: 用户输入消息
+            session_id: 会话 ID
+
+        Returns:
+            清理后的消息历史（只保留 user/assistant 文本消息，过滤 tool 链）。
+            两种消费语义：
+            - CLI/TUI 路径以返回值为下一轮输入（doclens run_query / planify cli.py）；
+            - Web 路径（doclens chat.py）**丢弃返回值**——历史真相在宿主 SQLite，
+              每轮从 DB 重建（tool_trace + message_ai_raw 成对回放）。
+        """
+        # 设置当前 session_id（供工具门禁/load_skill 标记使用）
+        ctx_token = set_current_session_id(session_id)
+
+        # 本轮压缩打标重置：last_compaction / 清理 id 累积按轮隔离
+        # （chat.py 每请求新建实例天然隔离；CLI/TUI 复用 agent 时防串轮）
+        self.last_compaction = None
+        self.round_cleared_tool_use_ids = []
+
+        # 每轮重建 skill-context（头部稳定部分 + 尾部已加载 skill body，
+        # 两个注入方法均可重入——压缩管道替换历史后同样调用，见压缩分支）
+        self._inject_head_context(messages, session_id)
+        self._inject_loaded_skill_bodies(messages, session_id)
+
         # 添加用户 query（纯文本，不含 skills/agent.md）
         messages.append({"role": "user", "content": user_message})
         # 全部注入（头部 context / 尾部 skill body）已完成，此后追加的才是
@@ -322,13 +353,16 @@ class StreamingAgent:
                 # === 压缩管道 ===
                 # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
                 # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
-                self._microcompact(
+                cleared = self._microcompact(
                     messages,
                     min_estimated_tokens=int(
                         self.config.compact_threshold * self._microcompact_gate_ratio
                     ),
                 )
-                if self._estimate_tokens(messages) > self.config.compact_threshold:
+                if cleared:
+                    self.round_cleared_tool_use_ids.extend(cleared)
+                estimated = self._estimate_tokens(messages)
+                if estimated > self.config.compact_threshold:
                     if self._aauto_compact and self.runtime:
                         # 压缩 transcript 目录：宿主注入优先（doclens 注入
                         # .cortex/transcripts，避免落盘触发 FileWatcher 回路）；
@@ -347,6 +381,21 @@ class StreamingAgent:
                         messages[:] = compacted
                         if self.runtime:
                             self.runtime.replace_messages_in_place(compacted)
+                        # 打标供宿主轮末持久化（压缩即事实：摘要落库一次
+                        # 冻结，回放侧从边界投影，不再每轮重压缩）
+                        self.last_compaction = {
+                            "messages": compacted,
+                            "pre_tokens": estimated,
+                        }
+                        # 压缩吃掉了头部 context 与已加载 skill body——立即
+                        # 重注入（本轮后续工具循环需要 KB 指导在场）。
+                        self._inject_head_context(messages, session_id)
+                        self._inject_loaded_skill_bodies(messages, session_id)
+                        # 全部重注入完成后重置本轮起点：此后追加的才是本轮
+                        # 新消息（摘要对在起点之前，不会漏进 raw_messages；
+                        # 若在注入前重置，_inject_head_context 的头部 insert
+                        # 会把摘要对推进切片区间，与 compacted 条目重复落库）
+                        self.round_start_index = len(messages)
 
                 # === 后台通知 ===
                 if self.bg_manager:

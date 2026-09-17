@@ -124,6 +124,8 @@ def _make_runtime(tmp_path):
     return SimpleNamespace(
         config=config,
         skill_access_state=SimpleNamespace(loaded_names=lambda sid: ["demo-skill"]),
+        # 压缩触达时 runner 会同步 runtime 内存副本（ADR-0026 测试桩需提供）
+        replace_messages_in_place=lambda msgs: None,
     )
 
 
@@ -215,13 +217,32 @@ def _run_web_rounds(store, sid, sa, emitter, provider, rounds):
             payload=json.dumps({"content": msg}, ensure_ascii=False),
         ))
         history = store.get_chat_history(sid)
-        history.pop()  # 末尾即本轮消息，弹出防重复（chat.py:72-77）
+        # 末尾是本轮消息时弹出防重复（chat.py 同款条件；压缩轮回放末尾
+        # 可能是 raw 的 assistant 文本，无条件 pop 会误删）
+        if (
+            history
+            and history[-1].get("role") == "user"
+            and history[-1].get("content") == msg
+        ):
+            history.pop()
         round_start = len(history)  # fallback，见下
         await sa.run_stream(history, msg, sid)
         # 修复点 1：skill body 落库（在 append_chat_turn_raw 之前）
         injected = _extract_injected(history)
         if injected:
             store.upsert_skill_contexts(sid, injected)
+        # 修复点 3（ADR-0026 压缩即事实）：压缩事件落库。顺序与 chat.py
+        # finally 一致——upsert skill_contexts 之后、append_raw_messages
+        # 之前（upsert 插入位置是当前 MAX(seq) 之前，compacted 先落库会把
+        # 新 skill 条目插进已被截断投影丢弃的死前缀）
+        compaction = getattr(sa, "last_compaction", None)
+        if compaction:
+            store.append_compacted(
+                sid, compaction["messages"], compaction.get("pre_tokens", 0)
+            )
+        cleared = getattr(sa, "round_cleared_tool_use_ids", None)
+        if cleared:
+            store.append_microcompact(sid, cleared)
         # 修复点 2：本轮原始消息序列落库（多工具/交错文本轮结构等价）。
         # 轮起点必须用 runner 注入完成后的真实下标：run_stream 头部注入
         # context 消息对会把历史整体后移 2 条，用事前的 len(history) 切片
@@ -534,3 +555,91 @@ def test_extract_round_raw_messages_skips_injected_and_user():
     assert out == [
         {"role": "assistant", "content": [{"type": "text", "text": "回答"}]},
     ]
+
+
+# === ADR-0026 压缩即事实：端到端回放投影 ===
+
+_COMPACTED_PAIR = [
+    {"role": "user", "content": "[Compressed. Transcript: t.jsonl]\n对话摘要"},
+    {"role": "assistant", "content": "Understood. Continuing with summary context."},
+]
+
+
+def _make_compacting_agent(provider, emitter, tmp_path):
+    """compact_threshold=1 必触发压缩的 agent（fake 摘要对，聚焦回放投影）。"""
+    sa = _make_agent(provider, emitter, tmp_path)
+    sa.config.compact_threshold = 1
+
+    async def fake_compact(messages, provider_, transcript_dir, *, tracer=None):
+        return [dict(m) for m in _COMPACTED_PAIR]
+
+    sa._aauto_compact = fake_compact
+    return sa
+
+
+def test_compacted_replay_round2_prefix_identical(tmp_path):
+    """ADR-0026 幂等闭环验收：压缩落库后，轮 2 回放首请求的头部 ==
+    轮 1 压缩后最终请求（逐字节）——摘要冻结为事实，回放投影不再分叉。
+    """
+    store = SessionsStore(tmp_path / "sessions.db")
+    sid = store.find_or_create(SessionType.CHAT, "压缩回放").id
+
+    provider = MockProvider()
+    emitter = StubEmitter()
+    sa = _make_compacting_agent(provider, emitter, tmp_path)
+    _run_web_rounds(store, sid, sa, emitter, provider, ["第一轮", "第二轮"])
+
+    # 压缩事件已落库（轮 1 循环内两次压缩同轮覆盖，只落最后一条）
+    kinds = [it.kind for it in store.get_detail(sid)]
+    assert "compacted" in kinds
+
+    assert len(provider.records) >= 3
+    r1_final = provider.records[1]   # 轮 1 第 2 次调用（压缩后）
+    r2_first = provider.records[2]   # 轮 2 首次调用（DB 回放）
+    n, shared, total = _report("web 路径·压缩轮（ADR-0026）", r1_final, r2_first)
+
+    # 轮 1 压缩后最终请求应完整成为轮 2 回放请求的前缀（逐字节）
+    assert n == len(r1_final), (
+        f"压缩后前缀应完整复用 {len(r1_final)} 条，实际只共享 {n} 条"
+    )
+    # 首条即头部注入对（压缩后重注入生效），其后是摘要对
+    assert CONTEXT_MARKER in r2_first[0]["content"]
+    assert r2_first[2] == _COMPACTED_PAIR[0]
+    # 无孤儿 tool_result（压缩边界回放不复活旧工具链）
+    for req in provider.records:
+        assert _orphan_tool_results(req) == []
+
+
+def test_compacted_replay_with_skill_body(tmp_path):
+    """压缩会话中 skill body 的自愈链：压缩吃掉旧 skill_context → 边界感知
+    upsert 以新 seq 重插 → 轮 2 回放含 skill body（位置在摘要之后）。"""
+    store = SessionsStore(tmp_path / "sessions.db")
+    sid = store.find_or_create(SessionType.CHAT, "压缩技能").id
+
+    provider = MockProvider()
+    emitter = StubEmitter()
+    sa = _make_compacting_agent(provider, emitter, tmp_path)
+    _run_web_rounds(store, sid, sa, emitter, provider, ["第一轮", "第二轮"])
+
+    # 边界感知重插（threshold=1 每轮都压缩，最近 boundary 可能又在重插
+    # 之后——验「重插发生过」：skill_context ≥ 2 条且最后一条在**首个**
+    # compacted 之后。无边界感知时第二次 upsert 会匹配旧条目跳过插入）
+    items = store.get_detail(sid)
+    compacted_seqs = sorted(it.seq for it in items if it.kind == "compacted")
+    skill_seqs = sorted(it.seq for it in items if it.kind == "skill_context")
+    assert len(compacted_seqs) >= 1
+    assert len(skill_seqs) >= 2, (
+        f"压缩后 skill_context 应重插（边界感知 upsert），实际条目 seq={skill_seqs}"
+    )
+    assert skill_seqs[-1] > compacted_seqs[0], (
+        f"重插条目应在首个压缩边界之后：skills={skill_seqs} compacted={compacted_seqs}"
+    )
+
+    # 轮 2 请求含 skill body 与摘要对
+    r2_first = provider.records[2]
+    texts = [
+        m["content"] for m in r2_first
+        if m.get("role") == "user" and isinstance(m.get("content"), str)
+    ]
+    assert any("<loaded-skill" in t for t in texts), "轮 2 回放应含重插的 skill body"
+    assert any(t.startswith("[Compressed.") for t in texts)

@@ -1,10 +1,12 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
-/** 会话信息对话框（2026-09-17）：展示当前会话的上下文窗口占用 + 累计缓存命中率。
- *  数据来自 SSE usage 事件 / 会话详情 items 里的 kind="usage" 条目
- *  （占用口径 = 最近一次 LLM 调用的总输入 tokens；命中率口径 = 全会话
- *  Σcache_read ÷ Σ总输入，2026-09-17 与 LLM trace 落盘同期加）。 */
+/** 会话信息对话框（2026-09-17）：展示当前会话的上下文窗口占用 + 累计缓存命中率
+ *  + 自动压缩信息（ADR-0026）。usage 数据来自 SSE usage 事件 / 会话详情
+ *  items 里的 kind="usage" 条目（占用口径 = 最近一次 LLM 调用的总输入
+ *  tokens；命中率口径 = 全会话 Σcache_read ÷ Σ总输入，2026-09-17 与 LLM
+ *  trace 落盘同期加）；压缩信息来自 kind="compacted" 条目聚合（无 SSE，
+ *  打开弹窗时 re-fetch 刷新）。 */
 @customElement("session-info-dialog")
 export class SessionInfoDialog extends LitElement {
   static styles = css`
@@ -71,6 +73,8 @@ export class SessionInfoDialog extends LitElement {
 
   /** 已占用 tokens（最近一次调用的总输入）；null = 暂无数据 */
   @property({ type: Number }) used: number | null = null;
+  /** used 为压缩后估算（压缩晚于最近一次调用，下轮对话实测覆盖） */
+  @property({ type: Boolean }) usedIsEstimate = false;
   /** 上下文窗口上限 */
   @property({ type: Number }) contextWindow = 0;
   /** 全会话累计 cache_read tokens；null = 暂无数据（隐藏命中率行） */
@@ -79,6 +83,12 @@ export class SessionInfoDialog extends LitElement {
   @property({ type: Number }) inputTotal: number | null = null;
   /** 全会话 LLM 调用次数 */
   @property({ type: Number }) calls = 0;
+  /** 全会话自动压缩次数（kind="compacted" 条目数，ADR-0026）；0 = 未压缩过（隐藏压缩行） */
+  @property({ type: Number }) compactionCount = 0;
+  /** 最近一次压缩时间（ISO 字符串）；null = 无数据（旧后端 / 时间缺失） */
+  @property({ type: String }) lastCompactedAt: string | null = null;
+  /** 最近一次压缩前的估算 tokens；null = 无数据 */
+  @property({ type: Number }) lastPreTokens: number | null = null;
 
   /** 压缩阈值（与后端 compact_threshold = context_window × 0.8 对齐） */
   private static readonly COMPACT_RATIO = 0.8;
@@ -121,9 +131,11 @@ export class SessionInfoDialog extends LitElement {
           <div class="fill ${warn ? "warn" : ""}" style="width: ${Math.min(100, pct * 100)}%"></div>
         </div>
         <div class="hint ${warn ? "warn" : ""}">
-          ${warn
-            ? "已达压缩阈值，下一轮将自动压缩历史"
-            : `达到 ${SessionInfoDialog.COMPACT_RATIO * 100}% 将自动压缩历史`}
+          ${this.usedIsEstimate
+            ? "压缩后估算（仅消息部分，不含系统提示与工具表）——下一轮对话后更新为实测"
+            : warn
+              ? "已达压缩阈值，下一轮将自动压缩历史"
+              : `达到 ${SessionInfoDialog.COMPACT_RATIO * 100}% 将自动压缩历史`}
         </div>
       </div>
       ${hitPct !== null
@@ -134,6 +146,21 @@ export class SessionInfoDialog extends LitElement {
             <div class="value-sm">
               cache_read ${this._fmt(this.cacheReadTotal!)} /
               总输入 ${this._fmt(this.inputTotal!)} · ${this.calls} 次调用
+            </div>
+          </div>`
+        : ""}
+      ${this.compactionCount > 0
+        ? html`
+          <div class="row">
+            <div class="label">自动压缩</div>
+            <div class="value">${this.compactionCount} 次</div>
+            <div class="value-sm">
+              ${this.lastCompactedAt
+                ? `最近 ${new Date(this.lastCompactedAt).toLocaleString()}`
+                : ""}
+              ${this.lastPreTokens !== null
+                ? ` · 压缩前 ${this._fmt(this.lastPreTokens)} tokens`
+                : ""}
             </div>
           </div>`
         : ""}

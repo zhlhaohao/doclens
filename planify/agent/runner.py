@@ -140,6 +140,8 @@ class Agent:
             # === s06: 压缩管道 ===
             # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
             # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
+            # （microcompact 返回被清理的 tool_use_id 列表——本同步路径无
+            # 落库回放需求，直接丢弃；streaming 路径会收集供宿主持久化）
             self._microcompact(
                 messages,
                 min_estimated_tokens=int(
