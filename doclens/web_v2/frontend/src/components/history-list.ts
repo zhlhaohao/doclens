@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { repeat } from "lit/directives/repeat.js";
 import type { Session } from "../state/types";
 
 @customElement("history-list")
@@ -96,7 +97,11 @@ export class HistoryList extends LitElement {
       </div>
       ${this.sessions.length === 0
         ? html`<div class="empty">暂无历史${this.type === "search" ? "搜索" : "会话"}</div>`
-        : this.sessions.map((s) => html`<history-item .session=${s} ?active=${s.id === this.activeId}></history-item>`)}
+        : repeat(
+            this.sessions,
+            (s) => s.id,
+            (s) => html`<history-item .session=${s} ?active=${s.id === this.activeId}></history-item>`
+          )}
     `;
   }
 }
