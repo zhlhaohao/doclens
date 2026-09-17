@@ -20,6 +20,17 @@ class SessionAppendRequest(BaseModel):
     message_count: Optional[int] = None
 
 
+class SessionRenameRequest(BaseModel):
+    """人工改名。处理规则在端点内：strip 后为空 → 400；超 60 字符截断
+    （与 chat-view 创建时的 slice(0, 60) 语义对齐，故此处不设 max_length）。"""
+    title: str = Field(min_length=1)
+
+
+class SessionStarRequest(BaseModel):
+    """加星/取消加星（2026-09-17）：加星即置顶 + 删除保护；不刷新 updated_at。"""
+    starred: bool
+
+
 class SessionCreatedResponse(BaseModel):
     id: str
     type: SessionType
@@ -37,6 +48,7 @@ class SessionListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int
+    starred: bool = False
 
 
 class SessionListResponse(BaseModel):
@@ -53,4 +65,5 @@ class SessionDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int
+    starred: bool = False
     items: list[dict[str, Any]]

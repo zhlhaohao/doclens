@@ -63,6 +63,7 @@ import infoIcon from "lucide-static/icons/info.svg?raw";
 import plusIcon from "lucide-static/icons/plus.svg?raw";
 import minusIcon from "lucide-static/icons/minus.svg?raw";
 import slidersHorizontalIcon from "lucide-static/icons/sliders-horizontal.svg?raw";
+import starIcon from "lucide-static/icons/star.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -115,6 +116,7 @@ const ICONS: Record<string, string> = {
   minus: minusIcon,
   "sliders-horizontal": slidersHorizontalIcon,
   plug: plugIcon,
+  star: starIcon,
 };
 
 @customElement("doclens-icon")

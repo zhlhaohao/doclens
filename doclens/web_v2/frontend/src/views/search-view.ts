@@ -5,7 +5,7 @@ import { store, actions } from "../state/store";
 import type { SearchMode, SearchResult, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { grepApi } from "../api/grep";
-import { listSessions, clearSessions, findOrCreateSession } from "../api/sessions";
+import { listSessions, clearSessions, findOrCreateSession, starSession } from "../api/sessions";
 import { fetchPreview, isFullFilePreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -255,8 +255,14 @@ export class SearchView extends LitElement {
       this._clearing = true;
       this.requestUpdate();
       try {
-        await clearSessions("search");
-        this.historySessions = [];
+        const res = await clearSessions("search");
+        // 加星会话受保护：后端跳过，本地保留
+        this.historySessions = this.historySessions.filter((s) => s.starred);
+        if (res.skipped_starred > 0) {
+          this._pushToast(
+            `已清空 ${res.deleted_count} 条，${res.skipped_starred} 条加星搜索保留`,
+            "info", 3500);
+        }
       } catch (e) {
         console.warn("clear sessions failed", e);
       } finally {
@@ -265,6 +271,23 @@ export class SearchView extends LitElement {
       }
     });
   }
+
+  /** 历史列表星标切换（2026-09-17）：乐观更新（本地翻转+重排），失败回滚。 */
+  private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
+    const { session, starred } = e.detail;
+    const prev = this.historySessions;
+    this.historySessions = prev
+      .map((s) => (s.id === session.id ? { ...s, starred } : s))
+      .sort((a, b) =>
+        (Number(b.starred ?? false) - Number(a.starred ?? false)) ||
+        b.updated_at.localeCompare(a.updated_at));
+    try {
+      await starSession(session.id, starred);
+    } catch (err) {
+      this.historySessions = prev;
+      this._pushToast(`加星失败：${(err as Error)?.message || err}`, "error", 5000);
+    }
+  };
 
   private get viewState() {
     return store.getState().search;
@@ -627,6 +650,7 @@ export class SearchView extends LitElement {
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
             @select=${this._onHistorySelect}
+            @toggle-star=${this._onToggleStar}
             @clear=${this._onClearHistory}>
           </history-list>
           <div class="input-row">

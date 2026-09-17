@@ -388,3 +388,100 @@ class TestToolPairingSanitizer:
             ]},
             {"role": "assistant", "content": [{"type": "text", "text": "a"}]},
         ]
+
+
+class TestUpdateTitle:
+    """人工改名（2026-09-17）：仅改 title，不刷新 updated_at。"""
+
+    def test_title_updated(self, store):
+        _create_session(store)
+        store.update_title("s1", "新标题")
+        assert store.get("s1").title == "新标题"
+
+    def test_updated_at_unchanged(self, store):
+        """历史列表按 updated_at 排序，改名不得把会话顶到最前。"""
+        _create_session(store)
+        before = store.get("s1").updated_at
+        store.update_title("s1", "新标题")
+        assert store.get("s1").updated_at == before
+
+
+class TestStarred:
+    """加星（2026-09-17）：置顶（starred DESC, updated_at DESC）+ 删除保护。"""
+
+    def test_star_roundtrip(self, store):
+        _create_session(store)
+        assert store.get("s1").starred is False
+        store.set_starred("s1", True)
+        assert store.get("s1").starred is True
+        store.set_starred("s1", False)
+        assert store.get("s1").starred is False
+
+    def test_star_does_not_refresh_updated_at(self, store):
+        """置顶纯靠排序键；加星不得像 find_or_create 命中那样刷时间戳。"""
+        _create_session(store)
+        before = store.get("s1").updated_at
+        store.set_starred("s1", True)
+        assert store.get("s1").updated_at == before
+
+    def test_list_starred_first_then_time_desc(self, store):
+        _create_session(store, "old")
+        _create_session(store, "new")
+        store.update_count_and_time("new", 1)  # new 的 updated_at 更新
+        store.set_starred("old", True)
+        ids = [s.id for s in store.list(SessionType.CHAT)]
+        assert ids == ["old", "new"]  # 加星的旧会话置顶
+
+    def test_find_or_create_preserves_starred(self, store):
+        """search 历史重复搜索走 find_or_create 命中分支，不得丢加星态。"""
+        _create_session(store, "s1")
+        store.set_starred("s1", True)
+        hit = store.find_or_create(SessionType.CHAT, "t")
+        assert hit.id == "s1" and hit.starred is True
+        assert store.get("s1").starred is True
+
+    def test_delete_refuses_starred(self, store):
+        _create_session(store, "s1")
+        store.set_starred("s1", True)
+        assert store.delete("s1") is False
+        assert store.get("s1") is not None
+        # 取消加星后可删
+        store.set_starred("s1", False)
+        assert store.delete("s1") is True
+        assert store.get("s1") is None
+
+    def test_delete_by_type_skips_starred(self, store):
+        _create_session(store, "keep")
+        _create_session(store, "drop1")
+        _create_session(store, "drop2")
+        store.set_starred("keep", True)
+        deleted, skipped = store.delete_by_type(SessionType.CHAT)
+        assert (deleted, skipped) == (2, 1)
+        remaining = [s.id for s in store.list(SessionType.CHAT)]
+        assert remaining == ["keep"]
+
+    def test_migration_adds_starred_column(self, tmp_path):
+        """旧库（无 starred 列）初始化时 ALTER 补列，存量行默认未加星。"""
+        import sqlite3
+        db = tmp_path / "old.db"
+        with sqlite3.connect(db) as conn:
+            conn.execute(
+                """CREATE TABLE sessions (
+                    id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL,
+                    preview TEXT NOT NULL, mode TEXT,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    message_count INTEGER NOT NULL DEFAULT 0
+                )"""
+            )
+            conn.execute(
+                """INSERT INTO sessions
+                   (id, type, title, preview, mode, created_at, updated_at, message_count)
+                   VALUES ('legacy', 'chat', 't', '', NULL,
+                           '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', 0)"""
+            )
+        store2 = SessionsStore(db)
+        s = store2.get("legacy")
+        assert s is not None and s.starred is False
+        # 迁移后加星可用
+        store2.set_starred("legacy", True)
+        assert store2.get("legacy").starred is True

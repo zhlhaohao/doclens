@@ -8,7 +8,7 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, appendSession, listSessions, clearSessions } from "../api/sessions";
+import { createSession, appendSession, listSessions, clearSessions, renameSession, starSession } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -16,6 +16,7 @@ import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import "../components/skill-toolbox-dialog";
+import "../components/session-rename-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -332,6 +333,7 @@ export class ChatView extends LitElement {
   @state() private _skillCandidatesError: string | null = null;
   /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
   @state() private _skillDialogOpen = false;
+  @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -358,9 +360,11 @@ export class ChatView extends LitElement {
   }
 
   updated() {
-    // 技能选择对话框用 showModal（top-layer + backdrop + ESC 关闭），与 files-view 一致
-    const dlg = this.renderRoot.querySelector("dialog");
-    if (dlg && !dlg.open) dlg.showModal();
+    // 对话框用 showModal（top-layer + backdrop + ESC 关闭），与 files-view 一致。
+    // 可能有多个 dialog 宿主（技能选择 / 会话改名），逐个处理。
+    for (const dlg of this.renderRoot.querySelectorAll("dialog")) {
+      if (!dlg.open) dlg.showModal();
+    }
   }
 
   /** 拉取对话技能候选 = 全部启用且未删除的技能（ADR-0016 §1，与工具箱白名单独立）。 */
@@ -413,6 +417,77 @@ export class ChatView extends LitElement {
     void this._sendWithSkill(e.detail.name);
   };
 
+  /** focus-header more 菜单动作：会话改名（仅当前会话存在时出现）。 */
+  private get _headerActions() {
+    if (!this.viewState.currentSession) return [];
+    return [{
+      label: "重命名会话",
+      icon: "pencil",
+      onClick: () => { this._renameDialogOpen = true; },
+    }];
+  }
+
+  private _onRenameSubmit = async (e: CustomEvent<{ title: string }>) => {
+    const session = this.viewState.currentSession;
+    this._renameDialogOpen = false;
+    if (!session) return;
+    try {
+      const res = await renameSession(session.id, e.detail.title);
+      // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
+      actions.setChatState({ currentSession: { ...session, title: res.title } });
+      this.historySessions = this.historySessions.map((s) =>
+        s.id === session.id ? { ...s, title: res.title } : s);
+      this._pushToast("已重命名", "success", 2500);
+    } catch (err) {
+      this._pushToast(`重命名失败：${(err as Error)?.message || err}`, "error", 5000);
+    }
+  };
+
+  private _onRenameCancel = () => {
+    this._renameDialogOpen = false;
+  };
+
+  /** 历史列表星标切换（2026-09-17）：乐观更新（本地翻转+重排），失败回滚。 */
+  private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
+    const { session, starred } = e.detail;
+    const prev = this.historySessions;
+    this.historySessions = this._sortedWithStar(prev, session.id, starred);
+    try {
+      await starSession(session.id, starred);
+      // 同步当前会话对象（加星态跟随，如 header/恢复逻辑消费）
+      const cur = this.viewState.currentSession;
+      if (cur && cur.id === session.id) {
+        actions.setChatState({ currentSession: { ...cur, starred } });
+      }
+    } catch (err) {
+      this.historySessions = prev;
+      this._pushToast(`加星失败：${(err as Error)?.message || err}`, "error", 5000);
+    }
+  };
+
+  /** 不可变地翻转指定会话 starred 并按 (starred, updated_at) 重排。 */
+  private _sortedWithStar(sessions: Session[], id: string, starred: boolean): Session[] {
+    return sessions
+      .map((s) => (s.id === id ? { ...s, starred } : s))
+      .sort((a, b) =>
+        (Number(b.starred ?? false) - Number(a.starred ?? false)) ||
+        b.updated_at.localeCompare(a.updated_at));
+  }
+
+  /** 会话改名对话框宿主（<dialog> 由 updated() showModal）。 */
+  private _renderRenameDialog() {
+    const session = this.viewState.currentSession;
+    if (!this._renameDialogOpen || !session) return nothing;
+    return html`
+      <dialog @cancel=${this._onRenameCancel}>
+        <session-rename-dialog
+          .currentTitle=${session.title}
+          @submit=${this._onRenameSubmit}
+          @cancel=${this._onRenameCancel}
+        ></session-rename-dialog>
+      </dialog>`;
+  }
+
   /** 技能直发（ADR-0016 §3/§4）：信封消息立即发往当前会话；
    *  initial 态新建会话（首条消息带标记，自然成为技能会话）。 */
   private async _sendWithSkill(name: string) {
@@ -453,8 +528,14 @@ export class ChatView extends LitElement {
     this._clearing = true;
     this.requestUpdate();
     try {
-      await clearSessions("chat");
-      this.historySessions = [];
+      const res = await clearSessions("chat");
+      // 加星会话受保护：后端跳过，本地保留
+      this.historySessions = this.historySessions.filter((s) => s.starred);
+      if (res.skipped_starred > 0) {
+        this._pushToast(
+          `已清空 ${res.deleted_count} 条，${res.skipped_starred} 条加星会话保留`,
+          "info", 3500);
+      }
     } catch (e) {
       console.warn("clear sessions failed", e);
     } finally {
@@ -906,6 +987,7 @@ export class ChatView extends LitElement {
             .sessions=${this.historySessions}
             .activeId=${this._highlightSessionId}
             @select=${this._onHistorySelect}
+            @toggle-star=${this._onToggleStar}
             @clear=${this._onClearHistory}>
           </history-list>
           <div class="input-row">
@@ -961,6 +1043,7 @@ export class ChatView extends LitElement {
           back-label="新对话"
           title=${s.currentSession?.title ?? ""}
           meta=${`${s.messages.length} 条消息`}
+          .actions=${this._headerActions}
           @back=${this._backToInitial}>
         </focus-header>
         <div class="focus-main ${hasPreview ? "has-preview" : ""}"
@@ -1027,6 +1110,7 @@ export class ChatView extends LitElement {
             : previewPane(true)}
         </div>` : null}
       ${this._renderSkillDialog()}
+      ${this._renderRenameDialog()}
     `;
   }
 

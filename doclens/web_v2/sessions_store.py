@@ -1,7 +1,7 @@
 """SQLite 持久化历史会话存储 + 登录会话（auth_sessions）。
 
 Schema:
-    sessions(id, type, title, preview, created_at, updated_at, message_count)
+    sessions(id, type, title, preview, created_at, updated_at, message_count, starred)
     session_items(id, session_id, seq, kind, payload, created_at)
     auth_sessions(token, created_at, expires_at)   -- Web 登录会话（24h 滑动过期）
 
@@ -95,6 +95,7 @@ class SessionSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
+    starred: bool = False  # 加星即置顶 + 删除保护（2026-09-17）
 
 
 class SessionItem(BaseModel):
@@ -114,7 +115,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     mode         TEXT,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
-    message_count INTEGER NOT NULL DEFAULT 0
+    message_count INTEGER NOT NULL DEFAULT 0,
+    starred      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_type_updated
     ON sessions(type, updated_at DESC);
@@ -164,6 +166,11 @@ class SessionsStore:
                 cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
                 if "mode" not in cols:
                     conn.execute("ALTER TABLE sessions ADD COLUMN mode TEXT")
+                # 迁移：加星功能（2026-09-17）补 starred 列
+                if "starred" not in cols:
+                    conn.execute(
+                        "ALTER TABLE sessions ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
+                    )
                 # 迁移：mode='skill' 上线前的存量技能会话——首条 message_user
                 # （按 seq 最小）以「[调用技能:」开头的 chat 会话补 mode。
                 # 幂等：已有非空 mode 或首条不匹配的不会被更新；新库无数据 no-op
@@ -217,7 +224,8 @@ class SessionsStore:
         now_iso = now.isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at,
+                          message_count, starred
                    FROM sessions
                    WHERE type = ? AND title = ?
                      AND COALESCE(mode, 'keyword') = COALESCE(?, 'keyword')
@@ -239,6 +247,7 @@ class SessionsStore:
                     created_at=_parse_db_ts(row["created_at"]),
                     updated_at=now,
                     message_count=row["message_count"],
+                    starred=bool(row["starred"]),
                 )
             sid = str(_ulid.new())
             conn.execute(
@@ -273,6 +282,25 @@ class SessionsStore:
                    SET message_count = ?, updated_at = ?
                    WHERE id = ?""",
                 (message_count, datetime.now(timezone.utc).isoformat(), session_id),
+            )
+
+    def update_title(self, session_id: str, title: str) -> None:
+        """人工改名（2026-09-17）：仅更新 title，**不**刷新 updated_at——
+        历史列表按 updated_at 排序，改名是元数据修正，不应把会话顶到最前。"""
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "UPDATE sessions SET title = ? WHERE id = ?",
+                (title, session_id),
+            )
+
+    def set_starred(self, session_id: str, starred: bool) -> None:
+        """加星/取消加星（2026-09-17）：仅更新 starred，**不**刷新 updated_at——
+        置顶效果由 list() 的排序键（starred DESC, updated_at DESC）承担，
+        加星顺序不打乱组内时间序。"""
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "UPDATE sessions SET starred = ? WHERE id = ?",
+                (1 if starred else 0, session_id),
             )
 
     def append_chat_turn_raw(
@@ -421,31 +449,47 @@ class SessionsStore:
                 )
             return k
 
-    def delete(self, session_id: str) -> None:
+    def delete(self, session_id: str) -> bool:
+        """删除单个会话；加星会话受保护（2026-09-17），拒绝删除并返回 False。"""
         with self._lock, self._conn() as conn:
-            conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            cur = conn.execute(
+                "DELETE FROM sessions WHERE id = ? AND starred = 0", (session_id,),
+            )
+            return cur.rowcount > 0
 
-    def delete_by_type(self, type_: Optional[SessionType]) -> int:
-        """批量删除某 type 的全部会话。type_=None 时清空所有。返回删除条数。
+    def delete_by_type(self, type_: Optional[SessionType]) -> tuple[int, int]:
+        """批量删除某 type 的全部未加星会话。type_=None 时清空所有类型。
 
         session_items 通过 FK ON DELETE CASCADE 自动级联删除。
+        加星会话（2026-09-17）受保护跳过；返回 (deleted, skipped_starred)。
         """
         with self._lock, self._conn() as conn:
             if type_ is None:
-                cur = conn.execute("DELETE FROM sessions")
+                skipped = conn.execute(
+                    "SELECT COUNT(*) FROM sessions WHERE starred = 1",
+                ).fetchone()[0]
+                cur = conn.execute("DELETE FROM sessions WHERE starred = 0")
             else:
-                cur = conn.execute("DELETE FROM sessions WHERE type = ?", (type_.value,))
-            return cur.rowcount
+                skipped = conn.execute(
+                    "SELECT COUNT(*) FROM sessions WHERE type = ? AND starred = 1",
+                    (type_.value,),
+                ).fetchone()[0]
+                cur = conn.execute(
+                    "DELETE FROM sessions WHERE type = ? AND starred = 0",
+                    (type_.value,),
+                )
+            return cur.rowcount, skipped
 
     # ---- 读取 ----
 
     def list(self, type_: SessionType, limit: int = 50, offset: int = 0) -> list[SessionSummary]:
         with self._lock, self._conn() as conn:
             rows = conn.execute(
-                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at,
+                          message_count, starred
                    FROM sessions
                    WHERE type = ?
-                   ORDER BY datetime(updated_at) DESC
+                   ORDER BY starred DESC, datetime(updated_at) DESC
                    LIMIT ? OFFSET ?""",
                 (type_.value, limit, offset),
             ).fetchall()
@@ -454,7 +498,8 @@ class SessionsStore:
     def get(self, session_id: str) -> Optional[SessionSummary]:
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT id, type, title, preview, mode, created_at, updated_at, message_count
+                """SELECT id, type, title, preview, mode, created_at, updated_at,
+                          message_count, starred
                    FROM sessions WHERE id = ?""",
                 (session_id,),
             ).fetchone()
@@ -591,6 +636,7 @@ class SessionsStore:
             created_at=_parse_db_ts(row["created_at"]),
             updated_at=_parse_db_ts(row["updated_at"]),
             message_count=row["message_count"],
+            starred=bool(row["starred"]),
         )
 
     # ---- 登录会话（auth_sessions）----

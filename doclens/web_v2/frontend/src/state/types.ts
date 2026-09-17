@@ -62,6 +62,8 @@ export interface Session {
   message_count: number;
   /** search: "keyword" | "grep"；chat 技能会话: "skill" */
   mode?: "keyword" | "grep" | "skill";
+  /** 加星（2026-09-17）：置顶 + 删除保护；旧数据缺省视为 false */
+  starred?: boolean;
 }
 
 export interface SearchViewState {

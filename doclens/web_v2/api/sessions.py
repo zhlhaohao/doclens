@@ -14,6 +14,8 @@ from doclens.web_v2.models.session import (
     SessionCreatedResponse,
     SessionDetailResponse,
     SessionListResponse,
+    SessionRenameRequest,
+    SessionStarRequest,
 )
 from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionType, SessionsStore
 from doclens.web_v2.tmp_workspace import cleanup_all_tmp, cleanup_session_tmp
@@ -75,7 +77,7 @@ async def list_sessions(
             store.list(SessionType.SEARCH, limit=limit + offset),
             store.list(SessionType.CHAT, limit=limit + offset),
         ))
-        items.sort(key=lambda s: s.updated_at, reverse=True)
+        items.sort(key=lambda s: (s.starred, s.updated_at), reverse=True)
         items = items[offset:offset + limit]
     else:
         items = store.list(type, limit, offset)
@@ -118,12 +120,41 @@ async def append_session(session_id: str, req: SessionAppendRequest):
     return {"ok": True, "id": session_id, "message_count": new_count}
 
 
+@router.patch("/sessions/{session_id}/title")
+async def rename_session(session_id: str, req: SessionRenameRequest):
+    """人工改名（2026-09-17）。strip 后为空 → 400；超 60 字符截断
+    （与 chat-view 创建时的 slice(0, 60) 对齐）；不刷新 updated_at。"""
+    store = _get_store()
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    title = req.title.strip()[:60]
+    if not title:
+        raise CortexAPIError(400, "TITLE_EMPTY", "标题不能为空")
+    store.update_title(session_id, title)
+    return {"ok": True, "id": session_id, "title": title}
+
+
+@router.patch("/sessions/{session_id}/star")
+async def star_session(session_id: str, req: SessionStarRequest):
+    """加星/取消加星（2026-09-17）：加星即置顶（排序键 starred DESC）+
+    删除保护；与改名同理不刷新 updated_at，避免打乱组内时间序。"""
+    store = _get_store()
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    store.set_starred(session_id, req.starred)
+    return {"ok": True, "id": session_id, "starred": req.starred}
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    if summary.starred:
+        raise CortexAPIError(409, "SESSION_STARRED", "加星会话受保护，请先取消加星再删除")
     store.delete(session_id)
     # 顺带清理该会话的 AI 临时工作区（.cortex/tmp/<session_id>/）
     cleanup_session_tmp(_get_workdir(), session_id)
@@ -136,11 +167,11 @@ async def delete_session(session_id: str):
 async def clear_sessions(
     type: Optional[SessionType] = Query(default=None, description="按类型清空；不传则清空全部"),
 ):
-    """批量删除会话。type=None 清全部。"""
+    """批量删除会话。type=None 清全部。加星会话受保护跳过（2026-09-17）。"""
     store = _get_store()
-    deleted = store.delete_by_type(type)
+    deleted, skipped_starred = store.delete_by_type(type)
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:
         cleanup_all_tmp(_get_workdir())
         grant_clear_all()
-    return {"ok": True, "deleted_count": deleted}
+    return {"ok": True, "deleted_count": deleted, "skipped_starred": skipped_starred}

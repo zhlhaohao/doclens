@@ -27,11 +27,21 @@ export async function appendSession(sessionId: string, items: Array<{ kind: stri
   return request(`/api/sessions/${sessionId}`, { method: "PATCH", json: { items, message_count: messageCount } });
 }
 
+/** 人工改名（2026-09-17）：后端 trim + 60 字符截断，不刷新 updated_at。 */
+export async function renameSession(sessionId: string, title: string): Promise<{ ok: boolean; id: string; title: string }> {
+  return request(`/api/sessions/${sessionId}/title`, { method: "PATCH", json: { title } });
+}
+
+/** 加星/取消加星（2026-09-17）：置顶 + 删除保护；不刷新 updated_at。 */
+export async function starSession(sessionId: string, starred: boolean): Promise<{ ok: boolean; id: string; starred: boolean }> {
+  return request(`/api/sessions/${sessionId}/star`, { method: "PATCH", json: { starred } });
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
 }
 
-export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boolean; deleted_count: number }> {
+export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boolean; deleted_count: number; skipped_starred: number }> {
   const sp = new URLSearchParams();
   if (type) sp.set("type", type);
   return request(`/api/sessions?${sp}`, { method: "DELETE" });

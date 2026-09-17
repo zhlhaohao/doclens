@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { Session } from "../state/types";
+import "./icon";
 
 @customElement("history-item")
 export class HistoryItem extends LitElement {
@@ -61,6 +62,28 @@ export class HistoryItem extends LitElement {
       padding: 0 4px;
       line-height: 1.5;
     }
+    /* 加星按钮（2026-09-17）：常显淡色描边星；加星后实心主题色。
+       加星即置顶 + 删除保护，故常显（不做 hover 才显现）。 */
+    .star-btn {
+      background: transparent;
+      border: none;
+      padding: 2px;
+      margin-left: var(--cortex-space-1);
+      cursor: pointer;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      border-radius: var(--cortex-radius-sm);
+      flex-shrink: 0;
+      line-height: 0;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .star-btn:hover {
+      color: var(--cortex-primary);
+      transform: scale(1.15);
+    }
+    .star-btn.starred {
+      color: var(--cortex-primary);
+    }
   `;
 
   @property({ attribute: false }) session: Session | null = null;
@@ -75,6 +98,16 @@ export class HistoryItem extends LitElement {
     }));
   }
 
+  private _toggleStar(e: Event) {
+    // 星标点击不触发行选中
+    e.stopPropagation();
+    if (!this.session) return;
+    this.dispatchEvent(new CustomEvent("toggle-star", {
+      detail: { session: this.session, starred: !this.session.starred },
+      bubbles: true, composed: true,
+    }));
+  }
+
   render() {
     if (!this.session) return null;
     // search 历史只保留关键词（不再保存结果数量）；chat 仍显示消息数。
@@ -83,12 +116,21 @@ export class HistoryItem extends LitElement {
       metaParts.push(String(this.session.message_count));
     }
     metaParts.push(new Date(this.session.updated_at).toLocaleDateString());
+    const starred = !!this.session.starred;
     return html`
       <div class="name">
         ${this.session.mode === "grep" ? html`<span class="mode-tag" title="正则 grep">grep</span>` : null}
         ${this.session.title}
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>
+      <button
+        class="star-btn ${starred ? "starred" : ""}"
+        title=${starred ? "取消加星" : "加星（置顶并防止被清空）"}
+        aria-label=${starred ? "取消加星" : "加星"}
+        aria-pressed=${starred ? "true" : "false"}
+        @click=${this._toggleStar}>
+        <doclens-icon name="star" class=${starred ? "filled" : ""}></doclens-icon>
+      </button>
     `;
   }
 
