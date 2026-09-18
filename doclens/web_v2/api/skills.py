@@ -92,12 +92,15 @@ async def list_skills():
     """工具箱技能列表（契约不变；context_menu/accept_dirs 改走 sidecar 有效值）。
 
     停用仅做路由层隔断（不进 system prompt 清单），不影响工具箱展示——
-    工具箱显隐由 context_menu 独立控制。
+    工具箱显隐由 context_menu 独立控制。user-invocable: false 的技能
+    （仅模型可调）全隐，不出现在工具箱。
     """
     agent = deps.get_agent()
     skills_loader = agent.runtime.skills
     skills = []
     for name, info in skills_loader.skills.items():
+        if not info.get("user_invocable", True):
+            continue
         state = skills_config.effective_state(name)
         if not state["context_menu"]:
             continue
@@ -113,18 +116,24 @@ async def list_skills():
 
 @router.get("/skills/manage", response_model=SkillManageListResponse)
 async def list_skills_manage():
-    """全量技能管理列表：磁盘技能 + 已删除内置技能（灰置可恢复）。"""
+    """全量技能管理列表：磁盘技能 + 已删除内置技能（灰置可恢复）。
+
+    user-invocable: false 的技能（仅模型可调）对配置面全隐——磁盘条目与
+    已删除内置的灰置条目都不出现。
+    """
     loader = _scan_loader()
     builtins = skills_config.builtin_skill_names()
     items = [
         _manage_item(name, info.get("meta", {}), name in builtins)
         for name, info in loader.skills.items()
+        if info.get("user_invocable", True)
     ]
     # 已删除的内置技能不在磁盘上（部署被跳过），从发行包 meta 补灰置条目
     deleted = skills_config.deleted_names()
     builtin_meta = skills_config.builtin_skill_meta()
+    model_only = skills_config.builtin_model_only_names()
     for name in sorted(deleted & builtins):
-        if name not in loader.skills:
+        if name not in loader.skills and name not in model_only:
             items.append(_manage_item(name, builtin_meta.get(name, {}), True))
     items.sort(key=lambda s: (s.deleted, not s.builtin, s.name))
     return SkillManageListResponse(skills=items)
@@ -137,6 +146,12 @@ async def patch_skill(name: str, req: SkillPatchRequest):
     loader = _scan_loader()
     builtins = skills_config.builtin_skill_names()
     if name not in loader.skills and name not in skills_config.deleted_names():
+        raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")
+    # user-invocable: false → 配置面拒识（磁盘在或已删内置均按不存在处理）
+    if (
+        not loader.skills.get(name, {}).get("user_invocable", True)
+        or name in skills_config.builtin_model_only_names()
+    ):
         raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")
     updates = req.model_dump(exclude_unset=True)
     skills_config.update_skill(name, updates)
@@ -196,6 +211,8 @@ async def restore_skill(name: str):
     builtins = skills_config.builtin_skill_names()
     if name not in builtins:
         raise CortexAPIError(400, "SKILL_NOT_BUILTIN", f"仅内置技能可恢复: {name}")
+    if name in skills_config.builtin_model_only_names():
+        raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")
     if name not in skills_config.deleted_names():
         raise CortexAPIError(409, "SKILL_NOT_DELETED", f"技能未处于已删除状态: {name}")
     skills_config.update_skill(name, {"deleted": None})

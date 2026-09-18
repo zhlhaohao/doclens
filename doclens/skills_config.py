@@ -66,6 +66,24 @@ def builtin_skill_meta() -> dict[str, dict]:
     return {n: s["meta"] for n, s in SkillLoader(pkg_skills).skills.items()}
 
 
+def builtin_model_only_names() -> set[str]:
+    """内置技能中 frontmatter 声明 user-invocable: false 的名单。
+
+    这些技能对宿主用户调用面全隐（管理页/工具箱/斜杠），管理 API 对其
+    拒识（PATCH/restore 404）；DELETE 保留为清理出口。
+    """
+    pkg_skills = Path(__file__).parent / "skills"
+    if not pkg_skills.is_dir():
+        return set()
+    from planify.skills.skill_loader import SkillLoader
+
+    return {
+        n
+        for n, s in SkillLoader(pkg_skills).skills.items()
+        if not s.get("user_invocable", True)
+    }
+
+
 def _empty_data() -> dict:
     return {"version": _SCHEMA_VERSION, "skills": {}}
 

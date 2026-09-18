@@ -125,7 +125,7 @@ describe("file-list", () => {
     document.body.appendChild(el);
     await el.updateComplete;
     const btns = el.shadowRoot.querySelectorAll(".toolbar button");
-    expect(btns.length).toBe(7); // mkdir/upload/rename/move/copy-path/skill-toolbox/delete
+    expect(btns.length).toBe(8); // mkdir/upload/rename/move/copy-path/skill-toolbox/delete/refresh
     // 每个按钮 = icon + .btn-label 文字（hover 才显示）
     for (const btn of btns) {
       expect(btn.querySelector("doclens-icon")).toBeTruthy();

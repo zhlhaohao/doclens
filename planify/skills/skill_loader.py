@@ -2,14 +2,33 @@
 
 从文件系统加载专业技能。
 
+目录组织：递归发现（rglob），支持厂商/分类子目录（skills/<厂商>/<技能名>/
+SKILL.md）；子目录层级不参与技能名——身份 = meta name（缺省回退叶子目录名），
+同名冲突先者胜（sorted 路径序）+ warning。
+
 技能文件格式 (skills/my_skill/SKILL.md)：
     ---
     name: my_skill
     description: 技能描述
+    allowed-tools: bash(${CLAUDE_SKILL_DIR}/scripts/run.sh)
     ---
     # 技能使用说明
-    详细使用说明...
+    运行 ${CLAUDE_SKILL_DIR}/scripts/run.sh 或相对引用 ./scripts/run.sh
     ---
+
+目录契约（对齐 Claude Code 的 getPromptForCommand 机制）：
+- load() 输出首行注入 "Base directory for this skill: <技能绝对目录>"——
+  正文里的 ./scripts/run.sh 相对引用由模型据此拼接真实路径；
+- ${CLAUDE_SKILL_DIR} 占位符确定性替换为技能目录（正斜杠归一，Windows 下
+  防 bash 转义吞噬）；frontmatter 值的替换在解析期（rescan）完成，
+  allowed-tools 等待消费字段拿到的是已解析的真实路径。
+
+user-invocable 契约（宿主用户调用面硬门）：
+- frontmatter ``user-invocable`` 解析为布尔存 ``skills[name]["user_invocable"]``；
+- false = 宿主用户调用面全隐（TUI 斜杠 / Web 工具箱 / 管理页），仅模型可调
+  （descriptions() 清单与 load() 不受影响，与 disabled 的路由层隔断同哲学）；
+- 解析宽松 fail-open：仅 false/0/no/off（忽略大小写）→ False，其余（含缺省、
+  杂值、拼写错误）→ True——false 是强隐藏后果，错向「可见」更安全。
 
 关键洞察："Model 可以在运行时学习新能力。"
 """
@@ -18,12 +37,30 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # 惰性新鲜度检查的最小间隔（秒）：descriptions() 高频调用时避免每次都 walk 目录。
 STALE_CHECK_MIN_INTERVAL = 2.0
+
+# 技能目录占位符：SKILL.md 正文/frontmatter 引用技能自身目录的确定性变量。
+SKILL_DIR_PLACEHOLDER = "${CLAUDE_SKILL_DIR}"
+
+# user-invocable 的 false 族（忽略大小写）——其余任何值（含缺省）→ True。
+_USER_INVOCABLE_FALSE = frozenset({"false", "0", "no", "off"})
+
+
+def _parse_user_invocable(raw: Any) -> bool:
+    """解析 user-invocable frontmatter（宽松 fail-open，见模块文档）。"""
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in _USER_INVOCABLE_FALSE
+
+
+def _shell_friendly_dir(base_dir: str) -> str:
+    """技能目录 → shell 友好字符串（反斜杠归一为正斜杠，防 bash 转义吞噬）。"""
+    return base_dir.replace("\\", "/")
 
 
 class SkillLoader:
@@ -67,7 +104,7 @@ class SkillLoader:
         self.skills_dir = skills_dir
         self._disabled = frozenset(disabled or ())
         self._auto_refresh = auto_refresh
-        self.skills: Dict[str, Dict[str, str]] = {}
+        self.skills: Dict[str, Dict[str, Any]] = {}
         self._file_to_name: Dict[Path, str] = {}
         self._signature: Dict[Path, Tuple[float, int]] = {}
         self._last_check = 0.0
@@ -76,13 +113,22 @@ class SkillLoader:
     def rescan(self) -> None:
         """重新扫描技能目录，原位替换 skills dict（不 mutation 旧 dict）。
 
+        目录组织：递归发现（rglob）——支持厂商/分类子目录（``skills/<厂商>/
+        <技能名>/SKILL.md``）；子目录层级不参与技能名（身份 = meta name，
+        缺省回退叶子目录名）。
+
+        同名冲突：**先者胜**——sorted 路径序靠前者保留，其余丢弃 +
+        warning（厂商组织升高同名概率，静默覆盖不可诊断）。
+
         容错：单文件读取/解码失败 → log warning + 沿用旧内容 + 不记入签名
         （下轮惰性检查 diff 出「新增」自动重试，自愈）。并发无锁——rescan
         幂等（构建局部 dict 后整体替换引用），交错最坏多扫一次。
         """
-        skills: Dict[str, Dict[str, str]] = {}
+        skills: Dict[str, Dict[str, Any]] = {}
         file_to_name: Dict[Path, str] = {}
         signature: Dict[Path, Tuple[float, int]] = {}
+        # 名字 → 首个来源文件（冲突告警时报告保留者路径）
+        name_sources: Dict[str, Path] = {}
         if self.skills_dir.exists():
             for f in sorted(self.skills_dir.rglob("SKILL.md")):
                 try:
@@ -106,7 +152,34 @@ class SkillLoader:
                             meta[k.strip()] = v.strip()
                     body = match.group(2).strip()
                 name = meta.get("name", f.parent.name)
-                skills[name] = {"meta": meta, "body": body}
+                # 同名冲突先者胜：丢弃后来者（含其签名——否则下轮 diff 出
+                # 「消失」触发无意义重扫）
+                if name in skills:
+                    logger.warning(
+                        "技能名冲突，先者胜: '%s' 保留 %s，丢弃 %s（改名 meta name 可解）",
+                        name, name_sources.get(name, "?"), f,
+                    )
+                    continue
+                # 技能绝对目录：注入头与占位符替换的事实来源
+                base_dir = str(f.parent.absolute())
+                # frontmatter 值解析期替换占位符（name 已先行取出，替换不影响
+                # 路由键）；allowed-tools 等待消费字段拿到的是已解析的真实路径
+                skill_dir = _shell_friendly_dir(base_dir)
+                meta = {
+                    k: v.replace(SKILL_DIR_PLACEHOLDER, skill_dir)
+                    if SKILL_DIR_PLACEHOLDER in v
+                    else v
+                    for k, v in meta.items()
+                }
+                skills[name] = {
+                    "meta": meta,
+                    "body": body,
+                    "base_dir": base_dir,
+                    "user_invocable": _parse_user_invocable(
+                        meta.get("user-invocable")
+                    ),
+                }
+                name_sources[name] = f
                 file_to_name[f] = name
                 try:
                     st = f.stat()
@@ -193,7 +266,14 @@ class SkillLoader:
 
     def load(self, name: str) -> str:
         """
-        加载指定技能的完整内容
+        加载指定技能的完整内容（注入 Base directory 头 + 替换目录占位符）
+
+        注入契约（对齐 Claude Code getPromptForCommand）：
+        - 首行 "Base directory for this skill: <技能绝对目录>"，位于 <skill>
+          标签内、正文之前——正文中的 ./scripts/run.sh 相对引用由模型据此
+          拼接真实路径（宿主不做 chdir，bash cwd 仍是工作目录）；
+        - 正文中的 ${CLAUDE_SKILL_DIR} 替换为技能目录（正斜杠归一）；
+          frontmatter 值的替换已在解析期（rescan）完成。
 
         Args:
             name: 技能名称
@@ -204,4 +284,9 @@ class SkillLoader:
         s = self.skills.get(name)
         if not s:
             return f"Error: Unknown skill '{name}'. Available: {', '.join(self.skills.keys())}"
-        return f"<skill name=\"{name}\">\n{s['body']}\n</skill>"
+        body = s["body"]
+        base_dir = s.get("base_dir")
+        if base_dir:
+            body = body.replace(SKILL_DIR_PLACEHOLDER, _shell_friendly_dir(base_dir))
+            body = f"Base directory for this skill: {base_dir}\n\n{body}"
+        return f"<skill name=\"{name}\">\n{body}\n</skill>"

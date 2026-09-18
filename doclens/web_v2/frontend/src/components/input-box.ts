@@ -192,6 +192,8 @@ export class InputBox extends LitElement {
     .menu-item.active { background: var(--cortex-primary-soft); }
     .menu-item.active:hover { background: var(--cortex-primary-soft); }
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
+    /* 斜杠技能下拉：候选多时限高滚动；左右撑满输入行（继承 .menu 向上展开） */
+    .menu.slash-menu { left: 6px; max-height: 320px; overflow-y: auto; }
     @media (max-width: 1023px) {
       /* 移动端稍矮（≈44px），仍随字号缩放 */
       :host { --min-h: calc(var(--cortex-fs-md) * 1.5 + 20px); }
@@ -221,7 +223,16 @@ export class InputBox extends LitElement {
    *  数组 = 最近技能（可为空，菜单只显示「选择技能…」）；null = 不启用（普通单按钮）。
    *  caret 在输入为空时禁用（先输入问题才能选技能）；点技能项发 skill-pick，点「选择技能…」发 skill-browse。 */
   @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
+
+  /** 斜杠技能引导（chat 专属）：非 null 时，输入以 "/" 开头且仍是纯技能名片段
+   *  （/^\/[A-Za-z0-9_.-]*$/）显示过滤下拉；↑↓ 导航、Enter 补全为 "/name "
+   *  （不发送）、Esc 关闭。候选由宿主注入（chat-view 的对话技能候选白名单：
+   *  启用 ∧ 未删除 ∧ 用户可调用）。 */
+  @property({ attribute: false }) slashItems: { name: string; description?: string; icon?: string }[] | null = null;
   @state() private _menuOpen = false;
+  @state() private _slashIndex = 0;
+  /** Esc 关闭斜杠下拉后的驳回标记：输入变化即复位（再敲字符重新出现） */
+  @state() private _slashDismissed = false;
 
   @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
 
@@ -253,6 +264,8 @@ export class InputBox extends LitElement {
   private _onInput(e: Event) {
     const target = e.target as HTMLInputElement | HTMLTextAreaElement;
     this.value = target.value;
+    this._slashDismissed = false; // 输入变化即复位 Esc 驳回
+    this._slashIndex = 0;
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
     // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件
     const btn = this.renderRoot.querySelector("button");
@@ -260,7 +273,64 @@ export class InputBox extends LitElement {
     this._autoResize();
   }
 
+  /** 斜杠下拉可见 = 启用（slashItems 非 null）∧ 输入仍是纯技能名片段（斜杠 +
+   *  名字字符，无空格——名字敲定即进入问题输入阶段，菜单隐去）∧ 未被 Esc 驳回。 */
+  private get _slashMenuOpen(): boolean {
+    return (
+      this.slashItems !== null &&
+      !this._slashDismissed &&
+      /^\/[A-Za-z0-9_.-]*$/.test(this.value)
+    );
+  }
+
+  /** 按已输入片段过滤候选：名字前缀优先段，其次名字含片段段（保持候选原序）。 */
+  private get _slashFiltered(): { name: string; description?: string; icon?: string }[] {
+    const items = this.slashItems ?? [];
+    const token = this.value.slice(1).toLowerCase();
+    if (!token) return items;
+    const prefix = items.filter((s) => s.name.toLowerCase().startsWith(token));
+    const infix = items.filter(
+      (s) => !s.name.toLowerCase().startsWith(token) && s.name.toLowerCase().includes(token),
+    );
+    return [...prefix, ...infix];
+  }
+
+  /** 补全选中项：置为 "/name "（尾随空格），菜单随空格自动隐去。 */
+  private _completeSlash(item: { name: string }) {
+    this.value = `/${item.name} `;
+    this._slashIndex = 0;
+    this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
+    const btn = this.renderRoot.querySelector("button");
+    if (btn) btn.disabled = !this.trimmed || this.disabled;
+    this._autoResize();
+    this.focus();
+  }
+
   private _onKeydown(e: KeyboardEvent) {
+    // 斜杠下拉打开时的菜单导航：↑↓ 移动、Enter 补全（不发送）、Esc 驳回
+    if (this._slashMenuOpen) {
+      const items = this._slashFiltered;
+      if (e.key === "ArrowDown" && items.length > 0) {
+        e.preventDefault();
+        this._slashIndex = (this._slashIndex + 1) % items.length;
+        return;
+      }
+      if (e.key === "ArrowUp" && items.length > 0) {
+        e.preventDefault();
+        this._slashIndex = (this._slashIndex - 1 + items.length) % items.length;
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this._slashDismissed = true;
+        return;
+      }
+      if (e.key === "Enter" && items.length > 0) {
+        e.preventDefault();
+        this._completeSlash(items[Math.min(this._slashIndex, items.length - 1)]!);
+        return;
+      }
+    }
     if (e.key !== "Enter") return;
     // multiline：Enter 发送、Shift+Enter 换行；非 multiline：Enter 始终发送
     if (e.shiftKey && this.multiline) return;
@@ -407,6 +477,28 @@ export class InputBox extends LitElement {
       </div>`;
   }
 
+  /** 斜杠技能引导下拉：输入 "/片段" 时浮现，↑↓/Enter/Esc 由 _onKeydown 处理。 */
+  private _renderSlashMenu() {
+    if (!this._slashMenuOpen) return null;
+    const items = this._slashFiltered;
+    if (items.length === 0) return null; // 无匹配：不渲染（提交由宿主阻断提示）
+    const idx = Math.min(this._slashIndex, items.length - 1);
+    return html`
+      <div class="menu slash-menu" role="listbox" aria-label="技能候选">
+        ${items.map((item, i) => html`
+          <div class="menu-item ${i === idx ? "active" : ""}" role="option"
+               aria-selected=${i === idx}
+               @click=${() => this._completeSlash(item)}
+               @mousemove=${() => (this._slashIndex = i)}>
+            <span class="menu-item-title">
+              ${item.icon ? html`<doclens-icon name=${item.icon} aria-hidden="true"></doclens-icon>` : null}/${item.name}
+            </span>
+            ${item.description ? html`<span class="menu-item-desc">${item.description}</span>` : null}
+          </div>`)}
+      </div>
+    `;
+  }
+
   render() {
     // 流式期间禁用输入（不能打字/回车），由停止键接管
     const fieldDisabled = this.disabled || this.streaming;
@@ -420,6 +512,7 @@ export class InputBox extends LitElement {
         ${field}
         ${this._renderButton()}
         ${this._renderMenu()}
+        ${this._renderSlashMenu()}
       </div>
     `;
   }

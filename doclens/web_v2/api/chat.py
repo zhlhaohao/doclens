@@ -40,21 +40,34 @@ _LOADED_SKILL_RE = re.compile(r'<loaded-skill name="([^"]+)">')
 
 
 def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str]]:
-    """从 run_stream 原地修改后的 history 提取注入的 skill body（按出现顺序去重）。
+    """从 run_stream 原地修改后的 history 提取注入的技能上下文（按出现顺序去重）。
+
+    覆盖两类注入消息对（回放均经 upsert_skill_contexts 原样重建）：
+    - skill body（<loaded-skill>，runner 重注入）→ 去重键 = 技能名；
+    - 斜杠调用 hint（<slash-skill-hint>，chat.py 发送前注入）→ 去重键 =
+      ``slash:<技能名>``，与 body 条目隔离（同技能两种条目并存不互斥）。
 
     Returns:
-        [(skill_name, 完整消息内容), ...]，与 runner 注入顺序一致。
+        [(去重键, 完整消息内容), ...]，与注入顺序一致。
     """
+    from doclens.web_v2.api._chat_slash import SLASH_HINT_RE
+
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
     for m in history:
         content = m.get("content")
         if m.get("role") != "user" or not isinstance(content, str):
             continue
-        match = _LOADED_SKILL_RE.search(content)
-        if match and match.group(1) not in seen:
-            seen.add(match.group(1))
-            out.append((match.group(1), content))
+        hint = SLASH_HINT_RE.search(content)
+        loaded = _LOADED_SKILL_RE.search(content)
+        key: Optional[str] = None
+        if hint:
+            key = f"slash:{hint.group(1)}"
+        elif loaded:
+            key = loaded.group(1)
+        if key and key not in seen:
+            seen.add(key)
+            out.append((key, content))
     return out
 
 
@@ -75,8 +88,18 @@ async def _stream_agent_response(
     agent = get_agent()
     runtime = agent.runtime
 
+    # 斜杠调用复检（注入权威；前端引导菜单只是 UX 层）。命中即视为技能会话
+    # （提取式引文），与工具箱直发的 [调用技能: …] 信封同待遇。
+    from doclens.web_v2.api._chat_slash import (
+        hint_already_injected,
+        legal_slash_skill,
+        slash_hint_content,
+    )
+
+    slash_skill = legal_slash_skill(message, runtime.skills)
+
     history: list[dict] = []
-    skill_session = is_skill_message(message)
+    skill_session = is_skill_message(message) or slash_skill is not None
     if session_id:
         try:
             from doclens.web_v2.deps import get_sessions_store
@@ -99,6 +122,16 @@ async def _stream_agent_response(
                 history.pop()
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
+
+    # 斜杠调用 hint 注入：用户消息原样（展示保真/落库原文），紧随其后插入
+    # 加载指引消息对（run_stream 随后追加本轮 user 消息）。会话中已有该技能
+    # hint（回放重建）则跳过——skill_context 按名幂等落库，重复注入会造成
+    # 「内存两对、回放一对」的前缀分叉。持久化经 _extract_injected_skill_
+    # contexts → upsert_skill_contexts 通路（键 slash:<名>），轮 N+1 回放与
+    # 轮 N 实发逐字节一致（prompt 前缀缓存）。
+    if slash_skill and not hint_already_injected(history, slash_skill):
+        history.append({"role": "user", "content": slash_hint_content(slash_skill)})
+        history.append({"role": "assistant", "content": "Noted."})
 
     from doclens.web_v2.api._chat_emitter import ChatEventEmitter
 

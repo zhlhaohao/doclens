@@ -134,12 +134,12 @@ class TestDeploySkipDeleted:
     def test_deleted_builtin_skipped(
         self, tmp_path, config_dir, monkeypatch: pytest.MonkeyPatch
     ):
-        # 伪造发行包结构 <fake>/skills/<name>/SKILL.md（deploy 用 Path(__file__).parent/skills）
+        # 伪造发行包结构 <fake>/skills/<name>/SKILL.md（deploy 源目录 = 模块常量）
         fake_mod = tmp_path / "fake"
         skills_root = fake_mod / "skills"
         _write_skill(skills_root, "keep", "keep")
         _write_skill(skills_root, "gone", "gone")
-        monkeypatch.setattr(skills_deploy, "__file__", str(fake_mod / "skills_deploy.py"))
+        monkeypatch.setattr(skills_deploy, "_BUILTIN_SKILLS_SRC", skills_root)
         skills_config.update_skill("gone", {"deleted": True})
 
         target = tmp_path / "global" / "skills"

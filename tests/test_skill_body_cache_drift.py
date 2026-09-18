@@ -96,6 +96,9 @@ class StubEmitter:
         tc["is_error"] = is_error
         self.tool_calls.append(tc)
 
+    async def emit_notice(self, message):
+        pass  # 轮内中性通知（压缩 toast）：本测试不消费
+
     async def emit_done(self, session_id, summary=None):
         pass
 
@@ -570,7 +573,8 @@ def _make_compacting_agent(provider, emitter, tmp_path):
     sa = _make_agent(provider, emitter, tmp_path)
     sa.config.compact_threshold = 1
 
-    async def fake_compact(messages, provider_, transcript_dir, *, tracer=None):
+    async def fake_compact(messages, provider_, transcript_dir, *, tracer=None,
+                           summary_input_budget=0, summary_max_tokens=0):
         return [dict(m) for m in _COMPACTED_PAIR]
 
     sa._aauto_compact = fake_compact

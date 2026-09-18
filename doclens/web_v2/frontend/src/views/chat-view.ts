@@ -23,6 +23,26 @@ import "../components/preview-pane";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
+/** 斜杠技能调用的提交校验结果（checkSlashSubmit）：
+ *  non-slash = 普通消息直接发送；ok = 合法斜杠调用（记录最近技能后发送）；
+ *  unknown = 未知技能名，阻断发送并提示（后端对漏网斜杠按普通文本处理）。 */
+export type SlashCheck =
+  | { type: "non-slash" }
+  | { type: "ok"; name: string }
+  | { type: "unknown"; name: string };
+
+/** 提交校验：首字符 / 即技能模式，技能名 = 首个空白前的片段；
+ *  合法集合 = 对话技能候选（启用 ∧ 未删除 ∧ 用户可调用，与引导菜单同源）。 */
+export function checkSlashSubmit(
+  message: string,
+  candidates: { name: string }[] | null,
+): SlashCheck {
+  if (!message.startsWith("/")) return { type: "non-slash" };
+  const name = message.slice(1).split(/\s/, 1)[0];
+  if ((candidates ?? []).some((c) => c.name === name)) return { type: "ok", name };
+  return { type: "unknown", name };
+}
+
 /** 将一个流式事件不可变地应用到 messages，返回新数组；非 assistant 末条则原样返回。 */
 export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): ChatMessage[] {
   if (messages.length === 0) return messages;
@@ -760,6 +780,26 @@ export class ChatView extends LitElement {
   private async _submit(e: CustomEvent<{ value: string }>) {
     this._resetPreview();
     const message = e.detail.value;
+
+    // 斜杠技能调用（首字符 /）：合法性硬校验（存在 ∧ 启用 ∧ 未删除 ∧ 用户可
+    // 调用）。非法阻断发送并保留草稿（后端对漏网的非法斜杠按普通文本处理，
+    // 不注入 hint）；合法则记录最近技能后按普通消息原样发送——hint 由后端
+    // 在发送给 LLM 时注入（展示保真/落库原文）。
+    if (message.startsWith("/") && this._skillCandidates === null) {
+      await this._loadSkillCandidates();
+    }
+    const check = checkSlashSubmit(message, this._skillCandidates);
+    if (check.type === "unknown") {
+      this.draft = message; // 恢复草稿便于修正
+      this._pushToast(
+        `未知技能「/${check.name}」：删掉开头的 / 可发送普通文本，或从下拉列表选择技能`,
+        "error",
+        4000,
+      );
+      return;
+    }
+    if (check.type === "ok") recordSkillUse(check.name);
+
     this.draft = "";
 
     // initial 态时消息发送前先建会话（与技能对话共用路径）
@@ -1234,6 +1274,7 @@ export class ChatView extends LitElement {
               multiline
               .value=${this.draft}
               .skillItems=${this._recentSkillItems}
+              .slashItems=${this._skillCandidates}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
               @skill-menu-open=${this._onSkillMenuOpen}
               @skill-pick=${this._onSkillMenuPick}
@@ -1320,6 +1361,7 @@ export class ChatView extends LitElement {
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             .skillItems=${this._recentSkillItems}
+            .slashItems=${this._skillCandidates}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
             @skill-menu-open=${this._onSkillMenuOpen}
             @skill-pick=${this._onSkillMenuPick}

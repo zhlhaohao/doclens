@@ -182,6 +182,12 @@ def preview_install(url: str) -> dict:
 def install_from_github(url: str, skills_dir: Path) -> list[str]:
     """执行安装：下载 → 冲突校验 → 落盘 → sidecar 记来源。
 
+    落盘组织（按来源分组）：``skills_dir/<repo名>/<技能名>/``——厂商子目录
+    纯文件系统组织，不影响技能身份（meta name）。旧平铺布局（``skills_dir/
+    <技能名>/``）不主动迁移，但**同源重装**（sidecar source_url 相同）会撤除
+    旧平铺目录，防递归读取下同名双份（先者胜告警噪音）。跨 repo 同名不覆盖
+    ——两目录并存，由 SkillLoader 的冲突先者胜规则接管。
+
     Returns:
         安装的技能名列表。
     """
@@ -195,11 +201,19 @@ def install_from_github(url: str, skills_dir: Path) -> list[str]:
         raise SkillInstallError("未发现可安装的技能")
 
     skills_dir.mkdir(parents=True, exist_ok=True)
+    group_dir = skills_dir / ref.repo  # 来源分组目录（厂商组织）
     installed: list[str] = []
     for name, info in found.items():
-        target = skills_dir / name
+        # 同源旧平铺目录迁移撤除（source_url 相同 = 同一技能的旧布局）
+        legacy_flat = skills_dir / name
+        if legacy_flat.is_dir() and (
+            skills_config.get_override(name).get("source_url") == ref.source_url
+        ):
+            shutil.rmtree(legacy_flat)
+            logger.info("同源重装，撤除旧平铺目录: %s", legacy_flat)
+        target = group_dir / name
         if target.exists():
-            shutil.rmtree(target)  # 外部同名 = 覆盖更新（sidecar 用户设置保留）
+            shutil.rmtree(target)  # 同 repo 重装 = 覆盖更新（sidecar 用户设置保留）
         target.mkdir(parents=True)
         for rel, content in info["files"].items():
             dest = target / rel
@@ -208,5 +222,5 @@ def install_from_github(url: str, skills_dir: Path) -> list[str]:
         # 记来源（保留该名已有覆盖中的用户设置，仅更新 source_url）
         skills_config.update_skill(name, {"source_url": ref.source_url})
         installed.append(name)
-        logger.info("技能安装完成: %s ← %s", name, ref.source_url)
+        logger.info("技能安装完成: %s/%s ← %s", ref.repo, name, ref.source_url)
     return installed

@@ -19,6 +19,8 @@ def extract_round_raw_messages(
     跳过（各有独立落库/重建通道）：
     - head-context 消息对（CONTEXT_MARKER + 紧随的 "Noted."，每轮重建注入）；
     - skill body 消息对（<loaded-skill>，已由 upsert_skill_contexts 单独落库）；
+    - 斜杠调用 hint 消息对（<slash-skill-hint>，同经 upsert_skill_contexts
+      落库，键 slash:<名>；不跳过会与 skill_context 回放双重重建）；
     - 本轮 user 消息（前端已落库 message_user）；
     - 中断残留的空 assistant（content=[]，回放无意义且可能触发 400）。
 
@@ -41,7 +43,11 @@ def extract_round_raw_messages(
         content = m.get("content")
         role = m.get("role")
         if isinstance(content, str) and role == "user":
-            if CONTEXT_MARKER in content or '<loaded-skill name="' in content:
+            if (
+                CONTEXT_MARKER in content
+                or '<loaded-skill name="' in content
+                or '<slash-skill-hint name="' in content
+            ):
                 # 注入消息 + 紧随的 assistant "Noted."（有则一并跳过）
                 nxt = msgs[i + 1] if i + 1 < len(msgs) else None
                 if (
