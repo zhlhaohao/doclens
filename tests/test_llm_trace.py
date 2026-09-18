@@ -1,6 +1,6 @@
 """LLM 追踪（LLM Trace）落盘测试。
 
-覆盖：开关门控、md 骨架（问/答节/触发源摘要）、轮次自增与跨 tracer 续接、
+覆盖：开关门控、md 骨架（发/收节/触发源摘要）、轮次自增与跨 tracer 续接、
 图像 base64 占位（Anthropic / OpenAI 两形态）、fence 转义、异常节、
 并发追加完整性、目录覆盖。
 """
@@ -86,8 +86,8 @@ def test_request_response_sections(tmp_path):
     )
     text = tracer._path.read_text(encoding="utf-8")
     assert "# LLM Trace" in text
-    assert "## 轮 1 · 问" in text
-    assert "## 轮 1 · 答" in text
+    assert "## 轮 1 · 发" in text
+    assert "## 轮 1 · 收" in text
     assert "模型: claude-opus-4-6 · max_tokens: 8000 · 工具: 2 个" in text
     assert "触发源[main]: (user) 什么是 doclens？" in text
     # 实发请求体原样（含 cache_control 断点）
@@ -109,7 +109,7 @@ def test_turn_increments_and_resumes_across_tracers(tmp_path):
     assert t2 is not None and t2._path == t1._path
     assert t2.trace_request({"model": "m", "messages": []}) == 3
     text = t2._path.read_text(encoding="utf-8")
-    assert "## 轮 3 · 问" in text
+    assert "## 轮 3 · 发" in text
 
 
 def test_no_session_key_timestamp_named(tmp_path):
@@ -126,7 +126,7 @@ def test_trace_error_section(tmp_path):
     turn = tracer.trace_request({"model": "m", "messages": []})
     tracer.trace_error(turn, ValueError("boom"))
     text = tracer._path.read_text(encoding="utf-8")
-    assert "## 轮 1 · 答" in text
+    assert "## 轮 1 · 收" in text
     assert "异常/中断" in text
     assert '"type": "ValueError"' in text
     assert "boom" in text
@@ -221,12 +221,12 @@ def test_concurrent_appends_keep_sections_intact(tmp_path):
     for th in threads:
         th.join()
     text = tracers[0]._path.read_text(encoding="utf-8")
-    # 40 问 + 40 答，标题行全部完整（无交错撕裂的半行）
-    assert text.count("· 问 ·") == 40
-    assert text.count("· 答 ·") == 40
+    # 40 发 + 40 收，标题行全部完整（无交错撕裂的半行）
+    assert text.count("· 发 ·") == 40
+    assert text.count("· 收 ·") == 40
     for line in text.splitlines():
         if line.startswith("## 轮"):
-            assert line.endswith("）") or "· 问 ·" in line
+            assert line.endswith("）") or "· 发 ·" in line
 
 
 # ------------------------------------------------------------- jsonable
@@ -248,7 +248,7 @@ def test_jsonable_handles_pydantic_like_objects():
 
 
 def test_openai_astream_traces_request_and_aggregated_response(tmp_path):
-    """OpenAI-compat 流式路径：kwargs 进问节、聚合原生响应进答节。"""
+    """OpenAI-compat 流式路径：kwargs 进发节、聚合原生响应进收节。"""
     import asyncio
     from types import SimpleNamespace
 
@@ -302,19 +302,19 @@ def test_openai_astream_traces_request_and_aggregated_response(tmp_path):
 
     asyncio.run(run())
     text = tracer._path.read_text(encoding="utf-8")
-    assert "## 轮 1 · 问" in text
-    assert "## 轮 1 · 答" in text
-    # 问节 = OpenAI 风格实发 kwargs（system 并入 messages）
+    assert "## 轮 1 · 发" in text
+    assert "## 轮 1 · 收" in text
+    # 发节 = OpenAI 风格实发 kwargs（system 并入 messages）
     assert '"role": "system"' in text
     assert '"stream_options"' in text
-    # 答节 = 聚合还原的原生形态 + 尾 chunk usage
+    # 收节 = 聚合还原的原生形态 + 尾 chunk usage
     assert '"stream_aggregated": true' in text
     assert '"content": "你好"' in text
     assert '"prompt_tokens": 100' in text
 
 
 def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
-    """runner 在 message_stop 即 break（真实消费行为）：答节已落且不误记异常节。"""
+    """runner 在 message_stop 即 break（真实消费行为）：收节已落且不误记异常节。"""
     import asyncio
 
     from planify.core.llm.openai_compat_provider import OpenAICompatProvider
@@ -362,13 +362,13 @@ def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
 
     asyncio.run(run())
     text = tracer._path.read_text(encoding="utf-8")
-    assert "## 轮 1 · 问" in text
-    assert "## 轮 1 · 答" in text
+    assert "## 轮 1 · 发" in text
+    assert "## 轮 1 · 收" in text
     assert "异常/中断" not in text
 
 
 def test_anthropic_chat_traces_request_and_native_response(tmp_path):
-    """Anthropic 非流式路径：cache_control 断点进问节、原生响应进答节。"""
+    """Anthropic 非流式路径：cache_control 断点进发节、原生响应进收节。"""
     from types import SimpleNamespace
 
     from planify.core.llm.anthropic_provider import AnthropicProvider
@@ -407,11 +407,11 @@ def test_anthropic_chat_traces_request_and_native_response(tmp_path):
     )
     assert resp.stop_reason == "end_turn"
     text = tracer._path.read_text(encoding="utf-8")
-    assert "## 轮 1 · 问" in text
-    assert "## 轮 1 · 答" in text
-    # 问节含缓存断点（实发请求体真相）
+    assert "## 轮 1 · 发" in text
+    assert "## 轮 1 · 收" in text
+    # 发节含缓存断点（实发请求体真相）
     assert '"cache_control"' in text
-    # 答节原生响应 usage
+    # 收节原生响应 usage
     assert '"cache_read_input_tokens": 90' in text
 
 
@@ -419,7 +419,7 @@ def test_anthropic_chat_traces_request_and_native_response(tmp_path):
 
 
 def test_streaming_agent_end_to_end_with_tracer(tmp_path):
-    """runner → provider.astream → tracer 全链路：一次 run_stream 落一轮问/答。"""
+    """runner → provider.astream → tracer 全链路：一次 run_stream 落一轮发/收。"""
     import asyncio
 
     from planify.streaming.runner import StreamingAgent
@@ -451,7 +451,7 @@ def test_streaming_agent_end_to_end_with_tracer(tmp_path):
                              "cache_creation_input_tokens": 0, "cache_read_input_tokens": 95},
                       block_index=None, block_type=None, tool_use_id=None, tool_name=None,
                       text_delta=None, input_json_delta=None)
-            # 真实 provider 语义：答节在 yield message_stop 之前落盘
+            # 真实 provider 语义：收节在 yield message_stop 之前落盘
             # （runner 在 message_stop 即 break，之后的代码不执行）
             if tracer:
                 tracer.trace_response(turn, {"id": "m1", "usage": {
@@ -498,6 +498,6 @@ def test_streaming_agent_end_to_end_with_tracer(tmp_path):
 
     assert captured["tracer"] is tracer
     text = tracer._path.read_text(encoding="utf-8")
-    assert "## 轮 1 · 问" in text
-    assert "## 轮 1 · 答" in text
+    assert "## 轮 1 · 发" in text
+    assert "## 轮 1 · 收" in text
     assert "触发源[main]: (user) 问题" in text

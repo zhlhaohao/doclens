@@ -1,6 +1,6 @@
 """LLM 追踪（LLM Trace）——每次 LLM 调用的实发/实收原文落盘为 Markdown。
 
-用途：人工审视调试 + 离线计算前缀缓存命中率（usage 在答节响应 JSON 里）。
+用途：人工审视调试 + 离线计算前缀缓存命中率（usage 在收节响应 JSON 里）。
 
 配置（env，宿主经环境注入，本模块不读宿主配置）：
 - ``PLANIFY_LLM_TRACE``：开关（"1"/"true"/"on" 开，默认关）
@@ -59,7 +59,7 @@ def _is_enabled(lookup: Any) -> bool:
 
 
 class LLMTracer:
-    """单会话的 LLM 调用追踪器（问/答两节追加写一个 md 文件）。
+    """单会话的 LLM 调用追踪器（发/收两节追加写一个 md 文件）。
 
     生命周期跟随「会话」而非 provider：provider 是进程级单例、跨会话共享，
     tracer 由调用方（宿主会话入口 / 子代理 / teammate / vision）按需创建，
@@ -121,7 +121,7 @@ class LLMTracer:
     # ---------- 记录 API ----------
 
     def trace_request(self, kwargs: dict) -> int:
-        """记「问」节（实发请求体，含缓存断点）。返回轮次号（供答节配对）。"""
+        """记「发」节（实发请求体，含缓存断点）。返回轮次号（供收节配对）。"""
         with self._state_lock:
             self._turn = max(self._turn, self._existing_last_turn())
             self._turn += 1
@@ -130,7 +130,7 @@ class LLMTracer:
         try:
             tools = kwargs.get("tools") or []
             lines = [
-                f"## 轮 {turn} · 问 · {_now_hms()}",
+                f"## 轮 {turn} · 发 · {_now_hms()}",
                 f"- 模型: {kwargs.get('model', '?')} · "
                 f"max_tokens: {kwargs.get('max_tokens', '?')} · 工具: {len(tools)} 个",
                 f"- 触发源[{self.label}]: {_trigger_summary(kwargs.get('messages'))}",
@@ -139,26 +139,26 @@ class LLMTracer:
             body = _fenced_json(_redact_images(_jsonable(kwargs)))
             _append_text(self._path, "\n".join(lines) + "\n" + body + "\n")
         except Exception:  # noqa: BLE001
-            logger.warning("LLM trace: 问节落盘失败 (turn=%d)", turn, exc_info=True)
+            logger.warning("LLM trace: 发节落盘失败 (turn=%d)", turn, exc_info=True)
         return turn
 
     def trace_response(self, turn: int, native_response: Any) -> None:
-        """记「答」节（实收原生响应完整 dump，usage 在其中）。"""
+        """记「收」节（实收原生响应完整 dump，usage 在其中）。"""
         try:
             header = (
-                f"## 轮 {turn} · 答 · {_now_hms()}"
+                f"## 轮 {turn} · 收 · {_now_hms()}"
                 f"（耗时 {self._elapsed(turn):.1f}s）\n"
             )
             body = _fenced_json(_redact_images(_jsonable(native_response)))
             _append_text(self._path, header + body + "\n")
         except Exception:  # noqa: BLE001
-            logger.warning("LLM trace: 答节落盘失败 (turn=%d)", turn, exc_info=True)
+            logger.warning("LLM trace: 收节落盘失败 (turn=%d)", turn, exc_info=True)
 
     def trace_error(self, turn: int, error: Any) -> None:
-        """记「答」节的异常形态（调用异常 / 流中断——问节已写，答侧不缺席）。"""
+        """记「收」节的异常形态（调用异常 / 流中断——发节已写，收侧不缺席）。"""
         try:
             header = (
-                f"## 轮 {turn} · 答 · {_now_hms()}"
+                f"## 轮 {turn} · 收 · {_now_hms()}"
                 f"（耗时 {self._elapsed(turn):.1f}s · 异常/中断）\n"
             )
             body = _fenced_json(
@@ -209,7 +209,7 @@ class LLMTracer:
                 f"- 标签: {self.label}\n"
                 f"- 会话: {self.session_key or '(时间戳命名)'}\n"
                 f"- 创建: {datetime.now():%Y-%m-%d %H:%M:%S}\n"
-                "- 说明: 每轮 = 一次 LLM 调用（问 = 实发请求体，答 = 实收响应体，"
+                "- 说明: 每轮 = 一次 LLM 调用（发 = 实发请求体，收 = 实收响应体，"
                 "含 cache_control 断点与 usage）；文本原样不压缩，"
                 "图像 base64 已换占位符。轮次号跨输入连续。\n\n"
             )
