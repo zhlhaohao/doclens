@@ -136,9 +136,11 @@ export class SearchView extends LitElement {
     }
     @media (min-width: 1024px) {
       .detail-overlay { display: none; }
-      /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感 */
+      /* 桌面端：初始内容居中，避免全宽拉伸的"手机浏览器"观感。
+         列宽统一走 --content-max-width（与 chat 初始/focus、diary 同宽，
+         三视图两侧留白一致且状态切换不跳变） */
       .initial-stack {
-        max-width: 720px;
+        max-width: var(--content-max-width, 1080px);
         margin: 0 auto;
         width: 100%;
       }

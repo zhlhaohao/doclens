@@ -578,10 +578,10 @@ export class FilesView extends LitElement {
     this._dialog = null;
     if (!skill || paths.length === 0) return;
 
+    // 斜杠形态（与对话页直发/手敲 /技能名 同链路）：后端检测前缀注入
+    // load_skill hint；文件清单保留在消息正文（供模型与提取式引文使用）。
     const lines = [
-      `[调用技能: ${skill.name}]`,
-      "",
-      `请先 load_skill("${skill.name}") 加载技能，然后按技能指引处理以下文件。`,
+      `/${skill.name} 按技能指引处理以下文件`,
       "",
       "文件：",
       ...paths.map((p) => `- ${p}`),

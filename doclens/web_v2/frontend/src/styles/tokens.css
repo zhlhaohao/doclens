@@ -124,8 +124,9 @@
   --cortex-tab-bar-height: 56px;
   --cortex-touch-target: 44px;
 
-  /* ── hero 区最大宽度（search/chat initial 居中卡，shared-styles 消费）── */
-  --hero-max-width: 720px;
+  /* ── 主内容列最大宽度（chat 对话流/输入行、diary 页面统一居中限宽）：
+      调整桌面端两侧留白改此处；视图组件一律引用本 token，禁止硬编码 ── */
+  --content-max-width: 1080px;
 
   /* ────────────────────────────────────────────────────────────
    * Shoelace --sl-* 主题映射（构建产物内联进 index.[hash].css）

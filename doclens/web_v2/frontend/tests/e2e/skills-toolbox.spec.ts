@@ -177,7 +177,7 @@ test.describe("Skills toolbox (mock)", () => {
     await expect(page.locator("chat-view")).toBeVisible();
     await expect(page.locator("chat-message").first()).toBeVisible();
     expect(sentBody).not.toBeNull();
-    expect(sentBody.message).toContain("[调用技能: summarize-files]");
+    expect(sentBody.message).toContain("/summarize-files ");
     expect(sentBody.message).toContain("医疗/癌症治疗.md");
     expect(sentBody.message).toContain("医疗/体检报告.pdf");
     expect(sentBody.message).toContain("重点提取数据结论");
@@ -290,7 +290,7 @@ test.describe("Skills toolbox (mock)", () => {
 
     await expect(page.locator("chat-view")).toBeVisible();
     expect(sentBody).not.toBeNull();
-    expect(sentBody.message).toContain("[调用技能: knowledge-base]");
+    expect(sentBody.message).toContain("/knowledge-base ");
     expect(sentBody.message).toContain("医疗/子目录");
   });
 

@@ -1,14 +1,15 @@
 """斜杠技能调用（``/技能名 问题``）——纯逻辑，独立于 chat.py 便于单测。
 
-设计（grilling 会话共识，2026-09-18）：
+设计（grilling 会话共识 2026-09-18；信封简化为斜杠形态）：
 - 前端引导式下拉 + 非法阻断是 UX 层；**本模块是注入权威**——chat.py 每次请求
   用 runtime SkillLoader 复检合法性（存在 ∧ 未停用 ∧ user-invocable）；
 - 合法时：用户消息**原样**发给 LLM（落库原文、展示保真），紧随其后注入一条
   hint 消息对（system-reminder + assistant "Noted."），指示模型 load_skill；
 - hint 持久化复用 skill_context 通路（upsert 按名幂等 + 回放原样重建消息对），
   去重键加 ``slash:`` 前缀与技能正文条目隔离；跨轮前缀缓存稳定的关键；
-- 引文策展联动：斜杠前缀命中合法技能 = 技能会话（提取式引文），
-  与工具箱直发的 ``[调用技能: …]`` 信封同待遇。
+- 引文策展联动：斜杠前缀命中合法技能 = 技能会话（提取式引文）。工具箱直发
+  （对话页/文件页右键）同样发送斜杠形态消息，与本链路完全统一；
+  ``[调用技能: …]`` 信封仅为遗留会话的兼容检测（skill_refs.is_skill_message）。
 """
 
 import re
@@ -24,7 +25,6 @@ SLASH_HINT_RE = re.compile(r'<slash-skill-hint name="([^"]+)">')
 _HINT_TEMPLATE = (
     "<system-reminder>\n"
     '<slash-skill-hint name="{name}">\n'
-    "[调用技能: {name}]\n"
     "用户以斜杠命令调用技能。请先 load_skill(\"{name}\") 加载该技能，"
     "然后严格按技能指引处理用户问题。\n"
     "</slash-skill-hint>\n"

@@ -246,7 +246,7 @@ export class ChatView extends LitElement {
       min-height: 0;
       background: var(--cortex-view-bg);
       /* shadow 内不受全局 border-box reset 影响，须显式声明：
-         content-box 下 .input-bar 的 max-width:820px 不含 padding(48px)，
+         content-box 下 .input-bar 的 max-width:token 不含 padding(48px)，
          输入框比 initial 态 .input-row 里的宽 48px，两态切换时跳动 */
       box-sizing: border-box;
     }
@@ -293,7 +293,7 @@ export class ChatView extends LitElement {
     @media (min-width: 1024px) {
       .focus-main:not(.has-preview) chat-stream,
       .focus-main:not(.has-preview) ask-card {
-        max-width: 820px;
+        max-width: var(--content-max-width, 1080px);
         margin: 0 auto;
         width: 100%;
       }
@@ -419,14 +419,14 @@ export class ChatView extends LitElement {
     }
     @media (min-width: 1024px) {
       /* 桌面端：居中列布局，避免全宽拉伸。initial 与 focus 两态共用同一
-         列宽（820px），保证发送首条消息切换状态时输入框不跳动 */
+         列宽（--content-max-width），保证发送首条消息切换状态时输入框不跳动 */
       .initial-stack {
-        max-width: 820px;
+        max-width: var(--content-max-width, 1080px);
         margin: 0 auto;
         width: 100%;
       }
       .input-bar {
-        max-width: 820px;
+        max-width: var(--content-max-width, 1080px);
         margin: 0 auto;
         width: 100%;
       }
@@ -717,19 +717,14 @@ export class ChatView extends LitElement {
     this._infoDialogOpen = false;
   };
 
-  /** 技能直发（ADR-0016 §3/§4）：信封消息立即发往当前会话；
-   *  initial 态新建会话（首条消息带标记，自然成为技能会话）。 */
+  /** 技能直发（ADR-0016 §3/§4）：斜杠形态消息（/技能名 问题）立即发往当前
+   *  会话；initial 态新建会话（mode="skill"）。load_skill 提示由后端 chat.py
+   *  检测斜杠前缀注入 hint（与手敲 /技能名 完全同一条链路）。 */
   private async _sendWithSkill(name: string) {
     const question = this.draft.trim();
     if (!question) return;
     recordSkillUse(name);
-    const message = [
-      `[调用技能: ${name}]`,
-      "",
-      `请先 load_skill("${name}") 加载技能，然后按技能指引处理。`,
-      "",
-      question,
-    ].join("\n");
+    const message = `/${name} ${question}`;
     this.draft = "";
     if (this.viewState.state === "initial") {
       await this._ensureSession(`${name} · ${question.slice(0, 30)}`, message, "skill");

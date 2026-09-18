@@ -77,8 +77,8 @@ async def _stream_agent_response(
     """流式跑 StreamingAgent + 完成后策展参考资料。
 
     工具调用实时推送（思考过程可见）。AI 完成后一次性策展「## 参考资料」：
-    - 技能会话（首条用户消息含「[调用技能: …]」标记）→ 提取式：从正文提取
-      真实路径重建章节，不用 [N] 策展
+    - 技能会话（首条用户消息为 /技能名 斜杠形态，或遗留「[调用技能: …]」信封，
+      或 sessions.mode == 'skill'）→ 提取式：从正文提取真实路径重建章节，不用 [N] 策展
     - 普通会话 → 声明式策展：合规 → 保留 AI 精选列表（剔除不存在/未被引用
       条目，重编号对齐 [N]）；不合规 → 工具检索结果分级兜底 + toast 告警
     """
@@ -89,7 +89,7 @@ async def _stream_agent_response(
     runtime = agent.runtime
 
     # 斜杠调用复检（注入权威；前端引导菜单只是 UX 层）。命中即视为技能会话
-    # （提取式引文），与工具箱直发的 [调用技能: …] 信封同待遇。
+    # （提取式引文）——工具箱直发也发斜杠形态，与此同链路（信封仅为遗留兼容）。
     from doclens.web_v2.api._chat_slash import (
         hint_already_injected,
         legal_slash_skill,

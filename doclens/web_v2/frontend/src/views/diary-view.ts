@@ -39,7 +39,7 @@ export class DiaryView extends LitElement {
     .page {
       flex: 1;
       width: 100%;
-      max-width: 820px;
+      max-width: var(--content-max-width, 1080px);
       margin: 0 auto;
       /* 上下留白用 em：随字号缩放（小屏 90% 字号时同步收紧）；
          顶部与 tab 条分割线下方的间距对称（0.6em）；

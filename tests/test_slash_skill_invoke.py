@@ -77,12 +77,12 @@ class TestLegalSlashSkill:
 
 class TestHintContent:
     def test_format_contract(self):
-        """hint 含：slash 标记、[调用技能] 信封标记（引文策展同待遇的语义源）、
-        load_skill 指引、system-reminder 包装。"""
+        """hint 含：slash 标记、load_skill 指引、system-reminder 包装；
+        不含 [调用技能] 信封标记（信封已简化为斜杠形态，仅遗留会话兼容）。"""
         content = slash_hint_content("normal")
         assert SLASH_HINT_RE.search(content).group(1) == "normal"
-        assert "[调用技能: normal]" in content
         assert 'load_skill("normal")' in content
+        assert "[调用技能" not in content
         assert content.startswith("<system-reminder>\n")
         assert content.endswith("</system-reminder>")
 
