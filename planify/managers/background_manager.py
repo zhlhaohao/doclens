@@ -18,6 +18,7 @@ import platform
 import shutil
 import subprocess
 import threading
+import time
 import uuid
 from pathlib import Path
 from queue import Queue
@@ -54,7 +55,12 @@ class BackgroundManager:
         """
         tid = str(uuid.uuid4())[:8]
         with self._tasks_lock:
-            self.tasks[tid] = {"status": "running", "command": command, "result": None}
+            self.tasks[tid] = {
+                "status": "running",
+                "command": command,
+                "result": None,
+                "started_at": time.monotonic(),
+            }
         threading.Thread(target=self._exec, args=(tid, command, timeout), daemon=True).start()
         return f"Background task {tid} started: {command[:80]}"
 
@@ -127,7 +133,22 @@ class BackgroundManager:
         with self._tasks_lock:
             if tid:
                 t = self.tasks.get(tid)
-                return f"[{t['status']}] {t.get('result', '(running)')}" if t else f"Unknown: {tid}"
+                if not t:
+                    return f"Unknown: {tid}"
+                if t["status"] == "running":
+                    # running 态无 result（初始化为 None）——渲染等待指引而非
+                    # 字面 "None"：耗时 + 完成会有通知 + 等待≠失败（与 runner
+                    # 轮次预算三机制同口径，防模型把等待误报成构建出错）。
+                    # 前缀 "[running]" 是 runner 纯轮询识别的契约，勿改。
+                    elapsed = time.monotonic() - t.get("started_at", 0.0)
+                    return (
+                        f"[running] still running, {elapsed:.0f}s elapsed "
+                        f"(command: {t['command'][:60]}). This is NOT a failure. "
+                        "You will receive a completion notification; if the user "
+                        "is waiting, tell them it is still running, or poll again "
+                        "with check_background in a little while."
+                    )
+                return f"[{t['status']}] {t.get('result') or '(no result)'}"
             return "\n".join(
                 f"{k}: [{v['status']}] {v['command'][:60]}"
                 for k, v in self.tasks.items()

@@ -5,7 +5,7 @@
 所有路径操作都通过安全检查，确保工作目录不被逃逸。
 命令执行具有以下安全措施：
 - 危险命令过滤（rm -rf /, sudo, shutdown, 等）
-- 超时保护（120 秒）
+- 超时保护（``PLANIFY_SHELL_TIMEOUT`` 可调，默认 120 秒；bash/powershell 统一）
 - 输出截断（50000 字符）
 
 """
@@ -19,6 +19,29 @@ from pathlib import Path
 from typing import Callable
 
 logger = logging.getLogger(__name__)
+
+# shell 工具超时默认值（秒）。经 env ``PLANIFY_SHELL_TIMEOUT`` 调整（调用期
+# 现读，改 .env 重启即生效）；非法/非正值回落默认。长命令的正道是改用
+# background_run 后台启动 + check_background 轮询，而非调大本值硬等。
+_DEFAULT_SHELL_TIMEOUT = 120
+
+
+def _shell_timeout() -> int:
+    """读 PLANIFY_SHELL_TIMEOUT（非法/非正回落默认 120）。"""
+    try:
+        t = int(os.getenv("PLANIFY_SHELL_TIMEOUT", "").strip())
+    except ValueError:
+        return _DEFAULT_SHELL_TIMEOUT
+    return t if t > 0 else _DEFAULT_SHELL_TIMEOUT
+
+
+def _timeout_message() -> str:
+    """超时返回文案：带实际秒数 + 引导模型改用后台工具（而非反复重试）。"""
+    return (
+        f"Error: Timeout ({_shell_timeout()}s). For long-running commands, "
+        "use background_run to start the task in the background, "
+        "then check_background to poll its output."
+    )
 
 
 # 危险命令：含空格的按子串匹配，单词按整词匹配（避免 "dd" 误伤 "yyyy-MM-dd"）
@@ -172,7 +195,7 @@ def run_bash(command: str, workdir: Path) -> str:
 
     在沙盒环境中执行命令，包含以下安全措施：
     - 危险命令过滤（rm -rf /, sudo, shutdown, reboot 等）
-    - 超时保护（20 秒）
+    - 超时保护（PLANIFY_SHELL_TIMEOUT，默认 120 秒，Windows/Unix 统一）
     - 输出截断（50000 字符）
 
     Args:
@@ -203,13 +226,13 @@ def run_bash(command: str, workdir: Path) -> str:
                 shell=False,
                 cwd=str(workdir),
                 capture_output=True,
-                timeout=20,
+                timeout=_shell_timeout(),
             )
         else:
             # Unix 环境直接使用 shell
             logger.debug("[bash] Executing: %s in %s", command, workdir)
             r = subprocess.run(
-                command, shell=True, cwd=str(workdir), capture_output=True, timeout=120
+                command, shell=True, cwd=str(workdir), capture_output=True, timeout=_shell_timeout()
             )
 
         # 确保输出使用 UTF-8 解码，失败时替换不可编码字符
@@ -226,7 +249,7 @@ def run_bash(command: str, workdir: Path) -> str:
             ).strip()[:50000]
         return out if out else "(no output)"
     except subprocess.TimeoutExpired:
-        return "Error: Timeout (20s)"
+        return _timeout_message()
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 
@@ -238,7 +261,7 @@ def run_powershell(command: str, workdir: Path) -> str:
     按优先级选择 shell：PowerShell 7 (pwsh) → Windows PowerShell → cmd。
     安全措施与 run_bash 一致：
     - 危险命令过滤
-    - 超时保护（20 秒）
+    - 超时保护（PLANIFY_SHELL_TIMEOUT，默认 120 秒）
     - 输出截断（50000 字符）
 
     Args:
@@ -271,7 +294,7 @@ def run_powershell(command: str, workdir: Path) -> str:
             shell=False,
             cwd=str(workdir),
             capture_output=True,
-            timeout=20,
+            timeout=_shell_timeout(),
         )
 
         # 确保输出使用 UTF-8 解码，失败时替换不可编码字符
@@ -281,7 +304,7 @@ def run_powershell(command: str, workdir: Path) -> str:
         ).strip()[:50000]
         return out if out else "(no output)"
     except subprocess.TimeoutExpired:
-        return "Error: Timeout (20s)"
+        return _timeout_message()
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 

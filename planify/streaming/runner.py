@@ -44,6 +44,35 @@ logger = logging.getLogger(__name__)
 # head-context 注入消息的标记（公共常量：宿主落库/回放时靠它识别注入消息对）
 CONTEXT_MARKER = "The following skills are available for use with the Skill tool"
 
+# === 工具轮次预算（防死循环熔断）常量与纯函数（2026-09-18）===
+# 轮询等待工具：返回 "[running] …" = 后台任务未完成。等待 ≠ 检索不收敛，
+# 纯轮询轮不计入轮次预算——否则长构建期间正常轮询会误触熔断，模型被
+# 「如实作答」提醒逼成「未找到/失败」的错误收场。
+_POLL_TOOL_NAME = "check_background"
+# 连续同参调用轮数达到该值 → 真死循环形态，立即注入针对性提醒（不等软阈值）
+_IDENTICAL_ROUNDS_LIMIT = 3
+
+
+def _is_pure_poll_round(calls: List[Tuple[str, dict, str]]) -> bool:
+    """本轮是否为纯轮询等待：全部调用为 check_background 且均处 running 态。"""
+    return bool(calls) and all(
+        name == _POLL_TOOL_NAME and output.startswith("[running]")
+        for name, _input, output in calls
+    )
+
+
+def _round_signature(calls: List[Tuple[str, dict, str]]) -> tuple:
+    """轮次工具签名：(工具名, 规范化参数 JSON) 序列——同签名 = 同参重复调用。"""
+    return tuple(
+        (
+            name,
+            json.dumps(
+                input_data, sort_keys=True, ensure_ascii=False, default=str
+            ),
+        )
+        for name, input_data, _output in calls
+    )
+
 
 def _refresh_or_insert_context(
     messages: List[Dict], marker: str, new_content: str
@@ -361,7 +390,11 @@ class StreamingAgent:
 
         system = self.get_system_prompt()
         loop_count = 0
-        tool_rounds = 0  # 工具轮次（含 tool_use 的轮数），供 max_tool_rounds/force_answer_rounds 兜底
+        # 工具轮次预算状态（防死循环熔断，见循环内三机制注释）
+        tool_rounds = 0  # 计数轮（纯轮询轮不计入）
+        self._last_round_signature: Optional[tuple] = None
+        self._identical_rounds = 0
+        self._saw_pending_bg = False
         full_text_output = ""
 
         try:
@@ -491,48 +524,103 @@ class StreamingAgent:
                     return self._cleanup_messages(messages)
 
                 # === 工具执行 ===
-                await self._execute_tools(messages)
+                round_calls = await self._execute_tools(messages)
 
-                # === 工具轮次兜底（宿主经 StreamingConfig 注入；默认 None 不限）===
-                # 与 interrupt_event 完全独立：不 set event、不 break，
-                # 软阈值注入提醒引导收尾，硬阈值以 tools=[] 强制终答
-                tool_rounds += 1
-                if (
-                    self.config.force_answer_rounds
-                    and tool_rounds >= self.config.force_answer_rounds
-                ):
-                    self.logger.warning(
-                        f"[StreamingAgent] 工具轮数达硬阈值 "
-                        f"{self.config.force_answer_rounds}，强制终答"
-                    )
-                    await self._stream_llm_call(messages, system, suppress_tools=True)
-                    summary = full_text_output[:500] if full_text_output else None
-                    await self.emitter.emit_done(session_id, summary)
-                    return self._cleanup_messages(messages)
-                if (
-                    self.config.max_tool_rounds
-                    and tool_rounds > self.config.max_tool_rounds
-                ):
-                    reminder = (
-                        self.config.tool_round_limit_reminder
-                        or "You have made many tool calls without converging. "
-                        "Stop calling tools now and give your best final answer "
-                        "based on what you have; if the information was not found, "
-                        "say so honestly."
-                    )
-                    # 追加在消息尾部，不破坏前缀缓存（与 bg/inbox 注入同理）
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": f"<system-reminder>\n{reminder}\n</system-reminder>",
-                        }
-                    )
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": "Understood. I will stop calling tools and answer now.",
-                        }
-                    )
+                # === 工具轮次兜底（防死循环熔断；宿主经 StreamingConfig 注入阈值）===
+                # 与 interrupt_event 完全独立：不 set event、不 break。三机制：
+                # 1) 纯轮询不计入预算：本轮全部调用为 check_background 且均处
+                #    [running] 态——等待后台任务 ≠ 检索不收敛（长构建期间正常
+                #    轮询不得误触熔断）；仅记 _saw_pending_bg 供软阈值文案分化；
+                # 2) 同参死循环早警：连续 3 轮工具签名完全相同（真死循环形态
+                #    ——同工具同参数反复调用）→ 立即注入针对性提醒，不等软阈值；
+                # 3) 软/硬阈值照旧：软阈值每轮注入收尾提醒（文案感知「后台仍在
+                #    跑」，防模型把等待误报成失败）；硬阈值以 tools=[] 强制终答。
+                if round_calls:
+                    pure_poll = _is_pure_poll_round(round_calls)
+                    reminder: Optional[str] = None
+                    if pure_poll:
+                        self._saw_pending_bg = True
+                    else:
+                        tool_rounds += 1
+                        # 硬阈值：强制终答（计数轮达限；轮询不消耗预算）
+                        if (
+                            self.config.force_answer_rounds
+                            and tool_rounds >= self.config.force_answer_rounds
+                        ):
+                            self.logger.warning(
+                                f"[StreamingAgent] 工具轮数达硬阈值 "
+                                f"{self.config.force_answer_rounds}，强制终答"
+                            )
+                            await self._stream_llm_call(
+                                messages, system, suppress_tools=True
+                            )
+                            summary = (
+                                full_text_output[:500] if full_text_output else None
+                            )
+                            await self.emitter.emit_done(session_id, summary)
+                            return self._cleanup_messages(messages)
+                        # 同参签名追踪（纯轮询轮不参与——等待合法，见上）
+                        signature = _round_signature(round_calls)
+                        if signature == self._last_round_signature:
+                            self._identical_rounds += 1
+                        else:
+                            self._identical_rounds = 1
+                            self._last_round_signature = signature
+                        if self._identical_rounds >= _IDENTICAL_ROUNDS_LIMIT:
+                            self.logger.warning(
+                                "[StreamingAgent] 连续 %d 轮同参工具调用，"
+                                "注入死循环提醒",
+                                self._identical_rounds,
+                            )
+                            reminder = (
+                                "You have called the exact same tools with "
+                                "identical arguments "
+                                f"{self._identical_rounds} times in a row with "
+                                "no progress. This is a loop: do NOT repeat the "
+                                "identical call. Change your approach (different "
+                                "tool, query, or parameters) or stop calling "
+                                "tools and give your best final answer with what "
+                                "you have."
+                            )
+                        elif (
+                            self.config.max_tool_rounds
+                            and tool_rounds > self.config.max_tool_rounds
+                        ):
+                            reminder = (
+                                self.config.tool_round_limit_reminder
+                                or "You have made many tool calls without converging. "
+                                "Stop calling tools now and give your best final answer "
+                                "based on what you have; if the information was not found, "
+                                "say so honestly."
+                            )
+                            if self._saw_pending_bg:
+                                # 本轮曾轮询后台任务：等待未完成 ≠ 失败——
+                                # 防模型被「如实作答」逼成「构建出错」式误报
+                                reminder += (
+                                    " Note: a background task may still be "
+                                    "running; if your answer depends on it, "
+                                    "tell the user it is still running and can "
+                                    "be checked later with check_background — "
+                                    "do not claim it failed."
+                                )
+                    if reminder:
+                        # 追加在消息尾部，不破坏前缀缓存（与 bg/inbox 注入同理）
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "<system-reminder>\n"
+                                    f"{reminder}\n"
+                                    "</system-reminder>"
+                                ),
+                            }
+                        )
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": "Understood. I will stop calling tools and answer now.",
+                            }
+                        )
 
         except Exception as e:
             self.logger.exception(f"[StreamingAgent] 运行异常: {e}")
@@ -840,19 +928,26 @@ class StreamingAgent:
         self.logger.info(f"[StreamingAgent] LLM 调用完成: stop_reason={stop_reason}")
         return stop_reason
 
-    async def _execute_tools(self, messages: List[Dict]) -> None:
+    async def _execute_tools(
+        self, messages: List[Dict]
+    ) -> Optional[List[Tuple[str, dict, str]]]:
         """
         执行待处理的工具调用。
 
         Args:
             messages: 消息历史
+
+        Returns:
+            本轮调用明细 [(工具名, input, 输出文本), ...]——供主循环做
+            轮次预算判定（纯轮询识别 / 同参签名）；无工具调用时 None。
         """
         # 获取最后一条助手消息中的工具调用
         if not messages or messages[-1].get("role") != "assistant":
-            return
+            return None
 
         assistant_content = messages[-1].get("content", [])
         results = []
+        round_calls: List[Tuple[str, dict, str]] = []
         used_todo = False
 
         # 先解析本轮全部工具调用（保持块顺序）
@@ -981,6 +1076,8 @@ class StreamingAgent:
             # 不截断：LLM 上下文与前端 SSE 都需要工具的完整输出
             output_str = str(output)
 
+            round_calls.append((name, input_data, output_str))
+
             # 发射工具结果事件
             is_error = output_str.startswith("Error:")
             await self.emitter.emit_tool_result(
@@ -1012,3 +1109,4 @@ class StreamingAgent:
         # 添加工具结果到消息历史
         if results:
             messages.append({"role": "user", "content": results})
+        return round_calls or None
