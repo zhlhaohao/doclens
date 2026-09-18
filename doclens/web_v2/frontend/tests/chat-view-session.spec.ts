@@ -3,6 +3,7 @@ import {
   mapSessionItemsToMessages,
   aggregateUsage,
   aggregateCompaction,
+  applyLiveWindow,
 } from "../src/views/chat-view";
 
 describe("mapSessionItemsToMessages", () => {
@@ -85,6 +86,17 @@ describe("aggregateUsage（会话信息弹窗，2026-09-17）", () => {
       used: 375, contextWindow: 200000,
       cacheReadTotal: 80, inputTotal: 500, calls: 2, lastSeq: 2,
     });
+  });
+
+  it("applyLiveWindow：实时窗口覆盖历史快照（配置热更后旧会话显示不再停滞）", () => {
+    const usage = { used: 375, contextWindow: 200000, cacheReadTotal: 80, inputTotal: 500, calls: 2, lastSeq: 2 };
+    // 实时 100k 覆盖快照 200k（不可变：原对象不动）
+    const updated = applyLiveWindow(usage, 100000);
+    expect(updated).toEqual({ ...usage, contextWindow: 100000 });
+    expect(usage.contextWindow).toBe(200000);
+    // live ≤ 0（agent 未装配）保持原值；null 透传
+    expect(applyLiveWindow(usage, 0)?.contextWindow).toBe(200000);
+    expect(applyLiveWindow(null, 100000)).toBeNull();
   });
 
   it("无 usage 条目返回 null", () => {

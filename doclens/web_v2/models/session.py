@@ -67,3 +67,7 @@ class SessionDetailResponse(BaseModel):
     message_count: int
     starred: bool = False
     items: list[dict[str, Any]]
+    # 实时上下文窗口（runtime.config 现读，与压缩决策同源）。前端会话信息
+    # 弹窗分母优先本值，而非 usage 落库行的历史快照——配置热更后旧会话
+    # 显示不再停滞旧窗口。agent 未装配时为 0（前端回落历史快照）。
+    context_window: int = 0

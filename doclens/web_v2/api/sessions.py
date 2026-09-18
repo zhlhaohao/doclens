@@ -94,6 +94,19 @@ async def get_session(session_id: str):
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     items = store.get_detail(session_id)
+    # 实时上下文窗口（与压缩决策同源：runtime.config 现读）。agent 未装配
+    # 或读取异常时为 0，前端回落 usage 历史快照。
+    window = 0
+    try:
+        from doclens.web_v2.deps import get_agent_if_ready
+
+        agent = get_agent_if_ready()
+        if agent is not None:
+            window = int(
+                getattr(agent.runtime.config, "planify_context_window", 0) or 0
+            )
+    except Exception:  # noqa: BLE001 — 展示字段，不影响 detail 主数据
+        pass
     return SessionDetailResponse(
         **summary.model_dump(mode="json"),
         # created_at 供前端压缩信息聚合取「最近压缩时间」（ADR-0026）；
@@ -107,6 +120,7 @@ async def get_session(session_id: str):
             }
             for i in items
         ],
+        context_window=window,
     )
 
 

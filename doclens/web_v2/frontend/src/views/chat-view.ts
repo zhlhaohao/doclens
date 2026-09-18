@@ -189,6 +189,17 @@ export function aggregateUsage(
   };
 }
 
+/** 会话信息弹窗分母优先实时窗口：detail 携带当前 runtime 配置值（与压缩
+ *  决策同源）时覆盖 usage 历史快照——配置热更后旧会话显示不再停滞旧窗口；
+ *  live ≤ 0（agent 未装配）或无 usage 数据时保持原值。 */
+export function applyLiveWindow(
+  usage: SessionUsageState | null,
+  liveWindow: number,
+): SessionUsageState | null {
+  if (usage === null || !(liveWindow > 0)) return usage;
+  return { ...usage, contextWindow: liveWindow };
+}
+
 /** 会话压缩信息（会话信息弹窗，ADR-0026）： */
 export interface SessionCompactionState {
   /** 全会话压缩次数（kind="compacted" 条目数） */
@@ -1013,7 +1024,10 @@ export class ChatView extends LitElement {
         const body = await res.json();
         const messages = mapSessionItemsToMessages(body.items || []);
         actions.setChatState({ messages });
-        this._sessionUsage = aggregateUsage(body.items || []);
+        this._sessionUsage = applyLiveWindow(
+          aggregateUsage(body.items || []),
+          Number(body.context_window ?? 0),
+        );
         this._sessionCompaction = aggregateCompaction(body.items || []);
       }
     } catch (e) {
