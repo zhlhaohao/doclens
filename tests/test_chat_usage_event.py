@@ -68,3 +68,32 @@ def test_chat_emitter_collects_all_usages_and_pushes():
     ev2 = q.get_nowait()
     assert ev1["type"] == "usage" and ev1["input_tokens"] == 100
     assert ev2["type"] == "usage" and ev2["input_tokens"] == 300
+
+
+def test_emit_notice_default_impl_wraps_stream_event():
+    """协议默认实现：emit_notice 包 StreamEvent(NOTICE)，detail/level 平铺。"""
+    cap = _CaptureEmitter()
+    asyncio.run(cap.emit_notice("上下文已达约 160K tokens，已自动压缩会话历史"))
+    assert len(cap.events) == 1
+    ev = cap.events[0]
+    assert ev.event_type == StreamEventType.NOTICE
+    assert ev.data["detail"].startswith("上下文已达约")
+    assert ev.data["level"] == "info"
+
+
+def test_chat_emitter_notice_becomes_toast_and_not_persisted():
+    """NOTICE → toast 直推队列（前端 toast 通道零改动复用）；
+    不进任何积累通道（text/tool_calls/usages 均不受影响）。"""
+    q: asyncio.Queue = asyncio.Queue()
+    em = ChatEventEmitter(q, context_window=200000)
+
+    async def go():
+        await em.emit_notice("已自动压缩会话历史")
+
+    asyncio.run(go())
+    ev = q.get_nowait()
+    assert ev == {"type": "toast", "level": "info", "detail": "已自动压缩会话历史"}
+    # 纯通知：不污染任何积累状态
+    assert em.text_parts == []
+    assert em.tool_calls == []
+    assert em.usages == []

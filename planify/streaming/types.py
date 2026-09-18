@@ -26,6 +26,8 @@ class StreamEventType(Enum):
     ERROR = "error"
     HEARTBEAT = "heartbeat"
     USAGE = "usage"
+    # 中性通知（框架内事实事件，宿主自行决定呈现方式——Web 端转 toast）
+    NOTICE = "notice"
 
 
 @dataclass
@@ -245,6 +247,24 @@ class EventEmitter(Protocol):
         """
         await self.emit(
             StreamEvent(event_type=StreamEventType.USAGE, data=dict(usage))
+        )
+
+    async def emit_notice(self, detail: str, level: str = "info") -> None:
+        """
+        发射中性通知事件（框架内值得告知用户的事实，如上下文自动压缩）。
+
+        语义中性的「发生了什么」——宿主决定呈现方式（Web 端转 toast、
+        CLI 可忽略或打印一行）。不承载对话内容，不进任何落库通道。
+
+        Args:
+            detail: 通知正文（宿主 UI 语言，短句）
+            level: 提示级别（"info" | "success" | "error"，默认 info）
+        """
+        await self.emit(
+            StreamEvent(
+                event_type=StreamEventType.NOTICE,
+                data={"detail": detail, "level": level},
+            )
         )
 
 

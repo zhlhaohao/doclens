@@ -26,7 +26,13 @@ from typing import Any, Dict, List, Optional
 
 from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
 
-from ._chat_events import ask_event, tool_call_event, tool_result_event, usage_event
+from ._chat_events import (
+    ask_event,
+    toast_event,
+    tool_call_event,
+    tool_result_event,
+    usage_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +168,15 @@ class ChatEventEmitter(EventEmitter):
             ev = usage_event(event.data, self.context_window)
             self.usages.append({k: v for k, v in ev.items() if k != "type"})
             self._push(ev)
+
+        elif event.event_type == StreamEventType.NOTICE:
+            # 中性通知（如上下文自动压缩）→ toast 直推；不进任何积累/落库通道
+            self._push(
+                toast_event(
+                    str(event.data.get("level", "info")),
+                    str(event.data.get("detail", "")),
+                )
+            )
 
     # ---- EventEmitter 协议定制（其余便捷方法用协议默认实现） ----
 

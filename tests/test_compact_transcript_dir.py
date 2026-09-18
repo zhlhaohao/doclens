@@ -45,6 +45,9 @@ class _NullEmitter:
     async def emit_done(self, session_id, summary=None):
         pass
 
+    async def emit_notice(self, detail, level="info"):
+        pass
+
     async def emit_error(self, error, code=None):
         raise AssertionError(error)
 

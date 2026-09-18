@@ -211,6 +211,8 @@ stateDiagram-v2
 
 ## 10. 前端展示
 
+压缩发生时的轮内提示：runner 发中性通知 `emit_notice`（planify 协议新增 `NOTICE` 事件）→ `_chat_emitter` 转 SSE `toast` 直推 → 前端 toast「上下文已达约 xxxK tokens，已自动压缩会话历史（早期对话由摘要替代）」——复用既有 toast 通道，前端零改动；NOTICE 不进任何积累/落库通道。CLI/TUI 的 emitter 对未知事件类型静默忽略，不受影响。
+
 `session-info-dialog.ts`：上下文占用进度条（阈值线 = 窗口 × 0.8，≥80% 变警告色并提示「将自动压缩历史」）；压缩次数 `compactionCount`（`kind="compacted"` 条目数，0 则隐藏压缩行）；最近压缩时间。对话流**不**插压缩分隔条（ADR-0026 决议 7——展示层与 LLM 回放双通道，前端历史仍显示全量对话）。
 
 ## 11. 设计要点速查（为什么长这样）

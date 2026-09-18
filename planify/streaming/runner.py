@@ -429,6 +429,13 @@ class StreamingAgent:
                         # 重注入（本轮后续工具循环需要 KB 指导在场）。
                         self._inject_head_context(messages, session_id)
                         self._inject_loaded_skill_bodies(messages, session_id)
+                        # 压缩是用户可感知的上下文跳变（模型此后基于摘要续接），
+                        # 发中性通知——Web 宿主转 toast（ADR-0026 决议 7 的
+                        # 补充：对话流仍不插分隔条）
+                        await self.emitter.emit_notice(
+                            f"上下文已达约 {estimated // 1000}K tokens，"
+                            "已自动压缩会话历史（早期对话由摘要替代）"
+                        )
                         # 全部重注入完成后重置本轮起点：此后追加的才是本轮
                         # 新消息（摘要对在起点之前，不会漏进 raw_messages；
                         # 若在注入前重置，_inject_head_context 的头部 insert
