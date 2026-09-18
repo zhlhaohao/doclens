@@ -53,7 +53,10 @@ def _run_with_capturing_compact(runtime_config, tmp_path):
     """跑一轮 run_stream（compact_threshold=1 必触发压缩），返回捕获的目录。"""
     captured = {}
 
-    async def fake_compact(messages, provider, transcript_dir, *, tracer=None):
+    async def fake_compact(
+        messages, provider, transcript_dir, *, tracer=None,
+        summary_input_budget=None, summary_max_tokens=None,
+    ):
         captured["dir"] = transcript_dir
         return messages
 
@@ -112,7 +115,10 @@ def _run_compacting_round(runtime_config, tmp_path):
     """
     from planify.streaming.runner import CONTEXT_MARKER
 
-    async def fake_compact(messages, provider, transcript_dir, *, tracer=None):
+    async def fake_compact(
+        messages, provider, transcript_dir, *, tracer=None,
+        summary_input_budget=None, summary_max_tokens=None,
+    ):
         return [dict(m) for m in _COMPACTED_PAIR]
 
     sa = StreamingAgent(

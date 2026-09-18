@@ -180,7 +180,11 @@ async def compact_session(session_id: str):
     if len(history) < 2:
         raise CortexAPIError(400, "NOTHING_TO_COMPACT", "会话历史太短，无需压缩")
 
-    from planify.context.compact import aauto_compact, estimate_tokens
+    from planify.context.compact import (
+        aauto_compact,
+        estimate_tokens,
+        summary_input_budget,
+    )
     from doclens.web_v2.deps import get_agent
 
     runtime = get_agent().runtime
@@ -188,12 +192,19 @@ async def compact_session(session_id: str):
         getattr(runtime.config, "compact_transcript_dir", None)
         or Path(runtime.config.workdir) / ".transcripts"
     )
+    # getattr 防御旧配置对象缺字段
+    window = getattr(runtime.config, "planify_context_window", None)
+    out_cap_cfg = getattr(runtime.config, "planify_max_tokens", None)
     pre_tokens = estimate_tokens(history)
     try:
         from planify.core.llm import LLMTracer
         compacted = await aauto_compact(
             history, runtime.client, transcript_dir,
             tracer=LLMTracer.create(label="compact", session_key=session_id),
+            # 摘要输入预算随窗口声明放大（输出预留随输出上限联动）
+            summary_input_budget=summary_input_budget(window, out_cap_cfg),
+            # 大输出模型跟随 PLANIFY_MAX_TOKENS 放开摘要上限（下限 10000 兜底）
+            summary_max_tokens=out_cap_cfg,
         )
     except CortexAPIError:
         raise

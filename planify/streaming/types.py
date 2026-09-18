@@ -304,6 +304,10 @@ class StreamingConfig:
 
     # 上下文配置（阈值由 caller 传入 = model.context_window × 0.8；此处为硬编码兜底）
     compact_threshold: int = 160000
+    # 上下文窗口声明（tokens）——摘要输入预算推导用（见 compact.
+    # summary_input_budget）：声明时预算随窗口放大（200K → ~160K token），
+    # None 时用保守兜底（对齐 128K 端点）
+    context_window: Optional[int] = None
 
     # 超时配置
     user_response_timeout: float = 300.0  # 5 分钟

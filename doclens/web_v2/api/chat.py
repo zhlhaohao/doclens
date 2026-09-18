@@ -157,6 +157,8 @@ async def _stream_agent_response(
         emitter=emitter,
         config=StreamingConfig(
             compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
+            # 窗口声明透传：摘要输入预算随窗口放大（None 时 planify 用保守兜底）
+            context_window=runtime.config.planify_context_window,
             max_tokens=runtime.config.planify_max_tokens,
             **tool_round_limit_kwargs(runtime.config),
         ),

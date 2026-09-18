@@ -15,7 +15,7 @@ import logging
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.llm.trace import LLMTracer
 from ..core.llm.types import Tool
@@ -157,17 +157,36 @@ class StreamingAgent:
         self._tool_call_states: Dict[int, ToolCallState] = {}
 
         # 延迟导入压缩模块和提示词构建器（必需组件，导入失败应直接报错）
-        from ..context import estimate_tokens, microcompact, auto_compact, aauto_compact
-        from ..context.compact import MICROCOMPACT_GATE_RATIO
+        from ..context import (
+            estimate_tokens,
+            estimate_tokens_with_usage,
+            microcompact,
+            auto_compact,
+            aauto_compact,
+        )
+        from ..context.compact import MICROCOMPACT_GATE_RATIO, summary_input_budget
         from ..prompts import SystemPromptBuilder
 
         self._estimate_tokens = estimate_tokens
+        self._estimate_tokens_with_usage = estimate_tokens_with_usage
+        self._summary_input_budget = summary_input_budget
         self._microcompact = microcompact
         self._auto_compact = auto_compact
         # 事件循环上直跑必须用异步压缩（同步 chat 会阻塞整个 loop 数秒~数十秒）
         self._aauto_compact = aauto_compact
         self._microcompact_gate_ratio = MICROCOMPACT_GATE_RATIO
         self._prompt_builder = SystemPromptBuilder()
+
+        # usage-based token 估算基线（借鉴 Claude Code 的
+        # tokenCountWithEstimation——其注释标注为 autocompact 阈值判断的
+        # canonical 口径）：(total_input, request_messages_len) = 最近一次
+        # LLM 调用的实测总输入（input + cache_read + cache_creation，含
+        # system prompt 与工具表，真实 tokenizer 计数）及该次请求的
+        # messages 长度。此后新增消息按 ÷4 估增量——误差限增量部分而非
+        # 全历史，且补上纯 ÷4 不含 system/工具表的盲区。
+        # 失效条件：auto_compact 整体替换历史（见压缩分支）；suppress_tools
+        # 的终答调用不更新（tools 置空会使 total_input 偏小）。
+        self._usage_baseline: Optional[Tuple[int, int]] = None
 
     def get_system_prompt(self) -> str:
         """
@@ -351,6 +370,14 @@ class StreamingAgent:
                 self.logger.info(f"[StreamingAgent] 开始循环 #{loop_count}")
 
                 # === 压缩管道 ===
+                # token 估算（usage-based：实测基线 + 增量 ÷4）算一次两用——
+                # microcompact 门控与 auto_compact 阈值共用，避免重复全量估算
+                baseline = self._usage_baseline
+                estimated = self._estimate_tokens_with_usage(
+                    messages,
+                    baseline[0] if baseline else None,
+                    baseline[1] if baseline else None,
+                )
                 # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
                 # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
                 cleared = self._microcompact(
@@ -358,10 +385,10 @@ class StreamingAgent:
                     min_estimated_tokens=int(
                         self.config.compact_threshold * self._microcompact_gate_ratio
                     ),
+                    estimated_tokens=estimated,
                 )
                 if cleared:
                     self.round_cleared_tool_use_ids.extend(cleared)
-                estimated = self._estimate_tokens(messages)
                 if estimated > self.config.compact_threshold:
                     if self._aauto_compact and self.runtime:
                         # 压缩 transcript 目录：宿主注入优先（doclens 注入
@@ -374,13 +401,24 @@ class StreamingAgent:
                             or Path(self.runtime.config.workdir) / ".transcripts"
                         )
                         compacted = await self._aauto_compact(
-                            messages, self.provider, transcript_dir, tracer=self.tracer
+                            messages, self.provider, transcript_dir,
+                            tracer=self.tracer,
+                            summary_input_budget=self._summary_input_budget(
+                                self.config.context_window,
+                                self.config.max_tokens,
+                            ),
+                            # 大输出模型跟随 PLANIFY_MAX_TOKENS 放开摘要上限
+                            #（下限 10000 由 summary_output_cap 兜底）
+                            summary_max_tokens=self.config.max_tokens,
                         )
                         # 必须就地替换本地循环列表，否则本轮后续循环仍用
                         # 未压缩历史（每轮重复触发压缩、transcript 越写越大）
                         messages[:] = compacted
                         if self.runtime:
                             self.runtime.replace_messages_in_place(compacted)
+                        # usage 基线随历史整体替换失效（其 request_len 指向
+                        # 的旧前缀已不存在）；下次 LLM 响应重新建立基线
+                        self._usage_baseline = None
                         # 打标供宿主轮末持久化（压缩即事实：摘要落库一次
                         # 冻结，回放侧从边界投影，不再每轮重压缩）
                         self.last_compaction = {
@@ -651,6 +689,10 @@ class StreamingAgent:
             for t in self.tools
         ]
 
+        # 本次请求的输入 messages 长度（usage 基线锚点）：astream 拿到的
+        # 输入就是此刻的 messages 全量，usage 的 input 类字段精确覆盖它
+        request_len = len(messages)
+
         try:
             # 通过 LLMProvider.astream() 归一化事件流（async 客户端，不阻塞事件循环）
             async for event in self.provider.astream(
@@ -774,6 +816,12 @@ class StreamingAgent:
                 f"output={call_usage.get('output_tokens', 0)} "
                 f"(前缀命中率 {hit_pct}%)"
             )
+            # usage-based 压缩估算基线（见 __init__ 注释）：实测总输入覆盖
+            # 本次请求全部输入（含 system prompt 与工具表），后续新增消息
+            # 只需 ÷4 估增量。suppress_tools 的终答调用不更新——tools 置空
+            # 会使 total_in 偏小，污染正常调用的基线
+            if not suppress_tools and total_in > 0:
+                self._usage_baseline = (total_in, request_len)
             # 透传给宿主（2026-09-17：GUI 会话信息弹窗展示上下文占用）；
             # 一轮工具链多次调用各发一次，最后一次即该轮峰值占用
             await self.emitter.emit_usage(call_usage)

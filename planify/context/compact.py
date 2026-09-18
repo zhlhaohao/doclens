@@ -19,22 +19,33 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from ..core.llm.provider import LLMProvider
 
 if TYPE_CHECKING:
     from ..core.llm.trace import LLMTracer
 
+# 非 ASCII 连续段（CJK / 全角 / emoji 等）：真实 tokenizer 约 1 token/字符
+# （中文实测 0.6~1.1），取 1 略偏高估——高估只是提前触发压缩（安全方向），
+# 低估会撞上下文硬上限。
+_NON_ASCII_RE = re.compile(r"[^\x00-\x7F]+")
+
 
 def estimate_tokens(messages: list) -> int:
     """
     估算消息列表的 token 数
 
-    使用简单的启发式：字符数除以 4。
-    实际 token 数可能会有所不同，但足以作为阈值判断。
+    启发式：ASCII 部分 4 字符 ≈ 1 token；非 ASCII（中日韩等）≈ 1 token/字符。
+    ensure_ascii=False 序列化——旧式默认转义把每个汉字变成 ``\\uXXXX`` 6 个
+    ASCII 字符，÷4 后 ≈1.5 token/汉字，对中文对话系统性高估 ~50%。
+
+    纯 ASCII 内容走 ``len // 4`` 快速路径，公式与历史版本完全一致（英文
+    场景行为不变）。足以作为阈值判断；需要更高精度时用
+    :func:`estimate_tokens_with_usage`（实测基线 + 本函数估增量）。
 
     Args:
         messages: 消息列表
@@ -42,7 +53,47 @@ def estimate_tokens(messages: list) -> int:
     Returns:
         估算的 token 数
     """
-    return len(json.dumps(messages, default=str)) // 4
+    s = json.dumps(messages, default=str, ensure_ascii=False)
+    if s.isascii():
+        return len(s) // 4
+    non_ascii = sum(len(m.group(0)) for m in _NON_ASCII_RE.finditer(s))
+    return (len(s) - non_ascii) // 4 + non_ascii
+
+
+def estimate_tokens_with_usage(
+    messages: list,
+    usage_total_input: Optional[int],
+    usage_messages_len: Optional[int],
+) -> int:
+    """
+    usage 实测基线 + 增量启发式估算（借鉴 Claude Code 的
+    tokenCountWithEstimation——它标注为 autocompact 阈值判断的 canonical 口径）。
+
+    上次 LLM 响应的 usage 总输入（input + cache_read + cache_creation，
+    含 system prompt 与工具表，真实 tokenizer 计数）精确覆盖该次请求的全部
+    输入；此后新增的消息（assistant 输出 / tool_result / 新 user）用
+    estimate_tokens ÷4 启发式估增量——误差被限制在增量部分而非全历史，
+    且补上了纯 ÷4 不含 system/工具表的盲区。
+
+    基线失效（返回全量 ÷4 兜底）：未提供基线（首轮 / usage 缺失）；或
+    ``len(messages) < usage_messages_len``（历史被压缩整体替换变短）。
+
+    Args:
+        messages: 当前消息列表
+        usage_total_input: 基线实测总输入 tokens（None = 无基线）
+        usage_messages_len: 基线对应的请求输入 messages 长度
+
+    Returns:
+        估算的 token 数
+    """
+    if (
+        usage_total_input is not None
+        and usage_messages_len is not None
+        and usage_messages_len >= 0
+        and len(messages) >= usage_messages_len
+    ):
+        return usage_total_input + estimate_tokens(messages[usage_messages_len:])
+    return estimate_tokens(messages)
 
 
 # === 摘要输入预处理（2026-09-17 摘要质量改进） ===
@@ -58,8 +109,52 @@ def estimate_tokens(messages: list) -> int:
 
 _TOOL_RESULT_CHARS = 400   # 单条工具结果保留字符数（大头是文档原文）
 _TOOL_INPUT_CHARS = 200    # 工具调用入参保留字符数
-_SUMMARY_WINDOW_CHARS = 80_000  # 转录窗口总量（沿用旧口径量级）
-_SUMMARY_HEAD_CHARS = 20_000    # 窗口兜底时头部保留量（任务目标所在）
+
+# 摘要输入 token 预算（2026-09-18 从 80K 字符窗口升级）：
+# - 预算按「摘要模型上下文安全值」计：调用方声明了上下文窗口时按
+#   summary_input_budget() 动态推（见该函数），未声明时对齐最保守的
+#   128K 端点兜底：128K − 输出上限 10K − system/包装 ≈ 117K，取整
+#   100K 留呼吸空间；
+# - 以估算 token（ASCII ÷4、非 ASCII ≈1/字符，与 estimate_tokens 同密度）
+#   计量而非字符数——英文转录有效窗口从旧口径 80K 字符放大到 ~400K 字符
+#   （÷4 密度），中文 ~100K 字，长对话中段不再轻易被丢；
+# - 头尾比例维持 1:3（头保任务目标、尾保最近工作——摘要第 6 节依赖尾部）。
+_SUMMARY_INPUT_TOKEN_BUDGET = 100_000
+_SUMMARY_HEAD_TOKENS = 25_000
+
+# 动态预算推导常量：输出预留 = 摘要输出上限（随配置）+ system/消息包装；
+# ×0.85 吸收 ÷4 启发式的估算误差（真实 tokenizer 可能高于估算 ~15%）
+_BUDGET_WRAPPER_RESERVE = 2_000
+_BUDGET_ESTIMATE_SAFETY = 0.85
+
+
+def summary_output_cap(summary_max_tokens: Optional[int]) -> int:
+    """摘要输出上限：max(实测下限, 配置值)——thinking 型模型需要下限兜底，
+    大输出模型（配置 131072 等）跟随配置放开。"""
+    return max(_SUMMARY_MAX_TOKENS_FLOOR, summary_max_tokens or 0)
+
+
+def summary_input_budget(
+    context_window: Optional[int],
+    summary_max_tokens: Optional[int] = None,
+) -> int:
+    """上下文窗口声明 + 摘要输出上限 → 摘要输入 token 预算。
+
+    摘要调用与主对话同 provider/模型，窗口声明可信时按声明推预算：
+    (窗口 − 输出预留 − 包装) × 0.85 估算安全系数。输出预留随
+    PLANIFY_MAX_TOKENS 配置联动（大输出配置挤占输入预算——窗口是
+    输入+输出共享的物理约束）。200K 窗口/默认输出 ≈ 160K、128K ≈ 99K；
+    200K 窗口/131072 输出 ≈ 57K。声明缺失 / 非法（≤ 预留）→ 100K 兜底
+    （对齐最保守的 128K 端点）。
+
+    Args:
+        context_window: 声明的上下文窗口 tokens（None = 未声明）
+        summary_max_tokens: 摘要输出上限配置（None = 用下限兜底）
+    """
+    output_reserve = summary_output_cap(summary_max_tokens) + _BUDGET_WRAPPER_RESERVE
+    if context_window is None or context_window <= output_reserve:
+        return _SUMMARY_INPUT_TOKEN_BUDGET
+    return int((context_window - output_reserve) * _BUDGET_ESTIMATE_SAFETY)
 
 # 结构化摘要 system prompt（借鉴 Claude Code compact 的分节式）：接收方
 # 只有这份摘要、看不到原文，分节强制覆盖任务状态的关键面；第 6 节
@@ -77,10 +172,13 @@ _SUMMARY_SYSTEM = (
     "什么结果、下一步是什么）——本节最重要，宁长勿短"
 )
 
-# 摘要输出上限。注意 thinking 型模型（glm-5.3 等服务端默认开思考）的
-# thinking 块共享输出预算——实测 4000 会被思考全文耗尽、正文 0 输出
-# （stop_reason=max_tokens），提到 10000 给思考留余量后仍够写分节正文。
-_SUMMARY_MAX_TOKENS = 10_000
+# 摘要输出上限下限（2026-09-18 起随配置放大：实际取
+# max(此下限, 调用方传入的 max_tokens 配置)）。注意 thinking 型模型
+# （glm-5.3 等服务端默认开思考）的 thinking 块共享输出预算——实测 4000
+# 会被思考全文耗尽、正文 0 输出（stop_reason=max_tokens），10000 是
+# 实测安全下限；大输出模型（PLANIFY_MAX_TOKENS 配 131072 等）跟随配置
+# 放开，摘要正文可写得更长。
+_SUMMARY_MAX_TOKENS_FLOOR = 10_000
 
 
 def _clip(s: str, limit: int) -> str:
@@ -144,12 +242,32 @@ def _render_message(msg: dict) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def _render_for_summary(messages: list) -> str:
+def _estimate_text_tokens(s: str) -> int:
+    """单字符串 token 估算（与 estimate_tokens 同密度：ASCII ÷4、
+    非 ASCII ≈1 token/字符）——摘要输入预算计量用。"""
+    if s.isascii():
+        return len(s) // 4
+    non_ascii = sum(len(m.group(0)) for m in _NON_ASCII_RE.finditer(s))
+    return (len(s) - non_ascii) // 4 + non_ascii
+
+
+def _render_for_summary(
+    messages: list, summary_input_budget: Optional[int] = None
+) -> str:
     """历史 → 瘦身转录（摘要输入）。
 
-    跳过注入对；其余逐条渲染为「用户/助手: 正文」；超窗口时头尾拼接
-    （头保任务目标、尾保最近对话），中段省略标记。
+    跳过注入对；其余逐条渲染为「用户/助手: 正文」；估算 token 超出
+    摘要输入预算时头尾拼接（头保任务目标、尾保最近对话），中段省略
+    标记。切分按整体平均密度把 token 预算映射到字符位置（兜底保险丝，
+    不追求逐块精确）。
+
+    Args:
+        messages: 历史消息列表
+        summary_input_budget: 输入 token 预算（None = 用保守兜底常量；
+            由 summary_input_budget(窗口声明) 推导），头部固定占 1/4
     """
+    budget = summary_input_budget or _SUMMARY_INPUT_TOKEN_BUDGET
+    head_tokens = budget // 4  # 头尾维持 1:3（头保任务目标、尾保最近工作）
     lines: List[str] = []
     role_label = {"user": "用户", "assistant": "助手"}
     i = 0
@@ -163,13 +281,17 @@ def _render_for_summary(messages: list) -> str:
             lines.append(f"{role_label.get(m.get('role'), str(m.get('role')))}: {body}")
         i += 1
     text = "\n\n".join(lines)
-    if len(text) <= _SUMMARY_WINDOW_CHARS:
+    total_est = _estimate_text_tokens(text)
+    if total_est <= budget:
         return text
-    head = text[:_SUMMARY_HEAD_CHARS]
-    tail = text[-(_SUMMARY_WINDOW_CHARS - _SUMMARY_HEAD_CHARS):]
+    density = total_est / len(text)  # token/字符（均匀假设下的平均密度）
+    head_chars = int(head_tokens / density)
+    tail_chars = int((budget - head_tokens) / density)
+    head = text[:head_chars]
+    tail = text[-tail_chars:] if tail_chars else ""
     return (
         head
-        + "\n\n…[中段省略：转录超出窗口，仅保留任务目标（开头）与最近对话（结尾）]…\n\n"
+        + "\n\n…[中段省略：转录超出摘要输入 token 预算，仅保留任务目标（开头）与最近对话（结尾）]…\n\n"
         + tail
     )
 
@@ -197,6 +319,8 @@ def microcompact(
     messages: list,
     keep: int = MICROCOMPACT_KEEP_DEFAULT,
     min_estimated_tokens: int = 0,
+    *,
+    estimated_tokens: Optional[int] = None,
 ) -> List[str]:
     """
     微压缩：清理旧的工具结果
@@ -215,13 +339,22 @@ def microcompact(
         messages: 消息列表（会被原地修改）
         keep: 保留的最近工具结果数
         min_estimated_tokens: 触发清理的估算 token 下限（0 = 总是检查）
+        estimated_tokens: 调用方已算好的估算值（usage-based 口径）——
+            传入时门控复用该值，跳过内部全量估算；None 时内部自行
+            estimate_tokens。与 min_estimated_tokens=0（无门控）互不影响
 
     Returns:
         本次实际清理的 tool_use_id 列表（未触发门控 / 无可清理项 / 豁免
         工具的结果均不包含；调用方可持久化以在回放侧重放同一清理）
     """
-    if min_estimated_tokens > 0 and estimate_tokens(messages) < min_estimated_tokens:
-        return []
+    if min_estimated_tokens > 0:
+        effective = (
+            estimated_tokens
+            if estimated_tokens is not None
+            else estimate_tokens(messages)
+        )
+        if effective < min_estimated_tokens:
+            return []
     # tool_use_id → 工具名（从 assistant 消息的 tool_use 块建立映射）
     tool_names: Dict[str, str] = {}
     for msg in messages:
@@ -252,7 +385,11 @@ def microcompact(
     return cleared_ids
 
 
-def _prepare_compaction(messages: list, transcript_dir: Path) -> tuple[Path, List[Dict], str]:
+def _prepare_compaction(
+    messages: list,
+    transcript_dir: Path,
+    summary_input_budget: Optional[int] = None,
+) -> tuple[Path, List[Dict], str]:
     """压缩前准备（同步/异步版共用）：原始对话落盘 + 摘要请求组装。
 
     Returns:
@@ -267,8 +404,8 @@ def _prepare_compaction(messages: list, transcript_dir: Path) -> tuple[Path, Lis
             f.write(json.dumps(msg, default=str) + "\n")
 
     # 摘要输入 = 瘦身转录（见 _render_for_summary：剥注入对/工具结果截断/
-    # 头尾窗口兜底），不再直接 dump 原始 JSON
-    conv_text = _render_for_summary(messages)
+    # token 预算头尾兜底），不再直接 dump 原始 JSON
+    conv_text = _render_for_summary(messages, summary_input_budget)
     summary_request_messages: List[Dict] = [
         {"role": "user", "content": f"对话转录如下，请生成续接摘要：\n{conv_text}"}
     ]
@@ -289,6 +426,8 @@ def auto_compact(
     transcript_dir: Path,
     *,
     tracer: Optional["LLMTracer"] = None,
+    summary_input_budget: Optional[int] = None,
+    summary_max_tokens: Optional[int] = None,
 ) -> list:
     """
     自动压缩：使用 LLM 生成对话摘要（同步版，服务旧 Agent 循环与 /compact 命令）
@@ -302,17 +441,23 @@ def auto_compact(
         provider: LLM Provider（自带模型信息）
         transcript_dir: 脚本目录
         tracer: LLM 追踪器（可选）——摘要调用也落 trace
+        summary_input_budget: 摘要输入 token 预算（None = 保守兜底；
+            由 summary_input_budget(上下文窗口声明) 推导）
+        summary_max_tokens: 摘要输出上限配置（None = 下限兜底 10000；
+            大输出模型跟随 PLANIFY_MAX_TOKENS 放开，见 summary_output_cap）
 
     Returns:
         新消息列表，包含摘要和确认消息
     """
-    path, summary_messages, summary_system = _prepare_compaction(messages, transcript_dir)
+    path, summary_messages, summary_system = _prepare_compaction(
+        messages, transcript_dir, summary_input_budget
+    )
 
     response = provider.chat(
         messages=summary_messages,
         system=summary_system,
         tools=[],  # 压缩阶段不提供工具
-        max_tokens=_SUMMARY_MAX_TOKENS,
+        max_tokens=summary_output_cap(summary_max_tokens),
         tracer=tracer,
     )
 
@@ -326,16 +471,24 @@ async def aauto_compact(
     transcript_dir: Path,
     *,
     tracer: Optional["LLMTracer"] = None,
+    summary_input_budget: Optional[int] = None,
+    summary_max_tokens: Optional[int] = None,
 ) -> list:
     """auto_compact 的异步版（StreamingAgent 在事件循环上直跑时使用，
-    经 provider.achat 调摘要，不阻塞事件循环）。行为与同步版一致。"""
-    path, summary_messages, summary_system = _prepare_compaction(messages, transcript_dir)
+    经 provider.achat 调摘要，不阻塞事件循环）。行为与同步版一致。
+
+    summary_input_budget: 摘要输入 token 预算（None = 保守兜底；
+    由 summary_input_budget(上下文窗口声明) 推导）。
+    summary_max_tokens: 摘要输出上限配置（None = 下限兜底 10000）。"""
+    path, summary_messages, summary_system = _prepare_compaction(
+        messages, transcript_dir, summary_input_budget
+    )
 
     response = await provider.achat(
         messages=summary_messages,
         system=summary_system,
         tools=[],  # 压缩阶段不提供工具
-        max_tokens=_SUMMARY_MAX_TOKENS,
+        max_tokens=summary_output_cap(summary_max_tokens),
         tracer=tracer,
     )
 

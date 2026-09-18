@@ -397,16 +397,19 @@ class SessionsStore:
         """落库一次上下文压缩（kind='compacted'，ADR-0026 压缩即事实），seq 按 MAX 续排。
 
         payload 与 raw_messages 同构（{"messages": [...]}）另加 pre_tokens
-        （压缩前估算）与 post_tokens（压缩后消息负载估算——公式与
-        planify.context.compact.estimate_tokens 同式 len(json)//4，仅消息
-        部分、不含 system prompt 与工具表，前端在「压缩晚于最近一次调用」
-        时作为上下文占用的估算显示，下轮对话实测覆盖）。回放
+        （压缩前估算）与 post_tokens（压缩后消息负载估算——直接调
+        planify.context.compact.estimate_tokens 保持同式（ASCII ÷4 /
+        非ASCII ≈1 token/字符），仅消息部分、不含 system prompt 与工具表，
+        前端在「压缩晚于最近一次调用」时作为上下文占用的估算显示，下轮
+        对话实测覆盖）。回放
         （get_chat_history）遇到本条目即**清空此前全部历史**再拼接
         messages——截断标记与压缩内容二合一；同会话多个边界只最后一个
         生效。调用方须在本轮 append_raw_messages 之前调用（回放顺序：
         compacted → 本轮 raw_messages）。
         """
-        post_tokens = len(json.dumps(messages, default=str)) // 4
+        from planify.context.compact import estimate_tokens
+
+        post_tokens = estimate_tokens(messages)
         now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(

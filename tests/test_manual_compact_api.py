@@ -46,7 +46,10 @@ def _patch(monkeypatch, store, tmp_path, compacted=None, captured=None):
         "doclens.web_v2.deps.get_agent", lambda: _FakeAgent(tmp_path)
     )
 
-    async def fake_aauto(messages, provider, transcript_dir, *, tracer=None):
+    async def fake_aauto(
+        messages, provider, transcript_dir, *, tracer=None,
+        summary_input_budget=None, summary_max_tokens=None,
+    ):
         if captured is not None:
             captured["transcript_dir"] = transcript_dir
             captured["messages_in"] = list(messages)
@@ -141,7 +144,8 @@ class TestManualCompact:
             "doclens.web_v2.deps.get_agent", lambda: _FakeAgent(tmp_path)
         )
 
-        async def boom(messages, provider, transcript_dir, *, tracer=None):
+        async def boom(messages, provider, transcript_dir, *, tracer=None,
+                       summary_input_budget=None, summary_max_tokens=None):
             raise RuntimeError("api down")
 
         monkeypatch.setattr("planify.context.compact.aauto_compact", boom)
