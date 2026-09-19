@@ -932,12 +932,23 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 用户点击停止：abort 前端读取 + 通知后端停生成（fire-and-forget）。 */
+  /** 用户点击停止：先落停止信号（await），再 abort 前端读取（ADR-0028）。
+   *  顺序是断开续跑下的正确性关键——abort 触发的连接断开在后端被判断为
+   *  「主动停止已请求」（interrupt 已 set）才会立刻停；颠倒顺序会让停止
+   *  信号晚到/丢失，本轮被当作断开放生继续烧 token。
+   *  恢复态（无本地 SSE 流，断开续跑的占位态）停止后重拉 detail 收尾展示。 */
   private async _stop(): Promise<void> {
     const sessionId = store.getState().chat.currentSession?.id;
-    this._abortController?.abort();
-    if (sessionId) {
-      void stopChat(sessionId);
+    const ctrl = this._abortController;
+    try {
+      if (sessionId) await stopChat(sessionId);
+    } finally {
+      ctrl?.abort();
+      // 恢复态：没有本地流（abort 不会触发重拉），手动刷新收尾
+      if (sessionId && ctrl === null) {
+        const cur = store.getState().chat.currentSession;
+        if (cur && cur.id === sessionId) await this._loadSession(cur);
+      }
     }
   }
 
@@ -1004,7 +1015,15 @@ export class ChatView extends LitElement {
       if (res.ok) {
         const body = await res.json();
         const { messages, dividers } = buildChatTimeline(body.items || []);
-        actions.setChatState({ messages });
+        // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
+        // + streaming 态（禁输入，停止钮可用；停止/完成后刷新可见）
+        const generating = !!body.generating;
+        actions.setChatState({
+          messages: generating
+            ? [...messages, { role: "assistant", content: "" }]
+            : messages,
+          streaming: generating,
+        });
         this._rewindDividers = dividers;
         this._sessionUsage = applyLiveWindow(
           aggregateUsage(body.items || []),

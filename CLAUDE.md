@@ -194,6 +194,7 @@ doclens/web_v2/
 ├── models/                   # Pydantic 请求/响应模型
 ├── sessions_store.py         # SQLite 会话持久化
 ├── rewind_tracker.py         # 改前备份/快照/恢复（ADR-0027 回退即事实）
+├── chat_runner.py            # 会话级生成登记表（ADR-0028 断开续跑）
 ├── frontend/                 # Lit + Vite 前端工程
 │   ├── src/
 │   │   ├── app.ts            # <cortex-app> 顶层路由

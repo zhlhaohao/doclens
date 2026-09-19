@@ -146,6 +146,11 @@ class CortexConfig(BaseSettings):
     watch_enabled: bool = Field(default=True)
     watch_debounce: float = Field(default=5.0)
 
+    # 对话断开续跑（ADR-0028）：true = SSE 消费端断开（关页/断网/切走）时
+    # 后台继续跑完本轮并落库（回来可见）；false = 旧行为（断开即停，省
+    # token）。用户主动点停止按钮不受此开关影响，始终立刻停止。
+    chat_disconnect_continue: bool = Field(default=True)
+
     # Git 同步（仅 GUI 进程运行；工作目录为 git 根且已配置 remote 时生效，
     # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0006）
     sync_enabled: bool = Field(default=True)

@@ -7,9 +7,16 @@
    直推 asyncio.Queue，本生成器按序转 SSE——工具 trace 实时可见
 3. 完成后由 refs_curator 策展「## 参考资料」：AI 章节合规 → 保留精选列表
   （清洗+重编号对齐 [N]）；不合规 → 工具结果分级兜底 + toast（不重试 LLM）
-4. 停止/断开：request_stop set Event（agent 在流式检查点退出）+ 中断
-   hook 唤醒挂起的 ask 等待 + 取消 agent 任务——三层兜底，覆盖旧版
-   「ask 挂起期间停止无效」缺口
+4. 停止/断开（ADR-0028 断开续跑）：
+   - 用户主动停止（POST /chat/stop，前端停止按钮）→ request_stop set
+     Event（agent 在流式检查点退出）+ 中断 hook 唤醒挂起的 ask 等待 +
+     取消 agent 任务——三层兜底，**立刻停止不烧 token**；
+   - 消费端断开（关页/断网/切走，且未请求过停止）→ 按配置
+     CORTEX_CHAT_DISCONNECT_CONTINUE（默认 true）放生 agent task 续跑
+     完本轮（chat_runner registry 持有强引用），收尾时后端补写展示层
+     message_ai（前端在场时的正常路径仍由前端写，判重防双写）；
+     false = 旧行为（断开即停）。会话生成中再收新请求 → 409（防两轮
+     交错写库）。
 """
 
 import asyncio
@@ -30,7 +37,8 @@ from doclens.web_v2.chat_interrupt import (
     unregister_interrupt,
     unregister_interrupt_hook,
 )
-from doclens.web_v2.deps import get_agent
+from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.deps import get_agent, get_config
 from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
 
@@ -239,12 +247,22 @@ async def _stream_agent_response(
         tracer=LLMTracer.create(label="main", session_key=session_id),
     )
 
+    # 消费端断开标志（ADR-0028）：SSE 生成器放生本 task 时置位——收尾时
+    # 据此补写展示层 message_ai。asyncio 单线程下单写多读，无竞态。
+    client_gone = False
+
     async def _run_and_finalize() -> None:
-        """跑 agent + 完成后策展推送 + 落库（断开/取消时落库仍执行，与旧行为一致）。"""
+        """跑 agent + 完成后策展推送 + 落库（断开/取消时落库仍执行，与旧行为一致）。
+
+        断开续跑（ADR-0028）：SSE 消费端断开后本 task 继续跑完，收尾时
+        若 client_gone 则由后端补写展示层 message_ai（前端不在场）。
+        """
         # 本轮开始前 history 长度（pop 本轮 user 消息后）：仅作 fallback——
         # run_stream 头部注入会移动下标，raw_messages 落库切片优先用
         # sa.round_start_index（见下方 finally 段注释）
         round_start = len(history)
+        # 策展文本（run_stream 中断/异常时保持 None，补写退回原文）
+        curated_text: Optional[str] = None
         try:
             await sa.run_stream(history, message, session_id or runtime.runtime_id)
 
@@ -410,14 +428,74 @@ async def _stream_agent_response(
                     logger.warning(
                         "persist usage failed for %s: %s", session_key, e
                     )
+            # 断开续跑补写（ADR-0028）：消费端断开后本轮由后端收尾，展示层
+            # message_ai（正常路径由前端写）补落一条——策展文本优先，中断
+            # 半截退回原文；判重（本轮已有 message_ai 则跳过）防极端时序
+            # 双写。被 stop 停止的半截同样补写——已生成部分用户回来可见。
+            if session_key and client_gone:
+                text = (
+                    curated_text
+                    if curated_text is not None
+                    else emitter.get_full_text()
+                )
+                if text:
+                    try:
+                        from doclens.web_v2.deps import get_sessions_store
+
+                        store = get_sessions_store()
+                        traces = [
+                            {
+                                "tool_use_id": tc.get("tool_use_id", ""),
+                                "name": tc.get("name", ""),
+                                "input": tc.get("input", {}),
+                                "output": tc.get("output", ""),
+                                "is_error": tc.get("is_error", False),
+                            }
+                            for tc in emitter.tool_calls
+                            if "output" in tc
+                        ]
+                        if store.append_display_ai_if_absent(
+                            session_key, text, traces
+                        ):
+                            store.update_count_and_time(
+                                session_key,
+                                store.count_live_messages(session_key),
+                            )
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "persist display ai (disconnect) failed for %s: %s",
+                            session_key, e,
+                        )
+            # interrupt 注销随 agent 收尾（ADR-0028 从 SSE 生成器 finally 挪入）
+            # ——断开续跑期间 /chat/stop 仍可经 registry 寻址本流。
+            if session_key:
+                unregister_interrupt(session_key, interrupt)
+                unregister_interrupt_hook(session_key, _interrupt_pending_asks)
             queue.put_nowait(None)  # 哨兵：SSE 生成器终结（无论成败）
 
     agent_task = asyncio.create_task(_run_and_finalize())
+    # 会话级登记（ADR-0028）：断开放生的续跑期持有强引用 + 「生成中」判定
+    # （409 / detail.generating）。原子注册失败（同会话并发）→ 取消新流。
+    if session_key:
+        from doclens.web_v2 import chat_runner
 
+        if not chat_runner.try_register(session_key, agent_task):
+            agent_task.cancel()
+            raise RuntimeError(f"会话 {session_key} 正在生成中")
+
+    # 断开续跑开关（ADR-0028）：默认 true=续跑；false=旧行为断开即停。
+    # 会话未指定（session_key None，前端总会传 DB id）不适用，行为同 false。
+    continue_on_disconnect = bool(
+        session_key
+        and get_config().chat_disconnect_continue
+    )
+
+    consumed_sentinel = False
     try:
         while True:
             chunk = await queue.get()
             if chunk is None:
+                consumed_sentinel = True
                 break
             yield chunk
         # 哨兵已到：agent 收尾（落库/策展）完成或异常，透传未捕获异常
@@ -427,25 +505,45 @@ async def _stream_agent_response(
                 logger.exception("chat task error: %s", exc)
                 yield {"type": "error", "detail": str(exc)}
     finally:
-        if session_key:
-            unregister_interrupt(session_key, interrupt)
-            unregister_interrupt_hook(session_key, _interrupt_pending_asks)
-        if not agent_task.done():
-            # 消费端早退（断开/异常）：三层兜底停止 agent
-            # 1) Event → agent 在流式检查点退出
-            # 2) hook → 唤醒挂起的 ask 等待
-            # 3) cancel → CancelledError 沿 await 链传播（astream/工具 await）
-            if session_key:
-                request_stop(session_key)
-            agent_task.cancel()
-        try:
-            await agent_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
+        if not consumed_sentinel and not agent_task.done():
+            # 消费端早退（断开 / 取消 / 主动 abort 后连接关闭）。
+            # 主动停止的信号（stop 按钮先 await stopChat 再断流）此刻已在
+            # interrupt registry 里——is_set() 命中即走停止路径。
+            if continue_on_disconnect and not interrupt.is_set():
+                # 断开续跑（ADR-0028）：放生 agent_task——registry 持强引用，
+                # 落库/message_ai 补写由 _run_and_finalize 自行收尾；本生成器
+                # 即刻退场（queue 残余事件无人消费，无害）。
+                client_gone = True
+                logger.info(
+                    "chat client disconnected, keep generating: %s", session_key
+                )
+            else:
+                # 停止路径（用户主动 / 开关关闭）：三层兜底立即停——
+                # 1) Event → agent 在流式检查点退出
+                # 2) hook → 唤醒挂起的 ask 等待
+                # 3) cancel → CancelledError 沿 await 链传播
+                if session_key:
+                    request_stop(session_key)
+                agent_task.cancel()
+                try:
+                    await agent_task
+                except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                    pass
 
 
 @router.post("/chat")
 async def chat(req: ChatRequest):
+    # 会话生成中锁（ADR-0028）：断开续跑使「旧轮未完、新消息又来」的窗口
+    # 敞开——两轮交错写 session_items 会破坏 raw_messages 配对。预检 409
+    # （_stream_agent_response 内 try_register 原子兜底竞争窗口）。
+    if req.session_id:
+        from doclens.web_v2 import chat_runner
+
+        if chat_runner.is_running(req.session_id):
+            raise CortexAPIError(
+                409, "SESSION_BUSY", "该会话正在生成中，请等待完成或先停止"
+            )
+
     async def event_stream() -> AsyncIterator[dict]:
         try:
             # 队列事件与线格式同构（_chat_events 单一真相源）：剥掉 type 作
@@ -464,10 +562,10 @@ async def chat(req: ChatRequest):
                 }
             yield {"event": "done", "data": "{}"}
         except asyncio.CancelledError:
-            # 客户端断开（关页 / 切走 / 断网 / 主动 abort）→ 通知生成线程停，
-            # 堵住「前端不读了，后端继续烧 token」的泄漏。重抛以正常收尾 SSE。
-            if req.session_id:
-                request_stop(req.session_id)
+            # 客户端断开（关页 / 切走 / 断网 / 主动 abort）。停止与否由
+            # _stream_agent_response 的 finally 分支处置（ADR-0028：主动停止
+            # 的信号已由 POST /chat/stop 落进 interrupt registry，此处不重复
+            # request_stop——断开续跑模式下它会把正常断开误杀）。重抛收尾 SSE。
             raise
         except Exception as e:
             logger.exception("chat stream error: %s", e)

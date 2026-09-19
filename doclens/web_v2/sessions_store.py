@@ -353,6 +353,54 @@ class SessionsStore:
                     (session_id, seq, json.dumps({"content": raw_text}, ensure_ascii=False), now),
                 )
 
+    def append_display_ai_if_absent(
+        self, session_id: str, content: str, tool_calls: list
+    ) -> bool:
+        """断开续跑的展示层补写（ADR-0028）：最后一个 message_user 之后尚无
+        message_ai 时写入一条（与前端正常路径写的 payload 同构），返回是否
+        写入。判重防双写——前端在场时 message_ai 由前端落库，后端仅在消费
+        端断开、由后端收尾的轮次补写；极端时序（前端已写、断开分支又触发）
+        以此幂等兜底。
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT MAX(seq) FROM session_items
+                   WHERE session_id = ? AND kind = 'message_user'""",
+                (session_id,),
+            ).fetchone()
+            if row is None or row[0] is None:
+                return False  # 无用户消息（不该发生，防御）
+            dup = conn.execute(
+                """SELECT 1 FROM session_items
+                   WHERE session_id = ? AND kind = 'message_ai' AND seq > ?
+                   LIMIT 1""",
+                (session_id, row[0]),
+            ).fetchone()
+            if dup is not None:
+                return False  # 本轮已有展示层条目（前端已写）
+            seq_row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'message_ai', ?, ?)""",
+                (
+                    session_id,
+                    seq_row[0] + 1,
+                    json.dumps(
+                        {"content": content, "tool_calls": tool_calls,
+                         "references": []},
+                        ensure_ascii=False,
+                    ),
+                    now,
+                ),
+            )
+            return True
+
     def append_raw_messages(self, session_id: str, messages: list[dict]) -> None:
         """追加一轮的原始消息序列（按 runner 轮内真实累积结构逐字节保存）。
 

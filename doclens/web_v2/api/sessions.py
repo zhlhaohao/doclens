@@ -108,7 +108,11 @@ async def get_session(session_id: str):
             )
     except Exception:  # noqa: BLE001 — 展示字段，不影响 detail 主数据
         pass
+    # 生成中标志（断开续跑恢复态，ADR-0028）
+    from doclens.web_v2 import chat_runner
+    generating = chat_runner.is_running(session_id)
     return SessionDetailResponse(
+        generating=generating,
         **summary.model_dump(mode="json"),
         # created_at 供前端压缩信息聚合取「最近压缩时间」（ADR-0026）；
         # 条目级时间戳此前未透传，新增字段对旧前端无感

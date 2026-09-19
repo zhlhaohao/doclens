@@ -78,3 +78,6 @@ class SessionDetailResponse(BaseModel):
     # 弹窗分母优先本值，而非 usage 落库行的历史快照——配置热更后旧会话
     # 显示不再停滞旧窗口。agent 未装配时为 0（前端回落历史快照）。
     context_window: int = 0
+    # 该会话是否正在生成（断开续跑的恢复态，ADR-0028）：前端恢复会话时
+    # 显示「思考中」占位 + 禁输入（可点停止），完成后刷新可见。
+    generating: bool = False
