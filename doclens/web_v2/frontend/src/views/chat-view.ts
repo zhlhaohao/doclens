@@ -546,10 +546,15 @@ export class ChatView extends LitElement {
     void this._sendWithSkill(e.detail.name);
   };
 
-  /** focus-header more 菜单动作：会话改名/会话信息（仅当前会话存在时出现）。 */
+  /** focus-header more 菜单动作：刷新/会话改名/会话信息（仅当前会话存在时出现）。 */
   private get _headerActions() {
     if (!this.viewState.currentSession) return [];
     return [
+      {
+        label: "刷新会话",
+        icon: "refresh-cw",
+        onClick: () => { void this.refresh(); },
+      },
       {
         label: "重命名会话",
         icon: "pencil",
@@ -728,6 +733,18 @@ export class ChatView extends LitElement {
       return;
     }
     await this._sendMessage(message);
+  }
+
+  /** 刷新当前会话（more 菜单「刷新会话」入口；曾接下拉刷新手势，因与
+   *  顶部滚屏手势矛盾撤下——见 pull-to-refresh.ts 注释）：重拉 detail，
+   *  消息流 + generating 恢复态一次接管（断开续跑的手动收口）。 */
+  async refresh(): Promise<void> {
+    const s = this.viewState;
+    if (s.state === "focus" && s.currentSession) {
+      await this._loadSession(s.currentSession);
+    } else if (s.state === "initial") {
+      await this._loadHistory();
+    }
   }
 
   disconnectedCallback() {

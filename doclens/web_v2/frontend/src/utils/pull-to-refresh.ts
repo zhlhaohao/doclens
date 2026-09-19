@@ -23,7 +23,10 @@ export interface RefreshableView extends HTMLElement {
   canRefresh?(): boolean;
 }
 
-/** view 宿主标签（保留下拉刷新的 view；搜索/对话/日记已关闭该能力） */
+/** view 宿主标签（保留下拉刷新的 view；搜索/对话/日记已关闭该能力）。
+ *  chat 曾短暂开启（2026-09-19）后即撤——对话页滚动最频繁，下拉手势与
+ *  顶部滚屏/惯性操作矛盾易误触；刷新入口改 focus-header more 菜单
+ *  「刷新会话」（调用同一 refresh()，断开续跑的手动收口）。 */
 const VIEW_TAGS = new Set([
   "files-view",
   "settings-view",

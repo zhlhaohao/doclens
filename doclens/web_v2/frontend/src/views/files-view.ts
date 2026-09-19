@@ -26,6 +26,11 @@ import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
 import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { router } from "../router/router";
+import {
+  jsbridgeDownloadAvailable,
+  downloadFile,
+  JsbridgeDownloadError,
+} from "../utils/jsbridge";
 
 type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
@@ -517,6 +522,12 @@ export class FilesView extends LitElement {
       this._copySelectedPaths();
       return;
     }
+    if (name === "download") {
+      // 单选生效（与重命名同口径）；目录无下载意义，列表层已置灰、此处双保险
+      if (this._state.selectedPaths.length !== 1) return;
+      void this._downloadSelected(this._state.selectedPaths[0]);
+      return;
+    }
     if (name === "skill-toolbox") {
       // 目录也可入选（accept_dirs 技能如 knowledge-base 可做目录范围问答），
       // 只要勾选非空即可开工具箱
@@ -533,9 +544,40 @@ export class FilesView extends LitElement {
     }
   }
 
+  /** 下载选中文件（单选）：App WebView 内走 jsbridge 原生通道（`<a>` 下载
+   *  在 NexBox WebView 不可靠），普通浏览器走 `<a>` 点击（文件名由后端
+   *  Content-Disposition 提供）。与 preview-pane 的下载同端点同策略。 */
+  private async _downloadSelected(path: string): Promise<void> {
+    const url = `/api/preview/download?path=${encodeURIComponent(path)}`;
+    if (jsbridgeDownloadAvailable()) {
+      // 起手即提示：原生下载大文件可达分钟级（回调挂死兜底 10 分钟），
+      // 且 Android 侧插件未实装时回调不返回——没有起手反馈用户会以为没点上
+      this._showToast("已开始下载，完成后系统通知可见");
+      try {
+        const res = await downloadFile({
+          downloadUrl: `${window.location.origin}${url}`,
+        });
+        this._showToast(`已保存到下载目录：${res.name}`);
+      } catch (e) {
+        if (e instanceof JsbridgeDownloadError && e.unauthorized) {
+          actions.setAuthState({ authenticated: false });
+          router.navigate("login");
+          return;
+        }
+        this._showToast(`下载失败：${(e as Error)?.message || e}`);
+      }
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   /** 选中项里过滤掉目录，只留文件（技能 read_document 只能读文件）。 */
-  private _selectedFilePaths(): string[] {
-    const { treeCache, selectedPaths } = this._state;
+  private _selectedFilePaths(): string[] {    const { treeCache, selectedPaths } = this._state;
     // 多选可跨目录：从各目录缓存收集 entry 判定 is_dir
     const entryByPath = new Map<string, { path: string; is_dir: boolean }>();
     for (const entries of Object.values(treeCache)) {

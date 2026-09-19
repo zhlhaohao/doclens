@@ -478,6 +478,11 @@ export class FileList extends LitElement {
   private _renderMobileHeader() {
     const { currentDir, selectedPaths } = store.getState().files;
     const canRename = selectedPaths.length === 1;
+    // 下载单选生效；目录置灰（与桌面 toolbar 同口径，跨目录残留选中由后端 404 兜底）
+    const canDownload = selectedPaths.length === 1
+      && !(store.getState().files.treeCache[currentDir] || []).some(
+        e => e.path === selectedPaths[0] && e.is_dir,
+      );
     const canAct = selectedPaths.length >= 1;
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
 
@@ -525,6 +530,13 @@ export class FileList extends LitElement {
                 <button
                   type="button"
                   role="menuitem"
+                  data-action="download"
+                  ?disabled=${!canDownload}
+                  @click=${this._onMenuItemClick("download")}
+                ><doclens-icon name="download"></doclens-icon>下载</button>
+                <button
+                  type="button"
+                  role="menuitem"
                   data-action="move"
                   ?disabled=${!canAct}
                   @click=${this._onMenuItemClick("move")}
@@ -563,6 +575,12 @@ export class FileList extends LitElement {
     const entries = treeCache[currentDir] || [];
     const sel = new Set(selectedPaths);
     const canRename = selectedPaths.length === 1;
+    // 下载与重命名同为单选生效；目录无下载意义（端点只服务文件），单选
+    // 目录时置灰——entry 不在当前目录缓存（跨目录残留选中）时放行由后端 404 兜底
+    const selEntry = selectedPaths.length === 1
+      ? entries.find(e => e.path === selectedPaths[0])
+      : undefined;
+    const canDownload = selectedPaths.length === 1 && selEntry?.is_dir !== true;
     const canAct = selectedPaths.length >= 1;
     const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
@@ -617,6 +635,7 @@ export class FileList extends LitElement {
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
+        <button data-action="download" title="下载选中文件（单选）" ?disabled=${!canDownload} @click=${() => this._action("download")}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
         <button data-action="copy-path" ?disabled=${!canAct} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
         <button data-action="skill-toolbox" ?disabled=${!canAct} title="对选中文件运行技能（AI 对话）" @click=${() => this._action("skill-toolbox")}><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">技能工具箱</span></button>
