@@ -32,11 +32,16 @@
 - 断开放生时 registry 持有 task 强引用（asyncio 只持弱引用），落库/补写由 `_run_and_finalize` 的 finally 自行收尾；
 - interrupt 的注销从 SSE 生成器 finally **挪到** agent 收尾——续跑期间 `/chat/stop` 仍可经 registry 寻址。
 
-### 3. 展示层 message_ai 后端补写（判重防双写）
+### 3. 展示层落库统一到后端（原「断开补写」的治本取代）
 
-`_run_and_finalize` finally：`client_gone`（断开放生时置位）→ `store.append_display_ai_if_absent`（最后一个 message_user 之后已有 message_ai 则跳过）。策展文本优先，中断半截退回 `emitter.get_full_text()`；payload 与前端写的同构（content/tool_calls/references: []）。被 stop 停止的断开轮同样补写半截——已生成部分用户回来可见。
+初版实现是「前端写 message_ai + 后端仅在断开轮补写（append_display_ai_if_absent 判重防双写）」——双生产者并存，判重与 client_gone 补写分支复杂。当日即治本取代：**后端成为展示层的唯一生产者**：
 
-正常路径（SSE 耗尽到哨兵）不补写——前端在场，由前端写（现状分工不变）。
+- 入口 `ensure_message_user`（老前端已写的同内容末尾条目幂等跳过，过渡兼容）；
+- 收尾 `append_message_ai` 无条件判重（409 会话锁保证无并发写者）：正常完成 / 断开续跑（含续跑中被 stop 的半截——已生成部分用户回来可见）都落；**在线主动停止不落**（`client_gone or not interrupt.is_set()`）——对齐「UI 当场丢弃半截、重进会话只留问题」的既有语义；
+- payload 与历史前端写入同构：content（策展文本，错误并入 ⚠️ 对齐前端展示格式）+ tool_calls（emitter 积累，含 duration_ms，未完成对过滤）+ references（恒 []——该 SSE 事件后端本无产生点，历史前端写入也恒空，等价）；
+- message_count 由后端 `count_live_messages` 刷新（与回退同口径，消灭前端传本地 messages.length 的第二口径）。
+
+前端自此在 chat 路径零 DB 写入（search 会话的 result 条目仍走 PATCH /sessions）。
 
 ### 4. 会话生成锁（409）
 

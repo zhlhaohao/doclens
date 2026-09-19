@@ -353,32 +353,55 @@ class SessionsStore:
                     (session_id, seq, json.dumps({"content": raw_text}, ensure_ascii=False), now),
                 )
 
-    def append_display_ai_if_absent(
-        self, session_id: str, content: str, tool_calls: list
-    ) -> bool:
-        """断开续跑的展示层补写（ADR-0028）：最后一个 message_user 之后尚无
-        message_ai 时写入一条（与前端正常路径写的 payload 同构），返回是否
-        写入。判重防双写——前端在场时 message_ai 由前端落库，后端仅在消费
-        端断开、由后端收尾的轮次补写；极端时序（前端已写、断开分支又触发）
-        以此幂等兜底。
+    def ensure_message_user(self, session_id: str, content: str) -> bool:
+        """确保本轮 message_user 已落库（ADR-0028 统一后端落库）。
+
+        新前端不再前置写入（后端是唯一生产者）；老前端已写的末尾同内容
+        条目幂等跳过，防双写。回放轮次分组与回退快照锚点都依赖它在库。
+
+        Returns:
+            是否新写入。
         """
         now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT MAX(seq) FROM session_items
-                   WHERE session_id = ? AND kind = 'message_user'""",
+                """SELECT kind, payload FROM session_items
+                   WHERE session_id = ? ORDER BY seq DESC LIMIT 1""",
                 (session_id,),
             ).fetchone()
-            if row is None or row[0] is None:
-                return False  # 无用户消息（不该发生，防御）
-            dup = conn.execute(
-                """SELECT 1 FROM session_items
-                   WHERE session_id = ? AND kind = 'message_ai' AND seq > ?
-                   LIMIT 1""",
-                (session_id, row[0]),
+            if row is not None and row["kind"] == "message_user":
+                try:
+                    p = json.loads(row["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    p = {}
+                if isinstance(p, dict) and p.get("content") == content:
+                    return False
+            seq_row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
             ).fetchone()
-            if dup is not None:
-                return False  # 本轮已有展示层条目（前端已写）
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'message_user', ?, ?)""",
+                (session_id, seq_row[0] + 1,
+                 json.dumps({"content": content}, ensure_ascii=False), now),
+            )
+            return True
+
+    def append_message_ai(
+        self, session_id: str, content: str, tool_calls: list
+    ) -> None:
+        """统一后端落库的展示层 AI 条目（ADR-0028）：seq 按 MAX 续排。
+
+        payload 与历史前端写入同构：content（策展文本）+ tool_calls
+        （emitter 积累形态，含 duration_ms，未完成对由调用方过滤）+
+        references（恒 []——references SSE 事件后端本无产生点，历史前端
+        写入也恒为空，等价）。调用方负责 message_count 刷新。
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
             seq_row = conn.execute(
                 """SELECT COALESCE(MAX(seq), -1) FROM session_items
                    WHERE session_id = ?""",
@@ -399,7 +422,6 @@ class SessionsStore:
                     now,
                 ),
             )
-            return True
 
     def append_raw_messages(self, session_id: str, messages: list[dict]) -> None:
         """追加一轮的原始消息序列（按 runner 轮内真实累积结构逐字节保存）。

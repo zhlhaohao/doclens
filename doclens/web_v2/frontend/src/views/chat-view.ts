@@ -8,7 +8,7 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, appendSession, listSessions, clearSessions, renameSession, starSession, rewindSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -458,6 +458,9 @@ export class ChatView extends LitElement {
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
+  /** 断开续跑轮询定时器（ADR-0028）：恢复态 generating 占位期间 5s 轮询
+   *  detail，跑完自动刷新展示；离开会话/停止后清除。 */
+  private _genPollTimer?: number;
 
   connectedCallback() {
     super.connectedCallback();
@@ -473,8 +476,13 @@ export class ChatView extends LitElement {
       actions.setPendingSession(null);
       this._loadSession(pending);
     }
-    // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）
+    // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）。
+    // 例外（ADR-0028）：上次会话仍在后台生成 → 自动进入恢复态（占位 +
+    // 轮询），用户不用手点也能看到续跑结果。
     this._highlightSessionId = loadSessionMemory().chat?.sessionId ?? null;
+    if (this._highlightSessionId) {
+      void this._autoResumeIfGenerating(this._highlightSessionId);
+    }
     this._consumePendingSkillChat();
     // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
     void this._loadSkillCandidates();
@@ -725,6 +733,56 @@ export class ChatView extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
+    this._stopGeneratingPoll();
+  }
+
+  /** 启动自动恢复（ADR-0028）：上次会话仍在后台生成 → 直接进入该会话
+   *  恢复态（generating 占位 + 轮询），否则保持 initial 只高亮。 */
+  private async _autoResumeIfGenerating(sessionId: string): Promise<void> {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`);
+      if (!res.ok) return;
+      const body = await res.json();
+      if (!body.generating) return;
+      if (store.getState().chat.state !== "initial") return; // 已被用户操作抢占
+      this._loadSession({
+        id: body.id, type: "chat", title: body.title, preview: body.preview,
+        updated_at: body.updated_at, message_count: body.message_count,
+      });
+    } catch {
+      // 网络抖动静默放弃（保持高亮-only 的默认恢复行为）
+    }
+  }
+
+  /** generating 轮询（ADR-0028）：占位期间 5s 拉 detail，跑完自动刷新
+   *  收尾展示；离开该会话 / 停止后自清。 */
+  private _startGeneratingPoll(sessionId: string): void {
+    this._stopGeneratingPoll();
+    this._genPollTimer = window.setInterval(async () => {
+      const cur = store.getState().chat.currentSession;
+      if (!cur || cur.id !== sessionId || store.getState().chat.state !== "focus") {
+        this._stopGeneratingPoll();
+        return;
+      }
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}`);
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!body.generating) {
+          this._stopGeneratingPoll();
+          await this._loadSession(cur); // 续跑完成：刷新收尾展示
+        }
+      } catch {
+        // 网络抖动继续轮询（下个周期重试）
+      }
+    }, 5000);
+  }
+
+  private _stopGeneratingPoll(): void {
+    if (this._genPollTimer !== undefined) {
+      window.clearInterval(this._genPollTimer);
+      this._genPollTimer = undefined;
+    }
   }
 
   private async _loadHistory() {
@@ -839,13 +897,9 @@ export class ChatView extends LitElement {
 
     const sessionId = store.getState().chat.currentSession!.id;
 
-    // 用户消息先落库：后端本轮的 tool_trace/message_ai_raw 在流结束后写入，
-    // message_user 必须先于它们入库，get_chat_history 才能按轮正确回放
-    await appendSession(
-      sessionId,
-      [{ kind: "message_user", payload: JSON.stringify({ content: message }) }],
-      store.getState().chat.messages.length,
-    );
+    // message_user / message_ai 均由后端统一落库（ADR-0028）——前端不再
+    // 写 DB（收尾展示条目 message_ai 与本轮 message_user 都在 chat.py），
+    // 断开续跑/正常完成/停止丢弃的落库口径由后端单一掌控。
 
     // assistant 占位 + 起始 messages（不可变）
     const placeholder: ChatMessage = { role: "assistant", content: "" };
@@ -899,29 +953,28 @@ export class ChatView extends LitElement {
         }
       }
 
-      const aiMsg = messages[messages.length - 1];
-      // message_user 已在发送时落库，这里只补 AI 展示条目
-      await appendSession(
-        sessionId,
-        [
-          { kind: "message_ai", payload: JSON.stringify({ content: aiMsg.content, tool_calls: aiMsg.tool_steps ?? [], references: aiMsg.references ?? [] }) },
-        ],
-        messages.length,
-      );
+      // 展示层 message_ai 已由后端统一落库（ADR-0028）；前端只在本地
+      // 维持流式视图（重进会话时经 detail 重建）
       this._loadHistory();
     } catch (err) {
       if (this._isAbortError(err)) {
-        // 用户主动停止：丢弃半截 AI 回答（屏幕 + DB 都只留用户问题），不弹错误 toast
-        // message_user 已在发送时落库，这里只刷新计数/时间
+        // 用户主动停止：丢弃半截 AI 回答（屏幕 + DB 都只留用户问题），不弹
+        // 错误 toast。落库口径由后端统一（在线主动停止不写 message_ai），
+        // 前端只刷本地视图与历史列表
         messages = this._dropTrailingAssistant(messages);
         actions.setChatState({ messages });
-        await appendSession(sessionId, [], messages.length);
         this._loadHistory();
       } else {
-        // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断
+        // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断。
+        // 断开续跑自愈（ADR-0028）：后端可能仍在生成——重拉 detail 接管：
+        // generating → 恢复态占位 + 轮询；已完成 → 直接展示补写结果。
         messages = finalizeInterruptedMessages(messages);
         actions.setChatState({ messages });
         actions.setError(`对话失败: ${(err as Error).message}`);
+        const cur = store.getState().chat.currentSession;
+        if (cur && cur.id === sessionId) {
+          void this._loadSession(cur);
+        }
       }
     } finally {
       this._abortController = null;
@@ -982,6 +1035,7 @@ export class ChatView extends LitElement {
     this._highlightSessionId = null; // 「新对话」返回后不残留旧高亮
     this._rewindDividers = [];
     this._rewindDialog = null;
+    this._stopGeneratingPoll();
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
   }
@@ -1016,7 +1070,7 @@ export class ChatView extends LitElement {
         const body = await res.json();
         const { messages, dividers } = buildChatTimeline(body.items || []);
         // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
-        // + streaming 态（禁输入，停止钮可用；停止/完成后刷新可见）
+        // + streaming 态（禁输入，停止钮可用）+ 轮询（跑完自动刷新展示）
         const generating = !!body.generating;
         actions.setChatState({
           messages: generating
@@ -1024,6 +1078,8 @@ export class ChatView extends LitElement {
             : messages,
           streaming: generating,
         });
+        if (generating) this._startGeneratingPoll(s.id);
+        else this._stopGeneratingPoll();
         this._rewindDividers = dividers;
         this._sessionUsage = applyLiveWindow(
           aggregateUsage(body.items || []),

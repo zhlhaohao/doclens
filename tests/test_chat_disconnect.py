@@ -71,18 +71,32 @@ def test_runner_register_atomic_and_lifecycle():
     asyncio.run(main())
 
 
-# ---------- store 补写判重 ----------
+# ---------- store 统一落库（ADR-0028） ----------
 
-def test_append_display_ai_if_absent(store):
+def test_ensure_message_user_idempotent(store):
+    _seed(store)  # 老前端形态：已前置写入
+    assert store.ensure_message_user("s1", "hello") is False   # 幂等跳过
+    assert store.ensure_message_user("s1", "hello2") is True   # 新消息写入
+    assert store.ensure_message_user("s1", "hello2") is False
+    users = [
+        json.loads(i.payload)["content"]
+        for i in store.get_detail("s1") if i.kind == "message_user"
+    ]
+    assert users == ["hello", "hello2"]
+
+
+def test_append_message_ai_shape(store):
     _seed(store)
-    # 无 message_ai → 写入
-    assert store.append_display_ai_if_absent("s1", "回答A", []) is True
-    items = store.get_detail("s1")
-    ai = [i for i in items if i.kind == "message_ai"]
-    assert len(ai) == 1 and json.loads(ai[0].payload)["content"] == "回答A"
-    # 本轮已有（前端写过）→ 幂等跳过
-    assert store.append_display_ai_if_absent("s1", "回答B", []) is False
-    assert len([i for i in store.get_detail("s1") if i.kind == "message_ai"]) == 1
+    store.append_message_ai("s1", "回答A", [
+        {"tool_use_id": "t1", "name": "bash", "input": {}, "output": "ok",
+         "is_error": False, "duration_ms": 123},
+    ])
+    ai = [i for i in store.get_detail("s1") if i.kind == "message_ai"]
+    assert len(ai) == 1
+    p = json.loads(ai[0].payload)
+    assert p["content"] == "回答A"
+    assert p["tool_calls"][0]["duration_ms"] == 123
+    assert p["references"] == []
 
 
 # ---------- 集成：断开续跑 ----------
@@ -161,9 +175,15 @@ def _item_contents(store, sid, kind):
 def test_disconnect_keeps_generating_and_persists_display_ai(
     store, tmp_path, monkeypatch
 ):
-    """断开（aclose）→ agent 续跑完 → message_ai 由后端补写。"""
+    """断开（aclose）→ agent 续跑完 → message_ai 由后端补写；
+    放生同时唤醒挂起 ask（按拒绝继续，不等 300s 超时）。"""
     _patch_env(monkeypatch, store, tmp_path)
     _seed(store)
+    interrupted: list = []
+    monkeypatch.setattr(
+        "planify.streaming.waiter.get_global_waiter",
+        lambda: SimpleNamespace(interrupt_session=lambda sid: interrupted.append(sid)),
+    )
 
     async def _consume_once_then_close(agen):
         # 消费端在生成窗口内断开：aclose 模拟 SSE 层的取消（GeneratorExit/
@@ -185,6 +205,8 @@ def test_disconnect_keeps_generating_and_persists_display_ai(
         assert chat_runner.is_running("s1") is False
 
     asyncio.run(main())
+    # 放生时唤醒了挂起 ask 的会话等待（不等 300s 超时）
+    assert interrupted == ["s1"]
     # 续跑完成：raw 轮 + 展示层补写均落库
     raw = _item_contents(store, "s1", "message_ai_raw")
     assert raw == ["这是完整的回答内容。"]
@@ -232,9 +254,14 @@ def test_stop_signal_then_disconnect_cancels_immediately(
 def test_normal_completion_no_backend_display_ai(
     store, tmp_path, monkeypatch
 ):
-    """正常耗尽（SSE 消费到底）→ 不补写（message_ai 由前端写）。"""
+    """正常耗尽（SSE 消费到底）→ 统一后端落库：message_ai 由后端写
+    （前端不再写 DB）；且新前端形态（不预写 message_user）由入口 ensure 落。"""
     _patch_env(monkeypatch, store, tmp_path)
-    _seed(store)
+    # 不 _seed：新前端形态——message_user 也由后端入口 ensure 落库
+    store.create(SessionSummary(
+        id="s1", type=SessionType.CHAT, title="t", preview="",
+        created_at=_NOW, updated_at=_NOW, message_count=0,
+    ))
 
     async def main():
         agen = chat_api._stream_agent_response("hello", "s1")
@@ -243,8 +270,10 @@ def test_normal_completion_no_backend_display_ai(
         assert chat_runner.is_running("s1") is False
 
     asyncio.run(main())
-    assert _item_contents(store, "s1", "message_ai") == []
+    assert _item_contents(store, "s1", "message_user") == ["hello"]
+    assert _item_contents(store, "s1", "message_ai") == ["[策展] 这是完整的回答内容。"]
     assert _item_contents(store, "s1", "message_ai_raw") == ["这是完整的回答内容。"]
+    assert store.count_live_messages("s1") == 2
 
 
 def test_disconnect_with_switch_off_stops_immediately(

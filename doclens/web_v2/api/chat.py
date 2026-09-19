@@ -119,10 +119,13 @@ async def _stream_agent_response(
             summary = store.get(session_id)
             if summary is not None and summary.mode == "skill":
                 skill_session = True
+            # 统一后端落库（ADR-0028）：本轮 message_user 由后端确保在库
+            # （新前端不前置写入；老前端已写的同内容末尾条目幂等跳过）——
+            # 回放轮次分组与回退快照锚点都依赖它先于本轮其余条目入库。
+            store.ensure_message_user(session_id, message)
             history = store.get_chat_history(session_id)
-            # 前端在发送时已把本轮 message_user 落库（会出现在 history 末尾），
-            # run_stream 内部还会再追加一次 user_message —— 弹出避免重复。
-            # （appendSession 失败时前端不会发起本请求，故末尾必是本轮消息）
+            # 末尾是本轮 message_user（后端已确保），run_stream 内部还会再
+            # 追加一次 user_message —— 弹出避免重复。
             if (
                 history
                 and history[-1].get("role") == "user"
@@ -428,43 +431,45 @@ async def _stream_agent_response(
                     logger.warning(
                         "persist usage failed for %s: %s", session_key, e
                     )
-            # 断开续跑补写（ADR-0028）：消费端断开后本轮由后端收尾，展示层
-            # message_ai（正常路径由前端写）补落一条——策展文本优先，中断
-            # 半截退回原文；判重（本轮已有 message_ai 则跳过）防极端时序
-            # 双写。被 stop 停止的半截同样补写——已生成部分用户回来可见。
-            if session_key and client_gone:
+            # 展示层 message_ai 统一后端落库（ADR-0028，取代前端写入与断开
+            # 补写双通道）：正常完成 / 断开续跑（含续跑中被 stop 的半截——
+            # 已生成部分用户回来可见）都落；**在线主动停止不落**——对齐
+            # 「UI 当场丢弃半截、重进会话只留问题」的既有语义。策展文本
+            # 优先，中断半截退回原文；错误文本并入（对齐前端 ⚠️ 展示格式）。
+            if session_key and (client_gone or not interrupt.is_set()):
                 text = (
                     curated_text
                     if curated_text is not None
                     else emitter.get_full_text()
                 )
+                if emitter.error:
+                    text = f"{text}\n\n⚠️ {emitter.error}" if text else f"⚠️ {emitter.error}"
                 if text:
                     try:
                         from doclens.web_v2.deps import get_sessions_store
 
                         store = get_sessions_store()
-                        traces = [
+                        # 未完成调用对（无 output）过滤：与 tool_trace 落库
+                        # 同口径，不进展示层
+                        display_calls = [
                             {
                                 "tool_use_id": tc.get("tool_use_id", ""),
                                 "name": tc.get("name", ""),
                                 "input": tc.get("input", {}),
                                 "output": tc.get("output", ""),
                                 "is_error": tc.get("is_error", False),
+                                "duration_ms": tc.get("duration_ms"),
                             }
                             for tc in emitter.tool_calls
                             if "output" in tc
                         ]
-                        if store.append_display_ai_if_absent(
-                            session_key, text, traces
-                        ):
-                            store.update_count_and_time(
-                                session_key,
-                                store.count_live_messages(session_key),
-                            )
+                        store.append_message_ai(session_key, text, display_calls)
+                        store.update_count_and_time(
+                            session_key, store.count_live_messages(session_key)
+                        )
                     except Exception as e:  # noqa: BLE001
                         logger.warning(
-                            "persist display ai (disconnect) failed for %s: %s",
-                            session_key, e,
+                            "persist display ai failed for %s: %s", session_key, e
                         )
             # interrupt 注销随 agent 收尾（ADR-0028 从 SSE 生成器 finally 挪入）
             # ——断开续跑期间 /chat/stop 仍可经 registry 寻址本流。
@@ -514,6 +519,12 @@ async def _stream_agent_response(
                 # 落库/message_ai 补写由 _run_and_finalize 自行收尾；本生成器
                 # 即刻退场（queue 残余事件无人消费，无害）。
                 client_gone = True
+                # 立即唤醒挂起的 ask（按拒绝继续）——中断 hook 挂在
+                # request_stop 上，而续跑不调它，不在此唤醒会白等 ask 的
+                # 300s 超时（实测一轮续跑被拖长约 5 分钟）。只唤醒等待，
+                # 不 set Event（agent 必须继续跑完本轮）。
+                if session_key:
+                    waiter.interrupt_session(session_key)
                 logger.info(
                     "chat client disconnected, keep generating: %s", session_key
                 )
