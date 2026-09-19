@@ -354,9 +354,12 @@ export class ChatMessageEl extends LitElement {
     if (!this.message) return null;
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
-    // 不进 tool trace
+    // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，
+    // 一并剔除不计数
     const askStep = steps?.find((s) => s.name === "ask_user_question");
-    const traceSteps: ToolStep[] | undefined = steps?.filter((s) => s.name !== "ask_user_question");
+    const traceSteps: ToolStep[] | undefined = steps?.filter(
+      (s) => s.name !== "ask_user_question" && s.name !== "check_background",
+    );
     const showTrace = this.role === "assistant" && traceSteps && traceSteps.length > 0;
     // user 气泡走紧凑模板：render() 模板的换行+缩进会被 white-space: pre-wrap
     // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
