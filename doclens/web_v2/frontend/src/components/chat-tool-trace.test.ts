@@ -139,7 +139,15 @@ describe("isRedundantOutput", () => {
     expect(isRedundantOutput(step({ name: "write_file", output: "Wrote 976 bytes to docs/adr/x.md" }))).toBe(true);
     expect(isRedundantOutput(step({ name: "write_file", output: "Error: Text not found in a.ts" }))).toBe(false);
     expect(isRedundantOutput(step({ name: "write_file", output: "" }))).toBe(false);
-    expect(isRedundantOutput(step({ name: "edit_file", output: "Edited a.ts" }))).toBe(false);
+  });
+
+  it("hides edit_file 'Edited <path>' but keeps errors and replace-count form", () => {
+    const edit = (output: string): ToolStep =>
+      step({ name: "edit_file", input: { path: "app/GridAdapter.kt" }, output });
+    expect(isRedundantOutput(edit("Edited app/GridAdapter.kt"))).toBe(true);
+    expect(isRedundantOutput(edit("Edited app/GridAdapter.kt（替换 3 处）"))).toBe(false);
+    expect(isRedundantOutput(edit("Error: Text not found in app/GridAdapter.kt"))).toBe(false);
+    expect(isRedundantOutput(step({ name: "read_file", output: "content" }))).toBe(false);
   });
 });
 

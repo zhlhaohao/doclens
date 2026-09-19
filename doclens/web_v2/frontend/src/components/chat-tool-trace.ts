@@ -67,12 +67,18 @@ export function orderedArgEntries(input: Record<string, unknown>): [string, unkn
   return [...first.map((k) => [k, input[k]] as [string, unknown]), ...rest];
 }
 
-/** write_file 成功输出（"Wrote N bytes to <path>"）与已展示的 path/content
- *  重复，结果区不渲染；错误输出照常显示。 */
+/** 成功输出与已展示内容重复时结果区不渲染；错误输出与带替换处数的
+ *  「Edited <path>（替换 N 处）」（diff 只示一处，处数有信息量）照常显示。 */
 export function isRedundantOutput(s: ToolStep): boolean {
-  if (s.name !== "write_file") return false;
   const out = s.output ?? "";
-  return out !== "" && !out.startsWith("Error:");
+  if (out === "" || out.startsWith("Error:")) return false;
+  // write_file："Wrote N bytes to <path>" 与 path/content 重复
+  if (s.name === "write_file") return true;
+  // edit_file："Edited <path>" 与 diff 头的 path 重复
+  if (s.name === "edit_file" && typeof s.input?.path === "string") {
+    return out === `Edited ${s.input.path}`;
+  }
+  return false;
 }
 
 /** shell 类工具（bash / powershell）成功输出默认收起——命令行输出噪音多，
