@@ -208,14 +208,19 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
-    /* 消息操作钮（user 重问 / assistant 复制）：默认隐藏，hover/focus 消息时浮现（移动端常显） */
-    .reask, .copy {
+    /* 消息操作钮（user 重问+回退 / assistant 复制）：默认隐藏，hover/focus
+       消息时浮现（移动端常显） */
+    .actions {
+      display: flex;
+      gap: 2px;
+      margin-top: 2px;
+    }
+    .reask, .rewind, .copy {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 26px;
       height: 26px;
-      margin-top: 2px;
       padding: 0;
       background: transparent;
       border: none;
@@ -228,16 +233,23 @@ export class ChatMessageEl extends LitElement {
         background var(--cortex-duration-fast);
     }
     :host(.hovered) .reask,
+    :host(.hovered) .rewind,
     :host(.hovered) .copy,
     :host(:focus-within) .reask,
+    :host(:focus-within) .rewind,
     :host(:focus-within) .copy,
     .reask:focus,
+    .rewind:focus,
     .copy:focus { opacity: 1; }
-    .reask:hover, .copy:hover {
+    .reask:hover, .rewind:hover, .copy:hover {
       color: var(--cortex-primary);
       background: var(--cortex-surface-muted);
     }
-    /* AI 复制钮靠右（与 user 重问钮左右对称） */
+    .rewind:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    /* AI 复制钮靠右（与 user 动作区左右对称） */
     .copy { align-self: flex-end; }
   `,
   ];
@@ -245,6 +257,9 @@ export class ChatMessageEl extends LitElement {
   @property({ reflect: true }) role: "user" | "assistant" = "user";
   @property({ attribute: false }) message: ChatMessage | null = null;
   @property() error: string | null = null;
+  /** 流式期间禁用回退钮（本轮快照尚未固化，与输入框禁用同律，ADR-0027）。
+   *  重问不受影响（纯拷贝无服务端副作用）。 */
+  @property({ type: Boolean }) rewindDisabled = false;
   /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
    *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
@@ -296,6 +311,20 @@ export class ChatMessageEl extends LitElement {
     const content = this.message?.content ?? "";
     this.dispatchEvent(
       new CustomEvent("reask", { detail: { content }, bubbles: true, composed: true }),
+    );
+  };
+
+  /** 点击「回退到这里」：冒泡锚点 seq + 消息内容（chat-view 弹确认框）。 */
+  private _emitRewind = (e: Event): void => {
+    e.stopPropagation();
+    const seq = this.message?.seq;
+    if (seq === undefined) return; // 无锚点（流式新建/老数据）不可回退
+    this.dispatchEvent(
+      new CustomEvent("rewind", {
+        detail: { seq, content: this.message?.content ?? "" },
+        bubbles: true,
+        composed: true,
+      }),
     );
   };
 
@@ -365,9 +394,12 @@ export class ChatMessageEl extends LitElement {
     // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
     if (this.role === "user") {
+      const canRewind = this.message.seq !== undefined;
       return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
-        : null}</div><button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>`;
+        : null}</div><div class="actions"><button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
+        ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`
+        : null}</div>`;
     }
     const canCopy = !!this.message.content;
     return html`

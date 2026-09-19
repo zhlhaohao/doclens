@@ -193,6 +193,7 @@ doclens/web_v2/
 │   └── _chat_emitter.py      # Chat SSE 事件收集器
 ├── models/                   # Pydantic 请求/响应模型
 ├── sessions_store.py         # SQLite 会话持久化
+├── rewind_tracker.py         # 改前备份/快照/恢复（ADR-0027 回退即事实）
 ├── frontend/                 # Lit + Vite 前端工程
 │   ├── src/
 │   │   ├── app.ts            # <cortex-app> 顶层路由

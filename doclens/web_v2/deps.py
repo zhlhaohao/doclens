@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _config: Optional[CortexConfig] = None
 _idx_manager: Optional[IndexManager] = None
 _sessions_store: Optional[SessionsStore] = None
+_rewind_tracker: Optional["object"] = None  # RewindTracker（ADR-0027），懒加载
 _agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
 _watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
 _vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 import 循环
@@ -118,9 +119,36 @@ def get_sessions_store() -> SessionsStore:
     return _sessions_store
 
 
+def get_rewind_tracker():
+    """获取 RewindTracker 单例（懒加载 + 线程安全，ADR-0027）。
+
+    备份目录与 sessions.db 同数据目录（开发 .cortex / 发行版 .doclens）：
+    ``{数据目录}/rewind/{session_id}/``——天然被索引器排除、被 GitSync
+    自动 gitignore。仅 GUI/web 链路装配使用（TUI/CLI 不接线，不产生孤儿备份）。
+    """
+    global _rewind_tracker
+    if _rewind_tracker is None:
+        with _lock:
+            if _rewind_tracker is None:
+                from doclens.web_v2.rewind_tracker import RewindTracker
+
+                store = get_sessions_store()
+                # 与 get_sessions_store 同一公式取数据目录
+                from doclens.config import data_dirname
+
+                config = get_config()
+                index_path = config.index_path or os.path.join(
+                    config.search_path, data_dirname(), "index.db"
+                )
+                base_dir = Path(index_path).parent / "rewind"
+                base_dir.mkdir(parents=True, exist_ok=True)
+                _rewind_tracker = RewindTracker(store, base_dir)
+    return _rewind_tracker
+
+
 def reset_singletons() -> None:
     """重置单例（仅供测试使用）。"""
-    global _config, _idx_manager, _sessions_store, _agent, _watcher, _mcp_handle, _vision_worker, _diary_worker, _git_sync
+    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent, _watcher, _mcp_handle, _vision_worker, _diary_worker, _git_sync
     # 停止可能存在的 watcher / worker / 同步循环 / MCP server，释放后台线程
     stop_watcher()
     stop_vision_worker()
@@ -132,6 +160,7 @@ def reset_singletons() -> None:
         _config = None
         _idx_manager = None
         _sessions_store = None
+        _rewind_tracker = None
         _agent = None
         _watcher = None
         _mcp_handle = None

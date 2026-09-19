@@ -15,6 +15,7 @@ from doclens.web_v2.models.session import (
     SessionDetailResponse,
     SessionListResponse,
     SessionRenameRequest,
+    SessionRewindRequest,
     SessionStarRequest,
 )
 from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionType, SessionsStore
@@ -235,6 +236,73 @@ async def compact_session(session_id: str):
     }
 
 
+@router.get("/sessions/{session_id}/rewind/preview")
+async def rewind_preview(session_id: str, point_seq: int = Query(..., description="锚点 message_user 的 seq")):
+    """回退预览（ADR-0027，只读不写盘）：锚点校验 + 文件三态处置清单。
+
+    供确认框展示「将恢复 / 将删除 / 无法恢复」清单；死段消息计数由前端
+    从 detail items 自行计算（前端本就持有全量条目与 seq）。
+    """
+    store = _get_store()
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    if summary.type is not SessionType.CHAT:
+        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持回退")
+    if not store.is_live_anchor(session_id, point_seq):
+        raise CortexAPIError(400, "INVALID_ANCHOR", "回退锚点无效（须为可见的用户消息）")
+
+    from doclens.web_v2.deps import get_rewind_tracker
+
+    files = get_rewind_tracker().preview(session_id, point_seq)
+    return {
+        "ok": True,
+        "id": session_id,
+        "point_seq": point_seq,
+        "files": files,
+    }
+
+
+@router.post("/sessions/{session_id}/rewind")
+async def rewind_session(session_id: str, req: SessionRewindRequest):
+    """执行回退（ADR-0027：回退即事实）。
+
+    时序：文件恢复（可选，best-effort 逐文件容错）→ 落 rewound 边界条目
+    → 重算 message_count（可见时间线口径）。前端随后重拉 detail 渲染折叠
+    条，并把锚点消息内容回填输入框。流式生成中 409（本轮快照未固化）。
+    """
+    store = _get_store()
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    if summary.type is not SessionType.CHAT:
+        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持回退")
+    from doclens.web_v2.chat_interrupt import is_streaming
+    if is_streaming(session_id):
+        raise CortexAPIError(409, "SESSION_STREAMING", "对话生成中，请等待完成后再回退")
+    if not store.is_live_anchor(session_id, req.point_seq):
+        raise CortexAPIError(400, "INVALID_ANCHOR", "回退锚点无效（须为可见的用户消息）")
+
+    from doclens.web_v2.deps import get_rewind_tracker
+
+    if req.restore_files:
+        files = get_rewind_tracker().restore(session_id, req.point_seq)
+    else:
+        files = {"restored": [], "deleted": [], "skipped": [], "failed": []}
+    store.append_rewound(
+        session_id, req.point_seq, files["restored"], files["deleted"]
+    )
+    message_count = store.count_live_messages(session_id)
+    store.update_count_and_time(session_id, message_count)
+    return {
+        "ok": True,
+        "id": session_id,
+        "point_seq": req.point_seq,
+        "files": files,
+        "message_count": message_count,
+    }
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     store = _get_store()
@@ -248,6 +316,9 @@ async def delete_session(session_id: str):
     cleanup_session_tmp(_get_workdir(), session_id)
     # 清理外部访问门禁的会话目录授权账本（ADR-0021，内存态）
     grant_session_clear(session_id)
+    # 级联清改前备份目录（ADR-0027；DB 快照行随 FK CASCADE 自理）
+    from doclens.web_v2.deps import get_rewind_tracker
+    get_rewind_tracker().purge(session_id)
     return {"ok": True}
 
 
@@ -257,9 +328,22 @@ async def clear_sessions(
 ):
     """批量删除会话。type=None 清全部。加星会话受保护跳过（2026-09-17）。"""
     store = _get_store()
+    # 删前快照 chat 会话 id——删后 list 只剩幸存者，被删者的备份目录要靠
+    # 这份清单级联清理（ADR-0027）
+    chat_ids_before = (
+        [s.id for s in store.list(SessionType.CHAT, limit=1000000)]
+        if type is None or type == SessionType.CHAT
+        else []
+    )
     deleted, skipped_starred = store.delete_by_type(type)
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:
         cleanup_all_tmp(_get_workdir())
         grant_clear_all()
+        # 级联清改前备份（ADR-0027）：只清确实已删除的会话——加星幸存者不动
+        from doclens.web_v2.deps import get_rewind_tracker
+        tracker = get_rewind_tracker()
+        for sid in chat_ids_before:
+            if store.get(sid) is None:
+                tracker.purge(sid)
     return {"ok": True, "deleted_count": deleted, "skipped_starred": skipped_starred}

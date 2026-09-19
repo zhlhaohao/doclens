@@ -31,6 +31,13 @@ class SessionStarRequest(BaseModel):
     starred: bool
 
 
+class SessionRewindRequest(BaseModel):
+    """执行回退（ADR-0027）。point_seq = 锚点 message_user 的 seq；
+    restore_files=False 时跳过文件恢复（仅对话回退）。"""
+    point_seq: int
+    restore_files: bool = True
+
+
 class SessionCreatedResponse(BaseModel):
     id: str
     type: SessionType

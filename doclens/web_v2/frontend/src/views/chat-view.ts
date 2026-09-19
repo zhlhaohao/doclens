@@ -3,21 +3,26 @@ import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
 import { loadSessionMemory } from "../utils/session-memory";
-import type { Session, ChatMessage, Reference, ToolStep, PendingAsk } from "../state/types";
+import type { Session, ChatMessage, ToolStep, PendingAsk } from "../state/types";
 import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, appendSession, listSessions, clearSessions, renameSession, starSession } from "../api/sessions";
+import { createSession, appendSession, listSessions, clearSessions, renameSession, starSession, rewindSession } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
+import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
+import type { RewindDivider } from "./chat-timeline";
+// 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
+export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
 import "../components/session-rename-dialog";
 import "../components/session-info-dialog";
+import "../components/rewind-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -92,41 +97,8 @@ export function finalizeInterruptedMessages(messages: ChatMessage[]): ChatMessag
   });
 }
 
-/** 把后端 session_items 映射为 ChatMessage[]；tool_calls → tool_steps，老数据向后兼容。 */
-export function mapSessionItemsToMessages(
-  items: Array<{ kind: string; payload: string }>,
-): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-  for (const it of items) {
-    let payload: any;
-    try {
-      payload = JSON.parse(it.payload);
-    } catch {
-      continue;
-    }
-    if (it.kind === "message_user") {
-      messages.push({ role: "user", content: payload.content ?? "" });
-    } else if (it.kind === "message_ai") {
-      const tool_steps: ToolStep[] = (payload.tool_calls ?? []).map((tc: any) => ({
-        tool_use_id: tc.tool_use_id ?? "",
-        name: tc.name ?? "",
-        input: tc.input ?? {},
-        output: tc.output,
-        is_error: tc.is_error,
-        duration_ms: tc.duration_ms,
-        status: tc.is_error ? ("error" as const) : ("done" as const),
-      }));
-      const references: Reference[] = (payload.references ?? [])
-        .map((r: any) => ({ path: String(r?.path ?? "") }))
-        .filter((r: Reference) => r.path.length > 0);
-      const msg: ChatMessage = { role: "assistant", content: payload.content ?? "" };
-      if (tool_steps.length) msg.tool_steps = tool_steps;
-      if (references.length) msg.references = references;
-      messages.push(msg);
-    }
-  }
-  return messages;
-}
+/** 把后端 session_items 映射为 ChatMessage[]；tool_calls → tool_steps，老数据向后兼容。
+ *  （2026-09-19 迁至 chat-timeline.ts，此处再导出保持既有 import 路径可用。） */
 
 /** 会话 usage 状态：占用口径（最近一次调用）+ 命中率口径（全会话累计）。 */
 export interface SessionUsageState {
@@ -478,6 +450,11 @@ export class ChatView extends LitElement {
   /** 当前会话压缩信息（ADR-0026）：无 SSE，恢复会话 / 打开弹窗时从
    *  items 的 kind="compacted" 条目聚合刷新。 */
   @state() private _sessionCompaction: SessionCompactionState | null = null;
+  /** 回退折叠条（ADR-0027）：_loadSession 时从 rewound 边界构建；
+   *  新会话 / 返回 initial 清空。 */
+  @state() private _rewindDividers: RewindDivider[] = [];
+  /** 回退确认框载荷（null = 关闭）：seq 锚点 / content 回填内容 / deadCount 折叠数。 */
+  @state() private _rewindDialog: { seq: number; content: string; deadCount: number } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -834,6 +811,8 @@ export class ChatView extends LitElement {
   private async _ensureSession(title: string, message: string, mode?: "skill"): Promise<void> {
     const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100), mode });
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
+    this._rewindDividers = []; // 新会话：无回退边界
+    this._rewindDialog = null;
     actions.setChatState({
       state: "focus",
       currentSession: {
@@ -990,6 +969,8 @@ export class ChatView extends LitElement {
     this._resetPreview();
     this._activeAsk = null;
     this._highlightSessionId = null; // 「新对话」返回后不残留旧高亮
+    this._rewindDividers = [];
+    this._rewindDialog = null;
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
   }
@@ -1022,8 +1003,9 @@ export class ChatView extends LitElement {
       const res = await fetch(`/api/sessions/${s.id}`);
       if (res.ok) {
         const body = await res.json();
-        const messages = mapSessionItemsToMessages(body.items || []);
+        const { messages, dividers } = buildChatTimeline(body.items || []);
         actions.setChatState({ messages });
+        this._rewindDividers = dividers;
         this._sessionUsage = applyLiveWindow(
           aggregateUsage(body.items || []),
           Number(body.context_window ?? 0),
@@ -1121,6 +1103,68 @@ export class ChatView extends LitElement {
       const ib = this.renderRoot.querySelector("input-box") as { focus?: () => void } | null;
       ib?.focus?.();
     }
+  }
+
+  /** 点击 user 气泡的「回退到这里」：算折叠数并弹确认框（ADR-2026-09-19）。 */
+  private _onRewind(e: CustomEvent<{ seq: number; content: string }>): void {
+    if (this.viewState.streaming) return; // 流式期间按钮已禁用，双保险
+    const anchorSeq = e.detail.seq;
+    // 折叠数 = 锚点及其后的活消息（锚点回填输入框，同样从时间线消失）
+    const deadCount = this.viewState.messages.filter(
+      (m) => m.seq !== undefined && m.seq >= anchorSeq,
+    ).length;
+    this._rewindDialog = { seq: anchorSeq, content: e.detail.content, deadCount };
+  }
+
+  /** 确认回退：POST → 重拉 detail（渲染新折叠条）→ 锚点内容回填输入框。 */
+  private async _onRewindConfirm(
+    e: CustomEvent<{ pointSeq: number; restoreFiles: boolean }>,
+  ): Promise<void> {
+    const session = this.viewState.currentSession;
+    const anchor = this._rewindDialog;
+    this._rewindDialog = null;
+    if (!session || !anchor) return;
+    try {
+      const res = await rewindSession(
+        session.id, e.detail.pointSeq, e.detail.restoreFiles,
+      );
+      this.draft = anchor.content;
+      const f = res.files;
+      const parts: string[] = [];
+      if (f.restored.length) parts.push(`恢复 ${f.restored.length} 个文件`);
+      if (f.deleted.length) parts.push(`删除 ${f.deleted.length} 个文件`);
+      if (f.failed.length) parts.push(`${f.failed.length} 个文件处置失败`);
+      this._pushToast(
+        parts.length ? `已回退（${parts.join("，")}）` : "已回退",
+        f.failed.length ? "info" : "success",
+        4000,
+      );
+      await this._loadSession(session);
+    } catch (err) {
+      this._pushToast(`回退失败：${(err as Error)?.message || err}`, "error", 5000);
+    }
+  }
+
+  private _onRewindCancel = (): void => {
+    this._rewindDialog = null;
+  };
+
+  /** 回退确认框宿主（<dialog> 由 updated() showModal）。 */
+  private _renderRewindDialog() {
+    const d = this._rewindDialog;
+    const session = this.viewState.currentSession;
+    if (!d || !session) return nothing;
+    return html`
+      <dialog @cancel=${this._onRewindCancel}>
+        <rewind-dialog
+          .sessionId=${session.id}
+          .pointSeq=${d.seq}
+          .anchorContent=${d.content}
+          .deadCount=${d.deadCount}
+          @rewind-confirm=${this._onRewindConfirm}
+          @cancel=${this._onRewindCancel}>
+        </rewind-dialog>
+      </dialog>`;
   }
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
@@ -1335,10 +1379,12 @@ export class ChatView extends LitElement {
         <div class="focus-main ${hasPreview ? "has-preview" : ""}"
              style="--preview-pane-width: ${this._previewPaneWidth}px">
           <chat-stream
-            .messages=${s.messages}
+            .nodes=${mergeTimeline(this._rewindDividers, s.messages)}
             .modelName=${store.getState().status?.model_name ?? null}
+            ?rewindDisabled=${s.streaming}
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
+            @rewind=${this._onRewind}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
           ${this._activeAsk
@@ -1399,6 +1445,7 @@ export class ChatView extends LitElement {
       ${this._renderSkillDialog()}
       ${this._renderRenameDialog()}
       ${this._renderInfoDialog()}
+      ${this._renderRewindDialog()}
     `;
   }
 

@@ -3,6 +3,7 @@
 Schema:
     sessions(id, type, title, preview, created_at, updated_at, message_count, starred)
     session_items(id, session_id, seq, kind, payload, created_at)
+    rewind_snapshots(id, session_id, anchor_seq, payload, created_at)  -- ADR-0027
     auth_sessions(token, created_at, expires_at)   -- Web 登录会话（24h 滑动过期）
 
 WAL 模式；session_items 通过外键 ON DELETE CASCADE 跟随 sessions 删除。
@@ -132,6 +133,16 @@ CREATE TABLE IF NOT EXISTS session_items (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_items_session ON session_items(session_id, seq);
+
+CREATE TABLE IF NOT EXISTS rewind_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    anchor_seq  INTEGER NOT NULL,
+    payload     TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rewind_snap_session
+    ON rewind_snapshots(session_id, anchor_seq);
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
     token      TEXT PRIMARY KEY,
@@ -454,6 +465,204 @@ class SessionsStore:
                             ensure_ascii=False), now),
             )
 
+    # ---- 回退（ADR-0027：回退即事实）----
+
+    def append_rewound(
+        self,
+        session_id: str,
+        point_seq: int,
+        files_restored: Optional[list] = None,
+        files_deleted: Optional[list] = None,
+    ) -> None:
+        """落一条回退边界（kind='rewound'，截断投影标记），seq 按 MAX 续排。
+
+        payload 记锚点（point_seq = 被回退到的 message_user 的 seq）+ 文件
+        恢复结果摘要（审计用，回放不消费）。get_chat_history 回放经
+        project_live_items 投影：死段 = 全部回退边界区间 [point, boundary]
+        的并集（含锚点本身），其中条目（compacted / microcompact /
+        skill_context / usage 等）全部不可见。
+        """
+        payload = {
+            "point_seq": point_seq,
+            "files_restored": files_restored or [],
+            "files_deleted": files_deleted or [],
+        }
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, 'rewound', ?, ?)""",
+                (session_id, row[0] + 1,
+                 json.dumps(payload, ensure_ascii=False), now),
+            )
+
+    def append_rewind_snapshot(
+        self, session_id: str, anchor_seq: int, tracked_backups: dict
+    ) -> list:
+        """落一条文件快照（轮次开始时调用），环形上限 100 条/会话。
+
+        tracked_backups: {路径: {"backup_file_name": str|None, "version": int}}
+        （None = 该时点文件不存在）。超上限删最旧，返回被驱逐快照的 payload
+        列表——调用方据此清理孤儿备份文件（文件内容备份在
+        ``.cortex/rewind/{session_id}/``，不归本库管）。
+        """
+        payload = json.dumps({"tracked_file_backups": tracked_backups},
+                             ensure_ascii=False)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                """INSERT INTO rewind_snapshots
+                   (session_id, anchor_seq, payload, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (session_id, anchor_seq, payload, now),
+            )
+            rows = conn.execute(
+                """SELECT id, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT -1 OFFSET 100""",
+                (session_id,),
+            ).fetchall()
+            evicted = []
+            for r in rows:
+                conn.execute(
+                    "DELETE FROM rewind_snapshots WHERE id = ?", (r["id"],)
+                )
+                try:
+                    evicted.append(json.loads(r["payload"]))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            return evicted
+
+    def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
+        """把写前备份条目回填进**最新**快照（track_edit 通路，ADR-0027）。
+
+        语义对齐 Claude Code 的 fileHistoryTrackEdit：本轮轮首快照先落库，
+        写工具动手前的改前备份回填进该快照——锚点时点状态由此可恢复。
+        最新快照已含该路径则跳过（幂等）；无任何快照返回 False（调用方
+        应先建快照或放弃追踪）。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            try:
+                p = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                p = {}
+            backups = p.get("tracked_file_backups") if isinstance(p, dict) else None
+            if not isinstance(backups, dict):
+                backups = {}
+            if path in backups:
+                return True
+            backups[path] = entry
+            conn.execute(
+                "UPDATE rewind_snapshots SET payload = ? WHERE id = ?",
+                (json.dumps({"tracked_file_backups": backups},
+                            ensure_ascii=False), row["id"]),
+            )
+            return True
+
+    def list_rewind_snapshots(self, session_id: str) -> list:
+        """全部文件快照（id 升序）：[{id, anchor_seq, tracked_file_backups, created_at}]。"""
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                """SELECT id, anchor_seq, payload, created_at
+                   FROM rewind_snapshots WHERE session_id = ? ORDER BY id ASC""",
+                (session_id,),
+            ).fetchall()
+        out = []
+        for r in rows:
+            try:
+                p = json.loads(r["payload"])
+            except (json.JSONDecodeError, TypeError):
+                p = {}
+            out.append({
+                "id": r["id"],
+                "anchor_seq": r["anchor_seq"],
+                "tracked_file_backups": p.get("tracked_file_backups", {}),
+                "created_at": r["created_at"],
+            })
+        return out
+
+    def last_message_user_seq(self, session_id: str) -> Optional[int]:
+        """最新一条 message_user 的 seq（chat.py 轮首快照的锚点）。"""
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT MAX(seq) FROM session_items
+                   WHERE session_id = ? AND kind = 'message_user'""",
+                (session_id,),
+            ).fetchone()
+        return row[0] if row and row[0] is not None else None
+
+    def rewind_boundaries(self, session_id: str) -> list:
+        """全部回退边界（seq 升序）：[(point_seq, boundary_seq)]。
+
+        投影与展示层共用：死段 = 全部闭区间 [point, boundary] 的并集
+        （project_live_items）；展示层每个边界各渲染一个折叠条。
+        """
+        items = self.get_detail(session_id)
+        out = []
+        for it in items:
+            if it.kind != "rewound":
+                continue
+            try:
+                p = json.loads(it.payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(p, dict) and isinstance(p.get("point_seq"), int):
+                out.append((p["point_seq"], it.seq))
+        return out
+
+    def is_live_anchor(self, session_id: str, seq: int) -> bool:
+        """seq 是否为一条**活** message_user（回退锚点校验：死段内不可再回退）。"""
+        items = self.get_detail(session_id)
+        target = next((it for it in items if it.seq == seq), None)
+        if target is None or target.kind != "message_user":
+            return False
+        return any(it.seq == seq for it in self.project_live_items(items))
+
+    def count_live_messages(self, session_id: str) -> int:
+        """可见时间线的消息条数（message_user + message_ai，死段不计）——
+        回退后 message_count 的重算口径（ADR-0027）。"""
+        items = self.project_live_items(self.get_detail(session_id))
+        return sum(1 for it in items if it.kind in ("message_user", "message_ai"))
+
+    @staticmethod
+    def project_live_items(items: list) -> list:
+        """回退边界投影：死段 = **全部**回退边界区间的并集，滤掉死段条目。
+
+        单条边界 i 的死段 = [point_i, boundary_i]（闭区间——锚点消息本身
+        回填输入框，也算死）。多条边界取并集而非「最后一个生效」：在新对话
+        里再次回退到更早锚点时，旧边界的死段必须继续压住——例如边界
+        (0,4) 后新对话 5、6，再回退到 5，新边界 (5,7) 只盖 5..7，0..4
+        靠旧边界仍死。无边界原样返回。
+        """
+        intervals = []
+        for it in items:
+            if it.kind == "rewound":
+                try:
+                    p = json.loads(it.payload)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(p, dict) and isinstance(p.get("point_seq"), int):
+                    intervals.append((p["point_seq"], it.seq))
+        if not intervals:
+            return items
+
+        def _dead(seq: int) -> bool:
+            return any(lo <= seq <= hi for lo, hi in intervals)
+
+        return [it for it in items if not _dead(it.seq)]
+
     def upsert_skill_contexts(
         self,
         session_id: str,
@@ -641,12 +850,16 @@ class SessionsStore:
         - skill_context → run_stream 注入的 skill body 原样回放（见
           upsert_skill_contexts）；
         - message_ai_raw（模型原始输出）优先于 message_ai（策展展示文本）；
+        - rewound → 回退边界（截断投影，ADR-0027）：死段 = 全部回退边界
+          区间 [point, boundary] 的并集（含锚点本身）；死段条目（含其中的
+          压缩边界/微压缩/skill_context）全部不可见——死段内的 compacted
+          不得清空活前缀；
         - 旧会话无 raw/tool_trace/compacted 条目时行为与之前一致。
 
         Returns:
             [{"role": "user"|"assistant", "content": str | list}, ...]，按 seq 升序。
         """
-        items = self.get_detail(session_id)
+        items = self.project_live_items(self.get_detail(session_id))
         # 预扫描：最后一个压缩边界 + 边界之后的微压缩清理 id 并集。
         # 遇新边界清空已收集 ids——更早的清理目标已被截断投影丢弃。
         last_compacted_seq = -1

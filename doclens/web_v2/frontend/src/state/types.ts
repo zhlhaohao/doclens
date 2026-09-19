@@ -45,6 +45,9 @@ export interface ChatMessage {
   tool_steps?: ToolStep[];
   /** 结构化引用：后端从检索工具结果提取，前端渲染为可点击的引用卡片 */
   references?: Reference[];
+  /** 回退锚点（ADR-0027）：user 消息携带其 session_items seq，「回退到这里」
+   *  以此定位；流式新建/本地构造的消息无此字段（排在时间线最尾）。 */
+  seq?: number;
 }
 
 /** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */

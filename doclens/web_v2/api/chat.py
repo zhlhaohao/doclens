@@ -17,6 +17,7 @@ import json
 import logging
 import re
 import threading
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi import APIRouter
@@ -162,6 +163,19 @@ async def _stream_agent_response(
 
     waiter = get_global_waiter()
 
+    # 回退快照（ADR-0027）：轮首固化「锚点时点」的文件状态——本轮写工具
+    # 的改前备份（bind_rewind_hooks 包装）回填进这条快照。失败只记日志，
+    # 不阻断对话主流程。
+    if session_key:
+        try:
+            from doclens.web_v2.deps import get_rewind_tracker
+            from doclens.web_v2.rewind_tracker import bind_rewind_hooks
+
+            tracker = get_rewind_tracker()
+            tracker.begin_turn(session_key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("rewind begin_turn failed for %s: %s", session_key, e)
+
     def _interrupt_pending_asks() -> None:
         """中断 hook：唤醒该会话挂起的 ask 等待（Event 检查点覆盖不到工具挂起期）。
 
@@ -178,6 +192,19 @@ async def _stream_agent_response(
     # 不能写回共享单例 runtime.tool_handlers（同 runtime 并发两流会互相覆盖绑定）。
     tool_handlers = {**runtime.tool_handlers}
     bind_user_interaction_handlers(tool_handlers, emitter, waiter)
+    # 改前备份（ADR-0027）：同一浅拷贝上包装写类工具（write/edit 执行前、
+    # shell 执行前命令扫描），备份目标 = 本请求会话
+    if session_key:
+        try:
+            from doclens.web_v2.deps import get_rewind_tracker
+            from doclens.web_v2.rewind_tracker import bind_rewind_hooks
+
+            bind_rewind_hooks(
+                tool_handlers, get_rewind_tracker(), session_key,
+                Path(runtime.config.workdir),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("bind rewind hooks failed for %s: %s", session_key, e)
     # ask_user_question：GUI 结构化问答（旧 ask_user/user_confirm 已在
     # runtime 工具集过滤，此处无需绑定）
     bind_ask_user_question_handler(tool_handlers, emitter, waiter)

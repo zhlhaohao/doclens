@@ -364,6 +364,47 @@ def extract_external_paths(command: str, workdir: Path) -> List[Path]:
     return found
 
 
+def extract_write_targets(command: str, workdir: Path) -> List[Path]:
+    """扫描命令文本，提取**可能被写**的目标路径候选（去重保序，纯文本扫描）。
+
+    与 ``extract_external_paths`` 的两点差异，均为宿主「写前备份」场景服务：
+    - 只统计**写段**（段首 token 命中写词表，或剥除丢弃型重定向后仍含
+      ``>`` / ``>>``）——纯读段的名字参数不进候选；
+    - 不限路径形态也不限 workdir 内外——``sed -i note.md`` 这类无分隔符
+      相对名是最常见的写目标；token 统统按相对路径拼到 workdir 解析，
+      是否真为现存文件由调用方 stat 决定（本函数不做存在性过滤，
+      也不区分读写位置参数——写段的全部非首 token 皆候选，宁可多备）。
+
+    空设备 token（/dev/null、NUL）排除；URL（含 ``://``）拼接后不指现实
+    文件，由调用方存在性过滤自然淘汰。
+    """
+    found: List[Path] = []
+    seen: Set[str] = set()
+    for seg in _SEGMENT_SPLIT.split(command):
+        tokens = _tokenize(seg)
+        if not tokens:
+            continue
+        head = _strip_quotes(tokens[0]).casefold()
+        seg_write = head in _WRITE_WORDS or ">" in _NULL_REDIRECT.sub(" ", seg)
+        if not seg_write:
+            continue
+        for raw in tokens[1:]:  # 首 token 是命令词，不是目标
+            tok = _strip_quotes(raw)
+            if not tok or tok.casefold() in _NULL_DEVICE_TOKENS:
+                continue
+            if tok.startswith("-"):
+                continue  # flag/选项参数（-i / --force / -Recurse）不是文件名
+            if set(tok) <= set("><&0123456789"):
+                continue  # 重定向运算符（> / >> / 2> / &1）不是文件名
+            p = _expand(tok)
+            full = p if p.is_absolute() else workdir / p
+            key = _norm_key(full)
+            if key not in seen:
+                seen.add(key)
+                found.append(full)
+    return found
+
+
 # ---- 判定入口 ----
 
 
