@@ -26,6 +26,7 @@ import "../components/file-search-results";
 import { fetchDocuments } from "../api/documents";
 import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { router } from "../router/router";
+import "../components/download-overlay";
 import {
   jsbridgeDownloadAvailable,
   downloadFile,
@@ -255,6 +256,8 @@ export class FilesView extends LitElement {
 
   @state() private _dialog: DialogKind = null;
   @state() private _reparsePath = ""; // 重新解析目标图像路径
+  /** jsbridge 下载进行中（屏幕中心转圈遮罩，与 preview-pane 下载同视觉） */
+  @state() private _downloading = false;
   @state() private _pickedSkill: SkillInfo | null = null; // 工具箱中选中的技能
   @state() private _toolboxSkills: SkillInfo[] | null = null; // 工具箱候选（null=加载中）
   @state() private _toolboxSkillsError: string | null = null;
@@ -546,13 +549,13 @@ export class FilesView extends LitElement {
 
   /** 下载选中文件（单选）：App WebView 内走 jsbridge 原生通道（`<a>` 下载
    *  在 NexBox WebView 不可靠），普通浏览器走 `<a>` 点击（文件名由后端
-   *  Content-Disposition 提供）。与 preview-pane 的下载同端点同策略。 */
+   *  Content-Disposition 提供）。与 preview-pane 的下载同端点同策略、
+   *  同视觉（下载中屏幕中心转圈遮罩 download-overlay）。 */
   private async _downloadSelected(path: string): Promise<void> {
     const url = `/api/preview/download?path=${encodeURIComponent(path)}`;
     if (jsbridgeDownloadAvailable()) {
-      // 起手即提示：原生下载大文件可达分钟级（回调挂死兜底 10 分钟），
-      // 且 Android 侧插件未实装时回调不返回——没有起手反馈用户会以为没点上
-      this._showToast("已开始下载，完成后系统通知可见");
+      if (this._downloading) return;
+      this._downloading = true;
       try {
         const res = await downloadFile({
           downloadUrl: `${window.location.origin}${url}`,
@@ -565,6 +568,8 @@ export class FilesView extends LitElement {
           return;
         }
         this._showToast(`下载失败：${(e as Error)?.message || e}`);
+      } finally {
+        this._downloading = false;
       }
       return;
     }
@@ -1124,6 +1129,7 @@ export class FilesView extends LitElement {
       ${this._isMobile ? this._renderMobile() : this._renderDesktop()}
       ${this._renderDialogs()}
       <drop-zone .targetDir=${this._state.currentDir} @drop-files=${this._onDropFiles}></drop-zone>
+      <download-overlay ?open=${this._downloading} label="下载中…"></download-overlay>
       ${this._uploading
         ? html`<div class="upload-overlay" role="status" aria-live="polite">
             <div class="ring"></div>

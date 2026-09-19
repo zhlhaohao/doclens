@@ -15,6 +15,7 @@ import {
   renderScrollJumpFabs,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
+import "./download-overlay";
 import {
   jsbridgeDownloadAvailable,
   isWebviewContainer,
@@ -176,31 +177,6 @@ export class PreviewPane extends LitElement {
       justify-content: center;
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-base);
-    }
-    /* 下载中：屏幕中心遮罩（与 files-view 上传遮罩同款视觉）；fixed 覆盖整个视口 */
-    .download-overlay {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: var(--cortex-space-4);
-      background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
-      backdrop-filter: blur(2px);
-      z-index: 9999;
-    }
-    .download-overlay .ring {
-      width: 40px; height: 40px;
-      border: 4px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-download-spin 0.8s linear infinite;
-    }
-    .download-overlay .label {
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-    }
-    @keyframes cortex-download-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .download-overlay .ring { animation: none; }
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
@@ -1281,13 +1257,11 @@ export class PreviewPane extends LitElement {
     `;
   }
 
-  /** 下载中屏幕中心遮罩（与 files-view 上传遮罩同款视觉） */
+  /** 下载中屏幕中心遮罩（公共组件 download-overlay，与 files-view 共用）。
+   *  显隐由组件 open 属性自理（false 不渲染），不再条件挂载——漏传
+   *  open 即「preview 没转圈」回归的根因。 */
   private _renderDownloadOverlay() {
-    if (!this._downloading) return null;
-    return html`<div class="download-overlay" role="status" aria-live="polite">
-      <div class="ring"></div>
-      <div class="label">下载中…</div>
-    </div>`;
+    return html`<download-overlay ?open=${this._downloading} label="下载中…"></download-overlay>`;
   }
 }
 

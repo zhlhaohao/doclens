@@ -33,6 +33,26 @@ describe("<preview-pane> markdown branch", () => {
   });
 });
 
+describe("<preview-pane> download overlay（公共组件集成）", () => {
+  it("_downloading=true 渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" content="# T"></preview-pane>
+    `) as any;
+    await el.updateComplete;
+    // 默认不显示
+    let ov = el.shadowRoot!.querySelector("download-overlay") as any;
+    expect(ov?.open ?? false).toBe(false);
+    // 下载中：组件在且 open=true（遮罩内容在其自身 shadow 内渲染）
+    el._downloading = true;
+    await el.updateComplete;
+    ov = el.shadowRoot!.querySelector("download-overlay") as any;
+    expect(ov).toBeTruthy();
+    expect(ov.open).toBe(true);
+    await ov.updateComplete;
+    expect(ov.shadowRoot!.querySelector(".download-overlay")).toBeTruthy();
+  });
+});
+
 describe("<preview-pane> edit mode", () => {
   it("shows [编辑] button when writable=true and language=markdown", async () => {
     const el = await fixture(html`
