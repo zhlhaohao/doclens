@@ -24,6 +24,7 @@ import "../components/skill-toolbox-dialog";
 import "../components/session-rename-dialog";
 import "../components/session-info-dialog";
 import "../components/rewind-dialog";
+import "../components/compact-confirm-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -458,6 +459,8 @@ export class ChatView extends LitElement {
   @state() private _skillDialogOpen = false;
   @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
+  /** 压缩上下文确认框开关（more 菜单「压缩上下文」→ 确认后才执行） */
+  @state() private _compactDialogOpen = false;
   /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
   private _compacting = false;
   /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
@@ -577,9 +580,10 @@ export class ChatView extends LitElement {
         onClick: () => { this._renameDialogOpen = true; },
       },
       {
-        label: "压缩历史",
+        label: "压缩上下文",
         icon: "archive",
-        onClick: () => { void this._compactSession(); },
+        // 先弹确认框（压缩不可逆替换上下文 + 摘要调用耗时数十秒）
+        onClick: () => { this._compactDialogOpen = true; },
       },
       {
         label: "会话信息",
@@ -613,6 +617,16 @@ export class ChatView extends LitElement {
       this._compacting = false;
     }
   }
+
+  /** 确认压缩：关框后执行（_compactSession 自带防重入与结果 toast）。 */
+  private _onCompactConfirm = (): void => {
+    this._compactDialogOpen = false;
+    void this._compactSession();
+  };
+
+  private _onCompactCancel = (): void => {
+    this._compactDialogOpen = false;
+  };
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
   private async _refreshCompaction() {
@@ -1244,6 +1258,18 @@ export class ChatView extends LitElement {
       </dialog>`;
   }
 
+  /** 压缩上下文确认框宿主（<dialog> 由 updated() showModal）。 */
+  private _renderCompactDialog() {
+    if (!this._compactDialogOpen) return nothing;
+    return html`
+      <dialog @cancel=${this._onCompactCancel}>
+        <compact-confirm-dialog
+          @compact-confirm=${this._onCompactConfirm}
+          @cancel=${this._onCompactCancel}
+        ></compact-confirm-dialog>
+      </dialog>`;
+  }
+
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>): Promise<void> => {
     await this._safeAction(async () => {
@@ -1523,6 +1549,7 @@ export class ChatView extends LitElement {
       ${this._renderRenameDialog()}
       ${this._renderInfoDialog()}
       ${this._renderRewindDialog()}
+      ${this._renderCompactDialog()}
     `;
   }
 
