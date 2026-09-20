@@ -697,8 +697,9 @@ class TestStarred:
         _create_session(store, "drop1")
         _create_session(store, "drop2")
         store.set_starred("keep", True)
-        deleted, skipped = store.delete_by_type(SessionType.CHAT)
+        deleted, skipped, deleted_ids = store.delete_by_type(SessionType.CHAT)
         assert (deleted, skipped) == (2, 1)
+        assert sorted(deleted_ids) == ["drop1", "drop2"]
         remaining = [s.id for s in store.list(SessionType.CHAT)]
         assert remaining == ["keep"]
 

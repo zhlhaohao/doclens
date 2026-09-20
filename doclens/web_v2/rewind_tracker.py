@@ -42,10 +42,15 @@ DEFAULT_MAX_BACKUP_BYTES = 50 * 1024 * 1024
 _COMPARE_CHUNK = 8192
 
 
+def _path_hash(path: Path) -> str:
+    """备份文件名的路径哈希前缀（16 位 hex）——文件名构造与版本扫描共用，
+    截断长度/编码改动只改这里。"""
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+
+
 def _backup_name(path: Path, version: int) -> str:
     """备份文件名：路径哈希前 16 位 + 版本号（确定性，容纳 workdir 外路径）。"""
-    digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
-    return f"{digest}@v{version}"
+    return f"{_path_hash(path)}@v{version}"
 
 
 class RewindTracker:
@@ -73,8 +78,10 @@ class RewindTracker:
             anchor = self._store.last_message_user_seq(session_id)
             if anchor is None:
                 return  # 无消息（防御；正常链路前端先落 message_user 再发请求）
-            snapshots = self._store.list_rewind_snapshots(session_id)
-            per_path = self._latest_entries(snapshots)
+            # 每路径最新条目 = 最新一条快照内容（新快照全量结转，见
+            # latest_rewind_snapshot docstring）——免全量读归并
+            latest = self._store.latest_rewind_snapshot(session_id)
+            per_path = latest["tracked_file_backups"] if latest else {}
             new_backups: dict = {}
             for path, entry in per_path.items():
                 fp = Path(path)
@@ -116,10 +123,10 @@ class RewindTracker:
                     new_backups[path] = nb if nb is not None else entry
                 else:
                     new_backups[path] = entry  # 未变：版本指针结转
-            evicted = self._store.append_rewind_snapshot(
+            evicted, survivors_referenced = self._store.append_rewind_snapshot(
                 session_id, anchor, new_backups
             )
-            self._cleanup_evicted(session_id, evicted)
+            self._cleanup_evicted(session_id, evicted, survivors_referenced)
         except Exception as e:  # noqa: BLE001
             logger.warning("rewind begin_turn failed for %s: %s", session_id, e)
 
@@ -143,11 +150,20 @@ class RewindTracker:
         候选 = planify guard 的 ``extract_write_targets``（写段全部非首
         token，workdir 内外皆可）；只对**现存文件**备份，不记 null——
         token 集合过宽，null 会误删（见模块 docstring）。
+
+        幂等预过滤：最新快照已追踪的候选先剔除（一次轻量读盘，常见的
+        「同文件反复写」场景只剩首个候选走备份慢路径）。
         """
         try:
             from planify.tools.guard import extract_write_targets
 
+            latest = self._latest_or_none(session_id)
+            tracked = (
+                latest["tracked_file_backups"] if latest else {}
+            )
             for cand in extract_write_targets(command, Path(workdir)):
+                if str(cand) in tracked:
+                    continue  # 已追踪：幂等跳过
                 try:
                     if cand.is_file():
                         self._track(session_id, cand, record_missing=False)
@@ -156,22 +172,29 @@ class RewindTracker:
         except Exception as e:  # noqa: BLE001
             logger.warning("rewind track_shell failed: %s", e)
 
+    def _latest_or_none(self, session_id: str) -> Optional[dict]:
+        """最新快照（预过滤/幂等查询用；异常与无快照一律 None）。"""
+        try:
+            return self._store.latest_rewind_snapshot(session_id)
+        except Exception:  # noqa: BLE001 — 查询失败不拦截备份本体
+            return None
+
     def _track(self, session_id: str, fp: Path, *, record_missing: bool) -> None:
         """写前备份一条路径：幂等（最新快照已含则跳过），回填最新快照。"""
         with self._lock:
-            snapshots = self._store.list_rewind_snapshots(session_id)
-            if not snapshots:
+            latest = self._store.latest_rewind_snapshot(session_id)
+            if latest is None:
                 # 首轮前就有写（防御）：先补一个锚点快照再回填
                 anchor = self._store.last_message_user_seq(session_id)
                 if anchor is None:
                     return
                 self._store.append_rewind_snapshot(session_id, anchor, {})
-                snapshots = self._store.list_rewind_snapshots(session_id)
+                latest = self._store.latest_rewind_snapshot(session_id)
             key = str(fp)
-            if key in snapshots[-1]["tracked_file_backups"]:
+            if key in latest["tracked_file_backups"]:
                 return  # 最新快照已追踪（Claude Code trackEdit 同款幂等）
-            per_path = self._latest_entries(snapshots)
-            entry = per_path.get(key)
+            # 每路径最新条目 = 最新一条快照内容（结转不变式），version 直接读
+            entry = latest["tracked_file_backups"].get(key)
             version = (entry["version"] if entry else 0) + 1
             try:
                 st = fp.stat()
@@ -344,7 +367,7 @@ class RewindTracker:
 
     def _disk_max_version(self, session_id: str, fp: Path) -> int:
         """备份目录里该路径现存的最大版本号（0 = 无备份）。"""
-        prefix = hashlib.sha256(str(fp).encode("utf-8")).hexdigest()[:16] + "@v"
+        prefix = _path_hash(fp) + "@v"
         best = 0
         try:
             for name in self._session_dir(session_id).iterdir():
@@ -384,22 +407,21 @@ class RewindTracker:
                 if not ca:
                     return False
 
-    def _cleanup_evicted(self, session_id: str, evicted: list) -> None:
-        """环形淘汰后清理孤儿备份文件（不再被任何幸存快照引用的文件）。"""
+    def _cleanup_evicted(
+        self, session_id: str, evicted: list, survivors_referenced: set
+    ) -> None:
+        """环形淘汰后清理孤儿备份文件（不被任何幸存快照引用的文件）。
+
+        幸存引用集合由 ``append_rewind_snapshot`` 在删除淘汰行的同一事务
+        里顺手产出，免掉为同一目的的第二次全量快照读。
+        """
         if not evicted:
             return
         session_dir = self._session_dir(session_id)
-        survivors = self._store.list_rewind_snapshots(session_id)
-        referenced = set()
-        for snap in survivors:
-            for entry in snap["tracked_file_backups"].values():
-                name = entry.get("backup_file_name")
-                if name:
-                    referenced.add(name)
         for snap in evicted:
             for entry in snap.get("tracked_file_backups", {}).values():
                 name = entry.get("backup_file_name")
-                if name and name not in referenced:
+                if name and name not in survivors_referenced:
                     try:
                         (session_dir / name).unlink(missing_ok=True)
                     except OSError:

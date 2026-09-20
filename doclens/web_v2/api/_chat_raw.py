@@ -10,6 +10,8 @@
 
 from planify.streaming.runner import CONTEXT_MARKER
 
+from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER, SLASH_HINT_MARKER
+
 
 def extract_round_raw_messages(
     history: list[dict], start: int, user_message: str
@@ -45,8 +47,8 @@ def extract_round_raw_messages(
         if isinstance(content, str) and role == "user":
             if (
                 CONTEXT_MARKER in content
-                or '<loaded-skill name="' in content
-                or '<slash-skill-hint name="' in content
+                or LOADED_SKILL_MARKER in content
+                or SLASH_HINT_MARKER in content
             ):
                 # 注入消息 + 紧随的 assistant "Noted."（有则一并跳过）
                 nxt = msgs[i + 1] if i + 1 < len(msgs) else None

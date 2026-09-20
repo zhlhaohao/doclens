@@ -16,14 +16,8 @@ import {
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
 import "./download-overlay";
-import {
-  jsbridgeDownloadAvailable,
-  isWebviewContainer,
-  downloadFile,
-  JsbridgeDownloadError,
-} from "../utils/jsbridge";
-import { actions } from "../state/store";
-import { router } from "../router/router";
+import { isWebviewContainer } from "../utils/jsbridge";
+import { downloadServerFile } from "../utils/download";
 import {
   FONT_SCALE_MIN_PCT,
   FONT_SCALE_MAX_PCT,
@@ -856,45 +850,27 @@ export class PreviewPane extends LitElement {
     this._mode = "preview";
   }
 
-  /** 触发原始文件下载；文件名由后端 Content-Disposition 决定。 */
+  /** 触发原始文件下载（WebView 内 jsbridge 原生通道，浏览器 `<a>` 兜底，
+   *  编排见 utils/download.ts）；文件名由后端 Content-Disposition 决定。 */
   private _onDownloadClick = () => {
     if (!this.path || this._downloading) return;
-    const url = `/api/preview/download?path=${encodeURIComponent(this.path)}`;
-    // NexBox WebView 内 <a> 下载不可靠（无下载 UI/路径不可见）→ jsbridge 原生通道
-    if (jsbridgeDownloadAvailable()) {
-      void this._downloadViaJsbridge(url);
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = url;
-    a.rel = "noopener";
-    // 文件名由后端 Content-Disposition 提供，这里不设 download 属性
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  /** App 内下载：原生 GET → 流式写 Downloads 目录 + 系统通知（契约见 download_bridge.md） */
-  private async _downloadViaJsbridge(url: string) {
-    if (this._downloading) return;
-    this._downloading = true;
-    try {
-      const res = await downloadFile({ downloadUrl: `${window.location.origin}${url}` });
-      this.dispatchEvent(
-        new CustomEvent("download-success", { detail: { name: res.name } }),
-      );
-    } catch (e) {
-      if (e instanceof JsbridgeDownloadError && e.unauthorized) {
-        // 与 client.ts 401 钩子行为对齐：跳登录页
-        actions.setAuthState({ authenticated: false });
-        router.navigate("login");
-        return;
+    void (async () => {
+      this._downloading = true;
+      try {
+        const r = await downloadServerFile(this.path!);
+        if (r.via !== "jsbridge") return;
+        if (r.name) {
+          this.dispatchEvent(
+            new CustomEvent("download-success", { detail: { name: r.name } }),
+          );
+        } else if (r.error) {
+          this.dispatchEvent(new CustomEvent("download-failed", { detail: { message: r.error } }));
+        }
+        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
+      } finally {
+        this._downloading = false;
       }
-      const msg = e instanceof Error ? e.message : "下载失败";
-      this.dispatchEvent(new CustomEvent("download-failed", { detail: { message: msg } }));
-    } finally {
-      this._downloading = false;
-    }
+    })();
   }
 
   private _renderDownloadBtn() {

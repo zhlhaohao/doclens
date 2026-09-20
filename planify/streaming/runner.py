@@ -45,9 +45,12 @@ logger = logging.getLogger(__name__)
 CONTEXT_MARKER = "The following skills are available for use with the Skill tool"
 
 # === 工具轮次预算（防死循环熔断）常量与纯函数（2026-09-18）===
-# 轮询等待工具：返回 "[running] …" = 后台任务未完成。等待 ≠ 检索不收敛，
-# 纯轮询轮不计入轮次预算——否则长构建期间正常轮询会误触熔断，模型被
-# 「如实作答」提醒逼成「未找到/失败」的错误收场。
+# 轮询等待工具：返回 RUNNING_PREFIX 前缀 = 后台任务未完成（前缀是
+# background_manager 导出的契约常量，输出文案其余部分可自由演化）。
+# 等待 ≠ 检索不收敛，纯轮询轮不计入轮次预算——否则长构建期间正常
+# 轮询会误触熔断，模型被「如实作答」提醒逼成「未找到/失败」的错误收场。
+from ..managers.background_manager import RUNNING_PREFIX  # noqa: E402
+
 _POLL_TOOL_NAME = "check_background"
 # 连续同参调用轮数达到该值 → 真死循环形态，立即注入针对性提醒（不等软阈值）
 _IDENTICAL_ROUNDS_LIMIT = 3
@@ -56,7 +59,7 @@ _IDENTICAL_ROUNDS_LIMIT = 3
 def _is_pure_poll_round(calls: List[Tuple[str, dict, str]]) -> bool:
     """本轮是否为纯轮询等待：全部调用为 check_background 且均处 running 态。"""
     return bool(calls) and all(
-        name == _POLL_TOOL_NAME and output.startswith("[running]")
+        name == _POLL_TOOL_NAME and output.startswith(RUNNING_PREFIX)
         for name, _input, output in calls
     )
 
@@ -390,11 +393,12 @@ class StreamingAgent:
 
         system = self.get_system_prompt()
         loop_count = 0
-        # 工具轮次预算状态（防死循环熔断，见循环内三机制注释）
+        # 工具轮次预算状态（防死循环熔断，见循环内三机制注释）——纯轮内
+        # 状态收为局部变量（作用域即隔离，CLI/TUI 复用实例天然不串轮）
         tool_rounds = 0  # 计数轮（纯轮询轮不计入）
-        self._last_round_signature: Optional[tuple] = None
-        self._identical_rounds = 0
-        self._saw_pending_bg = False
+        last_round_signature: Optional[tuple] = None
+        identical_rounds = 0
+        saw_pending_bg = False
         full_text_output = ""
 
         try:
@@ -530,7 +534,7 @@ class StreamingAgent:
                 # 与 interrupt_event 完全独立：不 set event、不 break。三机制：
                 # 1) 纯轮询不计入预算：本轮全部调用为 check_background 且均处
                 #    [running] 态——等待后台任务 ≠ 检索不收敛（长构建期间正常
-                #    轮询不得误触熔断）；仅记 _saw_pending_bg 供软阈值文案分化；
+                #    轮询不得误触熔断）；仅记 saw_pending_bg 供软阈值文案分化；
                 # 2) 同参死循环早警：连续 3 轮工具签名完全相同（真死循环形态
                 #    ——同工具同参数反复调用）→ 立即注入针对性提醒，不等软阈值；
                 # 3) 软/硬阈值照旧：软阈值每轮注入收尾提醒（文案感知「后台仍在
@@ -539,7 +543,7 @@ class StreamingAgent:
                     pure_poll = _is_pure_poll_round(round_calls)
                     reminder: Optional[str] = None
                     if pure_poll:
-                        self._saw_pending_bg = True
+                        saw_pending_bg = True
                     else:
                         tool_rounds += 1
                         # 硬阈值：强制终答（计数轮达限；轮询不消耗预算）
@@ -561,21 +565,21 @@ class StreamingAgent:
                             return self._cleanup_messages(messages)
                         # 同参签名追踪（纯轮询轮不参与——等待合法，见上）
                         signature = _round_signature(round_calls)
-                        if signature == self._last_round_signature:
-                            self._identical_rounds += 1
+                        if signature == last_round_signature:
+                            identical_rounds += 1
                         else:
-                            self._identical_rounds = 1
-                            self._last_round_signature = signature
-                        if self._identical_rounds >= _IDENTICAL_ROUNDS_LIMIT:
+                            identical_rounds = 1
+                            last_round_signature = signature
+                        if identical_rounds >= _IDENTICAL_ROUNDS_LIMIT:
                             self.logger.warning(
                                 "[StreamingAgent] 连续 %d 轮同参工具调用，"
                                 "注入死循环提醒",
-                                self._identical_rounds,
+                                identical_rounds,
                             )
                             reminder = (
                                 "You have called the exact same tools with "
                                 "identical arguments "
-                                f"{self._identical_rounds} times in a row with "
+                                f"{identical_rounds} times in a row with "
                                 "no progress. This is a loop: do NOT repeat the "
                                 "identical call. Change your approach (different "
                                 "tool, query, or parameters) or stop calling "
@@ -593,7 +597,7 @@ class StreamingAgent:
                                 "based on what you have; if the information was not found, "
                                 "say so honestly."
                             )
-                            if self._saw_pending_bg:
+                            if saw_pending_bg:
                                 # 本轮曾轮询后台任务：等待未完成 ≠ 失败——
                                 # 防模型被「如实作答」逼成「构建出错」式误报
                                 reminder += (

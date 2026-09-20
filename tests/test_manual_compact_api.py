@@ -13,7 +13,6 @@ import pytest
 
 from doclens.web_v2.api import sessions as sessions_api
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.chat_interrupt import register_interrupt, unregister_interrupt
 from doclens.web_v2.sessions_store import SessionSummary, SessionType, SessionsStore
 
 
@@ -95,13 +94,23 @@ class TestManualCompact:
         _create(store)
         _seed_chat_history(store)
         _patch(monkeypatch, store, tmp_path)
-        ev = register_interrupt("s1")
+        # 判定源 = chat_runner 执行体登记表（与 POST /chat 预检同源）
+        from doclens.web_v2 import chat_runner
+
+        class _FakeTask:  # 只需 done()/add_done_callback 协议
+            def done(self):
+                return False
+
+            def add_done_callback(self, cb):
+                pass
+
+        assert chat_runner.try_register("s1", _FakeTask())  # type: ignore[arg-type]
         try:
             with pytest.raises(CortexAPIError) as e:
                 asyncio.run(sessions_api.compact_session("s1"))
             assert e.value.status == 409
         finally:
-            unregister_interrupt("s1", ev)
+            chat_runner.clear_all()
 
     def test_400_history_too_short(self, store, monkeypatch, tmp_path):
         _create(store)

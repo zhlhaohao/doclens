@@ -26,6 +26,10 @@ from typing import Dict, List
 
 from ..tools.basic import _build_shell_argv, _find_bash_path, _find_windows_shell
 
+#: check_background「仍在运行」回复的前缀——streaming runner 的纯轮询识别
+#: 契约（等待轮不计入轮次预算）依赖此常量判断，输出文案其余部分可自由演化
+RUNNING_PREFIX = "[running]"
+
 
 class BackgroundManager:
     """后台任务管理器（线程安全）"""
@@ -139,10 +143,10 @@ class BackgroundManager:
                     # running 态无 result（初始化为 None）——渲染等待指引而非
                     # 字面 "None"：耗时 + 完成会有通知 + 等待≠失败（与 runner
                     # 轮次预算三机制同口径，防模型把等待误报成构建出错）。
-                    # 前缀 "[running]" 是 runner 纯轮询识别的契约，勿改。
+                    # 前缀 RUNNING_PREFIX 是 runner 纯轮询识别的契约（见上）。
                     elapsed = time.monotonic() - t.get("started_at", 0.0)
                     return (
-                        f"[running] still running, {elapsed:.0f}s elapsed "
+                        f"{RUNNING_PREFIX} still running, {elapsed:.0f}s elapsed "
                         f"(command: {t['command'][:60]}). This is NOT a failure. "
                         "You will receive a completion notification; if the user "
                         "is waiting, tell them it is still running, or poll again "

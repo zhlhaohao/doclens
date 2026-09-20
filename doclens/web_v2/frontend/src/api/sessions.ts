@@ -27,6 +27,46 @@ export async function appendSession(sessionId: string, items: Array<{ kind: stri
   return request(`/api/sessions/${sessionId}`, { method: "PATCH", json: { items, message_count: messageCount } });
 }
 
+/** 会话条目（kind/payload/seq/created_at）——buildChatTimeline/aggregate* 消费 */
+export interface SessionItemDTO {
+  kind: string;
+  payload: string;
+  seq?: number;
+  created_at?: string | null;
+}
+
+/** 会话详情：元数据（generating/context_window）+ 条目列表。 */
+export interface SessionDetail {
+  id: string;
+  type: "search" | "chat";
+  title: string;
+  preview: string;
+  updated_at: string;
+  message_count: number;
+  /** 断开续跑恢复态（ADR-0028）：后端仍在生成 */
+  generating: boolean;
+  /** 实时上下文窗口（与压缩决策同源）；0 = 未装配，前端回落 usage 快照 */
+  context_window?: number;
+  items: SessionItemDTO[];
+}
+
+/** 拉取会话详情。metaOnly=true 只回元数据（items 置空）——轮询 generating
+ *  等场景省全量条目传输（长会话 items 可达几百 KB）。 */
+export async function fetchSessionDetail(
+  sessionId: string,
+  opts: { metaOnly?: boolean } = {},
+): Promise<SessionDetail> {
+  const qs = opts.metaOnly ? "?meta_only=true" : "";
+  return request<SessionDetail>(`/api/sessions/${sessionId}${qs}`, { method: "GET" });
+}
+
+/** 手动压缩会话历史（ADR-0026）：LLM 摘要落库 compacted 条目。 */
+export async function compactSession(
+  sessionId: string,
+): Promise<{ ok: boolean; id: string; pre_tokens: number; post_tokens: number }> {
+  return request(`/api/sessions/${sessionId}/compact`, { method: "POST" });
+}
+
 /** 人工改名（2026-09-17）：后端 trim + 60 字符截断，不刷新 updated_at。 */
 export async function renameSession(sessionId: string, title: string): Promise<{ ok: boolean; id: string; title: string }> {
   return request(`/api/sessions/${sessionId}/title`, { method: "PATCH", json: { title } });

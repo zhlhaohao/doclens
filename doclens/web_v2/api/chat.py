@@ -41,11 +41,13 @@ from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_agent, get_config
 from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
+from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_LOADED_SKILL_RE = re.compile(r'<loaded-skill name="([^"]+)">')
+# 由标记常量派生（_chat_markers 是注入标记的单一真相源）
+_LOADED_SKILL_RE = re.compile(re.escape(LOADED_SKILL_MARKER) + r'([^"]+)">')
 
 
 def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str]]:
@@ -174,13 +176,13 @@ async def _stream_agent_response(
 
     waiter = get_global_waiter()
 
-    # 回退快照（ADR-0027）：轮首固化「锚点时点」的文件状态——本轮写工具
-    # 的改前备份（bind_rewind_hooks 包装）回填进这条快照。失败只记日志，
-    # 不阻断对话主流程。
+    # 回退快照 + 写前备份挂钩（ADR-0027）：轮首固化「锚点时点」的文件状态，
+    # 本轮写工具的改前备份（bind_rewind_hooks 包装，见下方 tool_handlers 段）
+    # 回填进这条快照。失败只记日志，不阻断对话主流程。
+    tracker = None
     if session_key:
         try:
             from doclens.web_v2.deps import get_rewind_tracker
-            from doclens.web_v2.rewind_tracker import bind_rewind_hooks
 
             tracker = get_rewind_tracker()
             tracker.begin_turn(session_key)
@@ -204,14 +206,15 @@ async def _stream_agent_response(
     tool_handlers = {**runtime.tool_handlers}
     bind_user_interaction_handlers(tool_handlers, emitter, waiter)
     # 改前备份（ADR-0027）：同一浅拷贝上包装写类工具（write/edit 执行前、
-    # shell 执行前命令扫描），备份目标 = 本请求会话
-    if session_key:
+    # shell 执行前命令扫描），备份目标 = 本请求会话；与轮首快照共用同一
+    # tracker 单例（上块取，失败为 None 时 no-op），失败只记日志不阻断
+    # 工具调用本身
+    if session_key and tracker is not None:
         try:
-            from doclens.web_v2.deps import get_rewind_tracker
             from doclens.web_v2.rewind_tracker import bind_rewind_hooks
 
             bind_rewind_hooks(
-                tool_handlers, get_rewind_tracker(), session_key,
+                tool_handlers, tracker, session_key,
                 Path(runtime.config.workdir),
             )
         except Exception as e:  # noqa: BLE001
@@ -246,8 +249,12 @@ async def _stream_agent_response(
         system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA
         + kb_root_guidance(agent.workdir),
         # LLM 追踪（调试/缓存命中率观测）：聊天会话 id 作会话键——
-        # 同会话跨输入/跨进程追加同 trace 文件；开关未开时为 None
-        tracer=LLMTracer.create(label="main", session_key=session_id),
+        # 同会话跨输入/跨进程追加同 trace 文件；开关未开时为 None。
+        # workdir 显式传入：trace 落 {workdir}/.planify/llm_trace/（与
+        # gitignore 覆盖范围一致），不随进程 cwd 漂移
+        tracer=LLMTracer.create(
+            label="main", session_key=session_id, workdir=agent.workdir
+        ),
     )
 
     # 消费端断开标志（ADR-0028）：SSE 生成器放生本 task 时置位——收尾时
@@ -420,13 +427,15 @@ async def _stream_agent_response(
             # 落库本轮 token 用量（kind="usage"，2026-09-17）：每次 LLM 调用
             # 一条全量落库——弹窗累计命中率与 trace 文件 / 实时 SSE 同口径
             # （工具循环的中间调用也进累计）；末条即该轮上下文峰值占用。
+            # 批量单事务落库（工具循环一轮可达 10+ 条，逐条独立连接+fsync
+            # 的收尾开销可观）。
             if session_key and emitter.usages:
                 try:
                     from doclens.web_v2.deps import get_sessions_store
 
-                    store = get_sessions_store()
-                    for usage in emitter.usages:
-                        store.append_usage(session_key, usage)
+                    get_sessions_store().append_usages(
+                        session_key, emitter.usages
+                    )
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         "persist usage failed for %s: %s", session_key, e

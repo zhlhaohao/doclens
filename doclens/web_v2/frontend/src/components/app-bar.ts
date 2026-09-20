@@ -177,27 +177,23 @@ export class AppBar extends LitElement {
 
   private _onWatchReindexed: (e: Event) => void = (e: Event) => {
     const detail = (e as CustomEvent).detail as { doc_count?: number | null; failed_count?: number };
-    const stack = this.shadowRoot?.querySelector("toast-stack") as
-      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
     const n = detail?.doc_count;
     const failed = detail?.failed_count ?? 0;
     if (failed > 0) {
-      stack?.pushToast?.(
+      this._pushToast(
         n != null ? `索引完成：${n} 文档，${failed} 个文件失败` : `索引完成：${failed} 个文件失败`,
         "error", 5000,
       );
     } else {
-      stack?.pushToast?.(n != null ? `索引已更新：${n} 文档` : "索引已更新", "success", 3000);
+      this._pushToast(n != null ? `索引已更新：${n} 文档` : "索引已更新", "success", 3000);
     }
   };
 
   /** 上传图片后台判向旋转完成（ADR-0017）：toast 告知用户文件已被自动转正。 */
   private _onImageRotated: (e: Event) => void = (e: Event) => {
     const detail = (e as CustomEvent).detail as { path?: string };
-    const stack = this.shadowRoot?.querySelector("toast-stack") as
-      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
     const name = (detail?.path ?? "").split("/").pop() || "图片";
-    stack?.pushToast?.(`已自动旋转：${name}`, "info", 4000);
+    this._pushToast(`已自动旋转：${name}`, "info", 4000);
   };
 
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {

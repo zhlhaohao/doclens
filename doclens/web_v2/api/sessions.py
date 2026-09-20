@@ -89,12 +89,14 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
-async def get_session(session_id: str):
+async def get_session(session_id: str, meta_only: bool = False):
+    """会话详情。``?meta_only=true`` 只回元数据（items 置空）——断开续跑
+    的轮询等只需 generating/计数的调用方用，省全量条目传输。"""
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    items = store.get_detail(session_id)
+    items = [] if meta_only else store.get_detail(session_id)
     # 实时上下文窗口（与压缩决策同源：runtime.config 现读）。agent 未装配
     # 或读取异常时为 0，前端回落 usage 历史快照。
     window = 0
@@ -176,6 +178,31 @@ async def star_session(session_id: str, req: SessionStarRequest):
     return {"ok": True, "id": session_id, "starred": req.starred}
 
 
+def _require_chat_session(
+    store: SessionsStore, session_id: str, action: str, *, busy: bool = False
+) -> SessionSummary:
+    """chat 会话端点的前置守卫：存在 → 类型 → （可选）生成中互斥。
+
+    compact / rewind 系端点共用（校验口径调整只改此处）；``busy=True``
+    额外做「生成中 409」互斥——判定源与 POST /chat 预检、detail.generating
+    同用 chat_runner.is_running（ADR-0028 执行体登记表是「生成中」的
+    唯一权威，避免 interrupt/registry 双表漂移）。
+    """
+    summary = store.get(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    if summary.type is not SessionType.CHAT:
+        raise CortexAPIError(400, "NOT_CHAT_SESSION", f"仅对话会话支持{action}")
+    if busy:
+        from doclens.web_v2 import chat_runner
+
+        if chat_runner.is_running(session_id):
+            raise CortexAPIError(
+                409, "SESSION_STREAMING", f"对话生成中，请等待完成后再{action}"
+            )
+    return summary
+
+
 @router.post("/sessions/{session_id}/compact")
 async def compact_session(session_id: str):
     """手动压缩会话历史（ADR-0026 压缩即事实的手动入口，2026-09-17）。
@@ -186,14 +213,7 @@ async def compact_session(session_id: str):
     - 历史过短 400（无摘要意义，白付一次 LLM 调用）。
     """
     store = _get_store()
-    summary = store.get(session_id)
-    if summary is None:
-        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    if summary.type is not SessionType.CHAT:
-        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持压缩")
-    from doclens.web_v2.chat_interrupt import is_streaming
-    if is_streaming(session_id):
-        raise CortexAPIError(409, "SESSION_STREAMING", "对话生成中，请等待完成后再压缩")
+    _require_chat_session(store, session_id, "压缩", busy=True)
 
     history = store.get_chat_history(session_id)
     if len(history) < 2:
@@ -219,7 +239,12 @@ async def compact_session(session_id: str):
         from planify.core.llm import LLMTracer
         compacted = await aauto_compact(
             history, runtime.client, transcript_dir,
-            tracer=LLMTracer.create(label="compact", session_key=session_id),
+            # workdir 显式传：trace 落 {workdir}/.planify/（gitignore 覆盖
+            # 范围），不随进程 cwd 漂移
+            tracer=LLMTracer.create(
+                label="compact", session_key=session_id,
+                workdir=runtime.config.workdir,
+            ),
             # 摘要输入预算随窗口声明放大（输出预留随输出上限联动）
             summary_input_budget=summary_input_budget(window, out_cap_cfg),
             # 大输出模型跟随 PLANIFY_MAX_TOKENS 放开摘要上限（下限 10000 兜底）
@@ -248,11 +273,7 @@ async def rewind_preview(session_id: str, point_seq: int = Query(..., descriptio
     从 detail items 自行计算（前端本就持有全量条目与 seq）。
     """
     store = _get_store()
-    summary = store.get(session_id)
-    if summary is None:
-        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    if summary.type is not SessionType.CHAT:
-        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持回退")
+    _require_chat_session(store, session_id, "回退")
     if not store.is_live_anchor(session_id, point_seq):
         raise CortexAPIError(400, "INVALID_ANCHOR", "回退锚点无效（须为可见的用户消息）")
 
@@ -276,14 +297,7 @@ async def rewind_session(session_id: str, req: SessionRewindRequest):
     条，并把锚点消息内容回填输入框。流式生成中 409（本轮快照未固化）。
     """
     store = _get_store()
-    summary = store.get(session_id)
-    if summary is None:
-        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    if summary.type is not SessionType.CHAT:
-        raise CortexAPIError(400, "NOT_CHAT_SESSION", "仅对话会话支持回退")
-    from doclens.web_v2.chat_interrupt import is_streaming
-    if is_streaming(session_id):
-        raise CortexAPIError(409, "SESSION_STREAMING", "对话生成中，请等待完成后再回退")
+    _require_chat_session(store, session_id, "回退", busy=True)
     if not store.is_live_anchor(session_id, req.point_seq):
         raise CortexAPIError(400, "INVALID_ANCHOR", "回退锚点无效（须为可见的用户消息）")
 
@@ -332,22 +346,15 @@ async def clear_sessions(
 ):
     """批量删除会话。type=None 清全部。加星会话受保护跳过（2026-09-17）。"""
     store = _get_store()
-    # 删前快照 chat 会话 id——删后 list 只剩幸存者，被删者的备份目录要靠
-    # 这份清单级联清理（ADR-0027）
-    chat_ids_before = (
-        [s.id for s in store.list(SessionType.CHAT, limit=1000000)]
-        if type is None or type == SessionType.CHAT
-        else []
-    )
-    deleted, skipped_starred = store.delete_by_type(type)
+    deleted, skipped_starred, deleted_ids = store.delete_by_type(type)
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:
         cleanup_all_tmp(_get_workdir())
         grant_clear_all()
-        # 级联清改前备份（ADR-0027）：只清确实已删除的会话——加星幸存者不动
+        # 级联清改前备份（ADR-0027）：delete_by_type 返回的是真实被删 id
+        # 清单（加星幸存者天然不在内）
         from doclens.web_v2.deps import get_rewind_tracker
         tracker = get_rewind_tracker()
-        for sid in chat_ids_before:
-            if store.get(sid) is None:
-                tracker.purge(sid)
+        for sid in deleted_ids:
+            tracker.purge(sid)
     return {"ok": True, "deleted_count": deleted, "skipped_starred": skipped_starred}

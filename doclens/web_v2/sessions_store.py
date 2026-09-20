@@ -207,6 +207,27 @@ class SessionsStore:
 
     # ---- 写入 ----
 
+    def _append_item(self, session_id: str, kind: str, payload: dict) -> None:
+        """session_items 追加一条（锁内事务 MAX(seq)+1 续排）。
+
+        各 ``append_*``（kind 签名固定、payload dict 形态）的公共落库路径，
+        seq 分配与 payload 序列化约定收敛在此单一实现。
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT COALESCE(MAX(seq), -1) FROM session_items
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, row[0] + 1, kind,
+                 json.dumps(payload, ensure_ascii=False, default=str), now),
+            )
+
     def create(self, s: SessionSummary) -> None:
         with self._lock, self._conn() as conn:
             conn.execute(
@@ -362,7 +383,6 @@ class SessionsStore:
         Returns:
             是否新写入。
         """
-        now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
                 """SELECT kind, payload FROM session_items
@@ -376,19 +396,9 @@ class SessionsStore:
                     p = {}
                 if isinstance(p, dict) and p.get("content") == content:
                     return False
-            seq_row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'message_user', ?, ?)""",
-                (session_id, seq_row[0] + 1,
-                 json.dumps({"content": content}, ensure_ascii=False), now),
-            )
-            return True
+        # RLock 内嵌调用 _append_item：查-判与插-入之间无并发写入
+        self._append_item(session_id, "message_user", {"content": content})
+        return True
 
     def append_message_ai(
         self, session_id: str, content: str, tool_calls: list
@@ -400,28 +410,9 @@ class SessionsStore:
         references（恒 []——references SSE 事件后端本无产生点，历史前端
         写入也恒为空，等价）。调用方负责 message_count 刷新。
         """
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            seq_row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'message_ai', ?, ?)""",
-                (
-                    session_id,
-                    seq_row[0] + 1,
-                    json.dumps(
-                        {"content": content, "tool_calls": tool_calls,
-                         "references": []},
-                        ensure_ascii=False,
-                    ),
-                    now,
-                ),
-            )
+        self._append_item(session_id, "message_ai", {
+            "content": content, "tool_calls": tool_calls, "references": [],
+        })
 
     def append_raw_messages(self, session_id: str, messages: list[dict]) -> None:
         """追加一轮的原始消息序列（按 runner 轮内真实累积结构逐字节保存）。
@@ -436,21 +427,7 @@ class SessionsStore:
         """
         if not messages:
             return
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'raw_messages', ?, ?)""",
-                (session_id, row[0] + 1,
-                 json.dumps({"messages": messages}, ensure_ascii=False, default=str),
-                 now),
-            )
+        self._append_item(session_id, "raw_messages", {"messages": messages})
 
     def append_usage(self, session_id: str, usage: dict) -> None:
         """落库一轮的 token 用量（kind='usage'，2026-09-17），seq 按 MAX 续排。
@@ -459,6 +436,14 @@ class SessionsStore:
         context_window（宿主注入）；回放（get_chat_history）对未知 kind
         天然跳过，不进 LLM 上下文。
         """
+        self.append_usages(session_id, [usage])
+
+    def append_usages(self, session_id: str, usages: list) -> None:
+        """批量落库多轮 token 用量（单连接单事务，seq 连续续排）——
+        轮末收尾一次调用取代逐条 append_usage（每条独立连接+MAX(seq)
+        点查 + fsync，一轮工具循环 10+ 次调用即 10+ 次事务开销）。"""
+        if not usages:
+            return
         now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
@@ -466,12 +451,16 @@ class SessionsStore:
                    WHERE session_id = ?""",
                 (session_id,),
             ).fetchone()
-            conn.execute(
+            base = row[0]
+            conn.executemany(
                 """INSERT INTO session_items
                    (session_id, seq, kind, payload, created_at)
                    VALUES (?, ?, 'usage', ?, ?)""",
-                (session_id, row[0] + 1,
-                 json.dumps(usage, ensure_ascii=False), now),
+                [
+                    (session_id, base + i,
+                     json.dumps(u, ensure_ascii=False, default=str), now)
+                    for i, u in enumerate(usages, start=1)
+                ],
             )
 
     def append_compacted(self, session_id: str, messages: list[dict], pre_tokens: int) -> None:
@@ -490,24 +479,11 @@ class SessionsStore:
         """
         from planify.context.compact import estimate_tokens
 
-        post_tokens = estimate_tokens(messages)
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'compacted', ?, ?)""",
-                (session_id, row[0] + 1,
-                 json.dumps({"messages": messages,
-                             "pre_tokens": pre_tokens,
-                             "post_tokens": post_tokens},
-                            ensure_ascii=False, default=str), now),
-            )
+        self._append_item(session_id, "compacted", {
+            "messages": messages,
+            "pre_tokens": pre_tokens,
+            "post_tokens": estimate_tokens(messages),
+        })
 
     def append_microcompact(self, session_id: str, cleared_tool_use_ids: list[str]) -> None:
         """落库一轮微压缩（kind='microcompact'，ADR-0026），seq 按 MAX 续排。
@@ -519,21 +495,10 @@ class SessionsStore:
         """
         if not cleared_tool_use_ids:
             return
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'microcompact', ?, ?)""",
-                (session_id, row[0] + 1,
-                 json.dumps({"cleared_tool_use_ids": list(cleared_tool_use_ids)},
-                            ensure_ascii=False), now),
-            )
+        self._append_item(
+            session_id, "microcompact",
+            {"cleared_tool_use_ids": list(cleared_tool_use_ids)},
+        )
 
     # ---- 回退（ADR-0027：回退即事实）----
 
@@ -552,35 +517,22 @@ class SessionsStore:
         的并集（含锚点本身），其中条目（compacted / microcompact /
         skill_context / usage 等）全部不可见。
         """
-        payload = {
+        self._append_item(session_id, "rewound", {
             "point_seq": point_seq,
             "files_restored": files_restored or [],
             "files_deleted": files_deleted or [],
-        }
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT COALESCE(MAX(seq), -1) FROM session_items
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchone()
-            conn.execute(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, 'rewound', ?, ?)""",
-                (session_id, row[0] + 1,
-                 json.dumps(payload, ensure_ascii=False), now),
-            )
+        })
 
     def append_rewind_snapshot(
         self, session_id: str, anchor_seq: int, tracked_backups: dict
-    ) -> list:
+    ) -> tuple:
         """落一条文件快照（轮次开始时调用），环形上限 100 条/会话。
 
         tracked_backups: {路径: {"backup_file_name": str|None, "version": int}}
-        （None = 该时点文件不存在）。超上限删最旧，返回被驱逐快照的 payload
-        列表——调用方据此清理孤儿备份文件（文件内容备份在
-        ``.cortex/rewind/{session_id}/``，不归本库管）。
+        （None = 该时点文件不存在）。超上限删最旧，返回 ``(被驱逐快照的
+        payload 列表, 幸存快照引用的全部备份文件名集合)``——驱逐清单供
+        调用方清孤儿备份文件，幸存引用集合免掉为同一目的的第二次全量
+        查询（文件内容备份在 ``.cortex/rewind/{session_id}/``，不归本库管）。
         """
         payload = json.dumps({"tracked_file_backups": tracked_backups},
                              ensure_ascii=False)
@@ -606,7 +558,47 @@ class SessionsStore:
                     evicted.append(json.loads(r["payload"]))
                 except (json.JSONDecodeError, TypeError):
                     continue
-            return evicted
+            survivors = conn.execute(
+                """SELECT payload FROM rewind_snapshots
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchall()
+            referenced = set()
+            for r in survivors:
+                try:
+                    p = json.loads(r["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                for entry in p.get("tracked_file_backups", {}).values():
+                    name = entry.get("backup_file_name")
+                    if name:
+                        referenced.add(name)
+            return evicted, referenced
+
+    def latest_rewind_snapshot(self, session_id: str) -> Optional[dict]:
+        """最新一条文件快照（无则 None）：{anchor_seq, tracked_file_backups}。
+
+        写前备份路径（``_track``）的快照读取入口——每条新快照都全量继承
+        前一路径集（begin_turn 结转 + backfill 只写最新），「每路径最新
+        条目」恒等于最新一条快照的内容，无需全量读归并（全量归并只留给
+        低频的恢复规划）。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT anchor_seq, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            p = json.loads(row["payload"])
+        except (json.JSONDecodeError, TypeError):
+            p = {}
+        return {
+            "anchor_seq": row["anchor_seq"],
+            "tracked_file_backups": p.get("tracked_file_backups", {}),
+        }
 
     def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
         """把写前备份条目回填进**最新**快照（track_edit 通路，ADR-0027）。
@@ -679,18 +671,7 @@ class SessionsStore:
         投影与展示层共用：死段 = 全部闭区间 [point, boundary] 的并集
         （project_live_items）；展示层每个边界各渲染一个折叠条。
         """
-        items = self.get_detail(session_id)
-        out = []
-        for it in items:
-            if it.kind != "rewound":
-                continue
-            try:
-                p = json.loads(it.payload)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if isinstance(p, dict) and isinstance(p.get("point_seq"), int):
-                out.append((p["point_seq"], it.seq))
-        return out
+        return self._rewound_intervals(self.get_detail(session_id))
 
     def is_live_anchor(self, session_id: str, seq: int) -> bool:
         """seq 是否为一条**活** message_user（回退锚点校验：死段内不可再回退）。"""
@@ -707,6 +688,25 @@ class SessionsStore:
         return sum(1 for it in items if it.kind in ("message_user", "message_ai"))
 
     @staticmethod
+    def _rewound_intervals(items: list) -> list:
+        """解析全部回退边界为 (point_seq, boundary_seq) 区间（seq 升序）。
+
+        rewind_boundaries（API 投影）与 project_live_items（回放投影）共用
+        的单一解析实现——坏 payload 容错跳过，死段语义只此一处维护。
+        """
+        out = []
+        for it in items:
+            if it.kind != "rewound":
+                continue
+            try:
+                p = json.loads(it.payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(p, dict) and isinstance(p.get("point_seq"), int):
+                out.append((p["point_seq"], it.seq))
+        return out
+
+    @staticmethod
     def project_live_items(items: list) -> list:
         """回退边界投影：死段 = **全部**回退边界区间的并集，滤掉死段条目。
 
@@ -716,15 +716,7 @@ class SessionsStore:
         (0,4) 后新对话 5、6，再回退到 5，新边界 (5,7) 只盖 5..7，0..4
         靠旧边界仍死。无边界原样返回。
         """
-        intervals = []
-        for it in items:
-            if it.kind == "rewound":
-                try:
-                    p = json.loads(it.payload)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                if isinstance(p, dict) and isinstance(p.get("point_seq"), int):
-                    intervals.append((p["point_seq"], it.seq))
+        intervals = SessionsStore._rewound_intervals(items)
         if not intervals:
             return items
 
@@ -835,28 +827,44 @@ class SessionsStore:
             )
             return cur.rowcount > 0
 
-    def delete_by_type(self, type_: Optional[SessionType]) -> tuple[int, int]:
+    def delete_by_type(
+        self, type_: Optional[SessionType]
+    ) -> tuple[int, int, list]:
         """批量删除某 type 的全部未加星会话。type_=None 时清空所有类型。
 
         session_items 通过 FK ON DELETE CASCADE 自动级联删除。
-        加星会话（2026-09-17）受保护跳过；返回 (deleted, skipped_starred)。
+        加星会话（2026-09-17）受保护跳过；返回
+        ``(deleted_count, skipped_starred, 被删会话 id 列表)``——id 列表供
+        调用方做删除后级联清理（回退备份目录等），取代「删前快照全量 id
+        再逐个复查」的预测式（有竞态窗口且要靠魔法 limit 绕过分页）。
         """
         with self._lock, self._conn() as conn:
             if type_ is None:
                 skipped = conn.execute(
                     "SELECT COUNT(*) FROM sessions WHERE starred = 1",
                 ).fetchone()[0]
+                ids = [
+                    r[0] for r in conn.execute(
+                        "SELECT id FROM sessions WHERE starred = 0"
+                    ).fetchall()
+                ]
                 cur = conn.execute("DELETE FROM sessions WHERE starred = 0")
             else:
                 skipped = conn.execute(
                     "SELECT COUNT(*) FROM sessions WHERE type = ? AND starred = 1",
                     (type_.value,),
                 ).fetchone()[0]
+                ids = [
+                    r[0] for r in conn.execute(
+                        "SELECT id FROM sessions WHERE type = ? AND starred = 0",
+                        (type_.value,),
+                    ).fetchall()
+                ]
                 cur = conn.execute(
                     "DELETE FROM sessions WHERE type = ? AND starred = 0",
                     (type_.value,),
                 )
-            return cur.rowcount, skipped
+            return cur.rowcount, skipped, ids
 
     # ---- 读取 ----
 

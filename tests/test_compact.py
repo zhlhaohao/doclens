@@ -77,7 +77,7 @@ class TestSummaryInputBudget:
         assert "中段省略" in _render_for_summary(msgs)
         # 200K 窗口预算（159.8K）→ 全量可见
         assert "中段省略" not in _render_for_summary(
-            msgs, summary_input_budget=159_800
+            msgs, input_budget=159_800
         )
         assert _SUMMARY_INPUT_TOKEN_BUDGET == 100_000  # 兜底口径前提
 

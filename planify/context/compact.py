@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
@@ -29,10 +28,19 @@ from ..core.llm.provider import LLMProvider
 if TYPE_CHECKING:
     from ..core.llm.trace import LLMTracer
 
-# 非 ASCII 连续段（CJK / 全角 / emoji 等）：真实 tokenizer 约 1 token/字符
+# 非 ASCII 字符（CJK / 全角 / emoji 等）：真实 tokenizer 约 1 token/字符
 # （中文实测 0.6~1.1），取 1 略偏高估——高估只是提前触发压缩（安全方向），
-# 低估会撞上下文硬上限。
-_NON_ASCII_RE = re.compile(r"[^\x00-\x7F]+")
+# 低估会撞上下文硬上限。计数用 encode("ascii", errors="ignore") 一步差值。
+
+
+def _estimate_text_tokens(s: str) -> int:
+    """单字符串 token 估算：ASCII ÷4、非 ASCII ≈1 token/字符（密度公式
+    单一真相源——estimate_tokens 与摘要输入预算计量共用）。"""
+    if s.isascii():
+        return len(s) // 4
+    # 非 ASCII 字符数一步可得（比逐段 finditer 求和快数倍，长 dump 常态）
+    non_ascii = len(s) - len(s.encode("ascii", errors="ignore"))
+    return (len(s) - non_ascii) // 4 + non_ascii
 
 
 def estimate_tokens(messages: list) -> int:
@@ -53,11 +61,9 @@ def estimate_tokens(messages: list) -> int:
     Returns:
         估算的 token 数
     """
-    s = json.dumps(messages, default=str, ensure_ascii=False)
-    if s.isascii():
-        return len(s) // 4
-    non_ascii = sum(len(m.group(0)) for m in _NON_ASCII_RE.finditer(s))
-    return (len(s) - non_ascii) // 4 + non_ascii
+    return _estimate_text_tokens(
+        json.dumps(messages, default=str, ensure_ascii=False)
+    )
 
 
 def estimate_tokens_with_usage(
@@ -120,7 +126,6 @@ _TOOL_INPUT_CHARS = 200    # 工具调用入参保留字符数
 #   （÷4 密度），中文 ~100K 字，长对话中段不再轻易被丢；
 # - 头尾比例维持 1:3（头保任务目标、尾保最近工作——摘要第 6 节依赖尾部）。
 _SUMMARY_INPUT_TOKEN_BUDGET = 100_000
-_SUMMARY_HEAD_TOKENS = 25_000
 
 # 动态预算推导常量：输出预留 = 摘要输出上限（随配置）+ system/消息包装；
 # ×0.85 吸收 ÷4 启发式的估算误差（真实 tokenizer 可能高于估算 ~15%）
@@ -242,17 +247,8 @@ def _render_message(msg: dict) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def _estimate_text_tokens(s: str) -> int:
-    """单字符串 token 估算（与 estimate_tokens 同密度：ASCII ÷4、
-    非 ASCII ≈1 token/字符）——摘要输入预算计量用。"""
-    if s.isascii():
-        return len(s) // 4
-    non_ascii = sum(len(m.group(0)) for m in _NON_ASCII_RE.finditer(s))
-    return (len(s) - non_ascii) // 4 + non_ascii
-
-
 def _render_for_summary(
-    messages: list, summary_input_budget: Optional[int] = None
+    messages: list, input_budget: Optional[int] = None
 ) -> str:
     """历史 → 瘦身转录（摘要输入）。
 
@@ -263,10 +259,11 @@ def _render_for_summary(
 
     Args:
         messages: 历史消息列表
-        summary_input_budget: 输入 token 预算（None = 用保守兜底常量；
-            由 summary_input_budget(窗口声明) 推导），头部固定占 1/4
+        input_budget: 输入 token 预算（None = 用保守兜底常量；由
+            summary_input_budget(窗口声明) 推导），头部固定占 1/4
+            （参数名避开同名模块级函数——遮蔽后体内一调即无限递归）
     """
-    budget = summary_input_budget or _SUMMARY_INPUT_TOKEN_BUDGET
+    budget = input_budget or _SUMMARY_INPUT_TOKEN_BUDGET
     head_tokens = budget // 4  # 头尾维持 1:3（头保任务目标、尾保最近工作）
     lines: List[str] = []
     role_label = {"user": "用户", "assistant": "助手"}

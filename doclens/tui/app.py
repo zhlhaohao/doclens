@@ -371,7 +371,7 @@ class CortexApp(App):
             for name, info in loader.skills.items():
                 if loader.is_disabled(name):  # 命令注册同样走路由隔断
                     continue
-                if not info.get("user_invocable", True):
+                if not loader.is_user_invocable(name):
                     continue  # 仅模型可调：不进用户斜杠命令表
                 description = info["meta"].get("description", "Skill")
                 self._cmd_registry.register(Command(

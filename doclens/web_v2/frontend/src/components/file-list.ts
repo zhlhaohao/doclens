@@ -475,14 +475,23 @@ export class FileList extends LitElement {
     this._action(name);
   };
 
+  /** 下载菜单可用：单选 ∧ 非目录（桌面 toolbar 与移动菜单共用同一判定；
+   *  entry 不在当前目录缓存（跨目录残留选中）时放行由后端 404 兜底）。 */
+  private _canDownloadSelected(
+    entries: Array<{ path: string; is_dir: boolean }>,
+    selectedPaths: string[],
+  ): boolean {
+    if (selectedPaths.length !== 1) return false;
+    const selEntry = entries.find(e => e.path === selectedPaths[0]);
+    return selEntry?.is_dir !== true;
+  }
+
   private _renderMobileHeader() {
-    const { currentDir, selectedPaths } = store.getState().files;
+    const { currentDir, treeCache, selectedPaths } = store.getState().files;
     const canRename = selectedPaths.length === 1;
-    // 下载单选生效；目录置灰（与桌面 toolbar 同口径，跨目录残留选中由后端 404 兜底）
-    const canDownload = selectedPaths.length === 1
-      && !(store.getState().files.treeCache[currentDir] || []).some(
-        e => e.path === selectedPaths[0] && e.is_dir,
-      );
+    const canDownload = this._canDownloadSelected(
+      treeCache[currentDir] || [], selectedPaths,
+    );
     const canAct = selectedPaths.length >= 1;
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
 
@@ -575,12 +584,7 @@ export class FileList extends LitElement {
     const entries = treeCache[currentDir] || [];
     const sel = new Set(selectedPaths);
     const canRename = selectedPaths.length === 1;
-    // 下载与重命名同为单选生效；目录无下载意义（端点只服务文件），单选
-    // 目录时置灰——entry 不在当前目录缓存（跨目录残留选中）时放行由后端 404 兜底
-    const selEntry = selectedPaths.length === 1
-      ? entries.find(e => e.path === selectedPaths[0])
-      : undefined;
-    const canDownload = selectedPaths.length === 1 && selEntry?.is_dir !== true;
+    const canDownload = this._canDownloadSelected(entries, selectedPaths);
     const canAct = selectedPaths.length >= 1;
     const canGoUp = currentDir !== "";
     const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;

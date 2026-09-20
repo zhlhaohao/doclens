@@ -14,6 +14,7 @@
 import json
 import os
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
@@ -42,28 +43,35 @@ def _config_path() -> Path:
     return get_global_cortex_dir() / _FILENAME
 
 
+@lru_cache(maxsize=1)
+def _builtin_skills() -> dict:
+    """内置技能包的单次扫描（name → skills 条目），三个 builtin_* 视图共用。
+
+    内置技能目录（发行包 doclens/skills/）随版本固定、运行期不可变，
+    lru_cache 缓存扫描结果——此前 builtin_skill_names / builtin_skill_meta /
+    builtin_model_only_names 各自全量 rglob + 解析 SKILL.md，管理 API 一次
+    请求里同批文件要重复解析 2-3 遍。
+    """
+    pkg_skills = Path(__file__).parent / "skills"
+    if not pkg_skills.is_dir():
+        return {}
+    from planify.skills.skill_loader import SkillLoader
+
+    return dict(SkillLoader(pkg_skills).skills)
+
+
 def builtin_skill_names() -> set[str]:
     """内置技能名集合（发行包 doclens/skills/ 下各 SKILL.md 的 meta name）。
 
     注意目录名与技能名可能不一致（如目录 knowledge_base / 技能名 knowledge-base），
     一律以 meta name 为准——SkillLoader 与 sidecar 的键都是 meta name。
     """
-    pkg_skills = Path(__file__).parent / "skills"
-    if not pkg_skills.is_dir():
-        return set()
-    from planify.skills.skill_loader import SkillLoader
-
-    return set(SkillLoader(pkg_skills).skills.keys())
+    return set(_builtin_skills().keys())
 
 
 def builtin_skill_meta() -> dict[str, dict]:
     """内置技能 meta 表（name → frontmatter dict），供已删除内置技能的展示。"""
-    pkg_skills = Path(__file__).parent / "skills"
-    if not pkg_skills.is_dir():
-        return {}
-    from planify.skills.skill_loader import SkillLoader
-
-    return {n: s["meta"] for n, s in SkillLoader(pkg_skills).skills.items()}
+    return {n: s["meta"] for n, s in _builtin_skills().items()}
 
 
 def builtin_model_only_names() -> set[str]:
@@ -72,16 +80,8 @@ def builtin_model_only_names() -> set[str]:
     这些技能对宿主用户调用面全隐（管理页/工具箱/斜杠），管理 API 对其
     拒识（PATCH/restore 404）；DELETE 保留为清理出口。
     """
-    pkg_skills = Path(__file__).parent / "skills"
-    if not pkg_skills.is_dir():
-        return set()
-    from planify.skills.skill_loader import SkillLoader
-
-    return {
-        n
-        for n, s in SkillLoader(pkg_skills).skills.items()
-        if not s.get("user_invocable", True)
-    }
+    skills = _builtin_skills()
+    return {n for n, s in skills.items() if not s.get("user_invocable", True)}
 
 
 def _empty_data() -> dict:

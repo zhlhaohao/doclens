@@ -236,6 +236,16 @@ class SkillLoader:
         """某技能是否在停用名单中（宿主的展示层据此过滤）。"""
         return name in self._disabled
 
+    def is_user_invocable(self, name: str) -> bool:
+        """某技能是否可经**用户调用面**（宿主的斜杠命令 / 技能菜单等）调用。
+
+        与 :meth:`is_disabled` 并排的展示层谓词：frontmatter 未声明
+        ``user-invocable`` 默认可调用；声明为否（model-only 技能）时仅
+        模型侧 load_skill 可达。宿主的用户入口统一走本方法，谓词语义
+        变化（如增加第三态）只改此处。
+        """
+        return bool(self.skills.get(name, {}).get("user_invocable", True))
+
     def descriptions(self) -> str:
         """
         获取所有启用技能的描述（含路由指引与技能根目录事实）。停用技能不出现在清单中。

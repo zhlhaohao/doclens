@@ -260,6 +260,10 @@ export class ChatToolTrace extends LitElement {
   @state() private _expanded = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
+  /** lineDiff 结果记忆化（tool_use_id + 两文本长度 → 行）：流式期间每次
+   *  input_json_delta 触发重渲染，O(n×m) LCS DP 不记忆化则每 delta 重算
+   *  数十万 cell；文本单调增长，长度即版本号。超上限清空防长会话累积。 */
+  private _diffCache = new Map<string, DiffRow[]>();
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("steps")) {
@@ -340,13 +344,20 @@ export class ChatToolTrace extends LitElement {
     if (s.name !== "edit_file") return null;
     const { path, old_text, new_text } = s.input;
     if (typeof old_text !== "string" || typeof new_text !== "string") return null;
+    const key = `${s.tool_use_id}:${old_text.length}:${new_text.length}`;
+    let rows = this._diffCache.get(key);
+    if (rows === undefined) {
+      if (this._diffCache.size > 64) this._diffCache.clear();
+      rows = lineDiff(old_text, new_text);
+      this._diffCache.set(key, rows);
+    }
     const prefix: Record<DiffRow["type"], string> = { ctx: "  ", del: "- ", add: "+ " };
     return html`
       <div class="diff">
         ${typeof path === "string" && path
           ? html`<span class="dl path">${path}</span>`
           : nothing}
-        ${lineDiff(old_text, new_text).map(
+        ${rows.map(
           (r) => html`<span class="dl ${r.type}">${prefix[r.type]}${r.line}</span>`,
         )}
       </div>

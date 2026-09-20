@@ -8,7 +8,7 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession } from "../api/sessions";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -17,6 +17,7 @@ import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
+import { formatTokens } from "../utils/format";
 // 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
 export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
@@ -97,9 +98,6 @@ export function finalizeInterruptedMessages(messages: ChatMessage[]): ChatMessag
   });
 }
 
-/** 把后端 session_items 映射为 ChatMessage[]；tool_calls → tool_steps，老数据向后兼容。
- *  （2026-09-19 迁至 chat-timeline.ts，此处再导出保持既有 import 路径可用。） */
-
 /** 会话 usage 状态：占用口径（最近一次调用）+ 命中率口径（全会话累计）。 */
 export interface SessionUsageState {
   /** 最近一次调用的总输入 = input + cache_read + cache_creation（上下文峰值占用） */
@@ -115,6 +113,43 @@ export interface SessionUsageState {
   lastSeq: number;
 }
 
+/** 单条 usage 样本（SSE 事件或落库条目解析后的四字段）。 */
+interface UsageSample {
+  input: number;
+  read: number;
+  creation: number;
+  contextWindow: number;
+  /** 条目 seq（SSE 实时事件无 seq，用 MAX_SAFE_INTEGER 表「晚于一切落库条目」） */
+  seq: number;
+}
+
+/** 把一条 usage 样本不可变地并入聚合状态——SSE 实时事件与恢复态
+ *  items 聚合共用同一口径（used 取末条 / cache_read·总输入·次数累计），
+ *  漏改一处则「流式期间」与「刷新后」显示分叉。 */
+export function applyUsageEvent(
+  prev: SessionUsageState | null,
+  sample: UsageSample,
+): SessionUsageState {
+  const used = sample.input + sample.read + sample.creation;
+  return prev === null
+    ? {
+        used,
+        contextWindow: sample.contextWindow,
+        cacheReadTotal: sample.read,
+        inputTotal: used,
+        calls: 1,
+        lastSeq: sample.seq,
+      }
+    : {
+        ...prev,
+        used,
+        cacheReadTotal: prev.cacheReadTotal + sample.read,
+        inputTotal: prev.inputTotal + used,
+        calls: prev.calls + 1,
+        lastSeq: Math.max(prev.lastSeq, sample.seq),
+      };
+}
+
 /** 从 session_items 聚合全部 kind="usage" 条目（会话信息弹窗）：
  *  used 取最后一条（上下文占用），cache_read/总输入/调用次数全程累加
  *  （累计缓存命中率，2026-09-17 与 LLM trace 落盘同期加）；
@@ -122,12 +157,7 @@ export interface SessionUsageState {
 export function aggregateUsage(
   items: Array<{ kind: string; payload: string; seq?: number }>,
 ): SessionUsageState | null {
-  let cacheReadTotal = 0;
-  let inputTotal = 0;
-  let calls = 0;
-  let last: { input: number; read: number; creation: number; contextWindow: number } | null =
-    null;
-  let lastSeq = -1;
+  let state: SessionUsageState | null = null;
   for (const item of items) {
     if (item.kind !== "usage") continue;
     let p: Record<string, unknown>;
@@ -136,29 +166,15 @@ export function aggregateUsage(
     } catch {
       continue;
     }
-    const input = Number(p.input_tokens ?? 0);
-    const read = Number(p.cache_read_input_tokens ?? 0);
-    const creation = Number(p.cache_creation_input_tokens ?? 0);
-    cacheReadTotal += read;
-    inputTotal += input + read + creation;
-    calls += 1;
-    last = {
-      input,
-      read,
-      creation,
+    state = applyUsageEvent(state, {
+      input: Number(p.input_tokens ?? 0),
+      read: Number(p.cache_read_input_tokens ?? 0),
+      creation: Number(p.cache_creation_input_tokens ?? 0),
       contextWindow: Number(p.context_window ?? 0),
-    };
-    lastSeq = Math.max(lastSeq, Number(item.seq ?? -1));
+      seq: Number(item.seq ?? -1),
+    });
   }
-  if (last === null) return null;
-  return {
-    used: last.input + last.read + last.creation,
-    contextWindow: last.contextWindow,
-    cacheReadTotal,
-    inputTotal,
-    calls,
-    lastSeq,
-  };
+  return state;
 }
 
 /** 会话信息弹窗分母优先实时窗口：detail 携带当前 runtime 配置值（与压缩
@@ -585,19 +601,9 @@ export class ChatView extends LitElement {
     this._compacting = true;
     this._pushToast("正在压缩会话历史…", "info", 60000);
     try {
-      const res = await fetch(`/api/sessions/${session.id}/compact`, {
-        method: "POST",
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        this._pushToast(
-          `压缩失败：${body.detail || res.status}`, "error", 5000,
-        );
-        return;
-      }
-      const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+      const body = await compactSession(session.id);
       this._pushToast(
-        `已压缩（约 ${fmt(body.pre_tokens ?? 0)} → ${fmt(body.post_tokens ?? 0)} tokens）`,
+        `已压缩（约 ${formatTokens(body.pre_tokens ?? 0)} → ${formatTokens(body.post_tokens ?? 0)} tokens）`,
         "success", 4000,
       );
       void this._refreshCompaction();
@@ -613,9 +619,7 @@ export class ChatView extends LitElement {
     const session = this.viewState.currentSession;
     if (!session) return;
     try {
-      const res = await fetch(`/api/sessions/${session.id}`);
-      if (!res.ok) return;
-      const body = await res.json();
+      const body = await fetchSessionDetail(session.id);
       this._sessionCompaction = aggregateCompaction(body.items || []);
     } catch {
       // 拉取失败保留上次聚合结果
@@ -757,9 +761,7 @@ export class ChatView extends LitElement {
    *  恢复态（generating 占位 + 轮询），否则保持 initial 只高亮。 */
   private async _autoResumeIfGenerating(sessionId: string): Promise<void> {
     try {
-      const res = await fetch(`/api/sessions/${sessionId}`);
-      if (!res.ok) return;
-      const body = await res.json();
+      const body = await fetchSessionDetail(sessionId, { metaOnly: true });
       if (!body.generating) return;
       if (store.getState().chat.state !== "initial") return; // 已被用户操作抢占
       this._loadSession({
@@ -771,8 +773,9 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** generating 轮询（ADR-0028）：占位期间 5s 拉 detail，跑完自动刷新
-   *  收尾展示；离开该会话 / 停止后自清。 */
+  /** generating 轮询（ADR-0028）：占位期间 5s 拉 detail（metaOnly 轻量
+   *  端点——只需 generating 标志，不搬全量条目），跑完自动刷新收尾展示；
+   *  离开会话 / 停止后自清。 */
   private _startGeneratingPoll(sessionId: string): void {
     this._stopGeneratingPoll();
     this._genPollTimer = window.setInterval(async () => {
@@ -782,9 +785,7 @@ export class ChatView extends LitElement {
         return;
       }
       try {
-        const res = await fetch(`/api/sessions/${sessionId}`);
-        if (!res.ok) return;
-        const body = await res.json();
+        const body = await fetchSessionDetail(sessionId, { metaOnly: true });
         if (!body.generating) {
           this._stopGeneratingPoll();
           await this._loadSession(cur); // 续跑完成：刷新收尾展示
@@ -941,29 +942,16 @@ export class ChatView extends LitElement {
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type === "usage") {
-          // 总输入 = input + cache_read + cache_creation（上下文窗口真实占用）；
-          // 每次调用一条事件，累加出全会话命中率口径（不可变更新）
-          const used =
-            ev.input_tokens + ev.cache_read_input_tokens + ev.cache_creation_input_tokens;
-          const prev = this._sessionUsage;
-          this._sessionUsage = prev === null
-            ? {
-                used,
-                contextWindow: ev.context_window,
-                cacheReadTotal: ev.cache_read_input_tokens,
-                inputTotal: used,
-                calls: 1,
-                lastSeq: Number.MAX_SAFE_INTEGER,
-              }
-            : {
-                ...prev,
-                used,
-                cacheReadTotal: prev.cacheReadTotal + ev.cache_read_input_tokens,
-                inputTotal: prev.inputTotal + used,
-                calls: prev.calls + 1,
-                // 新实测必然晚于已知 compacted 条目——占用切回实测口径
-                lastSeq: Number.MAX_SAFE_INTEGER,
-              };
+          // 与恢复态聚合共用 applyUsageEvent（口径单一真相源）；
+          // seq = MAX_SAFE_INTEGER 表「新实测必然晚于已知 compacted 条目
+          // ——占用切回实测口径」
+          this._sessionUsage = applyUsageEvent(this._sessionUsage, {
+            input: ev.input_tokens,
+            read: ev.cache_read_input_tokens,
+            creation: ev.cache_creation_input_tokens,
+            contextWindow: ev.context_window,
+            seq: Number.MAX_SAFE_INTEGER,
+          });
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -1082,28 +1070,25 @@ export class ChatView extends LitElement {
       pendingAsk: null,
     });
     try {
-      const res = await fetch(`/api/sessions/${s.id}`);
-      if (res.ok) {
-        const body = await res.json();
-        const { messages, dividers } = buildChatTimeline(body.items || []);
-        // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
-        // + streaming 态（禁输入，停止钮可用）+ 轮询（跑完自动刷新展示）
-        const generating = !!body.generating;
-        actions.setChatState({
-          messages: generating
-            ? [...messages, { role: "assistant", content: "" }]
-            : messages,
-          streaming: generating,
-        });
-        if (generating) this._startGeneratingPoll(s.id);
-        else this._stopGeneratingPoll();
-        this._rewindDividers = dividers;
-        this._sessionUsage = applyLiveWindow(
-          aggregateUsage(body.items || []),
-          Number(body.context_window ?? 0),
-        );
-        this._sessionCompaction = aggregateCompaction(body.items || []);
-      }
+      const body = await fetchSessionDetail(s.id);
+      const { messages, dividers } = buildChatTimeline(body.items ?? []);
+      // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
+      // + streaming 态（禁输入，停止钮可用）+ 轮询（跑完自动刷新展示）
+      const generating = !!body.generating;
+      actions.setChatState({
+        messages: generating
+          ? [...messages, { role: "assistant", content: "" }]
+          : messages,
+        streaming: generating,
+      });
+      if (generating) this._startGeneratingPoll(s.id);
+      else this._stopGeneratingPoll();
+      this._rewindDividers = dividers;
+      this._sessionUsage = applyLiveWindow(
+        aggregateUsage(body.items ?? []),
+        Number(body.context_window ?? 0),
+      );
+      this._sessionCompaction = aggregateCompaction(body.items ?? []);
     } catch (e) {
       console.warn("load session failed", e);
     }

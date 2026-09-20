@@ -389,9 +389,13 @@ class CortexAgent:
         )
 
     def _get_llm_tracer(self):
-        """LLM 追踪器（CLI/TUI 会话级惰性单例；开关未开为 None）。"""
+        """LLM 追踪器（CLI/TUI 会话级惰性单例；开关未开为 None）。
+        workdir 显式传：trace 落 {workdir}/.planify/（gitignore 覆盖范围），
+        不随进程 cwd 漂移。"""
         if self._llm_tracer is None:
-            self._llm_tracer = LLMTracer.create(label="cli")
+            self._llm_tracer = LLMTracer.create(
+                label="cli", workdir=self.workdir
+            )
         return self._llm_tracer
 
     def run_query(

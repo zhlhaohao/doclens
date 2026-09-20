@@ -127,9 +127,10 @@ def test_snapshot_ring_and_backfill(store):
     _create(store)
     evicted_all = []
     for i in range(102):
-        evicted_all.extend(store.append_rewind_snapshot(
+        evicted, _referenced = store.append_rewind_snapshot(
             "s1", i, {"f": {"backup_file_name": f"b{i}", "version": i}},
-        ))
+        )
+        evicted_all.extend(evicted)
     snaps = store.list_rewind_snapshots("s1")
     assert len(snaps) == 100
     assert [s["anchor_seq"] for s in snaps] == list(range(2, 102))
@@ -371,9 +372,17 @@ def test_rewind_endpoint_rejects(api_env):
         ))
     with pytest.raises(CortexAPIError):
         asyncio.run(api.rewind_preview(session_id="s1", point_seq=1))
-    # 流式中 → 409
-    from doclens.web_v2 import chat_interrupt
-    ev = chat_interrupt.register_interrupt("s1")
+    # 流式中 → 409（判定源 = chat_runner 执行体登记表，与 POST /chat 预检同源）
+    from doclens.web_v2 import chat_runner
+
+    class _FakeTask:  # 只需 done()/add_done_callback 协议
+        def done(self):
+            return False
+
+        def add_done_callback(self, cb):
+            pass
+
+    assert chat_runner.try_register("s1", _FakeTask())  # type: ignore[arg-type]
     try:
         with pytest.raises(CortexAPIError) as ei:
             asyncio.run(api.rewind_session(
@@ -381,4 +390,4 @@ def test_rewind_endpoint_rejects(api_env):
             ))
         assert ei.value.status == 409
     finally:
-        chat_interrupt.unregister_interrupt("s1", ev)
+        chat_runner.clear_all()

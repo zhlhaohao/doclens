@@ -1,6 +1,8 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
+import { formatTokens } from "../utils/format";
+
 /** 会话信息对话框（2026-09-17）：展示当前会话的上下文窗口占用 + 累计缓存命中率
  *  + 自动压缩信息（ADR-0026）。usage 数据来自 SSE usage 事件 / 会话详情
  *  items 里的 kind="usage" 条目（占用口径 = 最近一次 LLM 调用的总输入
@@ -97,10 +99,6 @@ export class SessionInfoDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
   }
 
-  private _fmt(n: number): string {
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-  }
-
   render() {
     if (this.used === null || !this.contextWindow) {
       return html`
@@ -124,7 +122,7 @@ export class SessionInfoDialog extends LitElement {
       <div class="row">
         <div class="label">上下文占用</div>
         <div class="value">
-          ${this._fmt(this.used)} / ${this._fmt(this.contextWindow)}
+          ${formatTokens(this.used)} / ${formatTokens(this.contextWindow)}
           （${Math.round(pct * 100)}%）
         </div>
         <div class="bar">
@@ -144,8 +142,8 @@ export class SessionInfoDialog extends LitElement {
             <div class="label">缓存命中率（全会话累计）</div>
             <div class="value">${hitPct}%</div>
             <div class="value-sm">
-              cache_read ${this._fmt(this.cacheReadTotal!)} /
-              总输入 ${this._fmt(this.inputTotal!)} · ${this.calls} 次调用
+              cache_read ${formatTokens(this.cacheReadTotal!)} /
+              总输入 ${formatTokens(this.inputTotal!)} · ${this.calls} 次调用
             </div>
           </div>`
         : ""}
@@ -159,7 +157,7 @@ export class SessionInfoDialog extends LitElement {
                 ? `最近 ${new Date(this.lastCompactedAt).toLocaleString()}`
                 : ""}
               ${this.lastPreTokens !== null
-                ? ` · 压缩前 ${this._fmt(this.lastPreTokens)} tokens`
+                ? ` · 压缩前 ${formatTokens(this.lastPreTokens)} tokens`
                 : ""}
             </div>
           </div>`

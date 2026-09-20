@@ -123,7 +123,13 @@ class LLMTracer:
     def trace_request(self, kwargs: dict) -> int:
         """记「发」节（实发请求体，含缓存断点）。返回轮次号（供收节配对）。"""
         with self._state_lock:
-            self._turn = max(self._turn, self._existing_last_turn())
+            # 文件尾扫描只在实例首笔做（跨 tracer 续接同会话文件的轮次号）；
+            # 此后信任内存计数——同实例的 agent 工具循环每次 LLM 调用都
+            # 走这里，重扫文件尾（64KB read + regex）是纯浪费。并发 tracer
+            # 实例间轮次号可能撞号（各编各的），只影响 trace 文件内标题
+            # 排序，不影响内容完整性——调试设施可接受。
+            if self._turn == 0:
+                self._turn = self._existing_last_turn()
             self._turn += 1
             turn = self._turn
             self._t0[turn] = time.monotonic()
@@ -241,9 +247,7 @@ def _jsonable(obj: Any) -> Any:
         return obj
     if isinstance(obj, dict):
         return {str(k): _jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_jsonable(x) for x in obj]
-    if isinstance(obj, (set, frozenset)):
+    if isinstance(obj, (list, tuple, set, frozenset)):
         return [_jsonable(x) for x in obj]
     if isinstance(obj, Path):
         return str(obj)

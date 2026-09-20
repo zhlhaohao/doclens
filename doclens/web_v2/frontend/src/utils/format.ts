@@ -7,6 +7,12 @@ export function formatBytes(b: number): string {
   if (b < 1024 * 1024 * 1024) return `${fmt(b / (1024 * 1024))} MB`;
   return `${fmt(b / (1024 * 1024 * 1024))} GB`;
 }
+
+/** token 数值展示：≥1000 显示一位小数的 k 形态，否则原样
+ *  （会话信息弹窗占用 / 压缩结果 toast 共用）。 */
+export function formatTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
 function fmt(n: number): string {
   if (n < 10) {
     // 整数不显示小数位，非整数保留1位小数

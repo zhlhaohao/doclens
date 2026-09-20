@@ -99,7 +99,7 @@ async def list_skills():
     skills_loader = agent.runtime.skills
     skills = []
     for name, info in skills_loader.skills.items():
-        if not info.get("user_invocable", True):
+        if not skills_loader.is_user_invocable(name):
             continue
         state = skills_config.effective_state(name)
         if not state["context_menu"]:
@@ -126,7 +126,7 @@ async def list_skills_manage():
     items = [
         _manage_item(name, info.get("meta", {}), name in builtins)
         for name, info in loader.skills.items()
-        if info.get("user_invocable", True)
+        if loader.is_user_invocable(name)
     ]
     # 已删除的内置技能不在磁盘上（部署被跳过），从发行包 meta 补灰置条目
     deleted = skills_config.deleted_names()
@@ -145,11 +145,14 @@ async def patch_skill(name: str, req: SkillPatchRequest):
     name = _validate_name(name)
     loader = _scan_loader()
     builtins = skills_config.builtin_skill_names()
-    if name not in loader.skills and name not in skills_config.deleted_names():
-        raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")
-    # user-invocable: false → 配置面拒识（磁盘在或已删内置均按不存在处理）
+    # user-invocable: false（model-only）→ 配置面拒识：磁盘在或已删内置均
+    # 按不存在处理。is_user_invocable 对不在磁盘的条目默认放行（与旧
+    # `.get(name, {})` 口径一致），已删内置的 model-only 靠名单拦截
     if (
-        not loader.skills.get(name, {}).get("user_invocable", True)
+        name not in loader.skills
+        and name not in skills_config.deleted_names()
+    ) or (
+        not loader.is_user_invocable(name)
         or name in skills_config.builtin_model_only_names()
     ):
         raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")

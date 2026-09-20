@@ -27,11 +27,7 @@ import { fetchDocuments } from "../api/documents";
 import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { router } from "../router/router";
 import "../components/download-overlay";
-import {
-  jsbridgeDownloadAvailable,
-  downloadFile,
-  JsbridgeDownloadError,
-} from "../utils/jsbridge";
+import { downloadServerFile } from "../utils/download";
 
 type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
@@ -550,42 +546,26 @@ export class FilesView extends LitElement {
     }
   }
 
-  /** 下载选中文件（单选）：App WebView 内走 jsbridge 原生通道（`<a>` 下载
-   *  在 NexBox WebView 不可靠），普通浏览器走 `<a>` 点击（文件名由后端
-   *  Content-Disposition 提供）。与 preview-pane 的下载同端点同策略、
-   *  同视觉（下载中屏幕中心转圈遮罩 download-overlay）。 */
+  /** 下载选中文件（单选）：与 preview-pane 共用 utils/download.ts 的统一
+   *  编排（WebView 内 jsbridge 原生通道 / 浏览器 `<a>` 兜底），同视觉
+   *  （下载中屏幕中心转圈遮罩 download-overlay）。 */
   private async _downloadSelected(path: string): Promise<void> {
-    const url = `/api/preview/download?path=${encodeURIComponent(path)}`;
-    if (jsbridgeDownloadAvailable()) {
-      if (this._downloading) return;
-      this._downloading = true;
-      try {
-        const res = await downloadFile({
-          downloadUrl: `${window.location.origin}${url}`,
-        });
-        this._showToast(`已保存到下载目录：${res.name}`);
-      } catch (e) {
-        if (e instanceof JsbridgeDownloadError && e.unauthorized) {
-          actions.setAuthState({ authenticated: false });
-          router.navigate("login");
-          return;
-        }
-        this._showToast(`下载失败：${(e as Error)?.message || e}`);
-      } finally {
-        this._downloading = false;
-      }
-      return;
+    if (this._downloading) return;
+    this._downloading = true;
+    try {
+      const r = await downloadServerFile(path);
+      if (r.via !== "jsbridge") return;
+      if (r.name) this._showToast(`已保存到下载目录：${r.name}`);
+      else if (r.error) this._showToast(`下载失败：${r.error}`);
+      // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
+    } finally {
+      this._downloading = false;
     }
-    const a = document.createElement("a");
-    a.href = url;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   }
 
   /** 选中项里过滤掉目录，只留文件（技能 read_document 只能读文件）。 */
-  private _selectedFilePaths(): string[] {    const { treeCache, selectedPaths } = this._state;
+  private _selectedFilePaths(): string[] {
+    const { treeCache, selectedPaths } = this._state;
     // 多选可跨目录：从各目录缓存收集 entry 判定 is_dir
     const entryByPath = new Map<string, { path: string; is_dir: boolean }>();
     for (const entries of Object.values(treeCache)) {

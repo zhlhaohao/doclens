@@ -15,12 +15,14 @@
 import re
 from typing import Optional
 
+from doclens.web_v2.api._chat_markers import SLASH_HINT_MARKER
+
 # 技能名字符集与 API 校验一致（skills._NAME_RE：[A-Za-z0-9_.-]+）
 _SLASH_SKILL_RE = re.compile(r"^/([A-Za-z0-9_.-]+)(?:\s|$)")
 
 # hint 注入消息的标记（与 <loaded-skill> 语义区分：本标记 = 请求加载，
 # loaded-skill = 已加载正文；runner 的重注入去重只认 loaded-skill，不冲突）
-SLASH_HINT_RE = re.compile(r'<slash-skill-hint name="([^"]+)">')
+SLASH_HINT_RE = re.compile(re.escape(SLASH_HINT_MARKER) + r'([^"]+)">')
 
 _HINT_TEMPLATE = (
     "<system-reminder>\n"
@@ -50,10 +52,11 @@ def legal_slash_skill(message: str, skills_loader) -> Optional[str]:
     if not match:
         return None
     name = match.group(1)
-    info = skills_loader.skills.get(name)
-    if info is None or skills_loader.is_disabled(name):
-        return None
-    if not info.get("user_invocable", True):
+    if (
+        name not in skills_loader.skills
+        or skills_loader.is_disabled(name)
+        or not skills_loader.is_user_invocable(name)
+    ):
         return None
     return name
 
@@ -69,7 +72,7 @@ def hint_already_injected(history: list, name: str) -> bool:
     已注入则本轮不再追加——早轮 hint 已在上下文且 skill_context 落库按名
     幂等，重复注入会造成「内存两对、回放一对」的前缀分叉。
     """
-    marker = f'<slash-skill-hint name="{name}">'
+    marker = f"{SLASH_HINT_MARKER}{name}\">"
     return any(
         m.get("role") == "user"
         and isinstance(m.get("content"), str)

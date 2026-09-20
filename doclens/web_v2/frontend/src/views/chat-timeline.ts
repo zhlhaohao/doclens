@@ -34,6 +34,9 @@ interface RawItem {
 
 /** 单条 item → ChatMessage（message_user 带锚点 seq）；非消息条目返回 null。 */
 function mapItem(it: RawItem): ChatMessage | null {
+  // kind 前置过滤：raw_messages/compacted/usage/rewound 等（payload 可达
+  // 整轮消息序列或压缩摘要）解析后即弃——不为其付 JSON.parse 成本
+  if (it.kind !== "message_user" && it.kind !== "message_ai") return null;
   let payload: any;
   try {
     payload = JSON.parse(it.payload);
