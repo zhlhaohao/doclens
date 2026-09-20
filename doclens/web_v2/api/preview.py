@@ -12,13 +12,16 @@ from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from doclens.config import data_dirname
+from doclens.image_orienter import ORIENTABLE_IMAGE_EXTS, rotate_image_inplace
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
+from doclens.web_v2.api._auto_rotate import broadcast_rotated, drop_vision_queue_row
 from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 from doclens.web_v2.models.preview import (
     PreviewResponse,
+    PreviewRotateResponse,
     PreviewSaveRequest,
     PreviewSaveResponse,
     PreviewUploadResponse,
@@ -198,6 +201,32 @@ async def preview_raw(
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
     media_type = EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
     return FileResponse(path=str(full), media_type=media_type)
+
+
+@router.post("/preview/rotate", response_model=PreviewRotateResponse)
+def rotate_image(
+    path: str = Query(..., description="图像文件相对路径"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """预览期手动顺时针旋转 90° 并落盘（ADR-0029）。
+
+    复用判向自动旋转（ADR-0017）的像素旋转与收尾管线（同格式重编码 →
+    清视觉队列残留 → FileWatcher 自然重建重转写），但**无条件可用**——
+    纯像素操作，不依赖视觉 API 配置与 VISION_AUTO_ROTATE 开关。
+    同步 def 端点（threadpool 执行），PIL 单图操作耗时可接受。
+    """
+    base = Path(idx.search_path)
+    full, resolved_rel = _resolve_path(base, path, idx)
+    if full.suffix.lower() not in ORIENTABLE_IMAGE_EXTS:
+        raise CortexAPIError(400, "NOT_ROTATABLE", f"该格式不支持旋转: {path}")
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+    if not rotate_image_inplace(full, 90):
+        raise CortexAPIError(500, "ROTATE_FAILED", f"旋转失败: {path}")
+    # 收尾与判向旋转一致（ADR-0017 §6）；manual 标志驱动前端 toast 措辞
+    drop_vision_queue_row(full, idx.index_path)
+    broadcast_rotated(resolved_rel, manual=True)
+    return PreviewRotateResponse(path=resolved_rel, rotated=True)
 
 
 @router.get("/preview", response_model=PreviewResponse)

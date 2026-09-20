@@ -238,11 +238,13 @@ export class AppBar extends LitElement {
     }
   };
 
-  /** 上传图片后台判向旋转完成（ADR-0017）：toast 告知用户文件已被自动转正。 */
+  /** 图片旋转落盘完成：判向自动（ADR-0017）toast「已自动旋转」；
+   *  预览期手动（ADR-0029）toast「已旋转」（用户刚点的，非自动）。 */
   private _onImageRotated: (e: Event) => void = (e: Event) => {
-    const detail = (e as CustomEvent).detail as { path?: string };
+    const detail = (e as CustomEvent).detail as { path?: string; manual?: boolean };
     const name = (detail?.path ?? "").split("/").pop() || "图片";
-    this._pushToast(`已自动旋转：${name}`, "info", 4000);
+    const verb = detail?.manual ? "已旋转" : "已自动旋转";
+    this._pushToast(`${verb}：${name}`, "info", 4000);
   };
 
   private _onDocClick: (e: MouseEvent) => void = (e: MouseEvent) => {

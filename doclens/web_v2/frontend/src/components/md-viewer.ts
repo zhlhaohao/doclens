@@ -9,7 +9,7 @@ import katexStyles from "katex/dist/katex.min.css?inline";
 import { sanitizeHtml } from "../utils/sanitize";
 import { cjkInlineMath } from "../utils/marked-math";
 import type { PageMarker } from "../api/preview";
-import "./image-viewer";
+import { bustRawImages } from "./image-viewer";
 import "./icon";
 import {
   ScrollJumpController,
@@ -512,6 +512,23 @@ export class MdViewer extends LitElement {
 
   /** 悬浮跳转按钮（跳首行/跳尾行）：scroller = :host 自身 */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener("cortex:image-rotated", this._onImageRotated);
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("cortex:image-rotated", this._onImageRotated);
+    super.disconnectedCallback();
+  }
+
+  /** 图片旋转落盘（判向自动 ADR-0017 / 预览期手动 ADR-0029）：
+   *  刷新正文里指向该图的原图 <img>，防旧方向缓存。 */
+  private _onImageRotated = (e: Event) => {
+    const path = (e as CustomEvent).detail?.path as string | undefined;
+    if (path) bustRawImages(this.shadowRoot, path);
+  };
 
   firstUpdated() {
     this._scrollJump.attach(this);

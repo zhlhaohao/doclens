@@ -48,10 +48,11 @@ function dispatchReindexedToast(d: ReindexedPayload): void {
   }));
 }
 
-/** 上传图片后台判向旋转完成（ADR-0017）：派发 toast 事件（app-bar 消费）。 */
-function dispatchImageRotated(d: { path?: string }): void {
+/** 图片旋转落盘完成（判向自动 ADR-0017 / 预览期手动 ADR-0029）：派发事件
+ *  （app-bar 消费 toast；md-viewer / diary 缩略图刷新内嵌原图）。 */
+function dispatchImageRotated(d: { path?: string; manual?: boolean }): void {
   window.dispatchEvent(new CustomEvent("cortex:image-rotated", {
-    detail: { path: d.path ?? "" },
+    detail: { path: d.path ?? "", manual: d.manual === true },
   }));
 }
 
@@ -85,7 +86,7 @@ async function run(): Promise<void> {
           const d = safeParse<ReindexedPayload>(ev.data);
           if (d) dispatchReindexedToast(d);
         } else if (ev.event === "image_rotated") {
-          const d = safeParse<{ path?: string }>(ev.data);
+          const d = safeParse<{ path?: string; manual?: boolean }>(ev.data);
           if (d) dispatchImageRotated(d);
         } else if (ev.event === "diary_updated") {
           const d = safeParse<{ date?: string }>(ev.data);

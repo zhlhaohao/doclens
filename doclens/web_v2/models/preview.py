@@ -47,3 +47,9 @@ class PreviewUploadResponse(BaseModel):
     path: str
     bytes_written: int
     reindex_triggered: bool
+
+
+class PreviewRotateResponse(BaseModel):
+    """POST /api/preview/rotate 响应（ADR-0029 预览期手动旋转）。"""
+    path: str
+    rotated: bool

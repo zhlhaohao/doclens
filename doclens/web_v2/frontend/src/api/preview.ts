@@ -1,5 +1,7 @@
 /** PUT /api/preview 客户端。*/
 
+import { request } from "./client";
+
 export interface PreviewSaveResponse {
   path: string;
   content: string;
@@ -68,6 +70,23 @@ export async function uploadPreview(file: File): Promise<PreviewUploadResponse> 
     );
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/preview/rotate（ADR-0029 预览期手动旋转）
+// ---------------------------------------------------------------------------
+
+export interface PreviewRotateResponse {
+  path: string;
+  rotated: boolean;
+}
+
+/** 顺时针旋转 90° 并落盘（失败抛 ApiError）。 */
+export async function rotatePreviewImage(path: string): Promise<PreviewRotateResponse> {
+  return request<PreviewRotateResponse>(
+    `/api/preview/rotate?path=${encodeURIComponent(path)}`,
+    { method: "POST" },
+  );
 }
 
 // ---------------------------------------------------------------------------

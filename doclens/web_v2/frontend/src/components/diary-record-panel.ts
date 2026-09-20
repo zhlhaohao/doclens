@@ -27,7 +27,7 @@ import {
 } from "../utils/jsbridge";
 import "./icon";
 import "./input-box";
-import "./image-viewer";
+import { bustRawImages } from "./image-viewer";
 import "./toast-stack";
 import type { ToastStack } from "./toast-stack";
 
@@ -352,13 +352,26 @@ export class DiaryRecordPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener("cortex:image-rotated", this._onImageRotated);
     if (!this._dbgShown) {
       this._dbgShown = true;
       // 调试：进入记录页即弹环境诊断（点 toast 可提前关闭）
       this.updateComplete.then(() => this._debugToast(jsbridgeDebugSummary(), "info", 6000));
     }
   }
+
+  disconnectedCallback() {
+    window.removeEventListener("cortex:image-rotated", this._onImageRotated);
+    super.disconnectedCallback();
+  }
   private _dbgShown = false;
+
+  /** 图片旋转落盘（判向自动 ADR-0017 / 预览期手动 ADR-0029）：
+   *  刷新时间线上指向该图的缩略图 <img>，防旧方向缓存。 */
+  private _onImageRotated = (e: Event) => {
+    const path = (e as CustomEvent).detail?.path as string | undefined;
+    if (path) bustRawImages(this.renderRoot, path);
+  };
 
   /** 调试 toast：右下角展示（真机 webview 无 devtools 时的眼睛）；JSBRIDGE_DEBUG=false 时静默 */
   private _debugToast(message: string, level: "success" | "error" | "info" = "info", duration = 4000) {

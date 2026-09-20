@@ -68,11 +68,16 @@ def drop_vision_queue_row(abs_path: Path, index_path) -> None:
         logger.debug("drop vision queue row failed for %s: %s", abs_path, e)
 
 
-def broadcast_rotated(rel_path: str) -> None:
-    """经 WatchBroker 广播 image_rotated（线程安全；无 SSE 客户端时为空操作）。"""
+def broadcast_rotated(rel_path: str, manual: bool = False) -> None:
+    """经 WatchBroker 广播 image_rotated（线程安全；无 SSE 客户端时为空操作）。
+
+    manual=True 标记预览期手动旋转（ADR-0029）——前端 toast 据此区分措辞。
+    """
     try:
         from doclens.web_v2.watch_broker import get_watch_broker
 
-        get_watch_broker().broadcast("image_rotated", {"path": rel_path})
+        get_watch_broker().broadcast(
+            "image_rotated", {"path": rel_path, "manual": manual}
+        )
     except Exception as e:  # noqa: BLE001
         logger.debug("broadcast image_rotated failed: %s", e)
