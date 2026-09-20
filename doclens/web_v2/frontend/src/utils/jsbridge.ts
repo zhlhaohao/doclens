@@ -26,6 +26,10 @@ interface JsbridgeGlobal {
     fileName?: string;
     cookieName?: string;
   }): void;
+  /** 通用异步通道（jsbridge-dev-guide §2.3）：methodName = 注册插件名（仅异步插件） */
+  sendToNative(methodName: string, params: unknown, callBackClosureDict: JsbridgeCallbackDict): void;
+  /** 通用同步通道（仅 BaseJSPluginSync 同步插件；Android.syndMessageSend） */
+  syncSendToNative(methodName: string, params: unknown): string;
 }
 
 interface JsbridgeCallbackDict {
@@ -418,6 +422,38 @@ function downloadFailMessage(detail: string): string {
   if (detail.includes("NETWORK_ERROR")) return "网络错误，请检查连接";
   if (detail.includes("WRITE_FAILED")) return "保存失败（存储空间不足？）";
   return "下载失败，请重试";
+}
+
+/**
+ * 关闭当前 WebView 页退回 Android 宿主（用户菜单「退出」）。
+ *
+ * 原生插件 closeHtmlPage（JsCloseHtmlPage，已注册实装，行为 =
+ * getActivity().finish()）。注意它是 **BaseJSPluginSync 同步插件**——
+ * 必须走同步通道 syncSendToNative（Android.syndMessageSend）：
+ * 异步通道的 dispatchJSRequest 只路由异步插件，调同步插件会石沉大海
+ * （2026-09-20 真机「点了没退出」的根因；dev-guide §2.1 接口表曾误标
+ * 异步，已修正）。页面随后即 finish——返回值仅诊断用，不做回调依赖。
+ *
+ * Returns:
+ *     true = 通道可用已发起关闭；false = 非 WebView 环境 / 通道缺失或
+ *     原生异常（调用方 toast 兜底）。
+ */
+export function closeWebview(onFail?: (msg: string) => void): boolean {
+  if (
+    typeof window === "undefined" ||
+    !window.Android ||
+    !window.jsbridge ||
+    typeof window.jsbridge.syncSendToNative !== "function"
+  ) {
+    return false;
+  }
+  try {
+    window.jsbridge.syncSendToNative("closeHtmlPage", {});
+    return true;
+  } catch (e) {
+    onFail?.(`原生关闭 WebView 失败: ${(e as Error)?.message || e}`);
+    return false;
+  }
 }
 
 /**

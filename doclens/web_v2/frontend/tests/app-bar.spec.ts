@@ -34,6 +34,40 @@ describe("<app-bar>", () => {
     expect(menu?.classList.contains("open")).toBe(true);
   });
 
+  describe("WebView 内「退出」（closeHtmlPage）", () => {
+    it("webview 环境显示「退出」而非「注销登录」，点击调 closeHtmlPage", async () => {
+      const calls: Array<{ method: string; params: unknown }> = [];
+      const origAndroid = window.Android;
+      const origJsbridge = window.jsbridge;
+      (window as any).Android = { messageSend: () => {} };
+      (window as any).jsbridge = {
+        // closeHtmlPage 是 BaseJSPluginSync 同步插件——走 syncSendToNative
+        syncSendToNative: (method: string, params: unknown) => { calls.push({ method, params }); return '{"code":0}'; },
+      };
+      try {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        (el2.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+        await elementUpdated(el2);
+        const item = el2.shadowRoot?.querySelector('[data-testid="logout-item"]') as HTMLButtonElement;
+        // webview 内该项无条件显示为「退出」（App 用户需要退出键，与登录态无关）
+        expect(item).toBeTruthy();
+        expect(item.textContent).toContain("退出");
+        expect(item.textContent).not.toContain("注销登录");
+        item.click();
+        expect(calls).toHaveLength(1);
+        expect(calls[0].method).toBe("closeHtmlPage");
+      } finally {
+        (window as any).Android = origAndroid;
+        (window as any).jsbridge = origJsbridge;
+      }
+    });
+
+    it("非 webview 环境未登录（闸门未生效）不显示该项", async () => {
+      expect(window.Android).toBeUndefined();
+      expect(el.shadowRoot?.querySelector('[data-testid="logout-item"]')).toBeNull();
+    });
+  });
+
   it("clicking 全局配置 menu item dispatches navigate with settings+global", async () => {
     const btn = el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement;
     btn.click();

@@ -11,6 +11,7 @@ import "./about-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
+import { closeWebview, isWebviewContainer } from "../utils/jsbridge";
 import { router } from "../router/router";
 import { watchStatusLabel } from "../utils/watch-status";
 
@@ -246,6 +247,14 @@ export class AppBar extends LitElement {
 
   private async _onLogoutClick() {
     this._menuOpen = false;
+    // WebView 内该项语义为「退出」：关闭当前 WebView 退回 Android 宿主
+    // （原生插件 closeHtmlPage），不做登出——App 内会话由 cookie 维持，
+    // 下次进入仍是登录态
+    if (this._inWebview) {
+      const fired = closeWebview((msg) => this._pushToast(`退出失败：${msg}`, "error", 5000));
+      if (!fired) this._pushToast("当前环境不支持退出，请使用系统返回", "info", 4000);
+      return;
+    }
     try {
       await logout();
     } catch {
@@ -253,6 +262,17 @@ export class AppBar extends LitElement {
     }
     actions.setAuthState({ authenticated: false });
     router.navigate("login");
+  }
+
+  /** 运行在 App WebView 容器内（用户菜单末项语义切换：注销登录 → 退出） */
+  private get _inWebview(): boolean {
+    return isWebviewContainer();
+  }
+
+  private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
+    const stack = this.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
+    stack?.pushToast?.(message, level, duration);
   }
 
   connectedCallback() {
@@ -357,11 +377,11 @@ export class AppBar extends LitElement {
               </span>
             </button>
           ` : nothing}
-          ${this._showLogout ? html`
+          ${this._inWebview || this._showLogout ? html`
             <button class="menu-item" type="button" data-testid="logout-item" @click=${this._onLogoutClick}>
               <doclens-icon class="icon" name="log-out"></doclens-icon>
               <span class="text">
-                <span class="label">注销登录</span>
+                <span class="label">${this._inWebview ? "退出" : "注销登录"}</span>
               </span>
             </button>
           ` : nothing}

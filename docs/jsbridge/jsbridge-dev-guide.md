@@ -62,7 +62,7 @@ XxxPlugin（继承 BaseJSPlugin / BaseJSPluginSync）
 | `fullScreen` | JsFullScreenPlugin | 异步 | 全屏参数 | — |
 | `openHtmlPage` | JsOpenHtmlPage | **同步** | `{url: string}` | return `{code:"success"}`；启动 `PureX5WebViewActivity` |
 | `getScreenInfo` | JsGetScreenInfo | **同步** | `{}` | return `{width, height, code:0}` |
-| `closeHtmlPage` | JsCloseHtmlPage | 异步 | — | 关闭当前 WebView 页 |
+| `closeHtmlPage` | JsCloseHtmlPage | **同步** | `{}` | 关闭当前 WebView 页（finish Activity）；**必须走同步通道** `syncSendToNative`，异步通道不路由 Sync 插件 |
 | `showSoftInput` | JsShowSoftInput | 异步 | — | 唤起软键盘 |
 | `canGoBack` | JsCanGoBack | 异步 | `{value: "true"/"false"}` | 配合 `pageGoBack()`：物理返回键时 success `{result:"true"}` |
 | `getUserInfo` | JsGetUserInfo | 异步 | `{}` | success `{username, password, code:0}`（**写死的测试数据**） |
