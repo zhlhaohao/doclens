@@ -68,6 +68,95 @@ describe("<app-bar>", () => {
     });
   });
 
+  describe("WebView 顶栏关闭 X（替代 logo/标题）", () => {
+    it("webview 内不渲染 brand，左侧渲染 X 钮，点击走 closeHtmlPage", async () => {
+      const calls: Array<{ method: string; params: unknown }> = [];
+      const origAndroid = window.Android;
+      const origJsbridge = window.jsbridge;
+      (window as any).Android = { messageSend: () => {} };
+      (window as any).jsbridge = {
+        // closeHtmlPage 是 BaseJSPluginSync 同步插件——走 syncSendToNative
+        syncSendToNative: (method: string, params: unknown) => { calls.push({ method, params }); return '{"code":0}'; },
+      };
+      try {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        expect(el2.shadowRoot?.querySelector(".brand")).toBeNull();
+        expect(el2.shadowRoot?.querySelector(".close-btn")).toBeTruthy();
+        expect(el2.shadowRoot?.textContent).not.toContain("Doclens");
+        const btn = el2.shadowRoot?.querySelector('[data-testid="webview-close"]') as HTMLButtonElement;
+        btn.click();
+        expect(calls).toHaveLength(1);
+        expect(calls[0].method).toBe("closeHtmlPage");
+      } finally {
+        (window as any).Android = origAndroid;
+        (window as any).jsbridge = origJsbridge;
+      }
+    });
+
+    it("非 webview 环境：brand 在、X 钮不在", async () => {
+      expect(window.Android).toBeUndefined();
+      const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+      expect(el2.shadowRoot?.querySelector(".brand")).toBeTruthy();
+      expect(el2.shadowRoot?.querySelector('[data-testid="webview-close"]')).toBeNull();
+    });
+  });
+
+  describe("WebView 顶栏中央标题（宿主标题 ?title=）", () => {
+    /** 设置/恢复 URL query 与 jsbridge 环境（title 在 app-bar 构造时读取） */
+    async function withEnv(url: string, webview: boolean, fn: () => Promise<void>) {
+      const origHref = window.location.href;
+      const origAndroid = window.Android;
+      const origJsbridge = window.jsbridge;
+      window.history.replaceState(null, "", url);
+      if (webview) {
+        (window as any).Android = { messageSend: () => {} };
+        (window as any).jsbridge = { syncSendToNative: () => '{"code":0}' };
+      }
+      try {
+        await fn();
+      } finally {
+        window.history.replaceState(null, "", origHref);
+        (window as any).Android = origAndroid;
+        (window as any).jsbridge = origJsbridge;
+      }
+    }
+
+    it("webview + 带参（URL 编码中文）：中央渲染解码后的标题，brand 不渲染", async () => {
+      await withEnv(`/?title=${encodeURIComponent("我的知识库")}`, true, async () => {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        const title = el2.shadowRoot?.querySelector(".center-title");
+        expect(title?.textContent).toBe("我的知识库");
+        expect(el2.shadowRoot?.querySelector(".brand")).toBeNull();
+        // X 钮与中央标题共存（三列：左 X｜中标题｜右头像簇）
+        expect(el2.shadowRoot?.querySelector('[data-testid="webview-close"]')).toBeTruthy();
+      });
+    });
+
+    it("webview + 无参：中央留空（不渲染元素，不回退品牌名）", async () => {
+      await withEnv("/", true, async () => {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
+        expect(el2.shadowRoot?.querySelector(".brand")).toBeNull();
+        expect(el2.shadowRoot?.textContent).not.toContain("Doclens");
+      });
+    });
+
+    it("webview + 参数为空白：视为未传（trim）", async () => {
+      await withEnv("/?title=%20%20", true, async () => {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
+      });
+    });
+
+    it("浏览器 + 带参：忽略 ?title（brand 照常，无中央标题）", async () => {
+      await withEnv("/?title=%E6%B5%8F%E8%A7%88%E5%99%A8", false, async () => {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
+        expect(el2.shadowRoot?.querySelector(".brand")).toBeTruthy();
+      });
+    });
+  });
+
   it("clicking 全局配置 menu item dispatches navigate with settings+global", async () => {
     const btn = el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement;
     btn.click();

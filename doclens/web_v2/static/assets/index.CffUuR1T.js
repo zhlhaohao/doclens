@@ -13198,7 +13198,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;hf([y({type:Boolean,reflect:!0})],rn.prototype,"open",2);rn=hf([G("watch-changes-dialog")],rn);var x3=Object.defineProperty,w3=Object.getOwnPropertyDescriptor,Pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?w3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&x3(t,r,s),s};let Fs=class extends W{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 bb23715 · 2026-09-20 16:41 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
+  `;hf([y({type:Boolean,reflect:!0})],rn.prototype,"open",2);rn=hf([G("watch-changes-dialog")],rn);var x3=Object.defineProperty,w3=Object.getOwnPropertyDescriptor,Pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?w3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&x3(t,r,s),s};let Fs=class extends W{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 c8f6c89 · 2026-09-20 18:47 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -13213,7 +13213,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?u`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"bb23715 · 2026-09-20 16:41"}</span>
+            <span class="value">${"c8f6c89 · 2026-09-20 18:47"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
@@ -13334,7 +13334,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;Pn([y({type:Boolean,reflect:!0})],Fs.prototype,"open",2);Pn([k()],Fs.prototype,"_health",2);Pn([k()],Fs.prototype,"_healthError",2);Fs=Pn([G("about-dialog")],Fs);var y3=Object.defineProperty,_3=Object.getOwnPropertyDescriptor,Ci=(e,t,r,i)=>{for(var s=i>1?void 0:i?_3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&y3(t,r,s),s};let br=class extends W{constructor(){super(...arguments),this.activeView="search",this._menuOpen=!1,this._showSaveAndRevert=!1,this._showLogout=!1,this._watchDialogOpen=!1,this._panelOpen=!1,this._aboutOpen=!1,this._onWatchReindexed=e=>{const t=e.detail,r=t==null?void 0:t.doc_count,i=(t==null?void 0:t.failed_count)??0;i>0?this._pushToast(r!=null?`索引完成：${r} 文档，${i} 个文件失败`:`索引完成：${i} 个文件失败`,"error",5e3):this._pushToast(r!=null?`索引已更新：${r} 文档`:"索引已更新","success",3e3)},this._onImageRotated=e=>{const t=e.detail,r=((t==null?void 0:t.path)??"").split("/").pop()||"图片";this._pushToast(`已自动旋转：${r}`,"info",4e3)},this._onDocClick=e=>{if(!this._menuOpen)return;e.composedPath().includes(this)||(this._menuOpen=!1)}}_onAvatarClick(e){e.stopPropagation(),this._menuOpen=!this._menuOpen}_onControlPanelClick(){this._menuOpen=!1,this._panelOpen=!0}_onPanelOpenWatch(){this._panelOpen=!1,this._watchDialogOpen=!0}_onAboutMenuClick(){this._menuOpen=!1,this._aboutOpen=!0}_onScopeSelect(e){this._menuOpen=!1,this.dispatchEvent(new CustomEvent("navigate",{detail:{view:"settings",scope:e},bubbles:!0,composed:!0}))}_onRevertClick(){this._menuOpen=!1,window.dispatchEvent(new CustomEvent("cortex:revert-settings"))}async _onLogoutClick(){if(this._menuOpen=!1,this._inWebview){n4(t=>this._pushToast(`退出失败：${t}`,"error",5e3))||this._pushToast("当前环境不支持退出，请使用系统返回","info",4e3);return}try{await kh()}catch{}C.setAuthState({authenticated:!1}),_t.navigate("login")}get _inWebview(){return lc()}_pushToast(e,t,r){var s,a;const i=(s=this.shadowRoot)==null?void 0:s.querySelector("toast-stack");(a=i==null?void 0:i.pushToast)==null||a.call(i,e,t,r)}connectedCallback(){super.connectedCallback(),document.addEventListener("click",this._onDocClick),window.addEventListener("cortex:watch-reindexed",this._onWatchReindexed),window.addEventListener("cortex:image-rotated",this._onImageRotated),this._syncFromStore(),this._unsubStore=T.subscribe(()=>this._syncFromStore())}disconnectedCallback(){var e;document.removeEventListener("click",this._onDocClick),window.removeEventListener("cortex:watch-reindexed",this._onWatchReindexed),window.removeEventListener("cortex:image-rotated",this._onImageRotated),(e=this._unsubStore)==null||e.call(this),super.disconnectedCallback()}_syncFromStore(){const e=T.getState();this._showSaveAndRevert=e.view==="settings"&&e.settings.dirty,this._showLogout=e.auth.required===!0&&e.auth.authenticated,this.requestUpdate()}_openWatchDialog(){this._watchDialogOpen=!0}_renderSyncBadge(e){if(!e||!e.running&&!e.message)return A;const t=e.message!==""||e.last_success===!1,r=t?"warn":"dot",i=t?`⚠${e.message||"同步失败"}`:"●同步";return u`
+  `;Pn([y({type:Boolean,reflect:!0})],Fs.prototype,"open",2);Pn([k()],Fs.prototype,"_health",2);Pn([k()],Fs.prototype,"_healthError",2);Fs=Pn([G("about-dialog")],Fs);var y3=Object.defineProperty,_3=Object.getOwnPropertyDescriptor,Ci=(e,t,r,i)=>{for(var s=i>1?void 0:i?_3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&y3(t,r,s),s};let br=class extends W{constructor(){super(...arguments),this.activeView="search",this._menuOpen=!1,this._showSaveAndRevert=!1,this._showLogout=!1,this._watchDialogOpen=!1,this._panelOpen=!1,this._aboutOpen=!1,this._hostTitle=(()=>{var t;const e=(t=new URLSearchParams(window.location.search).get("title"))==null?void 0:t.trim();return e||null})(),this._onWatchReindexed=e=>{const t=e.detail,r=t==null?void 0:t.doc_count,i=(t==null?void 0:t.failed_count)??0;i>0?this._pushToast(r!=null?`索引完成：${r} 文档，${i} 个文件失败`:`索引完成：${i} 个文件失败`,"error",5e3):this._pushToast(r!=null?`索引已更新：${r} 文档`:"索引已更新","success",3e3)},this._onImageRotated=e=>{const t=e.detail,r=((t==null?void 0:t.path)??"").split("/").pop()||"图片";this._pushToast(`已自动旋转：${r}`,"info",4e3)},this._onDocClick=e=>{if(!this._menuOpen)return;e.composedPath().includes(this)||(this._menuOpen=!1)}}_onAvatarClick(e){e.stopPropagation(),this._menuOpen=!this._menuOpen}_onControlPanelClick(){this._menuOpen=!1,this._panelOpen=!0}_onPanelOpenWatch(){this._panelOpen=!1,this._watchDialogOpen=!0}_onAboutMenuClick(){this._menuOpen=!1,this._aboutOpen=!0}_onScopeSelect(e){this._menuOpen=!1,this.dispatchEvent(new CustomEvent("navigate",{detail:{view:"settings",scope:e},bubbles:!0,composed:!0}))}_onRevertClick(){this._menuOpen=!1,window.dispatchEvent(new CustomEvent("cortex:revert-settings"))}async _onLogoutClick(){if(this._menuOpen=!1,this._inWebview){this._exitWebview();return}try{await kh()}catch{}C.setAuthState({authenticated:!1}),_t.navigate("login")}_exitWebview(){this._menuOpen=!1,n4(t=>this._pushToast(`退出失败：${t}`,"error",5e3))||this._pushToast("当前环境不支持退出，请使用系统返回","info",4e3)}get _inWebview(){return lc()}_pushToast(e,t,r){var s,a;const i=(s=this.shadowRoot)==null?void 0:s.querySelector("toast-stack");(a=i==null?void 0:i.pushToast)==null||a.call(i,e,t,r)}connectedCallback(){super.connectedCallback(),document.addEventListener("click",this._onDocClick),window.addEventListener("cortex:watch-reindexed",this._onWatchReindexed),window.addEventListener("cortex:image-rotated",this._onImageRotated),this._syncFromStore(),this._unsubStore=T.subscribe(()=>this._syncFromStore())}disconnectedCallback(){var e;document.removeEventListener("click",this._onDocClick),window.removeEventListener("cortex:watch-reindexed",this._onWatchReindexed),window.removeEventListener("cortex:image-rotated",this._onImageRotated),(e=this._unsubStore)==null||e.call(this),super.disconnectedCallback()}_syncFromStore(){const e=T.getState();this._showSaveAndRevert=e.view==="settings"&&e.settings.dirty,this._showLogout=e.auth.required===!0&&e.auth.authenticated,this.requestUpdate()}_openWatchDialog(){this._watchDialogOpen=!0}_renderSyncBadge(e){if(!e||!e.running&&!e.message)return A;const t=e.message!==""||e.last_success===!1,r=t?"warn":"dot",i=t?`⚠${e.message||"同步失败"}`:"●同步";return u`
       <span
         class="watch-badge sync-badge ${r}"
         role="status"
@@ -13349,11 +13349,23 @@ ${s}</table>
         title="点击查看近期文件变化"
         @click=${this._openWatchDialog}
       ><doclens-icon name="folder"></doclens-icon>${r}</button>
+    `}_renderWebviewClose(){return u`
+      <button
+        class="close-btn"
+        type="button"
+        data-testid="webview-close"
+        aria-label="关闭"
+        title="关闭并返回 App"
+        @click=${this._exitWebview}
+      ><doclens-icon name="x"></doclens-icon></button>
     `}render(){return u`
-      <div class="brand">
-        <span class="logo">${ph(f3)}</span>
-        <span>Doclens</span>
-      </div>
+      ${this._inWebview?this._renderWebviewClose():u`
+        <div class="brand">
+          <span class="logo">${ph(f3)}</span>
+          <span>Doclens</span>
+        </div>
+      `}
+      ${this._inWebview&&this._hostTitle?u`<div class="center-title">${this._hostTitle}</div>`:A}
       <div class="right-cluster">
         ${this._renderSyncBadge(T.getState().syncStatus)}
         ${this._renderWatchBadge(T.getState().watcher)}
@@ -13413,9 +13425,11 @@ ${s}</table>
       ></about-dialog>
     `}};br.styles=q`
     :host {
-      display: flex;
+      /* 三列：左（X/品牌）｜中（宿主标题）｜右（徽标+头像）——中列 1fr 使标题
+       * 光学居中且被截断时不挤两侧；toast-stack 与对话框为 fixed 脱流不占格。 */
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
-      justify-content: space-between;
       height: 56px;
       padding: 0 calc(var(--cortex-space-2) + 4px);
       background: var(--cortex-surface);
@@ -13426,11 +13440,25 @@ ${s}</table>
       font-family: var(--cortex-font);
     }
     .brand {
+      grid-column: 1;
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
       font-weight: 600;
       font-size: var(--cortex-fs-md);
+    }
+    /* 宿主标题（CONTEXT.md）：webview 内中央单行展示，超长省略号截断 */
+    .center-title {
+      grid-column: 2;
+      min-width: 0;
+      text-align: center;
+      font-weight: 600;
+      font-size: var(--cortex-fs-md);
+      color: var(--cortex-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 var(--cortex-space-2);
     }
     .brand .logo {
       width: 28px; height: 28px;
@@ -13442,7 +13470,33 @@ ${s}</table>
       flex-shrink: 0;
     }
     .brand .logo svg { width: 100%; height: 100%; display: block; }
+    /* WebView 容器内左侧关闭钮（替代 logo/标题）：视觉语言对齐 avatar-btn */
+    .close-btn {
+      grid-column: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      font-size: 20px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 50%;
+      color: var(--cortex-text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .close-btn:hover {
+      background: var(--cortex-primary-soft);
+      border-color: var(--cortex-border);
+    }
+    .close-btn:focus-visible {
+      outline: 2px solid var(--cortex-primary);
+      outline-offset: 1px;
+    }
     .right-cluster {
+      grid-column: 3;
       display: flex;
       align-items: center;
       gap: var(--cortex-space-3);

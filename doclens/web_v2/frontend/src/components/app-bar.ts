@@ -19,9 +19,11 @@ import { watchStatusLabel } from "../utils/watch-status";
 export class AppBar extends LitElement {
   static styles = css`
     :host {
-      display: flex;
+      /* 三列：左（X/品牌）｜中（宿主标题）｜右（徽标+头像）——中列 1fr 使标题
+       * 光学居中且被截断时不挤两侧；toast-stack 与对话框为 fixed 脱流不占格。 */
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
-      justify-content: space-between;
       height: 56px;
       padding: 0 calc(var(--cortex-space-2) + 4px);
       background: var(--cortex-surface);
@@ -32,11 +34,25 @@ export class AppBar extends LitElement {
       font-family: var(--cortex-font);
     }
     .brand {
+      grid-column: 1;
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
       font-weight: 600;
       font-size: var(--cortex-fs-md);
+    }
+    /* 宿主标题（CONTEXT.md）：webview 内中央单行展示，超长省略号截断 */
+    .center-title {
+      grid-column: 2;
+      min-width: 0;
+      text-align: center;
+      font-weight: 600;
+      font-size: var(--cortex-fs-md);
+      color: var(--cortex-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 var(--cortex-space-2);
     }
     .brand .logo {
       width: 28px; height: 28px;
@@ -48,7 +64,33 @@ export class AppBar extends LitElement {
       flex-shrink: 0;
     }
     .brand .logo svg { width: 100%; height: 100%; display: block; }
+    /* WebView 容器内左侧关闭钮（替代 logo/标题）：视觉语言对齐 avatar-btn */
+    .close-btn {
+      grid-column: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      font-size: 20px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 50%;
+      color: var(--cortex-text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .close-btn:hover {
+      background: var(--cortex-primary-soft);
+      border-color: var(--cortex-border);
+    }
+    .close-btn:focus-visible {
+      outline: 2px solid var(--cortex-primary);
+      outline-offset: 1px;
+    }
     .right-cluster {
+      grid-column: 3;
       display: flex;
       align-items: center;
       gap: var(--cortex-space-3);
@@ -173,6 +215,13 @@ export class AppBar extends LitElement {
   @state() private _panelOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
+  /** 宿主标题（CONTEXT.md）：Android 宿主经 URL query `?title=`（URL 编码）
+   *  传入，启动读一次（SPA 导航 query 保留，刷新重读）；trim 后空串视为
+   *  未传。仅 webview 内渲染于 app bar 中央。 */
+  private readonly _hostTitle: string | null = (() => {
+    const t = new URLSearchParams(window.location.search).get("title")?.trim();
+    return t ? t : null;
+  })();
   private _unsubStore?: () => void;
 
   private _onWatchReindexed: (e: Event) => void = (e: Event) => {
@@ -247,8 +296,7 @@ export class AppBar extends LitElement {
     // （原生插件 closeHtmlPage），不做登出——App 内会话由 cookie 维持，
     // 下次进入仍是登录态
     if (this._inWebview) {
-      const fired = closeWebview((msg) => this._pushToast(`退出失败：${msg}`, "error", 5000));
-      if (!fired) this._pushToast("当前环境不支持退出，请使用系统返回", "info", 4000);
+      this._exitWebview();
       return;
     }
     try {
@@ -260,7 +308,14 @@ export class AppBar extends LitElement {
     router.navigate("login");
   }
 
-  /** 运行在 App WebView 容器内（用户菜单末项语义切换：注销登录 → 退出） */
+  /** 关闭 WebView 退回宿主（顶栏 X 与用户菜单「退出」共用；closeHtmlPage 同步通道） */
+  private _exitWebview() {
+    this._menuOpen = false;
+    const fired = closeWebview((msg) => this._pushToast(`退出失败：${msg}`, "error", 5000));
+    if (!fired) this._pushToast("当前环境不支持退出，请使用系统返回", "info", 4000);
+  }
+
+  /** 运行在 App WebView 容器内（顶栏左侧 logo/标题换关闭 X；菜单末项语义切换：注销登录 → 退出） */
   private get _inWebview(): boolean {
     return isWebviewContainer();
   }
@@ -334,12 +389,31 @@ export class AppBar extends LitElement {
     `;
   }
 
+  /** WebView 顶栏左侧关闭钮（替代 logo/标题）：关闭当前 WebView 退回 Android 宿主。 */
+  private _renderWebviewClose() {
+    return html`
+      <button
+        class="close-btn"
+        type="button"
+        data-testid="webview-close"
+        aria-label="关闭"
+        title="关闭并返回 App"
+        @click=${this._exitWebview}
+      ><doclens-icon name="x"></doclens-icon></button>
+    `;
+  }
+
   render() {
     return html`
-      <div class="brand">
-        <span class="logo">${unsafeSVG(appLogoSvg)}</span>
-        <span>Doclens</span>
-      </div>
+      ${this._inWebview ? this._renderWebviewClose() : html`
+        <div class="brand">
+          <span class="logo">${unsafeSVG(appLogoSvg)}</span>
+          <span>Doclens</span>
+        </div>
+      `}
+      ${this._inWebview && this._hostTitle
+        ? html`<div class="center-title">${this._hostTitle}</div>`
+        : nothing}
       <div class="right-cluster">
         ${this._renderSyncBadge(store.getState().syncStatus)}
         ${this._renderWatchBadge(store.getState().watcher)}
