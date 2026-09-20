@@ -271,7 +271,10 @@ export class FilesView extends LitElement {
   @state() private _previewWritable = false;
   @state() private _previewPages: PageMarker[] | null = null;
   @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
-  @state() private _previewError: "NOT_INDEXED" | null = null;
+  /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
+   *  二进制 415「请下载后查看」）；null = 无错误。设置后移动端 detail 层
+   *  渲染带返回条的错误提示页，不再卡空白整页。 */
+  @state() private _previewError: string | null = null;
   @state() private _previewDirty = false;
 
   @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
@@ -923,6 +926,14 @@ export class FilesView extends LitElement {
       this._previewPages = null;
       this._previewAttachments = null;
     } else {
+      // 其他失败（如二进制 415）：同样进错误态页（移动端整页需要返回条），
+      // toast 仍弹一瞬作即时反馈
+      this._previewError = result.message || "预览失败";
+      this._previewPath = path;
+      this._previewContent = "";
+      this._previewWritable = false;
+      this._previewPages = null;
+      this._previewAttachments = null;
       this._showToast(result.message || "预览失败");
     }
   }
@@ -985,11 +996,15 @@ export class FilesView extends LitElement {
     this._showToast(`下载失败：${e.detail.message}`);
   };
 
-  private _renderNotIndexedHint(mobile = false) {
-    const hint = html`<div class="preview-placeholder">
-      该文件未索引，无法预览。<br>
-      请先执行 doclens index 后重试。
-    </div>`;
+  private _renderPreviewErrorHint(mobile = false) {
+    const hint = this._previewError === "NOT_INDEXED"
+      ? html`<div class="preview-placeholder">
+          该文件未索引，无法预览。<br>
+          请先执行 doclens index 后重试。
+        </div>`
+      : html`<div class="preview-placeholder">
+          ${this._previewError ?? "预览失败"}
+        </div>`;
     // 移动端 detail 层无 preview-pane 的 mobile-header，须自带返回条，
     // 否则用户卡在「未索引」提示页无法回文件列表
     if (!mobile) return hint;
@@ -1009,8 +1024,8 @@ export class FilesView extends LitElement {
   }
 
   private _renderPreviewPane(opts: { noHeader?: boolean; mobile?: boolean } = {}) {
-    if (this._previewError === "NOT_INDEXED") {
-      return this._renderNotIndexedHint(opts.mobile ?? false);
+    if (this._previewError) {
+      return this._renderPreviewErrorHint(opts.mobile ?? false);
     }
     if (!this._previewPath) {
       return html`<div class="preview-placeholder">点击文件预览</div>`;

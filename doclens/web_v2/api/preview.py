@@ -36,6 +36,25 @@ BINARY_PREVIEW_EXTS = frozenset({
     ".rtf", ".epub", ".csv", ".mhtml", ".mht",
 }) | IMAGE_EXTENSIONS
 
+# 二进制嗅探字节数（git is-binary 判据：前导块含 NUL 即二进制）
+_BINARY_SNIFF_BYTES = 8192
+
+
+def _looks_binary(full: Path) -> bool:
+    """文本兜底路径的二进制嗅探：前 8KB 含 NUL 字节即判定二进制。
+
+    BINARY_PREVIEW_EXTS 只覆盖**已知解析器**的类型；未知扩展（apk/zip/
+    exe/dll/db…）会漏进文本兜底被 read_text(errors="replace") 喷成乱码
+    （2026-09-20 实测）。嗅探按内容判定，与扩展名无关，兜住全部未知
+    二进制。UTF-16 文本含 NUL 会被误杀——此类文件现状渲染同样是乱码，
+    可接受。
+    """
+    try:
+        with open(full, "rb") as f:
+            return b"\x00" in f.read(_BINARY_SNIFF_BYTES)
+    except OSError:
+        return False  # 读失败留给 read_text 的既有错误处理
+
 
 def _compute_writable(full: Path, search_path: Path) -> bool:
     """判断文件是否可在 PUT /api/preview 中写入。
@@ -217,6 +236,13 @@ async def preview(
 
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+
+    # 二进制嗅探（按内容，与扩展名无关）：未知二进制不支持预览——不把
+    # 字节乱码当文本渲染，引导下载查看（前端通用错误 toast 呈现）
+    if _looks_binary(full):
+        raise CortexAPIError(
+            415, "BINARY_NOT_PREVIEWABLE", "二进制文件不支持预览，请下载后查看"
+        )
 
     try:
         text = full.read_text(encoding="utf-8", errors="replace")
