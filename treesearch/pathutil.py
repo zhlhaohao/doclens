@@ -63,11 +63,14 @@ def _find_gitignore(start_dir: str) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
-def _load_gitignore_spec(root: str):
+def load_gitignore_spec(root: str):
     """Load ``<root>/.gitignore`` as a ``pathspec`` matcher.
 
     Returns a ``(pathspec.PathSpec, base_dir)`` tuple, or ``(None, root)``
     if the file is not found or ``pathspec`` is not installed.
+
+    Public since 1.2.8: hosts (file watchers etc.) reuse the exact same
+    rules as the indexer — single source of truth, no drift.
     """
     gitignore_path = _find_gitignore(root)
     if not gitignore_path:
@@ -116,7 +119,7 @@ def _iter_walk_directory(
     (max_files + 1)-th match.
     """
     directory = os.path.abspath(directory)
-    gitignore_spec, gitignore_base = _load_gitignore_spec(directory) if respect_gitignore else (None, directory)
+    gitignore_spec, gitignore_base = load_gitignore_spec(directory) if respect_gitignore else (None, directory)
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(directory, followlinks=follow_symlinks):
