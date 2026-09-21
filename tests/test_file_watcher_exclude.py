@@ -45,6 +45,30 @@ def test_unsupported_extension_excluded(tmp_path: Path):
     assert h._should_handle(str(exe)) is False
 
 
+def test_gitignored_file_excluded(tmp_path: Path):
+    """索引根 .gitignore 命中的文件事件被丢弃（与索引器同规则源）。"""
+    (tmp_path / ".gitignore").write_text("generated/\n*.draft.md\n", encoding="utf-8")
+    seen: list = []
+    h = _handler(tmp_path, seen)
+
+    gen = tmp_path / "generated" / "out.md"
+    (tmp_path / "generated").mkdir()
+    draft = tmp_path / "docs" / "note.draft.md"
+    assert h._should_handle(str(gen)) is False
+    assert h._should_handle(str(draft)) is False
+    h.on_modified(_Evt(str(gen)))
+    assert seen == []
+
+
+def test_gitignore_absent_no_filter(tmp_path: Path):
+    """无 .gitignore 时不过滤（行为与旧版一致）。"""
+    (tmp_path / "docs").mkdir()
+    seen: list = []
+    h = _handler(tmp_path, seen)
+    assert h._gitignore_spec is None
+    assert h._should_handle(str(tmp_path / "docs" / "note.draft.md")) is True
+
+
 class _Evt:
     """最小 watchdog 事件桩（on_modified 只用 is_directory/src_path）。"""
 

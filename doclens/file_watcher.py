@@ -44,6 +44,15 @@ if _HAS_WATCHDOG:
             self._callback = callback
             self._search_path = os.path.normpath(search_path).lower()
             self._extensions = set(SUPPORTED_FORMATS.keys())
+            # .gitignore 过滤（与索引器同一规则源：索引根的 .gitignore，
+            # treesearch.pathutil.load_gitignore_spec 公共化接口）。启动时
+            # 快照——运行中编辑 .gitignore 重启生效。pathspec 未安装时降级
+            # 为不过滤（与索引器 respect_gitignore 的可选依赖行为一致）。
+            try:
+                from treesearch.pathutil import load_gitignore_spec
+                self._gitignore_spec, self._gitignore_base = load_gitignore_spec(search_path)
+            except ImportError:
+                self._gitignore_spec, self._gitignore_base = None, search_path
             # 误报去重快照：normcase 路径 → (mtime_ns, size)。
             # 启动时用各文件当前 mtime/size 建立基线（_init_baseline），使后续
             # on_modified 能用 prev==cur 去重 Windows 读访问触发的伪事件（仅 atime
@@ -57,7 +66,15 @@ if _HAS_WATCHDOG:
             if data_dirname() in (p.lower() for p in parts):
                 return False
             _, ext = os.path.splitext(path)
-            return ext.lower() in self._extensions
+            if ext.lower() not in self._extensions:
+                return False
+            # .gitignore 命中即丢弃（与索引器过滤口径一致，调用方式逐字
+            # 相同——relpath 原样传 match_file，防两处行为漂移）
+            if self._gitignore_spec is not None:
+                rel = os.path.relpath(path, self._gitignore_base)
+                if self._gitignore_spec.match_file(rel):
+                    return False
+            return True
 
         @staticmethod
         def _snapshot_key(path: str) -> str:
