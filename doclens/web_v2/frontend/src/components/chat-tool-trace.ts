@@ -258,6 +258,8 @@ export class ChatToolTrace extends LitElement {
 
   @property({ attribute: false }) steps: ToolStep[] = [];
   @state() private _expanded = false;
+  /** 用户手动切换过展开态——此后运行态自动展开/收起不再覆盖。 */
+  private _userToggled = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
   /** lineDiff 结果记忆化（tool_use_id + 两文本长度 → 行）：流式期间每次
@@ -270,12 +272,17 @@ export class ChatToolTrace extends LitElement {
       const oldSteps = (changed.get("steps") as ToolStep[] | undefined) ?? [];
       const wasRunning = oldSteps.some((s) => s.status === "running");
       const nowRunning = this.steps.some((s) => s.status === "running");
-      if (!wasRunning && nowRunning) this._expanded = true;
-      else if (wasRunning && !nowRunning) this._expanded = false;
+      // 自动展开/收起只服务未手动操作过的 trace；用户切换过展开态后
+      // 不再覆盖（手工展开不会被「运行结束自动收起」回吞）
+      if (!this._userToggled) {
+        if (!wasRunning && nowRunning) this._expanded = true;
+        else if (wasRunning && !nowRunning) this._expanded = false;
+      }
     }
   }
 
   private _toggle() {
+    this._userToggled = true;
     this._expanded = !this._expanded;
   }
 

@@ -49,6 +49,34 @@ describe("<chat-tool-trace>", () => {
     expect(el.shadowRoot!.querySelector(".err")).toBeTruthy();
   });
 
+  it("manual expand survives run-finish auto-collapse", async () => {
+    // 用户在运行中手动收起又展开（反复查看）→ 结尾为展开态；
+    // 运行结束不得自动收起（尊重显式操作）
+    const el = await trace([running]);
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeTruthy();
+
+    el.steps = [done];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeTruthy();
+  });
+
+  it("manual collapse during run suppresses auto re-expand", async () => {
+    // 运行中用户手动收起 → 新一轮工具开始（running 再现）不得强制展开
+    const el = await trace([running]);
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+
+    const running2: ToolStep = { tool_use_id: "t2", name: "search", input: {}, status: "running" };
+    el.steps = [done, running2];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+  });
+
   it("truncates long output with expand-all toggle", async () => {
     const long: ToolStep = {
       tool_use_id: "t1", name: "read_document", input: {},
