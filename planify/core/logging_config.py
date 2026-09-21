@@ -1,9 +1,10 @@
 """日志配置
 
-提供安全的文件日志记录，支持编码错误处理。
+提供安全的文件日志记录，支持编码错误处理与大小轮转。
 """
 
 import logging
+import logging.handlers
 import os
 import sys
 from datetime import datetime
@@ -20,12 +21,12 @@ def data_dirname() -> str:
     return os.environ.get("CORTEX_DATA_DIRNAME", ".cortex")
 
 
-class SafeFileHandler(logging.FileHandler):
+class SafeFileHandler(logging.handlers.RotatingFileHandler):
     """
-    安全的文件日志处理器
+    安全的轮转文件日志处理器
 
-    继承自 logging.FileHandler，添加编码错误处理。
-    当遇到无法编码的字符时，自动替换为 UTF-8 安全字符。
+    继承 RotatingFileHandler（大小轮转，默认单文件 20MB × 5 个备份），
+    添加编码错误处理。轮转兜底任何自反馈/刷屏类日志异常，防日志文件无限增长。
     """
 
     def emit(self, record):
@@ -100,7 +101,10 @@ def setup_logging(
     handlers = []
 
     log_file = log_dir / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
-    file_handler = SafeFileHandler(log_file, encoding='utf-8')
+    # 大小轮转兜底：即使出现自反馈/刷屏类异常，单日日志封顶 maxBytes × (backupCount+1)
+    file_handler = SafeFileHandler(
+        log_file, maxBytes=20 * 1024 * 1024, backupCount=5, encoding='utf-8'
+    )
     file_handler.setFormatter(formatter)
     handlers.append(file_handler)
 
@@ -119,9 +123,12 @@ def setup_logging(
     # Suppress noisy third-party loggers to WARNING (they spam DEBUG millions of lines)
     # sse_starlette: 每个 SSE chunk/ping 都 debug 一次（watch/chat 流），刷屏且无用
     # PIL: 读 PNG 每个数据块（IDAT 等）都 debug 一次（STREAM ...），图像解析时刷屏
+    # watchdog: inotify/observers 每个内核事件 debug 一次（in-event ...）——日志
+    #   文件若在被监控目录内，写日志 → IN_MODIFY → 再 debug 的自反馈风暴（曾把
+    #   单日 debug log 刷到 GB 级；Linux inotify 下 1ms 多条）
     for _name in ("pdfminer", "pdfplumber", "markitdown",
                   "urllib3", "httpx", "httpcore", "asyncio", "filelock",
-                  "sse_starlette", "PIL"):
+                  "sse_starlette", "PIL", "watchdog"):
         logging.getLogger(_name).setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
