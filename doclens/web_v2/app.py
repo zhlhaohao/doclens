@@ -345,6 +345,17 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
     # CORTEX_NO_BROWSER=1 时不弹浏览器（供 Stop hook 自动重启使用，避免反复弹窗）
     open_browser = not os.environ.get("CORTEX_NO_BROWSER")
 
+    # Linux 无头环境（无 DISPLAY / WAYLAND_DISPLAY）自动跳过：图形浏览器
+    # 不存在，webbrowser/xdg-open 会回落到文本浏览器（lynx/w3m）——在
+    # 当前终端把 Web UI 当文本页面打开，劫持终端。Windows/macOS 不检查
+    # （总有图形会话）；SSH 无头服务器从此无需手动设 CORTEX_NO_BROWSER。
+    import sys
+    if open_browser and sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        print("[无图形会话，跳过浏览器自动打开：http://%s:%s]" % (host, port))
+        open_browser = False
+
     def _verify_gui_ready() -> bool:
         """实测用户链路：SPA 根页 + files 列表 + status 均 200 才算真可用。
 
