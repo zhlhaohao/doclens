@@ -424,6 +424,13 @@ def write_report(results: list[dict], run_id: str, out_dir: Path, meta: dict) ->
     def _avg(xs):
         return sum(xs) / len(xs) if xs else None
 
+    # recall 命中面：>0（至少找回一篇 gold）/ =0（一篇未中），分母为有 gold 集的题
+    rec_n = len(recalls)
+    rec_pos = sum(1 for x in recalls if x > 0)
+    rec_zero = sum(1 for x in recalls if x == 0)
+    rec_pos_pct = f"{rec_pos / rec_n * 100:.1f}%（{rec_pos}/{rec_n}）" if rec_n else "—"
+    rec_zero_pct = f"{rec_zero / rec_n * 100:.1f}%（{rec_zero}/{rec_n}）" if rec_n else "—"
+
     lines = []
     lines.append(f"# EnterpriseRAG Benchmark 报告 · {run_id}")
     lines.append("")
@@ -439,6 +446,8 @@ def write_report(results: list[dict], run_id: str, out_dir: Path, meta: dict) ->
     lines.append(f"| AI 评分（1-10） | {_fmt(_avg(scores))} |")
     lines.append(f"| 契合度 recall | {_fmt(_avg(recalls))} |")
     lines.append(f"| 契合度 precision | {_fmt(_avg(precisions))} |")
+    lines.append(f"| recall>0 占比（命中面） | {rec_pos_pct} |")
+    lines.append(f"| recall=0 占比（零命中） | {rec_zero_pct} |")
     lines.append(f"| 耗时 wall（s/题） | {_fmt(_avg(walls))} |")
     lines.append(f"| 首 token（s） | {_fmt(_avg(ftts))} |")
     lines.append("")

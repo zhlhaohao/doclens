@@ -1,0 +1,653 @@
+[
+ {
+  "qid": "qst_0306",
+  "run": "20260914_181349",
+  "qt": "intra_document_reasoning",
+  "st": "slack",
+  "score": 1
+ },
+ {
+  "qid": "qst_0323",
+  "run": "20260914_181349",
+  "qt": "intra_document_reasoning",
+  "st": "linear",
+  "score": 3
+ },
+ {
+  "qid": "qst_0325",
+  "run": "20260914_181349",
+  "qt": "intra_document_reasoning",
+  "st": "slack",
+  "score": 2
+ },
+ {
+  "qid": "qst_0334",
+  "run": "20260914_181349",
+  "qt": "intra_document_reasoning",
+  "st": "slack",
+  "score": 1
+ },
+ {
+  "qid": "qst_0345",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,gmail",
+  "score": 6
+ },
+ {
+  "qid": "qst_0353",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence",
+  "score": 4
+ },
+ {
+  "qid": "qst_0354",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,github,google_drive,jira",
+  "score": 6
+ },
+ {
+  "qid": "qst_0355",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,gmail,slack",
+  "score": 6
+ },
+ {
+  "qid": "qst_0356",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,gmail,jira",
+  "score": 4
+ },
+ {
+  "qid": "qst_0357",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,slack",
+  "score": 4
+ },
+ {
+  "qid": "qst_0358",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence",
+  "score": 4
+ },
+ {
+  "qid": "qst_0362",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,github,gmail,jira,slack",
+  "score": 6
+ },
+ {
+  "qid": "qst_0365",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,github,google_drive,linear,slack",
+  "score": 3
+ },
+ {
+  "qid": "qst_0366",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,github,jira,linear,slack",
+  "score": 5
+ },
+ {
+  "qid": "qst_0367",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,gmail,jira,slack",
+  "score": 5
+ },
+ {
+  "qid": "qst_0371",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,slack",
+  "score": 3
+ },
+ {
+  "qid": "qst_0373",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,linear",
+  "score": 5
+ },
+ {
+  "qid": "qst_0378",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,github,google_drive,jira",
+  "score": 6
+ },
+ {
+  "qid": "qst_0380",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "jira,linear",
+  "score": 5
+ },
+ {
+  "qid": "qst_0370",
+  "run": "20260913_141933",
+  "qt": "project_related",
+  "st": "confluence,jira,slack",
+  "score": 5
+ },
+ {
+  "qid": "qst_0384",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0391",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "google_drive",
+  "score": 4
+ },
+ {
+  "qid": "qst_0394",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0399",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "slack",
+  "score": 3
+ },
+ {
+  "qid": "qst_0400",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 4
+ },
+ {
+  "qid": "qst_0403",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence,linear",
+  "score": 2
+ },
+ {
+  "qid": "qst_0404",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0405",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0406",
+  "run": "20260913_160249",
+  "qt": "constrained",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0437",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 2
+ },
+ {
+  "qid": "qst_0440",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 6
+ },
+ {
+  "qid": "qst_0441",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0444",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 4
+ },
+ {
+  "qid": "qst_0445",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0447",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0433",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0439",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0450",
+  "run": "20260913_171828",
+  "qt": "completeness",
+  "st": "fireflies",
+  "score": 2
+ },
+ {
+  "qid": "qst_0411",
+  "run": "20260913_194948",
+  "qt": "conflicting_info",
+  "st": "google_drive,jira",
+  "score": 3
+ },
+ {
+  "qid": "qst_0413",
+  "run": "20260913_194948",
+  "qt": "conflicting_info",
+  "st": "jira",
+  "score": 5
+ },
+ {
+  "qid": "qst_0415",
+  "run": "20260913_194948",
+  "qt": "conflicting_info",
+  "st": "confluence,slack",
+  "score": 4
+ },
+ {
+  "qid": "qst_0422",
+  "run": "20260913_194948",
+  "qt": "conflicting_info",
+  "st": "confluence,linear",
+  "score": 4
+ },
+ {
+  "qid": "qst_0430",
+  "run": "20260913_194948",
+  "qt": "conflicting_info",
+  "st": "confluence,fireflies",
+  "score": 4
+ },
+ {
+  "qid": "qst_0458",
+  "run": "20260913_201707",
+  "qt": "miscellaneous",
+  "st": "confluence",
+  "score": 5
+ },
+ {
+  "qid": "qst_0461",
+  "run": "20260913_201707",
+  "qt": "miscellaneous",
+  "st": "google_drive",
+  "score": 4
+ },
+ {
+  "qid": "qst_0471",
+  "run": "20260913_222045",
+  "qt": "high_level",
+  "st": "",
+  "score": 2
+ },
+ {
+  "qid": "qst_0474",
+  "run": "20260913_222045",
+  "qt": "high_level",
+  "st": "",
+  "score": 6
+ },
+ {
+  "qid": "qst_0475",
+  "run": "20260913_222045",
+  "qt": "high_level",
+  "st": "",
+  "score": 6
+ },
+ {
+  "qid": "qst_0480",
+  "run": "20260913_222045",
+  "qt": "high_level",
+  "st": "",
+  "score": 3
+ },
+ {
+  "qid": "qst_0002",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "github",
+  "score": 2
+ },
+ {
+  "qid": "qst_0006",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 6
+ },
+ {
+  "qid": "qst_0007",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0014",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "fireflies",
+  "score": 2
+ },
+ {
+  "qid": "qst_0016",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "confluence",
+  "score": 3
+ },
+ {
+  "qid": "qst_0028",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 4
+ },
+ {
+  "qid": "qst_0030",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "linear",
+  "score": 3
+ },
+ {
+  "qid": "qst_0032",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "linear",
+  "score": 3
+ },
+ {
+  "qid": "qst_0037",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "jira",
+  "score": 3
+ },
+ {
+  "qid": "qst_0039",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0043",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 3
+ },
+ {
+  "qid": "qst_0047",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0051",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 2
+ },
+ {
+  "qid": "qst_0053",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 2
+ },
+ {
+  "qid": "qst_0055",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "gmail",
+  "score": 4
+ },
+ {
+  "qid": "qst_0058",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "gmail",
+  "score": 2
+ },
+ {
+  "qid": "qst_0061",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "linear",
+  "score": 2
+ },
+ {
+  "qid": "qst_0062",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0064",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 1
+ },
+ {
+  "qid": "qst_0065",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "jira",
+  "score": 3
+ },
+ {
+  "qid": "qst_0072",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 2
+ },
+ {
+  "qid": "qst_0074",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "github",
+  "score": 2
+ },
+ {
+  "qid": "qst_0077",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "github",
+  "score": 2
+ },
+ {
+  "qid": "qst_0091",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0100",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 4
+ },
+ {
+  "qid": "qst_0105",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0108",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 2
+ },
+ {
+  "qid": "qst_0118",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "confluence",
+  "score": 4
+ },
+ {
+  "qid": "qst_0121",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "fireflies",
+  "score": 3
+ },
+ {
+  "qid": "qst_0123",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "hubspot",
+  "score": 2
+ },
+ {
+  "qid": "qst_0131",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "hubspot",
+  "score": 4
+ },
+ {
+  "qid": "qst_0134",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 1
+ },
+ {
+  "qid": "qst_0135",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "jira",
+  "score": 3
+ },
+ {
+  "qid": "qst_0137",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "hubspot",
+  "score": 4
+ },
+ {
+  "qid": "qst_0138",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "hubspot",
+  "score": 2
+ },
+ {
+  "qid": "qst_0141",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ },
+ {
+  "qid": "qst_0144",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 3
+ },
+ {
+  "qid": "qst_0149",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "slack",
+  "score": 5
+ },
+ {
+  "qid": "qst_0150",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "confluence",
+  "score": 2
+ },
+ {
+  "qid": "qst_0155",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 3
+ },
+ {
+  "qid": "qst_0158",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "linear",
+  "score": 5
+ },
+ {
+  "qid": "qst_0161",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "github",
+  "score": 2
+ },
+ {
+  "qid": "qst_0165",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "gmail",
+  "score": 2
+ },
+ {
+  "qid": "qst_0169",
+  "run": "20260913_230003",
+  "qt": "basic",
+  "st": "google_drive",
+  "score": 2
+ }
+]
