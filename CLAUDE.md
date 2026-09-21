@@ -341,14 +341,16 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 ### 三种运行模式
 
-**1. TUI 界面（交互式终端）**
+> **默认入口是 Web UI**：`doclens` 裸命令（及 `./start-app.ps1` 无参）等价 `doclens gui`；TUI 需显式 `doclens tui`。
+
+**1. TUI 界面（交互式终端，需显式指定）**
 ```powershell
-./start-app.ps1
 ./start-app.ps1 tui
 ```
 
-**2. Web UI（GUI PWA）**
+**2. Web UI（GUI PWA，默认模式）**
 ```powershell
+./start-app.ps1
 ./start-app.ps1 gui
 ```
 > 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：

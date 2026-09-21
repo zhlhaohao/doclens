@@ -99,10 +99,12 @@ Write-Host "  然后重启 Claude Code 会话，用 skill 做知识库问答："
 Write-Host "    /kb-ask 新能源汽车技术有哪些"
 Write-Host "========================" -ForegroundColor Cyan
 
-# gui 启动时记忆显式 -C 工作目录，供 Stop hook 自动重启时复用（显式 -C 压过
-# global 配置，重启必须保持用户显式意图）。未传 -C 时清除 stamp——hook 重启
-# 不带 -C，工作目录由 global CORTEX_WORKDIR 接管。stamp 文件已 gitignore。
-if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
+# gui 模式判定：无参（doclens 裸命令默认 gui）或显式 'gui'。tui/search 等子命令
+# 透传不注入。gui 启动时记忆显式 -C 工作目录，供 Stop hook 自动重启时复用
+# （显式 -C 压过 global 配置，重启必须保持用户显式意图）。未传 -C 时清除
+# stamp——hook 重启不带 -C，工作目录由 global CORTEX_WORKDIR 接管。stamp 已 gitignore。
+$modeGui = ($args.Count -eq 0) -or ($args[0] -eq 'gui')
+if ($modeGui) {
     $workdirStamp = Join-Path $PSScriptRoot ".claude/.last-app-workdir"
     if ($explicitWorkdir) {
         Set-Content -Path $workdirStamp -Value $explicitWorkdir -NoNewline -Encoding utf8
@@ -111,11 +113,12 @@ if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
     }
 }
 
-# 仅 gui 子命令注入 --port；用户显式传 --port 时尊重用户。
+# 仅 gui 模式（无参 = 裸 doclens 默认 gui / 显式 'gui'）注入 --port；
+# 用户显式传 --port 时尊重用户。tui/search 等子命令原样透传。
 $finalArgs = @()
-if ($args.Count -gt 0 -and $args[0] -eq 'gui') {
+if ($modeGui) {
     $finalArgs += 'gui'
-    $rest = @($args | Select-Object -Skip 1)
+    $rest = if ($args.Count -gt 0) { @($args | Select-Object -Skip 1) } else { @() }
     if ($rest -notcontains '--port') {
         $finalArgs += '--port', $port
     }

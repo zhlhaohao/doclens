@@ -920,6 +920,13 @@ def _build_parser():
     )
     gui_parser.set_defaults(func=_cli_gui)
 
+    # cortex tui —— 显式进入终端界面（裸命令默认已是 gui）
+    tui_parser = sub.add_parser(
+        "tui", help="Launch interactive TUI (Textual)",
+        parents=[common],
+    )
+    tui_parser.set_defaults(func=_cli_tui)
+
     # cortex auth reset
     auth_parser = sub.add_parser("auth", help="GUI 访问密码管理", parents=[common])
     auth_sub = auth_parser.add_subparsers(dest="auth_action", required=True)
@@ -1174,6 +1181,79 @@ def _cli_gui(args, config, idx):
     launch_app(port=port, host=host, share=args.share)
 
 
+def _cli_tui(args, config, idx):
+    """Handle `cortex tui` — launch Textual TUI（显式子命令；裸命令默认已是 gui）。
+
+    自管首启引导与索引检查（main 中特判跳过 _init_components——保持原
+    「裸命令进 TUI」时代的行为，不预构建 IndexManager）。config/idx 入参
+    恒为 None（签名与分派约定统一）。
+    """
+    import sqlite3
+
+    config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
+    index_path = config.index_path or os.path.join(config.search_path, data_dirname(), "index.db")
+
+    # Check if index exists and contains documents
+    doc_count = 0
+    if os.path.exists(index_path):
+        try:
+            with sqlite3.connect(index_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM documents")
+                doc_count = cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"[警告] 无法读取索引: {e}")
+
+    if doc_count == 0:
+        search_path = config.search_path
+        try:
+            response = input(
+                f"当前目录 '{search_path}' 尚未建立索引，是否创建？ [Y/n] "
+            ).strip().lower()
+        except EOFError:
+            print("当前目录尚未建立索引，请在交互式终端中运行或先手动创建索引。")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\n已取消。")
+            sys.exit(1)
+
+        if response and response not in ("y", "yes"):
+            print("已取消。如需进入 TUI，请先建立索引。")
+            sys.exit(1)
+
+        print("正在创建索引...")
+
+        def on_progress(current_file: str, processed: int, total: int):
+            print(f"Indexing [{processed}/{total}] {current_file}")
+
+        try:
+            from treesearch import set_config, TreeSearch, TreeSearchConfig
+            set_config(TreeSearchConfig(
+                cjk_tokenizer=config.cjk_tokenizer,
+                max_index_fail_count=config.max_index_fail_count,
+                enable_shadow_md=config.treesearch_enable_shadow_md,
+                xlsx_max_rows_per_sheet=config.treesearch_xlsx_max_rows_per_sheet,
+                xlsx_max_consecutive_empty_rows=config.treesearch_xlsx_max_consecutive_empty_rows,
+                allowed_source_types=config.allowed_source_types,
+            ))
+            ts = TreeSearch(search_path, db_path=index_path)
+            ts.index(search_path, progress_callback=on_progress)
+            print("索引创建完成。")
+        except Exception as e:
+            print(f"索引创建失败: {e}")
+            sys.exit(1)
+
+    # 启动 TUI 前：确保 Claude Code kb-ask skill 已安装到 ~/.claude/skills
+    try:
+        from doclens.claude_code_skill import ensure_claude_code_skill
+        ensure_claude_code_skill()
+    except Exception as e:  # noqa: BLE001
+        print(f"[Claude Code skill 同步跳过: {e}]")
+
+    from doclens.tui.app import CortexApp
+    app = CortexApp()
+    app.run(mouse=True)
+
+
 def _cli_auth_reset(args, config, idx):
     """Handle `cortex auth reset` — 清除访问密码并吊销所有会话（忘记密码时）。
 
@@ -1224,10 +1304,7 @@ def _apply_workdir_override():
 
 
 def main():
-    """主函数 - 启动 TUI"""
-    import logging
-    import sqlite3
-
+    """主函数 - 裸命令默认启动 Web UI (gui)；`doclens tui` 显式进终端界面。"""
     parser = _build_parser()
     args, unknown = parser.parse_known_args()
 
@@ -1254,81 +1331,22 @@ def main():
     from planify.core.logging_config import setup_logging
     setup_logging()
 
-    from doclens.config import CortexConfig
-    from doclens.tui.app import CortexApp
-    from treesearch.treesearch import TreeSearch
-
     if args.command is not None:
-        if args.command == "auth":
-            # auth reset 不需要索引/配置组件（索引损坏时也必须可用）
+        if args.command in ("auth", "tui"):
+            # auth reset：索引损坏时也必须可用；tui：自管首启引导与索引
+            # 检查（不经 _init_components——保持原「裸命令进 TUI」时代行为）
             args.func(args, None, None)
             return
         config, idx = _init_components()
         args.func(args, config, idx)
         return
 
-    # ── TUI mode (unchanged original logic) ──
-    config = CortexConfig.load()  # 首次运行会在此自动初始化并退出
-    index_path = config.index_path or os.path.join(config.search_path, data_dirname(), "index.db")
-
-    # Check if index exists and contains documents
-    doc_count = 0
-    if os.path.exists(index_path):
-        try:
-            with sqlite3.connect(index_path) as conn:
-                cursor = conn.execute("SELECT COUNT(*) FROM documents")
-                doc_count = cursor.fetchone()[0]
-        except sqlite3.Error as e:
-            print(f"[警告] 无法读取索引: {e}")
-
-    if doc_count == 0:
-        search_path = config.search_path
-        try:
-            response = input(
-                f"当前目录 '{search_path}' 尚未建立索引，是否创建？ [Y/n] "
-            ).strip().lower()
-        except EOFError:
-            print("当前目录尚未建立索引，请在交互式终端中运行或先手动创建索引。")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            print("\n已取消。")
-            sys.exit(1)
-
-        if response and response not in ("y", "yes"):
-            print("已取消。如需进入 TUI，请先建立索引。")
-            sys.exit(1)
-
-        print("正在创建索引...")
-
-        def on_progress(current_file: str, processed: int, total: int):
-            print(f"Indexing [{processed}/{total}] {current_file}")
-
-        try:
-            from treesearch import set_config, TreeSearchConfig
-            set_config(TreeSearchConfig(
-                cjk_tokenizer=config.cjk_tokenizer,
-                max_index_fail_count=config.max_index_fail_count,
-                enable_shadow_md=config.treesearch_enable_shadow_md,
-                xlsx_max_rows_per_sheet=config.treesearch_xlsx_max_rows_per_sheet,
-                xlsx_max_consecutive_empty_rows=config.treesearch_xlsx_max_consecutive_empty_rows,
-                allowed_source_types=config.allowed_source_types,
-            ))
-            ts = TreeSearch(search_path, db_path=index_path)
-            ts.index(search_path, progress_callback=on_progress)
-            print("索引创建完成。")
-        except Exception as e:
-            print(f"索引创建失败: {e}")
-            sys.exit(1)
-
-    # 启动 TUI 前：确保 Claude Code kb-ask skill 已安装到 ~/.claude/skills
-    try:
-        from doclens.claude_code_skill import ensure_claude_code_skill
-        ensure_claude_code_skill()
-    except Exception as e:  # noqa: BLE001
-        print(f"[Claude Code skill 同步跳过: {e}]")
-
-    app = CortexApp()
-    app.run(mouse=True)
+    # 裸命令（无子命令）默认 gui——与 `doclens gui` 等价（2026-09-21 起，
+    # 原「裸命令进 TUI」改为需显式 `doclens tui`）
+    args.port, args.host, args.share = None, None, False
+    config, idx = _init_components()
+    _cli_gui(args, config, idx)
+    return
 
 
 if __name__ == "__main__":
