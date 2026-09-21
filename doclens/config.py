@@ -153,8 +153,10 @@ class CortexConfig(BaseSettings):
     chat_disconnect_continue: bool = Field(default=True)
 
     # Git 同步（仅 GUI 进程运行；工作目录为 git 根且已配置 remote 时生效，
-    # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0006）
-    sync_enabled: bool = Field(default=True)
+    # 否则整体停摆。auto-commit → pull → merge(偏向本地) → push，详见 ADR-0006。
+    # 默认关闭——需显式 CORTEX_SYNC_ENABLED=true 开启：自动同步会向知识库
+    # 仓库自动提交/推送并写 .gitignore/.gitattributes，属侵入性操作，opt-in）
+    sync_enabled: bool = Field(default=False)
     sync_interval_minutes: float = Field(default=5.0, gt=0)
 
     # Web UI 监听（FastAPI + uvicorn）；改 host/port 需重启 gui 才生效
