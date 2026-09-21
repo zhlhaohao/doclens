@@ -346,10 +346,11 @@ class CortexConfig(BaseSettings):
         ),
     )
     vision_auto_rotate: bool = Field(
-        default=True,
+        default=False,
         alias="VISION_AUTO_ROTATE",
         description="上传图片（文件管理/日记）后台视觉判向自动转正（ADR-0017）；"
-        "需已配置视觉 API，关闭则保持原样",
+        "默认关闭——每张上传图片消耗一次视觉 API 调用，需 VISION_AUTO_ROTATE=true "
+        "显式开启；还需已配置视觉 API（VISION_API_KEY），开启后原样/歪图均照转判",
     )
 
     @classmethod
