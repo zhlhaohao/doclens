@@ -61,7 +61,7 @@ export class ActivityBar extends LitElement {
   `;
 
   @property() active: ViewId = "search";
-  /** 日记 tab 显隐（ADR-0022）：来自 store.status.diary_enabled，未知按显示 */
+  /** 日记 tab 显隐（ADR-0030）：来自 store.status.diary_enabled，未知按显示 */
   @property() diaryEnabled: boolean = true;
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [

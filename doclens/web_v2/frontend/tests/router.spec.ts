@@ -232,7 +232,7 @@ describe("router.lastMain", () => {
   });
 });
 
-describe("diary view guard (ADR-0022)", () => {
+describe("diary view guard (ADR-0030)", () => {
   it("redirects #/diary to files when diary_enabled is false", async () => {
     window.history.replaceState(null, "", "#/diary");
     store.setState({ status: { ...INITIAL_STATE.status!, diary_enabled: false } });

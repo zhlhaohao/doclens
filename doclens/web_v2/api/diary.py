@@ -85,7 +85,7 @@ def _bad_request(e: ValueError) -> CortexAPIError:
 
 
 def _require_diary_dir(idx: IndexManager) -> None:
-    """写端点前置检查：diary 目录不存在时拒绝（ADR-0022 D4）。
+    """写端点前置检查：diary 目录不存在时拒绝（ADR-0030 D4）。
 
     diary/ 是日记启用状态的唯一事实源（= 用户显式 mkdir 的意图声明），
     API 副作用不得伪造它——否则隐藏 tab 期间任何一次写入都会悄悄造出

@@ -160,7 +160,7 @@ export class CortexApp extends LitElement {
       actions.setStatus(s);
       // 同步状态在 SSE 首推到达前先填一次初值（SSE status 快照会持续覆盖）
       if (s.sync !== undefined) actions.setSyncStatus(s.sync ?? null);
-      // 日记守卫补偿（ADR-0022 D3）：status 迟到窗口内可能已落在 diary 视图
+      // 日记守卫补偿（ADR-0030 D3）：status 迟到窗口内可能已落在 diary 视图
       // （URL 直达且 enabled 未知时放行）——enabled 明确为 false 时纠正到 files
       if (s.diary_enabled === false && store.getState().view === "diary") {
         router.navigate("files");
@@ -206,7 +206,7 @@ export class CortexApp extends LitElement {
 
   render() {
     const view = store.getState().view;
-    // 日记 tab 显隐事实源（ADR-0022 D1/D2）：status.diary_enabled，未知（status
+    // 日记 tab 显隐事实源（ADR-0030 D1/D2）：status.diary_enabled，未知（status
     // 未返回）按启用渲染——迟到窗口由 _loadStatus 补偿纠正
     const diaryEnabled = store.getState().status?.diary_enabled ?? true;
     // 登录页全屏独占：不渲染 app-bar / activity-bar / tab-bar / reindex-dialog

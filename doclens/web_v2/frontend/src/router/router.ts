@@ -31,7 +31,7 @@ function normalizeView(): ViewId {
   return parseHash(currentHash()) ?? DEFAULT_VIEW;
 }
 
-/** 日记视图守卫（ADR-0022 D3）：diary 未启用（目录不存在）时重定向 files。
+/** 日记视图守卫（ADR-0030 D3）：diary 未启用（目录不存在）时重定向 files。
 
  * 覆盖 URL 直达 / 会话恢复 fallback / hashchange 三条路径（router 是
  * URL → store 的唯一通道）。status 未返回前（diary_enabled === undefined）
