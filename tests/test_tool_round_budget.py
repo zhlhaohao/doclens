@@ -260,3 +260,33 @@ class TestBudgetMechanisms:
         reminders = _reminder_texts(messages)
         assert len(reminders) == 1
         assert "background task" not in reminders[0]
+
+
+def test_runtime_config_carries_tool_round_budget():
+    """doclens→planify 透传契约：RuntimeConfig 必须携带 planify_max_tool_rounds。
+
+    agent_integration 构造 RuntimeConfig 时传入，StreamingConfig 装配经
+    tool_round_limit_kwargs 读取——曾断链（RuntimeConfig 无该字段，getattr
+    恒落兜底 15）致 PLANIFY_MAX_TOOL_ROUNDS env 调节无效（2026-09-21 修复）。
+    """
+    from dataclasses import replace
+    from pathlib import Path
+
+    from planify.core.runtime import RuntimeConfig
+
+    from doclens.agent_prompt import tool_round_limit_kwargs
+
+    rc = RuntimeConfig(
+        workdir=Path.cwd(),
+        model_id="m",
+        api_key="k",
+        planify_max_tool_rounds=7,
+    )
+    kwargs = tool_round_limit_kwargs(rc)
+    assert kwargs["max_tool_rounds"] == 7
+    assert kwargs["force_answer_rounds"] == 17
+
+    # 0 = 不限（软/硬阈值都注入 None）
+    kwargs0 = tool_round_limit_kwargs(replace(rc, planify_max_tool_rounds=0))
+    assert kwargs0["max_tool_rounds"] is None
+    assert kwargs0["force_answer_rounds"] is None

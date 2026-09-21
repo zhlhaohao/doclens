@@ -345,6 +345,7 @@ class CortexAgent:
             token_threshold=config.get("token_threshold", 100000),
             planify_context_window=kb_config.planify_context_window,
             planify_max_tokens=_max_tokens,
+            planify_max_tool_rounds=kb_config.planify_max_tool_rounds,
             poll_interval=config.get("poll_interval", 5),
             idle_timeout=config.get("idle_timeout", 60),
             # 压缩 transcript 落到 .cortex/transcripts（上面已 mkdir）：

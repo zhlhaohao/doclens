@@ -313,10 +313,10 @@ class CortexConfig(BaseSettings):
     )
     planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
     planify_max_tool_rounds: int = Field(
-        default=15,
+        default=0,
         alias="PLANIFY_MAX_TOOL_ROUNDS",
         description="单轮问答工具调用轮数软上限：超过后每轮注入停止提醒；"
-        "硬阈值 = 本值 + 10，达到后强制终答；0=不限。",
+        "硬阈值 = 本值 + 10，达到后强制终答；0=不限（默认）。",
     )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）

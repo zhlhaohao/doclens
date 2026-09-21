@@ -63,9 +63,9 @@ KB_TOOL_ROUND_LIMIT_REMINDER = (
 def tool_round_limit_kwargs(config) -> dict:
     """从 doclens Config 派生 StreamingConfig 的工具轮次兜底参数。
 
-    软阈值 = planify_max_tool_rounds（默认 15），硬阈值 = 软 + 10；0 = 不限。
+    软阈值 = planify_max_tool_rounds（默认 0 = 不限），硬阈值 = 软 + 10。
     """
-    soft = getattr(config, "planify_max_tool_rounds", 15) or 0
+    soft = getattr(config, "planify_max_tool_rounds", 0) or 0
     return {
         "max_tool_rounds": soft or None,
         "force_answer_rounds": (soft + 10) if soft else None,

@@ -36,6 +36,9 @@ class RuntimeConfig:
     token_threshold: int = 100000
     planify_context_window: int = 200000
     planify_max_tokens: int = 8000
+    # 工具轮数软上限（宿主配置透传；0 = 不限（默认）。软阈值提醒 + 硬阈值（+10）
+    # 强制终答由 StreamingAgent 消费，见 streaming/runner.py）
+    planify_max_tool_rounds: int = 0
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径
