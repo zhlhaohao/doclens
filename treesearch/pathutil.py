@@ -81,6 +81,19 @@ def load_gitignore_spec(root: str):
         return pathspec.PathSpec.from_lines("gitwildmatch", f), base_dir
 
 
+def is_gitignored(spec, base_dir: str, path: str) -> bool:
+    """True if *path* matches a gitignore *spec* loaded by load_gitignore_spec.
+
+    Single matching predicate shared by the indexer walk and hosts (file
+    watchers) — gitignore matching semantics evolve in one place, no
+    copy-drift between consumers. ``spec=None`` (no .gitignore / pathspec
+    missing) never matches.
+    """
+    if spec is None:
+        return False
+    return spec.match_file(os.path.relpath(path, base_dir))
+
+
 def _should_ignore_dir(dirname: str, ignore_dirs: frozenset[str]) -> bool:
     """Check if a directory name should be ignored."""
     if dirname in ignore_dirs:
@@ -144,10 +157,8 @@ def _iter_walk_directory(
             full_path = os.path.join(dirpath, fname)
 
             # .gitignore filter
-            if gitignore_spec is not None:
-                rel = os.path.relpath(full_path, gitignore_base)
-                if gitignore_spec.match_file(rel):
-                    continue
+            if is_gitignored(gitignore_spec, gitignore_base, full_path):
+                continue
 
             count += 1
             if max_files > 0 and count > max_files:

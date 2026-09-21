@@ -16,23 +16,18 @@ except ImportError:
 
 from doclens.index_manager import SUPPORTED_FORMATS
 from doclens.config import data_dirname
+from treesearch.pathutil import is_gitignored
 
 
 if _HAS_WATCHDOG:
 
     class _ChangeHandler(FileSystemEventHandler):
-        """watchdog 事件处理器，过滤支持的文件扩展名与数据目录。
+        """watchdog 事件处理器：丢弃索引范围外的文件事件（handler 层统一排除）。
 
-        数据目录（.cortex / .doclens）排除在 handler 层统一生效（两平台
-        同一路径）：其内的日志 / index.db / sessions.db 高频写入事件被
-        _should_handle 直接丢弃——不触发 reindex，也不产生本模块日志。
-        watchdog 自身的 per-event debug（Linux inotify 的 in-event）由
-        logging 配置压制到 WARNING（曾引发「写日志 → IN_MODIFY → watchdog
-        debug 再写日志」自反馈风暴）。
-
-        递归 schedule 不做监控树级排除：watchdog 每次 schedule 建一个
-        emitter 线程，自管 watch 树会在大语料下线程/fd 膨胀，而递归单
-        线程聚合整树是平台最优模型。
+        排除口径与索引器一致：数据目录（.cortex / .doclens）子树、不支持
+        扩展名、索引器生成的影子 Markdown（._*.md）、索引根 .gitignore
+        命中文件。递归 vs 监控树级排除的取舍见 FileWatcher.start()；
+        watchdog 自身 per-event debug 由 logging 压制（自反馈风暴史）。
 
         on_modified 会做去重：watchdog 在 Windows 上对纯读访问也会报
         modified（典型为 atime 更新被 ReadDirectoryChangesW 当作修改），
@@ -42,7 +37,9 @@ if _HAS_WATCHDOG:
         def __init__(self, callback, search_path: str):
             super().__init__()
             self._callback = callback
-            self._search_path = os.path.normpath(search_path).lower()
+            # data_dirname() 每次调用做文件系统 resolve（~0.2ms，事件热路径
+            # 上 × 每目录/每事件）——按字段缓存一次
+            self._data_dir = data_dirname()
             self._extensions = set(SUPPORTED_FORMATS.keys())
             # .gitignore 过滤（与索引器同一规则源：索引根的 .gitignore，
             # treesearch.pathutil.load_gitignore_spec 公共化接口）。启动时
@@ -61,19 +58,24 @@ if _HAS_WATCHDOG:
             self._init_baseline(search_path)
 
         def _should_handle(self, path: str) -> bool:
-            norm = os.path.normpath(path)
-            parts = norm.split(os.sep)
-            if data_dirname() in (p.lower() for p in parts):
-                return False
+            # 廉价且选择性最高的检查先行：扩展名白名单（.tmp/.log/二进制
+            # 事件在此即死，不付后续路径处理）
             _, ext = os.path.splitext(path)
             if ext.lower() not in self._extensions:
                 return False
-            # .gitignore 命中即丢弃（与索引器过滤口径一致，调用方式逐字
-            # 相同——relpath 原样传 match_file，防两处行为漂移）
-            if self._gitignore_spec is not None:
-                rel = os.path.relpath(path, self._gitignore_base)
-                if self._gitignore_spec.match_file(rel):
-                    return False
+            # 数据目录任意路径段命中即排除
+            if self._data_dir in (
+                p.lower() for p in os.path.normpath(path).split(os.sep)
+            ):
+                return False
+            # 索引器生成的影子 Markdown（._x.md）——索引链路自身跳过
+            # （pathutil walk 同规则），其事件同样丢弃
+            basename = os.path.basename(path)
+            if basename.startswith("._") and basename.endswith(".md"):
+                return False
+            # .gitignore（与索引器同一谓词，treesearch.pathutil.is_gitignored）
+            if is_gitignored(self._gitignore_spec, self._gitignore_base, path):
+                return False
             return True
 
         @staticmethod
@@ -94,18 +96,16 @@ if _HAS_WATCHDOG:
             目的：让 on_modified 的去重（prev==cur）从 watcher 启动一开始就生效——
             Windows 读访问会触发伪 on_modified（仅 atime 变），有了基线即可直接过滤，
             不必等到文件"首次出现"才被动建档（那会吞掉启动后的首次真修改）。
-            跳过数据目录（.cortex / .doclens）；仅 stat 不读内容，开销很小。
+            跳过数据目录（原地剪枝，walk 不下钻其子树）；逐文件复用
+            _should_handle 谓词（与事件过滤同一口径，不手抄第二份）；
+            仅 stat 不读内容，开销很小。
             """
-            for root, _dirs, files in os.walk(search_path):
-                if data_dirname() in (
-                    p.lower() for p in os.path.normpath(root).split(os.sep)
-                ):
-                    continue
+            for root, dirnames, files in os.walk(search_path):
+                dirnames[:] = [d for d in dirnames if d.lower() != self._data_dir]
                 for name in files:
-                    _, ext = os.path.splitext(name)
-                    if ext.lower() not in self._extensions:
-                        continue
-                    self._record_baseline(os.path.join(root, name))
+                    path = os.path.join(root, name)
+                    if self._should_handle(path):
+                        self._record_baseline(path)
 
         def _is_real_modification(self, path: str) -> bool:
             """stat 当前文件，与上次快照对比，过滤读访问触发的伪 on_modified。
@@ -124,7 +124,8 @@ if _HAS_WATCHDOG:
             """
             try:
                 st = os.stat(path)
-            except OSError:
+            except OSError as e:
+                logger.debug("FileWatcher stat failed: %s (%s)", path, e)
                 return False
             key = self._snapshot_key(path)
             cur = (st.st_mtime_ns, st.st_size)
@@ -133,22 +134,24 @@ if _HAS_WATCHDOG:
                 # 竞态兜底：基线未覆盖（启动后新增文件 on_created 之前先到 on_modified），
                 # 只记基线不触发，避免读访问的伪 on_modified 误触发 reindex
                 logger.debug(
-                    "FileWatcher BASELINE %s mtime_ns=%d size=%d",
-                    path, cur[0], cur[1],
+                    "FileWatcher BASELINE %s mtime_ns=%d size=%d "
+                    "ctime_ns=%d atime_ns=%d",
+                    path, cur[0], cur[1], st.st_ctime_ns, st.st_atime_ns,
                 )
                 self._mod_snapshot[key] = cur
                 return False
             if prev == cur:
                 # mtime/size 都未变 → atime-only 误报
                 logger.debug(
-                    "FileWatcher DEDUP %s mtime_ns=%d size=%d unchanged",
-                    path, cur[0], cur[1],
+                    "FileWatcher DEDUP %s mtime_ns=%d size=%d "
+                    "ctime_ns=%d atime_ns=%d unchanged",
+                    path, cur[0], cur[1], st.st_ctime_ns, st.st_atime_ns,
                 )
                 return False
             # mtime/size 真变 → 真修改，更新快照并触发
             logger.debug(
-                "FileWatcher MOD %s prev=%s cur=%s",
-                path, prev, cur,
+                "FileWatcher MOD %s prev=%s cur=%s ctime_ns=%d atime_ns=%d",
+                path, prev, cur, st.st_ctime_ns, st.st_atime_ns,
             )
             self._mod_snapshot[key] = cur
             return True
@@ -156,17 +159,6 @@ if _HAS_WATCHDOG:
         def on_modified(self, event):
             if event.is_directory or not self._should_handle(event.src_path):
                 return
-            # 诊断：on_modified 入口打印原始事件 + stat 全字段
-            try:
-                st = os.stat(event.src_path)
-                logger.debug(
-                    "FileWatcher on_modified %s "
-                    "mtime_ns=%d size=%d ctime_ns=%d atime_ns=%d",
-                    event.src_path,
-                    st.st_mtime_ns, st.st_size, st.st_ctime_ns, st.st_atime_ns,
-                )
-            except OSError as e:
-                logger.debug("FileWatcher on_modified stat failed: %s (%s)", event.src_path, e)
             if self._is_real_modification(event.src_path):
                 self._callback(event.src_path)
 
@@ -244,11 +236,7 @@ class FileWatcher:
         if getattr(self._idx, "startup_audit_done", False):
             print("[文件监控：启动审计已完成，跳过启动增量扫描]")
             return True
-        if self._timer:
-            self._timer.cancel()
-        self._timer = threading.Timer(self._debounce, self._do_reindex)
-        self._timer.daemon = True
-        self._timer.start()
+        self._reset_debounce_timer()
         return True
 
     def stop(self):
@@ -285,16 +273,20 @@ class FileWatcher:
                 "last_success": self._last_success,
             }
 
-    def _on_change(self, file_path: str):
-        """收到文件变化事件，累加计数 + 重置防抖定时器"""
-        logger.debug("FileWatcher _on_change: %s", file_path)
-        with self._state_lock:
-            self._changed_count += 1
+    def _reset_debounce_timer(self):
+        """重置防抖定时器（启动扫描与每事件共用同一形状）。"""
         if self._timer:
             self._timer.cancel()
         self._timer = threading.Timer(self._debounce, self._do_reindex)
         self._timer.daemon = True
         self._timer.start()
+
+    def _on_change(self, file_path: str):
+        """收到文件变化事件，累加计数 + 重置防抖定时器"""
+        logger.debug("FileWatcher _on_change: %s", file_path)
+        with self._state_lock:
+            self._changed_count += 1
+        self._reset_debounce_timer()
         if self._on_change_callback:
             logger.debug("FileWatcher calling callback for: %s", file_path)
             self._on_change_callback(file_path)
