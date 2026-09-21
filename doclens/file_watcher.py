@@ -21,7 +21,18 @@ from doclens.config import data_dirname
 if _HAS_WATCHDOG:
 
     class _ChangeHandler(FileSystemEventHandler):
-        """watchdog 事件处理器，过滤支持的文件扩展名。
+        """watchdog 事件处理器，过滤支持的文件扩展名与数据目录。
+
+        数据目录（.cortex / .doclens）排除在 handler 层统一生效（两平台
+        同一路径）：其内的日志 / index.db / sessions.db 高频写入事件被
+        _should_handle 直接丢弃——不触发 reindex，也不产生本模块日志。
+        watchdog 自身的 per-event debug（Linux inotify 的 in-event）由
+        logging 配置压制到 WARNING（曾引发「写日志 → IN_MODIFY → watchdog
+        debug 再写日志」自反馈风暴）。
+
+        递归 schedule 不做监控树级排除：watchdog 每次 schedule 建一个
+        emitter 线程，自管 watch 树会在大语料下线程/fd 膨胀，而递归单
+        线程聚合整树是平台最优模型。
 
         on_modified 会做去重：watchdog 在 Windows 上对纯读访问也会报
         modified（典型为 atime 更新被 ReadDirectoryChangesW 当作修改），
@@ -198,6 +209,10 @@ class FileWatcher:
 
         handler = _ChangeHandler(self._on_change, self._idx.search_path)
         self._observer = Observer()
+        # 递归 schedule：单 emitter 线程聚合整树（两平台统一）。数据目录
+        # 排除在 handler 层（_should_handle）——监控树级排除需自管非递归
+        # watch 树，但 watchdog 每次 schedule 建一个 emitter 线程，大语料
+        # 下线程/fd 膨胀，得不偿失
         self._observer.schedule(handler, self._idx.search_path, recursive=True)
         self._observer.daemon = True
         self._observer.start()
