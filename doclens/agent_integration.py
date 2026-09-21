@@ -152,12 +152,16 @@ class CortexAgent:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        # 从 ~/<数据目录>/.env 和 {workdir}/<数据目录>/.env 加载配置，项目级覆盖全局
+        # 从 ~/<数据目录>/.env 和 {workdir}/<数据目录>/.env 加载配置——两处均
+        # override=False：只填进程 env 缺失的键，启动时注入的环境变量优先于
+        # .env 文件（与 CortexConfig 的 pydantic-settings 层序 env > dotenv、
+        # CORTEX_WORKDIR 读取链同语义）。设置页热生效不受影响：那走
+        # deps.reload_config() 的 override=True 刷新 + apply_config 推送。
         from dotenv import load_dotenv
         global_env = get_global_cortex_dir() / ".env"
         local_env = self.workdir / data_dirname() / ".env"
         if global_env.exists():
-            load_dotenv(global_env, override=True)
+            load_dotenv(global_env, override=False)
         if local_env.exists():
             load_dotenv(local_env, override=False)
 
