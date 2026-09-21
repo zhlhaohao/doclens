@@ -831,32 +831,6 @@ def _build_parser():
     search_v2_parser.set_defaults(func=_cli_search_v2)
 
     # cortex web <query> [--allowed-domains DOMAINS] [--recency FILTER] [--content-size SIZE] [--location LOC]
-    web_parser = sub.add_parser(
-        "web", help="Web search using Anthropic server-side search",
-        parents=[common],
-    )
-    web_parser.add_argument("query", nargs="+", help="Search query keywords")
-    web_parser.add_argument(
-        "--allowed-domains", type=str, default=None,
-        help="只搜索这些域名（逗号分隔）"
-    )
-    web_parser.add_argument(
-        "--recency", type=str, default=None,
-        choices=["oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"],
-        help="时间范围过滤"
-    )
-    web_parser.add_argument(
-        "--content-size", type=str, default=None,
-        choices=["medium", "high"],
-        help="内容详细度"
-    )
-    web_parser.add_argument(
-        "--location", type=str, default=None,
-        choices=["cn", "us"],
-        help="搜索地区"
-    )
-    web_parser.set_defaults(func=_cli_web)
-
     # cortex webfetch <url> [--no-meta]
     webfetch_parser = sub.add_parser(
         "webfetch", help="Fetch and extract web page content as Markdown",
@@ -1107,42 +1081,6 @@ def _cli_read_document(args, config, idx):
         start_word=args.start_word,
         end_word=args.end_word,
         section=args.section,
-    )
-    print(result)
-
-
-def _cli_web(args, config, idx):
-    """Handle `cortex web <query>` — web search via LLM Provider."""
-    query = " ".join(args.query)
-
-    allowed = None
-    if args.allowed_domains:
-        allowed = [d.strip() for d in args.allowed_domains.split(",") if d.strip()]
-
-    from planify.tools.web import run_web_search
-    from planify.core.llm import create_provider
-
-    api_key = config.planify_api_key
-    base_url = config.planify_base_url
-    model_id = config.planify_model_id
-    protocol = getattr(config, "planify_protocol", "")
-
-    if not api_key:
-        print("错误: 未配置 PLANIFY_API_KEY。请在 .env 中设置。")
-        return
-
-    client = create_provider({
-        "protocol": protocol,
-        "api_key": api_key,
-        "model_id": model_id,
-        "base_url": base_url,
-    })
-    result = run_web_search(
-        query, client, model_id,
-        allowed_domains=allowed,
-        search_recency_filter=args.recency,
-        content_size=args.content_size,
-        location=args.location,
     )
     print(result)
 

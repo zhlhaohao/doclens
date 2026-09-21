@@ -81,12 +81,6 @@ def build_builtin_registry() -> CommandRegistry:
 
     # -- 网络 --
     registry.register(Command(
-        name="web",
-        handler="_cmd_web",
-        description="网络搜索",
-        aliases=("web", "w"),
-    ))
-    registry.register(Command(
         name="webfetch",
         handler="_cmd_webfetch",
         description="网页抓取",

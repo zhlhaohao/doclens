@@ -13,7 +13,6 @@ import platform
 from .basic import make_basic_tools
 from .glob_tool import make_glob_tools
 from .grep import make_grep_tools, rg_available
-from .web import make_web_tools
 from .file_tasks import get_file_task_definitions, get_file_task_handlers
 from .team_tools import get_team_tools_definitions, get_team_tools_handlers
 from .protocols import get_protocol_definitions, get_protocol_handlers
@@ -245,10 +244,9 @@ def build_tool_registry(
         tools.extend(glob_tools)
         handlers.update(glob_handlers)
 
-    # 网络工具
-    web_tools, web_handlers = make_web_tools(client, model or "claude-opus-4-6")
-    tools.extend(web_tools)
-    handlers.update(web_handlers)
+    # 网络工具：web_search 已废弃（2026-09-21 实测 BigModel Anthropic 兼容
+    # 网关剥离 web_search_20250305 服务端工具、消息约定通路亦无真搜索，
+    # 输出恒为模型自答——误导大于价值。webfetch 保留（直连抓取不依赖搜索）。
 
     # 待办和子代理工具
     todo_subagent_tools = [

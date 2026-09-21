@@ -237,8 +237,18 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int,
         stream: bool = False,
+        server_tools: Optional[list] = None,
     ) -> dict[str, Any]:
-        """chat/stream/achat/astream 共用的请求参数（含 Anthropic→OpenAI 翻译）。"""
+        """chat/stream/achat/astream 共用的请求参数（含 Anthropic→OpenAI 翻译）。
+
+        server_tools（Anthropic 服务端工具，如 web_search_20250305）在
+        OpenAI 兼容格式无对应物——显式抛错让调用方（web_search 等）回落
+        自有通路，而非静默丢工具产生错误结果。
+        """
+        if server_tools:
+            raise ValueError(
+                "server_tools not supported on OpenAI-compatible endpoints"
+            )
         openai_messages = [{"role": "system", "content": system}] if system else []
         openai_messages.extend(messages_anthropic_to_openai(messages))
         kwargs: dict[str, Any] = {
@@ -262,8 +272,9 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             response = self._client.chat.completions.create(**kwargs)
@@ -282,8 +293,9 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> Iterator[StreamEvent]:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
         translator = _StreamTranslator()
@@ -313,8 +325,9 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             response = await self._ensure_async_client().chat.completions.create(**kwargs)
@@ -333,8 +346,9 @@ class OpenAICompatProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> AsyncIterator[StreamEvent]:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
         translator = _StreamTranslator()

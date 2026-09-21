@@ -76,13 +76,19 @@ class AnthropicProvider:
         system: str,
         tools: list[Tool],
         max_tokens: int,
+        server_tools: Optional[list] = None,
     ) -> dict[str, Any]:
-        """chat/stream/achat/astream 共用的请求参数（含 prompt caching 断点）。"""
+        """chat/stream/achat/astream 共用的请求参数（含 prompt caching 断点）。
+
+        server_tools：Anthropic 服务端工具（如 web_search_20250305）原始 dict
+        列表，原样附在客户端工具之后——不做 Tool dataclass 转换（那会剥掉
+        type/max_uses 等服务端专属字段）。
+        """
         return {
             "model": self.model,
             "system": self._system_blocks(system),
             "messages": self._mark_cache_tail(messages),
-            "tools": self._tools_with_cache_breakpoint(tools),
+            "tools": self._tools_with_cache_breakpoint(tools, server_tools),
             "max_tokens": max_tokens,
         }
 
@@ -93,6 +99,7 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
         """单次非流式调用。
 
@@ -100,7 +107,7 @@ class AnthropicProvider:
         在客户端直接抛 ValueError("Streaming is required ...")，请求根本
         没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
         """
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             try:
@@ -125,9 +132,10 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> Iterator[StreamEvent]:
         """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         with self._client.messages.stream(**kwargs) as stream:
             done = False
@@ -157,13 +165,14 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
         """单次非流式调用（async 客户端，不阻塞事件循环）。
 
         与 chat() 同一套兜底：非流式预估超时被 SDK 拒发时降级流式聚合。
         """
         client = self._ensure_async_client()
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             try:
@@ -188,10 +197,11 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> AsyncIterator[StreamEvent]:
         """流式调用（async 客户端），事件转换与同步版共用。"""
         client = self._ensure_async_client()
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         async with client.messages.stream(**kwargs) as stream:
             done = False
@@ -254,9 +264,14 @@ class AnthropicProvider:
         return [{"type": "text", "text": system, "cache_control": dict(cls._EPHEMERAL)}]
 
     @classmethod
-    def _tools_with_cache_breakpoint(cls, tools: list[Tool]) -> list[dict]:
+    def _tools_with_cache_breakpoint(
+        cls, tools: list[Tool], server_tools: Optional[list] = None
+    ) -> list[dict]:
         """工具表整体稳定，在最后一个工具上打断点以缓存整个 tools 前缀。"""
         payload = [cls._tool_to_anthropic(t) for t in tools]
+        if server_tools:
+            # 服务端工具 dict 原样附加（浅拷贝防污染调用方对象）
+            payload.extend(dict(t) for t in server_tools)
         if payload:
             payload[-1]["cache_control"] = dict(cls._EPHEMERAL)
         return payload

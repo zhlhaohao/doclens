@@ -56,6 +56,23 @@ class TestPromptCaching:
         assert payload[2]["cache_control"] == {"type": "ephemeral"}
         assert AnthropicProvider._tools_with_cache_breakpoint([]) == []
 
+    def test_server_tools_appended_verbatim_breakpoint_moved(self):
+        """服务端工具（如 web_search_20250305）原样附加，cache 断点移到最后。"""
+        client_tool = SimpleNamespace(name="t", description="d", input_schema={"type": "object"})
+        server_tool = {"type": "web_search_20250305", "name": "web_search_20250305", "max_uses": 8}
+        payload = AnthropicProvider._tools_with_cache_breakpoint(
+            [client_tool], [server_tool]
+        )
+        assert len(payload) == 2
+        # 服务端字段完整保留（不经 Tool dataclass 转换）
+        assert payload[1]["type"] == "web_search_20250305"
+        assert payload[1]["max_uses"] == 8
+        # 断点在整体最后一个（客户端工具不再带）
+        assert "cache_control" not in payload[0]
+        assert payload[1]["cache_control"] == {"type": "ephemeral"}
+        # 不污染调用方 dict（浅拷贝）
+        assert "cache_control" not in server_tool
+
     def test_mark_cache_tail_string_content(self):
         msgs = [
             {"role": "user", "content": "q1"},

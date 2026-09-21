@@ -58,9 +58,46 @@ def _load_cortex_env():
         pass  # dotenv 未安装
 
 
+# CORTEX_LOG_LEVEL 可选值 → logging 常数（大小写不敏感；WARN 为 WARNING 别名）
+_LOG_LEVEL_NAMES: dict[str, int] = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARN": logging.WARNING,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+
+
+def _resolve_log_level(explicit: Optional[int]) -> int:
+    """日志级别解析：显式参数 > CORTEX_LOG_LEVEL（env / .env）> INFO。
+
+    显式传参的调用方（如 planify 独立 CLI 的 WARNING）不受 env 影响；
+    未传参的调用方（doclens gui/tui/子命令）由 env 调节文件日志详细程度。
+    非法值回落 INFO 并告警（fail-open：宁可多记不可漏记）。调试需要
+    DEBUG 时显式设 CORTEX_LOG_LEVEL=DEBUG。
+    """
+    if explicit is not None:
+        return explicit
+    raw = os.environ.get("CORTEX_LOG_LEVEL")
+    if not raw:
+        _load_cortex_env()
+        raw = os.environ.get("CORTEX_LOG_LEVEL")
+    if not raw:
+        return logging.INFO
+    level = _LOG_LEVEL_NAMES.get(raw.strip().upper())
+    if level is None:
+        logging.getLogger(__name__).warning(
+            "CORTEX_LOG_LEVEL=%r 无法识别（可选 %s），回落 INFO",
+            raw, "/".join(_LOG_LEVEL_NAMES),
+        )
+        return logging.INFO
+    return level
+
+
 def setup_logging(
     log_dir: Optional[Path] = None,
-    log_level: int = logging.DEBUG,
+    log_level: Optional[int] = None,
     console_output: bool = False,
     console_level: int = logging.INFO,
 ) -> logging.Logger:
@@ -68,8 +105,10 @@ def setup_logging(
     设置应用日志记录。
 
     Args:
-        log_dir: 日志文件目录（默认为 <数据目录>/logs，即 .cortex 或 .doclens）
-        log_level: 日志级别（默认为 DEBUG）
+        log_dir: 日志文件目录（默认为 <数据目录>/logs，即 .cortex 或 .doclens；
+            可用 CORTEX_LOG_DIR 覆盖）
+        log_level: 日志级别。None（默认）时读 CORTEX_LOG_LEVEL
+            （DEBUG/INFO/WARNING/ERROR/CRITICAL，默认 INFO）；显式传参优先于 env
         console_output: 是否输出到控制台（默认为 False）
         console_level: 控制台日志级别（默认为 INFO）
 
@@ -89,6 +128,8 @@ def setup_logging(
                 log_dir = Path(env_dir)
             else:
                 log_dir = (Path.cwd() / data_dirname() / "logs").resolve()
+
+    log_level = _resolve_log_level(log_level)
 
     # 创建日志目录（默认信任，不再询问）
     log_dir.mkdir(parents=True, exist_ok=True)

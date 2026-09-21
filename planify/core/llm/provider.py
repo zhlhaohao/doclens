@@ -18,6 +18,9 @@ class LLMProvider(Protocol):
     异步方法（achat/astream）服务事件循环内调用方（StreamingAgent 在
     ASGI 主 loop 上直跑），async 客户端在具体实现中惰性初始化。
 
+    server_tools（可选）：Anthropic 服务端工具原始 dict（如 web_search），
+    原样附加到请求 tools——实现不支持时抛错，由调用方回落。
+
     tracer（可选）：LLM 追踪落盘（调试 / 缓存命中率观测），None 即不记录。
     由调用方按会话创建、逐调用传入（provider 实例跨会话共享，不能挂实例上）。
     """
@@ -29,6 +32,7 @@ class LLMProvider(Protocol):
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
         """单次非流式调用。"""
         ...
@@ -40,6 +44,7 @@ class LLMProvider(Protocol):
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> Iterator[StreamEvent]:
         """流式调用，yield 归一化 StreamEvent。"""
         ...
@@ -51,6 +56,7 @@ class LLMProvider(Protocol):
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> LLMResponse:
         """单次非流式调用（async 客户端，不阻塞事件循环）。"""
         ...
@@ -62,6 +68,7 @@ class LLMProvider(Protocol):
         tools: list[Tool],
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
+        server_tools: Optional[list] = None,
     ) -> AsyncIterator[StreamEvent]:
         """流式调用（async 客户端），async for 消费归一化 StreamEvent。"""
         ...
