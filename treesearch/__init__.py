@@ -13,7 +13,7 @@ Quick Start::
     ts = TreeSearch("./docs/")
     results = ts.search("How to configure voice calls?")
 """
-__version__ = "1.2.6"
+__version__ = "1.2.7"
 
 # ============================================================================
 # Public API
