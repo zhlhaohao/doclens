@@ -31,6 +31,19 @@ function normalizeView(): ViewId {
   return parseHash(currentHash()) ?? DEFAULT_VIEW;
 }
 
+/** 日记视图守卫（ADR-0022 D3）：diary 未启用（目录不存在）时重定向 files。
+
+ * 覆盖 URL 直达 / 会话恢复 fallback / hashchange 三条路径（router 是
+ * URL → store 的唯一通道）。status 未返回前（diary_enabled === undefined）
+ * 放行，由 app._loadStatus 到达后补偿纠正——避免「status 迟到误弹走」。
+ */
+function guardView(view: ViewId): ViewId {
+  if (view === "diary" && store.getState().status?.diary_enabled === false) {
+    return "files";
+  }
+  return view;
+}
+
 /** 用 history.replaceState 修改 hash —— 不压入历史栈、不触发 hashchange。 */
 function replaceHash(hash: string): void {
   if (typeof window === "undefined") return;
@@ -41,10 +54,11 @@ function replaceHash(hash: string): void {
 
 /** 监听器：hash 变化时规范化 + 同步 store。 */
 function onHashChange(): void {
-  const view = normalizeView();
+  const view = guardView(normalizeView());
   const expected = VIEW_TO_HASH[view];
   if (currentHash() !== expected) {
-    // 非法 hash：replaceState 修正 URL（不会再次触发 hashchange，无递归）
+    // 非法 hash（含守卫重定向的 #/diary → #/files）：replaceState 修正 URL
+    // （不会再次触发 hashchange，无递归）
     replaceHash(expected);
   }
   actions.setView(view);
@@ -62,7 +76,7 @@ export const router = {
     if (initialized) return;
     initialized = true;
 
-    const view = parseHash(currentHash()) ?? fallbackView ?? DEFAULT_VIEW;
+    const view = guardView(parseHash(currentHash()) ?? fallbackView ?? DEFAULT_VIEW);
     const expected = VIEW_TO_HASH[view];
     if (currentHash() !== expected) {
       replaceHash(expected);

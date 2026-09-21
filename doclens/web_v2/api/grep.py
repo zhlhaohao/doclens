@@ -47,9 +47,9 @@ def _to_search_result(
     )
 
 
-def _do_grep(idx: IndexManager, pattern: str):
-    """在子线程中执行同步 grep 搜索，返回 (SearchResult[], query_words)。"""
-    result = execute_grep_search(idx, pattern)
+def _do_grep(idx: IndexManager, pattern: str, max_results: int):
+    """在子线程中执行同步 grep 搜索，返回 (SearchResult[], query_words, notes)。"""
+    result = execute_grep_search(idx, pattern, max_results=max_results)
     total_terms = max(len(result.query_words), 1)
     out: list[SearchResult] = []
     ctx = dict(
@@ -62,27 +62,34 @@ def _do_grep(idx: IndexManager, pattern: str):
         out.append(_to_search_result(doc_id, node, matched, total_terms, "content", **ctx))
     for doc_id, node, matched, _prox, _fts in result.path_results:
         out.append(_to_search_result(doc_id, node, matched, total_terms, "path", **ctx))
-    return out, result.query_words
+    return out, result.query_words, result.notes
 
 
 @router.post("/grep", response_model=SearchResponse)
 async def grep(req: GrepRequest, idx: IndexManager = Depends(get_index_manager)):
     start = time.perf_counter()
+    # 分页下推：引擎按 offset+limit 取足量，翻页才不会被默认 max_results
+    # 截在 50 条内（引擎内部还有 grep_max_results 上限，取二者较大值）
+    fetch_size = req.offset + req.limit
     try:
-        all_results, query_words = await asyncio.to_thread(_do_grep, idx, req.pattern)
+        all_results, query_words, notes = await asyncio.to_thread(
+            _do_grep, idx, req.pattern, fetch_size,
+        )
     except Exception as e:
         logger.warning("execute_grep_search failed: %s; returning empty result", e)
         return SearchResponse(
             results=[], total=0, offset=0, limit=req.limit,
             query=req.pattern, query_words=[], source="grep",
             elapsed_ms=int((time.perf_counter() - start) * 1000),
+            error=f"grep 引擎异常: {e}",
         )
 
     total = len(all_results)
-    safe_offset = min(req.offset, max(0, total - 1)) if total > 0 else 0
-    page = all_results[safe_offset : safe_offset + req.limit]
+    # offset 超界返回空页（标准分页语义），不再夹到最后一项
+    page = all_results[req.offset : req.offset + req.limit]
     return SearchResponse(
-        results=page, total=total, offset=safe_offset, limit=req.limit,
+        results=page, total=total, offset=req.offset, limit=req.limit,
         query=req.pattern, query_words=query_words, source="grep",
         elapsed_ms=int((time.perf_counter() - start) * 1000),
+        notes=notes,
     )

@@ -189,6 +189,7 @@ def resolve_paths(
     respect_gitignore: bool = True,
     max_files: int = MAX_DIR_FILES,
     follow_symlinks: bool = False,
+    apply_source_type_filter: bool = True,
 ) -> list[str]:
     """Resolve a mix of files, globs, and directories into file paths.
 
@@ -209,6 +210,12 @@ def resolve_paths(
         max_files: safety cap on total files from a single directory walk.
             ``<= 0`` means no cap (walk everything).
         follow_symlinks: follow symbolic links during directory walk.
+        apply_source_type_filter: if True (default), further intersect
+            *allowed_extensions* with the source-type filter from global
+            config (mirrors the indexer's view of what should be indexed).
+            Pass False for callers that want the full extension whitelist —
+            e.g. a plain-text fallback search whose scope should NOT be
+            narrowed by indexing type preferences.
 
     Returns:
         List of resolved file paths (deduplicated, order-preserved).
@@ -217,12 +224,13 @@ def resolve_paths(
         allowed_extensions = _get_default_extensions()
 
     # Overlay source_type filter from global config
-    from .config import get_config
-    source_type_exts = get_allowed_extensions_for_source_types(
-        get_config().allowed_source_types
-    )
-    if source_type_exts is not None:
-        allowed_extensions = allowed_extensions & source_type_exts
+    if apply_source_type_filter:
+        from .config import get_config
+        source_type_exts = get_allowed_extensions_for_source_types(
+            get_config().allowed_source_types
+        )
+        if source_type_exts is not None:
+            allowed_extensions = allowed_extensions & source_type_exts
 
     resolved: list[str] = []
     seen: set[str] = set()

@@ -198,8 +198,11 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    # snippet 字符兜底 = 统一窗口模型（锚点前 + 后），与工具层同口径
-    snippet_max = idx.search_context_before + idx.search_context_after
+    # snippet 字符兜底 = 统一窗口模型（锚点前 + 后词数）× 词长上限粗估，
+    # 与工具层同口径（词口径下窗口宽度依内容而变，保险丝取保守上限）
+    from doclens.word_window import WORD_CHAR_CEILING
+
+    snippet_max = (idx.search_context_before + idx.search_context_after) * WORD_CHAR_CEILING
     all_results = _format_scored_results(
         result, idx.path_map, idx.search_path, idx.max_context_lines, snippet_max
     )

@@ -181,6 +181,9 @@ READ_DOCUMENT_TOOL = {
 
 MAX_CONTEXT_CHARS_PER_RESULT = 800
 MAX_TOTAL_CHARS = 10000
+# 窗口不在开头时补文档开头（标题/表头）的字符预算——独立于词窗口参数
+# （旧实现 min(200, before) 的 before 现为词单位，语义分离）
+_HEAD_BUDGET_CHARS = 200
 MAX_READ_WORDS = 4000
 
 
@@ -388,18 +391,22 @@ def _extract_keyword_window(
     after: int,
     max_chars: int | None = None,
 ) -> str:
-    """从超长文本中截取统一锚点窗口：前 *before* 字符 + 锚点 + 后 *after* 字符。
+    """从超长文本中截取统一锚点窗口：前 *before* 词 + 锚点 + 后 *after* 词。
 
     大表格/长名单类文档常只有一个巨型节点：固定取开头会漏掉中部、尾部的
     命中内容（LLM 看不到 → 误判"找不到资料"）。改为在命中密度最高的位置
-    开窗口；窗口外内容以省略标记提示。无命中时回退为开头截断。
-    max_chars 为总预算上限兜底（窗口不超过它），None 时取 before+after。
+    开窗口；窗口外内容以省略标记提示。无命中时回退为按词预算的开头截断。
 
-    与 grep 的 _regex_led_snippet 同口径（统一窗口模型）。
+    与 grep 的 _regex_led_snippet 同口径（统一窗口模型，词单位：CJK 每
+    字一词，其余按空白切分——与 read_document/max_read_words 同源）。
+    max_chars 为总预算的**字符兜底**（保险丝，窗口总宽不超过它）；
+    None 时无字符兜底（纯词窗口）。
     """
-    if max_chars is None:
-        max_chars = before + after
-    if len(text) <= max_chars:
+    from doclens.word_window import WORD_CHAR_CEILING, end_after_words, start_before_words
+
+    if max_chars is not None and len(text) <= max_chars:
+        return text
+    if max_chars is None and _count_words(text) <= before + after:
         return text
 
     # 收集所有关键词命中位置（大小写不敏感）
@@ -418,16 +425,19 @@ def _extract_keyword_window(
             start = idx + len(wl)
 
     if not hits:
-        return _truncate_to_paragraphs(text, max_chars)
+        truncated, _cut = _truncate_to_word_budget(text, before + after)
+        return truncated
 
     # 以"窗口内命中数最多"选锚点：把窗口左缘对齐到尽量靠前的命中，
-    # 使窗口覆盖尽可能多的后续命中（滑窗取最优，命中位置数通常不多）
+    # 使窗口覆盖尽可能多的后续命中（滑窗取最优，命中位置数通常不多）。
+    # 滑窗宽度用字符兜底口径（词窗口宽度依内容而变，无固定宽度可滑）
+    slide_width = max_chars if max_chars is not None else (before + after) * WORD_CHAR_CEILING
     hits.sort()
     best_start = hits[0]
     best_count = -1
     for h in hits:
         count = 0
-        limit = h + max_chars
+        limit = h + slide_width
         for p in hits:
             if p < h:
                 continue
@@ -438,22 +448,25 @@ def _extract_keyword_window(
             best_count = count
             best_start = h
 
-    # 窗口向锚点前回退上下文（表头/上文更有用），并避免切断词语
-    context_back = min(before, max_chars // 2)
-    win_start = max(0, best_start - context_back)
+    # 窗口向锚点前回退上下文（表头/上文更有用）：词单位换算，字符兜底
+    # 时夹回 max_chars 的一半（保持旧保险丝语义）
+    win_start = start_before_words(text, best_start, before)
+    if max_chars is not None and best_start - win_start > max_chars // 2:
+        win_start = max(0, best_start - max_chars // 2)
 
     # 窗口不在开头时，预留预算补带文档开头（标题/表头），
     # 否则大表格中部/尾部的行缺列名，LLM 无法解读
     head = ""
     if win_start > 0:
-        head_budget = min(200, before)
-        head_raw = text[:head_budget]
+        head_raw = text[:_HEAD_BUDGET_CHARS]
         nl = head_raw.rfind("\n")
         head = (head_raw[:nl] if nl > 40 else head_raw).rstrip()
 
-    # 统一窗口：终点 = 锚点 + after（head 只补表头不挤占后文预算），
-    # 总宽仍受 max_chars 兜底
-    win_end = min(len(text), best_start + after, win_start + max_chars)
+    # 统一窗口：终点 = 锚点后 after 词（head 只补表头不挤占后文预算），
+    # 总宽仍受字符兜底约束
+    win_end = end_after_words(text, best_start, after)
+    if max_chars is not None:
+        win_end = min(win_end, win_start + max_chars)
     excerpt = text[win_start:win_end].rstrip()
     prefix = f"{head}\n…（中部略）\n" if head else ""
     suffix = "\n…（后文略）" if win_end < len(text) else ""

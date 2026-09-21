@@ -35,3 +35,9 @@ class SearchResponse(BaseModel):
     query_words: list[str] = []  # 后端分词结果，供前端高亮使用
     elapsed_ms: int
     source: str = "fts"  # 值 ∈ {"fts", "like", "ripgrep", "grep"}
+    # 引擎附注（grep 源可能非空）：rg 超时截断、二进制子集超限未覆盖等
+    # 「结果为什么可能不完整」的提示
+    notes: list[str] = []
+    # 引擎异常摘要——引擎抛错时结果为空但请求仍是 200，前端据此区分
+    # 「无结果」与「出错了」（None = 正常）
+    error: Optional[str] = None

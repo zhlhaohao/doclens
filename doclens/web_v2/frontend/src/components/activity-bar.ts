@@ -61,6 +61,8 @@ export class ActivityBar extends LitElement {
   `;
 
   @property() active: ViewId = "search";
+  /** 日记 tab 显隐（ADR-0022）：来自 store.status.diary_enabled，未知按显示 */
+  @property() diaryEnabled: boolean = true;
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
     { id: "search", icon: "search", label: "搜索" },
@@ -77,8 +79,9 @@ export class ActivityBar extends LitElement {
   }
 
   render() {
+    const items = this.diaryEnabled ? this._items : this._items.filter((it) => it.id !== "diary");
     return html`
-      ${this._items.map((it) => html`
+      ${items.map((it) => html`
         <button
           class=${this.active === it.id ? "active" : ""}
           title=${it.label}

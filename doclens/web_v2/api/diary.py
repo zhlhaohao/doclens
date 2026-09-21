@@ -84,6 +84,20 @@ def _bad_request(e: ValueError) -> CortexAPIError:
     return CortexAPIError(400, "INVALID_INPUT", str(e))
 
 
+def _require_diary_dir(idx: IndexManager) -> None:
+    """写端点前置检查：diary 目录不存在时拒绝（ADR-0022 D4）。
+
+    diary/ 是日记启用状态的唯一事实源（= 用户显式 mkdir 的意图声明），
+    API 副作用不得伪造它——否则隐藏 tab 期间任何一次写入都会悄悄造出
+    目录，刷新后 tab 凭空出现。读端点不检查（自然空态）。
+    """
+    if not diary.diary_dir(_workdir(idx)).is_dir():
+        raise CortexAPIError(
+            409, "DIARY_NOT_ENABLED",
+            "日记未启用：请在知识库根目录创建 diary 文件夹后刷新页面",
+        )
+
+
 # --- GET /diary/today ---
 
 @router.get("/diary/today", response_model=TodayResponse)
@@ -151,6 +165,7 @@ async def set_city(
     idx: IndexManager = Depends(get_index_manager),
 ) -> DayEntryResponse:
     """设置某日小节的城市标记（md 标题 📍city），返回更新后的小节。"""
+    _require_diary_dir(idx)
     try:
         diary.set_city(_workdir(idx), date, city)
     except ValueError as e:
@@ -166,6 +181,7 @@ async def add_text_fragment(
     req: AddTextRequest,
     idx: IndexManager = Depends(get_index_manager),
 ) -> FragmentResponse:
+    _require_diary_dir(idx)
     now = _now()
     try:
         frag = diary.append_text(
@@ -250,6 +266,7 @@ async def add_photo_fragment(
     caption: str = Form(default=""),
     idx: IndexManager = Depends(get_index_manager),
 ) -> FragmentResponse:
+    _require_diary_dir(idx)
     data = await file.read(_MAX_PHOTO_BYTES + 1)
     if len(data) > _MAX_PHOTO_BYTES:
         raise CortexAPIError(413, "CONTENT_TOO_LARGE", f"超过 {_MAX_PHOTO_BYTES // 1024 // 1024}MB 上限")
@@ -286,6 +303,7 @@ async def delete_fragment(
     date: str = Query(..., description="片段所属日期 YYYY-MM-DD"),
     idx: IndexManager = Depends(get_index_manager),
 ) -> DeleteFragmentResponse:
+    _require_diary_dir(idx)
     try:
         deleted = diary.remove_fragment(_workdir(idx), date, fid)
     except ValueError as e:
@@ -303,6 +321,7 @@ async def update_text_fragment(
     date: str = Query(..., description="片段所属日期 YYYY-MM-DD"),
     idx: IndexManager = Depends(get_index_manager),
 ) -> FragmentResponse:
+    _require_diary_dir(idx)
     try:
         updated = diary.update_fragment(_workdir(idx), date, fid, req.text)
     except ValueError as e:

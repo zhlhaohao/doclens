@@ -119,11 +119,42 @@ class TestGrepSnippetSelection:
 
     def test_regex_led_snippet_greedy_capped(self):
         from doclens.grep_tools import _regex_led_snippet
+        from doclens.word_window import WORD_CHAR_CEILING
 
         text = "第29题" + "A" * 5000
         led = _regex_led_snippet(text, [r"第29题[\s\S]*"], before=BEFORE, after=AFTER)
         assert led is not None and led.startswith("第29题")
-        assert len(led) <= SNIPPET_MATCH_MAX_CHARS + BEFORE + AFTER
+        # 词口径：命中体 cap 字符 + 前后词窗的字符保险丝上限。A*5000 是
+        # 一个无空白「词」，在 after 词数预算内吃满剩余是词定义的正确语义
+        assert len(led) <= SNIPPET_MATCH_MAX_CHARS + (BEFORE + AFTER) * WORD_CHAR_CEILING
+
+    def test_regex_led_snippet_word_unit_english(self):
+        """词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
+        from doclens.grep_tools import _regex_led_snippet
+
+        words = [f"w{i}" for i in range(200)]
+        text = " ".join(words[:100]) + " NEEDLE " + " ".join(words[100:])
+        led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8)
+        assert led is not None
+        assert led.split()[-1] == "w107"  # 锚点后 8 词（NEEDLE 后第一个词是 w100）
+        assert led.split()[0] == "w95"  # 锚点前 5 词（w95..w99）
+
+    def test_regex_led_snippet_cjk_word_equals_char(self):
+        """CJK 每字一词：词窗口宽度与旧字符口径一致（回归保护）。"""
+        from doclens.grep_tools import _regex_led_snippet
+
+        text = "前" * 1000 + "NEEDLE" + "后" * 1000
+        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
+        assert led == "前" * 100 + "NEEDLE" + "后" * 200
+
+    def test_word_window_fuse_on_runaway_word(self):
+        """超长无空白段（一个词）触发字符保险丝，窗口不被炸穿。"""
+        from doclens.grep_tools import _regex_led_snippet
+
+        text = "NEEDLE" + "A" * 30000
+        led = _regex_led_snippet(text, ["NEEDLE"], before=0, after=10)
+        assert led is not None
+        assert len(led) <= len("NEEDLE") + 10 * 8  # 10 词 × WORD_CHAR_CEILING
 
     def test_format_agent_output_contains_match_span(self):
         from doclens.grep_tools import _format_agent_output
@@ -280,6 +311,31 @@ class TestRegexpCaseAlignment:
             fts.index_document(doc)
             hits = fts.like_search("needle", top_k=10, use_regex=True)
             assert len(hits) == 1
+            assert hits[0]["doc_id"] == "d1"
+        finally:
+            fts.close()
+
+    def test_like_search_phase2_json_escape_rescan(self, tmp_path: Path):
+        """Phase 2 转义兜底：JSON 源码预筛 miss（\n 转义打断 \s）时 loads 后精筛。
+
+        构造：长节点中段藏 "alpha\nneedle"（真换行）——Phase 1 的 summary
+        是头尾截断窗口（不含中段）；Phase 2 预筛在 structure_json 源码上
+        跑，换行被序列化成字面 "\\n" 两字符，`alpha\sneedle` 匹配不上；
+        慢路径反序列化后对节点原文精筛才能命中。
+        """
+        from treesearch.fts import FTS5Index
+        from treesearch.tree import Document, assign_node_ids
+
+        text = "前填充。" * 200 + "alpha\nneedle\n" + "后填充。" * 200
+        structure = [{"title": "t", "text": text}]
+        assign_node_ids(structure)
+        fts = FTS5Index(db_path=str(tmp_path / "t.db"))
+        try:
+            fts.index_document(
+                Document(doc_id="d1", doc_name="esc.md", structure=structure)
+            )
+            hits = fts.like_search(r"alpha\sneedle", top_k=10, use_regex=True)
+            assert len(hits) == 1, "转义边界文本未被 Phase 2 慢路径兜底命中"
             assert hits[0]["doc_id"] == "d1"
         finally:
             fts.close()

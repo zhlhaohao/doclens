@@ -152,6 +152,9 @@ export interface SystemStatus {
   watcher?: WatcherStatus | null;
   /** Git 同步快照；null/undefined = 同步循环未注册 */
   sync?: GitSyncStatus | null;
+  /** 日记启用事实源（ADR-0022）：知识库根存在 diary/ 目录即 true（空目录也算）。
+   *  启动判定一次；undefined = status 尚未返回（按启用放行，迟到由补偿逻辑纠正）。 */
+  diary_enabled?: boolean;
 }
 
 /** Settings page */
