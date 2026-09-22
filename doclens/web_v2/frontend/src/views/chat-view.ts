@@ -977,10 +977,10 @@ export class ChatView extends LitElement {
       this._loadHistory();
     } catch (err) {
       if (this._isAbortError(err)) {
-        // 用户主动停止：丢弃半截 AI 回答（屏幕 + DB 都只留用户问题），不弹
-        // 错误 toast。落库口径由后端统一（在线主动停止不写 message_ai），
-        // 前端只刷本地视图与历史列表
-        messages = this._dropTrailingAssistant(messages);
+        // 用户主动停止：保留已生成的半截回答（2026-09-22 语义变更：后端
+        // 同步落库 message_ai，重进会话可见；原「UI==DB 都丢弃」废弃）。
+        // 残留 running 步骤标记为中断，不弹错误 toast
+        messages = finalizeInterruptedMessages(messages);
         actions.setChatState({ messages });
         this._loadHistory();
       } else {
@@ -1038,14 +1038,6 @@ export class ChatView extends LitElement {
   /** 判定是否为用户主动 abort（AbortController.abort 抛 AbortError）。 */
   private _isAbortError(err: unknown): boolean {
     return !!err && (err as Error).name === "AbortError";
-  }
-
-  /** 移除末尾的 assistant 占位/半截回答，保留用户问题（UI==DB）。 */
-  private _dropTrailingAssistant(messages: ChatMessage[]): ChatMessage[] {
-    if (messages.length && messages[messages.length - 1].role === "assistant") {
-      return messages.slice(0, -1);
-    }
-    return messages;
   }
 
   private _backToInitial() {

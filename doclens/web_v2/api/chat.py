@@ -441,11 +441,12 @@ async def _stream_agent_response(
                         "persist usage failed for %s: %s", session_key, e
                     )
             # 展示层 message_ai 统一后端落库（ADR-0028，取代前端写入与断开
-            # 补写双通道）：正常完成 / 断开续跑（含续跑中被 stop 的半截——
-            # 已生成部分用户回来可见）都落；**在线主动停止不落**——对齐
-            # 「UI 当场丢弃半截、重进会话只留问题」的既有语义。策展文本
-            # 优先，中断半截退回原文；错误文本并入（对齐前端 ⚠️ 展示格式）。
-            if session_key and (client_gone or not interrupt.is_set()):
+            # 补写双通道）：正常完成 / 断开续跑 / **在线主动停止**都落——
+            # 2026-09-22 语义变更：停止时已生成的部分对用户有价值，保留
+            # 落库（原「主动停止不落、UI 当场丢弃」的语义废弃，前端同步
+            # 保留半截）。策展文本优先，中断半截退回原文；错误文本并入
+            # （对齐前端 ⚠️ 展示格式）。
+            if session_key:
                 text = (
                     curated_text
                     if curated_text is not None

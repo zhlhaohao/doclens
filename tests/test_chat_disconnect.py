@@ -7,7 +7,8 @@
 - 集成（直接驱动 _stream_agent_response 异步生成器 + aclose 模拟消费端
   断开）：
   * 断开放生 → agent 续跑完 → 补写展示层 message_ai；
-  * 主动停止（先 request_stop 再断开）→ 立刻取消、不补写（半截丢弃=现状）；
+  * 主动停止（先 request_stop 再断开）→ 立刻停；半截照常落库
+    （2026-09-22 语义：停止保留已生成部分）；
   * 正常耗尽 → 不补写（前端写）、registry 注销；
   * 开关关闭（chat_disconnect_continue=False）→ 旧行为断开即停；
   * 会话生成中 → POST /chat 409。
@@ -114,7 +115,13 @@ class _FakeAgent:
         self.full_text = "这是完整的回答内容。"
 
     async def run_stream(self, history, message, session_key):
-        await asyncio.sleep(0.2)  # 生成期（消费端在此窗口内断开）
+        try:
+            await asyncio.sleep(0.2)  # 生成期（消费端在此窗口内断开）
+        except asyncio.CancelledError:
+            # 停止路径第 3 层兜底是 cancel——真实 agent 此刻已流出的文本
+            # 早在 emitter 里；替身补写半截以模拟该语义
+            self.emitter.text_parts.append("半截")
+            return
         if self.interrupt_event is not None and self.interrupt_event.is_set():
             self.emitter.text_parts.append("半截")
             return
@@ -224,7 +231,8 @@ def test_stop_signal_then_disconnect_cancels_immediately(
     store, tmp_path, monkeypatch
 ):
     """主动停止（stop 按钮先落信号再断流）→ 断开分支命中 interrupt →
-    立刻 cancel，不补写（半截丢弃 = 现状语义）。"""
+    立刻停；半截照常落库（2026-09-22 语义变更：停止保留已生成部分，
+    原「主动停止不落库」废弃）。"""
     _patch_env(monkeypatch, store, tmp_path)
     _seed(store)
 
@@ -243,10 +251,10 @@ def test_stop_signal_then_disconnect_cancels_immediately(
         assert chat_runner.is_running("s1") is False
 
     asyncio.run(main())
-    # 停止路径：不补写展示层（前端在线时由前端丢弃半截）
-    assert _item_contents(store, "s1", "message_ai") == []
+    # 停止路径：半截经策展后照常落库展示层（用户回来可见）
+    assert _item_contents(store, "s1", "message_ai") == ["[策展] 半截"]
     # raw 落库与取消/检查点竞态相关：cancel 先到 → 空文本不落；检查点先到
-    # → 半截。两者都不是补写，断言仅约束「无展示层条目」。
+    # → 半截。与展示层独立，宽松断言。
     raw = _item_contents(store, "s1", "message_ai_raw")
     assert raw in ([], ["半截"])
 
@@ -294,9 +302,9 @@ def test_disconnect_with_switch_off_stops_immediately(
         assert chat_runner.is_running("s1") is False
 
     asyncio.run(main())
-    # 旧行为：断开即停（cancel 注入）——run_stream 被 cancel，text_parts 空，
-    # message_ai_raw 落空文本（不写）、message_ai 不补写
-    assert _item_contents(store, "s1", "message_ai") == []
+    # 断开即停（cancel 注入）——2026-09-22 语义：已流出的半截照常落库
+    # 展示层（替身在 cancel 时补写 text_parts 模拟已流出文本）
+    assert _item_contents(store, "s1", "message_ai") == ["[策展] 半截"]
 
 
 def test_chat_endpoint_409_when_generating(store, tmp_path, monkeypatch):
