@@ -189,7 +189,7 @@ def _resolve_tool_path(
         return None, f"Error: {e}".encode("utf-8", errors="replace").decode("utf-8")
 
 
-def run_bash(command: str, workdir: Path) -> str:
+def _run_bash_impl(command: str, workdir: Path) -> str:
     """
     执行 shell 命令
 
@@ -254,7 +254,7 @@ def run_bash(command: str, workdir: Path) -> str:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 
 
-def run_powershell(command: str, workdir: Path) -> str:
+def _run_powershell_impl(command: str, workdir: Path) -> str:
     """
     执行 Windows 原生 shell 命令
 
@@ -307,6 +307,47 @@ def run_powershell(command: str, workdir: Path) -> str:
         return _timeout_message()
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
+
+
+# 审计日志：shell 工具的 call/result 按 INFO 落盘（供宿主审计）。
+# 命令全文记录；结果压平换行（换行符转义为字面 \n，保单行日志可 grep）
+# 并截断到 _AUDIT_RESULT_MAX_CHARS，超出以省略标记结尾——日志体积防线
+# （轮转兜底之外）。
+_AUDIT_RESULT_MAX_CHARS = 2000
+
+
+def _audit_snippet(text: str) -> str:
+    """审计片段：换行压平 + 截断标记。"""
+    flat = text.replace("\r", "").replace("\n", "\\n")
+    if len(flat) <= _AUDIT_RESULT_MAX_CHARS:
+        return flat
+    return flat[:_AUDIT_RESULT_MAX_CHARS] + f" ...(truncated, total {len(flat)} chars)"
+
+
+def _audit_shell(tool: str, command: str, workdir, fn, *args):
+    """shell 工具审计包装：入口记 call、出口记 result（所有路径恰好一次：
+    成功 / 危险拦截 / 超时 / 异常均覆盖——拦截与错误也以 result 形态落盘）。"""
+    logger.info("[audit][%s] call | cwd=%s | command=%s", tool, workdir, command)
+    result = fn(*args)
+    logger.info("[audit][%s] result | %s", tool, _audit_snippet(result))
+    return result
+
+
+def run_bash(command: str, workdir: Path) -> str:
+    """执行 shell 命令（对外入口；审计包装 _run_bash_impl）。
+
+    安全措施：危险命令过滤、超时保护（PLANIFY_SHELL_TIMEOUT，默认 120 秒）、
+    输出截断（50000 字符）、call/result 审计落盘（INFO）。
+    """
+    return _audit_shell("bash", command, workdir, _run_bash_impl, command, workdir)
+
+
+def run_powershell(command: str, workdir: Path) -> str:
+    """执行 Windows 原生 shell 命令（对外入口；审计包装 _run_powershell_impl）。
+
+    安全措施与 run_bash 一致（危险过滤 / 超时 / 截断 / 审计落盘）。
+    """
+    return _audit_shell("powershell", command, workdir, _run_powershell_impl, command, workdir)
 
 
 # CJK 统一表意文字 + 扩展A + 兼容表意 + 日文假名 + 谚文（中文一字一词的判定范围）

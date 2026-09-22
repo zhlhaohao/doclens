@@ -13,6 +13,7 @@
 关键洞察："Agent 可以同时做多件事。"
 """
 
+import logging
 import os
 import platform
 import shutil
@@ -24,7 +25,15 @@ from pathlib import Path
 from queue import Queue
 from typing import Dict, List
 
-from ..tools.basic import _build_shell_argv, _find_bash_path, _find_windows_shell
+from ..tools.basic import (
+    _audit_snippet,
+    _build_shell_argv,
+    _find_bash_path,
+    _find_windows_shell,
+    _is_dangerous,
+)
+
+logger = logging.getLogger(__name__)
 
 #: check_background「仍在运行」回复的前缀——streaming runner 的纯轮询识别
 #: 契约（等待轮不计入轮次预算）依赖此常量判断，输出文案其余部分可自由演化
@@ -58,6 +67,22 @@ class BackgroundManager:
             启动确认信息，包含任务 ID
         """
         tid = str(uuid.uuid4())[:8]
+        # 审计：后台命令与同步 shell 工具同口径（call/result INFO 落盘），
+        # task ID 串联两行；结果在 _exec 完成时记录
+        logger.info(
+            "[audit][background] call | task=%s | cwd=%s | command=%s",
+            tid, self.workdir, command,
+        )
+        # 危险命令过滤：与同步 bash/powershell 同一清单——后台不是绕行通道
+        # （此前 _exec 不查，模型可把被拦命令改走 background_run 执行）。
+        # 拦截时不建任务不启线程，直接返回错误（与同步工具行为一致），
+        # 审计仍完整（call + result status=blocked）。
+        if _is_dangerous(command):
+            logger.info(
+                "[audit][background] result | task=%s | status=blocked | %s",
+                tid, "Error: Dangerous command blocked",
+            )
+            return "Error: Dangerous command blocked"
         with self._tasks_lock:
             self.tasks[tid] = {
                 "status": "running",
@@ -118,10 +143,17 @@ class BackgroundManager:
                 if tid in self.tasks:
                     self.tasks[tid].update({"status": "error", "result": str(e)})
         # 发送完成通知
+        status = self.tasks[tid]["status"] if tid in self.tasks else "error"
+        result = self.tasks[tid]["result"] if tid in self.tasks else "Unknown error"
+        # 审计：完成/超时/异常统一在此落盘（_exec 的唯一汇聚出口）
+        logger.info(
+            "[audit][background] result | task=%s | status=%s | %s",
+            tid, status, _audit_snippet(result or "(no output)"),
+        )
         self.notifications.put({
             "task_id": tid,
-            "status": self.tasks[tid]["status"] if tid in self.tasks else "error",
-            "result": self.tasks[tid]["result"][:500] if tid in self.tasks else "Unknown error"
+            "status": status,
+            "result": result[:500] if tid in self.tasks else "Unknown error"
         })
 
     def check(self, tid: str = None) -> str:
