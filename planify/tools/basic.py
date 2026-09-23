@@ -220,7 +220,6 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
                 # 没有 Git Bash，回退到 Windows 原生 shell（pwsh → powershell → cmd）
                 return run_powershell(command, workdir)
             # 使用 bash -c 包装命令
-            logger.debug("[bash] Executing: %s -c '%s' in %s", bash_path, command, workdir)
             r = subprocess.run(
                 [bash_path, "-c", command],
                 shell=False,
@@ -230,7 +229,6 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
             )
         else:
             # Unix 环境直接使用 shell
-            logger.debug("[bash] Executing: %s in %s", command, workdir)
             r = subprocess.run(
                 command, shell=True, cwd=str(workdir), capture_output=True, timeout=_shell_timeout()
             )
@@ -288,7 +286,6 @@ def _run_powershell_impl(command: str, workdir: Path) -> str:
             workdir.mkdir(parents=True, exist_ok=True)
 
         argv = _build_shell_argv(exe_path, kind, command)
-        logger.debug("[powershell] Executing: %s (%s) in %s", argv, kind, workdir)
         r = subprocess.run(
             argv,
             shell=False,
