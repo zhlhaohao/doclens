@@ -31,6 +31,14 @@ export class AskCard extends LitElement {
       display: block;
       width: 100%;
       box-sizing: border-box;
+      /* 悬置卡钉在消息区与输入栏之间（flex 子项）：多问堆叠超高时自身
+         限高内部滚动，不再把消息区压穿、溢出到屏外不可操作。overflow
+         非 visible 同时解除 flex 自动最小尺寸（= 内容高度），使卡片可被
+         容器剩余空间压缩；overscroll 防滚动穿透到底层页面。 */
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
     }
     .card {
       border: 1px solid var(--cortex-border, #d0d7de);
@@ -58,7 +66,7 @@ export class AskCard extends LitElement {
       margin: 0 0 10px;
     }
     .q:last-of-type {
-      margin-bottom: 12px;
+      margin-bottom: 4px;
     }
     .q-title {
       font-weight: 600;
@@ -127,10 +135,19 @@ export class AskCard extends LitElement {
       border-radius: 6px;
       font: inherit;
     }
+    /* 提交按钮常驻可见：卡片内部滚动时 sticky 钉在可视底部，免「滚到底
+       才能提交」。负 margin 拉通卡片全宽并吃掉 .card 底 padding，配不透
+       明背景防滚动内容从按钮下透出；未滚动时视觉与原布局等价。 */
     .actions {
+      position: sticky;
+      bottom: 0;
       display: flex;
       justify-content: flex-end;
       gap: 8px;
+      margin: 0 -14px -12px;
+      padding: 8px 14px 10px;
+      background: var(--cortex-surface, #fafbfc);
+      border-radius: 0 0 9px 9px;
     }
     button.primary {
       padding: 6px 18px;

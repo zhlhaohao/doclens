@@ -88,3 +88,97 @@ test.describe("Ask card interaction", () => {
     await expect(input).toBeEnabled();
   });
 });
+
+/**
+ * E2E: 悬置卡移动端多问超高——限高内部滚动可操作（2026-09-23 修复回归护栏）。
+ *
+ * 现有 interaction 用例依赖仓库中不存在的「挂起式 SSE mock 服务」（见
+ * tests/test_report_0831_001.md），本 describe 自包含：向页面注入 <ask-card>
+ * 并放进高度受限的 flex 容器（模拟 .focus-main 剩余空间被压缩的真实布局），
+ * respond 走 page.route mock——真实浏览器布局，验证 overflow-y:auto 收缩
+ * + sticky 提交按钮 + 4 问作答提交全链路。
+ */
+test.describe("Ask card mobile overflow scroll", () => {
+  test.skip(({ browserName }) => browserName === "webkit", "chat E2E baseline broken on webkit mobile");
+
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  const FOUR_QUESTIONS = {
+    requestId: "req_e2e_overflow_1",
+    questions: [1, 2, 3, 4].map((n) => ({
+      question: `第 ${n} 个问题：修复后卡片必须可在小屏内部滚动并完成作答？`,
+      header: `Q${n}`,
+      multiSelect: false,
+      options: [1, 2, 3, 4].map((k) => ({
+        label: `选项 ${k}`,
+        description: `第 ${n} 问的第 ${k} 个候选答案，附带较长描述文本以确保四问堆叠整体高度远超移动视口可用空间。`,
+      })),
+    })),
+  };
+
+  test("4-question card scrolls internally and submits within constrained height", async ({ page }) => {
+    // ---- mock respond（捕获提交载荷）----
+    const respondBodies: unknown[] = [];
+    await page.route("**/api/ask/respond", async (route) => {
+      respondBodies.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, json: { submitted: true } });
+    });
+    await page.route("**/api/status", (r) =>
+      r.fulfill({ status: 200, json: { indexed_docs: 0, index_path: "", total_size_bytes: 0, file_types: {} } }),
+    );
+
+    await page.goto("/");
+    // 等组件注册（app bundle 加载完成）后注入受限容器 + 卡片
+    await page.waitForFunction(() => customElements.get("ask-card") !== undefined);
+    await page.evaluate((ask) => {
+      const wrap = document.createElement("div");
+      // 模拟 .focus-main：column flex + 高度受限（移动视口下被 chrome 与
+      // 保底消息区压缩后的剩余空间，远小于 4 问卡片内容高度）
+      wrap.style.cssText =
+        "display:flex;flex-direction:column;height:400px;width:375px;overflow:hidden;";
+      wrap.id = "e2e-ask-wrap";
+      const card = document.createElement("ask-card");
+      card.ask = ask;
+      wrap.appendChild(card);
+      document.body.appendChild(wrap);
+    }, FOUR_QUESTIONS);
+
+    const card = shadowLocator(page, "ask-card", ".card");
+    await card.waitFor({ state: "visible" });
+    await expect(shadowLocator(page, "ask-card", ".q")).toHaveCount(4);
+
+    // 卡片进入内部滚动态：内容高度超出受限容器分配的高度
+    const scrollable = await page.evaluate(() => {
+      const host = document.querySelector("#e2e-ask-wrap ask-card");
+      return host !== null && host.scrollHeight > host.clientHeight;
+    });
+    expect(scrollable).toBe(true);
+
+    // sticky 提交按钮常驻可视区（不必滚到底）
+    const submitBtn = shadowLocator(page, "ask-card", "button.primary");
+    await expect(submitBtn).toBeDisabled();
+    await expect(submitBtn).toBeVisible();
+
+    // 逐问作答：每问勾选首个选项（第 4 问原本在屏外，滚动容器内可达）
+    const questionBlocks = shadowLocator(page, "ask-card", ".q");
+    for (let i = 0; i < 4; i++) {
+      const first = questionBlocks.nth(i).locator('input[type="radio"]').first();
+      await first.check();
+      await expect(first).toBeChecked();
+    }
+    await expect(submitBtn).toBeEnabled();
+    await submitBtn.click();
+
+    // 提交载荷：request_id 正确 + 4 问均有所选
+    await expect
+      .poll(() => respondBodies.length, { timeout: 10_000 })
+      .toBe(1);
+    const payload = respondBodies[0] as { request_id?: string; answers?: { selected: string[] }[] };
+    expect(payload.request_id).toBe("req_e2e_overflow_1");
+    expect(payload.answers?.length).toBe(4);
+    expect(payload.answers?.every((a) => a.selected.length === 1)).toBe(true);
+
+    // 已答实时卡消失（组件渲染 nothing）
+    await expect(card).toBeHidden();
+  });
+});

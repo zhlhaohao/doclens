@@ -6186,6 +6186,14 @@ ${s}</table>
       display: block;
       width: 100%;
       box-sizing: border-box;
+      /* 悬置卡钉在消息区与输入栏之间（flex 子项）：多问堆叠超高时自身
+         限高内部滚动，不再把消息区压穿、溢出到屏外不可操作。overflow
+         非 visible 同时解除 flex 自动最小尺寸（= 内容高度），使卡片可被
+         容器剩余空间压缩；overscroll 防滚动穿透到底层页面。 */
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
     }
     .card {
       border: 1px solid var(--cortex-border, #d0d7de);
@@ -6213,7 +6221,7 @@ ${s}</table>
       margin: 0 0 10px;
     }
     .q:last-of-type {
-      margin-bottom: 12px;
+      margin-bottom: 4px;
     }
     .q-title {
       font-weight: 600;
@@ -6282,10 +6290,19 @@ ${s}</table>
       border-radius: 6px;
       font: inherit;
     }
+    /* 提交按钮常驻可见：卡片内部滚动时 sticky 钉在可视底部，免「滚到底
+       才能提交」。负 margin 拉通卡片全宽并吃掉 .card 底 padding，配不透
+       明背景防滚动内容从按钮下透出；未滚动时视觉与原布局等价。 */
     .actions {
+      position: sticky;
+      bottom: 0;
       display: flex;
       justify-content: flex-end;
       gap: 8px;
+      margin: 0 -14px -12px;
+      padding: 8px 14px 10px;
+      background: var(--cortex-surface, #fafbfc);
+      border-radius: 0 0 9px 9px;
     }
     button.primary {
       padding: 6px 18px;
@@ -8124,6 +8141,12 @@ ${s}</table>
       flex: 1;
       min-height: 0;
       flex-direction: column;
+    }
+    /* 悬置卡（ask-card）可收缩内滚后，多问堆叠时会把消息区压到 0——
+       留最小保底，答题期间仍可见最后一两条消息上下文。row 布局
+       （桌面有预览）下列高本就 stretch，此规则无实际影响。 */
+    .focus-main chat-stream {
+      min-height: 96px;
     }
     /* 桌面 preview 关闭：chat-stream 与 ask-card 同步居中限宽（卡片不超消息区） */
     @media (min-width: 1024px) {
@@ -13302,7 +13325,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;vf([y({type:Boolean,reflect:!0})],rn.prototype,"open",2);rn=vf([V("watch-changes-dialog")],rn);var T3=Object.defineProperty,C3=Object.getOwnPropertyDescriptor,Pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?C3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&T3(t,r,s),s};let Hs=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 ac7c79c · 2026-09-22 14:58 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
+  `;vf([y({type:Boolean,reflect:!0})],rn.prototype,"open",2);rn=vf([V("watch-changes-dialog")],rn);var T3=Object.defineProperty,C3=Object.getOwnPropertyDescriptor,Pn=(e,t,r,i)=>{for(var s=i>1?void 0:i?C3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&T3(t,r,s),s};let Hs=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 b2ba0c7 · 2026-09-24 16:09 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?u`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -13317,7 +13340,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?u`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"ac7c79c · 2026-09-22 14:58"}</span>
+            <span class="value">${"b2ba0c7 · 2026-09-24 16:09"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

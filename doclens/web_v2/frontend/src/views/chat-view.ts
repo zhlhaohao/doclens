@@ -289,6 +289,12 @@ export class ChatView extends LitElement {
       min-height: 0;
       flex-direction: column;
     }
+    /* 悬置卡（ask-card）可收缩内滚后，多问堆叠时会把消息区压到 0——
+       留最小保底，答题期间仍可见最后一两条消息上下文。row 布局
+       （桌面有预览）下列高本就 stretch，此规则无实际影响。 */
+    .focus-main chat-stream {
+      min-height: 96px;
+    }
     /* 桌面 preview 关闭：chat-stream 与 ask-card 同步居中限宽（卡片不超消息区） */
     @media (min-width: 1024px) {
       .focus-main:not(.has-preview) chat-stream,
