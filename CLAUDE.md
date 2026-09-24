@@ -25,6 +25,9 @@ pip install -e ".[dev]"
 # 开发态用本地源码覆盖 PyPI 的 treesearchlib / planify（改 treesearch/、planify/ 即生效）
 pip install -e ./treesearch
 pip install -e ./planify
+
+# webfetch 二级降级需要 Playwright 浏览器二进制（pip 装不了，缺它 JS 渲染页全失败）
+python -m playwright install chromium --only-shell
 ```
 
 **运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
