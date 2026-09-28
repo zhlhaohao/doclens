@@ -169,32 +169,6 @@ def _iter_walk_directory(
             yield full_path
 
 
-def _walk_directory(
-    directory: str,
-    *,
-    allowed_extensions: set[str] | None = None,
-    ignore_dirs: frozenset[str] = DEFAULT_IGNORE_DIRS,
-    respect_gitignore: bool = True,
-    max_files: int = MAX_DIR_FILES,
-    follow_symlinks: bool = False,
-) -> list[str]:
-    """Recursively walk *directory* and return matching file paths.
-
-    List wrapper over the streaming ``_iter_walk_directory`` (single filter
-    implementation, no copy drift). ``max_files <= 0`` means no cap.
-    """
-    return list(
-        _iter_walk_directory(
-            directory,
-            allowed_extensions=allowed_extensions,
-            ignore_dirs=ignore_dirs,
-            respect_gitignore=respect_gitignore,
-            max_files=max_files,
-            follow_symlinks=follow_symlinks,
-        )
-    )
-
-
 def resolve_paths(
     patterns: list[str],
     *,

@@ -35,13 +35,6 @@ def rg_path() -> Optional[str]:
     return _rg_path
 
 
-def _reset_cache() -> None:
-    """Reset the cached rg check (for testing only)."""
-    global _rg_path, _rg_checked
-    _rg_path = None
-    _rg_checked = False
-
-
 def _estimate_cmd_length(cmd: list[str]) -> int:
     """Estimate total command-line length (args + separating spaces)."""
     return sum(len(arg) for arg in cmd) + len(cmd)

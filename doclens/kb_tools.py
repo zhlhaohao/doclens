@@ -367,23 +367,6 @@ def _bump_heading_levels(text: str, levels: int) -> str:
     return "\n".join(result)
 
 
-def _truncate_to_paragraphs(text: str, max_chars: int) -> str:
-    """以段落为单位截断文本，不超过 max_chars。"""
-    if len(text) <= max_chars:
-        return text
-
-    truncated = text[:max_chars]
-    last_para = truncated.rfind("\n\n")
-    if last_para > max_chars // 2:
-        return truncated[:last_para].rstrip()
-
-    last_nl = truncated.rfind("\n")
-    if last_nl > max_chars // 2:
-        return truncated[:last_nl].rstrip()
-
-    return truncated.rstrip()
-
-
 def _extract_keyword_window(
     text: str,
     query_words: list[str],
@@ -1043,7 +1026,7 @@ def _truncate_to_word_budget(text: str, max_words: int) -> Tuple[str, bool]:
     if len(pieces) <= max_words:
         return text, False
     kept = "".join(w + s for w, s in pieces[:max_words])
-    # 优先落在段落边界，其次行边界（与 _truncate_to_paragraphs 同一策略）
+    # 优先落在段落边界，其次行边界
     last_para = kept.rfind("\n\n")
     if last_para > len(kept) // 2:
         return kept[:last_para].rstrip(), True

@@ -95,11 +95,6 @@ def hl(text, keywords):
     return result
 
 
-def short_path(path):
-    """缩短路径"""
-    return path.replace("E:\\github\\notebook\\", "").replace("E:/github/notebook/", "")
-
-
 def make_vscode_link(path, line=None):
     """生成 VSCode 可点击超链接
 

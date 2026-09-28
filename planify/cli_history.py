@@ -88,13 +88,6 @@ class CommandHistory:
 # 跨平台单字符输入
 # ============================================================================
 
-def _read_char_win32() -> str:
-    """Windows: 使用 msvcrt 读取单个字符（支持 Unicode）"""
-    import msvcrt
-    ch = msvcrt.getwch()
-    return ch
-
-
 def _read_char_unix() -> str:
     """Unix: 使用 termios raw 模式读取单个字符"""
     import termios
@@ -313,37 +306,6 @@ def _read_key_win32() -> tuple[str, str]:
         return ("char", chr(first_ord))
 
 
-def _read_key_unix_ansi() -> tuple[str, str]:
-    """Unix ANSI 风格读取（用于 Git Bash/mintty）"""
-    import sys
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if ch == "\x1b":
-            # ESC 序列
-            ch2 = sys.stdin.read(1)
-            if ch2 == "[":
-                ch3 = sys.stdin.read(1)
-                if ch3 == "A":
-                    return ("up", "")
-                if ch3 == "B":
-                    return ("down", "")
-                if ch3 == "C":
-                    return ("right", "")
-                if ch3 == "D":
-                    return ("left", "")
-            return ("other", "")
-        # 普通字符
-        return ("char", ch)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-
 def _read_key_unix() -> tuple[str, str]:
     """Unix 平台按键识别"""
     ch = _read_char_unix()
@@ -377,14 +339,6 @@ def _read_key_unix() -> tuple[str, str]:
 # ============================================================================
 # 带历史导航的输入函数
 # ============================================================================
-
-def _clear_line(prompt_len: int, buf_len: int) -> None:
-    """清除当前行内容并重置光标到 prompt 之后"""
-    # \r 回到行首 → 输出 prompt_len 个空格覆盖 → 再回到行首
-    sys.stdout.write("\r" + " " * (prompt_len + buf_len) + "\r")
-    sys.stdout.write("\r")  # 光标到行首
-    sys.stdout.flush()
-
 
 def _redraw_line(prompt: str, buf: str, cursor_pos: int) -> None:
     """重绘当前行：prompt + buf，光标定位到 cursor_pos"""

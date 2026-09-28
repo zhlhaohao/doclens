@@ -18,5 +18,10 @@
       "Read(//c/Users/lianghao/github/cortex/test_work_dir/日记/**)",
       "Bash(rm -rf \"/c/Users/lianghao/github/cortex/test_work_dir/日记\")"
     ]
+  },
+  "skillOverrides": {
+    "code-review-skill": "off",
+    "kb-ask": "off",
+    "xlsx": "off"
   }
 }

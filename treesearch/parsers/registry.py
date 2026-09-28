@@ -108,11 +108,6 @@ SOURCE_TYPE_MAP: dict[str, str] = {
 }
 
 
-def _get_source_type(ext: str) -> str:
-    """Get source_type from file extension. Falls back to 'text'."""
-    return SOURCE_TYPE_MAP.get(ext.lower(), "text")
-
-
 # ---------------------------------------------------------------------------
 # Pre-filter routing
 # ---------------------------------------------------------------------------
