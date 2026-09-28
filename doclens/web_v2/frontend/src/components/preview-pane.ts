@@ -27,6 +27,20 @@ import {
   fontScaleFromPct,
 } from "../utils/font-scale";
 
+/** CJK 字符（汉字 / 假名 / 谚文基础区）——用于高亮输入条的分词判定。 */
+const CJK_RE = /[一-鿿぀-ヿ가-힯]/;
+
+/** 高亮输入条手动输入的关键词归一化（2026-09-28 决议）：
+ *  含 CJK → 去空格**整串匹配**（中文没有空格分词习惯——输入法确认词组
+ *  敲出的空格不是语义分隔，「松平 广忠」的意图是整词「松平广忠」；
+ *  按空格分词会把人名拆成「松平」「广忠」两支，落到「松平信定」这类
+ *  单字命中上，找不到目标整词）；纯 ASCII → 原样返回（保留空格分词的
+ *  英文多词语义，与 search 透传同口径——后端 tokenize_query 的
+ *  queryWords 契约不受影响，那条链路不经过本函数）。 */
+export function normalizeHighlightKeyword(input: string): string {
+  return CJK_RE.test(input) ? input.replace(/\s+/g, "") : input;
+}
+
 @customElement("preview-pane")
 export class PreviewPane extends LitElement {
   static styles = [
@@ -941,6 +955,14 @@ export class PreviewPane extends LitElement {
   // 透传 md-viewer keyword 高亮全部命中，并自动滚动到第一个命中。
   // ------------------------------------------------------------------
 
+  /** md-viewer 生效的关键词：手动输入经 normalizeHighlightKeyword 归一化
+   *  （含 CJK 去空格整串）；未手动输入时透传父组件 keyword 原样。 */
+  private get _effectiveKeyword(): string {
+    return this._highlightInput.trim()
+      ? normalizeHighlightKeyword(this._highlightInput)
+      : this.keyword;
+  }
+
   /** 桌面 header 的高亮按钮（图标 + hover 文字）。 */
   private _renderHighlightBtn() {
     return html`<button
@@ -957,7 +979,7 @@ export class PreviewPane extends LitElement {
         <doclens-icon name="search"></doclens-icon>
         <input
           type="text"
-          placeholder="输入关键字高亮，空格分隔多个…"
+          placeholder="输入关键字高亮（中文整词匹配，英文空格分隔多个）"
           .value=${this._highlightInput}
           @input=${this._onHighlightInput}
           @keydown=${this._onHighlightKeydown}
@@ -995,8 +1017,10 @@ export class PreviewPane extends LitElement {
 
   private _onHighlightKeydown = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
+      // Enter=下一个 / Shift+Enter=上一个（匹配导航，2026-09-28 决议，
+      // 浏览器 find bar 手感）。关键词变化后的自动首跳由输入 debounce 负责。
       this._clearHighlightDebounce();
-      void this._jumpToFirstHit();
+      void this._stepHit(e.shiftKey ? -1 : 1);
     } else if (e.key === "Escape") {
       this._onHighlightClear();
     }
@@ -1022,6 +1046,15 @@ export class PreviewPane extends LitElement {
     if (!viewer) return;
     await viewer.updateComplete;
     viewer.scrollToFirstKeywordHit();
+  }
+
+  /** 步进匹配导航（高亮输入条 Enter/Shift+Enter）：透传 md-viewer。 */
+  private async _stepHit(dir: 1 | -1) {
+    await this.updateComplete;
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (!viewer) return;
+    await viewer.updateComplete;
+    viewer.stepKeywordHit(dir);
   }
 
   // ------------------------------------------------------------------
@@ -1171,7 +1204,7 @@ export class PreviewPane extends LitElement {
         <md-viewer
           .content=${this._content}
           .line=${this.line}
-          .keyword=${this._highlightInput || this.keyword}
+          .keyword=${this._effectiveKeyword}
           .pages=${this.pages}
           .docPath=${this.path}
           .fontScale=${fontScaleFromPct(this._fontScalePct)}

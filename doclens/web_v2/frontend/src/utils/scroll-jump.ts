@@ -164,6 +164,16 @@ export const scrollJumpFabStyles = css`
     color: var(--cortex-primary);
     border-color: var(--cortex-primary);
   }
+  /* 禁用态（匹配导航零匹配时置灰，2026-09-28 匹配导航决议） */
+  .scroll-jump-fab:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .scroll-jump-fab:disabled:hover {
+    background: var(--cortex-surface);
+    color: var(--cortex-text-muted);
+    border-color: var(--cortex-border);
+  }
   .scroll-jump-fab:focus-visible {
     outline: none;
     box-shadow: var(--cortex-focus-ring);

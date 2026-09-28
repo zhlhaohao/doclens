@@ -252,6 +252,34 @@ function ensureMdConfigured(): void {
   marked.use({ extensions: [singleLineDisplayMath] });
 }
 
+/** 匹配导航粗跳阈值（px）：目标距离超过此值时第一段用瞬跳（auto）粗定位，
+ *  避免 smooth 全程滚动期间懒渲染页密集插入导致的高度持续塌变压垮收敛。 */
+const MATCH_NAV_ROUGH_JUMP_PX = 50000;
+
+/** 匹配导航的源文本索引：逐行跑与 _highlightKeyword 相同口径的正则
+ *  （空格分词 + escape + join("|")，大小写不敏感），返回每个匹配起始所在的
+ *  源行号（1-indexed，升序）。**源文本口径是导航真相源**——懒渲染文档
+ *  未渲染页的匹配不存在于 DOM，DOM <mark> 只是视觉呈现。
+ *  零宽命中防御性跳过（同 _highlightKeyword）。 */
+export function buildMatchLines(content: string, keyword: string): number[] {
+  const words = (keyword ?? "").split(/\s+/).filter((w) => w.length > 0);
+  if (words.length === 0 || !content) return [];
+  const re = new RegExp(
+    words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+    "gi",
+  );
+  const lines: number[] = [];
+  content.split("\n").forEach((line, i) => {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      lines.push(i + 1);
+      if (m[0].length === 0) re.lastIndex++; // 防御零宽匹配死循环
+    }
+  });
+  return lines;
+}
+
 @customElement("md-viewer")
 export class MdViewer extends LitElement {
   static styles = [
@@ -494,6 +522,32 @@ export class MdViewer extends LitElement {
       padding: 0 2px;
       border-radius: 2px;
     }
+    /* 匹配导航（keyword 非空时替代跳顶/跳底 FAB，2026-09-28 决议）：
+       计数徽标 n/m + 上/下步进两钮，复用 .scroll-jump-anchor 的 sticky
+       定位与 .scroll-jump-fab 外观；不受滚动距离门槛约束（出现 = 高亮激活）。 */
+    .match-fabs {
+      transform: translateY(-100%);  /* 同 .scroll-jump-fabs：锚点上移到锚点线之上 */
+      padding-right: var(--cortex-space-1);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: var(--cortex-space-2);
+      pointer-events: none;  /* 仅按钮可点，容器不拦截正文 */
+    }
+    .match-fabs .scroll-jump-fab {
+      pointer-events: auto;
+    }
+    .match-fabs .match-count {
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-pill);
+      padding: 1px 8px;
+      box-shadow: var(--cortex-shadow-md);
+      white-space: nowrap;
+    }
     /* 分页卡片：白纸，靠阴影区分（去 border） */
     .page-card {
       background: var(--cortex-surface);
@@ -550,6 +604,28 @@ export class MdViewer extends LitElement {
 
   /** 悬浮跳转按钮（跳首行/跳尾行）：scroller = :host 自身 */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
+
+  // ---------------------------------------------------------------- 匹配导航
+  // keyword 非空（高亮条输入 / 父组件搜索词透传**两源等价**）时，右下角
+  // 「跳顶/跳底」FAB 让位为「上一个/下一个匹配」（2026-09-28 决议）。
+  // 索引走源文本口径（buildMatchLines）——懒渲染文档未渲染页的匹配不在
+  // DOM，DOM <mark> 只是视觉呈现，不是导航真相源。
+  /** 源文本匹配索引（keyword/content 变化时重建）：每项 = 匹配起始源行号（升序）。 */
+  private _matchLines: number[] = [];
+  /** 徽标当前序号（1-based，随导航/滚动派生更新；0 = 无匹配）。 */
+  @state() private _matchIndex = 0;
+  /** 最近一次导航目标（0-based；-1 = 无）——步进时吸收平滑滚动未到位的
+   *  中间态（连点不丢步）；滚动落定后由 _updateMatchIndex 同步为视口实况。 */
+  private _navIdx = -1;
+  /** 最近一次导航落点元素（<mark> 或块）——**粘性锚**：仍在视口内时步进
+   *  基准粘住导航目标（一行多匹配也能逐一推进；topSourceLine 的块内像素
+   *  插值对块中部匹配会低报行号，纯视口推导会卡簇）；滚离视口或 DOM 重建
+   *  （keyword/content 变化销毁旧 mark）自动失效，回退视口行号推导。 */
+  private _navAnchor: HTMLElement | null = null;
+  /** 徽标滚动更新 debounce（滚动停顿 120ms 后刷新）。 */
+  private _badgeTimer: number | undefined;
+  /** 终校准代数：新的导航使进行中的 settle 循环失效（连点竞争）。 */
+  private _settleGen = 0;
 
   // ---------------------------------------------------------------- 分页懒渲染
   // 大文档（epub 14 万行）分页卡片不做全量 parse+insert——骨架先行，
@@ -637,10 +713,15 @@ export class MdViewer extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener("cortex:image-rotated", this._onImageRotated);
+    // :host 自身是滚动容器：直接挂 scroll 监听（匹配导航徽标派生更新）
+    this.addEventListener("scroll", this._onBadgeScroll, { passive: true });
   }
 
   disconnectedCallback() {
     window.removeEventListener("cortex:image-rotated", this._onImageRotated);
+    this.removeEventListener("scroll", this._onBadgeScroll);
+    window.clearTimeout(this._badgeTimer);
+    this._badgeTimer = undefined;
     this._pageObserver?.disconnect();
     this._pageObserver = null;
     super.disconnectedCallback();
@@ -676,10 +757,15 @@ export class MdViewer extends LitElement {
     // 旧 <mark> 随之销毁；仅 keyword 变化时 .innerHTML 绑定同值跳过、DOM 不重建，
     // 需先剥掉旧 <mark>——否则残留旧高亮且 TreeWalker 跳过 MARK 子树会漏判）
     if (changedProps.has("content") || changedProps.has("keyword")) {
+      // 匹配导航索引重建（源文本口径，与 DOM 无关；先于徽标派生更新）
+      this._matchLines = buildMatchLines(this.content, this.keyword);
+      this._navIdx = -1;
+      this._navAnchor = null; // 旧 mark 已随高亮重建销毁
       if (changedProps.has("keyword") && !changedProps.has("content")) {
         this._stripKeywordMarks();
       }
       this._highlightKeyword();
+      this._updateMatchIndex();
     }
     if (
       changedProps.has("content") ||
@@ -1065,26 +1151,186 @@ export class MdViewer extends LitElement {
     this.scrollTo({ top: this.scrollHeight - this.clientHeight, behavior });
   }
 
-  /** 滚动到第一个关键词命中（<mark class="keyword-hit">），并闪烁其所在块。
+  /** 滚动到第一个关键词命中（源文本口径的第一个匹配），并闪烁定位。
    *  供 preview-pane 的高亮输入条在用户输入后自动定位。无命中时静默返回。 */
   scrollToFirstKeywordHit(behavior: ScrollBehavior = "smooth") {
-    const mark = this.shadowRoot?.querySelector("mark.keyword-hit") as HTMLElement | null;
-    if (!mark) return;
-    // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器），
-    // 不能用 scrollIntoView —— 会沿滚动链传播把外层容器顶出去。
+    if (this._matchLines.length === 0) return;
+    this._gotoMatch(0, behavior);
+  }
+
+  // ---------------------------------------------------------------- 匹配导航
+  // （2026-09-28 决议）keyword 非空时右下角 FAB = 上一个/下一个匹配：
+  // 循环、视口位置起算（无独立索引状态）、徽标 n/m；懒渲染文档先同步
+  // 展开目标页再定位。详见 CONTEXT.md「匹配导航」。
+
+  /** 滚动监听：滚动停顿 120ms 后按视口位置派生更新徽标（与导航基准同源）。 */
+  private _onBadgeScroll = () => {
+    if (!this.keyword.trim() || this._matchLines.length === 0) return;
+    window.clearTimeout(this._badgeTimer);
+    this._badgeTimer = window.setTimeout(() => {
+      this._badgeTimer = undefined;
+      this._updateMatchIndex();
+    }, 120);
+  };
+
+  /** 粘性锚是否有效（存在、已挂载、在视口内）。 */
+  private _anchorVisible(): boolean {
+    const a = this._navAnchor;
+    if (!a || !a.isConnected) return false;
     const hostRect = this.getBoundingClientRect();
-    if (hostRect.height <= 0) return;
-    const markRect = mark.getBoundingClientRect();
-    this.scrollTo({
-      top: markRect.top - hostRect.top + this.scrollTop,
-      behavior,
-    });
-    // 闪烁首个命中所在的块级元素，增强定位感知
-    const block = mark.closest("[data-source-line]") as HTMLElement | null;
-    const flashTarget = block ?? mark;
-    flashTarget.classList.remove("highlight-flash"); // 重置以便动画重放
-    void flashTarget.offsetWidth;                    // 强制 reflow，让 animation 重新触发
-    flashTarget.classList.add("highlight-flash");
+    if (hostRect.height <= 0) return false;
+    const r = a.getBoundingClientRect();
+    return r.top < hostRect.bottom && r.bottom > hostRect.top;
+  }
+
+  /** 视口位置 → 当前匹配序号（0-based；-1 = 视口在首匹配之前）：
+   *  粘性锚在视口内 → 直接采用导航目标；否则行号 <= 视口顶部源行的
+   *  最后一个匹配（"正站着或刚越过"的那个）。 */
+  private _currentMatchIdx(): number {
+    if (this._anchorVisible()) return this._navIdx;
+    const top = this.topSourceLine();
+    let cur = -1;
+    for (let i = 0; i < this._matchLines.length; i++) {
+      if (this._matchLines[i] <= top) cur = i;
+      else break;
+    }
+    return cur;
+  }
+
+  /** 徽标与导航基准的统一刷新点：粘性锚有效 → 徽标钉在导航目标；
+   *  否则视口实况派生 n 并同步 _navIdx（清掉未到位/已滚离的导航目标）。 */
+  private _updateMatchIndex(): void {
+    const total = this._matchLines.length;
+    if (total === 0) {
+      this._matchIndex = 0;
+      this._navIdx = -1;
+      this._navAnchor = null;
+      return;
+    }
+    if (this._anchorVisible()) {
+      this._matchIndex = this._navIdx + 1;
+      return;
+    }
+    this._navAnchor = null;
+    const cur = this._currentMatchIdx();
+    this._matchIndex = Math.max(1, Math.min(total, cur + 1));
+    this._navIdx = cur;
+  }
+
+  /** 匹配导航：步进到上一个/下一个关键词命中（循环）。dir=1 下一个，
+   *  -1 上一个。无匹配静默返回（零匹配时按钮置灰，此为兜底）。
+   *  起算 = 视口位置派生的当前匹配；平滑滚动未到位时以最近导航目标
+   *  为当前（连点步进不丢步）。 */
+  stepKeywordHit(dir: 1 | -1): void {
+    const total = this._matchLines.length;
+    if (total === 0) return;
+    const cur = this._currentMatchIdx();
+    const base =
+      this._navIdx >= 0
+        ? dir > 0
+          ? Math.max(cur, this._navIdx)
+          : Math.min(cur, this._navIdx)
+        : cur;
+    const idx =
+      dir > 0 ? (base + 1) % total : base <= 0 ? total - 1 : base - 1;
+    this._gotoMatch(idx);
+  }
+
+  /** 定位到第 idx 个匹配（0-based）：懒渲染先展开目标页；滚动使匹配贴
+   *  视口顶（与 TOC / 命中行定位 / 锚点恢复全应用统一的 top 语义），
+   *  highlight-flash 闪 <mark> 本身（一行多匹配时连点可见闪烁移动；
+   *  源文本命中但 DOM 无 mark（alt 文本等）回退闪块）。 */
+  private _gotoMatch(idx: number, behavior: ScrollBehavior = "smooth") {
+    const line = this._matchLines[idx];
+    if (line === undefined) return;
+    this._matchIndex = idx + 1; // 徽标立即指向目的地（滚动动画中即更新）
+    this._navIdx = idx;
+    const block = this._findBlockAtLine(line); // 内部先 _ensurePageForLine 同步展开
+    if (!block) return;
+    const mark = this._markForMatch(block, idx);
+    const target = mark ?? block;
+    this._navAnchor = target; // 粘性锚：视口内时步进基准钉在落点
+    const gen = ++this._settleGen; // 使进行中的旧 settle 循环失效
+    const scrollOnce = (b: ScrollBehavior = behavior): number => {
+      // 仅滚动 md-viewer 自身（:host 是滚动容器），不用 scrollIntoView——
+      // 会沿滚动链传播把外层容器顶出去
+      const hostRect = this.getBoundingClientRect();
+      if (hostRect.height <= 0) return 0;
+      const tRect = target.getBoundingClientRect();
+      const top = tRect.top - hostRect.top + this.scrollTop;
+      const delta = Math.abs(top - this.scrollTop);
+      this.scrollTo({ top, behavior: b });
+      return delta; // 修正量（收敛循环的判定依据）
+    };
+    const flash = () => {
+      target.classList.remove("highlight-flash"); // 重置以便动画重放
+      void target.offsetWidth;                    // 强制 reflow，让 animation 重新触发
+      target.classList.add("highlight-flash");
+    };
+    const rough = scrollOnce();
+    // 超大跨度（目标常在从未渲染的懒渲染区）：全程 smooth 滚动需途经数十
+    // 页，页密集插入使高度持续塌变、收敛窗口压不住——第一段改瞬跳粗定位
+    //（估高位置），落定后收敛循环再精调
+    if (rough > MATCH_NAV_ROUGH_JUMP_PX) {
+      scrollOnce("auto");
+    }
+    // content-visibility / 新渲染页估高偏差：两帧后（尺寸为实值）再校准一次
+    //（同 scrollToSourceLine 的既有模式）
+    requestAnimationFrame(() => requestAnimationFrame(() => { scrollOnce(); }));
+    flash(); // 即时反馈（滚动动画中即开始闪）
+    // 滚动落定后的终校准（远距离跳转两帧校准仍会漂移，见 _settleTo）
+    this._settleTo(gen, scrollOnce, flash);
+  }
+
+  /** 等 scrollTop 稳定（连续 5 帧不动）后校准，**循环至收敛**再重放闪烁。
+   *  远距离跳转：途经懒渲染页陆续插入 + content-visibility 估高塌变，
+   *  单轮校准本身又引起新滚动、滚动又触发页插入——高度持续变，一次性
+   *  校准不够（症状：连点/大跨度跳转后页面"看似无高亮"，回退再进——
+   *  那时页已渲染、高度稳定——才正确）。收敛判据 = 稳定后的修正量
+   *  ≤1px（此时落点已精确）。gen 不匹配（被更新的导航取代）立即退出；
+   *  300 帧（~5s）超时兜底。 */
+  private _settleTo(gen: number, scrollOnce: () => number, flash: () => void) {
+    let last = -1;
+    let stable = 0;
+    let frames = 0;
+    const check = () => {
+      if (gen !== this._settleGen || !this.isConnected) return;
+      if (frames++ > 300) {
+        flash();
+        return;
+      }
+      const cur = this.scrollTop;
+      if (Math.abs(cur - last) <= 1) {
+        stable++;
+        if (stable >= 5) {
+          const delta = scrollOnce();
+          if (delta <= 1) {
+            flash(); // 落点已精确，重放闪烁
+            return;
+          }
+          stable = 0; // 修正量大 → 引起新滚动/页插入，继续等下一轮稳定
+        }
+      } else {
+        stable = 0;
+      }
+      last = cur;
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }
+
+  /** 第 idx 个匹配在块内对应的 <mark>：块内第 k 个匹配 = 块内 DOM 序第
+   *  k 个 mark（DOM 文本序 ≈ 块内源序）。块内序号 = idx 去掉块外前置匹配
+   *  （行号 < 块起始行的都是块外）。失配（块内无 mark / 越界）返回 null
+   *  → 调用方回退闪块。 */
+  private _markForMatch(block: HTMLElement, idx: number): HTMLElement | null {
+    const from = Number(block.getAttribute("data-source-line")) || 1;
+    let before = 0;
+    for (let i = 0; i < idx; i++) {
+      if (this._matchLines[i] < from) before++;
+    }
+    const marks = block.querySelectorAll<HTMLElement>("mark.keyword-hit");
+    return marks[idx - before] ?? null;
   }
 
   /** 滚动到源行所在块并闪烁定位（目录抽屉跳转用）。
@@ -1127,6 +1373,10 @@ export class MdViewer extends LitElement {
         if (tag === "SCRIPT" || tag === "STYLE" || tag === "MARK") {
           return NodeFilter.FILTER_REJECT;
         }
+        // re 带 g 标志：test 会推进 lastIndex 且跨节点残留——上一节点
+        // 命中后，本节点段首的目标词会被跳过而整节点漏高亮（实测：
+        // 「城主松平广忠…」ACCEPT 后，「广忠大怒…」被 REJECT）。每次重置。
+        re.lastIndex = 0;
         return re.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       },
     });
@@ -1211,7 +1461,7 @@ export class MdViewer extends LitElement {
             </section>
           `)}
         </div>
-        <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
+        ${this._renderFloatNav()}
         ${this._viewerSrc ? html`<image-viewer .src=${this._viewerSrc} @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
       `;
     }
@@ -1228,10 +1478,46 @@ export class MdViewer extends LitElement {
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>
         <div .innerHTML=${raw}></div>
       </div>
-      <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
+      ${this._renderFloatNav()}
       ${this._viewerSrc ? html`<image-viewer
         .src=${this._viewerSrc}
         @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
+    `;
+  }
+
+  /** 右下角悬浮导航：keyword 非空 → 匹配导航（上一个/下一个 + n/m 徽标），
+   *  替代跳顶/跳底 FAB（2026-09-28 决议；不受滚动距离门槛约束——出现 =
+   *  高亮激活）；keyword 空 → 原跳顶/跳底 FAB（含 300px 显隐门槛）。 */
+  private _renderFloatNav() {
+    if (this.keyword.trim()) {
+      const total = this._matchLines.length;
+      const none = total === 0;
+      return html`
+        <div class="scroll-jump-anchor">
+          <div class="match-fabs" role="group" aria-label="匹配导航">
+            <span class="match-count">${none ? "0/0" : `${this._matchIndex}/${total}`}</span>
+            <button
+              class="scroll-jump-fab"
+              type="button"
+              aria-label="上一个匹配"
+              title="上一个匹配"
+              ?disabled=${none}
+              @click=${() => this.stepKeywordHit(-1)}
+            ><doclens-icon name="chevron-up"></doclens-icon></button>
+            <button
+              class="scroll-jump-fab"
+              type="button"
+              aria-label="下一个匹配"
+              title="下一个匹配"
+              ?disabled=${none}
+              @click=${() => this.stepKeywordHit(1)}
+            ><doclens-icon name="chevron-down"></doclens-icon></button>
+          </div>
+        </div>
+      `;
+    }
+    return html`
+      <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
     `;
   }
 

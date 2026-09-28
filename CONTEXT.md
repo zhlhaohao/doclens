@@ -89,6 +89,7 @@
 
 - **宿主标题 (Host Title)**：Android 宿主打开 WebView 时通过 URL query `?title=`（URL 编码）传入的页面显示名，**仅 App WebView 容器内生效**——渲染为 app bar 中央的单行标题（超长省略号截断）。宿主不传则中央留空（**不**回退品牌名）；浏览器环境忽略该参数；不写 document.title。_Avoid_: 品牌名 Doclens（webview 内有意隐藏）、页面标题。
 - **悬置卡 (Pending Ask Card)**：AI 提问（ask_user_question / 门禁确认）的实时交互形态——钉在消息列表与输入框之间的固定槽位，**不随消息流滚动**；内容超高（一次最多 4 问）时限高**内部滚动**（可收缩 + 防滚动穿透 + 提交按钮常驻），消息列表保留最小可见高度（2026-09-23 决议）。与历史回看时消息流内的只读「提问摘要」相区分。_Avoid_: 把卡内多个问题块称作多张卡片（同一时刻至多一张悬置卡，新提问直接替换旧的）。
+- **匹配导航 (Match Navigation)**：预览关键词高亮的逐个命中步进形态——md-viewer keyword 非空（高亮条输入与父组件搜索词透传**两源等价**）时，右下角「跳顶/跳底」FAB 让位为「上一个/下一个匹配」（循环、视口位置起算、徽标 n/m、Enter/Shift+Enter 键位）；匹配索引以**源文本口径**预计算（与关键词高亮同正则、逐匹配记行号），懒渲染文档（epub/pdf/pptx/xlsx）导航前先同步展开目标页——DOM `<mark>` 只是视觉呈现，不是导航真相源。零匹配 = 按钮组置灰 + `0/0`（2026-09-28 决议）。_Avoid_: 拿 DOM mark 序列当导航索引（懒渲染下未渲染页的匹配不存在于 DOM）。
 - **分页懒渲染 (Paged Lazy Rendering)**：超大文档预览的渲染形态——后端按章产分页标记（epub 按树 depth-2 章，pdf/pptx/xlsx 原有体系），前端骨架先行（页卡片 header + 估高占位），滚动接近（IntersectionObserver 提前量）才 parse+sanitize+insert 该页；跳转/搜索定位先同步展开目标行所在页再定位。块级 content-visibility 跳过视口外 layout/paint（2026-09-28 决议，治 epub 14.5 万行预览的白屏与滚动卡顿）。_Avoid_: 全量渲染（数万块 DOM 拖死滚动）、虚拟滚动（锚点/TOC/选区功能全依赖 DOM 存在，已否决）。
 
 ## 决议摘要（详见 docs/adr/）
