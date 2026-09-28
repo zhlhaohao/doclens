@@ -4,4 +4,4 @@
 原始实现：agents/s_full.py
 """
 
-__version__ = "1.2.11"
+__version__ = "1.2.12"
