@@ -89,6 +89,7 @@
 
 - **宿主标题 (Host Title)**：Android 宿主打开 WebView 时通过 URL query `?title=`（URL 编码）传入的页面显示名，**仅 App WebView 容器内生效**——渲染为 app bar 中央的单行标题（超长省略号截断）。宿主不传则中央留空（**不**回退品牌名）；浏览器环境忽略该参数；不写 document.title。_Avoid_: 品牌名 Doclens（webview 内有意隐藏）、页面标题。
 - **悬置卡 (Pending Ask Card)**：AI 提问（ask_user_question / 门禁确认）的实时交互形态——钉在消息列表与输入框之间的固定槽位，**不随消息流滚动**；内容超高（一次最多 4 问）时限高**内部滚动**（可收缩 + 防滚动穿透 + 提交按钮常驻），消息列表保留最小可见高度（2026-09-23 决议）。与历史回看时消息流内的只读「提问摘要」相区分。_Avoid_: 把卡内多个问题块称作多张卡片（同一时刻至多一张悬置卡，新提问直接替换旧的）。
+- **分页懒渲染 (Paged Lazy Rendering)**：超大文档预览的渲染形态——后端按章产分页标记（epub 按树 depth-2 章，pdf/pptx/xlsx 原有体系），前端骨架先行（页卡片 header + 估高占位），滚动接近（IntersectionObserver 提前量）才 parse+sanitize+insert 该页；跳转/搜索定位先同步展开目标行所在页再定位。块级 content-visibility 跳过视口外 layout/paint（2026-09-28 决议，治 epub 14.5 万行预览的白屏与滚动卡顿）。_Avoid_: 全量渲染（数万块 DOM 拖死滚动）、虚拟滚动（锚点/TOC/选区功能全依赖 DOM 存在，已否决）。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -144,3 +145,4 @@
 - 2026-09-19：断开续跑（ADR-0028）= SSE 消费端断开不再终止生成——agent task 经 chat_runner registry（原子注册 + done 注销 + 强引用）与 SSE 生成器生命周期脱钩，断开后续跑完本轮并落库；**主动停止立刻停**（前端先 await stopChat 落信号再 abort，断开分支 interrupt.is_set() 命中即走旧三层兜底）；会话生成中再收新请求 409 SESSION_BUSY；detail 加 generating 字段（恢复态「思考中」占位 + 禁输入 + 停止可用）+ 5s 轮询跑完自动刷新 + 启动自动进入 generating 会话 + 断流自愈重拉；放生时立即唤醒挂起 ask（不等 300s 超时）；开关 CORTEX_CHAT_DISCONNECT_CONTINUE 默认 true（false = 旧行为断开即停）；interrupt 注销随 agent 收尾（续跑期 /chat/stop 仍可寻址）；不做 SSE 断点续传。同日治本修订：**展示层落库统一到后端**——chat 路径前端零 DB 写入（入口 ensure_message_user 幂等落本轮用户消息，收尾 append_message_ai 统一落策展 AI 条目；正常完成/断开续跑都落、在线主动停止不落=UI 丢弃半截既有语义；tool_calls 含 duration_ms、references 恒 [] 与历史等价；message_count 后端 count_live_messages 单一口径），取代初版「前端写 + 断开后端补写判重」的双生产者形态。
 - 2026-09-20：webview 顶栏中央标题（不建 ADR，展示层可逆）= 宿主经 URL query `?title=` 传入（encodeURIComponent，启动读一次，SPA 导航 query 天然保留）；显示门禁与 X 钮同源 isWebviewContainer()（单一环境真相源，浏览器忽略）；无参留空不回退品牌；app bar 改三列 grid（左 X/品牌 auto｜中标题 1fr 居中｜右 badges+avatar auto），单行省略号截断；不动 document.title；标题走 Lit 文本绑定（无 unsafeHTML，天然防注入）。
 - 2026-09-20：预览期手动旋转（ADR-0029）= 全屏查看器旋转钮，像素级顺时针 90° 落盘复用判向旋转管线（清 vision 队列残留 + FileWatcher 重建重转写）；无条件可用（纯像素操作零视觉依赖）、不弹确认、连点累加；范围 = /api/preview/raw 的四格式知识库图像（图像预览原图 / md 引用图 / 日记照片自动覆盖），内嵌图片（asset）排除；image_rotated SSE 加 manual 标志区分 toast 措辞，md-viewer / 日记缩略图监听事件 cache-bust 刷新。
+- 2026-09-28：大文档预览性能两连修（无 ADR，展示/渲染层可逆）= ① md-viewer 行号反推 lineOf 从逐块从头数换行（O(块数×全文长)，万行 md ~400ms）改为 preprocess 预构建行起始前缀表 + 二分（等价性逐块验证通过）；② epub 合成预览分页化 + 分页懒渲染（骨架 + IntersectionObserver 滚动接近才渲染该章 + 跳转先展开目标页）+ 块级 content-visibility: auto；实测《德川家康》epub（14.5 万行/460 章）：首屏从全量渲染（外推 5-15s 白屏）降至 2.7s（其中 ~1-2s 为 10.5MB 响应传输解析）、远距离跳转 315ms 行级精确命中、滚动最长一帧 212ms（单页懒渲染成本）。

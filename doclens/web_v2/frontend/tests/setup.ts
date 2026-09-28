@@ -15,7 +15,18 @@ class ResizeObserverMock {
 }
 
 class IntersectionObserverMock {
-  observe(): void {}
+  private callback: IntersectionObserverCallback;
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+  }
+  /** observe 即同步回调 isIntersecting=true：md-viewer 分页懒渲染在测试环境
+   *  保持「全部页立即渲染」语义（真实浏览器走原生 IntersectionObserver）。 */
+  observe(target: Element): void {
+    this.callback(
+      [{ target, isIntersecting: true } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
   unobserve(): void {}
   disconnect(): void {}
   takeRecords(): IntersectionObserverEntry[] {

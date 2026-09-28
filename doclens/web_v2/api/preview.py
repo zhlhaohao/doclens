@@ -421,7 +421,7 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         )
 
     md_content, line_map = render_tree_to_md(doc.structure, doc.source_type)
-    pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content)
+    pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content, line_map)
     # 图像文件：顶部嵌入原图（经 /api/preview/raw 服务源文件），下方为视觉解析结果
     if doc.source_type == "image":
         from urllib.parse import quote
@@ -503,6 +503,7 @@ def _extract_pages(
     structure: list,
     source_type: str,
     md_content: str,
+    line_map: dict | None = None,
 ):
     """从合成 md + structure 抽取分页信息。
 
@@ -510,6 +511,8 @@ def _extract_pages(
         structure: treesearch Document.structure（root 节点列表）
         source_type: Document.source_type（"pdf" / "pptx" / "excel" / ...）
         md_content: render_tree_to_md 的输出
+        line_map: render_tree_to_md 的 {node.line_start: md 实际行号}；
+          epub 分支依赖它换算分页边界（原始 line_start 体系与 md 行号不一致）
 
     Returns:
         (pages, cleaned_md):
@@ -522,7 +525,41 @@ def _extract_pages(
         return _extract_pptx_pages(structure), md_content
     if source_type == "excel":
         return _extract_excel_pages(structure), md_content
+    if source_type == "epub":
+        return _extract_epub_pages(structure, line_map or {}), md_content
     return None, md_content
+
+
+def _extract_epub_pages(structure: list, line_map: dict):
+    """EPUB：按章级节点（树 depth-2）产 pages，line_start 用 md 实际行号。
+
+    epub 经 anydoc→md_to_tree 的树形态：根(书名) → 册壳 → 章(depth-2) → 节。
+    章是天然的阅读/分页单位（实测《德川家康》460 章/14.5 万行）。
+    - node.line_start 是原始解析体系行号，须经 line_map 换算成 md 实际行号
+      （前端 _splitByPages 按它切 md content）
+    - 首页强制 line_start=1（书名/册壳 heading 并入第一页，防切丢开头）
+    - md 行号不增的空章跳过（并入前页，防零跨度页）
+    """
+    from doclens.web_v2.models.preview import PageMarker
+
+    pages = []
+    prev_line = 0
+    roots = [structure] if isinstance(structure, dict) else (structure or [])
+    for root in roots:
+        for vol in root.get("nodes") or []:
+            for ch in vol.get("nodes") or []:
+                title = (ch.get("title") or "").strip()
+                ls = ch.get("line_start") or 1
+                md_line = line_map.get(ls) or ls
+                if pages and md_line <= prev_line:
+                    continue
+                line_start = 1 if not pages else md_line
+                pages.append(PageMarker(
+                    label=title or f"章节 {len(pages) + 1}",
+                    line_start=line_start,
+                ))
+                prev_line = md_line
+    return pages or None
 
 
 def _extract_pptx_pages(structure: list):

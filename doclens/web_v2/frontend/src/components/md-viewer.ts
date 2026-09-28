@@ -33,6 +33,32 @@ let currentSrc = "";
 let cursor = 0;
 let currentOffset = 0;
 
+/** 每行起始偏移的前缀表（lineStarts[n] = 第 n+1 行在 currentSrc 中的起始偏移）。
+ *  preprocess 时随 currentSrc 一起 O(n) 构建；行计数从逐块
+ *  slice(0, idx).match(/\n/g)（O(块数×全文长) 的二次方，万行文档 ~400ms）
+ *  换成二分查找（对数复杂度）。 */
+let lineStarts: number[] = [0];
+
+function buildLineStarts(src: string): void {
+  const starts = [0];
+  for (let i = 0; i < src.length; i++) {
+    if (src.charCodeAt(i) === 10) starts.push(i + 1);
+  }
+  lineStarts = starts;
+}
+
+/** currentSrc 偏移 → 1-indexed 行号；二分找最后一个 ≤ idx 的行起始。 */
+function lineAt(idx: number): number {
+  let lo = 0;
+  let hi = lineStarts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (lineStarts[mid] <= idx) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo + 1;
+}
+
 /** 在 currentSrc 中查找 raw 的起始位置，返回 1-indexed 行号（全文绝对） */
 function lineOf(raw: string | undefined): number {
   if (!raw) return 0;
@@ -41,9 +67,9 @@ function lineOf(raw: string | undefined): number {
     // 降级：从头查找（处理罕见的乱序情况）
     const idx0 = currentSrc.indexOf(raw);
     if (idx0 === -1) return 0;
-    return (currentSrc.slice(0, idx0).match(/\n/g) ?? []).length + 1 + currentOffset;
+    return lineAt(idx0) + currentOffset;
   }
-  const line = (currentSrc.slice(0, idx).match(/\n/g) ?? []).length + 1;
+  const line = lineAt(idx);
   cursor = idx + raw.length;
   return line + currentOffset;
 }
@@ -208,6 +234,7 @@ function ensureMdConfigured(): void {
       preprocess(src: string) {
         currentSrc = src;
         cursor = 0;
+        buildLineStarts(src);
         return src;
       },
     },
@@ -377,6 +404,17 @@ export class MdViewer extends LitElement {
       max-width: 820px;
       margin: 0 auto;
     }
+    /* 视口外块跳过 layout/paint——大文档（epub 14 万行 / 数万块）滚动
+       性能关键。contain-intrinsic-size 的 auto 前缀让浏览器记住每块
+       最后渲染的真实尺寸（重复滚动越来越准）；从未渲染过的远处块按
+       500px 估高，锚点跳转到该类块存在一次性偏差（scrollToSourceLine
+       的 rAF 二次校准吸收）。选择器覆盖单块（.md-body > div）与分页
+       卡片（.page-card > div）两种 innerHTML 容器的直接块级子元素。 */
+    .md-body > div > *,
+    .page-card > div > * {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 500px;
+    }
     /* 分页容器（pdf/pptx/excel）：覆盖 .md-body 白纸为透明，
        仅保留居中 —— 让子 .page-card 当"多张纸"而非"一张大纸包多页"。
        必须在 .md-body 之后定义才能覆盖。 */
@@ -513,6 +551,89 @@ export class MdViewer extends LitElement {
   /** 悬浮跳转按钮（跳首行/跳尾行）：scroller = :host 自身 */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
 
+  // ---------------------------------------------------------------- 分页懒渲染
+  // 大文档（epub 14 万行）分页卡片不做全量 parse+insert——骨架先行，
+  // 滚动接近（observer 提前量）才渲染该页内容；跳转/定位先展开目标页。
+  /** _splitByPages 的缓存（content/pages 变化时重算，render 与 _renderPage 共用）。 */
+  private _pagedChunks: Array<{ label: string; md: string; offset: number }> | null = null;
+  /** 已渲染页的 index 集合（content/pages 变化时整体作废）。 */
+  private _renderedPages = new Set<number>();
+  private _pageObserver: IntersectionObserver | null = null;
+
+  /** 页内容估高（骨架占位，渲染后移除）：行数 × 28px 粗估。 */
+  private _estHeight(md: string): number {
+    return Math.max(120, (md.split("\n").length) * 28);
+  }
+
+  private _pageCard(i: number): HTMLElement | null {
+    return this.shadowRoot?.querySelector(`.page-card[data-page-index="${i}"]`) ?? null;
+  }
+
+  /** 渲染第 i 页内容（幂等）：parse + sanitize + 塞入骨架，并跑该页的后处理。 */
+  private _renderPage(i: number): void {
+    if (!this._pagedChunks || this._renderedPages.has(i)) return;
+    const c = this._pagedChunks[i];
+    const holder = this._pageCard(i)?.querySelector<HTMLElement>(".page-content");
+    if (!c || !holder) return;
+    currentOffset = c.offset;
+    holder.innerHTML = sanitizeHtml(marked.parse(c.md, { async: false }) as string);
+    holder.removeAttribute("style"); // 移除估高占位
+    this._renderedPages.add(i);
+    this._resolveImageUrls(holder);
+    this._applyIconSizing(holder);
+    this._bindImageClicks(holder);
+    this._bindCopyButtons(holder);
+    if (this.keyword.trim()) this._highlightKeyword(holder);
+  }
+
+  /** 确保源行 line 所在页已渲染（跳转/定位入口调用，未渲染则同步展开）。 */
+  private _ensurePageForLine(line: number): void {
+    if (!this.pages?.length) return;
+    let idx = 0;
+    for (let i = 0; i < this.pages.length; i++) {
+      if (this.pages[i].line_start <= line) idx = i;
+      else break;
+    }
+    this._renderPage(idx);
+  }
+
+  /** content/pages 变化后（骨架已 commit）启动懒渲染：首页立即渲染 + observer 观察其余页。 */
+  private _startLazyPages(): void {
+    this._pageObserver?.disconnect();
+    this._pageObserver = null;
+    const chunks = this._pagedChunks;
+    if (!chunks?.length) return;
+    // Lit 按位置复用卡片 DOM：清掉旧文档残留内容并恢复估高占位
+    // （_renderedPages 已在 willUpdate 清空，此处重置 DOM 与其一致）
+    chunks.forEach((c, i) => {
+      const holder = this._pageCard(i)?.querySelector<HTMLElement>(".page-content");
+      if (holder) {
+        holder.innerHTML = "";
+        holder.setAttribute("style", `min-height:${this._estHeight(c.md)}px`);
+      }
+    });
+    this._renderPage(0);
+    if (typeof IntersectionObserver === "undefined") return; // 测试/老环境兜底：只渲染首页
+    this._pageObserver = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const card = (e.target as HTMLElement).closest(".page-card");
+          const idx = Number(card?.getAttribute("data-page-index"));
+          this._renderPage(idx);
+          this._pageObserver?.unobserve(e.target);
+        }
+      },
+      { root: this, rootMargin: "2000px 0px" },
+    );
+    chunks.forEach((_, i) => {
+      if (!this._renderedPages.has(i)) {
+        const holder = this._pageCard(i)?.querySelector(".page-content");
+        if (holder) this._pageObserver!.observe(holder);
+      }
+    });
+  }
+
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener("cortex:image-rotated", this._onImageRotated);
@@ -520,7 +641,19 @@ export class MdViewer extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener("cortex:image-rotated", this._onImageRotated);
+    this._pageObserver?.disconnect();
+    this._pageObserver = null;
     super.disconnectedCallback();
+  }
+
+  willUpdate(changed: Map<string, unknown>) {
+    if (changed.has("content") || changed.has("pages")) {
+      // 分页文档：重算分块缓存；已渲染页作废（render 后由 _startLazyPages 重新启动）
+      this._pagedChunks = this.pages?.length
+        ? this._splitByPages(this.content, this.pages)
+        : null;
+      this._renderedPages.clear();
+    }
   }
 
   /** 图片旋转落盘（判向自动 ADR-0017 / 预览期手动 ADR-0029）：
@@ -553,6 +686,11 @@ export class MdViewer extends LitElement {
       changedProps.has("pages") ||
       changedProps.has("docPath")
     ) {
+      if (changedProps.has("content") || changedProps.has("pages")) {
+        // 骨架已 commit：启动懒渲染（首页立即渲染，其余页挂 observer）
+        this._startLazyPages();
+      }
+      // docPath 单独变化（content 未变）：对已渲染页补图片 URL 重写与绑定
       this._resolveImageUrls();
       this._applyIconSizing();
       this._bindImageClicks();
@@ -566,10 +704,11 @@ export class MdViewer extends LitElement {
   }
 
   /** 相对文档目录的图片 src → /api/preview/raw URL（仅当 docPath 已设置）。
-   *  在 _applyIconSizing 之前执行：重写后的 URL 不带 dw，自然走 naturalWidth 兜底。 */
-  private _resolveImageUrls() {
+   *  在 _applyIconSizing 之前执行：重写后的 URL 不带 dw，自然走 naturalWidth 兜底。
+   *  root 参数供懒渲染对新页根单独执行（缺省 = 全组件树）。 */
+  private _resolveImageUrls(root: ParentNode = this.shadowRoot!) {
     if (!this.docPath) return;
-    const imgs = this.shadowRoot!.querySelectorAll<HTMLImageElement>("img");
+    const imgs = root.querySelectorAll<HTMLImageElement>("img");
     imgs.forEach((img) => {
       const raw = img.getAttribute("src") ?? "";
       const url = resolveDocImageUrl(this.docPath, raw);
@@ -578,8 +717,8 @@ export class MdViewer extends LitElement {
   }
 
   /** 为渲染后的 img 绑定点击 → 全屏查看（marked innerHTML 的图片无法用 @click 模板绑定） */
-  private _bindImageClicks() {
-    const imgs = this.shadowRoot!.querySelectorAll<HTMLImageElement>("img");
+  private _bindImageClicks(root: ParentNode = this.shadowRoot!) {
+    const imgs = root.querySelectorAll<HTMLImageElement>("img");
     imgs.forEach((img) => {
       if (img.dataset.bound) return;
       img.dataset.bound = "true";
@@ -591,8 +730,8 @@ export class MdViewer extends LitElement {
   }
 
   /** 为代码块的复制按钮绑定点击 → 写入剪贴板 */
-  private _bindCopyButtons() {
-    const btns = this.shadowRoot!.querySelectorAll<HTMLButtonElement>(".copy-btn");
+  private _bindCopyButtons(root: ParentNode = this.shadowRoot!) {
+    const btns = root.querySelectorAll<HTMLButtonElement>(".copy-btn");
     btns.forEach((btn) => {
       if (btn.dataset.bound) return;
       btn.dataset.bound = "true";
@@ -627,8 +766,8 @@ export class MdViewer extends LitElement {
    *  优先用 src 的 dw 查询参数（方案 B：后端注入的显示宽，准确、立即布局无闪烁）；
    *  无 dw 时退回 naturalWidth（方案 A 兜底，覆盖旧索引，需等图片加载）。
    *  ≤阈值的设 style.width 固定原尺寸；大图不设 width，继续 max-width:100% 铺满。 */
-  private _applyIconSizing() {
-    const imgs = this.shadowRoot!.querySelectorAll("img");
+  private _applyIconSizing(root: ParentNode = this.shadowRoot!) {
+    const imgs = root.querySelectorAll("img");
     imgs.forEach((img) => {
       const dw = this._dispWidthFromSrc(img.src);
       if (dw !== null) {
@@ -658,6 +797,8 @@ export class MdViewer extends LitElement {
 
   /** 找 data-source-line <= line 的最后一个块 = 该源行所在的 markdown 块 */
   private _findBlockAtLine(line: number): HTMLElement | null {
+    // 懒渲染：目标行所在页可能尚未渲染，先同步展开（幂等）再查块
+    this._ensurePageForLine(line);
     const blocks = this._anchorBlocks();
     let best: HTMLElement | null = null;
     for (const el of blocks) {
@@ -708,24 +849,30 @@ export class MdViewer extends LitElement {
    *  供 preview-pane 在编辑→预览切换时恢复位置锚点，与 md-editor.scrollToLine()
    *  同精度；不触发闪烁动画。 */
   scrollToSourceLine(line: number, behavior: ScrollBehavior = "auto") {
-    const blocks = this._anchorBlocks();
-    const target = this._findBlockAtLine(line);
-    if (!target) return;
-    // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
-    // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
-    // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
-    const hostRect = this.getBoundingClientRect();
-    if (hostRect.height <= 0) return;
-    const targetRect = target.getBoundingClientRect();
-    // 块内行偏移 → 像素偏移（与 topSourceLine 的插值互逆，保证切换往返一致）
-    const start = Number(target.getAttribute("data-source-line")) || 1;
-    const span = this._blockSpan(target, blocks);
-    const offset = Math.max(0, Math.min(span - 1, line - start));
-    const pxInto = targetRect.height > 0 ? (offset / span) * targetRect.height : 0;
-    this.scrollTo({
-      top: targetRect.top + pxInto - hostRect.top + this.scrollTop,
-      behavior,
-    });
+    const scrollOnce = () => {
+      const blocks = this._anchorBlocks();
+      const target = this._findBlockAtLine(line);
+      if (!target) return;
+      // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
+      // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
+      // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
+      const hostRect = this.getBoundingClientRect();
+      if (hostRect.height <= 0) return;
+      const targetRect = target.getBoundingClientRect();
+      // 块内行偏移 → 像素偏移（与 topSourceLine 的插值互逆，保证切换往返一致）
+      const start = Number(target.getAttribute("data-source-line")) || 1;
+      const span = this._blockSpan(target, blocks);
+      const offset = Math.max(0, Math.min(span - 1, line - start));
+      const pxInto = targetRect.height > 0 ? (offset / span) * targetRect.height : 0;
+      this.scrollTo({
+        top: targetRect.top + pxInto - hostRect.top + this.scrollTop,
+        behavior,
+      });
+    };
+    scrollOnce();
+    // content-visibility：目标块首次进入视口才真实渲染，估高（500px）与实高
+    // 有偏差；两帧后（渲染完成、尺寸为实值）再校准一次，吸收该偏差。
+    requestAnimationFrame(() => requestAnimationFrame(scrollOnce));
   }
 
   /** 组件渲染树内的 Selection（Chromium 提供 ShadowRoot.getSelection，
@@ -963,9 +1110,10 @@ export class MdViewer extends LitElement {
   }
 
   /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
-   *  使用 TreeWalker 遍历文本节点，避免对 HTML 结构做字符串替换引入 XSS。 */
-  private _highlightKeyword() {
-    const root = this.shadowRoot?.querySelector(".md-body-paged, .md-body") as HTMLElement | null;
+   *  使用 TreeWalker 遍历文本节点，避免对 HTML 结构做字符串替换引入 XSS。
+   *  scope 参数供懒渲染对新渲染页单独执行（缺省 = 正文容器全量）。 */
+  private _highlightKeyword(scope?: ParentNode) {
+    const root = (scope ?? this.shadowRoot?.querySelector(".md-body-paged, .md-body")) as HTMLElement | null;
     if (!root) return;
     const words = (this.keyword ?? "").split(/\s+/).filter((w) => w.length > 0);
     if (words.length === 0) return;
@@ -1047,23 +1195,21 @@ export class MdViewer extends LitElement {
     if (!this.content) {
       return html`<div class="empty">无内容</div>`;
     }
-    // 分页模式：每段 = 一张卡片
+    // 分页模式：每段 = 一张卡片（懒渲染——骨架先行，滚动接近才 parse+insert 该页）
     if (this.pages && this.pages.length > 0) {
-      const chunks = this._splitByPages(this.content, this.pages);
+      const chunks = this._pagedChunks ?? [];
       return html`
         <div class="md-body md-body-paged">
           <div class="copy-bar-top">${this._renderCopyBtn()}</div>
-          ${chunks.map((c) => {
-            // 在调 marked.parse 前先设偏移，renderer 把分块内行号加上 offset 得绝对行号
-            currentOffset = c.offset;
-            const chunkHtml = sanitizeHtml(marked.parse(c.md, { async: false }) as string);
-            return html`
-              <section class="page-card">
-                <header class="page-card-header">${c.label}</header>
-                <div .innerHTML=${chunkHtml}></div>
-              </section>
-            `;
-          })}
+          ${chunks.map((c, i) => html`
+            <section class="page-card" data-page-index="${i}">
+              <header class="page-card-header">${c.label}</header>
+              <div
+                class="page-content"
+                style="min-height:${this._estHeight(c.md)}px"
+              ></div>
+            </section>
+          `)}
         </div>
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
         ${this._viewerSrc ? html`<image-viewer .src=${this._viewerSrc} @close=${() => this._viewerSrc = ""}></image-viewer>` : null}
