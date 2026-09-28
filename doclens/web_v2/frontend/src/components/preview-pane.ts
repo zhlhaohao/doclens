@@ -3,12 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
 import "./toc-drawer";
+import "./pdf-viewer";
 import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import { extractHeadings, type TocItem } from "../utils/toc";
 import type { MdEditor } from "./md-editor";
 import type { MdViewer } from "./md-viewer";
+import type { PdfViewer } from "./pdf-viewer";
 import {
   ScrollJumpController,
   scrollJumpFabStyles,
@@ -462,6 +464,8 @@ export class PreviewPane extends LitElement {
    *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
   @property({ type: Boolean }) mobile = false;
   @property({ attribute: false }) pages: PageMarker[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表（后端 page_starts），命中行跳页依据。 */
+  @property({ attribute: false }) pageStarts: number[] | null = null;
   /** PST 派生邮件预览的附件清单（null = 非邮件预览或无元数据）。 */
   @property({ attribute: false }) attachments: PstAttachmentInfo[] | null = null;
   /** 桌面 header 显示返回按钮（如 PST 邮件预览 → 返回邮件列表）。 */
@@ -508,8 +512,10 @@ export class PreviewPane extends LitElement {
   /** 悬浮跳转按钮（纯文本预览分支；markdown 分支由 md-viewer 自治） */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
 
-  /** 滚动位置记忆：当前挂监听器的 md-viewer（随分支生灭，需重复挂/摘） */
-  private _scrollBoundViewer: MdViewer | null = null;
+  /** 滚动位置记忆：当前挂监听器的预览组件（md-viewer / pdf-viewer，随分支生灭） */
+  private _scrollBoundViewer: HTMLElement | null = null;
+  /** 绑定时刻的锚点读取函数（md=行号 / pdf=页号）。 */
+  private _scrollAnchorFn: (() => number) | null = null;
   private _scrollSaveTimer: number | undefined;
   /** 待落盘写入所属的 path（滚动发生时的旧 path，flush 时 this.path 可能已切走） */
   private _pendingScrollPath = "";
@@ -520,8 +526,10 @@ export class PreviewPane extends LitElement {
       this._highlightInput = "";
       this._showHighlightBar = false;
       this._clearHighlightDebounce();
-      // 目录抽屉同样不跨文档残留
+      // 目录抽屉同样不跨文档残留（pdf 的 content 恒空串，content 变化
+      // 分支不触发，须在 path 变化时清书签条目）
       this._showToc = false;
+      this._tocItems = [];
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
@@ -546,13 +554,15 @@ export class PreviewPane extends LitElement {
     if (body) this._scrollJump.attach(body);
     else this._scrollJump.detach();
 
-    // 滚动位置记忆：md-viewer 只在 markdown 预览分支存在，跟随分支挂/摘
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    // 滚动位置记忆：md-viewer（markdown 分支）/ pdf-viewer（pdf 分支，
+    // ADR-0031——内部容器 re-dispatch scroll）跟随分支挂/摘
+    const viewer = this._activePreviewViewer();
     if (this.rememberScroll && viewer && this._mode === "preview") {
-      if (this._scrollBoundViewer !== viewer) {
+      if (this._scrollBoundViewer !== viewer.el) {
         this._detachScrollMemory(); // 先摘旧的（含 flush）
-        viewer.addEventListener("scroll", this._onViewerScroll, { passive: true });
-        this._scrollBoundViewer = viewer;
+        viewer.el.addEventListener("scroll", this._onViewerScroll, { passive: true });
+        this._scrollBoundViewer = viewer.el;
+        this._scrollAnchorFn = viewer.top;
       }
     } else if (this._scrollBoundViewer) {
       this._detachScrollMemory();
@@ -560,13 +570,14 @@ export class PreviewPane extends LitElement {
 
     // 位置恢复：独立分支（打开新文件时 _mode 不变，下面的 _mode 分支不执行）。
     // files-view 从不传 .line → 无需 _suppressLocate；行号锚点是尽力而为语义。
+    // pdf 分支的恢复由 @document-ready 处理（渲染管线就绪时机在 lit 更新之后）。
     if (this.rememberScroll && changed.has("path")) {
       const saved = readScrollLine(this.path);
-      if (saved !== null && saved > 1 && this.language === "markdown" && viewer) {
+      if (saved !== null && saved > 1 && this.language === "markdown" && viewer?.kind === "md") {
         const pathAtRestore = this.path;
-        await viewer.updateComplete;
+        await viewer.el.updateComplete;
         if (this.path !== pathAtRestore) return; // 快速连点：放弃过期恢复
-        viewer.scrollToSourceLine(saved, "auto"); // 瞬跳，与锚点恢复一致
+        (viewer.el as MdViewer).scrollToSourceLine(saved, "auto"); // 瞬跳，与锚点恢复一致
       }
     }
 
@@ -585,16 +596,17 @@ export class PreviewPane extends LitElement {
       }
       return;
     }
-    // 编辑 → 预览
+    // 编辑 → 预览（编辑只在 markdown 分支发生，恢复目标恒为 md-viewer）
     if (this._skipRestoreOnce) {
       this._skipRestoreOnce = false;
       return;
     }
-    if (viewer) {
-      await viewer.updateComplete;
-      if (this._anchorAtBottom) viewer.scrollToBottom("auto");
-      else viewer.scrollToSourceLine(this._anchorLine, "auto");
-      if (this._selOffsets) viewer.selectSourceOffsets(this._selOffsets.start, this._selOffsets.end);
+    const mdViewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    if (mdViewer) {
+      await mdViewer.updateComplete;
+      if (this._anchorAtBottom) mdViewer.scrollToBottom("auto");
+      else mdViewer.scrollToSourceLine(this._anchorLine, "auto");
+      if (this._selOffsets) mdViewer.selectSourceOffsets(this._selOffsets.start, this._selOffsets.end);
     }
     this._suppressLocate = false;
   }
@@ -614,6 +626,19 @@ export class PreviewPane extends LitElement {
 
   // ------------------------------------------------------------ 滚动位置记忆
 
+  /** 当前活跃预览组件的滚动锚点（md-viewer=源行号 / pdf-viewer=页号+
+   *  页内偏移编码值，ADR-0031）。 */
+  private _activePreviewViewer():
+    | { kind: "md"; el: MdViewer; top: () => number }
+    | { kind: "pdf"; el: PdfViewer; top: () => number }
+    | null {
+    const md = this.shadowRoot?.querySelector("md-viewer") as MdViewer | null;
+    if (md) return { kind: "md", el: md, top: () => md.topSourceLine() };
+    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    if (pdf) return { kind: "pdf", el: pdf, top: () => pdf.scrollAnchorValue() };
+    return null;
+  }
+
   private _onViewerScroll = () => {
     this._pendingScrollPath = this.path;
     window.clearTimeout(this._scrollSaveTimer);
@@ -625,10 +650,11 @@ export class PreviewPane extends LitElement {
     window.clearTimeout(this._scrollSaveTimer);
     this._scrollSaveTimer = undefined;
     const viewer = this._scrollBoundViewer;
+    const top = this._scrollAnchorFn;
     const path = this._pendingScrollPath;
     this._pendingScrollPath = "";
-    if (!viewer || !path) return;
-    writeScrollLine(path, viewer.topSourceLine());
+    if (!viewer || !top || !path) return;
+    writeScrollLine(path, top());
   }
 
   /** 摘除 scroll 监听并 flush 未落盘的写入（幂等）。 */
@@ -731,7 +757,7 @@ export class PreviewPane extends LitElement {
               @click=${this._onTocToggle}
             ><doclens-icon name="list-tree"></doclens-icon></button>`
           : null}
-        ${this.language === "markdown" && this._mode === "preview"
+        ${(this.language === "markdown" || this.language === "pdf") && this._mode === "preview"
           ? html`<button
               class="mobile-highlight ${this._showHighlightBar ? "active" : ""}"
               type="button"
@@ -1039,8 +1065,10 @@ export class PreviewPane extends LitElement {
     }
   }
 
-  /** 等 md-viewer 重渲染并完成关键词高亮后，滚动到第一个命中。 */
+  /** 等 md-viewer 重渲染并完成关键词高亮后，滚动到第一个命中。
+   *  pdf 分支无需处理：findController 的 find 命令默认选中首个命中。 */
   private async _jumpToFirstHit() {
+    if (this.language === "pdf") return;
     await this.updateComplete;
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     if (!viewer) return;
@@ -1048,9 +1076,15 @@ export class PreviewPane extends LitElement {
     viewer.scrollToFirstKeywordHit();
   }
 
-  /** 步进匹配导航（高亮输入条 Enter/Shift+Enter）：透传 md-viewer。 */
+  /** 步进匹配导航（高亮输入条 Enter/Shift+Enter）：
+   *  md-viewer 源文本预计算索引 / pdf-viewer findagain（ADR-0031 平移）。 */
   private async _stepHit(dir: 1 | -1) {
     await this.updateComplete;
+    if (this.language === "pdf") {
+      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+      pdf?.stepKeywordHit(dir);
+      return;
+    }
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     if (!viewer) return;
     await viewer.updateComplete;
@@ -1063,20 +1097,38 @@ export class PreviewPane extends LitElement {
   // ------------------------------------------------------------------
 
   /** 目录抽屉支持的预览类型：md / docx / pdf
-   * （pptx/xlsx/邮件/图像解读的 md 不提供——2026-08-21 决议）。 */
+   * （pptx/xlsx/邮件/图像解读的 md 不提供——2026-08-21 决议；
+   * pdf 数据源为原生书签，无书签无条目 → 按钮隐藏，ADR-0031）。 */
   private get _tocSupported(): boolean {
     return /\.(md|markdown|docx|pdf)$/i.test(this.path);
   }
 
-  /** 目录按钮显隐：markdown 预览模式 + 支持的文档类型 + 文档含 heading。 */
+  /** 目录按钮显隐：预览模式 + 支持的文档类型 + 有目录条目
+   *  （md/docx 来自 heading 提取；pdf 来自 pdf-viewer 的 toc-change 书签）。 */
   private get _tocAvailable(): boolean {
     return (
-      this.language === "markdown" &&
+      (this.language === "markdown" || this.language === "pdf") &&
       this._mode === "preview" &&
       this._tocSupported &&
       this._tocItems.length > 0
     );
   }
+
+  /** pdf-viewer 书签目录就位（无书签不触发，按钮保持隐藏）。 */
+  private _onPdfTocChange = (e: CustomEvent<{ items: TocItem[] }>) => {
+    if (this.language !== "pdf") return;
+    this._tocItems = e.detail.items;
+  };
+
+  /** pdf 文档就绪：滚动位置恢复（页号+页内偏移锚点；渲染管线就绪晚于
+   *  lit 更新。≤1 = 无记忆/回顶部清除语义）。 */
+  private _onPdfDocumentReady = () => {
+    if (!this.rememberScroll || this.language !== "pdf") return;
+    const saved = readScrollLine(this.path);
+    if (saved === null || saved <= 1) return;
+    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    pdf?.restoreScrollAnchorValue(saved);
+  };
 
   /** 桌面 header 的目录按钮（图标 + hover 文字，同 highlight-btn）。 */
   private _renderTocBtn() {
@@ -1089,9 +1141,8 @@ export class PreviewPane extends LitElement {
 
   private _onTocToggle = () => {
     if (!this._showToc) {
-      // 打开前捕获阅读位置，抽屉据此高亮当前章节
-      const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-      this._tocCurrentLine = viewer?.topSourceLine() ?? 1;
+      // 打开前捕获阅读位置，抽屉据此高亮当前章节（md=行号锚点 / pdf=页号锚点）
+      this._tocCurrentLine = this._activePreviewViewer()?.top() ?? 1;
     }
     this._showToc = !this._showToc;
   };
@@ -1100,9 +1151,15 @@ export class PreviewPane extends LitElement {
     this._showToc = false;
   };
 
-  /** 点击目录节点：关闭抽屉 + 平滑滚动到标题位置并闪烁定位。 */
+  /** 点击目录节点：关闭抽屉 + 跳转（md：平滑滚到标题行；pdf：line=页号，
+   *  跳到对应页——原生书签目的地，ADR-0031）。 */
   private _onTocJump = (e: CustomEvent<{ line: number }>) => {
     this._showToc = false;
+    if (this.language === "pdf") {
+      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+      pdf?.scrollToPage(e.detail.line);
+      return;
+    }
     const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
     viewer?.jumpToSourceLine(e.detail.line, "smooth");
   };
@@ -1150,7 +1207,9 @@ export class PreviewPane extends LitElement {
 
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
-    if (!this._content && !this.content)
+    // 空态守卫不含 pdf——PDF 原生预览的 content 恒为空串（轻量标记
+    // 响应，ADR-0031），空串是正常态而非「无预览」
+    if (this.language !== "pdf" && !this._content && !this.content)
       return html`<div class="empty">点击左侧结果查看预览</div>`;
 
     // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
@@ -1211,6 +1270,37 @@ export class PreviewPane extends LitElement {
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
+        ${this._renderTocDrawer()}
+        ${this._renderDownloadOverlay()}
+      `;
+    }
+
+    // PDF：原生预览（ADR-0031）——pdf.js 组件层渲染原始字节；页表跳页、
+    // 书签 TOC、findController 匹配导航均在 pdf-viewer 内闭环
+    if (this.language === "pdf") {
+      return html`
+        <input type="file" hidden @change=${this._onFileChange}>
+        ${renderMobileBar}
+        ${showDesktopHeader ? html`
+          <div class="header">
+            ${this._renderBackBtn()}
+            <span class="path">${this.path}</span>
+            ${this._renderDownloadBtn()}
+            ${this._renderUploadBtn()}
+            ${this._renderTocBtn()}
+            ${this._renderHighlightBtn()}
+            ${this._renderReparseBtn()}
+          </div>
+        ` : null}
+        ${this._renderHighlightBar()}
+        <pdf-viewer
+          .docPath=${this.path}
+          .keyword=${this._effectiveKeyword}
+          .locateLine=${this.line}
+          .pageStarts=${this.pageStarts}
+          @toc-change=${this._onPdfTocChange}
+          @document-ready=${this._onPdfDocumentReady}
+        ></pdf-viewer>
         ${this._renderTocDrawer()}
         ${this._renderDownloadOverlay()}
       `;

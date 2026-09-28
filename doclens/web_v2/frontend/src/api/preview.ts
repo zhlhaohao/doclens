@@ -145,10 +145,14 @@ export type PreviewFetchResult =
       language: string;
       writable: boolean;
       pages: PageMarker[] | null;
-      /** 二进制合成预览（pdf/docx/xlsx/csv）的行号映射：
+      /** 二进制合成预览（docx/xlsx/csv）的行号映射：
        *  key = node.line_start(原始体系, string)，value = heading 在合成 md 中的实际行号。
        *  null 表示无映射（普通文本预览，r.line 即文件实际行号）。 */
       lineMap: Record<string, number> | null;
+      /** 仅 PDF 原生预览（language="pdf"，ADR-0031）：页表（每页起始行号，
+       *  与索引提取文本行号同体系），搜索命中行二分得页号跳页；
+       *  null = 未索引 / 旧索引无页表（跳页静默降级）。 */
+      pageStarts: number[] | null;
       /** 仅 PST 派生邮件预览（<pst>#<entry_id>）非空：附件清单 + 下载 URL。 */
       attachments: PstAttachmentInfo[] | null;
     }
@@ -177,6 +181,7 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
         writable: body.writable ?? false,
         pages: body.pages ?? null,
         lineMap: body.line_map ?? null,
+        pageStarts: body.page_starts ?? null,
         attachments: body.attachments ?? null,
       };
     }

@@ -266,6 +266,8 @@ export class FilesView extends LitElement {
   @state() private _previewLanguage = "text";
   @state() private _previewWritable = false;
   @state() private _previewPages: PageMarker[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表。 */
+  @state() private _previewPageStarts: number[] | null = null;
   @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
    *  二进制 415「请下载后查看」）；null = 无错误。设置后移动端 detail 层
@@ -754,6 +756,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       this._previewDirty = false;
     }
     actions.clearSelection();
@@ -887,6 +890,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       return;
     }
     const result = await fetchPreview(path);
@@ -898,6 +902,7 @@ export class FilesView extends LitElement {
       this._previewWritable = result.writable;
       this._previewPages = result.pages;
       this._previewAttachments = result.attachments;
+      this._previewPageStarts = result.pageStarts;
     } else if (result.notIndexed) {
       this._previewError = "NOT_INDEXED";
       this._previewPath = path;
@@ -905,6 +910,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
     } else {
       // 其他失败（如二进制 415）：同样进错误态页（移动端整页需要返回条），
       // toast 仍弹一瞬作即时反馈
@@ -914,6 +920,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       this._showToast(result.message || "预览失败");
     }
   }
@@ -927,6 +934,7 @@ export class FilesView extends LitElement {
       this._previewWritable = r.writable;
       this._previewPages = r.pages;
       this._previewAttachments = r.attachments;
+      this._previewPageStarts = r.pageStarts;
     }
   }
 
@@ -1029,6 +1037,7 @@ export class FilesView extends LitElement {
       content=${this._previewContent}
       ?writable=${this._previewWritable}
       .pages=${this._previewPages}
+      .pageStarts=${this._previewPageStarts}
       .attachments=${this._previewAttachments}
       ?showBack=${isPstEmailPath(this._previewPath)}
       backLabel="邮件列表"

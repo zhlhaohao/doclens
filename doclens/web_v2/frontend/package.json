@@ -19,7 +19,8 @@
     "lit": "^3.2.0",
     "lucide-static": "^1.26.0",
     "marked": "^18.0.5",
-    "marked-katex-extension": "^5.1.10"
+    "marked-katex-extension": "^5.1.10",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
     "@open-wc/testing": "^4.0.0",

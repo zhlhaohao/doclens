@@ -54,6 +54,49 @@ _RE_ALL_CAPS_LINE = re.compile(r"^[A-Z][A-Z\s\-:,&/()]{2,}$")
 # Regex: [PAGE N] marker
 _RE_PAGE_MARKER = re.compile(r"^\[PAGE\s+(\d+)\]$")
 
+# Page-fallback 转换后的页标题行（_use_page_fallback 把 [PAGE N] 变成
+# "## Page N" heading，页码信息保留在标题里）
+_RE_PAGE_HEADING = re.compile(r"^##\s+Page\s+(\d+)\s*$")
+
+
+def _compute_page_starts(text: str) -> Optional[list]:
+    """在最终提取文本上计算每页起始行号（1-based，页表）。
+
+    行号体系必须与 text_to_tree 产出的节点 line_start 一致——调用前须对
+    文本预跑 ``_preprocess_text``（其空行折叠幂等，text_to_tree 内部再跑
+    不改行号）。同时识别两种页标记形态：heading 路径残留的 ``[PAGE N]``
+    正文标记行与 page-fallback 路径转换出的 ``## Page N`` 标题行。
+
+    数组语义：索引 k = 物理页 k+1 的起始行（命中行二分即得页号）。标记 N
+    行属于第 N 页内容开头；首个标记之前的前导内容（extract_pdf_text 的
+    join 前导空行）归第 1 页，故 starts[0] 恒为 1。断号页（纯图页无文本
+    无图 md → 无标记）**与其后首个有标记页共享起始行**——该页在提取文本
+    中零行，其前行归前页、其后行归后页，二分两侧都正确（向前继承会把
+    前页尾部行误判给断号页）。
+
+    Returns:
+        页表数组；全文无任何页标记（空文本等异常）返回 None。
+    """
+    marker_lines: dict = {}
+    for i, line in enumerate(text.split("\n"), start=1):
+        stripped = line.strip()
+        m = _RE_PAGE_MARKER.match(stripped) or _RE_PAGE_HEADING.match(stripped)
+        if m:
+            page_no = int(m.group(1))
+            if page_no >= 1 and page_no not in marker_lines:
+                marker_lines[page_no] = i
+    if not marker_lines:
+        return None
+
+    last = max(marker_lines)
+    starts = [0] * last
+    nxt = marker_lines[last]
+    for page in range(last, 0, -1):
+        cur = marker_lines.get(page, nxt)
+        starts[page - 1] = 1 if page == 1 else cur
+        nxt = cur
+    return starts
+
 # Common single-word ALL CAPS headings in academic papers (whitelist)
 _ACADEMIC_HEADINGS = {
     "ABSTRACT", "INTRODUCTION", "BACKGROUND", "METHODS", "METHODOLOGY",
@@ -392,6 +435,12 @@ async def pdf_to_tree(
     if _check_needs_page_fallback(text):
         text = _use_page_fallback(text)
 
+    # Step 3.5: 页表——在最终文本上计算每页起始行号（ADR-0031 宿主侧
+    # 原生预览的搜索跳页依据）。行号体系与 text_to_tree 的节点 line_start
+    # 对齐：预跑 _preprocess_text（幂等，内部再跑不改行号）。
+    from ..indexer import _preprocess_text
+    page_starts = _compute_page_starts(_preprocess_text(text))
+
     # Step 4: Delegate to text_to_tree for heading detection and tree building
     from ..indexer import text_to_tree
     result = await text_to_tree(
@@ -406,4 +455,6 @@ async def pdf_to_tree(
     )
     result["doc_name"] = doc_name
     result["source_path"] = os.path.abspath(fp)
+    if page_starts is not None:
+        result["page_starts"] = page_starts
     return result

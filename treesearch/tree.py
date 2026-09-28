@@ -28,6 +28,10 @@ class Document:
     doc_description: str = ""
     metadata: dict = field(default_factory=dict)
     source_type: str = ""  # e.g. "markdown", "code", "text", "json", "csv"
+    # PDF 页表（每页起始行号，1-based，与节点 line_start 同一提取文本行号
+    # 体系）——宿主侧原生预览的「搜索命中行 → 页号」换算依据。非 PDF 或
+    # 旧索引（列不存在/未写入）为 None。
+    page_starts: Optional[list] = None
 
     def __post_init__(self):
         self._node_map: dict[str, dict] = {}

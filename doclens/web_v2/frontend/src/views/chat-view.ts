@@ -453,6 +453,8 @@ export class ChatView extends LitElement {
   @state() private previewPath = "";
   @state() private previewLanguage = "text";
   @state() private previewPages: PageMarker[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表。 */
+  @state() private previewPageStarts: number[] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
@@ -1066,6 +1068,7 @@ export class ChatView extends LitElement {
     this.previewLanguage = "text";
     this.previewPages = null;
     this.previewAttachments = null;
+    this.previewPageStarts = null;
     this.previewWritable = false;
     this.previewError = null;
     this.previewDirty = false;
@@ -1286,6 +1289,7 @@ export class ChatView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       this.previewOpen = true;
       return;
     }
@@ -1297,6 +1301,7 @@ export class ChatView extends LitElement {
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
+      this.previewPageStarts = result.pageStarts;
       this.previewOpen = true;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
@@ -1305,6 +1310,7 @@ export class ChatView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       this.previewOpen = true;
     } else {
       this._pushToast(`预览失败：${result.message}`, "error", 5000);
@@ -1375,6 +1381,7 @@ export class ChatView extends LitElement {
       this.previewWritable = r.writable;
       this.previewPages = r.pages;
       this.previewAttachments = r.attachments;
+      this.previewPageStarts = r.pageStarts;
     }
   }
 
@@ -1457,6 +1464,7 @@ export class ChatView extends LitElement {
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
       .pages=${this.previewPages}
+      .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}
       ?showBack=${isPstEmailPath(this.previewPath)}
       backLabel="邮件列表"

@@ -51,3 +51,24 @@ export function writeScrollLine(path: string, line: number): void {
     // 配额满等写入失败：静默降级，不影响预览
   }
 }
+
+// ---------------------------------------------------------------------------
+// PDF 滚动锚点（ADR-0031）：编码为单一正整数存进同一 map（值域与 md 行号
+// 共存，零 schema 变化）。编码 = page × 10000 + ratio × 9999（page ≤ 9999、
+// 偏移比例精度 1/9999）；页 1 且近顶（ratio < 0.02）编码为 1，落入
+// writeScrollLine 的「回顶部 = 清除记忆」语义。
+// ---------------------------------------------------------------------------
+
+/** PDF 锚点编码：{页号, 页内偏移比例} → 正整数。 */
+export function encodePdfScrollAnchor(page: number, ratio: number): number {
+  const p = Math.min(9999, Math.max(1, Math.floor(page)));
+  const r = Math.min(1, Math.max(0, ratio));
+  if (p === 1 && r < 0.02) return 1;
+  return p * 10000 + Math.round(r * 9999);
+}
+
+/** PDF 锚点解码：正整数 → {页号, 页内偏移比例}。 */
+export function decodePdfScrollAnchor(value: number): { page: number; ratio: number } {
+  const v = Math.max(1, Math.floor(value));
+  return { page: Math.floor(v / 10000), ratio: (v % 10000) / 9999 };
+}

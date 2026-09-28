@@ -253,6 +253,30 @@ def _tokenize_fts_expression(expr: str) -> str:
 # FTS5 Index Engine
 # ---------------------------------------------------------------------------
 
+def _encode_page_starts(page_starts: Optional[list]) -> str:
+    """页表序列化（documents.page_starts 列）：JSON 数组字符串；None/空 → ''。"""
+    if not page_starts:
+        return ""
+    return json.dumps(list(page_starts))
+
+
+def _page_starts_of(document) -> Optional[list]:
+    """读取 document.page_starts（鸭子类型防御：宿主/测试的 Document 形态
+    可能缺该属性——视为无页表）。"""
+    return getattr(document, "page_starts", None)
+
+
+def _decode_page_starts(raw) -> Optional[list]:
+    """页表反序列化：'' / 非法 JSON / 非数组 → None（旧索引或非 PDF）。"""
+    if not raw:
+        return None
+    try:
+        v = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return v if isinstance(v, list) and v else None
+
+
 class FTS5Index:
     """SQLite FTS5 full-text search index for tree-structured documents.
 
@@ -372,9 +396,18 @@ class FTS5Index:
                 source_type TEXT DEFAULT '',
                 structure_json TEXT DEFAULT '',
                 node_count INTEGER DEFAULT 0,
-                index_hash TEXT
+                index_hash TEXT,
+                page_starts TEXT DEFAULT ''
             )
         """)
+        # PDF 页表列（ADR-0031）：CREATE 只对新库生效，存量库 ALTER 补列
+        try:
+            self._conn.execute(
+                "ALTER TABLE documents ADD COLUMN page_starts TEXT DEFAULT ''"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
         # Incremental index metadata (replaces _index_meta.json)
         self._conn.execute("""
@@ -816,14 +849,15 @@ class FTS5Index:
             self._conn.execute(
                 """INSERT OR REPLACE INTO documents
                    (doc_id, doc_name, doc_description, source_path, source_type,
-                    structure_json, node_count, index_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    structure_json, node_count, index_hash, page_starts)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     document.doc_id, document.doc_name, document.doc_description,
                     document.metadata.get("source_path", ""),
                     document.source_type,
                     structure_json,
                     len(all_nodes), content_hash,
+                    _encode_page_starts(document.page_starts),
                 ),
             )
 
@@ -1537,8 +1571,8 @@ class FTS5Index:
         content_hash = hashlib.md5(structure_json.encode()).hexdigest()
         self._conn.execute(
             """INSERT OR REPLACE INTO documents
-               (doc_id, doc_name, doc_description, source_path, source_type, structure_json, node_count, index_hash)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (doc_id, doc_name, doc_description, source_path, source_type, structure_json, node_count, index_hash, page_starts)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 document.doc_id, document.doc_name, document.doc_description,
                 document.metadata.get("source_path", ""),
@@ -1546,6 +1580,7 @@ class FTS5Index:
                 structure_json,
                 len(flatten_tree(document.structure)),
                 content_hash,
+                _encode_page_starts(_page_starts_of(document)),
             ),
         )
         if auto_commit:
@@ -1559,7 +1594,7 @@ class FTS5Index:
         """
         from .tree import Document
         row = self._conn.execute(
-            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json FROM documents WHERE doc_id = ?",
+            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json, page_starts FROM documents WHERE doc_id = ?",
             (doc_id,),
         ).fetchone()
         if not row:
@@ -1572,6 +1607,7 @@ class FTS5Index:
             doc_description=row[2] or "",
             metadata={"source_path": row[3] or ""},
             source_type=row[4] or "",
+            page_starts=_decode_page_starts(row[6]),
         )
 
     def load_document_by_source_path(self, source_path: str) -> Optional["Document"]:
@@ -1586,13 +1622,13 @@ class FTS5Index:
         from .tree import Document  # 局部导入避免循环依赖
 
         row = self._conn.execute(
-            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json "
+            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json, page_starts "
             "FROM documents WHERE source_path = ? LIMIT 1",
             (source_path,),
         ).fetchone()
         if not row:
             return None
-        doc_id, doc_name, doc_description, sp, source_type, structure_json = row
+        doc_id, doc_name, doc_description, sp, source_type, structure_json, page_starts_raw = row
         structure = json.loads(structure_json) if structure_json else []
         return Document(
             doc_id=doc_id,
@@ -1601,6 +1637,7 @@ class FTS5Index:
             structure=structure,
             source_type=source_type or "",
             metadata={"source_path": sp or ""},
+            page_starts=_decode_page_starts(page_starts_raw),
         )
 
     def load_doc_id_source_paths(self) -> dict[str, str]:
@@ -1726,7 +1763,7 @@ class FTS5Index:
         """
         from .tree import Document
         rows = self._conn.execute(
-            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json FROM documents ORDER BY doc_id"
+            "SELECT doc_id, doc_name, doc_description, source_path, source_type, structure_json, page_starts FROM documents ORDER BY doc_id"
         ).fetchall()
         documents = []
         for row in rows:
@@ -1738,6 +1775,7 @@ class FTS5Index:
                 doc_description=row[2] or "",
                 metadata={"source_path": row[3] or ""},
                 source_type=row[4] or "",
+                page_starts=_decode_page_starts(row[6]),
             ))
         return documents
 
