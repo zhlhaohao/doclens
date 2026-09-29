@@ -245,6 +245,50 @@ export class PreviewPane extends LitElement {
       color: var(--cortex-text);
       border-color: var(--cortex-text-subtle);
     }
+    /* PDF 缩放组（header 内 − 比例 + 三件套，pill 联排） */
+    .zoom-group {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-pill);
+      background: var(--cortex-surface);
+      overflow: hidden;
+    }
+    .zoom-group .zoom-btn,
+    .zoom-group .zoom-label {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--cortex-text-muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .zoom-group .zoom-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 24px;
+      font-size: 13px;
+    }
+    .zoom-group .zoom-label {
+      min-width: 52px;
+      height: 24px;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      border-left: 1px solid var(--cortex-border-muted);
+      border-right: 1px solid var(--cortex-border-muted);
+    }
+    .zoom-group .zoom-btn:hover:not(:disabled),
+    .zoom-group .zoom-label:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
+    }
+    .zoom-group .zoom-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
     /* 高亮输入条/目录抽屉展开中的激活态 */
     button.highlight-btn.active,
     button.toc-btn.active {
@@ -489,6 +533,9 @@ export class PreviewPane extends LitElement {
   @state() private _highlightInput = "";
   private _highlightDebounce: number | undefined;
 
+  /** PDF 缩放控件显示（「适宽」/百分比；pdf-viewer scalechanging 驱动）。 */
+  @state() private _pdfZoomLabel = "适宽";
+
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
   @state() private _tocItems: TocItem[] = [];
@@ -715,6 +762,38 @@ export class PreviewPane extends LitElement {
     writeFontScalePct(next);
   }
 
+  /** PDF 缩放 stepper（mobile-menu 内一行，复用 font-scale-row 样式）：
+   *  − 适宽/百分比 +；点击中值回适宽。 */
+  private _renderPdfZoomStepper() {
+    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    return html`
+      <div class="font-scale-row" role="group" aria-label="缩放">
+        <span class="font-scale-label">缩放</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="缩小"
+          ?disabled=${pdf?.atZoomMin()}
+          @click=${() => this._pdfZoom(-1)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="font-scale-value"
+          type="button"
+          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
+          title="点击回到适宽"
+          @click=${() => this._pdfZoom("fit")}
+        >${this._pdfZoomLabel}</button>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="放大"
+          ?disabled=${pdf?.atZoomMax()}
+          @click=${() => this._pdfZoom(1)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
   private _onDocClick = (e: MouseEvent) => {
     if (!this._showMobileMenu) return;
     const path = e.composedPath();
@@ -776,6 +855,9 @@ export class PreviewPane extends LitElement {
               <div class="mobile-menu" role="menu">
                 ${this.language === "markdown" && this._mode === "preview"
                   ? this._renderFontScaleStepper()
+                  : null}
+                ${this.language === "pdf" && this._mode === "preview"
+                  ? this._renderPdfZoomStepper()
                   : null}
                 ${this.writable
                   ? html`<button
@@ -1120,6 +1202,51 @@ export class PreviewPane extends LitElement {
     this._tocItems = e.detail.items;
   };
 
+  /** pdf-viewer 缩放状态变化（缩放控件显示「适宽」/百分比）。 */
+  private _onPdfZoomChange = (e: CustomEvent<{ label: string }>) => {
+    if (this.language !== "pdf") return;
+    this._pdfZoomLabel = e.detail.label;
+  };
+
+  /** PDF 缩放操作（透传 pdf-viewer；view 事件绑定需箭头包装保持 this）。 */
+  private _pdfZoom(delta: 1 | -1 | "fit") {
+    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    if (!pdf) return;
+    if (delta === "fit") pdf.fitWidth();
+    else if (delta === 1) pdf.zoomIn();
+    else pdf.zoomOut();
+  }
+
+  /** 桌面 header 的 PDF 缩放组（− 比例 +；点击比例回适宽）。 */
+  private _renderPdfZoomGroup() {
+    if (this.language !== "pdf" || this._mode !== "preview") return null;
+    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    return html`
+      <div class="zoom-group" role="group" aria-label="缩放">
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="缩小"
+          ?disabled=${pdf?.atZoomMin()}
+          @click=${() => this._pdfZoom(-1)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="zoom-label"
+          type="button"
+          title="点击回到适宽"
+          @click=${() => this._pdfZoom("fit")}
+        >${this._pdfZoomLabel}</button>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="放大"
+          ?disabled=${pdf?.atZoomMax()}
+          @click=${() => this._pdfZoom(1)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
   /** pdf 文档就绪：滚动位置恢复（页号+页内偏移锚点；渲染管线就绪晚于
    *  lit 更新。≤1 = 无记忆/回顶部清除语义）。 */
   private _onPdfDocumentReady = () => {
@@ -1285,6 +1412,7 @@ export class PreviewPane extends LitElement {
           <div class="header">
             ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
+            ${this._renderPdfZoomGroup()}
             ${this._renderDownloadBtn()}
             ${this._renderUploadBtn()}
             ${this._renderTocBtn()}
@@ -1299,6 +1427,7 @@ export class PreviewPane extends LitElement {
           .locateLine=${this.line}
           .pageStarts=${this.pageStarts}
           @toc-change=${this._onPdfTocChange}
+          @zoom-change=${this._onPdfZoomChange}
           @document-ready=${this._onPdfDocumentReady}
         ></pdf-viewer>
         ${this._renderTocDrawer()}

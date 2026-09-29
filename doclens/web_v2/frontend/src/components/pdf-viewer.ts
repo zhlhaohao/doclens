@@ -1,8 +1,8 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 // pdf.js 官方 viewer 组件层样式（文本层选择/高亮/页面布局）——按 URL 引用
 // （独立资产文件，不进主 bundle），文档加载时 fetch + adoptedStyleSheets
-// 懒注入 shadow DOM（首屏体积零增量，ADR-0031）。
+// 懒注入 document（首屏体积零增量，ADR-0031）。
 import viewerCssUrl from "pdfjs-dist/web/pdf_viewer.css?url";
 import type { TocItem } from "../utils/toc";
 import { encodePdfScrollAnchor, decodePdfScrollAnchor } from "../utils/scroll-memory";
@@ -30,16 +30,22 @@ function loadViewerModule(): Promise<PdfViewerModule> {
   return viewerModulePromise;
 }
 
-/** viewer 组件层样式的懒加载单例（fetch 文本 → CSSStyleSheet）。 */
-let viewerSheetPromise: Promise<CSSStyleSheet> | null = null;
+/** viewer 组件层样式的懒加载单例（fetch 文本 → document 级注入）。
+ *  组件样式（light DOM 选择器限定）+ viewer CSS 一并挂
+ *  document.adoptedStyleSheets——document 级 adopted 只作用于 light 树，
+ *  本组件恰为 light 渲染，其他 shadow 组件不受影响。 */
+let viewerSheetPromise: Promise<void> | null = null;
 
-function loadViewerStyles(): Promise<CSSStyleSheet> {
+function loadViewerStyles(): Promise<void> {
   if (!viewerSheetPromise) {
     viewerSheetPromise = (async () => {
       const sheet = new CSSStyleSheet();
       const res = await fetch(viewerCssUrl);
-      if (res.ok) sheet.replaceSync(await res.text());
-      return sheet;
+      // 失败降级：仅组件样式（正文 canvas 渲染不受影响，textLayer 视觉降级）
+      sheet.replaceSync(
+        (res.ok ? await res.text() : "") + COMPONENT_CSS,
+      );
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     })();
   }
   return viewerSheetPromise;
@@ -119,6 +125,54 @@ export function lineToPage(line: number, pageStarts: number[] | null): number | 
 const SCALE_MIN = 0.3;
 const SCALE_MAX = 5;
 
+/** 主文档侧样式（portal 子树专用——portal 挂 document.body，document
+ *  adopted sheet 可正常命中）。组件自身/占位/状态徽标等 shadow 树内
+ *  元素用 inline style（document 级 CSS 跨不过 preview-pane 的 shadow
+ *  边界，匹配不到它们）。 */
+const COMPONENT_CSS = `
+.cortex-pdf-portal {
+  position: fixed;
+  /* 尺寸/位置由组件按占位 rect 同步（left/top/width/height 内联） */
+  z-index: 1;
+  overflow: hidden;
+  background: var(--cortex-surface-muted, #525659);
+}
+.cortex-pdf-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.cortex-pdf-host {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  /* 单指双向平移交给浏览器（pinch 放大后左右横移可用）；浏览器级
+     pinch-zoom 仍被排除——双指缩放由组件 touch 处理接管 */
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
+}
+/* 页间零缝（覆盖 viewer 的 .page 底 margin 10px——白纸紧挨成连续长图，
+   不露灰底；特异性同级、同 sheet 内声明在后者胜） */
+.cortex-pdf-host .pdfViewer .page {
+  margin: 0;
+}
+`;
+
+/** 组件自身与 shadow 树内元素的 inline 布局样式（connected 时套用）。 */
+const HOST_INLINE_STYLE =
+  "display:flex;flex-direction:column;flex:1;min-height:0;position:relative;outline:none;background:var(--cortex-surface-muted,#525659)";
+
+/** 占位元素 inline 样式（flex 撑满组件，portal 对齐其 rect）。 */
+const ANCHOR_INLINE_STYLE = "flex:1;min-height:0;";
+
+/** 状态层 inline 样式（loading / error）。 */
+const STATUS_INLINE_STYLE =
+  "flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--cortex-text-muted,#666);font-size:var(--cortex-fs-base,14px);background:var(--cortex-card-bg,#fff);text-align:center;line-height:1.7;padding:0 16px";
+
+/** 匹配徽标 inline 样式（右下角 n/m）。 */
+const BADGE_INLINE_STYLE =
+  "position:absolute;right:16px;bottom:72px;z-index:5;background:var(--cortex-text,#111);color:var(--cortex-surface,#fff);font-family:var(--cortex-font-mono,monospace);font-size:12px;padding:3px 10px;border-radius:999px;opacity:0.92;pointer-events:none";
+
 /**
  * PDF 原生预览（ADR-0031）：pdf.js 官方 viewer 组件层渲染原始字节。
  *
@@ -131,76 +185,14 @@ const SCALE_MAX = 5;
  */
 @customElement("pdf-viewer")
 export class PdfViewer extends LitElement {
-  static styles = [
-    css`
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        background: var(--cortex-surface-muted, #525659);
-        outline: none;
-        position: relative;
-      }
-      /* 滚动容器定位：PDFViewer 构造校验要求 container 绝对定位——
-         外层 wrapper 承担 flex 占位，内层 .pdf-host absolute inset 0 */
-      .pdf-wrap {
-        flex: 1;
-        min-height: 0;
-        position: relative;
-      }
-      .pdf-host {
-        position: absolute;
-        inset: 0;
-        overflow: auto;
-        /* 单指双向平移交给浏览器（pinch 放大后左右横移可用）；浏览器级
-           pinch-zoom 仍被排除——双指缩放由组件 touch 处理接管 */
-        touch-action: pan-x pan-y;
-        overscroll-behavior: contain;
-      }
-      .status {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--cortex-space-2, 8px);
-        color: var(--cortex-text-muted, #666);
-        font-size: var(--cortex-fs-base, 14px);
-        background: var(--cortex-card-bg, #fff);
-      }
-      .status doclens-icon {
-        animation: spin 1s linear infinite;
-      }
-      .status.error {
-        color: var(--cortex-text, #333);
-        text-align: center;
-        padding: 0 var(--cortex-space-4, 16px);
-        line-height: 1.7;
-      }
-      .error doclens-icon {
-        animation: none;
-        color: var(--cortex-text-subtle, #999);
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-      /* 匹配导航徽标（右下角 FAB 区上方，与 md-viewer 的 n/m 对齐） */
-      .match-badge {
-        position: absolute;
-        right: 16px;
-        bottom: 72px;
-        z-index: 5;
-        background: var(--cortex-text, #111);
-        color: var(--cortex-surface, #fff);
-        font-family: var(--cortex-font-mono, monospace);
-        font-size: 12px;
-        padding: 3px 10px;
-        border-radius: 999px;
-        opacity: 0.92;
-        pointer-events: none;
-      }
-    `,
-  ];
+  /** light DOM 渲染：pdf.js 的 textLayer 选区（::selection 绘制）在
+   *  shadow DOM 内不渲染（Chromium 已知缺陷，实测选中/未选中截图逐字节
+   *  相同）；官方 viewer 即 light DOM 形态——选区/打印等原生行为全通。
+   *  样式经 document.adoptedStyleSheets 注入，作用域由 `pdf-viewer`
+   *  元素选择器限定（document 级 adopted 不穿透其他组件 shadow）。 */
+  protected createRenderRoot(): HTMLElement {
+    return this;
+  }
 
   /** 文档相对路径（workdir 相对）——字节经 /api/preview/pdf 拉取。 */
   @property() docPath = "";
@@ -233,16 +225,6 @@ export class PdfViewer extends LitElement {
   private _initialFitDone = false;
   private _fitObserver: ResizeObserver | null = null;
 
-  async connectedCallback() {
-    super.connectedCallback();
-    if (this.docPath) void this._loadDocument();
-  }
-
-  disconnectedCallback() {
-    this._teardown();
-    super.disconnectedCallback();
-  }
-
   protected willUpdate(changed: Map<string, unknown>) {
     if (changed.has("docPath") && this.docPath) {
       void this._loadDocument();
@@ -256,7 +238,7 @@ export class PdfViewer extends LitElement {
   protected render() {
     if (this._error) {
       return html`
-        <div class="status error">
+        <div style=${STATUS_INLINE_STYLE}>
           <doclens-icon name="file-x"></doclens-icon>
           <span>${this._error}</span>
         </div>
@@ -264,30 +246,109 @@ export class PdfViewer extends LitElement {
     }
     return html`
       ${this._loading
-        ? html`<div class="status"><doclens-icon name="loader"></doclens-icon>PDF 加载中…</div>`
+        ? html`<div style=${STATUS_INLINE_STYLE}><doclens-icon name="loader"></doclens-icon>PDF 加载中…</div>`
         : null}
-      <div class="pdf-wrap">
-        <div class="pdf-host" part="host">
-          <div class="pdfViewer"></div>
-        </div>
-      </div>
+      <div class="cortex-pdf-anchor" style=${ANCHOR_INLINE_STYLE} part="host"></div>
       ${this._matchInfo && this._matchInfo.count > 0
-        ? html`<div class="match-badge">${this._matchInfo.selected}/${this._matchInfo.count}</div>`
+        ? html`<div style=${BADGE_INLINE_STYLE}>${this._matchInfo.selected}/${this._matchInfo.count}</div>`
         : null}
     `;
   }
 
+  /** portal 渲染层（document.body 下，随组件生灭）：
+   *  textLayer 必须在主文档树内——pdf.js 的选区绘制（::selection）在
+   *  shadow 树内不渲染（Chromium 已知缺陷），而本组件必然嵌在
+   *  preview-pane 的 shadow 里，任何「light 渲染」都逃不出那棵 shadow
+   *  树。portal 容器 fixed 定位实时对齐组件占位 rect。 */
+  private _portal: HTMLDivElement | null = null;
+  /** rAF 持续对齐循环句柄（_destroyPortal 取消）。 */
+  private _portalRaf = 0;
+  /** 上次对齐的 rect 缓存（无变化跳过赋值——rAF 循环零成本稳态）。 */
+  private _portalLastRect = "";
+
+  private _ensurePortal(): HTMLDivElement {
+    if (this._portal && this._portal.isConnected) return this._portal;
+    const portal = document.createElement("div");
+    portal.className = "cortex-pdf-portal";
+    portal.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.className = "cortex-pdf-wrap";
+    const host = document.createElement("div");
+    host.className = "cortex-pdf-host";
+    const viewer = document.createElement("div");
+    viewer.className = "pdfViewer";
+    host.appendChild(viewer);
+    wrap.appendChild(host);
+    portal.appendChild(wrap);
+    document.body.appendChild(portal);
+    this._portal = portal;
+
+    // 占位 rect 对齐：**rAF 持续对齐**而非 ResizeObserver——RO 只报尺寸
+    // 变化，首次渲染的布局中间态稳定后组件常只有「位移」无「尺寸变化」
+    // （上方 header/mobile-header 布局晚于本组件落位），RO 不触发，portal
+    // 停在中间态位置（症状：顶部灰边，拖一下分隔条才纠正）。rAF 每帧读
+    // 一次 rect（浏览器布局缓存，无重排成本），与缓存比对无变化即跳过。
+    const anchor = () => this.renderRoot.querySelector(".cortex-pdf-anchor") as HTMLElement | null;
+    const sync = () => {
+      const a = anchor();
+      if (!a) return;
+      const r = a.getBoundingClientRect();
+      const key = `${r.left},${r.top},${r.width},${r.height}`;
+      if (key === this._portalLastRect) return;
+      this._portalLastRect = key;
+      if (r.width === 0 || r.height === 0) {
+        portal.style.display = "none";
+        return;
+      }
+      portal.style.display = "";
+      portal.style.left = `${r.left}px`;
+      portal.style.top = `${r.top}px`;
+      portal.style.width = `${r.width}px`;
+      portal.style.height = `${r.height}px`;
+    };
+    const loop = () => {
+      sync();
+      this._portalRaf = requestAnimationFrame(loop);
+    };
+    this._portalRaf = requestAnimationFrame(loop);
+    sync();
+    return portal;
+  }
+
+  private _destroyPortal(): void {
+    cancelAnimationFrame(this._portalRaf);
+    this._portalRaf = 0;
+    this._portalLastRect = "";
+    this._portal?.remove();
+    this._portal = null;
+  }
+
+  /** portal 内的滚动容器（PDFViewer 的 container）。 */
+  private _portalHost(): HTMLElement | null {
+    return this._portal?.querySelector(".cortex-pdf-host") ?? null;
+  }
+
+  /** portal 内的 .pdfViewer 元素（PDFViewer 的 viewer 参数）。 */
+  private _portalViewerEl(): HTMLDivElement | null {
+    return this._portal?.querySelector(".pdfViewer") ?? null;
+  }
+
   protected firstUpdated() {
-    const host = this.renderRoot.querySelector(".pdf-host") as HTMLElement | null;
-    if (!host) return;
-    // PDFViewer 要求滚动容器上有该属性（其内部滚动监听依赖）
-    this._bindPinch(host);
-    this._bindWheel(host);
     this._bindKeys();
-    // 滚动位置记忆：内部容器滚动 re-dispatch（scroll 不冒泡，父组件监听不到）
-    host.addEventListener("scroll", () => {
-      this.dispatchEvent(new CustomEvent("scroll", { bubbles: true, composed: true }));
-    }, { passive: true });
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // shadow 树内元素吃不到 document CSS——布局样式 inline 套用
+    this.setAttribute("style", HOST_INLINE_STYLE);
+    // 已有文档路径的复挂载（keep-alive 视图切回）：portal 重建 + 重载
+    if (this.docPath) void this._loadDocument();
+  }
+
+  disconnectedCallback() {
+    this._teardown();
+    this._destroyPortal();
+    super.disconnectedCallback();
   }
 
   // ---------------------------------------------------------------- 公共方法
@@ -325,13 +386,43 @@ export class PdfViewer extends LitElement {
     return this._viewer?.currentPageNumber ?? 1;
   }
 
+  /** 缩放：放大一档（×1.1，与 Ctrl+滚轮同一步长，SCALE 边界钳制）。 */
+  zoomIn(): void {
+    if (!this._viewer) return;
+    this._viewer.currentScale = Math.min(
+      SCALE_MAX, this._viewer.currentScale * 1.1,
+    );
+  }
+
+  /** 缩放：缩小一档（÷1.1）。 */
+  zoomOut(): void {
+    if (!this._viewer) return;
+    this._viewer.currentScale = Math.max(
+      SCALE_MIN, this._viewer.currentScale / 1.1,
+    );
+  }
+
+  /** 回到适宽（page-width 预设；用户缩放后的一键还原）。 */
+  fitWidth(): void {
+    if (this._viewer) this._viewer.currentScaleValue = "page-width";
+  }
+
+  /** 当前缩放是否已达上限/下限（控件禁用态）。 */
+  atZoomMin(): boolean {
+    return (this._viewer?.currentScale ?? 1) <= SCALE_MIN + 1e-6;
+  }
+
+  atZoomMax(): boolean {
+    return (this._viewer?.currentScale ?? 1) >= SCALE_MAX - 1e-6;
+  }
+
   /** 滚动位置记忆锚点（页号 + 页内偏移比例，编码为正整数——见
    *  scroll-memory 的 encodePdfScrollAnchor）。页 1 近顶编码为 1，
    *  落入 writeScrollLine 的「回顶部 = 清除记忆」语义。 */
   scrollAnchorValue(): number {
-    const host = this.renderRoot.querySelector(".pdf-host") as HTMLElement | null;
+    const host = this._portalHost();
     const page = this.topPage();
-    const pageEl = this.renderRoot.querySelector(
+    const pageEl = this._portal?.querySelector(
       `.page[data-page-number="${page}"]`,
     ) as HTMLElement | null;
     if (!host || !pageEl || pageEl.offsetHeight === 0) {
@@ -350,8 +441,8 @@ export class PdfViewer extends LitElement {
     if (!this._viewer) return;
     this.scrollToPage(page);
     const apply = (attempt: number) => {
-      const host = this.renderRoot.querySelector(".pdf-host") as HTMLElement | null;
-      const pageEl = this.renderRoot.querySelector(
+      const host = this._portalHost();
+      const pageEl = this._portal?.querySelector(
         `.page[data-page-number="${page}"]`,
       ) as HTMLElement | null;
       if (!host || !pageEl) {
@@ -384,13 +475,9 @@ export class PdfViewer extends LitElement {
     let mod: PdfViewerModule;
     try {
       mod = await loadViewerModule();
-      // viewer 组件层样式懒注入（adoptedStyleSheets 追加，幂等）
+      // 组件样式 + viewer CSS 懒注入 document（幂等单例）
       try {
-        const sheet = await loadViewerStyles();
-        const root = this.shadowRoot!;
-        if (sheet.cssRules.length && !root.adoptedStyleSheets.includes(sheet)) {
-          root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
-        }
+        await loadViewerStyles();
       } catch {
         // 样式失败不阻断渲染（文本层视觉降级，正文 canvas 不受影响）
       }
@@ -401,9 +488,18 @@ export class PdfViewer extends LitElement {
       return;
     }
 
-    const host = this.renderRoot.querySelector(".pdf-host") as HTMLElement | null;
-    const viewerEl = this.renderRoot.querySelector(".pdfViewer") as HTMLDivElement | null;
-    if (!host || !viewerEl) return; // 渲染被错误态替换（守卫）
+    // portal 先建（document.body，主文档树）——textLayer 选区绘制的前提
+    this._ensurePortal();
+    const host = this._portalHost();
+    const viewerEl = this._portalViewerEl();
+    if (!host || !viewerEl) return; // portal 构建异常（守卫）
+
+    // portal 内滚动容器的交互绑定（每次重建 portal 后重挂）
+    this._bindPinch(host);
+    this._bindWheel(host);
+    host.addEventListener("scroll", () => {
+      this.dispatchEvent(new CustomEvent("scroll", { bubbles: true, composed: true }));
+    }, { passive: true });
 
     try {
       const pdfjs = await import("pdfjs-dist");
@@ -452,13 +548,30 @@ export class PdfViewer extends LitElement {
       eventBus.on("updatefindmatchescount", onCount);
       eventBus.on("updatefindcontrolstate", onCount);
 
+      // 缩放状态外播（preview-pane 的缩放控件显示「适宽」/百分比）
+      const onScale = (evt: { scale?: number; presetValue?: string }) => {
+        const label = evt.presetValue === "page-width"
+          ? "适宽"
+          : `${Math.round((evt.scale ?? 1) * 100)}%`;
+        this.dispatchEvent(new CustomEvent("zoom-change", {
+          detail: { label },
+          bubbles: true, composed: true,
+        }));
+      };
+      eventBus.on("scalechanging", onScale);
+
       // 适宽默认（Q6 决议）——挂载瞬间容器宽度可能是中间态（移动端布局
       // 收缩前被内容撑到 793px），此时套 page-width 会得到 ≈1.0 的错值
-      // 且 PDFViewer 内建 ResizeObserver 不重算；这里自建观察：尺寸变化
-      // 即重套，宽度稳定 300ms 才锁定（锁定后不再干预用户缩放）。
+      // 且 PDFViewer 内建 ResizeObserver 不重算；这里自建常驻观察：
+      // - 初始阶段：尺寸变化即重套，宽度稳定 300ms 锁定；
+      // - 锁定后：容器再变（拖拽预览栏分隔条 / 窗口 resize）且用户仍处
+      //   适宽模式（currentScaleValue 保持 "page-width"——pinch/Ctrl+滚轮
+      //   走数字赋值会把它变成数字串）→ 防抖 80ms 重套；用户手动缩放
+      //   过则不干预。pdf.js 对同值赋值有 #isSameScale 短路，零成本。
       this._initialFitDone = false;
       viewer.currentScaleValue = "page-width";
       let settleTimer: number | undefined;
+      let refitTimer: number | undefined;
       const applyInitialFit = () => {
         if (this._initialFitDone || seq !== this._loadSeq) return;
         // 页对象未建时 page-width 计算落空（scale 停留默认 1.0），跳过等下轮
@@ -467,14 +580,27 @@ export class PdfViewer extends LitElement {
         this._viewer.currentScaleValue = "page-width";
         window.clearTimeout(settleTimer);
         settleTimer = window.setTimeout(() => {
-          if (seq !== this._loadSeq) return;
-          this._initialFitDone = true;
-          this._fitObserver?.disconnect();
-          this._fitObserver = null;
+          if (seq === this._loadSeq) this._initialFitDone = true;
         }, 300);
       };
+      const onResize = () => {
+        if (seq !== this._loadSeq || !this._viewer) return;
+        if (!this._initialFitDone) {
+          applyInitialFit();
+          return;
+        }
+        // 锁定后：仅适宽模式下跟随容器宽度（拖拽分隔条实时重适配）
+        if (this._viewer.currentScaleValue !== "page-width") return;
+        window.clearTimeout(refitTimer);
+        refitTimer = window.setTimeout(() => {
+          if (seq === this._loadSeq && this._viewer
+              && this._viewer.currentScaleValue === "page-width") {
+            this._viewer.currentScaleValue = "page-width";
+          }
+        }, 80);
+      };
       this._fitObserver?.disconnect();
-      this._fitObserver = new ResizeObserver(applyInitialFit);
+      this._fitObserver = new ResizeObserver(onResize);
       this._fitObserver.observe(host);
       applyInitialFit();
 
