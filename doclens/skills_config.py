@@ -31,7 +31,7 @@ _FIELDS = ("enabled", "context_menu", "accept_dirs", "deleted", "source_url")
 # 有效值 = sidecar 覆盖 ?? 本表 ?? false。键 = 技能名（SKILL.md 的 name 字段）。
 BUILTIN_SKILL_DEFAULTS: dict[str, dict[str, bool]] = {
     "knowledge-base": {"context_menu": True, "accept_dirs": True},
-    "summarize-files": {"context_menu": True},
+    "ask-files": {"context_menu": True},
 }
 
 

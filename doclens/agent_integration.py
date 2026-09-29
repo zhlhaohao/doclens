@@ -288,7 +288,7 @@ class CortexAgent:
 
         # 子代理运行器包装：注入 KB 只读工具（read_document/file_info）。
         # 子代理默认只有 bash/read_file/write_file/edit_file，无法解析 PDF/DOCX
-        # 等二进制格式；summarize-files 等技能的并发子代理需要它们读知识库文档。
+        # 等二进制格式；ask-files 等技能的并发子代理需要它们读知识库文档。
         _kb_readonly_names = ("read_document", "file_info")
         _kb_readonly_tools = [t for t in kb_tools if t["name"] in _kb_readonly_names]
         _kb_readonly_handlers = {
