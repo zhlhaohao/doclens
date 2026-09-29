@@ -722,6 +722,30 @@ def _resolve_upload_target(idx, stem: str, hash6: str):
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
+@router.get("/preview/upload-target")
+async def probe_upload_target(
+    filename: str = Query(..., description="上传文件名"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """只读探测：文件名带 hash6（doclens 下载产物）时反查知识库原文件路径。
+
+    供 files 页上传分流（「覆盖原文件 / 存入当前目录」用户确认）——
+    复用 POST /preview/upload 的文件名解析与反查逻辑，不做任何写入。
+    hash 冲突（命中多个）按无匹配处理（与静默目录上传的旧行为一致）。
+    """
+    parsed = _parse_upload_filename(filename)
+    if parsed is None:
+        return {"match": False}
+    stem, hash6, _suffix = parsed
+    try:
+        rel = _resolve_upload_target(idx, stem, hash6)
+    except _HashCollisionError:
+        return {"match": False}
+    if rel is None:
+        return {"match": False}
+    return {"match": True, "path": rel}
+
+
 @router.post("/preview/upload", response_model=PreviewUploadResponse)
 async def upload(
     file: UploadFile = File(..., description="要上传的文件"),

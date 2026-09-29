@@ -36,13 +36,29 @@ export async function savePreview(path: string, content: string): Promise<Previe
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/preview/upload
+// GET /api/preview/upload-target + POST /api/preview/upload
 // ---------------------------------------------------------------------------
 
 export interface PreviewUploadResponse {
   path: string;
   bytes_written: number;
   reindex_triggered: boolean;
+}
+
+/** 只读探测：文件名带 hash6（doclens 下载产物）时返回知识库原文件路径。
+ *  无匹配 / 命名不符 / hash 冲突均返回 match=false（不抛异常）。 */
+export async function probeUploadTarget(
+  filename: string,
+): Promise<{ match: boolean; path?: string }> {
+  try {
+    const res = await fetch(
+      `/api/preview/upload-target?filename=${encodeURIComponent(filename)}`,
+    );
+    if (!res.ok) return { match: false };
+    return await res.json();
+  } catch {
+    return { match: false }; // 探测失败按无匹配处理（走目录上传）
+  }
 }
 
 export class PreviewUploadError extends Error {

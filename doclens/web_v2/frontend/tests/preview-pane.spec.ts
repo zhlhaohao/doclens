@@ -329,155 +329,6 @@ describe("<preview-pane> download button", () => {
   });
 });
 
-describe("<preview-pane> upload button", () => {
-  it("renders upload button in markdown preview header", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeTruthy();
-  });
-
-  it("renders upload button in plain-text preview header", async () => {
-    const el = await fixture(html`
-      <preview-pane language="python" content="print('hi')" path="a.py"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeTruthy();
-  });
-
-  it("renders upload button in edit mode header", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    el.enterEdit();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeTruthy();
-  });
-
-  it("does not render upload button when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md" ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeNull();
-  });
-
-  it("clicking upload button triggers hidden file input click", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-
-    const input = el.shadowRoot!.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    expect(input).toBeTruthy();
-    const clickSpy = vi.fn();
-    input.click = clickSpy;
-
-    (el.shadowRoot!.querySelector(".upload-btn") as HTMLElement).click();
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("file pick + confirm OK dispatches upload-success event", async () => {
-    vi.stubGlobal("confirm", () => true);
-    vi.stubGlobal("fetch", vi.fn());
-    const fetchSpy = vi.mocked(fetch);
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          path: "doc.md",
-          bytes_written: 3,
-          reindex_triggered: true,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-
-    const detailPromise = new Promise((resolve) => {
-      el.addEventListener("upload-success", (e: any) => resolve(e.detail));
-    });
-
-    const input = el.shadowRoot!.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    const file = new File(["abc"], "doc1_a1b2c3.md", { type: "text/markdown" });
-    Object.defineProperty(input, "files", { value: [file], writable: false });
-    input.dispatchEvent(new Event("change"));
-
-    const detail: any = await detailPromise;
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe("/api/preview/upload");
-    expect(init?.method).toBe("POST");
-    expect(detail).toEqual({ path: "doc.md" });
-
-    vi.unstubAllGlobals();
-  });
-
-  it("confirm cancelled does not call fetch", async () => {
-    vi.stubGlobal("confirm", () => false);
-    vi.stubGlobal("fetch", vi.fn());
-    const fetchSpy = vi.mocked(fetch);
-
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-
-    const input = el.shadowRoot!.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    const file = new File(["abc"], "doc1_a1b2c3.md");
-    Object.defineProperty(input, "files", { value: [file], writable: false });
-    input.dispatchEvent(new Event("change"));
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(fetchSpy).not.toHaveBeenCalled();
-
-    vi.unstubAllGlobals();
-  });
-
-  it("upload failure dispatches upload-failed event with message", async () => {
-    vi.stubGlobal("confirm", () => true);
-    vi.stubGlobal("fetch", vi.fn());
-    const fetchSpy = vi.mocked(fetch);
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ code: "NOT_INDEXED", detail: "hash+stem 不匹配" }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md"></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-
-    const detailPromise = new Promise((resolve) => {
-      el.addEventListener("upload-failed", (e: any) => resolve(e.detail));
-    });
-
-    const input = el.shadowRoot!.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    const file = new File(["abc"], "wrong_deadbe.md");
-    Object.defineProperty(input, "files", { value: [file], writable: false });
-    input.dispatchEvent(new Event("change"));
-
-    const detail: any = await detailPromise;
-    expect(detail.message).toContain("NOT_INDEXED");
-
-    vi.unstubAllGlobals();
-  });
-});
 
 describe("<preview-pane> pages pass-through", () => {
   it("passes pages prop to md-viewer", async () => {
@@ -537,7 +388,7 @@ describe("<preview-pane> html branch", () => {
     expect(el.shadowRoot!.querySelector(".edit-btn")).toBeNull();
   });
 
-  it("shows download + upload buttons for html", async () => {
+  it("shows download button for html", async () => {
     const el = await fixture(html`
       <preview-pane
         language="html"
@@ -547,7 +398,7 @@ describe("<preview-pane> html branch", () => {
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
-    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".upload-btn")).toBeNull();
   });
 
   it("hides header when noHeader=true for html", async () => {
@@ -630,7 +481,7 @@ describe("<preview-pane> mobile header", () => {
     expect(received).toBe(true);
   });
 
-  it("clicking mobile-more opens dropdown with edit/download/upload", async () => {
+  it("clicking mobile-more opens dropdown with edit/download", async () => {
     const el = await fixture(html`
       <preview-pane
         language="markdown"
@@ -646,13 +497,12 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     const menu = el.shadowRoot!.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
-    // menuitem 三项（字号 stepper 的 ± 按钮带 role=menuitem 之外的 group）
+    // menuitem 两项（字号 stepper 的 ± 按钮带 role=menuitem 之外的 group）
     const items = menu!.querySelectorAll('button[role="menuitem"]');
-    // writable=true: 编辑/下载/上传 三项
-    expect(items.length).toBe(3);
+    // writable=true: 编辑/下载 两项
+    expect(items.length).toBe(2);
     expect(items[0].textContent).toContain("编辑");
     expect(items[1].textContent).toContain("下载");
-    expect(items[2].textContent).toContain("上传");
   });
 
   it("dropdown omits edit when writable=false", async () => {
@@ -668,9 +518,8 @@ describe("<preview-pane> mobile header", () => {
     (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
-    expect(items.length).toBe(2);
+    expect(items.length).toBe(1);
     expect(items[0].textContent).toContain("下载");
-    expect(items[1].textContent).toContain("上传");
   });
 
   it("clicking mobile-more twice closes the dropdown", async () => {
@@ -709,28 +558,6 @@ describe("<preview-pane> mobile header", () => {
     (items[0] as HTMLElement).click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
-  });
-
-  it("dropdown item '上传' triggers hidden file input click", async () => {
-    const el = await fixture(html`
-      <preview-pane
-        language="markdown"
-        content="# T"
-        path="doc.md"
-        ?mobile=${true}>
-      </preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    const input = el.shadowRoot!.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input).toBeTruthy();
-    const clickSpy = vi.fn();
-    input.click = clickSpy;
-    (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
-    await el.updateComplete;
-    // 非 writable：菜单 menuitem [下载, 上传]
-    const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
-    (items[1] as HTMLElement).click();
-    expect(clickSpy).toHaveBeenCalledTimes(1);
   });
 
   it("dropdown item '下载' triggers anchor click with server URL", async () => {
@@ -859,7 +686,6 @@ describe("<preview-pane> keyword highlight", () => {
     const cases: Array<[string, string]> = [
       [".edit-btn", "编辑"],
       [".download-btn", "下载"],
-      [".upload-btn", "上传"],
       [".highlight-btn", "高亮"],
     ];
     for (const [sel, label] of cases) {

@@ -156,6 +156,67 @@ const COMPONENT_CSS = `
 .cortex-pdf-host .pdfViewer .page {
   margin: 0;
 }
+/* 匹配导航 FAB 组（keyword 非空时显示）——布局与视觉对齐 md-viewer 的
+ * .match-fabs：垂直堆叠（徽标在上、上/下步进两钮），白底 pill 徽标，
+ * chevron-up/down 图标（与 scroll-jump FAB 同族） */
+.cortex-pdf-fabs {
+  position: absolute;
+  right: 16px;
+  bottom: 72px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cortex-space-2, 8px);
+  pointer-events: none;
+}
+.cortex-pdf-fab {
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--cortex-border);
+  background: var(--cortex-surface);
+  color: var(--cortex-text-muted);
+  box-shadow: var(--cortex-shadow-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cortex-pdf-fab:hover:not(:disabled) {
+  background: var(--cortex-primary-soft);
+  color: var(--cortex-primary);
+  border-color: var(--cortex-primary);
+}
+.cortex-pdf-fab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cortex-pdf-fab:disabled:hover {
+  background: var(--cortex-surface);
+  color: var(--cortex-text-muted);
+  border-color: var(--cortex-border);
+}
+.cortex-pdf-fab doclens-icon {
+  font-size: 16px;
+}
+.cortex-pdf-fab-num {
+  font-family: var(--cortex-font-mono, monospace);
+  font-size: var(--cortex-fs-xs, 12px);
+  color: var(--cortex-text-muted);
+  background: var(--cortex-surface);
+  border: 1px solid var(--cortex-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  box-shadow: var(--cortex-shadow-md);
+  white-space: nowrap;
+  pointer-events: none;
+}
 `;
 
 /** 组件自身与 shadow 树内元素的 inline 布局样式（connected 时套用）。 */
@@ -168,10 +229,6 @@ const ANCHOR_INLINE_STYLE = "flex:1;min-height:0;";
 /** 状态层 inline 样式（loading / error）。 */
 const STATUS_INLINE_STYLE =
   "flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--cortex-text-muted,#666);font-size:var(--cortex-fs-base,14px);background:var(--cortex-card-bg,#fff);text-align:center;line-height:1.7;padding:0 16px";
-
-/** 匹配徽标 inline 样式（右下角 n/m）。 */
-const BADGE_INLINE_STYLE =
-  "position:absolute;right:16px;bottom:72px;z-index:5;background:var(--cortex-text,#111);color:var(--cortex-surface,#fff);font-family:var(--cortex-font-mono,monospace);font-size:12px;padding:3px 10px;border-radius:999px;opacity:0.92;pointer-events:none";
 
 /**
  * PDF 原生预览（ADR-0031）：pdf.js 官方 viewer 组件层渲染原始字节。
@@ -249,9 +306,6 @@ export class PdfViewer extends LitElement {
         ? html`<div style=${STATUS_INLINE_STYLE}><doclens-icon name="loader"></doclens-icon>PDF 加载中…</div>`
         : null}
       <div class="cortex-pdf-anchor" style=${ANCHOR_INLINE_STYLE} part="host"></div>
-      ${this._matchInfo && this._matchInfo.count > 0
-        ? html`<div style=${BADGE_INLINE_STYLE}>${this._matchInfo.selected}/${this._matchInfo.count}</div>`
-        : null}
     `;
   }
 
@@ -261,6 +315,50 @@ export class PdfViewer extends LitElement {
    *  preview-pane 的 shadow 里，任何「light 渲染」都逃不出那棵 shadow
    *  树。portal 容器 fixed 定位实时对齐组件占位 rect。 */
   private _portal: HTMLDivElement | null = null;
+  /** portal 内匹配导航 FAB 组（上一个/下一个 + n/m 徽标）。 */
+  private _fabs: HTMLDivElement | null = null;
+
+  /** 同步 FAB 组：keyword 非空显示；计数驱动徽标与禁用态（零匹配 0/0
+   *  置灰——与 md-viewer 匹配导航决议语义一致）。 */
+  private _syncFabs(): void {
+    const fabs = this._fabs;
+    if (!fabs) return;
+    if (!this.keyword.trim()) {
+      fabs.style.display = "none";
+      return;
+    }
+    const selected = this._matchInfo?.selected ?? 1;
+    const count = this._matchInfo?.count ?? 0;
+    if (fabs.style.display === "none" || !fabs.childElementCount) {
+      // 首次构建（对齐 md-viewer .match-fabs 结构）：徽标在上，
+      // 「上一个」chevron-up、「下一个」chevron-down 竖排
+      fabs.innerHTML = "";
+      const mk = (label: string, icon: string, dir: 1 | -1) => {
+        const b = document.createElement("button");
+        b.className = "cortex-pdf-fab";
+        b.type = "button";
+        b.setAttribute("aria-label", label);
+        b.title = label;
+        const ic = document.createElement("doclens-icon");
+        ic.setAttribute("name", icon);
+        b.appendChild(ic);
+        b.addEventListener("click", () => this.stepKeywordHit(dir));
+        return b;
+      };
+      const num = document.createElement("span");
+      num.className = "cortex-pdf-fab-num";
+      const prev = mk("上一个匹配", "chevron-up", -1);
+      const next = mk("下一个匹配", "chevron-down", 1);
+      fabs.append(num, prev, next);
+    }
+    fabs.style.display = "";
+    const [num, prev, next] = fabs.children as unknown as [HTMLSpanElement, HTMLButtonElement, HTMLButtonElement];
+    // 零匹配显示 0/0（匹配导航决议语义），非零时 selected 从 1 起
+    num.textContent = count === 0 ? "0/0" : `${selected}/${count}`;
+    const disabled = count === 0;
+    prev.disabled = disabled;
+    next.disabled = disabled;
+  }
   /** rAF 持续对齐循环句柄（_destroyPortal 取消）。 */
   private _portalRaf = 0;
   /** 上次对齐的 rect 缓存（无变化跳过赋值——rAF 循环零成本稳态）。 */
@@ -280,6 +378,12 @@ export class PdfViewer extends LitElement {
     host.appendChild(viewer);
     wrap.appendChild(host);
     portal.appendChild(wrap);
+    // 匹配导航 FAB 组（上一个/下一个 + n/m 徽标；keyword 非空时显示）
+    const fabs = document.createElement("div");
+    fabs.className = "cortex-pdf-fabs";
+    fabs.style.display = "none";
+    portal.appendChild(fabs);
+    this._fabs = fabs;
     document.body.appendChild(portal);
     this._portal = portal;
 
@@ -312,6 +416,7 @@ export class PdfViewer extends LitElement {
     };
     this._portalRaf = requestAnimationFrame(loop);
     sync();
+    this._syncFabs();
     return portal;
   }
 
@@ -321,6 +426,7 @@ export class PdfViewer extends LitElement {
     this._portalLastRect = "";
     this._portal?.remove();
     this._portal = null;
+    this._fabs = null;
   }
 
   /** portal 内的滚动容器（PDFViewer 的 container）。 */
@@ -543,6 +649,7 @@ export class PdfViewer extends LitElement {
             selected: Math.max(1, mc.current ?? 1),
             count: mc.total,
           };
+          this._syncFabs();
         }
       };
       eventBus.on("updatefindmatchescount", onCount);
@@ -681,6 +788,7 @@ export class PdfViewer extends LitElement {
 
   private _applyKeyword(): void {
     const q = this.keyword.trim();
+    this._syncFabs();
     if (!this._eventBus) {
       this._activeQuery = q; // 文档就绪后 _loadDocument 尾部补执行
       return;

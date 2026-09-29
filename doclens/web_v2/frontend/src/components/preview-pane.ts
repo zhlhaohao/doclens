@@ -4,7 +4,7 @@ import "./md-viewer";
 import "./md-editor";
 import "./toc-drawer";
 import "./pdf-viewer";
-import { savePreview, PreviewSaveError, uploadPreview, PreviewUploadError, isImageFile } from "../api/preview";
+import { savePreview, PreviewSaveError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import { extractHeadings, type TocItem } from "../utils/toc";
@@ -190,7 +190,6 @@ export class PreviewPane extends LitElement {
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
-    button.upload-btn,
     button.highlight-btn,
     button.toc-btn,
     button.edit-btn,
@@ -236,7 +235,6 @@ export class PreviewPane extends LitElement {
       pointer-events: none;
     }
     button.download-btn:hover,
-    button.upload-btn:hover,
     button.highlight-btn:hover,
     button.toc-btn:hover,
     button.edit-btn:hover,
@@ -874,11 +872,6 @@ export class PreviewPane extends LitElement {
                       ?disabled=${this._downloading}
                       @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
                 >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  @click=${() => { this._showMobileMenu = false; this._onUploadClick(); }}
-                ><doclens-icon name="upload"></doclens-icon>上传</button>
                 ${this.enableReparse && isImageFile(this.path)
                   ? html`<button
                       type="button"
@@ -1020,42 +1013,6 @@ export class PreviewPane extends LitElement {
   private _renderBackBtn() {
     if (!this.showBack) return null;
     return html`<button class="back-btn" @click=${this._onMobileBackClick}><doclens-icon name="arrow-left"></doclens-icon><span class="btn-label">${this.backLabel}</span></button>`;
-  }
-
-  private _onUploadClick = () => {
-    const input = this.shadowRoot?.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement | null;
-    input?.click();
-  };
-
-  private async _onFileChange(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    // 重置 value 允许下次再选同一文件
-    input.value = "";
-    if (!file) return;
-    const ok = window.confirm(`即将上传 '${file.name}' 覆盖原文件，是否继续？`);
-    if (!ok) return;
-    try {
-      const res = await uploadPreview(file);
-      this.dispatchEvent(
-        new CustomEvent("upload-success", { detail: { path: res.path } }),
-      );
-    } catch (err) {
-      const msg =
-        err instanceof PreviewUploadError
-          ? `${err.code} ${err.message}`
-          : (err as Error).message ?? "上传失败";
-      this.dispatchEvent(
-        new CustomEvent("upload-failed", { detail: { message: msg } }),
-      );
-    }
-  }
-
-  private _renderUploadBtn() {
-    if (this._isPst) return null;
-    return html`<button class="upload-btn" @click=${this._onUploadClick}><doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span></button>`;
   }
 
   // ------------------------------------------------------------------
@@ -1345,14 +1302,12 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown" && this._mode === "edit") {
       return html`
-        <input type="file" hidden @change=${this._onFileChange}>
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
             ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
-            ${this._renderUploadBtn()}
             ${this._renderReparseBtn()}
           </div>
         ` : null}
@@ -1370,7 +1325,6 @@ export class PreviewPane extends LitElement {
 
     if (this.language === "markdown") {
       return html`
-        <input type="file" hidden @change=${this._onFileChange}>
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
@@ -1380,7 +1334,6 @@ export class PreviewPane extends LitElement {
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
               : null}
             ${this._renderDownloadBtn()}
-            ${this._renderUploadBtn()}
             ${this._renderTocBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
@@ -1406,7 +1359,6 @@ export class PreviewPane extends LitElement {
     // 书签 TOC、findController 匹配导航均在 pdf-viewer 内闭环
     if (this.language === "pdf") {
       return html`
-        <input type="file" hidden @change=${this._onFileChange}>
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
@@ -1414,7 +1366,6 @@ export class PreviewPane extends LitElement {
             <span class="path">${this.path}</span>
             ${this._renderPdfZoomGroup()}
             ${this._renderDownloadBtn()}
-            ${this._renderUploadBtn()}
             ${this._renderTocBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
@@ -1438,14 +1389,12 @@ export class PreviewPane extends LitElement {
     // HTML：iframe srcdoc 渲染原生网页（脚本隔离，不可编辑）
     if (this.language === "html") {
       return html`
-        <input type="file" hidden @change=${this._onFileChange}>
         ${renderMobileBar}
         ${showDesktopHeader ? html`
           <div class="header">
             ${this._renderBackBtn()}
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
-            ${this._renderUploadBtn()}
             ${this._renderReparseBtn()}
           </div>
         ` : null}
@@ -1462,14 +1411,12 @@ export class PreviewPane extends LitElement {
     // 非 md：现有纯文本 + 行号视图
     const lines = this._content.split("\n");
     return html`
-      <input type="file" hidden @change=${this._onFileChange}>
       ${renderMobileBar}
       ${showDesktopHeader ? html`
         <div class="header">
           ${this._renderBackBtn()}
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
-          ${this._renderUploadBtn()}
             ${this._renderReparseBtn()}
         </div>
       ` : null}

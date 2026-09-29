@@ -131,3 +131,41 @@ class TestPdfBytesEndpoint:
                 path="../outside.pdf", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 404
+
+
+class TestProbeUploadTarget:
+    """GET /api/preview/upload-target 只读探测（files 页 hash 反查分流）。"""
+
+    def _idx_with_docs(self, tmp_path, rel, stem):
+        """构造带一个已索引文档的 fake idx（indexed_source_paths 供反查）。"""
+        return SimpleNamespace(
+            search_path=str(tmp_path),
+            index_path=str(tmp_path / ".cortex" / "index.db"),
+            path_map={},
+            indexed_source_paths=lambda: [str(tmp_path / rel)],
+        )
+
+    def test_match(self, tmp_path):
+        import hashlib
+
+        rel = "科技/report.pdf"
+        idx = self._idx_with_docs(tmp_path, rel, "report")
+        h = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:6]
+        resp = asyncio.run(preview_api.probe_upload_target(
+            filename=f"report_{h}.pdf", idx=idx,
+        ))
+        assert resp == {"match": True, "path": rel}
+
+    def test_bad_filename_no_match(self, tmp_path):
+        idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
+        resp = asyncio.run(preview_api.probe_upload_target(
+            filename="普通名字.pdf", idx=idx,
+        ))
+        assert resp == {"match": False}
+
+    def test_no_index_match(self, tmp_path):
+        idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
+        resp = asyncio.run(preview_api.probe_upload_target(
+            filename="b_deadbee.pdf", idx=idx,
+        ))
+        assert resp == {"match": False}

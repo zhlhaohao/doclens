@@ -551,19 +551,6 @@ export class SearchView extends LitElement {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
   };
 
-  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
-    // 清掉可能残留的编辑脏标志（上传可能发生在 edit 模式下），避免
-    // 后续切换结果时弹出陈旧的"丢弃修改？"确认框
-    this.previewDirty = false;
-    this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
-    // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
-    this._reloadPreview();
-  };
-
-  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>) => {
-    this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
-  };
-
   /** 预览 pane 下载成功（App 内 jsbridge 通道） */
   private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
     this._pushToast(`已保存到下载目录：${e.detail.name}`, "success", 2500);
@@ -572,20 +559,6 @@ export class SearchView extends LitElement {
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
-
-  /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
-  private async _reloadPreview() {
-    if (!this.previewPath) return;
-    const r = await fetchPreview(this.previewPath);
-    if (r.ok) {
-      this.previewContent = r.content;
-      this.previewLanguage = r.language;
-      this.previewWritable = r.writable;
-      this.previewPages = r.pages;
-      this.previewAttachments = r.attachments;
-      this.previewPageStarts = r.pageStarts;
-    }
-  }
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击搜索结果同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
@@ -756,8 +729,6 @@ export class SearchView extends LitElement {
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
-                @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
@@ -803,8 +774,6 @@ export class SearchView extends LitElement {
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
-                @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
