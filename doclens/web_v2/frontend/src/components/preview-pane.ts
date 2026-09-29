@@ -4,9 +4,13 @@ import "./md-viewer";
 import "./md-editor";
 import "./toc-drawer";
 import "./pdf-viewer";
+import "./skill-toolbox-dialog";
+import "./skill-run-dialog";
 import { savePreview, PreviewSaveError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
+import { fetchSkills, type SkillInfo } from "../api/skills";
+import { recordSkillUse } from "../state/recent-skills";
 import { extractHeadings, type TocItem } from "../utils/toc";
 import type { MdEditor } from "./md-editor";
 import type { MdViewer } from "./md-viewer";
@@ -287,6 +291,22 @@ export class PreviewPane extends LitElement {
       opacity: 0.35;
       cursor: default;
     }
+    /* 技能工具箱对话框（showModal：top layer 全屏居中——不被 PDF portal
+       （document.body z-index 1）遮挡、不受预览栏 overflow 裁剪；
+       样式对齐 files-view 的 dialog） */
+    dialog {
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-xl);
+      box-sizing: border-box;
+      padding: 0;
+      background: var(--cortex-surface);
+      box-shadow: var(--cortex-shadow-lg);
+      min-width: 360px;
+      max-width: 90vw;
+    }
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.4);
+    }
     /* 高亮输入条/目录抽屉展开中的激活态 */
     button.highlight-btn.active,
     button.toc-btn.active {
@@ -534,6 +554,12 @@ export class PreviewPane extends LitElement {
   /** PDF 缩放控件显示（「适宽」/百分比；pdf-viewer scalechanging 驱动）。 */
   @state() private _pdfZoomLabel = "适宽";
 
+  /** 技能工具箱（预览文件 → AI 技能处理）：对话框态与数据源。 */
+  @state() private _toolbox: "list" | "run" | null = null;
+  @state() private _toolboxSkills: SkillInfo[] | null = null;
+  @state() private _toolboxError: string | null = null;
+  @state() private _pickedSkill: SkillInfo | null = null;
+
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
   @state() private _tocItems: TocItem[] = [];
@@ -594,6 +620,12 @@ export class PreviewPane extends LitElement {
 
   async updated(changed: Map<string, unknown>) {
     super.updated?.(changed);
+    // 工具箱对话框以 showModal 打开（top layer，防 PDF portal 遮挡、
+    // 不受预览栏裁剪）；list↔run 切换时 dialog 节点重建，需重新 showModal
+    if (changed.has("_toolbox") && this._toolbox) {
+      const dlg = this.shadowRoot!.querySelector("dialog") as HTMLDialogElement | null;
+      if (dlg && !dlg.open) dlg.showModal();
+    }
     // 纯文本分支的滚动容器 .body 只在该分支存在：在则绑定，不在则解绑
     const body = this.shadowRoot!.querySelector(".body") as HTMLElement | null;
     if (body) this._scrollJump.attach(body);
@@ -872,6 +904,11 @@ export class PreviewPane extends LitElement {
                       ?disabled=${this._downloading}
                       @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
                 >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  @click=${() => { this._showMobileMenu = false; void this._onToolboxOpen(); }}
+                ><doclens-icon name="sparkles"></doclens-icon>工具箱</button>
                 ${this.enableReparse && isImageFile(this.path)
                   ? html`<button
                       type="button"
@@ -1223,6 +1260,95 @@ export class PreviewPane extends LitElement {
     ><doclens-icon name="list-tree"></doclens-icon><span class="btn-label">目录</span></button>`;
   }
 
+  // ------------------------------------------------------------------
+  // 技能工具箱（对当前预览文件跑 AI 技能）：流程内嵌本组件（对话框
+  // 组件复用 files 页同款），完成后发 skill-chat 组合事件由 cortex-app
+  // 统一消费（新建技能会话 + 切 chat），三个宿主视图零改动。
+  // ------------------------------------------------------------------
+
+  /** 工具箱入口可用：有预览文件且非 PST（派生路径非真实文件）。 */
+  private get _toolboxAvailable(): boolean {
+    return !!this.path && !this._isPst;
+  }
+
+  private async _onToolboxOpen() {
+    if (!this._toolboxAvailable) return;
+    this._pickedSkill = null;
+    this._toolbox = "list";
+    this._toolboxSkills = null;
+    this._toolboxError = null;
+    try {
+      this._toolboxSkills = await fetchSkills();
+    } catch (e) {
+      this._toolboxError = (e as Error)?.message || "技能列表加载失败";
+    }
+  }
+
+  private _onSkillPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
+    this._pickedSkill = e.detail.skill;
+    this._toolbox = "run";
+  };
+
+  /** 确认「开始对话」：拼消息 → skill-chat 事件（app 层建会话切 chat）。 */
+  private _onSkillRunSubmit = (e: CustomEvent<{ prompt: string }>) => {
+    const skill = this._pickedSkill;
+    this._toolbox = null;
+    if (!skill) return;
+    const lines = [
+      `/${skill.name} 按技能指引处理以下文件`,
+      "",
+      "文件：",
+      `- ${this.path}`,
+      "",
+      `补充要求：${e.detail.prompt || "无"}`,
+    ];
+    recordSkillUse(skill.name);
+    const firstFile = this.path.split("/").pop() ?? this.path;
+    this.dispatchEvent(new CustomEvent("skill-chat", {
+      detail: {
+        message: lines.join("\n"),
+        title: `${skill.name} · ${firstFile}`,
+      },
+      bubbles: true, composed: true,
+    }));
+  };
+
+  /** 工具箱按钮（桌面 header，sparkles 图标与 files 工具栏同款）。 */
+  private _renderToolboxBtn() {
+    if (!this._toolboxAvailable) return null;
+    return html`<button
+      class="toc-btn"
+      title="技能工具箱（对当前文件运行 AI 技能）"
+      @click=${() => void this._onToolboxOpen()}
+    ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
+  }
+
+  /** 工具箱对话框组（list → run 两段式，与 files 页同组件同交互）。
+   *  showModal 渲染（top layer）：见 updated() 的打开时机。 */
+  private _renderToolboxDialogs() {
+    if (this._toolbox === "list") {
+      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
+        <skill-toolbox-dialog
+          .skills=${this._toolboxSkills}
+          .error=${this._toolboxError}
+          @pick=${this._onSkillPick}
+          @cancel=${() => { this._toolbox = null; }}
+        ></skill-toolbox-dialog>
+      </dialog>`;
+    }
+    if (this._toolbox === "run" && this._pickedSkill) {
+      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
+        <skill-run-dialog
+          .skill=${this._pickedSkill}
+          .filePaths=${[this.path]}
+          @submit=${this._onSkillRunSubmit}
+          @cancel=${() => { this._toolbox = null; }}
+        ></skill-run-dialog>
+      </dialog>`;
+    }
+    return null;
+  }
+
   private _onTocToggle = () => {
     if (!this._showToc) {
       // 打开前捕获阅读位置，抽屉据此高亮当前章节（md=行号锚点 / pdf=页号锚点）
@@ -1309,6 +1435,7 @@ export class PreviewPane extends LitElement {
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
+            ${this._renderToolboxBtn()}
           </div>
         ` : null}
         <md-editor
@@ -1320,6 +1447,7 @@ export class PreviewPane extends LitElement {
           @dirty-change=${this._onEditorDirty}
         ></md-editor>
         ${this._renderDownloadOverlay()}
+        ${this._renderToolboxDialogs()}
       `;
     }
 
@@ -1337,6 +1465,7 @@ export class PreviewPane extends LitElement {
             ${this._renderTocBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
+            ${this._renderToolboxBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1352,6 +1481,7 @@ export class PreviewPane extends LitElement {
         ${this._renderAttachments()}
         ${this._renderTocDrawer()}
         ${this._renderDownloadOverlay()}
+        ${this._renderToolboxDialogs()}
       `;
     }
 
@@ -1369,6 +1499,7 @@ export class PreviewPane extends LitElement {
             ${this._renderTocBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
+            ${this._renderToolboxBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1383,6 +1514,7 @@ export class PreviewPane extends LitElement {
         ></pdf-viewer>
         ${this._renderTocDrawer()}
         ${this._renderDownloadOverlay()}
+        ${this._renderToolboxDialogs()}
       `;
     }
 
@@ -1396,6 +1528,7 @@ export class PreviewPane extends LitElement {
             <span class="path">${this.path}</span>
             ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
+            ${this._renderToolboxBtn()}
           </div>
         ` : null}
         <iframe
@@ -1405,6 +1538,7 @@ export class PreviewPane extends LitElement {
           title="HTML 预览"
         ></iframe>
         ${this._renderDownloadOverlay()}
+        ${this._renderToolboxDialogs()}
       `;
     }
 
@@ -1418,6 +1552,7 @@ export class PreviewPane extends LitElement {
           <span class="path">${this.path}</span>
           ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
+            ${this._renderToolboxBtn()}
         </div>
       ` : null}
       <div class="body">
@@ -1429,6 +1564,7 @@ export class PreviewPane extends LitElement {
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       </div>
       ${this._renderDownloadOverlay()}
+        ${this._renderToolboxDialogs()}
     `;
   }
 
