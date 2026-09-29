@@ -423,6 +423,15 @@ export class ChatView extends LitElement {
       display: flex;
       flex-direction: column;
     }
+    /* 移动端预览打开时隐藏对话顶栏：focus-header 因 backdrop-filter 需
+       z-index:10，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
+       顶栏的「新对话」返回钮——点了回 initial 而非关闭预览，2026-09-29
+       修复）。预览层的返回由 preview-pane 自带 mobile-header 承担。 */
+    @media (max-width: 1023px) {
+      .focus-body.has-preview > focus-header {
+        display: none;
+      }
+    }
     @media (min-width: 1024px) {
       .preview-overlay {
         display: none;
@@ -1460,7 +1469,7 @@ export class ChatView extends LitElement {
     </preview-pane>`;
     return html`
       <toast-stack></toast-stack>
-      <div class="focus-body">
+      <div class="focus-body ${hasPreview ? "has-preview" : ""}">
         <focus-header
           back-label="新对话"
           title=${s.currentSession?.title ?? ""}
