@@ -43,7 +43,7 @@ class TestEffectiveState:
     def test_builtin_defaults_apply(self, config_dir):
         st = skills_config.effective_state("knowledge-base")
         assert st["context_menu"] is True and st["accept_dirs"] is True
-        st2 = skills_config.effective_state("summarize-files")
+        st2 = skills_config.effective_state("ask-files")
         assert st2["context_menu"] is True and st2["accept_dirs"] is False
 
     def test_override_beats_builtin_default(self, config_dir):
