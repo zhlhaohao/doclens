@@ -215,7 +215,7 @@ class TestDeployRecursion:
 
         monkeypatch.setattr(skills_deploy.skills_config, "deleted_names", lambda: set())
         deployed = skills_deploy.deploy_builtin_skills(tmp_path / "dst")
-        assert sorted(deployed) == ["ignore-rules", "knowledge-base", "summarize-files"]
+        assert sorted(deployed) == ["ask-files", "ignore-rules", "knowledge-base"]
         assert (tmp_path / "dst" / "knowledge_base" / "SKILL.md").exists()
 
 
