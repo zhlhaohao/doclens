@@ -98,6 +98,9 @@ export class CortexApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // 预览页技能工具箱（preview-pane 发起）：统一建技能会话并切 chat——
+    // composed 事件从任意视图的 preview-pane 冒泡直达，宿主视图零改动
+    this.addEventListener("skill-chat", this._onSkillChat as EventListener);
     // 会话恢复先于路由/写入器：恢复值落 store 后各 view 挂载时可见；
     // 上次主视图作为 hash 为空时的路由 fallback（URL 显式 hash 优先）
     const restored = applySessionRestore();
@@ -171,6 +174,7 @@ export class CortexApp extends LitElement {
   }
 
   disconnectedCallback() {
+    this.removeEventListener("skill-chat", this._onSkillChat as EventListener);
     this._unsubscribe?.();
     this._unsubAuth?.();
     this._unsubMemory?.();
@@ -179,6 +183,18 @@ export class CortexApp extends LitElement {
     stopWatchStream();
     super.disconnectedCallback();
   }
+
+  /** 预览页技能工具箱确认（skill-chat 事件）：重置 chat 态 → pending
+   *  技能消息 → 走 router 切 chat（与 files 页工具箱同一条收尾链路）。 */
+  private _onSkillChat = (e: CustomEvent<{ message: string; title: string }>) => {
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setPendingSkillChat({
+      message: e.detail.message,
+      title: e.detail.title,
+      isSkill: true,
+    });
+    router.navigate("chat");
+  };
 
   private _navigate(e: CustomEvent<{ view: ViewId; scope?: "local" | "global" }>) {
     // URL 是 view 的唯一真相源：通过 router 写 hash，hashchange 监听器再同步 store

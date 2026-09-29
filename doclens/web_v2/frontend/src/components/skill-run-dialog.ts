@@ -10,7 +10,13 @@ import "../components/icon";
 @customElement("skill-run-dialog")
 export class SkillRunDialog extends LitElement {
   static styles = css`
-    :host { display: block; min-width: 420px; }
+    :host {
+      display: block;
+      min-width: 420px;
+      /* 对话框内容留白自带（宿主 <dialog> padding:0——files 页与预览页
+         工具箱两处宿主一致获得四周留白） */
+      padding: var(--cortex-space-5, 20px) var(--cortex-space-6, 24px);
+    }
     h3 {
       margin: 0 0 var(--cortex-space-3) 0;
       font-size: var(--cortex-fs-md); font-weight: 600;

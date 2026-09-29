@@ -160,6 +160,8 @@ export class SearchView extends LitElement {
   @state() private previewWritable = false;
   @state() private previewPages: PageMarker[] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表，previewLine 跳页换算依据。 */
+  @state() private previewPageStarts: number[] | null = null;
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -308,6 +310,7 @@ export class SearchView extends LitElement {
       this.previewError = null;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       // 新搜索始终从第 0 页开始（重置 offset）
       actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
@@ -429,6 +432,7 @@ export class SearchView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       return;
     }
     const line = (r.line as number | null) ?? null;
@@ -456,6 +460,7 @@ export class SearchView extends LitElement {
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
+      this.previewPageStarts = result.pageStarts;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
       this.previewContent = "";
@@ -463,6 +468,7 @@ export class SearchView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
     }
   }
 
@@ -471,7 +477,7 @@ export class SearchView extends LitElement {
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; attachments: null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -489,6 +495,7 @@ export class SearchView extends LitElement {
           writable: body.writable ?? false,
           pages: body.pages ?? null,
           lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
+          pageStarts: null, // 范围预览只用于文本文件，无页表
           attachments: null, // 范围预览只用于文本文件，无附件
         };
       }
@@ -544,40 +551,20 @@ export class SearchView extends LitElement {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
   };
 
-  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
-    // 清掉可能残留的编辑脏标志（上传可能发生在 edit 模式下），避免
-    // 后续切换结果时弹出陈旧的"丢弃修改？"确认框
-    this.previewDirty = false;
-    this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
-    // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
-    this._reloadPreview();
-  };
-
-  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>) => {
-    this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
-  };
-
   /** 预览 pane 下载成功（App 内 jsbridge 通道） */
   private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
     this._pushToast(`已保存到下载目录：${e.detail.name}`, "success", 2500);
   };
 
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>) => {
+    if (e.detail.ok) this._pushToast("已复制路径", "success", 2500);
+    else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
+  };
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
-
-  /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
-  private async _reloadPreview() {
-    if (!this.previewPath) return;
-    const r = await fetchPreview(this.previewPath);
-    if (r.ok) {
-      this.previewContent = r.content;
-      this.previewLanguage = r.language;
-      this.previewWritable = r.writable;
-      this.previewPages = r.pages;
-      this.previewAttachments = r.attachments;
-    }
-  }
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击搜索结果同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
@@ -740,6 +727,7 @@ export class SearchView extends LitElement {
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
+                .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}
                 ?showBack=${isPstEmailPath(this.previewPath)}
                 backLabel="邮件列表"
@@ -747,9 +735,8 @@ export class SearchView extends LitElement {
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
-                @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
+                @path-copied=${this._onPathCopied}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>
@@ -788,14 +775,14 @@ export class SearchView extends LitElement {
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
+                .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}
                 @back=${this._popDetail}
                 @dirty-change=${this._onPreviewDirty}
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
-                @upload-success=${this._onPreviewUploadSuccess}
-                @upload-failed=${this._onPreviewUploadFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
+                @path-copied=${this._onPathCopied}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>` : null}

@@ -453,6 +453,8 @@ export class ChatView extends LitElement {
   @state() private previewPath = "";
   @state() private previewLanguage = "text";
   @state() private previewPages: PageMarker[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表。 */
+  @state() private previewPageStarts: number[] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
@@ -1066,6 +1068,7 @@ export class ChatView extends LitElement {
     this.previewLanguage = "text";
     this.previewPages = null;
     this.previewAttachments = null;
+    this.previewPageStarts = null;
     this.previewWritable = false;
     this.previewError = null;
     this.previewDirty = false;
@@ -1286,6 +1289,7 @@ export class ChatView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       this.previewOpen = true;
       return;
     }
@@ -1297,6 +1301,7 @@ export class ChatView extends LitElement {
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
+      this.previewPageStarts = result.pageStarts;
       this.previewOpen = true;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
@@ -1305,6 +1310,7 @@ export class ChatView extends LitElement {
       this.previewWritable = false;
       this.previewPages = null;
       this.previewAttachments = null;
+      this.previewPageStarts = null;
       this.previewOpen = true;
     } else {
       this._pushToast(`预览失败：${result.message}`, "error", 5000);
@@ -1352,31 +1358,11 @@ export class ChatView extends LitElement {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
   };
 
-  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>): void => {
-    // 清掉可能残留的编辑脏标志（上传可能发生在 edit 模式下），避免
-    // 后续切换结果时弹出陈旧的"丢弃修改？"确认框
-    this.previewDirty = false;
-    this._pushToast(`已覆盖：${e.detail.path}`, "success", 2500);
-    // 上传是外部覆盖（不像 PUT /api/preview 已含新内容），必须重新拉取
-    void this._reloadPreview();
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>): void => {
+    if (e.detail.ok) this._pushToast("已复制路径", "success", 2500);
+    else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
   };
-
-  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>): void => {
-    this._pushToast(`上传失败：${e.detail.message}`, "error", 5000);
-  };
-
-  /** 上传成功后用：按当前 previewPath 重新拉取完整预览内容（不缩行范围）。 */
-  private async _reloadPreview(): Promise<void> {
-    if (!this.previewPath) return;
-    const r = await fetchPreview(this.previewPath);
-    if (r.ok) {
-      this.previewContent = r.content;
-      this.previewLanguage = r.language;
-      this.previewWritable = r.writable;
-      this.previewPages = r.pages;
-      this.previewAttachments = r.attachments;
-    }
-  }
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
@@ -1457,6 +1443,7 @@ export class ChatView extends LitElement {
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
       .pages=${this.previewPages}
+      .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}
       ?showBack=${isPstEmailPath(this.previewPath)}
       backLabel="邮件列表"
@@ -1464,8 +1451,7 @@ export class ChatView extends LitElement {
       @dirty-change=${this._onPreviewDirty}
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
-      @upload-success=${this._onPreviewUploadSuccess}
-      @upload-failed=${this._onPreviewUploadFailed}>
+      @path-copied=${this._onPathCopied}
     </preview-pane>`;
     return html`
       <toast-stack></toast-stack>

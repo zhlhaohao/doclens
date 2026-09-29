@@ -29,6 +29,10 @@ export class SkillToolboxDialog extends LitElement {
       /* 桌面占页面宽度 50%（2026-08-17 决议），三列卡片矩阵 */
       width: 50vw;
       max-width: 100%;
+      /* 对话框内容留白自带（宿主 <dialog> padding:0——files 页与预览页
+         工具箱两处宿主一致获得四周留白）；border-box：留白不撑破 50vw */
+      box-sizing: border-box;
+      padding: var(--cortex-space-5, 20px) var(--cortex-space-6, 24px);
     }
 
     /* ── 头部：标题块 + 右上关闭 ── */

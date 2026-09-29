@@ -1918,7 +1918,7 @@ async def build_index(
                             logger.info("Removed %d stale derived doc(s) for %s",
                                         len(removed_ids), fp)
                         for doc in new_docs:
-                            fts.index_document(doc, auto_commit=False)
+                            fts.index_document(doc, auto_commit=False, force=force)
                             d = fts.last_node_diff
                             for k in diff_totals:
                                 diff_totals[k] += d[k]
@@ -1950,11 +1950,15 @@ async def build_index(
                         doc_description=result.get("doc_description", ""),
                         metadata={"source_path": result.get("source_path", "")},
                         source_type=result.get("source_type", ""),
+                        page_starts=result.get("page_starts"),
                     )
                     _result_node_counts[fp] = len(flatten_tree(doc.structure))
                     # index_document writes nodes, fts_nodes, documents AND index_meta
                     # in a single atomic transaction (auto_commit handles batching).
-                    fts.index_document(doc, auto_commit=False, file_hash=file_h)
+                    # force 必须透传：文档级 fast-path（structure hash 未变即跳过
+                    # documents 重写）会让 --force 无法刷新结构外的新列
+                    # （如 page_starts，ADR-0031）。
+                    fts.index_document(doc, auto_commit=False, file_hash=file_h, force=force)
                     # Clear any prior failure record for this file
                     fts.clear_failed_file(abs_fp)
                     d = fts.last_node_diff

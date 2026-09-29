@@ -229,6 +229,75 @@ def rotate_image(
     return PreviewRotateResponse(path=resolved_rel, rotated=True)
 
 
+@router.get("/preview/pdf")
+async def preview_pdf(
+    path: str = Query(..., description="PDF 文件相对路径"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """PDF 原生预览字节流（ADR-0031）：inline 返回原始 PDF。
+
+    只做越权校验与磁盘存在性——**不查 DB**（预览与索引解耦：未索引文件
+    照常可看）。文件不在磁盘（含「已索引但被移走」——搜索仍命中的场景）
+    → FILE_MOVED 明确报错，不回退合成 md（单路径决议）。
+    """
+    base = Path(idx.search_path)
+    # 直拼 → miss 则 path_map 反查（AI 只给文件名）；_resolve_path 对
+    # 不存在文件直接抛 404，绕过了 FILE_MOVED 的区分语义，故手工拼装
+    full = _safe_resolve(base, path)
+    if not (full.exists() and full.is_file()):
+        rel = _lookup_rel_via_path_map(base, path, idx)
+        if rel is not None:
+            full = _safe_resolve(base, rel)
+    if full.suffix.lower() != ".pdf":
+        raise CortexAPIError(400, "NOT_A_PDF", f"非 PDF 文件: {path}")
+    if not (full.exists() and full.is_file()):
+        raise CortexAPIError(
+            404, "FILE_MOVED",
+            f"PDF 文件不在磁盘（可能已被移动或删除），无法预览: {path}",
+        )
+    return FileResponse(path=str(full), media_type="application/pdf")
+
+
+def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
+    """PDF 预览元数据（ADR-0031 原生预览）：language=pdf、无 content。
+
+    附 page_starts（索引有则带、无则 None——未索引/旧索引均返回 None，
+    前端跳页静默降级）。路径经 path_map 反查归一（AI 只给文件名场景）。
+    """
+    from treesearch.fts import FTS5Index
+
+    base = Path(idx.search_path)
+    resolved = path
+    candidate = _safe_resolve(base, path)
+    if not (candidate.exists() and candidate.is_file()):
+        rel = _lookup_rel_via_path_map(base, path, idx)
+        if rel is not None:
+            resolved = rel
+
+    abs_path = os.path.abspath(os.path.join(idx.search_path, resolved))
+    page_starts = None
+    fts = FTS5Index(db_path=idx.index_path)
+    try:
+        doc = fts.load_document_by_source_path(abs_path)
+        # 防御性双查：部分历史索引可能用相对路径存
+        if doc is None:
+            doc = fts.load_document_by_source_path(resolved)
+    finally:
+        fts.close()
+    if doc is not None:
+        page_starts = doc.page_starts
+
+    return PreviewResponse(
+        path=resolved,
+        language="pdf",
+        content="",
+        line_range=None,
+        highlights=[],
+        writable=False,  # PDF 不可编辑（BINARY_PREVIEW_EXTS 写回闸门同款语义）
+        page_starts=page_starts,
+    )
+
+
 @router.get("/preview", response_model=PreviewResponse)
 async def preview(
     path: str = Query(..., description="相对路径"),
@@ -249,6 +318,10 @@ async def preview(
     # 合成邮件目录页（总数 + 前 N 封主题列表）
     if path.lower().endswith(".pst"):
         return _synthesize_pst_overview(idx, path)
+    # PDF：原生预览（ADR-0031）——轻量标记响应（language=pdf、无 content），
+    # 字节由 GET /api/preview/pdf 服务；合成 md 链路对 pdf 退役
+    if path.lower().endswith(".pdf"):
+        return _pdf_preview_meta(idx, path)
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
@@ -428,12 +501,6 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
 
         raw_url = f"/api/preview/raw?path={quote(rel_path, safe='')}"
         cleaned_md = f"![原图]({raw_url})\n\n{cleaned_md}"
-    # pdf 分支 _extract_pdf_pages 会剥除 [PAGE N] 标记并重排行号，
-    # 导致 line_map（基于原始 md 行号）失真；此时丢弃映射，避免误导。
-    # docx/xlsx/csv 分支 cleaned_md == md_content，line_map 仍然有效。
-    final_line_map = None if doc.source_type == "pdf" else {
-        str(k): v for k, v in line_map.items()
-    }
     return PreviewResponse(
         path=rel_path,
         language="markdown",
@@ -442,7 +509,7 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         highlights=[],
         writable=False,  # 合成预览不可写
         pages=pages,
-        line_map=final_line_map,
+        line_map={str(k): v for k, v in line_map.items()},
     )
 
 
@@ -494,9 +561,7 @@ _UPLOAD_FILENAME_RE = re.compile(
 )
 
 
-# PDF [PAGE N] 标记正则（与 treesearch.parsers.pdf_parser._RE_PAGE_MARKER 同模式，
-# 但本模块内独立定义避免跨模块耦合）
-_RE_PDF_PAGE_MARKER = re.compile(r"^\[PAGE\s+(\d+)\]$")
+# PDF [PAGE N] 标记处理已随 ADR-0031 原生预览退役（页表见 page_starts）
 
 
 def _extract_pages(
@@ -507,20 +572,20 @@ def _extract_pages(
 ):
     """从合成 md + structure 抽取分页信息。
 
+    pdf 不在此列（ADR-0031：PDF 走原生预览，不再合成 md）。
+
     Args:
         structure: treesearch Document.structure（root 节点列表）
-        source_type: Document.source_type（"pdf" / "pptx" / "excel" / ...）
+        source_type: Document.source_type（"pptx" / "excel" / ...）
         md_content: render_tree_to_md 的输出
         line_map: render_tree_to_md 的 {node.line_start: md 实际行号}；
           epub 分支依赖它换算分页边界（原始 line_start 体系与 md 行号不一致）
 
     Returns:
-        (pages, cleaned_md):
+        (pages, cleaned_md)：
         - pages: list[PageMarker] 或 None（不支持的类型或空 structure）
-        - cleaned_md: pdf 分支为剥除 [PAGE N] 后的 md；其他分支原样返回 md_content
+        - cleaned_md: 原样返回 md_content
     """
-    if source_type == "pdf":
-        return _extract_pdf_pages(md_content)
     if source_type == "pptx":
         return _extract_pptx_pages(structure), md_content
     if source_type == "excel":
@@ -601,37 +666,6 @@ def _extract_excel_pages(structure: list):
     return pages
 
 
-def _extract_pdf_pages(md_content: str):
-    """PDF 分支：剥除 [PAGE N] 标记 + 按 counter 生成 pages。"""
-    from doclens.web_v2.models.preview import PageMarker
-
-    pages: list = []
-    cleaned_lines: list[str] = []
-
-    for line in md_content.split("\n"):
-        if _RE_PDF_PAGE_MARKER.match(line.strip()):
-            if not pages:
-                # 第一个 marker → page 1 起始 = cleaned-line 1
-                pages.append(PageMarker(label="第 1 页", line_start=1))
-            else:
-                # 后续 marker → page N 起始 = 下一 cleaned-line
-                pages.append(
-                    PageMarker(
-                        label=f"第 {len(pages) + 1} 页",
-                        line_start=len(cleaned_lines) + 1,
-                    )
-                )
-            # 不写入 cleaned_lines
-        else:
-            cleaned_lines.append(line)
-
-    if not pages:
-        # 无 marker → 整篇当一页
-        pages = [PageMarker(label="第 1 页", line_start=1)]
-
-    return pages, "\n".join(cleaned_lines)
-
-
 def _parse_upload_filename(filename: str):
     """解析上传文件名 → (stem, hash6, suffix)。
 
@@ -686,6 +720,30 @@ def _resolve_upload_target(idx, stem: str, hash6: str):
 
 # 50MB 上限（防御性，避免 OOM；允许二进制大文件）
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+@router.get("/preview/upload-target")
+async def probe_upload_target(
+    filename: str = Query(..., description="上传文件名"),
+    idx: IndexManager = Depends(get_index_manager),
+):
+    """只读探测：文件名带 hash6（doclens 下载产物）时反查知识库原文件路径。
+
+    供 files 页上传分流（「覆盖原文件 / 存入当前目录」用户确认）——
+    复用 POST /preview/upload 的文件名解析与反查逻辑，不做任何写入。
+    hash 冲突（命中多个）按无匹配处理（与静默目录上传的旧行为一致）。
+    """
+    parsed = _parse_upload_filename(filename)
+    if parsed is None:
+        return {"match": False}
+    stem, hash6, _suffix = parsed
+    try:
+        rel = _resolve_upload_target(idx, stem, hash6)
+    except _HashCollisionError:
+        return {"match": False}
+    if rel is None:
+        return {"match": False}
+    return {"match": True, "path": rel}
 
 
 @router.post("/preview/upload", response_model=PreviewUploadResponse)

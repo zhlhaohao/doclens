@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
-import { fetchPreview } from "../api/preview";
+import { fetchPreview, probeUploadTarget, uploadPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
@@ -266,6 +266,8 @@ export class FilesView extends LitElement {
   @state() private _previewLanguage = "text";
   @state() private _previewWritable = false;
   @state() private _previewPages: PageMarker[] | null = null;
+  /** PDF 原生预览（ADR-0031）：页表。 */
+  @state() private _previewPageStarts: number[] | null = null;
   @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
    *  二进制 415「请下载后查看」）；null = 无错误。设置后移动端 detail 层
@@ -754,6 +756,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       this._previewDirty = false;
     }
     actions.clearSelection();
@@ -772,8 +775,37 @@ export class FilesView extends LitElement {
     let ok = 0;
     let skipped = 0;
     let lastError = "";
+    /** 经 hash 反查确认覆盖原文件的数量（toast 单列）。 */
+    let restored = 0;
+    /** 覆盖原文件后须失效刷新的额外目录（原文件所在目录 ≠ 上传目标目录）。 */
+    const extraDirs = new Set<string>();
     try {
       for (const f of files) {
+        // hash 反查分流（恢复预览栏上传删除后丢失的「覆盖原文件」闭环）：
+        // 文件名带 hash6（doclens 下载产物）且索引命中 → 用户确认后走
+        // /api/preview/upload 覆盖原位；否则/取消 → 常规目录上传
+        const probe = await probeUploadTarget(f.name);
+        if (probe.match && probe.path) {
+          const dir = probe.path.includes("/")
+            ? probe.path.slice(0, probe.path.lastIndexOf("/"))
+            : "";
+          const yes = window.confirm(
+            `"${f.name}" 看起来源自知识库文件 "${probe.path}"。\n` +
+            "确定 = 覆盖原文件；取消 = 作为新文件存入当前目录",
+          );
+          if (yes) {
+            try {
+              await uploadPreview(f);
+              restored++;
+              // 原文件在别的目录 → 额外失效刷新该目录；同目录则 destDir 覆盖
+              if (dir && dir !== destDir) extraDirs.add(dir);
+              continue;
+            } catch (e: any) {
+              lastError = e?.message || "覆盖原文件失败";
+              continue;
+            }
+          }
+        }
         try {
           await filesApi.upload(f, destDir, false);
           ok++;
@@ -785,20 +817,28 @@ export class FilesView extends LitElement {
           }
         }
       }
-      await this._finishUpload(destDir, ok, skipped, lastError);
+      await this._finishUpload(destDir, ok, skipped, lastError, restored, extraDirs);
     } finally {
       this._uploading = false;
     }
   }
 
-  /** 上传收尾：失效缓存 + 刷新目录 + toast 汇总（input 路径与 jsbridge 路径共用） */
-  private async _finishUpload(destDir: string, ok: number, skipped: number, lastError: string) {
+  /** 上传收尾：失效缓存 + 刷新目录 + toast 汇总（input 路径与 jsbridge 路径共用）。
+   *  restored/extraDirs 仅 Web 目录上传路径使用（hash 反查覆盖原文件的
+   *  计数与原文件所在目录的额外刷新）。 */
+  private async _finishUpload(
+    destDir: string, ok: number, skipped: number, lastError: string,
+    restored = 0, extraDirs: Set<string> = new Set(),
+  ) {
     actions.invalidateDir(destDir);
+    for (const d of extraDirs) actions.invalidateDir(d);
     await this._ensureLoaded(destDir);
-    if (lastError && ok === 0) {
+    for (const d of extraDirs) await this._ensureLoaded(d);
+    if (lastError && ok === 0 && restored === 0) {
       this._showToast(lastError);
     } else {
       const parts = [`已上传 ${ok}`];
+      if (restored > 0) parts.push(`覆盖原文件 ${restored}`);
       if (skipped > 0) parts.push(`跳过 ${skipped}`);
       if (lastError) parts.push(`部分失败`);
       this._showToast(parts.join("，"));
@@ -887,6 +927,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       return;
     }
     const result = await fetchPreview(path);
@@ -898,6 +939,7 @@ export class FilesView extends LitElement {
       this._previewWritable = result.writable;
       this._previewPages = result.pages;
       this._previewAttachments = result.attachments;
+      this._previewPageStarts = result.pageStarts;
     } else if (result.notIndexed) {
       this._previewError = "NOT_INDEXED";
       this._previewPath = path;
@@ -905,6 +947,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
     } else {
       // 其他失败（如二进制 415）：同样进错误态页（移动端整页需要返回条），
       // toast 仍弹一瞬作即时反馈
@@ -914,6 +957,7 @@ export class FilesView extends LitElement {
       this._previewWritable = false;
       this._previewPages = null;
       this._previewAttachments = null;
+      this._previewPageStarts = null;
       this._showToast(result.message || "预览失败");
     }
   }
@@ -927,6 +971,7 @@ export class FilesView extends LitElement {
       this._previewWritable = r.writable;
       this._previewPages = r.pages;
       this._previewAttachments = r.attachments;
+      this._previewPageStarts = r.pageStarts;
     }
   }
 
@@ -957,19 +1002,15 @@ export class FilesView extends LitElement {
     this._showToast(`保存失败：${e.detail.message}`);
   };
 
-  private _onPreviewUploadSuccess = (e: CustomEvent<{ path: string }>) => {
-    this._previewDirty = false;
-    this._showToast(`已覆盖：${e.detail.path}`);
-    void this._reloadPreview();
-  };
-
-  private _onPreviewUploadFailed = (e: CustomEvent<{ message: string }>) => {
-    this._showToast(`上传失败：${e.detail.message}`);
-  };
-
   /** 预览 pane 下载成功（App 内 jsbridge 通道） */
   private _onPreviewDownloadSuccess = (e: CustomEvent<{ name: string }>) => {
     this._showToast(`已保存到下载目录：${e.detail.name}`);
+  };
+
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>) => {
+    if (e.detail.ok) this._showToast("已复制路径");
+    else this._showToast("复制失败（剪贴板不可用）");
   };
 
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
@@ -1029,15 +1070,15 @@ export class FilesView extends LitElement {
       content=${this._previewContent}
       ?writable=${this._previewWritable}
       .pages=${this._previewPages}
+      .pageStarts=${this._previewPageStarts}
       .attachments=${this._previewAttachments}
       ?showBack=${isPstEmailPath(this._previewPath)}
       backLabel="邮件列表"
       @dirty-change=${this._onPreviewDirty}
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
-      @upload-success=${this._onPreviewUploadSuccess}
-      @upload-failed=${this._onPreviewUploadFailed}
       @download-success=${this._onPreviewDownloadSuccess}
+      @path-copied=${this._onPathCopied}
       @download-failed=${this._onPreviewDownloadFailed}
       @reparse=${this._onReparse}
       @back=${this._onPreviewBack}
