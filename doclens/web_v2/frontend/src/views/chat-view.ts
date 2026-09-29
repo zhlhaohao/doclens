@@ -409,14 +409,19 @@ export class ChatView extends LitElement {
     }
     dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
     dialog > * { display: block; padding: var(--cortex-space-6); }
-    /* 移动端预览 overlay */
+    /* 移动端预览 overlay。**不得设 z-index**（2026-09-29 修复：对话页
+       参考资料 PDF 在移动浏览器灰屏的真根因）——z-index 会创建层叠
+       上下文，把 document.body 下 z-index:1 的 pdf-viewer portal 整个
+       压在下面（canvas 画好但被挡死）。去掉后：overlay（absolute 定位）
+       仍画在静态消息流之上（背景遮罩语义不变），而 portal（定位 + z:1）
+       反超 overlay（z:auto）显露 canvas；toc-drawer（z:30）等内部浮层
+       在根上下文直接比较，仍正确盖住 canvas。 */
     .preview-overlay {
       position: absolute;
       inset: 0;
       background: var(--cortex-card-bg);
       display: flex;
       flex-direction: column;
-      z-index: 10;
     }
     @media (min-width: 1024px) {
       .preview-overlay {

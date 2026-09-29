@@ -284,12 +284,32 @@ export class PdfViewer extends LitElement {
 
   protected willUpdate(changed: Map<string, unknown>) {
     if (changed.has("docPath") && this.docPath) {
-      void this._loadDocument();
+      this._loadWhenVisible();
     }
     if (changed.has("keyword")) this._applyKeyword();
     if (changed.has("locateLine") && this.locateLine != null) {
       this.locateToLine(this.locateLine);
     }
+  }
+
+  /** 组件不可见（keep-alive 视图隐藏 / 移动端布局未完成 / 挂载中间态）
+   *  时延迟加载：0 尺寸容器上初始化 pdf.js 会把适宽 scale 钉成 0——
+   *  页面 0 尺寸、loading 正常收尾、无异常，表现为真机移动浏览器灰屏
+   *  （2026-09-29 修复：对话页参考资料 PDF 灰屏）。rAF 轮询等 rect
+   *  非零（布局就位）再加载；代数守卫防连续切文档的竞态。顺带消除
+   *  keep-alive 隐藏实例的并发下载（同文档此前会加载 3 份）。 */
+  private _loadWhenVisible(): void {
+    const seq = ++this._loadSeq; // 占代数：作废进行中的旧加载与旧轮询
+    const check = () => {
+      if (seq !== this._loadSeq) return;
+      const rect = this.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        void this._loadDocument();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
   }
 
   protected render() {
@@ -397,7 +417,14 @@ export class PdfViewer extends LitElement {
       const a = anchor();
       if (!a) return;
       const r = a.getBoundingClientRect();
-      const key = `${r.left},${r.top},${r.width},${r.height}`;
+      // 坐标系补偿：getBoundingClientRect 是 visual viewport 坐标，而
+      // position:fixed 定位基准是 layout viewport——iOS Safari 动态工具栏
+      // /pinch 缩放下两者偏移，portal 会被对到屏幕外（canvas 正常渲染但
+      // 不可见 = 真机灰屏，2026-09-29 修复）。桌面两者重合（offset 0）。
+      const vv = window.visualViewport;
+      const vvL = vv?.offsetLeft ?? 0;
+      const vvT = vv?.offsetTop ?? 0;
+      const key = `${r.left},${r.top},${r.width},${r.height},${vvL},${vvT}`;
       if (key === this._portalLastRect) return;
       this._portalLastRect = key;
       if (r.width === 0 || r.height === 0) {
@@ -405,8 +432,8 @@ export class PdfViewer extends LitElement {
         return;
       }
       portal.style.display = "";
-      portal.style.left = `${r.left}px`;
-      portal.style.top = `${r.top}px`;
+      portal.style.left = `${r.left + vvL}px`;
+      portal.style.top = `${r.top + vvT}px`;
       portal.style.width = `${r.width}px`;
       portal.style.height = `${r.height}px`;
     };
@@ -448,7 +475,8 @@ export class PdfViewer extends LitElement {
     // shadow 树内元素吃不到 document CSS——布局样式 inline 套用
     this.setAttribute("style", HOST_INLINE_STYLE);
     // 已有文档路径的复挂载（keep-alive 视图切回）：portal 重建 + 重载
-    if (this.docPath) void this._loadDocument();
+    //（经 _loadWhenVisible：视图刚切回时布局未完成，0 尺寸直接加载会灰屏）
+    if (this.docPath) this._loadWhenVisible();
   }
 
   disconnectedCallback() {
@@ -676,7 +704,10 @@ export class PdfViewer extends LitElement {
       //   走数字赋值会把它变成数字串）→ 防抖 80ms 重套；用户手动缩放
       //   过则不干预。pdf.js 对同值赋值有 #isSameScale 短路，零成本。
       this._initialFitDone = false;
-      viewer.currentScaleValue = "page-width";
+      // 0 宽容器（portal 对齐首帧未完成 / 布局中间态）不设 page-width——
+      // pdf.js 会把适宽 scale 算成 0（页面 0 尺寸 = 灰屏），交给下方
+      // applyInitialFit 的 ResizeObserver 在宽度就位后补套
+      if (host.clientWidth > 0) viewer.currentScaleValue = "page-width";
       let settleTimer: number | undefined;
       let refitTimer: number | undefined;
       const applyInitialFit = () => {
