@@ -909,6 +909,13 @@ export class PreviewPane extends LitElement {
                   role="menuitem"
                   @click=${() => { this._showMobileMenu = false; void this._onToolboxOpen(); }}
                 ><doclens-icon name="sparkles"></doclens-icon>工具箱</button>
+                ${this.path
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this._onCopyPathClick(); }}
+                    ><doclens-icon name="copy"></doclens-icon>拷贝路径</button>`
+                  : null}
                 ${this.enableReparse && isImageFile(this.path)
                   ? html`<button
                       type="button"
@@ -1323,6 +1330,32 @@ export class PreviewPane extends LitElement {
     ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
   }
 
+  /** 拷贝当前预览路径（相对 workdir）到剪贴板；结果经 path-copied 事件
+   *  由宿主视图 toast（与 download-success 同模式，移动/桌面一致）。 */
+  private _onCopyPathClick = () => {
+    if (!this.path) return;
+    navigator.clipboard.writeText(this.path).then(
+      () => this.dispatchEvent(new CustomEvent("path-copied", {
+        detail: { ok: true, path: this.path },
+        bubbles: true, composed: true,
+      })),
+      () => this.dispatchEvent(new CustomEvent("path-copied", {
+        detail: { ok: false, path: this.path },
+        bubbles: true, composed: true,
+      })),
+    );
+  };
+
+  /** 拷贝路径按钮（桌面 header）。 */
+  private _renderCopyPathBtn() {
+    if (!this.path) return null;
+    return html`<button
+      class="toc-btn"
+      title="拷贝路径（相对知识库根目录）"
+      @click=${this._onCopyPathClick}
+    ><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>`;
+  }
+
   /** 工具箱对话框组（list → run 两段式，与 files 页同组件同交互）。
    *  showModal 渲染（top layer）：见 updated() 的打开时机。 */
   private _renderToolboxDialogs() {
@@ -1436,6 +1469,7 @@ export class PreviewPane extends LitElement {
             ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
+            ${this._renderCopyPathBtn()}
           </div>
         ` : null}
         <md-editor
@@ -1466,6 +1500,7 @@ export class PreviewPane extends LitElement {
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
+            ${this._renderCopyPathBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1500,6 +1535,7 @@ export class PreviewPane extends LitElement {
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
+            ${this._renderCopyPathBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1529,6 +1565,7 @@ export class PreviewPane extends LitElement {
             ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
+            ${this._renderCopyPathBtn()}
           </div>
         ` : null}
         <iframe
@@ -1553,6 +1590,7 @@ export class PreviewPane extends LitElement {
           ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
+            ${this._renderCopyPathBtn()}
         </div>
       ` : null}
       <div class="body">

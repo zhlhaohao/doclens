@@ -1007,6 +1007,12 @@ export class FilesView extends LitElement {
     this._showToast(`已保存到下载目录：${e.detail.name}`);
   };
 
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>) => {
+    if (e.detail.ok) this._showToast("已复制路径");
+    else this._showToast("复制失败（剪贴板不可用）");
+  };
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._showToast(`下载失败：${e.detail.message}`);
   };
@@ -1072,6 +1078,7 @@ export class FilesView extends LitElement {
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
       @download-success=${this._onPreviewDownloadSuccess}
+      @path-copied=${this._onPathCopied}
       @download-failed=${this._onPreviewDownloadFailed}
       @reparse=${this._onReparse}
       @back=${this._onPreviewBack}

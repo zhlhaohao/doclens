@@ -1358,6 +1358,12 @@ export class ChatView extends LitElement {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);
   };
 
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>): void => {
+    if (e.detail.ok) this._pushToast("已复制路径", "success", 2500);
+    else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
+  };
+
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
     stack?.pushToast(message, level, duration);
@@ -1445,6 +1451,7 @@ export class ChatView extends LitElement {
       @dirty-change=${this._onPreviewDirty}
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
+      @path-copied=${this._onPathCopied}
     </preview-pane>`;
     return html`
       <toast-stack></toast-stack>

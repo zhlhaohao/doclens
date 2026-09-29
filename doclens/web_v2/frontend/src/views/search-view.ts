@@ -556,6 +556,12 @@ export class SearchView extends LitElement {
     this._pushToast(`已保存到下载目录：${e.detail.name}`, "success", 2500);
   };
 
+  /** 预览 pane 拷贝路径结果（clipboard 不可用时可见失败）。 */
+  private _onPathCopied = (e: CustomEvent<{ ok: boolean }>) => {
+    if (e.detail.ok) this._pushToast("已复制路径", "success", 2500);
+    else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
+  };
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
@@ -730,6 +736,7 @@ export class SearchView extends LitElement {
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
+                @path-copied=${this._onPathCopied}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>
@@ -775,6 +782,7 @@ export class SearchView extends LitElement {
                 @saved=${this._onPreviewSaved}
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
+                @path-copied=${this._onPathCopied}
                 @download-failed=${this._onPreviewDownloadFailed}>
               </preview-pane>`}
         </div>` : null}

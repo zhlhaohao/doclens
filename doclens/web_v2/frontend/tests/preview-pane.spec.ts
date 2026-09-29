@@ -481,7 +481,7 @@ describe("<preview-pane> mobile header", () => {
     expect(received).toBe(true);
   });
 
-  it("clicking mobile-more opens dropdown with edit/download/toolbox", async () => {
+  it("clicking mobile-more opens dropdown with edit/download/toolbox/copy", async () => {
     const el = await fixture(html`
       <preview-pane
         language="markdown"
@@ -499,11 +499,12 @@ describe("<preview-pane> mobile header", () => {
     expect(menu).toBeTruthy();
     // menuitem（字号 stepper 的 ± 按钮带 role=menuitem 之外的 group）
     const items = menu!.querySelectorAll('button[role="menuitem"]');
-    // writable=true: 编辑/下载/工具箱 三项
-    expect(items.length).toBe(3);
+    // writable=true: 编辑/下载/工具箱/拷贝路径 四项
+    expect(items.length).toBe(4);
     expect(items[0].textContent).toContain("编辑");
     expect(items[1].textContent).toContain("下载");
     expect(items[2].textContent).toContain("工具箱");
+    expect(items[3].textContent).toContain("拷贝路径");
   });
 
   it("dropdown omits edit when writable=false", async () => {
@@ -519,9 +520,10 @@ describe("<preview-pane> mobile header", () => {
     (el.shadowRoot!.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
-    expect(items.length).toBe(2);
+    expect(items.length).toBe(3);
     expect(items[0].textContent).toContain("下载");
     expect(items[1].textContent).toContain("工具箱");
+    expect(items[2].textContent).toContain("拷贝路径");
   });
 
   it("clicking mobile-more twice closes the dropdown", async () => {
