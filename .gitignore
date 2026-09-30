@@ -238,6 +238,7 @@ rust/target/
 rust/Cargo.lock
 .treesearch/
 .cortex/
+.doclens/
 .planify/
 ._*.md
 
