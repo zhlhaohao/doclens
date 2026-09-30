@@ -469,6 +469,8 @@ export class ChatView extends LitElement {
   @state() private previewPages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表。 */
   @state() private previewPageStarts: number[] | null = null;
+  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
+  @state() private previewTokens: string[][][] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
@@ -1304,6 +1306,7 @@ export class ChatView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       this.previewOpen = true;
       return;
     }
@@ -1316,6 +1319,7 @@ export class ChatView extends LitElement {
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
       this.previewPageStarts = result.pageStarts;
+      this.previewTokens = result.tokens;
       this.previewOpen = true;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
@@ -1325,6 +1329,7 @@ export class ChatView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       this.previewOpen = true;
     } else {
       this._pushToast(`预览失败：${result.message}`, "error", 5000);
@@ -1459,6 +1464,7 @@ export class ChatView extends LitElement {
       .pages=${this.previewPages}
       .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}
+      .tokens=${this.previewTokens}
       ?showBack=${isPstEmailPath(this.previewPath)}
       backLabel="邮件列表"
       @back=${this._onPreviewBack}

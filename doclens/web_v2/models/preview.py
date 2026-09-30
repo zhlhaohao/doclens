@@ -21,6 +21,12 @@ class PreviewResponse(BaseModel):
     line_range: Optional[tuple[int, int]] = None
     highlights: list[int] = []
     writable: bool = False
+    # 服务端语法分词（ADR-0032）：仅代码文件文本预览返回。外层 = 行（与
+    # content 的 \n 切分一一对应），内层 = run 的 [kind, text]；kind 为 8 类
+    # 归一化单字符（c注释/k关键字/s字符串/n数字/f函数/t类型/o操作符/p标点），
+    # 空串 = 正文色。None = 不适用（md/pdf/html/二进制合成/txt/未知后缀/
+    # 超 1MB），前端回退纯文本渲染。
+    tokens: Optional[list[list[list[str]]]] = None
     pages: Optional[list[PageMarker]] = None  # 仅 pptx/excel/epub 返回
     # 仅二进制合成预览（docx/xlsx/csv）返回。
     # {node.line_start(原始体系, str): heading 在合成 md 中的实际行号(str)}。

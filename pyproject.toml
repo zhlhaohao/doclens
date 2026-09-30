@@ -57,6 +57,8 @@ dependencies = [
     "watchdog>=3.0",
     # 日记照片上传压缩（1600px/q80 WebP，ADR-0007；doclens/diary.py 直接使用）
     "Pillow>=10.0.0",
+    # 预览语法高亮的服务端分词引擎（ADR-0032；此前仅作 rich 传递依赖存在）
+    "pygments>=2.13.0,<3.0.0",
 ]
 
 [project.optional-dependencies]

@@ -125,6 +125,18 @@ export class PreviewPane extends LitElement {
       padding: 0 2px;
       border-radius: 2px;
     }
+    /* 服务端语法分词 8 类配色（ADR-0032；亮色 Meta 画布，克制不花哨）：
+       c注释=stone 灰 / k关键字=ink 深蓝黑 / s字符串=森林绿 / n数字=赭棕 /
+       f函数=靛蓝 / t类型=青蓝 / o操作符=steel / p标点=slate。未归类 run
+       不挂 class（正文色 --cortex-text）。 */
+    .tk-c { color: var(--cortex-text-subtle); font-style: italic; }
+    .tk-k { color: #0a3d91; font-weight: 500; }
+    .tk-s { color: #0a7d33; }
+    .tk-n { color: #a05a1f; }
+    .tk-f { color: #4b3fd4; }
+    .tk-t { color: #0b7285; }
+    .tk-o { color: var(--cortex-text-caption); }
+    .tk-p { color: var(--cortex-text-muted); }
     .html-frame {
       flex: 1;
       border: none;
@@ -516,6 +528,10 @@ export class PreviewPane extends LitElement {
   @property() path = "";
   @property() language = "text";
   @property() content = "";
+  /** 服务端语法分词（ADR-0032）：逐行 [[kind, text], ...] run 数组，与
+   *  content 的 \n 切分一一对应；kind 8 类（c/k/s/n/f/t/o/p），空串=正文色。
+   *  null = 后端未下发（md/pdf/html/txt/未知后缀/超限）→ 纯文本渲染。 */
+  @property({ attribute: false }) tokens: string[][][] | null = null;
   @property({ attribute: false }) highlights: number[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Number }) line: number | null = null;
@@ -1579,8 +1595,10 @@ export class PreviewPane extends LitElement {
       `;
     }
 
-    // 非 md：现有纯文本 + 行号视图
+    // 非 md：纯文本 + 行号视图（代码文件按服务端分词 tokens 着色，ADR-0032）
     const lines = this._content.split("\n");
+    const tokLines = this.tokens;
+    const tokensAligned = tokLines !== null && tokLines.length === lines.length;
     return html`
       ${renderMobileBar}
       ${showDesktopHeader ? html`
@@ -1597,7 +1615,10 @@ export class PreviewPane extends LitElement {
         ${lines.map((line, i) => {
           const lineNo = i + 1;
           const cls = this.highlights.includes(lineNo) ? "highlight" : "";
-          return html`<div class="line ${cls}"><span class="line-no">${lineNo}</span>${line}</div>`;
+          const runs = tokensAligned ? tokLines[i] : null;
+          return html`<div class="line ${cls}"><span class="line-no">${lineNo}</span>${runs
+            ? runs.map(([kind, text]) => (kind ? html`<span class="tk-${kind}">${text}</span>` : text))
+            : line}</div>`;
         })}
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       </div>

@@ -268,6 +268,8 @@ export class FilesView extends LitElement {
   @state() private _previewPages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表。 */
   @state() private _previewPageStarts: number[] | null = null;
+  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
+  @state() private _previewTokens: string[][][] | null = null;
   @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
    *  二进制 415「请下载后查看」）；null = 无错误。设置后移动端 detail 层
@@ -928,6 +930,7 @@ export class FilesView extends LitElement {
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
+      this._previewTokens = null;
       return;
     }
     const result = await fetchPreview(path);
@@ -940,6 +943,7 @@ export class FilesView extends LitElement {
       this._previewPages = result.pages;
       this._previewAttachments = result.attachments;
       this._previewPageStarts = result.pageStarts;
+      this._previewTokens = result.tokens;
     } else if (result.notIndexed) {
       this._previewError = "NOT_INDEXED";
       this._previewPath = path;
@@ -948,6 +952,7 @@ export class FilesView extends LitElement {
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
+      this._previewTokens = null;
     } else {
       // 其他失败（如二进制 415）：同样进错误态页（移动端整页需要返回条），
       // toast 仍弹一瞬作即时反馈
@@ -958,6 +963,7 @@ export class FilesView extends LitElement {
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
+      this._previewTokens = null;
       this._showToast(result.message || "预览失败");
     }
   }
@@ -972,6 +978,7 @@ export class FilesView extends LitElement {
       this._previewPages = r.pages;
       this._previewAttachments = r.attachments;
       this._previewPageStarts = r.pageStarts;
+      this._previewTokens = r.tokens;
     }
   }
 
@@ -1072,6 +1079,7 @@ export class FilesView extends LitElement {
       .pages=${this._previewPages}
       .pageStarts=${this._previewPageStarts}
       .attachments=${this._previewAttachments}
+      .tokens=${this._previewTokens}
       ?showBack=${isPstEmailPath(this._previewPath)}
       backLabel="邮件列表"
       @dirty-change=${this._onPreviewDirty}
