@@ -94,6 +94,8 @@
 - **原生预览 (Native PDF Preview)**：PDF 的预览形态——原始 PDF 字节直发前端（`GET /api/preview/pdf`，inline），pdf.js 官方 viewer **组件层**渲染（PDFViewer 页面虚拟滚动 + PDFFindController 查找 + PDFLinkService 书签跳转，UI 皮自有）。单路径无 fallback：磁盘文件移走即报错，不退回合成 md（2026-09-28 决议，ADR-0031）。预览与索引解耦——字节端点不查 DB，未索引文件照常可看；缩放走 PDF 原生语义（适宽默认 + pinch/Ctrl+滚轮，字号 stepper 不适用）。_Avoid_: 浏览器内置 viewer/iframe（WebView 宿主无渲染器且不可程序化控制）、为「文件移走」保留合成 md 兜底（已否决）。
 - **页表 (Page Starts)**：PDF 搜索命中跳页的换算依据——每页起始行号数组（原始提取文本行号体系），由 pdf_parser 解析时顺手记录并持久化进索引（treesearch 侧扩展，随索引换代覆盖）。前端拿命中行号对页表二分得页号，跳页由 pdf-viewer 落地。无页表（存量索引）不定位、不兜底。只服务搜索跳页；**不为 TOC heading 兜底服务**（heading 行号与页边界的换算要跨「剥除 [PAGE N] 重排」鸿沟，即当年 pdf line_map 被丢弃之坑，2026-09-28 决议不翻案）。
 - **带问阅读 (Query-driven Reading)**：文件问答技能（ask-files，重构自 summarize-files）的执行形态——全部章节组并发子代理**携用户要求原文**精读各自章节，只返回与要求相关的内容（无关章节一行声明）；相关内容的发现交给通读而非检索定位（2026-09-28 决议：有意否决「先 search_kb/kb_grep 定位再读」的分诊方案——以并发成本换零漏读）。用户要求缺失时退化为「总结全文」（与旧 summarize-files 行为等价）。_Avoid_: 定位再读（检索召回缺口漏内容）、按要求类型分诊（查一个人物与总结全书走同一条路径）。
+- **交互式提问**：agent 经 ask_user_question 工具发起结构化提问的**默认形态**——waiter 阻塞 agent 循环等待，UI 弹交互答题卡，用户作答后**同一回合内**恢复（300s 超时回填 timeout 继续回合）。等待发生在**回合内**。
+- **对话式提问**：交互式提问的降级形态（`PLANIFY_ASK_MODE=chat`，env 全局、调用时读取热生效；设置页「模型」tab「提问方式」select 可视化配置，保存即落盘 .env 并热同步进程环境）——问题降维为 Markdown 以**常规助手消息**送达（刷新/重开页面可读），工具返回哨兵说明并由 runner **确定性终止本回合**；答案 = 用户的**下一条消息**，自然续接（无 pending 状态机——最新一轮 tool 往返不会被压缩清除）。等待发生在**回合间**，回合无常驻等待资源，断线/重启天然可恢复。动机：移动端浏览器杀后台断线后，交互答题卡不可存活（2026-10-01 决议，ADR-0033）。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -152,3 +154,4 @@
 - 2026-09-28：PDF 原生预览（ADR-0031）= pdf.js 官方 viewer 组件层渲染原始字节（PDFViewer+PDFFindController+PDFLinkService，自有 UI 皮），单路径无 fallback（文件移走报错、未索引直接看——预览与索引解耦）；否决 iframe 内置 viewer（WebView 宿主无渲染器+不可程序化控制）；匹配导航经 findController 平移（单短语语义，多词 OR 有损接受）；TOC 改原生书签（无书签隐藏，heading 树不翻案）；搜索命中跳页依赖索引时持久化的 page_starts 页表（treesearch 扩展，无页表不定位不兜底，force 重建换覆盖）；缩放走 PDF 原生语义（适宽+pinch/Ctrl+滚轮，stepper 不适用）；主 bundle 不变（动态 chunk 懒加载，SW 天然缓存）；合成链路 pdf 分支（_extract_pdf_pages/line_map 丢弃/TOC heading）退役。
 - 2026-09-28：大文档预览性能两连修（无 ADR，展示/渲染层可逆）= ① md-viewer 行号反推 lineOf 从逐块从头数换行（O(块数×全文长)，万行 md ~400ms）改为 preprocess 预构建行起始前缀表 + 二分（等价性逐块验证通过）；② epub 合成预览分页化 + 分页懒渲染（骨架 + IntersectionObserver 滚动接近才渲染该章 + 跳转先展开目标页）+ 块级 content-visibility: auto；实测《德川家康》epub（14.5 万行/460 章）：首屏从全量渲染（外推 5-15s 白屏）降至 2.7s（其中 ~1-2s 为 10.5MB 响应传输解析）、远距离跳转 315ms 行级精确命中、滚动最长一帧 212ms（单页懒渲染成本）。
 - 2026-09-28：summarize-files 技能重构为 ask-files（无 ADR，改 SKILL.md 即可逆）= 统一全量带问阅读（否决检索定位分诊，以并发成本换零漏读）；章节级相关/无关返回协议；结构硬校验 + 点名章节不许无关 / 全组无关带关键词补跑一次两条窄语义规则；双轨输出（总结类含默认沿用固定三节结构 + 拼接去重语义，其他要求自由组织 + 三硬约束）；会话内追问复用上文笔记定向补读；多文件全部章节组同批并发。
+- 2026-10-01：ask_user_question 支持对话式降级（PLANIFY_ASK_MODE=chat，热生效）——问题以普通消息送达 + 确定性断回合（stop reason waiting_user）+ 用户下一条消息自然续接；否决「保循环等下一条消息回填 waiter」（赌跨夜存活）。见 ADR-0033。
