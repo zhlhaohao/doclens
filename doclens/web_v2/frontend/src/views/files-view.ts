@@ -1013,6 +1013,11 @@ export class FilesView extends LitElement {
     else this._showToast("复制失败（剪贴板不可用）");
   };
 
+  /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
+  private _onBookmarkAdded = () => this._showToast("已收藏书签");
+  private _onBookmarkDuplicate = () => this._showToast("此处已有书签");
+  private _onBookmarkFull = () => this._showToast("书签已满（200 条），请先清理");
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._showToast(`下载失败：${e.detail.message}`);
   };
@@ -1080,6 +1085,9 @@ export class FilesView extends LitElement {
       @download-success=${this._onPreviewDownloadSuccess}
       @path-copied=${this._onPathCopied}
       @download-failed=${this._onPreviewDownloadFailed}
+      @bookmark-added=${this._onBookmarkAdded}
+      @bookmark-duplicate=${this._onBookmarkDuplicate}
+      @bookmark-full=${this._onBookmarkFull}
       @reparse=${this._onReparse}
       @back=${this._onPreviewBack}
     ></preview-pane>`;

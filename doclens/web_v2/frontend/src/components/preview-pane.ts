@@ -11,7 +11,7 @@ import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import { fetchSkills, type SkillInfo } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
-import { extractHeadings, type TocItem } from "../utils/toc";
+import { extractHeadings, activeTocIndex, type TocItem } from "../utils/toc";
 import type { MdEditor } from "./md-editor";
 import type { MdViewer } from "./md-viewer";
 import type { PdfViewer } from "./pdf-viewer";
@@ -21,6 +21,13 @@ import {
   renderScrollJumpFabs,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
+import {
+  addBookmark,
+  bookmarksFor,
+  removeBookmark,
+  type ReadingBookmark,
+} from "../utils/bookmarks";
+import "./bookmark-drawer";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
 import { downloadServerFile } from "../utils/download";
@@ -566,6 +573,10 @@ export class PreviewPane extends LitElement {
   /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
   @state() private _tocCurrentLine = 1;
 
+  /** 阅读书签抽屉（2026-10-01 决议）：显隐 + 当前文件书签列表 */
+  @state() private _showBookmarks = false;
+  @state() private _bookmarkItems: ReadingBookmark[] = [];
+
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
   /** 锚点语义为「贴底」：目标行在对方视口无法贴顶时（下方内容不足一屏），
@@ -601,6 +612,9 @@ export class PreviewPane extends LitElement {
       // 分支不触发，须在 path 变化时清书签条目）
       this._showToc = false;
       this._tocItems = [];
+      // 书签抽屉同样不跨文档残留；列表换 path 重读
+      this._showBookmarks = false;
+      this._bookmarkItems = bookmarksFor(this.path);
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
@@ -865,6 +879,14 @@ export class PreviewPane extends LitElement {
               aria-label="目录"
               @click=${this._onTocToggle}
             ><doclens-icon name="list-tree"></doclens-icon></button>`
+          : null}
+        ${this._bookmarkAvailable
+          ? html`<button
+              class="mobile-toc mobile-bookmark ${this._showBookmarks ? "active" : ""}"
+              type="button"
+              aria-label="书签"
+              @click=${this._onBookmarksToggle}
+            ><doclens-icon name="star"></doclens-icon></button>`
           : null}
         ${(this.language === "markdown" || this.language === "pdf") && this._mode === "preview"
           ? html`<button
@@ -1268,6 +1290,116 @@ export class PreviewPane extends LitElement {
   }
 
   // ------------------------------------------------------------------
+  // 阅读书签（2026-10-01 决议）：显式收藏阅读位置，md-viewer 链路
+  // （md/epub/docx，源行号锚点）+ pdf-viewer 链路（pdf，页号+页内偏移
+  // 锚点）。与滚动记忆（隐式自动）分工并存；与 PDF 原生书签（TOC）无关。
+  // ------------------------------------------------------------------
+
+  /** 书签支持的扩展名（按预览链路划定：md-viewer 链路 md/epub/docx +
+   *  pdf-viewer 链路 pdf；pptx/xlsx/邮件/图像等不提供）。 */
+  private static readonly BOOKMARK_EXTS = /\.(md|markdown|epub|docx|pdf)$/i;
+
+  /** 书签入口可用：预览模式 + 支持的扩展名 + 有 path 且非 PST。 */
+  private get _bookmarkAvailable(): boolean {
+    return (
+      !!this.path &&
+      !this._isPst &&
+      this._mode === "preview" &&
+      PreviewPane.BOOKMARK_EXTS.test(this.path)
+    );
+  }
+
+  /** 书签自动标签（2026-10-01 决议：纯锚点 + 自动标签，无用户命名）：
+   *  md 链路 = 当前所在 heading（activeTocIndex 同口径），无 heading 时
+   *  用「第 N 行」；pdf 链路 = 「第 N 页」。 */
+  private _bookmarkLabel(kind: "md" | "pdf", anchor: number): string {
+    if (kind === "pdf") {
+      const page = Math.max(1, Math.floor(anchor / 10000));
+      return `第 ${page} 页`;
+    }
+    const idx = activeTocIndex(this._tocItems, anchor);
+    return idx >= 0 ? this._tocItems[idx].text : `第 ${anchor} 行`;
+  }
+
+  /** 收藏当前位置（header 圆钮一键动作）：捕获当前锚点 + 生成自动标签。
+   *  幂等命中 / 满员经 toast 反馈（bookmark-added 事件，宿主视图 toast，
+   *  与 download-success 同模式）。 */
+  private _onBookmarkAdd = () => {
+    if (!this._bookmarkAvailable) return;
+    const viewer = this._activePreviewViewer();
+    if (!viewer) return;
+    const kind = viewer.kind;
+    const anchor = Math.max(1, Math.floor(viewer.top()));
+    const label = this._bookmarkLabel(kind, anchor);
+    const result = addBookmark({ path: this.path, anchor, kind, label });
+    if (!result.ok) {
+      this.dispatchEvent(new CustomEvent("bookmark-full", { bubbles: true, composed: true }));
+      return;
+    }
+    this._bookmarkItems = bookmarksFor(this.path);
+    if (result.duplicate) {
+      this.dispatchEvent(new CustomEvent("bookmark-duplicate", { bubbles: true, composed: true }));
+    } else {
+      this.dispatchEvent(new CustomEvent("bookmark-added", { bubbles: true, composed: true }));
+    }
+  };
+
+  private _onBookmarksToggle = () => {
+    if (!this._showBookmarks) {
+      this._bookmarkItems = bookmarksFor(this.path);
+    }
+    this._showBookmarks = !this._showBookmarks;
+  };
+
+  private _onBookmarksClose = () => {
+    this._showBookmarks = false;
+  };
+
+  /** 点击书签条目：关闭抽屉 + 跳转（md：平滑滚到源行号；pdf：restore
+   *  页号+页内偏移——与滚动记忆恢复同路径）。 */
+  private _onBookmarkJump = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
+    const b = e.detail.bookmark;
+    this._showBookmarks = false;
+    if (b.kind === "pdf") {
+      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+      pdf?.restoreScrollAnchorValue(b.anchor);
+      return;
+    }
+    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    viewer?.scrollToSourceLine(b.anchor, "smooth");
+  };
+
+  /** 删除书签：本地移除并刷新列表（抽屉不关闭，可连续删）。 */
+  private _onBookmarkRemove = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
+    const b = e.detail.bookmark;
+    removeBookmark(b.path, b.anchor);
+    this._bookmarkItems = bookmarksFor(this.path);
+  };
+
+  /** 桌面 header 的书签按钮（图标 + hover 文字，同 toc-btn）：点击打开
+   *  抽屉（收藏动作在抽屉内——右键入口不可发现，2026-10-01 修正）。 */
+  private _renderBookmarkBtn() {
+    if (!this._bookmarkAvailable) return null;
+    return html`<button
+      class="toc-btn ${this._showBookmarks ? "active" : ""}"
+      title="书签列表"
+      @click=${this._onBookmarksToggle}
+    ><doclens-icon name="star"></doclens-icon><span class="btn-label">书签</span></button>`;
+  }
+
+  private _renderBookmarkDrawer() {
+    if (!this._showBookmarks) return null;
+    return html`<bookmark-drawer
+      .items=${this._bookmarkItems}
+      .canAdd=${this._bookmarkAvailable}
+      @add=${this._onBookmarkAdd}
+      @jump=${this._onBookmarkJump}
+      @remove=${this._onBookmarkRemove}
+      @close=${this._onBookmarksClose}
+    ></bookmark-drawer>`;
+  }
+
+  // ------------------------------------------------------------------
   // 技能工具箱（对当前预览文件跑 AI 技能）：流程内嵌本组件（对话框
   // 组件复用 files 页同款），完成后发 skill-chat 组合事件由 cortex-app
   // 统一消费（新建技能会话 + 切 chat），三个宿主视图零改动。
@@ -1497,6 +1629,7 @@ export class PreviewPane extends LitElement {
               : null}
             ${this._renderDownloadBtn()}
             ${this._renderTocBtn()}
+            ${this._renderBookmarkBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
@@ -1515,6 +1648,7 @@ export class PreviewPane extends LitElement {
         ></md-viewer>
         ${this._renderAttachments()}
         ${this._renderTocDrawer()}
+        ${this._renderBookmarkDrawer()}
         ${this._renderDownloadOverlay()}
         ${this._renderToolboxDialogs()}
       `;
@@ -1532,6 +1666,7 @@ export class PreviewPane extends LitElement {
             ${this._renderPdfZoomGroup()}
             ${this._renderDownloadBtn()}
             ${this._renderTocBtn()}
+            ${this._renderBookmarkBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
@@ -1549,6 +1684,7 @@ export class PreviewPane extends LitElement {
           @document-ready=${this._onPdfDocumentReady}
         ></pdf-viewer>
         ${this._renderTocDrawer()}
+        ${this._renderBookmarkDrawer()}
         ${this._renderDownloadOverlay()}
         ${this._renderToolboxDialogs()}
       `;

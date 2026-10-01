@@ -566,6 +566,11 @@ export class SearchView extends LitElement {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
 
+  /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
+  private _onBookmarkAdded = () => this._pushToast("已收藏书签", "success", 2500);
+  private _onBookmarkDuplicate = () => this._pushToast("此处已有书签", "info", 2500);
+  private _onBookmarkFull = () => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
+
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击搜索结果同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
     await this._safeAction(async () => {
@@ -737,7 +742,10 @@ export class SearchView extends LitElement {
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @path-copied=${this._onPathCopied}
-                @download-failed=${this._onPreviewDownloadFailed}>
+                @download-failed=${this._onPreviewDownloadFailed}
+                @bookmark-added=${this._onBookmarkAdded}
+                @bookmark-duplicate=${this._onBookmarkDuplicate}
+                @bookmark-full=${this._onBookmarkFull}>
               </preview-pane>`}
         </div>
       </div>
@@ -783,7 +791,10 @@ export class SearchView extends LitElement {
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @path-copied=${this._onPathCopied}
-                @download-failed=${this._onPreviewDownloadFailed}>
+                @download-failed=${this._onPreviewDownloadFailed}
+                @bookmark-added=${this._onBookmarkAdded}
+                @bookmark-duplicate=${this._onBookmarkDuplicate}
+                @bookmark-full=${this._onBookmarkFull}>
               </preview-pane>`}
         </div>` : null}
     `;
