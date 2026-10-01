@@ -2,12 +2,16 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
+import { gitApi } from "../api/git";
+import type { GitDiffResponse } from "../api/git";
 import { fetchPreview, probeUploadTarget, uploadPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/file-tree";
 import "../components/file-list";
+import "../components/git-changes-list";
+import "../components/diff-viewer";
 import "../components/preview-pane";
 import "../components/mkdir-dialog";
 import "../components/rename-dialog";
@@ -242,6 +246,80 @@ export class FilesView extends LitElement {
       z-index: 5;
       font-size: var(--cortex-fs-sm);
     }
+    /* 改动模式预览栏（diff header / 二进制占位卡片 / 预览按钮） */
+    .diff-header {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      border-bottom: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      flex-shrink: 0;
+      min-height: 44px;
+    }
+    .diff-header .diff-filename {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .diff-header .preview-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+      padding: 4px 10px;
+      border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      border-radius: var(--cortex-radius-sm);
+      font-size: var(--cortex-fs-sm);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .diff-header .preview-btn:hover {
+      background: var(--cortex-primary-soft);
+      color: var(--cortex-primary);
+      border-color: var(--cortex-primary);
+    }
+    .binary-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--cortex-space-3);
+      padding: var(--cortex-space-8);
+      margin: var(--cortex-space-3);
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-lg);
+      color: var(--cortex-text-subtle);
+      font-size: var(--cortex-fs-base);
+      text-align: center;
+    }
+    .binary-card doclens-icon { font-size: 28px; }
+    .binary-card .binary-title { color: var(--cortex-text); }
+    .binary-card .binary-meta {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-1);
+      font-size: var(--cortex-fs-sm);
+    }
+    .binary-card .binary-meta > div {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+    }
+    .binary-card .binary-meta span { color: var(--cortex-text-subtle); }
+    .binary-card .binary-meta code {
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+    }
     @media (max-width: 1023px) {
       .desktop-layout { display: none; }
     }
@@ -278,6 +356,21 @@ export class FilesView extends LitElement {
   @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
   @state() private _previewPaneWidth = FilesView.PREVIEW_PANE_WIDTH_DEFAULT;
 
+  // 未提交改动模式（CONTEXT.md 2026-10-01）：中间栏切换为改动列表 + 预览栏 diff
+  /** 改动模式开关（git 根才显示入口；探测失败静默隐藏）。 */
+  @state() private _changesMode = false;
+  /** 知识库是否 git 根（入口显隐依据；null = 未探测）。 */
+  @state() private _isGitRoot: boolean | null = null;
+  /** 当前 diff 预览的文件路径（空 = 无）。 */
+  @state() private _diffPath = "";
+  /** diff 响应（null = 加载中/失败共用态机）。 */
+  @state() private _diffResp: GitDiffResponse | null = null;
+  @state() private _diffError: string | null = null;
+  /** 上次见到的同步时间戳——变化即顺带重拉改动列表（Q5 决议）。 */
+  private _lastSeenSyncAt: number | null | undefined = undefined;
+  /** 进入改动模式时记录的当前目录——变化 = 用户点了 file-tree（Q15 退出依据）。 */
+  private _lastDirBeforeChanges: string | null = null;
+
   /** jsbridge 上传进行中（App 内）：禁用上传入口，防重复触发 */
   @state() private _uploading = false;
 
@@ -286,14 +379,78 @@ export class FilesView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._unsubscribe = store.subscribe(() => this.requestUpdate());
+    this._unsubscribe = store.subscribe(() => this._onStoreChange());
     this._ensureLoaded("");
     this._loadPaneWidths();
     this._loadIndexedDocuments();
+    this._probeGitRoot();
     // 启动恢复：上次所在目录 + 选中文件（选择恢复，预览不自动拉）
     void this._restoreSelection();
     // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
     window.addEventListener("cortex:watch-reindexed", this._onIndexUpdated);
+  }
+
+  /** store 订阅回调：检测 Git Sync 轮次（last_sync_at 变化）顺带重拉改动列表
+   *  （Q5 决议：进模式拉取 + 手动刷新 + 同步轮次 SSE 零新事件重拉）。 */
+  private _onStoreChange() {
+    const syncAt = store.getState().syncStatus?.last_sync_at ?? null;
+    if (this._lastSeenSyncAt !== undefined && syncAt !== this._lastSeenSyncAt && this._changesMode) {
+      const list = this.shadowRoot?.querySelector("git-changes-list") as any;
+      void list?.refresh?.();
+    }
+    this._lastSeenSyncAt = syncAt;
+    // Q15 决议：改动模式是中间栏的一个态——点 file-tree 目录节点照常切目录并退出改动模式
+    if (this._changesMode && store.getState().files.currentDir !== this._lastDirBeforeChanges) {
+      // selectDir 已由 file-tree 派发；这里被动感知并收起改动模式
+      this._changesMode = false;
+      this._diffPath = "";
+      this._diffResp = null;
+      this._diffError = null;
+    }
+    this.requestUpdate();
+  }
+
+  /** 探测知识库是否 git 根（入口显隐；非 git 根 / 探测失败均隐藏，Q6 决议）。 */
+  private async _probeGitRoot() {
+    try {
+      await gitApi.changes();
+      this._isGitRoot = true;
+    } catch {
+      this._isGitRoot = false;
+    }
+  }
+
+  /** 进入 / 退出改动模式。进入时预览栏清空（diff 由用户点行触发）。 */
+  private _toggleChangesMode() {
+    this._changesMode = !this._changesMode;
+    if (!this._changesMode) {
+      this._diffPath = "";
+      this._diffResp = null;
+      this._diffError = null;
+      this._lastDirBeforeChanges = null;
+      // 回到普通列表时恢复常规预览态（dirty 编辑丢弃确认与切文件同律）
+      if (this._previewPath) void this._previewPathWithDirtyCheck(this._previewPath);
+    } else {
+      this._diffPath = "";
+      this._diffResp = null;
+      this._diffError = null;
+      this._lastDirBeforeChanges = store.getState().files.currentDir;
+      if (this._isMobile) actions.setMobilePane("list");
+    }
+  }
+
+  /** 改动列表行点击 → 预览栏加载该文件的 Unified Diff。 */
+  private async _onChangeActivated(e: CustomEvent<{ path: string }>) {
+    const path = e.detail.path;
+    this._diffPath = path;
+    this._diffResp = null;
+    this._diffError = null;
+    if (this._isMobile) actions.setMobilePane("detail");
+    try {
+      this._diffResp = await gitApi.diff(path);
+    } catch (err: any) {
+      this._diffError = err?.message || "diff 加载失败";
+    }
   }
 
   /** 祖先前缀链："a/b/c" → ["", "a", "a/b", "a/b/c"]。 */
@@ -516,6 +673,10 @@ export class FilesView extends LitElement {
     if (name === "refresh") {
       // 桌面工具栏刷新按钮：与移动端下拉刷新同一路径
       void this._refreshFileList();
+      return;
+    }
+    if (name === "git-changes") {
+      this._toggleChangesMode();
       return;
     }
     if (name === "upload") {
@@ -1044,6 +1205,67 @@ export class FilesView extends LitElement {
     `;
   }
 
+  /** 改动模式预览栏：极简 header（Q14）+ diff-viewer / 二进制占位卡片（Q8）。 */
+  private _renderDiffPane(mobile: boolean) {
+    const name = this._diffPath ? this._diffPath.split("/").pop() ?? this._diffPath : "";
+    const header = html`
+      <div class="diff-header">
+        ${mobile
+          ? html`<button
+              class="mobile-back"
+              type="button"
+              aria-label="返回"
+              @click=${() => this._goBack()}
+            ><doclens-icon name="arrow-left"></doclens-icon></button>`
+          : null}
+        <span class="diff-filename" title=${this._diffPath}>${name}</span>
+        ${this._diffPath && this._diffResp?.kind !== "deleted"
+          ? html`<button
+              class="preview-btn"
+              type="button"
+              title="打开该文件的常规预览（退出 diff 视图）"
+              @click=${() => this._openNormalPreview()}
+            ><doclens-icon name="file"></doclens-icon><span class="btn-label">预览</span></button>`
+          : null}
+      </div>
+    `;
+    let body: unknown;
+    if (!this._diffPath) {
+      body = html`<div class="preview-placeholder">点击改动列表中的文件查看差异</div>`;
+    } else if (this._diffError) {
+      body = html`<div class="preview-placeholder">${this._diffError}</div>`;
+    } else if (!this._diffResp) {
+      body = html`<div class="preview-placeholder">加载差异…</div>`;
+    } else if (this._diffResp.is_binary) {
+      const info = this._diffResp.binary_info;
+      const fmt = (n: number | null) => (n === null ? "—" : `${n} B`);
+      body = html`
+        <div class="binary-card">
+          <doclens-icon name="alert-triangle"></doclens-icon>
+          <div class="binary-title">二进制文件${this._diffResp.kind === "deleted" ? "已删除" : "已修改"}，无行级差异</div>
+          <div class="binary-meta">
+            <div><span>旧版本</span><code>${info?.old_sha ?? "—"}</code><span>${fmt(info?.old_size ?? null)}</span></div>
+            <div><span>新版本</span><code>${info?.new_sha ?? "—"}</code><span>${fmt(info?.new_size ?? 0)}</span></div>
+          </div>
+        </div>
+      `;
+    } else {
+      body = html`<diff-viewer .diff=${this._diffResp.diff}></diff-viewer>`;
+    }
+    return html`${header}${body}`;
+  }
+
+  /** diff header「预览」按钮：退出改动模式并常规预览该文件（Q14 次级入口）。 */
+  private async _openNormalPreview() {
+    if (!this._diffPath) return;
+    const path = this._diffPath;
+    this._changesMode = false;
+    this._diffPath = "";
+    this._diffResp = null;
+    this._diffError = null;
+    await this._previewPathWithDirtyCheck(path);
+  }
+
   private _renderPreviewPane(opts: { noHeader?: boolean; mobile?: boolean } = {}) {
     if (this._previewError) {
       return this._renderPreviewErrorHint(opts.mobile ?? false);
@@ -1207,12 +1429,20 @@ export class FilesView extends LitElement {
               @activated=${this._onFilenameResultActivated}
               @clear=${this._onFilenameClear}
             ></file-search-results>`
-          : html`<file-list
-              .activePath=${this._previewPath}
-              .uploading=${this._uploading}
-              @action=${this._onAction}
-              @activated=${this._onFileListActivated}
-            ></file-list>`}
+          : this._changesMode
+            ? html`<git-changes-list
+                .activePath=${this._diffPath}
+                @activated=${this._onChangeActivated}
+                @exit=${() => this._toggleChangesMode()}
+              ></git-changes-list>`
+            : html`<file-list
+                .activePath=${this._previewPath}
+                .uploading=${this._uploading}
+                .gitChangesAvailable=${this._isGitRoot === true}
+                .changesMode=${this._changesMode}
+                @action=${this._onAction}
+                @activated=${this._onFileListActivated}
+              ></file-list>`}
         <div
           class="splitter"
           role="separator"
@@ -1220,7 +1450,7 @@ export class FilesView extends LitElement {
           aria-label="调整预览栏宽度"
           @mousedown=${this._onPreviewSplitterMouseDown}
         ></div>
-        <div class="preview-col">${this._renderPreviewPane({ noHeader: false })}</div>
+        <div class="preview-col">${this._changesMode ? this._renderDiffPane(false) : this._renderPreviewPane({ noHeader: false })}</div>
       </div>
     `;
   }
@@ -1244,18 +1474,26 @@ export class FilesView extends LitElement {
                     @activated=${this._onFilenameResultActivated}
                     @clear=${this._onFilenameClear}
                   ></file-search-results>`
-                : html`<file-list
-                    .activePath=${this._previewPath}
-                    .uploading=${this._uploading}
-                    ?mobile=${true}
-                    @action=${this._onAction}
-                    @activated=${this._onFileListActivated}
-                    @back=${() => this._goBack()}
-                  ></file-list>`}
+                : this._changesMode
+                  ? html`<git-changes-list
+                      .activePath=${this._diffPath}
+                      @activated=${this._onChangeActivated}
+                      @exit=${() => this._toggleChangesMode()}
+                    ></git-changes-list>`
+                  : html`<file-list
+                      .activePath=${this._previewPath}
+                      .uploading=${this._uploading}
+                      .gitChangesAvailable=${this._isGitRoot === true}
+                      .changesMode=${this._changesMode}
+                      ?mobile=${true}
+                      @action=${this._onAction}
+                      @activated=${this._onFileListActivated}
+                      @back=${() => this._goBack()}
+                    ></file-list>`}
             `
           : ""}
         ${pane === "detail"
-          ? html`<div class="mobile-preview" data-ptr-off>${this._renderPreviewPane({ mobile: true })}</div>`
+          ? html`<div class="mobile-preview" data-ptr-off>${this._changesMode ? this._renderDiffPane(true) : this._renderPreviewPane({ mobile: true })}</div>`
           : ""}
       </div>
     `;

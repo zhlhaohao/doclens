@@ -299,6 +299,12 @@ export class FileList extends LitElement {
   /** 上传进行中（App 内 jsbridge 通道）——禁用上传入口防重复触发 */
   @property({ type: Boolean }) uploading = false;
 
+  /** 「改动」入口可用（知识库为 git 根；由 files-view 探测后传入，Q6 决议）。 */
+  @property({ type: Boolean }) gitChangesAvailable = false;
+
+  /** 改动模式激活中（按钮高亮反馈）。 */
+  @property({ type: Boolean }) changesMode = false;
+
   /** 各列宽度（px），通过 --col-N CSS var 注入到 host，file-row 经继承读取 */
   @state() private _colWidths: number[] = [...DEFAULT_COL_WIDTHS];
   @state() private _showMobileMenu = false;
@@ -515,6 +521,14 @@ export class FileList extends LitElement {
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
+                ${this.gitChangesAvailable
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      data-action="git-changes"
+                      @click=${this._onMenuItemClick("git-changes")}
+                    ><doclens-icon name="history"></doclens-icon>${this.changesMode ? "退出改动模式" : "未提交改动"}</button>`
+                  : null}
                 <button
                   type="button"
                   role="menuitem"
@@ -636,6 +650,9 @@ export class FileList extends LitElement {
       </div>
       <div class="toolbar">
         <button data-action="refresh" title="刷新当前目录（与移动端下拉刷新等效）" @click=${() => this._action("refresh")}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">刷新</span></button>
+        ${this.gitChangesAvailable
+          ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="查看 git 未提交改动（staged + unstaged + untracked）" @click=${() => this._action("git-changes")}><doclens-icon name="history"></doclens-icon><span class="btn-label">改动</span></button>`
+          : null}
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>

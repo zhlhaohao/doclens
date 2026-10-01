@@ -95,6 +95,8 @@
 - **页表 (Page Starts)**：PDF 搜索命中跳页的换算依据——每页起始行号数组（原始提取文本行号体系），由 pdf_parser 解析时顺手记录并持久化进索引（treesearch 侧扩展，随索引换代覆盖）。前端拿命中行号对页表二分得页号，跳页由 pdf-viewer 落地。无页表（存量索引）不定位、不兜底。只服务搜索跳页；**不为 TOC heading 兜底服务**（heading 行号与页边界的换算要跨「剥除 [PAGE N] 重排」鸿沟，即当年 pdf line_map 被丢弃之坑，2026-09-28 决议不翻案）。
 - **带问阅读 (Query-driven Reading)**：文件问答技能（ask-files，重构自 summarize-files）的执行形态——全部章节组并发子代理**携用户要求原文**精读各自章节，只返回与要求相关的内容（无关章节一行声明）；相关内容的发现交给通读而非检索定位（2026-09-28 决议：有意否决「先 search_kb/kb_grep 定位再读」的分诊方案——以并发成本换零漏读）。用户要求缺失时退化为「总结全文」（与旧 summarize-files 行为等价）。_Avoid_: 定位再读（检索召回缺口漏内容）、按要求类型分诊（查一个人物与总结全书走同一条路径）。
 
+- **未提交改动 (Uncommitted Changes)**：知识库 git 工作区中尚未进入任何提交的本地变更集合——含已暂存 (staged)、未暂存 (unstaged) 与**未跟踪 (untracked)**（untracked 视同「新增」，2026-10-01 决议）。查看形态 = files 页「改动」模式：中间栏切换为改动列表（状态/名称/路径），点击文件在预览栏以 Unified Diff 展示该文件**未提交的总净效果**（工作区 vs HEAD，staged+unstaged 叠加，不做分层），基线恒为 HEAD。前提 = 知识库为 git 根（与有无 remote 无关——没 remote 的纯本地 git 知识库恰是改动堆积最久的场景；非 git 根入口整体隐藏，对齐「同步停摆」的 not_git_root 语义）。二进制文件的 diff 形态 = 占位卡片（新旧大小/哈希简写，无内容对比）；机器人提交（Git Sync 轮次）落盘后改动自然退出集合。_Avoid_: 源代码管理面板（IDE 词汇）、分层展示 staged/unstaged 两段 diff（已否决，一条净效果看全貌）、实时文件级刷新（已否决，进模式拉取 + 手动刷新 + 同步轮次 SSE 顺带重拉）。
+
 ## 决议摘要（详见 docs/adr/）
 
 - 2026-07-25：图像解析索引的边界 = 仅独立图像文件；内嵌图片不送视觉模型。
@@ -152,3 +154,4 @@
 - 2026-09-28：PDF 原生预览（ADR-0031）= pdf.js 官方 viewer 组件层渲染原始字节（PDFViewer+PDFFindController+PDFLinkService，自有 UI 皮），单路径无 fallback（文件移走报错、未索引直接看——预览与索引解耦）；否决 iframe 内置 viewer（WebView 宿主无渲染器+不可程序化控制）；匹配导航经 findController 平移（单短语语义，多词 OR 有损接受）；TOC 改原生书签（无书签隐藏，heading 树不翻案）；搜索命中跳页依赖索引时持久化的 page_starts 页表（treesearch 扩展，无页表不定位不兜底，force 重建换覆盖）；缩放走 PDF 原生语义（适宽+pinch/Ctrl+滚轮，stepper 不适用）；主 bundle 不变（动态 chunk 懒加载，SW 天然缓存）；合成链路 pdf 分支（_extract_pdf_pages/line_map 丢弃/TOC heading）退役。
 - 2026-09-28：大文档预览性能两连修（无 ADR，展示/渲染层可逆）= ① md-viewer 行号反推 lineOf 从逐块从头数换行（O(块数×全文长)，万行 md ~400ms）改为 preprocess 预构建行起始前缀表 + 二分（等价性逐块验证通过）；② epub 合成预览分页化 + 分页懒渲染（骨架 + IntersectionObserver 滚动接近才渲染该章 + 跳转先展开目标页）+ 块级 content-visibility: auto；实测《德川家康》epub（14.5 万行/460 章）：首屏从全量渲染（外推 5-15s 白屏）降至 2.7s（其中 ~1-2s 为 10.5MB 响应传输解析）、远距离跳转 315ms 行级精确命中、滚动最长一帧 212ms（单页懒渲染成本）。
 - 2026-09-28：summarize-files 技能重构为 ask-files（无 ADR，改 SKILL.md 即可逆）= 统一全量带问阅读（否决检索定位分诊，以并发成本换零漏读）；章节级相关/无关返回协议；结构硬校验 + 点名章节不许无关 / 全组无关带关键词补跑一次两条窄语义规则；双轨输出（总结类含默认沿用固定三节结构 + 拼接去重语义，其他要求自由组织 + 三硬约束）；会话内追问复用上文笔记定向补读；多文件全部章节组同批并发。
+- 2026-10-01：files 页未提交改动视图 = git 根知识库（无 remote 亦可）中间栏「改动」模式列出 staged+unstaged+untracked；点击文件预览栏 Unified Diff（工作区 vs HEAD 总净效果，不分层）；非 git 根隐藏入口；二进制占位卡片（大小/哈希简写）；刷新 = 进模式拉取 + 手动 + Git Sync 轮次 SSE 顺带重拉；桌面/移动同构（more 菜单入口 + mobile-preview diff）。
