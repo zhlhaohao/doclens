@@ -208,17 +208,26 @@ class EventEmitter(Protocol):
             )
         )
 
-    async def emit_done(self, session_id: str, summary: Optional[str] = None) -> None:
+    async def emit_done(
+        self,
+        session_id: str,
+        summary: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
         """
         发射完成事件。
 
         Args:
             session_id: 会话 ID
             summary: 执行摘要
+            reason: 终止原因标记（如 "waiting_user"——对话式提问的回合
+                终止，宿主可据此渲染「等待回复」状态；None = 正常完成）
         """
         data: Dict[str, Any] = {"session_id": session_id}
         if summary is not None:
             data["summary"] = summary
+        if reason is not None:
+            data["reason"] = reason
         await self.emit(StreamEvent(event_type=StreamEventType.DONE, data=data))
 
     async def emit_error(self, error: str, code: Optional[str] = None) -> None:

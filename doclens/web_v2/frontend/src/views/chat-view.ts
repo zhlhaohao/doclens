@@ -990,6 +990,10 @@ export class ChatView extends LitElement {
             contextWindow: ev.context_window,
             seq: Number.MAX_SAFE_INTEGER,
           });
+        } else if (ev.type === "done" && ev.reason === "waiting_user") {
+          // 对话式提问（ADR-0033）：回合因提问而终止，输入框已解锁——
+          // 提示用户直接发消息作答（答案即下一条用户消息）
+          this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });

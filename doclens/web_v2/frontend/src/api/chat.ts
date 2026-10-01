@@ -18,7 +18,7 @@ export type ChatStreamEvent =
   | { type: "references"; items: { path: string }[] }
   | { type: "toast"; level: "error" | "info" | "success"; detail: string }
   | { type: "usage" } & UsagePayload
-  | { type: "done" }
+  | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
 
 /** 解析失败不中断流，但至少留 warning——契约错误不应双向隐形 */
@@ -96,7 +96,10 @@ export async function* chatStream(
         };
       }
     } else if (ev.event === "done") {
-      yield { type: "done" };
+      // reason 仅对话式提问（ADR-0033）终止时携带（waiting_user）；
+      // 正常完成的终端 done data 为空
+      const d = parseData("done", ev.data);
+      yield { type: "done", reason: d?.reason as string | undefined };
     } else if (ev.event === "error") {
       const d = parseData("error", ev.data);
       yield { type: "error", detail: String(d?.detail ?? "未知错误") };

@@ -29,6 +29,8 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_ACTIVE_LLM_PRESET",
     # AI 工具外部访问门禁（ADR-0021；空串 = 未设置 = 默认 ask）
     "PLANIFY_OUTSIDE_WORKDIR",
+    # AI 对话提问模式（ADR-0033；空串 = 未设置 = 默认 interactive）
+    "PLANIFY_ASK_MODE",
     # 视觉模型（图像文件解析，独立于 AI 对话配置）
     "VISION_API_KEY",
     "VISION_BASE_URL",

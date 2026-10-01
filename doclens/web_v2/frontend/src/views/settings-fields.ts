@@ -64,6 +64,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_SYNC_ENABLED: "true",
   VISION_AUTO_ROTATE: "true",
   PLANIFY_OUTSIDE_WORKDIR: "ask",
+  PLANIFY_ASK_MODE: "interactive",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -101,10 +102,22 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     hint: "文件管理/日记上传的图片在后台用视觉模型判断方向，歪斜时自动旋转落盘并重新解析。需已配置视觉模型；关闭则上传图保持原样。保存后即时生效。",
   },
 
-  // ===== AI 工具安全（ai tab；ADR-0021 外部访问门禁，保存即时生效） =====
+  // ===== AI 对话与安全（ai tab；ADR-0033 提问方式 + ADR-0021 外部访问门禁，保存即时生效） =====
   {
     tab: "ai",
-    section: "AI 工具安全",
+    section: "AI 对话与安全",
+    envVar: "PLANIFY_ASK_MODE",
+    label: "提问方式",
+    component: "select",
+    options: [
+      { value: "interactive", label: "交互式提问（推荐）" },
+      { value: "chat", label: "对话式提问（无人值守）" },
+    ],
+    hint: "AI 需要你做决定时的提问形态：交互式弹答题卡、在当前回合内等待作答；对话式把问题作为普通消息发送并结束当前回合，你的下一条回复即答案——适合人不在电脑前/移动端使用的场景。保存后即时生效。",
+  },
+  {
+    tab: "ai",
+    section: "AI 对话与安全",
     envVar: "PLANIFY_OUTSIDE_WORKDIR",
     label: "工作目录外访问确认",
     component: "select",

@@ -37,6 +37,7 @@ from ..tools.guard import (
     parse_grant_response,
     record_grant,
 )
+from ..tools.user_interaction import CHAT_ASK_RESULT_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +530,25 @@ class StreamingAgent:
 
                 # === 工具执行 ===
                 round_calls = await self._execute_tools(messages)
+
+                # === 对话式提问降级（ADR-0033，PLANIFY_ASK_MODE=chat）===
+                # ask_user_question 在 chat 模式不阻塞等待：问题已由 handler
+                # 经正文通道送达（emit_text），工具结果带哨兵前缀——本回合
+                # 到此确定性终止，答案 = 用户的下一条消息（自然续接，无
+                # pending 状态机）。tool_use/tool_result 已按序入 messages，
+                # 回放/续轮配对完整；guard 确认等其余 waiter 用途不受影响。
+                if round_calls and any(
+                    output.startswith(CHAT_ASK_RESULT_PREFIX)
+                    for _name, _input, output in round_calls
+                ):
+                    self.logger.info(
+                        "[StreamingAgent] 对话式提问送达，回合终止"
+                        "（等待用户下一条消息）"
+                    )
+                    await self.emitter.emit_done(
+                        session_id, reason="waiting_user"
+                    )
+                    return self._cleanup_messages(messages)
 
                 # === 工具轮次兜底（防死循环熔断；宿主经 StreamingConfig 注入阈值）===
                 # 与 interrupt_event 完全独立：不 set event、不 break。三机制：
