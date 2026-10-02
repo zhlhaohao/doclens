@@ -96,6 +96,7 @@
 - **带问阅读 (Query-driven Reading)**：文件问答技能（ask-files，重构自 summarize-files）的执行形态——全部章节组并发子代理**携用户要求原文**精读各自章节，只返回与要求相关的内容（无关章节一行声明）；相关内容的发现交给通读而非检索定位（2026-09-28 决议：有意否决「先 search_kb/kb_grep 定位再读」的分诊方案——以并发成本换零漏读）。用户要求缺失时退化为「总结全文」（与旧 summarize-files 行为等价）。_Avoid_: 定位再读（检索召回缺口漏内容）、按要求类型分诊（查一个人物与总结全书走同一条路径）。
 - **交互式提问**：agent 经 ask_user_question 工具发起结构化提问的**默认形态**——waiter 阻塞 agent 循环等待，UI 弹交互答题卡，用户作答后**同一回合内**恢复（300s 超时回填 timeout 继续回合）。等待发生在**回合内**。
 - **对话式提问**：交互式提问的降级形态（`PLANIFY_ASK_MODE=chat`，env 全局、调用时读取热生效；设置页「模型」tab「提问方式」select 可视化配置，保存即落盘 .env 并热同步进程环境）——问题降维为 Markdown 以**常规助手消息**送达（刷新/重开页面可读），工具返回哨兵说明并由 runner **确定性终止本回合**；答案 = 用户的**下一条消息**，自然续接（无 pending 状态机——最新一轮 tool 往返不会被压缩清除）。等待发生在**回合间**，回合无常驻等待资源，断线/重启天然可恢复。动机：移动端浏览器杀后台断线后，交互答题卡不可存活（2026-10-01 决议，ADR-0033）。
+- **服务端分词 (Server-side Tokenization)**：代码文件预览高亮的分工形态——语法 token 化在后端完成（Pygments，按文件名解析 lexer），前端只按 8 类 kind 着色、不携带语法知识（零高亮库 bundle）。传输载体为预览响应的逐行 `[kind, text]` run 数组，行口径与 content 的 `\n` 切分一一对应；分词始终整文件进行再按行切片（多行字符串/块注释跨行词法正确，范围切片同口径）。纯预览侧能力，与索引无关（代码文件默认不进索引，allowed_source_types 不动）（2026-09-30 决议，ADR-0032）。_Avoid_: 前端高亮库（highlight.js/Prism/Shiki，bundle 数百 KB 级增量 + 主线程解析）、内容嗅探猜语言（慢且不可预测）、内联样式 token（颜色写死 payload）。
 
 ## 决议摘要（详见 docs/adr/）
 
@@ -154,4 +155,5 @@
 - 2026-09-28：PDF 原生预览（ADR-0031）= pdf.js 官方 viewer 组件层渲染原始字节（PDFViewer+PDFFindController+PDFLinkService，自有 UI 皮），单路径无 fallback（文件移走报错、未索引直接看——预览与索引解耦）；否决 iframe 内置 viewer（WebView 宿主无渲染器+不可程序化控制）；匹配导航经 findController 平移（单短语语义，多词 OR 有损接受）；TOC 改原生书签（无书签隐藏，heading 树不翻案）；搜索命中跳页依赖索引时持久化的 page_starts 页表（treesearch 扩展，无页表不定位不兜底，force 重建换覆盖）；缩放走 PDF 原生语义（适宽+pinch/Ctrl+滚轮，stepper 不适用）；主 bundle 不变（动态 chunk 懒加载，SW 天然缓存）；合成链路 pdf 分支（_extract_pdf_pages/line_map 丢弃/TOC heading）退役。
 - 2026-09-28：大文档预览性能两连修（无 ADR，展示/渲染层可逆）= ① md-viewer 行号反推 lineOf 从逐块从头数换行（O(块数×全文长)，万行 md ~400ms）改为 preprocess 预构建行起始前缀表 + 二分（等价性逐块验证通过）；② epub 合成预览分页化 + 分页懒渲染（骨架 + IntersectionObserver 滚动接近才渲染该章 + 跳转先展开目标页）+ 块级 content-visibility: auto；实测《德川家康》epub（14.5 万行/460 章）：首屏从全量渲染（外推 5-15s 白屏）降至 2.7s（其中 ~1-2s 为 10.5MB 响应传输解析）、远距离跳转 315ms 行级精确命中、滚动最长一帧 212ms（单页懒渲染成本）。
 - 2026-09-28：summarize-files 技能重构为 ask-files（无 ADR，改 SKILL.md 即可逆）= 统一全量带问阅读（否决检索定位分诊，以并发成本换零漏读）；章节级相关/无关返回协议；结构硬校验 + 点名章节不许无关 / 全组无关带关键词补跑一次两条窄语义规则；双轨输出（总结类含默认沿用固定三节结构 + 拼接去重语义，其他要求自由组织 + 三硬约束）；会话内追问复用上文笔记定向补读；多文件全部章节组同批并发。
+- 2026-09-30：代码预览语法高亮 = 服务端分词（ADR-0032）= Pygments 按文件名解析 lexer（覆盖全开、不做内容嗅探）→ 逐行 [kind, text] run 数组（8 类归一：c/k/s/n/f/t/o/p，空串=正文色，相邻同 kind 合并）→ 前端 Lit 安全构建 DOM 按 CSS 类着色（零高亮库、主 bundle 零增量）；分词始终整文件再按行切片（多行词法正确，范围切片同口径）；txt/md/html/未知后缀/超 1MB → 不下发 tokens 纯文本兜底；纯预览侧能力，与索引解耦（代码文件默认不进索引不变）。
 - 2026-10-01：ask_user_question 支持对话式降级（PLANIFY_ASK_MODE=chat，热生效）——问题以普通消息送达 + 确定性断回合（stop reason waiting_user）+ 用户下一条消息自然续接；否决「保循环等下一条消息回填 waiter」（赌跨夜存活）。见 ADR-0033。

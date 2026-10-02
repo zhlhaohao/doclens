@@ -13,6 +13,7 @@
 注意：.planify/.env 用于项目级配置，.env.local 用于本地开发配置，不应提交到版本控制。
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -44,6 +45,39 @@ def _get_env_or_default(key: str, default: str = "") -> str:
     if key in _registered_config and _registered_config[key]:
         return _registered_config[key]
     return os.getenv(key, default)
+
+
+# =============================================================================
+# 用户交互提问模式（对话式提问，ADR-0033）
+# =============================================================================
+
+ASK_MODE_INTERACTIVE = "interactive"
+ASK_MODE_CHAT = "chat"
+
+
+def get_ask_mode() -> str:
+    """
+    读取用户交互提问模式（PLANIFY_ASK_MODE，每次调用重读 env——热生效）。
+
+    - interactive（默认）：ask_user_question 阻塞等待用户在界面作答
+      （同回合内恢复）；
+    - chat：对话式提问——问题以普通消息送达并终止本回合，答案 = 用户的
+      下一条消息。适用于用户不在场的场景（如移动端浏览器被杀后台）。
+
+    非法值回退 interactive 并告警（fail-safe 保持旧行为）。
+
+    Returns:
+        "interactive" | "chat"
+    """
+    raw = (os.getenv("PLANIFY_ASK_MODE", "") or "").strip().lower()
+    if raw in ("", ASK_MODE_INTERACTIVE):
+        return ASK_MODE_INTERACTIVE
+    if raw == ASK_MODE_CHAT:
+        return ASK_MODE_CHAT
+    logging.getLogger(__name__).warning(
+        "PLANIFY_ASK_MODE=%r 非法（应为 interactive|chat），回退 interactive", raw
+    )
+    return ASK_MODE_INTERACTIVE
 
 
 class _PlanifySettings:

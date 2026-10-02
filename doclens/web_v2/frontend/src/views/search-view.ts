@@ -162,6 +162,8 @@ export class SearchView extends LitElement {
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表，previewLine 跳页换算依据。 */
   @state() private previewPageStarts: number[] | null = null;
+  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
+  @state() private previewTokens: string[][][] | null = null;
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -311,6 +313,7 @@ export class SearchView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       // 新搜索始终从第 0 页开始（重置 offset）
       actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
@@ -433,6 +436,7 @@ export class SearchView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       return;
     }
     const line = (r.line as number | null) ?? null;
@@ -461,6 +465,7 @@ export class SearchView extends LitElement {
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
       this.previewPageStarts = result.pageStarts;
+      this.previewTokens = result.tokens;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
       this.previewContent = "";
@@ -469,6 +474,7 @@ export class SearchView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
     }
   }
 
@@ -477,7 +483,7 @@ export class SearchView extends LitElement {
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -497,6 +503,7 @@ export class SearchView extends LitElement {
           lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
           pageStarts: null, // 范围预览只用于文本文件，无页表
           attachments: null, // 范围预览只用于文本文件，无附件
+          tokens: body.tokens ?? null, // 服务端分词（切片行与 content 对齐，ADR-0032）
         };
       }
       const err = await res.json().catch(() => ({}));
@@ -723,6 +730,7 @@ export class SearchView extends LitElement {
                 path=${this.previewPath}
                 language=${this.previewLanguage}
                 content=${this.previewContent}
+                .tokens=${this.previewTokens}
                 .line=${this.previewLine}
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}
@@ -771,6 +779,7 @@ export class SearchView extends LitElement {
                 path=${this.previewPath}
                 language=${this.previewLanguage}
                 content=${this.previewContent}
+                .tokens=${this.previewTokens}
                 .line=${this.previewLine}
                 .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
                 ?writable=${this.previewWritable}

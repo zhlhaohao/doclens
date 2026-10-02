@@ -171,6 +171,10 @@ export type PreviewFetchResult =
       pageStarts: number[] | null;
       /** 仅 PST 派生邮件预览（<pst>#<entry_id>）非空：附件清单 + 下载 URL。 */
       attachments: PstAttachmentInfo[] | null;
+      /** 服务端语法分词（ADR-0032）：逐行 [[kind, text], ...] run 数组，
+       *  与 content 的 \n 切分一一对应。null = 后端未下发（非代码文件/
+       *  未知后缀/超 1MB）→ 纯文本渲染。 */
+      tokens: string[][][] | null;
     }
   | { ok: false; notIndexed: boolean; message: string };
 
@@ -199,6 +203,7 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
         lineMap: body.line_map ?? null,
         pageStarts: body.page_starts ?? null,
         attachments: body.attachments ?? null,
+        tokens: body.tokens ?? null,
       };
     }
     const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));

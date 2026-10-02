@@ -361,6 +361,18 @@ async def preview(
         content = text
         line_range = None
 
+    # 服务端语法分词（ADR-0032）：整文件分词保证跨行词法（多行字符串/
+    # 块注释）正确，再按与 content 相同的口径切片；范围切片同样高亮
+    from doclens.web_v2.syntax_tokens import tokenize_code
+    tokens_all = tokenize_code(text, full.name)
+    if tokens_all is not None:
+        tokens = tokens_all[s:e] if line_range else tokens_all
+        # 防御：行数失配（异常 lexer）时整体放弃，不渲染错位高亮
+        if len(tokens) != len(content.split("\n")):
+            tokens = None
+    else:
+        tokens = None
+
     return PreviewResponse(
         path=resolved_rel,
         language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
@@ -368,6 +380,7 @@ async def preview(
         line_range=line_range,
         highlights=[],
         writable=_compute_writable(full, base),
+        tokens=tokens,
     )
 
 

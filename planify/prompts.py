@@ -243,9 +243,20 @@ You are a coding agent. Use tools to solve tasks.
         # 流式代理额外添加 ask_user_question 提示（GUI 唯一用户交互通道；
         # 旧名 ask_user 已被宿主会话层过滤，工具表里不存在）
         if agent_type == "streaming":
+            # 提问模式与工具行为同源联动（延迟 import 避免模块级依赖；
+            # 每次构建重读 env，改配置下一轮 prompt 生效——同 guard 模式）
+            from .core.config import get_ask_mode
+
             specific_prompt += (
                 "- Use ask_user_question to request user input when needed\n"
             )
+            if get_ask_mode() == "chat":
+                specific_prompt += (
+                    "- ask_user_question 当前为对话式模式（chat）：提问会作为"
+                    "普通消息发送给用户并**结束当前回合**，用户的下一条消息才"
+                    "是答案。因此一次调用把所有待决问题问全（最多 4 问），不要"
+                    "挤牙膏式多轮提问；本回合不要再重复调用提问工具。\n"
+                )
 
     prompt = base_prompt + specific_prompt
     if extra_prompt:

@@ -1,19 +1,25 @@
 """ask_user_question 工具链路测试。
 
-覆盖三层：
+覆盖四层：
 1. planify 工具层：schema 定义、入参校验（合法/违规矩阵）、handler 的
    JSON 回填契约（答案回传 / 超时形态）
 2. waiter：create → wait → submit 唤醒、超时清理
 3. doclens respond 端点：命中 / request_id 失效、Pydantic 校验
+4. 对话式提问（ADR-0033，PLANIFY_ASK_MODE=chat）：模式解析、handler
+   正文送达 + 哨兵结果、runner 哨兵检测断回合
 """
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from planify.core.config import ASK_MODE_CHAT, ASK_MODE_INTERACTIVE, get_ask_mode
 from planify.streaming.waiter import GlobalResponseWaiter
 from planify.tools.user_interaction import (
     ASK_TIMEOUT_SECONDS,
+    CHAT_ASK_RESULT_PREFIX,
+    format_chat_questions,
     get_ask_user_question_tool,
     get_user_interaction_tools,
     validate_ask_questions,
@@ -208,6 +214,205 @@ async def test_handler_timeout_shape(monkeypatch):
     payload = json.loads(result)
     assert payload["error"] == "timeout"
     assert payload["request_id"]
+
+
+# ---------- 对话式提问（ADR-0033，PLANIFY_ASK_MODE=chat） ----------
+
+def test_get_ask_mode_env_matrix(monkeypatch):
+    """模式解析：缺省/interactive → interactive；chat → chat；非法值告警回退。"""
+    monkeypatch.delenv("PLANIFY_ASK_MODE", raising=False)
+    assert get_ask_mode() == ASK_MODE_INTERACTIVE
+
+    monkeypatch.setenv("PLANIFY_ASK_MODE", "interactive")
+    assert get_ask_mode() == ASK_MODE_INTERACTIVE
+
+    monkeypatch.setenv("PLANIFY_ASK_MODE", " Chat ")  # 容忍空白与大小写
+    assert get_ask_mode() == ASK_MODE_CHAT
+
+    monkeypatch.setenv("PLANIFY_ASK_MODE", "cht")  # 拼错 → fail-safe 回退
+    assert get_ask_mode() == ASK_MODE_INTERACTIVE
+
+
+def test_format_chat_questions_markdown_shape():
+    text = format_chat_questions([
+        _valid_question(),
+        _valid_question(question="还要哪些?", header="h2", multiSelect=True),
+    ])
+    assert text.startswith("需要你的输入：")
+    assert "**1. 选哪个方案?**" in text
+    assert "**2. 还要哪些?**（可多选）" in text
+    assert "- **A（推荐）** — 首选" in text
+
+
+class _TextStubEmitter:
+    """chat 模式桩 emitter：记录 emit_text 正文送达（不走 ask 通道）。"""
+
+    def __init__(self):
+        self.texts = []
+        self.ask_calls = []
+
+    async def emit_text(self, content, is_end=False):
+        self.texts.append(content)
+
+    async def emit_ask_questions(self, request_id, questions):
+        self.ask_calls.append(request_id)
+
+
+@pytest.mark.asyncio
+async def test_handler_chat_mode_delivers_via_text_and_returns_sentinel(monkeypatch):
+    """chat 模式：问题经正文通道送达 + 哨兵结果；不建 waiter 请求、不阻塞。"""
+    from planify.tools.user_interaction import bind_ask_user_question_handler
+
+    monkeypatch.setenv("PLANIFY_ASK_MODE", "chat")
+    waiter = _fresh_waiter()
+    emitter = _TextStubEmitter()
+    handlers = {}
+    bind_ask_user_question_handler(handlers, emitter, waiter)
+
+    result = await asyncio.wait_for(
+        handlers["ask_user_question"](questions=[_valid_question()]), timeout=2
+    )
+
+    # 哨兵前缀 + 续接说明（随 tool_result 入历史，供下轮模型读到）
+    assert result.startswith(CHAT_ASK_RESULT_PREFIX)
+    # 问题以正文送达且含结构化内容（降维为 Markdown）
+    assert len(emitter.texts) == 1
+    assert "选哪个方案?" in emitter.texts[0]
+    assert "A（推荐）" in emitter.texts[0]
+    # 无交互问答通道、无挂起等待（chat 模式的核心承诺：不阻塞回合）
+    assert emitter.ask_calls == []
+    assert waiter.get_pending_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_handler_interactive_mode_still_waits(monkeypatch):
+    """interactive 模式（缺省）行为不变：仍走 waiter 阻塞等待。"""
+    from planify.tools.user_interaction import bind_ask_user_question_handler
+
+    monkeypatch.delenv("PLANIFY_ASK_MODE", raising=False)
+    waiter = _fresh_waiter()
+    emitter = _TextStubEmitter()
+    handlers = {}
+    bind_ask_user_question_handler(handlers, emitter, waiter)
+
+    async def _answer_later():
+        await asyncio.sleep(0.05)
+        rid = emitter.ask_calls[0]
+        waiter.submit_response(rid, {"answers": []})
+
+    task = asyncio.ensure_future(_answer_later())
+    result = await handlers["ask_user_question"](questions=[_valid_question()])
+    await task
+
+    # 交互链路：ask 通道收到请求，返回 JSON 答案（非哨兵）
+    assert emitter.ask_calls
+    assert not result.startswith(CHAT_ASK_RESULT_PREFIX)
+    assert json.loads(result)["answers"] == []
+
+
+def test_run_stream_chat_ask_ends_turn(monkeypatch, tmp_path):
+    """runner 级断回合：chat 模式 ask 工具执行后，回合确定性终止——
+    只发生一次 LLM 调用（无第二次循环），emit_done 带 waiting_user。"""
+    from planify.streaming.runner import StreamingAgent
+    from planify.streaming.types import StreamingConfig
+    from planify.tools.user_interaction import bind_ask_user_question_handler
+
+    monkeypatch.setenv("PLANIFY_ASK_MODE", "chat")
+
+    astream_calls = {"n": 0}
+
+    def _ev(**kw):
+        base = dict(
+            usage=None, block_index=None, block_type=None, tool_use_id=None,
+            tool_name=None, text_delta=None, input_json_delta=None, stop_reason=None,
+        )
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    class _Provider:
+        async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
+            astream_calls["n"] += 1
+            if astream_calls["n"] > 1:
+                raise AssertionError("chat 模式断回合后不应有第二次 LLM 调用")
+            yield _ev(type="message_start")
+            yield _ev(type="content_block_start", block_index=0, block_type="tool_use",
+                      tool_use_id="tu1", tool_name="ask_user_question")
+            yield _ev(type="content_block_delta", block_index=0,
+                      input_json_delta=json.dumps(
+                          {"questions": [_valid_question()]}, ensure_ascii=False))
+            yield _ev(type="content_block_stop", block_index=0)
+            yield _ev(type="message_delta", stop_reason="tool_use")
+            yield _ev(type="message_stop")
+
+    class _Emitter:
+        def __init__(self):
+            self.done = []  # [(session_id, reason)]
+            self.tool_results = []
+
+        async def emit_text(self, content, is_end=False):
+            pass
+
+        async def emit_tool_call(self, tool_use_id, name, input_data, is_complete=False):
+            pass
+
+        async def emit_tool_result(self, tool_use_id, name, output, is_error=False):
+            self.tool_results.append((name, output))
+
+        async def emit_done(self, session_id, summary=None, reason=None):
+            self.done.append((session_id, reason))
+
+        async def emit_error(self, error, code=None):
+            raise AssertionError(error)
+
+        async def emit_usage(self, usage):
+            pass
+
+    waiter = _fresh_waiter()
+    emitter = _Emitter()
+    handlers = {}
+    bind_ask_user_question_handler(handlers, emitter, waiter)
+
+    sa = StreamingAgent(
+        client=_Provider(),
+        model="mock",
+        tools=[get_ask_user_question_tool()],
+        tool_handlers=handlers,
+        emitter=emitter,
+        config=StreamingConfig(compact_threshold=10**9),
+        skills_loader=None,
+        runtime=SimpleNamespace(
+            config=SimpleNamespace(workdir=tmp_path, assets_dir=tmp_path / "none"),
+            skill_access_state=None,
+        ),
+    )
+
+    cleaned = asyncio.run(sa.run_stream([], "问题", "sid"))
+
+    # 断回合核心断言：单次 LLM 调用 + done(reason=waiting_user)
+    assert astream_calls["n"] == 1
+    assert emitter.done == [("sid", "waiting_user")]
+    # 工具结果即哨兵（经 emit_tool_result 直达 SSE / 落库）
+    assert emitter.tool_results[0][0] == "ask_user_question"
+    assert emitter.tool_results[0][1].startswith(CHAT_ASK_RESULT_PREFIX)
+    # 清理后的返回值不含 tool 链（CLI/TUI 下一轮输入）
+    assert all(
+        not (isinstance(m.get("content"), list)) for m in cleaned
+    )
+
+
+# ---------- 设置页契约（ADR-0033：PLANIFY_ASK_MODE 可视化配置） ----------
+
+def test_ask_mode_settings_contract():
+    """KNOWN_KEYS 带上提问模式键；校验规则接受合法值（含大小写/空串）、拒绝非法值。"""
+    from doclens.web_v2.config_store import KNOWN_KEYS
+    from doclens.web_v2.config_validator import validate_values
+
+    assert "PLANIFY_ASK_MODE" in KNOWN_KEYS
+    for ok in ("", "interactive", "chat", "CHAT", " Chat "):
+        assert not validate_values({"PLANIFY_ASK_MODE": ok}).fields, ok
+    errs = validate_values({"PLANIFY_ASK_MODE": "cht"}).fields
+    assert errs and errs[0].field == "PLANIFY_ASK_MODE"
+    assert "interactive" in errs[0].error
 
 
 # ---------- respond 端点 ----------

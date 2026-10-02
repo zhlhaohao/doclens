@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 10 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 外部访问门禁 + 工作目录覆盖；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(10);
+  it("has exactly 11 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 工作目录覆盖；模型/搜索参数由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(11);
   });
 
   it("every field has a unique envVar", () => {
@@ -46,11 +46,12 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills"]);
   });
 
-  it("AI tab has 百度天气 AK + 图像自动旋转 + 外部访问门禁字段 (模型配置由 <model-presets-section> 接管)", () => {
+  it("AI tab has 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁字段 (模型配置由 <model-presets-section> 接管)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
     expect(ai.map((f) => f.envVar)).toEqual([
       "BAIDU_WEATHER_AK",
       "VISION_AUTO_ROTATE",
+      "PLANIFY_ASK_MODE",
       "PLANIFY_OUTSIDE_WORKDIR",
     ]);
   });

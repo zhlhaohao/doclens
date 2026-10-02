@@ -62,6 +62,17 @@ def _outside_workdir_rule(values: dict[str, str]) -> list[ConfigValidationError]
     return []
 
 
+def _ask_mode_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """对话提问模式校验（ADR-0033；空串 = 未设置 = 默认 interactive，跳过）。"""
+    raw = values.get("PLANIFY_ASK_MODE", "").strip().lower()
+    if raw and raw not in ("interactive", "chat"):
+        return [ConfigValidationError(
+            field="PLANIFY_ASK_MODE",
+            error="合法值：interactive / chat",
+        )]
+    return []
+
+
 def _workdir_dir_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     """CORTEX_WORKDIR 非空时必须是已存在的目录（启动时目录不存在会退出）。"""
     import os
@@ -130,6 +141,8 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_llm_endpoint_rules(values))
     # 外部访问门禁三态规则（ADR-0021）
     errors.extend(_outside_workdir_rule(values))
+    # 对话提问模式规则（ADR-0033）
+    errors.extend(_ask_mode_rule(values))
     # 工作目录覆盖规则（目录存在性）
     errors.extend(_workdir_dir_rule(values))
 

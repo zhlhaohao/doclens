@@ -94,6 +94,18 @@ async def put_config(
             _os.environ.pop("PLANIFY_OUTSIDE_WORKDIR", None)
         logger.info("guard mode hot-applied: %r", v or "ask(default)")
 
+    # 4.6 对话提问模式热生效（ADR-0033）：ask 模式与门禁同理经 os.getenv
+    # 惰性读（工具调用时取值）——显式同步该键
+    # （空串 = 删除回落默认 interactive）
+    if "PLANIFY_ASK_MODE" in updates:
+        v = updates["PLANIFY_ASK_MODE"].strip().lower()
+        import os as _os
+        if v:
+            _os.environ["PLANIFY_ASK_MODE"] = v
+        else:
+            _os.environ.pop("PLANIFY_ASK_MODE", None)
+        logger.info("ask mode hot-applied: %r", v or "interactive(default)")
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )

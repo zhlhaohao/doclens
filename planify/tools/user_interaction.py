@@ -15,6 +15,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from ..core.config import get_ask_mode
 from ..skills.access_state import get_current_session_id
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,35 @@ ASK_TIMEOUT_SECONDS = 300.0
 # input_type 判别值：仅用于旧协议回退路径（emitter 未实现
 # emit_ask_questions 时），question 字段携带 JSON 序列化的 questions 数组
 ASK_INPUT_TYPE_QUESTIONS = "questions"
+
+# chat 模式（对话式提问，ADR-0033）工具结果哨兵前缀——runner 检测到该
+# 前缀即确定性终止本回合（问题已由 handler 经正文通道送达，答案 = 用户
+# 的下一条消息）。前缀之后是给模型看的续接说明，随 tool_result 入历史。
+CHAT_ASK_RESULT_PREFIX = "[waiting-user-reply]"
+
+
+def format_chat_questions(questions: List[Dict[str, Any]]) -> str:
+    """
+    chat 模式的问题正文（Markdown）——结构化数组降维为可读正文。
+
+    问题以常规 assistant 消息送达：GUI 渲染为普通气泡（选项呈列表），
+    CLI/TUI 直接打印。选项 label 中的 "(Recommended)" 前缀原样保留
+    （推荐位即首位的约定不变）。
+
+    Args:
+        questions: 校验后的结构化问题数组（validate_ask_questions 产物）
+
+    Returns:
+        Markdown 文本
+    """
+    lines: List[str] = ["需要你的输入：", ""]
+    for i, q in enumerate(questions, 1):
+        multi = "（可多选）" if q.get("multiSelect") else ""
+        lines.append(f"**{i}. {q['question']}**{multi}")
+        for opt in q["options"]:
+            lines.append(f"   - **{opt['label']}** — {opt['description']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def get_ask_user_question_tool() -> Dict[str, Any]:
@@ -445,6 +475,23 @@ def bind_ask_user_question_handler(
             error_msg = f"Error: invalid ask_user_question input: {e}"
             logger.warning("[ask_user_question] %s", error_msg)
             return error_msg
+
+        # 对话式提问（ADR-0033，PLANIFY_ASK_MODE=chat）：问题以常规正文
+        # 消息送达（GUI 落库为普通 assistant 消息、刷新/重开可读；
+        # CLI/TUI 直接打印），工具返回哨兵说明——runner 检测到哨兵即
+        # 终止本回合。不创建 waiter 请求、不阻塞等待；答案 = 用户的
+        # 下一条消息，自然续接（无 pending 状态机）。
+        if get_ask_mode() == "chat":
+            await emitter.emit_text(format_chat_questions(questions), is_end=True)
+            logger.info(
+                "[ask_user_question] chat 模式：%d 个问题经正文通道送达，"
+                "回合即将终止", len(questions),
+            )
+            return (
+                f"{CHAT_ASK_RESULT_PREFIX} 上述问题已作为普通聊天消息发送给"
+                "用户，本回合到此结束。用户的下一条消息即是对上述问题的回答，"
+                "收到后基于该回答继续原任务；在此之前不要重复提问。"
+            )
 
         request_id = f"req_{uuid.uuid4().hex[:8]}"
         # session_id 供 waiter.interrupt_session 按会话中断

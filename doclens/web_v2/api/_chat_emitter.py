@@ -28,6 +28,7 @@ from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
 
 from ._chat_events import (
     ask_event,
+    done_event,
     toast_event,
     tool_call_event,
     tool_result_event,
@@ -158,6 +159,12 @@ class ChatEventEmitter(EventEmitter):
 
         elif event.event_type == StreamEventType.DONE:
             self.done = True
+            # 对话式提问（ADR-0033）：带 reason 的收尾推给前端（供渲染
+            # 「等待回复」状态）；正常完成不推——终端 done 由 chat.py 兜底
+            # （见 event_stream 的 saw_done 去重），保证前端只收一个 done。
+            reason = event.data.get("reason")
+            if reason:
+                self._push(done_event(str(reason)))
 
         elif event.event_type == StreamEventType.ERROR:
             self.error = event.data.get("error", "未知错误")

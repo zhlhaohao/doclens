@@ -469,6 +469,8 @@ export class ChatView extends LitElement {
   @state() private previewPages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表。 */
   @state() private previewPageStarts: number[] | null = null;
+  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
+  @state() private previewTokens: string[][][] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
   @state() private previewError: "NOT_INDEXED" | null = null;
@@ -988,6 +990,10 @@ export class ChatView extends LitElement {
             contextWindow: ev.context_window,
             seq: Number.MAX_SAFE_INTEGER,
           });
+        } else if (ev.type === "done" && ev.reason === "waiting_user") {
+          // 对话式提问（ADR-0033）：回合因提问而终止，输入框已解锁——
+          // 提示用户直接发消息作答（答案即下一条用户消息）
+          this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -1304,6 +1310,7 @@ export class ChatView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       this.previewOpen = true;
       return;
     }
@@ -1316,6 +1323,7 @@ export class ChatView extends LitElement {
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
       this.previewPageStarts = result.pageStarts;
+      this.previewTokens = result.tokens;
       this.previewOpen = true;
     } else if (result.notIndexed) {
       this.previewError = "NOT_INDEXED";
@@ -1325,6 +1333,7 @@ export class ChatView extends LitElement {
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
+      this.previewTokens = null;
       this.previewOpen = true;
     } else {
       this._pushToast(`预览失败：${result.message}`, "error", 5000);
@@ -1459,6 +1468,7 @@ export class ChatView extends LitElement {
       .pages=${this.previewPages}
       .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}
+      .tokens=${this.previewTokens}
       ?showBack=${isPstEmailPath(this.previewPath)}
       backLabel="邮件列表"
       @back=${this._onPreviewBack}

@@ -566,6 +566,9 @@ async def chat(req: ChatRequest):
             )
 
     async def event_stream() -> AsyncIterator[dict]:
+        # 对话式提问（ADR-0033）：emitter 可能已推带 reason 的 done 队列
+        # 事件——透传后终端 done 不再重复发（前端只收一个 done）
+        saw_done = False
         try:
             # 队列事件与线格式同构（_chat_events 单一真相源）：剥掉 type 作
             # event 名，其余字段整体透传；未知类型记 warning（不静默丢弃）。
@@ -574,6 +577,8 @@ async def chat(req: ChatRequest):
                 if t not in KNOWN_EVENT_TYPES:
                     logger.warning("chat stream: 未知队列事件类型 %r，丢弃: %s", t, ev)
                     continue
+                if t == "done":
+                    saw_done = True
                 yield {
                     "event": t,
                     "data": json.dumps(
@@ -581,7 +586,8 @@ async def chat(req: ChatRequest):
                         ensure_ascii=False,
                     ),
                 }
-            yield {"event": "done", "data": "{}"}
+            if not saw_done:
+                yield {"event": "done", "data": "{}"}
         except asyncio.CancelledError:
             # 客户端断开（关页 / 切走 / 断网 / 主动 abort）。停止与否由
             # _stream_agent_response 的 finally 分支处置（ADR-0028：主动停止

@@ -90,10 +90,16 @@ export const cjkInlineMath: any = {
 };
 
 /** 创建配置好 KaTeX 的 marked 实例：$...$ 行内（含 CJK 兜底）/ $$...$$ 块级 +
- *  单行 $$...$$ 兜底；throwOnError:false 非法公式渲染为红色源码而非抛错。 */
+ *  单行 $$...$$ 兜底；throwOnError:false 非法公式渲染为红色源码而非抛错。
+ *
+ *  breaks:true（GFM 换行模式）——段内单个换行渲染为 <br>。聊天语境的
+ *  换行几乎总是有意的（AI 多选项回答「A. …\nB. …」无空行分隔即典型），
+ *  CommonMark 默认折叠会并成一段。仅聊天气泡用本工厂；文档预览
+ *  （md-viewer，全局 marked）保持严格 CommonMark 不受影响。 */
 export function createMathMarked(): Marked {
   const md = new Marked();
   md.use(markedKatex({ throwOnError: false }));
   md.use({ extensions: [cjkInlineMath, singleLineDisplayMath] });
+  md.use({ breaks: true });
   return md;
 }

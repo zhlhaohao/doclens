@@ -5,7 +5,7 @@
 定义与构造函数——字段名只在此定义一次，加事件类型改一处。
 
 队列事件全集（另加 None 哨兵终止）：
-token / tool_call / tool_result / ask / toast / error / usage
+token / tool_call / tool_result / ask / toast / error / usage / done
 
 线格式（SSE data JSON）与队列事件同构，chat.py 透传字段不做改名。
 """
@@ -63,14 +63,22 @@ class UsageEvent(TypedDict):
     context_window: int
 
 
+class DoneEvent(TypedDict):
+    """带原因的收尾事件（2026-10-01，ADR-0033 对话式提问）：仅终止原因
+    存在时由 emitter 推送（reason="waiting_user" = 回合因提问等待用户
+    下一条消息而终止）；正常完成不推，终端 done 仍由 chat.py 兜底。"""
+    type: str  # "done"
+    reason: str  # 终止原因标记
+
+
 ChatQueueEvent = Union[
     TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
-    UsageEvent,
+    UsageEvent, DoneEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
-    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage"}
+    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage", "done"}
 )
 
 
@@ -113,6 +121,10 @@ def ask_event(request_id: str, questions: List[Dict[str, Any]]) -> AskEvent:
 
 def toast_event(level: str, detail: str) -> ToastEvent:
     return {"type": "toast", "level": level, "detail": detail}
+
+
+def done_event(reason: str) -> DoneEvent:
+    return {"type": "done", "reason": reason}
 
 
 def error_event(detail: str) -> ErrorEvent:
