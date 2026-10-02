@@ -176,6 +176,8 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix="/api")
     from doclens.web_v2.api import mcp
     app.include_router(mcp.router, prefix="/api")
+    from doclens.web_v2.api import git
+    app.include_router(git.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():
