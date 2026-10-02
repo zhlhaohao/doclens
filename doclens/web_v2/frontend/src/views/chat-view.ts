@@ -1387,6 +1387,11 @@ export class ChatView extends LitElement {
     else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
   };
 
+  /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
+  private _onBookmarkAdded = (): void => this._pushToast("已收藏书签", "success", 2500);
+  private _onBookmarkDuplicate = (): void => this._pushToast("此处已有书签", "info", 2500);
+  private _onBookmarkFull = (): void => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
+
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
     const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
     stack?.pushToast(message, level, duration);
@@ -1476,6 +1481,9 @@ export class ChatView extends LitElement {
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
       @path-copied=${this._onPathCopied}
+      @bookmark-added=${this._onBookmarkAdded}
+      @bookmark-duplicate=${this._onBookmarkDuplicate}
+      @bookmark-full=${this._onBookmarkFull}
     </preview-pane>`;
     return html`
       <toast-stack></toast-stack>
