@@ -183,7 +183,13 @@ def run_subagent(
 
     # 子代理主循环（最多 30 轮）
     resp = None
-    for _ in range(30):  # 最多 30 轮
+    for round_no in range(1, 31):  # 最多 30 轮
+        # 运行可见性：每轮一行 INFO（无此日志时子代理静默运行，挂死与
+        # 正常读码在日志/终端上无法区分——2026-10-03 五组直派挂死实测）
+        logger.info(
+            "[subagent] 轮 %d/30 (agent_type=%s, messages=%d)",
+            round_no, agent_type, len(sub_msgs),
+        )
         # LLM 调用（通过 LLMProvider 抽象接口）
         try:
             resp = client.chat(
@@ -227,6 +233,13 @@ def run_subagent(
             break
 
         # 执行工具调用
+        tool_names = [
+            b.get("name", "?") for b in assistant_blocks if b.get("type") == "tool_use"
+        ]
+        if tool_names:
+            logger.info(
+                "[subagent] 执行工具: %s (agent_type=%s)", ", ".join(tool_names), agent_type
+            )
         results = []
         for b in assistant_blocks:
             if b.get("type") != "tool_use":
