@@ -1090,7 +1090,11 @@ class StreamingAgent:
                 precomputed[tid] = out
 
         for tool_use_id, name, input_data in pending:
-            self.logger.info(f"[StreamingAgent] 执行工具: {name}")
+            # task 已在上方 gather 并发完成（precomputed）——此处只补发结果
+            # 事件，不再打「执行工具」日志（否则并发完成后又逐条串行打日志，
+            # 误导排查：2026-10-03 实测 21 个 task 并发收齐后连打 21 行）。
+            if tool_use_id not in precomputed:
+                self.logger.info(f"[StreamingAgent] 执行工具: {name}")
 
             if tool_use_id in precomputed:
                 output = precomputed[tool_use_id]

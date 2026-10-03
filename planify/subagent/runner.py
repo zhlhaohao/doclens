@@ -30,6 +30,62 @@ except ImportError:
     from planify.prompts import build_system_prompt
 
 
+# retryable 异常的退避重试参数
+_RETRY_MAX_ATTEMPTS = 4    # 总尝试次数（含首次）
+_RETRY_BASE_DELAY_S = 3.0  # 首次退避秒数，逐次 ×2
+_RETRY_MAX_DELAY_S = 60.0  # 单次退避上限
+
+
+def _chat_with_retry(
+    client: LLMProvider,
+    messages: list,
+    system: str,
+    tools: list,
+    max_tokens: int,
+    tracer,
+    *,
+    agent_type: str,
+    round_no: int,
+):
+    """client.chat 的退避重试包装。
+
+    - retryable=True 的异常（LLMRateLimitError/LLMNetworkError，429/网络）：
+      指数退避重试至多 _RETRY_MAX_ATTEMPTS 次；全部耗尽返回 None（调用方
+      以失败收场）。多子代理并发下 429 是常态而非异常（2026-10-03 实测：
+      21 并发 → 网关限流，SDK 内建 2 次重试耗尽后子代理整体报废）。
+    - 不可重试（认证/上下文超限/未知异常）：立即失败——保留全栈日志供排查。
+    """
+    import time
+
+    for attempt in range(1, _RETRY_MAX_ATTEMPTS + 1):
+        try:
+            return client.chat(
+                messages=messages,
+                system=system,
+                tools=tools,
+                max_tokens=max_tokens,
+                tracer=tracer,
+            )
+        except Exception as e:
+            retryable = bool(getattr(e, "retryable", False))
+            if not retryable or attempt == _RETRY_MAX_ATTEMPTS:
+                logger.exception(
+                    "子代理 LLM 调用失败 (agent_type=%s, max_tokens=%d, "
+                    "轮=%d, attempt=%d/%d, retryable=%s): %s",
+                    agent_type, max_tokens, round_no, attempt,
+                    _RETRY_MAX_ATTEMPTS, retryable, e,
+                )
+                return None
+            delay = min(_RETRY_BASE_DELAY_S * (2 ** (attempt - 1)), _RETRY_MAX_DELAY_S)
+            logger.warning(
+                "[subagent] LLM 调用可重试失败，%.1fs 后重试 "
+                "(agent_type=%s, 轮=%d, attempt=%d/%d): %s",
+                delay, agent_type, round_no, attempt, _RETRY_MAX_ATTEMPTS, e,
+            )
+            time.sleep(delay)
+    return None
+
+
 def run_subagent(
     prompt: str,
     agent_type: str,
@@ -190,23 +246,16 @@ def run_subagent(
             "[subagent] 轮 %d/30 (agent_type=%s, messages=%d)",
             round_no, agent_type, len(sub_msgs),
         )
-        # LLM 调用（通过 LLMProvider 抽象接口）
-        try:
-            resp = client.chat(
-                messages=sub_msgs,
-                system=system_prompt,
-                tools=tool_defs,
-                max_tokens=max_tokens,
-                tracer=tracer,
-            )
-        except Exception as e:
-            # 不能静默吞掉：子代理失败时主代理只会看到 "(subagent failed)"，
-            # 没有异常内容就完全无法排查（如模型拒绝 max_tokens、上下文超长等）
-            logger.exception(
-                "子代理 LLM 调用失败 (agent_type=%s, max_tokens=%d, 已累积消息=%d): %s",
-                agent_type, max_tokens, len(sub_msgs), e,
-            )
-            return f"(subagent failed: {type(e).__name__}: {e})"
+        # LLM 调用（通过 LLMProvider 抽象接口）。
+        # retryable 异常（429 限流 / 网络抖动）指数退避重试——多子代理并发
+        # 场景 429 是常态而非异常（2026-10-03 实测：21 并发 → 网关限流，
+        # SDK 内建 2 次重试耗尽后子代理整体报废）；不可重试错误照旧立即失败。
+        resp = _chat_with_retry(
+            client, sub_msgs, system_prompt, tool_defs, max_tokens, tracer,
+            agent_type=agent_type, round_no=round_no,
+        )
+        if resp is None:
+            return f"(subagent failed after retries: round={round_no})"
 
         # 把响应内容块序列化为 dict（兼容后续 _execute_tools 风格）
         assistant_blocks: list[dict] = []

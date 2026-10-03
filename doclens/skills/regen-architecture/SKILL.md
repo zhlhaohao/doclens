@@ -34,7 +34,7 @@ icon: book-open
 
 - 分组按仓库五域起底：doclens 核心（含 tui/ 与 tools/pst-extract）、web_v2 后端、前端 frontend/src、treesearch、planify；
 - **每组 ≤30 个常规文件**；>1000 行的文件计 2 个名额；超大文件（如 fts.py 10 万字符级）计 3 个；
-- 域内文件多就按子目录切多组（如后端拆 api/ 与支撑模块，前端拆 views+components 与 api+state+utils）；典型总量 10~14 组；
+- 域内文件多就按子目录切多组（如后端拆 api/ 与支撑模块，前端拆 views+components 与 api+state+utils）；**组总数上限 14**——若五域合计超 14 组，合并小域（如 treesearch+planify 合组、api/ 与 models/ 合组）压回上限，宁可单组略大也不许超组数（防 429 限流）；
 - 每组prompt必须附**该组的精确文件相对路径清单**，禁止只给目录名让子代理自己逛；
 - 排除：node_modules / static / 构建产物 / `*.test.ts` / `__pycache__` / egg-info。
 
@@ -44,7 +44,9 @@ icon: book-open
 
 ### 第 3 步：并发读码（两遍读法，防巨请求）
 
-为所有组**在同一批 task 调用里并发派发**（`agent_type=Explore`，只读）。每子代理 prompt 按此模板（照抄再填空）：
+**分批派发（防限流雪崩）**：组**分批**派发，**每批 ≤6 个 task 并发**，收齐一批笔记再派下一批（2026-10-03 实测：21 组同秒并发 → 上游网关 429 限流，过半子代理报废）。批间向用户简报进度「第 k/N 批完成」。
+
+每批内子代理 prompt 按此模板（照抄再填空）：
 
 ```
 为《项目全貌报告》深读以下文件，用两遍读法（严禁逐文件全文通读）：
