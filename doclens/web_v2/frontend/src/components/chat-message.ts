@@ -5,7 +5,26 @@ import { createMathMarked } from "../utils/marked-math";
 // shadow DOM 隔离全局样式，KaTeX CSS 必须内联注入组件 styles（同 md-viewer）
 import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
+import { isCoarsePointer } from "../utils/device";
 import "./ask-card";
+
+/** 消息时间格式化：今天 HH:MM，非今天 MM-DD HH:MM。
+ *  非法/缺失输入返回 ""（操作行不渲染时间位）。导出供测试。 */
+export function formatMsgTime(iso: string | undefined, now = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return `${hh}:${mm}`;
+  const M = String(d.getMonth() + 1).padStart(2, "0");
+  const D = String(d.getDate()).padStart(2, "0");
+  return `${M}-${D} ${hh}:${mm}`;
+}
 
 /** AI 气泡专用 marked 实例（模块级单例）。不能用全局 marked：
  *  其 KaTeX 扩展注册在 md-viewer.ensureMdConfigured()，只在打开过
@@ -60,14 +79,24 @@ export class ChatMessageEl extends LitElement {
       padding: 7px 12px;
       line-height: 1.4;
     }
-    /* 用户气泡下方的小时间戳（17:08 风格） */
+    /* 消息操作行（user：时间+重问+回退 / assistant：时间+复制）：默认隐藏，
+       桌面 hover 消息 / 移动端点击气泡时浮现（.hovered class，两态复用） */
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-top: 2px;
+    }
+    /* 操作行行首的消息时间（今天 HH:MM，非今天 MM-DD HH:MM）：
+       与按钮同律默认隐藏（opacity 0），hover/点击浮现时一起淡入 */
     .ts {
-      display: block;
-      text-align: right;
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-subtle);
-      margin-top: 4px;
-      padding-right: 4px;
+      margin-right: 4px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+      transition: opacity var(--cortex-duration-fast);
     }
     /* AI 气泡：白底 + 极浅边框（更轻盈）。多子元素（trace / md / error）
        仍用普通文档流堆叠。 */
@@ -208,13 +237,7 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
-    /* 消息操作钮（user 重问+回退 / assistant 复制）：默认隐藏，hover/focus
-       消息时浮现（移动端常显） */
-    .actions {
-      display: flex;
-      gap: 2px;
-      margin-top: 2px;
-    }
+    /* 消息操作钮见下方 .actions/.reask/.rewind/.copy —— 时间戳与按钮同一行浮现 */
     .reask, .rewind, .copy {
       display: inline-flex;
       align-items: center;
@@ -232,12 +255,15 @@ export class ChatMessageEl extends LitElement {
       transition: opacity var(--cortex-duration-fast), color var(--cortex-duration-fast),
         background var(--cortex-duration-fast);
     }
+    :host(.hovered) .ts,
     :host(.hovered) .reask,
     :host(.hovered) .rewind,
     :host(.hovered) .copy,
+    :host(:focus-within) .ts,
     :host(:focus-within) .reask,
     :host(:focus-within) .rewind,
     :host(:focus-within) .copy,
+    .ts:focus,
     .reask:focus,
     .rewind:focus,
     .copy:focus { opacity: 1; }
@@ -250,7 +276,7 @@ export class ChatMessageEl extends LitElement {
       cursor: not-allowed;
     }
     /* AI 复制钮靠右（与 user 动作区左右对称） */
-    .copy { align-self: flex-end; }
+    .copy { margin-left: auto; }
   `,
   ];
 
@@ -270,7 +296,8 @@ export class ChatMessageEl extends LitElement {
   firstUpdated() {
     this.addEventListener("click", this._onClick);
     /* mouseenter/leave 不冒泡且进入后代不重复触发：保证鼠标在整条消息范围内
-       （气泡 + 按钮）持续显示按钮，避免移向按钮途中 CSS :hover 丢失导致消失。 */
+       （气泡 + 按钮）持续显示按钮，避免移向按钮途中 CSS :hover 丢失导致消失。
+       桌面 = hover 浮现/移出隐藏；移动端（粗指针）由点击切换（_onClickBubble）。 */
     this.addEventListener("mouseenter", this._onHoverChange);
     this.addEventListener("mouseleave", this._onHoverChange);
   }
@@ -287,13 +314,33 @@ export class ChatMessageEl extends LitElement {
     this.classList.toggle("hovered", e.type === "mouseenter");
   };
 
-  /** 事件委托：命中 .ref-link 时派发 reference-click（供 chat-view 打开预览）。 */
+  /** 移动端（粗指针无 hover）：点击气泡切换操作行（时间+按钮）浮现，
+   *  再点收起。桌面点击无此切换（hover 已覆盖，点击留给 ref-link 等委托）。
+   *  命中按钮/链接等交互元素时不切换（点击目标是操作本身）。 */
+  private _onClickBubble = (e: MouseEvent): void => {
+    if (!isCoarsePointer()) return;
+    const path = e.composedPath();
+    const hitInteractive = path.some(
+      (n) =>
+        n instanceof HTMLElement &&
+        (n.closest("button, a, [contenteditable]") !== null ||
+          n.classList.contains("ref-link")),
+    );
+    if (hitInteractive) return;
+    this.classList.toggle("hovered");
+  };
+
+  /** 事件委托：命中 .ref-link 时派发 reference-click（供 chat-view 打开预览）；
+   *  未命中时移动端走气泡点击切换（操作行浮现）。 */
   private _onClick = (e: MouseEvent): void => {
     const target = e.composedPath().find(
       (n): n is HTMLElement =>
         n instanceof HTMLElement && n.classList.contains("ref-link"),
     );
-    if (!target) return;
+    if (!target) {
+      this._onClickBubble(e);
+      return;
+    }
     e.preventDefault();
     const path = target.getAttribute("data-path") ?? "";
     this.dispatchEvent(
@@ -395,13 +442,15 @@ export class ChatMessageEl extends LitElement {
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
     if (this.role === "user") {
       const canRewind = this.message.seq !== undefined;
+      const ts = formatMsgTime(this.message.created_at);
       return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
-        : null}</div><div class="actions"><button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
+        : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
         ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`
         : null}</div>`;
     }
     const canCopy = !!this.message.content;
+    const tsAi = formatMsgTime(this.message.created_at);
     return html`
       <div class="bubble">
         ${showTrace
@@ -411,8 +460,10 @@ export class ChatMessageEl extends LitElement {
         ${this.renderBubble(this.message.content)}
         ${this.error ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>` : null}
       </div>
-      ${canCopy
-        ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+      ${canCopy || tsAi
+        ? html`<div class="actions">${tsAi ? html`<span class="ts">${tsAi}</span>` : null}${canCopy
+          ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+          : null}</div>`
         : null}
     `;
   }

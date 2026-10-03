@@ -30,6 +30,7 @@ interface RawItem {
   kind: string;
   payload: string;
   seq?: number;
+  created_at?: string | null;
 }
 
 /** 单条 item → ChatMessage（message_user 带锚点 seq）；非消息条目返回 null。 */
@@ -46,6 +47,8 @@ function mapItem(it: RawItem): ChatMessage | null {
   if (it.kind === "message_user") {
     const msg: ChatMessage = { role: "user", content: payload.content ?? "" };
     if (typeof it.seq === "number") msg.seq = it.seq;
+    // 条目时刻透传（后端权威）：hover 操作行显示消息时间；缺失（理论不存在）静默不渲染
+    if (typeof it.created_at === "string" && it.created_at) msg.created_at = it.created_at;
     return msg;
   }
   if (it.kind === "message_ai") {
@@ -66,6 +69,7 @@ function mapItem(it: RawItem): ChatMessage | null {
     if (references.length) msg.references = references;
     // assistant 也带 seq：折叠数统计（含 AI 回答）与 mergeTimeline 插入定位都依赖
     if (typeof it.seq === "number") msg.seq = it.seq;
+    if (typeof it.created_at === "string" && it.created_at) msg.created_at = it.created_at;
     return msg;
   }
   return null;

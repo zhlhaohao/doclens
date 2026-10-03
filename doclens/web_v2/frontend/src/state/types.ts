@@ -48,6 +48,9 @@ export interface ChatMessage {
   /** 回退锚点（ADR-0027）：user 消息携带其 session_items seq，「回退到这里」
    *  以此定位；流式新建/本地构造的消息无此字段（排在时间线最尾）。 */
   seq?: number;
+  /** 消息时刻（ISO8601，后端 created_at 权威；流式中本地打戳，刷新归正）。
+   *  hover/点击浮现于操作行（今天 HH:MM，非今天 MM-DD HH:MM）。 */
+  created_at?: string;
 }
 
 /** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */

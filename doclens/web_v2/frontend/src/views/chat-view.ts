@@ -934,7 +934,7 @@ export class ChatView extends LitElement {
         preview: message.slice(0, 100), mode, updated_at: new Date().toISOString(),
         message_count: 0,
       },
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: message, created_at: new Date().toISOString() }],
       streaming: true,
     });
   }
@@ -944,7 +944,7 @@ export class ChatView extends LitElement {
   private async _sendMessage(message: string, firstOfSession = false): Promise<void> {
     if (!firstOfSession) {
       actions.setChatState({
-        messages: [...this.viewState.messages, { role: "user", content: message }],
+        messages: [...this.viewState.messages, { role: "user", content: message, created_at: new Date().toISOString() }],
         streaming: true,
       });
     } else {
@@ -957,8 +957,9 @@ export class ChatView extends LitElement {
     // 写 DB（收尾展示条目 message_ai 与本轮 message_user 都在 chat.py），
     // 断开续跑/正常完成/停止丢弃的落库口径由后端单一掌控。
 
-    // assistant 占位 + 起始 messages（不可变）
-    const placeholder: ChatMessage = { role: "assistant", content: "" };
+    // assistant 占位 + 起始 messages（不可变）；created_at 本地打戳：
+    // done 落库后重进会话即为后端权威时刻（与 user 消息同律，刷新归正）
+    const placeholder: ChatMessage = { role: "assistant", content: "", created_at: new Date().toISOString() };
     let messages = [...store.getState().chat.messages, placeholder];
     actions.setChatState({ messages });
 
