@@ -37,3 +37,9 @@ vision 解读出的 Markdown 不再只存进 `index.db` 的 documents 表，而�
 - `dc:title` 可附带写入（让「标题」列也有内容），但解读主体载体是 EXIF `XPComment`。
 
 详见 `.scratch/vision-result-writeback/spike/findings.md`。
+
+---
+
+## 后记修正（2026-10-03，代码为准）
+
+- 正文「内容指纹 = 剥离元数据段后对文件核心内容算 hash」的口径未落地：spike 实证 piexif 写回会改动 APP0 段导致剥段字节 hash 漂移，最终实现为 `content_fingerprint`——**解码图像后对像素 RGB 数据算 md5**（`treesearch/parsers/image_metadata.py`）。目的不变（写回元数据不改变指纹、不触发重解析死循环），仅实现口径不同。

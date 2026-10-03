@@ -1,6 +1,6 @@
 # doclens
 
-> Structure-aware document retrieval — FTS5/BM25 keyword search over document trees, with an interactive TUI and a PWA Web UI.
+> Structure-aware document retrieval — FTS5/BM25 keyword search over document trees, with a PWA Web UI (default) and a Textual TUI.
 
 [![PyPI version](https://badge.fury.io/py/doclens.svg)](https://badge.fury.io/py/doclens)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
@@ -16,7 +16,7 @@
 |---|---|
 | **Structure-aware search** | Returns results anchored to document headings, code classes, or function definitions — not orphaned line fragments |
 | **Multi-format** | Markdown, PDF, DOCX, PPTX, Excel, HTML, JSON, CSV, code (Python AST + tree-sitter) |
-| **Two UIs** | Textual TUI (terminal) and Lit + Shoelace PWA (browser) |
+| **Two UIs** | Lit + Shoelace PWA (browser, default) and Textual TUI (terminal) |
 | **LLM-augmented QA** | Send search results to Anthropic Claude for natural-language answers |
 | **Background watching** | Auto-reindexes changed files via `watchdog` |
 | **Web search** | Fetch + extract public web pages as markdown before searching |
@@ -74,9 +74,11 @@ doclens <command> [--workdir DIR]
 | `doclens status` | Show index statistics and system status |
 | `doclens gui [--port PORT]` | Launch the Web UI (PWA) |
 | `doclens read_document --path <path>` | Read a document with structure info |
-| `doclens web <query…>` | Search the live web |
+| `doclens search_kb <query…>` | KB search in the AI-tool output format (same engine as `search`) |
 | `doclens webfetch <url>` | Extract a web page as markdown |
 | `doclens grep <pattern>` | Ripgrep-style regex search |
+| `doclens tui` | Launch the terminal UI (the bare `doclens` command launches the Web GUI by default) |
+| `doclens auth reset` | Clear the Web UI access password |
 
 ---
 
@@ -104,22 +106,24 @@ doclens search "量子 计算"          # Chinese supported via jieba
 doclens search_v2 '{"type": "and", "terms": ["auth", "token"]}'
 ```
 
-### 3. Interactive TUI
+### 3. Web UI (default)
 
 ```bash
-doclens
-```
-
-Opens the full terminal UI with live preview, command history, and keyboard navigation.
-
-### 4. Web UI
-
-```bash
+doclens          # bare command launches the Web GUI
+# or explicitly:
 doclens gui
 # INFO: Uvicorn running on http://127.0.0.1:7860
 ```
 
-Browser opens automatically. Port may vary if 7860 is in use — check the startup log.
+Browser opens automatically (after the initial index build finishes). Port may vary if 7860 is in use — check the startup log.
+
+### 4. Interactive TUI
+
+```bash
+doclens tui
+```
+
+Opens the terminal UI with command history, keyboard navigation, and AI chat.
 
 ### 5. Ask the AI
 
@@ -146,9 +150,9 @@ doclens auto-starts an **MCP server** (Streamable HTTP) inside both the TUI and 
 **1. Start doclens** (this also starts the MCP server):
 
 ```bash
-doclens gui          # Web UI mode
+doclens gui          # Web UI mode (default)
 # or
-doclens              # TUI mode
+doclens tui          # TUI mode
 ```
 
 Read the MCP URL from the startup log:

@@ -1,7 +1,7 @@
 # sessions.db 数据库结构
 
 > 位置：workdir 的 `.cortex/sessions.db`；由 `SessionsStore` 管理（`doclens/web_v2/sessions_store.py`）。
-> schema 定义见 `_SCHEMA`（sessions_store.py:61-91）。共 **3 张表 + 3 个索引**。
+> schema 定义见 `_SCHEMA`（sessions_store.py:112-153）。共 **4 张表 + 4 个索引**。
 
 ## 1. `sessions` —— 会话主表（列表页数据源）
 
@@ -13,7 +13,8 @@
 | `preview` | TEXT | 预览文本（首条消息前 100 字），列表页展示 |
 | `mode` | TEXT 可空 | search：`"keyword"`/`"grep"`；chat 技能会话：`"skill"`（后端据此切换提取式引文策展）；其余 NULL |
 | `created_at` / `updated_at` | TEXT | ISO 时间戳（aware UTC），`updated_at` 用于列表排序置顶 |
-| `message_count` | INTEGER | 消息条数，列表页展示 |
+| `message_count` | INTEGER | 消息条数（回退后按存活条目重算），列表页展示 |
+| `starred` | INTEGER | 加星标志（2026-09-17）：置顶排序（`starred DESC, updated_at DESC`）+ 删除保护（DB/API 层拒绝删除加星会话）；加星不刷新 `updated_at` |
 
 索引 `idx_sessions_type_updated(type, updated_at DESC)`：按类型过滤 + 时间倒序的列表查询。
 
@@ -24,15 +25,45 @@
 | `id` | INTEGER 自增 PK | 行 id |
 | `session_id` | TEXT FK → sessions(id) | 所属会话，`ON DELETE CASCADE`（删会话连带删明细） |
 | `seq` | INTEGER | 会话内序号，保证回放顺序 |
-| `kind` | TEXT | 条目种类：`message_user`（用户消息）/ `message_ai`（策展后的 AI 展示文本）/ `message_ai_raw`（模型原始输出）/ `tool_trace`（工具调用链）/ `result`（search 会话的搜索结果快照） |
+| `kind` | TEXT | 条目种类（11 种，见下表） |
 | `payload` | TEXT | JSON 字符串，具体内容（如 `{"content": "..."}`） |
 | `created_at` | TEXT | 写入时间 |
 
 索引 `idx_items_session(session_id, seq)`：按会话取有序明细。
 
-> 展示层与上下文层分离：`message_ai`（策展文本）给前端展示，`message_ai_raw` + `tool_trace` 供下一轮 LLM 上下文回放（`get_chat_history`）。
+`kind` 全集与回放语义（`get_chat_history` 回放投影按以下规则消费）：
 
-## 3. `auth_sessions` —— 登录会话表（Web UI 鉴权）
+| kind | 写入时机 | 回放语义 |
+|------|----------|----------|
+| `message_user` | 用户消息（后端唯一生产者，幂等） | 活消息 |
+| `message_ai` | 轮末统一落库的策展展示文本 | 展示层用；不进模型上下文 |
+| `message_ai_raw` | 旧链路模型原始输出 | raw_messages 缺失时的回放兜底 |
+| `raw_messages` | 轮末真实请求逐字节快照 | **回放首选来源**（跨轮 prompt 前缀缓存的前提） |
+| `tool_trace` | 工具调用链（旧链路） | 回放兜底（只落已配对调用） |
+| `result` | search 会话的搜索结果快照 | 不进对话回放 |
+| `usage` | 每次 LLM 调用一条 | 不进上下文；会话信息弹窗累计命中率 |
+| `compacted` | 压缩发生轮（ADR-0026） | 从最后一个压缩边界起清空前缀，之前条目不再进模型请求 |
+| `microcompact` | 微压缩轮（ADR-0026） | 按 payload 的 tool_use_id 清单把旧工具结果重放为 "[cleared]" |
+| `rewound` | 用户回退（ADR-0027） | 锚点后死段（多边界并集）从展示与回放中剔除 |
+| `skill_context` | 技能正文/提示注入轮 | 压缩边界感知的技能注入持久化 |
+
+> 展示层与上下文层分离：`message_ai`（策展文本）给前端展示；`raw_messages`（+兜底 `message_ai_raw`/`tool_trace`）供下一轮 LLM 上下文回放。
+
+## 3. `rewind_snapshots` —— 回退快照表（ADR-0027，2026-09-19）
+
+每轮对话开始时固化「锚点时刻被跟踪文件的备份映射」，供回退恢复规划。环形上限 100 条/会话（驱逐最旧，孤儿备份文件随之清理）。
+
+| 字段 | 类型 | 用途 |
+|------|------|------|
+| `id` | INTEGER 自增 PK | 行 id |
+| `session_id` | TEXT FK → sessions(id) | 所属会话，`ON DELETE CASCADE` |
+| `anchor_seq` | INTEGER | 锚点条目序号 |
+| `payload` | TEXT | JSON：`{"tracked_file_backups": {路径: {backup_file_name, version, skipped_reason?}}}` |
+| `created_at` | TEXT | 写入时间 |
+
+索引 `idx_rewind_snap_session(session_id, anchor_seq)`。备份实体文件存 `{数据目录}/rewind/{session_id}/`，随会话删除级联清理。
+
+## 4. `auth_sessions` —— 登录会话表（Web UI 鉴权）
 
 | 字段 | 类型 | 用途 |
 |------|------|------|
@@ -44,8 +75,9 @@
 
 ## 迁移逻辑（`_init_schema`，老库自动升级）
 
-1. 旧库 `sessions` 无 `mode` 列 → `ALTER TABLE` 补上
-2. 存量技能会话回填：首条 `message_user` 以 `[调用技能:` 开头的 chat 会话补 `mode='skill'`（幂等）
+1. 旧库 `sessions` 无 `mode` 列 → `ALTER TABLE` 补上；存量技能会话回填（首条 `message_user` 以 `[调用技能:` 开头的 chat 会话补 `mode='skill'`，幂等）
+2. 无 `starred` 列 → `ALTER TABLE` 补 `starred INTEGER NOT NULL DEFAULT 0`（2026-09-17）
+3. `rewind_snapshots` / `auth_sessions` 等新表由 `CREATE TABLE IF NOT EXISTS` 幂等补建
 
 ## 其他
 
@@ -102,6 +134,7 @@
 | `structure_json` | TEXT | 文档树结构 JSON（整棵树持久化于此） |
 | `node_count` | INTEGER | 节点数 |
 | `index_hash` | TEXT | 索引哈希 |
+| `page_starts` | TEXT | PDF 页表 JSON（每页起始行号数组，ADR-0031 搜索命中跳页依据；存量库 ALTER 补列） |
 
 索引 `idx_documents_source_path(source_path)`（万级文档集性能索引）。
 

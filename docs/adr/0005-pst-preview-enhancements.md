@@ -49,3 +49,9 @@ CID 内嵌图本期剥除（转写时丢 `<img>` 留 alt 占位）：cid→附�
 - 索引时间：PST 全量重建一次（分钟级，与 ADR-0002 §3 的同步模式一致）。
 - 单邮件预览页从纯 md 升级为「邮件查看器」：头部 + 转写正文 + 附件下载
   列表 + 附件解析文本章节。
+
+---
+
+## 后记修正（2026-10-03，代码为准）
+
+- 正文「附件落盘路径 `pst_attachments/<entry_id>/<文件名>`」已过时：实际实现为 `pst_attachments/<doc_hash(PST)>/<entry_id>/<文件名>`——多了一层 PST 文件哈希目录，用于解决多个 PST 文件同 entry_id 冲突（见 `treesearch/parsers/pst_attachment_store.py`）。

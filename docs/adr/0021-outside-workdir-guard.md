@@ -76,3 +76,9 @@ planify 出机制（判定核心同步纯函数 + 会话账本 + handler 包装 
 - **前端小改**：guard 卡片视觉区分（一个字段判断 + 样式），`ask` UI 与回传端点复用。
 - **模块边界**：门禁机制归 planify 层（`PLANIFY_*` 配置、中性术语「宿主」），GUI 接线在 doclens chat 链路；`tests/test_architecture.py` 红线不受影响。
 - **拒绝/拦截返回**：`Error:` 前缀字符串（`is_error=True`），含被拒路径、读/写语义与「由主代理确认或改用工作目录内路径」提示——模型可自行纠正。
+
+---
+
+## 后记修正（2026-10-03，代码为准）
+
+- §36「确认弹窗 300s 超时」与实现不符：门禁确认超时实为 `GUARD_TIMEOUT_SECONDS = 120` 秒（`planify/tools/guard.py`），短于模型提问的 300 秒；前端 guard 卡 122 秒本地计时与代码配套。fail-closed 语义不变。
