@@ -1,238 +1,329 @@
 # Planify
 
-基于 Claude API 的多代理 LLM 系统，提供交互式 REPL 命令行界面和单用户 CLI。
+[简体中文](README.zh-CN.md)
 
-## 项目概述
+Planify is a single-process, multi-agent LLM agent framework. It provides a streaming agent loop, a statically composed tool registry, dual provider backends (Anthropic and OpenAI-compatible), and context compaction designed to preserve prompt prefix caching (reusing the unchanged head of a conversation so the provider charges less for repeated input). Planify ships as a Python library — a host application embeds it and drives it, while providers, tools, and configuration can all be injected or extended from the outside.
 
-Planify 是一个模块化的多代理 LLM 系统，支持：
+## Table of Contents
 
-- **单用户 CLI** - 适合个人开发、本地使用
-- **多用户多会话** - 支持 Web 应用后端、多用户服务
-- **子代理委派** - 临时执行特定任务后返回
-- **队友协作** - 持久化独立代理，通过消息总线通信
-- **上下文压缩** - 自动压缩对话历史，支持长对话
-- **技能加载** - 从文件系统加载专业技能
-- **任务管理** - 持久化任务系统，支持依赖关系
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start (Library Usage)](#quick-start-library-usage)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Built-in Tools](#built-in-tools)
+- [Runtime Data Directories](#runtime-data-directories)
+- [Embedding as a Host Application](#embedding-as-a-host-application)
+- [Development](#development)
+- [Documentation](#documentation)
+- [License](#license)
 
-## 快速开始
+## Features
 
-### 单用户 CLI
+**Agent execution**
 
-#### Unix/Linux/macOS (Git Bash)
+- **Streaming agent loop** (primary path) — fully asynchronous, consuming normalized stream events from the provider. Tool handlers run off the main loop, and a mid-run interrupt event lets the caller stop generation between rounds.
+- **Synchronous agent loop** — a legacy whole-response path that shares the same loop skeleton and compaction pipeline.
+- **One-shot subagents** — temporary agent loops capped at 30 rounds: they execute an isolated task, return a summary, and are destroyed. The `agent_type` trims the toolset (`Explore` is read-only; `general-purpose` adds file writes).
+- **Persistent teammates** — each teammate is a persistent agent running its own loop on a background daemon thread (a thread that does not block process exit), communicating through a file-based message bus. Idle teammates automatically claim unblocked tasks from the task board.
+
+**Context management**
+
+- **Microcompact** (truncation) keeps only the last 10 tool results and clears the rest. It is gated at 80% of the compaction threshold: below the gate, history is left completely untouched so the conversation head stays byte-stable and cache-friendly.
+- **Auto-compact** (LLM summary) first writes the original transcript to disk, then asks the model to produce a continuity summary that replaces the history.
+- Compaction triggers from four places: both agent loops internally, a `compress` tool the model may call itself, and a manual command from the hosting front end.
+
+**LLM provider layer**
+
+- A single provider protocol with three methods (send / stream / count tokens) — no caller touches SDK types directly.
+- Two interchangeable backends: **Anthropic** (with prompt-caching breakpoints on the system prompt, tool table, and last user message) and **OpenAI-compatible** (via `/chat/completions`, with a built-in translator between the two tool-call formats).
+- An error hierarchy carrying a `retryable` flag, covering auth, rate limit, context length, and network failures.
+
+**Tool system**
+
+- The registry is statically composed and returns tool definitions plus their handlers in one pass; handlers may be synchronous or async.
+- A host application can inject its own tools, filter the set with a whitelist environment variable, and enable a stricter path guard for sandboxed front ends (shell tools get wrapped; file tools are blocked from path escapes).
+- About 29 built-in tools ship out of the box — see [Built-in Tools](#built-in-tools).
+
+**Skills**
+
+- Skill files (`SKILL.md`) act as two-stage prompt injection rather than callable tools: a lightweight catalog is injected up front (cheap for caching), and the full body is fetched on demand via the `load_skill` tool. Skills hot-reload — changed files are picked up at the start of the next conversation turn without a restart.
+
+**Task management**
+
+- **TodoManager** — an in-memory, per-agent checklist: at most 20 items, exactly one in progress at a time, with a reminder nag if it goes stale for 3 rounds.
+- **TaskManager** — a file-persisted task board with dependency edges (blocked-by / blocks); completing a task automatically unblocks dependents, and any agent may claim an unowned task.
+- **BackgroundManager** — runs long shell commands on daemon threads (on Windows it falls back from Git Bash to PowerShell to cmd) and feeds results back into the agent loop as notifications.
+
+**Host integration**
+
+- Configuration and tools flow in through registration hooks; planify never imports the host application.
+- Pluggable event emitters (SSE queue, console, callback routing) let one agent drive different front ends.
+
+## Requirements
+
+- Python ≥ 3.10 (declared in `pyproject.toml`)
+- An API key for an Anthropic-compatible or OpenAI-compatible endpoint
+- Playwright's Chromium binary, needed only for fetching JavaScript-rendered pages:
 
 ```bash
-# cd 到你的工作目录
-cd /path/to/your/project
-
-# 执行脚本（绝对路径）
-bash ~/github/learn-claude-code/backend/app/planify/planify.sh
+# One-time download of the headless browser for the webfetch tool
+python -m playwright install chromium --only-shell
 ```
 
-#### Windows (CMD)
+## Installation
 
-```cmd
-cd C:\path\to\your\project
-C:\Users\lianghao\github\learn-claude-code\backend\app\planify\planify.cmd
-```
-
-#### 直接调用 Python（通用）
+Install from the repository root in editable mode (recommended for development):
 
 ```bash
-cd /path/to/your/project
-python ~/github/learn-claude-code/backend/app/planify/cli.py
+# Editable install of the planify package
+pip install -e ./planify
 ```
 
-## 环境配置
+Core dependencies are pulled automatically: the two provider SDKs (`anthropic`, `openai`), `httpx`, `python-dotenv`, `borax` (lunar calendar data), and `trafilatura` + `playwright` (web fetching).
 
-在当前工作目录创建 `.env` 文件，配置以下变量：
+## Quick Start (Library Usage)
 
-### 必需配置
+Planify is embedded by a host application; it has no user-facing entry point of its own. The minimal path is: register configuration → create a runtime → drive the streaming loop.
 
-```bash
-# Planify API 密钥（必需）
-PLANIFY_API_KEY=your-planify-api-key
+```python
+import asyncio
+from pathlib import Path
 
-# 模型 ID（必需）
-PLANIFY_MODEL_ID=glm-4.7
-# 或 PLANIFY_MODEL_ID=claude-sonnet-4-6
+from planify.bootstrap import initialize, get_or_create_runtime
+from planify.streaming import StreamingAgent
+from planify.streaming.emitter import SSEEmitter   # or your own emitter implementation
+
+# 1. Boot the runtime manager singleton for this working directory
+manager = initialize(base_workdir=Path.cwd())
+
+# 2. Create the per-user runtime: wires the provider, managers, message bus, tools
+runtime = get_or_create_runtime("alice", {
+    "api_key": "sk-...",
+    "model_id": "claude-sonnet-4-6",
+})
+
+# 3. Build a streaming agent on top of that runtime
+agent = StreamingAgent(
+    client=runtime.client,          # provider instance
+    model=runtime.model,
+    tools=runtime.tools,
+    tool_handlers=runtime.tool_handlers,
+    emitter=SSEEmitter(),           # any emitter implementation
+    bus=runtime.bus,
+    skills_loader=runtime.skills,
+    runtime=runtime,
+    system_prompt_extra="Optional host policy appended to the system prompt.",
+)
+
+# 4. Run the loop. Note: `messages` is modified in place.
+messages = []
+asyncio.run(agent.run_stream(messages, "Summarize the repo layout.", session_id="demo-001"))
 ```
 
-### 可选配置
+A one-shot subagent for isolated read-only exploration:
 
-```bash
-# 自定义 API 端点（可选）
-PLANIFY_BASE_URL=https://api.anthropic.com
+```python
+from planify.subagent.runner import run_subagent
+from planify.tools.basic import run_bash, run_read, run_write, run_edit
 
-# ZhipuAI API 密钥（可选，用于 web_search 工具）
-# 如果不配置，web_search 工具将不可用，但不影响其他功能
-# ZHIPUAI_API_KEY=your-zhipuai-api-key
+summary = run_subagent(
+    prompt="List the top-level packages and their responsibilities.",
+    agent_type="Explore",                 # read-only toolset
+    workdir=Path.cwd(),
+    client=runtime.client,
+    model=runtime.model,
+    run_bash=run_bash, run_read=run_read, run_write=run_write, run_edit=run_edit,
+)
 ```
 
-## 切换 LLM 端点
+## Configuration
 
-通过 `PLANIFY_PROTOCOL` + `PLANIFY_BASE_URL` 指定 LLM 端点（不再有 provider 预设）：
+Config resolution order (highest first):
 
-- `PLANIFY_PROTOCOL`：`anthropic`（默认，走 Anthropic `/v1/messages`）或 `openai_compat`（走 OpenAI 兼容 `/chat/completions`）
-- `PLANIFY_BASE_URL`：端点 URL；留空则用 SDK 默认（Anthropic 原生）
+1. Host-injected registration at startup
+2. The per-user config dict passed to `get_or_create_runtime()`
+3. Environment variables
+4. `.env` files in the working directory (`.planify/.env` → `.env.local` → `.env`)
+5. Built-in defaults
 
-示例（OpenAI 兼容端点）：
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `PLANIFY_API_KEY` | Yes | LLM provider API key |
+| `PLANIFY_MODEL_ID` | Yes | Model ID, e.g. `claude-sonnet-4-6`, `glm-4.7`, `deepseek-chat` — fully config-driven, no presets |
+| `PLANIFY_PROTOCOL` | No | `anthropic` (default, `/v1/messages`) or `openai_compat` (`/chat/completions`) |
+| `PLANIFY_BASE_URL` | No | Endpoint URL; empty = provider SDK default. Setting it removes `ANTHROPIC_AUTH_TOKEN` to avoid auth conflicts |
+| `PLANIFY_ENABLED_TOOLS` | No | Comma-separated tool whitelist; empty/unset = register all tools |
+| `PLANIFY_ASK_MODE` | No | How the agent asks the user questions: `interactive` (default, blocking prompt) or `chat` (answered via the next user message); re-read per call |
+| `ASSETS_DIR` | No | Assets directory, absolute or relative to the workdir |
+| `BAIDU_WEATHER_API_URL` / `BAIDU_WEATHER_AK` / `BAIDU_WEATHER_DATA_TYPE` | No | Baidu Map weather API settings for the `baidu_weather` tool |
+
+### Switching LLM endpoints
+
+The endpoint is chosen by protocol plus base URL — there are no provider presets.
+
+OpenAI-compatible endpoint:
+
 ```bash
-export PLANIFY_PROTOCOL=openai_compat
+export PLANIFY_PROTOCOL=openai_compat          # use /chat/completions
 export PLANIFY_BASE_URL=https://api.deepseek.com/v1
 export PLANIFY_API_KEY=sk-...
 export PLANIFY_MODEL_ID=deepseek-chat
 ```
 
-Anthropic 原生（默认，无需 BASE_URL）：
+Anthropic native (the default; no base URL needed):
+
 ```bash
 export PLANIFY_API_KEY=sk-ant-...
 export PLANIFY_MODEL_ID=claude-sonnet-4-6
 ```
 
-## 目录结构
+## Architecture
 
-### 单用户模式
-
-所有数据存储在当前工作目录：
+Four layers, with dependencies strictly one-directional (upper depends on lower, no cycles):
 
 ```
-your-project/
-├── .team/          # 团队配置和收件箱
-│   ├── config.json
-│   └── inbox/
-├── .tasks/         # 任务文件存储
-│   ├── task_001.json
-│   └── task_002.json
-├── .transcripts/   # 对话记录
-│   ├── compact_001.jsonl
-│   └── compact_002.jsonl
-├── skills/         # 技能文件
-├── logs/           # 日志文件
-└── .env            # 配置文件
+Entry       host front ends (web SSE / console / callback routing)
+              ↓
+Assembly    bootstrap.py → core/runtime_manager.py → core/runtime.py (component container)
+              ↓ tool registry assembly
+Execution   streaming/runner.py (async, primary)  agent/runner.py (sync, legacy)  subagent/runner.py (one-shot)
+              └─────────── all three share the provider protocol and the compaction pipeline ───────────┘
+Support     core/llm/ (provider abstraction) · tools/ · skills/ · managers/ · messaging/ · context/compact.py
 ```
 
-### 多用户模式
-
-数据存储在 `.sessions/` 目录下，每个用户有独立的隔离空间：
-
-```
-project/
-├── .sessions/
-│   ├── alice/              # 用户 alice 的所有会话数据
-│   │   ├── .team/
-│   │   ├── .tasks/
-│   │   └── .transcripts/
-│   │       ├── sess_001/   # 会话 1 的对话记录
-│   │       └── sess_002/   # 会话 2 的对话记录
-│   └── bob/
-├── skills/                 # 共享技能目录
-└── logs/                   # 日志文件
-```
-
-## CLI 命令
-
-- `/compact` - 手动压缩对话上下文
-- `/tasks` - 列出任务
-- `/team` - 列出队友
-- `/inbox` - 读取收件箱
-- `/exit` - 退出 REPL
-
-### 多用户 REPL 专属命令
-
-- `/user` - 切换用户
-- `/session` - 切换会话
-- `/new-session` - 创建新会话
-- `/sessions` - 列出当前用户的所有会话
-- `/close-session` - 关闭当前会话
-
-## 架构说明
-
-### 核心模块
+Source layout:
 
 ```
 planify/
-├── cli.py              # 单用户 CLI 入口
-├── main.py             # 多用户 REPL 入口
-├── bootstrap.py        # 应用初始化，会话管理
-├── agent/runner.py     # 核心代理循环
-├── subagent/runner.py  # 子代理运行器
-├── context/           # 上下文压缩机制
-├── messaging/          # 消息传递系统
-├── managers/          # 各种管理器
-│   ├── todo_manager.py   # 内存待办列表
-│   ├── task_manager.py   # 持久化任务管理
-│   ├── background_manager.py  # 后台任务管理
-│   └── teammate_manager.py  # 队友管理
-├── tools/             # 工具注册中心
-├── skills/            # 技能加载器
-└── core/
-    ├── session.py          # Session 和 SessionConfig
-    ├── session_manager.py  # 会话管理器
-    ├── context.py          # 线程本地会话上下文
-    ├── config.py           # 配置管理
-    ├── encoding.py         # UTF-8 编码设置
-    └── logging_config.py  # 日志配置
+├── bootstrap.py            # Assembly entry: runtime manager singleton + host dependency registration
+├── prompts.py              # System-prompt builder (per-agent-type branches; host extension point)
+├── agent/
+│   └── runner.py           # Synchronous agent loop (legacy whole-response path)
+├── streaming/
+│   ├── runner.py           # StreamingAgent — async main loop (primary path)
+│   ├── emitter.py          # Emitter implementations (SSE queue / console / callback routing)
+│   ├── waiter.py           # Cross-thread "agent asks, user answers" blocking wait
+│   └── types.py            # Event types, protocols, streaming config
+├── subagent/
+│   └── runner.py           # One-shot subagent (≤ 30 rounds, toolset trimmed by agent type)
+├── context/
+│   └── compact.py          # Two-level compaction: truncation and LLM summary
+├── core/
+│   ├── runtime.py          # AgentRuntime: process-level component container
+│   ├── runtime_manager.py  # Runtime lifecycle / component assembly (thread-safe singleton)
+│   ├── config.py           # Config (.env multi-level loading + host-injection dual path)
+│   ├── encoding.py         # Windows GBK/UTF-8 console handling
+│   ├── logging_config.py   # Logging + first-run workspace init
+│   └── llm/                # Provider protocol, factory, dual backends, translator, errors
+├── managers/
+│   ├── todo_manager.py     # In-memory per-agent todo list
+│   ├── task_manager.py     # File-persisted task board with dependency edges
+│   ├── background_manager.py  # Background shell commands (thread + notification queue)
+│   └── teammate_manager.py # Persistent teammates (one daemon thread + agent loop each)
+├── messaging/
+│   └── message_bus.py      # File-level per-recipient inbox
+├── skills/
+│   ├── skill_loader.py     # SKILL.md scan/parse, lazy hot-reload
+│   └── access_state.py     # Per-session loaded-skill state
+└── tools/
+    ├── registry.py         # Tool registry assembly + external tool injection + whitelist
+    ├── basic.py            # bash / powershell / read_file / write_file / edit_file (+ path guard)
+    ├── grep.py / glob_tool.py  # ripgrep-based content search / glob file matching
+    ├── webfetch.py         # Web fetching: trafilatura → Playwright fallback, SSRF checks
+    ├── user_interaction.py # User-question tools (host binds emitter + waiter at runtime)
+    ├── team_tools.py       # Team collaboration tools
+    ├── file_tasks.py       # Task-board tools
+    ├── protocols.py        # shutdown / plan_approval / idle protocol tools
+    ├── weather_tool.py / baidu_weather.py / lunar.py  # Weather + lunar calendar
+    └── guard.py            # Path guard for sandboxed front ends
 ```
 
-### 关键概念
+### Key concepts
 
-**子代理 vs 队友：**
-- **子代理** - 临时执行特定任务后返回摘要并销毁
-- **队友** - 持久化的独立代理，在独立线程中运行，通过消息总线通信
+- **Subagent vs teammate** — a subagent is temporary: it runs one task, returns a summary, and is destroyed. A teammate is persistent: it runs its own agent loop in a background thread and communicates through the message bus.
+- **TodoManager vs TaskManager** — the former is an in-memory checklist private to one agent; the latter is a file-persisted task board shared across agents, with dependency edges.
+- **Two-level compaction** — truncation clears old tool results automatically each round; the LLM summary kicks in once the token threshold is exceeded. Both protect prompt prefix caching through the 0.8 gate described above.
 
-**TodoManager vs TaskManager：**
-- **TodoManager** - 内存中的短期待办列表
-- **TaskManager** - 文件持久化的长期任务系统，支持依赖关系
+A deeper analysis (layering, call chains, known technical debt) lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**上下文压缩：**
-- **微压缩** - 每次循环自动清理旧的 tool_result
-- **自动压缩** - 超过 token 阈值时使用 LLM 生成摘要
+## Built-in Tools
 
-## 配置文件优先级
+About 29 tools, statically assembled by the tool registry in `tools/registry.py`. Tool definitions are plain dicts in Anthropic format; handlers may be sync or async. The host can inject more via the registration hook and filter the set with the whitelist variable.
 
-1. `.env.local`（最高优先级）- 用于本地开发，不提交到版本控制
-2. `.env` - 标准配置文件
-3. 环境变量
+| Category | Tools | Notes |
+|---|---|---|
+| Files & commands | `bash`, `powershell`, `read_file`, `write_file`, `edit_file` | Path-escape guard, dangerous-command filtering, timeouts, output truncation; reads are line-numbered with offset/limit paging; edits enforce unique match or explicit replace-all |
+| Search | `grep`, `glob` | ripgrep-based content search and file-name matching |
+| Web | `webfetch` | trafilatura extraction with Playwright fallback; SSRF (server-side request forgery) protection |
+| User interaction | `ask_user`, `user_confirm`, `ask_user_question` | Registered unbound; the host binds an emitter and response waiter at runtime, so the same tools drive any front end |
+| Team collaboration | `spawn_teammate`, `list_teammates`, `send_message`, `read_inbox`, `broadcast` | Delegate to the teammate manager and message bus |
+| Protocol | `shutdown_request`, `plan_approval`, `idle` | Team lifecycle coordination |
+| Task board | `task_create`, `task_get`, `task_update`, `task_list`, `claim_task` | Forward to the persistent task board |
+| Agent-internal | `TodoWrite`, `task` (one-shot subagent), `load_skill`, `background_run`, `check_background`, `compress` | Loop-adjacent conveniences |
+| Weather & calendar | `baidu_weather` | Baidu Map API plus borax lunar calendar |
 
-## 模式对比
+## Runtime Data Directories
 
-| 特性 | 单用户 CLI | 多用户 REPL |
-|------|-----------|------------|
-| 用户数 | 单用户 | 多用户 |
-| 会话数 | 单会话 | 多会话 |
-| 数据目录 | 当前工作目录 | `.sessions/{user_id}/` |
-| 适用场景 | 个人开发、本地使用 | Web 应用后端、多用户服务 |
+All runtime state lives under the working directory (`.planify/` namespace plus convention dirs):
 
-## 常见问题
-
-### ZhipuAI 客户端初始化失败
-
-如果看到警告：
 ```
-警告: 无法初始化 ZhipuAI 客户端: 未提供api_key，请通过参数或环境变量提供
-web_search 工具可能不可用
+your-project/
+├── .planify/
+│   ├── team/              # Team config and per-recipient inboxes (inbox/)
+│   ├── tasks/             # Task board JSON files
+│   ├── transcript.json    # Compaction transcript sink
+│   └── .env               # Highest-priority .env location
+├── skills/                # SKILL.md skill files (scanned recursively)
+├── .transcripts/          # Conversation transcripts saved by auto-compact
+└── logs/                  # Log files
 ```
 
-这表示 `ZHIPUAI_API_KEY` 未配置。这不影响其他功能，只是 `web_search` 工具不可用。
+## Embedding as a Host Application
 
-如果需要 `web_search` 功能，请在 `.env` 文件中添加：
+Planify never imports the host — everything flows in through registration hooks:
+
+```python
+from planify import bootstrap
+
+# 1. Inject configuration (highest priority, beats environment variables)
+bootstrap.register_planify_config(
+    api_key="sk-...",
+    model_id="claude-sonnet-4-6",
+    base_url="",                     # empty = SDK default
+    protocol="anthropic",            # or "openai_compat"
+)
+
+# 2. Inject host tools (e.g. domain-specific retrieval tools)
+bootstrap.register_app_dependencies(
+    external_tools=[{"name": "read_document", "description": "...", "input_schema": {...}}],
+    external_handlers={"read_document": my_handler},
+)
+```
+
+User-question tools are wired at runtime: the host binds its event emitter and response waiter with `bind_user_interaction_handlers()` (in `tools/user_interaction.py`), so agent questions reach whatever front end the host provides and answers flow back asynchronously.
+
+A full integration walkthrough (SSE streaming, custom tool development, config injection) is in [INTEGRATION.md](INTEGRATION.md) and [examples.md](examples.md).
+
+## Development
+
 ```bash
-ZHIPUAI_API_KEY=your-zhipuai-api-key
+# Install with dev extras (pytest / pytest-asyncio)
+pip install -e "./planify[dev]"
+
+# Run the test suite
+pytest
 ```
 
-### 路径错误
+## Documentation
 
-如果看到 `cli.py not found`，请确保：
-1. 脚本路径正确
-2. planify.sh 和 cli.py 在同一目录下
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — deep architecture analysis (layering, call chains, technical debt)
+- [INTEGRATION.md](INTEGRATION.md) — host-application integration guide (SSE, custom tools, config injection)
+- [examples.md](examples.md) — usage example code
 
-### Python 找不到
+## License
 
-如果看到 `Error: Python or python3 not found`，请确保：
-1. Python 已安装
-2. 在 PATH 中可用
-
-## 更多文档
-
-- [CLAUDE.md](./CLAUDE.md) - Claude Code 开发指南
-- [examples.md](./examples.md) - 代码示例和 API 集成
+Apache-2.0 — see the repository root [LICENSE](../LICENSE).
