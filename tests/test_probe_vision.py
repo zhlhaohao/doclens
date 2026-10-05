@@ -74,12 +74,37 @@ def test_probe_supported_reads_code():
     with patch("doclens.web_v2.probe_vision._render_probe_image", side_effect=_capture):
         with patch("planify.core.llm.create_provider", return_value=p):
             assert probe_vision("openai_compat", "https://x", "m1", "k") is True
-    # 请求形态：image block + text 块，max_tokens=32
+    # 请求形态：image block + text 块，max_tokens=1024（思考型模型思维链预算）
     kw = calls["kwargs"]
     blocks = kw["messages"][0]["content"]
     assert blocks[0]["type"] == "image"
     assert blocks[0]["source"]["media_type"] == "image/jpeg"
     assert blocks[-1]["type"] == "text"
+
+
+def test_probe_retry_until_success():
+    """思考型模型思维链波动导致偶发空响应（2026-10-05 glm-5.3-flash 4/6 失败
+    复现）：N 次尝试内任一次读出密码串即判支持。"""
+    code_holder = {}
+    orig_render = _render_probe_image
+
+    def _capture(code):
+        code_holder["code"] = code
+        return orig_render(code)
+
+    class _P:
+        def __init__(self):
+            self.n = 0
+
+        def chat(self, **kw):
+            self.n += 1
+            if self.n == 1:
+                return _FakeResp("")
+            return _FakeResp(f"The answer is {code_holder['code']}")
+
+    with patch("doclens.web_v2.probe_vision._render_probe_image", side_effect=_capture):
+        with patch("planify.core.llm.create_provider", return_value=_P()):
+            assert probe_vision("anthropic", "https://x", "glm-flash", "k") is True
 
 
 def test_probe_silent_swallow_means_unsupported():

@@ -8937,6 +8937,7 @@ ${s}</table>
           </div>
         </div>
         ${this._renderSkillDialog()}
+        ${this._renderVisionGateDialog()}
       `;const t=this.previewOpen,r=o=>jr(this.previewPath)?d`<pst-email-list
           .pstPath=${this.previewPath}
           @open-email=${this._onOpenPstEmail}>
@@ -14609,7 +14610,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;Uf([x({type:Boolean,reflect:!0})],un.prototype,"open",2);un=Uf([G("watch-changes-dialog")],un);var N3=Object.defineProperty,F3=Object.getOwnPropertyDescriptor,Hn=(e,t,r,i)=>{for(var s=i>1?void 0:i?F3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&N3(t,r,s),s};let Gs=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 703b89b · 2026-10-05 21:33 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?d`
+  `;Uf([x({type:Boolean,reflect:!0})],un.prototype,"open",2);un=Uf([G("watch-changes-dialog")],un);var N3=Object.defineProperty,F3=Object.getOwnPropertyDescriptor,Hn=(e,t,r,i)=>{for(var s=i>1?void 0:i?F3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&N3(t,r,s),s};let Gs=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 6d7d712 · 2026-10-05 22:18 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?d`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -14624,7 +14625,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?d`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"703b89b · 2026-10-05 21:33"}</span>
+            <span class="value">${"6d7d712 · 2026-10-05 22:18"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

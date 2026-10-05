@@ -3,7 +3,8 @@
 原理：程序合成一张随机密码串图片（红底白字），问模型「图中字母数字序列」，
 按回答判定——读出密码串 → 支持；报错或答不出（**含静默吞图**：网关接受
 image 但模型看不见，按报错判定永远测不出）→ 不支持；连接/鉴权失败 →
-探测中止（ProbeError，不判定）。
+探测中止（ProbeError，不判定）。单次判定受思考型模型思维链长度波动影响，
+N 次尝试内任一次读出即判支持。
 
 随机化密码串使「读图」成为唯一信息来源（防模型靠训练记忆蒙对固定串）。
 """
@@ -23,7 +24,14 @@ _IMG_SIZE = 512
 _BG = (200, 30, 30)      # 红底
 _FG = (255, 255, 255)    # 白字
 _QUESTION = "图中白色大写字母和数字序列是什么？只回答该序列。"
-_MAX_TOKENS = 32
+# 思考型模型（GLM-4.5+/5.x 等）默认开思维链：输出预算先供思考消耗，剩余才产文本。
+# 32 token 时思维链经常耗尽预算 → content=[] + stop=max_tokens，被误判「不支持」
+# （2026-10-05 glm-5.3-flash 实测失败率 4/6，全部为该模式）。1024 足够「短思考 +
+# 密码串答案」，非思考模型不受影响（答案本身 <10 token）。
+_MAX_TOKENS = 1024
+# 单次判定对随机性敏感（思维链长度波动/偶发拒答），N 选 1 过即支持：
+# 视觉探测目标是「能不能读图」而非「读得多稳」，一次成功即为能力存在证明。
+_MAX_ATTEMPTS = 3
 
 
 class ProbeError(Exception):
@@ -77,41 +85,48 @@ def probe_vision(protocol: str, base_url: str, model_id: str, api_key: str) -> b
     """
     from planify.core.llm import create_provider
 
-    code = _gen_code()
-    _, b64 = _render_probe_image(code)
     provider = create_provider({
         "protocol": protocol,
         "model_id": model_id,
         "base_url": base_url or None,
         "api_key": api_key,
     })
-    try:
-        resp = provider.chat(
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
-                    {"type": "text", "text": _QUESTION},
-                ],
-            }],
-            system="",
-            tools=[],
-            max_tokens=_MAX_TOKENS,
+    last_text = ""
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        code = _gen_code()
+        _, b64 = _render_probe_image(code)
+        try:
+            resp = provider.chat(
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                        {"type": "text", "text": _QUESTION},
+                    ],
+                }],
+                system="",
+                tools=[],
+                max_tokens=_MAX_TOKENS,
+            )
+        except Exception as e:
+            # API 报错（400/415/unsupported media 等）：不支持视觉。
+            # 注意区分「连接/鉴权失败」——这类错误不代表模型能力，但与能力类
+            # 报错无法可靠二分（各家网关文案不一），统一按「不支持」返回会把
+            # 链路问题误判成能力问题；按「中止」返回会掩盖真 400。取舍：错误
+            # 信息含连接/鉴权特征词 → 中止；其余 → 不支持。
+            msg = str(e).lower()
+            if any(k in msg for k in ("connection", "timed out", "timeout", "unauthorized", "401", "api key", "invalid_api_key", "forbidden", "403", "not found", "404", "resolve", "ssl")):
+                raise ProbeError(f"探测中止：请求失败（{type(e).__name__}: {e}），请检查网络/密钥/模型名") from e
+            logger.info("probe_vision: model=%s rejected image (%s: %s)", model_id, type(e).__name__, e)
+            return False
+        last_text = "".join(
+            getattr(b, "text", "") for b in resp.content
         )
-    except Exception as e:
-        # API 报错（400/415/unsupported media 等）：不支持视觉。
-        # 注意区分「连接/鉴权失败」——这类错误不代表模型能力，但与能力类
-        # 报错无法可靠二分（各家网关文案不一），统一按「不支持」返回会把
-        # 链路问题误判成能力问题；按「中止」返回会掩盖真 400。取舍：错误
-        # 信息含连接/鉴权特征词 → 中止；其余 → 不支持。
-        msg = str(e).lower()
-        if any(k in msg for k in ("connection", "timed out", "timeout", "unauthorized", "401", "api key", "invalid_api_key", "forbidden", "403", "not found", "404", "resolve", "ssl")):
-            raise ProbeError(f"探测中止：请求失败（{type(e).__name__}: {e}），请检查网络/密钥/模型名") from e
-        logger.info("probe_vision: model=%s rejected image (%s: %s)", model_id, type(e).__name__, e)
-        return False
-    text = "".join(
-        getattr(b, "text", "") for b in resp.content
-    )
-    ok = _normalize(code) in _normalize(text)
-    logger.info("probe_vision: model=%s code=%s answered=%r -> %s", model_id, code, text[:80], ok)
-    return ok
+        ok = _normalize(code) in _normalize(last_text)
+        logger.info(
+            "probe_vision: model=%s attempt=%d/%d code=%s answered=%r -> %s",
+            model_id, attempt, _MAX_ATTEMPTS, code, last_text[:80], ok,
+        )
+        if ok:
+            return True
+    return False

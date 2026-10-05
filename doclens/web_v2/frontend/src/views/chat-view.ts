@@ -1566,6 +1566,7 @@ export class ChatView extends LitElement {
           </div>
         </div>
         ${this._renderSkillDialog()}
+        ${this._renderVisionGateDialog()}
       `;
     }
     const hasPreview = this.previewOpen;
