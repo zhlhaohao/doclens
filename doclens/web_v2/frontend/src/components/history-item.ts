@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import type { Session } from "../state/types";
 import "./icon";
 
@@ -84,11 +84,37 @@ export class HistoryItem extends LitElement {
     .star-btn.starred {
       color: var(--cortex-primary);
     }
+    /* 复制标题按钮（2026-10-05）：与 star-btn 同款常显图标钮，位于其左侧；
+       复制成功 copy→check 变主题色 1.5s 反馈（同 chat-message 复制钮）。 */
+    .copy-btn {
+      background: transparent;
+      border: none;
+      padding: 2px;
+      margin-left: var(--cortex-space-1);
+      cursor: pointer;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      border-radius: var(--cortex-radius-sm);
+      flex-shrink: 0;
+      line-height: 0;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .copy-btn:hover {
+      color: var(--cortex-primary);
+      transform: scale(1.15);
+    }
+    .copy-btn.copied {
+      color: var(--cortex-primary);
+    }
   `;
 
   @property({ attribute: false }) session: Session | null = null;
   /** 上次会话高亮（重启恢复态；非当前打开的会话） */
   @property({ type: Boolean, reflect: true }) active = false;
+
+  /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
+  @state() private _copied = false;
+  private _copyTimer?: number;
 
   private _select() {
     if (!this.session) return;
@@ -108,6 +134,24 @@ export class HistoryItem extends LitElement {
     }));
   }
 
+  /** 点击「复制」：标题纯文本写入剪贴板，图标短暂变 check 反馈；失败冒泡 toast。 */
+  private _onCopy = async (e: Event): Promise<void> => {
+    // 复制点击不触发行选中
+    e.stopPropagation();
+    const text = this.session?.title ?? "";
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this._copied = true;
+      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
+    } catch {
+      this.dispatchEvent(
+        new CustomEvent("copy-failed", { bubbles: true, composed: true }),
+      );
+    }
+  };
+
   render() {
     if (!this.session) return null;
     // search 历史只保留关键词（不再保存结果数量）；chat 仍显示消息数。
@@ -123,6 +167,13 @@ export class HistoryItem extends LitElement {
         ${this.session.title}
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>
+      <button
+        class="copy-btn ${this._copied ? "copied" : ""}"
+        title=${this._copied ? "已复制" : "复制标题"}
+        aria-label=${this._copied ? "已复制" : "复制标题"}
+        @click=${this._onCopy}>
+        <doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon>
+      </button>
       <button
         class="star-btn ${starred ? "starred" : ""}"
         title=${starred ? "取消加星" : "加星（置顶并防止被清空）"}
@@ -141,6 +192,7 @@ export class HistoryItem extends LitElement {
 
   disconnectedCallback() {
     this.removeEventListener("click", this._select);
+    if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
     super.disconnectedCallback();
   }
 }
