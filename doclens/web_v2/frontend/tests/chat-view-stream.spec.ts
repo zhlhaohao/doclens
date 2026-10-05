@@ -16,6 +16,24 @@ describe("applyStreamEvent", () => {
     expect(next[1]).not.toBe(base[1]);
   });
 
+  it("accumulates thinking deltas while content empty (thinking stream)", () => {
+    const s1 = applyStreamEvent(base, { type: "thinking", delta: "推理" });
+    const s2 = applyStreamEvent(s1, { type: "thinking", delta: "继续" });
+    expect(s2[1].thinking).toBe("推理继续");
+    expect(s2[1].content).toBe("");
+    // 不可变：原数组与原对象不动
+    expect(base[1].thinking).toBeUndefined();
+    expect(s1[1].thinking).toBe("推理");
+  });
+
+  it("stops accumulating thinking after first body token (ephemeral)", () => {
+    const s1 = applyStreamEvent(base, { type: "thinking", delta: "思考" });
+    const s2 = applyStreamEvent(s1, { type: "token", text: "答案" });
+    const s3 = applyStreamEvent(s2, { type: "thinking", delta: "迟到思考" });
+    expect(s3[1].thinking).toBe("思考");
+    expect(s3[1].content).toBe("答案");
+  });
+
   it("adds a running tool step on tool_call", () => {
     const next = applyStreamEvent(base, { type: "tool_call", tool_use_id: "t1", name: "search", input: { q: "x" } });
     expect(next[1].tool_steps).toEqual([

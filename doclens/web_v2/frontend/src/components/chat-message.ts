@@ -228,6 +228,24 @@ export class ChatMessageEl extends LitElement {
       color: var(--cortex-text-subtle);
       font-style: italic;
     }
+    /* 思考流双行尾部滑窗（2026-10-05）：rtl 容器让内容锚定右缘——文字增长
+       时新字从右进入、旧文被持续向左推走（生成驱动的滑窗，无动画定时器）；
+       plaintext 保持中英混排内部阅读顺序不乱。两行各 1.5em 基线，溢出隐藏。 */
+    .thinking-stream {
+      direction: rtl;
+      text-align: left;
+      max-height: 3em;
+      overflow: hidden;
+      line-height: 1.5;
+      color: var(--cortex-text-subtle);
+      font-style: italic;
+      font-size: var(--cortex-fs-sm);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .thinking-stream > span {
+      unicode-bidi: plaintext;
+    }
     .trace-sep {
       border-top: 1px dashed var(--cortex-border);
       margin: 8px 0;
@@ -425,7 +443,15 @@ export class ChatMessageEl extends LitElement {
   private renderBubble(content: string) {
     if (content === "") {
       const prefix = this.modelName ? `${this.modelName} 思考中` : "思考中";
-      return html`<span class="thinking">${prefix}...</span>`;
+      // 思考流（2026-10-05）：占位期间以双行尾部滑窗展示被动接收的推理增量；
+      // 无思考流（服务端不发）退化为静态「思考中...」占位
+      const stream = this.message?.thinking;
+      return html`
+        <div class="thinking">${prefix}${stream ? "" : "..."}</div>
+        ${stream
+          ? html`<div class="thinking-stream"><span>${stream}</span></div>`
+          : null}
+      `;
     }
     if (this.role === "assistant") {
       const htmlstr = chatMarked.parse(content, { async: false }) as string;

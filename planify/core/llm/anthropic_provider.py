@@ -395,6 +395,14 @@ class AnthropicProvider:
                     text_delta=getattr(delta, "text", ""),
                     block_index=getattr(event, "index", None),
                 )
+            if dtype == "thinking_delta":
+                # 思考流被动透传（2026-10-05）：仅在响应偶带 thinking 块时
+                # 出现（本 provider 不主动开启 extended thinking）
+                return StreamEvent(
+                    type="content_block_delta",
+                    thinking_delta=getattr(delta, "thinking", ""),
+                    block_index=getattr(event, "index", None),
+                )
             if dtype == "input_json_delta":
                 return StreamEvent(
                     type="content_block_delta",

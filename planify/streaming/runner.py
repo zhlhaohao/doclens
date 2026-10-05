@@ -901,6 +901,13 @@ class StreamingAgent:
                         block_text_parts.setdefault(index, []).append(text)
                         # 发射文本事件
                         await self.emitter.emit_text(text, is_end=False)
+                    elif event.thinking_delta:
+                        # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
+                        # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
+                        # 实现只惠及显式继承 EventEmitter 的实现类）
+                        emit_thinking = getattr(self.emitter, "emit_thinking", None)
+                        if emit_thinking is not None:
+                            await emit_thinking(event.thinking_delta)
                     elif event.input_json_delta:
                         # 工具参数增量
                         if index in self._tool_call_states:

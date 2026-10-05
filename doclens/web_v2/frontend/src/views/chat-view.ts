@@ -61,6 +61,11 @@ export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): 
   if (ev.type === "token") {
     return [...head, { ...last, content: last.content + ev.text }];
   }
+  if (ev.type === "thinking") {
+    // 正文已开始即不再累积（前端「正文首 token 撤思考」同一语义的写入侧）
+    if (last.content !== "") return messages;
+    return [...head, { ...last, thinking: (last.thinking ?? "") + ev.delta }];
+  }
   if (ev.type === "tool_call") {
     const step: ToolStep = { tool_use_id: ev.tool_use_id, name: ev.name, input: ev.input, status: "running" };
     return [...head, { ...last, tool_steps: [...(last.tool_steps ?? []), step] }];

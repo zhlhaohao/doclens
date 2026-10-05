@@ -28,6 +28,8 @@ class StreamEventType(Enum):
     USAGE = "usage"
     # 中性通知（框架内事实事件，宿主自行决定呈现方式——Web 端转 toast）
     NOTICE = "notice"
+    # 思考流增量（模型内部推理文字，被动接收非对话事实，宿主流式展示用）
+    THINKING = "thinking"
 
 
 @dataclass
@@ -256,6 +258,22 @@ class EventEmitter(Protocol):
         """
         await self.emit(
             StreamEvent(event_type=StreamEventType.USAGE, data=dict(usage))
+        )
+
+    async def emit_thinking(self, delta: str) -> None:
+        """
+        发射思考流增量（模型内部推理文字，2026-10-05）。
+
+        仅被动接收服务端主动推送的思考增量（OpenAI 兼容网关的
+        reasoning_content / reasoning 字段；Anthropic 协议响应偶带
+        thinking 块时透传）——不是对话事实，不进任何落库通道，
+        宿主仅流式期间展示。
+
+        Args:
+            delta: 思考文字增量（累加语义，消费方自行拼接）
+        """
+        await self.emit(
+            StreamEvent(event_type=StreamEventType.THINKING, data={"delta": delta})
         )
 
     async def emit_notice(self, detail: str, level: str = "info") -> None:

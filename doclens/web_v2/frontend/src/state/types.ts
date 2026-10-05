@@ -42,6 +42,10 @@ export interface PendingSkillChat {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** 思考流（2026-10-05）：流式期间累积的模型推理文字——ephemeral，
+   *  仅「思考中」占位阶段展示（双行尾部滑窗），正文首 token 到达即
+   *  停止更新并随占位撤下；不落库，刷新后不存在。 */
+  thinking?: string;
   /** 对话图片（ADR-0034）：user 消息的 images 平级数组（后端 payload 原样），
    *  渲染为气泡内缩略图行；无图消息无此字段（旧数据零兼容负担）。 */
   images?: { data: string; media_type: string }[];

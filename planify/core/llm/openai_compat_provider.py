@@ -75,6 +75,19 @@ class _StreamTranslator:
         choice = chunk.choices[0]
         delta = choice.delta
 
+        # 思考流被动接收（2026-10-05）：DeepSeek/glm 系网关把内部推理放在
+        # delta.reasoning_content（OpenAI SDK 未建模为属性，getattr 动态取）；
+        # 部分网关用 delta.reasoning。只透传不请求——服务端不发就无事发生。
+        reasoning = getattr(delta, "reasoning_content", None) or getattr(
+            delta, "reasoning", None
+        )
+        if reasoning:
+            events.append(StreamEvent(
+                type="content_block_delta",
+                thinking_delta=reasoning,
+                block_index=-1,
+            ))
+
         if getattr(delta, "content", None):
             if not self._text_started:
                 events.append(StreamEvent(
@@ -131,12 +144,14 @@ class _StreamTraceAccumulator:
     与 _StreamTranslator（归一化事件）并行消费同一批 chunk：translator
     服务运行时事件流，本器只在 tracer 开启时还原原生 ChatCompletion 形态
     （content 拼接 / tool_calls 按 index 聚合 / 尾 chunk usage）。
+    reasoning_content 同步累积（原生侧本就有该字段，思考可见利于排障）。
     """
 
     def __init__(self) -> None:
         self._id = ""
         self._model = ""
         self._content_parts: list[str] = []
+        self._reasoning_parts: list[str] = []
         self._tool_calls: dict[int, dict] = {}  # index → {id, name, arguments}
         self._finish_reason: Any = None
         self._usage: Any = None
@@ -152,6 +167,11 @@ class _StreamTraceAccumulator:
             return  # include_usage 尾 chunk
         choice = chunk.choices[0]
         delta = choice.delta
+        reasoning = getattr(delta, "reasoning_content", None) or getattr(
+            delta, "reasoning", None
+        )
+        if reasoning:
+            self._reasoning_parts.append(reasoning)
         if getattr(delta, "content", None):
             self._content_parts.append(delta.content)
         for tc in getattr(delta, "tool_calls", None) or []:
@@ -174,6 +194,8 @@ class _StreamTraceAccumulator:
             "role": "assistant",
             "content": "".join(self._content_parts) or None,
         }
+        if self._reasoning_parts:
+            message["reasoning_content"] = "".join(self._reasoning_parts)
         if self._tool_calls:
             message["tool_calls"] = [
                 {

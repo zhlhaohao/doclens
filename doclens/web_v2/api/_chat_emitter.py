@@ -29,6 +29,7 @@ from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
 from ._chat_events import (
     ask_event,
     done_event,
+    thinking_event,
     toast_event,
     tool_call_event,
     tool_result_event,
@@ -184,6 +185,13 @@ class ChatEventEmitter(EventEmitter):
                     str(event.data.get("detail", "")),
                 )
             )
+
+        elif event.event_type == StreamEventType.THINKING:
+            # 思考流增量（2026-10-05）：直推 SSE（前端滑窗展示），不积累
+            # 不落库——ephemeral，正文首 token 到达前端即撤下
+            delta = str(event.data.get("delta", ""))
+            if delta:
+                self._push(thinking_event(delta))
 
     # ---- EventEmitter 协议定制（其余便捷方法用协议默认实现） ----
 

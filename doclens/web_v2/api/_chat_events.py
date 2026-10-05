@@ -47,6 +47,14 @@ class ToastEvent(TypedDict):
     detail: str
 
 
+class ThinkingEvent(TypedDict):
+    """思考流增量（2026-10-05）：模型内部推理文字的实时推送——仅被动
+    接收（reasoning_content / thinking 块），不落库不积累，前端流式
+    期间双行滑窗展示，正文首 token 到达即撤。"""
+    type: str  # "thinking"
+    delta: str
+
+
 class ErrorEvent(TypedDict):
     type: str  # "error"
     detail: str
@@ -73,12 +81,13 @@ class DoneEvent(TypedDict):
 
 ChatQueueEvent = Union[
     TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
-    UsageEvent, DoneEvent,
+    UsageEvent, DoneEvent, ThinkingEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
-    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage", "done"}
+    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage", "done",
+     "thinking"}
 )
 
 
@@ -121,6 +130,10 @@ def ask_event(request_id: str, questions: List[Dict[str, Any]]) -> AskEvent:
 
 def toast_event(level: str, detail: str) -> ToastEvent:
     return {"type": "toast", "level": level, "detail": detail}
+
+
+def thinking_event(delta: str) -> ThinkingEvent:
+    return {"type": "thinking", "delta": delta}
 
 
 def done_event(reason: str) -> DoneEvent:

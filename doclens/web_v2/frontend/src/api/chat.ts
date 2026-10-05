@@ -12,6 +12,7 @@ export interface UsagePayload {
 
 export type ChatStreamEvent =
   | { type: "token"; text: string }
+  | { type: "thinking"; delta: string }
   | { type: "tool_call"; tool_use_id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; name: string; output: string; is_error: boolean; duration_ms?: number }
   | { type: "ask"; request_id: string; questions: AskQuestionPayload[] }
@@ -45,6 +46,10 @@ export async function* chatStream(
     if (ev.event === "token") {
       const d = parseData("token", ev.data);
       if (d) yield { type: "token", text: String(d.text ?? "") };
+    } else if (ev.event === "thinking") {
+      // 思考流增量（2026-10-05）：被动接收的模型推理文字，ephemeral 不落库
+      const d = parseData("thinking", ev.data);
+      if (d) yield { type: "thinking", delta: String(d.delta ?? "") };
     } else if (ev.event === "tool_call") {
       const d = parseData("tool_call", ev.data);
       if (d) {

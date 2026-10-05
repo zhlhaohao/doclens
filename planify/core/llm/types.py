@@ -60,7 +60,7 @@ class StreamEvent:
     """归一化流式事件。
 
     为支持 streaming 端的事件处理，新增以下可选字段：
-      - block_type: content_block_start 时区分 "text" / "tool_use"
+      - block_type: content_block_start 时区分 "text" / "tool_use" / "thinking"
       - tool_use_id: tool_use block 的 id（在 content_block_start 时填充）
       - tool_name: tool_use block 的 name（在 content_block_start 时填充）
       - usage: token 用量（Anthropic: message_start 带全量四字段、message_delta
@@ -80,9 +80,11 @@ class StreamEvent:
     # 可选字段
     text_delta: str | None = None
     input_json_delta: str | None = None
+    # 思考流增量（reasoning_content / reasoning 字段被动透传，2026-10-05）
+    thinking_delta: str | None = None
     stop_reason: str | None = None
     block_index: int | None = None
-    block_type: Literal["text", "tool_use"] | None = None
+    block_type: Literal["text", "tool_use", "thinking"] | None = None
     tool_use_id: str | None = None
     tool_name: str | None = None
     usage: dict[str, int] | None = None
