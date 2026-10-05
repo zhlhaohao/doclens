@@ -651,10 +651,39 @@ async def chat(req: ChatRequest):
 
 @router.post("/chat/stop")
 async def chat_stop(req: ChatStopRequest):
-    """请求中断指定 session 的 AI 生成。
+    """请求中断指定 session 的 AI 生成（ADR-0035：信号 + 取消 + 等收尾）。
+
+    三步（层层递进，覆盖所有阻塞形态）：
+
+    1. ``request_stop``：set Event + 中断 hook（唤醒挂起 ask、杀 shell
+       进程树）——优雅检查点退出路径（agent 在循环顶 / 流事件间隙自查）；
+    2. 立刻 ``task.cancel()``：检查点覆盖不到「静默期」——网关长时间不下
+       发任何流事件（深度思考不流式、首 token 前静默）、auto-compact 摘要
+       调用、工具线程挂起，Event 永远无人检查。cancel 在任意 await 点打断
+       （CancelledError 沿 await 链传播），是静默期的唯一可靠停止手段。
+       在场停止本就经 SSE finally 走 cancel（chat.py 生成器收尾分支），
+       本端点把同一路径补到恢复态（断开续跑回页后无本地流可 abort，
+       2026-10-05 事故：恢复态点停止长时间无效果）；
+    3. ``asyncio.shield`` 等收尾（上限 2s）：落库（半截保留，ADR-0028
+       2026-09-22 语义）+ 注销 registry（generating=false）完成后才返回
+       ——前端 stopChat 返回即状态一致，单次 reload 必见停止生效，不靠
+       5s 轮询兜底。收尾为同步 SQLite 写（毫秒级），超时上限只是极端兜底
+       （等不到也不阻塞停止本身，轮询自然收敛）。
 
     命中（已发出中断信号）或未命中（流已结束 / 不存在）都返回 ``ok=True``，
     让前端可以 fire-and-forget 而无需关心时序。``stopped`` 仅作诊断用。
     """
     stopped = request_stop(req.session_id)
+    from doclens.web_v2 import chat_runner
+
+    task = chat_runner.get_task(req.session_id)
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            # shield：等待本身不因外部取消中断（stop 请求客户端断开时仍跑完）
+            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):  # noqa: BLE001
+            # 收尾超时/异常不阻断 stop 返回——落库在 _run_and_finalize 的
+            # finally，task 终将收尾；TimeoutError 时 shield 内层仍在收尾
+            pass
     return {"ok": True, "stopped": stopped}

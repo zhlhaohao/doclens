@@ -120,12 +120,15 @@ export async function* chatStream(
   }
 }
 
-/** 请求中断指定 session 的 AI 生成（fire-and-forget；失败静默，不阻塞前端收尾）。 */
+/** 请求中断指定 session 的 AI 生成（fire-and-forget；失败静默，不阻塞前端收尾）。
+ *  5s 超时兜底（ADR-0035）：后端 stop 端点等收尾（≤2s）才返回，极端情况下
+ *  请求可能挂起——不设超时会把 _stop() 的 abort 卡住，UI 停在流式态。 */
 export async function stopChat(sessionId: string): Promise<void> {
   try {
     await request<{ ok: boolean }>("/api/chat/stop", {
       method: "POST",
       json: { session_id: sessionId },
+      signal: AbortSignal.timeout(5000),
     });
   } catch {
     /* 停止是尽力而为：网络/鉴权失败不影响前端把对话收尾 */

@@ -3,7 +3,7 @@
 SSE 消费端断开（关页 / 断网 / 切走）不再终止生成：agent task 从 SSE
 生成器的生命周期中**脱钩**，由本登记表持有强引用直至跑完本轮并落库
 （含展示层 message_ai 补写）。用户主动停止（POST /chat/stop）不受影响
-——仍然立刻停止（chat_interrupt 的 request_stop 三层兜底）。
+——仍然立刻停止（request_stop 的 Event + hook，加 ADR-0035 的 task.cancel）。
 
 职责：
 - 强引用持有 agent_task（防 asyncio 只持弱引用被 GC）；
@@ -59,8 +59,14 @@ def is_running(session_id: Optional[str]) -> bool:
 
 
 def get_task(session_id: str) -> Optional[asyncio.Task]:
-    """取该会话的活跃 task（测试/诊断用；消费方不得 cancel——停止一律走
-    chat_interrupt.request_stop 的检查点语义，保证收尾落盘有序）。"""
+    """取该会话的活跃 task（/chat/stop 取消路径，ADR-0035）。
+
+    停止端点持有本表 task 引用并 cancel——「取消禁令」已解除（原注释
+    禁止消费方 cancel，2026-10-05 起停止语义升级为「信号 + 取消」：
+    检查点覆盖不到静默期，cancel 是唯一可靠手段；收尾落库全在
+    _run_and_finalize 的 finally，cancel 不丢收尾）。测试/诊断消费方
+    仍不得 cancel——停止一律走 /chat/stop 端点。
+    """
     with _lock:
         return _active.get(session_id)
 

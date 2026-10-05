@@ -88,6 +88,7 @@
 - **改前备份 (Pre-write Backup)**：文件恢复的唯一依据——写工具（write_file/edit_file）与 shell（bash/powershell/background_run，经命令文本路径扫描 + 写信号词表提取被引用路径）执行**前**对被引用现存文件的原内容整拷贝备份。备份必须发生在写入之前，事后不可补录；扫描漏掉的写（脚本内部生成文件）不备份不恢复（best-effort，与 Claude Code 同局限）。_Avoid_: shadow repo / git 快照（Claude Code 实为按文件版本化备份，非仓库形态）。
 
 - **断开续跑 (Disconnect-resilient Generation)**：对话生成与会话连接的解耦形态——SSE 消费端断开（关页/断网/切走）时后台 agent 继续跑完本轮并落库（含展示层 message_ai 后端补写），用户回来刷新可见；会话生成中再收新请求 409（防两轮交错写库）。**用户主动停止不在其列**——停止信号先落再断流，仍然立刻停止。开关 `CORTEX_CHAT_DISCONNECT_CONTINUE`（默认开；关 = 旧行为断开即停）。_Avoid_: 断点续传（不做 SSE resume/replay，回来刷新即见全量）。
+- **主动停止 (Active Stop)**：用户点击停止按钮的语义 = **信号 + 取消 + 等收尾**——先落中断信号（Event + 唤醒挂起提问 + 杀 shell），随后**立刻取消 agent 任务**（检查点覆盖不到静默期：深度思考不流式、首 token 前静默、压缩摘要调用期间 Event 无人检查，取消是静默期唯一可靠手段），最后等收尾（落库 + 撤「生成中」状态，上限 2s）完成才返回。被停止的半截文本保留落库、不走参考资料策展（退回原文）。在场停止与恢复态（断开续跑回页）两个入口同语义。_Avoid_: 只发信号不等收效（2026-10-05 事故：恢复态静默思考期点停止长时间无效果）。
 
 - **宿主标题 (Host Title)**：Android 宿主打开 WebView 时通过 URL query `?title=`（URL 编码）传入的页面显示名，**仅 App WebView 容器内生效**——渲染为 app bar 中央的单行标题（超长省略号截断）。宿主不传则中央留空（**不**回退品牌名）；浏览器环境忽略该参数；不写 document.title。_Avoid_: 品牌名 Doclens（webview 内有意隐藏）、页面标题。
 - **悬置卡 (Pending Ask Card)**：AI 提问（ask_user_question / 门禁确认）的实时交互形态——钉在消息列表与输入框之间的固定槽位，**不随消息流滚动**；内容超高（一次最多 4 问）时限高**内部滚动**（可收缩 + 防滚动穿透 + 提交按钮常驻），消息列表保留最小可见高度（2026-09-23 决议）。与历史回看时消息流内的只读「提问摘要」相区分。_Avoid_: 把卡内多个问题块称作多张卡片（同一时刻至多一张悬置卡，新提问直接替换旧的）。
@@ -112,6 +113,8 @@
 - **登记 (Registration)**：白名单外文本文件的元数据收录形态——不解析、不建树、不分词、不写倒排（FTS），只在 documents 表落一行**ghost 行**（空 structure_json、node_count=0，写 index_meta 指纹）。服务 files 页完整盘点与**文件搜索**（文件名可搜）；**知识库全文搜索（KB search）不命中**（空树 + 无倒排行，天然隔离）。范围 = `allowed_source_types` 白名单外的全部文本文件（code/json/xml/yaml/无后缀等），文本判定 = 已知文本后缀直通 + 无/未知后缀读前 8KB 嗅探（含 NUL 字节即二进制，不登记）。实现分层 = treesearch 引擎层在发现阶段分流（增量指纹/prune/移动检测自动复用），ghost 指纹加盐（白名单变化自动触发重建）。读取闸门：`read_document`（KB 工具）遇 ghost **拒绝并提示改用 read_file**（与「不读取内容」自洽）；预览不受影响（code 预览本就不查 DB）。files 徽标三态：未登记（灰）/ 已登记 / 已索引，状态页统计分开报。_Avoid_: 占位节点（会被后台替换，ghost 永不升级——语义不同）、叫「索引」（索引 = 解析建树分词入 FTS，是另一回事）。
 
 ## 决议摘要（详见 docs/adr/）
+
+- 2026-10-05：主动停止 = 信号 + 取消 + 等收尾（ADR-0035）——/chat/stop 从「只发信号」升级：Event + hook 照旧，随后立刻 task.cancel（静默期唯一可靠手段：深度思考不流式/首 token 前静默/压缩摘要期 Event 无人检查；恢复态原本够不着 cancel——SSE finally 已退场，2026-10-05 事故根因），最后 shield 等收尾 ≤2s 才返回（stopChat 返回即 generating=false，不靠 5s 轮询）；chat_runner 取消禁令解除（收尾全在 finally，cancel 不丢落库）；前端 stopChat 挂 5s 超时防极端挂起；半截退原文落库不走策展；planify 零改动。
 
 - 2026-10-05：思考流 = 「思考中」占位的实时思考展示（双行尾部滑窗，被动接收 reasoning_content/thinking 块，不主动开 extended thinking、不落库、正文首 token 即撤）。
 
