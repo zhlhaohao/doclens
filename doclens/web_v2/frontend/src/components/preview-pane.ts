@@ -124,6 +124,10 @@ export class PreviewPane extends LitElement {
       color: var(--cortex-text-subtle);
       display: inline-block;
       width: 40px;
+      /* 悬挂缩进（.line 的 text-indent:-48px）会继承进本 inline-block（块容器）
+         使数字再左移 48px 落到滚动容器裁剪区外——行号「DOM 在而不可见」的
+         根因。此处显式归零，行号回到 .line 左缘的悬挂位。 */
+      text-indent: 0;
     }
     /* 行选择（2026-10-05 决议）：行号可点击（toggle 选中/反选）；选中行
        整行高亮。与搜索命中 .highlight（命中词着色）语义不同、视觉并存。 */
@@ -634,7 +638,21 @@ export class PreviewPane extends LitElement {
     return parts.join(",");
   }
 
-  private _onLineNoClick = (lineNo: number) => {
+  /** Shift+click 的锚点行：普通点击时更新，Shift+click 时从锚点到点击行
+   *  整段加入选区（IDE 惯例；无锚点时退化为普通点击）。 */
+  private _lineAnchor: number | null = null;
+
+  private _onLineNoClick = (lineNo: number, shift: boolean) => {
+    if (shift && this._lineAnchor !== null) {
+      const next = new Set(this._selectedLines);
+      const [a, b] = this._lineAnchor <= lineNo
+        ? [this._lineAnchor, lineNo]
+        : [lineNo, this._lineAnchor];
+      for (let n = a; n <= b; n++) next.add(n);
+      this._selectedLines = next;
+      return; // 锚点不动：连续 Shift+click 可重设段尾
+    }
+    this._lineAnchor = lineNo;
     const next = new Set(this._selectedLines);
     if (next.has(lineNo)) next.delete(lineNo);
     else next.add(lineNo);
@@ -646,6 +664,16 @@ export class PreviewPane extends LitElement {
   private get _pathWithRanges(): string {
     const ranges = this._lineRanges;
     return ranges ? `${this.path}:${ranges}` : this.path;
+  }
+
+  /** 行号视图（纯文本+行号渲染分支）：markdown/pdf/image/html 之外全部——
+   *  代码文件、txt、未知后缀、超限兜底文本。行选择与编辑能力都挂在这条
+   *  渲染路径上（按渲染路径划定，不按文件类型设闸）。 */
+  private get _isLineView(): boolean {
+    return this.language !== "markdown"
+      && this.language !== "pdf"
+      && this.language !== "image"
+      && this.language !== "html";
   }
 
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
@@ -698,6 +726,7 @@ export class PreviewPane extends LitElement {
       this._bookmarkItems = bookmarksFor(this.path);
       // 行选择不跨文档残留（防 A 文件行号配 B 文件）
       this._selectedLines = new Set();
+      this._lineAnchor = null;
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
@@ -714,6 +743,7 @@ export class PreviewPane extends LitElement {
       this._selOffsets = null;
       // 新内容行集合已变，选中行号随之失效
       this._selectedLines = new Set();
+      this._lineAnchor = null;
     }
   }
 
@@ -1092,6 +1122,11 @@ export class PreviewPane extends LitElement {
     try {
       await savePreview(this.path, e.detail.content);
       this._content = e.detail.content;
+      // 行号视图：旧 tokens 与新内容行数对得上时会渲染陈旧分词文本——
+      // 清空破坏对齐（先无高亮渲染新内容）。tokens 的恢复由宿主在 saved
+      // 回调里重拉回填（受控 prop 不由组件自写，否则宿主重渲染时会用
+      // 旧 state 覆盖回来——「保存后一秒变回旧内容」的根因）。
+      this.tokens = null;
       this._tocItems = extractHeadings(this._content);
       this._mode = "preview";
       this.dispatchEvent(
@@ -1530,6 +1565,7 @@ export class PreviewPane extends LitElement {
     recordSkillUse(skill.name);
     const firstFile = this.path.split("/").pop() ?? this.path;
     this._selectedLines = new Set(); // 已发送：选区消费完毕，不残留旧区间
+    this._lineAnchor = null;
     this.dispatchEvent(new CustomEvent("skill-chat", {
       detail: {
         message: lines.join("\n"),
@@ -1678,7 +1714,12 @@ export class PreviewPane extends LitElement {
     const renderMobileBar = this.mobile ? this._renderMobileHeader() : null;
     const showDesktopHeader = !this.mobile && !this.noHeader;
 
-    if (this.language === "markdown" && this._mode === "edit") {
+    /** 可编辑语言：md 格式化预览 + 行号视图全家（代码/txt/未知后缀——
+     *  md-editor 本质是通用 textarea，保存走同一条 savePreview 链路；
+     *  pdf/image/html 不可编辑）。 */
+    const editable = this.language === "markdown" || this._isLineView;
+
+    if (editable && this._mode === "edit") {
       return html`
         ${renderMobileBar}
         ${showDesktopHeader ? html`
@@ -1812,6 +1853,9 @@ export class PreviewPane extends LitElement {
         <div class="header">
           ${this._renderBackBtn()}
           <span class="path">${this.path}</span>
+          ${this.writable
+            ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
+            : null}
           ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
@@ -1826,8 +1870,8 @@ export class PreviewPane extends LitElement {
           const runs = tokensAligned ? tokLines[i] : null;
           return html`<div class="line ${sel ? "line-selected" : ""}"><span
             class="line-no clickable ${cls}"
-            title="点击选中/取消选中该行（选中区间可经工具箱带给 AI 技能）"
-            @click=${() => this._onLineNoClick(lineNo)}
+            title="点击选中/取消选中该行；Shift+点击选区间"
+            @click=${(ev: MouseEvent) => this._onLineNoClick(lineNo, ev.shiftKey)}
           >${lineNo}</span>${runs
             ? runs.map(([kind, text]) => (kind ? html`<span class="tk-${kind}">${text}</span>` : text))
             : line}</div>`;

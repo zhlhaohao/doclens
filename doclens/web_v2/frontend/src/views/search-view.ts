@@ -549,10 +549,26 @@ export class SearchView extends LitElement {
     await action();
   }
 
-  private _onPreviewSaved = () => {
+  private _onPreviewSaved = (e: CustomEvent<{ content: string }>) => {
     this.previewDirty = false;
+    // 回填宿主 state + 重拉 tokens（与 files-view 同款；行号视图防回跳）
+    this.previewContent = e.detail.content;
+    this.previewTokens = null;
+    if (this.previewPath) void this._reloadPreviewTokens();
     this._pushToast("已保存", "success", 2500);
   };
+
+  /** 保存后重拉预览元数据（tokens 高亮恢复；仍在本文件才回填防竞态）。 */
+  private async _reloadPreviewTokens(): Promise<void> {
+    const path = this.previewPath;
+    try {
+      const r = await fetchPreview(path);
+      if (r.ok && this.previewPath === path) {
+        this.previewContent = r.content;
+        this.previewTokens = r.tokens;
+      }
+    } catch { /* 静默：无高亮可接受 */ }
+  }
 
   private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`保存失败：${e.detail.message}`, "error", 5000);

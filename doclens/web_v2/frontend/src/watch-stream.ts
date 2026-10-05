@@ -35,10 +35,28 @@ function safeParse<T>(raw: string): T | null {
   }
 }
 
+/** SSE 订阅起点时刻（epoch 秒）：晚于此时刻的 recent_change 才算「新变化」，
+ *  防连接首推的全量快照重复触发预览刷新。每次（重）连接时刷新。 */
+let streamStartedAt = 0;
+
 function applyStatus(s: StatusSnapshot): void {
   actions.setWatcherStatus(s.watcher ?? null);
-  actions.setWatchRecentChanges(s.recent_changes ?? []);
+  const next = s.recent_changes ?? [];
+  actions.setWatchRecentChanges(next);
   actions.setSyncStatus(s.sync ?? null);
+  // 外部改动（编辑器/git pull 等）命中当前预览文件时派发刷新事件。
+  // 不依赖 reindexed：代码文件默认不进索引，indexed_files=0 时后端不广播
+  // reindexed（deps.py），而 status 的 recent_changes 是 badge 同源数据、
+  // 每次真变化必到。时间窗判定「新」（晚于连接起点），幂等于同文件多次写
+  // 与重连首推；路径统一正斜杠（后端 os.path.relpath 在 Windows 产反斜杠）。
+  const fresh = next
+    .filter((c) => (c.ts ?? 0) > streamStartedAt)
+    .map((c) => (c.path ?? "").replace(/\\/g, "/"));
+  if (fresh.length > 0) {
+    window.dispatchEvent(new CustomEvent("cortex:files-changed", {
+      detail: { paths: fresh },
+    }));
+  }
 }
 
 function dispatchReindexedToast(d: ReindexedPayload): void {
@@ -77,6 +95,8 @@ async function run(): Promise<void> {
     try {
       const signal = controller?.signal;
       if (!signal) return;
+      // 连接起点：本次（重）连之后到达的 recent_change 才算新变化
+      streamStartedAt = Date.now() / 1000;
       for await (const ev of streamSSE("/api/watch/events", {}, signal)) {
         if (stopped) break;
         if (ev.event === "status") {

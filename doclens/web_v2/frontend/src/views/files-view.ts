@@ -390,6 +390,9 @@ export class FilesView extends LitElement {
     void this._restoreSelection();
     // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
     window.addEventListener("cortex:watch-reindexed", this._onIndexUpdated);
+    // 外部文件变化（编辑器/git pull 等，SSE status recent_changes 驱动）：
+    // 命中当前预览文件时重拉预览——badge 已报变化而预览停旧内容的缺口。
+    window.addEventListener("cortex:files-changed", this._onExternalFilesChanged);
   }
 
   /** store 订阅回调：检测 Git Sync 轮次（last_sync_at 变化）顺带重拉改动列表
@@ -499,6 +502,16 @@ export class FilesView extends LitElement {
    *  让 indexed 标志反映新索引（改名/新增/删除后自动回填）。仅在 files 视图挂载时生效。 */
   private _onIndexUpdated = () => {
     void this._refreshFileList();
+  };
+
+  /** 外部文件变化（cortex:files-changed）：当前预览文件在变化清单中 → 重拉
+   *  预览（content + tokens 一起换新）。编辑态不打扰——用户正在改，外部
+   *  改动等退出编辑后再看；文件列表不动（reindexed 已管）。 */
+  private _onExternalFilesChanged = (e: Event) => {
+    const paths = (e as CustomEvent<{ paths: string[] }>).detail?.paths ?? [];
+    if (this._previewPath && paths.includes(this._previewPath) && this._dialog !== "skill-run") {
+      void this._reloadPreview();
+    }
   };
 
   /** 失效当前目录缓存并重拉目录列表 + 已索引文档清单（下拉刷新与 reindex 回调共用）。 */
@@ -620,6 +633,7 @@ export class FilesView extends LitElement {
     this._unsubscribe?.();
     if (this._toastTimer) clearTimeout(this._toastTimer);
     window.removeEventListener("cortex:watch-reindexed", this._onIndexUpdated);
+    window.removeEventListener("cortex:files-changed", this._onExternalFilesChanged);
     super.disconnectedCallback();
   }
 
@@ -1161,8 +1175,14 @@ export class FilesView extends LitElement {
     this._previewDirty = e.detail.dirty;
   };
 
-  private _onPreviewSaved = () => {
+  private _onPreviewSaved = (e: CustomEvent<{ content: string }>) => {
     this._previewDirty = false;
+    // 回填宿主 state（组件只更新了内部 _content）：content 防宿主重渲染
+    // 旧值覆盖；tokens 重拉恢复语法高亮（行号视图，ADR-0032 服务端分词）。
+    // SSE reindexed 随后触发重渲染，届时 state 已是新值不再回跳。
+    this._previewContent = e.detail.content;
+    this._previewTokens = null;
+    void this._reloadPreview();
     this._showToast("已保存");
   };
 
