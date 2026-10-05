@@ -7607,7 +7607,9 @@ ${s}</table>
     `}};rs.styles=H`
     :host {
       display: block;
-      border: 1px solid var(--cortex-border);
+      /* 边框减层（2026-10-05）：旧三层 hairline 叠框（bubble → host → step）
+       * 视觉杂乱——host 层去边框，改 muted 底 + 圆角与周围留白分层；
+       * 边框语义留给 .step 的状态描边（running/error），层级各司其职。 */
       border-radius: var(--cortex-radius-md);
       background: var(--cortex-surface-muted);
       overflow: hidden;
@@ -7621,10 +7623,13 @@ ${s}</table>
     .summary:hover { background: var(--cortex-surface); }
     .summary .arrow { color: var(--cortex-primary); font-weight: 700; }
     .summary .count { color: var(--cortex-text); font-weight: 600; }
-    .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .steps {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-top: 8px; padding: 0 var(--cortex-space-2) var(--cortex-space-2);
+    }
     .step {
       background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
+      border: 1px solid transparent; /* 占位对齐：状态描边出现时无布局跳动 */
       border-radius: var(--cortex-radius-md);
       padding: 7px 9px;
     }
@@ -14375,7 +14380,7 @@ ${s}</table>
         max-width: calc(100vw - 16px);
       }
     }
-  `;Hf([x({type:Boolean,reflect:!0})],hn.prototype,"open",2);hn=Hf([G("watch-changes-dialog")],hn);var D3=Object.defineProperty,I3=Object.getOwnPropertyDescriptor,Fn=(e,t,r,i)=>{for(var s=i>1?void 0:i?I3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&D3(t,r,s),s};let Ws=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 13bc42a · 2026-10-05 13:42 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?d`
+  `;Hf([x({type:Boolean,reflect:!0})],hn.prototype,"open",2);hn=Hf([G("watch-changes-dialog")],hn);var D3=Object.defineProperty,I3=Object.getOwnPropertyDescriptor,Fn=(e,t,r,i)=>{for(var s=i>1?void 0:i?I3(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&D3(t,r,s),s};let Ws=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 031a352 · 2026-10-05 14:00 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?d`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -14390,7 +14395,7 @@ ${s}</table>
           ${(e=this._health)!=null&&e.dev?d`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"13bc42a · 2026-10-05 13:42"}</span>
+            <span class="value">${"031a352 · 2026-10-05 14:00"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

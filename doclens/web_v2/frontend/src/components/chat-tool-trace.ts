@@ -164,7 +164,9 @@ export class ChatToolTrace extends LitElement {
   static styles = css`
     :host {
       display: block;
-      border: 1px solid var(--cortex-border);
+      /* 边框减层（2026-10-05）：旧三层 hairline 叠框（bubble → host → step）
+       * 视觉杂乱——host 层去边框，改 muted 底 + 圆角与周围留白分层；
+       * 边框语义留给 .step 的状态描边（running/error），层级各司其职。 */
       border-radius: var(--cortex-radius-md);
       background: var(--cortex-surface-muted);
       overflow: hidden;
@@ -178,10 +180,13 @@ export class ChatToolTrace extends LitElement {
     .summary:hover { background: var(--cortex-surface); }
     .summary .arrow { color: var(--cortex-primary); font-weight: 700; }
     .summary .count { color: var(--cortex-text); font-weight: 600; }
-    .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .steps {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-top: 8px; padding: 0 var(--cortex-space-2) var(--cortex-space-2);
+    }
     .step {
       background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
+      border: 1px solid transparent; /* 占位对齐：状态描边出现时无布局跳动 */
       border-radius: var(--cortex-radius-md);
       padding: 7px 9px;
     }
