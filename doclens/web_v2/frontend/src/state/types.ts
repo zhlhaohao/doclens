@@ -42,6 +42,9 @@ export interface PendingSkillChat {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** 对话图片（ADR-0034）：user 消息的 images 平级数组（后端 payload 原样），
+   *  渲染为气泡内缩略图行；无图消息无此字段（旧数据零兼容负担）。 */
+  images?: { data: string; media_type: string }[];
   tool_steps?: ToolStep[];
   /** 结构化引用：后端从检索工具结果提取，前端渲染为可点击的引用卡片 */
   references?: Reference[];
@@ -152,6 +155,8 @@ export interface SystemStatus {
   file_types: Record<string, number>;
   /** 当前 AI 模型 id（后端从 CortexConfig.planify_model_id 读）。空字符串表示未配置。 */
   model_name?: string;
+  /** 对话 LLM 视觉能力位（ADR-0034）：false 时前端拦截带图消息并引导切换模型。 */
+  llm_vision?: boolean;
   watcher?: WatcherStatus | null;
   /** Git 同步快照；null/undefined = 同步循环未注册 */
   sync?: GitSyncStatus | null;
@@ -280,6 +285,8 @@ export interface AppState {
   pendingSession: Session | null;
   /** 跨视图技能对话发送请求（files 工具箱 → chat-view 自动新建会话并发送） */
   pendingSkillChat: PendingSkillChat | null;
+  /** 设置页待聚焦 tab（ADR-0034 视觉路由）：chat 页「前往设置」写入 */
+  pendingSettingsTab: "ai" | "search" | "network" | "mcp" | "skills" | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
   /** Git 同步状态（SSE status 快照 / /api/status 携带；null = 未注册） */

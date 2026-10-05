@@ -36,6 +36,11 @@ class PresetCreate(BaseModel):
         ge=1,
         description="LLM 上下文窗口（仅 kind=llm）",
     )
+    vision: Optional[bool] = Field(
+        default=None,
+        description="对话模型支持视觉（仅 kind=llm；ADR-0034 视觉路由能力位，"
+        "默认 false=不支持 → 带图消息拦截引导切换模型）",
+    )
     max_tokens: Optional[int] = Field(
         default=None,
         ge=1,
@@ -72,6 +77,7 @@ class PresetUpdate(BaseModel):
     model_id: Optional[str] = None
     api_key: Optional[str] = None
     context_window: Optional[int] = Field(default=None, ge=1)
+    vision: Optional[bool] = None
     max_tokens: Optional[int] = Field(default=None, ge=1)
     # 搜索调优字段
     max_results: Optional[int] = Field(default=None, ge=1, le=500)
@@ -98,6 +104,7 @@ class Preset(BaseModel):
     model_id: str = ""
     api_key: str = ""
     context_window: Optional[int] = None
+    vision: Optional[bool] = None
     max_tokens: Optional[int] = None
     # 搜索调优字段（search 有值；llm|vision 为 None）
     max_results: Optional[int] = None
@@ -140,3 +147,14 @@ class ProbeMaxTokensRequest(BaseModel):
 class ProbeMaxTokensResult(BaseModel):
     max_tokens: int
     attempts: int
+
+
+class ProbeVisionResult(BaseModel):
+    """POST /api/presets/probe-vision 响应（ADR-0034 增补视觉探测）。
+
+    supported = True：模型读出图中随机密码串（真支持视觉）；
+    False：API 拒图或静默吞图（答不出密码串）——不支持。
+    连接/鉴权失败走 502 PROBE_FAILED（探测中止，不判定）。
+    """
+
+    supported: bool

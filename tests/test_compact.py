@@ -112,6 +112,46 @@ class TestEstimateTokens:
         ascii_est = estimate_tokens([{"role": "user", "content": "a" * 100}])
         assert est > ascii_est
 
+    def test_image_blocks_estimated_by_pixel_not_base64(self):
+        """ADR-0034：image block 按像素估（~2.8K/张），不数 base64——
+        80 万字符 base64 若被当文本估算会得 ~20 万 tokens。"""
+        from planify.context.compact import estimate_tokens
+
+        b64 = "A" * 800_000
+        msgs = [{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+                {"type": "text", "text": "看这张图"},
+            ],
+        }]
+        est = estimate_tokens(msgs)
+        assert 2780 <= est <= 2900, est
+        # 两张图 = 两份像素 token
+        msgs2 = [{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}},
+                {"type": "image", "source": {"type": "base64", "data": b64}},
+                {"type": "text", "text": "对比"},
+            ],
+        }]
+        assert estimate_tokens(msgs2) > est + 2700
+
+    def test_render_message_replaces_image_with_placeholder(self):
+        """ADR-0034：压缩转录把 image block 换 [图片] 占位，base64 不进摘要输入。"""
+        from planify.context.compact import _render_message
+
+        msg = {
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "data": "A" * 1000}},
+                {"type": "text", "text": "正文文字"},
+            ],
+        }
+        r = _render_message(msg)
+        assert "[图片]" in r and "正文文字" in r and "AAAA" not in r
+
 
 class TestEstimateTokensWithUsage:
     """usage 实测基线 + 增量 ÷4（借鉴 Claude Code tokenCountWithEstimation）。"""

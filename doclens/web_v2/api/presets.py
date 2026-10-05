@@ -24,6 +24,7 @@ from doclens.web_v2.models.preset import (
     PresetUpdate,
     ProbeMaxTokensRequest,
     ProbeMaxTokensResult,
+    ProbeVisionResult,
 )
 from doclens.web_v2 import presets_store
 from doclens.web_v2.probe_max_tokens import ProbeError, probe_max_tokens
@@ -58,6 +59,9 @@ def _materialize(preset: dict) -> dict:
             "PLANIFY_API_KEY": preset.get("api_key", ""),
             "PLANIFY_MODEL_ID": preset.get("model_id", ""),
             "CORTEX_ACTIVE_LLM_PRESET": name,
+            # vision 能力位（ADR-0034）：显式物化（含 False——未声明/False 都
+            # 视为不支持）；预设删除该字段时留旧值无害（下次激活会覆盖）
+            "CORTEX_LLM_VISION": "true" if preset.get("vision") else "false",
         }
         if preset.get("context_window"):
             updates["PLANIFY_CONTEXT_WINDOW"] = str(preset["context_window"])
@@ -138,6 +142,31 @@ def probe_max_tokens_endpoint(req: ProbeMaxTokensRequest):
     except ProbeError as e:
         raise CortexAPIError(502, "PROBE_FAILED", str(e))
     return ProbeMaxTokensResult(max_tokens=answer, attempts=attempts)
+
+
+@router.post("/presets/probe-vision", response_model=ProbeVisionResult)
+def probe_vision_endpoint(req: ProbeMaxTokensRequest):
+    """行为学探测模型是否支持视觉（ADR-0034 增补；同步函数 → 线程池执行）。
+
+    请求体复用 ProbeMaxTokensRequest 形态；api_key 留空/占位时回退
+    preset_id 已存密钥。supported = True 支持（模型读出图中密码串）/
+    False 不支持（API 报错或静默吞图——按报错判定测不出的关键类）。
+    """
+    from doclens.web_v2.probe_vision import ProbeError as VisionProbeError, probe_vision
+
+    api_key = req.api_key
+    if not api_key or api_key == PRESET_SECRET_MASK:
+        if not req.preset_id:
+            raise CortexAPIError(400, "PROBE_KEY_REQUIRED", "未提供 API Key；编辑既有预设时请传 preset_id")
+        raw = presets_store.get_preset_raw(req.preset_id)
+        if raw is None:
+            raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {req.preset_id}")
+        api_key = raw.get("api_key", "")
+    try:
+        supported = probe_vision(req.protocol, req.base_url, req.model_id, api_key)
+    except VisionProbeError as e:
+        raise CortexAPIError(502, "PROBE_FAILED", str(e))
+    return ProbeVisionResult(supported=supported)
 
 
 @router.post("/presets/{preset_id}/activate", response_model=ActivateResult)

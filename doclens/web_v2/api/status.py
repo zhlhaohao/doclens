@@ -31,6 +31,9 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         # 当前 AI 模型 id（用于前端展示「{model} 思考中」），可能为空
         # （用户未设置 PLANIFY_MODEL_ID 时不展示模型名前缀）
         "model_name": cfg.planify_model_id or "",
+        # 对话 LLM 视觉能力位（ADR-0034 视觉路由）：false 时前端拦截带图
+        # 消息并引导切换模型
+        "llm_vision": bool(getattr(cfg, "llm_vision", False)),
         "watcher": {
             "enabled": cfg.watch_enabled,
             **(watcher_obj.status() if watcher_obj is not None else {

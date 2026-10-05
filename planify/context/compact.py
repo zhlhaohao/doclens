@@ -43,6 +43,29 @@ def _estimate_text_tokens(s: str) -> int:
     return (len(s) - non_ascii) // 4 + non_ascii
 
 
+def _estimate_image_tokens(block: dict) -> int:
+    """image block 的 token 估算：按像素面积（与 Anthropic 真实计费同公式
+    量级，宽×高/750 + 固定开销），**不数 base64 字符**——base64 进文本
+    估算会把单张图误估成数十万 tokens，击穿 auto-compact 阈值判断
+    （ADR-0034）。块内无尺寸信息（data URL 不携带宽高），按已压缩
+    对话图片的典型上界估（1600px 最长边 ≈ 1600×1200 → ~2.6K tokens）。"""
+    return (1600 * 1200) // 750 + 200  # ≈ 2780 tokens/张
+
+
+def _has_image_blocks(messages: list) -> bool:
+    """消息列表是否含 image block（Anthropic image / OpenAI image_url）。"""
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        if isinstance(c, list) and any(
+            isinstance(b, dict) and b.get("type") in ("image", "image_url")
+            for b in c
+        ):
+            return True
+    return False
+
+
 def estimate_tokens(messages: list) -> int:
     """
     估算消息列表的 token 数
@@ -55,15 +78,44 @@ def estimate_tokens(messages: list) -> int:
     场景行为不变）。足以作为阈值判断；需要更高精度时用
     :func:`estimate_tokens_with_usage`（实测基线 + 本函数估增量）。
 
+    含 image block 的消息（ADR-0034）：把 image block 替换为等 token 的
+    短占位字符串后走同一 JSON 序列化公式——tool_use/tool_result 等其它块
+    的开销口径与旧公式逐字节一致，只有图片按像素计（不数 base64）。
+
     Args:
         messages: 消息列表
 
     Returns:
         估算的 token 数
     """
-    return _estimate_text_tokens(
-        json.dumps(messages, default=str, ensure_ascii=False)
+    if not _has_image_blocks(messages):
+        return _estimate_text_tokens(
+            json.dumps(messages, default=str, ensure_ascii=False)
+        )
+    # 带图路径：image block 换占位（长度无关紧要——加回像素 token 后占位
+    # 自身开销可忽略），其余结构原样进 JSON 公式
+    def _swap(node):
+        if isinstance(node, list):
+            return [_swap(x) for x in node]
+        if isinstance(node, dict):
+            if node.get("type") in ("image", "image_url"):
+                return {"type": node["type"], "source": "[img]"}
+            return {k: _swap(v) for k, v in node.items()}
+        return node
+
+    n_images = sum(
+        1
+        for m in messages
+        if isinstance(m, dict)
+        for b in (m.get("content") or [])
+        if isinstance(m.get("content"), list)
+        and isinstance(b, dict)
+        and b.get("type") in ("image", "image_url")
     )
+    base = _estimate_text_tokens(
+        json.dumps(_swap(messages), default=str, ensure_ascii=False)
+    )
+    return base + n_images * _estimate_image_tokens({})
 
 
 def estimate_tokens_with_usage(
@@ -214,6 +266,7 @@ def _render_message(msg: dict) -> str:
     """单条消息 → 转录正文（不含角色前缀，由调用方拼接）。
 
     - text 块原样；thinking 块跳过（内部推理，非对话事实）
+    - image 块 → ``[图片]`` 占位（ADR-0034 压缩转录剥图：base64 不进摘要输入）
     - tool_use → ``[调用 name(入参摘要)]``
     - tool_result → ``[结果] 前 N 字符``
     """
@@ -229,6 +282,8 @@ def _render_message(msg: dict) -> str:
             parts.append(b.get("text", ""))
         elif t == "thinking":
             continue
+        elif t in ("image", "image_url"):
+            parts.append("[图片]")
         elif t == "tool_use":
             input_s = json.dumps(
                 b.get("input") or {}, ensure_ascii=False, default=str

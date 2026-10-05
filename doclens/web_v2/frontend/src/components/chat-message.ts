@@ -277,6 +277,20 @@ export class ChatMessageEl extends LitElement {
     }
     /* AI 复制钮靠右（与 user 动作区左右对称） */
     .copy { margin-left: auto; }
+    /* 对话图片缩略图行（ADR-0034） */
+    .chat-imgs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+    .chat-img {
+      width: 96px; height: 96px; object-fit: cover; border-radius: 8px;
+      border: 1px solid var(--cortex-border, #e5e7eb); cursor: zoom-in; display: block;
+    }
+    dialog.img-preview-dialog {
+      border: none; padding: 0; background: transparent; max-width: 92vw; max-height: 92vh;
+    }
+    dialog.img-preview-dialog img {
+      max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 8px;
+      cursor: zoom-out; display: block;
+    }
+    dialog.img-preview-dialog::backdrop { background: rgba(0, 0, 0, 0.75); }
   `,
   ];
 
@@ -292,6 +306,8 @@ export class ChatMessageEl extends LitElement {
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
   private _copyTimer?: number;
+  /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图 */
+  @state() private _imgPreview: string | null = null;
 
   firstUpdated() {
     this.addEventListener("click", this._onClick);
@@ -357,7 +373,11 @@ export class ChatMessageEl extends LitElement {
     e.stopPropagation();
     const content = this.message?.content ?? "";
     this.dispatchEvent(
-      new CustomEvent("reask", { detail: { content }, bubbles: true, composed: true }),
+      new CustomEvent("reask", {
+        detail: { content, images: this.message?.images },
+        bubbles: true,
+        composed: true,
+      }),
     );
   };
 
@@ -368,12 +388,21 @@ export class ChatMessageEl extends LitElement {
     if (seq === undefined) return; // 无锚点（流式新建/老数据）不可回退
     this.dispatchEvent(
       new CustomEvent("rewind", {
-        detail: { seq, content: this.message?.content ?? "" },
+        detail: { seq, content: this.message?.content ?? "", images: this.message?.images },
         bubbles: true,
         composed: true,
       }),
     );
   };
+
+  /** 对话图片缩略图行（ADR-0034）：点击放大（dialog 原生弹层，ESC/点击关闭）。 */
+  private _renderImages(images: { data: string; media_type: string }[]) {
+    return html`<div class="chat-imgs">${images.map((img, i) => html`
+      <img class="chat-img" src="data:${img.media_type};base64,${img.data}"
+           alt="图片 ${i + 1}" loading="lazy"
+           @click=${() => this._imgPreview = `data:${img.media_type};base64,${img.data}`} />`)}
+    </div>`;
+  }
 
   /** 点击「复制」：把 AI 回复原文写入剪贴板，图标短暂变 check 反馈；失败冒泡 toast。 */
   private _onCopy = async (e: Event): Promise<void> => {
@@ -428,6 +457,12 @@ export class ChatMessageEl extends LitElement {
 
   render() {
     if (!this.message) return null;
+    // 对话图片全屏预览弹层（ADR-0034）：dialog 原生 top-layer，点击图片关闭
+    if (this._imgPreview) {
+      return html`<dialog open @click=${() => (this._imgPreview = null)} class="img-preview-dialog">
+        <img src=${this._imgPreview} alt="图片预览" />
+      </dialog>`;
+    }
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
     // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，
@@ -443,7 +478,9 @@ export class ChatMessageEl extends LitElement {
     if (this.role === "user") {
       const canRewind = this.message.seq !== undefined;
       const ts = formatMsgTime(this.message.created_at);
-      return html`<div class="bubble">${this.renderBubble(this.message.content)}${this.error
+      // 对话图片（ADR-0034）：缩略图行渲染在正文之上；点击全屏复用 dialog 原生弹层
+      const imgs = this.message.images ?? [];
+      return html`<div class="bubble">${imgs.length > 0 ? this._renderImages(imgs) : null}${this.renderBubble(this.message.content)}${this.error
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
         : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
         ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`

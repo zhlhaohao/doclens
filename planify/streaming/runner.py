@@ -355,6 +355,7 @@ class StreamingAgent:
         messages: List[Dict],
         user_message: str,
         session_id: str,
+        images: Optional[List[Dict]] = None,
     ) -> List[Dict]:
         """
         流式运行代理循环。
@@ -365,6 +366,10 @@ class StreamingAgent:
                 入参原样需自行拷贝。
             user_message: 用户输入消息
             session_id: 会话 ID
+            images: 本轮对话图片（可选，ADR-0034）。每项 ``{"data": base64,
+                "media_type": str}``；有图时本轮 user 消息构造为 Anthropic
+                块数组 ``[image×N, text]``（OpenAI-compat 由 provider 翻译），
+                无图时保持纯字符串（既有路径零变化）。
 
         Returns:
             清理后的消息历史（只保留 user/assistant 文本消息，过滤 tool 链）。
@@ -386,8 +391,21 @@ class StreamingAgent:
         self._inject_head_context(messages, session_id)
         self._inject_loaded_skill_bodies(messages, session_id)
 
-        # 添加用户 query（纯文本，不含 skills/agent.md）
-        messages.append({"role": "user", "content": user_message})
+        # 添加用户 query（纯文本，不含 skills/agent.md）。带图时构造为
+        # Anthropic 块数组（image block 原生 / OpenAI-compat 由 provider 翻译）
+        if images:
+            blocks: List[Dict] = [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": img.get("media_type", "application/octet-stream"), "data": img.get("data", "")},
+                }
+                for img in images
+                if isinstance(img, dict) and img.get("data")
+            ]
+            blocks.append({"type": "text", "text": user_message})
+            messages.append({"role": "user", "content": blocks})
+        else:
+            messages.append({"role": "user", "content": user_message})
         # 全部注入（头部 context / 尾部 skill body）已完成，此后追加的才是
         # 本轮消息；记录起点供宿主落库切片（见 __init__ 注释）。
         self.round_start_index = len(messages) - 1
@@ -692,7 +710,13 @@ class StreamingAgent:
                 # user 消息：content 是字符串（系统注入的 skills/agent.md）保留
                 if isinstance(content, str):
                     cleaned.append(msg)
-                # 列表类型（tool_result）跳过
+                elif isinstance(content, list) and not any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                ):
+                    # 非工具结果的列表 content（带图用户消息，ADR-0034）保留
+                    cleaned.append(msg)
+                # tool_result 消息跳过
             elif role == "assistant":
                 if isinstance(content, str):
                     # 纯文本回复保留

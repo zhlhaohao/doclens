@@ -314,6 +314,12 @@ class CortexConfig(BaseSettings):
         "子代理并发拆分读取时，每组读取量建议 ≤ max_tokens × 0.8 词（留 20% 余量）。",
     )
     planify_protocol: Optional[str] = Field(default=None, alias="PLANIFY_PROTOCOL")
+    llm_vision: bool = Field(
+        default=False,
+        alias="CORTEX_LLM_VISION",
+        description="当前对话 LLM 是否支持视觉（ADR-0034 视觉路由能力位；"
+        "由 LLM 预设 activate 物化，默认 False=不支持 → 带图消息前端拦截引导切换）",
+    )
     planify_max_tool_rounds: int = Field(
         default=0,
         alias="PLANIFY_MAX_TOOL_ROUNDS",

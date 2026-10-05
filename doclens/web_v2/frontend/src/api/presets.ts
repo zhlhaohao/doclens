@@ -15,6 +15,8 @@ export interface Preset {
   model_id?: string;
   api_key?: string;
   context_window?: number | null;
+  /** 支持视觉（ADR-0034 视觉路由能力位，仅 kind=llm；未声明=不支持） */
+  vision?: boolean | null;
   max_tokens?: number | null;
   // 搜索调优（search 有值；llm|vision 缺省）
   max_results?: number | null;
@@ -63,6 +65,8 @@ export interface NewPresetInput {
   model_id?: string;
   api_key?: string;
   context_window?: number | null;
+  /** 支持视觉（ADR-0034，仅 kind=llm；null=未声明走后端默认 false） */
+  vision?: boolean | null;
   max_tokens?: number | null;
   // 搜索调优（search）
   max_results?: number | null;
@@ -135,6 +139,24 @@ export async function probeMaxTokens(
 ): Promise<ProbeMaxTokensResult> {
   return handle<ProbeMaxTokensResult>(
     await fetch("/api/presets/probe-max-tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export interface ProbeVisionResult {
+  /** true = 模型读出图中密码串（真支持）；false = 拒图或静默吞图（不支持） */
+  supported: boolean;
+}
+
+/** 行为学探测模型是否支持视觉（ADR-0034 增补）：后端合成随机密码串图实测。 */
+export async function probeVision(
+  input: ProbeMaxTokensInput,
+): Promise<ProbeVisionResult> {
+  return handle<ProbeVisionResult>(
+    await fetch("/api/presets/probe-vision", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

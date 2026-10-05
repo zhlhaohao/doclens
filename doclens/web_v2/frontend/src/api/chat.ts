@@ -31,8 +31,14 @@ function parseData(eventName: string, raw: string): Record<string, unknown> | nu
   }
 }
 
+/** 单张对话图片（ADR-0034）：前端压缩后的 base64（不含 data: 前缀）。 */
+export interface ChatImage {
+  data: string;
+  media_type: string;
+}
+
 export async function* chatStream(
-  req: { message: string; session_id?: string },
+  req: { message: string; session_id?: string; images?: ChatImage[] },
   signal?: AbortSignal,
 ): AsyncGenerator<ChatStreamEvent> {
   for await (const ev of streamSSE("/api/chat", req, signal)) {

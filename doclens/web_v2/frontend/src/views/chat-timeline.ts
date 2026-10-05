@@ -46,6 +46,10 @@ function mapItem(it: RawItem): ChatMessage | null {
   }
   if (it.kind === "message_user") {
     const msg: ChatMessage = { role: "user", content: payload.content ?? "" };
+    // 对话图片（ADR-0034）：payload 平级 images 数组原样透传（无图消息无字段）
+    if (Array.isArray(payload.images) && payload.images.length > 0) {
+      msg.images = payload.images;
+    }
     if (typeof it.seq === "number") msg.seq = it.seq;
     // 条目时刻透传（后端权威）：hover 操作行显示消息时间；缺失（理论不存在）静默不渲染
     if (typeof it.created_at === "string" && it.created_at) msg.created_at = it.created_at;

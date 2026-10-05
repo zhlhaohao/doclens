@@ -588,6 +588,11 @@ export class SettingsView extends LitElement {
     super.connectedCallback();
     const state = store.getState();
     this._scope = state.settings.scope;
+    // 跨视图待聚焦 tab（ADR-0034 视觉路由）：chat 页「前往设置」写入，消费即清
+    if (state.pendingSettingsTab) {
+      this._activeTab = state.pendingSettingsTab;
+      actions.setPendingSettingsTab(null);
+    }
     this._unsubscribe = store.subscribe(() => this._onStoreChange());
     window.addEventListener("cortex:revert-settings", this._onRevertRequest);
     this._load();
@@ -611,6 +616,12 @@ export class SettingsView extends LitElement {
     if (newState.settings.scope !== this._scope) {
       this._scope = newState.settings.scope;
       this._load();
+    }
+    // 跨视图待聚焦 tab（ADR-0034）：设置页 keep-alive 常驻，connectedCallback
+    // 只跑一次——store 订阅里补消费（chat 页跳转写入后此处生效）
+    if (newState.pendingSettingsTab && newState.pendingSettingsTab !== this._activeTab) {
+      this._activeTab = newState.pendingSettingsTab;
+      actions.setPendingSettingsTab(null);
     }
   }
 

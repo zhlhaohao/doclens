@@ -23,7 +23,7 @@ _SCHEMA_VERSION = 1
 _FIELDS = (
     "name", "kind",
     # 模型连接（llm|vision）
-    "protocol", "base_url", "model_id", "api_key", "context_window", "max_tokens",
+    "protocol", "base_url", "model_id", "api_key", "context_window", "max_tokens", "vision",
     # 搜索调优（search）
     "max_results", "min_score_threshold", "max_span",
     "search_context_before", "search_context_after",

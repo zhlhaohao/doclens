@@ -374,15 +374,24 @@ class SessionsStore:
                     (session_id, seq, json.dumps({"content": raw_text}, ensure_ascii=False), now),
                 )
 
-    def ensure_message_user(self, session_id: str, content: str) -> bool:
+    def ensure_message_user(
+        self, session_id: str, content: str, images: Optional[list] = None
+    ) -> bool:
         """确保本轮 message_user 已落库（ADR-0028 统一后端落库）。
 
         新前端不再前置写入（后端是唯一生产者）；老前端已写的末尾同内容
         条目幂等跳过，防双写。回放轮次分组与回退快照锚点都依赖它在库。
 
+        images（ADR-0034 对话图片）：非空时 payload 平级携带
+        ``[{"data": b64, "media_type": str}, …]``；无图消息 payload 与旧
+        格式逐字节相同（无 images 键）。
+
         Returns:
             是否新写入。
         """
+        payload: dict = {"content": content}
+        if images:
+            payload["images"] = images
         with self._lock, self._conn() as conn:
             row = conn.execute(
                 """SELECT kind, payload FROM session_items
@@ -395,9 +404,11 @@ class SessionsStore:
                 except (json.JSONDecodeError, TypeError):
                     p = {}
                 if isinstance(p, dict) and p.get("content") == content:
-                    return False
+                    # 带图判重：旧条目无 images 键视同 []（老前端/无图路径幂等不变）
+                    if (p.get("images") or []) == (images or []):
+                        return False
         # RLock 内嵌调用 _append_item：查-判与插-入之间无并发写入
-        self._append_item(session_id, "message_user", {"content": content})
+        self._append_item(session_id, "message_user", payload)
         return True
 
     def append_message_ai(
@@ -1012,7 +1023,27 @@ class SessionsStore:
                 if it.kind == "message_user":
                     content = payload.get("content", "")
                     if content:
-                        _append("user", content)
+                        # 对话图片（ADR-0034）：images 平级数组非空时组装为
+                        # Anthropic 块数组 [image×N, text]（OpenAI-compat 由
+                        # provider 翻译）；无图保持纯字符串（与历史逐字节一致）
+                        images = payload.get("images")
+                        if isinstance(images, list) and images:
+                            blocks = [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": img.get("media_type", "application/octet-stream"),
+                                        "data": img.get("data", ""),
+                                    },
+                                }
+                                for img in images
+                                if isinstance(img, dict) and img.get("data")
+                            ]
+                            blocks.append({"type": "text", "text": content})
+                            _append("user", blocks)
+                        else:
+                            _append("user", content)
                 elif it.kind == "raw_messages":
                     for rm in payload.get("messages", []):
                         if not isinstance(rm, dict):

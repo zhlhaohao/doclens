@@ -442,6 +442,7 @@ class CortexAgent:
         query: str,
         history: List[Dict],
         emitter_callbacks: Optional[Dict[str, Any]] = None,
+        images: Optional[List[Dict]] = None,
     ) -> List[Dict]:
         """运行流式查询
 
@@ -450,6 +451,7 @@ class CortexAgent:
             history: 消息历史
             emitter_callbacks: TUI 回调函数字典，传入时使用 TUIEventEmitter，
                               不传时使用 CLIEventEmitter（CLI 模式）
+            images: 本轮对话图片（可选，ADR-0034；[{"data": b64, "media_type": str}]）
         """
         global _interrupt_event
         _interrupt_event.clear()
@@ -507,7 +509,7 @@ class CortexAgent:
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
             return self.loop.run_until_complete(
-                agent.run_stream(history, query, self.runtime.runtime_id)
+                agent.run_stream(history, query, self.runtime.runtime_id, images=images)
             )
         except Exception:
             # ESC 中断：丢弃残留循环，下次 run_query 会创建新的

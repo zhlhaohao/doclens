@@ -84,7 +84,7 @@ def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str
 
 
 async def _stream_agent_response(
-    message: str, session_id: Optional[str]
+    message: str, session_id: Optional[str], images: Optional[list] = None
 ) -> AsyncIterator[dict]:
     """流式跑 StreamingAgent + 完成后策展参考资料。
 
@@ -125,16 +125,38 @@ async def _stream_agent_response(
             # 统一后端落库（ADR-0028）：本轮 message_user 由后端确保在库
             # （新前端不前置写入；老前端已写的同内容末尾条目幂等跳过）——
             # 回放轮次分组与回退快照锚点都依赖它先于本轮其余条目入库。
-            store.ensure_message_user(session_id, message)
+            # images（ADR-0034）：带图消息 payload 平级携带，无图与旧格式
+            # 逐字节相同。
+            store.ensure_message_user(session_id, message, images)
             history = store.get_chat_history(session_id)
             # 末尾是本轮 message_user（后端已确保），run_stream 内部还会再
-            # 追加一次 user_message —— 弹出避免重复。
-            if (
-                history
-                and history[-1].get("role") == "user"
-                and history[-1].get("content") == message
-            ):
-                history.pop()
+            # 追加一次 user_message —— 弹出避免重复。带图消息回放为块数组
+            # （末块 text == message），同样弹出。
+            if history and history[-1].get("role") == "user":
+                tail = history[-1].get("content")
+                if isinstance(tail, str):
+                    if tail == message:
+                        history.pop()
+                elif (
+                    isinstance(tail, list)
+                    and tail
+                    and isinstance(tail[-1], dict)
+                    and tail[-1].get("type") == "text"
+                    and tail[-1].get("text") == message
+                    and not images
+                ):
+                    # 无图重发命中旧带图条目（同文字）：不弹，作为历史保留
+                    # ——本轮新形态（纯文本）落库后重放。
+                    pass
+                elif (
+                    isinstance(tail, list)
+                    and tail
+                    and isinstance(tail[-1], dict)
+                    and tail[-1].get("type") == "text"
+                    and tail[-1].get("text") == message
+                    and images
+                ):
+                    history.pop()
         except Exception as e:  # noqa: BLE001
             logger.warning("load chat history failed for %s: %s", session_id, e)
 
@@ -293,7 +315,9 @@ async def _stream_agent_response(
         # 策展文本（run_stream 中断/异常时保持 None，补写退回原文）
         curated_text: Optional[str] = None
         try:
-            await sa.run_stream(history, message, session_id or runtime.runtime_id)
+            await sa.run_stream(
+                history, message, session_id or runtime.runtime_id, images=images
+            )
 
             # done：策展参考资料章节。
             # 技能会话 → 即选择文件再点右键选择技能执行，例如总结文件技能，提取式（正文提路径+存在性校验重建章节，无 toast）；
@@ -592,7 +616,11 @@ async def chat(req: ChatRequest):
         try:
             # 队列事件与线格式同构（_chat_events 单一真相源）：剥掉 type 作
             # event 名，其余字段整体透传；未知类型记 warning（不静默丢弃）。
-            async for ev in _stream_agent_response(req.message, req.session_id):
+            async for ev in _stream_agent_response(
+                req.message,
+                req.session_id,
+                images=[img.model_dump() for img in req.images] if req.images else None,
+            ):
                 t = ev.get("type")
                 if t not in KNOWN_EVENT_TYPES:
                     logger.warning("chat stream: 未知队列事件类型 %r，丢弃: %s", t, ev)

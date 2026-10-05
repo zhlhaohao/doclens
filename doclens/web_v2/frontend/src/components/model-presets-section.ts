@@ -7,6 +7,7 @@ import {
   deletePreset,
   listPresets,
   probeMaxTokens,
+  probeVision,
   updatePreset,
   PresetsApiError,
   type NewPresetInput,
@@ -26,6 +27,7 @@ function emptyForm(kind: PresetKind): FormState {
     api_key: "",
     context_window: "",
     max_tokens: "",
+    vision: "",
   };
 }
 
@@ -38,6 +40,8 @@ interface FormState {
   api_key: string;
   context_window: string;
   max_tokens: string;
+  /** 支持视觉（ADR-0034，仅 kind=llm）："" = 未声明（默认 false） */
+  vision: "" | "true" | "false";
 }
 
 interface EditingState {
@@ -284,6 +288,7 @@ export class ModelPresetsSection extends LitElement {
   @state() private _formError: string | null = null;
   @state() private _probing = false;
   @state() private _probeMsg: string | null = null;
+  @state() private _probingVision = false;
 
   private _toastTimer?: number;
 
@@ -350,6 +355,7 @@ export class ModelPresetsSection extends LitElement {
         api_key: "", // 留空=不改动（编辑时密钥已脱敏）
         context_window: p.context_window ? String(p.context_window) : "",
         max_tokens: p.max_tokens ? String(p.max_tokens) : "",
+        vision: p.vision === true ? "true" : p.vision === false ? "false" : "",
       },
     };
   }
@@ -389,6 +395,8 @@ export class ModelPresetsSection extends LitElement {
           api_key: f.api_key,
           context_window: f.kind === "llm" && f.context_window ? Number(f.context_window) : null,
           max_tokens: f.kind === "llm" && f.max_tokens ? Number(f.max_tokens) : null,
+          // 视觉能力位（ADR-0034，仅 llm）：未声明 = null（后端默认 false 语义）
+          vision: f.kind === "llm" ? (f.vision === "true" ? true : f.vision === "false" ? false : null) : null,
         };
         await createPreset(input);
         this._setFlash(`已创建预设「${input.name}」`);
@@ -402,6 +410,10 @@ export class ModelPresetsSection extends LitElement {
           model_id: f.model_id.trim(),
           context_window: cw,
           max_tokens: mt,
+          // 视觉能力位（ADR-0034，仅 llm）：显式传布尔（含 false）；未声明不传
+          ...(f.kind === "llm" && f.vision !== ""
+            ? { vision: f.vision === "true" }
+            : {}),
         };
         // api_key 仅在用户输入了新值时才传（空=不改动）
         if (f.api_key) updates.api_key = f.api_key;
@@ -483,6 +495,39 @@ export class ModelPresetsSection extends LitElement {
     }
   }
 
+  /** 行为学探测视觉能力（ADR-0034 增补）：后端发随机密码串图实测模型能否
+   *  读图；结果回填 vision 字段（不自动保存，用户可否决）。 */
+  private async _probeVision() {
+    const ed = this._editing;
+    if (!ed) return;
+    const f = ed.form;
+    if (!f.base_url.trim() || !f.model_id.trim()) {
+      this._formError = "探测前请先填写 Base URL 与模型 ID";
+      return;
+    }
+    if (!f.api_key && ed.mode === "new") {
+      this._formError = "探测前请先填写 API Key";
+      return;
+    }
+    this._probingVision = true;
+    this._formError = null;
+    try {
+      const r = await probeVision({
+        protocol: f.protocol,
+        base_url: f.base_url.trim(),
+        model_id: f.model_id.trim(),
+        api_key: f.api_key || undefined,
+        preset_id: ed.mode === "edit" ? ed.presetId : undefined,
+      });
+      // 探测即回填（不自动保存——声明权在用户）；结果文案不展示（用户要求）
+      this._setField("vision", r.supported ? "true" : "false");
+    } catch (e) {
+      this._formError = this._errMsg(e);
+    } finally {
+      this._probingVision = false;
+    }
+  }
+
   private _renderForm() {
     const ed = this._editing;
     if (!ed) return nothing;
@@ -528,6 +573,20 @@ export class ModelPresetsSection extends LitElement {
             ${this._probing ? html`<div class="probe-msg">二分探测中，约 18 次请求，可能需要数十秒…</div>` : nothing}
             ${this._probeMsg ? html`<div class="probe-msg">${this._probeMsg}</div>` : nothing}
           </div>
+          <div>
+            <div class="field-label">支持视觉（ADR-0034 视觉路由能力位）</div>
+            <div class="probe-row">
+              <select class="select" .value=${f.vision} @change=${(e: Event) => this._setField("vision", (e.target as HTMLSelectElement).value as "" | "true" | "false")}>
+                <option value="" ?selected=${f.vision === ""}>未声明（视为不支持）</option>
+                <option value="true" ?selected=${f.vision === "true"}>支持（粘贴图片直通模型）</option>
+                <option value="false" ?selected=${f.vision === "false"}>不支持（带图消息拦截引导切换）</option>
+              </select>
+              <button class="icon-btn" ?disabled=${this._busy || this._probingVision} @click=${() => this._probeVision()}>
+                ${this._probingVision ? "探测中…" : "探测视觉"}
+              </button>
+            </div>
+            ${this._probingVision ? html`<div class="probe-msg">发送合成图片实测中，约一次请求…</div>` : nothing}
+          </div>
         ` : nothing}
         ${this._formError ? html`<div class="form-error">${this._formError}</div>` : nothing}
         <div class="form-actions">
@@ -567,7 +626,7 @@ export class ModelPresetsSection extends LitElement {
           <div class="preset-name">
             ${p.name}
           </div>
-          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}</div>
+          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}${p.kind === "llm" && p.vision ? " · 视觉" : ""}</div>
         </div>
         <div class="row-actions">
           ${active

@@ -1,6 +1,50 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { SearchMode } from "../state/types";
+import type { ChatImage } from "../api/chat";
+
+/** 对话图片上限与白名单（ADR-0034，与后端 ChatRequest 校验同口径） */
+const MAX_IMAGES = 4;
+const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+/** 压缩参数：最长边 1600px / JPEG q80（对齐日记照片口径；GIF 动图转 JPEG 丢动画——
+ *  粘贴场景可接受，静态帧仍可看） */
+const MAX_EDGE = 1600;
+const JPEG_QUALITY = 0.8;
+
+/** File/Blob → 压缩 base64（不含 data: 前缀）。GIF 直接原样 base64（canvas
+ *  解码 GIF 取首帧 + 透明通道变黑，原样更保真且尺寸通常可接受）。 */
+async function compressImage(file: Blob): Promise<ChatImage | null> {
+  const mediaType = file.type || "image/png";
+  if (!ALLOWED_TYPES.has(mediaType)) return null;
+  if (mediaType === "image/gif") {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 0x8000) {
+      bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    }
+    return { data: btoa(bin), media_type: mediaType };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode failed"));
+      el.src = url;
+    });
+    const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+    return { data: dataUrl.slice(dataUrl.indexOf(",") + 1), media_type: "image/jpeg" };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 @customElement("input-box")
 export class InputBox extends LitElement {
@@ -14,7 +58,8 @@ export class InputBox extends LitElement {
     .wrapper {
       position: relative;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: stretch;
       /* 边框效果：绿色渐变描边（padding-box 白心 + border-box 渐变），跟随 pill 圆角 */
       border: 2px solid transparent;
       border-radius: var(--cortex-radius-pill);
@@ -22,11 +67,79 @@ export class InputBox extends LitElement {
         linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
         linear-gradient(135deg, #16a34a, #22c55e) border-box;
       min-height: var(--min-h);
-      /* 右侧只留边距：按钮在文档流中占据实际宽度，文本换行点自然落在按钮前 */
       padding: 0 3px 0 18px;
       /* 强化：绿色调 elevation 阴影——静止即浮起，作为主动作区 */
       box-shadow: 0 6px 18px rgba(22, 163, 74, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
       transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
+    }
+    /* 有缩略图行时改为大圆角（pill 上沿套缩略图视觉突兀） */
+    .wrapper:has(.thumbs) { border-radius: var(--cortex-radius-xl, 20px); }
+    .wrapper.drag-over {
+      border-color: #16a34a;
+      background:
+        linear-gradient(var(--cortex-surface-muted), var(--cortex-surface-muted)) padding-box,
+        linear-gradient(135deg, #16a34a, #22c55e) border-box;
+    }
+    .row { display: flex; align-items: center; min-height: var(--min-h); }
+    /* 附件模式：左侧 18px 让位给 📎 钮 */
+    .wrapper:has(button.attach) .row { padding-left: 0; }
+    .wrapper:has(button.attach) { padding-left: 4px; }
+    /* 📎 附件按钮：灰 subtle 图标钮（绿色留给发送主键） */
+    button.attach {
+      flex: 0 0 auto;
+      background: transparent;
+      color: var(--cortex-text-subtle);
+      border: none;
+      border-radius: 50%;
+      width: calc(var(--min-h) - 10px);
+      height: calc(var(--min-h) - 10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin-right: 2px;
+    }
+    button.attach:hover:not(:disabled) { background: var(--cortex-surface-muted); color: var(--cortex-text-muted); }
+    button.attach:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* 缩略图暂存行 */
+    .thumbs {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px 2px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .thumbs::-webkit-scrollbar { display: none; }
+    .thumb {
+      position: relative;
+      flex: 0 0 auto;
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--cortex-border);
+      background: var(--cortex-surface-muted);
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb-loading { animation: cortex-thumb-pulse 1s ease-in-out infinite; }
+    @keyframes cortex-thumb-pulse { 0%,100% { opacity: .4 } 50% { opacity: .8 } }
+    .thumb-x {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      font-size: 12px;
+      line-height: 18px;
+      padding: 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .wrapper:focus-within {
       /* 聚焦：绿色渐变描边加深为满色 + 更强 elevation + 绿色光晕环 */
@@ -214,6 +327,13 @@ export class InputBox extends LitElement {
   /** 流式中：按钮原地变身为「停止」（发 stop 事件），输入框禁用。仅 chat 用。 */
   @property({ type: Boolean }) streaming = false;
 
+  /** 对话图片附件（ADR-0034）：true 时启用粘贴/📎/拖拽三入口 + 缩略图暂存行。
+   *  仅 chat 输入框开启；文字仍是消息主体（必填），图是附件。 */
+  @property({ type: Boolean }) attachments = false;
+  /** 暂存图片（压缩后 base64，不含 data: 前缀）。宿主只读（经 submit 事件带出，
+   *  经 images-restored 事件回填）；增删由组件内部入口驱动。 */
+  @property({ attribute: false }) images: ChatImage[] = [];
+
   /** 模式选择器：提供 .mode + .modes 时渲染分裂按钮 + caret 下拉；
    *  不提供时为遗留单一按钮（chat/files 等消费者不受影响）。 */
   @property() mode: SearchMode = "keyword";
@@ -235,6 +355,12 @@ export class InputBox extends LitElement {
   @state() private _slashDismissed = false;
 
   @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
+  /** 隐藏文件选择器（📎 入口；移动端主路径） */
+  @query("#img-input") private fileInputEl!: HTMLInputElement;
+  /** 拖拽悬停高亮 */
+  @state() private _dragOver = false;
+  /** 压缩进行中（粘贴大图时缩略图延迟出现，给个细条占位） */
+  @state() private _compressing = false;
 
   /** Focus the inner input/textarea element. */
   focus(): void {
@@ -341,7 +467,78 @@ export class InputBox extends LitElement {
   private _submit() {
     // 流式中由停止键接管，submit 不触发（textarea 已禁用，此为双保险）
     if (this.streaming || !this.trimmed || this.disabled) return;
-    this.dispatchEvent(new CustomEvent("submit", { detail: { value: this.trimmed } }));
+    const images = this.attachments && this.images.length > 0 ? this.images : undefined;
+    this.dispatchEvent(
+      new CustomEvent("submit", { detail: { value: this.trimmed, images } }),
+    );
+    // 发送即清空暂存（文字由宿主清；图在这里清——submit 后组件自动复位）
+    if (images) {
+      this.images = [];
+      this.dispatchEvent(new CustomEvent("images-change", { detail: { images: [] } }));
+    }
+  }
+
+  /** ---------- 对话图片附件（ADR-0034） ---------- */
+
+  /** 接收一批待压缩图片文件：白名单外拒收 toast、超上限拒收、GIF 原样透传。 */
+  private async _addFiles(files: File[]) {
+    if (!this.attachments || this.disabled || this.streaming) return;
+    for (const f of files) {
+      if (!f.type || !ALLOWED_TYPES.has(f.type)) {
+        this.dispatchEvent(new CustomEvent("image-reject", {
+          detail: { reason: `不支持的图片格式: ${f.type || "未知"}（支持 png/jpg/webp/gif）` },
+        }));
+        continue;
+      }
+      if (this.images.length >= MAX_IMAGES) {
+        this.dispatchEvent(new CustomEvent("image-reject", {
+          detail: { reason: `最多 ${MAX_IMAGES} 张图片` },
+        }));
+        break;
+      }
+      this._compressing = true;
+      try {
+        const img = await compressImage(f);
+        if (img) this._setImages([...this.images, img]);
+      } catch {
+        this.dispatchEvent(new CustomEvent("image-reject", { detail: { reason: "图片解码失败" } }));
+      } finally {
+        this._compressing = false;
+      }
+    }
+  }
+
+  /** 更新暂存图并通知宿主（宿主 .images 绑定回组件 → 受控往返）。 */
+  private _setImages(images: ChatImage[]) {
+    this.images = images;
+    this.dispatchEvent(new CustomEvent("images-change", { detail: { images } }));
+  }
+
+  private _removeImage(i: number) {
+    this._setImages(this.images.filter((_, idx) => idx !== i));
+  }
+
+  private _onPaste(e: ClipboardEvent) {
+    if (!this.attachments) return;
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imgFiles = items
+      .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (imgFiles.length > 0) {
+      e.preventDefault(); // 阻止把图片占位符粘进文本框
+      void this._addFiles(imgFiles);
+    }
+  }
+
+  private _onDrop(e: DragEvent) {
+    if (!this.attachments) return;
+    e.preventDefault();
+    this._dragOver = false;
+    const files = Array.from(e.dataTransfer?.files ?? []).filter(
+      (f) => f.type.startsWith("image/"),
+    );
+    if (files.length > 0) void this._addFiles(files);
   }
 
   /** 流式中按钮变身停止键：发 stop 事件（不 submit），始终可点。 */
@@ -504,15 +701,54 @@ export class InputBox extends LitElement {
     const fieldDisabled = this.disabled || this.streaming;
     const field = this.multiline
       ? html`<textarea rows="1" .value=${this.value} placeholder=${this.placeholder}
-          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}></textarea>`
+          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}
+          @paste=${this._onPaste}></textarea>`
       : html`<input type="text" .value=${this.value} placeholder=${this.placeholder}
-          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown} />`;
+          ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}
+          @paste=${this._onPaste} />`;
     return html`
-      <div class="wrapper">
-        ${field}
-        ${this._renderButton()}
+      <div class="wrapper ${this._dragOver ? "drag-over" : ""}"
+           @dragover=${(e: DragEvent) => { if (this.attachments) { e.preventDefault(); this._dragOver = true; } }}
+           @dragleave=${() => (this._dragOver = false)}
+           @drop=${this._onDrop}>
+        ${this.attachments ? this._renderThumbRow() : null}
+        <div class="row">
+          ${this.attachments ? this._renderAttachButton(fieldDisabled) : null}
+          ${field}
+          ${this._renderButton()}
+        </div>
         ${this._renderMenu()}
         ${this._renderSlashMenu()}
+      </div>
+    `;
+  }
+
+  /** 📎 附件按钮（文档流内左侧；图片 icon，灰色 subtle 样式）。 */
+  private _renderAttachButton(fieldDisabled: boolean) {
+    return html`
+      <button class="attach" @click=${() => this.fileInputEl?.click()}
+              ?disabled=${fieldDisabled} aria-label="添加图片" title="添加图片">
+        <doclens-icon name="image" aria-hidden="true"></doclens-icon>
+      </button>
+      <input id="img-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
+             multiple hidden @change=${(e: Event) => {
+               const inp = e.target as HTMLInputElement;
+               void this._addFiles(Array.from(inp.files ?? []));
+               inp.value = ""; // 允许重复选同一文件
+             }} />`;
+  }
+
+  /** 缩略图暂存行（输入框上方）：每张 × 删除；压缩中细条占位。 */
+  private _renderThumbRow() {
+    if (this.images.length === 0 && !this._compressing) return null;
+    return html`
+      <div class="thumbs">
+        ${this.images.map((img, i) => html`
+          <div class="thumb">
+            <img src="data:${img.media_type};base64,${img.data}" alt="待发送图片 ${i + 1}" />
+            <button class="thumb-x" @click=${() => this._removeImage(i)} aria-label="删除图片">×</button>
+          </div>`)}
+        ${this._compressing ? html`<div class="thumb thumb-loading"></div>` : null}
       </div>
     `;
   }

@@ -74,6 +74,41 @@ def test_runner_register_atomic_and_lifecycle():
 
 # ---------- store 统一落库（ADR-0028） ----------
 
+def test_ensure_message_user_with_images(store):
+    """ADR-0034 对话图片：payload 平级 images；无图消息与旧格式逐字节相同；
+    同文字不同图不幂等（新条目）。"""
+    from doclens.web_v2.sessions_store import SessionsStore  # noqa: F401
+
+    _seed(store)
+    imgs = [{"data": "abc", "media_type": "image/png"}]
+    # 老条目（无 images 键）+ 无图重发 → 幂等（老前端路径不变）
+    assert store.ensure_message_user("s1", "hello") is False
+    # 同文字带图 → 新条目（图不同即不同消息）
+    assert store.ensure_message_user("s1", "hello", imgs) is True
+    # 同文字同图 → 幂等
+    assert store.ensure_message_user("s1", "hello", imgs) is False
+    # 同文字不同图 → 新条目
+    assert store.ensure_message_user("s1", "hello", [{"data": "xyz", "media_type": "image/jpeg"}]) is True
+
+    # payload 形态：带图条目有 images 键，无图条目没有
+    items = [i for i in store.get_detail("s1") if i.kind == "message_user"]
+    with_img = json.loads(items[1].payload)
+    assert with_img["images"] == imgs and with_img["content"] == "hello"
+    without_img = json.loads(items[0].payload)
+    assert "images" not in without_img
+
+    # 回放（get_chat_history）：带图条目组装块数组，无图条目保持字符串
+    history = store.get_chat_history("s1")
+    contents = [m["content"] for m in history if m["role"] == "user"]
+    block_msgs = [c for c in contents if isinstance(c, list)]
+    str_msgs = [c for c in contents if isinstance(c, str)]
+    assert len(block_msgs) == 2  # 两条带图
+    blocks = block_msgs[-1]
+    assert blocks[0]["type"] == "image"
+    assert blocks[0]["source"]["data"] == "xyz"
+    assert blocks[-1] == {"type": "text", "text": "hello"}
+    assert str_msgs == ["hello"]  # 无图条目原样
+
 def test_ensure_message_user_idempotent(store):
     _seed(store)  # 老前端形态：已前置写入
     assert store.ensure_message_user("s1", "hello") is False   # 幂等跳过
@@ -114,7 +149,7 @@ class _FakeAgent:
         self.round_start_index = None
         self.full_text = "这是完整的回答内容。"
 
-    async def run_stream(self, history, message, session_key):
+    async def run_stream(self, history, message, session_key, images=None):
         try:
             await asyncio.sleep(0.2)  # 生成期（消费端在此窗口内断开）
         except asyncio.CancelledError:

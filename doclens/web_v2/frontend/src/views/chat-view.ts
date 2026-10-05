@@ -9,6 +9,7 @@ import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
 import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession } from "../api/sessions";
+import { router } from "../router/router";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -239,6 +240,18 @@ export class ChatView extends LitElement {
   static readonly PREVIEW_PANE_WIDTH_MAX = 900;
 
   static styles = css`
+    /* 视觉能力拦截对话框（ADR-0034） */
+    .vision-gate { max-width: 360px; padding: 4px; }
+    .vision-gate h3 { margin: 0 0 8px; font-size: 16px; }
+    .vision-gate p { margin: 0 0 8px; color: var(--cortex-text-muted, #555); font-size: 14px; line-height: 1.5; }
+    .vision-gate .vision-gate-hint { color: var(--cortex-text-subtle, #888); font-size: 13px; }
+    .vision-gate-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .vision-gate-actions button {
+      border: none; border-radius: var(--cortex-radius-pill, 100px);
+      padding: 8px 18px; font-size: 14px; cursor: pointer;
+    }
+    .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted, #555); border: 1px solid var(--cortex-border, #ddd); }
+    .vision-gate-actions .primary { background: #0064e0; color: #fff; }
     :host {
       display: flex;
       flex-direction: column;
@@ -454,6 +467,12 @@ export class ChatView extends LitElement {
   `;
 
   @state() private draft = "";
+  /** 待回填输入框的图片附件（ADR-0034）：重问/回退锚点带的图，经绑定
+   *  .images 传给 input-box 暂存区；用户手动增删后以组件内状态为准。 */
+  @state() private _pendingImages: { data: string; media_type: string }[] = [];
+  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉时弹出，引导
+   *  跳设置页切换；拦截的消息/图保留在草稿与暂存区。 */
+  @state() private _visionGateOpen = false;
   /** 当前渲染的 ask 卡片载荷（交互态→摘要态由卡片内部管理；
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
@@ -497,7 +516,11 @@ export class ChatView extends LitElement {
    *  新会话 / 返回 initial 清空。 */
   @state() private _rewindDividers: RewindDivider[] = [];
   /** 回退确认框载荷（null = 关闭）：seq 锚点 / content 回填内容 / deadCount 折叠数。 */
-  @state() private _rewindDialog: { seq: number; content: string; deadCount: number } | null = null;
+  @state() private _rewindDialog: {
+    seq: number; content: string; deadCount: number;
+    /** 锚点图片（ADR-0034）：确认后回填附件暂存区 */
+    images?: { data: string; media_type: string }[];
+  } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -725,6 +748,35 @@ export class ChatView extends LitElement {
       </dialog>`;
   }
 
+  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉，消息未发送、
+   *  草稿与附件保留——「前往设置」跳模型 tab 手动切换（预设热生效）。 */
+  private _renderVisionGateDialog() {
+    if (!this._visionGateOpen) return nothing;
+    return html`
+      <dialog @cancel=${() => (this._visionGateOpen = false)}>
+        <div class="vision-gate">
+          <h3>当前模型不支持图像</h3>
+          <p>这条消息带有图片，但当前对话模型（${store.getState().status?.model_name || "未命名"}）
+            未声明视觉能力，发送会被模型忽略或报错。</p>
+          <p class="vision-gate-hint">在设置 → 模型中切换到支持视觉的模型预设
+            （或编辑当前预设勾选「支持视觉」），切换即时生效，回来重新发送即可。
+            消息与图片已保留在输入框。</p>
+          <div class="vision-gate-actions">
+            <button class="secondary" @click=${() => (this._visionGateOpen = false)}>取消</button>
+            <button class="primary" @click=${this._gotoModelSettings}>前往设置</button>
+          </div>
+        </div>
+      </dialog>`;
+  }
+
+  /** 跳设置页模型 tab（ADR-0034）：写 pendingSettingsTab 再导航，keep-alive
+   *  下由 store 订阅消费。 */
+  private _gotoModelSettings() {
+    this._visionGateOpen = false;
+    actions.setPendingSettingsTab("ai");
+    router.navigate("settings");
+  }
+
   /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
   private _renderInfoDialog() {
     if (!this._infoDialogOpen || !this.viewState.currentSession) return nothing;
@@ -874,9 +926,19 @@ export class ChatView extends LitElement {
     return store.getState().chat;
   }
 
-  private async _submit(e: CustomEvent<{ value: string }>) {
+  private async _submit(e: CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>) {
     this._resetPreview();
     const message = e.detail.value;
+    const images = e.detail.images;
+
+    // 对话图片视觉路由（ADR-0034）：当前 LLM 预设不支持视觉时拦截发送，
+    // 消息/草稿/附件全保留（切完模型回来重发）；能力位来自 /api/status。
+    if (images && images.length > 0 && !store.getState().status?.llm_vision) {
+      this.draft = message;
+      this._pendingImages = images;
+      this._visionGateOpen = true;
+      return;
+    }
 
     // 斜杠技能调用（首字符 /）：合法性硬校验（存在 ∧ 启用 ∧ 未删除 ∧ 用户可
     // 调用）。非法阻断发送并保留草稿（后端对漏网的非法斜杠按普通文本处理，
@@ -901,11 +963,11 @@ export class ChatView extends LitElement {
 
     // initial 态时消息发送前先建会话（与技能对话共用路径）
     if (this.viewState.state === "initial") {
-      await this._ensureSession(message, message);
-      await this._sendMessage(message, true);
+      await this._ensureSession(message, message, undefined, images);
+      await this._sendMessage(message, true, images);
       return;
     }
-    await this._sendMessage(message);
+    await this._sendMessage(message, false, images);
   }
 
   /** 消费跨视图技能对话请求（files 工具箱）：initial 态新建技能会话后自动发送。
@@ -922,7 +984,10 @@ export class ChatView extends LitElement {
 
   /** initial 态下创建新会话并转入 focus 态（用户气泡先行）。
    *  mode="skill" 声明技能会话（后端据此切换提取式引文策展）。 */
-  private async _ensureSession(title: string, message: string, mode?: "skill"): Promise<void> {
+  private async _ensureSession(
+    title: string, message: string, mode?: "skill",
+    images?: { data: string; media_type: string }[],
+  ): Promise<void> {
     const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100), mode });
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
@@ -934,17 +999,20 @@ export class ChatView extends LitElement {
         preview: message.slice(0, 100), mode, updated_at: new Date().toISOString(),
         message_count: 0,
       },
-      messages: [{ role: "user", content: message, created_at: new Date().toISOString() }],
+      messages: [{ role: "user", content: message, images, created_at: new Date().toISOString() }],
       streaming: true,
     });
   }
 
   /** 追加用户消息并发起流式请求（会话已就位）。
    *  firstOfSession=true 时用户气泡已由 _ensureSession 加入，不重复追加。 */
-  private async _sendMessage(message: string, firstOfSession = false): Promise<void> {
+  private async _sendMessage(
+    message: string, firstOfSession = false,
+    images?: { data: string; media_type: string }[],
+  ): Promise<void> {
     if (!firstOfSession) {
       actions.setChatState({
-        messages: [...this.viewState.messages, { role: "user", content: message, created_at: new Date().toISOString() }],
+        messages: [...this.viewState.messages, { role: "user", content: message, images, created_at: new Date().toISOString() }],
         streaming: true,
       });
     } else {
@@ -967,7 +1035,10 @@ export class ChatView extends LitElement {
     this._abortController = new AbortController();
 
     try {
-      for await (const ev of chatStream({ message, session_id: sessionId }, this._abortController.signal)) {
+      for await (const ev of chatStream(
+        { message, session_id: sessionId, images },
+        this._abortController.signal,
+      )) {
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
@@ -1206,10 +1277,11 @@ export class ChatView extends LitElement {
   }
 
   /** 点击 user 气泡的「重问」：把问题内容拷回输入框（不自动发送，留给用户编辑/发送）。 */
-  private _onReask(e: CustomEvent<{ content: string }>): void {
+  private _onReask(e: CustomEvent<{ content: string; images?: { data: string; media_type: string }[] }>): void {
     const content = e.detail?.content ?? "";
     if (!content) return;
     this.draft = content;
+    this._pendingImages = e.detail?.images ?? [];
     this.requestUpdate();
     // 流式期间输入框禁用，不抢焦点；停止后再点重问可聚焦编辑
     if (!this.viewState.streaming) {
@@ -1219,14 +1291,17 @@ export class ChatView extends LitElement {
   }
 
   /** 点击 user 气泡的「回退到这里」：算折叠数并弹确认框（ADR-2026-09-19）。 */
-  private _onRewind(e: CustomEvent<{ seq: number; content: string }>): void {
+  private _onRewind(e: CustomEvent<{ seq: number; content: string; images?: { data: string; media_type: string }[] }>): void {
     if (this.viewState.streaming) return; // 流式期间按钮已禁用，双保险
     const anchorSeq = e.detail.seq;
     // 折叠数 = 锚点及其后的活消息（锚点回填输入框，同样从时间线消失）
     const deadCount = this.viewState.messages.filter(
       (m) => m.seq !== undefined && m.seq >= anchorSeq,
     ).length;
-    this._rewindDialog = { seq: anchorSeq, content: e.detail.content, deadCount };
+    this._rewindDialog = {
+      seq: anchorSeq, content: e.detail.content, deadCount,
+      images: e.detail.images,
+    };
   }
 
   /** 确认回退：POST → 重拉 detail（渲染新折叠条）→ 锚点内容回填输入框。 */
@@ -1242,6 +1317,7 @@ export class ChatView extends LitElement {
         session.id, e.detail.pointSeq, e.detail.restoreFiles,
       );
       this.draft = anchor.content;
+      this._pendingImages = anchor.images ?? [];
       const f = res.files;
       const parts: string[] = [];
       if (f.restored.length) parts.push(`恢复 ${f.restored.length} 个文件`);
@@ -1457,10 +1533,14 @@ export class ChatView extends LitElement {
               placeholder="问 Doclens 任何问题..."
               .buttonLabel=${"发送"}
               multiline
+              attachments
               .value=${this.draft}
+              .images=${this._pendingImages}
               .skillItems=${this._recentSkillItems}
               .slashItems=${this._skillCandidates}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
+              @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
+              @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
               @skill-menu-open=${this._onSkillMenuOpen}
               @skill-pick=${this._onSkillMenuPick}
               @skill-browse=${this._onSkillBrowse}
@@ -1549,11 +1629,15 @@ export class ChatView extends LitElement {
             placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续对话..."}
             .buttonLabel=${"发送"}
             multiline
+            attachments
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
+            .images=${this._pendingImages}
             .skillItems=${this._recentSkillItems}
             .slashItems=${this._skillCandidates}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
+            @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
+            @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
             @skill-menu-open=${this._onSkillMenuOpen}
             @skill-pick=${this._onSkillMenuPick}
             @skill-browse=${this._onSkillBrowse}
@@ -1580,6 +1664,7 @@ export class ChatView extends LitElement {
         </div>` : null}
       ${this._renderSkillDialog()}
       ${this._renderRenameDialog()}
+      ${this._renderVisionGateDialog()}
       ${this._renderInfoDialog()}
       ${this._renderRewindDialog()}
       ${this._renderCompactDialog()}
