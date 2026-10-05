@@ -29,6 +29,7 @@ describe("fetchDocuments", () => {
       name: "a.md",
       size: 100,
       modifiedAt: "2026-06-24T00:00:00Z",
+      ghost: false,  // 后端未带 ghost 字段时默认 false
     });
   });
 

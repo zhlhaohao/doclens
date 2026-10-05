@@ -123,6 +123,7 @@ def _iter_walk_directory(
     respect_gitignore: bool = True,
     max_files: int = MAX_DIR_FILES,
     follow_symlinks: bool = False,
+    ghost_candidates: set[str] | None = None,
 ):
     """Recursively walk *directory*, yielding matching file paths one by one.
 
@@ -130,6 +131,10 @@ def _iter_walk_directory(
     shadow MD / extensions / .gitignore), O(1) memory. ``max_files <= 0``
     means no cap; exceeding the cap raises like the list variant, at the
     (max_files + 1)-th match.
+
+    ``ghost_candidates``: when a set is passed, files dropped by the
+    *extension* filter are appended to it (metadata-only registration
+    candidates — see treesearch/ghost.py). They are NOT yielded.
     """
     directory = os.path.abspath(directory)
     gitignore_spec, gitignore_base = load_gitignore_spec(directory) if respect_gitignore else (None, directory)
@@ -152,6 +157,21 @@ def _iter_walk_directory(
             if allowed_extensions is not None:
                 _, ext = os.path.splitext(fname)
                 if ext.lower() not in allowed_extensions:
+                    if ghost_candidates is not None:
+                        # Ghost candidates exclude hidden (dot) directories —
+                        # engine/host state lives there (db sidecars, logs);
+                        # registering them would churn on every run.
+                        parts = dirpath.split(os.sep)
+                        if any(p.startswith(".") for p in parts):
+                            continue
+                        full_gc = os.path.join(dirpath, fname)
+                        # Same visibility rules as indexed files: .gitignore
+                        # filter applies below-shadowed here (dot dirs already
+                        # cover the common cases); keep the explicit check for
+                        # non-dot gitignored paths.
+                        if respect_gitignore and is_gitignored(gitignore_spec, gitignore_base, full_gc):
+                            continue
+                        ghost_candidates.add(full_gc)
                     continue
 
             full_path = os.path.join(dirpath, fname)
@@ -178,6 +198,7 @@ def resolve_paths(
     max_files: int = MAX_DIR_FILES,
     follow_symlinks: bool = False,
     apply_source_type_filter: bool = True,
+    ghost_candidates: set[str] | None = None,
 ) -> list[str]:
     """Resolve a mix of files, globs, and directories into file paths.
 
@@ -204,6 +225,9 @@ def resolve_paths(
             Pass False for callers that want the full extension whitelist —
             e.g. a plain-text fallback search whose scope should NOT be
             narrowed by indexing type preferences.
+        ghost_candidates: optional collector set. When passed, files dropped
+            by the extension filter during directory walks are appended here
+            (candidates for metadata-only ghost registration, ghost.py).
 
     Returns:
         List of resolved file paths (deduplicated, order-preserved).
@@ -244,6 +268,7 @@ def resolve_paths(
                 respect_gitignore=respect_gitignore,
                 max_files=max_files,
                 follow_symlinks=follow_symlinks,
+                ghost_candidates=ghost_candidates,
             ):
                 _add(fp)
         elif os.path.isfile(p):

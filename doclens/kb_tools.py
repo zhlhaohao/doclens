@@ -1519,6 +1519,14 @@ def _handle_read_document(
 
     ext = os.path.splitext(abs_path)[1].lower()
 
+    # 登记闸门（ADR-0034 ghost 行）：仅登记未索引的文件（空树 ghost 行命中
+    # DB）拒绝读取——与「不读取内容」的登记语义自洽，AI 读代码走 read_file。
+    if _is_ghost_registered(idx_manager, abs_path):
+        return (
+            f"该文件仅登记未索引（不在索引类型白名单内）: {path}。\n"
+            f"read_document 不读取其内容；请改用 read_file 工具按纯文本读取。"
+        )
+
     try:
         # 索引优先（text-first 取完整正文）：部分格式（如 PDF）现场解析只产出
         # summary 截断摘要，完整 text 只在索引里；读索引还省掉重复解析。
@@ -1563,6 +1571,22 @@ def _handle_read_document(
 # ---------------------------------------------------------------------------
 # file_info：read_document 之前的文件概况探查
 # ---------------------------------------------------------------------------
+
+
+def _is_ghost_registered(idx_manager: IndexManager, abs_path: str) -> bool:
+    """路径是否为「仅登记」的 ghost 行（ADR-0034）——documents 有行但空树。
+
+    判据 = DB 命中该 source_path 且 node_count == 0。true 索引文档至少有
+    一个节点（无 heading 的 md/txt 也有单节点兜底）。
+    """
+    try:
+        if getattr(idx_manager, "ts", None) is None:
+            return False
+        doc = _load_doc_by_source_path(idx_manager, abs_path)
+        return doc is not None and not doc.structure
+    except Exception as e:  # noqa: BLE001
+        logger.debug("is_ghost_registered(%s) failed: %s", abs_path, e)
+        return False
 
 
 def _load_tree_for_info(
@@ -1662,6 +1686,19 @@ def _handle_file_info(
         return f"文档不存在: {path}。请确认路径是否正确。"
 
     ext = os.path.splitext(abs_path)[1].lower()
+
+    # 登记态如实标注（ADR-0034）：ghost 行 = 已收录元数据、未建树——
+    # 概况按「仅登记」报告，不走索引树（空树无概况可言）。
+    if _is_ghost_registered(idx_manager, abs_path):
+        stat = os.stat(abs_path)
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        return (
+            f"文件: {path}\n"
+            f"格式: {ext} ({fmt_size(stat.st_size)})\n"
+            f"修改时间: {mtime}\n"
+            f"已索引: 否（仅登记——文件名可搜索，内容不参与全文检索）\n"
+            f"read_document 不读取该文件内容；请改用 read_file 工具。"
+        )
 
     try:
         tree, indexed = _load_tree_for_info(idx_manager, abs_path, ext)

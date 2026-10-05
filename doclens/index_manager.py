@@ -328,6 +328,48 @@ class IndexManager:
             logger.debug("indexed_children_of(%s) failed: %s", dir_abs_path, e)
             return set()
 
+    def ghost_children_of(self, dir_abs_path: str) -> set[str]:
+        """目录的直接子项中「仅登记」（ghost 行，ADR-0034）的子项名集合。
+
+        与 indexed_children_of 同构的单次前缀查询；三态徽标的数据源之一。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.ghost_children_of(dir_abs_path)
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("ghost_children_of(%s) failed: %s", dir_abs_path, e)
+            return set()
+
+    def is_path_registered(self, abs_path: str) -> bool:
+        """单个文件路径是否为「仅登记」ghost 行（未索引但已收录元数据）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return fts.is_ghost_at(abs_path)
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("is_path_registered(%s) failed: %s", abs_path, e)
+            return False
+
+    def registered_doc_count(self) -> int:
+        """「仅登记」ghost 行总数（与已索引文档分开报，ADR-0034）。"""
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return int(fts.get_stats().get("ghost_count", 0))
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("registered_doc_count failed: %s", e)
+            return 0
+
     @property
     def scoring_weights(self) -> dict:
         c = self._config

@@ -7,6 +7,8 @@ export interface FileEntry {
   size: number;
   modified_at: string;
   indexed: boolean;
+  /** ADR-0034：仅登记（ghost 行）——文件名可搜、内容不参与全文搜索。 */
+  registered?: boolean;
   writable: boolean;
   has_child_dirs: boolean;
 }

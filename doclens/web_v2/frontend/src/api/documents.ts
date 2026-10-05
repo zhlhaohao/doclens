@@ -6,6 +6,7 @@ interface IndexedDocumentDTO {
   name: string;
   size: number;
   modified_at: string;
+  ghost?: boolean;
 }
 
 interface IndexedDocumentsResponseDTO {
@@ -19,6 +20,8 @@ export interface IndexedDocument {
   name: string;
   size: number;
   modifiedAt: string;
+  /** ADR-0034：仅登记行（文件名可搜、内容不可搜）。 */
+  ghost?: boolean;
 }
 
 /** 拉取所有已索引文档列表（用于文件名搜索本地过滤）。 */
@@ -29,5 +32,6 @@ export async function fetchDocuments(): Promise<IndexedDocument[]> {
     name: d.name,
     size: d.size,
     modifiedAt: d.modified_at,
+    ghost: d.ghost ?? false,
   }));
 }

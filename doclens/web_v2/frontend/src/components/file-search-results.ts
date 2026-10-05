@@ -106,6 +106,16 @@ export class FileSearchResults extends LitElement {
       text-overflow: ellipsis;
       color: var(--cortex-text);
     }
+    /* ADR-0034：仅登记文件（ghost 行）——meta 区追加「仅登记」标记 */
+    .ghost-tag {
+      color: var(--cortex-text-subtle);
+      font-size: var(--cortex-fs-xs);
+      border: 1px solid var(--cortex-border-muted);
+      border-radius: var(--cortex-radius-sm);
+      padding: 0 4px;
+      flex-shrink: 0;
+      user-select: none;
+    }
     .dir {
       color: var(--cortex-text-muted);
       font-family: var(--cortex-font-mono);
@@ -249,6 +259,9 @@ export class FileSearchResults extends LitElement {
               <span class="name-cell">
                 <doclens-icon class="icon" name="file"></doclens-icon>
                 <span class="name">${highlight(doc.name, query)}</span>
+                ${doc.ghost
+                  ? html`<span class="ghost-tag" title="已登记：文件名可搜索，内容不参与全文检索">仅登记</span>`
+                  : ""}
                 ${dir ? html`<span class="dir">${dir}</span>` : ""}
               </span>
               <span class="meta">${formatSize(doc.size)} · ${formatRelative(doc.modifiedAt)}</span>
