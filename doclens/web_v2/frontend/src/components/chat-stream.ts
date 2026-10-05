@@ -68,15 +68,58 @@ export class ChatStream extends LitElement {
   /** 流式期间禁用回退钮（重问不受影响）。 */
   @property({ type: Boolean }) rewindDisabled = false;
   @state() private _expanded = new Set<number>();
+  /** 贴底粘滞（stick-to-bottom，2026-10-05）：仅当用户视口在底部附近时，
+   *  流式增量（token / thinking_delta / tool step）才自动跟随滚底。
+   *  思考流高频刷新期间用户上滚回看 → 视口冻结，不再被拽回底部
+   *  （旧实现 updated() 无条件 scrollTop=scrollHeight 的缺陷）。
+   *  程序性滚动自身触发的 scroll 事件不计为用户滚动（_pinned 置位期间忽略）。 */
+  private _pinned = true;
   private _scrollRafPending = false;
+  /** 距底判定阈值（px）：容差视口高度的小比例，容纳字体缩放/最后一行渲染抖动 */
+  private static readonly PIN_THRESHOLD = 80;
+
+  /** 粘滞态只读出口（测试/调试观测用；写状态仅经 scroll 事件与 scrollToBottom）。 */
+  get pinned(): boolean {
+    return this._pinned;
+  }
+
+  firstUpdated() {
+    // 程序性滚动（跟随滚底）也会触发 scroll 事件——只有非 pinned 的
+    // 用户滚动才更新粘滞状态，避免跟随动作本身把自己顶下线
+    this.addEventListener("scroll", this._onScroll, { passive: true });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.removeEventListener("scroll", this._onScroll);
+  }
+
+  private _onScroll = (): void => {
+    // 程序性跟随滚动期间（_pinned=true 且本次 updated 已排定 rAF）忽略：
+    // 本方法只在用户滚动导致离开/回到底部时翻转 _pinned
+    if (this._scrollRafPending) return;
+    const distance = this.scrollHeight - this.scrollTop - this.clientHeight;
+    this._pinned = distance <= ChatStream.PIN_THRESHOLD;
+  };
+
+  /** 强制脱离粘滞判定，无条件滚到底。发送新消息/切换会话时调用
+   *  （新内容在底部，用户意图明确指向底部，无视当前滚动位置）。 */
+  scrollToBottom(): void {
+    this._pinned = true;
+    // 立即滚一次；若同帧有 pending 渲染，updated() 的 rAF 会再补一次对齐
+    this.scrollTop = this.scrollHeight;
+  }
 
   updated() {
-    // 自动滚动到底部：延迟到下一帧，等子组件（chat-message → chat-tool-trace）
-    // 渲染/展开后再算 scrollHeight；guard 合并同帧多次 updated 为单次 rAF
+    // 贴底粘滞：仅 pinned 时跟随滚底。延迟到下一帧，等子组件
+    // （chat-message → chat-tool-trace）渲染/展开后再算 scrollHeight；
+    // guard 合并同帧多次 updated 为单次 rAF
+    if (!this._pinned) return;
     if (this._scrollRafPending) return;
     this._scrollRafPending = true;
     requestAnimationFrame(() => {
       this._scrollRafPending = false;
+      if (!this._pinned) return; // rAF 间隙用户上滚：放弃本次跟随
       this.scrollTop = this.scrollHeight;
     });
   }

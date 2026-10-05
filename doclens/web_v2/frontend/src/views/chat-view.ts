@@ -18,6 +18,7 @@ import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
+import type { ChatStream } from "../components/chat-stream";
 import { formatTokens } from "../utils/format";
 // 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
 export { mapSessionItemsToMessages } from "./chat-timeline";
@@ -931,6 +932,11 @@ export class ChatView extends LitElement {
     return store.getState().chat;
   }
 
+  /** 消息流元素（发送消息时强制回底——新内容在底部，用户意图明确）。 */
+  private get _streamEl(): ChatStream | null {
+    return this.renderRoot.querySelector("chat-stream");
+  }
+
   private async _submit(e: CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>) {
     this._resetPreview();
     const message = e.detail.value;
@@ -1015,6 +1021,9 @@ export class ChatView extends LitElement {
     message: string, firstOfSession = false,
     images?: { data: string; media_type: string }[],
   ): Promise<void> {
+    // 发送即回底（贴底粘滞的强制出口）：用户主动发消息 = 意图明确指向
+    // 底部的新内容，即使此前上滚回看冻结了视口也立即恢复跟随
+    this._streamEl?.scrollToBottom();
     if (!firstOfSession) {
       actions.setChatState({
         messages: [...this.viewState.messages, { role: "user", content: message, images, created_at: new Date().toISOString() }],
@@ -1196,6 +1205,9 @@ export class ChatView extends LitElement {
       if (generating) this._startGeneratingPoll(s.id);
       else this._stopGeneratingPoll();
       this._rewindDividers = dividers;
+      // 切换会话/刷新：视口强制回底（贴底粘滞的强制出口）——不同会话间
+      // 保留的 _pinned 状态无意义，新时间线以底部为默认视位
+      this._streamEl?.scrollToBottom();
       this._sessionUsage = applyLiveWindow(
         aggregateUsage(body.items ?? []),
         Number(body.context_window ?? 0),

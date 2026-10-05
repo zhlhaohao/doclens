@@ -114,6 +114,8 @@
 
 ## 决议摘要（详见 docs/adr/）
 
+- 2026-10-05：消息流滚动 = 贴底粘滞（stick-to-bottom）——仅当视口在底部附近（距底 ≤80px）时流式增量才自动跟随滚底；用户上滚回看即冻结视口（思考流高频刷新不再拽人回底），滚回底部自动恢复跟随；发送消息/切换会话强制回底（用户意图明确指向底部新内容）。_Avoid_: updated() 无条件 scrollTop=scrollHeight（高频刷新劫持滚动条）。
+
 - 2026-10-05：主动停止 = 信号 + 取消 + 等收尾（ADR-0035）——/chat/stop 从「只发信号」升级：Event + hook 照旧，随后立刻 task.cancel（静默期唯一可靠手段：深度思考不流式/首 token 前静默/压缩摘要期 Event 无人检查；恢复态原本够不着 cancel——SSE finally 已退场，2026-10-05 事故根因），最后 shield 等收尾 ≤2s 才返回（stopChat 返回即 generating=false，不靠 5s 轮询）；chat_runner 取消禁令解除（收尾全在 finally，cancel 不丢落库）；前端 stopChat 挂 5s 超时防极端挂起；半截退原文落库不走策展；planify 零改动。
 
 - 2026-10-05：思考流 = 「思考中」占位的实时思考展示（双行尾部滑窗，被动接收 reasoning_content/thinking 块，不主动开 extended thinking、不落库、正文首 token 即撤）。
