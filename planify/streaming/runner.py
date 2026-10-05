@@ -407,6 +407,17 @@ class StreamingAgent:
                 loop_count += 1
                 self.logger.info(f"[StreamingAgent] 开始循环 #{loop_count}")
 
+                # === 中断检查点（循环顶）===
+                # 流式检查点（_stream_llm_call 内）覆盖不到「工具执行被
+                # 中断 hook 击杀」的场景：shell 进程树被杀后工具立即返回，
+                # 若不在此退出，会再发起一轮 LLM 调用（烧 token 后才断）。
+                if self._interrupt_event and self._interrupt_event.is_set():
+                    self.logger.info("[StreamingAgent] 工具执行后检测到中断，结束回合")
+                    await self.emitter.emit_done(
+                        session_id, None, reason="stopped"
+                    )
+                    return self._cleanup_messages(messages)
+
                 # === 压缩管道 ===
                 # token 估算（usage-based：实测基线 + 增量 ÷4）算一次两用——
                 # microcompact 门控与 auto_compact 阈值共用，避免重复全量估算

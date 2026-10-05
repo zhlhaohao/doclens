@@ -10,7 +10,8 @@
 4. 停止/断开（ADR-0028 断开续跑）：
    - 用户主动停止（POST /chat/stop，前端停止按钮）→ request_stop set
      Event（agent 在流式检查点退出）+ 中断 hook 唤醒挂起的 ask 等待 +
-     取消 agent 任务——三层兜底，**立刻停止不烧 token**；
+     中断 hook 击杀会话在跑的 shell 进程树（2026-10-05：卡在常驻进程的
+     工具即刻返回）+ 取消 agent 任务——四层兜底，**立刻停止不烧 token**；
    - 消费端断开（关页/断网/切走，且未请求过停止）→ 按配置
      CORTEX_CHAT_DISCONNECT_CONTINUE（默认 true）放生 agent task 续跑
      完本轮（chat_runner registry 持有强引用），收尾时后端补写展示层
@@ -198,8 +199,26 @@ async def _stream_agent_response(
         if session_key:
             waiter.interrupt_session(session_key)
 
+    def _kill_running_shells() -> None:
+        """中断 hook：击杀该会话在跑的 shell 进程树（2026-10-05 事故修复）。
+
+        shell 卡在常驻进程（如误跑 run-server）时，Event 检查点在工具返回
+        之前永远到不了——此钩子让「停止」= 杀进程树 = 工具线程即刻返回，
+        主循环在循环顶检查点退出。击杀与登记均按 session 隔离，并发会话
+        互不影响。
+        """
+        if not session_key:
+            return
+        try:
+            from planify.tools.basic import kill_session_shell_procs
+
+            kill_session_shell_procs(session_key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("kill session shell procs failed for %s: %s", session_key, e)
+
     if session_key:
         register_interrupt_hook(session_key, _interrupt_pending_asks)
+        register_interrupt_hook(session_key, _kill_running_shells)
 
     # 用户交互工具的 handler 捕获本请求的 emitter——必须绑在每请求浅拷贝上，
     # 不能写回共享单例 runtime.tool_handlers（同 runtime 并发两流会互相覆盖绑定）。
@@ -486,6 +505,7 @@ async def _stream_agent_response(
             if session_key:
                 unregister_interrupt(session_key, interrupt)
                 unregister_interrupt_hook(session_key, _interrupt_pending_asks)
+                unregister_interrupt_hook(session_key, _kill_running_shells)
             queue.put_nowait(None)  # 哨兵：SSE 生成器终结（无论成败）
 
     agent_task = asyncio.create_task(_run_and_finalize())

@@ -210,12 +210,22 @@ class TestDeployRecursion:
         assert not (tmp_path / "dst" / "vendor").exists()
 
     def test_real_package_regression(self, tmp_path, monkeypatch):
-        """存量回归：真实发行包（平铺 3 技能）递归部署行为与旧版一致。"""
+        """存量回归：真实发行包递归部署行为与旧版一致。
+
+        技能清单随版本扩容（2026-10：3 → 6），断言改为「源目录存在即部署」
+        的动态核对，新增技能无需改测试。
+        """
         from doclens import skills_deploy
 
         monkeypatch.setattr(skills_deploy.skills_config, "deleted_names", lambda: set())
         deployed = skills_deploy.deploy_builtin_skills(tmp_path / "dst")
-        assert sorted(deployed) == ["ask-files", "ignore-rules", "knowledge-base"]
+        # 源目录下划线 → 部署名连字符（skills_deploy 命名规约）
+        expected = sorted(
+            p.name.replace("_", "-")
+            for p in skills_deploy._BUILTIN_SKILLS_SRC.iterdir()
+            if (p / "SKILL.md").exists()
+        )
+        assert sorted(deployed) == expected
         assert (tmp_path / "dst" / "knowledge_base" / "SKILL.md").exists()
 
 

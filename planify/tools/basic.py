@@ -6,7 +6,12 @@
 命令执行具有以下安全措施：
 - 危险命令过滤（rm -rf /, sudo, shutdown, 等）
 - 超时保护（``PLANIFY_SHELL_TIMEOUT`` 可调，默认 120 秒；bash/powershell 统一）
+  ——超时击杀**整个进程树**（不只是直接子进程）：Windows 上孙进程持有
+  stdout 管道写端时，仅 kill 子进程会让 communicate() 排空管道永久阻塞
+  （2026-10-05 事故：``playwright run-server`` 常驻孙进程挂起会话 38 分钟）
 - 输出截断（50000 字符）
+- 会话级进程登记（``kill_session_shell_procs``）：宿主「停止」可立即击杀
+  该会话在跑的 shell 进程树，工具调用即刻返回——中断不再等到超时
 
 """
 
@@ -15,8 +20,11 @@ import os
 import platform
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Callable
+
+from ..skills.access_state import get_current_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +50,141 @@ def _timeout_message() -> str:
         "use background_run to start the task in the background, "
         "then check_background to poll its output."
     )
+
+
+# ---------------------------------------------------------------------------
+# 会话级 shell 进程登记表
+#
+# 动机（2026-10-05 事故复盘）：中断检查点在 LLM 流式循环里，工具执行期
+# （尤其 shell 卡在常驻进程上）到不了检查点——用户「停止」只能干等超时。
+# 登记表把每个会话在跑的 shell Popen 暴露给宿主（经中断 hook 调用
+# kill_session_shell_procs），使停止 = 立即击杀进程树 = 工具线程即刻返回。
+#
+# 线程安全：web 多请求并发（每工具一线程），读写均持锁。
+# session_id 为空（CLI/TUI/子代理未透传）时登记在 "" 键下，kill ""
+# 即击杀无会话上下文的 shell——宿主不会这么调，注册表只是兜底不留孤儿。
+# ---------------------------------------------------------------------------
+_session_procs_lock = threading.Lock()
+_session_procs: dict[str, set[subprocess.Popen]] = {}
+
+
+def _register_session_proc(proc: subprocess.Popen) -> None:
+    sid = get_current_session_id()
+    with _session_procs_lock:
+        _session_procs.setdefault(sid, set()).add(proc)
+
+
+def _unregister_session_proc(proc: subprocess.Popen) -> None:
+    sid = get_current_session_id()
+    with _session_procs_lock:
+        procs = _session_procs.get(sid)
+        if procs is not None:
+            procs.discard(proc)
+            if not procs:
+                _session_procs.pop(sid, None)
+
+
+def _kill_proc_tree(proc: subprocess.Popen) -> None:
+    """击杀整个进程树（父 + 全部后代）——跨平台尽力而为，异常吞掉。
+
+    Windows：taskkill /F /T /PID（杀树是原生语义）；
+    Unix：进程组 killpg（shell 以 start_new_session 启动，组长 = shell），
+          回退仅 kill 直接子进程。
+    """
+    try:
+        if proc.poll() is not None:
+            return  # 已退出（含此前超时路径已杀过）
+        if platform.system() == "Windows":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                timeout=15,
+            )
+        else:
+            import signal
+
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (AttributeError, PermissionError, ProcessLookupError):
+                proc.kill()
+    except Exception:  # noqa: BLE001
+        logger.debug("[shell] kill_proc_tree 兜底 proc.kill()", exc_info=True)
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def kill_session_shell_procs(session_id: str) -> int:
+    """击杀 ``session_id`` 当前在跑的全部 shell 进程树（宿主「停止」入口）。
+
+    只杀该会话登记的进程——并发多会话互不影响。Popen 句柄属本进程，
+    进程退出与否检查可靠，无 PID 复用误杀风险。
+
+    Returns:
+        被发起击杀的进程数（含已自然退出但未摘除的，皆无副作用）。
+    """
+    with _session_procs_lock:
+        procs = list(_session_procs.pop(session_id, ()))
+    killed = 0
+    for proc in procs:
+        _kill_proc_tree(proc)
+        killed += 1
+    if killed:
+        logger.info("[shell] kill_session_shell_procs(%s): 击杀 %d 个进程树",
+                    session_id, killed)
+    return killed
+
+
+def _run_shell_with_tree_kill(argv, workdir: Path, timeout: int) -> tuple[str, bool]:
+    """Popen 执行 + 超时杀进程树 + 会话登记。
+
+    替代 ``subprocess.run(..., timeout=)``：后者超时只杀直接子进程，Windows
+    下孙进程持有 stdout 管道写端不退出时，内部 communicate() 排空管道
+    永久阻塞（kill 后无 EOF）——本函数超时先杀树再排空，管道随全部写端
+    关闭而 EOF，communicate 立即返回。
+
+    Args:
+        argv: 命令参数列表（shell=False 形态）
+        workdir: 工作目录
+        timeout: 超时秒数
+
+    Returns:
+        (合并输出文本, 是否超时)。超时时输出为空串（调用方给标准文案）。
+    """
+    is_unix = platform.system() != "Windows"
+    proc = subprocess.Popen(
+        argv,
+        shell=False,
+        cwd=str(workdir),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        # Unix：新会话/进程组（组长 = shell），超时可 killpg 整组；
+        # Windows：CREATE_NEW_PROCESS_GROUP 不影响 taskkill /T，不传。
+        start_new_session=is_unix,
+    )
+    _register_session_proc(proc)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        text = (
+            out.decode("utf-8", errors="replace")
+            + err.decode("utf-8", errors="replace")
+        ).strip()
+        return text, False
+    except subprocess.TimeoutExpired:
+        _kill_proc_tree(proc)
+        # 杀树后全部管道写端关闭 → EOF，communicate 立即返回残留输出
+        try:
+            out, err = proc.communicate(timeout=15)
+            text = (
+                out.decode("utf-8", errors="replace")
+                + err.decode("utf-8", errors="replace")
+            ).strip()
+        except Exception:  # noqa: BLE001
+            text = ""
+        return text, True
+    finally:
+        _unregister_session_proc(proc)
 
 
 # 危险命令：含空格的按子串匹配，单词按整词匹配（避免 "dd" 误伤 "yyyy-MM-dd"）
@@ -219,35 +362,19 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
             if not bash_path:
                 # 没有 Git Bash，回退到 Windows 原生 shell（pwsh → powershell → cmd）
                 return run_powershell(command, workdir)
-            # 使用 bash -c 包装命令
-            r = subprocess.run(
-                [bash_path, "-c", command],
-                shell=False,
-                cwd=str(workdir),
-                capture_output=True,
-                timeout=_shell_timeout(),
+            # 使用 bash -c 包装命令（进程树击杀语义见 _run_shell_with_tree_kill）
+            text, timed_out = _run_shell_with_tree_kill(
+                [bash_path, "-c", command], workdir, _shell_timeout()
             )
         else:
             # Unix 环境直接使用 shell
-            r = subprocess.run(
-                command, shell=True, cwd=str(workdir), capture_output=True, timeout=_shell_timeout()
+            text, timed_out = _run_shell_with_tree_kill(
+                ["sh", "-c", command], workdir, _shell_timeout()
             )
 
-        # 确保输出使用 UTF-8 解码，失败时替换不可编码字符
-        try:
-            out = (
-                r.stdout.decode("utf-8", errors="replace")
-                + r.stderr.decode("utf-8", errors="replace")
-            ).strip()[:50000]
-        except UnicodeDecodeError:
-            # 如果解码失败，尝试使用系统默认编码
-            out = (
-                r.stdout.decode("utf-8", errors="replace")
-                + r.stderr.decode("utf-8", errors="replace")
-            ).strip()[:50000]
-        return out if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return _timeout_message()
+        if timed_out:
+            return _timeout_message()
+        return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 
@@ -286,22 +413,11 @@ def _run_powershell_impl(command: str, workdir: Path) -> str:
             workdir.mkdir(parents=True, exist_ok=True)
 
         argv = _build_shell_argv(exe_path, kind, command)
-        r = subprocess.run(
-            argv,
-            shell=False,
-            cwd=str(workdir),
-            capture_output=True,
-            timeout=_shell_timeout(),
-        )
+        text, timed_out = _run_shell_with_tree_kill(argv, workdir, _shell_timeout())
 
-        # 确保输出使用 UTF-8 解码，失败时替换不可编码字符
-        out = (
-            r.stdout.decode("utf-8", errors="replace")
-            + r.stderr.decode("utf-8", errors="replace")
-        ).strip()[:50000]
-        return out if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return _timeout_message()
+        if timed_out:
+            return _timeout_message()
+        return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
 

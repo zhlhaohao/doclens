@@ -125,6 +125,34 @@ export class PreviewPane extends LitElement {
       display: inline-block;
       width: 40px;
     }
+    /* 行选择（2026-10-05 决议）：行号可点击（toggle 选中/反选）；选中行
+       整行高亮。与搜索命中 .highlight（命中词着色）语义不同、视觉并存。 */
+    .body .line-no.clickable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .body .line-no.clickable:hover {
+      color: var(--cortex-primary);
+      text-decoration: underline;
+    }
+    .body .line.line-selected {
+      background: rgba(0, 100, 224, 0.08);
+      box-shadow: inset 2px 0 0 var(--cortex-primary);
+    }
+    .line-clear-btn {
+      position: sticky;
+      bottom: var(--cortex-space-2);
+      float: right;
+      margin-top: var(--cortex-space-2);
+      padding: 4px 12px;
+      border: 1px solid var(--cortex-border);
+      border-radius: 100px;
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      font-size: var(--cortex-fs-xs);
+      cursor: pointer;
+    }
+    .line-clear-btn:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
     /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
     .highlight {
       background: rgba(0, 100, 224, 0.15);
@@ -583,6 +611,43 @@ export class PreviewPane extends LitElement {
   @state() private _toolboxError: string | null = null;
   @state() private _pickedSkill: SkillInfo | null = null;
 
+  /** 行选择（2026-10-05 决议）：行号视图点击行号 toggle 选中/反选；多选
+   *  升序合并为区间（"12-40,88-120"），经工具箱链路以 path:区间 后缀进消息。
+   *  生命周期：path 变化 / 发送后 / 手动清除钮 三处清空；滚动与开关
+   *  工具箱对话框不清——选行是「读码时随手标记」的持久态。 */
+  @state() private _selectedLines = new Set<number>();
+
+  /** 选中行集合 → 升序合并区间串（"12-40,88-120"）；空集返回 ""。 */
+  private get _lineRanges(): string {
+    if (this._selectedLines.size === 0) return "";
+    const sorted = [...this._selectedLines].sort((a, b) => a - b);
+    const parts: string[] = [];
+    let start = sorted[0], prev = sorted[0];
+    for (let i = 1; i <= sorted.length; i++) {
+      const n = sorted[i];
+      if (n !== prev + 1) {
+        parts.push(start === prev ? `${start}` : `${start}-${prev}`);
+        start = n;
+      }
+      prev = n;
+    }
+    return parts.join(",");
+  }
+
+  private _onLineNoClick = (lineNo: number) => {
+    const next = new Set(this._selectedLines);
+    if (next.has(lineNo)) next.delete(lineNo);
+    else next.add(lineNo);
+    this._selectedLines = next;
+  };
+
+  /** 工具箱消息拼装用的路径：有选中行时附 `:区间` 后缀（code-explain 定位
+   *  协议原生消费；其他技能视为无害路径变体）。 */
+  private get _pathWithRanges(): string {
+    const ranges = this._lineRanges;
+    return ranges ? `${this.path}:${ranges}` : this.path;
+  }
+
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
   @state() private _tocItems: TocItem[] = [];
@@ -631,6 +696,8 @@ export class PreviewPane extends LitElement {
       // 书签抽屉同样不跨文档残留；列表换 path 重读
       this._showBookmarks = false;
       this._bookmarkItems = bookmarksFor(this.path);
+      // 行选择不跨文档残留（防 A 文件行号配 B 文件）
+      this._selectedLines = new Set();
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
@@ -645,6 +712,8 @@ export class PreviewPane extends LitElement {
       this._anchorLine = 1;
       this._anchorAtBottom = false;
       this._selOffsets = null;
+      // 新内容行集合已变，选中行号随之失效
+      this._selectedLines = new Set();
     }
   }
 
@@ -1444,7 +1513,8 @@ export class PreviewPane extends LitElement {
     this._toolbox = "run";
   };
 
-  /** 确认「开始对话」：拼消息 → skill-chat 事件（app 层建会话切 chat）。 */
+  /** 确认「开始对话」：拼消息 → skill-chat 事件（app 层建会话切 chat）。
+   *  有选中行时文件路径附 `:区间` 后缀（行选择，2026-10-05 决议）。 */
   private _onSkillRunSubmit = (e: CustomEvent<{ prompt: string }>) => {
     const skill = this._pickedSkill;
     this._toolbox = null;
@@ -1453,12 +1523,13 @@ export class PreviewPane extends LitElement {
       `/${skill.name} 按技能指引处理以下文件`,
       "",
       "文件：",
-      `- ${this.path}`,
+      `- ${this._pathWithRanges}`,
       "",
       `补充要求：${e.detail.prompt || "无"}`,
     ];
     recordSkillUse(skill.name);
     const firstFile = this.path.split("/").pop() ?? this.path;
+    this._selectedLines = new Set(); // 已发送：选区消费完毕，不残留旧区间
     this.dispatchEvent(new CustomEvent("skill-chat", {
       detail: {
         message: lines.join("\n"),
@@ -1751,11 +1822,23 @@ export class PreviewPane extends LitElement {
         ${lines.map((line, i) => {
           const lineNo = i + 1;
           const cls = this.highlights.includes(lineNo) ? "highlight" : "";
+          const sel = this._selectedLines.has(lineNo);
           const runs = tokensAligned ? tokLines[i] : null;
-          return html`<div class="line ${cls}"><span class="line-no">${lineNo}</span>${runs
+          return html`<div class="line ${sel ? "line-selected" : ""}"><span
+            class="line-no clickable ${cls}"
+            title="点击选中/取消选中该行（选中区间可经工具箱带给 AI 技能）"
+            @click=${() => this._onLineNoClick(lineNo)}
+          >${lineNo}</span>${runs
             ? runs.map(([kind, text]) => (kind ? html`<span class="tk-${kind}">${text}</span>` : text))
             : line}</div>`;
         })}
+        ${this._selectedLines.size > 0
+          ? html`<button
+              class="line-clear-btn"
+              type="button"
+              @click=${() => { this._selectedLines = new Set(); }}
+            >清除选中（${this._lineRanges}）</button>`
+          : null}
         <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
       </div>
       ${this._renderDownloadOverlay()}

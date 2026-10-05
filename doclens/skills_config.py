@@ -32,6 +32,7 @@ _FIELDS = ("enabled", "context_menu", "accept_dirs", "deleted", "source_url")
 BUILTIN_SKILL_DEFAULTS: dict[str, dict[str, bool]] = {
     "knowledge-base": {"context_menu": True, "accept_dirs": True},
     "ask-files": {"context_menu": True},
+    "code-explain": {"context_menu": True},
 }
 
 
