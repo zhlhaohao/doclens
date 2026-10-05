@@ -228,21 +228,26 @@ export class ChatMessageEl extends LitElement {
       color: var(--cortex-text-subtle);
       font-style: italic;
     }
-    /* 思考流双行尾部滑窗（2026-10-05）：rtl 容器让内容锚定右缘——文字增长
-       时新字从右进入、旧文被持续向左推走（生成驱动的滑窗，无动画定时器）；
-       plaintext 保持中英混排内部阅读顺序不乱。两行各 1.5em 基线，溢出隐藏。 */
+    /* 思考流双行尾部滑窗（2026-10-05 二修）：可滚动容器 + JS 锚定尾部
+       （updated() 里 scrollTop=scrollHeight）——超高时显示最后两行，
+       不足两行时 scrollTop 赋值无效果、内容自然从顶显示。纯 CSS 方案
+       均缺陷：rtl 只锚水平（纵向裁底冻结头两行）；flex-end 贴底在内容
+       不足两行时把单行压到第二行位置（首行空置）。滚动条隐藏与
+       chat-stream 同款。unicode-bidi:plaintext 保持中英混排阅读顺序。 */
     .thinking-stream {
-      direction: rtl;
-      text-align: left;
       max-height: 3em;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
       line-height: 1.5;
       color: var(--cortex-text-subtle);
       font-style: italic;
       font-size: var(--cortex-fs-sm);
       white-space: pre-wrap;
       word-break: break-all;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    .thinking-stream::-webkit-scrollbar { display: none; }
     .thinking-stream > span {
       unicode-bidi: plaintext;
     }
@@ -326,6 +331,8 @@ export class ChatMessageEl extends LitElement {
   private _copyTimer?: number;
   /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图 */
   @state() private _imgPreview: string | null = null;
+  /** 思考流滑窗尾锚 rAF guard（同帧多次 updated 合并为单次） */
+  private _thinkingRafPending = false;
 
   firstUpdated() {
     this.addEventListener("click", this._onClick);
@@ -334,6 +341,21 @@ export class ChatMessageEl extends LitElement {
        桌面 = hover 浮现/移出隐藏；移动端（粗指针）由点击切换（_onClickBubble）。 */
     this.addEventListener("mouseenter", this._onHoverChange);
     this.addEventListener("mouseleave", this._onHoverChange);
+  }
+
+  updated() {
+    // 思考流滑窗尾锚（2026-10-05 二修）：thinking 增量到达 → 滚到滑窗底部，
+    // 可见区恒为最后两行（最新思考）。延迟到下一帧让浏览器完成布局后再读
+    // scrollHeight；不足两行时 scrollTop 赋值无效（无溢出），内容自然从顶
+    // 显示，避免 flex-end 方案「单行被压到第二行、首行空置」的缺陷。
+    if (this.message?.thinking && !this._thinkingRafPending) {
+      this._thinkingRafPending = true;
+      requestAnimationFrame(() => {
+        this._thinkingRafPending = false;
+        const el = this.renderRoot.querySelector<HTMLElement>(".thinking-stream");
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    }
   }
 
   disconnectedCallback() {
