@@ -20,6 +20,7 @@ from doclens.agent_prompt import (
 
 # 确保 planify 模块可导入
 import os
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Planify 核心模块导入
@@ -30,7 +31,13 @@ from planify.streaming.emitter import CLIEventEmitter
 from planify.streaming.waiter import get_global_waiter
 from planify.streaming.types import StreamingConfig
 from planify.tools.registry import build_tool_registry
-from planify.tools.basic import make_basic_tools, run_bash, run_read, run_write, run_edit
+from planify.tools.basic import (
+    make_basic_tools,
+    run_bash,
+    run_read,
+    run_write,
+    run_edit,
+)
 from planify.tools import bind_user_interaction_handlers
 from planify.context.compact import auto_compact
 from planify.managers.teammate_manager import TeammateManager
@@ -109,6 +116,7 @@ class EscapeKeyWatcher:
 
 class Colors:
     """终端输出颜色"""
+
     USER = "\033[36m"
     TOOL_CALL = "\033[33m"
     TOOL_RESULT = "\033[32m"
@@ -138,7 +146,9 @@ class CortexAgent:
         """创建数据目录子目录（开发 .cortex / 发行版 .doclens；skills 不再在工作目录下）"""
         subdirs = ["team/inbox", "tasks", "transcripts", "logs"]
         for subdir in subdirs:
-            (self.workdir / f"{data_dirname()}/{subdir}").mkdir(parents=True, exist_ok=True)
+            (self.workdir / f"{data_dirname()}/{subdir}").mkdir(
+                parents=True, exist_ok=True
+            )
 
     def initialize(self):
         """初始化 Agent 会话。
@@ -158,6 +168,7 @@ class CortexAgent:
         # CORTEX_WORKDIR 读取链同语义）。设置页热生效不受影响：那走
         # deps.reload_config() 的 override=True 刷新 + apply_config 推送。
         from dotenv import load_dotenv
+
         global_env = get_global_cortex_dir() / ".env"
         local_env = self.workdir / data_dirname() / ".env"
         if global_env.exists():
@@ -199,6 +210,7 @@ class CortexAgent:
 
         # 初始化日志
         from planify.core.logging_config import setup_logging
+
         logger = setup_logging(
             log_dir=logs_dir,
             console_output=True,
@@ -215,12 +227,14 @@ class CortexAgent:
         # 扫描须在部署之后，否则首启时 loader 看到的是空目录）
         from doclens.skills_deploy import deploy_builtin_skills
         from doclens import skills_config
+
         deploy_builtin_skills(skills_dir)
         skills = SkillLoader(skills_dir)
         skills.set_disabled(skills_config.disabled_names(skills.skills.keys()))
 
         # 技能加载状态（按 session_id 记录），供工具门禁 + load_skill 标记 + 跨轮 body 重注入使用
         from planify.skills.access_state import SkillAccessState
+
         skill_state = SkillAccessState()
 
         # 基础工具
@@ -276,13 +290,18 @@ class CortexAgent:
         _max_tokens = kb_config.planify_max_tokens
 
         from doclens.kb_tools import build_kb_tools
-        kb_tools, kb_handlers = build_kb_tools(self.idx, self.workdir, skill_state=skill_state)
+
+        kb_tools, kb_handlers = build_kb_tools(
+            self.idx, self.workdir, skill_state=skill_state
+        )
 
         from planify.tools.registry import register_external_tools
+
         register_external_tools(kb_tools, kb_handlers)
 
         # --- grep 工具注册 ---
         from doclens.grep_tools import build_grep_tools
+
         grep_tools, grep_handlers = build_grep_tools(self.idx, skill_state=skill_state)
         register_external_tools(grep_tools, grep_handlers)
 
@@ -295,11 +314,27 @@ class CortexAgent:
             n: kb_handlers[n] for n in _kb_readonly_names if n in kb_handlers
         }
 
-        def run_subagent(prompt, agent_type, workdir, client, model,
-                         run_bash, run_read, run_write, run_edit):
+        def run_subagent(
+            prompt,
+            agent_type,
+            workdir,
+            client,
+            model,
+            run_bash,
+            run_read,
+            run_write,
+            run_edit,
+        ):
             return _run_subagent(
-                prompt, agent_type, workdir, client, model,
-                run_bash, run_read, run_write, run_edit,
+                prompt,
+                agent_type,
+                workdir,
+                client,
+                model,
+                run_bash,
+                run_read,
+                run_write,
+                run_edit,
                 extra_tools=_kb_readonly_tools,
                 extra_handlers=_kb_readonly_handlers,
                 max_tokens=_max_tokens,
@@ -389,7 +424,8 @@ class CortexAgent:
             api_key=config.planify_api_key,
             model_id=config.planify_model_id,
             base_url=config.planify_base_url,
-            planify_context_window=getattr(config, "planify_context_window", None) or None,
+            planify_context_window=getattr(config, "planify_context_window", None)
+            or None,
             planify_max_tokens=getattr(config, "planify_max_tokens", None) or None,
         )
 
@@ -398,9 +434,7 @@ class CortexAgent:
         workdir 显式传：trace 落 {workdir}/.planify/（gitignore 覆盖范围），
         不随进程 cwd 漂移。"""
         if self._llm_tracer is None:
-            self._llm_tracer = LLMTracer.create(
-                label="cli", workdir=self.workdir
-            )
+            self._llm_tracer = LLMTracer.create(label="cli", workdir=self.workdir)
         return self._llm_tracer
 
     def run_query(
@@ -427,6 +461,7 @@ class CortexAgent:
 
         if emitter_callbacks is not None:
             from planify.streaming.emitter import TUIEventEmitter
+
             emitter = TUIEventEmitter(
                 callbacks=emitter_callbacks,
                 interrupt_event=_interrupt_event,
@@ -434,7 +469,9 @@ class CortexAgent:
             tool_handlers = self.runtime.tool_handlers
         else:
             emitter = CLIEventEmitter(
-                colors=Colors, waiter=waiter, interrupt_event=_interrupt_event,
+                colors=Colors,
+                waiter=waiter,
+                interrupt_event=_interrupt_event,
             )
             # handler 捕获本次查询的 emitter——绑在浅拷贝上，不改共享 runtime 字典
             tool_handlers = {**self.runtime.tool_handlers}
@@ -451,7 +488,9 @@ class CortexAgent:
             bus=self.runtime.bus,
             skills_loader=self.runtime.skills,
             config=StreamingConfig(
-                compact_threshold=int(round(self.runtime.config.planify_context_window * 0.8)),
+                compact_threshold=int(
+                    round(self.runtime.config.planify_context_window * 0.8)
+                ),
                 max_tokens=self.runtime.config.planify_max_tokens,
                 **tool_round_limit_kwargs(self.runtime.config),
             ),
@@ -478,7 +517,9 @@ class CortexAgent:
         finally:
             self._escape_watcher.stop()
 
-    def handle_slash_command(self, cmd: str, arg: str, history: List[Dict]) -> Tuple[bool, List[Dict]]:
+    def handle_slash_command(
+        self, cmd: str, arg: str, history: List[Dict]
+    ) -> Tuple[bool, List[Dict]]:
         """处理斜杠命令，返回 (should_exit, history)"""
         import json
 
@@ -510,6 +551,7 @@ class CortexAgent:
         if cmd in ("failed",):
             # 列出解析失败的文件
             from treesearch.fts import FTS5Index
+
             db_path = self.idx.index_path
             try:
                 fts = FTS5Index(db_path=db_path)
@@ -518,8 +560,14 @@ class CortexAgent:
                     print("没有解析失败的文件")
                 else:
                     print(f"共有 {len(failed)} 个解析失败的文件:")
-                    for path, (count, _, err) in sorted(failed.items(), key=lambda x: -x[1][0]):
-                        print(f"  [{count}次] {path}  --- {err}" if err else f"  [{count}次] {path}")
+                    for path, (count, _, err) in sorted(
+                        failed.items(), key=lambda x: -x[1][0]
+                    ):
+                        print(
+                            f"  [{count}次] {path}  --- {err}"
+                            if err
+                            else f"  [{count}次] {path}"
+                        )
             except Exception as e:
                 print(f"读取失败文件失败: {e}")
             return False, history
@@ -527,6 +575,7 @@ class CortexAgent:
         if cmd in ("clearfailed",):
             # 清空解析失败的文件记录并重新索引
             from treesearch.fts import FTS5Index
+
             db_path = self.idx.index_path
             try:
                 fts = FTS5Index(db_path=db_path)
@@ -536,9 +585,13 @@ class CortexAgent:
                 # 触发后台重新索引，带完成回调
                 def on_reindex_complete(success, doc_count, failed_count):
                     import sys
+
                     if success:
                         if failed_count > 0:
-                            print(f"[索引完成] 成功: {doc_count} 文档, 失败: {failed_count} 文件", file=sys.stderr)
+                            print(
+                                f"[索引完成] 成功: {doc_count} 文档, 失败: {failed_count} 文件",
+                                file=sys.stderr,
+                            )
                         else:
                             print(f"[索引完成] 共 {doc_count} 文档", file=sys.stderr)
                     else:
