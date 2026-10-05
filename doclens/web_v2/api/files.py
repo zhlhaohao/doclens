@@ -84,6 +84,7 @@ def _has_child_dirs(full: Path, base: Path) -> bool:
 
 
 def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = None,
+                 ghost_children: set[str] | None = None,
                  idx: IndexManager | None = None) -> Entry:
     stat = full.stat()
     rel = _posix_rel(full, base)
@@ -97,6 +98,16 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
         indexed = idx.is_path_indexed(str(full), is_dir=is_dir)
     else:
         indexed = False
+    # 三态徽标第二态（ADR-0034）：仅登记（ghost 行）——已索引优先，未索引时才判
+    if not indexed:
+        if ghost_children is not None:
+            registered = full.name in ghost_children
+        elif idx is not None and not is_dir:
+            registered = idx.is_path_registered(str(full))
+        else:
+            registered = False
+    else:
+        registered = False
     return Entry(
         name=full.name,
         path=rel,
@@ -104,13 +115,27 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
         size=0 if is_dir else stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
         indexed=indexed,
+        registered=registered,
         writable=compute_writable(full, base),
         has_child_dirs=has_child_dirs,
     )
 
 
 def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
-    """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件；DB 轻量查询）。"""
+    """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件；DB 轻量查询）。
+
+    ghost 行（仅登记，ADR-0034）包含在内并打 ghost=True 标——文件名搜索
+    可见，前端据此降级展示（不提供「索引内」语义的交互）。
+    """
+    from treesearch.fts import FTS5Index
+    try:
+        fts = FTS5Index(db_path=idx.index_path)
+        try:
+            ghosts = fts.ghost_source_paths()
+        finally:
+            fts.close()
+    except Exception:  # noqa: BLE001
+        ghosts = set()
     result: list[IndexedDocument] = []
     seen: set[str] = set()
     for abs_path in idx.indexed_source_paths():
@@ -129,6 +154,7 @@ def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
                 name=p.name,
                 size=stat.st_size,
                 modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                ghost=str(abs_path) in ghosts,
             ))
         except (ValueError, OSError):
             continue
@@ -187,10 +213,14 @@ async def list_dir(
 
         all_entries = []
         indexed_children = idx.indexed_children_of(str(full))
+        ghost_children = idx.ghost_children_of(str(full))
         for child in full.iterdir():
             if is_protected(child, base):
                 continue
-            all_entries.append(_build_entry(child, base, indexed_children=indexed_children))
+            all_entries.append(_build_entry(
+                child, base, indexed_children=indexed_children,
+                ghost_children=ghost_children,
+            ))
         all_entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
         page = all_entries[offset:offset + limit]
         return ListDirResponse(path=path, entries=page, total=len(all_entries))
@@ -242,6 +272,10 @@ async def attrs(
         size=0 if full.is_dir() else stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
         indexed=idx.is_path_indexed(str(full), is_dir=full.is_dir()),
+        registered=(
+            False if full.is_dir()
+            else idx.is_path_registered(str(full))
+        ),
         writable=compute_writable(full, base),
         created_at=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
         extension=full.suffix.lower() if full.suffix else None,

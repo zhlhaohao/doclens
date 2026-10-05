@@ -15,11 +15,13 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
     # DB 轻量查询 + 进程内缓存（ADR-0018）：50 万语料全量 stat 要 90s+，
     # 缓存键 = DB 文档计数，索引变化才重算。
     indexed_docs = idx.indexed_doc_count()
+    registered_docs = idx.registered_doc_count()
     total_size, type_counts = idx.file_stats()
     watcher_obj = get_watcher()
     cfg = get_config()
     return {
         "indexed_docs": indexed_docs,
+        "registered_docs": registered_docs,  # 仅登记（ghost 行，ADR-0034）
         "index_failed_count": idx.last_failed_count,
         "index_path": str(idx.index_path),
         "workdir": str(idx.search_path),

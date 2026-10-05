@@ -1077,6 +1077,7 @@ class IndexStats:
     skipped_files: int = 0
     failed_files: int = 0
     excluded_files: int = 0
+    registered_ghosts: int = 0  # metadata-only rows (ghost.py; not full-text searchable)
     total_nodes: int = 0
     total_time_s: float = 0.0
     per_type: dict = field(default_factory=dict)
@@ -1094,6 +1095,8 @@ class IndexStats:
         lines.append(f"Index Statistics")
         lines.append(f"  Total files discovered: {self.total_files}")
         lines.append(f"  Indexed (new/changed):  {self.indexed_files}")
+        if self.registered_ghosts:
+            lines.append(f"  Registered (ghost):     {self.registered_ghosts}")
         lines.append(f"  Skipped (unchanged):    {self.skipped_files}")
         if self.failed_files:
             lines.append(f"  Failed:                 {self.failed_files}")
@@ -1551,17 +1554,22 @@ async def build_index(
             base_dir = os.path.abspath(p)
             break
 
-    # Expand globs, files, and directories via resolve_paths
+    # Expand globs, files, and directories via resolve_paths.
+    # ghost_candidates: files dropped by the source-type whitelist overlay —
+    # metadata-only registration candidates (ghost.py; host decision, engine
+    # provides the mechanism).
+    ghost_candidates: set[str] = set()
     expanded = resolve_paths(
         paths,
         ignore_dirs=ignore_dirs,
         respect_gitignore=respect_gitignore,
         max_files=max_files,
+        ghost_candidates=ghost_candidates,
     )
     total_files = len(expanded)
     processed_counter = [0]
     _progress_lock = asyncio.Lock()
-    if not expanded:
+    if not expanded and not ghost_candidates:
         raise FileNotFoundError(f"No files found for patterns: {paths}")
 
     # Pre-compute deterministic doc_ids: basename + path hash (always, for determinism)
@@ -1632,6 +1640,9 @@ async def build_index(
         # Explicit `prune=True`: reduce the index to exactly `paths`.
         if prune and all_meta:
             expanded_abs = {os.path.abspath(p) for p in expanded}
+            # Ghost candidates are in scope too (ADR-0034): a whitelist-excluded
+            # file's ghost row must not be pruned-and-re-registered each run.
+            expanded_abs |= ghost_candidates
             # Pre-compute allowed extensions from source_type filter (if any)
             source_type_exts = None
             if cfg.allowed_source_types:
@@ -1751,6 +1762,7 @@ async def build_index(
         logger.info("Building indexes for %d file(s) (concurrency=%d)...", len(to_index), max_concurrency)
 
         build_start = time.monotonic()
+        _COMMIT_BATCH_GHOST = 500  # batch commit every N ghost registrations
         semaphore = asyncio.Semaphore(max_concurrency)
         # PST 专用并发上限：PST 解析启 sidecar 子进程 + 加载 GB 级文件 + 全量附件提取，
         # 多个并发会耗尽内存/CPU/IO 触发 sidecar 崩溃（exit 0xC000013A）。单独低并发限流，
@@ -1990,6 +2002,46 @@ async def build_index(
             await _commit_chunk(to_index[_i:_i + _chunk_step])
         _parse_bar.close()
 
+        # ---------------------------------------------------------------
+        # Ghost registration (metadata-only rows, ghost.py): text files the
+        # source-type whitelist excluded from indexing get a documents row
+        # with an empty structure (node_count=0, no fts_nodes) so host-side
+        # listings / filename search can see them. Full-text search can never
+        # match them (no inverted rows, empty tree). Salted fingerprints make
+        # whitelist widening auto-upgrade ghosts into real documents.
+        # ---------------------------------------------------------------
+        registered_ghosts = 0
+        if ghost_candidates:
+            from .ghost import (
+                classify_text_file, collect_known_text_extensions,
+                ghost_document, ghost_fingerprint,
+            )
+            _known_text_exts = collect_known_text_extensions()
+            _ghost_known = {
+                sp for sp in ghost_candidates
+                if classify_text_file(sp, _known_text_exts)
+            }
+            _pending_ghost_commits = 0
+            for abs_fp in sorted(_ghost_known):
+                gfh = ghost_fingerprint(file_hash_with_salts(abs_fp))
+                if not gfh:
+                    continue  # file vanished / unreadable
+                if not force:
+                    stored = all_meta.get(abs_fp)
+                    if stored == gfh and fts.get_doc_id_by_source_path(abs_fp) is not None:
+                        continue  # ghost row already current
+                gdoc = ghost_document(abs_fp, _doc_id_for(abs_fp))
+                fts.index_document(gdoc, auto_commit=False, file_hash=gfh, force=force)
+                _pending_ghost_commits += 1
+                registered_ghosts += 1
+                if _pending_ghost_commits >= _COMMIT_BATCH_GHOST:
+                    fts.commit()
+                    _pending_ghost_commits = 0
+            if _pending_ghost_commits:
+                fts.commit()
+            if registered_ghosts:
+                logger.info("Registered %d ghost row(s) (metadata-only)", registered_ghosts)
+
         # Batch load all skipped documents in one query (instead of N individual loads)
         # Key by source_path (unique and stable) instead of doc_id (may change).
         # Skipped entirely with return_documents=False: re-loading the whole DB
@@ -2059,6 +2111,7 @@ async def build_index(
             skipped_files=len(skipped),
             failed_files=len(_failed_paths),
             excluded_files=excluded_count,
+            registered_ghosts=registered_ghosts,
             total_nodes=total_nodes,
             total_time_s=build_elapsed,
             per_type=per_type,

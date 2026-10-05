@@ -1651,6 +1651,18 @@ class FTS5Index:
         ).fetchall()
         return {r[0]: (r[1] or "") for r in rows if r[1]}
 
+    def ghost_source_paths(self) -> set[str]:
+        """Source paths of ghost rows (node_count = 0, metadata-only).
+
+        Consumers that list "all known documents" (e.g. filename search)
+        include ghosts and may tag them; consumers of indexed semantics
+        should treat them as absent.
+        """
+        rows = self._conn.execute(
+            "SELECT source_path FROM documents WHERE node_count = 0"
+        ).fetchall()
+        return {r[0] for r in rows if r[0]}
+
     def search_source_paths_under(self, dir_path: str) -> set[str]:
         """Return distinct source_paths under *dir_path* (prefix match).
 
@@ -1673,18 +1685,22 @@ class FTS5Index:
 
         Index-backed LIKE prefix probe, LIMIT 1 — constant time regardless of
         how many documents live under the directory (500k-doc corpora included).
+        Ghost rows (node_count = 0) do not count — they are not indexed docs.
         """
         prefix = dir_path.rstrip("\\/")
         row = self._conn.execute(
-            "SELECT 1 FROM documents WHERE source_path LIKE ? LIMIT 1",
+            "SELECT 1 FROM documents WHERE source_path LIKE ? AND node_count > 0 LIMIT 1",
             (prefix + "%",),
         ).fetchone()
         return row is not None
 
     def has_doc_at(self, file_path: str) -> bool:
-        """Whether *file_path* (exact) is an indexed document's source."""
+        """Whether *file_path* (exact) is an indexed document's source.
+
+        Ghost rows (node_count = 0) do not count — see :meth:`is_ghost_at`.
+        """
         row = self._conn.execute(
-            "SELECT 1 FROM documents WHERE source_path = ? LIMIT 1",
+            "SELECT 1 FROM documents WHERE source_path = ? AND node_count > 0",
             (file_path,),
         ).fetchone()
         return row is not None
@@ -1735,6 +1751,9 @@ class FTS5Index:
         indexed" in a single ~0.1-0.3s query regardless of corpus size.
         Returns child names (both files and subdirectories whose subtree
         contains at least one document).
+
+        Ghost rows (node_count = 0, metadata-only) are **excluded** — they
+        are not indexed documents. Use :meth:`ghost_children_of` for them.
         """
         prefix = dir_path.rstrip("\\/")
         # depth-1: the segment right after the prefix, up to the next separator
@@ -1744,7 +1763,7 @@ class FTS5Index:
             "CASE WHEN instr(substr(source_path, ?), ?) > 0 "
             "THEN instr(substr(source_path, ?), ?) - 1 "
             "ELSE length(source_path) - ? + 1 END) "
-            "FROM documents WHERE source_path LIKE ?",
+            "FROM documents WHERE source_path LIKE ? AND node_count > 0",
             (
                 len(prefix) + 2,          # start after prefix + separator
                 len(prefix) + 2, sep,
@@ -1754,6 +1773,41 @@ class FTS5Index:
             ),
         ).fetchall()
         return {r[0] for r in rows if r[0]}
+
+    def ghost_children_of(self, dir_path: str, sep: str = os.sep) -> set[str]:
+        """Names of *dir_path*'s direct children that hold ghost rows only.
+
+        Mirror of :meth:`indexed_children_of` for metadata-only rows
+        (node_count = 0). An entry may appear in neither (not registered),
+        in this set (registered only), or in indexed_children_of (indexed).
+        Subdirectories appear here when their subtree holds ghost rows but
+        no indexed document (indexed probe wins, mirroring the prefix
+        precedence of indexed_children_of).
+        """
+        prefix = dir_path.rstrip("\\/")
+        rows = self._conn.execute(
+            "SELECT DISTINCT substr(source_path, ?, "
+            "CASE WHEN instr(substr(source_path, ?), ?) > 0 "
+            "THEN instr(substr(source_path, ?), ?) - 1 "
+            "ELSE length(source_path) - ? + 1 END) "
+            "FROM documents WHERE source_path LIKE ? AND node_count = 0",
+            (
+                len(prefix) + 2,
+                len(prefix) + 2, sep,
+                len(prefix) + 2, sep,
+                len(prefix) + 2,
+                prefix + "%",
+            ),
+        ).fetchall()
+        return {r[0] for r in rows if r[0]}
+
+    def is_ghost_at(self, file_path: str) -> bool:
+        """Whether *file_path* (exact) is a metadata-only ghost row."""
+        row = self._conn.execute(
+            "SELECT 1 FROM documents WHERE source_path = ? AND node_count = 0",
+            (file_path,),
+        ).fetchone()
+        return row is not None
 
     def load_all_documents(self) -> list:
         """Load all Documents stored in the DB.
@@ -2368,12 +2422,23 @@ class FTS5Index:
             logger.warning("FTS5 rebuild failed: %s", e)
 
     def get_stats(self) -> dict:
-        """Get index statistics."""
-        doc_count = self._conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        """Get index statistics.
+
+        ``document_count`` counts real (indexed) documents only; ghost rows
+        (metadata-only, node_count = 0) are reported separately as
+        ``ghost_count`` (ADR-0034).
+        """
+        doc_count = self._conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE node_count > 0"
+        ).fetchone()[0]
+        ghost_count = self._conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE node_count = 0"
+        ).fetchone()[0]
         node_count = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
         return {
             "db_path": self._db_path,
             "document_count": doc_count,
+            "ghost_count": ghost_count,
             "node_count": node_count,
         }
 

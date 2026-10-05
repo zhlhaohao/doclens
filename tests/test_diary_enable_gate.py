@@ -93,6 +93,7 @@ class TestStatusDiaryEnabled:
                 search_path=str(workdir),
                 index_path=str(workdir / ".cortex" / "index.db"),
                 indexed_doc_count=lambda: 0,
+                registered_doc_count=lambda: 0,
                 last_failed_count=0,
                 file_stats=lambda: (0, {}),
                 vision_status=lambda: {},

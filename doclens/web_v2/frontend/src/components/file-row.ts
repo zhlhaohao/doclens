@@ -129,8 +129,15 @@ export class FileRow extends LitElement {
                   style="background:${badge.bg};color:${badge.fg}">${badge.letter}</span>`
               : html`<doclens-icon name="file"></doclens-icon>`}
         </span>
-        <span class="name ${!this.entry.is_dir && !this.entry.indexed ? "unindexed" : ""}"
-          title=${!this.entry.is_dir && !this.entry.indexed ? "未索引（不参与搜索）" : ""}
+        <span
+          class="name ${!this.entry.is_dir && !this.entry.indexed && !this.entry.registered ? "unindexed" : ""}"
+          title=${this.entry.is_dir
+            ? ""
+            : this.entry.indexed
+              ? ""
+              : this.entry.registered
+                ? "已登记（文件名可搜索；内容不参与全文检索）"
+                : "未索引（不参与搜索）"}
         >${this.entry.name}</span>
         <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
