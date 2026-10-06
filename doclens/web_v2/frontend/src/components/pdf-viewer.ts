@@ -137,6 +137,12 @@ const COMPONENT_CSS = `
   overflow: hidden;
   background: var(--cortex-surface-muted, #525659);
 }
+/* 预览全屏联动（preview-pane body class）：portal 平时 z-index 1
+   （低于页面组件，允许 app-bar 等覆盖），全屏时提到 101——恰好压在
+   preview-pane 覆盖层（z-index 100）之上、toast（1000）之下 */
+body.cortex-preview-fs .cortex-pdf-portal {
+  z-index: 101;
+}
 .cortex-pdf-wrap {
   position: relative;
   width: 100%;

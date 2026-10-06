@@ -35,10 +35,24 @@ import {
   FONT_SCALE_MIN_PCT,
   FONT_SCALE_MAX_PCT,
   FONT_SCALE_STEP_PCT,
+  FONT_SCALE_DEFAULT_PCT,
   readFontScalePct,
   writeFontScalePct,
   fontScaleFromPct,
 } from "../utils/font-scale";
+import {
+  readCodeTheme,
+  writeCodeTheme,
+  type CodeTheme,
+} from "../utils/code-theme";
+import {
+  CODE_FONT_SCALE_MIN_PCT,
+  CODE_FONT_SCALE_MAX_PCT,
+  CODE_FONT_SCALE_STEP_PCT,
+  CODE_FONT_SCALE_DEFAULT_PCT,
+  readCodeFontScalePct,
+  writeCodeFontScalePct,
+} from "../utils/code-font-scale";
 
 /** CJK 字符（汉字 / 假名 / 谚文基础区）——用于高亮输入条的分词判定。 */
 const CJK_RE = /[一-鿿぀-ヿ가-힯]/;
@@ -115,17 +129,19 @@ export class PreviewPane extends LitElement {
       white-space: pre-wrap;      /* 长行自动折回，不横向滚动 */
       overflow-wrap: anywhere;
     }
-    /* 行号悬挂缩进：折行的续行对齐到正文列，不压行号列 */
+    /* 行号悬挂缩进：折行的续行对齐到正文列，不压行号列。
+       宽度用 em（相对本 .body 字号）——档位缩放后 40px 定宽会容不下
+       行号数字且悬挂缩进错位；1em≈2.86 数字位 + 0.4em 间隙。 */
     .body .line {
-      padding-left: 48px;
-      text-indent: -48px;
+      padding-left: 2.86em;
+      text-indent: -2.86em;
     }
     .body .line-no {
       color: var(--cortex-text-subtle);
       display: inline-block;
-      width: 40px;
-      /* 悬挂缩进（.line 的 text-indent:-48px）会继承进本 inline-block（块容器）
-         使数字再左移 48px 落到滚动容器裁剪区外——行号「DOM 在而不可见」的
+      width: 2.4em;
+      /* 悬挂缩进（.line 的 text-indent 负值）会继承进本 inline-block（块容器）
+         使数字再左移落到滚动容器裁剪区外——行号「DOM 在而不可见」的
          根因。此处显式归零，行号回到 .line 左缘的悬挂位。 */
       text-indent: 0;
     }
@@ -167,15 +183,70 @@ export class PreviewPane extends LitElement {
     /* 服务端语法分词 8 类配色（ADR-0032；亮色 Meta 画布，克制不花哨）：
        c注释=stone 灰 / k关键字=ink 深蓝黑 / s字符串=森林绿 / n数字=赭棕 /
        f函数=靛蓝 / t类型=青蓝 / o操作符=steel / p标点=slate。未归类 run
-       不挂 class（正文色 --cortex-text）。 */
-    .tk-c { color: var(--cortex-text-subtle); font-style: italic; }
-    .tk-k { color: #0a3d91; font-weight: 500; }
-    .tk-s { color: #0a7d33; }
-    .tk-n { color: #a05a1f; }
-    .tk-f { color: #4b3fd4; }
-    .tk-t { color: #0b7285; }
-    .tk-o { color: var(--cortex-text-caption); }
-    .tk-p { color: var(--cortex-text-muted); }
+       不挂 class（正文色 --cortex-text）。
+       颜色经 --code-tok-* 变量下发（ADR-0036 代码主题）：浅色值在 .body
+       基础规则，深色值在 .body.dark 覆盖——两套同键变量随主题切换。 */
+    .body {
+      --code-tok-c: var(--cortex-text-subtle);
+      --code-tok-k: #0a3d91;
+      --code-tok-s: #0a7d33;
+      --code-tok-n: #a05a1f;
+      --code-tok-f: #4b3fd4;
+      --code-tok-t: #0b7285;
+      --code-tok-o: var(--cortex-text-caption);
+      --code-tok-p: var(--cortex-text-muted);
+      /* 字号档位（utils/code-font-scale）：乘数经 --code-font-scale 注入，
+         行距用无单位 lh 随动；行号列宽改 em（随字号缩放，悬挂缩进不错位）。 */
+      --code-font-scale: 1;
+      font-size: calc(var(--cortex-fs-sm) * var(--code-font-scale));
+    }
+    .tk-c { color: var(--code-tok-c); font-style: italic; }
+    .tk-k { color: var(--code-tok-k); font-weight: 500; }
+    .tk-s { color: var(--code-tok-s); }
+    .tk-n { color: var(--code-tok-n); }
+    .tk-f { color: var(--code-tok-f); }
+    .tk-t { color: var(--code-tok-t); }
+    .tk-o { color: var(--code-tok-o); }
+    .tk-p { color: var(--code-tok-p); }
+    /* 深色代码主题（ADR-0036，GitHub dark 基准）：仅行号视图整体换肤——
+       底色/正文/行号/选中行/命中高亮全部换深色系；周边 header 与其余
+       预览形态维持 Meta 白画布。表面色：canvas #0d1117、行号 #8b949e。 */
+    .body.dark {
+      --code-tok-c: #8b949e;
+      --code-tok-k: #ff7b72;
+      --code-tok-s: #a5d6ff;
+      --code-tok-n: #79c0ff;
+      --code-tok-f: #d2a8ff;
+      --code-tok-t: #7ee787;
+      --code-tok-o: #ff7b72;
+      --code-tok-p: #c9d1d9;
+      background: #0d1117;
+      color: #c9d1d9;
+      transition: background 0.15s, color 0.15s;
+    }
+    .body.dark .line-no {
+      color: #6e7681;
+    }
+    .body.dark .line-no.clickable:hover {
+      color: #58a6ff;
+    }
+    .body.dark .line.line-selected {
+      background: rgba(56, 139, 253, 0.15);
+      box-shadow: inset 2px 0 0 #58a6ff;
+    }
+    .body.dark .highlight {
+      background: rgba(187, 128, 9, 0.4);
+      color: #e3b341;
+    }
+    .body.dark .line-clear-btn {
+      background: #21262d;
+      border-color: #30363d;
+      color: #8b949e;
+    }
+    .body.dark .line-clear-btn:hover {
+      color: #58a6ff;
+      border-color: #58a6ff;
+    }
     .html-frame {
       flex: 1;
       border: none;
@@ -183,6 +254,18 @@ export class PreviewPane extends LitElement {
       width: 100%;
       background: #fff;
       min-height: 0;
+    }
+    /* 预览全屏（类视频全屏）：host 变 fixed 覆盖层盖满视口，脱离分栏布局。
+       z-index 介于 app-bar(60) 与 toast(1000) 之间——盖过页面 UI，
+       toast/下载遮罩仍浮于其上。注意 pdf-viewer 的 portal 挂 document.body
+       且 z-index:1——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
+       的 body class 联动），否则 PDF 分支全屏会白屏。 */
+    :host(.preview-fullscreen) {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: var(--cortex-bg);
+      border-left: none;
     }
     /* PST 邮件附件下载区（markdown 预览底部） */
     .attachments {
@@ -248,7 +331,9 @@ export class PreviewPane extends LitElement {
     button.highlight-btn,
     button.toc-btn,
     button.edit-btn,
-    button.back-btn {
+    button.back-btn,
+    button.code-theme-btn,
+    button.fs-btn {
       font-family: inherit;
       font-size: var(--cortex-fs-xs);
       padding: var(--cortex-space-1) var(--cortex-space-3);
@@ -293,7 +378,9 @@ export class PreviewPane extends LitElement {
     button.highlight-btn:hover,
     button.toc-btn:hover,
     button.edit-btn:hover,
-    button.back-btn:hover {
+    button.back-btn:hover,
+    button.code-theme-btn:hover,
+    button.fs-btn:hover {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text);
       border-color: var(--cortex-text-subtle);
@@ -328,6 +415,9 @@ export class PreviewPane extends LitElement {
     .zoom-group .zoom-label {
       min-width: 52px;
       height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
       border-left: 1px solid var(--cortex-border-muted);
@@ -601,6 +691,13 @@ export class PreviewPane extends LitElement {
   @state() private _downloading = false;
   /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
   @state() private _fontScalePct = readFontScalePct();
+  /** 代码主题（ADR-0036）：行号视图浅/深两态；持久化 localStorage，默认 light。 */
+  @state() private _codeTheme: CodeTheme = readCodeTheme();
+  /** 行号视图字号档位（60–200 步长 10）；持久化 localStorage（独立于 md 字号）。 */
+  @state() private _codeFontScalePct = readCodeFontScalePct();
+  /** 预览全屏（类视频全屏）：host class preview-fullscreen + body class
+   *  cortex-preview-fs（pdf portal z-index 联动）；Esc / 再点按钮退出。 */
+  @state() private _fullscreen = false;
   /** 关键词高亮输入条（仅 markdown 预览分支可用） */
   @state() private _showHighlightBar = false;
   @state() private _highlightInput = "";
@@ -821,10 +918,18 @@ export class PreviewPane extends LitElement {
     super.connectedCallback();
     // 点击 outside 关闭 more 下拉
     document.addEventListener("click", this._onDocClick, true);
+    // Esc 退出预览全屏（keydown 冒泡阶段，避免与输入框内 Esc 冲突时被拦截）
+    document.addEventListener("keydown", this._onFsKeydown);
+    // keep-alive 复挂载：全屏 class 若残留（断连重建）复位
+    if (this._fullscreen) {
+      this._fullscreen = false;
+      this._applyFullscreen();
+    }
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
+    document.removeEventListener("keydown", this._onFsKeydown);
     this._clearHighlightDebounce();
     this._detachScrollMemory();
     super.disconnectedCallback();
@@ -899,7 +1004,13 @@ export class PreviewPane extends LitElement {
           ?disabled=${atMin}
           @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
         ><doclens-icon name="minus"></doclens-icon></button>
-        <span class="font-scale-value">${this._fontScalePct}%</span>
+        <button
+          class="font-scale-value"
+          type="button"
+          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
+          title="点击回到 100%"
+          @click=${() => this._resetFontScale()}
+        >${this._fontScalePct}%</button>
         <button
           class="font-scale-btn"
           type="button"
@@ -919,6 +1030,176 @@ export class PreviewPane extends LitElement {
     if (next === this._fontScalePct) return;
     this._fontScalePct = next;
     writeFontScalePct(next);
+  }
+
+  /** 点击百分比回默认 100%（对齐 PDF 缩放组「点击回适宽」惯例）。 */
+  private _resetFontScale() {
+    if (this._fontScalePct === FONT_SCALE_DEFAULT_PCT) return;
+    this._fontScalePct = FONT_SCALE_DEFAULT_PCT;
+    writeFontScalePct(FONT_SCALE_DEFAULT_PCT);
+  }
+
+  /** 代码主题切换（ADR-0036）：浅 ⇄ 深两态 toggle，即选即生效 + 落盘。 */
+  private _toggleCodeTheme() {
+    this._codeTheme = this._codeTheme === "dark" ? "light" : "dark";
+    writeCodeTheme(this._codeTheme);
+  }
+
+  /** 预览全屏切换（类视频全屏）：CSS 覆盖层形态——不用原生 Fullscreen API
+   *  （pdf-viewer 的 portal 挂 document.body，全屏顶层元素是本组件时 portal
+   *  会被排除在外导致 PDF 白屏）。body class 联动提升 portal z-index。 */
+  private _toggleFullscreen() {
+    this._fullscreen = !this._fullscreen;
+    this._applyFullscreen();
+  }
+
+  private _applyFullscreen() {
+    this.classList.toggle("preview-fullscreen", this._fullscreen);
+    document.body.classList.toggle("cortex-preview-fs", this._fullscreen);
+  }
+
+  private _onFsKeydown = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && this._fullscreen) {
+      this._fullscreen = false;
+      this._applyFullscreen();
+    }
+  };
+
+  /** 代码主题按钮（桌面 header pill / mobile more 菜单行共用）：
+   *  图标反映当前态（浅色显太阳、深色显月亮），点击切换。 */
+  private _renderCodeThemeBtn({ className }: { className: string }) {
+    const dark = this._codeTheme === "dark";
+    return html`<button
+      class=${className}
+      type="button"
+      aria-label=${dark ? "切换为浅色主题" : "切换为深色主题"}
+      title=${dark ? "浅色主题" : "深色主题"}
+      @click=${() => this._toggleCodeTheme()}
+    ><doclens-icon name=${dark ? "moon" : "sun"}></doclens-icon><span class="btn-label">${dark ? "浅色主题" : "深色主题"}</span></button>`;
+  }
+
+  /** 预览全屏按钮（桌面 header，所有预览分支通用）：全屏显 minimize 退出。 */
+  private _renderFullscreenBtn() {
+    const fs = this._fullscreen;
+    return html`<button
+      class="fs-btn"
+      type="button"
+      aria-label=${fs ? "退出全屏" : "全屏预览"}
+      title=${fs ? "退出全屏（Esc）" : "全屏预览"}
+      @click=${() => this._toggleFullscreen()}
+    ><doclens-icon name=${fs ? "minimize-2" : "maximize-2"}></doclens-icon><span class="btn-label">${fs ? "退出全屏" : "全屏"}</span></button>`;
+  }
+
+  private _bumpCodeFontScale(delta: number) {
+    const next = Math.min(
+      CODE_FONT_SCALE_MAX_PCT,
+      Math.max(CODE_FONT_SCALE_MIN_PCT, this._codeFontScalePct + delta),
+    );
+    if (next === this._codeFontScalePct) return;
+    this._codeFontScalePct = next;
+    writeCodeFontScalePct(next);
+  }
+
+  /** 点击百分比回默认 100%（对齐 PDF 缩放组「点击回适宽」惯例）。 */
+  private _resetCodeFontScale() {
+    if (this._codeFontScalePct === CODE_FONT_SCALE_DEFAULT_PCT) return;
+    this._codeFontScalePct = CODE_FONT_SCALE_DEFAULT_PCT;
+    writeCodeFontScalePct(CODE_FONT_SCALE_DEFAULT_PCT);
+  }
+
+  /** 桌面 header 的 md 正文字号组（− 比例 +，复用 PDF zoom-group 联排样式）。
+   *  桌面补齐——原先字号 stepper 只在移动端 more 菜单（_renderFontScaleStepper），
+   *  同一 _fontScalePct 状态两入口共享；点击百分比回 100%。 */
+  private _renderMdFontScaleGroup() {
+    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
+    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
+    return html`
+      <div class="zoom-group" role="group" aria-label="字号">
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="缩小字号"
+          ?disabled=${atMin}
+          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="zoom-label"
+          type="button"
+          title="点击回到 100%"
+          @click=${() => this._resetFontScale()}
+        >${this._fontScalePct}%</button>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="放大字号"
+          ?disabled=${atMax}
+          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  /** 行号视图字号 stepper（mobile-menu 内一行，复用 font-scale-row 样式）。 */
+  private _renderCodeFontScaleStepper() {
+    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
+    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
+    return html`
+      <div class="font-scale-row" role="group" aria-label="正文字号">
+        <span class="font-scale-label">字号</span>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="缩小字号"
+          ?disabled=${atMin}
+          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="font-scale-value"
+          type="button"
+          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
+          title="点击回到 100%"
+          @click=${() => this._resetCodeFontScale()}
+        >${this._codeFontScalePct}%</button>
+        <button
+          class="font-scale-btn"
+          type="button"
+          aria-label="放大字号"
+          ?disabled=${atMax}
+          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  /** 桌面 header 的行号视图字号组（− 比例 +，复用 PDF zoom-group 联排样式；
+   *  点击百分比回 100%）。 */
+  private _renderCodeFontScaleGroup() {
+    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
+    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
+    return html`
+      <div class="zoom-group" role="group" aria-label="字号">
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="缩小字号"
+          ?disabled=${atMin}
+          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="zoom-label"
+          type="button"
+          title="点击回到 100%"
+          @click=${() => this._resetCodeFontScale()}
+        >${this._codeFontScalePct}%</button>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label="放大字号"
+          ?disabled=${atMax}
+          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
   }
 
   /** PDF 缩放 stepper（mobile-menu 内一行，复用 font-scale-row 样式）：
@@ -1025,6 +1306,16 @@ export class PreviewPane extends LitElement {
                   : null}
                 ${this.language === "pdf" && this._mode === "preview"
                   ? this._renderPdfZoomStepper()
+                  : null}
+                ${this._isLineView && this._mode === "preview"
+                  ? this._renderCodeFontScaleStepper()
+                  : null}
+                ${this._isLineView && this._mode === "preview"
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => this._toggleCodeTheme()}
+                    ><doclens-icon name=${this._codeTheme === "dark" ? "sun" : "moon"}></doclens-icon>${this._codeTheme === "dark" ? "浅色主题" : "深色主题"}</button>`
                   : null}
                 ${this.writable
                   ? html`<button
@@ -1730,6 +2021,7 @@ export class PreviewPane extends LitElement {
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
             ${this._renderCopyPathBtn()}
+            ${this._renderFullscreenBtn()}
           </div>
         ` : null}
         <md-editor
@@ -1755,6 +2047,7 @@ export class PreviewPane extends LitElement {
             ${this.writable
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
               : null}
+            ${this._renderMdFontScaleGroup()}
             ${this._renderDownloadBtn()}
             ${this._renderTocBtn()}
             ${this._renderBookmarkBtn()}
@@ -1762,6 +2055,7 @@ export class PreviewPane extends LitElement {
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
             ${this._renderCopyPathBtn()}
+            ${this._renderFullscreenBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1799,6 +2093,7 @@ export class PreviewPane extends LitElement {
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
             ${this._renderCopyPathBtn()}
+            ${this._renderFullscreenBtn()}
           </div>
         ` : null}
         ${this._renderHighlightBar()}
@@ -1830,6 +2125,7 @@ export class PreviewPane extends LitElement {
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
             ${this._renderCopyPathBtn()}
+            ${this._renderFullscreenBtn()}
           </div>
         ` : null}
         <iframe
@@ -1847,6 +2143,7 @@ export class PreviewPane extends LitElement {
     const lines = this._content.split("\n");
     const tokLines = this.tokens;
     const tokensAligned = tokLines !== null && tokLines.length === lines.length;
+    const dark = this._codeTheme === "dark";
     return html`
       ${renderMobileBar}
       ${showDesktopHeader ? html`
@@ -1857,12 +2154,18 @@ export class PreviewPane extends LitElement {
             ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
             : null}
           ${this._renderDownloadBtn()}
+            ${this._renderCodeFontScaleGroup()}
+            ${this._renderCodeThemeBtn({ className: "code-theme-btn" })}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
             ${this._renderCopyPathBtn()}
+            ${this._renderFullscreenBtn()}
         </div>
       ` : null}
-      <div class="body">
+      <div
+        class="body ${dark ? "dark" : ""}"
+        style=${`--code-font-scale: ${this._codeFontScalePct / 100}`}
+      >
         ${lines.map((line, i) => {
           const lineNo = i + 1;
           const cls = this.highlights.includes(lineNo) ? "highlight" : "";
