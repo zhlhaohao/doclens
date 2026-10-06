@@ -699,7 +699,7 @@ graph TD
 
 - **Python 三包**：`doclens`（宿主）+ `treesearchlib` + `planify` 独立发 PyPI；统一入口 `publish-pypi.ps1`（自动判断变更、bump patch、发底层包后提升宿主依赖下限；凭据在 gitignored `.pypirc`）。
 - **前端**：`npm run build`（tsc 类型检查 + vite build）输出带 hash 产物到 `web_v2/static/`（git 跟踪）；改前端源码不构建不算交付。
-- **本地开发**：Stop hook 检测前后端代码改动自动重启应用（前端先构建再重启）。
+- **本地开发**：改完前后端代码后由 AI 自行判断是否重启应用（前端先 `npm run build` 再重启）；无自动重启机制。
 - **开发态**：`pip install -e ./treesearch`、`-e ./planify` 让仓库源码覆盖 PyPI 包（改源码即生效）。
 
 ### 3.8 安全面摘要

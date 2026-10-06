@@ -332,7 +332,22 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 ## 启动脚本 start-app.ps1
 
-> 当用户说：启动应用，则调用此脚本，以Web UI模式启动应用的前后端
+> 当用户说：启动应用，则**以后台方式**调用此脚本，以 Web UI 模式启动应用的前后端：
+
+```bash
+# 用 Start-Process 真脱离当前 shell：命令立即返回（rc=0），不会挂住工具
+CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -ArgumentList '-File','./start-app.ps1','gui' -WindowStyle Hidden"
+```
+
+> 必须从 `start-app.ps1` 所在目录（仓库根）执行。临时指定知识库时在参数里追加：`...,'gui','-C','D:\知识库'`。
+>
+> **不要用 `nohup pwsh -File ./start-app.ps1 gui &`**——uvicorn 前台常驻，该形式会让调用它的工具一直等下去（挂起），即便加了 `&`。
+>
+> `Start-Process` 隐藏窗口、输出不落盘，因此**确认启动成功靠端口探测**（`curl -s http://127.0.0.1:7860/api/status`）；要看实时日志请在终端前台运行 `pwsh -File ./start-app.ps1 gui`。`CORTEX_NO_BROWSER=1` 用于不弹浏览器，用户明确要看界面时去掉它。
+
+> **启动只经 start-app，不要手工 `kill`/`taskkill` 任何进程**。`start-app.ps1:32-66` 自己按规则算端口：`端口 = CORTEX_WEB_PORT（~/.cortex/.env，缺省 7860） + N`，`N` 取目录名尾部 `-<数字>`（如 `cortex-3` → n=3，`cortex` → n=0），多 worktree 并行各自独占端口。端口冲突由脚本内 `launch_app` 的 `_kill_port_process`（`doclens/web_v2/app.py:335`）自行接管，**它只处置自己那一个端口**，因此手工 kill 只会误伤无关实例。
+>
+> **也不要绕过 start-app 裸跑 `doclens gui`**：Python 侧优先级是 `--port` > 环境变量 `CORTEX_WEB_PORT` > `.env`（`doclens/config.py:166-171`），而 env 变量会压过 `~/.cortex/.env`。宿主注入的 `CORTEX_WEB_PORT`（如 8000）可能正指向工具宿主自身进程，裸跑会 `_kill_port_process(那端口)` 把宿主杀掉。start-app 总会注入 `--port`（最高优先级），是唯一安全入口。
 
 > **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
 
@@ -356,10 +371,7 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 ./start-app.ps1
 ./start-app.ps1 gui
 ```
-> 浏览器自动打开。**注意**：端口可能因冲突而变化（7860/7861/7862...），请查看启动日志中的实际地址：
-> ```
-> INFO: Uvicorn running on http://127.0.0.1:7860 (Press CTRL+C to quit)
-> ```
+> 前台运行需手动 CTRL+C 结束；**AI 代理启动一律走本节开头的 `Start-Process` 后台形态**（前台/`nohup &` 都会挂住调用方）。浏览器自动打开（`CORTEX_NO_BROWSER=1` 可关闭）。端口按本节开头的规则算（`CORTEX_WEB_PORT + N`），**冲突时杀占用者复用原端口、不递增**，故不要假设会变成 7861/7862。
 
 **3. 命令行模式（离线命令）**
 
@@ -380,20 +392,22 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 cd doclens/web_v2/frontend && npm run build
 
 # 2. 重启后端（否则后端仍在服务旧的静态文件）
-# 在 start-app.ps1 所在目录执行
-pwsh -File ./start-app.ps1 gui
+# 在 start-app.ps1 所在目录执行：后台形态，不带 Start-Process 会挂住调用方
+CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -ArgumentList '-File','./start-app.ps1','gui' -WindowStyle Hidden"
 ```
 
 > **注意**：仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新，必须先 `npm run build` 再重启后端。
 
-### 代码改动自动重启（Stop hook）
+### 代码改动后重启：由模型自行判断
 
-仓库已配项目级 Stop hook（`.claude/settings.json` + `.claude/hooks/restart-app-on-change.sh`）：Claude 每轮响应结束（Stop）时，若检测到**自上次重启后**有前后端代码改动，自动重启应用，无需手动重启。
+**没有自动重启机制**——改完代码后是否重启应用，由 AI 每轮自行判断并主动执行，不要等用户提醒，也不要假设有 hook 兜底。
 
-- **前端改动**（`doclens/web_v2/frontend/src/**`）：先 `npm run build` 再重启。
-- **后端改动**（`doclens/`、`treesearch/`、`planify/` 下 `*.py`）：直接重启（`start-app.ps1` 自带 `_kill_port_process` 停旧）。
-- **无改动**（纯对话）：静默跳过。
-- 重启用 `CORTEX_NO_BROWSER=1`，**不弹浏览器**（避免反复弹窗）；仅手动 `start-app.ps1 gui` 才弹。
-- 防抖时间戳：`.claude/.last-app-restart`（已 gitignore）。
+**需要重启**
+- 后端改动（`doclens/`、`treesearch/`、`planify/` 下 `*.py`）：进程内已加载的旧代码不会变，需重启才生效。
+- 前端改动（`doclens/web_v2/frontend/src/**`）：**必须先 `npm run build`**（Vite 产物落在 `doclens/web_v2/static/`，不构建则后端继续服务旧静态文件），再重启后端。
 
-> hook 只负责「改完重启」，不负责首次启动——首次仍需手动 `pwsh -File ./start-app.ps1 gui`。
+**不需要重启**：纯文档/Markdown（如本节）、`tests/` 下的测试文件、与运行态无关的改动，以及纯对话轮次。
+
+**怎么重启**：执行本节开头的 `Start-Process` 后台命令（带 `CORTEX_NO_BROWSER=1`，不弹浏览器）。`start-app.ps1` 自带 `_kill_port_process`，会自行停掉旧实例并复用同一端口——不要手工 kill 进程。
+
+> 首次启动与重启用同一条命令；判断不准时可先问用户。

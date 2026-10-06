@@ -56,5 +56,4 @@ for src in jira fireflies_fix2; do
   kill_all_doclens_gui
 done
 
-rm -f "$ROOT/.claude/.last-app-workdir"
 echo "===== v4 收尾完成，已清理 ====="

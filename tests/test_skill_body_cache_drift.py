@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 from doclens.web_v2.api._chat_raw import extract_round_raw_messages
 from doclens.web_v2.sessions_store import SessionItem, SessionsStore, SessionType
+from planify.core.llm.types import StreamEvent
 from planify.streaming.runner import CONTEXT_MARKER, StreamingAgent
 from planify.streaming.types import StreamingConfig
 
@@ -30,14 +31,8 @@ _LOADED_SKILL_RE = re.compile(r'<loaded-skill name="([^"]+)">')
 
 
 def _ev(type_, **kw):
-    """构造归一化 LLM 流事件（runner 只读属性，SimpleNamespace 即可）。"""
-    d = dict(
-        type=type_, block_index=None, block_type=None, tool_use_id=None,
-        tool_name=None, text_delta=None, input_json_delta=None, stop_reason=None,
-        usage=None,
-    )
-    d.update(kw)
-    return SimpleNamespace(**d)
+    """构造归一化 LLM 流事件——用真实 StreamEvent，避免手抄字段清单漂移。"""
+    return StreamEvent(type=type_, **kw)
 
 
 class MockProvider:

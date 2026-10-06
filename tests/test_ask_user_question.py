@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from planify.core.config import ASK_MODE_CHAT, ASK_MODE_INTERACTIVE, get_ask_mode
+from planify.core.llm.types import StreamEvent
 from planify.streaming.waiter import GlobalResponseWaiter
 from planify.tools.user_interaction import (
     ASK_TIMEOUT_SECONDS,
@@ -322,12 +323,8 @@ def test_run_stream_chat_ask_ends_turn(monkeypatch, tmp_path):
     astream_calls = {"n": 0}
 
     def _ev(**kw):
-        base = dict(
-            usage=None, block_index=None, block_type=None, tool_use_id=None,
-            tool_name=None, text_delta=None, input_json_delta=None, stop_reason=None,
-        )
-        base.update(kw)
-        return SimpleNamespace(**base)
+        # 真实 StreamEvent（单一真相源）——手抄字段清单会随契约加字段而漂移
+        return StreamEvent(**kw)
 
     class _Provider:
         async def astream(self, *, messages, system, tools, max_tokens, tracer=None):

@@ -267,11 +267,6 @@ doclens/web_v2/frontend/.playwright-cli/
 
 node_modules/
 
-# Claude Code 本地状态（Stop hook 防抖时间戳，勿提交）
-.claude/.last-app-restart
-# Stop hook 自动重启复用的工作目录（start-app.ps1 gui 每次启动时写入）
-.claude/.last-app-workdir
-
 # PyPI 发包凭据（真实 token，严禁入库；模板见 .pypirc.example）
 .pypirc
 .backup-before-filter-repo/

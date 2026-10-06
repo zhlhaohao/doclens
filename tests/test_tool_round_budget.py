@@ -15,6 +15,7 @@ import copy
 import json
 from types import SimpleNamespace
 
+from planify.core.llm.types import StreamEvent
 from planify.streaming.runner import (
     _IDENTICAL_ROUNDS_LIMIT,
     _is_pure_poll_round,
@@ -27,13 +28,8 @@ REMINDER = "<system-reminder>"
 
 
 def _ev(type_, **kw):
-    d = dict(
-        type=type_, block_index=None, block_type=None, tool_use_id=None,
-        tool_name=None, text_delta=None, input_json_delta=None, stop_reason=None,
-        usage=None,
-    )
-    d.update(kw)
-    return SimpleNamespace(**d)
+    """构造归一化 LLM 流事件——用真实 StreamEvent，避免手抄字段清单漂移。"""
+    return StreamEvent(type=type_, **kw)
 
 
 class ScriptedProvider:

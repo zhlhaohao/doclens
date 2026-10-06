@@ -60,7 +60,7 @@ try { (Invoke-RestMethod "http://127.0.0.1:$port/api/status" -TimeoutSec 10).wor
 $wt = "C:\Users\lianghao\github\0914-1"    # 本 skill base 向上三级
 $port = 7861                                 # 按端口规则算出
 
-# 2.1 清残留：杀 worktree 端口占用者（含 Stop hook 管理的开发实例）+ 删旧日志
+# 2.1 清残留：杀 worktree 端口占用者（遗留的开发实例）+ 删旧日志
 $l = Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue | Select -ExpandProperty OwningProcess -Unique
 if ($l) { $l | % { Stop-Process -Id $_ -Force } }
 Start-Sleep 3
@@ -79,7 +79,7 @@ Start-Process -FilePath "pwsh" `
 
 两个关键点：
 - **不传 `--port`**：start-app.ps1 按目录名自动算 worktree 端口（0914-1 → 7861），与本 skill 端口规则一致；显式传 7860 会抢主仓库端口，违背 worktree 隔离；
-- **`-C <语料库>` 必须显式传**：显式 -C 是最高优先级，压过 global `CORTEX_WORKDIR`（test_work_dir）——不传会跑到开发语料上，整轮结果作废。顺带写入 workdir stamp，Stop hook 若重启也保持语料 workdir。
+- **`-C <语料库>` 必须显式传**：显式 -C 是最高优先级，压过 global `CORTEX_WORKDIR`（test_work_dir）——不传会跑到开发语料上，整轮结果作废。
 
 **等待就绪的唯一可信信号**：`benchmarks/gui_out.log` 出现 `[GUI 就绪: ... — 已实测验证可用]` 横幅（app.py 就绪探针打印，start-app.ps1 透传；启动审计 ~30–60s）。**启动前必须删除旧 `gui_out.log`/`gui_err.log`**——旧横幅残留会让轮询 grep 立即命中、误判就绪（bench 打 000）；启动后进程持有句柄，删除会失败，必须在 Start-Process 之前删。轮询：
 
@@ -173,6 +173,6 @@ print(f'AI评分均值 {sum(sc)/len(sc):.1f} | recall均值 {sum(rc)/len(rc):.2f
 - **服务起了但请求 000** → 旧实例残留占端口（第 2.1 步清掉），或 bench `--base-url` 打错端口（打到 7860 主仓库而服务在 worktree 端口——按端口规则核对）。
 - **端口 200 但结果全对不上** → 进程跑在错误语料上（如 test_work_dir），或打到主仓库 7860 旧码实例。这就是第 1 步必须核对 `/api/status` 的 workdir + 端口规则的原因——杀了用 `-C 语料` 在 worktree 端口重启。
 - **改了 doclens 技能文件（SKILL.md）但行为没变化** → 技能运行时从全局 `~/.cortex/skills/` 读取，改源文件不会自动生效：`cp -r doclens/skills/<技能名> ~/.cortex/skills/` 同步后**下一轮对话自动生效**（SkillLoader 惰性热重载，逐文件 mtime+size 签名，≥2s 节流；坏文件沿用旧内容下轮重试）。「改技能 → 同步全局」两步即可；但保险起见，开跑前确认全局副本就是待测版本，否则整轮 benchmark 跑的是旧技能（结果作废）。
-- **Stop hook 撞 worktree 端口** → hook 重启（restart-app-on-change）不带 `--port`，也用 worktree 端口。被测服务占着端口时，hook 起的新实例 bind 失败自灭，**被测服务不受影响**（跑的还是启动时的代码快照，整轮结果代码版本一致）；但反向坑存在——**被测服务启动前**必须先清 worktree 端口残留（含 hook 管理的开发实例，第 2.1 步），否则 bind 失败起不来。
+- **端口被别的实例占着** → 被测服务启动前必须先清 worktree 端口残留（第 2.1 步），否则 bind 失败起不来。无自动重启机制，不会再有 hook 抢端口。
 - **bench 客户端崩了要杀后台任务** → 先 TaskStop，服务不用重启（客户端断流会自动停生成）。
 - **跑完 benchmark 别忘关服务**（用户没说要留着就问一句）。

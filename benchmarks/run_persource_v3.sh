@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 逐源窄域重测驱动 v3（终局：每组独立端口）。
-#   v2 教训——7860 上存在时隐时现的幽灵监听者（Stop hook/残留实例/TIME_WAIT），
+#   v2 教训——7860 上存在时隐时现的幽灵监听者（残留实例/TIME_WAIT），
 #   同端口多服务在 Windows 上连接分发不可控，探针与 workdir 核对均被干扰。
 #   v3 结构性修复：每组服务用独立端口（7870+idx，MCP 7890+idx），
 #   bench 与核对都指向该端口，与 7860 上的一切活动彻底隔离。
@@ -85,8 +85,5 @@ done
 
 echo ""
 echo "===== 缺口组补跑完成 ====="
-# 清 workdir stamp：防未来 Stop hook 以语料目录重启开发实例（无 stamp 时回落
-# global CORTEX_WORKDIR，恢复开发常态）
-rm -f "$ROOT/.claude/.last-app-workdir"
-echo "已清理 workdir stamp 与全部 doclens gui 进程"
+echo "已清理全部 doclens gui 进程"
 ls -la "$OUT"/*.jsonl 2>/dev/null | tail -6
