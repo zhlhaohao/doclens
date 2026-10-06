@@ -14854,7 +14854,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
         max-width: calc(100vw - 16px);
       }
     }
-  `;Qf([x({type:Boolean,reflect:!0})],xn.prototype,"open",2);xn=Qf([G("watch-changes-dialog")],xn);var Q3=Object.defineProperty,e5=Object.getOwnPropertyDescriptor,Kn=(e,t,r,i)=>{for(var s=i>1?void 0:i?e5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&Q3(t,r,s),s};let Ks=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&this.open&&this._loadHealth()}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime},this._health.dev&&console.info(`[about] 前端构建 c1c67e4 · 2026-10-06 21:51 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}render(){var e;return this.open?d`
+  `;Qf([x({type:Boolean,reflect:!0})],xn.prototype,"open",2);xn=Qf([G("watch-changes-dialog")],xn);var Q3=Object.defineProperty,e5=Object.getOwnPropertyDescriptor,Kn=(e,t,r,i)=>{for(var s=i>1?void 0:i?e5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&Q3(t,r,s),s};let Ks=class extends U{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 50df359 · 2026-10-06 23:47 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,a=o=>String(o).padStart(2,"0");return t>0?`${t}天 ${a(r)}:${a(i)}:${a(s)}`:`${a(r)}:${a(i)}:${a(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return d``;const e=this._runtime();return d`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -14866,10 +14866,39 @@ body.cortex-preview-fs .cortex-pdf-portal {
             <span class="label">doclens 版本</span>
             ${this._health?d`<span class="value">${this._health.version}</span>`:this._healthError?d`<span class="value err">后端不可达</span>`:d`<span class="value">获取中…</span>`}
           </div>
-          ${(e=this._health)!=null&&e.dev?d`
+          <div class="vitals" title="进程运行情况（每 5 秒刷新；错误数 = 本次运行累计）">
+            <span class="vitals-label">运行情况</span>
+            <div class="vitals-grid">
+              <div class="vital">
+                <span class="vital-k">运行时长</span>
+                <span class="vital-v">${e?this._fmtUptime(e.uptime_sec):"…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">内存</span>
+                <span class="vital-v">${e?e.rss_mb!==null?`${e.rss_mb} MB`:"不可用":"…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">线程</span>
+                <span class="vital-v">${e?this._fmtNum(e.threads):"…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">对象</span>
+                <span class="vital-v">${e?this._fmtNum(e.objects):"…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">错误</span>
+                <span class="vital-v ${e&&e.errors>0?"err":""}">${e?this._fmtNum(e.errors):"…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">GC 回收</span>
+                <span class="vital-v">${e?this._fmtNum(e.gc_collections):"…"}</span>
+              </div>
+            </div>
+          </div>
+          ${(t=this._health)!=null&&t.dev?d`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"c1c67e4 · 2026-10-06 21:51"}</span>
+            <span class="value">${"50df359 · 2026-10-06 23:47"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
@@ -14882,7 +14911,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           </div>`:null}
         </div>
       </dialog>
-    `:d``}};Ks.styles=q`
+    `}};Ks.styles=q`
     :host {
       position: fixed;
       inset: 0;
@@ -14979,6 +15008,44 @@ body.cortex-preview-fs .cortex-pdf-portal {
     /* SW 缓存旧 bundle 是高频坑：当前 bundle 行做视觉强调 */
     .row.stale-hint .value {
       font-weight: 600;
+    }
+    /* 运行情况分区（ADR-0037）：2×3 紧凑网格，等宽数字 */
+    .vitals {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-2, 6px);
+    }
+    .vitals-label {
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+    }
+    .vitals-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--cortex-space-2, 6px) var(--cortex-space-4, 12px);
+    }
+    .vital {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--cortex-space-2, 6px);
+      min-width: 0;
+    }
+    .vital-k {
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      white-space: nowrap;
+    }
+    .vital-v {
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      font-variant-numeric: tabular-nums;
+    }
+    .vital-v.err {
+      color: var(--cortex-danger);
     }
     .err {
       color: var(--cortex-danger);

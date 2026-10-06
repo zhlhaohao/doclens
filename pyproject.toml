@@ -59,6 +59,8 @@ dependencies = [
     "Pillow>=10.0.0",
     # 预览语法高亮的服务端分词引擎（ADR-0032；此前仅作 rich 传递依赖存在）
     "pygments>=2.13.0,<3.0.0",
+    # 关于弹窗运行情况面板：RSS 内存读取（ADR-0037；缺失降级显示不可用）
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]

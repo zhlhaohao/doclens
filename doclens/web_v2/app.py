@@ -11,6 +11,11 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from doclens import __version__ as CORTEX_VERSION
 from doclens.web_v2.api.errors import register_error_handlers
+from doclens.web_v2 import runtime_vitals
+
+# 错误计数器随 app 模块导入安装（ADR-0037）：全局记录工厂计数
+# ERROR/CRITICAL，早于 setup_logging 也能生效（basicConfig 不覆盖工厂）
+runtime_vitals.install_error_counter()
 
 # 后端进程启动时刻（模块导入时）：/api/health 返回给关于弹窗——
 # 测试者据此确认后端重启过（version 相同时仍有新旧进程之别）。
@@ -185,6 +190,8 @@ def create_app() -> FastAPI:
             "ok": True,
             "version": CORTEX_VERSION,
             "dev": _DEV_MODE,
+            # 运行情况（ADR-0037）：所有模式可见；错误数=本次运行累计
+            "runtime": runtime_vitals.snapshot(),
             # 调试字段仅开发模式返回（发行版 mtime=安装时刻，无意义）
             **({"started_at": _STARTED_AT, "code_mtime": _code_mtime()} if _DEV_MODE else {}),
         }

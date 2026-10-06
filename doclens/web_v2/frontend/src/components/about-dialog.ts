@@ -1,6 +1,16 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+/** 运行情况快照（/api/health.runtime，ADR-0037；rss_mb psutil 缺席为 null） */
+interface RuntimeVitals {
+  uptime_sec: number;
+  rss_mb: number | null;
+  threads: number;
+  objects: number;
+  errors: number;
+  gc_collections: number;
+}
+
 /** 「关于」对话框：发行版只显示 doclens 版本号；开发模式（后端
  * /api/health 返回 dev=true，源码树运行）附加调试信息：
  * - doclens 版本：health.version（发行版 = pip 安装的包版本号；
@@ -110,6 +120,44 @@ export class AboutDialog extends LitElement {
     .row.stale-hint .value {
       font-weight: 600;
     }
+    /* 运行情况分区（ADR-0037）：2×3 紧凑网格，等宽数字 */
+    .vitals {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-2, 6px);
+    }
+    .vitals-label {
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+    }
+    .vitals-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--cortex-space-2, 6px) var(--cortex-space-4, 12px);
+    }
+    .vital {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--cortex-space-2, 6px);
+      min-width: 0;
+    }
+    .vital-k {
+      font-family: var(--cortex-font);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      white-space: nowrap;
+    }
+    .vital-v {
+      font-family: var(--cortex-font-mono);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+      font-variant-numeric: tabular-nums;
+    }
+    .vital-v.err {
+      color: var(--cortex-danger);
+    }
     .err {
       color: var(--cortex-danger);
     }
@@ -130,8 +178,16 @@ export class AboutDialog extends LitElement {
     dev: boolean;
     started_at?: string;
     code_mtime?: string;
+    runtime?: RuntimeVitals;
   } | null = null;
   @state() private _healthError = false;
+  /** 运行情况轮询 timer（弹窗 open 期间 5s 一刷，ADR-0037） */
+  private _pollTimer: number | null = null;
+
+  /** 后端 runtime 快照（/api/health.runtime；rss_mb psutil 缺席时为 null） */
+  private _runtime(): RuntimeVitals | null {
+    return this._health?.runtime ?? null;
+  }
 
   /** 启动晚于代码最后修改 → 已加载最新；反之改了代码没重启（editable
    *  install 改源码立即生效的前提是重启进程）。「?」（扫描失败）视为未知。 */
@@ -164,13 +220,30 @@ export class AboutDialog extends LitElement {
   }
 
   disconnectedCallback(): void {
+    this._stopPolling();
     document.removeEventListener("keydown", this._onKeydown);
     super.disconnectedCallback();
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has("open") && this.open) {
-      this._loadHealth();
+    if (changed.has("open")) {
+      if (this.open) {
+        this._loadHealth();
+        // 运行情况 5s 轮询（ADR-0037）：打开期间持续刷新，关闭即清
+        this._pollTimer = window.setInterval(
+          () => void this._loadHealth(),
+          5000,
+        );
+      } else {
+        this._stopPolling();
+      }
+    }
+  }
+
+  private _stopPolling(): void {
+    if (this._pollTimer !== null) {
+      window.clearInterval(this._pollTimer);
+      this._pollTimer = null;
     }
   }
 
@@ -207,12 +280,14 @@ export class AboutDialog extends LitElement {
         dev?: boolean;
         started_at?: string;
         code_mtime?: string;
+        runtime?: RuntimeVitals;
       };
       this._health = {
         version: data.version ?? "?",
         dev: data.dev ?? false,
         started_at: data.started_at,
         code_mtime: data.code_mtime,
+        runtime: data.runtime,
       };
       // WebView 远程调试辅助（仅开发模式）
       if (this._health.dev) {
@@ -225,8 +300,24 @@ export class AboutDialog extends LitElement {
     }
   }
 
+  /** 秒数 → `X天 HH:MM:SS` / `HH:MM:SS` 运行时长。 */
+  private _fmtUptime(sec: number): string {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return d > 0 ? `${d}天 ${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  /** 对象/GC 大数千分位（1,234,567）。 */
+  private _fmtNum(n: number): string {
+    return n.toLocaleString("zh-CN");
+  }
+
   render() {
     if (!this.open) return html``;
+    const rt = this._runtime();
     return html`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
@@ -242,6 +333,35 @@ export class AboutDialog extends LitElement {
               : this._healthError
                 ? html`<span class="value err">后端不可达</span>`
                 : html`<span class="value">获取中…</span>`}
+          </div>
+          <div class="vitals" title="进程运行情况（每 5 秒刷新；错误数 = 本次运行累计）">
+            <span class="vitals-label">运行情况</span>
+            <div class="vitals-grid">
+              <div class="vital">
+                <span class="vital-k">运行时长</span>
+                <span class="vital-v">${rt ? this._fmtUptime(rt.uptime_sec) : "…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">内存</span>
+                <span class="vital-v">${rt ? (rt.rss_mb !== null ? `${rt.rss_mb} MB` : "不可用") : "…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">线程</span>
+                <span class="vital-v">${rt ? this._fmtNum(rt.threads) : "…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">对象</span>
+                <span class="vital-v">${rt ? this._fmtNum(rt.objects) : "…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">错误</span>
+                <span class="vital-v ${rt && rt.errors > 0 ? "err" : ""}">${rt ? this._fmtNum(rt.errors) : "…"}</span>
+              </div>
+              <div class="vital">
+                <span class="vital-k">GC 回收</span>
+                <span class="vital-v">${rt ? this._fmtNum(rt.gc_collections) : "…"}</span>
+              </div>
+            </div>
           </div>
           ${this._health?.dev
             ? html`
