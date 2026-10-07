@@ -114,9 +114,20 @@
 
 - **登记 (Registration)**：白名单外文本文件的元数据收录形态——不解析、不建树、不分词、不写倒排（FTS），只在 documents 表落一行**ghost 行**（空 structure_json、node_count=0，写 index_meta 指纹）。服务 files 页完整盘点与**文件搜索**（文件名可搜）；**知识库全文搜索（KB search）不命中**（空树 + 无倒排行，天然隔离）。范围 = `allowed_source_types` 白名单外的全部文本文件（code/json/xml/yaml/无后缀等），文本判定 = 已知文本后缀直通 + 无/未知后缀读前 8KB 嗅探（含 NUL 字节即二进制，不登记）。实现分层 = treesearch 引擎层在发现阶段分流（增量指纹/prune/移动检测自动复用），ghost 指纹加盐（白名单变化自动触发重建）。读取闸门：`read_document`（KB 工具）遇 ghost **拒绝并提示改用 read_file**（与「不读取内容」自洽）；预览不受影响（code 预览本就不查 DB）。files 徽标三态：未登记（灰）/ 已登记 / 已索引，状态页统计分开报。_Avoid_: 占位节点（会被后台替换，ghost 永不升级——语义不同）、叫「索引」（索引 = 解析建树分词入 FTS，是另一回事）。
 
+- **会话导出 (Session Export)**：chat 会话跨实例转移记忆的出口形态——单会话全保真自有 JSON（sessions 行 + **全部** session_items 原样，含 raw_messages/compacted/rewound/usage/skill_context），入口 = chat-view 菜单。死段与被压缩截断的旧条目照常包含（会话模型是 append-only + 边界投影，导出不做物理化截断）；rewind_snapshots（机器本地文件备份）与 auth_sessions 不导。_Avoid_: 只导活投影（破坏边界事实）。
+- **会话导入 (Session Import)**：入口 = 历史会话页（对话历史）菜单；**同 id 冲突 = 跳过并提示「会话已存在」**（幂等、防双份；会话身份 = id）。_Avoid_: 覆盖（静默丢失目标侧续聊）、每次重建 id（重复导入出双份）。
+- **对话图片随导 (Images Ride Export)**：对话图片（base64）作为 message_user payload 一部分照常进导出文件、导入后完整恢复——「会话导出」全保真哲学的自然延伸（接受文件数 MB 级）。_Avoid_: 导出时剥图（导入后与源会话永久分叉）。
+- **导出文件载体 (Export File)**：单会话导出的落地产物 = **浏览器下载**（前端拿全量 JSON 后存为文件，不写知识库目录/不进索引/Git 同步——导出文件与源会话不是双份数据，会话真相源仍是 DB）。文件 = 后端拼装的自有格式 JSON（含格式版本号）。文件名含会话标题 slug + 日期（可读可辨认，id 保留在 JSON 内）。_Avoid_: 导出落盘知识库（制造索引与同步负担）、导出 = Markdown 转录（已否决，绑定不可续跑格式）。
+- **导入文件载体 (Import File)**：导入 = 文件选择器选 JSON 上传（无拖拽/粘贴）；校验失败（非法 JSON / 缺字段 / 版本不识别）整体拒绝并提示，不部分导入。
+- **导入衔接 (Import Landing)**：导入成功 → toast 报告（导入 n 条 / 跳过 n 条已存在）+ 历史列表刷新即止，**不自动进入会话**（导入是数据操作不是导航操作）；导入会话的 created_at/updated_at **保留源值**（排序如实反映会话本身时序，不被导入时刻顶到最前）。流式生成中不限制导入/导出（导出是纯读，最多末轮不完整可接受）。
+- **导出/导入端点 (Export/Import Endpoints)**：`GET /api/sessions/{id}/export`（attachment 文件流，浏览器直接下载）+ `POST /api/sessions/import`（JSON body → `{imported, skipped}`）。导出端点直读 sessions + session_items 原始行拼格式（绕过展示层投影模型）。导入校验 = **结构校验不语义校验**（版本号/必填字段/items 字段类型；payload 内部语义交回放层容错），失败整体 400。_Avoid_: 前端拼库格式（违反分层）。
+- **格式版本 (Export Format Version)**：导出 JSON 顶层 `format: 1`；导入只认已知版本，不认识的版本号 → 400「文件版本不支持」（明确拒绝优于静默乱数据）。将来升版由导入端分支向后兼容；不做迁移函数矩阵（格式单一产品闭环，无多版本生态）。
+- **导入信任面 (Import Trust)**：前端选文件后**弹确认**（显示将导入的会话标题/条目数）才上传；后端 body 上限 50MB（对话图片 base64 膨胀 ~33% 已宽裕）；鉴权 = 现有 auth 闸门照常管。信任模型对齐既有惯例——「操作者可访问知识库即可信」，导入会话与往知识库放一个 md 文件的风险面等同，不单独立规矩（同技能安装的「确认时一次授予」）。
 - **运行情况 (Runtime Vitals)**：「关于」弹窗的进程健康分区——核心六项指标（运行时长/内存 RSS/线程数/对象数/错误数/GC 回收次数），**所有模式可见**（与仅开发模式的构建调试块有意分层：运行情况对最终用户排障同样有用）。错误数口径 = **本次运行累计**（进程内记录工厂计数，非日志文件统计——多进程写同一文件会混入他人错误）；数据随 `/api/health` 同源下发，弹窗打开期间 5s 轮询。只反映 GUI 主进程，不聚合 MCP 子进程。_Avoid_: 任务管理器全家桶（CPU%/句柄数/asyncio 任务数，已否决）、当日日志 grep（已否决）。
 
 ## 决议摘要（详见 docs/adr/）
+
+- 2026-10-07：会话导出/导入 = doclens-to-doclens 记忆转移——单会话全保真自有 JSON（browser 下载 / 文件选择器上传；`GET /sessions/{id}/export` + `POST /sessions/import`；format 版本号，同 id 跳过；结构校验 + 前端确认 + 50MB 上限；死段照导、图片随导、时间戳保留源值、导入后只刷新列表不自动进入；rewind_snapshots / auth_sessions 不导）。见 ADR-0038。
 
 - 2026-10-05：消息流滚动 = 贴底粘滞（stick-to-bottom）——仅当视口在底部附近（距底 ≤80px）时流式增量才自动跟随滚底；用户上滚回看即冻结视口（思考流高频刷新不再拽人回底），滚回底部自动恢复跟随；发送消息/切换会话强制回底（用户意图明确指向底部新内容）。_Avoid_: updated() 无条件 scrollTop=scrollHeight（高频刷新劫持滚动条）。
 

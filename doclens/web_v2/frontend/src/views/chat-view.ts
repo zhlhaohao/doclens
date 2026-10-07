@@ -8,7 +8,7 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, importSession } from "../api/sessions";
 import { router } from "../router/router";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
@@ -639,6 +639,12 @@ export class ChatView extends LitElement {
         onClick: () => { this._compactDialogOpen = true; },
       },
       {
+        label: "导出会话",
+        icon: "download",
+        // ADR-0038：全保真 JSON 浏览器下载（跨实例记忆转移）；纯读不互斥流式
+        onClick: () => { void this._exportSession(); },
+      },
+      {
         label: "会话信息",
         icon: "info",
         // 打开时顺带刷新压缩信息（无 SSE 通道，打开时 re-fetch 聚合补偿实时性）
@@ -925,6 +931,60 @@ export class ChatView extends LitElement {
     } finally {
       this._clearing = false;
       this.requestUpdate();
+    }
+  }
+
+  /** 导出当前会话（ADR-0038）：全保真 JSON 浏览器下载，跨实例记忆转移。 */
+  private async _exportSession(): Promise<void> {
+    const cur = this.viewState.currentSession;
+    if (!cur) return;
+    try {
+      await exportSession(cur.id);
+      this._pushToast("已导出会话文件", "success", 2500);
+    } catch (e) {
+      this._pushToast(`导出失败：${(e as Error)?.message || e}`, "error", 5000);
+    }
+  }
+
+  /** 导入会话（ADR-0038）：文件选择器 → 确认（标题/条目数）→ 上传 →
+   *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。 */
+  private _onImportHistory(): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (file) void this._importSessionFile(file);
+    };
+    input.click();
+  }
+
+  private async _importSessionFile(file: File): Promise<void> {
+    let data: unknown;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      this._pushToast("导入失败：文件不是合法 JSON", "error", 5000);
+      return;
+    }
+    // 前端轻量预读（标题/条目数）供确认展示；完整结构校验在后端
+    const d = data as { format?: unknown; session?: { title?: unknown }; items?: unknown };
+    const title = typeof d.session?.title === "string" ? d.session.title : "";
+    const count = Array.isArray(d.items) ? d.items.length : 0;
+    const ok = window.confirm(
+      `导入会话「${title || file.name}」（${count} 条记录）？\n\n` +
+      "导入后可在历史会话列表中找到；已存在相同会话时将跳过。");
+    if (!ok) return;
+    try {
+      const res = await importSession(data);
+      if (res.imported > 0) {
+        this._pushToast(`已导入会话「${title || file.name}」`, "success", 3000);
+      } else {
+        this._pushToast("会话已存在，已跳过", "info", 3000);
+      }
+      await this._loadHistory(); // 刷新列表（排序保留源时间戳，不自动进入）
+    } catch (e) {
+      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
     }
   }
 
@@ -1540,9 +1600,11 @@ export class ChatView extends LitElement {
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
             .activeId=${this._highlightSessionId}
+            ?importable=${true}
             @select=${this._onHistorySelect}
             @toggle-star=${this._onToggleStar}
-            @clear=${this._onClearHistory}>
+            @clear=${this._onClearHistory}
+            @import=${this._onImportHistory}>
           </history-list>
           <div class="input-row">
             <input-box

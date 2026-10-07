@@ -1,10 +1,13 @@
 """GET/POST/PATCH/DELETE /api/sessions。"""
+import json
 from datetime import datetime, timezone
 from itertools import chain
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import Response
 import ulid as _ulid
 
 from doclens.web_v2.api.errors import CortexAPIError
@@ -358,3 +361,68 @@ async def clear_sessions(
         for sid in deleted_ids:
             tracker.purge(sid)
     return {"ok": True, "deleted_count": deleted, "skipped_starred": skipped_starred}
+
+
+# ---- 导出/导入（ADR-0038：全保真单会话 JSON，跨实例记忆转移）----
+
+# 导入 body 上限：对话图片 base64 膨胀 ~33%，50MB 已宽裕（ADR-0038）
+_IMPORT_MAX_BYTES = 50 * 1024 * 1024
+
+
+@router.get("/sessions/{session_id}/export")
+async def export_session(session_id: str):
+    """导出单会话为全保真 JSON 文件（浏览器直接下载）。
+
+    attachment 文件名 = 标题 slug + 日期；id 保留在 JSON 内。纯读操作，
+    生成中不限制（最多末轮 raw_messages 未落库，可接受——ADR-0038）。
+    """
+    store = _get_store()
+    data = store.export_session(session_id)
+    if data is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    title = data["session"]["title"]
+    # 文件名 slug：保留字母/数字/中日韩文字/连字符，其余折叠为连字符
+    # （标题可能含路径分隔符等文件名非法字符）；空标题退 "session"。
+    slug = "".join(
+        c if (c.isalnum() or c == "-") else "-"
+        for c in title
+    )
+    slug = "-".join(p for p in slug.split("-") if p) or "session"
+    filename = f"{slug}-{datetime.now(timezone.utc):%Y%m%d}.json"
+    content = json.dumps(data, ensure_ascii=False)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        },
+    )
+
+
+@router.post("/sessions/import")
+async def import_session(request: Request):
+    """导入会话（单文件单会话，ADR-0038）。同 id 已存在 → 跳过；
+    结构校验失败 → 400 整体拒绝（不部分导入）。
+
+    body 上限 50MB（超限 413）——raw bytes 先验长度再解析，防超大
+    body 进 JSON 解析器。
+    """
+    raw = await request.body()
+    if len(raw) > _IMPORT_MAX_BYTES:
+        raise CortexAPIError(413, "IMPORT_TOO_LARGE", "导入文件超过 50MB 上限")
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise CortexAPIError(400, "IMPORT_INVALID", "文件不是合法 JSON")
+    if not isinstance(data, dict):
+        raise CortexAPIError(400, "IMPORT_INVALID", "文件根必须是 JSON 对象")
+    store = _get_store()
+    try:
+        imported = store.import_session(data)
+    except ValueError as e:
+        raise CortexAPIError(400, "IMPORT_INVALID", str(e))
+    return {
+        "ok": True,
+        "imported": 1 if imported else 0,
+        "skipped": 0 if imported else 1,
+    }

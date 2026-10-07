@@ -122,3 +122,37 @@ export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boo
   if (type) sp.set("type", type);
   return request(`/api/sessions?${sp}`, { method: "DELETE" });
 }
+
+/** 导出会话（ADR-0038）：全保真 JSON，attachment 下载（浏览器存为文件）。
+ *  用原生 fetch 拿 blob——request() 只解析 JSON 响应。 */
+export async function exportSession(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}/export`);
+  if (!res.ok) {
+    let detail = `导出失败（${res.status}）`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch { /* 非 JSON 错误体，用默认文案 */ }
+    throw new Error(detail);
+  }
+  // 从 Content-Disposition 解析文件名（filename*=UTF-8''<percent-encoded>）
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = m ? decodeURIComponent(m[1]) : "session-export.json";
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** 导入会话（ADR-0038）：单文件单会话；同 id 跳过（skipped=1）。 */
+export async function importSession(
+  data: unknown,
+): Promise<{ ok: boolean; imported: number; skipped: number }> {
+  return request("/api/sessions/import", { method: "POST", json: data });
+}

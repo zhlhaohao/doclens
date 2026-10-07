@@ -58,6 +58,26 @@ export class HistoryList extends LitElement {
       cursor: not-allowed;
       opacity: 0.6;
     }
+    .import-btn {
+      background: transparent;
+      border: none;
+      padding: 2px 6px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-sm);
+      transition: color 0.15s, background 0.15s;
+      margin-right: 2px;
+    }
+    .import-btn:hover {
+      color: var(--cortex-text);
+      background: var(--cortex-surface-muted);
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
     .empty {
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-sm);
@@ -70,6 +90,8 @@ export class HistoryList extends LitElement {
   @property({ attribute: false }) sessions: Session[] = [];
   /** 调用方类型，仅作文档化用；实际清空范围由父组件决定 */
   @property() type?: "search" | "chat";
+  /** 显示「导入」按钮（ADR-0038 会话导入入口；search 历史不提供） */
+  @property({ type: Boolean }) importable = false;
   /** 清空中状态：禁用按钮 + 文字变化 */
   @property({ type: Boolean }) clearing = false;
   /** 高亮条目 id（重启恢复的「上次会话」纯展示高亮） */
@@ -82,18 +104,33 @@ export class HistoryList extends LitElement {
     }));
   }
 
+  private _onImport() {
+    this.dispatchEvent(new CustomEvent("import", {
+      bubbles: true, composed: true,
+    }));
+  }
+
   render() {
     const showBtn = this.sessions.length > 0;
     return html`
       <div class="header">
         <div class="title">${this.title}</div>
-        ${showBtn ? html`
-          <button
-            class="clear-btn"
-            ?disabled=${this.clearing}
-            @click=${this._onClear}>
-            ${this.clearing ? "清空中..." : "清空"}
-          </button>` : null}
+        <div class="actions">
+          ${this.importable ? html`
+            <button
+              class="import-btn"
+              title="从导出文件导入会话（跨实例记忆转移）"
+              @click=${this._onImport}>
+              导入
+            </button>` : null}
+          ${showBtn ? html`
+            <button
+              class="clear-btn"
+              ?disabled=${this.clearing}
+              @click=${this._onClear}>
+              ${this.clearing ? "清空中..." : "清空"}
+            </button>` : null}
+        </div>
       </div>
       ${this.sessions.length === 0
         ? html`<div class="empty">暂无历史${this.type === "search" ? "搜索" : "会话"}</div>`

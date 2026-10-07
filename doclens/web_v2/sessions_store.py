@@ -830,6 +830,136 @@ class SessionsStore:
                 )
             return k
 
+    # ---- 导出/导入（ADR-0038：全保真单会话 JSON，跨实例记忆转移）----
+
+    # 导出格式版本：结构演进时 +1，导入端按已知版本分支向后兼容
+    EXPORT_FORMAT_VERSION = 1
+
+    def export_session(self, session_id: str) -> Optional[dict]:
+        """单会话全保真导出（ADR-0038）——sessions 行 + **全部**
+        session_items 原始行（含死段、compacted/rewound 边界、usage、
+        skill_context；raw payload 字符串原样透传，不做 JSON 重排）。
+
+        不导 rewind_snapshots（引用 .cortex/rewind/ 机器本地文件备份）
+        与 auth_sessions。会话不存在返回 None。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id, type, title, preview, mode, created_at,
+                          updated_at, message_count, starred
+                   FROM sessions WHERE id = ?""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            items = conn.execute(
+                """SELECT seq, kind, payload, created_at
+                   FROM session_items WHERE session_id = ?
+                   ORDER BY seq ASC""",
+                (session_id,),
+            ).fetchall()
+            return {
+                "format": self.EXPORT_FORMAT_VERSION,
+                "session": dict(row),
+                "items": [dict(i) for i in items],
+            }
+
+    @staticmethod
+    def _validate_import(data: dict) -> tuple[str, dict, list]:
+        """导入结构校验（不语义校验，ADR-0038）：版本号 / session 必填
+        字段 / items 字段类型。失败抛 ValueError（API 层转 400）。
+
+        Returns:
+            (session_id, session_row, item_rows)——可直接落库的原始行。
+        """
+        if not isinstance(data, dict):
+            raise ValueError("文件根必须是 JSON 对象")
+        fmt = data.get("format")
+        if fmt != SessionsStore.EXPORT_FORMAT_VERSION:
+            raise ValueError(
+                f"文件版本不支持（format={fmt!r}，本机支持 "
+                f"{SessionsStore.EXPORT_FORMAT_VERSION}）"
+            )
+        s = data.get("session")
+        if not isinstance(s, dict):
+            raise ValueError("缺少 session 字段")
+        for field in ("id", "type", "title", "created_at", "updated_at"):
+            if not isinstance(s.get(field), str) or not s[field]:
+                raise ValueError(f"session.{field} 缺失或非字符串")
+        if s["type"] not in (t.value for t in SessionType):
+            raise ValueError(f"session.type 非法：{s['type']!r}")
+        items = data.get("items")
+        if not isinstance(items, list):
+            raise ValueError("缺少 items 字段或非数组")
+        for i, it in enumerate(items):
+            if not isinstance(it, dict):
+                raise ValueError(f"items[{i}] 非对象")
+            if not isinstance(it.get("kind"), str) or not it["kind"]:
+                raise ValueError(f"items[{i}].kind 缺失或非字符串")
+            if not isinstance(it.get("payload"), str):
+                raise ValueError(f"items[{i}].payload 缺失或非字符串")
+            try:
+                json.loads(it["payload"])
+            except (json.JSONDecodeError, TypeError):
+                raise ValueError(f"items[{i}].payload 不是合法 JSON")
+        # 落库行：补齐可空列默认值，seq 用文件原值（保序）
+        session_row = {
+            "id": s["id"],
+            "type": s["type"],
+            "title": s["title"],
+            "preview": s.get("preview") or "",
+            "mode": s.get("mode"),
+            "created_at": s["created_at"],
+            "updated_at": s["updated_at"],
+            "message_count": s.get("message_count") or 0,
+            "starred": 1 if s.get("starred") else 0,
+        }
+        item_rows = [
+            {
+                "seq": it.get("seq") if isinstance(it.get("seq"), int) else i + 1,
+                "kind": it["kind"],
+                "payload": it["payload"],
+                "created_at": it.get("created_at") or s["created_at"],
+            }
+            for i, it in enumerate(items)
+        ]
+        return s["id"], session_row, item_rows
+
+    def import_session(self, data: dict) -> bool:
+        """导入单个会话（ADR-0038）——结构校验后原样写入，时间戳保留
+        源值（导入时刻不顶到最前）。
+
+        Returns:
+            是否新导入；同 id 已存在 → False（跳过，幂等防双份）。
+        Raises:
+            ValueError: 结构校验失败（调用方转 400，整体不部分导入）。
+        """
+        session_id, session_row, item_rows = self._validate_import(data)
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if row is not None:
+                return False
+            conn.execute(
+                """INSERT INTO sessions
+                   (id, type, title, preview, mode, created_at, updated_at,
+                    message_count, starred)
+                   VALUES (:id, :type, :title, :preview, :mode, :created_at,
+                           :updated_at, :message_count, :starred)""",
+                session_row,
+            )
+            conn.executemany(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (session_id, r["seq"], r["kind"], r["payload"], r["created_at"])
+                    for r in item_rows
+                ],
+            )
+            return True
+
     def delete(self, session_id: str) -> bool:
         """删除单个会话；加星会话受保护（2026-09-17），拒绝删除并返回 False。"""
         with self._lock, self._conn() as conn:
