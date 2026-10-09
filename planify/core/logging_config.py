@@ -64,6 +64,22 @@ def _load_cortex_env():
     """从 .env 文件加载环境变量（如果尚未加载）"""
     if os.environ.get("CORTEX_ENV_LOADED"):
         return
+    # 防御（2026-10-09）：宿主若可导入但尚未注册数据目录名（启动序颠倒：
+    # 本函数先于宿主装配代码执行），planify 回退 ".cortex" 会让发行版宿主
+    # 读错 .env（~/.cortex/.env 的端口/预设压过宿主自己的 ~/.<dir>/.env）。
+    # 宿主侧约定：模块 <host>.config 暴露 data_dirname()。用 importlib 按
+    # 名探测而非静态 import——planify 对宿主保持零静态依赖（架构红线：
+    # 底层不得 import 高层），宿主缺席时保持 ".cortex" 回退。
+    if _data_dirname == ".cortex":
+        try:
+            import importlib
+
+            _host_cfg = importlib.import_module("doclens.config")
+            _host_dd = getattr(_host_cfg, "data_dirname", None)
+            if callable(_host_dd):
+                register_data_dirname(_host_dd())
+        except Exception:
+            pass
     try:
         from dotenv import load_dotenv
         # 全局配置: ~/.<数据目录>/.env （开发 .cortex / 发行版 .doclens）

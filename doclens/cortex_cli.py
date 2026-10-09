@@ -1109,6 +1109,11 @@ def _cli_webfetch(args, config, idx):
 
 def _cli_gui(args, config, idx):
     """Handle `cortex gui` — launch FastAPI Web UI."""
+    # doclens.config 必须先于 setup_logging 导入：它在模块级把数据目录名注册进
+    # planify（register_data_dirname）。顺序颠倒时 _load_cortex_env 在注册前
+    # 跑、planify 回退 .cortex → 发行版 GUI 读了 ~/.cortex/.env 的
+    # CORTEX_WEB_PORT（7860）压过 ~/.doclens/.env 的 8000（2026-10-09 事故）。
+    import doclens.config  # noqa: F401  触发注册
     from planify.core.logging_config import setup_logging
     setup_logging()
 
@@ -1266,6 +1271,9 @@ def main():
         _apply_workdir_override()
 
     # 配置日志 → {workdir}/<数据目录>/logs/debug_YYYYMMDD.log （开发 .cortex / 发行版 .doclens）
+    # doclens.config 先于 setup_logging 导入（见 _cli_gui 同款注释）：注册数据
+    # 目录名进 planify 后，_load_cortex_env 才会读对 .env。
+    import doclens.config  # noqa: F401  触发注册
     from planify.core.logging_config import setup_logging
     setup_logging()
 
