@@ -12,13 +12,34 @@ from pathlib import Path
 from typing import Optional
 
 
-def data_dirname() -> str:
-    """数据目录名：读宿主应用设置的 CORTEX_DATA_DIRNAME env；未设则回退 .cortex。
+# =============================================================================
+# 宿主数据目录名（注入式单一真相源）
+# =============================================================================
+# 框架不知道宿主的数据目录叫什么（.cortex / .doclens / 其它）——由宿主在启动时
+# 经 register_data_dirname() 注入；未注入回退 ".cortex"（planify 独立运行）。
+#
+# 历史（2026-10-09 收敛）：旧实现读 CORTEX_DATA_DIRNAME env，而宿主侧
+# doclens.config.data_dirname() 是现场计算（is_installed_mode）——两个同名
+# 函数、两套真相源。宿主用 setdefault 把自己的决策写入 env 本意是同步给
+# planify，但「外部已有值则尊重」的语义让子进程继承宿主 env 时被劫持
+# （AI 宿主 .doclens → 其启动的 dev 实例日志落错目录，DB 却因现场计算而
+# 落对——同进程内分裂）。注入通路不经过进程环境，天然免疫继承劫持。
+_data_dirname: str = ".cortex"
 
-    宿主（如 doclens）在模块加载时把模式决策写入该 env，planify 读取即可与
-    宿主保持一致；planify 独立运行时 env 未设 → 回退 .cortex。
+
+def register_data_dirname(name: str) -> None:
+    """宿主注入数据目录名（如 doclens 在装配期调用，传 ".cortex"/".doclens"）。
+
+    必须在首次 data_dirname() 调用前完成（日志/agent.md/临时目录定位都依赖
+    它）；重复调用以最后一次为准（测试 monkeypatch 场景）。
     """
-    return os.environ.get("CORTEX_DATA_DIRNAME", ".cortex")
+    global _data_dirname
+    _data_dirname = name
+
+
+def data_dirname() -> str:
+    """数据目录名：宿主注入值；未注入（planify 独立运行）回退 ".cortex"。"""
+    return _data_dirname
 
 
 class SafeFileHandler(logging.handlers.RotatingFileHandler):

@@ -29,6 +29,19 @@ if ($isMainRepo) {
 # -C 是子命令参数（写在 gui 之后）；用户显式传 -C/--workdir 时尊重用户，不注入默认。
 $env:PYTHONPATH = $cortexRoot
 
+# 环境灭菌（2026-10-09）：从「已运行的 doclens 实例」（发行版 GUI / AI 宿主）内
+# 启动本脚本时，调用方进程里带着整套 CORTEX_* 运行时配置（CORTEX_DATA_DIRNAME=
+# .doclens、CORTEX_WEB_PORT=8000、CORTEX_ACTIVE_*_PRESET…）。子进程全盘继承会被
+# config.py 的 setdefault 尊重——dev 实例被劫持成发行版口径（日志落 .doclens、
+# 预设错乱、连错端口）。这里在启动前显式清掉所有 CORTEX_*，让被启动的实例用
+# 自己的判定重新算。
+# 例外：CORTEX_WORKDIR 是调用方显式意图（非运行时配置），灭菌前先抢救。
+$callerWorkdir = $env:CORTEX_WORKDIR
+Get-ChildItem env: | Where-Object { $_.Name -like 'CORTEX_*' } | ForEach-Object {
+    Remove-Item ("env:" + $_.Name)
+}
+if ($callerWorkdir) { $env:CORTEX_WORKDIR = $callerWorkdir }
+
 # 端口 = 基数 + N，N = 当前目录名横杠后的数字（如 0702-3 → N=3）。
 # 无横杠或横杠后非数字时 N=0。多 worktree 并行跑 gui 时各自独占端口，避免冲突。
 $dirName = Split-Path -Leaf $PSScriptRoot

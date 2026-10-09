@@ -4,6 +4,7 @@ Cortex 配置模块 - 从 .env 文件或环境变量加载配置
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -36,7 +37,12 @@ def data_dirname() -> str:
     """数据目录名：开发模式 ``.cortex``，发行版模式 ``.doclens``。
 
     不缓存，便于测试 monkeypatch ``doclens.__file__``。
+    显式外部覆盖（CORTEX_DATA_DIRNAME env）优先——高级用户强制口径，
+    与模块底注入 planify 的值同源（见文件尾 `_dirname` 推导）。
     """
+    override = os.environ.get("CORTEX_DATA_DIRNAME")
+    if override:
+        return override
     return ".doclens" if is_installed_mode() else ".cortex"
 
 
@@ -84,17 +90,31 @@ def bundled_env_example_path() -> Path:
     return Path(__file__).parent / ".env.example"
 
 
-# 模块级：把模式决策写入 env，供 planify（不反向依赖 doclens）读取。
-# setdefault 不覆盖用户已显式设置的 CORTEX_DATA_DIRNAME（高级用户可强制）。
-# 外部已有值时打 INFO 留痕——用户级 env 劫持（如 setx 残留）曾让开发实例
-# 日志静默落到 .doclens 两月未察（2026-10-08 事故），此行让其一目了然。
+# 模块级：把模式决策经注入通路同步给 planify（register_data_dirname，
+# 2026-10-09 收敛）。旧通路是写 CORTEX_DATA_DIRNAME env + planify 读回——
+# env 通路对子进程继承不设防（AI 宿主 .doclens → 其启动的 dev 实例日志被
+# 劫持落错目录，而 DB 因现场计算落对，同进程分裂；2026-10-08/09 两起事故
+# 同源）。注入走 Python 模块级全局，不经进程环境，免疫继承劫持。
+# CORTEX_DATA_DIRNAME env 仍被尊重（高级用户强制口径），但仅本模块消费；
+# 残留的外部值打 stderr 警告——此处 logging 尚未初始化，logger 会被吞。
 if os.environ.get("CORTEX_DATA_DIRNAME"):
-    logging.getLogger(__name__).info(
-        "CORTEX_DATA_DIRNAME 已有外部值 %r（用户级环境变量强制覆盖？数据目录将用它）",
-        os.environ["CORTEX_DATA_DIRNAME"],
+    print(
+        f"[doclens] 警告：CORTEX_DATA_DIRNAME 已有外部值 "
+        f"{os.environ['CORTEX_DATA_DIRNAME']!r}（继承自宿主进程或用户级环境变量？）"
+        f"——数据/日志目录将用它而非本进程自行判定。"
+        f"开发调试可先清除：Remove-Item env:CORTEX_DATA_DIRNAME",
+        file=sys.stderr,
     )
+    _dirname = os.environ["CORTEX_DATA_DIRNAME"]
 else:
-    os.environ.setdefault("CORTEX_DATA_DIRNAME", data_dirname())
+    _dirname = data_dirname()
+
+try:
+    from planify.core.logging_config import register_data_dirname as _reg
+
+    _reg(_dirname)
+except ImportError:  # planify 未安装（极端裁剪环境）——doclens 自身路径不受影响
+    pass
 
 
 class CortexConfig(BaseSettings):
