@@ -57,6 +57,16 @@ _POLL_TOOL_NAME = "check_background"
 _IDENTICAL_ROUNDS_LIMIT = 3
 
 
+def _poll_backoff_s(consecutive_polls: int, initial_s: float, max_s: float) -> float:
+    """第 consecutive_polls 次连续纯轮询后的等待秒数（指数退避封顶 max_s）。
+
+    initial_s=0 → 恒 0（关闭退避，测试注入）。
+    """
+    if consecutive_polls <= 0 or initial_s <= 0:
+        return 0.0
+    return min(initial_s * (2 ** (consecutive_polls - 1)), max_s)
+
+
 def _is_pure_poll_round(calls: List[Tuple[str, dict, str]]) -> bool:
     """本轮是否为纯轮询等待：全部调用为 check_background 且均处 running 态。"""
     return bool(calls) and all(
@@ -418,12 +428,42 @@ class StreamingAgent:
         last_round_signature: Optional[tuple] = None
         identical_rounds = 0
         saw_pending_bg = False
+        consecutive_poll_rounds = 0  # 连续纯轮询轮数（退避计算；非纯轮询清零）
         full_text_output = ""
 
         try:
             while True:
                 loop_count += 1
                 self.logger.info(f"[StreamingAgent] 开始循环 #{loop_count}")
+
+                # === 纯轮询退避（P3）===
+                # 上一轮是纯轮询（全部 check_background 且 [running]）时，在
+                # 下一轮 LLM 调用前等待：热轮询每轮都是真实 LLM 往返，长任务
+                # 期间空转烧 token。等待可被中断（用户「停止」立即生效）；
+                # 非纯轮询轮（有实质工具调用）不等待；config 置 0 关闭。
+                if consecutive_poll_rounds > 0:
+                    delay = _poll_backoff_s(
+                        consecutive_poll_rounds,
+                        self.config.poll_backoff_initial_s,
+                        self.config.poll_backoff_max_s,
+                    )
+                    if delay > 0:
+                        self.logger.info(
+                            "[StreamingAgent] 纯轮询第 %d 轮，退避 %.0fs"
+                            "（防热轮询空转）",
+                            consecutive_poll_rounds, delay,
+                        )
+                        if self._interrupt_event is not None:
+                            try:
+                                await asyncio.wait_for(
+                                    self._interrupt_event.wait(),
+                                    timeout=delay,
+                                )
+                                # interrupt 已置位 → 走下方中断检查点退出
+                            except asyncio.TimeoutError:
+                                pass  # 正常等到退避时间，继续本轮
+                        else:
+                            await asyncio.sleep(delay)
 
                 # === 中断检查点（循环顶）===
                 # 流式检查点（_stream_llm_call 内）覆盖不到「工具执行被
@@ -593,7 +633,9 @@ class StreamingAgent:
                     reminder: Optional[str] = None
                     if pure_poll:
                         saw_pending_bg = True
+                        consecutive_poll_rounds += 1
                     else:
+                        consecutive_poll_rounds = 0
                         tool_rounds += 1
                         # 硬阈值：强制终答（计数轮达限；轮询不消耗预算）
                         if (

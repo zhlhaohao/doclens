@@ -14,6 +14,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
+# 纯轮询退避默认值（P3 热轮询止血；StreamingConfig 字段默认引用此处）
+POLL_BACKOFF_INITIAL_S = 5.0
+POLL_BACKOFF_MAX_S = 30.0
+
 
 class StreamEventType(Enum):
     """流式事件类型枚举"""
@@ -371,6 +375,12 @@ class StreamingConfig:
     max_tool_rounds: Optional[int] = None  # 软阈值：超过后每轮注入"停止工具、如实作答"提醒
     tool_round_limit_reminder: Optional[str] = None  # 提醒文案；None 用中性默认
     force_answer_rounds: Optional[int] = None  # 硬阈值：达到后以 tools=[] 强制终答
+
+    # 纯轮询退避（P3 热轮询止血）：连续纯轮询轮（全部 check_background 且
+    # [running]）之间注入确定性等待——每轮轮询都是真实 LLM 往返，无等待时
+    # 长任务期间空转烧 token。指数退避 initial→max；initial=0 = 关闭（测试注入）
+    poll_backoff_initial_s: float = POLL_BACKOFF_INITIAL_S
+    poll_backoff_max_s: float = POLL_BACKOFF_MAX_S
 
 
 @dataclass

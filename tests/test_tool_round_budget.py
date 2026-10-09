@@ -112,6 +112,7 @@ def _make_agent(provider, max_tool_rounds, tmp_path):
         config=StreamingConfig(
             compact_threshold=10**9, max_tool_rounds=max_tool_rounds,
             force_answer_rounds=None,
+            poll_backoff_initial_s=0.0,  # 关闭真实等待，保持既有用例速度
         ),
     )
 
@@ -202,6 +203,59 @@ class TestBudgetMechanisms:
         asyncio.run(agent.run_stream(messages, "查构建", "s1"))
         assert _reminder_texts(messages) == []
         assert agent.emitter.get_full_text() == "任务仍在运行，稍后再查。"
+
+    def test_poll_backoff_delays_between_rounds(self, tmp_path, monkeypatch):
+        """P3 热轮询止血：连续纯轮询轮间注入退避等待（5s→10s→20s 指数）。
+
+        用假 sleep 记录退避时长（不真等），验证退避序列与非纯轮询清零。
+        _make_agent 未注入 interrupt_event → 走 asyncio.sleep 分支。
+        """
+        import planify.streaming.runner as runner_mod
+
+        sleeps: list[float] = []
+
+        async def fake_sleep(delay):
+            sleeps.append(delay)
+
+        orig_sleep = runner_mod.asyncio.sleep
+        runner_mod.asyncio.sleep = fake_sleep
+        try:
+            # 3 轮纯轮询 + 1 轮 grep（打断连续性）+ 终答
+            script = [{"tools": [("check_background", {"task_id": "t"})]}] * 3
+            script.append({"tools": [("grep", {"q": "x"})]})
+            script.append({"text": "done"})
+            provider = ScriptedProvider(script)
+            agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+            # 重新启用退避（_make_agent 注入 0 关闭了默认值）
+            agent.config.poll_backoff_initial_s = 5.0
+            agent.config.poll_backoff_max_s = 30.0
+            messages = []
+            asyncio.run(agent.run_stream(messages, "q", "s1"))
+        finally:
+            runner_mod.asyncio.sleep = orig_sleep
+
+        # 第 1/2/3 次连续纯轮询后的退避：5s、10s、20s（指数）；
+        # grep 轮打断连续性 → consecutive_poll_rounds 清零，此后无退避
+        assert sleeps == [5.0, 10.0, 20.0]
+        assert agent.emitter.get_full_text() == "done"
+
+    def test_poll_backoff_disabled_by_zero(self):
+        """initial=0 → 退避恒 0（关闭），既有行为不变。"""
+        from planify.streaming.runner import _poll_backoff_s
+
+        assert _poll_backoff_s(1, 0.0, 30.0) == 0.0
+        assert _poll_backoff_s(5, 0.0, 30.0) == 0.0
+        assert _poll_backoff_s(0, 5.0, 30.0) == 0.0
+
+    def test_poll_backoff_caps_at_max(self):
+        """退避指数增长但封顶 max_s。"""
+        from planify.streaming.runner import _poll_backoff_s
+
+        assert _poll_backoff_s(1, 5.0, 30.0) == 5.0
+        assert _poll_backoff_s(2, 5.0, 30.0) == 10.0
+        assert _poll_backoff_s(3, 5.0, 30.0) == 20.0
+        assert _poll_backoff_s(4, 5.0, 30.0) == 30.0
+        assert _poll_backoff_s(10, 5.0, 30.0) == 30.0
 
     def test_identical_rounds_early_warning(self, tmp_path):
         """连续 3 轮同参 grep（远低于软阈值）→ 注入死循环针对性提醒。"""
