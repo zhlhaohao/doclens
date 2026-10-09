@@ -364,8 +364,9 @@ class TranslationService:
     # ------------------------------------------------------------------
 
     def _finalize_outputs(self, job: TranslateJob, results: list) -> list[str]:
-        """引擎输出 <名>-mono.pdf/-dual.pdf → 两份产物**都**改名保留（2026-10-08
-        决议：用户选择只决定弹框提示哪份，文件永不删除）。
+        """引擎固定产出 <名>-mono.pdf/-dual.pdf 两份 → 按用户选择（job.outputs）
+        只保留所选形态并改名；未选中的那份删除（2026-10-09 决议：选择即生效，
+        废弃 2026-10-08「两份都保留、选择只影响提示」的旧口径）。
 
         目标命名：``<原名>.<目标语言>.pdf``（mono，单语纯译文）与
         ``<原名>.<目标语言>.dual.pdf``（dual，双语逐页对照）。
@@ -377,14 +378,22 @@ class TranslationService:
         mono_path = dual_path = None
         for pair in results:
             mono_path, dual_path = pair
-        if mono_path and Path(mono_path).exists():
-            kept_mono = out_dir / f"{stem}.{job.lang_out}.pdf"
-            _replace(Path(mono_path), kept_mono)
-            keep.append(self._to_rel(kept_mono))
-        if dual_path and Path(dual_path).exists():
-            kept_dual = out_dir / f"{stem}.{job.lang_out}.dual.pdf"
-            _replace(Path(dual_path), kept_dual)
-            keep.append(self._to_rel(kept_dual))
+        want_mono = job.outputs in ("mono", "both")
+        want_dual = job.outputs in ("dual", "both")
+        if mono_path:
+            if want_mono and Path(mono_path).exists():
+                kept_mono = out_dir / f"{stem}.{job.lang_out}.pdf"
+                _replace(Path(mono_path), kept_mono)
+                keep.append(self._to_rel(kept_mono))
+            else:
+                Path(mono_path).unlink(missing_ok=True)
+        if dual_path:
+            if want_dual and Path(dual_path).exists():
+                kept_dual = out_dir / f"{stem}.{job.lang_out}.dual.pdf"
+                _replace(Path(dual_path), kept_dual)
+                keep.append(self._to_rel(kept_dual))
+            else:
+                Path(dual_path).unlink(missing_ok=True)
         return keep
 
     # ------------------------------------------------------------------

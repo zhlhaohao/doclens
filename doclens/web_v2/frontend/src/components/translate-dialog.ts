@@ -347,10 +347,10 @@ export class TranslateDialog extends LitElement {
     return html`
       ${this._activePreset
         ? html`<div class="preset-hint">
-            使用已激活的翻译预设（设置页 AI tab 可管理）：${this._activePreset.name}
+            当前使用${this._activePreset.name}翻译服务
           </div>`
         : html`<div class="preset-hint">
-            尚无翻译预设，将使用 Google 免密钥翻译（设置页 AI tab 可配置更好的服务）
+            当前使用Google翻译服务
           </div>`}
       <div class="row">
         <label>源语言
@@ -372,7 +372,7 @@ export class TranslateDialog extends LitElement {
           @input=${(e: InputEvent) => (this._pages = (e.target as HTMLInputElement).value)}
         />
       </label>
-      <label>输出格式（单语=纯译文；双语=原文译文逐页交错；两份产物都会保留）
+      <label>输出格式（单语=纯译文；双语=原文译文逐页交错）
         <div class="outputs">
           ${(
             [

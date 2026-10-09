@@ -6473,9 +6473,9 @@ body.cortex-preview-fs .cortex-pdf-portal {
       </dialog>
     `}updated(){const e=this.renderRoot.querySelector("dialog");e&&(nu.has(e)||(e.addEventListener("cancel",t=>{t.preventDefault(),this._close()}),nu.add(e)),e.open||e.showModal())}_renderForm(){return d`
       ${this._activePreset?d`<div class="preset-hint">
-            使用已激活的翻译预设（设置页 AI tab 可管理）：${this._activePreset.name}
+            当前使用${this._activePreset.name}翻译服务
           </div>`:d`<div class="preset-hint">
-            尚无翻译预设，将使用 Google 免密钥翻译（设置页 AI tab 可配置更好的服务）
+            当前使用Google翻译服务
           </div>`}
       <div class="row">
         <label>源语言
@@ -6497,7 +6497,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           @input=${e=>this._pages=e.target.value}
         />
       </label>
-      <label>输出格式（单语=纯译文；双语=原文译文逐页交错；两份产物都会保留）
+      <label>输出格式（单语=纯译文；双语=原文译文逐页交错）
         <div class="outputs">
           ${[["both","单语+双语"],["dual","仅双语"],["mono","仅单语"]].map(([e,t])=>d`
               <label class=${this._outputs===e?"check":""}>
@@ -15182,7 +15182,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
         max-width: calc(100vw - 16px);
       }
     }
-  `;nm([y({type:Boolean,reflect:!0})],_n.prototype,"open",2);_n=nm([V("watch-changes-dialog")],_n);var g5=Object.defineProperty,b5=Object.getOwnPropertyDescriptor,Zn=(e,t,r,i)=>{for(var s=i>1?void 0:i?b5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&g5(t,r,s),s};let Zs=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 5dce2c4 · 2026-10-08 20:38 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,a=o=>String(o).padStart(2,"0");return t>0?`${t}天 ${a(r)}:${a(i)}:${a(s)}`:`${a(r)}:${a(i)}:${a(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return d``;const e=this._runtime();return d`
+  `;nm([y({type:Boolean,reflect:!0})],_n.prototype,"open",2);_n=nm([V("watch-changes-dialog")],_n);var g5=Object.defineProperty,b5=Object.getOwnPropertyDescriptor,Zn=(e,t,r,i)=>{for(var s=i>1?void 0:i?b5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&g5(t,r,s),s};let Zs=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 f126f65 · 2026-10-09 10:15 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,a=o=>String(o).padStart(2,"0");return t>0?`${t}天 ${a(r)}:${a(i)}:${a(s)}`:`${a(r)}:${a(i)}:${a(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return d``;const e=this._runtime();return d`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -15226,7 +15226,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           ${(t=this._health)!=null&&t.dev?d`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"5dce2c4 · 2026-10-08 20:38"}</span>
+            <span class="value">${"f126f65 · 2026-10-09 10:15"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
