@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 11 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 工作目录覆盖；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(11);
+  it("has exactly 12 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 工作目录覆盖 + shell 超时；模型/搜索参数由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(12);
   });
 
   it("every field has a unique envVar", () => {
@@ -42,8 +42,8 @@ describe("SETTINGS_FIELDS", () => {
     }
   });
 
-  it("5 tabs are exposed in SETTINGS_TABS in display order", () => {
-    expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills"]);
+  it("6 tabs are exposed in SETTINGS_TABS in display order", () => {
+    expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills", "misc"]);
   });
 
   it("AI tab has 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁字段 (模型配置由 <model-presets-section> 接管)", () => {
@@ -59,6 +59,14 @@ describe("SETTINGS_FIELDS", () => {
   it("search tab has no SETTINGS_FIELDS (由 <search-presets-section> 接管)", () => {
     const search = SETTINGS_FIELDS.filter((f) => f.tab === "search");
     expect(search).toHaveLength(0);
+  });
+
+  it("misc tab has exactly the shell timeout field (slider, 1–3600 校验在后端)", () => {
+    const misc = SETTINGS_FIELDS.filter((f) => f.tab === "misc");
+    expect(misc.map((f) => f.envVar)).toEqual(["PLANIFY_SHELL_TIMEOUT"]);
+    const f = misc[0];
+    expect(f.component).toBe("slider");
+    expect(f.min).toBeLessThan(f.max!);
   });
 
   it("SETTINGS_TAB_LABELS maps each tab to a Chinese label", () => {

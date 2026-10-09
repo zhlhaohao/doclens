@@ -86,6 +86,26 @@ def _workdir_dir_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     return []
 
 
+def _shell_timeout_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """shell 超时校验：空 = 默认 120；非空必须是 1–3600 的整数。"""
+    raw = values.get("PLANIFY_SHELL_TIMEOUT", "").strip()
+    if not raw:
+        return []
+    try:
+        t = int(raw)
+    except ValueError:
+        return [ConfigValidationError(
+            field="PLANIFY_SHELL_TIMEOUT",
+            error="必须是整数（秒）",
+        )]
+    if not (1 <= t <= 3600):
+        return [ConfigValidationError(
+            field="PLANIFY_SHELL_TIMEOUT",
+            error="合法范围：1–3600 秒",
+        )]
+    return []
+
+
 def validate_values(values: dict[str, str]) -> ValidationErrors:
     """Return ValidationErrors (possibly empty) for the given values dict.
 
@@ -145,5 +165,7 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_ask_mode_rule(values))
     # 工作目录覆盖规则（目录存在性）
     errors.extend(_workdir_dir_rule(values))
+    # shell 超时规则（1–3600 整数）
+    errors.extend(_shell_timeout_rule(values))
 
     return ValidationErrors(fields=errors)

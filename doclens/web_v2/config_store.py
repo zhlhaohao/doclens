@@ -70,6 +70,9 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     # 工作目录配置（次优先级：显式 -C > 本配置 env/local/global > 启动目录；
     # 改后需重启，空 = 按启动目录）
     "CORTEX_WORKDIR",
+    # shell 超时（秒；bash/powershell/background_run 三通道统一预算，
+    # 调用期现读 → 保存即热生效；空 = 默认 120，上限 3600）
+    "PLANIFY_SHELL_TIMEOUT",
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）

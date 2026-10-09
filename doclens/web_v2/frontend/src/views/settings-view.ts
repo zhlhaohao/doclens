@@ -23,7 +23,7 @@ import "../components/mcp-servers-section";
 import "../components/skills-section";
 import type { ToastStack } from "../components/toast-stack";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
 
 /** 各 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
 const TAB_ICONS: Record<SettingsTab, string> = {
@@ -32,6 +32,7 @@ const TAB_ICONS: Record<SettingsTab, string> = {
   network: "globe",
   mcp: "plug",
   skills: "brain",
+  misc: "sliders-horizontal",
 };
 
 /** Lucide 风格眼睛图标（密码隐藏）：闭合眼 + 圆瞳 */
@@ -772,9 +773,9 @@ export class SettingsView extends LitElement {
     `;
   }
 
-  /** 常驻描述行：hint（去末尾句号）+ 取值范围。仅 search tab 渲染。 */
+  /** 常驻描述行：hint（去末尾句号）+ 取值范围。仅 search/misc tab 渲染。 */
   private _renderDesc(f: SettingsField) {
-    if (f.tab !== "search" || !f.hint) return nothing;
+    if ((f.tab !== "search" && f.tab !== "misc") || !f.hint) return nothing;
     const base = f.hint.replace(/。$/, "");
     const range = f.min != null && f.max != null ? ` · ${f.min}–${f.max}` : "";
     return html`<div class="desc">${base}${range}</div>`;

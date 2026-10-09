@@ -106,6 +106,18 @@ async def put_config(
             _os.environ.pop("PLANIFY_ASK_MODE", None)
         logger.info("ask mode hot-applied: %r", v or "interactive(default)")
 
+    # 4.7 shell 超时热生效：_shell_timeout() 每次工具调用现读 os.getenv
+    # （bash/powershell/background_run 三通道统一）——.env 落盘不自动反映
+    # 到进程环境，显式同步该键（空串 = 删除回落默认 120）
+    if "PLANIFY_SHELL_TIMEOUT" in updates:
+        v = updates["PLANIFY_SHELL_TIMEOUT"].strip()
+        import os as _os
+        if v:
+            _os.environ["PLANIFY_SHELL_TIMEOUT"] = v
+        else:
+            _os.environ.pop("PLANIFY_SHELL_TIMEOUT", None)
+        logger.info("shell timeout hot-applied: %rs", v or "120(default)")
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )

@@ -39,14 +39,15 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  it("renders 5 tab buttons in order: 模型 / 搜索 / 网络 / MCP / 技能", () => {
+  it("renders 6 tab buttons in order: 模型 / 搜索 / 网络 / MCP / 技能 / 其它", () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    expect(tabs?.length).toBe(5);
+    expect(tabs?.length).toBe(6);
     expect(tabs?.[0].textContent?.trim()).toBe("模型");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索");
     expect(tabs?.[2].textContent?.trim()).toBe("网络");
     expect(tabs?.[3].textContent?.trim()).toBe("MCP");
     expect(tabs?.[4].textContent?.trim()).toBe("技能");
+    expect(tabs?.[5].textContent?.trim()).toBe("其它");
   });
 
   it("AI tab is active by default", () => {
@@ -85,6 +86,19 @@ describe("<settings-view>", () => {
     await elementUpdated(el);
     const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="search"]');
     expect(panel?.querySelectorAll(".field").length).toBe(0);
+  });
+
+  it("renders shell timeout slider on misc tab; 未设置时回显隐式默认 120", async () => {
+    const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
+    (tabs?.[5] as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const panel = el.shadowRoot?.querySelector('.tab-panel[data-panel="misc"]');
+    const input = panel?.querySelector('input[data-env="PLANIFY_SHELL_TIMEOUT"][type="number"]');
+    expect(input).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("120");
+    const chip = panel?.querySelector(".value-chip");
+    expect(chip?.textContent?.trim()).toBe("120");
+    expect(chip?.classList.contains("implicit")).toBe(true);
   });
 
   it("updates a field value via input event and marks dirty", async () => {

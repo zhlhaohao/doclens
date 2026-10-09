@@ -5,7 +5,7 @@
  * cortex/web_v2/config_store.py (backend) — they are the contract between
  * the API and this UI.
  */
-export type SettingsTab = "ai" | "search" | "network" | "mcp" | "skills";
+export type SettingsTab = "ai" | "search" | "network" | "mcp" | "skills" | "misc";
 export type SettingsFieldComponent =
   | "text"
   | "number"
@@ -39,7 +39,7 @@ export interface SettingsField {
   options?: SettingsFieldOption[];
 }
 
-export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills"];
+export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "模型",
@@ -47,6 +47,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   network: "网络",
   mcp: "MCP",
   skills: "技能",
+  misc: "其它",
 };
 
 /** 「恢复默认」判定的出厂基准值（与包内 .env.example 同步）。
@@ -75,6 +76,7 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_ENABLED: "false",
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
+  PLANIFY_SHELL_TIMEOUT: "120",
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
@@ -203,5 +205,19 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     effect: "restart",
     mono: true,
     hint: "未显式传 -C 参数时生效：重启后索引/.env/日志/AI 工具切换到该目录（显式 -C 优先于本配置）。留空 = 按启动目录。目录必须已存在（否则启动失败）。",
+  },
+
+  // ===== AI 工具（misc tab）=====
+  {
+    tab: "misc",
+    section: "AI 工具",
+    envVar: "PLANIFY_SHELL_TIMEOUT",
+    label: "Shell 命令超时",
+    component: "slider",
+    min: 10,
+    max: 600,
+    step: 10,
+    unit: "秒",
+    hint: "AI 执行 shell 命令（bash/powershell/后台命令）的统一超时：到时击杀整个进程树并返回超时信号与已产生的输出，AI 可据此自行恢复。超长任务应改用后台运行+轮询，不建议调大本值硬等。留空 = 默认 120 秒（允许 1–3600）。保存后即时生效。",
   },
 ];
