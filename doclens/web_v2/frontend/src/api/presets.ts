@@ -2,7 +2,7 @@
 // kind: llm|vision（模型连接档案，含 api_key）/ search（搜索调优档案，无密钥）。
 // api_key 在 GET 时脱敏为 "***"；更新时传 undefined/留空表示不改动。
 
-export type PresetKind = "llm" | "vision" | "search";
+export type PresetKind = "llm" | "vision" | "search" | "translate";
 export type PresetProtocol = "anthropic" | "openai_compat";
 
 export interface Preset {
@@ -29,6 +29,10 @@ export interface Preset {
   weight_fts_score?: number | null;
   weight_title_match?: number | null;
   weight_proximity_match?: number | null;
+  // 翻译（translate，ADR-0039）：translate_envs GET 时值脱敏为 "***"
+  translate_service?: string | null;
+  translate_envs?: Record<string, string> | null;
+  lang_default_out?: string | null;
 }
 
 export interface ActivateResult {
@@ -79,6 +83,10 @@ export interface NewPresetInput {
   weight_fts_score?: number | null;
   weight_title_match?: number | null;
   weight_proximity_match?: number | null;
+  // 翻译（translate，ADR-0039）
+  translate_service?: string;
+  translate_envs?: Record<string, string>;
+  lang_default_out?: string;
 }
 
 /** 创建预设。input 不含 id（由后端生成）。 */
@@ -157,6 +165,31 @@ export async function probeVision(
 ): Promise<ProbeVisionResult> {
   return handle<ProbeVisionResult>(
     await fetch("/api/presets/probe-vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export interface ProbeTranslateInput {
+  translate_service: string;
+  envs?: Record<string, string>;
+  /** 编辑既有预设时传，envs 值为 *** 时后端回退已存密钥 */
+  preset_id?: string;
+}
+
+export interface ProbeTranslateResult {
+  translation: string;
+  service: string;
+}
+
+/** 翻译服务连通性探测（ADR-0039）：翻一句固定文本验证服务与密钥。 */
+export async function probeTranslate(
+  input: ProbeTranslateInput,
+): Promise<ProbeTranslateResult> {
+  return handle<ProbeTranslateResult>(
+    await fetch("/api/presets/probe-translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

@@ -30,6 +30,8 @@ pip install -e ./planify
 python -m playwright install chromium --only-shell
 ```
 
+> **pip 逐版本刷屏回溯 = 依赖树无解**：`uv pip compile pyproject.toml --extra dev -o -` 秒出冲突报告，修 pyproject pin 而非绕过（pdfminer-six 必须落在 pdfplumber 钉版集合内，如 ==20250506）。
+
 **运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
 
 ```bash
@@ -329,6 +331,10 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 前端美化 / 视觉改造（色彩、字体、圆角、按钮、卡片、阴影等）以 `doclens/web_v2/frontend/docs/DESIGN.md` 为视觉标尺。该文件拷贝自仓库同级的 `awesome-design-md/design-md/meta/DESIGN.md`（META 硬件电商设计系统：白色画布、Optimistic VF / Montserrat 字体、钴蓝 `#0064E0` 仅用于购买 CTA、黑色 pill 主按钮、`rounded.full`(100px) 按钮 / `rounded.xxxl`(32px) 卡片、极简平铺无重阴影）。
 
 改造前端视觉时须对照该标尺保持一致；如需调整设计取向，先更新本标尺文件再改组件，避免组件与设计系统脱节。
+
+前端弹窗一律用原生 `<dialog>` + `showModal()`（top layer 全屏居中，防 portal 遮挡/容器 overflow 裁剪；Esc/backdrop 统一走关闭语义）；样式只用 tokens.css 已有 CSS 变量——`--cortex-accent` 不存在，主按钮用 `--cortex-btn-primary-*`。
+
+重启应用后健康检查必须核对 `started_at`/`dev`（`/api/health`）与监听进程 PID——端口可能被**旧发行版 doclens 实例**（系统 Python 的 site-packages 版）占着，curl 打到它会误以为新代码生效；`_kill_port_process` **按端口杀**（start-app 算出的专属监听口），不做进程名校验——进程名与 AI agent 同名，按名匹配会误伤。
 
 ## 启动脚本 start-app.ps1
 

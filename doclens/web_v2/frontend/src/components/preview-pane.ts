@@ -28,6 +28,7 @@ import {
   type ReadingBookmark,
 } from "../utils/bookmarks";
 import "./bookmark-drawer";
+import "./translate-dialog";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
 import { downloadServerFile } from "../utils/download";
@@ -775,6 +776,9 @@ export class PreviewPane extends LitElement {
 
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
+
+  /** PDF 翻译弹框（ADR-0039）：仅 pdf 分支可用。 */
+  @state() private _showTranslate = false;
   @state() private _tocItems: TocItem[] = [];
   /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
   @state() private _tocCurrentLine = 1;
@@ -1332,6 +1336,13 @@ export class PreviewPane extends LitElement {
                       ?disabled=${this._downloading}
                       @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
                 >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
+                ${this._translateAvailable
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      @click=${() => { this._showMobileMenu = false; this._showTranslate = true; }}
+                    ><doclens-icon name="language"></doclens-icon>翻译</button>`
+                  : null}
                 <button
                   type="button"
                   role="menuitem"
@@ -1699,6 +1710,47 @@ export class PreviewPane extends LitElement {
       @click=${this._onTocToggle}
     ><doclens-icon name="list-tree"></doclens-icon><span class="btn-label">目录</span></button>`;
   }
+
+  /** PDF 翻译按钮（ADR-0039）：仅预览模式 + pdf + 有 path 时显示。
+   *  点击开翻译弹框（语言/页码/产物形态 → 后台串行队列 → SSE 进度）。 */
+  /** 翻译产物命名模式：`.<lang>.pdf` / `.<lang>.dual.pdf`（lang=2-8 位
+   *  语言码）——命中的文件本身是译本，隐藏翻译按钮（防递归生成
+   *  xx.zh.zh.pdf）。 */
+  private static readonly TRANSLATED_PDF_RE = /\.[a-z]{2,8}(\.dual)?\.pdf$/i;
+
+  /** 翻译入口可用：预览模式 + pdf + 有 path + 非 PST + 非译本文件。 */
+  private get _translateAvailable(): boolean {
+    return (
+      this._mode === "preview" &&
+      this.language === "pdf" &&
+      !!this.path &&
+      !this._isPst &&
+      !PreviewPane.TRANSLATED_PDF_RE.test(this.path)
+    );
+  }
+
+  private _renderTranslateBtn() {
+    if (!this._translateAvailable) {
+      return null;
+    }
+    return html`<button
+      class="toc-btn ${this._showTranslate ? "active" : ""}"
+      title="翻译此 PDF（产物写回本目录）"
+      @click=${() => (this._showTranslate = !this._showTranslate)}
+    ><doclens-icon name="language"></doclens-icon><span class="btn-label">翻译</span></button>`;  }
+
+  /** 翻译完成：关弹框 + toast 提示产物路径（FileWatcher 会自动入索引）。 */
+  private _onTranslateDone = (e: CustomEvent<{ paths: string[] }>) => {
+    this._showTranslate = false;
+    const paths = e.detail?.paths ?? [];
+    this.dispatchEvent(
+      new CustomEvent("translate-finished", {
+        detail: { paths },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
 
   // ------------------------------------------------------------------
   // 阅读书签（2026-10-01 决议）：显式收藏阅读位置，md-viewer 链路
@@ -2088,6 +2140,7 @@ export class PreviewPane extends LitElement {
             ${this._renderPdfZoomGroup()}
             ${this._renderDownloadBtn()}
             ${this._renderTocBtn()}
+            ${this._renderTranslateBtn()}
             ${this._renderBookmarkBtn()}
             ${this._renderHighlightBtn()}
             ${this._renderReparseBtn()}
@@ -2108,6 +2161,13 @@ export class PreviewPane extends LitElement {
         ></pdf-viewer>
         ${this._renderTocDrawer()}
         ${this._renderBookmarkDrawer()}
+        ${this._showTranslate
+          ? html`<translate-dialog
+              .path=${this.path}
+              @translate-close=${() => (this._showTranslate = false)}
+              @translate-done=${this._onTranslateDone}
+            ></translate-dialog>`
+          : null}
         ${this._renderDownloadOverlay()}
         ${this._renderToolboxDialogs()}
       `;

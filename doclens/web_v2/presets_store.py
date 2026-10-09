@@ -29,6 +29,8 @@ _FIELDS = (
     "search_context_before", "search_context_after",
     "weight_keyword_match", "weight_file_name_match", "weight_fts_score",
     "weight_title_match", "weight_proximity_match",
+    # 翻译（translate，ADR-0039）
+    "translate_service", "translate_envs", "lang_default_out",
 )
 
 
@@ -71,10 +73,12 @@ def _save_raw(data: dict) -> None:
 
 
 def _mask(preset: dict) -> dict:
-    """返回脱敏副本（api_key 非空 → ***）。"""
+    """返回脱敏副本（api_key 非空 → ***；translate_envs 整体脱敏）。"""
     out = {**preset}
     if out.get("api_key"):
         out["api_key"] = PRESET_SECRET_MASK
+    if isinstance(out.get("translate_envs"), dict) and out["translate_envs"]:
+        out["translate_envs"] = {k: PRESET_SECRET_MASK for k in out["translate_envs"]}
     return out
 
 
@@ -164,6 +168,17 @@ def update_preset(preset_id: str, updates: dict) -> dict:
                 continue
             if k == "api_key" and v == PRESET_SECRET_MASK:
                 continue  # 占位 = 未改动
+            if k == "translate_envs" and isinstance(v, dict):
+                # 脱敏占位（value 全为 *** 或 dict 为空）= 未改动；
+                # 任何真实值整体替换（不做逐键合并，密钥表以最后提交为准）
+                real = {
+                    ek: ev
+                    for ek, ev in v.items()
+                    if ev and ev != PRESET_SECRET_MASK
+                }
+                if not real:
+                    continue
+                v = real
             if k == "name":
                 v = str(v).strip()
                 if _find_by_name(data["presets"], v, target.get("kind"), exclude_id=preset_id):

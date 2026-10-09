@@ -2,6 +2,7 @@
 Cortex 配置模块 - 从 .env 文件或环境变量加载配置
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -13,10 +14,18 @@ from pydantic_settings import BaseSettings
 def is_installed_mode() -> bool:
     """发行版（wheel 装进 site-packages）= True；开发（editable/源码）= False。
 
-    判据是 doclens 包自身的安装位置：editable 安装或源码树直接运行时，
-    ``__file__`` 指向项目源码目录；wheel 安装时指向 site-packages/dist-packages。
-    这与“python -m doclens（开发）vs doclens.exe（发行版）”两种入口精确吻合。
+    判据（2026-10-08 加强）：``sys.prefix`` 目录名是否为 ``.venv``——进程级
+    判定，不受 venv trampoline（Windows venv 的 python.exe 转发到 base 解释器
+    后，``doclens.__file__`` 可能解析到 base site-packages 的发行版副本，
+    导致开发实例被误判为发行版、日志落到 ``.doclens``）影响。
+    非 venv 环境回退旧判据（``__file__`` 路径含 site-packages/dist-packages）。
     """
+    import sys
+
+    prefix_name = Path(sys.prefix).name.lower()
+    if prefix_name.startswith(".venv") or prefix_name in ("venv", ".virtualenv"):
+        return False  # 显式虚拟环境运行 = 开发模式
+
     import doclens
 
     parts = Path(doclens.__file__).resolve().parts
@@ -77,7 +86,15 @@ def bundled_env_example_path() -> Path:
 
 # 模块级：把模式决策写入 env，供 planify（不反向依赖 doclens）读取。
 # setdefault 不覆盖用户已显式设置的 CORTEX_DATA_DIRNAME（高级用户可强制）。
-os.environ.setdefault("CORTEX_DATA_DIRNAME", data_dirname())
+# 外部已有值时打 INFO 留痕——用户级 env 劫持（如 setx 残留）曾让开发实例
+# 日志静默落到 .doclens 两月未察（2026-10-08 事故），此行让其一目了然。
+if os.environ.get("CORTEX_DATA_DIRNAME"):
+    logging.getLogger(__name__).info(
+        "CORTEX_DATA_DIRNAME 已有外部值 %r（用户级环境变量强制覆盖？数据目录将用它）",
+        os.environ["CORTEX_DATA_DIRNAME"],
+    )
+else:
+    os.environ.setdefault("CORTEX_DATA_DIRNAME", data_dirname())
 
 
 class CortexConfig(BaseSettings):

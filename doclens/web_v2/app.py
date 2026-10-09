@@ -183,6 +183,8 @@ def create_app() -> FastAPI:
     app.include_router(mcp.router, prefix="/api")
     from doclens.web_v2.api import git
     app.include_router(git.router, prefix="/api")
+    from doclens.web_v2.api import translate
+    app.include_router(translate.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():
@@ -242,10 +244,27 @@ def create_app() -> FastAPI:
     return app
 
 
-def _kill_port_process(port: int) -> bool:
-    """尝试杀死占用指定端口的进程（Windows/macOS/Linux）。
+def _port_listener_pids_win(port: int) -> list[str]:
+    """Windows：占用端口的监听进程 PID 列表（去重，仅 Listen 态）。"""
+    import os
+    import subprocess
 
-    返回 True 表示成功清理了端口，False 表示端口未被占用或清理失败。
+    ps_path = os.path.expandvars(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+    result = subprocess.run(
+        [ps_path, "-Command",
+         f"(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue).OwningProcess"],
+        capture_output=True, text=True
+    )
+    return list({ln.strip() for ln in result.stdout.strip().split("\n") if ln.strip().isdigit()})
+
+
+def _kill_port_process(port: int) -> bool:
+    """杀掉占用指定端口（Listen 态）的进程——**按端口定位，不看进程名**。
+
+    端口是 start-app 按本 worktree 算出的专属监听口（CORTEX_WEB_PORT + N），
+    能占住它的就是需要清理的旧实例；进程名校验不可靠（doclens 同时也是
+    AI agent 的名字，按名匹配会误伤），2026-10-08 复议后回退名校验、
+    仅保留 Listen 态收紧。
     """
     import subprocess
     import sys
@@ -254,18 +273,9 @@ def _kill_port_process(port: int) -> bool:
         # Windows: 使用 PowerShell 查找并杀死进程
         if sys.platform == "win32":
             import os
-            ps_path = os.path.expandvars(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
-            # 查找占用端口的进程 PID
-            result = subprocess.run(
-                [ps_path, "-Command",
-                 f"(Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue).OwningProcess"],
-                capture_output=True, text=True
-            )
-            if not result.stdout.strip():
+            pids = _port_listener_pids_win(port)
+            if not pids:
                 return False
-
-            # 去重 PID
-            pids = set(line.strip() for line in result.stdout.strip().split("\n") if line.strip().isdigit())
             for pid in pids:
                 subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
             return True

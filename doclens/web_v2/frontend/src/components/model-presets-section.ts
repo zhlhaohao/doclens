@@ -7,6 +7,7 @@ import {
   deletePreset,
   listPresets,
   probeMaxTokens,
+  probeTranslate,
   probeVision,
   updatePreset,
   PresetsApiError,
@@ -28,6 +29,9 @@ function emptyForm(kind: PresetKind): FormState {
     context_window: "",
     max_tokens: "",
     vision: "",
+    translate_service: "google",
+    translateEnvRows: [],
+    lang_default_out: "zh",
   };
 }
 
@@ -42,7 +46,43 @@ interface FormState {
   max_tokens: string;
   /** 支持视觉（ADR-0034，仅 kind=llm）："" = 未声明（默认 false） */
   vision: "" | "true" | "false";
+  /** 翻译服务（仅 kind=translate，ADR-0039）：vendor 引擎服务类 name */
+  translate_service: string;
+  /** 翻译服务环境变量（键值行，密钥编辑时脱敏为 ""） */
+  translateEnvRows: { key: string; value: string }[];
+  /** 默认目标语言（仅 kind=translate） */
+  lang_default_out: string;
 }
+
+/** 翻译服务目录（与 doclens/vendor_pdf2zh/translator.py 服务类 name 对齐）。 */
+/** 服务环境变量目录：键与 doclens/vendor_pdf2zh/translator.py 各类 envs 全量
+ *  对齐（含 *_MODEL / *_STREAM / endpoint 类；有默认值的键留空即用默认）。 */
+const TRANSLATE_SERVICES: { value: string; label: string; envKeys: string[] }[] = [
+  { value: "openai", label: "OpenAI", envKeys: ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_STREAM", "OPENAI_STOP_TOKENS"] },
+  { value: "openailiked", label: "OpenAI 兼容端点", envKeys: ["OPENAILIKED_API_KEY", "OPENAILIKED_BASE_URL", "OPENAILIKED_MODEL", "OPENAILIKED_STREAM", "OPENAILIKED_STOP_TOKENS"] },
+  { value: "google", label: "Google（免密钥）", envKeys: [] },
+  { value: "bing", label: "Bing（免密钥）", envKeys: [] },
+  { value: "deepl", label: "DeepL", envKeys: ["DEEPL_AUTH_KEY"] },
+  { value: "deeplx", label: "DeepLX", envKeys: ["DEEPLX_ACCESS_TOKEN", "DEEPLX_ENDPOINT"] },
+  { value: "deepseek", label: "DeepSeek", envKeys: ["DEEPSEEK_API_KEY", "DEEPSEEK_MODEL"] },
+  { value: "gemini", label: "Gemini", envKeys: ["GEMINI_API_KEY", "GEMINI_MODEL"] },
+  { value: "grok", label: "Grok", envKeys: ["GROK_API_KEY", "GROK_BASE_URL", "GROK_MODEL", "GROK_STREAM"] },
+  { value: "groq", label: "Groq", envKeys: ["GROQ_API_KEY", "GROQ_MODEL"] },
+  { value: "zhipu", label: "智谱 GLM", envKeys: ["ZHIPU_API_KEY", "ZHIPU_MODEL"] },
+  { value: "silicon", label: "SiliconFlow", envKeys: ["SILICON_API_KEY", "SILICON_MODEL"] },
+  { value: "minimax", label: "MiniMax", envKeys: ["MINIMAX_API_KEY", "MINIMAX_MODEL"] },
+  { value: "modelscope", label: "ModelScope", envKeys: ["MODELSCOPE_API_KEY", "MODELSCOPE_MODEL"] },
+  { value: "qwen-mt", label: "Qwen-MT", envKeys: ["ALI_API_KEY", "ALI_MODEL"] },
+  { value: "azure", label: "Azure 文本翻译", envKeys: ["AZURE_API_KEY", "AZURE_ENDPOINT"] },
+  { value: "azure-openai", label: "Azure OpenAI", envKeys: ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL", "AZURE_OPENAI_MODEL", "AZURE_OPENAI_API_VERSION"] },
+  { value: "tencent", label: "腾讯云 TMT", envKeys: ["TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY"] },
+  { value: "ollama", label: "Ollama（本地）", envKeys: ["OLLAMA_HOST", "OLLAMA_MODEL"] },
+  { value: "xinference", label: "Xinference（本地）", envKeys: ["XINFERENCE_HOST", "XINFERENCE_MODEL"] },
+  { value: "dify", label: "Dify", envKeys: ["DIFY_API_URL", "DIFY_API_KEY"] },
+  { value: "argos", label: "Argos（离线）", envKeys: [] },
+];
+
+const TRANSLATE_LANGS = ["zh", "en", "ja", "ko", "de", "fr", "es", "it", "pt", "ru"];
 
 interface EditingState {
   mode: "new" | "edit";
@@ -236,6 +276,23 @@ export class ModelPresetsSection extends LitElement {
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-focus-ring);
     }
+    .env-rows {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-2);
+    }
+    .env-key {
+      font-family: var(--cortex-font-mono, monospace);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      padding: var(--cortex-space-2) 0;
+    }
+    .env-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) 1.4fr auto;
+      gap: var(--cortex-space-2);
+      align-items: center;
+    }
     .form-actions {
       grid-column: 1 / -1;
       display: flex;
@@ -277,6 +334,9 @@ export class ModelPresetsSection extends LitElement {
   /** 当前激活预设名（来自 .env 的 CORTEX_ACTIVE_*_PRESET，由 settings-view 传入）。 */
   @property() activeLlm = "";
   @property() activeVision = "";
+  @property() activeTranslate = "";
+  /** 名称是否被用户手动改过（translate 新建时默认取服务名，手改后不再跟随） */
+  private _nameManuallyEdited = false;
 
   @state() private _presets: Preset[] = [];
   @state() private _loading = true;
@@ -289,6 +349,8 @@ export class ModelPresetsSection extends LitElement {
   @state() private _probing = false;
   @state() private _probeMsg: string | null = null;
   @state() private _probingVision = false;
+  @state() private _probingTranslate = false;
+  @state() private _probeTranslateMsg: string | null = null;
 
   private _toastTimer?: number;
 
@@ -318,6 +380,7 @@ export class ModelPresetsSection extends LitElement {
   }
 
   private _isActive(p: Preset): boolean {
+    if (p.kind === "translate") return this.activeTranslate === p.name;
     return (p.kind === "llm" ? this.activeLlm : this.activeVision) === p.name;
   }
 
@@ -337,7 +400,13 @@ export class ModelPresetsSection extends LitElement {
 
   private _openNew(kind: PresetKind) {
     this._formError = null;
-    this._editing = { mode: "new", kind, form: emptyForm(kind) };
+    this._nameManuallyEdited = false;
+    const form = emptyForm(kind);
+    // translate：名称默认取默认服务（google）的显示名
+    if (kind === "translate") {
+      form.name = TRANSLATE_SERVICES.find((s) => s.value === form.translate_service)?.label ?? form.translate_service;
+    }
+    this._editing = { mode: "new", kind, form };
   }
 
   private _openEdit(p: Preset) {
@@ -356,6 +425,12 @@ export class ModelPresetsSection extends LitElement {
         context_window: p.context_window ? String(p.context_window) : "",
         max_tokens: p.max_tokens ? String(p.max_tokens) : "",
         vision: p.vision === true ? "true" : p.vision === false ? "false" : "",
+        translate_service: p.translate_service ?? "google",
+        translateEnvRows: Object.entries(p.translate_envs ?? {}).map(([key, value]) => ({
+          key,
+          value: value === "***" ? "" : value,
+        })),
+        lang_default_out: p.lang_default_out ?? "zh",
       },
     };
   }
@@ -363,6 +438,39 @@ export class ModelPresetsSection extends LitElement {
   private _cancelEdit() {
     this._editing = null;
     this._formError = null;
+  }
+
+  /** 翻译服务切换：envRows 重建为该服务的键集合（保留已填值）；新建模式
+   *  下名称未手改过则跟随服务名（默认取服务显示名，如「智谱 GLM」）。 */
+  private _onTranslateServiceChange(service: string) {
+    if (!this._editing || this._editing.form.kind !== "translate") return;
+    const meta = TRANSLATE_SERVICES.find((s) => s.value === service);
+    const prev = Object.fromEntries(
+      this._editing.form.translateEnvRows
+        .filter((r) => r.key && r.value)
+        .map((r) => [r.key, r.value]),
+    );
+    const keys = meta && meta.envKeys.length > 0 ? meta.envKeys : [""];
+    const autoName =
+      this._editing.mode === "new" && !this._nameManuallyEdited
+        ? (meta?.label ?? service)
+        : undefined;
+    this._editing = {
+      ...this._editing,
+      form: {
+        ...this._editing.form,
+        translate_service: service,
+        translateEnvRows: keys.map((k) => ({ key: k, value: prev[k] ?? "" })),
+        ...(autoName !== undefined ? { name: autoName } : {}),
+      },
+    };
+  }
+
+  private _setEnvRow(i: number, field: "key" | "value", value: string) {
+    if (!this._editing) return;
+    const rows = [...this._editing.form.translateEnvRows];
+    rows[i] = { ...rows[i], [field]: value };
+    this._setField("translateEnvRows", rows);
   }
 
   private _setField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -378,25 +486,34 @@ export class ModelPresetsSection extends LitElement {
       this._formError = "请填写预设名称";
       return;
     }
-    if (!f.base_url.trim() || !f.model_id.trim()) {
+    if (f.kind !== "translate" && (!f.base_url.trim() || !f.model_id.trim())) {
       this._formError = "base_url 与模型 ID 必填";
       return;
     }
     this._busy = true;
     this._formError = null;
     try {
+      const translateEnvs: Record<string, string> = {};
+      if (f.kind === "translate") {
+        for (const r of f.translateEnvRows) {
+          if (r.key.trim() && r.value.trim()) translateEnvs[r.key.trim()] = r.value.trim();
+        }
+      }
       if (ed.mode === "new") {
         const input: NewPresetInput = {
           name: f.name.trim(),
           kind: f.kind,
           protocol: f.protocol,
           base_url: f.base_url.trim(),
-          model_id: f.model_id.trim(),
+          model_id: f.kind === "translate" ? "" : f.model_id.trim(),
           api_key: f.api_key,
           context_window: f.kind === "llm" && f.context_window ? Number(f.context_window) : null,
           max_tokens: f.kind === "llm" && f.max_tokens ? Number(f.max_tokens) : null,
           // 视觉能力位（ADR-0034，仅 llm）：未声明 = null（后端默认 false 语义）
           vision: f.kind === "llm" ? (f.vision === "true" ? true : f.vision === "false" ? false : null) : null,
+          translate_service: f.kind === "translate" ? f.translate_service : undefined,
+          translate_envs: f.kind === "translate" ? translateEnvs : undefined,
+          lang_default_out: f.kind === "translate" ? f.lang_default_out : undefined,
         };
         await createPreset(input);
         this._setFlash(`已创建预设「${input.name}」`);
@@ -417,6 +534,12 @@ export class ModelPresetsSection extends LitElement {
         };
         // api_key 仅在用户输入了新值时才传（空=不改动）
         if (f.api_key) updates.api_key = f.api_key;
+        if (f.kind === "translate") {
+          updates.translate_service = f.translate_service;
+          updates.lang_default_out = f.lang_default_out;
+          // envs 全空 = 未改动（占位脱敏已在前端置 ""，此处过滤后为空则不传）
+          if (Object.keys(translateEnvs).length > 0) updates.translate_envs = translateEnvs;
+        }
         await updatePreset(ed.presetId, updates);
         this._setFlash(`已更新预设「${f.name.trim()}」`);
       }
@@ -497,6 +620,32 @@ export class ModelPresetsSection extends LitElement {
 
   /** 行为学探测视觉能力（ADR-0034 增补）：后端发随机密码串图实测模型能否
    *  读图；结果回填 vision 字段（不自动保存，用户可否决）。 */
+  /** 翻译服务连通性探测（ADR-0039）：当前表单服务 + envs 翻一句固定文本。 */
+  private async _probeTranslate() {
+    const ed = this._editing;
+    if (!ed || ed.form.kind !== "translate") return;
+    const f = ed.form;
+    this._probingTranslate = true;
+    this._formError = null;
+    this._probeTranslateMsg = null;
+    try {
+      const envs: Record<string, string> = {};
+      for (const r of f.translateEnvRows) {
+        if (r.key.trim()) envs[r.key.trim()] = r.value.trim();
+      }
+      const r = await probeTranslate({
+        translate_service: f.translate_service,
+        envs,
+        preset_id: ed.mode === "edit" ? ed.presetId : undefined,
+      });
+      this._probeTranslateMsg = `连通正常：「Hello, this is a connectivity test.」→ ${r.translation.slice(0, 60)}`;
+    } catch (e) {
+      this._formError = this._errMsg(e);
+    } finally {
+      this._probingTranslate = false;
+    }
+  }
+
   private async _probeVision() {
     const ed = this._editing;
     if (!ed) return;
@@ -537,14 +686,50 @@ export class ModelPresetsSection extends LitElement {
       <div class="form">
         <div>
           <div class="field-label">名称</div>
-          <input class="input" autocomplete="off" .value=${f.name} @input=${(e: Event) => this._setField("name", (e.target as HTMLInputElement).value)} />
+          <input class="input" autocomplete="off" .value=${f.name} @input=${(e: Event) => { this._nameManuallyEdited = true; this._setField("name", (e.target as HTMLInputElement).value); }} />
         </div>
+        ${f.kind === "translate" ? html`
+          <div>
+            <div class="field-label">翻译服务</div>
+            <select class="select" .value=${f.translate_service} @change=${(e: Event) => this._onTranslateServiceChange((e.target as HTMLSelectElement).value)}>
+              ${TRANSLATE_SERVICES.map((o) => html`<option value=${o.value} ?selected=${o.value === f.translate_service}>${o.label}</option>`)}
+            </select>
+          </div>
+          <div class="full">
+            <div class="field-label">模型变量</div>
+            <div class="env-rows">
+              ${f.translateEnvRows.map(
+                (row, i) => html`
+                  <div class="env-row">
+                    <div class="env-key mono">${row.key}</div>
+                    <input class="input mono" type=${/KEY|TOKEN|SECRET|PASSWORD/i.test(row.key) ? "password" : "text"} placeholder=${ed.mode === "edit" && /KEY|TOKEN|SECRET|PASSWORD/i.test(row.key) ? "••••••（留空=不改动）" : "值"} .value=${row.value}
+                      @input=${(e: Event) => this._setEnvRow(i, "value", (e.target as HTMLInputElement).value)} />
+                  </div>
+                `,
+              )}
+            </div>
+          </div>
+          <div>
+            <div class="field-label">默认目标语言</div>
+            <div class="probe-row">
+              <select class="select" .value=${f.lang_default_out} @change=${(e: Event) => this._setField("lang_default_out", (e.target as HTMLSelectElement).value)}>
+                ${TRANSLATE_LANGS.map((l) => html`<option value=${l} ?selected=${l === f.lang_default_out}>${l}</option>`)}
+              </select>
+              <button class="icon-btn" ?disabled=${this._busy || this._probingTranslate} @click=${() => this._probeTranslate()}>
+                ${this._probingTranslate ? "探测中…" : "探测服务"}
+              </button>
+            </div>
+            ${this._probingTranslate ? html`<div class="probe-msg">发送测试翻译请求中…</div>` : nothing}
+            ${this._probeTranslateMsg ? html`<div class="probe-msg">${this._probeTranslateMsg}</div>` : nothing}
+          </div>
+        ` : html`
         <div>
           <div class="field-label">协议</div>
           <select class="select" .value=${f.protocol} @change=${(e: Event) => this._setField("protocol", (e.target as HTMLSelectElement).value as PresetProtocol)}>
             ${PROTOCOL_OPTIONS.map((o) => html`<option value=${o.value} ?selected=${o.value === f.protocol}>${o.label}</option>`)}
           </select>
-        </div>
+        </div>`}
+        ${f.kind !== "translate" ? html`
         <div class="full">
           <div class="field-label">API Base URL</div>
           <input class="input mono" autocomplete="off" placeholder="https://..." .value=${f.base_url} @input=${(e: Event) => this._setField("base_url", (e.target as HTMLInputElement).value)} />
@@ -556,7 +741,7 @@ export class ModelPresetsSection extends LitElement {
         <div>
           <div class="field-label">API Key ${ed.mode === "edit" ? html`（留空=不改动）` : nothing}</div>
           <input class="input mono" type="password" autocomplete="new-password" placeholder=${ed.mode === "edit" ? "••••••" : "可留空"} .value=${f.api_key} @input=${(e: Event) => this._setField("api_key", (e.target as HTMLInputElement).value)} />
-        </div>
+        </div>` : nothing}
         ${isLlm ? html`
           <div>
             <div class="field-label">上下文窗口（tokens，留空用默认 200000）</div>
@@ -626,7 +811,9 @@ export class ModelPresetsSection extends LitElement {
           <div class="preset-name">
             ${p.name}
           </div>
-          <div class="preset-meta">${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}${p.kind === "llm" && p.vision ? " · 视觉" : ""}</div>
+          <div class="preset-meta">${p.kind === "translate"
+            ? `${TRANSLATE_SERVICES.find((s) => s.value === p.translate_service)?.label ?? p.translate_service ?? "?"}${p.lang_default_out ? ` · 译入 ${p.lang_default_out}` : ""}`
+            : `${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}${p.kind === "llm" && p.vision ? " · 视觉" : ""}`}</div>
         </div>
         <div class="row-actions">
           ${active
@@ -646,7 +833,7 @@ export class ModelPresetsSection extends LitElement {
       <div class="wrap">
         ${this._loading
           ? html`<div class="empty">加载中…</div>`
-          : html`${this._renderGroup("llm", "LLM（AI 对话）")}${this._renderGroup("vision", "视觉模型（图像解析）")}`}
+          : html`${this._renderGroup("llm", "LLM（AI 对话）")}${this._renderGroup("vision", "视觉模型（图像解析）")}${this._renderGroup("translate", "翻译服务")}`}
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}
       </div>

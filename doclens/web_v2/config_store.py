@@ -39,6 +39,12 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "VISION_AUTO_ROTATE",
     "CORTEX_ACTIVE_VISION_PRESET",
     "CORTEX_ACTIVE_SEARCH_PRESET",
+    # PDF 翻译预设（ADR-0039）：激活键 + 物化的服务/模型/envs JSON/默认语言
+    "CORTEX_ACTIVE_TRANSLATE_PRESET",
+    "CORTEX_TRANSLATE_SERVICE",
+    "CORTEX_TRANSLATE_MODEL",
+    "CORTEX_TRANSLATE_ENVS",
+    "CORTEX_TRANSLATE_LANG_OUT",
     # 百度天气 API（日记录入时抓城市天气；空 = 不带天气，不阻断日记）
     "BAIDU_WEATHER_AK",
     # Search
@@ -67,7 +73,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
-SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK"})
+SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK", "CORTEX_TRANSLATE_ENVS"})
 SECRET_MASK = "***"
 
 

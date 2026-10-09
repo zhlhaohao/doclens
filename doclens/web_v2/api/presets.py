@@ -25,6 +25,8 @@ from doclens.web_v2.models.preset import (
     ProbeMaxTokensRequest,
     ProbeMaxTokensResult,
     ProbeVisionResult,
+    ProbeTranslateRequest,
+    ProbeTranslateResult,
 )
 from doclens.web_v2 import presets_store
 from doclens.web_v2.probe_max_tokens import ProbeError, probe_max_tokens
@@ -74,6 +76,24 @@ def _materialize(preset: dict) -> dict:
             v = preset.get(src)
             if v is not None:
                 updates[dst] = str(v)
+        return updates
+    if kind == "translate":
+        # ADR-0039：翻译预设物化——激活键 + 服务/模型/envs JSON。
+        # envs 含密钥写 .env（与 LLM 预设的 PLANIFY_API_KEY 同纪律）；
+        # 翻译服务运行时读激活预设（translate_service._preset），不走 .env
+        # 逐键展开（envs 键名随服务而异，逐键物化会产生未知数量的键）。
+        import json as _json
+
+        updates = {
+            "CORTEX_ACTIVE_TRANSLATE_PRESET": name,
+            "CORTEX_TRANSLATE_SERVICE": preset.get("translate_service") or "google",
+            "CORTEX_TRANSLATE_MODEL": preset.get("model_id") or "",
+            "CORTEX_TRANSLATE_ENVS": _json.dumps(
+                preset.get("translate_envs") or {}, ensure_ascii=False
+            ),
+        }
+        if preset.get("lang_default_out"):
+            updates["CORTEX_TRANSLATE_LANG_OUT"] = str(preset["lang_default_out"])
         return updates
     # vision：协议直接写原值（openai_compat / anthropic）
     return {
@@ -201,3 +221,59 @@ async def activate_preset(preset_id: str):
     )
     logger.info("preset activated: id=%s kind=%s name=%s", preset_id, raw.get("kind"), raw.get("name"))
     return ActivateResult(preset=Preset(**masked), note=note)
+
+
+@router.post("/presets/probe-translate", response_model=ProbeTranslateResult)
+def probe_translate_endpoint(req: ProbeTranslateRequest):
+    """翻译服务连通性探测（ADR-0039）：当前表单服务 + envs 翻一句固定文本。
+
+    envs 值为 ***（脱敏占位）时回退 preset_id 已存值（编辑既有预设场景）；
+    成功返回示例译文，失败（网络/密钥/服务不可用）走 502 PROBE_FAILED。
+    """
+    envs = dict(req.envs or {})
+    if req.preset_id:
+        raw = presets_store.get_preset_raw(req.preset_id)
+        if raw is None:
+            raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {req.preset_id}")
+        stored = raw.get("translate_envs") or {}
+        for k, v in list(envs.items()):
+            if not v or v == PRESET_SECRET_MASK:
+                if k in stored:
+                    envs[k] = stored[k]
+                else:
+                    envs.pop(k, None)
+        # 表单未带出的键也一并注入（服务需要而表单没填的默认键走类默认）
+        for k, v in stored.items():
+            envs.setdefault(k, v)
+
+    def _probe() -> str:
+        # 翻译缓存 DB 惰性初始化（与 translate_service._ensure_engine 同一
+        # 落位：<workdir>/.cortex/translate_cache.db）
+        from doclens.config import data_dirname
+        from doclens.vendor_pdf2zh.cache import init_db
+        import os as _os
+
+        init_db(_os.path.join(_os.getcwd(), data_dirname(), "translate_cache.db"))
+
+        from doclens.vendor_pdf2zh.translator import BaseTranslator
+
+        # 递归收集全部子类（OpenAI 族是孙类——继承 OpenAITranslator）
+        def _all_subclasses(cls):
+            for sub in cls.__subclasses__():
+                yield sub
+                yield from _all_subclasses(sub)
+
+        for translator_cls in _all_subclasses(BaseTranslator):
+            if translator_cls.name == req.translate_service:
+                t = translator_cls("en", "zh", None, envs=envs)
+                return t.translate("Hello, this is a connectivity test.")
+        raise CortexAPIError(400, "BAD_SERVICE", f"未知的翻译服务: {req.translate_service}")
+
+    try:
+        # def 端点 → FastAPI 线程池执行；探测文本极短，正常几秒内返回
+        translation = _probe()
+        return ProbeTranslateResult(translation=translation, service=req.translate_service)
+    except CortexAPIError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise CortexAPIError(502, "PROBE_FAILED", f"探测失败: {e}")

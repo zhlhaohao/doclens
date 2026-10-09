@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-PresetKind = Literal["llm", "vision", "search"]
+PresetKind = Literal["llm", "vision", "search", "translate"]
 PresetProtocol = Literal["anthropic", "openai_compat"]
 
 # 密钥脱敏占位（与 config_store.SECRET_MASK 同义，独立声明避免循环依赖）
@@ -63,6 +63,19 @@ class PresetCreate(BaseModel):
     weight_fts_score: Optional[float] = None
     weight_title_match: Optional[float] = None
     weight_proximity_match: Optional[float] = None
+    # 翻译字段（kind=translate，ADR-0039）
+    translate_service: Optional[str] = Field(
+        default=None, max_length=40,
+        description="翻译服务名（仅 kind=translate；vendor 引擎服务类 name，如 openai/openailiked/google）",
+    )
+    translate_envs: Optional[dict] = Field(
+        default=None,
+        description="翻译服务环境变量/密钥（仅 kind=translate；GET 时脱敏）",
+    )
+    lang_default_out: Optional[str] = Field(
+        default=None, max_length=16,
+        description="翻译弹框默认目标语言（仅 kind=translate，如 zh/en）",
+    )
 
 
 class PresetUpdate(BaseModel):
@@ -90,6 +103,19 @@ class PresetUpdate(BaseModel):
     weight_fts_score: Optional[float] = None
     weight_title_match: Optional[float] = None
     weight_proximity_match: Optional[float] = None
+    # 翻译字段（kind=translate，ADR-0039）
+    translate_service: Optional[str] = Field(
+        default=None, max_length=40,
+        description="翻译服务名（仅 kind=translate；vendor 引擎服务类 name，如 openai/openailiked/google）",
+    )
+    translate_envs: Optional[dict] = Field(
+        default=None,
+        description="翻译服务环境变量/密钥（仅 kind=translate；GET 时脱敏）",
+    )
+    lang_default_out: Optional[str] = Field(
+        default=None, max_length=16,
+        description="翻译弹框默认目标语言（仅 kind=translate，如 zh/en）",
+    )
 
 
 class Preset(BaseModel):
@@ -117,6 +143,19 @@ class Preset(BaseModel):
     weight_fts_score: Optional[float] = None
     weight_title_match: Optional[float] = None
     weight_proximity_match: Optional[float] = None
+    # 翻译字段（kind=translate，ADR-0039）
+    translate_service: Optional[str] = Field(
+        default=None, max_length=40,
+        description="翻译服务名（仅 kind=translate；vendor 引擎服务类 name，如 openai/openailiked/google）",
+    )
+    translate_envs: Optional[dict] = Field(
+        default=None,
+        description="翻译服务环境变量/密钥（仅 kind=translate；GET 时脱敏）",
+    )
+    lang_default_out: Optional[str] = Field(
+        default=None, max_length=16,
+        description="翻译弹框默认目标语言（仅 kind=translate，如 zh/en）",
+    )
 
 
 class PresetListResponse(BaseModel):
@@ -158,3 +197,22 @@ class ProbeVisionResult(BaseModel):
     """
 
     supported: bool
+
+
+class ProbeTranslateRequest(BaseModel):
+    """POST /api/presets/probe-translate 请求体（ADR-0039 翻译服务探测）。
+
+    用当前表单的服务 + envs 翻一句固定文本，验证连通与密钥有效性；
+    编辑既有预设时 envs 可传脱敏占位（后端回退已存密钥）。
+    """
+
+    translate_service: str = Field(..., min_length=1, max_length=40)
+    envs: dict = Field(default_factory=dict, description="服务环境变量（值 *** 时回退 preset_id 已存值）")
+    preset_id: Optional[str] = None
+
+
+class ProbeTranslateResult(BaseModel):
+    """探测结果：成功返回示例译文；失败走 502 PROBE_FAILED。"""
+
+    translation: str
+    service: str

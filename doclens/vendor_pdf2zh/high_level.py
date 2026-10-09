@@ -1,0 +1,547 @@
+"""Functions that can be used for the most common use-cases for pdf2zh.six"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import os
+import re
+import sys
+import tempfile
+import logging
+from time import perf_counter
+from asyncio import CancelledError
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
+from pathlib import Path
+from string import Template
+from typing import Any, BinaryIO, List, Optional, Dict, TYPE_CHECKING
+
+import numpy as np
+import requests
+import tqdm
+
+from pdfminer.pdfdocument import PDFDocument
+from pdfminer.pdfexceptions import PDFValueError
+from pdfminer.pdfinterp import PDFResourceManager
+from pdfminer.pdfpage import PDFPage
+from pdfminer.pdfparser import PDFParser
+from pymupdf import Document, Font
+
+from doclens.vendor_pdf2zh.converter import TranslateConverter
+
+if TYPE_CHECKING:
+    from doclens.vendor_pdf2zh.doclayout import OnnxModel
+from doclens.vendor_pdf2zh.pdfinterp import PDFPageInterpreterEx
+
+from doclens.vendor_pdf2zh.config import ConfigManager
+
+NOTO_NAME = "noto"
+
+logger = logging.getLogger(__name__)
+
+noto_list = [
+    "am",  # Amharic
+    "ar",  # Arabic
+    "bn",  # Bengali
+    "bg",  # Bulgarian
+    "chr",  # Cherokee
+    "el",  # Greek
+    "gu",  # Gujarati
+    "iw",  # Hebrew
+    "hi",  # Hindi
+    "kn",  # Kannada
+    "ml",  # Malayalam
+    "mr",  # Marathi
+    "ru",  # Russian
+    "sr",  # Serbian
+    "ta",  # Tamil
+    "te",  # Telugu
+    "th",  # Thai
+    "ur",  # Urdu
+    "uk",  # Ukrainian
+]
+
+
+def check_files(files: List[str]) -> List[str]:
+    files = [
+        f for f in files if not f.startswith("http://")
+    ]  # exclude online files, http
+    files = [
+        f for f in files if not f.startswith("https://")
+    ]  # exclude online files, https
+    missing_files = [file for file in files if not os.path.exists(file)]
+    return missing_files
+
+
+def translate_patch(
+    inf: BinaryIO,
+    pages: Optional[list[int]] = None,
+    vfont: str = "",
+    vchar: str = "",
+    thread: int = 0,
+    doc_zh: Document = None,
+    lang_in: str = "",
+    lang_out: str = "",
+    service: str = "",
+    noto_name: str = "",
+    noto: Font = None,
+    callback: object = None,
+    cancellation_event: asyncio.Event = None,
+    model: OnnxModel = None,
+    envs: Dict = None,
+    prompt: Template = None,
+    ignore_cache: bool = False,
+    ocr_pages: Optional[set[int]] = None,
+    ultrafast: bool = False,
+    perf=None,
+    text_items=None,
+    **kwarg: Any,
+) -> None:
+    if ultrafast and not thread:
+        thread = 16
+    rsrcmgr = PDFResourceManager()
+    layout = {}
+    device = TranslateConverter(
+        rsrcmgr,
+        vfont,
+        vchar,
+        thread,
+        layout,
+        lang_in,
+        lang_out,
+        service,
+        noto_name,
+        noto,
+        envs,
+        prompt,
+        ignore_cache,
+    )
+
+    assert device is not None
+    device.perf = perf
+    device.translator.no_cache = ultrafast and ignore_cache
+    obj_patch = {}
+    interpreter = PDFPageInterpreterEx(rsrcmgr, device, obj_patch)
+    if pages:
+        total_pages = len(pages)
+    else:
+        total_pages = doc_zh.page_count
+
+    parser = PDFParser(inf)
+    doc = PDFDocument(parser)
+    if ultrafast:
+        from doclens.vendor_pdf2zh.ultrafast import extract_layout, layout_mask
+
+        if text_items is None:
+            inf.seek(0)
+            started = perf_counter()
+            text_items = extract_layout(inf.read(), pages)
+            if perf:
+                perf.add("layout_extract", perf_counter() - started)
+            inf.seek(0)
+    pending_pages = []
+    with (
+        tqdm.tqdm(total=total_pages) as progress,
+        ThreadPoolExecutor(max_workers=thread) if ultrafast else nullcontext() as pool,
+    ):
+        if ultrafast:
+            device.translation_pool = pool
+            device.translation_futures = deque()
+        for pageno, page in enumerate(PDFPage.create_pages(doc)):
+            if cancellation_event and cancellation_event.is_set():
+                raise CancelledError("task cancelled")
+            if pages and (pageno not in pages):
+                continue
+            progress.update()
+            if callback:
+                callback(progress)
+            page.pageno = pageno
+            page_started = perf_counter() if perf else 0
+            if ultrafast:
+                if not text_items.get(pageno):
+                    logger.info(
+                        "[ultrafast perf] page_scan %d: skipped (no native text)",
+                        pageno + 1,
+                    )
+                    continue
+                # Inspector coordinates ignore /Rotate; keep content in that frame.
+                # The output page retains its original rotation metadata.
+                page.rotate = 0
+                started = perf_counter()
+                layout[page.pageno] = layout_mask(page, text_items.get(pageno, []))
+                if perf:
+                    perf.add("layout_mask", perf_counter() - started)
+            else:
+                pix = doc_zh[page.pageno].get_pixmap()
+                image = np.frombuffer(pix.samples, np.uint8).reshape(
+                    pix.height, pix.width, 3
+                )[:, :, ::-1]
+                page_layout = model.predict(image, imgsz=int(pix.height / 32) * 32)[0]
+                # [doclens] OCR 路径已裁剪：纯图页不在此分支处理（ADR-0039）
+                # kdtree 是不可能 kdtree 的，不如直接渲染成图片，用空间换时间
+                box = np.ones((pix.height, pix.width))
+                h, w = box.shape
+                vcls = [
+                    "abandon",
+                    "figure",
+                    "table",
+                    "isolate_formula",
+                    "formula_caption",
+                ]
+                for i, d in enumerate(page_layout.boxes):
+                    if page_layout.names[int(d.cls)] not in vcls:
+                        x0, y0, x1, y1 = d.xyxy.squeeze()
+                        x0, y0, x1, y1 = (
+                            np.clip(int(x0 - 1), 0, w - 1),
+                            np.clip(int(h - y1 - 1), 0, h - 1),
+                            np.clip(int(x1 + 1), 0, w - 1),
+                            np.clip(int(h - y0 + 1), 0, h - 1),
+                        )
+                        box[y0:y1, x0:x1] = i + 2
+                for i, d in enumerate(page_layout.boxes):
+                    if page_layout.names[int(d.cls)] in vcls:
+                        x0, y0, x1, y1 = d.xyxy.squeeze()
+                        x0, y0, x1, y1 = (
+                            np.clip(int(x0 - 1), 0, w - 1),
+                            np.clip(int(h - y1 - 1), 0, h - 1),
+                            np.clip(int(x1 + 1), 0, w - 1),
+                            np.clip(int(h - y0 + 1), 0, h - 1),
+                        )
+                        box[y0:y1, x0:x1] = 0
+                layout[page.pageno] = box
+            # 新建一个 xref 存放新指令流
+            page.page_xref = doc_zh.get_new_xref()  # hack 插入页面的新 xref
+            doc_zh.update_object(page.page_xref, "<<>>")
+            doc_zh.update_stream(page.page_xref, b"")
+            doc_zh[page.pageno].set_contents(page.page_xref)
+            interpreter.process_page(page)
+            if ultrafast:
+                pending_pages.append(page)
+            if perf:
+                logger.info(
+                    "[ultrafast perf] page_scan %d: %.3fs",
+                    pageno + 1,
+                    perf_counter() - page_started,
+                )
+        if ultrafast:
+            logger.info(
+                "[ultrafast perf] document pool: %d tasks, %d workers",
+                len(device.translation_futures),
+                thread,
+            )
+            started = perf_counter()
+            progress.reset(total=len(device.translation_futures))
+            progress.set_description("Translate paragraphs")
+            for future in as_completed(device.translation_futures):
+                future.result()  # Surface failures before the interpreter's form guards.
+                if cancellation_event and cancellation_event.is_set():
+                    raise CancelledError("task cancelled")
+                progress.update()
+                if callback:
+                    callback(progress)
+            if perf:
+                perf.add("translation", perf_counter() - started)
+            device.translation_pool = None
+            # ponytail: replay the cheap parser to retain per-page/form font state.
+            # A stored paragraph plan is only worthwhile if parsing becomes costly.
+            progress.reset(total=len(pending_pages))
+            progress.set_description("Typeset pages")
+            for page in pending_pages:
+                if cancellation_event and cancellation_event.is_set():
+                    raise CancelledError("task cancelled")
+                started = perf_counter()
+                interpreter.process_page(page)
+                progress.update()
+                if callback:
+                    callback(progress)
+                if perf:
+                    logger.info(
+                        "[ultrafast perf] page_render %d: %.3fs",
+                        page.pageno + 1,
+                        perf_counter() - started,
+                    )
+            assert not device.translation_futures
+
+    device.close()
+    return obj_patch
+
+
+def _ocr_tessdata(language):
+    """[doclens] OCR 路径已裁剪：本函数不再被调用（保留签名防外部引用）。"""
+    raise RuntimeError("OCR support is not bundled in this build (ADR-0039)")
+
+
+def _ocr_pages(doc, pages, lang_in, cancellation_event):
+    """[doclens] OCR 路径已裁剪：纯图页直接跳过（上游会尝试 Tesseract 加字层）。"""
+    return set()
+
+
+def translate_stream(
+    stream: bytes,
+    pages: Optional[list[int]] = None,
+    lang_in: str = "",
+    lang_out: str = "",
+    service: str = "",
+    thread: int = 0,
+    vfont: str = "",
+    vchar: str = "",
+    callback: object = None,
+    cancellation_event: asyncio.Event = None,
+    model: OnnxModel = None,
+    envs: Dict = None,
+    prompt: Template = None,
+    skip_subset_fonts: bool = False,
+    ignore_cache: bool = False,
+    ultrafast: bool = False,
+    perf=None,
+    **kwarg: Any,
+):
+    if ultrafast and not thread:
+        thread = 16
+    own_perf = perf is None
+    text_items = None
+    if ultrafast:
+        from doclens.vendor_pdf2zh.ultrafast import PerfTimer, extract_layout
+
+        if own_perf:
+            perf = PerfTimer()
+        logger.info(
+            "[ultrafast perf] skipped: layout models, rasterization, OCR, font subsetting; "
+            "translation cache: %s",
+            "off (read/write)" if ignore_cache else "on",
+        )
+        text_items = extract_layout(stream, pages)
+        perf.step("layout_extract")
+    font_list = [("tiro", None)]
+
+    font_path = download_remote_fonts(lang_out.lower())
+    noto_name = NOTO_NAME
+    noto = Font(noto_name, font_path)
+    font_list.append((noto_name, font_path))
+    if perf:
+        perf.step("font_setup")
+
+    doc_en = Document(stream=stream)
+    if ultrafast:
+        doc_zh = Document(stream=stream)
+    else:
+        stream = io.BytesIO()
+        doc_en.save(stream)
+        doc_zh = Document(stream=stream)
+    ocr_pages = (
+        set() if ultrafast else _ocr_pages(doc_zh, pages, lang_in, cancellation_event)
+    )
+    page_count = doc_zh.page_count
+    if perf:
+        perf.step("document_open")
+    # font_list = [("GoNotoKurrent-Regular.ttf", font_path), ("tiro", None)]
+    font_id = {}
+    for pageno, page in enumerate(doc_zh):
+        if ultrafast and (
+            (pages and pageno not in pages) or not text_items.get(pageno)
+        ):
+            continue
+        for font in font_list:
+            font_id[font[0]] = page.insert_font(font[0], font[1])
+    xreflen = doc_zh.xref_length()
+    for xref in range(1, xreflen):
+        for label in ["Resources/", ""]:  # 可能是基于 xobj 的 res
+            try:  # xref 读写可能出错
+                font_res = doc_zh.xref_get_key(xref, f"{label}Font")
+                target_key_prefix = f"{label}Font/"
+                if font_res[0] == "xref":
+                    resource_xref_id = re.search("(\\d+) 0 R", font_res[1]).group(1)
+                    xref = int(resource_xref_id)
+                    font_res = ("dict", doc_zh.xref_object(xref))
+                    target_key_prefix = ""
+
+                if font_res[0] == "dict":
+                    for font in font_list:
+                        target_key = f"{target_key_prefix}{font[0]}"
+                        font_exist = doc_zh.xref_get_key(xref, target_key)
+                        if font_exist[0] == "null":
+                            doc_zh.xref_set_key(
+                                xref,
+                                target_key,
+                                f"{font_id[font[0]]} 0 R",
+                            )
+            except Exception:
+                pass
+
+    if perf:
+        perf.step("font_resources")
+    fp = io.BytesIO()
+
+    doc_zh.save(fp)
+    if perf:
+        perf.step("working_copy_save")
+    obj_patch: dict = translate_patch(fp, **locals())
+    if perf:
+        perf.step("page_processing")
+
+    for obj_id, ops_new in obj_patch.items():
+        # ops_old=doc_en.xref_stream(obj_id)
+        # print(obj_id)
+        # print(ops_old)
+        # print(ops_new.encode())
+        doc_zh.update_stream(obj_id, ops_new.encode())
+    if perf:
+        perf.step("apply_patches")
+
+    doc_en.insert_file(doc_zh)
+    for id in range(page_count):
+        doc_en.move_page(page_count + id, id * 2 + 1)
+    if perf:
+        perf.step("bilingual_assembly")
+    if not (skip_subset_fonts or ultrafast):
+        doc_zh.subset_fonts(fallback=True)
+        doc_en.subset_fonts(fallback=True)
+    if perf:
+        perf.step("font_subset")
+    result = (
+        doc_zh.write(deflate=True, garbage=3, use_objstms=1),
+        doc_en.write(deflate=True, garbage=3, use_objstms=1),
+    )
+    if perf:
+        perf.step("pdf_serialize")
+        if own_perf:
+            perf.report()
+    return result
+
+
+def convert_to_pdfa(input_path, output_path):
+    """[doclens] PDF/A 输出已裁剪（pikepdf 未纳入依赖，ADR-0039）。"""
+    raise RuntimeError("PDF/A conversion is not bundled in this build (ADR-0039)")
+
+
+def translate(
+    files: list[str],
+    output: str = "",
+    pages: Optional[list[int]] = None,
+    lang_in: str = "",
+    lang_out: str = "",
+    service: str = "",
+    thread: int = 0,
+    vfont: str = "",
+    vchar: str = "",
+    callback: object = None,
+    compatible: bool = False,
+    cancellation_event: asyncio.Event = None,
+    model: OnnxModel = None,
+    envs: Dict = None,
+    prompt: Template = None,
+    skip_subset_fonts: bool = False,
+    ignore_cache: bool = False,
+    ultrafast: bool = False,
+    **kwarg: Any,
+):
+    if not files:
+        raise PDFValueError("No files to process.")
+
+    missing_files = check_files(files)
+
+    if missing_files:
+        print("The following files do not exist:", file=sys.stderr)
+        for file in missing_files:
+            print(f"  {file}", file=sys.stderr)
+        raise PDFValueError("Some files do not exist.")
+
+    result_files = []
+
+    for file in files:
+        perf = None
+        if ultrafast:
+            from doclens.vendor_pdf2zh.ultrafast import PerfTimer
+
+            perf = PerfTimer()
+        if type(file) is str and (
+            file.startswith("http://") or file.startswith("https://")
+        ):
+            print("Online files detected, downloading...")
+            try:
+                r = requests.get(file, allow_redirects=True)
+                if r.status_code == 200:
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".pdf", delete=False
+                    ) as tmp_file:
+                        print(f"Writing the file: {file}...")
+                        tmp_file.write(r.content)
+                        file = tmp_file.name
+                else:
+                    r.raise_for_status()
+            except Exception as e:
+                raise PDFValueError(
+                    f"Errors occur in downloading the PDF file. Please check the link(s).\nError:\n{e}"
+                )
+
+        # [doclens] doc/docx 输入已裁剪（converter_docx 依赖 LibreOffice，ADR-0039）：
+        # 仅接受 PDF 文件；URL 下载分支保留。
+        filename = os.path.splitext(os.path.basename(file))[0]
+
+        doc_raw = open(file, "rb")
+        s_raw = doc_raw.read()
+        doc_raw.close()
+        if perf:
+            perf.step("input_read")
+
+        temp_dir = Path(tempfile.gettempdir())
+        file_path = Path(file)
+        try:
+            if file_path.exists() and file_path.resolve().is_relative_to(
+                temp_dir.resolve()
+            ):
+                file_path.unlink(missing_ok=True)
+                logger.debug(f"Cleaned temp file: {file_path}")
+        except Exception:
+            logger.warning(f"Failed to clean temp file {file_path}", exc_info=True)
+
+        s_mono, s_dual = translate_stream(
+            s_raw,
+            **locals(),
+        )
+        file_mono = Path(output) / f"{filename}-mono.pdf"
+        file_dual = Path(output) / f"{filename}-dual.pdf"
+        doc_mono = open(file_mono, "wb")
+        doc_dual = open(file_dual, "wb")
+        doc_mono.write(s_mono)
+        doc_dual.write(s_dual)
+        doc_mono.close()
+        doc_dual.close()
+        if perf:
+            perf.step("output_write")
+            perf.report()
+        result_files.append((str(file_mono), str(file_dual)))
+
+    return result_files
+
+
+def download_remote_fonts(lang: str):
+    lang = lang.lower()
+    LANG_NAME_MAP = {
+        **{la: "GoNotoKurrent-Regular.ttf" for la in noto_list},
+        **{
+            la: f"SourceHanSerif{region}-Regular.ttf"
+            for region, langs in {
+                "CN": ["zh-cn", "zh-hans", "zh"],
+                "TW": ["zh-tw", "zh-hant"],
+                "JP": ["ja"],
+                "KR": ["ko"],
+            }.items()
+            for la in langs
+        },
+    }
+    font_name = LANG_NAME_MAP.get(lang, "GoNotoKurrent-Regular.ttf")
+
+    # docker
+    font_path = ConfigManager.get("NOTO_FONT_PATH", Path("/app", font_name).as_posix())
+    if not Path(font_path).exists():
+        from babeldoc.assets.assets import get_font_and_metadata
+
+        font_path, _ = get_font_and_metadata(font_name)
+        font_path = font_path.as_posix()
+
+    logger.info(f"use font: {font_path}")
+
+    return font_path

@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     # Core
     "fastapi>=0.110.0",
-    "cryptography>=42.0.0,<47",  # 47+ 在 PyPI 上没有 win_arm64 wheel（只有 46.0.0-46.0.3 有）
+    "cryptography>=42.0.0",  # 2026-10-08 解除 <47 上限（开发机为 x64；若需回归 ARM64 再收紧）
     "pydantic>=2.11.0,<3.0.0",
     "pydantic-settings>=2.5.2",
     "python-dotenv>=1.0.0",
@@ -61,6 +61,24 @@ dependencies = [
     "pygments>=2.13.0,<3.0.0",
     # 关于弹窗运行情况面板：RSS 内存读取（ADR-0037；缺失降级显示不可用）
     "psutil>=5.9.0",
+    # PDF 翻译引擎（ADR-0039，vendor_pdf2zh 核心 9 文件闭包）：
+    # 必装核心 7 包 + 布局模型 3 包；翻译 SDK（openai 等）按预设所用服务
+    # 按需安装；ultrafast 模式另需 pdf-inspector（可选 extra translate-ultrafast）。
+    "pymupdf<1.25.3",
+    # pdfminer-six 必须落在 pdfplumber 的精确钉版集合内
+    # （0.11.7→==20250506；20250416 不在任何 pdfplumber 版本的允许集，会导致
+    # 依赖树无解+pip 回溯风暴，2026-10-08 由 uv pubgrub 报告实锤）；
+    # 20250506 距 pdf2zh 上游钉的 20250416 仅 3 周，vendor 闭包 API 兼容
+    "pdfminer-six==20250506",
+    "fonttools>=4.38",  # PyMuPDF subset_fonts() 的内部依赖（翻译产物字体子集化）
+    "tenacity>=8.0",
+    "requests>=2.28",
+    "tqdm>=4.60",
+    "peewee>=3.17",
+    "onnx>=1.14",
+    "onnxruntime>=1.16",
+    "opencv-python-headless>=4.7",
+    "babeldoc>=0.1.22,<0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -78,6 +96,10 @@ dev = [
 # 故设为可选依赖。运行时由 try/except ImportError 保护（见 treesearch/parsers/treesitter_parser.py）。
 ast = [
     "treesearchlib[ast]>=1.2.12",
+]
+# ultrafast 翻译模式：pdf-inspector 原生文本坐标布局（ADR-0039）
+translate-ultrafast = [
+    "pdf-inspector>=1.25.2,<2",
 ]
 
 [project.urls]
