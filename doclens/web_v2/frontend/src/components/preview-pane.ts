@@ -1623,11 +1623,13 @@ export class PreviewPane extends LitElement {
   // toc-drawer 浮层列出 heading 扁平缩进列表 → 点击平滑滚动跳转并关闭。
   // ------------------------------------------------------------------
 
-  /** 目录抽屉支持的预览类型：md / docx / pdf
+  /** 目录抽屉支持的预览类型：md / docx / pdf / epub
    * （pptx/xlsx/邮件/图像解读的 md 不提供——2026-08-21 决议；
-   * pdf 数据源为原生书签，无书签无条目 → 按钮隐藏，ADR-0031）。 */
+   * pdf 数据源为原生书签，无书签无条目 → 按钮隐藏，ADR-0031；
+   * epub 2026-10-09 纳入：合成 md 章节即 heading，跳转走分页懒渲染
+   * 的「先展开目标页」链路，大部头多章条目可滚动）。 */
   private get _tocSupported(): boolean {
-    return /\.(md|markdown|docx|pdf)$/i.test(this.path);
+    return /\.(md|markdown|docx|pdf|epub)$/i.test(this.path);
   }
 
   /** 目录按钮显隐：预览模式 + 支持的文档类型 + 有目录条目

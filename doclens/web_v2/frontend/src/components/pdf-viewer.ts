@@ -729,6 +729,12 @@ export class PdfViewer extends LitElement {
       };
       const onResize = () => {
         if (seq !== this._loadSeq || !this._viewer) return;
+        // 0 尺寸 = keep-alive 视图隐藏（display:none 塌陷）或布局中间态：
+        // 此时重套 page-width 会让 pdf.js 用 clientWidth=0 算出 scale=0
+        // （--scale-factor 钉 0 → 所有 .page CSS 尺寸 0x0），恢复显示后
+        // 无人重算 → 预览整栏空白（2026-10-09：预览 PDF → 开设置 → 关闭
+        // 即白屏）。跳过，等真实尺寸回来的下一轮 RO 再重套。
+        if (host.clientWidth === 0 || host.clientHeight === 0) return;
         if (!this._initialFitDone) {
           applyInitialFit();
           return;

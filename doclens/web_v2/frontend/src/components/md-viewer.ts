@@ -936,24 +936,12 @@ export class MdViewer extends LitElement {
    *  同精度；不触发闪烁动画。 */
   scrollToSourceLine(line: number, behavior: ScrollBehavior = "auto") {
     const scrollOnce = () => {
-      const blocks = this._anchorBlocks();
       const target = this._findBlockAtLine(line);
       if (!target) return;
       // 仅滚动 md-viewer 自身（:host 是 overflow:auto 的滚动容器）。
       // 不能用 target.scrollIntoView —— 它会沿滚动链传播到 window，
       // 把外层 detail-overlay 顶部的 focus-header（返回键）推出视口。
-      const hostRect = this.getBoundingClientRect();
-      if (hostRect.height <= 0) return;
-      const targetRect = target.getBoundingClientRect();
-      // 块内行偏移 → 像素偏移（与 topSourceLine 的插值互逆，保证切换往返一致）
-      const start = Number(target.getAttribute("data-source-line")) || 1;
-      const span = this._blockSpan(target, blocks);
-      const offset = Math.max(0, Math.min(span - 1, line - start));
-      const pxInto = targetRect.height > 0 ? (offset / span) * targetRect.height : 0;
-      this.scrollTo({
-        top: targetRect.top + pxInto - hostRect.top + this.scrollTop,
-        behavior,
-      });
+      this._scrollOnceForLine(line, target, behavior);
     };
     scrollOnce();
     // content-visibility：目标块首次进入视口才真实渲染，估高（500px）与实高
@@ -1335,19 +1323,66 @@ export class MdViewer extends LitElement {
 
   /** 滚动到源行所在块并闪烁定位（目录抽屉跳转用）。
    *  与 _locateAndHighlight 的差别只在入口：这是父组件主动触发的一次性跳转，
-   *  不经过 line property。 */
+   *  不经过 line property。
+   *  懒渲染大文档（epub 数百章）：远距离跳转途经懒渲染页陆续插入 + 估高
+   *  塌变，scrollToSourceLine 的「滚一次 + 两帧校准」不够（落点漂移）——
+   *  复用匹配导航的三段机制：超阈值粗跳（瞬跳）→ 两帧校准 → _settleTo
+   *  收敛循环（见 _gotoMatch，同症状同修）。 */
   jumpToSourceLine(line: number, behavior: ScrollBehavior = "smooth") {
     const target = this._findBlockAtLine(line);
     if (!target) return;
 
-    this.scrollToSourceLine(line, behavior);
     // 闪烁节点第一行所在的块（不再回退到 <mark.keyword-hit>：
     // 即便 target 不含 keyword——典型如 xlsx 的 sheet 标题，
     // keyword 命中在内部 table 单元格——闪烁位置始终锚定在节点起始处，
     // 让用户明确感知到「这里就是节点开头」）。
-    target.classList.remove("highlight-flash");  // 重置以便动画重放
-    void target.offsetWidth;                     // 强制 reflow，让 animation 重新触发
-    target.classList.add("highlight-flash");
+    const flash = () => {
+      target.classList.remove("highlight-flash");  // 重置以便动画重放
+      void target.offsetWidth;                     // 强制 reflow，让 animation 重新触发
+      target.classList.add("highlight-flash");
+    };
+
+    if (!this.pages?.length) {
+      // 非分页文档：高度稳定，原路径（滚一次 + 两帧校准）即精确
+      this.scrollToSourceLine(line, behavior);
+      flash();
+      return;
+    }
+
+    const gen = ++this._settleGen; // 使进行中的旧 settle 循环失效
+    const scrollOnce = (b: ScrollBehavior = behavior): number =>
+      this._scrollOnceForLine(line, target, b);
+    const rough = scrollOnce();
+    // 超大跨度：目标常在从未渲染的懒渲染区，全程 smooth 途经数十页会
+    // 压垮收敛——第一段瞬跳粗定位（估高位置），落定后收敛循环精调
+    if (rough > MATCH_NAV_ROUGH_JUMP_PX) {
+      scrollOnce("auto");
+    }
+    // content-visibility / 新渲染页估高偏差：两帧后（尺寸为实值）再校准
+    requestAnimationFrame(() => requestAnimationFrame(() => { scrollOnce(); }));
+    flash(); // 即时反馈（滚动动画中即开始闪）
+    this._settleTo(gen, scrollOnce, flash); // 落定后循环校准至精确
+  }
+
+  /** scrollToSourceLine 的单次滚动计算（收敛循环复用）：返回本次修正量 px。
+   *  target = 事先 _findBlockAtLine 的目标块（复用查找，避免每轮重扫）。 */
+  private _scrollOnceForLine(
+    line: number,
+    target: HTMLElement,
+    behavior: ScrollBehavior,
+  ): number {
+    const hostRect = this.getBoundingClientRect();
+    if (hostRect.height <= 0) return 0;
+    const targetRect = target.getBoundingClientRect();
+    // 块内行偏移 → 像素偏移（与 topSourceLine 的插值互逆，保证切换往返一致）
+    const start = Number(target.getAttribute("data-source-line")) || 1;
+    const span = this._blockSpan(target, this._anchorBlocks());
+    const offset = Math.max(0, Math.min(span - 1, line - start));
+    const pxInto = targetRect.height > 0 ? (offset / span) * targetRect.height : 0;
+    const top = targetRect.top + pxInto - hostRect.top + this.scrollTop;
+    const delta = Math.abs(top - this.scrollTop);
+    this.scrollTo({ top, behavior });
+    return delta;
   }
 
   private _locateAndHighlight() {
