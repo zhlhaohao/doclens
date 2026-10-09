@@ -43,13 +43,24 @@ def _shell_timeout() -> int:
     return t if t > 0 else _DEFAULT_SHELL_TIMEOUT
 
 
-def _timeout_message() -> str:
-    """超时返回文案：带实际秒数 + 引导模型改用后台工具（而非反复重试）。"""
-    return (
+def _timeout_message(residual_output: str = "") -> str:
+    """超时返回文案：带实际秒数 + 引导模型改用后台工具（而非反复重试）。
+
+    residual_output 非空时附上（截断 2000 字符）——超时前命令可能已完成
+    实际工作（GIMP 案例教训：进程挂起但输出已写出），残余输出是模型
+    自行诊断恢复的关键信号。
+    """
+    msg = (
         f"Error: Timeout ({_shell_timeout()}s). For long-running commands, "
         "use background_run to start the task in the background, "
         "then check_background to poll its output."
     )
+    if residual_output:
+        msg += (
+            f"\n\nPartial output before timeout (may contain the reason, "
+            f"e.g. work already written to disk):\n{residual_output[:2000]}"
+        )
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +147,7 @@ def kill_session_shell_procs(session_id: str) -> int:
     return killed
 
 
-def _run_shell_with_tree_kill(argv, workdir: Path, timeout: int) -> tuple[str, bool]:
+def run_shell_with_tree_kill(argv, workdir: Path, timeout: int) -> tuple[str, bool]:
     """Popen 执行 + 超时杀进程树 + 会话登记。
 
     替代 ``subprocess.run(..., timeout=)``：后者超时只杀直接子进程，Windows
@@ -362,18 +373,18 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
             if not bash_path:
                 # 没有 Git Bash，回退到 Windows 原生 shell（pwsh → powershell → cmd）
                 return run_powershell(command, workdir)
-            # 使用 bash -c 包装命令（进程树击杀语义见 _run_shell_with_tree_kill）
-            text, timed_out = _run_shell_with_tree_kill(
+            # 使用 bash -c 包装命令（进程树击杀语义见 run_shell_with_tree_kill）
+            text, timed_out = run_shell_with_tree_kill(
                 [bash_path, "-c", command], workdir, _shell_timeout()
             )
         else:
             # Unix 环境直接使用 shell
-            text, timed_out = _run_shell_with_tree_kill(
+            text, timed_out = run_shell_with_tree_kill(
                 ["sh", "-c", command], workdir, _shell_timeout()
             )
 
         if timed_out:
-            return _timeout_message()
+            return _timeout_message(text)
         return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
@@ -413,10 +424,10 @@ def _run_powershell_impl(command: str, workdir: Path) -> str:
             workdir.mkdir(parents=True, exist_ok=True)
 
         argv = _build_shell_argv(exe_path, kind, command)
-        text, timed_out = _run_shell_with_tree_kill(argv, workdir, _shell_timeout())
+        text, timed_out = run_shell_with_tree_kill(argv, workdir, _shell_timeout())
 
         if timed_out:
-            return _timeout_message()
+            return _timeout_message(text)
         return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"

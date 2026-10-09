@@ -349,12 +349,23 @@ def build_tool_registry(
     bg_tools = [
         {
             "name": "background_run",
-            "description": "在后台线程中运行命令",
+            "description": (
+                "在后台线程中运行命令，立即返回任务 ID，用 check_background 轮询结果。"
+                "命令在 timeout 秒后整个进程树被击杀并转入 error 终态（返回超时信号"
+                "与残余输出）——命令必须能自行退出，长驻服务/需要交互的命令不适用。"
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "command": {"type": "string"},
-                    "timeout": {"type": "integer"},
+                    "timeout": {
+                        "type": "integer",
+                        "description": (
+                            "超时秒数（缺省与 bash 工具同源：PLANIFY_SHELL_TIMEOUT"
+                            " 环境变量，默认 120；上限 3600，非法/非正回落同源"
+                            " 缺省。到时杀整树并返回超时信号与残余输出）"
+                        ),
+                    },
                 },
                 "required": ["command"],
             },
@@ -372,7 +383,7 @@ def build_tool_registry(
     handlers.update(
         {
             "background_run": lambda **kw: bg_mgr.run(
-                kw["command"], kw.get("timeout", 120)
+                kw["command"], kw.get("timeout")
             ),
             "check_background": lambda **kw: bg_mgr.check(kw.get("task_id")),
         }
