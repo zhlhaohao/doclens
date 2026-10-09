@@ -62,14 +62,18 @@ export class FilesView extends LitElement {
     .desktop-layout {
       flex: 1;
       display: grid;
+      /* 窄窗口收缩修复（2026-10-09）：两侧栏改 minmax(0, 恢复宽度)——
+         localStorage 恢复的固定 px 轨道在窗口变窄后超出容器宽会整轨溢出
+         （html/body overflow:hidden 直接裁掉、无滚动条）。改后空间充足取
+         恢复宽度，不足时按 grid 分配收缩，不再溢出。中间栏保留 300px
+         base 下限（与 MIDDLE_PANE_MIN 对齐）+ 1fr 吃剩余空间；
+         桌面布局仅 ≥1024px 显示，300px 下限必有空间。 */
       grid-template-columns:
-        var(--tree-pane-width, 240px)
+        minmax(0, var(--tree-pane-width, 240px))
         4px
-        /* 中间栏（file-list）硬性最小宽度：与 JS 拖动上限 MIDDLE_PANE_MIN(300) 对齐，
-           防止恢复的两侧栏宽在窄窗口把中间列压没 */
         minmax(300px, 1fr)
         4px
-        var(--preview-pane-width, 320px);
+        minmax(0, var(--preview-pane-width, 320px));
       min-height: 0;
       min-width: 0;
     }

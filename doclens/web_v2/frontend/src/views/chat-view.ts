@@ -347,8 +347,8 @@ export class ChatView extends LitElement {
       background: var(--cortex-primary);
     }
     .focus-main .preview-pane-wrap {
-      flex: 0 0 var(--preview-pane-width, 420px);
-      min-width: 300px;
+      flex: 0 1 var(--preview-pane-width, 420px);
+      min-width: 180px;
       max-width: 900px;
       display: flex;
       flex-direction: column;

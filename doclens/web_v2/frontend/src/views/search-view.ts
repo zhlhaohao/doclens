@@ -77,8 +77,8 @@ export class SearchView extends LitElement {
     .results-col {
       display: flex;
       flex-direction: column;
-      flex: 0 0 var(--results-pane-width, 360px);
-      min-width: 280px;
+      flex: 0 1 var(--results-pane-width, 360px);
+      min-width: 180px;
       max-width: 800px;
       min-height: 0;
       /* 结果列表与分页栏之间的呼吸空间 */

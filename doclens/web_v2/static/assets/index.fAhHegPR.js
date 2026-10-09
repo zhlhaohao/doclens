@@ -7156,6 +7156,11 @@ body.cortex-preview-fs .cortex-pdf-portal {
       display: flex;
       flex-direction: column;
       flex: 1;
+      /* 窄窗口收缩（2026-10-09）：host 作为 flex 子项默认 min-width:auto
+         （= header 按钮组的 min-content，约 300px+），窄窗口下会顶住
+         不缩导致溢出。显式 min-width:0 允许被压到内容以下，配合内部
+         header 的 overflow 处理收纳按钮。 */
+      min-width: 0;
       min-height: 0;
       background: var(--cortex-card-bg);
       overflow: hidden;
@@ -7180,6 +7185,10 @@ body.cortex-preview-fs .cortex-pdf-portal {
     .header {
       display: flex;
       align-items: center;
+      /* 窄窗口收缩（2026-10-09）：按钮组多时允许换行收纳，不撑出
+         min-content 宽度顶住 host（配合 :host 的 min-width:0） */
+      flex-wrap: wrap;
+      row-gap: var(--cortex-space-1);
       gap: var(--cortex-space-2);
       font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
@@ -8896,8 +8905,8 @@ body.cortex-preview-fs .cortex-pdf-portal {
     .results-col {
       display: flex;
       flex-direction: column;
-      flex: 0 0 var(--results-pane-width, 360px);
-      min-width: 280px;
+      flex: 0 1 var(--results-pane-width, 360px);
+      min-width: 180px;
       max-width: 800px;
       min-height: 0;
       /* 结果列表与分页栏之间的呼吸空间 */
@@ -9668,8 +9677,8 @@ body.cortex-preview-fs .cortex-pdf-portal {
       background: var(--cortex-primary);
     }
     .focus-main .preview-pane-wrap {
-      flex: 0 0 var(--preview-pane-width, 420px);
-      min-width: 300px;
+      flex: 0 1 var(--preview-pane-width, 420px);
+      min-width: 180px;
       max-width: 900px;
       display: flex;
       flex-direction: column;
@@ -13801,14 +13810,18 @@ body.cortex-preview-fs .cortex-pdf-portal {
     .desktop-layout {
       flex: 1;
       display: grid;
+      /* 窄窗口收缩修复（2026-10-09）：两侧栏改 minmax(0, 恢复宽度)——
+         localStorage 恢复的固定 px 轨道在窗口变窄后超出容器宽会整轨溢出
+         （html/body overflow:hidden 直接裁掉、无滚动条）。改后空间充足取
+         恢复宽度，不足时按 grid 分配收缩，不再溢出。中间栏保留 300px
+         base 下限（与 MIDDLE_PANE_MIN 对齐）+ 1fr 吃剩余空间；
+         桌面布局仅 ≥1024px 显示，300px 下限必有空间。 */
       grid-template-columns:
-        var(--tree-pane-width, 240px)
+        minmax(0, var(--tree-pane-width, 240px))
         4px
-        /* 中间栏（file-list）硬性最小宽度：与 JS 拖动上限 MIDDLE_PANE_MIN(300) 对齐，
-           防止恢复的两侧栏宽在窄窗口把中间列压没 */
         minmax(300px, 1fr)
         4px
-        var(--preview-pane-width, 320px);
+        minmax(0, var(--preview-pane-width, 320px));
       min-height: 0;
       min-width: 0;
     }
@@ -15182,7 +15195,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
         max-width: calc(100vw - 16px);
       }
     }
-  `;lm([y({type:Boolean,reflect:!0})],_n.prototype,"open",2);_n=lm([V("watch-changes-dialog")],_n);var g5=Object.defineProperty,b5=Object.getOwnPropertyDescriptor,Zn=(e,t,r,i)=>{for(var s=i>1?void 0:i?b5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&g5(t,r,s),s};let Zs=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 146e92a · 2026-10-09 12:15 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,a=o=>String(o).padStart(2,"0");return t>0?`${t}天 ${a(r)}:${a(i)}:${a(s)}`:`${a(r)}:${a(i)}:${a(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return d``;const e=this._runtime();return d`
+  `;lm([y({type:Boolean,reflect:!0})],_n.prototype,"open",2);_n=lm([V("watch-changes-dialog")],_n);var g5=Object.defineProperty,b5=Object.getOwnPropertyDescriptor,Zn=(e,t,r,i)=>{for(var s=i>1?void 0:i?b5(t,r):t,a=e.length-1,o;a>=0;a--)(o=e[a])&&(s=(i?o(t,r,s):o(s))||s);return i&&s&&g5(t,r,s),s};let Zs=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var a;return((a=r.find(o=>o.type===s))==null?void 0:a.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 6cf086a · 2026-10-09 15:15 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,a=o=>String(o).padStart(2,"0");return t>0?`${t}天 ${a(r)}:${a(i)}:${a(s)}`:`${a(r)}:${a(i)}:${a(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return d``;const e=this._runtime();return d`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -15226,7 +15239,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           ${(t=this._health)!=null&&t.dev?d`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"146e92a · 2026-10-09 12:15"}</span>
+            <span class="value">${"6cf086a · 2026-10-09 15:15"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>

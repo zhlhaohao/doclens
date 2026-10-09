@@ -78,6 +78,11 @@ export class PreviewPane extends LitElement {
       display: flex;
       flex-direction: column;
       flex: 1;
+      /* 窄窗口收缩（2026-10-09）：host 作为 flex 子项默认 min-width:auto
+         （= header 按钮组的 min-content，约 300px+），窄窗口下会顶住
+         不缩导致溢出。显式 min-width:0 允许被压到内容以下，配合内部
+         header 的 overflow 处理收纳按钮。 */
+      min-width: 0;
       min-height: 0;
       background: var(--cortex-card-bg);
       overflow: hidden;
@@ -102,6 +107,10 @@ export class PreviewPane extends LitElement {
     .header {
       display: flex;
       align-items: center;
+      /* 窄窗口收缩（2026-10-09）：按钮组多时允许换行收纳，不撑出
+         min-content 宽度顶住 host（配合 :host 的 min-width:0） */
+      flex-wrap: wrap;
+      row-gap: var(--cortex-space-1);
       gap: var(--cortex-space-2);
       font-size: var(--cortex-fs-base);
       color: var(--cortex-text);
