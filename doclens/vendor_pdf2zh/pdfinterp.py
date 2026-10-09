@@ -161,10 +161,13 @@ class PDFPageInterpreterEx(PDFPageInterpreter):
 
     ############################################################
     # 重载返回调用参数（SCN）
+    # pdfminer.six ≥ 20250506：scs/ncs 已从解释器属性移入 PDFGraphicState，
+    # 这里统一从 graphicstate 取（旧版解释器属性同步保持，兼容老版环境）
     def do_SCN(self) -> None:
         """Set color for stroking operations."""
-        if self.scs:
-            n = self.scs.ncomponents
+        scs = getattr(self, "scs", None) or self.graphicstate.scs
+        if scs:
+            n = scs.ncomponents
         else:
             if settings.STRICT:
                 raise PDFInterpreterError("No colorspace specified!")
@@ -175,8 +178,9 @@ class PDFPageInterpreterEx(PDFPageInterpreter):
 
     def do_scn(self) -> None:
         """Set color for nonstroking operations"""
-        if self.ncs:
-            n = self.ncs.ncomponents
+        ncs = getattr(self, "ncs", None) or self.graphicstate.ncs
+        if ncs:
+            n = ncs.ncomponents
         else:
             if settings.STRICT:
                 raise PDFInterpreterError("No colorspace specified!")
@@ -224,8 +228,11 @@ class PDFPageInterpreterEx(PDFPageInterpreter):
                 [xobj],
                 ctm=ctm,
             )
-            self.ncs = interpreter.ncs
-            self.scs = interpreter.scs
+            # pdfminer.six ≥ 20250506：scs/ncs 移入 graphicstate，解释器不再
+            # 持有这两个属性；仅老版环境才回拷（新版 hasattr 为 False）
+            if hasattr(interpreter, "scs"):
+                self.ncs = interpreter.ncs
+                self.scs = interpreter.scs
             try:  # 有的时候 form 字体加不上这里会烂掉
                 self.device.fontid = interpreter.fontid
                 self.device.fontmap = interpreter.fontmap
