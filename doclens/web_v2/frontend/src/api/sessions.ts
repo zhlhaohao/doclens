@@ -81,6 +81,15 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
 }
 
+/** 孪生复制（2026-10-10）：原会话保留，新会话继承全部条目继续干活。 */
+export async function duplicateSession(
+  sessionId: string,
+): Promise<CreateSessionResponse> {
+  return request<CreateSessionResponse>(`/api/sessions/${sessionId}/duplicate`, {
+    method: "POST",
+  });
+}
+
 /** 回退文件三态清单（ADR-0027，GET rewind/preview 的 files 字段）。 */
 export interface RewindFilesPlan {
   /** 将被恢复（覆盖现内容）的文件 */

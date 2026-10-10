@@ -106,6 +106,25 @@ export class HistoryItem extends LitElement {
     .copy-btn.copied {
       color: var(--cortex-primary);
     }
+    /* 孪生复制按钮（2026-10-10）：复制整个会话为孪生会话继续干活，原会话
+       保留；仅 chat 会话显示（search 历史只是关键词记录，无复制意义）。 */
+    .fork-btn {
+      background: transparent;
+      border: none;
+      padding: 2px;
+      margin-left: var(--cortex-space-1);
+      cursor: pointer;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      border-radius: var(--cortex-radius-sm);
+      flex-shrink: 0;
+      line-height: 0;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .fork-btn:hover {
+      color: var(--cortex-primary);
+      transform: scale(1.15);
+    }
   `;
 
   @property({ attribute: false }) session: Session | null = null;
@@ -152,6 +171,15 @@ export class HistoryItem extends LitElement {
     }
   };
 
+  /** 点击「孪生复制」：冒泡给宿主（chat-view）调 API 复制会话并进入孪生。 */
+  private _onFork() {
+    if (!this.session) return;
+    this.dispatchEvent(new CustomEvent("fork", {
+      detail: { session: this.session },
+      bubbles: true, composed: true,
+    }));
+  }
+
   render() {
     if (!this.session) return null;
     // search 历史只保留关键词（不再保存结果数量）；chat 仍显示消息数。
@@ -167,6 +195,14 @@ export class HistoryItem extends LitElement {
         ${this.session.title}
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>
+      ${this.session.type === "chat" ? html`
+        <button
+          class="fork-btn"
+          title="复制会话：创建孪生会话继续对话，原会话保留"
+          aria-label="复制会话"
+          @click=${this._onFork}>
+          <doclens-icon name="copy-plus"></doclens-icon>
+        </button>` : null}
       <button
         class="copy-btn ${this._copied ? "copied" : ""}"
         title=${this._copied ? "已复制" : "复制标题"}

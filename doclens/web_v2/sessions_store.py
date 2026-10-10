@@ -960,6 +960,57 @@ class SessionsStore:
             )
             return True
 
+    def duplicate(self, session_id: str) -> Optional[SessionSummary]:
+        """孪生复制（2026-10-10）：新 id 复制 sessions 行 + **全部**
+        session_items（含死段、compacted/rewound 边界、usage、skill_context、
+        raw_messages——回放/展示/压缩信息聚合与源逐字节一致，继续对话时跨轮
+        前缀缓存不被结构差异打断）。
+
+        - 新标题 = 源标题 + " (副本)"；starred 不继承（孪生默认可删，源仍受保护）；
+          mode/type/message_count 原样保留；
+        - created_at/updated_at 取当前时刻（孪生是新会话，历史列表按
+          updated_at 排序自然置顶）；
+        - rewind_snapshots 不复制（引用 .cortex/rewind/{源 id}/ 机器本地
+          文件备份，指向源目录即错）——孪生无历史快照可回退，属预期降级。
+        - 生成中的会话允许复制（末轮 raw_messages 可能未落库，可接受——
+          同导出端点的宽容口径，ADR-0038）。
+
+        会话不存在返回 None。
+        """
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        new_id = str(_ulid.new())
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT type, title, preview, mode, message_count
+                   FROM sessions WHERE id = ?""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                """INSERT INTO sessions
+                   (id, type, title, preview, mode, created_at, updated_at,
+                    message_count, starred)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+                (
+                    new_id, row["type"], f"{row['title']} (副本)", row["preview"],
+                    row["mode"], now_iso, now_iso, row["message_count"],
+                ),
+            )
+            conn.execute(
+                """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
+                   SELECT ?, seq, kind, payload, created_at
+                   FROM session_items WHERE session_id = ?""",
+                (new_id, session_id),
+            )
+        return SessionSummary(
+            id=new_id, type=SessionType(row["type"]),
+            title=f"{row['title']} (副本)", preview=row["preview"],
+            mode=row["mode"], created_at=now, updated_at=now,
+            message_count=row["message_count"], starred=False,
+        )
+
     def delete(self, session_id: str) -> bool:
         """删除单个会话；加星会话受保护（2026-09-17），拒绝删除并返回 False。"""
         with self._lock, self._conn() as conn:

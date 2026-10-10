@@ -324,6 +324,24 @@ async def rewind_session(session_id: str, req: SessionRewindRequest):
     }
 
 
+@router.post("/sessions/{session_id}/duplicate", response_model=SessionCreatedResponse)
+async def duplicate_session(session_id: str):
+    """孪生复制（2026-10-10）：原会话完整保留，新会话继承全部条目继续干活。
+
+    复制含死段与压缩/回退边界的全量 session_items（回放逐字节一致）；
+    标题加 "(副本)" 后缀，starred 不继承，rewind 快照不复制（引用源会话
+    的机器本地文件备份）。生成中允许复制（末轮 raw 可能未落库，与导出
+    同口径）。"""
+    store = _get_store()
+    summary = store.duplicate(session_id)
+    if summary is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    return SessionCreatedResponse(
+        id=summary.id, type=summary.type, title=summary.title,
+        preview=summary.preview, mode=summary.mode,
+    )
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     store = _get_store()

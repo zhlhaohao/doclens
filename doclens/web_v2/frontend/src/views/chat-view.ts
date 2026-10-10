@@ -8,7 +8,7 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, importSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, importSession, duplicateSession } from "../api/sessions";
 import { router } from "../router/router";
 import { fetchPreview } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
@@ -1282,6 +1282,25 @@ export class ChatView extends LitElement {
     this._loadSession(e.detail.session);
   }
 
+  /** 历史条目「复制会话」（2026-10-10）：调孪生复制 API → 刷新历史 →
+   *  直接进入孪生会话（复制即为了继续干活，避免再点一次）。失败 toast。 */
+  private async _onForkSession(e: CustomEvent<{ session: Session }>) {
+    const { session } = e.detail;
+    try {
+      const twin = await duplicateSession(session.id);
+      await this._loadHistory();
+      // 复用 Session 形态进入会话（starred/mode 已知，免一次 get）
+      this._loadSession({
+        id: twin.id, type: "chat", title: twin.title, preview: twin.preview,
+        updated_at: new Date().toISOString(),
+        message_count: session.message_count, mode: session.mode,
+      });
+      this._pushToast("已复制会话，原会话保留", "success", 2500);
+    } catch (err) {
+      this._pushToast(`复制会话失败：${(err as Error)?.message || err}`, "error", 5000);
+    }
+  }
+
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
     if (!saved) return;
@@ -1603,6 +1622,7 @@ export class ChatView extends LitElement {
             ?importable=${true}
             @select=${this._onHistorySelect}
             @toggle-star=${this._onToggleStar}
+            @fork=${this._onForkSession}
             @clear=${this._onClearHistory}
             @import=${this._onImportHistory}>
           </history-list>
