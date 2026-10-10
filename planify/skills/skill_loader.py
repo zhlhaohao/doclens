@@ -90,6 +90,7 @@ class SkillLoader:
         skills_dir: Path,
         disabled: Optional[Iterable[str]] = None,
         auto_refresh: bool = True,
+        logs_dir: Optional[Path] = None,
     ):
         """
         初始化并扫描技能目录
@@ -100,10 +101,14 @@ class SkillLoader:
             skills_dir: 技能根目录
             disabled: 停用技能名集合（可选，宿主注入；仅影响 descriptions()）
             auto_refresh: 是否启用惰性热重载（descriptions() 入口检测磁盘变化）
+            logs_dir: 应用日志目录（可选，宿主注入；仅用于 descriptions() 的
+                目录事实输出，框架自身不计算/不消费——日志路径是宿主数据，
+                机制保持中性，对齐 disabled 的注入哲学）
         """
         self.skills_dir = skills_dir
         self._disabled = frozenset(disabled or ())
         self._auto_refresh = auto_refresh
+        self._logs_dir = logs_dir
         self.skills: Dict[str, Dict[str, Any]] = {}
         self._file_to_name: Dict[Path, str] = {}
         self._signature: Dict[Path, Tuple[float, int]] = {}
@@ -272,6 +277,13 @@ class SkillLoader:
             "下一轮对话自动生效，无需重启）；回答「技能装在哪里 / 技能目录」"
             "一律以该路径为准，禁止将技能安装到其他工具的配置目录。"
         )
+        if self._logs_dir is not None:
+            dir_fact += (
+                f"\n\n应用日志目录（logs dir）：{self._logs_dir}\n"
+                "排障/查运行记录时读取该目录下的 debug_YYYYMMDD.log——文件名日期为"
+                "应用启动日而非当前日（跨天常驻进程会继续写启动日文件），不确定时"
+                "按修改时间取最新者；回答「日志在哪里」一律以该路径为准。"
+            )
         return ("\n".join(lines) + "\n\n" if lines else "") + dir_fact
 
     def load(self, name: str) -> str:

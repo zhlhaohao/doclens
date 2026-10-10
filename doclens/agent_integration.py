@@ -229,7 +229,9 @@ class CortexAgent:
         from doclens import skills_config
 
         deploy_builtin_skills(skills_dir)
-        skills = SkillLoader(skills_dir)
+        # 注入应用日志目录（宿主数据，planify 不自行计算）——系统提示词的
+        # 目录事实紧随技能根目录输出，供 agent 排障时直接定位当日日志。
+        skills = SkillLoader(skills_dir, logs_dir=logs_dir)
         skills.set_disabled(skills_config.disabled_names(skills.skills.keys()))
 
         # 技能加载状态（按 session_id 记录），供工具门禁 + load_skill 标记 + 跨轮 body 重注入使用
