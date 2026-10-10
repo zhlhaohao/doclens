@@ -171,8 +171,11 @@ export class HistoryItem extends LitElement {
     }
   };
 
-  /** 点击「孪生复制」：冒泡给宿主（chat-view）调 API 复制会话并进入孪生。 */
-  private _onFork() {
+  /** 点击「孪生复制」：冒泡给宿主（chat-view）调 API 复制会话并进入孪生。
+   *  stopPropagation：行级 _select 也在监听 click，不拦会先跳进源会话
+   *  （focus 分支不渲染确认框，表现为「返回后才见到确认框」）。 */
+  private _onFork(e: Event) {
+    e.stopPropagation();
     if (!this.session) return;
     this.dispatchEvent(new CustomEvent("fork", {
       detail: { session: this.session },
