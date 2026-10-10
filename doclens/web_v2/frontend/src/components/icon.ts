@@ -73,6 +73,8 @@ import moonIcon from "lucide-static/icons/moon.svg?raw";
 import minimize2Icon from "lucide-static/icons/minimize-2.svg?raw";
 import languagesIcon from "lucide-static/icons/languages.svg?raw";
 import copyPlusIcon from "lucide-static/icons/copy-plus.svg?raw";
+import circleCheckIcon from "lucide-static/icons/circle-check.svg?raw";
+import circleXIcon from "lucide-static/icons/circle-x.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -135,6 +137,8 @@ const ICONS: Record<string, string> = {
   "minimize-2": minimize2Icon,
   language: languagesIcon,
   "copy-plus": copyPlusIcon,
+  "circle-check": circleCheckIcon,
+  "circle-x": circleXIcon,
 };
 
 @customElement("doclens-icon")

@@ -532,3 +532,137 @@ class TestAutoCompact:
         # None → 下限兜底
         auto_compact(msgs, provider, tmp_path / "t3")
         assert provider.captured["max_tokens"] == _SUMMARY_MAX_TOKENS_FLOOR
+
+
+class TestVerbatimSkeleton:
+    """逐字骨架（ADR-0040）：摘要对 + 骨架对、末轮完整问答对、
+    20K 兜底旧截新保、多轮压缩累积。"""
+
+    def test_skeleton_pair_appended(self, tmp_path):
+        """压缩产物 = 摘要对（2 条）+ 骨架对（2 条）；问题与末轮回答逐字在骨架。"""
+        from planify.context.compact import SKELETON_MARKER, auto_compact
+
+        msgs = [
+            {"role": "user", "content": "查一下鲁迅的《朝花夕拾》出版年份"},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "t1", "name": "search", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "命中"},
+            ]},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "《朝花夕拾》1928 年由未名社出版。"},
+            ]},
+            {"role": "user", "content": "作者原名叫什么？"},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "周树人，1881 年生。"},
+            ]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        assert len(out) == 4
+        assert "对话摘要" in out[0]["content"]          # 摘要对
+        assert out[1]["role"] == "assistant"
+        assert out[2]["role"] == "user"
+        assert out[2]["content"].startswith(SKELETON_MARKER)
+        # 两个用户问题逐字进骨架
+        assert "查一下鲁迅的《朝花夕拾》出版年份" in out[2]["content"]
+        assert "作者原名叫什么？" in out[2]["content"]
+        # 末轮完整对（最后一个 user 问 → assistant 纯 text 答）的原文在骨架
+        assert "周树人，1881 年生。" in out[2]["content"]
+        # 非末轮的 AI 回答不进骨架（该例中中间回答是 tool_use，无 text）
+        assert out[3]["role"] == "assistant"
+
+    def test_no_complete_pair_no_answer(self, tmp_path):
+        """工具循环中途压缩（末尾是 tool_result）→ 无完整对，骨架只含问题。"""
+        from planify.context.compact import SKELETON_MARKER, auto_compact
+
+        msgs = [
+            {"role": "user", "content": "问题一"},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "我查一下"},
+                {"type": "tool_use", "id": "t1", "name": "search", "input": {}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "结果"},
+            ]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        assert len(out) == 4
+        skel = out[2]["content"]
+        assert skel.startswith(SKELETON_MARKER)
+        assert "问题一" in skel
+        assert "我查一下" not in skel          # 中间插话不保
+        assert "最后一轮 AI 回答原文" not in skel  # 无末轮回答节
+
+    def test_injected_pairs_excluded_from_skeleton(self, tmp_path):
+        """<system-reminder> 注入对的问题不进骨架（与摘要输入同口径）。"""
+        from planify.context.compact import auto_compact
+
+        msgs = [
+            {"role": "user", "content": "<system-reminder>\nskills 清单\n</system-reminder>"},
+            {"role": "assistant", "content": "Noted."},
+            {"role": "user", "content": "真问题"},
+            {"role": "assistant", "content": [{"type": "text", "text": "真回答"}]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        skel = out[2]["content"]
+        assert "真问题" in skel
+        assert "<system-reminder>" not in skel
+        assert "skills 清单" not in skel
+
+    def test_budget_drops_oldest_questions(self, tmp_path):
+        """超 20K 预算 → 最旧问题被丢（旧截新保），最新问题保留。"""
+        from planify.context.compact import (
+            SKELETON_TOKEN_BUDGET, _render_skeleton,
+        )
+
+        # 构造：旧问题超长（每条 ~8K tokens ASCII）×3 + 新问题短
+        old_q1 = "a" * 32_000   # ≈8K tokens
+        old_q2 = "b" * 32_000
+        old_q3 = "c" * 32_000
+        new_q = "新问题"
+        out = _render_skeleton([old_q1, old_q2, old_q3, new_q], "回答")
+        content = out[0]["content"]
+        assert new_q in content               # 最新保住
+        assert "c" * 100 in content           # old_q3（较新）保住
+        assert "a" * 100 not in content       # old_q1（最旧）被丢
+        assert "最早" in content and "问题超预算被省略" in content
+
+    def test_skeleton_accumulates_across_compactions(self, tmp_path):
+        """二次压缩：旧骨架的问题原文被搬运累积，不随压缩递减。"""
+        from planify.context.compact import auto_compact
+
+        first = [
+            {"role": "user", "content": "早期问题：项目代号是什么？"},
+            {"role": "assistant", "content": [{"type": "text", "text": "代号 Aurora。"}]},
+        ]
+        out1 = auto_compact(first, _FakeProvider(), tmp_path / "t1")
+        assert len(out1) == 4
+
+        # 第二次压缩：历史 = 骨架对₁ + 新对话
+        second = [
+            *out1,
+            {"role": "user", "content": "后续问题：上线日期？"},
+            {"role": "assistant", "content": [{"type": "text", "text": "2027-03。"}]},
+        ]
+        out2 = auto_compact(second, _FakeProvider(), tmp_path / "t2")
+        skel2 = out2[2]["content"]
+        # 早期问题原文仍在（跨边界累积）+ 新问题也在
+        assert "早期问题：项目代号是什么？" in skel2
+        assert "后续问题：上线日期？" in skel2
+        # 末轮回答 = 第二次的（2027-03），不是第一次的
+        assert "2027-03" in skel2
+        # 骨架对只出现一次（旧骨架被吸收为新骨架，不嵌套）
+        assert out2[2]["content"].count("[Verbatim Q&A skeleton]") == 1
+
+    def test_empty_skeleton_degrades_to_summary_pair(self, tmp_path):
+        """无问题无回答（纯注入对历史）→ 骨架对省略，行为同旧版。"""
+        from planify.context.compact import auto_compact
+
+        msgs = [
+            {"role": "user", "content": "<system-reminder>\nx\n</system-reminder>"},
+            {"role": "assistant", "content": "Noted."},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        assert len(out) == 2                   # 纯摘要对
+        assert "对话摘要" in out[0]["content"]

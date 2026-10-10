@@ -28,8 +28,12 @@ export class FileRow extends LitElement {
     .checkbox { display: flex; align-items: center; justify-content: center; }
     .checkbox input { accent-color: var(--cortex-primary); }
     .cell-icon { font-size: 16px; }
+    /* 名称列可换行（用户决议 2026-10-10）：长文件名在列宽内折行完整展示，
+       替代原 nowrap+ellipsis 截断；anywhere 兜底无空格长串（CJK/连字符名） */
     .name {
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      min-width: 0;
       color: var(--cortex-text); font-size: var(--cortex-fs-sm);
     }
     /* 未索引文件：名称用 subtle 灰色区别（替代原"已索引"列徽标） */

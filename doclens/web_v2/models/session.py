@@ -21,8 +21,8 @@ class SessionAppendRequest(BaseModel):
 
 
 class SessionRenameRequest(BaseModel):
-    """人工改名。处理规则在端点内：strip 后为空 → 400；超 60 字符截断
-    （与 chat-view 创建时的 slice(0, 60) 语义对齐，故此处不设 max_length）。"""
+    """人工改名。处理规则在端点内：strip 后为空 → 400；超 200 字符截断
+    （与 chat-view 创建时的 slice(0, 200) 语义对齐，故此处不设 max_length）。"""
     title: str = Field(min_length=1)
 
 

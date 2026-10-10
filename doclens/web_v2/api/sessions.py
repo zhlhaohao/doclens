@@ -156,13 +156,13 @@ async def append_session(session_id: str, req: SessionAppendRequest):
 
 @router.patch("/sessions/{session_id}/title")
 async def rename_session(session_id: str, req: SessionRenameRequest):
-    """人工改名（2026-09-17）。strip 后为空 → 400；超 60 字符截断
-    （与 chat-view 创建时的 slice(0, 60) 对齐）；不刷新 updated_at。"""
+    """人工改名（2026-09-17）。strip 后为空 → 400；超 200 字符截断
+    （与 chat-view 创建时的 slice(0, 200) 对齐）；不刷新 updated_at。"""
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    title = req.title.strip()[:60]
+    title = req.title.strip()[:200]
     if not title:
         raise CortexAPIError(400, "TITLE_EMPTY", "标题不能为空")
     store.update_title(session_id, title)

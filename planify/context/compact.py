@@ -4,14 +4,15 @@
 
 1. 微压缩
    - 在每次循环开始时自动执行
-   - 清理旧的工具结果内容，只保留最近 3 个
+   - 清理旧的工具结果内容，只保留最近 10 个
    - 清理的内容被替换为 "[cleared]"
 
 2. 自动压缩
    - 当估算的 token 数超过阈值时触发
    - 使用 LLM 生成对话摘要
    - 将原始对话保存到 .transcripts/ 目录
-   - 用摘要替换整个对话历史
+   - 用「摘要对 + 逐字骨架对」替换整个对话历史（ADR-0040：
+     摘要管叙事，骨架管 Q&A 原文细节保真）
 
 关键洞察："可以无限期继续 —— 只需要偶尔压缩上下文。"
 """
@@ -216,6 +217,8 @@ def summary_input_budget(
 # 结构化摘要 system prompt（借鉴 Claude Code compact 的分节式）：接收方
 # 只有这份摘要、看不到原文，分节强制覆盖任务状态的关键面；第 6 节
 # （最近工作详情）最重要——下一轮对话直接接着这里继续。
+# ADR-0040：用户问题原文与末轮回答已在骨架对中逐字保留，摘要不重复
+# 转述原话（第 1/4 节给要点即可）——两通道责任分离。
 _SUMMARY_SYSTEM = (
     "你是对话摘要助手。把对话转录整理为「续接摘要」，供同一会话的下一"
     "阶段直接继续工作——接收方只有这份摘要、看不到原文。用 Markdown "
@@ -226,7 +229,9 @@ _SUMMARY_SYSTEM = (
     "4. 重要约束：用户明确要求遵守的规则\n"
     "5. 未完成事项：待办/待验证/遗留问题\n"
     "6. 最近工作详情：转录**末尾**若干轮的逐轮记录（做了什么、看到了"
-    "什么结果、下一步是什么）——本节最重要，宁长勿短"
+    "什么结果、下一步是什么）——本节最重要，宁长勿短\n"
+    "注意：用户问题与回答的原文已另行逐字保留（骨架），摘要中不要"
+    "大段复述原话，概括要点即可。"
 )
 
 # 摘要输出上限下限（2026-09-18 起随配置放大：实际取
@@ -236,6 +241,150 @@ _SUMMARY_SYSTEM = (
 # 实测安全下限；大输出模型（PLANIFY_MAX_TOKENS 配 131072 等）跟随配置
 # 放开，摘要正文可写得更长。
 _SUMMARY_MAX_TOKENS_FLOOR = 10_000
+
+# === 逐字骨架（ADR-0040，2026-10-10）===
+#
+# 压缩产物从「摘要对」扩为「摘要对 + 骨架对」：摘要负责叙事（工具
+# 交互转述），骨架负责原文（细节保真——人名/年代/原话措辞经摘要转写
+# 易损耗）。骨架内容：
+# - 用户问题全量逐字（role=user 纯文本，剔除 <system-reminder> 注入对）；
+# - AI 回答仅末轮「完整问答对」（user 纯文本问 → assistant 纯 text 答、
+#   无未闭合工具交互）的 text 逐字；找不到完整对则不保 AI 回答。
+# 兜底：骨架总预算 20K tokens，超限从最旧问题开始丢弃（旧截新保——
+# 新问题对续接更相关）。
+# 多轮压缩累积：二次压缩时识别历史里的旧骨架对（按下方标记前缀），
+# 原样搬运问题原文再叠加新问题。
+
+# 骨架 user 消息开头标记：多轮压缩识别旧骨架、搬运累积（ADR-0040 §4）
+SKELETON_MARKER = "[Verbatim Q&A skeleton]"
+
+# 骨架总 token 预算（estimate_tokens 同口径估算；旧截新保）
+SKELETON_TOKEN_BUDGET = 20_000
+
+
+def _is_plain_user_text(msg: dict) -> bool:
+    """用户纯文本问题：role=user 且 content 为 str。"""
+    return (
+        msg.get("role") == "user"
+        and isinstance(msg.get("content"), str)
+        and not (
+            msg["content"].lstrip().startswith("<system-reminder>")
+            and "</system-reminder>" in msg["content"]
+        )
+    )
+
+
+def _assistant_text(msg: dict) -> str:
+    """assistant 消息的纯 text 正文（无 tool_use/thinking 等其它块才返回
+    非空——混合块消息不算「纯 text 答」，见 _find_last_complete_pair）。"""
+    c = msg.get("content")
+    if msg.get("role") != "assistant" or not isinstance(c, list):
+        return ""
+    blocks = [b for b in c if isinstance(b, dict)]
+    if not blocks or any(b.get("type") != "text" for b in blocks):
+        return ""
+    text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+    return text.strip()
+
+
+def _find_last_complete_pair(messages: list) -> tuple:
+    """末轮完整问答对（ADR-0040 §2）：从尾往前找最近的
+    (user 纯文本问, assistant 纯 text 答) 相邻对——中间无未闭合工具
+    交互（工具流中途触发的压缩找不到完整对，返回 (None, None)）。
+
+    判定「无未闭合工具交互」= 扫描从该 assistant 起到列表末尾的区间
+    不含任何 tool_use/tool_result（完整对之后还有工具流则继续往前找）。
+    """
+    n = len(messages)
+    for i in range(n - 2, -1, -1):
+        q = messages[i]
+        if not _is_plain_user_text(q):
+            continue
+        a = messages[i + 1]
+        text = _assistant_text(a)
+        if not text:
+            continue
+        # 候选对之后到末尾必须无工具交互（否则末尾处于工具流中途）
+        trailing = messages[i + 2:]
+        if any(
+            isinstance(m.get("content"), list)
+            and any(
+                isinstance(b, dict) and b.get("type") in ("tool_use", "tool_result")
+                for b in m["content"]
+            )
+            for m in trailing
+        ):
+            continue
+        return q["content"], text
+    return None, None
+
+
+def _extract_skeleton_questions(messages: list) -> List[str]:
+    """从待压缩历史提取用户问题原文清单（含旧骨架累积）。
+
+    - 旧骨架对（以 SKELETON_MARKER 开头的 user 消息）：解析其问题清单
+      原样搬运（多轮压缩累积，ADR-0040 §4）；
+    - 其余历史：_is_plain_user_text 逐条收原文。
+    """
+    questions: List[str] = []
+    carried = set()  # 旧骨架已搬运的问题（去重，防止与新收重复）
+    for m in messages:
+        c = m.get("content")
+        if not (m.get("role") == "user" and isinstance(c, str)):
+            continue
+        if c.startswith(SKELETON_MARKER):
+            # 旧骨架：搬运其问题原文（沿用 _render_skeleton 的清单格式）
+            for line in c.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("- "):
+                    carried.add(stripped[2:])
+            continue
+        if _is_plain_user_text(m):
+            questions.append(c)
+    # 旧骨架问题排前（更旧）、新问题排后——与时间序一致，兜底截断从头部丢
+    new_questions = [q for q in questions if q not in carried]
+    # carried 保持旧骨架内原顺序（dict 有序，Python 3.7+）
+    return list(carried) + new_questions
+
+
+def _render_skeleton(questions: List[str], last_answer: Optional[str]) -> List[Dict]:
+    """骨架对消息（ADR-0040 §1）：问题清单 + 末轮回答，20K 兜底旧截新保。
+
+    Returns:
+        两条消息（user 骨架 + assistant 确认）；问题与回答全空时返回
+        空列表（退化为纯摘要对——空骨架对无信息量，白占确认消息）。
+    """
+    # 兜底（旧截新保）：从最旧的问题开始连续丢弃，直到剩余（含末轮回答）
+    # 进预算——末轮回答优先保住（它是唯一的 AI 原文，比任何旧问题价值高）
+    answer = last_answer or ""
+    answer_est = _estimate_text_tokens(answer)
+    ests = [_estimate_text_tokens(q) for q in questions]
+    # suffix[i] = sum(ests[i:])；找最小 i 使 suffix[i] + answer_est ≤ 预算
+    suffix = [0] * (len(ests) + 1)
+    for i in range(len(ests) - 1, -1, -1):
+        suffix[i] = suffix[i + 1] + ests[i]
+    budget = SKELETON_TOKEN_BUDGET - answer_est
+    i = 0
+    while i < len(questions) and suffix[i] > budget:
+        i += 1
+    dropped = i
+    kept = questions[i:]
+    if not kept and not answer:
+        return []
+    lines = [SKELETON_MARKER]
+    if dropped:
+        lines.append(f"（最早 {dropped} 条问题超预算被省略）")
+    lines.append("用户历史问题原文（逐字，无转写）：")
+    for q in kept:
+        lines.append(f"- {q}")
+    if answer:
+        lines.append("")
+        lines.append("最后一轮 AI 回答原文（逐字）：")
+        lines.append(answer)
+    return [
+        {"role": "user", "content": "\n".join(lines)},
+        {"role": "assistant", "content": "Noted. Verbatim history retained."},
+    ]
 
 
 def _clip(s: str, limit: int) -> str:
@@ -465,7 +614,11 @@ def _prepare_compaction(
 
 
 def _compacted_messages(path: Path, summary: str) -> list:
-    """摘要 → 压缩后的替换消息（同步/异步版共用）。"""
+    """摘要 → 压缩后的替换消息（同步/异步版共用）。
+
+    ADR-0040：摘要对 + 骨架对（骨架见 _render_skeleton；空骨架退化为
+    纯摘要对，行为与旧版一致）。
+    """
     return [
         {"role": "user", "content": f"[Compressed. Transcript: {path}]\n{summary}"},
         {"role": "assistant", "content": "Understood. Continuing with summary context."},
@@ -499,7 +652,7 @@ def auto_compact(
             大输出模型跟随 PLANIFY_MAX_TOKENS 放开，见 summary_output_cap）
 
     Returns:
-        新消息列表，包含摘要和确认消息
+        新消息列表：摘要对 + 骨架对（ADR-0040；空骨架退化为纯摘要对）
     """
     path, summary_messages, summary_system = _prepare_compaction(
         messages, transcript_dir, summary_input_budget
@@ -514,7 +667,11 @@ def auto_compact(
     )
 
     summary = _extract_summary(response)
-    return _compacted_messages(path, summary)
+    skeleton = _render_skeleton(
+        _extract_skeleton_questions(messages),
+        _find_last_complete_pair(messages)[1],
+    )
+    return _compacted_messages(path, summary) + skeleton
 
 
 async def aauto_compact(
@@ -545,7 +702,11 @@ async def aauto_compact(
     )
 
     summary = _extract_summary(response)
-    return _compacted_messages(path, summary)
+    skeleton = _render_skeleton(
+        _extract_skeleton_questions(messages),
+        _find_last_complete_pair(messages)[1],
+    )
+    return _compacted_messages(path, summary) + skeleton
 
 
 def _extract_summary(response) -> str:

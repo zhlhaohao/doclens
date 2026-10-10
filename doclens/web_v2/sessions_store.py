@@ -988,13 +988,14 @@ class SessionsStore:
             ).fetchone()
             if row is None:
                 return None
+            copy_title = f"{row['title']} (副本)"[:200]  # 截断到与创建/改名一致的 200 上限
             conn.execute(
                 """INSERT INTO sessions
                    (id, type, title, preview, mode, created_at, updated_at,
                     message_count, starred)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
                 (
-                    new_id, row["type"], f"{row['title']} (副本)", row["preview"],
+                    new_id, row["type"], copy_title, row["preview"],
                     row["mode"], now_iso, now_iso, row["message_count"],
                 ),
             )
@@ -1006,7 +1007,7 @@ class SessionsStore:
             )
         return SessionSummary(
             id=new_id, type=SessionType(row["type"]),
-            title=f"{row['title']} (副本)", preview=row["preview"],
+            title=copy_title, preview=row["preview"],
             mode=row["mode"], created_at=now, updated_at=now,
             message_count=row["message_count"], starred=False,
         )

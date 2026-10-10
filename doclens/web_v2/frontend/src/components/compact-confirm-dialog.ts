@@ -1,9 +1,19 @@
-import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property } from "lit/decorators.js";
+import { formatTokens } from "../utils/format";
 
-/** 压缩上下文确认框（ADR-0026 手动压缩入口的用户确认步骤）。
- *  说明压缩语义（摘要替换上下文、展示不变、耗时数十秒）；确认冒泡
- *  compact-confirm，取消/ESC 冒泡 cancel；执行由 chat-view 负责。 */
+/** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
+ *  三态复用同一个 <dialog> 宿主（chat-view 渲染），确认后不关框——压缩
+ *  期间以模态 spinner 停留（top-layer 天然禁止操作底层页面），完成后在
+ *  框内展示压缩效果（pre → post tokens）。
+ *
+ *  phase:
+ *   - confirm：说明压缩语义（摘要替换上下文、展示不变、耗时数十秒）；
+ *     确认冒泡 compact-confirm，取消/ESC 冒泡 cancel。
+ *   - running：压缩进行中。不可取消/ESC（对话框宿主拦截 cancel）。
+ *   - done：压缩完成，展示 token 缩减效果；「完成」冒泡 cancel 关框。
+ *   - error：压缩失败，展示错误信息；「关闭」冒泡 cancel 关框。
+ */
 @customElement("compact-confirm-dialog")
 export class CompactConfirmDialog extends LitElement {
   static styles = css`
@@ -16,6 +26,11 @@ export class CompactConfirmDialog extends LitElement {
     h2 {
       font-size: var(--cortex-fs-lg);
       margin: 0 0 var(--cortex-space-4);
+    }
+    h2.with-icon {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-3);
     }
     p {
       margin: 0 0 var(--cortex-space-3);
@@ -58,12 +73,69 @@ export class CompactConfirmDialog extends LitElement {
       border: none;
     }
     button.primary:hover { opacity: 0.9; }
+
+    /* —— running 态 —— */
+    .running {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--cortex-space-4);
+      padding: var(--cortex-space-6) 0;
+      text-align: center;
+    }
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: compact-spin 0.8s linear infinite;
+    }
+    @keyframes compact-spin { to { transform: rotate(360deg); } }
+
+    /* —— done 态效果展示 —— */
+    .result {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--cortex-space-4);
+      background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-sm);
+      padding: var(--cortex-space-4) var(--cortex-space-5);
+      margin-bottom: var(--cortex-space-4);
+    }
+    .result .tokens {
+      font-size: var(--cortex-fs-xl);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .result .arrow { color: var(--cortex-text-muted); }
+    .result .saved {
+      margin-left: auto;
+      color: var(--cortex-btn-primary-bg);
+      font-size: var(--cortex-fs-sm);
+      white-space: nowrap;
+    }
+    .error-text {
+      color: #c0392b;
+      word-break: break-all;
+    }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
       .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
+      .result { flex-wrap: wrap; }
     }
   `;
+
+  /** 当前阶段：confirm（确认）/ running（压缩中）/ done（完成）/ error（失败）。 */
+  @property({ attribute: false }) phase: "confirm" | "running" | "done" | "error" = "confirm";
+  /** done：压缩前 tokens（body.pre_tokens）。 */
+  @property({ type: Number }) preTokens = 0;
+  /** done：压缩后 tokens（body.post_tokens）。 */
+  @property({ type: Number }) postTokens = 0;
+  /** error：错误信息。 */
+  @property({ type: String }) errorMessage = "";
 
   private _onConfirm = (): void => {
     this.dispatchEvent(new CustomEvent("compact-confirm", {
@@ -75,7 +147,26 @@ export class CompactConfirmDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("cancel", { bubbles: true, composed: true }));
   };
 
+  /** 压缩缩减百分比（pre>0 且有实际缩减才显示）。 */
+  private get _savedPercent(): number | null {
+    if (this.preTokens <= 0 || this.postTokens >= this.preTokens) return null;
+    return Math.round((1 - this.postTokens / this.preTokens) * 100);
+  }
+
   render() {
+    switch (this.phase) {
+      case "running":
+        return this._renderRunning();
+      case "done":
+        return this._renderDone();
+      case "error":
+        return this._renderError();
+      default:
+        return this._renderConfirm();
+    }
+  }
+
+  private _renderConfirm() {
     return html`
       <h2>压缩上下文</h2>
       <p>AI 将把当前会话历史总结为一份摘要，之后的对话基于摘要继续，可显著降低上下文占用。</p>
@@ -86,6 +177,50 @@ export class CompactConfirmDialog extends LitElement {
       <div class="buttons">
         <button type="button" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" @click=${this._onConfirm}>确认压缩</button>
+      </div>
+    `;
+  }
+
+  private _renderRunning() {
+    return html`
+      <div class="running">
+        <div class="spinner" role="status" aria-label="正在压缩"></div>
+        <div>
+          <h2 style="margin: 0 0 var(--cortex-space-2); text-align: center;">正在压缩会话历史…</h2>
+          <p class="muted" style="margin: 0;">AI 正在总结会话内容，约需几十秒，请勿关闭页面。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderDone() {
+    const saved = this._savedPercent;
+    return html`
+      <h2 class="with-icon">
+        <doclens-icon name="circle-check"></doclens-icon>压缩完成
+      </h2>
+      <div class="result">
+        <span class="tokens">${formatTokens(this.preTokens)}</span>
+        <span class="arrow">→</span>
+        <span class="tokens">${formatTokens(this.postTokens)}</span>
+        ${saved !== null ? html`<span class="saved">节省 ${saved}%</span>` : nothing}
+      </div>
+      <p class="muted">上下文已替换为摘要；聊天记录展示不变，后续对话基于摘要继续。</p>
+      <div class="buttons">
+        <button class="primary" type="button" @click=${this._onCancel}>完成</button>
+      </div>
+    `;
+  }
+
+  private _renderError() {
+    return html`
+      <h2 class="with-icon">
+        <doclens-icon name="circle-x"></doclens-icon>压缩失败
+      </h2>
+      <p class="error-text">${this.errorMessage || "未知错误"}</p>
+      <p class="muted">会话历史未被修改，可稍后重试。</p>
+      <div class="buttons">
+        <button class="primary" type="button" @click=${this._onCancel}>关闭</button>
       </div>
     `;
   }

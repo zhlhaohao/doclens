@@ -454,14 +454,16 @@ class StreamingAgent:
                             consecutive_poll_rounds, delay,
                         )
                         if self._interrupt_event is not None:
-                            try:
-                                await asyncio.wait_for(
-                                    self._interrupt_event.wait(),
-                                    timeout=delay,
-                                )
-                                # interrupt 已置位 → 走下方中断检查点退出
-                            except asyncio.TimeoutError:
-                                pass  # 正常等到退避时间，继续本轮
+                            # threading.Event.wait() 是同步阻塞调用，禁止在
+                            # 参数位求值传给 wait_for——参数先于调用求值，事
+                            # 件循环线程在 wait_for 生效前就被无限期阻塞
+                            # （2026-10-10 GUI 全无响应 + 轮次不落库根因）。
+                            # 丢进线程池并自带 timeout：interrupt 置位立即返回
+                            # True（走下方中断检查点退出）；到时返回 False；
+                            # 线程最多挂 delay 秒自行回收，不泄漏。
+                            await asyncio.get_running_loop().run_in_executor(
+                                None, self._interrupt_event.wait, delay
+                            )
                         else:
                             await asyncio.sleep(delay)
 

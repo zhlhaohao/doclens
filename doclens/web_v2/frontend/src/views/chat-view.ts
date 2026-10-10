@@ -19,7 +19,6 @@ import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
 import type { ChatStream } from "../components/chat-stream";
-import { formatTokens } from "../utils/format";
 // 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
 export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
@@ -511,8 +510,15 @@ export class ChatView extends LitElement {
   /** 孪生复制确认框待复制的源会话（null = 关闭）；确认后执行复制。 */
   @state() private _forkDialogSession: Session | null = null;
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
-  /** 压缩上下文确认框开关（more 菜单「压缩上下文」→ 确认后才执行） */
-  @state() private _compactDialogOpen = false;
+  /** 压缩上下文模态框（more 菜单「压缩上下文」）：单框三态——确认 →
+   *  压缩中（模态 spinner，禁止操作页面）→ 完成/失败（框内展示效果）。
+   *  null = 关闭。 */
+  @state() private _compactDialog: {
+    phase: "confirm" | "running" | "done" | "error";
+    preTokens: number;
+    postTokens: number;
+    errorMessage: string;
+  } | null = null;
   /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
   private _compacting = false;
   /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
@@ -639,7 +645,11 @@ export class ChatView extends LitElement {
         label: "压缩上下文",
         icon: "archive",
         // 先弹确认框（压缩不可逆替换上下文 + 摘要调用耗时数十秒）
-        onClick: () => { this._compactDialogOpen = true; },
+        onClick: () => {
+          this._compactDialog = {
+            phase: "confirm", preTokens: 0, postTokens: 0, errorMessage: "",
+          };
+        },
       },
       {
         label: "导出会话",
@@ -660,34 +670,43 @@ export class ChatView extends LitElement {
   }
 
   /** 手动压缩当前会话历史（ADR-0026 手动入口）：LLM 摘要落库 compacted
-   *  条目，下轮起上下文从摘要开始；对话流展示不受影响。 */
+   *  条目，下轮起上下文从摘要开始；对话流展示不受影响。压缩期间模态框
+   *  保持打开（running 态）锁定页面交互，完成/失败切换框内结果展示。 */
   private async _compactSession() {
     const session = this.viewState.currentSession;
     if (!session || this._compacting) return;
     this._compacting = true;
-    this._pushToast("正在压缩会话历史…", "info", 60000);
+    this._compactDialog = {
+      phase: "running", preTokens: 0, postTokens: 0, errorMessage: "",
+    };
     try {
       const body = await compactSession(session.id);
-      this._pushToast(
-        `已压缩（约 ${formatTokens(body.pre_tokens ?? 0)} → ${formatTokens(body.post_tokens ?? 0)} tokens）`,
-        "success", 4000,
-      );
+      this._compactDialog = {
+        phase: "done",
+        preTokens: body.pre_tokens ?? 0,
+        postTokens: body.post_tokens ?? 0,
+        errorMessage: "",
+      };
       void this._refreshCompaction();
     } catch (err) {
-      this._pushToast(`压缩失败：${(err as Error)?.message || err}`, "error", 5000);
+      this._compactDialog = {
+        phase: "error", preTokens: 0, postTokens: 0,
+        errorMessage: (err as Error)?.message || String(err),
+      };
     } finally {
       this._compacting = false;
     }
   }
 
-  /** 确认压缩：关框后执行（_compactSession 自带防重入与结果 toast）。 */
+  /** 确认压缩：切换模态框为 running 态后执行（_compactSession 自带防重入）。 */
   private _onCompactConfirm = (): void => {
-    this._compactDialogOpen = false;
     void this._compactSession();
   };
 
   private _onCompactCancel = (): void => {
-    this._compactDialogOpen = false;
+    // running 态不允许关闭（拦截 ESC/backdrop；模态 spinner 必须停留到出结果）
+    if (this._compactDialog?.phase === "running") return;
+    this._compactDialog = null;
   };
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
@@ -1062,14 +1081,14 @@ export class ChatView extends LitElement {
     title: string, message: string, mode?: "skill",
     images?: { data: string; media_type: string }[],
   ): Promise<void> {
-    const created = await createSession({ type: "chat", title: title.slice(0, 60), preview: message.slice(0, 100), mode });
+    const created = await createSession({ type: "chat", title: title.slice(0, 200), preview: message.slice(0, 100), mode });
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
     this._rewindDialog = null;
     actions.setChatState({
       state: "focus",
       currentSession: {
-        id: created.id, type: "chat", title: title.slice(0, 60),
+        id: created.id, type: "chat", title: title.slice(0, 200),
         preview: message.slice(0, 100), mode, updated_at: new Date().toISOString(),
         message_count: 0,
       },
@@ -1466,12 +1485,22 @@ export class ChatView extends LitElement {
       </dialog>`;
   }
 
-  /** 压缩上下文确认框宿主（<dialog> 由 updated() showModal）。 */
+  /** 压缩上下文模态框宿主（<dialog> 由 updated() showModal）。running 态
+   *  拦截 cancel（ESC/无法点 backdrop——dialog 默认无 backdrop 点击关闭），
+   *  保证压缩期间模态锁定页面。 */
   private _renderCompactDialog() {
-    if (!this._compactDialogOpen) return nothing;
+    const d = this._compactDialog;
+    if (!d) return nothing;
     return html`
-      <dialog @cancel=${this._onCompactCancel}>
+      <dialog @cancel=${(e: Event) => {
+        if (d.phase === "running") e.preventDefault();
+        else this._onCompactCancel();
+      }}>
         <compact-confirm-dialog
+          .phase=${d.phase}
+          .preTokens=${d.preTokens}
+          .postTokens=${d.postTokens}
+          .errorMessage=${d.errorMessage}
           @compact-confirm=${this._onCompactConfirm}
           @cancel=${this._onCompactCancel}
         ></compact-confirm-dialog>

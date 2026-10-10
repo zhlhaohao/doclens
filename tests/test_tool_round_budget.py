@@ -81,7 +81,7 @@ class StubEmitter:
     async def emit_notice(self, message):
         pass
 
-    async def emit_done(self, session_id, summary=None):
+    async def emit_done(self, session_id, summary=None, reason=None):
         pass
 
     async def emit_error(self, error, code=None):
@@ -238,6 +238,64 @@ class TestBudgetMechanisms:
         # grep 轮打断连续性 → consecutive_poll_rounds 清零，此后无退避
         assert sleeps == [5.0, 10.0, 20.0]
         assert agent.emitter.get_full_text() == "done"
+
+    def test_poll_backoff_with_interrupt_event_keeps_loop_alive(self, tmp_path):
+        """回归（2026-10-10 GUI 挂起事故）：退避带 threading.Event 不得冻结事件循环。
+
+        根因：旧实现把 ``interrupt_event.wait()``（threading.Event 的同步
+        阻塞调用，无超时）作为参数传给 ``asyncio.wait_for``——参数求值
+        先于调用，事件循环线程在 wait_for 生效前就被无限期阻塞。
+        生产触发链：bash 超时 → 模型转 background_run → check_background
+        纯轮询轮 → 下一轮循环顶退避 → ASGI 循环冻结 → SSE/HTTP 全无响应
+        → _run_and_finalize 的 finally 落库永不执行 → 杀进程后轮次丢失。
+
+        红判据（两重）：
+        1. run_stream 跑在工作线程（自带事件循环），主线程 15s join 超时
+           = 循环冻结、回合永不完成 → 红；
+        2. 中断 set 后 agent 必须快速退出（循环顶检查点生效）——防把
+           「冻结」误修成「不再等待但也不响应中断」。
+        """
+        import threading
+        import time
+
+        script = [{"tools": [("check_background", {"task_id": "t"})]}] * 3
+        script.append({"text": "done"})
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+        agent.config.poll_backoff_initial_s = 5.0
+        agent.config.poll_backoff_max_s = 30.0
+
+        ev = threading.Event()
+        agent._interrupt_event = ev
+
+        messages: list = []
+        done_flag = threading.Event()
+
+        def _run_round() -> None:
+            asyncio.run(agent.run_stream(messages, "q", "s1"))
+            done_flag.set()
+
+        t = threading.Thread(target=_run_round, daemon=True)
+        t.start()
+
+        # 第 1 次纯轮询后的退避 5s 内，agent 线程应仍活着且未完成；
+        # 稍后 set 中断 → 循环顶检查点退出，join 应快速成功。
+        time.sleep(2.0)
+        assert not done_flag.is_set(), "退避尚未到时，回合不应提前完成"
+
+        t0 = time.monotonic()
+        ev.set()  # 用户「停止」
+        t.join(timeout=15.0)
+        elapsed = time.monotonic() - t0
+
+        assert not t.is_alive(), (
+            "run_stream 线程 15s 未退出——事件循环在退避期间被同步 "
+            "threading.Event.wait() 冻结（GUI 无响应 + 轮次不落库的根因）"
+        )
+        assert done_flag.is_set(), "线程退出但回合未正常收尾"
+        assert elapsed < 10.0, (
+            f"中断响应耗时 {elapsed:.1f}s——退避等待未让出控制权给中断"
+        )
 
     def test_poll_backoff_disabled_by_zero(self):
         """initial=0 → 退避恒 0（关闭），既有行为不变。"""

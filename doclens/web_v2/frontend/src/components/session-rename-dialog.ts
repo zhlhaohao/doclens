@@ -3,7 +3,7 @@ import { customElement, state, property } from "lit/decorators.js";
 
 /** 会话标题改名对话框（2026-09-17）。
  *  外壳仿 rename-dialog，但校验规则不同：标题是自由文本（可含任意字符），
- *  仅要求非空 + 有变化；长度上限 60 与 chat 创建时的 slice(0, 60) 对齐。 */
+ *  仅要求非空 + 有变化；长度上限 200 与 chat 创建时的 slice(0, 200) 对齐。 */
 @customElement("session-rename-dialog")
 export class SessionRenameDialog extends LitElement {
   static styles = css`
@@ -100,7 +100,7 @@ export class SessionRenameDialog extends LitElement {
         <label>会话标题</label>
         <input
           autofocus
-          maxlength="60"
+          maxlength="200"
           class=${invalid ? "invalid" : ""}
           .value=${this._title}
           @input=${this._onInput}
