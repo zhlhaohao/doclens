@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { SearchMode } from "../state/types";
 import type { ChatImage } from "../api/chat";
+import { jsbridgePhotoAvailable, takePhotoAsFile, pickPhotoAsFile } from "../utils/jsbridge";
 
 /** 对话图片上限与白名单（ADR-0034，与后端 ChatRequest 校验同口径） */
 const MAX_IMAGES = 4;
@@ -307,6 +308,8 @@ export class InputBox extends LitElement {
     .menu-item.active .menu-item-title { color: var(--cortex-primary); font-weight: 600; }
     /* 斜杠技能下拉：候选多时限高滚动；左右撑满输入行（继承 .menu 向上展开） */
     .menu.slash-menu { left: 6px; max-height: 320px; overflow-y: auto; }
+    /* 📎 附件源菜单（webview 内拍照/相册二选一）：贴左侧向上展开 */
+    .menu.attach-menu { left: 6px; }
     @media (max-width: 1023px) {
       /* 移动端稍矮（≈44px），仍随字号缩放 */
       :host { --min-h: calc(var(--cortex-fs-md) * 1.5 + 20px); }
@@ -350,6 +353,8 @@ export class InputBox extends LitElement {
    *  启用 ∧ 未删除 ∧ 用户可调用）。 */
   @property({ attribute: false }) slashItems: { name: string; description?: string; icon?: string }[] | null = null;
   @state() private _menuOpen = false;
+  /** 📎 附件源菜单（仅 webview 内 jsbridge 可用时启用）：拍照 / 相册二选一 */
+  @state() private _attachMenuOpen = false;
   @state() private _slashIndex = 0;
   /** Esc 关闭斜杠下拉后的驳回标记：输入变化即复位（再敲字符重新出现） */
   @state() private _slashDismissed = false;
@@ -581,6 +586,7 @@ export class InputBox extends LitElement {
 
   private _onDocClick = () => {
     this._menuOpen = false;
+    this._attachMenuOpen = false;
     document.removeEventListener("click", this._onDocClick);
   };
 
@@ -718,15 +724,19 @@ export class InputBox extends LitElement {
           ${this._renderButton()}
         </div>
         ${this._renderMenu()}
+        ${this._renderAttachMenu()}
         ${this._renderSlashMenu()}
       </div>
     `;
   }
 
-  /** 📎 附件按钮（文档流内左侧；图片 icon，灰色 subtle 样式）。 */
+  /** 📎 附件按钮（文档流内左侧；图片 icon，灰色 subtle 样式）。
+   *  webview 内 X5 内核不弹 input file 选择器：jsbridge 可用时改为弹
+   *  「拍照/相册」菜单走原生通道（takePhoto/pickPhotos）；浏览器照旧
+   *  click 隐藏 input。 */
   private _renderAttachButton(fieldDisabled: boolean) {
     return html`
-      <button class="attach" @click=${() => this.fileInputEl?.click()}
+      <button class="attach" @click=${this._onAttachClick}
               ?disabled=${fieldDisabled} aria-label="添加图片" title="添加图片">
         <doclens-icon name="image" aria-hidden="true"></doclens-icon>
       </button>
@@ -736,6 +746,44 @@ export class InputBox extends LitElement {
                void this._addFiles(Array.from(inp.files ?? []));
                inp.value = ""; // 允许重复选同一文件
              }} />`;
+  }
+
+  /** 📎 点击分流：webview + jsbridge 就绪 → 原生菜单；否则隐藏 input。 */
+  private _onAttachClick(e: Event) {
+    e.stopPropagation(); // 防冒泡到 document 立即触发 _onDocClick 关掉刚开的菜单
+    if (jsbridgePhotoAvailable()) {
+      this._attachMenuOpen = !this._attachMenuOpen;
+      if (this._attachMenuOpen) document.addEventListener("click", this._onDocClick);
+      return;
+    }
+    this.fileInputEl?.click();
+  }
+
+  /** webview 原生通道取图：取消静默；失败复用 image-reject 通知宿主。 */
+  private async _pickViaJsbridge(capture: boolean) {
+    this._attachMenuOpen = false;
+    try {
+      const file = await (capture ? takePhotoAsFile() : pickPhotoAsFile());
+      if (file) void this._addFiles([file]);
+    } catch (e) {
+      this.dispatchEvent(new CustomEvent("image-reject", {
+        detail: { reason: (e as Error).message || "取图失败，请重试" },
+      }));
+    }
+  }
+
+  /** 📎 附件源菜单（webview 内）：拍照 = 相机直拍；相册 = 系统选图。 */
+  private _renderAttachMenu() {
+    if (!this._attachMenuOpen) return null;
+    return html`
+      <div class="menu attach-menu" role="menu">
+        <div class="menu-item" role="menuitem" @click=${() => this._pickViaJsbridge(true)}>
+          <span class="menu-item-title"><doclens-icon name="camera" aria-hidden="true"></doclens-icon>拍照</span>
+        </div>
+        <div class="menu-item" role="menuitem" @click=${() => this._pickViaJsbridge(false)}>
+          <span class="menu-item-title"><doclens-icon name="image" aria-hidden="true"></doclens-icon>从相册选择</span>
+        </div>
+      </div>`;
   }
 
   /** 缩略图暂存行（输入框上方）：每张 × 删除；压缩中细条占位。 */

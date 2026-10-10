@@ -18,9 +18,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { DiaryEntry, DiaryFragment } from "../state/types";
 import {
   jsbridgePhotoAvailable,
-  jsbridgeDebugSummary,
-  JSBRIDGE_DEBUG,
-  JSBRIDGE_DEBUG_TAG,
   takePhotoAsFile,
   pickPhotoAsFile,
   JsbridgePhotoError,
@@ -29,7 +26,6 @@ import "./icon";
 import "./input-box";
 import { bustRawImages } from "./image-viewer";
 import "./toast-stack";
-import type { ToastStack } from "./toast-stack";
 
 @customElement("diary-record-panel")
 export class DiaryRecordPanel extends LitElement {
@@ -353,18 +349,12 @@ export class DiaryRecordPanel extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener("cortex:image-rotated", this._onImageRotated);
-    if (!this._dbgShown) {
-      this._dbgShown = true;
-      // 调试：进入记录页即弹环境诊断（点 toast 可提前关闭）
-      this.updateComplete.then(() => this._debugToast(jsbridgeDebugSummary(), "info", 6000));
-    }
   }
 
   disconnectedCallback() {
     window.removeEventListener("cortex:image-rotated", this._onImageRotated);
     super.disconnectedCallback();
   }
-  private _dbgShown = false;
 
   /** 图片旋转落盘（判向自动 ADR-0017 / 预览期手动 ADR-0029）：
    *  刷新时间线上指向该图的缩略图 <img>，防旧方向缓存。 */
@@ -372,13 +362,6 @@ export class DiaryRecordPanel extends LitElement {
     const path = (e as CustomEvent).detail?.path as string | undefined;
     if (path) bustRawImages(this.renderRoot, path);
   };
-
-  /** 调试 toast：右下角展示（真机 webview 无 devtools 时的眼睛）；JSBRIDGE_DEBUG=false 时静默 */
-  private _debugToast(message: string, level: "success" | "error" | "info" = "info", duration = 4000) {
-    if (!JSBRIDGE_DEBUG) return;
-    const stack = this.renderRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
-  }
 
   private _onSubmitText(e: CustomEvent<{ value: string }>) {
     this.dispatchEvent(new CustomEvent("submit-text", {
@@ -396,12 +379,9 @@ export class DiaryRecordPanel extends LitElement {
 
   private _pickPhoto(capture: boolean) {
     if (jsbridgePhotoAvailable()) {
-      this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 点${capture ? "拍照" : "相册"}→调jsbridge ${capture ? "takePhoto" : "pickPhotos"}…`);
-      this._toastCalledJsbridge(capture);
       void this._pickPhotoViaJsbridge(capture);
       return;
     }
-    this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 点${capture ? "拍照" : "相册"}→降级input：${jsbridgeDebugSummary()}`, "error", 6000);
     const input = this.renderRoot.querySelector<HTMLInputElement>(
       capture ? "input[data-capture]" : "input[data-gallery]",
     );
@@ -413,26 +393,17 @@ export class DiaryRecordPanel extends LitElement {
     try {
       const file = await (capture ? takePhotoAsFile() : pickPhotoAsFile());
       if (file) {
-        this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 原生回调success：${file.name} ${(file.size / 1024).toFixed(0)}KB`, "success");
         this._setPendingFile(file);
-      } else {
-        this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] 原生回调cancel（用户取消）`);
       }
     } catch (e) {
       const message = e instanceof JsbridgePhotoError
-        ? `[${JSBRIDGE_DEBUG_TAG}] 原生回调fail code=${e.code}：${e.message}`
+        ? e.message
         : "拍照失败，请重试";
-      this._debugToast(message, "error", 6000);
       this.dispatchEvent(new CustomEvent("photo-error", {
         detail: { message },
         bubbles: true, composed: true,
       }));
     }
-  }
-
-  /** 调用已发出（takePhotoAsFile 内部已挂回调等原生），用于确认 messageSend 未抛异常 */
-  private _toastCalledJsbridge(capture: boolean) {
-    this._debugToast(`[${JSBRIDGE_DEBUG_TAG}] messageSend已发出(${capture ? "takePhoto" : "pickPhotos"})，等原生回调（15s超时）…`, "info", 5000);
   }
 
   private _setPendingFile(file: File) {

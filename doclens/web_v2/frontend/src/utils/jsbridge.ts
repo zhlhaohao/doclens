@@ -163,9 +163,6 @@ export function isNexBoxWebview(): boolean {
   return uaHit || typeof window !== "undefined" && !!window.Android;
 }
 
-/** 诊断开关：true 时 _debugToast 弹出 jsbridge 环境/调用链诊断（真机调试后应关掉） */
-export const JSBRIDGE_DEBUG = false;
-
 /** 是否运行在 App WebView 容器内（Android 原生注入 + jsbridge 就绪）。
  *  供 WebView 特有的行为分支使用，如预览→编辑切换的视野中央选字锚点。 */
 export function isWebviewContainer(): boolean {
@@ -174,26 +171,6 @@ export function isWebviewContainer(): boolean {
     !!window.Android &&
     !!window.jsbridge
   );
-}
-
-/** 调试标记：toast 出现即证明新构建已生效（被 App 缓存旧页时不会有任何 toast） */
-export const JSBRIDGE_DEBUG_TAG = "dbg1";
-
-/** 调试用：环境检测信号一览（toast 展示，定位 webview 内为何没走 jsbridge） */
-export function jsbridgeDebugSummary(): string {
-  const uaHit = /NexBox\/(\d+(?:\.\d+)*)/.exec(navigator.userAgent);
-  const android = typeof window !== "undefined" && !!window.Android;
-  const jsb = typeof window !== "undefined" && !!window.jsbridge;
-  const take = jsb && typeof window.jsbridge!.takePhoto === "function";
-  const pick = jsb && typeof window.jsbridge!.pickPhotos === "function";
-  const ok = android && !!take && !!pick;
-  return [
-    `[${JSBRIDGE_DEBUG_TAG}] UA:${uaHit ? `NexBox/${uaHit[1]}` : "无NexBox标识"}`,
-    `Android注入:${android ? "有" : "无"}`,
-    `jsbridge.js:${jsb ? "已加载" : "未加载"}`,
-    `takePhoto:${take ? "✓" : "✗"} pickPhotos:${pick ? "✓" : "✗"}`,
-    `判定→${ok ? "走jsbridge" : "降级input"}`,
-  ].join(" | ");
 }
 
 /**
@@ -262,11 +239,15 @@ function failMessage(code: number): string {
   }
 }
 
-function pickFailMessage(code: number): string {
+function pickFailMessage(code: number, detail?: string): string {
+  // 原生 detail（如 "decode failed"）带上——真机排查的关键证据，
+  // code 文案只是归类（拍照 failMessage 不带 detail 是历史口径，勿动）。
+  const suffix = detail ? `（${detail}）` : "";
   switch (code) {
-    case 3: return "未找到可用的相册应用";
-    case 5: return "照片处理失败，请重试";
-    default: return "选图失败，请重试";
+    case 3: return "未找到可用的相册应用" + suffix;
+    case 4: return detail ? `选图失败：${detail}` : "选图失败，请重试";
+    case 5: return "照片处理失败，请重试" + suffix;
+    default: return "选图失败，请重试" + suffix;
   }
 }
 
@@ -341,16 +322,18 @@ export function pickPhotoAsFile(): Promise<File | null> {
       maxCount: 1,
       success: done((raw: unknown) => {
         const res = raw as PickPhotosResult;
+        // photos[] 可能全是 {error} 项（§2.5 单张容错）——把原生 error 文本透传进文案
+        const firstErr = res.photos?.[0] && "error" in res.photos[0] ? String(res.photos[0].error) : undefined;
         const item = res.photos?.[0] ? asPhotoItem(res.photos[0]) : null;
         if (!item) {
-          reject(new JsbridgePhotoError(5, pickFailMessage(5)));
+          reject(new JsbridgePhotoError(5, pickFailMessage(5, firstErr)));
           return;
         }
         resolve(base64ToFile(item, "gallery"));
       }),
       fail: done((raw: unknown) => {
         const f = raw as JsbridgeFail;
-        reject(new JsbridgePhotoError(f.code ?? -1, pickFailMessage(f.code ?? -1)));
+        reject(new JsbridgePhotoError(f.code ?? -1, pickFailMessage(f.code ?? -1, f.error)));
       }),
       cancel: done(() => resolve(null)),
     });
