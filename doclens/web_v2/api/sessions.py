@@ -265,7 +265,33 @@ async def compact_session(session_id: str):
         "id": session_id,
         "pre_tokens": pre_tokens,
         "post_tokens": estimate_tokens(compacted),
+        # 人审核用可读转录（2026-10-10）：摘要对 + 骨架对逐块渲染
+        "compacted_text": _render_compacted_text(compacted),
     }
+
+
+def _render_compacted_text(messages: list[dict]) -> str:
+    """压缩产物消息 → 可读文本（前端 copy 按钮拷贝供人审核）。
+
+    逐消息渲染「角色: 正文」；content 为块列表时拼 text 块。与
+    planify._render_for_summary 的瘦身转录不同——这里是**压缩后**落库
+    的最终内容（通常 2~4 条），全量原样，不截断。
+    """
+    lines: list[str] = []
+    for m in messages:
+        role = {"user": "用户", "assistant": "助手"}.get(m.get("role"), str(m.get("role")))
+        c = m.get("content")
+        if isinstance(c, str):
+            body = c
+        elif isinstance(c, list):
+            body = "\n".join(
+                b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"
+            )
+        else:
+            body = str(c or "")
+        if body.strip():
+            lines.append(f"{role}: {body}")
+    return "\n\n".join(lines)
 
 
 @router.get("/sessions/{session_id}/rewind/preview")

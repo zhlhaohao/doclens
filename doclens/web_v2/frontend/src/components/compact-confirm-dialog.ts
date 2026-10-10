@@ -1,17 +1,18 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { formatTokens } from "../utils/format";
 
 /** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
  *  三态复用同一个 <dialog> 宿主（chat-view 渲染），确认后不关框——压缩
  *  期间以模态 spinner 停留（top-layer 天然禁止操作底层页面），完成后在
- *  框内展示压缩效果（pre → post tokens）。
+ *  框内展示压缩效果（pre → post tokens）+ copy 按钮拷贝压缩产物供人审核。
  *
  *  phase:
  *   - confirm：说明压缩语义（摘要替换上下文、展示不变、耗时数十秒）；
  *     确认冒泡 compact-confirm，取消/ESC 冒泡 cancel。
  *   - running：压缩进行中。不可取消/ESC（对话框宿主拦截 cancel）。
- *   - done：压缩完成，展示 token 缩减效果；「完成」冒泡 cancel 关框。
+ *   - done：压缩完成，展示 token 缩减效果；「复制」拷贝压缩产物可读
+ *     转录（摘要 + 骨架）到剪贴板；「完成」冒泡 cancel 关框。
  *   - error：压缩失败，展示错误信息；「关闭」冒泡 cancel 关框。
  */
 @customElement("compact-confirm-dialog")
@@ -73,6 +74,7 @@ export class CompactConfirmDialog extends LitElement {
       border: none;
     }
     button.primary:hover { opacity: 0.9; }
+    button doclens-icon { font-size: 14px; vertical-align: -2px; margin-right: 4px; }
 
     /* —— running 态 —— */
     .running {
@@ -136,6 +138,10 @@ export class CompactConfirmDialog extends LitElement {
   @property({ type: Number }) postTokens = 0;
   /** error：错误信息。 */
   @property({ type: String }) errorMessage = "";
+  /** done：压缩产物可读转录（后端渲染，copy 按钮拷贝供人审核）。 */
+  @property({ type: String }) compactedText = "";
+  /** copy 成功瞬时反馈（2s 复位）。 */
+  @state() private _copied = false;
 
   private _onConfirm = (): void => {
     this.dispatchEvent(new CustomEvent("compact-confirm", {
@@ -151,6 +157,36 @@ export class CompactConfirmDialog extends LitElement {
   private get _savedPercent(): number | null {
     if (this.preTokens <= 0 || this.postTokens >= this.preTokens) return null;
     return Math.round((1 - this.postTokens / this.preTokens) * 100);
+  }
+
+  /** copy 压缩产物到剪贴板（clipboard 不可用时降级 execCommand，同
+   *  chat-tool-trace 的双轨配方；均失败时 console.warn）。 */
+  private async _onCopy(): Promise<void> {
+    const text = this.compactedText;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this._flashCopied();
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        this._flashCopied();
+      } catch (err2) {
+        console.warn("copy failed:", err2);
+      }
+    }
+  }
+
+  private _flashCopied(): void {
+    this._copied = true;
+    setTimeout(() => { this._copied = false; }, 2000);
   }
 
   render() {
@@ -207,6 +243,13 @@ export class CompactConfirmDialog extends LitElement {
       </div>
       <p class="muted">上下文已替换为摘要；聊天记录展示不变，后续对话基于摘要继续。</p>
       <div class="buttons">
+        ${this.compactedText ? html`
+          <button type="button" @click=${this._onCopy}>
+            ${this._copied
+              ? html`<doclens-icon name="check"></doclens-icon>已复制`
+              : html`<doclens-icon name="clipboard"></doclens-icon>复制压缩内容`}
+          </button>
+        ` : nothing}
         <button class="primary" type="button" @click=${this._onCancel}>完成</button>
       </div>
     `;

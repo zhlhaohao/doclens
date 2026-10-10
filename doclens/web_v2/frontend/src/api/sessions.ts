@@ -60,10 +60,11 @@ export async function fetchSessionDetail(
   return request<SessionDetail>(`/api/sessions/${sessionId}${qs}`, { method: "GET" });
 }
 
-/** 手动压缩会话历史（ADR-0026）：LLM 摘要落库 compacted 条目。 */
+/** 手动压缩会话历史（ADR-0026）：LLM 摘要落库 compacted 条目。
+ *  compacted_text = 压缩产物可读转录（copy 按钮拷贝供人审核，2026-10-10）。 */
 export async function compactSession(
   sessionId: string,
-): Promise<{ ok: boolean; id: string; pre_tokens: number; post_tokens: number }> {
+): Promise<{ ok: boolean; id: string; pre_tokens: number; post_tokens: number; compacted_text?: string }> {
   return request(`/api/sessions/${sessionId}/compact`, { method: "POST" });
 }
 

@@ -518,6 +518,8 @@ export class ChatView extends LitElement {
     preTokens: number;
     postTokens: number;
     errorMessage: string;
+    /** 压缩产物可读转录（done 态 copy 按钮拷贝供人审核，2026-10-10） */
+    compactedText: string;
   } | null = null;
   /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
   private _compacting = false;
@@ -648,6 +650,7 @@ export class ChatView extends LitElement {
         onClick: () => {
           this._compactDialog = {
             phase: "confirm", preTokens: 0, postTokens: 0, errorMessage: "",
+            compactedText: "",
           };
         },
       },
@@ -678,6 +681,7 @@ export class ChatView extends LitElement {
     this._compacting = true;
     this._compactDialog = {
       phase: "running", preTokens: 0, postTokens: 0, errorMessage: "",
+      compactedText: "",
     };
     try {
       const body = await compactSession(session.id);
@@ -686,12 +690,14 @@ export class ChatView extends LitElement {
         preTokens: body.pre_tokens ?? 0,
         postTokens: body.post_tokens ?? 0,
         errorMessage: "",
+        compactedText: body.compacted_text ?? "",
       };
       void this._refreshCompaction();
     } catch (err) {
       this._compactDialog = {
         phase: "error", preTokens: 0, postTokens: 0,
         errorMessage: (err as Error)?.message || String(err),
+        compactedText: "",
       };
     } finally {
       this._compacting = false;
@@ -1501,6 +1507,7 @@ export class ChatView extends LitElement {
           .preTokens=${d.preTokens}
           .postTokens=${d.postTokens}
           .errorMessage=${d.errorMessage}
+          .compactedText=${d.compactedText}
           @compact-confirm=${this._onCompactConfirm}
           @cancel=${this._onCompactCancel}
         ></compact-confirm-dialog>

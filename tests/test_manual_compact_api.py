@@ -141,6 +141,10 @@ class TestManualCompact:
         assert payload["pre_tokens"] == result["pre_tokens"]
         # 压缩后估算（前端「压缩晚于最近调用」时显示的占用量）
         assert payload["post_tokens"] == result["post_tokens"]
+        # 可读转录（copy 按钮拷贝供人审核，2026-10-10）：逐消息「角色: 正文」
+        assert result["compacted_text"].startswith("用户: [Compressed. Transcript: t]")
+        assert "摘要" in result["compacted_text"]
+        assert "助手: Understood." in result["compacted_text"]
         # 回放：截断投影（旧 message_user/message_ai_raw 不再出现）
         history = store.get_chat_history("s1")
         assert history == payload["messages"]

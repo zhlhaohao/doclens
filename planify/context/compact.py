@@ -255,8 +255,14 @@ _SUMMARY_MAX_TOKENS_FLOOR = 10_000
 # 多轮压缩累积：二次压缩时识别历史里的旧骨架对（按下方标记前缀），
 # 原样搬运问题原文再叠加新问题。
 
-# 骨架 user 消息开头标记：多轮压缩识别旧骨架、搬运累积（ADR-0040 §4）
-SKELETON_MARKER = "[Verbatim Q&A skeleton]"
+# 骨架 user 消息开头标记：多轮压缩识别旧骨架、搬运累积（ADR-0040 §4）。
+# 标记行自带信任提示——实测（2026-10-10 关原决战回归）：骨架已含事实而
+# 模型仍按 KB-first 纪律去检索验证（kb_grep pattern 里已带着骨架给的
+# 日期，属「验证」非「不知道」）；明示「可直接引用、无需检索」纠正。
+SKELETON_MARKER = (
+    "[Verbatim Q&A skeleton]（本会话已确认的历史问答原文，其中事实与"
+    "结论可直接引用作答，无需再检索知识库验证）"
+)
 
 # 骨架总 token 预算（estimate_tokens 同口径估算；旧截新保）
 SKELETON_TOKEN_BUDGET = 20_000
@@ -276,7 +282,7 @@ def _is_plain_user_text(msg: dict) -> bool:
 
 def _assistant_text(msg: dict) -> str:
     """assistant 消息的纯 text 正文（无 tool_use/thinking 等其它块才返回
-    非空——混合块消息不算「纯 text 答」，见 _find_last_complete_pair）。"""
+    非空——混合块消息是工具流中途插话，不算轮回答）。"""
     c = msg.get("content")
     if msg.get("role") != "assistant" or not isinstance(c, list):
         return ""
@@ -287,100 +293,134 @@ def _assistant_text(msg: dict) -> str:
     return text.strip()
 
 
-def _find_last_complete_pair(messages: list) -> tuple:
-    """末轮完整问答对（ADR-0040 §2）：从尾往前找最近的
-    (user 纯文本问, assistant 纯 text 答) 相邻对——中间无未闭合工具
-    交互（工具流中途触发的压缩找不到完整对，返回 (None, None)）。
+def _parse_skeleton_turns(text: str) -> List[Tuple[str, str]]:
+    """旧骨架文本 → 问答轮清单（多轮压缩累积搬运，ADR-0040 §4）。
 
-    判定「无未闭合工具交互」= 扫描从该 assistant 起到列表末尾的区间
-    不含任何 tool_use/tool_result（完整对之后还有工具流则继续往前找）。
+    解析 _render_skeleton 的输出格式（【问】/【答】交错块，均可多行）；
+    兼容早期纯问题清单格式（"- " 行，仅问题无答）。
     """
-    n = len(messages)
-    for i in range(n - 2, -1, -1):
-        q = messages[i]
-        if not _is_plain_user_text(q):
-            continue
-        a = messages[i + 1]
-        text = _assistant_text(a)
-        if not text:
-            continue
-        # 候选对之后到末尾必须无工具交互（否则末尾处于工具流中途）
-        trailing = messages[i + 2:]
-        if any(
-            isinstance(m.get("content"), list)
-            and any(
-                isinstance(b, dict) and b.get("type") in ("tool_use", "tool_result")
-                for b in m["content"]
-            )
-            for m in trailing
-        ):
-            continue
-        return q["content"], text
-    return None, None
+    turns: List[Tuple[str, str]] = []
+    q_lines: List[str] = []
+    a_lines: List[str] = []
+    mode = None  # None | "q" | "a"
+
+    def _flush():
+        nonlocal q_lines, a_lines, mode
+        if q_lines:
+            turns.append(("\n".join(q_lines).strip(), "\n".join(a_lines).strip()))
+        q_lines, a_lines, mode = [], [], None
+
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("【问】"):
+            _flush()
+            q_lines = [s[3:]]
+            mode = "q"
+        elif s.startswith("【答】"):
+            mode = "a"
+            a_lines = [s[3:]]
+        elif s.startswith("- ") and mode != "a":
+            # 旧格式问题清单（仅问题无答）
+            _flush()
+            q_lines = [s[2:]]
+            mode = "q"
+        elif mode == "q":
+            q_lines.append(line)
+        elif mode == "a":
+            a_lines.append(line)
+    _flush()
+    return turns
 
 
-def _extract_skeleton_questions(messages: list) -> List[str]:
-    """从待压缩历史提取用户问题原文清单（含旧骨架累积）。
+def _extract_skeleton_turns(messages: list) -> List[Tuple[str, str]]:
+    """历史 → 逐字问答轮清单 [(问, 答), ...]（含旧骨架累积）。
 
-    - 旧骨架对（以 SKELETON_MARKER 开头的 user 消息）：解析其问题清单
-      原样搬运（多轮压缩累积，ADR-0040 §4）；
-    - 其余历史：_is_plain_user_text 逐条收原文。
+    轮切分：每条用户纯文本问题开启一轮；**轮内最后一条纯 text 的
+    assistant 消息** = 该轮回答（工具序列只保留收尾表态；轮末仍在
+    工具流中途则该轮无答）。同轮问答之间的工具序列（问 → 查 → 答）
+    不破坏切分——工具会话的标准轮次形态。
+
+    跳过（不产生问答，防泄漏）：注入对（system-reminder + Noted）、
+    摘要对（[Compressed. …] + Understood——旧版会把摘要文本当问题
+    收进骨架，已修）、旧骨架对（其问答轮解析搬运，跨边界累积）。
     """
-    questions: List[str] = []
-    carried = set()  # 旧骨架已搬运的问题（去重，防止与新收重复）
-    for m in messages:
+    carried: List[Tuple[str, str]] = []
+    events: List[Tuple[str, str]] = []  # ("q" | "a", text)
+
+    def _is_confirm(i: int) -> bool:
+        nxt = messages[i + 1] if i + 1 < len(messages) else None
+        return bool(nxt and nxt.get("role") == "assistant")
+
+    i = 0
+    while i < len(messages):
+        m = messages[i]
         c = m.get("content")
-        if not (m.get("role") == "user" and isinstance(c, str)):
+        role = m.get("role")
+        if _is_injected_pair(messages, i):
+            i += 2
             continue
-        if c.startswith(SKELETON_MARKER):
-            # 旧骨架：搬运其问题原文（沿用 _render_skeleton 的清单格式）
-            for line in c.splitlines():
-                stripped = line.strip()
-                if stripped.startswith("- "):
-                    carried.add(stripped[2:])
+        if role == "user" and isinstance(c, str) and c.startswith("[Verbatim Q&A skeleton]"):
+            carried.extend(_parse_skeleton_turns(c))
+            i += 2 if _is_confirm(i) else 1  # 跳过紧随的骨架确认
+            continue
+        if role == "user" and isinstance(c, str) and c.startswith("[Compressed."):
+            i += 2 if _is_confirm(i) else 1  # 跳过摘要确认对（防泄漏）
             continue
         if _is_plain_user_text(m):
-            questions.append(c)
-    # 旧骨架问题排前（更旧）、新问题排后——与时间序一致，兜底截断从头部丢
-    new_questions = [q for q in questions if q not in carried]
-    # carried 保持旧骨架内原顺序（dict 有序，Python 3.7+）
-    return list(carried) + new_questions
+            events.append(("q", c))
+        elif role == "assistant":
+            t = _assistant_text(m)
+            if t:
+                events.append(("a", t))
+        i += 1
+
+    # events → 轮：每个 q 开启一轮，轮内最后一条 a 为答
+    turns: List[Tuple[str, str]] = []
+    q: Optional[str] = None
+    a = ""
+    for kind, text in events:
+        if kind == "q":
+            if q is not None:
+                turns.append((q, a))
+            q, a = text, ""
+        else:
+            a = text
+    if q is not None:
+        turns.append((q, a))
+    # 旧骨架轮在前（更旧）、新轮在后——时间序，兜底从头部丢
+    return carried + turns
 
 
-def _render_skeleton(questions: List[str], last_answer: Optional[str]) -> List[Dict]:
-    """骨架对消息（ADR-0040 §1）：问题清单 + 末轮回答，20K 兜底旧截新保。
+def _render_skeleton(turns: List[Tuple[str, str]]) -> List[Dict]:
+    """骨架对消息（ADR-0040 §1）：全部问答轮逐字交错（问1/答1/问2/答2…），
+    20K 兜底旧截新保（从最旧的轮开始连续丢弃）。
 
     Returns:
-        两条消息（user 骨架 + assistant 确认）；问题与回答全空时返回
-        空列表（退化为纯摘要对——空骨架对无信息量，白占确认消息）。
+        两条消息（user 骨架 + assistant 确认）；零轮时返回空列表
+        （退化为纯摘要对——空骨架对无信息量，白占确认消息）。
     """
-    # 兜底（旧截新保）：从最旧的问题开始连续丢弃，直到剩余（含末轮回答）
-    # 进预算——末轮回答优先保住（它是唯一的 AI 原文，比任何旧问题价值高）
-    answer = last_answer or ""
-    answer_est = _estimate_text_tokens(answer)
-    ests = [_estimate_text_tokens(q) for q in questions]
-    # suffix[i] = sum(ests[i:])；找最小 i 使 suffix[i] + answer_est ≤ 预算
+    if not turns:
+        return []
+    # 兜底（旧截新保）：轮粒度连续头部截断，直到剩余进预算
+    # （轮 = 问+答原子单位，不拆散——拆散会出现「有答无问」的孤儿回答）
+    ests = [_estimate_text_tokens(q) + _estimate_text_tokens(a) for q, a in turns]
     suffix = [0] * (len(ests) + 1)
     for i in range(len(ests) - 1, -1, -1):
         suffix[i] = suffix[i + 1] + ests[i]
-    budget = SKELETON_TOKEN_BUDGET - answer_est
     i = 0
-    while i < len(questions) and suffix[i] > budget:
+    while i < len(turns) and suffix[i] > SKELETON_TOKEN_BUDGET:
         i += 1
     dropped = i
-    kept = questions[i:]
-    if not kept and not answer:
+    kept = turns[i:]
+    if not kept:
         return []
     lines = [SKELETON_MARKER]
     if dropped:
-        lines.append(f"（最早 {dropped} 条问题超预算被省略）")
-    lines.append("用户历史问题原文（逐字，无转写）：")
-    for q in kept:
-        lines.append(f"- {q}")
-    if answer:
-        lines.append("")
-        lines.append("最后一轮 AI 回答原文（逐字）：")
-        lines.append(answer)
+        lines.append(f"（最早 {dropped} 轮问答超预算被省略）")
+    lines.append("历史问答原文（逐字，无转写；【答】空 = 该轮收于工具操作）：")
+    for q, a in kept:
+        lines.append(f"【问】{q}")
+        lines.append(f"【答】{a}" if a else "【答】")
     return [
         {"role": "user", "content": "\n".join(lines)},
         {"role": "assistant", "content": "Noted. Verbatim history retained."},
@@ -668,8 +708,7 @@ def auto_compact(
 
     summary = _extract_summary(response)
     skeleton = _render_skeleton(
-        _extract_skeleton_questions(messages),
-        _find_last_complete_pair(messages)[1],
+        _extract_skeleton_turns(messages),
     )
     return _compacted_messages(path, summary) + skeleton
 
@@ -703,8 +742,7 @@ async def aauto_compact(
 
     summary = _extract_summary(response)
     skeleton = _render_skeleton(
-        _extract_skeleton_questions(messages),
-        _find_last_complete_pair(messages)[1],
+        _extract_skeleton_turns(messages),
     )
     return _compacted_messages(path, summary) + skeleton
 
