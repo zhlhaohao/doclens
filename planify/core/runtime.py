@@ -182,6 +182,7 @@ class AgentRuntime:
         base_url: Optional[str] = None,
         planify_context_window: Optional[int] = None,
         planify_max_tokens: Optional[int] = None,
+        planify_max_tool_rounds: Optional[int] = None,
     ) -> None:
         """热更新 LLM 配置：重建 Provider 并更新 RuntimeConfig 字段。
 
@@ -198,6 +199,7 @@ class AgentRuntime:
             base_url: 新 API 端点；None 表示不更新
             planify_context_window: 上下文窗口；None 表示不更新
             planify_max_tokens: 单次输出上限；None 表示不更新
+            planify_max_tool_rounds: 主循环工具轮数软上限；None 表示不更新
         """
         from .llm import create_provider
 
@@ -222,6 +224,8 @@ class AgentRuntime:
             self.config.planify_context_window = planify_context_window
         if planify_max_tokens is not None:
             self.config.planify_max_tokens = planify_max_tokens
+        if planify_max_tool_rounds is not None:
+            self.config.planify_max_tool_rounds = planify_max_tool_rounds
 
     @property
     def model(self) -> str:

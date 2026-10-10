@@ -325,6 +325,18 @@ class CortexAgent:
             run_write,
             run_edit,
         ):
+            # 子代理轮次预算每次调用现读 os.environ（设置页保存 → reload_config
+            # 的 load_dotenv(override=True) 已刷新进程 env → 立即生效，无需重启）。
+            # 不能在 initialize 期捕获 kb_config 快照值——会停在启动值；
+            # 与 guard/ask_mode 的 env 惰性读同模式（ADR-0021/0033 先例）。
+            import os as _os
+
+            try:
+                _rounds = int(_os.environ.get("PLANIFY_MAX_SUBAGENT_ROUNDS", "30"))
+            except ValueError:
+                _rounds = 30  # 非法值回落默认（与 _normalize_bg_timeout 同哲学）
+            if _rounds < 1:
+                _rounds = 30
             return _run_subagent(
                 prompt,
                 agent_type,
@@ -338,6 +350,7 @@ class CortexAgent:
                 extra_tools=_kb_readonly_tools,
                 extra_handlers=_kb_readonly_handlers,
                 max_tokens=_max_tokens,
+                max_rounds=_rounds,
             )
 
         # 内置技能部署已前移至 SkillLoader 构造之前（跳过 sidecar 标记 deleted
@@ -427,6 +440,10 @@ class CortexAgent:
             planify_context_window=getattr(config, "planify_context_window", None)
             or None,
             planify_max_tokens=getattr(config, "planify_max_tokens", None) or None,
+            # 主循环轮数软上限热更新：chat 每请求从 runtime.config 现读
+            # （tool_round_limit_kwargs），推到 RuntimeConfig 即对新回合生效。
+            # 注意 0（不限）是合法值，不能用 or 短路吞掉。
+            planify_max_tool_rounds=getattr(config, "planify_max_tool_rounds", None),
         )
 
     def _get_llm_tracer(self):

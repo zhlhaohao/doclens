@@ -194,7 +194,8 @@ def get_or_create_runtime(user_id: str, user_config: dict, **overrides):
         runtime.model,
         runtime.tool_handlers,
         run_subagent=run_subagent,
-        runtime=runtime
+        runtime=runtime,
+        registry_tools=runtime.tools,
     )
 
     return runtime

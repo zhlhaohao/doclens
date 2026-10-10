@@ -118,6 +118,19 @@ async def put_config(
             _os.environ.pop("PLANIFY_SHELL_TIMEOUT", None)
         logger.info("shell timeout hot-applied: %rs", v or "120(default)")
 
+    # 4.8 AI 轮次预算热生效（主循环软上限 + 子代理上限）：无键级手动同步——
+    # 上方 reload_config() 已做两件事：① load_dotenv(override=True) 把 .env
+    # 刷新进 os.environ（子代理包装闭包每次调用现读 env）；② apply_config →
+    # AgentRuntime.update_llm_config 推 planify_max_tool_rounds 进
+    # RuntimeConfig（chat 每请求 tool_round_limit_kwargs(runtime.config) 现读）。
+    # 此处仅记日志便于观察。
+    _round_keys = {"PLANIFY_MAX_TOOL_ROUNDS", "PLANIFY_MAX_SUBAGENT_ROUNDS"}
+    if _round_keys & set(updates):
+        logger.info(
+            "round budget hot-applied: %s",
+            {k: updates[k] for k in _round_keys & set(updates)},
+        )
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )

@@ -106,6 +106,36 @@ def _shell_timeout_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     return []
 
 
+def _int_range_rule(
+    field: str, values: dict[str, str], lo: int, hi: int, unit: str
+) -> list[ConfigValidationError]:
+    """通用整数范围校验：空串跳过（= 用字段默认/不限语义）。"""
+    raw = values.get(field, "").strip()
+    if not raw:
+        return []
+    try:
+        v = int(raw)
+    except ValueError:
+        return [ConfigValidationError(field=field, error=f"必须是整数（{unit}）")]
+    if not (lo <= v <= hi):
+        return [ConfigValidationError(field=field, error=f"合法范围：{lo}–{hi} {unit}")]
+    return []
+
+
+def _round_budget_rules(values: dict[str, str]) -> list[ConfigValidationError]:
+    """AI 轮次预算校验。
+
+    - PLANIFY_MAX_TOOL_ROUNDS（主循环软上限）：空 = 默认 0 = 不限；
+      非空必须是 0–500 的整数（0 = 不限；硬阈值 = 本值 + 10）。
+    - PLANIFY_MAX_SUBAGENT_ROUNDS（task 子代理上限）：空 = 默认 30；
+      非空必须是 1–200 的整数。
+    """
+    return (
+        _int_range_rule("PLANIFY_MAX_TOOL_ROUNDS", values, 0, 500, "轮")
+        + _int_range_rule("PLANIFY_MAX_SUBAGENT_ROUNDS", values, 1, 200, "轮")
+    )
+
+
 def validate_values(values: dict[str, str]) -> ValidationErrors:
     """Return ValidationErrors (possibly empty) for the given values dict.
 
@@ -167,5 +197,7 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_workdir_dir_rule(values))
     # shell 超时规则（1–3600 整数）
     errors.extend(_shell_timeout_rule(values))
+    # AI 轮次预算规则（主循环 0–500、子代理 1–200；0 = 不限）
+    errors.extend(_round_budget_rules(values))
 
     return ValidationErrors(fields=errors)

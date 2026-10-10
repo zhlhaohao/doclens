@@ -73,6 +73,10 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     # shell 超时（秒；bash/powershell/background_run 三通道统一预算，
     # 调用期现读 → 保存即热生效；空 = 默认 120，上限 3600）
     "PLANIFY_SHELL_TIMEOUT",
+    # AI 轮次预算（保存即热生效：主循环软上限每请求现读 RuntimeConfig，
+    # 子代理上限每次调用现读 env；均经 reload_config 的 load_dotenv 同步）
+    "PLANIFY_MAX_TOOL_ROUNDS",
+    "PLANIFY_MAX_SUBAGENT_ROUNDS",
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）

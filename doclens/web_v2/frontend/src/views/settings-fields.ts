@@ -77,6 +77,8 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
   PLANIFY_SHELL_TIMEOUT: "120",
+  PLANIFY_MAX_TOOL_ROUNDS: "0",
+  PLANIFY_MAX_SUBAGENT_ROUNDS: "30",
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
@@ -218,6 +220,27 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     max: 600,
     step: 10,
     unit: "秒",
-    hint: "AI 执行 shell 命令（bash/powershell/后台命令）的统一超时：到时击杀整个进程树并返回超时信号与已产生的输出，AI 可据此自行恢复。超长任务应改用后台运行+轮询，不建议调大本值硬等。留空 = 默认 120 秒（允许 1–3600）。保存后即时生效。",
+  },
+  {
+    tab: "misc",
+    section: "AI 工具",
+    envVar: "PLANIFY_MAX_TOOL_ROUNDS",
+    label: "主对话轮数上限",
+    component: "slider",
+    min: 0,
+    max: 200,
+    step: 5,
+    unit: "轮",
+  },
+  {
+    tab: "misc",
+    section: "AI 工具",
+    envVar: "PLANIFY_MAX_SUBAGENT_ROUNDS",
+    label: "子代理轮数上限",
+    component: "slider",
+    min: 5,
+    max: 100,
+    step: 5,
+    unit: "轮",
   },
 ];

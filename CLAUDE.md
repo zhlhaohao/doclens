@@ -288,7 +288,7 @@ planify/
 │   ├── waiter.py           # 用户响应等待器（全局单例）
 │   └── types.py            # 事件类型 / 协议 / StreamingConfig
 ├── subagent/
-│   └── runner.py           # 一次性子代理（task 工具，≤30 轮）
+│   └── runner.py           # 一次性子代理（task 工具，轮次预算默认 30 可配，同参早警/软提醒/截断标记三机制）
 └── tools/
     ├── registry.py         # 工具注册表（build_tool_registry + 外部注入）
     ├── basic.py            # bash/powershell/read/write/edit（safe_path）

@@ -363,6 +363,13 @@ class CortexConfig(BaseSettings):
         description="单轮问答工具调用轮数软上限：超过后每轮注入停止提醒；"
         "硬阈值 = 本值 + 10，达到后强制终答；0=不限（默认）。",
     )
+    planify_max_subagent_rounds: int = Field(
+        default=30,
+        alias="PLANIFY_MAX_SUBAGENT_ROUNDS",
+        description="task 子代理轮次预算上限：预算将尽注入收尾提醒，跑满仍未"
+        "收尾则摘要带 [round-limit-reached] 截断标记；连续 3 轮同参调用"
+        "注入死循环提醒（与主代理熔断同哲学：先劝后断、断了留话）。",
+    )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）
     vision_api_key: Optional[str] = Field(

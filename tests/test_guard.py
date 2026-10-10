@@ -653,3 +653,56 @@ def test_validator_rejects_invalid_guard_mode(value):
     ]
     assert len(field_errors) == 1
     assert "ask / allow / block" in field_errors[0].error
+
+
+# ---- AI 轮次预算设置页链路（misc tab 两个 slider） ----
+
+
+def test_config_store_knows_round_budget_keys():
+    """KNOWN_KEYS 契约：设置页 GET/PUT 能带上两个轮次预算键。"""
+    from doclens.web_v2.config_store import KNOWN_KEYS
+
+    assert "PLANIFY_MAX_TOOL_ROUNDS" in KNOWN_KEYS
+    assert "PLANIFY_MAX_SUBAGENT_ROUNDS" in KNOWN_KEYS
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"PLANIFY_MAX_TOOL_ROUNDS": "0"},
+        {"PLANIFY_MAX_TOOL_ROUNDS": "30"},
+        {"PLANIFY_MAX_TOOL_ROUNDS": "500"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "5"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "30"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "200"},
+        {"PLANIFY_MAX_TOOL_ROUNDS": "", "PLANIFY_MAX_SUBAGENT_ROUNDS": ""},
+    ],
+)
+def test_validator_accepts_round_budget_values(values):
+    from doclens.web_v2.config_validator import validate_values
+
+    errors = validate_values(values)
+    field_errors = [
+        e for e in errors.fields if e.field in values
+    ]
+    assert field_errors == []
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"PLANIFY_MAX_TOOL_ROUNDS": "abc"},
+        {"PLANIFY_MAX_TOOL_ROUNDS": "501"},
+        {"PLANIFY_MAX_TOOL_ROUNDS": "-1"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "0"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "201"},
+        {"PLANIFY_MAX_SUBAGENT_ROUNDS": "x"},
+    ],
+)
+def test_validator_rejects_invalid_round_budget(values):
+    from doclens.web_v2.config_validator import validate_values
+
+    errors = validate_values(values)
+    # 非整数可能双重报错（pydantic int 解析 + 范围规则），断言字段命中即可
+    fields = {e.field for e in errors.fields}
+    assert fields == set(values), f"应报 {set(values)} 的错: {errors.fields}"

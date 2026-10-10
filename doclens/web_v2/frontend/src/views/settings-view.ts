@@ -511,25 +511,24 @@ export class SettingsView extends LitElement {
       /* 权重区移动端回退单列 */
       .weights-grid { grid-template-columns: 1fr; }
 
-      /* Slider 单控件 + 数值 chip */
+      /* Slider + number 同行：number 输入框固定窄宽，slider 撑满剩余 */
       .slider-row {
         display: flex;
-        flex-direction: column;
+        align-items: center;
         gap: var(--cortex-space-2);
       }
-      .slider-row input[type="number"] { display: none; }
+      .slider-row input[type="number"] {
+        width: 72px;
+        min-width: 72px;
+        flex: 0 0 auto;
+      }
       .slider-row input[type="range"] {
         max-width: 100%;
-        width: 100%;
+        min-width: 0;
         flex: 1;
       }
-      /* 需压过桌面端 .slider-row .value-chip { display: none } 的优先级 */
-      .slider-row .value-chip {
-        display: inline-block;
-        align-self: flex-start;
-        font-size: var(--cortex-fs-md);
-        font-weight: 600;
-      }
+      /* 移动端不显示数值 chip（number 框已在行内） */
+      .slider-row .value-chip { display: none; }
 
       /* Password 显示按钮：mobile 仍嵌在 input 内右侧，与桌面布局一致 */
       .password-wrap { max-width: 100% !important; position: relative !important; }

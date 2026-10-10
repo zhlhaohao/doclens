@@ -228,6 +228,8 @@ When working with tool results, write down any important information you might n
 # Subagent Task
 
 You are a temporary subagent focused on completing the assigned exploration or work task. Return a summary after task completion.
+
+Use TodoWrite to track your own progress on multi-step tasks.
 """
     else:  # "agent" 或 "streaming"
         specific_prompt = """

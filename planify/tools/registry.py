@@ -22,6 +22,33 @@ from .webfetch import make_webfetch_tools
 
 logger = logging.getLogger(__name__)
 
+# TodoWrite 工具定义：主注册表与子代理注入共用同一 schema
+# （子代理 handler 绑私有 TodoManager，见 handle_task）
+TODO_WRITE_TOOL = {
+    "name": "TodoWrite",
+    "description": "更新任务跟踪列表",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["pending", "in_progress", "completed"],
+                        },
+                        "activeForm": {"type": "string"},
+                    },
+                },
+            }
+        },
+        "required": ["items"],
+    },
+}
+
 
 # ==================== 外部工具注册表 ====================
 # 由主应用通过 register_external_tools() 注册
@@ -250,30 +277,7 @@ def build_tool_registry(
 
     # 待办和子代理工具
     todo_subagent_tools = [
-        {
-            "name": "TodoWrite",
-            "description": "更新任务跟踪列表",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "content": {"type": "string"},
-                                "status": {
-                                    "type": "string",
-                                    "enum": ["pending", "in_progress", "completed"],
-                                },
-                                "activeForm": {"type": "string"},
-                            },
-                        },
-                    }
-                },
-                "required": ["items"],
-            },
-        },
+        TODO_WRITE_TOOL,
         {
             "name": "task",
             "description": (
@@ -321,6 +325,7 @@ def build_tool_registry(
                 handlers,
                 run_subagent,
                 runtime,
+                registry_tools=tools,
             ),
             "load_skill": lambda **kw: _load_skill_handler(kw["name"]),
         }
@@ -485,6 +490,7 @@ def handle_task(
     handlers: Dict[str, Any],
     run_subagent,
     runtime: Optional[Any] = None,
+    registry_tools: Optional[List[Dict]] = None,
 ) -> str:
     """
     处理 task 工具调用（带运行时支持）
@@ -498,6 +504,8 @@ def handle_task(
         handlers: 工具处理器字典
         run_subagent: 子代理运行器函数
         runtime: AgentRuntime 实例（可选）
+        registry_tools: 主注册表工具 schema 列表（可选）——供子代理
+            透传检索类工具（grep/glob）；不传则子代理只有基础工具集
 
     Returns:
         执行结果
@@ -509,6 +517,29 @@ def handle_task(
         # 这里使用相同的工作目录，但可以配置为独立的临时目录
         pass
 
+    # ---- 子代理额外工具：检索（grep/glob）+ 任务跟踪（TodoWrite）----
+    # 从主注册表透传 schema + handler：
+    # - grep/glob 是条件注册（rg 缺失不注册）+ 白名单可过滤，透传而非重建
+    #   可保证子代理与主代理工具面一致；handler 闭包的 workdir / 门禁
+    #   （gui_mode 下 resolve_guarded_path，子代理无交互渠道 fail-closed）
+    #   与主链路同源，不引入第二条安全通路
+    # - TodoWrite 不透传主代理 handler（todo_mgr 是主代理私有状态，并发
+    #   子代理共享会互相覆盖待办列表），为每次调用新建私有 TodoManager
+    extra_tools: List[Dict] = []
+    extra_handlers: Dict[str, Any] = {}
+    if registry_tools is not None:
+        passthrough = [t for t in registry_tools if t.get("name") in ("grep", "glob")]
+        extra_tools.extend(passthrough)
+    for name in ("grep", "glob"):
+        if name in handlers:
+            extra_handlers[name] = handlers[name]
+    # TodoManager 延迟导入（与上方 manager 导入同风格；每次调用创建私有实例）
+    from ..managers.todo_manager import TodoManager
+
+    sub_todo = TodoManager()
+    extra_tools.append(TODO_WRITE_TOOL)
+    extra_handlers["TodoWrite"] = lambda **kw: sub_todo.update(kw["items"])
+
     return run_subagent(
         prompt,
         agent_type,
@@ -519,6 +550,8 @@ def handle_task(
         run_read=handlers["read_file"],
         run_write=handlers["write_file"],
         run_edit=handlers["edit_file"],
+        extra_tools=extra_tools or None,
+        extra_handlers=extra_handlers or None,
     )
 
 
