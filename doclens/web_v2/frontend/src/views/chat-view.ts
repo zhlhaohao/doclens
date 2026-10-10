@@ -24,6 +24,7 @@ import { formatTokens } from "../utils/format";
 export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
 import "../components/session-rename-dialog";
+import "../components/fork-confirm-dialog";
 import "../components/session-info-dialog";
 import "../components/rewind-dialog";
 import "../components/compact-confirm-dialog";
@@ -507,6 +508,8 @@ export class ChatView extends LitElement {
   /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
   @state() private _skillDialogOpen = false;
   @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
+  /** 孪生复制确认框待复制的源会话（null = 关闭）；确认后执行复制。 */
+  @state() private _forkDialogSession: Session | null = null;
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
   /** 压缩上下文确认框开关（more 菜单「压缩上下文」→ 确认后才执行） */
   @state() private _compactDialogOpen = false;
@@ -1282,10 +1285,21 @@ export class ChatView extends LitElement {
     this._loadSession(e.detail.session);
   }
 
-  /** 历史条目「复制会话」（2026-10-10）：调孪生复制 API → 刷新历史 →
-   *  直接进入孪生会话（复制即为了继续干活，避免再点一次）。失败 toast。 */
-  private async _onForkSession(e: CustomEvent<{ session: Session }>) {
-    const { session } = e.detail;
+  /** 历史条目「复制会话」（2026-10-10）：先弹确认框说明复制语义，确认后
+   *  调孪生复制 API → 刷新历史 → 直接进入孪生会话（复制即为了继续干活，
+   *  避免再点一次）。失败 toast。 */
+  private _onForkSession(e: CustomEvent<{ session: Session }>) {
+    this._forkDialogSession = e.detail.session;
+  }
+
+  private _onForkCancel = () => {
+    this._forkDialogSession = null;
+  };
+
+  private _onForkConfirm = async (): Promise<void> => {
+    const session = this._forkDialogSession;
+    this._forkDialogSession = null;
+    if (!session) return;
     try {
       const twin = await duplicateSession(session.id);
       await this._loadHistory();
@@ -1299,7 +1313,7 @@ export class ChatView extends LitElement {
     } catch (err) {
       this._pushToast(`复制会话失败：${(err as Error)?.message || err}`, "error", 5000);
     }
-  }
+  };
 
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
@@ -1461,6 +1475,22 @@ export class ChatView extends LitElement {
           @compact-confirm=${this._onCompactConfirm}
           @cancel=${this._onCompactCancel}
         ></compact-confirm-dialog>
+      </dialog>`;
+  }
+
+  /** 孪生复制确认框宿主（2026-10-10；<dialog> 由 updated() showModal）——
+   *  历史列表在 initial 分支，但渲染挂 focus 分支末尾同理可行；这里挂在
+   *  initial 分支（fork 按钮只出现在历史列表）。 */
+  private _renderForkDialog() {
+    const s = this._forkDialogSession;
+    if (!s) return nothing;
+    return html`
+      <dialog @cancel=${this._onForkCancel}>
+        <fork-confirm-dialog
+          .sessionTitle=${s.title}
+          @fork-confirm=${this._onForkConfirm}
+          @cancel=${this._onForkCancel}
+        ></fork-confirm-dialog>
       </dialog>`;
   }
 
@@ -1649,6 +1679,7 @@ export class ChatView extends LitElement {
         </div>
         ${this._renderSkillDialog()}
         ${this._renderVisionGateDialog()}
+        ${this._renderForkDialog()}
       `;
     }
     const hasPreview = this.previewOpen;
