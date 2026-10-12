@@ -54,6 +54,7 @@ _ALLOWED_UPLOAD_EXT = frozenset({
     ".pptx", ".ppt", ".pps", ".pot",
     ".xlsx", ".xls", ".xlsm", ".csv", ".rtf", ".epub", ".html", ".htm",
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+    ".log",
 })
 
 
