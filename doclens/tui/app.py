@@ -366,7 +366,12 @@ class CortexApp(App):
             skills_dir = get_global_cortex_dir() / "skills"
             loader = SkillLoader(skills_dir)
             from doclens import skills_config
-            loader.set_disabled(skills_config.disabled_names(loader.skills.keys()))
+            # 停用名单含深读技能整体（ADR-0041：模型感知面/用户斜杠命令表全隔断，
+            # 唯一入口 = Web 深读面板）
+            loader.set_disabled(
+                skills_config.disabled_names(loader.skills.keys())
+                | skills_config.book_skill_names(loader.skills.keys())
+            )
 
             for name, info in loader.skills.items():
                 if loader.is_disabled(name):  # 命令注册同样走路由隔断

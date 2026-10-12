@@ -16,6 +16,27 @@ export async function fetchSkills(): Promise<SkillInfo[]> {
   return data.skills ?? [];
 }
 
+// ===== 深读面板（ADR-0041）=====
+
+/** 深读面板书目条目：`_bookskill_` 前缀技能的去前缀视图。 */
+export interface BookSkillItem {
+  /** 技能全名（含前缀，DELETE / 点书跳 chat 的斜杠名都用它） */
+  name: string;
+  /** 去前缀书名（显示用） */
+  title: string;
+  /** description 首句摘要 */
+  description: string;
+  icon: string;
+  /** 生成时间（技能 SKILL.md mtime，Unix 秒；可空） */
+  created_at: number | null;
+}
+
+/** 拉取深读面板书目（生成时间倒序）。 */
+export async function fetchBookSkills(): Promise<BookSkillItem[]> {
+  const data = await request<{ books: BookSkillItem[] }>("/api/skills/books");
+  return data.books ?? [];
+}
+
 // ===== 管理面（设置页技能 tab，ADR-0015）=====
 
 /** 管理列表条目：磁盘技能 or 已删除内置技能（灰置可恢复）。 */

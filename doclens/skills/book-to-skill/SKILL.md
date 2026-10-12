@@ -18,7 +18,8 @@ icon: book-open
   - 第一层只有 1 个巨型节点且无有效子节（如 330 万词单块）→ 索引器未切章，走 Step 3 读法 B 的词区间变体。
 - **临时脚本产物**：本技能正常流程零临时文件；若确需辅助（如复杂分词统计），脚本写入 `<知识库工作目录>/.cortex/tmp/book-skill-<slug>/`，结束即删。**绝不**在知识库工作目录直接落脚本或中间文件。
 - **生成的技能只装 `~/.cortex/skills/<slug>/`**：doclens SkillLoader 只扫该目录，写入后**下一轮对话自动热加载**，无需重启、无需 symlink。
-- **交互提问用 `ask_user_question`**（内容类型、命名、用途、冲突处理可合并成一问多题）；等不到回复时选择最合理默认并在输出中说明所用默认与理由，不空转。
+- **ask-files 兜底回落（写进生成物）**：深读技能是结构提炼，不是全书全量——用户问题超出提炼覆盖（Topic Index 无命中 / 章节笔记不敷回答 / 回答被质疑或结果不满意）时，回落到 `ask-files` 技能对**源文件**带原问精读回答，不得凭提炼内容硬答或编造。生成的主 SKILL.md 必须写明：① 头部「源文件」相对路径；② How to Use 的兜底条目（见 Step 9 模板）。
+- **交互提问用 `ask_user_question`**（内容类型、用途、冲突处理可合并成一问多题；命名不问，slug 固定为 `_bookskill_<原文件名>`）；等不到回复时选择最合理默认并在输出中说明所用默认与理由，不空转。
 - **超长书的并发读法**：章节多、量大时，把章节分派给 `task` 子代理（`agent_type=Explore`）带问精读，子代理 prompt 模板见「Step 3 读法 B」。每波 ≤8 个，主代理汇总。子代理只用 read_document，不得联网、不得跑脚本。
 
 ## 模式路由
@@ -30,8 +31,8 @@ icon: book-open
 
 ## Step 0 — 参数与守卫
 
-- 用户消息的「文件：」一节列出源路径；无路径时停并回复用法：`book-to-skill <知识库内文档路径>... [skill-name-slug]`。
-- 末位参数形如小写连字符 slug 且不是已存在的知识库文件 → 视为 `SKILL_NAME`；其余为 `INPUT_PATHS`。
+- 用户消息的「文件：」一节列出源路径；无路径时停并回复用法：`book-to-skill <知识库内文档路径>...`。
+- **slug 固定规则：`_bookskill_<原文件名>`**——取源文件主名（去扩展名）**原样保留，不翻译、不转写、不改大小写**（如 `电子书/麦当劳准则.epub` → slug `_bookskill_麦当劳准则`；`examples/The McKinsey Way.pdf` → `_bookskill_The McKinsey Way` 中的空格按连字符替换为 `_bookskill_The-McKinsey-Way`）。多源合并时用第一个文件的主名。用户在补充要求里显式给了名字才例外覆盖。
 - 每个输入先用 `file_info(path=...)` 探明：存在性、格式、总词数、章节清单。文件不存在/未索引 → 先请用户确认是否 reindex，不要静默替代。
 - **冲突守卫**：按 Step 5 命名规则推导候选 slug，检查 `~/.cortex/skills/` 是否已有同名技能。**检查方式：`bash` 跑 `ls "$HOME/.cortex/skills/" | grep -x "<slug>"`（或直接 `ls "$HOME/.cortex/skills/<slug>/"`）**——技能根在知识库工作目录之外，`glob` 工具只在工作目录内生效，对它传绝对路径必然空手而归，不要用。命中 → `ask_user_question` 三选一（Update 并入 / 确认已完整即停 / 强制重新生成），选项里附上既有技能的生成时间（`stat`/`ls -la` 可得）与源文件 mtime 的对比，帮助用户判断。
 - **多源合并**：多个文件会合并为一个技能（章节数叠加）；单文件自成一本时才按单书处理。
@@ -40,13 +41,14 @@ icon: book-open
 
 `file_info` 返回的格式须在知识库支持列表内；不支持的扩展名（如 .mobi/.azw，本项目索引器不认）→ 明确告知不支持，建议用户先行转换为 .epub/.pdf 再放入知识库。巨型文件（file_info 显示数百万词、章节被压扁为一个巨型章，如 330 万词的整本小说）→ 该书结构未被索引器切章，走「Step 3 读法 B 变体」：按需用 read_document 的 start_word/end_word 切片读，或提示用户拆分文件。
 
-## Step 1.5 — 一次问齐（内容类型 / 命名 / 用途）
+## Step 1.5 — 一次问齐（内容类型 / 用途）
 
 `ask_user_question` 单次多题：
 
 1. **内容类型**：技术类（代码/表格/公式多 → `BOOK_TYPE=technical`，章节模板保留技术节）/ 文字密集（`text`，默认）/ 不确定（按 `text`）。
-2. **技能命名**：`{作者}-{核心概念}`（方法论身份强时，如 `mckinsey-mind`）/ 按书名 slug / 自定义。
-3. **用途**：应用框架 / 借心智模型 / 查章节引用（仅此项 → `DEPTH=reference`，否则 `DEPTH=study`）。
+2. **用途**：应用框架 / 借心智模型 / 查章节引用（仅此项 → `DEPTH=reference`，否则 `DEPTH=study`）。
+
+（命名不再询问——slug 由 Step 0 固定规则 `_bookskill_<原文件名>` 自动生成。）
 
 ## Step 2 — token 预算与切读计划
 
@@ -122,12 +124,12 @@ icon: book-open
 ## 抽取报告 — <书名>
 ### 作者核心框架（框架名 + 是什么 + 何时用）
 ### 关键原则 / 技法方法 / 反模式
-### 建议技能名：{作者}-{核心概念}
+### 技能 slug：_bookskill_<原文件名>（固定规则，见 Step 0）
 ### 章节表：| # | 标题 | 主要框架 | 词数 |
 
 ## Step 5 — 命名与安装根
 
-- slug：`SKILL_NAME` 优先；否则 Step 1.5 用户选定。
+- slug = Step 0 固定规则 `_bookskill_<原文件名>`（不翻译、原样保留；仅用户显式给名才覆盖）。
 - 安装根固定 `SKILLS_HOME=~/.cortex/skills`（不存在则创建）。
 - 生成的技能 frontmatter **必须**含 `name` 与 `description`，description 末尾追加「加载方式：`load_skill("<slug>")`。」。
 
@@ -199,11 +201,12 @@ description: "来自《<书名>》（<作者>）的知识库。当用户应用 <
 ---
 
 # <书名>
-**作者**: <> | **词数**: ~N | **章**: N（= file_info 目录第一层数） | **生成**: YYYY-MM-DD
+**作者**: <> | **词数**: ~N | **章**: N（= file_info 目录第一层数） | **生成**: YYYY-MM-DD | **源文件**: <知识库内相对路径>
 （可选：如目录明显少于书自称章数，附一句事实说明"源文件目录仅含以下 N 章"）
 
 ## How to Use This Skill
 （无参=核心框架速览 / 提主题=查相关章 / 提 chNN=读该章 / 问"有哪些章"=索引）
+（兜底：主题在 Topic Index 无命中、章节内容不足以回答、或用户对结果不满意 → `load_skill("ask-files")` 对上方「源文件」带原问精读回答——技能是提炼不是全量，原文才是最终真相）
 
 ## Core Frameworks & Mental Models
 <!-- ~2,000 tokens，命名框架 + "Use X when Y"，工具箱不是摘要 -->

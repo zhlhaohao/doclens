@@ -20,8 +20,9 @@ import "../components/move-dialog";
 import "../components/delete-dialog";
 import "../components/skill-toolbox-dialog";
 import "../components/skill-run-dialog";
-import type { SkillInfo } from "../api/skills";
-import { fetchSkills } from "../api/skills";
+import "../components/deep-read-list";
+import type { SkillInfo, BookSkillItem } from "../api/skills";
+import { fetchSkills, fetchBookSkills, deleteSkill } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
 import "../components/drop-zone";
 import "../components/icon";
@@ -203,6 +204,40 @@ export class FilesView extends LitElement {
     }
     dialog::backdrop { background: rgba(0,0,0,0.3); }
     dialog > * { display: block; padding: var(--cortex-space-6); }
+    /* 深读技能删除确认（内联轻量确认框，非独立组件） */
+    .confirm-dialog h3 {
+      margin: 0 0 var(--cortex-space-3);
+      font-size: var(--cortex-fs-md);
+      color: var(--cortex-text);
+    }
+    .confirm-dialog p {
+      margin: 0 0 var(--cortex-space-4);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      line-height: 1.5;
+    }
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--cortex-space-2);
+    }
+    .confirm-actions button {
+      padding: 6px 16px;
+      border-radius: var(--cortex-radius-md);
+      border: 1px solid var(--cortex-border);
+      font-size: var(--cortex-fs-sm);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .confirm-actions button.secondary {
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+    }
+    .confirm-actions button.danger {
+      background: var(--cortex-danger, #f85149);
+      border-color: var(--cortex-danger, #f85149);
+      color: #fff;
+    }
     .toast {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%);
@@ -377,6 +412,16 @@ export class FilesView extends LitElement {
   /** 进入改动模式时记录的当前目录——变化 = 用户点了 file-tree（Q15 退出依据）。 */
   private _lastDirBeforeChanges: string | null = null;
 
+  // 深读面板模式（ADR-0041）：中间栏切换为深读书目列表（同改动模式形态）
+  /** 深读模式开关（存在深读技能才显示入口；探测失败静默隐藏）。 */
+  @state() private _deepReadMode = false;
+  /** 是否存在深读技能（入口显隐依据；null = 未探测）。 */
+  @state() private _hasBooks: boolean | null = null;
+  /** 进入深读模式时记录的当前目录——变化 = 用户点了 file-tree（同 Q15 退出依据）。 */
+  private _lastDirBeforeDeepRead: string | null = null;
+  /** 待删除的深读技能（删除确认对话框数据；null = 无）。 */
+  @state() private _deleteBook: BookSkillItem | null = null;
+
   /** jsbridge 上传进行中（App 内）：禁用上传入口，防重复触发 */
   @state() private _uploading = false;
 
@@ -390,6 +435,7 @@ export class FilesView extends LitElement {
     this._loadPaneWidths();
     this._loadIndexedDocuments();
     this._probeGitRoot();
+    void this._probeBooks();
     // 启动恢复：上次所在目录 + 选中文件（选择恢复，预览不自动拉）
     void this._restoreSelection();
     // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
@@ -415,6 +461,10 @@ export class FilesView extends LitElement {
       this._diffPath = "";
       this._diffResp = null;
       this._diffError = null;
+    }
+    // 深读模式同律：点 file-tree 目录节点 = 退出深读模式
+    if (this._deepReadMode && store.getState().files.currentDir !== this._lastDirBeforeDeepRead) {
+      this._deepReadMode = false;
     }
     this.requestUpdate();
   }
@@ -445,6 +495,61 @@ export class FilesView extends LitElement {
       this._diffError = null;
       this._lastDirBeforeChanges = store.getState().files.currentDir;
       if (this._isMobile) actions.setMobilePane("list");
+    }
+  }
+
+  /** 进入 / 退出深读模式（ADR-0041；与改动模式互斥——进深读时先退改动）。
+   *  预览栏保持常规态（点书跳 chat，预览栏无深读专属内容）。 */
+  private _toggleDeepReadMode() {
+    if (this._changesMode) this._toggleChangesMode();
+    this._deepReadMode = !this._deepReadMode;
+    if (this._deepReadMode) {
+      this._lastDirBeforeDeepRead = store.getState().files.currentDir;
+      if (this._isMobile) actions.setMobilePane("list");
+    } else {
+      this._lastDirBeforeDeepRead = null;
+    }
+  }
+
+  /** 探测是否存在深读技能（入口显隐依据；失败静默隐藏，同 git 根探测）。 */
+  private async _probeBooks() {
+    try {
+      const books = await fetchBookSkills();
+      this._hasBooks = books.length > 0;
+    } catch {
+      this._hasBooks = false;
+    }
+  }
+
+  /** 深读书目行点击：跳 chat 新建技能会话，直发开场白（斜杠形态，
+   *  与 files 工具箱同一条 pendingSkillChat 收尾链路；ADR-0041 D2）。 */
+  private _onBookActivated(e: CustomEvent<{ book: BookSkillItem }>) {
+    const book = e.detail.book;
+    const message = `/${book.name} 请按技能指引回答关于《${book.title}》的问题`;
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setPendingSkillChat({
+      message,
+      title: `深读 · ${book.title}`,
+      isSkill: true,
+    });
+    router.navigate("chat");
+  }
+
+  /** 删除确认提交：真删技能目录（非内置 → DELETE 真删分支），刷新面板与入口。 */
+  private async _onBookDeleteConfirm() {
+    const book = this._deleteBook;
+    this._deleteBook = null;
+    if (!book) return;
+    try {
+      await deleteSkill(book.name);
+      this._showToast(`已删除深读技能：${book.title}`);
+      const list = this.shadowRoot?.querySelector("deep-read-list") as any;
+      await list?.refresh?.();
+      await this._probeBooks();
+      // 删空后退出深读模式（面板只剩空态引导）
+      if (this._hasBooks === false) this._deepReadMode = false;
+    } catch (e: any) {
+      this._showToast(e?.message || "删除失败");
     }
   }
 
@@ -697,6 +802,10 @@ export class FilesView extends LitElement {
     }
     if (name === "git-changes") {
       this._toggleChangesMode();
+      return;
+    }
+    if (name === "deep-read") {
+      this._toggleDeepReadMode();
       return;
     }
     if (name === "upload") {
@@ -1469,7 +1578,13 @@ export class FilesView extends LitElement {
               @activated=${this._onFilenameResultActivated}
               @clear=${this._onFilenameClear}
             ></file-search-results>`
-          : this._changesMode
+          : this._deepReadMode
+            ? html`<deep-read-list
+                @activated=${this._onBookActivated}
+                @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._deleteBook = e.detail.book; }}
+                @exit=${() => this._toggleDeepReadMode()}
+              ></deep-read-list>`
+            : this._changesMode
             ? html`<git-changes-list
                 .activePath=${this._diffPath}
                 @activated=${this._onChangeActivated}
@@ -1480,6 +1595,8 @@ export class FilesView extends LitElement {
                 .uploading=${this._uploading}
                 .gitChangesAvailable=${this._isGitRoot === true}
                 .changesMode=${this._changesMode}
+                .deepReadAvailable=${this._hasBooks === true}
+                .deepReadMode=${this._deepReadMode}
                 @action=${this._onAction}
                 @activated=${this._onFileListActivated}
               ></file-list>`}
@@ -1514,7 +1631,13 @@ export class FilesView extends LitElement {
                     @activated=${this._onFilenameResultActivated}
                     @clear=${this._onFilenameClear}
                   ></file-search-results>`
-                : this._changesMode
+                  : this._deepReadMode
+                  ? html`<deep-read-list
+                      @activated=${this._onBookActivated}
+                      @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._deleteBook = e.detail.book; }}
+                      @exit=${() => this._toggleDeepReadMode()}
+                    ></deep-read-list>`
+                  : this._changesMode
                   ? html`<git-changes-list
                       .activePath=${this._diffPath}
                       @activated=${this._onChangeActivated}
@@ -1525,6 +1648,8 @@ export class FilesView extends LitElement {
                       .uploading=${this._uploading}
                       .gitChangesAvailable=${this._isGitRoot === true}
                       .changesMode=${this._changesMode}
+                      .deepReadAvailable=${this._hasBooks === true}
+                      .deepReadMode=${this._deepReadMode}
                       ?mobile=${true}
                       @action=${this._onAction}
                       @activated=${this._onFileListActivated}
@@ -1602,6 +1727,20 @@ export class FilesView extends LitElement {
           @submit=${this._onSkillRunSubmit}
           @cancel=${this._cancelDialog}
         ></skill-run-dialog>
+      </dialog>`;
+    }
+    if (this._deleteBook) {
+      // 深读技能删除确认（ADR-0041：真删，源书文件不动，可随时重新生成）
+      const b = this._deleteBook;
+      return html`<dialog @cancel=${() => { this._deleteBook = null; }}>
+        <div class="confirm-dialog">
+          <h3>删除深读技能</h3>
+          <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /book-to-skill 重新生成。</p>
+          <div class="confirm-actions">
+            <button class="secondary" @click=${() => { this._deleteBook = null; }}>取消</button>
+            <button class="danger" @click=${() => void this._onBookDeleteConfirm()}>删除</button>
+          </div>
+        </div>
       </dialog>`;
     }
     return html``;

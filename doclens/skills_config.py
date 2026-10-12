@@ -27,6 +27,18 @@ _SCHEMA_VERSION = 1
 # 可变字段白名单（稀疏存储：只存显式设置的键）
 _FIELDS = ("enabled", "context_menu", "accept_dirs", "deleted", "source_url")
 
+# 深读技能前缀（ADR-0041）：book-to-skill 生成物的 slug 固定以该前缀开头，
+# 前缀即身份——从四个用户调用面全隐 + 不进 system prompt 清单，
+# 唯一用户入口 = files 页深读面板。前缀常量是全仓单一真相源，
+# 各过滤口径（API 端点 / 斜杠链路 / 前端）一律引用本处，禁止字面量散写。
+BOOK_SKILL_PREFIX = "_bookskill_"
+
+
+def is_book_skill(name: str) -> bool:
+    """是否深读技能（前缀判定，无状态、对未来生成的书自动生效）。"""
+    return name.startswith(BOOK_SKILL_PREFIX)
+
+
 # 内置技能的出厂默认（context_menu / accept_dirs 已退出 frontmatter，ADR-0015）。
 # 有效值 = sidecar 覆盖 ?? 本表 ?? false。键 = 技能名（SKILL.md 的 name 字段）。
 BUILTIN_SKILL_DEFAULTS: dict[str, dict[str, bool]] = {
@@ -184,7 +196,14 @@ def remove_entry(name: str) -> None:
 
 
 def disabled_names(names) -> set[str]:
-    """给定技能名集合，返回其中「停用或已删除」的子集（供 SkillLoader 路由隔断）。"""
+    """给定技能名集合，返回其中「停用或已删除」的子集（供 SkillLoader 路由隔断）。
+
+    深读技能（ADR-0041）不在其列——它们经 SkillLoader.set_disabled 隔断的
+    目的只是「不进 system prompt 清单」，但 disabled 的语义是「路由层隔断
+    + descriptions 剔除 + load 不受影响」；深读技能需要的是**模型感知面
+    也剔除**（由 model_hidden_names 独立名单承担），且不该因用户误设
+    enabled=false 就从深读面板消失（面板无停用语义，唯一管理 = 删除）。
+    """
     with _LOCK:
         overrides = _load_raw()["skills"]
     result = set()
@@ -200,3 +219,8 @@ def deleted_names() -> set[str]:
     with _LOCK:
         overrides = _load_raw()["skills"]
     return {n for n, ov in overrides.items() if ov.get("deleted", False)}
+
+
+def book_skill_names(names) -> set[str]:
+    """给定技能名集合中的深读技能子集（ADR-0041 前缀判定）。"""
+    return {n for n in names if is_book_skill(n)}

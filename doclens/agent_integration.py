@@ -232,7 +232,14 @@ class CortexAgent:
         # 注入应用日志目录（宿主数据，planify 不自行计算）——系统提示词的
         # 目录事实紧随技能根目录输出，供 agent 排障时直接定位当日日志。
         skills = SkillLoader(skills_dir, logs_dir=logs_dir)
-        skills.set_disabled(skills_config.disabled_names(skills.skills.keys()))
+        # 停用名单 = sidecar 停用/已删除 + 深读技能整体（ADR-0041 D3：模型
+        # 感知面隔断——descriptions() 清单剔除，书多不随 system prompt 膨胀）。
+        # disabled 只做路由层隔断，load_skill 不受影响；深读技能经深读面板
+        # 的斜杠 hint 注入照常加载（_chat_slash 对前缀豁免 disabled 门）。
+        skills.set_disabled(
+            skills_config.disabled_names(skills.skills.keys())
+            | skills_config.book_skill_names(skills.skills.keys())
+        )
 
         # 技能加载状态（按 session_id 记录），供工具门禁 + load_skill 标记 + 跨轮 body 重注入使用
         from planify.skills.access_state import SkillAccessState

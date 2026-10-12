@@ -41,7 +41,9 @@ from doclens.web_v2.models.skill import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+# 技能名字符集：ASCII 标识符 + CJK（ADR-0041 D4——深读技能 slug 允许中文书名，
+# ASCII-only 正则匹配不上中文名是存量缺陷，字符集对中日韩开放为全局放行）
+_NAME_RE = re.compile(r"^[\w.\-]+$", re.UNICODE)
 
 
 def _skills_dir():
@@ -63,7 +65,12 @@ def _hot_apply(rescan: bool = False) -> None:
     loader = agent.runtime.skills
     if rescan:
         loader.rescan()
-    loader.set_disabled(skills_config.disabled_names(loader.skills.keys()))
+    # 停用名单 = sidecar 停用/已删除 ∪ 深读技能整体（ADR-0041 模型感知面隔断，
+    # 与 agent_integration / tui 注入口径一致）
+    loader.set_disabled(
+        skills_config.disabled_names(loader.skills.keys())
+        | skills_config.book_skill_names(loader.skills.keys())
+    )
 
 
 def _validate_name(name: str) -> str:
@@ -93,13 +100,16 @@ async def list_skills():
 
     停用仅做路由层隔断（不进 system prompt 清单），不影响工具箱展示——
     工具箱显隐由 context_menu 独立控制。user-invocable: false 的技能
-    （仅模型可调）全隐，不出现在工具箱。
+    （仅模型可调）全隐，不出现在工具箱。深读技能（ADR-0041 `_bookskill_`
+    前缀）同样排除——唯一用户入口是深读面板。
     """
     agent = deps.get_agent()
     skills_loader = agent.runtime.skills
     skills = []
     for name, info in skills_loader.skills.items():
         if not skills_loader.is_user_invocable(name):
+            continue
+        if skills_config.is_book_skill(name):
             continue
         state = skills_config.effective_state(name)
         if not state["context_menu"]:
@@ -114,19 +124,72 @@ async def list_skills():
     return {"skills": skills}
 
 
+@router.get("/skills/books")
+async def list_books():
+    """深读面板书目列表（ADR-0041）。
+
+    深读技能的唯一用户入口数据源：按 `_bookskill_` 前缀过滤，字段一次配齐
+    （去前缀书名 / description 摘要 / 图标 / 生成时间 = 技能目录 mtime），
+    生成时间倒序。不做 enabled 过滤——面板无停用语义（唯一管理 = 删除），
+    用户误改 sidecar json 停用一本不该让它凭空消失。真删走
+    DELETE /api/skills/{name}（非内置 → 真删分支）。
+    """
+    loader = _scan_loader()
+    # 目录名 → SKILL.md 路径映射（一次扫描；技能根支持厂商子目录组织，
+    # meta name 与目录名可能不一致，故按 skill_name_of 归位而非拼路径）
+    from doclens.skills_deploy import skill_name_of
+
+    md_by_name: dict[str, Path] = {}
+    root = _skills_dir()
+    if root.exists():
+        for skill_md in sorted(root.rglob("SKILL.md")):
+            md_by_name.setdefault(
+                skill_name_of(skill_md, skill_md.parent.name), skill_md
+            )
+    books = []
+    for name, info in loader.skills.items():
+        if not skills_config.is_book_skill(name):
+            continue
+        skill_md = md_by_name.get(name)
+        mtime = None
+        if skill_md is not None:
+            try:
+                mtime = skill_md.stat().st_mtime
+            except OSError:
+                pass
+        meta = info.get("meta", {})
+        desc = meta.get("description", "")
+        # 摘要：description 首句（「。」「.」或换行截断，≤120 字）
+        for sep in ("。", ". ", "\n"):
+            idx = desc.find(sep)
+            if idx > 0:
+                desc = desc[: idx + (1 if sep != ". " else 2)]
+                break
+        books.append({
+            "name": name,
+            "title": name[len(skills_config.BOOK_SKILL_PREFIX):] or name,
+            "description": desc[:120],
+            "icon": meta.get("icon", "book-open"),
+            "created_at": mtime,
+        })
+    books.sort(key=lambda b: (-(b["created_at"] or 0), b["name"]))
+    return {"books": books}
+
+
 @router.get("/skills/manage", response_model=SkillManageListResponse)
 async def list_skills_manage():
     """全量技能管理列表：磁盘技能 + 已删除内置技能（灰置可恢复）。
 
     user-invocable: false 的技能（仅模型可调）对配置面全隐——磁盘条目与
-    已删除内置的灰置条目都不出现。
+    已删除内置的灰置条目都不出现。深读技能（ADR-0041 `_bookskill_` 前缀）
+    同样排除——设置页不可达，唯一管理面是深读面板。
     """
     loader = _scan_loader()
     builtins = skills_config.builtin_skill_names()
     items = [
         _manage_item(name, info.get("meta", {}), name in builtins)
         for name, info in loader.skills.items()
-        if loader.is_user_invocable(name)
+        if loader.is_user_invocable(name) and not skills_config.is_book_skill(name)
     ]
     # 已删除的内置技能不在磁盘上（部署被跳过），从发行包 meta 补灰置条目
     deleted = skills_config.deleted_names()
@@ -154,6 +217,7 @@ async def patch_skill(name: str, req: SkillPatchRequest):
     ) or (
         not loader.is_user_invocable(name)
         or name in skills_config.builtin_model_only_names()
+        or skills_config.is_book_skill(name)  # 深读技能设置页不可达（ADR-0041）
     ):
         raise CortexAPIError(404, "SKILL_NOT_FOUND", f"技能不存在: {name}")
     updates = req.model_dump(exclude_unset=True)

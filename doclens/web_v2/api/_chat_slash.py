@@ -15,10 +15,12 @@
 import re
 from typing import Optional
 
+from doclens import skills_config
 from doclens.web_v2.api._chat_markers import SLASH_HINT_MARKER
 
-# 技能名字符集与 API 校验一致（skills._NAME_RE：[A-Za-z0-9_.-]+）
-_SLASH_SKILL_RE = re.compile(r"^/([A-Za-z0-9_.-]+)(?:\s|$)")
+# 技能名字符集与 API 校验一致（skills._NAME_RE：[\w.\-]+ Unicode——ADR-0041 D4
+# 起对 CJK 开放，深读技能的中文书名 slug 可斜杠匹配）
+_SLASH_SKILL_RE = re.compile(r"^/([\w.\-]+)(?:\s|$)", re.UNICODE)
 
 # hint 注入消息的标记（与 <loaded-skill> 语义区分：本标记 = 请求加载，
 # loaded-skill = 已加载正文；runner 的重注入去重只认 loaded-skill，不冲突）
@@ -37,9 +39,14 @@ _HINT_TEMPLATE = (
 def legal_slash_skill(message: str, skills_loader) -> Optional[str]:
     """复检斜杠调用的合法性，合法返回技能名，否则 None。
 
-    四门（与前端引导菜单同口径）：斜杠前缀命中 ∧ 技能存在 ∧ 未停用/未删除
+    五门（与前端引导菜单同口径）：斜杠前缀命中 ∧ 技能存在 ∧ 未停用/未删除
     （loader.is_disabled，宿主已注入 sidecar 停用名单）∧ user-invocable
-    （用户调用面硬门，model-only 技能不可经用户入口调用）。
+    （用户调用面硬门，model-only 技能不可经用户入口调用）∧ 非深读技能
+    直连（ADR-0041：深读技能的唯一用户入口是深读面板，手敲斜杠/对话菜单
+    都不注入——但面板点书跳 chat 复用的正是斜杠形态消息，故深读技能的
+    面板消息须放行：豁免方式 = disabled 检查对深读技能跳过（宿主把深读
+    技能整体注入 disabled 名单实现模型感知面隔断，见 agent_integration），
+    is_disabled 为 False 时面板链路畅通）。
 
     Args:
         message: 用户消息原文（前端已 trim；未 trim 的调用方消息带前导空格
@@ -52,11 +59,15 @@ def legal_slash_skill(message: str, skills_loader) -> Optional[str]:
     if not match:
         return None
     name = match.group(1)
-    if (
-        name not in skills_loader.skills
-        or skills_loader.is_disabled(name)
-        or not skills_loader.is_user_invocable(name)
-    ):
+    if name not in skills_loader.skills:
+        return None
+    if skills_loader.is_disabled(name):
+        # 深读技能经 disabled 名单做模型感知面隔断（ADR-0041 D2/D3），
+        # 但面板点书的消息必须放行——豁免：前缀命中即视为合法，
+        # 交由上层（面板链路）独占
+        if not name.startswith(skills_config.BOOK_SKILL_PREFIX):
+            return None
+    if not skills_loader.is_user_invocable(name):
         return None
     return name
 

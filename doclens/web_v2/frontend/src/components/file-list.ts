@@ -305,6 +305,12 @@ export class FileList extends LitElement {
   /** 改动模式激活中（按钮高亮反馈）。 */
   @property({ type: Boolean }) changesMode = false;
 
+  /** 「深读」入口可用（存在 _bookskill_ 深读技能；由 files-view 探测后传入，ADR-0041）。 */
+  @property({ type: Boolean }) deepReadAvailable = false;
+
+  /** 深读模式激活中（按钮高亮反馈）。 */
+  @property({ type: Boolean }) deepReadMode = false;
+
   /** 各列宽度（px），通过 --col-N CSS var 注入到 host，file-row 经继承读取 */
   @state() private _colWidths: number[] = [...DEFAULT_COL_WIDTHS];
   @state() private _showMobileMenu = false;
@@ -529,6 +535,14 @@ export class FileList extends LitElement {
                       @click=${this._onMenuItemClick("git-changes")}
                     ><doclens-icon name="history"></doclens-icon>${this.changesMode ? "退出改动模式" : "未提交改动"}</button>`
                   : null}
+                ${this.deepReadAvailable
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      data-action="deep-read"
+                      @click=${this._onMenuItemClick("deep-read")}
+                    ><doclens-icon name="book-open"></doclens-icon>${this.deepReadMode ? "退出深读书目" : "深读书目"}</button>`
+                  : null}
                 <button
                   type="button"
                   role="menuitem"
@@ -652,6 +666,9 @@ export class FileList extends LitElement {
         <button data-action="refresh" title="刷新当前目录（与移动端下拉刷新等效）" @click=${() => this._action("refresh")}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">刷新</span></button>
         ${this.gitChangesAvailable
           ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="查看 git 未提交改动（staged + unstaged + untracked）" @click=${() => this._action("git-changes")}><doclens-icon name="history"></doclens-icon><span class="btn-label">改动</span></button>`
+          : null}
+        ${this.deepReadAvailable
+          ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（book-to-skill 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`
           : null}
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
