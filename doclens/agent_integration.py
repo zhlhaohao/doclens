@@ -326,6 +326,8 @@ class CortexAgent:
             run_read,
             run_write,
             run_edit,
+            extra_tools=None,
+            extra_handlers=None,
         ):
             # 子代理轮次预算每次调用现读 os.environ（设置页保存 → reload_config
             # 的 load_dotenv(override=True) 已刷新进程 env → 立即生效，无需重启）。
@@ -339,6 +341,31 @@ class CortexAgent:
                 _rounds = 30  # 非法值回落默认（与 _normalize_bg_timeout 同哲学）
             if _rounds < 1:
                 _rounds = 30
+            # 合并注入：调用方（planify handle_task 透传 grep/glob/TodoWrite）
+            # 与宿主 KB 只读工具（read_document/file_info）。名称冲突时宿主
+            # KB 工具优先（doclens 场景子代理读知识库文档是硬需求）。
+            if extra_tools:
+                _extra_names = {t["name"] for t in extra_tools}
+                _merged = list(extra_tools) + [
+                    t for t in _kb_readonly_tools if t["name"] not in _extra_names
+                ]
+                _merged_handlers = dict(extra_handlers or {})
+                _merged_handlers.update(_kb_readonly_handlers)
+                return _run_subagent(
+                    prompt,
+                    agent_type,
+                    workdir,
+                    client,
+                    model,
+                    run_bash,
+                    run_read,
+                    run_write,
+                    run_edit,
+                    extra_tools=_merged,
+                    extra_handlers=_merged_handlers,
+                    max_tokens=_max_tokens,
+                    max_rounds=_rounds,
+                )
             return _run_subagent(
                 prompt,
                 agent_type,
