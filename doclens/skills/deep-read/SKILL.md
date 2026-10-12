@@ -1,10 +1,10 @@
 ---
-name: book-to-skill
-description: 把书籍/文档（EPUB、PDF、DOCX、PPTX、HTML、Markdown、TXT、XLSX 等知识库支持的一切格式）转化为结构化 agent 技能：提取命名框架、心智模型、原则、技法与反模式，生成 SKILL.md + chapters/ + glossary/patterns/cheatsheet 并安装到 doclens 技能目录。当用户要求把某本书/文档"变成技能"、提取书中方法论供日后复用时使用。加载方式：load_skill("book-to-skill")。
+name: deep-read
+description: 深读书籍/文档（EPUB、PDF、DOCX、PPTX、HTML、Markdown、TXT、XLSX 等知识库支持的一切格式）：把全书转化为结构化 agent 技能——提取命名框架、心智模型、原则、技法与反模式，生成 SKILL.md + chapters/ + glossary/patterns/cheatsheet 并安装到 doclens 技能目录（深读面板）。当用户要求深读某本书/文档、提取书中方法论供日后复用时使用。加载方式：load_skill("deep-read")。
 icon: book-open
 ---
 
-# book-to-skill（doclens 宿主版）
+# deep-read（doclens 宿主版）
 
 把书面知识转成可复用技能：**提取结构，不做摘要**。技能 = 工具箱（命名框架 / 可执行原则 / 步骤化技法 / 反模式 / 作者语气校准），不是书评。
 
@@ -31,7 +31,7 @@ icon: book-open
 
 ## Step 0 — 参数与守卫
 
-- 用户消息的「文件：」一节列出源路径；无路径时停并回复用法：`book-to-skill <知识库内文档路径>...`。
+- 用户消息的「文件：」一节列出源路径；无路径时停并回复用法：`deep-read <知识库内文档路径>...`。
 - **slug 固定规则：`_bookskill_<原文件名>`**——取源文件主名（去扩展名）**原样保留，不翻译、不转写、不改大小写**（如 `电子书/麦当劳准则.epub` → slug `_bookskill_麦当劳准则`；`examples/The McKinsey Way.pdf` → `_bookskill_The McKinsey Way` 中的空格按连字符替换为 `_bookskill_The-McKinsey-Way`）。多源合并时用第一个文件的主名。用户在补充要求里显式给了名字才例外覆盖。
 - 每个输入先用 `file_info(path=...)` 探明：存在性、格式、总词数、章节清单。文件不存在/未索引 → 先请用户确认是否 reindex，不要静默替代。
 - **冲突守卫**：按 Step 5 命名规则推导候选 slug，检查技能根下是否已有同名技能。**技能根取 system prompt「技能根目录（skills dir）」事实行的实际路径**（开发 `~/.cortex/skills`，发行版 `~/.doclens/skills`，勿硬编码）。**检查方式：`bash` 跑 `ls "<技能根>/" | grep -x "<slug>"`（或直接 `ls "<技能根>/<slug>/"`）**——技能根在知识库工作目录之外，`glob` 工具只在工作目录内生效，对它传绝对路径必然空手而归，不要用。命中 → `ask_user_question` 三选一（Update 并入 / 确认已完整即停 / 强制重新生成），选项里附上既有技能的生成时间（`stat`/`ls -la` 可得）与源文件 mtime 的对比，帮助用户判断。
@@ -78,7 +78,7 @@ icon: book-open
 2. 同一条消息发多个 `task`（系统并发执行），每波 ≤8 组；预计 >16 组先合并相邻小章压缩组数。子代理 prompt 模板（用户要求原文照抄）：
 
 ```
-阅读知识库文件「<相对路径>」的以下章节，为"书籍转技能"提取结构化内容：
+阅读知识库文件「<相对路径>」的以下章节，为"深读转化"提取结构化内容：
 
 用户要求：把本书转化为 agent 技能（命名框架、原则、技法、反模式）
 

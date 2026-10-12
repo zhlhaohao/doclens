@@ -65,7 +65,7 @@ class TestPrefix:
     def test_is_book_skill(self):
         assert skills_config.is_book_skill("_bookskill_麦当劳准则") is True
         assert skills_config.is_book_skill("_bookskill_x") is True
-        assert skills_config.is_book_skill("book-to-skill") is False
+        assert skills_config.is_book_skill("deep-read") is False
         assert skills_config.is_book_skill("_bookskill") is False  # 前缀须带尾下划线
         assert skills_config.is_book_skill("") is False
 

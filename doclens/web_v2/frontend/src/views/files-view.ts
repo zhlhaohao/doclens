@@ -525,7 +525,7 @@ export class FilesView extends LitElement {
    *  与 files 工具箱同一条 pendingSkillChat 收尾链路；ADR-0041 D2）。 */
   private _onBookActivated(e: CustomEvent<{ book: BookSkillItem }>) {
     const book = e.detail.book;
-    const message = `/${book.name} 请按技能指引回答关于《${book.title}》的问题`;
+    const message = `/${book.name} 请按技能指引，先对本书内容做整体概要介绍，再以本书涉及的典型问题引导我开展深读。`;
     actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
     actions.setPendingSkillChat({
       message,
@@ -1735,7 +1735,7 @@ export class FilesView extends LitElement {
       return html`<dialog @cancel=${() => { this._deleteBook = null; }}>
         <div class="confirm-dialog">
           <h3>删除深读技能</h3>
-          <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /book-to-skill 重新生成。</p>
+          <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /deep-read 重新生成。</p>
           <div class="confirm-actions">
             <button class="secondary" @click=${() => { this._deleteBook = null; }}>取消</button>
             <button class="danger" @click=${() => void this._onBookDeleteConfirm()}>删除</button>

@@ -245,7 +245,7 @@ export class DeepReadList extends LitElement {
           : this._books !== null && this._books.length === 0
             ? html`<div class="empty">
                 还没有深读书目<br>
-                <span style="font-size: var(--cortex-fs-sm)">在对话中发送 /book-to-skill 生成第一本</span>
+                <span style="font-size: var(--cortex-fs-sm)">在对话中发送 /deep-read 生成第一本</span>
               </div>`
             : html`<div class="rows">
                 ${(this._books ?? []).map((b) => html`

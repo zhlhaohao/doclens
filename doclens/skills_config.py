@@ -27,7 +27,7 @@ _SCHEMA_VERSION = 1
 # 可变字段白名单（稀疏存储：只存显式设置的键）
 _FIELDS = ("enabled", "context_menu", "accept_dirs", "deleted", "source_url")
 
-# 深读技能前缀（ADR-0041）：book-to-skill 生成物的 slug 固定以该前缀开头，
+# 深读技能前缀（ADR-0041）：deep-read 技能生成物的 slug 固定以该前缀开头，
 # 前缀即身份——从四个用户调用面全隐 + 不进 system prompt 清单，
 # 唯一用户入口 = files 页深读面板。前缀常量是全仓单一真相源，
 # 各过滤口径（API 端点 / 斜杠链路 / 前端）一律引用本处，禁止字面量散写。

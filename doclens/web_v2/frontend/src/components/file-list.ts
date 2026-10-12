@@ -668,7 +668,7 @@ export class FileList extends LitElement {
           ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="查看 git 未提交改动（staged + unstaged + untracked）" @click=${() => this._action("git-changes")}><doclens-icon name="history"></doclens-icon><span class="btn-label">改动</span></button>`
           : null}
         ${this.deepReadAvailable
-          ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（book-to-skill 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`
+          ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（deep-read 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`
           : null}
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
