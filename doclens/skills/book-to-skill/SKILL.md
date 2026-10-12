@@ -33,7 +33,7 @@ icon: book-open
 - 用户消息的「文件：」一节列出源路径；无路径时停并回复用法：`book-to-skill <知识库内文档路径>... [skill-name-slug]`。
 - 末位参数形如小写连字符 slug 且不是已存在的知识库文件 → 视为 `SKILL_NAME`；其余为 `INPUT_PATHS`。
 - 每个输入先用 `file_info(path=...)` 探明：存在性、格式、总词数、章节清单。文件不存在/未索引 → 先请用户确认是否 reindex，不要静默替代。
-- **冲突守卫**：按 Step 5 命名规则推导候选 slug，在 `~/.cortex/skills/` 已存在 → `ask_user_question` 三选一（Update 并入 / 确认已完整即停 / 强制重新生成）。
+- **冲突守卫**：按 Step 5 命名规则推导候选 slug，检查 `~/.cortex/skills/` 是否已有同名技能。**检查方式：`bash` 跑 `ls "$HOME/.cortex/skills/" | grep -x "<slug>"`（或直接 `ls "$HOME/.cortex/skills/<slug>/"`）**——技能根在知识库工作目录之外，`glob` 工具只在工作目录内生效，对它传绝对路径必然空手而归，不要用。命中 → `ask_user_question` 三选一（Update 并入 / 确认已完整即停 / 强制重新生成），选项里附上既有技能的生成时间（`stat`/`ls -la` 可得）与源文件 mtime 的对比，帮助用户判断。
 - **多源合并**：多个文件会合并为一个技能（章节数叠加）；单文件自成一本时才按单书处理。
 
 ## Step 1 — 校验输入
