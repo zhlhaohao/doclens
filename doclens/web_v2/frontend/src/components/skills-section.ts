@@ -516,6 +516,17 @@ export class SkillsSection extends LitElement {
     }
   }
 
+  /** 展示顺序：启用在前、禁用其次、已删除垫底；各组内按名称字母序。
+   *  后端 manage 列表同序下发；本地再排一次，保证 PATCH 就地更新单条后
+   *  （不重拉列表）行位置仍符合排序规则。 */
+  private get _sortedSkills(): SkillManageItem[] {
+    return [...this._skills].sort((a, b) =>
+      Number(a.deleted) - Number(b.deleted)
+      || Number(b.enabled) - Number(a.enabled)
+      || a.name.localeCompare(b.name),
+    );
+  }
+
   private _renderSwitch(
     label: string,
     checked: boolean,
@@ -661,7 +672,7 @@ export class SkillsSection extends LitElement {
           : this._skills.length === 0
             ? html`<div class="empty">暂无技能。从 GitHub 安装一个，或等待内置技能部署。</div>`
             : html`<div class="skill-list">
-                ${this._skills.map((s) => this._renderRow(s))}
+                ${this._sortedSkills.map((s) => this._renderRow(s))}
               </div>`}
         ${this._error ? html`<div class="msg err">${this._error}</div>` : nothing}
         ${this._toast ? html`<div class="msg ok">${this._toast}</div>` : nothing}

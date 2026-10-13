@@ -198,7 +198,8 @@ async def list_skills_manage():
     for name in sorted(deleted & builtins):
         if name not in loader.skills and name not in model_only:
             items.append(_manage_item(name, builtin_meta.get(name, {}), True))
-    items.sort(key=lambda s: (s.deleted, not s.builtin, s.name))
+    # 展示排序：已删除垫底 → 启用在前、禁用其次 → 组内按名称字母序
+    items.sort(key=lambda s: (s.deleted, not s.enabled, s.name))
     return SkillManageListResponse(skills=items)
 
 

@@ -134,6 +134,46 @@ class TestListSkillsManage:
         names = [s.name for s in result.skills]
         assert names == ["normal"]
 
+    def test_manage_sort_order(self, tmp_path, monkeypatch):
+        """两级排序：启用在前、禁用其次、已删除垫底；组内名称字母序。"""
+        root = tmp_path
+        for name in ("banana", "apple", "cherry"):
+            _write_skill(root, name)
+        monkeypatch.setattr(skills_api, "_scan_loader", lambda: SkillLoader(root))
+        monkeypatch.setattr(
+            skills_api.skills_config, "builtin_skill_names", lambda: {"ghost"}
+        )
+        monkeypatch.setattr(
+            skills_api.skills_config, "deleted_names", lambda: {"ghost"}
+        )
+        monkeypatch.setattr(
+            skills_api.skills_config, "builtin_model_only_names", lambda: set()
+        )
+        states = {
+            "banana": {"enabled": True},
+            "apple": {"enabled": False},
+            "cherry": {"enabled": False},
+            "ghost": {"deleted": True},
+        }
+        monkeypatch.setattr(
+            skills_api.skills_config,
+            "effective_state",
+            lambda name: {
+                "enabled": states[name].get("enabled", True),
+                "context_menu": True,
+                "accept_dirs": False,
+                "deleted": states[name].get("deleted", False),
+                "source_url": None,
+            },
+        )
+        result = asyncio.run(skills_api.list_skills_manage())
+        assert [s.name for s in result.skills] == [
+            "banana",      # 启用组（字母序）
+            "apple",       # 禁用组（字母序）
+            "cherry",
+            "ghost",       # 已删除垫底
+        ]
+
 
 class TestPatchGuard:
     def test_patch_model_only_404(self, tmp_path, monkeypatch):
