@@ -59,6 +59,8 @@ def test_guidance_contains_discipline_and_index(_clean_env):
     assert "写后必报" in g and "静默写记忆是不合规的" in g
     # 显式记忆指令优先（同日用户要求：「记下来」类指令立即写入）
     assert "显式记忆指令优先" in g and "不等任务完成检查点" in g
+    # 显式撤销指令（同日：「不用记了」类指令立即退役）
+    assert "显式撤销指令" in g and "撤销了哪条" in g
     # 索引全文注入
     assert "## user" in g
     # 记忆库路径写明（通用工具读写要靠它定位）
