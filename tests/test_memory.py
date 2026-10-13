@@ -55,6 +55,8 @@ def test_guidance_contains_discipline_and_index(_clean_env):
     # 纪律条款
     assert "任务开始" in g and "压缩五步" in g
     assert "150 行" in g and "200 行" in g
+    # 写后必报（2026-10-13 用户要求：记忆写入须向用户简报）
+    assert "写后必报" in g and "静默写记忆是不合规的" in g
     # 索引全文注入
     assert "## user" in g
     # 记忆库路径写明（通用工具读写要靠它定位）
