@@ -127,11 +127,57 @@ def ensure_memory_store() -> Path:
     return root
 
 
+# 超标催办段（注入时机由 memory_guidance 按行数/字节双维判定：行或字节
+# 任一维超软上限即追加；超硬上限措辞更强）。这是纯纪律形态下最接近
+# 「机器防线」的机制：不拒写，但超标期间每轮提醒，直到模型压缩达标。
+_OVER_WARN_TEMPLATE = """\
+
+# ⚠ 记忆索引超标——本轮任务开始前先压缩
+
+索引当前 {lines} 行 / {kb:.1f} KB，超过软上限（{warn_lines} 行 / {warn_kb:.0f} KB）。
+**在处理用户请求之前**，先执行压缩五步把索引降回软上限以内（指针化长行 →
+合并重复 → 归档冷笔记到 archive/ 并摘除索引行 → 拆肥笔记 → 重数），完成后
+按写后必报格式简报压缩结果（归档了几条、索引降到多少行），再继续正事。
+"""
+
+_OVER_HARD_TEMPLATE = """\
+
+# ⚠⚠ 记忆索引严重超标（已超硬上限 {hard_lines} 行 / {hard_kb:.0f} KB）——必须先压缩
+
+索引当前 {lines} 行 / {kb:.1f} KB。**本轮第一件事就是压缩索引**：按压缩五步
+执行，目标降到软上限（{warn_lines} 行 / {warn_kb:.0f} KB）以内，简报压缩结果，
+然后才处理用户请求；若用户请求本身紧急，可先一句话说明再压缩。
+"""
+
+
+def _over_budget_notice(index_text: str) -> str:
+    """按索引现状生成超标催办段（未超标返回空串）。
+
+    行数只按 \\n 计（与写入侧口径一致）；字节数按 UTF-8 编码后长度。
+    双维判定：行或字节任一维超软上限 → 软催办；任一维超硬上限 → 强催办。
+    """
+    lines = index_text.count("\n") + (0 if index_text.endswith("\n") or not index_text else 1)
+    nbytes = len(index_text.encode("utf-8"))
+    kb = nbytes / 1024
+    ctx = {
+        "lines": lines, "kb": kb,
+        "warn_lines": WARN_LINES, "warn_kb": WARN_BYTES / 1024,
+        "hard_lines": HARD_LINES, "hard_kb": HARD_BYTES / 1024,
+    }
+    if lines > HARD_LINES or nbytes > HARD_BYTES:
+        return _OVER_HARD_TEMPLATE.format(**ctx)
+    if lines > WARN_LINES or nbytes > WARN_BYTES:
+        return _OVER_WARN_TEMPLATE.format(**ctx)
+    return ""
+
+
 def memory_guidance() -> str:
     """索引 + 纪律条款 → system prompt 注入段（关停/无库返回空串）。
 
     每次构造 agent 时重读 MEMORY.md——写后下一轮生效；文件不变则注入
     内容不变，不破坏 system 前缀缓存（与 kb_root_guidance 同模式）。
+    超标时在段尾追加催办：软上限内正常，超软上限提醒先压缩，超硬上限
+    强催办（本轮第一件事是压缩）——不拒写，但超标期间每轮提醒。
     """
     if memory_disabled():
         return ""
@@ -148,4 +194,5 @@ def memory_guidance() -> str:
         + "\n# 记忆索引（MEMORY.md，自动注入）\n\n"
         + index_text
         + "\n"
+        + _over_budget_notice(index_text)
     )

@@ -96,3 +96,37 @@ def test_compact_summary_has_memory_section():
 
     assert "长期记忆" in _SUMMARY_SYSTEM
     assert "7. 最近工作详情" in _SUMMARY_SYSTEM
+
+
+def test_over_budget_notice_thresholds(_clean_env):
+    """超标催办：未超标空串 / 超软上限软催办 / 超硬上限强催办（行与字节双维）。"""
+    # 未超标（模板默认 22 行级别）
+    normal = "line\n" * 20
+    assert mem._over_budget_notice(normal) == ""
+
+    # 超软上限（行维：151 行）
+    over_warn = "line\n" * 151
+    notice = mem._over_budget_notice(over_warn)
+    assert "超过软上限" in notice and "先压缩" in notice
+
+    # 超硬上限（行维：201 行）
+    over_hard = "line\n" * 201
+    assert "严重超标" in mem._over_budget_notice(over_hard)
+
+    # 超软上限（字节维：行长长、行数少——双维任一命中）
+    fat_lines = "x" * 150 + "\n"  # ~151 B/行；150 行 ≈ 22.6KB 超软 20KB
+    fat = fat_lines * 150
+    assert mem._over_budget_notice(fat) != ""
+
+    # 字节维超硬上限（行数仍低于软上限——防「行少就安全」误判）
+    very_fat = ("x" * 200 + "\n") * 130  # 130 行 ≈ 26KB > 25KB 硬限
+    assert "严重超标" in mem._over_budget_notice(very_fat)
+
+
+def test_guidance_appends_notice_when_over(_clean_env):
+    """guidance 段尾确实拼上催办（集成：写超限索引 → 注入含催办）。"""
+    root = _clean_env
+    root.mkdir(parents=True)
+    (root / "MEMORY.md").write_text("line\n" * 160, encoding="utf-8")
+    g = mem.memory_guidance()
+    assert "超过软上限" in g
