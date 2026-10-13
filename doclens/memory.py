@@ -83,10 +83,16 @@ write_file / edit_file），路径必须在该目录内。
 
 
 def memory_disabled() -> bool:
-    """CORTEX_MEMORY_DISABLE=1 时整体关停（不注入、不建库）。"""
+    """CORTEX_MEMORY_DISABLE 关停（1/true/非空非 false 均视为开停，设置页 switch 写 true）。
+
+    设置页「启用长期记忆」开关（invert 语义）保存写 "true"/"false"；
+    手改 .env 的用户可能写 "1"。统一口径：值非空且不为 "false"/"0"/"no"
+    即关停。
+    """
     import os
 
-    return os.environ.get("CORTEX_MEMORY_DISABLE", "").strip() == "1"
+    v = os.environ.get("CORTEX_MEMORY_DISABLE", "").strip().lower()
+    return v not in ("", "false", "0", "no")
 
 
 def memory_root() -> Path:

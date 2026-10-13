@@ -860,13 +860,18 @@ export class SettingsView extends LitElement {
       }
       case "switch": {
         // 布尔开关：值域 "true"/"false"；未显式设置（.env 无此键）时
-        // 回显出厂默认（FIELD_DEFAULTS），并标注（默认）
+        // 回显出厂默认（FIELD_DEFAULTS），并标注（默认）。
+        // invert 键（*_DISABLE 型）：env 非空非"false" = 关闭 → 开关 off
         const implicit = value === "";
-        const on = implicit
+        const rawOn = implicit
           ? (FIELD_DEFAULTS[f.envVar] ?? "true") === "true"
           : value === "true";
-        const onChange = (e: Event) =>
-          this._onInput(f.envVar, (e.target as HTMLInputElement).checked ? "true" : "false");
+        const on = f.invert ? !rawOn : rawOn;
+        const onChange = (e: Event) => {
+          const checked = (e.target as HTMLInputElement).checked;
+          const effective = f.invert ? !checked : checked;
+          this._onInput(f.envVar, effective ? "true" : "false");
+        };
         return html`
           <label class="switch">
             <input

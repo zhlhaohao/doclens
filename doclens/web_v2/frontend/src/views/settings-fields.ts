@@ -37,6 +37,9 @@ export interface SettingsField {
   mono?: boolean;
   datalist?: string[];
   options?: SettingsFieldOption[];
+  /** switch 反转语义：env 值非空/非"false" = 关（用于 *_DISABLE 型键：
+   *  env "1" → 开关 off，env 空/"false" → 开关 on）。保存仍写原键原值。 */
+  invert?: boolean;
 }
 
 export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
@@ -63,6 +66,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_MCP_HOST: "127.0.0.1",
   CORTEX_MCP_PORT: "7880",
   CORTEX_SYNC_ENABLED: "true",
+  CORTEX_MEMORY_DISABLE: "",
   VISION_AUTO_ROTATE: "true",
   PLANIFY_OUTSIDE_WORKDIR: "ask",
   PLANIFY_ASK_MODE: "interactive",
@@ -242,5 +246,15 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     max: 100,
     step: 5,
     unit: "轮",
+  },
+  {
+    tab: "misc",
+    section: "长期记忆",
+    envVar: "CORTEX_MEMORY_DISABLE",
+    label: "启用长期记忆",
+    component: "switch",
+    effect: "live",
+    invert: true,
+    hint: "关闭后对话不再注入记忆索引与纪律（记忆文件保留，重新开启即恢复）。保存即生效，无需重启。",
   },
 ];

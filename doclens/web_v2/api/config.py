@@ -93,6 +93,17 @@ async def put_config(
         else:
             _os.environ.pop("PLANIFY_OUTSIDE_WORKDIR", None)
         logger.info("guard mode hot-applied: %r", v or "ask(default)")
+    # 4.6 长期记忆开关热生效（ADR-0042，同 4.5 模式）：memory_disabled()/
+    # memory_guidance() 每次构造 agent 现读进程 env——显式同步该键；
+    # "false" 是开关的「开」值，删除键与写 false 等价于启用
+    if "CORTEX_MEMORY_DISABLE" in updates:
+        v = updates["CORTEX_MEMORY_DISABLE"].strip().lower()
+        import os as _os
+        if v in ("", "false", "0", "no"):
+            _os.environ.pop("CORTEX_MEMORY_DISABLE", None)
+        else:
+            _os.environ["CORTEX_MEMORY_DISABLE"] = v
+        logger.info("memory toggle hot-applied: %r", v or "enabled(default)")
 
     # 4.6 对话提问模式热生效（ADR-0033）：ask 模式与门禁同理经 os.getenv
     # 惰性读（工具调用时取值）——显式同步该键

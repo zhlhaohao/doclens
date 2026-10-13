@@ -81,6 +81,16 @@ def test_disable_switch(_clean_env, monkeypatch):
     assert not (_clean_env / "MEMORY.md").exists()
 
 
+def test_disable_truthy_values(_clean_env, monkeypatch):
+    """开关口径：非空且非 false/0/no 都视为关停（设置页 switch 写 true，手改 env 写 1）。"""
+    for v in ("1", "true", "TRUE", "yes"):
+        monkeypatch.setenv("CORTEX_MEMORY_DISABLE", v)
+        assert mem.memory_disabled() is True, v
+    for v in ("", "false", "0", "no"):
+        monkeypatch.setenv("CORTEX_MEMORY_DISABLE", v)
+        assert mem.memory_disabled() is False, v
+
+
 def test_root_override_and_default(monkeypatch, tmp_path):
     monkeypatch.delenv("CORTEX_MEMORY_ROOT", raising=False)
     monkeypatch.delenv("CORTEX_MEMORY_DISABLE", raising=False)

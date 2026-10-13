@@ -77,6 +77,9 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     # 子代理上限每次调用现读 env；均经 reload_config 的 load_dotenv 同步）
     "PLANIFY_MAX_TOOL_ROUNDS",
     "PLANIFY_MAX_SUBAGENT_ROUNDS",
+    # 长期记忆开关（ADR-0042；保存即热生效：memory_disabled/guidance 每次
+    # 构造 agent 现读进程 env——config API 显式同步，与 ADR-0021 同模式）
+    "CORTEX_MEMORY_DISABLE",
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
