@@ -61,6 +61,9 @@ def test_guidance_contains_discipline_and_index(_clean_env):
     assert "显式记忆指令优先" in g and "不等任务完成检查点" in g
     # 显式撤销指令（同日：「不用记了」类指令立即退役）
     assert "显式撤销指令" in g and "撤销了哪条" in g
+    # 判例补回（2026-10-13 用户要求：原协议 SKILL.md §2/§3/§4/§6 判例入纪律）
+    assert "归类判例" in g and "当前状态永不存" in g
+    assert "索引行预算" in g and "归档陷阱" in g and "召回安全" in g
     # 索引全文注入
     assert "## user" in g
     # 记忆库路径写明（通用工具读写要靠它定位）
