@@ -17,6 +17,7 @@ from doclens.agent_prompt import (
     kb_root_guidance,
     tool_round_limit_kwargs,
 )
+from doclens.memory import memory_guidance
 
 # 确保 planify 模块可导入
 import os
@@ -141,6 +142,17 @@ class CortexAgent:
         # 开关未开时保持 None，每次查询重试 create（开销仅两次 getenv））
         self._llm_tracer = None
         self._setup_dirs()
+        # 长期记忆库就绪（建目录/索引；关停时不做任何事）——失败不阻断启动
+        try:
+            from doclens.memory import ensure_memory_store
+
+            ensure_memory_store()
+        except Exception as e:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "memory store init failed: %s", e
+            )
 
     def _setup_dirs(self):
         """创建数据目录子目录（开发 .cortex / 发行版 .doclens；skills 不再在工作目录下）"""
@@ -552,8 +564,10 @@ class CortexAgent:
             logger_instance=self.runtime.logger,
             runtime=self.runtime,
             interrupt_event=_interrupt_event,
-            # 知识库根指导文件（CLAUDE.md/AGENTS.md）自动注入
-            system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA + kb_root_guidance(self.workdir),
+            # 知识库根指导文件（CLAUDE.md/AGENTS.md）+ 长期记忆索引/纪律注入
+            system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA
+            + kb_root_guidance(self.workdir)
+            + memory_guidance(),
             tracer=self._get_llm_tracer(),
         )
 

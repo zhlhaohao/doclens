@@ -195,6 +195,7 @@ async def _stream_agent_response(
         kb_root_guidance,
         tool_round_limit_kwargs,
     )
+    from doclens.memory import memory_guidance
     from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
 
     waiter = get_global_waiter()
@@ -285,10 +286,11 @@ async def _stream_agent_response(
         logger_instance=runtime.logger,
         runtime=runtime,
         interrupt_event=interrupt,
-        # 知识库根指导文件（CLAUDE.md/AGENTS.md）自动注入：每请求重读，
-        # 文件不变则 system 前缀缓存稳定
+        # 知识库根指导文件（CLAUDE.md/AGENTS.md）+ 长期记忆索引/纪律注入：
+        # 每请求重读，文件不变则 system 前缀缓存稳定
         system_prompt_extra=KB_SYSTEM_PROMPT_EXTRA
-        + kb_root_guidance(agent.workdir),
+        + kb_root_guidance(agent.workdir)
+        + memory_guidance(),
         # LLM 追踪（调试/缓存命中率观测）：聊天会话 id 作会话键——
         # 同会话跨输入/跨进程追加同 trace 文件；开关未开时为 None。
         # workdir 显式传入：trace 落 {workdir}/.planify/llm_trace/（与
