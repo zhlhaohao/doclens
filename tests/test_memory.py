@@ -64,6 +64,8 @@ def test_guidance_contains_discipline_and_index(_clean_env):
     # 判例补回（2026-10-13 用户要求：原协议 SKILL.md §2/§3/§4/§6 判例入纪律）
     assert "归类判例" in g and "当前状态永不存" in g
     assert "索引行预算" in g and "归档陷阱" in g and "召回安全" in g
+    # 只记编程类任务（同日用户规则：非开发话题不产生记忆；显式指令不受限）
+    assert "只记编程类任务" in g and "显式指令" in g
     # 索引全文注入
     assert "## user" in g
     # 记忆库路径写明（通用工具读写要靠它定位）
