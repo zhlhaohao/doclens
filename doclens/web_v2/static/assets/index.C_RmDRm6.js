@@ -15858,7 +15858,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
         max-width: calc(100vw - 16px);
       }
     }
-  `;Rm([x({type:Boolean,reflect:!0})],Ln.prototype,"open",2);Ln=Rm([W("watch-changes-dialog")],Ln);var t6=Object.defineProperty,r6=Object.getOwnPropertyDescriptor,ul=(e,t,r,i)=>{for(var s=i>1?void 0:i?r6(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&t6(t,r,s),s};let uo=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var o;return((o=r.find(a=>a.type===s))==null?void 0:o.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 916bb9a · 2026-10-14 11:13 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,o=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${o(r)}:${o(i)}:${o(s)}`:`${o(r)}:${o(i)}:${o(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
+  `;Rm([x({type:Boolean,reflect:!0})],Ln.prototype,"open",2);Ln=Rm([W("watch-changes-dialog")],Ln);var t6=Object.defineProperty,r6=Object.getOwnPropertyDescriptor,ul=(e,t,r,i)=>{for(var s=i>1?void 0:i?r6(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&t6(t,r,s),s};let uo=class extends q{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var o;return((o=r.find(a=>a.type===s))==null?void 0:o.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 76b7157 · 2026-10-14 12:02 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,o=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${o(r)}:${o(i)}:${o(s)}`:`${o(r)}:${o(i)}:${o(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -15902,7 +15902,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           ${(t=this._health)!=null&&t.dev?c`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"916bb9a · 2026-10-14 11:13"}</span>
+            <span class="value">${"76b7157 · 2026-10-14 12:02"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
@@ -16283,19 +16283,19 @@ body.cortex-preview-fs .cortex-pdf-portal {
         title="关闭并返回 App"
         @click=${this._exitWebview}
       ><doclens-icon name="x"></doclens-icon></button>
-    `}_renderWorkdirIndicator(){var r;const e=(r=T.getState().status)==null?void 0:r.workdir;if(!e)return E;const t=e.replace(/[\\/]+/g,"/").split("/").filter(Boolean).pop()||e;return c`
+    `}_renderWorkdirIndicator(){var r;const e=this._workdirName();if(!e)return E;const t=((r=T.getState().status)==null?void 0:r.workdir)||"";return c`
       <button
         class="workdir-indicator"
         type="button"
-        title="${e} — 点击切换工作目录"
+        title="${t} — 点击切换工作目录"
         aria-label="切换工作目录"
         @click=${()=>{this._workdirDialogOpen=!0}}
-      ><doclens-icon name="folder"></doclens-icon><span class="name">${t}</span></button>
-    `}render(){var e;return c`
+      ><doclens-icon name="folder"></doclens-icon><span class="name">${e}</span></button>
+    `}_workdirName(){var t;const e=((t=T.getState().status)==null?void 0:t.workdir)||"";return e?e.replace(/[\\/]+/g,"/").split("/").filter(Boolean).pop()||e:""}_onWorkdirMenuClick(){this._menuOpen=!1,this._workdirDialogOpen=!0}render(){var e;return c`
       ${this._inWebview?this._renderWebviewClose():c`
         <div class="brand">
           <span class="logo">${xp(Y5)}</span>
-          ${this._renderWorkdirIndicator()}
+          ${this._isMobileViewport?E:this._renderWorkdirIndicator()}
         </div>
       `}
       ${this._inWebview&&this._hostTitle?c`<div class="center-title">${this._hostTitle}</div>`:E}
@@ -16327,6 +16327,13 @@ body.cortex-preview-fs .cortex-pdf-portal {
               <span class="text">
                 <span class="label">切换主题</span>
                 <span class="desc">${js[this._appTheme]}（点击切换）</span>
+              </span>
+            </button>
+            <button class="menu-item" type="button" data-testid="workdir-item" @click=${this._onWorkdirMenuClick}>
+              <doclens-icon class="icon" name="folder"></doclens-icon>
+              <span class="text">
+                <span class="label">切换工作目录</span>
+                <span class="desc">${this._workdirName()}</span>
               </span>
             </button>
           `:E}

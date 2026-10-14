@@ -516,11 +516,12 @@ export class AppBar extends LitElement {
   }
 
   /** ADR-0043 工作目录指示器：显示当前目录末段名，点击弹切换面板。
-   *  status 未返回时不渲染（onboarding 阶段无目录概念）。 */
+   *  status 未返回时不渲染（onboarding 阶段无目录概念）。仅桌面渲染——
+   *  移动端入口在用户菜单（与主题切换同模式，header 空间紧张）。 */
   private _renderWorkdirIndicator() {
-    const workdir = store.getState().status?.workdir;
-    if (!workdir) return nothing;
-    const name = workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir;
+    const name = this._workdirName();
+    if (!name) return nothing;
+    const workdir = store.getState().status?.workdir || "";
     return html`
       <button
         class="workdir-indicator"
@@ -532,12 +533,25 @@ export class AppBar extends LitElement {
     `;
   }
 
+  /** 当前工作目录末段名（status 未返回时为空串——胶囊与菜单 desc 都用）。 */
+  private _workdirName(): string {
+    const workdir = store.getState().status?.workdir || "";
+    if (!workdir) return "";
+    return workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir;
+  }
+
+  /** 移动端用户菜单「切换工作目录」：关菜单开切换面板。 */
+  private _onWorkdirMenuClick() {
+    this._menuOpen = false;
+    this._workdirDialogOpen = true;
+  }
+
   render() {
     return html`
       ${this._inWebview ? this._renderWebviewClose() : html`
         <div class="brand">
           <span class="logo">${unsafeSVG(appLogoSvg)}</span>
-          ${this._renderWorkdirIndicator()}
+          ${this._isMobileViewport ? nothing : this._renderWorkdirIndicator()}
         </div>
       `}
       ${this._inWebview && this._hostTitle
@@ -571,6 +585,13 @@ export class AppBar extends LitElement {
               <span class="text">
                 <span class="label">切换主题</span>
                 <span class="desc">${APP_THEME_LABELS[this._appTheme]}（点击切换）</span>
+              </span>
+            </button>
+            <button class="menu-item" type="button" data-testid="workdir-item" @click=${this._onWorkdirMenuClick}>
+              <doclens-icon class="icon" name="folder"></doclens-icon>
+              <span class="text">
+                <span class="label">切换工作目录</span>
+                <span class="desc">${this._workdirName()}</span>
               </span>
             </button>
           ` : nothing}
