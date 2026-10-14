@@ -168,6 +168,10 @@ export class WelcomePane extends LitElement {
       margin: 0 3px;
       max-width: 100%;
     }
+    /* 移动端省屏幕：胶囊（含两侧间距）整体隐藏（hideWorkdirOnMobile 生效时） */
+    @media (max-width: 1023px) {
+      .workdir-pill-desktop { display: none; }
+    }
     .modes-row {
       display: flex;
       flex-wrap: wrap;
@@ -253,6 +257,9 @@ export class WelcomePane extends LitElement {
   @property({ attribute: false }) examples: string[] = [];
   /** 当前工作目录绝对路径（仅 onboarding 变体显示；空字符串/缺失则隐藏胶囊） */
   @property({ attribute: false }) workdir = "";
+  /** 移动端隐藏 subheading 中的 {workdir} 胶囊（省屏幕空间；桌面不受影响）。
+   *  布尔 attribute 形态（?hideWorkdirOnMobile）——CSS 控制 <1024px 隐藏胶囊。 */
+  @property({ type: Boolean, reflect: true }) hideWorkdirOnMobile = false;
 
   render() {
     if (this.variant === "onboarding") return this._renderOnboarding();
@@ -279,7 +286,9 @@ export class WelcomePane extends LitElement {
 
   /** subheading 渲染：含 {workdir} 占位符时把路径胶囊内嵌进句中（合并为一行）。
    *  胶囊始终保留——workdir 未就绪时先显示占位符，属性更新后 Lit 自动重渲染填实；
-   *  无 token 时纯文本，独立 workdir-row 由调用方按需保留。 */
+   *  无 token 时纯文本，独立 workdir-row 由调用方按需保留。
+   *  hideWorkdirOnMobile 时胶囊包 .workdir-pill-desktop 类——CSS 控制 <1024px 隐藏
+   *  （胶囊隐藏后首尾文案直接相连，故胶囊两侧各留一个空格由 before/after 文本自带）。 */
   private _renderOnboardingSubheading() {
     if (!this.subheading) return nothing;
     const token = "{workdir}";
@@ -287,8 +296,11 @@ export class WelcomePane extends LitElement {
     if (idx < 0) return html`<p class="onboarding-subheading">${this.subheading}</p>`;
     const before = this.subheading.slice(0, idx);
     const after = this.subheading.slice(idx + token.length);
+    const pill = this._renderWorkdirPill(this.workdir || "…");
     return html`<p class="onboarding-subheading workdir-inline">
-      ${before}${this._renderWorkdirPill(this.workdir || "…")}${after}
+      ${before}${this.hideWorkdirOnMobile
+        ? html`<span class="workdir-pill-desktop">${pill}</span>`
+        : pill}${after}
     </p>`;
   }
 

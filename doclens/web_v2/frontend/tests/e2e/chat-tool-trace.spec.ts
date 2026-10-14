@@ -49,7 +49,7 @@ test.describe("Chat tool trace", () => {
 
     // ---- 发起对话 ----
     await page.goto("/#/chat");
-    await page.getByRole("textbox", { name: "问 Doclens 任何问题..." }).fill("python 异步");
+    await page.getByRole("textbox", { name: "问助手任何问题..." }).fill("python 异步");
     await shadowLocator(page, "input-box", "button").click();
 
     // ---- 完成后：思考过程块出现且自动折叠 ----

@@ -18,6 +18,7 @@ import folderIcon from "lucide-static/icons/folder.svg?raw";
 import folderOpenIcon from "lucide-static/icons/folder-open.svg?raw";
 import fileIcon from "lucide-static/icons/file.svg?raw";
 import messageCircleIcon from "lucide-static/icons/message-circle.svg?raw";
+import botIcon from "lucide-static/icons/bot.svg?raw";
 import uploadIcon from "lucide-static/icons/upload.svg?raw";
 import downloadIcon from "lucide-static/icons/download.svg?raw";
 import folderPlusIcon from "lucide-static/icons/folder-plus.svg?raw";
@@ -84,6 +85,7 @@ const ICONS: Record<string, string> = {
   "folder-open": folderOpenIcon,
   file: fileIcon,
   "message-circle": messageCircleIcon,
+  bot: botIcon,
   upload: uploadIcon,
   download: downloadIcon,
   "folder-plus": folderPlusIcon,

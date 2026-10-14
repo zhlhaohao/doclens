@@ -158,7 +158,7 @@ export class ChatStream extends LitElement {
 
   render() {
     if (this.nodes.length === 0) {
-      return html`<div class="empty">开始与 Doclens 对话</div>`;
+      return html`<div class="empty">向助手提出你的第一个问题</div>`;
     }
     return html`${this.nodes.map((n) => this._renderNode(n))}`;
   }

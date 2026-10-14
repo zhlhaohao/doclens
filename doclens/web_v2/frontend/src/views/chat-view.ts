@@ -444,7 +444,7 @@ export class ChatView extends LitElement {
     }
     /* 移动端预览打开时隐藏对话顶栏：focus-header 因 backdrop-filter 需
        z-index:10，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
-       顶栏的「新对话」返回钮——点了回 initial 而非关闭预览，2026-09-29
+       顶栏的「新会话」返回钮——点了回 initial 而非关闭预览，2026-09-29
        修复）。预览层的返回由 preview-pane 自带 mobile-header 承担。 */
     @media (max-width: 1023px) {
       .focus-body.has-preview > focus-header {
@@ -1245,7 +1245,7 @@ export class ChatView extends LitElement {
   private _backToInitial() {
     this._resetPreview();
     this._activeAsk = null;
-    this._highlightSessionId = null; // 「新对话」返回后不残留旧高亮
+    this._highlightSessionId = null; // 「新会话」返回后不残留旧高亮
     this._rewindDividers = [];
     this._rewindDialog = null;
     this._stopGeneratingPoll();
@@ -1665,18 +1665,20 @@ export class ChatView extends LitElement {
         <div class="initial-stack">
           <welcome-pane
             variant="onboarding"
-            heroicon="sparkles"
-            heading="与你的知识库对话"
-            subheading="用自然语言提问，AI 会自动检索当前工作目录{workdir} 的知识库并引用原文回答"
+            heroicon="bot"
+            heading="你的个人 AI 助手"
+            subheading="检索 {workdir} 知识库引用原文作答，也能读写代码、执行命令帮你开发"
             .modes=${[
-              { label: "自动检索", icon: "search" },
-              { label: "引用原文", icon: "book-open" },
+              { label: "知识库问答", icon: "search" },
+              { label: "AI Coding", icon: "code" },
             ]}
             .examples=${[
-              "总结上周写过的所有技术文档",
-              "找出所有提到 X 的段落并对比",
-              "这篇文章的核心观点是什么？",
+              "总结《2025网络安全趋势报告》的核心趋势",
+              "5G 与 6G 的关键技术差异是什么？",
+              "对比两篇量子计算报告的观点异同",
+              "把这段 Python 脚本改成异步并发并解释改动",
             ]}
+            ?hideWorkdirOnMobile=${true}
             .workdir=${store.getState().status?.workdir ?? ""}
           ></welcome-pane>
           <history-list
@@ -1695,7 +1697,7 @@ export class ChatView extends LitElement {
           <div class="input-row">
             <input-box
               class="text-input"
-              placeholder="问 Doclens 任何问题..."
+              placeholder="问助手任何问题..."
               .buttonLabel=${"发送"}
               multiline
               attachments
@@ -1753,7 +1755,7 @@ export class ChatView extends LitElement {
       <toast-stack></toast-stack>
       <div class="focus-body ${hasPreview ? "has-preview" : ""}">
         <focus-header
-          back-label="新对话"
+          back-label="新会话"
           title=${s.currentSession?.title ?? ""}
           meta=${`${s.messages.length} 条消息`}
           .actions=${this._headerActions}
@@ -1793,7 +1795,7 @@ export class ChatView extends LitElement {
         <div class="input-bar">
           <input-box
             class="text-input"
-            placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续对话..."}
+            placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续提问..."}
             .buttonLabel=${"发送"}
             multiline
             attachments

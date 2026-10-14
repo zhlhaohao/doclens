@@ -73,8 +73,8 @@ test.describe("Doclens Full Flow", () => {
   test("switching between search and chat", async ({ page }) => {
     await page.goto("/");
 
-    // Click "对话" (chat) activity-bar button
-    const chatBtn = shadowLocator(page, "activity-bar", `button[title="对话"]`);
+    // Click "助手" (chat) activity-bar button
+    const chatBtn = shadowLocator(page, "activity-bar", `button[title="助手"]`);
     await chatBtn.click();
 
     // Should now show chat-view
