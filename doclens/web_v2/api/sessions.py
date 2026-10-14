@@ -462,7 +462,7 @@ async def import_session(request: Request):
         raise CortexAPIError(400, "IMPORT_INVALID", "文件根必须是 JSON 对象")
     store = _get_store()
     try:
-        imported = store.import_session(data)
+        imported = store.import_session(data, str(_get_workdir()))
     except ValueError as e:
         raise CortexAPIError(400, "IMPORT_INVALID", str(e))
     return {

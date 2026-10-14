@@ -925,9 +925,79 @@ class SessionsStore:
         ]
         return s["id"], session_row, item_rows
 
-    def import_session(self, data: dict) -> bool:
+    # 导入目录切换提示轮（ADR-0038 后续）：历史工具轨迹里的绝对路径指向
+    # 源机器工作目录，续聊时模型会沿用旧路径写文件。导入时在末尾追加一轮
+    # user（目录已改，注意相对路径/旧绝对路径作废）+ ai（明白）的合成对话，
+    # 进入 LLM 回放上下文纠正后续行为。此轮是宿主侧事实声明，非用户真话，
+    # 文案带固定前缀标记。
+    _DIR_SWITCH_USER_TMPL = (
+        "[系统提示] 本会话由其他工作目录导入。当前工作目录已改为：{workdir}。"
+        "此前对话中的绝对路径均指向旧工作目录，已全部作废——后续所有文件"
+        "操作（read_file/write_file/edit_file/bash 等）一律以当前工作目录"
+        "为基准使用相对路径；如需引用旧对话中提到的文件，请在当前目录下"
+        "重新确认其对应位置后再操作。"
+    )
+    _DIR_SWITCH_AI_REPLY = (
+        "明白。已切换到新工作目录 {workdir}，旧对话中的绝对路径不再有效，"
+        "后续文件操作全部以当前目录为基准使用相对路径，引用旧文件时会先"
+        "在当前目录重新确认位置。"
+    )
+
+    def _dir_switch_rows(
+        self,
+        session_row: dict,
+        item_rows: list,
+        workdir: Optional[str],
+    ) -> list:
+        """构造导入目录切换提示轮的 session_items 行（锁内调用）。
+
+        追加条件：workdir 非空、会话为 chat 类型——search 会话无 LLM
+        续聊语义，不追加。seq 在文件原 items 的 MAX(seq) 之上续排，
+        created_at 取导入时刻（这轮是导入动作产生的，非源会话时序）。
+
+        Returns:
+            行列表（通常 2 条）；不满足条件返回 []。
+        """
+        wd = (workdir or "").strip()
+        if not wd or session_row.get("type") != SessionType.CHAT.value:
+            return []
+        max_seq = max((r["seq"] for r in item_rows), default=-1)
+        now = datetime.now(timezone.utc).isoformat()
+        user_payload = json.dumps(
+            {"content": self._DIR_SWITCH_USER_TMPL.format(workdir=wd)},
+            ensure_ascii=False,
+        )
+        ai_payload = json.dumps(
+            {
+                "content": self._DIR_SWITCH_AI_REPLY.format(workdir=wd),
+                "tool_calls": [],
+                "references": [],
+            },
+            ensure_ascii=False,
+        )
+        return [
+            {
+                "seq": max_seq + 1,
+                "kind": "message_user",
+                "payload": user_payload,
+                "created_at": now,
+            },
+            {
+                "seq": max_seq + 2,
+                "kind": "message_ai",
+                "payload": ai_payload,
+                "created_at": now,
+            },
+        ]
+
+    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
         """导入单个会话（ADR-0038）——结构校验后原样写入，时间戳保留
         源值（导入时刻不顶到最前）。
+
+        workdir 非空且会话为 chat 类型时，末尾追加一轮目录切换提示对话
+        （message_user + message_ai，见 _DIR_SWITCH_USER_TMPL），message_count
+        相应 +2——把「目录已改」的事实注入续聊回放，防模型沿用导出文件里
+        的旧绝对路径继续写旧目录。
 
         Returns:
             是否新导入；同 id 已存在 → False（跳过，幂等防双份）。
@@ -941,6 +1011,13 @@ class SessionsStore:
             ).fetchone()
             if row is not None:
                 return False
+            extra_rows = self._dir_switch_rows(
+                session_row, item_rows, workdir
+            )
+            if extra_rows:
+                session_row["message_count"] = (
+                    session_row.get("message_count") or 0
+                ) + len(extra_rows)
             conn.execute(
                 """INSERT INTO sessions
                    (id, type, title, preview, mode, created_at, updated_at,
@@ -955,7 +1032,7 @@ class SessionsStore:
                    VALUES (?, ?, ?, ?, ?)""",
                 [
                     (session_id, r["seq"], r["kind"], r["payload"], r["created_at"])
-                    for r in item_rows
+                    for r in item_rows + extra_rows
                 ],
             )
             return True

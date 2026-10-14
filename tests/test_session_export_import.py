@@ -125,6 +125,90 @@ class TestImportRoundtrip:
         )  # 无重复写入
 
 
+class TestImportDirSwitch:
+    """导入目录切换提示轮（ADR-0038 后续）：chat 会话导入时追加
+    message_user（目录已改）+ message_ai（明白）合成对话。"""
+
+    def _live_export(self, store) -> dict:
+        now = datetime.now(timezone.utc)
+        store.create(SessionSummary(
+            id="LIVE", type=SessionType.CHAT, title="活", preview="",
+            created_at=now, updated_at=now,
+        ))
+        store._append_item("LIVE", "message_user", {"content": "q"})
+        store._append_item("LIVE", "message_ai", {"content": "a"})
+        store.update_count_and_time("LIVE", 2)
+        return store.export_session("LIVE")
+
+    def test_import_appends_dir_switch_turn(self, store, store2):
+        """chat 会话 + workdir：末尾追加 user/ai 一轮，含新目录路径。"""
+        data = self._live_export(store)
+        assert store2.import_session(data, workdir="D:/newdir") is True
+        items = store2.get_detail("LIVE")
+        assert [i.kind for i in items] == [
+            "message_user", "message_ai", "message_user", "message_ai",
+        ]
+        # 提示内容含当前工作目录
+        import json as _json
+        tail_user = _json.loads(items[2].payload)
+        tail_ai = _json.loads(items[3].payload)
+        assert "D:/newdir" in tail_user["content"]
+        assert "[系统提示]" in tail_user["content"]
+        assert "明白" in tail_ai["content"]
+        # seq 续排（原 items seq 为 0/1，追加轮 2/3）
+        assert items[2].seq == 2 and items[3].seq == 3
+
+    def test_import_chat_history_includes_switch_turn(self, store, store2):
+        """追加轮进入 LLM 回放：末两条为新目录声明 + AI 确认。"""
+        data = self._live_export(store)
+        store2.import_session(data, workdir="D:/newdir")
+        history = store2.get_chat_history("LIVE")
+        assert history[-2]["role"] == "user"
+        assert "D:/newdir" in history[-2]["content"]
+        assert history[-1]["role"] == "assistant"
+
+    def test_import_message_count_includes_extra(self, store, store2):
+        """message_count 源值 2 + 追加 2 = 4。"""
+        data = self._live_export(store)
+        store2.import_session(data, workdir="D:/newdir")
+        s = store2.get("LIVE")
+        assert s.message_count == 4
+        assert store2.count_live_messages("LIVE") == 4
+
+    def test_import_no_workdir_no_extra_turn(self, store, store2):
+        """未传 workdir（旧调用方兼容）：行为与原全保真导入一致。"""
+        data = self._live_export(store)
+        assert store2.import_session(data) is True
+        assert [i.kind for i in store2.get_detail("LIVE")] == [
+            "message_user", "message_ai",
+        ]
+        assert store2.get("LIVE").message_count == 2
+
+    def test_import_search_session_no_extra_turn(self, store, store2):
+        """search 会话无续聊语义：即使传 workdir 也不追加。"""
+        now = datetime.now(timezone.utc)
+        store.create(SessionSummary(
+            id="SRCH", type=SessionType.SEARCH, title="搜", preview="",
+            created_at=now, updated_at=now,
+        ))
+        store._append_item("SRCH", "message_user", {"content": "kw"})
+        data = store.export_session("SRCH")
+        assert store2.import_session(data, workdir="D:/newdir") is True
+        assert [i.kind for i in store2.get_detail("SRCH")] == ["message_user"]
+
+    def test_roundtrip_identical_without_workdir_preserved(
+        self, store, store2
+    ):
+        """既有全保真往返语义不受影响（不传 workdir 时逐字节一致）。"""
+        _seed_rich_session(store)
+        data = store.export_session("RICH1")
+        assert store2.import_session(data) is True
+        src = store.get_detail("RICH1")
+        dst = store2.get_detail("RICH1")
+        assert [(i.seq, i.kind, i.payload) for i in dst] == \
+               [(i.seq, i.kind, i.payload) for i in src]
+
+
 class TestImportValidation:
     def test_unknown_format_rejected(self, store):
         with pytest.raises(ValueError, match="版本不支持"):
