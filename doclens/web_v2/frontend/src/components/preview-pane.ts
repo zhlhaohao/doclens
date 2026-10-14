@@ -2118,9 +2118,10 @@ export class PreviewPane extends LitElement {
 
   render() {
     if (this.loading) return html`<div class="empty">加载中...</div>`;
-    // 空态守卫不含 pdf——PDF 原生预览的 content 恒为空串（轻量标记
-    // 响应，ADR-0031），空串是正常态而非「无预览」
-    if (this.language !== "pdf" && !this._content && !this.content)
+    // 空态守卫按 path 判定：空文件（新建 笔记.md 等）的 content 是合法空串，
+    // 不等于「无预览」；各视图清空预览时都会把 path 重置为 ""。
+    // pdf 分支无需豁免——其 content 恒空串但 path 非空，守卫天然放行。
+    if (!this.path)
       return html`<div class="empty">点击左侧结果查看预览</div>`;
 
     // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
@@ -2133,23 +2134,16 @@ export class PreviewPane extends LitElement {
     const editable = this.language === "markdown" || this._isLineView;
 
     if (editable && this._mode === "edit") {
+      // 编辑态只渲染 md-editor 自身的 toolbar（含路径/未保存/保存/取消）
+      // ——不再叠加 preview header，避免双 bar。下载/工具箱等预览专属
+      // 操作在编辑态不可达，保存/取消回到预览后恢复。
       return html`
         ${renderMobileBar}
-        ${showDesktopHeader ? html`
-          <div class="header">
-            ${this._renderBackBtn()}
-            <span class="path">${this.path}</span>
-            ${this._renderDownloadBtn()}
-            ${this._renderReparseBtn()}
-            ${this._renderToolboxBtn()}
-            ${this._renderCopyPathBtn()}
-            ${this._renderFullscreenBtn()}
-          </div>
-        ` : null}
         <md-editor
           .path=${this.path}
           .originalContent=${this._content}
           ?mobile=${this.mobile}
+          ?markdown=${this.language === "markdown"}
           @save=${this._onEditorSave}
           @cancel=${this._onEditorCancel}
           @dirty-change=${this._onEditorDirty}

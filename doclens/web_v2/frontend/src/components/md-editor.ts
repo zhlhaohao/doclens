@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import "./icon";
 import {
   ScrollJumpController,
   scrollJumpFabStyles,
@@ -111,6 +112,45 @@ export class MdEditor extends LitElement {
       overflow: hidden;
       position: relative;  /* FAB absolute 定位上下文 */
     }
+    /* markdown 格式化工具条：toolbar 下方一行 icon 按钮 */
+    .fmt-bar {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: var(--cortex-space-1) var(--cortex-space-3);
+      border-bottom: 1px solid var(--cortex-border-muted);
+      flex-shrink: 0;
+      overflow-x: auto;  /* 窄窗按钮多时横向滚动，不折行占竖向空间 */
+      scrollbar-width: thin;
+    }
+    .fmt-bar .fmt-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border: none;
+      background: transparent;
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-sm);
+    }
+    .fmt-bar .fmt-btn:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-text);
+      border-color: transparent;
+    }
+    .fmt-bar .fmt-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--cortex-focus-ring);
+    }
+    .fmt-bar .fmt-sep {
+      flex-shrink: 0;
+      width: 1px;
+      height: 16px;
+      margin: 0 4px;
+      background: var(--cortex-border-muted);
+    }
     /* 悬浮跳转按钮：覆盖在 textarea 右下角 */
     .body > .scroll-jump-fabs {
       position: absolute;
@@ -149,6 +189,8 @@ export class MdEditor extends LitElement {
   @property() originalContent = "";
   /** 移动端隐藏文件名（顶部 bar 已经显示）。 */
   @property({ type: Boolean }) mobile = false;
+  /** markdown 文件才显示格式化工具条（代码/txt 等文本编辑无 md 语义）。 */
+  @property({ type: Boolean }) markdown = false;
 
   @state() private _text = "";
   @state() private _dirty = false;
@@ -347,6 +389,160 @@ export class MdEditor extends LitElement {
     ta.scrollTop = ta.scrollHeight - ta.clientHeight;
   }
 
+  // ------------------------------------------------------------------
+  // markdown 格式化操作（fmt-bar）：三类原语 + 每个按钮的组合
+  // ------------------------------------------------------------------
+
+  /** 应用编辑：写回 textarea、同步 _text、置 dirty、恢复焦点与选区。 */
+  private _applyEdit(next: string, selStart: number, selEnd: number) {
+    const ta = this._textarea;
+    if (!ta) return;
+    ta.value = next;
+    this._text = next;
+    this._error = null;
+    this._scaleCache = null;
+    this._updateDirty();
+    ta.focus();
+    ta.setSelectionRange(selStart, selEnd);
+  }
+
+  /** 行级前缀操作（标题/列表/任务/引用）：对选区覆盖的每一行加/删前缀。
+   *  toggle 语义：行已有该前缀则去掉（循环标题时先移除旧级别再计数）。 */
+  private _linePrefixAction(prefixOf: (level: number) => string, level = 1) {
+    const ta = this._textarea;
+    if (!ta) return;
+    const { selectionStart: s, selectionEnd: e, value } = ta;
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    const lineEnd = e === value.length || value[e] === "\n" ? e : (value.indexOf("\n", e) === -1 ? value.length : value.indexOf("\n", e));
+    const lines = value.slice(lineStart, lineEnd).split("\n");
+    const prefix = prefixOf(level);
+    const allHave = lines.every(l => l.startsWith(prefix));
+    const next = lines
+      .map(l => (allHave ? l.slice(prefix.length) : prefix + l.replace(/^(\s*)/, (m) => m)))
+      .join("\n");
+    const newValue = value.slice(0, lineStart) + next + value.slice(lineEnd);
+    this._applyEdit(newValue, lineStart, lineStart + next.length);
+  }
+
+  /** 标题：循环升级 H1→H2→H3→H4→H5→H6→无。 */
+  private _toggleHeading() {
+    const ta = this._textarea;
+    if (!ta) return;
+    const { selectionStart: s, selectionEnd: e, value } = ta;
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    const lineEndRaw = e === value.length || value[e] === "\n" ? e : (value.indexOf("\n", e) === -1 ? value.length : value.indexOf("\n", e));
+    const firstLine = value.slice(lineStart, lineEndRaw).split("\n")[0];
+    const m = firstLine.match(/^(#{1,6})\s+/);
+    const cur = m ? m[1].length : 0;
+    // 全部行都有当前级别前缀时整体升级；否则从无标题开始加 H1
+    const nextLevel = cur >= 6 ? 0 : cur + 1;
+    const lineEnd = lineEndRaw;
+    const lines = value.slice(lineStart, lineEnd).split("\n");
+    const strip = (l: string) => l.replace(/^#{1,6}\s+/, "");
+    const next = lines.map(l => (nextLevel === 0 ? strip(l) : "#".repeat(nextLevel) + " " + strip(l))).join("\n");
+    const newValue = value.slice(0, lineStart) + next + value.slice(lineEnd);
+    this._applyEdit(newValue, lineStart, lineStart + next.length);
+  }
+
+  /** 行内包裹（粗体/斜体/行内代码/链接）：无选区时插入占位符并全选，
+   *  便于直接输入；有选区时包裹并在内侧留光标语义（选中包裹后的内容）。 */
+  private _wrapAction(before: string, after: string, placeholder: string) {
+    const ta = this._textarea;
+    if (!ta) return;
+    const { selectionStart: s, selectionEnd: e, value } = ta;
+    const sel = value.slice(s, e);
+    // 已包裹则解包（toggle）
+    if (sel && sel.startsWith(before) && sel.endsWith(after) && sel.length >= before.length + after.length) {
+      const inner = sel.slice(before.length, sel.length - after.length);
+      this._applyEdit(value.slice(0, s) + inner + value.slice(e), s, s + inner.length);
+      return;
+    }
+    const body = sel || placeholder;
+    const newValue = value.slice(0, s) + before + body + after + value.slice(e);
+    this._applyEdit(newValue, s + before.length, s + before.length + body.length);
+  }
+
+  /** 块插入（围栏/表格/分割线）：光标处插入完整块，前后保证空行隔离。 */
+  private _blockInsert(block: string, caretOffsetInBlock: number) {
+    const ta = this._textarea;
+    if (!ta) return;
+    const { selectionStart: s, value } = ta;
+    // 定位插入点：光标所在行的行首（块元素不打断当前行内容）
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    // 前隔离：光标行非空（或有前文）时补一个空行
+    const before = value.slice(0, lineStart);
+    const needsLead = before !== "" && !before.endsWith("\n\n");
+    const lead = needsLead ? "\n" : "";
+    const after = value.slice(lineStart);
+    const needsTrail = after !== "" && !after.startsWith("\n");
+    const trail = needsTrail ? "\n" : "";
+    const newValue = before + lead + block + trail + after;
+    const insertAt = before.length + lead.length;
+    this._applyEdit(newValue, insertAt + caretOffsetInBlock, insertAt + caretOffsetInBlock);
+  }
+
+  /** 列表动作：当前行行首加 mark，然后新增一行并将光标切到新行行首。
+   *  markOf 收到该行应显示的序号（有序列表递增；无序/任务恒 1）。
+   *  已带同类 mark 的行不重复添加（幂等）。 */
+  private _listAction(markOf: (n: number) => string) {
+    const ta = this._textarea;
+    if (!ta) return;
+    const { selectionStart: s, value } = ta;
+    // 光标所在行（多选时折叠到起始行——列表动作是行级插入语义）
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    const nlIdx = value.indexOf("\n", lineStart);
+    const lineEnd = nlIdx === -1 ? value.length : nlIdx;
+    const line = value.slice(lineStart, lineEnd);
+
+    // 同类 mark 识别：前缀标记词干（"- "/"1. "/"- [ ] "）——已有时不再加
+    const firstMark = markOf(1);
+    const stem = firstMark.replace(/^(\d+\.)/, "\\d+\\.").replace("[ ] ", "");
+    const hasMark = new RegExp(`^${stem}`).test(line);
+    const markedLine = hasMark ? line : firstMark + line;
+
+    const newValue =
+      value.slice(0, lineStart) + markedLine + "\n" + value.slice(lineEnd);
+    // 光标 = 当前行（含 mark 与内容）之后、新空行行首
+    const caret = lineStart + markedLine.length + 1;
+    this._applyEdit(newValue, caret, caret);
+  }
+
+  /** 有序列表自动续号：光标行之前的同级序号 + 1（无前序则从 1 起）。 */
+  private _nextOrderedNumber(): number {
+    const ta = this._textarea;
+    if (!ta) return 1;
+    const { selectionStart: s, value } = ta;
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    const before = value.slice(0, lineStart);
+    const nums = [...before.matchAll(/(?:^|\n)(\d+)\. /g)].map((m) =>
+      parseInt(m[1], 10),
+    );
+    return nums.length ? nums[nums.length - 1] + 1 : 1;
+  }
+
+  private _onHeading = () => this._toggleHeading();
+  private _onBold = () => this._wrapAction("**", "**", "粗体文本");
+  private _onItalic = () => this._wrapAction("*", "*", "斜体文本");
+  private _onInlineCode = () => this._wrapAction("`", "`", "代码");
+  private _onCodeFence = () => this._blockInsert("```\n\n```", 4);
+  private _onBulletList = () => this._listAction(() => "- ");
+  private _onOrderedList = () => this._listAction((n) => `${this._nextOrderedNumber() + n - 1}. `);
+  private _onTaskList = () => this._listAction(() => "- [ ] ");
+  private _onQuote = () => this._linePrefixAction(() => "> ");
+  private _onHr = () => this._blockInsert("---\n", 0);
+  private _onTable = () => {
+    // 表头 + 分隔行 + 5 内容行（不算标题）
+    const cols = 3;
+    const header = `| ${Array.from({ length: cols }, (_, i) => `列${i + 1}`).join(" | ")} |\n`;
+    const sep = `| ${Array.from({ length: cols }, () => "---").join(" | ")} |\n`;
+    const rows = Array.from(
+      { length: 5 },
+      () => `| ${Array.from({ length: cols }, () => "").join(" | ")} |\n`,
+    ).join("");
+    this._blockInsert(header + sep + rows, header.length + sep.length + 2);
+  };
+  private _onLink = () => this._wrapAction("[", "](https://)", "链接文字");
+
   private _onInput(e: Event) {
     const ta = e.target as HTMLTextAreaElement;
     this._text = ta.value;
@@ -416,6 +612,23 @@ export class MdEditor extends LitElement {
         </button>
         <button class="cancel-btn" @click=${this._onCancelClick}><doclens-icon name="x"></doclens-icon>取消</button>
       </div>
+      ${this.markdown ? html`
+        <div class="fmt-bar" role="toolbar" aria-label="Markdown 格式化">
+          <button class="fmt-btn" type="button" title="标题（循环 H1–H6，再按移除）" @click=${this._onHeading}><doclens-icon name="heading"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="粗体" @click=${this._onBold}><doclens-icon name="bold"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="斜体" @click=${this._onItalic}><doclens-icon name="italic"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="代码围栏" @click=${this._onCodeFence}><doclens-icon name="code"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="行内代码" @click=${this._onInlineCode}><doclens-icon name="code"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="无序列表" @click=${this._onBulletList}><doclens-icon name="list"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="有序列表" @click=${this._onOrderedList}><doclens-icon name="list-ordered"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="任务清单" @click=${this._onTaskList}><doclens-icon name="list-checks"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="引用块" @click=${this._onQuote}><doclens-icon name="quote"></doclens-icon></button>
+          <span class="fmt-sep" aria-hidden="true"></span>
+          <button class="fmt-btn" type="button" title="超链接" @click=${this._onLink}><doclens-icon name="link"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="表格" @click=${this._onTable}><doclens-icon name="table"></doclens-icon></button>
+          <button class="fmt-btn" type="button" title="分割线" @click=${this._onHr}><doclens-icon name="minus"></doclens-icon></button>
+        </div>
+      ` : null}
       <div class="body">
         <div class="mirror" aria-hidden="true"></div>
         <textarea

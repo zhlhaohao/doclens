@@ -546,6 +546,12 @@ export class FileList extends LitElement {
                 <button
                   type="button"
                   role="menuitem"
+                  data-action="new-file"
+                  @click=${this._onMenuItemClick("new-file")}
+                ><doclens-icon name="file-plus"></doclens-icon>新文件</button>
+                <button
+                  type="button"
+                  role="menuitem"
                   data-action="mkdir"
                   @click=${this._onMenuItemClick("mkdir")}
                 ><doclens-icon name="folder-plus"></doclens-icon>新目录</button>
@@ -670,6 +676,7 @@ export class FileList extends LitElement {
         ${this.deepReadAvailable
           ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（deep-read 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`
           : null}
+        <button data-action="new-file" title="在当前目录新建文本文件（如 笔记.md）" @click=${() => this._action("new-file")}><doclens-icon name="file-plus"></doclens-icon><span class="btn-label">新文件</span></button>
         <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
         <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>

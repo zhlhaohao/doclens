@@ -22,6 +22,7 @@ import botIcon from "lucide-static/icons/bot.svg?raw";
 import uploadIcon from "lucide-static/icons/upload.svg?raw";
 import downloadIcon from "lucide-static/icons/download.svg?raw";
 import folderPlusIcon from "lucide-static/icons/folder-plus.svg?raw";
+import filePlusIcon from "lucide-static/icons/file-plus.svg?raw";
 import pencilIcon from "lucide-static/icons/pencil.svg?raw";
 import arrowRightIcon from "lucide-static/icons/arrow-right.svg?raw";
 import trash2Icon from "lucide-static/icons/trash-2.svg?raw";
@@ -78,6 +79,14 @@ import languagesIcon from "lucide-static/icons/languages.svg?raw";
 import copyPlusIcon from "lucide-static/icons/copy-plus.svg?raw";
 import circleCheckIcon from "lucide-static/icons/circle-check.svg?raw";
 import circleXIcon from "lucide-static/icons/circle-x.svg?raw";
+import headingIcon from "lucide-static/icons/heading.svg?raw";
+import boldIcon from "lucide-static/icons/bold.svg?raw";
+import italicIcon from "lucide-static/icons/italic.svg?raw";
+import listIcon from "lucide-static/icons/list.svg?raw";
+import listOrderedIcon from "lucide-static/icons/list-ordered.svg?raw";import listChecksIcon from "lucide-static/icons/list-checks.svg?raw";
+import tableIcon from "lucide-static/icons/table.svg?raw";
+import linkIcon from "lucide-static/icons/link.svg?raw";
+import quoteIcon from "lucide-static/icons/quote.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -89,6 +98,7 @@ const ICONS: Record<string, string> = {
   upload: uploadIcon,
   download: downloadIcon,
   "folder-plus": folderPlusIcon,
+  "file-plus": filePlusIcon,
   pencil: pencilIcon,
   "arrow-right": arrowRightIcon,
   "trash-2": trash2Icon,
@@ -145,6 +155,15 @@ const ICONS: Record<string, string> = {
   "copy-plus": copyPlusIcon,
   "circle-check": circleCheckIcon,
   "circle-x": circleXIcon,
+  heading: headingIcon,
+  bold: boldIcon,
+  italic: italicIcon,
+  "list-ordered": listOrderedIcon,
+  "list-checks": listChecksIcon,
+  list: listIcon,
+  table: tableIcon,
+  link: linkIcon,
+  quote: quoteIcon,
 };
 
 @customElement("doclens-icon")

@@ -13,6 +13,7 @@ describe("<preview-pane> markdown branch", () => {
     const el = await fixture(html`
       <preview-pane
         language="markdown"
+        path="doc.md"
         content="# Title"
         .line=${1}>
       </preview-pane>
@@ -25,18 +26,27 @@ describe("<preview-pane> markdown branch", () => {
 
   it("renders plain text view for other languages", async () => {
     const el = await fixture(html`
-      <preview-pane language="python" content="print('hi')"></preview-pane>
+      <preview-pane language="python" path="a.py" content="print('hi')"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("md-viewer")).toBeNull();
     expect(el.shadowRoot!.querySelector(".body")).toBeTruthy();
+  });
+
+  it("empty content with path renders (空文件可预览，不落「无预览」占位)", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" path="empty.md" content=""></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
   });
 });
 
 describe("<preview-pane> download overlay（公共组件集成）", () => {
   it("_downloading=true 渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# T"></preview-pane>
+      <preview-pane language="markdown" path="t.md" content="# T"></preview-pane>
     `) as any;
     await el.updateComplete;
     // 默认不显示
@@ -56,7 +66,7 @@ describe("<preview-pane> download overlay（公共组件集成）", () => {
 describe("<preview-pane> edit mode", () => {
   it("shows [编辑] button when writable=true and language=markdown", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" writable></preview-pane>
+      <preview-pane language="markdown" path="t.md" content="# T" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const btn = el.shadowRoot!.querySelector(".edit-btn");
@@ -65,7 +75,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("hides [编辑] button when writable=false", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# T"></preview-pane>
+      <preview-pane language="markdown" path="t.md" content="# T"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".edit-btn")).toBeNull();
@@ -73,7 +83,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("clicking [编辑] switches to <md-editor>", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# hello" writable></preview-pane>
+      <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
@@ -85,7 +95,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("md-editor cancel event switches back to <md-viewer>", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# hello" writable></preview-pane>
+      <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
@@ -99,7 +109,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("forwards dirty-change from md-editor", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# hello" writable></preview-pane>
+      <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
@@ -113,7 +123,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("content prop change forces back to preview mode", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# a" writable></preview-pane>
+      <preview-pane language="markdown" path="a.md" content="# a" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
@@ -127,7 +137,7 @@ describe("<preview-pane> edit mode", () => {
 
   it("discard() forces back to preview mode (public method)", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# a" writable></preview-pane>
+      <preview-pane language="markdown" path="a.md" content="# a" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
@@ -143,7 +153,7 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
 
   it("预览→编辑：enterEdit 用 viewer.topSourceLine() 捕获锚点，editor.scrollToLine 恢复同源行", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content=${md} writable></preview-pane>
+      <preview-pane language="markdown" path="m.md" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -164,7 +174,7 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
   it("编辑→预览：退出编辑用 editor.topLine() 捕获，viewer.scrollToSourceLine 恢复同源行", async () => {
     const scrollSpy = vi.spyOn(MdViewer.prototype, "scrollToSourceLine").mockImplementation(() => {});
     const el = await fixture(html`
-      <preview-pane language="markdown" content=${md} writable></preview-pane>
+      <preview-pane language="markdown" path="m.md" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     el.enterEdit();
@@ -183,7 +193,7 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
 
   it("预览→编辑：enterEdit 捕获 viewer.selectionSourceOffsets，恢复后编辑器选区同偏移", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content=${md} writable></preview-pane>
+      <preview-pane language="markdown" path="m.md" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -199,7 +209,7 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
 
   it("预览无选区 → 编辑器不设选区（selectionSourceOffsets 为 null）", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content=${md} writable></preview-pane>
+      <preview-pane language="markdown" path="m.md" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -212,7 +222,7 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
 
   it("编辑→预览（cancel）：文本回滚后不恢复选区", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content=${md} writable></preview-pane>
+      <preview-pane language="markdown" path="m.md" content=${md} writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const viewer = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -230,7 +240,7 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
 describe("<preview-pane> noHeader prop", () => {
   it("does not render .header in markdown preview branch when noHeader=true", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# hi" ?noHeader=${true}></preview-pane>
+      <preview-pane language="markdown" path="hi.md" content="# hi" ?noHeader=${true}></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
@@ -239,7 +249,7 @@ describe("<preview-pane> noHeader prop", () => {
 
   it("does not render .header in edit mode when noHeader=true", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# hi" writable ?noHeader=${true}></preview-pane>
+      <preview-pane language="markdown" path="hi.md" content="# hi" writable ?noHeader=${true}></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     el.enterEdit();
@@ -266,14 +276,16 @@ describe("<preview-pane> download button", () => {
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
   });
 
-  it("renders download button in edit mode header", async () => {
+  it("edit mode: no preview header/download button (编辑态单 bar，md-editor toolbar 承担)", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     el.enterEdit();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
+    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
   });
 
   it("does not render download button when noHeader=true", async () => {
@@ -334,7 +346,7 @@ describe("<preview-pane> pages pass-through", () => {
   it("passes pages prop to md-viewer", async () => {
     const pages = [{ label: "第 1 页", line_start: 1 }];
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" .pages=${pages}></preview-pane>
+      <preview-pane language="markdown" path="t.md" content="# T" .pages=${pages}></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -344,7 +356,7 @@ describe("<preview-pane> pages pass-through", () => {
 
   it("defaults pages to null when not provided", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" content="# T"></preview-pane>
+      <preview-pane language="markdown" path="t.md" content="# T"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const mdv = el.shadowRoot!.querySelector("md-viewer") as any;
@@ -369,7 +381,7 @@ describe("<preview-pane> html branch", () => {
 
   it("uses sandbox=allow-scripts (no allow-same-origin)", async () => {
     const el = await fixture(html`
-      <preview-pane language="html" content="<p>x</p>"></preview-pane>
+      <preview-pane language="html" path="x.html" content="<p>x</p>"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     const frame = el.shadowRoot!.querySelector("iframe.html-frame") as HTMLIFrameElement;
@@ -406,6 +418,7 @@ describe("<preview-pane> html branch", () => {
       <preview-pane
         noHeader
         language="html"
+        path="x.html"
         content="<p>x</p>">
       </preview-pane>
     `) as PreviewPane;
@@ -416,7 +429,7 @@ describe("<preview-pane> html branch", () => {
 
   it("does not render iframe for non-html languages", async () => {
     const el = await fixture(html`
-      <preview-pane language="python" content="print('hi')"></preview-pane>
+      <preview-pane language="python" path="a.py" content="print('hi')"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeNull();

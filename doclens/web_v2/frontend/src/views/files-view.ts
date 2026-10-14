@@ -14,6 +14,7 @@ import "../components/git-changes-list";
 import "../components/diff-viewer";
 import "../components/preview-pane";
 import "../components/mkdir-dialog";
+import "../components/new-file-dialog";
 import "../components/rename-dialog";
 import "../components/reparse-dialog";
 import "../components/move-dialog";
@@ -34,7 +35,7 @@ import { router } from "../router/router";
 import "../components/download-overlay";
 import { downloadServerFile } from "../utils/download";
 
-type DialogKind = "mkdir" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
+type DialogKind = "mkdir" | "new-file" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
 @customElement("files-view")
 export class FilesView extends LitElement {
@@ -846,7 +847,7 @@ export class FilesView extends LitElement {
       void this._loadToolboxSkills();
       return;
     }
-    if (["mkdir", "rename", "move", "delete"].includes(name)) {
+    if (["mkdir", "new-file", "rename", "move", "delete"].includes(name)) {
       if (name === "rename" && this._state.selectedPaths.length !== 1) return;
       if ((name === "move" || name === "delete") && this._state.selectedPaths.length === 0) return;
       this._dialog = name as DialogKind;
@@ -987,6 +988,24 @@ export class FilesView extends LitElement {
       await this._ensureLoaded(parent);
       actions.expandDir(parent);
       this._showToast("目录已创建");
+    } catch (e: any) {
+      this._showToast(e?.message || "创建失败");
+    }
+  }
+
+  private async _onNewFileSubmit(e: CustomEvent<{ path: string }>) {
+    const path = e.detail.path;
+    this._dialog = null;
+    try {
+      await filesApi.createFile(path);
+      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+      actions.invalidateDir(parent);
+      await this._ensureLoaded(parent);
+      this._showToast("文件已创建");
+      // 直接打开新文件的预览，衔接后续编辑（空文件可能尚未入索引，
+      // NOT_INDEXED 属预期态，预览栏会给出占位提示）
+      void this._previewPathWithDirtyCheck(path);
+      if (this._isMobile) actions.setMobilePane("detail");
     } catch (e: any) {
       this._showToast(e?.message || "创建失败");
     }
@@ -1698,6 +1717,14 @@ export class FilesView extends LitElement {
           @submit=${this._onMkdirSubmit}
           @cancel=${this._cancelDialog}
         ></mkdir-dialog>
+      </dialog>`;
+    }
+    if (this._dialog === "new-file") {
+      return html`<dialog @cancel=${this._cancelDialog}>
+        <new-file-dialog
+          @submit=${this._onNewFileSubmit}
+          @cancel=${this._cancelDialog}
+        ></new-file-dialog>
       </dialog>`;
     }
     if (this._dialog === "rename") {

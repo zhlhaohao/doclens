@@ -125,7 +125,7 @@ describe("file-list", () => {
     document.body.appendChild(el);
     await el.updateComplete;
     const btns = el.shadowRoot.querySelectorAll(".toolbar button");
-    expect(btns.length).toBe(9); // mkdir/upload/rename/download/move/copy-path/skill-toolbox/delete/refresh
+    expect(btns.length).toBe(10); // new-file/mkdir/upload/rename/download/move/copy-path/skill-toolbox/delete/refresh
     // 每个按钮 = icon + .btn-label 文字（hover 才显示）
     for (const btn of btns) {
       expect(btn.querySelector("doclens-icon")).toBeTruthy();
@@ -462,7 +462,7 @@ describe("file-list mobile header", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking mobile-more opens dropdown with all 8 actions", async () => {
+  it("clicking mobile-more opens dropdown with all 9 actions", async () => {
     actions.setFilesState({
       currentDir: "docs",
       treeCache: { docs: entries },
@@ -478,16 +478,17 @@ describe("file-list mobile header", () => {
     const menu = el.shadowRoot.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
     const items = menu.querySelectorAll("button");
-    // 7 个：新目录 / 上传 / 重命名 / 移动 / 技能工具箱 / 拷贝路径 / 删除
-    expect(items.length).toBe(8);
-    expect(items[0].textContent).toContain("新目录");
-    expect(items[1].textContent).toContain("上传");
-    expect(items[2].textContent).toContain("重命名");
-    expect(items[3].textContent).toContain("下载");
-    expect(items[4].textContent).toContain("移动");
-    expect(items[5].textContent).toContain("技能工具箱");
-    expect(items[6].textContent).toContain("拷贝路径");
-    expect(items[7].textContent).toContain("删除");
+    // 9 个：新文件 / 新目录 / 上传 / 重命名 / 下载 / 移动 / 技能工具箱 / 拷贝路径 / 删除
+    expect(items.length).toBe(9);
+    expect(items[0].textContent).toContain("新文件");
+    expect(items[1].textContent).toContain("新目录");
+    expect(items[2].textContent).toContain("上传");
+    expect(items[3].textContent).toContain("重命名");
+    expect(items[4].textContent).toContain("下载");
+    expect(items[5].textContent).toContain("移动");
+    expect(items[6].textContent).toContain("技能工具箱");
+    expect(items[7].textContent).toContain("拷贝路径");
+    expect(items[8].textContent).toContain("删除");
     document.body.removeChild(el);
   });
 
@@ -526,14 +527,14 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中：rename (idx=2) disabled
-    expect((items[2] as HTMLButtonElement).disabled).toBe(true);
+    // 0 选中：rename (idx=3) disabled
+    expect((items[3] as HTMLButtonElement).disabled).toBe(true);
     // 1 选中
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     // 菜单仍展开（state 变化触发 re-render）
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    expect((items2[2] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -546,16 +547,16 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中（idx: 3=移动, 4=技能工具箱, 6=删除）
-    expect((items[3] as HTMLButtonElement).disabled).toBe(true);
-    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
+    // 0 选中（idx: 5=移动, 6=技能工具箱, 8=删除）
+    expect((items[5] as HTMLButtonElement).disabled).toBe(true);
     expect((items[6] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[8] as HTMLButtonElement).disabled).toBe(true);
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
-    expect((items2[4] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[5] as HTMLButtonElement).disabled).toBe(false);
     expect((items2[6] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[8] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -570,13 +571,13 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 点 + 新目录（idx=0）
-    (items[0] as HTMLElement).click();
+    // 点 + 新目录（idx=1）
+    (items[1] as HTMLElement).click();
     // 重新打开下拉（点 1 次会关闭）
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    (items2[1] as HTMLElement).click(); // 上传
+    (items2[2] as HTMLElement).click(); // 上传
     expect(seen).toEqual(["mkdir", "upload"]);
     document.body.removeChild(el);
   });

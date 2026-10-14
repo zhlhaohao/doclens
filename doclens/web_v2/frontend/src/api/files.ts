@@ -31,6 +31,7 @@ export interface DirStatsResponse {
   total_size_bytes: number;
 }
 export interface MkdirResponse { ok: true; path: string; reindex_triggered: boolean; }
+export interface CreateFileResponse { path: string; reindex_triggered: boolean; }
 export interface DeleteResponse { ok: true; deleted: string; reindex_triggered: boolean; }
 export interface SkippedItem { from_path: string; reason: string; }
 export interface MoveResponse { moved: string[]; skipped: SkippedItem[]; }
@@ -56,6 +57,8 @@ export const filesApi = {
     request<FileAttrs>(qs(`/attrs?path=${encodeURIComponent(path)}`)),
   mkdir: (path: string) =>
     request<MkdirResponse>(qs("/mkdir"), { method: "POST", json: { path } }),
+  createFile: (path: string) =>
+    request<CreateFileResponse>(qs("/create"), { method: "POST", json: { path } }),
   remove: (path: string) =>
     request<DeleteResponse>(qs(`?path=${encodeURIComponent(path)}`), { method: "DELETE" }),
   move: (fromPaths: string[], destDir: string, overwrite = false) =>

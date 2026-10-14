@@ -19,6 +19,8 @@ from doclens.web_v2.api.image_compress import compress_image_bytes
 from doclens.web_v2.deps import get_config, get_index_manager
 from doclens.web_v2.models.files import (
     AttrsResponse,
+    CreateFileRequest,
+    CreateFileResponse,
     DirStatsResponse,
     Entry,
     IndexedDocument,
@@ -326,6 +328,33 @@ async def mkdir(
     except OSError as e:
         raise CortexAPIError(500, "WRITE_FAILED", f"创建失败: {e}") from e
     return {"ok": True, "path": _posix_rel(target, base), "reindex_triggered": _trigger_reindex(idx)}
+
+
+# --- POST /files/create ---
+
+@router.post("/files/create", response_model=CreateFileResponse)
+async def create_file(
+    req: CreateFileRequest,
+    idx: IndexManager = Depends(get_index_manager),
+) -> CreateFileResponse:
+    """在当前目录新建空文本文件（如 笔记.md）。校验与 mkdir 同口径。"""
+    base = Path(idx.search_path)
+    target = safe_resolve(base, req.path)
+    assert_not_protected(target, base)
+    parent = target.parent
+    if not parent.exists() or not parent.is_dir():
+        raise CortexAPIError(400, "INVALID_PATH", f"父目录不存在: {parent}")
+    validate_name(target.name)
+    if target.exists():
+        raise CortexAPIError(409, "ALREADY_EXISTS", f"路径已存在: {req.path}")
+    try:
+        target.touch()
+    except OSError as e:
+        raise CortexAPIError(500, "WRITE_FAILED", f"创建失败: {e}") from e
+    return CreateFileResponse(
+        path=_posix_rel(target, base),
+        reindex_triggered=_trigger_reindex(idx),
+    )
 
 
 # --- DELETE /files ---

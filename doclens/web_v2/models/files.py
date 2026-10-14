@@ -43,6 +43,10 @@ class MkdirRequest(BaseModel):
     path: str
 
 
+class CreateFileRequest(BaseModel):
+    path: str
+
+
 class SkippedItem(BaseModel):
     from_path: str
     reason: str
@@ -70,6 +74,11 @@ class UploadResponse(BaseModel):
     overwritten: bool
     reindex_triggered: bool
     recompressed: bool = False  # 图像超阈值已自动压缩（适配视觉解析体积上限）
+
+
+class CreateFileResponse(BaseModel):
+    path: str
+    reindex_triggered: bool
 
 
 class IndexedDocument(BaseModel):
