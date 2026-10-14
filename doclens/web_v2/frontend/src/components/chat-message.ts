@@ -304,7 +304,7 @@ export class ChatMessageEl extends LitElement {
     .chat-imgs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
     .chat-img {
       width: 96px; height: 96px; object-fit: cover; border-radius: 8px;
-      border: 1px solid var(--cortex-border, #e5e7eb); cursor: zoom-in; display: block;
+      border: 1px solid var(--cortex-border); cursor: zoom-in; display: block;
     }
     dialog.img-preview-dialog {
       border: none; padding: 0; background: transparent; max-width: 92vw; max-height: 92vh;

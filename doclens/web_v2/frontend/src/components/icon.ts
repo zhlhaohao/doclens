@@ -70,6 +70,8 @@ import historyIcon from "lucide-static/icons/history.svg?raw";
 import codeIcon from "lucide-static/icons/code.svg?raw";
 import sunIcon from "lucide-static/icons/sun.svg?raw";
 import moonIcon from "lucide-static/icons/moon.svg?raw";
+import contrastIcon from "lucide-static/icons/contrast.svg?raw";
+import paletteIcon from "lucide-static/icons/palette.svg?raw";
 import minimize2Icon from "lucide-static/icons/minimize-2.svg?raw";
 import languagesIcon from "lucide-static/icons/languages.svg?raw";
 import copyPlusIcon from "lucide-static/icons/copy-plus.svg?raw";
@@ -134,6 +136,8 @@ const ICONS: Record<string, string> = {
   code: codeIcon,
   sun: sunIcon,
   moon: moonIcon,
+  contrast: contrastIcon,
+  palette: paletteIcon,
   "minimize-2": minimize2Icon,
   language: languagesIcon,
   "copy-plus": copyPlusIcon,

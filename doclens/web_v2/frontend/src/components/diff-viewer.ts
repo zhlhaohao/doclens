@@ -120,10 +120,10 @@ export class DiffViewer extends LitElement {
       opacity: 0.8;
     }
     tr.ctx td.code { color: var(--cortex-text); }
-    tr.add { background: color-mix(in srgb, #2ea04326 55%, transparent); }
-    tr.add td.sign { color: #3fb950; }
-    tr.del { background: color-mix(in srgb, #f8514926 55%, transparent); }
-    tr.del td.sign { color: #f85149; }
+    tr.add { background: var(--cortex-diff-add-bg); }
+    tr.add td.sign { color: var(--cortex-diff-add); }
+    tr.del { background: var(--cortex-diff-del-bg); }
+    tr.del td.sign { color: var(--cortex-diff-del); }
     tr.hunk td {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text-muted);

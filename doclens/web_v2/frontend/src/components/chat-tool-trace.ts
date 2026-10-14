@@ -217,8 +217,8 @@ export class ChatToolTrace extends LitElement {
     }
     .diff .path { color: var(--cortex-text-muted); background: var(--cortex-surface); }
     .diff .ctx { color: var(--cortex-text-muted); }
-    .diff .del { background: var(--cortex-danger); color: #fff; }
-    .diff .add { background: var(--cortex-success); color: #a5f3fc; }
+    .diff .del { background: var(--cortex-danger); color: var(--cortex-on-danger); }
+    .diff .add { background: var(--cortex-success); color: var(--cortex-on-primary); }
     .res {
       margin-top: 5px; background: var(--cortex-surface);
       border-radius: var(--cortex-radius-sm); padding: 5px 7px;

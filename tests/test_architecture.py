@@ -98,3 +98,38 @@ def test_doclens_no_full_document_materialization():
                 rel = py.relative_to(REPO).as_posix()
                 violations.append(f"{rel}: {m.group(0)!r}（ADR-0019 红线：全量物化）")
     assert not violations, "doclens 全量物化回潮（ADR-0019）：\n" + "\n".join(violations)
+
+
+# 红线 4（ADR-0043 应用主题包）：前端组件样式硬编码颜色——深夜/暖纸主题下
+# 泄漏为浅色残留。颜色只允许定义在主题层（tokens.css）与色板文件
+# （code-palette.ts / file-type.ts / appearance-section 色卡预览）。
+_HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+_TS_COLOR_WHITELIST = {
+    # 主题色板定义处（颜色真相源）
+    "doclens/web_v2/frontend/src/styles/tokens.css",
+    "doclens/web_v2/frontend/src/utils/code-palette.ts",
+    "doclens/web_v2/frontend/src/utils/app-theme.ts",  # meta theme-color 常量
+    # 文件类型徽标色（品牌字母块，跨主题恒定）
+    "doclens/web_v2/frontend/src/utils/file-type.ts",
+    # 设置页主题色卡预览（展示各主题代表色，不随当前主题变）
+    "doclens/web_v2/frontend/src/components/appearance-section.ts",
+}
+
+
+def test_frontend_no_hardcoded_colors():
+    """前端组件 .ts 禁硬编码 hex 色；var(--token, #fallback) 浅色 fallback 同禁。"""
+    fe = REPO / "doclens/web_v2/frontend/src"
+    violations: list[str] = []
+    for ts in fe.rglob("*.ts"):
+        rel = ts.relative_to(REPO).as_posix()
+        if rel in _TS_COLOR_WHITELIST or ts.name.endswith(".test.ts"):
+            continue
+        src = ts.read_text(encoding="utf-8", errors="replace")
+        for m in _HEX_COLOR_RE.finditer(src):
+            # 命中行内容（排除注释行——守卫查的是样式串）
+            line = src[: m.start()].count("\n") + 1
+            line_text = src.splitlines()[line - 1].strip()
+            if line_text.startswith(("*", "//", "<!--")):
+                continue
+            violations.append(f"{rel}:{line}: {m.group(0)} in {line_text[:80]}")
+    assert not violations, "组件硬编码颜色（ADR-0043：颜色只能来自 tokens.css / 色板白名单）:\n" + "\n".join(violations)

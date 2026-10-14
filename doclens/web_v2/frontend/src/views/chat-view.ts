@@ -249,15 +249,15 @@ export class ChatView extends LitElement {
     /* 视觉能力拦截对话框（ADR-0034） */
     .vision-gate { max-width: 360px; padding: 4px; }
     .vision-gate h3 { margin: 0 0 8px; font-size: 16px; }
-    .vision-gate p { margin: 0 0 8px; color: var(--cortex-text-muted, #555); font-size: 14px; line-height: 1.5; }
-    .vision-gate .vision-gate-hint { color: var(--cortex-text-subtle, #888); font-size: 13px; }
+    .vision-gate p { margin: 0 0 8px; color: var(--cortex-text-muted); font-size: 14px; line-height: 1.5; }
+    .vision-gate .vision-gate-hint { color: var(--cortex-text-subtle); font-size: 13px; }
     .vision-gate-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .vision-gate-actions button {
       border: none; border-radius: var(--cortex-radius-pill, 100px);
       padding: 8px 18px; font-size: 14px; cursor: pointer;
     }
-    .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted, #555); border: 1px solid var(--cortex-border, #ddd); }
-    .vision-gate-actions .primary { background: #0064e0; color: #fff; }
+    .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
+    .vision-gate-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
     :host {
       display: flex;
       flex-direction: column;
@@ -277,7 +277,7 @@ export class ChatView extends LitElement {
       min-height: 0;
       /* 顶部蓝色光晕：让白色卡片从背景中浮出，增加层次感 */
       background:
-        radial-gradient(720px 280px at 50% -80px, rgba(0, 100, 224, 0.08), transparent 70%);
+        radial-gradient(720px 280px at 50% -80px, color-mix(in srgb, var(--cortex-primary) 8%, transparent), transparent 70%);
     }
     .input-row {
       /* 底部留白与搜索页 .input-row 一致（space-4=16px），保证两页输入框距底边等高 */

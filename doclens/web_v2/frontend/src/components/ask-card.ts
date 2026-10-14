@@ -41,17 +41,17 @@ export class AskCard extends LitElement {
       scrollbar-width: thin;
     }
     .card {
-      border: 1px solid var(--cortex-border, #d0d7de);
+      border: 1px solid var(--cortex-border);
       border-radius: 10px;
       padding: 12px 14px;
-      background: var(--cortex-surface, #fafbfc);
+      background: var(--cortex-surface);
       font-size: var(--cortex-fs-md, 14px);
     }
     /* 外部访问门禁确认（ADR-0021）：与模型提问严格视觉区分——
        guard 载荷只由后端门禁代码构造，模型无法伪造此形态 */
     .card.guard {
-      border: 2px solid var(--cortex-danger, #c62828);
-      background: var(--cortex-surface, #fafbfc);
+      border: 2px solid var(--cortex-danger);
+      background: var(--cortex-surface);
     }
     .guard-banner {
       display: flex;
@@ -59,7 +59,7 @@ export class AskCard extends LitElement {
       gap: 6px;
       font-size: var(--cortex-fs-xs, 11px);
       font-weight: 600;
-      color: var(--cortex-danger, #c62828);
+      color: var(--cortex-danger);
       margin-bottom: 10px;
     }
     .q {
@@ -77,8 +77,8 @@ export class AskCard extends LitElement {
       display: inline-block;
       font-size: var(--cortex-fs-xs, 11px);
       font-weight: 600;
-      color: var(--cortex-text-subtle, #6a737d);
-      border: 1px solid var(--cortex-border, #d0d7de);
+      color: var(--cortex-text-subtle);
+      border: 1px solid var(--cortex-border);
       border-radius: 999px;
       padding: 1px 8px;
       margin-right: 6px;
@@ -93,7 +93,7 @@ export class AskCard extends LitElement {
       cursor: pointer;
     }
     .opt:hover {
-      background: var(--cortex-surface-muted, #eef1f4);
+      background: var(--cortex-surface-muted);
     }
     .opt input {
       margin-top: 3px;
@@ -106,7 +106,7 @@ export class AskCard extends LitElement {
       font-weight: 500;
     }
     .opt-desc {
-      color: var(--cortex-text-subtle, #6a737d);
+      color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-sm, 13px);
       margin-top: 2px;
       line-height: 1.45;
@@ -114,7 +114,7 @@ export class AskCard extends LitElement {
     .badge {
       display: inline-block;
       font-size: var(--cortex-fs-xs, 11px);
-      color: var(--cortex-accent-text, #0064e0);
+      color: var(--cortex-primary);
       border: 1px solid currentColor;
       border-radius: 999px;
       padding: 0 6px;
@@ -131,7 +131,7 @@ export class AskCard extends LitElement {
       flex: 1;
       min-width: 0;
       padding: 4px 8px;
-      border: 1px solid var(--cortex-border, #d0d7de);
+      border: 1px solid var(--cortex-border);
       border-radius: 6px;
       font: inherit;
     }
@@ -146,15 +146,15 @@ export class AskCard extends LitElement {
       gap: 8px;
       margin: 0 -14px -12px;
       padding: 8px 14px 10px;
-      background: var(--cortex-surface, #fafbfc);
+      background: var(--cortex-surface);
       border-radius: 0 0 9px 9px;
     }
     button.primary {
       padding: 6px 18px;
       border-radius: 999px;
       border: none;
-      background: #111;
-      color: #fff;
+      background: var(--cortex-btn-primary-bg);
+      color: var(--cortex-btn-primary-text);
       font-weight: 600;
       cursor: pointer;
     }
@@ -167,10 +167,10 @@ export class AskCard extends LitElement {
       display: flex;
       align-items: flex-start;
       gap: 8px;
-      border: 1px solid var(--cortex-border, #d0d7de);
+      border: 1px solid var(--cortex-border);
       border-radius: 10px;
       padding: 8px 12px;
-      background: var(--cortex-surface, #fafbfc);
+      background: var(--cortex-surface);
     }
     .summary .icon {
       flex: none;
@@ -189,10 +189,10 @@ export class AskCard extends LitElement {
       margin-right: 4px;
     }
     .summary-line .a {
-      color: var(--cortex-accent-text, #0064e0);
+      color: var(--cortex-primary);
     }
     .expired-note {
-      color: var(--cortex-danger, #c62828);
+      color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm, 13px);
     }
   `;

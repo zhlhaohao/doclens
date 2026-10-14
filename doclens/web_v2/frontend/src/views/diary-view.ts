@@ -102,14 +102,14 @@ export class DiaryView extends LitElement {
     .sub-tab:hover { color: var(--cortex-text); }
     .sub-tab doclens-icon { font-size: 16px; }
     .sub-tab.active {
-      background: rgba(0, 100, 224, 0.15);
+      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
       color: var(--cortex-primary);
     }
     .error-bar {
       margin-bottom: var(--cortex-space-3, 12px);
       padding: var(--cortex-space-2, 8px) var(--cortex-space-3, 12px);
       border-radius: var(--cortex-radius-md, 8px);
-      background: #fef2f2;
+      background: var(--cortex-danger-soft);
       color: var(--cortex-nav-active);
       font-size: var(--cortex-fs-sm);
     }

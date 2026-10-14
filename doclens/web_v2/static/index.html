@@ -13,13 +13,22 @@
     rel="stylesheet"
   />
   <title>Doclens</title>
+  <!-- 应用主题 FOUC 防护（ADR-0043）：同步读 localStorage 先挂 <html data-theme>，
+       深夜/暖纸用户刷新不闪白帧。必须在应用 CSS/JS 之前执行；与 sw.js 缓存无关
+       （HTML 是 network-first）。值域见 utils/app-theme.ts。 -->
+  <script>
+    try {
+      var t = localStorage.getItem("cortex.theme");
+      if (t === "dark" || t === "paper") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* 隐私模式等：保持默认 light */ }
+  </script>
   <!-- NexBox JSBridge 封装（ES5 IIFE，浏览器加载无害；仅 webview 内调用）。
        版本化引用防 App 内 CacheWebView 强缓存；升级 jsbridge.js 或后端路由变化后必须改 ?v= 号
        （v1 曾被 App 缓存过错误响应——SPA fallback 返回的 HTML 冒充 JS，URL 不变永远不回源）。
        来源：../cortex/docs/jsbridge/web/jsbridge.js（与 App 内置 assets/webpage/jsbridge.js 同源） -->
   <script src="/jsbridge.js?v=4"></script>
-  <script type="module" crossorigin src="/assets/index.Bu6AnbLS.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index.CpWHCO67.css">
+  <script type="module" crossorigin src="/assets/index.CBNTsjTi.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index.cdru3sdi.css">
 </head>
 <body>
   <cortex-app></cortex-app>

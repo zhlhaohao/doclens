@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { fixture, html, elementUpdated } from "@open-wc/testing";
 
 import "../src/components/control-panel-dialog";
@@ -23,26 +23,12 @@ describe("<control-panel-dialog>", () => {
     expect(closed.shadowRoot?.querySelector("dialog")).toBeNull();
   });
 
-  it("open 渲染三个操作行", () => {
-    expect(row("refresh-row")).toBeTruthy();
+  it("open 渲染两个操作行（重载页面已提升到系统菜单，2026-10-14）", () => {
     expect(row("reindex-row")).toBeTruthy();
     expect(row("watch-row")).toBeTruthy();
-    expect(el.shadowRoot?.textContent).toContain("重载页面");
+    expect(el.shadowRoot?.textContent).not.toContain("重载页面");
     expect(el.shadowRoot?.textContent).toContain("强制重建索引");
     expect(el.shadowRoot?.textContent).toContain("文件监控");
-  });
-
-  it("点击刷新行：派发 close 并调 window.location.reload", async () => {
-    // happy-dom 的 location.reload 不可配置，无法 spyOn——整体 stub location
-    const reload = vi.fn();
-    vi.stubGlobal("location", { ...window.location, reload });
-    const events: string[] = [];
-    el.addEventListener("close", () => events.push("close"));
-    row("refresh-row").click();
-    await elementUpdated(el);
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(events).toContain("close");
-    vi.unstubAllGlobals();
   });
 
   it("点击重建索引行：派发 close 且 store 进入 confirm", async () => {

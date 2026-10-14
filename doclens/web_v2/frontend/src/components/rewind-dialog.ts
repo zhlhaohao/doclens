@@ -79,7 +79,7 @@ export class RewindDialog extends LitElement {
       white-space: nowrap;
     }
     .tag.restore { color: var(--cortex-primary); border-color: var(--cortex-primary); }
-    .tag.delete { color: var(--cortex-danger, #c0392b); border-color: var(--cortex-danger, #c0392b); }
+    .tag.delete { color: var(--cortex-danger); border-color: var(--cortex-danger); }
     .none {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-subtle);
@@ -140,7 +140,7 @@ export class RewindDialog extends LitElement {
       color: var(--cortex-text-subtle);
       padding: var(--cortex-space-3) 0;
     }
-    .error { color: var(--cortex-danger, #c0392b); }
+    .error { color: var(--cortex-danger); }
   `;
 
   @property() sessionId = "";

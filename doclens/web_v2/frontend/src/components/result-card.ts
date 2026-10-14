@@ -115,7 +115,7 @@ export class ResultCard extends LitElement {
       margin-top: 4px;
     }
     mark {
-      background: rgba(0, 100, 224, 0.15);
+      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;

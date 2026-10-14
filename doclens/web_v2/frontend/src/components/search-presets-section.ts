@@ -191,7 +191,7 @@ export class SearchPresetsSection extends LitElement {
     .icon-btn.danger:hover {
       background: var(--cortex-danger);
       border-color: var(--cortex-danger);
-      color: #fff;
+      color: var(--cortex-on-danger);
     }
     .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .empty {

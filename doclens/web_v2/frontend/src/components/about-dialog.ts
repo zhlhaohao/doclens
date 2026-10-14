@@ -107,7 +107,7 @@ export class AboutDialog extends LitElement {
       word-break: break-all;
     }
     .row .value.ok {
-      color: var(--cortex-success, #16a34a);
+      color: var(--cortex-success);
     }
     .row .value.err {
       color: var(--cortex-danger);

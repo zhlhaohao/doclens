@@ -126,7 +126,7 @@ export class DiaryRecordPanel extends LitElement {
       border: none;
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       font-size: var(--cortex-fs-base);
       font-weight: 600;
       cursor: pointer;
@@ -232,7 +232,7 @@ export class DiaryRecordPanel extends LitElement {
       border: none;
       border-radius: 50%;
       background: rgba(0, 0, 0, 0.45);
-      color: #fff;
+      color: var(--cortex-on-media);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -259,7 +259,7 @@ export class DiaryRecordPanel extends LitElement {
       font-size: var(--cortex-fs-sm);
     }
     .del-btn:hover { background: var(--cortex-surface-muted); color: var(--cortex-nav-active); }
-    .del-btn.confirming { color: #fff; background: var(--cortex-nav-active); padding: 0 12px; }
+    .del-btn.confirming { color: var(--cortex-on-danger); background: var(--cortex-nav-active); padding: 0 12px; }
     .frag-actions { display: flex; align-items: center; gap: 2px; }
     .icon-btn {
       border: none;
@@ -303,7 +303,7 @@ export class DiaryRecordPanel extends LitElement {
       border: none;
       border-radius: var(--cortex-radius-pill, 100px);
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       font-size: var(--cortex-fs-base);
       font-weight: 600;
       cursor: pointer;

@@ -130,9 +130,9 @@ export class GitChangesList extends LitElement {
       border: 1px solid var(--cortex-border);
       white-space: nowrap;
     }
-    .badge.added { color: #3fb950; border-color: color-mix(in srgb, #3fb950 45%, transparent); }
+    .badge.added { color: var(--cortex-diff-add); border-color: color-mix(in srgb, var(--cortex-diff-add) 45%, transparent); }
     .badge.modified { color: var(--cortex-primary); border-color: color-mix(in srgb, var(--cortex-primary) 45%, transparent); }
-    .badge.deleted { color: #f85149; border-color: color-mix(in srgb, #f85149 45%, transparent); }
+    .badge.deleted { color: var(--cortex-diff-del); border-color: color-mix(in srgb, var(--cortex-diff-del) 45%, transparent); }
     .path {
       flex: 1;
       min-width: 0;
@@ -176,7 +176,7 @@ export class GitChangesList extends LitElement {
       align-items: center;
       justify-content: center;
       padding: var(--cortex-space-8);
-      color: var(--cortex-danger, #f85149);
+      color: var(--cortex-danger);
       font-size: var(--cortex-fs-base);
       text-align: center;
     }

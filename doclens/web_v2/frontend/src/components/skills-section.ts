@@ -209,7 +209,7 @@ export class SkillsSection extends LitElement {
     .icon-btn.danger:hover {
       background: var(--cortex-danger);
       border-color: var(--cortex-danger);
-      color: #fff;
+      color: var(--cortex-on-danger);
     }
     .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 纯图标按钮：直径对齐左侧 Toggle（track 高 20px）的视觉尺度 */

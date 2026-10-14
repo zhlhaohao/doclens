@@ -129,9 +129,9 @@ export class WorkdirSwitchDialog extends LitElement {
     }
     .warn {
       font-size: var(--cortex-fs-sm);
-      color: var(--cortex-warning, #b45309);
-      background: var(--cortex-warning-bg, rgba(217, 119, 6, 0.08));
-      border: 1px solid var(--cortex-warning-border, rgba(217, 119, 6, 0.25));
+      color: var(--cortex-warning);
+      background: var(--cortex-warning-bg);
+      border: 1px solid var(--cortex-warning-border);
       border-radius: var(--cortex-radius-md);
       padding: 8px 10px;
       display: flex;

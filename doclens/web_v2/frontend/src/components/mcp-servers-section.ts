@@ -174,7 +174,7 @@ export class McpServersSection extends LitElement {
       background: var(--cortex-text-subtle);
     }
     .dot.ok { background: var(--cortex-success); }
-    .dot.connecting { background: #d97706; animation: pulse 1.2s infinite; }
+    .dot.connecting { background: var(--cortex-warning); animation: pulse 1.2s infinite; }
     .dot.failed { background: var(--cortex-danger); }
     @keyframes pulse { 50% { opacity: 0.4; } }
     .status .err-text {
@@ -223,7 +223,7 @@ export class McpServersSection extends LitElement {
     .icon-btn.danger:hover {
       background: var(--cortex-danger);
       border-color: var(--cortex-danger);
-      color: #fff;
+      color: var(--cortex-on-danger);
     }
     .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 启用开关（复用 .switch 视觉语言的最小实现） */
