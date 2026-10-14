@@ -43,7 +43,7 @@ export class DeleteDialog extends LitElement {
     }
     button.danger {
       background: var(--cortex-danger);
-      color: #fff;
+      color: var(--cortex-on-danger);
       border: none;
       border-radius: var(--cortex-radius-pill);
     }

@@ -63,7 +63,7 @@ export class WelcomePane extends LitElement {
       padding: var(--cortex-space-6) var(--cortex-space-5);
       /* 聚光灯 hero（极淡蓝）：亮白热斑 → 极淡蓝向外微衰减，清淡通透；文字深色可读。 */
       background:
-        radial-gradient(circle at 18% 22%, #ffffff 0%, #f5f9ff 30%, #edf3fd 60%, #e4eefb 100%);
+        radial-gradient(circle at 18% 22%, var(--cortex-surface) 0%, color-mix(in srgb, var(--cortex-primary-soft) 35%, var(--cortex-surface)) 45%, var(--cortex-primary-soft) 100%);
       color: var(--cortex-text);
       border: none;
       border-radius: var(--cortex-radius-3xl);
@@ -85,7 +85,7 @@ export class WelcomePane extends LitElement {
       height: 48px;
       border-radius: var(--cortex-radius-circle);
       background: var(--cortex-primary);
-      color: #ffffff;
+      color: var(--cortex-on-primary);
       font-size: 24px;
     }
     /* 头部一行：左标题右模式 chips，节省一行高度 */

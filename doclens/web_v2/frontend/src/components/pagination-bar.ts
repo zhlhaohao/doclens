@@ -61,7 +61,7 @@ export class PaginationBar extends LitElement {
     }
     button.current {
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       border-color: var(--cortex-primary);
     }
     .ellipsis {

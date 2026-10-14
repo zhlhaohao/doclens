@@ -13,3 +13,8 @@ import "./components/icon";
 import "./styles/global.css";
 import "./styles/tokens.css";
 import "./styles/breakpoints.css";
+import { applyAppTheme, readAppTheme } from "./utils/app-theme";
+
+// 应用主题幂等重挂（index.html 内联 FOUC 脚本已先行挂过；此处兜底直开 HTML
+// 的情况并同步 PWA meta theme-color）
+applyAppTheme(readAppTheme());

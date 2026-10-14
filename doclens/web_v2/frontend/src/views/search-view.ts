@@ -41,7 +41,7 @@ export class SearchView extends LitElement {
       flex: 1;
       min-height: 0;
       /* 顶部蓝色光晕：让白色卡片从 view-bg 中浮出 */
-      background: radial-gradient(720px 280px at 50% -80px, rgba(0, 100, 224, 0.08), transparent 70%);
+      background: radial-gradient(720px 280px at 50% -80px, color-mix(in srgb, var(--cortex-primary) 8%, transparent), transparent 70%);
     }
     .input-row {
       padding: var(--cortex-space-4) var(--cortex-space-6);

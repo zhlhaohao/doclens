@@ -66,20 +66,20 @@ export class InputBox extends LitElement {
       border-radius: var(--cortex-radius-pill);
       background:
         linear-gradient(var(--cortex-chat-input-bg), var(--cortex-chat-input-bg)) padding-box,
-        linear-gradient(135deg, #16a34a, #22c55e) border-box;
+        linear-gradient(135deg, var(--cortex-input-accent), var(--cortex-input-accent-2)) border-box;
       min-height: var(--min-h);
       padding: 0 3px 0 18px;
       /* 强化：绿色调 elevation 阴影——静止即浮起，作为主动作区 */
-      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.12), 0 1px 2px rgba(20, 22, 26, 0.05);
+      box-shadow: 0 6px 18px color-mix(in srgb, var(--cortex-input-accent) 12%, transparent), 0 1px 2px rgba(20, 22, 26, 0.05);
       transition: box-shadow var(--cortex-duration-fast), background var(--cortex-duration-fast);
     }
     /* 有缩略图行时改为大圆角（pill 上沿套缩略图视觉突兀） */
     .wrapper:has(.thumbs) { border-radius: var(--cortex-radius-xl, 20px); }
     .wrapper.drag-over {
-      border-color: #16a34a;
+      border-color: var(--cortex-input-accent);
       background:
         linear-gradient(var(--cortex-surface-muted), var(--cortex-surface-muted)) padding-box,
-        linear-gradient(135deg, #16a34a, #22c55e) border-box;
+        linear-gradient(135deg, var(--cortex-input-accent), var(--cortex-input-accent-2)) border-box;
     }
     .row { display: flex; align-items: center; min-height: var(--min-h); }
     /* 附件模式：左侧 18px 让位给 📎 钮 */
@@ -133,7 +133,7 @@ export class InputBox extends LitElement {
       border: none;
       border-radius: 50%;
       background: rgba(0, 0, 0, 0.55);
-      color: #fff;
+      color: var(--cortex-on-media);
       font-size: 12px;
       line-height: 18px;
       padding: 0;
@@ -146,8 +146,8 @@ export class InputBox extends LitElement {
       /* 聚焦：绿色渐变描边加深为满色 + 更强 elevation + 绿色光晕环 */
       background:
         linear-gradient(var(--cortex-surface), var(--cortex-surface)) padding-box,
-        linear-gradient(135deg, #16a34a, #22c55e) border-box;
-      box-shadow: 0 10px 30px rgba(22, 163, 74, 0.20), 0 0 0 4px rgba(22, 163, 74, 0.14);
+        linear-gradient(135deg, var(--cortex-input-accent), var(--cortex-input-accent-2)) border-box;
+      box-shadow: 0 10px 30px color-mix(in srgb, var(--cortex-input-accent) 20%, transparent), 0 0 0 4px color-mix(in srgb, var(--cortex-input-accent) 14%, transparent);
     }
     input {
       flex: 1;
@@ -207,8 +207,8 @@ export class InputBox extends LitElement {
       /* 文档流内按钮：flex: 0 保证不收缩，文本区域（flex:1）自动让位——
          换行点自然落在按钮前，长文不再钻到按钮底下 */
       flex: 0 0 auto;
-      background: #16a34a;
-      color: #fff;
+      background: var(--cortex-input-accent);
+      color: var(--cortex-on-primary);
       border: none;
       border-radius: var(--cortex-radius-pill);
       /* 上下左右各留 3px（wrapper padding 右 3px，按钮自身贴齐） */
@@ -228,13 +228,13 @@ export class InputBox extends LitElement {
     button:hover:not(:disabled) { filter: brightness(1.05); }
     button:active:not(:disabled) { transform: scale(0.96); }
     /* 停止态：流式中发送键原地变身为「停止」（红色方形图标钮，区别于绿色发送），始终可点 */
-    button.stop { background: #dc2626; padding: 0; }
+    button.stop { background: var(--cortex-danger); padding: 0; }
     /* 停止态动画：白色方块呼吸 + 红色光晕扩散，错开节奏传达"正在思考/输出" */
     button.stop { animation: cortex-stop-glow 1.4s ease-in-out infinite; }
     button.stop doclens-icon { animation: cortex-stop-pulse 0.9s ease-in-out infinite; }
     @keyframes cortex-stop-glow {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-      50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.28); }
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cortex-danger) 0%, transparent); }
+      50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--cortex-danger) 28%, transparent); }
     }
     @keyframes cortex-stop-pulse {
       0%, 100% { transform: scale(0.8); opacity: 0.5; }

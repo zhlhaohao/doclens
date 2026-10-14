@@ -104,7 +104,7 @@ export class PasswordSection extends LitElement {
       cursor: pointer;
     }
     button.primary {
-      color: #fff;
+      color: var(--cortex-on-primary);
       background: var(--cortex-primary);
       border-color: var(--cortex-primary);
     }

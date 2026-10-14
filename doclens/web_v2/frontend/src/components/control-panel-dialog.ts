@@ -7,14 +7,13 @@ import { watchStatusLabel } from "../utils/watch-status";
 
 /**
  * 控制面板对话框（系统菜单「控制面板」入口）：收纳低频维护操作，
- * 精简系统菜单一级空间。三个操作行：
- * - 刷新页面 → dispatch close + window.location.reload()（整页重载，
- *   解决 PWA 旧 bundle 不换新的问题；重载后面板自然消失）
+ * 精简系统菜单一级空间。两个操作行：
  * - 强制重建索引 → dispatch close + actions.openReindexConfirm()。
  *   reindex-dialog 是 app.ts 根级全局 store 驱动组件（z-1000），会盖在
  *   本面板之上；reindex.dialog 非 closed 时行禁用（幂等守卫 UI 化）
  * - 文件监控 → dispatch close + dispatch open-watch，由宿主 app-bar 打开
  *   watch-changes-dialog（不内嵌不叠层——SSE 列表已封装在那边）
+ * （「重载页面」已提升到系统菜单一级入口，2026-10-14）
  *
  * 协议同 about-dialog / watch-changes-dialog：宿主持布尔 state → .open 属性
  * 传入；Esc / 点 scrim / ✕ 三路关闭 → dispatch close 事件回写。
@@ -126,7 +125,7 @@ export class ControlPanelDialog extends LitElement {
       display: block;
       margin-top: 2px;
     }
-    .action-row .label.dot { color: var(--cortex-success, #16a34a); }
+    .action-row .label.dot { color: var(--cortex-success); }
     .action-row .label.busy { color: var(--cortex-primary); }
     .action-row .label.warn { color: var(--cortex-warning); }
     @media (max-width: 1023px) {
@@ -167,11 +166,6 @@ export class ControlPanelDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
   }
 
-  private _onRefreshClick(): void {
-    this._close();
-    window.location.reload();
-  }
-
   private _onReindexClick(): void {
     // 幂等守卫（行禁用为主，此处双保险防 race）
     if (store.getState().reindex.dialog !== "closed") return;
@@ -202,13 +196,6 @@ export class ControlPanelDialog extends LitElement {
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
         </div>
         <div class="body">
-          <button class="action-row" type="button" data-testid="refresh-row" @click=${this._onRefreshClick}>
-            <doclens-icon class="icon" name="refresh-cw"></doclens-icon>
-            <span class="text">
-              <span class="label">重载页面</span>
-              <span class="hint">重新加载应用，获取最新版本</span>
-            </span>
-          </button>
           <button
             class="action-row"
             type="button"

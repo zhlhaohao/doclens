@@ -21,6 +21,7 @@ import "../components/model-presets-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
 import "../components/skills-section";
+import "../components/appearance-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
@@ -124,7 +125,7 @@ export class SettingsView extends LitElement {
       color: var(--cortex-text);
     }
     .tab-strip button.active {
-      background: rgba(0, 100, 224, 0.15);
+      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
       color: var(--cortex-primary);
     }
     .scroll-area {
@@ -250,7 +251,7 @@ export class SettingsView extends LitElement {
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      background: #fff;
+      background: var(--cortex-on-primary);
       transition: transform 0.15s;
     }
     .switch input:checked + .track { background: var(--cortex-primary); }
@@ -991,6 +992,7 @@ export class SettingsView extends LitElement {
                   ${tab === "network" ? html`<password-section></password-section>` : nothing}
                   ${tab === "mcp" ? html`<mcp-servers-section></mcp-servers-section>` : nothing}
                   ${tab === "skills" ? html`<skills-section></skills-section>` : nothing}
+                  ${tab === "misc" ? html`<appearance-section></appearance-section>` : nothing}
                 </div>
               `;
             })}

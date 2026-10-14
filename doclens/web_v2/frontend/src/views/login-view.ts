@@ -99,7 +99,7 @@ export class LoginView extends LitElement {
       padding: 12px;
       font-size: var(--cortex-fs-base);
       font-family: var(--cortex-font);
-      color: #fff;
+      color: var(--cortex-on-primary);
       background: var(--cortex-primary);
       border: none;
       border-radius: var(--cortex-radius-md);

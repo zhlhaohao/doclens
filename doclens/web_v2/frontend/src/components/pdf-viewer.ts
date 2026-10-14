@@ -135,7 +135,7 @@ const COMPONENT_CSS = `
   /* 尺寸/位置由组件按占位 rect 同步（left/top/width/height 内联） */
   z-index: 1;
   overflow: hidden;
-  background: var(--cortex-surface-muted, #525659);
+  background: var(--cortex-surface-muted);
 }
 /* 预览全屏联动（preview-pane body class）：portal 平时 z-index 1
    （低于页面组件，允许 app-bar 等覆盖），全屏时提到 101——恰好压在
@@ -227,14 +227,14 @@ body.cortex-preview-fs .cortex-pdf-portal {
 
 /** 组件自身与 shadow 树内元素的 inline 布局样式（connected 时套用）。 */
 const HOST_INLINE_STYLE =
-  "display:flex;flex-direction:column;flex:1;min-height:0;position:relative;outline:none;background:var(--cortex-surface-muted,#525659)";
+  "display:flex;flex-direction:column;flex:1;min-height:0;position:relative;outline:none;background:var(--cortex-surface-muted)";
 
 /** 占位元素 inline 样式（flex 撑满组件，portal 对齐其 rect）。 */
 const ANCHOR_INLINE_STYLE = "flex:1;min-height:0;";
 
 /** 状态层 inline 样式（loading / error）。 */
 const STATUS_INLINE_STYLE =
-  "flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--cortex-text-muted,#666);font-size:var(--cortex-fs-base,14px);background:var(--cortex-card-bg,#fff);text-align:center;line-height:1.7;padding:0 16px";
+  "flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--cortex-text-muted);font-size:var(--cortex-fs-base,14px);background:var(--cortex-card-bg);text-align:center;line-height:1.7;padding:0 16px";
 
 /**
  * PDF 原生预览（ADR-0031）：pdf.js 官方 viewer 组件层渲染原始字节。

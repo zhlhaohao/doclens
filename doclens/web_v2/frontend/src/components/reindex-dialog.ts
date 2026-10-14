@@ -54,7 +54,7 @@ export class ReindexDialog extends LitElement {
     }
     button.primary { background: var(--cortex-btn-primary-bg); color: var(--cortex-btn-primary-text); border: none; border-radius: var(--cortex-radius-pill); }
     button.primary:hover:not(:disabled) { opacity: 0.9; }
-    button.warn { background: var(--cortex-danger); color: #fff; border: none; border-radius: var(--cortex-radius-lg); }
+    button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
       dialog {
         min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px);

@@ -234,9 +234,9 @@ export class FilesView extends LitElement {
       color: var(--cortex-text-muted);
     }
     .confirm-actions button.danger {
-      background: var(--cortex-danger, #f85149);
-      border-color: var(--cortex-danger, #f85149);
-      color: #fff;
+      background: var(--cortex-danger);
+      border-color: var(--cortex-danger);
+      color: var(--cortex-on-danger);
     }
     .toast {
       position: fixed; bottom: 24px; left: 50%;

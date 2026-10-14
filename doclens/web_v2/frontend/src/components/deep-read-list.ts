@@ -147,8 +147,8 @@ export class DeepReadList extends LitElement {
       cursor: pointer;
     }
     .row .del:hover {
-      color: var(--cortex-danger, #f85149);
-      background: color-mix(in srgb, var(--cortex-danger, #f85149) 10%, transparent);
+      color: var(--cortex-danger);
+      background: color-mix(in srgb, var(--cortex-danger) 10%, transparent);
     }
     .empty {
       flex: 1;
@@ -168,7 +168,7 @@ export class DeepReadList extends LitElement {
       align-items: center;
       justify-content: center;
       padding: var(--cortex-space-8);
-      color: var(--cortex-danger, #f85149);
+      color: var(--cortex-danger);
       font-size: var(--cortex-fs-base);
       text-align: center;
     }

@@ -100,7 +100,7 @@ export class TranslateDialog extends LitElement {
       gap: var(--cortex-space-2);
     }
     .check input {
-      accent-color: var(--cortex-btn-primary-bg, #0a1317);
+      accent-color: var(--cortex-btn-primary-bg);
     }
     .actions {
       display: flex;
@@ -125,12 +125,12 @@ export class TranslateDialog extends LitElement {
     }
     button.primary {
       /* 黑 pill 主按钮（marketing primary） */
-      background: var(--cortex-btn-primary-bg, #0a1317);
+      background: var(--cortex-btn-primary-bg);
       border: none;
-      color: var(--cortex-btn-primary-text, #ffffff);
+      color: var(--cortex-btn-primary-text);
     }
     button.primary:hover:not(:disabled) {
-      background: var(--cortex-btn-primary-pressed, #444950);
+      background: var(--cortex-btn-primary-pressed);
     }
     button:disabled {
       opacity: 0.5;
@@ -149,7 +149,7 @@ export class TranslateDialog extends LitElement {
     }
     .bar > div {
       height: 100%;
-      background: var(--cortex-btn-primary-bg, #0a1317);
+      background: var(--cortex-btn-primary-bg);
       transition: width 0.3s ease;
     }
     .status-line {
@@ -157,7 +157,7 @@ export class TranslateDialog extends LitElement {
       color: var(--cortex-text-muted);
     }
     .status-line.err {
-      color: var(--cortex-danger, #b42318);
+      color: var(--cortex-danger);
     }
     .preset-hint {
       font-size: var(--cortex-fs-xs);

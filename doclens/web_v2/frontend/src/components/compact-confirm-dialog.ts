@@ -119,7 +119,7 @@ export class CompactConfirmDialog extends LitElement {
       white-space: nowrap;
     }
     .error-text {
-      color: #c0392b;
+      color: var(--cortex-danger);
       word-break: break-all;
     }
     @media (max-width: 1023px) {

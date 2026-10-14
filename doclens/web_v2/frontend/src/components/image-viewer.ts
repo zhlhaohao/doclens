@@ -78,7 +78,7 @@ export class ImageViewer extends LitElement {
       border: none;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.15);
-      color: #fff;
+      color: var(--cortex-on-media);
       font-size: 20px;
       cursor: pointer;
       display: flex;
@@ -96,7 +96,7 @@ export class ImageViewer extends LitElement {
       border: none;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.15);
-      color: #fff;
+      color: var(--cortex-on-media);
       font-size: 20px;
       line-height: 1;
       cursor: pointer;

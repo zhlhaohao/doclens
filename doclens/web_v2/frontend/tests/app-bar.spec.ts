@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fixture, html, elementUpdated } from "@open-wc/testing";
 
 vi.mock("../src/api/auth", () => ({
@@ -313,7 +313,7 @@ describe("<app-bar> watcher badge", () => {
 });
 
 describe("<app-bar> 控制面板 menu item", () => {
-  it("维护操作已收敛：菜单不含 重建索引/文件监控/刷新，含 控制面板", async () => {
+  it("维护操作已收敛：菜单不含 重建索引/文件监控，含 控制面板 与 重载页面", async () => {
     const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
     (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
     await elementUpdated(el);
@@ -321,8 +321,24 @@ describe("<app-bar> 控制面板 menu item", () => {
       .map((i) => i.textContent ?? "");
     expect(labels.some((l) => l.includes("强制重建索引"))).toBe(false);
     expect(labels.some((l) => l.includes("文件监控"))).toBe(false);
-    expect(labels.some((l) => l === "刷新" || l.trim() === "刷新")).toBe(false);
     expect(labels.some((l) => l.includes("控制面板"))).toBe(true);
+    expect(labels.some((l) => l.includes("重载页面"))).toBe(true);
+  });
+
+  it("clicking reload-item closes menu and reloads the page", async () => {
+    // happy-dom 的 location.reload 不可配置，无法 spyOn——整体 stub location
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = el.shadowRoot?.querySelector('[data-testid="reload-item"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    btn.click();
+    await elementUpdated(el);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot?.querySelector(".user-menu")?.classList.contains("open")).toBe(false);
+    vi.unstubAllGlobals();
   });
 
   it("renders 关于 menu item and clicking opens about-dialog", async () => {
@@ -360,5 +376,55 @@ describe("<app-bar> 控制面板 menu item", () => {
     expect(watch.open).toBe(true);
     const panelAgain = el.shadowRoot?.querySelector("control-panel-dialog") as HTMLElement & { open: boolean };
     expect(panelAgain.open).toBe(false);
+  });
+});
+
+describe("<app-bar> 主题入口的视口分治（ADR-0043）", () => {
+  afterEach(() => {
+    // 还原 matchMedia stub
+    vi.unstubAllGlobals();
+  });
+
+  function stubViewport(mobile: boolean) {
+    // happy-dom 的 window.innerWidth 可直接改，但组件用 matchMedia 探测——stub 之
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: mobile ? query.includes("max-width") : query.includes("min-width"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+      onchange: null,
+    }));
+  }
+
+  it("桌面视口（>1023px）：header 有快捷钮，用户菜单无「切换主题」项", async () => {
+    stubViewport(false);
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    expect(el.shadowRoot?.querySelector(".theme-btn")).toBeTruthy();
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const labels = Array.from(el.shadowRoot?.querySelectorAll(".menu-item") ?? [])
+      .map((i) => i.textContent ?? "");
+    expect(labels.some((l) => l.includes("切换主题"))).toBe(false);
+  });
+
+  it("移动视口（≤1023px）：header 快捷钮不渲染，用户菜单有「切换主题」项且点击切主题收菜单", async () => {
+    stubViewport(true);
+    const el = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+    await elementUpdated(el);
+    expect(el.shadowRoot?.querySelector(".theme-btn")).toBeNull();
+    (el.shadowRoot?.querySelector(".avatar-btn") as HTMLButtonElement).click();
+    await elementUpdated(el);
+    const btn = el.shadowRoot?.querySelector('[data-testid="theme-item"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    btn.click();
+    await elementUpdated(el);
+    // 点击后：菜单收起 + 主题已切换落盘
+    expect(el.shadowRoot?.querySelector(".user-menu")?.classList.contains("open")).toBe(false);
+    expect(["light", "dark", "paper"]).toContain(localStorage.getItem("cortex.theme"));
+    localStorage.removeItem("cortex.theme");
   });
 });

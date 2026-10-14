@@ -85,7 +85,7 @@ export class BookmarkDrawer extends LitElement {
       color: var(--cortex-text);
     }
     .del-btn:hover {
-      color: var(--cortex-danger, #dc2626);
+      color: var(--cortex-danger);
     }
     .add-btn {
       border: none;

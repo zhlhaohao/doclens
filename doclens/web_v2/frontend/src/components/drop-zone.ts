@@ -7,7 +7,7 @@ export class DropZone extends LitElement {
     :host { display: contents; }
     .overlay {
       position: fixed; inset: 0;
-      background: rgba(0, 100, 224, 0.05);
+      background: color-mix(in srgb, var(--cortex-primary) 5%, transparent);
       border: 2px dashed var(--cortex-primary);
       border-radius: var(--cortex-radius-lg);
       display: none;

@@ -511,13 +511,13 @@ export class MdViewer extends LitElement {
       animation: highlight-flash 2s ease-out;
     }
     @keyframes highlight-flash {
-      0% { box-shadow: 0 0 0 4px rgba(0, 100, 224, 0.12); }
+      0% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cortex-primary) 12%, transparent); }
       100% { box-shadow: 0 0 0 4px transparent; }
     }
     /* 搜索关键字命中高亮（primary-soft 底，类似浏览器 Ctrl+F）
-       SaaS Boutique：旧 amber #FEF3C7 已替换为 primary-based rgba。 */
+       SaaS Boutique：旧 amber 已替换为 primary-based（现 token 化跟随主题）。 */
     :host mark.keyword-hit {
-      background: rgba(0, 100, 224, 0.15);
+      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;

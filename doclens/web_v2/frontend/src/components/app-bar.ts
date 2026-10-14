@@ -14,6 +14,14 @@ import { logout } from "../api/auth";
 import { closeWebview, isWebviewContainer } from "../utils/jsbridge";
 import { router } from "../router/router";
 import { watchStatusLabel } from "../utils/watch-status";
+import {
+  APP_THEME_LABELS,
+  APP_THEME_ORDER,
+  cycleAppTheme,
+  onAppThemeChange,
+  readAppTheme,
+  type AppTheme,
+} from "../utils/app-theme";
 
 @customElement("app-bar")
 export class AppBar extends LitElement {
@@ -127,9 +135,33 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
+    /* 应用主题快捷钮（ADR-0043）：视觉同 watch-badge 的 icon-only pill */
+    .theme-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-pill);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      font-size: 15px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .theme-btn:hover {
+      background: var(--cortex-surface-muted);
+      border-color: var(--cortex-primary);
+      color: var(--cortex-primary);
+    }
     @media (max-width: 1023px) {
-      /* 移动端右侧空间紧张：watch-badge 隐藏（状态移入用户菜单）。 */
+      /* 移动端右侧空间紧张：watch-badge 隐藏（状态移入用户菜单）；
+         主题快捷钮由 JS 条件渲染（_isMobileViewport，菜单项接管入口），
+         此规则作 SSR/竞态兜底。 */
       .watch-badge { display: none; }
+      .theme-btn { display: none; }
     }
     .avatar-btn {
       display: inline-flex;
@@ -151,7 +183,7 @@ export class AppBar extends LitElement {
       width: 32px; height: 32px;
       border-radius: 50%;
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -201,6 +233,12 @@ export class AppBar extends LitElement {
       color: var(--cortex-text);
       display: block;
     }
+    .menu-item .desc {
+      display: block;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      margin-top: 2px;
+    }
   `;
 
   @property() activeView: ViewId = "search";
@@ -215,6 +253,19 @@ export class AppBar extends LitElement {
   @state() private _panelOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
+  /** 应用主题（ADR-0043）：app-bar 快捷钮循环切换；订阅外部变更（设置页色卡）同步图标。 */
+  @state() private _appTheme: AppTheme = readAppTheme();
+  private _offAppThemeChange?: () => void;
+  /** 移动视口（≤1023px，与 theme-btn/watch-badge 断点同口径）：主题入口只在
+   *  用户菜单显示（header 钮隐藏省空间）；桌面反之——菜单项不重复。 */
+  @state() private _isMobileViewport = AppBar._probeMobileViewport();
+  private _mqList?: MediaQueryList;
+  private _onMqChange = () => { this._isMobileViewport = AppBar._probeMobileViewport(); };
+
+  private static _probeMobileViewport(): boolean {
+    return typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 1023px)").matches;
+  }
   /** 宿主标题（CONTEXT.md）：Android 宿主经 URL query `?title=`（URL 编码）
    *  传入，启动读一次（SPA 导航 query 保留，刷新重读）；trim 后空串视为
    *  未传。仅 webview 内渲染于 app bar 中央。 */
@@ -278,6 +329,13 @@ export class AppBar extends LitElement {
     this._aboutOpen = true;
   }
 
+  /** 菜单「重载页面」：整页 reload（解决 PWA 旧 bundle 不换新；
+   *  从控制面板提升为一级入口，2026-10-14）。 */
+  private _onReloadClick() {
+    this._menuOpen = false;
+    window.location.reload();
+  }
+
   private _onScopeSelect(scope: SettingsScope) {
     this._menuOpen = false;
     this.dispatchEvent(new CustomEvent("navigate", {
@@ -333,6 +391,12 @@ export class AppBar extends LitElement {
     document.addEventListener("click", this._onDocClick);
     window.addEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     window.addEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
+    this._appTheme = readAppTheme();
+    this._offAppThemeChange = onAppThemeChange((t) => { this._appTheme = t; });
+    this._mqList = typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 1023px)")
+      : undefined;
+    this._mqList?.addEventListener("change", this._onMqChange);
     this._syncFromStore();
     this._unsubStore = store.subscribe(() => this._syncFromStore());
   }
@@ -341,8 +405,22 @@ export class AppBar extends LitElement {
     document.removeEventListener("click", this._onDocClick);
     window.removeEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     window.removeEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
+    this._mqList?.removeEventListener("change", this._onMqChange);
+    this._mqList = undefined;
+    this._offAppThemeChange?.();
+    this._offAppThemeChange = undefined;
     this._unsubStore?.();
     super.disconnectedCallback();
+  }
+
+  /** 应用主题快捷钮（ADR-0043）：循环三主题 + toast 反馈当前主题名；
+   *  菜单内入口点击后收起菜单（同其他菜单项惯例）。 */
+  private _cycleAppTheme(fromMenu = false) {
+    if (fromMenu) this._menuOpen = false;
+    const next = cycleAppTheme();
+    const idx = APP_THEME_ORDER.indexOf(next);
+    const seq = APP_THEME_ORDER.map((t, i) => (i === idx ? `【${APP_THEME_LABELS[t]}】` : APP_THEME_LABELS[t])).join(" → ");
+    this._pushToast(`主题：${seq}`, "info", 2200);
   }
 
   private _syncFromStore() {
@@ -417,6 +495,15 @@ export class AppBar extends LitElement {
         ? html`<div class="center-title">${this._hostTitle}</div>`
         : nothing}
       <div class="right-cluster">
+        ${!this._isMobileViewport ? html`
+          <button
+            class="theme-btn"
+            type="button"
+            aria-label=${`切换主题（当前：${APP_THEME_LABELS[this._appTheme]}）`}
+            title=${`主题：${APP_THEME_LABELS[this._appTheme]}（点击切换）`}
+            @click=${() => this._cycleAppTheme()}
+          ><doclens-icon name="palette"></doclens-icon></button>
+        ` : nothing}
         ${this._renderSyncBadge(store.getState().syncStatus)}
         ${this._renderWatchBadge(store.getState().watcher)}
         <button class="avatar-btn" @click=${this._onAvatarClick} aria-label="用户菜单">
@@ -429,10 +516,25 @@ export class AppBar extends LitElement {
               <span class="label">全局配置</span>
             </span>
           </button>
+          ${this._isMobileViewport ? html`
+            <button class="menu-item" type="button" data-testid="theme-item" @click=${() => this._cycleAppTheme(true)}>
+              <doclens-icon class="icon" name="palette"></doclens-icon>
+              <span class="text">
+                <span class="label">切换主题</span>
+                <span class="desc">${APP_THEME_LABELS[this._appTheme]}（点击切换）</span>
+              </span>
+            </button>
+          ` : nothing}
           <button class="menu-item" type="button" data-testid="control-panel-item" @click=${this._onControlPanelClick}>
             <doclens-icon class="icon" name="sliders-horizontal"></doclens-icon>
             <span class="text">
               <span class="label">控制面板</span>
+            </span>
+          </button>
+          <button class="menu-item" type="button" data-testid="reload-item" @click=${this._onReloadClick}>
+            <doclens-icon class="icon" name="refresh-cw"></doclens-icon>
+            <span class="text">
+              <span class="label">重载页面</span>
             </span>
           </button>
           <button class="menu-item" type="button" data-testid="about-item" @click=${this._onAboutMenuClick}>

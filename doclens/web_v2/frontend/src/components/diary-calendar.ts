@@ -116,7 +116,7 @@ export class DiaryCalendar extends LitElement {
     .day:disabled { color: var(--cortex-text-muted); opacity: 0.35; cursor: default; }
     .day.selected {
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       font-weight: 700;
     }
     .day .dot {
@@ -127,7 +127,7 @@ export class DiaryCalendar extends LitElement {
       border-radius: 50%;
       background: var(--cortex-primary);
     }
-    .day.selected .dot { background: #fff; }
+    .day.selected .dot { background: var(--cortex-on-primary); }
     /* 月份/年份快速选择网格（4 列） */
     .pick-grid {
       display: grid;
@@ -150,7 +150,7 @@ export class DiaryCalendar extends LitElement {
     .pick-cell:disabled { color: var(--cortex-text-muted); opacity: 0.35; cursor: default; }
     .pick-cell.selected {
       background: var(--cortex-primary);
-      color: #fff;
+      color: var(--cortex-on-primary);
       font-weight: 700;
     }
   `;

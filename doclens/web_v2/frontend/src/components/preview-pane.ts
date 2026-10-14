@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
@@ -47,6 +47,17 @@ import {
   type CodeTheme,
 } from "../utils/code-theme";
 import {
+  readAppTheme,
+  onAppThemeChange,
+  type AppTheme,
+} from "../utils/app-theme";
+import {
+  codeSurfaceLight,
+  codeSurfaceDark,
+  codeTokensLight,
+  codeTokensDark,
+} from "../utils/code-palette";
+import {
   CODE_FONT_SCALE_MIN_PCT,
   CODE_FONT_SCALE_MAX_PCT,
   CODE_FONT_SCALE_STEP_PCT,
@@ -73,6 +84,49 @@ export function normalizeHighlightKeyword(input: string): string {
 export class PreviewPane extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    // 行号视图双表面 token（utils/code-palette.ts；ADR-0043 三态代码主题）
+    css`
+    .body {
+      --code-tok-c: ${unsafeCSS(codeTokensLight.c)};
+      --code-tok-k: ${unsafeCSS(codeTokensLight.k)};
+      --code-tok-s: ${unsafeCSS(codeTokensLight.s)};
+      --code-tok-n: ${unsafeCSS(codeTokensLight.n)};
+      --code-tok-f: ${unsafeCSS(codeTokensLight.f)};
+      --code-tok-t: ${unsafeCSS(codeTokensLight.t)};
+      --code-tok-o: ${unsafeCSS(codeTokensLight.o)};
+      --code-tok-p: ${unsafeCSS(codeTokensLight.p)};
+      --code-surface-canvas: ${unsafeCSS(codeSurfaceLight.canvas)};
+      --code-surface-ink: ${unsafeCSS(codeSurfaceLight.ink)};
+      --code-surface-line-no: ${unsafeCSS(codeSurfaceLight.lineNo)};
+      --code-surface-line-no-hover: ${unsafeCSS(codeSurfaceLight.lineNoHover)};
+      --code-surface-selected-bg: ${unsafeCSS(codeSurfaceLight.selectedBg)};
+      --code-surface-selected-bar: ${unsafeCSS(codeSurfaceLight.selectedBar)};
+      --code-surface-hit-bg: ${unsafeCSS(codeSurfaceLight.hitBg)};
+      --code-surface-hit-ink: ${unsafeCSS(codeSurfaceLight.hitInk)};
+      --code-surface-clear-bg: ${unsafeCSS(codeSurfaceLight.clearBtnBg)};
+      --code-surface-clear-ink: ${unsafeCSS(codeSurfaceLight.clearBtnInk)};
+    }
+    .body.dark {
+      --code-tok-c: ${unsafeCSS(codeTokensDark.c)};
+      --code-tok-k: ${unsafeCSS(codeTokensDark.k)};
+      --code-tok-s: ${unsafeCSS(codeTokensDark.s)};
+      --code-tok-n: ${unsafeCSS(codeTokensDark.n)};
+      --code-tok-f: ${unsafeCSS(codeTokensDark.f)};
+      --code-tok-t: ${unsafeCSS(codeTokensDark.t)};
+      --code-tok-o: ${unsafeCSS(codeTokensDark.o)};
+      --code-tok-p: ${unsafeCSS(codeTokensDark.p)};
+      --code-surface-canvas: ${unsafeCSS(codeSurfaceDark.canvas)};
+      --code-surface-ink: ${unsafeCSS(codeSurfaceDark.ink)};
+      --code-surface-line-no: ${unsafeCSS(codeSurfaceDark.lineNo)};
+      --code-surface-line-no-hover: ${unsafeCSS(codeSurfaceDark.lineNoHover)};
+      --code-surface-selected-bg: ${unsafeCSS(codeSurfaceDark.selectedBg)};
+      --code-surface-selected-bar: ${unsafeCSS(codeSurfaceDark.selectedBar)};
+      --code-surface-hit-bg: ${unsafeCSS(codeSurfaceDark.hitBg)};
+      --code-surface-hit-ink: ${unsafeCSS(codeSurfaceDark.hitInk)};
+      --code-surface-clear-bg: ${unsafeCSS(codeSurfaceDark.clearBtnBg)};
+      --code-surface-clear-ink: ${unsafeCSS(codeSurfaceDark.clearBtnInk)};
+    }
+    `,
     css`
     :host {
       display: flex;
@@ -166,7 +220,7 @@ export class PreviewPane extends LitElement {
       text-decoration: underline;
     }
     .body .line.line-selected {
-      background: rgba(0, 100, 224, 0.08);
+      background: color-mix(in srgb, var(--cortex-primary) 8%, transparent);
       box-shadow: inset 2px 0 0 var(--cortex-primary);
     }
     .line-clear-btn {
@@ -185,28 +239,19 @@ export class PreviewPane extends LitElement {
     .line-clear-btn:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
     /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
     .highlight {
-      background: rgba(0, 100, 224, 0.15);
+      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
       color: var(--cortex-primary);
       padding: 0 2px;
       border-radius: 2px;
     }
-    /* 服务端语法分词 8 类配色（ADR-0032；亮色 Meta 画布，克制不花哨）：
+    /* 服务端语法分词 8 类配色（ADR-0032）+ 行号视图表面（ADR-0036/0043）：
        c注释=stone 灰 / k关键字=ink 深蓝黑 / s字符串=森林绿 / n数字=赭棕 /
        f函数=靛蓝 / t类型=青蓝 / o操作符=steel / p标点=slate。未归类 run
        不挂 class（正文色 --cortex-text）。
-       颜色经 --code-tok-* 变量下发（ADR-0036 代码主题）：浅色值在 .body
-       基础规则，深色值在 .body.dark 覆盖——两套同键变量随主题切换。 */
+       全部颜色经 --code-* 变量下发（utils/code-palette.ts 注入两套值）：
+       浅色值在 .body 基础规则，深色值在 .body.dark 覆盖——两套同键变量
+       随代码主题三态（auto=跟随应用主题 ⇄ 强制浅 ⇄ 强制深）切换。 */
     .body {
-      --code-tok-c: var(--cortex-text-subtle);
-      --code-tok-k: #0a3d91;
-      --code-tok-s: #0a7d33;
-      --code-tok-n: #a05a1f;
-      --code-tok-f: #4b3fd4;
-      --code-tok-t: #0b7285;
-      --code-tok-o: var(--cortex-text-caption);
-      --code-tok-p: var(--cortex-text-muted);
-      /* 字号档位（utils/code-font-scale）：乘数经 --code-font-scale 注入，
-         行距用无单位 lh 随动；行号列宽改 em（随字号缩放，悬挂缩进不错位）。 */
       --code-font-scale: 1;
       font-size: calc(var(--cortex-fs-sm) * var(--code-font-scale));
     }
@@ -220,49 +265,41 @@ export class PreviewPane extends LitElement {
     .tk-p { color: var(--code-tok-p); }
     /* 深色代码主题（ADR-0036，GitHub dark 基准）：仅行号视图整体换肤——
        底色/正文/行号/选中行/命中高亮全部换深色系；周边 header 与其余
-       预览形态维持 Meta 白画布。表面色：canvas #0d1117、行号 #8b949e。 */
+       预览形态跟随应用主题。具体值见 utils/code-palette.ts。 */
     .body.dark {
-      --code-tok-c: #8b949e;
-      --code-tok-k: #ff7b72;
-      --code-tok-s: #a5d6ff;
-      --code-tok-n: #79c0ff;
-      --code-tok-f: #d2a8ff;
-      --code-tok-t: #7ee787;
-      --code-tok-o: #ff7b72;
-      --code-tok-p: #c9d1d9;
-      background: #0d1117;
-      color: #c9d1d9;
+      background: var(--code-surface-canvas);
+      color: var(--code-surface-ink);
       transition: background 0.15s, color 0.15s;
     }
     .body.dark .line-no {
-      color: #6e7681;
+      color: var(--code-surface-line-no);
     }
     .body.dark .line-no.clickable:hover {
-      color: #58a6ff;
+      color: var(--code-surface-line-no-hover);
     }
     .body.dark .line.line-selected {
-      background: rgba(56, 139, 253, 0.15);
-      box-shadow: inset 2px 0 0 #58a6ff;
+      background: var(--code-surface-selected-bg);
+      box-shadow: inset 2px 0 0 var(--code-surface-selected-bar);
     }
     .body.dark .highlight {
-      background: rgba(187, 128, 9, 0.4);
-      color: #e3b341;
+      background: var(--code-surface-hit-bg);
+      color: var(--code-surface-hit-ink);
     }
     .body.dark .line-clear-btn {
-      background: #21262d;
-      border-color: #30363d;
-      color: #8b949e;
+      background: var(--code-surface-clear-bg);
+      border-color: var(--cortex-border);
+      color: var(--code-surface-clear-ink);
     }
     .body.dark .line-clear-btn:hover {
-      color: #58a6ff;
-      border-color: #58a6ff;
+      color: var(--code-surface-line-no-hover);
+      border-color: var(--code-surface-line-no-hover);
     }
     .html-frame {
       flex: 1;
       border: none;
       border-radius: 0;
       width: 100%;
-      background: #fff;
+      background: var(--cortex-surface);
       min-height: 0;
     }
     /* 预览全屏（类视频全屏）：host 变 fixed 覆盖层盖满视口，脱离分栏布局。
@@ -702,7 +739,18 @@ export class PreviewPane extends LitElement {
   /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
   @state() private _fontScalePct = readFontScalePct();
   /** 代码主题（ADR-0036）：行号视图浅/深两态；持久化 localStorage，默认 light。 */
+  /** 代码主题（ADR-0043 三态）：auto=跟随应用主题（深夜→深色），light/dark=显式固定。
+   *  应用主题变更时 auto 态需重算——订阅 onAppThemeChange。 */
   @state() private _codeTheme: CodeTheme = readCodeTheme();
+  @state() private _appTheme: AppTheme = readAppTheme();
+  private _offAppThemeChange?: () => void;
+
+  /** 行号视图实际渲染表面：auto 解析为跟随当前应用主题。 */
+  private get _codeDark(): boolean {
+    if (this._codeTheme === "dark") return true;
+    if (this._codeTheme === "light") return false;
+    return this._appTheme === "dark";
+  }
   /** 行号视图字号档位（60–200 步长 10）；持久化 localStorage（独立于 md 字号）。 */
   @state() private _codeFontScalePct = readCodeFontScalePct();
   /** 预览全屏（类视频全屏）：host class preview-fullscreen + body class
@@ -938,11 +986,16 @@ export class PreviewPane extends LitElement {
       this._fullscreen = false;
       this._applyFullscreen();
     }
+    // 代码主题 auto 态跟随应用主题（ADR-0043）
+    this._appTheme = readAppTheme();
+    this._offAppThemeChange = onAppThemeChange((t) => { this._appTheme = t; });
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
     document.removeEventListener("keydown", this._onFsKeydown);
+    this._offAppThemeChange?.();
+    this._offAppThemeChange = undefined;
     this._clearHighlightDebounce();
     this._detachScrollMemory();
     super.disconnectedCallback();
@@ -1052,10 +1105,13 @@ export class PreviewPane extends LitElement {
     writeFontScalePct(FONT_SCALE_DEFAULT_PCT);
   }
 
-  /** 代码主题切换（ADR-0036）：浅 ⇄ 深两态 toggle，即选即生效 + 落盘。 */
+  /** 代码主题切换（ADR-0043 三态）：跟随 ⇄ 浅 ⇄ 深循环，即选即生效 + 落盘
+   *  （auto 落盘 = 清除记录）。 */
   private _toggleCodeTheme() {
-    this._codeTheme = this._codeTheme === "dark" ? "light" : "dark";
-    writeCodeTheme(this._codeTheme);
+    const order: CodeTheme[] = ["auto", "light", "dark"];
+    const next = order[(order.indexOf(this._codeTheme) + 1) % order.length];
+    this._codeTheme = next;
+    writeCodeTheme(next);
   }
 
   /** 预览全屏切换（类视频全屏）：CSS 覆盖层形态——不用原生 Fullscreen API
@@ -1079,16 +1135,19 @@ export class PreviewPane extends LitElement {
   };
 
   /** 代码主题按钮（桌面 header pill / mobile more 菜单行共用）：
-   *  图标反映当前态（浅色显太阳、深色显月亮），点击切换。 */
+   *  三态循环（跟随/浅/深）：auto 显 contrast 图标、浅显太阳、深显月亮。 */
   private _renderCodeThemeBtn({ className }: { className: string }) {
-    const dark = this._codeTheme === "dark";
+    const t = this._codeTheme;
+    const label = t === "auto" ? "跟随应用" : t === "light" ? "浅色" : "深色";
+    const icon = t === "auto" ? "contrast" : t === "light" ? "sun" : "moon";
+    const nextLabel = t === "auto" ? "浅色" : t === "light" ? "深色" : "跟随应用";
     return html`<button
       class=${className}
       type="button"
-      aria-label=${dark ? "切换为浅色主题" : "切换为深色主题"}
-      title=${dark ? "浅色主题" : "深色主题"}
+      aria-label=${`代码配色：${label}（切换为${nextLabel}）`}
+      title=${`代码配色：${label}`}
       @click=${() => this._toggleCodeTheme()}
-    ><doclens-icon name=${dark ? "moon" : "sun"}></doclens-icon><span class="btn-label">${dark ? "浅色主题" : "深色主题"}</span></button>`;
+    ><doclens-icon name=${icon}></doclens-icon><span class="btn-label">${label}</span></button>`;
   }
 
   /** 预览全屏按钮（桌面 header，所有预览分支通用）：全屏显 minimize 退出。 */
@@ -1328,7 +1387,7 @@ export class PreviewPane extends LitElement {
                       type="button"
                       role="menuitem"
                       @click=${() => this._toggleCodeTheme()}
-                    ><doclens-icon name=${this._codeTheme === "dark" ? "sun" : "moon"}></doclens-icon>${this._codeTheme === "dark" ? "浅色主题" : "深色主题"}</button>`
+                    ><doclens-icon name=${this._codeTheme === "auto" ? "contrast" : this._codeTheme === "light" ? "sun" : "moon"}></doclens-icon>${this._codeTheme === "auto" ? "跟随应用" : this._codeTheme === "light" ? "浅色" : "深色"}</button>`
                   : null}
                 ${this.writable
                   ? html`<button
@@ -2214,7 +2273,7 @@ export class PreviewPane extends LitElement {
     const lines = this._content.split("\n");
     const tokLines = this.tokens;
     const tokensAligned = tokLines !== null && tokLines.length === lines.length;
-    const dark = this._codeTheme === "dark";
+    const dark = this._codeDark;
     return html`
       ${renderMobileBar}
       ${showDesktopHeader ? html`

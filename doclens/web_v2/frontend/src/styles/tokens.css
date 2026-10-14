@@ -1,62 +1,16 @@
-/* Cortex 设计 tokens · Meta 设计系统
- *   白画布 · 钴蓝(#0064E0)强调 + 黑色 pill 主按钮 · Montserrat · 极简平铺
- * 参考：awesome-design-md/design-md/meta/DESIGN.md
- * 真相源：frontend-spec/design-system/MASTER.md
+/* Cortex 设计 tokens · 应用主题包（ADR-0043）
+ *   三套内置主题：light = Meta 白（默认，:root 基线）/ dark = 深夜（GitHub dark 系）/
+ *   paper = 暖纸（米黄长阅读）。切换 = <html data-theme="..."> 属性（utils/app-theme.ts），
+ *   本文件只重定义颜色 token；间距/圆角/字号/动效等非颜色 token 主题无关。
+ * 参考：awesome-design-md/design-md/meta/DESIGN.md（Meta 白 = 默认主题标尺）
  *
  * 混合按钮策略：
- *   搜索/发送 = 钴蓝 pill（buy-CTA 等价，用 --cortex-primary）
+ *   搜索/发送 = 主色 pill（buy-CTA 等价，用 --cortex-primary）
  *   对话框/设置确认 = 黑色 pill（marketing primary，用 --cortex-btn-primary-*）
- *   钴蓝同时作强调色：链接/active 导航/聚焦环/<mark>高亮/选中态 */
+ *   主色同时作强调色：链接/active 导航/聚焦环/<mark>高亮/选中态 */
+
+/* ── 非颜色 token（主题无关，全主题共享）──────────────────── */
 :root {
-  /* ── 品牌与强调色 · 钴蓝（Cobalt）── */
-  --cortex-primary: #0064e0;          /* 钴蓝：hero 提交按钮 + 强调色 */
-  --cortex-primary-hover: #0457cb;    /* primary-deep：按下/链接 active */
-  --cortex-primary-2: #0091ff;        /* primary-soft 钴蓝 */
-  --cortex-primary-soft: #e8f0fe;     /* 钴蓝浅底（~12% tint） */
-  --cortex-fb-blue: #1876f2;          /* 选中态/表单激活（Meta fb-blue） */
-  --cortex-meta-link: #385898;        /* 遗留链接色（预留） */
-
-  /* ── 黑色主按钮（marketing-surface primary）── */
-  --cortex-btn-primary-bg: #0a1317;       /* ink-deep */
-  --cortex-btn-primary-text: #ffffff;
-  --cortex-btn-primary-pressed: #444950;  /* charcoal */
-  --cortex-btn-primary-disabled: #bcc0c4; /* disabled-text */
-
-  /* ── 中性色 · Meta Ink/Steel/Hairline ── */
-  --cortex-bg: #ffffff;              /* 画布纯白（canvas） */
-  --cortex-surface: #ffffff;         /* 卡片/面板 */
-  --cortex-surface-muted: #f1f4f7;   /* surface-soft：缩略图/次级面板/搜索 pill 静止 */
-  --cortex-view-bg: #ffffff;         /* view 主区底色 */
-  --cortex-card-bg: #ffffff;         /* 卡片/浮层 */
-  --cortex-border: #ced0d4;          /* hairline：输入边框/分隔 */
-  --cortex-border-muted: #dee3e9;    /* hairline-soft：卡片/分区弱分隔 */
-
-  /* ── 文字 ── */
-  --cortex-text: #0a1317;            /* ink-deep：标题/正文 */
-  --cortex-text-muted: #4b4c4f;      /* slate：次要正文/小节标题 */
-  --cortex-text-subtle: #8595a4;     /* stone：caption/placeholder */
-  --cortex-text-caption: #5d6c7b;    /* steel：footer/最静音 */
-
-  /* ── 语义色 ── */
-  --cortex-success: #31a24c;
-  --cortex-warning: #f7b928;
-  --cortex-attention: #f2a918;
-  --cortex-danger: #e41e3f;          /* critical */
-  --cortex-danger-strong: #f0284a;   /* 表单错误边框（critical-strong） */
-  --cortex-nav-active: #b91c1c;      /* 导航激活：深红文字 + 红色粗线条图标（activity-bar / tab-bar 共用，保证两端风格一致） */
-
-  /* ── Chat 专用（Meta 化）── */
-  --cortex-chat-bg: #ffffff;
-  --cortex-chat-bubble-user: #0064e0;        /* 钴蓝用户气泡，与发送按钮品牌统一 */
-  --cortex-chat-bubble-user-border: #0457cb;
-  --cortex-chat-bubble-user-text: #ffffff;
-  --cortex-chat-bubble-ai: #ffffff;
-  --cortex-chat-bubble-ai-border: #ced0d4;
-  --cortex-chat-section: #0064e0;
-  --cortex-chat-input-bg: #ffffff;
-  --cortex-chat-input-border: #ced0d4;
-  --cortex-chat-footer: #8595a4;
-
   /* ── 间距（4px 基线，Meta 对齐）── */
   --cortex-space-1: 4px;   /* xxs */
   --cortex-space-2: 8px;   /* xs */
@@ -84,10 +38,6 @@
   --cortex-shadow-sm: none;                               /* level 0：卡片纯边框无阴影 */
   --cortex-shadow-md: 0 1px 4px 0 rgba(20, 22, 26, 0.18); /* level 2：dialog/toast/下拉/粘性面板 */
   --cortex-shadow-lg: 0 1px 4px 0 rgba(20, 22, 26, 0.18); /* 大浮层 */
-
-  /* ── Focus ring（钴蓝）── */
-  --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
-  --cortex-focus-ring-danger: 0 0 0 3px rgba(228, 30, 63, 0.18);
 
   /* ── 字体 · Optimistic VF（私有）→ Montserrat 首选回退 ── */
   --cortex-font: "Optimistic VF", "Montserrat", "Helvetica Neue", Helvetica, Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -127,10 +77,90 @@
   /* ── 主内容列最大宽度（chat 对话流/输入行、diary 页面统一居中限宽）：
       调整桌面端两侧留白改此处；视图组件一律引用本 token，禁止硬编码 ── */
   --content-max-width: 1080px;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 主题：Meta 白（light，默认 = :root 基线）
+ * ════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;  /* 原生控件/滚动条随主题 */
+
+  /* ── 品牌与强调色 · 钴蓝（Cobalt）── */
+  --cortex-primary: #0064e0;          /* 钴蓝：hero 提交按钮 + 强调色 */
+  --cortex-primary-hover: #0457cb;    /* primary-deep：按下/链接 active */
+  --cortex-primary-2: #0091ff;        /* primary-soft 钴蓝 */
+  --cortex-primary-soft: #e8f0fe;     /* 钴蓝浅底（~12% tint） */
+  --cortex-fb-blue: #1876f2;          /* 选中态/表单激活（Meta fb-blue） */
+  --cortex-meta-link: #385898;        /* 遗留链接色（预留） */
+
+  /* ── 主按钮（marketing-surface primary；浅色主题 = 黑 pill）── */
+  --cortex-btn-primary-bg: #0a1317;       /* ink-deep */
+  --cortex-btn-primary-text: #ffffff;
+  --cortex-btn-primary-pressed: #444950;  /* charcoal */
+  --cortex-btn-primary-disabled: #bcc0c4; /* disabled-text */
+
+  /* ── 媒体浮层恒定色（全屏图像/缩略图浮钮：黑半透明底上的白字，跨主题不变）── */
+  --cortex-on-media: #ffffff;
+
+  /* ── 选中态/高亮上的文字（按钮主色底、日历选中日等场景的对色文字）── */
+  --cortex-on-primary: #ffffff;
+  --cortex-on-danger: #ffffff;
+
+  /* ── 中性色 · Meta Ink/Steel/Hairline ── */
+  --cortex-bg: #ffffff;              /* 画布（canvas） */
+  --cortex-surface: #ffffff;         /* 卡片/面板 */
+  --cortex-surface-muted: #f1f4f7;   /* surface-soft：缩略图/次级面板/搜索 pill 静止 */
+  --cortex-view-bg: #ffffff;         /* view 主区底色 */
+  --cortex-card-bg: #ffffff;         /* 卡片/浮层 */
+  --cortex-border: #ced0d4;          /* hairline：输入边框/分隔 */
+  --cortex-border-muted: #dee3e9;    /* hairline-soft：卡片/分区弱分隔 */
+
+  /* ── 文字 ── */
+  --cortex-text: #0a1317;            /* ink-deep：标题/正文 */
+  --cortex-text-muted: #4b4c4f;      /* slate：次要正文/小节标题 */
+  --cortex-text-subtle: #8595a4;     /* stone：caption/placeholder */
+  --cortex-text-caption: #5d6c7b;    /* steel：footer/最静音 */
+
+  /* ── 语义色 ── */
+  --cortex-success: #31a24c;
+  --cortex-success-ink: #1a7f37;     /* 语义色上的可读文字（浅底文字场景） */
+  --cortex-warning: #f7b928;
+  --cortex-attention: #f2a918;
+  --cortex-danger: #e41e3f;          /* critical */
+  --cortex-danger-strong: #f0284a;   /* 表单错误边框（critical-strong） */
+  --cortex-danger-soft: #fef2f2;     /* 危险提示浅底（error-bar 等） */
+  --cortex-nav-active: #b91c1c;      /* 导航激活：深红文字 + 红色粗线条图标（activity-bar / tab-bar 共用，保证两端风格一致） */
+
+  /* ── diff 语义色（增删行，diff-viewer / git-changes-list 共用）── */
+  --cortex-diff-add: #3fb950;
+  --cortex-diff-add-bg: color-mix(in srgb, #2ea04326 55%, transparent);
+  --cortex-diff-del: #f85149;
+  --cortex-diff-del-bg: color-mix(in srgb, #f8514926 55%, transparent);
+
+  /* ── 输入框主动区（chat 输入 pill 的绿色描边/光晕，input-box）── */
+  --cortex-input-accent: #16a34a;
+  --cortex-input-accent-2: #22c55e;
+
+  /* ── Chat 专用（Meta 化）── */
+  --cortex-chat-bg: #ffffff;
+  --cortex-chat-bubble-user: #0064e0;        /* 钴蓝用户气泡，与发送按钮品牌统一 */
+  --cortex-chat-bubble-user-border: #0457cb;
+  --cortex-chat-bubble-user-text: #ffffff;
+  --cortex-chat-bubble-ai: #ffffff;
+  --cortex-chat-bubble-ai-border: #ced0d4;
+  --cortex-chat-section: #0064e0;
+  --cortex-chat-input-bg: #ffffff;
+  --cortex-chat-input-border: #ced0d4;
+  --cortex-chat-footer: #8595a4;
+
+  /* ── Focus ring（钴蓝）── */
+  --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
+  --cortex-focus-ring-danger: 0 0 0 3px rgba(228, 30, 63, 0.18);
 
   /* ────────────────────────────────────────────────────────────
    * Shoelace --sl-* 主题映射（构建产物内联进 index.[hash].css）
-   * 让任意 Shoelace 组件跟随 Meta 主题（钴蓝主色 + Meta 中性 + pill 圆角）
+   * 让任意 Shoelace 组件跟随应用主题（ADR-0043：每主题整段自映射，
+   * 不叠加官方 dark.css——两套暗色体系会打架）
    * ──────────────────────────────────────────────────────────── */
   --sl-color-primary-50: #e8f0fe;
   --sl-color-primary-100: #cfe3fd;
@@ -174,4 +204,216 @@
   --sl-border-radius-x-large: 24px;
   --sl-border-radius-circle: 9999px;
   --sl-border-radius-pill: 100px;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 主题：深夜（dark）· GitHub dark 系
+ *   钴蓝同色相提亮至 #3c94f7（ADR-0043 对比度校准：#0064e0 在
+ *   #0d1117 上作链接文字 <4.5:1 不达 WCAG AA）
+ * ════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --cortex-primary: #3c94f7;          /* 钴蓝浅阶（primary-400），深底对比优先 */
+  --cortex-primary-hover: #6daef9;    /* hover 反向提亮（深底上 hover 更亮） */
+  --cortex-primary-2: #58a6ff;
+  --cortex-primary-soft: #12233a;     /* 钴蓝暗底（浅 tint 的深底版） */
+  --cortex-fb-blue: #58a6ff;
+  --cortex-meta-link: #a8c7fa;
+
+  /* 主按钮：深底上黑 pill 不可见 → 反转为白 pill 黑字（同 marketing 语义） */
+  --cortex-btn-primary-bg: #f0f6fc;
+  --cortex-btn-primary-text: #0d1117;
+  --cortex-btn-primary-pressed: #c9d1d9;
+  --cortex-btn-primary-disabled: #30363d;
+
+  --cortex-on-primary: #0d1117;       /* 提亮钴蓝底上用深字更可读 */
+  --cortex-on-danger: #ffffff;
+
+  /* 中性 · GitHub dark 阶 */
+  --cortex-bg: #0d1117;
+  --cortex-surface: #161b22;
+  --cortex-surface-muted: #21262d;
+  --cortex-view-bg: #0d1117;
+  --cortex-card-bg: #161b22;
+  --cortex-border: #30363d;
+  --cortex-border-muted: #21262d;
+
+  --cortex-text: #e6edf3;
+  --cortex-text-muted: #adb5bd;
+  --cortex-text-subtle: #8b949e;
+  --cortex-text-caption: #8b949e;
+
+  --cortex-success: #3fb950;
+  --cortex-success-ink: #3fb950;
+  --cortex-warning: #d29922;
+  --cortex-attention: #bb8009;
+  --cortex-danger: #f85149;
+  --cortex-danger-strong: #ff6b64;
+  --cortex-danger-soft: #2d1517;
+  --cortex-nav-active: #ff7b72;
+
+  --cortex-diff-add: #3fb950;
+  --cortex-diff-add-bg: color-mix(in srgb, #2ea04340 30%, transparent);
+  --cortex-diff-del: #f85149;
+  --cortex-diff-del-bg: color-mix(in srgb, #f8514940 30%, transparent);
+
+  --cortex-input-accent: #238636;
+  --cortex-input-accent-2: #2ea043;
+
+  --cortex-chat-bg: #0d1117;
+  --cortex-chat-bubble-user: #12233a;
+  --cortex-chat-bubble-user-border: #1f3a5f;
+  --cortex-chat-bubble-user-text: #e6edf3;
+  --cortex-chat-bubble-ai: #161b22;
+  --cortex-chat-bubble-ai-border: #30363d;
+  --cortex-chat-section: #3c94f7;
+  --cortex-chat-input-bg: #161b22;
+  --cortex-chat-input-border: #30363d;
+  --cortex-chat-footer: #8b949e;
+
+  --cortex-focus-ring: 0 0 0 3px rgba(88, 166, 255, 0.22);
+  --cortex-focus-ring-danger: 0 0 0 3px rgba(248, 81, 73, 0.22);
+
+  /* Shoelace 自映射（暗色全段） */
+  --sl-color-primary-50: #0d1d33;
+  --sl-color-primary-100: #12233a;
+  --sl-color-primary-200: #1f3a5f;
+  --sl-color-primary-300: #2a5a9c;
+  --sl-color-primary-400: #3c94f7;
+  --sl-color-primary-500: #3c94f7;
+  --sl-color-primary-600: #3c94f7;
+  --sl-color-primary-700: #6daef9;
+  --sl-color-primary-800: #9ec9fb;
+  --sl-color-primary-900: #cfe3fd;
+  --sl-color-primary-950: #e8f0fe;
+
+  --sl-color-gray-50: #0d1117;
+  --sl-color-gray-100: #161b22;
+  --sl-color-gray-200: #21262d;
+  --sl-color-gray-300: #30363d;
+  --sl-color-gray-400: #8b949e;
+  --sl-color-gray-500: #adb5bd;
+  --sl-color-gray-600: #c9d1d9;
+  --sl-color-gray-700: #d0d7de;
+  --sl-color-gray-800: #e6edf3;
+  --sl-color-gray-900: #f0f6fc;
+  --sl-color-gray-950: #f0f6fc;
+
+  --sl-color-success-600: #3fb950;
+  --sl-color-warning-600: #d29922;
+  --sl-color-danger-600: #f85149;
+
+  --sl-input-color: #e6edf3;
+  --sl-input-color-hover: #e6edf3;
+  --sl-input-color-focus: #e6edf3;
+  --sl-input-border-color: #30363d;
+  --sl-input-border-color-hover: #8b949e;
+  --sl-input-border-color-focus: #3c94f7;
+  --sl-input-focus-ring-color: rgba(88, 166, 255, 0.22);
+}
+
+/* ════════════════════════════════════════════════════════════
+ * 主题：暖纸（paper）· 米黄纸底长阅读护眼
+ *   钴蓝原样（米黄底对比度足够）；中性系暖化为纸墨体系
+ * ════════════════════════════════════════════════════════════ */
+[data-theme="paper"] {
+  color-scheme: light;
+
+  --cortex-primary: #0064e0;          /* 原钴蓝（暖纸底上对比度足够） */
+  --cortex-primary-hover: #0457cb;
+  --cortex-primary-2: #0091ff;
+  --cortex-primary-soft: #e7ecdf;
+  --cortex-fb-blue: #1876f2;
+  --cortex-meta-link: #385898;
+
+  --cortex-btn-primary-bg: #2b2417;       /* 暖墨（ink-deep 暖化） */
+  --cortex-btn-primary-text: #fdf9ef;
+  --cortex-btn-primary-pressed: #6b6353;
+  --cortex-btn-primary-disabled: #c4bcae;
+
+  --cortex-on-primary: #ffffff;
+  --cortex-on-danger: #ffffff;
+
+  /* 中性 · 纸墨体系 */
+  --cortex-bg: #f8f4ea;              /* 画布：米黄纸 */
+  --cortex-surface: #fdfaf2;         /* 卡片：更浅一档的纸面 */
+  --cortex-surface-muted: #efe9da;   /* surface-soft：牛皮纸感 */
+  --cortex-view-bg: #f8f4ea;
+  --cortex-card-bg: #fdfaf2;
+  --cortex-border: #d8cfba;          /* hairline：纸边 */
+  --cortex-border-muted: #e5ddcb;
+
+  --cortex-text: #2b2417;            /* 墨：暖深棕 */
+  --cortex-text-muted: #5c5342;
+  --cortex-text-subtle: #8d8268;
+  --cortex-text-caption: #6e6450;
+
+  --cortex-success: #3d8b4f;
+  --cortex-success-ink: #2c6e3b;
+  --cortex-warning: #c9971c;
+  --cortex-attention: #c9971c;
+  --cortex-danger: #c03541;
+  --cortex-danger-strong: #d24552;
+  --cortex-danger-soft: #f7e8e3;
+  --cortex-nav-active: #b91c1c;
+
+  --cortex-diff-add: #3d8b4f;
+  --cortex-diff-add-bg: color-mix(in srgb, #3d8b4f26 40%, transparent);
+  --cortex-diff-del: #c03541;
+  --cortex-diff-del-bg: color-mix(in srgb, #c0354126 40%, transparent);
+
+  --cortex-input-accent: #3d8b4f;
+  --cortex-input-accent-2: #52a465;
+
+  --cortex-chat-bg: #f8f4ea;
+  --cortex-chat-bubble-user: #0064e0;
+  --cortex-chat-bubble-user-border: #0457cb;
+  --cortex-chat-bubble-user-text: #ffffff;
+  --cortex-chat-bubble-ai: #fdfaf2;
+  --cortex-chat-bubble-ai-border: #d8cfba;
+  --cortex-chat-section: #0064e0;
+  --cortex-chat-input-bg: #fdfaf2;
+  --cortex-chat-input-border: #d8cfba;
+  --cortex-chat-footer: #8d8268;
+
+  --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
+  --cortex-focus-ring-danger: 0 0 0 3px rgba(192, 53, 65, 0.18);
+
+  /* Shoelace 自映射（暖纸） */
+  --sl-color-primary-50: #e7ecdf;
+  --sl-color-primary-100: #cfe0f5;
+  --sl-color-primary-200: #9ec9fb;
+  --sl-color-primary-300: #6daef9;
+  --sl-color-primary-400: #3c94f7;
+  --sl-color-primary-500: #0064e0;
+  --sl-color-primary-600: #0064e0;
+  --sl-color-primary-700: #0457cb;
+  --sl-color-primary-800: #0346a8;
+  --sl-color-primary-900: #023680;
+  --sl-color-primary-950: #01224f;
+
+  --sl-color-gray-50: #fdfaf2;
+  --sl-color-gray-100: #efe9da;
+  --sl-color-gray-200: #e5ddcb;
+  --sl-color-gray-300: #d8cfba;
+  --sl-color-gray-400: #8d8268;
+  --sl-color-gray-500: #6e6450;
+  --sl-color-gray-600: #5c5342;
+  --sl-color-gray-700: #3b3324;
+  --sl-color-gray-800: #2b2417;
+  --sl-color-gray-900: #2b2417;
+  --sl-color-gray-950: #2b2417;
+
+  --sl-color-success-600: #3d8b4f;
+  --sl-color-warning-600: #c9971c;
+  --sl-color-danger-600: #c03541;
+
+  --sl-input-color: #2b2417;
+  --sl-input-color-hover: #2b2417;
+  --sl-input-color-focus: #2b2417;
+  --sl-input-border-color: #d8cfba;
+  --sl-input-border-color-hover: #8d8268;
+  --sl-input-border-color-focus: #0064e0;
+  --sl-input-focus-ring-color: rgba(0, 100, 224, 0.18);
 }
