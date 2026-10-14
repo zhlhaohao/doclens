@@ -170,6 +170,195 @@ def reset_singletons() -> None:
         _git_sync = None
 
 
+# ---------------------------------------------------------------------------
+# 工作目录热切换（ADR-0043）
+# ---------------------------------------------------------------------------
+
+_swap_lock = threading.Lock()
+_swap_state: dict = {"swapping": False, "target": None}
+
+
+def swap_status() -> dict:
+    """当前切换状态快照（供 /api/status 与 503 响应体；无锁读——dict 拷贝原子）。"""
+    return dict(_swap_state)
+
+
+def is_swapping() -> bool:
+    return bool(_swap_state["swapping"])
+
+
+def swap_workdir(target: str) -> dict:
+    """工作目录热切换（ADR-0043）：先建后换 + 全局切换锁。
+
+    流程：切前校验 → 停全部后台组件 → 丢单例 → chdir → 按新目录重建
+    （索引经 load_or_build_index 审计）→ 重启组件。任一步失败抛异常，
+    由 API 层映射为 4xx/5xx；重建失败时尽力回滚旧目录单例。
+
+    Args:
+        target: 目标工作目录（未规范化，函数内规范化）。
+
+    Returns:
+        {"workdir": <新目录>, "doc_count": <索引文档数>}
+
+    Raises:
+        ValueError: 目录不存在/不可读（切前校验，不进入窗口）。
+        RuntimeError: 已有切换进行中（409）或重建/回滚失败。
+    """
+    from doclens.web_v2.workdir_store import normalize_workdir, same_workdir
+
+    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent
+
+    target = normalize_workdir(target)
+    # 切前廉价校验（不进入切换窗口）：存在 + 可读（ADR-0043「存在/可读」）
+    if not os.path.isdir(target):
+        raise ValueError(f"目录不存在: {target}")
+    if not os.access(target, os.R_OK):
+        raise ValueError(f"目录不可读: {target}")
+
+    # 切换锁互斥（409 语义由 API 层映射）
+    if not _swap_lock.acquire(blocking=False):
+        raise RuntimeError("切换进行中，请稍候")
+    _swap_state.update({"swapping": True, "target": target})
+
+    old_cwd = os.getcwd()
+    old_workdir = _idx_manager.search_path if _idx_manager is not None else old_cwd
+    swapped = False
+    try:
+        if same_workdir(target, old_workdir):
+            return {"workdir": old_workdir, "doc_count": (
+                _idx_manager.indexed_doc_count() if _idx_manager is not None else 0
+            ), "changed": False}
+
+        logger.info("workdir swap: %s -> %s", old_workdir, target)
+        try:
+            # 停全部后台组件（幂等）；在途生成/孤儿任务由强引用保活跑完
+            stop_mcp_client()
+            stop_mcp_server()
+            stop_git_sync()
+            stop_diary_worker()
+            stop_vision_worker()
+            stop_watcher()
+            with _lock:
+                _config = None
+                _idx_manager = None
+                _sessions_store = None
+                _rewind_tracker = None
+                _agent = None
+
+            os.chdir(target)
+            swapped = True
+            # 按新目录重建全套单例。
+            # 首次建库（index.db 不存在）与已有库分途（2026-10-14 热切换边界修复）：
+            # 首次全量索引可能分钟级，同步等待会让 POST 挂到 HTTP 超时、前端
+            # 误报「切换失败」——故首次建库只建空单例就放行，索引交后台线程
+            # （trigger_background_reindex，与 watcher 同模式），前端 reload 后
+            # 走常规「索引中」状态展示；已有库走 load_or_build_index 快路径
+            # （无变化秒回，增量审计有变化才耗时——启动期同款干等先例）。
+            from doclens.config import data_dirname as _data_dirname
+            _cfg = get_config()
+            _index_path = _cfg.index_path or os.path.join(
+                _cfg.search_path, _data_dirname(), "index.db"
+            )
+            _first_build = not os.path.exists(_index_path)
+
+            if _first_build:
+                from doclens.index_manager import IndexManager
+                with _lock:
+                    mgr = IndexManager(_cfg)
+                    _idx_manager = mgr
+                doc_count = 0
+
+                def _first_build_work() -> None:
+                    if not mgr.begin_background_build():
+                        return  # 已有构建在进行（理论不可达，防御）
+                    try:
+                        mgr.load_or_build_index()  # index.db 不存在 → 全量构建
+                        dc = mgr.indexed_doc_count()
+                        try:
+                            from doclens.web_v2.watch_broker import get_watch_broker
+                            get_watch_broker().broadcast("status", watch_snapshot())
+                            get_watch_broker().broadcast("reindexed", {
+                                "success": True, "doc_count": dc,
+                                "failed_count": mgr.last_failed_count,
+                            })
+                        except Exception as e:  # noqa: BLE001
+                            logger.debug("first-build broadcast failed: %s", e)
+                    except Exception as e:  # noqa: BLE001
+                        logger.exception("first-time index build failed for %s: %s", target, e)
+                        try:
+                            from doclens.web_v2.watch_broker import get_watch_broker
+                            get_watch_broker().broadcast("reindexed", {
+                                "success": False, "doc_count": 0, "failed_count": 0,
+                            })
+                        except Exception:  # noqa: BLE001
+                            pass
+                    finally:
+                        mgr.finish_background_build()
+
+                threading.Thread(target=_first_build_work, daemon=True).start()
+                logger.info("workdir swap: first-time index build started in background for %s", target)
+            else:
+                get_index_manager()  # 索引审计失败（如损坏）在此抛错
+                doc_count = get_index_manager().indexed_doc_count()
+            get_sessions_store()
+            get_agent()
+            # 重启后台组件（按新 config 的开关自行决定是否启动）
+            start_watcher()
+            start_vision_worker()
+            start_diary_worker()
+            start_git_sync()
+            start_mcp_client()
+
+            from doclens.web_v2.workdir_store import record_workdir
+            record_workdir(target)
+            logger.info("workdir swap done: %s (%d docs)", target, doc_count)
+            # SSE 广播切换完成（ADR-0043 切换即重载）：前端收到后整页 reload。
+            # 复用 watch status 通道（swap 状态已并入 /api/status，此处广播
+            # 专用 workdir_swapped 事件——status 快照此时仍带 swapping=True，
+            # 前端不能靠它判定终态）。
+            try:
+                from doclens.web_v2.watch_broker import get_watch_broker
+                get_watch_broker().broadcast("workdir_swapped", {
+                    "workdir": target, "doc_count": doc_count,
+                })
+            except Exception as e:  # noqa: BLE001
+                logger.debug("broadcast workdir_swapped failed: %s", e)
+            return {"workdir": target, "doc_count": doc_count, "changed": True}
+        except Exception as exc:
+            logger.exception("workdir swap failed, rolling back to %s: %s", old_workdir, exc)
+            # 回滚：重建旧目录单例（尽力而为——回滚也失败则系统留在切换态，
+            # 前端遮罩提示用户重启）
+            try:
+                if swapped and os.path.normcase(os.getcwd()) != os.path.normcase(old_cwd):
+                    os.chdir(old_cwd)
+                reset_singletons()
+                get_index_manager()
+                get_sessions_store()
+                get_agent()
+                start_watcher()
+                start_vision_worker()
+                start_diary_worker()
+                start_git_sync()
+                start_mcp_client()
+                logger.info("workdir swap rollback ok: %s", old_workdir)
+                try:
+                    from doclens.web_v2.watch_broker import get_watch_broker
+                    get_watch_broker().broadcast("workdir_swap_failed", {
+                        "workdir": old_workdir, "error": str(exc),
+                    })
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("broadcast workdir_swap_failed failed: %s", e)
+            except Exception as rb_exc:  # noqa: BLE001
+                logger.exception("workdir swap rollback failed: %s", rb_exc)
+                raise RuntimeError(
+                    f"切换到 {target} 失败且回滚到 {old_workdir} 也失败，请重启应用: {exc}"
+                ) from exc
+            raise RuntimeError(f"切换到 {target} 失败（已回滚到原目录）: {exc}") from exc
+    finally:
+        _swap_state.update({"swapping": False, "target": None})
+        _swap_lock.release()
+
+
 def reload_config() -> CortexConfig:
     """重建 CortexConfig 并推送到已存在的单例。
 

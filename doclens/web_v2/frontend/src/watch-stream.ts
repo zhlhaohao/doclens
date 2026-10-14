@@ -111,6 +111,17 @@ async function run(): Promise<void> {
         } else if (ev.event === "diary_updated") {
           const d = safeParse<{ date?: string }>(ev.data);
           if (d) dispatchDiaryUpdated(d);
+        } else if (ev.event === "workdir_swapped") {
+          // ADR-0043 切换即重载：后端广播在 swap 锁释放前发出，收到即整页
+          // reload——一切视图/store 天然重置，零幽灵旧数据。
+          window.dispatchEvent(new CustomEvent("cortex:workdir-swapped", {
+            detail: safeParse<{ workdir?: string }>(ev.data) ?? {},
+          }));
+        } else if (ev.event === "workdir_swap_failed") {
+          // 切换失败已回滚：遮罩解锁 + toast（app 层消费）。
+          window.dispatchEvent(new CustomEvent("cortex:workdir-swap-failed", {
+            detail: safeParse<{ error?: string }>(ev.data) ?? {},
+          }));
         }
       }
       // 流正常结束（服务端关闭）→ 若未主动停止则重连

@@ -58,6 +58,12 @@ def is_running(session_id: Optional[str]) -> bool:
         return task is not None and not task.done()
 
 
+def active_count() -> int:
+    """当前在途生成总数（ADR-0043 工作目录热切换确认对话框的警告数据源）。"""
+    with _lock:
+        return sum(1 for t in _active.values() if not t.done())
+
+
 def get_task(session_id: str) -> Optional[asyncio.Task]:
     """取该会话的活跃 task（/chat/stop 取消路径，ADR-0035）。
 

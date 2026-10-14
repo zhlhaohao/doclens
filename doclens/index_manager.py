@@ -7,6 +7,11 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# 首次建库后台化的构建者身份（ADR-0043）：begin_background_build 的调用线程
+# 记为 owner，load_or_build_index 的等待循环对 owner 豁免（防自我死锁）。
+_build_tls = threading.local()
+_build_tls.owner = None
+
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 from treesearch.parsers.registry import SOURCE_TYPE_MAP
 from doclens.config import CortexConfig, data_dirname
@@ -55,6 +60,11 @@ class IndexManager:
         self._startup_audit_done = False
         # /api/status 的 (总字节, 扩展名分布) 缓存：(doc_count, value)
         self._file_stats_cache: tuple[int, tuple[int, dict[str, int]]] | None = None
+        # 首次建库后台化（ADR-0043 热切换）：后台线程正在跑 load_or_build_index
+        # 时为 True——此时其他线程的 load_or_build_index/search 必须等待而非
+        # 重复构建（撞库）。配 _build_cond 等待/唤醒。
+        self._building = False
+        self._build_cond = threading.Condition()
 
     @property
     def last_failed_count(self) -> int:
@@ -71,6 +81,32 @@ class IndexManager:
         供 VisionWorker 等外部写入者在直接更新 FTS 后调用。
         """
         self._needs_reload = True
+
+    def begin_background_build(self) -> bool:
+        """声明本线程将独占执行首次建库（load_or_build_index 全量分支）。
+
+        返回 False 表示已有构建在进行（调用方应改走等待路径，不重复构建）。
+        与 finish_background_build 配对；期间其他线程的 load_or_build_index
+        在 _build_cond 上等待，本线程（owner）豁免（ADR-0043 热切换首次建库后台化）。
+        """
+        with self._build_cond:
+            if self._building:
+                return False
+            self._building = True
+            _build_tls.owner = threading.current_thread()
+            return True
+
+    def finish_background_build(self) -> None:
+        """结束独占构建并唤醒等待者（与 begin_background_build 配对）。"""
+        with self._build_cond:
+            self._building = False
+            _build_tls.owner = None
+            self._build_cond.notify_all()
+
+    @property
+    def building(self) -> bool:
+        """首次建库是否正在后台进行（供 /api/status 展示「索引中」）。"""
+        return self._building
 
     @property
     def startup_audit_done(self) -> bool:
@@ -715,6 +751,12 @@ class IndexManager:
         全程不物化 documents。
         """
         self._sync_image_version_expectation()
+        # 另一线程正在后台构建（首次建库后台化，ADR-0043）——等待其完成，
+        # 不重复构建。构建线程自身（begin_background_build 的调用线程）经
+        # thread-local 豁免等待，否则自我死锁。
+        with self._build_cond:
+            while self._building and _build_tls.owner is not threading.current_thread():
+                self._build_cond.wait()
         if self._ts is not None and not self._needs_reload:
             return True
         self._needs_reload = False

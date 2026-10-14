@@ -71,6 +71,39 @@ export class CortexApp extends LitElement {
     @media (max-width: 1023px) {
       .app-body { flex-direction: column; }
     }
+    /* ADR-0043 切换窗口遮罩：工作目录热切换进行中全屏阻塞，
+       等 SSE workdir_swapped / workdir_swap_failed 终态。 */
+    .swap-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--cortex-space-4);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(2px);
+      font-family: var(--cortex-font);
+      color: var(--cortex-text);
+    }
+    .swap-overlay .spin {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--cortex-border);
+      border-top-color: var(--cortex-primary);
+      border-radius: 50%;
+      animation: swap-spin 0.9s linear infinite;
+    }
+    @keyframes swap-spin { to { transform: rotate(360deg); } }
+    .swap-overlay .msg { font-size: var(--cortex-fs-md); font-weight: 600; }
+    .swap-overlay .sub {
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-muted);
+      font-family: var(--cortex-font-mono);
+      word-break: break-all;
+      max-width: 80vw;
+    }
   `;
 
   private _unsubscribe?: () => void;
@@ -81,6 +114,8 @@ export class CortexApp extends LitElement {
   /** keep-alive：已挂载过的 view 集合。首次访问某 view 才挂载，之后常驻 DOM
    *  用 [hidden] 切换，view 实例不销毁 → 本地状态（预览内容/滚动位置/草稿等）保留。 */
   @state() private _mountedViews = new Set<ViewId>();
+  /** ADR-0043 切换窗口遮罩：null = 未在切换；否则显示目标目录。 */
+  @state() private _swapTarget: string | null = null;
   /** 移动端下拉刷新：全局手势管理（指示器渲染在 .main 内）。
    *  构造时 addController 自注册；指示器 getter 惰性查询 renderRoot。 */
   private _ptr: PullToRefreshController = new PullToRefreshController(
@@ -122,9 +157,35 @@ export class CortexApp extends LitElement {
       (s) => s.auth.authenticated,
       (authed) => { if (authed) this._startMain(); },
     );
+    // ADR-0043：工作目录热切换 SSE 终态——成功即整页 reload（切换即重载，
+    // 一切状态天然重置）；失败已回滚则解锁遮罩 + 提示。
+    window.addEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
+    window.addEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.addEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     // 启动时探测登录闸门：需要登录且未认证 → 只渲染登录页，不启动轮询
     void this._probeAuth();
   }
+
+  private _onWorkdirSwapped = () => {
+    window.location.reload();
+  };
+
+  private _onWorkdirSwapStart = (e: Event) => {
+    const detail = (e as CustomEvent).detail as { target?: string };
+    this._swapTarget = detail?.target ?? "";
+  };
+
+  private _onWorkdirSwapFailed = (e: Event) => {
+    this._swapTarget = null;
+    const detail = (e as CustomEvent).detail as { error?: string };
+    // toast 走 app-bar 内的 toast-stack（全局唯一实例）
+    const stack = document.querySelector("app-bar")?.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null | undefined;
+    stack?.pushToast?.(`切换工作目录失败（已回到原目录）：${detail?.error ?? "未知错误"}`, "error", 6000);
+  };
+
+  /** ADR-0043 遮罩显隐：本页发起的切换走 swap-start 事件；其他标签页/设备的
+   *  并发切换经 /api/status 的 swap.swapping 补偿（_loadStatus 每次拉取时同步）。 */
 
   private async _probeAuth() {
     try {
@@ -161,6 +222,11 @@ export class CortexApp extends LitElement {
     try {
       const s = await getStatus();
       actions.setStatus(s);
+      // ADR-0043：他端发起切换的补偿——status.swap.swapping 同步遮罩
+      // （本页发起的切换由 swap-start 事件先行置位，此处同值覆盖无害）
+      if (s.swap?.swapping) {
+        this._swapTarget = s.swap.target ?? "";
+      }
       // 同步状态在 SSE 首推到达前先填一次初值（SSE status 快照会持续覆盖）
       if (s.sync !== undefined) actions.setSyncStatus(s.sync ?? null);
       // 日记守卫补偿（ADR-0030 D3）：status 迟到窗口内可能已落在 diary 视图
@@ -175,6 +241,9 @@ export class CortexApp extends LitElement {
 
   disconnectedCallback() {
     this.removeEventListener("skill-chat", this._onSkillChat as EventListener);
+    window.removeEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
+    window.removeEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.removeEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     this._unsubscribe?.();
     this._unsubAuth?.();
     this._unsubMemory?.();
@@ -243,6 +312,13 @@ export class CortexApp extends LitElement {
         <tab-bar .active=${view} .diaryEnabled=${diaryEnabled} @navigate=${this._navigate} ?hidden=${view === "settings"}></tab-bar>
       </div>
       <reindex-dialog></reindex-dialog>
+      ${this._swapTarget !== null ? html`
+        <div class="swap-overlay" role="alert" aria-live="assertive">
+          <div class="spin"></div>
+          <div class="msg">正在切换工作目录…</div>
+          ${this._swapTarget ? html`<div class="sub">${this._swapTarget}</div>` : null}
+        </div>
+      ` : null}
     `;
   }
 }

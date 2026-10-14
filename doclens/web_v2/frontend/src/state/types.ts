@@ -155,6 +155,8 @@ export interface SystemStatus {
   /** ADR-0034：仅登记（ghost 行）文档数，与已索引分开报。可选（旧后端无此字段）。 */
   registered_docs?: number;
   index_path: string;
+  /** 首次建库后台化（ADR-0043）：True = 目标库正在后台全量索引，UI 可提示「索引构建中」。 */
+  index_building?: boolean;
   /** 工作目录（绝对路径），welcome-pane 用以展示当前检索范围 */
   workdir?: string;
   total_size_bytes: number;
@@ -169,6 +171,8 @@ export interface SystemStatus {
   /** 日记启用事实源（ADR-0030）：知识库根存在 diary/ 目录即 true（空目录也算）。
    *  启动判定一次；undefined = status 尚未返回（按启用放行，迟到由补偿逻辑纠正）。 */
   diary_enabled?: boolean;
+  /** 工作目录热切换状态（ADR-0043）：swapping=true 时前端显示全屏遮罩。 */
+  swap?: { swapping: boolean; target?: string | null };
 }
 
 /** Settings page */

@@ -8,6 +8,7 @@ import "./toast-stack";
 import "./control-panel-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
+import "./workdir-switch-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
@@ -127,9 +128,38 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
+    /* ADR-0043 工作目录指示器：brand 旁的目录名 pill，点击弹切换面板。
+       只显示目录末段名，全长在 title；超长省略号。 */
+    .workdir-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+      max-width: 220px;
+      padding: 4px 10px;
+      font-size: var(--cortex-fs-xs);
+      font-family: inherit;
+      color: var(--cortex-text);
+      border: 1px solid var(--cortex-border);
+      border-radius: 999px;
+      background: var(--cortex-surface-muted);
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .workdir-indicator:hover { background: var(--cortex-surface); border-color: var(--cortex-primary); }
+    .workdir-indicator:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: 1px; }
+    .workdir-indicator .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
     @media (max-width: 1023px) {
       /* 移动端右侧空间紧张：watch-badge 隐藏（状态移入用户菜单）。 */
       .watch-badge { display: none; }
+      /* 工作目录指示器保留但收窄（它是全局上下文，移动端同样需要） */
+      .workdir-indicator { max-width: 120px; }
     }
     .avatar-btn {
       display: inline-flex;
@@ -215,6 +245,8 @@ export class AppBar extends LitElement {
   @state() private _panelOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
+  /** 工作目录切换对话框开关（ADR-0043：顶栏工作目录指示器点击） */
+  @state() private _workdirDialogOpen = false;
   /** 宿主标题（CONTEXT.md）：Android 宿主经 URL query `?title=`（URL 编码）
    *  传入，启动读一次（SPA 导航 query 保留，刷新重读）；trim 后空串视为
    *  未传。仅 webview 内渲染于 app bar 中央。 */
@@ -405,12 +437,29 @@ export class AppBar extends LitElement {
     `;
   }
 
+  /** ADR-0043 工作目录指示器：显示当前目录末段名，点击弹切换面板。
+   *  status 未返回时不渲染（onboarding 阶段无目录概念）。 */
+  private _renderWorkdirIndicator() {
+    const workdir = store.getState().status?.workdir;
+    if (!workdir) return nothing;
+    const name = workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir;
+    return html`
+      <button
+        class="workdir-indicator"
+        type="button"
+        title="${workdir} — 点击切换工作目录"
+        aria-label="切换工作目录"
+        @click=${() => { this._workdirDialogOpen = true; }}
+      ><doclens-icon name="folder"></doclens-icon><span class="name">${name}</span></button>
+    `;
+  }
+
   render() {
     return html`
       ${this._inWebview ? this._renderWebviewClose() : html`
         <div class="brand">
           <span class="logo">${unsafeSVG(appLogoSvg)}</span>
-          <span>Doclens</span>
+          ${this._renderWorkdirIndicator()}
         </div>
       `}
       ${this._inWebview && this._hostTitle
@@ -473,8 +522,25 @@ export class AppBar extends LitElement {
         .open=${this._aboutOpen}
         @close=${() => { this._aboutOpen = false; }}
       ></about-dialog>
+      <workdir-switch-dialog
+        .open=${this._workdirDialogOpen}
+        .currentWorkdir=${store.getState().status?.workdir ?? ""}
+        @close=${() => { this._workdirDialogOpen = false; }}
+        @swap-start=${this._onSwapStart}
+      ></workdir-switch-dialog>
     `;
   }
+
+  /** 切换请求已发出（ADR-0043）：立即通知 app 层显示遮罩——不等 SSE
+   *  终态事件（swap 窗口期 503 会挡住 status 轮询，遮罩必须先置位）。
+   *  对话框保持打开（submitting 态显示「切换中…」）：失败时用户可原地
+   *  修正重试；成功则页面整体 reload，对话框随之消失。 */
+  private _onSwapStart = (e: Event) => {
+    const target = (e as CustomEvent).detail?.target ?? "";
+    window.dispatchEvent(new CustomEvent("cortex:workdir-swap-start", {
+      detail: { target },
+    }));
+  };
 }
 
 declare global {

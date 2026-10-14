@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from doclens.diary import diary_dir
 from doclens.index_manager import IndexManager
+from doclens.web_v2 import deps
 from doclens.web_v2.deps import get_config, get_index_manager, get_watcher, sync_snapshot
 
 router = APIRouter()
@@ -23,6 +24,8 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         "indexed_docs": indexed_docs,
         "registered_docs": registered_docs,  # 仅登记（ghost 行，ADR-0034）
         "index_failed_count": idx.last_failed_count,
+        # 首次建库后台化（ADR-0043）：True 时前端显示「索引构建中」
+        "index_building": idx.building,
         "index_path": str(idx.index_path),
         "workdir": str(idx.search_path),
         "total_size_bytes": total_size,
@@ -51,4 +54,6 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         "sync": sync_snapshot(),
         # vision 处理状态（工单 09）：队列计数 + write_back 失败计数
         "vision": idx.vision_status(),
+        # 工作目录热切换状态（ADR-0043）：前端遮罩据此显隐
+        "swap": deps.swap_status(),
     }
