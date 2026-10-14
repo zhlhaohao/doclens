@@ -53,10 +53,10 @@ export class TabBar extends LitElement {
   @property() diaryEnabled: boolean = true;
 
   private _items: Array<{ id: ViewId; icon: string; label: string }> = [
-    { id: "search", icon: "search", label: "搜索" },
-    { id: "chat", icon: "bot", label: "助手" },
-    { id: "diary", icon: "book-open", label: "日记" },
-    { id: "files", icon: "folder", label: "文件" },
+    { id: "search", icon: "search", label: "全库搜索" },
+    { id: "chat", icon: "bot", label: "个人助手" },
+    { id: "diary", icon: "book-open", label: "岁月微笺" },
+    { id: "files", icon: "folder", label: "文件管理" },
   ];
 
   private _select(id: ViewId) {

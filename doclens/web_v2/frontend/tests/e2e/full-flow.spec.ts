@@ -81,7 +81,7 @@ test.describe("Doclens Full Flow", () => {
     await expect(page.locator("chat-view")).toBeVisible();
 
     // Click "搜索" (search) activity-bar button to go back
-    const searchBtn = shadowLocator(page, "activity-bar", `button[title="搜索"]`);
+    const searchBtn = shadowLocator(page, "activity-bar", `button[title="全库搜索"]`);
     await searchBtn.click();
 
     // Should now show search-view again
