@@ -377,7 +377,7 @@ CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -Argu
 ./start-app.ps1
 ./start-app.ps1 gui
 ```
-> 前台运行需手动 CTRL+C 结束；**AI 代理启动一律走本节开头的 `Start-Process` 后台形态**（前台/`nohup &` 都会挂住调用方）。浏览器自动打开（`CORTEX_NO_BROWSER=1` 可关闭）。端口按本节开头的规则算（`CORTEX_WEB_PORT + N`），**冲突时杀占用者复用原端口、不递增**，故不要假设会变成 7861/7862。
+> 前台运行需手动 CTRL+C 结束；**AI 代理启动一律走本节开头的 `Start-Process` 后台形态**（前台/`nohup &` 都会挂住调用方）。浏览器自动打开（`CORTEX_NO_BROWSER=1` 可关闭）。端口按本节开头的规则算（`CORTEX_WEB_PORT + N`），**开发版冲突时杀占用者复用原端口、不递增**，故不要假设会变成 7861/7862。**发行版（site-packages 安装）相反：端口被占不杀进程，从基准端口递增找空闲口**（用户机器上的占用者未必是 doclens，杀了就是事故），终端会打印实际端口。
 
 **3. 命令行模式（离线命令）**
 

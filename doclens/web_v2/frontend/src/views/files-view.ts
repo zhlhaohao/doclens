@@ -44,6 +44,8 @@ export class FilesView extends LitElement {
   static readonly TREE_PANE_WIDTH_MAX = 720;
 
   static readonly PREVIEW_PANE_WIDTH_KEY = "cortex.files.previewPaneWidth";
+  /** preview 缺省宽（拖动落盘前的初始轨道为比例 1:2，见 .desktop-layout；
+      该值仅作 splitter 拖动起始宽与窄窗兜底的基准） */
   static readonly PREVIEW_PANE_WIDTH_DEFAULT = 320;
   static readonly PREVIEW_PANE_WIDTH_MIN = 240;
   static readonly PREVIEW_PANE_WIDTH_MAX = 1600;
@@ -63,18 +65,24 @@ export class FilesView extends LitElement {
     .desktop-layout {
       flex: 1;
       display: grid;
-      /* 窄窗口收缩修复（2026-10-09）：两侧栏改 minmax(0, 恢复宽度)——
+      /* 三栏：tree（固定 px，默认 240）｜file-list｜preview。
+         窄窗口收缩修复（2026-10-09）：两侧栏改 minmax(0, …)——
          localStorage 恢复的固定 px 轨道在窗口变窄后超出容器宽会整轨溢出
          （html/body overflow:hidden 直接裁掉、无滚动条）。改后空间充足取
-         恢复宽度，不足时按 grid 分配收缩，不再溢出。中间栏保留 300px
-         base 下限（与 MIDDLE_PANE_MIN 对齐）+ 1fr 吃剩余空间；
-         桌面布局仅 ≥1024px 显示，300px 下限必有空间。 */
+         恢复宽度，不足时按 grid 分配收缩，不再溢出。
+
+         初始比例（2026-10-14）：file-list : preview = 1:2（剩余空间 tree 之后
+         按 1:2 分）——首次进入（无 localStorage 恢复值）时 file-list 不再过宽、
+         preview 不再过窄。--file-pane-flex / --preview-pane-flex 仅在无恢复值
+         时为 1fr/2fr；拖动落盘后（有 px 恢复值）二者退化为 minmax(0, auto) 让
+         固定 px 轨道接管（见 render 的 style 绑定）。中间栏 base 下限 300px
+         与 MIDDLE_PANE_MIN 对齐；桌面布局仅 ≥1024px 显示，下限必有空间。 */
       grid-template-columns:
         minmax(0, var(--tree-pane-width, 240px))
         4px
-        minmax(300px, 1fr)
+        minmax(300px, var(--file-pane-flex, 1fr))
         4px
-        minmax(0, var(--preview-pane-width, 320px));
+        minmax(0, var(--preview-pane-width, var(--preview-pane-flex, 2fr)));
       min-height: 0;
       min-width: 0;
     }
@@ -395,7 +403,9 @@ export class FilesView extends LitElement {
   @state() private _previewDirty = false;
 
   @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
-  @state() private _previewPaneWidth = FilesView.PREVIEW_PANE_WIDTH_DEFAULT;
+  /** preview 栏宽；null = 无 localStorage 恢复值（首次），grid 用 1fr/2fr
+   *  比例轨道（file-list:preview = 1:2）；拖动落盘后落 px 固定轨道。 */
+  @state() private _previewPaneWidth: number | null = null;
 
   // 未提交改动模式（CONTEXT.md 2026-10-01）：中间栏切换为改动列表 + 预览栏 diff
   /** 改动模式开关（git 根才显示入口；探测失败静默隐藏）。 */
@@ -664,6 +674,7 @@ export class FilesView extends LitElement {
         );
       }
     }
+    // previewSaved 缺失：保持 null → grid 走 1:2 比例轨道（首次进入）
   }
 
   /** 左 splitter：拖动 file-tree 右边缘。dx 正 = 变宽。
@@ -678,8 +689,9 @@ export class FilesView extends LitElement {
     const onMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const hostWidth = this.clientWidth;
+      const previewW = this._previewPaneWidth ?? FilesView.PREVIEW_PANE_WIDTH_DEFAULT;
       const dynMax = hostWidth > 0
-        ? hostWidth - this._previewPaneWidth - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
+        ? hostWidth - previewW - FilesView.MIDDLE_PANE_MIN - FilesView.SPLITTERS_TOTAL
         : FilesView.TREE_PANE_WIDTH_MAX;
       const cap = Math.min(FilesView.TREE_PANE_WIDTH_MAX, dynMax);
       const w = Math.max(
@@ -707,7 +719,10 @@ export class FilesView extends LitElement {
   private _onPreviewSplitterMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = this._previewPaneWidth;
+    // 起始宽：优先当前实测渲染宽（比例轨道下 _previewPaneWidth 为 null，
+    // 拖动应基于用户眼前实际宽度，不能跳回 DEFAULT 造成跳动）
+    const col = this.renderRoot.querySelector(".preview-col") as HTMLElement | null;
+    const startWidth = this._previewPaneWidth ?? (col?.getBoundingClientRect().width || FilesView.PREVIEW_PANE_WIDTH_DEFAULT);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
@@ -1549,12 +1564,24 @@ export class FilesView extends LitElement {
     `;
   }
 
+  /** 桌面布局 grid 轨道 CSS 变量：preview 无恢复值（null）时输出 1fr/2fr
+   *  比例轨道（file-list:preview = 1:2），有恢复值（拖动落盘）输出固定 px。 */
+  private _paneWidthStyle(): string {
+    const parts = [`--tree-pane-width: ${this._treePaneWidth}px`];
+    if (this._previewPaneWidth === null) {
+      parts.push("--file-pane-flex: 1fr", "--preview-pane-flex: 2fr");
+    } else {
+      parts.push(`--preview-pane-width: ${this._previewPaneWidth}px`);
+    }
+    return parts.join("; ");
+  }
+
   private _renderDesktop() {
     const { disabled: searchDisabled, placeholder: searchPlaceholder } = this._searchBoxState;
     return html`
       <div
         class="desktop-layout"
-        style="--tree-pane-width: ${this._treePaneWidth}px; --preview-pane-width: ${this._previewPaneWidth}px"
+        style="${this._paneWidthStyle()}"
       >
         <aside class="tree-pane">
           <file-search-box

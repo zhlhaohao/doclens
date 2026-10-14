@@ -103,8 +103,11 @@ async def lifespan(app: FastAPI):
     def _start_components() -> None:
         from pathlib import Path
         from doclens.web_v2.tmp_workspace import cleanup_all_tmp
+        from doclens.web_v2.workdir_store import record_workdir
         # 启动时清空 AI 会话临时工作区（.cortex/tmp/）——上轮运行残留的脚本/中间产物
         cleanup_all_tmp(Path(deps.get_index_manager().search_path))
+        # 记录启动落点（ADR-0043 最近工作目录）
+        record_workdir(deps.get_index_manager().search_path)
         deps.start_watcher()
         deps.start_vision_worker()
         deps.start_diary_worker()
@@ -143,10 +146,15 @@ def create_app() -> FastAPI:
     # 登录闸门（须在 router 注册前；只拦 /api/*，豁免 /api/health 与 /api/auth/*）
     from doclens.web_v2.auth_middleware import register_auth_middleware
     register_auth_middleware(app)
+    # 切换窗口 503（ADR-0043；后注册 = 内层，auth 401 优先于 swap 503）
+    from doclens.web_v2.swap_middleware import register_swap_middleware
+    register_swap_middleware(app)
 
     # API 路由（后续任务逐步挂载）
     from doclens.web_v2.api import auth
     app.include_router(auth.router, prefix="/api")
+    from doclens.web_v2.api import workdir
+    app.include_router(workdir.router, prefix="/api")
     from doclens.web_v2.api import search
     app.include_router(search.router, prefix="/api")
     from doclens.web_v2.api import preview
@@ -324,11 +332,35 @@ def _kill_port_process(port: int) -> bool:
         return False
 
 
+def _port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """探测端口是否已有 Listen 态占用（发行版递增端口的前置判定）。"""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex((host if host not in ("0.0.0.0", "") else "127.0.0.1", port)) == 0
+
+
+def _find_free_port(start: int, host: str, max_tries: int = 20) -> int:
+    """从 start 起递增找第一个空闲端口（发行版端口冲突策略）。"""
+    for offset in range(max_tries):
+        candidate = start + offset
+        if not _port_in_use(candidate, host):
+            return candidate
+    raise RuntimeError(f"端口 {start}~{start + max_tries - 1} 均被占用，无法启动")
+
+
 def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -> None:
     """启动 FastAPI + uvicorn，并自动打开浏览器。
 
     `share` 参数保留向后兼容，但 v2 不再支持公网分享。
-    如果端口被占用，自动尝试杀死占用进程后启动。
+
+    端口冲突策略按发行通道分野（2026-10-14）：
+    - 开发版（editable/源码，start-app 按 worktree 算专属端口）：杀占用者
+      复用原端口——占住专属口的几乎必然是本 worktree 的旧实例。
+    - 发行版（site-packages，用户可能并行跑多个知识库实例，或 8000 被
+      无关服务占用）：不杀进程，从基准端口递增找第一个空闲口启动，
+      终端显著打印实际端口。
 
     先索引后开浏览器（ADR-0018）：启动即后台线程跑索引（终端进度 +
     tqdm ETA），完成后才打开浏览器；索引失败仍开浏览器（应用可用、
@@ -348,8 +380,17 @@ def launch_app(port: int = 7860, host: str = "127.0.0.1", share: bool = False) -
 
     import uvicorn
 
-    # 尝试清理占用端口的进程
-    _kill_port_process(port)
+    from doclens.config import is_installed_mode
+    if is_installed_mode():
+        # 发行版：端口被占不杀进程，递增找空闲口（用户机器上的占用者未必
+        # 是 doclens——8000 被其他服务占用是常态，杀了就是事故）
+        if _port_in_use(port, host):
+            new_port = _find_free_port(port + 1, host)
+            print(f"[端口 {port} 已被占用，改用 {new_port}]", flush=True)
+            port = new_port
+    else:
+        # 开发版：尝试清理占用端口的进程（start-app 算出的 worktree 专属口）
+        _kill_port_process(port)
 
     # 启动前：确保 Claude Code kb-ask skill 已安装到 ~/.claude/skills
     try:
