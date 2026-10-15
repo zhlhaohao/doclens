@@ -323,7 +323,10 @@ def _handle_grep(
         except (TypeError, ValueError):
             capped_results = 50
 
-    result = execute_grep_search(idx, pattern, max_results=capped_results, allowed=allowed)
+    result = execute_grep_search(
+        idx, pattern, max_results=capped_results,
+        allowed=allowed, allowed_targets=paths,
+    )
 
     output = _format_agent_output(
         content_results=result.content_results,

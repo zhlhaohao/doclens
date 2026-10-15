@@ -1,4 +1,4 @@
-"""统一的 ripgrep 降级搜索逻辑"""
+"""统一 grep 搜索：双引擎分流（文本 → rg，二进制 → SQLite REGEXP）"""
 
 import logging
 import os
@@ -7,54 +7,21 @@ import time
 from dataclasses import dataclass, field
 from typing import Iterable
 
+from treesearch.ripgrep import rg_available
+
 logger = logging.getLogger(__name__)
 
-# 大语料 like_search(REGEXP) 旁路阈值：nodes 行数超过此值时跳过 SQLite
-# 正则预筛，全权交给 ripgrep。REGEXP 是逐行 Python UDF（每行跨语言回调
-# 一次 re.search），十万行级全表扫即秒级起步、百万行级分钟~十分钟级
-# （实测 51 万文档语料单次 grep 卡死对话流）；rg 子进程原生扫盘同规模
-# 仅数十秒。10 万取「Phase 1 单次扫描开始可感（>1s）」的保守下界。
+# REGEXP 子集扫描规模护栏：SQLite REGEXP 是逐行 Python UDF（每行跨语言
+# 回调一次 re.search），子集节点数超过此值时放弃扫描并显式注明——宁可
+# 声明结果不完整，不卡死对话流（实测 51 万文档语料全表扫分钟~十分钟级、
+# 单次 grep 卡死对话流；rg 子进程原生扫盘同规模仅数十秒）。10 万取
+# 「单次扫描开始可感（>1s）」的保守下界。
+# 护栏作用于两个子集腿：二进制文档子集（常规路径）与 rg 不可用时的
+# 文本索引子集（降级路径）；文本腿（rg 目录扫描）不受此限。
 REGEXP_SKIP_NODES_THRESHOLD = 100_000
-# nodes 计数缓存（db_path -> (count, 抓取时间戳)）：COUNT(*) 在大表上
-# 也要全 B-tree 扫描（秒级），TTL 内复用
-_NODES_COUNT_TTL_S = 600
-_nodes_count_cache: dict[str, tuple[int, float]] = {}
-# 二进制文档缓存（db_path -> (doc_id 集合, 子集节点行数, 抓取时间戳)，同 TTL 语义）
+# 二进制文档画像缓存（db_path -> (doc_id 集合, 子集节点行数, 抓取时间戳)）
+_PROFILE_CACHE_TTL_S = 600
 _binary_doc_ids_cache: dict[str, tuple[set[str], int, float]] = {}
-
-
-def _nodes_count_bypass(idx, threshold: int = REGEXP_SKIP_NODES_THRESHOLD) -> bool:
-    """判定是否旁路 like_search 正则路径（大语料直通 rg）。
-
-    nodes 行数超阈值即旁路；计数结果按 db_path 缓存（TTL 10min）。
-    COUNT 失败（表缺失/锁）按小语料处理（保守，维持旧行为）。
-    threshold 参数仅供测试缩小规模，生产恒用 REGEXP_SKIP_NODES_THRESHOLD。
-    """
-    db_path = str(getattr(idx, "index_path", ""))
-    now = time.monotonic()
-    cached = _nodes_count_cache.get(db_path)
-    if cached and now - cached[1] < _NODES_COUNT_TTL_S:
-        count = cached[0]
-        if count > threshold:
-            logger.debug("[grep] nodes=%d 超阈值（缓存），直通 rg", count)
-            return True
-        return False
-    try:
-        import sqlite3
-
-        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
-    except Exception as e:  # noqa: BLE001
-        logger.warning("[grep] nodes 计数失败（按小语料处理）: %s", e)
-        return False
-    _nodes_count_cache[db_path] = (count, now)
-    if count > threshold:
-        logger.info(
-            "[grep] nodes=%d 超阈值 %d，跳过 SQLite REGEXP 预筛直通 rg",
-            count, threshold,
-        )
-        return True
-    return False
 
 
 def build_rg_paths(
@@ -243,15 +210,22 @@ def _rg_search_root_hits(
     *,
     use_regex: bool,
     timeout: float = 120.0,
+    include_globs: list[str] | None = None,
 ) -> tuple[dict[str, list[int]], bool]:
-    """rg 单进程递归扫描根目录（大语料目录模式）。
+    """rg 单进程递归扫描根目录（文本引擎主力）。
 
     与逐文件 rg_search（treesearch）的分批模式相对：数十万文件分批要
     数千次进程启动（每次 ≤10s 超时预算），而 rg 递归扫目录一次进程原生
     并行完成（51 万文件实测 10-30s）。代价：不经 path_map 逐文件过滤，
     会扫到未索引文件（与 grep 工具「搜索所有文件」的承诺一致）；二进制
     文档（pdf/docx 等）rg 搜不了磁盘原文，由调用方经 REGEXP 子集扫描
-    兜底并集（见 execute_grep_search 大语料分支）。
+    并集（见 execute_grep_search）。
+
+    include_globs: 可选 rg glob 白名单（如 ``["sub/*"]``），paths 限定
+    搜索时把扫描范围收敛到目标目录/文件，避免全库扫。glob 相对 root
+    匹配——rg 的 glob 只按「相对搜索根的输出路径」求值（绝对路径根下
+    传相对 glob 永不命中，实验验证），故含 include_globs 时以 cwd 模式
+    （路径参数 ``.``）从 root 内运行，输出路径即相对形态。
 
     Returns:
         (hits, timed_out): hits 为 {绝对文件路径: [1-based 行号]}；
@@ -264,12 +238,12 @@ def _rg_search_root_hits(
     from treesearch.ripgrep import rg_available
 
     if not rg_available():
-        return {}
+        return {}, False
     from treesearch.ripgrep import rg_path as _ts_rg_path
 
     exe = _ts_rg_path()
     if not exe:
-        return {}
+        return {}, False
 
     # 排除数据/版本目录（索引、会话都不该进 grep 结果）与历史遗留的
     # shadow md（._*.md，机制已废弃；磁盘若有残留不该被当作语料命中）
@@ -277,16 +251,30 @@ def _rg_search_root_hits(
         "!.cortex/**", "!.doclens/**", "!.treesearch/**", "!.git/**",
         "!._*.md",
     ]
-    cmd = [exe, "--json", "--ignore-case", "--max-count", "100"]
+    # --no-require-git：知识库多为非 git 目录，rg 默认在无 .git 时跳过
+    # .gitignore 规则——索引链路（pathspec）无论是否有 .git 都尊重
+    # .gitignore，rg 须对齐口径，否则被索引忽略的文件会被 grep 搜出
+    cmd = [exe, "--json", "--ignore-case", "--max-count", "100", "--no-require-git"]
     if not use_regex:
         cmd.append("--fixed-strings")
     for g in exclude_globs:
         cmd.extend(["-g", g])
-    cmd.extend(["--", pattern, os.path.abspath(root)])
+
+    abs_root = os.path.abspath(root)
+    if include_globs:
+        # cwd 模式：glob 按相对路径求值（见 docstring）；命中路径为
+        # .\rel 形态，统一 normpath 成绝对路径再返回
+        for g in include_globs:
+            cmd.extend(["-g", g])
+        cmd.extend(["--", pattern, "."])
+        cwd = abs_root
+    else:
+        cmd.extend(["--", pattern, abs_root])
+        cwd = None
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout,
+            errors="replace", timeout=timeout, cwd=cwd,
         )
     except subprocess.TimeoutExpired:
         logger.warning("[grep] rg 目录扫描超时 %.0fs（root=%s）", timeout, root)
@@ -309,27 +297,28 @@ def _rg_search_root_hits(
         fp = data.get("path", {}).get("text", "")
         ln = data.get("line_number")
         if fp and ln:
-            hits.setdefault(fp, []).append(ln)
+            key = os.path.normpath(os.path.join(abs_root, fp)) if cwd else fp
+            hits.setdefault(key, []).append(ln)
     return hits, False
 
 
 def _binary_doc_profile(idx) -> tuple[set[str], int]:
-    """二进制文档（pdf/docx 等）的 (doc_id 集合, 子集节点行数)——REGEXP 兜底扫描的目标画像。
+    """二进制文档（pdf/docx 等）的 (doc_id 集合, 子集节点行数)——REGEXP 子集扫描的目标画像。
 
     rg 搜不了二进制源文件的磁盘原文；shadow md 机制已废弃（宿主默认
     enable_shadow_md=False，磁盘无 ._*.md），解析文本只存在于索引库
     （nodes/structure_json），故二进制文档整体走 SQLite REGEXP 限定子集
     扫描（UDF 回调只对子集行发生），与 rg 的文本结果并集。子集节点数
     用于规模护栏：全二进制语料（如 50 万 PDF）的子集≈全表，REGEXP
-    逐行 UDF 会回到分钟级（旁路机制失效），超 REGEXP_SKIP_NODES_THRESHOLD
-    时调用方应放弃兜底并注明。按 db_path 缓存（TTL 与 nodes 计数一致）。
+    逐行 UDF 会回到分钟级，超 REGEXP_SKIP_NODES_THRESHOLD 时调用方应
+    放弃扫描并注明。按 db_path 缓存（TTL 见 _PROFILE_CACHE_TTL_S）。
     """
     from treesearch.parsers.registry import SHADOW_MD_EXTENSIONS
 
     db_path = str(getattr(idx, "index_path", ""))
     cached = _binary_doc_ids_cache.get(db_path)
     now = time.monotonic()
-    if cached and now - cached[2] < _NODES_COUNT_TTL_S:
+    if cached and now - cached[2] < _PROFILE_CACHE_TTL_S:
         return cached[0], cached[1]
     binary: set[str] = set()
     nodes_count = 0
@@ -492,8 +481,13 @@ def _discover_disk_files(search_path: str, allowed_exts: set[str], max_files: in
         return []
 
 
-def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:
+def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:  # noqa: ARG001（保留供外部调用方与测试使用）
     """构建 rg 兜底用的 path_map：索引内文档 + 磁盘上未索引的文件。
+
+    .. deprecated:: 双引擎重构后 execute_grep_search 不再使用（rg 目录
+        扫描直扫磁盘，不需要 path_map 枚举）；保留是因 kb_tools /
+        scoring_pipeline / TUI 仍有 rg_fallback_search 逐文件调用场景。
+        新代码勿用。
 
     未索引文件以文件名（去扩展名）为伪 doc_id 入表，rg 命中后由
     rg_fallback_search 的合成节点逻辑产出结果（此时 reverse_map 查不到
@@ -502,7 +496,7 @@ def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:
     磁盘发现用完整 SUPPORTED_FORMATS 白名单、不做 allowed_source_types
     收缩：grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的
     代码文件（如 .kt）不索引，但 rg 是纯文本搜索无解析成本，理应能搜到
-    （与大语料目录扫描 _rg_search_root_hits 直扫磁盘的口径一致）。
+    （与 rg 目录扫描 _rg_search_root_hits 直扫磁盘的口径一致）。
     """
     from doclens.index_manager import SUPPORTED_FORMATS
 
@@ -580,27 +574,101 @@ def _attach_fulltext(
     return out
 
 
+def _targets_to_rg_globs(targets: list[str]) -> list[str]:
+    """搜索目标（相对根目录的目录/文件路径）→ rg glob 白名单。
+
+    rg -g 的匹配语义（实验验证）：glob 含 ``/`` 时按相对根的路径前缀匹配
+    （``科技/**`` 只命中根下科技/，不命中 other/科技/）；不含 ``/`` 时
+    按 basename 匹配（任意层级）。目标路径本身含 ``/``（常态），直接
+    ``目标 + '/**'``（目录）或原样（文件）即为相对根前缀语义。
+    统一转 posix 分隔符（rg glob 只认 ``/``）。
+    """
+    globs: list[str] = []
+    for t in targets:
+        p = t.strip().replace("\\", "/").rstrip("/")
+        if not p:
+            continue
+        # 目录目标：目录本身 + 其下所有内容；文件目标：精确该文件
+        globs.append(f"{p}/**")
+        globs.append(p)
+    return globs
+
+
+def _regexp_search_subset(
+    idx,
+    query: str,
+    limit: int,
+    doc_ids: set[str] | None,
+) -> list[tuple[str, dict, int, int, float]]:
+    """SQLite REGEXP 子集扫描（绕过 IndexManager.like_search——它不支持 doc_ids）。
+
+    直接开 FTS5Index 走 treesearch.like_search(use_regex=True, doc_ids=...)，
+    结果经 _attach_fulltext 回填全文（summary 是索引期截断窗口）。
+    doc_ids=None 表示全量扫描。
+    """
+    from treesearch.fts import FTS5Index
+
+    try:
+        fts = FTS5Index(db_path=str(idx.index_path))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[grep] REGEXP 子集扫描初始化失败: %s", e)
+        return []
+    try:
+        rows = fts.like_search(query, top_k=limit, use_regex=True, doc_ids=doc_ids)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[grep] REGEXP 子集扫描失败: %s", e)
+        return []
+    finally:
+        fts.close()
+    return _attach_fulltext(idx, rows)
+
+
+def _nodes_total_count(idx) -> int:
+    """索引库 nodes 表总行数（库缺失/计数失败返回 0，按小规模处理）。"""
+    import sqlite3
+
+    db_path = str(getattr(idx, "index_path", ""))
+    if not db_path or not os.path.exists(db_path):
+        return 0
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            return conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[grep] nodes 计数失败: %s", e)
+        return 0
+
+
 def execute_grep_search(
     idx,
     query: str,
     max_results: int = 50,
     allowed: set[str] | None = None,
+    allowed_targets: list[str] | None = None,
 ) -> GrepResult:
-    """执行统一的 grep 搜索流程。
+    """执行统一的 grep 搜索流程：双引擎分流 + 并集。
 
-    搜索流程:
-    1. like_search(use_regex=True) — SQLite REGEXP 搜索
-    2. 若无结果: rg_fallback_search — ripgrep 降级搜索（覆盖磁盘上
-       未索引文件，与 grep 工具"搜索所有文件（包括未索引的）"的承诺一致）
-    3. search_paths_by_regex — 路径正则匹配
-    4. 对内容结果评分排序（按词项命中数降序）
+    搜索流程（与语料规模无关的统一路径）:
+    1. 文本引擎: rg 目录扫描（_rg_search_root_hits）——覆盖磁盘上所有
+       文本文件（含未索引的），天然并行，数十万文件数十秒
+    2. 二进制引擎: SQLite REGEXP 限定二进制文档子集扫描（rg 搜不了
+       pdf/docx 磁盘原文，解析文本只在索引库）
+    3. 两腿结果并集（文本/二进制按扩展名互斥，基本无重叠；doc_id
+       重叠时保留 rg 结果——上下文来自磁盘更可信）
+    4. search_paths_by_regex — 路径正则匹配
+    5. 评分排序（按词项命中数降序）+ 阈值过滤
+
+    rg 不可用时整体降级：文本腿退回 SQLite REGEXP 全量扫描（受规模
+    护栏约束），无 rg 机器仍可 grep。
 
     Args:
         idx: IndexManager 实例
         query: 正则表达式
         max_results: 最大结果数
         allowed: 可选，搜索目标命中的 path_map 键集合
-            （resolve_search_targets 的结果）；传入则三条路径只保留目标内文档
+            （resolve_search_targets 的结果）；传入则各引擎只保留目标内文档
+        allowed_targets: 可选，resolve_search_targets 的原始目标列表
+            （相对路径）；传入时 rg 目录扫描按目标收敛扫描范围（目录目标
+            转为 rg glob），避免限定搜索仍全库扫盘
 
     Returns:
         GrepResult 包含内容结果、路径结果和查询词
@@ -609,36 +677,28 @@ def execute_grep_search(
     query_words = terms if terms else [query]
     notes: list[str] = []
 
-    # 目标过滤：path_map 收敛到 allowed（rg 降级 / 路径匹配共用）
+    # 目标过滤：path_map 收敛到 allowed（rg / REGEXP / 路径匹配共用）
     path_map = idx.path_map
     if allowed is not None:
         path_map = {k: v for k, v in path_map.items() if k in allowed}
 
-    # 步骤 1: like_search（有目标过滤时放大候选量，避免截断在前过滤在后丢结果）
-    # 大语料旁路：REGEXP 逐行 Python 扫描在百万节点级是分钟级（见
-    # _nodes_count_bypass 注释），直接走 rg 目录扫描（原生速度同规模数十秒）
     like_limit = max(200, max_results * 4) if allowed is not None else max_results
-    corpus_bypass = _nodes_count_bypass(idx)
-    if corpus_bypass:
-        like_results = []
-    else:
-        like_results = idx.like_search(query, max_results=like_limit, use_regex=True)
+    content_results: list[tuple[str, dict, int, int, float]] = []
 
-    if like_results:
-        if allowed is not None:
-            like_results = [r for r in like_results if r.get("doc_id", "") in allowed]
-        # like_search 返回 dict 列表，转为 tuple 格式；summary 可能是索引期
-        # 截断的 300 字符窗口（锚点前文丢失），批量回填 structure_json 全文
-        content_results = _attach_fulltext(idx, like_results)
-    else:
-        # 步骤 2: ripgrep 降级（无目标过滤时合并磁盘未索引文件；
-        # 大语料旁路也落此处——like_results 被置空，且用目录扫描模式
-        # 取代逐文件分批：数十万文件的分批 = 数千次进程启动，不可行）
-        if corpus_bypass and allowed is None:
-            pre_hits, rg_timed_out = _rg_search_root_hits(query, str(idx.search_path), use_regex=True)
-            if rg_timed_out:
-                notes.append("rg 目录扫描超时被截断，本次结果可能不完整（部分文本文件未覆盖）。")
-            content_results = rg_fallback_search(
+    # ------------------------------------------------------------------
+    # 腿 1（文本引擎）: rg 目录扫描——含未索引文件
+    # ------------------------------------------------------------------
+    rg_ok = rg_available()
+    if rg_ok:
+        include_globs = _targets_to_rg_globs(allowed_targets) if allowed_targets else None
+        pre_hits, rg_timed_out = _rg_search_root_hits(
+            query, str(idx.search_path), use_regex=True,
+            include_globs=include_globs,
+        )
+        if rg_timed_out:
+            notes.append("rg 目录扫描超时被截断，本次结果可能不完整（部分文本文件未覆盖）。")
+        if pre_hits:
+            rg_content = rg_fallback_search(
                 query,
                 path_map,
                 {},
@@ -649,42 +709,56 @@ def execute_grep_search(
                 pre_hits=pre_hits,
                 window_words=(idx.search_context_before, idx.search_context_after),
             )
-            # 二进制文档兜底：rg 搜不了 pdf/docx 等磁盘原文（shadow md 机制
-            # 已废弃，默认不生成），解析文本只在索引库里——用 REGEXP 限定
-            # 二进制子集扫描（UDF 回调只对子集行发生），与 rg 文本结果并集
-            # 去重（doc_id 相同保留 rg 结果，上下文来自磁盘更可信）。
-            # 规模护栏：全二进制语料（子集≈全表）的 REGEXP 会回到分钟级
-            # （旁路失效），超阈值放弃兜底并注明——宁可声明不完整，不卡死
-            binary_docs, binary_nodes = _binary_doc_profile(idx)
-            if binary_docs:
-                if binary_nodes > REGEXP_SKIP_NODES_THRESHOLD:
-                    notes.append(
-                        f"{len(binary_docs)} 个二进制文档（pdf/docx 等）因规模过大"
-                        f"（{binary_nodes} 节点）未纳入本次搜索。"
+            content_results.extend(rg_content)
+
+    # ------------------------------------------------------------------
+    # 腿 2（REGEXP 引擎）: 二进制子集（常规）；rg 不可用时全量降级
+    # ------------------------------------------------------------------
+    binary_docs, binary_nodes = _binary_doc_profile(idx)
+    if allowed is not None:
+        binary_docs = {d for d in binary_docs if d in allowed}
+    rg_docs = {c[0] for c in content_results}
+
+    if rg_ok:
+        # 二进制子集扫描（rg 已覆盖文本腿，这里只补 rg 搜不了的格式）
+        if binary_docs:
+            if binary_nodes > REGEXP_SKIP_NODES_THRESHOLD:
+                notes.append(
+                    f"{len(binary_docs)} 个二进制文档（pdf/docx 等）因规模过大"
+                    f"（{binary_nodes} 节点）未纳入本次搜索。"
+                )
+            else:
+                bin_results = _regexp_search_subset(
+                    idx, query, like_limit, binary_docs,
+                )
+                if bin_results:
+                    content_results.extend(
+                        item for item in bin_results if item[0] not in rg_docs
                     )
-                else:
-                    bin_results = idx.like_search(
-                        query, max_results=like_limit, use_regex=True,
-                        doc_ids=binary_docs,
-                    )
-                    if bin_results:
-                        rg_docs = {c[0] for c in content_results}
-                        content_results = content_results + [
-                            item for item in _attach_fulltext(idx, bin_results)
-                            if item[0] not in rg_docs
-                        ]
-        else:
-            rg_path_map = _rg_fallback_path_map(idx, path_map) if allowed is None else path_map
-            content_results = rg_fallback_search(
-                query,
-                rg_path_map,
-                {},
-                query_words,
-                context_before=idx.rg_context_before,
-                context_after=idx.rg_context_after,
-                use_regex=True,
-                window_words=(idx.search_context_before, idx.search_context_after),
+    else:
+        # rg 不可用降级：全量（nodes 表）REGEXP 扫描，受规模护栏约束——
+        # 超阈值宁可声明不完整，不卡死（此时无任何可用引擎，明说比挂起好）
+        nodes_count = _nodes_total_count(idx)
+        if nodes_count > REGEXP_SKIP_NODES_THRESHOLD:
+            notes.append(
+                f"rg 不可用且索引规模过大（{nodes_count} 节点），"
+                "本次仅搜索二进制文档子集。"
             )
+            if binary_docs and binary_nodes <= REGEXP_SKIP_NODES_THRESHOLD:
+                bin_results = _regexp_search_subset(
+                    idx, query, like_limit, binary_docs,
+                )
+                content_results.extend(bin_results)
+        else:
+            # nodes=0（含库缺失）：无内容可搜，跳过——FTS5Index 打开不存在
+            # 的 db 会凭空建空库文件
+            if nodes_count > 0:
+                all_results = _regexp_search_subset(idx, query, like_limit, None)
+                if allowed is not None:
+                    all_results = [r for r in all_results if r[0] in allowed]
+                content_results.extend(
+                    item for item in all_results if item[0] not in rg_docs
+                )
 
     # 步骤 3: 路径搜索
     path_results = search_paths_by_regex(

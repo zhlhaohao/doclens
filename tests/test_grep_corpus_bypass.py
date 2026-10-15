@@ -1,11 +1,13 @@
-"""grep 大语料旁路（方案 C）测试：百万节点级跳过 SQLite REGEXP 直通 rg。
+"""grep 双引擎分流测试：文本 → rg 目录扫描，二进制 → SQLite REGEXP 子集。
 
-背景：like_search(use_regex=True) 的 REGEXP 是逐行 Python UDF，nodes 表
-百万行级（51 万文档实测 118.8 万节点）全表扫是分钟~十分钟级，单次 grep
-即可卡死对话流（2026-09-14 实测）；rg 递归扫同规模目录 10-30s。
+背景：like_search(use_regex=True) 的 REGEXP 是逐行 Python UDF，全表扫在
+百万节点级是分钟~十分钟级（51 万文档实测卡死对话流）。统一双引擎后：
 
-二进制文档（pdf/docx 等）分流：rg 搜不了磁盘原文（shadow md 机制已废弃），
-解析文本只在索引库——走 REGEXP 限定二进制子集扫描，与 rg 文本结果并集。
+- 文本腿：rg 单进程递归扫描（原生并行，同规模数十秒），覆盖磁盘所有
+  文本文件（含未索引的）——不再依赖「DB 有结果就短路」
+- 二进制腿：rg 搜不了 pdf/docx 磁盘原文，解析文本只在索引库——走
+  REGEXP 限定二进制子集扫描，与 rg 文本结果并集
+- rg 不可用：整体降级为 REGEXP 全量扫描（受规模护栏约束）
 """
 import sqlite3
 from pathlib import Path
@@ -16,8 +18,9 @@ import pytest
 
 from doclens.ripgrep import (
     _binary_doc_ids,
-    _nodes_count_bypass,
+    _nodes_total_count,
     _rg_search_root_hits,
+    _targets_to_rg_globs,
     rg_fallback_search,
 )
 
@@ -26,44 +29,9 @@ from doclens.ripgrep import (
 def _clear_cache():
     from doclens import ripgrep
 
-    ripgrep._nodes_count_cache.clear()
     ripgrep._binary_doc_ids_cache.clear()
     yield
-    ripgrep._nodes_count_cache.clear()
     ripgrep._binary_doc_ids_cache.clear()
-
-
-def _fake_idx(tmp_path: Path, rows: int) -> SimpleNamespace:
-    """带 nodes 表的假索引（rows 行，COUNT 真实返回）。"""
-    db = tmp_path / "index.db"
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE nodes (node_id TEXT)")
-    con.executemany("INSERT INTO nodes VALUES (?)", [("",)] * rows)
-    con.commit()
-    con.close()
-    return SimpleNamespace(index_path=db, search_path=tmp_path)
-
-
-class TestNodesCountBypass:
-    def test_over_threshold_bypasses(self, tmp_path):
-        # 阈值缩小到 5（测试规模）；生产用 REGEXP_SKIP_NODES_THRESHOLD（十万级）
-        idx = _fake_idx(tmp_path, rows=10)
-        assert _nodes_count_bypass(idx, threshold=5) is True
-
-    def test_under_threshold_keeps_old_path(self, tmp_path):
-        idx = _fake_idx(tmp_path, rows=3)
-        assert _nodes_count_bypass(idx, threshold=5) is False
-
-    def test_count_cached_within_ttl(self, tmp_path):
-        idx = _fake_idx(tmp_path, rows=10)
-        with patch("doclens.ripgrep.logger") as mock_logger:
-            _nodes_count_bypass(idx, threshold=5)
-            _nodes_count_bypass(idx, threshold=5)  # 第二次走缓存
-        assert mock_logger.info.call_count == 1  # 只有一条跳过日志
-
-    def test_count_failure_treated_as_small(self, tmp_path):
-        idx = SimpleNamespace(index_path=tmp_path / "missing.db")
-        assert _nodes_count_bypass(idx) is False
 
 
 class TestRgSearchRootHits:
@@ -89,11 +57,45 @@ class TestRgSearchRootHits:
         hits, _ = _rg_search_root_hits("hello", str(tmp_path), use_regex=False)
         assert list(hits) == [str(tmp_path / "ok.txt")]
 
+    def test_gitignore_respected_without_git(self, tmp_path):
+        """非 git 目录也尊重 .gitignore（--no-require-git，与索引链路口径一致）。"""
+        (tmp_path / ".gitignore").write_text("ignored.md\n", encoding="utf-8")
+        (tmp_path / "ignored.md").write_text("needle-hidden", encoding="utf-8")
+        (tmp_path / "ok.md").write_text("needle-visible", encoding="utf-8")
+        assert not (tmp_path / ".git").exists()
+        hits, _ = _rg_search_root_hits("needle", str(tmp_path), use_regex=False)
+        assert list(hits) == [str(tmp_path / "ok.md")]
+
     def test_regex_mode(self, tmp_path):
         (tmp_path / "r.txt").write_text("foo123bar\nfoo45bar", encoding="utf-8")
         hits, _ = _rg_search_root_hits(r"foo\d{3}", str(tmp_path), use_regex=True)
         assert list(hits) == [str(tmp_path / "r.txt")]
         assert hits[str(tmp_path / "r.txt")] == [1]
+
+    def test_include_globs_scope_to_target_dir(self, tmp_path):
+        """include_globs 把扫描收敛到目标目录（相对根前缀语义）。"""
+        (tmp_path / "科技").mkdir()
+        (tmp_path / "other").mkdir()
+        (tmp_path / "科技" / "a.md").write_text("needle", encoding="utf-8")
+        (tmp_path / "other" / "b.md").write_text("needle", encoding="utf-8")
+        hits, _ = _rg_search_root_hits(
+            "needle", str(tmp_path), use_regex=False,
+            include_globs=["科技/**", "科技"],
+        )
+        assert list(hits) == [str(tmp_path / "科技" / "a.md")]
+
+
+class TestTargetsToRgGlobs:
+    def test_dir_target_gets_recursive_glob(self):
+        assert _targets_to_rg_globs(["科技"]) == ["科技/**", "科技"]
+
+    def test_file_target_exact(self):
+        assert _targets_to_rg_globs(["科技/a.md"]) == ["科技/a.md/**", "科技/a.md"]
+
+    def test_backslash_and_trailing_slash_normalized(self):
+        assert _targets_to_rg_globs(["科技\\sub\\", "  /x  "]) == [
+            "科技/sub/**", "科技/sub", "/x/**", "/x",
+        ]
 
 
 class TestRgFallbackWithPreHits:
@@ -202,28 +204,44 @@ class TestBinaryDocIds:
         assert _binary_doc_ids(idx) == set()
 
 
-class TestExecuteGrepNotes:
-    """execute_grep_search 的 notes 透出（结果不完整性必须显式告知）。"""
+class TestNodesTotalCount:
+    def test_count_from_db(self, tmp_path):
+        db = tmp_path / "index.db"
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE nodes (node_id TEXT)")
+        con.executemany("INSERT INTO nodes VALUES (?)", [("",)] * 7)
+        con.commit()
+        con.close()
+        idx = SimpleNamespace(index_path=db)
+        assert _nodes_total_count(idx) == 7
 
-    def _bypass_idx(self, tmp_path: Path) -> SimpleNamespace:
+    def test_missing_db_returns_zero(self, tmp_path):
+        assert _nodes_total_count(
+            SimpleNamespace(index_path=tmp_path / "missing.db")
+        ) == 0
+
+
+class TestExecuteGrepDualEngine:
+    """execute_grep_search 双引擎分流 + notes 透出（不完整必须显式告知）。"""
+
+    def _idx(self, tmp_path: Path) -> SimpleNamespace:
         return SimpleNamespace(
             index_path=tmp_path / "index.db", search_path=tmp_path,
             path_map={}, rg_context_before=2, rg_context_after=2,
             search_context_before=200, search_context_after=600,
+            grep_score_threshold=0.0, grep_max_results=50,
         )
 
     def test_rg_timeout_yields_note(self, tmp_path):
         from doclens.ripgrep import execute_grep_search
 
-        idx = self._bypass_idx(tmp_path)
-        with patch("doclens.ripgrep._nodes_count_bypass", return_value=True), patch(
-            "doclens.ripgrep._rg_search_root_hits", return_value=({}, True)
-        ):
+        idx = self._idx(tmp_path)
+        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, True)):
             result = execute_grep_search(idx, "whatever")
         assert any("超时" in n for n in result.notes)
 
     def test_binary_subset_over_limit_yields_note(self, tmp_path):
-        """二进制子集节点数超护栏：放弃 REGEXP 兜底并注明（不卡死）。"""
+        """二进制子集节点数超护栏：放弃 REGEXP 扫描并注明（不卡死）。"""
         from doclens.ripgrep import execute_grep_search
 
         db = tmp_path / "index.db"
@@ -236,23 +254,149 @@ class TestExecuteGrepNotes:
         con.execute("INSERT INTO documents VALUES ('d_pdf', ?)", (r"C:\kb\a.pdf",))
         con.commit()
         con.close()
-        idx = self._bypass_idx(tmp_path)
+        idx = self._idx(tmp_path)
         idx.index_path = db
-        with patch("doclens.ripgrep._nodes_count_bypass", return_value=True), patch(
-            "doclens.ripgrep._rg_search_root_hits", return_value=({}, False)
-        ), patch("doclens.ripgrep.REGEXP_SKIP_NODES_THRESHOLD", 3):
+        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, False)), \
+             patch("doclens.ripgrep.REGEXP_SKIP_NODES_THRESHOLD", 3):
             result = execute_grep_search(idx, "needle")
         assert any("二进制" in n for n in result.notes)
 
     def test_no_notes_when_healthy(self, tmp_path):
         from doclens.ripgrep import execute_grep_search
 
-        idx = self._bypass_idx(tmp_path)
-        with patch("doclens.ripgrep._nodes_count_bypass", return_value=True), patch(
-            "doclens.ripgrep._rg_search_root_hits", return_value=({}, False)
-        ):
+        idx = self._idx(tmp_path)
+        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, False)):
             result = execute_grep_search(idx, "whatever")
         assert result.notes == []
+
+    def test_rg_unavailable_degrades_to_regexp(self, tmp_path):
+        """rg 不可用：文本腿降级为 REGEXP 全量扫描（小库），仍出结果。"""
+        from doclens.ripgrep import execute_grep_search
+
+        db = tmp_path / "index.db"
+        from treesearch.fts import FTS5Index
+        from treesearch.tree import Document, assign_node_ids
+
+        fts = FTS5Index(db_path=str(db))
+        structure = [{"title": "t", "text": "needle in indexed text"}]
+        assign_node_ids(structure)
+        fts.index_document(
+            Document(doc_id="d1", doc_name="d1", structure=structure,
+                     source_type="text"),
+        )
+        fts.close()
+        idx = self._idx(tmp_path)
+        idx.index_path = db
+        with patch("doclens.ripgrep.rg_available", return_value=False), \
+             patch("doclens.ripgrep._rg_search_root_hits",
+                   side_effect=AssertionError("rg 不可用时不应目录扫描")):
+            result = execute_grep_search(idx, "needle")
+        assert {c[0] for c in result.content_results} == {"d1"}
+
+    def test_rg_unavailable_large_corpus_notes_incomplete(self, tmp_path):
+        """rg 不可用 + 索引超护栏：注明不完整而非卡死。"""
+        from doclens.ripgrep import execute_grep_search
+
+        db = tmp_path / "index.db"
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE nodes (node_id TEXT, doc_id TEXT)")
+        con.executemany("INSERT INTO nodes VALUES (?, ?)", [("", "d1")] * 10)
+        con.execute(
+            "CREATE TABLE documents (doc_id TEXT PRIMARY KEY, source_path TEXT)"
+        )
+        con.execute("INSERT INTO documents VALUES ('d1', ?)", (r"C:\kb\a.md",))
+        con.commit()
+        con.close()
+        idx = self._idx(tmp_path)
+        idx.index_path = db
+        with patch("doclens.ripgrep.rg_available", return_value=False), \
+             patch("doclens.ripgrep.REGEXP_SKIP_NODES_THRESHOLD", 5):
+            result = execute_grep_search(idx, "needle")
+        assert any("rg 不可用" in n for n in result.notes)
+
+    def test_unindexed_text_file_found_via_rg(self, tmp_path):
+        """双引擎统一路径：小库也走 rg 扫盘，未索引文本文件必须被搜到。"""
+        from doclens.ripgrep import execute_grep_search
+
+        db = tmp_path / "index.db"
+        from treesearch.fts import FTS5Index
+        from treesearch.tree import Document, assign_node_ids
+
+        fts = FTS5Index(db_path=str(db))
+        structure = [{"title": "t", "text": "needle in indexed doc"}]
+        assign_node_ids(structure)
+        fts.index_document(
+            Document(doc_id="d_idx", doc_name="d_idx", structure=structure,
+                     source_type="text"),
+        )
+        fts.close()
+
+        (tmp_path / "untracked.md").write_text(
+            "needle in unindexed file", encoding="utf-8"
+        )
+        idx = self._idx(tmp_path)
+        idx.index_path = db
+        result = execute_grep_search(idx, "needle")
+        nodes = {c[1].get("source_path", c[0]) for c in result.content_results}
+        assert any(str(p).endswith("untracked.md") for p in nodes)
+
+    def test_allowed_targets_scope_rg_scan(self, tmp_path):
+        """allowed_targets：rg 扫描收敛到目标目录，其他目录不被搜。"""
+        from doclens.ripgrep import execute_grep_search
+
+        (tmp_path / "科技").mkdir()
+        (tmp_path / "other").mkdir()
+        (tmp_path / "科技" / "a.md").write_text("needle", encoding="utf-8")
+        (tmp_path / "other" / "b.md").write_text("needle", encoding="utf-8")
+
+        idx = self._idx(tmp_path)
+        result = execute_grep_search(
+            idx, "needle", allowed={"nonexistent"}, allowed_targets=["科技"],
+        )
+        nodes = [c[1].get("source_path", "") for c in result.content_results]
+        assert nodes and all(str(p).endswith("a.md") for p in nodes)
+
+
+class TestRgFallbackSourceTypes:
+    """rg 兜底磁盘发现不受 allowed_source_types 收缩。
+
+    grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的代码文件
+    （如 .kt，source_type=code 默认未启用）不索引，但 rg 纯文本搜索应能
+    搜到；与 rg 目录扫描（_rg_search_root_hits 直扫磁盘）口径一致。
+    """
+
+    def test_code_file_outside_source_types_still_searched(self, tmp_path):
+        import os
+
+        from doclens.ripgrep import execute_grep_search, _rg_fallback_path_map
+        from treesearch import TreeSearchConfig, set_config
+        from treesearch.config import get_config
+
+        original = get_config()
+        try:
+            # 全局也注入类型过滤（模拟生产：doclens set_config 透传），
+            # rg 目录扫描与磁盘发现都不应把 .kt 挡在 rg 之外
+            set_config(TreeSearchConfig(allowed_source_types=["markdown"]))
+            kt = tmp_path / "SplashActivity.kt"
+            kt.write_text("const val SPLASH_DURATION_MS = 1200L", encoding="utf-8")
+            (tmp_path / "note.md").write_text("hello", encoding="utf-8")
+            idx = SimpleNamespace(
+                search_path=tmp_path, allowed_source_types=["markdown"],
+                index_path=tmp_path / "index.db", path_map={},
+                rg_context_before=2, rg_context_after=2,
+                search_context_before=200, search_context_after=600,
+                grep_score_threshold=0.0, grep_max_results=50,
+            )
+            merged = _rg_fallback_path_map(idx, {})
+            vals = {os.path.abspath(v) for v in merged.values()}
+            assert os.path.abspath(str(kt)) in vals
+            assert os.path.abspath(str(tmp_path / "note.md")) in vals
+
+            result = execute_grep_search(idx, "SPLASH_DURATION_MS")
+            nodes = [c[1].get("source_path", "") for c in result.content_results]
+            assert any(str(p).endswith("SplashActivity.kt") for p in nodes)
+        finally:
+            set_config(original)
 
 
 class TestPseudoIdCollision:
@@ -276,40 +420,8 @@ class TestPseudoIdCollision:
         assert os.path.abspath(str(f2)) in vals
 
 
-class TestRgFallbackSourceTypes:
-    """rg 兜底磁盘发现不受 allowed_source_types 收缩。
-
-    grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的代码文件
-    （如 .kt，source_type=code 默认未启用）不索引，但 rg 纯文本搜索应能
-    搜到；与大语料目录扫描（_rg_search_root_hits 直扫磁盘）口径一致。
-    """
-
-    def test_code_file_outside_source_types_still_searched(self, tmp_path):
-        import os
-
-        from doclens.ripgrep import _rg_fallback_path_map
-        from treesearch import TreeSearchConfig, set_config
-        from treesearch.config import get_config
-
-        original = get_config()
-        try:
-            # 全局也注入类型过滤（模拟生产：doclens set_config 透传），
-            # 两侧都不应把 .kt 挡在 rg 兜底之外
-            set_config(TreeSearchConfig(allowed_source_types=["markdown"]))
-            kt = tmp_path / "SplashActivity.kt"
-            kt.write_text("const val SPLASH_DURATION_MS = 1200L", encoding="utf-8")
-            (tmp_path / "note.md").write_text("hello", encoding="utf-8")
-            idx = SimpleNamespace(search_path=tmp_path, allowed_source_types=["markdown"])
-            merged = _rg_fallback_path_map(idx, {})
-            vals = {os.path.abspath(v) for v in merged.values()}
-            assert os.path.abspath(str(kt)) in vals
-            assert os.path.abspath(str(tmp_path / "note.md")) in vals
-        finally:
-            set_config(original)
-
-
 class TestLikeSearchDocSubset:
-    """treesearch like_search 的 doc_ids 子集过滤（REGEXP 兜底的目标收敛）。"""
+    """treesearch like_search 的 doc_ids 子集过滤（REGEXP 子集扫描的目标收敛）。"""
 
     @pytest.fixture()
     def fts(self, tmp_path):

@@ -442,20 +442,22 @@ class TestGrepUnindexedFiles:
         out = _handle_grep(idx, pattern="NEEDLE_IGNORED")
         assert "未找到" in out or "ignored.md" not in out
 
-    def test_indexed_file_still_uses_db(self, tmp_path: Path, monkeypatch):
+    def test_indexed_file_hit_from_disk_via_rg(self, tmp_path: Path, monkeypatch):
+        """双引擎统一路径：已索引文件的内容命中来自 rg 磁盘扫描腿
+        （DB 短路已移除——不再因 like_search 有结果就跳过 rg）。"""
         import doclens.ripgrep as rgmod
         from doclens.ripgrep import execute_grep_search
 
         idx = self._make_idx(tmp_path, monkeypatch)
         called = {"n": 0}
-        orig = rgmod.rg_fallback_search
-        rgmod.rg_fallback_search = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
+        orig = rgmod._rg_search_root_hits
+        rgmod._rg_search_root_hits = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
         try:
             r = execute_grep_search(idx, "NEEDLE_INDEXED")
         finally:
-            rgmod.rg_fallback_search = orig
+            rgmod._rg_search_root_hits = orig
         assert len(r.content_results) == 1
-        assert called["n"] == 0  # DB 命中，rg 不触发
+        assert called["n"] == 1  # 文本腿永远走 rg 目录扫描
 
     def test_synthetic_node_carries_source_path(self, tmp_path: Path, monkeypatch):
         idx = self._make_idx(tmp_path, monkeypatch)
