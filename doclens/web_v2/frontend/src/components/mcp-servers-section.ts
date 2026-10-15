@@ -400,6 +400,11 @@ export class McpServersSection extends LitElement {
 
   /** 轮询：静默刷新列表（含 runtime 状态），失败不打扰。 */
   private async _pollStatus() {
+    // keep-alive：app.ts 用 [hidden] 切视图，组件不卸载、disconnectedCallback
+    // 不触发；不可见（视图切走/标签页隐藏）时跳过请求，回到可见自动恢复轮询。
+    if (typeof this.checkVisibility === "function" && !this.checkVisibility({ checkVisibilityCSS: true })) {
+      return;
+    }
     try {
       this._servers = await listMcpServers();
     } catch {
