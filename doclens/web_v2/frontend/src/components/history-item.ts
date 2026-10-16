@@ -50,6 +50,11 @@ export class HistoryItem extends LitElement {
       flex-shrink: 0;
       margin-left: var(--cortex-space-2);
     }
+    /* 移动端横向空间紧张：隐藏条目数与时间，仅留标题与操作钮。
+       断点与 src/styles/breakpoints.css 移动段一致（<1024px）。 */
+    @media (max-width: 1023px) {
+      .meta { display: none; }
+    }
     .mode-tag {
       display: inline-flex;
       align-items: center;
