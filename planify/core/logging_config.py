@@ -42,6 +42,54 @@ def data_dirname() -> str:
     return _data_dirname
 
 
+# =============================================================================
+# 原生崩溃捕获（faulthandler）
+# =============================================================================
+# 原生扩展（sqlite3 / 各文档解析器等）发生段错误/访问违例时进程直接死掉，
+# Python 层无异常可写、日志戛然而止，只能靠 WER dump 事后取证（2026-10-16
+# 0xc0000005 事故）。faulthandler 在致命信号（SIGSEGV / Windows 0xc0000005
+# 等）时把崩溃线程及全部线程的 Python 层调用栈直接写入文件，绕过 logging
+# （崩溃时 logging 自身可能已不可用）。
+#
+# 文件策略：<log_dir>/crash_<pid>.log——正常启动只创建空文件（零写入开销），
+# 崩溃时才有内容；进程每次启动清理历史空崩溃文件，非空文件 = 崩溃留证，
+# 保留待查（重启不丢证据）。必须持引用防 GC 关闭 fd。
+_fault_file = None
+
+
+def _enable_faulthandler(log_dir: Path) -> Optional[Path]:
+    """启用 faulthandler，崩溃栈写入 log_dir/crash_<pid>.log。
+
+    Returns:
+        崩溃文件路径；不可用时返回 None（绝不阻断启动）。
+    """
+    global _fault_file
+    try:
+        import faulthandler
+
+        # 清理历史空崩溃文件（非空 = 崩溃留证，保留；Windows 上打开中的
+        # 文件 unlink 会 PermissionError，正好跳过其它进程的活文件）
+        for old in log_dir.glob("crash_*.log"):
+            try:
+                if old.stat().st_size == 0:
+                    old.unlink()
+            except OSError:
+                pass
+
+        if _fault_file is not None:
+            try:
+                _fault_file.close()
+            except OSError:
+                pass
+        crash_path = log_dir / f"crash_{os.getpid()}.log"
+        _fault_file = open(crash_path, "w", encoding="utf-8")
+        faulthandler.enable(file=_fault_file, all_threads=True)
+        return crash_path
+    except Exception:
+        _fault_file = None
+        return None
+
+
 class SafeFileHandler(logging.handlers.RotatingFileHandler):
     """
     安全的轮转文件日志处理器
@@ -211,5 +259,11 @@ def setup_logging(
 
     logger = logging.getLogger(__name__)
     logger.info("=" * 50 + " Runtime Started " + "=" * 50)
+
+    # 原生崩溃捕获（见 _enable_faulthandler 文档字符串）：放最后，日志目录
+    # 落定、Runtime Started 落盘之后再挂 fatal-signal handler
+    crash_path = _enable_faulthandler(log_dir)
+    if crash_path:
+        logger.debug("faulthandler enabled, crash file: %s", crash_path)
 
     return logger
