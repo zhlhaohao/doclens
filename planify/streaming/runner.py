@@ -478,16 +478,17 @@ class StreamingAgent:
                     )
                     return self._cleanup_messages(messages)
 
-                # === 压缩管道 ===
+                # === 压缩管道（microcompact only；auto compact 已搬到回合末，
+                # ADR-0044——压缩不打断任务，回合全程在完整上下文上执行）===
                 # token 估算（usage-based：实测基线 + 增量 ÷4）算一次两用——
-                # microcompact 门控与 auto_compact 阈值共用，避免重复全量估算
+                # microcompact 门控与（回合末的）compact 阈值同源
                 baseline = self._usage_baseline
                 estimated = self._estimate_tokens_with_usage(
                     messages,
                     baseline[0] if baseline else None,
                     baseline[1] if baseline else None,
                 )
-                # 缓存友好：清理推迟到逼近 auto_compact 阈值（默认 80%）才触发，
+                # 缓存友好：清理推迟到逼近 compact 阈值（默认 80%）才触发，
                 # 避免历史中段单点突变打废整体前缀缓存（国产端点双倍代价）
                 cleared = self._microcompact(
                     messages,
@@ -498,58 +499,6 @@ class StreamingAgent:
                 )
                 if cleared:
                     self.round_cleared_tool_use_ids.extend(cleared)
-                if estimated > self.config.compact_threshold:
-                    if self._aauto_compact and self.runtime:
-                        # 压缩 transcript 目录：宿主注入优先（doclens 注入
-                        # .cortex/transcripts，避免落盘触发 FileWatcher 回路）；
-                        # 未注入时退回 <workdir>/.transcripts/
-                        # （runtime.config.transcript_dir 是 .planify/transcript.json
-                        # 文件路径，语义不符，勿用）
-                        transcript_dir = (
-                            getattr(self.runtime.config, "compact_transcript_dir", None)
-                            or Path(self.runtime.config.workdir) / ".transcripts"
-                        )
-                        compacted = await self._aauto_compact(
-                            messages, self.provider, transcript_dir,
-                            tracer=self.tracer,
-                            summary_input_budget=self._summary_input_budget(
-                                self.config.context_window,
-                                self.config.max_tokens,
-                            ),
-                            # 大输出模型跟随 PLANIFY_MAX_TOKENS 放开摘要上限
-                            #（下限 10000 由 summary_output_cap 兜底）
-                            summary_max_tokens=self.config.max_tokens,
-                        )
-                        # 必须就地替换本地循环列表，否则本轮后续循环仍用
-                        # 未压缩历史（每轮重复触发压缩、transcript 越写越大）
-                        messages[:] = compacted
-                        if self.runtime:
-                            self.runtime.replace_messages_in_place(compacted)
-                        # usage 基线随历史整体替换失效（其 request_len 指向
-                        # 的旧前缀已不存在）；下次 LLM 响应重新建立基线
-                        self._usage_baseline = None
-                        # 打标供宿主轮末持久化（压缩即事实：摘要落库一次
-                        # 冻结，回放侧从边界投影，不再每轮重压缩）
-                        self.last_compaction = {
-                            "messages": compacted,
-                            "pre_tokens": estimated,
-                        }
-                        # 压缩吃掉了头部 context 与已加载 skill body——立即
-                        # 重注入（本轮后续工具循环需要 KB 指导在场）。
-                        self._inject_head_context(messages, session_id)
-                        self._inject_loaded_skill_bodies(messages, session_id)
-                        # 压缩是用户可感知的上下文跳变（模型此后基于摘要续接），
-                        # 发中性通知——Web 宿主转 toast（ADR-0026 决议 7 的
-                        # 补充：对话流仍不插分隔条）
-                        await self.emitter.emit_notice(
-                            f"上下文已达约 {estimated // 1000}K tokens，"
-                            "已自动压缩会话历史（早期对话由摘要替代）"
-                        )
-                        # 全部重注入完成后重置本轮起点：此后追加的才是本轮
-                        # 新消息（摘要对在起点之前，不会漏进 raw_messages；
-                        # 若在注入前重置，_inject_head_context 的头部 insert
-                        # 会把摘要对推进切片区间，与 compacted 条目重复落库）
-                        self.round_start_index = len(messages)
 
                 # === 后台通知 ===
                 if self.bg_manager:
@@ -591,6 +540,13 @@ class StreamingAgent:
 
                 # 检查停止原因
                 if stop_reason != "tool_use":
+                    # === 回合末自动压缩（ADR-0044）===
+                    # 终答已流完、emit_done 之前：超阈上下文在此压缩——
+                    # 回合全程在完整上下文上执行（压缩不再打断任务），
+                    # 压缩期间宿主可经 notice 通道弹模态进度（不可关）。
+                    await self._finalize_round_compaction(
+                        messages, session_id
+                    )
                     # 发射完成事件
                     summary = full_text_output[:500] if full_text_output else None
                     await self.emitter.emit_done(session_id, summary)
@@ -615,6 +571,9 @@ class StreamingAgent:
                     self.logger.info(
                         "[StreamingAgent] 对话式提问送达，回合终止"
                         "（等待用户下一条消息）"
+                    )
+                    await self._finalize_round_compaction(
+                        messages, session_id
                     )
                     await self.emitter.emit_done(
                         session_id, reason="waiting_user"
@@ -650,6 +609,9 @@ class StreamingAgent:
                             )
                             await self._stream_llm_call(
                                 messages, system, suppress_tools=True
+                            )
+                            await self._finalize_round_compaction(
+                                messages, session_id
                             )
                             summary = (
                                 full_text_output[:500] if full_text_output else None
@@ -725,6 +687,95 @@ class StreamingAgent:
             return self._cleanup_messages(messages)
         finally:
             reset_current_session_id(ctx_token)
+
+    async def _finalize_round_compaction(
+        self, messages: List[Dict], session_id: str
+    ) -> None:
+        """回合末自动压缩（ADR-0044，2026-10-16）。
+
+        终答流完、emit_done 之前执行——回合全程在完整上下文上跑
+        （旧制：工具循环内超阈即压，后半程任务在摘要上下文上执行，
+        工作质量受损）。触发 = usage-based 估算 > compact_threshold
+        （窗口 ×0.8，与旧制同口径）。**循环内不再有任何 auto 压缩**
+        （含紧急水位兜底——用户明确否决：超长轮撞窗口硬上限 →
+        LLM 报错回合失败，重发时自然先压再跑）。
+
+        通知协议（宿主转模态进度）：压缩开始/结束各发一条 notice，
+        data 携带结构化字段 kind="compact" phase="start"|"done" +
+        pre/post tokens——宿主可据此弹**不可关闭**的模态进度框；
+        不识别 kind 的旧宿主退化为 toast（兼容）。中断出口
+        （stopped / 异常）不压：上下文原样保住供重发。
+
+        其余语义与旧循环内分支一致：就地替换历史 + runtime 同步 +
+        usage 基线失效 + last_compaction 打标供宿主轮末落库 +
+        重注入 head context / skill body + round_start_index 重置
+        （摘要对不进 raw_messages 切片区间，落库不重复）。
+        """
+        baseline = self._usage_baseline
+        estimated = self._estimate_tokens_with_usage(
+            messages,
+            baseline[0] if baseline else None,
+            baseline[1] if baseline else None,
+        )
+        if estimated <= self.config.compact_threshold:
+            return
+        if not (self._aauto_compact and self.runtime):
+            return
+        self.logger.info(
+            "[StreamingAgent] 回合末自动压缩：估算 %d > 阈值 %d",
+            estimated, self.config.compact_threshold,
+        )
+        await self.emitter.emit_notice(
+            "正在压缩会话上下文（摘要 + 逐字骨架），请稍候…",
+            compact_phase="start", pre_tokens=estimated,
+        )
+        # 压缩 transcript 目录：宿主注入优先（doclens 注入
+        # .cortex/transcripts，避免落盘触发 FileWatcher 回路）；
+        # 未注入时退回 <workdir>/.transcripts/
+        # （runtime.config.transcript_dir 是 .planify/transcript.json
+        # 文件路径，语义不符，勿用）
+        transcript_dir = (
+            getattr(self.runtime.config, "compact_transcript_dir", None)
+            or Path(self.runtime.config.workdir) / ".transcripts"
+        )
+        compacted = await self._aauto_compact(
+            messages, self.provider, transcript_dir,
+            tracer=self.tracer,
+            summary_input_budget=self._summary_input_budget(
+                self.config.context_window,
+                self.config.max_tokens,
+            ),
+            # 大输出模型跟随 PLANIFY_MAX_TOKENS 放开摘要上限
+            #（下限 10000 由 summary_output_cap 兜底）
+            summary_max_tokens=self.config.max_tokens,
+        )
+        # 必须就地替换本地循环列表（调用方 history 引用同一列表）
+        messages[:] = compacted
+        self.runtime.replace_messages_in_place(compacted)
+        # usage 基线随历史整体替换失效（其 request_len 指向的旧前缀
+        # 已不存在）；下次 LLM 响应重新建立基线
+        self._usage_baseline = None
+        # 打标供宿主轮末持久化（压缩即事实：摘要落库一次冻结，
+        # 回放侧从边界投影，不再每轮重压缩）
+        self.last_compaction = {
+            "messages": compacted,
+            "pre_tokens": estimated,
+        }
+        # 压缩吃掉了头部 context 与已加载 skill body——立即重注入
+        # （下轮开跑时 KB 指导在场）。
+        self._inject_head_context(messages, session_id)
+        self._inject_loaded_skill_bodies(messages, session_id)
+        # 全部重注入完成后重置本轮起点：摘要对在起点之前，不会漏进
+        # raw_messages（若在注入前重置，_inject_head_context 的头部
+        # insert 会把摘要对推进切片区间，与 compacted 条目重复落库）
+        self.round_start_index = len(messages)
+        post_est = self._estimate_tokens(compacted)
+        await self.emitter.emit_notice(
+            f"上下文已从约 {estimated // 1000}K 压缩至 "
+            f"{post_est // 1000}K tokens（早期对话由摘要替代，"
+            "问答原文与编辑记录逐字保留）",
+            compact_phase="done", pre_tokens=estimated, post_tokens=post_est,
+        )
 
     def _cleanup_messages(self, messages: List[Dict]) -> List[Dict]:
         """

@@ -231,16 +231,19 @@ export class CompactConfirmDialog extends LitElement {
 
   private _renderDone() {
     const saved = this._savedPercent;
+    // auto 压缩（ADR-0044）SSE 通道只带 pre/post 估算值，无 compactedText
     return html`
       <h2 class="with-icon">
         <doclens-icon name="circle-check"></doclens-icon>压缩完成
       </h2>
-      <div class="result">
-        <span class="tokens">${formatTokens(this.preTokens)}</span>
-        <span class="arrow">→</span>
-        <span class="tokens">${formatTokens(this.postTokens)}</span>
-        ${saved !== null ? html`<span class="saved">节省 ${saved}%</span>` : nothing}
-      </div>
+      ${this.postTokens > 0 || this.preTokens > 0 ? html`
+        <div class="result">
+          <span class="tokens">${formatTokens(this.preTokens)}</span>
+          <span class="arrow">→</span>
+          <span class="tokens">${formatTokens(this.postTokens)}</span>
+          ${saved !== null ? html`<span class="saved">节省 ${saved}%</span>` : nothing}
+        </div>
+      ` : nothing}
       <p class="muted">上下文已替换为摘要；聊天记录展示不变，后续对话基于摘要继续。</p>
       <div class="buttons">
         ${this.compactedText ? html`

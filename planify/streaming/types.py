@@ -280,7 +280,15 @@ class EventEmitter(Protocol):
             StreamEvent(event_type=StreamEventType.THINKING, data={"delta": delta})
         )
 
-    async def emit_notice(self, detail: str, level: str = "info") -> None:
+    async def emit_notice(
+        self,
+        detail: str,
+        level: str = "info",
+        *,
+        compact_phase: Optional[str] = None,
+        pre_tokens: Optional[int] = None,
+        post_tokens: Optional[int] = None,
+    ) -> None:
         """
         发射中性通知事件（框架内值得告知用户的事实，如上下文自动压缩）。
 
@@ -290,11 +298,23 @@ class EventEmitter(Protocol):
         Args:
             detail: 通知正文（宿主 UI 语言，短句）
             level: 提示级别（"info" | "success" | "error"，默认 info）
+            compact_phase: 压缩进度标识（"start" | "done"；ADR-0044 回合末
+                压缩通知协议）——宿主据此弹不可关闭的模态进度框；
+                不识别的旧宿主可忽略（退化为 toast）
+            pre_tokens / post_tokens: 压缩前/后 token 估算（phase="done"
+                时 post_tokens 在场）
         """
+        data: Dict[str, Any] = {"detail": detail, "level": level}
+        if compact_phase is not None:
+            data["compact_phase"] = compact_phase
+        if pre_tokens is not None:
+            data["pre_tokens"] = pre_tokens
+        if post_tokens is not None:
+            data["post_tokens"] = post_tokens
         await self.emit(
             StreamEvent(
                 event_type=StreamEventType.NOTICE,
-                data={"detail": detail, "level": level},
+                data=data,
             )
         )
 

@@ -18,6 +18,7 @@ export type ChatStreamEvent =
   | { type: "ask"; request_id: string; questions: AskQuestionPayload[] }
   | { type: "references"; items: { path: string }[] }
   | { type: "toast"; level: "error" | "info" | "success"; detail: string }
+  | { type: "compact"; phase: "start" | "done"; detail: string; pre_tokens?: number; post_tokens?: number }
   | { type: "usage" } & UsagePayload
   | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
@@ -92,6 +93,18 @@ export async function* chatStream(
           type: "toast",
           level: (d.level ?? "error") as "error" | "info" | "success",
           detail: String(d.detail ?? ""),
+        };
+      }
+    } else if (ev.event === "compact") {
+      // 回合末自动压缩进度（ADR-0044）：前端弹不可关闭模态进度框
+      const d = parseData("compact", ev.data);
+      if (d) {
+        yield {
+          type: "compact",
+          phase: (d.phase === "done" ? "done" : "start"),
+          detail: String(d.detail ?? ""),
+          pre_tokens: d.pre_tokens as number | undefined,
+          post_tokens: d.post_tokens as number | undefined,
         };
       }
     } else if (ev.event === "usage") {

@@ -82,8 +82,8 @@ def test_emit_notice_default_impl_wraps_stream_event():
 
 
 def test_chat_emitter_notice_becomes_toast_and_not_persisted():
-    """NOTICE → toast 直推队列（前端 toast 通道零改动复用）；
-    不进任何积累通道（text/tool_calls/usages 均不受影响）。"""
+    """普通 NOTICE（无 compact_phase）→ toast 直推队列（前端 toast 通道
+    零改动复用）；不进任何积累通道（text/tool_calls/usages 均不受影响）。"""
     q: asyncio.Queue = asyncio.Queue()
     em = ChatEventEmitter(q, context_window=200000)
 
@@ -97,3 +97,30 @@ def test_chat_emitter_notice_becomes_toast_and_not_persisted():
     assert em.text_parts == []
     assert em.tool_calls == []
     assert em.usages == []
+
+
+def test_chat_emitter_compact_notice_becomes_compact_event():
+    """带 compact_phase 的 NOTICE（ADR-0044 回合末压缩）→ 专用 compact
+    SSE 事件（phase/pre/post）；start 无 post、done 带 post。"""
+    q: asyncio.Queue = asyncio.Queue()
+    em = ChatEventEmitter(q, context_window=200000)
+
+    async def go():
+        await em.emit_notice(
+            "正在压缩会话上下文…", compact_phase="start", pre_tokens=160_000,
+        )
+        await em.emit_notice(
+            "已压缩", compact_phase="done",
+            pre_tokens=160_000, post_tokens=25_000,
+        )
+
+    asyncio.run(go())
+    ev1 = q.get_nowait()
+    ev2 = q.get_nowait()
+    assert ev1 == {
+        "type": "compact", "phase": "start", "detail": "正在压缩会话上下文…",
+        "pre_tokens": 160_000,
+    }
+    assert ev2["type"] == "compact" and ev2["phase"] == "done"
+    assert ev2["pre_tokens"] == 160_000 and ev2["post_tokens"] == 25_000
+    assert "compact" in KNOWN_EVENT_TYPES

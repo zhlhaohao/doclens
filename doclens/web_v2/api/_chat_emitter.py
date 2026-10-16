@@ -28,6 +28,7 @@ from planify.streaming.types import EventEmitter, StreamEvent, StreamEventType
 
 from ._chat_events import (
     ask_event,
+    compact_event,
     done_event,
     thinking_event,
     toast_event,
@@ -178,13 +179,26 @@ class ChatEventEmitter(EventEmitter):
             self._push(ev)
 
         elif event.event_type == StreamEventType.NOTICE:
-            # 中性通知（如上下文自动压缩）→ toast 直推；不进任何积累/落库通道
-            self._push(
-                toast_event(
-                    str(event.data.get("level", "info")),
-                    str(event.data.get("detail", "")),
+            # 压缩进度（ADR-0044 回合末压缩）：带 compact_phase 的 notice 转
+            # 专用 compact 事件——前端弹不可关闭模态进度框；不带
+            # compact_phase 的普通 notice 仍走 toast。
+            if event.data.get("compact_phase"):
+                self._push(
+                    compact_event(
+                        str(event.data.get("compact_phase", "")),
+                        detail=str(event.data.get("detail", "")),
+                        pre_tokens=event.data.get("pre_tokens"),
+                        post_tokens=event.data.get("post_tokens"),
+                    )
                 )
-            )
+            else:
+                # 中性通知（如后台任务完成）→ toast 直推；不进任何积累/落库通道
+                self._push(
+                    toast_event(
+                        str(event.data.get("level", "info")),
+                        str(event.data.get("detail", "")),
+                    )
+                )
 
         elif event.event_type == StreamEventType.THINKING:
             # 思考流增量（2026-10-05）：直推 SSE（前端滑窗展示），不积累

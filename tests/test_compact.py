@@ -566,13 +566,16 @@ class TestVerbatimSkeleton:
         assert out[2]["role"] == "user"
         skel = out[2]["content"]
         assert skel.startswith(SKELETON_MARKER)
-        # 两个用户问题 + 两个 AI 回答全部逐字进骨架，交错排列
-        assert "【问】查一下鲁迅的《朝花夕拾》出版年份" in skel
-        assert "【答】《朝花夕拾》1928 年由未名社出版。" in skel
-        assert "【问】作者原名叫什么？" in skel
-        assert "【答】周树人，1881 年生。" in skel
-        assert skel.index("朝花夕拾》出版年份") < skel.index("1928 年由未名社") \
-            < skel.index("作者原名") < skel.index("周树人")   # 交错序
+        # 围栏式渲染（2026-10-16 修订）：## 单节 header + 【问】/【答】
+        # 标签行 + 围栏包原文，标签与原文分行
+        assert "## 历史问答原文" in skel
+        # 往返一致：骨架能完整解析回问答轮，原文逐字（问1/答1/问2/答2 交错）
+        from planify.context.compact import _parse_skeleton_turns
+        turns = _parse_skeleton_turns(skel)
+        assert turns == [
+            ("查一下鲁迅的《朝花夕拾》出版年份", "《朝花夕拾》1928 年由未名社出版。"),
+            ("作者原名叫什么？", "周树人，1881 年生。"),
+        ]
         assert out[3]["role"] == "assistant"
 
     def test_turn_without_text_answer_marked_empty(self, tmp_path):
@@ -594,9 +597,12 @@ class TestVerbatimSkeleton:
         assert len(out) == 4
         skel = out[2]["content"]
         assert skel.startswith(SKELETON_MARKER)
-        assert "【问】问题一" in skel
+        assert "问题一" in skel
         assert "我查一下" not in skel          # 混合块插话不保
-        assert "【答】\n" in skel or skel.rstrip().endswith("【答】")  # 空答标记
+        # 空答 = 裸【答】标签行、无围栏（该轮收于工具操作）
+        assert "【答】" in skel
+        from planify.context.compact import _parse_skeleton_turns
+        assert _parse_skeleton_turns(skel) == [("问题一", "")]
 
     def test_tool_flow_within_turn_answer_kept(self, tmp_path):
         """同轮问答之间的工具序列不破坏轮切分（回归 1：相邻判定会让
@@ -618,8 +624,8 @@ class TestVerbatimSkeleton:
         ]
         out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
         skel = out[2]["content"]
-        assert "【问】deep research 有哪些 benchmark" in skel
-        assert "【答】DSBench 与 GMAI-MMBench 是其中两个。" in skel
+        assert "deep research 有哪些 benchmark" in skel
+        assert "DSBench 与 GMAI-MMBench 是其中两个。" in skel
 
     def test_multi_assistant_text_last_wins(self, tmp_path):
         """同轮多条纯 text assistant（先部分表态后最终答）→ 轮内最后
@@ -633,7 +639,7 @@ class TestVerbatimSkeleton:
         ]
         out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
         skel = out[2]["content"]
-        assert "【答】完整回答" in skel
+        assert "完整回答" in skel
         assert "先说一半" not in skel
 
     def test_injected_pairs_excluded_from_skeleton(self, tmp_path):
@@ -728,3 +734,149 @@ class TestVerbatimSkeleton:
         out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
         assert len(out) == 2                   # 纯摘要对
         assert "对话摘要" in out[0]["content"]
+
+    def test_verbatim_md_content_fenced_roundtrip(self, tmp_path):
+        """回归（2026-10-16 修订）：问答原文本身是 md——含 ## 标题、
+        - 列表、``` 代码块、乃至伪装的【问】前缀行——必须完整逐字
+        保真，且不与骨架结构混淆。"""
+        from planify.context.compact import SKELETON_MARKER, _parse_skeleton_turns, auto_compact
+
+        q = (
+            "帮我看这段：\n\n## 配置\n\n- 项一\n- 项二\n\n"
+            "```python\nprint('hi')\n```"
+        )
+        a = (
+            "结论：\n\n【问】这是回答里伪装的问题行\n\n"
+            "```\ninner fence\n```\n\n末尾。"
+        )
+        msgs = [
+            {"role": "user", "content": q},
+            {"role": "assistant", "content": [{"type": "text", "text": a}]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        skel = out[2]["content"]
+        assert skel.startswith(SKELETON_MARKER)
+        assert "## 历史问答原文" in skel
+        # 往返逐字保真（含内部的 ``` 三反引号与伪装【问】行）
+        assert _parse_skeleton_turns(skel) == [(q, a)]
+
+    def test_fence_adapts_to_longer_inner_fence(self, tmp_path):
+        """原文含 ≥4 反引号围栏时外层围栏自适应加长（内容最长 + 1）。"""
+        from planify.context.compact import _render_skeleton
+
+        q = "问题"
+        a = "````\n四反引号围栏内容\n````"
+        out = _render_skeleton([(q, a)])
+        content = out[0]["content"]
+        assert "`````" in content             # 五反引号外栏（4+1）
+        # 问侧默认 4 反引号
+        q_block = content.split("【问】")[1]
+        assert q_block.strip().startswith("````\n问题\n````")
+
+    def test_legacy_skeleton_formats_still_parse(self):
+        """落库历史兼容：v2 行前缀式与 v1 清单式旧骨架二次压缩时
+        照常解析搬运（自动升级为新渲染格式）。"""
+        from planify.context.compact import _parse_skeleton_turns
+
+        v2 = (
+            "[Verbatim Q&A skeleton]（…）\n"
+            "历史问答原文（逐字，无转写）：\n"
+            "【问】问题甲\n"
+            "【答】回答甲\n"
+            "【问】问题乙\n"
+            "【答】"
+        )
+        assert _parse_skeleton_turns(v2) == [("问题甲", "回答甲"), ("问题乙", "")]
+        v1 = (
+            "[Verbatim Q&A skeleton]（…）\n"
+            "- 早期问题一\n"
+            "- 早期问题二\n"
+        )
+        assert _parse_skeleton_turns(v1) == [("早期问题一", ""), ("早期问题二", "")]
+
+    def test_skeleton_keeps_edit_diffs_verbatim(self, tmp_path):
+        """ADR-0040 §2a（2026-10-16）：edit_file 调用逐字进骨架——
+        path + old→new 全文，自适应围栏，时间序。diff 是精确事实，
+        LLM 转写必丢精度。"""
+        from planify.context.compact import auto_compact
+
+        msgs = [
+            {"role": "user", "content": "改一下配置"},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "e1", "name": "edit_file",
+                 "input": {"path": "app.py", "old_text": "debug = True",
+                           "new_text": "debug = False"}},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "e1", "content": "已替换"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "已改为关闭调试。"}]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        skel = out[2]["content"]
+        assert "## 文件编辑记录（edit_file 逐字，时间序）" in skel
+        assert "【编辑】app.py" in skel
+        assert "debug = True" in skel and "debug = False" in skel
+        assert "→" in skel                              # old → new 结构
+
+    def test_skeleton_edit_fences_adapt_and_multiple_edits_ordered(self, tmp_path):
+        """edit 原文含 ``` 围栏时外栏自适应；多次 edit 按时间序全量保。"""
+        from planify.context.compact import _render_skeleton
+
+        e1 = {"path": "a.md", "old": "```\ncode\n```", "new": "````\nmore\n````",
+              "replace_all": False}
+        e2 = {"path": "b.py", "old": "x=1", "new": "x=2", "replace_all": True}
+        out = _render_skeleton([], [e1, e2], [])
+        content = out[0]["content"]
+        assert "`````" in content                      # 自适应五反引号
+        assert content.index("a.md") < content.index("b.py")   # 时间序
+        assert "【编辑】b.py（全部替换）" in content     # replace_all 标注
+
+    def test_skeleton_reads_dedup_across_tools(self, tmp_path):
+        """已读/已写清单分组（2026-10-16b）：read 与 write 路径各归各节、
+        各自首现去重、时间序；offset 分块重读同文件只记一次。"""
+        from planify.context.compact import auto_compact
+
+        def _tu(i, name, **inp):
+            return {"type": "tool_use", "id": i, "name": name, "input": inp}
+
+        msgs = [
+            {"role": "user", "content": "看下代码"},
+            {"role": "assistant", "content": [
+                _tu("r1", "read_file", path="src/app.py"),
+                _tu("r2", "read_file", path="src/app.py", offset=100, limit=50),
+                _tu("w1", "write_file", path="src/new.py", content="print()"),
+                _tu("r3", "read_file", path="src/app.py"),
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "r1", "content": "…"},
+                {"type": "tool_result", "tool_use_id": "r2", "content": "…"},
+                {"type": "tool_result", "tool_use_id": "w1", "content": "已写入"},
+                {"type": "tool_result", "tool_use_id": "r3", "content": "…"},
+            ]},
+            {"role": "assistant", "content": [{"type": "text", "text": "看完了。"}]},
+        ]
+        out = auto_compact(msgs, _FakeProvider(), tmp_path / "t")
+        skel = out[2]["content"]
+        # 分组两节：read 与 write 各归各，不混排
+        assert "## 已读文件（read_file 路径，去重）" in skel
+        assert "## 已写文件（write_file 路径，去重）" in skel
+        assert skel.count("src/app.py") == 1            # 去重（3 次 read 1 行）
+        assert "- src/app.py" in skel and "- src/new.py" in skel
+        # 各节内部时间序；read 节在 write 节之前（渲染序）
+        assert skel.index("## 已读文件") < skel.index("## 已写文件")
+        # write_file 全文不逐字（磁盘即真相）
+        assert "print()" not in skel
+
+    def test_skeleton_reads_budget_drops_oldest(self):
+        """读/写清单合计 2K 独立预算：超出各自丢最旧（不挤占问答轮预算）。"""
+        from planify.context.compact import _render_skeleton, READLIST_TOKEN_BUDGET
+
+        # 每路径 ~200 tokens（800 字符 ASCII），11 个 ≈ 2200 tokens > 2K
+        paths = [f"dir{'x' * 780}/{i:03d}.py" for i in range(11)]
+        out = _render_skeleton([("问", "答")], [], paths)
+        content = out[0]["content"]
+        assert paths[0] not in content                  # 最旧被丢
+        assert paths[-1] in content                     # 最新保住
+        assert "文件路径超预算被省略" in content
+        assert READLIST_TOKEN_BUDGET == 2_000

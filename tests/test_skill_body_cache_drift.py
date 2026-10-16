@@ -91,8 +91,11 @@ class StubEmitter:
         tc["is_error"] = is_error
         self.tool_calls.append(tc)
 
-    async def emit_notice(self, message):
-        pass  # 轮内中性通知（压缩 toast）：本测试不消费
+    async def emit_notice(
+        self, message, level="info", *, compact_phase=None,
+        pre_tokens=None, post_tokens=None,
+    ):
+        pass  # 轮内中性通知（压缩 toast/进度）：本测试不消费
 
     async def emit_done(self, session_id, summary=None):
         pass
@@ -577,8 +580,10 @@ def _make_compacting_agent(provider, emitter, tmp_path):
 
 
 def test_compacted_replay_round2_prefix_identical(tmp_path):
-    """ADR-0026 幂等闭环验收：压缩落库后，轮 2 回放首请求的头部 ==
-    轮 1 压缩后最终请求（逐字节）——摘要冻结为事实，回放投影不再分叉。
+    """ADR-0026 幂等闭环验收（ADR-0044 回合末压缩后语义）：轮 1 终答后
+    压缩落库，轮 2 回放首请求的头部 == 轮 1 末请求 + 摘要对重排——
+    压缩后不再有「轮内压缩后请求」，前缀复用断言改为：
+    轮 2 首请求含完整重注入头 + 摘要对，且无孤儿 tool_result。
     """
     store = SessionsStore(tmp_path / "sessions.db")
     sid = store.find_or_create(SessionType.CHAT, "压缩回放").id
@@ -588,19 +593,14 @@ def test_compacted_replay_round2_prefix_identical(tmp_path):
     sa = _make_compacting_agent(provider, emitter, tmp_path)
     _run_web_rounds(store, sid, sa, emitter, provider, ["第一轮", "第二轮"])
 
-    # 压缩事件已落库（轮 1 循环内两次压缩同轮覆盖，只落最后一条）
+    # 压缩事件已落库（回合末压缩，每轮一条）
     kinds = [it.kind for it in store.get_detail(sid)]
     assert "compacted" in kinds
 
     assert len(provider.records) >= 3
-    r1_final = provider.records[1]   # 轮 1 第 2 次调用（压缩后）
     r2_first = provider.records[2]   # 轮 2 首次调用（DB 回放）
-    n, shared, total = _report("web 路径·压缩轮（ADR-0026）", r1_final, r2_first)
+    _report("web 路径·压缩轮（ADR-0026/0044）", r2_first, r2_first)
 
-    # 轮 1 压缩后最终请求应完整成为轮 2 回放请求的前缀（逐字节）
-    assert n == len(r1_final), (
-        f"压缩后前缀应完整复用 {len(r1_final)} 条，实际只共享 {n} 条"
-    )
     # 首条即头部注入对（压缩后重注入生效），其后是摘要对
     assert CONTEXT_MARKER in r2_first[0]["content"]
     assert r2_first[2] == _COMPACTED_PAIR[0]

@@ -520,6 +520,9 @@ export class ChatView extends LitElement {
     errorMessage: string;
     /** 压缩产物可读转录（done 态 copy 按钮拷贝供人审核，2026-10-10） */
     compactedText: string;
+    /** auto = 回合末自动压缩（SSE compact 事件驱动，ADR-0044）；
+     *  手动入口（confirm 态）为 undefined。 */
+    auto?: boolean;
   } | null = null;
   /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
   private _compacting = false;
@@ -714,6 +717,14 @@ export class ChatView extends LitElement {
     if (this._compactDialog?.phase === "running") return;
     this._compactDialog = null;
   };
+
+  /** auto 压缩模态兜底收尾（ADR-0044）：SSE done 已到而压缩 done 事件
+   *  丢失/未发（未触发压缩、网络丢包）时撤下 running 模态，防止卡死
+   *  页面；正常路径 done 事件已先行切换为 done 态，此处 no-op。 */
+  private _finalizeAutoCompactDialog(): void {
+    const d = this._compactDialog;
+    if (d?.auto && d.phase === "running") this._compactDialog = null;
+  }
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
   private async _refreshCompaction() {
@@ -1153,6 +1164,20 @@ export class ChatView extends LitElement {
           }
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
+        } else if (ev.type === "compact") {
+          // 回合末自动压缩（ADR-0044）：start → 不可关闭模态 running 态；
+          // done → 框内展示 pre→post 结果（「完成」按钮才可关）。
+          // 手动压缩弹窗在场时让位（同一次压缩不叠两个模态）。
+          if (this._compactDialog && !this._compactDialog.auto) break;
+          this._compactDialog = {
+            phase: ev.phase === "done" ? "done" : "running",
+            preTokens: ev.pre_tokens ?? 0,
+            postTokens: ev.post_tokens ?? 0,
+            errorMessage: "",
+            compactedText: "",
+            auto: true,
+          };
+          if (ev.phase === "done") void this._refreshCompaction();
         } else if (ev.type === "usage") {
           // 与恢复态聚合共用 applyUsageEvent（口径单一真相源）；
           // seq = MAX_SAFE_INTEGER 表「新实测必然晚于已知 compacted 条目
@@ -1168,6 +1193,7 @@ export class ChatView extends LitElement {
           // 对话式提问（ADR-0033）：回合因提问而终止，输入框已解锁——
           // 提示用户直接发消息作答（答案即下一条用户消息）
           this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
+          this._finalizeAutoCompactDialog();
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -1176,6 +1202,7 @@ export class ChatView extends LitElement {
 
       // 展示层 message_ai 已由后端统一落库（ADR-0028）；前端只在本地
       // 维持流式视图（重进会话时经 detail 重建）
+      this._finalizeAutoCompactDialog();
       this._loadHistory();
     } catch (err) {
       if (this._isAbortError(err)) {

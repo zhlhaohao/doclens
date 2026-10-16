@@ -269,6 +269,10 @@ SKELETON_MARKER = (
 # 骨架总 token 预算（estimate_tokens 同口径估算；旧截新保）
 SKELETON_TOKEN_BUDGET = 20_000
 
+# 已读文件清单独立预算（与问答轮预算分离——每行 ~几 token，小而便宜，
+# 极端膨胀时丢最旧即可，不挤占问答轮；2026-10-16）
+READLIST_TOKEN_BUDGET = 2_000
+
 
 def _is_plain_user_text(msg: dict) -> bool:
     """用户纯文本问题：role=user 且 content 为 str。"""
@@ -295,11 +299,39 @@ def _assistant_text(msg: dict) -> str:
     return text.strip()
 
 
+def _fence_for(text: str) -> str:
+    """为逐字原文选围栏长度：内容最长反引号行 + 1（最少 4）。
+
+    对话原文本身是 md（含 ``` 代码块是常态），固定长度围栏会被内容
+    击穿；自适应长度保证围栏永不与内容混淆（ADR-0040 §2，2026-10-16）。
+    """
+    longest = 0
+    for line in text.splitlines():
+        s = line.lstrip()
+        if s.startswith("`"):
+            n = len(s) - len(s.lstrip("`"))
+            longest = max(longest, n)
+    return "`" * max(4, longest + 1)
+
+
+def _is_fence(line: str) -> int:
+    """行为纯反引号围栏时返回其长度，否则 0（解析侧识别闭栏）。"""
+    s = line.strip()
+    if not s.startswith("`"):
+        return 0
+    n = len(s) - len(s.lstrip("`"))
+    return n if set(s) == {"`"} else 0
+
+
 def _parse_skeleton_turns(text: str) -> List[Tuple[str, str]]:
     """旧骨架文本 → 问答轮清单（多轮压缩累积搬运，ADR-0040 §4）。
 
-    解析 _render_skeleton 的输出格式（【问】/【答】交错块，均可多行）；
-    兼容早期纯问题清单格式（"- " 行，仅问题无答）。
+    兼容三种落库历史格式（2026-10-16 起 v3 为现行，旧格式二次压缩
+    时自动升级）：
+    - v3 围栏式：`【问】`/`【答】` 标签行 + 自适应围栏包原文（字节
+      精确，围栏内不 strip）；
+    - v2 行前缀式：`【问】xxx`/`【答】yyy` 起始、后续行续接；
+    - v1 清单式：`- ` 行，仅问题无答。
     """
     turns: List[Tuple[str, str]] = []
     q_lines: List[str] = []
@@ -312,24 +344,49 @@ def _parse_skeleton_turns(text: str) -> List[Tuple[str, str]]:
             turns.append(("\n".join(q_lines).strip(), "\n".join(a_lines).strip()))
         q_lines, a_lines, mode = [], [], None
 
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("【问】"):
-            _flush()
-            q_lines = [s[3:]]
-            mode = "q"
-        elif s.startswith("【答】"):
-            mode = "a"
-            a_lines = [s[3:]]
+    lines = text.splitlines()
+    i = 0
+    n = len(lines)
+    while i < n:
+        s = lines[i].strip()
+        if s.startswith("【问】") or s.startswith("【答】"):
+            is_q = s.startswith("【问】")
+            rest = s[3:]
+            if not is_q:
+                # 【答】标签：结束当前轮的问，开启答收集
+                mode = "a"
+                a_lines = [rest] if rest else []
+            else:
+                _flush()
+                q_lines = [rest] if rest else []
+                mode = "q"
+            i += 1
+            # 标签行后紧跟围栏 → 围栏内为逐字原文（v3；字节精确不 strip）
+            if i < n and _is_fence(lines[i]) >= 3:
+                fence_len = _is_fence(lines[i])
+                i += 1
+                body: List[str] = []
+                while i < n and _is_fence(lines[i]) != fence_len:
+                    body.append(lines[i])
+                    i += 1
+                i += 1  # 跳过闭栏（未闭合则吞到结尾，容错）
+                target = q_lines if is_q else a_lines
+                target[:] = body
+                if not body:
+                    # 空围栏（不应出现，渲染侧空答无围栏）→ 空文本
+                    target[:] = [""]
+                continue
+            continue  # 标签行（同行为原文的 v2 式）已消费，勿再吃下一行
         elif s.startswith("- ") and mode != "a":
-            # 旧格式问题清单（仅问题无答）
+            # v1 旧格式问题清单（仅问题无答）
             _flush()
             q_lines = [s[2:]]
             mode = "q"
         elif mode == "q":
-            q_lines.append(line)
+            q_lines.append(lines[i])
         elif mode == "a":
-            a_lines.append(line)
+            a_lines.append(lines[i])
+        i += 1
     _flush()
     return turns
 
@@ -393,17 +450,103 @@ def _extract_skeleton_turns(messages: list) -> List[Tuple[str, str]]:
     return carried + turns
 
 
-def _render_skeleton(turns: List[Tuple[str, str]]) -> List[Dict]:
-    """骨架对消息（ADR-0040 §1）：全部问答轮逐字交错（问1/答1/问2/答2…），
-    20K 兜底旧截新保（从最旧的轮开始连续丢弃）。
+def _extract_skeleton_facts(
+    messages: list,
+) -> Tuple[
+    List[Tuple[str, str]],
+    List[Dict],
+    List[str],
+    List[str],
+]:
+    """历史 → 骨架三节内容（ADR-0040 §2a，2026-10-16；读写分组 2026-10-16b）。
 
     Returns:
-        两条消息（user 骨架 + assistant 确认）；零轮时返回空列表
+        (问答轮, edit 记录, 已读文件清单, 已写文件清单)：
+        - 问答轮 = _extract_skeleton_turns 的结果（逐字交错）；
+        - edit 记录 = edit_file 调用逐字序列（时间序，含失败调用——
+          失败 diff 同样是「试过什么」的事实），每条
+          {"path", "old", "new", "replace_all"}；
+        - 已读 / 已写文件 = read_file / write_file 的路径，各自**按首次
+          出现去重**、时间序，分组呈现（用户实测反馈：读写混排难扫读）。
+    """
+    turns = _extract_skeleton_turns(messages)
+    edits: List[Dict] = []
+    reads: List[str] = []
+    writes: List[str] = []
+    seen_r: set = set()
+    seen_w: set = set()
+
+    def _record(bucket: List[str], seen: set, p: Optional[str]):
+        if p and p not in seen:
+            seen.add(p)
+            bucket.append(p)
+
+    for m in messages:
+        c = m.get("content")
+        if not (m.get("role") == "assistant" and isinstance(c, list)):
+            continue
+        for b in c:
+            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
+                continue
+            name = b.get("name", "")
+            inp = b.get("input") or {}
+            if name == "edit_file":
+                edits.append(
+                    {
+                        "path": str(inp.get("path", "")),
+                        "old": str(inp.get("old_text", "")),
+                        "new": str(inp.get("new_text", "")),
+                        "replace_all": bool(inp.get("replace_all", False)),
+                    }
+                )
+            elif name == "read_file":
+                _record(reads, seen_r, inp.get("path"))
+            elif name == "write_file":
+                _record(writes, seen_w, inp.get("path"))
+    return turns, edits, reads, writes
+
+
+def _render_skeleton(
+    turns: List[Tuple[str, str]],
+    edits: Optional[List[Dict]] = None,
+    reads: Optional[List[str]] = None,
+    writes: Optional[List[str]] = None,
+) -> List[Dict]:
+    """骨架对消息（ADR-0040 §1）：四节结构（2026-10-16b 读/写/编分组）。
+
+    - `## 历史问答原文`：全部问答轮逐字交错（问1/答1/问2/答2…），
+      20K 兜底旧截新保（从最旧的轮开始连续丢弃）；
+    - `## 文件编辑记录（edit_file 逐字）`：每次 edit 的 path +
+      old→new 逐字（自适应围栏，同问答格式）——diff 是精确事实、
+      LLM 转写必丢精度（ADR-0040 哲学：受不了转写损耗的走逐字通道）；
+    - `## 已读文件` / `## 已写文件`：read_file / write_file 路径
+      **分组清单**（首现去重、时间序；用户实测反馈：读写混排难扫读，
+      分开各归各）；合计共享 2K 独立预算（超出各自丢最旧）。write 全文
+      不逐字（磁盘即真相，要内容可再 read——只记「新建过哪些文件」）。
+
+    渲染格式（2026-10-16 修订，ADR-0040 §2）：单节 `##` header 与前置
+    摘要对分界；每轮 = `【问】`/`【答】` 标签行 + 自适应围栏包原文——
+    原文本身是 md（标题/列表/代码块/`【问】` 前缀行），裸文本会与
+    骨架结构混淆，围栏内 md 失活 + 字节精确。空答 = 裸 `【答】` 行
+    无围栏。块间空行便于人读（UI 复制审核）。
+
+    Returns:
+        两条消息（user 骨架 + assistant 确认）；四节全空时返回空列表
         （退化为纯摘要对——空骨架对无信息量，白占确认消息）。
     """
-    if not turns:
-        return []
-    # 兜底（旧截新保）：轮粒度连续头部截断，直到剩余进预算
+    edits = edits or []
+    reads = reads or []
+    writes = writes or []
+    # 读/写清单共享 2K 独立预算：各自从最旧开始丢（新文件对续接更相关）
+    read_dropped = 0
+    while reads and _estimate_text_tokens("\n".join(reads + writes)) > READLIST_TOKEN_BUDGET:
+        reads = reads[1:]
+        read_dropped += 1
+    write_dropped = 0
+    while writes and _estimate_text_tokens("\n".join(reads + writes)) > READLIST_TOKEN_BUDGET:
+        writes = writes[1:]
+        write_dropped += 1
+    # 问答轮兜底（旧截新保）：轮粒度连续头部截断，直到剩余进预算
     # （轮 = 问+答原子单位，不拆散——拆散会出现「有答无问」的孤儿回答）
     ests = [_estimate_text_tokens(q) + _estimate_text_tokens(a) for q, a in turns]
     suffix = [0] * (len(ests) + 1)
@@ -414,15 +557,61 @@ def _render_skeleton(turns: List[Tuple[str, str]]) -> List[Dict]:
         i += 1
     dropped = i
     kept = turns[i:]
-    if not kept:
+    if not kept and not edits and not reads and not writes:
         return []
-    lines = [SKELETON_MARKER]
+    lines = [SKELETON_MARKER, ""]
     if dropped:
         lines.append(f"（最早 {dropped} 轮问答超预算被省略）")
-    lines.append("历史问答原文（逐字，无转写；【答】空 = 该轮收于工具操作）：")
+        lines.append("")
+    if kept:
+        lines.append("## 历史问答原文（逐字，无转写；答为空 = 该轮收于工具操作）")
     for q, a in kept:
-        lines.append(f"【问】{q}")
-        lines.append(f"【答】{a}" if a else "【答】")
+        lines.append("")
+        lines.append("【问】")
+        fence = _fence_for(q)
+        lines.append(fence)
+        lines.append(q)
+        lines.append(fence)
+        lines.append("")
+        lines.append("【答】")
+        if a:
+            fence = _fence_for(a)
+            lines.append(fence)
+            lines.append(a)
+            lines.append(fence)
+    if edits:
+        if lines[-1]:
+            lines.append("")
+        lines.append("## 文件编辑记录（edit_file 逐字，时间序）")
+        for e in edits:
+            lines.append("")
+            mode = "（全部替换）" if e["replace_all"] else ""
+            lines.append(f"【编辑】{e['path']}{mode}")
+            fence = _fence_for(e["old"])
+            lines.append(fence)
+            lines.append(e["old"])
+            lines.append(fence)
+            lines.append("→")
+            fence = _fence_for(e["new"])
+            lines.append(fence)
+            lines.append(e["new"])
+            lines.append(fence)
+    if reads:
+        if lines[-1]:
+            lines.append("")
+        lines.append("## 已读文件（read_file 路径，去重）")
+        if read_dropped:
+            lines.append(f"（最早 {read_dropped} 个文件路径超预算被省略）")
+        for p in reads:
+            lines.append(f"- {p}")
+    if writes:
+        if lines[-1]:
+            lines.append("")
+        lines.append("## 已写文件（write_file 路径，去重）")
+        if write_dropped:
+            lines.append(f"（最早 {write_dropped} 个文件路径超预算被省略）")
+        for p in writes:
+            lines.append(f"- {p}")
     return [
         {"role": "user", "content": "\n".join(lines)},
         {"role": "assistant", "content": "Noted. Verbatim history retained."},
@@ -709,9 +898,7 @@ def auto_compact(
     )
 
     summary = _extract_summary(response)
-    skeleton = _render_skeleton(
-        _extract_skeleton_turns(messages),
-    )
+    skeleton = _render_skeleton(*_extract_skeleton_facts(messages))
     return _compacted_messages(path, summary) + skeleton
 
 
@@ -743,9 +930,7 @@ async def aauto_compact(
     )
 
     summary = _extract_summary(response)
-    skeleton = _render_skeleton(
-        _extract_skeleton_turns(messages),
-    )
+    skeleton = _render_skeleton(*_extract_skeleton_facts(messages))
     return _compacted_messages(path, summary) + skeleton
 
 

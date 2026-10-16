@@ -41,7 +41,10 @@ class _NullEmitter:
     async def emit_done(self, session_id, summary=None):
         pass
 
-    async def emit_notice(self, detail, level="info"):
+    async def emit_notice(
+        self, detail, level="info", *, compact_phase=None,
+        pre_tokens=None, post_tokens=None,
+    ):
         pass
 
     async def emit_error(self, error, code=None):
@@ -141,7 +144,8 @@ def _run_compacting_round(runtime_config, tmp_path):
 
 def test_compaction_marker_reinjection_and_round_start(tmp_path):
     """压缩打标契约：last_compaction 形状 / 压缩后重注入 head / round_start_index
-    重置到全部重注入完成后（摘要对不进 raw_messages 切片区间）。"""
+    重置到全部重注入完成后（摘要对不进 raw_messages 切片区间）。
+    （ADR-0044：压缩在回合末、emit_done 前触发——终答流完才压。）"""
     config = SimpleNamespace(
         workdir=tmp_path, assets_dir=tmp_path / "none",
     )
@@ -179,3 +183,70 @@ def test_cleared_ids_collected_across_loop_turns(tmp_path):
     if cleared:
         sa.round_cleared_tool_use_ids.extend(cleared)
     assert sa.round_cleared_tool_use_ids == ["r0", "r1"]
+
+
+# === ADR-0044：auto compact 回合末触发（终答后、emit_done 前）===
+
+class _SequenceEmitter(_NullEmitter):
+    """记录事件时序（notice/done 相对顺序）与 notice kwargs。"""
+
+    def __init__(self):
+        self.timeline: list[tuple] = []
+
+    async def emit_notice(
+        self, detail, level="info", *, compact_phase=None,
+        pre_tokens=None, post_tokens=None,
+    ):
+        self.timeline.append(("notice", compact_phase))
+
+    async def emit_done(self, session_id, summary=None):
+        self.timeline.append(("done", None))
+
+
+def _make_agent(emitter, threshold, tmp_path, fake_compact):
+    return StreamingAgent(
+        client=_TextProvider(),
+        model="mock",
+        tools=[],
+        tool_handlers={},
+        emitter=emitter,
+        config=StreamingConfig(compact_threshold=threshold),
+        skills_loader=None,
+        runtime=SimpleNamespace(
+            config=SimpleNamespace(workdir=tmp_path, assets_dir=tmp_path / "none"),
+            skill_access_state=None,
+            replace_messages_in_place=lambda msgs: None,
+        ),
+    )
+
+
+def test_round_end_compaction_fires_before_done(tmp_path):
+    """契约：压缩发生在终答之后、emit_done 之前；notice 时序 =
+    compact(start) → compact(done) → done。未超阈时不发任何 compact 事件。"""
+    import asyncio
+
+    async def fake_compact(
+        messages, provider, transcript_dir, *, tracer=None,
+        summary_input_budget=None, summary_max_tokens=None,
+    ):
+        return [
+            {"role": "user", "content": "[Compressed.]\n摘要"},
+            {"role": "assistant", "content": "Understood."},
+        ]
+
+    em = _SequenceEmitter()
+    sa = _make_agent(em, threshold=1, tmp_path=tmp_path, fake_compact=None)
+    sa._aauto_compact = fake_compact
+    asyncio.run(sa.run_stream([], "问题", "sid"))
+    assert em.timeline == [
+        ("notice", "start"), ("notice", "done"), ("done", None),
+    ]
+    assert sa.last_compaction is not None
+
+    # 未超阈：无压缩、无 compact notice
+    em2 = _SequenceEmitter()
+    sa2 = _make_agent(em2, threshold=10**9, tmp_path=tmp_path, fake_compact=None)
+    sa2._aauto_compact = fake_compact
+    asyncio.run(sa2.run_stream([], "问题", "sid"))
+    assert em2.timeline == [("done", None)]
+    assert sa2.last_compaction is None

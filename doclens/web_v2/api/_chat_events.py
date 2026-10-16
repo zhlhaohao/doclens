@@ -5,7 +5,7 @@
 定义与构造函数——字段名只在此定义一次，加事件类型改一处。
 
 队列事件全集（另加 None 哨兵终止）：
-token / tool_call / tool_result / ask / toast / error / usage / done
+token / tool_call / tool_result / ask / toast / compact / error / usage / done
 
 线格式（SSE data JSON）与队列事件同构，chat.py 透传字段不做改名。
 """
@@ -47,6 +47,15 @@ class ToastEvent(TypedDict):
     detail: str
 
 
+class CompactEvent(TypedDict, total=False):
+    """回合末自动压缩进度（ADR-0044）——前端转不可关闭模态进度框。"""
+    type: str  # "compact"
+    phase: str  # "start" | "done"
+    detail: str
+    pre_tokens: int
+    post_tokens: int
+
+
 class ThinkingEvent(TypedDict):
     """思考流增量（2026-10-05）：模型内部推理文字的实时推送——仅被动
     接收（reasoning_content / thinking 块），不落库不积累，前端流式
@@ -86,8 +95,8 @@ ChatQueueEvent = Union[
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
-    {"token", "tool_call", "tool_result", "ask", "toast", "error", "usage", "done",
-     "thinking"}
+    {"token", "tool_call", "tool_result", "ask", "toast", "compact", "error", "usage",
+     "done", "thinking"}
 )
 
 
@@ -130,6 +139,24 @@ def ask_event(request_id: str, questions: List[Dict[str, Any]]) -> AskEvent:
 
 def toast_event(level: str, detail: str) -> ToastEvent:
     return {"type": "toast", "level": level, "detail": detail}
+
+
+def compact_event(
+    phase: str,
+    detail: str = "",
+    pre_tokens: Optional[int] = None,
+    post_tokens: Optional[int] = None,
+) -> CompactEvent:
+    """回合末自动压缩进度（ADR-0044）：phase="start" | "done"。
+
+    前端据此弹不可关闭的模态进度框（start → running spinner；
+    done → 压缩结果 + 用户点「完成」关闭）。"""
+    ev: CompactEvent = {"type": "compact", "phase": phase, "detail": detail}
+    if pre_tokens is not None:
+        ev["pre_tokens"] = pre_tokens
+    if post_tokens is not None:
+        ev["post_tokens"] = post_tokens
+    return ev
 
 
 def thinking_event(delta: str) -> ThinkingEvent:
