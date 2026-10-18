@@ -857,6 +857,12 @@ export class PdfViewer extends LitElement {
       entireWord: false,
       highlightAll: true,
     } satisfies FindState);
+    // find 初查（type 省略）会自动滚到**文档首个匹配**——当首个字面匹配
+    // 不在 locateLine 换算的定位页（如 arxiv 正文页码 ≠ 物理页码）时，
+    // 抢走搜索命中的定位。debounce 后把滚动权夺回定位页（高亮保留）。
+    if (this.locateLine != null) {
+      setTimeout(() => this.locateToLine(this.locateLine!), 400);
+    }
   }
 
   // ---------------------------------------------------------------- 缩放交互

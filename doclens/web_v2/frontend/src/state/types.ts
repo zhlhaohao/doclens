@@ -4,13 +4,35 @@ export type ViewId = "search" | "chat" | "settings" | "files" | "diary" | "login
 export type FocusState = "initial" | "focus";
 export type SearchMode = "keyword" | "grep";
 
-export interface SearchResult {
-  path: string;
-  snippet: string;
-  score: number;
+export interface MatchItem {
+  /** 命中行号；无行号源（LIKE）为 null，行号区显示「—」 */
   line: number | null;
-  highlights: [number, number][];
+  /** 单行文本（超长已后端截断） */
+  text: string;
+  /** text 内命中区间 [start, end)，供 <mark> */
+  spans: [number, number][];
+}
+
+export interface FileGroup {
+  path: string;
+  /** 组内最高综合分（排序依据，不展示） */
+  best_score: number;
+  /** 命中总数（徽标显示值，不受 cap 影响） */
+  total_matches: number;
+  matches: MatchItem[];
+  /** "content" | "path"（路径命中组无命中行语义） */
   kind?: "content" | "path";
+  /** matches 超后端 cap 截断 */
+  truncated?: boolean;
+}
+
+/** 预览联动载荷：文件 + 定位行（由 match-row 点击产生） */
+export interface SearchHit {
+  path: string;
+  line: number | null;
+  /** 预览高亮词（点击命中行时 = spans 覆盖的字面匹配文本；grep 正则词项
+   *  不能直接给 findController/md-viewer——它们做字面匹配，正则串零命中） */
+  hl?: string;
 }
 
 export type ToolStepStatus = "running" | "done" | "error";
@@ -85,8 +107,9 @@ export interface SearchViewState {
   query: string;
   /** 后端分词结果，用于预览 pane 高亮（空数组时降级回 query 原文）。 */
   queryWords: string[];
-  results: SearchResult[];
+  groups: FileGroup[];
   total: number;
+  totalMatches: number;
   source: "fts" | "like" | "ripgrep" | "grep";
   offset: number;
   limit: number;
@@ -292,7 +315,7 @@ export interface AppState {
   search: SearchViewState;
   chat: ChatViewState;
   /** 详情推入栈（移动端整页推入） */
-  detailStack: SearchResult[];
+  detailStack: SearchHit[];
   /** 跨视图会话加载请求（search-view ↔ chat-view） */
   pendingSession: Session | null;
   /** 跨视图技能对话发送请求（files 工具箱 → chat-view 自动新建会话并发送） */

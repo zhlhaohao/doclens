@@ -296,15 +296,21 @@ class TestContextWindow:
         assert content.count("后") <= 60
 
     def test_web_snippet_budget_from_window(self, kb: Path):
-        """Web /api/search 的 snippet 字符兜底 = before + after（同口径）。"""
+        """Web /api/search 的行文本预算：行提取受 row_max_chars 控制（分组响应口径）。"""
         idx = _make_idx(kb, search_context_before=100, search_context_after=300)
-        from doclens.web_v2.api.search import _make_snippet
+        from doclens.web_v2.api._grouping import (
+            MATCH_ROW_MAX_CHARS, build_substring_matchers, extract_match_rows,
+        )
 
         snippet_max = idx.search_context_before + idx.search_context_after
         assert snippet_max == 400
-        # _make_snippet 的字符兜底直接受预算控制
-        long_text = _cn(20)
-        assert len(_make_snippet(long_text, "t", "a.md", max_lines=0, max_chars=snippet_max)) == 400
+        # 命中行提取：单行超长按 MATCH_ROW_MAX_CHARS 截断且命中词在窗内
+        long_line = "前" * 300 + "关键词" + "后" * 300
+        m = build_substring_matchers(["关键词"])
+        rows = extract_match_rows(long_line, 1, m)
+        assert len(rows) == 1
+        assert len(rows[0].text) <= MATCH_ROW_MAX_CHARS + 2  # 允许前后省略号
+        assert rows[0].spans and rows[0].text[rows[0].spans[0][0]:rows[0].spans[0][1]] == "关键词"
 
 
 # ---------------------------------------------------------------------------

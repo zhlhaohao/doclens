@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import type { SearchResult } from "../state/types";
+import type { FileGroup, SearchHit } from "../state/types";
+import "./file-card";
 
 @customElement("search-results")
 export class SearchResults extends LitElement {
@@ -20,13 +21,11 @@ export class SearchResults extends LitElement {
       flex: 0 0 var(--results-pane-width, 360px);
       min-width: 280px;
       max-width: 800px;
-      background: var(--cortex-surface-muted);
-      border-right: 1px solid var(--cortex-border);
-      padding: var(--cortex-space-3);
+      background: var(--cortex-view-bg);
+      padding: var(--cortex-space-3) var(--cortex-space-2);
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: var(--cortex-space-2);
     }
     .empty {
       color: var(--cortex-text-subtle);
@@ -58,33 +57,37 @@ export class SearchResults extends LitElement {
       :host { flex-direction: column; flex: 1; }
       .list-pane {
         flex: 1; max-width: none; min-width: 0;
-        border-right: none; border-bottom: 1px solid var(--cortex-border);
+        border-right: none;
       }
     }
   `;
 
-  @property({ attribute: false }) results: SearchResult[] = [];
-  /** 当前激活的 SearchResult 引用（来自父组件 detailStack 顶部）。
-   *  用引用比较而非 path+line，是为了避开 LIKE/ripgrep 降级场景下
-   *  line=null 导致的歧义：null === null 会误激活同文件多卡片；
-   *  而用 r.line != null 守卫又会让被点击的 line=null 卡片永远不加亮。
-   *  引用比较天然唯一：detailTop 就是用户点击的那张 result 引用，
-   *  其他同文件卡片哪怕 line=null，引用也不同，不会被加亮。 */
-  @property({ attribute: false }) activeResult: SearchResult | null = null;
+  @property({ attribute: false }) groups: FileGroup[] = [];
+  /** 当前激活命中（detailStack 顶部引用）——path+line 匹配对应行加亮。 */
+  @property({ attribute: false }) activeHit: SearchHit | null = null;
   @property({ type: Boolean }) loading = false;
+
+  private _onHitSelect(e: CustomEvent<{ hit: SearchHit }>) {
+    this.dispatchEvent(new CustomEvent("hit-select", {
+      detail: e.detail,
+      bubbles: true, composed: true,
+    }));
+  }
 
   render() {
     return html`
       <div class="list-pane">
-        ${this.loading && this.results.length === 0
+        ${this.loading && this.groups.length === 0
           ? html`<div class="loading">搜索中</div>`
-          : this.results.length === 0
+          : this.groups.length === 0
             ? html`<div class="empty">无搜索结果</div>`
-            : this.results.map((r) => html`
-                <result-card
-                  .result=${r}
-                  ?active=${this.activeResult === r}>
-                </result-card>`)}
+            : this.groups.map((g) => html`
+                <file-card
+                  .group=${g}
+                  .activeHit=${this.activeHit}
+                  ?expanded=${false}
+                  @hit-select=${this._onHitSelect}>
+                </file-card>`)}
       </div>
     `;
   }

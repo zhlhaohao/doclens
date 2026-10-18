@@ -26,6 +26,38 @@ class SearchResult(BaseModel):
     kind: str = "content"  # "content" | "path"（grep 路径匹配为 "path"）
 
 
+class MatchItem(BaseModel):
+    """单条命中行（文件分组视图，2026-10-18）：行号 + 单行文本 + 命中区间。"""
+    line: Optional[int] = None  # 无行号源（LIKE）为 None，前端行号区显示「—」
+    text: str                    # 单行文本（超长以首命中为中心截断，≤200 字符）
+    spans: list[tuple[int, int]] = []  # text 内命中区间 [start, end)，供 <mark>
+
+
+class FileGroup(BaseModel):
+    """一个文件的结果分组：头部信息 + 命中行集合。"""
+    path: str
+    best_score: float = 0.0   # 组内最高综合分（排序依据，不再展示给用户）
+    total_matches: int = 0    # 命中总数（徽标显示值，不受 cap 影响）
+    matches: list[MatchItem] = []
+    kind: str = "content"     # "content" | "path"（路径命中组无命中行）
+    truncated: bool = False   # matches 超 MATCHES_PER_FILE_CAP 截断
+
+
+class GroupedSearchResponse(BaseModel):
+    """文件分组搜索响应（2026-10-18 起 /api/search 与 /api/grep 的返回体）。"""
+    groups: list[FileGroup]
+    total: int          # 文件总数（分页单位 = 文件）
+    total_matches: int  # 全部命中行总数（「N 个文件 · M 处命中」的 M）
+    offset: int = 0
+    limit: int = 20
+    query: str
+    query_words: list[str] = []
+    elapsed_ms: int
+    source: str = "fts"
+    notes: list[str] = []
+    error: Optional[str] = None
+
+
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     total: int  # 真实过滤后总数（不再是 len(results)）

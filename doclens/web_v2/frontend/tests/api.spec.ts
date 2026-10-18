@@ -9,8 +9,9 @@ describe("searchApi", () => {
 
   it("builds POST /api/search request and parses response", async () => {
     const mockResponse = {
-      results: [{ path: "a.py", snippet: "x", score: 0.5, line: 1, highlights: [] }],
+      groups: [{ path: "a.py", best_score: 0.9, total_matches: 1, matches: [{ line: 1, text: "x", spans: [] }], kind: "content", truncated: false }],
       total: 1,
+      total_matches: 1,
       query: "x",
       elapsed_ms: 5,
     };
@@ -21,6 +22,7 @@ describe("searchApi", () => {
 
     const result = await searchApi({ query: "x" });
     expect(result.total).toBe(1);
+    expect(result.groups[0].path).toBe("a.py");
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/search",
       expect.objectContaining({ method: "POST" }),

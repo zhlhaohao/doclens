@@ -181,10 +181,16 @@ def rg_fallback_search(
                 win_start = start_before_words(full_text, line_start_off, window_words[0])
                 win_end = end_after_words(full_text, line_end_off, window_words[1])
                 text = full_text[win_start:win_end].rstrip()
+                # line_start 语义 = 节点 text 首行对应的文件行号（词窗起点），
+                # 这样下游「line_start + 行内偏移」才能命中行定位（2026-10-18
+                # 修复：此前记 matched_line——首个命中行，词窗前文使 text 首行
+                # 早于该行，行号整体偏移，预览跳到命中点下方）
+                node_line_start = full_text.count("\n", 0, win_start) + 1
             else:
                 context_start = max(0, matched_idx - context_before)
                 context_end = min(len(all_lines), matched_idx + context_after + 1)
                 text = ''.join(all_lines[context_start:context_end]).rstrip()
+                node_line_start = context_start + 1
 
             title = os.path.splitext(os.path.basename(display_path))[0]
             for did in doc_ids:
@@ -196,7 +202,7 @@ def rg_fallback_search(
             synthetic_node = {
                 "title": title,
                 "text": text,
-                "line_start": matched_line,
+                "line_start": node_line_start,
                 "source_path": display_path,
             }
             results.append((doc_id, synthetic_node, len(query_words), 0, 0.0))
@@ -566,7 +572,14 @@ def _attach_fulltext(
                     node_text[key] = (node or {}).get("text", "") or summary
                 text = node_text[key]
             out.append(
-                (doc_id, {"title": item.get("title", ""), "text": text}, 1, 0, item.get("fts_score", 0.0))
+                (doc_id, {
+                    "title": item.get("title", ""),
+                    "text": text,
+                    # 命中行定位（2026-10-18：文件分组响应需要行号跳转预览；
+                    # like_search 已带 line_start，此前在此丢弃导致 REGEXP
+                    # 子集扫描的 PDF/docx 命中 line=None 无法定位）
+                    "line_start": item.get("line_start"),
+                }, 1, 0, item.get("fts_score", 0.0))
             )
     finally:
         if fts is not None:
