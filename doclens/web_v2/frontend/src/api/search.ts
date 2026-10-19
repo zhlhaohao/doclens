@@ -1,9 +1,10 @@
 import { request } from "./client";
-import type { SearchResult } from "../state/types";
+import type { FileGroup } from "../state/types";
 
 export interface SearchResponse {
-  results: SearchResult[];
+  groups: FileGroup[];
   total: number;
+  total_matches: number;
   offset: number;
   limit: number;
   query: string;

@@ -19,7 +19,7 @@ import "./components/focus-header";
 import "./components/history-list";
 import "./components/history-item";
 import "./components/input-box";
-import "./components/result-card";
+import "./components/file-card";
 import "./components/search-results";
 import "./components/preview-pane";
 import "./components/chat-message";

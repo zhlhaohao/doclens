@@ -1199,7 +1199,7 @@ class FTS5Index:
         # 词的命中行全量 fetchall 再 Python 截断是纯浪费——传输/组装在
         # SQL 层截住（ORDER BY depth 语义与原 Python 截断一致）
         rows = self._conn.execute(
-            f"""SELECT n.node_id, n.doc_id, n.title, n.summary, n.depth,
+            f"""SELECT n.node_id, n.doc_id, n.title, n.summary, n.depth, n.line_start,
                       d.doc_name, d.source_path
                FROM nodes n
                {subset_join}
@@ -1223,6 +1223,7 @@ class FTS5Index:
                 "summary": row[3] or "",
                 "depth": row[4] or 0,
                 "fts_score": 1.0,
+                "line_start": row[5],  # 宿主搜索命中行定位用（可空列）
             })
 
         if results:
@@ -1294,6 +1295,7 @@ class FTS5Index:
                         "summary": snippet,
                         "depth": node.get("depth", 0),
                         "fts_score": 0.5,
+                        "line_start": node.get("line_start"),  # 宿主命中行定位用
                     })
 
         return results[:top_k]

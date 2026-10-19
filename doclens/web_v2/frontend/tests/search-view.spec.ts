@@ -5,12 +5,14 @@ import { SearchView } from "../src/views/search-view";
 import "../src/views/search-view";
 import { store, actions } from "../src/state/store";
 import { resetStore } from "./test-utils";
+import type { FileGroup } from "../src/state/types";
 
 const RESULTS_KEY = "cortex.resultsPaneWidth";
 
-const focusResults = [
-  { path: "doc1.md", snippet: "alpha", score: 1, line: 1 } as any,
-];
+const group = (path: string, line = 1): FileGroup => ({
+  path, best_score: 1, total_matches: 1, kind: "content", truncated: false,
+  matches: [{ line, text: "hit", spans: [] }],
+});
 
 describe("<search-view> splitter", () => {
   beforeEach(() => {
@@ -18,7 +20,7 @@ describe("<search-view> splitter", () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: focusResults,
+      groups: [group("doc1.md")],
       total: 1,
       source: "fts",
     });
@@ -129,7 +131,7 @@ describe("<search-view> auto-preview first result (desktop)", () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [],
+      groups: [],
       total: 0,
       source: "fts",
     });
@@ -160,15 +162,12 @@ describe("<search-view> auto-preview first result (desktop)", () => {
     });
   }
 
-  it("auto-previews first result on desktop width (>=1024)", async () => {
+  it("auto-previews first group on desktop width (>=1024)", async () => {
     setViewport(1440);
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
-    const results = [
-      { path: "doc1.md", snippet: "alpha", score: 1, line: 1 } as any,
-      { path: "doc2.md", snippet: "beta", score: 0.5, line: 5 } as any,
-    ];
-    (el as any)._autoPreviewFirstDesktop(results);
+    const groups = [group("doc1.md", 7), group("doc2.md", 5)];
+    (el as any)._autoPreviewFirstDesktop(groups);
     // Should NOT push to detailStack (that would trigger mobile overlay on resize)
     expect(store.getState().detailStack.length).toBe(0);
     // _fetchAndShowPreview is async — let it settle
@@ -182,16 +181,13 @@ describe("<search-view> auto-preview first result (desktop)", () => {
     setViewport(390);
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
-    const results = [
-      { path: "doc1.md", snippet: "alpha", score: 1, line: 1 } as any,
-    ];
-    (el as any)._autoPreviewFirstDesktop(results);
+    (el as any)._autoPreviewFirstDesktop([group("doc1.md")]);
     // fetch should not have been called for /api/preview
     const previewCalls = fetchSpy.mock.calls.filter((c: any) => String(c[0]).startsWith("/api/preview"));
     expect(previewCalls.length).toBe(0);
   });
 
-  it("does NOT auto-preview when results array is empty", async () => {
+  it("does NOT auto-preview when groups array is empty", async () => {
     setViewport(1440);
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
@@ -218,7 +214,7 @@ describe("<search-view> pagination integration", () => {
     actions.setSearchState({
       state: "focus",
       query: "old",
-      results: [],
+      groups: [],
       total: 100,
       offset: 40,  // page 3
       limit: 20,
@@ -234,8 +230,9 @@ describe("<search-view> pagination integration", () => {
         const body = init && init.body ? JSON.parse(init.body) : {};
         return new Response(
           JSON.stringify({
-            results: [{ path: "x.md", snippet: "...", score: 1, line: 1, highlights: [] }],
+            groups: [{ path: "x.md", best_score: 1, total_matches: 1, matches: [{ line: 1, text: "...", spans: [] }], kind: "content", truncated: false }],
             total: 5,
+            total_matches: 5,
             offset: body.offset ?? 0,
             limit: body.limit ?? 20,
             query: body.query,
@@ -245,9 +242,7 @@ describe("<search-view> pagination integration", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      // 桌面端 auto-preview 会拉首个结果的 /api/preview（带 start_line 参数）；
-      // 缺这个分支时 mock 落到 sessions 响应 → body.path undefined →
-      // previewPath=undefined → isPstFilePath 崩成 unhandled rejection
+      // 桌面端 auto-preview 会拉首个文件的 /api/preview（带 start_line 参数）
       if (u.startsWith("/api/preview")) {
         return new Response(
           JSON.stringify({ ok: true, path: "x.md", content: "# x", language: "markdown", writable: false, pages: null }),
@@ -269,15 +264,17 @@ describe("<search-view> pagination integration", () => {
     const s = store.getState().search;
     expect(s.offset).toBe(0);
     expect(s.query).toBe("new");
+    expect(s.total).toBe(5);
+    expect(s.totalMatches).toBe(5);
 
     vi.unstubAllGlobals();
   });
 
-  it("pagination-bar rendered when total > limit", async () => {
+  it("pagination-bar rendered when total > limit (file count)", async () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [],
+      groups: [],
       total: 100,
       offset: 0,
       limit: 20,
@@ -292,7 +289,7 @@ describe("<search-view> pagination integration", () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [],
+      groups: [],
       total: 15,
       offset: 0,
       limit: 20,
@@ -307,7 +304,7 @@ describe("<search-view> pagination integration", () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [],
+      groups: [],
       total: 100,
       offset: 0,
       limit: 20,
@@ -322,8 +319,9 @@ describe("<search-view> pagination integration", () => {
         const body = init && init.body ? JSON.parse(init.body) : {};
         return new Response(
           JSON.stringify({
-            results: [],
+            groups: [],
             total: 100,
+            total_matches: 0,
             offset: body.offset ?? 0,
             limit: body.limit ?? 20,
             query: body.query ?? "x",
@@ -383,7 +381,7 @@ describe("<search-view> grep mode routing", () => {
     const fetchSpy = vi.fn(async (url: string) => {
       if (String(url) === "/api/grep") {
         return new Response(JSON.stringify({
-          results: [], total: 0, offset: 0, limit: 20, query: "x",
+          groups: [], total: 0, total_matches: 0, offset: 0, limit: 20, query: "x",
           query_words: [], elapsed_ms: 1, source: "grep",
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       }

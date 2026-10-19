@@ -609,7 +609,7 @@ def _extract_pages(
 
 
 def _extract_epub_pages(structure: list, line_map: dict):
-    """EPUB：按章级节点（树 depth-2）产 pages，line_start 用 md 实际行号。
+    """EPUB：按章级节点产 pages，line_start 用 md 实际行号。
 
     epub 经 anydoc→md_to_tree 的树形态：根(书名) → 册壳 → 章(depth-2) → 节。
     章是天然的阅读/分页单位（实测《德川家康》460 章/14.5 万行）。
@@ -617,6 +617,9 @@ def _extract_epub_pages(structure: list, line_map: dict):
       （前端 _splitByPages 按它切 md content）
     - 首页强制 line_start=1（书名/册壳 heading 并入第一页，防切丢开头）
     - md 行号不增的空章跳过（并入前页，防零跨度页）
+    - 扁平树兜底（BUG-E1 修复）：单章本无册层时 md_to_tree 产出
+      「书名 + N 章」同级根列表（无 depth-2）——退化为按根级章节点分页，
+      书名根并入首页。
     """
     from doclens.web_v2.models.preview import PageMarker
 
@@ -637,6 +640,20 @@ def _extract_epub_pages(structure: list, line_map: dict):
                     line_start=line_start,
                 ))
                 prev_line = md_line
+    if not pages:
+        # 扁平树兜底：根级即章（书名根并入首页）
+        for root in roots:
+            title = (root.get("title") or "").strip()
+            ls = root.get("line_start") or 1
+            md_line = line_map.get(ls) or ls
+            if pages and md_line <= prev_line:
+                continue
+            line_start = 1 if not pages else md_line
+            pages.append(PageMarker(
+                label=title or f"章节 {len(pages) + 1}",
+                line_start=line_start,
+            ))
+            prev_line = md_line
     return pages or None
 
 

@@ -5,6 +5,12 @@ import type { SearchView } from "../src/views/search-view";
 import "../src/views/search-view";
 import { store, actions } from "../src/state/store";
 import { resetStore } from "./test-utils";
+import type { FileGroup } from "../src/state/types";
+
+const mkGroup = (path: string, line = 1): FileGroup => ({
+  path, best_score: 1, total_matches: 1, kind: "content", truncated: false,
+  matches: [{ line, text: "hi", spans: [] }],
+});
 
 describe("<search-view> edit flow integration", () => {
   let confirmSpy: any;
@@ -21,9 +27,7 @@ describe("<search-view> edit flow integration", () => {
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [
-        { path: "doc1.md", snippet: "hi", score: 1, line: 1, highlights: [] } as any,
-      ],
+      groups: [mkGroup("doc1.md")],
       total: 1,
       source: "fts",
     });
@@ -38,10 +42,11 @@ describe("<search-view> edit flow integration", () => {
       ),
     ) as unknown as typeof fetch;
     try {
-      const result = el.shadowRoot!.querySelector("search-results") as any;
-      result.dispatchEvent(
-        new CustomEvent("select", {
-          detail: { result: { path: "doc1.md", snippet: "hi", score: 1, line: 1, highlights: [] } },
+      const results = el.shadowRoot!.querySelector("search-results") as any;
+      results.dispatchEvent(
+        new CustomEvent("hit-select", {
+          detail: { hit: { path: "doc1.md", line: 1 } },
+          bubbles: true, composed: true,
         }),
       );
       await new Promise((r) => setTimeout(r, 50));
@@ -54,24 +59,21 @@ describe("<search-view> edit flow integration", () => {
     }
   });
 
-  it("previewDirty blocks result switch with confirm dialog", async () => {
+  it("previewDirty blocks hit switch with confirm dialog", async () => {
     confirmSpy.mockReturnValue(false); // user cancels
     actions.setSearchState({
       state: "focus",
       query: "x",
-      results: [
-        { path: "a.md", snippet: "a", score: 1, line: 1, highlights: [] } as any,
-        { path: "b.md", snippet: "b", score: 1, line: 1, highlights: [] } as any,
-      ],
+      groups: [mkGroup("a.md"), mkGroup("b.md")],
       total: 2,
       source: "fts",
     });
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
     (el as any).previewDirty = true;
-    // 触发 _onResultSelect —— 因为 dirty=true，应该弹 confirm 并因 false 而放弃
-    await (el as any)._onResultSelect({
-      detail: { result: { path: "b.md", snippet: "b", score: 1, line: 1, highlights: [] } },
+    // 触发 _onHitSelect —— 因为 dirty=true，应该弹 confirm 并因 false 而放弃
+    await (el as any)._onHitSelect({
+      detail: { hit: { path: "b.md", line: 1 } },
     } as any);
     expect(confirmSpy).toHaveBeenCalled();
     // previewPath 没有切换到 b

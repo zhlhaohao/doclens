@@ -2,7 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
-import type { SearchMode, SearchResult, Session } from "../state/types";
+import type { SearchMode, FileGroup, SearchHit, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { grepApi } from "../api/grep";
 import { listSessions, clearSessions, findOrCreateSession, starSession } from "../api/sessions";
@@ -14,6 +14,27 @@ import "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
+
+/** lineMap 精确查找 miss 时取「≤line 的最大键」前驱（BUG-F3）。
+ *  lineMap: {原始行号(字符串键): md 行号}；命中行落在块内部（docx 段落/
+ *  xlsx 单元格/pptx 正文）时精确键不存在，前驱 heading 即所属块。 */
+function mapLineViaPredecessor(
+  lineMap: Record<string, number>,
+  line: number,
+): number | null {
+  const exact = lineMap[String(line)];
+  if (exact != null) return exact;
+  let best: number | null = null;
+  let bestKey = -1;
+  for (const k of Object.keys(lineMap)) {
+    const n = Number(k);
+    if (!Number.isNaN(n) && n <= line && n > bestKey) {
+      bestKey = n;
+      best = lineMap[k];
+    }
+  }
+  return best;
+}
 
 @customElement("search-view")
 export class SearchView extends LitElement {
@@ -164,6 +185,9 @@ export class SearchView extends LitElement {
   @state() private previewPageStarts: number[] | null = null;
   /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
   @state() private previewTokens: string[][][] | null = null;
+  /** 点击命中行带来的字面高亮词（spans 还原；优先于 queryWords——
+   *  grep 正则词项不可字面搜，findController/md-viewer 会零命中）。 */
+  @state() private previewHl = "";
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -310,12 +334,13 @@ export class SearchView extends LitElement {
       this.previewContent = "";
       this.previewPath = "";
       this.previewError = null;
+      this.previewHl = "";
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
       this.previewTokens = null;
       // 新搜索始终从第 0 页开始（重置 offset）
-      actions.setSearchState({ state: "focus", query, queryWords: [], results: [], total: 0, offset: 0, limit: 20, source: "fts" });
+      actions.setSearchState({ state: "focus", query, queryWords: [], groups: [], total: 0, totalMatches: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
       try {
         const res = this.searchMode === "grep"
@@ -333,13 +358,14 @@ export class SearchView extends LitElement {
           state: "focus",
           query,
           queryWords: res.query_words ?? [],
-          results: res.results,
+          groups: res.groups,
           total: res.total,
+          totalMatches: res.total_matches,
           offset: 0,
           limit: 20,
           source: res.source,
         });
-        this._autoPreviewFirstDesktop(res.results);
+        this._autoPreviewFirstDesktop(res.groups);
         // 后台：去重写入历史会话（不阻塞 UI）。即使失败也不影响搜索结果展示。
         void findOrCreateSession({
           type: "search", title: query, preview: query.slice(0, 100),
@@ -366,7 +392,7 @@ export class SearchView extends LitElement {
 
   private async _backToInitial() {
     await this._safeAction(() => {
-      actions.setSearchState({ state: "initial", currentSession: null, results: [], query: "", queryWords: [] });
+      actions.setSearchState({ state: "initial", currentSession: null, groups: [], query: "", queryWords: [], totalMatches: 0 });
       this.localQuery = "";
       this._loadHistory();
     });
@@ -392,8 +418,9 @@ export class SearchView extends LitElement {
       actions.setSearchState({
         state: "focus",
         query: s.query,
-        results: res.results,
+        groups: res.groups,
         total: res.total,
+        totalMatches: res.total_matches,
         offset: res.offset,  // 用后端 clamp 后的值
         limit,
         source: res.source,
@@ -402,6 +429,7 @@ export class SearchView extends LitElement {
       this.previewContent = "";
       this.previewPath = "";
       this.previewLine = null;
+      this.previewHl = "";
     } catch (err) {
       actions.setError(`翻页失败: ${(err as Error).message}`);
     } finally {
@@ -413,19 +441,39 @@ export class SearchView extends LitElement {
     void this._goToPage(e.detail.page);
   };
 
-  private async _onResultSelect(e: CustomEvent<{ result: SearchResult }>) {
+  private async _onHitSelect(e: CustomEvent<{ hit: SearchHit }>) {
     await this._safeAction(async () => {
-      const r = e.detail.result;
-      actions.pushDetail(r);
-      await this._fetchAndShowPreview(r);
+      const hit = e.detail.hit;
+      actions.pushDetail(hit);
+      // 同一命中行重复点击：previewLine 赋同值不会触发 md-viewer updated()
+      // → 不重新定位（用户滚走阅读后再点命中行无反应）。先清空强制
+      // 下一次赋值产生属性变化（2026-10-18 E2E 复现修复）。
+      const sameHit = this.previewLine === hit.line && this.previewPath === hit.path;
+      if (sameHit) {
+        this.previewLine = null;
+      }
+      await this._fetchAndShowPreview(hit);
+      // Lit 属性去重竞态（2026-10-19）：null→同值在同一轮批处理中被合并为
+      // 「值未变」，md-viewer updated() 完全不触发（content/path 也全同）。
+      // 同文件同行重击时显式调用 reLocate 兜底；嵌套组件（preview-pane →
+      // md-viewer）的属性传递异步排队——先等 md-viewer 自身 updateComplete
+      // 才能保证 reLocate 读到最新 line。
+      if (sameHit && this.previewLanguage === "markdown") {
+        const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+        await pp?.updateComplete;
+        const mdv = pp?.shadowRoot?.querySelector("md-viewer") as any;
+        await mdv?.updateComplete;
+        mdv?.reLocate?.();
+      }
     });
   }
 
-  /** Fetches preview content for a result and updates preview-* state.
-   *  Pulled out of _onResultSelect so it can be reused by desktop auto-preview
+  /** Fetches preview content for a hit (path + line) and updates preview-* state.
+   *  Pulled out of _onHitSelect so it can be reused by desktop auto-preview
    *  (which doesn't go through the user-click path). */
-  private async _fetchAndShowPreview(r: SearchResult) {
+  private async _fetchAndShowPreview(r: SearchHit) {
     this.previewError = null;
+    this.previewHl = r.hl ?? "";
     // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
     if (isPstFilePath(r.path)) {
       this.previewContent = "";
@@ -455,12 +503,14 @@ export class SearchView extends LitElement {
       this.previewLanguage = result.language;
       // 二进制合成预览（docx/pdf/xlsx/csv）：node.line_start 是原始解析体系，
       // 与合成 md 行号不一致。用 result.lineMap 把 r.line 换算成 md 实际行号，
-      // md-viewer 才能定位到对应 heading。映射不到（如 TOC/list-item 降级节点）
-      // 时返回 null，md-viewer 不滚动。普通文本预览 result.lineMap 为 null，
+      // md-viewer 才能定位到对应 heading。映射不到时取「≤line 的最大键」
+      // 前驱近似（BUG-F3 修复：命中行常落在块内部——docx 段落/xlsx 单元格/
+      // pptx 正文——前驱 heading 即所属块，粗粒度定位远优于不滚）；仍无键
+      // 才返回 null（md-viewer 不滚动）。普通文本预览 result.lineMap 为 null，
       // r.line 即文件实际行号，直接使用。
       this.previewLine = line === null
         ? null
-        : (result.lineMap ? (result.lineMap[String(line)] ?? null) : line);
+        : (result.lineMap ? mapLineViaPredecessor(result.lineMap, line) : line);
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
@@ -522,12 +572,13 @@ export class SearchView extends LitElement {
    *  the window narrower. We only fetch and populate the preview-* state;
    *  if the user wants the first card highlighted, clicking it does the
    *  normal pushDetail flow. */
-  private _autoPreviewFirstDesktop(results: SearchResult[]) {
+  private _autoPreviewFirstDesktop(groups: FileGroup[]) {
     if (typeof window === "undefined") return;
     if (window.innerWidth < 1024) return;
-    if (results.length === 0) return;
+    const first = groups[0];
+    if (!first) return;
     // Fire-and-forget; preview loads in background
-    void this._fetchAndShowPreview(results[0]);
+    void this._fetchAndShowPreview({ path: first.path, line: first.matches[0]?.line ?? null });
   }
 
   private _discardPreviewEdits() {
@@ -594,18 +645,12 @@ export class SearchView extends LitElement {
   private _onBookmarkDuplicate = () => this._pushToast("此处已有书签", "info", 2500);
   private _onBookmarkFull = () => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
 
-  /** PST 邮件列表行点击 → 打开派生邮件预览（与点击搜索结果同路径）。 */
+  /** PST 邮件列表行点击 → 打开派生邮件预览（与点击命中行同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>) => {
     await this._safeAction(async () => {
-      const result: SearchResult = {
-        path: e.detail.path,
-        snippet: "",
-        score: 0,
-        line: null,
-        highlights: [],
-      };
-      actions.pushDetail(result);
-      await this._fetchAndShowPreview(result);
+      const hit: SearchHit = { path: e.detail.path, line: null };
+      actions.pushDetail(hit);
+      await this._fetchAndShowPreview(hit);
     });
   };
 
@@ -616,10 +661,7 @@ export class SearchView extends LitElement {
       actions.popDetail();
       await this._fetchAndShowPreview({
         path: this.previewPath.split("#")[0],
-        snippet: "",
-        score: 0,
         line: null,
-        highlights: [],
       });
     });
   };
@@ -705,7 +747,7 @@ export class SearchView extends LitElement {
     // loading 时显示"搜索中"，避免误以为"0 条结果"
     const meta = this.loading
       ? "搜索中"
-      : `${s.total} 条结果${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`;
+      : `${s.total} 个文件 · ${s.totalMatches} 处命中${s.source === "fts" ? "" : ` (${s.source.toUpperCase()})`}`;
     return html`
       <toast-stack></toast-stack>
       <div class="focus-body ${detailTop ? "is-covered" : ""}">
@@ -718,10 +760,10 @@ export class SearchView extends LitElement {
         <div class="focus-main" style="--results-pane-width: ${this._resultsPaneWidth}px">
           <div class="results-col">
             <search-results
-              .results=${s.results}
+              .groups=${s.groups}
               ?loading=${this.loading}
-              .activeResult=${detailTop ?? null}
-              @select=${this._onResultSelect}>
+              .activeHit=${detailTop ?? null}
+              @hit-select=${this._onHitSelect}>
             </search-results>
             ${s.total > s.limit
               ? html`<pagination-bar
@@ -753,7 +795,7 @@ export class SearchView extends LitElement {
                 content=${this.previewContent}
                 .tokens=${this.previewTokens}
                 .line=${this.previewLine}
-                .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
+                .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}
@@ -805,7 +847,7 @@ export class SearchView extends LitElement {
                 content=${this.previewContent}
                 .tokens=${this.previewTokens}
                 .line=${this.previewLine}
-                .keyword=${s.queryWords.length ? s.queryWords.join(" ") : s.query}
+                .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}

@@ -286,6 +286,14 @@ export class PdfViewer extends LitElement {
   private _pinchBase: { dist: number; scale: number } | null = null;
   /** 初始适宽是否已成功应用（成功前监听容器尺寸，有真实宽度即套用）。 */
   private _initialFitDone = false;
+  /** 仍处适宽模式（自有标志，2026-10-19 移动端白屏修复）：不能用
+   *  `currentScaleValue === "page-width"` 判定——pdf.js 在 scale≈1.0 时把
+   *  _currentScaleValue 归一化成数字，getter 返回 null，「适宽」身份永久
+   *  丢失 → 容器宽度再变（如移动端 detail-overlay 弹出把桌面预览栏宽
+   *  ~800 收缩成 390）refit 分支永不重算，页面保持桌面宽度 = 视口只见
+   *  页面边缘灰底（白屏）。set page-width 时置 true，用户缩放路径置 false。 */
+  private _fitWidthMode = false;
+
   private _fitObserver: ResizeObserver | null = null;
 
   protected willUpdate(changed: Map<string, unknown>) {
@@ -529,6 +537,7 @@ export class PdfViewer extends LitElement {
   /** 缩放：放大一档（×1.1，与 Ctrl+滚轮同一步长，SCALE 边界钳制）。 */
   zoomIn(): void {
     if (!this._viewer) return;
+    this._fitWidthMode = false;
     this._viewer.currentScale = Math.min(
       SCALE_MAX, this._viewer.currentScale * 1.1,
     );
@@ -537,6 +546,7 @@ export class PdfViewer extends LitElement {
   /** 缩放：缩小一档（÷1.1）。 */
   zoomOut(): void {
     if (!this._viewer) return;
+    this._fitWidthMode = false;
     this._viewer.currentScale = Math.max(
       SCALE_MIN, this._viewer.currentScale / 1.1,
     );
@@ -544,7 +554,7 @@ export class PdfViewer extends LitElement {
 
   /** 回到适宽（page-width 预设；用户缩放后的一键还原）。 */
   fitWidth(): void {
-    if (this._viewer) this._viewer.currentScaleValue = "page-width";
+    if (this._viewer) { this._viewer.currentScaleValue = "page-width"; this._fitWidthMode = true; }
   }
 
   /** 当前缩放是否已达上限/下限（控件禁用态）。 */
@@ -713,7 +723,7 @@ export class PdfViewer extends LitElement {
       // 0 宽容器（portal 对齐首帧未完成 / 布局中间态）不设 page-width——
       // pdf.js 会把适宽 scale 算成 0（页面 0 尺寸 = 灰屏），交给下方
       // applyInitialFit 的 ResizeObserver 在宽度就位后补套
-      if (host.clientWidth > 0) viewer.currentScaleValue = "page-width";
+      if (host.clientWidth > 0) { viewer.currentScaleValue = "page-width"; this._fitWidthMode = true; }
       let settleTimer: number | undefined;
       let refitTimer: number | undefined;
       const applyInitialFit = () => {
@@ -722,9 +732,19 @@ export class PdfViewer extends LitElement {
         if (!this._viewer || host.clientWidth === 0) return;
         if (this._viewer.currentPageNumber < 1) return;
         this._viewer.currentScaleValue = "page-width";
+        this._fitWidthMode = true;
         window.clearTimeout(settleTimer);
         settleTimer = window.setTimeout(() => {
-          if (seq === this._loadSeq) this._initialFitDone = true;
+          if (seq !== this._loadSeq) return;
+          this._initialFitDone = true;
+          // 锁定终值重套（2026-10-19 移动端 816px 白屏修复）：初始 page-width
+          // 可能算在布局中间态（portal/anchor 的 rAF 对齐首帧晚于本赋值，
+          // host 宽当时是桌面预览栏宽 ~816 → scale≈1.0）。300ms 后布局已
+          // 就位（host=真实宽度），强制再套一次把 scale 钉成终值。
+          // pdf.js 对同值有 #isSameScale 短路，终值正确时零成本。
+          if (this._fitWidthMode && this._viewer && host.clientWidth > 0) {
+            this._viewer.currentScaleValue = "page-width";
+          }
         }, 300);
       };
       const onResize = () => {
@@ -739,12 +759,14 @@ export class PdfViewer extends LitElement {
           applyInitialFit();
           return;
         }
-        // 锁定后：仅适宽模式下跟随容器宽度（拖拽分隔条实时重适配）
-        if (this._viewer.currentScaleValue !== "page-width") return;
+        // 锁定后：仅适宽模式下跟随容器宽度（拖拽分隔条/overlay 弹收
+        // 实时重适配）。判定用自有 _fitWidthMode——pdf.js 的
+        // currentScaleValue 在 scale≈1.0 时返回 null（内部归一为数字），
+        // 用它判定会在适宽=1.0 的场景永久失配（2026-10-19 移动端白屏）。
+        if (!this._fitWidthMode) return;
         window.clearTimeout(refitTimer);
         refitTimer = window.setTimeout(() => {
-          if (seq === this._loadSeq && this._viewer
-              && this._viewer.currentScaleValue === "page-width") {
+          if (seq === this._loadSeq && this._viewer && this._fitWidthMode) {
             this._viewer.currentScaleValue = "page-width";
           }
         }, 80);
@@ -857,6 +879,12 @@ export class PdfViewer extends LitElement {
       entireWord: false,
       highlightAll: true,
     } satisfies FindState);
+    // find 初查（type 省略）会自动滚到**文档首个匹配**——当首个字面匹配
+    // 不在 locateLine 换算的定位页（如 arxiv 正文页码 ≠ 物理页码）时，
+    // 抢走搜索命中的定位。debounce 后把滚动权夺回定位页（高亮保留）。
+    if (this.locateLine != null) {
+      setTimeout(() => this.locateToLine(this.locateLine!), 400);
+    }
   }
 
   // ---------------------------------------------------------------- 缩放交互
@@ -877,6 +905,7 @@ export class PdfViewer extends LitElement {
       const [a, b] = [e.touches[0], e.touches[1]];
       const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
       const ratio = dist / (this._pinchBase.dist || 1);
+      this._fitWidthMode = false;
       this._viewer.currentScale = Math.min(
         SCALE_MAX, Math.max(SCALE_MIN, this._pinchBase.scale * ratio),
       );
@@ -892,6 +921,7 @@ export class PdfViewer extends LitElement {
       e.preventDefault();
       const cur = this._viewer.currentScale ?? 1;
       const next = e.deltaY < 0 ? cur * 1.1 : cur / 1.1;
+      this._fitWidthMode = false;
       this._viewer.currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, next));
     }, { passive: false });
   }

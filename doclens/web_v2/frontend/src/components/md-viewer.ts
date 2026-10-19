@@ -1390,6 +1390,15 @@ export class MdViewer extends LitElement {
     this.jumpToSourceLine(this.line, "smooth");
   }
 
+  /** 宿主强制重定位（同文件同行的重复点击竞态修复，2026-10-19）：
+   *  桌面「搜索后自动预览首条」已把 line/content 就位；用户随后点击同一
+   *  命中行时，宿主把 previewLine 走 null→同值，Lit 按「值未变」去重后
+   *  md-viewer 的 updated() 完全不触发（四个属性全同）——滚动定位丢失。
+   *  宿主在此时调用本方法显式重定位（等价 scrollIntoView 语义，但不冒泡）。 */
+  reLocate(): void {
+    this._locateAndHighlight();
+  }
+
   /** 在渲染后的正文里高亮搜索关键字（按空格分词，每个命中词包裹 <mark>）。
    *  使用 TreeWalker 遍历文本节点，避免对 HTML 结构做字符串替换引入 XSS。
    *  scope 参数供懒渲染对新渲染页单独执行（缺省 = 正文容器全量）。 */
