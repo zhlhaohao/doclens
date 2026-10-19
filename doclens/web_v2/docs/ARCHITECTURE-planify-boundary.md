@@ -50,7 +50,7 @@
 - `doclens/web_v2/api/diary.py:135`：`from planify.tools.baidu_weather import get_weather`——Web API 端点直接调**工具实现**（也是天气配置混入 planify 配置层、即技术债 #6 的另一半成因）。
 - `doclens/cortex_cli.py:1110,1151`、`doclens/tui/app.py:945,1001`：CLI 直调 `run_web_search` / `run_webfetch` handler。
 - `doclens/kb_tools.py:24`：导入 `planify.tools.basic.split_words_with_seps`——**有意的单一真相源**（两侧注释互相引用），属合理共享，但把 doclens 工具耦合到 planify 非公开实现细节。
-- `doclens/skill_gate.py:14`：依赖 planify 的 contextvar 内部状态 `get_current_session_id()`——若 runner 不再 set 该 contextvar，门禁**静默失效**、无任何报错。
+- ~~`doclens/skill_gate.py:14`~~：曾依赖 planify 的 contextvar 内部状态 `get_current_session_id()`（门禁静默失效风险点）——2026-10-19 门禁整体删除，该依赖随之消失。
 
 ## 三、planify → doclens 的反向入侵（更违背分层）
 
@@ -98,4 +98,4 @@
 | 4 | logging_config 内置 doclens 首启初始化 | 确认 `_init_cortex_workspace` / `_cortex_package_dir` 全仓库零调用（doclens 自有 `CortexConfig._init_first_run`）→ 纯删除 + `import shutil` 移除；`_data_dirname` 公开化为 `data_dirname()`；`streaming/runner.py` 注释删除对 doclens 模块的引用 | `planify/core/logging_config.py`、`planify/streaming/runner.py` |
 | 5 | per-request 改写共享 tool_handlers | `chat.py` 与 `agent_integration.run_query` CLI 分支改为 `{**runtime.tool_handlers}` 浅拷贝后 bind——顺带修复同 runtime 并发两流 emitter 交叉接线的真实 bug | `doclens/web_v2/api/chat.py`、`doclens/agent_integration.py` |
 
-**残留（接受的边界状态）**：配置双通路仍在（doclens env 直读 + `register_planify_config`）；双装配器转为文档化决策而非消除；`kb_tools.py` 对 `split_words_with_seps` 的共享为有意单一真相源；`skill_gate.py` 对 contextvar 的依赖仍存（GATE_ENABLED 当前关闭）。
+**残留（接受的边界状态）**：配置双通路仍在（doclens env 直读 + `register_planify_config`）；双装配器转为文档化决策而非消除；`kb_tools.py` 对 `split_words_with_seps` 的共享为有意单一真相源。（skill_gate 对 contextvar 的依赖曾在此列——2026-10-19 门禁删除后消失。）

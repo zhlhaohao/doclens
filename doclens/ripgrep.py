@@ -75,7 +75,7 @@ def rg_fallback_search(
     use_regex: bool = False,
     pre_hits: dict[str, list[int]] | None = None,
     window_words: tuple[int, int] | None = None,
-) -> list[tuple[str, dict, int, int, float]]:
+) -> list[tuple[str, dict, int, int, float, list]]:
     """执行 ripgrep 降级搜索。
 
     doc_nodes_map 为空时：创建合成节点（原 _ripgrep_fallback 逻辑）。
@@ -123,7 +123,7 @@ def rg_fallback_search(
     for key, path in path_map.items():
         reverse_map.setdefault(os.path.normpath(path), []).append(key)
 
-    results: list[tuple[str, dict, int, int, float]] = []
+    results: list[tuple[str, dict, int, int, float, list]] = []
 
     if doc_nodes_map:
         # 模式 1：匹配已有节点（format_results 内联逻辑）
@@ -153,7 +153,7 @@ def rg_fallback_search(
                         break
 
             if matched_node:
-                results.append((source_doc_id, matched_node, len(query_words), 0, 0.0))
+                results.append((source_doc_id, matched_node, len(query_words), 0, 0.0, []))
     else:
         # 模式 2：创建合成节点（原 _ripgrep_fallback 逻辑）
         for file_path, line_nums in hits.items():
@@ -205,7 +205,7 @@ def rg_fallback_search(
                 "line_start": node_line_start,
                 "source_path": display_path,
             }
-            results.append((doc_id, synthetic_node, len(query_words), 0, 0.0))
+            results.append((doc_id, synthetic_node, len(query_words), 0, 0.0, []))
 
     return results
 
@@ -376,7 +376,7 @@ def search_paths_by_regex(
     regex: str,
     path_map: dict[str, str],
     max_results: int = 100,
-) -> list[tuple[str, dict, int, int, float]]:
+) -> list[tuple[str, dict, int, int, float, list]]:
     """在文件路径上执行正则匹配。
 
     Args:
@@ -401,7 +401,7 @@ def search_paths_by_regex(
                 "title": f"[路径匹配] {file_path}",
                 "text": f"路径包含正则匹配: {regex}",
             }
-            results.append((doc_id, node, 1, 0, 0.0))
+            results.append((doc_id, node, 1, 0, 0.0, []))
 
     return results[:max_results]
 
@@ -422,8 +422,8 @@ class GrepResult:
         notes: 引擎附注（rg 超时截断、二进制子集超限未覆盖等）——
                描述「结果为什么可能不完整」，供输出层透出给用户/Agent
     """
-    content_results: list[tuple[str, dict, int, int, float]]
-    path_results: list[tuple[str, dict, int, int, float]]
+    content_results: list[tuple[str, dict, int, int, float, list]]
+    path_results: list[tuple[str, dict, int, int, float, list]]
     query_words: list[str]
     notes: list[str] = field(default_factory=list)
 
@@ -529,7 +529,7 @@ def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:  # n
 def _attach_fulltext(
     idx,
     like_items: list[dict],
-) -> list[tuple[str, dict, int, int, float]]:
+) -> list[tuple[str, dict, int, int, float, list]]:
     """LIKE 命中条目批量回填全文，转 grep 结果 tuple。
 
     nodes.summary 是索引期截断的窗口（长节点仅头尾摘要），锚点前文可能
@@ -538,7 +538,7 @@ def _attach_fulltext(
     一次；逐条开关连接 + 全文档 loads 在 like_limit=200 时是秒级热点）。
     单条失败退回 summary（旧行为）。FTS5Index 打不开时整体退 summary。
     """
-    out: list[tuple[str, dict, int, int, float]] = []
+    out: list[tuple[str, dict, int, int, float, list]] = []
     if not like_items:
         return out
 
@@ -579,7 +579,7 @@ def _attach_fulltext(
                     # like_search 已带 line_start，此前在此丢弃导致 REGEXP
                     # 子集扫描的 PDF/docx 命中 line=None 无法定位）
                     "line_start": item.get("line_start"),
-                }, 1, 0, item.get("fts_score", 0.0))
+                }, 1, 0, item.get("fts_score", 0.0), [])
             )
     finally:
         if fts is not None:
@@ -612,7 +612,7 @@ def _regexp_search_subset(
     query: str,
     limit: int,
     doc_ids: set[str] | None,
-) -> list[tuple[str, dict, int, int, float]]:
+) -> list[tuple[str, dict, int, int, float, list]]:
     """SQLite REGEXP 子集扫描（绕过 IndexManager.like_search——它不支持 doc_ids）。
 
     直接开 FTS5Index 走 treesearch.like_search(use_regex=True, doc_ids=...)，
@@ -696,7 +696,7 @@ def execute_grep_search(
         path_map = {k: v for k, v in path_map.items() if k in allowed}
 
     like_limit = max(200, max_results * 4) if allowed is not None else max_results
-    content_results: list[tuple[str, dict, int, int, float]] = []
+    content_results: list[tuple[str, dict, int, int, float, list]] = []
 
     # ------------------------------------------------------------------
     # 腿 1（文本引擎）: rg 目录扫描——含未索引文件
@@ -785,10 +785,10 @@ def execute_grep_search(
     if terms:
         scored: list[tuple[int, tuple]] = []
         for item in content_results:
-            doc_id, node, _matched, prox, fts = item
+            doc_id, node, _matched, prox, fts, _hits = item
             text = node.get("text", "") or ""
             hits = _count_term_hits(text, terms)
-            scored.append((hits, (doc_id, node, hits, prox, fts)))
+            scored.append((hits, (doc_id, node, hits, prox, fts, [])))
         scored.sort(key=lambda x: -x[0])
         content_results = [item for _, item in scored]
 

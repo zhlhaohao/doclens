@@ -814,22 +814,6 @@ def _build_parser():
         func=_cli_status
     )
 
-    # cortex search_v2 '<json>'
-    search_v2_parser = sub.add_parser(
-        "search_v2",
-        help="Structured search with AND/OR/NOT/PHRASE operators (JSON input)",
-        parents=[common],
-    )
-    search_v2_parser.add_argument(
-        "query_tokens", type=str,
-        help='JSON query, e.g. \'{"type": "and", "terms": ["量子", "密码"]}\'',
-    )
-    search_v2_parser.add_argument(
-        "--max-results", type=int, default=None,
-        help="Maximum number of results",
-    )
-    search_v2_parser.set_defaults(func=_cli_search_v2)
-
     # cortex web <query> [--allowed-domains DOMAINS] [--recency FILTER] [--content-size SIZE] [--location LOC]
     # cortex webfetch <url> [--no-meta]
     webfetch_parser = sub.add_parser(
@@ -1039,33 +1023,6 @@ def _cli_status(args, config, idx):
   ─────────────────────────────
   文件类型统计 (前10)
 {type_lines}  依赖状态:   {'全部已安装' if deps_ok else '部分缺失'}""")
-
-
-def _cli_search_v2(args, config, idx):
-    """Handle `cortex search_v2 '<json>'` — structured search output."""
-    import json as _json
-    from doclens.kb_tools import _handle_search_kb_v2
-
-    try:
-        query_tokens = _json.loads(args.query_tokens)
-    except _json.JSONDecodeError as e:
-        print(f"JSON 解析失败: {e}")
-        print('示例: python -m cortex search_v2 \'{"type": "and", "terms": ["量子", "密码"]}\'')
-        return
-
-    if "type" not in query_tokens:
-        print("JSON 必须包含 'type' 字段 (and/or/not/phrase)")
-        return
-
-    idx.load_or_build_index()
-    workdir = Path(idx.search_path)
-    result = _handle_search_kb_v2(
-        idx,
-        workdir,
-        query_tokens=query_tokens,
-        max_results=args.max_results,
-    )
-    print(result)
 
 
 def _cli_read_document(args, config, idx):

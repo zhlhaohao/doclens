@@ -222,7 +222,7 @@ def render_search_results(
             matched = 1
             composite = item.get("fts_score", 0.0)
         elif is_ripgrep:
-            doc_id, node, matched, prox, fts = item
+            doc_id, node, matched, prox, fts, *_ = item
             composite = 0.0
         else:
             composite, (doc_id, node, matched, prox, fts) = item

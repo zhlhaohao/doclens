@@ -299,6 +299,7 @@ class TreeSearch:
             fts_expression=kwargs.get("fts_expression"),
             regex=kwargs.get("regex", False),
             db_path=self.db_path,
+            allowed_doc_ids=kwargs.pop("allowed_doc_ids", None),
         )
 
         def _empty_result() -> dict:
