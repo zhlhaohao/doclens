@@ -205,14 +205,16 @@ class CortexAgent:
         client = create_provider(config)
 
         # 目录
-        team_dir = self.workdir / data_dirname() / "team"
-        tasks_dir = self.workdir / data_dirname() / "tasks"
-        transcript_dir = self.workdir / data_dirname() / "transcripts"
+        data_dir = self.workdir / data_dirname()
+        team_dir = data_dir / "team"
+        tasks_dir = data_dir / "tasks"
+        transcript_dir = data_dir / "transcripts"
         inbox_dir = team_dir / "inbox"
         skills_dir = get_global_cortex_dir() / "skills"
-        logs_dir = self.workdir / data_dirname() / "logs"
+        logs_dir = data_dir / "logs"
 
         # 创建目录
+        data_dir.mkdir(parents=True, exist_ok=True)
         team_dir.mkdir(parents=True, exist_ok=True)
         tasks_dir.mkdir(parents=True, exist_ok=True)
         transcript_dir.mkdir(parents=True, exist_ok=True)
@@ -241,9 +243,11 @@ class CortexAgent:
         from doclens import skills_config
 
         deploy_builtin_skills(skills_dir)
-        # 注入应用日志目录（宿主数据，planify 不自行计算）——系统提示词的
-        # 目录事实紧随技能根目录输出，供 agent 排障时直接定位当日日志。
-        skills = SkillLoader(skills_dir, logs_dir=logs_dir)
+        # 注入应用日志目录与数据目录（宿主数据，planify 不自行计算）——
+        # 系统提示词的目录事实紧随技能根目录输出，供 agent 排障时直接定位
+        # 当日日志与数据归属（数据目录名随运行形态 .cortex/.doclens 变化，
+        # 不假设固定形态）。
+        skills = SkillLoader(skills_dir, logs_dir=logs_dir, data_dir=data_dir)
         # 停用名单 = sidecar 停用/已删除 + 深读技能整体（ADR-0041 D3：模型
         # 感知面隔断——descriptions() 清单剔除，书多不随 system prompt 膨胀）。
         # disabled 只做路由层隔断，load_skill 不受影响；深读技能经深读面板

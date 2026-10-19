@@ -130,6 +130,26 @@ class TestSkillLoaderDisabled:
         assert "技能根目录" in desc
 
 
+class TestDirFacts:
+    """descriptions() 尾部目录事实块：宿主注入 data_dir/logs_dir 后输出。"""
+
+    def test_data_dir_fact_injected(self, tmp_path):
+        _write_skill(tmp_path, "a", "a")
+        data_dir = tmp_path / ".doclens"
+        loader = SkillLoader(tmp_path, logs_dir=data_dir / "logs", data_dir=data_dir)
+        desc = loader.descriptions()
+        assert f"数据目录（data dir）：{data_dir}" in desc
+        assert f"应用日志目录（logs dir）：{data_dir / 'logs'}" in desc
+        assert "禁止假设固定目录名" in desc
+
+    def test_data_dir_omitted_when_not_injected(self, tmp_path):
+        # planify 独立运行 / 未注入：不输出数据目录段（机制中性）
+        _write_skill(tmp_path, "a", "a")
+        desc = SkillLoader(tmp_path).descriptions()
+        assert "数据目录" not in desc
+        assert "应用日志目录" not in desc
+
+
 class TestDeploySkipDeleted:
     def test_deleted_builtin_skipped(
         self, tmp_path, config_dir, monkeypatch: pytest.MonkeyPatch

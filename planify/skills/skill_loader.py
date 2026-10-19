@@ -91,6 +91,7 @@ class SkillLoader:
         disabled: Optional[Iterable[str]] = None,
         auto_refresh: bool = True,
         logs_dir: Optional[Path] = None,
+        data_dir: Optional[Path] = None,
     ):
         """
         初始化并扫描技能目录
@@ -104,11 +105,15 @@ class SkillLoader:
             logs_dir: 应用日志目录（可选，宿主注入；仅用于 descriptions() 的
                 目录事实输出，框架自身不计算/不消费——日志路径是宿主数据，
                 机制保持中性，对齐 disabled 的注入哲学）
+            data_dir: 宿主数据目录（可选，宿主注入；用途与约束同 logs_dir——
+                DB/临时工作区等数据的归属根，目录名由宿主按运行形态决定，
+                框架不假设固定名字）
         """
         self.skills_dir = skills_dir
         self._disabled = frozenset(disabled or ())
         self._auto_refresh = auto_refresh
         self._logs_dir = logs_dir
+        self._data_dir = data_dir
         self.skills: Dict[str, Dict[str, Any]] = {}
         self._file_to_name: Dict[Path, str] = {}
         self._signature: Dict[Path, Tuple[float, int]] = {}
@@ -277,6 +282,13 @@ class SkillLoader:
             "下一轮对话自动生效，无需重启）；回答「技能装在哪里 / 技能目录」"
             "一律以该路径为准，禁止将技能安装到其他工具的配置目录。"
         )
+        if self._data_dir is not None:
+            dir_fact += (
+                f"\n\n数据目录（data dir）：{self._data_dir}\n"
+                "会话 DB、索引、日志、任务板等运行数据的归属根；临时文件写入"
+                "其下 tmp/ 子目录。目录名随运行形态变化，回答「数据/日志在哪」"
+                "一律以该路径为准，禁止假设固定目录名。"
+            )
         if self._logs_dir is not None:
             dir_fact += (
                 f"\n\n应用日志目录（logs dir）：{self._logs_dir}\n"
