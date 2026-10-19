@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.api.preview import _safe_resolve
+from doclens.web_v2.path_safety import safe_resolve
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.pst import PstEmailItem, PstEmailListResponse
 from treesearch.parsers.pst_attachment_store import PstAttachmentStore
@@ -27,7 +27,7 @@ def _validate_pst_path(base: Path, path: str) -> None:
     """PST 路径校验：必须 .pst 后缀且不越权。"""
     if not path.lower().endswith(".pst"):
         raise CortexAPIError(400, "NOT_A_PST", f"非 PST 文件: {path}")
-    _safe_resolve(base, path)  # 越权校验，不通过则抛 FILE_NOT_FOUND
+    safe_resolve(base, path)  # 越权校验，不通过则抛 FILE_NOT_FOUND
 
 
 def _pst_store(idx: IndexManager) -> PstAttachmentStore:

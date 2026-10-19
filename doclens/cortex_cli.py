@@ -918,13 +918,13 @@ def _cli_search(args, config, idx):
 def _cli_search_kb(args, config, idx):
     """Handle `cortex search_kb <query>` — LLM-friendly format via search_kb tool."""
     import logging
-    from doclens.kb_tools import _handle_search_kb
+    from doclens.kb_tools import handle_search_kb
 
     logger = logging.getLogger(__name__)
     logger.debug("_cli_search_kb config.max_nodes_per_doc=%d, idx.max_nodes_per_doc=%d", config.max_nodes_per_doc, idx.max_nodes_per_doc)
     query = " ".join(args.query)
     idx.load_or_build_index()
-    result = _handle_search_kb(idx, Path(idx.search_path), query=query)
+    result = handle_search_kb(idx, Path(idx.search_path), query=query)
     print(result)
 
 
@@ -1027,11 +1027,11 @@ def _cli_status(args, config, idx):
 
 def _cli_read_document(args, config, idx):
     """Handle `cortex read_document --path <path>` — document reading output."""
-    from doclens.kb_tools import _handle_read_document
+    from doclens.kb_tools import handle_read_document
 
     idx.load_or_build_index()
     workdir = Path(idx.search_path)
-    result = _handle_read_document(
+    result = handle_read_document(
         idx,
         workdir,
         path=args.path,

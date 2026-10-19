@@ -15,11 +15,11 @@ from doclens.index_manager import IndexManager
 from doclens.vision_worker import (
     VISION_PROMPT,
     VisionWorker,
-    _strip_code_fence,
+    strip_code_fence,
 )
 from doclens.web_v2 import deps
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.api.preview import _safe_resolve
+from doclens.web_v2.path_safety import safe_resolve
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.vision import (
     NoteRequest,
@@ -55,7 +55,7 @@ async def reparse_image(
         raise CortexAPIError(400, "EMPTY_PROMPT", "提示词不能为空")
     # 3. 越权 + 存在性 + 扩展名（仅 jpg/jpeg/png/webp 可解读）
     base = Path(idx.search_path)
-    full = _safe_resolve(base, req.path)
+    full = safe_resolve(base, req.path)
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {req.path}")
     if full.suffix.lower() not in INTERPRETED_IMAGE_EXTS:
@@ -116,7 +116,7 @@ def _run_reparse_blocking(
         worker = VisionWorker(idx, deps.get_config)  # 不调 start()，仅复用方法
 
     md = worker._call_vision_api(abs_path, config, prompt=prompt)
-    md = _strip_code_fence(md)
+    md = strip_code_fence(md)
     if not md:
         raise CortexAPIError(500, "PARSE_FAILED", "视觉模型返回空内容")
 
@@ -141,7 +141,7 @@ async def set_manual_note(
     if not req.markdown or not req.markdown.strip():
         raise CortexAPIError(400, "EMPTY_NOTE", "备注不能为空")
     base = Path(idx.search_path)
-    full = _safe_resolve(base, req.path)
+    full = safe_resolve(base, req.path)
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {req.path}")
     if full.suffix.lower() not in INTERPRETED_IMAGE_EXTS:

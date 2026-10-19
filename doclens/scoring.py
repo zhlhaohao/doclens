@@ -45,7 +45,7 @@ def calc_proximity_score(text, keywords, max_span=20):
     return matched, 1
 
 
-def _matched_keywords(text, keywords):
+def matched_keywords(text, keywords):
     """返回在 text 中实际命中的关键词列表（大小写不敏感，保持原词形）。
 
     供输出层展示"哪几个查询词打中了本节点"，避免 LLM 在正文中自行猜
@@ -56,6 +56,10 @@ def _matched_keywords(text, keywords):
         return []
     text_lower = text.lower()
     return [kw for kw in keywords if kw and kw.lower() in text_lower]
+
+
+# 兼容别名（历史私有名，模块内消费方已迁移公共名）
+_matched_keywords = matched_keywords
 
 
 def compute_composite_score(matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights, proximity=0):

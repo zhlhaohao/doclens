@@ -197,10 +197,10 @@ def build_kb_tools(
     }
 
     raw_handlers = {
-        "search_kb": lambda **kw: _handle_search_kb(idx_manager, workdir, **kw),
-        "manage_kb": lambda **kw: _handle_manage_kb(idx_manager, **kw),
-        "read_document": lambda **kw: _handle_read_document(idx_manager, workdir, **kw),
-        "file_info": lambda **kw: _handle_file_info(idx_manager, workdir, **kw),
+        "search_kb": lambda **kw: handle_search_kb(idx_manager, workdir, **kw),
+        "manage_kb": lambda **kw: handle_manage_kb(idx_manager, **kw),
+        "read_document": lambda **kw: handle_read_document(idx_manager, workdir, **kw),
+        "file_info": lambda **kw: handle_file_info(idx_manager, workdir, **kw),
     }
 
     handlers = raw_handlers
@@ -969,7 +969,7 @@ def _format_word_range(
 # 处理函数
 # ---------------------------------------------------------------------------
 
-def _handle_search_kb(
+def handle_search_kb(
     idx_manager: IndexManager,
     workdir: Path,
     *,
@@ -1005,7 +1005,7 @@ def _handle_search_kb(
         if not allowed:
             return note + f"所有搜索目标均未命中已索引文档（query='{query}'），未执行搜索。"
 
-    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score, _matched_keywords
+    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score, matched_keywords
 
     nodes, docs = idx_manager.search(query, max_results=max_results, allowed_doc_ids=allowed)
     query_words = tokenize_query(query)
@@ -1056,7 +1056,7 @@ def _handle_search_kb(
                     weights=idx_manager.scoring_weights,
                     proximity=proximity,
                 )
-                all_candidates.append((doc_id, n, cnt, proximity, node_fts, composite, factors, _matched_keywords(n_text, query_words)))
+                all_candidates.append((doc_id, n, cnt, proximity, node_fts, composite, factors, matched_keywords(n_text, query_words)))
     _debug_lines = []
     for did, n, cnt, prox, fts, composite, factors, hits in all_candidates:
         title = n.get("title", "")[:20]
@@ -1102,7 +1102,7 @@ def _handle_search_kb(
 
 
 
-def _handle_manage_kb(
+def handle_manage_kb(
     idx_manager: IndexManager,
     *,
     action: str,
@@ -1117,7 +1117,7 @@ def _handle_manage_kb(
         return f"未知操作: {action}。支持的操作: reindex, stats"
 
 
-def _handle_read_document(
+def handle_read_document(
     idx_manager: IndexManager,
     workdir: Path,
     *,
@@ -1288,7 +1288,7 @@ def _build_info_toc(nodes: list[dict], depth: int = 0) -> Tuple[list[str], int]:
     return lines, count
 
 
-def _handle_file_info(
+def handle_file_info(
     idx_manager: IndexManager,
     workdir: Path,
     *,
@@ -1353,3 +1353,9 @@ def _handle_file_info(
         return header
 
     return header + "\n\n## 目录结构\n" + "\n".join(toc_lines)
+
+# 兼容别名（历史私有名；cortex_cli/mcp_server/tests 消费方已迁移公共名）
+_handle_search_kb = handle_search_kb
+_handle_manage_kb = handle_manage_kb
+_handle_read_document = handle_read_document
+_handle_file_info = handle_file_info

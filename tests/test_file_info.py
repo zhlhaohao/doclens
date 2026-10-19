@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from doclens.kb_tools import (
-    _handle_file_info,
-    _handle_read_document,
+    handle_file_info,
+    handle_read_document,
 )
 
 
@@ -44,7 +44,7 @@ def _fake_idx(**over):
 
 class TestStructuredMd:
     def test_info_fields(self, kb: Path):
-        out = _handle_file_info(_fake_idx(), kb, path="structured.md")
+        out = handle_file_info(_fake_idx(), kb, path="structured.md")
         assert "文档: structured.md" in out
         assert "格式: .md" in out
         assert re.search(r"修改时间: \d{4}-\d{2}-\d{2} \d{2}:\d{2}", out)
@@ -53,7 +53,7 @@ class TestStructuredMd:
         assert "章节数: 3" in out
 
     def test_toc_listing(self, kb: Path):
-        out = _handle_file_info(_fake_idx(), kb, path="structured.md")
+        out = handle_file_info(_fake_idx(), kb, path="structured.md")
         assert "## 目录结构" in out
         assert "- 第一章 概述" in out
         assert "  - 1.1 背景" in out  # 子节缩进
@@ -64,10 +64,10 @@ class TestStructuredMd:
     def test_word_count_matches_read_document(self, kb: Path):
         """file_info 的总词数必须与 read_document 的"共 N 词"一致（词序号语义）。"""
         idx = _fake_idx()
-        info = _handle_file_info(idx, kb, path="structured.md")
+        info = handle_file_info(idx, kb, path="structured.md")
         total = int(re.search(r"总词数: (\d+)", info).group(1))
 
-        read = _handle_read_document(idx, kb, path="structured.md", start_word=1, end_word=5)
+        read = handle_read_document(idx, kb, path="structured.md", start_word=1, end_word=5)
         m = re.search(r"共 (\d+) 词", read)
         assert m, read
         assert int(m.group(1)) == total
@@ -75,7 +75,7 @@ class TestStructuredMd:
     def test_plain_full_read_no_params(self, kb: Path):
         """无参全文读取（不走 section/start_word 分支）回归：曾残留 start_line/end_line
         死代码，普通 read_document(path) 直接 NameError。"""
-        out = _handle_read_document(_fake_idx(), kb, path="structured.md")
+        out = handle_read_document(_fake_idx(), kb, path="structured.md")
         assert "## 内容" in out
         assert "量子 计算 基础 知识" in out
         assert "[第" not in out  # 行号区间信息已随 start_line/end_line 参数一并移除
@@ -83,7 +83,7 @@ class TestStructuredMd:
 
 class TestPlainText:
     def test_no_sections(self, kb: Path):
-        out = _handle_file_info(_fake_idx(), kb, path="plain.txt")
+        out = handle_file_info(_fake_idx(), kb, path="plain.txt")
         assert "章节数: 0" in out
         assert "## 目录结构" not in out
         assert int(re.search(r"总词数: (\d+)", out).group(1)) > 0
@@ -117,7 +117,7 @@ class TestIndexedBranch:
         finally:
             fts.close()
         idx = _fake_idx(ts=object(), index_path=str(db))
-        out = _handle_file_info(idx, kb, path="a.fakeext")
+        out = handle_file_info(idx, kb, path="a.fakeext")
         assert "已索引: 是" in out
         assert "章节数: 2" in out
         assert "- 索引章一" in out and "- 索引章二" in out
@@ -125,14 +125,14 @@ class TestIndexedBranch:
 
 class TestErrors:
     def test_missing_file(self, kb: Path):
-        out = _handle_file_info(_fake_idx(), kb, path="不存在.md")
+        out = handle_file_info(_fake_idx(), kb, path="不存在.md")
         assert "文档不存在" in out
 
 
 class TestTocListing:
     def test_all_sections_listed(self, kb: Path):
         """目录清单不做条数截断：65 节全部列出，无「仅显示前 N 节」提示。"""
-        out = _handle_file_info(_fake_idx(), kb, path="big.md")
+        out = handle_file_info(_fake_idx(), kb, path="big.md")
         assert "章节数: 65" in out
         assert "仅显示前" not in out
         toc = out.split("## 目录结构", 1)[1]

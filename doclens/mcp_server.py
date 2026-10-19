@@ -21,7 +21,7 @@ import uvicorn
 from mcp.server.mcpserver import MCPServer
 
 from doclens.index_manager import IndexManager
-from doclens.kb_tools import _handle_file_info, _handle_read_document, _handle_search_kb
+from doclens.kb_tools import handle_file_info, handle_read_document, handle_search_kb
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +84,11 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
         paths 可选：搜索目标列表（相对目录如 '科技'，或相对文件路径如
         '科技/量子计算.md'），传入则只在目标范围内搜索。
         """
-        # 必须丢进 worker 线程：sync handler 链路（_handle_search_kb →
+        # 必须丢进 worker 线程：sync handler 链路（handle_search_kb →
         # IndexManager.search → TreeSearch.search）含 asyncio.get_running_loop()
         # 守卫，在事件循环线程里会抛 "Event loop is already running"。
         return await asyncio.to_thread(
-            _handle_search_kb,
+            handle_search_kb,
             idx_manager,
             workdir,
             query=query,
@@ -103,7 +103,7 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
         path 从 search_kb 结果中获取；section 传单个章节标题（不要拼层级路径）。
         """
         return await asyncio.to_thread(
-            _handle_read_document,
+            handle_read_document,
             idx_manager,
             workdir,
             path=path,
@@ -118,7 +118,7 @@ def create_mcp_server(idx_manager: IndexManager, workdir: Path) -> MCPServer:
         path 为相对知识库根目录的文件路径（从 search_kb 结果中获取）。
         """
         return await asyncio.to_thread(
-            _handle_file_info,
+            handle_file_info,
             idx_manager,
             workdir,
             path=path,

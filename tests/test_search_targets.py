@@ -119,19 +119,19 @@ def _fake_idx(kb: Path, path_map: dict[str, str]):
 
 class TestGrepHandlePaths:
     def test_filters_to_dir_target(self, kb: Path, path_map: dict):
-        from doclens.grep_tools import _handle_grep
-        out = _handle_grep(_fake_idx(kb, path_map), pattern="量子", paths=["科技"])
+        from doclens.grep_tools import handle_grep
+        out = handle_grep(_fake_idx(kb, path_map), pattern="量子", paths=["科技"])
         assert "a.md" in out
         assert "c.md" not in out
 
     def test_no_paths_returns_all(self, kb: Path, path_map: dict):
-        from doclens.grep_tools import _handle_grep
-        out = _handle_grep(_fake_idx(kb, path_map), pattern="量子")
+        from doclens.grep_tools import handle_grep
+        out = handle_grep(_fake_idx(kb, path_map), pattern="量子")
         assert "a.md" in out and "c.md" in out
 
     def test_all_missed_short_circuits(self, kb: Path, path_map: dict):
-        from doclens.grep_tools import _handle_grep
-        out = _handle_grep(_fake_idx(kb, path_map), pattern="量子", paths=["不存在"])
+        from doclens.grep_tools import handle_grep
+        out = handle_grep(_fake_idx(kb, path_map), pattern="量子", paths=["不存在"])
         assert "未命中" in out
         assert "a.md" not in out
 
@@ -174,20 +174,20 @@ class TestSearchKbHandlePaths:
         )
 
     def test_filters_to_dir_target(self, kb: Path, path_map: dict):
-        from doclens.kb_tools import _handle_search_kb
-        out = _handle_search_kb(self._fake_kb_idx(kb, path_map), kb, query="量子", paths=["科技"])
+        from doclens.kb_tools import handle_search_kb
+        out = handle_search_kb(self._fake_kb_idx(kb, path_map), kb, query="量子", paths=["科技"])
         assert "a.md" in out
         assert "c.md" not in out
 
     def test_file_target(self, kb: Path, path_map: dict):
-        from doclens.kb_tools import _handle_search_kb
-        out = _handle_search_kb(self._fake_kb_idx(kb, path_map), kb, query="量子", paths=["生活/c.md"])
+        from doclens.kb_tools import handle_search_kb
+        out = handle_search_kb(self._fake_kb_idx(kb, path_map), kb, query="量子", paths=["生活/c.md"])
         assert "c.md" in out
         assert "a.md" not in out
 
     def test_missed_note_in_output(self, kb: Path, path_map: dict):
-        from doclens.kb_tools import _handle_search_kb
-        out = _handle_search_kb(
+        from doclens.kb_tools import handle_search_kb
+        out = handle_search_kb(
             self._fake_kb_idx(kb, path_map), kb, query="量子", paths=["科技", "不存在目录"]
         )
         assert "未命中" in out and "不存在目录" in out

@@ -75,6 +75,49 @@ def test_no_cross_module_private_imports():
     assert not violations, "跨模块私有成员引用（应公共化）：\n" + "\n".join(violations)
 
 
+def _module_path(py: Path, pkg: str) -> str:
+    """文件 → 包内模块点路径（__init__.py 归到包本身）。"""
+    parts = py.relative_to(REPO / pkg).with_suffix("").parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join((pkg, *parts)) if parts else pkg
+
+
+def test_no_internal_cross_file_private_imports():
+    """红线 6：doclens 包内跨文件/跨模块 import 不得引用下划线私有成员。
+
+    CLAUDE.md 模块边界规则 6：web_v2/api/ 各 worker 之间只走公共接口。
+    本守卫把同一纪律推广到 doclens 全包——私有成员（_name）是模块实现
+    细节，跨文件消费即耦合（历史案例：api/pst.py 与 api/vision.py 曾
+    `from ..api.preview import _safe_resolve`，而 path_safety.safe_resolve
+    才是公共真相源；vision_worker._strip_code_fence、kb_tools._handle_*
+    同理）。需要使用就先公共化并全仓迁移消费方（可留 `_old = new` 兼容
+    别名，别名定义行不属于 import）。
+    """
+    violations: list[str] = []
+    for py in _py_sources("doclens"):
+        src = py.read_text(encoding="utf-8", errors="replace")
+        mine = _module_path(py, "doclens")
+        for m in _FROM_IMPORT_RE.finditer(src):
+            mod = m.group("mod")
+            if not mod.startswith("doclens.") or mod == mine:
+                continue
+            names = re.sub(r"[()\\\n]", " ", m.group("names"))
+            bad = [
+                n.strip().split(" as ")[0].strip()
+                for n in names.split(",")
+                if n.strip().split(" as ")[0].strip().startswith("_")
+                and not n.strip().split(" as ")[0].strip().startswith("__")
+            ]
+            if bad:
+                rel = py.relative_to(REPO).as_posix()
+                violations.append(f"{rel}: from {mod} import {', '.join(bad)}")
+    assert not violations, (
+        "doclens 包内跨文件私有成员引用（应公共化，见 CLAUDE.md 规则 6）：\n"
+        + "\n".join(violations)
+    )
+
+
 # 红线 3（ADR-0019/0020）：全量物化调用——把全库 structure_json / index_meta
 # 读进内存，百万语料 OOM / 驻留根因。doclens 搜索与变更检测链路必须走流式路径。
 # 注意：单文档精确加载（load_document / load_document_by_source_path /
