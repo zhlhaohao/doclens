@@ -326,6 +326,39 @@ cp -r doclens/skills/<技能名> ~/.cortex/skills/
 
 修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npm run build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。`npm run build` = `tsc --noEmit && vite build`，类型错误同样会阻断构建。
 
+## 分层回归测试纪律（2026-10-19）
+
+改动代码后**必须按触及层跑对应回归**——测试是确定性断言，不是可选装饰。规则分两层：**同名约定**（日常改动的最小回归位）+ **模块映射表**（跨文件行为的回归面）。测试方案全貌见 `tests/e2e/e2e-search-test-plan.md`（搜索链路）。pytest 一律用 `../cortex/.venv/Scripts/python.exe -m pytest`（worktree 复用主仓库 venv）。
+
+### 同名约定（第一回归位）
+
+`tests/test_<模块名>.py` / `frontend/tests/<组件名>.spec.ts` 与源码同名对应——**改谁就先跑谁的同名测试**，再跑其引用者的测试。例：改 `planify/streaming/runner.py` → `test_stream_usage.py`；改 `md-viewer.ts` → `md-viewer.spec.ts`。
+
+### 模块映射表（跨文件行为回归面）
+
+| 触及的代码 | 必跑回归 | 命令（cwd=仓库根 / frontend） |
+|---|---|---|
+| 后端搜索链路：`doclens/web_v2/api/`（search/grep/preview/_grouping/_pathutil）、`doclens/scoring*`、`doclens/ripgrep.py`、`doclens/index_manager.py` | pytest 搜索矩阵（含 LIKE/rg 降级、grep 双引擎、preview 各格式） | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_web_search_api_matrix.py tests/test_web_preview_formats.py tests/test_web_search_grouping.py -q` |
+| treesearch 索引引擎：`treesearch/**` | 既有引擎套件 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_grep_corpus_bypass.py -q` |
+| treesearch 解析器：`treesearch/parsers/**` | 对应格式测试（按触及格式取舍） | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_docx_parser.py tests/test_anydoc_parser.py tests/test_pdf_native_preview_api.py tests/test_pst_parser.py -q` |
+| planify LLM/流式/压缩：`planify/streaming/`、`planify/context/`、`planify/core/llm/` | 同名 + 关联 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_stream_usage.py tests/test_thinking_stream.py tests/test_compact.py tests/test_anthropic_provider.py -q` |
+| planify 工具层：`planify/tools/**` | 同名 + 门禁 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_grep_tool.py tests/test_glob_tool.py tests/test_basic_read_edit.py tests/test_guard.py tests/test_guard_pipeline.py -q` |
+| 会话/对话链路：`doclens/sessions_store.py`、`doclens/web_v2/api/{chat,sessions}.py` | 会话族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_chat_disconnect.py tests/test_session_export_import.py tests/test_sessions_store_history.py tests/test_rewind.py -q` |
+| 索引/文件监控：`doclens/file_watcher.py`、索引增量链路 | 监控族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_change_detection.py tests/test_file_watcher_exclude.py tests/test_index_chunking.py -q` |
+| 技能系统：`doclens/skills/`、`planify/skills/` | 技能族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_skill_hot_reload.py tests/test_skills_config.py tests/test_slash_skill_invoke.py -q` |
+| 前端搜索 UI：`frontend/src/views/search-view.ts`、`components/{md-viewer,file-card,preview-pane,pdf-viewer}.ts`、`api/{search,grep,preview}.ts` | ① Vitest 相关单测 ② 前端须先 `npm run build`（见上节） | `cd doclens/web_v2/frontend && npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/preview-pane.spec.ts` |
+| 前端其他组件 | 同名 spec | `cd doclens/web_v2/frontend && npm run test -- tests/<组件名>.spec.ts` |
+| 前端定位/滚动/分页/多格式预览行为（跨前后端用户旅程） | E2E 回归（自动复制语料 + 自起独立后端 7890，冷启 ~2min / 热实例 ~1.5min） | `cd doclens/web_v2/frontend && npm run test:e2e:search` |
+| 任何层改完（红线守卫） | 架构红线 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_architecture.py -q` |
+| **发版前（release / 版本 bump / 打 tag / push 主分支）** | **全量 pytest 冒烟**（92 文件，~4 分钟，最稳妥兜底） | `../cortex/.venv/Scripts/python.exe -m pytest tests/ -q` |
+
+### 执行口径
+
+- **最小必要集** = 同名约定 + 触及层的表内命令 + `test_architecture.py`；不做全量（全量归发版前）。
+- E2E 的 fixtures 语料（`tests/fixtures/e2e_search/`）是确定性断言的一部分——**改语料 = 改测试预期**，须同步更新 spec 断言（如命中行号/页号）。
+- E2E 只跑 desktop 全量 + 移动端少量（`--project=desktop-chrome` 可再减半耗时）；`npm run test:e2e:search` 默认含 grep-mode/full-flow 两个相关既有 spec。
+- 表内命令是基线：改动涉及交叉行为（如解析器改动影响搜索断言）时按判断追加，宁可多跑。
+
 ## 前端设计标尺
 
 前端美化 / 视觉改造（色彩、字体、圆角、按钮、卡片、阴影等）以 `doclens/web_v2/frontend/docs/DESIGN.md` 为视觉标尺。该文件拷贝自仓库同级的 `awesome-design-md/design-md/meta/DESIGN.md`（META 硬件电商设计系统：白色画布、Optimistic VF / Montserrat 字体、钴蓝 `#0064E0` 仅用于购买 CTA、黑色 pill 主按钮、`rounded.full`(100px) 按钮 / `rounded.xxxl`(32px) 卡片、极简平铺无重阴影）。

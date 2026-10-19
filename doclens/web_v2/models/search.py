@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 
 class SearchRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=500)
+    # 纯空白 query 拒绝（BUG-F2 修复）：strip 后为空 → 422——此前 " " 长度
+    # ≥1 过验证，触发 LIKE '% %' 随机命中（把含连续空格的 summary 当结果）。
+    query: str = Field(min_length=1, max_length=500, pattern=r"\S")
     mode: str = Field(default="keyword", pattern="^(keyword|phrase)$")
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)

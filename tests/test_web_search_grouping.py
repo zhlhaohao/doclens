@@ -132,11 +132,12 @@ class TestGroupAndPaginate:
         page, tf, tm, so = group_and_paginate([], 0, 20)
         assert page == [] and tf == 0 and tm == 0 and so == 0
 
-    def test_offset_clamped_to_last_page_start(self):
+    def test_offset_overflow_returns_empty_page(self):
+        """BUG-F7 已修：越界返回空页（不再 clamp 回显末页）。"""
         items = [(f"f{i}.md", 0.9, [MatchItem(line=1, text="x")]) for i in range(5)]
-        page, _, _, so = group_and_paginate(items, offset=99, limit=20)
-        assert so == 4
-        assert len(page) == 1
+        page, _, _, off = group_and_paginate(items, offset=99, limit=20)
+        assert off == 99
+        assert page == []
 
     def test_dict_rows_normalized(self):
         """grep path 命中曾以裸 dict 传行（回归：'dict' object has no attribute 'line'）。"""

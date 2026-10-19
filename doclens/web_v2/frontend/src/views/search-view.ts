@@ -15,6 +15,27 @@ import "../components/pagination-bar";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
 
+/** lineMap 精确查找 miss 时取「≤line 的最大键」前驱（BUG-F3）。
+ *  lineMap: {原始行号(字符串键): md 行号}；命中行落在块内部（docx 段落/
+ *  xlsx 单元格/pptx 正文）时精确键不存在，前驱 heading 即所属块。 */
+function mapLineViaPredecessor(
+  lineMap: Record<string, number>,
+  line: number,
+): number | null {
+  const exact = lineMap[String(line)];
+  if (exact != null) return exact;
+  let best: number | null = null;
+  let bestKey = -1;
+  for (const k of Object.keys(lineMap)) {
+    const n = Number(k);
+    if (!Number.isNaN(n) && n <= line && n > bestKey) {
+      bestKey = n;
+      best = lineMap[k];
+    }
+  }
+  return best;
+}
+
 @customElement("search-view")
 export class SearchView extends LitElement {
   static readonly RESULTS_PANE_WIDTH_KEY = "cortex.resultsPaneWidth";
@@ -427,10 +448,23 @@ export class SearchView extends LitElement {
       // 同一命中行重复点击：previewLine 赋同值不会触发 md-viewer updated()
       // → 不重新定位（用户滚走阅读后再点命中行无反应）。先清空强制
       // 下一次赋值产生属性变化（2026-10-18 E2E 复现修复）。
-      if (this.previewLine === hit.line && this.previewPath === hit.path) {
+      const sameHit = this.previewLine === hit.line && this.previewPath === hit.path;
+      if (sameHit) {
         this.previewLine = null;
       }
       await this._fetchAndShowPreview(hit);
+      // Lit 属性去重竞态（2026-10-19）：null→同值在同一轮批处理中被合并为
+      // 「值未变」，md-viewer updated() 完全不触发（content/path 也全同）。
+      // 同文件同行重击时显式调用 reLocate 兜底；嵌套组件（preview-pane →
+      // md-viewer）的属性传递异步排队——先等 md-viewer 自身 updateComplete
+      // 才能保证 reLocate 读到最新 line。
+      if (sameHit && this.previewLanguage === "markdown") {
+        const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+        await pp?.updateComplete;
+        const mdv = pp?.shadowRoot?.querySelector("md-viewer") as any;
+        await mdv?.updateComplete;
+        mdv?.reLocate?.();
+      }
     });
   }
 
@@ -469,12 +503,14 @@ export class SearchView extends LitElement {
       this.previewLanguage = result.language;
       // 二进制合成预览（docx/pdf/xlsx/csv）：node.line_start 是原始解析体系，
       // 与合成 md 行号不一致。用 result.lineMap 把 r.line 换算成 md 实际行号，
-      // md-viewer 才能定位到对应 heading。映射不到（如 TOC/list-item 降级节点）
-      // 时返回 null，md-viewer 不滚动。普通文本预览 result.lineMap 为 null，
+      // md-viewer 才能定位到对应 heading。映射不到时取「≤line 的最大键」
+      // 前驱近似（BUG-F3 修复：命中行常落在块内部——docx 段落/xlsx 单元格/
+      // pptx 正文——前驱 heading 即所属块，粗粒度定位远优于不滚）；仍无键
+      // 才返回 null（md-viewer 不滚动）。普通文本预览 result.lineMap 为 null，
       // r.line 即文件实际行号，直接使用。
       this.previewLine = line === null
         ? null
-        : (result.lineMap ? (result.lineMap[String(line)] ?? null) : line);
+        : (result.lineMap ? mapLineViaPredecessor(result.lineMap, line) : line);
       this.previewWritable = result.writable;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;

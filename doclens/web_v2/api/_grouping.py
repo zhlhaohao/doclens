@@ -173,7 +173,7 @@ def group_and_paginate(
     items: 内容命中（kind=content）；path_items: 路径命中（kind=path，
     仅当该文件无内容命中时才单独成组——文件组内已有内容命中时路径
     命中不再重复出现）。
-    返回 (page, total_files, total_matches, safe_offset)。
+    返回 (page, total_files, total_matches, offset)。
     """
     groups: dict[str, dict] = {}
     for path, score, rows in items:
@@ -220,6 +220,8 @@ def group_and_paginate(
 
     total_files = len(file_groups)
     total_matches = sum(fg.total_matches for fg in file_groups)
-    safe_offset = min(offset, max(0, total_files - 1)) if total_files > 0 else 0
-    page = file_groups[safe_offset: safe_offset + limit]
-    return page, total_files, total_matches, safe_offset
+    # 越界返回空页（BUG-F7 修复）：此前 clamp 到最后一页回显末页内容，
+    # 翻页超出总页数时前端会重复看到最后一页。
+    page = file_groups[offset: offset + limit] if total_files > 0 else []
+    return page, total_files, total_matches, offset
+    return page, total_files, total_matches, offset

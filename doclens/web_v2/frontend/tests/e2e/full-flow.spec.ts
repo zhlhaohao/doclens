@@ -19,11 +19,15 @@ function shadowLocator(
 
 test.describe("Doclens Full Flow", () => {
   test("desktop: initial state shows welcome + history + input", async ({ page }) => {
+    test.skip(
+      test.info().project.name === "mobile-iphone",
+      "移动端 activity-bar 折叠为底部 tab bar（另有 mobile 用例覆盖）",
+    );
     await page.goto("/");
 
-    // Welcome pane heading
-    const title = shadowLocator(page, "welcome-pane", ".title");
-    await expect(title).toHaveText("Doclens");
+    // Welcome pane（onboarding variant：card-title heading，e395855 重写）
+    const heading = shadowLocator(page, "welcome-pane", ".card-title");
+    await expect(heading).toHaveText("在你的文档中搜索");
 
     // Input with inline button
     const input = shadowLocator(page, "input-box", "input");
@@ -38,10 +42,10 @@ test.describe("Doclens Full Flow", () => {
 
     // Type into the initial search input
     const input = shadowLocator(page, "input-box", "input");
-    await input.fill("test");
+    await input.fill("麒麟");
 
-    // Submit by clicking the inline button
-    const btn = shadowLocator(page, "input-box", "button");
+    // Submit by clicking the inline button（primary，caret 是复合按钮非提交）
+    const btn = shadowLocator(page, "input-box", "button.primary");
     await btn.click();
 
     // Should transition to focus state — focus-header appears
@@ -71,10 +75,14 @@ test.describe("Doclens Full Flow", () => {
   });
 
   test("switching between search and chat", async ({ page }) => {
+    test.skip(
+      test.info().project.name === "mobile-iphone",
+      "移动端无 activity-bar（改走 tab-bar，mobile 用例已覆盖切换）",
+    );
     await page.goto("/");
 
-    // Click "助手" (chat) activity-bar button
-    const chatBtn = shadowLocator(page, "activity-bar", `button[title="助手"]`);
+    // Click "个人助手" (chat) activity-bar button（effaad8 四字命名）
+    const chatBtn = shadowLocator(page, "activity-bar", `button[title="个人助手"]`);
     await chatBtn.click();
 
     // Should now show chat-view

@@ -84,14 +84,14 @@ async def grep(req: GrepRequest, idx: IndexManager = Depends(get_index_manager))
             error=f"grep 引擎异常: {e}",
         )
 
-    page, total_files, total_matches, safe_offset = group_and_paginate(
+    page, total_files, total_matches, page_offset = group_and_paginate(
         items, req.offset, req.limit, path_items=path_items,
     )
     return GroupedSearchResponse(
         groups=page,
         total=total_files,
         total_matches=total_matches,
-        offset=safe_offset,
+        offset=page_offset,
         limit=req.limit,
         query=req.pattern,
         query_words=query_words,

@@ -129,6 +129,10 @@ export interface PstAttachmentInfo {
 /** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐）。 */
 const FULL_FILE_PREVIEW_EXTS = [
   ".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv",
+  // EPUB：DB 合成 md（按章分页懒渲染 + line_map 定位）——与 docx/xlsx 同类
+  // 二进制合成预览；行区间切片会切断分页边界（pages 按全文行号切分块，
+  // 切片内容与之错位 → 定位/滚动失效），必须取全文件（2026-10-19 修复）。
+  ".epub",
   // MHTML 网页存档：原始 MIME 文本无意义，预览走 DB 合成 md
   ".mhtml", ".mht",
   // PST 物理文件：GB 级二进制，预览 = DB 合成的邮件目录页

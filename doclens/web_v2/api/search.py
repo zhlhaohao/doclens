@@ -110,7 +110,7 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
 
     matchers = build_substring_matchers(query_words)
     items = _scored_to_group_items(result, idx.path_map, idx.search_path, matchers)
-    page, total_files, total_matches, safe_offset = group_and_paginate(
+    page, total_files, total_matches, page_offset = group_and_paginate(
         items, req.offset, req.limit,
     )
     elapsed_ms = int((time.perf_counter() - start) * 1000)
@@ -118,7 +118,7 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
         groups=page,
         total=total_files,
         total_matches=total_matches,
-        offset=safe_offset,
+        offset=page_offset,
         limit=req.limit,
         query=req.query,
         query_words=query_words,

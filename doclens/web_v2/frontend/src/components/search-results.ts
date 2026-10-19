@@ -68,6 +68,11 @@ export class SearchResults extends LitElement {
   @property({ type: Boolean }) loading = false;
 
   private _onHitSelect(e: CustomEvent<{ hit: SearchHit }>) {
+    // 阻断 file-card 原事件继续冒泡（composed 事件本会直达 search-view 的
+    // @hit-select），再由本组件统一转发一次——否则同一命中被 search-view
+    // 监听到两次，pushDetail 双压（移动端 detailStack 深度 2，须按两次
+    // 返回才能回结果列表，2026-10-19 实测复现）。
+    e.stopPropagation();
     this.dispatchEvent(new CustomEvent("hit-select", {
       detail: e.detail,
       bubbles: true, composed: true,
