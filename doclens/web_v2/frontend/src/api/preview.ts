@@ -127,25 +127,25 @@ export interface PstAttachmentInfo {
 // ---------------------------------------------------------------------------
 
 /** 这些后缀的预览走 md 渲染且需要全文件内容（与后端 BINARY_PREVIEW_EXTS 对齐）。 */
-const FULL_FILE_PREVIEW_EXTS = [
-  ".md", ".pdf", ".docx", ".xlsx", ".xlsm", ".xltx", ".xltm", ".csv",
-  // EPUB：DB 合成 md（按章分页懒渲染 + line_map 定位）——与 docx/xlsx 同类
-  // 二进制合成预览；行区间切片会切断分页边界（pages 按全文行号切分块，
-  // 切片内容与之错位 → 定位/滚动失效），必须取全文件（2026-10-19 修复）。
-  ".epub",
-  // MHTML 网页存档：原始 MIME 文本无意义，预览走 DB 合成 md
-  ".mhtml", ".mht",
-  // PST 物理文件：GB 级二进制，预览 = DB 合成的邮件目录页
-  ".pst",
-  // 图像文件：预览 = 顶部原图 + 视觉解析出的 Markdown
-  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif",
-];
+/** 全文件预览判定（单源化：消费后端 PreviewResponse.synthesized 标志）。
+ *
+ * 后缀清单已退役——历史上前端 FULL_FILE_PREVIEW_EXTS 与后端
+ * BINARY_PREVIEW_EXTS 双份维护、 drifted（pptx/doc/docm/rtf/xls 等 8 个
+ * 后缀不在前端清单，范围预览分支错切），现以后端响应的 synthesized
+ * （DB 合成 md）为唯一信号：合成预览必须整文件渲染（切片会切断分页
+ * 边界、line_map 换算依赖全文行号体系）。
+ *
+ * 注意：这是响应**之后**的判定（是否需要重新全量取）。请求前想知道
+ * 某路径是否合成的场景只有 PST 派生路径（非真实文件，必合成）。 */
+export function isSynthesizedPreview(resp: { synthesized?: boolean | null }): boolean {
+  return resp.synthesized === true;
+}
 
-export function isFullFilePreview(path: string): boolean {
+/** PST 派生邮件路径（"<pst>#<entry_id>"）：非真实文件，预览必为 DB 合成 md。
+ * 请求前即可判定（不依赖响应）。 */
+export function isPstDerivedPath(path: string): boolean {
   const lower = path.toLowerCase();
-  // PST 邮件派生路径（"<pst>#<entry_id>"）：非真实文件，走 DB 合成 md
-  if (lower.includes("#") && lower.split("#")[0].endsWith(".pst")) return true;
-  return FULL_FILE_PREVIEW_EXTS.some((ext) => lower.endsWith(ext));
+  return lower.includes("#") && lower.split("#")[0].endsWith(".pst");
 }
 
 /** 可被视觉模型解读的图像后缀（与后端 INTERPRETED_IMAGE_EXTS 对齐，仅这 4 种）。
@@ -164,6 +164,9 @@ export type PreviewFetchResult =
       content: string;
       language: string;
       writable: boolean;
+      /** DB 合成 md 预览（docx/xlsx/pptx/epub/图像/PST 等）= true——
+       *  整文件渲染信号（后端 BINARY_PREVIEW_EXTS 单源判定）。 */
+      synthesized: boolean;
       pages: PageMarker[] | null;
       /** 二进制合成预览（docx/xlsx/csv）的行号映射：
        *  key = node.line_start(原始体系, string)，value = heading 在合成 md 中的实际行号。
@@ -203,6 +206,7 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
         content: body.content,
         language: body.language,
         writable: body.writable ?? false,
+        synthesized: body.synthesized ?? false,
         pages: body.pages ?? null,
         lineMap: body.line_map ?? null,
         pageStarts: body.page_starts ?? null,

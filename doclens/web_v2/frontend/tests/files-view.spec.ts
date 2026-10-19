@@ -31,9 +31,11 @@ vi.mock("../src/api/preview", () => ({
     content: "# hello",
     language: "markdown",
     writable: false,
+    synthesized: false,
     pages: null,
   }),
-  isFullFilePreview: vi.fn(() => false),
+  // 单源化后 api/preview.ts 已无 isFullFilePreview 导出；mock 保留 isPstDerivedPath
+  isPstDerivedPath: vi.fn(() => false),
   // preview-pane 渲染期调用（图片重解析入口判断）；缺导出会 unhandled rejection
   isImageFile: vi.fn(() => false),
 }));

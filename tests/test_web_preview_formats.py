@@ -132,6 +132,18 @@ class TestPreviewFormats:
         r = _preview(idx, "杂记.md")
         assert r.highlights == []
 
+    def test_c16_synthesized_flag(self, idx):
+        """synthesized 标志（全文件预览判定单源化）：DB 合成 md = True，
+        磁盘直读（md/代码/txt/pdf 字节直读）= False。前端以此替代本地后缀清单。"""
+        assert _preview(idx, "纪要.docx").synthesized is True
+        assert _preview(idx, "报表.xlsx").synthesized is True
+        assert _preview(idx, "幻灯.pptx").synthesized is True   # 历史漂移点：pptx 曾不在前端清单
+        assert _preview(idx, "书.epub").synthesized is True
+        assert _preview(idx, "杂记.md").synthesized is False
+        assert _preview(idx, "code/kirin_util.py").synthesized is False
+        assert _preview(idx, "plain.txt").synthesized is False
+        assert _preview(idx, "report.pdf").synthesized is False  # pdf = 字节直读非合成
+
     def test_c14_line_map_keys_are_orig_lines(self, idx):
         r = _preview(idx, "报表.xlsx")
         keys = sorted(int(k) for k in r.line_map)

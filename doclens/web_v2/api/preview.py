@@ -15,8 +15,9 @@ from doclens.config import data_dirname
 from doclens.image_orienter import ORIENTABLE_IMAGE_EXTS, rotate_image_inplace
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.api._auto_rotate import broadcast_rotated, drop_vision_queue_row
+from doclens.web_v2.path_safety import safe_resolve
+from doclens.web_v2.deps import get_index_manager
 from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 from doclens.web_v2.models.preview import (
@@ -89,14 +90,8 @@ _LANGUAGE_MAP = {
 
 
 def _safe_resolve(base: Path, requested: str) -> Path:
-    """安全解析路径，禁止 .. 越权。"""
-    base_abs = base.resolve()
-    candidate = (base_abs / requested).resolve()
-    try:
-        candidate.relative_to(base_abs)
-    except ValueError:
-        raise CortexAPIError(404, "FILE_NOT_FOUND", "路径越权")
-    return candidate
+    """越权校验的兼容转发（历史调用点众多，收敛到 path_safety.safe_resolve 单源）。"""
+    return safe_resolve(base, requested)
 
 
 def _resolve_path(base: Path, requested: str, idx: IndexManager) -> tuple[Path, str]:
@@ -294,6 +289,7 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
         line_range=None,
         highlights=[],
         writable=False,  # PDF 不可编辑（BINARY_PREVIEW_EXTS 写回闸门同款语义）
+        synthesized=False,  # pdf 是磁盘字节直读（pdf.js 渲染），非 DB 合成
         page_starts=page_starts,
     )
 
@@ -317,8 +313,7 @@ async def preview(
     # PST 物理文件：GB 级二进制，绝不能 read_text（会把事件循环拖死）——
     # 合成邮件目录页（总数 + 前 N 封主题列表）
     if path.lower().endswith(".pst"):
-        return _synthesize_pst_overview(idx, path)
-    # PDF：原生预览（ADR-0031）——轻量标记响应（language=pdf、无 content），
+        return _synthesize_pst_overview(idx, path)    # PDF：原生预览（ADR-0031）——轻量标记响应（language=pdf、无 content），
     # 字节由 GET /api/preview/pdf 服务；合成 md 链路对 pdf 退役
     if path.lower().endswith(".pdf"):
         return _pdf_preview_meta(idx, path)
@@ -380,6 +375,7 @@ async def preview(
         line_range=line_range,
         highlights=[],
         writable=_compute_writable(full, base),
+        synthesized=False,
         tokens=tokens,
     )
 
@@ -482,6 +478,7 @@ def _synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewRespons
         line_range=None,
         highlights=[],
         writable=False,
+        synthesized=True,
     )
 
 
@@ -521,6 +518,7 @@ def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespo
         line_range=None,
         highlights=[],
         writable=False,  # 合成预览不可写
+        synthesized=True,
         pages=pages,
         line_map={str(k): v for k, v in line_map.items()},
     )

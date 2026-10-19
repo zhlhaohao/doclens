@@ -6,7 +6,7 @@ import type { SearchMode, FileGroup, SearchHit, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { grepApi } from "../api/grep";
 import { listSessions, clearSessions, findOrCreateSession, starSession } from "../api/sessions";
-import { fetchPreview, isFullFilePreview } from "../api/preview";
+import { fetchPreview, isPstDerivedPath } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
@@ -499,12 +499,21 @@ export class SearchView extends LitElement {
       return;
     }
     const line = (r.line as number | null) ?? null;
-    const fullFile = isFullFilePreview(r.path);
-    // search-hit 范围预览（非 full-file 时只取 line ±10/+20 行）—— fetchPreview
-    // 暂不支持 line range，走专用分支。
+    // 范围 vs 全文件分派（单源化 2026-10-19）：先取范围（line ±10/+20），
+    // 响应若需整文件渲染则丢弃片段改取全文件。两类：
+    // ① synthesized=true（DB 合成 md——后端 BINARY_PREVIEW_EXTS 判定，切片
+    //   会切断分页边界/line_map 失配）；
+    // ② language=markdown 且来自磁盘直读（.md）——md-viewer 的
+    //   data-source-line 锚点是全文行号体系，切片内容里绝对命中行不存在，
+    //   jumpToSourceLine 落空（2026-10-19 回归修复：md 曾在旧
+    //   FULL_FILE_PREVIEW_EXTS 清单内恒取全文件）。
+    // PST 派生路径（isPstDerivedPath）必为合成，直接全文件。
     let result;
-    if (line && !fullFile) {
+    if (line && !isPstDerivedPath(r.path)) {
       result = await this._fetchPreviewRange(r.path, line);
+      if (result.ok && (result.synthesized || result.language === "markdown")) {
+        result = await fetchPreview(r.path); // 合成/md 预览必须整文件渲染
+      }
     } else {
       result = await fetchPreview(r.path);
     }
@@ -539,12 +548,13 @@ export class SearchView extends LitElement {
     }
   }
 
-  /** search-hit 范围预览专用 —— 仅取 line ±10/+20 行。 */
+  /** search-hit 范围预览专用 —— 仅取 line ±10/+20 行。
+   *  synthesized=true 时调用方应改取全文件（合成 md 不能切片）。 */
   private async _fetchPreviewRange(
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; synthesized: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -560,6 +570,7 @@ export class SearchView extends LitElement {
           content: body.content,
           language: body.language,
           writable: body.writable ?? false,
+          synthesized: body.synthesized ?? false,
           pages: body.pages ?? null,
           lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
           pageStarts: null, // 范围预览只用于文本文件，无页表
