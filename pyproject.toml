@@ -78,7 +78,9 @@ dependencies = [
     "onnx>=1.14",
     "onnxruntime>=1.16",
     "opencv-python-headless>=4.7",
-    "babeldoc>=0.1.22,<0.3.0",
+    # babeldoc 0.1–0.2 requires-python <3.13（3.13 环境无解），0.3+ 支持 3.13；
+    # vendor 闭包只用 babeldoc.assets.assets 的 get_doclayout_onnx_model_path / get_font_and_metadata
+    "babeldoc>=0.1.22,<0.7.0",
 ]
 
 [project.optional-dependencies]

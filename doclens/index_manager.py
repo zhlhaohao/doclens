@@ -243,7 +243,13 @@ class IndexManager:
         return self._config.treesearch_index_chunk_size
 
     def _ts_config(self):
-        """构造 treesearch 配置（集中一处，避免 4 处 set_config 漂移）。"""
+        """构造 treesearch 配置（集中一处，避免 4 处 set_config 漂移）。
+
+        搜索参数（max_nodes_per_doc/top_k_docs）也在此注入——宿主值成为
+        引擎侧唯一真相，调用点不再逐次直传（消除同名参数双通道：
+        2026-10-19 前这三者经 search() 调用参数传入，与 _ts_config 白名单
+        并存，读者无法判断哪边生效）。
+        """
         return TreeSearchConfig(
             cjk_tokenizer=self.cjk_tokenizer,
             max_index_fail_count=self.max_index_fail_count,
@@ -253,6 +259,8 @@ class IndexManager:
             allowed_source_types=self.allowed_source_types,
             max_dir_files=self.max_dir_files,
             index_chunk_size=self.index_chunk_size,
+            max_nodes_per_doc=self.max_nodes_per_doc,
+            top_k_docs=self.top_k_docs,
         )
 
     def indexed_doc_count(self) -> int:
@@ -905,15 +913,23 @@ class IndexManager:
         else:
             print(f"[索引已更新: {doc_count} 个文档]")
 
-    def search(self, query, max_results=None, fts_expression=None):
+    def search(self, query, max_results=None, fts_expression=None, allowed_doc_ids=None):
         """执行搜索，返回 (flat_nodes, documents)。
 
         ADR-0019：全惰性——DB 路由出 top-k、只载 top-k 树结构，全程不物化
         全量 documents（百万语料 OOM 根因清除）。
-        """
-        if max_results is None:
-            max_results = self.max_results
 
+        max_results：历史形参，引擎侧从未消费（被 search(**kwargs) 静默
+        吞掉）——结果量的裁剪全部发生在调用方（scoring_pipeline /
+        kb_tools 的阈值过滤与 top-N）。保留形参仅为兼容既有调用签名。
+
+        max_nodes_per_doc / top_k_docs 经 _ts_config() → set_config() 注入
+        引擎（不再逐调用直传）。
+
+        allowed_doc_ids: 可选 doc_id 集合，路由阶段 SQL 内生效（search_kb
+        的 paths 范围限定走此路——范围外文档不进候选池，不再依赖检索后
+        过滤 + 候选量放大兜底）。
+        """
         self._check_swap()
         self.load_or_build_index()
 
@@ -922,10 +938,8 @@ class IndexManager:
 
         result = self._ts.search(
             query=query,
-            max_results=max_results,
-            max_nodes_per_doc=self.max_nodes_per_doc,
-            top_k_docs=self.top_k_docs,
             fts_expression=fts_expression,
+            allowed_doc_ids=allowed_doc_ids,
         )
 
         return result.get("flat_nodes", []), result.get("documents", [])

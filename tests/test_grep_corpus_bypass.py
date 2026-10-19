@@ -116,7 +116,7 @@ class TestRgFallbackWithPreHits:
             )
         mock_rg.assert_not_called()
         assert len(results) == 1
-        doc_id, node, matched, _, _ = results[0]
+        doc_id, node, matched, _, _, _ = results[0]
         assert doc_id == "dsid_x"  # normpath 反查命中 doc_id
         assert node["line_start"] == 2
         assert "needle here" in node["text"]

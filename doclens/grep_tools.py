@@ -77,18 +77,13 @@ def build_grep_tools(
 
     Args:
         idx: IndexManager 实例
-        skill_state: 可选，技能加载状态；传入则 grep 被门禁包裹。
+        skill_state: 可选，技能加载状态（历史参数，KB 门禁删除后仅占位）。
 
     Returns:
         (tools, handlers) 元组
     """
     raw_handler: Callable = lambda **kw: _handle_grep(idx, **kw)
-    if skill_state is not None:
-        from doclens.skill_gate import KB_SKILL, gate_skill
-        handler = gate_skill(skill_state, KB_SKILL, "kb_grep", raw_handler)
-    else:
-        handler = raw_handler
-    return [GREP_TOOL], {"kb_grep": handler}
+    return [GREP_TOOL], {"kb_grep": raw_handler}
 
 
 # ---------------------------------------------------------------------------
@@ -198,14 +193,14 @@ def _format_agent_output(
     output_lines: list[str] = []
 
     if content_results:
-        unique_files = len({_resolve(doc_id, node) for doc_id, node, _, _, _ in content_results})
+        unique_files = len({_resolve(doc_id, node) for doc_id, node, *_ in content_results})
         output_lines.append(f"Found {len(content_results)} results in {unique_files} files:")
         output_lines.append("Use read_document tool to read full content: path=<path value>.")
 
         total_chars = sum(len(l) for l in output_lines)
         shown = 0
 
-        for doc_id, node, matched, _prox, _fts in content_results:
+        for doc_id, node, matched, _prox, _fts, *_ in content_results:
             path = _resolve(doc_id, node)
             line_start = node.get("line_start")
             full_text = node.get("text", "") or ""

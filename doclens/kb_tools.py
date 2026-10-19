@@ -56,38 +56,6 @@ SEARCH_KB_TOOL = {
     },
 }
 
-SEARCH_KB_V2_TOOL = {
-    "name": "search_kb_v2",
-    "description": (
-        "使用结构化查询在知识库索引中搜索相关文档片段。"
-        "query_tokens 支持: "
-        "AND (所有词匹配), OR (任一匹配), NOT (排除), PHRASE (短语精确匹配)。"
-        "返回带层次结构的搜索结果。"
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "query_tokens": {
-                "type": "object",
-                "description": "结构化查询，支持 AND/OR/NOT/PHRASE 操作符",
-                "properties": {
-                    "type": {"type": "string", "enum": ["and", "or", "not", "phrase"]},
-                    "terms": {"type": "array", "items": {"type": "string"}},
-                    "term": {"type": "string"},
-                    "text": {"type": "string"},
-                    "exclude": {"type": "array", "items": {"type": "string"}},
-                },
-            },
-            "max_results": {
-                "type": "integer",
-                "description": "返回的最大结果数，默认 10",
-                "default": 10,
-            },
-        },
-        "required": ["query_tokens"],
-    },
-}
-
 MANAGE_KB_TOOL = {
     "name": "manage_kb",
     "description": (
@@ -201,8 +169,7 @@ def build_kb_tools(
     Args:
         idx_manager: 已初始化的 IndexManager 实例
         workdir: 工作目录（知识库搜索路径）
-        skill_state: 可选，技能加载状态；传入则 search_kb/read_document/manage_kb
-            被门禁包裹（未加载 knowledge-base 技能时弹回）。
+        skill_state: 可选，技能加载状态（历史参数，KB 门禁删除后仅占位）。
 
     Returns:
         (tools, handlers) 元组
@@ -236,14 +203,7 @@ def build_kb_tools(
         "file_info": lambda **kw: _handle_file_info(idx_manager, workdir, **kw),
     }
 
-    if skill_state is not None:
-        from doclens.skill_gate import KB_SKILL, gate_skill
-        handlers = {
-            name: gate_skill(skill_state, KB_SKILL, name, h)
-            for name, h in raw_handlers.items()
-        }
-    else:
-        handlers = raw_handlers
+    handlers = raw_handlers
 
     return [search_kb_schema, MANAGE_KB_TOOL, READ_DOCUMENT_TOOL, FILE_INFO_TOOL], handlers
 
@@ -251,52 +211,6 @@ def build_kb_tools(
 # ---------------------------------------------------------------------------
 # 搜索辅助函数
 # ---------------------------------------------------------------------------
-
-def _build_fts5_query(query_tokens: dict) -> str:
-    """将结构化查询转换为 FTS5 查询语法。
-
-    Args:
-        query_tokens: 结构化查询字典，支持以下类型：
-            - {"type": "and", "terms": [...], "exclude": [...]}  # 所有词都匹配，可选排除
-            - {"type": "or", "terms": [...]}  # 任一词匹配
-            - {"type": "not", "term": "word"}  # 排除该词（应用层处理，FTS5 不支持独立 NOT）
-            - {"type": "phrase", "text": "exact phrase"}  # 短语精确匹配
-
-    Returns:
-        FTS5 查询字符串。对于 type="not"，返回空字符串（由调用方在应用层处理）。
-    """
-    qtype = query_tokens.get("type", "").lower()
-
-    if qtype == "and":
-        terms = query_tokens.get("terms", [])
-        exclude = query_tokens.get("exclude", [])
-        # Use OR at FTS5 level (node-level AND is too strict; document-level AND
-        # is handled by post-processing / proximity scoring).
-        # Exclude uses FTS5 NOT operator (binary: positive NOT negative).
-        parts = []
-        if len(terms) > 1:
-            parts.append(" OR ".join(terms))
-        else:
-            parts.extend(terms)
-        for ex in exclude:
-            parts.append(f"NOT {ex}")
-        return " ".join(parts)
-
-    elif qtype == "or":
-        terms = query_tokens.get("terms", [])
-        return " OR ".join(terms)
-
-    elif qtype == "not":
-        # FTS5 不支持独立的一元 NOT 查询，由 _handle_search_kb_v2 在应用层处理
-        return ""
-
-    elif qtype == "phrase":
-        text = query_tokens.get("text", "")
-        return f'"{text}"'
-
-    else:
-        raise ValueError(f"Unknown query type: {qtype}")
-
 
 def _build_hierarchy_path(node: dict, doc_id: str, doc_nodes_map: dict[str, list[dict]], doc_title: str) -> str:
     """构建节点在文档树中的层级路径。通过遍历文档节点树找到目标节点的真实路径。"""
@@ -487,7 +401,7 @@ def _format_kb_results(
     shown = 0
     truncated_count = 0
 
-    for composite, (doc_id, node, matched, prox, fts) in display:
+    for composite, (doc_id, node, matched, prox, fts, matched_kws) in display:
         node_text = node.get("text", "") or ""
         path = path_map.get(doc_id) or (on_miss(doc_id) if on_miss else "")
         doc_title = doc_title_map.get(doc_id, doc_id)
@@ -503,6 +417,8 @@ def _format_kb_results(
         entry += f"    <doc>{doc_title}</doc>\n"
         entry += f"    <path>{path}</path>\n"
         entry += f"    <hierarchy>{hierarchy}</hierarchy>\n"
+        if matched_kws:
+            entry += "    <matched>" + " ".join(matched_kws) + "</matched>\n"
         entry += "  </meta>\n"
         if context:
             entry += f"  <content>\n{context}\n  </content>\n"
@@ -525,44 +441,6 @@ def _format_kb_results(
     return "\n".join(lines)
 
 
-def _format_ripgrep_results(
-    results: list[tuple],
-    query_words: list[str],
-    path_map: dict[str, str],
-    max_results: int,
-    max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
-    on_miss: Optional[Callable[[str], str]] = None,
-    context_before: int = 200,
-    context_after: int = 600,
-) -> str:
-    """格式化 ripgrep 降级搜索结果。on_miss 同 _format_kb_results。"""
-    display = results[:max_results]
-    lines = [f"搜索到 {len(results)} 个结果 (ripgrep 降级)："]
-
-    for i, (doc_id, node, matched, prox, fts) in enumerate(display, 1):
-        node_title = node.get("title", "")
-        node_text = node.get("text", "") or ""
-        path = path_map.get(doc_id) or (on_miss(doc_id) if on_miss else "")
-
-        context = _extract_keyword_window(
-            node_text, query_words, context_before, context_after,
-            max_chars=max_context_chars_per_result,
-        )
-
-        entry = (
-            f"\n=== 结果 {i} [匹配: {matched}/{len(query_words)} 词] ===\n"
-            f"路径: {path}\n"
-            f"标题: {node_title}\n"
-        )
-        if context:
-            entry += f"\n{context}\n"
-        lines.append(entry)
-
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# 索引管理辅助函数
 # ---------------------------------------------------------------------------
 
 def _kb_stats(idx_manager: IndexManager) -> str:
@@ -1116,7 +994,9 @@ def _handle_search_kb(
             "或确认知识库路径下有文件。"
         )
 
-    # 搜索目标过滤：目录前缀 / 文件精确匹配 → 命中的文档键集合
+    # 搜索目标过滤：目录前缀 / 文件精确匹配 → 命中的文档键集合。
+    # 范围限定在路由阶段 SQL 内生效（allowed_doc_ids）——范围外文档不进
+    # 候选池，不存在「先截后滤丢结果」问题，候选量放大兜底已随之退役。
     allowed: Optional[set] = None
     note = ""
     if paths:
@@ -1124,17 +1004,10 @@ def _handle_search_kb(
         note = format_missed_note(missed)
         if not allowed:
             return note + f"所有搜索目标均未命中已索引文档（query='{query}'），未执行搜索。"
-        # 截断在前过滤在后会丢结果：放大候选量，过滤后再截到 max_results
-        effective_limit = max(200, max_results * 4)
-    else:
-        effective_limit = max_results
 
-    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score
+    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score, _matched_keywords
 
-    nodes, docs = idx_manager.search(query, max_results=effective_limit)
-    if allowed is not None:
-        nodes = [n for n in nodes if n.get("doc_id", "") in allowed]
-        docs = [d for d in docs if d.get("doc_id", "") in allowed]
+    nodes, docs = idx_manager.search(query, max_results=max_results, allowed_doc_ids=allowed)
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
@@ -1147,13 +1020,11 @@ def _handle_search_kb(
             "若多角度检索均无结果，请如实告知用户未找到。"
         )
 
-    doc_nodes_map: dict[str, list[dict]] = {}
     doc_title_map: dict[str, str] = {}
     for doc in docs:
         doc_id = doc.get("doc_id", "")
         doc_name = doc.get("doc_name", doc_id)
         doc_title_map[doc_id] = doc_name
-        doc_nodes_map[doc_id] = list(doc.get("nodes", []))
 
     # 嵌套树映射：用于构建层级路径（搜索结果的 nodes 是扁平列表，缺少中间层级）。
     # 仅载结果文档的树结构（ADR-0019 惰性化），不物化全量 documents。
@@ -1162,51 +1033,38 @@ def _handle_search_kb(
     )
 
     logger.debug("max_nodes_per_doc=%d, FTS nodes=%d, docs=%d", idx_manager.max_nodes_per_doc, len(nodes), len(docs))
-    doc_best: dict[str, list[tuple]] = {}
-    doc_fts_best: dict[str, float] = {}
-    for node in nodes:
-        doc_id = node.get("doc_id", "")
-        score = node.get("score", 0.0)
-        if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
-            doc_fts_best[doc_id] = score
-        all_nodes = doc_nodes_map.get(doc_id, [])
-        node_scores: list[tuple] = []
-        for n in all_nodes:
+    # 评分融合（2026-10-19 改造）：候选直接取引擎管线已精排的 docs[].nodes
+    # （每文档 top-N，携带 score_nodes_batch 的节点级 BM25+传播分 + text），
+    # 宿主层只在其上做五因子综合分——不再对 doc_nodes_map 的全量节点做
+    # Python 子串重扫（双重打分消除）；fts_score 因子从「文档级 max」改为
+    # 「节点自身引擎分」（原实现误用文档级分数，节点间无区分度）。
+    all_candidates: list[tuple] = []
+    for doc in docs:
+        doc_id = doc.get("doc_id", "")
+        for n in doc.get("nodes", []):
             n_text = n.get("text", "") or ""
             cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
             if cnt > 0:
+                node_fts = n.get("score", 0.0)
                 composite, factors = compute_composite_score(
                     matched_count=cnt,
                     total_keywords=len(query_words),
                     doc_name=doc_id,
                     node_title=n.get("title", ""),
-                    fts_score=doc_fts_best.get(doc_id, 0.0),
+                    fts_score=node_fts,
                     query_words=query_words,
                     weights=idx_manager.scoring_weights,
                     proximity=proximity,
                 )
-                node_scores.append((n, cnt, proximity, composite, factors))
-        node_scores.sort(key=lambda x: -x[3])
-        top_n = node_scores[:idx_manager.max_nodes_per_doc]
-        if top_n:
-            doc_best[doc_id] = [
-                (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite, factors)
-                for n, cnt, prox, composite, factors in top_n
-            ]
+                all_candidates.append((doc_id, n, cnt, proximity, node_fts, composite, factors, _matched_keywords(n_text, query_words)))
     _debug_lines = []
-    for d, v in doc_best.items():
-        for n, cnt, prox, fts, composite, factors in v:
-            title = n.get("title", "")[:20]
-            _debug_lines.append(f"  {doc_title_map.get(d,'?')[:15]} > {title}: {composite:.0%} factors={factors}")
+    for did, n, cnt, prox, fts, composite, factors, hits in all_candidates:
+        title = n.get("title", "")[:20]
+        _debug_lines.append(f"  {doc_title_map.get(did,'?')[:15]} > {title}: {composite:.0%} factors={factors}")
     logger.debug("scoring detail:\n%s", "\n".join(_debug_lines))
-    logger.debug("doc_best counts: %s", [(doc_title_map.get(d,'?')[:15], len(v)) for d, v in doc_best.items()])
+    logger.debug("candidates: %s", [(doc_title_map.get(d,'?')[:15], sum(1 for x in all_candidates if x[0]==d)) for d in {x[0] for x in all_candidates}])
 
-    # Flatten all nodes across docs for filtering
-    all_candidates = []
-    for did, node_list in doc_best.items():
-        for bn, cnt, prox, fts, composite, _factors in node_list:
-            all_candidates.append((did, bn, cnt, prox, fts, composite))
-
+    # Flatten + 阈值过滤
     filtered = [
         item for item in all_candidates
         if item[5] >= idx_manager.min_score_threshold
@@ -1221,8 +1079,8 @@ def _handle_search_kb(
 
     scored_results = []
     for item in filtered:
-        did, display_node, matched, prox, fts, composite = item[:6]
-        scored_results.append((composite, (did, display_node, matched, prox, fts)))
+        did, display_node, matched, prox, fts, composite, factors, hits = item[:8]
+        scored_results.append((composite, (did, display_node, matched, prox, fts, hits)))
     scored_results.sort(key=lambda x: -x[0])
 
     # 评分阈值过滤：composite_score 来自 compute_composite_score，
@@ -1242,250 +1100,6 @@ def _handle_search_kb(
     )
 
 
-def _handle_search_kb_v2(
-    idx_manager: IndexManager,
-    workdir: Path,
-    *,
-    query_tokens: dict,
-    max_results: Optional[int] = None,
-) -> str:
-    """使用结构化查询搜索知识库。
-
-    Args:
-        query_tokens: 结构化查询字典
-            - {"type": "and", "terms": [...], "exclude": [...]}  # 所有词匹配，可选排除
-            - {"type": "or", "terms": [...]}  # 任一词匹配
-            - {"type": "not", "term": "word"}  # 排除该词
-            - {"type": "phrase", "text": "exact phrase"}  # 短语精确匹配
-        max_results: 最大结果数
-
-    Returns:
-        带层次结构的格式化搜索结果
-    """
-    qtype = query_tokens.get("type", "").lower()
-    if qtype not in ("and", "or", "not", "phrase"):
-        raise ValueError(f"Unknown query type: {qtype}")
-
-    if max_results is None:
-        max_results = idx_manager.max_results
-
-    if idx_manager.ts is None:
-        idx_manager.load_or_build_index()
-
-    if idx_manager.ts is None or not idx_manager.has_indexed_docs():
-        return (
-            "知识库索引未就绪或为空。\n"
-            "请用 manage_kb(action='reindex') 构建索引，"
-            "或确认知识库路径下有文件。"
-        )
-
-    from doclens.scoring import calc_proximity_score, compute_composite_score
-    from doclens import ripgrep as rg_module
-
-    # NOT 查询：FTS5 不支持独立一元 NOT，在应用层处理
-    if qtype == "not":
-        return _handle_not_query(idx_manager, query_tokens, max_results)
-
-    # 解析结构化查询为 FTS5 语法
-    try:
-        fts_query = _build_fts5_query(query_tokens)
-    except ValueError as e:
-        return f"无效的查询结构: {e}"
-
-    # 提取关键词用于 proximity 评分
-    query_words = _extract_keywords(query_tokens)
-
-    # 执行 FTS5 搜索
-    nodes, docs = idx_manager.search(fts_query, max_results=max_results, fts_expression=fts_query)
-
-    if not nodes:
-        # 降级到 ripgrep
-        filtered = rg_module.rg_fallback_search(
-            fts_query, idx_manager.path_map, {}, query_words,
-            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
-        )
-        if not filtered:
-            return (
-                f"未找到包含 '{fts_query}' 的结果。\n"
-                "建议换一个角度重试（同义词/上下位词/中英文），或用 kb_grep 补搜；"
-                "若多角度检索均无结果，请如实告知用户未找到。"
-            )
-        return _format_ripgrep_results(
-            filtered, query_words, idx_manager.path_map, max_results,
-            max_context_chars_per_result=idx_manager.max_context_chars_per_result,
-            on_miss=idx_manager.resolve_doc_path,
-            context_before=idx_manager.search_context_before,
-            context_after=idx_manager.search_context_after,
-        )
-
-    doc_nodes_map: dict[str, list[dict]] = {}
-    doc_title_map: dict[str, str] = {}
-    for doc in docs:
-        doc_id = doc.get("doc_id", "")
-        doc_name = doc.get("doc_name", doc_id)
-        doc_title_map[doc_id] = doc_name
-        doc_nodes_map[doc_id] = list(doc.get("nodes", []))
-
-    doc_tree_map: dict[str, list[dict]] = idx_manager.load_doc_structures(
-        [d.get("doc_id", "") for d in docs]
-    )
-
-    doc_best: dict[str, tuple] = {}
-    doc_fts_best: dict[str, float] = {}
-    for node in nodes:
-        doc_id = node.get("doc_id", "")
-        score = node.get("score", 0.0)
-        if doc_id not in doc_fts_best or score > doc_fts_best[doc_id]:
-            doc_fts_best[doc_id] = score
-        if doc_id in doc_best:
-            continue
-        all_nodes = doc_nodes_map.get(doc_id, [])
-        node_scores: list[tuple] = []
-        for n in all_nodes:
-            n_text = n.get("text", "") or ""
-            cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
-            if cnt > 0:
-                composite, _ = compute_composite_score(
-                    matched_count=cnt,
-                    total_keywords=len(query_words),
-                    doc_name=doc_id,
-                    node_title=n.get("title", ""),
-                    fts_score=doc_fts_best.get(doc_id, 0.0),
-                    query_words=query_words,
-                    weights=idx_manager.scoring_weights,
-                    proximity=proximity,
-                )
-                node_scores.append((n, cnt, proximity, composite))
-        node_scores.sort(key=lambda x: -x[3])
-        if node_scores:
-            n, cnt, prox, composite = node_scores[0]
-            doc_best[doc_id] = (n, cnt, prox, doc_fts_best.get(doc_id, 0.0), composite)
-
-    filtered = [
-        (did, bn, cnt, prox, fts, composite)
-        for did, (bn, cnt, prox, fts, composite) in doc_best.items()
-        if composite >= idx_manager.min_score_threshold
-    ]
-    if not filtered and query_words:
-        filtered = [
-            (did, bn, cnt, prox, fts, composite)
-            for did, (bn, cnt, prox, fts, composite) in doc_best.items()
-            if cnt >= 1
-        ]
-    if not filtered:
-        filtered = rg_module.rg_fallback_search(
-            fts_query, idx_manager.path_map, doc_nodes_map, query_words,
-            context_before=idx_manager.rg_context_before, context_after=idx_manager.rg_context_after,
-        )
-
-    if not filtered:
-        return f"未找到包含 '{fts_query}' 的结果。可换一个角度（同义词/上下位词/中英文）再试；若多角度检索均无结果，请如实告知用户未找到。"
-
-    scored_results = []
-    for item in filtered:
-        did, display_node, matched, prox, fts, composite = item[:6]
-        scored_results.append((composite, (did, display_node, matched, prox, fts)))
-    scored_results.sort(key=lambda x: -x[0])
-
-    # 评分阈值过滤：composite_score 来自 compute_composite_score，
-    # 3 词 query 命中 2 词的典型综合分约 0.5。把 CORTEX_MIN_SCORE_THRESHOLD
-    # 设成 0.5+ 会把大多数多关键词 query 的有效结果砍光——LLM 拿不到
-    # 足够候选做综合推理。推荐保持 0.0 或最多 0.2。
-    if idx_manager.min_score_threshold > 0.0:
-        scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
-
-    return _format_kb_results(
-        scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
-        max_context_chars_per_result=idx_manager.max_context_chars_per_result,
-        max_total_chars=idx_manager.max_total_chars,
-        on_miss=idx_manager.resolve_doc_path,
-        context_before=idx_manager.search_context_before,
-        context_after=idx_manager.search_context_after,
-    )
-
-def _handle_not_query(
-    idx_manager: IndexManager,
-    query_tokens: dict,
-    max_results: int,
-) -> str:
-    """处理 NOT 查询：返回不包含指定关键词的文档。
-
-    FTS5 不支持独立的一元 NOT 查询，因此通过正向搜索 + 结果取反实现。
-    """
-    term = query_tokens.get("term", "")
-    if not term:
-        return "NOT 查询需要提供 'term' 字段。"
-
-    # 正向搜索：找到包含该词的文档
-    positive_query = _build_fts5_query({"type": "and", "terms": [term]})
-    positive_nodes, positive_docs = idx_manager.search(
-        positive_query, max_results=None, fts_expression=positive_query,
-    )
-    exclude_paths: set[str] = set()
-    for d in positive_docs:
-        path = idx_manager.path_map.get(d.get("doc_id", ""))
-        if path:
-            exclude_paths.add(path)
-
-    # 同时用 ripgrep 补充（FTS5 可能漏掉一些）
-    from doclens import ripgrep as rg_module
-    rg_results = rg_module.rg_fallback_search(
-        positive_query, idx_manager.path_map, {}, [term],
-        context_before=0, context_after=0,
-    )
-    for item in (rg_results or []):
-        path = idx_manager.path_map.get(item[0], "")
-        if path:
-            exclude_paths.add(path)
-
-    # 取反：所有文档路径中排除包含该词的，按路径去重
-    all_paths = sorted(set(idx_manager.path_map.values()))
-    remaining_paths = [p for p in all_paths if p not in exclude_paths]
-
-    if not remaining_paths:
-        return f"所有文档都包含 '{term}'。"
-
-    lines = [f"搜索到 {len(remaining_paths)} 个结果（排除包含 '{term}' 的文档）："]
-    shown = 0
-    for path in remaining_paths:
-        if shown >= max_results:
-            remaining = len(remaining_paths) - shown
-            lines.append(f"\n（还有 {remaining} 个结果被截断，可用 max_results 参数获取更多）")
-            break
-        doc_name = Path(path).stem if path else path
-        lines.append(f"\n=== 结果 {shown + 1} ===\n文档: {doc_name}\n路径: {path}")
-        shown += 1
-
-    return "\n".join(lines)
-
-
-def _extract_keywords(query_tokens: dict) -> list[str]:
-    """从结构化查询中提取所有关键词用于 proximity 评分。
-
-    Args:
-        query_tokens: 结构化查询字典
-
-    Returns:
-        关键词列表
-    """
-    qtype = query_tokens.get("type", "").lower()
-    keywords = []
-
-    if qtype == "and":
-        keywords.extend(query_tokens.get("terms", []))
-        # exclude 关键词不参与 proximity 评分
-    elif qtype == "or":
-        keywords.extend(query_tokens.get("terms", []))
-    elif qtype == "not":
-        term = query_tokens.get("term", "")
-        if term:
-            keywords.append(term)
-    elif qtype == "phrase":
-        text = query_tokens.get("text", "")
-        if text:
-            keywords.append(text)
-
-    return keywords
 
 
 def _handle_manage_kb(

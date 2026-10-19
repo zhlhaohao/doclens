@@ -92,6 +92,7 @@ def route_documents_db(
     fts_expression: Optional[str] = None,
     regex: bool = False,
     db_path: Optional[str] = None,
+    allowed_doc_ids: Optional[set[str]] = None,
 ) -> list[str]:
     """DB-side document routing for lazy search: return top-k doc_ids via SQL only.
 
@@ -109,6 +110,12 @@ def route_documents_db(
       scan (full recall, approximate order — see
       ``FTS5Index.route_docs_by_pattern``); the loaded top-k get precise
       GrepFilter scoring inside ``search()``.
+
+    ``allowed_doc_ids``: host-side scope filter (e.g. a paths-restricted
+    search_kb call). Routing honours it **in SQL** — non-matching documents
+    never enter the candidate pool, so out-of-scope hits cannot crowd out
+    in-scope ones (the post-filter + candidate-inflation workaround this
+    replaces).
 
     Returns:
         ``(top_k_doc_ids, raw_scores)`` where *raw_scores* is the per-doc node
@@ -134,12 +141,16 @@ def route_documents_db(
     fts = get_fts_index(db_path=db_path)
 
     if query_mode.regex_pattern:
-        return fts.route_docs_by_pattern(query_mode.effective_query, top_k=top_k_docs), {}
+        routed = fts.route_docs_by_pattern(query_mode.effective_query, top_k=top_k_docs)
+        if allowed_doc_ids is not None:
+            routed = [did for did in routed if did in allowed_doc_ids]
+        return routed, {}
 
     scores = fts.score_nodes_batch(
         query_mode.effective_query,
         ancestor_decay=0.0,
         fts_expression=query_mode.fts_expression,
+        doc_ids=list(allowed_doc_ids) if allowed_doc_ids is not None else None,
     )
     doc_max_scores = [
         (did, max(nscores.values()))

@@ -68,6 +68,8 @@ class TreeSearchConfig:
     Priority: set_config() > env vars > defaults.
     """
     # Search
+    # 以下两个默认值供独立使用 treesearch 的场景（宿主 doclens 经
+    # set_config() 注入自己的值覆盖——见 doclens/index_manager._ts_config）
     max_nodes_per_doc: int = 5
     top_k_docs: int = 3
 

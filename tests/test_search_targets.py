@@ -152,11 +152,22 @@ class TestSearchKbHandlePaths:
             search_context_after=600,
             max_total_chars=8000,
             path_map=path_map,
-            search=lambda query, max_results: (
-                [{"doc_id": "d1", "score": 1.0}, {"doc_id": "d3", "score": 1.0}],
+            search=lambda query, max_results, allowed_doc_ids=None: (
+                [
+                    {"doc_id": "d1", "score": 1.0},
+                    {"doc_id": "d3", "score": 1.0},
+                ]
+                if allowed_doc_ids is None
+                else [{"doc_id": d, "score": 1.0} for d in ("d1", "d3") if d in allowed_doc_ids],
                 [
                     {"doc_id": "d1", "doc_name": "a", "nodes": [{"title": "t", "text": "量子 计算 内容"}]},
                     {"doc_id": "d3", "doc_name": "c", "nodes": [{"title": "t", "text": "量子 计算 内容"}]},
+                ]
+                if allowed_doc_ids is None
+                else [
+                    {"doc_id": d, "doc_name": n, "nodes": [{"title": "t", "text": "量子 计算 内容"}]}
+                    for d, n in (("d1", "a"), ("d3", "c"))
+                    if d in allowed_doc_ids
                 ],
             ),
             resolve_doc_path=lambda d: d,

@@ -24,15 +24,11 @@ def calc_proximity_score(text, keywords, max_span=20):
         (matched_count, proximity_score) - 匹配词数和紧邻分数
             proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
     """
-    if not text or not keywords:
-        return 0, 0
-
-    text_lower = text.lower()
+    matched_kws = _matched_keywords(text, keywords)
     positions = []
 
-    for kw in keywords:
-        kw_lower = kw.lower()
-        idx = text_lower.find(kw_lower)
+    for kw in matched_kws:
+        idx = text.lower().find(kw.lower())
         if idx >= 0:
             positions.append(idx)
 
@@ -47,6 +43,19 @@ def calc_proximity_score(text, keywords, max_span=20):
         return matched, 2
     # 部分关键词匹配 = 中等分数（按匹配比例）
     return matched, 1
+
+
+def _matched_keywords(text, keywords):
+    """返回在 text 中实际命中的关键词列表（大小写不敏感，保持原词形）。
+
+    供输出层展示"哪几个查询词打中了本节点"，避免 LLM 在正文中自行猜
+    （判断缺词是否为同义词未覆盖时尤其有用）。与 calc_proximity_score
+    同口径（子串包含，不做分词对齐）。
+    """
+    if not text or not keywords:
+        return []
+    text_lower = text.lower()
+    return [kw for kw in keywords if kw and kw.lower() in text_lower]
 
 
 def compute_composite_score(matched_count, total_keywords, doc_name, node_title, fts_score, query_words, weights, proximity=0):

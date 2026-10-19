@@ -1425,7 +1425,7 @@ class FTS5Index:
         weight_args = f"{w['title']}, {w['summary']}, {w['body']}, {w['code_blocks']}, {w['front_matter']}"
 
         # Single SQL query across all requested doc_ids (or entire index)
-        if doc_ids:
+        if doc_ids is not None:
             placeholders = ",".join("?" * len(doc_ids))
             sql = f"""
                 SELECT f.node_id, f.doc_id,
@@ -1437,6 +1437,11 @@ class FTS5Index:
                 LIMIT 5000
             """
             params = (match_expr, *doc_ids)
+            if not doc_ids:
+                # Empty scope: no document can match — return early
+                # (an IN () clause is a SQL syntax error; None vs [] is
+                # meaningful here: None = no filter, [] = match nothing).
+                return {}
         else:
             sql = f"""
                 SELECT f.node_id, f.doc_id,
