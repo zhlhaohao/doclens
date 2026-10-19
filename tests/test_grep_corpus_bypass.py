@@ -118,7 +118,7 @@ class TestRgFallbackWithPreHits:
         assert len(results) == 1
         doc_id, node, matched, _, _ = results[0]
         assert doc_id == "dsid_x"  # normpath 反查命中 doc_id
-        assert node["line_start"] == 2
+        assert node["line_start"] == 1  # 行窗起始行（±1 行含 l1）；新语义=text 首行行号而非首个命中行
         assert "needle here" in node["text"]
         assert matched == 1
 
@@ -151,7 +151,7 @@ class TestRgFallbackWithPreHits:
         )
         assert len(results) == 1
         node = results[0][1]
-        assert node["line_start"] == 31
+        assert node["line_start"] == 1  # 前窗按词覆盖文件头；新语义=词窗起始行而非首个命中行
         assert node["text"].startswith("line 0")  # 前窗按词覆盖文件头
         assert "NEEDLE" in node["text"]
         assert node["text"].rstrip().endswith("padding")  # 后窗到文件尾
