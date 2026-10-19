@@ -84,7 +84,8 @@ def _scored_to_group_items(
                 items.append((path, 0.5, rows))  # 对齐 CLI 固定分
 
     elif result.source == "ripgrep":
-        for doc_id, node, _matched, _prox, _fts in result.results:
+        # rg_fallback_search 结果为 6 元（尾元=matched 词列表）；web_v2 高亮走 query_words 通道
+        for doc_id, node, _matched, _prox, _fts, _matched_words in result.results:
             path = resolve_preview_path(doc_id, path_map, search_path)
             rows = extract_match_rows(
                 node.get("text", "") or "", node.get("line_start"), matchers,

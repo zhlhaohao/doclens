@@ -146,8 +146,8 @@ def _select_keyword_lines(
 
 
 def _format_agent_output(
-    content_results: list[tuple[str, dict, int, int, float]],
-    path_results: list[tuple[str, dict, int, int, float]],
+    content_results: list[tuple[str, dict, int, int, float, list]],
+    path_results: list[tuple[str, dict, int, int, float, list]],
     path_map: dict[str, str],
     total_terms: int,
     query_words: list[str],
@@ -236,7 +236,7 @@ def _format_agent_output(
             shown += 1
 
     if path_results:
-        path_strs = [_resolve(doc_id) for doc_id, _, _, _, _ in path_results]
+        path_strs = [_resolve(doc_id) for doc_id, _, _, _, _, _ in path_results]
         output_lines.append(f"\nPaths matched: {', '.join(path_strs)}")
 
     return "\n\n".join(output_lines)

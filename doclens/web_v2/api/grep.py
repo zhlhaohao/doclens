@@ -36,7 +36,8 @@ def _do_grep(idx: IndexManager, pattern: str, max_results: int):
     matchers = build_regex_matchers(result.query_words)
 
     items: list[tuple[str, float, list]] = []
-    for doc_id, node, matched, _prox, _fts in result.content_results:
+    # 元组为 6 元（尾元=matched 词列表，kb 链路用）；web_v2 高亮走 query_words 通道，不解包内容
+    for doc_id, node, matched, _prox, _fts, _matched_words in result.content_results:
         # 未索引文件的合成节点自带 source_path（伪 doc_id 在 path_map 中查不到）
         source_path = node.get("source_path") or doc_id
         path = resolve_preview_path(source_path, idx.path_map, idx.search_path)
@@ -57,7 +58,7 @@ def _do_grep(idx: IndexManager, pattern: str, max_results: int):
             items.append((path, matched / total_terms, rows))
 
     path_items: list[tuple[str, float, list]] = []
-    for doc_id, node, matched, _prox, _fts in result.path_results:
+    for doc_id, node, matched, _prox, _fts, _matched_words in result.path_results:
         path = resolve_preview_path(doc_id, idx.path_map, idx.search_path)
         row = [MatchItem(line=None, text=f"路径匹配: {node.get('title', '')}", spans=[])]
         path_items.append((path, 0.0, row))

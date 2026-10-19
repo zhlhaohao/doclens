@@ -385,7 +385,7 @@ def search_paths_by_regex(
         max_results: 最大返回结果数
 
     Returns:
-        [(doc_id, node_dict, matched_count, proximity, fts_score)]
+        [(doc_id, node_dict, matched_count, proximity, fts_score, matched_words)]
         node_dict 包含 'title'（路径）和 'text'（路径）字段
     """
     results = []
