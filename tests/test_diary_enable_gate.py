@@ -97,6 +97,7 @@ class TestStatusDiaryEnabled:
                 last_failed_count=0,
                 file_stats=lambda: (0, {}),
                 vision_status=lambda: {},
+                building=False,  # ADR-0043 index_building 字段的桩
             )
 
         # 无目录 → False
