@@ -25,11 +25,30 @@ icon: alert-triangle
 - **机械扫描恒做全仓**：可 grep 的结构性检查成本近零且问题天然跨模块散布。至少含：跨文件私有成员 import、行数 top 文件（God Object 候选）、同名/同值常量多处定义（Duplicated Source of Truth 候选）、`as any`/裸 fetch 密度。仓库已有架构守卫测试（如 test_architecture.py）必跑——它是既有红线，不是本技能产物。
 - 仓库自带的纪律文档（CLAUDE.md 边界规则、DESIGN.md 标尺等）是**附加判据**：违反仓库纪律 = 独立发现，即使形态本身经典。
 
-### 第 2 步：判据——形态学透镜（不是清单）
+### 第 2 步：判据——技术栈定制透镜（先检索后使用，分步装载）
 
-透镜来自业界公认目录（Wikipedia《List of software anti-patterns》、Fowler《Refactoring》code smells / refactoring.guru、microservices.io、Node.js 官方指南等；检索关键词见台账"判据声明"节）。它们是**透镜与归类词汇表**：诊断必须开放式——从项目实际架构推理"该形态在本仓的具体表现"，禁止拿形态名当 checklist 勾选。每个形态附检测线索，但发现要落到证据（文件:行号 + 为什么在此架构中构成问题）。
+判据分两部分，**装载顺序与节奏有硬约束**：
 
-**系统架构层**
+**(a) 技术栈专属清单——运行时联网检索生成（主判据）**
+
+反模式清单必须针对项目实际技术栈。流程：
+
+1. **探测技术栈**（读事实，不问用户）：后端框架/语言/DB（pyproject/requirements/go.mod…）、前端框架/构建链（package.json）。本仓事实：FastAPI + Pydantic v2 + uvicorn + SQLite (FTS5)；Lit + Vite + marked/pdf.js。
+2. **联网检索**每栈的反模式清单（检索词 = `<技术> common anti-patterns/mistakes/best practices`；优先官方文档与高星仓库，如 FastAPI→zhanymkanov/fastapi-best-practices、SQLite→官方 PRAGMA 指南与 WAL 陷阱）。本仓检索目标示例：
+   - 后端：Blocking the Event Loop（async def 内同步 I/O）、endpoint 调 endpoint（应抽 service 层）、Pydantic 双重序列化/response_model 误用、BackgroundTasks 当任务队列（进程死即丢）、sync SDK 未进 threadpool、FTS5 无 rank 索引慢查询、SQLite 缺 WAL/PRAGMA、每请求开关连接。
+   - 前端：Lit 受控属性 vs 内部 @state 双真相源、ReactiveController 挂载/卸载不对称、shadow DOM 穿透打洞（as any/element.parentNode）、模板内重计算未缓存。
+3. **判据声明入台账**：检索到的清单条目 + 来源 URL——审计可追溯判据出处。
+
+**(b) 通用形态学透镜——兜底词汇表（次判据）**
+
+跨技术栈的经典形态（Wikipedia《List of software anti-patterns》/ Fowler《Refactoring》/ microservices.io），用于归类 (a) 未覆盖的发现。**不是 checklist**：诊断开放式，每条发现必须绑定本仓证据（文件:行号 + 为什么在此架构中构成问题）。
+
+**装载节奏（硬约束——防一次性灌入大量清单导致套模板）**：
+- **先后端，再前端**：后端域分析完成、候选观察收齐后才启动前端域；两者判据分批装载，不混装。
+- **每批装载后立即用**：清单装载与使用同批——子代理 prompt 只附"本批正在用的形态"，不提前塞全量。
+- 数据库层判据随后端批（同属服务端域）。
+
+#### 通用透镜·系统架构层
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
@@ -40,7 +59,7 @@ icon: alert-triangle
 | Abstraction Inversion | 高层被迫重新实现/内联底层细节 | 高层代码复制底层逻辑绕过接口 |
 | Inner-Platform Effect | 系统复刻了它运行平台的既有能力 | 自研配置系统/查询语言/调度器，重造平台轮子 |
 
-**后端模块层**
+#### 通用透镜·后端模块层
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
@@ -55,7 +74,7 @@ icon: alert-triangle
 | Magic Numbers / Magic Strings | 未命名的裸字面量散布逻辑含义 | 同一数字/字符串多处硬编码；Soft Code（过度配置化）是其反面 |
 | Lava Flow | 死代码无人敢删，凝固成"历史的一部分" | "不知道为什么在这但删了怕炸"；无测试覆盖的遗留块 |
 
-**前端模块层**
+#### 通用透镜·前端模块层
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
@@ -66,7 +85,7 @@ icon: alert-triangle
 | Yo-yo Problem | 继承/组合层级过深，理解一处要上下横跳 N 层 | 追一个调用穿过 >3 层抽象 |
 | Hard Code | 该外置的环境/配置值写死在源码 | URL/路径/魔法阈值散布；与配置体系脱节 |
 
-**组件层**
+#### 通用透镜·组件层
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
@@ -76,7 +95,7 @@ icon: alert-triangle
 | Dead Props / Dead Styles | 声明存在但无任何调用方传值/无匹配元素 | prop 链路三层断中段；CSS 选择器无匹配 |
 | Poltergeist | 仅为传一手而存在的短命中间组件 | 创建→转发→销毁，无自身逻辑 |
 
-**功能层**
+#### 通用透镜·功能层
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
@@ -88,15 +107,16 @@ icon: alert-triangle
 
 **新型态**：项目特有、上表无法归类的形态，在台账单列一节描述（形态名自拟 + 定义 + 证据）——这是开放式诊断的出口，也是下次技能迭代的候补透镜。透镜表本身可随技能版本演进：新形态被多次实证后可晋升入表（来源须标注）。
 
-### 第 3 步：探索分析（复用 repo-wiki 方法论）
+### 第 3 步：探索分析（复用 repo-wiki 方法论，分域执行）
 
+- **顺序：先后端域，再前端域**——后端域（含数据库层）分析完成、候选观察收齐后才启动前端域；两域判据分批装载不混装。
 - 两遍读法：先 grep 骨架（签名/docstring），仅枢纽文件全文精读；
 - 分组派发子代理：每组 ≤30 文件、精确清单、每批 ≤6 并发（防巨请求挂死与限流雪崩，教训见 repo-wiki）；
 - 交叉核实：接口咬合（前端调用=后端路由；事件发布=订阅）、文档-代码冲突以代码为准并标注；
 - 审计对象是**证据链**：每条发现必须有文件:行号 + 一句"为什么在此架构中是问题"——没有证据的直觉不进台账。
 
 **子代理 prompt 定制要点**（方法论框架借 repo-wiki，但返回物按审计改造——勿照抄 repo-wiki 的模块清单笔记格式）：
-- 附该组精确文件清单 + 第 2 步形态透镜表中与本组相关的形态及检测线索；
+- 附该组精确文件清单 + **本批正在用的判据**（该域技术栈清单条目 + 相关通用形态；只附当前批的，不提前塞全量）；
 - 要求返回物三节：① **候选观察**——每条 = 形态归类 + `文件:行号` 证据 + 一句"为什么构成问题"；② **灰色项**——怀疑但证据不足的（如"疑似死代码，未找到调用方但搜索面有限"），主代理负责核实或降级丢弃；③ **反证**——看起来像反模式但实为有意设计的（配文档/注释出处），供 P4 记录项；
 - 明确禁止：无证据的泛泛评价（"该模块耦合度较高"）、给修复方案（定级与方案是主代理的活）。
 
@@ -118,10 +138,10 @@ icon: alert-triangle
 > 审计日期：YYYY-MM-DD｜点名范围：<...>｜机械扫描：全仓（<扫描项清单>）
 
 ## 一、判据声明
-（本次使用的形态透镜及来源：Wikipedia《List of software anti-patterns》/
-Fowler《Refactoring》code smells（refactoring.guru）/ microservices.io /
-Node.js 官方 "Don't Block the Event Loop" 等业界目录 + 仓库纪律文档
-（CLAUDE.md/DESIGN.md）作为附加判据的说明）
+（本次技术栈定制清单：后端 <FastAPI/Pydantic/SQLite… 检索到的条目 + 来源 URL>；
+前端 <Lit/… 条目 + 来源 URL>。附通用透镜来源：Wikipedia《List of software
+anti-patterns》/ Fowler《Refactoring》（refactoring.guru）/ microservices.io +
+仓库纪律文档（CLAUDE.md/DESIGN.md）作为附加判据）
 
 ## 二、发现条目
 ### AP-1 <标题> [P1] [status: pending]
@@ -154,6 +174,8 @@ status 取值：`pending` / `done(<commit>)` / `discovered-during-fix`（修复�
 ## 失败模式（流程约束的成因）
 
 - **套清单式审计**：拿形态名当 checklist 逐项勾选，产出放之四海皆准的空话——每条发现必须绑定本仓证据链，无证据不入账。
+- **判据脱锚**：不探测技术栈就用通用透镜审——透镜必须针对项目技术栈定制（先检索栈专属清单，通用形态只作兜底）。
+- **一次性灌清单**：全量反模式清单塞进单次分析导致套模板——分步装载（先后端再前端）、每批即装即用是硬约束。
 - **巨请求/限流**（repo-wiki 实测教训）：单子代理整域通读挂死、同秒并发触发 429——分组、两遍读法、分批派发是硬约束。
 - **审计越权**：审计态改了任何源码文件即违规（台账是唯一产出）；执行态无令先动同样违规。
 - **台账失联**：修复后不更新状态 → 台账与实际脱节，编号引用失效——闭环必含状态列更新。
