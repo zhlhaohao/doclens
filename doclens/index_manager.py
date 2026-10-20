@@ -15,6 +15,7 @@ _build_tls.owner = None
 from treesearch import TreeSearch, set_config, TreeSearchConfig
 from treesearch.parsers.registry import SOURCE_TYPE_MAP
 from doclens.config import CortexConfig, data_dirname
+from doclens import index_probe
 
 # 支持的文件类型：直接从 treesearch parser registry 获取，保持单一数据源
 SUPPORTED_FORMATS = {ext: (source_type, None) for ext, source_type in SOURCE_TYPE_MAP.items()}
@@ -119,6 +120,10 @@ class IndexManager:
         return self._startup_audit_done
 
     # --- Config-backed properties (hot-reloadable) ---
+    # 消费矩阵见 AP-9 修复记录：仅保留有外部消费方的转发；_ts_config 专用
+    # 的 7 个（无外部消费）已删，改为方法内直读 self._config.<name>。
+    # grep_score_threshold / grep_max_results 经 ripgrep.py 的 getattr(idx, ...)
+    # 动态消费（模块属性扫描不显式），必须保留。
 
     @property
     def max_results(self) -> int:
@@ -127,10 +132,6 @@ class IndexManager:
     @property
     def max_nodes_per_doc(self) -> int:
         return self._config.max_nodes_per_doc
-
-    @property
-    def top_k_docs(self) -> int:
-        return self._config.top_k_docs
 
     @property
     def max_span(self) -> int:
@@ -143,30 +144,6 @@ class IndexManager:
     @property
     def min_score_threshold(self) -> float:
         return self._config.min_score_threshold
-
-    @property
-    def cjk_tokenizer(self) -> str:
-        return self._config.cjk_tokenizer
-
-    @property
-    def max_index_fail_count(self) -> int:
-        return self._config.max_index_fail_count
-
-    @property
-    def enable_shadow_md(self) -> bool:
-        return self._config.treesearch_enable_shadow_md
-
-    @property
-    def xlsx_max_rows_per_sheet(self) -> int:
-        return self._config.treesearch_xlsx_max_rows_per_sheet
-
-    @property
-    def xlsx_max_consecutive_empty_rows(self) -> int:
-        return self._config.treesearch_xlsx_max_consecutive_empty_rows
-
-    @property
-    def allowed_source_types(self) -> list:
-        return self._config.allowed_source_types
 
     @property
     def title_width(self) -> int:
@@ -217,20 +194,20 @@ class IndexManager:
         return self._config.read_doc_show_toc
 
     @property
-    def rg_context_before(self) -> int:
-        return self._config.rg_context_before
-
-    @property
-    def rg_context_after(self) -> int:
-        return self._config.rg_context_after
-
-    @property
     def grep_score_threshold(self) -> float:
         return self._config.grep_score_threshold
 
     @property
     def grep_max_results(self) -> int:
         return self._config.grep_max_results
+
+    @property
+    def rg_context_before(self) -> int:
+        return self._config.rg_context_before
+
+    @property
+    def rg_context_after(self) -> int:
+        return self._config.rg_context_after
 
     @property
     def max_dir_files(self) -> int:
@@ -250,169 +227,65 @@ class IndexManager:
         2026-10-19 前这三者经 search() 调用参数传入，与 _ts_config 白名单
         并存，读者无法判断哪边生效）。
         """
+        c = self._config
         return TreeSearchConfig(
-            cjk_tokenizer=self.cjk_tokenizer,
-            max_index_fail_count=self.max_index_fail_count,
-            enable_shadow_md=self.enable_shadow_md,
-            xlsx_max_rows_per_sheet=self.xlsx_max_rows_per_sheet,
-            xlsx_max_consecutive_empty_rows=self.xlsx_max_consecutive_empty_rows,
-            allowed_source_types=self.allowed_source_types,
-            max_dir_files=self.max_dir_files,
-            index_chunk_size=self.index_chunk_size,
-            max_nodes_per_doc=self.max_nodes_per_doc,
-            top_k_docs=self.top_k_docs,
+            cjk_tokenizer=c.cjk_tokenizer,
+            max_index_fail_count=c.max_index_fail_count,
+            enable_shadow_md=c.treesearch_enable_shadow_md,
+            xlsx_max_rows_per_sheet=c.treesearch_xlsx_max_rows_per_sheet,
+            xlsx_max_consecutive_empty_rows=c.treesearch_xlsx_max_consecutive_empty_rows,
+            allowed_source_types=c.allowed_source_types,
+            max_dir_files=c.treesearch_max_dir_files,
+            index_chunk_size=c.treesearch_index_chunk_size,
+            max_nodes_per_doc=c.max_nodes_per_doc,
+            top_k_docs=c.top_k_docs,
         )
 
     def indexed_doc_count(self) -> int:
-        """索引文档总数（DB COUNT，不物化 documents——ADR-0018）。"""
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return int(fts.get_stats().get("document_count", 0))
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("indexed_doc_count failed: %s", e)
-            return 0
+        """索引文档总数（DB COUNT，转发 index_probe——AP-9 拆出）。"""
+        return index_probe.indexed_doc_count(self.index_path)
 
     def file_stats(self) -> tuple[int, dict[str, int]]:
-        """(总字节数, 扩展名分布)——供 /api/status，带缓存。
+        """(总字节数, 扩展名分布)——供 /api/status，实例级缓存。
 
         50 万语料全量 stat 要 90s+；缓存键 = DB 文档计数（COUNT，毫秒级），
         计数变化（索引增删）才重算。同数替换（改内容不改文件数）下显示值
-        可能略滞后，status 展示可接受。
+        可能略滞后，status 展示可接受。统计本体在 index_probe（AP-9）。
         """
         n = self.indexed_doc_count()
         if self._file_stats_cache and self._file_stats_cache[0] == n:
             return self._file_stats_cache[1]
-        total = 0
-        ext_counts: dict[str, int] = {}
-        for src in self.indexed_source_paths():
-            if not src:
-                continue
-            try:
-                total += os.path.getsize(src)
-            except OSError:
-                pass
-            ext = os.path.splitext(src)[1].lower()
-            if ext:
-                ext_counts[ext] = ext_counts.get(ext, 0) + 1
+        (total, ext_counts), _ = index_probe.file_stats(self.index_path)
         self._file_stats_cache = (n, (total, ext_counts))
         return total, ext_counts
 
     def indexed_source_paths(self) -> list[str]:
-        """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。
-
-        ⚠️ 全表返回（O(库内文档数)）——50 万级语料上单次调用秒级、每次
-        请求调用会拖垮 API。目录页/单文件场景请用 indexed_paths_under()。
-        仅保留给 /files/documents（自身就是全量语义）与低频管理场景。
-        """
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return sorted(set(fts.load_doc_id_source_paths().values()))
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("indexed_source_paths failed: %s", e)
-            return []
+        """已索引文档的 source_path 列表（转发 index_probe，成本口径见该模块）。"""
+        return index_probe.indexed_source_paths(self.index_path)
 
     def indexed_paths_under(self, dir_abs_path: str) -> set[str]:
-        """某目录（含子目录）下已索引文档的绝对路径集合（索引化前缀查询）。
-
-        LIKE 'dir%' 走 idx_documents_source_path 索引：50 万文档库上
-        DB 查询 ~0.4s，但返回集合仍达全子树规模——目录页请改用
-        is_path_indexed()（逐条目常数时间探测，不在 Python 侧物化集合）。
-        """
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return fts.search_source_paths_under(dir_abs_path)
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("indexed_paths_under failed: %s", e)
-            return set()
+        """某目录（含子目录）下已索引文档的绝对路径集合（转发 index_probe）。"""
+        return index_probe.indexed_paths_under(self.index_path, dir_abs_path)
 
     def is_path_indexed(self, abs_path: str, is_dir: bool = False) -> bool:
-        """单个路径是否已索引（索引化探测）。
-
-        目录：前缀 EXISTS（子树里有任一文档即 True）；文件：精确匹配。
-        ⚠️ 每次调用开关一个 DB 连接 + 一次索引范围扫（9.4GB 库上目录前缀
-        ~0.1s）——目录页批量判定请用 indexed_children_of（单查合并）。
-        """
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return fts.has_docs_under(abs_path) if is_dir else fts.has_doc_at(abs_path)
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("is_path_indexed(%s) failed: %s", abs_path, e)
-            return False
+        """单个路径是否已索引（转发 index_probe；目录页批量请用 indexed_children_of）。"""
+        return index_probe.is_path_indexed(self.index_path, abs_path, is_dir)
 
     def indexed_children_of(self, dir_abs_path: str) -> set[str]:
-        """目录的直接子项中含已索引文档的子项名集合（单次前缀查询）。
-
-        目录页一次调用替代逐条目探测：81 条目 27s → 0.3s（50 万文档库）。
-        子项名不含路径；文件 = 直接子文件已索引，子目录 = 其子树含文档。
-        """
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return fts.indexed_children_of(dir_abs_path)
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("indexed_children_of(%s) failed: %s", dir_abs_path, e)
-            return set()
+        """目录直接子项中含已索引文档的子项名集合（转发 index_probe）。"""
+        return index_probe.indexed_children_of(self.index_path, dir_abs_path)
 
     def ghost_children_of(self, dir_abs_path: str) -> set[str]:
-        """目录的直接子项中「仅登记」（ghost 行，ADR-0034）的子项名集合。
-
-        与 indexed_children_of 同构的单次前缀查询；三态徽标的数据源之一。
-        """
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return fts.ghost_children_of(dir_abs_path)
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("ghost_children_of(%s) failed: %s", dir_abs_path, e)
-            return set()
+        """目录直接子项中「仅登记」ghost 行的子项名集合（转发 index_probe）。"""
+        return index_probe.ghost_children_of(self.index_path, dir_abs_path)
 
     def is_path_registered(self, abs_path: str) -> bool:
-        """单个文件路径是否为「仅登记」ghost 行（未索引但已收录元数据）。"""
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return fts.is_ghost_at(abs_path)
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("is_path_registered(%s) failed: %s", abs_path, e)
-            return False
+        """单个文件路径是否为「仅登记」ghost 行（转发 index_probe）。"""
+        return index_probe.is_path_registered(self.index_path, abs_path)
 
     def registered_doc_count(self) -> int:
-        """「仅登记」ghost 行总数（与已索引文档分开报，ADR-0034）。"""
-        try:
-            from treesearch.fts import FTS5Index
-            fts = FTS5Index(db_path=self.index_path)
-            try:
-                return int(fts.get_stats().get("ghost_count", 0))
-            finally:
-                fts.close()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("registered_doc_count failed: %s", e)
-            return 0
+        """「仅登记」ghost 行总数（转发 index_probe）。"""
+        return index_probe.registered_doc_count(self.index_path)
 
     @property
     def scoring_weights(self) -> dict:
@@ -528,9 +401,9 @@ class IndexManager:
                 supported_exts = set(SUPPORTED_FORMATS.keys())
 
                 # Apply allowed_source_types filter to extension check
-                if self.allowed_source_types:
+                if self._config.allowed_source_types:
                     from treesearch.pathutil import get_allowed_extensions_for_source_types
-                    type_exts = get_allowed_extensions_for_source_types(self.allowed_source_types)
+                    type_exts = get_allowed_extensions_for_source_types(self._config.allowed_source_types)
                     if type_exts is not None:
                         supported_exts = supported_exts & type_exts
 

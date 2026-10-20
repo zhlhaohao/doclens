@@ -134,12 +134,22 @@
 - **修复方案**：① `SessionsStore` 提供 `transaction()` 上下文（单连接、`BEGIN IMMEDIATE`），批量落库走它；② 连接做进程级复用（`check_same_thread=False` + 现有 `RLock`）或至少 `synchronous=NORMAL`；③ `append_items` 批量方法收敛 seq 分配。
 - **回归验证**：`tests/test_sessions_store_history.py tests/test_chat_disconnect.py tests/test_session_detail_window.py`。
 
-### AP-9 `index_manager` 968 行：检索门面 + 索引生命周期 + 后台线程 + 配置代理四变化轴 [P2] [status: pending]
+### AP-9 `index_manager` 968 行：检索门面 + 索引生命周期 + 后台线程 + 配置代理四变化轴 [P2] [status: done]
 - **形态**：God Object / Divergent Change
 - **证据**：`doclens/index_manager.py:41-968`；约 35 个纯转发 `@property`（`:124-243`）；DB 探测方法群 `:266-412`；后台线程 + Timer + EventBus `:587-720`；建库/增量审计 `:752-838`；检索门面 `:916-968`。
 - **风险**：任何检索参数、索引生命周期或后台调度改动都落在同一文件；单测只能整体构造。
-- **修复方案**：先拆"检索门面（对外 API）"与"索引维护（build/audit/threads）"两角色，DB 探测方法群独立为 `index_probe.py`（同包公共函数），`IndexManager` 只保留编排。
-- **回归验证**：`tests/test_lazy_search.py tests/test_index_chunking.py tests/test_change_detection.py tests/test_architecture.py`。
+- **实际修复（2026-10-20）**：① DB 探测 9 方法抽为 `doclens/index_probe.py`（无状态模块级函数，收 index_path 参数，open→query→close 生命周期与异常语义逐点保留；
+  `file_stats` 统计本体同去，实例缓存留在门面）——`IndexManager` 上 9 方法变纯委托（对外 API 不变，files/status/CLI 零改动），单测可脱离宿主类构造。
+  ② 配置代理收缩：建**消费矩阵**（正则扫 `idx.<prop>` / `idx_manager.<prop>`）后删 7 个零外部消费的转发（top_k_docs/cjk_tokenizer/max_index_fail_count/enable_shadow_md/
+  xlsx×2/allowed_source_types——`_ts_config` 专用），改为方法内直读 `self._config.<name>`；`max_dir_files`/`index_chunk_size` 因 `has_changed_files` 与 tests 消费保留。
+  index_manager.py 985 → 847 行。
+- **踩坑记录（留档）**：第一版把 `grep_score_threshold`/`grep_max_results` 也删了——属性扫描漏掉 `ripgrep.py:797/806` 的 `getattr(idx, "grep_max_results", max_results)`
+  **动态消费**（getattr 与属性名同字符串，`idx.prop` 正则扫不到）：MISSING 回落 max_results=5 使 grep 结果被截到 5 条，`test_b6_grep_pagination` 红灯后二分定位（stash 对照复现 36 vs 5）。
+  两属性已恢复；教训：消费矩阵必须含 `getattr` 字符串模式。
+- **未做**：`trigger_background_reindex` 的线程/Timer/EventBus 编排闭包群（约 130 行）未拆——它是 AP-11 修复刚触碰过的区域，且闭包间共享 `_bg_work` 局部态，
+  拆离需先建回调上下文对象，属独立条目；「35 个 property 全砍」也未做——保留的 22 个均有真实外部消费方（tests/tui/cli/kb_tools/scoring_pipeline），砍它们要改 25+ 文件，收益不抵风险。
+- **回归验证**：`tests/test_web_search_api_matrix.py tests/test_lazy_search.py tests/test_max_dir_files.py tests/test_index_chunking.py tests/test_grep_regex_snippet.py
+  tests/test_change_detection.py tests/test_architecture.py tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_search_preset_params.py` → 237 passed。
 
 ### AP-10 `index_manager` 三套 DB 连接生命周期并存 [P3] [status: pending]
 - **形态**：Divergent Change（同类语义多种实现）
