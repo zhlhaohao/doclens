@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 
 from doclens.diary import diary_dir
+from doclens.file_watcher import FileWatcher
 from doclens.index_manager import IndexManager
 from doclens.web_v2 import deps
 from doclens.web_v2.deps import get_config, get_index_manager, get_watcher, sync_snapshot
@@ -41,14 +42,9 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
         "llm_vision": bool(getattr(cfg, "llm_vision", False)),
         "watcher": {
             "enabled": cfg.watch_enabled,
-            **(watcher_obj.status() if watcher_obj is not None else {
-                "running": False,
-                "reindexing": False,
-                "changed_count": 0,
-                "last_reindex_at": None,
-                "last_doc_count": None,
-                "last_success": None,
-            }),
+            # watcher 未启动时回退到 FileWatcher.DEFAULT_STATUS——单一真源，
+            # 不在此处手抄字面量（避免 status() 加字段时此兜底静默漂移）
+            **(watcher_obj.status() if watcher_obj is not None else dict(FileWatcher.DEFAULT_STATUS)),
         },
         # Git 同步快照（ADR-0006）；None = 同步循环未注册（配置关闭）
         "sync": sync_snapshot(),

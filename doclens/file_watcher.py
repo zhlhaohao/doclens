@@ -4,6 +4,7 @@ import os
 import time
 import threading
 import logging
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +210,18 @@ class FileWatcher:
     on_reindex_start / on_reindex_done）是两条独立路径：调用方可不传任何
     回调，仅靠 status() 观测。
     """
+
+    # status() 返回字典的默认值契约（watcher 未启动时由调用方引用）。
+    # 单一真源：本字段 + status() 返回处相邻，加/删字段时两边同步即可；
+    # 调用方（web_v2/api/status.py 等）不得手抄字面量兜底——引用本常量。
+    DEFAULT_STATUS: ClassVar[dict] = {
+        "running": False,
+        "reindexing": False,
+        "changed_count": 0,
+        "last_reindex_at": None,
+        "last_doc_count": None,
+        "last_success": None,
+    }
 
     def __init__(self, idx_manager, debounce_seconds: float = 5.0,
                  on_change_callback=None, on_reindex_start=None, on_reindex_done=None):

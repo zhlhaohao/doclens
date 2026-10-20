@@ -49,7 +49,7 @@
 - **修复方案**（接线侧为主）：`_on_change` 只 `record_change`，广播侧按 ~200ms 节流合并（Timer 或时间戳判断），风暴期每窗口至多一次快照。契约不变（回调仍逐事件，节流在 deps）。
 - **回归验证**：`tests/test_watch_sse.py`（若存在，按同名约定核实）+ `tests/test_architecture.py`；人工验证 SSE 风暴。
 
-### AP-6 watcher 状态默认值契约三处手抄 [P3] [status: pending]
+### AP-6 watcher 状态默认值契约三处手抄 [P3] [status: done]
 - **形态**：Duplicated Source of Truth（契约漂移）
 - **证据**：`FileWatcher.status()`（file_watcher.py:264-274）的六键结构在 `doclens/web_v2/api/status.py:44-51` 以字面量重抄一份（watcher 为 None 时的 fallback）。`status()` 增删字段（如未来加 `last_failed_count`）时 status.py 的 fallback 静默缺键 → 前端按 undefined 渲染。
 - **风险**：纯契约漂移风险，无当前行为差异。
@@ -92,4 +92,5 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-10-20 | 一起改吧 | AP-1 / AP-2 / AP-3 / AP-4 | 见 1b74cb8——file_watcher.py 重构 + tests/test_file_watcher_robustness.py 新增 5 断言；分层回归 46 passed |
-| 2026-10-20 | 修 | AP-5 | 见 HEAD——watch_broker.broadcast 增节流（200ms 窗口内同事件至多入队一次）+ deps.py 状态机边沿 immediate=True；新增 tests/test_watch_broker_throttle.py 4 断言；分层回归 50 passed |
+| 2026-10-20 | 修 | AP-5 | 见 7a41716——watch_broker.broadcast 增节流（200ms 窗口内同事件至多入队一次）+ deps.py 状态机边沿 immediate=True；新增 tests/test_watch_broker_throttle.py 4 断言；分层回归 50 passed |
+| 2026-10-20 | 修 | AP-6 | 见 HEAD——FileWatcher.DEFAULT_STATUS 类常量作为单一真源，status.py fallback 改引用；分层回归 63 passed |
