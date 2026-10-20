@@ -23,7 +23,18 @@ import { isPstFilePath } from "../api/pst";
  *   files 任何错误进错误页、search 只认 NOT_INDEXED）
  */
 
-/** 一次成功预览的完整文档态（对齐 PreviewResponse / fetchPreview 结果）。 */
+/** 一次成功预览的完整文档态（对齐 PreviewResponse / fetchPreview 结果）。
+ *
+ * 响应形态由 (language, synthesized) 判别为三态（P2-2 文档化；后端仍是
+ * 压平单模型，TS 侧注释先锁定契约——若新增格式应升级为完整 union）：
+ * ① 文本（synthesized=false, language≠pdf）：磁盘直读；代码文件附 tokens；
+ *    行范围切片时带 line_range，lineMap 恒 null
+ * ② 合成（synthesized=true）：DB 合成 markdown——pages（pptx/excel/epub
+ *    分页）与 lineMap（原始行号→md 行号换算）仅此形态非空；attachments
+ *    仅 PST 派生邮件非空
+ * ③ PDF（language=pdf）：轻量标记——content 恒空串、字节流由独立端点
+ *    服务；pageStarts 仅此形态非空（未索引为 null，跳页静默降级）
+ */
 export interface PreviewDoc {
   path: string;
   content: string;

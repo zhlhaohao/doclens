@@ -33,12 +33,6 @@ describe("<code-viewer> 行渲染", () => {
     const el = await fixture({ content: "" });
     expect(lineEls(el).length).toBe(1);
   });
-
-  it("applies .highlight to hits from highlights prop", async () => {
-    const el = await fixture({ content: "a\nb\nc", highlights: [2] });
-    expect(lineNo(el, 2).classList.contains("highlight")).toBe(true);
-    expect(lineNo(el, 1).classList.contains("highlight")).toBe(false);
-  });
 });
 
 describe("<code-viewer> 分词着色（ADR-0032）", () => {

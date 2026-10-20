@@ -95,7 +95,6 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
         language="pdf",
         content="",
         line_range=None,
-        highlights=[],
         writable=False,  # PDF 不可编辑（BINARY_PREVIEW_EXTS 写回闸门同款语义）
         synthesized=False,  # pdf 是磁盘字节直读（pdf.js 渲染），非 DB 合成
         page_starts=page_starts,
@@ -189,7 +188,6 @@ def preview(
         language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
         content=content,
         line_range=line_range,
-        highlights=[],
         writable=compute_writable(full, base),
         synthesized=False,
         tokens=tokens,

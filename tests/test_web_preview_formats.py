@@ -129,10 +129,6 @@ class TestPreviewFormats:
         assert r.line_range == (190, 195)
         assert "kirin" in r.content
 
-    def test_c15_highlights_empty(self, idx):
-        r = _preview(idx, "杂记.md")
-        assert r.highlights == []
-
     def test_c16_synthesized_flag(self, idx):
         """synthesized 标志（全文件预览判定单源化）：DB 合成 md = True，
         磁盘直读（md/代码/txt/pdf 字节直读）= False。前端以此替代本地后缀清单。"""

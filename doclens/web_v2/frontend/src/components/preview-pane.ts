@@ -577,7 +577,6 @@ export class PreviewPane extends LitElement {
    *  content 的 \n 切分一一对应；kind 8 类（c/k/s/n/f/t/o/p），空串=正文色。
    *  null = 后端未下发（md/pdf/html/txt/未知后缀/超限）→ 纯文本渲染。 */
   @property({ attribute: false }) tokens: string[][][] | null = null;
-  @property({ attribute: false }) highlights: number[] = [];
   @property({ type: Boolean }) loading = false;
   @property({ type: Number }) line: number | null = null;
   @property() keyword = "";
@@ -2154,7 +2153,6 @@ export class PreviewPane extends LitElement {
       <code-viewer
         .content=${this._content}
         .tokens=${this.tokens}
-        .highlights=${this.highlights}
         .fontScalePct=${this._codeFontScalePct}
         .theme=${this._codeTheme}
         @selection-change=${this._onCodeSelectionChange}

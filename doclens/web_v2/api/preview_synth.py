@@ -116,7 +116,6 @@ def synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewResponse
         language="markdown",
         content="\n".join(lines),
         line_range=None,
-        highlights=[],
         writable=False,
         synthesized=True,
     )
@@ -156,7 +155,6 @@ def synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespon
         language="markdown",
         content=cleaned_md,
         line_range=None,
-        highlights=[],
         writable=False,  # 合成预览不可写
         synthesized=True,
         pages=pages,

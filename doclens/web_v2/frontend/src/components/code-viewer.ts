@@ -39,7 +39,7 @@ import {
  * - 代码主题三态（ADR-0036/0043）与字号档位（60–200 步长 10）。
  *
  * 对外接口：
- * - properties: content / tokens / highlights / fontScalePct / theme
+ * - properties: content / tokens / fontScalePct / theme
  * - events: selection-change { ranges: string }（选区变化；空串 = 清空）
  * - 方法: clearSelection()（发送后消费）、lineRanges()（当前区间串）
  */
@@ -124,7 +124,7 @@ export class CodeViewer extends LitElement {
       text-indent: 0;
     }
     /* 行选择（2020-10-05 决议）：行号可点击（toggle 选中/反选）；选中行
-       整行高亮。与搜索命中 .highlight（命中词着色）语义不同、视觉并存。 */
+       整行高亮。 */
     .body .line-no.clickable {
       cursor: pointer;
       user-select: none;
@@ -151,13 +151,6 @@ export class CodeViewer extends LitElement {
       cursor: pointer;
     }
     .line-clear-btn:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
-    /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
-    .highlight {
-      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
-      color: var(--cortex-primary);
-      padding: 0 2px;
-      border-radius: 2px;
-    }
     /* 服务端语法分词 8 类配色（ADR-0032）：未归类 run 不挂 class（正文色）。 */
     .tk-c { color: var(--code-tok-c); font-style: italic; }
     .tk-k { color: var(--code-tok-k); font-weight: 500; }
@@ -183,10 +176,6 @@ export class CodeViewer extends LitElement {
       background: var(--code-surface-selected-bg);
       box-shadow: inset 2px 0 0 var(--code-surface-selected-bar);
     }
-    .body.dark .highlight {
-      background: var(--code-surface-hit-bg);
-      color: var(--code-surface-hit-ink);
-    }
     .body.dark .line-clear-btn {
       background: var(--code-surface-clear-bg);
       color: var(--code-surface-clear-ink);
@@ -203,8 +192,6 @@ export class CodeViewer extends LitElement {
   @property() content = "";
   /** 服务端分词（ADR-0032）：[[kind, text], ...] 逐行；null = 纯文本渲染。 */
   @property({ attribute: false }) tokens: string[][][] | null = null;
-  /** 搜索命中行（行号着色 .highlight）。 */
-  @property({ type: Array }) highlights: number[] = [];
   /** 字号档位百分比（受控：preview-pane header stepper 驱动）。 */
   @property({ type: Number }) fontScalePct = CODE_FONT_SCALE_DEFAULT_PCT;
   /** 代码主题三态（受控）：auto=跟随应用主题。 */
@@ -317,11 +304,10 @@ export class CodeViewer extends LitElement {
       >
         ${lines.map((line, i) => {
           const lineNo = i + 1;
-          const cls = this.highlights.includes(lineNo) ? "highlight" : "";
           const sel = this._selectedLines.has(lineNo);
           const runs = tokensAligned ? tokLines[i] : null;
           return html`<div class="line ${sel ? "line-selected" : ""}"><span
-            class="line-no clickable ${cls}"
+            class="line-no clickable"
             title="点击选中/取消选中该行；Shift+点击选区间"
             @click=${(ev: MouseEvent) => this._onLineNoClick(lineNo, ev.shiftKey)}
           >${lineNo}</span>${runs

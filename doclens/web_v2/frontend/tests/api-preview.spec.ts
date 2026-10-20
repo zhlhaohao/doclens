@@ -93,7 +93,7 @@ describe("fetchPreview", () => {
       return new Response(
         JSON.stringify({
           path: "a.md", content: "# hi", language: "markdown",
-          line_range: null, highlights: [], writable: true, synthesized: false,
+          line_range: null, writable: true, synthesized: false,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );

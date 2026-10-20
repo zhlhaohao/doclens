@@ -25,7 +25,6 @@ class PreviewResponse(BaseModel):
     # 字节由 GET /api/preview/pdf 单独服务，前端 pdf.js 渲染
     content: str = ""
     line_range: Optional[tuple[int, int]] = None
-    highlights: list[int] = []
     writable: bool = False
     # 服务端语法分词（ADR-0032）：仅代码文件文本预览返回。外层 = 行（与
     # content 的 \n 切分一一对应），内层 = run 的 [kind, text]；kind 为 8 类
