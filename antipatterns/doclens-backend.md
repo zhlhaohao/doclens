@@ -97,12 +97,30 @@
   `tests/test_workdir_config.py tests/test_session_duplicate.py tests/test_chat_disconnect.py tests/test_session_export_import.py
   tests/test_sessions_store_history.py tests/test_rewind.py tests/test_auth_challenge.py tests/test_architecture.py` → 124 passed。
 
-### AP-7 `sessions_store` 1450 行 God Object：登录会话 + 对话归档 + 回退快照 + 导入导出同文件同库 [P2] [status: pending]
+### AP-7 `sessions_store` 1450 行 God Object：登录会话 + 对话归档 + 回退快照 + 导入导出同文件同库 [P2] [status: done]
 - **形态**：God Object / Divergent Change
 - **证据**：`doclens/web_v2/sessions_store.py:159`（`SessionsStore`，约 50 个方法）；分节自证多职责：`# ---- 写入 ----` `:208`、rewind_snapshots `:537-737`、导入导出 `:838-1038`、回放投影 `:1180-1375`、`# ---- 登录会话 ----` `:1388`；`get_chat_history` `:1180-1375` 单函数 195 行。
 - **风险**：对话 schema、鉴权 token 生命周期、快照清理三套变更原因全部落在同一类；导入导出与实时写共用同一把 `RLock` 与连接口径，任何一域的修复都会触碰其余两域。
-- **修复方案**（不要求一次完成）：先按 `sessions / auth_sessions / snapshots / portability` 拆为四个内部协作类（同文件内先拆类，再考虑拆模块），公共连接/事务原语下放 `_db.py`。
-- **回归验证**：`tests/test_sessions_store_history.py tests/test_session_export_import.py tests/test_rewind.py tests/test_session_detail_window.py`。
+- **实际修复（2026-10-20，同文件内拆类，未拆模块）**：抽出共享底座 `_SessionDB`（连接原语 + schema 迁移，四个类共用同一实例 →
+  同锁、同连接口径）+ `_StorePart`（协作类基类，`_lock`/`_conn` 转发给 `_SessionDB`，方法体保持原样），随后按域拆：
+  - `_AuthSessionStore`（`:282`）：auth_sessions 的签发/校验/续期/清理，与对话归档彻底解耦
+  - `_RewindSnapshotStore`（`:353`）：rewind_snapshots 存取 + 环形驱逐
+  - `_SessionPortability`（`:492`）：EXPORT_FORMAT_VERSION + export/import/结构校验/目录切换提示轮
+  - `SessionsStore`（`:704`）：保留对话写入/读取/回放 + 分页/删除/复制，三域方法改为**纯委托**（保留原签名与 docstring 语义），对外 API 零变化
+  `get_chat_history` 195 行拆为 `_scan_cleared_ids`（预扫描）/ `_group_turns`（按轮分组）/ `_replay_turns`（回放主循环）/
+  `_replay_user`（含图片块组装）/ `_replay_raw` + 模块级 `_append_paired` / `_clear_marked_content` / `_replay_tool_trace`——
+  回放规则 docstring 留在门面方法上，分支逻辑各自带原注释。
+- **等价性取证（超越单测）**：① 只读差分——真实 38 个会话 × 9 个方法（get/get_detail/get_chat_history/export_session/
+  list_rewind_snapshots/latest_rewind_snapshot/count_live_messages/rewind_boundaries/last_message_user_seq）与拆前实现逐字节一致（0 diff）；
+  ② 写路径差分——24 类写操作（含 skills context 去重、快照环形驱逐、幂等 ensure_message_user、导入幂等、auth token）落库后
+  四张表按「归一化 id/时间戳」比对完全一致，`get_chat_history` 输出完全相同。
+- **顺带移除**：原 `get_chat_history` 预扫描里赋值后从未读取的死变量 `last_compacted_seq`（拆分为 `_scan_cleared_ids` 时自然消失，
+  语义不变——它只被赋值，从未参与判断）。
+- **未做**：未拆到独立模块（`_db.py` 等）——门面 + 协作类已在同文件内收敛职责，拆模块会牵动 4 个测试族与 `deps` 装配，
+  收益不及风险；AP-8（每方法新开连接 / 事务粒度）仍需在同一文件内做，届时 `_SessionDB` 是天然的落点。
+- **回归验证**：`tests/test_sessions_store_history.py tests/test_session_export_import.py tests/test_rewind.py
+  tests/test_session_detail_window.py tests/test_session_duplicate.py tests/test_sessions_ts_normalization.py
+  tests/test_chat_disconnect.py tests/test_auth_challenge.py tests/test_deps_locks.py tests/test_architecture.py` → 125 passed。
 
 ### AP-8 每次方法调用新开 SQLite 连接；单端点 N 次 connect + N 次事务 [P2] [status: pending]
 - **形态**：每请求开关连接 + 写路径无事务
@@ -269,5 +287,6 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-10-20 | 审计 | — | 台账落盘，28 条待令 |
+| 2026-10-20 | 修 | AP-7 | 见本提交——sessions_store 同文件内拆 `_SessionDB`/`_AuthSessionStore`/`_RewindSnapshotStore`/`_SessionPortability` + 门面委托；`get_chat_history` 195 行拆 5 方法 + 3 模块级原语；只读差分 38 会话 × 9 方法零差异、写路径四表结构等价；分层回归 125 passed |
 | 2026-10-20 | 修 | AP-6 | 见本提交——deps 拆四把单例构造锁，`_lock` 降为纯注册表锁；`_singleton_guards()` 固定顺序保全 reset/切换语义；新增 tests/test_deps_locks.py 4 断言；分层回归 124 passed |
 | 2026-10-20 | 修 | AP-11 | 见本提交——`load_or_build_index` 以 `_ts is None`（首次装配）作为唯一审计条件，reindex/mark_dirty 后的重载只重建句柄+刷新 path_map；新增 `TestReloadSkipsDiskAudit` 2 断言；分层回归 61 passed |

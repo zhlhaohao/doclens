@@ -89,6 +89,57 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# 回放原语（get_chat_history 拆分后的公共件，AP-7）
+# ---------------------------------------------------------------------------
+
+def _append_paired(history: list[dict], role: str, content) -> None:
+    """追加一条回放消息，并处理连续同角色。
+
+    user/user 补 assistant 填充（中断轮「只有 message_user 没有 AI 回复」的
+    400 防护）；assistant/assistant 放行——压缩边界后摘要确认紧跟 LLM 响应是
+    真实请求形态，插填充反而使回放与真实请求前缀分叉（ADR-0026）。
+    """
+    if history and history[-1]["role"] == role == "user":
+        history.append({"role": "assistant", "content": "(interrupted)"})
+    history.append({"role": role, "content": content})
+
+
+def _clear_marked_content(role: str, content, cleared_ids: set[str]):
+    """微压缩重放：被清理 id 的 tool_result 内容替换 "[cleared]"。"""
+    if role != "user" or not isinstance(content, list) or not cleared_ids:
+        return content
+    return [
+        {**b, "content": "[cleared]"}
+        if isinstance(b, dict)
+        and b.get("type") == "tool_result"
+        and b.get("tool_use_id") in cleared_ids
+        else b
+        for b in content
+    ]
+
+
+def _replay_tool_trace(payload: dict, history: list[dict], cleared_ids: set[str]) -> None:
+    """tool_trace → assistant(tool_use) + user(tool_result) 成对回放（旧轮兜底）。"""
+    tu_id = payload.get("tool_use_id", "")
+    if not tu_id:
+        return
+    _append_paired(history, "assistant", [{
+        "type": "tool_use",
+        "id": tu_id,
+        "name": payload.get("name", ""),
+        "input": payload.get("input") or {},
+    }])
+    _append_paired(history, "user", [{
+        "type": "tool_result",
+        "tool_use_id": tu_id,
+        "content": (
+            "[cleared]" if tu_id in cleared_ids else str(payload.get("output", ""))
+        ),
+        "is_error": bool(payload.get("is_error", False)),
+    }])
+
+
 class SessionSummary(BaseModel):
     id: str
     type: SessionType
@@ -156,8 +207,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at
 _AUTH_TOUCH_REFRESH_THRESHOLD = timedelta(hours=23)
 
 
-class SessionsStore:
-    """线程安全的 SQLite 历史会话存储。"""
+class _SessionDB:
+    """连接原语 + schema 迁移（四个协作类共享）。
+
+    无业务语义：只管「怎么连、连上后补齐表结构」。每方法新开连接的成本与
+    事务粒度问题见 AP-8，不属本次重组范围。
+    """
 
     def __init__(self, db_path: Path | str):
         self._db_path = str(db_path)
@@ -204,6 +259,472 @@ class SessionsStore:
                       )
                     """
                 )
+
+
+class _StorePart:
+    """协作类公共基类：连接与锁取自共享的 `_SessionDB`。
+
+    拆分前提（AP-7）：四个协作类必须共用**同一个** `_SessionDB` 实例，
+    否则各自持一把 RLock，跨域写（会话落库 vs token 续期）不再互斥。
+    """
+
+    def __init__(self, db: "_SessionDB"):
+        self._db = db
+
+    @property
+    def _lock(self) -> "threading.RLock":
+        return self._db._lock
+
+    def _conn(self) -> "sqlite3.Connection":
+        return self._db._conn()
+
+
+class _AuthSessionStore(_StorePart):
+    """登录会话（auth_sessions 表）：token 签发 / 校验 / 续期 / 清理。
+
+    与对话归档彻底解耦——鉴权热路径（每个 HTTP 请求一次校验）不再与
+    会话写入共享同一个类（AP-7），改动 token 策略不必读对话代码。
+    """
+
+    def create_auth_session(self, ttl_hours: int = 24) -> str:
+        """签发登录会话，返回 token。"""
+        token = secrets.token_urlsafe(32)
+        now = datetime.utcnow()
+        expires = now + timedelta(hours=ttl_hours)
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "INSERT INTO auth_sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
+                (token, now.isoformat(), expires.isoformat()),
+            )
+        self.purge_expired_auth_sessions()
+        return token
+
+    def validate_auth_session(
+        self,
+        token: str,
+        *,
+        touch: bool = True,
+        ttl_hours: int = 24,
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """校验登录会话存在且未过期。
+
+        touch=True 时滑动续期：剩余有效期不足阈值才把 expires_at 顺延为
+        now + ttl（节流，避免每个请求都写库）。now 可注入以便测试。
+        """
+        now = now or datetime.utcnow()
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT expires_at FROM auth_sessions WHERE token = ?", (token,)
+            ).fetchone()
+            if row is None:
+                return False
+            expires = datetime.fromisoformat(row["expires_at"])
+            if expires <= now:
+                conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+                return False
+            if touch and expires - now < _AUTH_TOUCH_REFRESH_THRESHOLD:
+                new_expires = now + timedelta(hours=ttl_hours)
+                conn.execute(
+                    "UPDATE auth_sessions SET expires_at = ? WHERE token = ?",
+                    (new_expires.isoformat(), token),
+                )
+            return True
+
+    def delete_auth_session(self, token: str) -> None:
+        with self._lock, self._conn() as conn:
+            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+
+    def revoke_all_auth_sessions(self) -> int:
+        """吊销全部登录会话，返回删除条数。"""
+        with self._lock, self._conn() as conn:
+            cur = conn.execute("DELETE FROM auth_sessions")
+            return cur.rowcount
+
+    def purge_expired_auth_sessions(self) -> int:
+        """清理已过期登录会话，返回删除条数。"""
+        now = datetime.utcnow().isoformat()
+        with self._lock, self._conn() as conn:
+            cur = conn.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now,))
+            return cur.rowcount
+
+class _RewindSnapshotStore(_StorePart):
+    """回退文件快照（rewind_snapshots 表，ADR-0027 回退即事实）。
+
+    只管快照行的存取与环形驱逐；回退边界投影（rewound 条目）属回放逻辑，
+    留在主存储（`SessionsStore.project_live_items`）。
+    """
+
+    def append_rewind_snapshot(
+        self, session_id: str, anchor_seq: int, tracked_backups: dict
+    ) -> tuple:
+        """落一条文件快照（轮次开始时调用），环形上限 100 条/会话。
+
+        tracked_backups: {路径: {"backup_file_name": str|None, "version": int}}
+        （None = 该时点文件不存在）。超上限删最旧，返回 ``(被驱逐快照的
+        payload 列表, 幸存快照引用的全部备份文件名集合)``——驱逐清单供
+        调用方清孤儿备份文件，幸存引用集合免掉为同一目的的第二次全量
+        查询（文件内容备份在 ``.cortex/rewind/{session_id}/``，不归本库管）。
+        """
+        payload = json.dumps({"tracked_file_backups": tracked_backups},
+                             ensure_ascii=False)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                """INSERT INTO rewind_snapshots
+                   (session_id, anchor_seq, payload, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (session_id, anchor_seq, payload, now),
+            )
+            rows = conn.execute(
+                """SELECT id, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT -1 OFFSET 100""",
+                (session_id,),
+            ).fetchall()
+            evicted = []
+            for r in rows:
+                conn.execute(
+                    "DELETE FROM rewind_snapshots WHERE id = ?", (r["id"],)
+                )
+                try:
+                    evicted.append(json.loads(r["payload"]))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            survivors = conn.execute(
+                """SELECT payload FROM rewind_snapshots
+                   WHERE session_id = ?""",
+                (session_id,),
+            ).fetchall()
+            referenced = set()
+            for r in survivors:
+                try:
+                    p = json.loads(r["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                for entry in p.get("tracked_file_backups", {}).values():
+                    name = entry.get("backup_file_name")
+                    if name:
+                        referenced.add(name)
+            return evicted, referenced
+
+    def latest_rewind_snapshot(self, session_id: str) -> Optional[dict]:
+        """最新一条文件快照（无则 None）：{anchor_seq, tracked_file_backups}。
+
+        写前备份路径（``_track``）的快照读取入口——每条新快照都全量继承
+        前一路径集（begin_turn 结转 + backfill 只写最新），「每路径最新
+        条目」恒等于最新一条快照的内容，无需全量读归并（全量归并只留给
+        低频的恢复规划）。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT anchor_seq, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            p = json.loads(row["payload"])
+        except (json.JSONDecodeError, TypeError):
+            p = {}
+        return {
+            "anchor_seq": row["anchor_seq"],
+            "tracked_file_backups": p.get("tracked_file_backups", {}),
+        }
+
+    def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
+        """把写前备份条目回填进**最新**快照（track_edit 通路，ADR-0027）。
+
+        语义对齐 Claude Code 的 fileHistoryTrackEdit：本轮轮首快照先落库，
+        写工具动手前的改前备份回填进该快照——锚点时点状态由此可恢复。
+        最新快照已含该路径则跳过（幂等）；无任何快照返回 False（调用方
+        应先建快照或放弃追踪）。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id, payload FROM rewind_snapshots
+                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            try:
+                p = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                p = {}
+            backups = p.get("tracked_file_backups") if isinstance(p, dict) else None
+            if not isinstance(backups, dict):
+                backups = {}
+            if path in backups:
+                return True
+            backups[path] = entry
+            conn.execute(
+                "UPDATE rewind_snapshots SET payload = ? WHERE id = ?",
+                (json.dumps({"tracked_file_backups": backups},
+                            ensure_ascii=False), row["id"]),
+            )
+            return True
+
+    def list_rewind_snapshots(self, session_id: str) -> list:
+        """全部文件快照（id 升序）：[{id, anchor_seq, tracked_file_backups, created_at}]。"""
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                """SELECT id, anchor_seq, payload, created_at
+                   FROM rewind_snapshots WHERE session_id = ? ORDER BY id ASC""",
+                (session_id,),
+            ).fetchall()
+        out = []
+        for r in rows:
+            try:
+                p = json.loads(r["payload"])
+            except (json.JSONDecodeError, TypeError):
+                p = {}
+            out.append({
+                "id": r["id"],
+                "anchor_seq": r["anchor_seq"],
+                "tracked_file_backups": p.get("tracked_file_backups", {}),
+                "created_at": r["created_at"],
+            })
+        return out
+
+class _SessionPortability(_StorePart):
+    """单会话全保真导出 / 导入（ADR-0038 跨实例记忆转移）。
+
+    自带格式版本与结构校验，与实时读写互不感知——改导出格式不必触碰
+    会话落库路径。
+    """
+
+    EXPORT_FORMAT_VERSION = 1  # 结构演进时 +1，导入端按已知版本分支向后兼容
+
+    def export_session(self, session_id: str) -> Optional[dict]:
+        """单会话全保真导出（ADR-0038）——sessions 行 + **全部**
+        session_items 原始行（含死段、compacted/rewound 边界、usage、
+        skill_context；raw payload 字符串原样透传，不做 JSON 重排）。
+
+        不导 rewind_snapshots（引用 .cortex/rewind/ 机器本地文件备份）
+        与 auth_sessions。会话不存在返回 None。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id, type, title, preview, mode, created_at,
+                          updated_at, message_count, starred
+                   FROM sessions WHERE id = ?""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            items = conn.execute(
+                """SELECT seq, kind, payload, created_at
+                   FROM session_items WHERE session_id = ?
+                   ORDER BY seq ASC""",
+                (session_id,),
+            ).fetchall()
+            return {
+                "format": self.EXPORT_FORMAT_VERSION,
+                "session": dict(row),
+                "items": [dict(i) for i in items],
+            }
+
+    @staticmethod
+    def _validate_import(data: dict) -> tuple[str, dict, list]:
+        """导入结构校验（不语义校验，ADR-0038）：版本号 / session 必填
+        字段 / items 字段类型。失败抛 ValueError（API 层转 400）。
+
+        Returns:
+            (session_id, session_row, item_rows)——可直接落库的原始行。
+        """
+        if not isinstance(data, dict):
+            raise ValueError("文件根必须是 JSON 对象")
+        fmt = data.get("format")
+        if fmt != _SessionPortability.EXPORT_FORMAT_VERSION:
+            raise ValueError(
+                f"文件版本不支持（format={fmt!r}，本机支持 "
+                f"{_SessionPortability.EXPORT_FORMAT_VERSION}）"
+            )
+        s = data.get("session")
+        if not isinstance(s, dict):
+            raise ValueError("缺少 session 字段")
+        for field in ("id", "type", "title", "created_at", "updated_at"):
+            if not isinstance(s.get(field), str) or not s[field]:
+                raise ValueError(f"session.{field} 缺失或非字符串")
+        if s["type"] not in (t.value for t in SessionType):
+            raise ValueError(f"session.type 非法：{s['type']!r}")
+        items = data.get("items")
+        if not isinstance(items, list):
+            raise ValueError("缺少 items 字段或非数组")
+        for i, it in enumerate(items):
+            if not isinstance(it, dict):
+                raise ValueError(f"items[{i}] 非对象")
+            if not isinstance(it.get("kind"), str) or not it["kind"]:
+                raise ValueError(f"items[{i}].kind 缺失或非字符串")
+            if not isinstance(it.get("payload"), str):
+                raise ValueError(f"items[{i}].payload 缺失或非字符串")
+            try:
+                json.loads(it["payload"])
+            except (json.JSONDecodeError, TypeError):
+                raise ValueError(f"items[{i}].payload 不是合法 JSON")
+        # 落库行：补齐可空列默认值，seq 用文件原值（保序）
+        session_row = {
+            "id": s["id"],
+            "type": s["type"],
+            "title": s["title"],
+            "preview": s.get("preview") or "",
+            "mode": s.get("mode"),
+            "created_at": s["created_at"],
+            "updated_at": s["updated_at"],
+            "message_count": s.get("message_count") or 0,
+            "starred": 1 if s.get("starred") else 0,
+        }
+        item_rows = [
+            {
+                "seq": it.get("seq") if isinstance(it.get("seq"), int) else i + 1,
+                "kind": it["kind"],
+                "payload": it["payload"],
+                "created_at": it.get("created_at") or s["created_at"],
+            }
+            for i, it in enumerate(items)
+        ]
+        return s["id"], session_row, item_rows
+
+    # 导入目录切换提示轮（ADR-0038 后续）：历史工具轨迹里的绝对路径指向
+    # 源机器工作目录，续聊时模型会沿用旧路径写文件。导入时在末尾追加一轮
+    # user（目录已改，注意相对路径/旧绝对路径作废）+ ai（明白）的合成对话，
+    # 进入 LLM 回放上下文纠正后续行为。此轮是宿主侧事实声明，非用户真话，
+    # 文案带固定前缀标记。
+    _DIR_SWITCH_USER_TMPL = (
+        "[系统提示] 本会话由其他工作目录导入。当前工作目录已改为：{workdir}。"
+        "此前对话中的绝对路径均指向旧工作目录，已全部作废——后续所有文件"
+        "操作（read_file/write_file/edit_file/bash 等）一律以当前工作目录"
+        "为基准使用相对路径；如需引用旧对话中提到的文件，请在当前目录下"
+        "重新确认其对应位置后再操作。"
+    )
+    _DIR_SWITCH_AI_REPLY = (
+        "明白。已切换到新工作目录 {workdir}，旧对话中的绝对路径不再有效，"
+        "后续文件操作全部以当前目录为基准使用相对路径，引用旧文件时会先"
+        "在当前目录重新确认位置。"
+    )
+
+    def _dir_switch_rows(
+        self,
+        session_row: dict,
+        item_rows: list,
+        workdir: Optional[str],
+    ) -> list:
+        """构造导入目录切换提示轮的 session_items 行（锁内调用）。
+
+        追加条件：workdir 非空、会话为 chat 类型——search 会话无 LLM
+        续聊语义，不追加。seq 在文件原 items 的 MAX(seq) 之上续排，
+        created_at 取导入时刻（这轮是导入动作产生的，非源会话时序）。
+
+        Returns:
+            行列表（通常 2 条）；不满足条件返回 []。
+        """
+        wd = (workdir or "").strip()
+        if not wd or session_row.get("type") != SessionType.CHAT.value:
+            return []
+        max_seq = max((r["seq"] for r in item_rows), default=-1)
+        now = datetime.now(timezone.utc).isoformat()
+        user_payload = json.dumps(
+            {"content": self._DIR_SWITCH_USER_TMPL.format(workdir=wd)},
+            ensure_ascii=False,
+        )
+        ai_payload = json.dumps(
+            {
+                "content": self._DIR_SWITCH_AI_REPLY.format(workdir=wd),
+                "tool_calls": [],
+                "references": [],
+            },
+            ensure_ascii=False,
+        )
+        return [
+            {
+                "seq": max_seq + 1,
+                "kind": "message_user",
+                "payload": user_payload,
+                "created_at": now,
+            },
+            {
+                "seq": max_seq + 2,
+                "kind": "message_ai",
+                "payload": ai_payload,
+                "created_at": now,
+            },
+        ]
+
+    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
+        """导入单个会话（ADR-0038）——结构校验后原样写入，时间戳保留
+        源值（导入时刻不顶到最前）。
+
+        workdir 非空且会话为 chat 类型时，末尾追加一轮目录切换提示对话
+        （message_user + message_ai，见 _DIR_SWITCH_USER_TMPL），message_count
+        相应 +2——把「目录已改」的事实注入续聊回放，防模型沿用导出文件里
+        的旧绝对路径继续写旧目录。
+
+        Returns:
+            是否新导入；同 id 已存在 → False（跳过，幂等防双份）。
+        Raises:
+            ValueError: 结构校验失败（调用方转 400，整体不部分导入）。
+        """
+        session_id, session_row, item_rows = self._validate_import(data)
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if row is not None:
+                return False
+            extra_rows = self._dir_switch_rows(
+                session_row, item_rows, workdir
+            )
+            if extra_rows:
+                session_row["message_count"] = (
+                    session_row.get("message_count") or 0
+                ) + len(extra_rows)
+            conn.execute(
+                """INSERT INTO sessions
+                   (id, type, title, preview, mode, created_at, updated_at,
+                    message_count, starred)
+                   VALUES (:id, :type, :title, :preview, :mode, :created_at,
+                           :updated_at, :message_count, :starred)""",
+                session_row,
+            )
+            conn.executemany(
+                """INSERT INTO session_items
+                   (session_id, seq, kind, payload, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    (session_id, r["seq"], r["kind"], r["payload"], r["created_at"])
+                    for r in item_rows + extra_rows
+                ],
+            )
+            return True
+
+
+class SessionsStore(_StorePart):
+    """线程安全的 SQLite 历史会话存储（门面）。
+
+    职责已按域拆给三个协作类（AP-7），本类保留对话本身的写入/读取/回放，
+    并把 auth_sessions / rewind_snapshots / 导入导出转委托——对外 API 与
+    拆分前逐字一致：
+
+    - `_AuthSessionStore`    登录 token 生命周期
+    - `_RewindSnapshotStore` 回退文件快照
+    - `_SessionPortability`  导出 / 导入
+
+    三者与门面共享同一个 `_SessionDB`（同锁、同连接口径）。
+    """
+
+    EXPORT_FORMAT_VERSION = _SessionPortability.EXPORT_FORMAT_VERSION
+
+    def __init__(self, db_path: Path | str):
+        super().__init__(_SessionDB(db_path))
+        self._auth = _AuthSessionStore(self._db)
+        self._snapshots = _RewindSnapshotStore(self._db)
+        self._portability = _SessionPortability(self._db)
+
+    @property
+    def _db_path(self) -> str:
+        """兼容旧属性（拆分前是实例字段）。"""
+        return self._db._db_path
 
     # ---- 写入 ----
 
@@ -534,138 +1055,6 @@ class SessionsStore:
             "files_deleted": files_deleted or [],
         })
 
-    def append_rewind_snapshot(
-        self, session_id: str, anchor_seq: int, tracked_backups: dict
-    ) -> tuple:
-        """落一条文件快照（轮次开始时调用），环形上限 100 条/会话。
-
-        tracked_backups: {路径: {"backup_file_name": str|None, "version": int}}
-        （None = 该时点文件不存在）。超上限删最旧，返回 ``(被驱逐快照的
-        payload 列表, 幸存快照引用的全部备份文件名集合)``——驱逐清单供
-        调用方清孤儿备份文件，幸存引用集合免掉为同一目的的第二次全量
-        查询（文件内容备份在 ``.cortex/rewind/{session_id}/``，不归本库管）。
-        """
-        payload = json.dumps({"tracked_file_backups": tracked_backups},
-                             ensure_ascii=False)
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._conn() as conn:
-            conn.execute(
-                """INSERT INTO rewind_snapshots
-                   (session_id, anchor_seq, payload, created_at)
-                   VALUES (?, ?, ?, ?)""",
-                (session_id, anchor_seq, payload, now),
-            )
-            rows = conn.execute(
-                """SELECT id, payload FROM rewind_snapshots
-                   WHERE session_id = ? ORDER BY id DESC LIMIT -1 OFFSET 100""",
-                (session_id,),
-            ).fetchall()
-            evicted = []
-            for r in rows:
-                conn.execute(
-                    "DELETE FROM rewind_snapshots WHERE id = ?", (r["id"],)
-                )
-                try:
-                    evicted.append(json.loads(r["payload"]))
-                except (json.JSONDecodeError, TypeError):
-                    continue
-            survivors = conn.execute(
-                """SELECT payload FROM rewind_snapshots
-                   WHERE session_id = ?""",
-                (session_id,),
-            ).fetchall()
-            referenced = set()
-            for r in survivors:
-                try:
-                    p = json.loads(r["payload"])
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                for entry in p.get("tracked_file_backups", {}).values():
-                    name = entry.get("backup_file_name")
-                    if name:
-                        referenced.add(name)
-            return evicted, referenced
-
-    def latest_rewind_snapshot(self, session_id: str) -> Optional[dict]:
-        """最新一条文件快照（无则 None）：{anchor_seq, tracked_file_backups}。
-
-        写前备份路径（``_track``）的快照读取入口——每条新快照都全量继承
-        前一路径集（begin_turn 结转 + backfill 只写最新），「每路径最新
-        条目」恒等于最新一条快照的内容，无需全量读归并（全量归并只留给
-        低频的恢复规划）。
-        """
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT anchor_seq, payload FROM rewind_snapshots
-                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
-                (session_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        try:
-            p = json.loads(row["payload"])
-        except (json.JSONDecodeError, TypeError):
-            p = {}
-        return {
-            "anchor_seq": row["anchor_seq"],
-            "tracked_file_backups": p.get("tracked_file_backups", {}),
-        }
-
-    def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
-        """把写前备份条目回填进**最新**快照（track_edit 通路，ADR-0027）。
-
-        语义对齐 Claude Code 的 fileHistoryTrackEdit：本轮轮首快照先落库，
-        写工具动手前的改前备份回填进该快照——锚点时点状态由此可恢复。
-        最新快照已含该路径则跳过（幂等）；无任何快照返回 False（调用方
-        应先建快照或放弃追踪）。
-        """
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT id, payload FROM rewind_snapshots
-                   WHERE session_id = ? ORDER BY id DESC LIMIT 1""",
-                (session_id,),
-            ).fetchone()
-            if row is None:
-                return False
-            try:
-                p = json.loads(row["payload"])
-            except (json.JSONDecodeError, TypeError):
-                p = {}
-            backups = p.get("tracked_file_backups") if isinstance(p, dict) else None
-            if not isinstance(backups, dict):
-                backups = {}
-            if path in backups:
-                return True
-            backups[path] = entry
-            conn.execute(
-                "UPDATE rewind_snapshots SET payload = ? WHERE id = ?",
-                (json.dumps({"tracked_file_backups": backups},
-                            ensure_ascii=False), row["id"]),
-            )
-            return True
-
-    def list_rewind_snapshots(self, session_id: str) -> list:
-        """全部文件快照（id 升序）：[{id, anchor_seq, tracked_file_backups, created_at}]。"""
-        with self._lock, self._conn() as conn:
-            rows = conn.execute(
-                """SELECT id, anchor_seq, payload, created_at
-                   FROM rewind_snapshots WHERE session_id = ? ORDER BY id ASC""",
-                (session_id,),
-            ).fetchall()
-        out = []
-        for r in rows:
-            try:
-                p = json.loads(r["payload"])
-            except (json.JSONDecodeError, TypeError):
-                p = {}
-            out.append({
-                "id": r["id"],
-                "anchor_seq": r["anchor_seq"],
-                "tracked_file_backups": p.get("tracked_file_backups", {}),
-                "created_at": r["created_at"],
-            })
-        return out
-
     def last_message_user_seq(self, session_id: str) -> Optional[int]:
         """最新一条 message_user 的 seq（chat.py 轮首快照的锚点）。"""
         with self._lock, self._conn() as conn:
@@ -829,214 +1218,6 @@ class SessionsStore:
                                 ensure_ascii=False), now),
                 )
             return k
-
-    # ---- 导出/导入（ADR-0038：全保真单会话 JSON，跨实例记忆转移）----
-
-    # 导出格式版本：结构演进时 +1，导入端按已知版本分支向后兼容
-    EXPORT_FORMAT_VERSION = 1
-
-    def export_session(self, session_id: str) -> Optional[dict]:
-        """单会话全保真导出（ADR-0038）——sessions 行 + **全部**
-        session_items 原始行（含死段、compacted/rewound 边界、usage、
-        skill_context；raw payload 字符串原样透传，不做 JSON 重排）。
-
-        不导 rewind_snapshots（引用 .cortex/rewind/ 机器本地文件备份）
-        与 auth_sessions。会话不存在返回 None。
-        """
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                """SELECT id, type, title, preview, mode, created_at,
-                          updated_at, message_count, starred
-                   FROM sessions WHERE id = ?""",
-                (session_id,),
-            ).fetchone()
-            if row is None:
-                return None
-            items = conn.execute(
-                """SELECT seq, kind, payload, created_at
-                   FROM session_items WHERE session_id = ?
-                   ORDER BY seq ASC""",
-                (session_id,),
-            ).fetchall()
-            return {
-                "format": self.EXPORT_FORMAT_VERSION,
-                "session": dict(row),
-                "items": [dict(i) for i in items],
-            }
-
-    @staticmethod
-    def _validate_import(data: dict) -> tuple[str, dict, list]:
-        """导入结构校验（不语义校验，ADR-0038）：版本号 / session 必填
-        字段 / items 字段类型。失败抛 ValueError（API 层转 400）。
-
-        Returns:
-            (session_id, session_row, item_rows)——可直接落库的原始行。
-        """
-        if not isinstance(data, dict):
-            raise ValueError("文件根必须是 JSON 对象")
-        fmt = data.get("format")
-        if fmt != SessionsStore.EXPORT_FORMAT_VERSION:
-            raise ValueError(
-                f"文件版本不支持（format={fmt!r}，本机支持 "
-                f"{SessionsStore.EXPORT_FORMAT_VERSION}）"
-            )
-        s = data.get("session")
-        if not isinstance(s, dict):
-            raise ValueError("缺少 session 字段")
-        for field in ("id", "type", "title", "created_at", "updated_at"):
-            if not isinstance(s.get(field), str) or not s[field]:
-                raise ValueError(f"session.{field} 缺失或非字符串")
-        if s["type"] not in (t.value for t in SessionType):
-            raise ValueError(f"session.type 非法：{s['type']!r}")
-        items = data.get("items")
-        if not isinstance(items, list):
-            raise ValueError("缺少 items 字段或非数组")
-        for i, it in enumerate(items):
-            if not isinstance(it, dict):
-                raise ValueError(f"items[{i}] 非对象")
-            if not isinstance(it.get("kind"), str) or not it["kind"]:
-                raise ValueError(f"items[{i}].kind 缺失或非字符串")
-            if not isinstance(it.get("payload"), str):
-                raise ValueError(f"items[{i}].payload 缺失或非字符串")
-            try:
-                json.loads(it["payload"])
-            except (json.JSONDecodeError, TypeError):
-                raise ValueError(f"items[{i}].payload 不是合法 JSON")
-        # 落库行：补齐可空列默认值，seq 用文件原值（保序）
-        session_row = {
-            "id": s["id"],
-            "type": s["type"],
-            "title": s["title"],
-            "preview": s.get("preview") or "",
-            "mode": s.get("mode"),
-            "created_at": s["created_at"],
-            "updated_at": s["updated_at"],
-            "message_count": s.get("message_count") or 0,
-            "starred": 1 if s.get("starred") else 0,
-        }
-        item_rows = [
-            {
-                "seq": it.get("seq") if isinstance(it.get("seq"), int) else i + 1,
-                "kind": it["kind"],
-                "payload": it["payload"],
-                "created_at": it.get("created_at") or s["created_at"],
-            }
-            for i, it in enumerate(items)
-        ]
-        return s["id"], session_row, item_rows
-
-    # 导入目录切换提示轮（ADR-0038 后续）：历史工具轨迹里的绝对路径指向
-    # 源机器工作目录，续聊时模型会沿用旧路径写文件。导入时在末尾追加一轮
-    # user（目录已改，注意相对路径/旧绝对路径作废）+ ai（明白）的合成对话，
-    # 进入 LLM 回放上下文纠正后续行为。此轮是宿主侧事实声明，非用户真话，
-    # 文案带固定前缀标记。
-    _DIR_SWITCH_USER_TMPL = (
-        "[系统提示] 本会话由其他工作目录导入。当前工作目录已改为：{workdir}。"
-        "此前对话中的绝对路径均指向旧工作目录，已全部作废——后续所有文件"
-        "操作（read_file/write_file/edit_file/bash 等）一律以当前工作目录"
-        "为基准使用相对路径；如需引用旧对话中提到的文件，请在当前目录下"
-        "重新确认其对应位置后再操作。"
-    )
-    _DIR_SWITCH_AI_REPLY = (
-        "明白。已切换到新工作目录 {workdir}，旧对话中的绝对路径不再有效，"
-        "后续文件操作全部以当前目录为基准使用相对路径，引用旧文件时会先"
-        "在当前目录重新确认位置。"
-    )
-
-    def _dir_switch_rows(
-        self,
-        session_row: dict,
-        item_rows: list,
-        workdir: Optional[str],
-    ) -> list:
-        """构造导入目录切换提示轮的 session_items 行（锁内调用）。
-
-        追加条件：workdir 非空、会话为 chat 类型——search 会话无 LLM
-        续聊语义，不追加。seq 在文件原 items 的 MAX(seq) 之上续排，
-        created_at 取导入时刻（这轮是导入动作产生的，非源会话时序）。
-
-        Returns:
-            行列表（通常 2 条）；不满足条件返回 []。
-        """
-        wd = (workdir or "").strip()
-        if not wd or session_row.get("type") != SessionType.CHAT.value:
-            return []
-        max_seq = max((r["seq"] for r in item_rows), default=-1)
-        now = datetime.now(timezone.utc).isoformat()
-        user_payload = json.dumps(
-            {"content": self._DIR_SWITCH_USER_TMPL.format(workdir=wd)},
-            ensure_ascii=False,
-        )
-        ai_payload = json.dumps(
-            {
-                "content": self._DIR_SWITCH_AI_REPLY.format(workdir=wd),
-                "tool_calls": [],
-                "references": [],
-            },
-            ensure_ascii=False,
-        )
-        return [
-            {
-                "seq": max_seq + 1,
-                "kind": "message_user",
-                "payload": user_payload,
-                "created_at": now,
-            },
-            {
-                "seq": max_seq + 2,
-                "kind": "message_ai",
-                "payload": ai_payload,
-                "created_at": now,
-            },
-        ]
-
-    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
-        """导入单个会话（ADR-0038）——结构校验后原样写入，时间戳保留
-        源值（导入时刻不顶到最前）。
-
-        workdir 非空且会话为 chat 类型时，末尾追加一轮目录切换提示对话
-        （message_user + message_ai，见 _DIR_SWITCH_USER_TMPL），message_count
-        相应 +2——把「目录已改」的事实注入续聊回放，防模型沿用导出文件里
-        的旧绝对路径继续写旧目录。
-
-        Returns:
-            是否新导入；同 id 已存在 → False（跳过，幂等防双份）。
-        Raises:
-            ValueError: 结构校验失败（调用方转 400，整体不部分导入）。
-        """
-        session_id, session_row, item_rows = self._validate_import(data)
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
-            if row is not None:
-                return False
-            extra_rows = self._dir_switch_rows(
-                session_row, item_rows, workdir
-            )
-            if extra_rows:
-                session_row["message_count"] = (
-                    session_row.get("message_count") or 0
-                ) + len(extra_rows)
-            conn.execute(
-                """INSERT INTO sessions
-                   (id, type, title, preview, mode, created_at, updated_at,
-                    message_count, starred)
-                   VALUES (:id, :type, :title, :preview, :mode, :created_at,
-                           :updated_at, :message_count, :starred)""",
-                session_row,
-            )
-            conn.executemany(
-                """INSERT INTO session_items
-                   (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, ?, ?, ?)""",
-                [
-                    (session_id, r["seq"], r["kind"], r["payload"], r["created_at"])
-                    for r in item_rows + extra_rows
-                ],
-            )
-            return True
-
     def duplicate(self, session_id: str) -> Optional[SessionSummary]:
         """孪生复制（2026-10-10）：新 id 复制 sessions 行 + **全部**
         session_items（含死段、compacted/rewound 边界、usage、skill_context、
@@ -1208,13 +1389,20 @@ class SessionsStore:
             [{"role": "user"|"assistant", "content": str | list}, ...]，按 seq 升序。
         """
         items = self.project_live_items(self.get_detail(session_id))
-        # 预扫描：最后一个压缩边界 + 边界之后的微压缩清理 id 并集。
-        # 遇新边界清空已收集 ids——更早的清理目标已被截断投影丢弃。
-        last_compacted_seq = -1
+        turns = self._group_turns(items)
+        cleared_ids = self._scan_cleared_ids(items)
+        return _sanitize_tool_pairing(self._replay_turns(turns, cleared_ids))
+
+    @staticmethod
+    def _scan_cleared_ids(items: list[SessionItem]) -> set[str]:
+        """预扫描微压缩清理目标：只认**最后一个**压缩边界之后的 microcompact。
+
+        压缩边界之前的清理目标已被截断投影丢弃，收集它们没有意义——遇新
+        边界即清空已收集集合（ADR-0026 回放口径）。
+        """
         cleared_ids: set[str] = set()
         for it in items:
             if it.kind == "compacted":
-                last_compacted_seq = it.seq
                 cleared_ids.clear()
             elif it.kind == "microcompact":
                 try:
@@ -1224,43 +1412,25 @@ class SessionsStore:
                 if isinstance(p, dict):
                     ids = p.get("cleared_tool_use_ids")
                     if isinstance(ids, list):
-                        cleared_ids.update(
-                            i for i in ids if isinstance(i, str)
-                        )
+                        cleared_ids.update(i for i in ids if isinstance(i, str))
+        return cleared_ids
 
-        # 按轮分组：message_user 是一轮的起点（前端在发送时写入，同轮的
-        # tool_trace / message_ai_raw / message_ai 都排在它之后）
+    @staticmethod
+    def _group_turns(items: list[SessionItem]) -> list[list[SessionItem]]:
+        """按轮分组：message_user 是一轮起点，其后条目归入同一轮。"""
         turns: list[list[SessionItem]] = []
         for it in items:
             if it.kind == "message_user" or not turns:
                 turns.append([it])
             else:
                 turns[-1].append(it)
+        return turns
 
+    def _replay_turns(
+        self, turns: list[list[SessionItem]], cleared_ids: set[str]
+    ) -> list[dict]:
+        """把分好组的条目回放为 LLM messages（规则见 get_chat_history docstring）。"""
         history: list[dict] = []
-
-        def _apply_cleared(role: str, content):
-            """微压缩重放：被清理 id 的 tool_result 内容替换 "[cleared]"。"""
-            if role != "user" or not isinstance(content, list) or not cleared_ids:
-                return content
-            return [
-                {**b, "content": "[cleared]"}
-                if isinstance(b, dict)
-                and b.get("type") == "tool_result"
-                and b.get("tool_use_id") in cleared_ids
-                else b
-                for b in content
-            ]
-
-        def _append(role: str, content) -> None:
-            # 连续同角色：user/user 补 assistant 填充（中断轮「只有
-            # message_user 没有 AI 回复」的 400 防护）；assistant/assistant
-            # 放行——压缩边界后摘要确认紧跟 LLM 响应是真实请求形态，
-            # 插填充反而使回放与真实请求前缀分叉（ADR-0026）。
-            if history and history[-1]["role"] == role == "user":
-                history.append({"role": "assistant", "content": "(interrupted)"})
-            history.append({"role": role, "content": content})
-
         for turn in turns:
             # 含 raw_messages 的轮：原始结构原样回放，tool_trace/AI 文本忽略
             has_raw_messages = any(it.kind == "raw_messages" for it in turn)
@@ -1280,78 +1450,27 @@ class SessionsStore:
                 if not isinstance(payload, dict):
                     continue
                 if it.kind == "message_user":
-                    content = payload.get("content", "")
-                    if content:
-                        # 对话图片（ADR-0034）：images 平级数组非空时组装为
-                        # Anthropic 块数组 [image×N, text]（OpenAI-compat 由
-                        # provider 翻译）；无图保持纯字符串（与历史逐字节一致）
-                        images = payload.get("images")
-                        if isinstance(images, list) and images:
-                            blocks = [
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": img.get("media_type", "application/octet-stream"),
-                                        "data": img.get("data", ""),
-                                    },
-                                }
-                                for img in images
-                                if isinstance(img, dict) and img.get("data")
-                            ]
-                            blocks.append({"type": "text", "text": content})
-                            _append("user", blocks)
-                        else:
-                            _append("user", content)
+                    self._replay_user(payload, history)
                 elif it.kind == "raw_messages":
-                    for rm in payload.get("messages", []):
-                        if not isinstance(rm, dict):
-                            continue
-                        r, c = rm.get("role"), rm.get("content")
-                        if r in ("user", "assistant") and c:
-                            _append(r, _apply_cleared(r, c))
+                    self._replay_raw(payload, history, cleared_ids)
                 elif it.kind == "compacted":
                     # 截断投影：清空此前全部回放再拼压缩后消息序列
                     # （payload 与 raw_messages 同构）
                     history.clear()
-                    for rm in payload.get("messages", []):
-                        if not isinstance(rm, dict):
-                            continue
-                        r, c = rm.get("role"), rm.get("content")
-                        if r in ("user", "assistant") and c:
-                            _append(r, c)
+                    self._replay_raw(payload, history, set())
                 elif it.kind == "microcompact":
                     # 预扫描已按 id 重放（_apply_cleared），无逐条回放动作
                     continue
                 elif it.kind == "tool_trace":
-                    if suppress_fallback:
-                        continue
-                    tu_id = payload.get("tool_use_id", "")
-                    if not tu_id:
-                        continue
-                    _append("assistant", [{
-                        "type": "tool_use",
-                        "id": tu_id,
-                        "name": payload.get("name", ""),
-                        "input": payload.get("input") or {},
-                    }])
-                    _append("user", [{
-                        "type": "tool_result",
-                        "tool_use_id": tu_id,
-                        "content": (
-                            "[cleared]"
-                            if tu_id in cleared_ids
-                            else str(payload.get("output", ""))
-                        ),
-                        "is_error": bool(payload.get("is_error", False)),
-                    }])
+                    if not suppress_fallback:
+                        _replay_tool_trace(payload, history, cleared_ids)
                 elif it.kind == "skill_context":
                     # run_stream 注入的 skill body（见 upsert_skill_contexts）：
                     # 原样回放在首次注入位置，跨轮请求前缀稳定（缓存友好）
                     content = payload.get("content", "")
                     if content:
-                        _append("user", content)
-                        _append("assistant", "Noted.")
+                        _append_paired(history, "user", content)
+                        _append_paired(history, "assistant", "Noted.")
                 elif it.kind == "message_ai_raw":
                     if suppress_fallback:
                         continue
@@ -1359,7 +1478,7 @@ class SessionsStore:
                     # 介于其间的 skill_context 挤到 AI 文本之前，破坏前缀）
                     content = payload.get("content", "")
                     if content and not ai_emitted:
-                        _append("assistant", content)
+                        _append_paired(history, "assistant", content)
                         ai_emitted = True
                 elif it.kind == "message_ai":
                     # 策展展示文本只做兜底：raw 无论 seq 先后都优先（与旧逻辑一致）；
@@ -1368,8 +1487,46 @@ class SessionsStore:
                     if content and not ai_display_fallback:
                         ai_display_fallback = content
             if not ai_emitted and not suppress_fallback and ai_display_fallback:
-                _append("assistant", ai_display_fallback)
-        return _sanitize_tool_pairing(history)
+                _append_paired(history, "assistant", ai_display_fallback)
+        return history
+
+    @staticmethod
+    def _replay_user(payload: dict, history: list[dict]) -> None:
+        """message_user 回放；images 非空时组装 [image×N, text] 块数组。"""
+        content = payload.get("content", "")
+        if not content:
+            return
+        # 对话图片（ADR-0034）：images 平级数组非空时组装为 Anthropic 块数组
+        # [image×N, text]（OpenAI-compat 由 provider 翻译）；无图保持纯字符串
+        # （与历史逐字节一致）
+        images = payload.get("images")
+        if isinstance(images, list) and images:
+            blocks = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img.get("media_type", "application/octet-stream"),
+                        "data": img.get("data", ""),
+                    },
+                }
+                for img in images
+                if isinstance(img, dict) and img.get("data")
+            ]
+            blocks.append({"type": "text", "text": content})
+            _append_paired(history, "user", blocks)
+        else:
+            _append_paired(history, "user", content)
+
+    @staticmethod
+    def _replay_raw(payload: dict, history: list[dict], cleared_ids: set[str]) -> None:
+        """raw_messages / compacted 的 messages 数组逐条回放。"""
+        for rm in payload.get("messages", []):
+            if not isinstance(rm, dict):
+                continue
+            role, content = rm.get("role"), rm.get("content")
+            if role in ("user", "assistant") and content:
+                _append_paired(history, role, _clear_marked_content(role, content, cleared_ids))
 
     @staticmethod
     def _row_to_summary(row: sqlite3.Row) -> SessionSummary:
@@ -1385,20 +1542,32 @@ class SessionsStore:
             starred=bool(row["starred"]),
         )
 
-    # ---- 登录会话（auth_sessions）----
+    # ---- 委托：回退文件快照（_RewindSnapshotStore）----
+
+    def append_rewind_snapshot(self, session_id: str, anchor_seq: int, tracked_backups: dict) -> tuple:
+        return self._snapshots.append_rewind_snapshot(session_id, anchor_seq, tracked_backups)
+
+    def latest_rewind_snapshot(self, session_id: str) -> Optional[dict]:
+        return self._snapshots.latest_rewind_snapshot(session_id)
+
+    def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
+        return self._snapshots.backfill_rewind_snapshot(session_id, path, entry)
+
+    def list_rewind_snapshots(self, session_id: str) -> list:
+        return self._snapshots.list_rewind_snapshots(session_id)
+
+    # ---- 委托：导出 / 导入（_SessionPortability）----
+
+    def export_session(self, session_id: str) -> Optional[dict]:
+        return self._portability.export_session(session_id)
+
+    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
+        return self._portability.import_session(data, workdir)
+
+    # ---- 委托：登录会话（_AuthSessionStore）----
 
     def create_auth_session(self, ttl_hours: int = 24) -> str:
-        """签发登录会话，返回 token。"""
-        token = secrets.token_urlsafe(32)
-        now = datetime.utcnow()
-        expires = now + timedelta(hours=ttl_hours)
-        with self._lock, self._conn() as conn:
-            conn.execute(
-                "INSERT INTO auth_sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
-                (token, now.isoformat(), expires.isoformat()),
-            )
-        self.purge_expired_auth_sessions()
-        return token
+        return self._auth.create_auth_session(ttl_hours)
 
     def validate_auth_session(
         self,
@@ -1408,43 +1577,15 @@ class SessionsStore:
         ttl_hours: int = 24,
         now: Optional[datetime] = None,
     ) -> bool:
-        """校验登录会话存在且未过期。
-
-        touch=True 时滑动续期：剩余有效期不足阈值才把 expires_at 顺延为
-        now + ttl（节流，避免每个请求都写库）。now 可注入以便测试。
-        """
-        now = now or datetime.utcnow()
-        with self._lock, self._conn() as conn:
-            row = conn.execute(
-                "SELECT expires_at FROM auth_sessions WHERE token = ?", (token,)
-            ).fetchone()
-            if row is None:
-                return False
-            expires = datetime.fromisoformat(row["expires_at"])
-            if expires <= now:
-                conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
-                return False
-            if touch and expires - now < _AUTH_TOUCH_REFRESH_THRESHOLD:
-                new_expires = now + timedelta(hours=ttl_hours)
-                conn.execute(
-                    "UPDATE auth_sessions SET expires_at = ? WHERE token = ?",
-                    (new_expires.isoformat(), token),
-                )
-            return True
+        return self._auth.validate_auth_session(
+            token, touch=touch, ttl_hours=ttl_hours, now=now
+        )
 
     def delete_auth_session(self, token: str) -> None:
-        with self._lock, self._conn() as conn:
-            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+        return self._auth.delete_auth_session(token)
 
     def revoke_all_auth_sessions(self) -> int:
-        """吊销全部登录会话，返回删除条数。"""
-        with self._lock, self._conn() as conn:
-            cur = conn.execute("DELETE FROM auth_sessions")
-            return cur.rowcount
+        return self._auth.revoke_all_auth_sessions()
 
     def purge_expired_auth_sessions(self) -> int:
-        """清理已过期登录会话，返回删除条数。"""
-        now = datetime.utcnow().isoformat()
-        with self._lock, self._conn() as conn:
-            cur = conn.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now,))
-            return cur.rowcount
+        return self._auth.purge_expired_auth_sessions()
