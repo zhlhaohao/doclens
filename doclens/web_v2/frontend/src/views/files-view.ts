@@ -401,6 +401,8 @@ export class FilesView extends LitElement {
   private get _previewPageStarts() { return this._preview.pageStarts; }
   private get _previewTokens() { return this._preview.tokens; }
   private get _previewAttachments() { return this._preview.attachments; }
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  private get _previewSizeBytes() { return this._preview.sizeBytes; }
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
    *  二进制 415「请下载后查看」）；null = 无错误。移动端 detail 层渲染
    *  带返回条的错误提示页（P1-2：状态在 controller，此 getter 归一）。 */
@@ -1405,6 +1407,7 @@ export class FilesView extends LitElement {
       language=${this._previewLanguage}
       content=${this._previewContent}
       ?writable=${this._previewWritable}
+      .sizeBytes=${this._previewSizeBytes}
       .pages=${this._previewPages}
       .pageStarts=${this._previewPageStarts}
       .attachments=${this._previewAttachments}

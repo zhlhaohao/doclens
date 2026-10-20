@@ -500,6 +500,8 @@ export class ChatView extends LitElement {
   private get previewPageStarts() { return this._preview.pageStarts; }
   private get previewTokens() { return this._preview.tokens; }
   private get previewAttachments() { return this._preview.attachments; }
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  private get previewSizeBytes() { return this._preview.sizeBytes; }
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
   /** 对话技能候选（ADR-0016 §1：全部启用技能）；null = 未加载/加载中 */
   @state() private _skillCandidates: SkillInfo[] | null = null;
@@ -1704,6 +1706,7 @@ export class ChatView extends LitElement {
       content=${this.previewContent}
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
+      .sizeBytes=${this.previewSizeBytes}
       .pages=${this.previewPages}
       .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}

@@ -6,7 +6,7 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
  *
  * 三个消费方（滚动容器各不相同）：
  * - md-viewer   : scroller = :host 自身（overflow-y: auto）
- * - md-editor   : scroller = 内部 <textarea>（跳转需附带光标移动 + focus）
+ * - cm-editor   : scroller = CM6 内部 .cm-scroller（内核自管滚动，本组件不消费）
  * - preview-pane: scroller = 纯文本预览的 .body div
  *
  * controller 负责：显隐状态（按滚动位置条件显示）、scroll/resize 监听、
@@ -117,7 +117,7 @@ export class ScrollJumpController implements ReactiveController {
  *     渲染（height:0 不占布局），FAB 固定在滚动视口右下角不随内容滚走。
  *     适用：md-viewer :host、preview-pane .body（自身即滚动容器）。
  *  2. absolute 覆盖 —— 消费方自行给 .scroll-jump-fabs 加 position 规则。
- *     适用：md-editor .body（textarea 不能有子元素，覆盖在 wrapper 上）。 */
+ *     适用：已无（cm-editor 用 CM6 内核滚动，不再需要 FAB 覆盖层）。 */
 export const scrollJumpFabStyles = css`
   .scroll-jump-anchor {
     position: sticky;

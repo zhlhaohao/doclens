@@ -191,4 +191,5 @@ def preview(
         writable=compute_writable(full, base),
         synthesized=False,
         tokens=tokens,
+        size_bytes=full.stat().st_size,
     )

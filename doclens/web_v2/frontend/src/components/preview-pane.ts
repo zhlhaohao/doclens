@@ -1,8 +1,8 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
-import "./md-editor";
 import "./code-viewer";
+import "./cm-editor";
 import "./toc-drawer";
 import "./pdf-viewer";
 import "./skill-toolbox-dialog";
@@ -13,7 +13,7 @@ import { isPstEmailPath, isPstFilePath } from "../api/pst";
 import { fetchSkills, type SkillInfo } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
 import { extractHeadings, activeTocIndex, type TocItem } from "../utils/toc";
-import type { MdEditor } from "./md-editor";
+import type { CmEditor } from "./cm-editor";
 import type { MdViewer } from "./md-viewer";
 import type { PdfViewer } from "./pdf-viewer";
 import type { CodeViewer } from "./code-viewer";
@@ -59,6 +59,11 @@ import {
 
 /** CJK 字符（汉字 / 假名 / 谚文基础区）——用于高亮输入条的分词判定。 */
 const CJK_RE = /[一-鿿぀-ヿ가-힯]/;
+
+/** 编辑大小上限（ADR-0046）：5MB，与后端写入上限 `_MAX_SAVE_BYTES` 对齐。
+ *  超过此值的文件仍可预览（只读），但不提供编辑入口——编辑器在移动端
+ *  WebView 需持多份文档副本，超大文件有 OOM 风险，且本就存不回去。 */
+export const EDIT_MAX_BYTES = 5 * 1024 * 1024;
 
 /** 高亮输入条手动输入的关键词归一化（2026-09-28 决议）：
  *  含 CJK → 去空格**整串匹配**（中文没有空格分词习惯——输入法确认词组
@@ -259,6 +264,24 @@ export class PreviewPane extends LitElement {
       border-radius: var(--cortex-radius-pill);
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    /* 文件过大提示（ADR-0046）：替代编辑按钮，说明为何不可编辑 */
+    .too-large-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-1);
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      white-space: nowrap;
+    }
+    .menuitem-disabled {
+      display: flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) var(--cortex-space-3);
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      cursor: not-allowed;
     }
     /* icon + hover 文字（参照 file-list 工具栏）：默认只显图标，hover 时
        文字以 tooltip 浮现于按钮左下方（上方被 app-bar 遮挡），
@@ -581,6 +604,8 @@ export class PreviewPane extends LitElement {
   @property({ type: Number }) line: number | null = null;
   @property() keyword = "";
   @property({ type: Boolean }) writable = false;
+  /** 文件字节数（ADR-0046）：超过 EDIT_MAX_BYTES 则禁编辑（仍可预览）。 */
+  @property({ type: Number }) sizeBytes: number | null = null;
   @property({ type: Boolean }) noHeader = false;
   /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）。与 noHeader 互不冲突：
    *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
@@ -683,6 +708,17 @@ export class PreviewPane extends LitElement {
   /** 代码主题（ADR-0036/0043 三态）：auto=跟随应用主题；渲染表面解析已随
    *  code-viewer（组件内订阅应用主题），宿主持状态驱动 header 按钮与 prop。 */
   @state() private _codeTheme: CodeTheme = readCodeTheme();
+
+  /** 是否超过编辑大小上限（ADR-0046）。sizeBytes 未下发时按可编辑处理
+   *  （后端未提供该字段的旧路径 / 非文本预览）。 */
+  private get _tooLarge(): boolean {
+    return this.sizeBytes !== null && this.sizeBytes > EDIT_MAX_BYTES;
+  }
+
+  /** 可编辑（ADR-0046）：后端判定可写 + 未超大小上限。 */
+  private get _canEdit(): boolean {
+    return this.writable && !this._tooLarge;
+  }
 
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
@@ -798,14 +834,19 @@ export class PreviewPane extends LitElement {
     if (!changed.has("_mode")) return;
     if (this._mode === "edit") {
       // 预览 → 编辑：把锚点行恢复为编辑器视口顶部（瞬跳；贴底锚点则对齐尾部视野）
-      const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+      const editor = this.shadowRoot!.querySelector("cm-editor") as CmEditor | null;
       if (editor) {
         await editor.updateComplete;
+        // CM6 核心是懒加载的（动态 import）——内核未就绪时锚点恢复会静默丢失，
+        // 故先等内核挂载（ADR-0046）。
+        await editor.whenReady();
         if (this._anchorAtBottom) editor.scrollToBottom();
         else editor.scrollToLine(this._anchorLine);
         if (this._selOffsets) {
-          // WebView：reveal 保留 focus 原生 reveal-selection 兜底视野
-          editor.selectOffsets(this._selOffsets.start, this._selOffsets.end, isWebviewContainer());
+          // 选区落地：CM6 原生按字符偏移设置选区并滚动进视野
+          // （ADR-0046 取代 md-editor 的 reveal 手动兜底——WebView 的
+          //  「中央字锚点」补偿是 textarea 行高测量误差的产物，CM6 无此问题）。
+          editor.selectOffsets(this._selOffsets.start, this._selOffsets.end);
         }
       }
       return;
@@ -1256,12 +1297,16 @@ export class PreviewPane extends LitElement {
                 ${this._isLineView && this._mode === "preview"
                   ? this._renderCodeSelectionClear()
                   : null}
-                ${this.writable
+                ${this._canEdit
                   ? html`<button
                       type="button"
                       role="menuitem"
                       @click=${() => { this._showMobileMenu = false; this.enterEdit(); }}
                     ><doclens-icon name="pencil"></doclens-icon>编辑</button>`
+                  : this._tooLarge
+                  ? html`<div class="menuitem-disabled" role="menuitem" aria-disabled="true">
+                      <doclens-icon name="alert-triangle"></doclens-icon>文件过大，无法编辑
+                    </div>`
                   : null}
                 ${this._isPst
                   ? null
@@ -1325,7 +1370,7 @@ export class PreviewPane extends LitElement {
   /** 退出编辑前捕获编辑器视口顶部的源行号（编辑后新文本的行号）与
    *  文本选区，并抑制切回预览时 md-viewer 的命中行定位（避免与锚点恢复打架）。 */
   private _captureEditorAnchor() {
-    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    const editor = this.shadowRoot!.querySelector("cm-editor") as CmEditor | null;
     if (editor) {
       this._anchorLine = editor.topLine();
       this._anchorAtBottom = editor.isAtBottom();
@@ -1337,7 +1382,7 @@ export class PreviewPane extends LitElement {
   private _onEditorCancel = () => {
     // cancel 回滚文本：放弃选区保持（编辑文本的行号已与原文失配），
     // 但保留锚点（视野位置按原文本行号尽力恢复）
-    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    const editor = this.shadowRoot!.querySelector("cm-editor") as CmEditor | null;
     if (editor) {
       this._anchorLine = editor.topLine();
       this._anchorAtBottom = editor.isAtBottom();
@@ -1354,7 +1399,7 @@ export class PreviewPane extends LitElement {
   };
 
   private async _onEditorSave(e: CustomEvent<{ content: string }>) {
-    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    const editor = this.shadowRoot!.querySelector("cm-editor") as CmEditor | null;
     this._captureEditorAnchor();
     try {
       await savePreview(this.path, e.detail.content);
@@ -1383,7 +1428,7 @@ export class PreviewPane extends LitElement {
 
   /** 公共方法：父组件（search-view）在用户确认"丢弃修改"后调用。 */
   discard() {
-    const editor = this.shadowRoot!.querySelector("md-editor") as MdEditor | null;
+    const editor = this.shadowRoot!.querySelector("cm-editor") as CmEditor | null;
     editor?.discard();
     this._mode = "preview";
   }
@@ -1996,17 +2041,17 @@ export class PreviewPane extends LitElement {
     const showDesktopHeader = !this.mobile && !this.noHeader;
 
     /** 可编辑语言：md 格式化预览 + 行号视图全家（代码/txt/未知后缀——
-     *  md-editor 本质是通用 textarea，保存走同一条 savePreview 链路；
-     *  pdf/image/html 不可编辑）。 */
+     *  cm-editor 是通用编辑器内核（ADR-0046），保存走同一条 savePreview
+     *  链路；pdf/image/html 不可编辑）。 */
     const editable = this.language === "markdown" || this._isLineView;
 
     if (editable && this._mode === "edit") {
-      // 编辑态只渲染 md-editor 自身的 toolbar（含路径/未保存/保存/取消）
+      // 编辑态只渲染 cm-editor 自身的 toolbar（含路径/未保存/保存/取消）
       // ——不再叠加 preview header，避免双 bar。下载/工具箱等预览专属
       // 操作在编辑态不可达，保存/取消回到预览后恢复。
       return html`
         ${renderMobileBar}
-        <md-editor
+        <cm-editor
           .path=${this.path}
           .originalContent=${this._content}
           ?mobile=${this.mobile}
@@ -2014,7 +2059,7 @@ export class PreviewPane extends LitElement {
           @save=${this._onEditorSave}
           @cancel=${this._onEditorCancel}
           @dirty-change=${this._onEditorDirty}
-        ></md-editor>
+        ></cm-editor>
         ${this._renderDownloadOverlay()}
         ${this._renderToolboxDialogs()}
       `;
@@ -2027,8 +2072,10 @@ export class PreviewPane extends LitElement {
           <div class="header">
             ${this._renderBackBtn()}
             ${this._renderPath()}
-            ${this.writable
+            ${this._canEdit
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
+              : this._tooLarge
+              ? html`<span class="too-large-hint" title="文件超过 ${Math.round(EDIT_MAX_BYTES / 1024 / 1024)}MB，无法编辑"><doclens-icon name="alert-triangle"></doclens-icon>文件过大，无法编辑</span>`
               : null}
             ${this._renderMdFontScaleGroup()}
             ${this._renderDownloadBtn()}
@@ -2138,8 +2185,10 @@ export class PreviewPane extends LitElement {
         <div class="header">
           ${this._renderBackBtn()}
           ${this._renderPath()}
-          ${this.writable
+          ${this._canEdit
             ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
+            : this._tooLarge
+            ? html`<span class="too-large-hint" title="文件超过 ${Math.round(EDIT_MAX_BYTES / 1024 / 1024)}MB，无法编辑"><doclens-icon name="alert-triangle"></doclens-icon>文件过大，无法编辑</span>`
             : null}
           ${this._renderDownloadBtn()}
             ${this._renderCodeFontScaleGroup()}

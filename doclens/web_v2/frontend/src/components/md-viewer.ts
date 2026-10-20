@@ -910,7 +910,7 @@ export class MdViewer extends LitElement {
 
   /** 视口顶部所在的源行号（1-indexed，行级精度）；无块时返回 1。
    *  视口顶侵入块内部时按像素比例插值（折行/图片按视觉比例），否则为块起始行。
-   *  供 preview-pane 在预览→编辑切换时捕获位置锚点，与 md-editor.topLine() 同精度。 */
+   *  供 preview-pane 在预览→编辑切换时捕获位置锚点，与 cm-editor.topLine() 同精度。 */
   topSourceLine(): number {
     const blocks = this._anchorBlocks();
     if (blocks.length === 0) return 1;
@@ -932,7 +932,7 @@ export class MdViewer extends LitElement {
   }
 
   /** 滚动使源行 line 贴顶（默认瞬跳，行级精度：块内按跨度比例像素偏移）。
-   *  供 preview-pane 在编辑→预览切换时恢复位置锚点，与 md-editor.scrollToLine()
+   *  供 preview-pane 在编辑→预览切换时恢复位置锚点，与 cm-editor.scrollToLine()
    *  同精度；不触发闪烁动画。 */
   scrollToSourceLine(line: number, behavior: ScrollBehavior = "auto") {
     const scrollOnce = () => {
@@ -1011,7 +1011,7 @@ export class MdViewer extends LitElement {
     };
   }
 
-  /** 当前 DOM 选区 → 源文本字符偏移（与 md-editor 的 selectionStart/End
+  /** 当前 DOM 选区 → 源文本字符偏移（与 cm-editor 的 selectionStart/End
    *  同一坐标系，字符级精度——修复行级映射的「选区放大」：选一个词切到
    *  编辑器不再变成整块几十行）。块内偏移按 渲染文本/源文本 长度比例
    *  映射，吸收行内语法（**、`、链接渲染后消失）的长度差。选区不在
@@ -1057,8 +1057,8 @@ export class MdViewer extends LitElement {
    *  背景：WebView 内核对 textarea 行高取整与镜像 div 不一致，镜像
    *  测量的 scrollTop 锚点有累积偏差。此方法在切编辑前于视野中央
    *  造一个单字符选区，走既有选区保持链路（selectionSourceOffsets →
-   *  md-editor.selectOffsets + focus 原生 reveal-selection）——滚动
-   *  执行者是浏览器自己（同引擎坐标），免疫测量误差。
+   *  cm-editor.selectOffsets）——滚动执行者是浏览器自己（同引擎坐标），
+   *  免疫测量误差。
    *  视野中央所在块的文本中部定位；失败（无块/无文本）静默返回 false。 */
   selectCharAtViewportCenter(): boolean {
     const blocks = this._anchorBlocks();

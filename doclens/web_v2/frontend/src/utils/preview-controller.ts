@@ -41,6 +41,8 @@ export interface PreviewDoc {
   language: string;
   writable: boolean;
   synthesized: boolean;
+  /** 文件字节数（ADR-0046 编辑阈值判定用；后端未下发时 null）。 */
+  sizeBytes: number | null;
   pages: PageMarker[] | null;
   lineMap: Record<string, number> | null;
   pageStarts: number[] | null;
@@ -113,6 +115,7 @@ export class PreviewController implements ReactiveController {
   get content(): string { return this.state.status === "ok" ? this.state.doc.content : ""; }
   get language(): string { return this.state.status === "ok" ? this.state.doc.language : "text"; }
   get writable(): boolean { return this.state.status === "ok" ? this.state.doc.writable : false; }
+  get sizeBytes(): number | null { return this.state.status === "ok" ? this.state.doc.sizeBytes : null; }
   get pages(): PageMarker[] | null { return this.state.status === "ok" ? this.state.doc.pages : null; }
   get attachments(): PstAttachmentInfo[] | null { return this.state.status === "ok" ? this.state.doc.attachments : null; }
   get pageStarts(): number[] | null { return this.state.status === "ok" ? this.state.doc.pageStarts : null; }
@@ -172,6 +175,7 @@ export class PreviewController implements ReactiveController {
         language: body.language ?? "text",
         writable: body.writable ?? false,
         synthesized: body.synthesized ?? false,
+        sizeBytes: body.size_bytes ?? null,
         pages: body.pages ?? null,
         lineMap: null,
         pageStarts: null,
@@ -267,13 +271,13 @@ export class PreviewController implements ReactiveController {
 
   private _docFrom(r: {
     path: string; content: string; language: string; writable: boolean;
-    synthesized: boolean; pages: PageMarker[] | null;
+    synthesized: boolean; sizeBytes: number | null; pages: PageMarker[] | null;
     lineMap: Record<string, number> | null; pageStarts: number[] | null;
     attachments: PstAttachmentInfo[] | null; tokens: string[][][] | null;
   }): PreviewDoc {
     return {
       path: r.path, content: r.content, language: r.language,
-      writable: r.writable, synthesized: r.synthesized,
+      writable: r.writable, synthesized: r.synthesized, sizeBytes: r.sizeBytes,
       pages: r.pages, lineMap: r.lineMap, pageStarts: r.pageStarts,
       attachments: r.attachments, tokens: r.tokens,
     };
@@ -282,7 +286,7 @@ export class PreviewController implements ReactiveController {
   private _emptyDoc(path: string): PreviewDoc {
     return {
       path, content: "", language: "text", writable: false,
-      synthesized: false, pages: null, lineMap: null,
+      synthesized: false, sizeBytes: null, pages: null, lineMap: null,
       pageStarts: null, attachments: null, tokens: null,
     };
   }

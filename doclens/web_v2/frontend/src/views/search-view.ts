@@ -183,6 +183,8 @@ export class SearchView extends LitElement {
   private get previewAttachments() { return this._preview.attachments; }
   private get previewPageStarts() { return this._preview.pageStarts; }
   private get previewTokens() { return this._preview.tokens; }
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  private get previewSizeBytes() { return this._preview.sizeBytes; }
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -682,6 +684,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
                 .line=${this.previewLine}
                 .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
+                .sizeBytes=${this.previewSizeBytes}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}
@@ -734,6 +737,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
                 .line=${this.previewLine}
                 .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
+                .sizeBytes=${this.previewSizeBytes}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}

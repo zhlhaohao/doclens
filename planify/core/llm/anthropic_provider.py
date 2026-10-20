@@ -236,16 +236,10 @@ class AnthropicProvider:
             content=content,
             stop_reason=response.stop_reason or "end_turn",
             model=response.model,
-            usage={
-                "input_tokens": getattr(response.usage, "input_tokens", 0),
-                "output_tokens": getattr(response.usage, "output_tokens", 0),
-                "cache_creation_input_tokens": getattr(
-                    response.usage, "cache_creation_input_tokens", 0
-                ),
-                "cache_read_input_tokens": getattr(
-                    response.usage, "cache_read_input_tokens", 0
-                ),
-            },
+            # 复用 _usage_from：其对 None 字段有 `or 0` 兜底（部分 Anthropic
+            # 兼容端点如 MiniMax /anthropic 会把 cache_creation_input_tokens
+            # 回成 null，直取会把 None 灌进 usage 的 int 字段）。
+            usage=AnthropicProvider._usage_from(response.usage),
         )
 
     def count_tokens(self, text: str) -> int:

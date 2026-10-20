@@ -2,11 +2,30 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fixture } from "@open-wc/testing";
 import { html } from "lit";
 import "../src/components/preview-pane";
-import "../src/components/md-editor";
+import "../src/components/cm-editor";
 import { MdViewer } from "../src/components/md-viewer";
 import type { PreviewPane } from "../src/components/preview-pane";
 
 const FONT_SCALE_KEY = "cortex.files.mdFontScalePct";
+
+/** 等 cm-editor 的懒加载内核挂载完成（CM6 核心是动态 import）。 */
+async function waitForEditor(el: PreviewPane) {
+  for (let i = 0; i < 50; i++) {
+    const ed = el.shadowRoot!.querySelector("cm-editor") as any;
+    if (ed && ed._view) return ed;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return el.shadowRoot!.querySelector("cm-editor") as any;
+}
+
+/** 等条件成立（超时返回 false）。用于等 preview-pane 的异步锚点恢复完成。 */
+async function waitUntil(fn: () => boolean, tries = 50): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    if (fn()) return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return fn();
+}
 
 describe("<preview-pane> markdown branch", () => {
   it("renders <md-viewer> when language is markdown", async () => {
@@ -84,40 +103,76 @@ describe("<preview-pane> edit mode", () => {
     expect(el.shadowRoot!.querySelector(".edit-btn")).toBeNull();
   });
 
-  it("clicking [编辑] switches to <md-editor>", async () => {
+  it("clicking [编辑] switches to <cm-editor>", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor");
+    const editor = el.shadowRoot!.querySelector("cm-editor");
     expect(editor).toBeTruthy();
     expect((editor as any).originalContent).toBe("# hello");
   });
 
-  it("md-editor cancel event switches back to <md-viewer>", async () => {
+  it("超过编辑上限（5MB）时隐藏编辑按钮并提示无法编辑（ADR-0046）", async () => {
     const el = await fixture(html`
-      <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
+      <preview-pane
+        language="markdown"
+        path="h.md"
+        content="# hello"
+        writable
+        .sizeBytes=${6 * 1024 * 1024}>
+      </preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
-    (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
-    await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
-    editor.dispatchEvent(new CustomEvent("cancel", {}));
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeNull();
+    // 编辑按钮不可用
+    expect(el.shadowRoot!.querySelector(".edit-btn")).toBeNull();
+    // 有明确提示
+    const hint = el.shadowRoot!.querySelector(".too-large-hint");
+    expect(hint).toBeTruthy();
+    expect(hint!.textContent).toContain("文件过大");
+    // 仍可预览（md-viewer 在位）
     expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
   });
 
-  it("forwards dirty-change from md-editor", async () => {
+  it("未超上限时正常显示编辑按钮", async () => {
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        path="h.md"
+        content="# hello"
+        writable
+        .sizeBytes=${1024}>
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".edit-btn")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".too-large-hint")).toBeNull();
+  });
+
+  it("cm-editor cancel event switches back to <md-viewer>", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
+    editor.dispatchEvent(new CustomEvent("cancel", {}));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeNull();
+    expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
+  });
+
+  it("forwards dirty-change from cm-editor", async () => {
+    const el = await fixture(html`
+      <preview-pane language="markdown" path="h.md" content="# hello" writable></preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
+    await el.updateComplete;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     let received: any = null;
     el.addEventListener("dirty-change", (e: any) => (received = e.detail));
     editor.dispatchEvent(new CustomEvent("dirty-change", { detail: { dirty: true } }));
@@ -131,10 +186,10 @@ describe("<preview-pane> edit mode", () => {
     await el.updateComplete;
     (el.shadowRoot!.querySelector(".edit-btn") as HTMLElement).click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
     el.content = "# b";
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeNull();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeNull();
     expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
   });
 
@@ -147,7 +202,7 @@ describe("<preview-pane> edit mode", () => {
     await el.updateComplete;
     el.discard();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeNull();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeNull();
   });
 });
 
@@ -164,7 +219,7 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
     const topSpy = vi.spyOn(viewer, "topSourceLine").mockReturnValue(4);
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     expect(editor).toBeTruthy();
     // updated() 异步 await editor.updateComplete 后才调 scrollToLine —— 等一拍
     await new Promise((r) => setTimeout(r, 0));
@@ -182,7 +237,7 @@ describe("<preview-pane> 预览↔编辑锚点一致性（视野首行）", () =
     await el.updateComplete;
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     editor.topLine = () => 4; // 视野首行 = 源行 4
     editor.dispatchEvent(new CustomEvent("cancel", {}));
     await el.updateComplete;
@@ -203,10 +258,11 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
     vi.spyOn(viewer, "selectionSourceOffsets").mockReturnValue({ start: 6, end: 12 });
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = await waitForEditor(el);
     expect(editor).toBeTruthy();
-    await new Promise((r) => setTimeout(r, 0));
     expect((el as any)._selOffsets).toEqual({ start: 6, end: 12 });
+    // 锚点恢复是异步的（preview-pane.updated 里 await whenReady 后才设选区）
+    await waitUntil(() => editor.selectionOffsets() !== null);
     expect(editor.selectionOffsets()).toEqual({ start: 6, end: 12 });
   });
 
@@ -232,7 +288,7 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
     vi.spyOn(viewer, "selectionSourceOffsets").mockReturnValue({ start: 6, end: 12 });
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     editor.dispatchEvent(new CustomEvent("cancel", {}));
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
@@ -258,7 +314,7 @@ describe("<preview-pane> noHeader prop", () => {
     el.enterEdit();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
   });
 });
 
@@ -279,7 +335,7 @@ describe("<preview-pane> download button", () => {
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeTruthy();
   });
 
-  it("edit mode: no preview header/download button (编辑态单 bar，md-editor toolbar 承担)", async () => {
+  it("edit mode: no preview header/download button (编辑态单 bar，cm-editor toolbar 承担)", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" content="# T" path="doc.md" writable></preview-pane>
     `) as PreviewPane;
@@ -288,7 +344,7 @@ describe("<preview-pane> download button", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
   });
 
   it("does not render download button when noHeader=true", async () => {
@@ -577,7 +633,7 @@ describe("<preview-pane> mobile header", () => {
     const items = el.shadowRoot!.querySelectorAll('.mobile-menu button[role="menuitem"]');
     (items[0] as HTMLElement).click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("md-editor")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
   });
 
   it("dropdown item '下载' triggers anchor click with server URL", async () => {
@@ -644,7 +700,7 @@ describe("<preview-pane> mobile header", () => {
     expect(el.shadowRoot!.querySelector(".mobile-menu")).toBeNull();
   });
 
-  it("edit mode in mobile: md-editor hides redundant filename (mobile bar already shows it)", async () => {
+  it("edit mode in mobile: cm-editor hides redundant filename (mobile bar already shows it)", async () => {
     const el = await fixture(html`
       <preview-pane
         language="markdown"
@@ -657,9 +713,9 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     expect(editor).toBeTruthy();
-    // mobile=true 透传给 md-editor
+    // mobile=true 透传给 cm-editor
     expect(editor.hasAttribute("mobile")).toBe(true);
     // 编辑器 toolbar 不再渲染 .path
     const toolbarPath = editor.shadowRoot!.querySelector(".toolbar .path");
@@ -669,7 +725,7 @@ describe("<preview-pane> mobile header", () => {
     expect(editor.shadowRoot!.querySelector(".cancel-btn")).toBeTruthy();
   });
 
-  it("edit mode in desktop: md-editor still shows filename in toolbar", async () => {
+  it("edit mode in desktop: cm-editor still shows filename in toolbar", async () => {
     const el = await fixture(html`
       <preview-pane
         language="markdown"
@@ -681,7 +737,7 @@ describe("<preview-pane> mobile header", () => {
     await el.updateComplete;
     el.enterEdit();
     await el.updateComplete;
-    const editor = el.shadowRoot!.querySelector("md-editor") as any;
+    const editor = el.shadowRoot!.querySelector("cm-editor") as any;
     expect(editor.hasAttribute("mobile")).toBe(false);
     const toolbarPath = editor.shadowRoot!.querySelector(".toolbar .path");
     expect(toolbarPath).toBeTruthy();
