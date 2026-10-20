@@ -31,15 +31,15 @@ icon: alert-triangle
 
 | 附件 | 内容 | 装载时机 |
 |---|---|---|
-| `lens-backend.md` | 后端栈主判据（本仓：FastAPI/Pydantic v2/uvicorn/SQLite-FTS5 专属清单 + 来源） | 后端域分析开始时 |
-| `lens-frontend.md` | 前端栈主判据（本仓：Lit/Vite/marked/pdf.js 专属清单 + 来源） | 前端域分析开始时（后端域完成后） |
+| `lens-backend.md` | 后端栈主判据（Python 语言层 + Web 框架层 + Pydantic + MySQL/SQLAlchemy + SQLite/FTS5，含两大典型栈组合） | 后端域分析开始时 |
+| `lens-frontend.md` | 前端栈主判据（Lit 组件工程 + 原生 H5/vanilla JS + 语义 HTML/可访问性，两形态） | 前端域分析开始时（后端域完成后） |
 | `lens-general.md` | 通用形态学兜底词汇表（Wikipedia/Fowler/microservices.io，按域分节） | 随对应域装载该域的节 |
 
 **(a) 栈专属清单的生成与保鲜**：
 
-1. **探测技术栈**（读事实，不问用户）：pyproject/requirements/go.mod 判后端，package.json 判前端。与附件 B/C 声明的栈不符（项目换了栈）→ 按新栈重新检索并**重写附件**。
+1. **探测技术栈**（读事实，不问用户）：pyproject/requirements/go.mod 判后端，package.json 判前端。附件 B/C 按**栈小节**组织（后端含 Python 语言层/框架层/Pydantic/MySQL-SQLAlchemy/SQLite-FTS5 五节，前端含 Lit/原生 H5-JS/语义 HTML 三节）——按探测结果装载命中的小节，其余跳过；项目换了附件未覆盖的栈 → 按新栈检索并**重写附件对应节**。
 2. **联网检索复检**：每次审计开始时对两附件的栈清单做快速复检（检索词 = `<技术> common anti-patterns/mistakes`；优先官方文档与高星仓库）——清单过时就地更新附件（含来源 URL 与复检日期），再投入使用。
-3. **判据声明入台账**：引用附件文件名 + 复检结论（更新了什么）。
+3. **判据声明入台账**：引用附件文件名 + 实际装载的栈小节 + 复检结论。
 
 **(b) 通用透镜使用纪律**：兜底词汇表不是 checklist——每条发现必须绑定本仓证据（文件:行号 + 为什么在此架构中构成问题）。
 
