@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from doclens.web_v2.api import preview as preview_api
+from doclens.web_v2.api import preview_mutations as preview_api
 from doclens.web_v2.api.errors import CortexAPIError
 
 

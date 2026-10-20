@@ -13,7 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from doclens.web_v2.api import preview as preview_api
+from doclens.web_v2.api import preview as preview_api          # GET /preview（元数据）
+from doclens.web_v2.api import preview_assets as preview_assets_api  # 字节流
+from doclens.web_v2.api import preview_mutations as mutations_api     # upload-target
 from doclens.web_v2.api.errors import CortexAPIError
 
 
@@ -89,7 +91,7 @@ class TestPdfPreviewMeta:
 class TestPdfBytesEndpoint:
     def test_inline_200(self, tmp_path):
         pdf = _make_pdf(tmp_path)
-        resp = asyncio.run(preview_api.preview_pdf(
+        resp = asyncio.run(preview_assets_api.preview_pdf(
             path="样本.pdf", idx=_fake_idx(tmp_path),
         ))
         assert resp.media_type == "application/pdf"
@@ -97,7 +99,7 @@ class TestPdfBytesEndpoint:
 
     def test_file_moved_404(self, tmp_path):
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_api.preview_pdf(
+            asyncio.run(preview_assets_api.preview_pdf(
                 path="不存在.pdf", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 404
@@ -106,7 +108,7 @@ class TestPdfBytesEndpoint:
     def test_not_a_pdf_400(self, tmp_path):
         (tmp_path / "note.md").write_text("x", encoding="utf-8")
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_api.preview_pdf(
+            asyncio.run(preview_assets_api.preview_pdf(
                 path="note.md", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 400
@@ -122,12 +124,12 @@ class TestPdfBytesEndpoint:
             index_path=str(tmp_path / ".cortex" / "index.db"),
             path_map={"deep": str(pdf)},
         )
-        resp = asyncio.run(preview_api.preview_pdf(path="deep.pdf", idx=idx))
+        resp = asyncio.run(preview_assets_api.preview_pdf(path="deep.pdf", idx=idx))
         assert Path(str(resp.path)) == pdf
 
     def test_path_traversal_blocked(self, tmp_path):
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_api.preview_pdf(
+            asyncio.run(preview_assets_api.preview_pdf(
                 path="../outside.pdf", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 404
@@ -151,21 +153,21 @@ class TestProbeUploadTarget:
         rel = "科技/report.pdf"
         idx = self._idx_with_docs(tmp_path, rel, "report")
         h = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:6]
-        resp = asyncio.run(preview_api.probe_upload_target(
+        resp = asyncio.run(mutations_api.probe_upload_target(
             filename=f"report_{h}.pdf", idx=idx,
         ))
         assert resp == {"match": True, "path": rel}
 
     def test_bad_filename_no_match(self, tmp_path):
         idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
-        resp = asyncio.run(preview_api.probe_upload_target(
+        resp = asyncio.run(mutations_api.probe_upload_target(
             filename="普通名字.pdf", idx=idx,
         ))
         assert resp == {"match": False}
 
     def test_no_index_match(self, tmp_path):
         idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
-        resp = asyncio.run(preview_api.probe_upload_target(
+        resp = asyncio.run(mutations_api.probe_upload_target(
             filename="b_deadbee.pdf", idx=idx,
         ))
         assert resp == {"match": False}
