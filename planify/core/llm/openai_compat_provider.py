@@ -28,19 +28,71 @@ _STOP_REASON_MAP = {
 }
 
 
+def _cache_tokens_from_openai(u: Any) -> tuple[int, int]:
+    """OpenAI 兼容端点的缓存字段 → (cache_read, cache_creation)。
+
+    兼容四套字段名（各家网关的缓存口径不同），按优先级取：
+
+    1. ``cache_read_input_tokens`` / ``cache_creation_input_tokens``：部分
+       代理直接透传 Anthropic 风格字段。
+    2. ``prompt_tokens_details.cached_tokens``：**MiniMax / 阿里云 / OpenAI
+       官方**口径。MiniMax 文档明确：OpenAI 兼容端点用
+       ``usage.prompt_tokens_details.cached_tokens`` 表示缓存命中 token 数，
+       且 ``usage.prompt_tokens`` 是**总**输入 token 数。
+    3. ``prompt_cache_hit_tokens``：DeepSeek 系（``prompt_tokens`` 同样是
+       「命中 + 未命中」总数）。
+
+    **cache_creation 恒为 0**：OpenAI 兼容端点只有「读缓存」概念，没有
+    Anthropic 那种显式「写缓存」计数——未命中的 token 是本次新算的输入
+    （计入 ``input_tokens``），把它再计成 cache_creation 会与 input 重复
+    计数，破坏「总输入 = input + cache_read + cache_creation」的不变式。
+    """
+    explicit_read = getattr(u, "cache_read_input_tokens", 0) or 0
+    explicit_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
+    if explicit_read or explicit_creation:
+        return int(explicit_read), int(explicit_creation)
+
+    details = getattr(u, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None) if details is not None else None
+    if cached:
+        return int(cached), 0
+
+    hit = getattr(u, "prompt_cache_hit_tokens", 0) or 0
+    if hit:
+        return int(hit), 0
+
+    return 0, 0
+
+
 def _usage_from_openai(u: Any) -> dict[str, int] | None:
     """OpenAI usage 对象 → 归一化四字段（None 输入返回 None）。
 
-    DeepSeek 系缓存字段 prompt_cache_hit_tokens / prompt_cache_miss_tokens
-    归一到 cache_read / cache_creation；无缓存概念的端点两字段为 0。
+    归一化到 **Anthropic 契约**（与 AnthropicProvider._usage_from 同一语义）：
+
+    - ``input_tokens`` = **未命中缓存的新增**输入 token 数
+    - ``cache_read_input_tokens`` = 命中缓存的输入 token 数
+    - ``cache_creation_input_tokens`` = 写入缓存的输入 token 数
+
+    关键：OpenAI 兼容端的 ``prompt_tokens`` 是**总**输入（命中 + 未命中），
+    与 Anthropic 的 ``input_tokens``（仅新增）语义不同。直接照搬会让
+    上层「总输入 = input + cache_read + cache_creation」的口径把命中部分
+    重复计一次——命中率被稀释、上下文占用虚高。故此处先减后归一，
+    保持不变式 ``input + cache_read + cache_creation == prompt_tokens``。
+
+    无缓存概念的端点（缓存字段皆缺）：``prompt_tokens`` 全是新增 token，
+    减 0，语义与 Anthropic 一致。
     """
     if u is None:
         return None
+    cache_read, cache_creation = _cache_tokens_from_openai(u)
+    prompt_total = getattr(u, "prompt_tokens", 0) or 0
+    # prompt_total 是「命中 + 未命中」总数 → 新增 = 总数 - 命中
+    new_input = max(0, int(prompt_total) - cache_read)
     return {
-        "input_tokens": getattr(u, "prompt_tokens", 0) or 0,
+        "input_tokens": new_input,
         "output_tokens": getattr(u, "completion_tokens", 0) or 0,
-        "cache_read_input_tokens": getattr(u, "prompt_cache_hit_tokens", 0) or 0,
-        "cache_creation_input_tokens": getattr(u, "prompt_cache_miss_tokens", 0) or 0,
+        "cache_read_input_tokens": cache_read,
+        "cache_creation_input_tokens": cache_creation,
     }
 
 
@@ -421,12 +473,18 @@ class OpenAICompatProvider:
 
         stop_reason = _STOP_REASON_MAP.get(choice.finish_reason or "", "end_turn")
 
+        # 非流式路径与流式路径共用同一套归一化（含缓存字段）——
+        # 否则 chat/achat 的 usage 与 astream 的 usage 口径分叉。
+        usage = _usage_from_openai(response.usage) or {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        }
+
         return LLMResponse(
             content=content_blocks,
             stop_reason=stop_reason,
             model=response.model,
-            usage={
-                "input_tokens": getattr(response.usage, "prompt_tokens", 0) if response.usage else 0,
-                "output_tokens": getattr(response.usage, "completion_tokens", 0) if response.usage else 0,
-            },
+            usage=usage,
         )
