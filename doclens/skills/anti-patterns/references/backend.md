@@ -1,6 +1,6 @@
 # 后端栈反模式清单（Python 系 + MySQL/SQLite）
 
-> 附件 B（lens/backend.md）。**技术栈专属主判据·后端域**（含数据库层）。
+> 附件 B（references/backend.md）。**技术栈专属主判据·后端域**（含数据库层）。
 > 两大典型栈组合（用户项目常见形态，按实际探测结果选用对应小节）：
 > ① Python Web 框架栈（FastAPI/Flask/Django）+ SQLite
 > ② Python + MySQL + SQLAlchemy（用户其他项目常见形态）

@@ -1,11 +1,11 @@
 # 通用反模式形态透镜（兜底词汇表）
 
-> 附件 A（lens/general.md）。跨技术栈经典形态，来源：Wikipedia《List
+> 附件 A（references/general.md）。跨技术栈经典形态，来源：Wikipedia《List
 > of software anti-patterns》/ Fowler《Refactoring》（refactoring.guru）/
 > microservices.io / Node.js 官方事件循环指南。
 >
 > **用途纪律**（同 SKILL.md 第 2 步）：这是**透镜与归类词汇表，不是
-> checklist**——主判据是技术栈专属清单（见 lens/ 下栈清单附件），本表用于归类
+> checklist**——主判据是技术栈专属清单（见 references/ 下栈清单附件），本表用于归类
 > 栈清单未覆盖的发现。每条发现必须绑定项目证据（文件:行号 + 为什么
 > 在此架构中构成问题）。**分域装载**：审后端域时只读后端/架构两节，
 > 审前端域时只读前端/组件两节——不整表灌入。

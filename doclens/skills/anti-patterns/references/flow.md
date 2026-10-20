@@ -1,6 +1,6 @@
 # anti-patterns 技能流程图
 
-> 附件 D（lens/flow.md）。SKILL.md 全流程的 mermaid 可视化——技能维护者用来校验流程改动后图文一致；审计执行时以 SKILL.md 文字为准，本图仅供快速回忆流程骨架。
+> 附件 D（references/flow.md）。SKILL.md 全流程的 mermaid 可视化——技能维护者用来校验流程改动后图文一致；审计执行时以 SKILL.md 文字为准，本图仅供快速回忆流程骨架。
 
 ## 一、两态协议总览
 
@@ -39,14 +39,14 @@ flowchart TD
 
     B1e --> C0["第3步 探索分析（分域：先后端，再前端）"]
     C0 --> C1["后端域（含数据库层）"]
-    C1 --> C1a["装载 lens/backend.md 命中节 +<br/>lens/general.md 架构/后端节"]
+    C1 --> C1a["装载 references/backend.md 命中节 +<br/>references/general.md 架构/后端节"]
     C1a --> C1b["切组：每组 ≤15 文件·判据 ≤8 条<br/>（大文件 2 倍计权，注意预算=乘积）"]
     C1b --> C1c["并行子代理：每批 ≤6·收齐再派<br/>两遍读法：grep 骨架 → 嫌疑 ±30 行取证"]
     C1c --> C1d{"某组失败/截断?"}
     C1d -->|"是"| C1e["对半缩小补跑；再败 → 主代理直读补齐"] --> C1f
     C1d -->|"否"| C1f["收齐后端域笔记"]
     C1f --> C2["前端域（同构并行协议）"]
-    C2 --> C2a["装载 lens/frontend.md 命中节 +<br/>lens/general.md 前端/组件/功能节"]
+    C2 --> C2a["装载 references/frontend.md 命中节 +<br/>references/general.md 前端/组件/功能节"]
     C2a --> C2f["收齐前端域笔记"]
 
     C1f & C2f --> D1["主代理交叉核实：<br/>接口咬合 / 文档-代码冲突 / 合并去重 /<br/>灰色项核实 / 反证归档 P4"]
@@ -105,8 +105,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    LENS["附件 B/C 栈清单<br/>lens/backend·frontend.md"] -->|审计装载| AUDIT2["审计态"]
-    GEN["附件 A 通用透镜<br/>lens/general.md"] -->|兜底归类| AUDIT2
+    REF["附件 B/C 栈清单<br/>references/backend·frontend.md"] -->|审计装载| AUDIT2["审计态"]
+    GEN["附件 A 通用透镜<br/>references/general.md"] -->|兜底归类| AUDIT2
     AUDIT2 -->|发现 AP-n·P1-P4| LEDGER[("台账<br/>antipatterns/范围.md")]
     LEDGER -->|下令引用 AP-n| EXEC2["执行态"]
     EXEC2 -->|status: done commit| LEDGER
