@@ -40,7 +40,10 @@ if _HAS_WATCHDOG:
             self._callback = callback
             # data_dirname() 每次调用做文件系统 resolve（~0.2ms，事件热路径
             # 上 × 每目录/每事件）——按字段缓存一次
-            self._data_dir = data_dirname()
+            # .lower()：_should_handle 的排除检查把路径段统一转小写对比，
+            # 配置值不 lower 时用户设 CORTEX_DATA_DIRNAME=MyData（首字母
+            # 大写是最自然写法）会让排除静默失效——数据目录内容流入索引
+            self._data_dir = data_dirname().lower()
             self._extensions = set(SUPPORTED_FORMATS.keys())
             # .gitignore 过滤（与索引器同一规则源：索引根的 .gitignore，
             # treesearch.pathutil.load_gitignore_spec 公共化接口）。启动时

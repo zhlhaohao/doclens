@@ -72,3 +72,19 @@ def test_gitignore_absent_no_filter(tmp_path: Path):
     h = _handler(tmp_path)
     assert h._gitignore_spec is None
     assert h._should_handle(str(tmp_path / "docs" / "note.draft.md")) is True
+
+
+def test_data_dir_exclusion_case_insensitive_override(tmp_path: Path, monkeypatch):
+    """AP-7：用户 CORTEX_DATA_DIRNAME=MyData 混合大小写 override 时排除仍生效。
+
+    _should_handle 把路径段统一转小写对比；_data_dir 若不 lower，"MyData"
+    永远匹配不到路径里的 "mydata"，排除静默失效——数据目录内容会被索引。
+    """
+    monkeypatch.setenv("CORTEX_DATA_DIRNAME", "MyData")
+    h = _ChangeHandler(lambda _p: None, str(tmp_path))
+    # 内部字段已规整为小写
+    assert h._data_dir == "mydata"
+    # 实际目录是混合大小写形式（Windows/macOS 文件系统不敏感，Linux 敏感但
+    # 排除语义跨平台统一为小写对比——只要配置写的什么大小写都能命中）
+    mixed = tmp_path / "MyData" / "logs" / "debug_20261020.log"
+    assert h._should_handle(str(mixed)) is False

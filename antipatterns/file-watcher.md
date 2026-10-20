@@ -56,7 +56,7 @@
 - **修复方案**：`FileWatcher` 提供类级 `DEFAULT_STATUS: ClassVar[dict]`（或模块级函数 `default_status()`），status.py 引用之。
 - **回归验证**：`tests/test_web_status*.py` 同名/关联 + `tests/test_architecture.py`。
 
-### AP-7 混合大小写 `CORTEX_DATA_DIRNAME` 覆盖使数据目录排除静默失效 [P3] [status: pending]
+### AP-7 混合大小写 `CORTEX_DATA_DIRNAME` 覆盖使数据目录排除静默失效 [P3] [status: done]
 - **形态**：Hard Code 的变体——大小写口径不对称（隐性脚枪）
 - **证据**：`doclens/config.py:43-46`：env 覆盖原样返回（可任意大小写）；`doclens/file_watcher.py:67-69`：`self._data_dir in (p.lower() for p in ...)`——路径段已 lower，而 `_data_dir` 未。用户设 `CORTEX_DATA_DIRNAME=MyData` → 排除永不命中 → 数据目录子树（含 `.py` 脚本、tmp 产物，均属 SUPPORTED_FORMATS）的事件流入回调并被 reindex 收进**知识库索引**。默认值（.cortex/.doclens）全小写不触发，故平时无感。
 - **风险**：高级用户自定目录名（首字母大写是最自然写法）即触发：数据目录内容被索引 + 潜在自反馈 reindex 回路。与记忆纪律「数据目录不写死形态」同域。
@@ -93,4 +93,5 @@
 |---|---|---|---|
 | 2026-10-20 | 一起改吧 | AP-1 / AP-2 / AP-3 / AP-4 | 见 1b74cb8——file_watcher.py 重构 + tests/test_file_watcher_robustness.py 新增 5 断言；分层回归 46 passed |
 | 2026-10-20 | 修 | AP-5 | 见 7a41716——watch_broker.broadcast 增节流（200ms 窗口内同事件至多入队一次）+ deps.py 状态机边沿 immediate=True；新增 tests/test_watch_broker_throttle.py 4 断言；分层回归 50 passed |
-| 2026-10-20 | 修 | AP-6 | 见 HEAD——FileWatcher.DEFAULT_STATUS 类常量作为单一真源，status.py fallback 改引用；分层回归 63 passed |
+| 2026-10-20 | 修 | AP-6 | 见 49ecd47——FileWatcher.DEFAULT_STATUS 类常量作为单一真源，status.py fallback 改引用；分层回归 63 passed |
+| 2026-10-20 | 修 | AP-7 | 见 HEAD——_ChangeHandler._data_dir 缓存时 .lower()；test_file_watcher_exclude 补混合大小写 override 用例；分层回归 51 passed |
