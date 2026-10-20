@@ -22,7 +22,7 @@ icon: alert-triangle
 ### 第 1 步：定范围
 
 - **点名范围**（模块轨：用户给路径，如 `doclens/web_v2`；feature 轨：主题词 grep 全仓发现文件，**列清单请用户确认**）——深挖对象。
-- **机械扫描恒做全仓**：可 grep 的结构性检查成本近零且问题天然跨模块散布。至少含：跨文件私有成员 import、行数 top 文件（上帝文件候选）、同名/同值常量多处定义（双份真相源候选）、`as any`/裸 fetch 密度。仓库已有架构守卫测试（如 test_architecture.py）必跑——它是既有红线，不是本技能产物。
+- **机械扫描恒做全仓**：可 grep 的结构性检查成本近零且问题天然跨模块散布。至少含：跨文件私有成员 import、行数 top 文件（God Object 候选）、同名/同值常量多处定义（Duplicated Source of Truth 候选）、`as any`/裸 fetch 密度。仓库已有架构守卫测试（如 test_architecture.py）必跑——它是既有红线，不是本技能产物。
 - 仓库自带的纪律文档（CLAUDE.md 边界规则、DESIGN.md 标尺等）是**附加判据**：违反仓库纪律 = 独立发现，即使形态本身经典。
 
 ### 第 2 步：判据——形态学透镜（不是清单）
@@ -33,56 +33,56 @@ icon: alert-triangle
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
-| Big Ball of Mud（大泥球） | 无清晰结构的系统整体，边界随意穿透 | 模块间调用无规律；"哪都能 import 哪" |
-| 循环依赖（Circular Dependency） | 模块互引成环 | import 图谱成环；构建工具告警 |
-| 分布式单体（Distributed Monolith） | 拆了进程/服务却保留单体耦合（同步链路、共享库、共库表） | 服务间同步调用链；共享数据库（Data Monolith） |
-| 烟囱系统（Stovepipe System） | 各子系统自成孤岛、互不复用、集成靠点对点 | 同类能力多处各造；集成点碎片化 |
-| 抽象倒置（Abstraction Inversion） | 高层被迫重新实现/内联底层细节 | 高层代码复制底层逻辑绕过接口 |
-| 内平台效应（Inner-Platform Effect） | 系统复刻了它运行平台的既有能力 | 自研配置系统/查询语言/调度器，重造平台轮子 |
+| Big Ball of Mud | 无清晰结构的系统整体，边界随意穿透 | 模块间调用无规律；"哪都能 import 哪" |
+| Circular Dependency | 模块互引成环 | import 图谱成环；构建工具告警 |
+| Distributed Monolith | 拆了进程/服务却保留单体耦合（同步链路、共享库、共库表） | 服务间同步调用链；共享数据库（Data Monolith） |
+| Stovepipe System | 各子系统自成孤岛、互不复用、集成靠点对点 | 同类能力多处各造；集成点碎片化 |
+| Abstraction Inversion | 高层被迫重新实现/内联底层细节 | 高层代码复制底层逻辑绕过接口 |
+| Inner-Platform Effect | 系统复刻了它运行平台的既有能力 | 自研配置系统/查询语言/调度器，重造平台轮子 |
 
 **后端模块层**
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
-| God Object / 上帝类 | 单类/单文件集过多职责，什么都知道什么都管 | 行数 + 公共方法数 + "改任何功能都 touch 它"（Fowler: Divergent Change 的变体） |
-| 霰弹式修改（Shotgun Surgery） | 一个改动要同时散改多处 | git log 里同一 feature 的 commit 横跨 N 个不相关文件 |
-| 发散式变化（Divergent Change） | 一个类因多种不同原因被反复改 | 类的变更原因数 >1（与霰弹式互为镜像） |
-| 阻塞事件循环（Blocking the Event Loop） | 异步运行时内在事件循环线程执行同步阻塞调用 | `async def` 内同步文件 I/O / 重 CPU / 长锁；Node.js/uvicorn 单线程全员冻结 |
-| 贫血领域模型（Anemic Domain Model） | 数据与行为分离：对象只有字段，逻辑全在过程式服务里 | model 层纯 getter/setter；业务规则堆在 util/service |
-| 错误隐藏（Error Hiding） | 捕获后吞掉、返回默认值或空 catch | `except: pass`；`catch {}`；失败被缓存（Caching Failure） |
-| 魔法数/串（Magic Numbers/Strings） | 未命名的裸字面量散布逻辑含义 | 同一数字/字符串多处硬编码；Soft Code（过度配置化）是其反面 |
-| 熔岩流（Lava Flow） | 死代码无人敢删，凝固成"历史的一部分" | "不知道为什么在这但删了怕炸"；无测试覆盖的遗留块 |
+| God Object | 单类/单文件集过多职责，什么都知道什么都管 | 行数 + 公共方法数 + "改任何功能都 touch 它"（Fowler: Divergent Change 的变体） |
+| Shotgun Surgery | 一个改动要同时散改多处 | git log 里同一 feature 的 commit 横跨 N 个不相关文件 |
+| Divergent Change | 一个类因多种不同原因被反复改 | 类的变更原因数 >1（与 Shotgun Surgery 互为镜像） |
+| Blocking the Event Loop | 异步运行时内在事件循环线程执行同步阻塞调用 | `async def` 内同步文件 I/O / 重 CPU / 长锁；Node.js/uvicorn 单线程全员冻结 |
+| Anemic Domain Model | 数据与行为分离：对象只有字段，逻辑全在过程式服务里 | model 层纯 getter/setter；业务规则堆在 util/service |
+| Error Hiding | 捕获后吞掉、返回默认值或空 catch | `except: pass`；`catch {}`；失败被缓存（Caching Failure） |
+| Magic Numbers / Magic Strings | 未命名的裸字面量散布逻辑含义 | 同一数字/字符串多处硬编码；Soft Code（过度配置化）是其反面 |
+| Lava Flow | 死代码无人敢删，凝固成"历史的一部分" | "不知道为什么在这但删了怕炸"；无测试覆盖的遗留块 |
 
 **前端模块层**
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
-| Prop Drilling（属性钻探） | 数据穿过多层不关心的中间组件层层下传 | 中间组件只为转发而存在的 props |
-| 复制粘贴编程（Copy-and-Paste Programming） | 同构代码多份复制而非抽象，各自演化漂移 | 同名方法 N 文件重复；已现行为分裂即实证 |
-| Smart/Dumb 失衡 | 展示组件内混业务/数据逻辑，或容器组件反复手搓取数 | dumb 组件里 fetch/store 访问；同类样板 N 份（业务逻辑泄漏） |
-| 状态重复源 | 同一状态多处持有，靠手工同步 | 本地 state 与全局 store/URL 各存一份；"闪回"类历史 bug |
-| Yo-yo 问题 | 继承/组合层级过深，理解一处要上下横跳 N 层 | 追一个调用穿过 >3 层抽象 |
-| 硬编码（Hard Code） | 该外置的环境/配置值写死在源码 | URL/路径/魔法阈值散布；与配置体系脱节 |
+| Prop Drilling | 数据穿过多层不关心的中间组件层层下传 | 中间组件只为转发而存在的 props |
+| Copy-and-Paste Programming | 同构代码多份复制而非抽象，各自演化漂移 | 同名方法 N 文件重复；已现行为分裂即实证 |
+| Smart/Dumb Component Imbalance | 展示组件内混业务/数据逻辑，或容器组件反复手搓取数 | dumb 组件里 fetch/store 访问；同类样板 N 份（业务逻辑泄漏） |
+| Duplicated State Source | 同一状态多处持有，靠手工同步 | 本地 state 与全局 store/URL 各存一份；"闪回"类历史 bug |
+| Yo-yo Problem | 继承/组合层级过深，理解一处要上下横跳 N 层 | 追一个调用穿过 >3 层抽象 |
+| Hard Code | 该外置的环境/配置值写死在源码 | URL/路径/魔法阈值散布；与配置体系脱节 |
 
 **组件层**
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
-| 接口膨胀（Interface Bloat） | 组件/接口暴露面过大，多数调用方只用小半 | props/参数 ≥10；多数用法只传 2-3 个 |
-| 依恋情结（Feature Envy） | 组件对别的组件/模块的数据比对自己的更感兴趣 | 大量读他人内部状态再本地计算 |
-| 基本类型偏执（Primitive Obsession） | 该建领域类型处全用裸 string/int/bool 传参 | 状态用裸枚举串表示；参数表一串同型 primitive |
-| 死 prop / 死样式 | 声明存在但无任何调用方传值/无匹配元素 | prop 链路三层断中段；CSS 选择器无匹配 |
-| Poltergeist（幽灵组件） | 仅为传一手而存在的短命中间组件 | 创建→转发→销毁，无自身逻辑 |
+| Interface Bloat | 组件/接口暴露面过大，多数调用方只用小半 | props/参数 ≥10；多数用法只传 2-3 个 |
+| Feature Envy | 组件对别的组件/模块的数据比对自己的更感兴趣 | 大量读他人内部状态再本地计算 |
+| Primitive Obsession | 该建领域类型处全用裸 string/int/bool 传参 | 状态用裸枚举串表示；参数表一串同型 primitive |
+| Dead Props / Dead Styles | 声明存在但无任何调用方传值/无匹配元素 | prop 链路三层断中段；CSS 选择器无匹配 |
+| Poltergeist | 仅为传一手而存在的短命中间组件 | 创建→转发→销毁，无自身逻辑 |
 
 **功能层**
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
-| 忙等（Busy Waiting） | 轮询检查条件而非事件驱动 | setInterval 轮询本可由事件/回调触发的状态 |
-| 距离作用（Action at a Distance） | 一处改动在意料之外的远处产生效果 | 隐式全局联动；调试要全仓搜"谁还监听了它" |
-| 竞态隐患（Race Hazard） | 行为正确性取决于不可控时序 | 未防护的并发写；先发请求后到响应的时序假设 |
-| 过早优化（Premature Optimization） | 无profile依据的猜测性优化 | 无实测数据的"性能"代码；以可读性换不可证收益 |
-| 教条式重复规则违反（DRY 误用反面） | 为消除重复把偶然相似的本质不同强行合一 | 错误抽象；改 A 坏 B（" Wrong abstraction 比 duplication 贵"） |
+| Busy Waiting | 轮询检查条件而非事件驱动 | setInterval 轮询本可由事件/回调触发的状态 |
+| Action at a Distance | 一处改动在意料之外的远处产生效果 | 隐式全局联动；调试要全仓搜"谁还监听了它" |
+| Race Hazard | 行为正确性取决于不可控时序 | 未防护的并发写；先发请求后到响应的时序假设 |
+| Premature Optimization | 无 profile 依据的猜测性优化 | 无实测数据的"性能"代码；以可读性换不可证收益 |
+| DRY Misuse (Wrong Abstraction) | 为消除重复把偶然相似的本质不同强行合一 | 错误抽象；改 A 坏 B（wrong abstraction 比 duplication 贵） |
 
 **新型态**：项目特有、上表无法归类的形态，在台账单列一节描述（形态名自拟 + 定义 + 证据）——这是开放式诊断的出口，也是下次技能迭代的候补透镜。透镜表本身可随技能版本演进：新形态被多次实证后可晋升入表（来源须标注）。
 
@@ -103,7 +103,7 @@ icon: alert-triangle
 | 级 | 判据 | 处置预期 |
 |---|---|---|
 | **P1** | 正确性/安全已受损（真实 bug、越权、数据丢失风险、性能陷阱已成事实） | 立即修 |
-| **P2** | 健壮性/演进能力显著受损（事件循环劫持未爆、上帝文件阻碍一切改动） | 近期修 |
+| **P2** | 健壮性/演进能力显著受损（Blocking the Event Loop 未爆、God Object 阻碍一切改动） | 近期修 |
 | **P3** | 纯代码组织（无行为影响的重复/死代码/组织混乱） | 择机修 |
 | **P4** | 记录即处置（有意设计但无文档的不对称、收益不明的观察项） | 文档化/关闭 |
 
