@@ -27,85 +27,25 @@ icon: alert-triangle
 
 ### 第 2 步：判据——技术栈定制透镜（先检索后使用，分步装载）
 
-判据分两部分，**装载顺序与节奏有硬约束**：
+判据分两层，载体是**附件**（主体不存清单，SKILL.md 只存流程）：
 
-**(a) 技术栈专属清单——运行时联网检索生成（主判据）**
+| 附件 | 内容 | 装载时机 |
+|---|---|---|
+| `lens-backend.md` | 后端栈主判据（本仓：FastAPI/Pydantic v2/uvicorn/SQLite-FTS5 专属清单 + 来源） | 后端域分析开始时 |
+| `lens-frontend.md` | 前端栈主判据（本仓：Lit/Vite/marked/pdf.js 专属清单 + 来源） | 前端域分析开始时（后端域完成后） |
+| `lens-general.md` | 通用形态学兜底词汇表（Wikipedia/Fowler/microservices.io，按域分节） | 随对应域装载该域的节 |
 
-反模式清单必须针对项目实际技术栈。流程：
+**(a) 栈专属清单的生成与保鲜**：
 
-1. **探测技术栈**（读事实，不问用户）：后端框架/语言/DB（pyproject/requirements/go.mod…）、前端框架/构建链（package.json）。本仓事实：FastAPI + Pydantic v2 + uvicorn + SQLite (FTS5)；Lit + Vite + marked/pdf.js。
-2. **联网检索**每栈的反模式清单（检索词 = `<技术> common anti-patterns/mistakes/best practices`；优先官方文档与高星仓库，如 FastAPI→zhanymkanov/fastapi-best-practices、SQLite→官方 PRAGMA 指南与 WAL 陷阱）。本仓检索目标示例：
-   - 后端：Blocking the Event Loop（async def 内同步 I/O）、endpoint 调 endpoint（应抽 service 层）、Pydantic 双重序列化/response_model 误用、BackgroundTasks 当任务队列（进程死即丢）、sync SDK 未进 threadpool、FTS5 无 rank 索引慢查询、SQLite 缺 WAL/PRAGMA、每请求开关连接。
-   - 前端：Lit 受控属性 vs 内部 @state 双真相源、ReactiveController 挂载/卸载不对称、shadow DOM 穿透打洞（as any/element.parentNode）、模板内重计算未缓存。
-3. **判据声明入台账**：检索到的清单条目 + 来源 URL——审计可追溯判据出处。
+1. **探测技术栈**（读事实，不问用户）：pyproject/requirements/go.mod 判后端，package.json 判前端。与附件 B/C 声明的栈不符（项目换了栈）→ 按新栈重新检索并**重写附件**。
+2. **联网检索复检**：每次审计开始时对两附件的栈清单做快速复检（检索词 = `<技术> common anti-patterns/mistakes`；优先官方文档与高星仓库）——清单过时就地更新附件（含来源 URL 与复检日期），再投入使用。
+3. **判据声明入台账**：引用附件文件名 + 复检结论（更新了什么）。
 
-**(b) 通用形态学透镜——兜底词汇表（次判据）**
-
-跨技术栈的经典形态（Wikipedia《List of software anti-patterns》/ Fowler《Refactoring》/ microservices.io），用于归类 (a) 未覆盖的发现。**不是 checklist**：诊断开放式，每条发现必须绑定本仓证据（文件:行号 + 为什么在此架构中构成问题）。
+**(b) 通用透镜使用纪律**：兜底词汇表不是 checklist——每条发现必须绑定本仓证据（文件:行号 + 为什么在此架构中构成问题）。
 
 **装载节奏（硬约束——防一次性灌入大量清单导致套模板）**：
-- **先后端，再前端**：后端域分析完成、候选观察收齐后才启动前端域；两者判据分批装载，不混装。
-- **每批装载后立即用**：清单装载与使用同批——子代理 prompt 只附"本批正在用的形态"，不提前塞全量。
-- 数据库层判据随后端批（同属服务端域）。
-
-#### 通用透镜·系统架构层
-
-| 形态 | 定义 | 检测线索 |
-|---|---|---|
-| Big Ball of Mud | 无清晰结构的系统整体，边界随意穿透 | 模块间调用无规律；"哪都能 import 哪" |
-| Circular Dependency | 模块互引成环 | import 图谱成环；构建工具告警 |
-| Distributed Monolith | 拆了进程/服务却保留单体耦合（同步链路、共享库、共库表） | 服务间同步调用链；共享数据库（Data Monolith） |
-| Stovepipe System | 各子系统自成孤岛、互不复用、集成靠点对点 | 同类能力多处各造；集成点碎片化 |
-| Abstraction Inversion | 高层被迫重新实现/内联底层细节 | 高层代码复制底层逻辑绕过接口 |
-| Inner-Platform Effect | 系统复刻了它运行平台的既有能力 | 自研配置系统/查询语言/调度器，重造平台轮子 |
-
-#### 通用透镜·后端模块层
-
-| 形态 | 定义 | 检测线索 |
-|---|---|---|
-| Long Method | 单函数集过多职责，内部有可各自命名的阶段（校验/取数/变换/组装） | 函数体需滚动或分段注释才读懂；Fowler Bloaters 家族；重构手法 = Extract Method |
-| Long Parameter List | 参数表臃肿，调用方难以正确组装 | 参数 ≥5 且多为同型 primitive（与 Primitive Obsession 互为表里） |
-| God Object | 单类/单文件集过多职责，什么都知道什么都管 | 行数 + 公共方法数 + "改任何功能都 touch 它"（Fowler: Divergent Change 的变体） |
-| Shotgun Surgery | 一个改动要同时散改多处 | git log 里同一 feature 的 commit 横跨 N 个不相关文件 |
-| Divergent Change | 一个类因多种不同原因被反复改 | 类的变更原因数 >1（与 Shotgun Surgery 互为镜像） |
-| Blocking the Event Loop | 异步运行时内在事件循环线程执行同步阻塞调用 | `async def` 内同步文件 I/O / 重 CPU / 长锁；Node.js/uvicorn 单线程全员冻结 |
-| Anemic Domain Model | 数据与行为分离：对象只有字段，逻辑全在过程式服务里 | model 层纯 getter/setter；业务规则堆在 util/service |
-| Error Hiding | 捕获后吞掉、返回默认值或空 catch | `except: pass`；`catch {}`；失败被缓存（Caching Failure） |
-| Magic Numbers / Magic Strings | 未命名的裸字面量散布逻辑含义 | 同一数字/字符串多处硬编码；Soft Code（过度配置化）是其反面 |
-| Lava Flow | 死代码无人敢删，凝固成"历史的一部分" | "不知道为什么在这但删了怕炸"；无测试覆盖的遗留块 |
-
-#### 通用透镜·前端模块层
-
-| 形态 | 定义 | 检测线索 |
-|---|---|---|
-| Prop Drilling | 数据穿过多层不关心的中间组件层层下传 | 中间组件只为转发而存在的 props |
-| Copy-and-Paste Programming | 同构代码多份复制而非抽象，各自演化漂移 | 同名方法 N 文件重复；已现行为分裂即实证 |
-| Smart/Dumb Component Imbalance | 展示组件内混业务/数据逻辑，或容器组件反复手搓取数 | dumb 组件里 fetch/store 访问；同类样板 N 份（业务逻辑泄漏） |
-| Duplicated State Source | 同一状态多处持有，靠手工同步 | 本地 state 与全局 store/URL 各存一份；"闪回"类历史 bug |
-| Yo-yo Problem | 继承/组合层级过深，理解一处要上下横跳 N 层 | 追一个调用穿过 >3 层抽象 |
-| Hard Code | 该外置的环境/配置值写死在源码 | URL/路径/魔法阈值散布；与配置体系脱节 |
-
-#### 通用透镜·组件层
-
-| 形态 | 定义 | 检测线索 |
-|---|---|---|
-| Interface Bloat | 组件/接口暴露面过大，多数调用方只用小半 | props/参数 ≥10；多数用法只传 2-3 个 |
-| Feature Envy | 组件对别的组件/模块的数据比对自己的更感兴趣 | 大量读他人内部状态再本地计算 |
-| Primitive Obsession | 该建领域类型处全用裸 string/int/bool 传参 | 状态用裸枚举串表示；参数表一串同型 primitive |
-| Dead Props / Dead Styles | 声明存在但无任何调用方传值/无匹配元素 | prop 链路三层断中段；CSS 选择器无匹配 |
-| Poltergeist | 仅为传一手而存在的短命中间组件 | 创建→转发→销毁，无自身逻辑 |
-
-#### 通用透镜·功能层
-
-| 形态 | 定义 | 检测线索 |
-|---|---|---|
-| Busy Waiting | 轮询检查条件而非事件驱动 | setInterval 轮询本可由事件/回调触发的状态 |
-| Action at a Distance | 一处改动在意料之外的远处产生效果 | 隐式全局联动；调试要全仓搜"谁还监听了它" |
-| Race Hazard | 行为正确性取决于不可控时序 | 未防护的并发写；先发请求后到响应的时序假设 |
-| Premature Optimization | 无 profile 依据的猜测性优化 | 无实测数据的"性能"代码；以可读性换不可证收益 |
-| DRY Misuse (Wrong Abstraction) | 为消除重复把偶然相似的本质不同强行合一 | 错误抽象；改 A 坏 B（wrong abstraction 比 duplication 贵） |
-
-**新型态**：项目特有、上表无法归类的形态，在台账单列一节描述（形态名自拟 + 定义 + 证据）——这是开放式诊断的出口，也是下次技能迭代的候补透镜。透镜表本身可随技能版本演进：新形态被多次实证后可晋升入表（来源须标注）。
+- **先后端，再前端**：后端域（含数据库层）分析完成、候选观察收齐后才启动前端域；判据分批装载不混装。
+- **每批装载后立即用**：子代理 prompt 只附"本批正在用的判据"（对应附件的相关节），不提前塞全量。
 
 ### 第 3 步：探索分析（复用 repo-wiki 方法论，分域执行）
 
@@ -116,7 +56,7 @@ icon: alert-triangle
 - 审计对象是**证据链**：每条发现必须有文件:行号 + 一句"为什么在此架构中是问题"——没有证据的直觉不进台账。
 
 **子代理 prompt 定制要点**（方法论框架借 repo-wiki，但返回物按审计改造——勿照抄 repo-wiki 的模块清单笔记格式）：
-- 附该组精确文件清单 + **本批正在用的判据**（该域技术栈清单条目 + 相关通用形态；只附当前批的，不提前塞全量）；
+- 附该组精确文件清单 + **本批正在用的判据**（从 lens-backend.md / lens-frontend.md 摘该组相关条目 + lens-general.md 对应域的节；只附当前批，不提前塞全量附件）；
 - 要求返回物三节：① **候选观察**——每条 = 形态归类 + `文件:行号` 证据 + 一句"为什么构成问题"；② **灰色项**——怀疑但证据不足的（如"疑似死代码，未找到调用方但搜索面有限"），主代理负责核实或降级丢弃；③ **反证**——看起来像反模式但实为有意设计的（配文档/注释出处），供 P4 记录项；
 - 明确禁止：无证据的泛泛评价（"该模块耦合度较高"）、给修复方案（定级与方案是主代理的活）。
 
@@ -138,10 +78,8 @@ icon: alert-triangle
 > 审计日期：YYYY-MM-DD｜点名范围：<...>｜机械扫描：全仓（<扫描项清单>）
 
 ## 一、判据声明
-（本次技术栈定制清单：后端 <FastAPI/Pydantic/SQLite… 检索到的条目 + 来源 URL>；
-前端 <Lit/… 条目 + 来源 URL>。附通用透镜来源：Wikipedia《List of software
-anti-patterns》/ Fowler《Refactoring》（refactoring.guru）/ microservices.io +
-仓库纪律文档（CLAUDE.md/DESIGN.md）作为附加判据）
+（引用附件：lens-backend.md（复检结论/更新内容）、lens-frontend.md（同左）、
+lens-general.md（通用兜底）+ 仓库纪律文档（CLAUDE.md/DESIGN.md）作为附加判据）
 
 ## 二、发现条目
 ### AP-1 <标题> [P1] [status: pending]
@@ -152,7 +90,7 @@ anti-patterns》/ Fowler《Refactoring》（refactoring.guru）/ microservices.i
 - **回归验证**：<按触及层引用 CLAUDE.md 分层回归表；前端必含 build>
 
 ## 三、新型态
-（清单外项目特有形态）
+（附件清单外项目特有形态：形态名自拟 + 定义 + 证据；多次实证后晋升入 lens-general.md 对应节——附来源与首次实证的台账路径）
 
 ## 四、执行记录
 | 日期 | 令 | 条目 | 结果（commit） |
