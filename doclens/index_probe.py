@@ -150,6 +150,23 @@ def registered_doc_count(index_path: str) -> int:
         return 0
 
 
+def load_document_source_path(index_path: str, doc_id: str) -> str | None:
+    """按 doc_id 查源文件路径（documents 表单行点查；无则 None）。
+
+    resolve_doc_path 的 DB 兜底（AP-10：请求级连接，替代 get_fts_index
+    全局单例——那个入口 db_path 变化时会 close 旧单例，持有者凭空断连）。
+    只取 source_path 列，不反序列化 structure_json。
+    """
+    fts = _open(index_path)
+    try:
+        doc = fts.load_document(doc_id)
+        if doc is None:
+            return None
+        return (doc.metadata or {}).get("source_path", "") or None
+    finally:
+        fts.close()
+
+
 def file_stats(index_path: str, cache: tuple | None = None) -> tuple[tuple[int, dict[str, int]], tuple | None]:
     """(总字节数, 扩展名分布)——供 /api/status。
 

@@ -311,19 +311,23 @@ class IndexManager:
 
         内存 path_map 可能滞后：diary worker 等后台重索引会改变 doc_id（哈希
         后缀），新 doc_id 不在旧 path_map 中。若此时把 doc_id 本身当 path 输出
-        给工具/AI，引用就是无意义的字符串（真实案例：日记 doc_id "2025_53285d70"
+        给工具/AI，引用就是无意义的字符串（真实案例：日记 doc_id "2025_53285a70"
         被当作路径输出，AI 无法引用真实来源 日记/2025.md）。
         仍解析不到则返回 doc_id 本身（保持旧行为）。
+
+        兜底查询走 index_probe（请求级连接，AP-10）——不再用 get_fts_index
+        全局单例：那个入口在 db_path 变化时会 close 当前单例再重建，若此处
+        持有旧连接即被凭空关闭（treesearch-core 台账 AP-2 同源问题），且单例
+        被谁重建过不可推理。doclens 侧三套连接生命周期由此收敛为两套
+        （请求级读 + TreeSearch 写路径）。
         """
         path = self._path_map.get(doc_id)
         if path:
             return path
         try:
-            from treesearch.fts import get_fts_index
-
-            doc = get_fts_index(db_path=self.index_path).load_document(doc_id)
+            doc = index_probe.load_document_source_path(self.index_path, doc_id)
             if doc is not None:
-                return (doc.metadata or {}).get("source_path", "") or doc_id
+                return doc
         except Exception as e:  # noqa: BLE001
             logger.warning("resolve_doc_path(%s) failed: %s", doc_id, e)
         return doc_id

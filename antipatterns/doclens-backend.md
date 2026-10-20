@@ -151,12 +151,20 @@
 - **回归验证**：`tests/test_web_search_api_matrix.py tests/test_lazy_search.py tests/test_max_dir_files.py tests/test_index_chunking.py tests/test_grep_regex_snippet.py
   tests/test_change_detection.py tests/test_architecture.py tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_search_preset_params.py` → 237 passed。
 
-### AP-10 `index_manager` 三套 DB 连接生命周期并存 [P3] [status: pending]
+### AP-10 `index_manager` 三套 DB 连接生命周期并存 [P3] [status: done]
 - **形态**：Divergent Change（同类语义多种实现）
 - **证据**：`doclens/index_manager.py:266-412` 八个方法统一 `FTS5Index(db_path=...)` + `finally close()`（`is_path_indexed` docstring `:344-346` 自述"每次调用开关一个 DB 连接"）；`:443-447` `resolve_doc_path` 走全局单例 `get_fts_index(...)`；`:768-773` 后台重建另走 `TreeSearch(...)`。
 - **风险**：同语义三种生命周期，缓存/连接失效策略无法统一推理；调试"看不到刚落库的文档"时要先判断走的是哪条路径。
-- **修复方案**：收敛为"请求级 FTS 句柄"单一入口（查询走它、后台重建走它），全局单例仅保留给跨请求缓存。
-- **回归验证**：`tests/test_lazy_search.py tests/test_index_chunking.py`。
+- **实际修复（2026-10-20）**：收敛为两套——① 请求级读（index_probe 的 open→query→close，本条把 `resolve_doc_path` 的 DB 兜底也改道至此：
+  新增 `index_probe.load_document_source_path`（documents 表单行点查，只取 source_path 列，不反序列化 structure_json）；
+  ② TreeSearch 写路径（`load_or_build_index` / 后台重建 / reindex，本就有自己的事务与分块语义，保留）。
+  **`get_fts_index` 全局单例从 doclens 侧完全移除**（grep 验证零残留）——单例在 db_path 变化时 close 旧连接再重建的竞态（treesearch-core 台账 AP-2 同源）
+  不再可能经 doclens 触发；treesearch 包内部对它的使用不属本台账范围。
+- **行为等价取证**：新旧 `resolve_doc_path` 对照——path_map 命中（50 doc_id）、path_map miss（真实 doc_id 3 个 + 伪造 id）、库不存在异常回落（返回 doc_id 本身）
+  全部 0 diff；`load_document` 的 metadata 映射（source_path）在两版间语义一致。
+- **未做**：请求级读的连接复用（每方法新开连接的 fsync/PRAGMA 成本）归 AP-8；TreeSearch 写路径内部的连接管理不属本条。
+- **回归验证**：`tests/test_lazy_search.py tests/test_index_chunking.py tests/test_change_detection.py tests/test_web_search_api_matrix.py
+  tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_diary.py tests/test_web_preview_formats.py tests/test_architecture.py` → 214 passed。
 
 ### AP-11 检索入口首行触发全库 hash 审计，首请求可被拖到分钟级 [P2] [status: done]
 - **形态**：性能陷阱（以正确性换延迟）
