@@ -80,7 +80,7 @@
 - **修复方案**：删 setter（或注明测试用）；签名默认改 `None` → 回退 config 值；两处 print 换 logger.info；基线遍历移入 `startup_audit_done` 未完成分支（可选）。
 - **回归验证**：同 AP-1。
 
-### AP-9 同仓双 watch 实现（doclens/file_watcher vs treesearch/watch） [P4] [status: pending]
+### AP-9 同仓双 watch 实现（doclens/file_watcher vs treesearch/watch） [P4] [status: done]
 - **形态**：Stovepipe System（同类能力两造）
 - **证据**：`treesearch/watch.py`（305 行，自带 `_DebouncedReindexer`、DB sidecar 排除、on_any_event 分发）与 `doclens/file_watcher.py` 是两套独立 watchdog 增量索引实现，排除语义不同（前者排 DB 边车文件，后者排数据目录/gitignore/影子 md）。分层上不违反 CLAUDE.md 红线（treesearch 中性通用、doclens 宿主特化），但 Windows atime 伪事件去重、`startup_audit_done` 跳过等修复只落在 doclens 侧——**修复漂移已现**（treesearch/watch 无同类去重）。
 - **风险**：低（两套受众不同）；主要是修复双份成本与口径漂移记忆负担。
@@ -102,3 +102,4 @@
 | 2026-10-20 | 修 | AP-6 | 见 49ecd47——FileWatcher.DEFAULT_STATUS 类常量作为单一真源，status.py fallback 改引用；分层回归 63 passed |
 | 2026-10-20 | 修 | AP-7 | 见 dc1edba——_ChangeHandler._data_dir 缓存时 .lower()；test_file_watcher_exclude 补混合大小写 override 用例；分层回归 51 passed |
 | 2026-10-20 | 修（B 方案：setter 保留补 docstring） | AP-8 | 见 efeec8e——①reindexing setter 补 docstring 注明 CLI/TUI 协调用途（保留，更正台账「死面」误判）；②debounce 默认 None 回退 CortexConfig；③print×2 换 logger；④_ChangeHandler 加 init_baseline 参数，startup_audit_done 时跳过；分层回归 51 passed |
+| 2026-10-20 | 修（文档化处置） | AP-9 | 见 HEAD——doclens/file_watcher.py 与 treesearch/watch.py 头部互注双实现边界（不回合并：treesearch 中性通用 / doclens 宿主特化），指引后续修复对齐参考；纯注释零行为变化；分层回归 51 passed |

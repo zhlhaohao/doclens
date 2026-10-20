@@ -1,4 +1,15 @@
-"""文件监控模块 - 后台监控搜索目录变化，自动触发增量 reindex"""
+"""文件监控模块 - 后台监控搜索目录变化，自动触发增量 reindex
+
+⚠️ 双实现边界（AP-9）：本模块是 doclens 宿主特化 watcher（知道数据目录
+.cortex/.doclens、影子 md、IndexManager.startup_audit_done 等宿主概念）。
+引擎层另有通用 watch 实现 treesearch/watch.py（被 `treesearch watch` CLI
+使用，不知道 doclens 概念，排除规则仅 DB sidecar）——两边不回合并：
+treesearch 保持中性通用，doclens 承载宿主特化。
+
+doclens 侧已修复的可靠性问题（atime 伪事件去重 / 回调异常防护 / reindex
+撞锁补账 / on_moved 基线 / 防抖锁 / 大小写排除 / 启动基线跳过）treesearch
+侧未同步——详见 antipatterns/file-watcher.md。
+"""
 
 import os
 import time
