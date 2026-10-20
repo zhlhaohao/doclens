@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { savePreview, PreviewSaveError, fetchPreview, isFullFilePreview } from "../src/api/preview";
+import {
+  savePreview,
+  PreviewSaveError,
+  fetchPreview,
+  isSynthesizedPreview,
+  isPstDerivedPath,
+} from "../src/api/preview";
 
 describe("savePreview", () => {
   const originalFetch = global.fetch;
@@ -55,20 +61,24 @@ describe("PreviewSaveError", () => {
   });
 });
 
-describe("isFullFilePreview", () => {
-  it("returns true for .md/.pdf/.docx/.xlsx/.xlsm/.xltx/.xltm/.csv", () => {
-    for (const p of ["x.md", "a.pdf", "b.docx", "c.xlsx", "d.xlsm", "e.xltx", "f.xltm", "g.csv"]) {
-      expect(isFullFilePreview(p)).toBe(true);
-    }
+describe("isSynthesizedPreview（单源化：消费后端 synthesized 标志）", () => {
+  it("returns true only when response flag is exactly true", () => {
+    expect(isSynthesizedPreview({ synthesized: true })).toBe(true);
+    expect(isSynthesizedPreview({ synthesized: false })).toBe(false);
+    expect(isSynthesizedPreview({})).toBe(false); // 后端缺字段（旧索引形态）按非合成兜底
+    expect(isSynthesizedPreview({ synthesized: null })).toBe(false);
   });
-  it("returns false for other extensions", () => {
-    for (const p of ["x.py", "y.txt", "z.html", "noext"]) {
-      expect(isFullFilePreview(p)).toBe(false);
-    }
+});
+
+describe("isPstDerivedPath", () => {
+  it("matches <pst>#<entry_id> case-insensitively", () => {
+    expect(isPstDerivedPath("归档.pst#0x1234")).toBe(true);
+    expect(isPstDerivedPath("A.PST#abc")).toBe(true);
   });
-  it("is case-insensitive on suffix", () => {
-    expect(isFullFilePreview("X.PDF")).toBe(true);
-    expect(isFullFilePreview("X.Md")).toBe(true);
+  it("rejects plain pst / non-pst / hash-less paths", () => {
+    expect(isPstDerivedPath("归档.pst")).toBe(false);
+    expect(isPstDerivedPath("doc.md#anchor")).toBe(false);
+    expect(isPstDerivedPath("a/b.md")).toBe(false);
   });
 });
 
@@ -83,7 +93,7 @@ describe("fetchPreview", () => {
       return new Response(
         JSON.stringify({
           path: "a.md", content: "# hi", language: "markdown",
-          line_range: null, highlights: [], writable: true,
+          line_range: null, writable: true, synthesized: false,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
@@ -96,6 +106,7 @@ describe("fetchPreview", () => {
       expect(r.content).toBe("# hi");
       expect(r.language).toBe("markdown");
       expect(r.writable).toBe(true);
+      expect(r.synthesized).toBe(false);
       expect(r.pages).toBe(null);
     }
   });

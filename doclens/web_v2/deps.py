@@ -276,20 +276,22 @@ def swap_workdir(target: str) -> dict:
                         dc = mgr.indexed_doc_count()
                         try:
                             from doclens.web_v2.watch_broker import get_watch_broker
-                            get_watch_broker().broadcast("status", watch_snapshot())
+                            # 首次构建完成是状态机边沿，immediate
+                            get_watch_broker().broadcast("status", watch_snapshot(), immediate=True)
                             get_watch_broker().broadcast("reindexed", {
                                 "success": True, "doc_count": dc,
                                 "failed_count": mgr.last_failed_count,
-                            })
+                            }, immediate=True)
                         except Exception as e:  # noqa: BLE001
                             logger.debug("first-build broadcast failed: %s", e)
                     except Exception as e:  # noqa: BLE001
                         logger.exception("first-time index build failed for %s: %s", target, e)
                         try:
                             from doclens.web_v2.watch_broker import get_watch_broker
+                            # 首建失败同样是终态，必须 immediate
                             get_watch_broker().broadcast("reindexed", {
                                 "success": False, "doc_count": 0, "failed_count": 0,
-                            })
+                            }, immediate=True)
                         except Exception:  # noqa: BLE001
                             pass
                     finally:
@@ -448,10 +450,12 @@ def start_watcher() -> bool:
             broker.broadcast("status", watch_snapshot())
 
         def _on_reindex_start() -> None:
-            broker.broadcast("status", watch_snapshot())
+            # 状态机边沿（reindexing: False→True）必须 immediate，不能被节流吞掉
+            broker.broadcast("status", watch_snapshot(), immediate=True)
 
         def _on_reindex_done(success: bool, doc_count: int, failed_count: int, indexed_files: int = 0) -> None:
-            broker.broadcast("status", watch_snapshot())
+            # 状态机边沿（reindexing: True→False）必须 immediate
+            broker.broadcast("status", watch_snapshot(), immediate=True)
             # 只在本次实际有变化（新索引文件或失败）时广播 reindexed，
             # 避免启动增量扫描无变化时每次都弹 toast 打扰用户。
             if indexed_files > 0 or failed_count > 0:
@@ -459,7 +463,7 @@ def start_watcher() -> bool:
                     "success": success,
                     "doc_count": doc_count,
                     "failed_count": failed_count,
-                })
+                }, immediate=True)
 
         watcher = FileWatcher(
             idx,
@@ -475,8 +479,8 @@ def start_watcher() -> bool:
             logger.warning("FileWatcher.start() returned False (watchdog unavailable?)")
             return False
         logger.info("FileWatcher started for %s", search_path)
-        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态
-        broker.broadcast("status", watch_snapshot())
+        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态（启动边沿，immediate）
+        broker.broadcast("status", watch_snapshot(), immediate=True)
         return True
     except Exception as exc:  # noqa: BLE001
         set_watcher(None)
@@ -609,8 +613,9 @@ def start_git_sync() -> bool:
         broker = get_watch_broker()
 
         def _on_cycle_done(_status: dict) -> None:
-            # sync 快照已并入 watch_snapshot()，广播 status 即可让前端拿到最新态
-            broker.broadcast("status", watch_snapshot())
+            # sync 快照已并入 watch_snapshot()，广播 status 即可让前端拿到最新态。
+            # git sync 完成是状态机边沿（sync 进行中→空闲），必须 immediate
+            broker.broadcast("status", watch_snapshot(), immediate=True)
 
         gs = GitSync(
             config.search_path,
@@ -627,8 +632,8 @@ def start_git_sync() -> bool:
             logger.info("GitSync 整体停摆: %s", gs.status()["reason"])
             return False
         logger.info("GitSync started for %s", config.search_path)
-        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态
-        broker.broadcast("status", watch_snapshot())
+        # 广播一次初值，让已连接的 SSE 客户端立刻拿到当前态（启动边沿，immediate）
+        broker.broadcast("status", watch_snapshot(), immediate=True)
         return True
     except Exception as exc:  # noqa: BLE001
         logger.exception("start_git_sync failed: %s", exc)

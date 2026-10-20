@@ -1,9 +1,21 @@
-"""文件监控模块 - 后台监控搜索目录变化，自动触发增量 reindex"""
+"""文件监控模块 - 后台监控搜索目录变化，自动触发增量 reindex
+
+⚠️ 双实现边界（AP-9）：本模块是 doclens 宿主特化 watcher（知道数据目录
+.cortex/.doclens、影子 md、IndexManager.startup_audit_done 等宿主概念）。
+引擎层另有通用 watch 实现 treesearch/watch.py（被 `treesearch watch` CLI
+使用，不知道 doclens 概念，排除规则仅 DB sidecar）——两边不回合并：
+treesearch 保持中性通用，doclens 承载宿主特化。
+
+doclens 侧已修复的可靠性问题（atime 伪事件去重 / 回调异常防护 / reindex
+撞锁补账 / on_moved 基线 / 防抖锁 / 大小写排除 / 启动基线跳过）treesearch
+侧未同步——详见 antipatterns/file-watcher.md。
+"""
 
 import os
 import time
 import threading
 import logging
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +46,15 @@ if _HAS_WATCHDOG:
         仅靠 mtime/size 对比即可过滤这种伪修改，避免 watch-badge 闪动。
         """
 
-        def __init__(self, callback, search_path: str):
+        def __init__(self, callback, search_path: str, init_baseline: bool = True):
             super().__init__()
             self._callback = callback
             # data_dirname() 每次调用做文件系统 resolve（~0.2ms，事件热路径
             # 上 × 每目录/每事件）——按字段缓存一次
-            self._data_dir = data_dirname()
+            # .lower()：_should_handle 的排除检查把路径段统一转小写对比，
+            # 配置值不 lower 时用户设 CORTEX_DATA_DIRNAME=MyData（首字母
+            # 大写是最自然写法）会让排除静默失效——数据目录内容流入索引
+            self._data_dir = data_dirname().lower()
             self._extensions = set(SUPPORTED_FORMATS.keys())
             # .gitignore 过滤（与索引器同一规则源：索引根的 .gitignore，
             # treesearch.pathutil.load_gitignore_spec 公共化接口）。启动时
@@ -55,7 +70,8 @@ if _HAS_WATCHDOG:
             # on_modified 能用 prev==cur 去重 Windows 读访问触发的伪事件（仅 atime
             # 变、mtime/size 不变），同时保留对真修改的捕获——不丢事件。
             self._mod_snapshot: dict[str, tuple[int, int]] = {}
-            self._init_baseline(search_path)
+            if init_baseline:
+                self._init_baseline(search_path)
 
         def _should_handle(self, path: str) -> bool:
             # 廉价且选择性最高的检查先行：扩展名白名单（.tmp/.log/二进制
@@ -160,28 +176,46 @@ if _HAS_WATCHDOG:
             if event.is_directory or not self._should_handle(event.src_path):
                 return
             if self._is_real_modification(event.src_path):
-                self._callback(event.src_path)
+                self._invoke_callback(event.src_path)
 
         def on_created(self, event):
             if not event.is_directory and self._should_handle(event.src_path):
                 # 新文件入快照，避免后续读访问的 on_modified 因 prev=None 被误判
                 self._record_baseline(event.src_path)
-                self._callback(event.src_path)
+                self._invoke_callback(event.src_path)
 
         def on_deleted(self, event):
             if not event.is_directory and self._should_handle(event.src_path):
                 # 文件已删，清理快照避免下次 on_modified 误命中旧快照
                 self._mod_snapshot.pop(self._snapshot_key(event.src_path), None)
-                self._callback(event.src_path)
+                self._invoke_callback(event.src_path)
+
+        def _invoke_callback(self, path: str) -> None:
+            """事件回调的统一防护：handler 链任何异常不外溢。
+
+            watchdog 的 EventDispatcher.run() 只捕获 queue.Empty——handler 抛出
+            的任何其他异常都会终结唯一的派发线程，导致 watch 静默停摆（observer
+            本体仍活着，status() 仍报 running=true，但事件再无人派发）。
+            在此兜底：异常落日志，派发线程继续处理后续事件。
+            """
+            try:
+                self._callback(path)
+            except Exception:
+                logger.exception("FileWatcher 回调异常（已吞没以保住派发线程）: %s", path)
 
         def on_moved(self, event):
             if not event.is_directory:
                 if self._should_handle(event.src_path):
                     self._mod_snapshot.pop(self._snapshot_key(event.src_path), None)
-                    self._callback(event.src_path)
+                    self._invoke_callback(event.src_path)
                 if self._should_handle(event.dest_path):
-                    self._mod_snapshot.pop(self._snapshot_key(event.dest_path), None)
-                    self._callback(event.dest_path)
+                    # dest 必须登记基线（对照 on_created）：否则紧随其后的首个
+                    # on_modified 会因 prev is None 进入兜底分支被当伪事件吞掉。
+                    # VSCode/JetBrains 原子保存 = 写临时文件 + rename 覆盖，
+                    # 每次保存都走此路径——不登记基线则原子保存后第一次真实
+                    # 修改（追加写 / 脚本 touch）必然丢失
+                    self._record_baseline(event.dest_path)
+                    self._invoke_callback(event.dest_path)
 
 
 class FileWatcher:
@@ -192,9 +226,26 @@ class FileWatcher:
     回调，仅靠 status() 观测。
     """
 
-    def __init__(self, idx_manager, debounce_seconds: float = 5.0,
+    # status() 返回字典的默认值契约（watcher 未启动时由调用方引用）。
+    # 单一真源：本字段 + status() 返回处相邻，加/删字段时两边同步即可；
+    # 调用方（web_v2/api/status.py 等）不得手抄字面量兜底——引用本常量。
+    DEFAULT_STATUS: ClassVar[dict] = {
+        "running": False,
+        "reindexing": False,
+        "changed_count": 0,
+        "last_reindex_at": None,
+        "last_doc_count": None,
+        "last_success": None,
+    }
+
+    def __init__(self, idx_manager, debounce_seconds: float | None = None,
                  on_change_callback=None, on_reindex_start=None, on_reindex_done=None):
         self._idx = idx_manager
+        # debounce 默认 None → 回退到 CortexConfig().watch_debounce（单一真源），
+        # 避免签名默认手抄字面量与 config.py 漂移（AP-8 子项②）
+        if debounce_seconds is None:
+            from doclens.config import CortexConfig
+            debounce_seconds = CortexConfig().watch_debounce
         self._debounce = debounce_seconds
         self._timer = None
         self._observer = None
@@ -202,6 +253,8 @@ class FileWatcher:
         self._on_reindex_start = on_reindex_start
         self._on_reindex_done = on_reindex_done
         self._reindexing = False
+        # reindex 进行中撞锁的事件记 pending，完成回调清位后重挂防抖补一轮
+        self._pending_rerun = False
         # 可观测状态（受 _state_lock 保护：Observer/reindex 线程写，API 线程读）
         self._state_lock = threading.Lock()
         self._running = False
@@ -213,10 +266,15 @@ class FileWatcher:
     def start(self):
         """启动文件监控"""
         if not _HAS_WATCHDOG:
-            print("[文件监控不可用: pip install watchdog]")
+            logger.warning("文件监控不可用: pip install watchdog")
             return False
 
-        handler = _ChangeHandler(self._on_change, self._idx.search_path)
+        # 启动审计已完成（load_or_build_index 的 has_changed_files 刚做完
+        # 全语料 stat 审计）时跳过 _init_baseline——同一时点重复 stat 遍历
+        # 在百万语料上是秒级浪费（AP-8 子项④）
+        skip_baseline = getattr(self._idx, "startup_audit_done", False)
+        handler = _ChangeHandler(self._on_change, self._idx.search_path,
+                                 init_baseline=not skip_baseline)
         self._observer = Observer()
         # 递归 schedule：单 emitter 线程聚合整树（两平台统一）。数据目录
         # 排除在 handler 层（_should_handle）——监控树级排除需自管非递归
@@ -233,17 +291,20 @@ class FileWatcher:
         # 与文件变化事件共用 _do_reindex（无变化时 build_index 增量快速返回）。
         # 本进程已完成启动审计（load_or_build_index 的 has_changed_files 本就
         # 补离线变化）时跳过——重复扫描在百万语料上多耗一轮分钟级审计。
-        if getattr(self._idx, "startup_audit_done", False):
-            print("[文件监控：启动审计已完成，跳过启动增量扫描]")
+        if skip_baseline:
+            logger.info("文件监控：启动审计已完成，跳过启动增量扫描 + 基线遍历")
             return True
         self._reset_debounce_timer()
         return True
 
     def stop(self):
         """停止文件监控"""
-        if self._timer:
-            self._timer.cancel()
-            self._timer = None
+        # _timer 读改写与 _reset_debounce_timer 同锁，避免「stop 清 None 后
+        # 新 Timer 又被创建」的竞态（停止后仍拉起一轮 reindex）
+        with self._state_lock:
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
         if self._observer:
             self._observer.stop()
             self._observer.join(timeout=2)
@@ -258,6 +319,11 @@ class FileWatcher:
 
     @reindexing.setter
     def reindexing(self, value):
+        """手动 reindex 协调口（CLI cmd_index / TUI /index 在用）。
+
+        手动索引命令执行期间置 True 防止 watch 自动 reindex 并发触发，
+        完成（含异常）后 finally 复位。语义 = 「外部正在占锁跑 reindex」。
+        """
         with self._state_lock:
             self._reindexing = value
 
@@ -274,12 +340,20 @@ class FileWatcher:
             }
 
     def _reset_debounce_timer(self):
-        """重置防抖定时器（启动扫描与每事件共用同一形状）。"""
-        if self._timer:
-            self._timer.cancel()
-        self._timer = threading.Timer(self._debounce, self._do_reindex)
-        self._timer.daemon = True
-        self._timer.start()
+        """重置防抖定时器（启动扫描与每事件共用同一形状）。
+
+        _timer 读改写必须持锁：调用方跨三线程（observer 派发线程的
+        _on_change、启动线程的 start、停止线程的 stop），无锁时存在「stop
+        清 None 后新 Timer 仍被创建并 start」「双线程同时通过 if 检查各建
+        一个 Timer 互相覆盖泄漏一个仍在计时」两类竞态。
+        """
+        with self._state_lock:
+            if self._timer:
+                self._timer.cancel()
+            timer = threading.Timer(self._debounce, self._do_reindex)
+            timer.daemon = True
+            self._timer = timer
+            timer.start()
 
     def _on_change(self, file_path: str):
         """收到文件变化事件，累加计数 + 重置防抖定时器"""
@@ -292,17 +366,26 @@ class FileWatcher:
             self._on_change_callback(file_path)
 
     def _do_reindex(self):
-        """后台线程执行 reindex（reindexing 在完成回调中清零）"""
+        """后台线程执行 reindex（reindexing 在完成回调中清零）。
+
+        补账语义：reindex 进行中又有事件触发防抖到期时，不在此处早退丢弃——
+        记 _pending_rerun=True，由 _on_reindex_complete 在清位后重挂防抖补
+        一轮，避免「长 reindex + 持续编辑」下变化被静默吞掉且不可自愈。
+        """
         logger.debug("_do_reindex called")
         with self._state_lock:
             if self._reindexing:
-                logger.debug("_do_reindex: already reindexing, returning")
+                logger.debug("_do_reindex: already reindexing, mark pending rerun")
+                self._pending_rerun = True
                 return
             self._reindexing = True
             self._changed_count = 0
-        if self._on_reindex_start:
-            self._on_reindex_start()
         try:
+            # _on_reindex_start 必须在 try 内：其抛异常时 except 分支会复位
+            # _reindexing；在 try 外则 finally 永远走不到，_reindexing 永卡
+            # True，后续所有 _do_reindex 都被幽灵锁早退，watch 瘫痪直至重启
+            if self._on_reindex_start:
+                self._on_reindex_start()
             self._idx.trigger_background_reindex(on_complete=self._on_reindex_complete)
             logger.info("后台 reindex 已触发")
         except Exception as e:
@@ -313,12 +396,21 @@ class FileWatcher:
                 self._last_reindex_at = time.time()
 
     def _on_reindex_complete(self, success: bool, doc_count: int, failed_count: int, indexed_files: int = 0):
-        """trigger_background_reindex 完成回调：更新状态后转发给外部 on_reindex_done"""
+        """trigger_background_reindex 完成回调：更新状态后转发给外部 on_reindex_done。
+
+        若 reindex 期间有新事件撞锁（_pending_rerun），清位后重挂防抖补一轮——
+        否则撞锁期间的变化被静默吞掉，索引持续滞后且无新事件则永不补。
+        """
         with self._state_lock:
             self._reindexing = False
             self._changed_count = 0
             self._last_reindex_at = time.time()
             self._last_doc_count = doc_count
             self._last_success = success
+            rerun = self._pending_rerun
+            self._pending_rerun = False
         if self._on_reindex_done:
             self._on_reindex_done(success, doc_count, failed_count, indexed_files)
+        if rerun:
+            logger.info("FileWatcher 补跑：reindex 期间有新变化，重挂防抖")
+            self._reset_debounce_timer()

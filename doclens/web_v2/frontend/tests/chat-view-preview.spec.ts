@@ -122,9 +122,19 @@ describe("<chat-view> reference preview", () => {
   it("_onPreviewSaved resets previewDirty=false (blocks spurious discard confirm)", async () => {
     const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
     await el.updateComplete;
-    (el as any).previewDirty = true;
-    (el as any)._onPreviewSaved();
-    expect((el as any).previewDirty).toBe(false);
+    // 脏标记经 controller；模拟已打开文档 + dirty，再触发 saved 事件
+    (el as any)._preview.state = {
+      status: "ok",
+      doc: {
+        path: "a.md", content: "# a", language: "markdown", writable: true,
+        synthesized: false, pages: null, lineMap: null, pageStarts: null,
+        attachments: null, tokens: null,
+      },
+    };
+    (el as any)._preview.onDirtyChange(true);
+    (el as any)._onPreviewSaved({ detail: { content: "# a" } } as CustomEvent<{ content: string }>);
+    await el.updateComplete;
+    expect((el as any)._preview.dirty).toBe(false);
   });
 
   it("splitter drag RIGHT narrows the (right-side) preview pane", async () => {

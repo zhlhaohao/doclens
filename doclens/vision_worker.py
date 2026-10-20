@@ -57,7 +57,7 @@ def vision_model_tag(config) -> str:
     return f"{config.vision_model}|pv{PROMPT_VERSION}|proto={proto}"
 
 
-def _strip_code_fence(text: str) -> str:
+def strip_code_fence(text: str) -> str:
     """防御性剥除模型可能输出的 ```markdown 围栏。"""
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -69,6 +69,10 @@ def _strip_code_fence(text: str) -> str:
             lines = lines[:-1]
         stripped = "\n".join(lines).strip()
     return stripped
+
+
+# 兼容别名（历史私有名，全仓消费方已迁移公共名）
+_strip_code_fence = strip_code_fence
 
 
 class VisionWorker:

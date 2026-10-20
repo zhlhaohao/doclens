@@ -159,6 +159,10 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix="/api")
     from doclens.web_v2.api import preview
     app.include_router(preview.router, prefix="/api")
+    from doclens.web_v2.api import preview_assets
+    app.include_router(preview_assets.router, prefix="/api")
+    from doclens.web_v2.api import preview_mutations
+    app.include_router(preview_mutations.router, prefix="/api")
     from doclens.web_v2.api import pst
     app.include_router(pst.router, prefix="/api")
     from doclens.web_v2.api import sessions

@@ -82,7 +82,7 @@ def build_grep_tools(
     Returns:
         (tools, handlers) 元组
     """
-    raw_handler: Callable = lambda **kw: _handle_grep(idx, **kw)
+    raw_handler: Callable = lambda **kw: handle_grep(idx, **kw)
     return [GREP_TOOL], {"kb_grep": raw_handler}
 
 
@@ -285,7 +285,7 @@ def _regex_led_snippet(
 # 处理函数
 # ---------------------------------------------------------------------------
 
-def _handle_grep(
+def handle_grep(
     idx: IndexManager,
     *,
     pattern: str,
@@ -346,3 +346,6 @@ def _handle_grep(
     logger.debug("grep pattern=%r, content=%d, paths=%d", pattern, len(result.content_results), len(result.path_results))
 
     return (note + "\n" + output) if note else output
+
+# 兼容别名（历史私有名；测试消费方已迁移公共名）
+_handle_grep = handle_grep

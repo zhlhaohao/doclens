@@ -5,6 +5,16 @@
 
 Optional dependency: ``pip install pytreesearch[watch]`` installs ``watchdog``.
 
+⚠️ 双实现边界（AP-9）：本模块是 treesearch 引擎通用 watch 模式（被
+``treesearch watch`` CLI 使用，排除规则仅 DB sidecar）。宿主侧另有
+doclens/file_watcher.py（宿主特化 watcher，知道数据目录 / 影子 md /
+启动审计等宿主概念）——两边不回合并：本模块保持中性通用。
+
+doclens 侧已修复的可靠性问题（atime 伪事件去重 / 回调异常防护 / reindex
+撞锁补账 / on_moved 基线 / 防抖锁 / 大小写排除 / 启动基线跳过）本文件
+未同步——以通用形态使用时如遇同类问题，参考 doclens/file_watcher.py 的
+对应机制与 antipatterns/file-watcher.md。
+
 Public entry point::
 
     from treesearch.watch import watch

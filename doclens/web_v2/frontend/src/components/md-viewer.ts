@@ -1342,13 +1342,13 @@ export class MdViewer extends LitElement {
       target.classList.add("highlight-flash");
     };
 
-    if (!this.pages?.length) {
-      // 非分页文档：高度稳定，原路径（滚一次 + 两帧校准）即精确
-      this.scrollToSourceLine(line, behavior);
-      flash();
-      return;
-    }
-
+    // 非分页文档不再走「滚一次 + 两帧校准」捷径（2026-10-19 真机修复）：
+    // 非分页正文同样有 content-visibility: auto + contain-intrinsic-size 估高
+    // ——真机 WebView 首次打开时视口外块全按 500px 估，smooth 滚动途经块
+    // 渐次真实渲染、目标上方总高度持续塌缩数千 px；两帧校准那一刻高度
+    // 仍在变，之后无人修正 → 落点永久偏移（高亮不在可视区）。分页/非分页
+    // 统一走三段机制：粗跳 → 两帧校准 → _settleTo 收敛循环（同 _gotoMatch，
+    // 即匹配导航 FAB 在真机上验证可正确落点的路径）。
     const gen = ++this._settleGen; // 使进行中的旧 settle 循环失效
     const scrollOnce = (b: ScrollBehavior = behavior): number =>
       this._scrollOnceForLine(line, target, b);

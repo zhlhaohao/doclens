@@ -377,10 +377,10 @@ class TestHandleGrepEndToEnd:
         assert set(handlers) == {"kb_grep"}
 
     def test_output_contains_match_body(self, tmp_path: Path, monkeypatch):
-        from doclens.grep_tools import _handle_grep
+        from doclens.grep_tools import handle_grep
 
         idx = _real_idx(tmp_path, monkeypatch)
-        out = _handle_grep(idx, pattern=PAT)
+        out = handle_grep(idx, pattern=PAT)
 
         assert "第29题" in out, f"输出未含匹配体:\n{out[:400]}"
         assert "医疗" in out, f"输出未含跨度后文:\n{out[:400]}"
@@ -398,9 +398,9 @@ class TestHandleGrepEndToEnd:
         idx = IndexManager(CortexConfig())
         idx.reindex(force=True)
 
-        from doclens.grep_tools import _handle_grep
+        from doclens.grep_tools import handle_grep
 
-        out = _handle_grep(idx, pattern=r"第29题")
+        out = handle_grep(idx, pattern=r"第29题")
         content = out.split("<content>")[1].split("</content>")[0]
         i = content.find("第29题")
         assert i >= 100, f"锚点前文未回填（前 {i} 字符）:\n{content[:200]}"
@@ -426,9 +426,9 @@ class TestGrepUnindexedFiles:
             "# 新增\n\nNEEDLE_UNINDEXED 新文件内容\n", encoding="utf-8"
         )
 
-        from doclens.grep_tools import _handle_grep
+        from doclens.grep_tools import handle_grep
 
-        out = _handle_grep(idx, pattern="NEEDLE_UNINDEXED")
+        out = handle_grep(idx, pattern="NEEDLE_UNINDEXED")
         assert "untracked.md" in out, f"未索引文件未被搜到:\n{out[:300]}"
         assert "新文件内容" in out
 
@@ -437,9 +437,9 @@ class TestGrepUnindexedFiles:
         (tmp_path / "ignored.md").write_text("NEEDLE_IGNORED 不应被搜到\n", encoding="utf-8")
         (tmp_path / ".gitignore").write_text("ignored.md\n", encoding="utf-8")
 
-        from doclens.grep_tools import _handle_grep
+        from doclens.grep_tools import handle_grep
 
-        out = _handle_grep(idx, pattern="NEEDLE_IGNORED")
+        out = handle_grep(idx, pattern="NEEDLE_IGNORED")
         assert "未找到" in out or "ignored.md" not in out
 
     def test_indexed_file_hit_from_disk_via_rg(self, tmp_path: Path, monkeypatch):

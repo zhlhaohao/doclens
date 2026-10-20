@@ -1,43 +1,32 @@
-"""GET /api/preview —— 文件预览。
+"""GET /api/preview —— 预览主分派与文本路径（P1-3 拆分后保留的枢纽）。
+
+预览域拆分形态（2026-10-20）：
+- 本文件：GET /preview 格式分派 + 普通文本路径 + 全域共享的路径/权限工具
+- preview_synth.py：DB 合成管线（docx/xlsx/pptx/epub/图像/PST）
+- preview_assets.py：字节流四端点（pdf/raw/asset/download）
+- preview_mutations.py：写路径（PUT 保存 / rotate / upload + hash 反查）
 
 路径解析相对于 IndexManager.search_path，防止越权访问。
 """
-import hashlib
-import logging
 import os
-import re
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Query
 
-from doclens.config import data_dirname
-from doclens.image_orienter import ORIENTABLE_IMAGE_EXTS, rotate_image_inplace
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.deps import get_index_manager
-from doclens.web_v2.api._auto_rotate import broadcast_rotated, drop_vision_queue_row
-from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
-from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
-from doclens.web_v2.models.preview import (
-    PreviewResponse,
-    PreviewRotateResponse,
-    PreviewSaveRequest,
-    PreviewSaveResponse,
-    PreviewUploadResponse,
+from doclens.web_v2.api import preview_synth
+from doclens.web_v2.api.preview_common import (
+    BINARY_PREVIEW_EXTS,
+    compute_writable,
+    lookup_rel_via_path_map,
+    resolve_path,
+    safe_resolve,
 )
-from doclens.web_v2.preview_synthesizer import render_tree_to_md
+from doclens.web_v2.deps import get_index_manager
+from doclens.web_v2.models.preview import PreviewResponse
 
 router = APIRouter()
-
-# 这些后缀的文件磁盘 utf-8 读取会出乱码；改为从 DB 合成 md 预览
-# （.mhtml/.mht 是 MIME 打包文本，原始预览无意义，同样走合成）
-# doc/docm/ppt/pps/pot/xls/rtf/epub 由 anydoc 解析（ADR-0013），同属二进制合成预览。
-BINARY_PREVIEW_EXTS = frozenset({
-    ".pdf", ".docx", ".doc", ".docm", ".pptx", ".ppt", ".pps", ".pot",
-    ".xlsx", ".xlsm", ".xltx", ".xltm", ".xls",
-    ".rtf", ".epub", ".csv", ".mhtml", ".mht",
-}) | IMAGE_EXTENSIONS
 
 # 二进制嗅探字节数（git is-binary 判据：前导块含 NUL 即二进制）
 _BINARY_SNIFF_BYTES = 8192
@@ -59,25 +48,6 @@ def _looks_binary(full: Path) -> bool:
         return False  # 读失败留给 read_text 的既有错误处理
 
 
-def _compute_writable(full: Path, search_path: Path) -> bool:
-    """判断文件是否可在 PUT /api/preview 中写入。
-
-    用于 GET（响应 writable 字段）和 PUT（写前检查），保持两端判断一致。
-    """
-    if not full.exists() or not full.is_file():
-        return False
-    if full.suffix.lower() in BINARY_PREVIEW_EXTS:
-        return False
-    # PST 物理文件：预览是合成的邮件目录页，写回会毁掉 GB 级二进制
-    if full.suffix.lower() == ".pst":
-        return False
-    # 数据目录内部不让用户改索引（开发 .cortex / 发行版 .doclens）
-    try:
-        full.relative_to(search_path / data_dirname())
-        return False
-    except ValueError:
-        pass
-    return os.access(full, os.W_OK)
 
 _LANGUAGE_MAP = {
     ".py": "python", ".md": "markdown", ".txt": "text",
@@ -88,174 +58,7 @@ _LANGUAGE_MAP = {
 }
 
 
-def _safe_resolve(base: Path, requested: str) -> Path:
-    """安全解析路径，禁止 .. 越权。"""
-    base_abs = base.resolve()
-    candidate = (base_abs / requested).resolve()
-    try:
-        candidate.relative_to(base_abs)
-    except ValueError:
-        raise CortexAPIError(404, "FILE_NOT_FOUND", "路径越权")
-    return candidate
 
-
-def _resolve_path(base: Path, requested: str, idx: IndexManager) -> tuple[Path, str]:
-    """解析文档路径：先直接拼（相对 workdir），失败则用 path_map 按文件名/endswith 反查。
-
-    AI 偶发只给文件名（如 ``深海生物新物种发现.md``，无目录前缀），直接拼 workdir 找不到；
-    path_map 的 mapped_path 是绝对路径，endswith(filename) 可反查出完整相对路径。
-
-    Returns:
-        (full_path, resolved_rel_path) —— full_path 是绝对路径，resolved_rel_path 是
-        相对 workdir 的路径（用于二进制合成等下游）；若直接拼就命中，resolved_rel_path=requested。
-    """
-    candidate = _safe_resolve(base, requested)
-    if candidate.exists() and candidate.is_file():
-        return candidate, requested
-    rel = _lookup_rel_via_path_map(base, requested, idx)
-    if rel is not None:
-        full = _safe_resolve(base, rel)
-        if full.exists() and full.is_file():
-            return full, rel
-    raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {requested}")
-
-
-def _lookup_rel_via_path_map(base: Path, requested: str, idx: IndexManager) -> str | None:
-    """用 path_map 按文件名/endswith 反查相对 workdir 的路径（不检查文件存在）。
-
-    用于：纯文件名（无目录）→ 反查完整相对路径；binary 文件可能不在磁盘但已在 DB 索引，
-    不能用存在性判断，所以本函数只反查路径。
-    """
-    for mapped in idx.path_map.values():
-        if mapped == requested or mapped.endswith("/" + requested) \
-                or mapped.endswith("\\" + requested) or mapped.endswith(requested):
-            try:
-                return str(Path(mapped).resolve().relative_to(base.resolve())).replace("\\", "/")
-            except ValueError:
-                return requested
-    return None
-
-
-def _build_download_filename(rel_path: str, full: Path) -> str:
-    """下载文件名 = 原始文件名 + '_' + sha256(rel_path)[:6] + 后缀。"""
-    h = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:6]
-    return f"{full.stem}_{h}{full.suffix}"
-
-
-@router.get("/preview/download")
-async def download(
-    path: str = Query(..., description="相对路径"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """以附件形式下载原始文件，文件名带相对路径 hash 防冲突。"""
-    base = Path(idx.search_path)
-    full, resolved_rel = _resolve_path(base, path, idx)
-    if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    download_name = _build_download_filename(resolved_rel, full)
-    return FileResponse(
-        path=str(full),
-        filename=download_name,
-        media_type="application/octet-stream",
-    )
-
-
-@router.get("/preview/asset")
-async def preview_asset(
-    path: str = Query(..., description="文档相对路径"),
-    id: int = Query(..., ge=1, description="图片序号（1-indexed）"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """返回文档内某张图片的字节流。
-
-    path 经越权校验（必须在 search_path 内）；图片从
-    ``<index_path>.parent/images/<doc_hash>/<seq>.<ext>`` 读取。
-    """
-    base = Path(idx.search_path)
-    _safe_resolve(base, path)  # 越权校验，不通过则抛 FILE_NOT_FOUND
-
-    images_root = Path(idx.index_path).parent / "images"
-    store = ImageStore(images_root)
-    resolved = store.resolve(doc_hash_for(path), id)
-    if resolved is None:
-        raise CortexAPIError(404, "IMAGE_NOT_FOUND", f"图片不存在: {path} #{id}")
-    file_path, media_type = resolved
-    return FileResponse(path=str(file_path), media_type=media_type)
-
-
-@router.get("/preview/raw")
-async def preview_raw(
-    path: str = Query(..., description="图像文件相对路径"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """直接返回独立图像文件的字节流（供图像预览顶部嵌入原图）。
-
-    仅限图像扩展名（IMAGE_EXTENSIONS）；path 经越权校验。
-    """
-    base = Path(idx.search_path)
-    full, _resolved_rel = _resolve_path(base, path, idx)
-    ext = full.suffix.lower()
-    if ext not in IMAGE_EXTENSIONS:
-        raise CortexAPIError(400, "NOT_AN_IMAGE", f"非图像文件: {path}")
-    if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    media_type = EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
-    return FileResponse(path=str(full), media_type=media_type)
-
-
-@router.post("/preview/rotate", response_model=PreviewRotateResponse)
-def rotate_image(
-    path: str = Query(..., description="图像文件相对路径"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """预览期手动顺时针旋转 90° 并落盘（ADR-0029）。
-
-    复用判向自动旋转（ADR-0017）的像素旋转与收尾管线（同格式重编码 →
-    清视觉队列残留 → FileWatcher 自然重建重转写），但**无条件可用**——
-    纯像素操作，不依赖视觉 API 配置与 VISION_AUTO_ROTATE 开关。
-    同步 def 端点（threadpool 执行），PIL 单图操作耗时可接受。
-    """
-    base = Path(idx.search_path)
-    full, resolved_rel = _resolve_path(base, path, idx)
-    if full.suffix.lower() not in ORIENTABLE_IMAGE_EXTS:
-        raise CortexAPIError(400, "NOT_ROTATABLE", f"该格式不支持旋转: {path}")
-    if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    if not rotate_image_inplace(full, 90):
-        raise CortexAPIError(500, "ROTATE_FAILED", f"旋转失败: {path}")
-    # 收尾与判向旋转一致（ADR-0017 §6）；manual 标志驱动前端 toast 措辞
-    drop_vision_queue_row(full, idx.index_path)
-    broadcast_rotated(resolved_rel, manual=True)
-    return PreviewRotateResponse(path=resolved_rel, rotated=True)
-
-
-@router.get("/preview/pdf")
-async def preview_pdf(
-    path: str = Query(..., description="PDF 文件相对路径"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """PDF 原生预览字节流（ADR-0031）：inline 返回原始 PDF。
-
-    只做越权校验与磁盘存在性——**不查 DB**（预览与索引解耦：未索引文件
-    照常可看）。文件不在磁盘（含「已索引但被移走」——搜索仍命中的场景）
-    → FILE_MOVED 明确报错，不回退合成 md（单路径决议）。
-    """
-    base = Path(idx.search_path)
-    # 直拼 → miss 则 path_map 反查（AI 只给文件名）；_resolve_path 对
-    # 不存在文件直接抛 404，绕过了 FILE_MOVED 的区分语义，故手工拼装
-    full = _safe_resolve(base, path)
-    if not (full.exists() and full.is_file()):
-        rel = _lookup_rel_via_path_map(base, path, idx)
-        if rel is not None:
-            full = _safe_resolve(base, rel)
-    if full.suffix.lower() != ".pdf":
-        raise CortexAPIError(400, "NOT_A_PDF", f"非 PDF 文件: {path}")
-    if not (full.exists() and full.is_file()):
-        raise CortexAPIError(
-            404, "FILE_MOVED",
-            f"PDF 文件不在磁盘（可能已被移动或删除），无法预览: {path}",
-        )
-    return FileResponse(path=str(full), media_type="application/pdf")
 
 
 def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
@@ -268,9 +71,9 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
 
     base = Path(idx.search_path)
     resolved = path
-    candidate = _safe_resolve(base, path)
+    candidate = safe_resolve(base, path)
     if not (candidate.exists() and candidate.is_file()):
-        rel = _lookup_rel_via_path_map(base, path, idx)
+        rel = lookup_rel_via_path_map(base, path, idx)
         if rel is not None:
             resolved = rel
 
@@ -292,32 +95,39 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
         language="pdf",
         content="",
         line_range=None,
-        highlights=[],
         writable=False,  # PDF 不可编辑（BINARY_PREVIEW_EXTS 写回闸门同款语义）
+        synthesized=False,  # pdf 是磁盘字节直读（pdf.js 渲染），非 DB 合成
         page_starts=page_starts,
     )
 
 
 @router.get("/preview", response_model=PreviewResponse)
-async def preview(
+def preview(
     path: str = Query(..., description="相对路径"),
     start_line: int = Query(default=0, ge=0),
     end_line: int = Query(default=0, ge=0),
     idx: IndexManager = Depends(get_index_manager),
 ):
+    """预览主分派（P2-1：同步 def，FastAPI 自动进 threadpool）。
+
+    函数体全同步（read_text / FTS5 查询 / Pygments 分词）——async def 声明
+    会把这些阻塞 I/O 压在事件循环上：一个大 md 的读盘+分词期间，搜索/
+    SSE/聊天流全部冻结。同步 def 由 Starlette 丢 anyio threadpool（默认
+    40 容量），事件循环立即归还。rotate 端点自始就是此形态（先例）。
+    """
     base = Path(idx.search_path)
     # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md，
     # 并附附件清单（含下载 URL，ADR-0005）
     if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):
-        resp = _synthesize_binary_preview(idx, path)
-        atts = _pst_email_attachments(idx, path)
+        resp = preview_synth.synthesize_binary_preview(idx, path)
+        atts = preview_synth.pst_email_attachments(idx, path)
         if atts is not None:
             resp = resp.model_copy(update={"attachments": atts})
         return resp
     # PST 物理文件：GB 级二进制，绝不能 read_text（会把事件循环拖死）——
     # 合成邮件目录页（总数 + 前 N 封主题列表）
     if path.lower().endswith(".pst"):
-        return _synthesize_pst_overview(idx, path)
+        return preview_synth.synthesize_pst_overview(idx, path)
     # PDF：原生预览（ADR-0031）——轻量标记响应（language=pdf、无 content），
     # 字节由 GET /api/preview/pdf 服务；合成 md 链路对 pdf 退役
     if path.lower().endswith(".pdf"):
@@ -325,16 +135,16 @@ async def preview(
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
-        candidate = _safe_resolve(base, path)
+        candidate = safe_resolve(base, path)
         if candidate.exists() and candidate.is_file():
-            return _synthesize_binary_preview(idx, path)
-        rel = _lookup_rel_via_path_map(base, path, idx)
+            return preview_synth.synthesize_binary_preview(idx, path)
+        rel = lookup_rel_via_path_map(base, path, idx)
         if rel is not None:
-            return _synthesize_binary_preview(idx, rel)
+            return preview_synth.synthesize_binary_preview(idx, rel)
         # 既不在磁盘也不在 path_map → 走合成（合成内部查 DB，未索引返回 NOT_INDEXED）
-        return _synthesize_binary_preview(idx, path)
+        return preview_synth.synthesize_binary_preview(idx, path)
 
-    full, resolved_rel = _resolve_path(base, path, idx)
+    full, resolved_rel = resolve_path(base, path, idx)
 
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
@@ -378,462 +188,7 @@ async def preview(
         language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
         content=content,
         line_range=line_range,
-        highlights=[],
-        writable=_compute_writable(full, base),
+        writable=compute_writable(full, base),
+        synthesized=False,
         tokens=tokens,
-    )
-
-
-# PST 目录页列出的邮件主题上限（超出只显示总数）
-_PST_OVERVIEW_LIST_LIMIT = 200
-
-
-def _pst_email_attachments(idx: IndexManager, derived_path: str):
-    """取 PST 派生邮件（<pst_rel>#<entry_id>）的附件清单，附下载 URL。
-
-    Returns:
-        list[PstAttachmentInfo]；pst_email_meta 无记录（旧索引）返回 None。
-    """
-    from urllib.parse import quote
-
-    from doclens.web_v2.models.pst import PstAttachmentInfo
-    from treesearch.fts import FTS5Index
-
-    pst_rel, sep, entry_id = derived_path.partition("#")
-    if not sep:
-        return None
-    abs_pst = os.path.abspath(os.path.join(idx.search_path, pst_rel))
-    fts = FTS5Index(db_path=idx.index_path)
-    try:
-        atts = fts.get_email_attachments_by_entry(abs_pst, entry_id)
-    finally:
-        fts.close()
-    if atts is None:
-        return None
-
-    out = []
-    for a in atts:
-        stored = bool(a.get("stored")) and bool(a.get("filename"))
-        url = None
-        if stored:
-            url = (
-                f"/api/pst/attachment?path={quote(pst_rel, safe='')}"
-                f"&entry={quote(entry_id, safe='')}"
-                f"&file={quote(a['filename'], safe='')}"
-            )
-        out.append(PstAttachmentInfo(
-            name=a.get("name") or "unnamed",
-            size=a.get("size") or 0,
-            stored=stored,
-            download_url=url,
-        ))
-    return out
-
-# MAPI 主题可能带 \x01 等控制字符（go-pst 原样返回），展示前清除
-_SUBJECT_CONTROL_CHARS = re.compile(r"[\x00-\x1f]")
-
-
-def _clean_subject(name: str) -> str:
-    cleaned = _SUBJECT_CONTROL_CHARS.sub("", name or "").strip()
-    return cleaned or "(无主题)"
-
-
-def _synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewResponse:
-    """PST 物理文件的预览：合成邮件目录页（总数 + 前 N 封主题）。"""
-    from treesearch.fts import FTS5Index
-
-    abs_path = os.path.abspath(os.path.join(idx.search_path, rel_path))
-    prefix = abs_path + "#"
-    fts = FTS5Index(db_path=idx.index_path)
-    try:
-        total = fts.count_docs_with_source_prefix(prefix)
-        names = fts.list_doc_names_by_source_prefix(prefix, _PST_OVERVIEW_LIST_LIMIT)
-    finally:
-        fts.close()
-
-    if total == 0:
-        raise CortexAPIError(
-            status=404,
-            code="NOT_INDEXED",
-            detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
-        )
-
-    name = os.path.basename(rel_path)
-    lines = [
-        f"# {name}",
-        "",
-        f"Outlook 邮件数据文件，共 **{total}** 封邮件已索引。",
-        "",
-        "每封邮件是独立文档（路径形如 `<文件名>#<邮件ID>`），"
-        "可直接搜索发件人、主题、正文与白名单附件内容。",
-        "",
-    ]
-    if names:
-        shown = len(names)
-        heading = f"## 邮件主题（前 {shown} 封）" if total > shown else "## 邮件主题"
-        lines.append(heading)
-        lines.append("")
-        lines.extend(f"- {_clean_subject(n)}" for n in names)
-
-    return PreviewResponse(
-        path=rel_path,
-        language="markdown",
-        content="\n".join(lines),
-        line_range=None,
-        highlights=[],
-        writable=False,
-    )
-
-
-def _synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewResponse:
-    """从 DB 读 structure_json → 合成 md → 返回 language=markdown。"""
-    from treesearch.fts import FTS5Index
-
-    abs_path = os.path.abspath(os.path.join(idx.search_path, rel_path))
-    fts = FTS5Index(db_path=idx.index_path)
-    try:
-        doc = fts.load_document_by_source_path(abs_path)
-        # 防御性双查：部分历史索引可能用相对路径存
-        if doc is None:
-            doc = fts.load_document_by_source_path(rel_path)
-    finally:
-        fts.close()
-
-    if doc is None:
-        raise CortexAPIError(
-            status=404,
-            code="NOT_INDEXED",
-            detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
-        )
-
-    md_content, line_map = render_tree_to_md(doc.structure, doc.source_type)
-    pages, cleaned_md = _extract_pages(doc.structure, doc.source_type, md_content, line_map)
-    # 图像文件：顶部嵌入原图（经 /api/preview/raw 服务源文件），下方为视觉解析结果
-    if doc.source_type == "image":
-        from urllib.parse import quote
-
-        raw_url = f"/api/preview/raw?path={quote(rel_path, safe='')}"
-        cleaned_md = f"![原图]({raw_url})\n\n{cleaned_md}"
-    return PreviewResponse(
-        path=rel_path,
-        language="markdown",
-        content=cleaned_md,
-        line_range=None,
-        highlights=[],
-        writable=False,  # 合成预览不可写
-        pages=pages,
-        line_map={str(k): v for k, v in line_map.items()},
-    )
-
-
-# 5MB 上限（防御性，避免 OOM）
-_MAX_SAVE_BYTES = 5 * 1024 * 1024
-
-
-@router.put("/preview", response_model=PreviewSaveResponse)
-async def save_preview(
-    path: str = Query(..., description="相对路径"),
-    body: PreviewSaveRequest = Body(...),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    base = Path(idx.search_path)
-    full = _safe_resolve(base, path)
-
-    if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
-    if not _compute_writable(full, base):
-        raise CortexAPIError(403, "NOT_WRITABLE", f"该文件不可编辑: {path}")
-
-    encoded = body.content.encode("utf-8")
-    if len(encoded) > _MAX_SAVE_BYTES:
-        raise CortexAPIError(413, "CONTENT_TOO_LARGE", f"content 超过 {_MAX_SAVE_BYTES // 1024 // 1024}MB 上限")
-
-    try:
-        full.write_bytes(encoded)
-    except OSError as e:
-        raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
-
-    # 触发后台增量重索引（不阻塞响应）
-    try:
-        idx.trigger_background_reindex()
-    except Exception as e:
-        # 索引失败不阻断保存成功
-        logging.getLogger(__name__).warning("Save reindex failed: %s", e)
-
-    return PreviewSaveResponse(
-        path=path,
-        content=body.content,
-        bytes_written=len(encoded),
-        reindex_triggered=True,
-    )
-
-
-_UPLOAD_FILENAME_RE = re.compile(
-    # 可选的 " (N)" 容忍浏览器下载去重后缀（Chrome/Edge: file (1).ext）
-    r"^(?P<stem>.+)_(?P<hash>[a-f0-9]{6})(?: \(\d+\))?(?P<suffix>\.[^./\\]+)$"
-)
-
-
-# PDF [PAGE N] 标记处理已随 ADR-0031 原生预览退役（页表见 page_starts）
-
-
-def _extract_pages(
-    structure: list,
-    source_type: str,
-    md_content: str,
-    line_map: dict | None = None,
-):
-    """从合成 md + structure 抽取分页信息。
-
-    pdf 不在此列（ADR-0031：PDF 走原生预览，不再合成 md）。
-
-    Args:
-        structure: treesearch Document.structure（root 节点列表）
-        source_type: Document.source_type（"pptx" / "excel" / ...）
-        md_content: render_tree_to_md 的输出
-        line_map: render_tree_to_md 的 {node.line_start: md 实际行号}；
-          epub 分支依赖它换算分页边界（原始 line_start 体系与 md 行号不一致）
-
-    Returns:
-        (pages, cleaned_md)：
-        - pages: list[PageMarker] 或 None（不支持的类型或空 structure）
-        - cleaned_md: 原样返回 md_content
-    """
-    if source_type == "pptx":
-        return _extract_pptx_pages(structure), md_content
-    if source_type == "excel":
-        return _extract_excel_pages(structure), md_content
-    if source_type == "epub":
-        return _extract_epub_pages(structure, line_map or {}), md_content
-    return None, md_content
-
-
-def _extract_epub_pages(structure: list, line_map: dict):
-    """EPUB：按章级节点产 pages，line_start 用 md 实际行号。
-
-    epub 经 anydoc→md_to_tree 的树形态：根(书名) → 册壳 → 章(depth-2) → 节。
-    章是天然的阅读/分页单位（实测《德川家康》460 章/14.5 万行）。
-    - node.line_start 是原始解析体系行号，须经 line_map 换算成 md 实际行号
-      （前端 _splitByPages 按它切 md content）
-    - 首页强制 line_start=1（书名/册壳 heading 并入第一页，防切丢开头）
-    - md 行号不增的空章跳过（并入前页，防零跨度页）
-    - 扁平树兜底（BUG-E1 修复）：单章本无册层时 md_to_tree 产出
-      「书名 + N 章」同级根列表（无 depth-2）——退化为按根级章节点分页，
-      书名根并入首页。
-    """
-    from doclens.web_v2.models.preview import PageMarker
-
-    pages = []
-    prev_line = 0
-    roots = [structure] if isinstance(structure, dict) else (structure or [])
-    for root in roots:
-        for vol in root.get("nodes") or []:
-            for ch in vol.get("nodes") or []:
-                title = (ch.get("title") or "").strip()
-                ls = ch.get("line_start") or 1
-                md_line = line_map.get(ls) or ls
-                if pages and md_line <= prev_line:
-                    continue
-                line_start = 1 if not pages else md_line
-                pages.append(PageMarker(
-                    label=title or f"章节 {len(pages) + 1}",
-                    line_start=line_start,
-                ))
-                prev_line = md_line
-    if not pages:
-        # 扁平树兜底：根级即章（书名根并入首页）
-        for root in roots:
-            title = (root.get("title") or "").strip()
-            ls = root.get("line_start") or 1
-            md_line = line_map.get(ls) or ls
-            if pages and md_line <= prev_line:
-                continue
-            line_start = 1 if not pages else md_line
-            pages.append(PageMarker(
-                label=title or f"章节 {len(pages) + 1}",
-                line_start=line_start,
-            ))
-            prev_line = md_line
-    return pages or None
-
-
-def _extract_pptx_pages(structure: list):
-    """PPTX: 返回 pages 或 None。content 由 _extract_pages 原样返回。"""
-    from doclens.web_v2.models.preview import PageMarker
-
-    root = structure[0] if structure else None
-    slides = (root.get("nodes", []) if root else []) or []
-    if not slides:
-        return None
-
-    pages = []
-    for i, slide in enumerate(slides):
-        title = (slide.get("title") or "").strip()
-        label = f"幻灯片 {i + 1}" + (f" · {title}" if title else "")
-        line_start = slide.get("line_start") or 1
-        pages.append(PageMarker(label=label, line_start=line_start))
-    return pages
-
-
-_RE_XLSX_ROW_SUFFIX = re.compile(r"\s*\(\d+\s*rows?\)\s*$")
-
-
-def _extract_excel_pages(structure: list):
-    """Excel: 返回 pages 或 None。content 由 _extract_pages 原样返回。"""
-    from doclens.web_v2.models.preview import PageMarker
-
-    if not structure:
-        return None
-
-    pages = []
-    for i, sheet in enumerate(structure):
-        # excel_parser 把 title 存为 "{sheet_name} ({row_count} rows)"；
-        # 卡片标签只需要 sheet 名，剥掉行数后缀。
-        name = _RE_XLSX_ROW_SUFFIX.sub("", (sheet.get("title") or "")).strip()
-        label = f"工作表 {i + 1}" + (f" · {name}" if name else "")
-        line_start = sheet.get("line_start") or 1
-        pages.append(PageMarker(label=label, line_start=line_start))
-    return pages
-
-
-def _parse_upload_filename(filename: str):
-    """解析上传文件名 → (stem, hash6, suffix)。
-
-    格式：{stem}_{hash6}[ (N)]{suffix}，其中 hash6 必须是 6 位小写十六进制。
-    可选的 " (N)" 是浏览器下载重名时自动添加的去重后缀，解析时容忍并忽略。
-
-    Returns:
-        (stem, hash6, suffix) 元组；不匹配返回 None。
-    """
-    m = _UPLOAD_FILENAME_RE.match(filename)
-    if not m:
-        return None
-    return (m.group("stem"), m.group("hash"), m.group("suffix"))
-
-
-class _HashCollisionError(Exception):
-    """多个索引文档命中同一 (stem, hash6) 时抛出。"""
-
-
-def _resolve_upload_target(idx, stem: str, hash6: str):
-    """遍历索引文档，按 (stem, sha256(rel_path)[:6]) 双因素匹配。
-
-    - IndexManager.documents[*].metadata["source_path"] 存的是绝对路径，
-      需先转相对 search_path 的 POSIX 路径再算 hash
-    - 命中 0 → None
-    - 命中 1 → 相对路径字符串
-    - 命中 ≥2 → raise _HashCollisionError
-    """
-    base = Path(idx.search_path)
-    matches = []
-    for abs_path in idx.indexed_source_paths():
-        if not abs_path:
-            continue
-        try:
-            rel = os.path.relpath(abs_path, base).replace(os.sep, "/")
-        except ValueError:
-            # Windows 跨盘符 relpath 会抛 ValueError
-            continue
-        if Path(rel).stem != stem:
-            continue
-        h = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:6]
-        if h == hash6:
-            matches.append(rel)
-    if len(matches) == 0:
-        return None
-    if len(matches) > 1:
-        raise _HashCollisionError(
-            f"hash+stem 命中多个文件：{matches}"
-        )
-    return matches[0]
-
-
-# 50MB 上限（防御性，避免 OOM；允许二进制大文件）
-_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-
-
-@router.get("/preview/upload-target")
-async def probe_upload_target(
-    filename: str = Query(..., description="上传文件名"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """只读探测：文件名带 hash6（doclens 下载产物）时反查知识库原文件路径。
-
-    供 files 页上传分流（「覆盖原文件 / 存入当前目录」用户确认）——
-    复用 POST /preview/upload 的文件名解析与反查逻辑，不做任何写入。
-    hash 冲突（命中多个）按无匹配处理（与静默目录上传的旧行为一致）。
-    """
-    parsed = _parse_upload_filename(filename)
-    if parsed is None:
-        return {"match": False}
-    stem, hash6, _suffix = parsed
-    try:
-        rel = _resolve_upload_target(idx, stem, hash6)
-    except _HashCollisionError:
-        return {"match": False}
-    if rel is None:
-        return {"match": False}
-    return {"match": True, "path": rel}
-
-
-@router.post("/preview/upload", response_model=PreviewUploadResponse)
-async def upload(
-    file: UploadFile = File(..., description="要上传的文件"),
-    idx: IndexManager = Depends(get_index_manager),
-):
-    """上传文件，按文件名 hash 反查目标路径并覆盖原文件。"""
-    # 1. 解析文件名
-    parsed = _parse_upload_filename(file.filename or "")
-    if parsed is None:
-        raise CortexAPIError(
-            400, "BAD_FILENAME",
-            "文件名不符合 {stem}_{hash6}{suffix} 格式",
-        )
-    stem, hash6, _suffix = parsed
-
-    # 2. 反查目标相对路径
-    try:
-        rel = _resolve_upload_target(idx, stem, hash6)
-    except _HashCollisionError as e:
-        raise CortexAPIError(409, "HASH_COLLISION", str(e)) from e
-    if rel is None:
-        raise CortexAPIError(
-            404, "NOT_INDEXED",
-            f"hash+stem 在索引中找不到匹配：{file.filename}",
-        )
-
-    # 3. 越权与可写性检查
-    base = Path(idx.search_path)
-    full = _safe_resolve(base, rel)
-    # 显式拒绝数据目录子目录（开发 .cortex / 发行版 .doclens）
-    try:
-        full.relative_to(base / data_dirname())
-        raise CortexAPIError(403, "NOT_WRITABLE", "禁止覆盖索引元数据")
-    except ValueError:
-        pass
-
-    # 4. 读字节 + 大小检查
-    data = await file.read(_MAX_UPLOAD_BYTES + 1)
-    if len(data) > _MAX_UPLOAD_BYTES:
-        raise CortexAPIError(
-            413, "CONTENT_TOO_LARGE",
-            f"文件超过 {_MAX_UPLOAD_BYTES // 1024 // 1024}MB 上限",
-        )
-
-    # 5. 写盘
-    try:
-        full.write_bytes(data)
-    except OSError as e:
-        raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
-
-    # 6. 触发后台重索引（不阻塞响应）
-    try:
-        idx.trigger_background_reindex()
-    except Exception as e:
-        logging.getLogger(__name__).warning("Upload reindex failed: %s", e)
-
-    return PreviewUploadResponse(
-        path=rel,
-        bytes_written=len(data),
-        reindex_triggered=True,
     )

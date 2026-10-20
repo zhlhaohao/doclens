@@ -5,6 +5,7 @@
 preview 直调路由函数（asyncio.run），与 test_pdf_native_preview_api 同模式。
 """
 import asyncio
+from tests._preview_call import call
 import shutil
 from pathlib import Path
 
@@ -55,7 +56,7 @@ def idx(kb: Path, tmp_path: Path):
 
 
 def _preview(idx, path, start_line=0, end_line=0):
-    return asyncio.run(preview_api.preview(
+    return call(preview_api.preview(
         path=path, start_line=start_line, end_line=end_line, idx=idx,
     ))
 
@@ -128,9 +129,17 @@ class TestPreviewFormats:
         assert r.line_range == (190, 195)
         assert "kirin" in r.content
 
-    def test_c15_highlights_empty(self, idx):
-        r = _preview(idx, "杂记.md")
-        assert r.highlights == []
+    def test_c16_synthesized_flag(self, idx):
+        """synthesized 标志（全文件预览判定单源化）：DB 合成 md = True，
+        磁盘直读（md/代码/txt/pdf 字节直读）= False。前端以此替代本地后缀清单。"""
+        assert _preview(idx, "纪要.docx").synthesized is True
+        assert _preview(idx, "报表.xlsx").synthesized is True
+        assert _preview(idx, "幻灯.pptx").synthesized is True   # 历史漂移点：pptx 曾不在前端清单
+        assert _preview(idx, "书.epub").synthesized is True
+        assert _preview(idx, "杂记.md").synthesized is False
+        assert _preview(idx, "code/kirin_util.py").synthesized is False
+        assert _preview(idx, "plain.txt").synthesized is False
+        assert _preview(idx, "report.pdf").synthesized is False  # pdf = 字节直读非合成
 
     def test_c14_line_map_keys_are_orig_lines(self, idx):
         r = _preview(idx, "报表.xlsx")
@@ -163,7 +172,7 @@ class TestSearchFallbackChain:
         from doclens.web_v2.api import search as search_api
         from doclens.web_v2.models.search import SearchRequest
 
-        return asyncio.run(search_api.search(SearchRequest(query=q, limit=20), idx))
+        return call(search_api.search(SearchRequest(query=q, limit=20), idx))
 
     def test_like_source(self, idx):
         r = self._search(idx, "filler sentence")

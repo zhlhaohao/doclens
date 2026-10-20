@@ -131,9 +131,9 @@ class TestTxtIndexing:
         monkeypatch.chdir(tmp_path)
         idx = _make_idx(tmp_path)
 
-        from doclens.kb_tools import _handle_search_kb
+        from doclens.kb_tools import handle_search_kb
 
-        out = _handle_search_kb(idx, tmp_path, query="磁锚 检索")
+        out = handle_search_kb(idx, tmp_path, query="磁锚 检索")
         assert "<result " in out
         assert "note.txt" in out
 
@@ -159,18 +159,18 @@ class TestTxtIndexing:
 class TestMaxResults:
     def test_kb_output_capped_by_config(self, kb: Path):
         idx = _make_idx(kb, max_results=1)
-        from doclens.kb_tools import _handle_search_kb
+        from doclens.kb_tools import handle_search_kb
 
-        out = _handle_search_kb(idx, kb, query="磁锚")
+        out = handle_search_kb(idx, kb, query="磁锚")
         # 3 命中但 max_results=1 → 只展示 1 条，其余截断提示
         assert out.count("<result ") == 1
         assert "more results truncated" in out
 
     def test_kb_output_larger_config(self, kb: Path):
         idx = _make_idx(kb, max_results=10)
-        from doclens.kb_tools import _handle_search_kb
+        from doclens.kb_tools import handle_search_kb
 
-        out = _handle_search_kb(idx, kb, query="磁锚")
+        out = handle_search_kb(idx, kb, query="磁锚")
         assert out.count("<result ") == 3
 
     def test_env_override_accepted(self, kb: Path, monkeypatch):
@@ -257,9 +257,9 @@ class TestContextWindow:
         monkeypatch.chdir(tmp_path)
         idx = _make_idx(tmp_path, search_context_before=50, search_context_after=100)
 
-        from doclens.kb_tools import _handle_search_kb
+        from doclens.kb_tools import handle_search_kb
 
-        out = _handle_search_kb(idx, tmp_path, query="磁锚")
+        out = handle_search_kb(idx, tmp_path, query="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
         # 统一窗口：锚点前 ≈50、锚点后 ≈100 字符可见（head/省略号占少量预算）
         i = content.find("磁锚")
@@ -274,9 +274,9 @@ class TestContextWindow:
         monkeypatch.chdir(tmp_path)
         idx = _make_idx(tmp_path, search_context_before=50, search_context_after=500)
 
-        from doclens.kb_tools import _handle_search_kb
+        from doclens.kb_tools import handle_search_kb
 
-        out = _handle_search_kb(idx, tmp_path, query="磁锚")
+        out = handle_search_kb(idx, tmp_path, query="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
         assert content.count("后") >= 450  # 500 预算 → 至少 450 可见
 
@@ -288,9 +288,9 @@ class TestContextWindow:
         monkeypatch.chdir(tmp_path)
         idx = _make_idx(tmp_path, search_context_before=30, search_context_after=60)
 
-        from doclens.grep_tools import _handle_grep
+        from doclens.grep_tools import handle_grep
 
-        out = _handle_grep(idx, pattern="磁锚")
+        out = handle_grep(idx, pattern="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
         assert "磁锚" in content
         assert content.count("后") <= 60

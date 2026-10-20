@@ -15,11 +15,16 @@ class PageMarker(BaseModel):
 class PreviewResponse(BaseModel):
     path: str
     language: str = "text"
+    # 该响应是否为「DB 合成 md」预览（docx/xlsx/pptx/epub/mhtml/图像/PST 等）。
+    # 合成预览必须整文件渲染（行区间切片会切断分页边界、line_map 换算依赖
+    # 全文行号体系），前端以此为「全文件预览」判定信号——不再各自维护
+    # 后缀清单（历史上前后端两份清单漂移导致 pptx 命中定位偏差）。
+    # 磁盘直读的文本（md/代码/txt/html）恒 false。
+    synthesized: bool = False
     # PDF 原生预览（ADR-0031）为轻量标记响应：language="pdf"、content 空——
     # 字节由 GET /api/preview/pdf 单独服务，前端 pdf.js 渲染
     content: str = ""
     line_range: Optional[tuple[int, int]] = None
-    highlights: list[int] = []
     writable: bool = False
     # 服务端语法分词（ADR-0032）：仅代码文件文本预览返回。外层 = 行（与
     # content 的 \n 切分一一对应），内层 = run 的 [kind, text]；kind 为 8 类

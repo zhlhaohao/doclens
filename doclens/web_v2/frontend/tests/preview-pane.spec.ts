@@ -24,13 +24,16 @@ describe("<preview-pane> markdown branch", () => {
     expect((mdv as any).line).toBe(1);
   });
 
-  it("renders plain text view for other languages", async () => {
+  it("renders plain text view for other languages (delegates to <code-viewer>)", async () => {
     const el = await fixture(html`
       <preview-pane language="python" path="a.py" content="print('hi')"></preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("md-viewer")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".body")).toBeTruthy();
+    const cv = el.shadowRoot!.querySelector("code-viewer");
+    expect(cv).toBeTruthy();
+    // .body 滚动容器随组件迁入 code-viewer shadow（P1-1 拆分）
+    expect(cv!.shadowRoot!.querySelector(".body")).toBeTruthy();
   });
 
   it("empty content with path renders (空文件可预览，不落「无预览」占位)", async () => {
@@ -962,9 +965,11 @@ describe("<preview-pane> mobile font scale stepper", () => {
     expect(row!.querySelector(".font-scale-value")!.textContent!.trim()).toBe("100%");
   });
 
-  it("non-markdown preview: no stepper row", async () => {
+  it("non-markdown preview: code font stepper row (code branch owns its own scale)", async () => {
     const el = await mountMenu("python", "print(1)");
-    expect(el.shadowRoot!.querySelector(".font-scale-row")).toBeNull();
+    // 行号视图分支有自己的字号 stepper（code-font-scale，独立于 md 字号）
+    const row = el.shadowRoot!.querySelector(".font-scale-row");
+    expect(row).toBeTruthy();
   });
 
   it("edit mode: no stepper row", async () => {
