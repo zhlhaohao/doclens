@@ -1,6 +1,6 @@
 # anti-patterns 技能流程图
 
-> 附件 D of anti-patterns 技能。SKILL.md 全流程的 mermaid 可视化——技能维护者用来校验流程改动后图文一致；审计执行时以 SKILL.md 文字为准，本图仅供快速回忆流程骨架。
+> 附件 D（lens/flow.md）。SKILL.md 全流程的 mermaid 可视化——技能维护者用来校验流程改动后图文一致；审计执行时以 SKILL.md 文字为准，本图仅供快速回忆流程骨架。
 
 ## 一、两态协议总览
 
