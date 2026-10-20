@@ -1,7 +1,8 @@
-import { LitElement, html, css, unsafeCSS } from "lit";
+import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./md-viewer";
 import "./md-editor";
+import "./code-viewer";
 import "./toc-drawer";
 import "./pdf-viewer";
 import "./skill-toolbox-dialog";
@@ -15,10 +16,10 @@ import { extractHeadings, activeTocIndex, type TocItem } from "../utils/toc";
 import type { MdEditor } from "./md-editor";
 import type { MdViewer } from "./md-viewer";
 import type { PdfViewer } from "./pdf-viewer";
+import type { CodeViewer } from "./code-viewer";
 import {
   ScrollJumpController,
   scrollJumpFabStyles,
-  renderScrollJumpFabs,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
 import {
@@ -32,6 +33,7 @@ import "./translate-dialog";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
 import { downloadServerFile } from "../utils/download";
+import { getFileTypeBadge } from "../utils/file-type";
 import {
   FONT_SCALE_MIN_PCT,
   FONT_SCALE_MAX_PCT,
@@ -46,17 +48,6 @@ import {
   writeCodeTheme,
   type CodeTheme,
 } from "../utils/code-theme";
-import {
-  readAppTheme,
-  onAppThemeChange,
-  type AppTheme,
-} from "../utils/app-theme";
-import {
-  codeSurfaceLight,
-  codeSurfaceDark,
-  codeTokensLight,
-  codeTokensDark,
-} from "../utils/code-palette";
 import {
   CODE_FONT_SCALE_MIN_PCT,
   CODE_FONT_SCALE_MAX_PCT,
@@ -84,49 +75,6 @@ export function normalizeHighlightKeyword(input: string): string {
 export class PreviewPane extends LitElement {
   static styles = [
     scrollJumpFabStyles,
-    // 行号视图双表面 token（utils/code-palette.ts；ADR-0043 三态代码主题）
-    css`
-    .body {
-      --code-tok-c: ${unsafeCSS(codeTokensLight.c)};
-      --code-tok-k: ${unsafeCSS(codeTokensLight.k)};
-      --code-tok-s: ${unsafeCSS(codeTokensLight.s)};
-      --code-tok-n: ${unsafeCSS(codeTokensLight.n)};
-      --code-tok-f: ${unsafeCSS(codeTokensLight.f)};
-      --code-tok-t: ${unsafeCSS(codeTokensLight.t)};
-      --code-tok-o: ${unsafeCSS(codeTokensLight.o)};
-      --code-tok-p: ${unsafeCSS(codeTokensLight.p)};
-      --code-surface-canvas: ${unsafeCSS(codeSurfaceLight.canvas)};
-      --code-surface-ink: ${unsafeCSS(codeSurfaceLight.ink)};
-      --code-surface-line-no: ${unsafeCSS(codeSurfaceLight.lineNo)};
-      --code-surface-line-no-hover: ${unsafeCSS(codeSurfaceLight.lineNoHover)};
-      --code-surface-selected-bg: ${unsafeCSS(codeSurfaceLight.selectedBg)};
-      --code-surface-selected-bar: ${unsafeCSS(codeSurfaceLight.selectedBar)};
-      --code-surface-hit-bg: ${unsafeCSS(codeSurfaceLight.hitBg)};
-      --code-surface-hit-ink: ${unsafeCSS(codeSurfaceLight.hitInk)};
-      --code-surface-clear-bg: ${unsafeCSS(codeSurfaceLight.clearBtnBg)};
-      --code-surface-clear-ink: ${unsafeCSS(codeSurfaceLight.clearBtnInk)};
-    }
-    .body.dark {
-      --code-tok-c: ${unsafeCSS(codeTokensDark.c)};
-      --code-tok-k: ${unsafeCSS(codeTokensDark.k)};
-      --code-tok-s: ${unsafeCSS(codeTokensDark.s)};
-      --code-tok-n: ${unsafeCSS(codeTokensDark.n)};
-      --code-tok-f: ${unsafeCSS(codeTokensDark.f)};
-      --code-tok-t: ${unsafeCSS(codeTokensDark.t)};
-      --code-tok-o: ${unsafeCSS(codeTokensDark.o)};
-      --code-tok-p: ${unsafeCSS(codeTokensDark.p)};
-      --code-surface-canvas: ${unsafeCSS(codeSurfaceDark.canvas)};
-      --code-surface-ink: ${unsafeCSS(codeSurfaceDark.ink)};
-      --code-surface-line-no: ${unsafeCSS(codeSurfaceDark.lineNo)};
-      --code-surface-line-no-hover: ${unsafeCSS(codeSurfaceDark.lineNoHover)};
-      --code-surface-selected-bg: ${unsafeCSS(codeSurfaceDark.selectedBg)};
-      --code-surface-selected-bar: ${unsafeCSS(codeSurfaceDark.selectedBar)};
-      --code-surface-hit-bg: ${unsafeCSS(codeSurfaceDark.hitBg)};
-      --code-surface-hit-ink: ${unsafeCSS(codeSurfaceDark.hitInk)};
-      --code-surface-clear-bg: ${unsafeCSS(codeSurfaceDark.clearBtnBg)};
-      --code-surface-clear-ink: ${unsafeCSS(codeSurfaceDark.clearBtnInk)};
-    }
-    `,
     css`
     :host {
       display: flex;
@@ -150,7 +98,7 @@ export class PreviewPane extends LitElement {
       padding: 0;
       background: transparent;
     }
-    :host([mobile]) .body {
+    :host([mobile]) code-viewer::part(body) {
       padding-left: var(--cortex-space-3);
       padding-right: var(--cortex-space-3);
     }
@@ -175,124 +123,45 @@ export class PreviewPane extends LitElement {
     .header .path {
       flex: 1;
       min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--cortex-space-2);
       font-family: var(--cortex-font-mono);
       font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
       overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .body {
-      flex: 1;
-      overflow: auto;
-      padding: var(--cortex-space-3) var(--cortex-space-4);
-      font-family: var(--cortex-font-mono);
-      font-size: var(--cortex-fs-sm);
-      line-height: 1.7;
-      color: var(--cortex-text);
-      white-space: pre-wrap;      /* 长行自动折回，不横向滚动 */
-      overflow-wrap: anywhere;
-    }
-    /* 行号悬挂缩进：折行的续行对齐到正文列，不压行号列。
-       宽度用 em（相对本 .body 字号）——档位缩放后 40px 定宽会容不下
-       行号数字且悬挂缩进错位；1em≈2.86 数字位 + 0.4em 间隙。 */
-    .body .line {
-      padding-left: 2.86em;
-      text-indent: -2.86em;
-    }
-    .body .line-no {
+    /* 路径分层呈现（对齐 file-list 的类型徽标语言）：文件名前的彩色字母
+       徽标（与文件列表同源 file-type.ts，跨视图视觉一致）；目录段弱化、
+       文件名主色强调——一眼区分「文件在哪」与「文件是什么」。 */
+    .header .path .path-dir {
       color: var(--cortex-text-subtle);
-      display: inline-block;
-      width: 2.4em;
-      /* 悬挂缩进（.line 的 text-indent 负值）会继承进本 inline-block（块容器）
-         使数字再左移落到滚动容器裁剪区外——行号「DOM 在而不可见」的
-         根因。此处显式归零，行号回到 .line 左缘的悬挂位。 */
-      text-indent: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: rtl;   /* 长目录靠左截断（保留贴近文件名的层级） */
+      text-align: left;
+      unicode-bidi: plaintext;
     }
-    /* 行选择（2026-10-05 决议）：行号可点击（toggle 选中/反选）；选中行
-       整行高亮。与搜索命中 .highlight（命中词着色）语义不同、视觉并存。 */
-    .body .line-no.clickable {
-      cursor: pointer;
-      user-select: none;
+    .header .path .path-name {
+      color: var(--cortex-text);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+      min-width: 2em;   /* 文件名极长时保底可见宽度 */
     }
-    .body .line-no.clickable:hover {
-      color: var(--cortex-primary);
-      text-decoration: underline;
-    }
-    .body .line.line-selected {
-      background: color-mix(in srgb, var(--cortex-primary) 8%, transparent);
-      box-shadow: inset 2px 0 0 var(--cortex-primary);
-    }
-    .line-clear-btn {
-      position: sticky;
-      bottom: var(--cortex-space-2);
-      float: right;
-      margin-top: var(--cortex-space-2);
-      padding: 4px 12px;
-      border: 1px solid var(--cortex-border);
-      border-radius: 100px;
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
+    .header .path .type-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      border-radius: var(--cortex-radius-sm);
       font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-    }
-    .line-clear-btn:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
-    /* 搜索命中行高亮 —— SaaS Boutique primary-based（替代旧 amber） */
-    .highlight {
-      background: color-mix(in srgb, var(--cortex-primary) 15%, transparent);
-      color: var(--cortex-primary);
-      padding: 0 2px;
-      border-radius: 2px;
-    }
-    /* 服务端语法分词 8 类配色（ADR-0032）+ 行号视图表面（ADR-0036/0043）：
-       c注释=stone 灰 / k关键字=ink 深蓝黑 / s字符串=森林绿 / n数字=赭棕 /
-       f函数=靛蓝 / t类型=青蓝 / o操作符=steel / p标点=slate。未归类 run
-       不挂 class（正文色 --cortex-text）。
-       全部颜色经 --code-* 变量下发（utils/code-palette.ts 注入两套值）：
-       浅色值在 .body 基础规则，深色值在 .body.dark 覆盖——两套同键变量
-       随代码主题三态（auto=跟随应用主题 ⇄ 强制浅 ⇄ 强制深）切换。 */
-    .body {
-      --code-font-scale: 1;
-      font-size: calc(var(--cortex-fs-sm) * var(--code-font-scale));
-    }
-    .tk-c { color: var(--code-tok-c); font-style: italic; }
-    .tk-k { color: var(--code-tok-k); font-weight: 500; }
-    .tk-s { color: var(--code-tok-s); }
-    .tk-n { color: var(--code-tok-n); }
-    .tk-f { color: var(--code-tok-f); }
-    .tk-t { color: var(--code-tok-t); }
-    .tk-o { color: var(--code-tok-o); }
-    .tk-p { color: var(--code-tok-p); }
-    /* 深色代码主题（ADR-0036，GitHub dark 基准）：仅行号视图整体换肤——
-       底色/正文/行号/选中行/命中高亮全部换深色系；周边 header 与其余
-       预览形态跟随应用主题。具体值见 utils/code-palette.ts。 */
-    .body.dark {
-      background: var(--code-surface-canvas);
-      color: var(--code-surface-ink);
-      transition: background 0.15s, color 0.15s;
-    }
-    .body.dark .line-no {
-      color: var(--code-surface-line-no);
-    }
-    .body.dark .line-no.clickable:hover {
-      color: var(--code-surface-line-no-hover);
-    }
-    .body.dark .line.line-selected {
-      background: var(--code-surface-selected-bg);
-      box-shadow: inset 2px 0 0 var(--code-surface-selected-bar);
-    }
-    .body.dark .highlight {
-      background: var(--code-surface-hit-bg);
-      color: var(--code-surface-hit-ink);
-    }
-    .body.dark .line-clear-btn {
-      background: var(--code-surface-clear-bg);
-      border-color: var(--cortex-border);
-      color: var(--code-surface-clear-ink);
-    }
-    .body.dark .line-clear-btn:hover {
-      color: var(--code-surface-line-no-hover);
-      border-color: var(--code-surface-line-no-hover);
+      font-weight: 700;
+      line-height: 1;
+      user-select: none;
     }
     .html-frame {
       flex: 1;
@@ -740,17 +609,8 @@ export class PreviewPane extends LitElement {
   @state() private _fontScalePct = readFontScalePct();
   /** 代码主题（ADR-0036）：行号视图浅/深两态；持久化 localStorage，默认 light。 */
   /** 代码主题（ADR-0043 三态）：auto=跟随应用主题（深夜→深色），light/dark=显式固定。
-   *  应用主题变更时 auto 态需重算——订阅 onAppThemeChange。 */
   @state() private _codeTheme: CodeTheme = readCodeTheme();
-  @state() private _appTheme: AppTheme = readAppTheme();
-  private _offAppThemeChange?: () => void;
 
-  /** 行号视图实际渲染表面：auto 解析为跟随当前应用主题。 */
-  private get _codeDark(): boolean {
-    if (this._codeTheme === "dark") return true;
-    if (this._codeTheme === "light") return false;
-    return this._appTheme === "dark";
-  }
   /** 行号视图字号档位（60–200 步长 10）；持久化 localStorage（独立于 md 字号）。 */
   @state() private _codeFontScalePct = readCodeFontScalePct();
   /** 预览全屏（类视频全屏）：host class preview-fullscreen + body class
@@ -770,49 +630,9 @@ export class PreviewPane extends LitElement {
   @state() private _toolboxError: string | null = null;
   @state() private _pickedSkill: SkillInfo | null = null;
 
-  /** 行选择（2026-10-05 决议）：行号视图点击行号 toggle 选中/反选；多选
-   *  升序合并为区间（"12-40,88-120"），经工具箱链路以 path:区间 后缀进消息。
-   *  生命周期：path 变化 / 发送后 / 手动清除钮 三处清空；滚动与开关
-   *  工具箱对话框不清——选行是「读码时随手标记」的持久态。 */
-  @state() private _selectedLines = new Set<number>();
-
-  /** 选中行集合 → 升序合并区间串（"12-40,88-120"）；空集返回 ""。 */
-  private get _lineRanges(): string {
-    if (this._selectedLines.size === 0) return "";
-    const sorted = [...this._selectedLines].sort((a, b) => a - b);
-    const parts: string[] = [];
-    let start = sorted[0], prev = sorted[0];
-    for (let i = 1; i <= sorted.length; i++) {
-      const n = sorted[i];
-      if (n !== prev + 1) {
-        parts.push(start === prev ? `${start}` : `${start}-${prev}`);
-        start = n;
-      }
-      prev = n;
-    }
-    return parts.join(",");
-  }
-
-  /** Shift+click 的锚点行：普通点击时更新，Shift+click 时从锚点到点击行
-   *  整段加入选区（IDE 惯例；无锚点时退化为普通点击）。 */
-  private _lineAnchor: number | null = null;
-
-  private _onLineNoClick = (lineNo: number, shift: boolean) => {
-    if (shift && this._lineAnchor !== null) {
-      const next = new Set(this._selectedLines);
-      const [a, b] = this._lineAnchor <= lineNo
-        ? [this._lineAnchor, lineNo]
-        : [lineNo, this._lineAnchor];
-      for (let n = a; n <= b; n++) next.add(n);
-      this._selectedLines = next;
-      return; // 锚点不动：连续 Shift+click 可重设段尾
-    }
-    this._lineAnchor = lineNo;
-    const next = new Set(this._selectedLines);
-    if (next.has(lineNo)) next.delete(lineNo);
-    else next.add(lineNo);
-    this._selectedLines = next;
-  };
+  /** 行选择已迁 code-viewer（2026-10-19 P1-1 拆分）：选区态归组件自治，
+   *  宿主经 _codeSelection 镜像 + _pathWithRanges 消费；path/content 变化
+   *  时组件自清（updated 钩）。 */
 
   /** 工具箱消息拼装用的路径：有选中行时附 `:区间` 后缀（code-explain 定位
    *  协议原生消费；其他技能视为无害路径变体）。 */
@@ -830,6 +650,40 @@ export class PreviewPane extends LitElement {
       && this.language !== "image"
       && this.language !== "html";
   }
+
+  /** 行号视图当前选中区间串（委派 code-viewer；工具箱消息拼装用）。 */
+  private get _lineRanges(): string {
+    const cv = this._codeViewer();
+    return cv ? cv.lineRanges() : "";
+  }
+
+  private _codeViewer(): CodeViewer | null {
+    if (!this._isLineView || this._mode !== "preview") return null;
+    return this.shadowRoot?.querySelector("code-viewer") ?? null;
+  }
+
+  /** code-viewer 选区上抛：记 dirty 无关，仅驱动「清除选中」按钮态。 */
+  private _onCodeSelectionChange = (e: CustomEvent<{ ranges: string }>) => {
+    this._codeSelection = e.detail.ranges;
+  };
+
+  /** code-viewer 选区镜像：mobile more 菜单「清除选中」项的显隐依据；
+   *  桌面清除钮在 code-viewer 正文底部（组件自治）。 */
+  private _renderCodeSelectionClear() {
+    if (!this._codeSelection) return null;
+    return html`<button
+      type="button"
+      role="menuitem"
+      @click=${() => { this._codeViewer()?.clearSelection(); }}
+    ><doclens-icon name="x"></doclens-icon>清除选中（${this._codeSelection}）</button>`;
+  }
+
+  /** code-viewer 选区镜像（驱动 header/按钮重渲染；空串 = 无选中）。 */
+  @state() private _codeSelection = "";
+
+  /** 代码主题（ADR-0036/0043 三态）：auto=跟随应用主题；渲染表面解析已随
+   *  code-viewer（组件内订阅应用主题），宿主持状态驱动 header 按钮与 prop。 */
+  @state() private _codeTheme: CodeTheme = readCodeTheme();
 
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
@@ -882,9 +736,8 @@ export class PreviewPane extends LitElement {
       // 书签抽屉同样不跨文档残留；列表换 path 重读
       this._showBookmarks = false;
       this._bookmarkItems = bookmarksFor(this.path);
-      // 行选择不跨文档残留（防 A 文件行号配 B 文件）
-      this._selectedLines = new Set();
-      this._lineAnchor = null;
+      // 行选择清空已随 code-viewer content 变化自清（组件自治）；宿主镜像复位
+      this._codeSelection = "";
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
       this._flushScrollMemory();
     }
@@ -899,9 +752,7 @@ export class PreviewPane extends LitElement {
       this._anchorLine = 1;
       this._anchorAtBottom = false;
       this._selOffsets = null;
-      // 新内容行集合已变，选中行号随之失效
-      this._selectedLines = new Set();
-      this._lineAnchor = null;
+      this._codeSelection = ""; // 行选择随 code-viewer content 变化自清
     }
   }
 
@@ -986,16 +837,11 @@ export class PreviewPane extends LitElement {
       this._fullscreen = false;
       this._applyFullscreen();
     }
-    // 代码主题 auto 态跟随应用主题（ADR-0043）
-    this._appTheme = readAppTheme();
-    this._offAppThemeChange = onAppThemeChange((t) => { this._appTheme = t; });
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
     document.removeEventListener("keydown", this._onFsKeydown);
-    this._offAppThemeChange?.();
-    this._offAppThemeChange = undefined;
     this._clearHighlightDebounce();
     this._detachScrollMemory();
     super.disconnectedCallback();
@@ -1330,6 +1176,25 @@ export class PreviewPane extends LitElement {
     return isPstEmailPath(this.path) || isPstFilePath(this.path);
   }
 
+  /** header 路径的分层呈现：类型徽标 + 弱化目录段 + 强调文件名。
+   *  徽标与 file-list 同源（file-type.ts）；PST 派生邮件的 #entry 段
+   *  并入文件名。title 悬浮给完整路径（截断时的补救）。 */
+  private _renderPath() {
+    const p = this.path;
+    const sep = p.lastIndexOf("/");
+    const dir = sep > 0 ? p.slice(0, sep + 1) : "";
+    let name = sep >= 0 ? p.slice(sep + 1) : p;
+    // PST 派生路径 "x.pst#<entry>"：# 段是邮件标识，与 pst 文件名同段呈现
+    const badge = getFileTypeBadge(name, false);
+    return html`<span class="path" title=${p}>
+      ${badge
+        ? html`<span class="type-badge" style=${`background:${badge.bg};color:${badge.fg}`}>${badge.letter}</span>`
+        : null}
+      ${dir ? html`<span class="path-dir">${dir}</span>` : null}
+      <span class="path-name">${name}</span>
+    </span>`;
+  }
+
   private _renderMobileHeader() {
     return html`
       <div class="mobile-header">
@@ -1388,6 +1253,9 @@ export class PreviewPane extends LitElement {
                       role="menuitem"
                       @click=${() => this._toggleCodeTheme()}
                     ><doclens-icon name=${this._codeTheme === "auto" ? "contrast" : this._codeTheme === "light" ? "sun" : "moon"}></doclens-icon>${this._codeTheme === "auto" ? "跟随应用" : this._codeTheme === "light" ? "浅色" : "深色"}</button>`
+                  : null}
+                ${this._isLineView && this._mode === "preview"
+                  ? this._renderCodeSelectionClear()
                   : null}
                 ${this.writable
                   ? html`<button
@@ -1977,8 +1845,8 @@ export class PreviewPane extends LitElement {
     ];
     recordSkillUse(skill.name);
     const firstFile = this.path.split("/").pop() ?? this.path;
-    this._selectedLines = new Set(); // 已发送：选区消费完毕，不残留旧区间
-    this._lineAnchor = null;
+    this._codeViewer()?.clearSelection(); // 已发送：选区消费完毕，不残留旧区间
+    this._codeSelection = "";
     this.dispatchEvent(new CustomEvent("skill-chat", {
       detail: {
         message: lines.join("\n"),
@@ -2159,7 +2027,7 @@ export class PreviewPane extends LitElement {
         ${showDesktopHeader ? html`
           <div class="header">
             ${this._renderBackBtn()}
-            <span class="path">${this.path}</span>
+            ${this._renderPath()}
             ${this.writable
               ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
               : null}
@@ -2200,7 +2068,7 @@ export class PreviewPane extends LitElement {
         ${showDesktopHeader ? html`
           <div class="header">
             ${this._renderBackBtn()}
-            <span class="path">${this.path}</span>
+            ${this._renderPath()}
             ${this._renderPdfZoomGroup()}
             ${this._renderDownloadBtn()}
             ${this._renderTocBtn()}
@@ -2244,7 +2112,7 @@ export class PreviewPane extends LitElement {
         ${showDesktopHeader ? html`
           <div class="header">
             ${this._renderBackBtn()}
-            <span class="path">${this.path}</span>
+            ${this._renderPath()}
             ${this._renderDownloadBtn()}
             ${this._renderReparseBtn()}
             ${this._renderToolboxBtn()}
@@ -2263,17 +2131,14 @@ export class PreviewPane extends LitElement {
       `;
     }
 
-    // 非 md：纯文本 + 行号视图（代码文件按服务端分词 tokens 着色，ADR-0032）
-    const lines = this._content.split("\n");
-    const tokLines = this.tokens;
-    const tokensAligned = tokLines !== null && tokLines.length === lines.length;
-    const dark = this._codeDark;
+    // 非 md：行号视图委派 <code-viewer>（P1-1 拆分；服务端分词着色
+    // ADR-0032、行选择、FAB、双表面主题全部组件自治）
     return html`
       ${renderMobileBar}
       ${showDesktopHeader ? html`
         <div class="header">
           ${this._renderBackBtn()}
-          <span class="path">${this.path}</span>
+          ${this._renderPath()}
           ${this.writable
             ? html`<button class="edit-btn" @click=${() => this.enterEdit()}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">编辑</span></button>`
             : null}
@@ -2286,32 +2151,14 @@ export class PreviewPane extends LitElement {
             ${this._renderFullscreenBtn()}
         </div>
       ` : null}
-      <div
-        class="body ${dark ? "dark" : ""}"
-        style=${`--code-font-scale: ${this._codeFontScalePct / 100}`}
-      >
-        ${lines.map((line, i) => {
-          const lineNo = i + 1;
-          const cls = this.highlights.includes(lineNo) ? "highlight" : "";
-          const sel = this._selectedLines.has(lineNo);
-          const runs = tokensAligned ? tokLines[i] : null;
-          return html`<div class="line ${sel ? "line-selected" : ""}"><span
-            class="line-no clickable ${cls}"
-            title="点击选中/取消选中该行；Shift+点击选区间"
-            @click=${(ev: MouseEvent) => this._onLineNoClick(lineNo, ev.shiftKey)}
-          >${lineNo}</span>${runs
-            ? runs.map(([kind, text]) => (kind ? html`<span class="tk-${kind}">${text}</span>` : text))
-            : line}</div>`;
-        })}
-        ${this._selectedLines.size > 0
-          ? html`<button
-              class="line-clear-btn"
-              type="button"
-              @click=${() => { this._selectedLines = new Set(); }}
-            >清除选中（${this._lineRanges}）</button>`
-          : null}
-        <div class="scroll-jump-anchor">${renderScrollJumpFabs(this._scrollJump)}</div>
-      </div>
+      <code-viewer
+        .content=${this._content}
+        .tokens=${this.tokens}
+        .highlights=${this.highlights}
+        .fontScalePct=${this._codeFontScalePct}
+        .theme=${this._codeTheme}
+        @selection-change=${this._onCodeSelectionChange}
+      ></code-viewer>
       ${this._renderDownloadOverlay()}
         ${this._renderToolboxDialogs()}
     `;
