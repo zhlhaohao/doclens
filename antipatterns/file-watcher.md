@@ -42,7 +42,7 @@
 - **修复方案**：`_timer` 的读改写统一纳入 `_state_lock`（或专用锁）；`_reset_debounce_timer` 内 create-then-assign，cancel 旧引用在锁内。无契约变更。
 - **回归验证**：同 AP-1。
 
-### AP-5 每原始事件一次全量状态快照广播（快照风暴） [P3] [status: pending]
+### AP-5 每原始事件一次全量状态快照广播（快照风暴） [P3] [status: done]
 - **形态**：新型态 NS-1「快照风暴」（见第三节）
 - **证据**：契约源头 `doclens/file_watcher.py:284-292`——`on_change_callback` 按原始事件逐个触发（防抖只作用于 reindex，不作用于回调）。接线侧 `doclens/web_v2/deps.py:441-448`：每事件 `watch_snapshot()`（重聚合 config + watcher 状态 + git 同步快照 + 30 条 recent 拷贝）→ `broker.broadcast` → 每客户端 `call_soon_threadsafe(q.put_nowait)`（`watch_broker.py:42` asyncio.Queue **无界**）。批量场景（git checkout / auto-sync 回放 / 首次 clone 数千文件）= 数千次全量快照排队，客户端消费滞后、内存无界增长。
 - **风险**：大变更风暴下 SSE 通道拥塞、前端卡顿；无正确性损失。
@@ -91,4 +91,5 @@
 ## 四、执行记录
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
-| 2026-10-20 | 一起改吧 | AP-1 / AP-2 / AP-3 / AP-4 | 见 HEAD——file_watcher.py 重构 + tests/test_file_watcher_robustness.py 新增 5 断言；分层回归 46 passed |
+| 2026-10-20 | 一起改吧 | AP-1 / AP-2 / AP-3 / AP-4 | 见 1b74cb8——file_watcher.py 重构 + tests/test_file_watcher_robustness.py 新增 5 断言；分层回归 46 passed |
+| 2026-10-20 | 修 | AP-5 | 见 HEAD——watch_broker.broadcast 增节流（200ms 窗口内同事件至多入队一次）+ deps.py 状态机边沿 immediate=True；新增 tests/test_watch_broker_throttle.py 4 断言；分层回归 50 passed |

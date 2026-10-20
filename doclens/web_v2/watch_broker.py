@@ -11,16 +11,26 @@ reindex daemon），而 SSE 客户端跑在 asyncio 事件循环上。本模块�
 - `broadcast` 先在锁内拷贝客户端集合，再用 `loop.call_soon_threadsafe` 在
   loop 线程上执行 `queue.put_nowait` —— 这是跨线程入队 asyncio.Queue 的唯一
   安全方式（参考 api/chat.py 的 call_soon_threadsafe 手法）。
+
+节流语义（AP-5 快照风暴防护）：
+- `broadcast` 默认按事件类型节流（`_THROTTLE_SEC` 窗口内同事件至多入队一次），
+  防止文件变更风暴（git checkout / 批量同步）时按原始事件粒度触发全量
+  watch_snapshot() 广播，塞爆客户端队列。
+- `broadcast(..., immediate=True)` 跳过节流——用于 reindex 完成、git 同步
+  完成等用户明确等待的"终态"事件，不能因为节流被吞。
 """
 import asyncio
 import logging
 import threading
+import time
 from collections import deque
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _RECENT_MAX = 30
+# 广播节流窗口：窗口内同事件类型至多入队一次（AP-5）
+_THROTTLE_SEC = 0.2
 
 
 class WatchBroker:
@@ -29,9 +39,11 @@ class WatchBroker:
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._clients: set[asyncio.Queue] = set()
-        # 保护 _clients：后台线程读 copy / loop 线程增删
+        # 保护 _clients + _last_broadcast_at：后台线程读写
         self._lock = threading.Lock()
         self._recent: deque[dict[str, Any]] = deque(maxlen=_RECENT_MAX)
+        # 事件类型 → 上次实际入队的单调时钟（节流状态）
+        self._last_broadcast_at: dict[str, float] = {}
 
     def bind(self, loop: asyncio.AbstractEventLoop) -> None:
         """绑定事件循环（lifespan startup 阶段调用，主 loop 线程上）。"""
@@ -57,12 +69,24 @@ class WatchBroker:
         """返回近期变化的浅拷贝（最旧→最新）。"""
         return list(self._recent)
 
-    def broadcast(self, event: str, data: dict[str, Any]) -> None:
-        """向所有客户端广播一个事件（线程安全，可从后台线程调用）。"""
+    def broadcast(self, event: str, data: dict[str, Any], *, immediate: bool = False) -> None:
+        """向所有客户端广播一个事件（线程安全，可从后台线程调用）。
+
+        immediate=False（默认）：按事件类型节流——_THROTTLE_SEC 窗口内同事件
+        类型只入队第一次，后续直接丢弃。watch_snapshot 是全量状态，丢弃中间
+        帧不丢信息（客户端最终看到的仍是最新态）。
+        immediate=True：跳过节流——终态事件（reindexed、git sync 完成）必须到。
+        """
         loop = self._loop
         if loop is None:
             return
+        now = time.monotonic()
         with self._lock:
+            if not immediate:
+                last = self._last_broadcast_at.get(event, 0.0)
+                if now - last < _THROTTLE_SEC:
+                    return
+                self._last_broadcast_at[event] = now
             clients = list(self._clients)
         if not clients:
             return
