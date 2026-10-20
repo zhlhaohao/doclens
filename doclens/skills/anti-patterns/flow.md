@@ -55,7 +55,7 @@ flowchart TD
     E1 --> E1b["P2 健壮性演进受损→近期修"]
     E1 --> E1c["P3 纯代码组织→择机修"]
     E1 --> E1d["P4 记录即处置→文档化/关闭"]
-    E1a & E1b & E1c & E1d --> F1["第5步 台账落盘<br/>repo_wiki/antipatterns/范围.md<br/>（AP-n 编号 + status + 执行记录）"]
+    E1a & E1b & E1c & E1d --> F1["第5步 台账落盘<br/>antipatterns/范围.md<br/>（AP-n 编号 + status + 执行记录）"]
     F1 --> STOP["对话侧摘要表 ⏸ 等令"]
 ```
 
@@ -90,7 +90,7 @@ sequenceDiagram
 flowchart LR
     L["用户下令 AP-n"] --> G1{"护栏1 单条目单提交<br/>（明确说 1、2 一起做除外）"}
     G1 --> FIX["按台账方案修复"]
-    FIX --> G2{"护栏2 分层回归<br/>CLAUDE.md 回归表 + 红线测试<br/>前端必 build / 后端按需重启"}
+    FIX --> G2{"护栏2 分层回归<br/>项目分层回归约定 + 守卫测试<br/>前端必 build / 后端按需重启"}
     G2 -->|"不过"| FIX
     G2 -->|"过"| G3{"修复中发现新问题?"}
     G3 -->|"是"| G4["护栏3 追加新条目 discovered-during-fix<br/>不顺手修，继续原条目"] --> G5
@@ -107,7 +107,7 @@ flowchart LR
 flowchart LR
     LENS["附件 B/C 栈清单<br/>lens-backend/frontend.md"] -->|审计装载| AUDIT2["审计态"]
     GEN["附件 A 通用透镜<br/>lens-general.md"] -->|兜底归类| AUDIT2
-    AUDIT2 -->|发现 AP-n·P1-P4| LEDGER[("台账<br/>repo_wiki/antipatterns/范围.md")]
+    AUDIT2 -->|发现 AP-n·P1-P4| LEDGER[("台账<br/>antipatterns/范围.md")]
     LEDGER -->|下令引用 AP-n| EXEC2["执行态"]
     EXEC2 -->|status: done commit| LEDGER
     EXEC2 -->|新问题 discovered-during-fix| LEDGER

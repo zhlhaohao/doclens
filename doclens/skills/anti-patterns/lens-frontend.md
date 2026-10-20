@@ -2,7 +2,7 @@
 
 > 附件 C of anti-patterns 技能。**技术栈专属主判据·前端域**。
 > 两大典型形态（按实际探测结果选用对应小节）：
-> ① Lit + Vite 组件工程（本仓 doclens 形态）
+> ① Lit + Vite 组件工程
 > ② 原生 H5 + vanilla JavaScript（无框架/轻框架项目——用户其他项目常见形态）
 > 来源（检索于 2026-10-20，复检时按 SKILL.md 第 2 步重新检索并更新本表）：
 > - Lit 官方文档（reactive properties / controllers / shadow DOM）

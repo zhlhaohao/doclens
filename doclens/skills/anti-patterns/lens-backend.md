@@ -2,7 +2,7 @@
 
 > 附件 B of anti-patterns 技能。**技术栈专属主判据·后端域**（含数据库层）。
 > 两大典型栈组合（用户项目常见形态，按实际探测结果选用对应小节）：
-> ① Python Web 框架栈（FastAPI/Flask/Django）+ SQLite（本仓 doclens 形态）
+> ① Python Web 框架栈（FastAPI/Flask/Django）+ SQLite
 > ② Python + MySQL + SQLAlchemy（用户其他项目常见形态）
 > 来源（检索于 2026-10-20，复检时按 SKILL.md 第 2 步重新检索并更新本表）：
 > - zhanymkanov/fastapi-best-practices（GitHub, 8k+★）；auth0《FastAPI Best Practices》
@@ -61,11 +61,11 @@
 | 隐式类型转换 | 字符串列与数字比较 → 每行 CAST，索引失效 | WHERE str_col = 123（列是 varchar） |
 | 循环逐条 INSERT | 每条一个事务一个 fsync | 批量导入走 for + 单条 insert（应 executemany/bulk） |
 
-## SQLite / FTS5（本仓 doclens 形态）
+## SQLite / FTS5
 
 | 反模式 | 为什么是问题 | 检测线索 |
 |---|---|---|
-| 每请求开关连接 | 连接建立 + PRAGMA 重放成本在热路径反复支付 | 请求处理函数内 `FTS5Index(db_path)` → close 模式（本仓已知形态） |
+| 每请求开关连接 | 连接建立 + PRAGMA 重放成本在热路径反复支付 | 请求处理函数内 `FTS5Index(db_path)` → close 模式 |
 | 缺 WAL 模式 | 默认 journal 阻塞并发读写 | 连接处无 `PRAGMA journal_mode=WAL` |
 | FTS5 大结果集 ORDER BY rank 全扫 | 百万行 rank 排序秒级 | 无 LIMIT 的 rank 查询；EXPLAIN QUERY PLAN 全表扫 |
 | 写路径无事务包裹 | 逐条 autocommit = 每条一个 fsync | 批量插入未用 with/begin |
