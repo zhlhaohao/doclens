@@ -44,6 +44,8 @@ icon: alert-triangle
 
 | 形态 | 定义 | 检测线索 |
 |---|---|---|
+| Long Method | 单函数集过多职责，内部有可各自命名的阶段（校验/取数/变换/组装） | 函数体需滚动或分段注释才读懂；Fowler Bloaters 家族；重构手法 = Extract Method |
+| Long Parameter List | 参数表臃肿，调用方难以正确组装 | 参数 ≥5 且多为同型 primitive（与 Primitive Obsession 互为表里） |
 | God Object | 单类/单文件集过多职责，什么都知道什么都管 | 行数 + 公共方法数 + "改任何功能都 touch 它"（Fowler: Divergent Change 的变体） |
 | Shotgun Surgery | 一个改动要同时散改多处 | git log 里同一 feature 的 commit 横跨 N 个不相关文件 |
 | Divergent Change | 一个类因多种不同原因被反复改 | 类的变更原因数 >1（与 Shotgun Surgery 互为镜像） |
