@@ -1,6 +1,6 @@
 # 前端栈反模式清单（Lit + 原生 H5/JS 两形态）
 
-> 附件 C（lens/lens-frontend.md）。**技术栈专属主判据·前端域**。
+> 附件 C（lens/frontend.md）。**技术栈专属主判据·前端域**。
 > 两大典型形态（按实际探测结果选用对应小节）：
 > ① Lit + Vite 组件工程
 > ② 原生 H5 + vanilla JavaScript（无框架/轻框架项目——用户其他项目常见形态）

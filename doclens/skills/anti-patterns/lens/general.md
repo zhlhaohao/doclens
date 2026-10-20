@@ -1,6 +1,6 @@
 # 通用反模式形态透镜（兜底词汇表）
 
-> 附件 A（lens/lens-general.md）。跨技术栈经典形态，来源：Wikipedia《List
+> 附件 A（lens/general.md）。跨技术栈经典形态，来源：Wikipedia《List
 > of software anti-patterns》/ Fowler《Refactoring》（refactoring.guru）/
 > microservices.io / Node.js 官方事件循环指南。
 >

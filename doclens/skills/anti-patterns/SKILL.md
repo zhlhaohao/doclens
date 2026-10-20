@@ -31,9 +31,9 @@ icon: alert-triangle
 
 | 附件 | 内容 | 装载时机 |
 |---|---|---|
-| `lens/lens-backend.md` | 后端栈主判据（Python 语言层 + Web 框架层 + Pydantic + MySQL/SQLAlchemy + SQLite/FTS5，含两大典型栈组合） | 后端域分析开始时 |
-| `lens/lens-frontend.md` | 前端栈主判据（Lit 组件工程 + 原生 H5/vanilla JS + 语义 HTML/可访问性，两形态） | 前端域分析开始时（后端域完成后） |
-| `lens/lens-general.md` | 通用形态学兜底词汇表（Wikipedia/Fowler/microservices.io，按域分节） | 随对应域装载该域的节 |
+| `lens/backend.md` | 后端栈主判据（Python 语言层 + Web 框架层 + Pydantic + MySQL/SQLAlchemy + SQLite/FTS5，含两大典型栈组合） | 后端域分析开始时 |
+| `lens/frontend.md` | 前端栈主判据（Lit 组件工程 + 原生 H5/vanilla JS + 语义 HTML/可访问性，两形态） | 前端域分析开始时（后端域完成后） |
+| `lens/general.md` | 通用形态学兜底词汇表（Wikipedia/Fowler/microservices.io，按域分节） | 随对应域装载该域的节 |
 
 **(a) 栈专属清单的生成与保鲜**：
 
@@ -66,7 +66,7 @@ icon: alert-triangle
 范围（精确清单，只读这些，附行数）：
 <该组文件相对路径清单>
 
-本组判据（≤8 条，从 lens/lens-backend.md、lens/lens-frontend.md 摘录与本组文件相关的条目；
+本组判据（≤8 条，从 lens/backend.md、lens/frontend.md 摘录与本组文件相关的条目；
 每条含形态名 + 一句定义 + 检测线索）：
 1. ...
 2. ...
@@ -105,8 +105,8 @@ icon: alert-triangle
 > 审计日期：YYYY-MM-DD｜点名范围：<...>｜机械扫描：全仓（<扫描项清单>）
 
 ## 一、判据声明
-（引用附件：lens/lens-backend.md（复检结论/更新内容）、lens/lens-frontend.md（同左）、
-lens/lens-general.md（通用兜底）+ 仓库纪律文档（有则列出）作为附加判据）
+（引用附件：lens/backend.md（复检结论/更新内容）、lens/frontend.md（同左）、
+lens/general.md（通用兜底）+ 仓库纪律文档（有则列出）作为附加判据）
 
 ## 二、发现条目
 ### AP-1 <标题> [P1] [status: pending]
@@ -117,7 +117,7 @@ lens/lens-general.md（通用兜底）+ 仓库纪律文档（有则列出）作�
 - **回归验证**：<按项目既有测试体系指定：同名测试 + 触及层相关套件；前端必含 build>
 
 ## 三、新型态
-（附件清单外项目特有形态：形态名自拟 + 定义 + 证据；多次实证后晋升入 lens/lens-general.md 对应节——附来源与首次实证的台账路径）
+（附件清单外项目特有形态：形态名自拟 + 定义 + 证据；多次实证后晋升入 lens/general.md 对应节——附来源与首次实证的台账路径）
 
 ## 四、执行记录
 | 日期 | 令 | 条目 | 结果（commit） |
