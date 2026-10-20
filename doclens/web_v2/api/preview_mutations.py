@@ -1,8 +1,10 @@
 """预览变更端点（P1-3 拆分自 api/preview.py）：保存 / 旋转 / 上传。
 
-写路径三端点 + hash 反查工具。路径解析与越权校验复用 api/preview.py
-的共享工具（_safe_resolve/_resolve_path/_compute_writable）。
+写路径三端点 + hash 反查工具。路径解析与越权校验复用 preview_common。
+P2-1：save/rotate/probe 同步 def（threadpool 执行，事件循环不被写盘
+阻塞）；upload 因 multipart 流式 read 保留 async，写盘包 to_thread。
 """
+import asyncio
 import hashlib
 import logging
 import os
@@ -34,11 +36,13 @@ _MAX_SAVE_BYTES = 5 * 1024 * 1024
 
 
 @router.put("/preview", response_model=PreviewSaveResponse)
-async def save_preview(
+def save_preview(
     path: str = Query(..., description="相对路径"),
     body: PreviewSaveRequest = Body(...),
     idx: IndexManager = Depends(get_index_manager),
 ):
+    """保存（P2-1：同步 def 进 threadpool——write_bytes 最多 5MB，
+    慢盘上可达百 ms 级，async def 会阻塞事件循环）。"""
     base = Path(idx.search_path)
     full = safe_resolve(base, path)
 
@@ -160,7 +164,7 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 @router.get("/preview/upload-target")
-async def probe_upload_target(
+def probe_upload_target(
     filename: str = Query(..., description="上传文件名"),
     idx: IndexManager = Depends(get_index_manager),
 ):
@@ -219,7 +223,7 @@ async def upload(
     except ValueError:
         pass
 
-    # 4. 读字节 + 大小检查
+    # 4. 读字节 + 大小检查（file.read 是真异步——multipart 流式读取）
     data = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(data) > _MAX_UPLOAD_BYTES:
         raise CortexAPIError(
@@ -227,9 +231,9 @@ async def upload(
             f"文件超过 {_MAX_UPLOAD_BYTES // 1024 // 1024}MB 上限",
         )
 
-    # 5. 写盘
+    # 5. 写盘（P2-1：50MB 级同步写盘包 to_thread，不阻塞事件循环）
     try:
-        full.write_bytes(data)
+        await asyncio.to_thread(full.write_bytes, data)
     except OSError as e:
         raise CortexAPIError(500, "WRITE_FAILED", f"写入失败: {e}") from e
 

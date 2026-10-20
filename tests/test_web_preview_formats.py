@@ -5,6 +5,7 @@
 preview 直调路由函数（asyncio.run），与 test_pdf_native_preview_api 同模式。
 """
 import asyncio
+from tests._preview_call import call
 import shutil
 from pathlib import Path
 
@@ -55,7 +56,7 @@ def idx(kb: Path, tmp_path: Path):
 
 
 def _preview(idx, path, start_line=0, end_line=0):
-    return asyncio.run(preview_api.preview(
+    return call(preview_api.preview(
         path=path, start_line=start_line, end_line=end_line, idx=idx,
     ))
 
@@ -175,7 +176,7 @@ class TestSearchFallbackChain:
         from doclens.web_v2.api import search as search_api
         from doclens.web_v2.models.search import SearchRequest
 
-        return asyncio.run(search_api.search(SearchRequest(query=q, limit=20), idx))
+        return call(search_api.search(SearchRequest(query=q, limit=20), idx))
 
     def test_like_source(self, idx):
         r = self._search(idx, "filler sentence")

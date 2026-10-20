@@ -7,7 +7,7 @@
 - 已知二进制文档（pdf/docx，BINARY_PREVIEW_EXTS）走 DB 合成分支，先于
   嗅探（代码序保证），不在本测试构造真索引验证。
 """
-import asyncio
+from tests._preview_call import call
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -43,7 +43,7 @@ def test_preview_endpoint_rejects_unknown_binary(tmp_path, monkeypatch):
         b"PK\x03\x04" + bytes(range(256)) * 8
     )
     with pytest.raises(CortexAPIError) as ei:
-        asyncio.run(preview_api.preview(
+        call(preview_api.preview(
             path="app-debug.apk", start_line=0, end_line=0, idx=fake_idx,
         ))
     assert ei.value.status == 415
@@ -54,7 +54,7 @@ def test_preview_endpoint_rejects_unknown_binary(tmp_path, monkeypatch):
 def test_preview_endpoint_text_still_works(tmp_path, monkeypatch):
     fake_idx = SimpleNamespace(search_path=str(tmp_path), path_map={})
     (tmp_path / "note.md").write_text("# 标题\n\n正文", encoding="utf-8")
-    resp = asyncio.run(preview_api.preview(
+    resp = call(preview_api.preview(
         path="note.md", start_line=0, end_line=0, idx=fake_idx,
     ))
     assert resp.language == "markdown"

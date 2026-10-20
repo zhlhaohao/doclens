@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 @router.get("/preview/download")
-async def download(
+def download(
     path: str = Query(..., description="文件相对路径"),
     idx: IndexManager = Depends(get_index_manager),
 ):
@@ -44,7 +44,7 @@ async def download(
 
 
 @router.get("/preview/asset")
-async def preview_asset(
+def preview_asset(
     path: str = Query(..., description="文档相对路径"),
     id: int = Query(..., ge=1, description="图片序号（1-indexed）"),
     idx: IndexManager = Depends(get_index_manager),
@@ -67,7 +67,7 @@ async def preview_asset(
 
 
 @router.get("/preview/raw")
-async def preview_raw(
+def preview_raw(
     path: str = Query(..., description="图像文件相对路径"),
     idx: IndexManager = Depends(get_index_manager),
 ):
@@ -87,7 +87,7 @@ async def preview_raw(
 
 
 @router.get("/preview/pdf")
-async def preview_pdf(
+def preview_pdf(
     path: str = Query(..., description="PDF 文件相对路径"),
     idx: IndexManager = Depends(get_index_manager),
 ):

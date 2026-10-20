@@ -8,7 +8,7 @@
 - 跳过面：txt（TextLexer）/markdown/html/未知后缀/空文件/超 1MB → None；
 - 端点级：整文件与范围切片（start_line/end_line）的 tokens 与 content 行对齐。
 """
-import asyncio
+from tests._preview_call import call
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -127,7 +127,7 @@ def test_endpoint_full_and_slice_alignment(tmp_path):
     code = "def hi(n: int) -> int:\n    # note\n    return n * 2\n"
     (tmp_path / "demo.py").write_text(code, encoding="utf-8")
 
-    r = asyncio.run(preview_api.preview(
+    r = call(preview_api.preview(
         path="demo.py", start_line=0, end_line=0, idx=_fake_idx(tmp_path)))
     assert r.language == "python"
     assert r.tokens is not None
@@ -135,7 +135,7 @@ def test_endpoint_full_and_slice_alignment(tmp_path):
     assert _flat(r.tokens) == r.content
 
     # 范围切片：tokens 行与 content 切片一一对齐，行号语义不漂移
-    r2 = asyncio.run(preview_api.preview(
+    r2 = call(preview_api.preview(
         path="demo.py", start_line=2, end_line=3, idx=_fake_idx(tmp_path)))
     assert r2.line_range == (2, 3)
     assert r2.tokens is not None
@@ -149,6 +149,6 @@ def test_endpoint_txt_has_no_tokens(tmp_path):
     from doclens.web_v2.api import preview as preview_api
 
     (tmp_path / "note.txt").write_text("plain text", encoding="utf-8")
-    r = asyncio.run(preview_api.preview(
+    r = call(preview_api.preview(
         path="note.txt", start_line=0, end_line=0, idx=_fake_idx(tmp_path)))
     assert r.tokens is None

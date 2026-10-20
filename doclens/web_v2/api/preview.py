@@ -103,12 +103,19 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
 
 
 @router.get("/preview", response_model=PreviewResponse)
-async def preview(
+def preview(
     path: str = Query(..., description="相对路径"),
     start_line: int = Query(default=0, ge=0),
     end_line: int = Query(default=0, ge=0),
     idx: IndexManager = Depends(get_index_manager),
 ):
+    """预览主分派（P2-1：同步 def，FastAPI 自动进 threadpool）。
+
+    函数体全同步（read_text / FTS5 查询 / Pygments 分词）——async def 声明
+    会把这些阻塞 I/O 压在事件循环上：一个大 md 的读盘+分词期间，搜索/
+    SSE/聊天流全部冻结。同步 def 由 Starlette 丢 anyio threadpool（默认
+    40 容量），事件循环立即归还。rotate 端点自始就是此形态（先例）。
+    """
     base = Path(idx.search_path)
     # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md，
     # 并附附件清单（含下载 URL，ADR-0005）

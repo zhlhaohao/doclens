@@ -7,7 +7,7 @@
 - GET /api/preview/pdf：inline 200 application/pdf、文件移走 FILE_MOVED、
   非 PDF NOT_A_PDF、文件名反查。
 """
-import asyncio
+from tests._preview_call import call
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -59,7 +59,7 @@ class TestPdfPreviewMeta:
     def test_meta_with_page_starts(self, tmp_path):
         _make_pdf(tmp_path)
         db = _make_db_with_page_starts(tmp_path, "样本.pdf", [1, 40, 88])
-        resp = asyncio.run(preview_api.preview(
+        resp = call(preview_api.preview(
             path="样本.pdf", start_line=0, end_line=0,
             idx=_fake_idx(tmp_path, db),
         ))
@@ -71,7 +71,7 @@ class TestPdfPreviewMeta:
     def test_meta_unindexed_still_ok(self, tmp_path):
         """预览与索引解耦：未索引不报错，page_starts=None。"""
         _make_pdf(tmp_path)
-        resp = asyncio.run(preview_api.preview(
+        resp = call(preview_api.preview(
             path="样本.pdf", start_line=0, end_line=0, idx=_fake_idx(tmp_path),
         ))
         assert resp.language == "pdf"
@@ -80,7 +80,7 @@ class TestPdfPreviewMeta:
     def test_meta_disk_missing_still_ok(self, tmp_path):
         """元数据不查磁盘（字节端点负责 FILE_MOVED）；索引仍在 → 页表可带。"""
         db = _make_db_with_page_starts(tmp_path, "已移走.pdf", [1, 5])
-        resp = asyncio.run(preview_api.preview(
+        resp = call(preview_api.preview(
             path="已移走.pdf", start_line=0, end_line=0,
             idx=_fake_idx(tmp_path, db),
         ))
@@ -91,7 +91,7 @@ class TestPdfPreviewMeta:
 class TestPdfBytesEndpoint:
     def test_inline_200(self, tmp_path):
         pdf = _make_pdf(tmp_path)
-        resp = asyncio.run(preview_assets_api.preview_pdf(
+        resp = call(preview_assets_api.preview_pdf(
             path="样本.pdf", idx=_fake_idx(tmp_path),
         ))
         assert resp.media_type == "application/pdf"
@@ -99,7 +99,7 @@ class TestPdfBytesEndpoint:
 
     def test_file_moved_404(self, tmp_path):
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_assets_api.preview_pdf(
+            call(preview_assets_api.preview_pdf(
                 path="不存在.pdf", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 404
@@ -108,7 +108,7 @@ class TestPdfBytesEndpoint:
     def test_not_a_pdf_400(self, tmp_path):
         (tmp_path / "note.md").write_text("x", encoding="utf-8")
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_assets_api.preview_pdf(
+            call(preview_assets_api.preview_pdf(
                 path="note.md", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 400
@@ -124,12 +124,12 @@ class TestPdfBytesEndpoint:
             index_path=str(tmp_path / ".cortex" / "index.db"),
             path_map={"deep": str(pdf)},
         )
-        resp = asyncio.run(preview_assets_api.preview_pdf(path="deep.pdf", idx=idx))
+        resp = call(preview_assets_api.preview_pdf(path="deep.pdf", idx=idx))
         assert Path(str(resp.path)) == pdf
 
     def test_path_traversal_blocked(self, tmp_path):
         with pytest.raises(CortexAPIError) as ei:
-            asyncio.run(preview_assets_api.preview_pdf(
+            call(preview_assets_api.preview_pdf(
                 path="../outside.pdf", idx=_fake_idx(tmp_path),
             ))
         assert ei.value.status == 404
@@ -153,21 +153,21 @@ class TestProbeUploadTarget:
         rel = "科技/report.pdf"
         idx = self._idx_with_docs(tmp_path, rel, "report")
         h = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:6]
-        resp = asyncio.run(mutations_api.probe_upload_target(
+        resp = call(mutations_api.probe_upload_target(
             filename=f"report_{h}.pdf", idx=idx,
         ))
         assert resp == {"match": True, "path": rel}
 
     def test_bad_filename_no_match(self, tmp_path):
         idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
-        resp = asyncio.run(mutations_api.probe_upload_target(
+        resp = call(mutations_api.probe_upload_target(
             filename="普通名字.pdf", idx=idx,
         ))
         assert resp == {"match": False}
 
     def test_no_index_match(self, tmp_path):
         idx = self._idx_with_docs(tmp_path, "a.pdf", "a")
-        resp = asyncio.run(mutations_api.probe_upload_target(
+        resp = call(mutations_api.probe_upload_target(
             filename="b_deadbee.pdf", idx=idx,
         ))
         assert resp == {"match": False}
