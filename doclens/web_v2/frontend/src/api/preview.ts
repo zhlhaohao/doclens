@@ -179,6 +179,8 @@ export type PreviewFetchResult =
        *  与 content 的 \n 切分一一对应。null = 后端未下发（非代码文件/
        *  未知后缀/超 1MB）→ 纯文本渲染。 */
       tokens: string[][][] | null;
+      /** 文件字节数（ADR-0046 编辑阈值判定用；null = 后端未下发）。 */
+      sizeBytes: number | null;
     }
   | { ok: false; notIndexed: boolean; message: string };
 
@@ -208,6 +210,7 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
         pageStarts: body.page_starts ?? null,
         attachments: body.attachments ?? null,
         tokens: body.tokens ?? null,
+        sizeBytes: body.size_bytes ?? null,
       };
     }
     const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));

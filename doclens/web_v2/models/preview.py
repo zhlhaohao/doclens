@@ -38,6 +38,9 @@ class PreviewResponse(BaseModel):
     page_starts: Optional[list[int]] = None
     # 仅 PST 派生邮件预览（<pst>#<entry_id>）返回：附件清单 + 下载 URL
     attachments: Optional[list[PstAttachmentInfo]] = None
+    # 文件字节数（ADR-0046 编辑阈值判定用；仅文本预览返回）。
+    # 前端据此判断是否超过 5MB 编辑上限 → 提示「文件过大，无法编辑」。
+    size_bytes: Optional[int] = None
 
 
 class PreviewSaveRequest(BaseModel):

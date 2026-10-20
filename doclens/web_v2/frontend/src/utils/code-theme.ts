@@ -26,6 +26,9 @@ export function readCodeTheme(): CodeTheme {
   return raw === "light" || raw === "dark" ? raw : CODE_THEME_DEFAULT;
 }
 
+/** 代码主题变更事件名（自定义 window 事件；订阅方如 cm-editor）。 */
+export const CODE_THEME_CHANGE_EVENT = "cortex-code-theme-change";
+
 /** 写入主题（仅接受三态值，其余静默忽略）。 */
 export function writeCodeTheme(theme: CodeTheme): void {
   if (theme !== "auto" && theme !== "light" && theme !== "dark") return;
@@ -39,4 +42,22 @@ export function writeCodeTheme(theme: CodeTheme): void {
   } catch {
     // 配额满等写入失败：静默降级，不影响预览
   }
+  // 通知订阅方（编辑态高亮需跟着换色板）
+  try {
+    window.dispatchEvent(
+      new CustomEvent(CODE_THEME_CHANGE_EVENT, { detail: { theme } }),
+    );
+  } catch {
+    // 无 window 环境（SSR/测试）时忽略
+  }
+}
+
+/** 订阅代码主题变更，返回取消订阅函数。 */
+export function onCodeThemeChange(cb: (theme: CodeTheme) => void): () => void {
+  const handler = (e: Event) => {
+    const detail = (e as CustomEvent<{ theme?: CodeTheme }>).detail;
+    if (detail?.theme) cb(detail.theme);
+  };
+  window.addEventListener(CODE_THEME_CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CODE_THEME_CHANGE_EVENT, handler);
 }

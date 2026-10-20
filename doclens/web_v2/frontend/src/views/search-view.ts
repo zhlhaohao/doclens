@@ -190,6 +190,8 @@ export class SearchView extends LitElement {
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
   @state() private previewWritable = false;
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  @state() private previewSizeBytes: number | null = null;
   @state() private previewPages: PageMarker[] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表，previewLine 跳页换算依据。 */
@@ -492,6 +494,7 @@ export class SearchView extends LitElement {
       this.previewLanguage = "text";
       this.previewLine = null;
       this.previewWritable = false;
+      this.previewSizeBytes = null;
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
@@ -523,6 +526,7 @@ export class SearchView extends LitElement {
         ? null
         : (result.lineMap ? mapLineViaPredecessor(result.lineMap, line) : line);
       this.previewWritable = result.writable;
+      this.previewSizeBytes = result.sizeBytes;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
       this.previewPageStarts = result.pageStarts;
@@ -532,6 +536,7 @@ export class SearchView extends LitElement {
       this.previewContent = "";
       this.previewPath = r.path;
       this.previewWritable = false;
+      this.previewSizeBytes = null;
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
@@ -544,7 +549,7 @@ export class SearchView extends LitElement {
     path: string,
     line: number,
   ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
+    | { ok: true; path: string; content: string; language: string; writable: boolean; sizeBytes: number | null; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
     | { ok: false; notIndexed: boolean }
   > {
     const params = new URLSearchParams({ path });
@@ -560,6 +565,7 @@ export class SearchView extends LitElement {
           content: body.content,
           language: body.language,
           writable: body.writable ?? false,
+          sizeBytes: body.size_bytes ?? null,
           pages: body.pages ?? null,
           lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
           pageStarts: null, // 范围预览只用于文本文件，无页表
@@ -628,6 +634,7 @@ export class SearchView extends LitElement {
       if (r.ok && this.previewPath === path) {
         this.previewContent = r.content;
         this.previewTokens = r.tokens;
+        this.previewSizeBytes = r.sizeBytes;
       }
     } catch { /* 静默：无高亮可接受 */ }
   }
@@ -808,6 +815,7 @@ export class SearchView extends LitElement {
                 .line=${this.previewLine}
                 .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
+                .sizeBytes=${this.previewSizeBytes}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}
@@ -860,6 +868,7 @@ export class SearchView extends LitElement {
                 .line=${this.previewLine}
                 .keyword=${this.previewHl || (s.queryWords.length ? s.queryWords.join(" ") : s.query)}
                 ?writable=${this.previewWritable}
+                .sizeBytes=${this.previewSizeBytes}
                 .pages=${this.previewPages}
                 .pageStarts=${this.previewPageStarts}
                 .attachments=${this.previewAttachments}

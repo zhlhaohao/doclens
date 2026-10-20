@@ -498,6 +498,8 @@ export class ChatView extends LitElement {
   @state() private previewTokens: string[][][] | null = null;
   @state() private previewAttachments: PstAttachmentInfo[] | null = null;
   @state() private previewWritable = false;
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  @state() private previewSizeBytes: number | null = null;
   @state() private previewError: "NOT_INDEXED" | null = null;
   @state() private previewDirty = false;
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
@@ -1573,6 +1575,7 @@ export class ChatView extends LitElement {
       this.previewPath = path;
       this.previewLanguage = "text";
       this.previewWritable = false;
+      this.previewSizeBytes = null;
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
@@ -1586,6 +1589,7 @@ export class ChatView extends LitElement {
       this.previewPath = result.path;
       this.previewLanguage = result.language;
       this.previewWritable = result.writable;
+      this.previewSizeBytes = result.sizeBytes;
       this.previewPages = result.pages;
       this.previewAttachments = result.attachments;
       this.previewPageStarts = result.pageStarts;
@@ -1596,6 +1600,7 @@ export class ChatView extends LitElement {
       this.previewContent = "";
       this.previewPath = path;
       this.previewWritable = false;
+      this.previewSizeBytes = null;
       this.previewPages = null;
       this.previewAttachments = null;
       this.previewPageStarts = null;
@@ -1655,6 +1660,7 @@ export class ChatView extends LitElement {
       if (r.ok && this.previewPath === path) {
         this.previewContent = r.content;
         this.previewTokens = r.tokens;
+        this.previewSizeBytes = r.sizeBytes;
       }
     } catch { /* 静默：无高亮可接受 */ }
   }
@@ -1763,6 +1769,7 @@ export class ChatView extends LitElement {
       content=${this.previewContent}
       .keyword=${this._previewKeyword}
       ?writable=${this.previewWritable}
+      .sizeBytes=${this.previewSizeBytes}
       .pages=${this.previewPages}
       .pageStarts=${this.previewPageStarts}
       .attachments=${this.previewAttachments}

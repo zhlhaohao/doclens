@@ -381,6 +381,7 @@ async def preview(
         highlights=[],
         writable=_compute_writable(full, base),
         tokens=tokens,
+        size_bytes=full.stat().st_size,
     )
 
 

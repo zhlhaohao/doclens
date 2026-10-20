@@ -391,6 +391,8 @@ export class FilesView extends LitElement {
   @state() private _previewContent = "";
   @state() private _previewLanguage = "text";
   @state() private _previewWritable = false;
+  /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
+  @state() private _previewSizeBytes: number | null = null;
   @state() private _previewPages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表。 */
   @state() private _previewPageStarts: number[] | null = null;
@@ -1078,6 +1080,7 @@ export class FilesView extends LitElement {
       this._previewContent = "";
       this._previewError = null;
       this._previewWritable = false;
+      this._previewSizeBytes = null;
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
@@ -1249,6 +1252,7 @@ export class FilesView extends LitElement {
       this._previewPath = path;
       this._previewContent = "";
       this._previewWritable = false;
+      this._previewSizeBytes = null;
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
@@ -1262,6 +1266,7 @@ export class FilesView extends LitElement {
       this._previewContent = result.content;
       this._previewLanguage = result.language;
       this._previewWritable = result.writable;
+      this._previewSizeBytes = result.sizeBytes;
       this._previewPages = result.pages;
       this._previewAttachments = result.attachments;
       this._previewPageStarts = result.pageStarts;
@@ -1271,6 +1276,7 @@ export class FilesView extends LitElement {
       this._previewPath = path;
       this._previewContent = "";
       this._previewWritable = false;
+      this._previewSizeBytes = null;
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
@@ -1282,6 +1288,7 @@ export class FilesView extends LitElement {
       this._previewPath = path;
       this._previewContent = "";
       this._previewWritable = false;
+      this._previewSizeBytes = null;
       this._previewPages = null;
       this._previewAttachments = null;
       this._previewPageStarts = null;
@@ -1297,6 +1304,7 @@ export class FilesView extends LitElement {
       this._previewContent = r.content;
       this._previewLanguage = r.language;
       this._previewWritable = r.writable;
+      this._previewSizeBytes = r.sizeBytes;
       this._previewPages = r.pages;
       this._previewAttachments = r.attachments;
       this._previewPageStarts = r.pageStarts;
@@ -1470,6 +1478,7 @@ export class FilesView extends LitElement {
       language=${this._previewLanguage}
       content=${this._previewContent}
       ?writable=${this._previewWritable}
+      .sizeBytes=${this._previewSizeBytes}
       .pages=${this._previewPages}
       .pageStarts=${this._previewPageStarts}
       .attachments=${this._previewAttachments}
