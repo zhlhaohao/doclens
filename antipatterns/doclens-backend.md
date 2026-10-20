@@ -77,15 +77,25 @@
 - **修复方案**：上界收敛到 `PBKDF2_ITERATIONS * 10`（或白名单 {100k, 200k, 600k}），超界拒绝；登录校验移出事件循环（见 AP-4）。
 - **回归验证**：`tests/test_auth_challenge.py` + 新增越界 iterations 拒绝用例。
 
-### AP-6 `deps` 全局锁面过宽：建库持锁期间登录闸门/会话库一并挂起 [P2] [status: pending]
+### AP-6 `deps` 全局锁面过宽：建库持锁期间登录闸门/会话库一并挂起 [P2] [status: done]
 - **形态**：Action at a Distance（锁耦合）/ 自相矛盾的契约
 - **证据**：
   - `doclens/web_v2/deps.py:53-67` `get_index_manager` 在 `_lock` 内 `t.join()` 等待分钟级建库。
   - `doclens/web_v2/deps.py:37/81/108` `get_config` / `get_agent` / `get_sessions_store` 共用同一把 `_lock`。
   - `doclens/web_v2/deps.py:103-104` 注释明写"sessions_store 故意不经 IndexManager——登录闸门必须在索引构建完成前就可用"。
 - **风险**：首次启动大库时，登录/会话/配置全部排在建库后面，"闸门早可用"的设计承诺被同一把锁抵消；表现为登录页长时间无响应。
-- **修复方案**：拆分锁（`_infra_lock` 只保护检查-赋值，索引构建用独立 `_build_lock`）；或双检锁内只做"是否已发布"的判读，把 join 移出全局锁。
-- **回归验证**：`tests/test_workdir_config.py`、`tests/test_session_duplicate.py`（涉及单例装配）+ 手工冷启大库验证并发请求。
+- **实际修复（2026-10-20）**：拆锁而非搬 join——`_lock` 降级为纯注册表锁（只保护引用检查/赋值），新增四把单例构造锁
+  `_idx_lock` / `_agent_lock` / `_sessions_lock` / `_rewind_lock`，四个 getter 各自持本类锁构造（双检锁形态）。
+  `get_sessions_store()` 从"等全局锁"变为"只等自己的轻量构造"，登录闸门兑现 `:103-104` 的原设计承诺。
+  `reset_singletons` / `swap_workdir` 的置空改走 `_singleton_guards()`（按 agent → idx → rewind → sessions → `_lock`
+  的固定顺序全量获取）——保留"构造进行中不得置空"的强保证，且顺序与 getter 的嵌套依赖一致，无环；
+  切换首建的 `IndexManager` 发布改持 `_idx_lock`，避免与 getter 装配出两个实例。
+- **未做（留作决策）**：`get_agent()` 的构造（技能部署 + MCP 装配）仍是长锁，但它已不与鉴权/检索路径共用锁，只在
+  并发"首个 agent 请求"时串行；要彻底消除需异步化 agent 装配，属独立条目。
+- **回归验证**：新增 `tests/test_deps_locks.py`（4 断言：建库期间 `get_sessions_store` / `get_config` 均不被阻塞、
+  第二调用者排队复用同一实例、构造异常仍上抛且不发布半成品）——已用"锁合并回旧形态"反证该测试能真实复现 AP-6；
+  `tests/test_workdir_config.py tests/test_session_duplicate.py tests/test_chat_disconnect.py tests/test_session_export_import.py
+  tests/test_sessions_store_history.py tests/test_rewind.py tests/test_auth_challenge.py tests/test_architecture.py` → 124 passed。
 
 ### AP-7 `sessions_store` 1450 行 God Object：登录会话 + 对话归档 + 回退快照 + 导入导出同文件同库 [P2] [status: pending]
 - **形态**：God Object / Divergent Change
@@ -259,4 +269,5 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-10-20 | 审计 | — | 台账落盘，28 条待令 |
+| 2026-10-20 | 修 | AP-6 | 见本提交——deps 拆四把单例构造锁，`_lock` 降为纯注册表锁；`_singleton_guards()` 固定顺序保全 reset/切换语义；新增 tests/test_deps_locks.py 4 断言；分层回归 124 passed |
 | 2026-10-20 | 修 | AP-11 | 见本提交——`load_or_build_index` 以 `_ts is None`（首次装配）作为唯一审计条件，reindex/mark_dirty 后的重载只重建句柄+刷新 path_map；新增 `TestReloadSkipsDiskAudit` 2 断言；分层回归 61 passed |

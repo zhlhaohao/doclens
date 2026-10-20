@@ -2,6 +2,7 @@
 
 复制自 cortex/web/deps.py，去除 Gradio 依赖。
 """
+import contextlib
 import logging
 import os
 import threading
@@ -27,7 +28,17 @@ _diary_worker: Optional["object"] = None  # DiaryWorker，懒加载避免 import
 _git_sync: Optional["object"] = None  # GitSync，懒加载避免 import 循环
 _mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
 _mcp_client: Optional["object"] = None  # McpClientManager（client 侧，ADR-0014）
+
+# 注册表锁：**只**保护引用的检查/赋值（毫秒级）。禁止在持锁期间做长耗时
+# 构造——曾经 get_index_manager 在锁内等完整建库/全库审计（分钟级），
+# 同一把锁让登录闸门（get_sessions_store）与配置读取一起排队（AP-6）。
 _lock = threading.RLock()
+# 单例构造锁：每个重量级单例各自一把，构造期只互斥同类构造。
+# 冷启动建库不再阻塞鉴权/会话/配置路径。
+_idx_lock = threading.Lock()       # IndexManager 构造（含分钟级建库 + 全库审计）
+_agent_lock = threading.Lock()     # CortexAgent 构造（技能部署 / MCP 装配）
+_sessions_lock = threading.Lock()  # SessionsStore 构造（含建库建表）
+_rewind_lock = threading.Lock()    # RewindTracker 构造（依赖 sessions_store）
 
 
 def get_config() -> CortexConfig:
@@ -47,44 +58,54 @@ def get_index_manager() -> IndexManager:
     `load_or_build_index()` 最终会调用 `TreeSearch.index()`，后者在事件循环
     已运行时会拒绝执行（见 treesearch.py 的 `asyncio.get_running_loop()` 检查）。
     因此在子线程中完成初始化，既绕过事件循环检查，也兼容 sync / async 调用方。
+
+    构造期持 `_idx_lock`（不持注册表 `_lock`）——建库/审计可能分钟级，
+    期间会话库、配置、登录闸门不受影响（AP-6）。
     """
     global _idx_manager
-    if _idx_manager is None:
-        with _lock:
-            if _idx_manager is None:
-                config = get_config()
-                mgr = IndexManager(config)
-                err: list = []
+    if _idx_manager is not None:
+        return _idx_manager
+    with _idx_lock:
+        if _idx_manager is None:
+            config = get_config()
+            mgr = IndexManager(config)
+            err: list = []
 
-                def _build():
-                    try:
-                        mgr.load_or_build_index()
-                    except Exception as e:  # noqa: BLE001
-                        err.append(e)
+            def _build():
+                try:
+                    mgr.load_or_build_index()
+                except Exception as e:  # noqa: BLE001
+                    err.append(e)
 
-                t = threading.Thread(target=_build, daemon=True)
-                t.start()
-                t.join()
-                if err:
-                    raise err[0]
-                # 构建成功后再发布单例，避免半初始化实例泄漏到后续调用
-                _idx_manager = mgr
-                logger.info("IndexManager initialized: %d documents (DB count)",
-                            mgr.indexed_doc_count())
+            t = threading.Thread(target=_build, daemon=True)
+            t.start()
+            t.join()
+            if err:
+                raise err[0]
+            # 构建成功后再发布单例，避免半初始化实例泄漏到后续调用
+            _idx_manager = mgr
+            logger.info("IndexManager initialized: %d documents (DB count)",
+                        mgr.indexed_doc_count())
     return _idx_manager
 
 
 def get_agent():
-    """获取 CortexAgent 单例（懒加载 + 线程安全）。"""
+    """获取 CortexAgent 单例（懒加载 + 线程安全）。
+
+    构造（技能部署 / MCP 装配）持 `_agent_lock`，不占注册表锁。内部会先取
+    IndexManager（`_idx_lock`）——获取顺序 agent → idx，与 `_singleton_guards()`
+    的固定顺序一致，无环。
+    """
     global _agent
-    if _agent is None:
-        with _lock:
-            if _agent is None:
-                from doclens.agent_integration import CortexAgent
-                idx = get_index_manager()
-                workdir = Path(idx.search_path)
-                _agent = CortexAgent(workdir, idx_manager=idx).initialize()
-                logger.info("CortexAgent initialized")
+    if _agent is not None:
+        return _agent
+    with _agent_lock:
+        if _agent is None:
+            from doclens.agent_integration import CortexAgent
+            idx = get_index_manager()
+            workdir = Path(idx.search_path)
+            _agent = CortexAgent(workdir, idx_manager=idx).initialize()
+            logger.info("CortexAgent initialized")
     return _agent
 
 
@@ -102,20 +123,22 @@ def get_sessions_store() -> SessionsStore:
     sessions.db 与 index.db 同在数据目录（开发 .cortex / 发行版 .doclens），跟随工作目录隔离。
     路径由 config 直接推导（与 IndexManager.index_path 同一公式），**故意不经
     IndexManager**——登录闸门（auth_sessions 表）必须在索引构建完成前就可用。
+    构造持独立的 `_sessions_lock`，不占注册表锁，也不等 `_idx_lock`（AP-6）。
     """
     global _sessions_store
-    if _sessions_store is None:
-        with _lock:
-            if _sessions_store is None:
-                from doclens.config import data_dirname
+    if _sessions_store is not None:
+        return _sessions_store
+    with _sessions_lock:
+        if _sessions_store is None:
+            from doclens.config import data_dirname
 
-                config = get_config()
-                index_path = config.index_path or os.path.join(
-                    config.search_path, data_dirname(), "index.db"
-                )
-                db_path = Path(index_path).parent / "sessions.db"
-                db_path.parent.mkdir(parents=True, exist_ok=True)
-                _sessions_store = SessionsStore(db_path)
+            config = get_config()
+            index_path = config.index_path or os.path.join(
+                config.search_path, data_dirname(), "index.db"
+            )
+            db_path = Path(index_path).parent / "sessions.db"
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            _sessions_store = SessionsStore(db_path)
     return _sessions_store
 
 
@@ -125,29 +148,52 @@ def get_rewind_tracker():
     备份目录与 sessions.db 同数据目录（开发 .cortex / 发行版 .doclens）：
     ``{数据目录}/rewind/{session_id}/``——天然被索引器排除、被 GitSync
     自动 gitignore。仅 GUI/web 链路装配使用（TUI/CLI 不接线，不产生孤儿备份）。
+
+    构造持 `_rewind_lock`，内部取 `get_sessions_store()`（`_sessions_lock`）——
+    顺序 rewind → sessions，与 `_singleton_guards()` 一致。
     """
     global _rewind_tracker
-    if _rewind_tracker is None:
-        with _lock:
-            if _rewind_tracker is None:
-                from doclens.web_v2.rewind_tracker import RewindTracker
+    if _rewind_tracker is not None:
+        return _rewind_tracker
+    with _rewind_lock:
+        if _rewind_tracker is None:
+            from doclens.web_v2.rewind_tracker import RewindTracker
 
-                store = get_sessions_store()
-                # 与 get_sessions_store 同一公式取数据目录
-                from doclens.config import data_dirname
+            store = get_sessions_store()
+            # 与 get_sessions_store 同一公式取数据目录
+            from doclens.config import data_dirname
 
-                config = get_config()
-                index_path = config.index_path or os.path.join(
-                    config.search_path, data_dirname(), "index.db"
-                )
-                base_dir = Path(index_path).parent / "rewind"
-                base_dir.mkdir(parents=True, exist_ok=True)
-                _rewind_tracker = RewindTracker(store, base_dir)
+            config = get_config()
+            index_path = config.index_path or os.path.join(
+                config.search_path, data_dirname(), "index.db"
+            )
+            base_dir = Path(index_path).parent / "rewind"
+            base_dir.mkdir(parents=True, exist_ok=True)
+            _rewind_tracker = RewindTracker(store, base_dir)
     return _rewind_tracker
 
 
+@contextlib.contextmanager
+def _singleton_guards():
+    """按固定顺序持有全部单例构造锁（供 reset / 工作目录切换）。
+
+    顺序依据单例构造时的嵌套依赖，取"外层先、内层后"以杜绝环形等待：
+        agent → idx   （get_agent 内部取 IndexManager）
+        rewind → sessions（get_rewind_tracker 内部取 SessionsStore）
+    代价：reset/切换会等同构建完成——它们本就要求"没有构造在进行中"，
+    与拆锁前的语义一致（AP-6 只解开了**请求路径**的耦合）。
+    """
+    for lk in (_agent_lock, _idx_lock, _rewind_lock, _sessions_lock):
+        lk.acquire()
+    try:
+        yield
+    finally:
+        for lk in (_sessions_lock, _rewind_lock, _idx_lock, _agent_lock):
+            lk.release()
+
+
 def reset_singletons() -> None:
-    """重置单例（仅供测试使用）。"""
+    """重置单例（仅供测试使用 / 工作目录切换复用）。"""
     global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent, _watcher, _mcp_handle, _vision_worker, _diary_worker, _git_sync
     # 停止可能存在的 watcher / worker / 同步循环 / MCP server，释放后台线程
     stop_watcher()
@@ -156,7 +202,8 @@ def reset_singletons() -> None:
     stop_git_sync()
     stop_mcp_server()
     stop_mcp_client()
-    with _lock:
+    # 持全部构造锁再置 None：防"构造进行中 → 置空 → 构造者随后发布旧实例"
+    with _singleton_guards(), _lock:
         _config = None
         _idx_manager = None
         _sessions_store = None
@@ -238,7 +285,8 @@ def swap_workdir(target: str) -> dict:
             stop_diary_worker()
             stop_vision_worker()
             stop_watcher()
-            with _lock:
+            # 持全部构造锁置空（防构造进行中发布旧实例），与注册表锁分开获取
+            with _singleton_guards(), _lock:
                 _config = None
                 _idx_manager = None
                 _sessions_store = None
@@ -263,7 +311,9 @@ def swap_workdir(target: str) -> dict:
 
             if _first_build:
                 from doclens.index_manager import IndexManager
-                with _lock:
+                # 发布空实例：与 get_index_manager 的构造路径共用 _idx_lock，
+                # 避免两边同时装配出两个 IndexManager
+                with _idx_lock:
                     mgr = IndexManager(_cfg)
                     _idx_manager = mgr
                 doc_count = 0
