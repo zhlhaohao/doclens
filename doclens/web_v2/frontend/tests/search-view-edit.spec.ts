@@ -70,7 +70,7 @@ describe("<search-view> edit flow integration", () => {
     });
     const el = await fixture(html`<search-view></search-view>`) as SearchView;
     await el.updateComplete;
-    (el as any).previewDirty = true;
+    (el as any)._preview.onDirtyChange(true); // 脏标记经 controller（P1-2）
     // 触发 _onHitSelect —— 因为 dirty=true，应该弹 confirm 并因 false 而放弃
     await (el as any)._onHitSelect({
       detail: { hit: { path: "b.md", line: 1 } },

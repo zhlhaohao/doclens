@@ -422,9 +422,9 @@ describe("files-view mobile filename search", () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    // 模拟预览未索引文件（如未入库的图片）
-    el._previewError = "NOT_INDEXED";
-    el._previewPath = "photos/a.jpg";
+    // 模拟预览未索引文件（如未入库的图片）——走 controller 公共状态
+    el._preview.state = { status: "not-indexed", path: "photos/a.jpg" };
+    el.requestUpdate();
     await el.updateComplete;
     const back = el.shadowRoot.querySelector(".preview-mobile-header .mobile-back") as HTMLButtonElement;
     expect(back, "未索引提示页必须有返回按钮").toBeTruthy();
@@ -440,10 +440,16 @@ describe("files-view mobile filename search", () => {
     const el = document.createElement("files-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    // 模拟已加载预览，触发 preview-pane 渲染
-    el._previewPath = "a.md";
-    el._previewContent = "# hi";
-    el._previewLanguage = "markdown";
+    // 模拟已加载预览（controller 状态注入 + 手动 requestUpdate）
+    el._preview.state = {
+      status: "ok",
+      doc: {
+        path: "a.md", content: "# hi", language: "markdown", writable: false,
+        synthesized: false, pages: null, lineMap: null, pageStarts: null,
+        attachments: null, tokens: null,
+      },
+    };
+    el.requestUpdate();
     await el.updateComplete;
     const pp = el.shadowRoot.querySelector("preview-pane");
     expect(pp).toBeTruthy();

@@ -10,8 +10,7 @@ import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
 import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, importSession, duplicateSession } from "../api/sessions";
 import { router } from "../router/router";
-import { fetchPreview } from "../api/preview";
-import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { PreviewController } from "../utils/preview-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
@@ -488,18 +487,19 @@ export class ChatView extends LitElement {
   @state() private _highlightSessionId: string | null = null;
   @state() private _clearing = false;
   @state() private previewOpen = false;
-  @state() private previewContent = "";
-  @state() private previewPath = "";
-  @state() private previewLanguage = "text";
-  @state() private previewPages: PageMarker[] | null = null;
-  /** PDF 原生预览（ADR-0031）：页表。 */
-  @state() private previewPageStarts: number[] | null = null;
-  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
-  @state() private previewTokens: string[][][] | null = null;
-  @state() private previewAttachments: PstAttachmentInfo[] | null = null;
-  @state() private previewWritable = false;
-  @state() private previewError: "NOT_INDEXED" | null = null;
-  @state() private previewDirty = false;
+  /** 预览状态机（P1-2 收敛，同 search 策略：只回填 content+tokens）。 */
+  private _preview = new PreviewController(this, {
+    getPane: () => this.shadowRoot?.querySelector("preview-pane") ?? null,
+  });
+  private get previewContent() { return this._preview.content; }
+  private get previewPath() { return this._preview.path; }
+  private get previewLanguage() { return this._preview.language; }
+  private get previewWritable() { return this._preview.writable; }
+  private get previewError() { return this._preview.notIndexed ? "NOT_INDEXED" as const : null; }
+  private get previewPages() { return this._preview.pages; }
+  private get previewPageStarts() { return this._preview.pageStarts; }
+  private get previewTokens() { return this._preview.tokens; }
+  private get previewAttachments() { return this._preview.attachments; }
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
   /** 对话技能候选（ADR-0016 §1：全部启用技能）；null = 未加载/加载中 */
   @state() private _skillCandidates: SkillInfo[] | null = null;
@@ -1284,15 +1284,7 @@ export class ChatView extends LitElement {
    *  不重置 _previewPaneWidth（用户偏好，持久）。 */
   private _resetPreview(): void {
     this.previewOpen = false;
-    this.previewContent = "";
-    this.previewPath = "";
-    this.previewLanguage = "text";
-    this.previewPages = null;
-    this.previewAttachments = null;
-    this.previewPageStarts = null;
-    this.previewWritable = false;
-    this.previewError = null;
-    this.previewDirty = false;
+    this._preview.clear();
   }
 
   private async _loadSession(s: Session) {
@@ -1565,54 +1557,25 @@ export class ChatView extends LitElement {
   };
 
   /** 按路径加载预览并打开预览栏（引用点击与 PST 邮件行点击共用）。 */
+  /** 打开引用预览：状态机在 controller；chat 差异 = 成功/未索引才开栏
+   *  （其他失败仅 toast，previewOpen 保持 false——精简宿主策略）。 */
   private async _openPreviewPath(path: string): Promise<void> {
-    this.previewError = null;
-    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
-    if (isPstFilePath(path)) {
-      this.previewContent = "";
-      this.previewPath = path;
-      this.previewLanguage = "text";
-      this.previewWritable = false;
-      this.previewPages = null;
-      this.previewAttachments = null;
-      this.previewPageStarts = null;
-      this.previewTokens = null;
+    const state = await this._preview.open(path);
+    if (state.status === "ok" || state.status === "not-indexed") {
       this.previewOpen = true;
-      return;
-    }
-    const result = await fetchPreview(path);
-    if (result.ok) {
-      this.previewContent = result.content;
-      this.previewPath = result.path;
-      this.previewLanguage = result.language;
-      this.previewWritable = result.writable;
-      this.previewPages = result.pages;
-      this.previewAttachments = result.attachments;
-      this.previewPageStarts = result.pageStarts;
-      this.previewTokens = result.tokens;
-      this.previewOpen = true;
-    } else if (result.notIndexed) {
-      this.previewError = "NOT_INDEXED";
-      this.previewContent = "";
-      this.previewPath = path;
-      this.previewWritable = false;
-      this.previewPages = null;
-      this.previewAttachments = null;
-      this.previewPageStarts = null;
-      this.previewTokens = null;
-      this.previewOpen = true;
-    } else {
-      this._pushToast(`预览失败：${result.message}`, "error", 5000);
+    } else if (state.status === "error") {
+      this._pushToast(`预览失败：${state.message}`, "error", 5000);
     }
   }
 
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>): void => {
-    this.previewDirty = e.detail.dirty;
+    this._preview.onDirtyChange(e.detail.dirty);
   };
 
   private _closePreview = async (): Promise<void> => {
     await this._safeAction(() => {
       this.previewOpen = false;
+      this._preview.clear();
     });
   };
 
@@ -1627,36 +1590,14 @@ export class ChatView extends LitElement {
     await this._closePreview();
   };
 
+/** dirty 门与保存回填已收敛 preview-controller（P1-2）。 */
   private async _safeAction(action: () => void | Promise<void>): Promise<void> {
-    if (this.previewDirty) {
-      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
-      if (!ok) return;
-      const pp = this.shadowRoot?.querySelector("preview-pane") as any;
-      pp?.discard?.();
-      this.previewDirty = false;
-    }
-    await action();
+    await this._preview.safeAction(action);
   }
 
   private _onPreviewSaved = (e: CustomEvent<{ content: string }>): void => {
-    this.previewDirty = false;
-    // 回填宿主 state + 重拉 tokens（与 files-view 同款；行号视图防回跳）
-    this.previewContent = e.detail.content;
-    this.previewTokens = null;
-    if (this.previewPath) void this._reloadPreviewTokens();
+    void this._preview.onSaved(e.detail.content);
     this._pushToast("已保存", "success", 2500);
-  };
-
-  /** 保存后重拉预览元数据（tokens 高亮恢复；仍在本文件才回填防竞态）。 */
-  private async _reloadPreviewTokens(): Promise<void> {
-    const path = this.previewPath;
-    try {
-      const r = await fetchPreview(path);
-      if (r.ok && this.previewPath === path) {
-        this.previewContent = r.content;
-        this.previewTokens = r.tokens;
-      }
-    } catch { /* 静默：无高亮可接受 */ }
   }
 
   private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>): void => {

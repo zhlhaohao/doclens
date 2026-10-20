@@ -6,35 +6,16 @@ import type { SearchMode, FileGroup, SearchHit, Session } from "../state/types";
 import { searchApi } from "../api/search";
 import { grepApi } from "../api/grep";
 import { listSessions, clearSessions, findOrCreateSession, starSession } from "../api/sessions";
-import { fetchPreview, isPstDerivedPath } from "../api/preview";
-import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
-
-/** lineMap 精确查找 miss 时取「≤line 的最大键」前驱（BUG-F3）。
- *  lineMap: {原始行号(字符串键): md 行号}；命中行落在块内部（docx 段落/
- *  xlsx 单元格/pptx 正文）时精确键不存在，前驱 heading 即所属块。 */
-function mapLineViaPredecessor(
-  lineMap: Record<string, number>,
-  line: number,
-): number | null {
-  const exact = lineMap[String(line)];
-  if (exact != null) return exact;
-  let best: number | null = null;
-  let bestKey = -1;
-  for (const k of Object.keys(lineMap)) {
-    const n = Number(k);
-    if (!Number.isNaN(n) && n <= line && n > bestKey) {
-      bestKey = n;
-      best = lineMap[k];
-    }
-  }
-  return best;
-}
+import {
+  PreviewController,
+  mapLineViaPredecessor,
+} from "../utils/preview-controller";
 
 @customElement("search-view")
 export class SearchView extends LitElement {
@@ -181,24 +162,27 @@ export class SearchView extends LitElement {
 
   @state() private localQuery = "";
   @state() private loading = false;
-  @state() private previewContent = "";
-  @state() private previewPath = "";
-  @state() private previewLanguage = "text";
   @state() private previewLine: number | null = null;
   @state() private historySessions: Session[] = [];
   @state() private _clearing = false;
-  @state() private previewError: "NOT_INDEXED" | null = null;
-  @state() private previewDirty = false;
-  @state() private previewWritable = false;
-  @state() private previewPages: PageMarker[] | null = null;
-  @state() private previewAttachments: PstAttachmentInfo[] | null = null;
-  /** PDF 原生预览（ADR-0031）：页表，previewLine 跳页换算依据。 */
-  @state() private previewPageStarts: number[] | null = null;
-  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
-  @state() private previewTokens: string[][][] | null = null;
   /** 点击命中行带来的字面高亮词（spans 还原；优先于 queryWords——
    *  grep 正则词项不可字面搜，findController/md-viewer 会零命中）。 */
   @state() private previewHl = "";
+
+  /** 预览状态机（P1-2 收敛：三宿主共用 controller；行定位/高亮词是
+   *  search 特有态，留在视图）。兼容 getter 转发保持渲染层零改动。 */
+  private _preview = new PreviewController(this, {
+    getPane: () => this.shadowRoot?.querySelector("preview-pane") ?? null,
+  });
+  private get previewContent() { return this._preview.content; }
+  private get previewPath() { return this._preview.path; }
+  private get previewLanguage() { return this._preview.language; }
+  private get previewError() { return this._preview.notIndexed ? "NOT_INDEXED" as const : null; }
+  private get previewWritable() { return this._preview.writable; }
+  private get previewPages() { return this._preview.pages; }
+  private get previewAttachments() { return this._preview.attachments; }
+  private get previewPageStarts() { return this._preview.pageStarts; }
+  private get previewTokens() { return this._preview.tokens; }
   @state() private _resultsPaneWidth = SearchView.RESULTS_PANE_WIDTH_DEFAULT;
   @state() private searchMode: SearchMode = "keyword";
   private _unsubscribe?: () => void;
@@ -342,14 +326,8 @@ export class SearchView extends LitElement {
       this.localQuery = query;
       // Reset any previous preview state so auto-preview starts fresh
       store.setState({ detailStack: [] });
-      this.previewContent = "";
-      this.previewPath = "";
-      this.previewError = null;
+      this._preview.clear();
       this.previewHl = "";
-      this.previewPages = null;
-      this.previewAttachments = null;
-      this.previewPageStarts = null;
-      this.previewTokens = null;
       // 新搜索始终从第 0 页开始（重置 offset）
       actions.setSearchState({ state: "focus", query, queryWords: [], groups: [], total: 0, totalMatches: 0, offset: 0, limit: 20, source: "fts" });
       this.loading = true;
@@ -437,8 +415,7 @@ export class SearchView extends LitElement {
         source: res.source,
       });
       // 翻页后预览面板清空（避免显示前一页的高亮）
-      this.previewContent = "";
-      this.previewPath = "";
+      this._preview.clear();
       this.previewLine = null;
       this.previewHl = "";
     } catch (err) {
@@ -479,109 +456,21 @@ export class SearchView extends LitElement {
     });
   }
 
-  /** Fetches preview content for a hit (path + line) and updates preview-* state.
+  /** Fetches preview content for a hit (path + line) and updates preview state.
    *  Pulled out of _onHitSelect so it can be reused by desktop auto-preview
    *  (which doesn't go through the user-click path). */
   private async _fetchAndShowPreview(r: SearchHit) {
-    this.previewError = null;
     this.previewHl = r.hl ?? "";
-    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
-    if (isPstFilePath(r.path)) {
-      this.previewContent = "";
-      this.previewPath = r.path;
-      this.previewLanguage = "text";
-      this.previewLine = null;
-      this.previewWritable = false;
-      this.previewPages = null;
-      this.previewAttachments = null;
-      this.previewPageStarts = null;
-      this.previewTokens = null;
-      return;
-    }
+    this.previewLine = null;
     const line = (r.line as number | null) ?? null;
-    // 范围 vs 全文件分派（单源化 2026-10-19）：先取范围（line ±10/+20），
-    // 响应若需整文件渲染则丢弃片段改取全文件。两类：
-    // ① synthesized=true（DB 合成 md——后端 BINARY_PREVIEW_EXTS 判定，切片
-    //   会切断分页边界/line_map 失配）；
-    // ② language=markdown 且来自磁盘直读（.md）——md-viewer 的
-    //   data-source-line 锚点是全文行号体系，切片内容里绝对命中行不存在，
-    //   jumpToSourceLine 落空（2026-10-19 回归修复：md 曾在旧
-    //   FULL_FILE_PREVIEW_EXTS 清单内恒取全文件）。
-    // PST 派生路径（isPstDerivedPath）必为合成，直接全文件。
-    let result;
-    if (line && !isPstDerivedPath(r.path)) {
-      result = await this._fetchPreviewRange(r.path, line);
-      if (result.ok && (result.synthesized || result.language === "markdown")) {
-        result = await fetchPreview(r.path); // 合成/md 预览必须整文件渲染
-      }
-    } else {
-      result = await fetchPreview(r.path);
-    }
-    if (result.ok) {
-      this.previewContent = result.content;
-      this.previewPath = result.path;
-      this.previewLanguage = result.language;
-      // 二进制合成预览（docx/pdf/xlsx/csv）：node.line_start 是原始解析体系，
-      // 与合成 md 行号不一致。用 result.lineMap 把 r.line 换算成 md 实际行号，
-      // md-viewer 才能定位到对应 heading。映射不到时取「≤line 的最大键」
-      // 前驱近似（BUG-F3 修复：命中行常落在块内部——docx 段落/xlsx 单元格/
-      // pptx 正文——前驱 heading 即所属块，粗粒度定位远优于不滚）；仍无键
-      // 才返回 null（md-viewer 不滚动）。普通文本预览 result.lineMap 为 null，
-      // r.line 即文件实际行号，直接使用。
-      this.previewLine = line === null
-        ? null
-        : (result.lineMap ? mapLineViaPredecessor(result.lineMap, line) : line);
-      this.previewWritable = result.writable;
-      this.previewPages = result.pages;
-      this.previewAttachments = result.attachments;
-      this.previewPageStarts = result.pageStarts;
-      this.previewTokens = result.tokens;
-    } else if (result.notIndexed) {
-      this.previewError = "NOT_INDEXED";
-      this.previewContent = "";
-      this.previewPath = r.path;
-      this.previewWritable = false;
-      this.previewPages = null;
-      this.previewAttachments = null;
-      this.previewPageStarts = null;
-      this.previewTokens = null;
-    }
-  }
-
-  /** search-hit 范围预览专用 —— 仅取 line ±10/+20 行。
-   *  synthesized=true 时调用方应改取全文件（合成 md 不能切片）。 */
-  private async _fetchPreviewRange(
-    path: string,
-    line: number,
-  ): Promise<
-    | { ok: true; path: string; content: string; language: string; writable: boolean; synthesized: boolean; pages: PageMarker[] | null; lineMap: null; pageStarts: null; attachments: null; tokens: string[][][] | null }
-    | { ok: false; notIndexed: boolean }
-  > {
-    const params = new URLSearchParams({ path });
-    params.set("start_line", String(Math.max(1, line - 10)));
-    params.set("end_line", String(line + 20));
-    try {
-      const res = await fetch(`/api/preview?${params}`);
-      if (res.ok) {
-        const body = await res.json();
-        return {
-          ok: true,
-          path: body.path,
-          content: body.content,
-          language: body.language,
-          writable: body.writable ?? false,
-          synthesized: body.synthesized ?? false,
-          pages: body.pages ?? null,
-          lineMap: null, // 范围预览是文本文件片段，r.line 即文件实际行号，无需映射
-          pageStarts: null, // 范围预览只用于文本文件，无页表
-          attachments: null, // 范围预览只用于文本文件，无附件
-          tokens: body.tokens ?? null, // 服务端分词（切片行与 content 对齐，ADR-0032）
-        };
-      }
-      const err = await res.json().catch(() => ({}));
-      return { ok: false, notIndexed: err.code === "NOT_INDEXED" };
-    } catch {
-      return { ok: false, notIndexed: false };
+    const state = await this._preview.openHit(r.path, line);
+    // 行定位（search 特有）：合成 md 用 lineMap 前驱换算（BUG-F3：命中行
+    // 常落在块内部，前驱 heading 即所属块）；普通文本 r.line 即文件行号；
+    // 范围片段/PST 列表/错误态 lineMap 为 null——直接用原行号或不定位。
+    if (state.status === "ok" && line !== null) {
+      this.previewLine = state.doc.lineMap
+        ? mapLineViaPredecessor(state.doc.lineMap, line)
+        : line;
     }
   }
 
@@ -603,44 +492,18 @@ export class SearchView extends LitElement {
     void this._fetchAndShowPreview({ path: first.path, line: first.matches[0]?.line ?? null });
   }
 
-  private _discardPreviewEdits() {
-    const pp = this.shadowRoot?.querySelector("preview-pane") as any;
-    pp?.discard?.();
-    this.previewDirty = false;
-  }
-
-  private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
-    this.previewDirty = e.detail.dirty;
+private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
+    this._preview.onDirtyChange(e.detail.dirty);
   };
 
-  private async _safeAction(action: () => void | Promise<void>) {
-    if (this.previewDirty) {
-      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
-      if (!ok) return;
-      this._discardPreviewEdits();
-    }
-    await action();
+  /** dirty 门与保存回填已收敛 preview-controller（P1-2）。 */
+  private _safeAction(action: () => void | Promise<void>) {
+    return this._preview.safeAction(action);
   }
 
   private _onPreviewSaved = (e: CustomEvent<{ content: string }>) => {
-    this.previewDirty = false;
-    // 回填宿主 state + 重拉 tokens（与 files-view 同款；行号视图防回跳）
-    this.previewContent = e.detail.content;
-    this.previewTokens = null;
-    if (this.previewPath) void this._reloadPreviewTokens();
+    void this._preview.onSaved(e.detail.content);
     this._pushToast("已保存", "success", 2500);
-  };
-
-  /** 保存后重拉预览元数据（tokens 高亮恢复；仍在本文件才回填防竞态）。 */
-  private async _reloadPreviewTokens(): Promise<void> {
-    const path = this.previewPath;
-    try {
-      const r = await fetchPreview(path);
-      if (r.ok && this.previewPath === path) {
-        this.previewContent = r.content;
-        this.previewTokens = r.tokens;
-      }
-    } catch { /* 静默：无高亮可接受 */ }
   }
 
   private _onPreviewSaveFailed = (e: CustomEvent<{ message: string }>) => {

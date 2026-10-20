@@ -4,8 +4,8 @@ import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
 import { gitApi } from "../api/git";
 import type { GitDiffResponse } from "../api/git";
-import { fetchPreview, probeUploadTarget, uploadPreview } from "../api/preview";
-import type { PageMarker, PstAttachmentInfo } from "../api/preview";
+import { probeUploadTarget, uploadPreview } from "../api/preview";
+import { PreviewController } from "../utils/preview-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/file-tree";
@@ -387,21 +387,27 @@ export class FilesView extends LitElement {
   private _toastTimer: any = null;
 
   // preview state（与 search-view 同款，本地管理）
-  @state() private _previewPath = "";
-  @state() private _previewContent = "";
-  @state() private _previewLanguage = "text";
-  @state() private _previewWritable = false;
-  @state() private _previewPages: PageMarker[] | null = null;
-  /** PDF 原生预览（ADR-0031）：页表。 */
-  @state() private _previewPageStarts: number[] | null = null;
-  /** 服务端语法分词（ADR-0032）：代码文件预览的逐行 [kind, text] run 数组。 */
-  @state() private _previewTokens: string[][][] | null = null;
-  @state() private _previewAttachments: PstAttachmentInfo[] | null = null;
+  /** 预览状态机（P1-2 收敛，reloadAfterSave=full：文件树宿主是管理语义，
+   *  元数据可随重索引变化）。兼容 getter 保持渲染层零改动。 */
+  private _preview = new PreviewController(this, {
+    getPane: () => this.shadowRoot?.querySelector("preview-pane") ?? null,
+    reloadAfterSave: "full",
+  });
+  private get _previewPath() { return this._preview.path; }
+  private get _previewContent() { return this._preview.content; }
+  private get _previewLanguage() { return this._preview.language; }
+  private get _previewWritable() { return this._preview.writable; }
+  private get _previewPages() { return this._preview.pages; }
+  private get _previewPageStarts() { return this._preview.pageStarts; }
+  private get _previewTokens() { return this._preview.tokens; }
+  private get _previewAttachments() { return this._preview.attachments; }
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
-   *  二进制 415「请下载后查看」）；null = 无错误。设置后移动端 detail 层
-   *  渲染带返回条的错误提示页，不再卡空白整页。 */
-  @state() private _previewError: string | null = null;
-  @state() private _previewDirty = false;
+   *  二进制 415「请下载后查看」）；null = 无错误。移动端 detail 层渲染
+   *  带返回条的错误提示页（P1-2：状态在 controller，此 getter 归一）。 */
+  private get _previewError(): string | null {
+    if (this._preview.notIndexed) return "NOT_INDEXED";
+    return this._preview.errorMessage;
+  }
 
   @state() private _treePaneWidth = FilesView.TREE_PANE_WIDTH_DEFAULT;
   /** preview 栏宽；null = 无 localStorage 恢复值（首次），grid 用 1fr/2fr
@@ -1023,7 +1029,7 @@ export class FilesView extends LitElement {
         const newPath = path.includes("/")
           ? path.slice(0, path.lastIndexOf("/") + 1) + e.detail.newName
           : e.detail.newName;
-        this._previewPath = newPath;
+        this._preview.renamePath(newPath);
         void this._reloadPreview();
       }
       this._showToast("已重命名");
@@ -1074,14 +1080,7 @@ export class FilesView extends LitElement {
     for (const p of parents) await this._ensureLoaded(p);
     // 若删除了正在预览的文件，清空 preview state
     if (this._previewPath && paths.includes(this._previewPath)) {
-      this._previewPath = "";
-      this._previewContent = "";
-      this._previewError = null;
-      this._previewWritable = false;
-      this._previewPages = null;
-      this._previewAttachments = null;
-      this._previewPageStarts = null;
-      this._previewDirty = false;
+      this._preview.clear();
     }
     actions.clearSelection();
     this._showToast(failed
@@ -1232,76 +1231,23 @@ export class FilesView extends LitElement {
     }
   }
 
-  /** dirty 检查后切换预览；用户拒绝丢弃时不切换。复用给所有触发预览的入口。 */
-  private async _previewPathWithDirtyCheck(path: string) {
-    if (this._previewDirty) {
-      const ok = window.confirm("当前文件有未保存的修改。\n确定要丢弃吗？");
-      if (!ok) return;
-      this._discardPreviewEdits();
-    }
-    await this._fetchPreview(path);
+/** dirty 检查后切换预览；用户拒绝丢弃时不切换。复用给所有触发预览的入口。 */
+  private _previewPathWithDirtyCheck(path: string) {
+    return this._preview.safeAction(() => this._fetchPreview(path));
   }
 
   private async _fetchPreview(path: string) {
-    // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
-    if (isPstFilePath(path)) {
-      this._previewError = null;
-      this._previewPath = path;
-      this._previewContent = "";
-      this._previewWritable = false;
-      this._previewPages = null;
-      this._previewAttachments = null;
-      this._previewPageStarts = null;
-      this._previewTokens = null;
-      return;
-    }
-    const result = await fetchPreview(path);
-    if (result.ok) {
-      this._previewError = null;
-      this._previewPath = result.path;
-      this._previewContent = result.content;
-      this._previewLanguage = result.language;
-      this._previewWritable = result.writable;
-      this._previewPages = result.pages;
-      this._previewAttachments = result.attachments;
-      this._previewPageStarts = result.pageStarts;
-      this._previewTokens = result.tokens;
-    } else if (result.notIndexed) {
-      this._previewError = "NOT_INDEXED";
-      this._previewPath = path;
-      this._previewContent = "";
-      this._previewWritable = false;
-      this._previewPages = null;
-      this._previewAttachments = null;
-      this._previewPageStarts = null;
-      this._previewTokens = null;
-    } else {
-      // 其他失败（如二进制 415）：同样进错误态页（移动端整页需要返回条），
-      // toast 仍弹一瞬作即时反馈
-      this._previewError = result.message || "预览失败";
-      this._previewPath = path;
-      this._previewContent = "";
-      this._previewWritable = false;
-      this._previewPages = null;
-      this._previewAttachments = null;
-      this._previewPageStarts = null;
-      this._previewTokens = null;
-      this._showToast(result.message || "预览失败");
+    // PST 拦截/错误三分支已收敛 controller（P1-2）；其他失败（如二进制
+    // 415）toast 仍弹一瞬作即时反馈（controller 只管状态）。
+    const before = this._preview.path;
+    await this._preview.open(path);
+    if (this._preview.errorMessage && this._preview.path !== before) {
+      this._showToast(this._preview.errorMessage);
     }
   }
 
-  private async _reloadPreview() {
-    if (!this._previewPath) return;
-    const r = await fetchPreview(this._previewPath);
-    if (r.ok) {
-      this._previewContent = r.content;
-      this._previewLanguage = r.language;
-      this._previewWritable = r.writable;
-      this._previewPages = r.pages;
-      this._previewAttachments = r.attachments;
-      this._previewPageStarts = r.pageStarts;
-      this._previewTokens = r.tokens;
-    }
+  private _reloadPreview() {
+    return this._preview.reload();
   }
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（走普通 preview 流程，含附件清单）。 */
@@ -1312,24 +1258,13 @@ export class FilesView extends LitElement {
     }
   };
 
-  private _discardPreviewEdits() {
-    const pp = this.shadowRoot?.querySelector("preview-pane") as any;
-    pp?.discard?.();
-    this._previewDirty = false;
-  }
-
   private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
-    this._previewDirty = e.detail.dirty;
+    this._preview.onDirtyChange(e.detail.dirty);
   };
 
   private _onPreviewSaved = (e: CustomEvent<{ content: string }>) => {
-    this._previewDirty = false;
-    // 回填宿主 state（组件只更新了内部 _content）：content 防宿主重渲染
-    // 旧值覆盖；tokens 重拉恢复语法高亮（行号视图，ADR-0032 服务端分词）。
-    // SSE reindexed 随后触发重渲染，届时 state 已是新值不再回跳。
-    this._previewContent = e.detail.content;
-    this._previewTokens = null;
-    void this._reloadPreview();
+    // content 回填 + tokens 清空 + 全量重拉已收敛 controller（P1-2）
+    void this._preview.onSaved(e.detail.content);
     this._showToast("已保存");
   };
 
