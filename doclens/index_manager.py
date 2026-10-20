@@ -48,7 +48,7 @@ class IndexManager:
         self._ts = None
         self._path_map = {}
         self._pending_swap = None  # (new_ts, new_path_map, doc_count)
-        self._needs_reload = False  # 后台 reindex 完成后标记，下次 load 时重新加载
+        self._needs_reload = False  # 需重建 TreeSearch 句柄（reindex 完成 / 外部直写 DB），不代表磁盘需审计
         self._reindexing = False
         self._reindex_lock = threading.Lock()
         # 最近一次索引（启动同步或后台 reindex）失败的文件数；0 = 全部成功。
@@ -757,6 +757,14 @@ class IndexManager:
         path_map 即返回；有变化/不存在 → 增量/全量索引（build_index 直写
         DB，return_documents=False）。搜索走 DB 路由惰性路径（ADR-0019），
         全程不物化 documents。
+
+        磁盘审计（has_changed_files，全库逐文件 hash）**只在进程首次装配
+        索引时做**——那是唯一"磁盘可能在本进程不知情下变化"的时点（离线
+        期间改动）。此后 `_needs_reload` 的两类来源都不需要审计：
+        `trigger_background_reindex` 刚把磁盘与 DB 对账完，重扫的结论恒为
+        "无变化"；`mark_index_dirty` 是外部写入者直接改 DB（磁盘未动）。
+        此前每次 reindex 后的首个搜索都白扫一遍全库（AP-11）。
+        审计之后才发生的改动由 FileWatcher 防抖 reindex 兜底。
         """
         self._sync_image_version_expectation()
         # 另一线程正在后台构建（首次建库后台化，ADR-0043）——等待其完成，
@@ -767,6 +775,8 @@ class IndexManager:
                 self._build_cond.wait()
         if self._ts is not None and not self._needs_reload:
             return True
+        # 本进程是否首次装配：必须在重建 _ts 之前判定（重建后即非 None）
+        needs_audit = self._ts is None
         self._needs_reload = False
 
         set_config(self._ts_config())
@@ -775,6 +785,13 @@ class IndexManager:
         self._startup_audit_done = True
 
         if os.path.exists(abs_path):
+            if not needs_audit:
+                # DB 已是权威（后台 reindex 刚对账 / 外部写入者原地更新）：
+                # 只重建句柄 + 刷新 path_map，跳过全库 hash 审计（AP-11）。
+                self.build_path_map()
+                logger.debug("Index reloaded without disk audit (%d docs)",
+                             len(self._path_map))
+                return True
             # 索引库已存在：无变化则不物化、不全量 load（ADR-0018）
             print(f"[变更检测中: {self.search_path}]（百万级语料可能需要数分钟）", flush=True)
             _t_audit = time.time()

@@ -188,3 +188,50 @@ class TestHasChangedFilesScenarios:
         finally:
             fts.close()
         assert idx.has_changed_files() is True  # walk 计 3 > cap 2 → 保守 True
+
+
+class TestReloadSkipsDiskAudit:
+    """AP-11：进程内已对账后的重载不再重扫全库 hash。
+
+    磁盘审计只在进程首次装配索引时做；此后 `_needs_reload` 的两类来源
+    （后台 reindex 完成 / 外部写入者 mark_index_dirty）DB 已是权威，
+    重扫结论恒为「无变化」，属纯浪费。
+    """
+
+    def test_reload_after_mark_dirty_skips_audit(self, env, monkeypatch):
+        idx, _corpus = env
+        calls: list[int] = []
+
+        def _spy():
+            calls.append(1)
+            return True
+
+        monkeypatch.setattr(idx, "has_changed_files", _spy)
+        idx.mark_index_dirty()
+        assert idx.load_or_build_index() is True
+        assert calls == []          # 未跑磁盘审计
+        assert idx.path_map         # path_map 已刷新
+
+    def test_first_load_still_audits(self, tmp_path, monkeypatch):
+        """新实例（冷启动）仍必须审计——离线期间的变化只能靠它补。"""
+        corpus = tmp_path / "kb2"
+        corpus.mkdir()
+        (corpus / "a.md").write_text("# 甲\n\n磁锚 甲\n", encoding="utf-8")
+        monkeypatch.chdir(corpus)
+
+        from doclens.config import CortexConfig
+        from doclens.index_manager import IndexManager
+
+        assert IndexManager(CortexConfig()).load_or_build_index()  # 先建库
+
+        fresh = IndexManager(CortexConfig())
+        calls: list[int] = []
+        orig = fresh.has_changed_files
+
+        def _spy():
+            calls.append(1)
+            return orig()
+
+        monkeypatch.setattr(fresh, "has_changed_files", _spy)
+        assert fresh.load_or_build_index() is True
+        assert calls == [1]         # 首次装配必须审计一次
