@@ -100,4 +100,5 @@
 | 2026-10-20 | 一起改吧 | AP-1 / AP-2 / AP-3 / AP-4 | 见 1b74cb8——file_watcher.py 重构 + tests/test_file_watcher_robustness.py 新增 5 断言；分层回归 46 passed |
 | 2026-10-20 | 修 | AP-5 | 见 7a41716——watch_broker.broadcast 增节流（200ms 窗口内同事件至多入队一次）+ deps.py 状态机边沿 immediate=True；新增 tests/test_watch_broker_throttle.py 4 断言；分层回归 50 passed |
 | 2026-10-20 | 修 | AP-6 | 见 49ecd47——FileWatcher.DEFAULT_STATUS 类常量作为单一真源，status.py fallback 改引用；分层回归 63 passed |
-| 2026-10-20 | 修 | AP-7 | 见 HEAD——_ChangeHandler._data_dir 缓存时 .lower()；test_file_watcher_exclude 补混合大小写 override 用例；分层回归 51 passed |
+| 2026-10-20 | 修 | AP-7 | 见 dc1edba——_ChangeHandler._data_dir 缓存时 .lower()；test_file_watcher_exclude 补混合大小写 override 用例；分层回归 51 passed |
+| 2026-10-20 | 修（B 方案：setter 保留补 docstring） | AP-8 | 见 efeec8e——①reindexing setter 补 docstring 注明 CLI/TUI 协调用途（保留，更正台账「死面」误判）；②debounce 默认 None 回退 CortexConfig；③print×2 换 logger；④_ChangeHandler 加 init_baseline 参数，startup_audit_done 时跳过；分层回归 51 passed |
