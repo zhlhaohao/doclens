@@ -63,7 +63,13 @@
 - **修复方案**：`_ChangeHandler.__init__` 中 `self._data_dir = data_dirname().lower()`。一行。
 - **回归验证**：`tests/test_file_watcher_exclude.py` 补混合大小写 override 用例 + 既有套件。
 
-### AP-8 杂项卫生打包（死面 / 双源默认值 / 日志混用 / 启动重复遍历） [P4] [status: pending]
+### AP-8 杂项卫生打包（死面 / 双源默认值 / 日志混用 / 启动重复遍历） [P4] [status: done]
+- **形态**：Lava Flow + Magic Numbers + 日志纪律不一
+- **证据**：
+  - ~~`file_watcher.py:259-262`：`reindexing` setter 全仓无调用方~~ **误判**——实际有 CLI cmd_index / TUI /index 调用（cortex_cli.py:534,539 / tui/app.py:546,560），是手动 reindex 协调口。**处置：保留 + 补 docstring 注明用途**（B 方案）
+  - 防抖默认 5.0 双源：`config.py:185` 与 `file_watcher.py:195`（消费方均传 config 值，签名默认仅测试直构生效——漂移无告警）
+  - `file_watcher.py:216,237`：print 与 logger 混用（Web/GUI 后台线程中 print 不可见；模块其余处均 logger）
+  - `file_watcher.py:219 vs 236`：`_ChangeHandler` 构造（含全语料 os.walk 基线）先于 `startup_audit_done` 判断——启动审计已遍历全语料时仍再走一遍 stat 遍历（stat-only，秒级，非热点）
 - **形态**：Lava Flow + Magic Numbers + 日志纪律不一
 - **证据**：
   - `file_watcher.py:259-262`：`reindexing` setter 全仓无调用方（grep 证实仅 docstring 提及）——死公共面；

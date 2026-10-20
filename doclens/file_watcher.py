@@ -35,7 +35,7 @@ if _HAS_WATCHDOG:
         仅靠 mtime/size 对比即可过滤这种伪修改，避免 watch-badge 闪动。
         """
 
-        def __init__(self, callback, search_path: str):
+        def __init__(self, callback, search_path: str, init_baseline: bool = True):
             super().__init__()
             self._callback = callback
             # data_dirname() 每次调用做文件系统 resolve（~0.2ms，事件热路径
@@ -59,7 +59,8 @@ if _HAS_WATCHDOG:
             # on_modified 能用 prev==cur 去重 Windows 读访问触发的伪事件（仅 atime
             # 变、mtime/size 不变），同时保留对真修改的捕获——不丢事件。
             self._mod_snapshot: dict[str, tuple[int, int]] = {}
-            self._init_baseline(search_path)
+            if init_baseline:
+                self._init_baseline(search_path)
 
         def _should_handle(self, path: str) -> bool:
             # 廉价且选择性最高的检查先行：扩展名白名单（.tmp/.log/二进制
@@ -226,9 +227,14 @@ class FileWatcher:
         "last_success": None,
     }
 
-    def __init__(self, idx_manager, debounce_seconds: float = 5.0,
+    def __init__(self, idx_manager, debounce_seconds: float | None = None,
                  on_change_callback=None, on_reindex_start=None, on_reindex_done=None):
         self._idx = idx_manager
+        # debounce 默认 None → 回退到 CortexConfig().watch_debounce（单一真源），
+        # 避免签名默认手抄字面量与 config.py 漂移（AP-8 子项②）
+        if debounce_seconds is None:
+            from doclens.config import CortexConfig
+            debounce_seconds = CortexConfig().watch_debounce
         self._debounce = debounce_seconds
         self._timer = None
         self._observer = None
@@ -249,10 +255,15 @@ class FileWatcher:
     def start(self):
         """启动文件监控"""
         if not _HAS_WATCHDOG:
-            print("[文件监控不可用: pip install watchdog]")
+            logger.warning("文件监控不可用: pip install watchdog")
             return False
 
-        handler = _ChangeHandler(self._on_change, self._idx.search_path)
+        # 启动审计已完成（load_or_build_index 的 has_changed_files 刚做完
+        # 全语料 stat 审计）时跳过 _init_baseline——同一时点重复 stat 遍历
+        # 在百万语料上是秒级浪费（AP-8 子项④）
+        skip_baseline = getattr(self._idx, "startup_audit_done", False)
+        handler = _ChangeHandler(self._on_change, self._idx.search_path,
+                                 init_baseline=not skip_baseline)
         self._observer = Observer()
         # 递归 schedule：单 emitter 线程聚合整树（两平台统一）。数据目录
         # 排除在 handler 层（_should_handle）——监控树级排除需自管非递归
@@ -269,8 +280,8 @@ class FileWatcher:
         # 与文件变化事件共用 _do_reindex（无变化时 build_index 增量快速返回）。
         # 本进程已完成启动审计（load_or_build_index 的 has_changed_files 本就
         # 补离线变化）时跳过——重复扫描在百万语料上多耗一轮分钟级审计。
-        if getattr(self._idx, "startup_audit_done", False):
-            print("[文件监控：启动审计已完成，跳过启动增量扫描]")
+        if skip_baseline:
+            logger.info("文件监控：启动审计已完成，跳过启动增量扫描 + 基线遍历")
             return True
         self._reset_debounce_timer()
         return True
@@ -297,6 +308,11 @@ class FileWatcher:
 
     @reindexing.setter
     def reindexing(self, value):
+        """手动 reindex 协调口（CLI cmd_index / TUI /index 在用）。
+
+        手动索引命令执行期间置 True 防止 watch 自动 reindex 并发触发，
+        完成（含异常）后 finally 复位。语义 = 「外部正在占锁跑 reindex」。
+        """
         with self._state_lock:
             self._reindexing = value
 
