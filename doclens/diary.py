@@ -26,8 +26,10 @@ DiaryWorker（diary_worker.py）共用。
 from __future__ import annotations
 
 import io
+import os
 import re
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date as date_type
@@ -111,8 +113,48 @@ def _read(path: Path) -> str:
 
 
 def _write(path: Path, content: str) -> None:
+    """原子写整年文件（AP-49）：同目录 tmp + ``os.replace``。
+
+    就地 ``write_text`` 是「先截断再写」——写窗口内 GitSync 的 ``git add -A``
+    会提交半截 ``2026.md`` 并推送，进程崩溃也会留下截断文件。``os.replace``
+    在同一文件系统内换名是原子操作，读者要么看到完整旧版、要么看到完整新版。
+
+    刻意不用「先 unlink 再 move」：那会在 move 失败时把新旧两份一起丢掉。
+
+    Windows 注意：目标文件正被其他进程/线程打开时（git 索引、编辑器、
+    预览读取），``os.replace`` 会抛 ``PermissionError``（共享冲突，瞬时）。
+    这类冲突通常几毫秒内消失，故做短暂重试；最终仍失败则上抛——宁可让
+    调用方看到错误，也不退回「就地截断」把文件写坏。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        _replace_with_retry(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass  # 清理失败不影响已完成的替换；残留 tmp 下次覆盖
+
+
+#: Windows 共享冲突重试：次数与间隔（总等待约 0.3s）。git 读单文件是毫秒级，
+#: 这个预算足以跨过它；仍失败说明有进程长期占用，应上抛而非退化成就地写。
+_REPLACE_RETRIES = 10
+_REPLACE_RETRY_DELAY_SEC = 0.03
+
+
+def _replace_with_retry(src: Path, dst: Path) -> None:
+    """``os.replace`` + 短暂重试（应对 Windows 上目标被短暂打开）。"""
+    for attempt in range(_REPLACE_RETRIES):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_RETRIES - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SEC)
 
 
 def _ensure_year_file(path: Path, year: int) -> str:

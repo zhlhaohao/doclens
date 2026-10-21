@@ -595,13 +595,24 @@
 - **修复方案**：超时改发「仍在进行」事件；暴露取消/进度；或断流不判失败。
 - **回归验证**：`tests/test_index_chunking.py`。
 
-### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: pending]
+### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: done]
 - **形态**：写路径无事务（跨资源）
 - **证据**：`doclens/diary.py:113-115` `path.write_text(content)` 就地截断重写整年文件；
   `doclens/git_sync.py:238` 每轮 `git add -A` + commit。
 - **风险**：写窗口内被 GitSync 撞上即提交并推送半截 `2026.md`；进程崩溃留下截断文件。
-- **修复方案**：tmp + `os.replace`（注意 `translate_service._replace` 的「先删后移」问题，勿照抄）。
-- **回归验证**：`tests/test_diary.py`。
+- **实际修复（2026-10-21）**：`diary._write` 改为同目录 `2026.md.tmp` + `os.replace`，
+  失败时清理 tmp 并**上抛**（不退回就地截断）。刻意避开 `translate_service._replace` 的
+  「先 unlink 再 move」——那会在 move 失败时新旧两份一起丢。
+  **Windows 补充（实测发现）**：目标文件被其他进程/线程打开时 `os.replace` 抛 `PermissionError`
+  （Python 打开文件不共享 delete 权限），因此加 `_replace_with_retry`（10 次 × 30ms ≈ 0.3s）。
+  预算耗尽仍上抛——「失败且旧文件完好」优于「成功但写坏」。
+  六条写路径（append/remove/update/rewrite_day/weather/city）全部经 `_write`，无需逐点改。
+- **回归验证**：新增 `tests/test_diary_atomic_write.py` 6 断言——`os.replace` 被调用且源是同目录 tmp /
+  写 tmp 失败时旧内容完好且无 tmp 残骸 / 建父目录 / 并发读线程只看到完整旧版或新版 /
+  Windows 语义（文件被独占打开时替换失败但旧内容完好）/ 真实入口 `append_text` 两次后内容完整。
+  **反证**：还原就地 `write_text` → 3 条红灯。
+  `tests/test_diary_atomic_write.py tests/test_diary.py tests/test_diary_worker.py
+  tests/test_diary_enable_gate.py tests/test_architecture.py` → 81 passed（连跑 3 次稳定）。
 
 ### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: done]
 - **形态**：Error Hiding（用户输入静默丢失）
@@ -818,6 +829,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-49 | 见本提交——`diary._write` 改 tmp + `os.replace`（+ Windows 共享冲突 10×30ms 重试，预算耗尽上抛而不退化）；新增 tests/test_diary_atomic_write.py 6 断言，反证 3 红；回归 81 passed（3 连跑稳定） |
 | 2026-10-21 | 修 | AP-50 | 见本提交——`_run_note_blocking` 改 UPSERT + 回读校验（`NOTE_NOT_PERSISTED`）；`vision_clear`/`vision_enqueue`/`vision_next_pending` 三处加 `model != 'manual'` 护栏；新增 tests/test_vision_manual_note.py 6 断言，反证 4 红；回归 38 + 76 passed。方案 A 边界（换图后备注不更新）另记 AP-69 |
 | 2026-10-21 | 修 | AP-51 | 见本提交——`initialize` 311 行拆 22 行编排 + 7 个 `_stage_*`（`_Assembly` 载体）；`_run_blocking` + `_dispose_loop` 保证每轮循环关闭（含取消未完成任务）；`_build_index_blocking` 的 join 加 1800s 上界（`CORTEX_INDEX_BUILD_TIMEOUT` 可调）；新增 tests/test_agent_init_lifecycle.py 11 断言，反证 5 红；回归 63 + 39 passed。顺带发现 AP-68（`basic_tools` 死赋值，未修） |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
