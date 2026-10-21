@@ -987,7 +987,17 @@ def handle_search_kb(
     if idx_manager.ts is None:
         idx_manager.load_or_build_index()
 
-    if idx_manager.ts is None or not idx_manager.has_indexed_docs():
+    # AP-45：区分「空库」与「索引库不可读」——后者若报成「未收录」，
+    # AI 会据此对用户宣称知识库里没有这段内容。
+    availability = idx_manager.index_availability()
+    if availability == "unavailable":
+        return (
+            "索引库不可用（无法读取索引文件，可能损坏或被占用）。\n"
+            "本次检索没有执行，**不能**据此认为知识库未收录相关文档。\n"
+            "请检查数据目录下的 index.db，"
+            "或用 manage_kb(action='reindex', force=true) 重建。"
+        )
+    if idx_manager.ts is None or availability == "empty":
         return (
             "知识库索引未就绪或为空。\n"
             "请用 manage_kb(action='reindex') 构建索引，"

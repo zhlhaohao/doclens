@@ -905,8 +905,16 @@ def _cli_search(args, config, idx):
 
     # Perform search
     # 候选池 = 配置 top_k_docs（AP-47：旧 max_results 参数被引擎静默吞掉）；
-    # 显示条数由下面的 format_results(max_results=...) 控制
-    nodes, docs = idx.search(query)
+    # 显示条数由下面的 format_results(max_results=...) 控制。
+    # AP-45：索引库不可读时给出明确提示，而非静默 0 结果。
+    from doclens.index_manager import IndexUnavailable
+
+    try:
+        nodes, docs = idx.search(query)
+    except IndexUnavailable as e:
+        print(f"[错误] {e}")
+        print("提示: 检查数据目录下的 index.db，或运行 `index --force` 重建索引。")
+        return
 
     # Determine min_score_threshold: CLI arg takes priority over config
     min_score = args.min_score if args.min_score is not None else config.min_score_threshold

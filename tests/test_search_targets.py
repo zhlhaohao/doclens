@@ -109,6 +109,8 @@ def _fake_idx(kb: Path, path_map: dict[str, str]):
         grep_match_max_chars=2000,
         grep_score_threshold=0.0,
         grep_max_results=50,
+        # AP-45：检索入口改以 index_availability 区分空库/不可读
+        index_availability=lambda: "ok",
         like_search=lambda query, max_results=50, use_regex=True: [
             {"doc_id": "d1", "title": "a", "summary": "量子 计算", "fts_score": 1.0},
             {"doc_id": "d3", "title": "c", "summary": "量子 计算", "fts_score": 1.0},
@@ -141,6 +143,8 @@ class TestSearchKbHandlePaths:
         return SimpleNamespace(
             ts=object(),
             has_indexed_docs=lambda: True,
+            # AP-45：检索入口改以 index_availability 区分空库/不可读
+            index_availability=lambda: "ok",
             load_doc_structures=lambda doc_ids: {i: [] for i in doc_ids},
             max_results=10,
             max_nodes_per_doc=3,
@@ -152,7 +156,9 @@ class TestSearchKbHandlePaths:
             search_context_after=600,
             max_total_chars=8000,
             path_map=path_map,
-            search=lambda query, max_results, allowed_doc_ids=None: (
+            # AP-47：候选池改由 top_k_docs 决定，调用方不再传 max_results
+            top_k_docs=100,
+            search=lambda query, allowed_doc_ids=None, **kw: (
                 [
                     {"doc_id": "d1", "score": 1.0},
                     {"doc_id": "d3", "score": 1.0},

@@ -11,7 +11,7 @@ import time
 
 from fastapi import APIRouter, Depends
 
-from doclens.index_manager import IndexManager
+from doclens.index_manager import IndexManager, IndexUnavailable
 from doclens.scoring import tokenize_query
 from doclens.scoring_pipeline import score_and_rank, ScoreResult
 from doclens.web_v2.api._grouping import (
@@ -108,12 +108,24 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
         result, query_words, notes = await asyncio.to_thread(
             _do_search, idx, req.query
         )
+    except IndexUnavailable as e:
+        # AP-45：索引库不可读 ≠ 没有匹配。与 /api/grep 对齐填 error，
+        # 前端据此区分「无结果」与「出错了」。
+        logger.warning("index unavailable: %s", e)
+        return GroupedSearchResponse(
+            groups=[], total=0, total_matches=0, offset=0, limit=req.limit,
+            query=req.query, query_words=[], source="fts",
+            notes=[str(e)],
+            error=f"索引库不可用，本次结果不代表知识库内容: {e}",
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
+        )
     except Exception as e:
         logger.warning("score_and_rank failed: %s; returning empty result", e)
         return GroupedSearchResponse(
             groups=[], total=0, total_matches=0, offset=0, limit=req.limit,
             query=req.query, query_words=[], source="fts",
             notes=[f"检索引擎异常: {e}"],
+            error=f"搜索失败: {e}",
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 

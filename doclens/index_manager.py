@@ -39,6 +39,14 @@ def _check_module(module_name):
         return False
 
 
+class IndexUnavailable(RuntimeError):
+    """索引库不可读（DB 损坏 / 被锁 / 权限）——**区别于「空库」**（AP-45）。
+
+    原先这类故障在检索链路上被 `has_indexed_docs()` 吞成 False，表现为
+    「库里没有这段内容」：用户与 AI 都会据此得出「未收录」的错误结论。
+    """
+
+
 class IndexManager:
     """TreeSearch 索引管理器"""
 
@@ -356,7 +364,12 @@ class IndexManager:
         )
 
     def has_indexed_docs(self) -> bool:
-        """索引库是否有文档（EXISTS 探测，常数时间——ADR-0019 搜索空库守卫）。"""
+        """索引库是否有文档（EXISTS 探测，常数时间——ADR-0019 搜索空库守卫）。
+
+        **fail-soft**：DB 故障返回 False。这个语义只适合「目录页/状态页不能
+        因瞬时锁 500」的场景；检索链路必须改用 `index_availability()` 区分
+        「空库」与「不可读」（AP-45）。
+        """
         try:
             from treesearch.fts import FTS5Index
             fts = FTS5Index(db_path=self.index_path)
@@ -367,6 +380,23 @@ class IndexManager:
         except Exception as e:  # noqa: BLE001
             logger.debug("has_indexed_docs failed: %s", e)
             return False
+
+    def index_availability(self) -> str:
+        """索引库可用性（AP-45）：``"ok"`` / ``"empty"`` / ``"unavailable"``。
+
+        与 `has_indexed_docs()` 的区别只在失败分支：这里**不**把 DB 故障
+        伪装成「没有文档」，调用方据此能给出「索引库不可用」而非「未收录」。
+        """
+        try:
+            from treesearch.fts import FTS5Index
+            fts = FTS5Index(db_path=self.index_path)
+            try:
+                return "ok" if fts.has_documents() else "empty"
+            finally:
+                fts.close()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("index unavailable (%s): %s", self.index_path, e)
+            return "unavailable"
 
     def load_doc_structures(self, doc_ids: list) -> dict:
         """按 doc_id 批量加载文档树结构（仅结果文档，不物化全量——ADR-0019）。
@@ -842,7 +872,11 @@ class IndexManager:
         """
         self.load_or_build_index()
 
-        if not self._ts or not self.has_indexed_docs():
+        availability = self.index_availability()
+        if availability == "unavailable":
+            # AP-45：DB 故障不得伪装成「空库」——上抛让检索入口给出明确信号
+            raise IndexUnavailable(f"索引库不可用: {self.index_path}")
+        if availability == "empty" or not self._ts:
             return [], []
 
         kwargs = {
@@ -867,8 +901,13 @@ class IndexManager:
 
         self.load_or_build_index()
 
-        # 直接查 DB（ADR-0018）：documents 不物化，空库以 DB 计数判定
-        if self.indexed_doc_count() == 0:
+        # 直接查 DB（ADR-0018）：documents 不物化，空库以可用性判定。
+        # AP-45：`indexed_doc_count() == 0` 会把「计数失败」也算成空库——
+        # 这里改用 index_availability 区分「空库」与「不可读」。
+        availability = self.index_availability()
+        if availability == "unavailable":
+            raise IndexUnavailable(f"索引库不可用: {self.index_path}")
+        if availability == "empty":
             return []
 
         from treesearch.fts import FTS5Index
