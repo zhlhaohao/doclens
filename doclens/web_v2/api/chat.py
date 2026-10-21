@@ -39,10 +39,20 @@ from doclens.web_v2.chat_interrupt import (
     unregister_interrupt_hook,
 )
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.deps import get_agent, get_config
+from doclens.web_v2.deps import get_agent, get_config, get_rewind_tracker, get_sessions_store
 from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
 from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
+from doclens.web_v2.api._chat_slash import (
+    SLASH_HINT_RE,
+    hint_already_injected,
+    legal_slash_skill,
+    slash_hint_content,
+)
+from doclens.web_v2.api._chat_emitter import ChatEventEmitter
+from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
+from doclens.web_v2.refs_retry import FALLBACK_TOAST
+from doclens.web_v2.skill_refs import curate_skill_references, is_skill_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,8 +72,6 @@ def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str
     Returns:
         [(去重键, 完整消息内容), ...]，与注入顺序一致。
     """
-    from doclens.web_v2.api._chat_slash import SLASH_HINT_RE
-
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
     for m in history:
@@ -94,20 +102,11 @@ async def _stream_agent_response(
     - 普通会话 → 声明式策展：合规 → 保留 AI 精选列表（剔除不存在/未被引用
       条目，重编号对齐 [N]）；不合规 → 工具检索结果分级兜底 + toast 告警
     """
-    from doclens.web_v2.refs_retry import FALLBACK_TOAST
-    from doclens.web_v2.skill_refs import curate_skill_references, is_skill_message
-
     agent = get_agent()
     runtime = agent.runtime
 
     # 斜杠调用复检（注入权威；前端引导菜单只是 UX 层）。命中即视为技能会话
     # （提取式引文）——工具箱直发也发斜杠形态，与此同链路（信封仅为遗留兼容）。
-    from doclens.web_v2.api._chat_slash import (
-        hint_already_injected,
-        legal_slash_skill,
-        slash_hint_content,
-    )
-
     slash_skill = legal_slash_skill(message, runtime.skills)
 
     history: list[dict] = []
@@ -170,8 +169,6 @@ async def _stream_agent_response(
         history.append({"role": "user", "content": slash_hint_content(slash_skill)})
         history.append({"role": "assistant", "content": "Noted."})
 
-    from doclens.web_v2.api._chat_emitter import ChatEventEmitter
-
     queue: asyncio.Queue = asyncio.Queue()
     emitter = ChatEventEmitter(
         queue, context_window=runtime.config.planify_context_window
@@ -196,7 +193,6 @@ async def _stream_agent_response(
         tool_round_limit_kwargs,
     )
     from doclens.memory import memory_guidance
-    from doclens.web_v2.api._chat_events import error_event, toast_event, token_event
 
     waiter = get_global_waiter()
 

@@ -21,12 +21,17 @@ _config: Optional[CortexConfig] = None
 _idx_manager: Optional[IndexManager] = None
 _sessions_store: Optional[SessionsStore] = None
 _rewind_tracker: Optional["object"] = None  # RewindTracker（ADR-0027），懒加载
-_agent: Optional[object] = None  # CortexAgent，延迟导入避免循环依赖
-_watcher: Optional["object"] = None  # FileWatcher，懒加载避免 import 循环
-_vision_worker: Optional["object"] = None  # VisionWorker，懒加载避免 import 循环
-_diary_worker: Optional["object"] = None  # DiaryWorker，懒加载避免 import 循环
-_git_sync: Optional["object"] = None  # GitSync，懒加载避免 import 循环
-_mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载避免 import 循环
+# 延迟导入说明（AP-28 审计结论，2026-10-20）：这些注释声称的 "import 循环"
+# 在当前代码下不存在——file_watcher/vision_worker/diary_worker/git_sync/
+# mcp_server/agent_integration 均无 web_v2 模块级依赖（grep 验证）。保留
+# 函数体内延迟的真实理由是启动开销与装配顺序（agent_integration 的
+# import 顺序有注册依赖，见其内部注释）。若未来确需上提，先重验环判定。
+_agent: Optional[object] = None  # CortexAgent，延迟导入（启动开销，非防环——见上注）
+_watcher: Optional["object"] = None  # FileWatcher，懒加载（同上）
+_vision_worker: Optional["object"] = None  # VisionWorker，懒加载（同上）
+_diary_worker: Optional["object"] = None  # DiaryWorker，懒加载（同上）
+_git_sync: Optional["object"] = None  # GitSync，懒加载（同上）
+_mcp_handle: Optional["object"] = None  # McpServerHandle，懒加载（同上）
 _mcp_client: Optional["object"] = None  # McpClientManager（client 侧，ADR-0014）
 
 # 注册表锁：**只**保护引用的检查/赋值（毫秒级）。禁止在持锁期间做长耗时

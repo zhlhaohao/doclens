@@ -291,10 +291,17 @@
 - **证据**：`doclens/grep_tools.py:314,319` 硬编码 50（同文件 `:33 MAX_RESULTS_CAP`、描述 `:61` 第三处）；`grep_tools.py:116,130,145` 三处 200 字符截断；`web_v2/api/chat.py:275` `0.8` 压缩阈值、`:686` `timeout=2.0`；`web_v2/api/_chat_emitter.py:85-86` 300 截断；`files.py:49` 与 `preview_mutations.py:163` 各定义 50MB 上传上限。
 - **处置**：合并同名常量为单一定义（上传上限进 `config.py` 或 `preview_common`），其余就地命名。
 
-### AP-28 历史遗留的延迟 import 面（当前未见真实环） [P4] [status: pending]
+### AP-28 历史遗留的延迟 import 面（当前未见真实环） [P4] [status: done]
 - **证据**：`doclens/web_v2/deps.py` 约 20 处函数体内 import（`:83,110,133,207,257,265,278,290,314,322,347,373-374,439,518,558,610-611,663-665,711`）；`doclens/web_v2/app.py:96-198` 约 24 处（含 `:119` 自导入）；`doclens/web_v2/api/chat.py` 约 20 处。
 - **判断**：抽查 `file_watcher/vision_worker/diary_worker/git_sync/mcp_server/agent_integration` 均无 `web_v2` 模块级依赖，`deps.py:24-29` 声称的"避免 import 循环"在当前代码下找不到对应环——属防御性延迟 import（其中一部分有启动顺序理由，见 `agent_integration.py:226` 注释）。
-- **处置**：不做全量上提；仅对"无环、无顺序依赖"的那批（首推 `chat.py` 内 `_chat_slash`，模块顶层已 import 同包 `_chat_markers`）恢复模块级 import，并在 `deps.py:24-29` 补注当前实际的环判定依据。
+- **实际处置（2026-10-20）**：① `chat.py` 上提 7 组无环同包/下游 import 到模块级——`_chat_slash`（SLASH_HINT_RE + 三函数）、`_chat_emitter.ChatEventEmitter`、
+  `_chat_events` 三事件构造、`refs_retry.FALLBACK_TOAST`、`skill_refs` 两函数，函数体内延迟 import 28 → 22 处；
+  ② `deps.py:24-29` 六行"避免 import 循环"注释更正为真实依据（启动开销 + agent_integration 装配顺序，附 AP-28 审计结论与重验指引）。
+- **踩坑记录（重要发现，留档）**：第一版把 `get_sessions_store`/`get_rewind_tracker` 也上提到模块级——`tests/test_chat_disconnect.py:192-198` 恰恰
+  monkeypatch **`doclens.web_v2.deps.get_sessions_store`**（模块属性），上提后 chat.py 绑定自有引用绕过 patch，4 个测试红灯。这两组的函数体内 import
+  因此**不是债，是测试接缝**（late-binding seam），已原样恢复。教训：延迟 import 的处置必须先查 monkeypatch 目标字符串。
+- **未做**：剩余 22 处（planify 流水线 / agent_prompt / memory / chat_runner / refs_curator / _chat_raw）保留——部分是重对象启动开销，部分同样可能被
+  monkeypatch 接缝消费，收益递减。
 
 ## 三、新型态
 
