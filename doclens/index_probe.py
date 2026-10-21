@@ -8,8 +8,15 @@ IndexManager 实例——files/status/CLI 侧的目录页探测可脱离宿主�
 目录页批量判定用 indexed_children_of（单查合并，81 条目 27s → 0.3s，
 50 万文档库实测）；连接复用归 AP-8/AP-10 管，不属本模块语义。
 
-异常语义与拆分前逐点一致：任何 DB 故障按「探测失败」处理（返回空值/
-False + debug 日志），不向调用方抛——目录页不能因索引库瞬时锁而 500。
+异常语义分两类（AP-45）：
+
+- **展示类探测**（目录页徽标 / 计数 / 状态面板）：DB 故障按「探测失败」
+  处理（返回空值/False + debug 日志），不向调用方抛——目录页不能因索引库
+  瞬时锁而 500。
+- **判定类探测**（`has_documents_checked`）：DB 故障**必须**抛
+  `IndexProbeError`。这类探测的返回值被用来决定「有没有内容可搜」，
+  返回 False 会被上游读成「空库」，于是锁冲突/库损坏在界面上等同
+  「这个知识库里没有这段内容」——比报错危险得多。
 """
 from __future__ import annotations
 
@@ -17,6 +24,14 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+
+class IndexProbeError(RuntimeError):
+    """索引库不可读（锁冲突 / 文件损坏 / 权限）——不等于「空库」。
+
+    调用方**不得**把它当成「没有命中」：正确处置是向用户/AI 报告
+    「索引暂时不可用」，而不是给出一份看似正常的空结果（AP-45）。
+    """
 
 
 def _open(index_path: str):
@@ -35,6 +50,30 @@ def indexed_doc_count(index_path: str) -> int:
     except Exception as e:  # noqa: BLE001
         logger.debug("indexed_doc_count failed: %s", e)
         return 0
+
+
+def has_documents_checked(index_path: str) -> bool:
+    """索引库是否有文档；**DB 不可读时抛 ``IndexProbeError``**。
+
+    与 :func:`indexed_doc_count` 的区别就是这个异常：那个返回 0，0 与
+    「库为空」不可区分；这里把「探测失败」作为独立结局交给调用方
+    （检索链路必须区分二者，见 AP-45）。
+    """
+    from treesearch.fts import FTS5Index
+
+    try:
+        fts = FTS5Index(db_path=index_path)
+    except Exception as e:  # noqa: BLE001
+        raise IndexProbeError(f"索引库无法打开: {e}") from e
+    try:
+        return fts.has_documents()
+    except Exception as e:  # noqa: BLE001
+        raise IndexProbeError(f"索引库探测失败: {e}") from e
+    finally:
+        try:
+            fts.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def indexed_source_paths(index_path: str) -> list[str]:
