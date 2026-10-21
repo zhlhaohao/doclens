@@ -263,11 +263,18 @@ async def delete_skill(name: str):
     target = _find_skill_dir(name)
     if target is None:
         raise CortexAPIError(500, "SKILL_DIR_MISSING", f"技能目录缺失: {name}")
+    # 先删盘再改 sidecar（AP-38）。Windows 上 rmtree 因文件占用失败是常态：
+    # 反过来的顺序会留下「已标记删除、目录还在」的不一致状态，且无补偿。
+    try:
+        shutil.rmtree(target)
+    except OSError as e:
+        raise CortexAPIError(
+            409, "SKILL_DELETE_FAILED", f"无法删除技能目录（可能被占用）: {e}"
+        )
     if name in builtins:
         skills_config.update_skill(name, {"deleted": True})
     else:
         skills_config.remove_entry(name)
-    shutil.rmtree(target)
     _hot_apply(rescan=True)
     return {"deleted": name, "builtin": name in builtins}
 

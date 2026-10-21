@@ -528,15 +528,28 @@
   tests/test_book_skill_routing.py tests/test_architecture.py` → 81 passed。
 - **运维提醒**：现有环境需重跑一次部署（重启应用即触发 `CortexAgent.initialize`）才会补上缺失的附件。
 
-### AP-38 技能安装/删除：先删后写无回滚、解压无总量上限、删除先改配置 [P2] [status: pending]
+### AP-38 技能安装/删除：先删后写无回滚、解压无总量上限、删除先改配置 [P2] [status: done]
 - **形态**：半成品残留 + Missing Resource Bound + 顺序错误
 - **证据**：
   - `doclens/skills_installer.py:214-221` `rmtree(target)` 后逐文件 `write_bytes`；`:223` 每装完一个立即写 sidecar；`api/skills.py:245-252` 批量循环无回滚。
   - `skills_installer.py:129-158` `zf.read(n)` 把每个条目全量读入内存 dict；仅校验压缩包字节数（`:72-81`），无解压后总量/条目数上限；`preview_install` 同样解压。
   - `doclens/web_v2/api/skills.py:266-270` 先提交 sidecar（deleted / remove_entry）再 `rmtree`。
 - **风险**：磁盘满/文件占用时旧版已删、新版半写；一次「预览」即可被 zip bomb 打爆内存（且叠加 AP-4 在事件循环内）；删除失败后「已删除」状态与磁盘目录并存。
-- **修复方案**：写临时目录后整体替换；解压设总量/条目数上限；删除顺序改为先 `rmtree` 再提交 sidecar。
-- **回归验证**：`tests/test_skills_config.py tests/test_skill_vendor_dirs.py` + 新增超限包与删除失败用例。
+- **实际修复（2026-10-21）**：
+  ① **原子安装 + 批量回滚**：全部文件写进 `group_dir/<name>.doclens-install-<token>` 暂存目录 →
+  旧目录 `rename` 成备份 → 暂存 `rename` 上线 → 全部成功后才写 sidecar、最后删备份。
+  任一失败走 `_rollback_install`（逆序还原已换名目录 + 还原旧平铺目录 + 按 token 清扫暂存/未登记备份）。
+  `target.exists()` 的 `rmtree` 破坏性窗口消失。
+  ② **解压上限**：`_MAX_UNCOMPRESSED_BYTES=200MB`（按 `ZipInfo.file_size` 累计，**读之前**判定）、
+  `_MAX_ARCHIVE_ENTRIES=5000`（防 `infolist` 内存膨胀）。`preview_install` 走同一 `_download_skills`，一并受控。
+  ③ **删除顺序**：`delete_skill` 先 `rmtree`（`OSError` → 409 `SKILL_DELETE_FAILED`）再改 sidecar。
+- **回归验证**：新增 7 断言——写第二个文件时炸则旧版仍在且无残留 / 批量装到一半失败撤掉已上线技能 /
+  磁盘失败时 sidecar 未动 / 解压总量超限 / 条目数超限 / 正常包仍可装 / 删盘失败时 sidecar 未动。
+  **反证**：分别还原「解压无上限 + 先改 sidecar」（3 红）、「rmtree 后直写」（3 红）。
+  `tests/test_skill_vendor_dirs.py tests/test_skills_config.py tests/test_skill_hot_reload.py
+  tests/test_architecture.py tests/test_book_skill_routing.py` → 88 passed。
+- **边界**：`rename` 跨卷会失败（skills_dir 与暂存同目录，实际不触发）；AP-1 的条目名/技能名路径校验
+  仍未修，属独立 P1 条目。
 
 ### AP-39 翻译取消是空操作——`call_soon_threadsafe` 投递到从不运行的 loop [P2] [status: pending]
 - **形态**：Lava Flow（死分支）+ 状态与事实不符
@@ -789,6 +802,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-38 | 见本提交——安装改「暂存目录 + 换名 + 批量回滚 + sidecar 最后写」；解压加 200MB/5000 条目上限；delete 改先 rmtree 再改 sidecar（失败 409）；新增 7 断言，反证 3+3 红；回归 88 passed |
 | 2026-10-21 | 修 | AP-37 | 见本提交——`deploy_builtin_skills` 改 `copytree(dirs_exist_ok=True)` 整目录部署（restore 同路修好）；新增 5 断言含真实发行包逐文件核对，反证 5 红；回归 81 passed |
 | 2026-10-21 | 修 | AP-36 | 见本提交——失败记忆 + 30s 冷却快速失败（`IndexInitError`）+ reset/切库清标记 + 503 `INDEX_INIT_FAILED` 带 `retry_after`；新增 6 断言（含 8 线程不惊群），反证 5 红；回归 69 passed |
 | 2026-10-21 | 修 | AP-35 | 见本提交——未捕获异常记 `logger.exception` + 8 位 traceback_id，响应体改通用文案并回传 id；新增 tests/test_api_errors.py 5 断言，反证 4 红；回归 57 passed |

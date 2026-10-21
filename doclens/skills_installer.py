@@ -16,6 +16,7 @@ import logging
 import re
 import shutil
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,10 @@ from doclens import skills_config
 logger = logging.getLogger(__name__)
 
 _MAX_ZIP_BYTES = 50 * 1024 * 1024  # 50MB 上限，防恶意/误传大 repo
+# 解压侧上限（AP-38）：只限压缩包大小挡不住 zip bomb——50MB 可解出数十 GB，
+# 且 preview 与 install 共用本模块，一次「预览」就能打爆内存。
+_MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024   # 解压后总字节上限
+_MAX_ARCHIVE_ENTRIES = 5000                    # 归档条目数上限（防 namelist 内存膨胀）
 _HTTP_TIMEOUT = 30
 _UA = "doclens-skill-installer"
 
@@ -132,7 +137,12 @@ def _download_skills(ref: _RepoRef) -> dict[str, dict[str, str]]:
 
     prefix = f"{ref.repo}-{branch}/"
     scope = f"{prefix}{ref.subdir}/" if ref.subdir else prefix
-    all_names = [n for n in zf.namelist() if n.startswith(scope)]
+    all_infos = zf.infolist()
+    if len(all_infos) > _MAX_ARCHIVE_ENTRIES:
+        raise SkillInstallError(
+            f"zip 条目数超过上限（{len(all_infos)} > {_MAX_ARCHIVE_ENTRIES}）"
+        )
+    all_names = [i.filename for i in all_infos if i.filename.startswith(scope)]
 
     # 发现 SKILL.md：scope 根部有一份 = 单技能；否则递归发现的每份 = 技能集成员
     skill_mds = [n for n in all_names if n.endswith("SKILL.md")]
@@ -144,6 +154,8 @@ def _download_skills(ref: _RepoRef) -> dict[str, dict[str, str]]:
     if not skill_dirs:
         raise SkillInstallError("指定位置未找到任何 SKILL.md")
 
+    size_of = {i.filename: i.file_size for i in all_infos}
+    total_bytes = 0
     result: dict[str, dict] = {}
     for skill_dir in skill_dirs:
         try:
@@ -155,6 +167,13 @@ def _download_skills(ref: _RepoRef) -> dict[str, dict[str, str]]:
         files: dict[str, bytes] = {}
         for n in all_names:
             if n.startswith(skill_dir) and not n.endswith("/"):
+                # 先按条目声明大小累计，再实际读取——避免边读边撑爆内存
+                total_bytes += size_of.get(n, 0)
+                if total_bytes > _MAX_UNCOMPRESSED_BYTES:
+                    raise SkillInstallError(
+                        "解压后体积超过上限"
+                        f"（{_MAX_UNCOMPRESSED_BYTES // 1024 // 1024}MB）"
+                    )
                 files[n[len(skill_dir):]] = zf.read(n)
         result[name] = {"description": desc, "files": files}
     return result
@@ -203,24 +222,84 @@ def install_from_github(url: str, skills_dir: Path) -> list[str]:
     skills_dir.mkdir(parents=True, exist_ok=True)
     group_dir = skills_dir / ref.repo  # 来源分组目录（厂商组织）
     installed: list[str] = []
-    for name, info in found.items():
-        # 同源旧平铺目录迁移撤除（source_url 相同 = 同一技能的旧布局）
-        legacy_flat = skills_dir / name
-        if legacy_flat.is_dir() and (
-            skills_config.get_override(name).get("source_url") == ref.source_url
-        ):
-            shutil.rmtree(legacy_flat)
-            logger.info("同源重装，撤除旧平铺目录: %s", legacy_flat)
-        target = group_dir / name
-        if target.exists():
-            shutil.rmtree(target)  # 同 repo 重装 = 覆盖更新（sidecar 用户设置保留）
-        target.mkdir(parents=True)
-        for rel, content in info["files"].items():
-            dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(content)
-        # 记来源（保留该名已有覆盖中的用户设置，仅更新 source_url）
+    # 暂存 + 换名（AP-38）：旧实现先 `rmtree(target)` 再逐文件 write_bytes——
+    # 磁盘满/文件占用时旧版已删、新版半写，且批量装到一半失败无法回退。
+    # 现在：全部写进暂存目录 → 逐个换名上线；任一步失败回滚已换名的目录。
+    swap_token = f".doclens-install-{uuid.uuid4().hex[:8]}"
+    replaced: list[tuple[Path, Optional[Path]]] = []  # (target, backup|None)
+    legacy_backups: list[tuple[Path, Path]] = []
+    try:
+        for name, info in found.items():
+            # 同源旧平铺目录迁移撤除（source_url 相同 = 同一技能的旧布局）
+            legacy_flat = skills_dir / name
+            if legacy_flat.is_dir() and legacy_flat != group_dir / name and (
+                skills_config.get_override(name).get("source_url") == ref.source_url
+            ):
+                backup = legacy_flat.with_name(f"{legacy_flat.name}{swap_token}")
+                legacy_flat.rename(backup)
+                legacy_backups.append((legacy_flat, backup))
+                logger.info("同源重装，撤除旧平铺目录: %s", legacy_flat)
+
+            target = group_dir / name
+            staging = group_dir / f"{name}{swap_token}"
+            staging.mkdir(parents=True, exist_ok=False)
+            for rel, content in info["files"].items():
+                dest = staging / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(content)
+
+            backup: Optional[Path] = None
+            if target.exists():
+                backup = target.with_name(f"{target.name}.bak{swap_token}")
+                target.rename(backup)
+            staging.rename(target)
+            replaced.append((target, backup))
+            installed.append(name)
+            logger.info("技能安装完成: %s/%s ← %s", ref.repo, name, ref.source_url)
+    except Exception as exc:  # noqa: BLE001 — 统一回滚后归一为安装错误
+        _rollback_install(replaced, legacy_backups, group_dir, swap_token)
+        if isinstance(exc, SkillInstallError):
+            raise
+        raise SkillInstallError(f"写入技能目录失败（已回滚）: {exc}") from exc
+
+    # 磁盘全部就位后才记来源：sidecar 先改会留下「记录已装、目录未装」
+    for name in installed:
         skills_config.update_skill(name, {"source_url": ref.source_url})
-        installed.append(name)
-        logger.info("技能安装完成: %s/%s ← %s", ref.repo, name, ref.source_url)
+
+    # 清掉备份（失败也无害：残留目录名带 token，不进发现链路）
+    for _target, backup in replaced:
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
+    for _old, backup in legacy_backups:
+        shutil.rmtree(backup, ignore_errors=True)
     return installed
+
+
+def _rollback_install(
+    replaced: list[tuple[Path, Optional[Path]]],
+    legacy_backups: list[tuple[Path, Path]],
+    group_dir: Path,
+    swap_token: str,
+) -> None:
+    """撤销本次安装已换名的目录，并清理暂存与备份残留。
+
+    ``replaced``/``legacy_backups`` 只记已成功的换名；失败点当前那一条可能
+    停在「暂存已建、目标已换名」之间的任一状态，故最后按 token 兜底清扫。
+    """
+    for target, backup in reversed(replaced):
+        shutil.rmtree(target, ignore_errors=True)
+        if backup is not None and backup.exists():
+            try:
+                backup.rename(target)
+            except OSError as exc:  # noqa: BLE001
+                logger.error("安装回滚失败（旧版残留在 %s）: %s", backup, exc)
+    for old, backup in legacy_backups:
+        if backup.exists() and not old.exists():
+            try:
+                backup.rename(old)
+            except OSError as exc:  # noqa: BLE001
+                logger.error("旧平铺目录回滚失败（残留在 %s）: %s", backup, exc)
+    # 暂存目录/未登记的备份（失败点当次）：按 token 清扫，命名带 token 不进发现链路
+    if group_dir.is_dir():
+        for stale in group_dir.glob(f"*{swap_token}"):
+            shutil.rmtree(stale, ignore_errors=True)

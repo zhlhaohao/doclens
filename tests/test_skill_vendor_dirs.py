@@ -343,3 +343,185 @@ class TestAssetDeployment:
                 if f.is_file():
                     got = dst / rel / f.relative_to(src_dir)
                     assert got.exists(), f"附件未部署: {got}"
+
+
+# ---------------------------------------------------------------- 安装原子性/上限
+
+
+class TestInstallAtomicity:
+    """AP-38：先删后写 → 磁盘满/占用时旧版已删、新版半写且无法回滚。
+
+    现在写暂存目录再换名；任一步失败回滚已换名的目录，且 sidecar 最后写。
+    """
+
+    _FILES = {"SKILL.md": b"---\nname: tdd\ndescription: d\n---\nv1"}
+
+    def test_failure_mid_write_keeps_old_version(self, tmp_path, monkeypatch):
+        from doclens import skills_installer as inst
+
+        _patch_installer(monkeypatch, tmp_path, "my-repo",
+                         {"tdd": {"description": "d", "files": dict(self._FILES)}})
+        inst.install_from_github("u", tmp_path)
+        target_md = tmp_path / "my-repo" / "tdd" / "SKILL.md"
+        assert target_md.read_bytes().endswith(b"v1")
+
+        # 第二次安装：新版含两个文件，写第二个时炸（模拟磁盘满）
+        found = inst._download_skills(None)
+        found["tdd"]["files"]["extra.md"] = b"new"
+        real_write = Path.write_bytes
+        calls = {"n": 0}
+
+        def flaky(self_path, data):
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                raise OSError("disk full")
+            return real_write(self_path, data)
+
+        monkeypatch.setattr(Path, "write_bytes", flaky)
+        with pytest.raises(inst.SkillInstallError, match="已回滚"):
+            inst.install_from_github("u", tmp_path)
+        monkeypatch.setattr(Path, "write_bytes", real_write)
+
+        assert target_md.exists(), "旧版本必须还在"
+        assert target_md.read_bytes().endswith(b"v1")
+        # 无暂存/备份残留
+        assert [p.name for p in (tmp_path / "my-repo").iterdir()] == ["tdd"]
+
+    def test_batch_failure_rolls_back_earlier_skills(self, tmp_path, monkeypatch):
+        from doclens import skills_installer as inst
+
+        found = {
+            "alpha": {"description": "d",
+                      "files": {"SKILL.md": b"---\nname: alpha\n---\nA"}},
+            "beta": {"description": "d",
+                     "files": {"SKILL.md": b"---\nname: beta\n---\nB"}},
+        }
+        _patch_installer(monkeypatch, tmp_path, "my-repo", found)
+
+        real_write = Path.write_bytes
+
+        def flaky(self_path, data):
+            if self_path.read_bytes() == b"---\nname: beta\n---\nB":
+                raise OSError("boom")
+            return real_write(self_path, data)
+
+        monkeypatch.setattr(Path, "write_bytes", flaky)
+        with pytest.raises(inst.SkillInstallError):
+            inst.install_from_github("u", tmp_path)
+        monkeypatch.setattr(Path, "write_bytes", real_write)
+
+        # alpha 已换名上线 → 必须被撤掉（否则调用方以为一个都没装）
+        assert not (tmp_path / "my-repo" / "alpha").exists()
+        assert [p.name for p in (tmp_path / "my-repo").iterdir()] == []
+
+    def test_sidecar_written_only_after_disk_success(self, tmp_path, monkeypatch):
+        from doclens import skills_installer as inst
+
+        _patch_installer(monkeypatch, tmp_path, "my-repo",
+                         {"tdd": {"description": "d", "files": dict(self._FILES)}})
+        written = []
+        monkeypatch.setattr(
+            inst.skills_config, "update_skill",
+            lambda name, fields: written.append((name, fields)),
+        )
+
+        real_write = Path.write_bytes
+        monkeypatch.setattr(
+            Path, "write_bytes",
+            lambda self_path, data: (_ for _ in ()).throw(OSError("boom")),
+        )
+        with pytest.raises(inst.SkillInstallError):
+            inst.install_from_github("u", tmp_path)
+        monkeypatch.setattr(Path, "write_bytes", real_write)
+        assert written == [], "磁盘失败时不得记来源"
+
+
+class TestDecompressionLimits:
+    """AP-38：只限压缩包大小挡不住 zip bomb；preview 与 install 共用解压。"""
+
+    def _zip(self, entries: dict[str, bytes]) -> bytes:
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, data in entries.items():
+                zf.writestr(name, data)
+        return buf.getvalue()
+
+    def _install_with(self, monkeypatch, zip_bytes: bytes, subdir: str = ""):
+        from doclens import skills_installer as inst
+
+        ref = SimpleNamespace(
+            owner="o", repo="r", branch="main", subdir=subdir,
+            source_url="https://github.com/o/r",
+        )
+        monkeypatch.setattr(inst, "_resolve_branch", lambda r: "main")
+        monkeypatch.setattr(inst, "_http_get", lambda url: zip_bytes)
+        return inst._download_skills(ref)
+
+    def test_uncompressed_total_capped(self, monkeypatch):
+        from doclens import skills_installer as inst
+
+        monkeypatch.setattr(inst, "_MAX_UNCOMPRESSED_BYTES", 1024)
+        payload = b"\x00" * 4096  # 压缩后极小、解压后超限
+        zb = self._zip({"r-main/SKILL.md": b"---\nname: x\n---\n", "r-main/big.bin": payload})
+        with pytest.raises(inst.SkillInstallError, match="解压后体积超过上限"):
+            self._install_with(monkeypatch, zb)
+
+    def test_entry_count_capped(self, monkeypatch):
+        from doclens import skills_installer as inst
+
+        monkeypatch.setattr(inst, "_MAX_ARCHIVE_ENTRIES", 5)
+        entries = {"r-main/SKILL.md": b"---\nname: x\n---\n"}
+        entries.update({f"r-main/f{i}.txt": b"x" for i in range(10)})
+        with pytest.raises(inst.SkillInstallError, match="条目数超过上限"):
+            self._install_with(monkeypatch, self._zip(entries))
+
+    def test_normal_package_still_installs(self, monkeypatch):
+        zb = self._zip({
+            "r-main/SKILL.md": b"---\nname: x\ndescription: d\n---\nbody",
+            "r-main/references/a.md": b"ref",
+        })
+        found = self._install_with(monkeypatch, zb)
+        assert found["x"]["files"]["references/a.md"] == b"ref"
+
+
+class TestDeleteOrdering:
+    """AP-38：删除先改 sidecar 再 rmtree → 失败留下「已删除但目录还在」。"""
+
+    def test_rmtree_failure_keeps_config_untouched(self, tmp_path, monkeypatch):
+        import asyncio
+        import shutil as _shutil
+
+        from doclens.web_v2.api import skills as skills_api
+
+        skill_dir = tmp_path / "my-repo" / "tdd"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: tdd\ndescription: d\n---\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(skills_api, "_skills_dir", lambda: tmp_path)
+        monkeypatch.setattr(skills_api, "_hot_apply", lambda rescan=False: None)
+        monkeypatch.setattr(
+            skills_api.skills_config, "builtin_skill_names", lambda: set()
+        )
+        touched = []
+        monkeypatch.setattr(
+            skills_api.skills_config, "remove_entry", lambda name: touched.append(name)
+        )
+        monkeypatch.setattr(
+            skills_api.skills_config, "update_skill",
+            lambda name, fields: touched.append((name, fields)),
+        )
+        monkeypatch.setattr(
+            _shutil, "rmtree",
+            lambda p, *a, **k: (_ for _ in ()).throw(PermissionError("in use")),
+        )
+        monkeypatch.setattr(skills_api.shutil, "rmtree", _shutil.rmtree)
+
+        with pytest.raises(Exception) as ei:
+            asyncio.run(skills_api.delete_skill("tdd"))
+        assert "SKILL_DELETE_FAILED" in str(ei.value) or ei.value.status == 409
+        assert touched == [], "删盘失败不得改 sidecar"
+        assert skill_dir.exists()
