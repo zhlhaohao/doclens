@@ -13,12 +13,19 @@ const g = globalThis as unknown as {
 };
 
 function enterWebview() {
-  g.window.Android = { messageSend: vi.fn(), syndMessageSend: vi.fn() };
+  // AndroidGlobal 只声明了 messageSend：跨 WebView 兼容留的 syndMessageSend
+  // 不在该契约内，mock 按契约补齐即可
+  g.window.Android = { messageSend: vi.fn() };
   g.window.jsbridge = {
     downloadFile: vi.fn((p: { downloadUrl: string; fileName?: string; success(v: unknown): void }) => {
       p.success({ code: 0, name: "已保存.json", savedTo: "/Downloads/x.json", bytes: 10, notified: true });
     }),
     pickAndUploadFiles: vi.fn(),
+    // 其余 jsbridge 能力（拍照/相册/同步通道）本用例不触达：按契约补齐占位
+    takePhoto: vi.fn(),
+    pickPhotos: vi.fn(),
+    sendToNative: vi.fn(),
+    syncSendToNative: vi.fn(),
   };
 }
 
@@ -45,7 +52,7 @@ describe("downloadFromUrl（会话导出）", () => {
     const r = await downloadFromUrl(sessionExportUrl("S1"), "会话-20261021.json");
     expect(r).toEqual({ via: "jsbridge", name: "已保存.json" });
     expect(g.window.jsbridge).toBeTruthy();
-    const fn = (g.window.jsbridge as { downloadFile: ReturnType<typeof vi.fn> }).downloadFile;
+    const fn = (g.window.jsbridge as unknown as { downloadFile: ReturnType<typeof vi.fn> }).downloadFile;
     const arg = fn.mock.calls[0][0] as { downloadUrl: string; fileName?: string };
     expect(arg.downloadUrl).toBe(`${window.location.origin}/api/sessions/S1/export`);
     expect(arg.fileName).toBe("会话-20261021.json");
