@@ -211,3 +211,23 @@ class TestSwapStateSnapshot:
         for r in rs:
             r.join(2)
         assert bad == [], bad[:3]
+
+
+class TestResetSingletons:
+    """AP-23：reset 的 global 列表必须覆盖全部单例赋值（曾漏 _mcp_client）。"""
+
+    def test_reset_mcp_client_without_stop_fallback(self, monkeypatch):
+        """摘掉 stop_mcp_client 的间接重置后，reset 仍必须清 _mcp_client。
+
+        旧行为：global 列表漏名 → 赋值落局部变量 → 残留旧实例。
+        """
+        from doclens.web_v2 import deps
+        import doclens.web_v2.deps as d
+
+        monkeypatch.setattr(d, "_mcp_client", object(), raising=False)
+        # no-op 掉所有 stop_*（隔离"stop 内部顺手重置"的兜底路径）
+        for name in ("stop_watcher", "stop_vision_worker", "stop_diary_worker",
+                     "stop_git_sync", "stop_mcp_server", "stop_mcp_client"):
+            monkeypatch.setattr(d, name, lambda: None)
+        d.reset_singletons()
+        assert d._mcp_client is None

@@ -253,12 +253,14 @@
 - **修复方案**：四个函数去下划线公共化（`materialize_preset` / `looks_binary` / 对应 planify 函数），同步改测试引用；如需保留私有语义，改测试走公共入口 + monkeypatch。
 - **回归验证**：`tests/test_presets_store.py tests/test_preview_binary_guard.py tests/test_shell_timeout.py tests/test_thinking_stream.py tests/test_architecture.py`。
 
-### AP-23 `deps.reset_singletons` 的 global 列表漏 `_mcp_client`，赋值落空 [P3] [status: pending]
+### AP-23 `deps.reset_singletons` 的 global 列表漏 `_mcp_client`，赋值落空 [P3] [status: done]
 - **形态**：Lava Flow / 隐性失效
 - **证据**：`doclens/web_v2/deps.py:151` `global` 声明未含 `_mcp_client`；`:167` `_mcp_client = None` 实际只写局部变量。当前"看起来正常"仅因 `:158` `stop_mcp_client()` 顺手重置了模块全局。
 - **风险**：一旦调整停服顺序或删掉 stop 调用，工作目录切换后旧 MCP 客户端残留（连到旧目录/旧配置），且无报错。
-- **修复方案**：补齐 `global` 列表；或把单例集合改为 `dict` 统一遍历重置（避免每次新增单例都要改两处）。
-- **回归验证**：`tests/test_workdir_config.py` + 手工工作目录切换后 MCP 状态。
+- **实际修复（2026-10-20，最小修）**：global 列表补 `_mcp_client`（一行）+ docstring 写入对齐纪律（"global 列表必须与赋值行逐名对齐，
+  新增单例同步改三处"）。结构修（单例改 dict 统一遍历）未做——全仓 reset 只有 swap 回滚一个调用方，收益等下一个单例诞生才兑现。
+- **回归验证**：新增 `tests/test_deps_locks.py::TestResetSingletons`——把全部 `stop_*` no-op 掉（隔离"stop 内部顺手重置"的兜底路径）后
+  reset，断言 `_mcp_client` 仍被清（旧行为此断言红）；`tests/test_workdir_config.py tests/test_architecture.py` → 24 passed。
 
 ### AP-24 `_swap_state` 双键非原子更新 vs 无锁 `dict()` 拷贝 [P3] [status: done]
 - **形态**：Action at a Distance（并发正确性）

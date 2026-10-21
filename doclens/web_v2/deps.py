@@ -199,8 +199,14 @@ def _singleton_guards():
 
 
 def reset_singletons() -> None:
-    """重置单例（仅供测试使用 / 工作目录切换复用）。"""
-    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent, _watcher, _mcp_handle, _vision_worker, _diary_worker, _git_sync
+    """重置单例（仅供测试使用 / 工作目录切换复用）。
+
+    ⚠️ global 列表必须与下方赋值行**逐名对齐**——AP-23 教训：曾漏
+    `_mcp_client`，`:220` 的赋值静默落为局部变量，正确性全靠
+    `stop_mcp_client()` 内部的重置兜底（顺序巧合而非结构保证）。
+    新增单例时同步改三处：模块级变量、本 global 列表、赋值行。
+    """
+    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent, _watcher, _mcp_handle, _mcp_client, _vision_worker, _diary_worker, _git_sync
     # 停止可能存在的 watcher / worker / 同步循环 / MCP server，释放后台线程
     stop_watcher()
     stop_vision_worker()
