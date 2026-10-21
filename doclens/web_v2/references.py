@@ -140,11 +140,23 @@ def normalize_paths(paths: list[str], workdir: Path) -> list[str]:
     search_kb 返回相对），统一为相对 workdir 的正斜杠路径并去重，避免 marked 转义
     + 重复展示。
     """
+    return [rel for _, rel in normalize_paths_numbered(paths, workdir)]
+
+
+def normalize_paths_numbered(
+    paths: list[str], workdir: Path
+) -> list[tuple[int, str]]:
+    """同 ``normalize_paths``，但保留位次：返回 ``(原编号, rel)``，编号 1-based。
+
+    AI 正文的 ``[N]`` 按**列表位次**索引列表项。压紧（去掉重复/空项后再编号）
+    会让 ``[N]`` 指向另一篇文档——调用方必须用本函数的原编号做映射，
+    不得用返回列表的下标（AP-31）。
+    """
     seen: set[str] = set()
-    result: list[str] = []
-    for p in paths:
+    result: list[tuple[int, str]] = []
+    for idx, p in enumerate(paths, 1):
         rel = to_relative_path(p, workdir)
         if rel and rel not in seen:
             seen.add(rel)
-            result.append(rel)
+            result.append((idx, rel))
     return result

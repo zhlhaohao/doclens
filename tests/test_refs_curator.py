@@ -185,3 +185,48 @@ class TestFallbackPath:
         result = curate_references(text, tcs, workdir)
         assert result.fallback is True
         assert result.paths[0] == "a/z.md"
+
+
+class TestNumberingAfterDrop:
+    """AP-31：剔除/去重后正文 [N] 必须按**原编号**重映射，不得按新下标。"""
+
+    def test_middle_missing_path_does_not_shift(self, workdir: Path):
+        text = (
+            "甲 [1]，乙 [2]，丙 [3]。\n\n"
+            "## 参考资料\n1. a/x.md\n2. a/ghost.md\n3. a/z.md\n"
+        )
+        result = curate_references(text, [_search_tc("a/x.md", "a/z.md")], workdir)
+        assert result.paths == ["a/x.md", "a/z.md"]
+        # 乙引的 ghost 已剔除 → 标注剥掉；丙的 [3] 重编号为 [2]
+        assert "甲 [1]" in result.text
+        assert "乙 " in result.text and "乙 [2]" not in result.text
+        assert "丙 [2]" in result.text
+        assert "[3]" not in result.text
+        # 参考资料章节序号与 path 对齐（z 是第 2 条）
+        assert "2. a/z.md" in result.text
+
+    def test_duplicate_list_entry_does_not_shift(self, workdir: Path):
+        """AI 列表重复列同一路径：归一化去重后位次不能被压紧。"""
+        text = (
+            "甲 [1]，丙 [3]。\n\n"
+            "## 参考资料\n1. a/x.md\n2. a/x.md\n3. a/z.md\n"
+        )
+        result = curate_references(text, [_search_tc("a/x.md", "a/z.md")], workdir)
+        assert result.paths == ["a/x.md", "a/z.md"]
+        assert "甲 [1]" in result.text
+        assert "丙 [2]" in result.text   # 原 [3] → 新 [2]，不是被当成 [3] 剥掉
+
+    def test_each_mark_maps_to_its_own_document(self, workdir: Path):
+        """端到端不变量：保留的每个 [N] 指向它原本引用的那篇文档。"""
+        text = (
+            "结论甲 [1]，结论乙 [2]，结论丙 [3]。\n\n"
+            "## 参考资料\n1. b/p.md\n2. a/ghost.md\n3. b/q.md\n"
+        )
+        result = curate_references(
+            text, [_search_tc("b/p.md", "b/q.md")], workdir
+        )
+        assert result.paths == ["b/p.md", "b/q.md"]
+        # [1] 仍是 b/p.md；[3] 重编号为 [2] 且仍是 b/q.md
+        assert "结论甲 [1]" in result.text
+        assert "结论丙 [2]" in result.text
+        assert "2. b/q.md" in result.text

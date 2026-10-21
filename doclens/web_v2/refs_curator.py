@@ -28,6 +28,7 @@ from doclens.web_v2.references import (
     extract_paths_by_tool,
     extract_snippets_by_path,
     normalize_paths,
+    normalize_paths_numbered,
 )
 from doclens.web_v2.refs_parser import parse_references_section, split_references_section
 
@@ -60,14 +61,21 @@ def _used_marks(body: str) -> list[int]:
     return sorted({int(n) for n in _MARK_RE.findall(body)})
 
 
-def _renumber(body: str, paths: list[str], keep_idx: list[int]) -> tuple[str, list[str]]:
-    """只保留 keep_idx（1-based）对应的引用项；正文 [N] 同步重编号，悬空标注剥掉。
+def _renumber(
+    body: str, numbered: list[tuple[int, str]], keep_ids: list[int]
+) -> tuple[str, list[str]]:
+    """只保留 keep_ids（AI **原编号**，1-based）对应的引用项；正文 [N] 同步重编号，悬空标注剥掉。
+
+    ``numbered`` 为 ``(原编号, path)``——原编号是正文 ``[N]`` 的索引键，
+    与列表下标无关（剔除项后下标会移位，用下标查会指向另一篇文档，AP-31）。
 
     Returns:
         (新正文, 保留的 path 列表)
     """
-    mapping = {old: new for new, old in enumerate(keep_idx, 1)}
-    kept = [paths[i - 1] for i in keep_idx]
+    by_id = dict(numbered)
+    ordered = sorted(keep_ids)
+    mapping = {old: new for new, old in enumerate(ordered, 1)}
+    kept = [by_id[i] for i in ordered]
 
     def _repl(m: re.Match[str]) -> str:
         n = int(m.group(1))
@@ -165,13 +173,16 @@ def _curate_compliant(
     marks = _used_marks(body)
     actions: list[str] = []
 
-    # A1：剔除 workdir 下不存在的路径（防幻觉）
-    existing = [p for p in paths if (workdir / p).exists()]
-    dropped_missing = [p for p in paths if p not in existing]
+    # A1：剔除 workdir 下不存在的路径（防幻觉）。**保留原编号**——正文 [N]
+    # 按 AI 列表位次索引，压紧后再按下标查会指向另一篇文档（AP-31）。
+    numbered = normalize_paths_numbered(paths, workdir)
+    existing_pairs = [(i, p) for i, p in numbered if (workdir / p).exists()]
+    dropped_missing = [p for _, p in numbered if not (workdir / p).exists()]
     if dropped_missing:
         actions.append(f"剔除不存在路径: {dropped_missing}")
-    if not existing:
+    if not existing_pairs:
         return None
+    existing = [p for _, p in existing_pairs]
 
     if not marks:
         # 正文无 [N] 标注：无法建立序号映射，用内容佐证校验 AI 列表
@@ -192,16 +203,17 @@ def _curate_compliant(
         )
 
     # A2：剔除正文从未用 [N] 引用的条目 + 重编号；悬空 [N] 在重编号中剥掉
-    keep_idx = [i for i in range(1, len(existing) + 1) if i in marks]
-    uncited = [p for i, p in enumerate(existing, 1) if i not in marks]
+    keep_ids = [i for i, _ in existing_pairs if i in marks]
+    uncited = [p for i, p in existing_pairs if i not in marks]
     if uncited:
         actions.append(f"剔除未被正文引用的条目: {uncited}")
-    dangling = [n for n in marks if n > len(existing)]
+    known_ids = {i for i, _ in numbered}
+    dangling = [n for n in marks if n not in known_ids]
     if dangling:
         actions.append(f"剥掉悬空标注: {dangling}")
-    if not keep_idx:
+    if not keep_ids:
         return None  # 列表与标注完全对不上，降级兜底
-    new_body, kept = _renumber(body, existing, keep_idx)
+    new_body, kept = _renumber(body, existing_pairs, keep_ids)
     return Curation(text=_build_text(new_body, kept), paths=kept, fallback=False, actions=actions)
 
 
@@ -248,9 +260,10 @@ def curate_references(
 
     parsed = parse_references_section(raw_text)
     if parsed.is_compliant():
-        paths = normalize_paths(parsed.paths, workdir)
+        # 传**未归一**的原始列表：归一化要保留原编号（正文 [N] 的索引键），
+        # 由 _curate_compliant 内部走 normalize_paths_numbered（AP-31）。
         snippets = extract_snippets_by_path(tool_calls, workdir)
-        result = _curate_compliant(raw_text, paths, workdir, snippets)
+        result = _curate_compliant(raw_text, parsed.paths, workdir, snippets)
         if result is not None:
             logger.info("refs curate(compliant): actions=%s refs=%d", result.actions, len(result.paths))
             return result
