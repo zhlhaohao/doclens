@@ -26,6 +26,7 @@ ROBOT_EMAIL = "doclens-sync@local"
 # 本地 git 操作（add/commit/status 类）与网络操作（pull/push）的超时
 # ——单一真源在 git_command；此处保留别名供旧引用（AP-42）
 from doclens.git_command import GIT_TIMEOUT_LOCAL, GIT_TIMEOUT_NET, is_git_root, run_git
+from doclens.worker_lifecycle import WorkerStopState, join_thread
 
 # 未启动原因（status()["reason"]，供前端区分展示）
 REASON_NOT_GIT_ROOT = "not_git_root"
@@ -61,6 +62,7 @@ class GitSync:
         self._last_success: Optional[bool] = None
         self._message = ""  # 弱提醒文案（"" = 无提醒）
         self._fail_count = 0
+        self._lifecycle = WorkerStopState()
 
     # ------------------------------------------------------------------ git 原语
 
@@ -160,7 +162,13 @@ class GitSync:
     # ------------------------------------------------------------------ 生命周期
 
     def start(self) -> bool:
-        """启动同步循环。前置条件不满足（非 git 根 / 无 remote）则不启动，返回 False。"""
+        """启动同步循环。前置条件不满足（非 git 根 / 无 remote）则不启动，返回 False。
+
+        停止中的旧线程未退出时也返回 False（AP-43）——否则两条循环会同时在
+        同一仓库上 auto-commit / push。
+        """
+        if not self._lifecycle.can_start("GitSync", self._thread):
+            return False
         if not self._is_git_root():
             with self._state_lock:
                 self._reason = REASON_NOT_GIT_ROOT
@@ -182,20 +190,38 @@ class GitSync:
         logger.info("GitSync 已启动：%s，间隔 %.0fs", self._path, self._interval)
         return True
 
-    def stop(self) -> None:
-        """停止同步循环（幂等）。"""
+    def stop(self, timeout: float = 2.0) -> bool:
+        """停止同步循环（幂等）。
+
+        Returns:
+            True = 线程已确认退出；False = 超时仍在跑（在途 push 可达
+            GIT_TIMEOUT_NET）。False 时保留 `_thread` 并置 stopping，
+            `start()` 会拒绝（AP-43）。
+        """
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
-            self._thread = None
+        if not join_thread(self._thread, timeout):
+            self._lifecycle.begin()
+            logger.warning(
+                "GitSync stop 超时（%.1fs），旧循环仍在运行：拒绝重启", timeout
+            )
+            return False
+        self._thread = None
+        self._lifecycle.clear()
         with self._state_lock:
             self._running = False
+        return True
+
+    @property
+    def stopping(self) -> bool:
+        """旧线程仍在收尾（stop 超时未退）——此时不得启动新线程（AP-43）。"""
+        return self._lifecycle.stopping
 
     def status(self) -> dict:
         """返回同步状态快照（线程安全）。message 非空 = 弱提醒。"""
         with self._state_lock:
             return {
                 "running": self._running,
+                "stopping": self._lifecycle.stopping,
                 "reason": self._reason,
                 "last_sync_at": self._last_sync_at,
                 "last_success": self._last_success,

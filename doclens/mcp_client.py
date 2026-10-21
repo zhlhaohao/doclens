@@ -25,6 +25,7 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
+from doclens.worker_lifecycle import WorkerStopState, join_thread
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
@@ -130,32 +131,70 @@ class McpClientManager:
         self._connections: Dict[str, _ServerConnection] = {}
         # 注入目标（CortexAgent.runtime）；启动后由 attach 设置
         self._runtime: Optional[Any] = None
+        self._lifecycle = WorkerStopState()
 
     # ---------- 生命周期 ----------
 
-    def start(self, runtime: Optional[Any] = None) -> None:
-        """拉起专属线程 + loop，并把工具注入目标 runtime。幂等。"""
+    def start(self, runtime: Optional[Any] = None) -> bool:
+        """拉起专属线程 + loop，并把工具注入目标 runtime。幂等。
+
+        Returns:
+            False = 上一条 client 线程仍在运行（stop 超时未退），拒绝起第二条
+            ——两条 loop 会并发 `_spawn/_reap` 同一张 `_connections`（AP-43）。
+        """
         if runtime is not None:
             self._runtime = runtime
-        if self._started.is_set():
-            return
-        self._thread = threading.Thread(
+        if self._started.is_set() or (
+            self._thread is not None and self._thread.is_alive()
+        ):
+            if self._lifecycle.stopping:
+                logger.warning("[mcp-client] 正在停止中（旧线程未退出），拒绝重启")
+            return False
+        if self._thread is not None:      # 已自然退出：清残留引用后重启
+            self._thread = None
+        self._lifecycle.clear()
+        self._stop_requested.clear()
+        thread = threading.Thread(
             target=self._thread_main, name="mcp-client", daemon=True
         )
-        self._thread.start()
+        self._thread = thread
+        thread.start()
         self._started.wait(timeout=10)
+        return True
 
-    def stop(self, timeout: float = 10.0) -> None:
-        """请求停止并等待专属 loop 收割全部会话。幂等。"""
-        if not self._started.is_set():
-            return
+    @property
+    def stopping(self) -> bool:
+        """旧线程仍在收尾（stop 超时未退）——此时不得启动新线程（AP-43）。"""
+        return self._lifecycle.stopping
+
+    def stop(self, timeout: float = 10.0) -> bool:
+        """请求停止并等待专属 loop 收割全部会话。幂等。
+
+        Returns:
+            True = 线程已确认退出；False = 仍存活（在途连接收割可能卡住）。
+            False 时**不清** `_started`/`_stop_requested`——否则旧 loop 会
+            继续 reconcile，而 `start()` 又会起第二条（AP-43）。
+        """
+        thread = self._thread
+        if thread is None and not self._started.is_set():
+            return True
         self._stop_requested.set()
         if self._loop is not None:
-            self._loop.call_soon_threadsafe(self._stop_async)
-        if self._thread is not None:
-            self._thread.join(timeout=timeout)
+            try:
+                self._loop.call_soon_threadsafe(self._stop_async)
+            except RuntimeError as e:  # loop 已关闭
+                logger.debug("[mcp-client] 投递停止信号失败: %s", e)
+        if not join_thread(thread, timeout):
+            self._lifecycle.begin()
+            logger.warning(
+                "[mcp-client] stop 超时（%.1fs），旧 loop 仍在运行：拒绝重启", timeout
+            )
+            return False
+        self._thread = None
+        self._lifecycle.clear()
         self._started.clear()
         self._stop_requested.clear()
+        return True
 
     def _thread_main(self) -> None:
         asyncio.run(self._loop_main())

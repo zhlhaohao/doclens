@@ -29,6 +29,7 @@ from pathlib import Path
 
 from doclens import diary
 from doclens.vision_client import call_vision, encode_image
+from doclens.worker_lifecycle import WorkerStopState, join_thread
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +116,19 @@ class DiaryWorker:
         self._current_date: str | None = None
         self._summarized_count = 0
         self._last_error = ""
+        self._lifecycle = WorkerStopState()
 
     # ------------------------------------------------------------------
     # 生命周期
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """启动后台线程（幂等）。启动即补扫一次，之后每日 00:05 定点合成。"""
-        if self._thread is not None:
-            return True
+        """启动后台线程（幂等；停止中的旧线程未退出时拒绝，AP-43）。"""
+        if not self._lifecycle.can_start("DiaryWorker", self._thread):
+            return False
+        if self._thread is not None:      # 已自然退出：清残留引用后重启
+            self._thread = None
+        self._lifecycle.clear()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, name="diary-worker", daemon=True)
         self._thread.start()
@@ -134,21 +139,38 @@ class DiaryWorker:
         )
         return True
 
-    def stop(self) -> None:
-        """停止后台线程（最多等 5s）。"""
+    def stop(self, timeout: float = 5.0) -> bool:
+        """停止后台线程。
+
+        Returns:
+            True = 线程已确认退出；False = 超时仍在跑（在途 LLM 总结可达分钟级）。
+            False 时保留 `_thread` 并置 stopping，`start()` 会拒绝（AP-43）。
+        """
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            self._thread = None
+        if not join_thread(self._thread, timeout):
+            self._lifecycle.begin()
+            logger.warning(
+                "DiaryWorker stop 超时（%.1fs），旧线程仍在运行：拒绝重启", timeout
+            )
+            return False
+        self._thread = None
+        self._lifecycle.clear()
         with self._state_lock:
             self._running = False
             self._current_date = None
+        return True
+
+    @property
+    def stopping(self) -> bool:
+        """旧线程仍在收尾（stop 超时未退）——此时不得启动新线程（AP-43）。"""
+        return self._lifecycle.stopping
 
     def status(self) -> dict:
         """状态快照（线程安全）。"""
         with self._state_lock:
             return {
                 "running": self._running,
+                "stopping": self._lifecycle.stopping,
                 "current_date": self._current_date,
                 "summarized_count": self._summarized_count,
                 "last_error": self._last_error,

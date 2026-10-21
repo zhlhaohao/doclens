@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+from doclens.worker_lifecycle import WorkerStopState, join_thread
+
 logger = logging.getLogger(__name__)
 
 # 任务状态机：queued → running → done | error | cancelled
@@ -84,14 +86,19 @@ class TranslationService:
         # 最近一次 _preset() 的降级原因（None = 无问题）。AP-17：配置了却读
         # 不出来时不再静默回落 google，_execute 据此推 toast 告知用户。
         self._preset_error: Optional[str] = None
+        self._lifecycle = WorkerStopState()
 
     # ------------------------------------------------------------------
     # 生命周期
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
+        """启动消费线程（幂等；停止中的旧线程未退出时拒绝，AP-43）。"""
+        if not self._lifecycle.can_start("TranslationService", self._thread):
             return
+        if self._thread is not None:      # 已自然退出：清残留引用后重启
+            self._thread = None
+        self._lifecycle.clear()
         self._shutdown = False
         self._thread = threading.Thread(
             target=self._run_loop, name="translate-service", daemon=True
@@ -99,12 +106,31 @@ class TranslationService:
         self._thread.start()
         logger.info("TranslationService started (workdir=%s)", self._workdir)
 
-    def stop(self) -> None:
+    @property
+    def stopping(self) -> bool:
+        """旧线程仍在收尾（stop 超时未退）——此时不得启动新线程（AP-43）。"""
+        return self._lifecycle.stopping
+
+    def stop(self, timeout: float = 5.0) -> bool:
+        """停止消费线程。
+
+        Returns:
+            True = 线程已确认退出；False = 超时仍在跑（在途整本 PDF 翻译可达
+            数分钟）。False 时保留 `_thread` 并置 stopping，`start()` 会拒绝
+            ——否则切库后旧实例继续把译本写回旧 workdir（AP-43）。
+        """
         self._shutdown = True
         self._wake.set()
-        if self._thread:
-            self._thread.join(timeout=5)
+        if not join_thread(self._thread, timeout):
+            self._lifecycle.begin()
+            logger.warning(
+                "TranslationService stop 超时（%.1fs），旧线程仍在运行：拒绝重启", timeout
+            )
+            return False
+        self._thread = None
+        self._lifecycle.clear()
         logger.info("TranslationService stopped")
+        return True
 
     # ------------------------------------------------------------------
     # 任务提交 / 查询 / 取消

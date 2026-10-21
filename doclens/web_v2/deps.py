@@ -665,6 +665,11 @@ def start_vision_worker() -> bool:
     设置页补上 key 后下一轮循环自动开始消费（配置热生效）。
     """
     global _vision_worker
+    with _lock:
+        existing = _vision_worker
+    if existing is not None and getattr(existing, "stopping", False):
+        logger.warning("start_vision_worker: 旧 worker 仍在停止中，拒绝启动第二条线程")
+        return False
     idx = get_index_manager()
     try:
         from doclens.vision_worker import VisionWorker
@@ -680,17 +685,29 @@ def start_vision_worker() -> bool:
         return False
 
 
-def stop_vision_worker() -> None:
-    """停止并注销 VisionWorker 单例（幂等）。"""
+def stop_vision_worker(timeout: float = 5.0) -> bool:
+    """停止 VisionWorker 单例（幂等）。
+
+    Returns:
+        True = 已停止并注销；False = 旧线程仍在跑（AP-43）——此时**保留**
+        注册，`start_vision_worker` 会据此拒绝起第二个消费者。
+    """
     global _vision_worker
     with _lock:
         worker = _vision_worker
-        _vision_worker = None
-    if worker is not None:
-        try:
-            worker.stop()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stop_vision_worker: %s", exc)
+    if worker is None:
+        return True
+    try:
+        stopped = worker.stop(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stop_vision_worker: %s", exc)
+        stopped = False
+    if not stopped:
+        return False
+    with _lock:
+        if _vision_worker is worker:
+            _vision_worker = None
+    return True
 
 
 def get_diary_worker():
@@ -705,6 +722,11 @@ def start_diary_worker() -> bool:
     设置页补上 key 后下一轮循环自动开始总结（配置热生效）。
     """
     global _diary_worker
+    with _lock:
+        existing = _diary_worker
+    if existing is not None and getattr(existing, "stopping", False):
+        logger.warning("start_diary_worker: 旧 worker 仍在停止中，拒绝启动第二条线程")
+        return False
     idx = get_index_manager()
     try:
         from doclens.diary_worker import DiaryWorker
@@ -720,17 +742,24 @@ def start_diary_worker() -> bool:
         return False
 
 
-def stop_diary_worker() -> None:
-    """停止并注销 DiaryWorker 单例（幂等）。"""
+def stop_diary_worker(timeout: float = 5.0) -> bool:
+    """停止 DiaryWorker 单例（幂等）。语义同 ``stop_vision_worker``（AP-43）。"""
     global _diary_worker
     with _lock:
         worker = _diary_worker
-        _diary_worker = None
-    if worker is not None:
-        try:
-            worker.stop()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stop_diary_worker: %s", exc)
+    if worker is None:
+        return True
+    try:
+        stopped = worker.stop(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stop_diary_worker: %s", exc)
+        stopped = False
+    if not stopped:
+        return False
+    with _lock:
+        if _diary_worker is worker:
+            _diary_worker = None
+    return True
 
 
 def get_git_sync():
@@ -754,6 +783,11 @@ def start_git_sync() -> bool:
         True 表示已启动；False 表示配置关闭、非 git 根或无 remote（整体停摆）。
     """
     global _git_sync
+    with _lock:
+        existing = _git_sync
+    if existing is not None and getattr(existing, "stopping", False):
+        logger.warning("start_git_sync: 旧同步循环仍在停止中，拒绝启动第二条")
+        return False
     config = get_config()
     if not config.sync_enabled:
         logger.info("Git sync disabled by config (sync_enabled=False)")
@@ -792,17 +826,24 @@ def start_git_sync() -> bool:
         return False
 
 
-def stop_git_sync() -> None:
-    """停止并注销 GitSync 单例（幂等）。"""
+def stop_git_sync(timeout: float = 2.0) -> bool:
+    """停止 GitSync 单例（幂等）。语义同 ``stop_vision_worker``（AP-43）。"""
     global _git_sync
     with _lock:
         gs = _git_sync
-        _git_sync = None
-    if gs is not None:
-        try:
-            gs.stop()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stop_git_sync: %s", exc)
+    if gs is None:
+        return True
+    try:
+        stopped = gs.stop(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stop_git_sync: %s", exc)
+        stopped = False
+    if not stopped:
+        return False
+    with _lock:
+        if _git_sync is gs:
+            _git_sync = None
+    return True
 
 
 async def start_mcp_server() -> bool:
@@ -858,12 +899,19 @@ def start_mcp_client() -> bool:
     空转对账，配置出现即自动连接）。仅 GUI 进程调用（lifespan）。
     """
     global _mcp_client
+    with _lock:
+        existing = _mcp_client
+    if existing is not None and getattr(existing, "stopping", False):
+        logger.warning("start_mcp_client: 旧 client 仍在停止中，拒绝启动第二条线程")
+        return False
     agent = get_agent()  # 确保 CortexAgent/runtime 已装配
     try:
         from doclens.mcp_client import get_mcp_client_manager
 
         manager = get_mcp_client_manager()
-        manager.start(runtime=agent.runtime)
+        if not manager.start(runtime=agent.runtime):
+            logger.warning("start_mcp_client: 管理器拒绝启动（旧线程仍在运行）")
+            return False
         with _lock:
             _mcp_client = manager
         logger.info("MCP client manager started")
@@ -873,14 +921,26 @@ def start_mcp_client() -> bool:
         return False
 
 
-def stop_mcp_client() -> None:
-    """停止 MCP client 管理器（收割全部外部会话，幂等）。"""
+def stop_mcp_client(timeout: float = 10.0) -> bool:
+    """停止 MCP client 管理器（收割全部外部会话，幂等）。
+
+    Returns:
+        True = 已停止并注销；False = 旧 loop 仍在跑（AP-43）——保留注册，
+        ``start_mcp_client`` 会据此拒绝起第二条。
+    """
     global _mcp_client
     with _lock:
         manager = _mcp_client
-        _mcp_client = None
-    if manager is not None:
-        try:
-            manager.stop()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stop_mcp_client: %s", exc)
+    if manager is None:
+        return True
+    try:
+        stopped = manager.stop(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stop_mcp_client: %s", exc)
+        stopped = False
+    if not stopped:
+        return False
+    with _lock:
+        if _mcp_client is manager:
+            _mcp_client = None
+    return True

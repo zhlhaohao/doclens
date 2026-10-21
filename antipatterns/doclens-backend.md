@@ -622,14 +622,28 @@
   **反证**：把 `_GIT_TEXT_KW` 还原成 `{"text": True}` → 3 条红灯（`decoding with 'gbk' codec failed`）。
   `tests/test_git_command.py tests/test_architecture.py tests/test_git_sync_ignore.py` → 19 passed。
 
-### AP-43 worker.stop 超时即弃线程——切库后新旧消费者并存 [P2] [status: pending]
+### AP-43 worker.stop 超时即弃线程——切库后新旧消费者并存 [P2] [status: done]
 - **形态**：生命周期管理缺失（孤儿线程）
 - **证据**：`vision_worker.py:131-139`、`diary_worker.py:137-145`、`git_sync.py:194-201`、`translate_service.py:94-99` 均 `join(timeout)` 后无条件 `_thread=None` / `running=False`；
   `mcp_client.py:148-157` join 超时后也清 `_started/_stop_requested`，`start()` 可再起第二条 `mcp-client` 线程。
   切库流程 `deps.py:322-324 → 399-401` 紧接着重启 worker。
 - **风险**：在途视觉调用（5-60s）或 `git push`（120s）必然超时 → 旧线程继续跑并把产物写回旧 `index_path`；MCP 两条 loop 并发改 `_connections`。
-- **修复方案**：join 超时保留「停止中」状态并拒绝新 start；或用代际号让旧线程丢弃结果。
-- **回归验证**：`tests/test_workdir_config.py` + 新增「stop 超时后 start 被拒」用例。
+- **实际修复（2026-10-21，采用「保留停止中状态并拒绝 start」）**：
+  ① 新增 `doclens/worker_lifecycle.py`——`join_thread(thread, timeout)` 报告线程**是否真的退出**；
+  `WorkerStopState` 把「停止中」显式化为第三态（`can_start` 在 stopping / 仍存活时拒绝并说明原因）。
+  ② 五个类（VisionWorker / DiaryWorker / GitSync / TranslationService / McpClientManager）统一改造：
+  `stop()` 返回 bool；超时则**保留** `_thread` + 置 stopping + `logger.warning`，不再清引用、不再置 `running=False`；
+  `start()` 前置 `can_start` 拒绝；`status()` 增 `stopping` 字段（前端可区分三态）。
+  McpClientManager 额外修掉 `stop()` 超时后清 `_started/_stop_requested`（旧 loop 会继续 reconcile）。
+  ③ `deps.stop_*` 失败时**保留单例注册**（原来无条件置 None，旧线程就此失去引用）；
+  `deps.start_*` 在 `stopping` 时拒绝新建。
+- **回归验证**：新增 `tests/test_worker_lifecycle.py` 22 断言（helper 3 + 状态机 4 + 五个类各「超时保留引用并拒绝
+  start」/「成功清状态」+ deps 接线 5）。**反证**：把五处 stop 还原成「超时也清引用」→ 5 条红灯。
+  `tests/test_worker_lifecycle.py tests/test_deps_locks.py tests/test_workdir_config.py
+  tests/test_architecture.py tests/test_git_command.py tests/test_translate_service_preset.py` → 91 passed。
+- **契约变更**：`stop()` 从 `None` 改返回 `bool`（调用方原来不消费返回值，兼容）；`translation_service.start()`
+  在停止中不再静默重启；`mcp_client.start()` 改返回 bool（`deps` 已按返回值判定）。
+- **未做**：未引入「代际号丢弃旧线程结果」——拒绝重启已从源头消除并存，代际号属额外复杂度。
 
 ### AP-44 `sessions_store` 连接从不 close [P2] [status: pending]
 - **形态**：资源所有权缺失（区别于 AP-8 的连接开销）
@@ -838,6 +852,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-43 | 见本提交——新增 `doclens/worker_lifecycle.py`（join_thread + WorkerStopState 三态）；五个 worker 的 stop 超时保留引用并拒绝 start，status 增 stopping；deps.stop_* 失败保留注册；新增 22 断言，反证 5 红；回归 91 passed |
 | 2026-10-21 | 修 | AP-42 | 见本提交——新增 `doclens/git_command.py`（UTF-8 固定 + 单一 `is_git_root` + 超时常量），GitSync 与 api/git 共 7 处调用全部改道；新增 10 断言（含 gbk 解码模拟与结构枪口），反证 3 红；回归 19 passed |
 | 2026-10-21 | 修 | AP-41 | 见本提交——`_resolve_source` 加 resolve+relative_to 包含校验（`PathOutsideWorkdir` → 403）；`_to_rel` 不泄露绝对路径；输出目录保留 ADR-0039「写回源同目录」；新增 8 断言，反证 5 红；回归 51 passed |
 | 2026-10-21 | 修 | AP-40 | 见本提交——新增 `unsubscribe`（终态+无订阅者立即 `_prune`）；SSE `finally` 注销 + 已有终态只推快照即返回；新增 7 断言，反证 3 红；回归 43 passed |

@@ -21,6 +21,7 @@ import threading
 import time
 
 from doclens.vision_client import call_vision, encode_image
+from doclens.worker_lifecycle import WorkerStopState, join_thread
 
 logger = logging.getLogger(__name__)
 
@@ -91,15 +92,19 @@ class VisionWorker:
         self._done_count = 0
         self._failed_count = 0
         self._last_error = ""
+        self._lifecycle = WorkerStopState()
 
     # ------------------------------------------------------------------
     # 生命周期
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """启动后台消费线程（幂等）。"""
-        if self._thread is not None:
-            return True
+        """启动后台消费线程（幂等；停止中的旧线程未退出时拒绝，AP-43）。"""
+        if not self._lifecycle.can_start("VisionWorker", self._thread):
+            return False
+        if self._thread is not None:      # 已自然退出：清残留引用后重启
+            self._thread = None
+        self._lifecycle.clear()
         self._stop_event.clear()
         # 崩溃恢复：上次残留的 processing 重置回 pending
         try:
@@ -128,21 +133,39 @@ class VisionWorker:
         logger.info("VisionWorker started (poll=%.1fs)", self._poll_interval)
         return True
 
-    def stop(self) -> None:
-        """停止后台线程（等待当前这张图的调用返回，最多 5s）。"""
+    def stop(self, timeout: float = 5.0) -> bool:
+        """停止后台线程（等待当前这张图的调用返回）。
+
+        Returns:
+            True = 线程已确认退出；False = 超时仍在跑（在途视觉调用可达 60s）。
+            False 时**保留** `_thread` 引用并置 stopping——`start()` 会拒绝，
+            避免切库后新旧两个消费者同时写不同 index_path（AP-43）。
+        """
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            self._thread = None
+        if not join_thread(self._thread, timeout):
+            self._lifecycle.begin()
+            logger.warning(
+                "VisionWorker stop 超时（%.1fs），旧线程仍在运行：拒绝重启", timeout
+            )
+            return False
+        self._thread = None
+        self._lifecycle.clear()
         with self._state_lock:
             self._running = False
             self._current_file = None
+        return True
+
+    @property
+    def stopping(self) -> bool:
+        """旧线程仍在收尾（stop 超时未退）——此时不得启动新线程（AP-43）。"""
+        return self._lifecycle.stopping
 
     def status(self) -> dict:
         """状态快照（线程安全）。"""
         with self._state_lock:
             return {
                 "running": self._running,
+                "stopping": self._lifecycle.stopping,
                 "current_file": self._current_file,
                 "done_count": self._done_count,
                 "failed_count": self._failed_count,
