@@ -25,12 +25,13 @@ _SCHEMA_VERSION = 1
 _MAX_ITEMS = 20
 
 
-def normalize_workdir(path: str) -> str:
+def normalize_workdir(path: "str | os.PathLike[str]") -> str:
     """规范化工作目录路径（与 cortex_cli._apply_workdir_override 同口径）。
 
     expanduser + abspath + 去尾斜杠；比较请用 ``same_workdir``（normcase）。
+    兼容 ``str`` 与 ``os.PathLike``（启动链路传 ``Path``，见 app._start_components）。
     """
-    return os.path.abspath(os.path.expanduser(path.strip())).rstrip("\\/")
+    return os.path.abspath(os.path.expanduser(os.fspath(path).strip())).rstrip("\\/")
 
 
 def same_workdir(a: str, b: str) -> bool:
