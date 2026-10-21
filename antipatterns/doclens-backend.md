@@ -611,14 +611,42 @@
 - **修复方案**：rowcount=0 时插入 manual 行；重建/重解析跳过 `model='manual'`。
 - **回归验证**：新增 vision API 用例。
 
-### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: pending]
+### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: done]
 - **形态**：Long Method + 资源泄漏
 - **证据**：`doclens/agent_integration.py:165-477` `initialize`（283 非空行）同管 .env 层序、Provider、7 个目录、日志、技能部署、6 个 manager、两批工具、子代理与 Runtime 组装；
   `:174` 创建 `self.loop` 后从未使用，`:580` `run_query` 每轮 `asyncio.new_event_loop()` 且无 `close()`（对照 `mcp_server.py:149-157` 有 `finally: loop.close()`）；
   `:309-311` `_t.join()` 无 timeout，且处于 `deps.get_agent()` 的 `_agent_lock` 内。
 - **风险**：CLI/TUI 长会话每问泄漏一个 selector/fd；建库阻塞时首个 agent 请求无限挂起（并阻塞后续 agent 请求）。
-- **修复方案**：拆装配函数；loop 复用并 finally close；`join(timeout)` + 超时降级。
-- **回归验证**：`tests/test_deps_locks.py` + 新增装配超时用例。
+- **实际修复（2026-10-21，三条一起做——同一函数同一处风险面）**：
+  ① **装配拆解**：`initialize` 311 行 → 22 行编排 + 7 个 `_stage_*`（`_stage_env` 31 /
+  `_stage_dirs` 14 / `_stage_runtime` 33 / `_stage_skills` 28 / `_stage_knowledge_base` 37 /
+  `_stage_tools` 32 / `_stage_assemble` 39）；阶段间经新 `_Assembly` dataclass 传产物，
+  不再靠 18 个裸局部变量横穿 300 行。`_make_run_subagent`（84 行）单独成方法。
+  **顺带修掉的语义缺陷**：原 `initialize` 开头 `asyncio.new_event_loop()` + `set_event_loop`
+  建了一个从不使用、也从不关闭的循环——删除（属本条 loop 泄漏的同一病灶）。
+  ② **loop 回收**：`run_query` 改走 `_run_blocking(coro)` → `finally: _dispose_loop(loop)`，
+  先 cancel 未完成任务并 `gather(return_exceptions=True)`、`shutdown_asyncgens()`，再 `close()`；
+  清理异常只 `logger.debug`（不得掩盖主异常）。中断语义不变（每轮仍新建循环）。
+  ③ **建库等待上界**：抽 `_build_index_blocking(idx, timeout_sec)`，线程名 `cortex-index-build`，
+  `join(budget)` 后 `is_alive()` 判超时 → `TimeoutError`，文案给出两条可行出路
+  （先跑 `doclens index` / 调大 `CORTEX_INDEX_BUILD_TIMEOUT`，默认 1800s）。
+  超时不杀线程——建库继续在后台跑，只是不再让请求方无限等。
+- **回归验证**：新增 `tests/test_agent_init_lifecycle.py` 11 断言——建库正常/超时文案/异常透传/env 覆盖四例；
+  循环「正常关闭」「异常路径仍关闭」「未完成任务先取消」「无 unclosed ResourceWarning」；结构三例
+  （`initialize` 非空非注释 ≤20 行、七个 stage 方法存在、initialize 不再建 loop）。
+  **反证**：还原「join 无超时 / 不 close / initialize 建 loop」→ 5 条红灯。
+  `tests/test_agent_init_lifecycle.py tests/test_deps_locks.py tests/test_architecture.py
+  tests/test_tool_round_budget.py tests/test_book_skill_routing.py` → 63 passed；
+  另跑 `tests/test_chat_disconnect.py tests/test_web_search_api_matrix.py` → 39 passed。
+
+### AP-68 `initialize` 里的 `basic_tools` 赋值后从未使用 [P4] [status: discovered-during-fix]
+- **形态**：Lava Flow（AP-51 拆分时发现，按「不扩散」原样搬入 `_stage_runtime`）
+- **证据**：`doclens/agent_integration.py` `_stage_runtime` 中 `basic_tools = make_basic_tools(self.workdir)`，
+  全文件仅此一处出现（AP-51 修复前为原 `initialize:266`）；工具注册实际走 `build_tool_registry`
+  （其内部自建基础工具），该变量从未被读取。
+- **风险**：每次装配白跑一次 `make_basic_tools`；更主要是误导读者以为基础工具由这里注入。
+- **修复方案**：删除该行（先确认 `make_basic_tools` 为纯构造）。
+- **回归验证**：`tests/test_agent_init_lifecycle.py tests/test_tool_round_budget.py`。
 
 ### AP-52 `deps` 锁内做磁盘 I/O 违反自述契约；数据目录公式三份 [P3] [status: pending]
 - **证据**：`doclens/web_v2/deps.py:38-40` 自述锁「只保护引用的检查/赋值（毫秒级），禁止持锁期间做长耗时」；
@@ -759,6 +787,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-51 | 见本提交——`initialize` 311 行拆 22 行编排 + 7 个 `_stage_*`（`_Assembly` 载体）；`_run_blocking` + `_dispose_loop` 保证每轮循环关闭（含取消未完成任务）；`_build_index_blocking` 的 join 加 1800s 上界（`CORTEX_INDEX_BUILD_TIMEOUT` 可调）；新增 tests/test_agent_init_lifecycle.py 11 断言，反证 5 红；回归 63 + 39 passed。顺带发现 AP-68（`basic_tools` 死赋值，未修） |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
 | 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |
 | 2026-10-21 | 修 | AP-32 | 4dfb548——download 补 `assert_not_protected`；新增 `TestDownloadProtected` 2 断言（点文件三例 403 + 普通文件仍可下），反证撤闸门红灯；回归 82 passed。顺带发现 AP-67（preview_raw/preview_pdf 同缺闸门，未修） |
