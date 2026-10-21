@@ -1,6 +1,6 @@
 # doclens 后台模块 反模式审计台账
 
-> 审计日期：2026-10-20｜点名范围：`doclens/` 后端（`doclens/*.py` + `doclens/web_v2/**`，共 116 个 `.py`，约 24,436 行）。
+> 审计日期：2026-10-20（首轮）、**2026-10-21（复审增量：AP-29 ~ AP-66）**｜点名范围：`doclens/` 后端（`doclens/*.py` + `doclens/web_v2/**`；复审时 142 个 `.py`、31,097 行）。
 > 范围外并已说明：`doclens/tui/`（终端 UI 层）、`doclens/vendor_pdf2zh/`（上游 vendored 代码，不审）、`doclens/skills/`（技能内容）、`doclens/file_watcher.py`（已有独立台账 `antipatterns/file-watcher.md`，本台账不重复）。
 > 机械扫描：全仓（跨文件私有成员 import、行数 top 文件、裸 except、`async def` 内同步重活、`sqlite3.connect` 位置、`os.environ` 写路径、同名/同值常量重复、死代码、架构守卫测试）。
 
@@ -14,6 +14,14 @@
   机械扫描结果：`doclens/` 源码内**零**跨文件私有成员 import（`from ... import _x`）；但 `tests/` 有 4 处（见 AP-22）。所有模块级私有 import 都是 `_chat_*` / `_pathutil` 等**私有模块名**，属同包内部拆分，非私有成员引用。
 - **架构守卫**：`../cortex/.venv/Scripts/python.exe -m pytest tests/test_architecture.py -q` → **5 passed**。
 - 前端域：点名范围为后台模块，未启动前端域分析。
+- **复审（2026-10-21）**：栈清单复检检索 `FastAPI async def blocking event loop`、`sqlite3 per-request WAL busy_timeout`、`uvicorn SSE blocking`——结论与附件既有条目一致，**附件未更新**；
+  口径修正一条：`sqlite3.connect` 默认 `timeout=5.0` 即隐式 busy_timeout，故「缺 busy_timeout」不成立（`sessions_store.py:230` 无需显式设置）；
+  WAL 下仍只有单写者，跨方法/跨资源的半状态与连接生命周期问题归 AP-8 / AP-44。
+  首轮 pending 条目（AP-1/2/3/5/8/13/14/15/16/18/19/27）逐条复验证据仍在，保持 `pending`。
+- **复审机械扫描**：全仓 `except:` 0 处；`except Exception: pass` 0 处；`doclens/` 源码跨文件私有成员 import 0 处；
+  `sqlite3.connect` 4 处（cortex_cli 裸读 1、ripgrep 只读 2、sessions_store 1）；`os.environ` 写入 6 处（config_validator 校验窗口 3、api/config 热生效 4、vendor 1）。
+- **复审未覆盖**：`doclens/tui/**`（终端 UI）、`doclens/vendor_pdf2zh/**`（vendored 上游）、`doclens/file_watcher.py`（独立台账 `antipatterns/file-watcher.md`）；
+  `cortex_cli.py` / `kb_tools.py` 子代理两轮均超时，改为主代理 grep 骨架 + 复用首轮 AP-15/16/19 结论，未产出新条目。
 
 ## 二、发现条目
 
@@ -364,6 +372,347 @@
 - **未做**：剩余 22 处（planify 流水线 / agent_prompt / memory / chat_runner / refs_curator / _chat_raw）保留——部分是重对象启动开销，部分同样可能被
   monkeypatch 接缝消费，收益递减。
 
+### AP-29 登录闸门会话校验漏传必传 `ttl_hours`——LAN 下改密/登出/删密必 500 [P1] [status: done]
+- **形态**：Shotgun Surgery 副作用（AP-21 去默认值的残留调用点）
+- **证据**：`doclens/web_v2/sessions_store.py:1579-1586` 门面签名为 `validate_auth_session(self, token, *, touch: bool = True, ttl_hours: int, now=None)`（keyword-only 必传）；
+  `doclens/web_v2/api/auth.py:69` 仍写 `store.validate_auth_session(token, touch=False)`。`_require_session_if_enabled` 被 logout（`:159`）、改密（`:177`）、删密（`:223`）调用。
+  仅当闸门生效（非环回来源 + 已设密码，`auth_gate.py:32-37`）才进入该分支——本机自测（环回免登录）永不触发。
+- **风险**：LAN 用户无法登出、无法改密/删密；改密失败意味着凭证无法轮换。属已发生的事实性缺陷（TypeError → 500）。
+- **修复方案**：补传 `SESSION_TTL_HOURS`（该模块已 import）。新增"闸门开启时 logout/改密不 500"用例。
+- **实际修复（2026-10-21）**：`api/auth.py:69` 补传 `SESSION_TTL_HOURS`（模块早已 import，无需新增依赖）。
+  全仓 `validate_auth_session(` 四调用点复核：`auth.py:83`、`auth_middleware.py:48` 本就带 ttl，`sessions_store.py:1587` 是门面委托。
+  新增 `TestGateEnabledEndpoints` 4 断言（前置断言「无 cookie 时 401」证明闸门真生效 + logout/改密/删密各 200）——
+  **反证**：临时还原漏传版本 → 后 3 条红灯（`TypeError: missing 1 required keyword-only argument`），确认测试能真复现。
+- **回归验证**：`tests/test_auth_challenge.py tests/test_architecture.py tests/test_deps_locks.py
+  tests/test_workdir_config.py` → 46 passed。
+
+### AP-30 技能注入重排 seq 后回退锚点未同步——回退静默退到「首次改前」 [P1] [status: done]
+- **形态**：Referent Renumbering Without Remap（见三、新型态 3）
+- **证据**：`doclens/web_v2/api/chat.py:207` 轮首 `tracker.begin_turn()`，锚点取 `last_message_user_seq`（`rewind_tracker.py:78`）；
+  流式结束 finally `chat.py:377` 调 `upsert_skill_contexts`，`sessions_store.py:1212-1216` 执行 `UPDATE session_items SET seq = seq + k WHERE seq >= tail_seq`
+  把本轮 `message_user` 的 seq 后移 k 位，`rewind_snapshots.anchor_seq` 仍是旧值。
+  回退时 `rewind_tracker.py:246-247` 找不到 `target`，`_restore_one:268-270` 落到 `first_version`（首次追踪前内容），
+  `apply=True` 直接写盘并在 `restored` 里报成功；无日志、无 skipped 记录（对照 `:276-281` 超限 skipped 已有明示契约）。
+- **风险**：会话首次使用某技能的那一轮，回退会把工作区文件恢复成「首次被追踪之前」的版本，覆盖用户中间修改，且返回体报成功。
+- **实际修复（2026-10-21，方案②+③）**：
+  ① 坐标变更连带重映射——新增 `_RewindSnapshotStore.shift_anchors(session_id, from_seq, delta, conn=)`，
+  `upsert_skill_contexts` 在自己那条 `UPDATE session_items ... WHERE seq >= ?` 之后、**同一连接同一事务**调用它
+  （`conn=conn` 是关键：分事务会导致只成功一半）；门面 `shift_rewind_anchors` 纯委托。
+  ② 降级面显式化——`_restore_one` 在 `target is None` 时直接记 `skipped: 锚点无快照（已被环形淘汰或该轮未追踪）` 并 return。
+  区分保留：target **存在**而 entry 缺失仍是合法的首版本回落（该文件在锚点后才首触，`test_first_version_fallback_for_earlier_anchor` 覆盖）。
+- **行为变更（有意）**：锚点快照被淘汰/丢失时，回退不再"恢复成更早的版本并报 restored"，而是明示跳过——破坏性写盘不容静默降级。
+- **回归验证**：新增 3 断言（`test_skill_context_seq_shift_remaps_anchor` / `..._leaves_earlier_anchors` /
+  `test_missing_anchor_snapshot_skips_instead_of_reverting_to_first`）；**反证**：撤掉 shift 调用与 target-None 分支 → 3 条全红。
+  `tests/test_rewind.py tests/test_sessions_store_history.py tests/test_session_export_import.py tests/test_session_duplicate.py
+  tests/test_session_detail_window.py tests/test_sessions_ts_normalization.py tests/test_chat_disconnect.py tests/test_architecture.py`
+  → 115 passed。
+
+### AP-31 引用策展剔除缺失路径后仍按原编号索引——正文 [N] 指向另一篇文档 [P1] [status: done]
+- **形态**：Referent Renumbering Without Remap
+- **证据**：`doclens/web_v2/refs_curator.py:169` 先 `existing = [p for p in paths if (workdir/p).exists()]` 过滤，`:197-211` 却用 `marks`（AI 原编号）去索引过滤后的 `existing`，
+  再交 `_renumber` 重编号。任一幻觉路径被剔除（或 `normalize_paths` 去重）后，编号整体左移。
+- **风险**：正文 `[2]` 实际指向原本的第 3 篇文档——错误引文比缺引文更难被发现。该模块本身声明要消除「标注与列表错位」。
+- **实际修复（2026-10-21）**：
+  ① `references.normalize_paths_numbered()` 新增——与 `normalize_paths` 同语义但返回 `(原编号, rel)`；
+  `normalize_paths` 改为其投影（一处实现）。原编号 = AI 列表位次，重复/空项被跳过但**不压紧位次**。
+  ② `_curate_compliant` 全程改用 `(原编号, path)` 对：缺失过滤、未引用剔除、重编号都按原编号查，
+  `dangling` 判定改为「原编号不在已知集合」（同时覆盖越界标注与被去重的重复项）。
+  ③ `_renumber(body, numbered, keep_ids)` 签名改为接收编号对，`by_id` 查 path（原实现 `paths[i-1]` 按下标）。
+  ④ `curate_references` 改为把**未归一**的 `parsed.paths` 传给 `_curate_compliant`（归一内含编号保留）。
+- **回归验证**：新增 `TestNumberingAfterDrop` 3 断言（中间路径缺失不位移 / 重复列项不压紧 / 每个 [N] 仍指向原文档）；
+  **反证**：还原按下标版本 → 7 条红灯（含既有 2 条）。
+  `tests/test_refs_curator.py tests/test_skill_refs.py tests/test_chat_disconnect.py tests/test_architecture.py` → 53 passed。
+
+### AP-32 `/api/preview/download` 缺 `is_protected`——点文件与索引库可整包下载 [P1] [status: done]
+- **形态**：路径安全面不一致（AP-3 的同源侧门，读侧整文件下载端点）
+- **证据**：`doclens/web_v2/api/preview_assets.py:40-50` 只 `safe_resolve` 限制 base 范围，未调 `is_protected`/`assert_not_protected`；
+  其余文件类端点（`files.py:211/246/267/319/343/369`）逐个调用。
+  索引库默认落 `search_path/.cortex/index.db`（`index_manager.py:48`），内含全文与元数据。
+- **风险**：可下载 `.env`、`.git/config`、`.cortex/index.db`、`.cortex/sessions.db`，绕过点文件保护设计（AP-3 只覆盖预览读写）。
+- **实际修复（2026-10-21）**：download 在 `safe_resolve` 之后补 `assert_not_protected(full, base)`（复用 `path_safety`），docstring 记录理由。
+- **回归验证**：新增 `TestDownloadProtected` 2 断言（`.env` / `.git/config` / `.cortex/index.db` 均 403 PROTECTED；普通文件仍可下载）；
+  **反证**：撤掉闸门 → `test_dotfiles_rejected` 红灯。
+  `tests/test_preview_binary_guard.py tests/test_web_preview_formats.py tests/test_pdf_native_preview_api.py
+  tests/test_preview_rotate.py tests/test_web_search_api_matrix.py tests/test_architecture.py` → 82 passed。
+- **顺带发现（未修，见 AP-67）**：同文件 `preview_raw` / `preview_pdf` 也只做 `safe_resolve`，同样缺 `assert_not_protected`。
+
+### AP-33 中间件洋葱顺序与注释相反——swap 503 先于 auth 401，且回传 target 路径 [P2] [status: pending]
+- **形态**：Action at a Distance（注册顺序承担安全语义）
+- **证据**：`doclens/web_v2/app.py:149-151` 与 `swap_middleware.py:24-28` 均注释「后注册 = 内层，auth 401 优先于 swap 503」；
+  Starlette 1.9.0 `add_middleware` 实现为 `self.user_middleware.insert(0, ...)`，`build_middleware_stack` 对列表 `reversed()` 包装
+  → **后注册者是最外层、先执行**。实测调用链 ServerError → swap → auth → router。
+  `swap_middleware.py:43-46` 的 503 响应体含 `target`（目标工作目录绝对路径）。
+- **风险**：切换窗口内未登录 LAN 客户端先拿到 503 并读到目标路径，401 永不出现；文档与实现相反，后续按注释调整会继续错。
+- **修复方案**：调换注册顺序（先 swap 后 auth）或改注释并显式断言顺序；新增一条中间件顺序测试（构造 app 检查 `user_middleware` 次序）。
+- **回归验证**：`tests/test_auth_challenge.py tests/test_workdir_config.py`。
+
+### AP-34 `.env` 读-改-写无锁非原子，值不转义 [P2] [status: pending]
+- **形态**：写路径无事务 / Duplicated write discipline
+- **证据**：`doclens/web_v2/config_store.py:210-219` `read_text → 变换 → write_text`，无锁、无 tmp+replace；`:182/:188` `f"{key}={value}"` 不转义。
+  写入方至少三处：`api/config.py:168`（`shutil.copyfile` 覆盖）、`api/presets.py:207/213`、`auth_credentials.py:63`；
+  三者只各自持本模块锁，彼此无互斥。同目录三个 JSON store 均已实现 tmp+`os.replace`（`presets_store.py:63-72` 等）。
+- **风险**：并发保存设置与改密互相丢更新；含空格/`#`/引号的 JSON 值被 dotenv 截断 →「保存成功但不生效」；半写会让凭证解析失败（叠加 AP-2 的 fail-open）。
+- **修复方案**：`write_env_values` 提为单一写入口（进程级锁 + tmp + `os.replace` + 引号转义），三个调用方统一改道。
+- **回归验证**：`tests/test_presets_store.py tests/test_auth_challenge.py` + 新增「并发写不丢更新」「特殊字符值往返」用例。
+
+### AP-35 全局异常处理器不打日志、把异常文本回传客户端 [P2] [status: pending]
+- **形态**：Error Hiding + 信息泄露
+- **证据**：`doclens/web_v2/api/errors.py:39-45` 无 `logger.exception`，注释「真实生产可在这里记 traceback_id 并写日志」是未实现的 TODO；`detail: str(exc)` 直接进响应体。
+- **风险**：500 无 traceback 可查（`runtime_vitals` 只记计数）；内部路径/SQL 片段泄露给 LAN 客户端。
+- **修复方案**：`logger.exception` + 通用文案；需要定位时返回 traceback_id。
+- **回归验证**：新增 handler 单测（断言日志被调用、响应体不含异常文本）。
+
+### AP-36 `get_index_manager` 失败不记忆——每次请求重跑分钟级建库并排队 [P2] [status: pending]
+- **形态**：Error Hiding 的可用性变体（故障放大）
+- **证据**：`doclens/web_v2/deps.py:71-95` 构造异常后 `raise`，`_idx_manager` 仍为 None 且无失败标记 → 下一请求重新进入 `_idx_lock` 执行 `load_or_build_index`；
+  其余请求在同一锁上排队。
+- **风险**：一次启动期故障（DB 锁/权限/磁盘）被放大成持续性全站阻塞，且无可见原因。
+- **修复方案**：记录 `_idx_init_error` + 冷却期快速失败（503 带原因），后台重试成功后清标记。
+- **回归验证**：`tests/test_deps_locks.py` + 新增「构造失败后第二请求快速失败」用例。
+
+### AP-37 内置技能部署只拷 `SKILL.md`——附件永不更新、restore 后残缺仍报成功 [P2] [status: pending]
+- **形态**：半实现（实现与 docstring 声明不符）
+- **证据**：`doclens/skills_deploy.py:58-68` 唯一写操作是 `shutil.copy2(src_skill_md, dst/"SKILL.md")`，而 `:44` docstring 声明「升级时新旧结构对位覆盖」；
+  包内技能是多文件资产（`doclens/skills/anti-patterns/references/*.md`、`plan/ADR-FORMAT.md` 等）。
+  `doclens/web_v2/api/skills.py:287-290` 忽略部署返回值、仍返回 200 完整条目。
+- **风险**：升级后判据/模板永不更新（首装 `config.py:441-444` copytree 仅一次）；删除内置技能再 restore 只回填 SKILL.md，技能引用全部失效却报成功。
+- **修复方案**：按 `skill_src_dir` 全量覆盖拷贝（`copytree(dirs_exist_ok=True)`）；restore 复用同一函数并校验附件存在。
+- **回归验证**：`tests/test_skill_vendor_dirs.py` + 新增「部署后 references/ 存在」「restore 后附件完整」断言。
+
+### AP-38 技能安装/删除：先删后写无回滚、解压无总量上限、删除先改配置 [P2] [status: pending]
+- **形态**：半成品残留 + Missing Resource Bound + 顺序错误
+- **证据**：
+  - `doclens/skills_installer.py:214-221` `rmtree(target)` 后逐文件 `write_bytes`；`:223` 每装完一个立即写 sidecar；`api/skills.py:245-252` 批量循环无回滚。
+  - `skills_installer.py:129-158` `zf.read(n)` 把每个条目全量读入内存 dict；仅校验压缩包字节数（`:72-81`），无解压后总量/条目数上限；`preview_install` 同样解压。
+  - `doclens/web_v2/api/skills.py:266-270` 先提交 sidecar（deleted / remove_entry）再 `rmtree`。
+- **风险**：磁盘满/文件占用时旧版已删、新版半写；一次「预览」即可被 zip bomb 打爆内存（且叠加 AP-4 在事件循环内）；删除失败后「已删除」状态与磁盘目录并存。
+- **修复方案**：写临时目录后整体替换；解压设总量/条目数上限；删除顺序改为先 `rmtree` 再提交 sidecar。
+- **回归验证**：`tests/test_skills_config.py tests/test_skill_vendor_dirs.py` + 新增超限包与删除失败用例。
+
+### AP-39 翻译取消是空操作——`call_soon_threadsafe` 投递到从不运行的 loop [P2] [status: pending]
+- **形态**：Lava Flow（死分支）+ 状态与事实不符
+- **证据**：`doclens/translate_service.py:162-163` `job._loop.call_soon_threadsafe(job._cancellation.set)`；
+  但 `:203-205` 的 loop 是 `asyncio.new_event_loop()` 后从不 `run_forever`，回调永不执行；`:292` 直接 `close()`。
+  引擎在 `:151/:239` 用 `cancellation.is_set()` 同步轮询 → 永不置位；`:276` 的 `except CancelledError` 不可达。
+- **风险**：用户点取消，API 返回 200，任务照常跑完并变 done（大 PDF 翻译可能数分钟）。
+- **修复方案**：改用 `threading.Event`（轮询在翻译线程，跨线程天然可见），删除 asyncio 分支。
+- **回归验证**：`tests/test_translate_service_preset.py` + 新增「running 态取消后任务转 cancelled」用例。
+
+### AP-40 翻译 SSE 无退订且终态不退出——job/回调/连接常驻 [P2] [status: pending]
+- **形态**：订阅生命周期缺失（无界增长）
+- **证据**：`doclens/web_v2/api/translate.py:157` `svc.subscribe()` 无 `finally` 反注册；
+  `:174-186` 只在收到事件后判 `terminal`，订阅前已 done 的任务不再产生事件 → 快照后进入 30s ping 死循环；
+  `translate_service.py:450-456` `_prune` 见 `_subscribers` 非空即跳过 → job 与死回调永不回收，`_emit` 持续向已取消队列 `put_nowait`。
+- **风险**：每打开一次进度页泄漏一个 job + 回调 + 一条常驻 SSE 连接；长期运行内存与连接单调增长。
+- **修复方案**：`finally: svc.unsubscribe(...)`；快照后立即判终态并 break；终态任务队列自行摘除。
+- **回归验证**：新增 API 级 SSE 生命周期用例。
+
+### AP-41 翻译提交无路径包含校验，产物写回源文件目录 [P2] [status: pending]
+- **形态**：路径安全面遗漏（校验只在 files/preview 域）
+- **证据**：`doclens/web_v2/api/translate.py:103-113` 直接透传 `req.path`；`translate_service.py:458-462` 允许绝对路径与 `..`；
+  `:237-238` 以 `Path(src_abs).parent` 为输出目录写 `<名>.<lang>.pdf`；`_to_rel`（`:464-468`）回落 `str(p)` 使绝对路径进入响应。
+- **风险**：任意可读 PDF 可被翻译，产物写到知识库之外；错误响应泄露绝对路径。
+- **修复方案**：复用 `path_safety.safe_resolve` + `assert_not_protected`；输出目录固定（如用户临时/导出目录）并二次校验。
+- **回归验证**：`tests/test_translate_service_preset.py` + 新增越界路径 403 用例。
+
+### AP-42 git 子进程未固定编码——中文路径被判「非 git 根」，GitSync 整体停摆 [P2] [status: pending]
+- **形态**：子进程纪律（编码）+ Duplicated Source of Truth
+- **证据**：`doclens/git_sync.py:70-75` `subprocess.run(..., text=True)` 无 `encoding`；`doclens/web_v2/api/git.py:63-66` 同；
+  而 `api/git.py:163/168/173` 已写 `encoding="utf-8", errors="replace"`。
+  Windows 默认按 cp936 解码 git 的 UTF-8 路径输出 → `--show-toplevel` 乱码 → `normcase` 比较失败 → `GitSync.start()` 以 `not_git_root` 停摆，`/api/git/*` 全 400。
+- **风险**：用户名/目录含中文的用户 git 同步与 git 面板全不可用，原因表现为「不是 git 仓库」。
+- **修复方案**：抽 `_run_git()` 统一 `encoding="utf-8", errors="replace"`；`_is_git_root` 与 `GitSync` 共用。
+- **回归验证**：`tests/test_git_sync.py`（若有）+ 手工中文路径仓验证。
+
+### AP-43 worker.stop 超时即弃线程——切库后新旧消费者并存 [P2] [status: pending]
+- **形态**：生命周期管理缺失（孤儿线程）
+- **证据**：`vision_worker.py:131-139`、`diary_worker.py:137-145`、`git_sync.py:194-201`、`translate_service.py:94-99` 均 `join(timeout)` 后无条件 `_thread=None` / `running=False`；
+  `mcp_client.py:148-157` join 超时后也清 `_started/_stop_requested`，`start()` 可再起第二条 `mcp-client` 线程。
+  切库流程 `deps.py:322-324 → 399-401` 紧接着重启 worker。
+- **风险**：在途视觉调用（5-60s）或 `git push`（120s）必然超时 → 旧线程继续跑并把产物写回旧 `index_path`；MCP 两条 loop 并发改 `_connections`。
+- **修复方案**：join 超时保留「停止中」状态并拒绝新 start；或用代际号让旧线程丢弃结果。
+- **回归验证**：`tests/test_workdir_config.py` + 新增「stop 超时后 start 被拒」用例。
+
+### AP-44 `sessions_store` 连接从不 close [P2] [status: pending]
+- **形态**：资源所有权缺失（区别于 AP-8 的连接开销）
+- **证据**：`doclens/web_v2/sessions_store.py:229-234` `_conn()` 每次 `sqlite3.connect`；所有调用点 `with self._conn() as conn`——
+  `sqlite3.Connection.__enter__` 只 commit/rollback，**不关闭**；全文件 `.close()` 出现 0 次。
+- **风险**：WAL 下连接/文件句柄随请求增长，回收依赖 GC 时机；长驻进程表现为句柄与内存缓慢上涨。
+- **修复方案**：与 AP-8 一并做——进程级复用单连接（`check_same_thread=False` + 现有 `RLock`），或每方法 `try/finally: conn.close()`。
+- **回归验证**：`tests/test_sessions_store_history.py tests/test_chat_disconnect.py`。
+
+### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: pending]
+- **形态**：Error Hiding（fail-soft 语义越界）
+- **证据**：`doclens/index_manager.py:349-360` `has_indexed_docs()` 吞异常返回 False → `:838-840` 直接 `return [], []`；
+  `load_doc_structures()`（`:362-383`）同样吞异常；
+  `doclens/web_v2/api/search.py:104-108` 捕获一切异常返回空结果且**不填 `error`**；
+  同构的 `api/grep.py:79-85` 填 `error=f"grep 引擎异常: {e}"`（响应模型 `models/search.py:77` 有该字段）。
+- **风险**：索引库损坏/锁冲突在 UI 上等同「知识库里没有这段内容」，AI 会据此给出「未收录」的错误结论。
+- **修复方案**：区分「空库」与「探测失败」；search 端点与 grep 对齐填 `error`。
+- **回归验证**：`tests/test_web_search_api_matrix.py` + 新增「DB 损坏时 error 非空」用例。
+
+### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: pending]
+- **形态**：Error Hiding
+- **证据**：`doclens/ripgrep.py:315-324` 超时返回 `({}, True)`、`OSError` 返回 `({}, False)`；`execute_grep_search` 只据 `rg_timed_out` 追加附注（`:750-751`）。
+  同模块 `grep_tools.py:339` 明确承诺「结果可能不完整必须显式告知，不能静默当作无结果」。
+- **风险**：rg 缺失/被杀/权限失败时文本腿静默零结果，模型与用户都以为「确实没有」。
+- **修复方案**：启动失败单独状态并转 note（或抛可捕获错误）。
+- **回归验证**：`tests/test_grep_tool.py tests/test_grep_corpus_bypass.py`。
+
+### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: pending]
+- **形态**：Abstraction Inversion / 静默吞参数
+- **证据**：`doclens/web_v2/api/search.py:33,47` 声明 `_MAX_FETCH=1000` 为「单次搜索最大候选数」；
+  `doclens/index_manager.py:817,823-825` 自认 `max_results` 是「历史形参……静默吞掉」。实际候选池由 `config.top_k_docs=100`（`config.py:132`）决定。
+  5 处调用点全部传该死参：`cortex_cli.py:692,905`、`kb_tools.py:1010`、`tui/app.py:643`、`search.py:47`。
+- **风险**：分页 `total/total_matches` 只在约 100 文档上算，宣称「1000 候选完整过滤排序」不成立；调参者以为能改行为。
+- **修复方案**：接线到 `top_k_docs`（或删除该参数），total 口径与真实候选池一致。
+- **回归验证**：`tests/test_web_search_api_matrix.py tests/test_search_preset_params.py`。
+
+### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: pending]
+- **形态**：超时/取消语义错位
+- **证据**：`doclens/web_v2/api/reindex.py:17,61-66` `_SSE_TIMEOUT_SECONDS=600` 只作用于 `q.get()` 空等，超时即向前端发 `error`；
+  `index_manager.py:459` 启动的后台线程无停止标志，客户端断开也不取消。
+- **风险**：大库全量重建（模块自述分钟级）时前端收到「失败」而索引仍在写；用户重试再启一轮（阻塞在 `_reindex_lock`）。
+- **修复方案**：超时改发「仍在进行」事件；暴露取消/进度；或断流不判失败。
+- **回归验证**：`tests/test_index_chunking.py`。
+
+### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: pending]
+- **形态**：写路径无事务（跨资源）
+- **证据**：`doclens/diary.py:113-115` `path.write_text(content)` 就地截断重写整年文件；
+  `doclens/git_sync.py:238` 每轮 `git add -A` + commit。
+- **风险**：写窗口内被 GitSync 撞上即提交并推送半截 `2026.md`；进程崩溃留下截断文件。
+- **修复方案**：tmp + `os.replace`（注意 `translate_service._replace` 的「先删后移」问题，勿照抄）。
+- **回归验证**：`tests/test_diary.py`。
+
+### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: pending]
+- **形态**：Error Hiding（用户输入静默丢失）
+- **证据**：`doclens/web_v2/api/vision.py:186-190` `UPDATE vision_queue ... WHERE source_path=?` 不校验 `rowcount`；
+  该图无 `vision_queue` 行时备注只落到文件元数据；下次 force 重建入队后 `vision_worker.py:320-322` 用 AI 结果整篇替换。
+- **风险**：用户手写备注在某次重建后无声消失。
+- **修复方案**：rowcount=0 时插入 manual 行；重建/重解析跳过 `model='manual'`。
+- **回归验证**：新增 vision API 用例。
+
+### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: pending]
+- **形态**：Long Method + 资源泄漏
+- **证据**：`doclens/agent_integration.py:165-477` `initialize`（283 非空行）同管 .env 层序、Provider、7 个目录、日志、技能部署、6 个 manager、两批工具、子代理与 Runtime 组装；
+  `:174` 创建 `self.loop` 后从未使用，`:580` `run_query` 每轮 `asyncio.new_event_loop()` 且无 `close()`（对照 `mcp_server.py:149-157` 有 `finally: loop.close()`）；
+  `:309-311` `_t.join()` 无 timeout，且处于 `deps.get_agent()` 的 `_agent_lock` 内。
+- **风险**：CLI/TUI 长会话每问泄漏一个 selector/fd；建库阻塞时首个 agent 请求无限挂起（并阻塞后续 agent 请求）。
+- **修复方案**：拆装配函数；loop 复用并 finally close；`join(timeout)` + 超时降级。
+- **回归验证**：`tests/test_deps_locks.py` + 新增装配超时用例。
+
+### AP-52 `deps` 锁内做磁盘 I/O 违反自述契约；数据目录公式三份 [P3] [status: pending]
+- **证据**：`doclens/web_v2/deps.py:38-40` 自述锁「只保护引用的检查/赋值（毫秒级），禁止持锁期间做长耗时」；
+  但 `get_config()`（`:56`）在 `_lock` 内 `CortexConfig.load()`（读多份 .env，`config.py:452-478`），`reload_config`（`:462-477`）在锁内 `load_dotenv(override=True)` + `apply_config`。
+  数据目录拼接公式重复三份：`:142-145`、`:173-176`、`:346-350`。
+- **风险**：保存配置/切库时其它请求排队；三份公式漏改一处会让 DB/快照落不同目录（只在冷启动或切库时显现）。
+- **修复方案**：构造移出锁（双检）；抽 `_data_paths()` 单源。
+- **回归验证**：`tests/test_deps_locks.py tests/test_workdir_config.py`。
+
+### AP-53 配置键清单四处维护且已漂移（`CORTEX_LLM_VISION` 物化后不可见/不可写） [P3] [status: pending]
+- **证据**：键集合分别维护于 `config_store.py:19-83`（注释自认与 `settings-fields.ts` 同步）、`config_validator.py:27`（`f"CORTEX_{upper}"` 二次推导）、
+  `api/presets.py:56-106`（物化）、`api/config.py:88-131`（热生效手写）。
+  实证漂移：`presets.py:66` 物化 `CORTEX_LLM_VISION`，但它不在 `KNOWN_KEYS` → `GET /api/config` 看不到，PUT 被 `config_validator.py:150-155` 判「未知配置项」拒绝。
+- **风险**：新增配置项必须同改四处并同步前端；漏一处即产生「写入成功但读不到/改不了」。
+- **修复方案**：单一键注册表（env 名 / 类型 / secret / 热生效动作 / 前端字段映射）。
+- **回归验证**：`tests/test_presets_store.py tests/test_workdir_config.py`。
+
+### AP-54 watch broker：`deque` 并发遍历 + 客户端队列无界 [P3] [status: pending]
+- **证据**：`doclens/web_v2/watch_broker.py:64-70` 后台线程 `_recent.append`、loop 线程 `list(self._recent)`（`_clients` 有锁、`_recent` 无锁）——CPython 迭代中追加会抛 `RuntimeError: deque mutated during iteration`；
+  `:54` `asyncio.Queue()` 无 maxsize；`:84-95` 节流是**全局按事件类型**（0.2s），不是每客户端限流，`put_nowait` 永不失败；`immediate=True` 还绕过节流。
+- **风险**：`/api/watch/status` 或 SSE 首帧偶发 500；挂起客户端积压全量快照（含 30 条 recent_changes），内存单调增长。
+- **修复方案**：`_recent` 读写同锁；队列设上限 + 合并/丢弃策略。
+- **回归验证**：`tests/test_watch_broker.py`（若有）+ 并发迭代用例。
+
+### AP-55 `get_detail` 无 LIMIT 被当标量查询复用 [P3] [status: pending]
+- **证据**：`doclens/web_v2/sessions_store.py:1352-1366` 整会话 `ORDER BY seq ASC` 无 LIMIT；
+  消费方 `is_live_anchor`（`:1083-1089`）、`count_live_messages`（`:1091-1095`）、`api/sessions.py:149-150`（只为算 `next_seq`）都加载全部 payload（含 base64 图片、工具输出）。
+- **风险**：回退预览与每次 PATCH 的代价随会话长度线性上升，且全在 async 端点内同步执行（叠加 AP-4）。
+- **修复方案**：新增轻量查询（`MAX(seq)` / `COUNT` / 锚点 kind 存在性）。
+- **回归验证**：`tests/test_sessions_store_history.py tests/test_session_detail_window.py`。
+
+### AP-56 文本契约承担结构语义：`"Noted"` 前缀识别注入对、参考资料标题两份 [P3] [status: pending]
+- **证据**：`doclens/web_v2/api/chat.py:170` 写入 assistant 回执 `"Noted."`；`_chat_raw.py:59` 用 `nxt["content"].startswith("Noted")` 反推注入对并跳过——
+  文案或本地化变更即静默把注入对当本轮消息落库（回放双重重建 + 前缀分叉），无断言锚点。
+  `refs_parser.py:12` `^##\s+参考资料\s*$` 与 `refs_curator.py:81` 生成 `"## 参考资料\n"` 各写一份契约，改标题即「解析器不认自己生成的章节」（`is_compliant()` 恒 False → 全程兜底）。
+- **修复方案**：注入对用结构化标记（已有 `*_MARKER` 常量体系）而非回执文本；标题常量单源。
+- **回归验证**：`tests/test_chat_disconnect.py tests/test_skill_refs.py`。
+
+### AP-57 `ChatQueueEvent` Union 与 `KNOWN_EVENT_TYPES` 两份清单已漂移 [P3] [status: pending]
+- **证据**：`doclens/web_v2/api/_chat_events.py:91-94`（Union 缺 `CompactEvent`）与 `:96-100`（含 compact）不一致；Union 仅定义处出现（全仓无引用）。
+  模块 docstring 声称「字段名只在此定义一次」。
+- **修复方案**：由 Union 派生类型集合（或删 Union、只留常量表）。
+- **回归验证**：`tests/test_stream_usage.py tests/test_chat_usage_event.py`。
+
+### AP-58 预览资源 hash6 两条推导链（download 用原始串 / upload 用规范化 rel） [P3] [status: pending]
+- **证据**：`doclens/web_v2/api/preview_assets.py:45` `sha256(path.replace(os.sep,"/"))`（未归一化的 query 参数）；
+  `preview_mutations.py:149-155` `sha256(relpath(abs, base)...)`（规范化）；正则 `[a-f0-9]{6}`（`:111`）是第三处同源假设。
+- **风险**：`./a.md`、`a//b.md` 或反斜杠路径下载后回传 hash 不匹配 → `NOT_INDEXED`，覆盖闭环断裂。
+- **修复方案**：单源 `asset_hash6(rel)`，两侧先归一 rel。
+- **回归验证**：`tests/test_web_preview_formats.py tests/test_upload_image_compress.py`。
+
+### AP-59 文本预览读侧无体积上限（与写侧闸门不对称） [P3] [status: pending]
+- **证据**：`doclens/web_v2/api/preview.py:162,179` `read_text()` 全文 + `tokenize_code()` + `split("\n")` 三份副本；
+  写侧限 5MB（`preview_mutations.py:40`）、上传限 50MB（`files.py:49`），读侧零限制。
+- **风险**：工作目录放一个 1GB `.log` 即可让单请求吃掉数倍内存（端点 sync 进线程池，40 并发下是 OOM 面）。
+- **修复方案**：读侧设上限并返回明确错误码（复用 `ERR_*`）。
+- **回归验证**：`tests/test_web_preview_formats.py`。
+
+### AP-60 `index_probe` 八个函数各复制一份「开连接→吞异常→中性值」样板 [P3] [status: pending]
+- **证据**：`doclens/index_probe.py:27-152`（doc_count / source_paths / paths_under / is_path_indexed / children / ghost_children / is_registered / registered_count），每个 15-18 行同构；
+  中性值选择分散（0 / False / []），语义漂移后被上游读成「空库」（见 AP-45）。
+- **修复方案**：抽 `_probe(sql, params, default, map_row)`。
+- **回归验证**：`tests/test_lazy_search.py`。
+
+### AP-61 grep 结果上限 6 处独立来源，截断无 note [P3] [status: pending]
+- **证据**：`doclens/grep_tools.py:314,319` 字面 `50`、`:33 MAX_RESULTS_CAP=500`、`config.py:181 grep_max_results=50`、
+  `ripgrep.py:693` 形参默认 50、`:737 max(200, max_results*4)`、`:297 --max-count 100`、`:845 max(getattr(idx,...), max_results)`；
+  `path_results` 按 `max_results` 截断（`:819`）时不发 note。
+- **风险**：改配置不能整体改变上限（`max()` 与 CAP 各自兜底），200/4/100 三个系数无来源无注释。
+- **修复方案**：单一上限解析函数 + 截断 note。
+- **回归验证**：`tests/test_grep_tool.py tests/test_grep_corpus_bypass.py`。
+
+### AP-62 限速器状态无 GC；runtime_vitals 计数无锁 [P3] [status: pending]
+- **证据**：`doclens/web_v2/auth_rate_limit.py:21,44-49` 过期条目只在该 IP 再次 `check` 时清除，无全局 GC/容量上限（轮换 IP 即无界增长）；
+  同类内存态 `auth_challenge.py:25` 有 `_MAX_PENDING_PER_IP` + 惰性 GC（同域两套规格）。
+  `runtime_vitals.py:33,51-56` `_error_count += 1` 与 `_counter_installed` 检查-赋值均非原子（多线程丢计数/重复安装工厂）。
+- **修复方案**：限速器加定期 GC + 上限；计数改 `itertools.count()` 或加锁。
+- **回归验证**：`tests/test_auth_challenge.py`。
+
+### AP-63 两套「生成中」判据；tmp_workspace 的假保证 [P3] [status: pending]
+- **证据**：`chat_interrupt.is_streaming` 与 `chat_runner.is_running` 两套判据（`api/sessions.py` 已全用后者，前者疑似无消费方）；
+  `doclens/web_v2/tmp_workspace.py:36-46` `session_tmp_dir` 无生产调用者（仅测试），但 `:57-63`（失败→False+warning）与 `:72-78`（`ignore_errors=True` + 无条件 `removed += 1`）两套清理策略并存；
+  `api/sessions.py:389` 的 `grant_session_clear` 为不存在的目录维护授权账本。
+- **风险**：删除失败仍报「已删除 N 个」；`session_tmp_dir` 一旦启用，清理语义已被两套实现分叉。
+- **修复方案**：统一清理错误策略（返回真实结果）；删除死入口或启用并补测试。
+- **回归验证**：`tests/test_tmp_workspace.py`。
+
+### AP-64 降级成功三例：`last_error` 不清零 / 空产物仍 done / 先删后移 [P3] [status: pending]
+- **证据**：`doclens/diary_worker.py:208`、`doclens/vision_worker.py:202` `last_error` 只写不清 → `/api/status` 长期展示历史错误；`translate_service.py:418-419,259-260` `results=[]` 仍 `status="done"`；`:476-478` 目标存在即 `unlink()` 再 `shutil.move`（move 失败新旧全失）。
+- **修复方案**：成功时清 `last_error`；空产物判 error；替换改 `os.replace`。
+- **回归验证**：`tests/test_translate_service_preset.py`。
+
+### AP-65 死代码清单（本轮新增，记录即处置） [P4] [status: pending]
+- **证据**：`api/chat.py:301,573` `client_gone` 只写不读（`:305-308` docstring 仍称据此分支，`:487-528` 早已无条件落库）；
+  `api/_chat_emitter.py:75-88` `get_display_text` 全仓零调用；
+  `config.py:215-217` `web_password_hash` 字段无读取方（鉴权链路直读 `.env`）；
+  三个 store 的 `_SCHEMA_VERSION` 只写不校验（`presets_store.py:19/46`、`mcp_servers_store.py:26/41`、`workdir_store.py:24/46`）。
+- **处置**：不单独开工；下次触及对应模块时删除，并在提交信息引用本条目。
+
+### AP-66 约定不一致（记录，收益待评估） [P4] [status: pending]
+- `auth_sessions` 用 naive `utcnow()`（`sessions_store.py:299/322`），sessions 域强制 aware（`:26-35` 明说 naive/aware 混比是历史 500 根因）——同一 DB 两套时区约定。
+- `api/mcp.py:34-38` 缺 runtime map 时伪造 `status="disabled"`；上游 `mcp_client.py:460-464` 吞异常返回 `[]` → 配置读取失败显示「全部禁用」。
+- `probe_vision.py:99-110` 自建 Anthropic 风格消息构造，与 `vision_client.py:71-82` 生产链路是两份协议实现，探测结论与 `call_vision` 不保证等价。
+- `api/vision.py:69,85-101` 只拦 `status='processing'`，worker 取走 pending 行（`vision_worker.py:172`）前无锁 → 可与 reparse 同时写 FTS（TOCTOU）；`set_manual_note` 连这道检查都没有。
+
+### AP-67 preview 读侧另两个字节端点同样缺 `assert_not_protected` [P2] [status: discovered-during-fix]
+- **形态**：路径安全面不一致（AP-32 修复过程中发现，同一文件同类缺口）
+- **证据**：`doclens/web_v2/api/preview_assets.py:100-118` `preview_raw` 与 `:126-152` `preview_pdf` 只经 `resolve_path` / `resolve_path_optional`（内部 `safe_resolve`，只保证不越出 base），
+  无点文件闸门。后缀白名单（图像扩展名 / `.pdf`）限制了点文件的实际可利用面，但 `.cache/secret.pdf`、`.git/docs/x.png` 之类仍可直接取字节。
+- **风险**：与 AP-32 同级（读侧侧门），可利用面窄于 download（需点文件目录内存在对应后缀文件）。
+- **修复方案**：两处 `full` 解析后各补 `assert_not_protected(full, base)`；与 AP-32 同一批回归。
+- **回归验证**：`tests/test_preview_binary_guard.py`（扩展 `TestDownloadProtected` 为三端点参数化）。
+
 ## 三、新型态
 
 1. **Fail-Open on Corrupted Trust Anchor**（凭证/密钥解析失配 → 保护逻辑退化为"未配置"）
@@ -375,13 +724,23 @@
    - 证据：本台账 AP-13（`config_validator.py:161-188`）。
    - 与既有形态关系：属 Action at a Distance 的变体，危害是跨线程瞬时读到空状态。
 
-（两条均已有本台账实证；若再在其他范围复现，按 SKILL.md 第 5 步晋升入 `references/general.md` 后端模块层。）
+3. **Referent Renumbering Without Remap**（引用方的位置/编号被重写，依赖它的映射未同步重算）
+   - 定义：一次「过滤/去重/插入」改变了条目的位置坐标（list 索引、DB `seq`、文件名 hash），但以该坐标为外键的引用（正文 `[N]`、快照 `anchor_seq`、回链 hash）没有随之重映射——读方仍按旧坐标解释，得到「合法但错误」的对象。
+   - 证据：本台账 AP-30（`upsert_skill_contexts` 重排 seq → 回退锚点失配）、AP-31（剔除缺失路径后仍用原编号索引 `existing`）。
+   - 与既有形态关系：属 Action at a Distance 的坐标变体；与普通「下标越界」不同——越界会抛错，这里**静默指向另一个有效对象**，因此比崩溃更难发现（AP-31 直接产出错误引文、AP-30 回报 restored）。
+
+（前两条已有本台账实证；若再在其他范围复现，按 SKILL.md 第 5 步晋升入 `references/general.md` 后端模块层。）
 
 ## 四、执行记录
 
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-10-20 | 审计 | — | 台账落盘，28 条待令 |
+| 2026-10-21 | 复审 | — | 增量落盘 **AP-29 ~ AP-66（38 条）**待令；首轮 pending 条目复验证据仍在；`cortex_cli.py`/`kb_tools.py` 子代理两轮超时，改主代理骨架扫描（无新条目） |
+| 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
+| 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
+| 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-32 | 4dfb548——download 补 `assert_not_protected`；新增 `TestDownloadProtected` 2 断言（点文件三例 403 + 普通文件仍可下），反证撤闸门红灯；回归 82 passed。顺带发现 AP-67（preview_raw/preview_pdf 同缺闸门，未修） |
 | 2026-10-20 | 修 | AP-7 | 见本提交——sessions_store 同文件内拆 `_SessionDB`/`_AuthSessionStore`/`_RewindSnapshotStore`/`_SessionPortability` + 门面委托；`get_chat_history` 195 行拆 5 方法 + 3 模块级原语；只读差分 38 会话 × 9 方法零差异、写路径四表结构等价；分层回归 125 passed |
 | 2026-10-20 | 修 | AP-6 | 见本提交——deps 拆四把单例构造锁，`_lock` 降为纯注册表锁；`_singleton_guards()` 固定顺序保全 reset/切换语义；新增 tests/test_deps_locks.py 4 断言；分层回归 124 passed |
 | 2026-10-20 | 修 | AP-11 | 见本提交——`load_or_build_index` 以 `_ts is None`（首次装配）作为唯一审计条件，reindex/mark_dirty 后的重载只重建句柄+刷新 path_map；新增 `TestReloadSkipsDiskAudit` 2 断言；分层回归 61 passed |
