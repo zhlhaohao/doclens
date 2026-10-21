@@ -587,13 +587,27 @@
 - **修复方案**：接线到 `top_k_docs`（或删除该参数），total 口径与真实候选池一致。
 - **回归验证**：`tests/test_web_search_api_matrix.py tests/test_search_preset_params.py`。
 
-### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: pending]
+### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: done]
 - **形态**：超时/取消语义错位
 - **证据**：`doclens/web_v2/api/reindex.py:17,61-66` `_SSE_TIMEOUT_SECONDS=600` 只作用于 `q.get()` 空等，超时即向前端发 `error`；
   `index_manager.py:459` 启动的后台线程无停止标志，客户端断开也不取消。
 - **风险**：大库全量重建（模块自述分钟级）时前端收到「失败」而索引仍在写；用户重试再启一轮（阻塞在 `_reindex_lock`）。
-- **修复方案**：超时改发「仍在进行」事件；暴露取消/进度；或断流不判失败。
-- **回归验证**：`tests/test_index_chunking.py`。
+- **实际修复（2026-10-21，取台账「超时改发仍在进行事件」分支 + 修掉附带线程泄漏）**：
+  ① 静默超时不再是失败——`_SSE_TIMEOUT_SECONDS=600`（超时即发 `error` 并 break）改为
+  `_HEARTBEAT_SECONDS=30`，超时发 `heartbeat` 事件 `{indexed_count, elapsed_sec}` 并 **continue**；
+  前端 `reindex-dialog.ts` 新增 heartbeat 分支：保持 `running`、只刷新计数，不清 `current_file`/`sub_label`。
+  ② 顺手修掉一个真实泄漏——原 `wait_for(loop.run_in_executor(None, q.get), timeout)` 超时只取消 future，
+  阻塞在线程池里的 `q.get` **永不返回**，每超时一次泄漏一个执行器线程。改为 `asyncio.Queue` +
+  回调侧 `loop.call_soon_threadsafe`（与 watch_broker / translate SSE 同范式），零执行器线程。
+  ③ 客户端断开（关弹窗/断网）只结束观察窗口：捕获 `CancelledError` 记 info 后上抛，后台重建照旧继续。
+  **未做**：真正的「取消重建」——`treesearch` 的 `index()` 无中断点，要做得先建协作式停止协议，属独立条目。
+- **回归验证**：新增 `tests/test_reindex_sse.py` 6 断言（静默期连发 heartbeat 不发 error / progress 后静默仍心跳且计数延续 /
+  done 正常收尾 / 客户端 `aclose` 不影响触发参数 / 5 次心跳期间线程数不增长 = 无执行器泄漏）。
+  **反证**：还原「timeout→error+break + run_in_executor」→ 6 条全红。
+  前端新增 1 条 vitest（heartbeat 保持 running + 计数刷新 + 不清 current_file/sub_label），
+  **反证**：删掉 heartbeat 分支 → 该条红灯（`expected 3 to be 9`）。
+  `tests/test_reindex_sse.py tests/test_index_chunking.py tests/test_architecture.py` → 29 passed；
+  前端 `npm run test -- reindex-dialog store-reindex` → 15 passed；`npm run build` exit 0。
 
 ### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: done]
 - **形态**：写路径无事务（跨资源）
@@ -829,6 +843,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-48 | 见本提交——静默超时由 `error+break`(600s) 改为 `heartbeat`(30s) 且继续；`asyncio.Queue` + `call_soon_threadsafe` 取代 `run_in_executor`（原每超时泄漏一个执行器线程）；前端 heartbeat 分支保持 running 只刷计数。新增 tests/test_reindex_sse.py 6 断言 + 1 条 vitest，反证分别 6 红 / 1 红；回归 29 passed + 15 vitest + build exit 0 |
 | 2026-10-21 | 修 | AP-49 | 见本提交——`diary._write` 改 tmp + `os.replace`（+ Windows 共享冲突 10×30ms 重试，预算耗尽上抛而不退化）；新增 tests/test_diary_atomic_write.py 6 断言，反证 3 红；回归 81 passed（3 连跑稳定） |
 | 2026-10-21 | 修 | AP-50 | 见本提交——`_run_note_blocking` 改 UPSERT + 回读校验（`NOTE_NOT_PERSISTED`）；`vision_clear`/`vision_enqueue`/`vision_next_pending` 三处加 `model != 'manual'` 护栏；新增 tests/test_vision_manual_note.py 6 断言，反证 4 红；回归 38 + 76 passed。方案 A 边界（换图后备注不更新）另记 AP-69 |
 | 2026-10-21 | 修 | AP-51 | 见本提交——`initialize` 311 行拆 22 行编排 + 7 个 `_stage_*`（`_Assembly` 载体）；`_run_blocking` + `_dispose_loop` 保证每轮循环关闭（含取消未完成任务）；`_build_index_blocking` 的 join 加 1800s 上界（`CORTEX_INDEX_BUILD_TIMEOUT` 可调）；新增 tests/test_agent_init_lifecycle.py 11 断言，反证 5 红；回归 63 + 39 passed。顺带发现 AP-68（`basic_tools` 死赋值，未修） |

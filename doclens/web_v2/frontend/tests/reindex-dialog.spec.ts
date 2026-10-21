@@ -85,6 +85,25 @@ describe("<reindex-dialog>", () => {
     expect(store.getState().reindex.error).toBe("boom");
   });
 
+  it("heartbeat keeps running stage and refreshes count (AP-48)", async () => {
+    (streamSSE as any).mockImplementation(makeStream([
+      { event: "progress", data: JSON.stringify({ current_file: "a.md", indexed_count: 3, sub_label: "已解析 2 封邮件" }) },
+      { event: "heartbeat", data: JSON.stringify({ indexed_count: 9, elapsed_sec: 120 }) },
+    ]));
+    actions.openReindexConfirm();
+    const el = await fixture<ReindexDialog>(html`<reindex-dialog></reindex-dialog>`);
+    await elementUpdated(el);
+    (Array.from(el.shadowRoot!.querySelectorAll("button"))
+      .find((b) => (b.textContent || "").includes("确认重建")) as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    await elementUpdated(el);
+    const r = store.getState().reindex;
+    expect(r.dialog).toBe("running");        // 静默期不得被判失败
+    expect(r.indexed_count).toBe(9);         // 计数随心跳刷新
+    expect(r.current_file).toBe("a.md");     // 当前文件/子进度不被心跳清空
+    expect(r.sub_label).toBe("已解析 2 封邮件");
+  });
+
   it("done with success:false → error stage (not success)", async () => {
     (streamSSE as any).mockImplementation(makeStream([
       { event: "done", data: JSON.stringify({ success: false, doc_count: 0, failed_count: 3 }) },
