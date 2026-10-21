@@ -46,6 +46,40 @@ _agent_lock = threading.Lock()     # CortexAgent 构造（技能部署 / MCP 装
 _sessions_lock = threading.Lock()  # SessionsStore 构造（含建库建表）
 _rewind_lock = threading.Lock()    # RewindTracker 构造（依赖 sessions_store）
 
+# 索引初始化失败记忆（AP-36）：构造失败后不发布单例，若不留失败标记，
+# 每个后续请求都会重新进入 _idx_lock 重跑分钟级建库——一次启动期故障被放大
+# 成全站持续阻塞。冷却期内快速失败（带原因），过期后允许重试（自愈）。
+_IDX_INIT_COOLDOWN_SEC = 30.0
+_idx_init_error: Optional[BaseException] = None
+_idx_init_failed_at: float = 0.0
+
+
+class IndexInitError(RuntimeError):
+    """索引初始化失败（冷却期内的快速失败；``__cause__`` 是原始异常）。"""
+
+
+def _idx_init_failure() -> Optional[BaseException]:
+    """冷却期内返回上次失败原因，过期/未失败返回 None。"""
+    if _idx_init_error is None:
+        return None
+    if time.monotonic() - _idx_init_failed_at >= _IDX_INIT_COOLDOWN_SEC:
+        return None
+    return _idx_init_error
+
+
+def _clear_idx_init_failure() -> None:
+    global _idx_init_error, _idx_init_failed_at
+    _idx_init_error = None
+    _idx_init_failed_at = 0.0
+
+
+def idx_init_retry_after() -> int:
+    """距下次允许重试的秒数（冷却期外为 0；供 503 响应的 ``retry_after``）。"""
+    if _idx_init_error is None:
+        return 0
+    remaining = _IDX_INIT_COOLDOWN_SEC - (time.monotonic() - _idx_init_failed_at)
+    return max(0, int(remaining + 0.999))
+
 
 def get_config() -> CortexConfig:
     """获取 CortexConfig 单例（懒加载 + 线程安全）。"""
@@ -67,12 +101,28 @@ def get_index_manager() -> IndexManager:
 
     构造期持 `_idx_lock`（不持注册表 `_lock`）——建库/审计可能分钟级，
     期间会话库、配置、登录闸门不受影响（AP-6）。
+
+    失败记忆（AP-36）：失败后记 `_idx_init_error` 并保留 30s。冷却期内的调用
+    立即抛 ``IndexInitError``（``__cause__`` 为原始异常），不再逐个请求重跑
+    分钟级建库；冷却过期自动重试。切换工作目录 / reset 会清空该记忆。
     """
-    global _idx_manager
+    global _idx_manager, _idx_init_error, _idx_init_failed_at
     if _idx_manager is not None:
         return _idx_manager
+    previous = _idx_init_failure()
+    if previous is not None:
+        raise IndexInitError(
+            f"索引初始化此前失败（{_IDX_INIT_COOLDOWN_SEC:.0f}s 内不重试）: {previous}"
+        ) from previous
     with _idx_lock:
         if _idx_manager is None:
+            # 双检：排队的调用者可能在前一个持锁者失败/成功后到达
+            previous = _idx_init_failure()
+            if previous is not None:
+                raise IndexInitError(
+                    f"索引初始化此前失败（{_IDX_INIT_COOLDOWN_SEC:.0f}s 内不重试）: "
+                    f"{previous}"
+                ) from previous
             config = get_config()
             mgr = IndexManager(config)
             err: list = []
@@ -87,9 +137,16 @@ def get_index_manager() -> IndexManager:
             t.start()
             t.join()
             if err:
+                _idx_init_error = err[0]
+                _idx_init_failed_at = time.monotonic()
+                logger.error(
+                    "IndexManager init failed (cooldown %.0fs): %s",
+                    _IDX_INIT_COOLDOWN_SEC, err[0],
+                )
                 raise err[0]
             # 构建成功后再发布单例，避免半初始化实例泄漏到后续调用
             _idx_manager = mgr
+            _clear_idx_init_failure()
             logger.info("IndexManager initialized: %d documents (DB count)",
                         mgr.indexed_doc_count())
     return _idx_manager
@@ -234,6 +291,8 @@ def reset_singletons() -> None:
     with _singleton_guards(), _lock:
         _config = None
         _idx_manager = None
+        # 失败记忆随单例一并清空（AP-36）：reset 后应当允许立刻重试
+        _clear_idx_init_failure()
         _sessions_store = None
         _rewind_tracker = None
         _agent = None
@@ -329,6 +388,9 @@ def swap_workdir(target: str) -> dict:
             with _singleton_guards(), _lock:
                 _config = None
                 _idx_manager = None
+                # 换目录必须忘掉旧目录的失败记忆（AP-36），否则新目录
+                # 在冷却期内会被旧故障挡住
+                _clear_idx_init_failure()
                 _sessions_store = None
                 _rewind_tracker = None
                 _agent = None

@@ -25,6 +25,9 @@ def deps_env(tmp_path, monkeypatch):
 
     for name in ("_idx_manager", "_sessions_store", "_agent", "_config"):
         monkeypatch.setattr(deps, name, None, raising=False)
+    # AP-36 新增的失败记忆也是模块级状态——不重置会让用例间互相污染
+    monkeypatch.setattr(deps, "_idx_init_error", None, raising=False)
+    monkeypatch.setattr(deps, "_idx_init_failed_at", 0.0, raising=False)
 
     data_dir = tmp_path / ".cortex"
     data_dir.mkdir()
@@ -231,3 +234,146 @@ class TestResetSingletons:
             monkeypatch.setattr(d, name, lambda: None)
         d.reset_singletons()
         assert d._mcp_client is None
+
+
+class TestIndexInitFailureMemory:
+    """AP-36：构造失败必须留记忆——否则每个请求都重跑分钟级建库并排队。"""
+
+    class _Boom:
+        calls = 0
+
+        def __init__(self, config):
+            self.search_path = config.search_path
+            self.index_path = config.index_path
+
+        def load_or_build_index(self):
+            type(self).calls += 1
+            raise RuntimeError("db broken")
+
+        def indexed_doc_count(self):
+            return 0
+
+    def test_second_call_fast_fails_without_rebuilding(self, deps_env, monkeypatch):
+        deps, _cfg = deps_env
+        self._Boom.calls = 0
+        monkeypatch.setattr(deps, "IndexManager", self._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 60.0)
+
+        with pytest.raises(RuntimeError, match="db broken"):
+            deps.get_index_manager()
+        assert self._Boom.calls == 1
+
+        # 冷却期内：立即失败，不再进入建库
+        import time as _t
+        t0 = _t.monotonic()
+        with pytest.raises(deps.IndexInitError) as ei:
+            deps.get_index_manager()
+        assert _t.monotonic() - t0 < 0.5, "冷却期内必须快速失败"
+        assert self._Boom.calls == 1, "不得重跑建库"
+        assert isinstance(ei.value.__cause__, RuntimeError)
+        assert "db broken" in str(ei.value)
+
+    def test_concurrent_callers_do_not_stampede(self, deps_env, monkeypatch):
+        """8 个线程同时抢救：只有一次真正建库，其余全部快速失败。"""
+        deps, _cfg = deps_env
+        self._Boom.calls = 0
+        monkeypatch.setattr(deps, "IndexManager", self._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 60.0)
+
+        barrier = threading.Barrier(8)
+        errors = []
+
+        def call():
+            barrier.wait()
+            try:
+                deps.get_index_manager()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=call) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+
+        assert len(errors) == 8
+        assert self._Boom.calls == 1, f"建库跑了 {self._Boom.calls} 次"
+        assert sum(isinstance(e, deps.IndexInitError) for e in errors) == 7
+
+    def test_expired_cooldown_retries(self, deps_env, monkeypatch):
+        """冷却期过期后允许重试（自愈），成功的调用清空记忆。"""
+        deps, _cfg = deps_env
+        self._Boom.calls = 0
+        monkeypatch.setattr(deps, "IndexManager", self._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 0.05)
+
+        with pytest.raises(RuntimeError, match="db broken"):
+            deps.get_index_manager()
+        assert deps.idx_init_retry_after() >= 0
+        import time as _t
+        _t.sleep(0.08)
+
+        class _Ok(self._Boom):
+            def load_or_build_index(self):
+                type(self).calls += 1
+
+        monkeypatch.setattr(deps, "IndexManager", _Ok)
+        mgr = deps.get_index_manager()
+        assert mgr is not None
+        assert deps._idx_init_error is None
+        assert deps.idx_init_retry_after() == 0
+
+    def test_reset_clears_failure_memory(self, deps_env, monkeypatch):
+        """reset 后立刻可重试（否则测试/切库会被 30s 冷却挡住）。"""
+        deps, _cfg = deps_env
+        monkeypatch.setattr(deps, "IndexManager", self._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 60.0)
+        with pytest.raises(RuntimeError):
+            deps.get_index_manager()
+        assert deps._idx_init_error is not None
+
+        monkeypatch.setattr(deps, "IndexManager", _SlowIndexManager)
+        _SlowIndexManager.started = threading.Event()
+        _SlowIndexManager.release = threading.Event()
+        _SlowIndexManager.release.set()
+        deps.reset_singletons()
+        assert deps._idx_init_error is None
+        assert deps.get_index_manager() is not None
+
+    def test_retry_after_counts_down(self, deps_env, monkeypatch):
+        deps, _cfg = deps_env
+        monkeypatch.setattr(deps, "IndexManager", self._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 30.0)
+        with pytest.raises(RuntimeError):
+            deps.get_index_manager()
+        assert 25 <= deps.idx_init_retry_after() <= 30
+
+
+class TestIndexInitErrorResponse:
+    """AP-36：索引不可用对客户端是 503 + retry_after，而非 500 内部错误。"""
+
+    def test_handler_maps_to_503(self, deps_env, monkeypatch):
+        deps, _cfg = deps_env
+        monkeypatch.setattr(deps, "IndexManager", TestIndexInitFailureMemory._Boom)
+        monkeypatch.setattr(deps, "_IDX_INIT_COOLDOWN_SEC", 30.0)
+        with pytest.raises(RuntimeError):
+            deps.get_index_manager()
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from doclens.web_v2.api.errors import register_error_handlers
+
+        app = FastAPI()
+        register_error_handlers(app)
+
+        @app.get("/probe")
+        async def probe():
+            deps.get_index_manager()
+
+        r = TestClient(app).get("/probe")
+        assert r.status_code == 503
+        body = r.json()
+        assert body["code"] == "INDEX_INIT_FAILED"
+        assert "db broken" in body["detail"]   # 原因对用户可见（这是可重试故障）
+        assert 25 <= body["retry_after"] <= 30

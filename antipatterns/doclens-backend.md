@@ -488,13 +488,26 @@
   `tests/test_api_errors.py tests/test_middleware_order.py tests/test_auth_challenge.py
   tests/test_architecture.py tests/test_web_preview_formats.py` → 57 passed。
 
-### AP-36 `get_index_manager` 失败不记忆——每次请求重跑分钟级建库并排队 [P2] [status: pending]
+### AP-36 `get_index_manager` 失败不记忆——每次请求重跑分钟级建库并排队 [P2] [status: done]
 - **形态**：Error Hiding 的可用性变体（故障放大）
 - **证据**：`doclens/web_v2/deps.py:71-95` 构造异常后 `raise`，`_idx_manager` 仍为 None 且无失败标记 → 下一请求重新进入 `_idx_lock` 执行 `load_or_build_index`；
   其余请求在同一锁上排队。
 - **风险**：一次启动期故障（DB 锁/权限/磁盘）被放大成持续性全站阻塞，且无可见原因。
-- **修复方案**：记录 `_idx_init_error` + 冷却期快速失败（503 带原因），后台重试成功后清标记。
-- **回归验证**：`tests/test_deps_locks.py` + 新增「构造失败后第二请求快速失败」用例。
+- **实际修复（2026-10-21）**：
+  ① 失败记忆：`_idx_init_error` + `_idx_init_failed_at` + `IndexInitError(RuntimeError)`；
+  `get_index_manager` 锁外快检 + 锁内双检（排队者可能在前一个持锁者失败后到达），冷却期 30s 内直接抛
+  `IndexInitError`（`__cause__` 指向原始异常，消息含原因）；建库失败时 `logger.error` 留痕。
+  ② 成功即清标记；`reset_singletons` 与 `swap_workdir` 的置空段也清（换目录后不该被旧目录故障挡住）。
+  ③ `idx_init_retry_after()` 暴露剩余秒数；`register_error_handlers` 新增 `IndexInitError` → **503**
+  `{"code": "INDEX_INIT_FAILED", "detail": <原因>, "retry_after": n}`（延迟 import deps 避免 errors 导入期拉起重量级装配）。
+- **偏离台账方案（已确认口径）**：原写"后台重试成功后清标记"，实现改为**冷却期后惰性重试**——
+  等同自愈效果且不引入可能变孤儿线程的定时器。
+- **回归验证**：新增 5 断言（第二调用快速失败且不重跑建库 / 8 线程不惊群（恰 1 次建库 + 7 次
+  `IndexInitError`）/ 冷却过期可重试且成功清标记 / reset 清标记 / retry_after 倒计时）+ 1 条 API 层
+  503 断言；`deps_env` fixture 同步重置新增的模块级状态（否则用例间互相污染）。
+  **反证**：撤掉记忆读写 → 5 条红灯。
+  `tests/test_deps_locks.py tests/test_api_errors.py tests/test_middleware_order.py
+  tests/test_workdir_config.py tests/test_web_search_api_matrix.py tests/test_architecture.py` → 69 passed。
 
 ### AP-37 内置技能部署只拷 `SKILL.md`——附件永不更新、restore 后残缺仍报成功 [P2] [status: pending]
 - **形态**：半实现（实现与 docstring 声明不符）
@@ -766,6 +779,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-36 | 见本提交——失败记忆 + 30s 冷却快速失败（`IndexInitError`）+ reset/切库清标记 + 503 `INDEX_INIT_FAILED` 带 `retry_after`；新增 6 断言（含 8 线程不惊群），反证 5 红；回归 69 passed |
 | 2026-10-21 | 修 | AP-35 | 见本提交——未捕获异常记 `logger.exception` + 8 位 traceback_id，响应体改通用文案并回传 id；新增 tests/test_api_errors.py 5 断言，反证 4 红；回归 57 passed |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
 | 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |

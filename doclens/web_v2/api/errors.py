@@ -46,6 +46,22 @@ def register_error_handlers(app: FastAPI) -> None:
             content.update(exc.extra)
         return JSONResponse(status_code=exc.status, content=content)
 
+    # 索引初始化失败（AP-36）：这是"当前不可用但可重试"，不是业务错误，
+    # 也不是代码 bug——503 + 明确原因，前端据此提示稍后重试而非报错。
+    # 延迟 import：deps 是重量级装配模块，errors 不应在导入期拉起它。
+    from doclens.web_v2.deps import IndexInitError, idx_init_retry_after
+
+    @app.exception_handler(IndexInitError)
+    async def _handle_index_init_error(_: Request, exc: IndexInitError):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "INDEX_INIT_FAILED",
+                "detail": str(exc),
+                "retry_after": idx_init_retry_after(),
+            },
+        )
+
     @app.exception_handler(Exception)
     async def _handle_unexpected(request: Request, exc: Exception):
         # traceback_id 是日志与用户反馈之间的唯一关联键：前端把它显示出来，
