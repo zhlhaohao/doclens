@@ -295,3 +295,92 @@ class TestCancellation:
 
     def test_cancel_unknown_returns_false(self, svc):
         assert svc.cancel("nope") is False
+
+
+def _mk_job(job_id="j1", status="done"):
+    from doclens.translate_service import TranslateJob
+
+    job = TranslateJob(
+        job_id=job_id, source_path="a.pdf", lang_in="en", lang_out="zh",
+        outputs="both", pages=None, ultrafast=False, ignore_cache=False,
+    )
+    job.status = status
+    return job
+
+
+class TestSubscriptionLifecycle:
+    """AP-40：SSE 无退订 → 死回调常驻 + _prune 永不回收 job。"""
+
+    def test_unsubscribe_removes_callback(self, svc):
+        job = _mk_job()
+        svc._jobs["j1"] = job
+        cb = lambda e: None  # noqa: E731
+        assert svc.subscribe("j1", cb) is True
+        assert job._subscribers == [cb]
+        svc.unsubscribe("j1", cb)
+        assert job._subscribers == []
+
+    def test_unsubscribe_is_idempotent(self, svc):
+        job = _mk_job()
+        svc._jobs["j1"] = job
+        cb = lambda e: None  # noqa: E731
+        svc.unsubscribe("j1", cb)  # 从未订阅
+        svc.unsubscribe("nope", cb)  # 未知 job
+        assert job._subscribers == []
+
+    def test_prune_reclaims_after_unsubscribe(self, svc):
+        """终态 + 无订阅者 → 注销后立即回收（旧实现永久滞留）。"""
+        job = _mk_job()
+        svc._jobs["j1"] = job
+        cb = lambda e: None  # noqa: E731
+        svc.subscribe("j1", cb)
+        svc._prune("j1")
+        assert "j1" in svc._jobs, "还有订阅者时不回收（SSE 仍在线）"
+
+        svc.unsubscribe("j1", cb)
+        assert "j1" not in svc._jobs
+
+    def test_prune_keeps_running_job(self, svc):
+        job = _mk_job(status="running")
+        svc._jobs["j1"] = job
+        svc._prune("j1")
+        assert "j1" in svc._jobs
+
+    def test_subscribe_unknown_job_returns_false(self, svc):
+        assert svc.subscribe("nope", lambda e: None) is False
+
+
+class TestSseTerminalExit:
+    """AP-40：已终态任务订阅 SSE 时，推完快照就应结束（不进 ping 死循环）。"""
+
+    def _run_stream(self, svc, job, monkeypatch):
+        import asyncio
+        import json
+
+        from doclens.web_v2.api import translate as api
+
+        monkeypatch.setattr(api, "get_translation_service", lambda: svc)
+        svc._jobs[job.job_id] = job
+
+        async def collect():
+            resp = await api.translation_events(job.job_id)
+            events = []
+            async for chunk in resp.body_iterator:
+                events.append(chunk)
+                if len(events) > 5:
+                    break
+            return events
+
+        return asyncio.run(asyncio.wait_for(collect(), timeout=5))
+
+    def test_terminal_job_stream_ends_immediately(self, svc, monkeypatch):
+        job = _mk_job()
+        job.result_paths = ["a.zh.pdf"]
+        events = self._run_stream(svc, job, monkeypatch)
+        assert len(events) == 1, f"应当只有快照帧，实际 {len(events)} 帧"
+        assert "done" in str(events[0])
+
+    def test_subscription_released_after_stream(self, svc, monkeypatch):
+        job = _mk_job()
+        self._run_stream(svc, job, monkeypatch)
+        assert job._subscribers == [], "流结束后必须注销订阅"

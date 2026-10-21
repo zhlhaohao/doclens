@@ -566,14 +566,22 @@
   未知 id 返回 False。**反证**：还原 asyncio 版本 → 前 3 条红灯（引擎 200 次轮询均未见信号）。
   `tests/test_translate_service_preset.py tests/test_workdir_config.py tests/test_architecture.py` → 31 passed。
 
-### AP-40 翻译 SSE 无退订且终态不退出——job/回调/连接常驻 [P2] [status: pending]
+### AP-40 翻译 SSE 无退订且终态不退出——job/回调/连接常驻 [P2] [status: done]
 - **形态**：订阅生命周期缺失（无界增长）
 - **证据**：`doclens/web_v2/api/translate.py:157` `svc.subscribe()` 无 `finally` 反注册；
   `:174-186` 只在收到事件后判 `terminal`，订阅前已 done 的任务不再产生事件 → 快照后进入 30s ping 死循环；
   `translate_service.py:450-456` `_prune` 见 `_subscribers` 非空即跳过 → job 与死回调永不回收，`_emit` 持续向已取消队列 `put_nowait`。
 - **风险**：每打开一次进度页泄漏一个 job + 回调 + 一条常驻 SSE 连接；长期运行内存与连接单调增长。
-- **修复方案**：`finally: svc.unsubscribe(...)`；快照后立即判终态并 break；终态任务队列自行摘除。
-- **回归验证**：新增 API 级 SSE 生命周期用例。
+- **实际修复（2026-10-21）**：
+  ① `TranslationService.unsubscribe(job_id, cb)`：幂等移除回调；若移除后**终态且无订阅者**立即 `_prune`
+  —— 10 分钟定时器可能早于本次注销就已触发（当时还有订阅者被跳过），不留这条兜底则永久滞留。
+  ② SSE 端点：订阅后 `finally: svc.unsubscribe(...)`；快照推完即判终态并 `return`（不进入 ping 循环）；
+  循环体内判终态也用 `return` 走同一 finally。
+- **回归验证**：新增 7 断言——注销移除回调 / 注销幂等（含未知 job）/ 终态+无订阅者立即回收 /
+  有订阅者时不回收 / running 不回收 / 未知 job 订阅返回 False / **已终态任务只推 1 帧即结束** /
+  流结束后订阅已释放。**反证**：撤掉 finally 与终态早退 + 撤销销回收 → 3 条红灯。
+  `tests/test_translate_service_preset.py tests/test_workdir_config.py tests/test_architecture.py
+  tests/test_api_errors.py` → 43 passed。
 
 ### AP-41 翻译提交无路径包含校验，产物写回源文件目录 [P2] [status: pending]
 - **形态**：路径安全面遗漏（校验只在 files/preview 域）
@@ -808,6 +816,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-40 | 见本提交——新增 `unsubscribe`（终态+无订阅者立即 `_prune`）；SSE `finally` 注销 + 已有终态只推快照即返回；新增 7 断言，反证 3 红；回归 43 passed |
 | 2026-10-21 | 修 | AP-39 | 见本提交——取消信号 asyncio.Event → threading.Event，删掉从不运行的 loop 死链；新增 5 断言（含信号类型断言），反证 3 红；回归 31 passed |
 | 2026-10-21 | 修 | AP-38 | 见本提交——安装改「暂存目录 + 换名 + 批量回滚 + sidecar 最后写」；解压加 200MB/5000 条目上限；delete 改先 rmtree 再改 sidecar（失败 409）；新增 7 断言，反证 3+3 红；回归 88 passed |
 | 2026-10-21 | 修 | AP-37 | 见本提交——`deploy_builtin_skills` 改 `copytree(dirs_exist_ok=True)` 整目录部署（restore 同路修好）；新增 5 断言含真实发行包逐文件核对，反证 5 红；回归 81 passed |

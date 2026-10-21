@@ -140,7 +140,13 @@ async def cancel_translation(job_id: str):
 
 @router.get("/translate/{job_id}/events")
 async def translation_events(job_id: str):
-    """SSE 进度流：立即推一次当前状态快照，此后逐事件推送至终态。"""
+    """SSE 进度流：立即推一次当前状态快照，此后逐事件推送至终态。
+
+    生命周期（AP-40）：订阅在 `finally` 里注销，否则死回调常驻且
+    `_prune` 永远跳过该 job。已终态的任务推完快照即关闭——旧实现只在
+    **收到事件后**判终态，订阅前就 done 的任务不再产生事件，流退化成
+    30s ping 死循环（前端重连即多一条常驻连接）。
+    """
     import json
 
     svc = get_translation_service()
@@ -155,35 +161,40 @@ async def translation_events(job_id: str):
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
     svc.subscribe(job_id, on_event)
+    terminal = {"done", "error", "cancelled"}
 
     async def event_stream():
-        # 先推快照（订阅前的状态变化补发）
-        yield {
-            "event": "status",
-            "data": json.dumps(
-                {
-                    "type": job.status,
-                    "done": job.progress_done,
-                    "total": job.progress_total,
-                    "error": job.error,
-                    "paths": job.result_paths,
-                },
-                ensure_ascii=False,
-            ),
-        }
-        terminal = {"done", "error", "cancelled"}
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=30.0)
-            except asyncio.TimeoutError:
-                yield {"event": "ping", "data": "{}"}
-                continue
+        try:
+            # 先推快照（订阅前的状态变化补发）
             yield {
-                "event": event.get("type", "progress"),
-                "data": json.dumps(event, ensure_ascii=False),
+                "event": "status",
+                "data": json.dumps(
+                    {
+                        "type": job.status,
+                        "done": job.progress_done,
+                        "total": job.progress_total,
+                        "error": job.error,
+                        "paths": job.result_paths,
+                    },
+                    ensure_ascii=False,
+                ),
             }
-            if event.get("type") in terminal:
-                break
+            if job.status in terminal:
+                return  # 订阅前已终态：快照即完整信息，不进入 ping 循环
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    yield {"event": "ping", "data": "{}"}
+                    continue
+                yield {
+                    "event": event.get("type", "progress"),
+                    "data": json.dumps(event, ensure_ascii=False),
+                }
+                if event.get("type") in terminal:
+                    return
+        finally:
+            svc.unsubscribe(job_id, on_event)
 
     return EventSourceResponse(event_stream())
 

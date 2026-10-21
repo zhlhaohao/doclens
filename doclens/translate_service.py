@@ -180,6 +180,27 @@ class TranslationService:
             job._subscribers.append(cb)
             return True
 
+    def unsubscribe(self, job_id: str, cb: Callable[[dict], None]) -> None:
+        """注销进度回调（AP-40）：SSE 断开时必须调用。
+
+        不注销的后果是双向的：死回调继续被 `_emit` 调用（向已取消的队列
+        `put_nowait`），且 `_prune` 见 `_subscribers` 非空就跳过删除——
+        job 与回调在进程里常驻。
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return
+            try:
+                job._subscribers.remove(cb)
+            except ValueError:
+                pass  # 已注销（幂等）
+            terminal = job.status in {"done", "error", "cancelled"} and not job._subscribers
+        # 终态且已无订阅者 → 立即回收。_prune 的 10 分钟定时器可能早于
+        # 本次注销就已触发（当时还有订阅者，被跳过），不留这条兜底就永久滞留。
+        if terminal:
+            self._prune(job_id)
+
     # ------------------------------------------------------------------
     # 工作线程
     # ------------------------------------------------------------------
