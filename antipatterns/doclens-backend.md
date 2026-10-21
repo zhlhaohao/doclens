@@ -509,14 +509,24 @@
   `tests/test_deps_locks.py tests/test_api_errors.py tests/test_middleware_order.py
   tests/test_workdir_config.py tests/test_web_search_api_matrix.py tests/test_architecture.py` → 69 passed。
 
-### AP-37 内置技能部署只拷 `SKILL.md`——附件永不更新、restore 后残缺仍报成功 [P2] [status: pending]
+### AP-37 内置技能部署只拷 `SKILL.md`——附件永不更新、restore 后残缺仍报成功 [P2] [status: done]
 - **形态**：半实现（实现与 docstring 声明不符）
 - **证据**：`doclens/skills_deploy.py:58-68` 唯一写操作是 `shutil.copy2(src_skill_md, dst/"SKILL.md")`，而 `:44` docstring 声明「升级时新旧结构对位覆盖」；
   包内技能是多文件资产（`doclens/skills/anti-patterns/references/*.md`、`plan/ADR-FORMAT.md` 等）。
   `doclens/web_v2/api/skills.py:287-290` 忽略部署返回值、仍返回 200 完整条目。
 - **风险**：升级后判据/模板永不更新（首装 `config.py:441-444` copytree 仅一次）；删除内置技能再 restore 只回填 SKILL.md，技能引用全部失效却报成功。
-- **修复方案**：按 `skill_src_dir` 全量覆盖拷贝（`copytree(dirs_exist_ok=True)`）；restore 复用同一函数并校验附件存在。
-- **回归验证**：`tests/test_skill_vendor_dirs.py` + 新增「部署后 references/ 存在」「restore 后附件完整」断言。
+- **实际修复（2026-10-21）**：`deploy_builtin_skills` 改为 `shutil.copytree(skill_src_dir, skill_dst_dir, dirs_exist_ok=True)`
+  ——整目录覆盖（SKILL.md + 全部附件），同名覆盖、新增补入、不删除目标侧多余文件（用户自建附件保留）；
+  restore 本就复用该函数，一并修好。sidecar 在 skills_dir 之外，不受影响。
+- **现场取证**：修复前本机 `~/.cortex/skills/anti-patterns/` 只有 `SKILL.md`（`~/.doclens/` 那份是首装
+  `config.py` 的 copytree 产物，附件齐全）——缺陷在真实环境已发生。
+- **已知取舍（有意）**：源侧删掉某附件时目标侧保留（copytree 语义）——避免误删用户在同目录的自建文件；
+  需要强一致时由 release 流程另行处理。已加断言固定该行为。
+- **回归验证**：新增 5 断言（首次部署带 references / 删除后 restore 恢复完整目录 / 升级覆盖旧附件且保留
+  用户文件 / 源侧移除不删目标 / 真实发行包逐文件核对附件齐全）。**反证**：还原 `copy2(SKILL.md)` → 5 条红灯。
+  `tests/test_skill_vendor_dirs.py tests/test_skills_config.py tests/test_skill_hot_reload.py
+  tests/test_book_skill_routing.py tests/test_architecture.py` → 81 passed。
+- **运维提醒**：现有环境需重跑一次部署（重启应用即触发 `CortexAgent.initialize`）才会补上缺失的附件。
 
 ### AP-38 技能安装/删除：先删后写无回滚、解压无总量上限、删除先改配置 [P2] [status: pending]
 - **形态**：半成品残留 + Missing Resource Bound + 顺序错误
@@ -779,6 +789,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-37 | 见本提交——`deploy_builtin_skills` 改 `copytree(dirs_exist_ok=True)` 整目录部署（restore 同路修好）；新增 5 断言含真实发行包逐文件核对，反证 5 红；回归 81 passed |
 | 2026-10-21 | 修 | AP-36 | 见本提交——失败记忆 + 30s 冷却快速失败（`IndexInitError`）+ reset/切库清标记 + 503 `INDEX_INIT_FAILED` 带 `retry_after`；新增 6 断言（含 8 线程不惊群），反证 5 红；回归 69 passed |
 | 2026-10-21 | 修 | AP-35 | 见本提交——未捕获异常记 `logger.exception` + 8 位 traceback_id，响应体改通用文案并回传 id；新增 tests/test_api_errors.py 5 断言，反证 4 红；回归 57 passed |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |

@@ -47,6 +47,12 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
     「递归直到找到 SKILL.md」在所有发现链路统一）。部署保持源相对结构
     （包内 ``<厂商>/<技能>/`` → 目标同名相对路径），升级时新旧结构对位覆盖。
 
+    **整目录部署**（AP-37）：技能是目录级资产——``references/*.md``、
+    ``ADR-FORMAT.md`` 等附件与 SKILL.md 同等重要。曾只拷 SKILL.md，导致
+    升级后附件永不更新、删除后 restore 只剩一个光秃 SKILL.md 却仍报成功。
+    ``dirs_exist_ok=True`` 逐文件覆盖同名、新增新文件，不删除目标侧多余
+    文件（用户自建附件得以保留）。
+
     Returns:
         实际部署的技能名（meta name）列表。
     """
@@ -64,6 +70,8 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
         # 相对结构保持：包内嵌套层级原样映射到目标（平铺结构行为不变）
         skill_dst_dir = skills_dir / skill_src_dir.relative_to(skills_src_root)
         skill_dst_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_skill_md, skill_dst_dir / "SKILL.md")
+        # 整目录覆盖（含 SKILL.md 与全部附件）；sidecar 用户设置在 skills_dir
+        # 之外，不受影响
+        shutil.copytree(skill_src_dir, skill_dst_dir, dirs_exist_ok=True)
         deployed.append(skill_name)
     return deployed

@@ -249,3 +249,97 @@ class TestNestedDelete:
         shutil.rmtree(tmp_path / "vendor" / "x")
         assert (tmp_path / "vendor").is_dir()  # 空壳保留，rglob 无 SKILL.md 即忽略
         assert set(SkillLoader(tmp_path).skills) == set()
+
+
+# ---------------------------------------------------------------- 附件完整性
+
+
+class TestAssetDeployment:
+    """AP-37：技能是目录级资产——部署必须带附件，不能只拷 SKILL.md。
+
+    真实后果（修复前）：`~/.cortex/skills/anti-patterns/` 只有 SKILL.md，
+    而 SKILL.md 正文要求 `references/backend.md` 等判据文件；删除内置技能
+    再 restore，附件永久消失且 API 报成功。
+    """
+
+    def _pkg(self, tmp_path, monkeypatch):
+        from doclens import skills_deploy
+
+        pkg = tmp_path / "pkg"
+        d = pkg / "with-assets"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            "---\nname: with-assets\ndescription: d\n---\n见 references/a.md",
+            encoding="utf-8",
+        )
+        (d / "references").mkdir()
+        (d / "references" / "a.md").write_text("判据 A", encoding="utf-8")
+        (d / "FORMAT.md").write_text("模板", encoding="utf-8")
+        monkeypatch.setattr(skills_deploy, "_BUILTIN_SKILLS_SRC", pkg)
+        monkeypatch.setattr(skills_deploy.skills_config, "deleted_names", lambda: set())
+        return skills_deploy
+
+    def test_references_copied_on_first_deploy(self, tmp_path, monkeypatch):
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        assert mod.deploy_builtin_skills(dst) == ["with-assets"]
+        assert (dst / "with-assets" / "references" / "a.md").read_text(
+            encoding="utf-8"
+        ) == "判据 A"
+        assert (dst / "with-assets" / "FORMAT.md").exists()
+
+    def test_restore_after_delete_recreates_assets(self, tmp_path, monkeypatch):
+        """删除（rmtree）后 restore 必须恢复完整目录，而非光秃 SKILL.md。"""
+        import shutil
+
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        mod.deploy_builtin_skills(dst)
+        shutil.rmtree(dst / "with-assets")          # 模拟 delete_skill
+
+        mod.deploy_builtin_skills(dst)              # 模拟 restore
+        assert (dst / "with-assets" / "SKILL.md").exists()
+        assert (dst / "with-assets" / "references" / "a.md").exists()
+        assert (dst / "with-assets" / "FORMAT.md").exists()
+
+    def test_upgrade_overwrites_stale_asset_and_keeps_user_files(
+        self, tmp_path, monkeypatch
+    ):
+        """升级：同名附件被新版覆盖，用户自建文件与 sidecar 不受影响。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        mod.deploy_builtin_skills(dst)
+        stale = dst / "with-assets" / "references" / "a.md"
+        stale.write_text("旧版", encoding="utf-8")
+        user_file = dst / "with-assets" / "my-notes.md"
+        user_file.write_text("用户自建", encoding="utf-8")
+
+        mod.deploy_builtin_skills(dst)
+        assert stale.read_text(encoding="utf-8") == "判据 A"
+        assert user_file.exists(), "不删除目标侧多余文件"
+
+    def test_source_removed_asset_is_not_deleted(self, tmp_path, monkeypatch):
+        """源侧删掉附件时目标侧保留（copytree 语义）——记录为已知取舍。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        mod.deploy_builtin_skills(dst)
+        src_asset = mod._BUILTIN_SKILLS_SRC / "with-assets" / "references" / "a.md"
+        src_asset.unlink()
+
+        mod.deploy_builtin_skills(dst)
+        assert (dst / "with-assets" / "references" / "a.md").exists()
+
+    def test_real_package_deploys_references(self, tmp_path, monkeypatch):
+        """真实发行包回归：带 references/ 的内置技能部署后附件齐全。"""
+        from doclens import skills_deploy
+
+        monkeypatch.setattr(skills_deploy.skills_config, "deleted_names", lambda: set())
+        dst = tmp_path / "dst"
+        skills_deploy.deploy_builtin_skills(dst)
+        for src_skill_md in skills_deploy._BUILTIN_SKILLS_SRC.rglob("SKILL.md"):
+            src_dir = src_skill_md.parent
+            rel = src_dir.relative_to(skills_deploy._BUILTIN_SKILLS_SRC)
+            for f in src_dir.rglob("*"):
+                if f.is_file():
+                    got = dst / rel / f.relative_to(src_dir)
+                    assert got.exists(), f"附件未部署: {got}"
