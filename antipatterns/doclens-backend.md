@@ -452,14 +452,27 @@
   `tests/test_middleware_order.py tests/test_auth_challenge.py tests/test_workdir_config.py
   tests/test_deps_locks.py tests/test_architecture.py` → 49 passed。
 
-### AP-34 `.env` 读-改-写无锁非原子，值不转义 [P2] [status: pending]
+### AP-34 `.env` 读-改-写无锁非原子，值不转义 [P2] [status: done]
 - **形态**：写路径无事务 / Duplicated write discipline
 - **证据**：`doclens/web_v2/config_store.py:210-219` `read_text → 变换 → write_text`，无锁、无 tmp+replace；`:182/:188` `f"{key}={value}"` 不转义。
   写入方至少三处：`api/config.py:168`（`shutil.copyfile` 覆盖）、`api/presets.py:207/213`、`auth_credentials.py:63`；
   三者只各自持本模块锁，彼此无互斥。同目录三个 JSON store 均已实现 tmp+`os.replace`（`presets_store.py:63-72` 等）。
 - **风险**：并发保存设置与改密互相丢更新；含空格/`#`/引号的 JSON 值被 dotenv 截断 →「保存成功但不生效」；半写会让凭证解析失败（叠加 AP-2 的 fail-open）。
-- **修复方案**：`write_env_values` 提为单一写入口（进程级锁 + tmp + `os.replace` + 引号转义），三个调用方统一改道。
-- **回归验证**：`tests/test_presets_store.py tests/test_auth_challenge.py` + 新增「并发写不丢更新」「特殊字符值往返」用例。
+- **实际修复（2026-10-21）**：
+  ① `_ENV_WRITE_LOCK`（进程级 RLock）包住所有读-改-写；`_atomic_write()` 用同目录 `<name>.tmp` + `os.replace`，
+  异常路径清理 tmp；`copy_env_file()` 新增（曾用 `shutil.copyfile` 的 copy-from-global 改道）；
+  `reset_env_to_example` 的「读密钥 + 写模板」也整段进锁（原读在锁外，并发保存会被整体覆盖）。
+  ② `_quote_value()`：值含空白/引号/`#`/反斜杠、首尾有空白或含换行时加双引号并转义（`\`、`"`、换行→`
+`）；
+  裸值保持原样（`.env` 可读性与既有文本断言不破）。实证修掉的截断：`A=abc #def` 原来读回 `abc`，换行值原来
+  把后半截变成无值垃圾键。
+- **回归验证**：新增 `tests/test_config_store_env.py` 10 断言（无 tmp 残留 / 建父目录 / `os.replace` 被调用 /
+  16 线程并发写不丢键 / `#` 与引号与换行往返 / 裸值不加引号 / JSON 连续三次改写无漂移 / copy 逐字节一致）。
+  **反证**：还原「无锁 + 就地 write_text + 不转义」→ 5 条红灯。
+  `tests/test_config_store_env.py tests/test_search_preset_params.py tests/test_workdir_config.py
+  tests/test_auth_challenge.py tests/test_presets_store.py tests/test_architecture.py` → 98 passed。
+- **未做（跨进程）**：tmp 文件名为固定 `<name>.tmp`，进程内由锁串行；多进程（TUI + Web 同时写同一 `.env`）
+  仍可能互相覆盖——归 AP-22 类「单进程假设」，需要文件锁才能解决。
 
 ### AP-35 全局异常处理器不打日志、把异常文本回传客户端 [P2] [status: pending]
 - **形态**：Error Hiding + 信息泄露
@@ -746,6 +759,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
 | 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |
 | 2026-10-21 | 修 | AP-32 | 4dfb548——download 补 `assert_not_protected`；新增 `TestDownloadProtected` 2 断言（点文件三例 403 + 普通文件仍可下），反证撤闸门红灯；回归 82 passed。顺带发现 AP-67（preview_raw/preview_pdf 同缺闸门，未修） |
 | 2026-10-20 | 修 | AP-7 | 见本提交——sessions_store 同文件内拆 `_SessionDB`/`_AuthSessionStore`/`_RewindSnapshotStore`/`_SessionPortability` + 门面委托；`get_chat_history` 195 行拆 5 方法 + 3 模块级原语；只读差分 38 会话 × 9 方法零差异、写路径四表结构等价；分层回归 125 passed |

@@ -1,6 +1,5 @@
 """GET/PUT /api/config — read/write .env for a given scope."""
 import logging
-import shutil
 from typing import Literal
 
 from fastapi import APIRouter, Query
@@ -8,6 +7,7 @@ from fastapi import APIRouter, Query
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.config_store import (
     KNOWN_KEYS,
+    copy_env_file,
     mask_secret_values,
     read_env_values,
     reset_env_to_example,
@@ -164,8 +164,9 @@ async def copy_from_global():
     local_path = resolve_env_path("local")
     if not global_path.exists():
         raise CortexAPIError(404, "GLOBAL_ENV_MISSING", f"全局 .env 不存在: {global_path}")
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(str(global_path), str(local_path))
+    # 走 config_store 的唯一写入口（AP-34）：进程级锁 + tmp + os.replace。
+    # 直接 copyfile 会与并发保存互相截断，且绕过统一写入纪律。
+    copy_env_file(global_path, local_path)
     logger.info("copied global env -> %s", local_path)
     return {"ok": True, "saved_path": str(local_path)}
 

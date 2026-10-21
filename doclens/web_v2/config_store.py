@@ -5,9 +5,15 @@ Responsibilities:
 - Read a subset of keys from .env (using python-dotenv)
 - Write updates to .env while preserving unrelated keys / comments / order,
   with empty-string => unset_key semantics (spec §6.2)
+
+写入纪律（AP-34）：进程级锁 + 临时文件 + ``os.replace`` + 值转义。`.env`
+有多个写方（设置页保存、预设激活、改密、从全局复制、恢复默认），此前各自
+read-modify-write 且互不互斥——并发保存会丢更新，半写会让凭证解析失败
+（叠加 auth 的 fail-open）。所有写方必须经本模块。
 """
 import os
 import re
+import threading
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -15,6 +21,9 @@ from dotenv import dotenv_values
 from doclens.config import data_dirname, get_global_cortex_dir
 
 MERGED_VALUES_KEY = "values"  # placeholder; not currently used externally
+
+#: 进程级写锁——`.env` 的读-改-写必须整体串行，否则两个写方互相覆盖。
+_ENV_WRITE_LOCK = threading.RLock()
 
 # Settings UI keys. Keep in sync with
 # cortex/web_v2/frontend/src/views/settings-fields.ts (created in Task 6)
@@ -140,6 +149,42 @@ def read_env_values(
 
 _KEY_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
+#: 需要加双引号的值：含空白/引号/#（会被截断或误解析）、首尾有空白（会被 strip）、
+#: 含换行（会被拆成两行、第二行成为垃圾键）、含反斜杠（双引号内需转义）。
+_NEEDS_QUOTE_RE = re.compile(r"""[\s"'#\\]""")
+
+
+def _quote_value(value: str) -> str:
+    """把值渲染成 dotenv 可原样读回的一行（必要时加双引号并转义）。
+
+    不引用时保持原样——`.env` 的可读性/既有测试文本断言都依赖裸值。
+    """
+    if not _NEEDS_QUOTE_RE.search(value) and value == value.strip():
+        return value
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace("\r", "\\n")
+    )
+    return f'"{escaped}"'
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """同目录临时文件 + ``os.replace``——写一半崩溃不会留下截断的 `.env`。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass  # 清理失败不影响已完成的替换；残留 tmp 下次覆盖
+
 
 def _apply_env_updates(text: str, updates: dict[str, str]) -> str:
     """对 .env 文本应用更新，保留无关内容与各 key 的注释块。
@@ -179,13 +224,14 @@ def _apply_env_updates(text: str, updates: dict[str, str]) -> str:
                 delete[k] = True
                 k += 1
         else:
-            lines[i] = f"{key}={value}"
+            lines[i] = f"{key}={_quote_value(value)}"
 
     result = [line for i, line in enumerate(lines) if not delete[i]]
 
     # 追加文件中不存在、但 updates 非空的 key
     appended = [
-        f"{k}={v}" for k, v in updates.items() if v != "" and k not in key_idx
+        f"{k}={_quote_value(v)}" for k, v in updates.items()
+        if v != "" and k not in key_idx
     ]
     if appended:
         if result and result[-1].strip() != "":
@@ -211,12 +257,26 @@ def write_env_values(path: Path, updates: dict[str, str]) -> None:
     """Apply updates to .env at `path`, preserving unrelated keys / comments /
     order. 空串 => 删除该 key 及其注释块。Creates parent dirs and the file if
     missing.
+
+    全模块唯一写入口（AP-34）：进程级锁串行读-改-写，临时文件 + ``os.replace``
+    原子替换，值经 ``_quote_value`` 转义。任何绕过本函数直写 `.env` 的代码
+    都会重新引入「并发丢更新 / 半写 / 值被截断」三类缺陷。
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.touch()
-    text = path.read_text(encoding="utf-8")
-    path.write_text(_apply_env_updates(text, updates), encoding="utf-8")
+    with _ENV_WRITE_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        _atomic_write(path, _apply_env_updates(text, updates))
+
+
+def copy_env_file(src: Path, dst: Path) -> None:
+    """把 ``src`` 的原文整体复制到 ``dst``（原子 + 同一把写锁）。
+
+    用于「从全局复制到本地」——必须走本模块的写入纪律，直接 ``shutil.copyfile``
+    会与并发保存互相截断，且绕过统一入口（AP-34）。
+    """
+    with _ENV_WRITE_LOCK:
+        text = src.read_text(encoding="utf-8")
+        _atomic_write(dst, text)
 
 
 def reset_env_to_example(path: Path) -> None:
@@ -233,15 +293,16 @@ def reset_env_to_example(path: Path) -> None:
     if not src.exists():
         raise FileNotFoundError(f"包内 .env.example 模板缺失: {src}")
 
-    # 保留现有密钥（若有）
-    preserved: dict[str, str] = {}
-    if path.exists():
-        existing = read_env_values(path, SECRET_KEYS)[0]
-        preserved = {k: v for k, v in existing.items() if v}
+    # 读现有关键密钥 + 写模板必须在同一把锁内：否则保存设置并发的写入
+    # 会在读与写之间被本函数整体覆盖（AP-34）。
+    with _ENV_WRITE_LOCK:
+        preserved: dict[str, str] = {}
+        if path.exists():
+            existing = read_env_values(path, SECRET_KEYS)[0]
+            preserved = {k: v for k, v in existing.items() if v}
 
-    content = src.read_text(encoding="utf-8")
-    if preserved:
-        content = _apply_env_updates(content, preserved)
+        content = src.read_text(encoding="utf-8")
+        if preserved:
+            content = _apply_env_updates(content, preserved)
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+        _atomic_write(path, content)
