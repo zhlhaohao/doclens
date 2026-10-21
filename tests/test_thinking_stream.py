@@ -12,7 +12,7 @@ import asyncio
 from types import SimpleNamespace
 
 from planify.core.llm.anthropic_provider import AnthropicProvider
-from planify.core.llm.openai_compat_provider import _StreamTranslator
+from planify.core.llm.openai_compat_provider import StreamTranslator
 from planify.streaming.types import (
     EventEmitter,
     StreamEvent,
@@ -40,7 +40,7 @@ def _ns(**kw):
 
 
 def test_openai_reasoning_content_becomes_thinking_delta():
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     chunk = _ns(
         choices=[_ns(delta=_ns(
@@ -58,7 +58,7 @@ def test_openai_reasoning_content_becomes_thinking_delta():
 
 def test_openai_reasoning_field_alias():
     """部分网关用 delta.reasoning 而非 reasoning_content——同义解析。"""
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     chunk = _ns(
         choices=[_ns(delta=_ns(
@@ -75,7 +75,7 @@ def test_openai_reasoning_field_alias():
 
 def test_openai_content_chunk_untouched():
     """无思考字段的普通 chunk：行为与旧版完全一致（零回归面）。"""
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     chunk = _ns(
         choices=[_ns(delta=_ns(content="你好", tool_calls=None), finish_reason=None)],

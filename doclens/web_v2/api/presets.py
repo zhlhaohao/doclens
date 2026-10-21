@@ -49,7 +49,7 @@ _SEARCH_FIELD_MAP: dict[str, str] = {
 }
 
 
-def _materialize(preset: dict) -> dict:
+def materialize_preset(preset: dict) -> dict:
     """把预设字段映射为 .env key→value（用于物化写 global .env）。"""
     kind = preset.get("kind")
     proto = preset.get("protocol", "")
@@ -104,6 +104,10 @@ def _materialize(preset: dict) -> dict:
         "CORTEX_ACTIVE_VISION_PRESET": name,
     }
 
+
+
+# 兼容别名（AP-22 公共化前的私有名；别名定义行不属于跨模块私有 import）
+_materialize = materialize_preset
 
 @router.get("/presets", response_model=PresetListResponse)
 async def list_presets(kind: str | None = None):
@@ -196,7 +200,7 @@ async def activate_preset(preset_id: str):
     if raw is None:
         raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {preset_id}")
 
-    updates = _materialize(raw)
+    updates = materialize_preset(raw)
     # local config 已禁用（store scope 恒 global）：模型配置统一写 global；
     # 并清 local .env 中对应键的残留（空串=删除），避免 local 覆盖 global 致切换失效。
     try:

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from doclens.web_v2 import presets_store
-from doclens.web_v2.api.presets import _materialize
+from doclens.web_v2.api.presets import materialize_preset
 
 
 @pytest.fixture(autouse=True)
@@ -102,7 +102,7 @@ def test_delete_idempotent():
 
 
 def test_materialize_llm():
-    out = _materialize({
+    out = materialize_preset({
         "kind": "llm",
         "protocol": "openai_compat",
         "base_url": "https://x",
@@ -118,7 +118,7 @@ def test_materialize_llm():
 
 
 def test_materialize_vision_openai_compat_writes_protocol():
-    out = _materialize({
+    out = materialize_preset({
         "kind": "vision",
         "protocol": "openai_compat",
         "base_url": "https://x",
@@ -135,7 +135,7 @@ def test_materialize_vision_openai_compat_writes_protocol():
 
 
 def test_materialize_vision_anthropic():
-    out = _materialize({
+    out = materialize_preset({
         "kind": "vision",
         "protocol": "anthropic",
         "base_url": "https://x",
@@ -147,7 +147,7 @@ def test_materialize_vision_anthropic():
 
 
 def test_materialize_llm_without_context_window_omits_key():
-    out = _materialize({
+    out = materialize_preset({
         "kind": "llm",
         "protocol": "anthropic",
         "base_url": "",
@@ -160,7 +160,7 @@ def test_materialize_llm_without_context_window_omits_key():
 
 
 def test_materialize_search():
-    out = _materialize({
+    out = materialize_preset({
         "kind": "search",
         "name": "精准",
         "max_results": 30,
@@ -184,7 +184,7 @@ def test_materialize_search():
 
 
 def test_materialize_search_skips_none_fields():
-    out = _materialize({"kind": "search", "name": "N", "max_results": 30})
+    out = materialize_preset({"kind": "search", "name": "N", "max_results": 30})
     assert out["CORTEX_MAX_RESULTS"] == "30"
     assert "CORTEX_MIN_SCORE_THRESHOLD" not in out  # None 字段跳过
     assert out["CORTEX_ACTIVE_SEARCH_PRESET"] == "N"

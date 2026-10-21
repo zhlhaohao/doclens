@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 from planify.core.llm.anthropic_provider import AnthropicProvider
 from planify.core.llm.openai_compat_provider import (
-    _StreamTranslator,
+    StreamTranslator,
     _usage_from_openai,
 )
 from planify.streaming.runner import StreamingAgent
@@ -76,7 +76,7 @@ def test_openai_usage_only_chunk_becomes_message_delta():
     故 input_tokens 必须是 **新增** 200 而非 5000——否则上层
     「总输入 = input + cache_read + cache_creation」会把命中部分重复计一次。
     """
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     chunk = _ns(
         choices=[],
@@ -104,7 +104,7 @@ def test_openai_minimax_cached_tokens_details_normalized():
     回归 2026-10-20 事故：MiniMax 端点只报 cached_tokens，不报
     prompt_cache_hit_tokens——旧实现读不到该字段，命中率恒显示 0%。
     """
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     chunk = _ns(
         choices=[],
@@ -160,7 +160,7 @@ def test_openai_no_cache_endpoint_reports_full_input():
 
 
 def test_openai_finish_chunk_merges_usage_and_stop_reason():
-    translator = _StreamTranslator()
+    translator = StreamTranslator()
     translator.start()
     text_chunk = _ns(
         choices=[_ns(delta=_ns(content="hi", tool_calls=None), finish_reason=None)],

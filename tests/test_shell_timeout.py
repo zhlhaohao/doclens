@@ -7,35 +7,35 @@
 """
 import pytest
 
-from planify.tools.basic import _find_bash_path, _shell_timeout, _timeout_message, run_bash
+from planify.tools.basic import find_bash_path, run_bash, shell_timeout, timeout_message
 
 
 class TestShellTimeoutEnv:
     def test_default_120(self, monkeypatch):
         monkeypatch.delenv("PLANIFY_SHELL_TIMEOUT", raising=False)
-        assert _shell_timeout() == 120
+        assert shell_timeout() == 120
 
     @pytest.mark.parametrize("raw", ["300", " 60 ", "1"])
     def test_valid_env(self, monkeypatch, raw):
         monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", raw)
-        assert _shell_timeout() == int(raw)
+        assert shell_timeout() == int(raw)
 
     @pytest.mark.parametrize("raw", ["", "abc", "12.5", "0", "-30"])
     def test_invalid_falls_back(self, monkeypatch, raw):
         monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", raw)
-        assert _shell_timeout() == 120
+        assert shell_timeout() == 120
 
 
 class TestTimeoutMessage:
     def test_contains_seconds_and_background_guidance(self, monkeypatch):
         monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", "90")
-        msg = _timeout_message()
+        msg = timeout_message()
         assert msg.startswith("Error: Timeout (90s)")
         assert "background_run" in msg
         assert "check_background" in msg
 
 
-@pytest.mark.skipif(_find_bash_path() is None, reason="无 Git Bash（Windows 回退分支另行覆盖）")
+@pytest.mark.skipif(find_bash_path() is None, reason="无 Git Bash（Windows 回退分支另行覆盖）")
 class TestRunBashTimeoutPath:
     def test_timeout_returns_guidance(self, tmp_path, monkeypatch):
         """e2e：超时秒数来自 env（1s），命令 sleep 3 必超——返回引导文案。"""

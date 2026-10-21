@@ -96,7 +96,7 @@ def _usage_from_openai(u: Any) -> dict[str, int] | None:
     }
 
 
-class _StreamTranslator:
+class StreamTranslator:
     """OpenAI stream chunk → 归一化 StreamEvent 的状态机（同步/异步壳共用）。
 
     OpenAI 的 tool_call.index 用 0/1/2... 标识同一轮里的并行工具；
@@ -190,10 +190,14 @@ class _StreamTranslator:
         return StreamEvent(type="message_stop")
 
 
+# 兼容别名（AP-22 公共化）
+_StreamTranslator = StreamTranslator
+
+
 class _StreamTraceAccumulator:
     """流式 chunk → 原生风格响应（供 LLM trace 落盘）。
 
-    与 _StreamTranslator（归一化事件）并行消费同一批 chunk：translator
+    与 StreamTranslator（归一化事件）并行消费同一批 chunk：translator
     服务运行时事件流，本器只在 tracer 开启时还原原生 ChatCompletion 形态
     （content 拼接 / tool_calls 按 index 聚合 / 尾 chunk usage）。
     reasoning_content 同步累积（原生侧本就有该字段，思考可见利于排障）。
@@ -372,7 +376,7 @@ class OpenAICompatProvider:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
-        translator = _StreamTranslator()
+        translator = StreamTranslator()
         yield translator.start()
         done = False
         try:
@@ -425,7 +429,7 @@ class OpenAICompatProvider:
         kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
-        translator = _StreamTranslator()
+        translator = StreamTranslator()
         yield translator.start()
         done = False
         try:

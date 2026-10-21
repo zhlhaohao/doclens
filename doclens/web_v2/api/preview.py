@@ -32,7 +32,7 @@ router = APIRouter()
 _BINARY_SNIFF_BYTES = 8192
 
 
-def _looks_binary(full: Path) -> bool:
+def looks_binary(full: Path) -> bool:
     """文本兜底路径的二进制嗅探：前 8KB 含 NUL 字节即判定二进制。
 
     BINARY_PREVIEW_EXTS 只覆盖**已知解析器**的类型；未知扩展（apk/zip/
@@ -60,6 +60,10 @@ _LANGUAGE_MAP = {
 
 
 
+
+
+# 兼容别名（AP-22 公共化）
+_looks_binary = looks_binary
 
 def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
     """PDF 预览元数据（ADR-0031 原生预览）：language=pdf、无 content。
@@ -151,7 +155,7 @@ def preview(
 
     # 二进制嗅探（按内容，与扩展名无关）：未知二进制不支持预览——不把
     # 字节乱码当文本渲染，引导下载查看（前端通用错误 toast 呈现）
-    if _looks_binary(full):
+    if looks_binary(full):
         raise CortexAPIError(
             415, "BINARY_NOT_PREVIEWABLE", "二进制文件不支持预览，请下载后查看"
         )

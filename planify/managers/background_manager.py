@@ -37,10 +37,10 @@ from ..skills.access_state import (
 from ..tools.basic import (
     _audit_snippet,
     _build_shell_argv,
-    _find_bash_path,
+    find_bash_path,
     _find_windows_shell,
     _is_dangerous,
-    _shell_timeout,
+    shell_timeout,
     run_shell_with_tree_kill,
 )
 
@@ -68,9 +68,9 @@ def _normalize_bg_timeout(t) -> int:
         t = int(t)
     except (TypeError, ValueError):
         # None（未传）/ 非数字：与同步 shell 同源——读 PLANIFY_SHELL_TIMEOUT
-        return _shell_timeout()
+        return shell_timeout()
     if t <= 0:
-        return _shell_timeout()
+        return shell_timeout()
     return min(t, _BG_TIMEOUT_MAX)
 
 
@@ -164,7 +164,7 @@ class BackgroundManager:
     def _build_argv(self, command: str) -> list:
         """构建命令行参数（shell=False 形态），与同步 shell 工具同口径。"""
         if platform.system() == "Windows":
-            bash_path = _find_bash_path()
+            bash_path = find_bash_path()
             if bash_path:
                 return [bash_path, "-c", command]
             # 没有 Git Bash，回退 Windows 原生 shell（pwsh → powershell → cmd）
@@ -250,7 +250,7 @@ class BackgroundManager:
                     # error 终态，打破纯轮询豁免下的无界等待。注意锁内只
                     # 改状态，文案在锁外渲染。
                     elapsed = time.monotonic() - t.get("started_at", 0.0)
-                    budget = t.get("timeout") or _shell_timeout()
+                    budget = t.get("timeout") or shell_timeout()
                     if elapsed > budget + _EXEC_GRACE_SECONDS:
                         t.update(
                             {

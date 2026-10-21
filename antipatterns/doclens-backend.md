@@ -246,12 +246,20 @@
 - **修复方案**：单一常量模块（`auth_gate.SESSION_TTL_HOURS` 为准，`COOKIE_MAX_AGE = SESSION_TTL_HOURS*3600` 计算）；ring 上限与标题长度常量化。
 - **回归验证**：`tests/test_auth_challenge.py tests/test_sessions_store_history.py`。
 
-### AP-22 测试跨模块 import 私有成员（违反 CLAUDE.md 规则 2） [P3] [status: pending]
+### AP-22 测试跨模块 import 私有成员（违反 CLAUDE.md 规则 2） [P3] [status: done]
 - **形态**：违反仓库纪律（独立发现）
 - **证据**：`tests/test_presets_store.py:10` `from doclens.web_v2.api.presets import _materialize`；`tests/test_preview_binary_guard.py:18` `from doclens.web_v2.api.preview import _looks_binary`；`tests/test_shell_timeout.py:10`（planify 私有）；`tests/test_thinking_stream.py:15`（planify 私有）。源码侧机械扫描为 0。
 - **风险**：私有函数改名即可红灯一片，且测试把实现细节固化为契约；`tests/test_architecture.py` 目前只守护规则 1/2 的一部分，未覆盖此项。
-- **修复方案**：四个函数去下划线公共化（`materialize_preset` / `looks_binary` / 对应 planify 函数），同步改测试引用；如需保留私有语义，改测试走公共入口 + monkeypatch。
-- **回归验证**：`tests/test_presets_store.py tests/test_preview_binary_guard.py tests/test_shell_timeout.py tests/test_thinking_stream.py tests/test_architecture.py`。
+- **实际修复（2026-10-20）**：① 六符号公共化 + `_old = new` 兼容别名（守卫明文允许别名定义行）：`_materialize`→`materialize_preset`、`_looks_binary`→`looks_binary`
+  （doclens 侧）；`_shell_timeout`/`_timeout_message`/`_find_bash_path`→去下划线（planify/tools/basic，内部调用点与 background_manager 消费方同步）；
+  `_StreamTranslator`→`StreamTranslator`（openai_compat_provider）；② 5 个测试文件改引公共名；③ 新增 `test_architecture.py::test_no_private_import_in_tests`
+  机械化守卫——AST 只看模块级 import，含 26 项存量白名单（新条目禁止加入）。
+- **discovered-during-fix（守卫启用后新发现，未修）**：模块级私有 import 远不止台账四处——另有 15 个测试文件 26 项（_ChangeHandler、_parse_db_ts、
+  _extract_match_snippet、_round_signature 族等）。按"不扩散"原则：公共化收益低（白盒点测的内部常量/纯辅助），以白名单圈存——新代码禁止再加入，
+  存量在触及对应模块时顺手公共化。函数体内的局部私有 import（约 60 处）不在此红线（测试白盒惯例，monkeypatch 目标本就需字符串路径）。
+- **回归验证**：`tests/test_presets_store.py tests/test_preview_binary_guard.py tests/test_shell_timeout.py tests/test_thinking_stream.py
+  tests/test_stream_usage.py tests/test_background_tree_kill.py tests/test_compact.py tests/test_architecture.py` → 126 passed；
+  搜索族（web_search_api_matrix/grep_tool）→ 82 passed。
 
 ### AP-23 `deps.reset_singletons` 的 global 列表漏 `_mcp_client`，赋值落空 [P3] [status: done]
 - **形态**：Lava Flow / 隐性失效

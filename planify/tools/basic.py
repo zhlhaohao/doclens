@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SHELL_TIMEOUT = 120
 
 
-def _shell_timeout() -> int:
+def shell_timeout() -> int:
     """读 PLANIFY_SHELL_TIMEOUT（非法/非正回落默认 120）。"""
     try:
         t = int(os.getenv("PLANIFY_SHELL_TIMEOUT", "").strip())
@@ -43,7 +43,7 @@ def _shell_timeout() -> int:
     return t if t > 0 else _DEFAULT_SHELL_TIMEOUT
 
 
-def _timeout_message(residual_output: str = "") -> str:
+def timeout_message(residual_output: str = "") -> str:
     """超时返回文案：带实际秒数 + 引导模型改用后台工具（而非反复重试）。
 
     residual_output 非空时附上（截断 2000 字符）——超时前命令可能已完成
@@ -51,7 +51,7 @@ def _timeout_message(residual_output: str = "") -> str:
     自行诊断恢复的关键信号。
     """
     msg = (
-        f"Error: Timeout ({_shell_timeout()}s). For long-running commands, "
+        f"Error: Timeout ({shell_timeout()}s). For long-running commands, "
         "use background_run to start the task in the background, "
         "then check_background to poll its output."
     )
@@ -211,7 +211,7 @@ def _is_dangerous(command: str) -> bool:
     return bool(tokens & _DANGEROUS_WORDS)
 
 
-def _find_bash_path() -> str:
+def find_bash_path() -> str:
     """查找 bash 可执行文件路径
 
     Windows 环境下依次尝试：
@@ -236,6 +236,12 @@ def _find_bash_path() -> str:
 
     return None
 
+
+
+# 兼容别名（AP-22 公共化；别名定义行不属于跨模块私有 import）
+_shell_timeout = shell_timeout
+_timeout_message = timeout_message
+_find_bash_path = find_bash_path
 
 def _find_windows_shell() -> tuple:
     """查找 Windows 原生 shell 可执行文件
@@ -369,22 +375,22 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
 
         # 检测 Windows 环境并使用 bash 包装命令
         if platform.system() == "Windows":
-            bash_path = _find_bash_path()
+            bash_path = find_bash_path()
             if not bash_path:
                 # 没有 Git Bash，回退到 Windows 原生 shell（pwsh → powershell → cmd）
                 return run_powershell(command, workdir)
             # 使用 bash -c 包装命令（进程树击杀语义见 run_shell_with_tree_kill）
             text, timed_out = run_shell_with_tree_kill(
-                [bash_path, "-c", command], workdir, _shell_timeout()
+                [bash_path, "-c", command], workdir, shell_timeout()
             )
         else:
             # Unix 环境直接使用 shell
             text, timed_out = run_shell_with_tree_kill(
-                ["sh", "-c", command], workdir, _shell_timeout()
+                ["sh", "-c", command], workdir, shell_timeout()
             )
 
         if timed_out:
-            return _timeout_message(text)
+            return timeout_message(text)
         return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"
@@ -424,10 +430,10 @@ def _run_powershell_impl(command: str, workdir: Path) -> str:
             workdir.mkdir(parents=True, exist_ok=True)
 
         argv = _build_shell_argv(exe_path, kind, command)
-        text, timed_out = run_shell_with_tree_kill(argv, workdir, _shell_timeout())
+        text, timed_out = run_shell_with_tree_kill(argv, workdir, shell_timeout())
 
         if timed_out:
-            return _timeout_message(text)
+            return timeout_message(text)
         return text[:50000] if text else "(no output)"
     except Exception as e:
         return f"Error: {str(e).encode('utf-8', errors='replace').decode('utf-8')}"

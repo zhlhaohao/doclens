@@ -11,6 +11,7 @@ planify 与 treesearch 互不依赖；底层永不 import 高层。
 - vision_worker 曾 from doclens.diary_worker import _vision_openai（跨 worker
   私有引用）；api/diary.py 曾 import _CAPTION_PROMPT（跨层私有引用）。
 """
+import ast
 import re
 from pathlib import Path
 
@@ -176,3 +177,71 @@ def test_frontend_no_hardcoded_colors():
                 continue
             violations.append(f"{rel}:{line}: {m.group(0)} in {line_text[:80]}")
     assert not violations, "组件硬编码颜色（ADR-0043：颜色只能来自 tokens.css / 色板白名单）:\n" + "\n".join(violations)
+
+
+def test_no_private_import_in_tests():
+    """红线 2/6 推广（AP-22）：tests/ 的**模块级** import 不得引入私有成员。
+
+    范围裁定（2026-10-20 首次启用）：仅约束模块级 import（top-level）——
+    台账 AP-22 的四处存量已公共化（materialize_preset / looks_binary /
+    shell_timeout 族 / StreamTranslator）。函数体内的局部私有 import
+    （monkeypatch 目标、白盒点测，约 60 处散布 19 文件）属测试白盒惯例，
+    记录在案但不在本红线内（见台账 AP-22 discovered-during-fix 附注）。
+    别名定义行（`_old = new`）在源码侧，不在此扫描范围。
+
+    存量白名单（2026-10-20 首次启用时清点，新条目**禁止**加入——公共化
+    或函数内 import 二选一）：白盒点测历史存量，涉及测试内部常量/纯
+    辅助函数，公共化收益低；记录于台账 AP-22 附注。
+    """
+    _GRANDFATHERED = {
+        ("tests/test_background_tree_kill.py", "planify.managers.background_manager", "_EXEC_GRACE_SECONDS"),
+        ("tests/test_docx_parser.py", "treesearch.parsers.docx_parser", "_extract_docx_headings"),
+        ("tests/test_file_watcher_exclude.py", "doclens.file_watcher", "_ChangeHandler"),
+        ("tests/test_file_watcher_robustness.py", "doclens.file_watcher", "_ChangeHandler"),
+        ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_binary_doc_ids"),
+        ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_nodes_total_count"),
+        ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_rg_search_root_hits"),
+        ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_targets_to_rg_globs"),
+        ("tests/test_grep_regex_snippet.py", "treesearch.fts", "_extract_match_snippet"),
+        ("tests/test_llm_trace.py", "planify.core.llm.trace", "_fenced_json"),
+        ("tests/test_llm_trace.py", "planify.core.llm.trace", "_redact_images"),
+        ("tests/test_llm_trace.py", "planify.core.llm.trace", "_trigger_summary"),
+        ("tests/test_pdf_page_starts.py", "treesearch.indexer", "_preprocess_text"),
+        ("tests/test_pdf_page_starts.py", "treesearch.parsers.pdf_parser", "_compute_page_starts"),
+        ("tests/test_probe_vision.py", "doclens.web_v2.probe_vision", "_gen_code"),
+        ("tests/test_probe_vision.py", "doclens.web_v2.probe_vision", "_normalize"),
+        ("tests/test_probe_vision.py", "doclens.web_v2.probe_vision", "_render_probe_image"),
+        ("tests/test_pst_parser.py", "treesearch.parsers.pst_parser", "_parse_attachment_text"),
+        ("tests/test_sessions_ts_normalization.py", "doclens.web_v2.sessions_store", "_parse_db_ts"),
+        ("tests/test_stream_usage.py", "planify.core.llm.openai_compat_provider", "_usage_from_openai"),
+        ("tests/test_subagent_round_budget.py", "planify.subagent.runner", "_IDENTICAL_ROUNDS_LIMIT"),
+        ("tests/test_subagent_round_budget.py", "planify.subagent.runner", "_round_signature"),
+        ("tests/test_subagent_round_budget.py", "planify.subagent.runner", "_soft_remind_round"),
+        ("tests/test_tool_round_budget.py", "planify.streaming.runner", "_IDENTICAL_ROUNDS_LIMIT"),
+        ("tests/test_tool_round_budget.py", "planify.streaming.runner", "_is_pure_poll_round"),
+        ("tests/test_tool_round_budget.py", "planify.streaming.runner", "_round_signature"),
+    }
+    violations: list[str] = []
+    tests_dir = REPO / "tests"
+    for py in tests_dir.rglob("*.py"):
+        if "__pycache__" in py.parts:
+            continue
+        rel = py.relative_to(REPO).as_posix()
+        tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+        for node in tree.body:  # 只看模块级
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if node.module.split(".")[0] not in ("doclens", "planify", "treesearch"):
+                continue
+            bad = [
+                a.name for a in node.names
+                if a.name.startswith("_")
+                and not a.name.startswith("__")
+                and (rel, node.module, a.name) not in _GRANDFATHERED
+            ]
+            if bad:
+                violations.append(f"{rel}: from {node.module} import {', '.join(bad)}")
+    assert not violations, (
+        "tests/ 模块级私有成员引用（应公共化或改为函数内 monkeypatch 目标，"
+        "见 CLAUDE.md 规则 2）：\n" + "\n".join(violations)
+    )
