@@ -136,6 +136,26 @@ def _round_budget_rules(values: dict[str, str]) -> list[ConfigValidationError]:
     )
 
 
+def _llm_trace_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """LLM trace 保留天数校验（空/0 = 关闭；非空必须是 1–365 的整数天）。"""
+    raw = values.get("PLANIFY_LLM_TRACE", "").strip()
+    if not raw:
+        return []
+    try:
+        d = int(raw)
+    except ValueError:
+        return [ConfigValidationError(
+            field="PLANIFY_LLM_TRACE",
+            error="必须是整数（天）",
+        )]
+    if not (0 <= d <= 365):
+        return [ConfigValidationError(
+            field="PLANIFY_LLM_TRACE",
+            error="合法范围：0–365 天（0 = 关闭）",
+        )]
+    return []
+
+
 def validate_values(values: dict[str, str]) -> ValidationErrors:
     """Return ValidationErrors (possibly empty) for the given values dict.
 
@@ -197,6 +217,8 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_workdir_dir_rule(values))
     # shell 超时规则（1–3600 整数）
     errors.extend(_shell_timeout_rule(values))
+    # LLM trace 保留天数规则（0–365 整数天；0 = 关闭）
+    errors.extend(_llm_trace_rule(values))
     # AI 轮次预算规则（主循环 0–500、子代理 1–200；0 = 不限）
     errors.extend(_round_budget_rules(values))
 

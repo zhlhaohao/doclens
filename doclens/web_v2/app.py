@@ -105,9 +105,13 @@ async def lifespan(app: FastAPI):
         from doclens.web_v2.tmp_workspace import cleanup_all_tmp
         from doclens.web_v2.workdir_store import record_workdir
         # 启动时清空 AI 会话临时工作区（.cortex/tmp/）——上轮运行残留的脚本/中间产物
-        cleanup_all_tmp(Path(deps.get_index_manager().search_path))
+        search_path = Path(deps.get_index_manager().search_path)
+        cleanup_all_tmp(search_path)
+        # LLM trace 过期清理（PLANIFY_LLM_TRACE > 0 天时；0/空 = 关闭 = 无操作）
+        from planify.core.llm import cleanup_expired_traces_for_workdir
+        cleanup_expired_traces_for_workdir(workdir=search_path)
         # 记录启动落点（ADR-0043 最近工作目录）
-        record_workdir(deps.get_index_manager().search_path)
+        record_workdir(search_path)
         deps.start_watcher()
         deps.start_vision_worker()
         deps.start_diary_worker()

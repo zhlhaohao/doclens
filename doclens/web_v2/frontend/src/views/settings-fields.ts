@@ -83,6 +83,7 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   PLANIFY_SHELL_TIMEOUT: "120",
   PLANIFY_MAX_TOOL_ROUNDS: "0",
   PLANIFY_MAX_SUBAGENT_ROUNDS: "30",
+  PLANIFY_LLM_TRACE: "0",
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
@@ -246,6 +247,17 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     max: 100,
     step: 5,
     unit: "轮",
+  },
+  {
+    tab: "misc",
+    section: "AI 工具",
+    envVar: "PLANIFY_LLM_TRACE",
+    label: "LLM trace 保留天数",
+    component: "number",
+    min: 0,
+    max: 365,
+    unit: "天",
+    hint: "LLM 调用原文落盘（调试/缓存命中率分析）：0 = 关闭（默认）；>0 = 开启并保留该天数，启动时自动删除过期 trace 文件（.planify/llm_trace/）。改后需重启。",
   },
   {
     tab: "misc",

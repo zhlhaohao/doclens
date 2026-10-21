@@ -2,7 +2,7 @@
 from .factory import create_provider
 from .presets import resolve_provider_config
 from .provider import LLMProvider
-from .trace import LLMTracer
+from .trace import LLMTracer, cleanup_expired_traces_for_workdir
 from .types import (
     LLMResponse,
     StreamEvent,
@@ -17,6 +17,7 @@ __all__ = [
     "resolve_provider_config",
     "LLMProvider",
     "LLMTracer",
+    "cleanup_expired_traces_for_workdir",
     "LLMResponse",
     "StreamEvent",
     "TextBlock",

@@ -37,7 +37,7 @@ def _make(tmp_path, session_key=None, label="main", env=None, **kw):
 
 def test_create_disabled_by_default(tmp_path):
     assert LLMTracer.create(label="main", workdir=tmp_path, env={}) is None
-    for off in ("0", "false", "off", "", "yes-but-not-quite"):
+    for off in ("0", "false", "off", "", "yes-but-not-quite", "abc", "-3"):
         assert (
             LLMTracer.create(label="main", workdir=tmp_path, env={"PLANIFY_LLM_TRACE": off})
             is None
@@ -56,6 +56,51 @@ def test_create_dir_override(tmp_path):
     tracer = _make(tmp_path, env={"PLANIFY_LLM_TRACE_DIR": str(override)})
     assert tracer is not None
     assert tracer.trace_dir == override
+
+
+# ------------------------------------------------------------- 保留天数 / 过期清理
+
+
+def test_retention_semantics(tmp_path):
+    """天数语义：2 = 开 2 天；"true" 兼容旧布尔 = 1 天；0/空/非法 = 关。"""
+    from planify.core.llm.trace import _trace_retention_days
+
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": "7"}) == 7
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": "1"}) == 1
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": "true"}) == 1  # 旧布尔兼容
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": "0"}) == 0
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": ""}) == 0
+    assert _trace_retention_days({"PLANIFY_LLM_TRACE": "abc"}) == 0
+    assert _trace_retention_days({}) == 0
+
+
+def test_cleanup_expired_traces_on_create(tmp_path):
+    """创建 tracer 时清理超期文件、保留期内文件不动。"""
+    import os
+    import time as _time
+
+    old_file = tmp_path / ".planify" / "llm_trace" / "20200101-old.md"
+    new_file = tmp_path / ".planify" / "llm_trace" / "20990101-new.md"
+    old_file.parent.mkdir(parents=True)
+    old_file.write_text("# LLM Trace\n", encoding="utf-8")
+    new_file.write_text("# LLM Trace\n", encoding="utf-8")
+    past = _time.time() - 10 * 86400
+    os.utime(old_file, (past, past))
+
+    tracer = _make(tmp_path, env={"PLANIFY_LLM_TRACE": "3"})
+    assert tracer is not None
+    assert not old_file.exists()  # 超 3 天保留期 → 删
+    assert new_file.exists()  # mtime 在未来 → 保留
+
+
+def test_cleanup_skipped_when_disabled(tmp_path):
+    """关闭态（0）创建前不清理——tracer 本身返回 None，文件原地不动。"""
+    stale = tmp_path / ".planify" / "llm_trace" / "20200101-old.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("# LLM Trace\n", encoding="utf-8")
+
+    assert LLMTracer.create(label="main", workdir=tmp_path, env={"PLANIFY_LLM_TRACE": "0"}) is None
+    assert stale.exists()
 
 
 # ------------------------------------------------------------- md 骨架

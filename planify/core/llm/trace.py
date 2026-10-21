@@ -3,7 +3,8 @@
 用途：人工审视调试 + 离线计算前缀缓存命中率（usage 在收节响应 JSON 里）。
 
 配置（env，宿主经环境注入，本模块不读宿主配置）：
-- ``PLANIFY_LLM_TRACE``：开关（"1"/"true"/"on" 开，默认关）
+- ``PLANIFY_LLM_TRACE``：保留天数（整数天；"0"/空 = 关闭，默认关；>0 = 开启，
+  且每次创建 tracer 时顺带清理超过保留期的 trace 文件）
 - ``PLANIFY_LLM_TRACE_DIR``：输出目录（默认 ``{workdir}/.planify/llm_trace/``）
 
 文件组织：每聊天会话一个 md。宿主传入会话键（``session_key``）时跨进程 /
@@ -36,6 +37,52 @@ _TURN_HEADER_RE = re.compile(r"^## 轮 (\d+) ", re.MULTILINE)
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 _BASE64_URL_SPLIT = "base64,"
 
+
+def _trace_retention_days(lookup: Any) -> int:
+    """解析保留天数（``PLANIFY_LLM_TRACE``）：0/空/非法 = 关闭（0）；>0 = 天数。"""
+    raw = str(lookup.get("PLANIFY_LLM_TRACE", "")).strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        # 兼容旧布尔值（1/true/on 已被 int() 覆盖为 1 天；其余非数字视为关闭）
+        return 1 if raw.lower() in _TRUTHY else 0
+    return days if days > 0 else 0
+
+
+def _cleanup_expired_traces(trace_dir: Path, retention_days: int) -> None:
+    """删除修改时间早于保留期的 trace 文件（调试设施，失败只 warning）。"""
+    cutoff = time.time() - retention_days * 86400
+    try:
+        for f in trace_dir.glob("*.md"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+            except OSError:
+                pass  # 单文件失败（占用/权限）不影响其余清理
+    except OSError:
+        logger.warning("LLM trace: 过期清理失败 (%s)", trace_dir, exc_info=True)
+
+
+def cleanup_expired_traces_for_workdir(
+    workdir: Optional[Any] = None, env: Optional[dict] = None
+) -> None:
+    """按当前配置清理过期 trace（供宿主在应用启动时调用；关闭态 = 无操作）。
+
+    trace 目录解析与 ``LLMTracer.create`` 同一规则（``PLANIFY_LLM_TRACE_DIR``
+    覆盖，否则 ``{workdir}/.planify/llm_trace/``）。
+    """
+    lookup = env if env is not None else os.environ
+    days = _trace_retention_days(lookup)
+    if days <= 0:
+        return
+    base = str(lookup.get("PLANIFY_LLM_TRACE_DIR", "")).strip()
+    if base:
+        trace_dir = Path(base)
+    else:
+        root = Path(workdir) if workdir is not None else Path.cwd()
+        trace_dir = root / ".planify" / "llm_trace"
+    _cleanup_expired_traces(trace_dir, days)
+
 # 轮次续接时只扫文件尾部（长会话单文件几十 MB，全读浪费）
 _TAIL_SCAN_BYTES = 64 * 1024
 
@@ -55,7 +102,7 @@ def _lock_for(path: str) -> threading.Lock:
 
 
 def _is_enabled(lookup: Any) -> bool:
-    return str(lookup.get("PLANIFY_LLM_TRACE", "")).strip().lower() in _TRUTHY
+    return _trace_retention_days(lookup) > 0
 
 
 class LLMTracer:
@@ -112,6 +159,9 @@ class LLMTracer:
         else:
             root = Path(workdir) if workdir is not None else Path.cwd()
             trace_dir = root / ".planify" / "llm_trace"
+        # 开启状态下顺带清理过期 trace（保留天数来自同一开关；每会话首笔
+        # tracer 创建各触发一次，glob+stat 幂等且量小，重复执行无害）
+        _cleanup_expired_traces(trace_dir, _trace_retention_days(lookup))
         try:
             return cls(label=label, session_key=session_key, trace_dir=trace_dir)
         except Exception:  # noqa: BLE001
