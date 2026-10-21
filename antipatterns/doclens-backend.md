@@ -176,12 +176,19 @@
 - **未做（留作决策，不属本条目）**：冷启动那一次审计仍在请求路径上（web 由 `deps.get_index_manager()` 的 `t.join()` 承担）。把它挪到后台等于"首个搜索可能基于离线旧索引返回"，属产品语义变更；且 `has_changed_files` 只有 `(path, file_hash)` 两列、无 mtime，无法做 stat 预筛——要做需 index_meta schema 变更。
 - **回归验证**：`tests/test_lazy_search.py tests/test_change_detection.py tests/test_web_search_api_matrix.py`；新增 `tests/test_change_detection.py::TestReloadSkipsDiskAudit`（reload 不调 `has_changed_files` / 冷启动必调一次）。
 
-### AP-12 `ripgrep` 模块级二进制 doc_id 缓存无失效钩子，reindex 后 10 分钟漏结果 [P2] [status: pending]
+### AP-12 `ripgrep` 模块级二进制 doc_id 缓存无失效钩子，reindex 后 10 分钟漏结果 [P2] [status: done]
 - **形态**：全局可变单例当传参通道（陈旧缓存）
 - **证据**：`doclens/ripgrep.py:24` `_binary_doc_ids_cache`（键 `db_path`，TTL 600s）；`:325-361` 无锁读写。索引重建后 `doc_id` 集合变化，缓存不感知。
 - **风险**：重建索引后的 10 分钟内，REGEXP/grep 的二进制文档子集按旧 doc_id 扫描——漏掉的文档不报错，只表现为"少结果"，是最难被用户描述、也最难复现的一类缺陷。
-- **修复方案**：缓存键加入索引版本（`index.db` mtime/size 或 `index_meta` 版本号）；reindex 完成时显式清缓存。
-- **回归验证**：`tests/test_grep_corpus_bypass.py tests/test_web_search_api_matrix.py` + 新增"重建索引后缓存失效"用例。
+- **实际修复（2026-10-20，双保险）**：
+  ① **版本戳进缓存键**：新增 `_index_version()` = (index.db mtime_ns, size, index.db-wal mtime_ns, size)——WAL 模式下增量写先进 -wal、
+  主库 mtime 可能滞后，两者都看才能覆盖。缓存元组从 3 元扩为 4 元 `(doc_ids, nodes_count, fetched_at, version)`，TTL 内版本不符即重算。
+  这层兜住**跨进程 reindex**（CLI 建库、另一实例写库）。
+  ② **显式失效钩子**：新增 `invalidate_binary_doc_profile(db_path=None)`，挂在 `IndexManager.build_path_map()` 开头——所有索引变更路径
+  （首次构建 / 增量 / 后台 reindex / 工作目录切换）最终都会刷新 path_map，是天然的单一挂钩点。失败只 debug（缓存失效不该阻断索引）。
+- **回归验证**：新增 `tests/test_grep_corpus_bypass.py::TestBinaryProfileCacheInvalidation` 4 断言（TTL 内复用 / **库文件变化即失效（无钩子）** /
+  显式失效 / `build_path_map` 接线生效）。`test_grep_corpus_bypass tests/test_web_search_api_matrix tests/test_grep_regex_snippet
+  tests/test_lazy_search tests/test_change_detection tests/test_architecture` → 128 passed。
 
 ### AP-13 配置校验原地清空并重建进程级 `os.environ` [P2] [status: pending]
 - **形态**：全局可变单例当传参通道（跨线程可见的全局写）

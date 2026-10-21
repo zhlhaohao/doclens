@@ -19,9 +19,43 @@ logger = logging.getLogger(__name__)
 # 护栏作用于两个子集腿：二进制文档子集（常规路径）与 rg 不可用时的
 # 文本索引子集（降级路径）；文本腿（rg 目录扫描）不受此限。
 REGEXP_SKIP_NODES_THRESHOLD = 100_000
-# 二进制文档画像缓存（db_path -> (doc_id 集合, 子集节点行数, 抓取时间戳)）
+# 二进制文档画像缓存（db_path -> (doc_id 集合, 子集节点行数, 抓取时间戳, 索引版本)）
+#
+# AP-12：原键只有 db_path，reindex 后 doc_id 集合变了但缓存不感知——重建后
+# 最长 10 分钟里 REGEXP 子集按旧 doc_id 扫描，漏掉的文档**不报错，只表现为
+# 少结果**。现缓存键加入索引版本（index.db + -wal 的 mtime/size），reindex
+# 一落盘即自动失效；另有 `invalidate_binary_doc_profile()` 供宿主显式清理。
 _PROFILE_CACHE_TTL_S = 600
-_binary_doc_ids_cache: dict[str, tuple[set[str], int, float]] = {}
+# (doc_ids, nodes_count, fetched_at, index_version)
+_binary_doc_ids_cache: dict[str, tuple[set[str], int, float, tuple]] = {}
+
+
+def _index_version(index_path: str) -> tuple:
+    """索引库版本戳 = (主库 mtime_ns, size, WAL mtime_ns, WAL size)。
+
+    WAL 模式下增量写先进 -wal，主库 mtime 可能滞后——两者都要看，否则
+    reindex 后仍可能复用旧画像（AP-12）。
+    """
+    stamps: list = []
+    for path in (index_path, index_path + "-wal"):
+        try:
+            st = os.stat(path)
+            stamps.extend((st.st_mtime_ns, st.st_size))
+        except OSError:
+            stamps.extend((0, 0))
+    return tuple(stamps)
+
+
+def invalidate_binary_doc_profile(db_path: str | None = None) -> None:
+    """清二进制文档画像缓存（不传 db_path = 全清）。
+
+    reindex 完成后由 IndexManager 调用；跨进程 reindex（CLI 建库）靠
+    `_index_version` 的版本戳兜底。
+    """
+    if db_path is None:
+        _binary_doc_ids_cache.clear()
+        return
+    _binary_doc_ids_cache.pop(str(db_path), None)
 
 
 def build_rg_paths(
@@ -322,9 +356,14 @@ def _binary_doc_profile(idx) -> tuple[set[str], int]:
     from treesearch.parsers.registry import SHADOW_MD_EXTENSIONS
 
     db_path = str(getattr(idx, "index_path", ""))
+    version = _index_version(db_path)
     cached = _binary_doc_ids_cache.get(db_path)
     now = time.monotonic()
-    if cached and now - cached[2] < _PROFILE_CACHE_TTL_S:
+    if (
+        cached
+        and now - cached[2] < _PROFILE_CACHE_TTL_S
+        and cached[3] == version
+    ):
         return cached[0], cached[1]
     binary: set[str] = set()
     nodes_count = 0
@@ -358,7 +397,7 @@ def _binary_doc_profile(idx) -> tuple[set[str], int]:
     except Exception as e:  # noqa: BLE001
         logger.warning("[grep] 二进制文档集合扫描失败（跳过兜底）: %s", e)
         return set(), 0
-    _binary_doc_ids_cache[db_path] = (binary, nodes_count, now)
+    _binary_doc_ids_cache[db_path] = (binary, nodes_count, now, version)
     if binary:
         logger.info(
             "[grep] %d 个二进制文档走 REGEXP 子集扫描（rg 搜不了原文，%d 节点）",

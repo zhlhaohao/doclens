@@ -709,7 +709,19 @@ class IndexManager:
         return True
 
     def build_path_map(self):
-        """构建路径映射（从 DB 轻量加载 doc_id/source_path，不物化树结构）。"""
+        """构建路径映射（从 DB 轻量加载 doc_id/source_path，不物化树结构）。
+
+        顺带失效 ripgrep 的二进制文档画像缓存（AP-12：doc_id 集合随索引重建
+        变化，不失效会让 REGEXP 子集按旧 id 扫描 → 静默漏结果）。选择挂在这里
+        而非每个 reindex 分支：所有索引变更路径（首次构建 / 增量 / 后台
+        reindex / 目录切换）最终都会刷新 path_map。
+        """
+        try:
+            from doclens.ripgrep import invalidate_binary_doc_profile
+
+            invalidate_binary_doc_profile(self.index_path)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("invalidate binary doc profile failed: %s", e)
         try:
             from treesearch.fts import FTS5Index
             fts = FTS5Index(db_path=self.index_path)

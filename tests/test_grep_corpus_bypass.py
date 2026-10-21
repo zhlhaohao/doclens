@@ -464,3 +464,78 @@ class TestLikeSearchDocSubset:
             assert {h["doc_id"] for h in hits} == {"doc_bin", "doc_txt"}
         finally:
             fts.close()
+
+
+class TestBinaryProfileCacheInvalidation:
+    """AP-12：reindex 后二进制文档画像缓存必须失效（否则静默漏结果）。"""
+
+    def _make_idx(self, tmp_path):
+        """最小假 idx：真 SQLite 库 + documents 表。"""
+        import sqlite3
+        from types import SimpleNamespace
+
+        db = tmp_path / "index.db"
+        conn = sqlite3.connect(str(db))
+        conn.executescript(
+            """
+            CREATE TABLE documents (doc_id TEXT PRIMARY KEY, source_path TEXT);
+            CREATE TABLE nodes (doc_id TEXT, text TEXT);
+            """
+        )
+        conn.execute("INSERT INTO documents VALUES ('d1', 'a.pdf')")
+        conn.execute("INSERT INTO nodes VALUES ('d1', 'x')")
+        conn.commit()
+        conn.close()
+        return SimpleNamespace(index_path=str(db)), db
+
+    def test_cache_reused_within_ttl(self, tmp_path):
+        from doclens import ripgrep
+
+        idx, _db = self._make_idx(tmp_path)
+        first = ripgrep._binary_doc_profile(idx)
+        assert first[0] == {"d1"}
+        second = ripgrep._binary_doc_profile(idx)  # 命中缓存
+        assert second[0] == first[0]
+
+    def test_index_change_invalidates_without_hook(self, tmp_path):
+        """跨进程 reindex 场景：文件 mtime/size 变即失效（版本戳兜底）。"""
+        import sqlite3
+        import time
+
+        from doclens import ripgrep
+
+        idx, db = self._make_idx(tmp_path)
+        assert ripgrep._binary_doc_profile(idx)[0] == {"d1"}
+        time.sleep(0.01)  # 确保 mtime 可区分
+        conn = sqlite3.connect(str(db))
+        conn.execute("INSERT INTO documents VALUES ('d2', 'b.docx')")
+        conn.execute("INSERT INTO nodes VALUES ('d2', 'y')")
+        conn.commit()
+        conn.close()
+        assert ripgrep._binary_doc_profile(idx)[0] == {"d1", "d2"}
+
+    def test_explicit_invalidate(self, tmp_path):
+        from doclens import ripgrep
+
+        idx, _db = self._make_idx(tmp_path)
+        ripgrep._binary_doc_profile(idx)
+        assert str(idx.index_path) in ripgrep._binary_doc_ids_cache
+        ripgrep.invalidate_binary_doc_profile(idx.index_path)
+        assert str(idx.index_path) not in ripgrep._binary_doc_ids_cache
+
+    def test_index_manager_build_path_map_clears_cache(self, tmp_path):
+        """宿主接线：IndexManager.build_path_map 会清画像缓存。"""
+        from doclens import ripgrep
+        from doclens.config import CortexConfig
+        from doclens.index_manager import IndexManager
+
+        idx, db = self._make_idx(tmp_path)
+        mgr = IndexManager.__new__(IndexManager)
+        mgr._config = CortexConfig()
+        mgr.search_path = str(tmp_path)
+        mgr.index_path = str(db)
+        # 预热缓存
+        ripgrep._binary_doc_profile(idx)
+        assert str(db) in ripgrep._binary_doc_ids_cache
+        mgr.build_path_map()
+        assert str(db) not in ripgrep._binary_doc_ids_cache
