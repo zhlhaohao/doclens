@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from doclens.web_v2.api import preview as preview_api
+from doclens.web_v2.api import preview_assets as preview_assets_api
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.api.preview import looks_binary
 
@@ -102,3 +103,31 @@ class TestResolveHelpers:
         base, idx = self._env(tmp_path)
         with _pytest.raises(CortexAPIError):
             resolve_path_optional(base, "../../etc/passwd", idx)
+
+
+class TestDownloadProtected:
+    """AP-32：/api/preview/download 必须与 files API 同样拦点文件。
+
+    该端点直传字节、不经 DB——缺闸门时 `.env`、`.git/config`、
+    `.cortex/index.db`（含全文索引）可整包拉走。
+    """
+
+    def test_dotfiles_rejected(self, tmp_path):
+        (tmp_path / ".env").write_text("SECRET=1", encoding="utf-8")
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".git" / "config").write_text("[core]", encoding="utf-8")
+        (tmp_path / ".cortex").mkdir()
+        (tmp_path / ".cortex" / "index.db").write_bytes(b"SQLite format 3\x00")
+        fake_idx = SimpleNamespace(search_path=str(tmp_path))
+
+        for rel in (".env", ".git/config", ".cortex/index.db"):
+            with pytest.raises(CortexAPIError) as ei:
+                preview_assets_api.download(path=rel, idx=fake_idx)
+            assert ei.value.status == 403, rel
+            assert ei.value.code == "PROTECTED", rel
+
+    def test_normal_file_still_downloadable(self, tmp_path):
+        (tmp_path / "note.md").write_text("正文", encoding="utf-8")
+        fake_idx = SimpleNamespace(search_path=str(tmp_path))
+        resp = preview_assets_api.download(path="note.md", idx=fake_idx)
+        assert Path(resp.path).name == "note.md"

@@ -21,6 +21,7 @@ from doclens.web_v2.api.preview_common import (
     safe_resolve,
 )
 from doclens.web_v2.deps import get_index_manager
+from doclens.web_v2.path_safety import assert_not_protected
 from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 
@@ -36,9 +37,14 @@ def download(
 
     下载文件名带 sha256(rel_path) 前 6 位后缀——上传时按它反查原路径
     覆盖原文件（hash 回写闭环，见 preview_mutations.py）。
+
+    点文件保护与 files API 一致（AP-32）：本端点直传字节、不经 DB，
+    若不拦 `.env` / `.git/config` / `.cortex/index.db` 等于给保护面开了
+    整文件下载侧门。
     """
     base = Path(idx.search_path)
     full = safe_resolve(base, path)
+    assert_not_protected(full, base)
     if not full.exists() or not full.is_file():
         raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
     stem = full.stem
