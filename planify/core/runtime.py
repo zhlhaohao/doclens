@@ -39,6 +39,11 @@ class RuntimeConfig:
     # 工具轮数软上限（宿主配置透传；0 = 不限（默认）。软阈值提醒 + 硬阈值（+10）
     # 强制终答由 StreamingAgent 消费，见 streaming/runner.py）
     planify_max_tool_rounds: int = 0
+    # 注入消息后是否补合成 assistant 回执（宿主配置透传；默认 False）。
+    # 关闭时后台结果/收件箱通知只留 user 消息；thinking 模式端点（DeepSeek /
+    # GLM 等）不接受以 assistant 结尾的请求。仅对坚持 user/assistant 严格
+    # 交替的端点开启，见 streaming/types.py 同名字段说明。
+    planify_injection_ack: bool = False
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径

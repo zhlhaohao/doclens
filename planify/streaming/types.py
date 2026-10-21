@@ -402,6 +402,14 @@ class StreamingConfig:
     poll_backoff_initial_s: float = POLL_BACKOFF_INITIAL_S
     poll_backoff_max_s: float = POLL_BACKOFF_MAX_S
 
+    # 注入消息后的合成回执（默认关闭）：后台结果 / 收件箱通知以 user 消息
+    # 插入历史后，是否再补一条固定的 assistant "Noted ..." 回执。
+    # 关闭（默认）：只留 user 通知，请求以 user 结尾——thinking 模式端点
+    # （DeepSeek / GLM 等，响应带 thinking 块）拒绝以 assistant 结尾的请求
+    # （prefill 需回传 thinking 块），会 400。
+    # 开启：用于坚持 user/assistant 严格交替、不接受连续同角色消息的端点。
+    injection_ack: bool = False
+
 
 @dataclass
 class ToolCallState:

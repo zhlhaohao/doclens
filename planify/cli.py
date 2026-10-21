@@ -413,7 +413,11 @@ def run_streaming_query(loop, runtime, query: str, history: list) -> list:
         bus=runtime.bus,
         skills_loader=runtime.skills,
         config=StreamingConfig(
-            compact_threshold=int(round(runtime.config.planify_context_window * 0.8))
+            compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
+            # 注入回执开关：planify CLI 无宿主配置注入通道，按 PLANIFY_* env
+            # 现读（planify 命名空间内自有的调试开关，非宿主配置）
+            injection_ack=os.getenv("PLANIFY_INJECTION_ACK", "").strip().lower()
+            in ("1", "true", "on", "yes"),
         ),
         logger_instance=runtime.logger,
         runtime=runtime,

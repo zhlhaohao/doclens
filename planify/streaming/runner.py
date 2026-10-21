@@ -360,6 +360,18 @@ class StreamingAgent:
                         })
                         messages.append({"role": "assistant", "content": "Noted."})
 
+    def _append_injection_ack(self, messages: List[Dict], text: str) -> None:
+        """注入 user 通知后补合成 assistant 回执（仅 config.injection_ack 开启）。
+
+        默认关闭（见 StreamingConfig.injection_ack）：合成回执会让请求以
+        assistant 结尾，thinking 模式端点（DeepSeek / GLM 等）按 prefill 处理
+        并要求回传该轮 thinking 块，而本框架有意丢弃 thinking 块 → 400。
+        关闭时历史中可能出现连续 user 消息，Messages API 合并同角色消息，
+        语义等价。
+        """
+        if self.config.injection_ack:
+            messages.append({"role": "assistant", "content": text})
+
     async def run_stream(
         self,
         messages: List[Dict],
@@ -514,11 +526,8 @@ class StreamingAgent:
                                 "content": f"<background-results>\n{txt}\n</background-results>",
                             }
                         )
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": "Noted background results.",
-                            }
+                        self._append_injection_ack(
+                            messages, "Noted background results."
                         )
 
                 # === 收件箱检查 ===
@@ -531,8 +540,8 @@ class StreamingAgent:
                                 "content": f"<inbox>{json.dumps(inbox, indent=2)}</inbox>",
                             }
                         )
-                        messages.append(
-                            {"role": "assistant", "content": "Noted inbox messages."}
+                        self._append_injection_ack(
+                            messages, "Noted inbox messages."
                         )
 
                 # === LLM 流式调用 ===

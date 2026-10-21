@@ -547,6 +547,7 @@ class CortexAgent:
             planify_context_window=asm.kb_config.planify_context_window,
             planify_max_tokens=asm.max_tokens,
             planify_max_tool_rounds=asm.kb_config.planify_max_tool_rounds,
+            planify_injection_ack=asm.kb_config.planify_injection_ack,
             poll_interval=asm.config.get("poll_interval", 5),
             idle_timeout=asm.config.get("idle_timeout", 60),
             # 压缩 transcript 落到 .cortex/transcripts（上面已 mkdir）：
@@ -698,6 +699,9 @@ class CortexAgent:
                     round(self.runtime.config.planify_context_window * 0.8)
                 ),
                 max_tokens=self.runtime.config.planify_max_tokens,
+                injection_ack=getattr(
+                    self.runtime.config, "planify_injection_ack", False
+                ),
                 **tool_round_limit_kwargs(self.runtime.config),
             ),
             logger_instance=self.runtime.logger,

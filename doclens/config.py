@@ -370,6 +370,13 @@ class CortexConfig(BaseSettings):
         "收尾则摘要带 [round-limit-reached] 截断标记；连续 3 轮同参调用"
         "注入死循环提醒（与主代理熔断同哲学：先劝后断、断了留话）。",
     )
+    planify_injection_ack: bool = Field(
+        default=False,
+        alias="PLANIFY_INJECTION_ACK",
+        description="后台结果/收件箱通知插入后是否补合成 assistant 回执，"
+        "用于强制 user/assistant 严格交替的端点。默认 False：thinking 模式"
+        "端点（DeepSeek / GLM 等）会因请求以 assistant 结尾返回 400。",
+    )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）
     vision_api_key: Optional[str] = Field(
