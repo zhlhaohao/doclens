@@ -225,3 +225,76 @@ class TestSessionTtlSingleSource:
         for fn_name in ("create_auth_session", "validate_auth_session"):
             sig = inspect.signature(getattr(SessionsStore, fn_name))
             assert sig.parameters["ttl_hours"].default is inspect.Parameter.empty, fn_name
+
+
+class TestGateEnabledEndpoints:
+    """AP-29：闸门生效时（非环回 + 已设密码）logout / 改密 / 删密必须可用。
+
+    这些端点走 ``_require_session_if_enabled``；AP-21 去掉 ``ttl_hours``
+    默认值后该调用点漏传必传参数 → TypeError 500。TestClient 来源 host
+    为非环回（``testclient``），恰好覆盖 LAN 场景。
+    """
+
+    @pytest.fixture()
+    def client_env(self, tmp_path, monkeypatch):
+        from doclens.web_v2 import auth_credentials
+        monkeypatch.setattr(auth_credentials, "_env_path", lambda: tmp_path / ".env")
+        auth_credentials.set_password("123456")
+        yield
+        auth_credentials.clear_password()
+
+    @staticmethod
+    def _login(c):
+        ch = c.get("/api/auth/challenge").json()
+        pb = _pbkdf2_hex("123456", ch["salt"], ch["iterations"])
+        return c.post(
+            "/api/auth/login",
+            json={"proof": compute_proof(ch["nonce"], pb), "nonce": ch["nonce"]},
+        )
+
+    def test_gate_really_enabled(self, client_env):
+        """前置断言：无 cookie 时受保护端点返回 401（证明闸门在此 fixture 生效）。"""
+        from fastapi.testclient import TestClient
+        from doclens.web_v2.app import create_app
+
+        with TestClient(create_app()) as c:
+            assert c.post("/api/auth/logout").status_code == 401
+
+    def test_logout_with_session(self, client_env):
+        from fastapi.testclient import TestClient
+        from doclens.web_v2.app import create_app
+
+        with TestClient(create_app()) as c:
+            assert self._login(c).status_code == 200
+            assert c.post("/api/auth/logout").status_code == 200
+
+    def test_update_password_with_session(self, client_env):
+        from fastapi.testclient import TestClient
+        from doclens.web_v2.app import create_app
+
+        with TestClient(create_app()) as c:
+            assert self._login(c).status_code == 200
+            ch = c.get("/api/auth/challenge").json()
+            old_pb = _pbkdf2_hex("123456", ch["salt"], ch["iterations"])
+            new_salt = "dd" * 16
+            r = c.put(
+                "/api/auth/password",
+                json={
+                    "old_proof": compute_proof(ch["nonce"], old_pb),
+                    "old_nonce": ch["nonce"],
+                    "new_salt": new_salt,
+                    "new_hash": _pbkdf2_hex("999999", new_salt, 100_000),
+                },
+            )
+            assert r.status_code == 200, r.text
+
+    def test_clear_password_with_session(self, client_env):
+        from fastapi.testclient import TestClient
+        from doclens.web_v2.app import create_app
+
+        with TestClient(create_app()) as c:
+            assert self._login(c).status_code == 200
+            r = c.request(
+                "DELETE", "/api/auth/password", json={"password": "123456"}
+            )
+            assert r.status_code == 200, r.text

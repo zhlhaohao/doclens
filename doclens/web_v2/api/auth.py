@@ -66,7 +66,9 @@ def _require_session_if_enabled(request: Request) -> None:
     if _gate_on(request):
         token = request.cookies.get(COOKIE_NAME)
         store = deps.get_sessions_store()
-        if not token or not store.validate_auth_session(token, touch=False):
+        if not token or not store.validate_auth_session(
+            token, touch=False, ttl_hours=SESSION_TTL_HOURS
+        ):
             raise CortexAPIError(401, "UNAUTHORIZED", "需要登录")
 
 
