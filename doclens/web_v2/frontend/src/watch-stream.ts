@@ -122,6 +122,12 @@ async function run(): Promise<void> {
           window.dispatchEvent(new CustomEvent("cortex:workdir-swap-failed", {
             detail: safeParse<{ error?: string }>(ev.data) ?? {},
           }));
+        } else if (ev.event === "sessions_restored") {
+          // 会话库恢复完成（ADR-0047 自动/人工）：toast + 会话列表刷新
+          // （app-bar 消费 toast 并派发 cortex:sessions-restored 刷新事件）。
+          window.dispatchEvent(new CustomEvent("cortex:sse-sessions-restored", {
+            detail: safeParse<{ backup_created_at?: string; auto?: boolean }>(ev.data) ?? {},
+          }));
         }
       }
       // 流正常结束（服务端关闭）→ 若未主动停止则重连

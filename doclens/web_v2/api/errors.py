@@ -64,6 +64,34 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(request: Request, exc: Exception):
+        # 运行中会话库损坏（ADR-0047）：DatabaseError 触发自动恢复（换库文件
+        # + 丢单例），本请求 503——前端提示稍后重试；恢复完成经 SSE 广播。
+        import sqlite3
+
+        if isinstance(exc, sqlite3.DatabaseError):
+            try:
+                from doclens.web_v2 import deps
+                from doclens.web_v2 import session_backup
+
+                db_path = deps.sessions_db_path()
+                restored = session_backup.restore_latest(db_path)
+                if restored is not None:
+                    deps.invalidate_sessions_store()
+                    deps.broadcast_sessions_restored(restored, auto=True)
+                    logger.warning(
+                        "sessions.db runtime corruption auto-restored from %s",
+                        restored["restored_from"],
+                    )
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "code": "SESSION_DB_RESTORING",
+                            "detail": "会话库损坏，已从最新备份恢复，请重试本操作",
+                            "restored_from": restored["restored_from"],
+                        },
+                    )
+            except Exception:  # noqa: BLE001 — 恢复失败回落到 500 通用路径
+                logger.exception("sessions.db runtime auto-restore failed")
         # traceback_id 是日志与用户反馈之间的唯一关联键：前端把它显示出来，
         # 用户报障时可直接在日志里 grep 到完整堆栈（AP-35）。
         traceback_id = secrets.token_hex(4)

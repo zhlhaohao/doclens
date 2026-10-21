@@ -97,6 +97,92 @@ async def list_sessions(
     )
 
 
+# ---- 会话库备份/恢复（ADR-0047）----
+
+
+@router.get("/sessions/backups")
+async def list_session_backups():
+    """备份清单（新→旧）+ 损坏库残留（供控制面板「会话备份」对话框）。
+
+    GET /sessions/{session_id} 路由在前且 session_id 无模式约束，本端点
+    需在其之前注册——见文件内路由顺序（FastAPI 按注册序匹配）。
+    """
+    from doclens.web_v2.deps import sessions_db_path
+    from doclens.web_v2 import session_backup
+
+    db_path = sessions_db_path()
+    backups = session_backup.list_backups(db_path)
+    corrupt = session_backup.list_corrupt_files(db_path)
+    # 当前库会话数（对比展示用；库打不开时不阻断清单——恢复正是解法）
+    session_count = None
+    try:
+        store = _get_store()
+        session_count = len(store.list(SessionType.CHAT, limit=10000)) + len(
+            store.list(SessionType.SEARCH, limit=10000)
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    # 各备份内的会话数：逐份打开只读计数（十几 MB × ≤10 份，秒级）
+    for b in backups:
+        b["session_count"] = _count_sessions_in_backup(db_path, b["file"])
+    return {"ok": True, "backups": backups, "corrupt_files": corrupt,
+            "current_session_count": session_count}
+
+
+def _count_sessions_in_backup(db_path, backup_file: str) -> Optional[int]:
+    """打开备份文件统计 sessions 行数（只读；打不开返回 None）。"""
+    import sqlite3
+
+    from doclens.web_v2.session_backup import backup_dir
+
+    p = backup_dir(db_path) / backup_file
+    try:
+        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()
+            return int(row[0]) if row else 0
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+
+@router.post("/sessions/backups/{backup_file}/restore")
+async def restore_session_backup(backup_file: str):
+    """人工恢复：用指定备份整体替换 sessions.db（ADR-0047）。
+
+    互斥：任一会话生成中（chat_runner 非空）→ 409——恢复换库文件，
+    在途生成落库会写到已换掉的旧句柄/被换后的新库，撕裂不可控。
+    """
+    from doclens.web_v2 import chat_runner
+    from doclens.web_v2 import session_backup
+    from doclens.web_v2.deps import (
+        broadcast_sessions_restored,
+        invalidate_sessions_store,
+        sessions_db_path,
+    )
+
+    if chat_runner.active_count() > 0:
+        raise CortexAPIError(
+            409, "SESSION_STREAMING", "有对话生成中，请等待完成后再恢复备份"
+        )
+    db_path = sessions_db_path()
+    try:
+        info = session_backup.restore_backup(db_path, backup_file)
+    except FileNotFoundError as e:
+        raise CortexAPIError(404, "BACKUP_NOT_FOUND", str(e))
+    except RuntimeError as e:
+        raise CortexAPIError(502, "RESTORE_FAILED", str(e))
+    # 恢复换掉了库文件：丢弃旧单例，下次请求按新库重建
+    invalidate_sessions_store()
+    broadcast_sessions_restored(info, auto=False)
+    return {"ok": True, **info}
+
+
+# 导入 body 上限：对话图片 base64 膨胀 ~33%，50MB 已宽裕（ADR-0038）
+_IMPORT_MAX_BYTES = 50 * 1024 * 1024
+
+
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_session(session_id: str, meta_only: bool = False):
     """会话详情。``?meta_only=true`` 只回元数据（items 置空）——断开续跑
@@ -414,10 +500,6 @@ async def clear_sessions(
 
 
 # ---- 导出/导入（ADR-0038：全保真单会话 JSON，跨实例记忆转移）----
-
-# 导入 body 上限：对话图片 base64 膨胀 ~33%，50MB 已宽裕（ADR-0038）
-_IMPORT_MAX_BYTES = 50 * 1024 * 1024
-
 
 @router.get("/sessions/{session_id}/export")
 async def export_session(session_id: str):

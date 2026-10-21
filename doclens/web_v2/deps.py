@@ -180,6 +180,17 @@ def get_agent_if_ready():
     return _agent
 
 
+def sessions_db_path() -> Path:
+    """sessions.db 路径（与 get_sessions_store 同一公式；备份/恢复共用）。"""
+    from doclens.config import data_dirname
+
+    config = get_config()
+    index_path = config.index_path or os.path.join(
+        config.search_path, data_dirname(), "index.db"
+    )
+    return Path(index_path).parent / "sessions.db"
+
+
 def get_sessions_store() -> SessionsStore:
     """获取 SessionsStore 单例（懒加载 + 线程安全）。
 
@@ -187,22 +198,76 @@ def get_sessions_store() -> SessionsStore:
     路径由 config 直接推导（与 IndexManager.index_path 同一公式），**故意不经
     IndexManager**——登录闸门（auth_sessions 表）必须在索引构建完成前就可用。
     构造持独立的 `_sessions_lock`，不占注册表锁，也不等 `_idx_lock`（AP-6）。
+
+    损坏自愈（ADR-0047）：SessionsStore 构造（打开/建表）抛
+    sqlite3.DatabaseError 时自动恢复——损坏库改名留原地 → 最新备份恢复 →
+    重试构建；无备份按原异常上抛。构建成功后触发启动备份（节流）并启动
+    24h 周期备份定时器。
     """
     global _sessions_store
     if _sessions_store is not None:
         return _sessions_store
     with _sessions_lock:
         if _sessions_store is None:
-            from doclens.config import data_dirname
+            import sqlite3
 
-            config = get_config()
-            index_path = config.index_path or os.path.join(
-                config.search_path, data_dirname(), "index.db"
-            )
-            db_path = Path(index_path).parent / "sessions.db"
+            from doclens.web_v2 import session_backup
+
+            db_path = sessions_db_path()
             db_path.parent.mkdir(parents=True, exist_ok=True)
-            _sessions_store = SessionsStore(db_path)
+            try:
+                store = SessionsStore(db_path)
+            except sqlite3.DatabaseError:
+                logger.exception(
+                    "sessions.db failed to open (corrupt?): %s", db_path
+                )
+                restored = session_backup.restore_latest(db_path)
+                if restored is None:
+                    raise  # 无备份：无计可施，按现状失败
+                logger.warning(
+                    "sessions.db auto-restored from %s (corrupt kept as %s)",
+                    restored["restored_from"], restored["corrupt_renamed"],
+                )
+                broadcast_sessions_restored(restored, auto=True)
+                store = SessionsStore(db_path)  # 重试构建
+            _sessions_store = store
+            # 启动备份（近 1h 内已有则跳过）+ 24h 周期备份（ADR-0047）。
+            # 失败静默告警——备份是韧性机制，不打断主流程。
+            try:
+                session_backup.backup_if_due(db_path, reason="startup")
+                session_backup.start_periodic_backup(db_path)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("session backup scheduling failed: %s", e)
     return _sessions_store
+
+
+def invalidate_sessions_store() -> None:
+    """丢弃 SessionsStore 单例（库文件已被恢复替换后的下一请求重建）。
+
+    ADR-0047 恢复流程调用：restore_backup 换掉了 sessions.db 文件，旧
+    单例持有的连接语义已失效。持 `_sessions_lock` 置空，与构造互斥。
+    """
+    global _sessions_store
+    with _sessions_lock:
+        _sessions_store = None
+
+
+def broadcast_sessions_restored(info: dict, *, auto: bool) -> None:
+    """恢复完成经 watch SSE 广播 sessions_restored（前端 toast + 刷新）。
+
+    广播失败只告警——恢复本身已成功，通知是尽力而为。
+    """
+    try:
+        from doclens.web_v2.watch_broker import get_watch_broker
+
+        get_watch_broker().broadcast("sessions_restored", {
+            "restored_from": info.get("restored_from", ""),
+            "backup_created_at": info.get("backup_created_at", ""),
+            "corrupt_renamed": info.get("corrupt_renamed"),
+            "auto": auto,
+        }, immediate=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("broadcast sessions_restored failed: %s", e)
 
 
 def get_rewind_tracker():
@@ -287,6 +352,12 @@ def reset_singletons() -> None:
     stop_mcp_server()
     stop_mcp_client()
     _reset_translate_service()
+    # 会话库周期备份定时器（ADR-0047）：切目录前停掉，新目录构建时重启
+    try:
+        from doclens.web_v2 import session_backup
+        session_backup.stop_periodic_backup()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stop periodic session backup failed: %s", exc)
     # 持全部构造锁再置 None：防"构造进行中 → 置空 → 构造者随后发布旧实例"
     with _singleton_guards(), _lock:
         _config = None

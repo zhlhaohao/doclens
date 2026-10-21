@@ -7,12 +7,14 @@ import { watchStatusLabel } from "../utils/watch-status";
 
 /**
  * 控制面板对话框（系统菜单「控制面板」入口）：收纳低频维护操作，
- * 精简系统菜单一级空间。两个操作行：
+ * 精简系统菜单一级空间。三个操作行：
  * - 强制重建索引 → dispatch close + actions.openReindexConfirm()。
  *   reindex-dialog 是 app.ts 根级全局 store 驱动组件（z-1000），会盖在
  *   本面板之上；reindex.dialog 非 closed 时行禁用（幂等守卫 UI 化）
  * - 文件监控 → dispatch close + dispatch open-watch，由宿主 app-bar 打开
  *   watch-changes-dialog（不内嵌不叠层——SSE 列表已封装在那边）
+ * - 会话备份（ADR-0047）→ dispatch close + dispatch open-backup，由宿主
+ *   app-bar 打开 backup-dialog（清单/恢复/损坏残留展示）
  * （「重载页面」已提升到系统菜单一级入口，2026-10-14）
  *
  * 协议同 about-dialog / watch-changes-dialog：宿主持布尔 state → .open 属性
@@ -180,6 +182,13 @@ export class ControlPanelDialog extends LitElement {
     );
   }
 
+  private _onBackupClick(): void {
+    this._close();
+    this.dispatchEvent(
+      new CustomEvent("open-backup", { bubbles: true, composed: true }),
+    );
+  }
+
   render() {
     if (!this.open) return nothing;
     const s = store.getState();
@@ -214,6 +223,13 @@ export class ControlPanelDialog extends LitElement {
             <span class="text">
               <span class="label ${cls}">文件监控</span>
               <span class="hint">${watchHint}</span>
+            </span>
+          </button>
+          <button class="action-row" type="button" data-testid="backup-row" @click=${this._onBackupClick}>
+            <doclens-icon class="icon" name="archive"></doclens-icon>
+            <span class="text">
+              <span class="label">会话备份</span>
+              <span class="hint">查看备份并恢复会话库</span>
             </span>
           </button>
         </div>

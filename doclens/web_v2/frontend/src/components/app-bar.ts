@@ -6,6 +6,7 @@ import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
 import "./control-panel-dialog";
+import "./backup-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
 import "./workdir-switch-dialog";
@@ -281,6 +282,8 @@ export class AppBar extends LitElement {
   @state() private _watchDialogOpen = false;
   /** 控制面板对话框开关（用户菜单「控制面板」：收纳刷新/重建索引/文件监控） */
   @state() private _panelOpen = false;
+  /** 会话备份对话框开关（控制面板「会话备份」行，ADR-0047） */
+  @state() private _backupDialogOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
   /** 工作目录切换对话框开关（ADR-0043：顶栏工作目录指示器点击） */
@@ -355,6 +358,29 @@ export class AppBar extends LitElement {
     this._watchDialogOpen = true;
   }
 
+  /** 面板「会话备份」行（ADR-0047）→ 关面板开备份对话框。 */
+  private _onPanelOpenBackup() {
+    this._panelOpen = false;
+    this._backupDialogOpen = true;
+  }
+
+  /** SSE sessions_restored（ADR-0047 自动/人工恢复完成）：toast 告知
+   *  恢复时点（备份时点之后的对话已丢失）+ 派发刷新事件（会话列表重拉）。 */
+  private _onSessionsRestored: (e: Event) => void = (e: Event) => {
+    const detail = (e as CustomEvent).detail as {
+      backup_created_at?: string;
+      auto?: boolean;
+    };
+    const when = detail?.backup_created_at
+      ? new Date(detail.backup_created_at).toLocaleString()
+      : "早前时点";
+    this._pushToast(
+      `会话库已从 ${when} 的备份恢复${detail?.auto ? "（检测到损坏，已自动处理）" : ""}，该时点之后的对话不再存在`,
+      "info", 8000,
+    );
+    window.dispatchEvent(new CustomEvent("cortex:sessions-restored"));
+  };
+
   /** 菜单「关于」：打开构建版本对话框（测试时确认前后端均为最新构建）。 */
   private _onAboutMenuClick() {
     this._menuOpen = false;
@@ -423,6 +449,8 @@ export class AppBar extends LitElement {
     document.addEventListener("click", this._onDocClick);
     window.addEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     window.addEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
+    window.addEventListener("cortex:sessions-restored", this._onSessionsRestored as EventListener);
+    window.addEventListener("cortex:sse-sessions-restored", this._onSessionsRestored as EventListener);
     this._appTheme = readAppTheme();
     this._offAppThemeChange = onAppThemeChange((t) => { this._appTheme = t; });
     this._mqList = typeof window.matchMedia === "function"
@@ -437,6 +465,8 @@ export class AppBar extends LitElement {
     document.removeEventListener("click", this._onDocClick);
     window.removeEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     window.removeEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
+    window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored as EventListener);
+    window.removeEventListener("cortex:sse-sessions-restored", this._onSessionsRestored as EventListener);
     this._mqList?.removeEventListener("change", this._onMqChange);
     this._mqList = undefined;
     this._offAppThemeChange?.();
@@ -636,7 +666,12 @@ export class AppBar extends LitElement {
         .open=${this._panelOpen}
         @close=${() => { this._panelOpen = false; }}
         @open-watch=${this._onPanelOpenWatch}
+        @open-backup=${this._onPanelOpenBackup}
       ></control-panel-dialog>
+      <backup-dialog
+        .open=${this._backupDialogOpen}
+        @close=${() => { this._backupDialogOpen = false; }}
+      ></backup-dialog>
       <watch-changes-dialog
         .open=${this._watchDialogOpen}
         @close=${() => { this._watchDialogOpen = false; }}

@@ -166,3 +166,37 @@ export async function importSession(
 ): Promise<{ ok: boolean; imported: number; skipped: number }> {
   return request("/api/sessions/import", { method: "POST", json: data });
 }
+
+// ---- 会话库备份/恢复（ADR-0047）----
+
+export interface SessionBackupInfo {
+  file: string;
+  size_bytes: number;
+  created_at: string;
+  session_count: number | null;
+}
+
+export interface CorruptFileInfo {
+  file: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface SessionBackupsResponse {
+  ok: boolean;
+  backups: SessionBackupInfo[];
+  corrupt_files: CorruptFileInfo[];
+  current_session_count: number | null;
+}
+
+/** 备份清单 + 损坏库残留（控制面板「会话备份」对话框数据源）。 */
+export async function listSessionBackups(): Promise<SessionBackupsResponse> {
+  return request("/api/sessions/backups", { method: "GET" });
+}
+
+/** 人工恢复：用指定备份整体替换 sessions.db；生成中 409。 */
+export async function restoreSessionBackup(
+  file: string,
+): Promise<{ ok: boolean; restored_from: string; corrupt_renamed: string | null; backup_created_at: string }> {
+  return request(`/api/sessions/backups/${encodeURIComponent(file)}/restore`, { method: "POST" });
+}

@@ -553,6 +553,9 @@ export class ChatView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._loadHistory();
+    // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
+    // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
+    window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
     this._unsubscribe = store.subscribe(() => {
       this.requestUpdate();
       this._consumePendingSkillChat();
@@ -914,7 +917,31 @@ export class ChatView extends LitElement {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._stopGeneratingPoll();
+    window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored);
   }
+
+  /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */
+  private _onSessionsRestored = (): void => {
+    void this._loadHistory();
+    const cur = store.getState().chat.currentSession;
+    if (cur) {
+      void fetchSessionDetail(cur.id, { metaOnly: true })
+        .then(() => {
+          // 仍存在：消息流可能是恢复前旧态，重拉
+          this._loadSession(cur);
+        })
+        .catch(() => {
+          // 会话已随恢复消失（创建晚于备份）：回欢迎页
+          actions.setChatState({
+            state: "initial",
+            currentSession: null,
+            messages: [],
+            streaming: false,
+            pendingAsk: null,
+          });
+        });
+    }
+  };
 
   /** 启动自动恢复（ADR-0028）：上次会话仍在后台生成 → 直接进入该会话
    *  恢复态（generating 占位 + 轮询），否则保持 initial 只高亮。 */
