@@ -264,10 +264,18 @@ class RewindTracker:
         result: dict, apply: bool,
     ) -> None:
         fp = Path(path)
+        # 锚点本身没有快照（环形淘汰 / 该轮 begin_turn 失败 / 坐标失配，见
+        # AP-30）：first_version 是「首触之前」的内容，**不是该时点的状态**，
+        # 拿它落盘等于把文件倒回更早的版本却报 restored——恢复是破坏性写盘，
+        # 降级必须显式（对照下方 skipped_reason 的明示契约）。
+        if target is None:
+            result["skipped"].append({
+                "path": path,
+                "reason": "锚点无快照（已被环形淘汰或该轮未追踪）",
+            })
+            return
         # 目标态：锚点快照条目；锚点后才首触的文件退回首版本（首触前内容）
-        entry = None
-        if target is not None:
-            entry = target["tracked_file_backups"].get(path)
+        entry = target["tracked_file_backups"].get(path)
         if entry is None:
             entry = first_version.get(path)
         if entry is None:

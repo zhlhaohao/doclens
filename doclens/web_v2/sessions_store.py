@@ -472,6 +472,39 @@ class _RewindSnapshotStore(_StorePart):
             )
             return True
 
+    def shift_anchors(
+        self,
+        session_id: str,
+        from_seq: int,
+        delta: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> int:
+        """坐标重映射（AP-30）：``session_items.seq`` 整体后移后同步快照锚点。
+
+        ``anchor_seq`` 是 ``message_user`` 的 seq 外键。任何重排 seq 的写路径
+        都必须连带调用本方法，否则回退会找不到目标快照而静默降级。
+
+        Args:
+            from_seq: 被后移区间的最小 seq（与重排 SQL 的 ``WHERE seq >= ?`` 同值）。
+            delta: 位移量。
+            conn: 复用调用方连接——**必须**与自己那条重排 SQL 处于同一事务，
+                否则两者可能只成功一半。``None`` 时独立事务（仅供外部核对用）。
+        """
+        if delta == 0:
+            return 0
+
+        def _run(c: sqlite3.Connection) -> int:
+            return c.execute(
+                """UPDATE rewind_snapshots SET anchor_seq = anchor_seq + ?
+                   WHERE session_id = ? AND anchor_seq >= ?""",
+                (delta, session_id, from_seq),
+            ).rowcount
+
+        if conn is not None:
+            return _run(conn)
+        with self._lock, self._conn() as own:
+            return _run(own)
+
     def list_rewind_snapshots(self, session_id: str) -> list:
         """全部文件快照（id 升序）：[{id, anchor_seq, tracked_file_backups, created_at}]。"""
         with self._lock, self._conn() as conn:
@@ -1214,6 +1247,10 @@ class SessionsStore(_StorePart):
                    WHERE session_id = ? AND seq >= ?""",
                 (k, session_id, tail_seq),
             )
+            # 坐标变更必须连带重映射（AP-30）：rewind_snapshots.anchor_seq 是
+            # message_user 的 seq 外键，不同步则回退找不到目标快照，会静默
+            # 落回「首次改前」版本并误报 restored。同一事务内完成。
+            self._snapshots.shift_anchors(session_id, tail_seq, k, conn=conn)
             now = datetime.now(timezone.utc).isoformat()
             for i, (name, content) in enumerate(fresh):
                 conn.execute(
@@ -1559,6 +1596,12 @@ class SessionsStore(_StorePart):
 
     def backfill_rewind_snapshot(self, session_id: str, path: str, entry: dict) -> bool:
         return self._snapshots.backfill_rewind_snapshot(session_id, path, entry)
+
+    def shift_rewind_anchors(
+        self, session_id: str, from_seq: int, delta: int,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> int:
+        return self._snapshots.shift_anchors(session_id, from_seq, delta, conn=conn)
 
     def list_rewind_snapshots(self, session_id: str) -> list:
         return self._snapshots.list_rewind_snapshots(session_id)

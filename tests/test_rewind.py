@@ -391,3 +391,62 @@ def test_rewind_endpoint_rejects(api_env):
         assert ei.value.status == 409
     finally:
         chat_runner.clear_all()
+
+
+def test_skill_context_seq_shift_remaps_anchor(store):
+    """AP-30：upsert_skill_contexts 重排 seq 时必须同步快照锚点。
+
+    anchor_seq 是 message_user 的 seq 外键；只移 session_items 不移快照，
+    回退会找不到目标快照而静默退到「首次改前」版本。
+    """
+    _create(store)
+    _append(store, "s1", 0, "message_user", {"content": "q1"})
+    _append(store, "s1", 1, "message_ai", {"content": "a1"})
+    _append(store, "s1", 2, "message_user", {"content": "q2"})   # 本轮尾部
+    store.append_rewind_snapshot("s1", 2, {})                    # begin_turn
+
+    moved = store.upsert_skill_contexts("s1", [("demo", "body")])
+    assert moved == 1
+
+    assert store.list_rewind_snapshots("s1")[-1]["anchor_seq"] == 3
+    # 锚点仍指向活着的那条 message_user（旧坐标已被 skill_context 占据）
+    assert store.is_live_anchor("s1", 3) is True
+    assert store.is_live_anchor("s1", 2) is False
+
+
+def test_skill_context_seq_shift_leaves_earlier_anchors(store):
+    """只移动被重排区间内的锚点——历史锚点不得跟着漂移。"""
+    _create(store)
+    _append(store, "s1", 0, "message_user", {"content": "q1"})
+    _append(store, "s1", 1, "message_ai", {"content": "a1"})
+    _append(store, "s1", 2, "message_user", {"content": "q2"})
+    store.append_rewind_snapshot("s1", 0, {})
+    store.append_rewind_snapshot("s1", 2, {})
+
+    store.upsert_skill_contexts("s1", [("demo", "body")])
+
+    anchors = [s["anchor_seq"] for s in store.list_rewind_snapshots("s1")]
+    assert anchors == [0, 3]
+
+
+def test_missing_anchor_snapshot_skips_instead_of_reverting_to_first(tracker_env):
+    """AP-30 降级面：锚点无快照时不得拿「首次改前」冒充该时点状态。
+
+    旧行为会 apply=True 覆盖文件并回报 restored——破坏性写盘却报成功。
+    """
+    store, work, tr = tracker_env
+    f = work / "note.md"
+    _turn(store, "s2", 1, "q2")
+    tr.begin_turn("s2")                       # 唯一快照：anchor=1
+    f.write_text("原始", encoding="utf-8")
+    tr.track_structured("s2", str(f), work)   # v1 = 原始
+    f.write_text("被改", encoding="utf-8")
+
+    pv = tr.preview("s2", 0)                  # 锚点 0 无快照（模拟淘汰/失配）
+    assert pv["restored"] == []
+    assert pv["skipped"] == [
+        {"path": str(f), "reason": "锚点无快照（已被环形淘汰或该轮未追踪）"}
+    ]
+    # 不落盘：文件保持现值
+    tr.restore("s2", 0)
+    assert f.read_text(encoding="utf-8") == "被改"
