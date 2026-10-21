@@ -152,7 +152,7 @@ class TestSearchKbHandlePaths:
             search_context_after=600,
             max_total_chars=8000,
             path_map=path_map,
-            search=lambda query, allowed_doc_ids=None: (
+            search=lambda query, max_results, allowed_doc_ids=None: (
                 [
                     {"doc_id": "d1", "score": 1.0},
                     {"doc_id": "d3", "score": 1.0},

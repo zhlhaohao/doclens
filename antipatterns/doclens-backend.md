@@ -560,36 +560,15 @@
 - **修复方案**：与 AP-8 一并做——进程级复用单连接（`check_same_thread=False` + 现有 `RLock`），或每方法 `try/finally: conn.close()`。
 - **回归验证**：`tests/test_sessions_store_history.py tests/test_chat_disconnect.py`。
 
-### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: done]
+### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: pending]
 - **形态**：Error Hiding（fail-soft 语义越界）
 - **证据**：`doclens/index_manager.py:349-360` `has_indexed_docs()` 吞异常返回 False → `:838-840` 直接 `return [], []`；
   `load_doc_structures()`（`:362-383`）同样吞异常；
   `doclens/web_v2/api/search.py:104-108` 捕获一切异常返回空结果且**不填 `error`**；
   同构的 `api/grep.py:79-85` 填 `error=f"grep 引擎异常: {e}"`（响应模型 `models/search.py:77` 有该字段）。
 - **风险**：索引库损坏/锁冲突在 UI 上等同「知识库里没有这段内容」，AI 会据此给出「未收录」的错误结论。
-- **实际修复（2026-10-21，区分「空库」与「探测失败」，两类探测分道）**：
-  ① `index_probe` 新增**判定类**探测 `has_documents_checked()` + `IndexProbeError`：
-  DB 打不开或查询失败一律抛，不再返回 False。同时保留原 fail-soft 的展示类探测
-  （`indexed_doc_count` / `is_path_indexed` 等），模块 docstring 明确两类语义分界——
-  目录页仍不能因索引库瞬时锁而 500。
-  ② `IndexManager.search()` → 用 checked 探测（`_ts` 缺失仍返回空，那是「未装配」）；
-  `IndexManager.like_search()` 同（原用 `indexed_doc_count() == 0`，故障时静默返回 []，
-  让 LIKE 降级腿把故障说成「没有 LIKE 命中」，再落进 rg 腿）。
-  ③ `api/search.py` 捕获 `IndexProbeError` → 200 + `error="索引库不可读，本次结果不代表知识库内容: …"`
-  + `notes`（与 `/api/grep` 同契约）；其他异常也补 `error`（AP-47 只补了 notes）。
-  ④ `kb_tools.handle_search_kb` 捕获 → 明确文案「本次检索没有执行，**不能**据此认为知识库未收录相关文档」
-  ——这是本条最危险的降级面：AI 会把空结果当作事实引用。
-- **回归验证**：新增 `tests/test_index_unavailable.py` 10 断言——空库返回 False 不抛 /
-  垃圾库文件抛 `IndexProbeError` / 展示类探测保持 fail-soft / `search` 与 `like_search` 都上抛 /
-  web 端点填 `error` 且 notes 有原因 / 健康空库不报错（仍返回干净空结果）/
-  工具层文案含「索引库暂时不可读」与「不能…未收录」且不含「未找到」。
-  **反证**：还原 fail-soft 与无 error 的端点 → 5 条红灯。
-  另修 AP-47 遗留：`tests/test_search_targets.py` 的替身仍按旧签名
-  `search=lambda query, max_results, ...`，已同步去掉该形参（AP-47 回归时未覆盖此文件）。
-  `tests/test_web_search_api_matrix.py tests/test_search_candidate_pool.py tests/test_index_unavailable.py
-  tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_rg_engine_status.py
-  tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_architecture.py` → 195 passed；
-  `pytest tests/ -k "search or grep or index or kb"` → 327 passed。
+- **修复方案**：区分「空库」与「探测失败」；search 端点与 grep 对齐填 `error`。
+- **回归验证**：`tests/test_web_search_api_matrix.py` + 新增「DB 损坏时 error 非空」用例。
 
 ### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: done]
 - **形态**：Error Hiding
@@ -899,7 +878,6 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
-| 2026-10-21 | 修 | AP-45 | 见本提交——`index_probe.has_documents_checked` + `IndexProbeError` 区分「空库」与「探测失败」；`search`/`like_search` 改用 checked 探测；web 端点填 `error`（与 grep 同契约）；kb_tools 明说「不能据此认为未收录」。新增 tests/test_index_unavailable.py 10 断言，反证 5 红；回归 195 + 327 passed。另修 AP-47 遗留的 test_search_targets 旧签名替身 |
 | 2026-10-21 | 修 | AP-46 | 见本提交——扫描结局 bool → 四态枚举（ok/timeout/unavailable/error）；运行期失败降级到索引全量 REGEXP 并留 note（原先连已索引文本都搜不到）；无 rg 且未超护栏也补 note。`_rg_search_root_hits` 公共化为 `rg_search_root_hits`。新增 tests/test_rg_engine_status.py 11 断言，反证 9 红；回归 177 passed |
 | 2026-10-21 | 修 | AP-47 | 见本提交——`IndexManager.search` 死参数 `max_results` → 真接线 `top_k_docs`（+ 同名属性暴露配置）；5 个调用点去死参数；web 删 `_MAX_FETCH=1000` 假池改「池满附 notes」；检索异常也填 notes。新增 tests/test_search_candidate_pool.py 10 断言，反证 4 红 / 2 红；回归 174 + 16 passed |
 | 2026-10-21 | 修 | AP-48 | 见本提交——静默超时由 `error+break`(600s) 改为 `heartbeat`(30s) 且继续；`asyncio.Queue` + `call_soon_threadsafe` 取代 `run_in_executor`（原每超时泄漏一个执行器线程）；前端 heartbeat 分支保持 running 只刷计数。新增 tests/test_reindex_sse.py 6 断言 + 1 条 vitest，反证分别 6 红 / 1 红；回归 29 passed + 15 vitest + build exit 0 |

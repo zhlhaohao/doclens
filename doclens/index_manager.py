@@ -842,14 +842,7 @@ class IndexManager:
         """
         self.load_or_build_index()
 
-        # AP-45：这里必须用 checked 探测——`has_indexed_docs()` 在 DB 故障时
-        # 返回 False，会让「索引库读不了」与「库是空的」在上游完全同形，
-        # 最终表现为「知识库未收录这段内容」这种看似正常的错误结论。
-        if not self._ts:
-            return [], []
-        from doclens.index_probe import has_documents_checked
-
-        if not has_documents_checked(str(self.index_path)):
+        if not self._ts or not self.has_indexed_docs():
             return [], []
 
         kwargs = {
@@ -874,12 +867,8 @@ class IndexManager:
 
         self.load_or_build_index()
 
-        # 直接查 DB（ADR-0018）：documents 不物化，空库以 DB 计数判定。
-        # AP-45：用 checked 探测——`indexed_doc_count()` 在 DB 故障时返回 0，
-        # 会让 LIKE 降级腿静默返回「没有结果」，等同于把故障说成「未收录」。
-        from doclens.index_probe import has_documents_checked
-
-        if not has_documents_checked(str(self.index_path)):
+        # 直接查 DB（ADR-0018）：documents 不物化，空库以 DB 计数判定
+        if self.indexed_doc_count() == 0:
             return []
 
         from treesearch.fts import FTS5Index

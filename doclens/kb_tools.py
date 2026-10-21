@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from doclens.index_manager import IndexManager
-from doclens.index_probe import IndexProbeError
 from doclens.search_targets import (
     SEARCH_PATHS_PROPERTY,
     format_missed_note,
@@ -1010,16 +1009,7 @@ def handle_search_kb(
 
     # 候选池 = 配置 top_k_docs（AP-47：旧 max_results 参数从未被引擎消费）；
     # `max_results` 只决定下面 _format_kb_results 显示多少条
-    try:
-        nodes, docs = idx_manager.search(query, allowed_doc_ids=allowed)
-    except IndexProbeError as e:
-        # AP-45：索引库读不了时**必须**明说。若返回「未找到」，模型会据此
-        # 得出「知识库未收录此内容」的错误结论（这是最危险的降级）。
-        return (
-            f"索引库暂时不可读（{e}）。\n"
-            "本次检索没有执行，**不能**据此认为知识库未收录相关文档。\n"
-            "可稍后重试，或先运行 manage_kb(action='stats') 确认索引状态。"
-        )
+    nodes, docs = idx_manager.search(query, allowed_doc_ids=allowed)
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
