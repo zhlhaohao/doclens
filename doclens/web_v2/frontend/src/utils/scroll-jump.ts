@@ -8,6 +8,8 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
  * - md-viewer   : scroller = :host 自身（overflow-y: auto）
  * - cm-editor   : scroller = CM6 内部 .cm-scroller（内核自管滚动，本组件不消费）
  * - preview-pane: scroller = 纯文本预览的 .body div
+ * - chat-stream : scroller = :host 自身；threshold=1000 + unify（三钮组统一显隐，
+ *                 中间钮是「展开/收起思考过程」，非滚动动作）
  *
  * controller 负责：显隐状态（按滚动位置条件显示）、scroll/resize 监听、
  * 默认跳转动作。消费方各自渲染按钮（renderScrollJumpFabs）并引入
@@ -24,6 +26,12 @@ export interface ScrollJumpOptions {
   onJumpTop?: (scroller: HTMLElement) => void;
   /** 覆盖默认「跳到底」动作 */
   onJumpBottom?: (scroller: HTMLElement) => void;
+  /** 距顶/距底超过该值才显示按钮（默认 SCROLL_JUMP_THRESHOLD）。
+   *  长会话（chat-stream）用更大的门槛，避免短对话也挂按钮。 */
+  threshold?: number;
+  /** 组内统一显隐：任一方向过门槛 → 显示全部按钮（含消费方额外按钮），
+   *  而不是各方向独立显隐。chat-stream 三钮组（回顶/展开/回底）依赖此模式。 */
+  unify?: boolean;
 }
 
 export class ScrollJumpController implements ReactiveController {
@@ -71,11 +79,17 @@ export class ScrollJumpController implements ReactiveController {
   refresh() {
     const el = this._scroller;
     if (!el) return;
+    const threshold = this._opts.threshold ?? SCROLL_JUMP_THRESHOLD;
     const canScroll = el.scrollHeight - el.clientHeight > 8;
-    const nextTop = canScroll && el.scrollTop > SCROLL_JUMP_THRESHOLD;
-    const nextBottom =
+    let nextTop = canScroll && el.scrollTop > threshold;
+    let nextBottom =
       canScroll &&
-      el.scrollHeight - el.scrollTop - el.clientHeight > SCROLL_JUMP_THRESHOLD;
+      el.scrollHeight - el.scrollTop - el.clientHeight > threshold;
+    // 统一组模式：任一方向够远 → 整组显形（含中间的非滚动按钮）
+    if (this._opts.unify && (nextTop || nextBottom)) {
+      nextTop = true;
+      nextBottom = true;
+    }
     if (nextTop !== this.showTop || nextBottom !== this.showBottom) {
       this.showTop = nextTop;
       this.showBottom = nextBottom;

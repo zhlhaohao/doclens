@@ -1229,8 +1229,11 @@ export class ChatView extends LitElement {
     images?: { data: string; media_type: string }[],
   ): Promise<void> {
     // 发送即回底（贴底粘滞的强制出口）：用户主动发消息 = 意图明确指向
-    // 底部的新内容，即使此前上滚回看冻结了视口也立即恢复跟随
+    // 底部的新内容，即使此前上滚回看冻结了视口也立即恢复跟随。
+    // 同时清空「展开/收起全部思考过程」指令：新回合回到自动展开/收起，
+    // 不因上次选了「收起全部」而看不到本轮执行进度（2026-10-21 决议）。
     this._streamEl?.scrollToBottom();
+    this._streamEl?.resetTraceExpand();
     if (!firstOfSession) {
       actions.setChatState({
         messages: [...this.viewState.messages, { role: "user", content: message, images, created_at: new Date().toISOString() }],
@@ -1421,8 +1424,10 @@ export class ChatView extends LitElement {
       else this._stopGeneratingPoll();
       this._rewindDividers = dividers;
       // 切换会话/刷新：视口强制回底（贴底粘滞的强制出口）——不同会话间
-      // 保留的 _pinned 状态无意义，新时间线以底部为默认视位
+      // 保留的 _pinned 状态无意义，新时间线以底部为默认视位；
+      // 展开指令同律清空（旧会话的「收起全部」不得带进新会话）
       this._streamEl?.scrollToBottom();
+      this._streamEl?.resetTraceExpand();
       this._sessionUsage = applyLiveWindow(
         aggregateUsage(body.items ?? []),
         Number(body.context_window ?? 0),

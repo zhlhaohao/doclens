@@ -38,6 +38,7 @@ import moreHorizontalIcon from "lucide-static/icons/more-horizontal.svg?raw";
 import moreVerticalIcon from "lucide-static/icons/more-vertical.svg?raw";
 import chevronDownIcon from "lucide-static/icons/chevron-down.svg?raw";
 import chevronUpIcon from "lucide-static/icons/chevron-up.svg?raw";
+import chevronsDownUpIcon from "lucide-static/icons/chevrons-down-up.svg?raw";
 import chevronRightIcon from "lucide-static/icons/chevron-right.svg?raw";
 import refreshCwIcon from "lucide-static/icons/refresh-cw.svg?raw";
 import refreshCcwIcon from "lucide-static/icons/refresh-ccw.svg?raw";
@@ -112,6 +113,7 @@ const ICONS: Record<string, string> = {
   "more-vertical": moreVerticalIcon,
   "chevron-down": chevronDownIcon,
   "chevron-up": chevronUpIcon,
+  "chevrons-down-up": chevronsDownUpIcon,
   "chevron-right": chevronRightIcon,
   "refresh-cw": refreshCwIcon,
   "refresh-ccw": refreshCcwIcon,

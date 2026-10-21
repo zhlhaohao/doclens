@@ -115,3 +115,143 @@ describe("<chat-stream> stick-to-bottom", () => {
     expect(el.pinned).toBe(true);
   });
 });
+
+/** 会话导航三钮组（2026-10-21）：回顶 / 展开-收起思考过程 / 回底。
+ *  门槛 1000px（远大于预览页 300px）+ 整组统一显隐（任一方向够远则三个全显）。
+ *  jsdom 无布局：stub 滚动几何后手动派发 scroll 事件让 controller 重算。 */
+describe("<chat-stream> 会话导航三钮组", () => {
+  const traceNode = (id: string, status: "running" | "done"): TimelineNode => ({
+    type: "message",
+    message: {
+      role: "assistant",
+      content: "x",
+      tool_steps: [{ tool_use_id: id, name: "search", input: {}, status }],
+    },
+  });
+
+  const fabs = (el: ChatStream) =>
+    Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".scroll-jump-fab"));
+
+  /** 取消息内的 trace 元素（嵌套 shadow；测试内宽松类型，避开 jsdom 类型摩擦） */
+  function firstMessage(el: ChatStream): any {
+    return el.shadowRoot!.querySelector("chat-message");
+  }
+  function firstTrace(el: ChatStream): any {
+    return firstMessage(el)?.shadowRoot?.querySelector("chat-tool-trace");
+  }
+  /** 等嵌套 shadow（chat-message → chat-tool-trace）渲染完成 */
+  async function settle(el: ChatStream): Promise<void> {
+    await el.updateComplete;
+    const msg = firstMessage(el);
+    if (!msg) return;
+    await msg.updateComplete;
+    const tr = firstTrace(el);
+    if (tr) await tr.updateComplete;
+  }
+
+  it("stays hidden within 1000px of both ends", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    stubLayout(el, 1600, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 400, set: () => { /* 用户位置 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await el.updateComplete;
+    // 距顶 400、距底 1600-400-300=900 均不足 1000 → 不显形
+    expect(fabs(el).length).toBe(0);
+  });
+
+  it("shows all three buttons together once either end is 1000px away", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    stubLayout(el, 5000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 0, set: () => { /* 顶部 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await el.updateComplete;
+    // unify：距底 4700 > 1000 → 三个一起显形（含非滚动动作的中间钮）
+    expect(fabs(el).length).toBe(3);
+  });
+
+  it("middle button disabled when the session has no tool trace", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    stubLayout(el, 5000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 0, set: () => { /* 顶部 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await el.updateComplete;
+    const middle = fabs(el)[1];
+    expect(middle.disabled).toBe(true);
+    expect(middle.getAttribute("title")).toContain("没有思考过程");
+  });
+
+  it("middle button expands every trace, then collapses them", async () => {
+    const el = await fixture(
+      html`<chat-stream .nodes=${[traceNode("a", "done"), traceNode("b", "done")]}></chat-stream>`,
+    ) as ChatStream;
+    stubLayout(el, 5000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 0, set: () => { /* 顶部 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await settle(el);
+    expect(fabs(el).length).toBe(3);
+
+    // 默认全收起 → 显示「展开全部」
+    expect(fabs(el)[1].getAttribute("title")).toContain("展开全部");
+    fabs(el)[1].click();
+    await settle(el);
+    const tr = firstTrace(el);
+    expect(tr.shadowRoot.querySelector(".steps")).toBeTruthy();
+    expect(fabs(el)[1].getAttribute("title")).toContain("收起全部");
+
+    fabs(el)[1].click();
+    await settle(el);
+    expect(tr.shadowRoot.querySelector(".steps")).toBeNull();
+    expect(fabs(el)[1].getAttribute("title")).toContain("展开全部");
+  });
+
+  it("single trace click takes over: global instruction is dropped", async () => {
+    const el = await fixture(
+      html`<chat-stream .nodes=${[traceNode("a", "done")]}></chat-stream>`,
+    ) as ChatStream;
+    stubLayout(el, 5000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 0, set: () => { /* 顶部 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await settle(el);
+
+    fabs(el)[1].click(); // 展开全部
+    await settle(el);
+    const tr = firstTrace(el);
+    // 手动收起该条 → 全局指令作废，按钮文案回到「展开全部」
+    tr.shadowRoot.querySelector(".summary").dispatchEvent(new Event("click", { bubbles: true }));
+    await settle(el);
+    expect(tr.shadowRoot.querySelector(".steps")).toBeNull();
+    expect(fabs(el)[1].getAttribute("title")).toContain("展开全部");
+  });
+
+  it("resetTraceExpand() returns new content to automatic behaviour", async () => {
+    const el = await fixture(
+      html`<chat-stream .nodes=${[traceNode("a", "running")]}></chat-stream>`,
+    ) as ChatStream;
+    stubLayout(el, 5000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true, get: () => 0, set: () => { /* 顶部 */ },
+    });
+    el.dispatchEvent(new Event("scroll"));
+    await settle(el);
+
+    fabs(el)[1].click(); // 收起全部（压过运行中自动展开）
+    await settle(el);
+    const tr = firstTrace(el);
+    expect(tr.shadowRoot.querySelector(".steps")).toBeNull();
+
+    el.resetTraceExpand();
+    await settle(el);
+    // 指令清空 → trace 解冻；当前展开态保持，不强行改回
+    expect(tr.shadowRoot.querySelector(".steps")).toBeNull();
+  });
+});

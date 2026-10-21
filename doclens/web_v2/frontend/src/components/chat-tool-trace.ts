@@ -139,6 +139,15 @@ export function lineDiff(oldText: string, newText: string): DiffRow[] {
   return rows;
 }
 
+/** 进入「思考过程」折叠块的步骤：剔除 ask_user_question（渲染为问答卡片）
+ *  与 check_background（后台轮询无信息量）。chat-message 据此决定是否渲染块，
+ *  chat-stream 据此统计会话内 trace 存在性（三钮组中间钮的可用性 + 全展开判定）。 */
+export function traceStepsOf(steps: ToolStep[] | undefined): ToolStep[] {
+  return (steps ?? []).filter(
+    (s) => s.name !== "ask_user_question" && s.name !== "check_background",
+  );
+}
+
 /** 构造整个 trace 的完整可拷贝文本（所有步骤的 name + 完整 input + 完整 output，无截断）。 */
 export function buildFullText(steps: ToolStep[]): string {
   const lines: string[] = [`思考过程（${steps.length} 步）`];
@@ -262,17 +271,31 @@ export class ChatToolTrace extends LitElement {
   `;
 
   @property({ attribute: false }) steps: ToolStep[] = [];
+  /** 全局展开指令（chat-stream 三钮组中间钮下发）：true/false 强制本 trace
+   *  的展开态并压过流式自动展开/收起；null = 自动管理。
+   *  指令生效期间视同「已手动切换」（自动行为停摆），指令清空后解冻。 */
+  @property({ attribute: false }) expandOverride: boolean | null = null;
   @state() private _expanded = false;
   /** 用户手动切换过展开态——此后运行态自动展开/收起不再覆盖。 */
   private _userToggled = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
+  /** 已上报给宿主的展开态（避免每次 updated 重复派发同一状态） */
+  private _reportedExpanded: boolean | null = null;
   /** lineDiff 结果记忆化（tool_use_id + 两文本长度 → 行）：流式期间每次
    *  input_json_delta 触发重渲染，O(n×m) LCS DP 不记忆化则每 delta 重算
    *  数十万 cell；文本单调增长，长度即版本号。超上限清空防长会话累积。 */
   private _diffCache = new Map<string, DiffRow[]>();
 
   willUpdate(changed: Map<string, unknown>) {
+    // 全局指令优先（2026-10-21「展开全部/收起全部」钮）：非 null 时直接下发
+    // 展开态并冻结自动行为；回到 null 时解冻，展开态保持当下值由宿主决定
+    // （新消息由 chat-view → chat-stream.resetTraceExpand() 统一重置）
+    if (changed.has("expandOverride")) {
+      const override = this.expandOverride;
+      this._userToggled = override !== null;
+      if (override !== null) this._expanded = override;
+    }
     if (changed.has("steps")) {
       const oldSteps = (changed.get("steps") as ToolStep[] | undefined) ?? [];
       const wasRunning = oldSteps.some((s) => s.status === "running");
@@ -286,9 +309,31 @@ export class ChatToolTrace extends LitElement {
     }
   }
 
+  updated() {
+    // 展开态变化（自动展开/收起、全局指令生效）上报给 chat-stream：
+    // 三钮组中间钮据各 trace 的实际状态算「展开全部 / 收起全部」
+    if (this._reportedExpanded !== this._expanded) this._reportExpanded(false);
+  }
+
+  /** 上报当前展开态。manual=true = 用户手动单点 → 宿主作废全局指令。
+   *  key 取首步 tool_use_id（会话内唯一、跨重渲染稳定）。 */
+  private _reportExpanded(manual: boolean) {
+    const key = this.steps[0]?.tool_use_id;
+    if (!key) return;
+    this._reportedExpanded = this._expanded;
+    this.dispatchEvent(
+      new CustomEvent("trace-expanded", {
+        detail: { key, expanded: this._expanded, manual },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private _toggle() {
     this._userToggled = true;
     this._expanded = !this._expanded;
+    this._reportExpanded(true);
   }
 
   private _toggleResult(id: string) {

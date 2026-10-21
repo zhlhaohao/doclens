@@ -6,6 +6,7 @@ import { createMathMarked } from "../utils/marked-math";
 import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
 import { isCoarsePointer } from "../utils/device";
+import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
 
 /** 消息时间格式化：今天 HH:MM，非今天 MM-DD HH:MM。
@@ -323,6 +324,9 @@ export class ChatMessageEl extends LitElement {
   /** 流式期间禁用回退钮（本轮快照尚未固化，与输入框禁用同律，ADR-0027）。
    *  重问不受影响（纯拷贝无服务端副作用）。 */
   @property({ type: Boolean }) rewindDisabled = false;
+  /** 「展开/收起全部思考过程」全局指令（chat-stream 三钮组下发）：
+   *  null = 自动（各 trace 自行管理），true/false = 强制本消息 trace 的展开态。 */
+  @property({ attribute: false }) traceExpandOverride: boolean | null = null;
   /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
    *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
@@ -514,12 +518,10 @@ export class ChatMessageEl extends LitElement {
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
     // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，
-    // 一并剔除不计数
+    // 一并剔除不计数（过滤口径集中在 traceStepsOf，chat-stream 统计同源）
     const askStep = steps?.find((s) => s.name === "ask_user_question");
-    const traceSteps: ToolStep[] | undefined = steps?.filter(
-      (s) => s.name !== "ask_user_question" && s.name !== "check_background",
-    );
-    const showTrace = this.role === "assistant" && traceSteps && traceSteps.length > 0;
+    const traceSteps = traceStepsOf(steps);
+    const showTrace = this.role === "assistant" && traceSteps.length > 0;
     // user 气泡走紧凑模板：render() 模板的换行+缩进会被 white-space: pre-wrap
     // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
@@ -539,7 +541,8 @@ export class ChatMessageEl extends LitElement {
     return html`
       <div class="bubble">
         ${showTrace
-          ? html`<chat-tool-trace .steps=${traceSteps}></chat-tool-trace><div class="trace-sep"></div>`
+          ? html`<chat-tool-trace .steps=${traceSteps}
+                                 .expandOverride=${this.traceExpandOverride}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
         ${askStep ? this._renderAskSummary(askStep) : null}
         ${this.renderBubble(this.message.content)}

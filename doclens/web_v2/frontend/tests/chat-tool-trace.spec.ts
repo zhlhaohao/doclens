@@ -176,3 +176,50 @@ describe("<chat-tool-trace> copy button", () => {
     expect(btn.classList.contains("copied")).toBe(true);
   });
 });
+
+/** 全局展开指令（2026-10-21「展开全部/收起全部」三钮组）：override 压过
+ *  流式自动展开/收起；手动单点上报 manual=true 让宿主作废指令。 */
+describe("<chat-tool-trace> expandOverride", () => {
+  it("forces the block open even for a finished trace", async () => {
+    const el = await trace([done]);
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+    el.expandOverride = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeTruthy();
+    el.expandOverride = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+  });
+
+  it("beats run-start auto-expand while override is false", async () => {
+    const el = await trace([done]);
+    el.expandOverride = false;
+    await el.updateComplete;
+    el.steps = [running]; // 自动逻辑本该展开
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+  });
+
+  it("beats run-finish auto-collapse while override is true", async () => {
+    const el = await trace([running]);
+    el.expandOverride = true;
+    await el.updateComplete;
+    el.steps = [done]; // 自动逻辑本该收起
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeTruthy();
+  });
+
+  it("reports state changes, and manual clicks are flagged", async () => {
+    const el = await trace([done]);
+    const seen: { key: string; expanded: boolean; manual: boolean }[] = [];
+    el.addEventListener("trace-expanded", (e) => seen.push((e as CustomEvent).detail));
+
+    el.expandOverride = true;
+    await el.updateComplete;
+    expect(seen.at(-1)).toEqual({ key: "t1", expanded: true, manual: false });
+
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    expect(seen.at(-1)).toEqual({ key: "t1", expanded: false, manual: true });
+  });
+});
