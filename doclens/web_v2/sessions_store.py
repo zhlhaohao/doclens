@@ -10,6 +10,7 @@ WAL 模式；session_items 通过外键 ON DELETE CASCADE 跟随 sessions 删除
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import secrets
 import sqlite3
@@ -18,7 +19,8 @@ import ulid as _ulid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from contextlib import AbstractContextManager
+from typing import Iterator, Optional
 
 from pydantic import BaseModel
 
@@ -226,12 +228,30 @@ class _SessionDB:
         self._lock = threading.RLock()
         self._init_schema()
 
-    def _conn(self) -> sqlite3.Connection:
+    @contextlib.contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """打开一条连接并**保证关闭**（AP-44）。
+
+        `sqlite3.Connection` 的上下文管理器只 commit/rollback，**不关闭**——
+        全库 32 处 `with self._conn() as conn` 原本都把句柄留给 GC。WAL 下
+        残留 `-wal/-shm` 句柄随请求增长，长驻进程表现为句柄与内存缓慢上涨。
+
+        语义与 `with conn:` 保持一致：正常退出 commit，异常 rollback 后上抛，
+        两条路径都 close。
+        """
         conn = sqlite3.connect(self._db_path)
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+            except BaseException:
+                conn.rollback()
+                raise
+            conn.commit()
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -282,7 +302,8 @@ class _StorePart:
     def _lock(self) -> "threading.RLock":
         return self._db._lock
 
-    def _conn(self) -> "sqlite3.Connection":
+    def _conn(self) -> "AbstractContextManager[sqlite3.Connection]":
+        """共享连接的上下文管理器（进入即开、退出必关，AP-44）。"""
         return self._db._conn()
 
 

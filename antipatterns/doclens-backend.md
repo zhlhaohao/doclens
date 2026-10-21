@@ -645,13 +645,22 @@
   在停止中不再静默重启；`mcp_client.start()` 改返回 bool（`deps` 已按返回值判定）。
 - **未做**：未引入「代际号丢弃旧线程结果」——拒绝重启已从源头消除并存，代际号属额外复杂度。
 
-### AP-44 `sessions_store` 连接从不 close [P2] [status: pending]
+### AP-44 `sessions_store` 连接从不 close [P2] [status: done]
 - **形态**：资源所有权缺失（区别于 AP-8 的连接开销）
 - **证据**：`doclens/web_v2/sessions_store.py:229-234` `_conn()` 每次 `sqlite3.connect`；所有调用点 `with self._conn() as conn`——
   `sqlite3.Connection.__enter__` 只 commit/rollback，**不关闭**；全文件 `.close()` 出现 0 次。
 - **风险**：WAL 下连接/文件句柄随请求增长，回收依赖 GC 时机；长驻进程表现为句柄与内存缓慢上涨。
-- **修复方案**：与 AP-8 一并做——进程级复用单连接（`check_same_thread=False` + 现有 `RLock`），或每方法 `try/finally: conn.close()`。
-- **回归验证**：`tests/test_sessions_store_history.py tests/test_chat_disconnect.py`。
+- **实际修复（2026-10-21，取「每方法进入即开、退出必关」）**：`_SessionDB._conn()` 改为
+  `@contextlib.contextmanager`——进入时连库 + 三条 PRAGMA，正常退出 `commit()`，异常 `rollback()` 后上抛，
+  **两条路径都 `close()`**（`sqlite3.Connection.__enter__` 只 commit/rollback 不 close 是根因）。
+  32 处 `with self._conn() as conn:` 调用点零改动（`_StorePart._conn` 转发保持）。
+- **未做（与台账方案的差异）**：没有改成「进程级复用单连接」——那会与 AP-8 的连接开销问题一起改，
+  且跨线程共享连接需 `check_same_thread=False` + 更细的写序列化，风险面远大于本条收益。留待 AP-8 一并决策。
+- **回归验证**：新增 `tests/test_sessions_conn_lifecycle.py` 7 断言——上下文退出即关 / 读方法、
+  写方法开的连接全部已关 / 异常路径也关 / commit 语义保留（新连接可见写入）/ 异常路径回滚 /
+  8 线程并发调用后无泄漏。判定手法：patch `sqlite3.connect` 记录连接，退出后 `SELECT 1` 应收
+  `ProgrammingError: closed`。**反证**：还原成返回裸 Connection → 4 条红灯。
+  `-k "session or chat or auth or rewind or manual_compact or architecture"` → 189 passed。
 
 ### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: pending]
 - **形态**：Error Hiding（fail-soft 语义越界）
@@ -852,6 +861,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-44 | 见本提交——`_SessionDB._conn()` 改 contextmanager，commit/rollback 后必 close，32 处调用点零改动；新增 7 断言（含并发无泄漏、回滚），反证 4 红；会话族回归 189 passed |
 | 2026-10-21 | 修 | AP-43 | 见本提交——新增 `doclens/worker_lifecycle.py`（join_thread + WorkerStopState 三态）；五个 worker 的 stop 超时保留引用并拒绝 start，status 增 stopping；deps.stop_* 失败保留注册；新增 22 断言，反证 5 红；回归 91 passed |
 | 2026-10-21 | 修 | AP-42 | 见本提交——新增 `doclens/git_command.py`（UTF-8 固定 + 单一 `is_git_root` + 超时常量），GitSync 与 api/git 共 7 处调用全部改道；新增 10 断言（含 gbk 解码模拟与结构枪口），反证 3 红；回归 19 passed |
 | 2026-10-21 | 修 | AP-41 | 见本提交——`_resolve_source` 加 resolve+relative_to 包含校验（`PathOutsideWorkdir` → 403）；`_to_rel` 不泄露绝对路径；输出目录保留 ADR-0039「写回源同目录」；新增 8 断言，反证 5 红；回归 51 passed |
