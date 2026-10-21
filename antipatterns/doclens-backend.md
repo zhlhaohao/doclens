@@ -239,12 +239,22 @@
 - **修复方案**：全域统一走 `resolve_path`（含 binary/DB-only 变体），错误码收敛为 `preview_common.ERRORS` 常量集。
 - **回归验证**：`tests/test_web_preview_formats.py tests/test_pdf_native_preview_api.py`。
 
-### AP-21 会话 TTL / cookie 有效期 / 清理上限三源同值 [P3] [status: pending]
+### AP-21 会话 TTL / cookie 有效期 / 清理上限三源同值 [P3] [status: done]
 - **形态**：Magic Numbers / Duplicated Source of Truth
 - **证据**：`doclens/web_v2/auth_gate.py:15-16` `COOKIE_MAX_AGE = 24*3600` 与 `SESSION_TTL_HOURS = 24` 靠行内注释维系；`doclens/web_v2/sessions_store.py:1390/1408` 默认 `ttl_hours: int = 24` 第三处；`sessions_store.py:560` `OFFSET 100` 与 `:540` docstring"环形上限 100"两处；`sessions_store.py:1068 [:200]` 与 `models/session.py:12 max_length=200`、`api/sessions.py:165` 三处。
 - **风险**：改 TTL 只改一处 → cookie 未过期而会话已失效（或反之），表现为"突然要求重新登录"。
-- **修复方案**：单一常量模块（`auth_gate.SESSION_TTL_HOURS` 为准，`COOKIE_MAX_AGE = SESSION_TTL_HOURS*3600` 计算）；ring 上限与标题长度常量化。
-- **回归验证**：`tests/test_auth_challenge.py tests/test_sessions_store_history.py`。
+- **实际修复（2026-10-20）**：
+  ① TTL：`COOKIE_MAX_AGE = SESSION_TTL_HOURS * 3600`（派生而非并列常量，原靠行内注释维系）；
+  `SessionsStore.create_auth_session/validate_auth_session` 的 `ttl_hours: int = 24` 默认值**去掉**（改为必传，强制调用方引用单一真源——
+  不想让底层 sessions_store 反向 import auth_gate）。
+  ② 环形上限：新增 `REWIND_SNAPSHOT_RING_MAX = 100`，SQL 改参数化 `OFFSET ?`，docstring 引用常量名（原 docstring 100 与 SQL OFFSET 100 两处）。
+  ③ 标题上限：新增 `SESSION_TITLE_MAX = 200`（落在 sessions_store 而非 models——models 已从它 import SessionType，反向会成环）；
+  `models/session.py` 的 `max_length=200` 与 `api/sessions.py` 的 `[:200]`、`sessions_store.py` 复制截断 `[:200]` 三处全部引用它。
+- **回归验证**：新增 `tests/test_auth_challenge.py::TestSessionTtlSingleSource`（cookie 派生关系 + 签名无默认值）与
+  `tests/test_sessions_store_history.py::TestConstantsSingleSource`（环形上限实写 105 条只留 100 / Pydantic max_length 与常量一致）；
+  `tests/test_auth_challenge.py tests/test_sessions_store_history.py tests/test_rewind.py tests/test_session_duplicate.py
+  tests/test_architecture.py` → 90 passed；`workdir_config / deps_locks / session_export_import / session_detail_window /
+  sessions_ts_normalization` → 49 passed。
 
 ### AP-22 测试跨模块 import 私有成员（违反 CLAUDE.md 规则 2） [P3] [status: done]
 - **形态**：违反仓库纪律（独立发现）

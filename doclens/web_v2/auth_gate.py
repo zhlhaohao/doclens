@@ -12,8 +12,12 @@ from __future__ import annotations
 import ipaddress
 
 COOKIE_NAME = "cortex_auth"
-COOKIE_MAX_AGE = 24 * 3600  # 秒，与 SESSION_TTL_HOURS 对应
+#: 登录会话有效期（小时）——单一真源（AP-21）：cookie max_age 由它计算，
+#: 不再并列硬编码，避免「只改一处 → 浏览器丢 cookie 而服务端会话仍有效」
+#: 这类只在 24 小时后才显形的脱钩。
 SESSION_TTL_HOURS = 24
+#: Cookie 有效期（秒）：由 SESSION_TTL_HOURS 派生，勿单独修改。
+COOKIE_MAX_AGE = SESSION_TTL_HOURS * 3600
 
 
 def is_loopback_ip(ip: str | None) -> bool:

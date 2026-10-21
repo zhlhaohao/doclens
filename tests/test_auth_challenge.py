@@ -207,3 +207,21 @@ class TestProtocolEndToEnd:
                 "proof": compute_proof(ch["nonce"], pb), "nonce": ch["nonce"],
             })
             assert r2.status_code == 200
+
+
+class TestSessionTtlSingleSource:
+    """AP-21：cookie 有效期由 SESSION_TTL_HOURS 派生，不得并列硬编码。"""
+
+    def test_cookie_max_age_derived(self):
+        from doclens.web_v2 import auth_gate
+        assert auth_gate.COOKIE_MAX_AGE == auth_gate.SESSION_TTL_HOURS * 3600
+
+    def test_store_requires_explicit_ttl(self):
+        """sessions_store 不再有 ttl_hours=24 默认值（强制调用方传单一真源）。"""
+        import inspect
+
+        from doclens.web_v2.sessions_store import SessionsStore
+
+        for fn_name in ("create_auth_session", "validate_auth_session"):
+            sig = inspect.signature(getattr(SessionsStore, fn_name))
+            assert sig.parameters["ttl_hours"].default is inspect.Parameter.empty, fn_name

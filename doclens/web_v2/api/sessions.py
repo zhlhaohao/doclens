@@ -21,7 +21,13 @@ from doclens.web_v2.models.session import (
     SessionRewindRequest,
     SessionStarRequest,
 )
-from doclens.web_v2.sessions_store import SessionItem, SessionSummary, SessionType, SessionsStore
+from doclens.web_v2.sessions_store import (
+    SESSION_TITLE_MAX,
+    SessionItem,
+    SessionSummary,
+    SessionType,
+    SessionsStore,
+)
 from doclens.web_v2.tmp_workspace import cleanup_all_tmp, cleanup_session_tmp
 from planify.tools.guard import grant_clear_all, grant_session_clear
 
@@ -156,13 +162,13 @@ async def append_session(session_id: str, req: SessionAppendRequest):
 
 @router.patch("/sessions/{session_id}/title")
 async def rename_session(session_id: str, req: SessionRenameRequest):
-    """人工改名（2026-09-17）。strip 后为空 → 400；超 200 字符截断
-    （与 chat-view 创建时的 slice(0, 200) 对齐）；不刷新 updated_at。"""
+    """人工改名（2026-09-17）。strip 后为空 → 400；超 SESSION_TITLE_MAX 截断
+    （与创建/复制同源，AP-21）；不刷新 updated_at。"""
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
-    title = req.title.strip()[:200]
+    title = req.title.strip()[:SESSION_TITLE_MAX]
     if not title:
         raise CortexAPIError(400, "TITLE_EMPTY", "标题不能为空")
     store.update_title(session_id, title)

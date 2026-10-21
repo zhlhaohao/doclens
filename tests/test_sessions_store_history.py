@@ -728,3 +728,25 @@ class TestStarred:
         # 迁移后加星可用
         store2.set_starred("legacy", True)
         assert store2.get("legacy").starred is True
+
+
+class TestConstantsSingleSource:
+    """AP-21：环形上限与标题上限常量化，不再散落硬编码。"""
+
+    def test_rewind_ring_max_used_in_sql(self, tmp_path):
+        from doclens.web_v2.sessions_store import REWIND_SNAPSHOT_RING_MAX, SessionsStore
+
+        store = SessionsStore(tmp_path / "s.db")
+        _create_session(store, "S1")
+        # 超上限写入 → 只保留 REWIND_SNAPSHOT_RING_MAX 条
+        for i in range(REWIND_SNAPSHOT_RING_MAX + 5):
+            store.append_rewind_snapshot("S1", i, {"f.md": {"backup_file_name": f"b{i}", "version": 1}})
+        assert len(store.list_rewind_snapshots("S1")) == REWIND_SNAPSHOT_RING_MAX
+
+    def test_title_max_shared(self):
+        from doclens.web_v2.models.session import SessionCreateRequest
+        from doclens.web_v2.sessions_store import SESSION_TITLE_MAX
+
+        field = SessionCreateRequest.model_fields["title"]
+        max_lengths = [m.max_length for m in field.metadata if hasattr(m, "max_length")]
+        assert max_lengths == [SESSION_TITLE_MAX]

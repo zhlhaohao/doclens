@@ -4,12 +4,12 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from doclens.web_v2.sessions_store import SessionType
+from doclens.web_v2.sessions_store import SESSION_TITLE_MAX, SessionType
 
 
 class SessionCreateRequest(BaseModel):
     type: SessionType
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=SESSION_TITLE_MAX)
     preview: str = Field(default="", max_length=200)
     mode: Optional[str] = None  # search: 'keyword' | 'grep'；chat: 'skill'（技能会话）
 

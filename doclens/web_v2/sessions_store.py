@@ -206,6 +206,13 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at
 # 登录会话滑动续期节流阈值：剩余有效期超过该值时不写库（避免每个 API 请求都写 SQLite）
 _AUTH_TOUCH_REFRESH_THRESHOLD = timedelta(hours=23)
 
+#: 每会话回退快照的环形上限（AP-21：docstring 与 SQL 曾各写一次 100）
+REWIND_SNAPSHOT_RING_MAX = 100
+#: 会话标题长度上限（AP-21：Pydantic 校验 / API 截断 / 复制截断曾各写 200）。
+#: 定义在此而非 models/session.py——models 已从本模块 import SessionType，
+#: 反向 import 会成环。
+SESSION_TITLE_MAX = 200
+
 
 class _SessionDB:
     """连接原语 + schema 迁移（四个协作类共享）。
@@ -286,7 +293,7 @@ class _AuthSessionStore(_StorePart):
     会话写入共享同一个类（AP-7），改动 token 策略不必读对话代码。
     """
 
-    def create_auth_session(self, ttl_hours: int = 24) -> str:
+    def create_auth_session(self, ttl_hours: int) -> str:
         """签发登录会话，返回 token。"""
         token = secrets.token_urlsafe(32)
         now = datetime.utcnow()
@@ -304,7 +311,7 @@ class _AuthSessionStore(_StorePart):
         token: str,
         *,
         touch: bool = True,
-        ttl_hours: int = 24,
+        ttl_hours: int,
         now: Optional[datetime] = None,
     ) -> bool:
         """校验登录会话存在且未过期。
@@ -358,7 +365,7 @@ class _RewindSnapshotStore(_StorePart):
     def append_rewind_snapshot(
         self, session_id: str, anchor_seq: int, tracked_backups: dict
     ) -> tuple:
-        """落一条文件快照（轮次开始时调用），环形上限 100 条/会话。
+        """落一条文件快照（轮次开始时调用），环形上限 REWIND_SNAPSHOT_RING_MAX 条/会话。
 
         tracked_backups: {路径: {"backup_file_name": str|None, "version": int}}
         （None = 该时点文件不存在）。超上限删最旧，返回 ``(被驱逐快照的
@@ -378,8 +385,8 @@ class _RewindSnapshotStore(_StorePart):
             )
             rows = conn.execute(
                 """SELECT id, payload FROM rewind_snapshots
-                   WHERE session_id = ? ORDER BY id DESC LIMIT -1 OFFSET 100""",
-                (session_id,),
+                   WHERE session_id = ? ORDER BY id DESC LIMIT -1 OFFSET ?""",
+                (session_id, REWIND_SNAPSHOT_RING_MAX),
             ).fetchall()
             evicted = []
             for r in rows:
@@ -1246,7 +1253,7 @@ class SessionsStore(_StorePart):
             ).fetchone()
             if row is None:
                 return None
-            copy_title = f"{row['title']} (副本)"[:200]  # 截断到与创建/改名一致的 200 上限
+            copy_title = f"{row['title']} (副本)"[:SESSION_TITLE_MAX]  # 与创建/改名同源（AP-21）
             conn.execute(
                 """INSERT INTO sessions
                    (id, type, title, preview, mode, created_at, updated_at,
@@ -1566,7 +1573,7 @@ class SessionsStore(_StorePart):
 
     # ---- 委托：登录会话（_AuthSessionStore）----
 
-    def create_auth_session(self, ttl_hours: int = 24) -> str:
+    def create_auth_session(self, ttl_hours: int) -> str:
         return self._auth.create_auth_session(ttl_hours)
 
     def validate_auth_session(
@@ -1574,7 +1581,7 @@ class SessionsStore(_StorePart):
         token: str,
         *,
         touch: bool = True,
-        ttl_hours: int = 24,
+        ttl_hours: int,
         now: Optional[datetime] = None,
     ) -> bool:
         return self._auth.validate_auth_session(
