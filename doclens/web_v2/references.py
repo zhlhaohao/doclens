@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 # 检索类工具（manage_kb 等非检索工具的 output 不含可引用 path，跳过）。
-# 公开供 refs_retry.evaluate_round 复用，避免两处定义漂移。
 RETRIEVAL_TOOLS = frozenset({"search_kb", "kb_grep", "read_document"})
 
 # search_kb / grep：<path>...</path>（非贪婪，一段 output 可能含多个）
@@ -39,32 +38,6 @@ def _extract_paths(name: str, output: str) -> list[str]:
         m = _DOC_HEADER_RE.search(output)
         return [_clean_path(m.group(1))] if m else []
     return []
-
-
-def extract_references(tool_calls: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """从检索工具调用结果提取去重保序的引用 path。
-
-    Args:
-        tool_calls: 每项含 ``name`` / ``output``，可选 ``is_error``（True 则跳过）。
-
-    Returns:
-        ``[{"path": "rel/path"}, ...]``，按首次出现顺序去重，空 path 过滤。
-    """
-    seen: set[str] = set()
-    refs: list[dict[str, str]] = []
-    for tc in tool_calls:
-        if tc.get("is_error"):
-            continue
-        name = tc.get("name", "")
-        if name not in RETRIEVAL_TOOLS:
-            continue
-        for raw in _extract_paths(name, tc.get("output") or ""):
-            path = raw.strip()
-            if not path or path in seen:
-                continue
-            seen.add(path)
-            refs.append({"path": path})
-    return refs
 
 
 def extract_paths_by_tool(

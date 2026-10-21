@@ -93,9 +93,3 @@ def compress_image_bytes(data: bytes, ext: str) -> tuple[bytes, bool]:
         # 所有尝试都比原图大（极端：几百 KB 的 PNG 放大成 9MB+？防御分支）
         return data, False
     return best, True
-
-
-def should_compress(filename_or_ext: str, size: int) -> bool:
-    """快速判断：该文件是否需要走压缩路径（不读内容）。"""
-    ext = os.path.splitext(filename_or_ext)[1].lower()
-    return ext in _COMPRESSIBLE_EXTS and size > COMPRESS_THRESHOLD_BYTES

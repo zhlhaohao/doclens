@@ -12,7 +12,6 @@ from PIL import Image
 from doclens.web_v2.api.image_compress import (
     COMPRESS_THRESHOLD_BYTES,
     compress_image_bytes,
-    should_compress,
 )
 
 
@@ -110,12 +109,3 @@ class TestCompressImageBytes:
             return
         with Image.open(io.BytesIO(out)) as rotated:
             assert rotated.size[0] <= 2048
-
-
-class TestShouldCompress:
-    def test_should_compress_heuristics(self):
-        assert should_compress("IMG12345.jpg", COMPRESS_THRESHOLD_BYTES + 1) is True
-        assert should_compress("IMG12345.JPG", COMPRESS_THRESHOLD_BYTES + 1) is True
-        assert should_compress("IMG12345.jpg", COMPRESS_THRESHOLD_BYTES) is False
-        assert should_compress("doc.pdf", 50 * 1024 * 1024) is False
-        assert should_compress("photo.gif", 50 * 1024 * 1024) is False

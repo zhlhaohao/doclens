@@ -48,7 +48,6 @@ class IndexManager:
         self.index_path = config.index_path or os.path.join(self.search_path, data_dirname(), "index.db")
         self._ts = None
         self._path_map = {}
-        self._pending_swap = None  # (new_ts, new_path_map, doc_count)
         self._needs_reload = False  # 需重建 TreeSearch 句柄（reindex 完成 / 外部直写 DB），不代表磁盘需审计
         self._reindexing = False
         self._reindex_lock = threading.Lock()
@@ -457,10 +456,6 @@ class IndexManager:
             logger.debug("has_changed_files exception: %s", e)
             return True
 
-    def _check_swap(self):
-        """兼容保留，实际 reload 由 _needs_reload 机制处理"""
-        self._pending_swap = None
-
     def trigger_background_reindex(self, force: bool = False, on_progress=None, on_complete=None, on_sub_progress=None):
         """供 FileWatcher / 手动触发的后台 reindex（使用自身的 _reindex_lock）
 
@@ -824,7 +819,6 @@ class IndexManager:
         的 paths 范围限定走此路——范围外文档不进候选池，不再依赖检索后
         过滤 + 候选量放大兜底）。
         """
-        self._check_swap()
         self.load_or_build_index()
 
         if not self._ts or not self.has_indexed_docs():

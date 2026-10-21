@@ -274,9 +274,18 @@
 - **修复方案**：`_pending` 加 `threading.Lock`（与 `record_failure` 一致）；`consume_nonce` 校验通过后再删除。
 - **回归验证**：`tests/test_auth_challenge.py`。
 
-### AP-26 死代码与退役分支（记录即处置） [P4] [status: pending]
+### AP-26 死代码与退役分支（记录即处置） [P4] [status: done]
 - **证据**：`doclens/web_v2/refs_retry.py:20-48`（docstring 自认 `evaluate_round` 已被 `refs_curator` 取代，仅 `FALLBACK_TOAST` 在用）；`doclens/web_v2/refs_parser.py:100`、`doclens/web_v2/references.py:44`（仅定义处出现）；`doclens/index_manager.py:583-585` `_check_swap` 空实现 + `_pending_swap` 无消费者；`doclens/web_v2/api/image_compress.py:98` `should_compress` 无调用方；`doclens/web_v2/api/_grouping.py:226-227` 两行相同 `return`（第二行不可达）；`doclens/web_v2/preview_synthesizer.py:63-78` PDF 目录/列表降级分支（`preview.py:131-134` 已走原生预览）。
-- **处置**：删除或加 `# deprecated since <date>` 明确注释；`image_compress.should_compress` 若有前端契约先查调用再删。
+- **实际处置（2026-10-20，六项全删，-217/+7 行）**：
+  ① `refs_retry.py` 重写为最小模块——只留 `FALLBACK_TOAST`（chat.py:97 唯一消费方），`RoundResult`/`evaluate_round` 删，docstring 记录退役历史；
+  ② `refs_parser.rewrite_references_section`、`references.extract_references` 两零引用函数删（`references.RETRIEVAL_TOOLS` 注释同步去掉对 refs_retry 的提及）；
+  ③ `_check_swap` 空壳方法 + `_pending_swap` 死字段 + search/load 两处调用全删（两个测试 fixture 里的 `mgr._pending_swap = None` 赋值同步清理）；
+  ④ `image_compress.should_compress` 删（全仓唯一消费是自己的测试）；`tests/test_upload_image_compress.py::TestShouldCompress` 类 + import 同步删；
+  ⑤ `_grouping.py:226-227` 不可达重复 return 删；
+  ⑥ `preview_synthesizer` PDF 专属降级分支删（TOC 项分支 + `_emit_list_item` 整函数 + `_RE_TOC_ENTRY`/`_RE_LIST_ITEM`/`_is_toc_entry`/`_strip_trailing_pagenum`，文件 282→178 行）。
+  **删前取证**：非 PDF 文档（docx/pptx/xlsx/epub，86 节点）对 `_is_toc_entry` 0 命中——分支只可能被 PDF 触发，而 PDF 已全量走 ADR-0031 原生预览，属死路；`rewrite_references_section`/`extract_references` 全仓仅定义处出现（grep 验证）；`should_compress` 无前端契约。
+- **回归验证**：`tests/test_web_preview_formats.py tests/test_upload_image_compress.py tests/test_web_search_api_matrix.py tests/test_lazy_search.py
+  tests/test_change_detection.py tests/test_chat_disconnect.py tests/test_skill_refs.py tests/test_architecture.py` → 115 passed。
 
 ### AP-27 模板化 Magic Numbers 散落 [P4] [status: pending]
 - **证据**：`doclens/grep_tools.py:314,319` 硬编码 50（同文件 `:33 MAX_RESULTS_CAP`、描述 `:61` 第三处）；`grep_tools.py:116,130,145` 三处 200 字符截断；`web_v2/api/chat.py:275` `0.8` 压缩阈值、`:686` `timeout=2.0`；`web_v2/api/_chat_emitter.py:85-86` 300 截断；`files.py:49` 与 `preview_mutations.py:163` 各定义 50MB 上传上限。

@@ -224,4 +224,3 @@ def group_and_paginate(
     # 翻页超出总页数时前端会重复看到最后一页。
     page = file_groups[offset: offset + limit] if total_files > 0 else []
     return page, total_files, total_matches, offset
-    return page, total_files, total_matches, offset

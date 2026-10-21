@@ -50,7 +50,6 @@ def idx(tmp_path: Path, monkeypatch):
     mgr._needs_reload = False
     mgr._building = False
     mgr._build_cond = threading.Condition()
-    mgr._pending_swap = None
     mgr._startup_audit_done = True
     mgr._last_failed_count = 0
     mgr._sync_image_version_expectation = lambda: None
