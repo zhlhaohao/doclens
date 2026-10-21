@@ -260,12 +260,14 @@
 - **修复方案**：补齐 `global` 列表；或把单例集合改为 `dict` 统一遍历重置（避免每次新增单例都要改两处）。
 - **回归验证**：`tests/test_workdir_config.py` + 手工工作目录切换后 MCP 状态。
 
-### AP-24 `_swap_state` 双键非原子更新 vs 无锁 `dict()` 拷贝 [P3] [status: pending]
+### AP-24 `_swap_state` 双键非原子更新 vs 无锁 `dict()` 拷贝 [P3] [status: done]
 - **形态**：Action at a Distance（并发正确性）
 - **证据**：`doclens/web_v2/deps.py:177-187` `_swap_state.update({...})` 一次改两个键，`swap_status()` 用 `dict()` 拷贝并注释断言"dict 拷贝原子"；`:221`、`:360` 多处写入。
 - **风险**：读方可观察到 `swapping=True` 而 `target=None` 的中间态；前端据 `target` 显示目标目录会闪空。
-- **修复方案**：改用不可变 `namedtuple`/dataclass 整体替换（`_swap_state = SwapState(...)`），或加同一把锁读。
-- **回归验证**：`tests/test_workdir_config.py`。
+- **实际修复（2026-10-20）**：双键 dict → `@dataclass(frozen=True) _SwapState`，写方两处整体赋值（`_swap_state = _SwapState(...)`，单引用替换在
+  CPython 下原子）、`swap_status()` 对外仍输出 dict（前端/中间件 `status.get("target")` 零改动）、`is_swapping()` 直读字段。中间态在结构上不可能存在。
+- **回归验证**：`tests/test_deps_locks.py` 新增 `TestSwapStateSnapshot`（快照形态 + 0.5s 三读一写高频撕读测试：任何快照两键必须自洽）+
+  `tests/test_workdir_config.py tests/test_architecture.py tests/test_web_search_api_matrix.py tests/test_chat_disconnect.py` → 23+2 套件全绿。
 
 ### AP-25 auth challenge / rate-limit 的模块级状态无锁；nonce 先 pop 后校验 IP [P3] [status: done]
 - **形态**：全局可变单例当传参通道（并发）

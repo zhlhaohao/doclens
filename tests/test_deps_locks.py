@@ -158,3 +158,56 @@ class TestIndexBuildDoesNotBlockAuthPath:
         with pytest.raises(RuntimeError, match="db broken"):
             deps.get_index_manager()
         assert deps._idx_manager is None
+
+
+class TestSwapStateSnapshot:
+    """AP-24：切换状态整体替换——读方不可能观察到自相矛盾的中间态。"""
+
+    def test_swap_status_shape(self):
+        from doclens.web_v2 import deps
+        st = deps.swap_status()
+        assert st == {"swapping": False, "target": None}  # 对外仍是 dict（前端契约）
+        assert deps.is_swapping() is False
+
+    def test_reader_never_sees_half_state(self):
+        """高频读 vs 高频整体替换：任何快照的两个键必须自洽。
+
+        旧实现（dict.update 双键）在此测试下可撕读出 (True, None) 或
+        (False, <旧target>)；不可变替换在结构上杜绝。
+        """
+        import threading
+        from doclens.web_v2 import deps
+        import doclens.web_v2.deps as d
+
+        stop = threading.Event()
+        bad = []
+
+        def _writer():
+            i = 0
+            while not stop.is_set():
+                d._swap_state = d._SwapState(swapping=True, target=f"D{i}")
+                d._swap_state = d._SwapState(swapping=False, target=None)
+                i += 1
+
+        def _reader():
+            while not stop.is_set():
+                st = d.swap_status()
+                swapping, target = st["swapping"], st["target"]
+                # 自洽性：swapping=True 必有 target；swapping=False 必无
+                if swapping and target is None:
+                    bad.append(("half-on", st))
+                if not swapping and target is not None:
+                    bad.append(("half-off", st))
+
+        w = threading.Thread(target=_writer, daemon=True)
+        rs = [threading.Thread(target=_reader, daemon=True) for _ in range(3)]
+        w.start()
+        for r in rs:
+            r.start()
+        import time as _t
+        _t.sleep(0.5)
+        stop.set()
+        w.join(2)
+        for r in rs:
+            r.join(2)
+        assert bad == [], bad[:3]

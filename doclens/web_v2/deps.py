@@ -4,6 +4,7 @@
 """
 import contextlib
 import logging
+from dataclasses import dataclass
 import os
 import threading
 import time
@@ -227,16 +228,26 @@ def reset_singletons() -> None:
 # ---------------------------------------------------------------------------
 
 _swap_lock = threading.Lock()
-_swap_state: dict = {"swapping": False, "target": None}
+
+
+@dataclass(frozen=True)
+class _SwapState:
+    """切换状态（AP-24：不可变值，整体替换——单引用赋值原子，读方要么
+    全旧值要么全新值，`swapping=True 而 target=None` 的中间态结构上不可能）。"""
+    swapping: bool = False
+    target: Optional[str] = None
+
+
+_swap_state = _SwapState()
 
 
 def swap_status() -> dict:
-    """当前切换状态快照（供 /api/status 与 503 响应体；无锁读——dict 拷贝原子）。"""
-    return dict(_swap_state)
+    """当前切换状态快照（供 /api/status 与 503 响应体；无锁读，见 _SwapState）。"""
+    return {"swapping": _swap_state.swapping, "target": _swap_state.target}
 
 
 def is_swapping() -> bool:
-    return bool(_swap_state["swapping"])
+    return _swap_state.swapping
 
 
 def swap_workdir(target: str) -> dict:
@@ -258,7 +269,7 @@ def swap_workdir(target: str) -> dict:
     """
     from doclens.web_v2.workdir_store import normalize_workdir, same_workdir
 
-    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent
+    global _config, _idx_manager, _sessions_store, _rewind_tracker, _agent, _swap_state
 
     target = normalize_workdir(target)
     # 切前廉价校验（不进入切换窗口）：存在 + 可读（ADR-0043「存在/可读」）
@@ -270,7 +281,7 @@ def swap_workdir(target: str) -> dict:
     # 切换锁互斥（409 语义由 API 层映射）
     if not _swap_lock.acquire(blocking=False):
         raise RuntimeError("切换进行中，请稍候")
-    _swap_state.update({"swapping": True, "target": target})
+    _swap_state = _SwapState(swapping=True, target=target)
 
     old_cwd = os.getcwd()
     old_workdir = _idx_manager.search_path if _idx_manager is not None else old_cwd
@@ -412,7 +423,7 @@ def swap_workdir(target: str) -> dict:
                 ) from exc
             raise RuntimeError(f"切换到 {target} 失败（已回滚到原目录）: {exc}") from exc
     finally:
-        _swap_state.update({"swapping": False, "target": None})
+        _swap_state = _SwapState()
         _swap_lock.release()
 
 
