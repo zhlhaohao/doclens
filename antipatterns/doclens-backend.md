@@ -583,13 +583,26 @@
   `tests/test_translate_service_preset.py tests/test_workdir_config.py tests/test_architecture.py
   tests/test_api_errors.py` → 43 passed。
 
-### AP-41 翻译提交无路径包含校验，产物写回源文件目录 [P2] [status: pending]
+### AP-41 翻译提交无路径包含校验，产物写回源文件目录 [P2] [status: done]
 - **形态**：路径安全面遗漏（校验只在 files/preview 域）
 - **证据**：`doclens/web_v2/api/translate.py:103-113` 直接透传 `req.path`；`translate_service.py:458-462` 允许绝对路径与 `..`；
   `:237-238` 以 `Path(src_abs).parent` 为输出目录写 `<名>.<lang>.pdf`；`_to_rel`（`:464-468`）回落 `str(p)` 使绝对路径进入响应。
 - **风险**：任意可读 PDF 可被翻译，产物写到知识库之外；错误响应泄露绝对路径。
-- **修复方案**：复用 `path_safety.safe_resolve` + `assert_not_protected`；输出目录固定（如用户临时/导出目录）并二次校验。
-- **回归验证**：`tests/test_translate_service_preset.py` + 新增越界路径 403 用例。
+- **实际修复（2026-10-21，只做包含校验，不改输出目录语义）**：
+  ① `_resolve_source` 改为 `resolve()` 后必须 `relative_to(workdir)`（符号链接一并展开），越界抛新增的
+  `PathOutsideWorkdir`；绝对路径指向库内仍合法（前端有时传绝对）。
+  ② API 层新增映射 403 `PATH_FORBIDDEN`（与「文件不存在」的 404 区分：越界是策略拒绝，不是路径打错）。
+  ③ `_to_rel` 回落不再返回绝对路径（会泄露本机目录结构），改为 warning + 文件名。
+- **未做（与台账方案的差异）**：台账写「输出目录固定到用户临时/导出目录」，实现保留「写回源 PDF 同目录」
+  ——那是 ADR-0039 的既有决议（译本即知识，随 FileWatcher 入索引、随 Git 同步）。真正的问题是**源路径**未校验，
+  校验后输出自然落在库内。若要把产物移出知识库，属产品决议变更，不在本条。
+  也未叠加 `assert_not_protected`：翻译的是 PDF 源文件，点文件在此场景无对应威胁面（`.pdf` 不会以点开头且
+  越界校验已挡住库外读取）；需要时再单列。
+- **回归验证**：新增 8 断言——相对路径正常 / `..` 拒绝 / 库外绝对路径拒绝 / 库内绝对路径允许 /
+  符号链接逃逸拒绝（无符号链接权限时 skip）/ `_to_rel` 不泄露绝对路径 / API 层 403 / 库内不存在仍 404。
+  **反证**：还原旧 `_resolve_source` 与 `_to_rel` → 5 条红灯。
+  `tests/test_translate_service_preset.py tests/test_architecture.py tests/test_workdir_config.py
+  tests/test_api_errors.py` → 51 passed。
 
 ### AP-42 git 子进程未固定编码——中文路径被判「非 git 根」，GitSync 整体停摆 [P2] [status: pending]
 - **形态**：子进程纪律（编码）+ Duplicated Source of Truth
@@ -816,6 +829,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-41 | 见本提交——`_resolve_source` 加 resolve+relative_to 包含校验（`PathOutsideWorkdir` → 403）；`_to_rel` 不泄露绝对路径；输出目录保留 ADR-0039「写回源同目录」；新增 8 断言，反证 5 红；回归 51 passed |
 | 2026-10-21 | 修 | AP-40 | 见本提交——新增 `unsubscribe`（终态+无订阅者立即 `_prune`）；SSE `finally` 注销 + 已有终态只推快照即返回；新增 7 断言，反证 3 红；回归 43 passed |
 | 2026-10-21 | 修 | AP-39 | 见本提交——取消信号 asyncio.Event → threading.Event，删掉从不运行的 loop 死链；新增 5 断言（含信号类型断言），反证 3 红；回归 31 passed |
 | 2026-10-21 | 修 | AP-38 | 见本提交——安装改「暂存目录 + 换名 + 批量回滚 + sidecar 最后写」；解压加 200MB/5000 条目上限；delete 改先 rmtree 再改 sidecar（失败 409）；新增 7 断言，反证 3+3 红；回归 88 passed |

@@ -384,3 +384,88 @@ class TestSseTerminalExit:
         job = _mk_job()
         self._run_stream(svc, job, monkeypatch)
         assert job._subscribers == [], "流结束后必须注销订阅"
+
+
+class TestPathConfinement:
+    """AP-41：翻译提交必须限定在知识库内（产物写回源文件同目录）。"""
+
+    def _pdf(self, root, rel="docs/a.pdf"):
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"%PDF-1.4\n")
+        return p
+
+    def test_relative_path_ok(self, svc, tmp_path):
+        p = self._pdf(tmp_path)
+        job = svc.submit("docs/a.pdf", "en", "zh")
+        assert job.source_path == "docs/a.pdf"
+        assert p.exists()
+
+    def test_traversal_rejected(self, svc):
+        from doclens.translate_service import PathOutsideWorkdir
+
+        with pytest.raises(PathOutsideWorkdir):
+            svc.submit("../outside.pdf", "en", "zh")
+
+    def test_absolute_outside_rejected(self, svc, tmp_path_factory):
+        from doclens.translate_service import PathOutsideWorkdir
+
+        other = tmp_path_factory.mktemp("other")
+        target = other / "x.pdf"
+        target.write_bytes(b"%PDF-1.4\n")
+        with pytest.raises(PathOutsideWorkdir):
+            svc.submit(str(target), "en", "zh")
+
+    def test_absolute_inside_allowed(self, svc, tmp_path):
+        """绝对路径指向知识库内部是合法的（前端有时传绝对）。"""
+        p = self._pdf(tmp_path, "docs/b.pdf")
+        job = svc.submit(str(p), "en", "zh")
+        assert job.source_path == "docs/b.pdf"
+
+    def test_symlink_escape_rejected(self, svc, tmp_path, tmp_path_factory):
+        """符号链接指向库外 → resolve() 后越界，同样拒绝。"""
+        import os
+
+        from doclens.translate_service import PathOutsideWorkdir
+
+        outside = tmp_path_factory.mktemp("out")
+        (outside / "secret.pdf").write_bytes(b"%PDF-1.4\n")
+        link = tmp_path / "link.pdf"
+        try:
+            os.symlink(outside / "secret.pdf", link)
+        except (OSError, NotImplementedError):
+            pytest.skip("当前环境无法创建符号链接")
+        with pytest.raises(PathOutsideWorkdir):
+            svc.submit("link.pdf", "en", "zh")
+
+    def test_to_rel_never_leaks_absolute_path(self, svc, tmp_path):
+        outside = tmp_path.parent / "elsewhere.pdf"
+        rel = svc._to_rel(outside)
+        assert ":" not in rel and "\\" not in rel and "/" not in rel
+        assert rel == outside.name
+
+    def test_api_maps_to_403(self, svc, monkeypatch):
+        import asyncio
+
+        from doclens.web_v2.api import translate as api
+        from doclens.web_v2.api.errors import CortexAPIError
+
+        monkeypatch.setattr(api, "get_translation_service", lambda: svc)
+        req = api.TranslateRequest(path="../evil.pdf")
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.submit_translation(req))
+        assert ei.value.status == 403
+        assert ei.value.code == "PATH_FORBIDDEN"
+
+    def test_api_404_for_missing_inside_path(self, svc, monkeypatch):
+        import asyncio
+
+        from doclens.web_v2.api import translate as api
+        from doclens.web_v2.api.errors import CortexAPIError
+
+        monkeypatch.setattr(api, "get_translation_service", lambda: svc)
+        req = api.TranslateRequest(path="docs/nope.pdf")
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.submit_translation(req))
+        assert ei.value.status == 404
+        assert ei.value.code == "FILE_NOT_FOUND"

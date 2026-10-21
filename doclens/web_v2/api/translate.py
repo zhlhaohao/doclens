@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from doclens.translate_service import (
+    PathOutsideWorkdir,
     TranslationQueueFull,
     get_translation_service,
 )
@@ -111,6 +112,8 @@ async def submit_translation(req: TranslateRequest):
             ultrafast=req.ultrafast,
             ignore_cache=req.ignore_cache,
         )
+    except PathOutsideWorkdir as e:
+        raise CortexAPIError(403, "PATH_FORBIDDEN", str(e))
     except FileNotFoundError as e:
         raise CortexAPIError(404, "FILE_NOT_FOUND", str(e))
     except TranslationQueueFull as e:

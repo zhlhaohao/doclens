@@ -63,6 +63,10 @@ class TranslationQueueFull(Exception):
     """队列已满（防无界堆积）。"""
 
 
+class PathOutsideWorkdir(ValueError):
+    """请求路径越出知识库目录（AP-41；API 层映射为 403）。"""
+
+
 class TranslationService:
     """翻译任务串行队列 + 引擎调用（进程单例）。"""
 
@@ -485,16 +489,34 @@ class TranslationService:
                     self._jobs.pop(job_id, None)
 
     def _resolve_source(self, source_path: str) -> Path:
-        p = Path(source_path)
-        if p.is_absolute():
-            return p
-        return self._workdir / p
+        """把请求路径归一为知识库内的绝对路径，**拒绝越界**（AP-41）。
+
+        旧实现允许绝对路径与 `..`：任意可读 PDF 都能被翻译，产物经
+        `out_dir = src.parent` 写到知识库之外，`_to_rel` 回落还把绝对路径
+        带进 API 响应。这里与 web 侧 `safe_resolve` 同语义：`resolve()` 后
+        必须落在 `workdir` 内（符号链接一并展开），越界抛
+        ``PathOutsideWorkdir``（API 层 403，与「文件不存在」的 404 区分开
+        ——越界是策略拒绝，不是路径打错）。
+        """
+        base = self._workdir.resolve()
+        raw = Path(source_path)
+        candidate = (raw if raw.is_absolute() else base / raw).resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError as exc:
+            raise PathOutsideWorkdir(
+                f"路径越权（必须在知识库目录内）: {source_path}"
+            ) from exc
+        return candidate
 
     def _to_rel(self, p: Path) -> str:
+        """知识库相对路径（API/前端契约）。越界时**不**回落绝对路径（AP-41）：
+        绝对路径会随响应体泄露本机目录结构，只留文件名并记 warning。"""
         try:
             return p.resolve().relative_to(self._workdir.resolve()).as_posix()
         except ValueError:
-            return str(p)
+            logger.warning("translate path outside workdir: %s", p)
+            return p.name
 
 
 def _replace(src: Path, dst: Path) -> None:
