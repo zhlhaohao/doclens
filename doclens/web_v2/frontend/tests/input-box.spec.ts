@@ -115,14 +115,42 @@ describe("<input-box> skill split-button (ADR-0016)", () => {
     expect(plain.shadowRoot!.querySelector(".caret")).toBeNull();
   });
 
-  it("caret disabled while input empty, enabled after typing", async () => {
+  it("caret stays enabled with empty input (menu is a discovery entry); disabled only via disabled prop", async () => {
     const el = await fixture(html`<input-box button-label="发送" .skillItems=${RECENTS}></input-box>`) as InputBox;
     await el.updateComplete;
     const caret = () => el.shadowRoot!.querySelector<HTMLButtonElement>(".caret")!;
-    expect(caret().disabled).toBe(true);
-    typeText(el, "问题");
+    expect(caret().disabled).toBe(false); // 空输入也可打开技能菜单（2026-10-21）
+    const off = await fixture(html`<input-box button-label="发送" .skillItems=${RECENTS} disabled></input-box>`) as InputBox;
+    await off.updateComplete;
+    expect(off.shadowRoot!.querySelector<HTMLButtonElement>(".caret")!.disabled).toBe(true);
+  });
+
+  it("empty input: caret opens menu; picking skill emits skill-pick-empty (not skill-pick)", async () => {
+    const el = await fixture(html`<input-box button-label="发送" .skillItems=${RECENTS}></input-box>`) as InputBox;
     await el.updateComplete;
-    expect(caret().disabled).toBe(false);
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".caret")!.click();
+    await el.updateComplete;
+    const items = el.shadowRoot!.querySelectorAll<HTMLElement>(".menu-item");
+    expect(items.length).toBe(3); // 选择技能… + 2 个最近（空输入菜单照常可见）
+
+    let emptyPicked: string | null = null;
+    let picked = "";
+    el.addEventListener("skill-pick-empty", (e: any) => (emptyPicked = e.detail.name));
+    el.addEventListener("skill-pick", (e: any) => (picked = e.detail.name));
+    items[2]!.click();
+    await el.updateComplete;
+    expect(emptyPicked).toBe("summarize-files");
+    expect(picked).toBe(""); // 未发 skill-pick
+    expect(el.shadowRoot!.querySelector(".menu")).toBeNull(); // 菜单关闭
+
+    // 空输入也能从菜单「选择技能…」进浏览
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".caret")!.click();
+    await el.updateComplete;
+    let browsed = false;
+    el.addEventListener("skill-browse", () => (browsed = true));
+    el.shadowRoot!.querySelectorAll<HTMLElement>(".menu-item")[0]!.click();
+    await el.updateComplete;
+    expect(browsed).toBe(true);
   });
 
   it("menu: first item is 选择技能… (skill-browse), recents below emit skill-pick", async () => {

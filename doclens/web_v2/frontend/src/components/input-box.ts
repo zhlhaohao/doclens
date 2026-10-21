@@ -344,7 +344,10 @@ export class InputBox extends LitElement {
 
   /** 技能菜单（ADR-0016）：非 null 时渲染分裂按钮 + caret 技能菜单（与 modes 互斥，modes 优先）。
    *  数组 = 最近技能（可为空，菜单只显示「选择技能…」）；null = 不启用（普通单按钮）。
-   *  caret 在输入为空时禁用（先输入问题才能选技能）；点技能项发 skill-pick，点「选择技能…」发 skill-browse。 */
+   *  caret 只在整体 disabled 时禁用——空输入也能打开菜单选技能（2026-10-21：旧版要求
+   *  先输入问题，导致空输入时无法从菜单进入技能选择，用户体验割裂）；输入非空时点
+   *  技能项发 skill-pick，输入为空时发 skill-pick-empty（携带技能名，由宿主决定去处），
+   *  点「选择技能…」发 skill-browse。 */
   @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
 
   /** 斜杠技能引导（chat 专属）：非 null 时，输入以 "/" 开头且仍是纯技能名片段
@@ -561,14 +564,18 @@ export class InputBox extends LitElement {
   }
 
   private _pickSkill(item: { name: string; icon?: string }) {
-    if (!this.trimmed || this.disabled || this.streaming) return;
+    if (this.disabled || this.streaming) return;
     this._menuOpen = false;
     document.removeEventListener("click", this._onDocClick);
-    this.dispatchEvent(new CustomEvent("skill-pick", { detail: { name: item.name } }));
+    if (this.trimmed) {
+      this.dispatchEvent(new CustomEvent("skill-pick", { detail: { name: item.name } }));
+    } else {
+      this.dispatchEvent(new CustomEvent("skill-pick-empty", { detail: { name: item.name } }));
+    }
   }
 
   private _browseSkills() {
-    if (!this.trimmed || this.disabled || this.streaming) return;
+    if (this.disabled || this.streaming) return;
     this._menuOpen = false;
     document.removeEventListener("click", this._onDocClick);
     this.dispatchEvent(new CustomEvent("skill-browse"));
@@ -615,7 +622,8 @@ export class InputBox extends LitElement {
         </button>`;
     }
     if (this._hasSkillMenu) {
-      // 技能菜单分裂按钮：主键 = 普通发送；caret 弹出技能菜单（空输入禁用——先输入问题才能选技能）
+      // 技能菜单分裂按钮：主键 = 普通发送；caret 弹出技能菜单（空输入也可打开，
+      // 2026-10-21——选技能是发现入口，不该被「先输入问题」卡住）
       const icon = this.buttonIcon
         ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
         : null;
@@ -625,7 +633,7 @@ export class InputBox extends LitElement {
           <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
             ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
           </button>
-          <button class="caret" @click=${this._toggleMenu} ?disabled=${!this.trimmed || this.disabled}
+          <button class="caret" @click=${this._toggleMenu} ?disabled=${this.disabled}
                   aria-label="选择技能" aria-expanded=${this._menuOpen}><doclens-icon name="chevron-down"></doclens-icon></button>
         </div>`;
     }

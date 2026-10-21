@@ -615,6 +615,18 @@ export class ChatView extends LitElement {
     void this._loadSkillCandidates();
   };
 
+  /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
+  private _prefillSkill(name: string) {
+    this.draft = `/${name} `;
+    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
+  }
+
+  /** 空输入时从 caret 菜单选技能：预填 `/name `（用户续写问题后发送），
+   *  而非直接发送——没有可发送的问题（2026-10-21：caret 空输入不再禁用）。 */
+  private _onSkillPickEmpty = (e: CustomEvent<{ name: string }>) => {
+    this._prefillSkill(e.detail.name);
+  };
+
   /** 菜单「选择技能…」→ 弹技能选择对话框（刷新候选保证最新）。 */
   private _onSkillBrowse = () => {
     this._skillDialogOpen = true;
@@ -623,6 +635,10 @@ export class ChatView extends LitElement {
 
   private _onSkillDialogPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
     this._skillDialogOpen = false;
+    if (!this.draft.trim()) {
+      this._prefillSkill(e.detail.skill.name);
+      return;
+    }
     void this._sendWithSkill(e.detail.skill.name);
   };
 
@@ -1680,6 +1696,7 @@ export class ChatView extends LitElement {
               @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
               @skill-menu-open=${this._onSkillMenuOpen}
               @skill-pick=${this._onSkillMenuPick}
+              @skill-pick-empty=${this._onSkillPickEmpty}
               @skill-browse=${this._onSkillBrowse}
               @submit=${this._submit}>
             </input-box>
@@ -1780,6 +1797,7 @@ export class ChatView extends LitElement {
             @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
             @skill-menu-open=${this._onSkillMenuOpen}
             @skill-pick=${this._onSkillMenuPick}
+            @skill-pick-empty=${this._onSkillPickEmpty}
             @skill-browse=${this._onSkillBrowse}
             @submit=${this._submit}
             @stop=${this._stop}>
