@@ -74,12 +74,15 @@ export async function cancelTranslation(
 }
 
 export interface TranslateEvent {
-  type: string; // running | progress | done | error | cancelled
+  type: string; // running | progress | toast | done | error | cancelled
   done?: number;
   total?: number;
   error?: string;
   paths?: string[];
   seconds?: number;
+  /** type=toast 时的文案与级别（后端预设降级告知，AP-17） */
+  message?: string;
+  level?: string;
 }
 
 /** SSE 订阅翻译进度。返回关闭函数（组件 disconnected 时调用）。 */
@@ -89,7 +92,15 @@ export function subscribeTranslation(
   onOpenError?: (err: Error) => void,
 ): () => void {
   const es = new EventSource(`/api/translate/${jobId}/events`);
-  const types = ["status", "running", "progress", "done", "error", "cancelled"];
+  const types = [
+    "status",
+    "running",
+    "progress",
+    "toast",
+    "done",
+    "error",
+    "cancelled",
+  ];
   for (const t of types) {
     es.addEventListener(t, (e) => {
       try {

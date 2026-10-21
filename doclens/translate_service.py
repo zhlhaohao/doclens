@@ -73,6 +73,9 @@ class TranslationService:
         self._thread: Optional[threading.Thread] = None
         self._shutdown = False
         self._engine_started = False
+        # 最近一次 _preset() 的降级原因（None = 无问题）。AP-17：配置了却读
+        # 不出来时不再静默回落 google，_execute 据此推 toast 告知用户。
+        self._preset_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -219,6 +222,18 @@ class TranslationService:
 
             from doclens.vendor_pdf2zh.high_level import translate
 
+            # AP-17：预设解析一次（原两次），降级原因随 running 事件一并告知
+            service_name, translate_envs = self._preset_or_default()
+            if self._preset_error:
+                self._emit(
+                    job,
+                    {
+                        "type": "toast",
+                        "level": "info",
+                        "message": self._preset_error,
+                    },
+                )
+
             src_abs = str(self._workdir / job.source_path)
             out_dir = str(Path(src_abs).parent)
             results = translate(
@@ -227,14 +242,14 @@ class TranslationService:
                 pages=job.pages,
                 lang_in=job.lang_in,
                 lang_out=job.lang_out,
-                service=self._service_from_preset(),
+                service=service_name,
                 # 非 ultrafast 上游 CLI 默认 4 线程（pdf2zh.py parse_args）；
                 # high_level 只对 ultrafast 补默认（16），普通模式传 0 会
                 # ThreadPoolExecutor(max_workers=0) 炸——宿主侧显式给值
                 thread=16 if job.ultrafast else 4,
                 callback=on_progress,
                 cancellation_event=cancellation,
-                envs=self._envs_from_preset(),
+                envs=translate_envs,
                 ignore_cache=job.ignore_cache,
                 ultrafast=job.ultrafast,
                 model=self._load_model() if not job.ultrafast else None,
@@ -312,7 +327,12 @@ class TranslationService:
 
         优先读激活预设（presets_store 按 CORTEX_ACTIVE_TRANSLATE_PRESET 名匹配）；
         激活键指向的预设被删时回退读 global .env 的物化值。
+
+        降级原因记在 `self._preset_error`（AP-17）：**配了却读不出来**时置
+        文案，`_preset_or_default` 的调用方据此推 toast；完全未配置是合法
+        默认状态，不置错误。
         """
+        self._preset_error = None
         try:
             from doclens.web_v2 import presets_store
             from doclens.config import get_global_cortex_dir
@@ -326,6 +346,17 @@ class TranslationService:
                             raw = presets_store.get_preset_raw(raw_id) if raw_id else None
                             if raw and raw.get("kind") == "translate":
                                 return raw
+                        self._preset_error = (
+                            f"激活的翻译预设「{active_name}」内容不可读"
+                            "（可能已损坏），本次已回退默认引擎 google"
+                        )
+                        break
+                else:
+                    # 激活键非空但预设库里没有同名预设（被删/改名）
+                    self._preset_error = (
+                        f"激活的翻译预设「{active_name}」不存在"
+                        "（可能已被删除），本次已回退默认引擎 google"
+                    )
             # 回退：物化到 global .env 的值（激活预设已删但仍留有 env 键）
             service = os.environ.get("CORTEX_TRANSLATE_SERVICE", "")
             if service:
@@ -343,21 +374,29 @@ class TranslationService:
                 }
         except Exception:  # noqa: BLE001
             logger.exception("translate preset resolution failed")
+            self._preset_error = (
+                "翻译预设读取失败（详见服务日志），本次已回退默认引擎 google"
+            )
         return None
 
-    def _service_from_preset(self) -> str:
+    def _preset_or_default(self) -> tuple[str, dict]:
+        """解析一次预设 → (service, envs)，并把降级原因记在 `_preset_error`。
+
+        AP-17：原 `_service_from_preset` / `_envs_from_preset` 各调一次
+        `_preset()`（每任务读两遍预设 JSON），且「未配置」与「配了却读不出来」
+        无法区分——后者同样静默回落 google，用户只看到结果不对。
+        现区分：未配置 = 合法默认（google，无告警）；配置了但读不出来 =
+        置 `_preset_error`，由 `_execute` 推 toast 告知后仍降级执行。
+        """
         preset = self._preset()
         if not preset:
-            return "google"
+            return "google", {}
         # 模型统一走 envs 的 *_MODEL 键（引擎 model=None 自动回退各自默认，
         # 2026-10-08 决议：表单不再提供独立的“模型”输入框）
-        return preset.get("translate_service") or "google"
-
-    def _envs_from_preset(self) -> dict:
-        preset = self._preset()
-        if not preset:
-            return {}
-        return dict(preset.get("translate_envs") or {})
+        return (
+            preset.get("translate_service") or "google",
+            dict(preset.get("translate_envs") or {}),
+        )
 
     # ------------------------------------------------------------------
     # 产物落盘
@@ -404,8 +443,9 @@ class TranslationService:
         for cb in list(job._subscribers):
             try:
                 cb(event)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                # AP-17：原为纯 pass——订阅端异常导致进度静默丢失且无从排查
+                logger.debug("translate event subscriber failed: %s", exc)
 
     def _prune(self, job_id: str) -> None:
         with self._lock:
@@ -447,6 +487,7 @@ _service_lock = threading.Lock()
 
 
 def get_translation_service() -> TranslationService:
+    """获取翻译服务单例（懒加载，绑定创建时的工作目录）。"""
     global _service
     if _service is None:
         with _service_lock:
@@ -457,3 +498,21 @@ def get_translation_service() -> TranslationService:
                 _service = TranslationService(workdir)
                 _service.start()
     return _service
+
+
+def reset_translation_service() -> None:
+    """丢弃单例（工作目录切换时调用，AP-17）。
+
+    单例在构造时冻结 ``workdir``，此前 `deps.swap_workdir` 不重建它——
+    切换后翻译仍读写旧目录（源路径拼接、产物落盘、缓存 DB 全错位）。
+    在途任务由各自线程持有 job 引用跑完；新任务按新目录重建。
+    """
+    global _service
+    with _service_lock:
+        old = _service
+        _service = None
+    if old is not None:
+        try:
+            old.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("translate service stop failed: %s", exc)

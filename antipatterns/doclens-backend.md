@@ -211,12 +211,25 @@
 - **修复方案**：删除其中一份，统一走 `IndexManager` 公共方法（需要新统计就加公共方法，不写裸 SQL）。
 - **回归验证**：手工 `doclens status` / TUI 启动；相关 `tests/` 搜索测试。
 
-### AP-17 翻译预设读取失败静默回落 google/空 env [P2] [status: pending]
+### AP-17 翻译预设读取失败静默回落 google/空 env [P2] [status: done]
 - **形态**：Error Hiding（降级成正常路径）
 - **证据**：`doclens/translate_service.py:310-346` `_preset()` 整段 `except Exception → logger.exception → return None`；`:348-360` `_service_from_preset` 回落 `"google"`、`_envs_from_preset` 回落 `{}`；`:403-408` SSE 订阅回调 `except Exception: pass`；`:449-459` 首次调用把 `search_path` 冻结进单例（`deps.swap_workdir` 不重建）。
 - **风险**：预设损坏/密钥缺失时任务照跑，实际用默认服务且无密钥，用户看到的是"翻译结果不对/中途失败"；切换工作目录后翻译仍读写旧目录。
-- **修复方案**：预设不可用 → job 立即失败并推 error 事件（不回落）；`translate_service` 单例纳入 `deps.swap_workdir` 的重建列表；订阅回调至少 `logger.debug`。
-- **回归验证**：`tests/test_book_skill_routing.py`（含翻译链路时）或新增翻译服务单测；`tests/test_workdir_config.py`。
+- **实际修复（2026-10-20，按用户裁定「预设读取失败就 toast」——降级但不静默、也不让任务失败）**：
+  ① `_preset()` 区分三态并置 `self._preset_error`：**完全未配置** = 合法默认（google，无告警，保住现有语义）；
+  **激活键非空但预设不存在**（被删/改名）、**预设内容不可读**（`get_preset_raw` 空/kind 不符）、**读取抛异常** → 各置一句中文原因；
+  ② 新增 `_preset_or_default()` 一次解析出 (service, envs)，取代 `_service_from_preset`/`_envs_from_preset` 各读一遍（每任务原读两遍预设库）；
+  ③ `_execute` 在 running 事件后推 `{"type": "toast", "level": "info", "message": ...}`，任务继续跑 —— 用户能看到「已回退默认引擎」而不只是结果不对；
+  ④ `_emit` 的订阅回调异常由 `except: pass` 改为 `logger.debug`；
+  ⑤ 新增 `reset_translation_service()`，`deps.reset_singletons` 与 `swap_workdir` 均调用（经 `deps._reset_translate_service()` 延迟 import 包装，避免与
+  `get_translation_service` 的 deps 反向取配置成环）——修掉「切换工作目录后翻译仍读写旧目录」；
+  ⑥ 前端 `api/translate.ts` 事件类型白名单加 `toast`、`TranslateEvent` 补 `message/level`；`translate-dialog.ts` 收到 toast 后推全局
+  `app-bar` 内的 `toast-stack`（6000ms，与 app.ts 同范式）。`npm run build` 通过（exit 0，`built in 5.04s`）。
+- **保留的已知取舍**：激活预设被删但仍留有物化 env 时，仍会报「预设不存在」toast 同时用物化值执行（部分降级）——文案如实，不再静默。
+- **回归验证**：新增 `tests/test_translate_service_preset.py` 8 断言（未配置无告警 / 预设不存在报因 / 物化 env 回退 / 读取异常报因 / 每任务只解析一次 /
+  `_execute` 推 toast 且任务仍 done / 单例 reset 生效 / deps 两处接线存在）。**踩坑**：`_execute` 的 finally 起 `threading.Timer(600s)`（非 daemon），
+  不拦截会让 pytest 退出时干等 10 分钟——测试内 monkeypatch 掉 Timer。`tests/test_translate_service_preset.py tests/test_workdir_config.py
+  tests/test_deps_locks.py tests/test_architecture.py tests/test_book_skill_routing.py` → 56 passed。
 
 ### AP-18 chat SSE 收尾：6 段同形持久化 + 两处 `except (..., Exception): pass` [P3] [status: pending]
 - **形态**：Long Method / Shotgun Surgery / Error Hiding

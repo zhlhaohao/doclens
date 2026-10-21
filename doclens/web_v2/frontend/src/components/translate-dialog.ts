@@ -247,6 +247,16 @@ export class TranslateDialog extends LitElement {
     }
   }
 
+  /** 全局 toast-stack（app-bar shadow 内唯一实例，与 app.ts 同范式）。 */
+  private _pushToast(message: string, level: "success" | "error" | "info"): void {
+    if (!message) return;
+    const stack = document
+      .querySelector("app-bar")
+      ?.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
+    stack?.pushToast?.(message, level, 6000);
+  }
+
   private _onEvent(ev: TranslateEvent) {
     if (ev.type === "progress" || ev.type === "running" || ev.type === "status") {
       if (typeof ev.done === "number") this._progressDone = ev.done;
@@ -266,6 +276,9 @@ export class TranslateDialog extends LitElement {
       this._closeSse?.();
       this._error = ev.error ?? "翻译失败";
       this._phase = "form";
+    } else if (ev.type === "toast") {
+      // AP-17：预设读取失败等非致命降级，用全局 toast 告知（任务继续跑）
+      this._pushToast(ev.message ?? "", ev.level === "error" ? "error" : "info");
     } else if (ev.type === "cancelled") {
       this._closeSse?.();
       this._phase = "form";

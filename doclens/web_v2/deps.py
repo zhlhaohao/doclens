@@ -198,6 +198,21 @@ def _singleton_guards():
             lk.release()
 
 
+def _reset_translate_service() -> None:
+    """丢弃翻译服务单例（AP-17：它构造时冻结 workdir，切换目录必须重建）。
+
+    延迟 import：translate_service 在 get_translation_service 里反向取
+    deps.get_config，模块级 import 会成环。失败只告警——切换主流程不该
+    因翻译服务停不掉而失败。
+    """
+    try:
+        from doclens.translate_service import reset_translation_service
+
+        reset_translation_service()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("translate service reset failed: %s", exc)
+
+
 def reset_singletons() -> None:
     """重置单例（仅供测试使用 / 工作目录切换复用）。
 
@@ -214,6 +229,7 @@ def reset_singletons() -> None:
     stop_git_sync()
     stop_mcp_server()
     stop_mcp_client()
+    _reset_translate_service()
     # 持全部构造锁再置 None：防"构造进行中 → 置空 → 构造者随后发布旧实例"
     with _singleton_guards(), _lock:
         _config = None
@@ -307,6 +323,8 @@ def swap_workdir(target: str) -> dict:
             stop_diary_worker()
             stop_vision_worker()
             stop_watcher()
+            # AP-17：翻译单例冻结了 workdir，不重置则切换后仍读写旧目录
+            _reset_translate_service()
             # 持全部构造锁置空（防构造进行中发布旧实例），与注册表锁分开获取
             with _singleton_guards(), _lock:
                 _config = None
