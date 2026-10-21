@@ -604,14 +604,23 @@
   `tests/test_translate_service_preset.py tests/test_architecture.py tests/test_workdir_config.py
   tests/test_api_errors.py` → 51 passed。
 
-### AP-42 git 子进程未固定编码——中文路径被判「非 git 根」，GitSync 整体停摆 [P2] [status: pending]
+### AP-42 git 子进程未固定编码——中文路径被判「非 git 根」，GitSync 整体停摆 [P2] [status: done]
 - **形态**：子进程纪律（编码）+ Duplicated Source of Truth
 - **证据**：`doclens/git_sync.py:70-75` `subprocess.run(..., text=True)` 无 `encoding`；`doclens/web_v2/api/git.py:63-66` 同；
   而 `api/git.py:163/168/173` 已写 `encoding="utf-8", errors="replace"`。
   Windows 默认按 cp936 解码 git 的 UTF-8 路径输出 → `--show-toplevel` 乱码 → `normcase` 比较失败 → `GitSync.start()` 以 `not_git_root` 停摆，`/api/git/*` 全 400。
 - **风险**：用户名/目录含中文的用户 git 同步与 git 面板全不可用，原因表现为「不是 git 仓库」。
-- **修复方案**：抽 `_run_git()` 统一 `encoding="utf-8", errors="replace"`；`_is_git_root` 与 `GitSync` 共用。
-- **回归验证**：`tests/test_git_sync.py`（若有）+ 手工中文路径仓验证。
+- **实际修复（2026-10-21）**：新增 `doclens/git_command.py` 作为 git 子进程的唯一原语——
+  `run_git(root, *args, timeout)`（固定 `text=True, encoding="utf-8", errors="replace"`，异常返回 None）、
+  `is_git_root(root)`（单一判据）、`GIT_TIMEOUT_LOCAL/NET`（单一真源）。
+  `git_sync._git` / `git_sync._is_git_root` / `api/git._run_git` / `api/git._is_git_root` 全部改为委托；
+  `api/git.py` 里另外 5 处裸 `subprocess.run(["git"...])`（cat-file / hash-object / rev-parse / 两处 diff）
+  一并改道，`GIT_TIMEOUT = GIT_TIMEOUT_LOCAL` 取代独立的 30。
+- **回归验证**：新增 `tests/test_git_command.py` 10 断言。**复现手法**：本机 Python 默认编码是 UTF-8，
+  缺陷不会自然复现，改用「假 subprocess 在未指定 encoding 时按 gbk 解码」来固定契约——
+  中文路径下 `is_git_root` 旧口径必判 False。另含结构枪口：全仓不得再有裸 `subprocess.run(["git"`。
+  **反证**：把 `_GIT_TEXT_KW` 还原成 `{"text": True}` → 3 条红灯（`decoding with 'gbk' codec failed`）。
+  `tests/test_git_command.py tests/test_architecture.py tests/test_git_sync_ignore.py` → 19 passed。
 
 ### AP-43 worker.stop 超时即弃线程——切库后新旧消费者并存 [P2] [status: pending]
 - **形态**：生命周期管理缺失（孤儿线程）
@@ -829,6 +838,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-42 | 见本提交——新增 `doclens/git_command.py`（UTF-8 固定 + 单一 `is_git_root` + 超时常量），GitSync 与 api/git 共 7 处调用全部改道；新增 10 断言（含 gbk 解码模拟与结构枪口），反证 3 红；回归 19 passed |
 | 2026-10-21 | 修 | AP-41 | 见本提交——`_resolve_source` 加 resolve+relative_to 包含校验（`PathOutsideWorkdir` → 403）；`_to_rel` 不泄露绝对路径；输出目录保留 ADR-0039「写回源同目录」；新增 8 断言，反证 5 红；回归 51 passed |
 | 2026-10-21 | 修 | AP-40 | 见本提交——新增 `unsubscribe`（终态+无订阅者立即 `_prune`）；SSE `finally` 注销 + 已有终态只推快照即返回；新增 7 断言，反证 3 红；回归 43 passed |
 | 2026-10-21 | 修 | AP-39 | 见本提交——取消信号 asyncio.Event → threading.Event，删掉从不运行的 loop 死链；新增 5 断言（含信号类型断言），反证 3 红；回归 31 passed |

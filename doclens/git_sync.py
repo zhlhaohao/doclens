@@ -24,8 +24,8 @@ ROBOT_NAME = "doclens-sync"
 ROBOT_EMAIL = "doclens-sync@local"
 
 # 本地 git 操作（add/commit/status 类）与网络操作（pull/push）的超时
-GIT_TIMEOUT_LOCAL = 30
-GIT_TIMEOUT_NET = 120
+# ——单一真源在 git_command；此处保留别名供旧引用（AP-42）
+from doclens.git_command import GIT_TIMEOUT_LOCAL, GIT_TIMEOUT_NET, is_git_root, run_git
 
 # 未启动原因（status()["reason"]，供前端区分展示）
 REASON_NOT_GIT_ROOT = "not_git_root"
@@ -65,25 +65,16 @@ class GitSync:
     # ------------------------------------------------------------------ git 原语
 
     def _git(self, *args: str, timeout: int = GIT_TIMEOUT_LOCAL) -> Optional[subprocess.CompletedProcess]:
-        """在知识库目录执行 git 命令；异常（git 不存在/超时）返回 None，绝不抛出。"""
-        try:
-            return subprocess.run(
-                ["git", "-C", self._path, *args],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except (OSError, subprocess.TimeoutExpired) as e:
-            logger.warning("GitSync git %s 执行异常: %s", args[0] if args else "", e)
-            return None
+        """在知识库目录执行 git 命令；异常（git 不存在/超时）返回 None，绝不抛出。
+
+        统一走 ``git_command.run_git``（AP-42）：固定 UTF-8 解码，中文路径
+        不会再被 locale 解码成乱码。
+        """
+        return run_git(self._path, *args, timeout=timeout)
 
     def _is_git_root(self) -> bool:
         """工作目录本身是否为 git 仓库根（不是某个子目录）。"""
-        r = self._git("rev-parse", "--show-toplevel")
-        if r is None or r.returncode != 0:
-            return False
-        top = os.path.normcase(os.path.abspath(r.stdout.strip()))
-        return top == os.path.normcase(self._path)
+        return is_git_root(self._path)
 
     def _has_remote(self) -> bool:
         r = self._git("remote")

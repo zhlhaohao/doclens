@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 
+from doclens.git_command import GIT_TIMEOUT_LOCAL, is_git_root, run_git
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_index_manager
@@ -30,7 +31,7 @@ from doclens.web_v2.models.git import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-GIT_TIMEOUT = 30  # 与 GitSync.GIT_TIMEOUT_LOCAL 同档（本地操作）
+GIT_TIMEOUT = GIT_TIMEOUT_LOCAL  # 单一真源（AP-42）：git_command
 
 
 def _run_git(
@@ -40,36 +41,19 @@ def _run_git(
 
     ok_codes：额外放行的退出码（diff --no-index 有差异时按惯例返回 1）。
     """
-    try:
-        r = subprocess.run(
-            ["git", "-C", root, *args],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
+    r = run_git(root, *args, timeout=timeout)
+    if r is None:
+        raise CortexAPIError(
+            500, "GIT_ERROR", f"git 命令执行失败（git 缺失或超时）: {' '.join(args[:2])}"
         )
-    except (OSError, subprocess.TimeoutExpired) as e:
-        logger.warning("git %s 执行异常: %s", args[0] if args else "", e)
-        raise CortexAPIError(500, "GIT_ERROR", f"git 命令执行失败: {e}") from e
     if r.returncode not in ok_codes:
         raise CortexAPIError(500, "GIT_ERROR", f"git {' '.join(args[:2])} 失败: {r.stderr.strip()[:200]}")
     return r
 
 
 def _is_git_root(root: Path) -> bool:
-    """工作目录本身是否为 git 仓库根（与 GitSync._is_git_root 同口径：不含子仓库）。"""
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=GIT_TIMEOUT,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    if r.returncode != 0:
-        return False
-    top = os.path.normcase(os.path.abspath(r.stdout.strip()))
-    return top == os.path.normcase(str(root))
+    """工作目录本身是否为 git 仓库根（与 GitSync 共用同一实现，AP-42）。"""
+    return is_git_root(root)
 
 
 def _require_git_root(idx: IndexManager) -> str:
@@ -81,14 +65,8 @@ def _require_git_root(idx: IndexManager) -> str:
 
 def _head_size(root: str, path: str) -> int | None:
     """HEAD 版本文件大小（bytes）；不在 HEAD（新增）或读取失败返回 None。"""
-    try:
-        r = subprocess.run(
-            ["git", "-C", root, "cat-file", "-s", f"HEAD:{path}"],
-            capture_output=True, text=True, timeout=GIT_TIMEOUT,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if r.returncode != 0:
+    r = run_git(root, "cat-file", "-s", f"HEAD:{path}")
+    if r is None or r.returncode != 0:
         return None
     try:
         return int(r.stdout.strip())
@@ -158,20 +136,13 @@ def _diff_binary_flag(root: str, path: str, kind: str) -> bool:
     added（untracked）：--no-index 对比 devnull，同判据。
     """
     if kind == "added":
-        r = subprocess.run(
-            ["git", "-C", root, "diff", "--no-index", "--numstat", "--", os.devnull, path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT,
+        r = run_git(
+            root, "diff", "--no-index", "--numstat", "--", os.devnull, path,
         )
     else:
-        r = subprocess.run(
-            ["git", "-C", root, "diff", "--numstat", "HEAD", "--", path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT,
-        )
-        if r.returncode == 0 and not r.stdout.strip():
-            r = subprocess.run(
-                ["git", "-C", root, "diff", "--numstat", "--", path],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT,
-            )
+        r = run_git(root, "diff", "--numstat", "HEAD", "--", path)
+        if r is not None and r.returncode == 0 and not r.stdout.strip():
+            r = run_git(root, "diff", "--numstat", "--", path)
     if not r.stdout.strip():
         return False
     first = r.stdout.strip().splitlines()[0]
@@ -215,20 +186,11 @@ async def git_diff(
         def _sha(p: str | None) -> str | None:
             if p is None:
                 return None
-            try:
-                r = subprocess.run(
-                    ["git", "-C", root, "rev-parse", p],
-                    capture_output=True, text=True, timeout=GIT_TIMEOUT,
-                )
-                return r.stdout.strip()[:12] if r.returncode == 0 else None
-            except (OSError, subprocess.TimeoutExpired):
-                return None
+            r = run_git(root, "rev-parse", p)
+            return r.stdout.strip()[:12] if r is not None and r.returncode == 0 else None
 
-        blob = subprocess.run(
-            ["git", "-C", root, "hash-object", str(full)],
-            capture_output=True, text=True, timeout=GIT_TIMEOUT,
-        )
-        worktree_sha = blob.stdout.strip()[:12] if blob.returncode == 0 else None
+        blob = run_git(root, "hash-object", str(full))
+        worktree_sha = blob.stdout.strip()[:12] if blob is not None and blob.returncode == 0 else None
         return GitDiffResponse(
             path=path, kind=change.kind, is_binary=True, diff="",
             binary_info={
