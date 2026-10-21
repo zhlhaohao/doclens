@@ -143,12 +143,15 @@ def create_app() -> FastAPI:
     # 错误处理
     register_error_handlers(app)
 
-    # 登录闸门（须在 router 注册前；只拦 /api/*，豁免 /api/health 与 /api/auth/*）
-    from doclens.web_v2.auth_middleware import register_auth_middleware
-    register_auth_middleware(app)
-    # 切换窗口 503（ADR-0043；后注册 = 内层，auth 401 优先于 swap 503）
+    # 切换窗口 503（ADR-0043）。**先注册 = 内层**：Starlette 的
+    # `add_middleware` 是 `user_middleware.insert(0, ...)`，后注册者在最外层、
+    # 先执行（AP-33）。auth 必须在外层，否则切换窗口内未登录的 LAN 客户端
+    # 会拿到带目标路径的 503，401 永远不出现。
     from doclens.web_v2.swap_middleware import register_swap_middleware
     register_swap_middleware(app)
+    # 登录闸门（外层；须在 router 注册前；只拦 /api/*，豁免 /api/health 与 /api/auth/*）
+    from doclens.web_v2.auth_middleware import register_auth_middleware
+    register_auth_middleware(app)
 
     # API 路由（后续任务逐步挂载）
     from doclens.web_v2.api import auth

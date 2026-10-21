@@ -27,7 +27,11 @@ def _set_auth_cookie(response, token: str) -> None:
 
 
 def register_auth_middleware(app: FastAPI) -> None:
-    """注册登录闸门中间件（应在 router 注册前调用）。"""
+    """注册登录闸门中间件（须在 router 注册前、swap 中间件**之后**调用）。
+
+    顺序理由见 ``swap_middleware.register_swap_middleware``：后注册者是最外层，
+    auth 在外层才能保证 401 先于切换窗口的 503（AP-33）。
+    """
 
     @app.middleware("http")
     async def auth_gate(request: Request, call_next):

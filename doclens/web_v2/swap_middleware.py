@@ -21,11 +21,12 @@ _EXEMPT_PREFIXES = (
 
 
 def register_swap_middleware(app: FastAPI) -> None:
-    """注册切换窗口中间件（应在 auth 中间件之后、router 注册前调用）。
+    """注册切换窗口中间件（应在 auth 中间件**之前**、router 注册前调用）。
 
-    注册顺序注意：FastAPI 中间件后注册者先执行（洋葱外层）。本中间件
-    要在 auth 之后注册 → 成为内层 → 请求先过 auth（401 优先）再过 swap
-    503——未登录用户永远先看到 401，语义正确。
+    注册顺序注意：Starlette ``add_middleware`` 是 ``user_middleware.insert(0)``
+    ——**后注册者是最外层、先执行**（AP-33；此处原注释曾写反）。本中间件
+    先于 auth 注册 → 成为 auth 的内层 → 请求先过 auth（401 优先）再过
+    swap 503，未登录用户永远先看到 401。
     """
 
     @app.middleware("http")

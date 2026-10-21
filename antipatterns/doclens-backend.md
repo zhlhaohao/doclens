@@ -436,15 +436,21 @@
   tests/test_preview_rotate.py tests/test_web_search_api_matrix.py tests/test_architecture.py` → 82 passed。
 - **顺带发现（未修，见 AP-67）**：同文件 `preview_raw` / `preview_pdf` 也只做 `safe_resolve`，同样缺 `assert_not_protected`。
 
-### AP-33 中间件洋葱顺序与注释相反——swap 503 先于 auth 401，且回传 target 路径 [P2] [status: pending]
+### AP-33 中间件洋葱顺序与注释相反——swap 503 先于 auth 401，且回传 target 路径 [P2] [status: done]
 - **形态**：Action at a Distance（注册顺序承担安全语义）
 - **证据**：`doclens/web_v2/app.py:149-151` 与 `swap_middleware.py:24-28` 均注释「后注册 = 内层，auth 401 优先于 swap 503」；
   Starlette 1.9.0 `add_middleware` 实现为 `self.user_middleware.insert(0, ...)`，`build_middleware_stack` 对列表 `reversed()` 包装
   → **后注册者是最外层、先执行**。实测调用链 ServerError → swap → auth → router。
   `swap_middleware.py:43-46` 的 503 响应体含 `target`（目标工作目录绝对路径）。
 - **风险**：切换窗口内未登录 LAN 客户端先拿到 503 并读到目标路径，401 永不出现；文档与实现相反，后续按注释调整会继续错。
-- **修复方案**：调换注册顺序（先 swap 后 auth）或改注释并显式断言顺序；新增一条中间件顺序测试（构造 app 检查 `user_middleware` 次序）。
-- **回归验证**：`tests/test_auth_challenge.py tests/test_workdir_config.py`。
+- **实际修复（2026-10-21）**：`app.py` 改为**先 register_swap 再 register_auth**（先注册 = 内层），
+  两处 docstring/行内注释按 Starlette 真实实现（`insert(0)` + `reversed()` 包装）重写，不再留反话。
+- **回归验证**：新增 `tests/test_middleware_order.py` 3 断言——
+  ① 未登录 + 切换中 → 401 且响应体不含 `target`；② 已登录 + 切换中 → 503 `WORKDIR_SWAPPING`；
+  ③ 结构不变量：`app.user_middleware[0].kwargs["dispatch"].__name__ == "auth_gate"`（最外层）。
+  **反证**：还原原注册顺序 → ①② 红灯（实测拿到 503 / 401 反转）。
+  `tests/test_middleware_order.py tests/test_auth_challenge.py tests/test_workdir_config.py
+  tests/test_deps_locks.py tests/test_architecture.py` → 49 passed。
 
 ### AP-34 `.env` 读-改-写无锁非原子，值不转义 [P2] [status: pending]
 - **形态**：写路径无事务 / Duplicated write discipline
@@ -740,6 +746,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |
 | 2026-10-21 | 修 | AP-32 | 4dfb548——download 补 `assert_not_protected`；新增 `TestDownloadProtected` 2 断言（点文件三例 403 + 普通文件仍可下），反证撤闸门红灯；回归 82 passed。顺带发现 AP-67（preview_raw/preview_pdf 同缺闸门，未修） |
 | 2026-10-20 | 修 | AP-7 | 见本提交——sessions_store 同文件内拆 `_SessionDB`/`_AuthSessionStore`/`_RewindSnapshotStore`/`_SessionPortability` + 门面委托；`get_chat_history` 195 行拆 5 方法 + 3 模块级原语；只读差分 38 会话 × 9 方法零差异、写路径四表结构等价；分层回归 125 passed |
 | 2026-10-20 | 修 | AP-6 | 见本提交——deps 拆四把单例构造锁，`_lock` 降为纯注册表锁；`_singleton_guards()` 固定顺序保全 reset/切换语义；新增 tests/test_deps_locks.py 4 断言；分层回归 124 passed |
