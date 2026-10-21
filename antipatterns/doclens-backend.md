@@ -662,15 +662,25 @@
   `ProgrammingError: closed`。**反证**：还原成返回裸 Connection → 4 条红灯。
   `-k "session or chat or auth or rewind or manual_compact or architecture"` → 189 passed。
 
-### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: pending]
+### AP-45 检索侧把「DB 故障」吞成「空结果」，且与 grep 端点契约不一致 [P2] [status: done]
 - **形态**：Error Hiding（fail-soft 语义越界）
 - **证据**：`doclens/index_manager.py:349-360` `has_indexed_docs()` 吞异常返回 False → `:838-840` 直接 `return [], []`；
   `load_doc_structures()`（`:362-383`）同样吞异常；
   `doclens/web_v2/api/search.py:104-108` 捕获一切异常返回空结果且**不填 `error`**；
   同构的 `api/grep.py:79-85` 填 `error=f"grep 引擎异常: {e}"`（响应模型 `models/search.py:77` 有该字段）。
 - **风险**：索引库损坏/锁冲突在 UI 上等同「知识库里没有这段内容」，AI 会据此给出「未收录」的错误结论。
-- **修复方案**：区分「空库」与「探测失败」；search 端点与 grep 对齐填 `error`。
-- **回归验证**：`tests/test_web_search_api_matrix.py` + 新增「DB 损坏时 error 非空」用例。
+- **实际修复（2026-10-21）**：
+  ① `IndexManager.index_availability() -> "ok"|"empty"|"unavailable"` 新增——与 `has_indexed_docs()` 的
+  fail-soft 分工明确（后者仍供目录页/状态页使用）；新增 `IndexUnavailable(RuntimeError)`。
+  ② `search()` / `like_search()` 改用可用性判定：`unavailable` 上抛，`empty` 才返回空；
+  `like_search` 原以 `indexed_doc_count() == 0` 判空（index_probe 吞异常返回 0 → 同样伪装成空库），一并改掉。
+  ③ 检索入口：`/api/search` 捕获 `IndexUnavailable` 填 `error`（与 `/api/grep` 对齐；通用异常也补填 error，
+  原来也吞成空结果）；`search_kb` 工具对不可用单独给文案（「索引库不可用……建议重建」≠「索引未就绪或为空」）；
+  CLI `search` 子命令打印明确错误与修复建议（TUI 本就有 `except Exception` → 错误区）。
+- **回归验证**：新增 `tests/test_index_availability.py` 11 断言（三态探测 / search+like_search 抛错 / 空库仍返回空 /
+  端点 error 填充 / 正常路径 error 为空 / kb_tools 两套文案互斥）；`tests/test_search_targets.py` 的 fake IndexManager
+  补 `index_availability`。**反证**：还原 `has_indexed_docs()` / `indexed_doc_count()` 判定 → 2 条红灯。
+  搜索族回归（search/grep/kb/index/lazy/change_detection/architecture/tui/cli）→ 363 passed。
 
 ### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: pending]
 - **形态**：Error Hiding
@@ -861,6 +871,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-45 | 见本提交——新增 `index_availability()` 三态 + `IndexUnavailable`；search/like_search 区分空库与不可读；端点填 `error`（对齐 grep）、kb_tools 与 CLI 给不同文案；新增 11 断言，反证 2 红；搜索族 363 passed |
 | 2026-10-21 | 修 | AP-44 | 见本提交——`_SessionDB._conn()` 改 contextmanager，commit/rollback 后必 close，32 处调用点零改动；新增 7 断言（含并发无泄漏、回滚），反证 4 红；会话族回归 189 passed |
 | 2026-10-21 | 修 | AP-43 | 见本提交——新增 `doclens/worker_lifecycle.py`（join_thread + WorkerStopState 三态）；五个 worker 的 stop 超时保留引用并拒绝 start，status 增 stopping；deps.stop_* 失败保留注册；新增 22 断言，反证 5 红；回归 91 passed |
 | 2026-10-21 | 修 | AP-42 | 见本提交——新增 `doclens/git_command.py`（UTF-8 固定 + 单一 `is_git_root` + 超时常量），GitSync 与 api/git 共 7 处调用全部改道；新增 10 断言（含 gbk 解码模拟与结构枪口），反证 3 红；回归 19 passed |

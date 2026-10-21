@@ -901,8 +901,15 @@ def _cli_search(args, config, idx):
     # Load or build index if needed
     idx.load_or_build_index()
 
-    # Perform search
-    nodes, docs = idx.search(query, max_results=config.max_results)
+    # Perform search（AP-45：索引库不可读时给出明确提示，而非静默 0 结果）
+    from doclens.index_manager import IndexUnavailable
+
+    try:
+        nodes, docs = idx.search(query, max_results=config.max_results)
+    except IndexUnavailable as e:
+        print(f"[错误] {e}")
+        print("提示: 检查数据目录下的 index.db，或运行 `index --force` 重建索引。")
+        return
 
     # Determine min_score_threshold: CLI arg takes priority over config
     min_score = args.min_score if args.min_score is not None else config.min_score_threshold
