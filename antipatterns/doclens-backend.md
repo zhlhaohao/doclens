@@ -232,12 +232,27 @@
 - **修复方案**：按"工具定义 / 格式化 / 索引操作 / 文档解析"拆文件（同包公共函数），`fmt_size` 单一实现上提；`handle_search_kb` 抽 `_resolve_targets / _rank / _threshold` 三段。
 - **回归验证**：`tests/test_grep_tool.py tests/test_glob_tool.py tests/test_web_search_api_matrix.py`。
 
-### AP-20 预览域四份路径解析 + 错误码字面量 15 处 [P3] [status: pending]
+### AP-20 预览域四份路径解析 + 错误码字面量 15 处 [P3] [status: done]
 - **形态**：Shotgun Surgery / Magic Strings
 - **证据**：`doclens/web_v2/api/preview_common.py:40-47`、`preview.py:74-78,138-143`、`preview_assets.py:103-107` 四份"先 safe_resolve 直拼、miss 再 path_map 反查"（仅 `resolve_path` 有完整存在性语义）；`preview_assets.py:58-62` 用原始 `path` 算 `doc_hash_for` 而同域 `preview_raw:79` 用 `resolve_path`；错误码 `"FILE_NOT_FOUND"/"NOT_INDEXED"` 在 `preview_common.py:48`、`preview_assets.py:36`、`preview_synth.py:91/139` 等 15 处裸写。
 - **风险**：AI 只给文件名时同域两端点行为分叉；改错误码需多点同步。
-- **修复方案**：全域统一走 `resolve_path`（含 binary/DB-only 变体），错误码收敛为 `preview_common.ERRORS` 常量集。
-- **回归验证**：`tests/test_web_preview_formats.py tests/test_pdf_native_preview_api.py`。
+- **实际修复（2026-10-20）**：路径解析收敛为**三个语义明确的共享变体**（都在 preview_common，原先是四处手抄）：
+  ① `resolve_path`（既有）：必须命中 → 否则 404；
+  ② `resolve_path_optional`（新增）：命中返回 (full, rel)，都不命中返回 None（不抛）——二进制 DB-only 合成分支、
+     PDF 的 FILE_MOVED 区分用它；
+  ③ `resolve_rel_best_effort`（新增）：只求"正确 rel"，不校验存在性——PDF 元数据（文件可能已移走）与
+     `preview_asset`（图片按 `doc_hash_for(rel)` 落盘）用它。
+  **修掉真实行为分叉**：`preview_asset` 原先用原始 `path` 算 `doc_hash_for`，AI 只给文件名时 hash 对不上必然 404
+  ——现在先归一 rel 再算（同域 `preview_raw` 早已走归一后的路径）。错误码收敛为 `preview_common` 六个常量
+  （ERR_FILE_NOT_FOUND / ERR_NOT_INDEXED / ERR_FILE_MOVED / ERR_BINARY_NOT_PREVIEWABLE / ERR_INVALID_PATH / ERR_PROTECTED），
+  **线上值不变**（前端 preview.ts / preview-controller.ts 按 code 判分支）。preview.py / preview_assets.py /
+  preview_mutations.py / preview_synth.py 全部改用常量。
+- **注意**：`resolve_path_optional` 的"可选"**不放松越权边界**——跨出 base 仍由 safe_resolve 抛（有断言守护）。
+- **回归验证**：新增 `tests/test_preview_binary_guard.py::TestResolveHelpers` 4 断言（文件名反查 / miss 返回原值 /
+  optional 命中与 miss / 越权仍抛）。**踩坑**：首版测试把 path_map 值写成相对路径，反查走 `Path(mapped).resolve()`
+  相对 cwd 解析 → 断言失败；生产 path_map 值是绝对路径（`fts.load_doc_id_source_paths`），测试改绝对后通过。
+  `tests/test_web_preview_formats.py tests/test_pdf_native_preview_api.py tests/test_preview_rotate.py
+  tests/test_preview_binary_guard.py tests/test_web_search_api_matrix.py tests/test_architecture.py` → 80 passed。
 
 ### AP-21 会话 TTL / cookie 有效期 / 清理上限三源同值 [P3] [status: done]
 - **形态**：Magic Numbers / Duplicated Source of Truth

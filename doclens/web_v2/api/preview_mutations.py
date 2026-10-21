@@ -18,7 +18,12 @@ from doclens.image_orienter import ORIENTABLE_IMAGE_EXTS, rotate_image_inplace
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api._auto_rotate import broadcast_rotated, drop_vision_queue_row
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.api.preview_common import compute_writable, resolve_path, safe_resolve
+from doclens.web_v2.api.preview_common import (
+    ERR_FILE_NOT_FOUND,
+    compute_writable,
+    resolve_path,
+    safe_resolve,
+)
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.preview import (
     PreviewRotateResponse,
@@ -47,7 +52,7 @@ def save_preview(
     full = safe_resolve(base, path)
 
     if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
     if not compute_writable(full, base):
         raise CortexAPIError(403, "NOT_WRITABLE", f"该文件不可编辑: {path}")
 
@@ -92,7 +97,7 @@ def rotate_image(
     if full.suffix.lower() not in ORIENTABLE_IMAGE_EXTS:
         raise CortexAPIError(400, "NOT_ROTATABLE", f"该格式不支持旋转: {path}")
     if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
     if not rotate_image_inplace(full, 90):
         raise CortexAPIError(500, "ROTATE_FAILED", f"旋转失败: {path}")
     # 收尾与判向旋转一致（ADR-0017 §6）；manual 标志驱动前端 toast 措辞

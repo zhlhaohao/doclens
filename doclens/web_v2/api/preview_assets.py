@@ -12,7 +12,14 @@ from fastapi.responses import FileResponse
 
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
-from doclens.web_v2.api.preview_common import lookup_rel_via_path_map, resolve_path, safe_resolve
+from doclens.web_v2.api.preview_common import (
+    ERR_FILE_MOVED,
+    ERR_FILE_NOT_FOUND,
+    resolve_path,
+    resolve_path_optional,
+    resolve_rel_best_effort,
+    safe_resolve,
+)
 from doclens.web_v2.deps import get_index_manager
 from treesearch.parsers.image_store import ImageStore, doc_hash_for, EXT_TO_MEDIA
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
@@ -33,7 +40,7 @@ def download(
     base = Path(idx.search_path)
     full = safe_resolve(base, path)
     if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
     stem = full.stem
     digest = hashlib.sha256(path.replace(os.sep, "/").encode("utf-8")).hexdigest()[:6]
     return FileResponse(
@@ -55,11 +62,14 @@ def preview_asset(
     ``<index_path>.parent/images/<doc_hash>/<seq>.<ext>`` 读取。
     """
     base = Path(idx.search_path)
-    safe_resolve(base, path)  # 越权校验，不通过则抛 FILE_NOT_FOUND
+    # AP-20：先归一为相对路径再算 doc_hash_for——图片按 rel 落盘，用原始
+    # path 算 hash 在「AI 只给文件名」时必然 404（同域 preview_raw 走
+    # resolve_path 已是归一后的路径，两端口径此前分叉）。
+    rel = resolve_rel_best_effort(base, path, idx)
 
     images_root = Path(idx.index_path).parent / "images"
     store = ImageStore(images_root)
-    resolved = store.resolve(doc_hash_for(path), id)
+    resolved = store.resolve(doc_hash_for(rel), id)
     if resolved is None:
         raise CortexAPIError(404, "IMAGE_NOT_FOUND", f"图片不存在: {path} #{id}")
     file_path, media_type = resolved
@@ -81,7 +91,7 @@ def preview_raw(
     if ext not in IMAGE_EXTENSIONS:
         raise CortexAPIError(400, "NOT_AN_IMAGE", f"非图像文件: {path}")
     if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
     media_type = EXT_TO_MEDIA.get(ext.lstrip("."), "application/octet-stream")
     return FileResponse(path=str(full), media_type=media_type)
 
@@ -98,18 +108,16 @@ def preview_pdf(
     → FILE_MOVED 明确报错，不回退合成 md（单路径决议）。
     """
     base = Path(idx.search_path)
-    # 直拼 → miss 则 path_map 反查（AI 只给文件名）；_resolve_path 对
-    # 不存在文件直接抛 404，绕过了 FILE_MOVED 的区分语义，故手工拼装
-    full = safe_resolve(base, path)
-    if not (full.exists() and full.is_file()):
-        rel = lookup_rel_via_path_map(base, path, idx)
-        if rel is not None:
-            full = safe_resolve(base, rel)
+    # AP-20：统一走 resolve_path_optional（原此处手抄一份反查）。
+    # 不用 resolve_path——它对不存在文件抛 FILE_NOT_FOUND，会绕过本端点
+    # 「已索引/曾存在但文件被移走」的 FILE_MOVED 区分语义。
+    resolved = resolve_path_optional(base, path, idx)
+    full = resolved[0] if resolved is not None else safe_resolve(base, path)
     if full.suffix.lower() != ".pdf":
         raise CortexAPIError(400, "NOT_A_PDF", f"非 PDF 文件: {path}")
     if not (full.exists() and full.is_file()):
         raise CortexAPIError(
-            404, "FILE_MOVED",
+            404, ERR_FILE_MOVED,
             f"PDF 文件不在磁盘（可能已被移动或删除），无法预览: {path}",
         )
     return FileResponse(path=str(full), media_type="application/pdf")

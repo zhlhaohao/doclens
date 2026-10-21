@@ -59,3 +59,46 @@ def test_preview_endpoint_text_still_works(tmp_path, monkeypatch):
     ))
     assert resp.language == "markdown"
     assert "# 标题" in resp.content
+
+
+class TestResolveHelpers:
+    """AP-20：路径解析三变体语义（含 AI 只给文件名的反查）。"""
+
+    def _env(self, tmp_path):
+        from types import SimpleNamespace
+
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "doc.md").write_text("x", encoding="utf-8")
+        # path_map 的值是**绝对路径**（生产实况：fts.load_doc_id_source_paths）
+        idx = SimpleNamespace(path_map={"d1": str(tmp_path / "sub" / "doc.md")})
+        return tmp_path, idx
+
+    def test_best_effort_bare_filename_resolves(self, tmp_path):
+        from doclens.web_v2.api.preview_common import resolve_rel_best_effort
+
+        base, idx = self._env(tmp_path)
+        assert resolve_rel_best_effort(base, "doc.md", idx) == "sub/doc.md"
+
+    def test_best_effort_missing_returns_requested(self, tmp_path):
+        from doclens.web_v2.api.preview_common import resolve_rel_best_effort
+
+        base, idx = self._env(tmp_path)
+        assert resolve_rel_best_effort(base, "nope.md", idx) == "nope.md"
+
+    def test_optional_hit_and_miss(self, tmp_path):
+        from doclens.web_v2.api.preview_common import resolve_path_optional
+
+        base, idx = self._env(tmp_path)
+        hit = resolve_path_optional(base, "doc.md", idx)
+        assert hit is not None and hit[1] == "sub/doc.md"
+        assert resolve_path_optional(base, "nope.md", idx) is None
+
+    def test_optional_still_guards_traversal(self, tmp_path):
+        """「可选」不放松越权边界：跨出 base 仍抛。"""
+        import pytest as _pytest
+        from doclens.web_v2.api.errors import CortexAPIError
+        from doclens.web_v2.api.preview_common import resolve_path_optional
+
+        base, idx = self._env(tmp_path)
+        with _pytest.raises(CortexAPIError):
+            resolve_path_optional(base, "../../etc/passwd", idx)

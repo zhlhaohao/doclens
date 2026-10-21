@@ -11,6 +11,7 @@ import re
 
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.api.preview_common import ERR_NOT_INDEXED
 from doclens.web_v2.models.preview import PageMarker, PreviewResponse
 from doclens.web_v2.preview_synthesizer import render_tree_to_md
 
@@ -90,7 +91,7 @@ def synthesize_pst_overview(idx: IndexManager, rel_path: str) -> PreviewResponse
     if total == 0:
         raise CortexAPIError(
             status=404,
-            code="NOT_INDEXED",
+            code=ERR_NOT_INDEXED,
             detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
         )
 
@@ -138,7 +139,7 @@ def synthesize_binary_preview(idx: IndexManager, rel_path: str) -> PreviewRespon
     if doc is None:
         raise CortexAPIError(
             status=404,
-            code="NOT_INDEXED",
+            code=ERR_NOT_INDEXED,
             detail=f"文件未索引，无法预览：{rel_path}。请先执行 cortex index。",
         )
 

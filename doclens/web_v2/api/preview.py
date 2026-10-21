@@ -18,10 +18,12 @@ from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.api import preview_synth
 from doclens.web_v2.api.preview_common import (
     BINARY_PREVIEW_EXTS,
+    ERR_BINARY_NOT_PREVIEWABLE,
+    ERR_FILE_NOT_FOUND,
     compute_writable,
-    lookup_rel_via_path_map,
     resolve_path,
-    safe_resolve,
+    resolve_path_optional,
+    resolve_rel_best_effort,
 )
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.preview import PreviewResponse
@@ -74,12 +76,9 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
     from treesearch.fts import FTS5Index
 
     base = Path(idx.search_path)
-    resolved = path
-    candidate = safe_resolve(base, path)
-    if not (candidate.exists() and candidate.is_file()):
-        rel = lookup_rel_via_path_map(base, path, idx)
-        if rel is not None:
-            resolved = rel
+    # AP-20：统一走 resolve_rel_best_effort（原此处手抄一份反查）——
+    # 文件可能已移走，但仍需正确 rel 查 DB
+    resolved = resolve_rel_best_effort(base, path, idx)
 
     abs_path = os.path.abspath(os.path.join(idx.search_path, resolved))
     page_starts = None
@@ -139,25 +138,24 @@ def preview(
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
-        candidate = safe_resolve(base, path)
-        if candidate.exists() and candidate.is_file():
-            return preview_synth.synthesize_binary_preview(idx, path)
-        rel = lookup_rel_via_path_map(base, path, idx)
-        if rel is not None:
-            return preview_synth.synthesize_binary_preview(idx, rel)
-        # 既不在磁盘也不在 path_map → 走合成（合成内部查 DB，未索引返回 NOT_INDEXED）
+        # AP-20：统一走 resolve_path_optional（原此处手抄一份 safe_resolve +
+        # path_map 反查）。命中即用反查出的相对路径（AI 只给文件名时 hash 才
+        # 对得上）；都不命中仍走合成——合成内部查 DB，未索引返回 NOT_INDEXED。
+        resolved = resolve_path_optional(base, path, idx)
+        if resolved is not None:
+            return preview_synth.synthesize_binary_preview(idx, resolved[1])
         return preview_synth.synthesize_binary_preview(idx, path)
 
     full, resolved_rel = resolve_path(base, path, idx)
 
     if not full.exists() or not full.is_file():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {path}")
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
 
     # 二进制嗅探（按内容，与扩展名无关）：未知二进制不支持预览——不把
     # 字节乱码当文本渲染，引导下载查看（前端通用错误 toast 呈现）
     if looks_binary(full):
         raise CortexAPIError(
-            415, "BINARY_NOT_PREVIEWABLE", "二进制文件不支持预览，请下载后查看"
+            415, ERR_BINARY_NOT_PREVIEWABLE, "二进制文件不支持预览，请下载后查看"
         )
 
     try:

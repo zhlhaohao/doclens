@@ -20,6 +20,16 @@ from doclens.web_v2.path_safety import safe_resolve  # noqa: F401（re-export）
 # 放这里而非 preview.py：_compute_writable 与分派同文件时会循环 import。
 from treesearch.parsers.image_parser import IMAGE_EXTENSIONS
 
+#: 预览域错误码（AP-20：原 15 处裸字面量）。**线上值不可改**——前端
+#: preview.ts / preview-controller.ts 按 code 判分支（如 NOT_INDEXED 决定
+#: 是否进错误页），改值等于改契约。
+ERR_FILE_NOT_FOUND = "FILE_NOT_FOUND"
+ERR_NOT_INDEXED = "NOT_INDEXED"
+ERR_FILE_MOVED = "FILE_MOVED"
+ERR_BINARY_NOT_PREVIEWABLE = "BINARY_NOT_PREVIEWABLE"
+ERR_INVALID_PATH = "INVALID_PATH"
+ERR_PROTECTED = "PROTECTED"
+
 BINARY_PREVIEW_EXTS = frozenset({
     ".pdf", ".docx", ".doc", ".docm", ".pptx", ".ppt", ".pps", ".pot",
     ".xlsx", ".xlsm", ".xltx", ".xltm", ".xls",
@@ -45,7 +55,50 @@ def resolve_path(base: Path, requested: str, idx: IndexManager) -> tuple[Path, s
         full = safe_resolve(base, rel)
         if full.exists() and full.is_file():
             return full, rel
-    raise CortexAPIError(404, "FILE_NOT_FOUND", f"文件不存在: {requested}")
+    raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {requested}")
+
+
+def resolve_rel_best_effort(base: Path, requested: str, idx: IndexManager) -> str:
+    """尽最大努力把 requested 归一为「相对 workdir 的路径」，**不校验存在性**。
+
+    用于「文件可能已不在磁盘、但仍需用正确相对路径做 key」的消费方
+    （AP-20）：
+    - PDF 元数据（`_pdf_preview_meta`）：已索引但被移走时仍要按 rel 查 DB；
+    - 文档内图片（`preview_asset`）：图片按 ``doc_hash_for(rel)`` 落盘，
+      用原始 path 算 hash 会在「AI 只给文件名」时永远 404。
+
+    磁盘直拼命中 → 返回 requested（调用方语义即"用它本身"）；否则用
+    path_map 反查；都查不到 → 原样返回 requested（下游自行处理）。
+    越权仍抛（safe_resolve）。
+    """
+    candidate = safe_resolve(base, requested)
+    if candidate.exists() and candidate.is_file():
+        return requested
+    rel = lookup_rel_via_path_map(base, requested, idx)
+    return rel if rel is not None else requested
+
+
+def resolve_path_optional(
+    base: Path, requested: str, idx: IndexManager
+) -> tuple[Path, str] | None:
+    """同 resolve_path，但**不抛异常**——磁盘与 path_map 都不命中时返回 None。
+
+    AP-20：三种"路径可能不在磁盘"的消费方（二进制文档的 DB-only 合成、
+    PDF 的 FILE_MOVED 区分、文档内图片的 hash 反查）此前各自手抄一遍
+    「safe_resolve 直拼 → miss 再 path_map 反查」，语义各有出入。统一到
+    此函数：越权仍由 safe_resolve 抛（安全边界不因"可选"而放松）。
+
+    Returns:
+        (full_path, resolved_rel_path)；均不存在时 None。
+    """
+    candidate = safe_resolve(base, requested)
+    if candidate.exists() and candidate.is_file():
+        return candidate, requested
+    rel = lookup_rel_via_path_map(base, requested, idx)
+    if rel is not None:
+        full = safe_resolve(base, rel)
+        return (full, rel) if full.exists() and full.is_file() else None
+    return None
 
 
 def lookup_rel_via_path_map(base: Path, requested: str, idx: IndexManager) -> str | None:
