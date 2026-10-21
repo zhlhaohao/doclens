@@ -8,10 +8,12 @@ import { chatStream, stopChat } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, importSession, duplicateSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
+import { downloadFromUrl } from "../utils/download";
+import { jsbridgeDownloadAvailable, jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
@@ -486,6 +488,8 @@ export class ChatView extends LitElement {
    *  进入会话后跟随真实 id，返回 initial 清空。 */
   @state() private _highlightSessionId: string | null = null;
   @state() private _clearing = false;
+  /** WebView 原生导入进行中（防重复拉起选择器）。 */
+  private _importing = false;
   @state() private previewOpen = false;
   /** 预览状态机（P1-2 收敛，同 search 策略：只回填 content+tokens）。 */
   private _preview = new PreviewController(this, {
@@ -1018,11 +1022,24 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 导出当前会话（ADR-0038）：全保真 JSON 浏览器下载，跨实例记忆转移。 */
+  /** 导出当前会话（ADR-0038）：全保真 JSON，跨实例记忆转移。
+   *  WebView 内 `<a download>`（blob URL）在 X5 无下载 UI → 走 jsbridge
+   *  原生下载（写 Downloads + 系统通知）；浏览器仍走 fetch+blob。 */
   private async _exportSession(): Promise<void> {
     const cur = this.viewState.currentSession;
     if (!cur) return;
     try {
+      if (jsbridgeDownloadAvailable()) {
+        const r = await downloadFromUrl(
+          sessionExportUrl(cur.id),
+          sessionExportFileName(cur.title || ""),
+        );
+        if (r.via !== "jsbridge") return;
+        if (r.name) this._pushToast(`已导出：${r.name}（保存在下载目录）`, "success", 3500);
+        else if (r.error) this._pushToast(`导出失败：${r.error}`, "error", 5000);
+        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
+        return;
+      }
       await exportSession(cur.id);
       this._pushToast("已导出会话文件", "success", 2500);
     } catch (e) {
@@ -1030,9 +1047,14 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 导入会话（ADR-0038）：文件选择器 → 确认（标题/条目数）→ 上传 →
+  /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认（标题/条目数）→
+   *  上传；WebView 内改用原生选择器 + 直传（X5 不弹 input file）。
    *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。 */
   private _onImportHistory(): void {
+    if (jsbridgeUploadAvailable()) {
+      void this._importViaJsbridge();
+      return;
+    }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json,.json";
@@ -1041,6 +1063,47 @@ export class ChatView extends LitElement {
       if (file) void this._importSessionFile(file);
     };
     input.click();
+  }
+
+  /** WebView 原生导入：pickAndUploadFiles 选中 JSON 直传
+   *  /api/sessions/import/upload（multipart），H5 不碰文件字节。
+   *  服务端借 path 字段回报 imported / skipped。 */
+  private async _importViaJsbridge(): Promise<void> {
+    if (this._importing) return;
+    this._importing = true;
+    try {
+      const res = await pickAndUploadFiles({
+        destDir: "",
+        uploadUrl: sessionImportUploadUrl(),
+        maxCount: 1,
+      });
+      if (!res) return; // 用户在选择器取消
+      if (res.unauthorized) {
+        // 与 client.ts 的 401 统一钩子行为对齐
+        actions.setAuthState({ authenticated: false });
+        router.navigate("login");
+        return;
+      }
+      const item = res.results[0];
+      if (!item) {
+        this._pushToast("导入失败：未选择文件", "error", 5000);
+        return;
+      }
+      if (!item.ok) {
+        this._pushToast(`导入失败：${item.detail || item.code || "未知错误"}`, "error", 5000);
+        return;
+      }
+      if (item.path === "skipped") {
+        this._pushToast("会话已存在，已跳过", "info", 3000);
+      } else {
+        this._pushToast("已导入会话", "success", 3000);
+      }
+      await this._loadHistory();
+    } catch (e) {
+      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
+    } finally {
+      this._importing = false;
+    }
   }
 
   private async _importSessionFile(file: File): Promise<void> {

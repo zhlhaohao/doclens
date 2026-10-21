@@ -133,10 +133,26 @@ export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boo
   return request(`/api/sessions?${sp}`, { method: "DELETE" });
 }
 
+/** 导出会话端点（WebView 内 jsbridge 原生下载直接 GET 它）。 */
+export function sessionExportUrl(sessionId: string): string {
+  return `/api/sessions/${sessionId}/export`;
+}
+
+/** 导出文件名（与后端 Content-Disposition 同构：标题 slug + UTC 日期）。
+ *  WebView 内原生下载无法先读响应头，由 H5 直接给 fileName。 */
+export function sessionExportFileName(title: string): string {
+  const slug = Array.from(title)
+    .map((c) => (/[\p{L}\p{N}-]/u.test(c) ? c : "-"))
+    .join("");
+  const cleaned = slug.split("-").filter(Boolean).join("-") || "session";
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return `${cleaned}-${date}.json`;
+}
+
 /** 导出会话（ADR-0038）：全保真 JSON，attachment 下载（浏览器存为文件）。
  *  用原生 fetch 拿 blob——request() 只解析 JSON 响应。 */
 export async function exportSession(sessionId: string): Promise<void> {
-  const res = await fetch(`/api/sessions/${sessionId}/export`);
+  const res = await fetch(sessionExportUrl(sessionId));
   if (!res.ok) {
     let detail = `导出失败（${res.status}）`;
     try {
@@ -165,6 +181,13 @@ export async function importSession(
   data: unknown,
 ): Promise<{ ok: boolean; imported: number; skipped: number }> {
   return request("/api/sessions/import", { method: "POST", json: data });
+}
+
+/** WebView 内导入的 multipart 直传端点（pickAndUploadFiles 的 uploadUrl）。
+ *  原生上传后只透传 path/bytes_written/overwritten（upload_bridge.md §2.2），
+ *  服务端借此用 `path` 回报 imported / skipped。 */
+export function sessionImportUploadUrl(): string {
+  return `${window.location.origin}/api/sessions/import/upload`;
 }
 
 // ---- 会话库备份/恢复（ADR-0047）----

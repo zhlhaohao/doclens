@@ -3,11 +3,13 @@
 导出 = sessions 行 + 全部 session_items 原样（含死段/边界/usage）；
 导入 = 结构校验（不语义校验）→ 原 id 原时间戳写入；同 id 跳过。
 """
+import asyncio
 import json
 from datetime import datetime, timezone
 
 import pytest
 
+from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.sessions_store import (
     SessionSummary,
     SessionType,
@@ -243,3 +245,58 @@ class TestImportValidation:
                 "items": [{"kind": "k", "payload": "{broken"}],
             })
         assert store.get("BAD") is None
+
+
+class TestImportUploadApi:
+    """WebView 原生直传入口 POST /sessions/import/upload（ADR-0038）。
+
+    端点函数依赖注入风格（_get_store/_get_workdir 调用期解析），直接
+    asyncio.run 调用 + monkeypatch 注入桩（同 test_session_duplicate 约定）。
+    """
+
+    def _patch(self, monkeypatch, store, tmp_path):
+        from doclens.web_v2.api import sessions as sessions_api
+        monkeypatch.setattr(sessions_api, "_get_store", lambda: store)
+        monkeypatch.setattr(sessions_api, "_get_workdir", lambda: tmp_path)
+        return sessions_api
+
+    def _upload(self, name: str, raw: bytes):
+        from fastapi import UploadFile
+        import io
+        return UploadFile(file=io.BytesIO(raw), filename=name)
+
+    def test_import_ok_reports_imported(self, store, monkeypatch, tmp_path):
+        _seed_rich_session(store)
+        data = store.export_session("RICH1")
+        other = SessionsStore(tmp_path / "target.db")
+        api = self._patch(monkeypatch, other, tmp_path)
+        res = asyncio.run(api.import_session_upload(
+            self._upload("s.json", json.dumps(data).encode()),
+        ))
+        assert res["imported"] == 1 and res["path"] == "imported"
+        assert other.get("RICH1") is not None
+
+    def test_duplicate_reports_skipped(self, store, monkeypatch, tmp_path):
+        _seed_rich_session(store)
+        data = store.export_session("RICH1")
+        api = self._patch(monkeypatch, store, tmp_path)
+        res = asyncio.run(api.import_session_upload(
+            self._upload("s.json", json.dumps(data).encode()),
+        ))
+        assert res["imported"] == 0 and res["path"] == "skipped"
+
+    def test_non_json_extension_rejected(self, store, monkeypatch, tmp_path):
+        api = self._patch(monkeypatch, store, tmp_path)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.import_session_upload(
+                self._upload("s.txt", b"{}"),
+            ))
+        assert ei.value.status == 400 and ei.value.code == "INVALID_TYPE"
+
+    def test_bad_json_rejected(self, store, monkeypatch, tmp_path):
+        api = self._patch(monkeypatch, store, tmp_path)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.import_session_upload(
+                self._upload("s.json", b"{broken"),
+            ))
+        assert ei.value.status == 400 and ei.value.code == "IMPORT_INVALID"

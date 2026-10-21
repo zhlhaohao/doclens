@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import Response
 import ulid as _ulid
 
@@ -531,6 +531,28 @@ async def export_session(session_id: str):
     )
 
 
+def _parse_export_payload(raw: bytes) -> dict:
+    """导入体预检：50MB 上限 → JSON 解析 → 根必须是对象（ADR-0038）。"""
+    if len(raw) > _IMPORT_MAX_BYTES:
+        raise CortexAPIError(413, "IMPORT_TOO_LARGE", "导入文件超过 50MB 上限")
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise CortexAPIError(400, "IMPORT_INVALID", "文件不是合法 JSON")
+    if not isinstance(data, dict):
+        raise CortexAPIError(400, "IMPORT_INVALID", "文件根必须是 JSON 对象")
+    return data
+
+
+def _import_payload(data: dict) -> bool:
+    """结构校验 + 写入；ValueError → 400（不部分导入）。返回是否新导入。"""
+    store = _get_store()
+    try:
+        return store.import_session(data, str(_get_workdir()))
+    except ValueError as e:
+        raise CortexAPIError(400, "IMPORT_INVALID", str(e))
+
+
 @router.post("/sessions/import")
 async def import_session(request: Request):
     """导入会话（单文件单会话，ADR-0038）。同 id 已存在 → 跳过；
@@ -540,21 +562,40 @@ async def import_session(request: Request):
     body 进 JSON 解析器。
     """
     raw = await request.body()
-    if len(raw) > _IMPORT_MAX_BYTES:
-        raise CortexAPIError(413, "IMPORT_TOO_LARGE", "导入文件超过 50MB 上限")
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise CortexAPIError(400, "IMPORT_INVALID", "文件不是合法 JSON")
-    if not isinstance(data, dict):
-        raise CortexAPIError(400, "IMPORT_INVALID", "文件根必须是 JSON 对象")
-    store = _get_store()
-    try:
-        imported = store.import_session(data, str(_get_workdir()))
-    except ValueError as e:
-        raise CortexAPIError(400, "IMPORT_INVALID", str(e))
+    data = _parse_export_payload(raw)
+    imported = _import_payload(data)
     return {
         "ok": True,
         "imported": 1 if imported else 0,
         "skipped": 0 if imported else 1,
+    }
+
+
+@router.post("/sessions/import/upload")
+async def import_session_upload(file: UploadFile = File(...)):
+    """WebView 容器内的导入入口（pickAndUploadFiles 原生直传，ADR-0038）。
+
+    X5 内核不弹 `<input type="file">` 选择器、H5 也拿不到所选文件字节，
+    因此原生把文件 multipart 直传到本端点（upload_bridge.md）。语义与
+    POST /sessions/import 完全一致，只是入口形态不同。
+
+    响应兼容原生上传回调契约（upload_bridge.md §2.2）：原生只把服务端
+    返回的 path/bytes_written/overwritten 透传给 H5，故借用 `path` 字段
+    回报导入结果（"imported" / "skipped"），H5 据此给精确提示。
+    """
+    name = file.filename or ""
+    if Path(name).suffix.lower() != ".json":
+        raise CortexAPIError(
+            400, "INVALID_TYPE", f"仅支持会话导出 JSON 文件: {name or '(无文件名)'}"
+        )
+    raw = await file.read(_IMPORT_MAX_BYTES + 1)  # +1 用于判定超限
+    data = _parse_export_payload(raw)
+    imported = _import_payload(data)
+    return {
+        "ok": True,
+        "imported": 1 if imported else 0,
+        "skipped": 0 if imported else 1,
+        "path": "imported" if imported else "skipped",
+        "bytes_written": len(raw),
+        "overwritten": False,
     }
