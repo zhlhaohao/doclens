@@ -36,7 +36,47 @@ class TestNonce:
     def test_ip_binding(self):
         n = issue_nonce("1.2.3.4")
         assert consume_nonce(n, "5.6.7.8") is False  # 换 IP 无效
-        assert consume_nonce(n, "1.2.3.4") is False  # 消费已发生（绑定失败也算消费）
+        # AP-25：绑定失败不再烧掉 nonce（校验通过才删除）——持有者仍可消费
+        assert consume_nonce(n, "1.2.3.4") is True
+        assert consume_nonce(n, "1.2.3.4") is False  # 有效消费后才是一次性
+
+    def test_wrong_ip_does_not_burn_nonce(self):
+        """嗅探者抢先以错 IP 提交：nonce 不被废掉，受害者仍能完成登录。"""
+        n = issue_nonce("1.2.3.4")
+        for _ in range(3):
+            assert consume_nonce(n, "9.9.9.9") is False
+        assert consume_nonce(n, "1.2.3.4") is True
+
+    def test_expired_nonce_cleared_on_failed_consume(self):
+        """过期条目在校验失败时顺手清除（防表滞留）。"""
+        n = issue_nonce("1.1.1.1")
+        import doclens.web_v2.auth_challenge as _ac
+        real = _ac.time.monotonic
+        _ac.time.monotonic = lambda: real() + auth_challenge.NONCE_TTL_S + 1
+        try:
+            assert consume_nonce(n, "1.1.1.1") is False
+            assert n not in _ac._pending
+        finally:
+            _ac.time.monotonic = real
+
+    def test_concurrent_consume_exactly_once(self):
+        """并发竞争同一 nonce：有且仅有一个线程消费成功（锁语义）。"""
+        import threading as _th
+
+        n = issue_nonce("1.2.3.4")
+        results: list[bool] = []
+        barrier = _th.Barrier(8)
+
+        def _try():
+            barrier.wait()
+            results.append(consume_nonce(n, "1.2.3.4"))
+
+        threads = [_th.Thread(target=_try) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert sum(results) == 1
 
     def test_expiry(self, monkeypatch):
         n = issue_nonce("1.1.1.1")

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 
 #: nonce 有效期（秒）：取挑战到提交登录的正常间隔留足余量
@@ -23,13 +24,16 @@ NONCE_TTL_S = 120
 #: 单 IP 未决 nonce 上限（防挑战端点被刷内存）
 _MAX_PENDING_PER_IP = 8
 
-# nonce → (expires_at, ip)；模块级单例（GUI 单进程模型足够）
+# nonce → (expires_at, ip)；模块级单例（GUI 单进程模型足够）。
+# 读写全程持 _LOCK（AP-25）：async 登录端点未来把 PBKDF2 挪进 to_thread /
+# 加线程 worker 后即多线程消费，与 auth_rate_limit.LoginRateLimiter 同款式。
 _pending: dict[str, tuple[float, str]] = {}
 _last_gc = 0.0
+_LOCK = threading.Lock()
 
 
 def _gc() -> None:
-    """惰性清理过期 nonce（每次发挑战时顺带扫一遍）。"""
+    """惰性清理过期 nonce（每次发挑战时顺带扫一遍；锁内调用）。"""
     global _last_gc
     now = time.monotonic()
     if now - _last_gc < NONCE_TTL_S:
@@ -41,24 +45,36 @@ def _gc() -> None:
 
 def issue_nonce(ip: str) -> str:
     """签发一次性 nonce（记录来源 IP + TTL；超量先淘汰最老的）。"""
-    _gc()
-    mine = [n for n, (_, owner) in _pending.items() if owner == ip]
-    if len(mine) >= _MAX_PENDING_PER_IP:
-        oldest = min(mine, key=lambda n: _pending[n][0])
-        _pending.pop(oldest, None)
-    nonce = secrets.token_hex(16)
-    _pending[nonce] = (time.monotonic() + NONCE_TTL_S, ip)
+    with _LOCK:
+        _gc()
+        mine = [n for n, (_, owner) in _pending.items() if owner == ip]
+        if len(mine) >= _MAX_PENDING_PER_IP:
+            oldest = min(mine, key=lambda n: _pending[n][0])
+            _pending.pop(oldest, None)
+        nonce = secrets.token_hex(16)
+        _pending[nonce] = (time.monotonic() + NONCE_TTL_S, ip)
     return nonce
 
 
 def consume_nonce(nonce: str, ip: str) -> bool:
-    """消费 nonce（一次性）：存在、未过期、来源 IP 一致才有效。"""
-    entry = _pending.get(nonce)
-    if entry is None:
-        return False
-    _pending.pop(nonce, None)
-    exp, owner = entry
-    return exp > time.monotonic() and owner == ip
+    """消费 nonce（一次性）：存在、未过期、来源 IP 一致才有效。
+
+    校验通过才删除（AP-25：原先先 pop 后验，错 IP / 过期提交也会把 nonce
+    烧掉——嗅探者可抢先废掉受害者的挑战，与「一次性」的语义应为「有效
+    消费一次性」不符）。仅过期条目在校验失败时顺手清除。
+    """
+    with _LOCK:
+        entry = _pending.get(nonce)
+        if entry is None:
+            return False
+        exp, owner = entry
+        if exp <= time.monotonic():
+            _pending.pop(nonce, None)  # 过期条目：清掉防滞留
+            return False
+        if owner != ip:
+            return False  # 来源不符：nonce 留给真正的持有者
+        _pending.pop(nonce, None)
+        return True
 
 
 def compute_proof(nonce: str, pbkdf2_hex: str) -> str:

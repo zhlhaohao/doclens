@@ -267,12 +267,16 @@
 - **修复方案**：改用不可变 `namedtuple`/dataclass 整体替换（`_swap_state = SwapState(...)`），或加同一把锁读。
 - **回归验证**：`tests/test_workdir_config.py`。
 
-### AP-25 auth challenge / rate-limit 的模块级状态无锁；nonce 先 pop 后校验 IP [P3] [status: pending]
+### AP-25 auth challenge / rate-limit 的模块级状态无锁；nonce 先 pop 后校验 IP [P3] [status: done]
 - **形态**：全局可变单例当传参通道（并发）
 - **证据**：`doclens/web_v2/auth_challenge.py:27-28` `_pending` / `_last_gc` 模块级 dict，`:44-61` 读写无锁（`:31-39` `_gc` 亦然）；`:59` `consume_nonce` 先 `pop` 再校验 IP——来源不符也会烧掉 nonce。`doclens/web_v2/auth_rate_limit.py:59-70` 进程级 `_limiter` 单例无锁。
 - **风险**：并发登录时 nonce 被误清（受害者需重试）；多线程下 `_pending` 结构可能被并发修改。当前 uvicorn 单线程事件循环掩盖了大部分窗口。
-- **修复方案**：`_pending` 加 `threading.Lock`（与 `record_failure` 一致）；`consume_nonce` 校验通过后再删除。
-- **回归验证**：`tests/test_auth_challenge.py`。
+- **实际修复（2026-10-20）**：① `auth_challenge._pending` 全程持 `_LOCK`（issue/consume/_gc 三函数覆盖，与 auth_rate_limit.LoginRateLimiter 同款式）；
+  ② `consume_nonce` 改为「校验通过才删除」：过期条目顺手清（防表滞留），**来源不符不再烧 nonce**——嗅探者抢先提交错 IP 无法废掉受害者的挑战；
+  ③ `auth_rate_limit._limiter` 单例本就有 `_limiter_lock` 双检（审计时误记为无锁，实查有锁），无需改。
+- **契约变更（有意）**：nonce 一次性语义从「被任何人碰一下就废」改为「有效消费一次性」——`tests/test_auth_challenge.py::test_ip_binding`
+  断言随语义更新（原断言"绑定失败也算消费"，现断言"持有者仍可消费"），另新增 3 断言：错 IP 连续 3 次不烧 / 过期失败时清表 / 8 线程并发竞争恰成功一次。
+- **回归验证**：`tests/test_auth_challenge.py`（15 passed，含 3 新增）。
 
 ### AP-26 死代码与退役分支（记录即处置） [P4] [status: done]
 - **证据**：`doclens/web_v2/refs_retry.py:20-48`（docstring 自认 `evaluate_round` 已被 `refs_curator` 取代，仅 `FALLBACK_TOAST` 在用）；`doclens/web_v2/refs_parser.py:100`、`doclens/web_v2/references.py:44`（仅定义处出现）；`doclens/index_manager.py:583-585` `_check_swap` 空实现 + `_pending_swap` 无消费者；`doclens/web_v2/api/image_compress.py:98` `should_compress` 无调用方；`doclens/web_v2/api/_grouping.py:226-227` 两行相同 `return`（第二行不可达）；`doclens/web_v2/preview_synthesizer.py:63-78` PDF 目录/列表降级分支（`preview.py:131-134` 已走原生预览）。
