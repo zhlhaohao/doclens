@@ -154,3 +154,144 @@ class TestSingletonLifecycle:
         assert "_reset_translate_service" in src
         src_swap = inspect.getsource(deps.swap_workdir)
         assert "_reset_translate_service" in src_swap
+
+
+class TestCancellation:
+    """AP-39：running 态取消必须是真取消。
+
+    旧实现：`job._loop.call_soon_threadsafe(...)` 投递到 `new_event_loop()`
+    后从不 run_forever 的壳 loop —— 回调永不执行，引擎的 `is_set()` 轮询
+    永不置位，任务照常跑完并变 done。
+    """
+
+    def _job(self, tmp_path):
+        from doclens.translate_service import TranslateJob
+
+        return TranslateJob(
+            job_id="j1", source_path="a.pdf", lang_in="en", lang_out="zh",
+            outputs="both", pages=None, ultrafast=False, ignore_cache=False,
+        )
+
+    def _drive(self, svc, job, monkeypatch, translate_impl):
+        """把 _execute 跑在后台线程（模拟真实服务线程），返回线程句柄。"""
+        import threading
+
+        import doclens.translate_service as ts_mod
+        import doclens.vendor_pdf2zh.high_level as hl
+
+        class _NoTimer:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def start(self):
+                pass
+
+        monkeypatch.setattr(ts_mod.threading, "Timer", _NoTimer)
+        monkeypatch.setattr(hl, "translate", translate_impl)
+        monkeypatch.setattr(svc, "_ensure_engine", lambda: None)
+        monkeypatch.setattr(svc, "_load_model", lambda: None)
+        monkeypatch.setattr(svc, "_finalize_outputs", lambda j, res: [])
+        monkeypatch.setattr(svc, "_jobs", {"j1": job})
+        monkeypatch.setattr(svc, "_order", ["j1"])
+        t = threading.Thread(target=svc._execute, args=(job,), daemon=True)
+        t.start()
+        return t
+
+    def test_running_cancel_aborts_job(self, svc, tmp_path, monkeypatch):
+        """引擎轮询到 is_set() → 抛 CancelledError → 任务转 cancelled。"""
+        import threading
+        import time as _t
+
+        started = threading.Event()
+        observed = []
+
+        def fake_translate(*_a, cancellation_event=None, **_k):
+            started.set()
+            # 引擎的真实语义：每页前 `if cancellation_event.is_set(): raise`
+            for _ in range(200):          # 最多等 2s
+                if cancellation_event is not None and cancellation_event.is_set():
+                    observed.append(True)
+                    raise __import__("asyncio").CancelledError("task cancelled")
+                _t.sleep(0.01)
+            observed.append(False)
+            return []
+
+        job = self._job(tmp_path)
+        t = self._drive(svc, job, monkeypatch, fake_translate)
+        assert started.wait(5), "引擎未启动"
+
+        assert svc.cancel("j1") is True, "running 态取消必须被接受"
+        t.join(5)
+        assert not t.is_alive()
+        assert observed == [True], "引擎必须看到取消信号（旧实现在此为 False）"
+        assert job.status == "cancelled"
+        assert job.finished_at is not None
+
+    def test_cancel_emits_cancelled_event(self, svc, tmp_path, monkeypatch):
+        import threading
+        import time as _t
+
+        started = threading.Event()
+
+        def fake_translate(*_a, cancellation_event=None, **_k):
+            started.set()
+            for _ in range(200):
+                if cancellation_event is not None and cancellation_event.is_set():
+                    raise __import__("asyncio").CancelledError()
+                _t.sleep(0.01)
+            return []
+
+        job = self._job(tmp_path)
+        events: list[dict] = []
+        job._subscribers.append(events.append)
+        t = self._drive(svc, job, monkeypatch, fake_translate)
+        assert started.wait(5)
+        svc.cancel("j1")
+        t.join(5)
+        assert [e["type"] for e in events][-1] == "cancelled"
+
+    def test_cancellation_is_threading_event(self, svc, tmp_path, monkeypatch):
+        """信号类型必须是 threading.Event——asyncio.Event 跨线程不可见。"""
+        import threading
+        import time as _t
+
+        started = threading.Event()
+        seen: list[type] = []
+
+        def fake_translate(*_a, cancellation_event=None, **_k):
+            seen.append(type(cancellation_event))
+            started.set()
+            for _ in range(100):
+                if cancellation_event.is_set():
+                    raise __import__("asyncio").CancelledError()
+                _t.sleep(0.01)
+            return []
+
+        job = self._job(tmp_path)
+        t = self._drive(svc, job, monkeypatch, fake_translate)
+        assert started.wait(5)
+        svc.cancel("j1")
+        t.join(5)
+        assert seen == [threading.Event]
+
+    def test_cancel_queued_still_works(self, svc):
+        """queued 态（从未进 running）取消路径保持不变。"""
+        from doclens.translate_service import TranslateJob
+
+        job = TranslateJob(
+            job_id="q1", source_path="a.pdf", lang_in="en", lang_out="zh",
+            outputs="both", pages=None, ultrafast=False, ignore_cache=False,
+        )
+        events: list[dict] = []
+        job._subscribers.append(events.append)
+        import doclens.translate_service as ts_mod
+
+        # 绕过 submit 的文件校验，直接摆进队列
+        svc._jobs["q1"] = job
+        svc._order.append("q1")
+        assert svc.cancel("q1") is True
+        assert job.status == "cancelled"
+        assert events[-1]["type"] == "cancelled"
+
+    def test_cancel_unknown_returns_false(self, svc):
+        assert svc.cancel("nope") is False

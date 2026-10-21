@@ -6,7 +6,8 @@
 - 消费「翻译预设」（presets_store kind=translate）→ 引擎 envs 注入；
 - 产物写回知识库源 PDF 同目录，命名 ``<原名>.<目标语言>.pdf``（译本即知识，
   随 FileWatcher 入索引、随 Git 同步）；
-- 逐页进度经内存广播 → API 层 SSE 转发；取消 = asyncio.Event 置位。
+- 逐页进度经内存广播 → API 层 SSE 转发；取消 = threading.Event 置位
+  （引擎在翻译线程内同步轮询 `is_set()`，跨线程天然可见——AP-39）。
 
 不持久化任务状态（进程内存态）：崩溃即丢，用户重开弹框重译——翻译缓存
 （translate_cache.db）保证已译段落秒回。
@@ -51,8 +52,11 @@ class TranslateJob:
     result_paths: list[str] = field(default_factory=list)
     # 进度/事件订阅（SSE 消费者注册回调；翻译线程调用）
     _subscribers: list[Callable[[dict], None]] = field(default_factory=list)
-    _cancellation: "asyncio.Event | None" = None
-    _loop: Optional[asyncio.AbstractEventLoop] = None
+    # 取消信号（AP-39）：引擎在翻译线程内同步轮询 `is_set()`，所以必须是
+    # **threading.Event**（跨线程天然可见、`.set()` 本身线程安全）。
+    # 曾用 asyncio.Event + `loop.call_soon_threadsafe`，但那个 loop 从不
+    # run_forever → 回调永不执行，取消是空操作。
+    _cancellation: Optional[threading.Event] = None
 
 
 class TranslationQueueFull(Exception):
@@ -159,8 +163,11 @@ class TranslationService:
                 self._order.remove(job_id)
                 self._emit(job, {"type": "cancelled"})
                 return True
-            if job.status == "running" and job._cancellation and job._loop:
-                job._loop.call_soon_threadsafe(job._cancellation.set)
+            if job.status == "running" and job._cancellation is not None:
+                # threading.Event：直接置位即可，引擎在翻译线程内轮询
+                # `is_set()`（AP-39——曾投递到从不运行的 asyncio loop）
+                job._cancellation.set()
+                logger.info("translate job %s 收到取消请求", job_id)
                 return True
             return False
 
@@ -200,9 +207,9 @@ class TranslationService:
         self._ensure_engine()
         job.status = "running"
         self._emit(job, {"type": "running"})
-        loop = asyncio.new_event_loop()
-        cancellation = asyncio.Event()
-        job._loop = loop
+        # 取消信号必须在起跑前就位：cancel() 可能在 running 事件刚发出、
+        # 引擎尚未进入第一轮轮询时到达（AP-39）。
+        cancellation = threading.Event()
         job._cancellation = cancellation
         started = time.time()
         try:
@@ -274,6 +281,7 @@ class TranslationService:
                 keep,
             )
         except asyncio.CancelledError:
+            # 引擎在轮询点抛 asyncio.CancelledError 表示「按要求取消」
             job.status = "cancelled"
             job.finished_at = time.time()
             self._emit(job, {"type": "cancelled"})
@@ -289,7 +297,7 @@ class TranslationService:
             job.finished_at = time.time()
             self._emit(job, {"type": "error", "error": str(exc)})
         finally:
-            loop.close()
+            job._cancellation = None
             with self._lock:
                 if job.job_id in self._order:
                     self._order.remove(job.job_id)

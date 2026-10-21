@@ -551,14 +551,20 @@
 - **边界**：`rename` 跨卷会失败（skills_dir 与暂存同目录，实际不触发）；AP-1 的条目名/技能名路径校验
   仍未修，属独立 P1 条目。
 
-### AP-39 翻译取消是空操作——`call_soon_threadsafe` 投递到从不运行的 loop [P2] [status: pending]
+### AP-39 翻译取消是空操作——`call_soon_threadsafe` 投递到从不运行的 loop [P2] [status: done]
 - **形态**：Lava Flow（死分支）+ 状态与事实不符
 - **证据**：`doclens/translate_service.py:162-163` `job._loop.call_soon_threadsafe(job._cancellation.set)`；
   但 `:203-205` 的 loop 是 `asyncio.new_event_loop()` 后从不 `run_forever`，回调永不执行；`:292` 直接 `close()`。
   引擎在 `:151/:239` 用 `cancellation.is_set()` 同步轮询 → 永不置位；`:276` 的 `except CancelledError` 不可达。
 - **风险**：用户点取消，API 返回 200，任务照常跑完并变 done（大 PDF 翻译可能数分钟）。
-- **修复方案**：改用 `threading.Event`（轮询在翻译线程，跨线程天然可见），删除 asyncio 分支。
-- **回归验证**：`tests/test_translate_service_preset.py` + 新增「running 态取消后任务转 cancelled」用例。
+- **实际修复（2026-10-21）**：信号类型换 `threading.Event`（引擎在翻译线程内同步轮询 `is_set()`，跨线程天然可见），
+  `cancel()` 直接 `.set()`；删除 `loop = asyncio.new_event_loop()` / `job._loop` / `loop.close()` 整条死链。
+  `except asyncio.CancelledError` 分支**保留**——引擎轮询点确实抛这个异常（`high_level.py:153/239/252`）。
+  `finally` 改为清 `job._cancellation`，避免取消后残留引用。
+- **回归验证**：新增 5 断言——running 态取消后引擎看到信号并抛 CancelledError、任务转 `cancelled`、
+  推 cancelled 事件、信号类型确为 `threading.Event`（直接断言，比只看行为更抗回归）、queued 态取消不变、
+  未知 id 返回 False。**反证**：还原 asyncio 版本 → 前 3 条红灯（引擎 200 次轮询均未见信号）。
+  `tests/test_translate_service_preset.py tests/test_workdir_config.py tests/test_architecture.py` → 31 passed。
 
 ### AP-40 翻译 SSE 无退订且终态不退出——job/回调/连接常驻 [P2] [status: pending]
 - **形态**：订阅生命周期缺失（无界增长）
@@ -802,6 +808,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-39 | 见本提交——取消信号 asyncio.Event → threading.Event，删掉从不运行的 loop 死链；新增 5 断言（含信号类型断言），反证 3 红；回归 31 passed |
 | 2026-10-21 | 修 | AP-38 | 见本提交——安装改「暂存目录 + 换名 + 批量回滚 + sidecar 最后写」；解压加 200MB/5000 条目上限；delete 改先 rmtree 再改 sidecar（失败 409）；新增 7 断言，反证 3+3 红；回归 88 passed |
 | 2026-10-21 | 修 | AP-37 | 见本提交——`deploy_builtin_skills` 改 `copytree(dirs_exist_ok=True)` 整目录部署（restore 同路修好）；新增 5 断言含真实发行包逐文件核对，反证 5 红；回归 81 passed |
 | 2026-10-21 | 修 | AP-36 | 见本提交——失败记忆 + 30s 冷却快速失败（`IndexInitError`）+ reset/切库清标记 + 503 `INDEX_INIT_FAILED` 带 `retry_after`；新增 6 断言（含 8 线程不惊群），反证 5 红；回归 69 passed |
