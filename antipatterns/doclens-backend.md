@@ -578,14 +578,33 @@
 - **修复方案**：启动失败单独状态并转 note（或抛可捕获错误）。
 - **回归验证**：`tests/test_grep_tool.py tests/test_grep_corpus_bypass.py`。
 
-### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: pending]
+### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: done]
 - **形态**：Abstraction Inversion / 静默吞参数
 - **证据**：`doclens/web_v2/api/search.py:33,47` 声明 `_MAX_FETCH=1000` 为「单次搜索最大候选数」；
   `doclens/index_manager.py:817,823-825` 自认 `max_results` 是「历史形参……静默吞掉」。实际候选池由 `config.top_k_docs=100`（`config.py:132`）决定。
   5 处调用点全部传该死参：`cortex_cli.py:692,905`、`kb_tools.py:1010`、`tui/app.py:643`、`search.py:47`。
 - **风险**：分页 `total/total_matches` 只在约 100 文档上算，宣称「1000 候选完整过滤排序」不成立；调参者以为能改行为。
-- **修复方案**：接线到 `top_k_docs`（或删除该参数），total 口径与真实候选池一致。
-- **回归验证**：`tests/test_web_search_api_matrix.py tests/test_search_preset_params.py`。
+- **实际修复（2026-10-21，取台账「删除该死参数 + total 口径与真实池一致」分支）**：
+  ① `IndexManager.search` 形参 `max_results` → **`top_k_docs`**，并真的接线（`None` = 配置值，
+  非空则 `max(1, n)` 覆盖引擎 `top_k_docs`）；新增 `IndexManager.top_k_docs` 属性暴露配置真源。
+  ② 5 个调用点全部去掉死参数：CLI（`do_search` / `_cli_search`）、TUI `_do_search`、
+  `kb_tools.handle_search_kb`、web `_do_search`。展示裁剪本就在下游（`format_results` /
+  `_format_kb_results` / 分页），无需候选池参与。
+  ③ web `_do_search` 删掉 `_MAX_FETCH = 1000` 这个谎，改为**池满就明说**：路由到的文档数
+  `>= idx.top_k_docs` 时往 `notes` 加一条「候选池已满（N 个文档），实际命中可能更多——
+  可缩小查询范围或调大 CORTEX_TOP_K_DOCS」（`GroupedSearchResponse.notes` 早已存在，前端契约零变更）。
+  ④ 顺带对齐 grep 端点契约：检索异常时也填 `notes`（原来只 `logger.warning` 后返回空结果，
+  与 AP-45 同源的「空结果 vs 出错不可分」）。
+- **未做**：没有把候选池真的提到 1000 文档——惰性检索要按池大小加载文档树，1000 文档的树加载
+  是 10 倍成本，属产品取舍而非缺陷修复；想放宽时改 `CORTEX_TOP_K_DOCS`（现在它是唯一真源且被文档化）。
+- **回归验证**：新增 `tests/test_search_candidate_pool.py` 10 断言——签名不再有 `max_results` /
+  `top_k_docs` 属性暴露配置 / 真索引上 3 篇·2 篇·8 篇三档池子返回数随之变化（引擎真的消费了）/
+  `None` 回落配置 / `0` 夹到 1 / 全仓 grep 无 `.search(..., max_results=...)` 残留 /
+  池满有 note、池未满无 note / 引擎异常时 note 带原因。
+  **反证**：还原 `max_results` 死形参 → 4 红；去掉 note 逻辑 → 2 红。
+  `tests/test_search_candidate_pool.py tests/test_web_search_api_matrix.py tests/test_search_preset_params.py
+  tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_lazy_search.py tests/test_architecture.py`
+  → 174 passed；`tests/test_deps_locks.py tests/test_chat_disconnect.py` → 16 passed。
 
 ### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: done]
 - **形态**：超时/取消语义错位
@@ -843,6 +862,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-47 | 见本提交——`IndexManager.search` 死参数 `max_results` → 真接线 `top_k_docs`（+ 同名属性暴露配置）；5 个调用点去死参数；web 删 `_MAX_FETCH=1000` 假池改「池满附 notes」；检索异常也填 notes。新增 tests/test_search_candidate_pool.py 10 断言，反证 4 红 / 2 红；回归 174 + 16 passed |
 | 2026-10-21 | 修 | AP-48 | 见本提交——静默超时由 `error+break`(600s) 改为 `heartbeat`(30s) 且继续；`asyncio.Queue` + `call_soon_threadsafe` 取代 `run_in_executor`（原每超时泄漏一个执行器线程）；前端 heartbeat 分支保持 running 只刷计数。新增 tests/test_reindex_sse.py 6 断言 + 1 条 vitest，反证分别 6 红 / 1 红；回归 29 passed + 15 vitest + build exit 0 |
 | 2026-10-21 | 修 | AP-49 | 见本提交——`diary._write` 改 tmp + `os.replace`（+ Windows 共享冲突 10×30ms 重试，预算耗尽上抛而不退化）；新增 tests/test_diary_atomic_write.py 6 断言，反证 3 红；回归 81 passed（3 连跑稳定） |
 | 2026-10-21 | 修 | AP-50 | 见本提交——`_run_note_blocking` 改 UPSERT + 回读校验（`NOTE_NOT_PERSISTED`）；`vision_clear`/`vision_enqueue`/`vision_next_pending` 三处加 `model != 'manual'` 护栏；新增 tests/test_vision_manual_note.py 6 断言，反证 4 红；回归 38 + 76 passed。方案 A 边界（换图后备注不更新）另记 AP-69 |

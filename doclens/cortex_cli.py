@@ -192,8 +192,10 @@ class NotebookSearchCLI:
     def reindex(self, force=False):
         return self.idx.reindex(force=force)
 
-    def do_search(self, query, max_results=None):
-        return self.idx.search(query, max_results)
+    def do_search(self, query):
+        """执行检索（AP-47：候选池由配置 top_k_docs 决定，显示裁剪在
+        format_results 的 max_results 里）。"""
+        return self.idx.search(query)
 
     @staticmethod
     def _convert_like_to_render_items(
@@ -902,7 +904,9 @@ def _cli_search(args, config, idx):
     idx.load_or_build_index()
 
     # Perform search
-    nodes, docs = idx.search(query, max_results=config.max_results)
+    # 候选池 = 配置 top_k_docs（AP-47：旧 max_results 参数被引擎静默吞掉）；
+    # 显示条数由下面的 format_results(max_results=...) 控制
+    nodes, docs = idx.search(query)
 
     # Determine min_score_threshold: CLI arg takes priority over config
     min_score = args.min_score if args.min_score is not None else config.min_score_threshold
