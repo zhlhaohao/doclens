@@ -474,12 +474,19 @@
 - **未做（跨进程）**：tmp 文件名为固定 `<name>.tmp`，进程内由锁串行；多进程（TUI + Web 同时写同一 `.env`）
   仍可能互相覆盖——归 AP-22 类「单进程假设」，需要文件锁才能解决。
 
-### AP-35 全局异常处理器不打日志、把异常文本回传客户端 [P2] [status: pending]
+### AP-35 全局异常处理器不打日志、把异常文本回传客户端 [P2] [status: done]
 - **形态**：Error Hiding + 信息泄露
 - **证据**：`doclens/web_v2/api/errors.py:39-45` 无 `logger.exception`，注释「真实生产可在这里记 traceback_id 并写日志」是未实现的 TODO；`detail: str(exc)` 直接进响应体。
 - **风险**：500 无 traceback 可查（`runtime_vitals` 只记计数）；内部路径/SQL 片段泄露给 LAN 客户端。
-- **修复方案**：`logger.exception` + 通用文案；需要定位时返回 traceback_id。
-- **回归验证**：新增 handler 单测（断言日志被调用、响应体不含异常文本）。
+- **实际修复（2026-10-21）**：每次未捕获异常生成 8 位 `traceback_id`（`secrets.token_hex(4)`），
+  `logger.exception("unhandled API error [%s] %s %s", id, method, path)` 记录完整堆栈；
+  响应体改为 `{"code": "INTERNAL_ERROR", "detail": "内部错误，详情见后端日志", "traceback_id": ...}`。
+  `CortexAPIError` 分支不动——那是显式给用户看的业务错误（`preview.py:164` 的 500 文案属此类）。
+- **回归验证**：新增 `tests/test_api_errors.py` 5 断言（不泄露异常文本 / traceback_id 形态 /
+  日志含 id 且 `exc_info` 非空 / 业务错误 detail 仍原样透出 / 每次失败 id 不同）。
+  **反证**：还原原实现 → 4 条红灯。
+  `tests/test_api_errors.py tests/test_middleware_order.py tests/test_auth_challenge.py
+  tests/test_architecture.py tests/test_web_preview_formats.py` → 57 passed。
 
 ### AP-36 `get_index_manager` 失败不记忆——每次请求重跑分钟级建库并排队 [P2] [status: pending]
 - **形态**：Error Hiding 的可用性变体（故障放大）
@@ -759,6 +766,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-35 | 见本提交——未捕获异常记 `logger.exception` + 8 位 traceback_id，响应体改通用文案并回传 id；新增 tests/test_api_errors.py 5 断言，反证 4 红；回归 57 passed |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
 | 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |
 | 2026-10-21 | 修 | AP-32 | 4dfb548——download 补 `assert_not_protected`；新增 `TestDownloadProtected` 2 断言（点文件三例 403 + 普通文件仍可下），反证撤闸门红灯；回归 82 passed。顺带发现 AP-67（preview_raw/preview_pdf 同缺闸门，未修） |
