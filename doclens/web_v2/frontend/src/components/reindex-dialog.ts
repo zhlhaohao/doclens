@@ -102,6 +102,18 @@ export class ReindexDialog extends LitElement {
         if (ev.event === "progress") {
           const d = JSON.parse(ev.data);
           actions.setReindexProgress({ current_file: d.current_file, indexed_count: d.indexed_count, sub_label: d.sub_label });
+        } else if (ev.event === "heartbeat") {
+          // 后端长时间无进度事件时的心跳（AP-48）：重建仍在进行，只刷新计数，
+          // 不清 current_file / sub_label，也不改变 dialog 状态。
+          const d = JSON.parse(ev.data);
+          const cur = store.getState().reindex;
+          if (cur.dialog === "running" && typeof d.indexed_count === "number") {
+            actions.setReindexProgress({
+              current_file: cur.current_file ?? "",
+              indexed_count: d.indexed_count,
+              sub_label: cur.sub_label,
+            });
+          }
         } else if (ev.event === "done") {
           const d = JSON.parse(ev.data);
           if (d.success) {

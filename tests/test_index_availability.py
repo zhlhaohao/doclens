@@ -132,7 +132,8 @@ class TestWebEndpointContract:
 
         monkeypatch.setattr(
             search_api, "_do_search",
-            lambda *a, **k: (ScoreResult(results=[], like_raw=[], source="fts"), []),
+            # 本分支 _do_search 返回 (result, query_words, notes)——AP-47 引入 notes
+            lambda *a, **k: (ScoreResult(results=[], like_raw=[], source="fts"), [], []),
         )
         resp = asyncio.run(search_api.search(SearchRequest(query="q"), idx=idx))
         assert resp.error is None

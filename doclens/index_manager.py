@@ -141,6 +141,15 @@ class IndexManager:
         return self._config.max_nodes_per_doc
 
     @property
+    def top_k_docs(self) -> int:
+        """搜索候选池大小（路由阶段选多少个文档）。
+
+        这是 `search()` 唯一真实的量级旋钮（AP-47）：命中该池之外的文档
+        不可见，任何 `total` 口径都以它为界。
+        """
+        return self._config.top_k_docs
+
+    @property
     def max_span(self) -> int:
         return self._config.max_span
 
@@ -844,22 +853,22 @@ class IndexManager:
         else:
             print(f"[索引已更新: {doc_count} 个文档]")
 
-    def search(self, query, max_results=None, fts_expression=None, allowed_doc_ids=None):
+    def search(self, query, top_k_docs=None, fts_expression=None, allowed_doc_ids=None):
         """执行搜索，返回 (flat_nodes, documents)。
 
         ADR-0019：全惰性——DB 路由出 top-k、只载 top-k 树结构，全程不物化
         全量 documents（百万语料 OOM 根因清除）。
 
-        max_results：历史形参，引擎侧从未消费（被 search(**kwargs) 静默
-        吞掉）——结果量的裁剪全部发生在调用方（scoring_pipeline /
-        kb_tools 的阈值过滤与 top-N）。保留形参仅为兼容既有调用签名。
+        top_k_docs：**候选池大小**——路由阶段最多选多少个文档参与打分，
+        `None` 取配置值（`self.top_k_docs`）。命中该池之外的文档不进结果，
+        任何「总数」都以此为界（AP-47：旧形参 `max_results` 从未被引擎消费，
+        被 `search(**kwargs)` 静默吞掉，调用方以为能改行为）。
+        展示层面的裁剪（显示前 N 条）由调用方自己做，与本参数无关。
 
-        max_nodes_per_doc / top_k_docs 经 _ts_config() → set_config() 注入
-        引擎（不再逐调用直传）。
+        max_nodes_per_doc 经 _ts_config() → set_config() 注入引擎。
 
         allowed_doc_ids: 可选 doc_id 集合，路由阶段 SQL 内生效（search_kb
-        的 paths 范围限定走此路——范围外文档不进候选池，不再依赖检索后
-        过滤 + 候选量放大兜底）。
+        的 paths 范围限定走此路——范围外文档不进候选池）。
         """
         self.load_or_build_index()
 
@@ -870,11 +879,14 @@ class IndexManager:
         if availability == "empty" or not self._ts:
             return [], []
 
-        result = self._ts.search(
-            query=query,
-            fts_expression=fts_expression,
-            allowed_doc_ids=allowed_doc_ids,
-        )
+        kwargs = {
+            "fts_expression": fts_expression,
+            "allowed_doc_ids": allowed_doc_ids,
+        }
+        if top_k_docs is not None:
+            kwargs["top_k_docs"] = max(1, int(top_k_docs))
+
+        result = self._ts.search(query=query, **kwargs)
 
         return result.get("flat_nodes", []), result.get("documents", [])
 
@@ -890,8 +902,8 @@ class IndexManager:
         self.load_or_build_index()
 
         # 直接查 DB（ADR-0018）：documents 不物化，空库以可用性判定。
-        # AP-45：`indexed_doc_count() == 0` 会把「计数失败」也算成空库（
-        # index_probe 吞异常返回 0）——这里改用 index_availability 区分。
+        # AP-45：`indexed_doc_count() == 0` 会把「计数失败」也算成空库——
+        # 这里改用 index_availability 区分「空库」与「不可读」。
         availability = self.index_availability()
         if availability == "unavailable":
             raise IndexUnavailable(f"索引库不可用: {self.index_path}")

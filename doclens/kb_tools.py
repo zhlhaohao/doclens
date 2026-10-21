@@ -993,7 +993,9 @@ def handle_search_kb(
     if availability == "unavailable":
         return (
             "索引库不可用（无法读取索引文件，可能损坏或被占用）。\n"
-            "请检查数据目录下的 index.db，或用 manage_kb(action='reindex', force=true) 重建。"
+            "本次检索没有执行，**不能**据此认为知识库未收录相关文档。\n"
+            "请检查数据目录下的 index.db，"
+            "或用 manage_kb(action='reindex', force=true) 重建。"
         )
     if idx_manager.ts is None or availability == "empty":
         return (
@@ -1015,7 +1017,9 @@ def handle_search_kb(
 
     from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score, matched_keywords
 
-    nodes, docs = idx_manager.search(query, max_results=max_results, allowed_doc_ids=allowed)
+    # 候选池 = 配置 top_k_docs（AP-47：旧 max_results 参数从未被引擎消费）；
+    # `max_results` 只决定下面 _format_kb_results 显示多少条
+    nodes, docs = idx_manager.search(query, allowed_doc_ids=allowed)
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]

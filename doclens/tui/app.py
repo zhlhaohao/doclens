@@ -640,7 +640,8 @@ class CortexApp(App):
 
         try:
             # 执行 FTS5 搜索
-            nodes, docs = self.idx.search(query, max_results=self.max_results)
+            # 候选池 = 配置 top_k_docs（AP-47）；显示条数由 render 层控制
+            nodes, docs = self.idx.search(query)
 
             # 分词
             query_words = tokenize_query(query)

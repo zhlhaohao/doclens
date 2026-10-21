@@ -450,12 +450,12 @@ class TestGrepUnindexedFiles:
 
         idx = self._make_idx(tmp_path, monkeypatch)
         called = {"n": 0}
-        orig = rgmod._rg_search_root_hits
-        rgmod._rg_search_root_hits = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
+        orig = rgmod.rg_search_root_hits
+        rgmod.rg_search_root_hits = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
         try:
             r = execute_grep_search(idx, "NEEDLE_INDEXED")
         finally:
-            rgmod._rg_search_root_hits = orig
+            rgmod.rg_search_root_hits = orig
         assert len(r.content_results) == 1
         assert called["n"] == 1  # 文本腿永远走 rg 目录扫描
 

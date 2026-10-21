@@ -27,28 +27,34 @@ from doclens.web_v2.models.search import SearchRequest, GroupedSearchResponse
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 单次搜索拉取的最大 FTS 候选数。覆盖大部分实际匹配；
-# score_and_rank 在此集合上做完整过滤+排序，提供准确 total。
-# 超过该值的匹配不可见（v1 接受）。
-_MAX_FETCH = 1000
-
 
 def _do_search(
-    idx: IndexManager, query: str, max_fetch: int = _MAX_FETCH
-) -> tuple[ScoreResult, list[str]]:
+    idx: IndexManager, query: str
+) -> tuple[ScoreResult, list[str], list[str]]:
     """在子线程中执行同步搜索 + 评分管道。
 
-    max_fetch 是 FTS 候选拉取上限（搜索池大小），与 endpoint 的 limit（页大小）解耦。
+    **候选池就是配置里的 `top_k_docs`（默认 100 个文档）**——AP-47：这里
+    原先写着 `_MAX_FETCH = 1000` 并据此传 `max_results`，但引擎从未消费
+    该参数，实际池子是 100，于是 `total` 号称覆盖 1000 个候选其实只覆盖
+    100 个。现在不再编造池子大小，改为「池满就明说」：路由到的文档数等于
+    池上限时，实际命中很可能更多，用 notes 告诉用户/前端。
+
     TreeSearch.search 是同步的，不能在事件循环内调用。
 
-    返回 (ScoreResult, query_words)：query_words 是后端分词结果，
-    空分词时降级为按空白拆分，供命中行提取与前端高亮使用。
+    返回 (ScoreResult, query_words, notes)。
     """
-    nodes, docs = idx.search(query, max_results=max_fetch)
+    nodes, docs = idx.search(query)
+    pool = idx.top_k_docs
+    notes: list[str] = []
+    if len(docs) >= pool:
+        notes.append(
+            f"候选池已满（{pool} 个文档），实际命中可能更多——"
+            "可缩小查询范围或调大 CORTEX_TOP_K_DOCS"
+        )
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
-    return score_and_rank(nodes, docs, query, query_words, idx), query_words
+    return score_and_rank(nodes, docs, query, query_words, idx), query_words, notes
 
 
 def _scored_to_group_items(
@@ -100,24 +106,28 @@ def _scored_to_group_items(
 async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manager)):
     start = time.perf_counter()
     try:
-        result, query_words = await asyncio.to_thread(_do_search, idx, req.query)
+        result, query_words, notes = await asyncio.to_thread(
+            _do_search, idx, req.query
+        )
     except IndexUnavailable as e:
         # AP-45：索引库不可读 ≠ 没有匹配。与 /api/grep 对齐填 error，
-        # 前端据此区分「无结果」与「出错了」（此前一律返回空结果）。
+        # 前端据此区分「无结果」与「出错了」。
         logger.warning("index unavailable: %s", e)
         return GroupedSearchResponse(
             groups=[], total=0, total_matches=0, offset=0, limit=req.limit,
             query=req.query, query_words=[], source="fts",
+            notes=[str(e)],
+            error=f"索引库不可用，本次结果不代表知识库内容: {e}",
             elapsed_ms=int((time.perf_counter() - start) * 1000),
-            error=f"索引库不可用: {e}",
         )
     except Exception as e:
         logger.warning("score_and_rank failed: %s; returning empty result", e)
         return GroupedSearchResponse(
             groups=[], total=0, total_matches=0, offset=0, limit=req.limit,
             query=req.query, query_words=[], source="fts",
-            elapsed_ms=int((time.perf_counter() - start) * 1000),
+            notes=[f"检索引擎异常: {e}"],
             error=f"搜索失败: {e}",
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
     matchers = build_substring_matchers(query_words)
@@ -135,5 +145,6 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
         query=req.query,
         query_words=query_words,
         source=result.source,
+        notes=notes,
         elapsed_ms=elapsed_ms,
     )

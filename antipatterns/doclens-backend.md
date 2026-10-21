@@ -669,68 +669,191 @@
   `doclens/web_v2/api/search.py:104-108` 捕获一切异常返回空结果且**不填 `error`**；
   同构的 `api/grep.py:79-85` 填 `error=f"grep 引擎异常: {e}"`（响应模型 `models/search.py:77` 有该字段）。
 - **风险**：索引库损坏/锁冲突在 UI 上等同「知识库里没有这段内容」，AI 会据此给出「未收录」的错误结论。
-- **实际修复（2026-10-21）**：
+
+- **实际修复（2026-10-21，移植主分支 release 的 2f4cc22 实现——同一问题两套方案以主分支为准）**：
   ① `IndexManager.index_availability() -> "ok"|"empty"|"unavailable"` 新增——与 `has_indexed_docs()` 的
   fail-soft 分工明确（后者仍供目录页/状态页使用）；新增 `IndexUnavailable(RuntimeError)`。
   ② `search()` / `like_search()` 改用可用性判定：`unavailable` 上抛，`empty` 才返回空；
-  `like_search` 原以 `indexed_doc_count() == 0` 判空（index_probe 吞异常返回 0 → 同样伪装成空库），一并改掉。
-  ③ 检索入口：`/api/search` 捕获 `IndexUnavailable` 填 `error`（与 `/api/grep` 对齐；通用异常也补填 error，
-  原来也吞成空结果）；`search_kb` 工具对不可用单独给文案（「索引库不可用……建议重建」≠「索引未就绪或为空」）；
-  CLI `search` 子命令打印明确错误与修复建议（TUI 本就有 `except Exception` → 错误区）。
-- **回归验证**：新增 `tests/test_index_availability.py` 11 断言（三态探测 / search+like_search 抛错 / 空库仍返回空 /
-  端点 error 填充 / 正常路径 error 为空 / kb_tools 两套文案互斥）；`tests/test_search_targets.py` 的 fake IndexManager
-  补 `index_availability`。**反证**：还原 `has_indexed_docs()` / `indexed_doc_count()` 判定 → 2 条红灯。
-  搜索族回归（search/grep/kb/index/lazy/change_detection/architecture/tui/cli）→ 363 passed。
+  `like_search` 原以 `indexed_doc_count() == 0` 判空（计数失败也返回 0 → 同样伪装成空库），一并改掉。
+  ③ 检索入口：`/api/search` 捕获 `IndexUnavailable` 填 `error`（与 `/api/grep` 对齐；通用异常也补填 error）；
+  `search_kb` 工具对不可用单独给文案（「索引库不可用……**不能**据此认为未收录」≠「索引未就绪或为空」）；
+  CLI `search` 子命令打印明确错误与修复建议。
+- **与本分支 AP-47 的叠加**：本分支 `_do_search` 已返回三元组 `(result, query_words, notes)`，
+  故端点除 `error` 外同时填 `notes`；release 的测试桩按本分支接口适配（三元组），
+  `test_search_targets.py` 的 fake `search` 签名按 AP-47 改为 `(query, allowed_doc_ids=None)`。
+- **回归验证**：`tests/test_index_availability.py`（11 断言，取自 release）、`tests/test_search_targets.py`（18 passed）、
+  `tests/test_search_candidate_pool.py tests/test_web_search_api_matrix.py tests/test_grep_tool.py
+  tests/test_grep_corpus_bypass.py tests/test_rg_engine_status.py tests/test_architecture.py` → 171 passed。
+  主分支原回归：`tests/test_index_availability.py tests/test_search_targets.py` 等搜索族 → 363 passed。
 
-### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: pending]
+### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: done]
 - **形态**：Error Hiding
 - **证据**：`doclens/ripgrep.py:315-324` 超时返回 `({}, True)`、`OSError` 返回 `({}, False)`；`execute_grep_search` 只据 `rg_timed_out` 追加附注（`:750-751`）。
   同模块 `grep_tools.py:339` 明确承诺「结果可能不完整必须显式告知，不能静默当作无结果」。
 - **风险**：rg 缺失/被杀/权限失败时文本腿静默零结果，模型与用户都以为「确实没有」。
-- **修复方案**：启动失败单独状态并转 note（或抛可捕获错误）。
-- **回归验证**：`tests/test_grep_tool.py tests/test_grep_corpus_bypass.py`。
+- **实际修复（2026-10-21）**：
+  ① `rg_search_root_hits`（原 `_rg_search_root_hits`，按 AP-22 纪律公共化并同步两个测试消费方，
+  顺手摘掉 `test_architecture.py` 里那条随之失效的白名单）的返回值由 bool 改为**四态枚举**：
+  `RG_SCAN_OK / RG_SCAN_TIMEOUT / RG_SCAN_UNAVAILABLE / RG_SCAN_ERROR`——
+  原实现把「启动失败」与「一切正常」压成同一个 `False`，调用方只能看见「没有超时」。
+  ② `execute_grep_search`：`RG_SCAN_ERROR`（进程启动失败/被杀/权限）时**降级到「索引全量 REGEXP」**并
+  记 note `rg 启动失败，本次仅搜索已索引的文档（磁盘上未索引的文本文件未覆盖）`——
+  原来这一轮还会把文本腿整个跳过（rg_ok 仍为 True，leg2 只扫二进制子集），等于已索引的文本也搜不到。
+  `RG_SCAN_UNAVAILABLE` 同文案（区分「未安装」与「启动失败」两个措辞）；
+  降级后 nodes 超护栏的 note 补上「文本文件（含已索引的）未覆盖」。
+  ③ 初次 `rg_available()` 为 False 且 nodes 未超护栏时也补一条 note（原来完全静默）。
+- **回归验证**：新增 `tests/test_rg_engine_status.py` 11 断言——四态各自可复现（含 `subprocess.run` 抛 `OSError`）、
+  四值互异且都不是 `False`（防再被当布尔）、启动失败时降级后**仍有命中**（真索引库 + 一篇只在磁盘未索引的文件）、
+  三种失败态各产出 note、工具层 `handle_grep` 在「有结果」与「无结果」两种情形都把 `[注意]` 透给用户。
+  **反证**：还原 bool 语义并去掉 note → 9 条红灯。
+  `tests/test_rg_engine_status.py tests/test_grep_corpus_bypass.py tests/test_grep_tool.py
+  tests/test_grep_regex_snippet.py tests/test_web_search_api_matrix.py tests/test_search_candidate_pool.py
+  tests/test_architecture.py` → 177 passed。
 
-### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: pending]
+### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: done]
 - **形态**：Abstraction Inversion / 静默吞参数
 - **证据**：`doclens/web_v2/api/search.py:33,47` 声明 `_MAX_FETCH=1000` 为「单次搜索最大候选数」；
   `doclens/index_manager.py:817,823-825` 自认 `max_results` 是「历史形参……静默吞掉」。实际候选池由 `config.top_k_docs=100`（`config.py:132`）决定。
   5 处调用点全部传该死参：`cortex_cli.py:692,905`、`kb_tools.py:1010`、`tui/app.py:643`、`search.py:47`。
 - **风险**：分页 `total/total_matches` 只在约 100 文档上算，宣称「1000 候选完整过滤排序」不成立；调参者以为能改行为。
-- **修复方案**：接线到 `top_k_docs`（或删除该参数），total 口径与真实候选池一致。
-- **回归验证**：`tests/test_web_search_api_matrix.py tests/test_search_preset_params.py`。
+- **实际修复（2026-10-21，取台账「删除该死参数 + total 口径与真实池一致」分支）**：
+  ① `IndexManager.search` 形参 `max_results` → **`top_k_docs`**，并真的接线（`None` = 配置值，
+  非空则 `max(1, n)` 覆盖引擎 `top_k_docs`）；新增 `IndexManager.top_k_docs` 属性暴露配置真源。
+  ② 5 个调用点全部去掉死参数：CLI（`do_search` / `_cli_search`）、TUI `_do_search`、
+  `kb_tools.handle_search_kb`、web `_do_search`。展示裁剪本就在下游（`format_results` /
+  `_format_kb_results` / 分页），无需候选池参与。
+  ③ web `_do_search` 删掉 `_MAX_FETCH = 1000` 这个谎，改为**池满就明说**：路由到的文档数
+  `>= idx.top_k_docs` 时往 `notes` 加一条「候选池已满（N 个文档），实际命中可能更多——
+  可缩小查询范围或调大 CORTEX_TOP_K_DOCS」（`GroupedSearchResponse.notes` 早已存在，前端契约零变更）。
+  ④ 顺带对齐 grep 端点契约：检索异常时也填 `notes`（原来只 `logger.warning` 后返回空结果，
+  与 AP-45 同源的「空结果 vs 出错不可分」）。
+- **未做**：没有把候选池真的提到 1000 文档——惰性检索要按池大小加载文档树，1000 文档的树加载
+  是 10 倍成本，属产品取舍而非缺陷修复；想放宽时改 `CORTEX_TOP_K_DOCS`（现在它是唯一真源且被文档化）。
+- **回归验证**：新增 `tests/test_search_candidate_pool.py` 10 断言——签名不再有 `max_results` /
+  `top_k_docs` 属性暴露配置 / 真索引上 3 篇·2 篇·8 篇三档池子返回数随之变化（引擎真的消费了）/
+  `None` 回落配置 / `0` 夹到 1 / 全仓 grep 无 `.search(..., max_results=...)` 残留 /
+  池满有 note、池未满无 note / 引擎异常时 note 带原因。
+  **反证**：还原 `max_results` 死形参 → 4 红；去掉 note 逻辑 → 2 红。
+  `tests/test_search_candidate_pool.py tests/test_web_search_api_matrix.py tests/test_search_preset_params.py
+  tests/test_grep_tool.py tests/test_grep_corpus_bypass.py tests/test_lazy_search.py tests/test_architecture.py`
+  → 174 passed；`tests/test_deps_locks.py tests/test_chat_disconnect.py` → 16 passed。
 
-### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: pending]
+### AP-48 reindex SSE 超时只断流，任务继续写库且不可取消 [P2] [status: done]
 - **形态**：超时/取消语义错位
 - **证据**：`doclens/web_v2/api/reindex.py:17,61-66` `_SSE_TIMEOUT_SECONDS=600` 只作用于 `q.get()` 空等，超时即向前端发 `error`；
   `index_manager.py:459` 启动的后台线程无停止标志，客户端断开也不取消。
 - **风险**：大库全量重建（模块自述分钟级）时前端收到「失败」而索引仍在写；用户重试再启一轮（阻塞在 `_reindex_lock`）。
-- **修复方案**：超时改发「仍在进行」事件；暴露取消/进度；或断流不判失败。
-- **回归验证**：`tests/test_index_chunking.py`。
+- **实际修复（2026-10-21，取台账「超时改发仍在进行事件」分支 + 修掉附带线程泄漏）**：
+  ① 静默超时不再是失败——`_SSE_TIMEOUT_SECONDS=600`（超时即发 `error` 并 break）改为
+  `_HEARTBEAT_SECONDS=30`，超时发 `heartbeat` 事件 `{indexed_count, elapsed_sec}` 并 **continue**；
+  前端 `reindex-dialog.ts` 新增 heartbeat 分支：保持 `running`、只刷新计数，不清 `current_file`/`sub_label`。
+  ② 顺手修掉一个真实泄漏——原 `wait_for(loop.run_in_executor(None, q.get), timeout)` 超时只取消 future，
+  阻塞在线程池里的 `q.get` **永不返回**，每超时一次泄漏一个执行器线程。改为 `asyncio.Queue` +
+  回调侧 `loop.call_soon_threadsafe`（与 watch_broker / translate SSE 同范式），零执行器线程。
+  ③ 客户端断开（关弹窗/断网）只结束观察窗口：捕获 `CancelledError` 记 info 后上抛，后台重建照旧继续。
+  **未做**：真正的「取消重建」——`treesearch` 的 `index()` 无中断点，要做得先建协作式停止协议，属独立条目。
+- **回归验证**：新增 `tests/test_reindex_sse.py` 6 断言（静默期连发 heartbeat 不发 error / progress 后静默仍心跳且计数延续 /
+  done 正常收尾 / 客户端 `aclose` 不影响触发参数 / 5 次心跳期间线程数不增长 = 无执行器泄漏）。
+  **反证**：还原「timeout→error+break + run_in_executor」→ 6 条全红。
+  前端新增 1 条 vitest（heartbeat 保持 running + 计数刷新 + 不清 current_file/sub_label），
+  **反证**：删掉 heartbeat 分支 → 该条红灯（`expected 3 to be 9`）。
+  `tests/test_reindex_sse.py tests/test_index_chunking.py tests/test_architecture.py` → 29 passed；
+  前端 `npm run test -- reindex-dialog store-reindex` → 15 passed；`npm run build` exit 0。
 
-### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: pending]
+### AP-49 日记年度文件非原子写 × 自动 git 提交——半截文件可入库 [P2] [status: done]
 - **形态**：写路径无事务（跨资源）
 - **证据**：`doclens/diary.py:113-115` `path.write_text(content)` 就地截断重写整年文件；
   `doclens/git_sync.py:238` 每轮 `git add -A` + commit。
 - **风险**：写窗口内被 GitSync 撞上即提交并推送半截 `2026.md`；进程崩溃留下截断文件。
-- **修复方案**：tmp + `os.replace`（注意 `translate_service._replace` 的「先删后移」问题，勿照抄）。
-- **回归验证**：`tests/test_diary.py`。
+- **实际修复（2026-10-21）**：`diary._write` 改为同目录 `2026.md.tmp` + `os.replace`，
+  失败时清理 tmp 并**上抛**（不退回就地截断）。刻意避开 `translate_service._replace` 的
+  「先 unlink 再 move」——那会在 move 失败时新旧两份一起丢。
+  **Windows 补充（实测发现）**：目标文件被其他进程/线程打开时 `os.replace` 抛 `PermissionError`
+  （Python 打开文件不共享 delete 权限），因此加 `_replace_with_retry`（10 次 × 30ms ≈ 0.3s）。
+  预算耗尽仍上抛——「失败且旧文件完好」优于「成功但写坏」。
+  六条写路径（append/remove/update/rewrite_day/weather/city）全部经 `_write`，无需逐点改。
+- **回归验证**：新增 `tests/test_diary_atomic_write.py` 6 断言——`os.replace` 被调用且源是同目录 tmp /
+  写 tmp 失败时旧内容完好且无 tmp 残骸 / 建父目录 / 并发读线程只看到完整旧版或新版 /
+  Windows 语义（文件被独占打开时替换失败但旧内容完好）/ 真实入口 `append_text` 两次后内容完整。
+  **反证**：还原就地 `write_text` → 3 条红灯。
+  `tests/test_diary_atomic_write.py tests/test_diary.py tests/test_diary_worker.py
+  tests/test_diary_enable_gate.py tests/test_architecture.py` → 81 passed（连跑 3 次稳定）。
 
-### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: pending]
+### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: done]
 - **形态**：Error Hiding（用户输入静默丢失）
 - **证据**：`doclens/web_v2/api/vision.py:186-190` `UPDATE vision_queue ... WHERE source_path=?` 不校验 `rowcount`；
   该图无 `vision_queue` 行时备注只落到文件元数据；下次 force 重建入队后 `vision_worker.py:320-322` 用 AI 结果整篇替换。
 - **风险**：用户手写备注在某次重建后无声消失。
-- **修复方案**：rowcount=0 时插入 manual 行；重建/重解析跳过 `model='manual'`。
-- **回归验证**：新增 vision API 用例。
+- **实际修复（2026-10-21，方案 A：把既有 `model='manual'` 护栏补全到其余入口）**：
+  调查发现三条独立的静默覆盖路径，不止台账记的那一条——
+  ① 队列无行（旋转 `vision_remove` / force 重建 `vision_clear` / 从未入队）时 `UPDATE` 影响 0 行仍返回成功，
+  备注只活在文件元数据里，而元数据写入失败仅 `logger.warning` 降级；
+  ② `vision_clear()` 无条件 `DELETE FROM vision_queue`，manual 标记随重建蒸发；
+  ③ `vision_enqueue()` 的 `ON CONFLICT DO UPDATE` 不看 model，manual 行被拉回 pending → worker 用 AI 结果整篇替换。
+  四处改动：
+  - `api/vision.py` `_run_note_blocking`：`UPDATE` → `INSERT ... ON CONFLICT DO UPDATE`（强制 manual）**+ 回读校验**，
+    标记没生效抛 `NOTE_NOT_PERSISTED`（不再「只写元数据还回保存成功」）。
+  - `treesearch/fts.py` `vision_clear()` → `DELETE ... WHERE model != 'manual'`（手动备注是用户数据，不是缓存）。
+  - `treesearch/fts.py` `vision_enqueue()` → `DO UPDATE ... WHERE vision_queue.model != 'manual'`。
+  - `treesearch/fts.py` `vision_next_pending()` → 取件与抢占两条 SQL 都加 `AND model != 'manual'`
+    （兜住历史库中已被置 pending 的 manual 行）。
+- **已知取舍（方案 A 边界）**：用户**替换**图像文件后队列仍标 manual → 不再自动重解析，需手动清标记。
+  彻底方案（加 `file_hash` 列区分「元数据写失败」与「文件真被换掉」）未做，见 AP-69。
+- **回归验证**：新增 `tests/test_vision_manual_note.py` 6 断言（clear 保留 manual / enqueue 对 manual 是 no-op
+  且普通行仍重置 / next_pending 跳过 manual 含脏 pending 行 / 无队列行时 UPSERT 建成 manual 行 + 重建后仍存活）。
+  **反证**：还原四处 SQL → 4 条红灯。另手工端到端验证（真 FTS 库 + 真 JPEG）：
+  note → `('done','manual')` → `vision_clear` + `vision_enqueue` → 仍 `('done','manual')`、`next_pending() is None`。
+  `tests/test_vision_manual_note.py tests/test_preview_rotate.py tests/test_readback_loop.py
+  tests/test_upload_image_compress.py tests/test_png_support.py tests/test_webp_support.py
+  tests/test_architecture.py` → 38 passed；`tests/test_lazy_search.py tests/test_search_preset_params.py
+  tests/test_grep_corpus_bypass.py` → 76 passed。
+- **发版注意**：改了 `treesearch/fts.py`，发行版需同步发 `treesearchlib`（CLAUDE.md 发布纪律）。
 
-### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: pending]
+### AP-69 视觉队列不记录文件指纹——替换图像后 manual 备注永不更新 [P3] [status: pending]
+- **形态**：方案 A 的已知边界（AP-50 修复时刻意未做，需改表结构）
+- **证据**：`treesearch/fts.py` `vision_queue` 表只有 `source_path/rel_path/status/attempts/model/last_error/updated_at`，无内容指纹；
+  AP-50 后 `vision_enqueue` 对 `model='manual'` 整体跳过 → 用户把该 jpg 换成另一张图，索引重建后仍沿用旧备注，且不会有任何提示。
+- **风险**：低（用户可手动改备注覆盖）；但「换图后看到旧描述」是事实性错误内容。
+- **修复方案**：`vision_queue` 加 `file_hash` 列（`ALTER TABLE` 迁移，参照 `documents` 表既有迁移段）；
+  `vision_enqueue` 带当前 hash，跳过条件改为「manual **且 hash 未变**」；hash 变了则清 manual 并重新入队。
+- **回归验证**：`tests/test_vision_manual_note.py`（新增「换图后 manual 失效」用例）+ treesearch 引擎套件。
+
+### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: done]
 - **形态**：Long Method + 资源泄漏
 - **证据**：`doclens/agent_integration.py:165-477` `initialize`（283 非空行）同管 .env 层序、Provider、7 个目录、日志、技能部署、6 个 manager、两批工具、子代理与 Runtime 组装；
   `:174` 创建 `self.loop` 后从未使用，`:580` `run_query` 每轮 `asyncio.new_event_loop()` 且无 `close()`（对照 `mcp_server.py:149-157` 有 `finally: loop.close()`）；
   `:309-311` `_t.join()` 无 timeout，且处于 `deps.get_agent()` 的 `_agent_lock` 内。
 - **风险**：CLI/TUI 长会话每问泄漏一个 selector/fd；建库阻塞时首个 agent 请求无限挂起（并阻塞后续 agent 请求）。
-- **修复方案**：拆装配函数；loop 复用并 finally close；`join(timeout)` + 超时降级。
-- **回归验证**：`tests/test_deps_locks.py` + 新增装配超时用例。
+- **实际修复（2026-10-21，三条一起做——同一函数同一处风险面）**：
+  ① **装配拆解**：`initialize` 311 行 → 22 行编排 + 7 个 `_stage_*`（`_stage_env` 31 /
+  `_stage_dirs` 14 / `_stage_runtime` 33 / `_stage_skills` 28 / `_stage_knowledge_base` 37 /
+  `_stage_tools` 32 / `_stage_assemble` 39）；阶段间经新 `_Assembly` dataclass 传产物，
+  不再靠 18 个裸局部变量横穿 300 行。`_make_run_subagent`（84 行）单独成方法。
+  **顺带修掉的语义缺陷**：原 `initialize` 开头 `asyncio.new_event_loop()` + `set_event_loop`
+  建了一个从不使用、也从不关闭的循环——删除（属本条 loop 泄漏的同一病灶）。
+  ② **loop 回收**：`run_query` 改走 `_run_blocking(coro)` → `finally: _dispose_loop(loop)`，
+  先 cancel 未完成任务并 `gather(return_exceptions=True)`、`shutdown_asyncgens()`，再 `close()`；
+  清理异常只 `logger.debug`（不得掩盖主异常）。中断语义不变（每轮仍新建循环）。
+  ③ **建库等待上界**：抽 `_build_index_blocking(idx, timeout_sec)`，线程名 `cortex-index-build`，
+  `join(budget)` 后 `is_alive()` 判超时 → `TimeoutError`，文案给出两条可行出路
+  （先跑 `doclens index` / 调大 `CORTEX_INDEX_BUILD_TIMEOUT`，默认 1800s）。
+  超时不杀线程——建库继续在后台跑，只是不再让请求方无限等。
+- **回归验证**：新增 `tests/test_agent_init_lifecycle.py` 11 断言——建库正常/超时文案/异常透传/env 覆盖四例；
+  循环「正常关闭」「异常路径仍关闭」「未完成任务先取消」「无 unclosed ResourceWarning」；结构三例
+  （`initialize` 非空非注释 ≤20 行、七个 stage 方法存在、initialize 不再建 loop）。
+  **反证**：还原「join 无超时 / 不 close / initialize 建 loop」→ 5 条红灯。
+  `tests/test_agent_init_lifecycle.py tests/test_deps_locks.py tests/test_architecture.py
+  tests/test_tool_round_budget.py tests/test_book_skill_routing.py` → 63 passed；
+  另跑 `tests/test_chat_disconnect.py tests/test_web_search_api_matrix.py` → 39 passed。
+
+### AP-68 `initialize` 里的 `basic_tools` 赋值后从未使用 [P4] [status: discovered-during-fix]
+- **形态**：Lava Flow（AP-51 拆分时发现，按「不扩散」原样搬入 `_stage_runtime`）
+- **证据**：`doclens/agent_integration.py` `_stage_runtime` 中 `basic_tools = make_basic_tools(self.workdir)`，
+  全文件仅此一处出现（AP-51 修复前为原 `initialize:266`）；工具注册实际走 `build_tool_registry`
+  （其内部自建基础工具），该变量从未被读取。
+- **风险**：每次装配白跑一次 `make_basic_tools`；更主要是误导读者以为基础工具由这里注入。
+- **修复方案**：删除该行（先确认 `make_basic_tools` 为纯构造）。
+- **回归验证**：`tests/test_agent_init_lifecycle.py tests/test_tool_round_budget.py`。
 
 ### AP-52 `deps` 锁内做磁盘 I/O 违反自述契约；数据目录公式三份 [P3] [status: pending]
 - **证据**：`doclens/web_v2/deps.py:38-40` 自述锁「只保护引用的检查/赋值（毫秒级），禁止持锁期间做长耗时」；
@@ -871,7 +994,13 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
-| 2026-10-21 | 修 | AP-45 | 见本提交——新增 `index_availability()` 三态 + `IndexUnavailable`；search/like_search 区分空库与不可读；端点填 `error`（对齐 grep）、kb_tools 与 CLI 给不同文案；新增 11 断言，反证 2 红；搜索族 363 passed |
+| 2026-10-21 | 修 | AP-45 | 以主分支 release 的 2f4cc22 为准（本分支 a1f9ec0 实现已 revert）：`index_availability()` 三态 + `IndexUnavailable`；search/like_search 区分空库与不可读；端点填 `error`（对齐 grep，本分支另叠加 notes）、kb_tools 与 CLI 给不同文案；新增 tests/test_index_availability.py 11 断言；搜索族 171 passed |
+| 2026-10-21 | 修 | AP-46 | 见本提交——扫描结局 bool → 四态枚举（ok/timeout/unavailable/error）；运行期失败降级到索引全量 REGEXP 并留 note（原先连已索引文本都搜不到）；无 rg 且未超护栏也补 note。`_rg_search_root_hits` 公共化为 `rg_search_root_hits`。新增 tests/test_rg_engine_status.py 11 断言，反证 9 红；回归 177 passed |
+| 2026-10-21 | 修 | AP-47 | 见本提交——`IndexManager.search` 死参数 `max_results` → 真接线 `top_k_docs`（+ 同名属性暴露配置）；5 个调用点去死参数；web 删 `_MAX_FETCH=1000` 假池改「池满附 notes」；检索异常也填 notes。新增 tests/test_search_candidate_pool.py 10 断言，反证 4 红 / 2 红；回归 174 + 16 passed |
+| 2026-10-21 | 修 | AP-48 | 见本提交——静默超时由 `error+break`(600s) 改为 `heartbeat`(30s) 且继续；`asyncio.Queue` + `call_soon_threadsafe` 取代 `run_in_executor`（原每超时泄漏一个执行器线程）；前端 heartbeat 分支保持 running 只刷计数。新增 tests/test_reindex_sse.py 6 断言 + 1 条 vitest，反证分别 6 红 / 1 红；回归 29 passed + 15 vitest + build exit 0 |
+| 2026-10-21 | 修 | AP-49 | 见本提交——`diary._write` 改 tmp + `os.replace`（+ Windows 共享冲突 10×30ms 重试，预算耗尽上抛而不退化）；新增 tests/test_diary_atomic_write.py 6 断言，反证 3 红；回归 81 passed（3 连跑稳定） |
+| 2026-10-21 | 修 | AP-50 | 见本提交——`_run_note_blocking` 改 UPSERT + 回读校验（`NOTE_NOT_PERSISTED`）；`vision_clear`/`vision_enqueue`/`vision_next_pending` 三处加 `model != 'manual'` 护栏；新增 tests/test_vision_manual_note.py 6 断言，反证 4 红；回归 38 + 76 passed。方案 A 边界（换图后备注不更新）另记 AP-69 |
+| 2026-10-21 | 修 | AP-51 | 见本提交——`initialize` 311 行拆 22 行编排 + 7 个 `_stage_*`（`_Assembly` 载体）；`_run_blocking` + `_dispose_loop` 保证每轮循环关闭（含取消未完成任务）；`_build_index_blocking` 的 join 加 1800s 上界（`CORTEX_INDEX_BUILD_TIMEOUT` 可调）；新增 tests/test_agent_init_lifecycle.py 11 断言，反证 5 红；回归 63 + 39 passed。顺带发现 AP-68（`basic_tools` 死赋值，未修） |
 | 2026-10-21 | 修 | AP-44 | 见本提交——`_SessionDB._conn()` 改 contextmanager，commit/rollback 后必 close，32 处调用点零改动；新增 7 断言（含并发无泄漏、回滚），反证 4 红；会话族回归 189 passed |
 | 2026-10-21 | 修 | AP-43 | 见本提交——新增 `doclens/worker_lifecycle.py`（join_thread + WorkerStopState 三态）；五个 worker 的 stop 超时保留引用并拒绝 start，status 增 stopping；deps.stop_* 失败保留注册；新增 22 断言，反证 5 红；回归 91 passed |
 | 2026-10-21 | 修 | AP-42 | 见本提交——新增 `doclens/git_command.py`（UTF-8 固定 + 单一 `is_git_root` + 超时常量），GitSync 与 api/git 共 7 处调用全部改道；新增 10 断言（含 gbk 解码模拟与结构枪口），反证 3 红；回归 19 passed |
