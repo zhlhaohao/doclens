@@ -570,13 +570,29 @@
 - **修复方案**：区分「空库」与「探测失败」；search 端点与 grep 对齐填 `error`。
 - **回归验证**：`tests/test_web_search_api_matrix.py` + 新增「DB 损坏时 error 非空」用例。
 
-### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: pending]
+### AP-46 rg 启动失败静默零结果（与超时同形返回） [P2] [status: done]
 - **形态**：Error Hiding
 - **证据**：`doclens/ripgrep.py:315-324` 超时返回 `({}, True)`、`OSError` 返回 `({}, False)`；`execute_grep_search` 只据 `rg_timed_out` 追加附注（`:750-751`）。
   同模块 `grep_tools.py:339` 明确承诺「结果可能不完整必须显式告知，不能静默当作无结果」。
 - **风险**：rg 缺失/被杀/权限失败时文本腿静默零结果，模型与用户都以为「确实没有」。
-- **修复方案**：启动失败单独状态并转 note（或抛可捕获错误）。
-- **回归验证**：`tests/test_grep_tool.py tests/test_grep_corpus_bypass.py`。
+- **实际修复（2026-10-21）**：
+  ① `rg_search_root_hits`（原 `_rg_search_root_hits`，按 AP-22 纪律公共化并同步两个测试消费方，
+  顺手摘掉 `test_architecture.py` 里那条随之失效的白名单）的返回值由 bool 改为**四态枚举**：
+  `RG_SCAN_OK / RG_SCAN_TIMEOUT / RG_SCAN_UNAVAILABLE / RG_SCAN_ERROR`——
+  原实现把「启动失败」与「一切正常」压成同一个 `False`，调用方只能看见「没有超时」。
+  ② `execute_grep_search`：`RG_SCAN_ERROR`（进程启动失败/被杀/权限）时**降级到「索引全量 REGEXP」**并
+  记 note `rg 启动失败，本次仅搜索已索引的文档（磁盘上未索引的文本文件未覆盖）`——
+  原来这一轮还会把文本腿整个跳过（rg_ok 仍为 True，leg2 只扫二进制子集），等于已索引的文本也搜不到。
+  `RG_SCAN_UNAVAILABLE` 同文案（区分「未安装」与「启动失败」两个措辞）；
+  降级后 nodes 超护栏的 note 补上「文本文件（含已索引的）未覆盖」。
+  ③ 初次 `rg_available()` 为 False 且 nodes 未超护栏时也补一条 note（原来完全静默）。
+- **回归验证**：新增 `tests/test_rg_engine_status.py` 11 断言——四态各自可复现（含 `subprocess.run` 抛 `OSError`）、
+  四值互异且都不是 `False`（防再被当布尔）、启动失败时降级后**仍有命中**（真索引库 + 一篇只在磁盘未索引的文件）、
+  三种失败态各产出 note、工具层 `handle_grep` 在「有结果」与「无结果」两种情形都把 `[注意]` 透给用户。
+  **反证**：还原 bool 语义并去掉 note → 9 条红灯。
+  `tests/test_rg_engine_status.py tests/test_grep_corpus_bypass.py tests/test_grep_tool.py
+  tests/test_grep_regex_snippet.py tests/test_web_search_api_matrix.py tests/test_search_candidate_pool.py
+  tests/test_architecture.py` → 177 passed。
 
 ### AP-47 `max_results` 死参数 + `_MAX_FETCH=1000` 假候选池——total 系统性偏低 [P2] [status: done]
 - **形态**：Abstraction Inversion / 静默吞参数
@@ -862,6 +878,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-46 | 见本提交——扫描结局 bool → 四态枚举（ok/timeout/unavailable/error）；运行期失败降级到索引全量 REGEXP 并留 note（原先连已索引文本都搜不到）；无 rg 且未超护栏也补 note。`_rg_search_root_hits` 公共化为 `rg_search_root_hits`。新增 tests/test_rg_engine_status.py 11 断言，反证 9 红；回归 177 passed |
 | 2026-10-21 | 修 | AP-47 | 见本提交——`IndexManager.search` 死参数 `max_results` → 真接线 `top_k_docs`（+ 同名属性暴露配置）；5 个调用点去死参数；web 删 `_MAX_FETCH=1000` 假池改「池满附 notes」；检索异常也填 notes。新增 tests/test_search_candidate_pool.py 10 断言，反证 4 红 / 2 红；回归 174 + 16 passed |
 | 2026-10-21 | 修 | AP-48 | 见本提交——静默超时由 `error+break`(600s) 改为 `heartbeat`(30s) 且继续；`asyncio.Queue` + `call_soon_threadsafe` 取代 `run_in_executor`（原每超时泄漏一个执行器线程）；前端 heartbeat 分支保持 running 只刷计数。新增 tests/test_reindex_sse.py 6 断言 + 1 条 vitest，反证分别 6 红 / 1 红；回归 29 passed + 15 vitest + build exit 0 |
 | 2026-10-21 | 修 | AP-49 | 见本提交——`diary._write` 改 tmp + `os.replace`（+ Windows 共享冲突 10×30ms 重试，预算耗尽上抛而不退化）；新增 tests/test_diary_atomic_write.py 6 断言，反证 3 红；回归 81 passed（3 连跑稳定） |

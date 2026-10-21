@@ -200,7 +200,6 @@ def test_no_private_import_in_tests():
         ("tests/test_file_watcher_robustness.py", "doclens.file_watcher", "_ChangeHandler"),
         ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_binary_doc_ids"),
         ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_nodes_total_count"),
-        ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_rg_search_root_hits"),
         ("tests/test_grep_corpus_bypass.py", "doclens.ripgrep", "_targets_to_rg_globs"),
         ("tests/test_grep_regex_snippet.py", "treesearch.fts", "_extract_match_snippet"),
         ("tests/test_llm_trace.py", "planify.core.llm.trace", "_fenced_json"),

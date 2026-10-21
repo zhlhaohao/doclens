@@ -19,7 +19,7 @@ import pytest
 from doclens.ripgrep import (
     _binary_doc_ids,
     _nodes_total_count,
-    _rg_search_root_hits,
+    rg_search_root_hits,
     _targets_to_rg_globs,
     rg_fallback_search,
 )
@@ -41,8 +41,8 @@ class TestRgSearchRootHits:
         (tmp_path / "sub" / "b.txt").write_text(
             "nope\nhello beta", encoding="utf-8"
         )
-        hits, timed_out = _rg_search_root_hits("hello", str(tmp_path), use_regex=False)
-        assert timed_out is False
+        hits, status = rg_search_root_hits("hello", str(tmp_path), use_regex=False)
+        assert status == "ok", status  # AP-46：状态是枚举，不是布尔
         files = {Path(p).name for p in hits}
         assert files == {"a.txt", "b.txt"}
         # 行号 1-based
@@ -54,7 +54,7 @@ class TestRgSearchRootHits:
             "hello-secret", encoding="utf-8"
         )
         (tmp_path / "ok.txt").write_text("hello-public", encoding="utf-8")
-        hits, _ = _rg_search_root_hits("hello", str(tmp_path), use_regex=False)
+        hits, _ = rg_search_root_hits("hello", str(tmp_path), use_regex=False)
         assert list(hits) == [str(tmp_path / "ok.txt")]
 
     def test_gitignore_respected_without_git(self, tmp_path):
@@ -63,12 +63,12 @@ class TestRgSearchRootHits:
         (tmp_path / "ignored.md").write_text("needle-hidden", encoding="utf-8")
         (tmp_path / "ok.md").write_text("needle-visible", encoding="utf-8")
         assert not (tmp_path / ".git").exists()
-        hits, _ = _rg_search_root_hits("needle", str(tmp_path), use_regex=False)
+        hits, _ = rg_search_root_hits("needle", str(tmp_path), use_regex=False)
         assert list(hits) == [str(tmp_path / "ok.md")]
 
     def test_regex_mode(self, tmp_path):
         (tmp_path / "r.txt").write_text("foo123bar\nfoo45bar", encoding="utf-8")
-        hits, _ = _rg_search_root_hits(r"foo\d{3}", str(tmp_path), use_regex=True)
+        hits, _ = rg_search_root_hits(r"foo\d{3}", str(tmp_path), use_regex=True)
         assert list(hits) == [str(tmp_path / "r.txt")]
         assert hits[str(tmp_path / "r.txt")] == [1]
 
@@ -78,7 +78,7 @@ class TestRgSearchRootHits:
         (tmp_path / "other").mkdir()
         (tmp_path / "科技" / "a.md").write_text("needle", encoding="utf-8")
         (tmp_path / "other" / "b.md").write_text("needle", encoding="utf-8")
-        hits, _ = _rg_search_root_hits(
+        hits, _ = rg_search_root_hits(
             "needle", str(tmp_path), use_regex=False,
             include_globs=["科技/**", "科技"],
         )
@@ -169,7 +169,7 @@ class TestRgFallbackWithPreHits:
             "needle-in-stale-shadow", encoding="utf-8"
         )
         (tmp_path / "ok.txt").write_text("needle-fresh", encoding="utf-8")
-        hits, _ = _rg_search_root_hits("needle", str(tmp_path), use_regex=False)
+        hits, _ = rg_search_root_hits("needle", str(tmp_path), use_regex=False)
         assert list(hits) == [str(tmp_path / "ok.txt")]
 
 
@@ -236,7 +236,8 @@ class TestExecuteGrepDualEngine:
         from doclens.ripgrep import execute_grep_search
 
         idx = self._idx(tmp_path)
-        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, True)):
+        with patch("doclens.ripgrep.rg_search_root_hits",
+                   return_value=({}, "timeout")):
             result = execute_grep_search(idx, "whatever")
         assert any("超时" in n for n in result.notes)
 
@@ -256,7 +257,7 @@ class TestExecuteGrepDualEngine:
         con.close()
         idx = self._idx(tmp_path)
         idx.index_path = db
-        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, False)), \
+        with patch("doclens.ripgrep.rg_search_root_hits", return_value=({}, False)), \
              patch("doclens.ripgrep.REGEXP_SKIP_NODES_THRESHOLD", 3):
             result = execute_grep_search(idx, "needle")
         assert any("二进制" in n for n in result.notes)
@@ -265,7 +266,7 @@ class TestExecuteGrepDualEngine:
         from doclens.ripgrep import execute_grep_search
 
         idx = self._idx(tmp_path)
-        with patch("doclens.ripgrep._rg_search_root_hits", return_value=({}, False)):
+        with patch("doclens.ripgrep.rg_search_root_hits", return_value=({}, False)):
             result = execute_grep_search(idx, "whatever")
         assert result.notes == []
 
@@ -288,7 +289,7 @@ class TestExecuteGrepDualEngine:
         idx = self._idx(tmp_path)
         idx.index_path = db
         with patch("doclens.ripgrep.rg_available", return_value=False), \
-             patch("doclens.ripgrep._rg_search_root_hits",
+             patch("doclens.ripgrep.rg_search_root_hits",
                    side_effect=AssertionError("rg 不可用时不应目录扫描")):
             result = execute_grep_search(idx, "needle")
         assert {c[0] for c in result.content_results} == {"d1"}
@@ -362,7 +363,7 @@ class TestRgFallbackSourceTypes:
 
     grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的代码文件
     （如 .kt，source_type=code 默认未启用）不索引，但 rg 纯文本搜索应能
-    搜到；与 rg 目录扫描（_rg_search_root_hits 直扫磁盘）口径一致。
+    搜到；与 rg 目录扫描（rg_search_root_hits 直扫磁盘）口径一致。
     """
 
     def test_code_file_outside_source_types_still_searched(self, tmp_path):

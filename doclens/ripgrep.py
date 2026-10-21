@@ -9,6 +9,15 @@ from typing import Iterable
 
 from treesearch.ripgrep import rg_available
 
+# rg 目录扫描的结局（AP-46）：只有 OK 表示「扫完了」。
+# 原实现用 bool `timed_out` 表达，把「启动失败」和「一切正常」压成同一个
+# False，调用方只能看见「没有超时」，于是 rg 缺失/被杀/权限失败时文本腿
+# 静默返回零结果——模型与用户都以为「确实没有」。
+RG_SCAN_OK = "ok"
+RG_SCAN_TIMEOUT = "timeout"
+RG_SCAN_UNAVAILABLE = "unavailable"
+RG_SCAN_ERROR = "error"
+
 logger = logging.getLogger(__name__)
 
 # REGEXP 子集扫描规模护栏：SQLite REGEXP 是逐行 Python UDF（每行跨语言
@@ -116,7 +125,7 @@ def rg_fallback_search(
     doc_nodes_map 非空时：匹配已有节点（原 format_results 内联逻辑）。
 
     pre_hits 给定时跳过内部逐文件扫描（大语料目录模式由调用方预取，
-    见 _rg_search_root_hits——逐文件分批在数十万文件下要数千次进程
+    见 rg_search_root_hits——逐文件分批在数十万文件下要数千次进程
     启动，不可行），key 为绝对文件路径。
 
     window_words: 可选 (before, after) **词**预算——给定时合成节点文本
@@ -244,14 +253,14 @@ def rg_fallback_search(
     return results
 
 
-def _rg_search_root_hits(
+def rg_search_root_hits(
     pattern: str,
     root: str,
     *,
     use_regex: bool,
     timeout: float = 120.0,
     include_globs: list[str] | None = None,
-) -> tuple[dict[str, list[int]], bool]:
+) -> tuple[dict[str, list[int]], str]:
     """rg 单进程递归扫描根目录（文本引擎主力）。
 
     与逐文件 rg_search（treesearch）的分批模式相对：数十万文件分批要
@@ -268,9 +277,14 @@ def _rg_search_root_hits(
     （路径参数 ``.``）从 root 内运行，输出路径即相对形态。
 
     Returns:
-        (hits, timed_out): hits 为 {绝对文件路径: [1-based 行号]}；
-        timed_out 为 True 表示扫描超时被截断，结果不完整（调用方须向
-        用户透出，不能静默当作「无结果」）。
+        (hits, status): hits 为 {绝对文件路径: [1-based 行号]}；status 是
+        下列之一（AP-46：**不要**把它当布尔用）：
+        - ``RG_SCAN_OK``：扫描完成；
+        - ``RG_SCAN_TIMEOUT``：超时截断，结果不完整；
+        - ``RG_SCAN_UNAVAILABLE``：rg 未安装 / 不在 PATH；
+        - ``RG_SCAN_ERROR``：进程启动失败（权限、被杀、临时目录不可写等）。
+        除 OK 外，调用方都**必须**向用户透出「结果可能不完整」，不能静默
+        当作「无结果」。
     """
     import json as _json
     import subprocess
@@ -278,12 +292,12 @@ def _rg_search_root_hits(
     from treesearch.ripgrep import rg_available
 
     if not rg_available():
-        return {}, False
+        return {}, RG_SCAN_UNAVAILABLE
     from treesearch.ripgrep import rg_path as _ts_rg_path
 
     exe = _ts_rg_path()
     if not exe:
-        return {}, False
+        return {}, RG_SCAN_UNAVAILABLE
 
     # 排除数据/版本目录（索引、会话都不该进 grep 结果）与历史遗留的
     # shadow md（._*.md，机制已废弃；磁盘若有残留不该被当作语料命中）
@@ -318,10 +332,10 @@ def _rg_search_root_hits(
         )
     except subprocess.TimeoutExpired:
         logger.warning("[grep] rg 目录扫描超时 %.0fs（root=%s）", timeout, root)
-        return {}, True
+        return {}, RG_SCAN_TIMEOUT
     except OSError as e:  # noqa: BLE001
         logger.warning("[grep] rg 目录扫描失败: %s", e)
-        return {}, False
+        return {}, RG_SCAN_ERROR
 
     hits: dict[str, list[int]] = {}
     for line in result.stdout.splitlines():
@@ -339,7 +353,7 @@ def _rg_search_root_hits(
         if fp and ln:
             key = os.path.normpath(os.path.join(abs_root, fp)) if cwd else fp
             hits.setdefault(key, []).append(ln)
-    return hits, False
+    return hits, RG_SCAN_OK
 
 
 def _binary_doc_profile(idx) -> tuple[set[str], int]:
@@ -541,7 +555,7 @@ def _rg_fallback_path_map(idx, path_map: dict[str, str]) -> dict[str, str]:  # n
     磁盘发现用完整 SUPPORTED_FORMATS 白名单、不做 allowed_source_types
     收缩：grep 承诺「搜索所有文件（包括未索引的）」——被类型配置排除的
     代码文件（如 .kt）不索引，但 rg 是纯文本搜索无解析成本，理应能搜到
-    （与 rg 目录扫描 _rg_search_root_hits 直扫磁盘的口径一致）。
+    （与 rg 目录扫描 rg_search_root_hits 直扫磁盘的口径一致）。
     """
     from doclens.index_manager import SUPPORTED_FORMATS
 
@@ -700,7 +714,7 @@ def execute_grep_search(
     """执行统一的 grep 搜索流程：双引擎分流 + 并集。
 
     搜索流程（与语料规模无关的统一路径）:
-    1. 文本引擎: rg 目录扫描（_rg_search_root_hits）——覆盖磁盘上所有
+    1. 文本引擎: rg 目录扫描（rg_search_root_hits）——覆盖磁盘上所有
        文本文件（含未索引的），天然并行，数十万文件数十秒
     2. 二进制引擎: SQLite REGEXP 限定二进制文档子集扫描（rg 搜不了
        pdf/docx 磁盘原文，解析文本只在索引库）
@@ -740,15 +754,25 @@ def execute_grep_search(
     # ------------------------------------------------------------------
     # 腿 1（文本引擎）: rg 目录扫描——含未索引文件
     # ------------------------------------------------------------------
-    rg_ok = rg_available()
-    if rg_ok:
+    rg_available_now = rg_available()
+    rg_ok = rg_available_now
+    if rg_available_now:
         include_globs = _targets_to_rg_globs(allowed_targets) if allowed_targets else None
-        pre_hits, rg_timed_out = _rg_search_root_hits(
+        pre_hits, rg_status = rg_search_root_hits(
             query, str(idx.search_path), use_regex=True,
             include_globs=include_globs,
         )
-        if rg_timed_out:
+        if rg_status == RG_SCAN_TIMEOUT:
             notes.append("rg 目录扫描超时被截断，本次结果可能不完整（部分文本文件未覆盖）。")
+        elif rg_status in (RG_SCAN_UNAVAILABLE, RG_SCAN_ERROR):
+            # AP-46：文本腿没跑起来 ≠ 没有命中。rg 挂在运行期（被杀/权限/
+            # 临时目录）时，本轮改走「索引全量 REGEXP」降级，并明说覆盖范围
+            # 缩到了已索引文档——磁盘上未索引的文本文件这一轮搜不到。
+            rg_ok = False
+            _why = "未安装或不可用" if rg_status == RG_SCAN_UNAVAILABLE else "启动失败"
+            notes.append(
+                f"rg {_why}，本次仅搜索已索引的文档（磁盘上未索引的文本文件未覆盖）。"
+            )
         if pre_hits:
             rg_content = rg_fallback_search(
                 query,
@@ -794,7 +818,7 @@ def execute_grep_search(
         if nodes_count > REGEXP_SKIP_NODES_THRESHOLD:
             notes.append(
                 f"rg 不可用且索引规模过大（{nodes_count} 节点），"
-                "本次仅搜索二进制文档子集。"
+                "本次仅搜索二进制文档子集——文本文件（含已索引的）未覆盖。"
             )
             if binary_docs and binary_nodes <= REGEXP_SKIP_NODES_THRESHOLD:
                 bin_results = _regexp_search_subset(
@@ -802,6 +826,13 @@ def execute_grep_search(
                 )
                 content_results.extend(bin_results)
         else:
+            if not rg_available_now:
+                # AP-46：降级到 REGEXP 不等于「什么都没扫到」——覆盖范围缩到
+                # 已索引文档，必须让用户知道磁盘上的未索引文件这轮没搜。
+                notes.append(
+                    "rg 未安装或不可用，本次仅搜索已索引的文档"
+                    "（磁盘上未索引的文本文件未覆盖）。"
+                )
             # nodes=0（含库缺失）：无内容可搜，跳过——FTS5Index 打开不存在
             # 的 db 会凭空建空库文件
             if nodes_count > 0:
