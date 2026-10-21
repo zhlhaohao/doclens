@@ -563,7 +563,12 @@ class FTS5Index:
     # -------------------------------------------------------------------
 
     def vision_enqueue(self, source_path: str, rel_path: str = "") -> None:
-        """登记一个待视觉解析的图像文件（重复登记=文件变更，重置为 pending）。"""
+        """登记一个待视觉解析的图像文件（重复登记=文件变更，重置为 pending）。
+
+        ``model='manual'`` 的行（用户手动备注）不是「文件变更」，不得被拉回
+        pending——否则 worker 会用 AI 结果整篇覆盖用户手写内容（AP-50）。
+        手动备注的生命周期由 ``set_manual_note`` 显式管理。
+        """
         import time as _time
         self._conn.execute(
             """INSERT INTO vision_queue (source_path, rel_path, status, attempts, model, last_error, updated_at)
@@ -574,6 +579,7 @@ class FTS5Index:
                    attempts = 0,
                    last_error = '',
                    updated_at = excluded.updated_at
+               WHERE vision_queue.model != 'manual'
             """,
             (source_path, rel_path, _time.time()),
         )
@@ -581,15 +587,18 @@ class FTS5Index:
     def vision_next_pending(self) -> Optional[dict]:
         """取出下一个待解析项并置为 processing（原子抢占）。无则返回 None。"""
         import time as _time
+        # model != 'manual'：手动备注永不进解析流程（AP-50；兜住历史库里
+        # 已被置 pending 的 manual 行，如旧版本 vision_enqueue 覆盖所致）
         row = self._conn.execute(
             "SELECT source_path, rel_path, attempts FROM vision_queue "
-            "WHERE status = 'pending' ORDER BY updated_at LIMIT 1"
+            "WHERE status = 'pending' AND model != 'manual' "
+            "ORDER BY updated_at LIMIT 1"
         ).fetchone()
         if row is None:
             return None
         cur = self._conn.execute(
             "UPDATE vision_queue SET status = 'processing', updated_at = ? "
-            "WHERE source_path = ? AND status = 'pending'",
+            "WHERE source_path = ? AND status = 'pending' AND model != 'manual'",
             (_time.time(), row[0]),
         )
         self._conn.commit()
@@ -625,9 +634,14 @@ class FTS5Index:
         )
 
     def vision_clear(self) -> None:
-        """清空队列（force 全量重建时调用；重建过程会重新登记）。"""
+        """清空队列（force 全量重建时调用；重建过程会重新登记）。
+
+        保留 ``model='manual'`` 行：手动备注不是缓存，是用户数据——清掉它
+        等于下次重建时重新入队并用 AI 结果覆盖（AP-50）。重建期间
+        ``vision_enqueue`` 也不会把它拉回 pending。
+        """
         with self._conn:
-            self._conn.execute("DELETE FROM vision_queue")
+            self._conn.execute("DELETE FROM vision_queue WHERE model != 'manual'")
 
     def vision_reset_stale_processing(self) -> int:
         """启动时把残留的 processing（上次进程崩溃）重置回 pending。"""

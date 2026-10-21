@@ -603,13 +603,44 @@
 - **修复方案**：tmp + `os.replace`（注意 `translate_service._replace` 的「先删后移」问题，勿照抄）。
 - **回归验证**：`tests/test_diary.py`。
 
-### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: pending]
+### AP-50 视觉手动备注无 rowcount 校验，可被后续重建覆盖 [P2] [status: done]
 - **形态**：Error Hiding（用户输入静默丢失）
 - **证据**：`doclens/web_v2/api/vision.py:186-190` `UPDATE vision_queue ... WHERE source_path=?` 不校验 `rowcount`；
   该图无 `vision_queue` 行时备注只落到文件元数据；下次 force 重建入队后 `vision_worker.py:320-322` 用 AI 结果整篇替换。
 - **风险**：用户手写备注在某次重建后无声消失。
-- **修复方案**：rowcount=0 时插入 manual 行；重建/重解析跳过 `model='manual'`。
-- **回归验证**：新增 vision API 用例。
+- **实际修复（2026-10-21，方案 A：把既有 `model='manual'` 护栏补全到其余入口）**：
+  调查发现三条独立的静默覆盖路径，不止台账记的那一条——
+  ① 队列无行（旋转 `vision_remove` / force 重建 `vision_clear` / 从未入队）时 `UPDATE` 影响 0 行仍返回成功，
+  备注只活在文件元数据里，而元数据写入失败仅 `logger.warning` 降级；
+  ② `vision_clear()` 无条件 `DELETE FROM vision_queue`，manual 标记随重建蒸发；
+  ③ `vision_enqueue()` 的 `ON CONFLICT DO UPDATE` 不看 model，manual 行被拉回 pending → worker 用 AI 结果整篇替换。
+  四处改动：
+  - `api/vision.py` `_run_note_blocking`：`UPDATE` → `INSERT ... ON CONFLICT DO UPDATE`（强制 manual）**+ 回读校验**，
+    标记没生效抛 `NOTE_NOT_PERSISTED`（不再「只写元数据还回保存成功」）。
+  - `treesearch/fts.py` `vision_clear()` → `DELETE ... WHERE model != 'manual'`（手动备注是用户数据，不是缓存）。
+  - `treesearch/fts.py` `vision_enqueue()` → `DO UPDATE ... WHERE vision_queue.model != 'manual'`。
+  - `treesearch/fts.py` `vision_next_pending()` → 取件与抢占两条 SQL 都加 `AND model != 'manual'`
+    （兜住历史库中已被置 pending 的 manual 行）。
+- **已知取舍（方案 A 边界）**：用户**替换**图像文件后队列仍标 manual → 不再自动重解析，需手动清标记。
+  彻底方案（加 `file_hash` 列区分「元数据写失败」与「文件真被换掉」）未做，见 AP-69。
+- **回归验证**：新增 `tests/test_vision_manual_note.py` 6 断言（clear 保留 manual / enqueue 对 manual 是 no-op
+  且普通行仍重置 / next_pending 跳过 manual 含脏 pending 行 / 无队列行时 UPSERT 建成 manual 行 + 重建后仍存活）。
+  **反证**：还原四处 SQL → 4 条红灯。另手工端到端验证（真 FTS 库 + 真 JPEG）：
+  note → `('done','manual')` → `vision_clear` + `vision_enqueue` → 仍 `('done','manual')`、`next_pending() is None`。
+  `tests/test_vision_manual_note.py tests/test_preview_rotate.py tests/test_readback_loop.py
+  tests/test_upload_image_compress.py tests/test_png_support.py tests/test_webp_support.py
+  tests/test_architecture.py` → 38 passed；`tests/test_lazy_search.py tests/test_search_preset_params.py
+  tests/test_grep_corpus_bypass.py` → 76 passed。
+- **发版注意**：改了 `treesearch/fts.py`，发行版需同步发 `treesearchlib`（CLAUDE.md 发布纪律）。
+
+### AP-69 视觉队列不记录文件指纹——替换图像后 manual 备注永不更新 [P3] [status: pending]
+- **形态**：方案 A 的已知边界（AP-50 修复时刻意未做，需改表结构）
+- **证据**：`treesearch/fts.py` `vision_queue` 表只有 `source_path/rel_path/status/attempts/model/last_error/updated_at`，无内容指纹；
+  AP-50 后 `vision_enqueue` 对 `model='manual'` 整体跳过 → 用户把该 jpg 换成另一张图，索引重建后仍沿用旧备注，且不会有任何提示。
+- **风险**：低（用户可手动改备注覆盖）；但「换图后看到旧描述」是事实性错误内容。
+- **修复方案**：`vision_queue` 加 `file_hash` 列（`ALTER TABLE` 迁移，参照 `documents` 表既有迁移段）；
+  `vision_enqueue` 带当前 hash，跳过条件改为「manual **且 hash 未变**」；hash 变了则清 manual 并重新入队。
+- **回归验证**：`tests/test_vision_manual_note.py`（新增「换图后 manual 失效」用例）+ treesearch 引擎套件。
 
 ### AP-51 Agent 装配 283 行 + 每轮新建 loop 不 close + 无超时 join [P2] [status: done]
 - **形态**：Long Method + 资源泄漏
@@ -787,6 +818,7 @@
 | 2026-10-21 | 修 | AP-29 | 5904951——闸门生效时 logout/改密/删密补传 `SESSION_TTL_HOURS`；新增 `TestGateEnabledEndpoints` 4 断言（含"无 cookie 时 401"前置断言证明闸门真生效）；反证漏传版本 3 红；回归 46 passed |
 | 2026-10-21 | 修 | AP-30 | 434f15d——`shift_anchors(conn=)` 与 seq 重排同事务重映射 `rewind_snapshots.anchor_seq`；`_restore_one` 在 target 缺失时显式 skipped 不再回落首版本；新增 3 断言，反证全红；回归 115 passed |
 | 2026-10-21 | 修 | AP-31 | 26a281e——`normalize_paths_numbered` 保留 AI 原编号，`_curate_compliant`/`_renumber` 全程按原编号映射；新增 `TestNumberingAfterDrop` 3 断言，反证旧行为 7 红；回归 53 passed |
+| 2026-10-21 | 修 | AP-50 | 见本提交——`_run_note_blocking` 改 UPSERT + 回读校验（`NOTE_NOT_PERSISTED`）；`vision_clear`/`vision_enqueue`/`vision_next_pending` 三处加 `model != 'manual'` 护栏；新增 tests/test_vision_manual_note.py 6 断言，反证 4 红；回归 38 + 76 passed。方案 A 边界（换图后备注不更新）另记 AP-69 |
 | 2026-10-21 | 修 | AP-51 | 见本提交——`initialize` 311 行拆 22 行编排 + 7 个 `_stage_*`（`_Assembly` 载体）；`_run_blocking` + `_dispose_loop` 保证每轮循环关闭（含取消未完成任务）；`_build_index_blocking` 的 join 加 1800s 上界（`CORTEX_INDEX_BUILD_TIMEOUT` 可调）；新增 tests/test_agent_init_lifecycle.py 11 断言，反证 5 红；回归 63 + 39 passed。顺带发现 AP-68（`basic_tools` 死赋值，未修） |
 | 2026-10-21 | 修 | AP-34 | 见本提交——`_ENV_WRITE_LOCK` + `_atomic_write`(tmp+os.replace) + `_quote_value` 转义 + `copy_env_file`；reset 读密钥移入锁内；新增 tests/test_config_store_env.py 10 断言，反证 5 红；回归 98 passed |
 | 2026-10-21 | 修 | AP-33 | 见本提交——先注册 swap 再注册 auth（insert(0) ⇒ 先注册为内层），注释按真实实现重写；新增 tests/test_middleware_order.py 3 断言（401 优先/503 仍生效/顺序不变量）；回归 49 passed |

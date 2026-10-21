@@ -182,13 +182,32 @@ def _run_note_blocking(
             fts, abs_path, markdown, config,
             model_tag="manual", prompt_version="manual",
         )
-        # 标记该图视觉队列为手动备注：worker 启动 requeue 排除 manual，不被重解析覆盖
+        # 标记该图视觉队列为手动备注：worker 启动 requeue / 重建清空 / 重新入队
+        # 三处均排除 manual（AP-50），不被重解析覆盖。
+        # 用 UPSERT 而非 UPDATE：该图可能没有队列行（旋转清行、force 重建早已
+        # 清空、从未入队）——UPDATE 影响 0 行时标记没写进去，备注只活在文件
+        # 元数据里，而元数据写入失败只 warning 降级，用户手写内容就此无声消失。
         fts._conn.execute(
-            "UPDATE vision_queue SET model='manual', status='done', "
-            "attempts=0, last_error='', updated_at=? WHERE source_path=?",
-            (time.time(), abs_path),
+            "INSERT INTO vision_queue "
+            "(source_path, rel_path, status, attempts, model, last_error, updated_at) "
+            "VALUES (?, '', 'done', 0, 'manual', '', ?) "
+            "ON CONFLICT(source_path) DO UPDATE SET "
+            "    status='done', attempts=0, model='manual', "
+            "    last_error='', updated_at=excluded.updated_at",
+            (abs_path, time.time()),
         )
         fts.commit()
+        # 落库后回读：标记没生效就明确报错，不能一边只写元数据一边回「保存成功」
+        row = fts._conn.execute(
+            "SELECT model, status FROM vision_queue WHERE source_path = ?",
+            (abs_path,),
+        ).fetchone()
+        if row is None or row[0] != "manual":
+            raise CortexAPIError(
+                500, "NOTE_NOT_PERSISTED",
+                "备注已写入文件元数据，但视觉队列标记失败——"
+                "该备注可能在下次重建时被 AI 解析覆盖",
+            )
     finally:
         fts.close()
 
