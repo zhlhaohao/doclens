@@ -1196,23 +1196,31 @@ class FTS5Index:
             rows = []
 
         # Pre-fetch node metadata (depth, title, summary) for deduped node_ids
-        unique_nids_in_result = {r[0] for r in rows}
+        # AP-2：旧实现对每个 unique nid ①内层全量扫 rows 找 doc_id（O(n²)）
+        # ②逐条 fetchone 回查 nodes（N+1 次往返，n=200 的聚合搜索每次
+        # 固定付 200 次 SQL + 200 次连接锁）。改为：dict 直取 doc_id +
+        # 行值 IN 批量回查（分批 ≤100 对，防 SQLITE_MAX_VARIABLE_NUMBER）。
+        nid_to_doc = {r[0]: r[1] for r in rows}
         node_meta: dict[tuple[str, str], dict] = {}
-        if unique_nids_in_result:
-            # Batch lookup from nodes table
-            for raw_nid in unique_nids_in_result:
-                for r in rows:
-                    if r[0] == raw_nid:
-                        did = r[1]
-                        break
-                else:
-                    continue
-                meta_row = self._conn.execute(
-                    "SELECT title, summary, depth FROM nodes WHERE node_id = ? AND doc_id = ?",
-                    (raw_nid, did),
-                ).fetchone()
-                if meta_row:
-                    node_meta[(raw_nid, did)] = {"title": meta_row[0], "summary": meta_row[1], "depth": meta_row[2]}
+        if nid_to_doc:
+            pairs = list(nid_to_doc.items())
+            _BATCH = 100
+            for i in range(0, len(pairs), _BATCH):
+                chunk = pairs[i:i + _BATCH]
+                placeholders = ",".join("(?, ?)" for _ in chunk)
+                params: list = []
+                for nid, did in chunk:
+                    params.extend((nid, did))
+                for meta_row in self._conn.execute(
+                    f"SELECT node_id, doc_id, title, summary, depth FROM nodes "
+                    f"WHERE (node_id, doc_id) IN (VALUES {placeholders})",
+                    params,
+                ).fetchall():
+                    node_meta[(meta_row[0], meta_row[1])] = {
+                        "title": meta_row[2],
+                        "summary": meta_row[3],
+                        "depth": meta_row[4],
+                    }
 
         results = []
         seen_nids: dict[str, int] = {}  # track dedup by node_id

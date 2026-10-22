@@ -24,12 +24,14 @@
 - **修复方案**：以 scoring_pipeline 为唯一编排点，kb_tools 改为调 `score_and_rank` 并把节点级 fts 分的修复（kb_tools 现行口径）回灌管线（契约变更：score_and_rank 的 fts_score 取数口径从 doc 级改为 node 级，需同步 web 侧断言）；cortex_cli 的第三份过滤并入管线可选参数。
 - **回归验证**：`tests/test_web_search_api_matrix.py`（web 侧排序断言）+ kb_tools 相关搜索测试；评分口径变化需先在两入口对拍同一查询的排序快照。
 
-### AP-2 search() 结果去重 O(n²) 内层扫描 + 逐 nid fetchone 回查 [P2] [status: pending]
+### AP-2 search() 结果去重 O(n²) 内层扫描 + 逐 nid fetchone 回查 [P2] [status: done]
 - **形态**：N+1 查询（后端栈清单）
 - **证据**：`treesearch/fts.py:1030-1042`——对每个 unique nid：内层再扫全 rows 找 doc_id（O(n²)），随后逐条 `fetchone` 回查 nodes 表（O(n) 次 SQL 往返）。结果集数百节点时即数百次单行查询。
 - **风险**：搜索热路径延迟随结果集规模平方增长；doclens 默认 top_k 50 时已有 50+ 次额外查询，大语料宽查询（如高频词）结果集可达 LIMIT 5000 档位。
 - **修复方案**：① rows 本身携带 doc_id 时建 nid→doc 索引 dict 消掉内层扫描；② 批量回查 nodes（`WHERE nid IN (...)` 分批）或让首查直接 JOIN 出所需列。
 - **回归验证**：`tests/test_lazy_search.py tests/test_search_preset_params.py`；加结果集 ≥500 的延迟对照断言（可选）。
+- **实际修复（2026-10-22）**：`search()` 元数据回查段重写——① `nid_to_doc = {r[0]: r[1] for r in rows}` 一次建 dict 直取 doc_id（消 O(n²) 内层扫描）；② 逐条 fetchone 改行值批量回查 `WHERE (node_id, doc_id) IN (VALUES ...)`，分批 ≤100 对（200 参数，远低于 SQLITE_MAX_VARIABLE_NUMBER=999 旧限），200 节点场景 200 次往返 → 2 批。**零表结构变更**（同表同列同语义，nodes 主键 (doc_id, node_id) 既有索引足够，老库直接受益无迁移）。附带红利：消掉 AP-3 连接锁下的 200 次锁获取。
+- **回归结果**：新增 `tests/test_fts_search_batch_meta.py`（3 例：meta 覆盖/dedup 结果正确 / execute 次数 ≤10（旧实现 202+）/ 180 节点批量回查与 nodes 表逐对一致）；`tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_grep_corpus_bypass.py tests/test_fts_concurrent_connection.py tests/test_architecture.py` 85 passed；`tests/test_web_search_api_matrix.py tests/test_web_search_grouping.py` 49 passed。
 
 ### AP-3 单 SQLite 连接 `check_same_thread=False` 跨线程共享、全模块零锁 [P2] [status: done]
 - **形态**：Race Hazard（功能层兜底）+ SQLite 栈清单「每请求开关连接」的反面陷阱
@@ -239,6 +241,7 @@
 | 2026-10-22 | 修 AP-8 | AP-8 | `IndexReadError` 语义分离（DB 坏 ≠ 未入索引）+ stats 不可读标注；新增 6 例单测；66 例回归全绿 |
 | 2026-10-22 | 修 AP-13 | AP-13 | 标志检查+清位+换柄收进 `_build_cond`，两置位点与 reindex 建柄同锁；新增 4 例时序单测；79 例回归全绿 |
 | 2026-10-22 | 修 AP-3 | AP-3 | `_LockedConnection`/`_LockedCursor` 连接层收口（RLock 贯穿语句+事务+游标消费）；新增 3 例并发压力测试；219 例回归全绿 |
+| 2026-10-22 | 修 AP-2 | AP-2 | search() 元数据回查批量化（dict 消 O(n²) + 行值 IN 分批回查）；零表结构变更；新增 3 例单测；134 例回归全绿 |
 
 ## 附录：与既有台账查重对照
 
