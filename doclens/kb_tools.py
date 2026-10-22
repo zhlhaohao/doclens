@@ -552,16 +552,21 @@ def _resolve_doc_path(path: str, workdir: Path, idx_manager: IndexManager) -> Op
     return None
 
 
-def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
-    """获取或创建事件循环。"""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop
+def _run_async_parser(parser_fn, file_path: str) -> dict:
+    """在同步 handler 中驱动异步解析器（AP-7）。
+
+    treesearch 的解析器全是 async def，而 kb_tools 的 handler 是同步函数。
+    官方姿势是 asyncio.run()：每次干净起停事件循环，不留泄漏——旧实现
+    ``get_event_loop() + run_until_complete`` 建的循环从不 close()（每次
+    泄漏一个 selector/fd，同 agent_integration AP-51 的教训），且
+    ``get_event_loop`` 在无运行循环线程里 3.12+ 弃用、3.14 报错。
+
+    调用方契约：本函数不得在已运行的事件循环线程内调用（asyncio.run
+    会 RuntimeError）。现有消费方均安全——planify StreamingAgent 对同步
+    handler 统一经 ``asyncio.to_thread`` 在线程池执行（无 running loop），
+    CLI/MCP 入口为纯同步上下文。
+    """
+    return asyncio.run(parser_fn(file_path))
 
 
 def _parse_document(file_path: str, ext: str) -> Optional[dict]:
@@ -581,8 +586,7 @@ def _parse_document(file_path: str, ext: str) -> Optional[dict]:
             text = f.read()
         return {"title": os.path.basename(file_path), "text": text, "nodes": []}
 
-    loop = _get_or_create_event_loop()
-    raw = loop.run_until_complete(parser_fn(file_path))
+    raw = _run_async_parser(parser_fn, file_path)
 
     # 标准化解析器输出
     title = raw.get("doc_name", os.path.basename(file_path))

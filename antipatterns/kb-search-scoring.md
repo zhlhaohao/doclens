@@ -61,12 +61,14 @@
 - **实际修复（2026-10-22）**：后处理抽为 `_group_results(result, query_words, idx, offset, limit)`（matchers 构建 + 命中行提取 + 分组分页一体），端点内第二次 `asyncio.to_thread(_group_results, ...)` 调用——对齐 /api/grep 口径。不动 `_do_search` 契约（tests 用 monkeypatch 打模块属性并断言 3 元组返回，零改动兼容）。文件内 `build_substring_matchers`/`group_and_paginate` 的直接 import 因 `_group_results` 仍在同文件消费而保留。
 - **回归结果**：`tests/test_web_search_api_matrix.py tests/test_index_availability.py tests/test_search_candidate_pool.py` → 51 passed；`tests/test_web_search_grouping.py tests/test_architecture.py` → 25 passed。
 
-### AP-7 kb_tools 自管事件循环跑同步壳（sync-async 倒置）[P2] [status: pending]
+### AP-7 kb_tools 自管事件循环跑同步壳（sync-async 倒置）[P2] [status: done]
 - **形态**：事件循环管理反模式（Web 框架栈清单「sync SDK 直调」的变体）
 - **证据**：`doclens/kb_tools.py:555-564` `_get_or_create_event_loop` + `:584-585` `loop.run_until_complete(parser_fn(...))`：每次调用可能新建事件循环且**从不关闭**；宿主线程已有 running loop 时直接 RuntimeError。
 - **风险**：① kb_tools 由 AI agent 调用，宿主（planify）若在异步上下文内同步调 handler 即崩；② 反复 new loop + 不关闭 = 资源泄漏（watcher/selector 句柄）；③ `asyncio.get_event_loop` 在 3.12+ 无运行循环时已 DeprecationWarning，3.14 起报错——升级即断。
 - **修复方案**：解析器调用改 `asyncio.run()`（每调用干净起停），或给 parser 层提供同步入口/线程池包装；与 planify 侧调用方式（`to_thread` 或直调）对齐后定案。
 - **回归验证**：`tests/test_docx_parser.py tests/test_anydoc_parser.py`（解析链路）+ kb_tools 相关测试；补「已有 running loop 时调用不崩」单测。
+- **实际修复（2026-10-22）**：调用链核实——planify `StreamingAgent._run_handler` 对同步 handler 统一 `asyncio.to_thread`（`planify/streaming/runner.py:1155`），CLI（`cortex_cli.py:1046`）/MCP（`mcp_server.py:106`）为纯同步上下文，**无 running loop 内调用场景**，`asyncio.run()` 为最小正解。`_get_or_create_event_loop` 删除，替换为 `_run_async_parser(parser_fn, file_path)`（docstring 写明调用方契约：不得在 running loop 线程内调用 + 三类消费方安全性依据）。
+- **回归结果**：新增 `tests/test_kb_tools_async_parser.py`（2 例：线程池形态解析成功 + 循环零残留）；`tests/test_anydoc_parser.py tests/test_docx_parser.py` → 13 passed 1 skipped；`tests/test_architecture.py` → 6 passed（首版测试因模块级私有 import 被守卫拦下，改为函数内 import——守卫白名单惯例）。
 
 ### AP-8 kb_tools 三处吞异常改变行为分支（Error Hiding 实害版）[P2] [status: pending]
 - **形态**：Error Hiding（失败被转译成行为漂移）
@@ -226,6 +228,7 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-10-22 | 修 AP-6 | AP-6 | 后处理抽 `_group_results` + 第二次 `to_thread`；回归 76 passed |
+| 2026-10-22 | 修 AP-7 | AP-7 | `_get_or_create_event_loop` 删除 → `_run_async_parser`（asyncio.run）；新增 2 例单测；解析器/架构回归全绿 |
 
 ## 附录：与既有台账查重对照
 
