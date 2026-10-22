@@ -53,6 +53,16 @@ export function checkSlashSubmit(
   return { type: "unknown", name };
 }
 
+/** 流事件归属判定（导出供单测）：本次流只许写回发起它的会话。
+ *  用户中途切到别的对话/回欢迎页后，事件静默丢弃——否则别的对话会实时
+ *  冒出本轮的思考步骤与工具卡片（「另一个页面同步收到实时消息」）。 */
+export function streamOwnedBy(
+  chat: { state: string; currentSession: { id: string } | null },
+  sessionId: string,
+): boolean {
+  return chat.state === "focus" && chat.currentSession?.id === sessionId;
+}
+
 /** 将一个流式事件不可变地应用到 messages，返回新数组；非 assistant 末条则原样返回。 */
 export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): ChatMessage[] {
   if (messages.length === 0) return messages;
@@ -936,6 +946,7 @@ export class ChatView extends LitElement {
         })
         .catch(() => {
           // 会话已随恢复消失（创建晚于备份）：回欢迎页
+          this._markTabSession(null);
           actions.setChatState({
             state: "initial",
             currentSession: null,
@@ -948,8 +959,14 @@ export class ChatView extends LitElement {
   };
 
   /** 启动自动恢复（ADR-0028）：上次会话仍在后台生成 → 直接进入该会话
-   *  恢复态（generating 占位 + 轮询），否则保持 initial 只高亮。 */
+   *  恢复态（generating 占位 + 轮询），否则保持 initial 只高亮。
+   *
+   *  多标签页防劫持（2026-10-22）：session 记忆存 localStorage，是**全标签页
+   *  共享**的——A 页正在生成时新开一页，新页会把 A 的会话自动接管过来，
+   *  看起来像「另一个页面也在同步收到实时消息」。自动恢复只对本标签页
+   *  生效：sessionStorage 里没有该会话（= 新开的标签页，不是刷新）就放弃。 */
   private async _autoResumeIfGenerating(sessionId: string): Promise<void> {
+    if (this._tabSessionId() !== sessionId) return; // 新标签页不继承别的页的在途生成
     try {
       const body = await fetchSessionDetail(sessionId, { metaOnly: true });
       if (!body.generating) return;
@@ -990,6 +1007,28 @@ export class ChatView extends LitElement {
     if (this._genPollTimer !== undefined) {
       window.clearInterval(this._genPollTimer);
       this._genPollTimer = undefined;
+    }
+  }
+
+  /** 本标签页当前挂着的会话 id（sessionStorage：按标签页隔离，刷新保留、
+   *  新标签页为空）——自动恢复据此判断「是不是本页刷新」，防新开页被
+   *  别的标签页的在途生成劫持（localStorage 的 session 记忆是全页共享的）。 */
+  private static readonly TAB_SESSION_KEY = "cortex.chat.tabSession";
+
+  private _tabSessionId(): string | null {
+    try {
+      return sessionStorage.getItem(ChatView.TAB_SESSION_KEY);
+    } catch {
+      return null; // 隐私模式等禁用 storage：退化为不自动恢复
+    }
+  }
+
+  private _markTabSession(id: string | null): void {
+    try {
+      if (id) sessionStorage.setItem(ChatView.TAB_SESSION_KEY, id);
+      else sessionStorage.removeItem(ChatView.TAB_SESSION_KEY);
+    } catch {
+      /* storage 不可用：忽略 */
     }
   }
 
@@ -1207,6 +1246,7 @@ export class ChatView extends LitElement {
     images?: { data: string; media_type: string }[],
   ): Promise<void> {
     const created = await createSession({ type: "chat", title: title.slice(0, 200), preview: message.slice(0, 100), mode });
+    this._markTabSession(created.id); // 新会话也算本页当前会话
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
     this._rewindDialog = null;
@@ -1258,11 +1298,19 @@ export class ChatView extends LitElement {
     // 建立中断控制器：_stop() 会 abort 它 + 通知后端停（abort 抛 AbortError 走静默路径）
     this._abortController = new AbortController();
 
+    // 会话归属守卫（2026-10-22 串台修复）：本流的增量只允许写回发起它的
+    // 会话。用户中途切到别的对话（「返回」/历史列表/新会话）后，若继续把
+    // 事件灌进 store.chat.messages，别的对话就会实时冒出本轮思考步骤与
+    // 工具卡片（现象即「另一个页面同步收到实时消息」）。切换期间事件静默
+    // 丢弃（连接不断，后端照常生成）；切回本会话后自动恢复实时展示。
+    const stillOwn = (): boolean => streamOwnedBy(store.getState().chat, sessionId);
+
     try {
       for await (const ev of chatStream(
         { message, session_id: sessionId, images },
         this._abortController.signal,
       )) {
+        if (!stillOwn()) continue;
         if (ev.type === "error") {
           messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
           actions.setChatState({ messages });
@@ -1312,25 +1360,32 @@ export class ChatView extends LitElement {
       }
 
       // 展示层 message_ai 已由后端统一落库（ADR-0028）；前端只在本地
-      // 维持流式视图（重进会话时经 detail 重建）
-      this._finalizeAutoCompactDialog();
+      // 维持流式视图（重进会话时经 detail 重建）。切走了就别动当前会话的
+      // 收尾状态（弹窗/输入锁属于正在展示的那个会话）；历史列表是全局的，
+      // 照常刷新（标题/条数随本轮落库更新）。
+      if (stillOwn()) this._finalizeAutoCompactDialog();
       this._loadHistory();
     } catch (err) {
       if (this._isAbortError(err)) {
         // 用户主动停止：保留已生成的半截回答（2026-09-22 语义变更：后端
         // 同步落库 message_ai，重进会话可见；原「UI==DB 都丢弃」废弃）。
         // 残留 running 步骤标记为中断，不弹错误 toast
-        messages = finalizeInterruptedMessages(messages);
-        actions.setChatState({ messages });
-        this._loadHistory();
+        if (stillOwn()) {
+          messages = finalizeInterruptedMessages(messages);
+          actions.setChatState({ messages });
+          this._loadHistory();
+        }
       } else {
         // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断。
         // 断开续跑自愈（ADR-0028）：后端可能仍在生成——重拉 detail 接管：
         // generating → 恢复态占位 + 轮询；已完成 → 直接展示补写结果。
-        messages = finalizeInterruptedMessages(messages);
-        actions.setChatState({ messages });
-        actions.setError(`对话失败: ${(err as Error).message}`);
         const cur = store.getState().chat.currentSession;
+        const own = stillOwn();
+        if (own) {
+          messages = finalizeInterruptedMessages(messages);
+          actions.setChatState({ messages });
+        }
+        actions.setError(`对话失败: ${(err as Error).message}`);
         if (cur && cur.id === sessionId) {
           void this._loadSession(cur);
         }
@@ -1340,7 +1395,11 @@ export class ChatView extends LitElement {
       // 流结束即撤下交互卡片：问答已由消息内 tool trace 持久化展示，
       // 外挂卡片（_activeAsk）只服务悬置期交互，留着会重复/残留
       this._activeAsk = null;
-      actions.setChatState({ streaming: false, pendingAsk: null });
+      // streaming 是当前展示会话的状态：切走了就不要解锁别人的输入框
+      // （另开一轮的输入锁归它自己的流管）。
+      if (stillOwn()) {
+        actions.setChatState({ streaming: false, pendingAsk: null });
+      }
     }
   }
 
@@ -1384,6 +1443,7 @@ export class ChatView extends LitElement {
     this._resetPreview();
     this._activeAsk = null;
     this._highlightSessionId = null; // 「新会话」返回后不残留旧高亮
+    this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
     this._rewindDialog = null;
     this._stopGeneratingPoll();
@@ -1402,6 +1462,7 @@ export class ChatView extends LitElement {
     this._resetPreview();
     this._activeAsk = null;
     this._highlightSessionId = s.id;
+    this._markTabSession(s.id); // 本页当前会话（自动恢复只看本页，见 _autoResumeIfGenerating）
     actions.setChatState({
       state: "focus",
       currentSession: s,
