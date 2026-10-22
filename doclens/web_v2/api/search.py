@@ -102,6 +102,25 @@ def _scored_to_group_items(
     return items
 
 
+def _group_results(
+    result: ScoreResult,
+    query_words: list[str],
+    idx: IndexManager,
+    offset: int,
+    limit: int,
+) -> tuple[list, int, int, int]:
+    """在子线程中执行命中行提取 + 分组分页（AP-6：与 /api/grep 的 _do_grep
+    同口径——extract_match_rows 对全部命中节点做子串扫描，属可感知的
+    CPU 重活，不能留在事件循环线程上跑，否则宽查询期间全服务（含 SSE
+    chat 流）冻结）。
+
+    返回 (page, total_files, total_matches, page_offset)。
+    """
+    matchers = build_substring_matchers(query_words)
+    items = _scored_to_group_items(result, idx.path_map, idx.search_path, matchers)
+    return group_and_paginate(items, offset, limit)
+
+
 @router.post("/search", response_model=GroupedSearchResponse)
 async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manager)):
     start = time.perf_counter()
@@ -130,10 +149,9 @@ async def search(req: SearchRequest, idx: IndexManager = Depends(get_index_manag
             elapsed_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    matchers = build_substring_matchers(query_words)
-    items = _scored_to_group_items(result, idx.path_map, idx.search_path, matchers)
-    page, total_files, total_matches, page_offset = group_and_paginate(
-        items, req.offset, req.limit,
+    # AP-6：命中行提取 + 分组分页同样入线程（对齐 /api/grep 的 _do_grep）。
+    page, total_files, total_matches, page_offset = await asyncio.to_thread(
+        _group_results, result, query_words, idx, req.offset, req.limit,
     )
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     return GroupedSearchResponse(
