@@ -338,6 +338,11 @@ export class CmEditor extends LitElement {
 
   /** 依据代码主题三态算出深浅。 */
   private get _codeDark(): boolean {
+    // markdown 编辑态跟随应用主题，**不**消费「代码配色」（ADR-0043 作用范围：
+    // 代码主题只管行号视图；md 文档的代码块/编辑态一律跟随应用主题）。
+    // 否则行号视图里点过「深色」后，md 编辑器被永久锁成深底——而 md 预览
+    // header 没有配色按钮（那只在行号视图出现），用户没有任何入口改回。
+    if (this.markdown) return this._appTheme === "dark";
     if (this._codeTheme === "dark") return true;
     if (this._codeTheme === "light") return false;
     return this._appTheme === "dark";
@@ -354,7 +359,10 @@ export class CmEditor extends LitElement {
     const view = this._view;
     if (!view || !this._core) return;
     const dark = this._codeDark;
-    const surface = dark ? codeSurfaceDark : codeSurfaceLight;
+    // markdown：表面恒用 token 版（codeSurfaceLight 的 canvas/ink 是
+    // var(--cortex-bg)/var(--cortex-text)）——应用主题切到深夜时 token 自己
+    // 变深，天然跟随；行号视图才用 codeSurfaceDark 那套硬编码 GitHub dark。
+    const surface = dark && !this.markdown ? codeSurfaceDark : codeSurfaceLight;
     view.dom.style.background = surface.canvas;
     view.dom.style.color = surface.ink;
     const comp = this._themeCompartment;
