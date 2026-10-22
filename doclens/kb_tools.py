@@ -457,13 +457,17 @@ def _kb_stats(idx_manager: IndexManager) -> str:
     source_paths = idx_manager.indexed_source_paths()
     total_files = len(source_paths)
     total_size = 0
+    unreadable: list[str] = []
     file_type_counts: dict[str, int] = {}
 
     for source_path in source_paths:
         try:
             total_size += os.path.getsize(source_path) if source_path else 0
-        except OSError:
-            pass
+        except OSError as e:
+            # AP-8：单文件 stat 失败不吞——计入不可读清单，输出如实标注
+            # （否则文件总大小静默少算，统计失真无提示）。
+            unreadable.append(source_path or "(空路径)")
+            logger.warning("kb_stats: getsize failed for %s: %s", source_path, e)
         ext = os.path.splitext(source_path)[1].lower() if source_path else ''
         if ext:
             file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
@@ -483,7 +487,7 @@ def _kb_stats(idx_manager: IndexManager) -> str:
         type_name = SUPPORTED_FORMATS.get(ext, (ext, None))[0] if ext in SUPPORTED_FORMATS else ext
         type_lines.append(f"  {ext}: {count} 个 ({type_name})")
 
-    return (
+    stats = (
         f"知识库状态:\n"
         f"  索引路径: {index_abs}\n"
         f"  索引大小: {fmt_size(index_size)}\n"
@@ -492,6 +496,12 @@ def _kb_stats(idx_manager: IndexManager) -> str:
         f"  文件类型:\n"
         + "\n".join(type_lines)
     )
+    if unreadable:
+        stats += (
+            f"\n  （警告: {len(unreadable)} 个文件大小不可读（权限/占用/已移除），"
+            f"文件总大小为部分统计，如 {unreadable[0]}）"
+        )
+    return stats
 
 
 def _kb_reindex(idx_manager: IndexManager, force: bool = False) -> str:
@@ -631,23 +641,44 @@ def _load_indexed_image_tree(idx_manager, abs_path: str) -> Optional[dict]:
     return None
 
 
-def _load_doc_by_source_path(idx_manager, abs_path: str):
-    """按 source_path 从索引库精确加载单个 Document（未命中返回 None）。"""
-    try:
-        from treesearch.fts import FTS5Index
+# ---------------------------------------------------------------------------
+# 索引读失败语义（AP-8 / AP-45 口径：DB 故障 ≠ 未入索引）
+# ---------------------------------------------------------------------------
 
-        target = os.path.abspath(abs_path)
+
+class IndexReadError(RuntimeError):
+    """索引库读失败（打不开/损坏/锁死）——与「未命中返回 None」显式区分。
+
+    旧实现把一切异常吞成 None/False：DB 损坏被伪装成「未入索引」，
+    ghost 闸门静默放行、read_document 改走现场解析——路径漂移不可察觉，
+    AI 据此输出「文档不存在」类幻觉结论。
+    """
+
+
+def _load_doc_by_source_path(idx_manager, abs_path: str):
+    """按 source_path 从索引库精确加载单个 Document。
+
+    返回契约：未命中 → None；**索引库读失败 → 上抛 IndexReadError**
+    （调用方必须区分「没有」与「坏了」，不得静默降级）。
+    """
+    from treesearch.fts import FTS5Index
+
+    target = os.path.abspath(abs_path)
+    fts = None
+    try:
         fts = FTS5Index(db_path=idx_manager.index_path)
-        try:
-            doc_id = fts.get_doc_id_by_source_path(target)
-            if doc_id is None:
-                return None
-            return fts.load_document(doc_id)
-        finally:
-            fts.close()
+        doc_id = fts.get_doc_id_by_source_path(target)
+        if doc_id is None:
+            return None
+        return fts.load_document(doc_id)
+    except IndexReadError:
+        raise
     except Exception as e:  # noqa: BLE001
-        logger.debug("load_doc_by_source_path(%s) failed: %s", abs_path, e)
-        return None
+        logger.warning("load_doc_by_source_path(%s) index read failed: %s", abs_path, e)
+        raise IndexReadError(str(e)) from e
+    finally:
+        if fts is not None:
+            fts.close()
 
 
 def _normalize_nodes(nodes: list[dict]) -> list[dict]:
@@ -1151,7 +1182,16 @@ def handle_read_document(
 
     # 登记闸门（ADR-0034 ghost 行）：仅登记未索引的文件（空树 ghost 行命中
     # DB）拒绝读取——与「不读取内容」的登记语义自洽，AI 读代码走 read_file。
-    if _is_ghost_registered(idx_manager, abs_path):
+    # 索引读失败显式报错（AP-8）：不能静默放行后走现场解析掩盖 DB 故障。
+    try:
+        ghost = _is_ghost_registered(idx_manager, abs_path)
+    except IndexReadError as e:
+        return (
+            f"索引库读取失败，无法判定文档登记状态: {e}。\n"
+            f"本次不走现场解析兜底（避免掩盖索引故障）；"
+            f"可尝试 manage_kb(action='reindex') 修复索引后重试。"
+        )
+    if ghost:
         return (
             f"该文件仅登记未索引（不在索引类型白名单内）: {path}。\n"
             f"read_document 不读取其内容；请改用 read_file 工具按纯文本读取。"
@@ -1166,6 +1206,13 @@ def handle_read_document(
         return (
             f"文档解析失败: 缺少依赖 {e}。\n"
             f"请安装对应的解析库后重试。"
+        )
+    except IndexReadError as e:
+        # AP-8：DB 故障 ≠ 文档坏了——单独报错，不与解析失败混同。
+        return (
+            f"索引库读取失败: {e}。\n"
+            f"已索引文档的完整内容依赖索引库；可尝试 "
+            f"manage_kb(action='reindex') 修复后重试。"
         )
     except Exception as e:
         return (
@@ -1208,15 +1255,14 @@ def _is_ghost_registered(idx_manager: IndexManager, abs_path: str) -> bool:
 
     判据 = DB 命中该 source_path 且 node_count == 0。true 索引文档至少有
     一个节点（无 heading 的 md/txt 也有单节点兜底）。
+
+    索引读失败上抛 IndexReadError（AP-8）：闸门放行与否必须建立在
+    「读到了 DB 且确认非 ghost」之上——DB 坏了不能伪装成「非 ghost」。
     """
-    try:
-        if getattr(idx_manager, "ts", None) is None:
-            return False
-        doc = _load_doc_by_source_path(idx_manager, abs_path)
-        return doc is not None and not doc.structure
-    except Exception as e:  # noqa: BLE001
-        logger.debug("is_ghost_registered(%s) failed: %s", abs_path, e)
+    if getattr(idx_manager, "ts", None) is None:
         return False
+    doc = _load_doc_by_source_path(idx_manager, abs_path)
+    return doc is not None and not doc.structure
 
 
 def _load_tree_for_info(
@@ -1319,7 +1365,12 @@ def handle_file_info(
 
     # 登记态如实标注（ADR-0034）：ghost 行 = 已收录元数据、未建树——
     # 概况按「仅登记」报告，不走索引树（空树无概况可言）。
-    if _is_ghost_registered(idx_manager, abs_path):
+    # 索引读失败显式报错（AP-8）：不能把 DB 故障伪装成「非 ghost」。
+    try:
+        ghost = _is_ghost_registered(idx_manager, abs_path)
+    except IndexReadError as e:
+        return f"索引库读取失败，无法判定登记状态: {e}。"
+    if ghost:
         stat = os.stat(abs_path)
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
         return (
@@ -1334,6 +1385,13 @@ def handle_file_info(
         tree, indexed = _load_tree_for_info(idx_manager, abs_path, ext)
     except ImportError as e:
         return f"文档解析失败: 缺少依赖 {e}。请安装对应的解析库后重试。"
+    except IndexReadError as e:
+        # AP-8：DB 故障 ≠ 文档坏了——单独报错，不与解析失败混同。
+        return (
+            f"索引库读取失败: {e}。\n"
+            f"词数/章节概况依赖索引树；可尝试 "
+            f"manage_kb(action='reindex') 修复后重试。"
+        )
     except Exception as e:
         return f"文档解析失败: {e}。"
 

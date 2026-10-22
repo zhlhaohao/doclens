@@ -70,7 +70,7 @@
 - **实际修复（2026-10-22）**：调用链核实——planify `StreamingAgent._run_handler` 对同步 handler 统一 `asyncio.to_thread`（`planify/streaming/runner.py:1155`），CLI（`cortex_cli.py:1046`）/MCP（`mcp_server.py:106`）为纯同步上下文，**无 running loop 内调用场景**，`asyncio.run()` 为最小正解。`_get_or_create_event_loop` 删除，替换为 `_run_async_parser(parser_fn, file_path)`（docstring 写明调用方契约：不得在 running loop 线程内调用 + 三类消费方安全性依据）。
 - **回归结果**：新增 `tests/test_kb_tools_async_parser.py`（2 例：线程池形态解析成功 + 循环零残留）；`tests/test_anydoc_parser.py tests/test_docx_parser.py` → 13 passed 1 skipped；`tests/test_architecture.py` → 6 passed（首版测试因模块级私有 import 被守卫拦下，改为函数内 import——守卫白名单惯例）。
 
-### AP-8 kb_tools 三处吞异常改变行为分支（Error Hiding 实害版）[P2] [status: pending]
+### AP-8 kb_tools 三处吞异常改变行为分支（Error Hiding 实害版）[P2] [status: done]
 - **形态**：Error Hiding（失败被转译成行为漂移）
 - **证据**：
   - `doclens/kb_tools.py:644-646` `_load_doc_by_source_path` 裸 `except Exception → logger.debug + return None`：DB 损坏/锁死被伪装成「未入索引」，ghost 闸门与索引优先加载据此走错分支；
@@ -80,6 +80,9 @@
 - **风险**：AI 工具在索引异常时输出「文档不存在」类幻觉结论，用户无从分辨是索引坏了还是真没有。
 - **修复方案**：三处改上抛或返回带错误注记的结果（对齐 AP-45 口径：错误信息进工具输出，让 AI 自己声明降级）。
 - **回归验证**：kb_tools 搜索/读取相关测试 + `tests/test_web_search_api_matrix.py`（若共享口径）。
+- **实际修复（2026-10-22）**：① 新增 `IndexReadError`（kb_tools 模块级），`_load_doc_by_source_path` 重写——未命中仍返回 None，DB 读失败（含 FTS5Index 构造失败）上抛 IndexReadError；`_is_ghost_registered` 删吞异常分支、透传上抛。② 两个 handler 各加显式分支：`handle_read_document` ghost 闸门处 IndexReadError → 报错文案（含 reindex 修复指引，**不走现场解析兜底**）；`_load_tree_for_info` 调用处 IndexReadError 与 ImportError/解析失败三分（避免「DB 坏了」被报成「文档坏了」）。③ `_kb_stats` OSError 不再 pass：计入不可读清单，输出尾注「N 个文件大小不可读…总大小为部分统计」。
+- **消费方核实**：MCP（mcp_server.py）/CLI（cortex_cli.py:1046）均消费 handler 返回字符串，IndexReadError 已在 handler 内转文案，无未受保护调用点；`_load_indexed_image_tree`/`_load_tree_for_info` 的上抛由 handler 分支接住。
+- **回归结果**：新增 `tests/test_kb_tools_index_errors.py`（6 例：DB 坏 → read_document/file_info 显式报错不静默降级、ghost 判定上抛不返 False、未命中 None 语义保留、stats 不可读标注、正常现场解析路径回归）；`tests/test_file_info.py tests/test_kb_tools_async_parser.py` 16 passed；`tests/test_index_availability.py tests/test_architecture.py` 17 passed；`tests/test_web_search_api_matrix.py tests/test_docx_parser.py` 33 passed。
 
 ### AP-9 tokenize_query + 空回退两字不差复制于 API 层与工具层 [P3] [status: pending]
 - **形态**：Copy-and-Paste Programming / Duplicated Source of Truth
@@ -229,6 +232,7 @@
 |---|---|---|---|
 | 2026-10-22 | 修 AP-6 | AP-6 | 后处理抽 `_group_results` + 第二次 `to_thread`；回归 76 passed |
 | 2026-10-22 | 修 AP-7 | AP-7 | `_get_or_create_event_loop` 删除 → `_run_async_parser`（asyncio.run）；新增 2 例单测；解析器/架构回归全绿 |
+| 2026-10-22 | 修 AP-8 | AP-8 | `IndexReadError` 语义分离（DB 坏 ≠ 未入索引）+ stats 不可读标注；新增 6 例单测；66 例回归全绿 |
 
 ## 附录：与既有台账查重对照
 
