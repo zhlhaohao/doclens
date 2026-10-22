@@ -31,12 +31,14 @@
 - **修复方案**：① rows 本身携带 doc_id 时建 nid→doc 索引 dict 消掉内层扫描；② 批量回查 nodes（`WHERE nid IN (...)` 分批）或让首查直接 JOIN 出所需列。
 - **回归验证**：`tests/test_lazy_search.py tests/test_search_preset_params.py`；加结果集 ≥500 的延迟对照断言（可选）。
 
-### AP-3 单 SQLite 连接 `check_same_thread=False` 跨线程共享、全模块零锁 [P2] [status: pending]
+### AP-3 单 SQLite 连接 `check_same_thread=False` 跨线程共享、全模块零锁 [P2] [status: done]
 - **形态**：Race Hazard（功能层兜底）+ SQLite 栈清单「每请求开关连接」的反面陷阱
 - **证据**：`treesearch/fts.py:330` `sqlite3.connect(..., check_same_thread=False)`；`grep threading|Lock|_lock` 全文件零命中。宿主线程模型坐实并发面：`doclens/index_manager.py` 后台 reindex 线程（`:608` 置 `_needs_reload`）与 uvicorn 工作线程（`api/search.py:109` `asyncio.to_thread`）**共用同一全局单例连接**（`get_fts_index`，fts.py:2659-2676）。
 - **风险**：sqlite3 连接非线程安全（Python 官方：跨线程使用需外部串行化）。搜索线程执行 MATCH 查询期间后台线程 commit 建索引 → `sqlite3.ProgrammingError` / 游标失效 / 偶发空结果。现有「未炸」依赖时序运气：watcher 防抖使 reindex 突发概率低。treesearch-core 台账 AP-2 已记录单例互关面，但**零锁共享**这一并发维度是本轮新证据。
 - **修复方案**：`FTS5Index` 内建 `threading.RLock` 串行化全部 execute/commit 路径（粗锁即可，SQLite 本身串行）；或改 per-thread 连接 + WAL（多读单写天然合拍）。与 treesearch-core AP-2 的 registry 方案协同设计。
 - **回归验证**：新增「搜索与建索引并发」压力测试（线程池交替 search/index_document 断言无异常）；`tests/test_lazy_search.py tests/test_web_search_api_matrix.py tests/test_architecture.py`。
+- **实际修复（2026-10-22）**：连接层收口——`_init_db` 的裸连接包进 `_LockedConnection`（RLock 贯穿语句与事务）：① 单语句 execute/executemany/commit/rollback/close 持锁转发；② `with conn:` 隐式事务 enter 持锁 / exit（提交回滚）释放——多语句事务独占连接，杜绝并发交叉提交半截事务；③ RLock 可重入，事务内调 commit 不自锁。152 处 `self._conn.*` 调用点零改动经代理全覆盖（外部无直摸 `_conn`，grep 核实）。**开发中发现并修复第二层竞态**：语句锁不够——游标消费期间（execute 返回后 fetchall 前）连接状态被并发变更会抛 `InterfaceError: bad parameter or other API misuse`（并发压力测试实测复现）；增补 `_LockedCursor`（execute 时锁转交游标，fetchall/fetchone/fetchmany/iter/rowcount/lastrowid 消费即释放，GC 兜底防锁泄漏）。
+- **回归结果**：新增 `tests/test_fts_concurrent_connection.py`（3 例：并发 search+index 无异常且节点完整 / 隐式事务独占——语句不得穿透进行中事务 / 多线程读写单实例无 ProgrammingError——第一版曾复现 InterfaceError，游标锁后通过）；`tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_grep_corpus_bypass.py tests/test_index_chunking.py` 93 passed；`tests/test_change_detection.py tests/test_web_search_api_matrix.py tests/test_architecture.py tests/test_index_reload_race.py` 55 passed；`tests/test_grep_tool.py tests/test_docx_parser.py tests/test_anydoc_parser.py tests/test_kb_tools_index_errors.py` 71 passed。
 
 ### AP-4 护栏被异常路径静默绕过：REGEXP 腿节点计数失败按 0 处理 → 分钟级全表 UDF 扫描放行 [P2] [status: pending]
 - **形态**：Error Hiding + 护栏语义失效
@@ -236,6 +238,7 @@
 | 2026-10-22 | 修 AP-7 | AP-7 | `_get_or_create_event_loop` 删除 → `_run_async_parser`（asyncio.run）；新增 2 例单测；解析器/架构回归全绿 |
 | 2026-10-22 | 修 AP-8 | AP-8 | `IndexReadError` 语义分离（DB 坏 ≠ 未入索引）+ stats 不可读标注；新增 6 例单测；66 例回归全绿 |
 | 2026-10-22 | 修 AP-13 | AP-13 | 标志检查+清位+换柄收进 `_build_cond`，两置位点与 reindex 建柄同锁；新增 4 例时序单测；79 例回归全绿 |
+| 2026-10-22 | 修 AP-3 | AP-3 | `_LockedConnection`/`_LockedCursor` 连接层收口（RLock 贯穿语句+事务+游标消费）；新增 3 例并发压力测试；219 例回归全绿 |
 
 ## 附录：与既有台账查重对照
 

@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,178 @@ class _NullContext:
         return self
     def __exit__(self, *exc):
         return False
+
+
+class _LockedCursor:
+    """游标代理：持锁直至游标消费完毕（fetchall/fetchone/迭代）。
+
+    锁由 _LockedConnection.execute 转交（已 acquire），本类负责在消费
+    完成或 GC 时 release——在途游标未消费即被丢弃（局部变量出作用域）
+    时靠 __del__ 兜底，防锁泄漏。
+    """
+
+    __slots__ = ("_cur", "_lock")
+
+    def __init__(self, cur, lock):
+        self._cur = cur
+        self._lock = lock
+
+    def _release(self):
+        if self._lock is not None:
+            self._lock.release()
+            self._lock = None
+
+    def __del__(self):
+        try:
+            self._release()
+        except RuntimeError:
+            pass  # 锁已由显式消费路径释放
+
+    def fetchall(self):
+        try:
+            return self._cur.fetchall()
+        finally:
+            self._release()
+
+    def fetchone(self):
+        try:
+            return self._cur.fetchone()
+        finally:
+            self._release()
+
+    def fetchmany(self, size=-1):
+        try:
+            return self._cur.fetchmany(size)
+        finally:
+            self._release()
+
+    def __iter__(self):
+        try:
+            return iter(self._cur.fetchall())
+        finally:
+            self._release()
+
+    @property
+    def rowcount(self):
+        try:
+            return self._cur.rowcount
+        finally:
+            self._release()
+
+    @property
+    def lastrowid(self):
+        try:
+            return self._cur.lastrowid
+        finally:
+            self._release()
+
+    @property
+    def description(self):
+        try:
+            return self._cur.description
+        finally:
+            self._release()
+
+    def __getattr__(self, name):
+        # 其余只读属性直通（无连接状态变更；不释放锁——消费类访问走显式方法）
+        return getattr(self._cur, name)
+
+
+class _LockedConnection:
+    """sqlite3.Connection 的线程安全代理（AP-3）。
+
+    背景：FTS5Index 以 ``check_same_thread=False`` 在多线程间共享**单条**
+    连接（全局单例 get_fts_index：uvicorn 搜索线程 + 后台 reindex 线程
+    + lazy 补录写路径）。sqlite3 连接本身非线程安全，官方要求跨线程
+    使用必须外部串行化；且 Python 侧「隐式事务」是**连接级**状态——
+    两个线程在同一连接上交错 execute/commit 会互相提交/回滚对方的
+    半截事务（脏索引）。
+
+    设计：一条 RLock 贯穿语句与事务——
+    - 单语句（execute/executemany/commit/rollback）持锁执行；
+    - ``with conn:``（隐式事务）：进入时持锁，退出（提交/回滚）时释放，
+      整段事务独占连接——多语句 + commit 原子化；
+    - RLock 可重入：事务内调 commit()/execute() 不自锁；
+    - cursor() 同样持锁返回（游标创建后由调用方单线程消费）。
+
+    粒度权衡（粗锁）：读-读也互斥。SQLite 本身串行，粗锁不损失单连接
+    吞吐，只损失「Python 层重叠」——这是正确性的必要代价；读多场景的
+    并发度由宿主侧 per-thread 连接方案（后续）提升。
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+        self._lock = threading.RLock()
+
+    # ---- 事务上下文：with conn: = 持锁的隐式事务 ----
+    def __enter__(self):
+        self._lock.acquire()
+        try:
+            return self._conn.__enter__()
+        except BaseException:
+            self._lock.release()
+            raise
+
+    def __exit__(self, *exc):
+        try:
+            return self._conn.__exit__(*exc)
+        finally:
+            self._lock.release()
+
+    # ---- 语句级方法：持锁转发，游标消费期保持持锁 ----
+    def execute(self, sql, params=()):
+        # 游标代理：execute 与后续 fetchall/fetchone 同锁——sqlite3 游标
+        # 消费期间依赖连接状态稳定（并发 execute 同一连接会让在途 fetch
+        # 抛 InterfaceError: bad parameter or other API misuse）。
+        self._lock.acquire()
+        try:
+            cur = self._conn.execute(sql, params)
+            return _LockedCursor(cur, self._lock)
+        except BaseException:
+            self._lock.release()
+            raise
+
+    def executemany(self, sql, seq):
+        self._lock.acquire()
+        try:
+            cur = self._conn.executemany(sql, seq)
+            return _LockedCursor(cur, self._lock)
+        except BaseException:
+            self._lock.release()
+            raise
+
+    def executescript(self, sql):
+        with self._lock:
+            return self._conn.executescript(sql)
+
+    def commit(self):
+        with self._lock:
+            return self._conn.commit()
+
+    def rollback(self):
+        with self._lock:
+            return self._conn.rollback()
+
+    def cursor(self):
+        with self._lock:
+            return self._conn.cursor()
+
+    def close(self):
+        with self._lock:
+            return self._conn.close()
+
+    def create_function(self, *a, **kw):
+        with self._lock:
+            return self._conn.create_function(*a, **kw)
+
+    # ---- 只读属性直通（无连接状态变更）----
+    @property
+    def in_transaction(self):
+        return self._conn.in_transaction
+
+    @property
+    def total_changes(self):
+        return self._conn.total_changes
 
 
 def _check_fts5() -> bool:
@@ -311,7 +484,7 @@ class FTS5Index:
         """
         self._db_path = db_path or ":memory:"
         self._weights = {**_DEFAULT_WEIGHTS, **(weights or {})}
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: Optional[sqlite3.Connection] = None  # 实际持有 _LockedConnection（AP-3 类型注解保留父类型）
         # Populated by index_document(); inspected by build_index for stats.
         self.last_node_diff: dict[str, int] = {"added": 0, "changed": 0, "removed": 0, "kept": 0}
         self._tokenize_log_path = tokenize_log_path
@@ -327,7 +500,7 @@ class FTS5Index:
         if self._db_path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(self._db_path)), exist_ok=True)
 
-        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        self._conn = _LockedConnection(sqlite3.connect(self._db_path, check_same_thread=False))
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
 
