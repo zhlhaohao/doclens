@@ -112,12 +112,14 @@
 - **修复方案**：SUPPORTED_FORMATS 下沉到无依赖模块（如 `doclens/formats.py` 或并入 search_targets.py），两模块改为依赖它，环断开。
 - **回归验证**：`tests/test_architecture.py` + `tests/test_grep_tool.py`；可考虑给 test_architecture 加 doclens 内部环检测（另立条目不扩本条）。
 
-### AP-13 load_or_build_index 的 check-then-act 无锁清位（_needs_reload 丢失窗口）[P2] [status: pending]
+### AP-13 load_or_build_index 的 check-then-act 无锁清位（_needs_reload 丢失窗口）[P2] [status: done]
 - **形态**：Race Hazard
 - **证据**：`doclens/index_manager.py:687-691`——无锁下 `if self._ts is not None and not self._needs_reload: return True` 早退，随后 `self._needs_reload = False` 清位；后台 reindex 线程 `:608` 置 `_needs_reload = True`。若清位与置位交错（两搜索线程并发、或搜索线程与 reindex 完成交错），标记被覆盖丢失——**本次搜索用旧索引且永不补审计**（该标记是 `doclens-backend.md` AP-11 修复后唯一的 reload 触发源）。`_ts` 句柄读换写（`:687/694`）同样无锁。
 - **风险**：reindex 完成后的首搜索可能拿旧 path_map/旧树（用户改完文件搜不到新内容），且无自愈——直到下次文件变化。低频但属正确性受损。
 - **修复方案**：`_needs_reload` 检查+清位移入既有 `_build_cond`/`_reindex_lock` 保护域，或改用标志+版本号（读时快照版本，reindex 递增版本）；`_ts` 换柄同样加锁。
 - **回归验证**：新增「reindex 完成与并发搜索交错」单测（monkeypatch 时序）；`tests/test_lazy_search.py tests/test_change_detection.py`。
+- **实际修复（2026-10-22）**：① `load_or_build_index` 的「标志检查+清位 + `_ts` 换柄」整段收进 `_build_cond` 保护域（锁内只做标志/句柄操作；磁盘审计与索引重活留在锁外，不拖慢并发搜索）；② 两个置位点同锁化——`mark_index_dirty` 与 `_bg_work` 的 reindex 完成置位均持 `_build_cond`；③ `_reindex_internal` 的 `_ts` 建柄（原 `:790`）改为 `_build_cond` 内 double-check 后建——与 load 的换柄临界段互斥。锁序核实：`_reindex_lock → _build_cond` 单向嵌套，`_build_cond` 内不反向拿 `_reindex_lock`，无死锁面。
+- **回归结果**：新增 `tests/test_index_reload_race.py`（4 例：置位先于 load → 必重建不吞标志 / 并发交错 / 干净状态早退不重建 / mark_index_dirty 持锁不裸写）；`tests/test_lazy_search.py tests/test_change_detection.py` 24 passed；`tests/test_web_search_api_matrix.py tests/test_index_availability.py tests/test_architecture.py` 47 passed；`tests/test_file_watcher_exclude.py` 8 passed。
 
 ### AP-14 后台 reindex 统计失败静默归零，/api/status 呈假 0 [P2] [status: pending]
 - **形态**：Error Hiding / Caching Failure
@@ -233,6 +235,7 @@
 | 2026-10-22 | 修 AP-6 | AP-6 | 后处理抽 `_group_results` + 第二次 `to_thread`；回归 76 passed |
 | 2026-10-22 | 修 AP-7 | AP-7 | `_get_or_create_event_loop` 删除 → `_run_async_parser`（asyncio.run）；新增 2 例单测；解析器/架构回归全绿 |
 | 2026-10-22 | 修 AP-8 | AP-8 | `IndexReadError` 语义分离（DB 坏 ≠ 未入索引）+ stats 不可读标注；新增 6 例单测；66 例回归全绿 |
+| 2026-10-22 | 修 AP-13 | AP-13 | 标志检查+清位+换柄收进 `_build_cond`，两置位点与 reindex 建柄同锁；新增 4 例时序单测；79 例回归全绿 |
 
 ## 附录：与既有台账查重对照
 
