@@ -1,109 +1,118 @@
 ---
 name: rag-bench
-description: 对 EnterpriseRAG-Bench-Data 语料做端到端基准测试（benchmark）：以当前工作目录名作 source_type，从父目录 questions.jsonl 随机抽 N 题（默认 10），经 /api/chat 取答案，再由 LLM 裁判对比黄金答案打 1-10 分，生成 Markdown 报告（含逐题明细、低分诊断、引用召回率）。当用户说「跑基准测试/benchmark/RAG 评测/测一下 jira 语料/评测这个语料」时使用。
+description: 对 EnterpriseRAG-Bench-Data 语料做端到端基准测试（benchmark）：以运行实例 workdir（或用户指定）定 source_type，playwright-cli 驱动真实 Web UI chat 视图并发问答（真实 RAG 全链路，非 API、不派子代理），问答完成立即出预览报告（问题/回答/金标/召回率/耗时，无评分），用户说「开始评分」后逐题评分出终报。测试方案（题数/题型）无默认值，必须用户明确；不带参数只列题库统计。产物落 AI 助手 data dir 下 benchmarks/。当用户说「跑基准测试/benchmark/RAG 评测/测一下 jira 语料/评测这个语料」时使用。
 icon: chart-bar
 ---
 
 # EnterpriseRAG 基准测试（rag-bench）
 
-对**单源语料**做端到端评测：随机抽题 → 真实对话链路作答 → LLM 裁判打分 → 报告。
+两阶段评测：抽题（方案用户明确）→ playwright-cli 并发真实 UI 问答 → 预览报告（无评分）→ 用户确认后在线评分 → 终报。
 
-## 目录约定（先核对，不符先报错）
+> **无默认值纪律**：题数、题型等测试方案**必须由用户明确**，脚本不提供默认；用户没说清就先列统计并问（ask_user_question），不要替用户决定。
+
+## 目录约定
 
 | 项 | 约定 |
 |---|---|
-| 当前工作目录 | 必须是被测语料目录，**目录名 = source_type**（如 `C:\Users\lianghao\EnterpriseRAG-Bench-Data\jira`） |
-| 题库 | 工作目录**父目录**的 `questions.jsonl`（即 `..\questions.jsonl`） |
-| 基准库根 | `C:\Users\lianghao\EnterpriseRAG-Bench-Data`（默认安装位置） |
-| 结果目录 | `<语料>/.doclens/benchmarks/`（存在 `.cortex` 数据目录时用它）——**不要写进语料根目录** |
+| 被测 source_type | 优先级：`--source-type` > 运行实例 workdir 目录名（自动探测）> cwd。**不要假设用户的语料** |
+| 题库 | 语料目录父目录的 `questions.jsonl` |
+| 产物目录 | `--out-dir` **必传**：AI 助手 data dir 下 `benchmarks/`（见系统提示） |
 
-先用 `pwd`/`ls ..` 核对：cwd 名与 `questions.jsonl` 同时成立才继续；否则向用户确认语料目录，不要自行猜。
+## 前置检查
 
-## 执行步骤
+1. 被测实例：`curl -s http://127.0.0.1:7860/api/status` 确认 workdir/索引状态；没起按 start-app 指引启动（`-C` 指向语料目录）。
+2. playwright-cli：不可用时 `--pw-bin "npx playwright-cli"`。
 
-### 1. 环境检查（不通过就停下来说明原因）
+## 执行流程
 
-1. **解释器**：脚本依赖 `httpx` + `planify`。
-   ```bash
-   python -c "import httpx, planify; print('ok')"
-   ```
-   失败时改用 doclens 仓库自带的 venv：`python -c "import doclens; print(doclens.__file__)"` 定位仓库根，再与其同级的 `.venv/Scripts/python.exe`（Linux/macOS 为 `.venv/bin/python`）执行本技能所有命令。
-2. **被测实例**：脚本会自动在 `CORTEX_WEB_PORT`（`~/.cortex/.env`，默认 7860）起的 10 个端口探测 `/api/status`，只接受 `workdir` 等于当前目录的实例——**不会误测别的语料**。跑测前确认：
-   - `/api/status` 的 `index_building` 为 `false`；
-   - `indexed_docs` 与被测语料规模相当（jira≈6000 篇）。
-3. **没有匹配实例**（脚本会给出已探测实例清单）：用 `start-app.ps1` 后台启动，等它建完索引再跑：
-   ```bash
-   CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -ArgumentList '-File','<仓库根>/start-app.ps1','gui','-C','<当前语料目录>' -WindowStyle Hidden"
-   ```
-   > 端口按「worktree 目录名尾部 -N → CORTEX_WEB_PORT+N」算；语料目录没有 `-N` 后缀，就是基准端口本身。启动后用 `/api/status` 的 `workdir` 与 `started_at` 确认新实例（别把旧实例的响应当成自己的）。不要手工 kill 进程。
+### 第 1 步：题库统计 + 确认方案
 
-### 2. 跑测
-
-先看题库分布（可选，几秒）：
 ```bash
-python "<skills dir>/rag-bench/scripts/run_bench.py" --list
+python "<skills dir>/rag-bench/scripts/run_bench.py" stats   # 或不带任何参数
 ```
-> `<skills dir>` = 系统提示里的技能根目录（本机 `C:\Users\lianghao\.doclens\skills`），技能目录名 `rag-bench`。
 
-正式跑（默认 10 题）：
+输出两张表（**原样照贴**，禁止自己重算）：题型分布（全库题数+说明）、source_type 单源题数（列全部源）。
+
+**用 ask_user_question 让用户明确**：抽多少题（--n）、测哪些题型（--question-type，逗号分隔或 all）。用户没答前不进入下一步。
+
+### 第 2 步：抽题（参数必填，缺一拒绝）
+
 ```bash
-python "<skills dir>/rag-bench/scripts/run_bench.py" --n 10
+cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" pick \
+  --n <用户明确> --question-type <用户明确或 all> \
+  --out-dir "<AI 助手 data dir>/benchmarks" [--seed <可选>]
 ```
-用户指定题数时替换 `--n`；要求可复现时加 `--seed <整数>` 并把输出里的 seed 回报给用户。
 
-长跑放后台：用 `background_run` 跑同一条命令（单题默认 240s 超时，题多时总时长按 N×1~3 分钟估），再用 `check_background` 轮询；不要在前台硬等。
+输出 run_id、pick 清单、任务清单片段（逐条 task_create）。题型拼错会报错并列出本源可用题型。
 
-### 3. 汇报（报告是产物，聊天里只给要点）
+> **禁用子代理**：全流程由脚本+主代理完成，任何环节都不派 task 子代理。
 
-脚本结束会打印报告路径并给出三项速览。随后读取 `<语料>/.doclens/benchmarks/report_<run_id>.md`，按下面骨架给用户**简短**汇报：
+### 第 3 步：并发问答 → 预览报告
 
+```bash
+cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" run \
+  --pick <pick json> --all --workers 3 --timeout 120 \
+  --out-dir "<AI 助手 data dir>/benchmarks"
 ```
-评测完成：<source_type> · N 题（seed=<seed>）· 模型 <model>
-AI 评分均值 x.x / 中位数 x.x / ≥7 分 a/b
-引用 recall x.xx · precision x.xx · 平均 xxs/题
-低分题：qst_xxx（x 分，一句话原因）……
-失败题：qst_xxx（原因）……
-报告：<绝对路径>
+
+> 长跑放 `background_run`（**只发起一次**，锁文件防双跑），`check_background` 轮询。单题 120s 超时强杀算回答失败。失败题可 `ask` 单题补跑。
+
+run 完成立即产出 `results_<run_id>.jsonl` + `preview_<run_id>.md`（速览 + 逐题预览），向用户汇报要点后**停下等「开始评分」**。
+
+### 第 4 步：用户说「开始评分」后——逐题在线评分
+
+从 results jsonl 逐题取「问题/answer/gold_answer+answer_facts」，在对话窗口对比打分（9-10 全对 / 7-8 大部分对 / 4-6 部分 / 1-3 错误编造；info_not_found 只有明确说查不到才高分）。recall/precision/耗时**抄 JSONL 现成值**。逐题写入 answers md：
+
+```markdown
+## qst_xxxx
+**评分**：x/10 —— <理由>
+**引用**：recall=x.xx precision=x.xx
+**耗时**：xx.xs
+**回答**：
+<answer 原文>
 ```
-细节（逐题答案、金标、完整裁判理由）留在报告与 JSONL 里，用户要再看时读取。**不要**把整份报告贴进对话。
 
-## 参数
+### 第 5 步：终报
 
-| 参数 | 默认 | 说明 |
+```bash
+python "<skills dir>/rag-bench/scripts/run_bench.py" report --answers <answers md>
+```
+
+落盘 `report_<run_id>.md` 并打印 `## REPORT_CONTENT` 段——**原样展示在对话窗口**，附要点与路径。
+
+## 产物清单（均在 `--out-dir`）
+
+| 文件 | 阶段 | 内容 |
 |---|---|---|
-| `--n` | 10 | 随机抽样题数（超过可用池时取全池） |
-| `--seed` | 随机 | 复现用随机种子（报告会记录实际值） |
-| `--include-multi` | 关 | 纳入跨源题。默认只取 `source_types == [本目录]` 的纯单源题——跨源题（如 jira+confluence 的 project_related）在单源语料下必然答不全，计入会系统性拉低分数 |
-| `--question-type` | 全部 | 只测指定题型，逗号分隔（`basic,semantic` 等） |
-| `--skill` | `knowledge-base` | 答题时加载的技能；传空串 `--skill ""` 走纯问答（不注入技能） |
-| `--base-url` | 自动探测 | 指定被测实例（仍会校验 workdir，不符则报错） |
-| `--out-dir` | `<语料>/.doclens/benchmarks` | 结果目录 |
-| `--resume` | — | 续测已有 `results_*.jsonl`（按 question_id 跳过已完成题） |
-| `--timeout` | 240 | 单题墙钟超时（秒），超时判失败、保留部分回答且不评分 |
-| `--judge-model` | 同被测模型 | 裁判模型 id（默认 `PLANIFY_MODEL_ID`，配置读 `~/.cortex/.env`） |
-| `--no-judge` | 关 | 只测引用匹配与耗时，不调裁判 |
-| `--allow-mismatch` | 关 | 允许实例 workdir 与 cwd 不一致（仅调试用，正常不要开） |
+| `pick_<run_id>.json` | 抽题后 | 题目+金标+关键事实+seed |
+| `results_<run_id>.jsonl` | 问答后 | 逐题：回答+recall/precision+wall_ms |
+| `preview_<run_id>.md` | 问答后 | 预览报告（无评分） |
+| `answers_<run_id>.md` | 评分后 | 逐题评分+引用+耗时+回答 |
+| `report_<run_id>.md` | 评分后 | 终报（stdout 同步打印） |
 
-输出：`results_<run_id>.jsonl`（逐题明细，实时追加、可续测）+ `report_<run_id>.md`（总览 / 评分分布 / 逐题明细 / 低分诊断 / 失败清单）。
+## 参数（必填项无默认）
+
+- **（无参数）**：等价 stats，只列题库统计。
+- **stats**：`--questions`（可选覆盖）。
+- **pick**：`--n`（必）、`--question-type`（必，逗号分隔或 `all`）、`--out-dir`（必）；`--seed`/`--source-type`/`--include-multi`/`--status-url` 可选。
+- **run**：`--pick`（必）、`--out-dir`（必）、`--all` 或 `--n`；`--workers`（默认 3）/`--timeout`（默认 120s）/`--url`/`--pw-bin` 可选。
+- **ask**：`--pick`（必）、`--qidx`（必）、`--out-dir`（必）；`--url`/`--timeout`/`--pw-bin` 可选。
+- **report**：`--answers`（必）。
 
 ## 指标口径
 
-- **AI 评分**：裁判模型对比候选答案与 `gold_answer` + `answer_facts`，1-10 分；`info_not_found` 题型只有明确说「无法从现有文档回答」才给高分，编造具体信息打 1-3 分。
-- **引用 recall / precision**：从答案的 `## 参考资料`、工具轨迹的 `<path>`、正文反引号路径提取引用，按 `expected_doc_ids`（`dsid_xxx` 文件名前缀）匹配；用于观察检索面，不替代评分。
-- 失败题（对话超时/报错）不评分，单列在报告末尾。
+- **AI 评分**：主代理逐题对比 UI 真实回答与金标打 1-10。基于 results jsonl 的 answer 原文，不要自行检索替代。
+- **recall/precision**：脚本从会话 tool_trace 提取实际触及文档（search_kb `<path>` + read_document input.path）与 `expected_doc_ids` 的 dsid 前缀比对；含重试至 trace 落库稳定。「recall=0 但评分高」优先怀疑提取假阴性（可按 session_id 重拉核对）。
+- **耗时**：wall_ms = 浏览器内实测（提问→回答完成）；超时强杀题 wall_ms≈阈值。横向对比需固定 workers。
 
 ## 故障排查
 
 | 现象 | 处置 |
 |---|---|
-| `未找到 workdir = ... 的实例` | 按脚本提示启动被测实例；确认 `-C` 指向 cwd、端口按目录名规则算 |
-| `workdir 不一致` | 当前连到别的语料/实例；改用匹配实例，别加 `--allow-mismatch` |
-| `index_building=true` | 等索引建完再跑（大语料首次建库数分钟到数十分钟） |
-| 大量 `timeout after 240s` | 先单题验证实例响应；可加 `--timeout 360`，或检查模型/网络 |
-| `judge failed` / 评分全 N/A | 裁判用的 `PLANIFY_*` 配置不可用：核对 `~/.cortex/.env` 的 protocol/base_url/model_id/api_key，或 `--judge-model` 指定可用模型 |
-| 分数整体偏低且多为跨源题 | 用户可能想测跨源能力：需把对应语料并入同一工作目录后再 `--include-multi`，否则保持默认口径 |
-| 抽样题数不足 N | 该 source_type 的纯单源题少于 N，报告会标注实际抽样数 |
-
-## 与既有脚本的关系
-
-仓库内 `benchmarks/run_benchmark.py` 是交互式旧版（手动选题型/来源、固定追问「全部题库」），本技能脚本是其单源自动化版本（自动定位题库与实例、随机抽样、默认 10 题、报告落语料数据目录）。改评测口径时优先改本技能脚本；两者共用同一套 chat API 序列与裁判提示词，避免口径漂移。
+| 缺参数报 required 错误 | 按提示补全——无默认值是纪律，不要猜 |
+| `题库不存在` | cwd 不在语料目录下（需能定位 ../questions.jsonl） |
+| `playwright-cli 打不开` | 实例没起/端口不对；`curl /api/status` 核对 |
+| run 报「疑似已在运行」 | 同 run_id 已有活跃实例；先 check_background，勿重复发起 |
+| 个别题 `timeout` | 120s 强杀算失败（不评分、进失败清单）；`ask` 单题重跑补数 |
+| report 报「缺少 N 题」 | answers md 没写全，按题号补齐 |
+| recall=0 但评分高 | 提取假阴性信号；按 session_id 重拉会话核对 tool_trace |
