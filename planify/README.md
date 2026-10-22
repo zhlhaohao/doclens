@@ -157,6 +157,7 @@ Config resolution order (highest first):
 | `PLANIFY_PROTOCOL` | No | `anthropic` (default, `/v1/messages`) or `openai_compat` (`/chat/completions`) |
 | `PLANIFY_BASE_URL` | No | Endpoint URL; empty = provider SDK default. Setting it removes `ANTHROPIC_AUTH_TOKEN` to avoid auth conflicts |
 | `PLANIFY_ENABLED_TOOLS` | No | Comma-separated tool whitelist; empty/unset = register all tools |
+| `PLANIFY_DISABLED_TOOLS` | No | Comma-separated tool blacklist; empty/unset = block nothing. Blacklist wins when both are set; an explicitly listed `ask_user_question` is honored in GUI mode (warning only) |
 | `PLANIFY_ASK_MODE` | No | How the agent asks the user questions: `interactive` (default, blocking prompt) or `chat` (answered via the next user message); re-read per call |
 | `ASSETS_DIR` | No | Assets directory, absolute or relative to the workdir |
 | `BAIDU_WEATHER_API_URL` / `BAIDU_WEATHER_AK` / `BAIDU_WEATHER_DATA_TYPE` | No | Baidu Map weather API settings for the `baidu_weather` tool |

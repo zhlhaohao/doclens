@@ -157,6 +157,7 @@ summary = run_subagent(
 | `PLANIFY_PROTOCOL` | 否 | `anthropic`（默认，`/v1/messages`）或 `openai_compat`（`/chat/completions`） |
 | `PLANIFY_BASE_URL` | 否 | 端点 URL；留空用 Provider SDK 默认。设置后会移除 `ANTHROPIC_AUTH_TOKEN` 防认证冲突 |
 | `PLANIFY_ENABLED_TOOLS` | 否 | 逗号分隔的工具白名单；未设置/为空 = 注册全部工具 |
+| `PLANIFY_DISABLED_TOOLS` | 否 | 逗号分隔的工具黑名单；未设置/为空 = 不屏蔽。与白名单并存时黑名单优先；GUI 下若显式列入 `ask_user_question` 会按其执行（仅告警，不强制保留） |
 | `PLANIFY_ASK_MODE` | 否 | 代理向用户提问的方式：`interactive`（默认，阻塞式提问）或 `chat`（以下一条用户消息作答）；每次调用重读环境变量 |
 | `ASSETS_DIR` | 否 | 资源目录，绝对路径或相对工作目录 |
 | `BAIDU_WEATHER_API_URL` / `BAIDU_WEATHER_AK` / `BAIDU_WEATHER_DATA_TYPE` | 否 | 百度地图天气 API 配置（`baidu_weather` 工具用） |

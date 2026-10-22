@@ -41,6 +41,7 @@ Resources / Prompts 不做。Tools 是无损映射（`inputSchema` → `input_sc
 - 前缀平铺 `mcp__<server>__<tool>`（Claude Code 同款约定），无命名冲突，AI 从名字可看出归属。
 - 否决「每 server 一个代理工具」：JSON-in-JSON 两跳推理是模型已知弱项，且丢 JSON Schema 描述。
 - MCP 工具不经 `PLANIFY_ENABLED_TOOLS` 白名单过滤——开关在 server enabled 位（停 server = 下架全部工具）。
+- `PLANIFY_DISABLED_TOOLS` 黑名单在装配时可按名剔除（如临时屏蔽某个 server 的个别工具），但运行时 reconcile 新挂载的工具不经此过滤。
 - 单 server 工具数上限 64（超出截断 + 警告），防失控 server 撑爆上下文。
 
 ### 7. 结果归一（handler 返回 str）

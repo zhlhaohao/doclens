@@ -445,6 +445,7 @@ class CortexAgent:
             run_edit,
             extra_tools=None,
             extra_handlers=None,
+            disabled_tools=None,
         ):
             # 子代理轮次预算每次调用现读 os.environ（设置页保存 → reload_config
             # 的 load_dotenv(override=True) 已刷新进程 env → 立即生效，无需重启）。
@@ -480,6 +481,7 @@ class CortexAgent:
                     run_edit,
                     extra_tools=_merged,
                     extra_handlers=_merged_handlers,
+                    disabled_tools=disabled_tools,
                     max_tokens=_max_tokens,
                     max_rounds=_rounds,
                 )
@@ -495,6 +497,7 @@ class CortexAgent:
                 run_edit,
                 extra_tools=_kb_readonly_tools,
                 extra_handlers=_kb_readonly_handlers,
+                disabled_tools=disabled_tools,
                 max_tokens=_max_tokens,
                 max_rounds=_rounds,
             )

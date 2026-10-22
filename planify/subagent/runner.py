@@ -130,6 +130,7 @@ def run_subagent(
     run_edit: Callable,
     extra_tools: list | None = None,
     extra_handlers: Dict[str, Callable] | None = None,
+    disabled_tools: list | None = None,
     max_tokens: int = 8000,
     max_rounds: int = 30,
 ) -> str:
@@ -153,6 +154,9 @@ def run_subagent(
         extra_tools: 追加的工具定义（如宿主应用注入的 read_document/file_info；
             检索链路注入的 grep/glob 也走此路——见 tools/registry.py handle_task）
         extra_handlers: extra_tools 对应的处理器
+        disabled_tools: 需从子代理工具面剔除的工具名（黑名单 PLANIFY_DISABLED_TOOLS
+            与主注册表里缺失的基础工具）——子代理工具表是固定构造的，不跟随
+            主注册表过滤，必须显式剔除才能与主代理保持一致
         max_tokens: 子代理每轮 LLM 调用的最大输出 tokens（由宿主应用按对话模型参数传入；
             过小会截断子代理的最终摘要，表现为"只总结了前几章"）
         max_rounds: 轮次预算上限（默认 30；宿主可配置，如 doclens 的
@@ -256,6 +260,13 @@ def run_subagent(
         sub_tools.extend(extra_tools)
     if extra_handlers:
         sub_handlers.update(extra_handlers)
+
+    # 黑名单 / 主注册表缺失的工具：从子代理工具面剔除（schema + handler 同步，
+    # 避免模型看到 schema 却调用到空 handler）
+    if disabled_tools:
+        blocked = set(disabled_tools)
+        sub_tools = [t for t in sub_tools if t.get("name") not in blocked]
+        sub_handlers = {k: v for k, v in sub_handlers.items() if k not in blocked}
 
     # 子代理消息循环
     workdir_str = str(workdir)
