@@ -146,7 +146,13 @@ class CortexConfig(BaseSettings):
     context_expand_range: int = Field(default=5)
 
     # KB 工具字符限制（影响 LLM token 消耗）
-    max_context_chars_per_result: int = Field(default=800)
+    # max_context_chars_per_result 是词窗口的**字符兜底**（防超长无空白段
+    # 炸穿预算），不是常规约束：默认值 (200+600)×8 与词窗口同量级——
+    # 旧默认 800 在英文语料下比 800 词预算（≈4500 字符）紧 5-6 倍，
+    # 词窗口从未真正生效（小文档也出 …（中部略/后文略）标记）
+    max_context_chars_per_result: int = Field(
+        default=(200 + 600) * 8, description="单条搜索结果的字符兜底（防超长无空白段；默认与词窗口同量级）"
+    )
     max_total_chars: int = Field(default=10000)
     # 搜索结果片段统一窗口：锚点前/后词数（grep 与 search 同口径；
     # 词：CJK 每字一词，其余按空白切分，与 max_read_words 同源；
@@ -376,6 +382,14 @@ class CortexConfig(BaseSettings):
         description="后台结果/收件箱通知插入后是否补合成 assistant 回执，"
         "用于强制 user/assistant 严格交替的端点。默认 False：thinking 模式"
         "端点（DeepSeek / GLM 等）会因请求以 assistant 结尾返回 400。",
+    )
+    planify_thinking_depth: str = Field(
+        default="auto",
+        alias="PLANIFY_THINKING_DEPTH",
+        description="LLM 思考深度档位：auto（默认，不发思考参数，兼容一切端点）/"
+        "off（显式不思考）/low/medium/high。openai_compat 端映射 reasoning_effort；"
+        "anthropic 端映射 thinking{budget_tokens} + output_config{effort}。"
+        "主对话与子代理生效；压缩摘要/视觉/翻译不受影响。保存即热生效。",
     )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）

@@ -147,8 +147,10 @@ READ_DOCUMENT_TOOL = {
 # 格式化常量（默认值，运行时从 idx_manager 配置读取）
 # ---------------------------------------------------------------------------
 
-MAX_CONTEXT_CHARS_PER_RESULT = 800
+MAX_CONTEXT_CHARS_PER_RESULT = (200 + 600) * 8
 MAX_TOTAL_CHARS = 10000
+# 字符兜底默认与词窗口同量级（(200+600)×8）：旧 800 在英文语料下比词预算
+# （800 词 ≈ 4500 字符）紧 5-6 倍，词窗口从未真正生效——小文档也出略标记
 # 窗口不在开头时补文档开头（标题/表头）的字符预算——独立于词窗口参数
 # （旧实现 min(200, before) 的 before 现为词单位，语义分离）
 _HEAD_BUDGET_CHARS = 200
@@ -301,7 +303,10 @@ def _extract_keyword_window(
     """
     from doclens.word_window import WORD_CHAR_CEILING, end_after_words, start_before_words
 
-    if max_chars is not None and len(text) <= max_chars:
+    # 短文早退：两个口径（字符兜底/词预算）都富余才整篇返回——只看
+    # max_chars 会让词窗口在小文本上失效（max_chars 升到词口径后，
+    # 2000 字中文文本 ≤6400 但 >150 词，旧早退会绕过 50/100 词窗口）
+    if max_chars is not None and len(text) <= max_chars and _count_words(text) <= before + after:
         return text
     if max_chars is None and _count_words(text) <= before + after:
         return text

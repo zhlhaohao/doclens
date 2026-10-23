@@ -314,6 +314,37 @@ class TestUnifiedWindowModel:
             last_line = head_seg.split("\n")[-1]
             assert len(last_line) < 30 or last_line not in excerpt_seg[: len(last_line) + 50]
 
+    def test_char_fuse_default_english_small_doc_no_markers(self):
+        """回归（2026-10-23）：字符兜底默认须与词窗口同量级。
+
+        旧默认 800 字符在英文语料下比词预算（800 词 ≈ 4500 字符）紧
+        5-6 倍——词窗口从未真正生效，4000 字符小文档也出略标记。
+        新默认 (200+600)×8：小英文文档（≤800 词）整篇返回。
+        """
+        from doclens.config import CortexConfig
+        from doclens.kb_tools import MAX_CONTEXT_CHARS_PER_RESULT, _extract_keyword_window
+
+        assert MAX_CONTEXT_CHARS_PER_RESULT == (200 + 600) * 8
+        assert CortexConfig().max_context_chars_per_result == MAX_CONTEXT_CHARS_PER_RESULT
+
+        # ~394 词 / 2435 字符的英文小文档：词预算内，整篇返回
+        # （≤max_chars 时走早退分支原样返回，含尾换行）
+        head = "channel\n\nalice: Hey folks seeing intermittent 502s during streaming.\n\n"
+        text = head + ("bob: plain filler chatter line number here\n" * 55)
+        out = _extract_keyword_window(
+            text, ["502", "streaming"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+        )
+        assert out == text  # 无略标记，整篇（含尾换行）
+        assert "…（中部略）" not in out and "…（后文略）" not in out
+
+        # 超长无空白段（单词 > 兜底）：保险丝仍生效
+        blob = "x" * 20000 + " needle " + "y" * 20000
+        out2 = _extract_keyword_window(
+            blob, ["needle"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+        )
+        assert "needle" in out2
+        assert len(out2) < 20000  # 兜底截断，未被超长词炸穿
+
 
 # ---------------------------------------------------------------------------
 # 引擎一致性：SQLite REGEXP 与 rg --ignore-case 大小写口径对齐
