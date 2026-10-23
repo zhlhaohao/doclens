@@ -1,107 +1,83 @@
 # -*- coding: utf-8 -*-
-"""EnterpriseRAG 单源基准测试（doclens 对话链路 E2E）。
+"""EnterpriseRAG 单源基准测试——真实对话链路评测（技能 rag-bench 的执行体）。
 
-约定（技能 rag-bench 的执行体）：
-  * 当前工作目录名 = source_type（如 ``.../EnterpriseRAG-Bench-Data/jira``）
-  * 父目录的 ``questions.jsonl`` = 题库
-  * 随机抽取 N 题（默认 10）→ 走 /api/chat 取答案 → LLM 裁判对比 gold_answer 打分
-  * 产出 Markdown 报告 + 逐题 JSONL 明细（写入语料的数据目录下 benchmarks/）
+问答走被测实例的**生产对话接口**（``POST /api/chat``，SSE 流），不驱动浏览器、
+不派子代理：每题新建会话 → 发斜杠技能消息 → 收流至 done。思考过程
+（``thinking``）、工具轨迹（``tool_call``/``tool_result``）、正文（``token``）
+与用量（``usage``）都从同一条流里取，与 Web UI 走的是完全相同的后端链路。
 
-用法（cwd = 语料目录，如 C:/Users/lianghao/EnterpriseRAG-Bench-Data/jira）：
-    python <skills>/rag-bench/scripts/run_bench.py            # 默认抽 10 题
-    python <skills>/rag-bench/scripts/run_bench.py --n 20 --seed 42
-    python <skills>/rag-bench/scripts/run_bench.py --list     # 只看题库分布
+**被测应用由用户自行启动**：脚本不启动/不重启/不杀进程，只接受 ``--port``。
 
-被测实例：自动在 CORTEX_WEB_PORT..+9 间探测 /api/status，取 workdir 与当前目录
-一致者；没有匹配实例时报错并给出启动指引（不会误测别的语料）。
+两阶段：问答完成先出预览报告（无评分），用户说「开始评分」后主代理逐题在线
+评分，再出终报。
+
+**无默认值纪律**：测试方案（题数/题型/源）必须由用户明确——参数不齐全时
+脚本拒绝执行并列出缺什么；不带任何参数时只打印题库统计（等价 stats）。
+
+子命令：
+  stats  打印题库统计（题型分布表 + source_type 单源题数表）
+  check  冒烟自检：问一句「你是谁？」验证链路能跑通（--port 必填）
+  pick   抽题：--n/--question-type/--out-dir 全部必填，缺一拒绝
+  run    问答（默认串行、每题即时落盘）：--pick/--out-dir/--port 必填
+  ask    单题调试：--pick/--qidx/--out-dir/--port 必填
+  report 解析评分后的 answers md 出终报：--answers 必填
+
+产物均落 --out-dir（AI 助手 data dir 下 benchmarks/），便于审查。
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import random
 import re
+import socket
 import statistics
 import sys
+import threading
 import time
+import urllib.error
 import urllib.request
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-try:  # Windows 控制台 GBK 会炸掉英文引号/中文，统一 UTF-8 输出
+try:  # Windows 控制台 GBK 兜底
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:  # noqa: BLE001
     pass
 
-# ---------------------------------------------------------------------------
-# 常量
-# ---------------------------------------------------------------------------
+BENCH_SUBDIR = "benchmarks"
 
-SKILL_NAME_DEFAULT = "knowledge-base"
-SKILL_MESSAGE_TEMPLATE = (
-    "[调用技能: {name}]\n"
-    '请先 load_skill("{name}") 加载技能，然后按技能指引处理。\n'
-    "\n"
-    "{question}\n"
-    "\n"
-    "（语料为全英文，请全程使用英文回答 / Answer entirely in English.）"
-)
-PLAIN_MESSAGE_TEMPLATE = (
-    "{question}\n"
-    "\n"
-    "（语料为全英文，请全程使用英文回答 / Answer entirely in English.）"
-)
+# 斜杠技能：与被测实例里已安装的技能同名（题集为全英文语料问答）
+SKILL_NAME = "knowledge-base"
+LANG_SUFFIX = "\n\n（语料为全英文，请全程使用英文回答 / Answer entirely in English.）"
 
-REFS_LINE_RE = re.compile(r"^\s*\d+\.\s+(.+?)\s*$", re.M)
-_REFS_SECTION_RE = re.compile(r"^##\s+(参考资料|References)\s*$", re.M)
-_TOOL_PATH_RE = re.compile(r"<path>([^<>\n]+?)</path>")
-_DOC_LINE_RE = re.compile(r"^文档[:：]\s*(.+?)\s*$", re.M)
-_SCORE_RE = re.compile(r"\{[^{}]*\"score\"[^{}]*\}", re.S)
+# 题型说明（题库全量口径；分布表用）
+QUESTION_TYPE_DESC = [
+    ("basic", "单一事实"),
+    ("semantic", "语义理解"),
+    ("intra_document_reasoning", "文档内推理"),
+    ("project_related", "跨源项目题（多为跨源）"),
+    ("constrained", "约束条件"),
+    ("conflicting_info", "信息冲突"),
+    ("completeness", "完整性"),
+    ("miscellaneous", "杂项"),
+    ("info_not_found", "应答“查不到”（评分特例）"),
+    ("high_level", "高层概括"),
+]
 
-JUDGE_SYSTEM = (
-    "You are a strict benchmark judge. Compare the candidate answer against the "
-    "gold answer for the given question. Score 1-10:\n"
-    "9-10: covers all key facts correctly, no contradictions.\n"
-    "7-8: covers most key facts, minor omissions, no wrong facts.\n"
-    "4-6: partial coverage or vague; may contain minor errors.\n"
-    "1-3: mostly wrong, misses the point, or fabricates.\n"
-    "Special case (info_not_found questions): the gold answer REQUIRES stating "
-    "the query is not fully answerable. Score 9-10 only if the candidate "
-    "explicitly says it cannot fully answer from available documents; answering "
-    "with fabricated specifics scores 1-3.\n"
-    "Judge only factual agreement with the gold answer; ignore verbosity, "
-    "formatting and citation style.\n"
-    "Respond with ONLY a JSON object: {\"score\": <int 1-10>, \"reason\": \"<one sentence>\"}"
+ANSWER_SECTION_RE = re.compile(
+    r"^##\s+(?P<qid>qst_\d+)\s*\n(?P<body>.*?)(?=^##\s+qst_\d+\s*$|\Z)",
+    re.M | re.S,
 )
 
 
 # ---------------------------------------------------------------------------
-# 小型工具
+# 小工具
 # ---------------------------------------------------------------------------
-
-def _env(name: str, default: str = "") -> str:
-    """进程环境优先，其次 ~/.cortex/.env（GUI 激活 LLM 预设的落点）。"""
-    val = os.environ.get(name)
-    if val:
-        return val
-    env_path = Path.home() / ".cortex" / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            if line.startswith(f"{name}="):
-                return line.split("=", 1)[1].strip()
-    return default
-
-
-def _normcase(p: str | Path) -> str:
-    return os.path.normcase(os.path.abspath(str(p)))
-
 
 def _fmt(x, suffix: str = "") -> str:
     return f"{x:.2f}{suffix}" if x is not None else "—"
@@ -115,13 +91,212 @@ def _pct(part: int, total: int) -> str:
     return f"{part / total * 100:.1f}%（{part}/{total}）" if total else "—"
 
 
-def data_dir(root: Path) -> Path:
-    """语料目录的数据目录（开发版 .cortex / 发行版 .doclens，取已存在者）。"""
-    for name in (".doclens", ".cortex"):
-        d = root / name
-        if d.is_dir():
-            return d
-    return root / ".doclens"
+def base_url(port: int, host: str = "127.0.0.1") -> str:
+    return f"http://{host}:{port}"
+
+
+def acquire_run_lock(bench: Path, run_id: str) -> Path:
+    """同 run_id 并发防护：30 分钟内的活跃锁直接拒绝（防两个 run 进程互撞）。"""
+    lock = bench / f".run_{run_id}.lock"
+    if lock.exists():
+        age = time.time() - lock.stat().st_mtime
+        if age < 1800:
+            raise SystemExit(
+                f"错误：run {run_id} 疑似已在运行（锁文件 {lock}，{age:.0f}s 前创建）。\n"
+                "      不要重复发起同一 run——先 check_background 确认状态；"
+                "确认无实例后删除锁文件再重跑。")
+    lock.write_text(str(os.getpid()), encoding="utf-8")
+    return lock
+
+
+# ---------------------------------------------------------------------------
+# HTTP / SSE（生产对话链路，纯标准库）
+# ---------------------------------------------------------------------------
+
+def _http_error_text(e: urllib.error.HTTPError) -> str:
+    try:
+        raw = e.read().decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        raw = ""
+    try:
+        body = json.loads(raw)
+        return f"HTTP {e.code} {body.get('code', '')}: {body.get('detail', '')}".strip()
+    except Exception:  # noqa: BLE001
+        return f"HTTP {e.code}: {raw[:200]}"
+
+
+def api_get(base: str, path: str, timeout: float = 30.0) -> dict:
+    with urllib.request.urlopen(base + path, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def api_post(base: str, path: str, body: dict, timeout: float = 30.0) -> dict:
+    req = urllib.request.Request(
+        base + path,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read().decode("utf-8", errors="replace")
+    return json.loads(raw) if raw.strip() else {}
+
+
+def create_session(base: str, title: str, mode: Optional[str] = "skill") -> str:
+    """建聊天会话；mode='skill' → 引文走提取式策展（不做 [N] 重写）。"""
+    body = {"type": "chat", "title": title[:200], "preview": ""}
+    if mode:
+        body["mode"] = mode
+    return str(api_post(base, "/api/sessions", body)["id"])
+
+
+def create_skill_session(base: str, title: str) -> str:
+    """建技能会话（基准题专用）。"""
+    return create_session(base, title, mode="skill")
+
+
+def delete_session(base: str, session_id: str) -> bool:
+    """删除会话（冒烟自检后清理，不污染用户的会话列表）。"""
+    req = urllib.request.Request(base + f"/api/sessions/{session_id}", method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def stop_session(base: str, session_id: str) -> bool:
+    """请求中断该会话生成（ADR-0028/0035）。
+
+    基准测试超时后**必须**调它：客户端断开并不会让后端停——默认配置下
+    agent 会续跑完本轮（耗时可达数分钟、白烧 token），且会与下一题抢
+    LLM/检索资源，把后续耗时全部污染。
+    """
+    try:
+        api_post(base, "/api/chat/stop", {"session_id": session_id}, timeout=20)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def ask_once(base: str, session_id: str, question: str, timeout_s: float) -> dict:
+    """发一轮对话并收流到 done。
+
+    返回 ``{ok, answer, wall_ms, error?, tool_calls, thinking_chars, usage}``。
+    ``wall_ms`` = 提问→done 的实测墙钟（含思考、工具、策展）。
+    """
+    body = json.dumps({"message": question, "session_id": session_id},
+                      ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        base + "/api/chat", data=body,
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        method="POST",
+    )
+
+    texts: list[str] = []
+    tool_names: list[str] = []
+    thinking_chars = 0
+    usage: Optional[dict] = None
+    error: Optional[str] = None
+    ask_hit = False
+    t0 = time.monotonic()
+
+    def _finish(ok: bool, err: Optional[str] = None) -> dict:
+        return {
+            "ok": ok, "answer": "".join(texts).strip(),
+            "wall_ms": int((time.monotonic() - t0) * 1000),
+            "error": err, "tool_calls": len(tool_names),
+            "tool_names": tool_names[:20],
+            "thinking_chars": thinking_chars, "usage": usage,
+        }
+
+    def _timeout() -> dict:
+        """超时：先让后端停生成（否则断开续跑会白烧几分钟），再报失败。"""
+        stopped = stop_session(base, session_id) if session_id else False
+        return _finish(
+            False,
+            f"超时 {timeout_s:.0f}s（回答失败；"
+            f"{'已请求停止' if stopped else '停止请求失败，后端可能仍在跑'}）",
+        )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as r:
+            event = ""
+            data_lines: list[str] = []
+            while True:
+                if time.monotonic() - t0 > timeout_s:
+                    return _timeout()
+                raw = r.readline()
+                if not raw:
+                    break
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                if not line:
+                    # 事件分隔：派发
+                    if event:
+                        payload = "\n".join(data_lines)
+                        try:
+                            data = json.loads(payload) if payload.strip() else {}
+                        except json.JSONDecodeError:
+                            data = {}
+                        if event == "token":
+                            texts.append(str(data.get("text", "")))
+                        elif event == "thinking":
+                            thinking_chars += len(str(data.get("delta", "")))
+                        elif event == "tool_call":
+                            tool_names.append(str(data.get("name", "")))
+                        elif event == "usage":
+                            usage = data
+                        elif event == "error":
+                            error = str(data.get("detail", "")) or "未知错误"
+                        elif event == "ask":
+                            ask_hit = True
+                        elif event == "done":
+                            if ask_hit:
+                                return _finish(
+                                    False, "agent 触发 ask_user_question（基准题不应交互）")
+                            if error:
+                                return _finish(False, error)
+                            return _finish(True)
+                    event, data_lines = "", []
+                    continue
+                if line.startswith(":"):
+                    continue  # SSE 注释/心跳
+                if line.startswith("event:"):
+                    event = line[len("event:"):].strip()
+                elif line.startswith("data:"):
+                    data_lines.append(line[len("data:"):].lstrip())
+    except urllib.error.HTTPError as e:
+        return _finish(False, _http_error_text(e))
+    except (socket.timeout, TimeoutError):
+        return _timeout()
+    except urllib.error.URLError as e:
+        return _finish(False, f"连接失败：{e.reason}")
+
+    if error:
+        return _finish(False, error)
+    if not texts:
+        return _finish(False, "流已结束但没有正文（token 事件为空）")
+    return _finish(True)
+
+
+def require_instance(base: str, cwd: Path) -> dict:
+    """前置检查：实例可达 ∧ workdir 与 cwd 一致（防测错知识库）。"""
+    try:
+        st = api_get(base, "/api/status", timeout=90)  # 大语料 status 需遍历全库，可能 >10s
+    except Exception as e:  # noqa: BLE001
+        raise SystemExit(
+            f"错误：连不上被测实例 {base}（{e}）。\n"
+            "      请先在目标知识库目录自行启动应用，然后传它实际监听的 --port。")
+    wd = str(st.get("workdir") or "")
+    if wd:
+        a, b = Path(wd).resolve(), cwd.resolve()
+        if str(a).lower() != str(b).lower():
+            raise SystemExit(
+                f"错误：实例 workdir 与当前目录不一致，拒绝开测（防测错知识库）。\n"
+                f"      实例 workdir：{a}\n"
+                f"      当前目录    ：{b}\n"
+                "      请在目标知识库目录下运行本脚本，或换到对应实例的 --port。")
+    return st
 
 
 # ---------------------------------------------------------------------------
@@ -140,12 +315,7 @@ def load_questions(path: Path) -> list[dict]:
 
 def filter_questions(questions: list[dict], source_type: str, include_multi: bool,
                      question_types: Optional[set[str]] = None) -> list[dict]:
-    """筛出本语料可作答的题。
-
-    默认只取 ``source_types == [source_type]`` 的纯单源题——跨源题（如
-    jira+confluence 的 project_related）需要别的语料，单源语料下必然答不全，
-    计入会系统性拉低分数。``--include-multi`` 可放宽为「包含本 source_type」。
-    """
+    """默认只取 source_types == [source_type] 的纯单源题。--include-multi 放宽。"""
     picked = []
     for q in questions:
         sts = set(q.get("source_types") or [])
@@ -162,195 +332,201 @@ def filter_questions(questions: list[dict], source_type: str, include_multi: boo
 
 
 # ---------------------------------------------------------------------------
-# 被测实例发现
+# stats：题库统计
 # ---------------------------------------------------------------------------
 
-def _status(base_url: str, timeout: float = 30.0) -> dict:
-    with urllib.request.urlopen(base_url.rstrip("/") + "/api/status", timeout=timeout) as r:
-        return json.load(r)
+def print_stats(questions_path: Path) -> None:
+    questions = load_questions(questions_path)
+    by_type = Counter(q.get("question_type", "") for q in questions)
+    by_src_pure = Counter(next(iter(q["source_types"]))
+                          for q in questions if len(q.get("source_types") or []) == 1)
+    desc = dict(QUESTION_TYPE_DESC)
+
+    print("## 题型分布")
+    print()
+    print("| 题型 | 全库题数 | 说明 |")
+    print("|------|---------|------|")
+    for t, _d in QUESTION_TYPE_DESC:
+        print(f"| {t} | {by_type.get(t, 0)} | {desc[t]} |")
+    for t, c in by_type.most_common():  # 表外新题型追加，防静默丢数
+        if t not in desc:
+            print(f"| {t} | {c} | — |")
+    print()
+    print("## source_type 单源题数")
+    print()
+    print("| source_type | 单源题数 |")
+    print("|------|---------|")
+    for s, c in by_src_pure.most_common():
+        print(f"| {s} | {c} |")
 
 
-def discover_base_url(workdir: Path, override: str = "", allow_mismatch: bool = False,
-                      extra_ports: int = 10) -> tuple[str, dict]:
-    """找到 workdir 与当前目录一致的 doclens 实例。"""
-    candidates: list[str] = []
-    if override:
-        candidates.append(override.rstrip("/"))
-    else:
-        base = 7860
+def cmd_stats(args: argparse.Namespace) -> None:
+    questions_path = (Path(args.questions) if args.questions
+                      else Path.cwd().resolve().parent / "questions.jsonl")
+    if not questions_path.exists():
+        raise SystemExit(f"错误：题库不存在：{questions_path}")
+    print_stats(questions_path)
+
+
+# ---------------------------------------------------------------------------
+# pick：抽题（方案必须明确）
+# ---------------------------------------------------------------------------
+
+def _require(params: dict[str, tuple[bool, str]], usage_hint: str) -> None:
+    """缺必填参数时统一报错：列出缺失项与用法提示（无默认值纪律）。"""
+    missing = [hint for ok, hint in params.values() if not ok]
+    if missing:
+        raise SystemExit("错误：测试方案不完整，缺以下参数（不提供默认值，须由用户明确）：\n"
+                         + "\n".join(f"  - {m}" for m in missing)
+                         + f"\n{usage_hint}")
+
+
+def cmd_pick(args: argparse.Namespace) -> None:
+    _require({
+        "--n": (args.n is not None, "--n <题数>：抽多少题（用户明确）"),
+        "--question-type": (bool(args.question_type),
+                            "--question-type basic,semantic：测哪些题型（用户明确；全部题型传 all）"),
+        "--out-dir": (bool(args.out_dir), "--out-dir <AI 助手 data dir>/benchmarks：产物目录"),
+    }, "用法：pick --n 10 --question-type basic,semantic --out-dir <dir> [--port 7860] [--seed 42]")
+
+    workdir = Path.cwd().resolve()
+    questions_path = (Path(args.questions) if args.questions
+                      else workdir.parent / "questions.jsonl")
+    if not questions_path.exists():
+        raise SystemExit(f"错误：题库不存在：{questions_path}\n"
+                         "      约定：cwd 为 source_type 目录，父目录放 questions.jsonl。")
+
+    # source_type：显式 > 运行实例 workdir（--port 可达时）> cwd 兜底
+    source_type = args.source_type
+    if not source_type and args.port:
         try:
-            base = int(_env("CORTEX_WEB_PORT", "7860") or 7860)
-        except ValueError:
-            pass
-        ports = list(dict.fromkeys(list(range(base, base + extra_ports)) + list(range(7860, 7870))))
-        candidates = [f"http://127.0.0.1:{p}" for p in ports]
-
-    seen: list[tuple[str, str]] = []
-    for url in candidates:
-        try:
-            st = _status(url)
+            wd = str(api_get(base_url(args.port, args.host), "/api/status", timeout=90)
+                     .get("workdir") or "")
+            if wd:
+                source_type = Path(wd).name
         except Exception:  # noqa: BLE001
-            continue
-        wd = str(st.get("workdir") or "")
-        if wd and _normcase(wd) == _normcase(workdir):
-            return url, st
-        seen.append((url, wd))
+            print(f"警告：{args.port} 端口不可达，source_type 回退用目录名 {workdir.name}",
+                  file=sys.stderr)
+    if not source_type:
+        source_type = workdir.name
 
-    if override and override.rstrip("/") in [u for u, _ in seen]:
-        st = _status(override)
-        if allow_mismatch:
-            return override.rstrip("/"), st
-        raise SystemExit(
-            f"错误：{override} 的 workdir 是 {st.get('workdir')!r}，与当前目录 {str(workdir)!r} 不一致。\n"
-            "      基准测试必须在被测语料目录启动的实例上跑；确需跨语料测试请加 --allow-mismatch。"
-        )
+    questions = load_questions(questions_path)
+    types = ({t.strip() for t in args.question_type.split(",") if t.strip()}
+             if args.question_type.lower() != "all" else set())
 
-    lines = [f"错误：未找到 workdir = {workdir} 的 doclens 实例。"]
-    if seen:
-        lines.append("已探测到的其它实例：")
-        lines.extend(f"  - {u}  workdir={wd or '?'}" for u, wd in seen)
-    lines.append("")
-    lines.append("启动被测实例（后台，隐藏窗口）：")
-    lines.append(
-        '  CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh '
-        f"-ArgumentList '-File','<repo>/start-app.ps1','gui','-C','{workdir}' -WindowStyle Hidden\""
-    )
-    lines.append("启动后等 /api/status 的 workdir 与 index_building=false 再重跑本脚本。")
-    raise SystemExit("\n".join(lines))
+    # 题型校验：拼错/不存在直接报错并列出本源可用题型
+    available = Counter(q["question_type"] for q in
+                        filter_questions(questions, source_type, args.include_multi))
+    if types:
+        bad = types - set(available)
+        if bad:
+            raise SystemExit(
+                f"错误：题型 {sorted(bad)} 不在本 source_type 的题池中。\n"
+                f"      可用题型（{source_type}）："
+                + "，".join(f"{k}={v}" for k, v in available.most_common()))
+
+    pool = filter_questions(questions, source_type, args.include_multi, types or None)
+    if not pool:
+        raise SystemExit(f"错误：题池为空（source_type={source_type}，types={sorted(types) or 'all'}）。"
+                         "可 --include-multi 放宽，或检查题型组合。")
+
+    n = max(1, min(args.n, len(pool)))
+    seed = args.seed if args.seed is not None else random.randrange(1_000_000)
+    selected = random.Random(seed).sample(pool, n)
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    pick_path = out_dir / f"pick_{run_id}.json"
+    pick_path.write_text(json.dumps({
+        "run_id": run_id, "source_type": source_type, "seed": seed, "n": n,
+        "pool_size": len(pool), "include_multi": args.include_multi,
+        "question_types": sorted(types) or None, "skill_name": SKILL_NAME,
+        "questions_path": str(questions_path), "questions": selected,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"run_id: {run_id}")
+    print(f"seed: {seed}")
+    print(f"抽样 {n}/{len(pool)} 题（source_type={source_type}，"
+          f"题型={'all' if not types else ','.join(sorted(types))}，"
+          f"跨源题{'包含' if args.include_multi else '排除'}）")
+    print(f"抽题清单：{pick_path}")
+    print()
+    print("## 任务清单（逐条 task_create）")
+    for i, q in enumerate(selected, 1):
+        print(f"- [{q['question_id']}] [{q.get('question_type', '')}] {q['question'][:80]}"
+              f"{'…' if len(q['question']) > 80 else ''}")
+    print()
+    print("answers md 模板（评分阶段逐题追加；引用/耗时从 RESULTS_JSONL 抄）：")
+    print(f"# RAG 基准测试作答 · {source_type} · run {run_id}")
+    print("## qst_xxxx")
+    print("**评分**：x/10 —— <理由>")
+    print("**引用**：recall=0.50 precision=0.33")
+    print("**耗时**：61.2s")
+    print("**回答**：")
+    print("<被测实例真实回答正文>")
 
 
-# ---------------------------------------------------------------------------
-# 对话客户端（复刻前端 chat-view 序列）
-# ---------------------------------------------------------------------------
-
-class ChatClient:
-    def __init__(self, base_url: str, timeout_s: float = 900.0,
-                 question_timeout_s: float = 240.0):
-        import httpx  # 延迟导入：--list 等纯本地操作不依赖
-
-        self._base = base_url.rstrip("/")
-        self._client = httpx.Client(timeout=timeout_s)
-        self._question_timeout_s = question_timeout_s
-
-    def ask(self, question: str, title: str, skill: Optional[str] = SKILL_NAME_DEFAULT) -> dict:
-        message = (
-            SKILL_MESSAGE_TEMPLATE.format(name=skill, question=question)
-            if skill else PLAIN_MESSAGE_TEMPLATE.format(question=question)
-        )
-        # 1. 建会话（技能会话 mode=skill；纯问答不指定 mode）
-        payload = {"type": "chat", "title": title[:60], "preview": question[:100]}
-        if skill:
-            payload["mode"] = "skill"
-        r = self._client.post(f"{self._base}/api/sessions", json=payload)
-        r.raise_for_status()
-        session_id = r.json()["id"]
-
-        # 2. 用户消息先落库（后端按轮回放依赖此序）
-        r = self._client.patch(f"{self._base}/api/sessions/{session_id}", json={
-            "items": [{"kind": "message_user",
-                       "payload": json.dumps({"content": message}, ensure_ascii=False)}],
-        })
-        r.raise_for_status()
-
-        # 3. SSE 取流
-        t0 = time.monotonic()
-        first_token_ms: Optional[float] = None
-        tokens: list[str] = []
-        tool_calls: list[dict] = []
-        tool_results: list[dict] = []
-        error: Optional[str] = None
-
-        with self._client.stream("POST", f"{self._base}/api/chat",
-                                 json={"message": message, "session_id": session_id}) as resp:
-            resp.raise_for_status()
-            event_name = ""
-            data_buf: list[str] = []
-            try:
-                for line in resp.iter_lines():
-                    if (time.monotonic() - t0) > self._question_timeout_s:
-                        error = f"timeout after {self._question_timeout_s:.0f}s"
-                        break
-                    if line.startswith("event:"):
-                        event_name = line[6:].strip()
-                    elif line.startswith("data:"):
-                        data_buf.append(line[5:].strip())
-                    elif line == "":
-                        if event_name:
-                            try:
-                                data = json.loads("".join(data_buf) or "{}")
-                            except json.JSONDecodeError:
-                                data = {}
-                            if event_name == "token" and first_token_ms is None:
-                                first_token_ms = (time.monotonic() - t0) * 1000
-                            self._consume(event_name, data, tokens, tool_calls, tool_results)
-                            if event_name in ("done", "error"):
-                                if event_name == "error":
-                                    error = str(data.get("detail") or data.get("message") or "unknown")
-                                break
-                        event_name, data_buf = "", []
-            finally:
-                # 早退/超时必须显式关流，否则服务端继续生成、连接悬挂
-                resp.close()
-
-        if error and error.startswith("timeout"):
-            try:
-                self._client.post(f"{self._base}/api/chat/stop",
-                                  json={"session_id": session_id}, timeout=10)
-            except Exception:  # noqa: BLE001
-                pass
-
-        return {
-            "answer": "".join(tokens),
-            "tool_calls": [{"name": tc.get("name"), "input": tc.get("input")} for tc in tool_calls],
-            "tool_results": tool_results,
-            "first_token_ms": first_token_ms,
-            "wall_ms": (time.monotonic() - t0) * 1000,
-            "error": error,
-            "session_id": session_id,
-        }
-
-    @staticmethod
-    def _consume(event: str, payload: dict, tokens: list[str],
-                 tool_calls: list[dict], tool_results: list[dict]) -> None:
-        if event == "token":
-            tokens.append(str(payload.get("text", "")))
-        elif event == "tool_call":
-            tool_calls.append({"name": str(payload.get("name", "")),
-                               "input": payload.get("input", {})})
-        elif event == "tool_result":
-            tool_results.append({"name": str(payload.get("name", "")),
-                                 "output": str(payload.get("output", "")),
-                                 "is_error": bool(payload.get("is_error"))})
-
-    def close(self) -> None:
-        self._client.close()
+def _ask_question_text(q: dict, skill_name: str) -> str:
+    return f"/{skill_name} {q['question']}{LANG_SUFFIX}"
 
 
 # ---------------------------------------------------------------------------
-# 引用契合度（expected_doc_ids 是文件名前缀 dsid_xxx）
+# 引用提取（会话落库后回读 tool_trace）
 # ---------------------------------------------------------------------------
 
-def extract_cited_paths(answer: str, tool_results: Optional[list[dict]] = None) -> list[str]:
-    """提取实际引用/检索到的文档路径（参考资料章节 → 工具轨迹 → 正文兜底）。"""
+def fetch_session_refs(base_url_: str, session_id: Optional[str],
+                       answer_text: str, retries: int = 3,
+                       retry_delay_s: float = 2.0) -> list[str]:
+    """提取一次问答实际引用/检索到的文档路径。
+
+    优先级：正文「参考资料」章节 → 会话 tool_trace → 正文反引号兜底。
+    tool_trace 落库滞后于流结束：重试至提取数稳定（连续两次一致），
+    避免读到了金标文档却判 recall=0 的假阴性。"""
     cited: list[str] = []
-    m = _REFS_SECTION_RE.search(answer or "")
+    m = re.search(r"^##\s+(参考资料|References)\s*$", answer_text or "", re.M)
     if m:
-        section = answer[m.end():]
+        section = answer_text[m.end():]
         nxt = re.search(r"^##\s", section, re.M)
         if nxt:
-            section = section[: nxt.start()]
-        cited = [mm.group(1) for mm in REFS_LINE_RE.finditer(section)]
+            section = section[:nxt.start()]
+        cited = [mm.group(1) for mm in re.finditer(r"^\s*\d+\.\s+(.+?)\s*$", section, re.M)]
 
-    if not cited and tool_results:
-        for tr in tool_results:
-            if tr.get("is_error"):
-                continue
-            out = tr.get("output") or ""
-            cited.extend(_TOOL_PATH_RE.findall(out))
-            cited.extend(_DOC_LINE_RE.findall(out))
+    if not cited and session_id:
+        prev: list[str] = []
+        for attempt in range(max(1, retries)):
+            try:
+                detail = api_get(base_url_, f"/api/sessions/{session_id}", timeout=30)
+                batch: list[str] = []
+                for it in detail.get("items") or []:
+                    if it.get("kind") != "tool_trace":
+                        continue
+                    try:
+                        tr = json.loads(it.get("payload") or "{}")
+                    except json.JSONDecodeError:
+                        continue
+                    if tr.get("name") == "search_kb":
+                        batch.extend(re.findall(r"<path>([^<>\n]+?)</path>",
+                                                str(tr.get("output") or "")))
+                    elif tr.get("name") == "read_document":
+                        p = (tr.get("input") or {}).get("path")
+                        if p:
+                            batch.append(str(p))
+                seen: set[str] = set()
+                batch = [c for c in batch if not (c in seen or seen.add(c))]
+                if batch and len(batch) == len(prev):
+                    return batch
+                prev = batch
+                if attempt < max(1, retries) - 1:
+                    time.sleep(retry_delay_s)
+            except Exception:  # noqa: BLE001
+                if attempt < max(1, retries) - 1:
+                    time.sleep(retry_delay_s)
+        if prev:
+            return prev
 
     if not cited:
-        for bm in re.finditer(r"`([^`\n]+\.\w{2,4})`", answer or ""):
+        for bm in re.finditer(r"`([^`\n]+\.\w{2,4})`", answer_text or ""):
             p = bm.group(1)
             if "/" in p or "\\" in p:
                 cited.append(p)
@@ -359,131 +535,396 @@ def extract_cited_paths(answer: str, tool_results: Optional[list[dict]] = None) 
     return [c for c in cited if not (c in seen or seen.add(c))]
 
 
-def match_score(cited: list[str], expected_doc_ids: list[str]) -> dict:
+def ref_metrics(cited: list[str], expected_doc_ids: list[str]) -> dict:
     prefixes = {Path(c).name.split("__")[0] for c in cited}
     hits = [d for d in expected_doc_ids if d in prefixes]
-    misses = [d for d in expected_doc_ids if d not in prefixes]
-    extra = sorted(prefixes - set(expected_doc_ids))
     return {
-        "recall": len(hits) / len(expected_doc_ids) if expected_doc_ids else None,
-        "precision": len(hits) / len(prefixes) if prefixes else None,
-        "hits": hits, "misses": misses, "extra": extra,
+        "recall": (len(hits) / len(expected_doc_ids)) if expected_doc_ids else None,
+        "precision": (len(hits) / len(prefixes)) if prefixes else None,
+        "hits": hits,
+        "misses": [d for d in expected_doc_ids if d not in prefixes],
+        "n_cited_docs": len(prefixes),
     }
 
 
 # ---------------------------------------------------------------------------
-# LLM 裁判
+# check：冒烟自检（一句话问答，验证整条链路能跑通）
 # ---------------------------------------------------------------------------
 
-def _judge_config() -> dict:
-    return {
-        "protocol": _env("PLANIFY_PROTOCOL", "anthropic"),
-        "base_url": _env("PLANIFY_BASE_URL", ""),
-        "model_id": _env("PLANIFY_MODEL_ID", ""),
-        "api_key": _env("PLANIFY_API_KEY", ""),
-    }
+CHECK_PROMPT = "你是谁？用一句话回答，不要调用工具。"
+CHECK_SKILL_PROMPT = "用一句话确认你已加载技能，然后回答：你是谁？"
 
 
-def judge_answer(question: dict, candidate: str, judge_model: str = "") -> dict:
-    """LLM 裁判对比 gold_answer 打 1-10 分；失败重试 3 次后返回 score=None。"""
-    try:
-        from planify.core.llm.factory import create_provider
-    except ImportError:
-        return {"score": None,
-                "reason": "cannot import planify —— 请用装有 planify 的解释器运行（见 SKILL.md 环境检查）"}
+def cmd_check(args: argparse.Namespace) -> None:
+    """冒烟自检：实例可达 → 建会话 → 发一句简单问题 → 收流到 done。
 
-    cfg = _judge_config()
-    if judge_model:
-        cfg["model_id"] = judge_model
-    user = (
-        f"Question:\n{question['question']}\n\n"
-        f"Gold answer:\n{question.get('gold_answer', '')}\n\n"
-        "Key facts to check:\n"
-        + "\n".join(f"- {f}" for f in question.get("answer_facts", []))
-        + f"\n\nCandidate answer:\n{(candidate or '')[:8000]}"
-    )
-    last_err = None
-    for _attempt in range(3):
-        try:
-            provider = create_provider(cfg)
-            resp = provider.chat(
-                messages=[{"role": "user", "content": user}],
-                system=JUDGE_SYSTEM,
-                tools=[],
-                max_tokens=2000,  # 推理模型会先吃 reasoning token，留足余量
-            )
-            text = "".join(getattr(b, "text", "") for b in resp.content)
-            m = _SCORE_RE.search(text)
-            data = None
-            if m:
-                try:
-                    data = json.loads(m.group(0))
-                except json.JSONDecodeError:
-                    data = None
-            if data is None:
-                sm = re.search(r'"score"\s*:\s*(\d{1,2})', text)
-                data = {"score": int(sm.group(1)), "reason": ""} if sm else None
-            if data is not None:
-                score = int(data["score"])
-                if 1 <= score <= 10:
-                    return {"score": score, "reason": str(data.get("reason", "")), "judge_model": cfg["model_id"]}
-            last_err = f"unparseable judge output: {text[:200]}"
-        except Exception as e:  # noqa: BLE001
-            last_err = str(e)
-        time.sleep(1.5)
-    return {"score": None, "reason": f"judge failed: {last_err}", "judge_model": cfg["model_id"]}
+    只验证链路（SSE 通、有正文、能收尾），不评分、不落产物。默认问
+    「你是谁？」——模型一句话就能答，不需要检索，能把「LLM 通不通」
+    与「RAG 好不好」解耦。失败退出码 1，便于流水线早停。
+    """
+    _require({
+        "--port": (args.port is not None, "--port <端口>：用户自起的被测实例端口"),
+    }, "用法：check --port 7860 [--with-skill] [--prompt '你是谁？'] [--timeout 90]")
+
+    workdir = Path.cwd().resolve()
+    base = base_url(args.port, args.host)
+    st = require_instance(base, workdir)
+
+    print("## 实例")
+    print(f"- 地址：{base}")
+    print(f"- workdir：{st.get('workdir', '')}")
+    print(f"- 已索引文档：{st.get('indexed_docs', '—')}（索引中：{st.get('index_building')}）")
+    print(f"- 模型：{st.get('model_name') or '未报告'}")
+    if st.get("index_building"):
+        print("- 警告：索引仍在构建，检索类问题可能不完整（本次冒烟不受影响）")
+    print()
+
+    use_skill = bool(args.with_skill)
+    prompt = args.prompt or (CHECK_SKILL_PROMPT if use_skill else CHECK_PROMPT)
+    if use_skill and not prompt.startswith("/"):
+        prompt = f"/{SKILL_NAME} {prompt}"
+
+    sid = create_session(base, "rag-bench-check", mode="skill" if use_skill else None)
+    print("## 提问")
+    print(f"- 会话：{sid}")
+    print(f"- 内容：{prompt}")
+    r = ask_once(base, sid, prompt, args.timeout)
+
+    print()
+    print("## 结果")
+    print(f"- 成功：{'是' if r['ok'] else '否'}")
+    print(f"- 耗时：{(r.get('wall_ms') or 0) / 1000:.1f}s")
+    print(f"- 工具调用：{r.get('tool_calls', 0)} 次"
+          + (f"（{', '.join(r.get('tool_names') or [])}）" if r.get("tool_names") else ""))
+    print(f"- 思考增量：{r.get('thinking_chars', 0)} 字符")
+    if r.get("usage"):
+        u = r["usage"]
+        print(f"- 用量：in {u.get('input_tokens')} / out {u.get('output_tokens')} "
+              f"/ 缓存读 {u.get('cache_read_input_tokens')}")
+    if r["ok"]:
+        print(f"- 回答：{r['answer']}")
+    else:
+        print(f"- 失败原因：{r.get('error')}")
+
+    if not args.keep_session:
+        print(f"- 清理会话：{'已删除' if delete_session(base, sid) else '删除失败（可手动删）'}")
+
+    if not r["ok"]:
+        raise SystemExit(1)
+    print()
+    print("链路可用——可以继续 pick / run。")
+
+
+def cmd_ask(args: argparse.Namespace) -> None:
+    _require({
+        "--pick": (bool(args.pick), "--pick <pick json>：抽题清单"),
+        "--qidx": (args.qidx is not None, "--qidx <0-based 下标>：哪一题"),
+        "--out-dir": (bool(args.out_dir), "--out-dir <dir>：产物目录"),
+        "--port": (args.port is not None, "--port <端口>：用户自起的被测实例端口"),
+    }, "用法：ask --pick <pick json> --qidx 0 --out-dir <dir> --port 7860 [--timeout 120]")
+
+    workdir = Path.cwd().resolve()
+    base = base_url(args.port, args.host)
+    require_instance(base, workdir)
+
+    pick = json.loads(Path(args.pick).read_text(encoding="utf-8"))
+    qs = pick["questions"]
+    if not (0 <= args.qidx < len(qs)):
+        raise SystemExit(f"错误：--qidx 越界（0..{len(qs) - 1}）")
+    q = qs[args.qidx]
+    skill_name = pick.get("skill_name") or SKILL_NAME
+
+    sid = create_skill_session(base, f"bench-{pick['run_id']}-{args.qidx}")
+    result = ask_once(base, sid, _ask_question_text(q, skill_name), args.timeout)
+
+    if not result.get("ok"):
+        raise SystemExit(f"错误：第 {args.qidx} 题（{q['question_id']}）问答失败：{result.get('error')}")
+
+    cited = fetch_session_refs(base, sid, result.get("answer") or "")
+    metrics = ref_metrics(cited, q.get("expected_doc_ids", []))
+    print(json.dumps({
+        "question_id": q["question_id"], "question": q["question"],
+        "answer": result["answer"], "wall_ms": result.get("wall_ms"),
+        "session_id": sid, "tool_calls": result.get("tool_calls"),
+        "thinking_chars": result.get("thinking_chars"),
+        "cited_n": metrics["n_cited_docs"], "recall": metrics["recall"],
+        "precision": metrics["precision"], "ref_misses": metrics["misses"],
+    }, ensure_ascii=False, indent=2))
 
 
 # ---------------------------------------------------------------------------
-# 报告
+# run：逐题问答（默认串行）
 # ---------------------------------------------------------------------------
 
-def write_report(results: list[dict], out_dir: Path, meta: dict) -> Path:
-    ok = [r for r in results if not r.get("chat_error")]
-    scores = [r["ai_score"]["score"] for r in ok if r.get("ai_score", {}).get("score") is not None]
-    recalls = [r["match"]["recall"] for r in ok if r["match"]["recall"] is not None]
-    precisions = [r["match"]["precision"] for r in ok if r["match"]["precision"] is not None]
-    walls = [r["wall_ms"] / 1000 for r in ok if r.get("wall_ms")]
+def write_preview(pick: dict, rows: list[dict], jsonl_path: Path, port: int) -> Path:
+    run_id = pick["run_id"]
+    ok = [x for x in rows if x["ok"]]
+    recalls = [x["recall"] for x in rows if x["recall"] is not None]
+    precisions = [x["precision"] for x in rows if x["precision"] is not None]
+    walls = [x["wall_ms"] / 1000 for x in rows if x.get("wall_ms")]
 
     lines: list[str] = []
-    lines.append(f"# EnterpriseRAG 基准测试报告 · {meta['source_type']} · {meta['run_id']}")
+    lines.append(f"# EnterpriseRAG 基准测试 · 预览报告（未评分） · {pick['source_type']} · {run_id}")
     lines.append("")
     lines.append(f"- 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"- 语料目录：`{meta['workdir']}`")
-    lines.append(f"- 题库：`{meta['questions_path']}`")
-    lines.append(f"- 抽样：{len(results)} 题（可用池 {meta['pool_size']}，N={meta['n']}，seed={meta['seed']}，"
-                 f"跨源题{'包含' if meta['include_multi'] else '排除'}）")
-    lines.append(f"- 被测实例：`{meta['base_url']}`（workdir 已校验；索引 {meta['indexed_docs']} 篇，"
-                 f"模型 {meta['model_name'] or '?'}）")
-    lines.append(f"- 答题模式：{'技能 ' + meta['skill'] if meta['skill'] else '纯问答'}"
-                 f"；裁判模型：{meta['judge_model'] or '?'}")
-    lines.append(f"- 明细：`{meta['jsonl_path']}`")
+    lines.append(f"- 抽样：{len(rows)} 题（可用池 {pick['pool_size']}，N={pick['n']}，seed={pick['seed']}，"
+                 f"跨源题{'包含' if pick['include_multi'] else '排除'}）")
+    lines.append(f"- 问答通道：`POST /api/chat`（SSE 流，port {port}）；每题独立技能会话")
+    lines.append(f"- 结果明细：`{jsonl_path}`")
+    lines.append("")
+    lines.append("## 速览")
+    lines.append("")
+    lines.append("| 指标 | 值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 问答成功 | {len(ok)}/{len(rows)} |")
+    lines.append(f"| 引用 recall 均值 | {_fmt(_avg(recalls))} |")
+    lines.append(f"| 引用 precision 均值 | {_fmt(_avg(precisions))} |")
+    lines.append(f"| recall=0 题数 | {sum(1 for x in recalls if x == 0)}/{len(recalls)} |")
+    lines.append(f"| 回答耗时均值 | {_fmt(_avg(walls), 's')}（最慢 {_fmt(max(walls) if walls else None, 's')}） |")
+    lines.append("| AI 评分 | 待评分（用户确认后进行） |")
+    lines.append("")
+    lines.append("## 逐题预览")
+    for i, x in enumerate(rows, 1):
+        lines.append("")
+        lines.append(f"### {i}. {x['question_id']}（{x.get('qtype', '')}，"
+                     f"recall {_fmt(x['recall'])}，耗时 {_fmt((x.get('wall_ms') or 0) / 1000, 's')}）")
+        lines.append("")
+        lines.append(f"- 问题：{x['question']}")
+        lines.append(f"- 金标：{(x['gold_answer'] or '')[:300]}")
+        lines.append(f"- 工具调用：{x.get('tool_calls', 0)} 次"
+                     + (f"（{', '.join(x.get('tool_names') or [])}）" if x.get("tool_names") else ""))
+        if x["ref_misses"]:
+            lines.append(f"- 未命中金标文档：{', '.join(x['ref_misses'])}")
+        if not x["ok"]:
+            lines.append(f"- **问答失败**：{x.get('error')}")
+        else:
+            lines.append(f"- 回答：{(x['answer'] or '')[:800].strip() or '（空）'}")
+    lines.append("")
+    path = jsonl_path.parent / f"preview_{run_id}.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    _require({
+        "--pick": (bool(args.pick), "--pick <pick json>：抽题清单"),
+        "--out-dir": (bool(args.out_dir), "--out-dir <dir>：产物目录"),
+        "--port": (args.port is not None, "--port <端口>：用户自起的被测实例端口"),
+    }, "用法：run --pick <pick json> --all --port 7860 --workers 1 --timeout 300 --out-dir <dir>")
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    workdir = Path.cwd().resolve()
+    base = base_url(args.port, args.host)
+    require_instance(base, workdir)
+
+    pick = json.loads(Path(args.pick).read_text(encoding="utf-8"))
+    skill_name = pick.get("skill_name") or SKILL_NAME
+    qs = pick["questions"]
+    idxs = list(range(len(qs))) if args.all else list(range(min(args.n, len(qs))))
+    if not idxs:
+        raise SystemExit("错误：没有要跑的题——用 --all 或 --n <题数>。")
+    workers = max(1, min(args.workers, len(idxs)))
+
+    bench = Path(args.out_dir)
+    bench.mkdir(parents=True, exist_ok=True)
+    lock = acquire_run_lock(bench, pick["run_id"])
+    jsonl_path = bench / f"results_{pick['run_id']}.jsonl"
+    print(f"{'串行' if workers == 1 else f'并发 {workers} worker'} × {len(idxs)} 题（{base}）",
+          flush=True)
+    print(f"单题超时 {args.timeout:.0f}s；每题完成即追加落盘：{jsonl_path}", flush=True)
+
+    results: dict[int, dict] = {}
+    write_lock = threading.Lock()
+
+    def run_one(i: int) -> dict:
+        """跑一题并补齐引用指标；异常一律转成失败行（不中断整批）。"""
+        q = qs[i]
+        # 标题带题号：同 run 重跑不产生同名会话，事后可按会话核对
+        try:
+            sid = create_skill_session(base, f"bench-{pick['run_id']}-{i}-{q['question_id']}")
+            r = ask_once(base, sid, _ask_question_text(q, skill_name), args.timeout)
+            r["session_id"] = sid
+        except Exception as e:  # noqa: BLE001
+            r = {"ok": False, "error": f"请求异常：{e}", "answer": "",
+                 "wall_ms": None, "tool_calls": 0, "tool_names": [],
+                 "thinking_chars": 0, "usage": None, "session_id": None}
+        cited = (fetch_session_refs(base, r.get("session_id"), r.get("answer") or "")
+                 if r.get("ok") else [])
+        metrics = ref_metrics(cited, q.get("expected_doc_ids", []))
+        return {
+            "qidx": i, "question_id": q["question_id"], "question": q["question"],
+            "qtype": q.get("question_type", ""), "gold_answer": q.get("gold_answer", ""),
+            "answer_facts": q.get("answer_facts", []),
+            "expected_doc_ids": q.get("expected_doc_ids", []),
+            "answer": r.get("answer", ""), "wall_ms": r.get("wall_ms"),
+            "session_id": r.get("session_id"), "ok": r.get("ok"), "error": r.get("error"),
+            "tool_calls": r.get("tool_calls", 0), "tool_names": r.get("tool_names") or [],
+            "thinking_chars": r.get("thinking_chars", 0),
+            "cited_n": metrics["n_cited_docs"], "recall": metrics["recall"],
+            "precision": metrics["precision"], "ref_misses": metrics["misses"],
+        }
+
+    def worker_loop(queue: list[int]) -> None:
+        for i in queue:
+            row = run_one(i)
+            results[i] = row
+            wall = (row.get("wall_ms") or 0) / 1000
+            with write_lock:
+                # 每题完成即追加落盘：run 被杀 / Ctrl+C / 断电都不会丢掉
+                # 已跑出来的题（曾因「全跑完才写」导致 3 题白跑、零产物）
+                with open(jsonl_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    f.flush()
+            print(f"[{'✓' if row.get('ok') else '✗'}] qidx={i} {row['question_id']} "
+                  f"wall={wall:.0f}s tools={row.get('tool_calls', 0)} "
+                  f"{('err=' + str(row.get('error'))[:80]) if not row.get('ok') else ''}",
+                  flush=True)
+
+    # 预置空文件：第一题就挂掉也知道本次 run 存在、结果路径固定
+    jsonl_path.write_text("", encoding="utf-8")
+
+    rows: list[dict] = []
+    preview_path: Optional[Path] = None
+    try:
+        queues = [idxs[i::workers] for i in range(workers)]
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [ex.submit(worker_loop, q) for q in queues]
+            for f in as_completed(futs):
+                f.result()
+    except KeyboardInterrupt:
+        print("\n中断：已完成的题已落盘，正在出部分预览……", flush=True)
+    finally:
+        lock.unlink(missing_ok=True)
+        # 部分/完整都出预览：缺失题按「未跑」补齐，避免看起来像已跑完
+        rows = []
+        for i in idxs:
+            q = qs[i]
+            rows.append(results.get(i, {
+                "qidx": i, "question_id": q["question_id"], "question": q["question"],
+                "qtype": q.get("question_type", ""), "gold_answer": q.get("gold_answer", ""),
+                "answer": "", "wall_ms": None, "ok": False,
+                "error": "未跑（run 被中断）", "tool_calls": 0, "tool_names": [],
+                "cited_n": 0, "recall": None, "precision": None, "ref_misses": [],
+            }))
+        try:
+            preview_path = write_preview(pick, rows, jsonl_path, args.port)
+        except Exception as e:  # noqa: BLE001
+            print(f"预览生成失败：{e}", flush=True)
+    print(f"results: {jsonl_path}")
+    print(f"预览报告：{preview_path}")
+    _recalls = [x["recall"] for x in rows if x["recall"] is not None]
+    _walls = [x["wall_ms"] / 1000 for x in rows if x.get("wall_ms")]
+    print(f"问答完成 {sum(1 for x in rows if x['ok'])}/{len(rows)} · "
+          f"recall 均值 {_fmt(_avg(_recalls))} · 耗时均值 {_fmt(_avg(_walls), 's')}")
+    print("（未评分——用户确认后逐题评分并跑 report 出终报）")
+    print("\n## RESULTS_JSONL", flush=True)
+    for x in rows:
+        print(json.dumps(x, ensure_ascii=False), flush=True)
+
+
+# ---------------------------------------------------------------------------
+# report：解析评分产物 → 终报（落盘 + 打印）
+# ---------------------------------------------------------------------------
+
+def parse_answers(md_path: Path) -> dict[str, dict]:
+    text = md_path.read_text(encoding="utf-8")
+    sections: dict[str, dict] = {}
+    for m in ANSWER_SECTION_RE.finditer(text):
+        qid = m.group("qid")
+        body = m.group("body")
+        score: Optional[int] = None
+        reason = ""
+        sm = re.search(r"^\*\*评分\*\*[:：]\s*(\d{1,2})\s*/\s*10\s*[—–-]*\s*(.*)$", body, re.M)
+        if sm:
+            v = int(sm.group(1))
+            if 1 <= v <= 10:
+                score = v
+            reason = sm.group(2).strip()
+        else:
+            nm = re.search(r"^\*\*评分\*\*[:：]\s*N/?A\s*[—–-]*\s*(.*)$", body, re.M | re.I)
+            if nm:
+                reason = nm.group(1).strip() or "未评分"
+
+        def _fnum(pat: str) -> Optional[float]:
+            fm = re.search(pat, body, re.M)
+            try:
+                return float(fm.group(1)) if fm else None
+            except (ValueError, IndexError):
+                return None
+
+        recall = _fnum(r"^\*\*引用\*\*[:：].*?recall[=＝]\s*([\d.]+)")
+        precision = _fnum(r"^\*\*引用\*\*[:：].*?precision[=＝]\s*([\d.]+)")
+
+        def _secs(pat: str) -> Optional[float]:
+            sm2 = re.search(pat, body, re.M)
+            try:
+                return float(sm2.group(1)) if sm2 else None
+            except (ValueError, IndexError):
+                return None
+
+        wall_s = _secs(r"^\*\*耗时\*\*[:：]\s*([\d.]+)\s*s")
+        am = re.search(r"^\*\*回答\*\*[:：]\s*\n?(.*)$", body, re.M | re.S)
+        answer = (am.group(1) if am else body).strip()
+        sections[qid] = {"score": score, "reason": reason, "answer": answer,
+                         "recall": recall, "precision": precision, "wall_s": wall_s}
+    return sections
+
+
+def write_report(pick: dict, answers: dict[str, dict], answers_path: Path) -> Path:
+    results = []
+    for q in pick["questions"]:
+        a = answers.get(q["question_id"], {})
+        results.append({
+            "question_id": q["question_id"], "question_type": q.get("question_type", ""),
+            "question": q["question"], "gold_answer": q.get("gold_answer", ""),
+            "score": a.get("score"), "reason": a.get("reason", ""),
+            "answer": a.get("answer", ""),
+            "recall": a.get("recall"), "precision": a.get("precision"),
+            "wall_s": a.get("wall_s"),
+        })
+    scored = [r for r in results if r["score"] is not None]
+    svals = [r["score"] for r in scored]
+    recalls = [r["recall"] for r in results if r["recall"] is not None]
+    precisions = [r["precision"] for r in results if r["precision"] is not None]
+    walls = [r["wall_s"] for r in results if r["wall_s"] is not None]
+    run_id = pick["run_id"]
+
+    lines: list[str] = []
+    lines.append(f"# EnterpriseRAG 基准测试报告 · {pick['source_type']} · {run_id}")
+    lines.append("")
+    lines.append(f"- 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"- 语料：`{pick.get('workdir', '')}`")
+    lines.append(f"- 抽样：{len(results)} 题（可用池 {pick['pool_size']}，N={pick['n']}，seed={pick['seed']}，"
+                 f"跨源题{'包含' if pick['include_multi'] else '排除'}）")
+    lines.append("- 问答通道：`POST /api/chat`（SSE 流，生产后端链路）；在线评分")
+    lines.append(f"- 答案产物：`{answers_path}`")
     lines.append("")
     lines.append("## 总览")
     lines.append("")
     lines.append("| 指标 | 值 |")
     lines.append("|------|------|")
-    lines.append(f"| AI 评分均值（1-10） | {_fmt(_avg(scores))} |")
-    lines.append(f"| AI 评分中位数 | {_fmt(statistics.median(scores)) if scores else '—'} |")
-    lines.append(f"| 及格率（评分 ≥7） | {_pct(sum(1 for s in scores if s >= 7), len(scores))} |")
-    lines.append(f"| 优秀率（评分 ≥9） | {_pct(sum(1 for s in scores if s >= 9), len(scores))} |")
-    lines.append(f"| 引用 recall | {_fmt(_avg(recalls))} |")
-    lines.append(f"| 引用 precision | {_fmt(_avg(precisions))} |")
+    lines.append(f"| AI 评分均值（1-10） | {_fmt(_avg(svals))} |")
+    lines.append(f"| AI 评分中位数 | {_fmt(statistics.median(svals)) if svals else '—'} |")
+    lines.append(f"| 及格率（评分 ≥7） | {_pct(sum(1 for s in svals if s >= 7), len(svals))} |")
+    lines.append(f"| 优秀率（评分 ≥9） | {_pct(sum(1 for s in svals if s >= 9), len(svals))} |")
+    lines.append(f"| 引用召回率 recall 均值 | {_fmt(_avg(recalls))}（{len(recalls)}/{len(results)} 题） |")
+    lines.append(f"| 引用 precision 均值 | {_fmt(_avg(precisions))} |")
     lines.append(f"| recall=0 题数 | {sum(1 for x in recalls if x == 0)}/{len(recalls)} |")
-    lines.append(f"| 平均耗时（s/题） | {_fmt(_avg(walls))} |")
-    lines.append(f"| 对话失败 | {len(results) - len(ok)}/{len(results)} |")
-    lines.append(f"| 评分失败 | {len(ok) - len(scores)}/{len(ok)} |")
+    lines.append(f"| 回答耗时均值 | {_fmt(_avg(walls), 's')} |")
+    lines.append(f"| 回答耗时中位数 | {_fmt(statistics.median(walls), 's') if walls else '—'} |")
+    lines.append(f"| 回答耗时最慢/最快 | {_fmt(max(walls) if walls else None, 's')} / {_fmt(min(walls) if walls else None, 's')} |")
+    lines.append(f"| 未评分 | {len(results) - len(scored)}/{len(results)} |")
     lines.append("")
 
-    if scores:
-        buckets = [("9-10", 9, 10), ("7-8", 7, 8), ("4-6", 4, 6), ("1-3", 1, 3)]
+    if svals:
         lines.append("## 评分分布")
         lines.append("")
         lines.append("| 区间 | 题数 | 占比 |")
         lines.append("|------|------|------|")
-        for label, lo, hi in buckets:
-            c = sum(1 for s in scores if lo <= s <= hi)
-            lines.append(f"| {label} | {c} | {_pct(c, len(scores))} |")
+        for label, lo, hi in (("9-10", 9, 10), ("7-8", 7, 8), ("4-6", 4, 6), ("1-3", 1, 3)):
+            c = sum(1 for s in svals if lo <= s <= hi)
+            lines.append(f"| {label} | {c} | {_pct(c, len(svals))} |")
         lines.append("")
 
     lines.append("## 逐题明细")
@@ -491,233 +932,152 @@ def write_report(results: list[dict], out_dir: Path, meta: dict) -> Path:
     lines.append("| # | 题号 | 类型 | 评分 | recall | precision | 耗时s | 裁判理由 |")
     lines.append("|---|------|------|------|--------|-----------|-------|----------|")
     for i, r in enumerate(results, 1):
-        score = r.get("ai_score", {}).get("score")
-        reason = (r.get("ai_score", {}).get("reason") or "").replace("\n", " ").replace("|", "\\|")
-        lines.append(
-            f"| {i} | {r['question_id']} | {r.get('question_type', '')} | "
-            f"{score if score is not None else '失败'} | "
-            f"{_fmt(r['match']['recall'])} | {_fmt(r['match']['precision'])} | "
-            f"{_fmt((r.get('wall_ms') or 0) / 1000)} | {reason[:100]} |"
-        )
+        reason = (r["reason"] or "").replace("\n", " ").replace("|", "\\|")
+        score = r["score"] if r["score"] is not None else "未评分"
+        lines.append(f"| {i} | {r['question_id']} | {r['question_type']} | {score} | "
+                     f"{_fmt(r['recall'])} | {_fmt(r['precision'])} | "
+                     f"{_fmt(r['wall_s'])} | {reason[:100]} |")
     lines.append("")
 
-    low = [r for r in results if (r.get("ai_score", {}).get("score") or 99) <= 5]
+    low = [r for r in scored if r["score"] <= 5]
     if low:
         lines.append("## 低分题诊断（≤5 分）")
         lines.append("")
         for r in low:
-            lines.append(f"### {r['question_id']}（{r.get('question_type', '')}，{r['ai_score']['score']} 分）")
+            lines.append(f"### {r['question_id']}（{r['question_type']}，{r['score']} 分）")
             lines.append("")
             lines.append(f"- 问题：{r['question']}")
-            lines.append(f"- 金标：{(r.get('gold_answer') or '')[:400]}")
-            lines.append(f"- 裁判：{r['ai_score'].get('reason', '')}")
-            lines.append(f"- 命中/缺失：hits={len(r['match']['hits'])} / misses={len(r['match']['misses'])}")
-            lines.append(f"- 答案摘录：{(r.get('answer') or '')[:600].strip() or '（空）'}")
+            lines.append(f"- 金标：{(r['gold_answer'] or '')[:400]}")
+            lines.append(f"- 评分理由：{r['reason']}")
+            lines.append(f"- 答案摘录：{(r['answer'] or '')[:600] or '（空）'}")
             lines.append("")
 
-    failed = [r for r in results if r.get("chat_error")]
-    if failed:
-        lines.append("## 失败题清单")
+    unscored = [r for r in results if r["score"] is None]
+    if unscored:
+        lines.append("## 未评分清单")
         lines.append("")
-        for r in failed:
-            lines.append(f"- **{r['question_id']}**：{r['chat_error']}")
-        lines.append("")
-
-    judge_failed = [r for r in ok if r.get("ai_score", {}).get("score") is None]
-    if judge_failed:
-        lines.append("## 评分失败清单")
-        lines.append("")
-        for r in judge_failed:
-            lines.append(f"- **{r['question_id']}**：{r['ai_score'].get('reason', '')[:200]}")
+        for r in unscored:
+            lines.append(f"- **{r['question_id']}**：{r['reason'] or '（无评分行）'}")
         lines.append("")
 
-    path = out_dir / f"report_{meta['run_id']}.md"
+    path = answers_path.parent / f"report_{run_id}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
+def cmd_report(args: argparse.Namespace) -> None:
+    _require({
+        "--answers": (bool(args.answers), "--answers <answers md>：评分后的答案产物"),
+    }, "用法：report --answers <answers_<run_id>.md>")
+
+    answers_path = Path(args.answers)
+    if not answers_path.exists():
+        raise SystemExit(f"错误：答案产物不存在：{answers_path}")
+
+    m = re.search(r"answers_(\w+)\.md$", answers_path.name)
+    if not m:
+        raise SystemExit(f"错误：文件名须为 answers_<run_id>.md：{answers_path.name}")
+    run_id = m.group(1)
+    pick_path = answers_path.parent / f"pick_{run_id}.json"
+    if not pick_path.exists():
+        raise SystemExit(f"错误：找不到抽题清单 {pick_path}")
+    pick = json.loads(pick_path.read_text(encoding="utf-8"))
+    pick["workdir"] = str(Path.cwd().resolve())
+
+    answers = parse_answers(answers_path)
+    missing = [q["question_id"] for q in pick["questions"] if q["question_id"] not in answers]
+    if missing:
+        raise SystemExit(f"错误：答案产物缺少 {len(missing)} 题：{', '.join(missing[:10])}"
+                         + ("…" if len(missing) > 10 else ""))
+
+    report = write_report(pick, answers, answers_path)
+    scored = [answers[q["question_id"]] for q in pick["questions"]
+              if answers[q["question_id"]]["score"] is not None]
+    print(f"报告：{report}")
+    if scored:
+        vals = [a["score"] for a in scored]
+        print(f"评分均值 {_avg(vals):.2f} / 中位数 {statistics.median(vals):.1f} / "
+              f"≥7 分 {sum(1 for s in vals if s >= 7)}/{len(vals)}")
+    else:
+        print("警告：没有任何评分行，报告只有作答明细。")
+
+    print("\n## REPORT_CONTENT", flush=True)
+    print(report.read_text(encoding="utf-8"), flush=True)
+
+
 # ---------------------------------------------------------------------------
-# 主流程
+# main：无参数 = stats；子命令必填参数无默认
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="EnterpriseRAG 单源基准测试（cwd 名 = source_type，父目录 questions.jsonl）")
-    ap.add_argument("--n", type=int, default=10, help="随机抽样题数（默认 10）")
-    ap.add_argument("--seed", type=int, default=None, help="随机种子（记录到报告，便于复现）")
-    ap.add_argument("--source-type", default="", help="覆盖 cwd 推导的 source_type")
-    ap.add_argument("--questions", default="", help="覆盖题库路径（默认 ../questions.jsonl）")
-    ap.add_argument("--base-url", default="", help="被测实例地址（默认自动探测）")
-    ap.add_argument("--allow-mismatch", action="store_true", help="允许实例 workdir 与 cwd 不一致")
-    ap.add_argument("--out-dir", default="", help="结果目录（默认 <语料>/.doclens/benchmarks）")
-    ap.add_argument("--resume", default="", help="续测已有 results_*.jsonl")
-    ap.add_argument("--include-multi", action="store_true",
-                    help="纳入跨源题（source_types 含本源）——默认只取纯单源题")
-    ap.add_argument("--question-type", default="", help="只测某类题型（逗号分隔，如 basic,semantic）")
-    ap.add_argument("--skill", default=SKILL_NAME_DEFAULT, help=f"答题技能（默认 {SKILL_NAME_DEFAULT}；空串=纯问答）")
-    ap.add_argument("--timeout", type=float, default=240.0, help="单题墙钟超时秒数（默认 240）")
-    ap.add_argument("--judge-model", default="", help="裁判模型 id（默认同被测 PLANIFY_MODEL_ID）")
-    ap.add_argument("--no-judge", action="store_true", help="跳过 LLM 评分（只测引用与耗时）")
-    ap.add_argument("--list", action="store_true", help="只打印题库分布，不跑测")
+        description="EnterpriseRAG 基准测试（被测应用由用户自起、传 --port；"
+                    "无默认值：测试方案须用户明确；不带参数时只打印题库统计）")
+    sub = ap.add_subparsers(dest="cmd")
+
+    p_stats = sub.add_parser("stats", help="题库统计（题型分布表 + 各源单源题数表）")
+    p_stats.add_argument("--questions", default="", help="覆盖题库路径（默认 ../questions.jsonl）")
+    p_stats.set_defaults(func=cmd_stats)
+
+    p_pick = sub.add_parser("pick", help="抽题（--n/--question-type/--out-dir 必填）")
+    p_pick.add_argument("--n", type=int, required=True, help="抽题数（用户明确，无默认）")
+    p_pick.add_argument("--question-type", required=True,
+                        help="题型逗号分隔（用户明确，无默认；全部题型传 all）")
+    p_pick.add_argument("--out-dir", required=True, help="产物目录（AI 助手 data dir 下 benchmarks）")
+    p_pick.add_argument("--seed", type=int, default=None, help="随机种子（复现用）")
+    p_pick.add_argument("--source-type", default="", help="覆盖自动推导（显式 > 实例 workdir > cwd）")
+    p_pick.add_argument("--questions", default="", help="覆盖题库路径")
+    p_pick.add_argument("--port", type=int, default=None,
+                        help="被测实例端口（可选；给了就据此推导 source_type）")
+    p_pick.add_argument("--host", default="127.0.0.1", help="被测实例主机（默认 127.0.0.1）")
+    p_pick.add_argument("--include-multi", action="store_true", help="纳入跨源题（默认纯单源）")
+    p_pick.set_defaults(func=cmd_pick)
+
+    p_run = sub.add_parser("run", help="问答（默认串行，--pick/--out-dir/--port 必填）")
+    p_run.add_argument("--pick", required=True, help="pick_<run_id>.json")
+    p_run.add_argument("--out-dir", required=True, help="产物目录")
+    p_run.add_argument("--port", type=int, default=None, help="被测实例端口（用户自起的应用）")
+    p_run.add_argument("--host", default="127.0.0.1", help="被测实例主机（默认 127.0.0.1）")
+    p_run.add_argument("--all", action="store_true", help="跑全部抽中题（否则须 --n）")
+    p_run.add_argument("--n", type=int, default=0, help="跑前 N 题")
+    p_run.add_argument("--workers", type=int, default=1, help="并发问答数（默认 1：串行，耗时口径最干净）")
+    p_run.add_argument("--timeout", type=float, default=300.0,
+                       help="单题超时秒（默认 300；大语料单题可达 3-6 分钟，超时主动停生成并记失败）")
+    p_run.set_defaults(func=cmd_run)
+
+    p_check = sub.add_parser("check", help="冒烟自检：问一句「你是谁？」验证链路（--port 必填）")
+    p_check.add_argument("--port", type=int, default=None, help="被测实例端口（用户自起的应用）")
+    p_check.add_argument("--host", default="127.0.0.1", help="被测实例主机（默认 127.0.0.1）")
+    p_check.add_argument("--prompt", default="", help=f"自定义问题（默认「{CHECK_PROMPT}」）")
+    p_check.add_argument("--with-skill", action="store_true",
+                         help="改问斜杠技能形态（/knowledge-base …），一并验证技能加载")
+    p_check.add_argument("--timeout", type=float, default=90.0, help="超时秒（默认 90）")
+    p_check.add_argument("--keep-session", action="store_true", help="保留冒烟会话（默认删除）")
+    p_check.set_defaults(func=cmd_check)
+
+    p_ask = sub.add_parser("ask", help="单题调试（--pick/--qidx/--out-dir/--port 必填）")
+    p_ask.add_argument("--pick", required=True, help="pick_<run_id>.json")
+    p_ask.add_argument("--qidx", type=int, required=True, help="题下标（0-based）")
+    p_ask.add_argument("--out-dir", required=True, help="产物目录")
+    p_ask.add_argument("--port", type=int, default=None, help="被测实例端口（用户自起的应用）")
+    p_ask.add_argument("--host", default="127.0.0.1", help="被测实例主机（默认 127.0.0.1）")
+    p_ask.add_argument("--timeout", type=float, default=300.0, help="单题超时秒（默认 300）")
+    p_ask.set_defaults(func=cmd_ask)
+
+    p_rep = sub.add_parser("report", help="终报（--answers 必填）")
+    p_rep.add_argument("--answers", required=True, help="answers_<run_id>.md")
+    p_rep.set_defaults(func=cmd_report)
+
     args = ap.parse_args()
-
-    workdir = Path.cwd().resolve()
-    source_type = args.source_type or workdir.name
-    questions_path = Path(args.questions) if args.questions else workdir.parent / "questions.jsonl"
-
-    if not questions_path.exists():
-        raise SystemExit(f"错误：题库不存在：{questions_path}\n"
-                         "      约定：cwd 为 source_type 目录（如 .../jira），父目录放 questions.jsonl。")
-
-    questions = load_questions(questions_path)
-    types = {t for t in (args.question_type.split(",") if args.question_type else []) if t.strip()}
-    pool = filter_questions(questions, source_type, args.include_multi, types or None)
-
-    if args.list:
-        from collections import Counter
-        by_src = Counter()
-        for q in questions:
-            for s in q.get("source_types") or []:
-                by_src[s] += 1
-        print(f"题库：{questions_path}（{len(questions)} 题）")
-        print("按 source_type：" + "，".join(f"{k}={v}" for k, v in by_src.most_common()))
-        print(f"本目录 source_type = {source_type!r}，纯单源题 {len(filter_questions(questions, source_type, False, types or None))} 题，"
-              f"含跨源 {len(filter_questions(questions, source_type, True, types or None))} 题")
-        print("题型分布：" + "，".join(f"{k}={v}" for k, v in
-                                   Counter(q["question_type"] for q in pool).most_common()))
+    if not args.cmd:
+        # 无任何参数：只打印题库统计（不跑测）
+        questions_path = Path.cwd().resolve().parent / "questions.jsonl"
+        if not questions_path.exists():
+            raise SystemExit(f"错误：题库不存在：{questions_path}\n"
+                             "      无参数模式只列统计；测试请用 stats/pick/run/ask/report 子命令。")
+        print_stats(questions_path)
         return
-
-    if not pool:
-        raise SystemExit(f"错误：题库中没有 source_types == ['{source_type}'] 的题。"
-                         "可加 --include-multi 放宽，或检查目录名/--source-type。")
-
-    n = max(1, min(args.n, len(pool)))
-    seed = args.seed if args.seed is not None else random.randrange(1_000_000)
-    rng = random.Random(seed)
-    selected = rng.sample(pool, n)
-
-    # 被测实例（先校验 workdir，避免测错语料）
-    base_url, status = discover_base_url(workdir, args.base_url, args.allow_mismatch)
-    if status.get("index_building"):
-        raise SystemExit("错误：被测实例仍在建索引（index_building=true），请等索引完成后再跑。")
-    indexed = status.get("indexed_docs")
-    model_name = status.get("model_name") or ""
-    print(f"实例 {base_url}  workdir={status.get('workdir')}  已索引 {indexed} 篇  模型 {model_name}")
-    print(f"抽样 {n}/{len(pool)} 题（source_type={source_type}, seed={seed}）")
-
-    out_dir = Path(args.out_dir) if args.out_dir else data_dir(workdir) / "benchmarks"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    jsonl_path = Path(args.resume) if args.resume else out_dir / f"results_{run_id}.jsonl"
-
-    done_ids: set[str] = set()
-    if jsonl_path.exists():
-        for line in jsonl_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                try:
-                    done_ids.add(json.loads(line)["question_id"])
-                except json.JSONDecodeError:
-                    pass
-        if done_ids:
-            print(f"续测：{jsonl_path.name} 已有 {len(done_ids)} 题，跳过")
-
-    pending = [q for q in selected if q["question_id"] not in done_ids]
-    if not pending:
-        print("所选题目均已完成。")
-    else:
-        print(f"结果实时追加至 {jsonl_path}\n")
-        client = ChatClient(base_url, question_timeout_s=args.timeout)
-        t_start = time.monotonic()
-        try:
-            for i, q in enumerate(pending, 1):
-                title = f"bench-{source_type} · {q['question'][:40]}"
-                try:
-                    chat = client.ask(q["question"], title, args.skill or None)
-                except Exception as e:  # noqa: BLE001
-                    chat = {"answer": "", "tool_calls": [], "tool_results": [],
-                            "first_token_ms": None, "wall_ms": None,
-                            "error": f"{type(e).__name__}: {e}", "session_id": None}
-
-                cited = extract_cited_paths(chat.get("answer") or "", chat.get("tool_results"))
-                match = match_score(cited, q.get("expected_doc_ids", []))
-                failed = bool(chat.get("error"))
-                if failed or args.no_judge:
-                    ai_score = {"score": None,
-                                "reason": f"failed: {chat.get('error')}" if failed else "no-judge"}
-                else:
-                    ai_score = judge_answer(q, chat.get("answer") or "", args.judge_model)
-
-                record = {
-                    "question_id": q["question_id"],
-                    "question_type": q.get("question_type"),
-                    "source_types": q.get("source_types"),
-                    "question": q["question"],
-                    "expected_doc_ids": q.get("expected_doc_ids", []),
-                    "gold_answer": q.get("gold_answer", ""),
-                    "answer_facts": q.get("answer_facts", []),
-                    "answer": chat.get("answer") or "",
-                    "cited_paths": cited,
-                    "match": {k: match[k] for k in ("recall", "precision", "hits", "misses", "extra")},
-                    "ai_score": ai_score,
-                    "wall_ms": chat.get("wall_ms"),
-                    "first_token_ms": chat.get("first_token_ms"),
-                    "chat_error": chat.get("error"),
-                    "tool_calls": chat.get("tool_calls"),
-                    "tool_result_names": [tr.get("name") for tr in chat.get("tool_results") or []],
-                    "session_id": chat.get("session_id"),
-                    "ts": datetime.now().isoformat(timespec="seconds"),
-                }
-                with open(jsonl_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-                print(f"[{i}/{len(pending)}] {q['question_id']} "
-                      f"{'✗' if failed else '✓'} "
-                      f"score={ai_score['score'] if ai_score['score'] is not None else 'N/A'} "
-                      f"recall={_fmt(match['recall'])} precision={_fmt(match['precision'])} "
-                      f"{(chat.get('wall_ms') or 0) / 1000:.0f}s", flush=True)
-        except KeyboardInterrupt:
-            print("\n中断——已完成结果已落盘，可用 --resume 续测。", flush=True)
-        finally:
-            client.close()
-        print(f"\n本轮用时 {(time.monotonic() - t_start) / 60:.1f} 分钟")
-
-    # 聚合报告（含续测：读全量 JSONL）
-    all_results: list[dict] = []
-    for line in jsonl_path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            try:
-                all_results.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-    if not all_results:
-        print("没有可汇总的结果。")
-        return
-
-    meta = {
-        "run_id": jsonl_path.stem.replace("results_", ""),
-        "source_type": source_type,
-        "workdir": str(workdir),
-        "questions_path": str(questions_path),
-        "pool_size": len(pool),
-        "n": n,
-        "seed": seed,
-        "include_multi": args.include_multi,
-        "base_url": base_url,
-        "indexed_docs": indexed,
-        "model_name": model_name,
-        "skill": args.skill,
-        "judge_model": (all_results[0].get("ai_score") or {}).get("judge_model", "") if all_results else "",
-        "jsonl_path": str(jsonl_path),
-    }
-    report = write_report(all_results, out_dir, meta)
-    print(f"报告：{report}")
-
-    # 终端速览（技能据此向用户汇报）
-    scores = [r["ai_score"]["score"] for r in all_results
-              if not r.get("chat_error") and (r.get("ai_score") or {}).get("score") is not None]
-    if scores:
-        print(f"评分均值 {_avg(scores):.2f} / 中位数 {statistics.median(scores):.1f} / "
-              f"≥7 分 {sum(1 for s in scores if s >= 7)}/{len(scores)}")
+    args.func(args)
 
 
 if __name__ == "__main__":

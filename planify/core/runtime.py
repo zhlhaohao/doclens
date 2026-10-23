@@ -44,6 +44,10 @@ class RuntimeConfig:
     # GLM 等）不接受以 assistant 结尾的请求。仅对坚持 user/assistant 严格
     # 交替的端点开启，见 streaming/types.py 同名字段说明。
     planify_injection_ack: bool = False
+    # 思考深度档位（宿主配置透传；auto/off/low/medium/high，见
+    # core/llm/types.THINKING_DEPTHS。auto = 不发思考参数（默认），向后
+    # 兼容一切端点。经 update_llm_config 热更新 → 重建 Provider 生效。）
+    planify_thinking_depth: str = "auto"
     poll_interval: int = 5
     idle_timeout: int = 60
     assets_dir: Optional[Path] = None  # assets 目录路径
@@ -188,6 +192,7 @@ class AgentRuntime:
         planify_context_window: Optional[int] = None,
         planify_max_tokens: Optional[int] = None,
         planify_max_tool_rounds: Optional[int] = None,
+        planify_thinking_depth: Optional[str] = None,
     ) -> None:
         """热更新 LLM 配置：重建 Provider 并更新 RuntimeConfig 字段。
 
@@ -205,15 +210,20 @@ class AgentRuntime:
             planify_context_window: 上下文窗口；None 表示不更新
             planify_max_tokens: 单次输出上限；None 表示不更新
             planify_max_tool_rounds: 主循环工具轮数软上限；None 表示不更新
+            planify_thinking_depth: 思考深度档位；None 表示不更新
         """
         from .llm import create_provider
 
+        if planify_thinking_depth is not None:
+            # 先落 config：旧值兜底（None 之外的合法空串场景由 normalize 收敛）
+            self.config.planify_thinking_depth = planify_thinking_depth or "auto"
         client = create_provider(
             {
                 "protocol": protocol,
                 "api_key": api_key,
                 "model_id": model_id,
                 "base_url": base_url,
+                "thinking_depth": self.config.planify_thinking_depth,
             }
         )
         # client 与 provider 双指同一实例（client 为历史兼容字段）

@@ -388,11 +388,17 @@ def test_runtime_config_carries_tool_round_budget():
         workdir=Path.cwd(),
         model_id="m",
         api_key="k",
-        planify_max_tool_rounds=7,
+        planify_max_tool_rounds=20,
     )
     kwargs = tool_round_limit_kwargs(rc)
-    assert kwargs["max_tool_rounds"] == 7
-    assert kwargs["force_answer_rounds"] == 17
+    # 配置值 = 硬阈值；软阈值 = 硬 × 70% 向下取整（2026-10-23 语义反转）
+    assert kwargs["max_tool_rounds"] == 14
+    assert kwargs["force_answer_rounds"] == 20
+
+    # 非整除场景：向下取整（5 → 3，不是四舍五入的 4）
+    kwargs5 = tool_round_limit_kwargs(replace(rc, planify_max_tool_rounds=5))
+    assert kwargs5["max_tool_rounds"] == 3
+    assert kwargs5["force_answer_rounds"] == 5
 
     # 0 = 不限（软/硬阈值都注入 None）
     kwargs0 = tool_round_limit_kwargs(replace(rc, planify_max_tool_rounds=0))

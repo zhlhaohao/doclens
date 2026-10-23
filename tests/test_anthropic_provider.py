@@ -106,3 +106,134 @@ class TestPromptCaching:
         msgs = [{"role": "assistant", "content": "a"}]
         out = AnthropicProvider._mark_cache_tail(msgs)
         assert out == msgs
+
+
+class TestThinkingDepthRequestKwargs:
+    """思考深度档位 → anthropic 请求参数注入（离线，_request_kwargs 纯函数）。"""
+
+    @staticmethod
+    def _kwargs(depth: str, max_tokens: int = 8000, override: str | None = None):
+        from unittest.mock import patch
+
+        with patch("planify.core.llm.anthropic_provider.Anthropic"), \
+             patch("planify.core.llm.anthropic_provider.AsyncAnthropic"):
+            p = AnthropicProvider(
+                api_key="k", base_url=None, model="m", thinking_depth=depth,
+            )
+        return p._request_kwargs([], "sys", [], max_tokens, None, override)
+
+    def test_auto_sends_nothing(self):
+        kw = self._kwargs("auto")
+        assert "thinking" not in kw and "output_config" not in kw
+        assert kw["max_tokens"] == 8000
+
+    def test_off_sends_disabled(self):
+        kw = self._kwargs("off")
+        assert kw["thinking"] == {"type": "disabled"}
+        assert "output_config" not in kw and kw["max_tokens"] == 8000
+
+    def test_low_dual_send_budget_plus_effort(self):
+        kw = self._kwargs("low")
+        assert kw["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+        assert kw["output_config"] == {"effort": "low"}
+        # budget 叠加进 max_tokens，可见输出不缩水
+        assert kw["max_tokens"] == 8000 + 2048
+
+    def test_high_budget_16384(self):
+        assert self._kwargs("high")["thinking"]["budget_tokens"] == 16384
+
+    def test_per_call_override_to_auto(self):
+        """每调用级覆盖：构造 low、调用时显式 auto → 不发思考参数。"""
+        kw = self._kwargs("low", override="auto")
+        assert "thinking" not in kw and "output_config" not in kw
+        assert kw["max_tokens"] == 8000
+
+    def test_invalid_depth_normalizes_to_auto(self):
+        kw = self._kwargs("bogus")
+        assert "thinking" not in kw and "output_config" not in kw
+
+    def test_empty_depth_normalizes_to_auto(self):
+        kw = self._kwargs("")
+        assert "thinking" not in kw and "output_config" not in kw
+
+
+class TestThinkingDepthOpenAICompat:
+    """思考深度档位 → openai_compat 请求参数注入（离线，_request_kwargs 纯函数）。"""
+
+    @staticmethod
+    def _kwargs(depth: str, override: str | None = None):
+        from unittest.mock import patch
+
+        from planify.core.llm.openai_compat_provider import OpenAICompatProvider
+
+        with patch("planify.core.llm.openai_compat_provider.OpenAI"), \
+             patch("planify.core.llm.openai_compat_provider.AsyncOpenAI"):
+            p = OpenAICompatProvider(
+                api_key="k", base_url=None, model="m", thinking_depth=depth,
+            )
+        return p._request_kwargs([], "sys", [], 8000, False, None, override)
+
+    def test_auto_sends_nothing(self):
+        assert "reasoning_effort" not in self._kwargs("auto")
+
+    def test_off_maps_to_none(self):
+        assert self._kwargs("off")["reasoning_effort"] == "none"
+
+    def test_levels_pass_through(self):
+        for lv in ("low", "medium", "high"):
+            assert self._kwargs(lv)["reasoning_effort"] == lv
+
+    def test_per_call_override(self):
+        assert "reasoning_effort" not in self._kwargs("high", override="auto")
+        assert self._kwargs("auto", override="high")["reasoning_effort"] == "high"
+
+
+class TestThinkingDepthRuntimeHotUpdate:
+    """update_llm_config 热更新：thinking_depth 落 RuntimeConfig 并进新 Provider。"""
+
+    def test_update_rebuilds_provider_with_depth(self):
+        from unittest.mock import patch
+
+        from planify.core.llm.factory import create_provider
+        from planify.core.runtime import AgentRuntime, RuntimeConfig
+
+        captured = {}
+
+        def fake_create(config):
+            captured.update(config)
+            return object()
+
+        with patch("planify.core.llm.create_provider", fake_create), \
+             patch("planify.core.llm.factory.create_provider", fake_create):
+            rt = AgentRuntime(
+                user_id="u",
+                config=RuntimeConfig(workdir=".", model_id="m", api_key="k"),
+            )
+            rt.update_llm_config(
+                protocol="openai_compat",
+                model_id="m2",
+                planify_thinking_depth="high",
+            )
+        assert captured["thinking_depth"] == "high"
+        assert rt.config.planify_thinking_depth == "high"
+
+    def test_update_empty_depth_falls_back_auto(self):
+        from unittest.mock import patch
+
+        from planify.core.runtime import AgentRuntime, RuntimeConfig
+
+        captured = {}
+
+        def fake_create(config):
+            captured.update(config)
+            return object()
+
+        with patch("planify.core.llm.create_provider", fake_create), \
+             patch("planify.core.llm.factory.create_provider", fake_create):
+            rt = AgentRuntime(
+                user_id="u",
+                config=RuntimeConfig(workdir=".", model_id="m", api_key="k"),
+            )
+            rt.update_llm_config(planify_thinking_depth="")
+        assert captured["thinking_depth"] == "auto"
+        assert rt.config.planify_thinking_depth == "auto"

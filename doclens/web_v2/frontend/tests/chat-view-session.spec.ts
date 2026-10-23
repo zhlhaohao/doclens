@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   mapSessionItemsToMessages,
   aggregateUsage,
@@ -197,5 +197,38 @@ describe("aggregateCompaction（会话信息弹窗，ADR-0026）", () => {
     ];
     const msgs = mapSessionItemsToMessages(items);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
+  });
+});
+
+describe("多标签页防劫持（2026-10-22）", () => {
+  it("新标签页（sessionStorage 无本页会话标记）不自动接管别的页面在途生成", async () => {
+    const { ChatView } = await import("../src/views/chat-view");
+    const el = document.createElement("chat-view") as InstanceType<typeof ChatView>;
+    const load = vi.fn();
+    (el as any)._loadSession = load;
+    sessionStorage.clear(); // 新标签页：本页从未挂过该会话
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    await (el as any)._autoResumeIfGenerating("s-other-tab");
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("本页刷新（sessionStorage 有标记）仍在生成 → 进入恢复态", async () => {
+    const { ChatView } = await import("../src/views/chat-view");
+    const el = document.createElement("chat-view") as InstanceType<typeof ChatView>;
+    const load = vi.fn();
+    (el as any)._loadSession = load;
+    sessionStorage.setItem("cortex.chat.tabSession", "s1");
+    global.fetch = vi.fn(async () => new Response(JSON.stringify({
+      id: "s1", title: "t", preview: "p", updated_at: new Date().toISOString(),
+      message_count: 2, generating: true, items: [], context_window: 0,
+    }), { status: 200, headers: { "Content-Type": "application/json" } })) as unknown as typeof fetch;
+
+    await (el as any)._autoResumeIfGenerating("s1");
+
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ id: "s1" }));
   });
 });

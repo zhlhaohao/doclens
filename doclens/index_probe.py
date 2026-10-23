@@ -37,6 +37,24 @@ def indexed_doc_count(index_path: str) -> int:
         return 0
 
 
+def index_counts(index_path: str) -> tuple[int, int]:
+    """(已索引文档数, ghost 登记数)——单次 get_stats 往返（AP-9）。
+
+    与分开调 indexed_doc_count + registered_doc_count 等价，但只开一次
+    连接、跑一次聚合（大库下往返成本 ~1s/次，合并省 2 次）。
+    """
+    try:
+        fts = _open(index_path)
+        try:
+            stats = fts.get_stats()
+            return int(stats.get("document_count", 0)), int(stats.get("ghost_count", 0))
+        finally:
+            fts.close()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("index_counts failed: %s", e)
+        return 0, 0
+
+
 def indexed_source_paths(index_path: str) -> list[str]:
     """已索引文档的 source_path 列表（DB 轻量查询，不物化树结构）。
 

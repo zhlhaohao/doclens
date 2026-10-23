@@ -12,7 +12,16 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from anthropic import Anthropic, AsyncAnthropic
 
-from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolResultBlock, ToolUseBlock
+from .types import (
+    LLMResponse,
+    StreamEvent,
+    TextBlock,
+    Tool,
+    ToolResultBlock,
+    ToolUseBlock,
+    THINKING_BUDGET_TOKENS,
+    normalize_thinking_depth,
+)
 
 if TYPE_CHECKING:
     from .trace import LLMTracer
@@ -46,6 +55,7 @@ class AnthropicProvider:
         api_key: str,
         base_url: str | None,
         model: str,
+        thinking_depth: str = "auto",
     ) -> None:
         # 禁用 SSL 验证以适配自签名证书环境（与旧 init_anthropic_client 一致）
         httpx = _sdk_httpx()
@@ -58,6 +68,7 @@ class AnthropicProvider:
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
+        self.thinking_depth = normalize_thinking_depth(thinking_depth)
 
     def _ensure_async_client(self) -> AsyncAnthropic:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
@@ -77,6 +88,7 @@ class AnthropicProvider:
         tools: list[Tool],
         max_tokens: int,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> dict[str, Any]:
         """chat/stream/achat/astream 共用的请求参数（含 prompt caching 断点）。
 
@@ -84,13 +96,33 @@ class AnthropicProvider:
         列表，原样附在客户端工具之后——不做 Tool dataclass 转换（那会剥掉
         type/max_uses 等服务端专属字段）。
         """
-        return {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "system": self._system_blocks(system),
             "messages": self._mark_cache_tail(messages),
             "tools": self._tools_with_cache_breakpoint(tools, server_tools),
-            "max_tokens": max_tokens,
         }
+        # 思考深度（auto = 不发参）。off → disabled；低/中/高双发
+        # thinking{enabled, budget} + output_config{effort}——真 Anthropic 吃
+        # budget（精确），DeepSeek/MiniMax 忽略 budget 只认 effort（双发各方
+        # 各取所需）。思考 token 计在 max_tokens 内：budget 叠加其上，
+        # 可见输出不缩水。output_config 为 anthropic SDK ≥1.15 的较新参数，
+        # 用 plain dict 传入（SDK TypedDict 接受 dict）。
+        # thinking_depth 参数 = 每调用级覆盖（None = 用构造档位）
+        depth = normalize_thinking_depth(
+            self.thinking_depth if thinking_depth is None else thinking_depth
+        )
+        if depth == "off":
+            kwargs["thinking"] = {"type": "disabled"}
+            kwargs["max_tokens"] = max_tokens
+        elif depth in THINKING_BUDGET_TOKENS:
+            budget = THINKING_BUDGET_TOKENS[depth]
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            kwargs["output_config"] = {"effort": depth}
+            kwargs["max_tokens"] = max_tokens + budget
+        else:
+            kwargs["max_tokens"] = max_tokens
+        return kwargs
 
     def chat(
         self,
@@ -100,6 +132,7 @@ class AnthropicProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
         """单次非流式调用。
 
@@ -107,7 +140,7 @@ class AnthropicProvider:
         在客户端直接抛 ValueError("Streaming is required ...")，请求根本
         没发出去。此时降级为流式聚合，对外仍表现为一次性返回。
         """
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             try:
@@ -133,9 +166,10 @@ class AnthropicProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> Iterator[StreamEvent]:
         """流式调用。Anthropic 事件格式与归一化事件语义接近，直接转换。"""
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         with self._client.messages.stream(**kwargs) as stream:
             done = False
@@ -166,13 +200,14 @@ class AnthropicProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
         """单次非流式调用（async 客户端，不阻塞事件循环）。
 
         与 chat() 同一套兜底：非流式预估超时被 SDK 拒发时降级流式聚合。
         """
         client = self._ensure_async_client()
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             try:
@@ -198,10 +233,11 @@ class AnthropicProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> AsyncIterator[StreamEvent]:
         """流式调用（async 客户端），事件转换与同步版共用。"""
         client = self._ensure_async_client()
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         async with client.messages.stream(**kwargs) as stream:
             done = False

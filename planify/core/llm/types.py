@@ -4,6 +4,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+# ---- 思考深度档位（宿主全局配置 → Provider 请求参数）----
+# auto（默认）：不干预——不发任何思考参数，兼容一切端点（含不支持思考的模型）。
+# off：显式不思考——OpenAI 兼容端 reasoning_effort="none"（best-effort），
+#      Anthropic 兼容端 thinking={"type": "disabled"}（部分恒思考模型会 400，
+#      由用户显式报错可见，逃生档 = auto）。
+# low/medium/high：开思考并控制深度——
+#      OpenAI 兼容端顶层 reasoning_effort 直传（low/medium/high 是全行业最大
+#      公约数；xhigh/max 等端点私有超档值不进全局枚举）；
+#      Anthropic 兼容端双发 thinking={"type": "enabled", "budget_tokens": N}
+#      + output_config={"effort": 同名}——真 Anthropic 吃 budget（精确控制），
+#      DeepSeek/MiniMax 忽略 budget 只认 effort（双发各方各取所需，
+#      2026-10 四家官方文档核实）。budget 叠加进 max_tokens（思考 token 计在
+#      max_tokens 内，直接覆盖会挤占可见输出）。
+THINKING_DEPTHS = ("auto", "off", "low", "medium", "high")
+
+# low/medium/high → Anthropic thinking.budget_tokens
+THINKING_BUDGET_TOKENS = {"low": 2048, "medium": 8192, "high": 16384}
+
+
+def normalize_thinking_depth(value: Any) -> str:
+    """归一化思考深度档位：None/空串/未知值 → "auto"（不干预，向后兼容）。"""
+    v = (value or "auto").strip().lower() if isinstance(value, str) else "auto"
+    return v if v in THINKING_DEPTHS else "auto"
+
+
 
 @dataclass(frozen=True)
 class TextBlock:

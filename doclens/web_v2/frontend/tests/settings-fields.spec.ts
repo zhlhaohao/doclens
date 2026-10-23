@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 12 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 工作目录覆盖 + shell 超时；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(12);
+  it("has exactly 17 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 工作目录覆盖 + shell 超时/轮数/trace/记忆；模型/搜索参数由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(17);
   });
 
   it("every field has a unique envVar", () => {
@@ -46,13 +46,14 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills", "misc"]);
   });
 
-  it("AI tab has 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁字段 (模型配置由 <model-presets-section> 接管)", () => {
+  it("AI tab has 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度字段 (模型配置由 <model-presets-section> 接管)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
     expect(ai.map((f) => f.envVar)).toEqual([
       "BAIDU_WEATHER_AK",
       "VISION_AUTO_ROTATE",
       "PLANIFY_ASK_MODE",
       "PLANIFY_OUTSIDE_WORKDIR",
+      "PLANIFY_THINKING_DEPTH",
     ]);
   });
 
@@ -61,9 +62,15 @@ describe("SETTINGS_FIELDS", () => {
     expect(search).toHaveLength(0);
   });
 
-  it("misc tab has exactly the shell timeout field (slider, 1–3600 校验在后端)", () => {
+  it("misc tab has AI 工具（shell 超时 + 轮数 + trace）与长期记忆字段 (1–3600 校验在后端)", () => {
     const misc = SETTINGS_FIELDS.filter((f) => f.tab === "misc");
-    expect(misc.map((f) => f.envVar)).toEqual(["PLANIFY_SHELL_TIMEOUT"]);
+    expect(misc.map((f) => f.envVar)).toEqual([
+      "PLANIFY_SHELL_TIMEOUT",
+      "PLANIFY_MAX_TOOL_ROUNDS",
+      "PLANIFY_MAX_SUBAGENT_ROUNDS",
+      "PLANIFY_LLM_TRACE",
+      "CORTEX_MEMORY_DISABLE",
+    ]);
     const f = misc[0];
     expect(f.component).toBe("slider");
     expect(f.min).toBeLessThan(f.max!);

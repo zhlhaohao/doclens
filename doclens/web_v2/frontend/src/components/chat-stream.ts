@@ -9,6 +9,7 @@ import "./chat-message";
 @customElement("chat-stream")
 export class ChatStream extends LitElement {
   static styles = [
+    scrollJumpFabStyles,
     css`
       :host {
         display: flex;
@@ -68,8 +69,47 @@ export class ChatStream extends LitElement {
           display: none;
         }
       }
+      /* 垂直居中（2026-10-21）：按钮组钉在视口高度 50% 处，而非贴底。
+         sticky bottom 只能把视口下方的元素钉在下缘，故锚点改放内容**开头**
+         （见 render），用 sticky top: 50% —— 静态位置在内容顶部、滚动时被
+         钳制在 50% 线；height:0 不占布局，负 margin 抵消 flex gap。 */
+      .scroll-jump-anchor {
+        top: 50%;
+        bottom: auto;
+        margin-bottom: calc(-1 * var(--cortex-space-4));
+      }
+      .scroll-jump-anchor .scroll-jump-fabs {
+        /* 锚点 height:0 → 按钮组整体上移自身一半高度，中心对准 50% 线 */
+        transform: translateY(-50%);
+        padding-right: var(--cortex-space-1);
+      }
+      /* 半透明（2026-10-21，二版加深）：悬浮钮压在正文上，实心底会切掉文字。
+         默认极薄底 + 重毛玻璃——靠模糊而非底色区分层级，正文透出来；
+         hover/键盘聚焦回到实心（可读性在交互时优先），禁用态只剩描边。
+         作用域限定 chat-stream——md-viewer / preview-pane 的跳转钮保持原实心。 */
+      .scroll-jump-anchor .scroll-jump-fab {
+        background: color-mix(in srgb, var(--cortex-surface) 32%, transparent);
+        border-color: color-mix(in srgb, var(--cortex-border) 35%, transparent);
+        color: color-mix(in srgb, var(--cortex-text-muted) 70%, transparent);
+        backdrop-filter: blur(8px) saturate(1.15);
+        -webkit-backdrop-filter: blur(8px) saturate(1.15);
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+      }
+      .scroll-jump-anchor .scroll-jump-fab:hover,
+      .scroll-jump-anchor .scroll-jump-fab:focus-visible {
+        background: var(--cortex-surface);
+        border-color: var(--cortex-primary);
+        color: var(--cortex-primary);
+        box-shadow: var(--cortex-shadow-md);
+      }
+      .scroll-jump-anchor .scroll-jump-fab:disabled,
+      .scroll-jump-anchor .scroll-jump-fab:disabled:hover {
+        background: transparent;
+        border-color: color-mix(in srgb, var(--cortex-border) 30%, transparent);
+        color: var(--cortex-text-subtle);
+        box-shadow: none;
+      }
     `,
-    scrollJumpFabStyles,
   ];
 
   /** 渲染节点序列（活消息 + 折叠条，mergeTimeline 产物）。 */
@@ -303,7 +343,9 @@ export class ChatStream extends LitElement {
     if (this.nodes.length === 0) {
       return html`<div class="empty">向助手提出你的第一个问题</div>`;
     }
-    return html`${this.nodes.map((n) => this._renderNode(n))}${this._renderFabs()}`;
+    // 三钮组放在内容**开头**：sticky top:50% 需要静态位置在内容顶部才能
+    // 被钳制到视口中央（放末尾只能配 sticky bottom 钉住下缘）
+    return html`${this._renderFabs()}${this.nodes.map((n) => this._renderNode(n))}`;
   }
 }
 

@@ -10,6 +10,9 @@ from .types import (
     Tool,
     ToolResultBlock,
     ToolUseBlock,
+    THINKING_BUDGET_TOKENS,
+    THINKING_DEPTHS,
+    normalize_thinking_depth,
 )
 
 __all__ = [
@@ -24,4 +27,7 @@ __all__ = [
     "Tool",
     "ToolResultBlock",
     "ToolUseBlock",
+    "THINKING_BUDGET_TOKENS",
+    "THINKING_DEPTHS",
+    "normalize_thinking_depth",
 ]

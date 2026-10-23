@@ -74,6 +74,11 @@ def get_external_tools() -> Tuple[List[Dict], Dict[str, Any]]:
     return _external_tools, _external_handlers
 
 
+def _parse_tool_names(raw: str) -> set:
+    """解析逗号分隔的工具名配置（PLANIFY_ENABLED_TOOLS / PLANIFY_DISABLED_TOOLS）。"""
+    return {name.strip() for name in raw.split(",") if name.strip()}
+
+
 def _build_load_skill_handler(
     skills_loader: "SkillLoader | None",
     skill_access_state: "SkillAccessState | None",
@@ -442,7 +447,7 @@ def build_tool_registry(
     # 工具白名单：PLANIFY_ENABLED_TOOLS=bash,read_file,...（未设置/为空 = 全部注册）
     enabled_raw = os.getenv("PLANIFY_ENABLED_TOOLS", "").strip()
     if enabled_raw:
-        enabled = {name.strip() for name in enabled_raw.split(",") if name.strip()}
+        enabled = _parse_tool_names(enabled_raw)
         all_names = {t["name"] for t in tools}
         unknown = enabled - all_names
         if unknown:
@@ -465,9 +470,35 @@ def build_tool_registry(
             len(tools), len(removed), sorted(removed),
         )
 
-    # 外部访问门禁：shell 工具包装（gui_mode 链路）。放在白名单过滤之后——
-    # 被过滤掉的工具不包装。task 工具运行时按名取 handlers["bash"] 等，
-    # 子代理因此拿到带门禁的函数（未授权外部访问在无交互上下文 fail-closed）。
+    # 工具黑名单：PLANIFY_DISABLED_TOOLS=bash,webfetch,...（未设置/为空 = 不屏蔽）。
+    # 与白名单的关系：先白名单后黑名单，黑名单优先——白名单负责「只留这些」，
+    # 黑名单负责「除了这些都要」（工具多时无需穷举）。
+    # 作用点是合并后的全量工具，含外部注入工具（知识库 / MCP）。
+    # 注意：MCP 运行时 reconcile 新挂载的工具不经此处，开关仍在 server enabled 位。
+    disabled = _parse_tool_names(os.getenv("PLANIFY_DISABLED_TOOLS", ""))
+    if disabled:
+        present = {t["name"] for t in tools}
+        hits = present & disabled
+        unknown = disabled - present
+        if unknown:
+            logger.warning("[tools] 黑名单中的未知工具名将被忽略: %s", sorted(unknown))
+        if hits:
+            tools = [t for t in tools if t["name"] not in hits]
+            for name in hits:
+                handlers.pop(name, None)
+            # 黑名单是显式点名（区分于白名单的「漏列」），故不强制保留，
+            # 只告警：GUI 下删掉它等于掐断模型向用户提问的唯一通道。
+            if kwargs.get("gui_mode") and "ask_user_question" in hits:
+                logger.warning(
+                    "[tools] 黑名单显式禁用了 ask_user_question：GUI 下模型将无法"
+                    "向用户结构化提问（已按配置执行，移除该项可恢复）"
+                )
+            logger.info("[tools] 黑名单生效：屏蔽 %d 个: %s", len(hits), sorted(hits))
+
+    # 外部访问门禁：shell 工具包装（gui_mode 链路）。放在黑白名单过滤之后——
+    # 被过滤掉的工具不包装。task 工具运行时按名取 handlers（缺失则从子代理
+    # 工具面剔除），子代理因此拿到带门禁的函数（未授权外部访问在无交互上下文
+    # fail-closed）。
     if guard_on:
         from .guard import wrap_shell_handler_fail_closed
 
@@ -540,18 +571,29 @@ def handle_task(
     extra_tools.append(TODO_WRITE_TOOL)
     extra_handlers["TodoWrite"] = lambda **kw: sub_todo.update(kw["items"])
 
+    # ---- 子代理工具面继承：黑名单 / 白名单 / handler 缺失 ----
+    # 黑名单在 build_tool_registry 里已经裁掉主注册表；子代理的工具表是固定
+    # 构造的（bash/read_file/write_file/edit_file），不自动跟随，故把最终
+    # 不可用的名字显式传下去，避免「主代理没有、子代理还有」的双重工具面。
+    disabled = _parse_tool_names(os.getenv("PLANIFY_DISABLED_TOOLS", ""))
+    disabled |= {
+        n for n in ("bash", "read_file", "write_file", "edit_file")
+        if n not in handlers
+    }
+
     return run_subagent(
         prompt,
         agent_type,
         subagent_workdir,
         client,
         model,
-        run_bash=handlers["bash"],
-        run_read=handlers["read_file"],
-        run_write=handlers["write_file"],
-        run_edit=handlers["edit_file"],
+        run_bash=handlers.get("bash"),
+        run_read=handlers.get("read_file"),
+        run_write=handlers.get("write_file"),
+        run_edit=handlers.get("edit_file"),
         extra_tools=extra_tools or None,
         extra_handlers=extra_handlers or None,
+        disabled_tools=disabled or None,
     )
 
 

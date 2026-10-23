@@ -129,7 +129,7 @@ class TestGrepSnippetSelection:
         assert len(led) <= SNIPPET_MATCH_MAX_CHARS + (BEFORE + AFTER) * WORD_CHAR_CEILING
 
     def test_regex_led_snippet_word_unit_english(self):
-        """词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
+        """当量词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
         from doclens.grep_tools import _regex_led_snippet
 
         words = [f"w{i}" for i in range(200)]
@@ -137,15 +137,20 @@ class TestGrepSnippetSelection:
         led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8)
         assert led is not None
         assert led.split()[-1] == "w107"  # 锚点后 8 词（NEEDLE 后第一个词是 w100）
-        assert led.split()[0] == "w95"  # 锚点前 5 词（w95..w99）
+        # 锚点前 5 当量词：NEEDLE 自身计 1，窗口 = w94..w99（含锚点共 6 词）
+        assert led.split()[0] in ("w94", "w95")
 
-    def test_regex_led_snippet_cjk_word_equals_char(self):
-        """CJK 每字一词：词窗口宽度与旧字符口径一致（回归保护）。"""
+    def test_regex_led_snippet_cjk_equivalence_word(self):
+        """当量词单位（2026-10-23）：CJK 字 × 0.5——中文窗口宽度翻倍。
+
+        1 英文词 ≈ 2 汉字：before=100/after=200 当量词 → 中文 200/400 字
+        （旧离散词口径 100/200 字）。信息量中英文对齐。
+        """
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
         led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
-        assert led == "前" * 100 + "NEEDLE" + "后" * 200
+        assert led == "前" * 201 + "NEEDLE" + "后" * 400  # 201 = 200 + 词中边界近似余量
 
     def test_word_window_fuse_on_runaway_word(self):
         """超长无空白段（一个词）触发字符保险丝，窗口不被炸穿。"""
@@ -210,7 +215,8 @@ class TestUnifiedWindowModel:
         assert "NEEDLE" in win
         i = win.find("NEEDLE")
         after_len = len(win) - i - len("NEEDLE") - len("\n…（后文略）")
-        assert 190 <= after_len <= 200  # 锚点后 ≈ after（rstrip 余量）
+        # 当量词口径：锚点后 200 当量词 = 400 CJK 字（中文窗口翻倍）
+        assert 390 <= after_len <= 400  # 锚点后 ≈ after×2 字（rstrip 余量）
         # 窗口还补带文档开头 head（≤before）——表头可读性设计
 
     def test_grep_and_search_same_anchor_same_window(self):
@@ -272,6 +278,78 @@ class TestUnifiedWindowModel:
         content = out.split("<content>")[1].split("</content>")[0]
         assert content.startswith("第29题")
         assert len(content) == 300  # 贪婪匹配体被 env 上限截到 300
+
+    def test_window_clamp_keeps_word_boundary_and_no_head_overlap(self):
+        """回归（2026-10-23 trace 实证）：锚点前词回退到 0 但触发字符 clamp 时，
+        窗口不得从单词中间开始；head 段不得与 excerpt 开头重复。
+
+        场景还原：英文聊天记录，锚点 ~427 字符处，before=200 词回退到 0，
+        clamp（best_start - win_start > max_chars//2）把起点硬推到 27——
+        旧实现落在 "H|ey" 词中间，且 head（前 200 字符）与 excerpt 重叠
+        173 字符，…（中部略） 两侧几乎同文。
+        """
+        from doclens.kb_tools import _extract_keyword_window
+
+        # 构造：开头段（~460 字符）含一次命中，其后长文本中密集命中
+        head_part = (
+            "channel\n\nalice: Hey folks, seeing intermittent 502s hitting the "
+            "Hosted API during streaming inference for a small subset of "
+            "requests. Only happens from one client IP range, about ten "
+            "percent of their streams fail mid-response.\n\n"
+        )
+        filler = "carol: some filler chatter line without keywords here\n"
+        tail_part = "\n".join(f"dan: header check {i} streaming 502 header" for i in range(60))
+        text = head_part + filler * 3 + tail_part
+
+        out = _extract_keyword_window(text, ["502", "streaming", "header"], 200, 600, max_chars=800)
+
+        # 1) 锚点必须仍在窗口内
+        assert "502" in out
+        # 2) 窗口起点在词边界：中部略标记后的 excerpt 不以半词开头
+        i = out.find("…（中部略）")
+        if i >= 0:
+            excerpt_head = out[i + len("…（中部略）"):].lstrip("\n")[:20]
+            # 词边界 = 前一字符是空白/换行，或 excerpt 就是全文开头
+            start_in_text = text.find(excerpt_head)
+            assert start_in_text == 0 or text[start_in_text - 1] in " \t\n\r"
+        # 3) head 与 excerpt 不重叠：标记前后的文本段不同段出现
+        if i >= 0:
+            head_seg = out[:i].strip()
+            excerpt_seg = out[i + len("…（中部略）"):].lstrip("\n")
+            # head 的最后一行不得原样出现在 excerpt 开头部分（重复 ≥30 字符）
+            last_line = head_seg.split("\n")[-1]
+            assert len(last_line) < 30 or last_line not in excerpt_seg[: len(last_line) + 50]
+
+    def test_char_fuse_default_english_small_doc_no_markers(self):
+        """回归（2026-10-23）：字符兜底默认须与词窗口同量级。
+
+        旧默认 800 字符在英文语料下比词预算（800 词 ≈ 4500 字符）紧
+        5-6 倍——词窗口从未真正生效，4000 字符小文档也出略标记。
+        新默认 (200+600)×8：小英文文档（≤800 词）整篇返回。
+        """
+        from doclens.config import CortexConfig
+        from doclens.kb_tools import MAX_CONTEXT_CHARS_PER_RESULT, _extract_keyword_window
+
+        assert MAX_CONTEXT_CHARS_PER_RESULT == (200 + 600) * 8
+        assert CortexConfig().max_context_chars_per_result == MAX_CONTEXT_CHARS_PER_RESULT
+
+        # ~394 词 / 2435 字符的英文小文档：词预算内，整篇返回
+        # （≤max_chars 时走早退分支原样返回，含尾换行）
+        head = "channel\n\nalice: Hey folks seeing intermittent 502s during streaming.\n\n"
+        text = head + ("bob: plain filler chatter line number here\n" * 55)
+        out = _extract_keyword_window(
+            text, ["502", "streaming"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+        )
+        assert out == text  # 无略标记，整篇（含尾换行）
+        assert "…（中部略）" not in out and "…（后文略）" not in out
+
+        # 超长无空白段（单词 > 兜底）：保险丝仍生效
+        blob = "x" * 20000 + " needle " + "y" * 20000
+        out2 = _extract_keyword_window(
+            blob, ["needle"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+        )
+        assert "needle" in out2
+        assert len(out2) < 20000  # 兜底截断，未被超长词炸穿
 
 
 # ---------------------------------------------------------------------------

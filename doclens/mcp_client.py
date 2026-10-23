@@ -14,7 +14,8 @@ doclens 作为 MCP **client**，消费外部 MCP 服务器（stdio / Streamable 
   原位更新 ``runtime.tools`` / ``runtime.tool_handlers``——chat 每请求现读，
   下一轮对话即生效；进行中对话持快照不受影响。
 - 工具命名前缀平铺 ``mcp__<server>__<tool>``；不经 PLANIFY_ENABLED_TOOLS
-  白名单（开关在 server enabled 位）。
+  白名单（开关在 server enabled 位）。PLANIFY_DISABLED_TOOLS 黑名单在
+  装配时可按名剔除已挂载的 MCP 工具，但运行时 reconcile 新挂载的不经此处。
 
 信任模型（ADR-0014 §9）：配置时一次授予，运行时零摩擦——env 注入不过滤、
 调用不确认；工具描述 prompt injection 首期不做技术防御。

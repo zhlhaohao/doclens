@@ -1,6 +1,6 @@
 ---
 name: release
-description: 发版全流程：提交代码 → publish-pypi.ps1 发 PyPI → 提交版本号 → 推 tag → 验证。当用户说"发包"、"发版"、"发布版本"、"release"、"上传新版本"时使用。适用于 doclens / treesearch / planify 三包。
+description: 发版全流程：远端连通性预检 → 提交代码 → publish-pypi.ps1 发 PyPI → 提交版本号 → 推 tag → 验证。当用户说"发包"、"发版"、"发布版本"、"release"、"上传新版本"时使用。适用于 doclens / treesearch / planify 三包。
 ---
 
 # PyPI 发版全流程
@@ -14,6 +14,21 @@ description: 发版全流程：提交代码 → publish-pypi.ps1 发 PyPI → �
    - `../cortex/.venv/Scripts/python.exe -m pytest -q` 全绿（发版前必须）
    - `git status` 浏览待提交改动，无意外文件（构建产物、临时文件应被 gitignore 挡住；发现可疑文件先停下问用户）
 
+## 远端连通性预检（必做，任何推送之前）
+
+两个远端（origin=内网 GitLab、github）网络路径独立，**发版开始前先各探一次**——不通的远端全程跳过，不为它浪费等待与重试时间：
+
+```bash
+for r in origin github; do
+  GIT_TERMINAL_PROMPT=0 timeout 15 git ls-remote --exit-code --heads "$r" >/dev/null 2>&1 \
+    && echo "$r OK" || echo "$r UNREACHABLE"
+done
+```
+
+- rc=0 才算通；其余一律按「不通」处理（124=超时，128=域名解析/连接/认证失败）
+- **不通 → 跳过该远端的所有推送，不询问用户、不重试**，把远端名与补救命令记进完成汇报的「未同步远端」一节
+- 第 1 步、第 3 步推送前各跑一次（网络可能在流程中途恢复或断开），只推通的远端
+
 ## 第 1 步：提交当前改动
 
 今天的功能改动必须先 commit——这样发包脚本打的 tag 才落在包含该版本的 commit 上。
@@ -21,6 +36,7 @@ description: 发版全流程：提交代码 → publish-pypi.ps1 发 PyPI → �
 ```bash
 git add -A
 git commit -m "<type>: <描述今天的改动>"
+# 逐行独立执行，禁止用 && 串联；仅对预检通的远端执行
 git push origin HEAD            # 当前分支（不依赖 upstream 配置），顺带把已有 pypi/* tag 推上去
 git push github HEAD --tags     # 同步到 GitHub 双远端（zhlhaohao/doclens）
 ```
@@ -29,16 +45,11 @@ commit message 遵循仓库规范（`<type>: <description>`，禁止 Co-Authored
 
 ## 推送容错（两处 push 块通用）
 
-两个远端（origin=内网 GitLab、github）网络路径独立，推送命令**逐行独立执行，禁止用 `&&` 串联**。
+两个远端网络路径独立，推送命令**逐行独立执行，禁止用 `&&` 串联**。
 
-**任一推送失败时必须立即停下来询问用户是否继续**（用 AskUserQuestion），不得静默跳过：
-
-- 展示失败的远端名、错误信息、以及"失败发生在发版流程的哪一步"（第 1 步推送失败 = 代码未同步就发包；第 3 步推送失败 = 包已发、版本 commit/tag 未同步）
-- 选项：
-  1. **重试该推送**（网络抖动常见，先重试一次再问）
-  2. **跳过并继续发版**——commit/tag 均为本地操作、PyPI 上传直传 pypi.org，不依赖 git 远端；选此项后失败的推送记入完成汇报：列出远端名与补救命令（如 `git push origin HEAD --tags`），提醒用户网络恢复后补推
-  3. **中止流程**（第 1 步推送失败且用户在意远端同步时；已产生的 commit 保留在本地，向用户说明现状）
-- 用户明确选择"跳过"前，不得继续执行任何后续步骤
+1. **预检不通** → 直接跳过该远端（见上文预检节），不询问、不重试。
+2. **预检通但推送失败** → 先静默重试一次（网络抖动常见）；仍失败则跳过该远端并记入汇报，**不打断发版流程**——commit/tag 均为本地操作，PyPI 上传直传 pypi.org，不依赖 git 远端。
+3. 完成汇报必须列出每次跳过的远端、失败步骤（第 1 步=代码未同步就发包；第 3 步=包已发但版本 commit/tag 未同步）、错误摘要与补救命令（如 `git push origin HEAD --tags`），提醒用户网络恢复后补推。
 
 ## 第 2 步：发包
 
@@ -59,6 +70,7 @@ commit message 遵循仓库规范（`<type>: <description>`，禁止 Co-Authored
 ```bash
 git add -A
 git commit -m "chore: release <pkg> <版本>"
+# 逐行独立执行，仅对预检通的远端
 git push origin HEAD
 git push origin pypi/<pkg>-<版本>    # 若上一步 push 未把新 tag 带上
 git push github HEAD --tags         # GitHub 双远端同步
@@ -77,3 +89,5 @@ curl -s https://pypi.org/pypi/<分发名>/json | grep -o '"version":"[^"]*"' | h
 ## 完成汇报
 
 向用户报告：发了哪些包与版本、tag 名、PyPI 链接（https://pypi.org/project/<分发名>/）。
+
+**未同步远端**（若有跳过）：远端名 + 失败步骤 + 错误摘要 + 补救命令，提醒网络恢复后手动补推。

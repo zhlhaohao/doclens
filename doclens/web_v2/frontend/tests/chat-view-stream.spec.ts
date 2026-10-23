@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyStreamEvent, finalizeInterruptedMessages } from "../src/views/chat-view";
+import { applyStreamEvent, finalizeInterruptedMessages, streamOwnedBy } from "../src/views/chat-view";
 import type { ChatMessage } from "../src/state/types";
 
 const base: ChatMessage[] = [
@@ -106,5 +106,16 @@ describe("finalizeInterruptedMessages", () => {
       ] },
     ];
     expect(finalizeInterruptedMessages(msgs)).toBe(msgs);
+  });
+});
+
+describe("streamOwnedBy（串台守卫，2026-10-22）", () => {
+  it("当前展示的正是发起流事件的会话 → 接受事件", () => {
+    expect(streamOwnedBy({ state: "focus", currentSession: { id: "s1" } }, "s1")).toBe(true);
+  });
+
+  it("切到别的会话 / 回欢迎页 → 丢弃事件（不写进别人的对话）", () => {
+    expect(streamOwnedBy({ state: "focus", currentSession: { id: "s2" } }, "s1")).toBe(false);
+    expect(streamOwnedBy({ state: "initial", currentSession: null }, "s1")).toBe(false);
   });
 });

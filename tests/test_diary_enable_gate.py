@@ -92,10 +92,9 @@ class TestStatusDiaryEnabled:
             return SimpleNamespace(
                 search_path=str(workdir),
                 index_path=str(workdir / ".cortex" / "index.db"),
-                indexed_doc_count=lambda: 0,
-                registered_doc_count=lambda: 0,
+                index_counts=lambda: (0, 0),
                 last_failed_count=0,
-                file_stats=lambda: (0, {}),
+                file_stats_nonblocking=lambda: (0, {}),
                 vision_status=lambda: {},
                 building=False,  # ADR-0043 index_building 字段的桩
             )

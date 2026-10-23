@@ -213,7 +213,7 @@ REWIND_SNAPSHOT_RING_MAX = 100
 #: 会话标题长度上限（AP-21：Pydantic 校验 / API 截断 / 复制截断曾各写 200）。
 #: 定义在此而非 models/session.py——models 已从本模块 import SessionType，
 #: 反向 import 会成环。
-SESSION_TITLE_MAX = 200
+SESSION_TITLE_MAX = 1000
 
 
 class _SessionDB:

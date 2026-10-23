@@ -895,6 +895,9 @@ def auto_compact(
         tools=[],  # 压缩阶段不提供工具
         max_tokens=summary_output_cap(summary_max_tokens),
         tracer=tracer,
+        # 摘要是机械转写，不吃深度思考——显式覆盖为 auto（不发思考参数），
+        # 全局开了思考深度也不拖慢/不费 token（provider 构造档位每调用覆盖）
+        thinking_depth="auto",
     )
 
     summary = _extract_summary(response)
@@ -927,6 +930,8 @@ async def aauto_compact(
         tools=[],  # 压缩阶段不提供工具
         max_tokens=summary_output_cap(summary_max_tokens),
         tracer=tracer,
+        # 同步版：摘要显式剥离思考深度（机械转写不吃深度思考）
+        thinking_depth="auto",
     )
 
     summary = _extract_summary(response)

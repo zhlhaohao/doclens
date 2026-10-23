@@ -87,8 +87,11 @@ class IndexManager:
         """标记内存中的 documents 已过时，下次 load/search 时从磁盘重新加载。
 
         供 VisionWorker 等外部写入者在直接更新 FTS 后调用。
+        持 _build_cond 锁置位（AP-13）：与 load_or_build_index 的
+        「检查+清位」互斥，防无锁交错丢标志。
         """
-        self._needs_reload = True
+        with self._build_cond:
+            self._needs_reload = True
 
     def begin_background_build(self) -> bool:
         """声明本线程将独占执行首次建库（load_or_build_index 全量分支）。
@@ -261,6 +264,15 @@ class IndexManager:
         """索引文档总数（DB COUNT，转发 index_probe——AP-9 拆出）。"""
         return index_probe.indexed_doc_count(self.index_path)
 
+    def index_counts(self) -> tuple[int, int]:
+        """(已索引文档数, ghost 登记数)——单次 DB 往返（get_stats 单遍聚合）。
+
+        /api/status 等同时需要两种计数的调用方应使用本方法：分开调
+        indexed_doc_count() + registered_doc_count() 会各自开连接跑
+        get_stats（28.5 万语料下每次 ~1s，即使有 node_count 覆盖索引）。
+        """
+        return index_probe.index_counts(self.index_path)
+
     def file_stats(self) -> tuple[int, dict[str, int]]:
         """(总字节数, 扩展名分布)——供 /api/status，实例级缓存。
 
@@ -268,12 +280,33 @@ class IndexManager:
         计数变化（索引增删）才重算。同数替换（改内容不改文件数）下显示值
         可能略滞后，status 展示可接受。统计本体在 index_probe（AP-9）。
         """
-        n = self.indexed_doc_count()
+        n, _ghosts = self.index_counts()
         if self._file_stats_cache and self._file_stats_cache[0] == n:
             return self._file_stats_cache[1]
         (total, ext_counts), _ = index_probe.file_stats(self.index_path)
         self._file_stats_cache = (n, (total, ext_counts))
         return total, ext_counts
+
+    def file_stats_nonblocking(self) -> tuple[int, dict[str, int]] | None:
+        """file_stats 的非阻塞形态：缓存命中直接返回；冷缓存返回 None 并
+        起后台线程预热（下次调用命中）。
+
+        /api/status 消费：total_size_bytes / file_types 前端无渲染消费，
+        不值得让 workdir / model_name 等轻字段陪着冷缓存的全量 stat
+        （28.5 万语料 ~24s）一起等。None 时 status 返回占位值 0 / {}。
+        """
+        n, _ghosts = self.index_counts()
+        if self._file_stats_cache and self._file_stats_cache[0] == n:
+            return self._file_stats_cache[1]
+
+        def _warm():
+            try:
+                self.file_stats()
+            except Exception:  # noqa: BLE001
+                logger.debug("file_stats background warmup failed", exc_info=True)
+
+        threading.Thread(target=_warm, daemon=True, name="file-stats-warmup").start()
+        return None
 
     def indexed_source_paths(self) -> list[str]:
         """已索引文档的 source_path 列表（转发 index_probe，成本口径见该模块）。"""
@@ -613,7 +646,10 @@ class IndexManager:
                             and (_stats.indexed_files > 0 or len(_stats.pruned_paths) > 0)
                         )
                         if _index_touched:
-                            self._needs_reload = True
+                            # 持 _build_cond 锁置位（AP-13）：与 load_or_build_index
+                            # 的临界段互斥，防「读→清」窗口吞掉本次置位。
+                            with self._build_cond:
+                                self._needs_reload = True
                         else:
                             logger.debug("Background reindex touched nothing; skip reload mark")
                     else:
@@ -689,17 +725,25 @@ class IndexManager:
         # 另一线程正在后台构建（首次建库后台化，ADR-0043）——等待其完成，
         # 不重复构建。构建线程自身（begin_background_build 的调用线程）经
         # thread-local 豁免等待，否则自我死锁。
+        #
+        # AP-13：_needs_reload 的「检查+清位」与 _ts 换柄必须在 _build_cond
+        # 保护域内原子完成——旧实现读（687）与清（691）之间无锁，后台
+        # reindex 的置位（_bg_work / mark_index_dirty）恰好落在窗口内时被
+        # 无条件覆盖，标志丢失且永不补账（该标志是唯一 reload 触发源）。
+        # 锁内只做标志/句柄操作；审计与索引重活在锁外，不拖慢并发搜索。
         with self._build_cond:
             while self._building and _build_tls.owner is not threading.current_thread():
                 self._build_cond.wait()
-        if self._ts is not None and not self._needs_reload:
-            return True
-        # 本进程是否首次装配：必须在重建 _ts 之前判定（重建后即非 None）
-        needs_audit = self._ts is None
-        self._needs_reload = False
+            # ---- 临界段开始：标志检查 + 清位 + 句柄重建 ----
+            if self._ts is not None and not self._needs_reload:
+                return True
+            # 本进程是否首次装配：必须在重建 _ts 之前判定（重建后即非 None）
+            needs_audit = self._ts is None
+            self._needs_reload = False
 
-        set_config(self._ts_config())
-        self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
+            set_config(self._ts_config())
+            self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
+            # ---- 临界段结束 ----
         abs_path = os.path.abspath(self.index_path)
         self._startup_audit_done = True
 
@@ -794,8 +838,12 @@ class IndexManager:
         """内部 reindex（已持有锁）"""
         self._sync_image_version_expectation()
         if self._ts is None:
-            set_config(self._ts_config())
-            self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
+            # 持 _build_cond 建 _ts 句柄（AP-13）：与 load_or_build_index 的
+            # 换柄临界段互斥，防两个线程并发换柄。
+            with self._build_cond:
+                if self._ts is None:
+                    set_config(self._ts_config())
+                    self._ts = TreeSearch(db_path=self.index_path, lazy_search=True)
 
         mode = "全量重建" if force else "增量更新"
 

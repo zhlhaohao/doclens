@@ -183,7 +183,7 @@ stateDiagram-v2
 4. **终止判定**：stop_reason != tool_use → emit_done(summary=全文[:500])，`_cleanup_messages` 剥工具链返回（Web 丢弃返回值，历史真相在 DB）。
 5. **工具执行**：门禁确认 → task≥2 并发 gather + 同步 handler to_thread → tool_result 以 user 消息块回灌。
 6. **chat 哨兵检测**：任一工具输出以 CHAT_ASK_RESULT_PREFIX 开头 → emit_done(reason=waiting_user) 断回合。
-7. **轮次预算三机制**：纯轮询轮不计入；连续 3 轮同参签名→死循环提醒；软阈值 max_tool_rounds 收尾提醒 + 硬阈值 force_answer_rounds→suppress_tools 强制终答（提醒以 system-reminder 消息对追加，不破坏前缀缓存）。
+7. **轮次预算三机制**：纯轮询轮不计入；连续 3 轮同参签名→死循环提醒；软阈值 max_tool_rounds 收尾提醒 + 硬阈值 force_answer_rounds→suppress_tools 强制终答（提醒以 system-reminder 消息对追加，不破坏前缀缓存）。doclens 注入规则：`PLANIFY_MAX_TOOL_ROUNDS` = 硬阈值，软 = 硬 × 70% 向下取整，0 = 不限。
 
 ## 7. 持久化：落库六连与回放投影
 

@@ -368,3 +368,39 @@ describe("<cm-editor> 语言包懒加载", () => {
     expect(contentOf(el)).toBe("x");
   });
 });
+
+/** md 编辑态与「代码配色」的隔离（ADR-0043 作用范围：代码主题只管行号视图）。
+ *  回归 2026-10-22 用户报告：「md 编辑器永远是暗色，即使系统主题是亮色」——
+ *  根因是 cm-editor 无条件消费 codeTheme，行号视图里点过「深色」后 md 编辑
+ *  被永久锁深；而 md 预览 header 没有配色按钮，用户无从改回。 */
+describe("<cm-editor> md 编辑态跟随应用主题", () => {
+  /** 直接驱动内部主题状态（不走 localStorage，避免污染其它用例） */
+  function setThemes(el: CmEditor, code: "auto" | "light" | "dark", app: "light" | "dark" | "paper") {
+    (el as any)._codeTheme = code;
+    (el as any)._appTheme = app;
+    (el as any)._applyTheme();
+  }
+
+  it("markdown + codeTheme=dark + 应用亮色 → 仍取浅色表面", async () => {
+    const el = await makeFixture("# h", { markdown: true });
+    setThemes(el, "dark", "light");
+    expect((el as any)._codeDark).toBe(false);
+    expect((el as any)._view.dom.style.background).toBe("var(--cortex-bg)");
+  });
+
+  it("markdown 时应用主题切深夜 → 跟随变深（token 自己变）", async () => {
+    const el = await makeFixture("# h", { markdown: true });
+    setThemes(el, "light", "dark");
+    expect((el as any)._codeDark).toBe(true);
+    // 表面仍是 token 版（不是 GitHub dark 硬编码），让应用主题决定实际色值
+    expect((el as any)._view.dom.style.background).toBe("var(--cortex-bg)");
+  });
+
+  it("非 markdown（行号视图）仍尊重 codeTheme 强制深色", async () => {
+    const el = await makeFixture("x = 1", { path: "a.py", markdown: false });
+    setThemes(el, "dark", "light");
+    expect((el as any)._codeDark).toBe(true);
+    // jsdom 会把 hex 归一为 rgb
+    expect((el as any)._view.dom.style.background).toBe("rgb(13, 17, 23)");
+  });
+});

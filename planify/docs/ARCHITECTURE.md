@@ -75,7 +75,8 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 ### 4. 工具系统（`tools/`）
 
 - `build_tool_registry()`（`tools/registry.py:67`）静态组装，返回 `(定义列表, handler 字典)` 二元组；无装饰器自动发现。工具定义是纯 dict `{"name", "description", "input_schema"}`（Anthropic 格式），handler 同步/async 皆可
-- 外部工具经 `register_external_tools()`（`registry.py:27`）注入；`PLANIFY_ENABLED_TOOLS` 环境变量白名单过滤；gui_mode 下 `ask_user_question` 强制保留
+- 外部工具经 `register_external_tools()`（`registry.py:27`）注入；`PLANIFY_ENABLED_TOOLS` 环境变量白名单过滤；gui_mode 下 `ask_user_question` 强制保留。`PLANIFY_DISABLED_TOOLS` 黑名单在合并后（含外部工具）再剔除，与白名单并存时优先级更高；子代理经 `handle_task` 的 `disabled_tools` 继承，不复活
+
 - 约 25 个内置工具分 9 类：
 
 | 类别 | 工具 | 实现要点 |

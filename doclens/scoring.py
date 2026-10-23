@@ -19,30 +19,48 @@ def calc_proximity_score(text, keywords, max_span=20):
     Args:
         text: 要检查的文本
         keywords: 关键词列表
-        max_span: 关键词最大跨度（字符数），超过则不算紧邻
+        max_span: 关键词最大跨度（**当量词数**：非 CJK 词计 1，CJK 字计
+            0.5——1 英文词 ≈ 2 汉字，中英文同预算下信息量对齐。历史：
+            字符口径（旧）对英文 6 词 query 无区分度；纯词口径（过渡版）
+            对中文窗口偏小）。
     Returns:
         (matched_count, proximity_score) - 匹配词数和紧邻分数
             proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
     """
     matched_kws = _matched_keywords(text, keywords)
-    positions = []
+    spans = []  # (首字符位置, 末字符位置)
 
     for kw in matched_kws:
         idx = text.lower().find(kw.lower())
         if idx >= 0:
-            positions.append(idx)
+            spans.append((idx, idx + len(kw) - 1))
 
-    if not positions:
+    if not spans:
         return 0, 0
 
-    matched = len(positions)
-    span = max(positions) - min(positions) if len(positions) > 1 else 0
+    matched = len(spans)
+    if matched > 1:
+        span = _word_distance(text, min(s for s, _ in spans), max(e for _, e in spans))
+    else:
+        span = 0
 
     # 全部关键词都匹配且紧邻 = 最高分
     if matched == len(keywords) and span <= max_span:
         return matched, 2
     # 部分关键词匹配 = 中等分数（按匹配比例）
     return matched, 1
+
+
+def _word_distance(text: str, start_char: int, end_char: int) -> float:
+    """两个字符位置之间的当量词距（含端点）。
+
+    当量词口径（word_window.CJK_WORD_WEIGHT）：非 CJK 词计 1，CJK 字
+    计 0.5——中英文同一 max_span 预算下信息量对齐（1 英文词 ≈ 2 汉字）。
+    """
+    from doclens.word_window import count_equivalence_words
+
+    segment = text[start_char:end_char + 1]
+    return max(count_equivalence_words(segment) - 1, 0)
 
 
 def matched_keywords(text, keywords):
@@ -70,7 +88,9 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         total_keywords: 总关键词数
         doc_name: 文档名（文件名）
         node_title: 节点标题
-        fts_score: FTS5 BM25 原始分数
+        fts_score: 引擎节点分（propagate_scores 全局 max 归一后的 [0,1]；
+            直传使用——2026-10-23 前曾 sigmoid 二次压缩，区间 [0.46,1]
+            被压到 0.61-0.73，composite 摆动仅 ~1%，区分度损失殆尽）
         query_words: 查询分词列表
         weights: 各因子权重字典
         proximity: 邻近度分数 (0=无匹配, 1=部分匹配, 2=全部关键词紧邻)
@@ -105,18 +125,22 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         weighted_sum += w * val
         total_weight += w
 
-    # fts_score: 归一化 BM25 分数 (用 sigmoid 映射到 0~1)
+    # fts_score: 引擎节点分直传（全局 max 归一后已是 [0,1]，且唯一带
+    # IDF 感知的因子——BM25 天然编码查询词稀有度，kw/fname 均无）
     w = weights.get("fts_score", 0)
     if w > 0:
-        import math
-        val = 1.0 / (1.0 + math.exp(-fts_score)) if fts_score != 0 else 0.5
+        val = fts_score
         factors["fts_score"] = val
         weighted_sum += w * val
         total_weight += w
 
-    # title_match: 标题中匹配的关键词数 / 总关键词数
+    # title_match: 标题中匹配的关键词数 / 总关键词数。
+    # 派生标题跳过：平文本语料（slack/单节点文档）的节点 title 由文件名
+    # 派生（title ⊆ 文件名），fname 已计过同一信号——再计 title 等效把
+    # 文件名权重翻倍到 4.0。标题是文件名子串时不重复计入；结构化文档
+    # （真章节标题，非文件名子串）不受影响。
     w = weights.get("title_match", 0)
-    if w > 0:
+    if w > 0 and title_lower and not (title_lower in name_lower):
         title_hits = sum(1 for kw in query_words if kw.lower() in title_lower)
         val = title_hits / total_keywords
         factors["title_match"] = val

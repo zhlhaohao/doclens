@@ -111,6 +111,8 @@ sequenceDiagram
 | 软阈值 | 轮数超过 `max_tool_rounds`（宿主注入；默认 None = 不启用） | 注入收尾提醒，模型仍可继续调工具 |
 | 硬阈值 | 轮数达到 `force_answer_rounds`（默认 None） | 以空工具列表再调一次 LLM，强制纯文本终答后结束 |
 
+宿主注入规则（doclens `agent_prompt.tool_round_limit_kwargs`）：`PLANIFY_MAX_TOOL_ROUNDS` 配置值即硬阈值，软阈值 = 硬 × 70% 向下取整；0 = 不限。
+
 纯轮询轮（上一轮全是后台检查）不消耗轮次预算。
 
 ## 4. 三种 runner 对比

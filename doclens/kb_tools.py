@@ -147,8 +147,10 @@ READ_DOCUMENT_TOOL = {
 # 格式化常量（默认值，运行时从 idx_manager 配置读取）
 # ---------------------------------------------------------------------------
 
-MAX_CONTEXT_CHARS_PER_RESULT = 800
+MAX_CONTEXT_CHARS_PER_RESULT = (200 + 600) * 8
 MAX_TOTAL_CHARS = 10000
+# 字符兜底默认与词窗口同量级（(200+600)×8）：旧 800 在英文语料下比词预算
+# （800 词 ≈ 4500 字符）紧 5-6 倍，词窗口从未真正生效——小文档也出略标记
 # 窗口不在开头时补文档开头（标题/表头）的字符预算——独立于词窗口参数
 # （旧实现 min(200, before) 的 before 现为词单位，语义分离）
 _HEAD_BUDGET_CHARS = 200
@@ -301,9 +303,15 @@ def _extract_keyword_window(
     """
     from doclens.word_window import WORD_CHAR_CEILING, end_after_words, start_before_words
 
-    if max_chars is not None and len(text) <= max_chars:
+    # 短文早退：两个口径（字符兜底/当量词预算）都富余才整篇返回——只看
+    # max_chars 会让词窗口在小文本上失效（max_chars 升到词口径后，
+    # 2000 字中文文本 ≤6400 但 >150 当量词，旧早退会绕过 50/100 词窗口）
+    from doclens.word_window import count_equivalence_words
+
+    ew = count_equivalence_words(text)
+    if max_chars is not None and len(text) <= max_chars and ew <= before + after:
         return text
-    if max_chars is None and _count_words(text) <= before + after:
+    if max_chars is None and ew <= before + after:
         return text
 
     # 收集所有关键词命中位置（大小写不敏感）
@@ -349,13 +357,18 @@ def _extract_keyword_window(
     # 时夹回 max_chars 的一半（保持旧保险丝语义）
     win_start = start_before_words(text, best_start, before)
     if max_chars is not None and best_start - win_start > max_chars // 2:
-        win_start = max(0, best_start - max_chars // 2)
+        # clamp 时对齐到词边界，且不越过 0——否则窗口可能从单词中间
+        # 开始（半词残留），旧版还有负值边界（best_start < max_chars//2 时）
+        clamped = start_before_words(text, best_start - max_chars // 2, 1)
+        win_start = max(0, min(win_start, clamped))
 
     # 窗口不在开头时，预留预算补带文档开头（标题/表头），
-    # 否则大表格中部/尾部的行缺列名，LLM 无法解读
+    # 否则大表格中部/尾部的行缺列名，LLM 无法解读。
+    # head 只取到 win_start 之前——excerpt 本就覆盖 [win_start, …)，
+    # head 越过 win_start 会与 excerpt 开头重复（中部略标记两侧同文）
     head = ""
     if win_start > 0:
-        head_raw = text[:_HEAD_BUDGET_CHARS]
+        head_raw = text[:min(_HEAD_BUDGET_CHARS, win_start)]
         nl = head_raw.rfind("\n")
         head = (head_raw[:nl] if nl > 40 else head_raw).rstrip()
 
@@ -457,13 +470,17 @@ def _kb_stats(idx_manager: IndexManager) -> str:
     source_paths = idx_manager.indexed_source_paths()
     total_files = len(source_paths)
     total_size = 0
+    unreadable: list[str] = []
     file_type_counts: dict[str, int] = {}
 
     for source_path in source_paths:
         try:
             total_size += os.path.getsize(source_path) if source_path else 0
-        except OSError:
-            pass
+        except OSError as e:
+            # AP-8：单文件 stat 失败不吞——计入不可读清单，输出如实标注
+            # （否则文件总大小静默少算，统计失真无提示）。
+            unreadable.append(source_path or "(空路径)")
+            logger.warning("kb_stats: getsize failed for %s: %s", source_path, e)
         ext = os.path.splitext(source_path)[1].lower() if source_path else ''
         if ext:
             file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
@@ -483,7 +500,7 @@ def _kb_stats(idx_manager: IndexManager) -> str:
         type_name = SUPPORTED_FORMATS.get(ext, (ext, None))[0] if ext in SUPPORTED_FORMATS else ext
         type_lines.append(f"  {ext}: {count} 个 ({type_name})")
 
-    return (
+    stats = (
         f"知识库状态:\n"
         f"  索引路径: {index_abs}\n"
         f"  索引大小: {fmt_size(index_size)}\n"
@@ -492,6 +509,12 @@ def _kb_stats(idx_manager: IndexManager) -> str:
         f"  文件类型:\n"
         + "\n".join(type_lines)
     )
+    if unreadable:
+        stats += (
+            f"\n  （警告: {len(unreadable)} 个文件大小不可读（权限/占用/已移除），"
+            f"文件总大小为部分统计，如 {unreadable[0]}）"
+        )
+    return stats
 
 
 def _kb_reindex(idx_manager: IndexManager, force: bool = False) -> str:
@@ -552,16 +575,21 @@ def _resolve_doc_path(path: str, workdir: Path, idx_manager: IndexManager) -> Op
     return None
 
 
-def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
-    """获取或创建事件循环。"""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop
+def _run_async_parser(parser_fn, file_path: str) -> dict:
+    """在同步 handler 中驱动异步解析器（AP-7）。
+
+    treesearch 的解析器全是 async def，而 kb_tools 的 handler 是同步函数。
+    官方姿势是 asyncio.run()：每次干净起停事件循环，不留泄漏——旧实现
+    ``get_event_loop() + run_until_complete`` 建的循环从不 close()（每次
+    泄漏一个 selector/fd，同 agent_integration AP-51 的教训），且
+    ``get_event_loop`` 在无运行循环线程里 3.12+ 弃用、3.14 报错。
+
+    调用方契约：本函数不得在已运行的事件循环线程内调用（asyncio.run
+    会 RuntimeError）。现有消费方均安全——planify StreamingAgent 对同步
+    handler 统一经 ``asyncio.to_thread`` 在线程池执行（无 running loop），
+    CLI/MCP 入口为纯同步上下文。
+    """
+    return asyncio.run(parser_fn(file_path))
 
 
 def _parse_document(file_path: str, ext: str) -> Optional[dict]:
@@ -581,8 +609,7 @@ def _parse_document(file_path: str, ext: str) -> Optional[dict]:
             text = f.read()
         return {"title": os.path.basename(file_path), "text": text, "nodes": []}
 
-    loop = _get_or_create_event_loop()
-    raw = loop.run_until_complete(parser_fn(file_path))
+    raw = _run_async_parser(parser_fn, file_path)
 
     # 标准化解析器输出
     title = raw.get("doc_name", os.path.basename(file_path))
@@ -627,23 +654,44 @@ def _load_indexed_image_tree(idx_manager, abs_path: str) -> Optional[dict]:
     return None
 
 
-def _load_doc_by_source_path(idx_manager, abs_path: str):
-    """按 source_path 从索引库精确加载单个 Document（未命中返回 None）。"""
-    try:
-        from treesearch.fts import FTS5Index
+# ---------------------------------------------------------------------------
+# 索引读失败语义（AP-8 / AP-45 口径：DB 故障 ≠ 未入索引）
+# ---------------------------------------------------------------------------
 
-        target = os.path.abspath(abs_path)
+
+class IndexReadError(RuntimeError):
+    """索引库读失败（打不开/损坏/锁死）——与「未命中返回 None」显式区分。
+
+    旧实现把一切异常吞成 None/False：DB 损坏被伪装成「未入索引」，
+    ghost 闸门静默放行、read_document 改走现场解析——路径漂移不可察觉，
+    AI 据此输出「文档不存在」类幻觉结论。
+    """
+
+
+def _load_doc_by_source_path(idx_manager, abs_path: str):
+    """按 source_path 从索引库精确加载单个 Document。
+
+    返回契约：未命中 → None；**索引库读失败 → 上抛 IndexReadError**
+    （调用方必须区分「没有」与「坏了」，不得静默降级）。
+    """
+    from treesearch.fts import FTS5Index
+
+    target = os.path.abspath(abs_path)
+    fts = None
+    try:
         fts = FTS5Index(db_path=idx_manager.index_path)
-        try:
-            doc_id = fts.get_doc_id_by_source_path(target)
-            if doc_id is None:
-                return None
-            return fts.load_document(doc_id)
-        finally:
-            fts.close()
+        doc_id = fts.get_doc_id_by_source_path(target)
+        if doc_id is None:
+            return None
+        return fts.load_document(doc_id)
+    except IndexReadError:
+        raise
     except Exception as e:  # noqa: BLE001
-        logger.debug("load_doc_by_source_path(%s) failed: %s", abs_path, e)
-        return None
+        logger.warning("load_doc_by_source_path(%s) index read failed: %s", abs_path, e)
+        raise IndexReadError(str(e)) from e
+    finally:
+        if fts is not None:
+            fts.close()
 
 
 def _normalize_nodes(nodes: list[dict]) -> list[dict]:
@@ -858,7 +906,9 @@ def _format_document_output(
         )
 
     content_parts = []
-    total_words = 0
+    from doclens.word_window import count_equivalence_words as _cew
+
+    total_words = 0.0
     for title, text, ls, le in all_text_parts:
         if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
@@ -868,7 +918,7 @@ def _format_document_output(
         else:
             part = text
 
-        part_words = _count_words(part)
+        part_words = _cew(part)
         if total_words + part_words > max_read_words:
             remaining = max_read_words - total_words
             if remaining > 200:
@@ -883,7 +933,7 @@ def _format_document_output(
     content = "\n\n".join(content_parts)
     output = header + "\n## 内容\n\n" + content
 
-    total_doc_words = sum(_count_words(t) for _, t, _, _ in all_text_parts)
+    total_doc_words = sum(_cew(t) for _, t, _, _ in all_text_parts)
     if total_doc_words > max_read_words:
         output += "\n\n（内容已截断。使用 start_word/end_word 或 section 参数读取后续内容。）"
 
@@ -895,15 +945,26 @@ def _split_words_cjk(text: str) -> list[str]:
     return [w for w, _s in split_words_with_seps(text)]
 
 
-def _truncate_to_word_budget(text: str, max_words: int) -> Tuple[str, bool]:
-    """按词数预算截断（词：CJK 每字一词，其余按空白切分），尽量落在段落边界。
+def _truncate_to_word_budget(text: str, max_words: float) -> Tuple[str, bool]:
+    """按当量词预算截断（非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈ 2 汉字），
+    尽量落在段落边界。
 
     Returns: (截断后文本, 是否发生了截断)
     """
-    pieces = split_words_with_seps(text)
-    if len(pieces) <= max_words:
+    from doclens.word_window import count_equivalence_words
+
+    if count_equivalence_words(text) <= max_words:
         return text, False
-    kept = "".join(w + s for w, s in pieces[:max_words])
+    pieces = split_words_with_seps(text)
+    kept = ""
+    acc = 0.0
+    for w, s in pieces:
+        if w:
+            from doclens.word_window import word_weight
+            acc += word_weight(w)
+            if acc > max_words:
+                break
+        kept += w + s
     # 优先落在段落边界，其次行边界
     last_para = kept.rfind("\n\n")
     if last_para > len(kept) // 2:
@@ -952,9 +1013,19 @@ def _format_word_range(
     sliced = words[start_idx:end_idx]
     shown = sliced
     truncated = ""
-    if len(sliced) > max_read_words:
-        # 按词数预算截断，并告知实际读到的词位置，供下一轮续读
-        shown = sliced[:max_read_words]
+    # 预算按当量词（中文 2 字计 1）：序号仍离散词，但单次读取量与
+    # max_read_words 的当量词口径一致
+    from doclens.word_window import word_weight
+
+    acc = 0.0
+    cut = len(sliced)
+    for i, w in enumerate(sliced):
+        acc += word_weight(w)
+        if acc > max_read_words:
+            cut = i
+            break
+    if cut < len(sliced):
+        shown = sliced[:cut]
         truncated = (
             f"\n\n（内容已截断。使用 start_word={start_idx + len(shown) + 1} 续读后续内容。）"
         )
@@ -1147,7 +1218,16 @@ def handle_read_document(
 
     # 登记闸门（ADR-0034 ghost 行）：仅登记未索引的文件（空树 ghost 行命中
     # DB）拒绝读取——与「不读取内容」的登记语义自洽，AI 读代码走 read_file。
-    if _is_ghost_registered(idx_manager, abs_path):
+    # 索引读失败显式报错（AP-8）：不能静默放行后走现场解析掩盖 DB 故障。
+    try:
+        ghost = _is_ghost_registered(idx_manager, abs_path)
+    except IndexReadError as e:
+        return (
+            f"索引库读取失败，无法判定文档登记状态: {e}。\n"
+            f"本次不走现场解析兜底（避免掩盖索引故障）；"
+            f"可尝试 manage_kb(action='reindex') 修复索引后重试。"
+        )
+    if ghost:
         return (
             f"该文件仅登记未索引（不在索引类型白名单内）: {path}。\n"
             f"read_document 不读取其内容；请改用 read_file 工具按纯文本读取。"
@@ -1162,6 +1242,13 @@ def handle_read_document(
         return (
             f"文档解析失败: 缺少依赖 {e}。\n"
             f"请安装对应的解析库后重试。"
+        )
+    except IndexReadError as e:
+        # AP-8：DB 故障 ≠ 文档坏了——单独报错，不与解析失败混同。
+        return (
+            f"索引库读取失败: {e}。\n"
+            f"已索引文档的完整内容依赖索引库；可尝试 "
+            f"manage_kb(action='reindex') 修复后重试。"
         )
     except Exception as e:
         return (
@@ -1204,15 +1291,14 @@ def _is_ghost_registered(idx_manager: IndexManager, abs_path: str) -> bool:
 
     判据 = DB 命中该 source_path 且 node_count == 0。true 索引文档至少有
     一个节点（无 heading 的 md/txt 也有单节点兜底）。
+
+    索引读失败上抛 IndexReadError（AP-8）：闸门放行与否必须建立在
+    「读到了 DB 且确认非 ghost」之上——DB 坏了不能伪装成「非 ghost」。
     """
-    try:
-        if getattr(idx_manager, "ts", None) is None:
-            return False
-        doc = _load_doc_by_source_path(idx_manager, abs_path)
-        return doc is not None and not doc.structure
-    except Exception as e:  # noqa: BLE001
-        logger.debug("is_ghost_registered(%s) failed: %s", abs_path, e)
+    if getattr(idx_manager, "ts", None) is None:
         return False
+    doc = _load_doc_by_source_path(idx_manager, abs_path)
+    return doc is not None and not doc.structure
 
 
 def _load_tree_for_info(
@@ -1247,7 +1333,9 @@ def _load_tree_for_info(
 
 
 def _count_words(text: str) -> int:
-    """词数统计，与 read_document 的 start_word/end_word 词序号语义一致。"""
+    """词数统计（离散词序号口径：CJK 每字一词），与 read_document 的
+    start_word/end_word 词序号语义一致——序号 API 冻结，不用当量词。
+    预算判断（截断上限）请用 word_window.count_equivalence_words。"""
     return len(_split_words_cjk(text)) if text else 0
 
 
@@ -1290,7 +1378,11 @@ def _build_info_toc(nodes: list[dict], depth: int = 0) -> Tuple[list[str], int]:
             if depth == 0:
                 wc = _count_words(_subtree_text(node))
                 if wc:
-                    line += f"（约 {wc} 词）"
+                    # 当量词（中文 2 字计 1）——与 max_read_words 预算同口径，
+                    # AI 据此估算 section 是否超出单次读取上限
+                    from doclens.word_window import count_equivalence_words as _cew
+                    ew = _cew(_subtree_text(node))
+                    line += f"（约 {ew:.0f} 词）"
             lines.append(line)
         child_lines, child_count = _build_info_toc(
             children, depth + 1 if title else depth
@@ -1315,7 +1407,12 @@ def handle_file_info(
 
     # 登记态如实标注（ADR-0034）：ghost 行 = 已收录元数据、未建树——
     # 概况按「仅登记」报告，不走索引树（空树无概况可言）。
-    if _is_ghost_registered(idx_manager, abs_path):
+    # 索引读失败显式报错（AP-8）：不能把 DB 故障伪装成「非 ghost」。
+    try:
+        ghost = _is_ghost_registered(idx_manager, abs_path)
+    except IndexReadError as e:
+        return f"索引库读取失败，无法判定登记状态: {e}。"
+    if ghost:
         stat = os.stat(abs_path)
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
         return (
@@ -1330,6 +1427,13 @@ def handle_file_info(
         tree, indexed = _load_tree_for_info(idx_manager, abs_path, ext)
     except ImportError as e:
         return f"文档解析失败: 缺少依赖 {e}。请安装对应的解析库后重试。"
+    except IndexReadError as e:
+        # AP-8：DB 故障 ≠ 文档坏了——单独报错，不与解析失败混同。
+        return (
+            f"索引库读取失败: {e}。\n"
+            f"词数/章节概况依赖索引树；可尝试 "
+            f"manage_kb(action='reindex') 修复后重试。"
+        )
     except Exception as e:
         return f"文档解析失败: {e}。"
 

@@ -73,6 +73,17 @@ def _ask_mode_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     return []
 
 
+def _thinking_depth_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """思考深度档位校验（空串 = 未设置 = 默认 auto，跳过）。"""
+    raw = values.get("PLANIFY_THINKING_DEPTH", "").strip().lower()
+    if raw and raw not in ("auto", "off", "low", "medium", "high"):
+        return [ConfigValidationError(
+            field="PLANIFY_THINKING_DEPTH",
+            error="合法值：auto / off / low / medium / high",
+        )]
+    return []
+
+
 def _workdir_dir_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     """CORTEX_WORKDIR 非空时必须是已存在的目录（启动时目录不存在会退出）。"""
     import os
@@ -213,6 +224,8 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_outside_workdir_rule(values))
     # 对话提问模式规则（ADR-0033）
     errors.extend(_ask_mode_rule(values))
+    # 思考深度档位规则（auto/off/low/medium/high）
+    errors.extend(_thinking_depth_rule(values))
     # 工作目录覆盖规则（目录存在性）
     errors.extend(_workdir_dir_rule(values))
     # shell 超时规则（1–3600 整数）
