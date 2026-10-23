@@ -1680,7 +1680,7 @@ class FTS5Index:
         per_doc_raw: dict[str, dict[str, float]],
         ancestor_decay: float = 0.6,
     ) -> dict[str, dict[str, float]]:
-        """Normalize per-doc raw bm25 scores and propagate ancestor bonuses.
+        """Normalize raw bm25 scores (cross-doc global max) + propagate ancestor bonuses.
 
         Post-processing half of :meth:`score_nodes_batch`, public so callers
         that already hold raw routing scores (e.g. lazy search routing, which
@@ -1689,6 +1689,15 @@ class FTS5Index:
         re-querying the FTS index — a ``doc_id IN`` filter does not shrink
         the inverted-index scan, so re-scoring k documents costs the same
         full posting-list walk as scoring the whole corpus.
+
+        Normalization basis is the **global max** across all documents in
+        *per_doc_raw* (2026-10-23): the old per-doc max made every
+        single-node document score exactly 1.0, erasing cross-document
+        relevance (a 1-term hit scored the same as a 6-term hit after
+        normalization). Global max keeps intra-doc node ordering intact
+        (same divisor) while restoring cross-doc discrimination — hosts
+        consuming ``nodes[].score`` as an fts factor get a meaningful
+        signal again.
         """
         result: dict[str, dict[str, float]] = {}
         doc_children_map: dict[str, dict[str, list[str]]] = {}
@@ -1705,12 +1714,17 @@ class FTS5Index:
                 if pid:
                     doc_children_map.setdefault(d_id, {}).setdefault(pid, []).append(nid)
 
+        # Global normalization basis: max raw score across ALL documents —
+        # per-doc max erased cross-doc relevance (single-node docs all 1.0)
+        global_max = max(
+            (s for raw_scores in per_doc_raw.values() for s in raw_scores.values()),
+            default=0.0,
+        )
+        if global_max <= 0:
+            global_max = 1.0
+
         for doc_id, raw_scores in per_doc_raw.items():
-            # Normalize to [0, 1]
-            max_s = max(raw_scores.values()) if raw_scores else 1.0
-            if max_s <= 0:
-                max_s = 1.0
-            scores = {nid: s / max_s for nid, s in raw_scores.items()}
+            scores = {nid: s / global_max for nid, s in raw_scores.items()}
 
             # Ancestor propagation
             if ancestor_decay > 0:
@@ -1722,7 +1736,9 @@ class FTS5Index:
                     bonus = ancestor_decay * max(child_scores)
                     scores[pid] = scores.get(pid, 0.0) + bonus
 
-                # Re-normalize after propagation
+                # Re-normalize after propagation (cap at 1.0; global basis
+                # keeps intra-doc ordering — the cap only rescales when
+                # ancestor bonuses push the top above 1.0)
                 final_max = max(scores.values()) if scores else 1.0
                 if final_max > 1.0:
                     scores = {nid: s / final_max for nid, s in scores.items()}
