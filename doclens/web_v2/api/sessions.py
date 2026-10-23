@@ -248,7 +248,7 @@ async def append_session(session_id: str, req: SessionAppendRequest):
 
 @router.patch("/sessions/{session_id}/title")
 async def rename_session(session_id: str, req: SessionRenameRequest):
-    """人工改名（2026-09-17）。strip 后为空 → 400；超 SESSION_TITLE_MAX 截断
+    """人工改名（2026-09-17）。strip 后为空 → 400；超 SESSION_TITLE_MAX（1000）截断
     （与创建/复制同源，AP-21）；不刷新 updated_at。"""
     store = _get_store()
     summary = store.get(session_id)

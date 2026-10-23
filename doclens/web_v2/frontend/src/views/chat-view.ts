@@ -1245,7 +1245,7 @@ export class ChatView extends LitElement {
     title: string, message: string, mode?: "skill",
     images?: { data: string; media_type: string }[],
   ): Promise<void> {
-    const created = await createSession({ type: "chat", title: title.slice(0, 200), preview: message.slice(0, 100), mode });
+    const created = await createSession({ type: "chat", title: title.slice(0, 1000), preview: message.slice(0, 100), mode });
     this._markTabSession(created.id); // 新会话也算本页当前会话
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
@@ -1253,7 +1253,7 @@ export class ChatView extends LitElement {
     actions.setChatState({
       state: "focus",
       currentSession: {
-        id: created.id, type: "chat", title: title.slice(0, 200),
+        id: created.id, type: "chat", title: title.slice(0, 1000),
         preview: message.slice(0, 100), mode, updated_at: new Date().toISOString(),
         message_count: 0,
       },

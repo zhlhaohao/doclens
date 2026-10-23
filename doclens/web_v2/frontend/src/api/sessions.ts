@@ -68,7 +68,7 @@ export async function compactSession(
   return request(`/api/sessions/${sessionId}/compact`, { method: "POST" });
 }
 
-/** 人工改名（2026-09-17）：后端 trim + 200 字符截断，不刷新 updated_at。 */
+/** 人工改名（2026-09-17）：后端 trim + 1000 字符截断，不刷新 updated_at。 */
 export async function renameSession(sessionId: string, title: string): Promise<{ ok: boolean; id: string; title: string }> {
   return request(`/api/sessions/${sessionId}/title`, { method: "PATCH", json: { title } });
 }
