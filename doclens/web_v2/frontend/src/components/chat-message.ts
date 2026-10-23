@@ -327,6 +327,13 @@ export class ChatMessageEl extends LitElement {
   /** 「展开/收起全部思考过程」全局指令（chat-stream 三钮组下发）：
    *  null = 自动（各 trace 自行管理），true/false = 强制本消息 trace 的展开态。 */
   @property({ attribute: false }) traceExpandOverride: boolean | null = null;
+  /** 插话在途（ADR-0048）：透传给 chat-tool-trace 的按钮提示态。 */
+  @property({ type: Boolean }) interjectPending = false;
+  /** 回合生成中（ADR-0048 插话入口锚点）：来自会话 streaming 态，整回合
+   *  稳定为 true——插话按钮绑它而非「有 running 工具步骤」（后者在每轮
+   *  工具结束到下一轮 tool_call 的 LLM 流式间隙会翻 false，按钮闪烁）。
+   *  恢复态（断开续跑回页占位）同样为 true——插话入口照常可用（ADR-0048）。 */
+  @property({ type: Boolean }) generating = false;
   /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
    *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
@@ -542,7 +549,9 @@ export class ChatMessageEl extends LitElement {
       <div class="bubble">
         ${showTrace
           ? html`<chat-tool-trace .steps=${traceSteps}
-                                 .expandOverride=${this.traceExpandOverride}></chat-tool-trace><div class="trace-sep"></div>`
+                                 .expandOverride=${this.traceExpandOverride}
+                                 .interjectPending=${this.interjectPending}
+                                 .generating=${this.generating}></chat-tool-trace><div class="trace-sep"></div>`
           : null}
         ${askStep ? this._renderAskSummary(askStep) : null}
         ${this.renderBubble(this.message.content)}

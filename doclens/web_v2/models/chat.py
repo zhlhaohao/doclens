@@ -44,3 +44,13 @@ class ChatRequest(BaseModel):
 class ChatStopRequest(BaseModel):
     """POST /api/chat/stop —— 中断指定 session 的 AI 生成。"""
     session_id: str = Field(min_length=1)
+
+
+class ChatInterjectRequest(BaseModel):
+    """POST /api/chat/interject —— 生成中途插话（ADR-0048）。
+
+    会话级单槽位：写入待处理插话，agent 主循环在下一个检查点消费
+    （注入 → suppress_tools 汇报 → 循环继续，回合不结束）。
+    """
+    session_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=2000)

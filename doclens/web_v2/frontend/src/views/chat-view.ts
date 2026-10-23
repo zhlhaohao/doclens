@@ -4,7 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { loadSessionMemory } from "../utils/session-memory";
 import type { Session, ChatMessage, ToolStep, PendingAsk } from "../state/types";
-import { chatStream, stopChat } from "../api/chat";
+import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
@@ -259,6 +259,27 @@ export class ChatView extends LitElement {
     }
     .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
     .vision-gate-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
+    /* 插话输入框（ADR-0048）：与 vision-gate 同规格的小 dialog */
+    .interject-dialog { max-width: 380px; padding: 4px; display: block; }
+    .interject-dialog h3 { margin: 0 0 8px; font-size: 16px; }
+    .interject-dialog .interject-hint {
+      margin: 0 0 10px; color: var(--cortex-text-subtle); font-size: 13px; line-height: 1.5;
+    }
+    .interject-dialog textarea {
+      width: 100%; box-sizing: border-box; resize: vertical;
+      border: 1px solid var(--cortex-border); border-radius: var(--cortex-radius-md);
+      padding: 8px 10px; font-size: 14px; font-family: var(--cortex-font);
+      background: var(--cortex-surface); color: var(--cortex-text);
+    }
+    .interject-dialog textarea:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: -1px; }
+    .interject-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .interject-actions button {
+      border: none; border-radius: var(--cortex-radius-pill, 100px);
+      padding: 8px 18px; font-size: 14px; cursor: pointer;
+    }
+    .interject-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
+    .interject-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
+    .interject-actions .primary:disabled { opacity: 0.5; cursor: not-allowed; }
     :host {
       display: flex;
       flex-direction: column;
@@ -553,6 +574,11 @@ export class ChatView extends LitElement {
   /** 断开续跑轮询定时器（ADR-0028）：恢复态 generating 占位期间 5s 轮询
    *  detail，跑完自动刷新展示；离开会话/停止后清除。 */
   private _genPollTimer?: number;
+  /** 插话在途（ADR-0048）：true = 已提交待送达（按钮「已插入」禁点），
+   *  interject_ack 送达后回落；回合结束由丢弃 toast 兜底复位。 */
+  @state() private _interjectPending = false;
+  /** 插话输入框（ADR-0048）：true = 打开原生 dialog。 */
+  @state() private _interjectDialogOpen = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -851,6 +877,77 @@ export class ChatView extends LitElement {
     this._visionGateOpen = false;
     actions.setPendingSettingsTab("ai");
     router.navigate("settings");
+  }
+
+  // ---- 插话（ADR-0048）----
+
+  /** 插话输入框草稿（dialog 打开期间）。 */
+  @state() private _interjectDraft = "";
+
+  /** trace 标题栏「插话」按钮 → 打开原生 dialog（ADR-0048 决策 7）。
+   *  入口在生成中才渲染（组件侧控制）；恢复态（无本地流但 generating）
+   *  同样可达——按钮显隐由 chat-tool-trace 按 running 步骤判定。 */
+  private _onInterjectRequest = (): void => {
+    this._interjectDraft = "";
+    this._interjectDialogOpen = true;
+  };
+
+  private _onInterjectCancel = (): void => {
+    this._interjectDialogOpen = false;
+    this._interjectDraft = "";
+  };
+
+  /** 提交插话：写会话单槽位，按钮转「已插入」等检查点送达（ack 回落）。
+   *  拒绝路径（占用/不在生成）toast 提示，dialog 关闭。 */
+  private _onInterjectSubmit = async (): Promise<void> => {
+    const session = store.getState().chat.currentSession;
+    const text = this._interjectDraft.trim();
+    if (!session || !text) return;
+    this._interjectDialogOpen = false;
+    this._interjectDraft = "";
+    const r = await interject(session.id, text);
+    if (r === "ok") {
+      this._interjectPending = true;
+      this._pushToast("已插入，将在当前步骤完成后送达", "info", 3500);
+    } else if (r === "pending") {
+      this._pushToast("已有插话在等待送达，请稍候", "info", 3500);
+    } else if (r === "not_running") {
+      this._pushToast("会话已结束生成，直接发送消息提问即可", "info", 3500);
+    } else {
+      this._pushToast("插话提交失败，请重试", "error", 3500);
+    }
+  };
+
+  /** 插话输入 dialog（原生 <dialog>，仓库惯例 showModal）。 */
+  private _renderInterjectDialog() {
+    if (!this._interjectDialogOpen) return nothing;
+    return html`
+      <dialog @cancel=${this._onInterjectCancel}>
+        <div class="interject-dialog">
+          <h3>插话</h3>
+          <p class="interject-hint">向正在执行的 AI 提问或下达临时指令。当前步骤
+            完成后送达，AI 只做文字汇报并继续原任务，不会被打断。</p>
+          <textarea
+            rows="4"
+            placeholder="例如：现在进度汇报一下 / 改用方案 B / 已读文件里有线索吗"
+            .value=${this._interjectDraft}
+            @input=${(e: InputEvent) => {
+              this._interjectDraft = (e.target as HTMLTextAreaElement).value;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              // Ctrl/Cmd+Enter 快捷提交（Enter 留给多行输入）
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                void this._onInterjectSubmit();
+              }
+            }}></textarea>
+          <div class="interject-actions">
+            <button class="secondary" @click=${this._onInterjectCancel}>取消</button>
+            <button class="primary" ?disabled=${!this._interjectDraft.trim()}
+                    @click=${this._onInterjectSubmit}>插入</button>
+          </div>
+        </div>
+      </dialog>`;
   }
 
   /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
@@ -1305,6 +1402,32 @@ export class ChatView extends LitElement {
           // 提示用户直接发消息作答（答案即下一条用户消息）
           this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
           this._finalizeAutoCompactDialog();
+        } else if (ev.type === "interject_ack") {
+          // 插话送达（ADR-0048）：占位 trace 末追加 running 插话卡
+          // （interject_report 到达回填 output；回合落库条目随 raw 回放一致）
+          const last = messages[messages.length - 1];
+          if (last?.role === "assistant") {
+            const step: ToolStep = {
+              tool_use_id: ev.tool_use_id, name: "user_interject",
+              input: { question: ev.question }, status: "running",
+            };
+            messages = [...messages.slice(0, -1),
+              { ...last, tool_steps: [...(last.tool_steps ?? []), step] }];
+            actions.setChatState({ messages });
+          }
+          this._interjectPending = false;
+        } else if (ev.type === "interject_report") {
+          // 插话汇报全文（ADR-0048）：一次性回填插话卡 output
+          const last = messages[messages.length - 1];
+          if (last?.role === "assistant") {
+            const tool_steps = (last.tool_steps ?? []).map((s) =>
+              s.tool_use_id === ev.tool_use_id
+                ? { ...s, output: ev.text, status: "done" as const }
+                : s
+            );
+            messages = [...messages.slice(0, -1), { ...last, tool_steps }];
+            actions.setChatState({ messages });
+          }
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });
@@ -1340,6 +1463,7 @@ export class ChatView extends LitElement {
       // 流结束即撤下交互卡片：问答已由消息内 tool trace 持久化展示，
       // 外挂卡片（_activeAsk）只服务悬置期交互，留着会重复/残留
       this._activeAsk = null;
+      this._interjectPending = false; // 插话态复位（ADR-0048；丢弃 toast 已另行送达）
       actions.setChatState({ streaming: false, pendingAsk: null });
     }
   }
@@ -1401,6 +1525,7 @@ export class ChatView extends LitElement {
   private async _loadSession(s: Session) {
     this._resetPreview();
     this._activeAsk = null;
+    this._interjectPending = false;
     this._highlightSessionId = s.id;
     actions.setChatState({
       state: "focus",
@@ -1850,9 +1975,12 @@ export class ChatView extends LitElement {
             .nodes=${mergeTimeline(this._rewindDividers, s.messages)}
             .modelName=${store.getState().status?.model_name ?? null}
             ?rewindDisabled=${s.streaming}
+            ?generating=${s.streaming}
+            ?interjectPending=${this._interjectPending}
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
             @rewind=${this._onRewind}
+            @interject-request=${this._onInterjectRequest}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
           ${this._activeAsk
@@ -1918,6 +2046,7 @@ export class ChatView extends LitElement {
       ${this._renderSkillDialog()}
       ${this._renderRenameDialog()}
       ${this._renderVisionGateDialog()}
+      ${this._renderInterjectDialog()}
       ${this._renderInfoDialog()}
       ${this._renderRewindDialog()}
       ${this._renderCompactDialog()}

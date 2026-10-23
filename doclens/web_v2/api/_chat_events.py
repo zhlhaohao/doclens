@@ -88,15 +88,32 @@ class DoneEvent(TypedDict):
     reason: str  # 终止原因标记
 
 
+class InterjectAckEvent(TypedDict):
+    """插话送达确认（ADR-0048）：检查点消费插话时发——前端建插话卡
+    （含用户原话），「插话」按钮转已送达态。"""
+    type: str  # "interject_ack"
+    question: str
+    tool_use_id: str
+
+
+class InterjectReportEvent(TypedDict):
+    """插话汇报全文（ADR-0048）：suppress_tools 调用产出后一次性推送
+    （非逐 token——旁路短文不再造流式状态机）；text 不进正文
+    text_parts（防污染策展文本）。"""
+    type: str  # "interject_report"
+    tool_use_id: str
+    text: str
+
+
 ChatQueueEvent = Union[
     TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
-    UsageEvent, DoneEvent, ThinkingEvent,
+    UsageEvent, DoneEvent, ThinkingEvent, InterjectAckEvent, InterjectReportEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
     {"token", "tool_call", "tool_result", "ask", "toast", "compact", "error", "usage",
-     "done", "thinking"}
+     "done", "thinking", "interject_ack", "interject_report"}
 )
 
 
@@ -165,6 +182,20 @@ def thinking_event(delta: str) -> ThinkingEvent:
 
 def done_event(reason: str) -> DoneEvent:
     return {"type": "done", "reason": reason}
+
+
+def interject_ack_event(question: str, tool_use_id: str) -> InterjectAckEvent:
+    """插话送达确认（ADR-0048）：question 回显供前端建卡。"""
+    return {
+        "type": "interject_ack",
+        "question": question,
+        "tool_use_id": tool_use_id,
+    }
+
+
+def interject_report_event(tool_use_id: str, text: str) -> InterjectReportEvent:
+    """插话汇报全文（ADR-0048）：一次性推送。"""
+    return {"type": "interject_report", "tool_use_id": tool_use_id, "text": text}
 
 
 def error_event(detail: str) -> ErrorEvent:

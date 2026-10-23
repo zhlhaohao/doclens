@@ -20,6 +20,8 @@ export type ChatStreamEvent =
   | { type: "toast"; level: "error" | "info" | "success"; detail: string }
   | { type: "compact"; phase: "start" | "done"; detail: string; pre_tokens?: number; post_tokens?: number }
   | { type: "usage" } & UsagePayload
+  | { type: "interject_ack"; question: string; tool_use_id: string }
+  | { type: "interject_report"; tool_use_id: string; text: string }
   | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
 
@@ -119,6 +121,26 @@ export async function* chatStream(
           context_window: Number(d.context_window ?? 0),
         };
       }
+    } else if (ev.event === "interject_ack") {
+      // 插话送达确认（ADR-0048）：检查点消费，前端建插话卡（含用户原话）
+      const d = parseData("interject_ack", ev.data);
+      if (d) {
+        yield {
+          type: "interject_ack",
+          question: String(d.question ?? ""),
+          tool_use_id: String(d.tool_use_id ?? ""),
+        };
+      }
+    } else if (ev.event === "interject_report") {
+      // 插话汇报全文（ADR-0048）：一次性推送（非逐 token）
+      const d = parseData("interject_report", ev.data);
+      if (d) {
+        yield {
+          type: "interject_report",
+          tool_use_id: String(d.tool_use_id ?? ""),
+          text: String(d.text ?? ""),
+        };
+      }
     } else if (ev.event === "done") {
       // reason 仅对话式提问（ADR-0033）终止时携带（waiting_user）；
       // 正常完成的终端 done data 为空
@@ -145,5 +167,27 @@ export async function stopChat(sessionId: string): Promise<void> {
     });
   } catch {
     /* 停止是尽力而为：网络/鉴权失败不影响前端把对话收尾 */
+  }
+}
+
+/** 插话结果：ok = 已写入槽位；pending = 槽位已占用（单槽位不排队）；
+ *  not_running = 会话不在生成中（竞态兜底）。 */
+export type InterjectResult = "ok" | "pending" | "not_running" | "error";
+
+/** 生成中途插话（ADR-0048）：写入会话级单槽位，agent 在下一个循环顶检查点
+ *  消费（suppress_tools 纯文字汇报 → 循环继续，回合不结束）。 */
+export async function interject(sessionId: string, text: string): Promise<InterjectResult> {
+  try {
+    await request<{ ok: boolean }>("/api/chat/interject", {
+      method: "POST",
+      json: { session_id: sessionId, text },
+      signal: AbortSignal.timeout(5000),
+    });
+    return "ok";
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === "INTERJECT_PENDING") return "pending";
+    if (code === "SESSION_NOT_RUNNING") return "not_running";
+    return "error";
   }
 }

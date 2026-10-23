@@ -30,6 +30,8 @@ from ._chat_events import (
     ask_event,
     compact_event,
     done_event,
+    interject_ack_event,
+    interject_report_event,
     thinking_event,
     toast_event,
     tool_call_event,
@@ -62,6 +64,15 @@ class ChatEventEmitter(EventEmitter):
         # 弹窗累计命中率与 trace 文件 / 实时 SSE 同口径（2026-09-17 修正：
         # 此前只留最后一条，工具循环的中间调用进不了累计）；末条即峰值占用
         self.usages: list[dict] = []
+        # 插话改道状态（ADR-0048）：runner 消费插话时 begin/end_interjection
+        # 包夹 suppress_tools 汇报调用——期间 TEXT 事件不进 text_parts
+        # （防污染正文策展文本），改积累到 _interject_text 并一次性经
+        # interject_report 推送；合成条目（user_interject）追加进 tool_calls
+        # 随回合落库（input.question + output=汇报，回放随 raw_messages
+        # 天然一致，展示层按序渲染插话卡）。
+        self._interject_active: bool = False
+        self._interject_text: list[str] = []
+        self._interject_entry: Optional[dict] = None
 
     def _push(self, ev: dict) -> None:
         """事件直达 SSE 队列（emit 处同步入队，顺序与发生顺序一致）。"""
@@ -91,7 +102,11 @@ class ChatEventEmitter(EventEmitter):
         if event.event_type == StreamEventType.TEXT:
             content = event.data.get("content", "")
             if content:
-                self.text_parts.append(content)
+                if self._interject_active:
+                    # 插话汇报（ADR-0048）：不进正文 text_parts，旁路积累
+                    self._interject_text.append(content)
+                else:
+                    self.text_parts.append(content)
 
         elif event.event_type == StreamEventType.TOOL_CALL:
             if event.data.get("is_complete", False):
@@ -228,3 +243,41 @@ class ChatEventEmitter(EventEmitter):
         # 旧工具形态不应出现在 GUI（工具集已过滤），兜底告警不吞细节。
         # （ask_user_question 已迁一等协议 emit_ask_questions，不再走此通道）
         logger.warning("legacy ask_user not supported in SSE mode: %s", question)
+
+    # ---- 插话通道（ADR-0048）----
+
+    async def begin_interjection(self, question: str) -> None:
+        """插话送达（runner 消费插话时调用）：推 interject_ack + 在
+        tool_calls 建合成条目（user_interject，output 待汇报回填）。"""
+        import time
+        import uuid
+
+        tool_use_id = f"interject_{uuid.uuid4().hex[:8]}"
+        self._interject_active = True
+        self._interject_text = []
+        self._interject_entry = {
+            "tool_use_id": tool_use_id,
+            "name": "user_interject",
+            "input": {"question": question},
+            "_t0": time.monotonic(),
+        }
+        self.tool_calls.append(self._interject_entry)
+        self._push(interject_ack_event(question, tool_use_id))
+
+    async def end_interjection(self) -> None:
+        """插话汇报完成（suppress_tools 调用返回后调用）：一次性推
+        interject_report + 回填合成条目 output/duration（随回合落库）。"""
+        import time
+
+        if self._interject_entry is None:
+            return
+        text = "".join(self._interject_text)
+        entry = self._interject_entry
+        duration_ms = int((time.monotonic() - entry.pop("_t0", time.monotonic())) * 1000)
+        entry["output"] = text
+        entry["is_error"] = False
+        entry["duration_ms"] = duration_ms
+        self._push(interject_report_event(entry["tool_use_id"], text))
+        self._interject_active = False
+        self._interject_entry = None
+        self._interject_text = []

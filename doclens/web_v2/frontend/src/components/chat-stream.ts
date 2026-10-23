@@ -79,6 +79,11 @@ export class ChatStream extends LitElement {
   @property({ attribute: false }) modelName: string | null = null;
   /** 流式期间禁用回退钮（重问不受影响）。 */
   @property({ type: Boolean }) rewindDisabled = false;
+  /** 插话在途（ADR-0048）：透传给末条消息 trace 的按钮提示态。 */
+  @property({ type: Boolean }) interjectPending = false;
+  /** 回合生成中（ADR-0048）：透传给消息 trace——插话按钮显隐锚点
+   *  （绑 streaming 态而非 running 步骤，防流式间隙闪烁）。 */
+  @property({ type: Boolean }) generating = false;
   @state() private _expanded = new Set<number>();
   /** 贴底粘滞（stick-to-bottom，2026-10-05）：仅当用户视口在底部附近时，
    *  流式增量（token / thinking_delta / tool step）才自动跟随滚底。
@@ -240,7 +245,10 @@ export class ChatStream extends LitElement {
 
   private _renderNode(node: TimelineNode) {
     if (node.type === "message") {
-      return html`<chat-message role=${node.message.role} .message=${node.message} .modelName=${this.modelName} .rewindDisabled=${this.rewindDisabled} .traceExpandOverride=${this._expandOverride}></chat-message>`;
+      // generating 只给末条（流式占位 / 恢复态占位）——历史消息的 trace
+      // 不亮插话按钮（它们不是当前回合）
+      const isLast = this.nodes[this.nodes.length - 1] === node;
+      return html`<chat-message role=${node.message.role} .message=${node.message} .modelName=${this.modelName} .rewindDisabled=${this.rewindDisabled} .traceExpandOverride=${this._expandOverride} .interjectPending=${this.interjectPending} .generating=${this.generating && isLast}></chat-message>`;
     }
     const expanded = this._expanded.has(node.boundarySeq);
     return html`

@@ -223,3 +223,99 @@ describe("<chat-tool-trace> expandOverride", () => {
     expect(seen.at(-1)).toEqual({ key: "t1", expanded: false, manual: true });
   });
 });
+
+// ---- 插话（ADR-0048）----
+
+describe("<chat-tool-trace> interjection", () => {
+  const interjectWaiting: ToolStep = {
+    tool_use_id: "interject_ab12", name: "user_interject",
+    input: { question: "现在进度汇报一下" }, status: "running",
+  };
+  const interjectDone: ToolStep = {
+    ...interjectWaiting, output: "已完成检索，正在写报告", status: "done",
+  };
+
+  it("generating trace shows interject button; non-generating hides it", async () => {
+    // 显隐锚点是 generating（会话 streaming 态）而非 running 步骤——
+    // LLM 流式间隙步骤全 done，按步骤单独判定会闪烁显隐（用户实测反馈）；
+    // running 步骤作为兜底（父级状态缺失时不隐藏），故此处用 done 步骤断言隐藏。
+    const el = await trace([done]);
+    el.generating = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".interject-btn")).toBeTruthy();
+    el.generating = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".interject-btn")).toBeNull();
+  });
+
+  it("running step keeps button visible even if generating flag is missing", async () => {
+    // 兜底：父级 generating 未传 / 传错时，running 步骤仍在场即不隐藏
+    const el = await trace([running]);
+    el.generating = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".interject-btn")).toBeTruthy();
+  });
+
+  it("button stays visible while steps are all-done but generating", async () => {
+    // 工具轮间隙（无 running 步骤）但回合生成中——按钮不消失
+    const el = await trace([done]);
+    el.generating = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".interject-btn")).toBeTruthy();
+  });
+
+  it("interject button reflects pending state (已插入 + disabled)", async () => {
+    const el = await trace([running]);
+    el.generating = true;
+    await el.updateComplete;
+    el.interjectPending = true;
+    await el.updateComplete;
+    const btn = el.shadowRoot!.querySelector(".interject-btn") as HTMLButtonElement;
+    expect(btn.textContent).toContain("已插入");
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("renders interject card with question and report (done state)", async () => {
+    const el = await trace([interjectDone]);
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    const card = el.shadowRoot!.querySelector(".interject");
+    expect(card).toBeTruthy();
+    expect(card!.textContent).toContain("现在进度汇报一下");
+    expect(card!.textContent).toContain("已完成检索，正在写报告");
+    // 不按普通工具步骤渲染（无 .step 包裹的 name 行）
+    expect(el.shadowRoot!.querySelector(".step .name")).toBeNull();
+  });
+
+  it("renders waiting placeholder while report is streaming", async () => {
+    const el = await trace([interjectWaiting]);
+    // running 步骤自动展开
+    const card = el.shadowRoot!.querySelector(".interject");
+    expect(card).toBeTruthy();
+    expect(card!.textContent).toContain("现在进度汇报一下");
+    expect(card!.querySelector(".waiting")!.textContent).toContain("正在汇报");
+  });
+
+  it("interject click dispatches interject-request and does not toggle expand", async () => {
+    const el = await trace([running]);
+    el.generating = true;
+    await el.updateComplete;
+    let fired = 0;
+    el.addEventListener("interject-request", () => fired++);
+    // 手动收起（running 自动展开了）——按钮点击不应切换展开态
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+    (el.shadowRoot!.querySelector(".interject-btn") as HTMLButtonElement)
+      .dispatchEvent(new Event("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(fired).toBe(1);
+    expect(el.shadowRoot!.querySelector(".steps")).toBeNull();
+  });
+
+  it("interject step counts toward trace visibility (not filtered)", async () => {
+    // traceStepsOf 不过滤 user_interject——插话卡就在时间线内（ADR-0048 决策 8）
+    const { traceStepsOf } = await import("../src/components/chat-tool-trace");
+    expect(traceStepsOf([interjectDone]).length).toBe(1);
+  });
+});

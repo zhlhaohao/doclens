@@ -164,7 +164,11 @@
 - **对话备份 (Session DB Backup)**：会话库（sessions.db，含全部对话历史）的灾备形态——SQLite backup API **整库一致性快照**（WAL 下无需停写），落 `{数据目录}/backups/sessions/`，环形保留 10 份全量（无增量链）。触发 = 启动时（近 1h 已有新备份则跳过）+ 长驻每 24h；**退出不备份**（崩溃/断电场景退出路径不执行）。备份失败静默告警不打断主流程。**不备份** index.db（可从源文件重建）、rewind/ 与 transcripts/（机器本地缓存，恢复对话不依赖）。_Avoid_: 单会话导出（ADR-0038，跨实例转移用，非灾备）、改前备份（rewind，写工具的文件级备份，另一回事）。
 - **对话恢复 (Session DB Restore)**：sessions.db 损坏或人工回滚时的整库替换——损坏库改名 `sessions.db.corrupt-<时间戳>` **留原地不删**（留尸供事后抢救），最新备份（或人工指定份）原子拷回，验证可打开后丢单例重建。检测两面：构建 SessionsStore 失败（启动/热切换）与 API 运行中 DatabaseError（自动恢复 + 本请求 503 提示重试）；人工入口 = 控制面板「会话备份」行（清单/恢复确认/残留可见，生成中 409 互斥）。恢复完成经 SSE `sessions_restored` 广播：toast 明示「已从 X 时备份恢复」+ 会话列表刷新、已消失的当前会话回欢迎页。**自动吞备份时点之后的对话是已接受风险**（可审计性靠 toast 弥补，不为此退回人工确认）。_Avoid_: 定期 integrity_check 体检（已否决——慢且收益低）、退出时备份。
 
+- **插话 (Interjection)**：用户在**生成进行中**经思考过程框发起的旁路询问——注入工具循环（循环顶检查点、不打断在飞步骤），模型只做**文字汇报**（工具表置空的确定性双阶段：先无工具调用产汇报，后恢复工具循环），回合**不结束**、原任务继续。生效时机 = 循环顶检查点消费会话级**单槽位**（不排队、不持久化，`POST /api/chat/interject`）；回合结束仍未消费 → **丢弃 + toast**（不转正式消息）；轮次预算不计插话轮、纯轮询退避可被插话提前唤醒、仅主循环感知（子代理/teammate 不插话）、恢复态（generating）入口可用。展示 = 思考过程时间线内的插话卡（用户问题 + 汇报，`interject_ack`/`interject_report` 双事件、汇报一次性推送），落库复用该回合 tool_calls 数组合成条目（`name: "user_interject"`，input.question + output=汇报）；插话问答是真实 LLM 历史消息，随 raw_messages 自然回放，回放层零改动。与邻居的边界：≠ **交互式提问**（agent 问用户，waiter 阻塞回合内等待）、≠ **对话式提问**（降级形态，回合终止等下一条消息）、≠ **主动停止**（杀伤任务）、≠ **思考流**（被动接收模型推理文字）——插话是唯一「**用户发起 + 回合不结束**」的形态。见 ADR-0048。_Avoid_: 与「中断」混用（中断=停止语义）、把插话落成 message_user（会劈裂回放轮次）。
+
 ## 决议摘要（详见 docs/adr/）
+
+- 2026-10-23：插话 (User Interjection)（ADR-0048）= 生成中途的旁路询问——循环顶检查点消费会话级单槽位（不排队、不持久化、`POST /api/chat/interject`），确定性双阶段（注入 `<user-interjection>` 模板不补 ack → suppress_tools 调用产纯文字汇报 → 循环继续、回合不结束）；不打断在飞步骤、退避可提前唤醒、轮次预算不计、仅主循环感知、恢复态可用；回合结束未消费丢弃 + toast；展示为思考过程时间线插话卡（`interject_ack`/`interject_report` 双事件、汇报一次性推送），落库 tool_calls 合成条目 `user_interject`（回放层零改动）。否决：仅提示词软约束、立即打断、多排队、逐 token 流、独立气泡、message_user 落库。
 
 - 2026-10-07：会话导出/导入 = doclens-to-doclens 记忆转移——单会话全保真自有 JSON（browser 下载 / 文件选择器上传；`GET /sessions/{id}/export` + `POST /sessions/import`；format 版本号，同 id 跳过；结构校验 + 前端确认 + 50MB 上限；死段照导、图片随导、时间戳保留源值、导入后只刷新列表不自动进入；rewind_snapshots / auth_sessions 不导）。见 ADR-0038。
 

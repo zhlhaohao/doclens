@@ -23,6 +23,7 @@ from ..core.logging_config import data_dirname
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
+from .interjection import interjection_message
 from ..skills.access_state import (
     get_current_session_id,
     reset_current_session_id,
@@ -465,19 +466,51 @@ class StreamingAgent:
                             "（防热轮询空转）",
                             consecutive_poll_rounds, delay,
                         )
-                        if self._interrupt_event is not None:
-                            # threading.Event.wait() 是同步阻塞调用，禁止在
-                            # 参数位求值传给 wait_for——参数先于调用求值，事
-                            # 件循环线程在 wait_for 生效前就被无限期阻塞
-                            # （2026-10-10 GUI 全无响应 + 轮次不落库根因）。
-                            # 丢进线程池并自带 timeout：interrupt 置位立即返回
-                            # True（走下方中断检查点退出）；到时返回 False；
-                            # 线程最多挂 delay 秒自行回收，不泄漏。
-                            await asyncio.get_running_loop().run_in_executor(
-                                None, self._interrupt_event.wait, delay
-                            )
+                        # 插话唤醒（ADR-0048）：退避等待期间用户插话到达 →
+                        # 提前结束等待，检查点即刻消费（不干等退避秒数）。
+                        # 仅在会话已登记插话槽位（宿主 GUI 链路）时分段等待
+                        # （每 ≤1s 醒来查槽位）；未登记（CLI/TUI/测试）保持
+                        # 整段等待，行为与旧路径一致。
+                        from .interjection import (
+                            get_interjection_slot,
+                            has_interjection_slot,
+                        )
+
+                        _slot = (
+                            get_interjection_slot(session_id)
+                            if session_id and has_interjection_slot(session_id)
+                            else None
+                        )
+                        if _slot is None:
+                            if self._interrupt_event is not None:
+                                # threading.Event.wait() 是同步阻塞调用，禁止在
+                                # 参数位求值传给 wait_for——参数先于调用求值，事
+                                # 件循环线程在 wait_for 生效前就被无限期阻塞
+                                # （2026-10-10 GUI 全无响应 + 轮次不落库根因）。
+                                # 丢进线程池并自带 timeout：interrupt 置位立即返回
+                                # True（走下方中断检查点退出）；到时返回 False；
+                                # 线程最多挂 delay 秒自行回收，不泄漏。
+                                await asyncio.get_running_loop().run_in_executor(
+                                    None, self._interrupt_event.wait, delay
+                                )
+                            else:
+                                await asyncio.sleep(delay)
                         else:
-                            await asyncio.sleep(delay)
+                            remaining = delay
+                            while remaining > 0:
+                                wait_s = min(1.0, remaining)
+                                remaining -= wait_s
+                                if self._interrupt_event is not None:
+                                    await asyncio.get_running_loop().run_in_executor(
+                                        None, self._interrupt_event.wait, wait_s
+                                    )
+                                else:
+                                    await asyncio.sleep(wait_s)
+                                if _slot.has_pending():
+                                    self.logger.info(
+                                        "[StreamingAgent] 退避被插话提前唤醒"
+                                    )
+                                    break
 
                 # === 中断检查点（循环顶）===
                 # 流式检查点（_stream_llm_call 内）覆盖不到「工具执行被
@@ -489,6 +522,62 @@ class StreamingAgent:
                         session_id, None, reason="stopped"
                     )
                     return self._cleanup_messages(messages)
+
+                # === 插话检查点（ADR-0048，宿主术语「插话 Interjection」）===
+                # 生成中途的旁路询问：宿主经 HTTP 端点写入会话级单槽位，此处
+                # （下一次 LLM 调用前）消费——注入模板消息 → suppress_tools
+                # 调用产出纯文字汇报 → 循环继续原任务（回合不结束）。
+                # 设计要点：
+                # - 槽位**只查不建**（has→take）：宿主端点 submit 时才登记；
+                #   此处惰性创建会让退避等待误入分段路径（CLI/TUI 行为漂移）；
+                # - 不打断在飞步骤：注入点只在循环顶（本处），当前工具/流
+                #   跑完自然送达；
+                # - suppress_tools（工具表置空）使「只做文字汇报、不调工具」
+                #   成为机制保证，不赌模型听话；汇报是真实 assistant 消息，
+                #   随 raw_messages 自然落库回放（宿主回放层零改动）；
+                # - 轮次预算不计插话轮（用户旁路 ≠ 任务收敛信号，计入会加速
+                #   熔断惩罚插话）；同参签名天然不参与（无工具调用）；
+                # - 不补合成 ack：汇报本身就是模型真实回复（user(插话) →
+                #   assistant(汇报) 自然配对）；且 assistant 结尾会触发
+                #   thinking 模式端点 prefill 400（DeepSeek 事故）。
+                # - 汇报文本以 suppress_tools 调用的流式 text 事件正常推送
+                #   （CLI/TUI 直接可见）；宿主 ChatEventEmitter 在此分支
+                #   改道 interject_report 通道（不进正文 text_parts，防污染
+                #   策展文本——详见宿主 _chat_emitter.py）。
+                if session_id:
+                    from .interjection import has_interjection_slot
+
+                    if has_interjection_slot(session_id):
+                        from .interjection import get_interjection_slot
+
+                        _interject_text = get_interjection_slot(session_id).take()
+                        if _interject_text:
+                            self.logger.info(
+                                "[StreamingAgent] 消费插话（suppress_tools 汇报）"
+                            )
+                            report_switch = getattr(
+                                self.emitter, "begin_interjection", None
+                            )
+                            if report_switch is not None:
+                                await report_switch(_interject_text)
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": interjection_message(_interject_text),
+                                }
+                            )
+                            # 汇报调用：工具表置空 → 模型物理上无法调工具；
+                            # stop_reason 不可能是 tool_use，直接 continue 回
+                            # 循环顶（压缩管道 / bg / inbox / 正常 LLM 调用照旧）
+                            await self._stream_llm_call(
+                                messages, system, suppress_tools=True
+                            )
+                            report_end = getattr(
+                                self.emitter, "end_interjection", None
+                            )
+                            if report_end is not None:
+                                await report_end()
+                            continue
 
                 # === 压缩管道（microcompact only；auto compact 已搬到回合末，
                 # ADR-0044——压缩不打断任务，回合全程在完整上下文上执行）===

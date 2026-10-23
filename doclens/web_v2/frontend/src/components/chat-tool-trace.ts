@@ -141,11 +141,19 @@ export function lineDiff(oldText: string, newText: string): DiffRow[] {
 
 /** 进入「思考过程」折叠块的步骤：剔除 ask_user_question（渲染为问答卡片）
  *  与 check_background（后台轮询无信息量）。chat-message 据此决定是否渲染块，
- *  chat-stream 据此统计会话内 trace 存在性（三钮组中间钮的可用性 + 全展开判定）。 */
+ *  chat-stream 据此统计会话内 trace 存在性（三钮组中间钮的可用性 + 全展开判定）。
+ *  user_interject（插话合成条目，ADR-0048）不剔除——插话卡就在时间线内。 */
 export function traceStepsOf(steps: ToolStep[] | undefined): ToolStep[] {
   return (steps ?? []).filter(
     (s) => s.name !== "ask_user_question" && s.name !== "check_background",
   );
+}
+
+/** 插话合成条目名（ADR-0048）：前端识别渲染插话卡，不按普通工具步骤。 */
+export const USER_INTERJECT_NAME = "user_interject";
+
+export function isInterjectStep(s: ToolStep): boolean {
+  return s.name === USER_INTERJECT_NAME;
 }
 
 /** 构造整个 trace 的完整可拷贝文本（所有步骤的 name + 完整 input + 完整 output，无截断）。 */
@@ -268,6 +276,44 @@ export class ChatToolTrace extends LitElement {
     }
     .copy-btn:hover { background: var(--cortex-surface); color: var(--cortex-primary); }
     .copy-btn.copied { color: var(--cortex-success); }
+    /* 插话卡（ADR-0048）：用户问题 + 模型汇报，按时间序嵌在工具步骤之间。
+     * 双色分区（问=主色调底 / 答=常规底）+ 左缘竖条强化「旁路询问」身份。 */
+    .interject {
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-left: 3px solid var(--cortex-primary);
+      border-radius: var(--cortex-radius-md);
+      padding: 7px 9px;
+    }
+    .interject .q {
+      color: var(--cortex-text);
+      font-size: var(--cortex-fs-sm);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .interject .a {
+      margin-top: 5px; background: var(--cortex-surface-muted);
+      border-radius: var(--cortex-radius-sm); padding: 5px 7px;
+      color: var(--cortex-text-muted);
+      font-size: var(--cortex-fs-sm);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .interject .waiting { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
+    .interject-btn {
+      /* 与复制钮同排的标题栏动作钮：生成中才渲染（ADR-0048），提交后转
+       * 「已插入」提示态（等检查点送达）；停用态（插话在途）半透明。 */
+      background: transparent;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-sm);
+      padding: 1px 8px;
+      font-size: var(--cortex-fs-xs);
+      cursor: pointer;
+      color: var(--cortex-primary);
+      font-family: var(--cortex-font);
+      line-height: 1.4;
+    }
+    .interject-btn:hover { background: var(--cortex-surface); }
+    .interject-btn.sent { color: var(--cortex-text-subtle); cursor: default; }
+    .interject-btn.sent:hover { background: transparent; }
   `;
 
   @property({ attribute: false }) steps: ToolStep[] = [];
@@ -275,6 +321,12 @@ export class ChatToolTrace extends LitElement {
    *  的展开态并压过流式自动展开/收起；null = 自动管理。
    *  指令生效期间视同「已手动切换」（自动行为停摆），指令清空后解冻。 */
   @property({ attribute: false }) expandOverride: boolean | null = null;
+  /** 插话在途（ADR-0048）：宿主在提交后置 true（按钮转「已插入」禁点），
+   *  interject_ack 送达（本 trace 出现 user_interject 步骤）后回落可点。 */
+  @property({ type: Boolean }) interjectPending = false;
+  /** 回合生成中（ADR-0048）：插话按钮显隐锚点——绑会话 streaming 态而非
+   *  running 步骤（LLM 流式间隙步骤全 done，按步骤判定会闪烁显隐）。 */
+  @property({ type: Boolean }) generating = false;
   @state() private _expanded = false;
   /** 用户手动切换过展开态——此后运行态自动展开/收起不再覆盖。 */
   private _userToggled = false;
@@ -422,6 +474,7 @@ export class ChatToolTrace extends LitElement {
   }
 
   private _renderStep(s: ToolStep) {
+    if (isInterjectStep(s)) return this._renderInterject(s);
     const running = s.status === "running";
     const error = s.status === "error";
     const mcpName = mcpDisplayName(s.name);
@@ -466,14 +519,58 @@ export class ChatToolTrace extends LitElement {
     `;
   }
 
+  /** 插话卡（ADR-0048）：问（input.question）+ 汇报（output）。
+   *  流式期间：ack 建卡时 output 尚未回填（running 态显示「正在汇报…」占位），
+   *  interject_report 到达后回填（done 态）。回看：落库条目两字段齐全。 */
+  private _renderInterject(s: ToolStep): TemplateResult {
+    const question = typeof s.input?.question === "string" ? s.input.question : "";
+    const report = s.output ?? "";
+    const waiting = s.status === "running";
+    return html`
+      <div class="interject">
+        <div class="q">💬 ${question}</div>
+        ${report
+          ? html`<div class="a">${report}</div>`
+          : waiting
+            ? html`<div class="waiting">正在汇报…</div>`
+            : nothing}
+      </div>
+    `;
+  }
+
+  private _onInterjectClick(e: Event) {
+    e.stopPropagation();
+    // 宿主（chat-message → chat-view）承接：开原生 dialog（ADR-0048 决策 7）
+    this.dispatchEvent(
+      new CustomEvent("interject-request", {
+        detail: { toolUseId: this.steps[0]?.tool_use_id ?? "" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   render() {
     if (!this.steps.length) return null;
     const running = this.steps.some((s) => s.status === "running");
+    // 插话入口（ADR-0048）：主锚点是 generating（会话 streaming 态，整回合
+    // 稳定），并兜底 `|| running`——LLM 流式间隙（步骤全 done、下一轮
+    // tool_call 未到）父级状态若有任何缺失，running 仍在场即不隐藏；
+    // 历史消息（步骤全 done 且非生成中）天然两者皆假，不亮按钮。
+    const showInterjectBtn = this.generating || running;
     return html`
       <div class="summary" @click=${this._toggle}>
         <doclens-icon class="arrow" name=${this._expanded ? "chevron-down" : "chevron-right"}></doclens-icon>
         <doclens-icon name="sparkles"></doclens-icon> 思考过程 · <span class="count">${this.steps.length} 步</span>
         ${running ? " · 进行中" : ""}
+        ${showInterjectBtn
+          ? html`<button class="interject-btn ${this.interjectPending ? "sent" : ""}"
+              ?disabled=${this.interjectPending}
+              @click=${this._onInterjectClick}
+              title=${this.interjectPending ? "已插入，等待当前步骤完成后送达" : "插话：在生成中途向 AI 提问，不打断任务"}>
+              ${this.interjectPending ? "已插入" : "插话"}
+            </button>`
+          : nothing}
         <button class="copy-btn ${this._copied ? "copied" : ""}" @click=${this._onCopy} title=${this._copied ? "已复制" : "复制全文"}>${this._copied ? html`<doclens-icon name="check"></doclens-icon> 已复制` : html`<doclens-icon name="copy"></doclens-icon>`}</button>
       </div>
       ${this._expanded ? html`<div class="steps">${this.steps.map((s) => this._renderStep(s))}</div>` : null}

@@ -40,7 +40,11 @@ from doclens.web_v2.chat_interrupt import (
 )
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.deps import get_agent, get_config, get_rewind_tracker, get_sessions_store
-from doclens.web_v2.models.chat import ChatRequest, ChatStopRequest
+from doclens.web_v2.models.chat import (
+    ChatRequest,
+    ChatStopRequest,
+    ChatInterjectRequest,
+)
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
 from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
 from doclens.web_v2.api._chat_slash import (
@@ -238,6 +242,14 @@ async def _stream_agent_response(
     if session_key:
         register_interrupt_hook(session_key, _interrupt_pending_asks)
         register_interrupt_hook(session_key, _kill_running_shells)
+
+    # 插话槽位预检（ADR-0048）：新回合开始前若上一回合残留未消费插话
+    # （竞态窗口：提交后检查点未到回合即结束），此刻丢弃——不带入新回合
+    # （旁路询问语境已过时，静默消费会答非所问）。丢弃 toast 由下一节
+    # finally 收尾统一补发（本处只清槽位）。
+    from planify.streaming.interjection import drop_interjection_slot
+
+    stale_interject = drop_interjection_slot(session_key) if session_key else None
 
     # 用户交互工具的 handler 捕获本请求的 emitter——必须绑在每请求浅拷贝上，
     # 不能写回共享单例 runtime.tool_handlers（同 runtime 并发两流会互相覆盖绑定）。
@@ -531,6 +543,19 @@ async def _stream_agent_response(
                 unregister_interrupt(session_key, interrupt)
                 unregister_interrupt_hook(session_key, _interrupt_pending_asks)
                 unregister_interrupt_hook(session_key, _kill_running_shells)
+            # 插话槽位收尾（ADR-0048）：回合结束仍未消费的插话丢弃 + toast
+            # （SSE 在场则送达；断开续跑时无人消费，静默丢弃——回页刷新
+            # 即见终态，无需补发）。stale_interject 是本回合开始前上一回合
+            # 的残留（见上方预检），一并在此 toast。
+            if session_key:
+                leftover = drop_interjection_slot(session_key)
+                for dropped in filter(None, (stale_interject, leftover)):
+                    queue.put_nowait(
+                        toast_event(
+                            "info",
+                            f"回合已结束，插话未送达：{dropped[:80]}",
+                        )
+                    )
             queue.put_nowait(None)  # 哨兵：SSE 生成器终结（无论成败）
 
     agent_task = asyncio.create_task(_run_and_finalize())
@@ -688,3 +713,31 @@ async def chat_stop(req: ChatStopRequest):
             # finally，task 终将收尾；TimeoutError 时 shield 内层仍在收尾
             pass
     return {"ok": True, "stopped": stopped}
+
+
+@router.post("/chat/interject")
+async def chat_interject(req: ChatInterjectRequest):
+    """生成中途插话（ADR-0048）：写入会话级单槽位，agent 主循环在下一个
+    循环顶检查点消费（注入模板消息 → suppress_tools 纯文字汇报 → 循环
+    继续原任务，回合不结束）。
+
+    语义：
+    - 409 SESSION_NOT_RUNNING：会话不在生成中（无循环可插入）——前端按钮
+      本就只在生成中显示，此码是竞态兜底；
+    - 409 INTERJECT_PENDING：槽位已占用（单槽位不排队，ADR-0048 决策 3）
+      ——前端 toast 提示稍候；
+    - 消费时机 = 检查点（下一次 LLM 调用前）：当前在飞工具/流不被打断；
+      回合恰在其间正常结束 → 槽位残留由收尾丢弃 + toast（不转正式消息）。
+    """
+    from doclens.web_v2.chat_interrupt import is_streaming
+    from planify.streaming.interjection import get_interjection_slot
+
+    if not is_streaming(req.session_id):
+        raise CortexAPIError(
+            409, "SESSION_NOT_RUNNING", "该会话当前没有进行中的生成"
+        )
+    if not get_interjection_slot(req.session_id).submit(req.text):
+        raise CortexAPIError(
+            409, "INTERJECT_PENDING", "已有插话在等待送达，请稍候"
+        )
+    return {"ok": True}
