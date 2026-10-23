@@ -533,7 +533,7 @@ export class FileList extends LitElement {
                       role="menuitem"
                       data-action="git-changes"
                       @click=${this._onMenuItemClick("git-changes")}
-                    ><doclens-icon name="history"></doclens-icon>${this.changesMode ? "退出改动模式" : "未提交改动"}</button>`
+                    ><doclens-icon name="git-fork"></doclens-icon>${this.changesMode ? "退出改动模式" : "未提交改动"}</button>`
                   : null}
                 ${this.deepReadAvailable
                   ? html`<button
@@ -671,7 +671,7 @@ export class FileList extends LitElement {
       <div class="toolbar">
         <button data-action="refresh" title="刷新当前目录（与移动端下拉刷新等效）" @click=${() => this._action("refresh")}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">刷新</span></button>
         ${this.gitChangesAvailable
-          ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="查看 git 未提交改动（staged + unstaged + untracked）" @click=${() => this._action("git-changes")}><doclens-icon name="history"></doclens-icon><span class="btn-label">改动</span></button>`
+          ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="未提交改动" @click=${() => this._action("git-changes")}><doclens-icon name="git-fork"></doclens-icon><span class="btn-label">改动</span></button>`
           : null}
         ${this.deepReadAvailable
           ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（deep-read 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`

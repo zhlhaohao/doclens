@@ -534,12 +534,15 @@ export class ChatMessageEl extends LitElement {
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
     if (this.role === "user") {
       const canRewind = this.message.seq !== undefined;
+      const canCopy = !!this.message.content;
       const ts = formatMsgTime(this.message.created_at);
       // 对话图片（ADR-0034）：缩略图行渲染在正文之上；点击全屏复用 dialog 原生弹层
       const imgs = this.message.images ?? [];
       return html`<div class="bubble">${imgs.length > 0 ? this._renderImages(imgs) : null}${this.renderBubble(this.message.content)}${this.error
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
-        : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
+        : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}${canCopy
+        ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+        : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
         ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`
         : null}</div>`;
     }
