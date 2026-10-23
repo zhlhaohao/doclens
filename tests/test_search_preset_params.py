@@ -414,8 +414,10 @@ class TestWeightFtsScore:
             weight_proximity_match=0.0,
         )
         rows = _run(idx)
-        # sigmoid(BM25) ∈ (0,1)：composite = (ratio + sigmoid)/2 ∈ (0.25, 1)
-        assert all(0.25 < r[3] < 1.0 for r in rows)
+        # fts 直传引擎分（全局 max 归一 [0,1]，2026-10-23 卸除 sigmoid）：
+        # composite = (ratio + fts)/2 ∈ (0.25, 1)；ratio=1 且 fts=1 的
+        # 最强命中恰为 1.0（含端点），弱命中 fts 可低至 0.4x
+        assert all(0.25 < r[3] <= 1.0 for r in rows)
         # 同为 2/2 命中的 doc1 与 far 分数可能因 BM25 不同而不同——只验证合成公式成立
         for _score, doc in [(r[3], r[0]) for r in rows]:
             assert isinstance(doc, str)

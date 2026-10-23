@@ -88,7 +88,9 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         total_keywords: 总关键词数
         doc_name: 文档名（文件名）
         node_title: 节点标题
-        fts_score: FTS5 BM25 原始分数
+        fts_score: 引擎节点分（propagate_scores 全局 max 归一后的 [0,1]；
+            直传使用——2026-10-23 前曾 sigmoid 二次压缩，区间 [0.46,1]
+            被压到 0.61-0.73，composite 摆动仅 ~1%，区分度损失殆尽）
         query_words: 查询分词列表
         weights: 各因子权重字典
         proximity: 邻近度分数 (0=无匹配, 1=部分匹配, 2=全部关键词紧邻)
@@ -123,18 +125,22 @@ def compute_composite_score(matched_count, total_keywords, doc_name, node_title,
         weighted_sum += w * val
         total_weight += w
 
-    # fts_score: 归一化 BM25 分数 (用 sigmoid 映射到 0~1)
+    # fts_score: 引擎节点分直传（全局 max 归一后已是 [0,1]，且唯一带
+    # IDF 感知的因子——BM25 天然编码查询词稀有度，kw/fname 均无）
     w = weights.get("fts_score", 0)
     if w > 0:
-        import math
-        val = 1.0 / (1.0 + math.exp(-fts_score)) if fts_score != 0 else 0.5
+        val = fts_score
         factors["fts_score"] = val
         weighted_sum += w * val
         total_weight += w
 
-    # title_match: 标题中匹配的关键词数 / 总关键词数
+    # title_match: 标题中匹配的关键词数 / 总关键词数。
+    # 派生标题跳过：平文本语料（slack/单节点文档）的节点 title 由文件名
+    # 派生（title ⊆ 文件名），fname 已计过同一信号——再计 title 等效把
+    # 文件名权重翻倍到 4.0。标题是文件名子串时不重复计入；结构化文档
+    # （真章节标题，非文件名子串）不受影响。
     w = weights.get("title_match", 0)
-    if w > 0:
+    if w > 0 and title_lower and not (title_lower in name_lower):
         title_hits = sum(1 for kw in query_words if kw.lower() in title_lower)
         val = title_hits / total_keywords
         factors["title_match"] = val

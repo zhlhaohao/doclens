@@ -341,7 +341,10 @@ class CortexConfig(BaseSettings):
     # 评分权重（0=禁用，值越大越重要；加权平均，只有相对比例起作用）
     weight_keyword_match: float = Field(default=4.0)
     weight_file_name_match: float = Field(default=2.0)
-    weight_fts_score: float = Field(default=1.0)
+    # fts 权重 1.0→2.0（2026-10-23）：fts 因子是五因子里唯一带 IDF 感知的
+    # （BM25 编码查询词稀有度）；sigmoid 卸除后直传引擎分（全局 max 归一
+    # [0,1]），恢复的区分度配得上更高权重
+    weight_fts_score: float = Field(default=2.0)
     weight_title_match: float = Field(default=2.0)
     weight_proximity_match: float = Field(default=1.0)
 
