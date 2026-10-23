@@ -306,6 +306,16 @@ class BackgroundManager:
             notifs.append(self.notifications.get_nowait())
         return notifs
 
+    def has_pending_notifications(self) -> bool:
+        """是否有待消费的完成通知（只查不取——供等待循环提前唤醒）。
+
+        ``drain()`` 只在主循环顶调用；主循环若正卡在退避等待里，完成通知
+        要等整段等待结束才被感知。等待循环用本方法探测后立即退出等待，
+        由下一次循环顶的 drain 真正消费（不在等待处取走，避免与注入
+        顺序脱节）。
+        """
+        return not self.notifications.empty()
+
     def remove(self, tid: str) -> bool:
         """
         移除已完成的任务记录

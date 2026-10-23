@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from openai import AsyncOpenAI, OpenAI
 
+from .timeouts import build_httpx_timeout
 from .tool_translator import (
     messages_anthropic_to_openai,
     tools_anthropic_to_openai,
@@ -298,7 +299,14 @@ class OpenAICompatProvider:
         model: str,
         thinking_depth: str = "auto",
     ) -> None:
+        import httpx
+
+        # 显式超时（见 timeouts.py）：SDK 默认 read=600s 且按字节间隔计，
+        # 端点静默挂起时整轮对话被单个 LLM 调用钉死
         kwargs: dict[str, Any] = {"api_key": api_key}
+        _timeout = build_httpx_timeout(httpx)
+        if _timeout is not None:
+            kwargs["timeout"] = _timeout
         if base_url:
             kwargs["base_url"] = base_url
         self._client = OpenAI(**kwargs)
@@ -311,7 +319,12 @@ class OpenAICompatProvider:
     def _ensure_async_client(self) -> AsyncOpenAI:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
         if self._aclient is None:
+            import httpx
+
             kwargs: dict[str, Any] = {"api_key": self.api_key}
+            _timeout = build_httpx_timeout(httpx)
+            if _timeout is not None:
+                kwargs["timeout"] = _timeout
             if self.base_url:
                 kwargs["base_url"] = self.base_url
             self._aclient = AsyncOpenAI(**kwargs)

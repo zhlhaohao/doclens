@@ -297,6 +297,68 @@ class TestBudgetMechanisms:
             f"中断响应耗时 {elapsed:.1f}s——退避等待未让出控制权给中断"
         )
 
+    def test_poll_backoff_wakes_on_bg_notification(self, tmp_path):
+        """退避等待必须被后台完成通知提前唤醒（2026-10-23 事故）。
+
+        事故链：bench 后台任务 17:28:14 就已完成，但主循环正卡在纯轮询
+        退避/LLM 调用里，完成通知只能躺在队列等下次循环顶 drain——用户
+        面对转圈，直到手动催问才知道早跑完了。
+
+        红判据：退避 30s，通知在第 0.2s 到达 → 等待应远早于 30s 结束。
+        """
+        import threading
+        import time
+        from queue import Queue
+
+        class FakeBgManager:
+            def __init__(self):
+                self.notifications = Queue()
+
+            def has_pending_notifications(self):
+                return not self.notifications.empty()
+
+            def drain(self):
+                out = []
+                while not self.notifications.empty():
+                    out.append(self.notifications.get_nowait())
+                return out
+
+        # 单轮纯轮询：唤醒 → 循环顶 drain 注入完成通知 → 下一轮直接终答
+        # （若还留一轮纯轮询，会再退避一次，测的就不是唤醒而是第二次等待）
+        script = [{"tools": [("check_background", {"task_id": "t"})]},
+                  {"text": "done"}]
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+        bg = FakeBgManager()
+        agent.bg_manager = bg
+        agent.config.poll_backoff_initial_s = 30.0
+        agent.config.poll_backoff_max_s = 30.0
+
+        def _notify_soon():
+            time.sleep(0.2)
+            bg.notifications.put(
+                {"task_id": "t", "status": "completed", "result": "bench done"}
+            )
+
+        threading.Thread(target=_notify_soon, daemon=True).start()
+
+        messages: list = []
+        t0 = time.monotonic()
+        asyncio.run(agent.run_stream(messages, "q", "s1"))
+        elapsed = time.monotonic() - t0
+
+        assert elapsed < 5.0, (
+            f"退避未响应后台完成通知（耗时 {elapsed:.1f}s，退避 30s）——"
+            "完成通知会白等到退避结束才被感知"
+        )
+        # 通知在下一轮循环顶被注入历史（唤醒只探测不消费）
+        assert any(
+            isinstance(m.get("content"), str)
+            and "<background-results>" in m["content"]
+            and "bench done" in m["content"]
+            for m in messages
+        ), "唤醒后未在循环顶注入后台完成通知"
+
     def test_poll_backoff_disabled_by_zero(self):
         """initial=0 → 退避恒 0（关闭），既有行为不变。"""
         from planify.streaming.runner import _poll_backoff_s

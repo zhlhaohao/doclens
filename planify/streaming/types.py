@@ -402,6 +402,12 @@ class StreamingConfig:
     poll_backoff_initial_s: float = POLL_BACKOFF_INITIAL_S
     poll_backoff_max_s: float = POLL_BACKOFF_MAX_S
 
+    # 插话汇报调用上限（秒，ADR-0048）：插话消费触发的 suppress_tools
+    # 汇报是一次额外 LLM 往返，端点静默挂起时它会把原任务一起钉死
+    # （2026-10-23 实测 11.6 分钟无输出，整轮对话停顿）。超时即放弃本次
+    # 汇报、继续原任务；0 = 不限（不推荐，仅测试/特殊端点）。
+    interject_report_timeout_s: float = 120.0
+
     # 注入消息后的合成回执（默认关闭）：后台结果 / 收件箱通知以 user 消息
     # 插入历史后，是否再补一条固定的 assistant "Noted ..." 回执。
     # 关闭（默认）：只留 user 通知，请求以 user 结尾——thinking 模式端点

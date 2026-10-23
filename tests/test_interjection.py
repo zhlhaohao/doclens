@@ -274,6 +274,81 @@ class TestRunnerInterjection:
 
 # ---------- ChatEventEmitter 双事件 ----------
 
+class HangingProvider(ScriptedProvider):
+    """第 hang_on 次调用挂起不返回（模拟端点静默钉死）。"""
+
+    def __init__(self, script, hang_on: int = 0):
+        super().__init__(script)
+        self.hang_on = hang_on
+
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
+        idx = len(self.records)
+        if idx == self.hang_on:
+            self.records.append({"messages": copy.deepcopy(messages), "tools": []})
+            self._call += 1
+            await asyncio.sleep(3600)  # 永不返回（由调用方超时取消）
+            return
+        async for ev in super().astream(
+            messages=messages, system=system, tools=tools,
+            max_tokens=max_tokens, tracer=tracer,
+        ):
+            yield ev
+
+
+class TestInterjectReportTimeout:
+    """插话汇报是额外一次 LLM 往返——端点静默挂起不得钉死原任务。
+
+    2026-10-23 事故：汇报调用 200 OK 后 11.6 分钟零输出，整轮对话停顿，
+    用户被迫手动催问；后台 bench 早已跑完，完成通知在队列里躺了 5 分钟。
+    """
+
+    def test_report_timeout_skips_report_and_continues(self, tmp_path):
+        from planify.streaming.interjection import get_interjection_slot
+
+        sid = "sess_ij_timeout"
+        provider = HangingProvider(
+            [
+                {"text": "汇报不该到这一步"},  # 轮1 = 挂起（不会产出）
+                {"text": "任务完成"},          # 轮2 = 恢复后的终答
+            ],
+            hang_on=0,
+        )
+        agent = _make_agent(provider, tmp_path, interject_report_timeout_s=0.05)
+        get_interjection_slot(sid).submit("进度？")
+
+        try:
+            asyncio.run(agent.run_stream([], "开始任务", sid))
+        finally:
+            drop_interjection_slot(sid)
+
+        # 汇报超时被放弃 → 原任务继续并正常终答（不抛异常、不卡死）
+        assert "".join(agent.emitter.texts) == "任务完成"
+        assert len(provider.records) == 2
+        # 汇报轮仍走 suppress_tools（工具表置空）
+        assert provider.records[0]["tools"] == []
+        # 恢复轮工具表回来
+        assert "grep" in provider.records[1]["tools"]
+
+    def test_timeout_zero_disables_limit(self, tmp_path):
+        """0 = 不限（测试/特殊端点）：正常汇报照常产出。"""
+        from planify.streaming.interjection import get_interjection_slot
+
+        sid = "sess_ij_nolimit"
+        provider = ScriptedProvider([
+            {"text": "当前进度：一半"},
+            {"text": "任务完成"},
+        ])
+        agent = _make_agent(provider, tmp_path, interject_report_timeout_s=0)
+        get_interjection_slot(sid).submit("进度？")
+        try:
+            asyncio.run(agent.run_stream([], "开始任务", sid))
+        finally:
+            drop_interjection_slot(sid)
+        full = "".join(agent.emitter.texts)
+        assert "当前进度：一半" in full
+        assert full.endswith("任务完成")
+
+
 class TestEmitterEvents:
     def _make_emitter(self):
         from doclens.web_v2.api._chat_emitter import ChatEventEmitter

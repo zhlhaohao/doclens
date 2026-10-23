@@ -466,11 +466,12 @@ class StreamingAgent:
                             "（防热轮询空转）",
                             consecutive_poll_rounds, delay,
                         )
-                        # 插话唤醒（ADR-0048）：退避等待期间用户插话到达 →
-                        # 提前结束等待，检查点即刻消费（不干等退避秒数）。
-                        # 仅在会话已登记插话槽位（宿主 GUI 链路）时分段等待
-                        # （每 ≤1s 醒来查槽位）；未登记（CLI/TUI/测试）保持
-                        # 整段等待，行为与旧路径一致。
+                        # 唤醒源（可在等待中提前结束，均只探测不消费）：
+                        # - 中断（用户「停止」）
+                        # - 插话槽位（ADR-0048：旁路询问应即刻处理）
+                        # - 后台完成通知（后台任务跑完不该再干等退避秒数）
+                        # 无任何唤醒源（CLI/TUI 无 bg manager、无会话槽位）时
+                        # 保持整段单次等待，行为与旧路径一致。
                         from .interjection import (
                             get_interjection_slot,
                             has_interjection_slot,
@@ -481,7 +482,7 @@ class StreamingAgent:
                             if session_id and has_interjection_slot(session_id)
                             else None
                         )
-                        if _slot is None:
+                        if _slot is None and self.bg_manager is None:
                             if self._interrupt_event is not None:
                                 # threading.Event.wait() 是同步阻塞调用，禁止在
                                 # 参数位求值传给 wait_for——参数先于调用求值，事
@@ -506,9 +507,17 @@ class StreamingAgent:
                                     )
                                 else:
                                     await asyncio.sleep(wait_s)
-                                if _slot.has_pending():
+                                if _slot is not None and _slot.has_pending():
                                     self.logger.info(
                                         "[StreamingAgent] 退避被插话提前唤醒"
+                                    )
+                                    break
+                                if (
+                                    self.bg_manager is not None
+                                    and self.bg_manager.has_pending_notifications()
+                                ):
+                                    self.logger.info(
+                                        "[StreamingAgent] 退避被后台完成通知提前唤醒"
                                     )
                                     break
 
@@ -569,9 +578,38 @@ class StreamingAgent:
                             # 汇报调用：工具表置空 → 模型物理上无法调工具；
                             # stop_reason 不可能是 tool_use，直接 continue 回
                             # 循环顶（压缩管道 / bg / inbox / 正常 LLM 调用照旧）
-                            await self._stream_llm_call(
-                                messages, system, suppress_tools=True
+                            #
+                            # 墙钟上限（2026-10-23 事故）：汇报是额外一次 LLM
+                            # 往返，端点静默挂起时会把原任务一起钉死（实测
+                            # 200 OK 后 11.6 分钟零输出，整轮对话停顿）。超时
+                            # 即放弃本次汇报、继续原任务——汇报是旁路信息，
+                            # 不值得为它牺牲主任务。0 = 不限（测试/特殊端点）。
+                            _report_timeout = getattr(
+                                self.config, "interject_report_timeout_s", 120.0
                             )
+                            try:
+                                if _report_timeout and _report_timeout > 0:
+                                    await asyncio.wait_for(
+                                        self._stream_llm_call(
+                                            messages, system, suppress_tools=True
+                                        ),
+                                        timeout=_report_timeout,
+                                    )
+                                else:
+                                    await self._stream_llm_call(
+                                        messages, system, suppress_tools=True
+                                    )
+                            except (asyncio.TimeoutError, TimeoutError):
+                                self.logger.warning(
+                                    "[StreamingAgent] 插话汇报超过 %.0fs 未完成，"
+                                    "放弃本次汇报并继续原任务",
+                                    _report_timeout,
+                                )
+                                await self._emit_notice_best_effort(
+                                    f"插话汇报超过 {_report_timeout:.0f}s 未返回，"
+                                    "已跳过（原任务继续）",
+                                    level="error",
+                                )
                             report_end = getattr(
                                 self.emitter, "end_interjection", None
                             )
@@ -874,6 +912,20 @@ class StreamingAgent:
             "问答原文与编辑记录逐字保留）",
             compact_phase="done", pre_tokens=estimated, post_tokens=post_est,
         )
+
+    async def _emit_notice_best_effort(self, detail: str, level: str = "info") -> None:
+        """发一条中性通知；emitter 不支持/签名不符时静默跳过。
+
+        用于「机制层面发生了值得告知的事，但不影响回合正确性」的场合
+        （如插话汇报超时被跳过）——通知失败绝不能反过来拖垮回合。
+        """
+        emit = getattr(self.emitter, "emit_notice", None)
+        if emit is None:
+            return
+        try:
+            await emit(detail, level)
+        except Exception as e:  # noqa: BLE001
+            self.logger.debug("[StreamingAgent] notice 发送失败: %s", e)
 
     def _cleanup_messages(self, messages: List[Dict]) -> List[Dict]:
         """

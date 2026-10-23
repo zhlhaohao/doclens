@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from anthropic import Anthropic, AsyncAnthropic
 
+from .timeouts import build_httpx_timeout
 from .types import (
     LLMResponse,
     StreamEvent,
@@ -58,8 +59,12 @@ class AnthropicProvider:
         thinking_depth: str = "auto",
     ) -> None:
         # 禁用 SSL 验证以适配自签名证书环境（与旧 init_anthropic_client 一致）
+        # 显式超时：SDK 默认 read=600s 且为「字节间隔」，端点静默挂起时整轮
+        # 对话会被单个 LLM 调用钉死（见 timeouts.py 模块注释）
         httpx = _sdk_httpx()
-        http_client = httpx.Client(verify=False)
+        http_client = httpx.Client(
+            verify=False, timeout=build_httpx_timeout(httpx) or httpx.USE_CLIENT_DEFAULT
+        )
         kwargs: dict[str, Any] = {"api_key": api_key, "http_client": http_client}
         if base_url:
             kwargs["base_url"] = base_url
@@ -74,7 +79,10 @@ class AnthropicProvider:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
         if self._aclient is None:
             httpx = _sdk_httpx()
-            http_client = httpx.AsyncClient(verify=False)
+            http_client = httpx.AsyncClient(
+                verify=False,
+                timeout=build_httpx_timeout(httpx) or httpx.USE_CLIENT_DEFAULT,
+            )
             kwargs: dict[str, Any] = {"api_key": self.api_key, "http_client": http_client}
             if self.base_url:
                 kwargs["base_url"] = self.base_url
