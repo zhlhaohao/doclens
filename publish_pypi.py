@@ -45,6 +45,7 @@ class PkgConfig:
     version_line: str   # 写回的行模板（{v} = 版本号）
     diff_paths: list[str]  # 变化检测的路径（相对 repo 根）
     root_dep_re: str | None = None  # 根 pyproject 依赖下限提升的正则（None = doclens 自身不涉及）
+    static_index: str | None = None  # doclens 专属：发包前校验的前端 index.html（产物完整性防线）
 
 
 PACKAGES: dict[str, PkgConfig] = {
@@ -57,6 +58,7 @@ PACKAGES: dict[str, PkgConfig] = {
         version_line='version = "{v}"',
         diff_paths=["doclens", "pyproject.toml", "README.md"],
         root_dep_re=None,
+        static_index="doclens/web_v2/static/index.html",
     ),
     "treesearch": PkgConfig(
         key="treesearch",
@@ -160,6 +162,28 @@ def changed_files(tag: str, cfg: PkgConfig) -> list[str]:
     return real
 
 
+def verify_static_assets(index_rel: str) -> None:
+    """发包前校验前端产物完整性：index.html 引用的每个本地资源必须在盘。
+
+    背景（2026-10-23 事故）：1.2.83~1.2.86 构建后入口 JS 疑被杀软隔离，
+    index.html 引用了不存在的文件照常发包，pip 用户装到即空白页。
+    """
+    index = ROOT / index_rel
+    if not index.is_file():
+        sys.exit(f"[ERROR] 前端产物缺失：{index_rel} 不存在（先到 frontend 执行 npm run build）")
+    html = index.read_text(encoding="utf-8")
+    refs = {m.split("?")[0] for m in re.findall(r'(?:src|href)="(/[^"]+)"', html)}
+    local_refs = sorted(r for r in refs if not r.startswith(("http:", "https:", "//")))
+    missing = [r for r in local_refs if not (index.parent / r.lstrip("/")).is_file()]
+    if missing:
+        sys.exit(
+            "[ERROR] index.html 引用的资源在盘上不存在，发包中止（空白页事故防线）：\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + "\n  先到 doclens/web_v2/frontend 执行 npm run build 重建产物"
+        )
+    log(f"OK 前端产物完整性校验通过：{len(local_refs)} 个本地资源全部在盘")
+
+
 def update_root_dependency(cfg: PkgConfig, new_ver: str) -> None:
     """treesearch/planify 发版后提升根 pyproject 的依赖下限。"""
     if cfg.root_dep_re is None:
@@ -234,6 +258,8 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg = PACKAGES[args.pkg]
+    if cfg.static_index:
+        verify_static_assets(cfg.static_index)
     ver = current_version(cfg)
     tag_info = last_release_tag(cfg)
 
