@@ -214,19 +214,43 @@ async def list_dir(
         if not full.is_dir():
             raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
 
-        all_entries = []
-        indexed_children = idx.indexed_children_of(str(full))
-        ghost_children = idx.ghost_children_of(str(full))
-        for child in full.iterdir():
-            if is_protected(child, base):
-                continue
-            all_entries.append(_build_entry(
-                child, base, indexed_children=indexed_children,
-                ghost_children=ghost_children,
-            ))
-        all_entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
-        page = all_entries[offset:offset + limit]
-        return ListDirResponse(path=path, entries=page, total=len(all_entries))
+        # 两段式：scandir 的名字+类型信息先排序分页，只对当页条目做重探测
+        # （stat / 索引判定 / 可写性 / has_child_dirs）。此前对全目录每个
+        # 条目都跑 _build_entry（含 stat + resolve + 2×os.access）再丢弃
+        # 非当页的——16,898 文件的目录实测 ~3.7s，其中 99% 花在 200 条以外。
+        names: list[tuple[str, bool]] = []  # (name, is_dir)
+        with os.scandir(full) as it:
+            for child in it:
+                try:
+                    is_dir = child.is_dir()
+                except OSError:
+                    continue
+                # 点开头组件受保护——父链已由 assert_not_protected 保证，
+                # 这里只过滤本层隐藏项（与旧 is_protected(child) 语义等价）
+                if child.name.startswith("."):
+                    continue
+                names.append((child.name, is_dir))
+        names.sort(key=lambda t: (not t[1], t[0].lower()))
+        total = len(names)
+        page_names = names[offset:offset + limit]
+        # 索引/ghost 徽标也只探测当页：点查版 probe_*（μs/条）。原
+        # indexed_children_of 的 DISTINCT 全扫成本 ∝ 子树总行数——工作
+        # 目录根页匹配整库（28.5 万行 ~1s+），点查版只花 len(page) 次索引
+        # 下潜（实测 81 子项 2ms、200 子项 ~10ms）。
+        page_paths = [str(full / n) for n, _ in page_names]
+        hit_paths = idx.probe_indexed_paths(page_paths)
+        ghost_paths = idx.probe_ghost_paths(
+            [p for p in page_paths if p not in hit_paths])
+        indexed_children = {Path(p).name for p in hit_paths}
+        ghost_children = {Path(p).name for p in ghost_paths}
+        page_entries = [
+            _build_entry(
+                full / name, base,
+                indexed_children=indexed_children, ghost_children=ghost_children,
+            )
+            for name, _ in page_names
+        ]
+        return ListDirResponse(path=path, entries=page_entries, total=total)
 
     # 同步重 IO（目录扫描 + stat + DB 探测）丢线程池——async handler 里直接跑
     # 会阻塞事件循环，冻结期间所有请求（子目录「目录为空」bug 根因之一）

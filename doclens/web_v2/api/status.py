@@ -1,4 +1,5 @@
 """GET /api/status -- 系统状态。"""
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -18,7 +19,11 @@ async def status(idx: IndexManager = Depends(get_index_manager)):
     # 缓存键 = DB 文档计数，索引变化才重算。
     indexed_docs = idx.indexed_doc_count()
     registered_docs = idx.registered_doc_count()
-    total_size, type_counts = idx.file_stats()
+    # 缓存未命中时 file_stats 对全部索引文档做磁盘 stat（28.5 万条实测
+    # ~24s）——同步跑在 async handler 里会冻结事件循环，期间所有请求
+    # （含 /files/list，前端表现「加载中」不消失）全部挂起。丢线程池
+    # （与 /files/list 的 to_thread 同律）。
+    total_size, type_counts = await asyncio.to_thread(idx.file_stats)
     watcher_obj = get_watcher()
     cfg = get_config()
     return {

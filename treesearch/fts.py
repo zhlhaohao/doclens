@@ -70,6 +70,16 @@ class _NullContext:
         return False
 
 
+def _glob_escape(pattern: str) -> str:
+    """Escape GLOB metacharacters in a literal path prefix.
+
+    Only ``[`` and ``]`` need escaping (``*``/``?`` cannot appear in real
+    paths on the platforms we index). Escaped brackets keep the GLOB
+    pattern case-sensitive AND index-friendly (see indexed_children_of).
+    """
+    return pattern.replace("[", "[[]").replace("]", "[]]")
+
+
 def _check_fts5() -> bool:
     """Check whether the current SQLite build includes the FTS5 extension."""
     global _FTS5_AVAILABLE
@@ -1766,34 +1776,92 @@ class FTS5Index:
     def indexed_children_of(self, dir_path: str, sep: str = os.sep) -> set[str]:
         """Names of *dir_path*'s direct children that hold indexed documents.
 
-        One index-backed LIKE-prefix query replaces N per-entry probes
-        (each probe opens a connection and pays a range scan on huge
-        indexes). For a directory page this answers "which entries are
-        indexed" in a single ~0.1-0.3s query regardless of corpus size.
-        Returns child names (both files and subdirectories whose subtree
-        contains at least one document).
+        Index-backed prefix query (GLOB → BINARY index range scan). Returns
+        child names (both files and subdirectories whose subtree contains
+        at least one document).
 
         Ghost rows (node_count = 0, metadata-only) are **excluded** — they
         are not indexed documents. Use :meth:`ghost_children_of` for them.
+
+        ⚠️ Cost scales with the number of matching rows (the whole subtree),
+        not with the number of children: the workdir root itself matches
+        every document in the index (~1s on a 285k-row corpus) even though
+        it has only a handful of children. Callers that already know the
+        child paths (directory pages) should use :meth:`probe_indexed_paths`
+        instead — per-child index probes, ~microseconds each.
         """
         prefix = dir_path.rstrip("\\/")
-        # depth-1: the segment right after the prefix, up to the next separator
-        # (or end of path for files directly inside dir_path).
+        # GLOB (not LIKE): GLOB is case-sensitive and therefore maps to a
+        # BINARY-collation index range scan on idx_documents_source_path.
+        # LIKE's NOCASE semantics prevent the planner from using the index,
+        # silently degrading every call into a full-table scan over all
+        # documents (~0.5s on a 285k-row index per directory click). [ ]
+        # are GLOB metacharacters and must be escaped (_glob_escape).
+        glob_pat = _glob_escape(prefix) + "*"
         rows = self._conn.execute(
             "SELECT DISTINCT substr(source_path, ?, "
             "CASE WHEN instr(substr(source_path, ?), ?) > 0 "
             "THEN instr(substr(source_path, ?), ?) - 1 "
             "ELSE length(source_path) - ? + 1 END) "
-            "FROM documents WHERE source_path LIKE ? AND node_count > 0",
+            "FROM documents WHERE source_path GLOB ? AND node_count > 0",
             (
                 len(prefix) + 2,          # start after prefix + separator
                 len(prefix) + 2, sep,
                 len(prefix) + 2, sep,
                 len(prefix) + 2,
-                prefix + "%",
+                glob_pat,
             ),
         ).fetchall()
         return {r[0] for r in rows if r[0]}
+
+    def probe_indexed_paths(self, paths: list[str]) -> set[str]:
+        """Which of *paths* (files or directories) hold indexed documents.
+
+        Per-path GLOB EXISTS probe down the source_path index B-tree
+        (~microseconds each). Semantics match :meth:`indexed_children_of`:
+        a directory matches when its subtree holds at least one indexed
+        document (node_count > 0); a file matches on an exact row.
+
+        Use this instead of indexed_children_of when the caller already
+        knows the child paths (directory pages): the DISTINCT variant's
+        cost scales with the subtree's total row count (the workdir root
+        matches the entire index), while this scales with len(paths).
+        """
+        hits: set[str] = set()
+        for p in paths:
+            row = self._conn.execute(
+                "SELECT 1 FROM documents WHERE source_path GLOB ? "
+                "AND node_count > 0 LIMIT 1",
+                (_glob_escape(p) + "*",),
+            ).fetchone()
+            if row:
+                hits.add(p)
+        return hits
+
+    def probe_ghost_paths(self, paths: list[str]) -> set[str]:
+        """Ghost-row counterpart of :meth:`probe_indexed_paths`.
+
+        A path matches when its subtree holds at least one ghost row
+        (node_count = 0) and no indexed document (indexed probe wins —
+        mirrors the precedence documented on ghost_children_of).
+        """
+        hits: set[str] = set()
+        for p in paths:
+            g = self._conn.execute(
+                "SELECT 1 FROM documents WHERE source_path GLOB ? "
+                "AND node_count = 0 LIMIT 1",
+                (_glob_escape(p) + "*",),
+            ).fetchone()
+            if not g:
+                continue
+            indexed = self._conn.execute(
+                "SELECT 1 FROM documents WHERE source_path GLOB ? "
+                "AND node_count > 0 LIMIT 1",
+                (_glob_escape(p) + "*",),
+            ).fetchone()
+            if not indexed:
+                hits.add(p)
+        return hits
 
     def ghost_children_of(self, dir_path: str, sep: str = os.sep) -> set[str]:
         """Names of *dir_path*'s direct children that hold ghost rows only.
@@ -1806,18 +1874,20 @@ class FTS5Index:
         precedence of indexed_children_of).
         """
         prefix = dir_path.rstrip("\\/")
+        # GLOB 走索引（同 indexed_children_of 的性能注记）
+        glob_pat = _glob_escape(prefix) + "*"
         rows = self._conn.execute(
             "SELECT DISTINCT substr(source_path, ?, "
             "CASE WHEN instr(substr(source_path, ?), ?) > 0 "
             "THEN instr(substr(source_path, ?), ?) - 1 "
             "ELSE length(source_path) - ? + 1 END) "
-            "FROM documents WHERE source_path LIKE ? AND node_count = 0",
+            "FROM documents WHERE source_path GLOB ? AND node_count = 0",
             (
                 len(prefix) + 2,
                 len(prefix) + 2, sep,
                 len(prefix) + 2, sep,
                 len(prefix) + 2,
-                prefix + "%",
+                glob_pat,
             ),
         ).fetchall()
         return {r[0] for r in rows if r[0]}

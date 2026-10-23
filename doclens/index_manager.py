@@ -295,6 +295,14 @@ class IndexManager:
         """目录直接子项中「仅登记」ghost 行的子项名集合（转发 index_probe）。"""
         return index_probe.ghost_children_of(self.index_path, dir_abs_path)
 
+    def probe_indexed_paths(self, abs_paths: list[str]) -> set[str]:
+        """逐路径点查是否含已索引文档（转发 index_probe；目录页分页后用这版）。"""
+        return index_probe.probe_indexed_paths(self.index_path, abs_paths)
+
+    def probe_ghost_paths(self, abs_paths: list[str]) -> set[str]:
+        """逐路径点查是否「仅登记」ghost（转发 index_probe）。"""
+        return index_probe.probe_ghost_paths(self.index_path, abs_paths)
+
     def is_path_registered(self, abs_path: str) -> bool:
         """单个文件路径是否为「仅登记」ghost 行（转发 index_probe）。"""
         return index_probe.is_path_registered(self.index_path, abs_path)

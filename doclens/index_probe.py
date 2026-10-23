@@ -124,6 +124,41 @@ def ghost_children_of(index_path: str, dir_abs_path: str) -> set[str]:
         return set()
 
 
+def probe_indexed_paths(index_path: str, abs_paths: list[str]) -> set[str]:
+    """逐路径探测是否含已索引文档（点查版 indexed_children_of）。
+
+    调用方已知子路径清单时（目录页分页后只探测当页 ≤500 条）用这版：
+    indexed_children_of 的 DISTINCT 全扫成本 ∝ 子树总行数（工作目录根
+    匹配整库，28.5 万行 ~1s），点查 ∝ 路径数（每查索引下潜 ~μs）。
+    返回命中的路径（文件精确行；目录子树任一 node_count>0 行）。
+    """
+    try:
+        fts = _open(index_path)
+        try:
+            return fts.probe_indexed_paths(abs_paths)
+        finally:
+            fts.close()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("probe_indexed_paths(%d paths) failed: %s", len(abs_paths), e)
+        return set()
+
+
+def probe_ghost_paths(index_path: str, abs_paths: list[str]) -> set[str]:
+    """逐路径探测是否「仅登记」ghost（点查版 ghost_children_of）。
+
+    语义与 ghost_children_of 一致：子树含 ghost 行且不含已索引文档。
+    """
+    try:
+        fts = _open(index_path)
+        try:
+            return fts.probe_ghost_paths(abs_paths)
+        finally:
+            fts.close()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("probe_ghost_paths(%d paths) failed: %s", len(abs_paths), e)
+        return set()
+
+
 def is_path_registered(index_path: str, abs_path: str) -> bool:
     """单个文件路径是否为「仅登记」ghost 行（未索引但已收录元数据）。"""
     try:
