@@ -16,7 +16,14 @@ from .tool_translator import (
     messages_anthropic_to_openai,
     tools_anthropic_to_openai,
 )
-from .types import LLMResponse, StreamEvent, TextBlock, Tool, ToolUseBlock
+from .types import (
+    LLMResponse,
+    StreamEvent,
+    TextBlock,
+    Tool,
+    ToolUseBlock,
+    normalize_thinking_depth,
+)
 
 if TYPE_CHECKING:
     from .trace import LLMTracer
@@ -289,6 +296,7 @@ class OpenAICompatProvider:
         api_key: str,
         base_url: str | None,
         model: str,
+        thinking_depth: str = "auto",
     ) -> None:
         kwargs: dict[str, Any] = {"api_key": api_key}
         if base_url:
@@ -298,6 +306,7 @@ class OpenAICompatProvider:
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
+        self.thinking_depth = normalize_thinking_depth(thinking_depth)
 
     def _ensure_async_client(self) -> AsyncOpenAI:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
@@ -316,6 +325,7 @@ class OpenAICompatProvider:
         max_tokens: int,
         stream: bool = False,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> dict[str, Any]:
         """chat/stream/achat/astream 共用的请求参数（含 Anthropic→OpenAI 翻译）。
 
@@ -334,6 +344,16 @@ class OpenAICompatProvider:
             "messages": openai_messages,
             "max_tokens": max_tokens,
         }
+        # 思考深度（auto = 不发参，保持现状；off → "none" best-effort——
+        # 部分端点不支持该值会 400，显式报错可见，逃生档 = auto）。
+        # thinking_depth 参数 = 每调用级覆盖（None = 用构造档位）。
+        depth = normalize_thinking_depth(
+            self.thinking_depth if thinking_depth is None else thinking_depth
+        )
+        if depth != "auto":
+            kwargs["reasoning_effort"] = (
+                "none" if depth == "off" else depth
+            )
         if stream:
             kwargs["stream"] = True
             # 尾 chunk 带 usage（prompt/completion tokens；DeepSeek 系含缓存命中
@@ -351,8 +371,9 @@ class OpenAICompatProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             response = self._client.chat.completions.create(**kwargs)
@@ -372,8 +393,9 @@ class OpenAICompatProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> Iterator[StreamEvent]:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
         translator = StreamTranslator()
@@ -404,8 +426,9 @@ class OpenAICompatProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, server_tools=server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         try:
             response = await self._ensure_async_client().chat.completions.create(**kwargs)
@@ -425,8 +448,9 @@ class OpenAICompatProvider:
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> AsyncIterator[StreamEvent]:
-        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools)
+        kwargs = self._request_kwargs(messages, system, tools, max_tokens, stream=True, server_tools=server_tools, thinking_depth=thinking_depth)
         turn = tracer.trace_request(kwargs) if tracer else None
         accumulator = _StreamTraceAccumulator() if tracer else None
         translator = StreamTranslator()

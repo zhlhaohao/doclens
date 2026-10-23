@@ -23,6 +23,10 @@ class LLMProvider(Protocol):
 
     tracer（可选）：LLM 追踪落盘（调试 / 缓存命中率观测），None 即不记录。
     由调用方按会话创建、逐调用传入（provider 实例跨会话共享，不能挂实例上）。
+
+    thinking_depth（可选，每调用级覆盖）：默认 None = 用 Provider 构造时
+    的档位；显式传 "auto" 等档位可对单次调用覆盖（如上下文压缩摘要
+    显式剥离思考深度——机械转写不吃深度思考，省 token 省时）。
     """
 
     def chat(
@@ -33,6 +37,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
         """单次非流式调用。"""
         ...
@@ -45,6 +50,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> Iterator[StreamEvent]:
         """流式调用，yield 归一化 StreamEvent。"""
         ...
@@ -57,6 +63,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> LLMResponse:
         """单次非流式调用（async 客户端，不阻塞事件循环）。"""
         ...
@@ -69,6 +76,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 8000,
         tracer: Optional["LLMTracer"] = None,
         server_tools: Optional[list] = None,
+        thinking_depth: Optional[str] = None,
     ) -> AsyncIterator[StreamEvent]:
         """流式调用（async 客户端），async for 消费归一化 StreamEvent。"""
         ...

@@ -359,12 +359,14 @@ class _FakeProvider:
     def __init__(self):
         self.captured = {}
 
-    def chat(self, messages, system, tools, max_tokens=8000, tracer=None):
+    def chat(self, messages, system, tools, max_tokens=8000, tracer=None, thinking_depth=None):
         from planify.core.llm.types import LLMResponse, TextBlock
 
         self.captured = {
             "messages": messages, "system": system,
             "tools": tools, "max_tokens": max_tokens,
+            # 压缩摘要显式剥离思考深度（机械转写不吃深度思考）
+            "thinking_depth": thinking_depth,
         }
         return LLMResponse(
             content=[TextBlock(text="对话摘要")],
@@ -508,6 +510,8 @@ class TestAutoCompact:
         # 无工具 + 不传配置时输出上限 = 下限兜底
         assert req["tools"] == []
         assert req["max_tokens"] == _SUMMARY_MAX_TOKENS_FLOOR
+        # 压缩摘要显式剥离思考深度（机械转写不吃深度思考）
+        assert req["thinking_depth"] == "auto"
 
     def test_summary_max_tokens_follows_config_with_floor(self, tmp_path):
         """摘要输出上限 = max(下限 10000, 配置值)——大输出模型跟随

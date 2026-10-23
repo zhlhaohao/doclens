@@ -70,6 +70,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   VISION_AUTO_ROTATE: "true",
   PLANIFY_OUTSIDE_WORKDIR: "ask",
   PLANIFY_ASK_MODE: "interactive",
+  PLANIFY_THINKING_DEPTH: "auto",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -136,6 +137,21 @@ export const SETTINGS_FIELDS: SettingsField[] = [
       { value: "block", label: "一律拦截" },
     ],
     hint: "AI 工具（读写文件 / shell 命令）访问工作目录以外路径时的处置：确认后本会话内同目录免再问（读/写分开记账）。子代理等无交互场景未授权一律拦截。保存后即时生效。",
+  },
+  {
+    tab: "ai",
+    section: "AI 对话与安全",
+    envVar: "PLANIFY_THINKING_DEPTH",
+    label: "思考深度",
+    component: "select",
+    options: [
+      { value: "auto", label: "模型默认（不传参，推荐）" },
+      { value: "off", label: "不思考（显式关闭）" },
+      { value: "low", label: "低" },
+      { value: "medium", label: "中" },
+      { value: "high", label: "高" },
+    ],
+    hint: "AI 对话（含子代理）的推理深度：auto = 不传思考参数、模型自行决定（兼容一切端点）；低/中/高按档位开启思考（OpenAI 端 reasoning_effort，Anthropic 端 thinking 预算 2048/8192/16384）。注意：恒思考模型（如 MiniMax M3.1-Flash、GLM-5.3、Kimi K3）拒绝「不思考」档，报错就改回 auto。上下文压缩摘要不受影响。保存后即时生效。",
   },
 
   // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====

@@ -63,10 +63,10 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
-  it("renders 4 .field for AI tab (百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁；模型配置由预设区块接管)", () => {
+  it("renders 5 .field for AI tab (百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度；模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(4);
+    expect(fields?.length).toBe(5);
     expect(aiPanel?.querySelector('input[data-env="BAIDU_WEATHER_AK"]')).toBeTruthy();
     // 提问方式下拉存在（ADR-0033）；未设置（空串）时回显出厂默认 interactive
     const askSelect = aiPanel?.querySelector('select[data-env="PLANIFY_ASK_MODE"]');
@@ -78,6 +78,11 @@ describe("<settings-view>", () => {
     expect(select).toBeTruthy();
     const selected = select?.querySelector("option:checked") as HTMLOptionElement | null;
     expect(selected?.value).toBe("ask");
+    // 思考深度下拉存在；未设置（空串）时回显出厂默认 auto
+    const depthSelect = aiPanel?.querySelector('select[data-env="PLANIFY_THINKING_DEPTH"]');
+    expect(depthSelect).toBeTruthy();
+    const depthSelected = depthSelect?.querySelector("option:checked") as HTMLOptionElement | null;
+    expect(depthSelected?.value).toBe("auto");
   });
 
   it("renders 0 .field for search tab (搜索参数由预设区块接管)", async () => {

@@ -295,8 +295,9 @@ class CortexAgent:
             "token_threshold": 100000,
             "poll_interval": 5,
             "idle_timeout": 60,
+            # 思考深度档位（None/未设置 = auto；非法值由 provider 归一收敛）
+            "thinking_depth": os.getenv("PLANIFY_THINKING_DEPTH", "auto"),
         }
-
         # 初始化 LLM Provider（通过 factory.create_provider）
         asm.client = create_provider(asm.config)
 
@@ -551,6 +552,7 @@ class CortexAgent:
             planify_max_tokens=asm.max_tokens,
             planify_max_tool_rounds=asm.kb_config.planify_max_tool_rounds,
             planify_injection_ack=asm.kb_config.planify_injection_ack,
+            planify_thinking_depth=asm.kb_config.planify_thinking_depth,
             poll_interval=asm.config.get("poll_interval", 5),
             idle_timeout=asm.config.get("idle_timeout", 60),
             # 压缩 transcript 落到 .cortex/transcripts（上面已 mkdir）：
@@ -635,6 +637,10 @@ class CortexAgent:
             # （tool_round_limit_kwargs），推到 RuntimeConfig 即对新回合生效。
             # 注意 0（不限）是合法值，不能用 or 短路吞掉。
             planify_max_tool_rounds=getattr(config, "planify_max_tool_rounds", None),
+            # 思考深度热更新：update_llm_config 内先落 config 再以
+            # config.planify_thinking_depth 重建 Provider（新 Provider 携带
+            # 新档位；空串 = 未设置 → 归一回 auto）
+            planify_thinking_depth=getattr(config, "planify_thinking_depth", None),
         )
 
     def _get_llm_tracer(self):

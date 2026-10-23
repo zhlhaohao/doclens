@@ -167,3 +167,36 @@ def test_cli_config_used_when_no_dash_c(tmp_path):
     r = _run_status(launch_dir, env, [])
     assert str(b) in (r.stdout or "")
     assert r.returncode == 0
+
+
+# ---- 思考深度档位（PLANIFY_THINKING_DEPTH）----
+
+
+def test_validator_accepts_valid_thinking_depths():
+    from doclens.web_v2.config_validator import validate_values
+
+    for v in ("auto", "off", "low", "medium", "high", ""):
+        errors = validate_values({"PLANIFY_THINKING_DEPTH": v})
+        assert [e for e in errors.fields if e.field == "PLANIFY_THINKING_DEPTH"] == [], v
+
+
+def test_validator_rejects_invalid_thinking_depth():
+    from doclens.web_v2.config_validator import validate_values
+
+    errors = validate_values({"PLANIFY_THINKING_DEPTH": "xhigh"})
+    field_errors = [e for e in errors.fields if e.field == "PLANIFY_THINKING_DEPTH"]
+    assert len(field_errors) == 1
+    assert "auto / off / low / medium / high" in field_errors[0].error
+
+
+def test_thinking_depth_key_in_known_keys():
+    from doclens.web_v2.config_store import KNOWN_KEYS
+
+    assert "PLANIFY_THINKING_DEPTH" in KNOWN_KEYS
+
+
+def test_thinking_depth_default_in_cortex_config():
+    from doclens.config import CortexConfig
+
+    cfg = CortexConfig(_env_file=None)
+    assert cfg.planify_thinking_depth == "auto"
