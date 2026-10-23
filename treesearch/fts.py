@@ -641,6 +641,13 @@ class FTS5Index:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_documents_source_path ON documents (source_path)"
         )
+        # Covering index for node_count COUNT queries (get_stats): full-table
+        # scans hit large structure_json blobs (~0.5s per COUNT at 285k rows);
+        # with this index both COUNT variants drop to ~2ms. Existing DBs get
+        # it via IF NOT EXISTS on next open (one-time ~0.5s build cost).
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_node_count ON documents (node_count)"
+        )
 
         self._conn.commit()
 
@@ -2630,12 +2637,13 @@ class FTS5Index:
         (metadata-only, node_count = 0) are reported separately as
         ``ghost_count`` (ADR-0034).
         """
-        doc_count = self._conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE node_count > 0"
-        ).fetchone()[0]
-        ghost_count = self._conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE node_count = 0"
-        ).fetchone()[0]
+        # Single-pass aggregate: two separate COUNT(*) WHERE scans cost
+        # ~1s at 285k docs even with the node_count covering index; one
+        # FILTER query walks the table once (~0.5s unindexed, ~ms indexed).
+        doc_count, ghost_count = self._conn.execute(
+            "SELECT COUNT(*) FILTER (WHERE node_count > 0),"
+            " COUNT(*) FILTER (WHERE node_count = 0) FROM documents"
+        ).fetchone()
         node_count = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
         return {
             "db_path": self._db_path,

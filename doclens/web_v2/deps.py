@@ -152,6 +152,29 @@ def get_index_manager() -> IndexManager:
     return _idx_manager
 
 
+def try_get_index_manager() -> Optional[IndexManager]:
+    """非阻塞形态的 get_index_manager：单例已就绪返回之，否则 None。
+
+    供 /api/status 等轻量只读端点：启动审计/建库窗口（大语料 20s+）内
+    不挂起请求，由调用方降级（config 派生轻字段 + 计数占位）。触发构造
+    仍走 get_index_manager（本函数不建单例，避免给只读请求引入建库副作用）。
+    """
+    return _idx_manager
+
+
+def _index_path_placeholder(cfg: CortexConfig) -> str:
+    """审计窗口内 status 降级用的 index_path（config 派生，不建单例）。
+
+    与 IndexManager.__init__ 的推导同口径：显式 index_path 优先，否则
+    <workdir>/<数据目录>/index.db。
+    """
+    import os
+
+    from doclens.config import data_dirname
+
+    return cfg.index_path or os.path.join(cfg.search_path, data_dirname(), "index.db")
+
+
 def get_agent():
     """获取 CortexAgent 单例（懒加载 + 线程安全）。
 

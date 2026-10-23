@@ -264,6 +264,15 @@ class IndexManager:
         """索引文档总数（DB COUNT，转发 index_probe——AP-9 拆出）。"""
         return index_probe.indexed_doc_count(self.index_path)
 
+    def index_counts(self) -> tuple[int, int]:
+        """(已索引文档数, ghost 登记数)——单次 DB 往返（get_stats 单遍聚合）。
+
+        /api/status 等同时需要两种计数的调用方应使用本方法：分开调
+        indexed_doc_count() + registered_doc_count() 会各自开连接跑
+        get_stats（28.5 万语料下每次 ~1s，即使有 node_count 覆盖索引）。
+        """
+        return index_probe.index_counts(self.index_path)
+
     def file_stats(self) -> tuple[int, dict[str, int]]:
         """(总字节数, 扩展名分布)——供 /api/status，实例级缓存。
 
@@ -271,12 +280,33 @@ class IndexManager:
         计数变化（索引增删）才重算。同数替换（改内容不改文件数）下显示值
         可能略滞后，status 展示可接受。统计本体在 index_probe（AP-9）。
         """
-        n = self.indexed_doc_count()
+        n, _ghosts = self.index_counts()
         if self._file_stats_cache and self._file_stats_cache[0] == n:
             return self._file_stats_cache[1]
         (total, ext_counts), _ = index_probe.file_stats(self.index_path)
         self._file_stats_cache = (n, (total, ext_counts))
         return total, ext_counts
+
+    def file_stats_nonblocking(self) -> tuple[int, dict[str, int]] | None:
+        """file_stats 的非阻塞形态：缓存命中直接返回；冷缓存返回 None 并
+        起后台线程预热（下次调用命中）。
+
+        /api/status 消费：total_size_bytes / file_types 前端无渲染消费，
+        不值得让 workdir / model_name 等轻字段陪着冷缓存的全量 stat
+        （28.5 万语料 ~24s）一起等。None 时 status 返回占位值 0 / {}。
+        """
+        n, _ghosts = self.index_counts()
+        if self._file_stats_cache and self._file_stats_cache[0] == n:
+            return self._file_stats_cache[1]
+
+        def _warm():
+            try:
+                self.file_stats()
+            except Exception:  # noqa: BLE001
+                logger.debug("file_stats background warmup failed", exc_info=True)
+
+        threading.Thread(target=_warm, daemon=True, name="file-stats-warmup").start()
+        return None
 
     def indexed_source_paths(self) -> list[str]:
         """已索引文档的 source_path 列表（转发 index_probe，成本口径见该模块）。"""
