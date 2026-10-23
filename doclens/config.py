@@ -135,9 +135,9 @@ class CortexConfig(BaseSettings):
     )
 
     # 匹配参数
-    # max_span：紧密度判定半径（词数，CJK 每字一词——2026-10-23 由字符口径
-    # 改词口径：旧 50 字符对英文 6 词 query 平均本身超长，proximity 恒 0.5
-    # 无区分度；词口径与 search_context_before/after 同源，中英同预算）
+    # max_span：紧密度判定半径（当量词数：非 CJK 词 1，CJK 字 0.5——
+    # 2026-10-23 由字符口径改当量词口径：旧 50 字符对英文 6 词 query
+    # 平均本身超长，proximity 恒 0.5 无区分度；当量词口径中英文信息量对齐）
     max_span: int = Field(default=50)
     min_keywords_per_line: int = Field(default=2)
 
@@ -157,19 +157,20 @@ class CortexConfig(BaseSettings):
         default=(200 + 600) * 8, description="单条搜索结果的字符兜底（防超长无空白段；默认与词窗口同量级）"
     )
     max_total_chars: int = Field(default=10000)
-    # 搜索结果片段统一窗口：锚点前/后词数（grep 与 search 同口径；
-    # 词：CJK 每字一词，其余按空白切分，与 max_read_words 同源；
-    # grep 正则自声明跨度时保留跨度语义，另加前后窗口）
+    # 搜索结果片段统一窗口：锚点前/后**当量词**数（grep 与 search 同口径；
+    # 当量词：非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈ 2 汉字，中英文
+    # 同预算下信息量对齐；grep 正则自声明跨度时保留跨度语义，另加前后窗口）
     search_context_before: int = Field(
-        default=200, description="搜索结果片段：锚点前词数（CJK 每字一词，其余按空白切分）"
+        default=200, description="搜索结果片段：锚点前当量词数（非 CJK 词 1，CJK 字 0.5）"
     )
     search_context_after: int = Field(
-        default=600, description="搜索结果片段：锚点后词数（CJK 每字一词，其余按空白切分）"
+        default=600, description="搜索结果片段：锚点后当量词数（非 CJK 词 1，CJK 字 0.5）"
     )
     # grep 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果。
     # 高级项，仅 env 可调，不在设置页/预设中暴露。
     grep_match_max_chars: int = Field(default=2000)
-    # read_document 单次输出词数预算（词：CJK 每字一词，其余按空白切分）
+    # read_document 单次输出预算（当量词：非 CJK 词 1，CJK 字 0.5——
+    # 1 英文词 ≈ 2 汉字，中英文同预算信息量对齐；离散词序号 API 不变）
     max_read_words: int = Field(default=4000)
 
     # read_document 输出选项

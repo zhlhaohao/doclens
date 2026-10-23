@@ -19,27 +19,30 @@ def calc_proximity_score(text, keywords, max_span=20):
     Args:
         text: 要检查的文本
         keywords: 关键词列表
-        max_span: 关键词最大跨度（**词数**，与统一窗口模型同源：CJK 每
-            字一词，其余按空白切分）。旧字符口径下英文 6 词 query 平均
-            本身就 >50 字符，proximity 恒 0.5 无区分度；词口径下中英文
-            同预算（与 search_context_before/after 一致）。
+        max_span: 关键词最大跨度（**当量词数**：非 CJK 词计 1，CJK 字计
+            0.5——1 英文词 ≈ 2 汉字，中英文同预算下信息量对齐。历史：
+            字符口径（旧）对英文 6 词 query 无区分度；纯词口径（过渡版）
+            对中文窗口偏小）。
     Returns:
         (matched_count, proximity_score) - 匹配词数和紧邻分数
             proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
     """
     matched_kws = _matched_keywords(text, keywords)
-    positions = []
+    spans = []  # (首字符位置, 末字符位置)
 
     for kw in matched_kws:
         idx = text.lower().find(kw.lower())
         if idx >= 0:
-            positions.append(idx)
+            spans.append((idx, idx + len(kw) - 1))
 
-    if not positions:
+    if not spans:
         return 0, 0
 
-    matched = len(positions)
-    span = _word_distance(text, min(positions), max(positions)) if len(positions) > 1 else 0
+    matched = len(spans)
+    if matched > 1:
+        span = _word_distance(text, min(s for s, _ in spans), max(e for _, e in spans))
+    else:
+        span = 0
 
     # 全部关键词都匹配且紧邻 = 最高分
     if matched == len(keywords) and span <= max_span:
@@ -48,20 +51,16 @@ def calc_proximity_score(text, keywords, max_span=20):
     return matched, 1
 
 
-def _word_distance(text: str, start_char: int, end_char: int) -> int:
-    """两个字符位置之间的词距（词数，含端点）。
+def _word_distance(text: str, start_char: int, end_char: int) -> float:
+    """两个字符位置之间的当量词距（含端点）。
 
-    与 word_window 的词定义同源（split_words_with_seps：CJK 每字一词，
-    其余按空白切分）。落在词中间的位置按该词计 1。
+    当量词口径（word_window.CJK_WORD_WEIGHT）：非 CJK 词计 1，CJK 字
+    计 0.5——中英文同一 max_span 预算下信息量对齐（1 英文词 ≈ 2 汉字）。
     """
-    from planify.tools.basic import split_words_with_seps
+    from doclens.word_window import count_equivalence_words
 
     segment = text[start_char:end_char + 1]
-    count = 0
-    for w, _sep in split_words_with_seps(segment):
-        if w:
-            count += 1
-    return max(count - 1, 0)
+    return max(count_equivalence_words(segment) - 1, 0)
 
 
 def matched_keywords(text, keywords):

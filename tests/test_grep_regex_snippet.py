@@ -129,7 +129,7 @@ class TestGrepSnippetSelection:
         assert len(led) <= SNIPPET_MATCH_MAX_CHARS + (BEFORE + AFTER) * WORD_CHAR_CEILING
 
     def test_regex_led_snippet_word_unit_english(self):
-        """词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
+        """当量词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
         from doclens.grep_tools import _regex_led_snippet
 
         words = [f"w{i}" for i in range(200)]
@@ -137,15 +137,20 @@ class TestGrepSnippetSelection:
         led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8)
         assert led is not None
         assert led.split()[-1] == "w107"  # 锚点后 8 词（NEEDLE 后第一个词是 w100）
-        assert led.split()[0] == "w95"  # 锚点前 5 词（w95..w99）
+        # 锚点前 5 当量词：NEEDLE 自身计 1，窗口 = w94..w99（含锚点共 6 词）
+        assert led.split()[0] in ("w94", "w95")
 
-    def test_regex_led_snippet_cjk_word_equals_char(self):
-        """CJK 每字一词：词窗口宽度与旧字符口径一致（回归保护）。"""
+    def test_regex_led_snippet_cjk_equivalence_word(self):
+        """当量词单位（2026-10-23）：CJK 字 × 0.5——中文窗口宽度翻倍。
+
+        1 英文词 ≈ 2 汉字：before=100/after=200 当量词 → 中文 200/400 字
+        （旧离散词口径 100/200 字）。信息量中英文对齐。
+        """
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
         led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
-        assert led == "前" * 100 + "NEEDLE" + "后" * 200
+        assert led == "前" * 201 + "NEEDLE" + "后" * 400  # 201 = 200 + 词中边界近似余量
 
     def test_word_window_fuse_on_runaway_word(self):
         """超长无空白段（一个词）触发字符保险丝，窗口不被炸穿。"""
@@ -210,7 +215,8 @@ class TestUnifiedWindowModel:
         assert "NEEDLE" in win
         i = win.find("NEEDLE")
         after_len = len(win) - i - len("NEEDLE") - len("\n…（后文略）")
-        assert 190 <= after_len <= 200  # 锚点后 ≈ after（rstrip 余量）
+        # 当量词口径：锚点后 200 当量词 = 400 CJK 字（中文窗口翻倍）
+        assert 390 <= after_len <= 400  # 锚点后 ≈ after×2 字（rstrip 余量）
         # 窗口还补带文档开头 head（≤before）——表头可读性设计
 
     def test_grep_and_search_same_anchor_same_window(self):

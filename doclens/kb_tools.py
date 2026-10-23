@@ -303,12 +303,15 @@ def _extract_keyword_window(
     """
     from doclens.word_window import WORD_CHAR_CEILING, end_after_words, start_before_words
 
-    # 短文早退：两个口径（字符兜底/词预算）都富余才整篇返回——只看
+    # 短文早退：两个口径（字符兜底/当量词预算）都富余才整篇返回——只看
     # max_chars 会让词窗口在小文本上失效（max_chars 升到词口径后，
-    # 2000 字中文文本 ≤6400 但 >150 词，旧早退会绕过 50/100 词窗口）
-    if max_chars is not None and len(text) <= max_chars and _count_words(text) <= before + after:
+    # 2000 字中文文本 ≤6400 但 >150 当量词，旧早退会绕过 50/100 词窗口）
+    from doclens.word_window import count_equivalence_words
+
+    ew = count_equivalence_words(text)
+    if max_chars is not None and len(text) <= max_chars and ew <= before + after:
         return text
-    if max_chars is None and _count_words(text) <= before + after:
+    if max_chars is None and ew <= before + after:
         return text
 
     # 收集所有关键词命中位置（大小写不敏感）
@@ -903,7 +906,9 @@ def _format_document_output(
         )
 
     content_parts = []
-    total_words = 0
+    from doclens.word_window import count_equivalence_words as _cew
+
+    total_words = 0.0
     for title, text, ls, le in all_text_parts:
         if title and not text.lstrip().startswith("#"):
             part = f"### {title}\n\n{text}"
@@ -913,7 +918,7 @@ def _format_document_output(
         else:
             part = text
 
-        part_words = _count_words(part)
+        part_words = _cew(part)
         if total_words + part_words > max_read_words:
             remaining = max_read_words - total_words
             if remaining > 200:
@@ -928,7 +933,7 @@ def _format_document_output(
     content = "\n\n".join(content_parts)
     output = header + "\n## 内容\n\n" + content
 
-    total_doc_words = sum(_count_words(t) for _, t, _, _ in all_text_parts)
+    total_doc_words = sum(_cew(t) for _, t, _, _ in all_text_parts)
     if total_doc_words > max_read_words:
         output += "\n\n（内容已截断。使用 start_word/end_word 或 section 参数读取后续内容。）"
 
@@ -940,15 +945,26 @@ def _split_words_cjk(text: str) -> list[str]:
     return [w for w, _s in split_words_with_seps(text)]
 
 
-def _truncate_to_word_budget(text: str, max_words: int) -> Tuple[str, bool]:
-    """按词数预算截断（词：CJK 每字一词，其余按空白切分），尽量落在段落边界。
+def _truncate_to_word_budget(text: str, max_words: float) -> Tuple[str, bool]:
+    """按当量词预算截断（非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈ 2 汉字），
+    尽量落在段落边界。
 
     Returns: (截断后文本, 是否发生了截断)
     """
-    pieces = split_words_with_seps(text)
-    if len(pieces) <= max_words:
+    from doclens.word_window import count_equivalence_words
+
+    if count_equivalence_words(text) <= max_words:
         return text, False
-    kept = "".join(w + s for w, s in pieces[:max_words])
+    pieces = split_words_with_seps(text)
+    kept = ""
+    acc = 0.0
+    for w, s in pieces:
+        if w:
+            from doclens.word_window import word_weight
+            acc += word_weight(w)
+            if acc > max_words:
+                break
+        kept += w + s
     # 优先落在段落边界，其次行边界
     last_para = kept.rfind("\n\n")
     if last_para > len(kept) // 2:
@@ -997,9 +1013,19 @@ def _format_word_range(
     sliced = words[start_idx:end_idx]
     shown = sliced
     truncated = ""
-    if len(sliced) > max_read_words:
-        # 按词数预算截断，并告知实际读到的词位置，供下一轮续读
-        shown = sliced[:max_read_words]
+    # 预算按当量词（中文 2 字计 1）：序号仍离散词，但单次读取量与
+    # max_read_words 的当量词口径一致
+    from doclens.word_window import word_weight
+
+    acc = 0.0
+    cut = len(sliced)
+    for i, w in enumerate(sliced):
+        acc += word_weight(w)
+        if acc > max_read_words:
+            cut = i
+            break
+    if cut < len(sliced):
+        shown = sliced[:cut]
         truncated = (
             f"\n\n（内容已截断。使用 start_word={start_idx + len(shown) + 1} 续读后续内容。）"
         )
@@ -1307,7 +1333,9 @@ def _load_tree_for_info(
 
 
 def _count_words(text: str) -> int:
-    """词数统计，与 read_document 的 start_word/end_word 词序号语义一致。"""
+    """词数统计（离散词序号口径：CJK 每字一词），与 read_document 的
+    start_word/end_word 词序号语义一致——序号 API 冻结，不用当量词。
+    预算判断（截断上限）请用 word_window.count_equivalence_words。"""
     return len(_split_words_cjk(text)) if text else 0
 
 
@@ -1350,7 +1378,11 @@ def _build_info_toc(nodes: list[dict], depth: int = 0) -> Tuple[list[str], int]:
             if depth == 0:
                 wc = _count_words(_subtree_text(node))
                 if wc:
-                    line += f"（约 {wc} 词）"
+                    # 当量词（中文 2 字计 1）——与 max_read_words 预算同口径，
+                    # AI 据此估算 section 是否超出单次读取上限
+                    from doclens.word_window import count_equivalence_words as _cew
+                    ew = _cew(_subtree_text(node))
+                    line += f"（约 {ew:.0f} 词）"
             lines.append(line)
         child_lines, child_count = _build_info_toc(
             children, depth + 1 if title else depth

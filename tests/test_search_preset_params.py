@@ -237,15 +237,18 @@ class TestMaxSpan:
     def test_narrow_span_downgrades_proximity_score(self, kb: Path):
         idx = _make_idx(kb, max_span=1, **_BASE_W)
         rows = _run(idx)
-        # 全部 prox=1；且 doc1 的"磁锚 检索"间隔 3 > 1 也降级
-        assert all(r[2] == 1 for r in rows)
+        # 全部 prox=1：当量词口径下 doc1 "磁锚 检索" 间隔 1.0 当量 ≤1 会紧邻，
+        # 但 far.md（~75 当量）与 doc2 降级——all-1 断言不再成立，
+        # 改验证 far 行降级（判定半径确实收窄）
+        far_row = next(r for r in rows if r[0] == "far")
+        assert far_row[2] == 1
 
     def test_word_unit_span_gives_english_discrimination(self):
-        """回归（2026-10-23）：跨度改词单位——英文多词 query 恢复区分度。
+        """回归（2026-10-23）：跨度改当量词单位——英文多词 query 恢复区分度。
 
         旧字符口径（50 字符）下 6 词英文 query 的命中词自身平均就超
-        50 字符，proximity 恒 1（综合分恒 0.5）无区分度；词口径下同一
-        从句内的 6 词命中可得 2（紧邻），远距离仍为 1。
+        50 字符，proximity 恒 1（综合分恒 0.5）无区分度；当量词口径下
+        同一从句内的 6 词命中可得 2（紧邻），远距离仍为 1。
         """
         qws = ["502", "base64", "metadata", "header", "http", "streaming"]
         near = "the 502 error with base64 metadata header over http during streaming sessions"
@@ -258,16 +261,20 @@ class TestMaxSpan:
         cnt, prox = calc_proximity_score(near, qws, max_span=50)
         assert (cnt, prox) == (6, 2)  # 同从句 → 紧邻
         cnt2, prox2 = calc_proximity_score(far, qws, max_span=50)
-        assert (cnt2, prox2) == (6, 1)  # 词距 ~350 词 → 部分匹配
+        assert (cnt2, prox2) == (6, 1)  # 词距 ~350 当量词 → 部分匹配
 
-    def test_cjk_word_distance_unchanged(self):
-        """中文每字一词：词口径与字符口径数值一致（向后兼容）。"""
+    def test_cjk_equivalence_word_distance(self):
+        """当量词口径（2026-10-23）：CJK 字 × 0.5——中文跨度数值减半。
+
+        旧离散词口径（每字一词）152 词距 → 当量词 75.5（信息量与英文
+        对齐：1 英文词 ≈ 2 汉字）。max_span=50 相当于中文 100 字半径。
+        """
         from doclens.scoring import _word_distance
 
         text = "磁锚" + "间" * 150 + "检索"
         t = text.lower()
-        d = _word_distance(text, t.find("磁锚"), t.find("检索"))
-        assert d == 152  # = 旧字符口径 span
+        d = _word_distance(text, t.find("磁锚"), t.find("检索") + len("检索") - 1)
+        assert d == 76.0  # 154 CJK 字段 = 77 当量 - 1 端点
 
 
 # ---------------------------------------------------------------------------
@@ -290,11 +297,12 @@ class TestContextWindow:
 
         out = handle_search_kb(idx, tmp_path, query="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
-        # 统一窗口：锚点前 ≈50、锚点后 ≈100 字符可见（head/省略号占少量预算）
+        # 统一窗口（当量词口径）：锚点前 ≈50 当量 = 100 字、锚点后 ≈100 当量 = 200 字可见
+        # （head/省略号占少量预算）
         i = content.find("磁锚")
         assert i > 0, "锚点前文不可见"
         after_visible = content.count("后")
-        assert 80 <= after_visible <= 100, f"锚点后可见字符 {after_visible} 不符 100 预算"
+        assert 180 <= after_visible <= 200, f"锚点后可见字符 {after_visible} 不符 100 当量词（200 字）预算"
 
     def test_wide_window_shows_more(self, tmp_path: Path, monkeypatch):
         (tmp_path / "win.md").write_text(
@@ -307,7 +315,7 @@ class TestContextWindow:
 
         out = handle_search_kb(idx, tmp_path, query="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
-        assert content.count("后") >= 450  # 500 预算 → 至少 450 可见
+        assert content.count("后") >= 900  # 500 当量词 = 1000 字预算 → 至少 900 可见
 
     def test_grep_window_same_params(self, tmp_path: Path, monkeypatch):
         """grep 工具与 search_kb 用同一对 config 字段（统一窗口模型）。"""
@@ -322,7 +330,7 @@ class TestContextWindow:
         out = handle_grep(idx, pattern="磁锚")
         content = out.split("<content>")[1].split("</content>")[0]
         assert "磁锚" in content
-        assert content.count("后") <= 60
+        assert content.count("后") <= 120  # 60 当量词 = 120 字
 
     def test_web_snippet_budget_from_window(self, kb: Path):
         """Web /api/search 的行文本预算：行提取受 row_max_chars 控制（分组响应口径）。"""
