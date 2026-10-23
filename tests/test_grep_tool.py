@@ -77,6 +77,8 @@ class TestBuildRgArgs:
     def test_defaults_files_mode(self):
         args = build_rg_args("foo", output_mode="files_with_matches")
         assert "--hidden" in args
+        # 非 git 目录也让 .gitignore 生效（rg 默认 require_git 会静默跳过）
+        assert "--no-require-git" in args
         # VCS 目录恒排除
         for d in (".git", ".svn", ".hg", ".bzr", ".jj", ".sl"):
             assert f"!{d}" in args

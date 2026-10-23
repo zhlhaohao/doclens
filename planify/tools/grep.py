@@ -17,6 +17,9 @@
 - rg exit code 语义：0/1 均成功（1 = 无匹配）；超时零结果 → 明确报错——
   区分「无匹配」与「没搜完」，防模型基于错误的空结果继续推理；
   超时但有部分输出 → 返回部分结果并丢弃最后一行（可能是半行）
+- --no-require-git：rg 默认只在 git 仓库内应用 .gitignore（require_git），
+  非 git 目录下 .gitignore 被静默跳过——知识库常是纯目录而非仓库，这里
+  显式放开让 .gitignore 规则无条件生效（.rgignore/.ignore 本就无条件）
 
 安全（本项目特有，Claude Code 无对应物）：path 与 read_file 同一通路
 （ADR-0021）——非门禁链路 safe_path 硬拒绝 workdir 外路径；gui_mode 由
@@ -161,7 +164,7 @@ def build_rg_args(
     上下文参数优先级：context > -C > (-B + -A)；仅 content 模式生效。
     pattern 以 - 开头时用 -e 传递，防 rg 误解析为命令行选项。
     """
-    args = ["--hidden"]
+    args = ["--hidden", "--no-require-git"]
     for d in VCS_DIRS_TO_EXCLUDE:
         args += ["--glob", f"!{d}"]
     args += ["--max-columns", str(MAX_COLUMNS)]
