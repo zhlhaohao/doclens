@@ -19,7 +19,10 @@ def calc_proximity_score(text, keywords, max_span=20):
     Args:
         text: 要检查的文本
         keywords: 关键词列表
-        max_span: 关键词最大跨度（字符数），超过则不算紧邻
+        max_span: 关键词最大跨度（**词数**，与统一窗口模型同源：CJK 每
+            字一词，其余按空白切分）。旧字符口径下英文 6 词 query 平均
+            本身就 >50 字符，proximity 恒 0.5 无区分度；词口径下中英文
+            同预算（与 search_context_before/after 一致）。
     Returns:
         (matched_count, proximity_score) - 匹配词数和紧邻分数
             proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
@@ -36,13 +39,29 @@ def calc_proximity_score(text, keywords, max_span=20):
         return 0, 0
 
     matched = len(positions)
-    span = max(positions) - min(positions) if len(positions) > 1 else 0
+    span = _word_distance(text, min(positions), max(positions)) if len(positions) > 1 else 0
 
     # 全部关键词都匹配且紧邻 = 最高分
     if matched == len(keywords) and span <= max_span:
         return matched, 2
     # 部分关键词匹配 = 中等分数（按匹配比例）
     return matched, 1
+
+
+def _word_distance(text: str, start_char: int, end_char: int) -> int:
+    """两个字符位置之间的词距（词数，含端点）。
+
+    与 word_window 的词定义同源（split_words_with_seps：CJK 每字一词，
+    其余按空白切分）。落在词中间的位置按该词计 1。
+    """
+    from planify.tools.basic import split_words_with_seps
+
+    segment = text[start_char:end_char + 1]
+    count = 0
+    for w, _sep in split_words_with_seps(segment):
+        if w:
+            count += 1
+    return max(count - 1, 0)
 
 
 def matched_keywords(text, keywords):

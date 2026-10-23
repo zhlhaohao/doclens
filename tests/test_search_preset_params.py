@@ -240,6 +240,35 @@ class TestMaxSpan:
         # 全部 prox=1；且 doc1 的"磁锚 检索"间隔 3 > 1 也降级
         assert all(r[2] == 1 for r in rows)
 
+    def test_word_unit_span_gives_english_discrimination(self):
+        """回归（2026-10-23）：跨度改词单位——英文多词 query 恢复区分度。
+
+        旧字符口径（50 字符）下 6 词英文 query 的命中词自身平均就超
+        50 字符，proximity 恒 1（综合分恒 0.5）无区分度；词口径下同一
+        从句内的 6 词命中可得 2（紧邻），远距离仍为 1。
+        """
+        qws = ["502", "base64", "metadata", "header", "http", "streaming"]
+        near = "the 502 error with base64 metadata header over http during streaming sessions"
+        far = (
+            "502 error at start "
+            + "filler words here and there with more filler content repeated "
+            * 30
+            + "then base64 metadata header http streaming at end"
+        )
+        cnt, prox = calc_proximity_score(near, qws, max_span=50)
+        assert (cnt, prox) == (6, 2)  # 同从句 → 紧邻
+        cnt2, prox2 = calc_proximity_score(far, qws, max_span=50)
+        assert (cnt2, prox2) == (6, 1)  # 词距 ~350 词 → 部分匹配
+
+    def test_cjk_word_distance_unchanged(self):
+        """中文每字一词：词口径与字符口径数值一致（向后兼容）。"""
+        from doclens.scoring import _word_distance
+
+        text = "磁锚" + "间" * 150 + "检索"
+        t = text.lower()
+        d = _word_distance(text, t.find("磁锚"), t.find("检索"))
+        assert d == 152  # = 旧字符口径 span
+
 
 # ---------------------------------------------------------------------------
 # 窗口参数：search_context_before / after —— grep 与 search 同口径

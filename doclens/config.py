@@ -135,6 +135,9 @@ class CortexConfig(BaseSettings):
     )
 
     # 匹配参数
+    # max_span：紧密度判定半径（词数，CJK 每字一词——2026-10-23 由字符口径
+    # 改词口径：旧 50 字符对英文 6 词 query 平均本身超长，proximity 恒 0.5
+    # 无区分度；词口径与 search_context_before/after 同源，中英同预算）
     max_span: int = Field(default=50)
     min_keywords_per_line: int = Field(default=2)
 
