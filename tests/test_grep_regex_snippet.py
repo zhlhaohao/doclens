@@ -273,6 +273,47 @@ class TestUnifiedWindowModel:
         assert content.startswith("第29题")
         assert len(content) == 300  # 贪婪匹配体被 env 上限截到 300
 
+    def test_window_clamp_keeps_word_boundary_and_no_head_overlap(self):
+        """回归（2026-10-23 trace 实证）：锚点前词回退到 0 但触发字符 clamp 时，
+        窗口不得从单词中间开始；head 段不得与 excerpt 开头重复。
+
+        场景还原：英文聊天记录，锚点 ~427 字符处，before=200 词回退到 0，
+        clamp（best_start - win_start > max_chars//2）把起点硬推到 27——
+        旧实现落在 "H|ey" 词中间，且 head（前 200 字符）与 excerpt 重叠
+        173 字符，…（中部略） 两侧几乎同文。
+        """
+        from doclens.kb_tools import _extract_keyword_window
+
+        # 构造：开头段（~460 字符）含一次命中，其后长文本中密集命中
+        head_part = (
+            "channel\n\nalice: Hey folks, seeing intermittent 502s hitting the "
+            "Hosted API during streaming inference for a small subset of "
+            "requests. Only happens from one client IP range, about ten "
+            "percent of their streams fail mid-response.\n\n"
+        )
+        filler = "carol: some filler chatter line without keywords here\n"
+        tail_part = "\n".join(f"dan: header check {i} streaming 502 header" for i in range(60))
+        text = head_part + filler * 3 + tail_part
+
+        out = _extract_keyword_window(text, ["502", "streaming", "header"], 200, 600, max_chars=800)
+
+        # 1) 锚点必须仍在窗口内
+        assert "502" in out
+        # 2) 窗口起点在词边界：中部略标记后的 excerpt 不以半词开头
+        i = out.find("…（中部略）")
+        if i >= 0:
+            excerpt_head = out[i + len("…（中部略）"):].lstrip("\n")[:20]
+            # 词边界 = 前一字符是空白/换行，或 excerpt 就是全文开头
+            start_in_text = text.find(excerpt_head)
+            assert start_in_text == 0 or text[start_in_text - 1] in " \t\n\r"
+        # 3) head 与 excerpt 不重叠：标记前后的文本段不同段出现
+        if i >= 0:
+            head_seg = out[:i].strip()
+            excerpt_seg = out[i + len("…（中部略）"):].lstrip("\n")
+            # head 的最后一行不得原样出现在 excerpt 开头部分（重复 ≥30 字符）
+            last_line = head_seg.split("\n")[-1]
+            assert len(last_line) < 30 or last_line not in excerpt_seg[: len(last_line) + 50]
+
 
 # ---------------------------------------------------------------------------
 # 引擎一致性：SQLite REGEXP 与 rg --ignore-case 大小写口径对齐

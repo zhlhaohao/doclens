@@ -349,13 +349,18 @@ def _extract_keyword_window(
     # 时夹回 max_chars 的一半（保持旧保险丝语义）
     win_start = start_before_words(text, best_start, before)
     if max_chars is not None and best_start - win_start > max_chars // 2:
-        win_start = max(0, best_start - max_chars // 2)
+        # clamp 时对齐到词边界，且不越过 0——否则窗口可能从单词中间
+        # 开始（半词残留），旧版还有负值边界（best_start < max_chars//2 时）
+        clamped = start_before_words(text, best_start - max_chars // 2, 1)
+        win_start = max(0, min(win_start, clamped))
 
     # 窗口不在开头时，预留预算补带文档开头（标题/表头），
-    # 否则大表格中部/尾部的行缺列名，LLM 无法解读
+    # 否则大表格中部/尾部的行缺列名，LLM 无法解读。
+    # head 只取到 win_start 之前——excerpt 本就覆盖 [win_start, …)，
+    # head 越过 win_start 会与 excerpt 开头重复（中部略标记两侧同文）
     head = ""
     if win_start > 0:
-        head_raw = text[:_HEAD_BUDGET_CHARS]
+        head_raw = text[:min(_HEAD_BUDGET_CHARS, win_start)]
         nl = head_raw.rfind("\n")
         head = (head_raw[:nl] if nl > 40 else head_raw).rstrip()
 
