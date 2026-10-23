@@ -366,8 +366,9 @@ class CortexConfig(BaseSettings):
     planify_max_tool_rounds: int = Field(
         default=0,
         alias="PLANIFY_MAX_TOOL_ROUNDS",
-        description="单轮问答工具调用轮数软上限：超过后每轮注入停止提醒；"
-        "硬阈值 = 本值 + 10，达到后强制终答；0=不限（默认）。",
+        description="单轮问答工具调用轮数硬上限：达到后强制终答；"
+        "软阈值 = 本值 70%（向下取整），超过后每轮注入停止提醒；"
+        "0=不限（默认）。",
     )
     planify_max_subagent_rounds: int = Field(
         default=30,
