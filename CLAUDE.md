@@ -17,7 +17,7 @@ python -m playwright install chromium --only-shell   # webfetch 二级降级需�
 - worktree 开发复用主仓库 `../cortex/.venv`，无需重建。
 - editable install 改源码即生效（`doclens.exe` 与 `python -m doclens` 都解析本仓库源码）。
 - pip 刷屏回溯 = 依赖无解：`uv pip compile pyproject.toml --extra dev -o -` 出冲突报告。
-- 发包统一入口 `./publish-pypi.ps1 <treesearch|planify|doclens>`（pwsh 7，--dry-run 预演）；凭据在 repo 根 `.pypirc`（gitignored）；发行版依赖 PyPI 版本——改 `treesearch/**`/`planify/**` 不发版则发行版停旧版。
+- 发版流程见 release 技能（`doclens/skills/release/`）：全量 pytest 必须后台跑（background_run），逐包盘点→dry-run→发包→人工 commit/push。
 
 ## 模块边界（红线，AI 编码必须遵守）
 
@@ -81,9 +81,8 @@ planify/                    # AI 框架：bootstrap / streaming/（runner 主循
 | 前端其他组件 | 同名 spec |
 | 前端定位/滚动/分页/预览（跨前后端旅程） | `npm run test:e2e:search`（自动语料 + 7890 后端） |
 | 任何层改完 | `pytest tests/test_architecture.py -q`（红线守卫） |
-| 发版前（release / bump / tag / push 主分支） | 全量 `pytest tests/ -q` |
 
-- 最小必要集 = 同名约定 + 表内命令 + `test_architecture.py`；全量归发版前。
+- 最小必要集 = 同名约定 + 表内命令 + `test_architecture.py`；全量与发版流程见 release 技能（必须 background_run 后台跑，bash 前台 120s 被掐）。
 - E2E fixtures 语料是断言的一部分——改语料须同步改 spec 断言。
 
 ## 启动脚本 start-app.ps1
