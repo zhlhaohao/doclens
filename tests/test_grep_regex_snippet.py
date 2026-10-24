@@ -90,7 +90,7 @@ class TestGrepSnippetSelection:
     def test_regex_led_snippet_unified_window(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        led = _regex_led_snippet(TEXT, [PAT], before=BEFORE, after=AFTER)
+        led = _regex_led_snippet(TEXT, [PAT], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led is not None
         assert "第29题" in led
         assert "医疗" in led  # 选项内容在跨度内
@@ -101,7 +101,7 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
+        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led is not None
         assert led.startswith("前" * 100)
         assert led.endswith("后" * 200)
@@ -110,19 +110,19 @@ class TestGrepSnippetSelection:
     def test_regex_led_snippet_none_on_invalid(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        assert _regex_led_snippet(TEXT, ["["]) is None
+        assert _regex_led_snippet(TEXT, ["["], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS) is None
 
     def test_regex_led_snippet_none_on_no_hit(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        assert _regex_led_snippet(TEXT, ["不存在的词"]) is None
+        assert _regex_led_snippet(TEXT, ["不存在的词"], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS) is None
 
     def test_regex_led_snippet_greedy_capped(self):
         from doclens.grep_tools import _regex_led_snippet
         from doclens.word_window import WORD_CHAR_CEILING
 
         text = "第29题" + "A" * 5000
-        led = _regex_led_snippet(text, [r"第29题[\s\S]*"], before=BEFORE, after=AFTER)
+        led = _regex_led_snippet(text, [r"第29题[\s\S]*"], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led is not None and led.startswith("第29题")
         # 词口径：命中体 cap 字符 + 前后词窗的字符保险丝上限。A*5000 是
         # 一个无空白「词」，在 after 词数预算内吃满剩余是词定义的正确语义
@@ -134,7 +134,7 @@ class TestGrepSnippetSelection:
 
         words = [f"w{i}" for i in range(200)]
         text = " ".join(words[:100]) + " NEEDLE " + " ".join(words[100:])
-        led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8)
+        led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led is not None
         assert led.split()[-1] == "w107"  # 锚点后 8 词（NEEDLE 后第一个词是 w100）
         # 锚点前 5 当量词：NEEDLE 自身计 1，窗口 = w94..w99（含锚点共 6 词）
@@ -149,7 +149,7 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
+        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led == "前" * 201 + "NEEDLE" + "后" * 400  # 201 = 200 + 词中边界近似余量
 
     def test_word_window_fuse_on_runaway_word(self):
@@ -157,7 +157,7 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "NEEDLE" + "A" * 30000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=0, after=10)
+        led = _regex_led_snippet(text, ["NEEDLE"], before=0, after=10, match_max=SNIPPET_MATCH_MAX_CHARS)
         assert led is not None
         assert len(led) <= len("NEEDLE") + 10 * 8  # 10 词 × WORD_CHAR_CEILING
 
@@ -173,6 +173,8 @@ class TestGrepSnippetSelection:
             query_words=[PAT],
             context_before=BEFORE,
             context_after=AFTER,
+            match_max=SNIPPET_MATCH_MAX_CHARS,
+            max_total_words=10000,
         )
         assert "第29题" in out
         assert "医疗" in out
@@ -225,7 +227,7 @@ class TestUnifiedWindowModel:
         from doclens.kb_tools import _extract_keyword_window
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        g = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200)
+        g = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
         k = _extract_keyword_window(text, ["needle"], before=100, after=200)
         # 两窗口都覆盖锚点前后核心区（尾部余量允许省略标记/rstrip 差异）
         assert g is not None and "NEEDLE" in g and "NEEDLE" in k
@@ -274,6 +276,7 @@ class TestUnifiedWindowModel:
             context_before=0,
             context_after=0,
             match_max=300,
+            max_total_words=10000,
         )
         content = out.split("<content>")[1].split("</content>")[0]
         assert content.startswith("第29题")
@@ -328,17 +331,17 @@ class TestUnifiedWindowModel:
         新默认 (200+600)×8：小英文文档（≤800 词）整篇返回。
         """
         from doclens.config import CortexConfig
-        from doclens.kb_tools import MAX_CONTEXT_CHARS_PER_RESULT, _extract_keyword_window
+        from doclens.kb_tools import _extract_keyword_window
 
-        assert MAX_CONTEXT_CHARS_PER_RESULT == (200 + 600) * 8
-        assert CortexConfig().max_context_chars_per_result == MAX_CONTEXT_CHARS_PER_RESULT
+        max_chars = CortexConfig().max_context_chars_per_result
+        assert max_chars == (200 + 600) * 8
 
         # ~394 词 / 2435 字符的英文小文档：词预算内，整篇返回
         # （≤max_chars 时走早退分支原样返回，含尾换行）
         head = "channel\n\nalice: Hey folks seeing intermittent 502s during streaming.\n\n"
         text = head + ("bob: plain filler chatter line number here\n" * 55)
         out = _extract_keyword_window(
-            text, ["502", "streaming"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+            text, ["502", "streaming"], 200, 600, max_chars=max_chars
         )
         assert out == text  # 无略标记，整篇（含尾换行）
         assert "…（中部略）" not in out and "…（后文略）" not in out
@@ -346,7 +349,7 @@ class TestUnifiedWindowModel:
         # 超长无空白段（单词 > 兜底）：保险丝仍生效
         blob = "x" * 20000 + " needle " + "y" * 20000
         out2 = _extract_keyword_window(
-            blob, ["needle"], 200, 600, max_chars=MAX_CONTEXT_CHARS_PER_RESULT
+            blob, ["needle"], 200, 600, max_chars=max_chars
         )
         assert "needle" in out2
         assert len(out2) < 20000  # 兜底截断，未被超长词炸穿

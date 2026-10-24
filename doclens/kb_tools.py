@@ -147,10 +147,6 @@ READ_DOCUMENT_TOOL = {
 # 格式化常量（默认值，运行时从 idx_manager 配置读取）
 # ---------------------------------------------------------------------------
 
-MAX_CONTEXT_CHARS_PER_RESULT = (200 + 600) * 8
-MAX_TOTAL_WORDS = 10000
-# 字符兜底默认与词窗口同量级（(200+600)×8）：旧 800 在英文语料下比词预算
-# （800 词 ≈ 4500 字符）紧 5-6 倍，词窗口从未真正生效——小文档也出略标记
 # 窗口不在开头时补文档开头（标题/表头）的字符预算——独立于词窗口参数
 # （旧实现 min(200, before) 的 before 现为词单位，语义分离）
 _HEAD_BUDGET_CHARS = 200
@@ -388,11 +384,11 @@ def _format_kb_results(
     doc_nodes_map: dict[str, list[dict]],
     doc_title_map: dict[str, str],
     max_results: int,
-    max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
-    max_total_words: int = MAX_TOTAL_WORDS,
+    max_context_chars_per_result: int,
+    max_total_words: int,
+    context_before: int,
+    context_after: int,
     on_miss: Optional[Callable[[str], str]] = None,
-    context_before: int = 200,
-    context_after: int = 600,
 ) -> str:
     """格式化 FTS 搜索结果为 XML 结构化文本，便于 LLM 区分元信息和原始内容。
 

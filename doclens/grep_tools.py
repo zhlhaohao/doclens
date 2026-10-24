@@ -15,8 +15,6 @@ from doclens.search_targets import (
     format_missed_note,
     resolve_search_targets,
 )
-from treesearch.fts import SNIPPET_MATCH_MAX_CHARS
-
 from doclens.word_window import count_equivalence_words
 
 if TYPE_CHECKING:
@@ -29,18 +27,10 @@ logger = logging.getLogger(__name__)
 # 常量
 # ---------------------------------------------------------------------------
 
-# grep 结果总预算默认值（当量词：非 CJK 词 1，CJK 字 0.5）。
-# 运行时从 config（grep_max_total_words）读取；旧字符口径 8000 字符下
-# 单条窗口摘录 ~4000+ 字符，只显示 1-3 条结果。
-MAX_TOTAL_WORDS = 10000
-
-# Agent 侧 max_results 参数上限（防一次灌爆上下文；输出另有总预算限制）
+# Agent 侧 max_results 参数上限（防一次灌爆上下文；输出另有总预算限制）。
+# 窗口/预算参数（片段窗口、匹配体上限、总预算）无模块级默认值——
+# 一律从 config（idx_manager）注入，默认值唯一定义在 CortexConfig。
 MAX_RESULTS_CAP = 500
-
-# 片段窗口默认值（当量词：非 CJK 词 1，CJK 字 0.5）——与 config 的
-# search_context_before/after 默认一致；实际调用从 config 注入。
-SNIPPET_CONTEXT_BEFORE_WORDS = 200
-SNIPPET_CONTEXT_AFTER_WORDS = 600
 
 # ---------------------------------------------------------------------------
 # Anthropic tool use schema
@@ -159,11 +149,11 @@ def _format_agent_output(
     path_map: dict[str, str],
     total_terms: int,
     query_words: list[str],
+    context_before: int,
+    context_after: int,
+    match_max: int,
+    max_total_words: int,
     on_miss: Optional[Callable[[str], str]] = None,
-    context_before: int = SNIPPET_CONTEXT_BEFORE_WORDS,
-    context_after: int = SNIPPET_CONTEXT_AFTER_WORDS,
-    match_max: int = SNIPPET_MATCH_MAX_CHARS,
-    max_total_words: int = MAX_TOTAL_WORDS,
 ) -> str:
     """将搜索结果格式化为结构化 XML，与 search_kb 输出格式对齐。
 
@@ -255,9 +245,9 @@ def _format_agent_output(
 def _regex_led_snippet(
     text: str,
     terms: list[str],
-    before: int = SNIPPET_CONTEXT_BEFORE_WORDS,
-    after: int = SNIPPET_CONTEXT_AFTER_WORDS,
-    match_max: int = SNIPPET_MATCH_MAX_CHARS,
+    before: int,
+    after: int,
+    match_max: int,
 ) -> str | None:
     """对全文跑词项正则，返回统一锚点窗口（正则不合法时返回 None）。
 
