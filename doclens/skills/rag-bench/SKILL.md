@@ -9,6 +9,10 @@
 - **不启动被测应用**：应用由用户自己在目标知识库目录起，本技能只接受 `--port`（默认主机 127.0.0.1）。脚本不启动、不重启、不 kill 任何进程。
 - **不驱动浏览器**：问答走 `POST /api/chat`（SSE 流），与 Web UI 完全同一条后端链路；思考过程 / 工具轨迹 / 正文 / 用量都从同一流里读。
 - **不派子代理**：全流程由脚本 + 主代理完成，任何环节都不派 task 子代理。
+- **只有 `run` 用 `background_run`**（长跑，bash 120s 会掐断）；其余子命令（`stats`/`check`/`pick`/`report`）和单题 `ask` 都直接 `bash` 前台跑即可。双跑防护靠脚本内置的**端口锁**，不用模型自律：同一被测端口同时只允许一个 bench 进程，被拒时报持有者 PID，照报错提示处置即可。
+  - `timeout` = `min(3600, 题数 × 单题超时 + 300)`；预算超 3600 就分批（`--n` ≤ 10 题/批）。
+  - run 发起后**轮询只发裸 `check_background`，不要 sleep、不要夹带 bash**：框架对纯轮询有指数退避（5s 起步封顶），后台跑完会发 `<background-results>` 通知并提前唤醒，模型零空转。每次被唤醒（轮询返回 running/收到通知）后向用户报一句进度（已完成 = `results_<run_id>.jsonl` 行数，用一次 `bash` `wc -l` 查完即回），再发下一轮 `check_background`。
+  - **禁止以「等通知唤醒」为由结束回合**（2026-10-24 事故）：`<background-results>` 通知只在回合存续（还在发工具调用）时自动送达——一旦输出纯文字收尾，回合即结束，**没有任何机制会叫醒你**，通知要一直躺到用户发下一条消息才被消费。所以收到 `[running]` 后唯一正确动作是同回合再发 `check_background`；要向用户交代进度就边轮询边说，说完接着轮询，直到拿到 `[completed]`/`[error]` 或终报所需的全部产物。
 
 ## 目录约定
 
@@ -61,11 +65,18 @@ cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" pick \
 
 ### 第 3 步：问答（默认串行）→ 预览报告
 
-```bash
-cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" run \
-  --pick <pick json> --all --port <端口> --workers 1 --timeout 300 \
-  --out-dir "<AI 助手 data dir>/benchmarks"
+**发起方式只有一种：`background_run` 工具调用**（长跑 bash 会被 120s 掐断）：
+
 ```
+background_run(
+  command = 'cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" run \
+    --pick <pick json> --all --port <端口> --workers 1 --timeout 300 \
+    --out-dir "<AI 助手 data dir>/benchmarks"',
+  timeout = min(3600, 题数 × 单题超时 + 300)   # 预算超 3600 → 分批，--n ≤ 10 题/批
+)
+```
+
+发起后进入裸轮询循环：每轮只发 `check_background`（框架自动指数退避，完成有通知唤醒），每次得到响应后向用户报一句进度（已完成题数用 `bash` `wc -l` 查 `results_<run_id>.jsonl` 行数），直到终态。后台任务中途死亡（超时/被杀）时：已落盘的题不丢；剩余题用 `ask --qidx N` 单题补跑（bash 前台即可），**不要**整批重跑、**不要**自造续跑脚本。双跑由脚本端口锁兜底——被「端口已有 bench 进程」拒绝时照报错处置。
 
 每题独立建技能会话（`mode=skill`）+ 发 `/<技能名> 问题` 斜杠消息，收流到 `done`。
 
@@ -77,7 +88,7 @@ cd <语料目录> && python "<skills dir>/rag-bench/scripts/run_bench.py" run \
 
 > **默认 `--workers 1`（串行）**：耗时是评测指标之一，并发会互相抢 LLM/检索资源把 wall_ms 抬高，串行口径最干净、可跨 run 直接比。想压总时长再显式加 `--workers N`，但同批次对比必须固定同一 worker 数。
 
-> 长跑放 `background_run`（**只发起一次**，锁文件防双跑），`check_background` 轮询。失败题可 `ask` 单题补跑。
+失败题可 `ask` 单题补跑（bash 前台）。
 
 run 结束产出 `results_<run_id>.jsonl` + `preview_<run_id>.md`（速览 + 逐题预览），向用户汇报要点后**停下等「开始评分」**。中途被中断也是有产物的（见上）。
 
@@ -143,8 +154,12 @@ python "<skills dir>/rag-bench/scripts/run_bench.py" report --answers <answers m
 | `check` 失败：`429` / `rate_limit` | LLM 配额用尽或密钥无效——环境问题，不是技能问题；看 `失败原因` 里的重置时间 |
 | `check` 失败：`流已结束但没有正文` | 后端收了请求但没推 token；看实例日志，确认模型/网关正常 |
 | `HTTP 401` | 实例开了登录闸门（仅非环回访问才会触发）；用 127.0.0.1 跑或让用户临时关闸 |
+| run 前台 `bash` 被掐断（约 120s） | 改成 `background_run` + `check_background` 轮询（见「硬约束」）；被掐断的那题很可能后端仍在续跑，先确认再补跑 |
+| `background_run` 报超时、输出写着「超时信号」 | `timeout` 没给够：已跑完的题已落盘不必重跑；剩余题 `ask` 逐题补跑。**根治是分批**：题数 × 单题超时 > 3600 就拆批跑 |
+| `check_background` 返回 `Unknown` | id 传错了（拿了 run_id 而非 `background_run` 返回的短任务 id），不等于任务没在跑——**禁止据此重发**。用文件证据判断：jsonl 行数在涨 / 锁文件在 / 进程在 = 活着 |
 | run 报「疑似已在运行」 | 同 run_id 已有活跃实例；先 check_background，勿重复发起 |
-| 单个题 `超时 Ns（… 已请求停止）` | 该题记失败（不评分、进失败清单），其余题继续；已跑完的题**已落盘不会丢**。先 `ask` 单题观察实际耗时，再决定调高 `--timeout` |
+| run/ask 报「端口 X 已有基准问答进程在跑（PID …）」 | **端口锁**生效：同一被测实例同时只允许一个 bench 进程。等现有进程跑完（jsonl 行数不再涨 = 已结束）再继续；持有 PID 已死则删 `.bench_port_<port>.lock` 重试 |
+| 单个题 `超时 Ns（… 已请求停止）` | 该题记失败（不评分、进失败清单），其余题继续；已跑完的题**已落盘不会丢**。先 `ask` 单题（bash 前台）观察实际耗时，再决定调高 `--timeout` |
 | run 被外部杀掉 / Ctrl+C | 已完成的题在 `results_<run_id>.jsonl` 里（逐题 flush），`preview_<run_id>.md` 也会补出（未跑题标「未跑」）——直接看产物，别重跑全部 |
 | 每题都超时且日志里 `chat done` 远晚于超时点 | 超时设太短（大语料单题 3-6 分钟），调高 `--timeout`；同时确认超时后 `/api/chat/stop` 是否生效（日志应有停止记录） |
 | `agent 触发 ask_user_question` | 模型在基准题上反问了用户；该题判失败，酌情改写题干重抽 |

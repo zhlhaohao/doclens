@@ -19,7 +19,8 @@ from typing import Callable, Dict
 logger = logging.getLogger("planify.subagent")
 
 from ..core.llm.provider import LLMProvider
-from ..core.llm.types import Tool, ToolUseBlock
+from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
+from ..tools.basic import to_tool_defs
 
 # prompts 模块导入（支持直接运行 cli.py 和作为模块运行两种方式）
 try:
@@ -278,15 +279,8 @@ def run_subagent(
 
     tracer = LLMTracer.create(label=f"subagent-{agent_type}", workdir=workdir)
 
-    # 把工具定义转换为 Tool dataclass
-    tool_defs = [
-        Tool(
-            name=t["name"],
-            description=t.get("description", ""),
-            input_schema=t.get("input_schema", {"type": "object"}),
-        )
-        for t in sub_tools
-    ]
+    # 把工具定义转换为 Tool dataclass（描述占位符现值替换，见 to_tool_defs）
+    tool_defs = to_tool_defs(sub_tools)
 
     # 子代理主循环（预算三机制：同参早警 → 软提醒 → 截断标记，见模块头注释）
     resp = None

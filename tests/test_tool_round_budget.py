@@ -314,6 +314,9 @@ class TestBudgetMechanisms:
             def __init__(self):
                 self.notifications = Queue()
 
+            def has_running_tasks(self):
+                return False
+
             def has_pending_notifications(self):
                 return not self.notifications.empty()
 
@@ -430,6 +433,96 @@ class TestBudgetMechanisms:
         reminders = _reminder_texts(messages)
         assert len(reminders) == 1
         assert "background task" not in reminders[0]
+
+
+class TestTurnExitGuard:
+    """回合退出护栏（2026-10-24「假通知」事故）。
+
+    模型在后台任务 running 时产出纯文字终答 → 注入 <background-guard>
+    纠正消息拉回循环（最多 1 次）；无运行中任务或模型坚持终答则放行。
+    FakeBgManager 与 test_poll_backoff_wakes_on_bg_notification 同构，
+    补 has_running_tasks / 无 drain 状态。
+    """
+
+    class _FakeBg:
+        def __init__(self, running: bool):
+            from queue import Queue
+
+            self._running = running
+            self.notifications = Queue()
+
+        def has_running_tasks(self):
+            return self._running
+
+        def has_pending_notifications(self):
+            return not self.notifications.empty()
+
+        def drain(self):
+            return []
+
+    def test_text_final_with_running_bg_gets_pulled_back(self, tmp_path):
+        """running 后台 + 纯文字终答 → 注入纠正消息，回合被拉回循环。
+
+        红判据：ScriptedProvider 第 2 步起全部是文本——若护栏生效，
+        纠正后模型仍产文本但第 2 次放行（限 1 次）；messages 中应出现
+        恰好 1 条 <background-guard> 注入。
+        """
+        script = [
+            {"tools": [("check_background", {"task_id": "t"})]},
+            {"text": "我先结束回合，等通知唤醒。"},
+            {"text": "任务仍在跑，我继续轮询。"},
+        ]
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+        agent.bg_manager = self._FakeBg(running=True)
+        messages = []
+        asyncio.run(agent.run_stream(messages, "q", "s1"))
+        guards = [
+            m["content"] for m in messages
+            if m.get("role") == "user"
+            and isinstance(m.get("content"), str)
+            and "<background-guard>" in m["content"]
+        ]
+        assert len(guards) == 1, "护栏未注入或未限次"
+        assert "check_background" in guards[0]
+        # 第二次文本终答被放行（不再纠正）
+        assert agent.emitter.get_full_text().endswith("任务仍在跑，我继续轮询。")
+
+    def test_text_final_without_bg_not_affected(self, tmp_path):
+        """无后台任务时护栏零介入——正常终答，无注入。"""
+        script = [{"text": "直接回答"}]
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+        agent.bg_manager = self._FakeBg(running=False)
+        messages = []
+        asyncio.run(agent.run_stream(messages, "q", "s1"))
+        assert not any(
+            isinstance(m.get("content"), str)
+            and "<background-guard>" in m["content"]
+            for m in messages
+        )
+        assert agent.emitter.get_full_text() == "直接回答"
+
+    def test_bg_finished_before_final_answer_not_guarded(self, tmp_path):
+        """后台已转终态（completed/error）→ 不拦截终答（护栏只看 running）。"""
+        from planify.managers.background_manager import BackgroundManager
+
+        mgr = BackgroundManager(tmp_path)
+        mgr.tasks["t"] = {
+            "status": "completed", "command": "x",
+            "result": "ok", "started_at": 0.0,
+        }
+        script = [{"text": "结果已拿到，终答。"}]
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=100, tmp_path=tmp_path)
+        agent.bg_manager = mgr
+        messages = []
+        asyncio.run(agent.run_stream(messages, "q", "s1"))
+        assert not any(
+            isinstance(m.get("content"), str)
+            and "<background-guard>" in m["content"]
+            for m in messages
+        )
 
 
 def test_runtime_config_carries_tool_round_budget():

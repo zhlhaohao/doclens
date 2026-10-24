@@ -109,6 +109,58 @@ def acquire_run_lock(bench: Path, run_id: str) -> Path:
     return lock
 
 
+def _pid_alive(pid: int) -> bool:
+    """跨平台探测 PID 是否存活（Windows 用 OpenProcess，POSIX 用 kill 0）。"""
+    if pid <= 0:
+        return False
+    try:
+        if os.name == "nt":
+            import ctypes
+            SYNCHRONIZE = 0x00100000
+            h = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if not h:
+                return False
+            try:
+                WAIT_TIMEOUT = 0x102
+                return ctypes.windll.kernel32.WaitForSingleObject(h, 0) == WAIT_TIMEOUT
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def acquire_port_lock(bench: Path, port: int) -> Path:
+    """按被测端口全局互斥：同一实例同时只允许一个 bench 问答进程（run/ask）。
+
+    防「换个 run_id 重新 pick」绕过 per-run 锁——多进程并行会互相污染同一被测
+    实例的 LLM/检索资源与耗时数据。锁内容为持有者 PID；持有进程已死视为陈锁，
+    自动接管。O_CREAT|O_EXCL 原子创建，避免双进程同时抢到。"""
+    lock = bench / f".bench_port_{port}.lock"
+    for attempt in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(str(os.getpid()))
+            return lock
+        except FileExistsError:
+            try:
+                holder = int(lock.read_text(encoding="utf-8").strip() or "0")
+            except (OSError, ValueError):
+                holder = 0
+            if holder and _pid_alive(holder):
+                raise SystemExit(
+                    f"错误：端口 {port} 已有基准问答进程在跑（PID {holder}，锁 {lock}）。\n"
+                    "      同一被测实例同时只允许一个 bench 进程——并行会互相污染耗时数据。\n"
+                    "      先 check_background / 看产物确认它在跑什么，等它跑完；\n"
+                    "      确认是孤儿进程（PID 已死）后删锁重试。不要另起 run。")
+            if attempt == 0:  # 陈锁：持有进程已死，删除后重试一次
+                lock.unlink(missing_ok=True)
+                continue
+    raise SystemExit(f"错误：无法获取端口锁 {lock}（重试后仍被占用）。")
+
+
 # ---------------------------------------------------------------------------
 # HTTP / SSE（生产对话链路，纯标准库）
 # ---------------------------------------------------------------------------
@@ -634,22 +686,29 @@ def cmd_ask(args: argparse.Namespace) -> None:
     q = qs[args.qidx]
     skill_name = pick.get("skill_name") or SKILL_NAME
 
-    sid = create_skill_session(base, f"bench-{pick['run_id']}-{args.qidx}")
-    result = ask_once(base, sid, _ask_question_text(q, skill_name), args.timeout)
+    bench = Path(args.out_dir)
+    bench.mkdir(parents=True, exist_ok=True)
+    port_lock = acquire_port_lock(bench, args.port)
 
-    if not result.get("ok"):
-        raise SystemExit(f"错误：第 {args.qidx} 题（{q['question_id']}）问答失败：{result.get('error')}")
+    try:
+        sid = create_skill_session(base, f"bench-{pick['run_id']}-{args.qidx}")
+        result = ask_once(base, sid, _ask_question_text(q, skill_name), args.timeout)
 
-    cited = fetch_session_refs(base, sid, result.get("answer") or "")
-    metrics = ref_metrics(cited, q.get("expected_doc_ids", []))
-    print(json.dumps({
-        "question_id": q["question_id"], "question": q["question"],
-        "answer": result["answer"], "wall_ms": result.get("wall_ms"),
-        "session_id": sid, "tool_calls": result.get("tool_calls"),
-        "thinking_chars": result.get("thinking_chars"),
-        "cited_n": metrics["n_cited_docs"], "recall": metrics["recall"],
-        "precision": metrics["precision"], "ref_misses": metrics["misses"],
-    }, ensure_ascii=False, indent=2))
+        if not result.get("ok"):
+            raise SystemExit(f"错误：第 {args.qidx} 题（{q['question_id']}）问答失败：{result.get('error')}")
+
+        cited = fetch_session_refs(base, sid, result.get("answer") or "")
+        metrics = ref_metrics(cited, q.get("expected_doc_ids", []))
+        print(json.dumps({
+            "question_id": q["question_id"], "question": q["question"],
+            "answer": result["answer"], "wall_ms": result.get("wall_ms"),
+            "session_id": sid, "tool_calls": result.get("tool_calls"),
+            "thinking_chars": result.get("thinking_chars"),
+            "cited_n": metrics["n_cited_docs"], "recall": metrics["recall"],
+            "precision": metrics["precision"], "ref_misses": metrics["misses"],
+        }, ensure_ascii=False, indent=2))
+    finally:
+        port_lock.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +787,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     bench = Path(args.out_dir)
     bench.mkdir(parents=True, exist_ok=True)
+    port_lock = acquire_port_lock(bench, args.port)
     lock = acquire_run_lock(bench, pick["run_id"])
     jsonl_path = bench / f"results_{pick['run_id']}.jsonl"
     print(f"{'串行' if workers == 1 else f'并发 {workers} worker'} × {len(idxs)} 题（{base}）",
@@ -796,6 +856,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         print("\n中断：已完成的题已落盘，正在出部分预览……", flush=True)
     finally:
         lock.unlink(missing_ok=True)
+        port_lock.unlink(missing_ok=True)
         # 部分/完整都出预览：缺失题按「未跑」补齐，避免看起来像已跑完
         rows = []
         for i in idxs:

@@ -153,6 +153,10 @@ def build_tool_registry(
     # bash/powershell 的描述承担「工具路由」职责：模型在决策点读的是工具描述，
     # 仅靠系统提示词不足以纠正其 bash 习惯（训练语料里 grep/find 是默认动作）。
     # 路由规则按 rg 是否可用动态拼接（grep/glob 是条件注册，见下）
+    # 超时秒数写 SHELL_TIMEOUT_PLACEHOLDER 占位符，发送给 LLM 前
+    # to_tool_defs 现值替换（env 热生效，构建期固化数字会过期说谎）。
+    from .basic import SHELL_TIMEOUT_PLACEHOLDER
+
     shell_donts = (
         "不要用本工具读/改/写文件——读文件用 read_file、改文件用 edit_file、"
         "写文件用 write_file。"
@@ -162,9 +166,15 @@ def build_tool_registry(
             "不要用本工具跑 grep/rg/find/ls 做检索——"
             "搜索文件内容用 grep 工具、按文件名/模式找文件用 glob 工具。"
         )
+    timeout_warning = (
+        f"命令在 {SHELL_TIMEOUT_PLACEHOLDER} 秒后整个进程树被强杀"
+        "（超时值可经 PLANIFY_SHELL_TIMEOUT 配置）；预计运行较久的命令"
+        "改用 background_run 后台启动 + check_background 轮询，别在本工具里硬等。"
+    )
     bash_description = (
         "运行 shell 命令（系统命令、脚本执行、构建、包管理等终端操作）。"
         + shell_donts
+        + timeout_warning
         + "仅当没有对应的专用工具时才用本工具。"
     )
 
@@ -189,6 +199,7 @@ def build_tool_registry(
                         "回退 Windows PowerShell / cmd）。"
                         "仅适合注册表、服务、系统等 Windows 原生操作；"
                         + shell_donts
+                        + timeout_warning
                     ),
                     "input_schema": {
                         "type": "object",
@@ -363,6 +374,8 @@ def build_tool_registry(
                 "在后台线程中运行命令，立即返回任务 ID，用 check_background 轮询结果。"
                 "命令在 timeout 秒后整个进程树被击杀并转入 error 终态（返回超时信号"
                 "与残余输出）——命令必须能自行退出，长驻服务/需要交互的命令不适用。"
+                "完成通知只在你的当前回合仍在循环中时自动送达；结束本回合后不会有"
+                "任何自动唤醒——要用结果就必须在本回合内继续 check_background 轮询。"
             ),
             "input_schema": {
                 "type": "object",
@@ -372,8 +385,8 @@ def build_tool_registry(
                         "type": "integer",
                         "description": (
                             "超时秒数（缺省与 bash 工具同源：PLANIFY_SHELL_TIMEOUT"
-                            " 环境变量，默认 120；上限 3600，非法/非正回落同源"
-                            " 缺省。到时杀整树并返回超时信号与残余输出）"
+                            f" 环境变量，当前 {SHELL_TIMEOUT_PLACEHOLDER}；上限 3600，"
+                            "非法/非正回落同源缺省。到时杀整树并返回超时信号与残余输出）"
                         ),
                     },
                 },
@@ -382,7 +395,13 @@ def build_tool_registry(
         },
         {
             "name": "check_background",
-            "description": "检查后台任务状态",
+            "description": (
+                "检查后台任务状态。任务完成时若你的回合仍在进行会自动收到"
+                " <background-results> 通知——但这不是「结束回合去等」的理由："
+                "结束回合后不会有任何自动唤醒，未消费的结果要等用户下一条消息"
+                "才能看到。要等结果，就在本回合内持续用本工具轮询（框架有指数"
+                "退避，不会空转）；不再需要结果时才结束回合并向用户说明。"
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {"task_id": {"type": "string"}},

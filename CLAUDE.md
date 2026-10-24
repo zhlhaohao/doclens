@@ -1,452 +1,110 @@
 # doclens CLAUDE.md
 
-doclens — 结构感知文档检索工具
+doclens — 结构感知文档检索工具（Textual TUI + FastAPI Web UI + TreeSearch 索引 + Planify AI 框架）
 
-## 安装
-
-### 开发环境 (虚拟环境)
+## 安装（开发环境）
 
 ```bash
-# 创建虚拟环境
-python -m venv .venv
-
-# 激活虚拟环境
-.venv\Scripts\Activate.ps1
-
-# 升级pip
+python -m venv .venv && .venv\Scripts\Activate.ps1
 python.exe -m pip install --upgrade pip setuptools wheel
-
-# 在 windows arm64 环境下，需要给cryptography下载预编译包，现在不用了，只有在不成功的时候可以试下
-pip install cryptography --only-binary=:all:
-
-# 以可编辑模式安装 doclens的所有依赖（包括dev可选依赖组）
-pip install -e ".[dev]"
-
-# 开发态用本地源码覆盖 PyPI 的 treesearchlib / planify（改 treesearch/、planify/ 即生效）
-pip install -e ./treesearch
-pip install -e ./planify
-
-# webfetch 二级降级需要 Playwright 浏览器二进制（pip 装不了，缺它 JS 渲染页全失败）
-python -m playwright install chromium --only-shell
+pip install -e ".[dev]"                 # doclens 全依赖（含 dev 组）
+pip install -e ./treesearch             # 本地源码覆盖 PyPI 包
+pip install -e ./planify                # 同上
+python -m playwright install chromium --only-shell   # webfetch 二级降级需要
 ```
 
-> **pip 逐版本刷屏回溯 = 依赖树无解**：`uv pip compile pyproject.toml --extra dev -o -` 秒出冲突报告，修 pyproject pin 而非绕过（pdfminer-six 必须落在 pdfplumber 钉版集合内，如 ==20250506）。
+- Claude Code Bash 是 Git Bash，`activate` 不入 PATH——必须 `.venv/Scripts/python.exe -m doclens ...`；人工终端用 pwsh 7。
+- worktree 开发复用主仓库 `../cortex/.venv`，无需重建。
+- editable install 改源码即生效（`doclens.exe` 与 `python -m doclens` 都解析本仓库源码）。
+- pip 刷屏回溯 = 依赖无解：`uv pip compile pyproject.toml --extra dev -o -` 出冲突报告。
+- 发包统一入口 `./publish-pypi.ps1 <treesearch|planify|doclens>`（pwsh 7，--dry-run 预演）；凭据在 repo 根 `.pypirc`（gitignored）；发行版依赖 PyPI 版本——改 `treesearch/**`/`planify/**` 不发版则发行版停旧版。
 
-**运行 Python 的方式**（Claude Code Bash 工具使用 Git Bash，`activate` 不会将 python 加入 PATH）：
+## 模块边界（红线，AI 编码必须遵守）
 
-```bash
-# 必须直接使用 .venv 中的 python.exe
-.venv/Scripts/python.exe -m doclens ...
-```
+分层：`doclens（宿主）→ planify（AI 框架）＋ treesearch（索引引擎）`；planify ↔ treesearch 互不依赖。
 
-> 人工在终端操作时，**使用 PowerShell 7 (`pwsh`)**，macOS/Linux 用 `source .venv/bin/activate`。
+1. 底层禁止 `import doclens`、互相禁止 import；通知宿主用回调/注入。
+2. 禁止跨模块引用私有成员（`_name`）——先公共化并全仓同步消费方。
+3. 配置命名空间隔离：treesearch 只认 `TREESEARCH_*`，planify 只认 `PLANIFY_*`＋`register_config()`；底层不碰 `CORTEX_*`。
+4. 数据目录归属：`.cortex/` 是 doclens 的；treesearch 产物在 `.treesearch/`。
+5. 引擎/框架代码中性化：不得出现 "doclens"，用「宿主 / host」表述。
+6. doclens 内部同样只走公共接口，不 import 对方私有成员。
 
-> **worktree 开发复用主仓库 `../cortex/.venv`**（依赖共享；doclens 源码经 PYTHONPATH 取 worktree 本地）——无需在 worktree 重建 venv，直接用 `../cortex/.venv/Scripts/python.exe`。
-
-> **editable install：改源码即生效，无需重装**。`doclens`、`treesearch` 均为 `pip install -e` 安装——系统 Python 的 `doclens.exe` 入口与 `.venv` 的 `python -m doclens` **都解析到本仓库源码**（`doclens/`、`treesearch/`，非 site-packages 副本）。修改这两个目录下任意 `.py` 立即对两种入口生效；排查问题时**勿假设 `doclens.exe` 跑的是旧代码副本**。验证方式：`python -c "import doclens,treesearch; print(doclens.__file__, treesearch.__file__)"`，应指向仓库源码而非 `site-packages`。
-
-> **treesearch / planify 的双形态分发**：开发调试用仓库内源码（`pip install -e ./treesearch`、`pip install -e ./planify`）；发行版 doclens 不内嵌两者，经 PyPI 依赖——`treesearchlib`（import 名仍为 `treesearch`，extras：cjk/parsers/image/convert/ast/nlp/gitignore/legacy）与 `planify`。
->
-> **⚠️ 改 `treesearch/**` 或 `planify/**` 后的发布纪律**：发行版用的是 PyPI 上的包——源码改动若不发新版，发行版会停在旧版。
->
-> **统一发包入口 `publish-pypi.ps1`**（repo 根，pwsh 7；自动定位 venv、修中文乱码、自动判断代码是否有变化、无变化跳过、有变化自动 bump patch、treesearch/planify 发后自动提升根 pyproject 依赖下限；实现见 `publish_pypi.py`）：
->
-> ```powershell
-> ./publish-pypi.ps1 treesearch --dry-run   # 先预演
-> ./publish-pypi.ps1 treesearch             # 实际发包
-> ```
->
-> 凭据已固化在 repo 根 `.pypirc`（**gitignored，严禁入库**；模板 `.pypirc.example`），
-> 优先级：`TWINE_PASSWORD` 环境变量 → `.pypirc` → `~/.pypirc`。
->
-> 可发包：`doclens`（首发需 `--first`）/ `treesearch` / `planify`。发布点以 git tag `pypi/<pkg>-<ver>` 记录（随 commit 一起 push）。脚本**不自动 commit**——bump 产生的版本文件/根 pyproject 改动需人工确认后提交。
-
-## doclens 技术栈
-
-### 核心技术
-| 技术 | 用途 |
-|------|------|
-| Textual | TUI 框架（终端用户界面） |
-| FastAPI | Web API 框架（Web UI 后端） |
-| Lit + Shoelace | 前端 SPA（Web Components） |
-| Vite | 前端构建工具 |
-| Pydantic + pydantic-settings | 配置管理（.env 环境变量） |
-| TreeSearch | 索引引擎（SQLite FTS5 + BM25） |
-| Watchdog | 文件监控（后台检测变化） |
-| Planify | AI Agent 框架（LLMProvider 协议，Anthropic / OpenAI 兼容双后端） |
-| Rich | 终端格式化（语法高亮、链接） |
-| Jieba | 中日韩分词器 |
-| uvicorn | ASGI 服务器 |
-| SSE (sse-starlette) | AI 对话流式响应 |
-
-### 依赖服务
-| 服务 | 用途 |
-|------|------|
-| SQLite | FTS5 索引 + 历史会话存储（.cortex/sessions.db） |
-| Anthropic API | AI 对话（可替换本地模型） |
-
-## 模块边界规则（红线，AI 编码必须遵守）
-
-分层与依赖方向——**只允许上层依赖下层，严禁反向**：
-
-```
-doclens（业务宿主）→ planify（AI 框架）＋ treesearch（索引引擎）
-planify ↔ treesearch 互不依赖
-```
-
-1. **底层不得 import 高层**：`treesearch/`、`planify/` 源码禁止 `import doclens`；`treesearch/` 与 `planify/` 互相禁止 import。底层需要通知宿主时用回调/注入（如 vision_pending 协议），不反向调用。
-2. **禁止跨模块引用私有成员**：`from treesearch.xxx import _name` / `from planify.xxx import _name` 一律禁止——确需使用先公共化（去下划线导出），并全仓同步消费方（含 tests 的 monkeypatch 目标字符串）。
-3. **配置命名空间隔离**：treesearch 只认 `TREESEARCH_*` env，planify 只认 `PLANIFY_*` 与 `register_config()` 宿主注入通路；底层不得读写 `CORTEX_*`（doclens 专属命名空间）。
-4. **数据目录归属**：`.cortex/` 是 doclens 的；treesearch 产物在 `.treesearch/`（index.db）。底层不写宿主数据目录。
-5. **引擎/框架代码中性化**：treesearch、planify 内的注释、常量、元数据格式不得出现 "doclens" 等宿主名——用「宿主 / host」表述，机制保持中性（历史遗留如 pathutil 的 `.doclens` 排除项除外）。
-6. **doclens 内部同样守规矩**：`web_v2/api/` 与各 worker 之间只走公共接口，不 import 对方下划线私有成员。
-
-规则 1、2 由 `tests/test_architecture.py` 机械化守护——违规测试即红，任何改动必须先过这两条再做别的。
-
-## doclens 架构
-
-### 分层架构
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      TUI 层                            │
-│  CortexApp (Textual) + Widgets (ContentArea, InputBox)   │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    命令处理层                           │
-│      CLI 子命令 (search/ai/index/status)                │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   业务逻辑层                             │
-│  IndexManager | CortexAgent | EventBus | Scoring         │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  数据访问层                               │
-│  TreeSearch (FTS5) | FileWatcher (watchdog)             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 核心组件
-| 组件 | 职责 |
-|------|------|
-| **CortexApp** | TUI 主应用，组合 Widget，处理命令路由 |
-| **IndexManager** | 索引生命周期管理，封装 TreeSearch |
-| **CortexAgent** | AI 集成，封装 Planify 核心功能 |
-| **FileWatcher** | 后台文件监控，自动触发增量索引 |
-| **EventBus** | 全局事件总线，发布/订阅机制 |
-| **Scoring** | 评分算法（关键词匹配、邻近度、综合评分） |
-| **Formatting** | 终端输出格式化（高亮、VSCode 链接） |
-| **Ripgrep** | FTS 无结果时的降级搜索 |
-
-### 数据流
-```
-用户输入 → CortexApp.parse_input() → 命令路由
-    ↓
-├── 搜索: IndexManager.search() → FTS5 查询 → Scoring → Formatting
-├── AI: CortexAgent.run_query() → Planify → Anthropic API
-├── 索引: IndexManager.reindex() → TreeSearch.index()
-└── 状态: IndexManager.documents → 统计信息
-```
-
-### 事件流
-```
-文件变化 → FileWatcher → EventBus.publish("file_changed")
-    ↓
-IndexManager.subscribe("file_changed") → 增量 reindex
-```
+规则 1、2 由 `tests/test_architecture.py` 守护——任何改动先过它。
 
 ## 项目结构
 
-### doclens/ - 文档检索工具
 ```
-doclens/
-├── agent_integration.py      # Agent 集成
-├── config.py                # 配置管理 (Pydantic)
-├── cortex_cli.py            # CLI 入口（TUI + 子命令）
-├── event_bus.py             # 事件总线（发布/订阅）
-├── file_watcher.py          # 文件监控 (watchdog)
-├── formatting.py            # 格式化输出 (Rich)
-├── index_manager.py         # 索引管理 (TreeSearch)
-├── kb_tools.py              # 知识库工具
-├── ripgrep.py               # ripgrep 降级搜索
-├── scoring.py               # 评分算法
-├── tui/
-│   ├── app.py               # TUI 应用主入口 (Textual)
-│   ├── commands.py          # TUI 命令处理
-│   ├── theme.py             # 主题配置
-│   └── widgets/
-│       ├── content_area.py   # 内容显示区域
-│       ├── header_bar.py    # 顶部标题栏
-│       ├── input_box.py     # 输入框（带历史）
-│       └── status_bar.py    # 底部状态栏
+doclens/                    # 业务宿主：config / index_manager / kb_tools / scoring(+pipeline) / ripgrep / grep_tools / agent_integration(+agent_prompt) / file_watcher / event_bus / memory / diary(+worker) / git_sync / mcp_client / mcp_server / skills_{config,deploy,installer} / claude_code_skill / tui/
+├── web_v2/                 # Web UI：app.py + deps.py + api/（search/preview/grep/chat SSE/sessions/status/config/presets/auth/diary/git/mcp/skills/vision/translate/workdir…）+ sessions_store + session_backup + rewind_tracker + chat_runner + references/refs_* + auth_*（闸门/限流/凭据）+ config_store + presets_store + mcp_servers_store + workdir_store + watch_broker + runtime_vitals + frontend/（Lit+Vite）+ static/（构建产物）
+treesearch/                 # 索引引擎：fts.py（FTS5）/ indexer / search / tokenizer / tree / tree_searcher / heuristics / ghost / ripgrep + parsers/（pdf/docx/excel/html/mhtml/markitdown/anydoc/pst/email/ast/treesitter/image_* + registry）
+planify/                    # AI 框架：bootstrap / streaming/（runner 主循环）/ core/（config/runtime/runtime_manager/llm Provider 抽象 + timeouts/trace）/ tools/（registry+内置工具）/ managers/（task/background/teammate/todo）/ skills/ / subagent/ / messaging/ / context/（compact 压缩）/ agent/（旧 REPL）——详见 planify/docs/ARCHITECTURE.md
 ```
 
-### doclens/web_v2/ - Web UI（FastAPI + Lit PWA）
-```
-doclens/web_v2/
-├── app.py                    # FastAPI 应用入口（create_app / launch_app）
-├── deps.py                   # 依赖注入单例（IndexManager / CortexAgent / Config）
-├── api/                      # REST API 路由
-│   ├── search.py             # GET /api/search
-│   ├── preview.py            # GET /api/preview
-│   ├── sessions.py           # CRUD /api/sessions
-│   ├── status.py             # GET /api/status
-│   ├── chat.py               # POST /api/chat（SSE 流）
-│   ├── errors.py             # 全局错误处理器
-│   └── _chat_emitter.py      # Chat SSE 事件收集器
-├── models/                   # Pydantic 请求/响应模型
-├── sessions_store.py         # SQLite 会话持久化
-├── rewind_tracker.py         # 改前备份/快照/恢复（ADR-0027 回退即事实）
-├── chat_runner.py            # 会话级生成登记表（ADR-0028 断开续跑）
-├── frontend/                 # Lit + Vite 前端工程
-│   ├── src/
-│   │   ├── app.ts            # <cortex-app> 顶层路由
-│   │   ├── state/            # 轻量 store（订阅模式）
-│   │   ├── api/              # 前端 API client（fetch + SSE）
-│   │   ├── components/       # 12 个 Lit Web Components
-│   │   ├── views/            # 3 个视图（search / chat / history）
-│   │   └── styles/           # CSS tokens + 响应式断点
-│   ├── tests/                # Vitest 单元测试 + Playwright E2E
-│   ├── public/               # PWA manifest + icons + sw.js
-│   └── vite.config.ts        # Vite 构建配置（输出到 ../static/）
-└── static/                   # Vite 构建产物（已 git 跟踪）
-    ├── index.html
-    ├── manifest.webmanifest
-    ├── sw.js
-    └── assets/               # 带 hash 的 JS/CSS + PWA icons
-```
-
-### treesearch/ - 结构感知检索核心库
-```
-treesearch/
-├── cli.py                   # CLI 入口
-├── config.py                # 配置
-├── fts.py                   # FTS5 索引
-├── indexer.py               # 索引构建
-├── pathutil.py              # 路径工具
-├── ripgrep.py               # ripgrep 集成
-├── search.py                # 搜索逻辑
-├── tokenizer.py             # 分词
-├── tree.py                  # 树结构
-├── treesearch.py            # 主入口
-├── tree_searcher.py         # 树搜索
-└── parsers/
-    ├── ast_parser.py        # Python AST 解析
-    ├── docx_parser.py      # Word 解析
-    ├── excel_parser.py      # Excel 解析
-    ├── html_parser.py       # HTML 解析
-    ├── pdf_parser.py       # PDF 解析
-    └── treesitter_parser.py # TreeSitter 解析
-```
-
-### planify/ - AI Agent 框架
-
-> 详细架构分析见 `planify/docs/ARCHITECTURE.md`（分层/调用链/技术债清单）。
-
-```
-planify/
-├── bootstrap.py            # 装配入口（RuntimeManager 单例 + 依赖注册）
-├── cli.py                  # 流式 CLI 入口（当前主力）
-├── cli_history.py          # 命令历史
-├── main.py                 # 旧版同步 REPL 入口
-├── prompts.py              # System Prompt 模板（按 agent_type 分支）
-├── agent/
-│   └── runner.py           # 同步 Agent 主循环（服务旧 REPL）
-├── context/
-│   └── compact.py          # 两级上下文压缩（microcompact / auto_compact）
-├── core/
-│   ├── client.py           # 遗留客户端初始化（死代码，勿用）
-│   ├── config.py           # 配置（.env 多级加载 + 宿主注入双通路）
-│   ├── encoding.py         # Windows GBK/UTF-8 编码处理
-│   ├── logging_config.py   # 日志 + 首启工作区初始化
-│   ├── runtime.py          # AgentRuntime 组件容器（原 session.py；对话身份在 doclens 侧）
-│   ├── runtime_manager.py  # 运行时生命周期 / 组件装配层（单例，原 session_manager.py）
-│   └── llm/                # LLM Provider 抽象层
-│       ├── provider.py     # LLMProvider 协议（chat/stream/count_tokens）
-│       ├── types.py        # 归一化消息/工具/流事件类型
-│       ├── factory.py      # create_provider 工厂（按 protocol 选后端）
-│       ├── presets.py      # provider 配置解析
-│       ├── anthropic_provider.py       # Anthropic 后端（prompt caching）
-│       ├── openai_compat_provider.py   # OpenAI 兼容后端
-│       ├── tool_translator.py          # Anthropic↔OpenAI 工具格式翻译
-│       └── errors.py       # LLM 异常层级（retryable 标志）
-├── managers/
-│   ├── background_manager.py # 后台 shell 命令（线程 + 通知队列）
-│   ├── task_manager.py     # 持久化任务板（.tasks/*.json，跨 agent 认领）
-│   ├── teammate_manager.py # teammate 线程管理（独立 agent loop）
-│   └── todo_manager.py     # 内存 Todo（单 agent 私有）
-├── messaging/
-│   └── message_bus.py      # 文件级 per-recipient 收件箱（.team/inbox/）
-├── skills/
-│   ├── access_state.py     # 技能加载状态（contextvars 门禁）
-│   └── skill_loader.py     # SKILL.md 扫描/加载（两段式 prompt 注入）
-├── streaming/
-│   ├── runner.py           # StreamingAgent 异步主循环（主力路径）
-│   ├── emitter.py          # EventEmitter 实现（SSE/CLI/TUI；便捷方法默认实现上移到协议）
-│   ├── waiter.py           # 用户响应等待器（全局单例）
-│   └── types.py            # 事件类型 / 协议 / StreamingConfig
-├── subagent/
-│   └── runner.py           # 一次性子代理（task 工具，轮次预算默认 30 可配，同参早警/软提醒/截断标记三机制）
-└── tools/
-    ├── registry.py         # 工具注册表（build_tool_registry + 外部注入）
-    ├── basic.py            # bash/powershell/read/write/edit（safe_path）
-    ├── web.py              # web_search（Provider 服务端工具）
-    ├── webfetch.py         # 网页抓取（trafilatura → Playwright）
-    ├── user_interaction.py # ask_user* 定义（运行时绑 emitter/waiter）
-    ├── team_tools.py       # 团队协作工具（spawn/send_message 等）
-    ├── protocols.py        # shutdown/plan_approval 协议工具（非 typing.Protocol）
-    ├── file_tasks.py       # 任务板工具（转发 TaskManager）
-    ├── weather_tool.py     # 天气工具入口
-    ├── baidu_weather.py    # 百度地图天气 API
-    └── lunar.py            # 农历/节气/节日
-```
+- 核心组件：CortexApp（TUI）、IndexManager（封装 TreeSearch）、CortexAgent（封装 Planify）、FileWatcher＋EventBus（增量索引）、Scoring、Ripgrep 降级。
+- 数据流：输入 → 命令路由 → 搜索（FTS5→Scoring→Formatting）/ AI（Planify→LLM）/ 索引；文件变化 → FileWatcher → EventBus → 增量 reindex。
 
 ## 工作目录（跨 worktree）
 
-**知识库 cortex 是独立仓库（不在本 doclens worktree 内）：默认按 `../cortex` 约定（同级父目录）发现（`[ -d ../cortex/.git ]` 验证），不在同级时用 `CORTEX_REPO` env 覆盖——禁止硬编码绝对路径。**
-**开发测试的默认工作目录（`../cortex/test_work_dir/`）由 global env 配置：`~/.cortex/.env` 写 `CORTEX_WORKDIR=<绝对路径>`（2026-09-14 起，start-app.ps1 不再自动发现/注入默认 `-C`，读取链 `显式 -C > CORTEX_WORKDIR env > local .env > global .env`）。**
-**workdir 落定后 DB 在 `.cortex/`；本 worktree 仓库根的 `test_work_dir/` 是 demo 数据，不是 GUI 用的知识库——别搞混。**
+- 知识库 cortex 是独立仓库：默认 `../cortex` 同级发现，不在同级用 `CORTEX_REPO` env 覆盖——禁止硬编码绝对路径。
+- 开发测试默认工作目录：`~/.cortex/.env` 写 `CORTEX_WORKDIR=<绝对路径>`；读取链 `显式 -C > CORTEX_WORKDIR env > local .env > global .env`；都没有则启动报错（不静默落启动目录）。
+- workdir 落定后数据在 `.cortex/`；仓库根 `test_work_dir/` 是 demo 数据，不是 GUI 知识库。
 
 ## Skill 维护
 
-**修改 `doclens/skills/` 下任意技能（每个 `<技能名>/SKILL.md`）后，必须立即同步到全局**——`SkillLoader` 运行时从全局 `~/.cortex/skills/` 读取，改源文件不会自动生效：
+改 `doclens/skills/` 下任意技能后立即同步全局：`cp -r doclens/skills/<技能名> ~/.cortex/skills/`（SkillLoader 从全局读，改源文件不自动生效）。同步后下一轮对话自动生效（惰性热重载，无需重启）。
 
-```bash
-# 同步全部技能（覆盖同名）
-cp -r doclens/skills/* ~/.cortex/skills/
-# 或只同步改动的单个技能
-cp -r doclens/skills/<技能名> ~/.cortex/skills/
-```
+## 前端改动 · 构建为完工标准
 
-**同步后下一轮对话自动生效（无需重启）**：SkillLoader 内建惰性热重载——每轮对话开始时（`descriptions()` 入口）stat 检查技能目录（逐文件 mtime+size 签名，≥2s 节流），磁盘有变化才原位 `rescan()`；坏文件（编码错/文件锁/半写）沿用旧内容并下轮自动重试。改技能文件 → 同步全局，两步即可；轮内一致性 = 轮首快照（`load_skill` 只读内存，清单与内容同一时点）；skills 管理 API 的 install/delete/restore 热生效不变。
+改 `doclens/web_v2/frontend/src/**` 后必须 `npm run build` 成功（= `tsc --noEmit && vite build`）才算交付；Vite 产物在 `doclens/web_v2/static/`，不构建则后端服务旧静态文件。
 
-## 前端代码改动 · 自动构建为完工标准
+前端设计标尺：`doclens/web_v2/frontend/docs/DESIGN.md`（META 设计系统）。弹窗用原生 `<dialog>` + `showModal()`；样式只用 tokens.css 已有 CSS 变量（`--cortex-accent` 不存在，主按钮用 `--cortex-btn-primary-*`）。
 
-修改 `doclens/web_v2/frontend/src/**` 后，**必须自动跑 `npm run build` 确认成功**（hash 更新、退出码 0）才算交付；构建 ≠ commit。`npm run build` = `tsc --noEmit && vite build`，类型错误同样会阻断构建。
+## 分层回归测试纪律
 
-## 分层回归测试纪律（2026-10-19）
+改代码必须按触及层跑回归；pytest 一律 `../cortex/.venv/Scripts/python.exe -m pytest`。方案全貌见 `tests/e2e/e2e-search-test-plan.md`。
 
-改动代码后**必须按触及层跑对应回归**——测试是确定性断言，不是可选装饰。规则分两层：**同名约定**（日常改动的最小回归位）+ **模块映射表**（跨文件行为的回归面）。测试方案全貌见 `tests/e2e/e2e-search-test-plan.md`（搜索链路）。pytest 一律用 `../cortex/.venv/Scripts/python.exe -m pytest`（worktree 复用主仓库 venv）。
+- **同名约定（第一回归位）**：改谁先跑 `tests/test_<模块名>.py` / `frontend/tests/<组件名>.spec.ts`，再跑引用者的测试。
+- **模块映射表**：
 
-### 同名约定（第一回归位）
+| 触及的代码 | 必跑回归 |
+|---|---|
+| 后端搜索链路（`web_v2/api/`、`scoring*`、`ripgrep.py`、`index_manager.py`） | `pytest tests/test_web_search_api_matrix.py tests/test_web_preview_formats.py tests/test_web_search_grouping.py -q` |
+| treesearch 引擎（`treesearch/**`） | `pytest tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_grep_corpus_bypass.py -q` |
+| treesearch 解析器（`parsers/**`） | 对应格式测试：`pytest tests/test_docx_parser.py tests/test_anydoc_parser.py tests/test_pdf_native_preview_api.py tests/test_pst_parser.py -q` |
+| planify LLM/流式/压缩（`streaming/`、`context/`、`core/llm/`） | `pytest tests/test_stream_usage.py tests/test_thinking_stream.py tests/test_compact.py tests/test_anthropic_provider.py -q` |
+| planify 工具层（`tools/**`） | `pytest tests/test_grep_tool.py tests/test_glob_tool.py tests/test_basic_read_edit.py tests/test_guard.py tests/test_guard_pipeline.py -q` |
+| 会话/对话（`sessions_store.py`、`api/{chat,sessions}.py`） | `pytest tests/test_chat_disconnect.py tests/test_session_export_import.py tests/test_sessions_store_history.py tests/test_rewind.py -q` |
+| 索引/监控（`file_watcher.py`、增量链路） | `pytest tests/test_change_detection.py tests/test_file_watcher_exclude.py tests/test_index_chunking.py -q` |
+| 技能系统（`doclens/skills/`、`planify/skills/`） | `pytest tests/test_skill_hot_reload.py tests/test_skills_config.py tests/test_slash_skill_invoke.py -q` |
+| 前端搜索 UI（search-view / md-viewer / file-card / preview-pane / pdf-viewer / api） | `npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/preview-pane.spec.ts`（cwd=frontend）＋ `npm run build` |
+| 前端其他组件 | 同名 spec |
+| 前端定位/滚动/分页/预览（跨前后端旅程） | `npm run test:e2e:search`（自动语料 + 7890 后端） |
+| 任何层改完 | `pytest tests/test_architecture.py -q`（红线守卫） |
+| 发版前（release / bump / tag / push 主分支） | 全量 `pytest tests/ -q` |
 
-`tests/test_<模块名>.py` / `frontend/tests/<组件名>.spec.ts` 与源码同名对应——**改谁就先跑谁的同名测试**，再跑其引用者的测试。例：改 `planify/streaming/runner.py` → `test_stream_usage.py`；改 `md-viewer.ts` → `md-viewer.spec.ts`。
-
-### 模块映射表（跨文件行为回归面）
-
-| 触及的代码 | 必跑回归 | 命令（cwd=仓库根 / frontend） |
-|---|---|---|
-| 后端搜索链路：`doclens/web_v2/api/`（search/grep/preview/_grouping/_pathutil）、`doclens/scoring*`、`doclens/ripgrep.py`、`doclens/index_manager.py` | pytest 搜索矩阵（含 LIKE/rg 降级、grep 双引擎、preview 各格式） | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_web_search_api_matrix.py tests/test_web_preview_formats.py tests/test_web_search_grouping.py -q` |
-| treesearch 索引引擎：`treesearch/**` | 既有引擎套件 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_lazy_search.py tests/test_search_preset_params.py tests/test_grep_corpus_bypass.py -q` |
-| treesearch 解析器：`treesearch/parsers/**` | 对应格式测试（按触及格式取舍） | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_docx_parser.py tests/test_anydoc_parser.py tests/test_pdf_native_preview_api.py tests/test_pst_parser.py -q` |
-| planify LLM/流式/压缩：`planify/streaming/`、`planify/context/`、`planify/core/llm/` | 同名 + 关联 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_stream_usage.py tests/test_thinking_stream.py tests/test_compact.py tests/test_anthropic_provider.py -q` |
-| planify 工具层：`planify/tools/**` | 同名 + 门禁 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_grep_tool.py tests/test_glob_tool.py tests/test_basic_read_edit.py tests/test_guard.py tests/test_guard_pipeline.py -q` |
-| 会话/对话链路：`doclens/sessions_store.py`、`doclens/web_v2/api/{chat,sessions}.py` | 会话族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_chat_disconnect.py tests/test_session_export_import.py tests/test_sessions_store_history.py tests/test_rewind.py -q` |
-| 索引/文件监控：`doclens/file_watcher.py`、索引增量链路 | 监控族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_change_detection.py tests/test_file_watcher_exclude.py tests/test_index_chunking.py -q` |
-| 技能系统：`doclens/skills/`、`planify/skills/` | 技能族 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_skill_hot_reload.py tests/test_skills_config.py tests/test_slash_skill_invoke.py -q` |
-| 前端搜索 UI：`frontend/src/views/search-view.ts`、`components/{md-viewer,file-card,preview-pane,pdf-viewer}.ts`、`api/{search,grep,preview}.ts` | ① Vitest 相关单测 ② 前端须先 `npm run build`（见上节） | `cd doclens/web_v2/frontend && npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/preview-pane.spec.ts` |
-| 前端其他组件 | 同名 spec | `cd doclens/web_v2/frontend && npm run test -- tests/<组件名>.spec.ts` |
-| 前端定位/滚动/分页/多格式预览行为（跨前后端用户旅程） | E2E 回归（自动复制语料 + 自起独立后端 7890，冷启 ~2min / 热实例 ~1.5min） | `cd doclens/web_v2/frontend && npm run test:e2e:search` |
-| 任何层改完（红线守卫） | 架构红线 | `../cortex/.venv/Scripts/python.exe -m pytest tests/test_architecture.py -q` |
-| **发版前（release / 版本 bump / 打 tag / push 主分支）** | **全量 pytest 冒烟**（92 文件，~4 分钟，最稳妥兜底） | `../cortex/.venv/Scripts/python.exe -m pytest tests/ -q` |
-
-### 执行口径
-
-- **最小必要集** = 同名约定 + 触及层的表内命令 + `test_architecture.py`；不做全量（全量归发版前）。
-- E2E 的 fixtures 语料（`tests/fixtures/e2e_search/`）是确定性断言的一部分——**改语料 = 改测试预期**，须同步更新 spec 断言（如命中行号/页号）。
-- E2E 只跑 desktop 全量 + 移动端少量（`--project=desktop-chrome` 可再减半耗时）；`npm run test:e2e:search` 默认含 grep-mode/full-flow 两个相关既有 spec。
-- 表内命令是基线：改动涉及交叉行为（如解析器改动影响搜索断言）时按判断追加，宁可多跑。
-
-## 前端设计标尺
-
-前端美化 / 视觉改造（色彩、字体、圆角、按钮、卡片、阴影等）以 `doclens/web_v2/frontend/docs/DESIGN.md` 为视觉标尺。该文件拷贝自仓库同级的 `awesome-design-md/design-md/meta/DESIGN.md`（META 硬件电商设计系统：白色画布、Optimistic VF / Montserrat 字体、钴蓝 `#0064E0` 仅用于购买 CTA、黑色 pill 主按钮、`rounded.full`(100px) 按钮 / `rounded.xxxl`(32px) 卡片、极简平铺无重阴影）。
-
-改造前端视觉时须对照该标尺保持一致；如需调整设计取向，先更新本标尺文件再改组件，避免组件与设计系统脱节。
-
-前端弹窗一律用原生 `<dialog>` + `showModal()`（top layer 全屏居中，防 portal 遮挡/容器 overflow 裁剪；Esc/backdrop 统一走关闭语义）；样式只用 tokens.css 已有 CSS 变量——`--cortex-accent` 不存在，主按钮用 `--cortex-btn-primary-*`。
-
-重启应用后健康检查必须核对 `started_at`/`dev`（`/api/health`）与监听进程 PID——端口可能被**旧发行版 doclens 实例**（系统 Python 的 site-packages 版）占着，curl 打到它会误以为新代码生效；`_kill_port_process` **按端口杀**（start-app 算出的专属监听口），不做进程名校验——进程名与 AI agent 同名，按名匹配会误伤。
+- 最小必要集 = 同名约定 + 表内命令 + `test_architecture.py`；全量归发版前。
+- E2E fixtures 语料是断言的一部分——改语料须同步改 spec 断言。
 
 ## 启动脚本 start-app.ps1
 
-> 当用户说：启动应用，则**以后台方式**调用此脚本，以 Web UI 模式启动应用的前后端：
+当用户说「启动应用」，后台启动 Web UI（必须从仓库根、pwsh 7）：
 
 ```bash
-# 用 Start-Process 真脱离当前 shell：命令立即返回（rc=0），不会挂住工具
 CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -ArgumentList '-File','./start-app.ps1','gui' -WindowStyle Hidden"
 ```
 
-> 必须从 `start-app.ps1` 所在目录（仓库根）执行。临时指定知识库时在参数里追加：`...,'gui','-C','D:\知识库'`。
->
-> **不要用 `nohup pwsh -File ./start-app.ps1 gui &`**——uvicorn 前台常驻，该形式会让调用它的工具一直等下去（挂起），即便加了 `&`。
->
-> `Start-Process` 隐藏窗口、输出不落盘，因此**确认启动成功靠端口探测**（`curl -s http://127.0.0.1:7860/api/status`）；要看实时日志请在终端前台运行 `pwsh -File ./start-app.ps1 gui`。`CORTEX_NO_BROWSER=1` 用于不弹浏览器，用户明确要看界面时去掉它。
+- 临时指定知识库：`...,'gui','-C','D:\知识库'`；用户要看界面去掉 `CORTEX_NO_BROWSER=1`。
+- 禁 nohup/`&`（挂住调用方）、禁手工 kill 进程（`_kill_port_process` 按端口自理）、禁裸跑 `doclens gui`（env 变量 `CORTEX_WEB_PORT` 可能指向宿主自身，会被 `_kill_port_process` 误杀）。
+- **端口规则**：`端口 = CORTEX_WEB_PORT（~/.cortex/.env，缺省 7860） + N`，N = 目录名尾缀 `-<数字>`（`cortex`→0，`cortex-3`→3）。开发版端口冲突杀占用者复用；发行版递增找空闲口。
+- **灭菌内建**：脚本启动前清掉全部 `CORTEX_*`/`PLANIFY_*` 宿主残留（仅抢救 `CORTEX_WORKDIR`），直接用标准命令即可。
+- **探测协议**：`sleep 10` 首探 `curl -s http://127.0.0.1:<端口>/api/status`；每 10s 重试，最多 6 次（~60s）。仍不通不算失败——提醒用户可能仍在索引构建，看 `<数据目录>/logs/` 日志，不无限轮询。
+- **回报**：启动成功必须报「端口 + 工作目录」（均取 `/api/status` 实测值，端口报算出来的那个）。健康检查核对 `/api/health` 的 `started_at`/`dev` 与监听 PID，防打到旧实例。
+- 工作目录：默认读 global `CORTEX_WORKDIR`；命令行子命令 `-C` 写在子命令后。
+- 三种模式：无参/`gui` = Web UI（默认）；`tui` = 终端界面；`search`/`read_document`/`ai`/`index [--force]` = 离线命令。
 
-> **启动只经 start-app，不要手工 `kill`/`taskkill` 任何进程**。`start-app.ps1:32-66` 自己按规则算端口：`端口 = CORTEX_WEB_PORT（~/.cortex/.env，缺省 7860） + N`，`N` 取目录名尾部 `-<数字>`（如 `cortex-3` → n=3，`cortex` → n=0），多 worktree 并行各自独占端口。端口冲突由脚本内 `launch_app` 的 `_kill_port_process`（`doclens/web_v2/app.py:335`）自行接管，**它只处置自己那一个端口**，因此手工 kill 只会误伤无关实例。
->
-> **也不要绕过 start-app 裸跑 `doclens gui`**：Python 侧优先级是 `--port` > 环境变量 `CORTEX_WEB_PORT` > `.env`（`doclens/config.py:166-171`），而 env 变量会压过 `~/.cortex/.env`。宿主注入的 `CORTEX_WEB_PORT`（如 8000）可能正指向工具宿主自身进程，裸跑会 `_kill_port_process(那端口)` 把宿主杀掉。start-app 总会注入 `--port`（最高优先级），是唯一安全入口。
+## 代码改动后重启（由模型自行判断）
 
-> **注意**：必须使用 PowerShell 7 (`pwsh`)，不要使用老版本的 Windows PowerShell。
-
-使用 `start-app.ps1` 可以方便地启动前后端进行测试和验证，支持从主分支或 worktree 运行。
-
-**工作目录优先级：显式 `-C` > global `CORTEX_WORKDIR` > 启动目录**。开发测试的默认工作目录统一在 global 配置：`~/.cortex/.env` 的 `CORTEX_WORKDIR`（如 `CORTEX_WORKDIR=C:\Users\lianghao\github\cortex\test_work_dir`）——不带 `-C` 启动时由 doclens 启动早期自动跳转；以其他目录临时启动加 `-C <目录>`：`./start-app.ps1 gui -C D:\知识库`（search/index 等命令行同理，`-C` 写在子命令后）。
-未传 `-C` 且 global 未配置 `CORTEX_WORKDIR` 时启动报错并给出配置指引（不静默落启动目录，防在仓库根建索引脏目录）。
-
-
-### 三种运行模式
-
-> **默认入口是 Web UI**：`doclens` 裸命令（及 `./start-app.ps1` 无参）等价 `doclens gui`；TUI 需显式 `doclens tui`。
-
-**1. TUI 界面（交互式终端，需显式指定）**
-```powershell
-./start-app.ps1 tui
-```
-
-**2. Web UI（GUI PWA，默认模式）**
-```powershell
-./start-app.ps1
-./start-app.ps1 gui
-```
-> 前台运行需手动 CTRL+C 结束；**AI 代理启动一律走本节开头的 `Start-Process` 后台形态**（前台/`nohup &` 都会挂住调用方）。浏览器自动打开（`CORTEX_NO_BROWSER=1` 可关闭）。端口按本节开头的规则算（`CORTEX_WEB_PORT + N`），**开发版冲突时杀占用者复用原端口、不递增**，故不要假设会变成 7861/7862。**发行版（site-packages 安装）相反：端口被占不杀进程，从基准端口递增找空闲口**（用户机器上的占用者未必是 doclens，杀了就是事故），终端会打印实际端口。
-
-**3. 命令行模式（离线命令）**
-
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `./start-app.ps1 search <关键词>` | 搜索文档 | `./start-app.ps1 search python`<br>`./start-app.ps1 search "量子 计算"` |
-| `./start-app.ps1 read_document --path <路径>` | 读取文档 | `./start-app.ps1 read_document --path '科技/doc.md'` |
-| `./start-app.ps1 ai <问题>` | AI 问答 | `./start-app.ps1 ai 你好` |
-| `./start-app.ps1 index` | 增量索引 | `./start-app.ps1 index` |
-| `./start-app.ps1 index --force` | 强制全量重建 | `./start-app.ps1 index --force` |
-
-### 前端开发模式
-
-修改前端代码后需要**重新构建并重启后端**才能生效：
-
-```bash
-# 1. 重新构建前端（位于 doclens/web_v2/frontend）
-cd doclens/web_v2/frontend && npm run build
-
-# 2. 重启后端（否则后端仍在服务旧的静态文件）
-# 在 start-app.ps1 所在目录执行：后台形态，不带 Start-Process 会挂住调用方
-CORTEX_NO_BROWSER=1 pwsh -NoProfile -Command "Start-Process -FilePath pwsh -ArgumentList '-File','./start-app.ps1','gui' -WindowStyle Hidden"
-```
-
-> **注意**：仅重启后端不够——Vite 构建产物（`doclens/web_v2/static/`）不会自动更新，必须先 `npm run build` 再重启后端。
-
-### 代码改动后重启：由模型自行判断
-
-**没有自动重启机制**——改完代码后是否重启应用，由 AI 每轮自行判断并主动执行，不要等用户提醒，也不要假设有 hook 兜底。
-
-**需要重启**
-- 后端改动（`doclens/`、`treesearch/`、`planify/` 下 `*.py`）：进程内已加载的旧代码不会变，需重启才生效。
-- 前端改动（`doclens/web_v2/frontend/src/**`）：**必须先 `npm run build`**（Vite 产物落在 `doclens/web_v2/static/`，不构建则后端继续服务旧静态文件），再重启后端。
-
-**不需要重启**：纯文档/Markdown（如本节）、`tests/` 下的测试文件、与运行态无关的改动，以及纯对话轮次。
-
-**怎么重启**：执行本节开头的 `Start-Process` 后台命令（带 `CORTEX_NO_BROWSER=1`，不弹浏览器）。`start-app.ps1` 自带 `_kill_port_process`，会自行停掉旧实例并复用同一端口——不要手工 kill 进程。
-
-> 首次启动与重启用同一条命令；判断不准时可先问用户。
+- 后端改动（`doclens/`、`treesearch/`、`planify/` 下 `*.py`）→ 需重启；前端改动 → 先 `npm run build` 再重启。
+- 不需要重启：纯文档/Markdown、`tests/`、与运行态无关的改动、纯对话。
+- 重启用上面的 Start-Process 后台命令（首次与重启用同一条）；判断不准先问用户。

@@ -35,9 +35,13 @@ $env:PYTHONPATH = $cortexRoot
 # config.py 的 setdefault 尊重——dev 实例被劫持成发行版口径（日志落 .doclens、
 # 预设错乱、连错端口）。这里在启动前显式清掉所有 CORTEX_*，让被启动的实例用
 # 自己的判定重新算。
+# 2026-10-24 扩大灭菌面到 PLANIFY_*：宿主进程经 _load_cortex_env() 把 ~/.doclens/.env
+# 提升进进程环境（含 PLANIFY_DISABLED_TOOLS），残留值同样压过被测实例自己的 .env
+# （7860 实例 kb_grep 被宿主黑名单屏蔽事故）。PLANIFY_API_KEY 等凭据性键清掉后由
+# 实例自己从 .env 重新加载，不受影响。
 # 例外：CORTEX_WORKDIR 是调用方显式意图（非运行时配置），灭菌前先抢救。
 $callerWorkdir = $env:CORTEX_WORKDIR
-Get-ChildItem env: | Where-Object { $_.Name -like 'CORTEX_*' } | ForEach-Object {
+Get-ChildItem env: | Where-Object { $_.Name -like 'CORTEX_*' -or $_.Name -like 'PLANIFY_*' } | ForEach-Object {
     Remove-Item ("env:" + $_.Name)
 }
 if ($callerWorkdir) { $env:CORTEX_WORKDIR = $callerWorkdir }

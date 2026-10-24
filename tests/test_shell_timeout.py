@@ -7,7 +7,15 @@
 """
 import pytest
 
-from planify.tools.basic import find_bash_path, run_bash, shell_timeout, timeout_message
+from planify.tools.basic import (
+    SHELL_TIMEOUT_PLACEHOLDER,
+    find_bash_path,
+    interpolate_tool_description,
+    run_bash,
+    shell_timeout,
+    timeout_message,
+    to_tool_defs,
+)
 
 
 class TestShellTimeoutEnv:
@@ -33,6 +41,70 @@ class TestTimeoutMessage:
         assert msg.startswith("Error: Timeout (90s)")
         assert "background_run" in msg
         assert "check_background" in msg
+
+
+class TestToolDescriptionPlaceholder:
+    """描述占位符契约（2026-10-24）：
+
+    - 注册表构建期写 ``{PLANIFY_SHELL_TIMEOUT}`` 占位符（不固化数字——
+      env 热生效，构建期固化会让改配置后的描述过期说谎）；
+    - bash/powershell/background_run 描述含超时警示与占位符；
+    - ``to_tool_defs`` 转换时现值替换（每次调用现读 env，热生效）；
+    - ``interpolate_tool_description`` 用 replace 而非 format——描述里
+      其他花括号（代码示例等）原样保留。
+    """
+
+    def _registry_bash_description(self, tmp_path):
+        from planify.tools.registry import build_tool_registry
+
+        tools, _ = build_tool_registry(workdir=tmp_path)
+        by_name = {t["name"]: t for t in tools}
+        return by_name["bash"]["description"], by_name
+
+    def test_bash_description_contains_placeholder_and_warning(self, tmp_path):
+        desc, _ = self._registry_bash_description(tmp_path)
+        assert SHELL_TIMEOUT_PLACEHOLDER in desc
+        assert "进程树" in desc, "模型决策点必须能看到超时强杀语义"
+        assert "background_run" in desc
+
+    def test_powershell_and_background_run_descriptions_covered(self, tmp_path):
+        import platform
+
+        _, by_name = self._registry_bash_description(tmp_path)
+        if platform.system() == "Windows":
+            assert SHELL_TIMEOUT_PLACEHOLDER in by_name["powershell"]["description"]
+        bg_desc = by_name["background_run"]["input_schema"]["properties"]["timeout"]["description"]
+        assert SHELL_TIMEOUT_PLACEHOLDER in bg_desc
+
+    def test_to_tool_defs_interpolates_current_value(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", "77")
+        _, by_name = self._registry_bash_description(tmp_path)
+        defs = to_tool_defs([by_name["bash"]])
+        assert defs[0].description == by_name["bash"]["description"].replace(
+            SHELL_TIMEOUT_PLACEHOLDER, "77"
+        )
+        assert "{PLANIFY_SHELL_TIMEOUT}" not in defs[0].description
+        assert "77 秒" in defs[0].description
+
+    def test_interpolation_hot_reload_follows_env(self, tmp_path, monkeypatch):
+        """热生效契约：同一构建产物，两次转换分别跟随当时的 env 值。"""
+        _, by_name = self._registry_bash_description(tmp_path)
+        monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", "60")
+        assert "60 秒" in to_tool_defs([by_name["bash"]])[0].description
+        monkeypatch.setenv("PLANIFY_SHELL_TIMEOUT", "300")
+        assert "300 秒" in to_tool_defs([by_name["bash"]])[0].description
+
+    def test_interpolate_keeps_other_braces(self):
+        """描述含其他花括号（如代码示例）时 replace 不误伤（format 会崩）。"""
+        raw = "用法示例 {'a': 1}，超时 {PLANIFY_SHELL_TIMEOUT} 秒"
+        assert interpolate_tool_description(raw) == "用法示例 {'a': 1}，超时 120 秒"
+
+    def test_to_tool_defs_preserves_defaults(self):
+        """无 description / 无 input_schema 的裸定义回落默认值不崩。"""
+        defs = to_tool_defs([{"name": "x"}])
+        assert defs[0].name == "x"
+        assert defs[0].description == ""
+        assert defs[0].input_schema == {"type": "object"}
 
 
 @pytest.mark.skipif(find_bash_path() is None, reason="无 Git Bash（Windows 回退分支另行覆盖）")

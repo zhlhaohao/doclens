@@ -18,8 +18,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.llm.trace import LLMTracer
-from ..core.llm.types import Tool
+from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
 from ..core.logging_config import data_dirname
+from ..tools.basic import to_tool_defs
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
@@ -442,6 +443,7 @@ class StreamingAgent:
         identical_rounds = 0
         saw_pending_bg = False
         consecutive_poll_rounds = 0  # 连续纯轮询轮数（退避计算；非纯轮询清零）
+        bg_turn_guard_corrections = 0  # 退出护栏纠正次数（限次防乒乓，见退出点）
         full_text_output = ""
 
         try:
@@ -676,6 +678,45 @@ class StreamingAgent:
 
                 # 检查停止原因
                 if stop_reason != "tool_use":
+                    # === 回合退出护栏（2026-10-24「假通知」事故）===
+                    # 模型产出纯文字终答时若仍有后台任务在跑，完成通知的
+                    # 「自动送达」承诺只在回合存续时成立（循环顶 drain +
+                    # 退避提前唤醒都是循环内机制）——结束回合后队列无人
+                    # 消费，通知躺到用户下一条消息。模型可能据此推断
+                    # 「先终答、等通知叫醒我」，机械护栏把回合拉回循环。
+                    # 限次纠正：模型仍坚持终答（可能确实不再需要结果）
+                    # 则放行，不与模型意志无限乒乓。
+                    if (
+                        self.bg_manager is not None
+                        and self.bg_manager.has_running_tasks()
+                        and bg_turn_guard_corrections < 1
+                    ):
+                        bg_turn_guard_corrections += 1
+                        self.logger.warning(
+                            "[StreamingAgent] 退出护栏：后台任务仍在跑，"
+                            "纯文字终答被拉回循环（第 %d 次纠正）",
+                            bg_turn_guard_corrections,
+                        )
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "<background-guard>\n"
+                                    "A background task is still running, but "
+                                    "ending your turn now means NO completion "
+                                    "notification will ever reach you — results "
+                                    "sit unseen until the user's next message. "
+                                    "If your task depends on the background "
+                                    "result, continue polling with "
+                                    "check_background in this turn (backoff is "
+                                    "automatic). Only finish now if you truly "
+                                    "no longer need the result — in that case "
+                                    "say so explicitly in your answer.\n"
+                                    "</background-guard>"
+                                ),
+                            }
+                        )
+                        continue
                     # === 回合末自动压缩（ADR-0044）===
                     # 终答已流完、emit_done 之前：超阈上下文在此压缩——
                     # 回合全程在完整上下文上执行（压缩不再打断任务），
@@ -790,13 +831,20 @@ class StreamingAgent:
                             )
                             if saw_pending_bg:
                                 # 本轮曾轮询后台任务：等待未完成 ≠ 失败——
-                                # 防模型被「如实作答」逼成「构建出错」式误报
+                                # 防模型被「如实作答」逼成「构建出错」式误报。
+                                # 同时言明通知的回合限定（2026-10-24 事故）：
+                                # 文案若留「稍后可查」的开放承诺，模型会选
+                                # 「先终答等唤醒」——那是假通知路径。
                                 reminder += (
                                     " Note: a background task may still be "
-                                    "running; if your answer depends on it, "
-                                    "tell the user it is still running and can "
-                                    "be checked later with check_background — "
-                                    "do not claim it failed."
+                                    "running; waiting is NOT a failure — do not "
+                                    "claim it failed. But be aware: completion "
+                                    "notifications are only delivered while your "
+                                    "turn is still running — ending the turn "
+                                    "means nothing will wake you up. If your "
+                                    "answer depends on the task, keep polling "
+                                    "check_background in this turn instead of "
+                                    "finishing now."
                                 )
                     if reminder:
                         # 追加在消息尾部，不破坏前缀缓存（与 bg/inbox 注入同理）
@@ -1078,15 +1126,9 @@ class StreamingAgent:
         # 记录完整的请求内容（确保 JSON 合法且完整）
         self._log_request_payload(messages, system)
 
-        # 把工具定义转换为 Tool dataclass（suppress_tools 时置空强制文本作答）
-        tool_defs = [] if suppress_tools else [
-            Tool(
-                name=t["name"],
-                description=t.get("description", ""),
-                input_schema=t.get("input_schema", {"type": "object"}),
-            )
-            for t in self.tools
-        ]
+        # 把工具定义转换为 Tool dataclass（suppress_tools 时置空强制文本作答）；
+        # 描述占位符（如超时秒数）在转换时现值替换（热生效）
+        tool_defs = [] if suppress_tools else to_tool_defs(self.tools)
 
         # 本次请求的输入 messages 长度（usage 基线锚点）：astream 拿到的
         # 输入就是此刻的 messages 全量，usage 的 input 类字段精确覆盖它

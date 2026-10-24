@@ -43,6 +43,40 @@ def shell_timeout() -> int:
     return t if t > 0 else _DEFAULT_SHELL_TIMEOUT
 
 
+#: 工具描述里的超时占位符——构建期写占位符、发送给 LLM 前现值替换。
+#: 不在 ``build_tool_registry`` 构建时直接拼死数字：该 env 是热生效配置
+#: （调用期现读），构建期固化会让用户改配置后描述过期说谎。
+SHELL_TIMEOUT_PLACEHOLDER = "{PLANIFY_SHELL_TIMEOUT}"
+
+
+def interpolate_tool_description(description: str) -> str:
+    """把工具描述里的 SHELL_TIMEOUT_PLACEHOLDER 替换为现读超时值。
+
+    用 ``str.replace`` 而非 ``str.format``——工具描述可能含其他花括号
+    （如代码示例），format 会 KeyError/误吞。
+    """
+    return description.replace(SHELL_TIMEOUT_PLACEHOLDER, str(shell_timeout()))
+
+
+def to_tool_defs(tools):
+    """注册表工具 dict 列表 → LLM Provider 的 ``Tool`` dataclass 列表。
+
+    统一 4 处调用点（streaming/agent/subagent runner + teammate_manager）
+    的相同转换逻辑；转换时对 description 做占位符现值替换（热生效）。
+    惰性导入 ``Tool`` 避免模块级循环依赖（tools 包被 runner 们反向引用）。
+    """
+    from ..core.llm.types import Tool
+
+    return [
+        Tool(
+            name=t["name"],
+            description=interpolate_tool_description(t.get("description", "")),
+            input_schema=t.get("input_schema", {"type": "object"}),
+        )
+        for t in tools
+    ]
+
+
 def timeout_message(residual_output: str = "") -> str:
     """超时返回文案：带实际秒数 + 引导模型改用后台工具（而非反复重试）。
 

@@ -38,7 +38,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..core.llm.provider import LLMProvider
-from ..core.llm.types import Tool, ToolUseBlock
+from ..core.llm.types import Tool, ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
+from ..tools.basic import to_tool_defs
 
 
 class TeammateManager:
@@ -312,14 +313,7 @@ class TeammateManager:
                         response = self.provider.chat(
                             messages=messages,
                             system=sys_prompt,
-                            tools=[
-                                Tool(
-                                    name=t["name"],
-                                    description=t.get("description", ""),
-                                    input_schema=t.get("input_schema", {"type": "object"}),
-                                )
-                                for t in tools
-                            ],
+                            tools=to_tool_defs(tools),
                             max_tokens=8000,
                             tracer=tracer,
                         )

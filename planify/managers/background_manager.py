@@ -279,12 +279,22 @@ class BackgroundManager:
                         # （与 runner 轮次预算三机制同口径，防模型把等待误
                         # 报成构建出错）。前缀 RUNNING_PREFIX 是 runner 纯
                         # 轮询识别的契约（见上）。
+                        #
+                        # 契约限定（2026-10-24「假通知」事故）：完成通知只在
+                        # 回合存续时自动送达（runner 循环顶 drain + 退避提前
+                        # 唤醒都是循环内机制）。模型结束回合后队列无人消费，
+                        # 通知要等用户下一条消息——文案必须言明，否则模型
+                        # 会合理地推断「可以先终答、等通知叫醒我」。
                         return (
                             f"{RUNNING_PREFIX} still running, {elapsed:.0f}s elapsed "
                             f"(command: {t['command'][:60]}). This is NOT a failure. "
-                            "You will receive a completion notification; if the user "
-                            "is waiting, tell them it is still running, or poll again "
-                            "with check_background in a little while."
+                            "A completion notification will be delivered ONLY while "
+                            "your current turn is still running — if you end your "
+                            "turn now, nothing will wake you up and the result will "
+                            "sit unseen until the user's next message. To use the "
+                            "result, keep polling with check_background within this "
+                            "turn (the framework backs off automatically); only end "
+                            "the turn if you no longer need the result, and say so."
                         )
                 return f"[{t['status']}] {t.get('result') or '(no result)'}"
             return "\n".join(
@@ -315,6 +325,19 @@ class BackgroundManager:
         顺序脱节）。
         """
         return not self.notifications.empty()
+
+    def has_running_tasks(self) -> bool:
+        """是否存在 running 态任务（供回合退出护栏用）。
+
+        runner 在模型产出纯文字终答（stop_reason != tool_use）的退出点
+        调用：仍有后台任务在跑时注入纠正消息把回合拉回循环——完成通知
+        只在回合存续时送达（2026-10-24「假通知」事故），机械护栏兜住
+        「先终答、等通知叫醒我」的错误推断。终态任务不计入。
+        """
+        with self._tasks_lock:
+            return any(
+                t.get("status") == "running" for t in self.tasks.values()
+            )
 
     def remove(self, tid: str) -> bool:
         """

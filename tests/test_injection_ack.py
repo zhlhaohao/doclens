@@ -70,6 +70,9 @@ class StubBgManager:
         self._drained = True
         return [{"task_id": "t1", "status": "completed", "result": "rc=0"}]
 
+    def has_running_tasks(self):
+        return False
+
 
 class StubBus:
     def __init__(self, inbox=None):

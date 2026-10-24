@@ -14,7 +14,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..core.llm.types import TextBlock, Tool, ToolUseBlock
+from ..core.llm.types import TextBlock, ToolUseBlock
+from ..tools.basic import to_tool_defs
 
 
 class Agent:
@@ -195,14 +196,7 @@ class Agent:
             response = self.provider.chat(
                 messages=messages,
                 system=system,
-                tools=[
-                    Tool(
-                        name=t["name"],
-                        description=t.get("description", ""),
-                        input_schema=t.get("input_schema", {"type": "object"}),
-                    )
-                    for t in self.tools
-                ],
+                tools=to_tool_defs(self.tools),
                 max_tokens=8000,
                 tracer=self.tracer,
             )
