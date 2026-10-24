@@ -22,7 +22,7 @@ TEXT = (
     "第30题, 下一题内容"
 )
 # 统一窗口默认（与 CortexConfig 出厂一致）
-BEFORE, AFTER = 200, 600
+BEFORE, AFTER = 200, 200
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +237,7 @@ class TestUnifiedWindowModel:
         assert "前" * 50 + "NEEDLE" in k  # 锚点前至少 50 字符
 
     def test_window_from_config_properties(self, tmp_path: Path, monkeypatch):
-        """配置字段 → IndexManager property 透传（默认 200/600/2000）。"""
+        """配置字段 → IndexManager property 透传（默认 200/200/2000）。"""
         from doclens.config import CortexConfig
         from doclens.index_manager import IndexManager
 
@@ -245,7 +245,7 @@ class TestUnifiedWindowModel:
         monkeypatch.chdir(tmp_path)
         idx = IndexManager(CortexConfig())
         assert idx.search_context_before == 200
-        assert idx.search_context_after == 600
+        assert idx.search_context_after == 200
         assert idx.grep_match_max_chars == 2000
 
     def test_match_max_env_override(self, tmp_path: Path, monkeypatch):
@@ -334,7 +334,7 @@ class TestUnifiedWindowModel:
         from doclens.kb_tools import _extract_keyword_window
 
         max_chars = CortexConfig().max_context_chars_per_result
-        assert max_chars == (200 + 600) * 8
+        assert max_chars == (200 + 200) * 8
 
         # ~394 词 / 2435 字符的英文小文档：词预算内，整篇返回
         # （≤max_chars 时走早退分支原样返回，含尾换行）

@@ -150,11 +150,11 @@ class CortexConfig(BaseSettings):
 
     # KB 工具字符限制（影响 LLM token 消耗）
     # max_context_chars_per_result 是词窗口的**字符兜底**（防超长无空白段
-    # 炸穿预算），不是常规约束：默认值 (200+600)×8 与词窗口同量级——
+    # 炸穿预算），不是常规约束：默认值与词窗口同量级（(200+200)×8）——
     # 旧默认 800 在英文语料下比 800 词预算（≈4500 字符）紧 5-6 倍，
     # 词窗口从未真正生效（小文档也出 …（中部略/后文略）标记）
     max_context_chars_per_result: int = Field(
-        default=(200 + 600) * 8, description="单条搜索结果的字符兜底（防超长无空白段；默认与词窗口同量级）"
+        default=(200 + 200) * 8, description="单条搜索结果的字符兜底（防超长无空白段；默认与词窗口同量级）"
     )
     # search_kb 结果总预算（当量词：非 CJK 词 1，CJK 字 0.5——与 a388de1d 的
     # 预算口径统一）。旧字符口径 10000 字符 ≈ 1750 英文词，单条窗口 800 词
@@ -162,12 +162,14 @@ class CortexConfig(BaseSettings):
     max_total_words: int = Field(default=10000)
     # 搜索结果片段统一窗口：锚点前/后**当量词**数（grep 与 search 同口径；
     # 当量词：非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈ 2 汉字，中英文
-    # 同预算下信息量对齐；grep 正则自声明跨度时保留跨度语义，另加前后窗口）
+    # 同预算下信息量对齐；grep 正则自声明跨度时保留跨度语义，另加前后窗口。
+    # 2026-10-24 由 200/600 改 200/200：总预算 10000 当量词下显示条数
+    # 11 → ~22，提高金标可见率；命中点后文需要更多时靠 read_document 深读）
     search_context_before: int = Field(
         default=200, description="搜索结果片段：锚点前当量词数（非 CJK 词 1，CJK 字 0.5）"
     )
     search_context_after: int = Field(
-        default=600, description="搜索结果片段：锚点后当量词数（非 CJK 词 1，CJK 字 0.5）"
+        default=200, description="搜索结果片段：锚点后当量词数（非 CJK 词 1，CJK 字 0.5）"
     )
     # grep 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果。
     # 高级项，仅 env 可调，不在设置页/预设中暴露。
