@@ -148,7 +148,7 @@ READ_DOCUMENT_TOOL = {
 # ---------------------------------------------------------------------------
 
 MAX_CONTEXT_CHARS_PER_RESULT = (200 + 600) * 8
-MAX_TOTAL_CHARS = 10000
+MAX_TOTAL_WORDS = 10000
 # 字符兜底默认与词窗口同量级（(200+600)×8）：旧 800 在英文语料下比词预算
 # （800 词 ≈ 4500 字符）紧 5-6 倍，词窗口从未真正生效——小文档也出略标记
 # 窗口不在开头时补文档开头（标题/表头）的字符预算——独立于词窗口参数
@@ -301,13 +301,11 @@ def _extract_keyword_window(
     max_chars 为总预算的**字符兜底**（保险丝，窗口总宽不超过它）；
     None 时无字符兜底（纯词窗口）。
     """
-    from doclens.word_window import WORD_CHAR_CEILING, end_after_words, start_before_words
+    from doclens.word_window import WORD_CHAR_CEILING, count_equivalence_words, end_after_words, start_before_words
 
     # 短文早退：两个口径（字符兜底/当量词预算）都富余才整篇返回——只看
     # max_chars 会让词窗口在小文本上失效（max_chars 升到词口径后，
     # 2000 字中文文本 ≤6400 但 >150 当量词，旧早退会绕过 50/100 词窗口）
-    from doclens.word_window import count_equivalence_words
-
     ew = count_equivalence_words(text)
     if max_chars is not None and len(text) <= max_chars and ew <= before + after:
         return text
@@ -391,7 +389,7 @@ def _format_kb_results(
     doc_title_map: dict[str, str],
     max_results: int,
     max_context_chars_per_result: int = MAX_CONTEXT_CHARS_PER_RESULT,
-    max_total_chars: int = MAX_TOTAL_CHARS,
+    max_total_words: int = MAX_TOTAL_WORDS,
     on_miss: Optional[Callable[[str], str]] = None,
     context_before: int = 200,
     context_after: int = 600,
@@ -405,12 +403,14 @@ def _format_kb_results(
     total_hits = len(scored_results)
     display = scored_results[:max_results]
 
+    from doclens.word_window import count_equivalence_words
+
     lines = [
         f"Found {total_hits} results:",
         "Use read_document tool to read full content: path=<path value>, section=<single section title only, NOT the full hierarchy path>. E.g. use '3.4.2. 变更流程' not '第三章 > 3.4.2. 变更流程'. Larger section = broader content, smaller section = more specific.",
     ]
 
-    total_chars = 0
+    total_words = 0.0
     shown = 0
     truncated_count = 0
 
@@ -437,13 +437,13 @@ def _format_kb_results(
             entry += f"  <content>\n{context}\n  </content>\n"
         entry += "</result>"
 
-        entry_len = len(entry)
-        if total_chars + entry_len > max_total_chars:
+        entry_words = count_equivalence_words(entry)
+        if total_words + entry_words > max_total_words:
             truncated_count = total_hits - shown
             break
 
         lines.append(entry)
-        total_chars += entry_len
+        total_words += entry_words
         shown += 1
 
     if truncated_count > 0:
@@ -1176,7 +1176,7 @@ def handle_search_kb(
     return note + _format_kb_results(
         scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
-        max_total_chars=idx_manager.max_total_chars,
+        max_total_words=idx_manager.max_total_words,
         on_miss=idx_manager.resolve_doc_path,
         context_before=idx_manager.search_context_before,
         context_after=idx_manager.search_context_after,

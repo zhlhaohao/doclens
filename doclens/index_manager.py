@@ -201,8 +201,8 @@ class IndexManager:
         return self._config.grep_match_max_chars
 
     @property
-    def max_total_chars(self) -> int:
-        return self._config.max_total_chars
+    def max_total_words(self) -> int:
+        return self._config.max_total_words
 
     @property
     def max_read_words(self) -> int:

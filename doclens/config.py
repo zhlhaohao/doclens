@@ -156,7 +156,10 @@ class CortexConfig(BaseSettings):
     max_context_chars_per_result: int = Field(
         default=(200 + 600) * 8, description="单条搜索结果的字符兜底（防超长无空白段；默认与词窗口同量级）"
     )
-    max_total_chars: int = Field(default=10000)
+    # search_kb 结果总预算（当量词：非 CJK 词 1，CJK 字 0.5——与 a388de1d 的
+    # 预算口径统一）。旧字符口径 10000 字符 ≈ 1750 英文词，单条窗口 800 词
+    # 时只显示 1-3 条（Found 92 shown 1）；10000 当量词可显示 ~10 条。
+    max_total_words: int = Field(default=10000)
     # 搜索结果片段统一窗口：锚点前/后**当量词**数（grep 与 search 同口径；
     # 当量词：非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈ 2 汉字，中英文
     # 同预算下信息量对齐；grep 正则自声明跨度时保留跨度语义，另加前后窗口）

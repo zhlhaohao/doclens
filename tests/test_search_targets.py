@@ -154,7 +154,7 @@ class TestSearchKbHandlePaths:
             max_context_chars_per_result=500,
             search_context_before=200,
             search_context_after=600,
-            max_total_chars=8000,
+            max_total_words=8000,
             path_map=path_map,
             # AP-47：候选池改由 top_k_docs 决定，调用方不再传 max_results
             top_k_docs=100,
