@@ -439,6 +439,7 @@ def test_anthropic_chat_traces_request_and_native_response(tmp_path):
             return native
 
     provider = AnthropicProvider.__new__(AnthropicProvider)
+    provider.thinking_depth = "auto"  # __new__ 绕过 __init__，chat() 现读该档位
     provider.model = "claude-opus-4-6"
     provider._client = _ns(messages=_ns(create=_Completions().create))
     tracer = _make(tmp_path, session_key="s-anthropic")
