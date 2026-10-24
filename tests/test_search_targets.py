@@ -107,6 +107,7 @@ def _fake_idx(kb: Path, path_map: dict[str, str]):
         search_context_before=200,
         search_context_after=600,
         grep_match_max_chars=2000,
+        grep_max_total_words=10000,
         grep_score_threshold=0.0,
         grep_max_results=50,
         # AP-45：检索入口改以 index_availability 区分空库/不可读

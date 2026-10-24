@@ -197,6 +197,10 @@ class IndexManager:
         return self._config.search_context_after
 
     @property
+    def grep_max_total_words(self) -> int:
+        return self._config.grep_max_total_words
+
+    @property
     def grep_match_max_chars(self) -> int:
         return self._config.grep_match_max_chars
 

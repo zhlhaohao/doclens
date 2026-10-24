@@ -15,7 +15,9 @@ from doclens.search_targets import (
     format_missed_note,
     resolve_search_targets,
 )
-from treesearch.fts import SNIPPET_BASE_CHARS, SNIPPET_MATCH_MAX_CHARS
+from treesearch.fts import SNIPPET_MATCH_MAX_CHARS
+
+from doclens.word_window import count_equivalence_words
 
 if TYPE_CHECKING:
     from doclens.index_manager import IndexManager
@@ -27,12 +29,18 @@ logger = logging.getLogger(__name__)
 # 常量
 # ---------------------------------------------------------------------------
 
-MAX_TOTAL_CHARS = 8000
+# grep 结果总预算默认值（当量词：非 CJK 词 1，CJK 字 0.5）。
+# 运行时从 config（grep_max_total_words）读取；旧字符口径 8000 字符下
+# 单条窗口摘录 ~4000+ 字符，只显示 1-3 条结果。
+MAX_TOTAL_WORDS = 10000
 
-# Agent 侧 max_results 参数上限（防一次灌爆上下文；输出另有 8000 字符预算）
+# Agent 侧 max_results 参数上限（防一次灌爆上下文；输出另有总预算限制）
 MAX_RESULTS_CAP = 500
 
-# 片段预算复用 treesearch.fts 的共享常量（口径见 SNIPPET_BASE_CHARS）
+# 片段窗口默认值（当量词：非 CJK 词 1，CJK 字 0.5）——与 config 的
+# search_context_before/after 默认一致；实际调用从 config 注入。
+SNIPPET_CONTEXT_BEFORE_WORDS = 200
+SNIPPET_CONTEXT_AFTER_WORDS = 600
 
 # ---------------------------------------------------------------------------
 # Anthropic tool use schema
@@ -152,16 +160,18 @@ def _format_agent_output(
     total_terms: int,
     query_words: list[str],
     on_miss: Optional[Callable[[str], str]] = None,
-    context_before: int = SNIPPET_BASE_CHARS,
-    context_after: int = 2 * SNIPPET_BASE_CHARS,
+    context_before: int = SNIPPET_CONTEXT_BEFORE_WORDS,
+    context_after: int = SNIPPET_CONTEXT_AFTER_WORDS,
     match_max: int = SNIPPET_MATCH_MAX_CHARS,
+    max_total_words: int = MAX_TOTAL_WORDS,
 ) -> str:
     """将搜索结果格式化为结构化 XML，与 search_kb 输出格式对齐。
 
     on_miss: path_map 未命中 doc_id 时的兜底解析（IndexManager.resolve_doc_path，
     应对后台重索引导致的 doc_id 漂移）；None 时未命中输出 doc_id 本身（旧行为）。
-    context_before/after: 统一窗口模型的锚点前/后字符数（来自 config）。
+    context_before/after: 统一窗口模型的锚点前/后当量词数（来自 config）。
     match_max: 匹配体硬上限（config.grep_match_max_chars，防贪婪正则）。
+    max_total_words: 结果总预算（当量词，config.grep_max_total_words）。
 
     格式:
         Found N results in M files:
@@ -197,7 +207,7 @@ def _format_agent_output(
         output_lines.append(f"Found {len(content_results)} results in {unique_files} files:")
         output_lines.append("Use read_document tool to read full content: path=<path value>.")
 
-        total_chars = sum(len(l) for l in output_lines)
+        total_words = sum(count_equivalence_words(l) for l in output_lines)
         shown = 0
 
         for doc_id, node, matched, _prox, _fts, *_ in content_results:
@@ -223,16 +233,16 @@ def _format_agent_output(
             entry += f"  <content>{snippet}</content>\n"
             entry += "</result>"
 
-            entry_len = len(entry) + 1
+            entry_words = count_equivalence_words(entry) + 1
 
-            if total_chars + entry_len > MAX_TOTAL_CHARS:
+            if total_words + entry_words > max_total_words:
                 remaining = len(content_results) - shown
                 if remaining > 0:
                     output_lines.append(f"\n({remaining} more results truncated. Use max_results parameter to get more.)")
                 break
 
             output_lines.append(entry)
-            total_chars += entry_len
+            total_words += entry_words
             shown += 1
 
     if path_results:
@@ -245,16 +255,15 @@ def _format_agent_output(
 def _regex_led_snippet(
     text: str,
     terms: list[str],
-    before: int = SNIPPET_BASE_CHARS,
-    after: int = 2 * SNIPPET_BASE_CHARS,
+    before: int = SNIPPET_CONTEXT_BEFORE_WORDS,
+    after: int = SNIPPET_CONTEXT_AFTER_WORDS,
     match_max: int = SNIPPET_MATCH_MAX_CHARS,
 ) -> str | None:
     """对全文跑词项正则，返回统一锚点窗口（正则不合法时返回 None）。
 
-    统一窗口模型（与 search 的 _extract_keyword_window 同口径，词单位）：
-    ``[锚点前 before 词] + [命中体(≤match_max 字符)] + [锚点后 after 词]``。
-    词定义与 read_document/max_read_words 同源（CJK 每字一词，其余按空白
-    切分）——中英语料下窗口内词量一致（字符口径对英文仅约 1/6 信息量）。
+    统一窗口模型（与 search 的 _extract_keyword_window 同口径，当量词单位：
+    非 CJK 词 1，CJK 字 0.5）：
+    ``[锚点前 before 当量词] + [命中体(≤match_max 字符)] + [锚点后 after 当量词]``。
     正则自声明跨度时（如 ``第29题[\\s\\S]{0,300}``）命中体本身即跨度，
     前后窗口再补上下文；纯字面词项退化为关键词窗口。match_max 保持字符
     单位（防贪婪正则的匹配体硬上限）。
@@ -333,6 +342,7 @@ def handle_grep(
         context_before=idx.search_context_before,
         context_after=idx.search_context_after,
         match_max=idx.grep_match_max_chars,
+        max_total_words=idx.grep_max_total_words,
     )
 
     # 引擎附注（rg 超时/二进制超限未覆盖）——「结果可能不完整」必须显式

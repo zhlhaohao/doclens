@@ -531,8 +531,30 @@ def join_word_slice(pairs: list[tuple[str, str]]) -> str:
     return "".join(w + s for w, s in pairs).rstrip()
 
 
-# read_file 输出字符预算（防超长文件撑爆上下文）
-READ_FILE_MAX_CHARS = 50000
+# read_file 输出预算（当量词：非 CJK 词计 1，CJK 字计 0.5——1 英文词 ≈
+# 2 汉字，中英文同预算信息量对齐；与 doclens 侧预算口径同构，因模块
+# 边界禁止反向依赖，此处为独立副本）。旧字符口径 50000 字符对中文文件
+# 意味着 5 万字、对英文文件仅约 8000 词——中文信息量被隐性放大 6 倍。
+READ_FILE_MAX_WORDS = 50000
+
+# 当量词权重（口径副本，勿跨包引用 doclens.word_window——分层红线）
+_CJK_WORD_WEIGHT = 0.5
+
+
+def _line_equivalence_words(line: str) -> float:
+    """单行文本的当量词数（轻量实现，供行级预算累计）。"""
+    acc = 0.0
+    for w, _sep in split_words_with_seps(line):
+        if not w:
+            continue
+        cjk = sum(1 for ch in w if '\u4e00' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u30ff' or '\uac00' <= ch <= '\ud7af')
+        if cjk == 0:
+            acc += 1.0
+        elif cjk == len(w):
+            acc += cjk * _CJK_WORD_WEIGHT
+        else:
+            acc += cjk * _CJK_WORD_WEIGHT + (len(w) - cjk)
+    return acc
 
 
 def run_read(
@@ -546,7 +568,7 @@ def run_read(
     读取文件内容（纯文本），输出带行号前缀（``行号<TAB>内容``，1-based）。
 
     offset/limit 按行分块（offset 为起始行号，1-based；limit 为行数），
-    均不传时从头读。输出超字符预算时按行截断并给续读提示。
+    均不传时从头读。输出超当量词预算时按行截断并给续读提示。
 
     Args:
         path: 相对文件路径
@@ -574,15 +596,15 @@ def run_read(
         limit = max(limit, 1) if limit is not None else None
         end = total if limit is None else min(start + limit - 1, total)
 
-        # 字符预算：逐行累计（含行号+Tab 前缀开销），超预算按行截断。
+        # 当量词预算：逐行累计（含行号+Tab 前缀开销），超预算按行截断。
         # 仅在「未显式给 limit 而被预算截断」时附续读提示——显式 limit 是
         # 调用方自己开的窗，不打扰（对齐 Claude Code）。
         shown: list[str] = []
-        acc = 0
+        acc = 0.0
         budget_truncated = False
         for i, line in enumerate(lines[start - 1 : end]):
-            acc += len(str(start + i)) + 1 + len(line)
-            if acc > READ_FILE_MAX_CHARS:
+            acc += _line_equivalence_words(f"{start + i}\t{line}")
+            if acc > READ_FILE_MAX_WORDS:
                 budget_truncated = True
                 break
             shown.append(line)

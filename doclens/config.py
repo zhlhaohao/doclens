@@ -172,6 +172,9 @@ class CortexConfig(BaseSettings):
     # grep 匹配体硬上限：防贪婪正则（如 [\s\S]*）把整个文档灌进单条结果。
     # 高级项，仅 env 可调，不在设置页/预设中暴露。
     grep_match_max_chars: int = Field(default=2000)
+    # grep 结果总预算（当量词，与 max_total_words 同口径）：旧字符口径
+    # 8000 字符 ≈ 1400 英文词，单条窗口 800 当量词时只显示 1-3 条
+    grep_max_total_words: int = Field(default=10000)
     # read_document 单次输出预算（当量词：非 CJK 词 1，CJK 字 0.5——
     # 1 英文词 ≈ 2 汉字，中英文同预算信息量对齐；离散词序号 API 不变）
     max_read_words: int = Field(default=4000)

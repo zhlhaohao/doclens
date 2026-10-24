@@ -62,7 +62,7 @@ def test_read_empty_file(workdir):
 
 
 def test_read_truncation_with_resume_hint(workdir, monkeypatch):
-    monkeypatch.setattr(basic, "READ_FILE_MAX_CHARS", 30)
+    monkeypatch.setattr(basic, "READ_FILE_MAX_WORDS", 30)
     lines = [f"line-{i:03d}-abcdefghij" for i in range(1, 21)]
     (workdir / "big.txt").write_text("\n".join(lines), encoding="utf-8")
 
