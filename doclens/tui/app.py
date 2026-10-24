@@ -710,8 +710,7 @@ class CortexApp(App):
                 self.idx.path_map,
                 {},
                 query_words,
-                context_before=self.idx.rg_context_before,
-                context_after=self.idx.rg_context_after,
+                window_words=(self.idx.search_context_before, self.idx.search_context_after),
                 use_regex=True,
             )
             renderables = render_search_results(

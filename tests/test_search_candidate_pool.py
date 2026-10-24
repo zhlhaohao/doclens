@@ -100,8 +100,9 @@ class TestWebApiHonestPool:
             max_nodes_per_doc=cfg.max_nodes_per_doc,
             max_span=cfg.max_span,
             min_score_threshold=cfg.min_score_threshold,
-            rg_context_before=cfg.rg_context_before,
-            rg_context_after=cfg.rg_context_after,
+            search_context_before=cfg.search_context_before,
+            search_context_after=cfg.search_context_after,
+
             scoring_weights={
                 "keyword_match_ratio": cfg.weight_keyword_match,
                 "file_name_match": cfg.weight_file_name_match,

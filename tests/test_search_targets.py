@@ -102,8 +102,8 @@ def _fake_idx(kb: Path, path_map: dict[str, str]):
     return SimpleNamespace(
         search_path=str(kb),
         path_map=path_map,
-        rg_context_before=2,
-        rg_context_after=2,
+
+
         search_context_before=200,
         search_context_after=600,
         grep_match_max_chars=2000,

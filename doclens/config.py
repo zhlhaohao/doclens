@@ -185,9 +185,8 @@ class CortexConfig(BaseSettings):
         description="read_document 是否输出目录结构（默认关闭以节省 token）",
     )
 
-    # Ripgrep 降级搜索上下文
-    rg_context_before: int = Field(default=6)
-    rg_context_after: int = Field(default=5)
+    # Ripgrep 降级片段窗口：已并入统一词窗口（search_context_before/after，
+    # 当量词口径）——旧独立行窗口 rg_context_before/after 已删（2026-10-24）。
 
     # Grep 工具配置
     grep_score_threshold: float = Field(

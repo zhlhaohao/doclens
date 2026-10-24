@@ -225,14 +225,6 @@ class IndexManager:
         return self._config.grep_max_results
 
     @property
-    def rg_context_before(self) -> int:
-        return self._config.rg_context_before
-
-    @property
-    def rg_context_after(self) -> int:
-        return self._config.rg_context_after
-
-    @property
     def max_dir_files(self) -> int:
         """单目录遍历文件数上限（0 = 不设限；防误扫巨型目录）。"""
         return self._config.treesearch_max_dir_files

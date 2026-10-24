@@ -113,11 +113,9 @@ def rg_fallback_search(
     path_map: dict[str, str],
     doc_nodes_map: dict[str, list[dict]],
     query_words: list[str],
-    context_before: int = 6,
-    context_after: int = 5,
+    window_words: tuple[int, int],
     use_regex: bool = False,
     pre_hits: dict[str, list[int]] | None = None,
-    window_words: tuple[int, int] | None = None,
 ) -> list[tuple[str, dict, int, int, float, list]]:
     """执行 ripgrep 降级搜索。
 
@@ -128,11 +126,10 @@ def rg_fallback_search(
     见 rg_search_root_hits——逐文件分批在数十万文件下要数千次进程
     启动，不可行），key 为绝对文件路径。
 
-    window_words: 可选 (before, after) **词**预算——给定时合成节点文本
-    按词窗口截取（word_window 同源词定义），替代 context_before/after
-    的行窗口。行窗口（±6/5 行）在代码类文件上远小于词预算对应的文本量
-    （200 词 ≈ 15-40 行代码），未索引文件的片段被行窗口卡短；词窗口与
-    search/grep 的统一窗口模型同口径。None 时保持旧行为（兼容既有调用方）。
+    window_words: (before, after) **当量词**预算——合成节点文本按词窗口
+    截取（word_window 同源词定义）。与 search/grep 的统一窗口模型同口径
+    （旧行窗口 ±6/5 行已在 2026-10-24 移除——代码类文件上行窗口远小于
+    词预算对应的文本量，未索引文件的片段被卡短）。
 
     Returns:
         [(doc_id, node_dict, matched_count, proximity, fts_score)]
@@ -212,28 +209,21 @@ def rg_fallback_search(
                 continue
 
             matched_idx = matched_line - 1  # convert to 0-based
-            if window_words is not None:
-                # 词口径：命中行首尾为锚，按词预算截全文（行窗口只做粗读，
-                # 合成节点文本量与 search/grep 统一窗口同口径——行窗口在
-                # 代码类文件上远小于词预算对应的文本量）
-                from doclens.word_window import end_after_words, start_before_words
+            # 词口径：命中行首尾为锚，按词预算截全文——合成节点文本量与
+            # search/grep 统一窗口同口径（当量词；行窗口已移除）
+            from doclens.word_window import end_after_words, start_before_words
 
-                full_text = ''.join(all_lines)
-                line_start_off = sum(len(l) for l in all_lines[:matched_idx])
-                line_end_off = line_start_off + len(all_lines[matched_idx])
-                win_start = start_before_words(full_text, line_start_off, window_words[0])
-                win_end = end_after_words(full_text, line_end_off, window_words[1])
-                text = full_text[win_start:win_end].rstrip()
-                # line_start 语义 = 节点 text 首行对应的文件行号（词窗起点），
-                # 这样下游「line_start + 行内偏移」才能命中行定位（2026-10-18
-                # 修复：此前记 matched_line——首个命中行，词窗前文使 text 首行
-                # 早于该行，行号整体偏移，预览跳到命中点下方）
-                node_line_start = full_text.count("\n", 0, win_start) + 1
-            else:
-                context_start = max(0, matched_idx - context_before)
-                context_end = min(len(all_lines), matched_idx + context_after + 1)
-                text = ''.join(all_lines[context_start:context_end]).rstrip()
-                node_line_start = context_start + 1
+            full_text = ''.join(all_lines)
+            line_start_off = sum(len(l) for l in all_lines[:matched_idx])
+            line_end_off = line_start_off + len(all_lines[matched_idx])
+            win_start = start_before_words(full_text, line_start_off, window_words[0])
+            win_end = end_after_words(full_text, line_end_off, window_words[1])
+            text = full_text[win_start:win_end].rstrip()
+            # line_start 语义 = 节点 text 首行对应的文件行号（词窗起点），
+            # 这样下游「line_start + 行内偏移」才能命中行定位（2026-10-18
+            # 修复：此前记 matched_line——首个命中行，词窗前文使 text 首行
+            # 早于该行，行号整体偏移，预览跳到命中点下方）
+            node_line_start = full_text.count("\n", 0, win_start) + 1
 
             title = os.path.splitext(os.path.basename(display_path))[0]
             for did in doc_ids:
@@ -779,8 +769,6 @@ def execute_grep_search(
                 path_map,
                 {},
                 query_words,
-                context_before=idx.rg_context_before,
-                context_after=idx.rg_context_after,
                 use_regex=True,
                 pre_hits=pre_hits,
                 window_words=(idx.search_context_before, idx.search_context_after),

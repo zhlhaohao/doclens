@@ -147,7 +147,6 @@ def _fallback_no_fts(query, query_words, idx_manager, doc_nodes_map):
         idx_manager.path_map,
         doc_nodes_map,
         query_words,
-        context_before=idx_manager.rg_context_before,
-        context_after=idx_manager.rg_context_after,
+        window_words=(idx_manager.search_context_before, idx_manager.search_context_after),
     )
     return ScoreResult(results=filtered, source="ripgrep")

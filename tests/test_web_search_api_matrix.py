@@ -174,7 +174,7 @@ class TestSearchMatrix:
         from doclens.config import CortexConfig
         cfg = CortexConfig()
         for name in ("max_results", "max_nodes_per_doc", "top_k_docs", "max_span",
-                     "min_score_threshold", "rg_context_before", "rg_context_after"):
+                     "min_score_threshold"):
             setattr(fake, name, getattr(cfg, name))
         fake.scoring_weights = {
             "keyword_match_ratio": cfg.weight_keyword_match,

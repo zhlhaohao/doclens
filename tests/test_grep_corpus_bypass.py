@@ -111,14 +111,15 @@ class TestRgFallbackWithPreHits:
         ), patch("treesearch.ripgrep.rg_search") as mock_rg:
             results = rg_fallback_search(
                 "needle", path_map, {}, ["needle"],
-                context_before=1, context_after=1, use_regex=False,
+                use_regex=False,
                 pre_hits={str(doc): [2]},
+                window_words=(200, 600),
             )
         mock_rg.assert_not_called()
         assert len(results) == 1
         doc_id, node, matched, _, _, _ = results[0]
         assert doc_id == "dsid_x"  # normpath 反查命中 doc_id
-        assert node["line_start"] == 1  # 行窗起始行（±1 行含 l1）；新语义=text 首行行号而非首个命中行
+        assert node["line_start"] == 1  # 词窗起点行号（短文窗口覆盖首行）
         assert "needle here" in node["text"]
         assert matched == 1
 
@@ -128,16 +129,15 @@ class TestRgFallbackWithPreHits:
         doc.write_text("needle", encoding="utf-8")
         results = rg_fallback_search(
             "needle", {}, {}, ["needle"], use_regex=False,
-            pre_hits={str(doc): [1]},
+            pre_hits={str(doc): [1]}, window_words=(200, 600),
         )
         assert results[0][0] == "wild"  # basename（无扩展名）兜底
 
-    def test_window_words_overrides_line_context(self, tmp_path):
-        """window_words 词预算替代 ±行窗口：合成节点文本按词截取。
+    def test_window_words_word_budget(self, tmp_path):
+        """window_words 词预算：合成节点文本按词截取。
 
-        行窗口（±2 行）在代码类文件上远小于词预算对应的文本量。文件
-        60 行 × 5 词；window_words=(200, 250) 两窗都超过对应侧的词量，
-        应覆盖文件头尾（旧行为只有 ±2 行）。
+        文件 60 行 × 5 词；window_words=(200, 250) 两窗都超过对应侧的
+        词量，应覆盖文件头尾。
         """
         doc = tmp_path / "code.txt"
         lines = [f"line {i} padding padding padding" for i in range(60)]
@@ -145,23 +145,26 @@ class TestRgFallbackWithPreHits:
         doc.write_text("\n".join(lines), encoding="utf-8")
 
         results = rg_fallback_search(
-            "NEEDLE", {}, {}, ["NEEDLE"], context_before=2, context_after=2,
+            "NEEDLE", {}, {}, ["NEEDLE"],
             use_regex=False, pre_hits={str(doc): [31]},
             window_words=(200, 250),
         )
         assert len(results) == 1
         node = results[0][1]
-        assert node["line_start"] == 1  # 前窗按词覆盖文件头；新语义=词窗起始行而非首个命中行
+        assert node["line_start"] == 1  # 前窗按词覆盖文件头；语义=词窗起始行而非首个命中行
         assert node["text"].startswith("line 0")  # 前窗按词覆盖文件头
         assert "NEEDLE" in node["text"]
         assert node["text"].rstrip().endswith("padding")  # 后窗到文件尾
 
-        # 不传 window_words：旧行为（±2 行窗口）
-        results_old = rg_fallback_search(
-            "NEEDLE", {}, {}, ["NEEDLE"], context_before=2, context_after=2,
+        # 小词预算：窗口收窄到命中行附近
+        results_narrow = rg_fallback_search(
+            "NEEDLE", {}, {}, ["NEEDLE"],
             use_regex=False, pre_hits={str(doc): [31]},
+            window_words=(10, 10),
         )
-        assert results_old[0][1]["text"].startswith("line 28")
+        text_narrow = results_narrow[0][1]["text"]
+        assert "NEEDLE" in text_narrow
+        assert not text_narrow.startswith("line 0")  # 前窗只有 10 词，盖不到文件头
 
     def test_stale_shadow_md_excluded_from_rg(self, tmp_path):
         """历史遗留 shadow md（._*.md）被排除 glob 跳过，不进 rg 结果。"""
@@ -227,7 +230,7 @@ class TestExecuteGrepDualEngine:
     def _idx(self, tmp_path: Path) -> SimpleNamespace:
         return SimpleNamespace(
             index_path=tmp_path / "index.db", search_path=tmp_path,
-            path_map={}, rg_context_before=2, rg_context_after=2,
+            path_map={}, 
             search_context_before=200, search_context_after=600,
             grep_score_threshold=0.0, grep_max_results=50,
         )
@@ -384,7 +387,7 @@ class TestRgFallbackSourceTypes:
             idx = SimpleNamespace(
                 search_path=tmp_path, allowed_source_types=["markdown"],
                 index_path=tmp_path / "index.db", path_map={},
-                rg_context_before=2, rg_context_after=2,
+                
                 search_context_before=200, search_context_after=600,
                 grep_score_threshold=0.0, grep_max_results=50,
             )
