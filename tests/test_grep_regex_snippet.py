@@ -150,7 +150,9 @@ class TestGrepSnippetSelection:
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
         led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
-        assert led == "前" * 201 + "NEEDLE" + "后" * 400  # 201 = 200 + 词中边界近似余量
+        # 2026-10-24 修 start_before_words 尾累计边界（> → >=）：旧代码恰好
+        # 凑满预算时多吞 1 字（201），注释误标为「词中边界近似余量」
+        assert led == "前" * 200 + "NEEDLE" + "后" * 400
 
     def test_word_window_fuse_on_runaway_word(self):
         """超长无空白段（一个词）触发字符保险丝，窗口不被炸穿。"""

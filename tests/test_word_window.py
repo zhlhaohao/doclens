@@ -32,7 +32,9 @@ class TestStartBeforeWords:
 
         text = "一二三四五NEEDLE"
         anchor = text.find("NEEDLE")
-        assert start_before_words(text, anchor, 2) == 3  # 前两词 = 「四」「五」
+        # 当量词口径（2026-10-23）：1 汉字 = 0.5 当量词，2 当量词 = 4 字，
+        # 窗口 = 「二三四五」；旧离散词口径（每字 1 词）为「四五」→ 3
+        assert start_before_words(text, anchor, 2) == 1
 
     def test_runaway_word_fuse(self):
         from doclens.word_window import start_before_words
@@ -67,7 +69,11 @@ class TestEndAfterWords:
         from doclens.word_window import end_after_words
 
         text = "NEEDLE一二三四五"
-        assert end_after_words(text, len("NEEDLE"), 3) == len("NEEDLE") + 3
+        # 当量词口径（2026-10-23）：3 当量词 = 6 字，窗口 = 「一二三四五」全取
+        # 不足时取尾；恰好整段不足 6 字 → len(text)（= len(NEEDLE)+5）。
+        # 用 2.5 当量词（5 字）验证精确边界：终点 = len(NEEDLE) + 5
+        assert end_after_words(text, len("NEEDLE"), 2.5) == len("NEEDLE") + 5
+        assert end_after_words(text, len("NEEDLE"), 6) == len(text)
 
     def test_runaway_word_fuse(self):
         from doclens.word_window import end_after_words

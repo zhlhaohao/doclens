@@ -75,11 +75,13 @@ def start_before_words(text: str, anchor: int, n_words: int) -> int:
         # 前缀当量词不足：短前缀（物理宽 ≤ 保险丝）全取到 0；超长无空白
         # 段（一个词撑爆物理宽）仍受保险丝约束
         return hard_floor
-    # 从尾往前累计当量词，越过预算的第一词即窗口起点
+    # 从尾往前累计当量词，凑满预算的第一词（含整词，与离散词口径的
+    # starts[-n] 对齐）即窗口起点。边界用 >= 而非 >：恰好凑满 n 当量词时
+    # 该词就是窗口首词，> 会多吞一词（end_after_words 同口径）。
     acc = 0.0
     for i in range(len(weights) - 1, -1, -1):
         acc += weights[i]
-        if acc > n_words:
+        if acc >= n_words:
             return max(hard_floor, starts[i])
     return max(hard_floor, starts[0])
 
