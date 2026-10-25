@@ -9,6 +9,8 @@
 > - LogRocket《Patterns for efficient DOM manipulation with vanilla JS》
 > - 语义 HTML 与 WCAG 可访问性高频错误清单（Level Access / Wallyax）
 > - Vite 构建产物纪律（chunk/code-split）
+> - 2026-10-25 增补：z-index 军备竞赛 / 跳转定位不收敛 / 主题配置越界 /
+>   全量数组进 store（来源：本仓提交史复盘实证，见 backend.md 增补说明）
 >
 > **用途纪律**：审前端域时装载本表（后端域完成后才装载——SKILL.md 第 3
 > 步分域顺序）；每条发现必须绑定项目证据。
@@ -24,6 +26,8 @@
 | 模板内重计算 | render() 里每次都跑昂贵计算/排序/过滤 | 模板表达式内 `.filter/.sort/.map` 链 + 大数组 |
 | 属性监听过度 | @property 全开 attribute 反射/深比较 | 大对象属性未设 `attribute: false` |
 | unsafeHTML 注入面 | 标记内容未消毒直接 unsafeHTML/innerHTML | sanitize 步骤缺失处用 unsafeHTML |
+| 全量数组进 store | 列表数据整表进全局 store 常驻内存——与后端全量拉取配套的前端半边（实证：28.5 万条清单常驻内存，搜索改服务端后连全量拉取链路一起删） | store 收全量数组字段（allDocs 类）；「本地过滤」在前端 store 上做 |
+| 主题/配置越界进入通用组件 | 特定域的持久化配置被通用组件无条件消费——别的域被劫持且无入口恢复（实证：行号视图的 codeTheme 劫持 md 编辑态，md header 无配色按钮用户改不回） | 通用组件读特定域配置无模式判定（markdown/code 分道缺失）；持久化配置无作用域隔离 |
 
 ## 原生 H5 + vanilla JavaScript（无框架形态）
 
@@ -37,6 +41,8 @@
 | this 指向丢失用 that/self 别名 | 未用箭头函数/bind，散布 `var that = this` | `that.`/`self.` 别名引用 |
 | innerHTML 拼接用户输入 | XSS 注入面 | 字符串拼接含用户数据后 innerHTML 赋值 |
 | 内联事件与结构耦合 | HTML 属性里写 onclick="fn()"——行为与结构纠缠 | onclick=/onchange= 出现于模板字符串 |
+| z-index 军备竞赛 | 层级靠手调 z-index 数字叠罗汉——新浮层必再加一层，portal/fixed 元素被意外层叠上下文压死（实证：overlay 带 z-index:10 创建层叠上下文，压住 body 下 z:1 的 PDF portal，canvas 画好了却显示灰底） | 多组件各自声明 z-index 数字无分层规范；portal 元素不可见但 DOM/截屏正常 |
+| 跳转定位走捷径不收敛 | 「滚一次+两帧校准」假设滚动后高度稳定——content-visibility 估高塌缩场景途经块渐次实渲染，总高度持续变，校准时刻仍在变即永久偏移（正解：粗跳→校准→收敛循环至 delta≤1px） | 非 rAF 收敛循环的 scrollTo 定位；「桌面正常真机偏移」的环境相关定位 bug |
 
 ## 语义 HTML / 可访问性（H5 通用）
 
