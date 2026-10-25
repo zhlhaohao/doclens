@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, Response, Query, UploadFile
 
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api._auto_rotate import schedule_auto_rotate
@@ -25,6 +25,8 @@ from doclens.web_v2.models.files import (
     Entry,
     IndexedDocument,
     IndexedDocumentsResponse,
+    FilenameSearchHit,
+    FilenameSearchResponse,
     ListDirResponse,
     MkdirRequest,
     MoveRequest,
@@ -125,42 +127,78 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
 
 
 def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
-    """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件；DB 轻量查询）。
+    """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件）。
 
     ghost 行（仅登记，ADR-0034）包含在内并打 ghost=True 标——文件名搜索
     可见，前端据此降级展示（不提供「索引内」语义的交互）。
+
+    性能（2026-10-25，285k 文档语料实测）：
+    - 旧实现（indexed_source_paths + 逐条 is_file/stat）在 50 万级语料上
+      ~110s——/files/documents 是下拉刷新路径，指示器全程转圈。
+    - 现实现：① 单条 SQL 直接取 name/source_path（免 index_probe 中转与
+      Python 侧去重排序往返）；② 存在性 + size/mtime 用 scandir 按父目录
+      批量取（Windows 枚举即带 stat 信息；285k 文件/39 目录实测 1.4s，
+      对比逐条 stat 17.7s）。总体 <5s。
     """
-    from treesearch.fts import FTS5Index
+    import sqlite3
+    from collections import defaultdict
+
+    # ghost 谓词下推：node_count=0 即 ghost 行，不再单独跑 ghost_source_paths()
     try:
-        fts = FTS5Index(db_path=idx.index_path)
+        conn = sqlite3.connect(idx.index_path)
         try:
-            ghosts = fts.ghost_source_paths()
+            rows = conn.execute(
+                "SELECT doc_name, source_path, node_count FROM documents"
+            ).fetchall()
         finally:
-            fts.close()
+            conn.close()
     except Exception:  # noqa: BLE001
-        ghosts = set()
-    result: list[IndexedDocument] = []
-    seen: set[str] = set()
-    for abs_path in idx.indexed_source_paths():
+        return []
+
+    base_resolved = base.resolve()
+    # 按父目录分组，scandir 一遍拿齐 exists/size/mtime（批量，免逐条 stat）
+    by_dir: dict[str, set[str]] = defaultdict(set)
+    name_of: dict[str, str] = {}
+    ghost_of: dict[str, bool] = {}
+    for doc_name, abs_path, node_count in rows:
         if not abs_path:
             continue
         try:
-            p = Path(abs_path)
-            rel_parts = p.relative_to(base.resolve()).parts
-            rel = "/".join(rel_parts) if rel_parts else ""
-            if rel in seen or not p.is_file():
-                continue
-            seen.add(rel)
-            stat = p.stat()
-            result.append(IndexedDocument(
-                path=rel,
-                name=p.name,
-                size=stat.st_size,
-                modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-                ghost=str(abs_path) in ghosts,
-            ))
-        except (ValueError, OSError):
+            rel_parts = Path(abs_path).relative_to(base_resolved).parts
+        except ValueError:
             continue
+        rel = "/".join(rel_parts)
+        if rel in name_of:
+            continue  # 去重（同 rel path 只留一条）
+        name_of[rel] = doc_name or Path(abs_path).name
+        ghost_of[rel] = node_count == 0
+        head, _, tail = rel.rpartition("/")
+        by_dir[head].add(tail)
+
+    result: list[IndexedDocument] = []
+    for head, names in by_dir.items():
+        dir_abs = base_resolved.joinpath(head) if head else base_resolved
+        try:
+            with os.scandir(dir_abs) as it:
+                for entry in it:
+                    if entry.name not in names:
+                        continue
+                    rel = f"{head}/{entry.name}" if head else entry.name
+                    if not entry.is_file():
+                        continue
+                    try:
+                        st = entry.stat()
+                    except OSError:
+                        continue
+                    result.append(IndexedDocument(
+                        path=rel,
+                        name=name_of[rel],
+                        size=st.st_size,
+                        modified_at=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
+                        ghost=ghost_of[rel],
+                    ))
+        except OSError:
+            continue  # 目录被移走/不可访问：该组全部视为缺失，跳过
     return result
 
 
@@ -314,19 +352,121 @@ async def attrs(
 
 @router.get("/files/documents", response_model=IndexedDocumentsResponse)
 async def list_indexed_documents(
+    response: Response,
     idx: IndexManager = Depends(get_index_manager),
-) -> IndexedDocumentsResponse:
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+) -> Response:
     """返回所有已索引文档的扁平列表（用于前端文件名搜索）。
 
-    全量语义：50 万语料上 51 万次 is_file+stat，实测 ~110s。必须走线程池
-    ——曾在事件循环上同步跑，期间所有请求（含 /files/list）冻结，前端
-    currentDir 已切换 + treeCache 未写入 → 永久显示「目录为空」。
+    全量语义。2026-10-25 优化后 285k 文档语料实测 <5s（见 _indexed_documents），
+    但大库仍非瞬时——必须走线程池：曾在事件循环上同步跑，期间所有请求
+    （含 /files/list）冻结，前端 currentDir 已切换 + treeCache 未写入
+    → 永久显示「目录为空」。
+
+    ETag/304（同日追加）：大库上即使 <5s 的重建 + 20MB 级 JSON 序列化/传输
+    也是下拉刷新的主要等待。ETag = 库内容指纹（doc 行数 + 行内容聚合散列 +
+    文件 stat 指纹），客户端带 If-None-Match 命中时直接 304——内容未变的
+    重复刷新近乎零成本。弱验证器（W/）语义：资源「语义等价」即可，mtime
+    变化但内容同构时允许命中。
     """
-    def _work() -> IndexedDocumentsResponse:
+    import hashlib
+
+    def _etag():
+        """内容指纹：documents 行 + 文件 stat 敏感（改动任一即失效）。
+
+        构建走 _indexed_documents 同一条 scandir 路径（顺路产出清单，
+        不额外扫盘）——即 ETag 计算与清单构建合一：304 判定发生在
+        构建之后，因此 304 省的是序列化/传输（大库的主要成本，实测
+        285k 库序列化+传输 ~18s）而非扫描（~2s）。要再省扫描需库侧
+        增量版本号，未做。
+        """
         base = Path(idx.search_path)
         docs = _indexed_documents(idx, base)
         docs.sort(key=lambda d: d.name.lower())
-        return IndexedDocumentsResponse(documents=docs, total=len(docs))
+        h = hashlib.sha256()
+        h.update(str(len(docs)).encode())
+        for d in docs:
+            h.update(f"{d.path}|{d.size}|{d.modified_at.timestamp()}|{d.ghost}".encode())
+        return f'W/"{h.hexdigest()[:32]}"', docs
+
+    def _work():
+        etag, docs = _etag()
+        return etag, IndexedDocumentsResponse(documents=docs, total=len(docs))
+
+    etag, payload = await asyncio.to_thread(_work)
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, no-cache"  # 304 协商缓存，不落磁盘缓存
+    if if_none_match and if_none_match == etag:
+        # 直接返回 Response：FastAPI 对显式 Response 跳过 response_model 序列化
+        return Response(status_code=304)
+    return payload
+
+
+# --- GET /files/search（文件名搜索服务端化，2026-10-25）---
+
+@router.get("/files/search", response_model=FilenameSearchResponse)
+async def search_filenames(
+    q: str = Query(..., min_length=1, description="文件名子串（大小写不敏感）"),
+    limit: int = Query(100, ge=1, le=500),
+    idx: IndexManager = Depends(get_index_manager),
+) -> FilenameSearchResponse:
+    """按文件名子串搜索已索引文档（files 页搜索框的服务端实现）。
+
+    背景：旧方案前端拉全量清单（/files/documents，285k 库 79MB/16s+）在
+    浏览器本地 filter——把「一个搜索框」的成本抬到了整库传输。此端点把
+    过滤下推到 SQL：lower(doc_name) LIKE '%q%'（子串无法走 B-tree 索引，
+    全表扫 285k 行实测 ~0.5s），只回 top N 命中（几 KB）。
+
+    与旧前端行为对齐：name 大小写不敏感 contains；ghost 行包含并打标。
+    排序用 doc_name 的 COLLATE NOCASE（旧前端是 localeCompare zh，
+    服务端无 locale 时退化为码点序，展示差异可接受）。
+    size/modified_at 仅对 top N 命中补（scandir 单目录批量 stat，百条
+    级成本可忽略）——结果行「大小 · 修改」列需要。
+    """
+    import sqlite3
+
+    pattern = f"%{q.lower()}%"
+
+    def _work() -> FilenameSearchResponse:
+        base = Path(idx.search_path)
+        base_resolved = base.resolve()
+        conn = sqlite3.connect(idx.index_path)
+        try:
+            rows = conn.execute(
+                """SELECT doc_name, source_path, node_count FROM documents
+                   WHERE lower(doc_name) LIKE ?
+                   ORDER BY doc_name COLLATE NOCASE
+                   LIMIT ?""",
+                (pattern, limit),
+            ).fetchall()
+            total = conn.execute(
+                "SELECT count(*) FROM documents WHERE lower(doc_name) LIKE ?",
+                (pattern,),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        hits: list[FilenameSearchHit] = []
+        for doc_name, abs_path, node_count in rows:
+            if not abs_path:
+                continue
+            try:
+                rel = "/".join(Path(abs_path).relative_to(base_resolved).parts)
+            except ValueError:
+                continue
+            size, mtime = 0, None
+            try:
+                st = os.stat(abs_path)
+                size, mtime = st.st_size, datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+            except OSError:
+                pass  # 缺失文件仍列出（path 可定位），仅缺 size/mtime
+            hits.append(FilenameSearchHit(
+                path=rel,
+                name=doc_name or Path(abs_path).name,
+                size=size,
+                modified_at=mtime,
+                ghost=node_count == 0,
+            ))
+        return FilenameSearchResponse(results=hits, total=total)
 
     return await asyncio.to_thread(_work)
 

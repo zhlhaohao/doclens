@@ -93,3 +93,17 @@ class IndexedDocument(BaseModel):
 class IndexedDocumentsResponse(BaseModel):
     documents: list[IndexedDocument]
     total: int
+
+
+class FilenameSearchHit(BaseModel):
+    """文件名搜索命中（/files/search，2026-10-25 服务端化）。"""
+    path: str
+    name: str
+    size: int = 0
+    modified_at: datetime | None = None
+    ghost: bool = False
+
+
+class FilenameSearchResponse(BaseModel):
+    results: list[FilenameSearchHit]
+    total: int
