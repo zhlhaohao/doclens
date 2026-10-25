@@ -21,9 +21,6 @@ export function resetStore(target: typeof store) {
       error: null,
       filenameSearch: {
         query: "",
-        allDocs: [],
-        docsLoading: true,
-        docsError: null,
         results: [],
         selectedPath: null,
         isActive: false,

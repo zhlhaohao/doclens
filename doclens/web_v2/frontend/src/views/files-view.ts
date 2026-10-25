@@ -29,7 +29,7 @@ import "../components/drop-zone";
 import "../components/icon";
 import "../components/file-search-box";
 import "../components/file-search-results";
-import { fetchDocuments } from "../api/documents";
+import { searchFilenames } from "../api/documents";
 import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { router } from "../router/router";
 import "../components/download-overlay";
@@ -446,13 +446,17 @@ export class FilesView extends LitElement {
 
   private _unsubscribe?: () => void;
   private _fileInput: HTMLInputElement | null = null;
+  /** 文件名搜索防抖句柄（服务端化后按需发请求）。 */
+  private _searchDebounce: number | undefined;
+  /** 最近一次发起的搜索词：迟到响应守卫的比较基准（不能比 store——
+   *  store.query 在响应落库前还是旧值，比 store 会把首个响应也判过期。 */
+  private _lastSearchQuery = "";
 
   connectedCallback() {
     super.connectedCallback();
     this._unsubscribe = store.subscribe(() => this._onStoreChange());
     this._ensureLoaded("");
     this._loadPaneWidths();
-    this._loadIndexedDocuments();
     this._probeGitRoot();
     void this._probeBooks();
     // 启动恢复：上次所在目录 + 选中文件（选择恢复，预览不自动拉）
@@ -616,16 +620,6 @@ export class FilesView extends LitElement {
     }
   }
 
-  private async _loadIndexedDocuments() {
-    if (!store.getState().files.filenameSearch.docsLoading) return;
-    try {
-      const docs = await fetchDocuments();
-      actions.loadIndexedDocuments(docs);
-    } catch (e: any) {
-      actions.setFilenameSearchDocsError(e?.message || "文档列表加载失败");
-    }
-  }
-
   /** reindex 完成后（cortex:watch-reindexed）：刷新当前目录列表与已索引文档列表，
    *  让 indexed 标志反映新索引（改名/新增/删除后自动回填）。仅在 files 视图挂载时生效。 */
   private _onIndexUpdated = () => {
@@ -642,20 +636,16 @@ export class FilesView extends LitElement {
     }
   };
 
-  /** 失效当前目录缓存并重拉目录列表 + 已索引文档清单（下拉刷新与 reindex 回调共用）。 */
+  /** 失效当前目录缓存并重拉目录列表（下拉刷新与 reindex 回调共用）。
+   *  2026-10-25：不再重拉全量文档清单（79MB）——文件名搜索已服务端化，
+   *  清单没有消费方了；目录 indexed 标志走 /files/list 本身。 */
   private async _refreshFileList(): Promise<void> {
     const dir = store.getState().files.currentDir;
     actions.invalidateDir(dir);
     void this._ensureLoaded(dir);
-    try {
-      const docs = await fetchDocuments();
-      actions.loadIndexedDocuments(docs);
-    } catch {
-      /* 静默：indexed 标志非关键，不阻塞 */
-    }
   }
 
-  /** 下拉刷新（移动端 pull-to-refresh）：list 层刷新当前目录与文档清单；
+  /** 下拉刷新（移动端 pull-to-refresh）：list 层刷新当前目录；
    *  detail 层正常已被 data-ptr-off 拦截，这里双保险直接跳过。 */
   async refresh(): Promise<void> {
     if (this._state.mobilePane === "detail") return;
@@ -1451,15 +1441,8 @@ export class FilesView extends LitElement {
   };
 
   private get _searchBoxState() {
-    const fs = store.getState().files.filenameSearch;
-    const docsEmpty = !fs.docsLoading && fs.allDocs.length === 0;
-    const disabled = fs.docsError !== null || docsEmpty;
-    const placeholder = fs.docsError !== null
-      ? "文档列表加载失败"
-      : docsEmpty
-        ? "暂无已索引文档"
-        : "按文件名搜索…";
-    return { disabled, placeholder };
+    // 搜索已服务端化（/files/search）：搜索框始终可用，无全量清单加载态
+    return { disabled: false, placeholder: "按文件名搜索…" };
   }
 
   private get _isFilenameSearchActive(): boolean {
@@ -1472,23 +1455,28 @@ export class FilesView extends LitElement {
       actions.clearFilenameSearch();
       return;
     }
-    const { allDocs } = store.getState().files.filenameSearch;
-    const q = query.toLowerCase();
-    const filtered = allDocs.filter(d => d.name.toLowerCase().includes(q));
-    filtered.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase(), "zh", {
-      numeric: true,
-      sensitivity: "base",
-    }));
-    const totalMatches = filtered.length;
-    const results = filtered.slice(0, 100);
-    actions.setFilenameSearchQuery({ query, results, totalMatches });
-    // 选中首项时立即联动 preview（dirty 检查与点击行一致）
-    if (results[0]) {
-      void this._previewPathWithDirtyCheck(results[0].path);
-    }
+    // 服务端化搜索（2026-10-25）：LIKE 下推到 SQL，替代旧「全量拉取本地
+    // filter」（285k 库 79MB/16s → ~0.5s 几 KB）。防抖 200ms 收敛连续按键。
+    window.clearTimeout(this._searchDebounce);
+    this._lastSearchQuery = query;
+    this._searchDebounce = window.setTimeout(async () => {
+      try {
+        const { results, total } = await searchFilenames(query);
+        // 迟到响应守卫：期间用户已改词（或清空）则丢弃本次结果
+        if (this._lastSearchQuery !== query) return;
+        actions.setFilenameSearchQuery({ query, results, totalMatches: total });
+        if (results[0]) {
+          void this._previewPathWithDirtyCheck(results[0].path);
+        }
+      } catch {
+        /* 搜索失败静默：保留旧结果，不打断浏览 */
+      }
+    }, 200);
   };
 
   private _onFilenameClear = () => {
+    window.clearTimeout(this._searchDebounce);
+    this._lastSearchQuery = "";
     actions.clearFilenameSearch();
   };
 

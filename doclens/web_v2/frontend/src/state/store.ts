@@ -92,9 +92,6 @@ export const INITIAL_STATE: AppState = {
     error: null,
     filenameSearch: {
       query: "",
-      allDocs: [],
-      docsLoading: true,
-      docsError: null,
       results: [],
       selectedPath: null,
       isActive: false,
@@ -385,32 +382,8 @@ export const actions = {
   },
 
   loadIndexedDocuments(docs: IndexedDocument[]) {
-    const cur = store.getState().files;
-    store.setState({
-      files: {
-        ...cur,
-        filenameSearch: {
-          ...cur.filenameSearch,
-          allDocs: docs,
-          docsLoading: false,
-          docsError: null,
-        },
-      },
-    });
-  },
-
-  setFilenameSearchDocsError(message: string) {
-    const cur = store.getState().files;
-    store.setState({
-      files: {
-        ...cur,
-        filenameSearch: {
-          ...cur.filenameSearch,
-          docsLoading: false,
-          docsError: message,
-        },
-      },
-    });
+    // 2026-10-25 服务端化后无全量清单：空实现保留（旧调用点已清，防漏）
+    void docs;
   },
 
   setFilenameSearchQuery(payload: {

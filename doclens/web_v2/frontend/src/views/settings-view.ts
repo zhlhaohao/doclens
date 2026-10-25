@@ -21,7 +21,6 @@ import "../components/model-presets-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
 import "../components/skills-section";
-import "../components/appearance-section";
 import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
@@ -992,7 +991,6 @@ export class SettingsView extends LitElement {
                   ${tab === "network" ? html`<password-section></password-section>` : nothing}
                   ${tab === "mcp" ? html`<mcp-servers-section></mcp-servers-section>` : nothing}
                   ${tab === "skills" ? html`<skills-section></skills-section>` : nothing}
-                  ${tab === "misc" ? html`<appearance-section></appearance-section>` : nothing}
                 </div>
               `;
             })}

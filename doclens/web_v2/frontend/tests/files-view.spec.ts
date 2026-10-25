@@ -40,15 +40,58 @@ vi.mock("../src/api/preview", () => ({
   isImageFile: vi.fn(() => false),
 }));
 
-// Mock fetchDocuments (避免真实网络请求；返回空数组即可让 _loadIndexedDocuments 走完)
+// Mock searchFilenames（2026-10-25 服务端化：files-view 经此发请求）
 vi.mock("../src/api/documents", () => ({
-  fetchDocuments: vi.fn().mockResolvedValue([]),
+  searchFilenames: vi.fn().mockResolvedValue({
+    results: [
+      { path: "docs/deploy.md", name: "deploy.md", size: 10, modifiedAt: "2026-10-25T00:00:00Z", ghost: false },
+    ],
+    total: 1,
+  }),
 }));
 
 describe("files-view", () => {
   beforeEach(() => {
     resetStore(store);
     vi.clearAllMocks();
+  });
+
+  it("filename search: 输入后 200ms 防抖发请求且结果落库激活（迟到守卫回归）", async () => {
+    // 2026-10-25 事故：守卫误比 store.query（响应落库前还是旧值）→
+    // 首个响应被自己丢弃 → 输入无反应。守卫基准必须是实例字段。
+    const { searchFilenames } = await import("../src/api/documents");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    el._onFilenameSearch(new CustomEvent("search", { detail: { query: "deploy" } }));
+    // 防抖 200ms 内未发请求
+    expect(searchFilenames).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 260));
+    expect(searchFilenames).toHaveBeenCalledWith("deploy");
+    // 结果落库：isActive + 首项选中（旧 bug 在这里挂——守卫把结果丢了）
+    await vi.waitFor(() => {
+      const fs = store.getState().files.filenameSearch;
+      expect(fs.isActive).toBe(true);
+      expect(fs.query).toBe("deploy");
+      expect(fs.selectedPath).toBe("docs/deploy.md");
+      expect(fs.totalMatches).toBe(1);
+    });
+    document.body.removeChild(el);
+  });
+
+  it("filename search: 清空取消待发请求并复位", async () => {
+    const { searchFilenames } = await import("../src/api/documents");
+    const el = document.createElement("files-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    el._onFilenameSearch(new CustomEvent("search", { detail: { query: "x" } }));
+    el._onFilenameClear();
+    await new Promise((r) => setTimeout(r, 260));
+    expect(searchFilenames).not.toHaveBeenCalled();
+    expect(store.getState().files.filenameSearch.isActive).toBe(false);
+    document.body.removeChild(el);
   });
 
   it("copy-path action copies selected paths (newline-joined) and toasts", async () => {

@@ -71,6 +71,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   PLANIFY_OUTSIDE_WORKDIR: "ask",
   PLANIFY_ASK_MODE: "interactive",
   PLANIFY_THINKING_DEPTH: "auto",
+  PLANIFY_INJECTION_ACK: "false",
 };
 
 /** 后端默认值镜像（必须与 doclens/config.py 的 Field default 一致）。
@@ -267,13 +268,22 @@ export const SETTINGS_FIELDS: SettingsField[] = [
   {
     tab: "misc",
     section: "AI 工具",
+    envVar: "PLANIFY_INJECTION_ACK",
+    label: "注入通知回执",
+    component: "switch",
+    effect: "live",
+    hint: "仅端点强制 user/assistant 严格交替时开启（thinking 端点开启会 400）。",
+  },
+  {
+    tab: "misc",
+    section: "AI 工具",
     envVar: "PLANIFY_LLM_TRACE",
     label: "LLM trace 保留天数",
     component: "number",
     min: 0,
     max: 365,
     unit: "天",
-    hint: "LLM 调用原文落盘（调试/缓存命中率分析）：0 = 关闭（默认）；>0 = 开启并保留该天数，启动时自动删除过期 trace 文件（.planify/llm_trace/）。改后需重启。",
+    hint: "0 = 关闭（默认）；>0 = 保留该天数（.planify/llm_trace/）。改后需重启。",
   },
   {
     tab: "misc",
@@ -283,6 +293,6 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     component: "switch",
     effect: "live",
     invert: true,
-    hint: "关闭后对话不再注入记忆索引与纪律（记忆文件保留，重新开启即恢复）。保存即生效，无需重启。",
+    hint: "关闭后对话不再注入记忆索引（文件保留）。保存即生效。",
   },
 ];

@@ -73,6 +73,18 @@ def _ask_mode_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     return []
 
 
+def _injection_ack_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """注入回执总开关校验（空串 = 未设置 = 默认关；布尔真值集合与
+    core.config.injection_ack_enabled 对齐）。"""
+    raw = values.get("PLANIFY_INJECTION_ACK", "").strip().lower()
+    if raw and raw not in ("1", "true", "yes", "on", "0", "false", "no", "off"):
+        return [ConfigValidationError(
+            field="PLANIFY_INJECTION_ACK",
+            error="合法值：1/true/yes/on（开）或 0/false/no/off（关）",
+        )]
+    return []
+
+
 def _thinking_depth_rule(values: dict[str, str]) -> list[ConfigValidationError]:
     """思考深度档位校验（空串 = 未设置 = 默认 auto，跳过）。"""
     raw = values.get("PLANIFY_THINKING_DEPTH", "").strip().lower()
@@ -224,6 +236,8 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_outside_workdir_rule(values))
     # 对话提问模式规则（ADR-0033）
     errors.extend(_ask_mode_rule(values))
+    # 注入回执总开关规则（真值集合与 injection_ack_enabled 对齐）
+    errors.extend(_injection_ack_rule(values))
     # 思考深度档位规则（auto/off/low/medium/high）
     errors.extend(_thinking_depth_rule(values))
     # 工作目录覆盖规则（目录存在性）

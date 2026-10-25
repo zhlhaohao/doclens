@@ -240,9 +240,6 @@ export interface IndexedDocument {
 
 export interface FilenameSearchState {
   query: string;
-  allDocs: IndexedDocument[];
-  docsLoading: boolean;
-  docsError: string | null;
   results: IndexedDocument[];
   selectedPath: string | null;
   isActive: boolean;

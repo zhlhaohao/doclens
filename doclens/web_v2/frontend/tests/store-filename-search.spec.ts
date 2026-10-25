@@ -8,7 +8,7 @@ const docs: IndexedDocument[] = [
   { path: "a.py", name: "a.py", size: 300, modifiedAt: "2026-06-26T00:00:00Z" },
 ];
 
-describe("filenameSearch store slice", () => {
+describe("filenameSearch store slice（2026-10-25 服务端化：无 allDocs/docsLoading）", () => {
   beforeEach(() => {
     store.setState({
       ...INITIAL_STATE,
@@ -16,23 +16,14 @@ describe("filenameSearch store slice", () => {
     });
   });
 
-  it("starts inactive with docsLoading=true", () => {
+  it("starts inactive with empty results", () => {
     const s = store.getState().files.filenameSearch;
     expect(s.isActive).toBe(false);
-    expect(s.docsLoading).toBe(true);
     expect(s.results).toEqual([]);
-  });
-
-  it("loadIndexedDocuments populates allDocs and clears loading", () => {
-    actions.loadIndexedDocuments(docs);
-    const s = store.getState().files.filenameSearch;
-    expect(s.allDocs).toHaveLength(3);
-    expect(s.docsLoading).toBe(false);
-    expect(s.docsError).toBeNull();
+    expect(s.query).toBe("");
   });
 
   it("setFilenameSearchQuery activates when query non-empty and selects first result", () => {
-    actions.loadIndexedDocuments(docs);
     actions.setFilenameSearchQuery({
       query: "ts",
       results: [docs[1]],
@@ -42,6 +33,7 @@ describe("filenameSearch store slice", () => {
     expect(s.isActive).toBe(true);
     expect(s.query).toBe("ts");
     expect(s.selectedPath).toBe("src/b.ts");
+    expect(s.totalMatches).toBe(1);
   });
 
   it("setFilenameSearchQuery with empty query deactivates and clears selectedPath", () => {
@@ -52,8 +44,7 @@ describe("filenameSearch store slice", () => {
     expect(s.selectedPath).toBeNull();
   });
 
-  it("clearFilenameSearch resets search-time fields but preserves allDocs", () => {
-    actions.loadIndexedDocuments(docs);
+  it("clearFilenameSearch resets search-time fields", () => {
     actions.setFilenameSearchQuery({ query: "a", results: [docs[0]], totalMatches: 1 });
     actions.clearFilenameSearch();
     const s = store.getState().files.filenameSearch;
@@ -61,21 +52,13 @@ describe("filenameSearch store slice", () => {
     expect(s.results).toEqual([]);
     expect(s.isActive).toBe(false);
     expect(s.selectedPath).toBeNull();
-    expect(s.allDocs).toHaveLength(3);
+    expect(s.totalMatches).toBe(0);
   });
 
   it("selectFilenameSearchResult only updates selectedPath", () => {
-    actions.loadIndexedDocuments(docs);
     actions.setFilenameSearchQuery({ query: "", results: [], totalMatches: 0 });
     actions.selectFilenameSearchResult("src/b.ts");
     expect(store.getState().files.filenameSearch.selectedPath).toBe("src/b.ts");
     expect(store.getState().files.filenameSearch.query).toBe("");
-  });
-
-  it("setFilenameSearchDocsError sets docsError and clears loading", () => {
-    actions.setFilenameSearchDocsError("boom");
-    const s = store.getState().files.filenameSearch;
-    expect(s.docsError).toBe("boom");
-    expect(s.docsLoading).toBe(false);
   });
 });

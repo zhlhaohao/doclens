@@ -7,7 +7,7 @@ import {
 
 describe("SETTINGS_FIELDS", () => {
   it("has exactly 17 fields (network + MCP + 百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 工作目录覆盖 + shell 超时/轮数/trace/记忆；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(17);
+    expect(SETTINGS_FIELDS).toHaveLength(18);
   });
 
   it("every field has a unique envVar", () => {
@@ -62,18 +62,23 @@ describe("SETTINGS_FIELDS", () => {
     expect(search).toHaveLength(0);
   });
 
-  it("misc tab has AI 工具（shell 超时 + 轮数 + trace）与长期记忆字段 (1–3600 校验在后端)", () => {
+  it("misc tab has AI 工具（shell 超时 + 轮数 + 注入回执 + trace）与长期记忆字段 (1–3600 校验在后端)", () => {
     const misc = SETTINGS_FIELDS.filter((f) => f.tab === "misc");
     expect(misc.map((f) => f.envVar)).toEqual([
       "PLANIFY_SHELL_TIMEOUT",
       "PLANIFY_MAX_TOOL_ROUNDS",
       "PLANIFY_MAX_SUBAGENT_ROUNDS",
+      "PLANIFY_INJECTION_ACK",
       "PLANIFY_LLM_TRACE",
       "CORTEX_MEMORY_DISABLE",
     ]);
     const f = misc[0];
     expect(f.component).toBe("slider");
     expect(f.min).toBeLessThan(f.max!);
+    // 注入回执开关（2026-10-25 单参数化）：switch + live 热生效
+    const ack = misc.find((x) => x.envVar === "PLANIFY_INJECTION_ACK")!;
+    expect(ack.component).toBe("switch");
+    expect(ack.effect).toBe("live");
   });
 
   it("SETTINGS_TAB_LABELS maps each tab to a Chinese label", () => {

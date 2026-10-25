@@ -142,6 +142,15 @@ async def put_config(
             {k: updates[k] for k in _round_keys & set(updates)},
         )
 
+    # 4.9 注入回执总开关热生效（2026-10-25 单参数化）：8 处注入点统一读
+    # core.config.injection_ack_enabled（每次现读 env），reload_config 的
+    # load_dotenv 已同步——此处记日志便于观察（switch 组件写 "true"/"false"，
+    # 均在 validator 布尔集内）。
+    if "PLANIFY_INJECTION_ACK" in updates:
+        logger.info(
+            "injection ack hot-applied: %r", updates["PLANIFY_INJECTION_ACK"] or "off(default)"
+        )
+
     logger.info(
         "config saved: scope=%s path=%s restart=%s", scope, path, restart_fields
     )
