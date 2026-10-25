@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..core.config import injection_ack_enabled
 from ..core.llm.types import TextBlock, ToolUseBlock
 from ..tools.basic import to_tool_defs
 
@@ -175,10 +176,15 @@ class Agent:
                     "role": "user",
                     "content": f"<background-results>\n{txt}\n</background-results>"
                 })
-                messages.append({
-                    "role": "assistant",
-                    "content": "Noted background results."
-                })
+                # 合成回执走总开关（默认关，见 core.config.injection_ack_enabled）：
+                # 硬补会让请求以 assistant 结尾，thinking 模式端点（DeepSeek 等）
+                # 按 prefill 处理并要求回传 thinking 块 → 400（与 streaming
+                # runner._append_injection_ack 同因）
+                if injection_ack_enabled():
+                    messages.append({
+                        "role": "assistant",
+                        "content": "Noted background results."
+                    })
 
             # === s09: 检查 lead 收件箱 ===
             inbox = self.bus.read_inbox("lead")
@@ -187,10 +193,12 @@ class Agent:
                     "role": "user",
                     "content": f"<inbox>{json.dumps(inbox, indent=2)}</inbox>"
                 })
-                messages.append({
-                    "role": "assistant",
-                    "content": "Noted inbox messages."
-                })
+                # 同上：合成回执走总开关（默认关，防 thinking 端点 400）
+                if injection_ack_enabled():
+                    messages.append({
+                        "role": "assistant",
+                        "content": "Noted inbox messages."
+                    })
 
             # === LLM 调用 ===
             response = self.provider.chat(

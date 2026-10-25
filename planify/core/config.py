@@ -47,6 +47,26 @@ def _get_env_or_default(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
+def injection_ack_enabled() -> bool:
+    """合成 assistant 回执总开关（PLANIFY_INJECTION_ACK，每次调用现读——热生效）。
+
+    单一真相源：全框架 8 处注入点（主循环 bg/inbox/预算提醒经
+    StreamingConfig.injection_ack，subagent/teammate/旧 agent 循环直读本函数）
+    最终都由本函数取值——配置来源 = 已注册配置（register_config 宿主注入）
+    或 PLANIFY_INJECTION_ACK env（.env 经 load_dotenv 同步），前者优先。
+
+    框架各循环向历史注入 user 通知（后台结果/收件箱/预算提醒/任务认领）后，
+    默认**不**补合成 assistant 回执：它会让请求以 assistant 结尾，thinking
+    模式端点（DeepSeek / GLM 等）按 prefill 处理并要求回传该轮 thinking 块，
+    而框架有意丢弃 thinking 块 → 400（判例见 2026-10-21/25 两次事故）。
+
+    置 1 恢复回执，用于坚持 user/assistant 严格交替、不接受连续同角色消息
+    的端点。
+    """
+    raw = _get_env_or_default("PLANIFY_INJECTION_ACK", "")
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
 # =============================================================================
 # 用户交互提问模式（对话式提问，ADR-0033）
 # =============================================================================

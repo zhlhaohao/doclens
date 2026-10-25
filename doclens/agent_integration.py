@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Planify 核心模块导入
 from planify.core.runtime import AgentRuntime, RuntimeConfig
+from planify.core.config import injection_ack_enabled
 from planify.core.llm import LLMTracer, create_provider
 from planify.streaming.runner import StreamingAgent
 from planify.streaming.emitter import CLIEventEmitter
@@ -551,7 +552,6 @@ class CortexAgent:
             planify_context_window=asm.kb_config.planify_context_window,
             planify_max_tokens=asm.max_tokens,
             planify_max_tool_rounds=asm.kb_config.planify_max_tool_rounds,
-            planify_injection_ack=asm.kb_config.planify_injection_ack,
             planify_thinking_depth=asm.kb_config.planify_thinking_depth,
             poll_interval=asm.config.get("poll_interval", 5),
             idle_timeout=asm.config.get("idle_timeout", 60),
@@ -708,9 +708,9 @@ class CortexAgent:
                     round(self.runtime.config.planify_context_window * 0.8)
                 ),
                 max_tokens=self.runtime.config.planify_max_tokens,
-                injection_ack=getattr(
-                    self.runtime.config, "planify_injection_ack", False
-                ),
+                # 注入回执总开关：与 subagent/teammate 等 8 处注入点同源，
+                # 统一读 core.config.injection_ack_enabled（env/注册配置，热生效）
+                injection_ack=injection_ack_enabled(),
                 **tool_round_limit_kwargs(self.runtime.config),
             ),
             logger_instance=self.runtime.logger,

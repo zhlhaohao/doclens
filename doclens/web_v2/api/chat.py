@@ -183,6 +183,7 @@ async def _stream_agent_response(
     session_key = session_id or None
     interrupt = register_interrupt(session_key) if session_key else threading.Event()
 
+    from planify.core.config import injection_ack_enabled
     from planify.core.llm import LLMTracer
     from planify.streaming.runner import StreamingAgent
     from planify.streaming.types import StreamingConfig
@@ -284,9 +285,9 @@ async def _stream_agent_response(
             # 窗口声明透传：摘要输入预算随窗口放大（None 时 planify 用保守兜底）
             context_window=runtime.config.planify_context_window,
             max_tokens=runtime.config.planify_max_tokens,
-            injection_ack=getattr(
-                runtime.config, "planify_injection_ack", False
-            ),
+            # 注入回执总开关：与 subagent/teammate 等 8 处注入点同源，
+            # 统一读 core.config.injection_ack_enabled（env/注册配置，热生效）
+            injection_ack=injection_ack_enabled(),
             **tool_round_limit_kwargs(runtime.config),
         ),
         waiter=waiter,

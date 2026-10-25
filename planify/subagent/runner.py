@@ -18,6 +18,7 @@ from typing import Callable, Dict
 
 logger = logging.getLogger("planify.subagent")
 
+from ..core.config import injection_ack_enabled
 from ..core.llm.provider import LLMProvider
 from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
 from ..tools.basic import to_tool_defs
@@ -361,7 +362,11 @@ def run_subagent(
                     "并基于已有信息输出总结。\n</system-reminder>"
                 ),
             })
-            sub_msgs.append({"role": "assistant", "content": "收到，我会调整策略或总结。"})
+            # 合成回执走总开关（默认关，见 core.config.injection_ack_enabled）：
+            # 它会让下轮请求以 assistant 结尾，thinking 模式端点（DeepSeek 等）
+            # 按 prefill 处理并要求回传 thinking 块 → 400
+            if injection_ack_enabled():
+                sub_msgs.append({"role": "assistant", "content": "收到，我会调整策略或总结。"})
             continue
 
         # ---- 预算机制 ②：软提醒（预算将尽，先劝后断）----
@@ -381,7 +386,9 @@ def run_subagent(
                     "\n</system-reminder>"
                 ),
             })
-            sub_msgs.append({"role": "assistant", "content": "明白，我现在开始汇总。"})
+            # 同上：合成回执走总开关（默认关，防 thinking 端点 400）
+            if injection_ack_enabled():
+                sub_msgs.append({"role": "assistant", "content": "明白，我现在开始汇总。"})
 
         # 执行工具调用
         tool_names = [

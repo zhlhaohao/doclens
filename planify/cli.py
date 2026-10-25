@@ -25,6 +25,7 @@ from planify.cli_history import CommandHistory, input_with_history
 
 # 编码模块必须在其他任何导入之前导入
 from planify.core import setup_encoding, apply_safe_stdio
+from planify.core.config import injection_ack_enabled
 
 # ============================================================================
 # 全局中断事件
@@ -415,9 +416,8 @@ def run_streaming_query(loop, runtime, query: str, history: list) -> list:
         config=StreamingConfig(
             compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
             # 注入回执开关：planify CLI 无宿主配置注入通道，按 PLANIFY_* env
-            # 现读（planify 命名空间内自有的调试开关，非宿主配置）
-            injection_ack=os.getenv("PLANIFY_INJECTION_ACK", "").strip().lower()
-            in ("1", "true", "on", "yes"),
+            # 现读（与 core.config.injection_ack_enabled 同解析，单一口径）
+            injection_ack=injection_ack_enabled(),
         ),
         logger_instance=runtime.logger,
         runtime=runtime,

@@ -434,6 +434,33 @@ class TestBudgetMechanisms:
         assert len(reminders) == 1
         assert "background task" not in reminders[0]
 
+    def test_reminder_injection_not_assistant_tailing(self, tmp_path):
+        """预算提醒注入后不得以合成 assistant 回执收尾（2026-10-25 rag-bench
+        DeepSeek 400 事故）：thinking 模式端点把尾部 assistant 当 prefill，
+        要求回传 thinking 块 → 400。injection_ack 默认关，末条必须是 user。
+        """
+        script = [{"tools": [("grep", {"q": f"q{i}"})]} for i in range(3)]
+        script.append({"text": "done"})
+        provider = ScriptedProvider(script)
+        agent = _make_agent(provider, max_tool_rounds=2, tmp_path=tmp_path)
+        messages = []
+        asyncio.run(agent.run_stream(messages, "q", "s1"))
+        assert _reminder_texts(messages), "软阈值提醒应已注入"
+        assert not any(
+            m.get("role") == "assistant"
+            and m.get("content") == "Understood. I will stop calling tools and answer now."
+            for m in messages
+        )
+        # 提醒的下一条 assistant 必须是模型真实回复（ScriptedProvider 的
+        # "done"），而非合成回执——即请求以 user reminder 收尾发给 LLM。
+        idx = next(
+            i for i, m in enumerate(messages)
+            if m.get("role") == "user" and REMINDER in str(m.get("content"))
+            and CONTEXT_MARKER not in str(m.get("content"))
+        )
+        tails = [m for m in messages[idx + 1:] if m.get("role") == "assistant"]
+        assert tails and tails[0]["content"] == [{"type": "text", "text": "done"}]
+
 
 class TestTurnExitGuard:
     """回合退出护栏（2026-10-24「假通知」事故）。

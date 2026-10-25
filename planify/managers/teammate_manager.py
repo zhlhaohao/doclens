@@ -37,6 +37,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from ..core.config import injection_ack_enabled
 from ..core.llm.provider import LLMProvider
 from ..core.llm.types import Tool, ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
 from ..tools.basic import to_tool_defs
@@ -419,10 +420,17 @@ class TeammateManager:
                             "role": "user",
                             "content": f"<auto-claimed>Task #{task['id']}: {task['subject']}\n{task.get('description', '')}</auto-claimed>"
                         })
-                        messages.append({
-                            "role": "assistant",
-                            "content": f"Claimed task #{task['id']}. Working on it."
-                        })
+                        # 合成回执走总开关（默认关，见
+                        # core.config.injection_ack_enabled）：硬补会让下轮请求
+                        # 以 assistant 结尾，thinking 模式端点（DeepSeek 等）按
+                        # prefill 处理并要求回传 thinking 块 → 400。
+                        # 身份重注入（上方 insert(0,1) 对）在头部，其后必有
+                        # 本条 user 消息，不受影响。
+                        if injection_ack_enabled():
+                            messages.append({
+                                "role": "assistant",
+                                "content": f"Claimed task #{task['id']}. Working on it."
+                            })
                         resume = True
                         break
 

@@ -25,6 +25,47 @@ from planify.subagent.runner import (
 REMINDER = "<system-reminder>"
 
 
+class TestInjectionAckSwitch:
+    """合成回执总开关（PLANIFY_INJECTION_ACK，core.config.injection_ack_enabled）。
+
+    2026-10-25 清剿事故判例：合成 assistant 回执让请求以 assistant 结尾，
+    thinking 模式端点（DeepSeek 等）按 prefill 处理 → 400。默认关；
+    开关打开时（严格交替端点）两处预算提醒须恢复回执。
+    """
+
+    def _soft_script(self):
+        # 8 轮预算 → 第 7 轮注入软提醒（第 8 轮请求携带）
+        return [{"tools": [("bash", {"command": f"c{i}"})]} for i in range(8)]
+
+    def test_default_no_ack_after_reminders(self, monkeypatch):
+        monkeypatch.delenv("PLANIFY_INJECTION_ACK", raising=False)
+        client = ScriptedClient(self._soft_script())
+        _run(client, max_rounds=8)
+        # 携带软提醒的请求里，末条必须是 user（提醒本体），无合成回执
+        for r in client.records:
+            contents = [m.get("content") for m in r if isinstance(m.get("content"), str)]
+            if any("轮次预算即将用尽" in str(c) for c in contents):
+                assert r[-1]["role"] == "user"
+                assert not any(m.get("content") == "明白，我现在开始汇总。" for m in r)
+
+    def test_ack_restored_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("PLANIFY_INJECTION_ACK", "1")
+        client = ScriptedClient(self._soft_script())
+        _run(client, max_rounds=8)
+        seen = [
+            m for r in client.records for m in r
+            if m.get("content") == "明白，我现在开始汇总。"
+        ]
+        assert seen, "开关开启时软提醒后应恢复合成回执"
+        # 回执紧跟提醒（同轮请求内提醒与回执成对出现）
+        for r in client.records:
+            texts = [m.get("content") for m in r]
+            if "明白，我现在开始汇总。" in texts:
+                i = texts.index("明白，我现在开始汇总。")
+                assert isinstance(texts[i - 1], str) and "轮次预算即将用尽" in texts[i - 1]
+                break
+
+
 class FakeBlock:
     """仿 LLMResponse 内容块（text / tool_use 两形态）。"""
 

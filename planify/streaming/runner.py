@@ -858,11 +858,13 @@ class StreamingAgent:
                                 ),
                             }
                         )
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": "Understood. I will stop calling tools and answer now.",
-                            }
+                        # 合成回执走 injection_ack 开关（默认关）：硬编码追加会让
+                        # 请求以 assistant 结尾，thinking 模式端点（DeepSeek 等）
+                        # 按 prefill 处理并要求回传 thinking 块 → 400（与 bg/inbox
+                        # 注入同因，见 _append_injection_ack 文档）。
+                        self._append_injection_ack(
+                            messages,
+                            "Understood. I will stop calling tools and answer now.",
                         )
 
         except Exception as e:
