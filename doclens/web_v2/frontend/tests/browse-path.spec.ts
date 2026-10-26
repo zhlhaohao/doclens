@@ -59,9 +59,10 @@ describe("parentBrowsePath（上溯链）", () => {
 });
 
 describe("parentOfBrowseRoot（走出 workdir 的唯一跳板）", () => {
-  it("workdir 根 → 父目录绝对路径", () => {
+  it("workdir 根 → 父目录绝对路径（非盘符根不带尾斜杠）", () => {
     expect(parentOfBrowseRoot("D:\\知识库")).toBe("D:/");
-    expect(parentOfBrowseRoot("D:/a/b")).toBe("D:/a/");
+    expect(parentOfBrowseRoot("D:/a/b")).toBe("D:/a");
+    expect(parentOfBrowseRoot("C:\\Users\\me\\kb")).toBe("C:/Users/me");
   });
   it("盘符根本身/未知 workdir → null", () => {
     expect(parentOfBrowseRoot("D:/")).toBe(null);

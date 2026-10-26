@@ -18,11 +18,14 @@ describe("<app-bar>", () => {
   });
 
   it("renders brand logo and name", async () => {
-    // 2026-10-26（ADR-0049 收尾）：顶栏工作目录指示器胶囊整体移除
-    // （切换入口收敛到 files 页）；brand 只剩 logo。
+    // 2026-10-26：brand = logo + 「工作目录名@端口」标题（多实例区分）
     expect(el.shadowRoot?.querySelector(".brand .logo")).toBeTruthy();
     actions.setStatus({ ...(store.getState().status as object), workdir: "C:/kb/docs" } as never);
     await elementUpdated(el);
+    const title = el.shadowRoot?.querySelector(".workdir-title");
+    expect(title).toBeTruthy();
+    // 末段目录名 + 当前测试端口（模板缩进空白 trim）
+    expect(title!.textContent?.trim()).toBe(`docs@${window.location.port || window.location.host}`);
     expect(el.shadowRoot?.querySelector(".workdir-indicator")).toBeNull();
   });
 
@@ -153,10 +156,13 @@ describe("<app-bar>", () => {
       });
     });
 
-    it("浏览器 + 带参：忽略 ?title（brand 照常，无中央标题）", async () => {
+    it("浏览器 + 带参：忽略 ?title（brand 照常；中央格显示工作目录标题）", async () => {
       await withEnv("/?title=%E6%B5%8F%E8%A7%88%E5%99%A8", false, async () => {
         const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
-        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
+        // 2026-10-26：桌面浏览器态中央格 = 工作目录名@端口（宿主 title 被忽略）
+        const center = el2.shadowRoot?.querySelector(".center-title");
+        expect(center).toBeTruthy();
+        expect(center?.classList.contains("workdir-title")).toBe(true);
         expect(el2.shadowRoot?.querySelector(".brand")).toBeTruthy();
       });
     });

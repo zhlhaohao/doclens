@@ -191,23 +191,28 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking up button navigates to parent dir", async () => {
+  it("clicking up button dispatches go-dir to parent dir", async () => {
     actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries, docs: [] } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
+    const seen: string[] = [];
+    el.addEventListener("go-dir", (e: Event) => seen.push((e as CustomEvent).detail.path));
     el.shadowRoot.querySelector(".up-btn").click();
-    expect(store.getState().files.currentDir).toBe("docs");
+    // ADR-0049：上溯统一走 go-dir 事件（宿主 selectDir + ensureLoaded）
+    expect(seen).toEqual(["docs"]);
     document.body.removeChild(el);
   });
 
-  it("clicking up button from top-level dir navigates to root", async () => {
+  it("clicking up button from top-level dir dispatches go-dir to root", async () => {
     actions.setFilesState({ currentDir: "docs", treeCache: { docs: entries, "": [] } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
+    const seen: string[] = [];
+    el.addEventListener("go-dir", (e: Event) => seen.push((e as CustomEvent).detail.path));
     el.shadowRoot.querySelector(".up-btn").click();
-    expect(store.getState().files.currentDir).toBe("");
+    expect(seen).toEqual([""]);
     document.body.removeChild(el);
   });
 

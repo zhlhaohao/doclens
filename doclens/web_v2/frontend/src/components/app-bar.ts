@@ -50,7 +50,9 @@ export class AppBar extends LitElement {
       font-weight: 600;
       font-size: var(--cortex-fs-md);
     }
-    /* 宿主标题（CONTEXT.md）：webview 内中央单行展示，超长省略号截断 */
+    /* 宿主标题（CONTEXT.md）：webview 内中央单行展示，超长省略号截断。
+       桌面浏览器态复用本格展示「工作目录名@端口」（2026-10-26 用户决议：
+       居中呈现，多实例区分）——两者互斥（_inWebview 三态分支）。 */
     .center-title {
       grid-column: 2;
       min-width: 0;
@@ -62,6 +64,33 @@ export class AppBar extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
       padding: 0 var(--cortex-space-2);
+    }
+    /* 桌面标题样式覆写：mono 弱化（信息标签，非品牌名）。
+       绝对居中（2026-10-26 用户决议）：grid auto 1fr auto 的中列几何
+       中心随左右两侧内容宽度漂移（左 logo 窄、右徽标簇宽，实测偏
+       72px）——改 absolute + 50% 平移，以顶栏整宽为基准真居中；
+       pointer-events:none 不挡两侧点击。 */
+    .center-title.workdir-title {
+      position: fixed;
+      /* 视口真居中（2026-10-26 用户决议）：顶栏 header 固定置顶，fixed
+         以视口为基准——规避 containing block（grid :host padding box）
+         的 20px 系统性偏移（盒模型对称但渲染盒不居中，实测 margin
+         576.7/576.7 对称仍偏，疑 :host grid 定位上下文怪癖）。
+         顶栏高度 56px 内垂直居中由 top:0 + line-height 撑起。 */
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 56px;
+      margin: 0 auto;
+      width: max-content;
+      max-width: min(60vw, 480px);
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+      font-family: var(--cortex-font-mono);
+      font-weight: 700;
+      font-size: var(--cortex-fs-md);
+      color: var(--cortex-text);
     }
     .brand .logo {
       width: 28px; height: 28px;
@@ -136,7 +165,6 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
-       只显示目录末段名，全长在 title；超长省略号。 */
     /* 应用主题快捷钮（ADR-0043）：视觉同 watch-badge 的 icon-only pill */
     .theme-btn {
       display: inline-flex;
@@ -427,7 +455,8 @@ export class AppBar extends LitElement {
       : undefined;
     this._mqList?.addEventListener("change", this._onMqChange);
     this._syncFromStore();
-    this._unsubStore = store.subscribe(() => this._syncFromStore());
+    this._syncDocumentTitle();
+    this._unsubStore = store.subscribe(() => { this._syncFromStore(); this._syncDocumentTitle(); });
   }
 
   disconnectedCallback() {
@@ -514,6 +543,37 @@ export class AppBar extends LitElement {
     `;
   }
 
+  /** 桌面顶栏标题「工作目录名@端口」（2026-10-26 用户决议）：多实例并行
+   *  时（worktree 各占一个端口）一眼区分这是哪个库。工作目录名取末段；
+   *  status 未返回时回退「Doclens@端口」。同一标签也写 document.title
+   *  （浏览器标签页文字，2026-10-26 追加需求）。 */
+  private _workdirShortLabel(): string {
+    const workdir = store.getState().status?.workdir || "";
+    const name = workdir
+      ? workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir
+      : "Doclens";
+    return `${name}@${this._portLabel()}`;
+  }
+
+  /** document.title 同步：status.workdir 变化即更新（store 订阅里调用）。
+   *  WebView 容器内不写（宿主标题语义归 ?title=，CONTEXT.md「不写
+   *  document.title」限 webview 场景；浏览器态这正是需求）。 */
+  private _syncDocumentTitle(): void {
+    if (this._inWebview) return;
+    document.title = this._workdirShortLabel();
+  }
+
+  /** 完整标签（title 悬浮）：全路径 + 端口。 */
+  private _workdirFullLabel(): string {
+    const workdir = store.getState().status?.workdir || "";
+    return workdir ? `${workdir} · 端口 ${this._portLabel()}` : `端口 ${this._portLabel()}`;
+  }
+
+  /** 当前端口（dev server 有值；file:// 等空回退 host）。 */
+  private _portLabel(): string {
+    return window.location.port || window.location.host || "?";
+  }
+
 
   render() {
     return html`
@@ -524,7 +584,11 @@ export class AppBar extends LitElement {
       `}
       ${this._inWebview && this._hostTitle
         ? html`<div class="center-title">${this._hostTitle}</div>`
-        : nothing}
+        : !this._inWebview
+          ? html`<div class="center-title workdir-title" title=${this._workdirFullLabel()}>
+              ${this._workdirShortLabel()}
+            </div>`
+          : nothing}
       <div class="right-cluster">
         ${!this._isMobileViewport ? html`
           <button

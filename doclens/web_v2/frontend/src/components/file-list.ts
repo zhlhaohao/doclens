@@ -457,31 +457,33 @@ export class FileList extends LitElement {
   private _goUp() {
     const { currentDir } = store.getState().files;
     // ADR-0049：workdir 根的上溯 = 跨入绝对路径世界（workdir 父目录）；
-    // 盘符根之上 = 「此电脑」层；再上无可上溯
+    // 盘符根之上 = 「此电脑」层；再上无可上溯。目标目录统一经 go-dir
+    // 事件交宿主加载——外部目录不在下钻逐级 ensureLoaded 的缓存保证内
+    // （首版只 selectDir 漏加载，表现为「上溯后目录为空」）。
     if (currentDir === "") {
       const parent = parentOfBrowseRoot(store.getState().status?.workdir);
-      if (parent) actions.selectDir(parent);
+      if (parent) this._goDir(parent);
       return;
     }
     const parent = parentBrowsePath(currentDir);
-    if (parent !== null) actions.selectDir(parent);
+    if (parent !== null) this._goDir(parent);
+  }
+
+  /** 统一导航出口（上溯按钮 + 面包屑分段共用）：go-dir 事件交宿主
+   *  selectDir + ensureLoaded——外部目录/此电脑层不在下钻逐级
+   *  ensureLoaded 的缓存保证内，必须走事件驱动加载。 */
+  private _goDir(path: string) {
+    if (path === store.getState().files.currentDir) return;
+    this.dispatchEvent(new CustomEvent("go-dir", {
+      detail: { path },
+      bubbles: true, composed: true,
+    }));
   }
 
   /** currentDir 拆成可导航分段：[{label: "根目录", path: ""}, {label: "a", path: "a"}, ...]。
    *  与 files-view._dirPrefixChain 同构（不跨组件复用私有方法）。 */
   private _breadcrumbSegments(currentDir: string): { label: string; path: string }[] {
     return breadcrumbSegments(currentDir);
-  }
-
-  /** 面包屑分段点击跳转：跨段跳转（含绝对链上跳）由 go-dir 事件驱动
-   *  宿主（files-view）加载目录——绝对路径段与「此电脑」层不在下钻
-   *  逐级 ensureLoaded 的既有保证内。 */
-  private _goToDir(path: string) {
-    if (path === store.getState().files.currentDir) return;
-    this.dispatchEvent(new CustomEvent("go-dir", {
-      detail: { path },
-      bubbles: true, composed: true,
-    }));
   }
 
   /** 「设为工作目录」（ADR-0049）：交宿主弹 workdir-switch 确认链路。 */
@@ -504,7 +506,7 @@ export class FileList extends LitElement {
             class="crumb"
             type="button"
             title=${seg.path || "根目录"}
-            @click=${() => this._goToDir(seg.path)}
+            @click=${() => this._goDir(seg.path)}
           >${seg.label}</button>`;
       return html`${i > 0 ? html`<span class="crumb-sep">›</span>` : null}${node}`;
     });

@@ -65,10 +65,13 @@ export function parentBrowsePath(dir: string): string | null {
 export function parentOfBrowseRoot(workdirAbs: string | null | undefined): string | null {
   if (!workdirAbs) return null;
   const norm = workdirAbs.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
-  // "D:/知识库" → "D:/"；"D:" 或 "D:/"（盘符根本身）→ null
+  // "D:/知识库" → "D:/"（盘符根带尾斜杠是唯一例外——裸 "D:" 非合法
+  // 目录形态）；更深父目录不带尾斜杠（与 parentBrowsePath 规范一致，
+  // 2026-10-26 修复：曾全带尾斜杠，与 treeCache 键/面包屑分段错位）
   const idx = norm.lastIndexOf("/");
   if (idx <= 0) return null;
-  return `${norm.slice(0, idx + 1)}`;
+  const parent = norm.slice(0, idx + 1);
+  return /^[A-Za-z]:\/$/.test(parent) ? parent : parent.replace(/\/$/, "");
 }
 
 export interface BreadcrumbSegment {
