@@ -741,11 +741,11 @@ export class FileList extends LitElement {
           ? emptyBlock
           : html`<div class="header-row">
               <span class="select-all">
-                ${readOnly ? null : html`<input
+                <input
                   type="checkbox"
                   .checked=${allSelected}
                   @click=${this._onSelectAll}
-                />`}
+                />
               </span>
               <span></span>
               <span>名称</span>
@@ -756,8 +756,7 @@ export class FileList extends LitElement {
           ${entries.map(e => html`
             <file-row
               .entry=${e}
-              .selected=${sel.has(e.path) && !readOnly}
-              .hideCheckbox=${readOnly}
+              .selected=${sel.has(e.path)}
               .active=${e.path === this.activePath}
               @checked=${this._onRowChecked}
             ></file-row>`)}
@@ -848,8 +847,7 @@ export class FileList extends LitElement {
         ${entries.map(e => html`
           <file-row
             .entry=${e}
-            .selected=${sel.has(e.path) && !readOnly}
-            .hideCheckbox=${readOnly}
+            .selected=${sel.has(e.path)}
             .active=${e.path === this.activePath}
             @checked=${this._onRowChecked}
           ></file-row>`)}
