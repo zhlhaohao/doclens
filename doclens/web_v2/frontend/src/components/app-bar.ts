@@ -192,22 +192,6 @@ export class AppBar extends LitElement {
          此规则作 SSR/竞态兜底。 */
       .watch-badge { display: none; }
       .theme-btn { display: none; }
-      /* 移动端撤销 fixed 视口居中（2026-10-26 修复）：iOS Safari 动态
-         工具栏/安全区会让 fixed top:0 跑出可视区，标题整体消失。
-         回退到 grid 自然布局（grid-column:2 + 文本居中），位置由
-         顶栏网格保障。 */
-      .center-title.workdir-title {
-        position: static;
-        left: auto;
-        right: auto;
-        top: auto;
-        height: auto;
-        margin: 0;
-        width: auto;
-        max-width: none;
-        display: block;
-        pointer-events: auto;
-      }
     }
     .avatar-btn {
       display: inline-flex;
