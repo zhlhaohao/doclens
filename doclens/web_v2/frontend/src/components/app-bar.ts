@@ -584,11 +584,9 @@ export class AppBar extends LitElement {
       `}
       ${this._inWebview && this._hostTitle
         ? html`<div class="center-title">${this._hostTitle}</div>`
-        : !this._inWebview
-          ? html`<div class="center-title workdir-title" title=${this._workdirFullLabel()}>
-              ${this._workdirShortLabel()}
-            </div>`
-          : nothing}
+        : html`<div class="center-title workdir-title" title=${this._workdirFullLabel()}>
+            ${this._workdirShortLabel()}
+          </div>`}
       <div class="right-cluster">
         ${!this._isMobileViewport ? html`
           <button

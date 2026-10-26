@@ -77,10 +77,12 @@ describe("<app-bar>", () => {
   });
 
   describe("WebView 顶栏关闭 X（替代 logo/标题）", () => {
-    it("webview 内不渲染 brand，左侧渲染 X 钮，点击走 closeHtmlPage", async () => {
+    it("webview + 带 title：不渲染 brand，左侧渲染 X 钮，点击走 closeHtmlPage", async () => {
       const calls: Array<{ method: string; params: unknown }> = [];
       const origAndroid = window.Android;
       const origJsbridge = window.jsbridge;
+      const origHref = window.location.href;
+      window.history.replaceState(null, "", `/?title=${encodeURIComponent("我的知识库")}`);
       (window as any).Android = { messageSend: () => {} };
       (window as any).jsbridge = {
         // closeHtmlPage 是 BaseJSPluginSync 同步插件——走 syncSendToNative
@@ -96,6 +98,24 @@ describe("<app-bar>", () => {
         expect(calls).toHaveLength(1);
         expect(calls[0].method).toBe("closeHtmlPage");
       } finally {
+        window.history.replaceState(null, "", origHref);
+        (window as any).Android = origAndroid;
+        (window as any).jsbridge = origJsbridge;
+      }
+    });
+
+    it("webview + 无 title：左侧仍渲染 X 钮（保持 WebView 容器一致性）", async () => {
+      const origAndroid = window.Android;
+      const origJsbridge = window.jsbridge;
+      const origHref = window.location.href;
+      window.history.replaceState(null, "", "/");
+      (window as any).Android = { messageSend: () => {} };
+      (window as any).jsbridge = { syncSendToNative: () => '{"code":0}' };
+      try {
+        const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
+        expect(el2.shadowRoot?.querySelector(".close-btn")).toBeTruthy();
+      } finally {
+        window.history.replaceState(null, "", origHref);
         (window as any).Android = origAndroid;
         (window as any).jsbridge = origJsbridge;
       }
@@ -140,19 +160,20 @@ describe("<app-bar>", () => {
       });
     });
 
-    it("webview + 无参：中央留空（不渲染元素，不回退品牌名）", async () => {
+    it("webview + 无参：中央回退 dir@port（2026-10-26 决议：无 title 时按桌面方式显示）", async () => {
       await withEnv("/", true, async () => {
         const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
-        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
-        expect(el2.shadowRoot?.querySelector(".brand")).toBeNull();
-        expect(el2.shadowRoot?.textContent).not.toContain("Doclens");
+        const title = el2.shadowRoot?.querySelector(".center-title.workdir-title");
+        expect(title).toBeTruthy();
+        expect(title?.textContent?.trim()).toBe("docs@3000");
       });
     });
 
-    it("webview + 参数为空白：视为未传（trim）", async () => {
+    it("webview + 参数为空白：视为未传（trim），回退 dir@port", async () => {
       await withEnv("/?title=%20%20", true, async () => {
         const el2 = await fixture<AppBar>(html`<app-bar .activeView=${"search"}></app-bar>`);
-        expect(el2.shadowRoot?.querySelector(".center-title")).toBeNull();
+        const title = el2.shadowRoot?.querySelector(".center-title.workdir-title");
+        expect(title?.textContent?.trim()).toBe("docs@3000");
       });
     });
 
