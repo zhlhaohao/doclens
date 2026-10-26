@@ -47,6 +47,13 @@ export interface UploadResponse {
 const qs = (p: string) => `/api/files${p}`;
 
 export const filesApi = {
+  /** 盘符清单 + 家目录（ADR-0049「此电脑」层数据源 + 快速跳转目标）。 */
+  listDrives: async (): Promise<{ drives: string[]; home: string }> => {
+    const resp = await fetch("/api/files/drives");
+    const body = await resp.json().catch(() => null);
+    if (!resp.ok) throw new Error(`files/drives HTTP ${resp.status}`);
+    return { drives: (body?.drives ?? []) as string[], home: (body?.home ?? "") as string };
+  },
   list: (path: string, limit = 200, offset = 0) =>
     request<ListDirResponse>(
       qs(`/list?path=${encodeURIComponent(path)}&limit=${limit}&offset=${offset}`),

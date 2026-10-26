@@ -59,11 +59,14 @@ def assert_not_root(full: Path, base: Path) -> None:
 
 
 def validate_name(name: str) -> None:
-    """mkdir / rename / upload 文件名共用校验。"""
+    """mkdir / rename / upload 文件名共用校验。
+
+    2026-10-26（ADR-0049 修订）：「不能以点开头」移除——物理视图语义下
+    用户可经 UI 创建/改名为点文件（如 .gitignore）。其余非法字符与
+    Windows 保留名校验保留。
+    """
     if not name or name in (".", ".."):
         raise CortexAPIError(400, "INVALID_NAME", "名称为空或为保留字")
-    if name.startswith("."):
-        raise CortexAPIError(400, "INVALID_NAME", "名称不能以点开头")
     bad = set(name) & ILLEGAL_NAME_CHARS
     if bad:
         raise CortexAPIError(400, "INVALID_NAME", f"含非法字符: {bad}")
@@ -85,9 +88,12 @@ def validate_move_target(from_path: Path, dest_dir: Path) -> None:
 
 
 def compute_writable(full: Path, base: Path) -> bool:
-    """统一可写性判断（保护 / 存在性 / 文件 W_OK / 目录 W_OK+X_OK）。"""
-    if is_protected(full, base):
-        return False
+    """统一可写性判断（存在性 / 文件 W_OK / 目录 W_OK+X_OK）。
+
+    2026-10-26（ADR-0049 修订）：点文件保护移除（物理视图语义，用户决议
+    完全放开）——可写性回归纯物理判定（os.access）；base 参数仅为签名
+    兼容保留。
+    """
     if not full.exists():
         return False
     if full.is_file():

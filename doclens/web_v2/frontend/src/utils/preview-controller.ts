@@ -54,6 +54,9 @@ export type PreviewState =
   | { status: "empty" }
   | { status: "ok"; doc: PreviewDoc }
   | { status: "not-indexed"; path: string }
+  /** ADR-0049：workdir 外二进制（合成预览依赖索引）——专属提示态，
+   *  视图据此渲染「设为工作目录后可预览」。 */
+  | { status: "outside-workdir"; path: string; message: string }
   | { status: "error"; path: string; message: string };
 
 export interface PreviewControllerOptions {
@@ -108,7 +111,8 @@ export class PreviewController implements ReactiveController {
 
   get path(): string {
     return this.state.status === "ok" ? this.state.doc.path
-      : this.state.status === "not-indexed" || this.state.status === "error" ? this.state.path
+      : this.state.status === "not-indexed" || this.state.status === "error"
+        || this.state.status === "outside-workdir" ? this.state.path
       : "";
   }
 
@@ -122,6 +126,8 @@ export class PreviewController implements ReactiveController {
   get tokens(): string[][][] | null { return this.state.status === "ok" ? this.state.doc.tokens : null; }
   /** NOT_INDEXED 专用错误标志（三视图错误页共用形态）。 */
   get notIndexed(): boolean { return this.state.status === "not-indexed"; }
+  /** ADR-0049 workdir 外二进制专用标志（files 视图专属提示页）。 */
+  get outsideWorkdir(): boolean { return this.state.status === "outside-workdir"; }
   /** 通用错误信息（files 错误页用；notIndexed/empty 为 null）。 */
   get errorMessage(): string | null {
     return this.state.status === "error" ? this.state.message : null;
@@ -138,6 +144,9 @@ export class PreviewController implements ReactiveController {
     const result = await fetchPreview(path);
     if (result.ok) {
       return this._set({ status: "ok", doc: this._docFrom(result) });
+    }
+    if (result.outsideWorkdir) {
+      return this._set({ status: "outside-workdir", path, message: result.message });
     }
     return this._set(this._failState(path, result.notIndexed, result.message));
   }

@@ -1,6 +1,14 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
+import {
+  breadcrumbSegments,
+  DRIVES_SENTINEL,
+  isDrivesLayer,
+  isOutsideWorkdir,
+  parentBrowsePath,
+  parentOfBrowseRoot,
+} from "../utils/browse-path";
 import "./file-row";
 
 const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140] as const;
@@ -55,6 +63,36 @@ export class FileList extends LitElement {
     }
     .up-btn:hover:not(:disabled) { background: var(--cortex-surface-muted); }
     .up-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* 「设为工作目录」（ADR-0049）：面包屑行尾，primary 语义弱化版 */
+    .set-workdir-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      font-size: var(--cortex-fs-xs);
+      border: 1px solid var(--cortex-primary);
+      background: var(--cortex-surface);
+      color: var(--cortex-primary);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-pill);
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+    .set-workdir-btn:hover {
+      background: var(--cortex-primary-soft);
+    }
+    /* 外部浏览只读徽标（ADR-0049） */
+    .readonly-hint {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      border: 1px dashed var(--cortex-border);
+      border-radius: var(--cortex-radius-pill);
+      white-space: nowrap;
+    }
     .toolbar {
       display: flex; gap: var(--cortex-space-2);
       padding: var(--cortex-space-2) var(--cortex-space-4);
@@ -311,6 +349,9 @@ export class FileList extends LitElement {
   /** 深读模式激活中（按钮高亮反馈）。 */
   @property({ type: Boolean }) deepReadMode = false;
 
+  /** 家目录绝对路径（ADR-0049 快速跳转；空 = 未取到，隐藏按钮）。 */
+  @property() homeDir = "";
+
   /** 各列宽度（px），通过 --col-N CSS var 注入到 host，file-row 经继承读取 */
   @state() private _colWidths: number[] = [...DEFAULT_COL_WIDTHS];
   @state() private _showMobileMenu = false;
@@ -415,28 +456,42 @@ export class FileList extends LitElement {
 
   private _goUp() {
     const { currentDir } = store.getState().files;
-    if (currentDir === "") return;
-    const parent = currentDir.includes("/")
-      ? currentDir.slice(0, currentDir.lastIndexOf("/"))
-      : "";
-    actions.selectDir(parent);
+    // ADR-0049：workdir 根的上溯 = 跨入绝对路径世界（workdir 父目录）；
+    // 盘符根之上 = 「此电脑」层；再上无可上溯
+    if (currentDir === "") {
+      const parent = parentOfBrowseRoot(store.getState().status?.workdir);
+      if (parent) actions.selectDir(parent);
+      return;
+    }
+    const parent = parentBrowsePath(currentDir);
+    if (parent !== null) actions.selectDir(parent);
   }
 
   /** currentDir 拆成可导航分段：[{label: "根目录", path: ""}, {label: "a", path: "a"}, ...]。
    *  与 files-view._dirPrefixChain 同构（不跨组件复用私有方法）。 */
   private _breadcrumbSegments(currentDir: string): { label: string; path: string }[] {
-    const parts = currentDir.split("/").filter(Boolean);
-    return [
-      { label: "根目录", path: "" },
-      ...parts.map((name, i) => ({ label: name, path: parts.slice(0, i + 1).join("/") })),
-    ];
+    return breadcrumbSegments(currentDir);
   }
 
-  /** 面包屑分段点击跳转。目标段必是当前目录祖先，treeCache 必然已缓存
-   * （下钻逐级 _ensureLoaded / 启动恢复预载祖先链），直接 selectDir 即可。 */
+  /** 面包屑分段点击跳转：跨段跳转（含绝对链上跳）由 go-dir 事件驱动
+   *  宿主（files-view）加载目录——绝对路径段与「此电脑」层不在下钻
+   *  逐级 ensureLoaded 的既有保证内。 */
   private _goToDir(path: string) {
     if (path === store.getState().files.currentDir) return;
-    actions.selectDir(path);
+    this.dispatchEvent(new CustomEvent("go-dir", {
+      detail: { path },
+      bubbles: true, composed: true,
+    }));
+  }
+
+  /** 「设为工作目录」（ADR-0049）：交宿主弹 workdir-switch 确认链路。 */
+  private _onSetWorkdirClick() {
+    const { currentDir } = store.getState().files;
+    if (!currentDir) return;
+    this.dispatchEvent(new CustomEvent("set-workdir", {
+      detail: { path: currentDir },
+      bubbles: true, composed: true,
+    }));
   }
 
   /** 分段面包屑：非末段可点击按钮，末段（当前目录）为静态文本。桌面/移动端共用。 */
@@ -500,12 +555,24 @@ export class FileList extends LitElement {
 
   private _renderMobileHeader() {
     const { currentDir, treeCache, selectedPaths } = store.getState().files;
-    const canRename = selectedPaths.length === 1;
+    // ADR-0049：与桌面 render() 同口径的外部只读判定（此处独立计算——
+    // mobile header 是独立渲染路径）
+    const readOnly = isOutsideWorkdir(currentDir) || isDrivesLayer(currentDir);
+    const canRename = selectedPaths.length === 1 && !readOnly;
     const canDownload = this._canDownloadSelected(
       treeCache[currentDir] || [], selectedPaths,
     );
-    const canAct = selectedPaths.length >= 1;
-    const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
+    const canAct = selectedPaths.length >= 1 && !readOnly;
+    // 上溯可用性（ADR-0049）：workdir 根也可上溯到 workdir 父目录
+    const canGoUp = currentDir !== ""
+      ? true
+      : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
+    const breadcrumb = currentDir === DRIVES_SENTINEL ? "此电脑"
+      : currentDir === "" ? "/"
+      : isOutsideWorkdir(currentDir) ? `${currentDir}/`
+      : `/${currentDir}/`;
+    // 「设为工作目录」：真实目录且非 workdir 本身（ADR-0049）
+    const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
 
     return html`
       <div class="mobile-header">
@@ -514,7 +581,7 @@ export class FileList extends LitElement {
           type="button"
           aria-label="返回上级目录"
           title="返回上级目录"
-          ?disabled=${currentDir === ""}
+          ?disabled=${!canGoUp}
           @click=${this._onMobileBackClick}
         ><doclens-icon name="arrow-left"></doclens-icon></button>
         <nav class="mobile-crumbs" title=${breadcrumb}>${this._renderBreadcrumbTrail(currentDir)}</nav>
@@ -527,7 +594,30 @@ export class FileList extends LitElement {
         ${this._showMobileMenu
           ? html`
               <div class="mobile-menu" role="menu">
-                ${this.gitChangesAvailable
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-action="goto-workdir"
+                  ?disabled=${currentDir === ""}
+                  @click=${this._onMenuItemClick("goto-workdir")}
+                ><doclens-icon name="hard-drive"></doclens-icon>回到工作目录</button>
+                ${this.homeDir && this.homeDir !== currentDir
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      data-action="goto-home"
+                      @click=${this._onMenuItemClick("goto-home")}
+                    ><doclens-icon name="home"></doclens-icon>家目录</button>`
+                  : null}
+                ${showSetWorkdir
+                  ? html`<button
+                      type="button"
+                      role="menuitem"
+                      data-action="set-workdir"
+                      @click=${this._onMenuItemClick("set-workdir")}
+                    ><doclens-icon name="home"></doclens-icon>设为工作目录</button>`
+                  : null}
+                ${!readOnly && this.gitChangesAvailable
                   ? html`<button
                       type="button"
                       role="menuitem"
@@ -535,7 +625,7 @@ export class FileList extends LitElement {
                       @click=${this._onMenuItemClick("git-changes")}
                     ><doclens-icon name="git-fork"></doclens-icon>${this.changesMode ? "退出改动模式" : "未提交改动"}</button>`
                   : null}
-                ${this.deepReadAvailable
+                ${!readOnly && this.deepReadAvailable
                   ? html`<button
                       type="button"
                       role="menuitem"
@@ -547,12 +637,14 @@ export class FileList extends LitElement {
                   type="button"
                   role="menuitem"
                   data-action="new-file"
+                  ?disabled=${readOnly}
                   @click=${this._onMenuItemClick("new-file")}
                 ><doclens-icon name="file-plus"></doclens-icon>新文件</button>
                 <button
                   type="button"
                   role="menuitem"
                   data-action="mkdir"
+                  ?disabled=${readOnly}
                   @click=${this._onMenuItemClick("mkdir")}
                 ><doclens-icon name="folder-plus"></doclens-icon>新目录</button>
                 <button
@@ -560,7 +652,7 @@ export class FileList extends LitElement {
                   role="menuitem"
                   data-action="upload"
                   class=${this.uploading ? "uploading" : ""}
-                  ?disabled=${this.uploading}
+                  ?disabled=${this.uploading || readOnly}
                   @click=${this._onMenuItemClick("upload")}
                 >${this.uploading ? "上传中…" : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
                 <button
@@ -595,7 +687,7 @@ export class FileList extends LitElement {
                   type="button"
                   role="menuitem"
                   data-action="copy-path"
-                  ?disabled=${!canAct}
+                  ?disabled=${selectedPaths.length === 0}
                   @click=${this._onMenuItemClick("copy-path")}
                 ><doclens-icon name="copy"></doclens-icon>拷贝路径</button>
                 <button
@@ -617,16 +709,28 @@ export class FileList extends LitElement {
     const { currentDir, treeCache, selectedPaths, listing } = store.getState().files;
     const entries = treeCache[currentDir] || [];
     const sel = new Set(selectedPaths);
-    const canRename = selectedPaths.length === 1;
+    // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
+    const outside = isOutsideWorkdir(currentDir);
+    const readOnly = outside || isDrivesLayer(currentDir);
+    const canRename = selectedPaths.length === 1 && !readOnly;
     const canDownload = this._canDownloadSelected(entries, selectedPaths);
-    const canAct = selectedPaths.length >= 1;
-    const canGoUp = currentDir !== "";
-    const breadcrumb = currentDir === "" ? "/" : `/${currentDir}/`;
+    const canAct = selectedPaths.length >= 1 && !readOnly;
+    // 上溯（ADR-0049）：workdir 根也可上溯（→workdir 父目录）；仅当
+    // workdir 未知/是盘符根本身时置灰。外部链/此电脑层照常逐级上溯。
+    const canGoUp = currentDir !== ""
+      ? true
+      : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
+    const breadcrumb = currentDir === DRIVES_SENTINEL ? "此电脑"
+      : currentDir === "" ? "/"
+      : isOutsideWorkdir(currentDir) ? `${currentDir}/`
+      : `/${currentDir}/`;
     const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
     // 加载中判定：请求进行中且当前目录尚未进 cache（首次进入/切换目录）——
     // 与「已加载但为空」区分，避免加载期间闪现误导性的「目录为空」
     const loading = listing && !(currentDir in treeCache);
     const emptyBlock = html`<div class="empty ${loading ? "loading" : ""}">${loading ? "加载中…" : "目录为空"}</div>`;
+    // 「设为工作目录」：真实目录且非 workdir 本身时显示（ADR-0049）
+    const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
 
     if (this.mobile) {
       return html`
@@ -635,11 +739,11 @@ export class FileList extends LitElement {
           ? emptyBlock
           : html`<div class="header-row">
               <span class="select-all">
-                <input
+                ${readOnly ? null : html`<input
                   type="checkbox"
                   .checked=${allSelected}
                   @click=${this._onSelectAll}
-                />
+                />`}
               </span>
               <span></span>
               <span>名称</span>
@@ -650,7 +754,8 @@ export class FileList extends LitElement {
           ${entries.map(e => html`
             <file-row
               .entry=${e}
-              .selected=${sel.has(e.path)}
+              .selected=${sel.has(e.path) && !readOnly}
+              .hideCheckbox=${readOnly}
               .active=${e.path === this.activePath}
               @checked=${this._onRowChecked}
             ></file-row>`)}
@@ -662,27 +767,51 @@ export class FileList extends LitElement {
       <div class="breadcrumb">
         <button
           class="up-btn"
-          title="返回上一级目录"
+          title=${outside ? "返回上一级（可回到此电脑/盘符根）" : currentDir === "" ? "上溯到工作目录的上级（整机浏览）" : "返回上一级目录"}
           ?disabled=${!canGoUp}
           @click=${this._goUp}
         ><doclens-icon name="arrow-up"></doclens-icon></button>
+        <button
+          class="up-btn"
+          title="回到工作目录根"
+          ?disabled=${currentDir === ""}
+          @click=${() => this._action("goto-workdir")}
+        ><doclens-icon name="hard-drive"></doclens-icon></button>
+        ${this.homeDir && this.homeDir !== currentDir
+          ? html`<button
+              class="up-btn"
+              title="跳转到家目录"
+              @click=${() => this._action("goto-home")}
+            ><doclens-icon name="home"></doclens-icon></button>`
+          : null}
         <nav class="crumb-trail" title=${breadcrumb}>${this._renderBreadcrumbTrail(currentDir)}</nav>
+        ${showSetWorkdir
+          ? html`<button
+              class="set-workdir-btn"
+              type="button"
+              title="将当前目录设为工作目录（切换后会重建索引并刷新页面）"
+              @click=${this._onSetWorkdirClick}
+            ><doclens-icon name="home"></doclens-icon><span>设为工作目录</span></button>`
+          : null}
       </div>
       <div class="toolbar">
         <button data-action="refresh" title="刷新当前目录（与移动端下拉刷新等效）" @click=${() => this._action("refresh")}><doclens-icon name="refresh-cw"></doclens-icon><span class="btn-label">刷新</span></button>
-        ${this.gitChangesAvailable
+        ${!readOnly && this.gitChangesAvailable
           ? html`<button data-action="git-changes" class=${this.changesMode ? "active" : ""} title="未提交改动" @click=${() => this._action("git-changes")}><doclens-icon name="git-fork"></doclens-icon><span class="btn-label">改动</span></button>`
           : null}
-        ${this.deepReadAvailable
+        ${!readOnly && this.deepReadAvailable
           ? html`<button data-action="deep-read" class=${this.deepReadMode ? "active" : ""} title="深读书目（deep-read 生成的书籍技能）" @click=${() => this._action("deep-read")}><doclens-icon name="book-open"></doclens-icon><span class="btn-label">深读</span></button>`
           : null}
-        <button data-action="new-file" title="在当前目录新建文本文件（如 笔记.md）" @click=${() => this._action("new-file")}><doclens-icon name="file-plus"></doclens-icon><span class="btn-label">新文件</span></button>
-        <button data-action="mkdir" @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
-        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
+        ${readOnly
+          ? html`<span class="readonly-hint" title="浏览工作目录外的目录为只读">只读浏览</span>`
+          : null}
+        <button data-action="new-file" title=${readOnly ? "工作目录外只读" : "在当前目录新建文本文件（如 笔记.md）"} ?disabled=${readOnly} @click=${() => this._action("new-file")}><doclens-icon name="file-plus"></doclens-icon><span class="btn-label">新文件</span></button>
+        <button data-action="mkdir" title=${readOnly ? "工作目录外只读" : "新建目录"} ?disabled=${readOnly} @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
+        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading || readOnly} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
         <button data-action="download" title="下载选中文件（单选）" ?disabled=${!canDownload} @click=${() => this._action("download")}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
-        <button data-action="copy-path" ?disabled=${!canAct} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
+        <button data-action="copy-path" ?disabled=${selectedPaths.length === 0} title="复制选中项的路径（多选时每行一个）" @click=${() => this._action("copy-path")}><doclens-icon name="copy"></doclens-icon><span class="btn-label">拷贝路径</span></button>
         <button data-action="skill-toolbox" ?disabled=${!canAct} title="对选中文件运行技能（AI 对话）" @click=${() => this._action("skill-toolbox")}><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">技能工具箱</span></button>
         <button data-action="delete" ?disabled=${!canAct} class="danger" @click=${() => this._action("delete")}><doclens-icon name="trash-2"></doclens-icon><span class="btn-label">删除</span></button>
       </div>
@@ -690,11 +819,11 @@ export class FileList extends LitElement {
         ? emptyBlock
         : html`<div class="header-row">
             <span class="select-all">
-              <input
+              ${readOnly ? null : html`<input
                 type="checkbox"
                 .checked=${allSelected}
                 @click=${this._onSelectAll}
-              />
+              />`}
             </span>
             <span></span>
             <span>名称<span
@@ -717,7 +846,8 @@ export class FileList extends LitElement {
         ${entries.map(e => html`
           <file-row
             .entry=${e}
-            .selected=${sel.has(e.path)}
+            .selected=${sel.has(e.path) && !readOnly}
+            .hideCheckbox=${readOnly}
             .active=${e.path === this.activePath}
             @checked=${this._onRowChecked}
           ></file-row>`)}

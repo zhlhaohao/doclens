@@ -40,8 +40,35 @@ export class HistoryItem extends LitElement {
       flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
-      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+    }
+    /* 标题文本：**溢出时尾锚定 + 左端渐隐**（2026-10-26 用户决议：会话
+       标题关键信息常在末尾，窄屏下最后面的内容必须显示）。
+       两态切换（JS 测量加 .over，见 _measureOverflow）：
+       - 不溢出：正常左对齐（与旧行为一致，无视觉变化）；
+       - 溢出：justify-content:flex-end 内容贴右、头部被裁，
+         左端 24px mask 渐隐当视觉省略号。
+       （纯 CSS 无条件 flex-end 会让短标题也贴右留白——第一版被用户
+       否决；direction:rtl 左截断在块级 nowrap 容器不可靠——第 0 版
+       实测无效。） */
+    .name-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
       white-space: nowrap;
+    }
+    .name-text.over {
+      display: flex;
+      justify-content: flex-end;
+      -webkit-mask-image: linear-gradient(to right, transparent 0, black 24px);
+      mask-image: linear-gradient(to right, transparent 0, black 24px);
+    }
+    .name-text-inner {
+      display: inline-block; /* scrollWidth = 内容真实宽（测量依据）；
+                                .over 态作 flex item 同样工作 */
+      flex: 0 0 auto;
+      min-width: 0;
     }
     .meta {
       font-size: var(--cortex-fs-xs);
@@ -66,6 +93,7 @@ export class HistoryItem extends LitElement {
       border-radius: var(--cortex-radius-sm);
       padding: 0 4px;
       line-height: 1.5;
+      flex-shrink: 0; /* .name 是 flex 行：tag 不被压缩，截断由 .name-text 承担 */
     }
     /* 加星按钮（2026-09-17）：常显淡色描边星；加星后实心主题色。
        加星即置顶 + 删除保护，故常显（不做 hover 才显现）。 */
@@ -200,7 +228,7 @@ export class HistoryItem extends LitElement {
     return html`
       <div class="name">
         ${this.session.mode === "grep" ? html`<span class="mode-tag" title="正则 grep">grep</span>` : null}
-        ${this.session.title}
+        <span class="name-text" title=${this.session.title}><span class="name-text-inner">${this.session.title}</span></span>
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>
       ${this.session.type === "chat" ? html`
@@ -232,13 +260,41 @@ export class HistoryItem extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener("click", this._select);
+    // 容器宽度变化（旋转/分栏拖动/断点切换）重测溢出态
+    this._ro = new ResizeObserver(() => this._measureOverflow());
+    this._ro.observe(this);
   }
 
   disconnectedCallback() {
     this.removeEventListener("click", this._select);
+    this._ro?.disconnect();
+    this._ro = undefined;
     if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
     super.disconnectedCallback();
   }
+
+  /** 溢出态测量（标题尾部保可见的两态开关）：
+   *  inner 内容宽 > outer 容器宽 → 加 .over（尾锚定 + 左渐隐）；
+   *  否则移除（正常左对齐）。mask/flex-end 只在 .over 生效，短标题
+   *  无视觉变化。 */
+  private _measureOverflow(): void {
+    const outer = this.shadowRoot?.querySelector(".name-text") as HTMLElement | null;
+    const inner = outer?.querySelector(".name-text-inner") as HTMLElement | null;
+    if (!outer || !inner) return;
+    // flex-end 态下 inner 贴右溢出，比较内容宽与容器 clientWidth
+    const over = inner.scrollWidth > outer.clientWidth;
+    outer.classList.toggle("over", over);
+  }
+
+  protected override updated(changed: Map<string | number | symbol, unknown>): void {
+    super.updated(changed);
+    if (changed.has("session")) {
+      // 标题变化后测量（渲染完成后 DOM 可测）
+      this._measureOverflow();
+    }
+  }
+
+  private _ro?: ResizeObserver;
 }
 
 declare global {

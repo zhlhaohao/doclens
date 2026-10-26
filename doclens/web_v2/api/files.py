@@ -15,6 +15,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, Res
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api._auto_rotate import schedule_auto_rotate
 from doclens.web_v2.api.errors import CortexAPIError
+from doclens.web_v2.api.files_browse import (
+    assert_writable_scope,
+    is_absolute_browse_path,
+    normalize_browse_path,
+)
 from doclens.web_v2.api.image_compress import compress_image_bytes
 from doclens.web_v2.deps import get_config, get_index_manager
 from doclens.web_v2.models.files import (
@@ -36,10 +41,8 @@ from doclens.web_v2.models.files import (
     UploadResponse,
 )
 from doclens.web_v2.path_safety import (
-    assert_not_protected,
     assert_not_root,
     compute_writable,
-    is_protected,
     safe_resolve,
     validate_move_target,
     validate_name,
@@ -69,17 +72,20 @@ def _posix_rel(full: Path, base: Path) -> str:
 
 
 def _has_child_dirs(full: Path, base: Path) -> bool:
-    """目录是否包含至少一个非受保护的子目录（向前看一层，用于树形控件的箭头显示）。
+    """目录是否包含至少一个子目录（向前看一层，用于树形控件的箭头显示）。
 
     os.scandir 读目录项自带的类型信息（零额外 stat）——pathlib 的
     iterdir().is_dir() 每条一次 stat，50 万文件大目录上一层扫描从
     ~0.2s/目录恶化到分钟级（ADR-0018 后续修复实测 81 目录 17.7s → <0.5s）。
+
+    2026-10-26（ADR-0049 修订）：点目录不再过滤（物理视图，全可见）；
+    base 参数仅为签名兼容保留。
     """
     try:
         with os.scandir(full) as it:
             for entry in it:
                 try:
-                    if entry.is_dir() and not is_protected(Path(entry.path), base):
+                    if entry.is_dir():
                         return True
                 except OSError:
                     continue
@@ -90,21 +96,33 @@ def _has_child_dirs(full: Path, base: Path) -> bool:
 
 def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = None,
                  ghost_children: set[str] | None = None,
-                 idx: IndexManager | None = None) -> Entry:
+                 idx: IndexManager | None = None,
+                 outside_workdir: bool = False) -> Entry:
+    """构建目录条目。outside_workdir=True（ADR-0049 整机浏览）时跳过全部
+    索引/可写探测与相对路径换算（_posix_rel 对 workdir 外路径抛
+    ValueError）——外部目录恒只读、恒未索引，Entry.path 由调用方覆写为
+    绝对规范形。"""
     stat = full.stat()
-    rel = _posix_rel(full, base)
     is_dir = full.is_dir()
     has_child_dirs = _has_child_dirs(full, base) if is_dir else False
-    # ADR-0018：目录页传 indexed_children（单次前缀查询单，~0.3s/页）；
-    # 单条目场景（rename 回包等）传 idx 逐条探测
-    if indexed_children is not None:
+    if outside_workdir:
+        indexed = False
+        registered = False
+        writable = False
+        rel = str(full).replace("\\", "/")  # 占位；调用方覆写为父目录+name
+    elif indexed_children is not None:
+        # ADR-0018：目录页传 indexed_children（单次前缀查询单，~0.3s/页）；
+        # 单条目场景（rename 回包等）传 idx 逐条探测
+        rel = _posix_rel(full, base)
         indexed = full.name in indexed_children
     elif idx is not None:
+        rel = _posix_rel(full, base)
         indexed = idx.is_path_indexed(str(full), is_dir=is_dir)
     else:
+        rel = _posix_rel(full, base)
         indexed = False
     # 三态徽标第二态（ADR-0034）：仅登记（ghost 行）——已索引优先，未索引时才判
-    if not indexed:
+    if not indexed and not outside_workdir:
         if ghost_children is not None:
             registered = full.name in ghost_children
         elif idx is not None and not is_dir:
@@ -121,7 +139,7 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
         indexed=indexed,
         registered=registered,
-        writable=compute_writable(full, base),
+        writable=(False if outside_workdir else compute_writable(full, base)),
         has_child_dirs=has_child_dirs,
     )
 
@@ -217,8 +235,6 @@ def _walk_for_stats(root: Path, base: Path) -> tuple:
     dirs = 0
     total = 0
     for child in root.iterdir():
-        if is_protected(child, base):
-            continue
         if child.is_dir():
             dirs += 1
             f, d, s = _walk_for_stats(child, base)
@@ -234,6 +250,45 @@ def _walk_for_stats(root: Path, base: Path) -> tuple:
     return files, dirs, total
 
 
+# --- GET /files/drives（ADR-0049 整机浏览：盘符清单，「此电脑」层）---
+
+def _list_windows_drives() -> list[str]:
+    """枚举本机盘符（C:/、D:/… 正斜杠规范形）。
+
+    优先 os.listdrives()（Python 3.12+，Windows）；旧版回退
+    GetLogicalDrives ctypes 调用。失败返回空清单（前端显示空态）。
+    """
+    if hasattr(os, "listdrives"):
+        try:
+            return sorted(d.replace("\\", "/") for d in os.listdrives())
+        except OSError:
+            return []
+    try:
+        import ctypes
+
+        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+    except Exception:  # noqa: BLE001
+        return []
+    drives = []
+    for i, letter in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+        if bitmask & (1 << i):
+            drives.append(f"{letter}:/")
+    return drives
+
+
+@router.get("/files/drives")
+async def list_drives() -> dict:
+    """盘符清单（ADR-0049「此电脑」虚拟层的数据源）+ 当前用户家目录
+    （快速跳转按钮的目标，一次 Path.home() 零成本顺带）。"""
+    def _work():
+        try:
+            home = str(Path.home()).replace("\\", "/")
+        except OSError:
+            home = ""
+        return {"drives": _list_windows_drives(), "home": home}
+    return await asyncio.to_thread(_work)
+
+
 # --- GET /files/list ---
 
 @router.get("/files/list", response_model=ListDirResponse)
@@ -245,12 +300,20 @@ async def list_dir(
 ) -> ListDirResponse:
     def _work() -> ListDirResponse:
         base = Path(idx.search_path)
-        full = safe_resolve(base, path)
-        assert_not_protected(full, base)
-        if not full.exists():
-            raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
-        if not full.is_dir():
-            raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
+        # ADR-0049 整机浏览：绝对路径 = workdir 外只读浏览，不进 safe_resolve
+        outside = is_absolute_browse_path(path)
+        if outside:
+            full = Path(normalize_browse_path(path))
+            if not full.exists():
+                raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+            if not full.is_dir():
+                raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
+        else:
+            full = safe_resolve(base, path)
+            if not full.exists():
+                raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+            if not full.is_dir():
+                raise CortexAPIError(400, "INVALID_PATH", f"不是目录: {path}")
 
         # 两段式：scandir 的名字+类型信息先排序分页，只对当页条目做重探测
         # （stat / 索引判定 / 可写性 / has_child_dirs）。此前对全目录每个
@@ -263,14 +326,30 @@ async def list_dir(
                     is_dir = child.is_dir()
                 except OSError:
                     continue
-                # 点开头组件受保护——父链已由 assert_not_protected 保证，
-                # 这里只过滤本层隐藏项（与旧 is_protected(child) 语义等价）
-                if child.name.startswith("."):
-                    continue
+                # 2026-10-26（ADR-0049 修订）：点文件与 $ 系统目录全部可见
+                # ——文件页定位为纯物理目录视图（用户决议，完全放开）；
+                # 隐藏/排除语义归索引层（gitignore/忽略规则）管。
                 names.append((child.name, is_dir))
         names.sort(key=lambda t: (not t[1], t[0].lower()))
         total = len(names)
         page_names = names[offset:offset + limit]
+        if outside:
+            # 外部目录：跳过索引/ghost 探测（恒 False），Entry.path 用绝对规范形。
+            # stat 失败（junction/权限/消失中的条目，如 C:\Documents and
+            # Settings 这类系统链接——scandir 枚举得到名字但 stat WinError
+            # 3/5）容错跳过：条目不可访问 = 不可浏览，不该让整页 500。
+            page_entries = []
+            for name, _ in page_names:
+                try:
+                    page_entries.append(_build_entry(full / name, base, outside_workdir=True))
+                except OSError:
+                    continue
+            # 覆写 path：_build_entry 的 _posix_rel 只能算 workdir 内相对路径
+            norm_dir = normalize_browse_path(path).rstrip("/")
+            for entry in page_entries:
+                # name 含在 entry.name；重新拼绝对规范形
+                entry.path = f"{norm_dir}/{entry.name}"
+            return ListDirResponse(path=normalize_browse_path(path), entries=page_entries, total=total)
         # 索引/ghost 徽标也只探测当页：点查版 probe_*（μs/条）。原
         # indexed_children_of 的 DISTINCT 全扫成本 ∝ 子树总行数——工作
         # 目录根页匹配整库（28.5 万行 ~1s+），点查版只花 len(page) 次索引
@@ -305,7 +384,6 @@ async def stats(
     def _work() -> DirStatsResponse:
         base = Path(idx.search_path)
         full = safe_resolve(base, path)
-        assert_not_protected(full, base)
         if not full.exists():
             raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
         if not full.is_dir():
@@ -325,23 +403,33 @@ async def attrs(
     idx: IndexManager = Depends(get_index_manager),
 ) -> AttrsResponse:
     base = Path(idx.search_path)
-    full = safe_resolve(base, path)
-    assert_not_protected(full, base)
-    if not full.exists():
-        raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+    # ADR-0049 整机浏览：绝对路径 = 外部文件属性（只读语义）
+    outside = is_absolute_browse_path(path)
+    if outside:
+        full = Path(normalize_browse_path(path))
+        if not full.exists():
+            raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
+    else:
+        full = safe_resolve(base, path)
+        if not full.exists():
+            raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
     stat = full.stat()
+    is_dir = full.is_dir()
     return AttrsResponse(
         name=full.name,
-        path=_posix_rel(full, base),
-        is_dir=full.is_dir(),
-        size=0 if full.is_dir() else stat.st_size,
+        path=(normalize_browse_path(path) if outside else _posix_rel(full, base)),
+        is_dir=is_dir,
+        size=0 if is_dir else stat.st_size,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-        indexed=idx.is_path_indexed(str(full), is_dir=full.is_dir()),
+        indexed=(
+            False if outside
+            else idx.is_path_indexed(str(full), is_dir=is_dir)
+        ),
         registered=(
-            False if full.is_dir()
+            False if (outside or is_dir)
             else idx.is_path_registered(str(full))
         ),
-        writable=compute_writable(full, base),
+        writable=(False if outside else compute_writable(full, base)),
         created_at=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
         extension=full.suffix.lower() if full.suffix else None,
         is_protected=False,
@@ -478,9 +566,9 @@ async def mkdir(
     req: MkdirRequest,
     idx: IndexManager = Depends(get_index_manager),
 ):
+    assert_writable_scope(req.path)  # ADR-0049：浏览自由，写入以 workdir 为界
     base = Path(idx.search_path)
     target = safe_resolve(base, req.path)
-    assert_not_protected(target, base)
     parent = target.parent
     if not parent.exists() or not parent.is_dir():
         raise CortexAPIError(400, "INVALID_PATH", f"父目录不存在: {parent}")
@@ -502,9 +590,9 @@ async def create_file(
     idx: IndexManager = Depends(get_index_manager),
 ) -> CreateFileResponse:
     """在当前目录新建空文本文件（如 笔记.md）。校验与 mkdir 同口径。"""
+    assert_writable_scope(req.path)  # ADR-0049
     base = Path(idx.search_path)
     target = safe_resolve(base, req.path)
-    assert_not_protected(target, base)
     parent = target.parent
     if not parent.exists() or not parent.is_dir():
         raise CortexAPIError(400, "INVALID_PATH", f"父目录不存在: {parent}")
@@ -528,9 +616,9 @@ async def delete(
     path: str = Query(...),
     idx: IndexManager = Depends(get_index_manager),
 ):
+    assert_writable_scope(path)  # ADR-0049
     base = Path(idx.search_path)
     full = safe_resolve(base, path)
-    assert_not_protected(full, base)
     assert_not_root(full, base)
     if not full.exists():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {path}")
@@ -551,9 +639,11 @@ async def move(
     req: MoveRequest,
     idx: IndexManager = Depends(get_index_manager),
 ) -> MoveResponse:
+    for p in req.from_paths:
+        assert_writable_scope(p)  # ADR-0049
+    assert_writable_scope(req.dest_dir)  # ADR-0049
     base = Path(idx.search_path)
     dest_dir = safe_resolve(base, req.dest_dir)
-    assert_not_protected(dest_dir, base)
     if not dest_dir.exists() or not dest_dir.is_dir():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"目标目录不存在: {req.dest_dir}")
 
@@ -563,7 +653,6 @@ async def move(
     for from_path_str in req.from_paths:
         src = safe_resolve(base, from_path_str)
         # 受保护源路径直接整体 403（与其他端点的保护语义一致）
-        assert_not_protected(src, base)
         if not src.exists():
             skipped.append(SkippedItem(from_path=from_path_str, reason="NOT_FOUND"))
             continue
@@ -572,7 +661,6 @@ async def move(
 
         target = dest_dir / src.name
         # 目标受保护也属于硬错误
-        assert_not_protected(target, base)
         if target.exists():
             if not req.overwrite:
                 skipped.append(SkippedItem(from_path=from_path_str, reason="ALREADY_EXISTS"))
@@ -603,14 +691,13 @@ async def rename(
     req: RenameRequest,
     idx: IndexManager = Depends(get_index_manager),
 ) -> Entry:
+    assert_writable_scope(req.path)  # ADR-0049
     base = Path(idx.search_path)
     src = safe_resolve(base, req.path)
-    assert_not_protected(src, base)
     if not src.exists():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"路径不存在: {req.path}")
     validate_name(req.new_name)
     target = src.parent / req.new_name
-    assert_not_protected(target, base)
     if target.exists():
         raise CortexAPIError(409, "ALREADY_EXISTS", f"目标已存在: {req.new_name}")
     try:
@@ -631,9 +718,9 @@ async def upload(
     overwrite: bool = Form(default=False),
     idx: IndexManager = Depends(get_index_manager),
 ) -> UploadResponse:
+    assert_writable_scope(dest_dir)  # ADR-0049
     base = Path(idx.search_path)
     dest_full = safe_resolve(base, dest_dir)
-    assert_not_protected(dest_full, base)
     if not dest_full.exists() or not dest_full.is_dir():
         raise CortexAPIError(404, "FILE_NOT_FOUND", f"目标目录不存在: {dest_dir}")
 
@@ -644,7 +731,6 @@ async def upload(
         raise CortexAPIError(400, "INVALID_TYPE", f"不允许的文件类型: {ext or '(无后缀)'}")
 
     target = dest_full / filename
-    assert_not_protected(target, base)
     overwritten = False
     if target.exists():
         if not overwrite:

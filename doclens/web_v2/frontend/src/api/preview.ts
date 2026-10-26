@@ -185,7 +185,11 @@ export type PreviewFetchResult =
       /** 文件字节数（ADR-0046 编辑阈值判定用；null = 后端未下发）。 */
       sizeBytes: number | null;
     }
-  | { ok: false; notIndexed: boolean; message: string };
+  | { ok: false; notIndexed: boolean; message: string; outsideWorkdir?: boolean };
+
+/** ADR-0049：workdir 外二进制合成预览的专属错误码（与后端
+ *  preview.py ERR_OUTSIDE_WORKDIR_PREVIEW 对齐）。 */
+export const ERR_OUTSIDE_WORKDIR_PREVIEW = "OUTSIDE_WORKDIR_PREVIEW";
 
 /**
  * 调用 GET /api/preview 获取预览内容。
@@ -219,9 +223,11 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
     }
     const err = await res.json().catch(() => ({ code: "UNKNOWN", detail: "" }));
     const notIndexed = err.code === "NOT_INDEXED";
+    const outsideWorkdir = err.code === ERR_OUTSIDE_WORKDIR_PREVIEW;
     return {
       ok: false,
       notIndexed,
+      outsideWorkdir,
       message: err.detail || err.code || `HTTP ${res.status}`,
     };
   } catch (e) {

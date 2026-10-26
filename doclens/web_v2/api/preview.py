@@ -16,6 +16,10 @@ from fastapi import APIRouter, Depends, Query
 from doclens.index_manager import IndexManager
 from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.api import preview_synth
+from doclens.web_v2.api.files_browse import (
+    is_absolute_browse_path,
+    normalize_browse_path,
+)
 from doclens.web_v2.api.preview_common import (
     BINARY_PREVIEW_EXTS,
     ERR_BINARY_NOT_PREVIEWABLE,
@@ -32,6 +36,10 @@ router = APIRouter()
 
 # 二进制嗅探字节数（git is-binary 判据：前导块含 NUL 即二进制）
 _BINARY_SNIFF_BYTES = 8192
+
+# ADR-0049 外部图像直读扩展名：与 treesearch IMAGE_EXTENSIONS 同口径
+# （png/jpg/jpeg/webp/gif/bmp/tiff/avif…由 raw 端点实际服务字节）。
+from treesearch.parsers.image_parser import IMAGE_EXTENSIONS as _OUTSIDE_IMAGE_EXTS  # noqa: E402
 
 
 def looks_binary(full: Path) -> bool:
@@ -104,6 +112,94 @@ def _pdf_preview_meta(idx: IndexManager, path: str) -> PreviewResponse:
     )
 
 
+#: ADR-0049：workdir 外二进制合成预览的专属错误码（前端按此渲染
+#: 「设为工作目录后可预览」提示页）。线上契约值，勿改。
+ERR_OUTSIDE_WORKDIR_PREVIEW = "OUTSIDE_WORKDIR_PREVIEW"
+
+#: ADR-0049：外部图像直读的扩展名（与 raw 端点 IMAGE_EXTENSIONS 对齐口径，
+#: 由 preview_assets 侧实际服务；这里只做格式分派）。
+
+
+def _preview_outside_workdir(path: str) -> PreviewResponse:
+    """ADR-0049 整机浏览：workdir 外文件的预览分派。
+
+    - 文本（非 BINARY_PREVIEW_EXTS、非 PST）：磁盘直读 + 二进制嗅探 +
+      服务端分词，writable 恒 False（外部只读）；
+    - 图像（png/jpg/jpeg/webp/gif/bmp/tiff）：**原始字节直读**——图像
+      预览本体（原图渲染）不依赖索引，依赖索引的只是 vision 解读文本。
+      合成单行 md（![原图](/api/preview/raw?path=…)），与 workdir 内
+      图像预览同形态（md-viewer 渲染），仅缺解读章节；
+    - PDF：轻量标记（language=pdf、无 content、page_starts=None——外部
+      无索引页表，跳页静默降级），字节由 /api/preview/pdf 直读；
+    - 其余二进制（docx/pptx/xlsx/epub/PST，DB 合成依赖索引）：
+      422 OUTSIDE_WORKDIR_PREVIEW，前端提示「设为工作目录后可预览」。
+    """
+    norm = normalize_browse_path(path)
+    lower = norm.lower()
+    full = Path(norm)
+    if lower.endswith(".pst"):
+        raise CortexAPIError(
+            422, ERR_OUTSIDE_WORKDIR_PREVIEW,
+            "PST 预览依赖索引，请将该文件所在目录设为工作目录后重试",
+        )
+    if lower.endswith(".pdf"):
+        if not (full.exists() and full.is_file()):
+            raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
+        return PreviewResponse(
+            path=norm,
+            language="pdf",
+            content="",
+            line_range=None,
+            writable=False,
+            synthesized=False,
+            page_starts=None,
+        )
+    if lower.endswith(tuple(_OUTSIDE_IMAGE_EXTS)):
+        # 图像原始字节直读（raw 端点支持绝对路径）：单行 md 内嵌原图
+        if not (full.exists() and full.is_file()):
+            raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
+        from urllib.parse import quote
+
+        raw_url = f"/api/preview/raw?path={quote(norm, safe='')}"
+        return PreviewResponse(
+            path=norm,
+            language="markdown",
+            content=f"![原图]({raw_url})\n\n> 工作目录外图像：仅显示原图（视觉解读需先设为工作目录）。\n",
+            line_range=None,
+            writable=False,
+            synthesized=False,
+        )
+    if lower.endswith(tuple(BINARY_PREVIEW_EXTS)):
+        raise CortexAPIError(
+            422, ERR_OUTSIDE_WORKDIR_PREVIEW,
+            "该格式的预览依赖索引，请将所在目录设为工作目录后重试",
+        )
+    if not full.exists() or not full.is_file():
+        raise CortexAPIError(404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}")
+    if looks_binary(full):
+        raise CortexAPIError(
+            415, ERR_BINARY_NOT_PREVIEWABLE, "二进制文件不支持预览，请下载后查看"
+        )
+    try:
+        text = full.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise CortexAPIError(500, "INTERNAL_ERROR", f"读取失败: {e}") from e
+
+    from doclens.web_v2.syntax_tokens import tokenize_code
+    tokens = tokenize_code(text, full.name)
+
+    return PreviewResponse(
+        path=norm,
+        language=_LANGUAGE_MAP.get(full.suffix.lower(), "text"),
+        content=text,
+        line_range=None,
+        writable=False,  # 外部浏览恒只读（ADR-0049）
+        synthesized=False,
+        tokens=tokens,
+        size_bytes=full.stat().st_size,
+    )
+
+
 @router.get("/preview", response_model=PreviewResponse)
 def preview(
     path: str = Query(..., description="相对路径"),
@@ -119,6 +215,11 @@ def preview(
     40 容量），事件循环立即归还。rotate 端点自始就是此形态（先例）。
     """
     base = Path(idx.search_path)
+    # ADR-0049 整机浏览：绝对路径 = workdir 外只读预览。文本/PDF 直读磁盘；
+    # DB 合成类（docx/pptx/xlsx/epub/图像/PST，依赖索引库）给专属错误码，
+    # 前端提示「设为工作目录后可预览」。
+    if is_absolute_browse_path(path):
+        return _preview_outside_workdir(path)
     # PST 派生路径（"<pst>#<entry_id>"，非真实文件）：直接从 DB 合成 md，
     # 并附附件清单（含下载 URL，ADR-0005）
     if "#" in path and path.split("#", 1)[0].lower().endswith(".pst"):

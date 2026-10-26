@@ -224,42 +224,48 @@ describe("file-list", () => {
     document.body.removeChild(el);
   });
 
-  it("clicking breadcrumb root segment navigates to root", async () => {
+  it("clicking breadcrumb root segment dispatches go-dir to root", async () => {
     actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
+    const seen: string[] = [];
+    el.addEventListener("go-dir", (e: Event) => seen.push((e as CustomEvent).detail.path));
     const rootCrumb = [...el.shadowRoot.querySelectorAll(".crumb")]
       .find((b: any) => b.textContent === "根目录") as HTMLElement;
     rootCrumb.click();
-    expect(store.getState().files.currentDir).toBe("");
+    expect(seen).toEqual([""]);
     document.body.removeChild(el);
   });
 
-  it("clicking breadcrumb middle segment navigates to that dir", async () => {
+  it("clicking breadcrumb middle segment dispatches go-dir", async () => {
     actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
     const el = document.createElement("file-list") as any;
     document.body.appendChild(el);
     await el.updateComplete;
+    const seen: string[] = [];
+    el.addEventListener("go-dir", (e: Event) => seen.push((e as CustomEvent).detail.path));
     const midCrumb = [...el.shadowRoot.querySelectorAll(".crumb")]
       .find((b: any) => b.textContent === "docs") as HTMLElement;
     midCrumb.click();
-    expect(store.getState().files.currentDir).toBe("docs");
+    expect(seen).toEqual(["docs"]);
     document.body.removeChild(el);
   });
 
-  it("mobile breadcrumb segments are clickable too", async () => {
+  it("mobile breadcrumb segments dispatch go-dir too", async () => {
     actions.setFilesState({ currentDir: "docs/sub", treeCache: { "docs/sub": entries } });
     const el = document.createElement("file-list") as any;
     el.mobile = true;
     document.body.appendChild(el);
     await el.updateComplete;
+    const seen: string[] = [];
+    el.addEventListener("go-dir", (e: Event) => seen.push((e as CustomEvent).detail.path));
     const trail = el.shadowRoot.querySelector(".mobile-crumbs");
     const midCrumb = [...trail.querySelectorAll(".crumb")]
       .find((b: any) => b.textContent === "docs") as HTMLElement;
     expect(midCrumb).toBeTruthy();
     midCrumb.click();
-    expect(store.getState().files.currentDir).toBe("docs");
+    expect(seen).toEqual(["docs"]);
     document.body.removeChild(el);
   });
 
@@ -478,17 +484,21 @@ describe("file-list mobile header", () => {
     const menu = el.shadowRoot.querySelector(".mobile-menu");
     expect(menu).toBeTruthy();
     const items = menu.querySelectorAll("button");
-    // 9 个：新文件 / 新目录 / 上传 / 重命名 / 下载 / 移动 / 技能工具箱 / 拷贝路径 / 删除
-    expect(items.length).toBe(9);
-    expect(items[0].textContent).toContain("新文件");
-    expect(items[1].textContent).toContain("新目录");
-    expect(items[2].textContent).toContain("上传");
-    expect(items[3].textContent).toContain("重命名");
-    expect(items[4].textContent).toContain("下载");
-    expect(items[5].textContent).toContain("移动");
-    expect(items[6].textContent).toContain("技能工具箱");
-    expect(items[7].textContent).toContain("拷贝路径");
-    expect(items[8].textContent).toContain("删除");
+    // 11 个（ADR-0049 后）：回到工作目录 / 设为工作目录 / 新文件 / 新目录 /
+    // 上传 / 重命名 / 下载 / 移动 / 技能工具箱 / 拷贝路径 / 删除
+    // （homeDir 未传 prop → 家目录项不渲染）
+    expect(items.length).toBe(11);
+    expect(items[0].textContent).toContain("回到工作目录");
+    expect(items[1].textContent).toContain("设为工作目录");
+    expect(items[2].textContent).toContain("新文件");
+    expect(items[3].textContent).toContain("新目录");
+    expect(items[4].textContent).toContain("上传");
+    expect(items[5].textContent).toContain("重命名");
+    expect(items[6].textContent).toContain("下载");
+    expect(items[7].textContent).toContain("移动");
+    expect(items[8].textContent).toContain("技能工具箱");
+    expect(items[9].textContent).toContain("拷贝路径");
+    expect(items[10].textContent).toContain("删除");
     document.body.removeChild(el);
   });
 
@@ -527,14 +537,15 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中：rename (idx=3) disabled
-    expect((items[3] as HTMLButtonElement).disabled).toBe(true);
+    // 0 选中：rename (ADR-0049 后 idx=4；idx=0 回到工作目录恒 disabled) disabled
+    expect((items[0] as HTMLButtonElement).disabled).toBe(true); // 根目录无可回
+    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
     // 1 选中
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     // 菜单仍展开（state 变化触发 re-render）
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    expect((items2[3] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[4] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -547,16 +558,16 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 0 选中（idx: 5=移动, 6=技能工具箱, 8=删除）
-    expect((items[5] as HTMLButtonElement).disabled).toBe(true);
+    // 0 选中（ADR-0049 后 idx: 6=移动, 7=技能工具箱, 9=删除）
     expect((items[6] as HTMLButtonElement).disabled).toBe(true);
-    expect((items[8] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[7] as HTMLButtonElement).disabled).toBe(true);
+    expect((items[9] as HTMLButtonElement).disabled).toBe(true);
     actions.setFilesState({ selectedPaths: ["a.md"] });
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    expect((items2[5] as HTMLButtonElement).disabled).toBe(false);
     expect((items2[6] as HTMLButtonElement).disabled).toBe(false);
-    expect((items2[8] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[7] as HTMLButtonElement).disabled).toBe(false);
+    expect((items2[9] as HTMLButtonElement).disabled).toBe(false);
     document.body.removeChild(el);
   });
 
@@ -571,13 +582,14 @@ describe("file-list mobile header", () => {
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    // 点 + 新目录（idx=1）
-    (items[1] as HTMLElement).click();
+    // 点 新目录（ADR-0049 后：currentDir="" 无「设为工作目录」项，
+    // 菜单 = [回到工作目录, 新文件, 新目录, 上传, ...] → idx=2）
+    (items[2] as HTMLElement).click();
     // 重新打开下拉（点 1 次会关闭）
     (el.shadowRoot.querySelector(".mobile-more") as HTMLElement).click();
     await el.updateComplete;
     const items2 = el.shadowRoot.querySelectorAll(".mobile-menu button");
-    (items2[2] as HTMLElement).click(); // 上传
+    (items2[3] as HTMLElement).click(); // 上传
     expect(seen).toEqual(["mkdir", "upload"]);
     document.body.removeChild(el);
   });

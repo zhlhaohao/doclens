@@ -74,6 +74,8 @@ export class FileRow extends LitElement {
   @property({ type: Boolean }) selected = false;
   /** 当前预览/焦点的文件行 —— 由行体单击触发，区别于 checkbox 的多选 */
   @property({ type: Boolean }) active = false;
+  /** 外部浏览态（ADR-0049）：隐藏 checkbox 与索引徽标（外部恒只读未索引）。 */
+  @property({ type: Boolean }) hideCheckbox = false;
 
   private _fmtSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -119,11 +121,13 @@ export class FileRow extends LitElement {
         class="row ${this.active ? "active" : ""}"
         @click=${this._onRowClick}>
         <span class="checkbox">
-          <input
-            type="checkbox"
-            .checked=${this.selected}
-            @click=${this._onCheckboxClick}
-          />
+          ${this.hideCheckbox
+            ? null
+            : html`<input
+                type="checkbox"
+                .checked=${this.selected}
+                @click=${this._onCheckboxClick}
+              />`}
         </span>
         <span class="cell-icon">
           ${this.entry.is_dir

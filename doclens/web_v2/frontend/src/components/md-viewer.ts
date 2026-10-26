@@ -422,14 +422,17 @@ export class MdViewer extends LitElement {
       margin-top: var(--cortex-space-1, 4px);
       line-height: 1.4;
     }
-    /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满 */
+    /* 单块预览（docx/md）= 一张白纸；max-width 居中，宽屏不撑满。
+       2026-10-26：820 → min(100%, 1400px)——预览栏可拖到 1600px，纸张
+       随之变宽（拖宽却内容不变大的割裂消除）；1400 上限保留版心约束
+       （可读性一行 ~100-120 字符）。 */
     .md-body {
       position: relative;
       background: var(--cortex-surface);
       border-radius: var(--cortex-radius-lg);
       box-shadow: var(--cortex-shadow-sm);
       padding: var(--cortex-space-8) var(--cortex-space-8);
-      max-width: 820px;
+      max-width: min(100%, 1400px);
       margin: 0 auto;
     }
     /* 视口外块跳过 layout/paint——大文档（epub 14 万行 / 数万块）滚动
@@ -451,7 +454,7 @@ export class MdViewer extends LitElement {
       box-shadow: none;
       padding: 0;
       border-radius: 0;
-      max-width: 820px;
+      max-width: min(100%, 1400px);
       margin: 0 auto;
     }
     .empty {

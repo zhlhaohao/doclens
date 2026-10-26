@@ -3,8 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import {
   getRecentWorkdirs,
-  getOrphanCount,
   switchWorkdir,
+  precheckWorkdir,
   WorkdirSwitchError,
   type RecentWorkdir,
 } from "../api/workdir";
@@ -176,11 +176,18 @@ export class WorkdirSwitchDialog extends LitElement {
   /** 当前工作目录（app-bar 从 store.status.workdir 传入） */
   @property() currentWorkdir = "";
 
+  /** 预填目标路径（ADR-0049 files 页「设为工作目录」入口）：打开时回填
+   *  路径输入框，用户仍可修改后提交。 */
+  @property() prefillPath = "";
+
   @state() private _recent: RecentWorkdir[] = [];
   @state() private _path = "";
-  @state() private _orphans = 0;
   @state() private _err = "";
   @state() private _submitting = false;
+  /** ADR-0049 索引确认态：目标目录无索引库，等用户确认耗时的全量构建。 */
+  @state() private _needIndexConfirm = false;
+  /** precheck 进行中（探测 ~10ms，按钮短暂禁用防双击）。 */
+  @state() private _prechecking = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -190,7 +197,8 @@ export class WorkdirSwitchDialog extends LitElement {
   updated(changed: Map<string, unknown>) {
     if (changed.has("open") && this.open) {
       this._err = "";
-      this._path = "";
+      this._path = this.prefillPath;
+      this._needIndexConfirm = false;
       void this._load();
     }
   }
@@ -201,7 +209,6 @@ export class WorkdirSwitchDialog extends LitElement {
     } catch {
       this._recent = [];
     }
-    this._orphans = await getOrphanCount();
   }
 
   private _samePath(a: string, b: string): boolean {
@@ -219,6 +226,7 @@ export class WorkdirSwitchDialog extends LitElement {
     if (this._samePath(path, this.currentWorkdir)) return; // 当前目录不可选
     this._path = path;
     this._err = "";
+    this._needIndexConfirm = false;
   }
 
   private async _submit() {
@@ -231,6 +239,26 @@ export class WorkdirSwitchDialog extends LitElement {
       this._err = "目标与当前目录相同";
       return;
     }
+    // ADR-0049 索引确认门：先探测目标是否已有索引库；未建索引则先弹
+    // 确认（大目录全量索引分钟级），用户确认后才真正发起切换。
+    if (!this._needIndexConfirm) {
+      this._prechecking = true;
+      this._err = "";
+      try {
+        const pre = await precheckWorkdir(path);
+        if (!pre.has_index) {
+          this._needIndexConfirm = true;
+          return; // 停在确认态；确认按钮文案变为「仍要切换」
+        }
+      } catch (e) {
+        // 探测失败（目录不存在 400 / 网络错）：直接报错，不进入切换
+        this._err = e instanceof Error ? e.message : String(e);
+        return;
+      } finally {
+        this._prechecking = false;
+      }
+    }
+    this._needIndexConfirm = false;
     this._submitting = true;
     this._err = "";
     // 通知 app 层立即显示遮罩（ADR-0043 切换窗口）：遮罩必须在请求期间
@@ -271,6 +299,7 @@ export class WorkdirSwitchDialog extends LitElement {
   private _onInput(e: Event) {
     this._path = (e.target as HTMLInputElement).value;
     this._err = "";
+    this._needIndexConfirm = false; // 改了路径，确认态作废重探
   }
 
   private _onKeydown(e: KeyboardEvent) {
@@ -279,7 +308,10 @@ export class WorkdirSwitchDialog extends LitElement {
 
   render() {
     if (!this.open) return nothing;
-    const others = this._recent.filter((r) => !this._samePath(r.path, this.currentWorkdir));
+    // 简化版（用户决议 2026-10-26）：只留 当前目录 / 新目录输入 / 三条
+    // 历史 / 确认取消；无常规 warn hint（索引确认警告保留——那是决策
+    // 所需信息，非提示噪音）
+    const others = this._recent.filter((r) => !this._samePath(r.path, this.currentWorkdir)).slice(0, 3);
     return html`
       <div class="scrim" @click=${this._close}></div>
       <dialog open>
@@ -295,19 +327,7 @@ export class WorkdirSwitchDialog extends LitElement {
             <div style="font-family: var(--cortex-font-mono); font-size: var(--cortex-fs-sm); word-break: break-all;">${this.currentWorkdir || "?"}</div>
           </div>
           <div>
-            <div class="label">最近使用</div>
-            <div class="recent-list">
-              ${others.length === 0
-                ? html`<div class="empty">暂无其他最近目录</div>`
-                : others.map((r) => html`
-                    <button class="recent-item" ?disabled=${this._submitting} @click=${() => this._pickRecent(r.path)}>
-                      <doclens-icon name="folder"></doclens-icon>${r.path}
-                    </button>
-                  `)}
-            </div>
-          </div>
-          <div>
-            <div class="label">或输入目录路径</div>
+            <div class="label">新目录</div>
             <input
               type="text"
               .value=${this._path}
@@ -317,17 +337,31 @@ export class WorkdirSwitchDialog extends LitElement {
               @keydown=${this._onKeydown}
             />
           </div>
-          <div class="warn">
-            <span>切换后页面将自动刷新，当前会话与未发送的输入将丢失。</span>
-            ${this._orphans > 0
-              ? html`<span>有 ${this._orphans} 个 AI 生成仍在后台运行，将在原目录继续完成。</span>`
-              : nothing}
-          </div>
+          ${others.length > 0
+            ? html`<div>
+                <div class="label">最近使用</div>
+                <div class="recent-list">
+                  ${others.map((r) => html`
+                      <button class="recent-item" ?disabled=${this._submitting} @click=${() => this._pickRecent(r.path)}>
+                        <doclens-icon name="folder"></doclens-icon>${r.path}
+                      </button>
+                    `)}
+                </div>
+              </div>`
+            : nothing}
+          ${this._needIndexConfirm
+            ? html`<div class="warn" style="border-color: var(--cortex-danger);">
+                <span><strong>该目录尚未建立索引。</strong>切换后将自动开始全量索引——目录较大时可能需要数分钟到更久，期间搜索不可用。</span>
+              </div>`
+            : nothing}
           ${this._err ? html`<div class="err">${this._err}</div>` : nothing}
           <div class="actions">
             <button ?disabled=${this._submitting} @click=${this._close}>取消</button>
-            <button class="primary" ?disabled=${this._submitting || !this._path.trim()} @click=${this._submit}>
-              ${this._submitting ? "切换中…" : "切换"}
+            <button class="primary" ?disabled=${this._submitting || this._prechecking || !this._path.trim()} @click=${this._submit}>
+              ${this._prechecking ? "检查索引…"
+                : this._submitting ? "切换中…"
+                : this._needIndexConfirm ? "仍要切换"
+                : "切换"}
             </button>
           </div>
         </div>

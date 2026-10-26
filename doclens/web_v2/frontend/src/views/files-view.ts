@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
+import type { FileEntry as FileEntryLike } from "../api/files";
 import { gitApi } from "../api/git";
 import type { GitDiffResponse } from "../api/git";
 import { probeUploadTarget, uploadPreview } from "../api/preview";
@@ -32,7 +33,14 @@ import "../components/file-search-results";
 import { searchFilenames } from "../api/documents";
 import { jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { router } from "../router/router";
+import {
+  isDrivesLayer,
+  isOutsideWorkdir,
+  parentBrowsePath,
+  parentOfBrowseRoot,
+} from "../utils/browse-path";
 import "../components/download-overlay";
+import "../components/workdir-switch-dialog";
 import { downloadServerFile } from "../utils/download";
 
 type DialogKind = "mkdir" | "new-file" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
@@ -405,9 +413,15 @@ export class FilesView extends LitElement {
   private get _previewSizeBytes() { return this._preview.sizeBytes; }
   /** 预览失败态：NOT_INDEXED 特例（专属文案）或后端 detail 文案（如
    *  二进制 415「请下载后查看」）；null = 无错误。移动端 detail 层渲染
-   *  带返回条的错误提示页（P1-2：状态在 controller，此 getter 归一）。 */
+   *  带返回条的错误提示页（P1-2：状态在 controller，此 getter 归一）。
+   *  ADR-0049 outsideWorkdir（workdir 外二进制）也是专属文案态。 */
   private get _previewError(): string | null {
     if (this._preview.notIndexed) return "NOT_INDEXED";
+    if (this._preview.outsideWorkdir) {
+      return this._preview.state.status === "outside-workdir"
+        ? this._preview.state.message
+        : null;
+    }
     return this._preview.errorMessage;
   }
 
@@ -444,6 +458,12 @@ export class FilesView extends LitElement {
   /** jsbridge 上传进行中（App 内）：禁用上传入口，防重复触发 */
   @state() private _uploading = false;
 
+  /** 「设为工作目录」对话框（ADR-0049）：open 态 + 预填目标路径。 */
+  @state() private _workdirDialogOpen = false;
+  @state() private _workdirTarget = "";
+  /** 家目录（快速跳转目标，ADR-0049；空 = 未取到，按钮隐藏）。 */
+  @state() private _homeDir = "";
+
   private _unsubscribe?: () => void;
   private _fileInput: HTMLInputElement | null = null;
   /** 文件名搜索防抖句柄（服务端化后按需发请求）。 */
@@ -459,6 +479,9 @@ export class FilesView extends LitElement {
     this._loadPaneWidths();
     this._probeGitRoot();
     void this._probeBooks();
+    // 家目录探测（ADR-0049 快速跳转）：复用 drives 端点顺带的 home 字段；
+    // 失败静默（按钮不显示，不阻塞页面）
+    void this._probeHomeDir();
     // 启动恢复：上次所在目录 + 选中文件（选择恢复，预览不自动拉）
     void this._restoreSelection();
     // reindex 完成后刷新当前目录，让 indexed 标志反映新索引（改名/新增后自动回填）
@@ -500,6 +523,15 @@ export class FilesView extends LitElement {
     } catch {
       this._isGitRoot = false;
     }
+  }
+
+  /** 家目录探测（ADR-0049 快速跳转；drives 端点顺带，失败静默）。 */
+  private async _probeHomeDir() {
+    if (this._homeDir) return;
+    try {
+      const { home } = await filesApi.listDrives();
+      if (home) this._homeDir = home;
+    } catch { /* 静默：按钮不显示 */ }
   }
 
   /** 进入 / 退出改动模式。进入时预览栏清空（diff 由用户点行触发）。 */
@@ -603,6 +635,12 @@ export class FilesView extends LitElement {
   private async _restoreSelection() {
     const { currentDir, selectedPaths } = store.getState().files;
     if (!currentDir) return;
+    // ADR-0049：外部浏览态不持久化（会话记忆写入侧已过滤）；防御性兜底
+    // ——旧版本可能已写入绝对路径，重置回 workdir 根
+    if (isOutsideWorkdir(currentDir)) {
+      actions.setFilesState({ currentDir: "", selectedPaths: [], error: null });
+      return;
+    }
     for (const p of this._dirPrefixChain(currentDir)) {
       await this._ensureLoaded(p);
       if (!(p in store.getState().files.treeCache)) {
@@ -771,19 +809,37 @@ export class FilesView extends LitElement {
     if (path in treeCache) return;
     try {
       actions.setFilesState({ listing: true });
-      const res = await filesApi.list(path);
+      // 「此电脑」虚拟层（ADR-0049）：盘符清单转 Entry 形态（path=盘符根）
+      let entries;
+      if (isDrivesLayer(path)) {
+        const { drives, home } = await filesApi.listDrives();
+        if (home) this._homeDir = home;  // 快速跳转缓存（ADR-0049）
+        entries = drives.map<FileEntryLike>((d) => ({
+          name: d,
+          path: d,
+          is_dir: true,
+          size: 0,
+          modified_at: "",
+          indexed: false,
+          writable: false,
+          has_child_dirs: true,
+        }));
+      } else {
+        const res = await filesApi.list(path);
+        entries = res.entries;
+      }
       if (store.getState().files.treeCache !== treeCache) {
         // 期间 treeCache 已被其他请求替换，做 merge 而非覆盖
         const fresh = store.getState().files.treeCache;
         if (path in fresh) return;
         actions.setFilesState({
-          treeCache: { ...fresh, [path]: res.entries },
+          treeCache: { ...fresh, [path]: entries },
           listing: false,
         });
         return;
       }
       actions.setFilesState({
-        treeCache: { ...treeCache, [path]: res.entries },
+        treeCache: { ...treeCache, [path]: entries },
         listing: false,
       });
     } catch (e: any) {
@@ -791,6 +847,27 @@ export class FilesView extends LitElement {
       this._showToast(e?.message || "加载失败");
     }
   }
+
+  /** 面包屑分段跳转（ADR-0049）：selectDir + 加载（绝对链/此电脑层没有
+   *  下钻逐级 ensureLoaded 的既有缓存保证，事件驱动宿主统一走这里）。 */
+  private _onGoDir = async (e: CustomEvent<{ path: string }>) => {
+    const path = e.detail.path;
+    actions.selectDir(path);
+    await this._ensureLoaded(path);
+  };
+
+  /** 「设为工作目录」（ADR-0049）：file-list 面包屑行尾按钮 → 弹现有
+   *  workdir-switch-dialog（预填路径），确认链路（孤儿任务警告/切换窗口
+   *  遮罩/整页 reload）全部复用。 */
+  private _onSetWorkdir = (e: CustomEvent<{ path: string }>) => {
+    this._workdirTarget = e.detail.path;
+    this._workdirDialogOpen = true;
+  };
+
+  private _closeWorkdirDialog = () => {
+    this._workdirDialogOpen = false;
+    this._workdirTarget = "";
+  };
 
   updated() {
     // preview 由 _onFileListActivated 主动驱动，无需在 update 中被动触发
@@ -812,6 +889,28 @@ export class FilesView extends LitElement {
     if (name === "refresh") {
       // 桌面工具栏刷新按钮：与移动端下拉刷新同一路径
       void this._refreshFileList();
+      return;
+    }
+    if (name === "set-workdir") {
+      // 移动端 more 菜单入口（ADR-0049）：对当前浏览目录弹切换确认
+      const dir = store.getState().files.currentDir;
+      if (dir) this._onSetWorkdir(new CustomEvent("set-workdir", { detail: { path: dir } }));
+      return;
+    }
+    if (name === "goto-workdir") {
+      // 快速跳转回工作目录根（ADR-0049）：外部浏览的回程捷径
+      actions.selectDir("");
+      void this._ensureLoaded("");
+      if (this._isMobile) actions.setMobilePane("list");
+      return;
+    }
+    if (name === "goto-home") {
+      // 快速跳转家目录（ADR-0049）：外部绝对路径直入
+      if (this._homeDir) {
+        actions.selectDir(this._homeDir);
+        void this._ensureLoaded(this._homeDir);
+        if (this._isMobile) actions.setMobilePane("list");
+      }
       return;
     }
     if (name === "git-changes") {
@@ -1199,12 +1298,19 @@ export class FilesView extends LitElement {
       // detail → list（文件名搜索结果也渲染在 list 层，无独立 tree 层）
       actions.setMobilePane("list");
     } else {
-      // list 是第一层：返回 = 上溯一级目录；根目录无可返回
+      // list 是第一层：返回 = 上溯一级目录（ADR-0049：workdir 根可继续
+      // 上溯到 workdir 父目录；盘符根之上是「此电脑」层）
       const { currentDir } = this._state;
-      if (currentDir === "") return;
-      const parent = currentDir.includes("/")
-        ? currentDir.slice(0, currentDir.lastIndexOf("/"))
-        : "";
+      if (currentDir === "") {
+        const parent = parentOfBrowseRoot(store.getState().status?.workdir);
+        if (parent) {
+          actions.selectDir(parent);
+          void this._ensureLoaded(parent);
+        }
+        return;
+      }
+      const parent = parentBrowsePath(currentDir);
+      if (parent === null) return;
       actions.selectDir(parent);
       void this._ensureLoaded(parent);
     }
@@ -1285,14 +1391,23 @@ export class FilesView extends LitElement {
   };
 
   private _renderPreviewErrorHint(mobile = false) {
-    const hint = this._previewError === "NOT_INDEXED"
-      ? html`<div class="preview-placeholder">
+    // ADR-0049：workdir 外二进制（合成预览依赖索引）专属提示
+    let hint: ReturnType<typeof html>;
+    if (this._preview.outsideWorkdir) {
+      hint = html`<div class="preview-placeholder">
+          ${this._previewError ?? "该格式的预览依赖索引。"}<br>
+          请将所在目录设为工作目录后重试。
+        </div>`;
+    } else if (this._previewError === "NOT_INDEXED") {
+      hint = html`<div class="preview-placeholder">
           该文件未索引，无法预览。<br>
           请先执行 doclens index 后重试。
-        </div>`
-      : html`<div class="preview-placeholder">
+        </div>`;
+    } else {
+      hint = html`<div class="preview-placeholder">
           ${this._previewError ?? "预览失败"}
         </div>`;
+    }
     // 移动端 detail 层无 preview-pane 的 mobile-header，须自带返回条，
     // 否则用户卡在「未索引」提示页无法回文件列表
     if (!mobile) return hint;
@@ -1441,7 +1556,11 @@ export class FilesView extends LitElement {
   };
 
   private get _searchBoxState() {
-    // 搜索已服务端化（/files/search）：搜索框始终可用，无全量清单加载态
+    // ADR-0049：外部浏览时禁用文件名搜索（数据源是 workdir 索引，与
+    // 「搜眼前目录」的用户预期错位）；回 workdir 自动恢复
+    if (isOutsideWorkdir(store.getState().files.currentDir)) {
+      return { disabled: true, placeholder: "搜索仅覆盖工作目录" };
+    }
     return { disabled: false, placeholder: "按文件名搜索…" };
   }
 
@@ -1497,6 +1616,15 @@ export class FilesView extends LitElement {
       ${this._renderDialogs()}
       <drop-zone .targetDir=${this._state.currentDir} @drop-files=${this._onDropFiles}></drop-zone>
       <download-overlay ?open=${this._downloading} label="下载中…"></download-overlay>
+      ${this._workdirDialogOpen
+        ? html`<workdir-switch-dialog
+            open
+            .currentWorkdir=${store.getState().status?.workdir ?? ""}
+            .prefillPath=${this._workdirTarget}
+            @close=${this._closeWorkdirDialog}
+            @swap-start=${this._onSwapStart}
+          ></workdir-switch-dialog>`
+        : ""}
       ${this._uploading
         ? html`<div class="upload-overlay" role="status" aria-live="polite">
             <div class="ring"></div>
@@ -1508,6 +1636,15 @@ export class FilesView extends LitElement {
         : ""}
     `;
   }
+
+  /** workdir 切换请求已发出（ADR-0049 files 页入口）：转发 app 层遮罩
+   *  事件（与 app-bar._onSwapStart 同协议）。 */
+  private _onSwapStart = (e: Event) => {
+    const target = (e as CustomEvent).detail?.target ?? "";
+    window.dispatchEvent(new CustomEvent("cortex:workdir-swap-start", {
+      detail: { target },
+    }));
+  };
 
   /** 桌面布局 grid 轨道 CSS 变量：preview 无恢复值（null）时输出 1fr/2fr
    *  比例轨道（file-list:preview = 1:2），有恢复值（拖动落盘）输出固定 px。 */
@@ -1569,8 +1706,11 @@ export class FilesView extends LitElement {
                 .changesMode=${this._changesMode}
                 .deepReadAvailable=${this._hasBooks === true}
                 .deepReadMode=${this._deepReadMode}
+                .homeDir=${this._homeDir}
                 @action=${this._onAction}
                 @activated=${this._onFileListActivated}
+                @go-dir=${this._onGoDir}
+                @set-workdir=${this._onSetWorkdir}
               ></file-list>`}
         <div
           class="splitter"
@@ -1622,9 +1762,12 @@ export class FilesView extends LitElement {
                       .changesMode=${this._changesMode}
                       .deepReadAvailable=${this._hasBooks === true}
                       .deepReadMode=${this._deepReadMode}
+                      .homeDir=${this._homeDir}
                       ?mobile=${true}
                       @action=${this._onAction}
                       @activated=${this._onFileListActivated}
+                      @go-dir=${this._onGoDir}
+                      @set-workdir=${this._onSetWorkdir}
                       @back=${() => this._goBack()}
                     ></file-list>`}
             `

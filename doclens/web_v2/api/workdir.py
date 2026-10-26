@@ -9,6 +9,7 @@
 """
 import asyncio
 import logging
+import os
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -36,6 +37,30 @@ class WorkdirSwitchResponse(BaseModel):
     workdir: str
     doc_count: int
     changed: bool
+
+
+@router.post("/workdir/precheck")
+async def precheck_workdir(body: WorkdirSwitchRequest):
+    """切换前轻量探测（ADR-0049 files 页「设为工作目录」链路）：
+
+    检查目标目录是否已有索引库（<数据目录>/index.db 存在）。首次切往
+    未建索引的大目录会触发后台全量索引（分钟级），前端据此先弹确认框
+    提醒用户。**只读探测，无副作用、不进切换窗口**——目录不存在同
+    switch 的切前校验口径返回 400，让用户在弹确认框前就知道目标非法。
+    """
+    from doclens.config import data_dirname
+
+    def _work() -> dict:
+        target = body.path.strip().strip('"')
+        if not os.path.isdir(target):
+            raise CortexAPIError(400, "WORKDIR_INVALID", f"目录不存在: {target}")
+        index_path = os.path.join(target, data_dirname(), "index.db")
+        return {
+            "has_index": os.path.exists(index_path),
+            "index_path": index_path,
+        }
+
+    return await asyncio.to_thread(_work)
 
 
 @router.post("/workdir/switch", response_model=WorkdirSwitchResponse)

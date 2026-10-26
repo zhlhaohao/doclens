@@ -363,14 +363,15 @@ describe("<md-viewer>", () => {
       `:host should set background: var(--cortex-surface-muted)\n${cssText}`,
     ).toBe(true);
 
-    // .md-body 单块 = 白纸 + max-width 居中
+    // .md-body 单块 = 白纸 + max-width 居中（2026-10-26：820 → min(100%, 1400px)，
+    // 预览栏拖宽纸张跟随；1400 版心上限保留可读性）
     expect(
       /\.md-body\s*\{[^}]*background:\s*var\(--cortex-surface\)/.test(cssText),
       `.md-body should be white paper (background: var(--cortex-surface))\n${cssText}`,
     ).toBe(true);
     expect(
-      /\.md-body\s*\{[^}]*max-width:\s*820px/.test(cssText),
-      `.md-body should have max-width: 820px\n${cssText}`,
+      /\.md-body\s*\{[^}]*max-width:\s*min\(100%,\s*1400px\)/.test(cssText),
+      `.md-body should have max-width: min(100%, 1400px)\n${cssText}`,
     ).toBe(true);
 
     // .md-body-paged 透明覆盖（注意：必须出现在 .md-body 之后才能覆盖）

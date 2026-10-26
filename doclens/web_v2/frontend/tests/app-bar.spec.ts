@@ -18,12 +18,12 @@ describe("<app-bar>", () => {
   });
 
   it("renders brand logo and name", async () => {
-    // ADR-0043：brand 文字「Doclens」由工作目录指示器取代（logo 保留），
-    // 名称在 webview 标题 / 关于对话框中仍可见。指示器依赖 status.workdir。
+    // 2026-10-26（ADR-0049 收尾）：顶栏工作目录指示器胶囊整体移除
+    // （切换入口收敛到 files 页）；brand 只剩 logo。
     expect(el.shadowRoot?.querySelector(".brand .logo")).toBeTruthy();
     actions.setStatus({ ...(store.getState().status as object), workdir: "C:/kb/docs" } as never);
     await elementUpdated(el);
-    expect(el.shadowRoot?.querySelector(".workdir-indicator")).toBeTruthy();
+    expect(el.shadowRoot?.querySelector(".workdir-indicator")).toBeNull();
   });
 
   it("dropdown is closed initially", () => {

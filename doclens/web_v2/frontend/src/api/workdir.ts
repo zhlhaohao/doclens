@@ -58,3 +58,22 @@ export async function switchWorkdir(path: string): Promise<WorkdirSwitchResult> 
   }
   return body as WorkdirSwitchResult;
 }
+
+/** 切换前轻量探测（ADR-0049）：目标目录是否已有索引库。
+ *  首次切往未建索引目录会触发后台全量索引（分钟级），前端据此先弹确认。 */
+export async function precheckWorkdir(path: string): Promise<{ has_index: boolean; index_path: string }> {
+  const resp = await fetch("/api/workdir/precheck", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const body = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new WorkdirSwitchError(
+      body?.detail ?? `目录无效（HTTP ${resp.status}）`,
+      resp.status,
+      body?.code ?? "UNKNOWN",
+    );
+  }
+  return body as { has_index: boolean; index_path: string };
+}

@@ -89,6 +89,8 @@ import listOrderedIcon from "lucide-static/icons/list-ordered.svg?raw";import li
 import tableIcon from "lucide-static/icons/table.svg?raw";
 import linkIcon from "lucide-static/icons/link.svg?raw";
 import quoteIcon from "lucide-static/icons/quote.svg?raw";
+import homeIcon from "lucide-static/icons/home.svg?raw";
+import hardDriveIcon from "lucide-static/icons/hard-drive.svg?raw";
 
 const ICONS: Record<string, string> = {
   search: searchIcon,
@@ -168,6 +170,8 @@ const ICONS: Record<string, string> = {
   table: tableIcon,
   link: linkIcon,
   quote: quoteIcon,
+  home: homeIcon,
+  "hard-drive": hardDriveIcon,
 };
 
 @customElement("doclens-icon")

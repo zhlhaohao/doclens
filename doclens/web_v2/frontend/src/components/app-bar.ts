@@ -9,7 +9,6 @@ import "./control-panel-dialog";
 import "./backup-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
-import "./workdir-switch-dialog";
 import { store, actions } from "../state/store";
 import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
@@ -137,33 +136,7 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
-    /* ADR-0043 工作目录指示器：brand 旁的目录名 pill，点击弹切换面板。
        只显示目录末段名，全长在 title；超长省略号。 */
-    .workdir-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--cortex-space-1);
-      max-width: 220px;
-      padding: 4px 10px;
-      font-size: var(--cortex-fs-xs);
-      font-family: inherit;
-      color: var(--cortex-text);
-      border: 1px solid var(--cortex-border);
-      border-radius: 999px;
-      background: var(--cortex-surface-muted);
-      cursor: pointer;
-      appearance: none;
-      -webkit-appearance: none;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .workdir-indicator:hover { background: var(--cortex-surface); border-color: var(--cortex-primary); }
-    .workdir-indicator:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: 1px; }
-    .workdir-indicator .name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-weight: 600;
-    }
     /* 应用主题快捷钮（ADR-0043）：视觉同 watch-badge 的 icon-only pill */
     .theme-btn {
       display: inline-flex;
@@ -190,8 +163,6 @@ export class AppBar extends LitElement {
          主题快捷钮由 JS 条件渲染（_isMobileViewport，菜单项接管入口），
          此规则作 SSR/竞态兜底。 */
       .watch-badge { display: none; }
-      /* 工作目录指示器保留但收窄（它是全局上下文，移动端同样需要） */
-      .workdir-indicator { max-width: 120px; }
       .theme-btn { display: none; }
     }
     .avatar-btn {
@@ -286,8 +257,6 @@ export class AppBar extends LitElement {
   @state() private _backupDialogOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
-  /** 工作目录切换对话框开关（ADR-0043：顶栏工作目录指示器点击） */
-  @state() private _workdirDialogOpen = false;
   /** 应用主题（ADR-0043）：app-bar 快捷钮循环切换；订阅外部变更（设置页色卡）同步图标。 */
   @state() private _appTheme: AppTheme = readAppTheme();
   private _offAppThemeChange?: () => void;
@@ -545,43 +514,12 @@ export class AppBar extends LitElement {
     `;
   }
 
-  /** ADR-0043 工作目录指示器：显示当前目录末段名，点击弹切换面板。
-   *  status 未返回时不渲染（onboarding 阶段无目录概念）。仅桌面渲染——
-   *  移动端入口在用户菜单（与主题切换同模式，header 空间紧张）。 */
-  private _renderWorkdirIndicator() {
-    const name = this._workdirName();
-    if (!name) return nothing;
-    const workdir = store.getState().status?.workdir || "";
-    return html`
-      <button
-        class="workdir-indicator"
-        type="button"
-        title="${workdir} — 点击切换工作目录"
-        aria-label="切换工作目录"
-        @click=${() => { this._workdirDialogOpen = true; }}
-      ><doclens-icon name="folder"></doclens-icon><span class="name">${name}</span></button>
-    `;
-  }
-
-  /** 当前工作目录末段名（status 未返回时为空串——胶囊与菜单 desc 都用）。 */
-  private _workdirName(): string {
-    const workdir = store.getState().status?.workdir || "";
-    if (!workdir) return "";
-    return workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir;
-  }
-
-  /** 移动端用户菜单「切换工作目录」：关菜单开切换面板。 */
-  private _onWorkdirMenuClick() {
-    this._menuOpen = false;
-    this._workdirDialogOpen = true;
-  }
 
   render() {
     return html`
       ${this._inWebview ? this._renderWebviewClose() : html`
         <div class="brand">
           <span class="logo">${unsafeSVG(appLogoSvg)}</span>
-          ${this._isMobileViewport ? nothing : this._renderWorkdirIndicator()}
         </div>
       `}
       ${this._inWebview && this._hostTitle
@@ -615,13 +553,6 @@ export class AppBar extends LitElement {
               <span class="text">
                 <span class="label">切换主题</span>
                 <span class="desc">${APP_THEME_LABELS[this._appTheme]}（点击切换）</span>
-              </span>
-            </button>
-            <button class="menu-item" type="button" data-testid="workdir-item" @click=${this._onWorkdirMenuClick}>
-              <doclens-icon class="icon" name="folder"></doclens-icon>
-              <span class="text">
-                <span class="label">切换工作目录</span>
-                <span class="desc">${this._workdirName()}</span>
               </span>
             </button>
           ` : nothing}
@@ -680,25 +611,9 @@ export class AppBar extends LitElement {
         .open=${this._aboutOpen}
         @close=${() => { this._aboutOpen = false; }}
       ></about-dialog>
-      <workdir-switch-dialog
-        .open=${this._workdirDialogOpen}
-        .currentWorkdir=${store.getState().status?.workdir ?? ""}
-        @close=${() => { this._workdirDialogOpen = false; }}
-        @swap-start=${this._onSwapStart}
-      ></workdir-switch-dialog>
     `;
   }
 
-  /** 切换请求已发出（ADR-0043）：立即通知 app 层显示遮罩——不等 SSE
-   *  终态事件（swap 窗口期 503 会挡住 status 轮询，遮罩必须先置位）。
-   *  对话框保持打开（submitting 态显示「切换中…」）：失败时用户可原地
-   *  修正重试；成功则页面整体 reload，对话框随之消失。 */
-  private _onSwapStart = (e: Event) => {
-    const target = (e as CustomEvent).detail?.target ?? "";
-    window.dispatchEvent(new CustomEvent("cortex:workdir-swap-start", {
-      detail: { target },
-    }));
-  };
 }
 
 declare global {

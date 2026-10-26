@@ -12,6 +12,7 @@ import {
   isValidReviewDate,
   type MainView,
 } from "../utils/session-memory";
+import { isOutsideWorkdir } from "../utils/browse-path";
 
 function isMainView(v: string): v is MainView {
   return v === "search" || v === "chat" || v === "files" || v === "diary";
@@ -33,6 +34,12 @@ export function installSessionMemoryWriter(): () => void {
       (s) => `${s.files.currentDir}|${s.files.selectedPaths.join("|")}`,
       () => {
         const f = store.getState().files;
+        // ADR-0049：外部浏览态（绝对路径/此电脑层）不持久化——刷新回
+        // workdir 根；但要用根目录覆盖旧记忆，防外部路径残留到下次启动
+        if (isOutsideWorkdir(f.currentDir)) {
+          saveSessionMemory({ files: { currentDir: "", selectedPaths: [] } });
+          return;
+        }
         saveSessionMemory({
           files: { currentDir: f.currentDir, selectedPaths: f.selectedPaths },
         });
@@ -68,9 +75,14 @@ export function applySessionRestore(): { view?: MainView } | null {
   restored = true;
   const mem = loadSessionMemory();
   if (mem.files) {
+    // ADR-0049：恢复侧防御——外部浏览态不持久化，旧版本写入的绝对路径
+    // 一律重置回 workdir 根
+    const cur = isOutsideWorkdir(mem.files.currentDir)
+      ? ""
+      : mem.files.currentDir;
     actions.setFilesState({
-      currentDir: mem.files.currentDir,
-      selectedPaths: mem.files.selectedPaths,
+      currentDir: cur,
+      selectedPaths: cur ? mem.files.selectedPaths : [],
     });
   }
   if (mem.search?.query) {
