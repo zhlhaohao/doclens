@@ -17,9 +17,9 @@ describe("search/diary 无下拉刷新能力", () => {
   });
 
   // PTR 控制器靠 capability check（typeof view.refresh === "function"）arm 手势；
-  // search/diary 已移除 refresh()/canRefresh()，手势永不 arm。chat 手势
-  // 与顶部滚屏矛盾已撤（见下方 chat-view 块——refresh() 保留供 more 菜单，
-  // 但不在 VIEW_TAGS 白名单，findView 不会命中）
+  // search/diary 已移除 refresh()/canRefresh()，手势永不 arm。chat 手势仅
+  // initial 态开放（2026-10-27），focus 态由 canRefresh() 返回 false 拦截
+  // （对话页与顶部滚屏矛盾，2026-09-19 撤下决策维持不变）。
   for (const tag of ["search-view", "diary-view"]) {
     it(`${tag} 不实现 refresh()/canRefresh()`, async () => {
       const el = document.createElement(tag) as any;
@@ -31,19 +31,37 @@ describe("search/diary 无下拉刷新能力", () => {
   }
 });
 
-describe("chat-view 下拉刷新手势关闭（2026-09-19 短暂开启后撤）", () => {
+describe("chat-view 下拉刷新：initial 态开放，focus 态拦截（2026-10-27）", () => {
   beforeEach(() => resetStore(store));
   afterEach(() => {
     document.body.querySelectorAll("chat-view").forEach((e) => e.remove());
   });
 
-  it("不实现 canRefresh()（手势协议不 arm），refresh() 保留供 more 菜单", async () => {
+  it("initial 态 canRefresh() 返回 true，refresh() 重拉历史会话", async () => {
     const el = document.createElement("chat-view") as any;
     document.body.appendChild(el);
     await el.updateComplete;
-    expect(typeof el.canRefresh).toBe("undefined");
-    // more 菜单「刷新会话」入口仍调用 refresh()
+    // resetStore 后 chat.state 默认 initial
+    expect(el.viewState.state).toBe("initial");
+    expect(typeof el.canRefresh).toBe("function");
+    expect(el.canRefresh()).toBe(true);
     expect(typeof el.refresh).toBe("function");
+  });
+
+  it("focus 态 canRefresh() 返回 false（手势不 arm，与顶部滚屏矛盾）", async () => {
+    const el = document.createElement("chat-view") as any;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    actions.setChatState({
+      state: "focus",
+      currentSession: { id: "s1", type: "chat", title: "t", preview: "", created_at: "", updated_at: "" } as any,
+      messages: [],
+      streaming: false,
+      pendingAsk: null,
+    });
+    await el.updateComplete;
+    expect(el.viewState.state).toBe("focus");
+    expect(el.canRefresh()).toBe(false);
   });
 });
 

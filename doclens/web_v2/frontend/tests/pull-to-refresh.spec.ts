@@ -129,13 +129,18 @@ describe("PullToRefreshController（seam 判定）", () => {
     expect(ctrl.findView([el])).toBeNull();
   });
 
-  it("findView 对不在白名单的 view（search/chat/diary 已关闭下拉刷新）返回 null", () => {
+  it("findView 对不在白名单的 view（search/diary 已关闭下拉刷新）返回 null", () => {
     // 即使元素被强行赋予 refresh 能力（如热更新残留），白名单外一律不 arm；
-    // chat 的 refresh() 保留供 more 菜单，但不在 VIEW_TAGS，手势不 arm
-    for (const tag of ["search-view", "chat-view", "diary-view"]) {
+    // chat 已在白名单（initial 态开放），focus 态拦截由 canRefresh() 负责
+    for (const tag of ["search-view", "diary-view"]) {
       const { el } = fakeView(tag);
       expect(ctrl.findView([el])).toBeNull();
     }
+  });
+
+  it("findView 命中白名单内的 chat-view（initial 态开放下拉刷新）", () => {
+    const { el } = fakeView("chat-view");
+    expect(ctrl.findView([el])).toBe(el);
   });
 
   it("isBlockedPath 拦截 dialog / 输入控件 / image-viewer / data-ptr-off", () => {

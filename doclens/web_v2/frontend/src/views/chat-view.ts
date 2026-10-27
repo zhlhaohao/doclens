@@ -1012,9 +1012,8 @@ export class ChatView extends LitElement {
     await this._sendMessage(message);
   }
 
-  /** 刷新当前会话（more 菜单「刷新会话」入口；曾接下拉刷新手势，因与
-   *  顶部滚屏手势矛盾撤下——见 pull-to-refresh.ts 注释）：重拉 detail，
-   *  消息流 + generating 恢复态一次接管（断开续跑的手动收口）。 */
+  /** 刷新当前会话（initial 态下拉刷新 / focus 态 more 菜单「刷新会话」入口）：
+   *  initial 态重拉历史会话列表，focus 态重拉 detail（断开续跑的手动收口）。 */
   async refresh(): Promise<void> {
     const s = this.viewState;
     if (s.state === "focus" && s.currentSession) {
@@ -1022,6 +1021,13 @@ export class ChatView extends LitElement {
     } else if (s.state === "initial") {
       await this._loadHistory();
     }
+  }
+
+  /** 下拉刷新手势闸门（pull-to-refresh 协议）：仅 initial 态开放（欢迎页刷
+   *  历史会话）；focus 态返回 false 拦截手势——对话页滚动最频繁，下拉与
+   *  顶部滚屏/惯性操作矛盾易误触（2026-09-19 撤下决策维持不变）。 */
+  canRefresh(): boolean {
+    return this.viewState.state === "initial";
   }
 
   disconnectedCallback() {
