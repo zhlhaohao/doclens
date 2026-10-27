@@ -1089,6 +1089,52 @@ export class ChatView extends LitElement {
         return;
       }
       try {
+        // 续跑期增量补齐（2026-10-27）：每周期拉 trace 快照，新步骤
+        // append 到占位消息——重连后后台继续跑的步骤实时可见（5s 粒度，
+        // 工具调用本身 3-30s 一个，够用）。与 SSE 流互斥：占位消息只在
+        // 恢复态存在，本地流式轮次的 messages 由事件驱动，不经此处。
+        try {
+          const trace = await fetchChatTrace(sessionId);
+          const snapshot = (trace.steps ?? []).map((t) => ({
+            tool_use_id: t.tool_use_id,
+            name: t.name,
+            input: t.input,
+            output: t.output ?? "",
+            is_error: !!t.is_error,
+            duration_ms: t.duration_ms,
+            status: t.status === "running" ? "running" : "done",
+          })) as ToolStep[];
+          const chat = store.getState().chat;
+          if (
+            trace.generating
+            && chat.currentSession?.id === sessionId
+            && chat.state === "focus"
+          ) {
+            const msgs = chat.messages;
+            const last = msgs[msgs.length - 1];
+            // 占位消息判定：末条 assistant 且无本地 SSE 流写它（恢复态
+            // content 为空）。有新步骤（快照长度增长或 running→done 状态
+            // 变化）才更新，避免无谓渲染。
+            if (last?.role === "assistant" && last.content === "") {
+              const prev = last.tool_steps ?? [];
+              const changed =
+                snapshot.length !== prev.length
+                || snapshot.some((s, i) =>
+                  s.tool_use_id !== prev[i]?.tool_use_id
+                  || s.status !== prev[i]?.status);
+              if (changed) {
+                actions.setChatState({
+                  messages: [
+                    ...msgs.slice(0, -1),
+                    { ...last, tool_steps: snapshot },
+                  ],
+                });
+              }
+            }
+          }
+        } catch {
+          /* 快照失败不阻断 generating 探测（下周期重试） */
+        }
         const body = await fetchSessionDetail(sessionId, { metaOnly: true });
         if (!body.generating) {
           this._stopGeneratingPoll();
