@@ -216,3 +216,30 @@ class ProbeTranslateResult(BaseModel):
 
     translation: str
     service: str
+
+
+class QuotaWindowOut(BaseModel):
+    """套餐额度窗口（5 小时 / 每周）：已用百分比（整数语义在展示层）。"""
+
+    label: str
+    percentage: float
+    next_reset_ms: Optional[int] = None
+
+
+class QuotaResult(BaseModel):
+    """GET /api/presets/{id}/quota 响应（2026-10-27 套餐额度展示）。
+
+    kind = windows（Coding Plan 窗口限额）/ balance（账户余额）/
+    none（无套餐额度或 base_url 不识别——前端据此保持静态行）。
+    """
+
+    kind: str  # "windows" | "balance" | "none"
+    provider: Optional[str] = Field(
+        default=None,
+        description="识别出的供应商（glm/kimi/minimax/deepseek）；None=base_url 不识别，前端保持静态行",
+    )
+    windows: list[QuotaWindowOut] = Field(default_factory=list)
+    balances: list[list[str]] = Field(
+        default_factory=list, description="[currency, total_balance] 对"
+    )
+    is_available: bool = True

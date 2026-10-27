@@ -5,6 +5,7 @@ import {
   activatePreset,
   createPreset,
   deletePreset,
+  fetchPresetQuota,
   listPresets,
   probeMaxTokens,
   probeTranslate,
@@ -15,6 +16,7 @@ import {
   type Preset,
   type PresetKind,
   type PresetProtocol,
+  type QuotaResult,
 } from "../api/presets";
 
 /** 空表单初值（新建用）。 */
@@ -317,6 +319,28 @@ export class ModelPresetsSection extends LitElement {
       margin-top: 4px;
     }
 
+    /* ===== 套餐额度（LLM 行元信息，2026-10-27）===== */
+    .quota { display: inline; }
+    .quota .q-pct { font-family: var(--cortex-font-mono); }
+    .quota .q-high { color: var(--cortex-danger); font-weight: 600; }
+    .quota .q-balance-low { color: var(--cortex-danger); font-weight: 600; }
+    .quota .q-none { color: var(--cortex-text-subtle); }
+    .quota .q-retry {
+      border: none;
+      background: none;
+      padding: 0 0 0 2px;
+      cursor: pointer;
+      color: var(--cortex-primary);
+      font-size: var(--cortex-fs-xs);
+      font-family: inherit;
+    }
+    /* 移动端：紧凑迷你标签（5h80% 周50%），桌面端为「5h 已用 80% · 周 已用 50%」 */
+    .quota .q-tag { display: none; }
+    @media (max-width: 1023px) {
+      .quota .q-full { display: none; }
+      .quota .q-tag { display: inline; }
+    }
+
     .msg {
       font-size: var(--cortex-fs-xs);
       padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -351,6 +375,11 @@ export class ModelPresetsSection extends LitElement {
   @state() private _probingVision = false;
   @state() private _probingTranslate = false;
   @state() private _probeTranslateMsg: string | null = null;
+  /** 套餐额度（仅 LLM 组）：preset_id → 查询状态（loading/ok/error） */
+  @state() private _quotas: Record<
+    string,
+    { status: "loading" | "ok" | "error"; data?: QuotaResult }
+  > = {};
 
   private _toastTimer?: number;
 
@@ -368,10 +397,28 @@ export class ModelPresetsSection extends LitElement {
     this._error = null;
     try {
       this._presets = await listPresets();
+      this._loadQuotas();
     } catch (e) {
       this._error = `加载预设失败: ${(e as Error).message}`;
     } finally {
       this._loading = false;
+    }
+  }
+
+  /** 逐 LLM 预设并发查询套餐额度（独立失败互不影响）。 */
+  private _loadQuotas() {
+    for (const p of this._presets) {
+      if (p.kind === "llm") void this._fetchQuota(p.id);
+    }
+  }
+
+  private async _fetchQuota(presetId: string) {
+    this._quotas = { ...this._quotas, [presetId]: { status: "loading" } };
+    try {
+      const data = await fetchPresetQuota(presetId);
+      this._quotas = { ...this._quotas, [presetId]: { status: "ok", data } };
+    } catch {
+      this._quotas = { ...this._quotas, [presetId]: { status: "error" } };
     }
   }
 
@@ -802,6 +849,62 @@ export class ModelPresetsSection extends LitElement {
     `;
   }
 
+  /** 套餐额度渲染（仅 LLM 行，2026-10-27 决议）。
+   * 桌面端「5h 已用 X% · 周 已用 Y%」/ 移动端「5hX% 周Y%」双形态 CSS 切换；
+   * ≥90% 红色警示；DeepSeek 显示余额（is_available=false 红）。
+   * 返回 nothing = 未知供应商（调用方回退静态元信息行）。 */
+  private _renderQuota(p: Preset) {
+    const q = this._quotas[p.id];
+    if (!q || q.status === "loading") {
+      return html`<span class="q-none">额度查询中…</span>`;
+    }
+    if (q.status === "error") {
+      return html`额度查询失败<button
+          class="q-retry"
+          title="重试"
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            void this._fetchQuota(p.id);
+          }}
+        >↻</button>`;
+    }
+    const data = q.data!;
+    if (data.provider == null) return nothing; // 未知供应商 → 静态行
+    if (data.kind === "windows" && data.windows.length > 0) {
+      return html`${data.windows.map((w, i) => {
+        const pct = Math.round(w.percentage);
+        const high = pct >= 90;
+        const tag = w.label === "每周" ? "周" : w.label.replace(/\s*小时$/, "h");
+        return html`${i > 0
+            ? html`<span class="q-full"> · </span><span class="q-tag"> </span>`
+            : nothing}<span class="q-full">${tag === "周" ? "周" : tag}
+            已用 </span><span class="q-tag">${tag}</span><span
+            class="q-pct ${high ? "q-high" : ""}"
+            >${pct}%</span
+          >`;
+      })}`;
+    }
+    if (data.kind === "balance" && data.balances.length > 0) {
+      const text = data.balances
+        .map(([cur, total]) => `${cur === "CNY" ? "¥" : cur === "USD" ? "$" : `${cur} `}${total}`)
+        .join(" ");
+      return html`<span class=${data.is_available ? "" : "q-balance-low"}
+        >余额 ${text}${data.is_available ? "" : "（不足）"}</span
+      >`;
+    }
+    // 已识别供应商但无套餐数据（非订阅 key 等）
+    return html`<span class="q-none">无套餐额度</span>`;
+  }
+
+  /** LLM 行元信息：额度可用则显示额度；未知供应商回退静态字段（Q4）。 */
+  private _renderPresetMeta(p: Preset) {
+    const quota = this._renderQuota(p);
+    if (quota === nothing) {
+      return `${p.model_id || "（未设模型）"} · ${p.protocol}${p.context_window ? ` · ${p.context_window}k` : ""}${p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}${p.vision ? " · 视觉" : ""}`;
+    }
+    return html`<span class="quota">${quota}</span>`;
+  }
+
   private _renderRow(p: Preset) {
     const active = this._isActive(p);
     const confirming = this._confirmDeleteId === p.id;
@@ -813,7 +916,9 @@ export class ModelPresetsSection extends LitElement {
           </div>
           <div class="preset-meta">${p.kind === "translate"
             ? `${TRANSLATE_SERVICES.find((s) => s.value === p.translate_service)?.label ?? p.translate_service ?? "?"}${p.lang_default_out ? ` · 译入 ${p.lang_default_out}` : ""}`
-            : `${p.model_id || "（未设模型）"} · ${p.protocol}${p.kind === "llm" && p.context_window ? ` · ${p.context_window}k` : ""}${p.kind === "llm" && p.max_tokens ? ` · 输出≤${p.max_tokens}` : ""}${p.kind === "llm" && p.vision ? " · 视觉" : ""}`}</div>
+            : p.kind === "llm"
+              ? this._renderPresetMeta(p)
+              : `${p.model_id || "（未设模型）"} · ${p.protocol}`}</div>
         </div>
         <div class="row-actions">
           ${active

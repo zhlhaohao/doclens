@@ -27,6 +27,7 @@ from doclens.web_v2.models.preset import (
     ProbeVisionResult,
     ProbeTranslateRequest,
     ProbeTranslateResult,
+    QuotaResult,
 )
 from doclens.web_v2 import presets_store
 from doclens.web_v2.probe_max_tokens import ProbeError, probe_max_tokens
@@ -191,6 +192,34 @@ def probe_vision_endpoint(req: ProbeMaxTokensRequest):
     except VisionProbeError as e:
         raise CortexAPIError(502, "PROBE_FAILED", str(e))
     return ProbeVisionResult(supported=supported)
+
+
+@router.get("/presets/{preset_id}/quota", response_model=QuotaResult)
+async def preset_quota(preset_id: str):
+    """查询预设的套餐额度（2026-10-27）：异步调供应商接口，密钥不出后端。
+
+    base_url 不识别 → kind=none（前端保持静态元信息行）；
+    网络/HTTP/解析失败 → 502 QUOTA_FAILED（前端显示可重试）。
+    """
+    from doclens.web_v2.quota_probe import QuotaProbeError, fetch_quota
+
+    raw = presets_store.get_preset_raw(preset_id)
+    if raw is None:
+        raise CortexAPIError(404, "PRESET_NOT_FOUND", f"预设不存在: {preset_id}")
+    try:
+        info = await fetch_quota(raw.get("base_url", ""), raw.get("api_key", ""))
+    except QuotaProbeError as e:
+        raise CortexAPIError(502, "QUOTA_FAILED", str(e))
+    return QuotaResult(
+        kind=info.kind,
+        provider=info.provider,
+        windows=[
+            {"label": w.label, "percentage": w.percentage, "next_reset_ms": w.next_reset_ms}
+            for w in info.windows
+        ],
+        balances=[[c, t] for c, t in info.balances],
+        is_available=info.is_available,
+    )
 
 
 @router.post("/presets/{preset_id}/activate", response_model=ActivateResult)

@@ -49,8 +49,14 @@ export class PresetsApiError extends Error {
 }
 
 async function handle<T>(resp: Response): Promise<T> {
-  const body = await resp.json().catch(() => null);
-  if (!resp.ok) throw new PresetsApiError(resp.status, body);
+  const ct = resp.headers.get("content-type") ?? "";
+  const body = ct.includes("application/json")
+    ? await resp.json().catch(() => null)
+    : null;
+  // SPA fallback 会把未知 API 路径回 200+HTML——按错误处理，防静默吞错
+  if (!resp.ok || (body === null && ct && !ct.includes("application/json"))) {
+    throw new PresetsApiError(resp.status, body ?? `non-JSON response (${ct || "no content-type"})`);
+  }
   return body as T;
 }
 
@@ -195,4 +201,26 @@ export async function probeTranslate(
       body: JSON.stringify(input),
     }),
   );
+}
+
+export interface QuotaWindow {
+  label: string;
+  percentage: number;
+  next_reset_ms?: number | null;
+}
+
+export interface QuotaResult {
+  /** windows=Coding Plan 窗口限额 / balance=账户余额 / none=无套餐或不识别 */
+  kind: "windows" | "balance" | "none";
+  /** 识别出的供应商；null = base_url 不识别（前端保持静态元信息行） */
+  provider?: "glm" | "kimi" | "minimax" | "deepseek" | null;
+  windows: QuotaWindow[];
+  /** [currency, total_balance] 对 */
+  balances: [string, string][];
+  is_available: boolean;
+}
+
+/** 查询预设的套餐额度（2026-10-27）：供应商识别与密钥回源在后端。 */
+export async function fetchPresetQuota(id: string): Promise<QuotaResult> {
+  return handle<QuotaResult>(await fetch(`/api/presets/${id}/quota`));
 }
