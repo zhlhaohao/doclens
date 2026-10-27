@@ -565,7 +565,7 @@ async def _stream_agent_response(
     if session_key:
         from doclens.web_v2 import chat_runner
 
-        if not chat_runner.try_register(session_key, agent_task):
+        if not chat_runner.try_register(session_key, agent_task, emitter=emitter):
             agent_task.cancel()
             raise RuntimeError(f"会话 {session_key} 正在生成中")
 
@@ -714,6 +714,22 @@ async def chat_stop(req: ChatStopRequest):
             # finally，task 终将收尾；TimeoutError 时 shield 内层仍在收尾
             pass
     return {"ok": True, "stopped": stopped}
+
+
+@router.get("/chat/trace")
+async def chat_trace(session_id: str):
+    """生成中的实时 tool trace 快照（断开续跑期的事件真空补齐，2026-10-27）。
+
+    前端重进/切回生成中的会话时调用：返回该会话当前轮 emitter 的
+    tool_calls 快照（含 running 态调用对），供思考 pane 重建断开期间
+    已发生的工具步骤。非生成中返回空列表（前端走 detail 回放）。
+    """
+    from doclens.web_v2 import chat_runner
+
+    return {
+        "generating": chat_runner.is_running(session_id),
+        "steps": chat_runner.get_trace_snapshot(session_id),
+    }
 
 
 @router.post("/chat/interject")

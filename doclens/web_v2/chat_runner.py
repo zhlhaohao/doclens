@@ -27,18 +27,34 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 # session_id -> 正在生成的 agent task（asyncio.Task，跑在同一事件循环上）
 _active: Dict[str, asyncio.Task] = {}
+# session_id -> ChatEventEmitter（断开续跑期的 trace 快照源，2026-10-27）。
+# 生命周期与 task 同步：注册时挂入，done_callback 一并摘除。
+_emitters: Dict[str, object] = {}
 
 
-def try_register(session_id: str, task: asyncio.Task) -> bool:
+def try_register(session_id: str, task: asyncio.Task, emitter=None) -> bool:
     """原子注册：同会话已有活跃 task 则拒绝（返回 False，调用方应取消
     新 task 并以 409 拒绝请求）。注册成功同时挂 done_callback 自动注销
-    （防异常路径漏注销导致会话永久 409）。"""
+    （防异常路径漏注销导致会话永久 409）。
+
+    emitter（可选）：本轮的 ChatEventEmitter——断开续跑期间前端可经
+    GET /api/chat/trace 拉取实时 tool_calls 快照，消除「后台跑了几轮、
+    前端 pane 静止」的事件真空（2026-10-27 插话事故）。
+    """
     with _lock:
         existing = _active.get(session_id)
         if existing is not None and not existing.done():
             return False
         _active[session_id] = task
-    task.add_done_callback(lambda _t, sid=session_id: unregister(sid, _t))
+        if emitter is not None:
+            _emitters[session_id] = emitter
+
+    def _cleanup(_t, sid=session_id):
+        unregister(sid, _t)
+        with _lock:
+            _emitters.pop(sid, None)
+
+    task.add_done_callback(_cleanup)
     return True
 
 
@@ -75,6 +91,35 @@ def get_task(session_id: str) -> Optional[asyncio.Task]:
     """
     with _lock:
         return _active.get(session_id)
+
+
+def get_trace_snapshot(session_id: str) -> list:
+    """该会话生成中的实时 tool_calls 快照（GET /api/chat/trace 数据源）。
+
+    断开续跑（ADR-0028）期间 SSE 无人消费，事件真空导致前端思考 pane
+    停留在断开前的最后一步——本快照供前端重进/重连会话时补齐
+    （含 running 态：无 output 的调用对补 status=running）。
+    非生成中返回 []（前端走 detail 回放路径）。
+    """
+    with _lock:
+        emitter = _emitters.get(session_id)
+    if emitter is None:
+        return []
+    calls = getattr(emitter, "tool_calls", None) or []
+    out = []
+    for tc in calls:
+        item = {
+            "tool_use_id": tc.get("tool_use_id", ""),
+            "name": tc.get("name", ""),
+            "input": tc.get("input", {}),
+            "output": tc.get("output", ""),
+            "is_error": tc.get("is_error", False),
+            "duration_ms": tc.get("duration_ms"),
+        }
+        if "output" not in tc:
+            item["status"] = "running"
+        out.append(item)
+    return out
 
 
 def clear_all() -> None:

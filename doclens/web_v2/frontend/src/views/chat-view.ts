@@ -8,7 +8,7 @@ import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession, fetchChatTrace } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -1600,12 +1600,35 @@ export class ChatView extends LitElement {
       // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
       // + streaming 态（禁输入，停止钮可用）+ 轮询（跑完自动刷新展示）
       const generating = !!body.generating;
-      actions.setChatState({
-        messages: generating
-          ? [...messages, { role: "assistant", content: "" }]
-          : messages,
-        streaming: generating,
-      });
+      if (generating) {
+        // 断开续跑事件真空补齐（2026-10-27）：拉实时 trace 快照，把断开
+        // 期间已发生的工具步骤重建到占位 assistant 消息的 tool_steps——
+        // 否则思考 pane 停在断开前的最后一步，后台明明在跑前台静止。
+        let steps: ToolStep[] = [];
+        try {
+          const trace = await fetchChatTrace(s.id);
+          steps = (trace.steps ?? []).map((t) => ({
+            tool_use_id: t.tool_use_id,
+            name: t.name,
+            input: t.input,
+            output: t.output ?? "",
+            is_error: !!t.is_error,
+            duration_ms: t.duration_ms,
+            status: t.status === "running" ? "running" : "done",
+          }));
+        } catch {
+          /* 快照失败退化为纯占位（原行为） */
+        }
+        actions.setChatState({
+          messages: [
+            ...messages,
+            { role: "assistant", content: "", tool_steps: steps },
+          ],
+          streaming: true,
+        });
+      } else {
+        actions.setChatState({ messages, streaming: false });
+      }
       if (generating) this._startGeneratingPoll(s.id);
       else this._stopGeneratingPoll();
       this._rewindDividers = dividers;

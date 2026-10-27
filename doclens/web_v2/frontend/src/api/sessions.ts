@@ -60,6 +60,24 @@ export async function fetchSessionDetail(
   return request<SessionDetail>(`/api/sessions/${sessionId}${qs}`, { method: "GET" });
 }
 
+/** 生成中的实时 tool trace 快照（断开续跑事件真空补齐，2026-10-27）：
+ *  重进/切回生成中会话时拉取，重建思考 pane 里断开期间已发生的步骤。 */
+export interface TraceStepDTO {
+  tool_use_id: string;
+  name: string;
+  input: Record<string, unknown>;
+  output?: string;
+  is_error?: boolean;
+  duration_ms?: number;
+  status?: "running";
+}
+
+export async function fetchChatTrace(
+  sessionId: string,
+): Promise<{ generating: boolean; steps: TraceStepDTO[] }> {
+  return request(`/api/chat/trace?session_id=${encodeURIComponent(sessionId)}`, { method: "GET" });
+}
+
 /** 手动压缩会话历史（ADR-0026）：LLM 摘要落库 compacted 条目。
  *  compacted_text = 压缩产物可读转录（copy 按钮拷贝供人审核，2026-10-10）。 */
 export async function compactSession(
