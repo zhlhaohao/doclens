@@ -36,9 +36,11 @@ if _HAS_WATCHDOG:
     class _ChangeHandler(FileSystemEventHandler):
         """watchdog 事件处理器：丢弃索引范围外的文件事件（handler 层统一排除）。
 
-        排除口径与索引器一致：数据目录（.cortex / .doclens）子树、不支持
-        扩展名、索引器生成的影子 Markdown（._*.md）、索引根 .gitignore
-        命中文件。递归 vs 监控树级排除的取舍见 FileWatcher.start()；
+        排除口径与索引器一致：数据目录（.cortex / .doclens）+ planify 运行时
+    目录（.planify，llm_trace/tasks/team 等每次 LLM 调用都写——2026-10-27
+    事故：llm_trace/*.md 触发 watcher 空跑 reindex 数十次，与 search_kb
+    争 SQLite 锁把单次检索从 ~3s 拉到 15s+）子树、不支持扩展名、索引器
+    生成的影子 Markdown（._*.md）、索引根 .gitignore 命中文件。递归 vs 监控树级排除的取舍见 FileWatcher.start()；
         watchdog 自身 per-event debug 由 logging 压制（自反馈风暴史）。
 
         on_modified 会做去重：watchdog 在 Windows 上对纯读访问也会报
@@ -55,6 +57,11 @@ if _HAS_WATCHDOG:
             # 配置值不 lower 时用户设 CORTEX_DATA_DIRNAME=MyData（首字母
             # 大写是最自然写法）会让排除静默失效——数据目录内容流入索引
             self._data_dir = data_dirname().lower()
+            # 排除目录集合：数据目录 + planify 运行时目录。planify 每次 LLM
+            # 调用写 .planify/llm_trace/*.md，若在知识库内会触发 watcher
+            # 防抖 → 空跑 reindex → 与 search_kb 争 SQLite 锁（2026-10-27）。
+            # planify 是框架固定目录名，任何形态下都不是知识库内容。
+            self._excluded_dirs = {self._data_dir, ".planify"}
             self._extensions = set(SUPPORTED_FORMATS.keys())
             # .gitignore 过滤（与索引器同一规则源：索引根的 .gitignore，
             # treesearch.pathutil.load_gitignore_spec 公共化接口）。启动时
@@ -79,10 +86,10 @@ if _HAS_WATCHDOG:
             _, ext = os.path.splitext(path)
             if ext.lower() not in self._extensions:
                 return False
-            # 数据目录任意路径段命中即排除
-            if self._data_dir in (
+            # 排除目录任意路径段命中即排除（数据目录 + .planify）
+            if self._excluded_dirs & {
                 p.lower() for p in os.path.normpath(path).split(os.sep)
-            ):
+            }:
                 return False
             # 索引器生成的影子 Markdown（._x.md）——索引链路自身跳过
             # （pathutil walk 同规则），其事件同样丢弃
@@ -112,12 +119,15 @@ if _HAS_WATCHDOG:
             目的：让 on_modified 的去重（prev==cur）从 watcher 启动一开始就生效——
             Windows 读访问会触发伪 on_modified（仅 atime 变），有了基线即可直接过滤，
             不必等到文件"首次出现"才被动建档（那会吞掉启动后的首次真修改）。
-            跳过数据目录（原地剪枝，walk 不下钻其子树）；逐文件复用
+            跳过排除目录（原地剪枝，walk 不下钻其子树——含 .planify，
+            否则启动基线对每次 LLM trace 文件都 stat 一遍）；逐文件复用
             _should_handle 谓词（与事件过滤同一口径，不手抄第二份）；
             仅 stat 不读内容，开销很小。
             """
             for root, dirnames, files in os.walk(search_path):
-                dirnames[:] = [d for d in dirnames if d.lower() != self._data_dir]
+                dirnames[:] = [
+                    d for d in dirnames if d.lower() not in self._excluded_dirs
+                ]
                 for name in files:
                     path = os.path.join(root, name)
                     if self._should_handle(path):

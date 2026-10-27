@@ -2946,6 +2946,7 @@ def get_fts_index(db_path: Optional[str] = None, weights: Optional[dict] = None)
         if _global_fts.db_path != requested:
             _global_fts.close()
             _global_fts = None
+            _bump_read_epoch()
     if _global_fts is None:
         _global_fts = FTS5Index(db_path=db_path, weights=weights)
     return _global_fts
@@ -2955,6 +2956,7 @@ def set_fts_index(index: FTS5Index) -> None:
     """Set the global FTS5 index instance."""
     global _global_fts
     _global_fts = index
+    _bump_read_epoch()
 
 
 def reset_fts_index() -> None:
@@ -2963,3 +2965,60 @@ def reset_fts_index() -> None:
     if _global_fts is not None:
         _global_fts.close()
         _global_fts = None
+    _bump_read_epoch()
+
+
+# ---------------------------------------------------------------------------
+# Thread-local read connections (2026-10-27)
+#
+# 动机：宿主 doclens 的工具层并发（一轮 gather 多个只读检索调用）下，
+# 全局单例的 _LockedConnection 粗锁（AP-3，读-读互斥）把并发读退化成
+# 排队——实测并发轮 engine 段 4.85s/调用，其中 ~75% 是等锁。WAL 模式
+# （_init_db 已设 journal_mode=WAL）下多连接并发读是 SQLite 设计场景：
+# 读连接互不阻塞，写者仍是单连接串行。
+#
+# ⚠️ 实测负优化，暂不启用（2026-10-27 benchmark 3 题）：每线程独立连接
+# = 每连接独立页缓存。579MB 的 index.db 上 4-6 线程并发首查时，磁盘冷
+# 读 ×N 把锁排队（~3.7s/调用）换成了更贵的冷读（串行 engine 1.2→3.2s，
+# 总耗时 7.84→10.42s）。WAL 并行读的收益只在页缓存已热或多盘并行时
+# 成立；消费点已切回 get_fts_index，本基础设施保留（正确性已验证：
+# 同线程复用/跨线程独立/epoch 失效），待页缓存预热或 mmap 方案再启用。
+#
+# 分工纪律：读走 get_read_index（线程本地），写走 get_fts_index（全局
+# 单例）。索引重建（set/reset/rebind db_path）经 epoch 计数器失效全部
+# 线程的缓存连接，下个读请求重开——FTS5Index 打开实测 ~1ms，可忽略。
+# ---------------------------------------------------------------------------
+
+_read_epoch = 0
+_tls = threading.local()
+
+
+def _bump_read_epoch() -> None:
+    """索引代际变更：线程本地读连接全部失效（下个请求重开）。"""
+    global _read_epoch
+    _read_epoch += 1
+
+
+def get_read_index(db_path: Optional[str] = None, weights: Optional[dict] = None) -> FTS5Index:
+    """Get a thread-local FTS5Index for read-only access (WAL: readers don't block).
+
+    Same contract as get_fts_index, but each thread gets its own connection,
+    so concurrent read calls (host tool-layer gather) don't serialize on the
+    shared _LockedConnection. Write paths must keep using get_fts_index.
+    """
+    cached = getattr(_tls, "fts", None)
+    if (
+        cached is not None
+        and getattr(_tls, "epoch", -1) == _read_epoch
+        and cached.db_path == (db_path or ":memory:")
+    ):
+        return cached
+    if cached is not None:
+        try:
+            cached.close()
+        except Exception:  # noqa: BLE001 - 关闭旧连接失败不阻塞换新
+            pass
+    inst = FTS5Index(db_path=db_path, weights=weights)
+    _tls.fts = inst
+    _tls.epoch = _read_epoch
+    return inst

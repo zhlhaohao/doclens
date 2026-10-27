@@ -13,7 +13,47 @@ def tokenize_query(query):
 # 经过 compute_composite_score 综合后，3 词 query 命中 2 词的
 # 综合分通常约 0.5 左右——所以 CORTEX_MIN_SCORE_THRESHOLD 设成 0.5
 # 会把多关键词 query 的大多数有效结果砍掉，慎用。
-def calc_proximity_score(text, keywords, max_span=20):
+import re
+from functools import lru_cache
+
+from doclens.word_window import count_equivalence_words
+
+
+@lru_cache(maxsize=256)
+def _compile_kw_pattern(kws_key: tuple):
+    """按关键词元组缓存编译后的正则（同一 query 的 1669 个候选节点
+    复用同一 pattern，编译只发生一次）。"""
+    return re.compile("|".join(re.escape(kw) for kw in kws_key))
+
+
+def _scan_keyword_hits(text: str, keywords: list):
+    """单次扫描返回每个关键词的首次命中区间（大小写不敏感）。
+
+    2026-10-27 性能改造：旧实现对每关键词各做一次 text.lower()
+    （O(n·k)，长文本 × 9 词 query 是 scoring 热点的主体——1669 候选
+    节点 × (k+2) 次全文 lower 实测 5-16s）。现改为 lower 一次 + 编译
+    正则一次 finditer，O(n + k)；命中区间语义与逐词 find 完全一致
+    （每个关键词取首个出现位置）。
+
+    Returns:
+        {kw_lower: (start, end)}，未命中的关键词不在结果里。
+    """
+    if not text or not keywords:
+        return {}
+    text_lower = text.lower()
+    kw_lowers = tuple(kw.lower() for kw in keywords if kw)
+    if not kw_lowers:
+        return {}
+    pattern = _compile_kw_pattern(kw_lowers)
+    hits = {}
+    for m in pattern.finditer(text_lower):
+        seg = m.group(0)
+        if seg not in hits:
+            hits[seg] = (m.start(), m.start() + len(seg) - 1)
+    return hits
+
+
+def calc_proximity_score(text, keywords, max_span=20, return_hits=False):
     """计算关键词紧密度分数
 
     Args:
@@ -23,20 +63,17 @@ def calc_proximity_score(text, keywords, max_span=20):
             0.5——1 英文词 ≈ 2 汉字，中英文同预算下信息量对齐。历史：
             字符口径（旧）对英文 6 词 query 无区分度；纯词口径（过渡版）
             对中文窗口偏小）。
+        return_hits: True 时附带返回命中关键词（小写形态，与 keywords
+            对齐去重），调用方免二次扫描。
+
     Returns:
-        (matched_count, proximity_score) - 匹配词数和紧邻分数
+        (matched_count, proximity_score[, hit_kws])
             proximity_score: 0=无匹配, 1=部分匹配, 2=全部关键词紧邻
     """
-    matched_kws = _matched_keywords(text, keywords)
-    spans = []  # (首字符位置, 末字符位置)
-
-    for kw in matched_kws:
-        idx = text.lower().find(kw.lower())
-        if idx >= 0:
-            spans.append((idx, idx + len(kw) - 1))
-
+    hits = _scan_keyword_hits(text, keywords)
+    spans = list(hits.values())
     if not spans:
-        return 0, 0
+        return (0, 0, []) if return_hits else (0, 0)
 
     matched = len(spans)
     if matched > 1:
@@ -46,9 +83,13 @@ def calc_proximity_score(text, keywords, max_span=20):
 
     # 全部关键词都匹配且紧邻 = 最高分
     if matched == len(keywords) and span <= max_span:
-        return matched, 2
+        result = (matched, 2)
     # 部分关键词匹配 = 中等分数（按匹配比例）
-    return matched, 1
+    else:
+        result = (matched, 1)
+    if return_hits:
+        return (*result, list(hits.keys()))
+    return result
 
 
 def _word_distance(text: str, start_char: int, end_char: int) -> float:
@@ -56,9 +97,11 @@ def _word_distance(text: str, start_char: int, end_char: int) -> float:
 
     当量词口径（word_window.CJK_WORD_WEIGHT）：非 CJK 词计 1，CJK 字
     计 0.5——中英文同一 max_span 预算下信息量对齐（1 英文词 ≈ 2 汉字）。
+    2026-10-27：函数内延迟 import 改模块级——热路径每次调用都走
+    importlib（sys.modules 查询 + 字节码定位）是 scoring 的最大单点
+    开销（profile 实测占 _word_distance 累计耗时 >50%）。word_window
+    是纯计算模块、无重依赖，模块级导入无循环风险。
     """
-    from doclens.word_window import count_equivalence_words
-
     segment = text[start_char:end_char + 1]
     return max(count_equivalence_words(segment) - 1, 0)
 
@@ -68,12 +111,13 @@ def matched_keywords(text, keywords):
 
     供输出层展示"哪几个查询词打中了本节点"，避免 LLM 在正文中自行猜
     （判断缺词是否为同义词未覆盖时尤其有用）。与 calc_proximity_score
-    同口径（子串包含，不做分词对齐）。
+    同口径（子串包含，不做分词对齐）；保持原词形返回。
     """
     if not text or not keywords:
         return []
-    text_lower = text.lower()
-    return [kw for kw in keywords if kw and kw.lower() in text_lower]
+    hits = _scan_keyword_hits(text, keywords)
+    hit_set = set(hits.keys())
+    return [kw for kw in keywords if kw and kw.lower() in hit_set]
 
 
 # 兼容别名（历史私有名，模块内消费方已迁移公共名）

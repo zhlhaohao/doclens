@@ -1082,11 +1082,14 @@ def handle_search_kb(
         if not allowed:
             return note + f"所有搜索目标均未命中已索引文档（query='{query}'），未执行搜索。"
 
-    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score, matched_keywords
+    from doclens.scoring import tokenize_query, calc_proximity_score, compute_composite_score
+    import time as _time
+    _t_start = _time.perf_counter()
 
     # 候选池 = 配置 top_k_docs（AP-47：旧 max_results 参数从未被引擎消费）；
     # `max_results` 只决定下面 _format_kb_results 显示多少条
     nodes, docs = idx_manager.search(query, allowed_doc_ids=allowed)
+    _t_engine = _time.perf_counter()
     query_words = tokenize_query(query)
     if not query_words:
         query_words = [w.strip() for w in query.split() if w.strip()]
@@ -1110,6 +1113,7 @@ def handle_search_kb(
     doc_tree_map: dict[str, list[dict]] = idx_manager.load_doc_structures(
         [d.get("doc_id", "") for d in docs]
     )
+    _t_trees = _time.perf_counter()
 
     logger.debug("max_nodes_per_doc=%d, FTS nodes=%d, docs=%d", idx_manager.max_nodes_per_doc, len(nodes), len(docs))
     # 评分融合（2026-10-19 改造）：候选直接取引擎管线已精排的 docs[].nodes
@@ -1122,7 +1126,11 @@ def handle_search_kb(
         doc_id = doc.get("doc_id", "")
         for n in doc.get("nodes", []):
             n_text = n.get("text", "") or ""
-            cnt, proximity = calc_proximity_score(n_text, query_words, max_span=idx_manager.max_span)
+            # return_hits=True：proximity 扫描顺带返回命中词，
+            # 免去 matched_keywords 的第二次全文扫描（2026-10-27）
+            cnt, proximity, hit_kws = calc_proximity_score(
+                n_text, query_words, max_span=idx_manager.max_span, return_hits=True
+            )
             if cnt > 0:
                 node_fts = n.get("score", 0.0)
                 composite, factors = compute_composite_score(
@@ -1135,7 +1143,7 @@ def handle_search_kb(
                     weights=idx_manager.scoring_weights,
                     proximity=proximity,
                 )
-                all_candidates.append((doc_id, n, cnt, proximity, node_fts, composite, factors, matched_keywords(n_text, query_words)))
+                all_candidates.append((doc_id, n, cnt, proximity, node_fts, composite, factors, hit_kws))
     _debug_lines = []
     for did, n, cnt, prox, fts, composite, factors, hits in all_candidates:
         title = n.get("title", "")[:20]
@@ -1161,6 +1169,7 @@ def handle_search_kb(
         did, display_node, matched, prox, fts, composite, factors, hits = item[:8]
         scored_results.append((composite, (did, display_node, matched, prox, fts, hits)))
     scored_results.sort(key=lambda x: -x[0])
+    _t_scoring = _time.perf_counter()
 
     # 评分阈值过滤：composite_score 来自 compute_composite_score，
     # 3 词 query 命中 2 词的典型综合分约 0.5。把 CORTEX_MIN_SCORE_THRESHOLD
@@ -1169,7 +1178,7 @@ def handle_search_kb(
     if idx_manager.min_score_threshold > 0.0:
         scored_results = [r for r in scored_results if r[0] >= idx_manager.min_score_threshold]
 
-    return note + _format_kb_results(
+    result = note + _format_kb_results(
         scored_results, query_words, idx_manager.path_map, doc_tree_map, doc_title_map, max_results,
         max_context_chars_per_result=idx_manager.max_context_chars_per_result,
         max_total_words=idx_manager.max_total_words,
@@ -1177,6 +1186,13 @@ def handle_search_kb(
         context_before=idx_manager.search_context_before,
         context_after=idx_manager.search_context_after,
     )
+    _t_end = _time.perf_counter()
+    logger.info(
+        "search_kb timing: engine=%.2fs trees=%.2fs scoring=%.2fs format=%.2fs total=%.2fs query=%r",
+        _t_engine - _t_start, _t_trees - _t_engine, _t_scoring - _t_trees,
+        _t_end - _t_scoring, _t_end - _t_start, query,
+    )
+    return result
 
 
 

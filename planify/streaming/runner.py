@@ -58,6 +58,16 @@ _POLL_TOOL_NAME = "check_background"
 # 连续同参调用轮数达到该值 → 真死循环形态，立即注入针对性提醒（不等软阈值）
 _IDENTICAL_ROUNDS_LIMIT = 3
 
+# 只读检索工具白名单：一轮 ≥2 个同类调用时 gather 并发（2026-10-27）。
+# 收录标准：无副作用、无顺序依赖、KB 侧读-读在 RLock 下安全串行化。
+# 刻意排除：write/edit/bash（副作用+顺序语义）、TodoWrite/ask_user_question
+# （交互/状态机）、task（已有专用并发路径）、load_skill（惰性热重载非幂等）。
+_CONCURRENT_READ_TOOLS = frozenset({
+    "search_kb", "kb_grep", "read_document", "file_info",
+    "manage_kb",
+    "read_file", "grep", "glob",
+})
+
 
 def _poll_backoff_s(consecutive_polls: int, initial_s: float, max_s: float) -> float:
     """第 consecutive_polls 次连续纯轮询后的等待秒数（指数退避封顶 max_s）。
@@ -1418,6 +1428,25 @@ class StreamingAgent:
                 *[_run_handler(name, inp) for _tid, name, inp in task_calls]
             )
             for (tid, _name, _inp), out in zip(task_calls, outputs):
+                precomputed[tid] = out
+
+        # 只读检索工具并发（2026-10-27）：一轮 ≥2 个只读检索调用时 gather。
+        # 安全性：全部无副作用（KB 读 / 文件读 / glob），无顺序依赖；KB 侧
+        # SQLite 读-读在 RLock 粗锁下天然串行化（AP-3），并发不会产生交错
+        # 事务；纯 CPU 段（scoring）在 to_thread 线程池重叠执行，GIL 间隙
+        # + I/O 等待重叠即收益来源。写工具 / 交互工具 / bash 一律不进此集。
+        read_only_calls = [
+            p for p in pending
+            if p[1] in _CONCURRENT_READ_TOOLS and p[0] not in precomputed
+        ]
+        if len(read_only_calls) >= 2:
+            self.logger.info(
+                f"[StreamingAgent] 并发执行 {len(read_only_calls)} 个只读检索调用"
+            )
+            outputs = await asyncio.gather(
+                *[_run_handler(name, inp) for _tid, name, inp in read_only_calls]
+            )
+            for (tid, _name, _inp), out in zip(read_only_calls, outputs):
                 precomputed[tid] = out
 
         for tool_use_id, name, input_data in pending:

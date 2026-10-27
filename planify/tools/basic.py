@@ -529,6 +529,24 @@ def _is_cjk(ch: str) -> bool:
     return any(lo <= cp <= hi for lo, hi in _CJK_RANGES)
 
 
+def _make_cjk_mask() -> bytearray:
+    """预计算 [0, 0x10000) BMP 的 CJK 判定掩码（一次性构建，查表 O(1)）。
+
+    2026-10-27 性能改造：doclens scoring 热路径经 word_window →
+    split_words_with_seps 逐字符调 _is_cjk（any+生成器），真实语料
+    profile 实测 912 万次调用占 scoring 大头。掩码把判定降为一次
+    下标访问；范围表变更需重建（当前为冻结常量）。
+    """
+    mask = bytearray(0x10000)
+    for lo, hi in _CJK_RANGES:
+        for cp in range(lo, hi + 1):
+            mask[cp] = 1
+    return mask
+
+
+_CJK_MASK = _make_cjk_mask()
+
+
 def split_words_with_seps(text: str) -> list[tuple[str, str]]:
     """切词（保留分隔符）：CJK 每字一词；非 CJK 连续段按空白切分。
 
@@ -539,6 +557,7 @@ def split_words_with_seps(text: str) -> list[tuple[str, str]]:
     ADR-0024），本函数仅供 doclens 的 read_document 词序号体系使用
     （doclens/kb_tools.py 导入，属有意的单一真相源），planify 内部勿新增消费方。
     """
+    mask = _CJK_MASK
     words: list[tuple[str, str]] = []
     n = len(text)
     i = 0
@@ -547,10 +566,16 @@ def split_words_with_seps(text: str) -> list[tuple[str, str]]:
             i += 1
             continue
         start = i
-        if _is_cjk(text[i]):
-            i += 1
+        # 快路径：掩码下标判 CJK，绕过 _is_cjk 的 any 生成器
+        #（ord >= 0x10000 的非 BMP 字符按非 CJK 处理——与 _CJK_RANGES 口径一致）
+        cp = ord(text[i])
+        if cp < 0x10000 and mask[cp]:
+            i += 1  # CJK 单字词
         else:
-            while i < n and not text[i].isspace() and not _is_cjk(text[i]):
+            while i < n and not text[i].isspace():
+                cp = ord(text[i])
+                if cp < 0x10000 and mask[cp]:
+                    break
                 i += 1
         j = i
         while j < n and text[j].isspace():

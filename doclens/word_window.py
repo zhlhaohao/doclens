@@ -40,9 +40,16 @@ def count_equivalence_words(text: str) -> float:
 
     read_document 的 start_word/end_word 是离散词序号 API（对外语义，
     冻结不变），与当量词计数（预算用途）明确分离。
+
+    快速路径（2026-10-27）：纯 ASCII 文本（企业语料绝大多数）跳过
+    通用切词器——非 CJK 词全计 1，当量词数 = 空白切分词数，str.split
+    即等价且 O(n) 单次扫描；含 CJK 走原通用路径。语义一致：split 按
+    空白切词与 split_words_with_seps 的非 CJK 分支同口径。
     """
     if not text:
         return 0.0
+    if text.isascii():
+        return float(len(text.split()))
     return sum(word_weight(w) for w, _sep in split_words_with_seps(text) if w)
 
 
