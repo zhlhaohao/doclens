@@ -13,7 +13,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, ConfigApiError, probeJimeng } from "../api/config";
+import { getConfig, putConfig, ConfigApiError, probeJimeng, fetchJimengBalance, type JimengBalance } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
@@ -162,6 +162,31 @@ export class SettingsView extends LitElement {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
       margin: 0 0 var(--cortex-space-4) 0;
+    }
+    /* ===== 分区余额行（即梦文生图，2026-10-28；对齐 LLM 额度行交互）===== */
+    .section-quota {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      margin: 0 0 var(--cortex-space-3) 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .section-quota .q-low {
+      color: var(--cortex-danger);
+      font-weight: 600;
+      font-family: var(--cortex-font-mono);
+    }
+    .section-quota .q-none { color: var(--cortex-text-subtle); }
+    .section-quota .q-sub { color: var(--cortex-text-subtle); }
+    .section-quota .q-retry {
+      border: none;
+      background: none;
+      padding: 0 0 0 2px;
+      cursor: pointer;
+      color: var(--cortex-primary);
+      font-size: var(--cortex-fs-xs);
+      font-family: inherit;
     }
     .field {
       display: grid;
@@ -582,6 +607,12 @@ export class SettingsView extends LitElement {
   /** 字段级探测（action 按钮）：进行中的字段 envVar → 结果 {ok,message} */
   @state() private _probingField: string | null = null;
   @state() private _probeResults: Record<string, { ok: boolean; message: string }> = {};
+  /** 即梦余额（2026-10-28）：进设置页 AI tab 时查询，对齐 LLM 额度行交互 */
+  @state() private _jimengBalance:
+    | { status: "loading" }
+    | { status: "ok"; data: JimengBalance }
+    | { status: "error" }
+    | null = null;
 
   private _unsubscribe?: () => void;
   private _loadGen = 0;            // invalidate stale loads (I1)
@@ -642,9 +673,23 @@ export class SettingsView extends LitElement {
       this._exists = resp.exists;
       this._fieldErrors = {};
       actions.loadSettings(this._values, resp.exists);
+      // 即梦余额：AI tab 进入/刷新时查询（独立失败不影响表单）
+      void this._loadJimengBalance();
     } catch (e: unknown) {
       if (gen !== this._loadGen || !this.isConnected) return;
       this._error = `加载失败: ${(e as Error).message}`;
+    }
+  }
+
+  /** 即梦余额查询（进行中的请求不重复发起）。 */
+  private async _loadJimengBalance() {
+    if (this._jimengBalance?.status === "loading") return;
+    this._jimengBalance = { status: "loading" };
+    try {
+      const data = await fetchJimengBalance();
+      this._jimengBalance = { status: "ok", data };
+    } catch {
+      this._jimengBalance = { status: "error" };
     }
   }
 
@@ -786,6 +831,42 @@ export class SettingsView extends LitElement {
         this._probingField = null;
       }
     }
+  }
+
+  /** 即梦余额行（2026-10-28）：对齐 LLM 额度行的三态交互。
+   *  查询中骨架 / 失败可重试 / no_credentials 提示配置引导 /
+   *  余额 ¥X（<5 元红色警示，口径与 DeepSeek 余额低额警示一致）。 */
+  private _renderJimengBalance() {
+    const q = this._jimengBalance;
+    if (!q || q.status === "loading") {
+      return html`<div class="section-quota">余额查询中…</div>`;
+    }
+    if (q.status === "error") {
+      return html`<div class="section-quota">余额查询失败<button
+          class="q-retry"
+          title="重试"
+          @click=${() => void this._loadJimengBalance()}
+        >↻</button></div>`;
+    }
+    const d = q.data;
+    if (d.kind === "no_credentials") {
+      return html`<div class="section-quota q-none">余额显示需配置火山引擎 AK/SK（见下方字段）</div>`;
+    }
+    const avail = d.available;
+    if (avail == null) {
+      return html`<div class="section-quota q-none">接口未返回余额数据</div>`;
+    }
+    const low = avail < 5;
+    return html`<div class="section-quota">火山引擎账户余额
+      <span class=${low ? "q-low" : ""}>¥${avail.toFixed(2)}</span>${low ? "（不足）" : ""}
+      ${d.credit_limit ? html`<span class="q-sub">（含信控额度 ¥${d.credit_limit.toFixed(2)}）</span>` : nothing}
+    </div>`;
+  }
+
+  /** 分区标题（jimeng 区额外渲染余额行）。 */
+  private _renderSectionHeader(title: string) {
+    return html`${title ? html`<h2>${title}</h2>` : nothing}
+      ${title === "即梦文生图" ? this._renderJimengBalance() : nothing}`;
   }
 
   private _renderField(f: SettingsField) {    const value = this._values[f.envVar] ?? "";
@@ -1034,7 +1115,7 @@ export class SettingsView extends LitElement {
                   ` : nothing}
                   ${sections.map((s) => html`
                     <div class="section">
-                      ${s.title ? html`<h2>${s.title}</h2>` : nothing}
+                      ${this._renderSectionHeader(s.title)}
                       ${s.fields.map((f) => this._renderField(f))}
                     </div>
                   `)}

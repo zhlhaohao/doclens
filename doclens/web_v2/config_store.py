@@ -63,6 +63,10 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     # jimeng MCP 工具（≤10s reconcile 自动生效）。MODEL 空 = 默认 4.0
     "JIMENG_API_KEY",
     "JIMENG_MODEL",
+    # 即梦余额显示（2026-10-28）：火山方舟无 Bearer 查余额接口，账户余额
+    # 走费用中心 QueryBalanceAcct（V4 签名，需 AK/SK——与 Bearer Key 两套凭证）
+    "JIMENG_ACCESS_KEY",
+    "JIMENG_SECRET_KEY",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",
@@ -105,7 +109,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
-SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK", "CORTEX_TRANSLATE_ENVS", "JIMENG_API_KEY"})
+SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK", "CORTEX_TRANSLATE_ENVS", "JIMENG_API_KEY", "JIMENG_ACCESS_KEY", "JIMENG_SECRET_KEY"})
 SECRET_MASK = "***"
 
 

@@ -127,6 +127,22 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     mono: true,
     hint: "留空 = doubao-seedream-4-0；生成时可用参数临时覆盖（如 doubao-seedream-3-0-t2i）。",
   },
+  {
+    tab: "ai",
+    section: "即梦文生图",
+    envVar: "JIMENG_ACCESS_KEY",
+    label: "火山引擎 AK",
+    component: "password",
+    hint: "余额显示（可选）：账户余额走费用中心 QueryBalanceAcct（V4 签名），与推理 API Key 是两套凭证。IAM 控制台获取，建议建独立用户只授账单只读权限；留空则不显示余额。保存后即时生效。",
+  },
+  {
+    tab: "ai",
+    section: "即梦文生图",
+    envVar: "JIMENG_SECRET_KEY",
+    label: "火山引擎 SK",
+    component: "password",
+    hint: "与火山引擎 AK 配对（余额查询签名用）。",
+  },
 
   // ===== 图像自动旋转（ai tab，视觉模型相关；ADR-0017） =====
   {

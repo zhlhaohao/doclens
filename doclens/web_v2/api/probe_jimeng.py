@@ -1,9 +1,14 @@
-"""即梦配置测试（/api/config/probe-jimeng，2026-10-28 增补）。
+"""即梦配置测试与余额查询（/api/config/probe-jimeng、jimeng-balance）。
 
-设置页「即梦文生图」区块的测试按钮：用表单当前值（未保存也可测——
-key 为 *** 占位时回退已保存值）真实调一次 Ark 生成小图，验证
-key 有效性 + 模型可用性 + 端点连通。探测图落数据目录 tmp（不进知识库、
-不写元数据——测试产物非知识）。
+设置页「即梦文生图」区块：
+- 测试按钮（POST probe-jimeng）：用表单当前值（未保存也可测——
+  key 为 *** 占位时回退已保存值）真实调一次 Ark 生成小图，验证
+  key 有效性 + 模型可用性 + 端点连通。探测图落数据目录 tmp（不进知识库、
+  不写元数据——测试产物非知识）。
+- 余额显示（GET jimeng-balance，2026-10-28 增补）：火山方舟无 Bearer
+  查余额接口，账户余额走费用中心 QueryBalanceAcct（火山引擎 V4 签名，
+  需 Access Key / Secret Key——与推理 Bearer Key 是两套凭证）。密钥
+  从全局 .env 回源，不出后端。
 """
 from __future__ import annotations
 
@@ -15,6 +20,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter
 
 from doclens.jimeng.client import JimengError, call_ark_generations
+from doclens.web_v2.api.errors import CortexAPIError
 from doclens.web_v2.config_store import read_env_values, resolve_env_path
 
 logger = logging.getLogger(__name__)
@@ -82,4 +88,59 @@ async def probe_jimeng(req: ProbeJimengRequest):
         ok=True,
         message=f"生成成功（{len(urls)} 张，耗时 {elapsed:.1f}s）",
         model=model,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 余额查询（GET /api/config/jimeng-balance）
+# ---------------------------------------------------------------------------
+
+
+class JimengBalanceResult(BaseModel):
+    """GET /api/config/jimeng-balance 响应。
+
+    kind = "balance"：balances 有效（元，人民币）
+    kind = "no_credentials"：未配置 AK/SK（前端显示配置引导）
+    查询失败 → 502 BALANCE_FAILED（前端显示可重试）。
+    """
+
+    kind: str  # "balance" | "no_credentials"
+    available: float | None = None
+    cash: float | None = None
+    credit_limit: float | None = None
+    frozen: float | None = None
+    arrears: float | None = None
+
+
+@router.get("/config/jimeng-balance", response_model=JimengBalanceResult)
+async def jimeng_balance():
+    """查询火山引擎账户余额（费用中心 QueryBalanceAcct，V4 签名）。
+
+    火山方舟无 Bearer 查余额接口——余额在费用中心，需要 Access Key /
+    Secret Key（JIMENG_ACCESS_KEY / JIMENG_SECRET_KEY，全局 .env），
+    与推理用的 Bearer API Key 是两套凭证。密钥不出后端。
+    """
+    from doclens.jimeng.ark_balance import ArkBalanceError, fetch_ark_balance
+
+    path = resolve_env_path("global")
+    saved, _ = read_env_values(
+        path, {"JIMENG_ACCESS_KEY", "JIMENG_SECRET_KEY"}
+    )
+    ak = (saved.get("JIMENG_ACCESS_KEY") or "").strip()
+    sk = (saved.get("JIMENG_SECRET_KEY") or "").strip()
+    if not ak or not sk:
+        return JimengBalanceResult(kind="no_credentials")
+
+    try:
+        bal = await fetch_ark_balance(ak, sk)
+    except ArkBalanceError as e:
+        logger.info("jimeng-balance failed: %s", e)
+        raise CortexAPIError(502, "BALANCE_FAILED", str(e))
+    return JimengBalanceResult(
+        kind="balance",
+        available=bal.available,
+        cash=bal.cash,
+        credit_limit=bal.credit_limit,
+        frozen=bal.frozen,
+        arrears=bal.arrears,
     )

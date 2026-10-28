@@ -449,6 +449,20 @@ class CortexConfig(BaseSettings):
         alias="JIMENG_MODEL",
         description="即梦文生图默认模型 ID（工具/CLI 的 model 参数可临时覆盖）",
     )
+    # 余额显示（2026-10-28）：费用中心 QueryBalanceAcct 走火山引擎 V4 签名
+    # （AK/SK），与推理 Bearer Key 是两套凭证；仅设置页余额展示用，
+    # 不影响 jimeng 工具挂载
+    jimeng_access_key: Optional[str] = Field(
+        default=None,
+        alias="JIMENG_ACCESS_KEY",
+        description="火山引擎 Access Key（费用中心余额查询用，V4 签名）；"
+        "IAM 控制台获取，建议只授 BillingReadOnly 权限",
+    )
+    jimeng_secret_key: Optional[str] = Field(
+        default=None,
+        alias="JIMENG_SECRET_KEY",
+        description="火山引擎 Secret Key（与 JIMENG_ACCESS_KEY 配对）",
+    )
 
     @classmethod
     def _init_first_run(cls):
