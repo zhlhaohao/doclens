@@ -24,6 +24,7 @@ export class SearchView extends LitElement {
   static readonly RESULTS_PANE_WIDTH_MIN = 280;
   static readonly RESULTS_PANE_WIDTH_MAX = 800;
   static readonly SEARCH_MODE_KEY = "cortex.searchMode";
+  static readonly STAR_PIN_KEY = "cortex.history.starPin";
   static readonly SEARCH_MODES: Record<SearchMode, { label: string; icon?: string; description?: string }> = {
     keyword: { label: "搜索", description: "拆分关键词匹配" },
     grep: { label: "grep", description: "正则表达式匹配" },
@@ -164,6 +165,10 @@ export class SearchView extends LitElement {
   @state() private loading = false;
   @state() private previewLine: number | null = null;
   @state() private historySessions: Session[] = [];
+  /** 历史分页当前页（1-based）；hasMore = 本页满 200 条 */
+  @state() private _historyPage = 1;
+  /** 星标置顶开关（localStorage 持久化，与 chat 历史共享一个偏好） */
+  @state() private _starPin = localStorage.getItem(SearchView.STAR_PIN_KEY) !== "0";
   @state() private _clearing = false;
   /** 点击命中行带来的字面高亮词（spans 还原；优先于 queryWords——
    *  grep 正则词项不可字面搜，findController/md-viewer 会零命中）。 */
@@ -268,14 +273,35 @@ export class SearchView extends LitElement {
     this._unsubscribe?.();
   }
 
-  private async _loadHistory() {
+  private async _loadHistory(page = 1) {
     try {
-      const { sessions } = await listSessions({ type: "search", limit: 20 });
-      this.historySessions = sessions;
+      const offset = (page - 1) * 200;
+      const { sessions } = await listSessions({ type: "search", limit: 200, offset });
+      // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
+      this.historySessions = this._starPin
+        ? sessions
+        : [...sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      this._historyPage = page;
     } catch (e) {
       console.warn("load history failed", e);
     }
   }
+
+  private _onHistoryPage = (e: CustomEvent<{ page: number }>) => {
+    this._loadHistory(e.detail.page);
+  };
+
+  /** 星标置顶开关：仅影响前端展示排序；与 chat 历史共享同一 localStorage 键。 */
+  private _onStarPinChange = (e: CustomEvent<{ value: boolean }>) => {
+    this._starPin = e.detail.value;
+    localStorage.setItem(SearchView.STAR_PIN_KEY, e.detail.value ? "1" : "0");
+    if (!this._starPin) {
+      this.historySessions = [...this.historySessions]
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    } else {
+      this._loadHistory(1);
+    }
+  };
 
   private async _onClearHistory() {
     await this._safeAction(async () => {
@@ -299,15 +325,13 @@ export class SearchView extends LitElement {
     });
   }
 
-  /** 历史列表星标切换（2026-09-17）：乐观更新（本地翻转+重排），失败回滚。 */
+  /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
+   *  加载历史时自然发生），失败回滚。 */
   private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
     const { session, starred } = e.detail;
     const prev = this.historySessions;
     this.historySessions = prev
-      .map((s) => (s.id === session.id ? { ...s, starred } : s))
-      .sort((a, b) =>
-        (Number(b.starred ?? false) - Number(a.starred ?? false)) ||
-        b.updated_at.localeCompare(a.updated_at));
+      .map((s) => (s.id === session.id ? { ...s, starred } : s));
     try {
       await starSession(session.id, starred);
     } catch (err) {
@@ -607,8 +631,13 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
             type="search"
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
+            .page=${this._historyPage}
+            ?hasMore=${this.historySessions.length >= 200}
+            .starPin=${this._starPin}
             @select=${this._onHistorySelect}
             @toggle-star=${this._onToggleStar}
+            @page-change=${this._onHistoryPage}
+            @star-pin-change=${this._onStarPinChange}
             @clear=${this._onClearHistory}>
           </history-list>
           <div class="input-row">

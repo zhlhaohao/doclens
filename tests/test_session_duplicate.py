@@ -82,12 +82,12 @@ class TestDuplicateStore:
     def test_metadata(self, store):
         """标题加后缀、新 id、starred 不继承、mode/message_count 保留、置顶排序。"""
         _create(store, "s1", title="调研")
-        store.set_starred("s1", True)
         store.update_count_and_time("s1", 6)
         # 手工补 mode（create 不带 mode 字段，走 find_or_create 路径太重）
         with store._lock, store._conn() as conn:
             conn.execute("UPDATE sessions SET mode='skill' WHERE id='s1'")
         twin = store.duplicate("s1")
+        store.set_starred("s1", True)  # 加星在复制后 → 刷新 updated_at 晚于孪生
         assert twin.id != "s1"
         assert twin.title == "调研 (副本)"
         assert twin.starred is False

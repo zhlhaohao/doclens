@@ -910,13 +910,18 @@ class SessionsStore(_StorePart):
             )
 
     def set_starred(self, session_id: str, starred: bool) -> None:
-        """加星/取消加星（2026-09-17）：仅更新 starred，**不**刷新 updated_at——
-        置顶效果由 list() 的排序键（starred DESC, updated_at DESC）承担，
-        加星顺序不打乱组内时间序。"""
+        """加星/取消加星（2026-09-17；2026-10-28 调整）：加星时刷新 updated_at，
+        使该会话在星标组内按加星时间排名第一；取消加星仅清 starred，
+        时间戳保持（下次列表中按时间自然回落）。置顶效果仍由 list() 的
+        排序键（starred DESC, updated_at DESC）承担。"""
         with self._lock, self._conn() as conn:
             conn.execute(
-                "UPDATE sessions SET starred = ? WHERE id = ?",
-                (1 if starred else 0, session_id),
+                """UPDATE sessions
+                   SET starred = ?,
+                       updated_at = CASE WHEN ? THEN ? ELSE updated_at END
+                   WHERE id = ?""",
+                (1 if starred else 0, starred,
+                 datetime.now(timezone.utc).isoformat(), session_id),
             )
 
     def append_chat_turn_raw(

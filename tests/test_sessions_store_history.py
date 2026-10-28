@@ -659,18 +659,27 @@ class TestStarred:
         store.set_starred("s1", False)
         assert store.get("s1").starred is False
 
-    def test_star_does_not_refresh_updated_at(self, store):
-        """置顶纯靠排序键；加星不得像 find_or_create 命中那样刷时间戳。"""
-        _create_session(store)
-        before = store.get("s1").updated_at
-        store.set_starred("s1", True)
-        assert store.get("s1").updated_at == before
+    def test_star_refreshes_updated_at(self, store):
+        """加星刷新 updated_at（2026-10-28 调整）：星标组内按加星时间排第一。
+        用可分辨的时间戳验证：先加星 new 再加星 old，old 应排最前。"""
+        _create_session(store, "old")
+        _create_session(store, "new")
+        store.update_count_and_time("new", 1)  # new 的 updated_at 更新
+        store.set_starred("new", True)
+        store.set_starred("old", True)  # 后加星 → 星标组内最新
+        ids = [s.id for s in store.list(SessionType.CHAT)]
+        assert ids == ["old", "new"]  # 后加星者第一
+        # 取消再加星 → 重新回到第一
+        store.set_starred("old", False)
+        store.set_starred("old", True)
+        ids = [s.id for s in store.list(SessionType.CHAT)]
+        assert ids == ["old", "new"]
 
     def test_list_starred_first_then_time_desc(self, store):
         _create_session(store, "old")
         _create_session(store, "new")
         store.update_count_and_time("new", 1)  # new 的 updated_at 更新
-        store.set_starred("old", True)
+        store.set_starred("old", True)  # 加星刷新 updated_at → 仍置顶
         ids = [s.id for s in store.list(SessionType.CHAT)]
         assert ids == ["old", "new"]  # 加星的旧会话置顶
 

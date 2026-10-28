@@ -515,6 +515,10 @@ export class ChatView extends LitElement {
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
   @state() private historySessions: Session[] = [];
+  /** 历史分页当前页（1-based）；hasMore = 本页满 200 条 */
+  @state() private _historyPage = 1;
+  /** 星标置顶开关（localStorage 持久化；false = 加星条目按时间混排） */
+  @state() private _starPin = localStorage.getItem(ChatView.STAR_PIN_KEY) !== "0";
   /** 会话列表高亮 id：重启恢复的「上次会话」（纯展示，不拉消息流）；
    *  进入会话后跟随真实 id，返回 initial 清空。 */
   @state() private _highlightSessionId: string | null = null;
@@ -819,11 +823,13 @@ export class ChatView extends LitElement {
     this._renameDialogOpen = false;
   };
 
-  /** 历史列表星标切换（2026-09-17）：乐观更新（本地翻转+重排），失败回滚。 */
+  /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
+   *  加载历史时自然发生），失败回滚。 */
   private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
     const { session, starred } = e.detail;
     const prev = this.historySessions;
-    this.historySessions = this._sortedWithStar(prev, session.id, starred);
+    this.historySessions = prev
+      .map((s) => (s.id === session.id ? { ...s, starred } : s));
     try {
       await starSession(session.id, starred);
       // 同步当前会话对象（加星态跟随，如 header/恢复逻辑消费）
@@ -836,15 +842,6 @@ export class ChatView extends LitElement {
       this._pushToast(`加星失败：${(err as Error)?.message || err}`, "error", 5000);
     }
   };
-
-  /** 不可变地翻转指定会话 starred 并按 (starred, updated_at) 重排。 */
-  private _sortedWithStar(sessions: Session[], id: string, starred: boolean): Session[] {
-    return sessions
-      .map((s) => (s.id === id ? { ...s, starred } : s))
-      .sort((a, b) =>
-        (Number(b.starred ?? false) - Number(a.starred ?? false)) ||
-        b.updated_at.localeCompare(a.updated_at));
-  }
 
   /** 会话改名对话框宿主（<dialog> 由 updated() showModal）。 */
   private _renderRenameDialog() {
@@ -1163,6 +1160,7 @@ export class ChatView extends LitElement {
    *  新标签页为空）——自动恢复据此判断「是不是本页刷新」，防新开页被
    *  别的标签页的在途生成劫持（localStorage 的 session 记忆是全页共享的）。 */
   private static readonly TAB_SESSION_KEY = "cortex.chat.tabSession";
+  private static readonly STAR_PIN_KEY = "cortex.history.starPin";
 
   private _tabSessionId(): string | null {
     try {
@@ -1181,14 +1179,39 @@ export class ChatView extends LitElement {
     }
   }
 
-  private async _loadHistory() {
+  private async _loadHistory(page = 1) {
     try {
-      const { sessions } = await listSessions({ type: "chat", limit: 20 });
-      this.historySessions = sessions;
+      const offset = (page - 1) * 200;
+      const { sessions } = await listSessions({ type: "chat", limit: 200, offset });
+      // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
+      this.historySessions = this._starPin
+        ? sessions
+        : [...sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+      this._historyPage = page;
     } catch (e) {
       console.warn("load history failed", e);
     }
   }
+
+  private _onHistoryPage = (e: CustomEvent<{ page: number }>) => {
+    this._loadHistory(e.detail.page);
+    // 翻页后回到列表顶部
+    this.renderRoot.querySelector("history-list")?.scrollIntoView({ block: "start" });
+  };
+
+  /** 星标置顶开关：仅影响前端展示排序（后端仍按 starred DESC 返回），
+   *  关闭时把已拉取的星标条目按时间混排回去。 */
+  private _onStarPinChange = (e: CustomEvent<{ value: boolean }>) => {
+    this._starPin = e.detail.value;
+    localStorage.setItem(ChatView.STAR_PIN_KEY, e.detail.value ? "1" : "0");
+    if (!this._starPin) {
+      this.historySessions = [...this.historySessions]
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    } else {
+      // 重新拉第 1 页（_loadHistory 内部按 _starPin 整理）
+      this._loadHistory(1);
+    }
+  };
 
   private async _onClearHistory() {
     this._clearing = true;
@@ -2029,10 +2052,15 @@ export class ChatView extends LitElement {
             ?clearing=${this._clearing}
             .sessions=${this.historySessions}
             .activeId=${this._highlightSessionId}
+            .page=${this._historyPage}
+            ?hasMore=${this.historySessions.length >= 200}
+            .starPin=${this._starPin}
             ?importable=${true}
             @select=${this._onHistorySelect}
             @toggle-star=${this._onToggleStar}
             @fork=${this._onForkSession}
+            @page-change=${this._onHistoryPage}
+            @star-pin-change=${this._onStarPinChange}
             @clear=${this._onClearHistory}
             @import=${this._onImportHistory}>
           </history-list>

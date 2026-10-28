@@ -263,8 +263,8 @@ async def rename_session(session_id: str, req: SessionRenameRequest):
 
 @router.patch("/sessions/{session_id}/star")
 async def star_session(session_id: str, req: SessionStarRequest):
-    """加星/取消加星（2026-09-17）：加星即置顶（排序键 starred DESC）+
-    删除保护；与改名同理不刷新 updated_at，避免打乱组内时间序。"""
+    """加星/取消加星：加星即置顶（starred DESC, updated_at DESC）+ 刷新
+    updated_at（星标组内按加星时间排第一）+ 删除保护。"""
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:

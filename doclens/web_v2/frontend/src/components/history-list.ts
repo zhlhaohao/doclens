@@ -73,6 +73,24 @@ export class HistoryList extends LitElement {
       color: var(--cortex-text);
       background: var(--cortex-surface-muted);
     }
+    .pin-btn {
+      background: transparent;
+      border: none;
+      padding: 2px 6px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-sm);
+      transition: color 0.15s, background 0.15s;
+      margin-right: 2px;
+    }
+    .pin-btn:hover {
+      color: var(--cortex-text);
+      background: var(--cortex-surface-muted);
+    }
+    .pin-btn.on {
+      color: var(--cortex-primary, var(--cortex-text));
+    }
     .actions {
       display: flex;
       align-items: center;
@@ -83,6 +101,38 @@ export class HistoryList extends LitElement {
       font-size: var(--cortex-fs-sm);
       text-align: center;
       padding: var(--cortex-space-6);
+    }
+    .pager {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--cortex-space-2);
+      padding: var(--cortex-space-2) 0 var(--cortex-space-3);
+    }
+    .pager button {
+      background: transparent;
+      border: 1px solid var(--cortex-border);
+      padding: 4px 12px;
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      border-radius: var(--cortex-radius-pill);
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .pager button:hover:not(:disabled) {
+      color: var(--cortex-text);
+      background: var(--cortex-surface-muted);
+    }
+    .pager button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .pager .page-info {
+      font-size: var(--cortex-fs-xs);
+      color: var(--cortex-text-subtle);
+      font-family: var(--cortex-font-mono);
+      min-width: 48px;
+      text-align: center;
     }
   `;
 
@@ -96,6 +146,12 @@ export class HistoryList extends LitElement {
   @property({ type: Boolean }) clearing = false;
   /** 高亮条目 id（重启恢复的「上次会话」纯展示高亮） */
   @property({ attribute: false }) activeId: string | null = null;
+  /** 当前页码（1-based）；仅当 hasMore=true 时展示翻页器 */
+  @property({ type: Number }) page = 1;
+  /** 是否还有更早的会话（上一页方向：page > 1；下一页方向：本页满 200 条） */
+  @property({ type: Boolean }) hasMore = false;
+  /** 星标置顶开关（父组件持有真实状态并负责排序与持久化） */
+  @property({ type: Boolean }) starPin = true;
 
   private _onClear() {
     if (this.clearing) return;
@@ -110,12 +166,32 @@ export class HistoryList extends LitElement {
     }));
   }
 
+  private _onPage(page: number) {
+    this.dispatchEvent(new CustomEvent("page-change", {
+      detail: { page }, bubbles: true, composed: true,
+    }));
+  }
+
+  private _onToggleStarPin() {
+    this.dispatchEvent(new CustomEvent("star-pin-change", {
+      detail: { value: !this.starPin }, bubbles: true, composed: true,
+    }));
+  }
+
   render() {
     const showBtn = this.sessions.length > 0;
     return html`
       <div class="header">
         <div class="title">${this.title}</div>
         <div class="actions">
+          <button
+            class="pin-btn ${this.starPin ? "on" : ""}"
+            title=${this.starPin
+              ? "加星条目置顶中，点击后加星与其他条目同等排序"
+              : "加星条目按时间混排中，点击恢复加星置顶"}
+            @click=${this._onToggleStarPin}>
+            ${this.starPin ? "★ 置顶" : "★ 混排"}
+          </button>
           ${this.importable ? html`
             <button
               class="import-btn"
@@ -139,6 +215,19 @@ export class HistoryList extends LitElement {
             (s) => s.id,
             (s) => html`<history-item .session=${s} ?active=${s.id === this.activeId}></history-item>`
           )}
+      ${this.hasMore
+        ? html`<div class="pager">
+            <button
+              ?disabled=${this.page <= 1}
+              @click=${() => this._onPage(this.page - 1)}>
+              上一页
+            </button>
+            <span class="page-info">${this.page}</span>
+            <button @click=${() => this._onPage(this.page + 1)}>
+              下一页
+            </button>
+          </div>`
+        : null}
     `;
   }
 }
