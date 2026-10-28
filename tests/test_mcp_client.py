@@ -165,9 +165,16 @@ def test_tool_registered_name():
 
 
 def _make_manager_with_sync_counter(monkeypatch):
-    """McpClientManager + _sync_runtime_tools 调用计数。"""
+    """McpClientManager + _sync_runtime_tools 调用计数。
+
+    隔离真实环境 JIMENG_API_KEY（~/.cortex/.env 文件直读，delenv 无效）——
+    patch builtin_server_configs 为空，防止内置 jimeng server 挂载污染对账
+    断言（2026-10-28 合并 1028-1 引入）。
+    """
+    from doclens import mcp_client
     from doclens.mcp_client import McpClientManager, _ServerConnection
 
+    monkeypatch.setattr(mcp_client, "builtin_server_configs", lambda: [])
     mgr = McpClientManager()
     calls = []
     monkeypatch.setattr(mgr, "_sync_runtime_tools", lambda: calls.append(1))

@@ -238,7 +238,8 @@ def test_builtin_server_configs_no_key(monkeypatch, tmp_path):
     from doclens import mcp_client
     from doclens.config import CortexConfig
 
-    monkeypatch.setattr(CortexConfig, "load", classmethod(lambda cls: cls()))
+    # 直读 ~/.cortex/.env（delenv 无效）——patch load 返回空配置
+    monkeypatch.setattr(CortexConfig, "load", classmethod(lambda cls: CortexConfig(_env_file=None)))
     configs = mcp_client.builtin_server_configs()
     assert configs == []
 
