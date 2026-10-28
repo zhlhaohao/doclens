@@ -43,6 +43,7 @@ from ..tools.basic import (
     shell_timeout,
     run_shell_with_tree_kill,
 )
+from ..tools.process_guard import check_kill_command
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,15 @@ class BackgroundManager:
                 tid, "Error: Dangerous command blocked",
             )
             return "Error: Dangerous command blocked"
+        # 终止进程自伤守卫：与同步 bash/powershell 同一判定——后台同样
+        # 不是绕行通道（防模型被拦后改走 background_run 杀宿主）。
+        kill_block = check_kill_command(command)
+        if kill_block:
+            logger.info(
+                "[audit][background] result | task=%s | status=blocked | %s",
+                tid, _audit_snippet(kill_block),
+            )
+            return kill_block
         with self._tasks_lock:
             self.tasks[tid] = {
                 "status": "running",

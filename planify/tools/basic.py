@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..skills.access_state import get_current_session_id
+from .process_guard import check_kill_command
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +403,10 @@ def _run_bash_impl(command: str, workdir: Path) -> str:
     if _is_dangerous(command):
         return "Error: Dangerous command blocked"
 
+    kill_block = check_kill_command(command)
+    if kill_block:
+        return kill_block
+
     try:
         workdir = Path(workdir)
         if not workdir.exists():
@@ -452,6 +457,10 @@ def _run_powershell_impl(command: str, workdir: Path) -> str:
 
     if _is_dangerous(command):
         return "Error: Dangerous command blocked"
+
+    kill_block = check_kill_command(command)
+    if kill_block:
+        return kill_block
 
     shell = _find_windows_shell()
     if not shell:
