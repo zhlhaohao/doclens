@@ -1,0 +1,8 @@
+<!-- 版式：image-right 文左图右。根容器四周留白 -->
+<div class="col" data-x="5%" data-y="4%" data-w="90%" data-h="92%">
+  <slot name="title" data-h="14%" data-min-h="10%" data-role="h1"/>
+  <div class="row" data-h="84%" data-gap="4%">
+    <slot name="content" data-grow="1"/>
+    <slot name="image" data-grow="1" data-fit="cover"/>
+  </div>
+</div>

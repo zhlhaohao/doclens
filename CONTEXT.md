@@ -4,6 +4,23 @@
 
 ## 术语
 
+### PPTX 生成技能（pptx-gen skill）
+
+- **PPT 中间格式 (PPT Intermediate Format)**：介于自然语言与 PPTX 二进制之间的 Markdown 表示——文档级元数据走 YAML frontmatter（主题/比例/作者），页级与块级指令走 HTML 注释（`<!-- slide: ... -->`），正文是合法 CommonMark。是 pptx-gen 技能的唯一生成物与转换器的唯一输入；源文件 `<名>.md` 与产物 `<名>.pptx` 同目录落知识库（deck 源即知识，随 Git 同步）。_Avoid_: PPT DSL、PPT 源码。
+- **转换器 (Converter)**：中间格式 md → PPTX 的独立 Python 脚本（`converter/` 包，CLI 入口），随技能分发但可脱离技能单独运行。失败语义 = 警告 + 降级（未知版式→title-content、未知动画词→fade、缺图→占位框），永远产出 PPTX。_Avoid_: 把转换逻辑写进 SKILL.md 文字里。
+- **页指令 (Slide Directive)**：HTML 注释承载的单页配置（版式/动画/背景等），置于每页内容之前。与「frontmatter」（文档级，全局默认值）分层：frontmatter 定全局，页指令做覆盖。
+- **主题 (Theme)**：打包整套视觉默认值的命名资产（色板、字体、母版装饰），JSON 定义、随技能内置分发、支持用户扩展自定义主题。frontmatter 的 `theme` 键按名引用。_Avoid_: 模板（template，指版式或母版文件，另一回事）、皮肤。
+- **主题角色 (Theme Role)**：主题内具名的颜色/字体槽位（如 `primary`/`accent`/`bg`/`text`），中间格式中颜色的**首选表达**——引用角色名而非色值，十六进制色值仅为逃生舱，技能提示词引导优先用角色名。_Avoid_: 直接叫「颜色」(color)。
+- **版式资产 (Layout Asset)**：预设版式的载体——HTML 文件（`layouts/<版式名>.html`），版式名 = 文件名，按名引用、可独立扩展。HTML 中 slot 元素声明内容占位框，容器支持行列嵌套 + grow 比例分配（受限布局引擎，非完整 CSS 渲染）。_Avoid_: 版式代码（已从代码常量升级为资产文件）、模板 (template，PPT 模板文件是另一回事)。
+- **受限布局引擎 (Constrained Layout Engine)**：版式 HTML 的布局求值器——仅支持行/列容器嵌套、`grow` 比例分配、`gap` 间距与显式百分比坐标四原语，将 slot 解析为矩形占位框。有意不实现完整 CSS（grid/绝对定位/文本度量）。_Avoid_: CSS 渲染器。
+- **行内白名单 (Inline Whitelist)**：正文中允许出现的 HTML 行内标签封闭集合——`<mark>`（高亮）、`<span class="角色名">`（文字引用主题角色色）、`<br>`（软换行）三个，其余排版一律用 MD 原生（粗体/斜体/代码/删除线）。有意不提供 inline 字号——字号只走主题阶梯，标题层级表达强调。_Avoid_: 开放式 HTML 内嵌。
+- **动画词 (Animation Token)**：白名单封闭集合的动画词汇（`enter.fly-in` / `exit.fade` / `emphasize.pulse`…，点分命名 = 类别.动作），每个词对应一张经验证的 `p:timing` XML 模板。白名单外词汇警告并降级为 fade，不中断转换。_Avoid_: 开放式动画参数。
+- **动画策略 (Animation Policy)**：页指令声明的批量动画规则（`anim=bullets:词` / `anim=all:词` / `anim=none`）——页级声明自动套用到列表项或全页元素，免去逐块注释；块级 `anim=` 覆盖页级。与「切换」(transition，页到页过渡，p:transition) 互不相干。
+- **适配 (Fit)**：图片块指令的变形策略三值——`cover`（填满裁剪，默认）/ `contain`（完整留白，图表截图默认）/ `stretch`（拉伸变形，不推荐但保留）。有意不提供像素级裁剪参数。_Avoid_: 裁剪 (crop)。
+- **占位图 (Image Placeholder)**：引用的图片文件缺失时转换脚本的降级产物——渲染占位框 + alt 文字 + 警告，不中断转换。与「占位节点」（视觉解析概念）无关。
+- **图表块 (Chart Block)**：`<!-- block: chart type=bar|line|pie -->` 指令 + 紧随的 MD 表格作为数据源，渲染为 PPTX 原生图表（Office 内可编辑数据），非图片。_Avoid_: 数据截图。
+- **备注 (Notes)**：`<!-- notes: ... -->` 页指令——渲染到 PPTX 演讲者备注窗格的页面附注，不进入幻灯片画面。
+
 - **个人助手 (Personal Assistant)**：chat 视图（AI 会话页）的**用户可见名称**——导航 tab 标签、hero「你的个人 AI 助手」（2026-10-14 同日四个 tab 统一四字命名：全库搜索/个人助手/岁月微笺/文件管理）。仅改显示层文案：ViewId/路由/组件名仍为 `chat`，历史文档中「对话 tab / 对话页」指同一对象。_Avoid_: 以为代码层有"assistant"标识符。
 - **图像文件 (Image File)**：知识库中以独立文件存在的图像，扩展名集合见「图像解析」相关决策（候选：.png/.jpg/.jpeg/.webp/.gif/.bmp/.tiff）。与「内嵌图片」严格区分。
 - **内嵌图片 (Embedded Image)**：存在于 docx/pptx/pdf 等富文档内部的图片，由对应 parser 提取后经 ImageStore 落盘，仅用于预览。**不**进入视觉理解索引流程（2026-07-25 决议：本期不做）。
@@ -169,7 +186,22 @@
 - **插话 (Interjection)**：用户在**生成进行中**经思考过程框发起的旁路询问——注入工具循环（循环顶检查点、不打断在飞步骤），模型只做**文字汇报**（工具表置空的确定性双阶段：先无工具调用产汇报，后恢复工具循环），回合**不结束**、原任务继续。生效时机 = 循环顶检查点消费会话级**单槽位**（不排队、不持久化，`POST /api/chat/interject`）；回合结束仍未消费 → **丢弃 + toast**（不转正式消息）；轮次预算不计插话轮、纯轮询退避可被插话提前唤醒、仅主循环感知（子代理/teammate 不插话）、恢复态（generating）入口可用。展示 = 思考过程时间线内的插话卡（用户问题 + 汇报，`interject_ack`/`interject_report` 双事件、汇报一次性推送），落库复用该回合 tool_calls 数组合成条目（`name: "user_interject"`，input.question + output=汇报）；插话问答是真实 LLM 历史消息，随 raw_messages 自然回放，回放层零改动。与邻居的边界：≠ **交互式提问**（agent 问用户，waiter 阻塞回合内等待）、≠ **对话式提问**（降级形态，回合终止等下一条消息）、≠ **主动停止**（杀伤任务）、≠ **思考流**（被动接收模型推理文字）——插话是唯一「**用户发起 + 回合不结束**」的形态。见 ADR-0048。_Avoid_: 与「中断」混用（中断=停止语义）、把插话落成 message_user（会劈裂回放轮次）。
 - **套餐额度 (Plan Quota)**：LLM 模型预设行上展示的订阅/余额状态（2026-10-27 决议）——按预设 base_url 子串识别供应商体系（GLM 国内/Z.AI、Kimi、MiniMax、DeepSeek），进设置页 AI tab 时逐预设并发实时查询（无持久缓存、异步不阻塞、密钥不出后端）。两种形态：**窗口限额**（Coding Plan 订阅：5 小时 + 每周窗口的已用百分比整数；Kimi 新会员无周窗口则省略该槽位、老会员两槽；MiniMax 只取 general 组；GLM 每月 MCP 不展示）与**账户余额**（DeepSeek 按量付费：`余额 ¥X`，is_available=false 红色警示）。桌面端 `5h 已用 X% · 周 已用 Y%`；移动端（<1024px）紧凑迷你标签 `5hX% 周Y%`；≥90% 红色。状态三态：查询中骨架 / 失败可重试 / 有效但无数据显示「无套餐额度」（非订阅 key）；base_url 不识别的预设保持原静态元信息行（模型ID·协议·上下文…）。仅在 LLM（AI 对话）组展示，视觉/翻译组不变。_Avoid_: 叫「配额」（与限流 rate limit 混淆）、叫「用量」（usage 已专指 LLM token 统计——见「usage 归一契约」）。
 
+- **即梦文生图 (Jimeng Text-to-image)**：经 MCP server（`mcp__jimeng__*` 工具前缀）暴露的 AI 图片生成能力，核心为火山方舟 Seedream API 客户端（即梦同源模型，Bearer API Key 鉴权、同步单次 HTTP 返回）。定位为 doclens 一部分（仓库内 jimeng 模块：核心客户端 + MCP stdio server 壳 + CLI 直调入口），不单独发版。代码级内置注册（GUI 启动自动挂载，配置 key 即有工具，无需设置页手填）。生成图片**落盘知识库**为「图像文件」新来源（第四来源，与上传/知识库存量/文档提取无关）——下载进工作目录约定子目录，进索引、可搜、随 Git 同步；工具结果返回本地路径，不返回临时 URL（约 24h 过期）或 base64。API Key 在全局配置（`~/.doclens/.env` / 开发 `~/.cortex/.env`）。_Avoid_: 做成 planify 内置 tool（外部能力应走 MCP 插槽）、只返回 URL（链接腐烂，生成物不进记忆）。
+
+- **即梦生成工具 (Jimeng Generate Tool)**：即梦文生图的唯一 MCP 工具面——单工具 `generate`（前缀展开 `mcp__jimeng__generate`）：prompt 必填；可选参考图路径（复用同一框架的图生图/多图融合，不单设 edit 工具）、张数、size、model、seed、**落盘目录（output_dir，未指定兜底 `图片/AI/`）**，均有默认值。文件名 = prompt slug + 时间戳，下载格式固定 png。。默认模型 `doubao-seedream-4-0`（全局配置可覆盖）。_Avoid_: 拆双工具（文生图/图编辑 80% 参数重叠）、全参数透传（描述臃肿、误配风险）。
+
+- **同步生成语义 (Synchronous Generation)**：`generate` 工具阻塞到生成 + 下载落盘完成才返回（返回即本地路径），MCP 条目 timeout 120s 兜底。失败/超时即时报错供 agent 重试。_Avoid_: 异步任务对（submit+poll，适合分钟级视频、对秒级图片过度设计）、后台任务+宿主通知通道（侵入不成比例）。
+
+- **生成图元数据写回 (Generated-image Prompt Writeback)**：即梦生成图落盘时把 prompt 写进图像元数据（复用图像元数据写回机制），使生成图不花视觉调用即可被全文搜索；force 重建经写回-读回闭环读回 prompt，不重花 API。生成图**默认不入视觉解析队列**——prompt 即自描述，视觉识别自己刚生成的图属重复消费；`describe` 参数可选入队（图生图场景 prompt 不完整描述画面时才有增量价值）。_Avoid_: 与上传图同权自动入队（每张多一次视觉调用）。
+- **即梦 CLI (Jimeng CLI)**：skill/脚本直调入口 = 挂现有 CLI 路由的子命令 `doclens jimeng generate "prompt" [--size --n --ref]`，与 MCP server 共享同一核心客户端（单一真相源）。双形态调用：发行版 `doclens jimeng ...`，开发版 `.venv/Scripts/python.exe -m doclens jimeng ...`——同一模块零重复实现，模式由 `is_installed_mode()` 自动分对配置目录；skill 文本内预写双形态命令 + 按所在实例身份选择（先例：pytest 双形态惯例），技能按实例各存全局副本。
+
+- **即梦配置 (Jimeng Config)**：全局 `.env` 单键粒度——`JIMENG_API_KEY`（火山方舟 Bearer key）+ `JIMENG_MODEL`（缺省 `doubao-seedream-4-0`）；工具/CLI 的 model 参数可临时覆盖。_Avoid_: 接入模型预设体系（生图单厂商单参数，预设过重）、写死无覆盖。
+
 ## 决议摘要（详见 docs/adr/）
+
+- 2026-10-28：pptx-gen 技能与 PPT 中间格式（ADR-0049）= LLM 产出中间格式 md（frontmatter + `<!-- slide/block: -->` 注释指令 + 合法 CommonMark 正文），converter 编译为 PPTX。颜色走主题角色名（JSON 主题资产 ×4，hex 逃生舱）；版式走 HTML 版式资产（受限布局引擎四原语，非完整 CSS，blank 版式坐标逃生舱）；排版 MD 原生 + 3 标签行内白名单、无 inline 字号；动画封闭白名单（手工注入 p:timing XML，页级默认策略 + 块级覆盖，默认 after/0.3s 递增）；图片 MD 原生 + fit 三值 + 缺图占位；mermaid 经 mmdc/npx 渲染 PNG；失败语义 = 警告降级永不中断（未知词全部有降级位）；图表块（chart=bar/line/pie + MD 表格数据源）渲染原生可编辑图表；产物 md/pptx 同目录落知识库。语法规范 `doclens/skills/pptx-gen/SCHEMA.md`。
+
+- 2026-10-28：即梦文生图 = doclens 内置 MCP server（仓库内 jimeng 模块：Ark Seedream 客户端核心 + stdio server 壳 + CLI 子命令 `doclens jimeng generate`，不进 dist-workspace 不单独发版）。代码级内置注册（GUI 启动自动挂载、配 key 即有工具、无先例小改 mcp_client）；**隐藏注册不进设置页 MCP tab**（未配 key 时工具直接缺席——agent 感知不到省 token；无 UI 开关，停用靠删 key，对齐 VISION_* 内置能力先例）；单工具 `generate`（prompt 必填 + 参考图/张数/size/model/seed 可选默认值，图生图复用同框架不拆双工具）；同步阻塞语义（timeout 120s，否决 submit+poll 与后台通知通道）；生成图落盘知识库（图像文件第四来源，进索引随 Git 同步，返回本地路径非 URL），**落盘目录由调用者经工具参数决定**（未指定时兜底 `图片/AI/`），文件名 = prompt slug + 时间戳，格式 png；prompt 写进图像元数据（写回-读回闭环零视觉调用、默认不入视觉队列、describe 参数可选入队）；全局 .env 单键 `JIMENG_API_KEY`+`JIMENG_MODEL`（否决预设体系接入）。
 
 - 2026-10-23：插话 (User Interjection)（ADR-0048）= 生成中途的旁路询问——循环顶检查点消费会话级单槽位（不排队、不持久化、`POST /api/chat/interject`），确定性双阶段（注入 `<user-interjection>` 模板不补 ack → suppress_tools 调用产纯文字汇报 → 循环继续、回合不结束）；不打断在飞步骤、退避可提前唤醒、轮次预算不计、仅主循环感知、恢复态可用；回合结束未消费丢弃 + toast；展示为思考过程时间线插话卡（`interject_ack`/`interject_report` 双事件、汇报一次性推送），落库 tool_calls 合成条目 `user_interject`（回放层零改动）。否决：仅提示词软约束、立即打断、多排队、逐 token 流、独立气泡、message_user 落库。
 

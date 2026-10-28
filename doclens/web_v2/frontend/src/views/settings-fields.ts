@@ -40,6 +40,9 @@ export interface SettingsField {
   /** switch 反转语义：env 值非空/非"false" = 关（用于 *_DISABLE 型键：
    *  env "1" → 开关 off，env 空/"false" → 开关 on）。保存仍写原键原值。 */
   invert?: boolean;
+  /** 字段级动作按钮（如「测试」）：点击调 probe API，结果显示在字段下方。
+   *  label = 按钮文案；probe = 前端 api/probe 动作名（jimeng）。 */
+  action?: { label: string; probe: "jimeng" };
 }
 
 export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
@@ -68,6 +71,7 @@ export const FIELD_DEFAULTS: Record<string, string> = {
   CORTEX_SYNC_ENABLED: "true",
   CORTEX_MEMORY_DISABLE: "",
   VISION_AUTO_ROTATE: "true",
+  JIMENG_MODEL: "doubao-seedream-4-0",
   PLANIFY_OUTSIDE_WORKDIR: "ask",
   PLANIFY_ASK_MODE: "interactive",
   PLANIFY_THINKING_DEPTH: "auto",
@@ -86,6 +90,7 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   PLANIFY_MAX_TOOL_ROUNDS: "0",
   PLANIFY_MAX_SUBAGENT_ROUNDS: "30",
   PLANIFY_LLM_TRACE: "0",
+  JIMENG_MODEL: "doubao-seedream-4-0",
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
@@ -101,6 +106,26 @@ export const SETTINGS_FIELDS: SettingsField[] = [
     label: "百度地图开放平台 AK",
     component: "password",
     hint: "供日记录入时抓取城市天气。需在百度地图开放平台申请；留空则日记不带天气（不影响其他功能）。保存后即时生效。",
+  },
+
+  // ===== 即梦文生图（ai tab；2026-10-28：配 key 即挂载内置 MCP 工具） =====
+  {
+    tab: "ai",
+    section: "即梦文生图",
+    envVar: "JIMENG_API_KEY",
+    label: "火山方舟 API Key",
+    component: "password",
+    action: { label: "测试", probe: "jimeng" },
+    hint: "即梦 AI 文生图（火山方舟 Seedream，即梦同源模型）。配置后约 10 秒内自动挂载 jimeng 生成工具（对话中可让 AI 生成图片，生成图落盘知识库）；留空则工具缺席。火山方舟控制台获取。保存后即时生效。",
+  },
+  {
+    tab: "ai",
+    section: "即梦文生图",
+    envVar: "JIMENG_MODEL",
+    label: "默认模型 ID",
+    component: "text",
+    mono: true,
+    hint: "留空 = doubao-seedream-4-0；生成时可用参数临时覆盖（如 doubao-seedream-3-0-t2i）。",
   },
 
   // ===== 图像自动旋转（ai tab，视觉模型相关；ADR-0017） =====

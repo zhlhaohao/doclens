@@ -13,7 +13,7 @@ import {
   type SettingsField,
   type SettingsTab,
 } from "./settings-fields";
-import { getConfig, putConfig, ConfigApiError } from "../api/config";
+import { getConfig, putConfig, ConfigApiError, probeJimeng } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
 import "../components/password-section";
@@ -579,6 +579,9 @@ export class SettingsView extends LitElement {
   @state() private _exists = true;
   @state() private _scope: SettingsScope = "global";
   @state() private _fieldErrors: Record<string, string> = {};
+  /** 字段级探测（action 按钮）：进行中的字段 envVar → 结果 {ok,message} */
+  @state() private _probingField: string | null = null;
+  @state() private _probeResults: Record<string, { ok: boolean; message: string }> = {};
 
   private _unsubscribe?: () => void;
   private _loadGen = 0;            // invalidate stale loads (I1)
@@ -756,15 +759,62 @@ export class SettingsView extends LitElement {
     }
   }
 
-  private _renderField(f: SettingsField) {
-    const value = this._values[f.envVar] ?? "";
+  /** 字段级动作（action 按钮）：jimeng 探测——用表单当前值调后端
+   *  probe API，结果显示在字段下方（成功绿 / 失败红）。 */
+  private async _probeFieldAction(f: SettingsField) {
+    if (!f.action) return;
+    if (f.action.probe === "jimeng") {
+      this._probingField = f.envVar;
+      try {
+        const r = await probeJimeng(
+          this._values["JIMENG_API_KEY"] ?? "",
+          this._values["JIMENG_MODEL"] ?? "",
+        );
+        this._probeResults = {
+          ...this._probeResults,
+          [f.envVar]: { ok: r.ok, message: r.ok ? `✓ ${r.message}` : `✗ ${r.message}` },
+        };
+      } catch (e: unknown) {
+        this._probeResults = {
+          ...this._probeResults,
+          [f.envVar]: {
+            ok: false,
+            message: `✗ 测试失败: ${e instanceof Error ? e.message : "未知错误"}`,
+          },
+        };
+      } finally {
+        this._probingField = null;
+      }
+    }
+  }
+
+  private _renderField(f: SettingsField) {    const value = this._values[f.envVar] ?? "";
     return html`
       <div class="field">
         <div class="field-label">
           <div class="name">${f.label}</div>
         </div>
         <div class="field-control">
-          <div class="row">${this._renderInput(f, value)}</div>
+          <div class="row">
+            ${this._renderInput(f, value)}
+            ${f.action
+              ? html`<button
+                  class="btn"
+                  type="button"
+                  style="flex: none;"
+                  ?disabled=${this._probingField === f.envVar}
+                  @click=${() => this._probeFieldAction(f)}
+                >${this._probingField === f.envVar ? "测试中…" : f.action.label}</button>`
+              : nothing}
+          </div>
+          ${this._probeResults[f.envVar]
+            ? html`<div
+                class="field-error"
+                style=${this._probeResults[f.envVar]!.ok
+                  ? "color: var(--cortex-success);"
+                  : ""}
+              >${this._probeResults[f.envVar]!.message}</div>`
+            : nothing}
           ${this._fieldErrors[f.envVar] ? html`<div class="field-error">${this._fieldErrors[f.envVar]}</div>` : nothing}
         </div>
         ${this._renderDesc(f)}

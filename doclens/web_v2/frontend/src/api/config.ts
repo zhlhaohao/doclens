@@ -55,8 +55,25 @@ export async function putConfig(
   return body as ConfigSaveResult;
 }
 
-export async function copyFromGlobal(): Promise<{ ok: boolean; saved_path: string }> {
-  const resp = await fetch("/api/config/copy-from-global", { method: "POST" });
+// 即梦配置探测（POST /api/config/probe-jimeng）：key/model 传表单当前值，
+// key 为空或 *** 时后端回退已保存值
+export async function probeJimeng(
+  api_key: string,
+  model: string,
+): Promise<{ ok: boolean; message: string; model: string }> {
+  const resp = await fetch("/api/config/probe-jimeng", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key, model }),
+  });
+  const body = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new ConfigApiError(resp.status, body);
+  }
+  return body as { ok: boolean; message: string; model: string };
+}
+
+export async function copyFromGlobal(): Promise<{ ok: boolean; saved_path: string }> {  const resp = await fetch("/api/config/copy-from-global", { method: "POST" });
   const body = await resp.json().catch(() => null);
   if (!resp.ok) {
     throw new ConfigApiError(resp.status, body);

@@ -182,6 +182,8 @@ def create_app() -> FastAPI:
     app.include_router(ask.router, prefix="/api")
     from doclens.web_v2.api import config
     app.include_router(config.router, prefix="/api")
+    from doclens.web_v2.api import probe_jimeng
+    app.include_router(probe_jimeng.router, prefix="/api")
     from doclens.web_v2.api import presets
     app.include_router(presets.router, prefix="/api")
     from doclens.web_v2.api import files
