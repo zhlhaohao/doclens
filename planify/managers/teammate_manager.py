@@ -32,10 +32,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+
+logger = logging.getLogger("planify.teammate")
 
 from ..core.config import injection_ack_enabled
 from ..core.llm.provider import LLMProvider
@@ -319,10 +322,32 @@ class TeammateManager:
                             tracer=tracer,
                         )
                     except Exception:
+                        logger.exception("[teammate:%s] LLM 调用失败，队友关闭", name)
                         self._set_status(name, "shutdown")
                         return
 
-                    messages.append({"role": "assistant", "content": response.content})
+                    # 响应内容块序列化为 dict 再入 messages——dataclass
+                    # （ToolUseBlock/TextBlock 等）直接 append 会让下轮请求
+                    # 在 SDK JSON 序列化时炸 TypeError（与 subagent runner 的
+                    # assistant_blocks 转换同构）
+                    assistant_blocks = []
+                    for b in response.content:
+                        if isinstance(b, dict):
+                            assistant_blocks.append(b)
+                            continue
+                        block_type = getattr(b, "type", None)
+                        if block_type == "text":
+                            assistant_blocks.append({"type": "text", "text": getattr(b, "text", "")})
+                        elif block_type == "tool_use":
+                            assistant_blocks.append({
+                                "type": "tool_use",
+                                "id": b.id,
+                                "name": b.name,
+                                "input": dict(b.input or {}),
+                            })
+                        else:
+                            assistant_blocks.append({"type": block_type or "unknown", "raw": str(b)})
+                    messages.append({"role": "assistant", "content": assistant_blocks})
                     if response.stop_reason != "tool_use":
                         break
 
