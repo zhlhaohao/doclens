@@ -89,6 +89,29 @@ export const cjkInlineMath: any = {
   },
 };
 
+/** 知识库图像路径 → /api/preview/raw URL（AI 气泡内嵌图，2026-10-28）。
+ *
+ *  jimeng 生成工具返回本地路径，agent 会把路径写进 markdown
+ *  （`![...](图片/AI/xx.png)` 或裸路径行）。这里识别 workdir 内的
+ *  图像扩展名路径，重写为服务端 URL——图直接在气泡里可见。
+ *  返回 null 表示不是图像路径（不重写）。 */
+const KB_IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|tiff?)([?#].*)?$/i;
+
+export function kbImageUrl(path: string): string | null {
+  let p = (path || "").trim();
+  if (!p || p.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(p)) {
+    return null; // 锚点 / 带协议 URL（含 data:）不处理
+  }
+  if (!KB_IMAGE_EXT_RE.test(p)) return null;
+  // Windows 绝对路径兜底（agent 可能写回绝对路径）：剥盘符按相对处理
+  p = p.replace(/\\/g, "/");
+  if (/^[a-z]:/i.test(p)) p = p.slice(2);
+  const rel = p.split(/[?#]/)[0];
+  const resolved = rel.split("/").filter((s) => s !== "" && s !== ".").map(encodeURIComponent).join("/");
+  if (!resolved || resolved.split("/").includes("..")) return null;
+  return `/api/preview/raw?path=${resolved}`;
+}
+
 /** 创建配置好 KaTeX 的 marked 实例：$...$ 行内（含 CJK 兜底）/ $$...$$ 块级 +
  *  单行 $$...$$ 兜底；throwOnError:false 非法公式渲染为红色源码而非抛错。
  *
@@ -101,5 +124,19 @@ export function createMathMarked(): Marked {
   md.use(markedKatex({ throwOnError: false }));
   md.use({ extensions: [cjkInlineMath, singleLineDisplayMath] });
   md.use({ breaks: true });
+
+  // 知识库图像内联（AI 气泡）：md image 的 href 是 workdir 内图像路径时
+  // 重写为 /api/preview/raw URL——jimeng 生成图等直接在气泡里看到。
+  md.use({
+    renderer: {
+      image(token: any) {
+        const rawHref: string = token.href ?? "";
+        const url = kbImageUrl(rawHref) ?? rawHref;
+        const title = token.title ? ` title="${String(token.title).replace(/"/g, "&quot;")}"` : "";
+        const alt = String(token.text ?? "").replace(/"/g, "&quot;");
+        return `<img class="kb-img" src="${url}" alt="${alt}"${title} loading="lazy">`;
+      },
+    },
+  });
   return md;
 }

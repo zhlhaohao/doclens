@@ -432,6 +432,20 @@ class CortexConfig(BaseSettings):
         "显式开启；还需已配置视觉 API（VISION_API_KEY），开启后原样/歪图均照转判",
     )
 
+    # 即梦文生图（2026-10-28 决议：MCP server 内置注册，配 key 即有工具；
+    # 不进设置页字段白名单——内置能力对齐 VISION_* 先例，无 UI 开关）
+    jimeng_api_key: Optional[str] = Field(
+        default=None,
+        alias="JIMENG_API_KEY",
+        description="即梦文生图（火山方舟 Seedream）API Key；为空时 jimeng "
+        "MCP 工具缺席（agent 感知不到）。火山方舟控制台获取",
+    )
+    jimeng_model: str = Field(
+        default="doubao-seedream-4-0",
+        alias="JIMENG_MODEL",
+        description="即梦文生图默认模型 ID（工具/CLI 的 model 参数可临时覆盖）",
+    )
+
     @classmethod
     def _init_first_run(cls):
         """首次运行引导：把包内打包的 .env.example 和 skills/ 拷贝到数据目录。

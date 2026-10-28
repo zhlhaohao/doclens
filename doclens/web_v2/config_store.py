@@ -59,6 +59,10 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "CORTEX_TRANSLATE_LANG_OUT",
     # 百度天气 API（日记录入时抓城市天气；空 = 不带天气，不阻断日记）
     "BAIDU_WEATHER_AK",
+    # 即梦文生图（2026-10-28）：火山方舟 Seedream API；配 key 即挂载内置
+    # jimeng MCP 工具（≤10s reconcile 自动生效）。MODEL 空 = 默认 4.0
+    "JIMENG_API_KEY",
+    "JIMENG_MODEL",
     # Search
     "CORTEX_MAX_RESULTS",
     "CORTEX_MAX_SPAN",
@@ -101,7 +105,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
 })
 
 # 敏感凭据：GET 接口脱敏返回，PUT 时占位符跳过（防泄露 + 防回写覆盖真值）
-SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK", "CORTEX_TRANSLATE_ENVS"})
+SECRET_KEYS: frozenset[str] = frozenset({"PLANIFY_API_KEY", "VISION_API_KEY", "BAIDU_WEATHER_AK", "CORTEX_TRANSLATE_ENVS", "JIMENG_API_KEY"})
 SECRET_MASK = "***"
 
 

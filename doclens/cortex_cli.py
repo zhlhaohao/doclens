@@ -893,6 +893,10 @@ def _build_parser():
     auth_sub.add_parser("reset", help="清除访问密码并吊销所有会话（忘记密码时使用）")
     auth_parser.set_defaults(func=_cli_auth_reset)
 
+    # cortex jimeng generate <prompt>（即梦文生图，2026-10-28）
+    from doclens.jimeng.cli import register_parser as _register_jimeng
+    _register_jimeng(sub)
+
     return parser
 
 
@@ -1247,9 +1251,11 @@ def main():
     setup_logging()
 
     if args.command is not None:
-        if args.command in ("auth", "tui"):
+        if args.command in ("auth", "tui", "jimeng"):
             # auth reset：索引损坏时也必须可用；tui：自管首启引导与索引
-            # 检查（不经 _init_components——保持原「裸命令进 TUI」时代行为）
+            # 检查（不经 _init_components——保持原「裸命令进 TUI」时代行为）；
+            # jimeng：生成不需要索引组件（handler 自行 CortexConfig.load()，
+            # describe 入队才只读打开索引库）
             args.func(args, None, None)
             return
         config, idx = _init_components()

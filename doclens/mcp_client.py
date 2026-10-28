@@ -61,6 +61,56 @@ def tool_registered_name(server_name: str, tool_name: str) -> str:
     return f"mcp__{server_name}__{tool_name}"
 
 
+# 内置 MCP server 注册 id 前缀（与 mcp_servers.json 的 uuid id 空间隔离）
+BUILTIN_ID_PREFIX = "builtin-"
+
+# jimeng 同步生成语义的条目超时（秒；工具内一次生成+下载典型 5-30s）
+JIMENG_TIMEOUT = 120.0
+
+
+def builtin_server_configs() -> List[dict]:
+    """内置 server 配置清单（隐藏注册，不进 mcp_servers.json / 设置页）。
+
+    2026-10-28 决议：jimeng（即梦文生图）——配置了 JIMENG_API_KEY 才挂载；
+    spawn 命令用 ``sys.executable -m doclens.jimeng``（发行版/开发版各自的
+    解释器，自动落对配置目录）。cwd = 当前工作目录（GUI 的知识库根），
+    使子进程 CortexConfig.load() 的 search_path 默认与宿主一致。
+
+    PYTHONPATH 注入：GUI 运行的 doclens 源码位置随本配置传给子进程——
+    worktree 形态下 venv 的 editable finder 写死指向主仓，不注入会解析到
+    主仓副本（无 jimeng 模块，spawn 即失败）。发行版 site-packages 下
+    指向同目录无副作用。env 合并 SDK 默认环境（PATH/SYSTEMROOT 等，
+    Windows 缺 SYSTEMROOT 子进程无法起 socket/SSL）。
+    """
+    import sys
+    from pathlib import Path
+
+    import doclens
+    from doclens.config import CortexConfig
+    from mcp.client.stdio import get_default_environment
+
+    configs: List[dict] = []
+    try:
+        cfg = CortexConfig.load()
+        if getattr(cfg, "jimeng_api_key", None):
+            # doclens/__init__.py 的 parent = 包目录；其 parent = 仓库根/site-packages
+            repo_root = str(Path(doclens.__file__).resolve().parent.parent)
+            configs.append({
+                "id": BUILTIN_ID_PREFIX + "jimeng",
+                "name": "jimeng",
+                "transport": "stdio",
+                "command": sys.executable,
+                "args": ["-m", "doclens.jimeng"],
+                "env": {**get_default_environment(), "PYTHONPATH": repo_root},
+                "cwd": None,  # 继承宿主 cwd（= 知识库工作目录）
+                "timeout": JIMENG_TIMEOUT,
+                "enabled": True,
+            })
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[mcp-client] 内置 server 配置读取失败: %s", e)
+    return configs
+
+
 def normalize_tool_result(result: CallToolResult) -> str:
     """把 ``CallToolResult`` 归一为 planify handler 的 str 返回值（ADR-0014 §7）。
 
@@ -240,6 +290,12 @@ class McpClientManager:
         except Exception as e:  # noqa: BLE001
             logger.warning("[mcp-client] 读取配置失败，本轮跳过: %s", e)
             return
+
+        # 内置注册（2026-10-28 决议）：jimeng（即梦文生图）随 GUI 自动挂载，
+        # 不在 mcp_servers.json（隐藏注册，对齐 VISION_* 内置能力先例）——
+        # 未配 JIMENG_API_KEY 时工具直接缺席（agent 感知不到，省 token）。
+        # 每轮现查配置：key 后配/删除 ≤ RECONCILE_INTERVAL 内自动生效。
+        snapshot.extend(builtin_server_configs())
 
         by_id = {s.get("id"): s for s in snapshot}
         dirty = False
@@ -502,15 +558,22 @@ class McpClientManager:
         except Exception as e:  # noqa: BLE001
             logger.warning("[mcp-client] 状态查询读配置失败: %s", e)
             snapshot = []
+        snapshot.extend(builtin_server_configs())
         for cfg in snapshot:
             server_id = cfg.get("id")
             conn = self._connections.get(server_id)
+            builtin = str(server_id or "").startswith(BUILTIN_ID_PREFIX)
             if conn is None or not cfg.get("enabled", True):
                 out.append({
                     "server_id": server_id,
-                    "status": STATUS_DISABLED if not cfg.get("enabled", True) else STATUS_CONNECTING,
+                    "status": (
+                        STATUS_DISABLED
+                        if not cfg.get("enabled", True)
+                        else STATUS_CONNECTING
+                    ),
                     "tool_count": 0,
                     "error": None,
+                    "builtin": builtin,
                 })
             else:
                 out.append({
@@ -518,6 +581,7 @@ class McpClientManager:
                     "status": conn.status,
                     "tool_count": len(conn.tools),
                     "error": conn.error,
+                    "builtin": builtin,
                 })
         return out
 

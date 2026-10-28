@@ -307,6 +307,12 @@ export class ChatMessageEl extends LitElement {
       width: 96px; height: 96px; object-fit: cover; border-radius: 8px;
       border: 1px solid var(--cortex-border); cursor: zoom-in; display: block;
     }
+    /* 知识库图像内联（jimeng 生成图等，2026-10-28）：md-body 内的 kb-img */
+    .md-body img.kb-img {
+      max-width: min(360px, 100%); max-height: 360px; object-fit: contain;
+      border-radius: 8px; border: 1px solid var(--cortex-border);
+      cursor: zoom-in; display: block; margin: 8px 0;
+    }
     dialog.img-preview-dialog {
       border: none; padding: 0; background: transparent; max-width: 92vw; max-height: 92vh;
     }
@@ -398,9 +404,19 @@ export class ChatMessageEl extends LitElement {
   };
 
   /** 事件委托：命中 .ref-link 时派发 reference-click（供 chat-view 打开预览）；
+   *  命中 img.kb-img 时全屏预览（复用对话图片的 img-preview-dialog）；
    *  未命中时移动端走气泡点击切换（操作行浮现）。 */
   private _onClick = (e: MouseEvent): void => {
-    const target = e.composedPath().find(
+    const path_ = e.composedPath();
+    const kbImg = path_.find(
+      (n): n is HTMLImageElement =>
+        n instanceof HTMLImageElement && n.classList.contains("kb-img"),
+    );
+    if (kbImg) {
+      this._imgPreview = kbImg.src;
+      return;
+    }
+    const target = path_.find(
       (n): n is HTMLElement =>
         n instanceof HTMLElement && n.classList.contains("ref-link"),
     );
