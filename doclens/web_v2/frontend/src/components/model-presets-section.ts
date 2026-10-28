@@ -384,13 +384,22 @@ export class ModelPresetsSection extends LitElement {
 
   private _toastTimer?: number;
 
+  /** keep-alive view 下 connectedCallback 仅首次触发（app.ts 挂载后 [hidden]
+   *  切换）；可见时重查额度，避免显示陈旧数据。同 password-section 模式。 */
+  private _observer?: IntersectionObserver;
+
   connectedCallback() {
     super.connectedCallback();
     this._load();
+    this._observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) this._loadQuotas();
+    });
+    this._observer.observe(this);
   }
 
   disconnectedCallback() {
     if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
+    this._observer?.disconnect();
     super.disconnectedCallback();
   }
 
@@ -414,6 +423,8 @@ export class ModelPresetsSection extends LitElement {
   }
 
   private async _fetchQuota(presetId: string) {
+    // 可见性变化可能连续触发；进行中的请求不重复发起
+    if (this._quotas[presetId]?.status === "loading") return;
     this._quotas = { ...this._quotas, [presetId]: { status: "loading" } };
     try {
       const data = await fetchPresetQuota(presetId);
