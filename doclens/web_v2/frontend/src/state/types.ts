@@ -184,7 +184,7 @@ export interface SystemStatus {
   workdir?: string;
   total_size_bytes: number;
   file_types: Record<string, number>;
-  /** 当前 AI 模型 id（后端从 CortexConfig.planify_model_id 读）。空字符串表示未配置。 */
+  /** 当前 AI 模型展示名（后端优先取激活 LLM 预设名，回退 CortexConfig.planify_model_id）。空字符串表示未配置。 */
   model_name?: string;
   /** 对话 LLM 视觉能力位（ADR-0034）：false 时前端拦截带图消息并引导切换模型。 */
   llm_vision?: boolean;

@@ -60,9 +60,9 @@ def _status_payload(idx: IndexManager | None) -> dict:
         # 日记启用事实源（ADR-0030）：目录存在即启用（空目录也算——
         # 入口先于内容）；启动判定一次，前端据此显隐日记 tab
         "diary_enabled": diary_dir(Path(workdir)).is_dir(),
-        # 当前 AI 模型 id（用于前端展示「{model} 思考中」），可能为空
-        # （用户未设置 PLANIFY_MODEL_ID 时不展示模型名前缀）
-        "model_name": cfg.planify_model_id or "",
+        # 展示名（前端「{model} 思考中」等）：优先激活 LLM 预设名（可读），
+        # 未激活预设时回退裸 model id。两者都空时不展示模型名前缀。
+        "model_name": cfg.active_llm_preset or cfg.planify_model_id or "",
         # 对话 LLM 视觉能力位（ADR-0034 视觉路由）：false 时前端拦截带图
         # 消息并引导切换模型
         "llm_vision": bool(getattr(cfg, "llm_vision", False)),

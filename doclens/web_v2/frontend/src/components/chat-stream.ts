@@ -114,7 +114,7 @@ export class ChatStream extends LitElement {
 
   /** 渲染节点序列（活消息 + 折叠条，mergeTimeline 产物）。 */
   @property({ attribute: false }) nodes: TimelineNode[] = [];
-  /** 当前 AI 模型 id（来自 store.getState().status?.model_name）。
+  /** 当前 AI 模型展示名（来自 store.getState().status?.model_name：预设名优先，回退 model id）。
    *  传 null/空串 → 思考中仅显示「思考中...」，不展示模型前缀。 */
   @property({ attribute: false }) modelName: string | null = null;
   /** 流式期间禁用回退钮（重问不受影响）。 */

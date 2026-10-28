@@ -358,6 +358,10 @@ class CortexConfig(BaseSettings):
     # Planify / Agent 配置
     planify_api_key: Optional[str] = Field(default=None, alias="PLANIFY_API_KEY")
     planify_model_id: str = Field(default="", alias="PLANIFY_MODEL_ID")
+    # 激活 LLM 预设的名称（由预设 activate 物化写入，见 web_v2/api/presets.py
+    # materialize_preset）。展示层（/api/status.model_name → 前端「{model} 思考中」）
+    # 优先取它——预设名可读性优于裸 model id；未激活预设时为空串，回退 model id。
+    active_llm_preset: str = Field(default="", alias="CORTEX_ACTIVE_LLM_PRESET")
     planify_base_url: Optional[str] = Field(default=None, alias="PLANIFY_BASE_URL")
     planify_context_window: int = Field(
         default=200000,

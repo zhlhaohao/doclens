@@ -106,3 +106,43 @@ class TestStatusDiaryEnabled:
         (tmp_path / "diary").mkdir()
         data = asyncio.run(status_api.status(_fake_idx(tmp_path)))
         assert data["diary_enabled"] is True
+
+
+class TestStatusModelName:
+    """model_name 取值优先级：激活 LLM 预设名 > 裸 model id > 空串。
+
+    展示层语义（前端「{model} 思考中」）：预设名是用户起的可读名，
+    激活时由 materialize_preset 物化写入 CORTEX_ACTIVE_LLM_PRESET；
+    未走预设流程（.env 手填 PLANIFY_MODEL_ID）时回退裸 id。
+    """
+
+    def _payload_with_cfg(self, monkeypatch, active_preset: str, model_id: str) -> dict:
+        from doclens.web_v2.api import status as status_api
+
+        # status.py 按名导入 get_config（from ... import），须 patch 模块内绑定
+        monkeypatch.setattr(
+            status_api,
+            "get_config",
+            lambda: SimpleNamespace(
+                search_path="",
+                index_path="",  # deps._index_path_placeholder 降级路径用
+                planify_model_id=model_id,
+                active_llm_preset=active_preset,
+                watch_enabled=False,  # watcher 快照字段
+                llm_vision=False,
+            ),
+        )
+        # idx=None 走降级路径：轻字段全部从 config 派生，不触碰索引 DB
+        return asyncio.run(status_api.status(None))
+
+    def test_preset_name_wins(self, monkeypatch):
+        data = self._payload_with_cfg(monkeypatch, "DeepSeek 官方", "deepseek-chat")
+        assert data["model_name"] == "DeepSeek 官方"
+
+    def test_fallback_to_model_id(self, monkeypatch):
+        data = self._payload_with_cfg(monkeypatch, "", "deepseek-chat")
+        assert data["model_name"] == "deepseek-chat"
+
+    def test_both_empty(self, monkeypatch):
+        data = self._payload_with_cfg(monkeypatch, "", "")
+        assert data["model_name"] == ""

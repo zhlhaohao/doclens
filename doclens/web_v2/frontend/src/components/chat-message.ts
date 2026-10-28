@@ -340,8 +340,8 @@ export class ChatMessageEl extends LitElement {
    *  工具结束到下一轮 tool_call 的 LLM 流式间隙会翻 false，按钮闪烁）。
    *  恢复态（断开续跑回页占位）同样为 true——插话入口照常可用（ADR-0048）。 */
   @property({ type: Boolean }) generating = false;
-  /** 当前 AI 模型名（来自 /api/status.model_name）。assistant 思考中占位会展示
-   *  「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
+  /** 当前 AI 模型名（来自 /api/status.model_name：激活 LLM 预设名优先，回退 model id）。
+   *  assistant 思考中占位会展示「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
