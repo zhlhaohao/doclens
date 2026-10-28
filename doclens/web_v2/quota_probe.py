@@ -91,7 +91,7 @@ _ENDPOINTS: tuple[_Endpoint, ...] = (
         provider="minimax",
         url="https://www.minimaxi.com/v1/token_plan/remains",
         auth_mode="bearer",
-        base_url_hint="minimaxi.com",
+        base_url_hint="minimax",  # 覆盖 api.minimaxi.com（国际）/ api.minimax.cn（国内）
     ),
     _Endpoint(
         key="deepseek",

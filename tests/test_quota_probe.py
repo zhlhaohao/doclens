@@ -25,6 +25,8 @@ from doclens.web_v2.quota_probe import (
         ("https://api.z.ai/api/paas/v4", "glm"),
         ("https://api.kimi.com/coding", "kimi"),
         ("https://www.minimaxi.com/v1", "minimax"),
+        ("https://api.minimaxi.com/anthropic", "minimax"),
+        ("https://api.minimax.cn/v1", "minimax"),
         ("https://api.deepseek.com", "deepseek"),
         ("https://api.deepseek.com/v1", "deepseek"),
     ],

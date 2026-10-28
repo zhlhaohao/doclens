@@ -325,6 +325,7 @@ export class ModelPresetsSection extends LitElement {
     .quota .q-high { color: var(--cortex-danger); font-weight: 600; }
     .quota .q-balance-low { color: var(--cortex-danger); font-weight: 600; }
     .quota .q-none { color: var(--cortex-text-subtle); }
+    .quota .q-reset { color: var(--cortex-text-subtle); }
     .quota .q-retry {
       border: none;
       background: none;
@@ -849,9 +850,23 @@ export class ModelPresetsSection extends LitElement {
     `;
   }
 
+  /** 桌面端重置时间：当天只显示 HH:mm（省空间），跨天补「M/D 」前缀。 */
+  private _fmtReset(ms: number): string {
+    const d = new Date(ms);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const today = new Date();
+    const sameDay =
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate();
+    return sameDay ? `${hh}:${mm}` : `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
+  }
+
   /** 套餐额度渲染（仅 LLM 行，2026-10-27 决议）。
-   * 桌面端「5h 已用 X% · 周 已用 Y%」/ 移动端「5hX% 周Y%」双形态 CSS 切换；
-   * ≥90% 红色警示；DeepSeek 显示余额（is_available=false 红）。
+   * 桌面端「5h 已用 X% 重置 HH:mm · 周 已用 Y%」/ 移动端「5hX% 周Y%」双形态
+   * CSS 切换；重置时间仅桌面显示（移动端空间不足）；≥90% 红色警示；
+   * DeepSeek 显示余额（is_available=false 红）。
    * 返回 nothing = 未知供应商（调用方回退静态元信息行）。 */
   private _renderQuota(p: Preset) {
     const q = this._quotas[p.id];
@@ -881,7 +896,9 @@ export class ModelPresetsSection extends LitElement {
             已用 </span><span class="q-tag">${tag}</span><span
             class="q-pct ${high ? "q-high" : ""}"
             >${pct}%</span
-          >`;
+          >${w.next_reset_ms
+            ? html`<span class="q-full q-reset"> 重置 ${this._fmtReset(w.next_reset_ms)}</span>`
+            : nothing}`;
       })}`;
     }
     if (data.kind === "balance" && data.balances.length > 0) {
