@@ -238,7 +238,10 @@ def test_builtin_server_configs_no_key(monkeypatch, tmp_path):
     from doclens import mcp_client
     from doclens.config import CortexConfig
 
-    # 直读 ~/.cortex/.env（delenv 无效）——patch load 返回空配置
+    # 双重隔离：① patch load 不读 .env 文件 ② delenv 清掉 os.environ 兜底——
+    # 之前测试的 load_dotenv 可能把 ~/.cortex/.env 的 JIMENG_API_KEY 灌进
+    # os.environ（2026-10-28 test_auth_challenge TestClient 触发）
+    monkeypatch.delenv("JIMENG_API_KEY", raising=False)
     monkeypatch.setattr(CortexConfig, "load", classmethod(lambda cls: CortexConfig(_env_file=None)))
     configs = mcp_client.builtin_server_configs()
     assert configs == []
