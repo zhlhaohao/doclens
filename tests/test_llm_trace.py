@@ -316,6 +316,7 @@ def test_openai_astream_traces_request_and_aggregated_response(tmp_path):
     class _AsyncIter:
         def __init__(self, items):
             self._items = items
+            self.closed = False
 
         def __aiter__(self):
             return self
@@ -324,6 +325,9 @@ def test_openai_astream_traces_request_and_aggregated_response(tmp_path):
             if not self._items:
                 raise StopAsyncIteration
             return self._items.pop(0)
+
+        async def aclose(self):
+            self.closed = True
 
     class _AsyncCompletions:
         async def create(self, **kw):
@@ -375,6 +379,7 @@ def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
     class _AsyncIter:
         def __init__(self, items):
             self._items = items
+            self.closed = False
 
         def __aiter__(self):
             return self
@@ -384,6 +389,9 @@ def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
                 raise StopAsyncIteration
             return self._items.pop(0)
 
+        async def aclose(self):
+            self.closed = True
+
     class _AsyncCompletions:
         async def create(self, **kw):
             return _AsyncIter(list(chunks))
@@ -391,6 +399,15 @@ def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
     provider = OpenAICompatProvider(api_key="k", base_url="http://x", model="qwen")
     provider._aclient = _ns(chat=_ns(completions=_AsyncCompletions()))
     tracer = _make(tmp_path, session_key="s-break")
+    raw_streams = []
+    orig_create = _AsyncCompletions.create
+
+    async def create_and_track(self, **kw):
+        s = await orig_create(self, **kw)
+        raw_streams.append(s)
+        return s
+
+    _AsyncCompletions.create = create_and_track
 
     async def run():
         agen = provider.astream(
@@ -406,6 +423,8 @@ def test_openai_astream_break_at_message_stop_still_traces(tmp_path):
         await agen.aclose()
 
     asyncio.run(run())
+    # 生成器关闭时底层 SDK 流必须已被关闭（不留 GC 终结器尾巴）
+    assert raw_streams and raw_streams[0].closed
     text = tracer._path.read_text(encoding="utf-8")
     assert "## 轮 1 · 发" in text
     assert "## 轮 1 · 收" in text

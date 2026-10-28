@@ -260,6 +260,13 @@ def setup_logging(
     logger = logging.getLogger(__name__)
     logger.info("=" * 50 + " Runtime Started " + "=" * 50)
 
+    # unraisable/线程异常兜底（见 logging_capture 模块注释）：GC 终结器、
+    # __del__、线程里吞不掉的异常默认只进 stderr，log 文件无凭——装钩子
+    # 落文件（幂等，先于 faulthandler：Python 层先兜，原生崩溃归 faulthandler）
+    from .logging_capture import install_unraisable_capture
+
+    install_unraisable_capture()
+
     # 原生崩溃捕获（见 _enable_faulthandler 文档字符串）：放最后，日志目录
     # 落定、Runtime Started 落盘之后再挂 fatal-signal handler
     crash_path = _enable_faulthandler(log_dir)

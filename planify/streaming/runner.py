@@ -14,6 +14,7 @@ import json
 import logging
 import threading
 import uuid
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1147,111 +1148,118 @@ class StreamingAgent:
         request_len = len(messages)
 
         try:
-            # 通过 LLMProvider.astream() 归一化事件流（async 客户端，不阻塞事件循环）
-            async for event in self.provider.astream(
-                messages=messages,
-                system=system,
-                tools=tool_defs,
-                max_tokens=self.config.max_tokens,
-                tracer=self.tracer,
-            ):
-                # 检查中断
-                if self._interrupt_event and self._interrupt_event.is_set():
-                    self.logger.info("[StreamingAgent] 流式调用被中断")
-                    break
+            # 通过 LLMProvider.astream() 归一化事件流（async 客户端，不阻塞事件循环）。
+            # aclosing：break/中断退出时确定性 close 生成器——provider 内部的
+            # SDK 流与 httpx Response 在本循环内释放，而不是等 GC 终结器在
+            # 循环关闭后重入（否则 GC 调 response.aclose() 会撞上仍在执行的
+            # Response.aiter_raw，抛 "async generator already executing"）
+            async with aclosing(
+                self.provider.astream(
+                    messages=messages,
+                    system=system,
+                    tools=tool_defs,
+                    max_tokens=self.config.max_tokens,
+                    tracer=self.tracer,
+                )
+            ) as stream:
+                async for event in stream:
+                    # 检查中断
+                    if self._interrupt_event and self._interrupt_event.is_set():
+                        self.logger.info("[StreamingAgent] 流式调用被中断")
+                        break
 
-                event_type = event.type
+                    event_type = event.type
 
-                if event.usage:
-                    for k, v in event.usage.items():
-                        if v and v > call_usage.get(k, 0):
-                            call_usage[k] = v
+                    if event.usage:
+                        for k, v in event.usage.items():
+                            if v and v > call_usage.get(k, 0):
+                                call_usage[k] = v
 
-                if event_type == "content_block_start":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    block_type = event.block_type
-                    if block_type == "text":
-                        text_started_index = index
-                        block_text_parts.setdefault(index, [])
-                    elif block_type == "tool_use":
-                        # 工具调用开始
-                        self._tool_call_states[index] = ToolCallState(
-                            tool_use_id=event.tool_use_id or "",
-                            name=event.tool_name or "",
-                        )
-                        block_tool_states[index] = self._tool_call_states[index]
-                        # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
-                        await self.emitter.emit_tool_call(
-                            tool_use_id=event.tool_use_id or "",
-                            name=event.tool_name or "",
-                            input_data={},
-                            is_complete=False,
-                        )
+                    if event_type == "content_block_start":
+                        index = event.block_index
+                        if index is None:
+                            continue
+                        block_type = event.block_type
+                        if block_type == "text":
+                            text_started_index = index
+                            block_text_parts.setdefault(index, [])
+                        elif block_type == "tool_use":
+                            # 工具调用开始
+                            self._tool_call_states[index] = ToolCallState(
+                                tool_use_id=event.tool_use_id or "",
+                                name=event.tool_name or "",
+                            )
+                            block_tool_states[index] = self._tool_call_states[index]
+                            # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
+                            await self.emitter.emit_tool_call(
+                                tool_use_id=event.tool_use_id or "",
+                                name=event.tool_name or "",
+                                input_data={},
+                                is_complete=False,
+                            )
 
-                elif event_type == "content_block_delta":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    if event.text_delta:
-                        text = event.text_delta
-                        current_text += text
-                        block_text_parts.setdefault(index, []).append(text)
-                        # 发射文本事件
-                        await self.emitter.emit_text(text, is_end=False)
-                    elif event.thinking_delta:
-                        # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
-                        # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
-                        # 实现只惠及显式继承 EventEmitter 的实现类）
-                        emit_thinking = getattr(self.emitter, "emit_thinking", None)
-                        if emit_thinking is not None:
-                            await emit_thinking(event.thinking_delta)
-                    elif event.input_json_delta:
-                        # 工具参数增量
-                        if index in self._tool_call_states:
-                            state = self._tool_call_states[index]
-                            state.append_chunk(event.input_json_delta)
+                    elif event_type == "content_block_delta":
+                        index = event.block_index
+                        if index is None:
+                            continue
+                        if event.text_delta:
+                            text = event.text_delta
+                            current_text += text
+                            block_text_parts.setdefault(index, []).append(text)
+                            # 发射文本事件
+                            await self.emitter.emit_text(text, is_end=False)
+                        elif event.thinking_delta:
+                            # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
+                            # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
+                            # 实现只惠及显式继承 EventEmitter 的实现类）
+                            emit_thinking = getattr(self.emitter, "emit_thinking", None)
+                            if emit_thinking is not None:
+                                await emit_thinking(event.thinking_delta)
+                        elif event.input_json_delta:
+                            # 工具参数增量
+                            if index in self._tool_call_states:
+                                state = self._tool_call_states[index]
+                                state.append_chunk(event.input_json_delta)
 
-                elif event_type == "content_block_stop":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    if index in block_tool_states:
-                        # 工具调用完成
-                        state = block_tool_states[index]
-                        complete_input = state.get_complete_input()
+                    elif event_type == "content_block_stop":
+                        index = event.block_index
+                        if index is None:
+                            continue
+                        if index in block_tool_states:
+                            # 工具调用完成
+                            state = block_tool_states[index]
+                            complete_input = state.get_complete_input()
 
-                        # 发射工具调用完成事件
-                        await self.emitter.emit_tool_call(
-                            tool_use_id=state.tool_use_id,
-                            name=state.name,
-                            input_data=complete_input,
-                            is_complete=True,
-                        )
-                        assistant_content.append({
-                            "type": "tool_use",
-                            "id": state.tool_use_id,
-                            "name": state.name,
-                            "input": complete_input,
-                        })
-                    elif index in block_text_parts:
-                        # 文本块完成
-                        text = "".join(block_text_parts[index])
-                        if text:
+                            # 发射工具调用完成事件
+                            await self.emitter.emit_tool_call(
+                                tool_use_id=state.tool_use_id,
+                                name=state.name,
+                                input_data=complete_input,
+                                is_complete=True,
+                            )
                             assistant_content.append({
-                                "type": "text",
-                                "text": text,
+                                "type": "tool_use",
+                                "id": state.tool_use_id,
+                                "name": state.name,
+                                "input": complete_input,
                             })
+                        elif index in block_text_parts:
+                            # 文本块完成
+                            text = "".join(block_text_parts[index])
+                            if text:
+                                assistant_content.append({
+                                    "type": "text",
+                                    "text": text,
+                                })
 
-                elif event_type == "message_delta":
-                    # 消息级别更新
-                    if event.stop_reason:
-                        stop_reason = event.stop_reason
+                    elif event_type == "message_delta":
+                        # 消息级别更新
+                        if event.stop_reason:
+                            stop_reason = event.stop_reason
 
-                elif event_type == "message_stop":
-                    # 消息结束
-                    break
+                    elif event_type == "message_stop":
+                        # 消息结束
+                        break
 
         except Exception as e:
             self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")

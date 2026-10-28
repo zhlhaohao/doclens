@@ -8,6 +8,7 @@ _response_to_llm）；async 客户端惰性初始化（同步-only 调用方零�
 from __future__ import annotations
 
 import json
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from openai import AsyncOpenAI, OpenAI
@@ -471,11 +472,15 @@ class OpenAICompatProvider:
         done = False
         try:
             stream = await self._ensure_async_client().chat.completions.create(**kwargs)
-            async for chunk in stream:
-                if accumulator:
-                    accumulator.feed(chunk)
-                for event in translator.feed(chunk):
-                    yield event
+            # aclosing：消费方 break/GC 关闭本生成器时，确定性关闭底层 SDK
+            # 流（httpx Response）——否则残留的 aiter_raw 由 GC 终结器在事件
+            # 循环关闭后重入，抛 "async generator already executing"
+            async with aclosing(stream):
+                async for chunk in stream:
+                    if accumulator:
+                        accumulator.feed(chunk)
+                    for event in translator.feed(chunk):
+                        yield event
         except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
             if tracer and not done:
                 tracer.trace_error(turn, e)
