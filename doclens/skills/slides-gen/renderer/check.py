@@ -178,16 +178,47 @@ def check(md_path: Path, layout_dir: Path, theme_dir: Path) -> CheckResult:
             f"{len(deck.slides)} 页但没有 section 过渡页",
             "每 5-7 页插一页 section，帮助听众定位"))
     run = 1
+    max_run, max_run_layout, max_run_end = 1, layouts_used[0] if layouts_used else "", 0
     for i in range(1, len(layouts_used)):
         if layouts_used[i] == layouts_used[i - 1]:
             run += 1
-            if run >= 3:
-                res.findings.append(Finding(
-                    "warn", i + 1, "structure/版式重复",
-                    f"连续 {run} 页使用 {layouts_used[i]} 版式",
-                    "换一个版式（如 two-col / image-right）打破单调"))
         else:
+            if run > max_run:
+                max_run, max_run_layout, max_run_end = run, layouts_used[i - 1], i
             run = 1
+    if run > max_run:
+        max_run, max_run_layout, max_run_end = run, layouts_used[-1], len(layouts_used)
+    if max_run >= 3:
+        res.findings.append(Finding(
+            "warn", max_run_end, "structure/版式重复",
+            f"{max_run_layout} 版式最长连续 {max_run} 页",
+            "在中间插一页别的版式（章节页/图表页/引述页）打破单调；"
+            "同版式内容多时优先拆页或换高语义版式"))
+
+    # ---- 版式多样性：长 deck 用不够多种版式 = 视觉单调（LLM 选版式保守的确定性护栏） ----
+    n_slides = len(deck.slides)
+    distinct = len(set(layouts_used))
+    if n_slides >= 10:
+        # 10-14 页至少 4 种；15 页以上至少 5 种
+        need = 4 if n_slides < 15 else 5
+        if distinct < need:
+            # 找出还没用过的高语义版式，给具体建议
+            unused = [l for l in ("stats", "timeline", "compare", "matrix",
+                                  "big-number", "grid", "pyramid", "funnel",
+                                  "cycle", "two-col", "quote", "image-right")
+                      if l not in layouts_used]
+            suggest = "、".join(unused[:3]) if unused else "two-col / quote"
+            res.findings.append(Finding(
+                "warn", 0, "structure/版式单一",
+                f"{n_slides} 页只用了 {distinct} 种版式（建议 ≥{need} 种）——"
+                f"全册以 {'/'.join(sorted(set(layouts_used)))[:60]} 为主，视觉会单调",
+                f"有数据用 stats/big-number，有先后用 timeline，有对比用 compare，"
+                f"有卡片特性用 grid；未用过的还有：{suggest}"))
+    elif n_slides >= 6 and distinct < 3:
+        res.findings.append(Finding(
+            "warn", 0, "structure/版式单一",
+            f"{n_slides} 页只用了 {distinct} 种版式",
+            "至少混用 3 种版式（列表页 + 一个高语义版式 + 章节页）打破单调"))
 
     # ---- 主题合法性（拼错会在渲染时静默回退 clean-white）----
     theme_name = str(deck.meta.get("theme", "clean-white"))
