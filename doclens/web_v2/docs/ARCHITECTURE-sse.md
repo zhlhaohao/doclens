@@ -141,9 +141,15 @@ sequenceDiagram
 
 ### 5. 持久化时序（展示层与回放层分离）
 
-1. **发送前**：前端 `appendSession` 落库 `message_user`（若失败则不发起 SSE 请求——这是 `chat.py:61-66` 弹出重复消息的前提约定）；
-2. **done 后（后端）**：`append_chat_turn_raw` 落库 tool 链 + 模型**原始**输出（`:202-204`，只落库已配对的调用，中断残留丢弃）；
-3. **done 后（前端）**：另写 `message_ai`（策展后文本）。
+**全部由后端写**（071d5169「展示层落库统一到后端」起的现状；此前前端
+用 `PATCH /api/sessions/{id}` 前置写 `message_user`、收尾写 `message_ai`，
+该路径已废弃——端点仅作旧 bundle 兼容保留并标记 deprecated）：
+
+1. **请求入口**：`ensure_message_user` 落库本轮 `message_user`（幂等，老
+   前端已写的同内容末尾条目跳过），回放轮次分组与回退锚点都依赖它先入库；
+2. **done 后（后端）**：`append_chat_turn_raw` 落库 tool 链 + 模型**原始**
+   输出（只落库已配对的调用，中断残留丢弃）；
+3. **done 后（后端）**：`append_message_ai` 落策展后文本（展示层用）。
 
 下轮回放 `get_chat_history` 优先 `message_ai_raw`——LLM 上下文用原始版，前端展示用策展版。
 

@@ -10,7 +10,7 @@
 
 两个结构事实决定了改造不是删掉 request_stop 就完事：
 
-1. **展示层 `message_ai` 由前端落库**（chat-view 流结束后 appendSession）——前端不在场时没人写，用户回来看不到那轮回答（展示映射只认 message_user/message_ai）。断开续跑必须配套后端补写。
+1. **展示层 `message_ai` 当时由前端落库**（chat-view 流结束后 `appendSession` → `PATCH /api/sessions/{id}`）——前端不在场时没人写，用户回来看不到那轮回答（展示映射只认 message_user/message_ai）。断开续跑必须配套后端补写。（**后续演进**：071d5169 已把展示层落库整体收归后端 `append_message_ai`，前端零 DB 写入；该 PATCH 端点仅作旧 bundle 兼容保留、标记 deprecated。）
 2. **断开即停顺带堵住了同会话并发**——续跑使「旧轮未完、新消息又来」窗口敞开，两轮交错写 session_items 会破坏 raw_messages 配对（孤儿 tool_result 400 那类问题）。必须加会话级生成锁。
 
 ## Decision

@@ -23,10 +23,6 @@ export async function listSessions(params: { type?: "search" | "chat"; limit?: n
   return request(`/api/sessions?${sp}`, { method: "GET" });
 }
 
-export async function appendSession(sessionId: string, items: Array<{ kind: string; payload: any }>, messageCount?: number): Promise<{ ok: boolean; message_count: number }> {
-  return request(`/api/sessions/${sessionId}`, { method: "PATCH", json: { items, message_count: messageCount } });
-}
-
 /** 会话条目（kind/payload/seq/created_at）——buildChatTimeline/aggregate* 消费 */
 export interface SessionItemDTO {
   kind: string;

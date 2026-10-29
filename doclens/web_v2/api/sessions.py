@@ -226,24 +226,67 @@ async def get_session(session_id: str, meta_only: bool = False):
     )
 
 
-@router.patch("/sessions/{session_id}")
+@router.patch("/sessions/{session_id}", deprecated=True)
 async def append_session(session_id: str, req: SessionAppendRequest):
+    """追加 items 到会话末尾 + 更新 message_count（**遗留端点，已弃用**）。
+
+    历史用途：展示层条目由前端落库（发送前写 message_user、流结束后写
+    message_ai）。自 071d5169「展示层落库统一到后端」起，chat 路径由
+    `ensure_message_user` / `append_chat_turn_raw` / `append_message_ai`
+    独占写入，前端不再调用本端点；保留它只为兼容缓存了旧 bundle 的
+    WebView 容器，新代码不要用。
+
+    payload 契约（2026-10-29 收紧）：接受 JSON 字符串（旧调用形态）或
+    任意可序列化对象（自动 dumps）；缺 kind / payload 非法 JSON → 400
+    （此前会一路穿到 SQLite 绑定层抛 InterfaceError → 500）。
+    """
     store = _get_store()
     summary = store.get(session_id)
     if summary is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    normalized = [_normalize_append_item(it, i) for i, it in enumerate(req.items)]
     existing = store.get_detail(session_id)
     next_seq = (existing[-1].seq + 1) if existing else 0
-    for idx, item in enumerate(req.items):
+    for idx, (kind, payload) in enumerate(normalized):
         store.append_item(SessionItem(
             session_id=session_id,
             seq=next_seq + idx,
-            kind=item["kind"],
-            payload=item.get("payload", "{}"),
+            kind=kind,
+            payload=payload,
         ))
     new_count = req.message_count if req.message_count is not None else (summary.message_count + len(req.items))
     store.update_count_and_time(session_id, new_count)
     return {"ok": True, "id": session_id, "message_count": new_count}
+
+
+def _normalize_append_item(item: dict, idx: int) -> tuple[str, str]:
+    """单条 item 校验 + payload 归一为 JSON 字符串（失败 → 400，不 500）。
+
+    session_items.payload 是 TEXT 列且下游一律 ``json.loads``，故这里
+    统一产出合法 JSON 字符串：字符串入参校验可通过解析，其余类型 dumps。
+    """
+    if not isinstance(item, dict):
+        raise CortexAPIError(400, "INVALID_ITEM", f"items[{idx}] 必须是对象")
+    kind = item.get("kind")
+    if not isinstance(kind, str) or not kind.strip():
+        raise CortexAPIError(400, "INVALID_ITEM", f"items[{idx}].kind 缺失或非字符串")
+    payload = item.get("payload", "{}")
+    if payload is None:
+        payload = "{}"
+    if isinstance(payload, str):
+        try:
+            json.loads(payload)
+        except (json.JSONDecodeError, TypeError):
+            raise CortexAPIError(
+                400, "INVALID_ITEM", f"items[{idx}].payload 不是合法 JSON 字符串"
+            ) from None
+        return kind, payload
+    try:
+        return kind, json.dumps(payload, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        raise CortexAPIError(
+            400, "INVALID_ITEM", f"items[{idx}].payload 无法序列化为 JSON"
+        ) from None
 
 
 @router.patch("/sessions/{session_id}/title")

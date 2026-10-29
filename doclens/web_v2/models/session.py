@@ -15,7 +15,10 @@ class SessionCreateRequest(BaseModel):
 
 
 class SessionAppendRequest(BaseModel):
-    """追加 items 到指定会话。"""
+    """追加 items 到指定会话（**遗留端点**，见 append_session docstring）。
+
+    payload 允许 JSON 字符串或任意对象——端点内归一为 JSON 字符串后再落库。
+    """
     items: list[dict[str, Any]]  # [{kind, payload}]
     message_count: Optional[int] = None
 
