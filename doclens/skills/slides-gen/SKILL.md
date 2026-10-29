@@ -41,6 +41,7 @@ doctor（首次）→ 复述+提问 → 写 deck.md → check（幽灵稿确认�
 | `check deck.md` | 写稿预检：容量/大纲/密度/对比度/图片版式主题合法性 + 幽灵稿 |
 | `capacity` | 各版式容量表 |
 | `preview deck.md` | 用用户自己的封面渲染三套主题样张（比报名字有效） |
+| `gallery` | 版式样板间：19 个版式各渲染一页（总览图 + 翻页浏览页），供用户挑版式 |
 | `extract-style <图>` | 参考图 → 主题 JSON（自动 WCAG 校准） |
 | `render deck.md` | md → HTML（秒级） |
 | `qa deck.html` | 视觉验收（`--pages 1,3` 只验指定页；`--no-vision` 只做几何） |

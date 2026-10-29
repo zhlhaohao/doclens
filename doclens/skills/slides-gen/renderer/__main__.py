@@ -1,12 +1,14 @@
 """CLI：slides-gen 写稿预检、渲染与验收。
 
   doctor                     环境自检（playwright/视觉 API/字体/资产完整性）
+  gallery                    版式样板间：19 个版式各渲染一页，供用户挑版式
   analyze  <素材>            素材结构分析（字数/小节/数据点 → 建议页数）
   extract-style <图>         参考图 → 主题 JSON（自动对比度校准）
   check    deck.md           写稿期预检（秒级，不渲染）：容量/大纲/结构/密度/主题对比度
   capacity [--layout 名]     打印各版式容量表
   images   deck.md           列图位清单（编号/来源/路径），重绘替换前用
   preview  deck.md           出三套主题样张（用你自己的封面+内容页），供用户挑风格
+  gallery                   版式样板间：19 个版式各渲染一页（总览图 + 可翻页浏览页）
   pdf      deck.html         导出 PDF（headless Chromium 打印）
   render   deck.md [-o out.html] [--theme X] [--no-embed]
   qa       deck.html [--pages 1,3] [--outdir DIR] [--no-vision]
@@ -20,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import pathlib
 import sys
 from pathlib import Path
 
@@ -168,6 +171,16 @@ def cmd_images(args: argparse.Namespace) -> int:
     if slots:
         print(f"\n已写 {images_mod.save_json(slots, md)}")
     return 0
+
+
+def cmd_gallery(args: argparse.Namespace) -> int:
+    from .gallery import main as gallery_main
+
+    argv = ["--theme", args.theme]
+    if args.layouts:
+        argv.append(f"--layouts={args.layouts}")
+    argv.append(f"--out={args.out}")
+    return gallery_main(argv)
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
@@ -410,6 +423,12 @@ def main(argv: list[str] | None = None) -> int:
     p_images = sub.add_parser("images", help="列图位清单（重绘/替换图片前用）")
     p_images.add_argument("input", type=Path, help="deck md 文件")
     p_images.set_defaults(func=cmd_images)
+
+    p_gal = sub.add_parser("gallery", help="版式样板间（19 版式各渲染一页）")
+    p_gal.add_argument("--theme", default="corporate-blue")
+    p_gal.add_argument("--layouts", default="", help="逗号分隔，只渲染指定版式")
+    p_gal.add_argument("--out", type=pathlib.Path, default=pathlib.Path("layouts-gallery"))
+    p_gal.set_defaults(func=cmd_gallery)
 
     p_preview = sub.add_parser("preview", help="出三套主题样张供用户挑风格")
     p_preview.add_argument("input", type=Path, help="deck md 文件")
