@@ -1,0 +1,34 @@
+<!-- 版式：grid 卡片网格 —— 2-4 张卡片（2 列表格：标题 | 说明，或列表） -->
+<div class="slide-inner layout-grid"
+     data-cap='{"bullets": 4, "bullet_chars": 60, "total_chars": 200, "table_rows": 5, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="gd-grid">{{content}}</div>
+</div>
+<style>
+  .layout-grid .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .gd-grid {
+    flex: 1 1 auto; display: grid; align-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: clamp(12px, 2vw, 26px); padding: 8px 0;
+  }
+  .gd-card {
+    display: flex; flex-direction: column; justify-content: center; gap: .38em;
+    padding: 1em 1.1em; border-radius: var(--radius, 10px);
+    background: color-mix(in srgb, var(--c-primary) calc(var(--card-alpha, .06) * 100%), transparent);
+    border: var(--card-border, none); box-shadow: var(--shadow, none);
+    min-height: 0; overflow: hidden;
+  }
+  .gd-num {
+    font-size: calc(var(--fs-caption) * 1.05 * var(--fit, 1));
+    font-weight: 800; color: var(--c-accent); letter-spacing: .1em;
+    font-variant-numeric: tabular-nums;
+  }
+  .gd-head {
+    font-size: calc(var(--fs-h3) * .92 * var(--fit, 1));
+    font-weight: 700; color: var(--c-text); line-height: 1.3;
+  }
+  .gd-desc {
+    font-size: calc(var(--fs-body) * .78 * var(--fit, 1));
+    color: var(--c-text-muted); line-height: 1.5;
+  }
+</style>

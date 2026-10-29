@@ -1,0 +1,20 @@
+<!-- 版式：funnel 漏斗 —— 3-5 段转化（2 列表格：阶段 | 数值，首行为入口） -->
+<div class="slide-inner layout-funnel"
+     data-cap='{"bullets": 5, "bullet_chars": 24, "total_chars": 140, "table_rows": 6, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="fn-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-funnel .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .fn-wrap { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 6px 0; }
+  .fn-stage {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1em;
+    padding: .55em 1.3em; border-radius: var(--radius-pill, 999px);
+    background: color-mix(in srgb, var(--c-primary) 10%, transparent);
+  }
+  /* 宽度按数值比例，最大 92%；两行布局：阶段名+数值（左） 转化率（右） */
+  .fn-name { font-size: calc(var(--fs-body) * .88 * var(--fit, 1)); font-weight: 600; white-space: nowrap; }
+  .fn-value { font-size: calc(var(--fs-body) * .96 * var(--fit, 1)); font-weight: 800;
+              color: var(--c-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fn-rate { font-size: calc(var(--fs-body) * .72 * var(--fit, 1)); color: var(--c-accent); white-space: nowrap; }
+</style>

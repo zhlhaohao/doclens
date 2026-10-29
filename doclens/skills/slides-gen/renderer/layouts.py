@@ -13,7 +13,8 @@ from pathlib import Path
 DEFAULT_LAYOUT = "title-content"
 BUILTIN = ("title", "section", "title-content", "two-col",
            "image-left", "image-right", "quote", "blank",
-           "stats", "timeline", "matrix", "compare", "big-number")
+           "stats", "timeline", "matrix", "compare", "big-number",
+           "grid", "agenda", "pyramid", "funnel", "cycle", "closing")
 
 _STYLE_RE = re.compile(r"<style[^>]*>(.*?)</style>", re.S | re.I)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)

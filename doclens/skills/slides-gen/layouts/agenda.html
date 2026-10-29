@@ -1,0 +1,23 @@
+<!-- 版式：agenda 目录页 —— 编号 + 章节名（2 列表格或列表，agent 也可从 section 页自动汇总） -->
+<div class="slide-inner layout-agenda"
+     data-cap='{"bullets": 7, "bullet_chars": 30, "total_chars": 180, "table_rows": 8, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="ag-list">{{content}}</div>
+</div>
+<style>
+  .layout-agenda .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .ag-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 0; padding: 6px 0; }
+  .ag-item {
+    display: flex; align-items: baseline; gap: 1.1em;
+    padding: .58em .4em;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-text) 8%, transparent);
+  }
+  .ag-item:last-child { border-bottom: none; }
+  .ag-num {
+    flex: 0 0 auto; min-width: 2.1em;
+    font-size: calc(var(--fs-h2) * .82 * var(--fit, 1)); font-weight: 800;
+    color: var(--c-accent); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  }
+  .ag-name { font-size: calc(var(--fs-body) * .96 * var(--fit, 1)); font-weight: 500; line-height: 1.4; }
+  .ag-note { font-size: calc(var(--fs-body) * .72 * var(--fit, 1)); color: var(--c-text-muted); }
+</style>

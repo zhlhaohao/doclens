@@ -214,3 +214,118 @@ def big_number(slide_directive: dict, blocks: list[Block]) -> tuple[str, list[Bl
             if text and len(text) <= 12 and re.search(r"\d", text):
                 return text, blocks[:i] + blocks[i + 1:]
     return "", blocks
+
+
+# ---------------------------------------------------------------------------
+# grid：表格或列表 → 卡片（2 列表格：标题|说明；或列表项"标题 —— 说明"）
+# ---------------------------------------------------------------------------
+
+def grid_cards(rows: list[list[str]], items: list[str]) -> list[dict]:
+    """返回 [{head, desc}]，最多 4 张（2x2）/6 张（2x3）。"""
+    out: list[dict] = []
+    if rows:
+        body = rows[1:] if len(rows) > 1 else rows
+        for r in body[:6]:
+            if len(r) >= 2:
+                out.append({"head": r[0].strip(), "desc": r[1].strip()})
+            elif r:
+                out.append({"head": r[0].strip(), "desc": ""})
+    elif items:
+        for it in items[:6]:
+            m = re.match(r"^(.+?)\s*[—–-]{1,2}\s*(.+)$", it.strip())
+            if m:
+                out.append({"head": m.group(1).strip(), "desc": m.group(2).strip()})
+            else:
+                out.append({"head": it.strip(), "desc": ""})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# agenda：表格或列表 → 目录项
+# ---------------------------------------------------------------------------
+
+def agenda_items(rows: list[list[str]], items: list[str]) -> list[dict]:
+    """返回 [{name, note}]。2 列表格（章节|说明）或列表。"""
+    out: list[dict] = []
+    if rows:
+        body = rows[1:] if len(rows) > 1 else rows
+        for r in body[:7]:
+            if len(r) >= 2:
+                out.append({"name": r[0].strip(), "note": r[1].strip()})
+            elif r:
+                out.append({"name": r[0].strip(), "note": ""})
+    else:
+        for it in items[:7]:
+            m = re.match(r"^(.+?)\s*[：:]\s*(.+)$", it.strip())
+            if m:
+                out.append({"name": m.group(1).strip(), "note": m.group(2).strip()})
+            else:
+                out.append({"name": it.strip(), "note": ""})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# pyramid：表格 → 层（首行为顶层）
+# ---------------------------------------------------------------------------
+
+def pyramid_levels(rows: list[list[str]]) -> list[dict]:
+    """返回 [{name, desc}]，从顶到底，最多 4 层。"""
+    out = []
+    if rows:
+        body = rows[1:] if len(rows) > 1 else rows
+        for r in body[:4]:
+            if len(r) >= 2:
+                out.append({"name": r[0].strip(), "desc": r[1].strip()})
+            elif r:
+                out.append({"name": r[0].strip(), "desc": ""})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# funnel：表格 → 漏斗段（阶段|数值，首行为入口）
+# ---------------------------------------------------------------------------
+
+def funnel_stages(rows: list[list[str]]) -> list[dict]:
+    """返回 [{name, value, rate}]，rate 为相对上一段的转化率（%），首段无。"""
+    out: list[dict] = []
+    if not rows:
+        return out
+    body = rows[1:] if len(rows) > 1 else rows
+    prev: float | None = None
+    for r in body[:5]:
+        name = r[0].strip() if r else ""
+        val_txt = r[1].strip().replace(",", "") if len(r) > 1 else ""
+        try:
+            v = float(val_txt.rstrip("%％"))
+        except ValueError:
+            v = 0.0
+        rate = ""
+        if prev and prev > 0 and v >= 0:
+            rate = f"{v / prev * 100:.0f}%"
+        out.append({"name": name, "value": val_txt or f"{v:g}", "rate": rate})
+        prev = v
+    return out
+
+
+# ---------------------------------------------------------------------------
+# cycle：列表或表格 → 环节点
+# ---------------------------------------------------------------------------
+
+def cycle_nodes(rows: list[list[str]], items: list[str]) -> list[dict]:
+    """返回 [{name, desc}]，3-5 节点。"""
+    out: list[dict] = []
+    if rows:
+        body = rows[1:] if len(rows) > 1 else rows
+        for r in body[:5]:
+            if len(r) >= 2:
+                out.append({"name": r[0].strip(), "desc": r[1].strip()})
+            elif r:
+                out.append({"name": r[0].strip(), "desc": ""})
+    else:
+        for it in items[:5]:
+            m = re.match(r"^(.+?)\s*[：:]\s*(.+)$", it.strip())
+            if m:
+                out.append({"name": m.group(1).strip(), "desc": m.group(2).strip()})
+            else:
+                out.append({"name": it.strip(), "desc": ""})
+    return out

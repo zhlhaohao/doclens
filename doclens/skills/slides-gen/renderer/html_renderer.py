@@ -577,6 +577,132 @@ class Renderer:
                             + (self._blocks_html(rest, page_anim) if rest else "")),
             }
 
+        # ---- grid：表格/列表 → 卡片网格 ----
+        if layout_name == "grid":
+            tbl = next((b for b in blocks if b.kind == "table"), None)
+            lst = next((b for b in blocks if b.kind == "list"), None)
+            cards = shapes.grid_cards(shapes.cells_of(tbl) if tbl else [],
+                                      shapes.list_items_of(lst) if lst else [])
+            if not cards:
+                self.warn.add("grid 版式需要 2 列表格（标题|说明）或列表，已降级")
+                return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                        "content": self._blocks_html([b for b in blocks if b is not title_b], page_anim)}
+            if len(cards) > 4:
+                # 5-6 张改 2 列布局
+                pass
+            html_cards = []
+            for i, c in enumerate(cards[:6], 1):
+                html_cards.append(
+                    f'<div class="gd-card">'
+                    f'<div class="gd-num">{i:02d}</div>'
+                    f'<div class="gd-head">{runs_html(parse_inline(c["head"]), theme)}</div>'
+                    + (f'<div class="gd-desc">{runs_html(parse_inline(c["desc"]), theme)}</div>'
+                       if c["desc"] else "")
+                    + "</div>")
+            style_cols = ' style="grid-template-columns:repeat(2,1fr)"' if len(cards) > 4 else ""
+            return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                    "content": f'<div class="gd-grid"{style_cols}>' + "".join(html_cards) + "</div>"}
+
+        # ---- agenda：表格/列表 → 目录 ----
+        if layout_name == "agenda":
+            tbl = next((b for b in blocks if b.kind == "table"), None)
+            lst = next((b for b in blocks if b.kind == "list"), None)
+            items = shapes.agenda_items(shapes.cells_of(tbl) if tbl else [],
+                                        shapes.list_items_of(lst) if lst else [])
+            if not items:
+                self.warn.add("agenda 版式需要表格（章节|说明）或列表，已降级")
+                return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                        "content": self._blocks_html([b for b in blocks if b is not title_b], page_anim)}
+            html_items = []
+            for i, it in enumerate(items[:7], 1):
+                html_items.append(
+                    f'<div class="ag-item"><span class="ag-num">{i:02d}</span>'
+                    f'<span class="ag-name">{runs_html(parse_inline(it["name"]), theme)}</span>'
+                    + (f'<span class="ag-note">{runs_html(parse_inline(it["note"]), theme)}</span>'
+                       if it["note"] else "")
+                    + "</div>")
+            return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                    "content": '<div class="ag-list">' + "".join(html_items) + "</div>"}
+
+        # ---- pyramid：表格 → 金字塔层 ----
+        if layout_name == "pyramid":
+            tbl = next((b for b in blocks if b.kind == "table"), None)
+            levels = shapes.pyramid_levels(shapes.cells_of(tbl) if tbl else [])
+            if not levels:
+                self.warn.add("pyramid 版式需要 2 列表格（层名|说明），首行为顶层，已降级")
+                return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                        "content": self._blocks_html([b for b in blocks if b is not title_b], page_anim)}
+            if len(levels) > 4:
+                self.warn.add(f"pyramid 最多 4 层（当前 {len(levels)}），超出已截断")
+            html_levels = []
+            for lv in levels[:4]:
+                html_levels.append(
+                    f'<div class="py-level"><span class="py-name">{_esc(lv["name"])}</span>'
+                    + (f'<span class="py-desc">{runs_html(parse_inline(lv["desc"]), theme)}</span>'
+                       if lv["desc"] else "")
+                    + "</div>")
+            return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                    "content": '<div class="py-wrap">' + "".join(html_levels) + "</div>"}
+
+        # ---- funnel：表格 → 漏斗 ----
+        if layout_name == "funnel":
+            tbl = next((b for b in blocks if b.kind == "table"), None)
+            stages = shapes.funnel_stages(shapes.cells_of(tbl) if tbl else [])
+            if not stages:
+                self.warn.add("funnel 版式需要 2 列表格（阶段|数值），首行为入口，已降级")
+                return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                        "content": self._blocks_html([b for b in blocks if b is not title_b], page_anim)}
+            try:
+                vmax = max(float(st["value"].replace(",", "").rstrip("%")) for st in stages) or 1.0
+            except ValueError:
+                vmax = 1.0
+            html_stages = []
+            for st in stages[:5]:
+                try:
+                    v = float(st["value"].replace(",", "").rstrip("%"))
+                except ValueError:
+                    v = 0.0
+                w = max(34, min(92, v / vmax * 92))
+                html_stages.append(
+                    f'<div class="fn-stage" style="width:{w:.0f}%">'
+                    f'<span><span class="fn-name">{_esc(st["name"])}</span> '
+                    f'<span class="fn-value">{_esc(st["value"])}</span></span>'
+                    + (f'<span class="fn-rate">↓ {st["rate"]}</span>' if st["rate"] else "")
+                    + "</div>")
+            return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                    "content": '<div class="fn-wrap">' + "".join(html_stages) + "</div>"}
+
+        # ---- cycle：列表/表格 → 循环节点 ----
+        if layout_name == "cycle":
+            tbl = next((b for b in blocks if b.kind == "table"), None)
+            lst = next((b for b in blocks if b.kind == "list"), None)
+            nodes = shapes.cycle_nodes(shapes.cells_of(tbl) if tbl else [],
+                                       shapes.list_items_of(lst) if lst else [])
+            if len(nodes) < 2:
+                self.warn.add("cycle 版式需要列表或表格（3-5 节点），已降级")
+                return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                        "content": self._blocks_html([b for b in blocks if b is not title_b], page_anim)}
+            html_nodes = []
+            for i, nd in enumerate(nodes[:5], 1):
+                if i > 1:
+                    html_nodes.append('<span class="cy-arrow">→</span>')
+                html_nodes.append(
+                    f'<div class="cy-node"><span class="cy-step">{i}</span>'
+                    f'<span class="cy-name">{runs_html(parse_inline(nd["name"]), theme)}</span>'
+                    + (f'<span class="cy-desc">{runs_html(parse_inline(nd["desc"]), theme)}</span>'
+                       if nd["desc"] else "")
+                    + "</div>")
+            return {"title": self._heading_html(title_b, page_anim, is_title=True) if title_b else "",
+                    "content": '<div class="cy-wrap"><div class="cy-flow">' + "".join(html_nodes)
+                               + '<span class="cy-loopback">↻</span></div></div>'}
+
+        # ---- closing：标题=决定请求，正文=下一步列表 ----
+        if layout_name == "closing":
+            body = [b for b in blocks if b is not title_b]
+            ask = runs_html(title_b.runs, theme) if title_b else ""
+            steps_html = self._blocks_html(body, page_anim)
+            return {"title": ask, "content": steps_html}
+
         # 通用：标题 + 单栏
         body = [b for b in blocks if b is not title_b]
         return {

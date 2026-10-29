@@ -1,0 +1,30 @@
+<!-- 版式：cycle 循环 —— 3-5 节点首尾相连（列表，按序为环上节点） -->
+<div class="slide-inner layout-cycle"
+     data-cap='{"bullets": 5, "bullet_chars": 30, "total_chars": 150, "table_rows": 6, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="cy-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-cycle .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .cy-wrap { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 6px 0; }
+  .cy-flow { display: flex; align-items: stretch; justify-content: center; gap: 0; flex-wrap: nowrap; }
+  .cy-node {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    gap: .3em; padding: .9em 1em; border-radius: var(--radius, 10px);
+    background: color-mix(in srgb, var(--c-primary) 8%, transparent);
+    border: var(--card-border, none); box-shadow: var(--shadow, none);
+    min-width: 0; flex: 0 1 auto;
+  }
+  .cy-step {
+    font-size: calc(var(--fs-caption) * 1.05 * var(--fit, 1)); font-weight: 800;
+    color: var(--c-accent); font-variant-numeric: tabular-nums;
+  }
+  .cy-name { font-size: calc(var(--fs-body) * .9 * var(--fit, 1)); font-weight: 700; text-align: center; line-height: 1.3; }
+  .cy-desc { font-size: calc(var(--fs-body) * .72 * var(--fit, 1)); color: var(--c-text-muted); text-align: center; line-height: 1.45; }
+  .cy-arrow {
+    display: flex; align-items: center; padding: 0 .5em;
+    color: var(--c-accent); font-size: calc(var(--fs-body) * 1.1 * var(--fit, 1)); font-weight: 700;
+  }
+  /* 收尾回环箭头：最后一个节点后跟 ↻ 表示循环 */
+  .cy-loopback { color: var(--c-accent); font-weight: 800; padding-left: .35em; }
+</style>

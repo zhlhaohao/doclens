@@ -130,9 +130,13 @@ GEOM_JS = r"""
     };
     const target = norm(accentHex);
     if (!target) return;
+    // 结构性元素不算强调：编号（gd-num/ag-num/cy-step）、流程箭头、转化率标签
+    // 它们是设计系统的结构色（序列/流向/比例），不是对内容的强调
+    const STRUCTURAL = ['.gd-num', '.ag-num', '.cy-step', '.cy-arrow', '.cy-loopback', '.fn-rate', '.tl-dot'];
+    const isStructural = (el) => STRUCTURAL.some(sel => el.matches(sel) || el.closest(sel));
     const hits = [];
     slide.querySelectorAll('*').forEach(el => {
-      if (!visible(el)) return;
+      if (!visible(el) || isStructural(el)) return;
       const st = getComputedStyle(el);
       const fg = norm(st.color);
       const bgc = norm(st.backgroundColor);

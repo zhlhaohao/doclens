@@ -1,0 +1,23 @@
+<!-- 版式：pyramid 金字塔 —— 3-4 层（2 列表格：层名 | 说明，首行为顶层） -->
+<div class="slide-inner layout-pyramid"
+     data-cap='{"bullets": 4, "bullet_chars": 40, "total_chars": 160, "table_rows": 5, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="py-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-pyramid .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .py-wrap { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 6px 0; }
+  .py-level {
+    display: flex; align-items: baseline; justify-content: center; gap: .9em;
+    padding: .62em 1.2em; border-radius: var(--radius-sm, 6px);
+    background: color-mix(in srgb, var(--c-primary) 9%, transparent);
+    border-left: 3px solid var(--c-primary);
+  }
+  /* 顶层最窄、底层最宽 —— 用 width 阶梯表达层次 */
+  .py-level:nth-last-child(4) { width: 46%; }
+  .py-level:nth-last-child(3) { width: 64%; }
+  .py-level:nth-last-child(2) { width: 82%; }
+  .py-level:nth-last-child(1) { width: 100%; }
+  .py-name { font-size: calc(var(--fs-body) * .92 * var(--fit, 1)); font-weight: 700; white-space: nowrap; }
+  .py-desc { font-size: calc(var(--fs-body) * .74 * var(--fit, 1)); color: var(--c-text-muted); line-height: 1.4; }
+</style>
