@@ -557,13 +557,23 @@ class _SessionPortability(_StorePart):
 
     EXPORT_FORMAT_VERSION = 1  # 结构演进时 +1，导入端按已知版本分支向后兼容
 
-    def export_session(self, session_id: str) -> Optional[dict]:
+    # 截断导出的标题后缀（与 duplicate 的「(副本)」同属可区分快照命名）
+    _UPTO_TITLE_TMPL = "{title}（导出至 {count} 条消息）"
+
+    def export_session(
+        self, session_id: str, upto_seq: Optional[int] = None
+    ) -> Optional[dict]:
         """单会话全保真导出（ADR-0038）——sessions 行 + **全部**
         session_items 原始行（含死段、compacted/rewound 边界、usage、
         skill_context；raw payload 字符串原样透传，不做 JSON 重排）。
 
         不导 rewind_snapshots（引用 .cortex/rewind/ 机器本地文件备份）
         与 auth_sessions。会话不存在返回 None。
+
+        ``upto_seq`` 非空 = **截断导出（导出到此为止）**：只导 seq ≤ 锚点
+        的条目（锚点为一条活 message_user，调用方校验），产物是**新 id 的
+        独立快照**而非源会话本体（见 ``_truncate_snapshot``）；空 = 原全量
+        导出，语义与 ADR-0038 完全一致。
         """
         with self._lock, self._conn() as conn:
             row = conn.execute(
@@ -574,17 +584,56 @@ class _SessionPortability(_StorePart):
             ).fetchone()
             if row is None:
                 return None
-            items = conn.execute(
-                """SELECT seq, kind, payload, created_at
-                   FROM session_items WHERE session_id = ?
-                   ORDER BY seq ASC""",
-                (session_id,),
-            ).fetchall()
-            return {
-                "format": self.EXPORT_FORMAT_VERSION,
-                "session": dict(row),
-                "items": [dict(i) for i in items],
-            }
+            sql = (
+                "SELECT seq, kind, payload, created_at FROM session_items "
+                "WHERE session_id = ?"
+            )
+            params: list = [session_id]
+            if upto_seq is not None:
+                sql += " AND seq <= ?"
+                params.append(upto_seq)
+            items = conn.execute(sql + " ORDER BY seq ASC", params).fetchall()
+        session = dict(row)
+        rows = [dict(i) for i in items]
+        if upto_seq is not None:
+            session = self._truncate_snapshot(session, rows, upto_seq)
+        return {
+            "format": self.EXPORT_FORMAT_VERSION,
+            "session": session,
+            "items": rows,
+        }
+
+    @staticmethod
+    def _truncate_snapshot(session: dict, rows: list, upto_seq: int) -> dict:
+        """截断导出 = 独立快照（2026-10-29）。
+
+        与全量导出的本质差别：后者是「同一会话的转移」（同 id，导入端
+        同 id 跳过），前者是「在锚点处切一段的派生会话」——沿用同 id 会
+        被导入端当重复静默跳过（同实例导入即完全失效），因此换新 id +
+        标题后缀；message_count 按截断后的**活投影**重算，updated_at 取
+        锚点条目时间（快照点），starred 不继承（同 duplicate）。
+        """
+        live = SessionsStore.project_live_items([
+            SessionItem(
+                session_id=session["id"], seq=r["seq"], kind=r["kind"],
+                payload=r["payload"], created_at=None,
+            )
+            for r in rows
+        ])
+        count = sum(
+            1 for it in live if it.kind in ("message_user", "message_ai")
+        )
+        anchor = next((r for r in rows if r["seq"] == upto_seq), None)
+        return {
+            **session,
+            "id": str(_ulid.new()),
+            "title": _SessionPortability._UPTO_TITLE_TMPL.format(
+                title=session["title"], count=count
+            )[:SESSION_TITLE_MAX],
+            "message_count": count,
+            "updated_at": anchor["created_at"] if anchor else session["updated_at"],
+            "starred": 0,
+        }
 
     @staticmethod
     def _validate_import(data: dict) -> tuple[str, dict, list]:
@@ -1634,8 +1683,10 @@ class SessionsStore(_StorePart):
 
     # ---- 委托：导出 / 导入（_SessionPortability）----
 
-    def export_session(self, session_id: str) -> Optional[dict]:
-        return self._portability.export_session(session_id)
+    def export_session(
+        self, session_id: str, upto_seq: Optional[int] = None
+    ) -> Optional[dict]:
+        return self._portability.export_session(session_id, upto_seq)
 
     def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
         return self._portability.import_session(data, workdir)

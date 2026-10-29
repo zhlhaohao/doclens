@@ -76,6 +76,77 @@ class TestExport:
         assert store.export_session("NOPE") is None
 
 
+class TestExportUpto:
+    """截断导出（导出到此为止，2026-10-29）：只导锚点及之前的条目，
+    产物是新 id 的独立快照——导入端不会因「同 id 跳过」把它吞掉。"""
+
+    def _seed_turns(self, st: SessionsStore, sid: str = "UPTO") -> None:
+        now = datetime.now(timezone.utc)
+        st.create(SessionSummary(
+            id=sid, type=SessionType.CHAT, title="长会话", preview="p",
+            created_at=now, updated_at=now, starred=True,
+        ))
+        st._append_item(sid, "message_user", {"content": "q1"})   # seq 0
+        st._append_item(sid, "message_ai", {"content": "a1"})     # seq 1
+        st._append_item(sid, "message_user", {"content": "q2"})   # seq 2
+        st._append_item(sid, "message_ai", {"content": "a2"})     # seq 3
+        st.update_count_and_time(sid, 4)
+
+    def test_upto_keeps_prefix_only(self, store):
+        """只含 seq ≤ 锚点的条目：锚点 user 消息本身在导出范围内。"""
+        self._seed_turns(store)
+        data = store.export_session("UPTO", upto_seq=2)
+        assert [i["seq"] for i in data["items"]] == [0, 1, 2]
+        assert [i["kind"] for i in data["items"]] == [
+            "message_user", "message_ai", "message_user",
+        ]
+
+    def test_upto_is_new_snapshot_identity(self, store):
+        """新 id + 标题后缀 + message_count 重算 + 快照点时间 + 不继承星标。"""
+        self._seed_turns(store)
+        data = store.export_session("UPTO", upto_seq=2)
+        s = data["session"]
+        assert s["id"] != "UPTO"
+        assert s["title"] == "长会话（导出至 3 条消息）"
+        assert s["message_count"] == 3
+        assert s["updated_at"] == data["items"][2]["created_at"]
+        assert s["starred"] == 0
+        # 源会话不受影响（纯读）
+        assert len(store.get_detail("UPTO")) == 4
+        assert store.get("UPTO").message_count == 4
+
+    def test_upto_import_as_new_session(self, store, store2):
+        """截断产物可导入为**新会话**；回放 = 前缀历史，可续聊。"""
+        self._seed_turns(store)
+        data = store.export_session("UPTO", upto_seq=2)
+        assert store2.import_session(data, workdir=None) is True
+        new_id = data["session"]["id"]
+        assert store2.get_chat_history(new_id) == [
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+        ]
+        # 同一文件再导一次 → 同 id 跳过（派生快照同样幂等）
+        assert store2.import_session(data, workdir=None) is False
+
+    def test_upto_respects_rewind_boundary_inside_prefix(self, store):
+        """前缀内的回退边界照常生效：message_count 按活投影重算。"""
+        self._seed_turns(store)
+        store.append_rewound("UPTO", 2, [], [])  # 边界 seq 4：死段 [2,4]
+        data = store.export_session("UPTO", upto_seq=1)  # 只到 a1：无边界
+        assert data["session"]["message_count"] == 2
+        data2 = store.export_session("UPTO", upto_seq=4)
+        assert data2["session"]["message_count"] == 2  # q2/a2 已死
+
+    def test_upto_none_keeps_full_export(self, store):
+        """不传 upto_seq：原全量导出口径逐字不变（同 id / 同标题）。"""
+        self._seed_turns(store)
+        data = store.export_session("UPTO")
+        assert data["session"]["id"] == "UPTO"
+        assert data["session"]["title"] == "长会话"
+        assert len(data["items"]) == 4
+
+
 class TestImportRoundtrip:
     def test_roundtrip_identical(self, store, store2):
         """导出 → 跨实例导入：items payload 逐字节一致，元数据保留。"""
@@ -300,3 +371,52 @@ class TestImportUploadApi:
                 self._upload("s.json", b"{broken"),
             ))
         assert ei.value.status == 400 and ei.value.code == "IMPORT_INVALID"
+
+
+class TestExportEndpointUpto:
+    """GET /sessions/{id}/export?upto_seq=N（截断导出端点，2026-10-29）。"""
+
+    def _patch(self, monkeypatch, store):
+        from doclens.web_v2.api import sessions as sessions_api
+        monkeypatch.setattr(sessions_api, "_get_store", lambda: store)
+        return sessions_api
+
+    def _seed(self, st, sid="UPTO"):
+        now = datetime.now(timezone.utc)
+        st.create(SessionSummary(
+            id=sid, type=SessionType.CHAT, title="长会话", preview="",
+            created_at=now, updated_at=now,
+        ))
+        st._append_item(sid, "message_user", {"content": "q1"})
+        st._append_item(sid, "message_ai", {"content": "a1"})
+        st._append_item(sid, "message_user", {"content": "q2"})
+        st.update_count_and_time(sid, 3)
+
+    def test_upto_returns_truncated_attachment(self, store, monkeypatch):
+        self._seed(store)
+        api = self._patch(monkeypatch, store)
+        res = asyncio.run(api.export_session("UPTO", upto_seq=2))
+        body = json.loads(res.body)
+        assert [i["seq"] for i in body["items"]] == [0, 1, 2]
+        assert body["session"]["title"] == "长会话（导出至 3 条消息）"
+        assert "attachment" in res.headers["content-disposition"]
+
+    def test_upto_invalid_anchor_400(self, store, monkeypatch):
+        """锚点须为活 message_user：指向 AI 消息 → 400。"""
+        self._seed(store)
+        api = self._patch(monkeypatch, store)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.export_session("UPTO", upto_seq=1))
+        assert ei.value.status == 400 and ei.value.code == "INVALID_ANCHOR"
+
+    def test_upto_search_session_rejected(self, store, monkeypatch):
+        now = datetime.now(timezone.utc)
+        store.create(SessionSummary(
+            id="SRCH", type=SessionType.SEARCH, title="搜", preview="",
+            created_at=now, updated_at=now,
+        ))
+        store._append_item("SRCH", "message_user", {"content": "kw"})
+        api = self._patch(monkeypatch, store)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.export_session("SRCH", upto_seq=0))
+        assert ei.value.status == 400 and ei.value.code == "NOT_CHAT_SESSION"

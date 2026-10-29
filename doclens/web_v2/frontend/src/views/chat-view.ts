@@ -1235,15 +1235,18 @@ export class ChatView extends LitElement {
 
   /** 导出当前会话（ADR-0038）：全保真 JSON，跨实例记忆转移。
    *  WebView 内 `<a download>`（blob URL）在 X5 无下载 UI → 走 jsbridge
-   *  原生下载（写 Downloads + 系统通知）；浏览器仍走 fetch+blob。 */
-  private async _exportSession(): Promise<void> {
+   *  原生下载（写 Downloads + 系统通知）；浏览器仍走 fetch+blob。
+   *  uptoSeq 非空 = 截断导出（导出到此为止，2026-10-29）：只导该 user
+   *  消息及之前的条目，产物是新 id 的派生会话（避免整段上下文过长）。 */
+  private async _exportSession(uptoSeq?: number): Promise<void> {
     const cur = this.viewState.currentSession;
     if (!cur) return;
+    const truncated = uptoSeq !== undefined;
     try {
       if (jsbridgeDownloadAvailable()) {
         const r = await downloadFromUrl(
-          sessionExportUrl(cur.id),
-          sessionExportFileName(cur.title || ""),
+          sessionExportUrl(cur.id, uptoSeq),
+          sessionExportFileName(cur.title || "", truncated),
         );
         if (r.via !== "jsbridge") return;
         if (r.name) this._pushToast(`已导出：${r.name}（保存在下载目录）`, "success", 3500);
@@ -1251,12 +1254,20 @@ export class ChatView extends LitElement {
         // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
         return;
       }
-      await exportSession(cur.id);
-      this._pushToast("已导出会话文件", "success", 2500);
+      await exportSession(cur.id, uptoSeq);
+      this._pushToast(
+        truncated ? "已导出（截至该消息）" : "已导出会话文件",
+        "success", 2500,
+      );
     } catch (e) {
       this._pushToast(`导出失败：${(e as Error)?.message || e}`, "error", 5000);
     }
   }
+
+  /** user 气泡「导出到此为止」：截断导出到该消息（含）为止。 */
+  private _onExportUpto = (e: CustomEvent<{ seq: number }>): void => {
+    void this._exportSession(e.detail.seq);
+  };
 
   /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认（标题/条目数）→
    *  上传；WebView 内改用原生选择器 + 直传（X5 不弹 input file）。
@@ -2144,6 +2155,7 @@ export class ChatView extends LitElement {
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
             @rewind=${this._onRewind}
+            @export-upto=${this._onExportUpto}
             @interject-request=${this._onInterjectRequest}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>

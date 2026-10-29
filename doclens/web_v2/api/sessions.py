@@ -502,14 +502,28 @@ async def clear_sessions(
 # ---- 导出/导入（ADR-0038：全保真单会话 JSON，跨实例记忆转移）----
 
 @router.get("/sessions/{session_id}/export")
-async def export_session(session_id: str):
+async def export_session(
+    session_id: str,
+    upto_seq: Optional[int] = None,
+):
     """导出单会话为全保真 JSON 文件（浏览器直接下载）。
 
     attachment 文件名 = 标题 slug + 日期；id 保留在 JSON 内。纯读操作，
     生成中不限制（最多末轮 raw_messages 未落库，可接受——ADR-0038）。
+
+    ``upto_seq`` 非空 = **导出到此为止**（2026-10-29）：只导锚点及之前的
+    条目，产物是**新 id 的独立快照**（标题带「导出至 N 条消息」后缀），
+    用于长会话只转移前段上下文、避免导入后上下文过长。锚点须为活
+    message_user（与回退锚点同口径），无效 → 400。
     """
     store = _get_store()
-    data = store.export_session(session_id)
+    if upto_seq is not None:
+        _require_chat_session(store, session_id, "截断导出")
+        if not store.is_live_anchor(session_id, upto_seq):
+            raise CortexAPIError(
+                400, "INVALID_ANCHOR", "导出锚点无效（须为可见的用户消息）"
+            )
+    data = store.export_session(session_id, upto_seq)
     if data is None:
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     title = data["session"]["title"]

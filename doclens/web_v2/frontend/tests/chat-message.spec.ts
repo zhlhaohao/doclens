@@ -139,3 +139,39 @@ describe("<chat-message> thinking stream tail window", () => {
     }
   });
 });
+
+/** 导出到此为止（2026-10-29）：user 气泡操作行多一个下载钮，点击冒泡
+ *  锚点 seq（chat-view 走截断导出，避免整段会话上下文过长）。 */
+describe("<chat-message> user export-upto button", () => {
+  it("renders .export for a user message carrying seq", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题", seq: 7 } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const btn = el.shadowRoot!.querySelector("button.export");
+    expect(btn).toBeTruthy();
+    expect(btn!.getAttribute("title")).toContain("导出到此为止");
+  });
+
+  it("no seq (streaming/new message) → no export button", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题" } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("button.export")).toBeNull();
+  });
+
+  it("click dispatches export-upto with seq (composed)", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题", seq: 3 } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const handler = vi.fn();
+    el.addEventListener("export-upto", handler);
+    (el.shadowRoot!.querySelector("button.export") as HTMLElement).click();
+    expect(handler).toHaveBeenCalledTimes(1);
+    const ev = handler.mock.calls[0][0] as CustomEvent<{ seq: number }>;
+    expect(ev.detail.seq).toBe(3);
+    expect(ev.composed).toBe(true);
+  });
+});

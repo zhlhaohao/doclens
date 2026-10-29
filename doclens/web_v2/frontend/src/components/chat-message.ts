@@ -261,8 +261,8 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
-    /* 消息操作钮见下方 .actions/.reask/.rewind/.copy —— 时间戳与按钮同一行浮现 */
-    .reask, .rewind, .copy {
+    /* 消息操作钮见下方 .actions/.reask/.rewind/.export/.copy —— 时间戳与按钮同一行浮现 */
+    .reask, .rewind, .export, .copy {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -282,16 +282,19 @@ export class ChatMessageEl extends LitElement {
     :host(.hovered) .ts,
     :host(.hovered) .reask,
     :host(.hovered) .rewind,
+    :host(.hovered) .export,
     :host(.hovered) .copy,
     :host(:focus-within) .ts,
     :host(:focus-within) .reask,
     :host(:focus-within) .rewind,
+    :host(:focus-within) .export,
     :host(:focus-within) .copy,
     .ts:focus,
     .reask:focus,
     .rewind:focus,
+    .export:focus,
     .copy:focus { opacity: 1; }
-    .reask:hover, .rewind:hover, .copy:hover {
+    .reask:hover, .rewind:hover, .export:hover, .copy:hover {
       color: var(--cortex-primary);
       background: var(--cortex-surface-muted);
     }
@@ -346,7 +349,8 @@ export class ChatMessageEl extends LitElement {
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
   private _copyTimer?: number;
-  /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图 */
+  /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图
+   *  （showModal top-layer，见 updated）；kb-img 内联图点击复用同状态。 */
   @state() private _imgPreview: string | null = null;
   /** 思考流滑窗尾锚 rAF guard（同帧多次 updated 合并为单次） */
   private _thinkingRafPending = false;
@@ -361,6 +365,10 @@ export class ChatMessageEl extends LitElement {
   }
 
   updated() {
+    // 图片预览 dialog：showModal 进 top-layer（center + backdrop + ESC 关闭）。
+    // open 状态由 _imgPreview 驱动：非 null 且尚未 open 时唤起；close 事件回落。
+    const dlg = this.renderRoot.querySelector<HTMLDialogElement>("dialog.img-preview-dialog");
+    if (this._imgPreview && dlg && !dlg.open) dlg.showModal();
     // 思考流滑窗尾锚（2026-10-05 二修）：thinking 增量到达 → 滚到滑窗底部，
     // 可见区恒为最后两行（最新思考）。延迟到下一帧让浏览器完成布局后再读
     // scrollHeight；不足两行时 scrollTop 赋值无效（无溢出），内容自然从顶
@@ -462,6 +470,21 @@ export class ChatMessageEl extends LitElement {
     );
   };
 
+  /** 点击「导出到此为止」：冒泡锚点 seq（chat-view 走截断导出，只导
+   *  这条 user 消息及之前的内容，避免整段会话导出后上下文过长）。 */
+  private _emitExportUpto = (e: Event): void => {
+    e.stopPropagation();
+    const seq = this.message?.seq;
+    if (seq === undefined) return; // 无锚点（流式新建/老数据）不可截断导出
+    this.dispatchEvent(
+      new CustomEvent("export-upto", {
+        detail: { seq },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
   /** 对话图片缩略图行（ADR-0034）：点击放大（dialog 原生弹层，ESC/点击关闭）。 */
   private _renderImages(images: { data: string; media_type: string }[]) {
     return html`<div class="chat-imgs">${images.map((img, i) => html`
@@ -532,12 +555,6 @@ export class ChatMessageEl extends LitElement {
 
   render() {
     if (!this.message) return null;
-    // 对话图片全屏预览弹层（ADR-0034）：dialog 原生 top-layer，点击图片关闭
-    if (this._imgPreview) {
-      return html`<dialog open @click=${() => (this._imgPreview = null)} class="img-preview-dialog">
-        <img src=${this._imgPreview} alt="图片预览" />
-      </dialog>`;
-    }
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
     // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，
@@ -549,7 +566,8 @@ export class ChatMessageEl extends LitElement {
     // 原样渲染成多余空行（textContent 混入 "\n    "，一行消息被撑成 4 行）。
     // assistant 气泡内部是 .md-body 等 block 元素，缩进空白无视觉影响，保留可读缩进。
     if (this.role === "user") {
-      const canRewind = this.message.seq !== undefined;
+      // 锚点 = 该 user 消息的 seq：回退 / 导出到此为止都要求有锚点
+      const hasAnchor = this.message.seq !== undefined;
       const canCopy = !!this.message.content;
       const ts = formatMsgTime(this.message.created_at);
       // 对话图片（ADR-0034）：缩略图行渲染在正文之上；点击全屏复用 dialog 原生弹层
@@ -558,9 +576,11 @@ export class ChatMessageEl extends LitElement {
         ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
         : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}${canCopy
         ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
-        : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${canRewind
+        : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${hasAnchor
+        ? html`<button class="export" type="button" aria-label="导出到此为止" title="导出到此为止（只导出这条及之前的对话）" @click=${this._emitExportUpto}><doclens-icon name="download"></doclens-icon></button>`
+        : null}${hasAnchor
         ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`
-        : null}</div>`;
+        : null}</div>${this._renderPreviewDialog()}`;
     }
     const canCopy = !!this.message.content;
     const tsAi = formatMsgTime(this.message.created_at);
@@ -581,7 +601,20 @@ export class ChatMessageEl extends LitElement {
           ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
           : null}</div>`
         : null}
+      ${this._renderPreviewDialog()}
     `;
+  }
+
+  /** 对话图片全屏预览弹层（ADR-0034）。与消息内容并存而非替换整个 render：
+   *  dialog 需 showModal() 进 top-layer 才有遮罩/置顶——只写 open 属性时它是
+   *  普通内联元素，会在消息流里原位渲染（视口外不可见，气泡又已消失，
+   *  2026-10-28 修复）。showModal 在 updated() 里做（渲染后才能拿到节点）。 */
+  private _renderPreviewDialog() {
+    if (!this._imgPreview) return null;
+    return html`<dialog class="img-preview-dialog" @click=${() => (this._imgPreview = null)}
+      @close=${() => (this._imgPreview = null)}>
+      <img src=${this._imgPreview} alt="图片预览" />
+    </dialog>`;
   }
 
   /** 历史 ask_user_question step → 折叠问答卡片（tool_result output 为 JSON 答案）。
