@@ -205,18 +205,26 @@ export async function exportSession(sessionId: string, uptoSeq?: number): Promis
   URL.revokeObjectURL(url);
 }
 
-/** 导入会话（ADR-0038）：单文件单会话；同 id 跳过（skipped=1）。 */
+/** 导入会话（ADR-0038）：单文件单会话；同 id 跳过（skipped=1）。
+ *
+ *  `asCopy`（2026-10-29）：同 id 已存在时不跳过，后端导为新 id 副本
+ *  （标题带「（导入副本）」，starred 不继承）。用于「同一份文件再导一份」。
+ */
 export async function importSession(
   data: unknown,
+  opts?: { asCopy?: boolean },
 ): Promise<{ ok: boolean; imported: number; skipped: number }> {
-  return request("/api/sessions/import", { method: "POST", json: data });
+  const qs = opts?.asCopy ? "?as_copy=true" : "";
+  return request(`/api/sessions/import${qs}`, { method: "POST", json: data });
 }
 
 /** WebView 内导入的 multipart 直传端点（pickAndUploadFiles 的 uploadUrl）。
  *  原生上传后只透传 path/bytes_written/overwritten（upload_bridge.md §2.2），
- *  服务端借此用 `path` 回报 imported / skipped。 */
-export function sessionImportUploadUrl(): string {
-  return `${window.location.origin}/api/sessions/import/upload`;
+ *  服务端借此用 `path` 回报 imported / skipped。
+ *  `asCopy` = 重复导入改导副本（原生端重新选文件后走同一端点）。 */
+export function sessionImportUploadUrl(asCopy = false): string {
+  const qs = asCopy ? "?as_copy=true" : "";
+  return `${window.location.origin}/api/sessions/import/upload${qs}`;
 }
 
 // ---- 会话库备份/恢复（ADR-0047）----

@@ -29,6 +29,7 @@ import "../components/session-info-dialog";
 import "../components/rewind-dialog";
 import "../components/turn-delete-dialog";
 import "../components/compact-confirm-dialog";
+import "../components/import-confirm-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -526,6 +527,18 @@ export class ChatView extends LitElement {
   @state() private _clearing = false;
   /** WebView 原生导入进行中（防重复拉起选择器）。 */
   private _importing = false;
+  /** 导入确认框状态（2026-10-29：替代 window.confirm——后者被浏览器
+   *  「阻止此页面创建更多对话框」静默返回 false 时，导入表现为毫无反应）。
+   *  phase=exists 表示后端回报同 id 已存在，等待用户选择「作为副本导入」。 */
+  @state() private _importDialog: {
+    fileName: string;
+    title: string;
+    count: number;
+    phase: "confirm" | "exists" | "busy";
+    /** 浏览器路径持有的解析结果（WebView 直传路径为 null，副本需重选文件）。 */
+    data: unknown | null;
+    webview: boolean;
+  } | null = null;
   @state() private previewOpen = false;
   /** 预览状态机（P1-2 收敛，同 search 策略：只回填 content+tokens）。 */
   private _preview = new PreviewController(this, {
@@ -1275,9 +1288,13 @@ export class ChatView extends LitElement {
     void this._exportSession(e.detail.seq);
   };
 
-  /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认（标题/条目数）→
+  /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认框（标题/条目数）→
    *  上传；WebView 内改用原生选择器 + 直传（X5 不弹 input file）。
-   *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。 */
+   *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。
+   *
+   *  2026-10-29：确认改用原生 <dialog>（window.confirm 可能被浏览器
+   *  「阻止此页面创建更多对话框」静默返回 false = 点了没反应）；后端回报
+   *  同 id 已存在时，弹「作为副本导入」分支而不是一闪而过的 toast。 */
   private _onImportHistory(): void {
     if (jsbridgeUploadAvailable()) {
       void this._importViaJsbridge();
@@ -1322,10 +1339,16 @@ export class ChatView extends LitElement {
         return;
       }
       if (item.path === "skipped") {
-        this._pushToast("会话已存在，已跳过", "info", 3000);
-      } else {
-        this._pushToast("已导入会话", "success", 3000);
+        // 已导入过：展示「作为副本导入」分支（副本需重新选文件——原生
+        // 直传通道不把文件字节交给 H5，只能再走一次选择器）。
+        this._importDialog = {
+          fileName: "", title: "", count: 0,
+          phase: "exists", data: null, webview: true,
+        };
+        await this._loadHistory();
+        return;
       }
+      this._pushToast("已导入会话", "success", 3000);
       await this._loadHistory();
     } catch (e) {
       this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
@@ -1334,6 +1357,7 @@ export class ChatView extends LitElement {
     }
   }
 
+  /** 浏览器路径：解析文件 → 打开原生确认框（不直接用 window.confirm）。 */
   private async _importSessionFile(file: File): Promise<void> {
     let data: unknown;
     try {
@@ -1343,25 +1367,89 @@ export class ChatView extends LitElement {
       return;
     }
     // 前端轻量预读（标题/条目数）供确认展示；完整结构校验在后端
-    const d = data as { format?: unknown; session?: { title?: unknown }; items?: unknown };
+    const d = data as { session?: { title?: unknown }; items?: unknown };
     const title = typeof d.session?.title === "string" ? d.session.title : "";
     const count = Array.isArray(d.items) ? d.items.length : 0;
-    const ok = window.confirm(
-      `导入会话「${title || file.name}」（${count} 条记录）？\n\n` +
-      "导入后可在历史会话列表中找到；已存在相同会话时将跳过。");
-    if (!ok) return;
+    this._importDialog = {
+      fileName: file.name, title, count,
+      phase: "confirm", data, webview: false,
+    };
+  }
+
+  /** 确认框「导入 / 作为副本导入」（detail.asCopy）。 */
+  private _onImportConfirm = async (
+    e: CustomEvent<{ asCopy: boolean }>,
+  ): Promise<void> => {
+    const asCopy = !!e.detail?.asCopy;
+    const dlg = this._importDialog;
+    if (!dlg) return;
+
+    // WebView 副本路径：无文件字节，重新拉起原生选择器（as_copy 直传端点）
+    if (dlg.webview) {
+      if (!asCopy) return;
+      this._importDialog = null;
+      await this._importViaJsbridgeCopy();
+      return;
+    }
+
+    if (dlg.data === null) return;
+    this._importDialog = { ...dlg, phase: "busy" };
     try {
-      const res = await importSession(data);
+      const res = await importSession(dlg.data, { asCopy });
       if (res.imported > 0) {
-        this._pushToast(`已导入会话「${title || file.name}」`, "success", 3000);
-      } else {
-        this._pushToast("会话已存在，已跳过", "info", 3000);
+        this._importDialog = null;
+        this._pushToast(
+          asCopy
+            ? `已导入副本「${dlg.title || dlg.fileName}」`
+            : `已导入会话「${dlg.title || dlg.fileName}」`,
+          "success", 3000,
+        );
+        await this._loadHistory();  // 刷新列表（导入即置顶）
+        return;
       }
-      await this._loadHistory(); // 刷新列表（排序保留源时间戳，不自动进入）
+      // skipped：切到「已存在」态，让用户决定是否作为副本导入
+      this._importDialog = { ...dlg, phase: "exists" };
     } catch (e) {
+      this._importDialog = { ...dlg, phase: "confirm" };
       this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
     }
+  };
+
+  /** WebView 副本导入：带 as_copy 再走一次原生选择器直传。 */
+  private async _importViaJsbridgeCopy(): Promise<void> {
+    if (this._importing) return;
+    this._importing = true;
+    try {
+      const res = await pickAndUploadFiles({
+        destDir: "",
+        uploadUrl: sessionImportUploadUrl(true),
+        maxCount: 1,
+      });
+      if (!res) return;
+      if (res.unauthorized) {
+        actions.setAuthState({ authenticated: false });
+        router.navigate("login");
+        return;
+      }
+      const item = res.results[0];
+      if (!item || !item.ok) {
+        this._pushToast(
+          `导入失败：${item?.detail || item?.code || "未选择文件"}`, "error", 5000,
+        );
+        return;
+      }
+      this._pushToast("已导入会话副本", "success", 3000);
+      await this._loadHistory();
+    } catch (e) {
+      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
+    } finally {
+      this._importing = false;
+    }
   }
+
+  private _onImportCancel = (): void => {
+    this._importDialog = null;
+  };
 
   private get viewState() {
     return store.getState().chat;
@@ -2036,6 +2124,29 @@ export class ChatView extends LitElement {
       </dialog>`;
   }
 
+  /** 导入确认框宿主（<dialog> 由 updated() showModal）——2026-10-29 取代
+   *  window.confirm（可被浏览器静默抑制），并承载「同 id 已存在 → 作为
+   *  副本导入」分支。 */
+  private _renderImportDialog() {
+    const d = this._importDialog;
+    if (!d) return nothing;
+    return html`
+      <dialog @cancel=${(e: Event) => {
+        if (d.phase === "busy") e.preventDefault();
+        else this._onImportCancel();
+      }}>
+        <import-confirm-dialog
+          .fileName=${d.fileName}
+          .sessionTitle=${d.title}
+          .itemCount=${d.count}
+          .phase=${d.phase}
+          ?webview=${d.webview}
+          @import-confirm=${this._onImportConfirm}
+          @cancel=${this._onImportCancel}
+        ></import-confirm-dialog>
+      </dialog>`;
+  }
+
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>): Promise<void> => {
     await this._safeAction(async () => {
@@ -2179,6 +2290,7 @@ export class ChatView extends LitElement {
         ${this._renderSkillDialog()}
         ${this._renderVisionGateDialog()}
         ${this._renderForkDialog()}
+        ${this._renderImportDialog()}
       `;
     }
     const hasPreview = this.previewOpen;

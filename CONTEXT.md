@@ -221,7 +221,7 @@
 
 - 2026-10-23：插话 (User Interjection)（ADR-0048）= 生成中途的旁路询问——循环顶检查点消费会话级单槽位（不排队、不持久化、`POST /api/chat/interject`），确定性双阶段（注入 `<user-interjection>` 模板不补 ack → suppress_tools 调用产纯文字汇报 → 循环继续、回合不结束）；不打断在飞步骤、退避可提前唤醒、轮次预算不计、仅主循环感知、恢复态可用；回合结束未消费丢弃 + toast；展示为思考过程时间线插话卡（`interject_ack`/`interject_report` 双事件、汇报一次性推送），落库 tool_calls 合成条目 `user_interject`（回放层零改动）。否决：仅提示词软约束、立即打断、多排队、逐 token 流、独立气泡、message_user 落库。
 
-- 2026-10-07：会话导出/导入 = doclens-to-doclens 记忆转移——单会话全保真自有 JSON（browser 下载 / 文件选择器上传；`GET /sessions/{id}/export` + `POST /sessions/import`；format 版本号，同 id 跳过；结构校验 + 前端确认 + 50MB 上限；死段照导、图片随导、时间戳保留源值、导入后只刷新列表不自动进入；rewind_snapshots / auth_sessions 不导）。见 ADR-0038。
+- 2026-10-07：会话导出/导入 = doclens-to-doclens 记忆转移——单会话全保真自有 JSON（browser 下载 / 文件选择器上传；`GET /sessions/{id}/export` + `POST /sessions/import`；format 版本号，同 id 跳过；结构校验 + 前端确认 + 50MB 上限；死段照导、图片随导、导入后只刷新列表不自动进入；rewind_snapshots / auth_sessions 不导）。见 ADR-0038。2026-10-29 修订：**updated_at 置为导入时刻**（created_at 保留源值）让导入即置顶；同 id 重复导入改为弹确认框给「作为副本导入」（`?as_copy=true`，标题带「（导入副本）」），确认框由 `window.confirm` 改原生 `<dialog>`（浏览器可静默抑制 confirm）。
 
 - 2026-10-05：消息流滚动 = 贴底粘滞（stick-to-bottom）——仅当视口在底部附近（距底 ≤80px）时流式增量才自动跟随滚底；用户上滚回看即冻结视口（思考流高频刷新不再拽人回底），滚回底部自动恢复跟随；发送消息/切换会话强制回底（用户意图明确指向底部新内容）。_Avoid_: updated() 无条件 scrollTop=scrollHeight（高频刷新劫持滚动条）。
 

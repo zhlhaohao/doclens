@@ -560,6 +560,10 @@ class _SessionPortability(_StorePart):
     # 截断导出的标题后缀（与 duplicate 的「(副本)」同属可区分快照命名）
     _UPTO_TITLE_TMPL = "{title}（导出至 {count} 条消息）"
 
+    # 重复导入时「作为新副本导入」（as_copy）的标题后缀——与 duplicate 的
+    # "(副本)" 区分：此处副本来自文件而非本机会话，且重复导入可叠加多份。
+    _IMPORT_COPY_SUFFIX = "（导入副本）"
+
     def export_session(
         self, session_id: str, upto_seq: Optional[int] = None
     ) -> Optional[dict]:
@@ -761,27 +765,52 @@ class _SessionPortability(_StorePart):
             },
         ]
 
-    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
-        """导入单个会话（ADR-0038）——结构校验后原样写入，时间戳保留
-        源值（导入时刻不顶到最前）。
+    def import_session(
+        self,
+        data: dict,
+        workdir: Optional[str] = None,
+        as_copy: bool = False,
+    ) -> bool:
+        """导入单个会话（ADR-0038）——结构校验后写入，条目原样保真。
 
         workdir 非空且会话为 chat 类型时，末尾追加一轮目录切换提示对话
         （message_user + message_ai，见 _DIR_SWITCH_USER_TMPL），message_count
         相应 +2——把「目录已改」的事实注入续聊回放，防模型沿用导出文件里
         的旧绝对路径继续写旧目录。
 
+        时间戳（2026-10-29 调整）：``created_at`` 保留源值，``updated_at``
+        一律置为导入时刻——历史列表按 updated_at 排序，导入即置顶，让用户
+        立刻看到刚导进来的会话（旧口径「原样保留」会让它在列表深处不可见，
+        表现为「导入没反应」）。会话内部条目的 created_at 不动，序时仍保真。
+
+        ``as_copy``（2026-10-29）：同 id 已存在时不跳过，改为**新 id 副本**
+        导入——标题追加「（导入副本）」、starred 不继承（同 duplicate 口径）。
+        用于「同一份文件想再导一份」的场景（截断导出快照重复导入很常见）。
+
         Returns:
-            是否新导入；同 id 已存在 → False（跳过，幂等防双份）。
+            是否新导入；非 as_copy 且同 id 已存在 → False（跳过，幂等防双份）。
         Raises:
             ValueError: 结构校验失败（调用方转 400，整体不部分导入）。
         """
         session_id, session_row, item_rows = self._validate_import(data)
+        now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock, self._conn() as conn:
             row = conn.execute(
                 "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
             ).fetchone()
             if row is not None:
-                return False
+                if not as_copy:
+                    return False
+                session_id = str(_ulid.new())
+                session_row = {
+                    **session_row,
+                    "id": session_id,
+                    "title": (
+                        session_row["title"] + self._IMPORT_COPY_SUFFIX
+                    )[:SESSION_TITLE_MAX],
+                    "starred": 0,
+                }
+            session_row["updated_at"] = now_iso
             extra_rows = self._dir_switch_rows(
                 session_row, item_rows, workdir
             )
@@ -1781,8 +1810,13 @@ class SessionsStore(_StorePart):
     ) -> Optional[dict]:
         return self._portability.export_session(session_id, upto_seq)
 
-    def import_session(self, data: dict, workdir: Optional[str] = None) -> bool:
-        return self._portability.import_session(data, workdir)
+    def import_session(
+        self,
+        data: dict,
+        workdir: Optional[str] = None,
+        as_copy: bool = False,
+    ) -> bool:
+        return self._portability.import_session(data, workdir, as_copy)
 
     # ---- 委托：登录会话（_AuthSessionStore）----
 

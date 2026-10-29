@@ -622,26 +622,32 @@ def _parse_export_payload(raw: bytes) -> dict:
     return data
 
 
-def _import_payload(data: dict) -> bool:
-    """结构校验 + 写入；ValueError → 400（不部分导入）。返回是否新导入。"""
+def _import_payload(data: dict, as_copy: bool = False) -> bool:
+    """结构校验 + 写入；ValueError → 400（不部分导入）。返回是否新导入。
+
+    ``as_copy``（2026-10-29）：同 id 已存在时改导为新 id 副本而非跳过。
+    """
     store = _get_store()
     try:
-        return store.import_session(data, str(_get_workdir()))
+        return store.import_session(data, str(_get_workdir()), as_copy)
     except ValueError as e:
         raise CortexAPIError(400, "IMPORT_INVALID", str(e))
 
 
 @router.post("/sessions/import")
-async def import_session(request: Request):
-    """导入会话（单文件单会话，ADR-0038）。同 id 已存在 → 跳过；
-    结构校验失败 → 400 整体拒绝（不部分导入）。
+async def import_session(request: Request, as_copy: bool = False):
+    """导入会话（单文件单会话，ADR-0038）。同 id 已存在 → 跳过；结构校验
+    失败 → 400 整体拒绝（不部分导入）。
+
+    ``as_copy=true``（2026-10-29）：已存在时不跳过，改导为新 id 副本
+    （标题带「（导入副本）」）——前端在 skipped 后二次确认走这条路径。
 
     body 上限 50MB（超限 413）——raw bytes 先验长度再解析，防超大
     body 进 JSON 解析器。
     """
     raw = await request.body()
     data = _parse_export_payload(raw)
-    imported = _import_payload(data)
+    imported = _import_payload(data, as_copy)
     return {
         "ok": True,
         "imported": 1 if imported else 0,
@@ -650,7 +656,9 @@ async def import_session(request: Request):
 
 
 @router.post("/sessions/import/upload")
-async def import_session_upload(file: UploadFile = File(...)):
+async def import_session_upload(
+    file: UploadFile = File(...), as_copy: bool = False
+):
     """WebView 容器内的导入入口（pickAndUploadFiles 原生直传，ADR-0038）。
 
     X5 内核不弹 `<input type="file">` 选择器、H5 也拿不到所选文件字节，
@@ -668,7 +676,7 @@ async def import_session_upload(file: UploadFile = File(...)):
         )
     raw = await file.read(_IMPORT_MAX_BYTES + 1)  # +1 用于判定超限
     data = _parse_export_payload(raw)
-    imported = _import_payload(data)
+    imported = _import_payload(data, as_copy)
     return {
         "ok": True,
         "imported": 1 if imported else 0,
