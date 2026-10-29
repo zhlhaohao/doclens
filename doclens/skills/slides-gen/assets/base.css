@@ -559,3 +559,27 @@ blockquote {
 }
 th:first-child { border-top-left-radius: var(--radius-sm, 6px); }
 th:last-child  { border-top-right-radius: var(--radius-sm, 6px); }
+
+/* ---------- 内容稿徽标（draft 态才显示） ---------- */
+
+.draft-badge { display: none; }
+body.draft .draft-badge {
+  display: block;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-accent, #e8622d) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-accent, #e8622d) 40%, transparent);
+  color: var(--c-accent, #e8622d);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  z-index: 26;
+  pointer-events: none;
+}
+@media print {
+  .draft-badge { display: none !important; }  /* 打印 PDF 时不带徽标（导出走 pdf 命令） */
+}

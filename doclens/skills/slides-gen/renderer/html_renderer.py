@@ -231,11 +231,13 @@ class Renderer:
         self.meta: dict[str, Any] = {}
         self.slide_count = 0
         self.embed_images = True
+        self._draft = False
 
     # ------------------------------------------------------------------ 主流程
 
     def render(self, md_path: Path, out_path: Path, *,
-               theme_override: str = "", embed_images: bool = True) -> dict[str, Any]:
+               theme_override: str = "", embed_images: bool = True,
+               draft: bool = False) -> dict[str, Any]:
         text = md_path.read_text(encoding="utf-8")
         self.md_dir = md_path.parent
         self.embed_images = embed_images
@@ -261,6 +263,7 @@ class Renderer:
         for i, slide in enumerate(deck.slides, 1):
             slides_html.append(self._slide_html(slide, i))
         self.slide_count = len(deck.slides)
+        self._draft = draft
 
         doc = self._document(slides_html, cw, ch)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -859,12 +862,13 @@ class Renderer:
 {layout_css}
 </style>
 </head>
-<body>
+<body class="{'draft' if getattr(self, '_draft', False) else ''}">
 <div id="stage">
 {chr(10).join(slides)}
 </div>
 <div class="progress"></div>
 <div class="hint">← → 翻页 · N 备注 · F 全屏 · P 打印</div>
+<div class="draft-badge">内容稿 · 未做最终验收</div>
 <script>
 {presenter_js}
 </script>

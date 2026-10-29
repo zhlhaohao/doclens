@@ -31,8 +31,9 @@ from .parser import parse_markdown
 from .qa import qa_deck
 
 
-def _default_html(md: Path) -> Path:
-    return md.with_suffix(".html")
+def _default_html(md: Path, draft: bool = False) -> Path:
+    """draft=True → <名>-draft.html（内容稿）；False → <名>.html（交付稿正式名）。"""
+    return md.with_suffix(".draft.html" if draft else ".html")
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -230,11 +231,13 @@ def cmd_render(args: argparse.Namespace) -> int:
     if not md.exists():
         print(f"错误：输入文件不存在 {md}", file=sys.stderr)
         return 2
-    out = args.output or _default_html(md)
+    # 内容稿默认写 <名>-draft.html；用户显式 -o 指定则尊重
+    out = args.output or _default_html(md, draft=True)
     r = Renderer(layout_dir=args.layout_dir, theme_dir=args.theme_dir)
     try:
         stats = r.render(md, out, theme_override=args.theme,
-                         embed_images=not args.no_embed)
+                         embed_images=not args.no_embed,
+                         draft=True)
     except Exception as e:  # noqa: BLE001
         print(f"错误：渲染失败 {e}", file=sys.stderr)
         return 2
@@ -325,10 +328,33 @@ def cmd_qa(args: argparse.Namespace) -> int:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    import shutil as _sh
+
+    # build 也是先渲染到 draft；验收全过才晋升正式名
+    if not args.output:
+        args.output = _default_html(args.input, draft=True)
     rc = cmd_render(args)
     if rc != 0:
         return rc
-    return _run_qa(args.output or _default_html(args.input), args)
+    qa_rc = _run_qa(args.output, args)
+
+    if qa_rc == 0:
+        # 晋升：用正式名重渲染（不带 draft 徽标；copy 会把徽标一起带上）
+        final = args.output.with_name(
+            args.output.name.replace(".draft.html", ".html"))
+        if final != args.output:
+            r2 = Renderer(layout_dir=args.layout_dir, theme_dir=args.theme_dir)
+            try:
+                r2.render(args.input, final, theme_override=args.theme,
+                          embed_images=not args.no_embed, draft=False)
+                print(f"验收全过，交付稿已写入正式名：{final}")
+                print(f"（draft 保留在 {args.output}，可继续迭代不污染交付稿）")
+            except Exception as e:  # noqa: BLE001
+                print(f"错误：正式名写出失败 {e}", file=sys.stderr)
+                return 1
+    else:
+        print("验收未全过——正式名保持上一版交付稿不动，只有 draft 更新。")
+    return qa_rc
 
 
 def main(argv: list[str] | None = None) -> int:
