@@ -547,6 +547,11 @@ def render_report_md(result: dict[str, Any]) -> str:
     lines.append(f"- 产物：`{result['html']}`")
     if result.get("vision"):
         lines.append(f"- 通过：{result['passed']} / {result['total']} 页（视觉模型：启用）")
+    elif "显式关闭" in (result.get("degraded_reason") or ""):
+        lines.append(f"- 几何检查：{result['passed']} / {result['total']} 页通过")
+        lines.append("")
+        lines.append("> 内容稿模式（`--no-vision`）：只做了确定性几何检查，"
+                     "未做审美评审。定稿时跑 `build` 才出完整结论。")
     else:
         reason = result.get("degraded_reason") or "视觉模型不可用"
         lines.append(f"- **几何检查**：{result['passed']} / {result['total']} 页通过")

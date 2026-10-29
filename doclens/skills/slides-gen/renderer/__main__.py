@@ -277,12 +277,19 @@ def _run_qa(html: Path, args: argparse.Namespace) -> int:
                   pages=_parse_pages(getattr(args, "pages", "") or ""),
                   use_vision=not getattr(args, "no_vision", False))
     vision_on = bool(res.get("vision"))
+    reason = res.get("degraded_reason") or ""
+    explicit_off = "显式关闭" in reason
+
     if vision_on:
         print(f"验收：{res['passed']}/{res['total']} 页通过（视觉模型已启用）")
+    elif explicit_off:
+        # 主动关闭 = 正常迭代流程（内容稿阶段），不是问题，给一句话轻提示即可
+        print(f"几何检查：{res['passed']}/{res['total']} 页通过"
+              f"（内容稿模式，未做审美检查）")
     else:
-        # 降级：先说清楚「只查了一半」，再报几何结果——避免「全部通过」造成误判
+        # 真降级：模型该配却配不上，必须说清「只查了一半」
         print("=" * 64)
-        print("⚠  视觉验收未执行 —— " + (res.get("degraded_reason") or "视觉模型不可用"))
+        print("⚠  视觉验收未执行 —— " + (reason or "视觉模型不可用"))
         print("   已检查：元素重叠 / 内容裁切 / 安全边距 / 最小字号 / 信息密度 /")
         print("           强调色预算 / 图片变形（均为确定性规则）")
         print("   未检查：留白失衡 / 层次不清 / 对比度不足 / 配色协调 / 整体观感")
@@ -306,6 +313,8 @@ def _run_qa(html: Path, args: argparse.Namespace) -> int:
 
     if vision_on:
         print("全部页面通过（几何 + 视觉）。")
+    elif explicit_off:
+        print("几何检查全部通过。内容确认后跑完整验收即可出交付稿。")
     else:
         print("几何检查全部通过 —— 但审美问题未检查，建议配好视觉模型后重跑。")
     return 0
