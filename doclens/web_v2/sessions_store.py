@@ -1202,6 +1202,99 @@ class SessionsStore(_StorePart):
         items = self.project_live_items(self.get_detail(session_id))
         return sum(1 for it in items if it.kind in ("message_user", "message_ai"))
 
+    # ---- 删除对话对（2026-10-29：清理无用轮次）----
+
+    # 轮内出现的**历史级边界**条目：与具体轮强绑定之外还改变全局回放语义，
+    # 删除轮次时必须保留（拒绝删除），否则死段/截断事实被悄悄改写。
+    _BOUNDARY_KINDS = ("compacted", "rewound")
+
+    def delete_turn(self, session_id: str, anchor_seq: int) -> Optional[dict]:
+        """删除一处**对话对**（该 user 消息起、到下一处 user 消息前的整轮）。
+
+        动机：长会话里无用轮次会一直占上下文，用户要在气泡上直接清掉。
+        删除粒度是整轮（message_user + raw_messages / tool_trace /
+        message_ai_raw / message_ai / usage / microcompact），不是单条
+        消息——留下一半会让回放把 user 与 assistant 拆散，语义断裂。
+
+        - 锚点须为**活** message_user（死段内/非 user 条目 → ValueError）；
+        - 轮范围 = [锚点之前紧邻的 skill_context…（本轮注入）] 起，到
+          下一条 message_user（不含）或会话末尾止；
+        - 范围内含 compacted / rewound 边界 → ValueError（拒绝，不静默
+          改写回放事实：该用回退/压缩而不是删轮）；
+        - 删除后 message_count 按活投影重算并刷新 updated_at；
+        - rewind_snapshots 不删（引用机器本地文件备份）：被删锚点的快照
+          随锚点失效而不可达，会话删除时级联清理。
+
+        Returns:
+            {"deleted_items": int, "message_count": int}；会话不存在 None。
+        Raises:
+            ValueError: 锚点无效 / 范围含历史级边界（调用方转 400）。
+        """
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            rows = conn.execute(
+                """SELECT seq, kind, payload FROM session_items
+                   WHERE session_id = ? ORDER BY seq ASC""",
+                (session_id,),
+            ).fetchall()
+            # payload 必须带上：活投影要解析 rewound 边界 payload 才能算出死段
+            items = [
+                SessionItem(
+                    session_id=session_id, seq=r["seq"], kind=r["kind"],
+                    payload=r["payload"], created_at=None,
+                )
+                for r in rows
+            ]
+            live_seqs = {it.seq for it in self.project_live_items(items)}
+            idx = next(
+                (i for i, it in enumerate(items) if it.seq == anchor_seq), None
+            )
+            if idx is None or items[idx].kind != "message_user":
+                raise ValueError("删除锚点无效（须为用户消息）")
+            if anchor_seq not in live_seqs:
+                raise ValueError("该消息已不在当前时间线（不可删除）")
+            # 向前吞并本轮注入的 skill_context（upsert_skill_contexts 紧跟
+            # 在 message_user 之前；留着会变成无主注入污染后续上下文）
+            start = idx
+            while start > 0 and items[start - 1].kind == "skill_context":
+                start -= 1
+            end = next(
+                (
+                    i for i, it in enumerate(items)
+                    if it.seq > anchor_seq and it.kind == "message_user"
+                ),
+                len(items),
+            )
+            doomed = items[start:end]
+            boundary = next(
+                (it for it in doomed if it.kind in self._BOUNDARY_KINDS), None
+            )
+            if boundary is not None:
+                raise ValueError(
+                    "该轮范围内含压缩/回退边界，无法删除"
+                    "（请改用回退或重新压缩）"
+                )
+            conn.executemany(
+                "DELETE FROM session_items WHERE session_id = ? AND seq = ?",
+                [(session_id, it.seq) for it in doomed],
+            )
+            remaining = items[:start] + items[end:]
+            count = sum(
+                1
+                for it in self.project_live_items(remaining)
+                if it.kind in ("message_user", "message_ai")
+            )
+            conn.execute(
+                """UPDATE sessions SET message_count = ?, updated_at = ?
+                   WHERE id = ?""",
+                (count, datetime.now(timezone.utc).isoformat(), session_id),
+            )
+        return {"deleted_items": len(doomed), "message_count": count}
+
     @staticmethod
     def _rewound_intervals(items: list) -> list:
         """解析全部回退边界为 (point_seq, boundary_seq) 区间（seq 升序）。

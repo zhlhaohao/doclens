@@ -261,8 +261,8 @@ export class ChatMessageEl extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
-    /* 消息操作钮见下方 .actions/.reask/.rewind/.export/.copy —— 时间戳与按钮同一行浮现 */
-    .reask, .rewind, .export, .copy {
+    /* 消息操作钮见下方 .actions/.reask/.rewind/.export/.delete/.copy —— 时间戳与按钮同一行浮现 */
+    .reask, .rewind, .export, .delete, .copy {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -283,24 +283,32 @@ export class ChatMessageEl extends LitElement {
     :host(.hovered) .reask,
     :host(.hovered) .rewind,
     :host(.hovered) .export,
+    :host(.hovered) .delete,
     :host(.hovered) .copy,
     :host(:focus-within) .ts,
     :host(:focus-within) .reask,
     :host(:focus-within) .rewind,
     :host(:focus-within) .export,
+    :host(:focus-within) .delete,
     :host(:focus-within) .copy,
     .ts:focus,
     .reask:focus,
     .rewind:focus,
     .export:focus,
+    .delete:focus,
     .copy:focus { opacity: 1; }
-    .reask:hover, .rewind:hover, .export:hover, .copy:hover {
+    .reask:hover, .rewind:hover, .export:hover, .delete:hover, .copy:hover {
       color: var(--cortex-primary);
       background: var(--cortex-surface-muted);
     }
-    .rewind:disabled {
+    .rewind:disabled,
+    .delete:disabled {
       opacity: 0.35;
       cursor: not-allowed;
+    }
+    /* 删轮是破坏性操作：hover 用危险色提示 */
+    .delete:hover {
+      color: var(--cortex-danger);
     }
     /* AI 复制钮靠右（与 user 动作区左右对称） */
     .copy { margin-left: auto; }
@@ -470,6 +478,20 @@ export class ChatMessageEl extends LitElement {
     );
   };
 
+  /** 点击「删除这一轮」：冒泡锚点 seq（chat-view 弹确认框后删除整轮对话对）。 */
+  private _emitDeleteTurn = (e: Event): void => {
+    e.stopPropagation();
+    const seq = this.message?.seq;
+    if (seq === undefined) return; // 无锚点（流式新建/老数据）不可删轮
+    this.dispatchEvent(
+      new CustomEvent("delete-turn", {
+        detail: { seq },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
   /** 点击「导出到此为止」：冒泡锚点 seq（chat-view 走截断导出，只导
    *  这条 user 消息及之前的内容，避免整段会话导出后上下文过长）。 */
   private _emitExportUpto = (e: Event): void => {
@@ -578,6 +600,8 @@ export class ChatMessageEl extends LitElement {
         ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
         : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${hasAnchor
         ? html`<button class="export" type="button" aria-label="导出到此为止" title="导出到此为止（只导出这条及之前的对话）" @click=${this._emitExportUpto}><doclens-icon name="download"></doclens-icon></button>`
+        : null}${hasAnchor
+        ? html`<button class="delete" type="button" aria-label="删除这一轮" title="删除这一轮（这条提问及其后的回答）" ?disabled=${this.rewindDisabled} @click=${this._emitDeleteTurn}><doclens-icon name="trash-2"></doclens-icon></button>`
         : null}${hasAnchor
         ? html`<button class="rewind" type="button" aria-label="回退到这里" title="回退到这里" ?disabled=${this.rewindDisabled} @click=${this._emitRewind}><doclens-icon name="history"></doclens-icon></button>`
         : null}</div>${this._renderPreviewDialog()}`;

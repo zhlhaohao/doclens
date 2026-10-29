@@ -175,3 +175,47 @@ describe("<chat-message> user export-upto button", () => {
     expect(ev.composed).toBe(true);
   });
 });
+
+/** 删除对话对（2026-10-29）：user 气泡操作行多一个删除钮，点击冒泡锚点
+ *  seq（chat-view 弹确认框后删整轮），流式期间禁用。 */
+describe("<chat-message> user delete-turn button", () => {
+  it("renders .delete for a user message carrying seq", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题", seq: 4 } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const btn = el.shadowRoot!.querySelector("button.delete");
+    expect(btn).toBeTruthy();
+    expect(btn!.getAttribute("title")).toContain("删除这一轮");
+  });
+
+  it("no seq (streaming/new message) → no delete button", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题" } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("button.delete")).toBeNull();
+  });
+
+  it("disabled while streaming (rewindDisabled)", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" ?rewindDisabled=${true} .message=${{ role: "user", content: "问题", seq: 4 } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    expect((el.shadowRoot!.querySelector("button.delete") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("click dispatches delete-turn with seq (composed)", async () => {
+    const el = await fixture(
+      html`<chat-message role="user" .message=${{ role: "user", content: "问题", seq: 5 } as any}></chat-message>`,
+    ) as ChatMessageEl;
+    await el.updateComplete;
+    const handler = vi.fn();
+    el.addEventListener("delete-turn", handler);
+    (el.shadowRoot!.querySelector("button.delete") as HTMLElement).click();
+    expect(handler).toHaveBeenCalledTimes(1);
+    const ev = handler.mock.calls[0][0] as CustomEvent<{ seq: number }>;
+    expect(ev.detail.seq).toBe(5);
+    expect(ev.composed).toBe(true);
+  });
+});

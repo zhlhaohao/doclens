@@ -145,6 +145,17 @@ export async function rewindSession(
   });
 }
 
+/** 删除一处对话对（2026-10-29）：该 user 消息起、到下一处 user 消息前的
+ *  整轮（含工具轨迹与 AI 回复）。锚点须为本轮 user 消息的 seq。 */
+export async function deleteTurn(
+  sessionId: string,
+  pointSeq: number,
+): Promise<{ deleted_items: number; message_count: number }> {
+  return request(`/api/sessions/${sessionId}/turns/${pointSeq}`, {
+    method: "DELETE",
+  });
+}
+
 export async function clearSessions(type?: "search" | "chat"): Promise<{ ok: boolean; deleted_count: number; skipped_starred: number }> {
   const sp = new URLSearchParams();
   if (type) sp.set("type", type);

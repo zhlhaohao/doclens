@@ -8,7 +8,7 @@ import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession, fetchChatTrace } from "../api/sessions";
+import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, deleteTurn, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession, fetchChatTrace } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -27,6 +27,7 @@ import "../components/session-rename-dialog";
 import "../components/fork-confirm-dialog";
 import "../components/session-info-dialog";
 import "../components/rewind-dialog";
+import "../components/turn-delete-dialog";
 import "../components/compact-confirm-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
@@ -581,6 +582,11 @@ export class ChatView extends LitElement {
     seq: number; content: string; deadCount: number;
     /** 锚点图片（ADR-0034）：确认后回填附件暂存区 */
     images?: { data: string; media_type: string }[];
+  } | null = null;
+  /** 删轮确认框载荷（null = 关闭）：seq 锚点 / 内容预览 / 本轮消息数 / 错误。 */
+  @state() private _deleteTurnDialog: {
+    seq: number; content: string; turnMessageCount: number;
+    submitting: boolean; errorMessage: string;
   } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
@@ -1433,6 +1439,7 @@ export class ChatView extends LitElement {
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
     this._rewindDialog = null;
+    this._deleteTurnDialog = null;
     actions.setChatState({
       state: "focus",
       currentSession: {
@@ -1656,6 +1663,7 @@ export class ChatView extends LitElement {
     this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
     this._rewindDialog = null;
+    this._deleteTurnDialog = null;
     this._stopGeneratingPoll();
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
@@ -1899,6 +1907,77 @@ export class ChatView extends LitElement {
   private _onRewindCancel = (): void => {
     this._rewindDialog = null;
   };
+
+  /** user 气泡「删除这一轮」：弹确认框（删除不可撤销，不直接执行）。
+   *  本轮消息数 = 锚点起、到下一条 user 消息之前的可见消息条数。 */
+  private _onDeleteTurn(e: CustomEvent<{ seq: number }>): void {
+    const seq = e.detail.seq;
+    const msgs = this.viewState.messages.filter((m) => m.seq !== undefined);
+    const nextUser = msgs.find(
+      (m) => m.role === "user" && (m.seq as number) > seq,
+    );
+    const end = nextUser?.seq ?? Infinity;
+    const inTurn = msgs.filter(
+      (m) => (m.seq as number) >= seq && (m.seq as number) < end,
+    );
+    const anchorMsg = msgs.find((m) => m.seq === seq);
+    this._deleteTurnDialog = {
+      seq,
+      content: anchorMsg?.content ?? "",
+      turnMessageCount: Math.max(inTurn.length, 1),
+      submitting: false,
+      errorMessage: "",
+    };
+  }
+
+  /** 确认删轮：DELETE → 重拉 detail（消息流与压缩信息同步刷新）。 */
+  private async _onDeleteTurnConfirm(
+    e: CustomEvent<{ pointSeq: number }>,
+  ): Promise<void> {
+    const session = this.viewState.currentSession;
+    const d = this._deleteTurnDialog;
+    if (!session || !d) return;
+    this._deleteTurnDialog = { ...d, submitting: true, errorMessage: "" };
+    try {
+      const res = await deleteTurn(session.id, e.detail.pointSeq);
+      this._deleteTurnDialog = null;
+      this._pushToast(
+        `已删除该轮对话（剩 ${res.message_count} 条消息）`, "success", 3000,
+      );
+      await this._loadSession(session);
+    } catch (err) {
+      this._deleteTurnDialog = {
+        ...d, submitting: false,
+        errorMessage: (err as Error)?.message || String(err),
+      };
+    }
+  }
+
+  private _onDeleteTurnCancel = (): void => {
+    this._deleteTurnDialog = null;
+  };
+
+  /** 删轮确认框宿主（<dialog> 由 updated() showModal）。 */
+  private _renderDeleteTurnDialog() {
+    const d = this._deleteTurnDialog;
+    const session = this.viewState.currentSession;
+    if (!d || !session) return nothing;
+    return html`
+      <dialog @cancel=${(e: Event) => {
+        if (d.submitting) e.preventDefault();
+        else this._onDeleteTurnCancel();
+      }}>
+        <turn-delete-dialog
+          .pointSeq=${d.seq}
+          .anchorContent=${d.content}
+          .turnMessageCount=${d.turnMessageCount}
+          .submitting=${d.submitting}
+          .errorMessage=${d.errorMessage}
+          @turn-delete-confirm=${this._onDeleteTurnConfirm}
+          @cancel=${this._onDeleteTurnCancel}>
+        </turn-delete-dialog>
+      </dialog>`;
+  }
 
   /** 回退确认框宿主（<dialog> 由 updated() showModal）。 */
   private _renderRewindDialog() {
@@ -2156,6 +2235,7 @@ export class ChatView extends LitElement {
             @reask=${this._onReask}
             @rewind=${this._onRewind}
             @export-upto=${this._onExportUpto}
+            @delete-turn=${this._onDeleteTurn}
             @interject-request=${this._onInterjectRequest}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
@@ -2225,6 +2305,7 @@ export class ChatView extends LitElement {
       ${this._renderInterjectDialog()}
       ${this._renderInfoDialog()}
       ${this._renderRewindDialog()}
+      ${this._renderDeleteTurnDialog()}
       ${this._renderCompactDialog()}
     `;
   }

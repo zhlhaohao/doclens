@@ -420,3 +420,141 @@ class TestExportEndpointUpto:
         with pytest.raises(CortexAPIError) as ei:
             asyncio.run(api.export_session("SRCH", upto_seq=0))
         assert ei.value.status == 400 and ei.value.code == "NOT_CHAT_SESSION"
+
+
+class TestDeleteTurn:
+    """删除对话对（2026-10-29）：user 消息起至下一处 user 前的整轮。
+
+    粒度是整轮——半删会让回放把 user 与 assistant 拆散；历史级边界
+    （compacted / rewound）范围内的轮次拒绝删除。
+    """
+
+    def _seed(self, st, sid="DEL"):
+        now = datetime.now(timezone.utc)
+        st.create(SessionSummary(
+            id=sid, type=SessionType.CHAT, title="清理", preview="",
+            created_at=now, updated_at=now,
+        ))
+        st._append_item(sid, "skill_context", {"name": "kb", "content": "body"})
+        st._append_item(sid, "message_user", {"content": "q1"})      # 1
+        st._append_item(sid, "tool_trace", {"name": "read", "input": {}})
+        st._append_item(sid, "message_ai", {"content": "a1"})        # 3
+        st.append_usages(sid, [{"input": 10, "output": 5}])
+        st._append_item(sid, "message_user", {"content": "q2"})      # 5
+        st._append_item(sid, "message_ai", {"content": "a2"})        # 6
+        st.update_count_and_time(sid, 4)
+        return sid
+
+    def test_deletes_whole_turn(self, store):
+        self._seed(store)
+        res = store.delete_turn("DEL", 1)
+        assert res["deleted_items"] == 5  # skill_context + 本轮 4 条
+        assert res["message_count"] == 2
+        kinds = [i.kind for i in store.get_detail("DEL")]
+        assert kinds == ["message_user", "message_ai"]
+        assert store.get("DEL").message_count == 2
+
+    def test_history_after_delete(self, store):
+        """回放只剩未被删的轮次（user/assistant 不拆散）。"""
+        self._seed(store)
+        store.delete_turn("DEL", 1)
+        assert store.get_chat_history("DEL") == [
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+
+    def test_last_turn_deleted_to_end(self, store):
+        """末轮：删除范围到会话末尾。"""
+        self._seed(store)
+        store.delete_turn("DEL", 5)
+        # 首轮的 skill_context 注入仍在（属 q1 轮，未被删）
+        assert store.get_chat_history("DEL") == [
+            {"role": "user", "content": "body"},
+            {"role": "assistant", "content": "Noted."},
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+        assert store.get("DEL").message_count == 2
+
+    def test_invalid_anchor_rejected(self, store):
+        self._seed(store)
+        with pytest.raises(ValueError, match="须为用户消息"):
+            store.delete_turn("DEL", 3)  # message_ai 不是轮首
+        with pytest.raises(ValueError, match="锚点无效"):
+            store.delete_turn("DEL", 999)
+
+    def test_dead_anchor_rejected(self, store):
+        """死段内的 user 消息不可删（它已不可见）。"""
+        self._seed(store)
+        store.append_rewound("DEL", 1, [], [])
+        with pytest.raises(ValueError, match="不在当前时间线"):
+            store.delete_turn("DEL", 1)
+
+    def test_boundary_in_range_rejected(self, store):
+        """范围内含压缩/回退边界 → 拒绝（不静默改写回放事实）。"""
+        now = datetime.now(timezone.utc)
+        store.create(SessionSummary(
+            id="BND", type=SessionType.CHAT, title="边界", preview="",
+            created_at=now, updated_at=now,
+        ))
+        store._append_item("BND", "message_user", {"content": "q1"})      # 0
+        store._append_item("BND", "message_ai", {"content": "a1"})        # 1
+        store._append_item("BND", "message_user", {"content": "q2"})      # 2
+        store.append_compacted("BND", [{"role": "user", "content": "摘要"}], 100)
+        store._append_item("BND", "message_ai", {"content": "a2"})
+        with pytest.raises(ValueError, match="边界"):
+            store.delete_turn("BND", 2)
+        # 拒绝时不写库
+        assert len(store.get_detail("BND")) == 5
+
+    def test_missing_session(self, store):
+        assert store.delete_turn("NOPE", 1) is None
+
+
+class TestDeleteTurnApi:
+    """DELETE /sessions/{id}/turns/{seq}（依赖注入风格，同既有约定）。"""
+
+    def _patch(self, monkeypatch, store):
+        from doclens.web_v2.api import sessions as sessions_api
+        monkeypatch.setattr(sessions_api, "_get_store", lambda: store)
+        return sessions_api
+
+    def _seed(self, st, sid="DEL"):
+        now = datetime.now(timezone.utc)
+        st.create(SessionSummary(
+            id=sid, type=SessionType.CHAT, title="清理", preview="",
+            created_at=now, updated_at=now,
+        ))
+        st._append_item(sid, "message_user", {"content": "q1"})
+        st._append_item(sid, "message_ai", {"content": "a1"})
+        st._append_item(sid, "message_user", {"content": "q2"})
+        st._append_item(sid, "message_ai", {"content": "a2"})
+        st.update_count_and_time(sid, 4)
+
+    def test_delete_ok(self, store, monkeypatch):
+        self._seed(store)
+        api = self._patch(monkeypatch, store)
+        res = asyncio.run(api.delete_turn("DEL", 2))
+        assert res["ok"] is True and res["message_count"] == 2
+        assert [i.kind for i in store.get_detail("DEL")] == [
+            "message_user", "message_ai",
+        ]
+
+    def test_invalid_anchor_400(self, store, monkeypatch):
+        self._seed(store)
+        api = self._patch(monkeypatch, store)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.delete_turn("DEL", 1))  # AI 消息
+        assert ei.value.status == 400 and ei.value.code == "INVALID_ANCHOR"
+
+    def test_search_session_rejected(self, store, monkeypatch):
+        now = datetime.now(timezone.utc)
+        store.create(SessionSummary(
+            id="SRCH", type=SessionType.SEARCH, title="搜", preview="",
+            created_at=now, updated_at=now,
+        ))
+        store._append_item("SRCH", "message_user", {"content": "kw"})
+        api = self._patch(monkeypatch, store)
+        with pytest.raises(CortexAPIError) as ei:
+            asyncio.run(api.delete_turn("SRCH", 0))
+        assert ei.value.status == 400 and ei.value.code == "NOT_CHAT_SESSION"

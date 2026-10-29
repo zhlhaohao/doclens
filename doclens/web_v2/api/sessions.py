@@ -442,6 +442,27 @@ async def rewind_session(session_id: str, req: SessionRewindRequest):
     }
 
 
+@router.delete("/sessions/{session_id}/turns/{point_seq}")
+async def delete_turn(session_id: str, point_seq: int):
+    """删除一处对话对（2026-10-29）：该 user 消息起、到下一处 user 消息前的
+    整轮（含工具轨迹 / raw_messages / AI 回复），用于清理无用轮次、压缩
+    上下文长度。
+
+    粒度是**整轮**而非单条消息——只删一半会让回放把 user 与 assistant 拆散。
+    锚点须为活用户消息；范围内含压缩/回退边界时拒绝（400），该类事实只能
+    用回退或重新压缩处理。流式生成中 409（本轮快照未固化）。
+    """
+    store = _get_store()
+    _require_chat_session(store, session_id, "删除", busy=True)
+    try:
+        res = store.delete_turn(session_id, point_seq)
+    except ValueError as e:
+        raise CortexAPIError(400, "INVALID_ANCHOR", str(e)) from e
+    if res is None:
+        raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
+    return {"ok": True, "id": session_id, "point_seq": point_seq, **res}
+
+
 @router.post("/sessions/{session_id}/duplicate", response_model=SessionCreatedResponse)
 async def duplicate_session(session_id: str):
     """孪生复制（2026-10-10）：原会话完整保留，新会话继承全部条目继续干活。
