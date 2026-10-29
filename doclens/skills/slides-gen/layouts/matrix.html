@@ -1,0 +1,37 @@
+<!-- 版式：matrix 2×2 象限 —— 3×3 表格（首行首列为轴标签），轴名可用页指令覆盖 -->
+<div class="slide-inner layout-matrix"
+     data-cap='{"bullets": 4, "bullet_chars": 24, "total_chars": 160, "table_rows": 3, "table_cols": 3, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="mx-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-matrix .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .mx-wrap { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 6px 0; }
+  .mx-grid {
+    display: grid;
+    grid-template-columns: minmax(64px, 92px) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: 30px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px 12px;
+    width: 100%; height: 100%; max-height: 100%;
+  }
+  .mx-corner { }
+  .mx-xaxis, .mx-yaxis {
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--fs-body) * .9 * var(--fit, 1)); font-weight: 700;
+    color: var(--c-primary); letter-spacing: .03em; line-height: 1.2;
+    text-align: center; padding: 2px;
+  }
+  .mx-yaxis { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg);
+              letter-spacing: .14em; }
+  .mx-quad {
+    display: flex; flex-direction: column; justify-content: center; gap: .35em;
+    padding: .8em 1em; border-radius: 10px; box-sizing: border-box;
+    background: color-mix(in srgb, var(--c-primary) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-primary) 14%, transparent);
+    min-height: 0; overflow: hidden;
+  }
+  .mx-quad.q-tl { background: color-mix(in srgb, var(--c-accent) 12%, transparent); border-color: color-mix(in srgb, var(--c-accent) 30%, transparent); }
+  .mx-quad-name { font-size: calc(var(--fs-caption) * .92 * var(--fit, 1)); font-weight: 700;
+                  color: var(--c-text-muted); letter-spacing: .08em; text-transform: uppercase; }
+  .mx-quad-text { font-size: calc(var(--fs-body) * .9 * var(--fit, 1)); font-weight: 500; line-height: 1.4; }
+</style>

@@ -4,22 +4,34 @@
 
 ## 术语
 
-### PPTX 生成技能（pptx-gen skill）
+### 演示稿生成技能（slides-gen skill）
 
-- **PPT 中间格式 (PPT Intermediate Format)**：介于自然语言与 PPTX 二进制之间的 Markdown 表示——文档级元数据走 YAML frontmatter（主题/比例/作者），页级与块级指令走 HTML 注释（`<!-- slide: ... -->`），正文是合法 CommonMark。是 pptx-gen 技能的唯一生成物与转换器的唯一输入；源文件 `<名>.md` 与产物 `<名>.pptx` 同目录落知识库（deck 源即知识，随 Git 同步）。_Avoid_: PPT DSL、PPT 源码。
-- **转换器 (Converter)**：中间格式 md → PPTX 的独立 Python 脚本（`converter/` 包，CLI 入口），随技能分发但可脱离技能单独运行。失败语义 = 警告 + 降级（未知版式→title-content、未知动画词→fade、缺图→占位框），永远产出 PPTX。_Avoid_: 把转换逻辑写进 SKILL.md 文字里。
+- **演示中间格式 (Slide Intermediate Format)**：介于自然语言与演示产物之间的 Markdown 表示——文档级元数据走 YAML frontmatter（主题/比例/标题），页级与块级指令走 HTML 注释（`<!-- slide: ... -->` / `<!-- block: ... -->`），正文是合法 CommonMark。是 slides-gen 技能的唯一生成物与渲染器的唯一输入；源文件 `<名>.md` 与产物 `<名>.html` 同目录落知识库（deck 源即知识，随 Git 同步）。_Avoid_: PPT DSL、PPT 源码。
+- **渲染器 (Renderer)**：中间格式 md → **单文件自包含 HTML** 的 Python 包（`renderer/`，CLI 入口 `render`/`qa`/`build`）。失败语义 = 警告 + 降级（未知版式→title-content、未知动画词→fade、缺图→占位框），永远产出可看的 deck。_Avoid_: 转换器 (converter，PPTX 时代旧称)、把渲染逻辑写进 SKILL.md 文字里。
+- **视觉验收 (Visual QA)**：每页渲染后的强制质量关卡——playwright 截图 + 视觉模型按审美清单打分 + 确定性几何自检，产出 issues 清单并驱动修复循环。判定口径 = 「无 high 问题 且 score ≥ 70」；**不采信视觉模型自报的 pass 字段**（与 score 常自相矛盾，会导致循环不收敛）。_Avoid_: 人工目检 (ad-hoc，无记录不可复现)、只看得分不看问题清单。
+- **几何自检 (Geometry Check)**：验收中的确定性检查面——元素重叠、内容裁切、越出安全边距、最小字号（<16px 判 high）、信息密度、图片变形。与「视觉评审」互补：几何管机器可判定的硬伤，视觉管审美。_Avoid_: 把审美问题也塞进几何规则。
+- **自适应字号 (Autofit)**：版面装不下内容时的处置——二分求 `--fit` 字号倍数让文字真实重排（不是等比缩放，后者不改变相对溢出量），**下限由可读性反推**（页内最小字号不低于 17px）。缩到底仍溢出则标记 `data-fit-overflow`，验收判「必须拆页」。_Avoid_: 无下限地缩字号（实测会压到 11.9px 不可读）、zoom/transform 等比缩放。
+- **QA 模式 (QA Mode)**：HTML deck 的 `?qa=1` 运行态——动画瞬时完成、元素全部可见、演示 UI（进度条/提示/备注）隐藏，保证截图反映最终版面且可复现。_Avoid_: 直接截演示态（动画中途会截到半透明元素）。
+- **版式容量 (Layout Capacity)**：每种版式对内容量的确定性上限——按「阅读单元」（1 个汉字或 1 个英文词 = 1）计量要点条数、每条字数、表格行列数等。分两处使用：写稿期预检（`check` 子命令，防内容天生装不下）、渲染期换版式（超容量自动降级到同族更宽松版式）。_Avoid_: 靠渲染后验收才发现装不下（往返成本高）。
+- **字号阶梯 (Type Ladder)**：deck 全局共享的固定字号档位序列（如 42/36/30/24/20/17/15/13），排版时**只允许落在档位上**——而不是任意连续缩放。保证同级标题跨页字号一致、视觉层次整齐。与「自适应字号」的关系：autofit 在阶梯上挑档，而非连续缩放。_Avoid_: 每页各自算出的 42/38.2/33.6 三种"同级"标题。
+- **孤字 (Orphan)**：折行后末行只剩 1-2 个汉字/字符的排版瑕疵（"任"字独自吊在最后一行）。处置 = 降一档字号重新折行使其均衡；降到底仍孤字则接受。_Avoid_: 无视孤字、用 `<br>` 手工断行。
+- **强调色预算 (Accent Budget)**：单页内强调色（accent 角色）的确定性上限——出现次数 ≤ 3 处、着色面积 ≤ 版面 8%。超出即验收报问题。动机：强调色遍地等于没有强调。_Avoid_: 把强调色当装饰色铺满。
+- **对比度预算 (Contrast Budget)**：主题色板在加载时即做 WCAG 对比度校验——正文/背景 ≥ 4.5:1、大字 ≥ 3:1；不达标则警告并给最近的安全替代色。与「强调色预算」并列，共同构成「不靠肉眼判断的颜色硬规则」。_Avoid_: 等视觉模型说"对比度偏低"再改。
+- **图标集 (Icon Set)**：随技能分发的内联 SVG 图标库（Lucide 系），按关键词自动匹配到页面要点，渲染为当前主题角色色。与「程序化插画」不同——图标是符号，插画是配图。_Avoid_: 用 emoji 当图标（跨平台渲染不一致、无法着色）。
+- **幽灵稿 (Ghost Outline)**：`check` 输出的纯标题清单（每页只有标题 + 页码，无正文排布），供用户在投入设计前确认叙事线是否成立。_Avoid_: 直接出成品再让用户推翻结构。
+- **五维自评 (Five-dimension Critique)**：交付前的整体审视框架——统一（视觉语言是否一套）、层级（主次是否分明）、细节（对齐/间距/孤字）、传达（一页一个结论是否成立）、节奏（详略与版式变化）。并入视觉验收的评审清单，分数与 issues 一起产出。_Avoid_: 只看单页问题不看全册一致性。
 - **页指令 (Slide Directive)**：HTML 注释承载的单页配置（版式/动画/背景等），置于每页内容之前。与「frontmatter」（文档级，全局默认值）分层：frontmatter 定全局，页指令做覆盖。
 - **主题 (Theme)**：打包整套视觉默认值的命名资产（色板、字体、母版装饰），JSON 定义、随技能内置分发、支持用户扩展自定义主题。frontmatter 的 `theme` 键按名引用。_Avoid_: 模板（template，指版式或母版文件，另一回事）、皮肤。
 - **主题角色 (Theme Role)**：主题内具名的颜色/字体槽位（如 `primary`/`accent`/`bg`/`text`），中间格式中颜色的**首选表达**——引用角色名而非色值，十六进制色值仅为逃生舱，技能提示词引导优先用角色名。_Avoid_: 直接叫「颜色」(color)。
-- **版式资产 (Layout Asset)**：预设版式的载体——HTML 文件（`layouts/<版式名>.html`），版式名 = 文件名，按名引用、可独立扩展。HTML 中 slot 元素声明内容占位框，容器支持行列嵌套 + grow 比例分配（受限布局引擎，非完整 CSS 渲染）。_Avoid_: 版式代码（已从代码常量升级为资产文件）、模板 (template，PPT 模板文件是另一回事)。
-- **受限布局引擎 (Constrained Layout Engine)**：版式 HTML 的布局求值器——仅支持行/列容器嵌套、`grow` 比例分配、`gap` 间距与显式百分比坐标四原语，将 slot 解析为矩形占位框。有意不实现完整 CSS（grid/绝对定位/文本度量）。_Avoid_: CSS 渲染器。
+- **版式资产 (Layout Asset)**：预设版式的载体——HTML 模板文件（`layouts/<版式名>.html`），版式名 = 文件名，按名引用、可独立扩展。文件内含 `{{title}}`/`{{content}}`/`{{left}}`/`{{right}}`/`{{image}}` 占位符与该版式专属 `<style>`（作用域限定 `.layout-<名>`）。_Avoid_: 版式代码（已从代码常量升级为资产文件）、模板 (template，PPT 模板文件是另一回事)。
+- **槽位 (Slot)**：版式模板里的内容占位符，把页面内容分派到不同区域——`title`=一级标题、`content`=其余内容、双栏版式用 `left`/`right`、图文版式用 `image`。内容用 CSS 流式排布，不存在坐标计算。_Avoid_: 占位框/文本框 (PPTX 绝对坐标时代的概念)。
 - **行内白名单 (Inline Whitelist)**：正文中允许出现的 HTML 行内标签封闭集合——`<mark>`（高亮）、`<span class="角色名">`（文字引用主题角色色）、`<br>`（软换行）三个，其余排版一律用 MD 原生（粗体/斜体/代码/删除线）。有意不提供 inline 字号——字号只走主题阶梯，标题层级表达强调。_Avoid_: 开放式 HTML 内嵌。
-- **动画词 (Animation Token)**：白名单封闭集合的动画词汇（`enter.fly-in` / `exit.fade` / `emphasize.pulse`…，点分命名 = 类别.动作），每个词对应一张经验证的 `p:timing` XML 模板。白名单外词汇警告并降级为 fade，不中断转换。_Avoid_: 开放式动画参数。
+- **动画词 (Animation Token)**：白名单封闭集合的动画词汇（`enter.fly-in` / `exit.fade` / `emphasize.pulse`…，点分命名 = 类别.动作），每个词对应一段 CSS keyframes。白名单外词汇警告并降级为 fade，不中断渲染。_Avoid_: 开放式动画参数。
 - **动画策略 (Animation Policy)**：页指令声明的批量动画规则（`anim=bullets:词` / `anim=all:词` / `anim=none`）——页级声明自动套用到列表项或全页元素，免去逐块注释；块级 `anim=` 覆盖页级。与「切换」(transition，页到页过渡，p:transition) 互不相干。
-- **适配 (Fit)**：图片块指令的变形策略三值——`cover`（填满裁剪，默认）/ `contain`（完整留白，图表截图默认）/ `stretch`（拉伸变形，不推荐但保留）。有意不提供像素级裁剪参数。_Avoid_: 裁剪 (crop)。
+- **适配 (Fit)**：图片块指令的变形策略三值——`cover`（填满裁剪，默认）/ `contain`（完整留白，图表截图默认）/ `stretch`（拉伸变形，不推荐但保留）。映射为 CSS `object-fit`，有意不提供像素级裁剪参数。_Avoid_: 裁剪 (crop)。
 - **占位图 (Image Placeholder)**：引用的图片文件缺失时转换脚本的降级产物——渲染占位框 + alt 文字 + 警告，不中断转换。与「占位节点」（视觉解析概念）无关。
-- **图表块 (Chart Block)**：`<!-- block: chart type=bar|line|pie -->` 指令 + 紧随的 MD 表格作为数据源，渲染为 PPTX 原生图表（Office 内可编辑数据），非图片。_Avoid_: 数据截图。
-- **备注 (Notes)**：`<!-- notes: ... -->` 页指令——渲染到 PPTX 演讲者备注窗格的页面附注，不进入幻灯片画面。
+- **图表块 (Chart Block)**：`<!-- block: chart=bar|line|pie -->` 指令 + 紧随的 MD 表格作为数据源，渲染为**内联 SVG** 图表（矢量、可打印、零依赖、随主题配色）。_Avoid_: 数据截图、外部图表库。
+- **备注 (Notes)**：`notes="..."` 页指令 / `<!-- notes: ... -->`——渲染到演示态的备注窗格（按 `N` 显示），不进入幻灯片画面；打印版亦不含。
 
 - **个人助手 (Personal Assistant)**：chat 视图（AI 会话页）的**用户可见名称**——导航 tab 标签、hero「你的个人 AI 助手」（2026-10-14 同日四个 tab 统一四字命名：全库搜索/个人助手/岁月微笺/文件管理）。仅改显示层文案：ViewId/路由/组件名仍为 `chat`，历史文档中「对话 tab / 对话页」指同一对象。_Avoid_: 以为代码层有"assistant"标识符。
 - **图像文件 (Image File)**：知识库中以独立文件存在的图像，扩展名集合见「图像解析」相关决策（候选：.png/.jpg/.jpeg/.webp/.gif/.bmp/.tiff）。与「内嵌图片」严格区分。
@@ -197,9 +209,13 @@
 
 - **即梦配置 (Jimeng Config)**：全局 `.env` 单键粒度——`JIMENG_API_KEY`（火山方舟 Bearer key）+ `JIMENG_MODEL`（缺省 `doubao-seedream-4-0`）；工具/CLI 的 model 参数可临时覆盖。_Avoid_: 接入模型预设体系（生图单厂商单参数，预设过重）、写死无覆盖。
 
+- 2026-10-29：吸收 luobo-ppt 的确定性设计规则（**HTML 路线不变，不做旧 pptx 换皮**，ADR-0051）= ①**版式容量**写进 `data-cap` 资产属性（bullets/bullet_chars/total_chars/table_rows/table_cols/image_min_ratio），`check` 子命令写稿期秒级预检、`capacity` 汇总打印；②**五段命令** `check/render/qa/build/capacity`，纪律「check ERROR 清零再 build」；③**字号阶梯**替代连续缩放（`body 22/20/17/15/13` 五档，autofit 遍历取档，全 deck 只有 5 种缩放态）；④**孤字**用 `text-wrap: pretty` 规避；⑤**强调色预算**（单页 ≤3 处 / ≤8% 面积）与⑥**对比度预算**（WCAG 正文 4.5:1、主色 3:1）作为确定性规则；⑦**图标集** 81 个内置 Lucide SVG，`<i data-icon="名"/>` 行内白名单，`currentColor` 随字色，未知名忽略并警告；⑧**幽灵稿** `<名>-outline.md`（纯标题）供用户在设计前确认叙事线；⑨**五维自评**（统一/层级/细节/传达/节奏）并入整册视觉评审、不阻断交付但必须报分；⑩风格库 4 → **8 套**（新增 swiss-grid / ink-magazine / mint-fresh / warm-orange，全部过对比度校验）。生图仍用即梦（`mcp__jimeng__generate`），未引入 luobo 的 AI 生图客户端与程序化插画兜底。
+
 ## 决议摘要（详见 docs/adr/）
 
-- 2026-10-28：pptx-gen 技能与 PPT 中间格式（ADR-0049）= LLM 产出中间格式 md（frontmatter + `<!-- slide/block: -->` 注释指令 + 合法 CommonMark 正文），converter 编译为 PPTX。颜色走主题角色名（JSON 主题资产 ×4，hex 逃生舱）；版式走 HTML 版式资产（受限布局引擎四原语，非完整 CSS，blank 版式坐标逃生舱）；排版 MD 原生 + 3 标签行内白名单、无 inline 字号；动画封闭白名单（手工注入 p:timing XML，页级默认策略 + 块级覆盖，默认 after/0.3s 递增）；图片 MD 原生 + fit 三值 + 缺图占位；mermaid 经 mmdc/npx 渲染 PNG；失败语义 = 警告降级永不中断（未知词全部有降级位）；图表块（chart=bar/line/pie + MD 表格数据源）渲染原生可编辑图表；产物 md/pptx 同目录落知识库。语法规范 `doclens/skills/pptx-gen/SCHEMA.md`。
+- 2026-10-29：slides-gen（ADR-0050，**取代 ADR-0049 的产物与验收方式**）= 演示稿产物由 PPTX 改为**单文件自包含 HTML**（CSS 流式布局天然免疫文本框重叠、点击翻页 + 动画 + 备注 + 打印导出 PDF、零依赖 presenter.js）；内置**强制逐页视觉验收**（playwright 2x 截图 + 视觉模型 8 项审美清单 + 确定性几何自检，判定 = 无 high 且 score≥70，不采信模型自报 pass）；**自适应字号下限由可读性反推**（最小字 17px），缩到底仍溢出即判「必须拆页」而非把字压到 11.9px；技能更名 slides-gen，pptx-gen 全删。中间格式 MD 与 SCHEMA 保留、语义改 HTML。语法规范 `doclens/skills/slides-gen/SCHEMA.md`。
+
+- 2026-10-28：pptx-gen 技能与 PPT 中间格式（ADR-0049，**已被 ADR-0050 取代**）= LLM 产出中间格式 md 编译为 PPTX。真机试用暴露「无视觉反馈 + PPTX 绝对坐标易重叠」两处根本缺陷，产物形态改 HTML。
 
 - 2026-10-28：即梦文生图 = doclens 内置 MCP server（仓库内 jimeng 模块：Ark Seedream 客户端核心 + stdio server 壳 + CLI 子命令 `doclens jimeng generate`，不进 dist-workspace 不单独发版）。代码级内置注册（GUI 启动自动挂载、配 key 即有工具、无先例小改 mcp_client）；**隐藏注册不进设置页 MCP tab**（未配 key 时工具直接缺席——agent 感知不到省 token；无 UI 开关，停用靠删 key，对齐 VISION_* 内置能力先例）；单工具 `generate`（prompt 必填 + 参考图/张数/size/model/seed 可选默认值，图生图复用同框架不拆双工具）；同步阻塞语义（timeout 120s，否决 submit+poll 与后台通知通道）；生成图落盘知识库（图像文件第四来源，进索引随 Git 同步，返回本地路径非 URL），**落盘目录由调用者经工具参数决定**（未指定时兜底 `图片/AI/`），文件名 = prompt slug + 时间戳，格式 png；prompt 写进图像元数据（写回-读回闭环零视觉调用、默认不入视觉队列、describe 参数可选入队）；全局 .env 单键 `JIMENG_API_KEY`+`JIMENG_MODEL`（否决预设体系接入）。
 

@@ -1,0 +1,15 @@
+<!-- 版式：image-right 文左图右 -->
+<div class="slide-inner layout-image-right"
+     data-cap='{"bullets": 5, "bullet_chars": 34, "total_chars": 200, "table_rows": 4, "table_cols": 3, "image_min_ratio": 0.3}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="slot-body-row">
+    <div class="col">{{content}}</div>
+    <div class="col image-col">{{image}}</div>
+  </div>
+</div>
+<style>
+  .layout-image-right .slot-title { padding-bottom: 16px; margin-bottom: 4px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .layout-image-right .slot-body-row > .col { flex: 1 1 0; }
+  .layout-image-right .image-col { flex: 0 0 46%; }
+  .layout-image-right .col { overflow: hidden; }
+</style>

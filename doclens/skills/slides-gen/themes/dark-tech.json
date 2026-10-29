@@ -1,0 +1,68 @@
+{
+  "name": "dark-tech",
+  "colors": {
+    "primary": "#38BDF8",
+    "accent": "#A78BFA",
+    "bg": "#0F172A",
+    "bg-alt": "#1E293B",
+    "text": "#E2E8F0",
+    "text-muted": "#94A3B8",
+    "table-header": "#1E293B",
+    "code-bg": "#020617"
+  },
+  "fonts": {
+    "family": "微软雅黑",
+    "mono": "Cascadia Code"
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "chart_series": [
+    "#38BDF8",
+    "#A78BFA",
+    "#34D399",
+    "#F472B6",
+    "#FBBF24",
+    "#60A5FA"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "primary",
+      "w": "10%",
+      "h": "0.6%",
+      "x": "6%",
+      "y": "16%"
+    },
+    "title-band": {
+      "type": "rect",
+      "color": "accent",
+      "w": "100%",
+      "h": "0.6%",
+      "x": "0%",
+      "y": "0%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "primary",
+      "w": "1%",
+      "h": "40%",
+      "x": "8%",
+      "y": "30%"
+    }
+  },
+  "shape": {
+    "radius": 14,
+    "shadow": "strong",
+    "card_alpha": 0.14,
+    "depth": "ring"
+  },
+  "background": {
+    "decor": "arcs"
+  }
+}

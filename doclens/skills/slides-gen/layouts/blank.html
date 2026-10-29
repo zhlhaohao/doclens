@@ -1,0 +1,13 @@
+<!-- 版式：blank 自由画布 —— 每个块必须携带 x/y/w/h 百分比坐标 -->
+<div class="slide-inner layout-blank"
+     data-cap='{"bullets": 8, "bullet_chars": 40, "total_chars": 300, "table_rows": 8, "table_cols": 4, "image_min_ratio": 0.0}'>
+  {{content}}
+</div>
+<style>
+  /* 注意：section 与 inner 都带 layout-blank 类，选择器必须限定到 inner，
+     否则 section 的 position:absolute 会被覆盖成 relative 导致高度塌陷 */
+  .slide.layout-blank { padding: 0; }
+  .slide-inner.layout-blank { display: block; position: relative; height: 100%; }
+  .slide-inner.layout-blank .abs-block { position: absolute; overflow: hidden; }
+  .slide-inner.layout-blank .abs-block > :first-child { margin-top: 0; }
+</style>

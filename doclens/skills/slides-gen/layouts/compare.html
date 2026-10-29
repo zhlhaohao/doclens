@@ -1,0 +1,31 @@
+<!-- 版式：compare 两方对比 —— 正文用 --- 切两栏，每栏首个加粗段落作小标题 -->
+<div class="slide-inner layout-compare"
+     data-cap='{"bullets": 8, "bullet_chars": 24, "total_chars": 200, "table_rows": 5, "table_cols": 3, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="cp-wrap">
+    <div class="cp-side">{{left}}</div>
+    <div class="cp-vs">{{vs}}</div>
+    <div class="cp-side cp-right">{{right}}</div>
+  </div>
+</div>
+<style>
+  .layout-compare .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .cp-wrap { flex: 1 1 auto; display: flex; align-items: stretch; gap: 0; min-height: 0; }
+  .cp-side {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: center;
+    gap: .4em; padding: 14px 22px;
+  }
+  .cp-vs {
+    flex: 0 0 auto; align-self: center; padding: 6px 10px;
+    font-size: calc(var(--fs-caption) * 1.1 * var(--fit, 1)); font-weight: 800;
+    color: var(--c-text-muted); letter-spacing: .1em;
+  }
+  .cp-side-title {
+    font-size: calc(var(--fs-h3) * .95 * var(--fit, 1)); font-weight: 700;
+    color: var(--c-primary); margin-bottom: .2em;
+  }
+  .cp-right .cp-side-title { color: var(--c-accent); }
+  .cp-side ul { margin: 0; }
+  .cp-side li { font-size: calc(var(--fs-body) * .84 * var(--fit, 1)); margin: .35em 0; }
+  .cp-right { background: color-mix(in srgb, var(--c-accent) 6%, transparent); border-radius: 12px; }
+</style>

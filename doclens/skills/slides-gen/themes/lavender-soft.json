@@ -1,0 +1,69 @@
+{
+  "name": "lavender-soft",
+  "colors": {
+    "primary": "#6F55C4",
+    "accent": "#C75F42",
+    "bg": "#FBFAFF",
+    "bg-alt": "#EBE4FB",
+    "text": "#241F33",
+    "text-muted": "#6E6485",
+    "table-header": "#6F55C4",
+    "code-bg": "#1E1A2A",
+    "stage-bg": "#241F33"
+  },
+  "chart_series": [
+    "#6F55C4",
+    "#E07A5F",
+    "#4F9D8A",
+    "#F2B36B",
+    "#9A7BD1",
+    "#C36F9E"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "primary",
+      "w": "10%",
+      "h": "0.9%",
+      "x": "6%",
+      "y": "16%"
+    },
+    "title-band": {
+      "type": "rect",
+      "color": "primary",
+      "w": "100%",
+      "h": "1.1%",
+      "x": "0%",
+      "y": "0%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "primary",
+      "w": "1.1%",
+      "h": "40%",
+      "x": "8%",
+      "y": "30%"
+    }
+  },
+  "fonts": {
+    "family": "微软雅黑",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "shape": {
+    "radius": 22,
+    "shadow": "soft",
+    "card_alpha": 0.1,
+    "depth": "whisper"
+  },
+  "background": {
+    "decor": "blobs"
+  }
+}

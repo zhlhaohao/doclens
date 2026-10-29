@@ -1,0 +1,68 @@
+{
+  "name": "ink-magazine",
+  "colors": {
+    "primary": "#1F3A34",
+    "accent": "#B07D3A",
+    "bg": "#FAF8F3",
+    "bg-alt": "#EFEBE1",
+    "text": "#20211E",
+    "text-muted": "#6F6A5E",
+    "table-header": "#1F3A34",
+    "code-bg": "#22251F",
+    "stage-bg": "#2B2E29"
+  },
+  "fonts": {
+    "family": "宋体",
+    "stack": [
+      "思源宋体",
+      "Songti SC",
+      "SimSun",
+      "宋体",
+      "_serif"
+    ],
+    "mono": "Consolas"
+  },
+  "chart_series": [
+    "#1F3A34",
+    "#B07D3A",
+    "#6B8E7F",
+    "#9C6644",
+    "#4A5D57",
+    "#C9A227"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "accent",
+      "w": "18%",
+      "h": "0.7%",
+      "x": "6%",
+      "y": "17%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "accent",
+      "w": "0.8%",
+      "h": "45%",
+      "x": "7%",
+      "y": "28%"
+    }
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "shape": {
+    "radius": 2,
+    "shadow": "none",
+    "card_alpha": 0.05,
+    "depth": "flat"
+  },
+  "background": {
+    "decor": "band"
+  }
+}

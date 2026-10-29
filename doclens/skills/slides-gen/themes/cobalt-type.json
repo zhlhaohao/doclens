@@ -1,0 +1,61 @@
+{
+  "name": "cobalt-type",
+  "colors": {
+    "primary": "#1238E6",
+    "accent": "#E05070",
+    "bg": "#F3F3F1",
+    "bg-alt": "#E8E8E4",
+    "text": "#111111",
+    "text-muted": "#5E5E5A",
+    "table-header": "#1238E6",
+    "code-bg": "#14161F",
+    "stage-bg": "#1A1C24"
+  },
+  "chart_series": [
+    "#1238E6",
+    "#E05070",
+    "#0F9E8A",
+    "#F2B134",
+    "#5B3FBF",
+    "#7A7A75"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "primary",
+      "w": "100%",
+      "h": "1.2%",
+      "x": "0%",
+      "y": "0%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "primary",
+      "w": "100%",
+      "h": "1%",
+      "x": "0%",
+      "y": "48%"
+    }
+  },
+  "fonts": {
+    "family": "微软雅黑",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "shape": {
+    "radius": 0,
+    "shadow": "none",
+    "card_alpha": 0.0,
+    "depth": "flat"
+  },
+  "background": {
+    "decor": "band"
+  }
+}

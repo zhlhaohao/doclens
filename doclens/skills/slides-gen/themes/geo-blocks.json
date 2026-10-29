@@ -1,0 +1,61 @@
+{
+  "name": "geo-blocks",
+  "colors": {
+    "primary": "#1F7A5A",
+    "accent": "#B07A0A",
+    "bg": "#FBF6E9",
+    "bg-alt": "#F0E9D6",
+    "text": "#20211C",
+    "text-muted": "#6B6A5E",
+    "table-header": "#1F7A5A",
+    "code-bg": "#1B2620",
+    "stage-bg": "#232520"
+  },
+  "chart_series": [
+    "#1F7A5A",
+    "#D99A20",
+    "#3E7A9E",
+    "#C2542E",
+    "#6B4C8A",
+    "#8FA33F"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "accent",
+      "w": "18%",
+      "h": "1.2%",
+      "x": "6%",
+      "y": "17%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "primary",
+      "w": "1.4%",
+      "h": "44%",
+      "x": "8%",
+      "y": "28%"
+    }
+  },
+  "fonts": {
+    "family": "微软雅黑",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "shape": {
+    "radius": 3,
+    "shadow": "none",
+    "card_alpha": 0.06,
+    "depth": "flat"
+  },
+  "background": {
+    "decor": "grid"
+  }
+}

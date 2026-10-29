@@ -1,0 +1,16 @@
+<!-- 版式：quote 大引述页 —— 引文居中大字，末尾行为署名 -->
+<div class="slide-inner layout-quote"
+     data-cap='{"bullets": 0, "bullet_chars": 0, "total_chars": 90, "table_rows": 0, "table_cols": 0, "image_min_ratio": 0.0}'>
+  <div class="slot-content">{{content}}</div>
+  <div class="slot-title">{{title}}</div>
+</div>
+<style>
+  .layout-quote { justify-content: center; gap: 32px; }
+  .layout-quote .slot-content { flex: 0 1 auto; text-align: center; }
+  .layout-quote .slot-content blockquote { border: none; background: none; padding: 0; margin: 0;
+    font-size: calc(var(--fs-h2) * 1.08 * var(--fit, 1)); line-height: 1.5; color: var(--c-text); }
+  .layout-quote .slot-content blockquote::before { content: "“"; display: block; font-size: 2.6em;
+    line-height: .55; color: var(--c-accent); opacity: .45; margin-bottom: 14px; }
+  .layout-quote .slot-title { text-align: center; }
+  .layout-quote .slot-title p { color: var(--c-text-muted); font-size: calc(var(--fs-body) * .92 * var(--fit, 1)); margin: 0; }
+</style>

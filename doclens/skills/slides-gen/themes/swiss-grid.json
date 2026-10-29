@@ -1,0 +1,61 @@
+{
+  "name": "swiss-grid",
+  "colors": {
+    "primary": "#111111",
+    "accent": "#D7263D",
+    "bg": "#FFFFFF",
+    "bg-alt": "#F2F2F2",
+    "text": "#111111",
+    "text-muted": "#6E6E6E",
+    "table-header": "#111111",
+    "code-bg": "#151515",
+    "stage-bg": "#2A2A2A"
+  },
+  "fonts": {
+    "family": "微软雅黑",
+    "mono": "Consolas"
+  },
+  "chart_series": [
+    "#111111",
+    "#D7263D",
+    "#7A7A7A",
+    "#B0B0B0",
+    "#4A4A4A",
+    "#E0E0E0"
+  ],
+  "decor": {
+    "title-rule": {
+      "type": "rect",
+      "color": "accent",
+      "w": "100%",
+      "h": "0.5%",
+      "x": "0%",
+      "y": "18%"
+    },
+    "section-bar": {
+      "type": "rect",
+      "color": "accent",
+      "w": "100%",
+      "h": "0.5%",
+      "x": "0%",
+      "y": "50%"
+    }
+  },
+  "sizes": {
+    "h1": 42,
+    "h2": 30,
+    "h3": 24,
+    "h4": 20,
+    "body": 22,
+    "caption": 14
+  },
+  "shape": {
+    "radius": 0,
+    "shadow": "none",
+    "card_alpha": 0.0,
+    "depth": "flat"
+  },
+  "background": {
+    "decor": "grid"
+  }
+}

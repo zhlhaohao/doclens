@@ -1,0 +1,33 @@
+<!-- 版式：stats 数据卡片 —— 2 列表格：值 | 标签 -->
+<div class="slide-inner layout-stats"
+     data-cap='{"bullets": 4, "bullet_chars": 12, "total_chars": 120, "table_rows": 5, "table_cols": 2, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="stat-grid">{{content}}</div>
+</div>
+<style>
+  .layout-stats .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .stat-grid {
+    flex: 1 1 auto; display: grid; align-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: clamp(12px, 2.4vw, 34px);
+    padding: 8px 0;
+  }
+  .stat-card {
+    display: flex; flex-direction: column; justify-content: flex-end;
+    gap: .3em; padding: .9em 1em;
+    border-left: 4px solid var(--c-accent);
+    background: color-mix(in srgb, var(--c-primary) 5%, transparent);
+    border-radius: 0 var(--radius, 10px) var(--radius, 10px) 0;
+    min-height: 0;
+  }
+  .stat-value {
+    font-size: calc(var(--fs-h1) * 1.15 * var(--fit, 1));
+    font-weight: 800; line-height: 1.05;
+    color: var(--c-primary); letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    font-size: calc(var(--fs-body) * .78 * var(--fit, 1));
+    color: var(--c-text-muted); line-height: 1.4;
+  }
+</style>

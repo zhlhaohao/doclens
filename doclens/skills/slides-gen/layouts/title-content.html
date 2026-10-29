@@ -1,0 +1,11 @@
+<!-- 版式：title-content 标题 + 单栏内容（默认工作版式） -->
+<div class="slide-inner layout-title-content"
+     data-cap='{"bullets": 6, "bullet_chars": 40, "total_chars": 240, "table_rows": 8, "table_cols": 4, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="slot-content">{{content}}</div>
+</div>
+<style>
+  .layout-title-content .slot-title { padding-bottom: 16px; margin-bottom: 4px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .layout-title-content .slot-title h1 { font-size: calc(var(--fs-h1) * var(--fit, 1)); }
+  .layout-title-content .slot-content { padding-top: 8px; overflow: hidden; }
+</style>

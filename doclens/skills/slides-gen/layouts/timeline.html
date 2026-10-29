@@ -1,0 +1,28 @@
+<!-- 版式：timeline 时间线 —— 2-3 列表格：日期 | 事件 | 说明 -->
+<div class="slide-inner layout-timeline"
+     data-cap='{"bullets": 6, "bullet_chars": 30, "total_chars": 200, "table_rows": 7, "table_cols": 3, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="tl-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-timeline .slot-title { padding-bottom: 14px; border-bottom: 2px solid color-mix(in srgb, var(--c-primary) 30%, transparent); }
+  .tl-wrap { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: 10px 0; }
+  .tl-track { position: relative; display: flex; flex-direction: column; gap: 0; }
+  .tl-track::before {
+    content: ""; position: absolute; left: 11px; top: 8px; bottom: 8px;
+    width: 2px; background: color-mix(in srgb, var(--c-primary) 22%, transparent);
+  }
+  .tl-node { position: relative; display: grid; grid-template-columns: 26px 108px 1fr;
+             align-items: start; gap: 16px; padding: .55em 0; }
+  .tl-dot {
+    position: relative; z-index: 1; width: 12px; height: 12px; margin: 6px 0 0 6px;
+    border-radius: 50%; background: var(--c-bg); border: 3px solid var(--c-accent);
+  }
+  .tl-date {
+    font-size: calc(var(--fs-body) * .8 * var(--fit, 1)); font-weight: 700;
+    color: var(--c-primary); white-space: nowrap; padding-top: .1em;
+  }
+  .tl-body { display: flex; flex-direction: column; gap: .16em; min-width: 0; }
+  .tl-title { font-size: calc(var(--fs-body) * .96 * var(--fit, 1)); font-weight: 600; line-height: 1.35; }
+  .tl-text { font-size: calc(var(--fs-body) * .78 * var(--fit, 1)); color: var(--c-text-muted); line-height: 1.45; }
+</style>
