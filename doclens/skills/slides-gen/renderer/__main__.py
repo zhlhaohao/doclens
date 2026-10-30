@@ -268,13 +268,7 @@ def cmd_render(args: argparse.Namespace) -> int:
         return 2
     # 内容稿默认写 <名>-draft.html；用户显式 -o 指定则尊重
     out = args.output or _default_html(md, draft=True)
-    narr_dir = None
-    if getattr(args, "narrate", False):
-        cand = md.parent / (md.stem + "-audio")
-        if cand.exists():
-            narr_dir = cand
-        else:
-            print(f"提示：未找到 {cand}，先跑 narrate 生成音频；本次不含口播。")
+    narr_dir = _resolve_narr_dir(args, md)
     r = Renderer(layout_dir=args.layout_dir, theme_dir=args.theme_dir)
     try:
         stats = r.render(md, out, theme_override=args.theme,
@@ -369,12 +363,24 @@ def cmd_qa(args: argparse.Namespace) -> int:
     return _run_qa(args.input, args)
 
 
+def _resolve_narr_dir(args: argparse.Namespace, md: Path) -> Path | None:
+    """解析 --narrate 的音频目录（cmd_render 与 cmd_build 晋升共用）。"""
+    if not getattr(args, "narrate", False):
+        return None
+    cand = md.parent / (md.stem + "-audio")
+    if cand.exists():
+        return cand
+    print(f"提示：未找到 {cand}，先跑 narrate 生成音频；本次不含口播。")
+    return None
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     import shutil as _sh
 
     # build 也是先渲染到 draft；验收全过才晋升正式名
     if not args.output:
         args.output = _default_html(args.input, draft=True)
+    narr_dir = _resolve_narr_dir(args, args.input)
     rc = cmd_render(args)
     if rc != 0:
         return rc
@@ -387,8 +393,10 @@ def cmd_build(args: argparse.Namespace) -> int:
         if final != args.output:
             r2 = Renderer(layout_dir=args.layout_dir, theme_dir=args.theme_dir)
             try:
+                # narrate_dir 必须带上：否则正式稿丢口播音频（draft 有声正式无声的实测 bug）
                 r2.render(args.input, final, theme_override=args.theme,
-                          embed_images=not args.no_embed, draft=False)
+                          embed_images=not args.no_embed, draft=False,
+                          narrate_dir=narr_dir)
                 print(f"验收全过，交付稿已写入正式名：{final}")
                 print(f"（draft 保留在 {args.output}，可继续迭代不污染交付稿）")
             except Exception as e:  # noqa: BLE001
