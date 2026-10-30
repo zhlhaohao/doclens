@@ -275,3 +275,16 @@ node_modules/
 benchmarks/results/
 benchmarks/gui_out.log
 benchmarks/gui_err.log
+
+# 用户 PPT/slides 工作目录（产物，非源码）
+ppt/
+ppt_work/
+slides/
+图片/
+
+# slides-gen 生成产物（gallery 命令输出到 layouts/ 旁，勿入库）
+doclens/skills/slides-gen/layouts/gallery.html
+doclens/skills/slides-gen/layouts/sheet.png
+
+# 演示运行时无引用拷贝（真身 doclens/skills/slides-gen/assets/presenter.js）
+doclens/web_v2/static/presenter.js
