@@ -355,9 +355,14 @@
     };
   }
 
-  // 翻页时接管音频：跳到哪页就播哪页
-  var _origJump = jump;
-  jump = function (n) { _origJump(n); playNarr(slides[index]); };
+  // 翻页时接管音频：在 go() 的完成回调挂 playNarr——
+  // next/prev/外部 jump 最终都走 go()，一处挂全链路生效
+  var _origGo = go;
+  go = function (target, dir) {
+    _origGo(target, dir);
+    // go 完成后当前页已切换；QA 模式同步完成，普通模式 260ms 过渡
+    setTimeout(function () { playNarr(slides[index]); }, 300);
+  };
 
   // 供外部（自动化/嵌入）调用
   window.deck = {
