@@ -86,7 +86,8 @@
     // 否则元素动画在页面尚未可见时已播掉大半，观感是"闪一下"
     var base = slide.classList.contains("is-entering") ? 480 : 0;
     s.after.forEach(function (el, i) {
-      setTimeout(function () { play(el); }, base + i * 300);
+      var dl = parseFloat(el.getAttribute("data-anim-delay") || "0") * 1000 || 0;
+      setTimeout(function () { play(el); }, base + i * 300 + dl);
     });
     pendingSteps = s.click.slice();
     // 无点击步骤时，页面所有元素在 after 序列后应可见

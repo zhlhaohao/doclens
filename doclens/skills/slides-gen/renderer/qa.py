@@ -98,12 +98,20 @@ GEOM_JS = r"""
     }
   });
 
-  // 3) 重叠：不同块的包围盒相交
+  // 3) 重叠：不同块的包围盒相交（blank 版式全屏图块=背景语义，豁免其与覆盖文字的重叠）
   const blocks = candidates.filter(el => !el.closest('td,th'));
+  const isBgBlock = (el) => {
+    if (!isBlank) return false;
+    const host = el.closest('.abs-block');
+    if (!host) return false;
+    const st = host.style;
+    return st.left === '0%' && st.top === '0%' && st.width === '100%' && st.height === '100%';
+  };
   for (let i = 0; i < blocks.length; i++) {
     for (let j = i + 1; j < blocks.length; j++) {
       const a = blocks[i], b = blocks[j];
       if (a.contains(b) || b.contains(a)) continue;
+      if (isBgBlock(a) || isBgBlock(b)) continue;   // 全屏背景图与覆盖文字的刻意重叠
       const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
       const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
       const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);

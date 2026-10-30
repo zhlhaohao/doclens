@@ -10,4 +10,6 @@
   .slide-inner.layout-blank { display: block; position: relative; height: 100%; }
   .slide-inner.layout-blank .abs-block { position: absolute; overflow: hidden; }
   .slide-inner.layout-blank .abs-block > :first-child { margin-top: 0; }
+  /* 图片块撑满：figure 需要确定高度，max-height:100% 才能约束 img（否则塌陷溢出） */
+  .slide-inner.layout-blank .abs-block > figure { height: 100%; }
 </style>

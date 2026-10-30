@@ -126,13 +126,23 @@ def _attrs(block: Block, page_anim: str, theme: Theme, page_level: bool) -> tupl
     if color:
         style.append(f"color:{theme.color(color)}")
 
-    token, direction, trigger = _resolve_anim(d, page_anim, block, page_level)
+    # bg=主题角色名：该块文字的不透明背景（全屏图上覆盖文字的可读性保障）
+    bg = d.get("bg", "")
+    if bg:
+        style.append(f"background:{theme.color(bg)}")
+        style.append("padding:.35em .7em")
+        style.append("border-radius:8px")
+        style.append("width:fit-content")
+
+    token, direction, trigger, delay = _resolve_anim(d, page_anim, block, page_level)
     if token:
         parts.append(f'data-anim="{token}"')
         if direction in _DIRS:
             parts.append(f'data-anim-dir="{direction}"')
         if trigger == "click":
             parts.append('data-anim-trigger="click"')
+        if delay > 0:
+            parts.append(f'data-anim-delay="{delay}"')
 
     if style:
         parts.append(f'style="{";".join(style)}"')
@@ -140,20 +150,25 @@ def _attrs(block: Block, page_anim: str, theme: Theme, page_level: bool) -> tupl
 
 
 def _resolve_anim(d: dict, page_anim: str, block: Block,
-                  page_level: bool) -> tuple[str, str, str]:
+                  page_level: bool) -> tuple[str, str, str, float]:
     raw = d.get("anim", "")
     direction = d.get("direction", "")
     trigger = d.get("trigger", "after")
+    delay = 0.0
+    try:
+        delay = max(0.0, float(d.get("delay", 0) or 0))
+    except (TypeError, ValueError):
+        delay = 0.0
     if raw:
-        return raw, direction, trigger
+        return raw, direction, trigger, delay
     if not page_anim or page_anim == "none":
-        return "", direction, trigger
+        return "", direction, trigger, delay
     if ":" in page_anim:
         policy, token = page_anim.split(":", 1)
         if policy == "bullets":
-            return (token, direction, trigger) if block.kind == "list" else ("", direction, trigger)
-        return token, direction, trigger
-    return page_anim, direction, trigger
+            return (token, direction, trigger, delay) if block.kind == "list" else ("", direction, trigger, delay)
+        return token, direction, trigger, delay
+    return page_anim, direction, trigger, delay
 
 
 def _list_html(b: Block, theme: Theme, page_anim: str, page_level: bool) -> str:
@@ -208,13 +223,15 @@ def _schema_attrs(b: Block, page_anim: str, page_level: bool) -> str:
     align = d.get("align", "")
     if align in ("left", "center", "right"):
         parts.append(f'style="text-align:{align}"')
-    token, direction, trigger = _resolve_anim(d, page_anim, b, page_level)
+    token, direction, trigger, delay = _resolve_anim(d, page_anim, b, page_level)
     if token:
         parts.append(f'data-anim="{token}"')
         if direction in _DIRS:
             parts.append(f'data-anim-dir="{direction}"')
         if trigger == "click":
             parts.append('data-anim-trigger="click"')
+        if delay > 0:
+            parts.append(f'data-anim-delay="{delay}"')
     return (" " + " ".join(parts)) if parts else ""
 
 

@@ -94,6 +94,8 @@ font:                   # 可选覆盖主题字体（部分覆盖即可）
 ```
 | `x` `y` `w` `h` | 百分比（如 `x=10%`） | **仅 blank 版式合法**；其他版式下警告并忽略 |
 | `color` | 主题角色名（`#RRGGBB` 逃生舱） | 该块文字颜色 |
+| `bg` | 主题角色名 | 该块文字的不透明背景胶囊（自动 padding/圆角/fit-content）——全屏图上覆盖文字的可读性保障 |
+| `delay` | 秒数（如 `delay=1.5`） | 该块动画启动延迟，叠加在自动递增时序（i×0.3s）之上；仅块级有效 |
 
 ## 5. 动画词表（封闭白名单）
 
@@ -106,7 +108,7 @@ font:                   # 可选覆盖主题字体（部分覆盖即可）
 | 退场 | `exit.fade` `exit.fly-out` | fly-out 支持 direction |
 | 强调 | `emphasize.pulse` `emphasize.grow` | — |
 
-时序：默认 `trigger=after`、延迟 0.3s 递增（自动逐项播放）；块指令可写 `trigger=click` 改为点击触发。
+时序：默认 `trigger=after`、延迟 0.3s 递增（自动逐项播放）；块指令可写 `trigger=click` 改为点击触发，`delay=<秒>` 在递增时序上额外延迟。
 
 底层实现：入场/退场/强调 = CSS keyframes（由 presenter.js 挂类触发）；切换 = 幻灯片切换 keyframes。
 白名单外动画（路径动画、陀螺旋等）不支持，写了会降级为 fade 并给出警告。
