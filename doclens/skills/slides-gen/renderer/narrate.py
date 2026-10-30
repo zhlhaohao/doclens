@@ -197,6 +197,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_voices:
         for v in voices():
             print(f"{v['id']:<22} {v['desc']}")
+        try:
+            from .voice_clone import cloned_voices
+            for v in cloned_voices():
+                print(f"{v['id']:<22} {v['desc']}")
+        except Exception:  # noqa: BLE001
+            pass
         return 0
 
     def _pp(s: str) -> list[int]:

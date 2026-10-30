@@ -182,6 +182,19 @@ def cmd_narrate(args: argparse.Namespace) -> int:
     return narrate_main(argv)
 
 
+def cmd_voice_clone(args: argparse.Namespace) -> int:
+    from .voice_clone import main as vc_main
+
+    argv = [str(args.audio)]
+    if args.label:
+        argv.append(f"--label={args.label}")
+    if args.voice_id:
+        argv.append(f"--voice-id={args.voice_id}")
+    if args.preview_text:
+        argv.append(f"--preview-text={args.preview_text}")
+    return vc_main(argv)
+
+
 def cmd_gallery(args: argparse.Namespace) -> int:
     from .gallery import main as gallery_main
 
@@ -441,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
     p_images = sub.add_parser("images", help="列图位清单（重绘/替换图片前用）")
     p_images.add_argument("input", type=Path, help="deck md 文件")
     p_images.set_defaults(func=cmd_images)
+
+    p_vc = sub.add_parser("voice-clone", help="声音克隆（音频 → voice_id）")
+    p_vc.add_argument("audio", type=Path, help="音频文件（mp3/m4a/wav，30s-5min，<20MB）")
+    p_vc.add_argument("--label", default="", help="音色备注名")
+    p_vc.add_argument("--voice-id", default="", help="自定义 voice_id（缺省自动生成）")
+    p_vc.add_argument("--preview-text", default="", help="试听文本")
+    p_vc.set_defaults(func=cmd_voice_clone)
 
     p_nar = sub.add_parser("narrate", help="口播合成（notes → mp3）")
     p_nar.add_argument("input", type=Path, help="deck md")
