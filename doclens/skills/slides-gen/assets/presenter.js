@@ -45,16 +45,22 @@
   function play(el) {
     var token = el.getAttribute("data-anim") || "enter.fade";
     var dir = el.getAttribute("data-anim-dir") || "";
-    el.classList.add("anim-done");
-    if (token === "enter.appear") return;
+    if (token === "enter.appear") { el.classList.add("anim-done"); return; }
     var cls = animClass(token);
     if (dir && cls === "anim-fly-in") cls += " dir-" + dir;
     if (dir && cls === "anim-fly-out") cls += " dir-" + dir;
-    el.classList.add(cls);
+    cls.split(/\s+/).filter(Boolean).forEach(function (c) { el.classList.add(c); });
     el.addEventListener("animationend", function () {
-      el.classList.remove(cls);
+      cls.split(/\s+/).filter(Boolean).forEach(function (c) { el.classList.remove(c); });
       el.classList.add("anim-done");
     }, { once: true });
+    // 安全网：animationend 丢失（如动画被中断/元素不可见）时兜底显示
+    setTimeout(function () {
+      if (!el.classList.contains("anim-done")) {
+        cls.split(/\s+/).filter(Boolean).forEach(function (c) { el.classList.remove(c); });
+        el.classList.add("anim-done");
+      }
+    }, 2000);
   }
 
   function collectSteps(slide) {
@@ -76,8 +82,11 @@
       pendingSteps = [];
       return;
     }
+    // 等页面切换动画（is-entering, 420ms）播完再启动元素入场，
+    // 否则元素动画在页面尚未可见时已播掉大半，观感是"闪一下"
+    var base = slide.classList.contains("is-entering") ? 480 : 0;
     s.after.forEach(function (el, i) {
-      setTimeout(function () { play(el); }, i * 300);
+      setTimeout(function () { play(el); }, base + i * 300);
     });
     pendingSteps = s.click.slice();
     // 无点击步骤时，页面所有元素在 after 序列后应可见
@@ -99,7 +108,7 @@
       var cls = animClass(token);
       var dir = el.getAttribute("data-anim-dir") || "";
       if (dir) cls += " dir-" + dir;
-      el.classList.add(cls);
+      cls.split(/\s+/).filter(Boolean).forEach(function (c) { el.classList.add(c); });
     });
     setTimeout(done, 440);
   }
