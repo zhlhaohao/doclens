@@ -49,7 +49,7 @@ doctor（首次）→ 复述+提问 → 写 deck.md → check（幽灵稿确认�
 | `images deck.md` | 图位清单（重绘前必查：区分即梦生成/本地截图） |
 | `pdf deck.html` | 导出 PDF（`--annotations` 带备注版） |
 | `narrate deck.md` | 口播合成：notes → MiniMax T2A → 逐页 mp3（`--voice` 选音色/克隆 id）；`--narrate` 渲染时注入，播放按 **V** 键旁白模式（读完整页自动翻页） |
-| `voice-clone <音频>` | 声音克隆：知识库内 mp3/m4a/wav（30s-5min，<20MB）→ voice_id；**克隆后立刻合成一页**（试听+保活，7 天不用会删） |
+| `voice-clone <音频>` | 声音克隆：知识库内 mp3/m4a/wav（30s-5min，<20MB）→ voice_id；**克隆后立刻合成一页**（试听+保活，7 天不用会删）。**克隆清单存 `~/.doclens/slides-gen-voices.json`（用户数据目录，技能更新不丢）**；用户说「用我的音色」先查 `--list-voices`，命中克隆音色直接用，**不要再要样本** |
 
 开发版从技能目录跑：`<venv>/python.exe -m renderer <子命令>`；发行版 `doclens slides-gen <子命令>`。
 

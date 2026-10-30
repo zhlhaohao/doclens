@@ -22,8 +22,11 @@ from dataclasses import dataclass
 
 from .narrate import _load_conf
 
-# 克隆音色清单：跟着技能走（每台机器自己的声音），不放知识库
-_VOICES_FILE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "cloned-voices.json"
+# 克隆音色清单：**用户数据目录**，不放技能目录——技能副本同步（cp -rf）会覆盖
+# 掉用户资产（实测事故：克隆登记被空清单冲掉）。跨开发/发行版共用一份。
+_USER_STORE = pathlib.Path.home() / ".doclens" / "slides-gen-voices.json"
+# 旧位置只作迁移源（老用户升级时自动并入）
+_LEGACY_STORE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "cloned-voices.json"
 
 AUDIO_EXTS = {".mp3", ".m4a", ".wav"}
 
@@ -36,18 +39,36 @@ class CloneResult:
 
 
 def _load_registry() -> dict:
-    if _VOICES_FILE.exists():
+    reg: dict = {"voices": {}}
+    # 旧位置迁移：并入后清空旧文件（下次不会再读）
+    if _LEGACY_STORE.exists():
         try:
-            return json.loads(_VOICES_FILE.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+            old = json.loads(_LEGACY_STORE.read_text(encoding="utf-8"))
+            for k, v in (old.get("voices") or {}).items():
+                reg["voices"].setdefault(k, v)
+        except (json.JSONDecodeError, OSError):
             pass
-    return {"voices": {}}
+        try:
+            _LEGACY_STORE.write_text(json.dumps({"voices": {}}, ensure_ascii=False),
+                                     encoding="utf-8")
+        except OSError:
+            pass
+    if _USER_STORE.exists():
+        try:
+            cur = json.loads(_USER_STORE.read_text(encoding="utf-8"))
+            for k, v in (cur.get("voices") or {}).items():
+                reg["voices"][k] = v
+        except (json.JSONDecodeError, OSError):
+            pass
+    if reg["voices"] and not _USER_STORE.exists():
+        _save_registry(reg)      # 迁移落盘
+    return reg
 
 
 def _save_registry(reg: dict) -> None:
-    _VOICES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _VOICES_FILE.write_text(json.dumps(reg, ensure_ascii=False, indent=2) + "\n",
-                            encoding="utf-8")
+    _USER_STORE.parent.mkdir(parents=True, exist_ok=True)
+    _USER_STORE.write_text(json.dumps(reg, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
 
 
 def cloned_voices() -> list[dict]:
