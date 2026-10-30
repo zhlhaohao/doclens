@@ -9,7 +9,7 @@ import { isCoarsePointer } from "../utils/device";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
 
-/** 消息时间格式化：今天 HH:MM，非今天 MM-DD HH:MM。
+/** 消息时间格式化：今天 HH:MM:SS，非今天 MM-DD HH:MM:SS（精确到秒）。
  *  非法/缺失输入返回 ""（操作行不渲染时间位）。导出供测试。 */
 export function formatMsgTime(iso: string | undefined, now = new Date()): string {
   if (!iso) return "";
@@ -17,14 +17,15 @@ export function formatMsgTime(iso: string | undefined, now = new Date()): string
   if (isNaN(d.getTime())) return "";
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
   const sameDay =
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
-  if (sameDay) return `${hh}:${mm}`;
+  if (sameDay) return `${hh}:${mm}:${ss}`;
   const M = String(d.getMonth() + 1).padStart(2, "0");
   const D = String(d.getDate()).padStart(2, "0");
-  return `${M}-${D} ${hh}:${mm}`;
+  return `${M}-${D} ${hh}:${mm}:${ss}`;
 }
 
 /** AI 气泡专用 marked 实例（模块级单例）。不能用全局 marked：
