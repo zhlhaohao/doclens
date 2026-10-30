@@ -222,7 +222,7 @@
 | 「图太小了看不清」 | 放大图 | 换 `image-left/right`（图占 46%）或删部分文字；`fit=contain` 保证不裁切 → `build` |
 | 「截图被裁掉一部分」 | 图片裁切 | 该图片块指令加 `fit=contain` → `build --pages n` |
 | 「产品截图别用 AI 画，用真实的」 | 用真实截图 | 从知识库找截图（glob `**/shot-*.png`）；找不到就请用户提供 |
-| 「截图要全屏铺满，别套小图版式」 | 全屏截图页 | blank 版式：图块 `x=0% y=0% w=100% h=100% fit=cover`；说明文字块 `bg=bg`（不透明底牌）+ `anim=enter.fly-in` + `delay=1.0` 覆盖在图上。QA 的 overlap 检查已豁免全屏背景块与覆盖文字的刻意重叠。竖屏截图先合成到 16:10 画布再 cover（contain 在 abs-block 内会高度塌陷） |
+| 「截图要全屏铺满，别套小图版式」 | 全屏截图页 | 用下方「全屏截图页配方」小节；别用 image-left/right 套小图 |
 
 **配图统一性（视觉锚点）**：一份 deck 的 AI 配图应**共用同一个主角/锚点**（同人物/同风格物体），每页只换道具与场景——否则多张画风各异的图拼在一起像拼盘。落地：第一张图的 prompt 保留「主角描述」部分，后续每页只改「道具+动作」。
 
@@ -347,6 +347,53 @@
 | 「换成另一套故事线」 | 不重写文字，只调页序与标题 → `check` 的幽灵稿给用户确认 → `build` |
 | 「压缩到 5 页」 | 只保留每章一张主结论页 → 其余内容移进 notes → `check` 密度 → `build` |
 | 「扩到 20 页」 | 每页抽成 2 页（论点 + 展开），或补案例/数据页 → 加 `section` 过渡 → `check` → `build` |
+
+---
+
+## 八b、全屏截图页配方（产品实拍轮播，高频场景）
+
+产品演示类 deck 几乎必配「实拍轮播」段：每页一张真实截图铺满 + 说明文字飞入覆盖。
+统一用 blank 版式，不用 image-left/right（那会套小图框，违背「全屏」诉求）。
+
+### 标准页模板（桌面横屏截图，直接抄）
+
+```markdown
+<!-- slide: layout=blank bg=bg kicker="02 · 实貌 1/4" anim=none notes="讲这页看什么" -->
+
+<!-- block: full=screen fit=cover -->
+![P3-图1 主界面](images/shot1-main.png)
+
+<!-- block: x=6% y=78% w=72% h=14% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.0 -->
+
+**页面主功能**——一句话说明（≤25 字）
+```
+
+### 要点
+
+- **图块用 `full=screen` 糖衣**（自动展开 0/0/100%/100% 坐标）——手写坐标易错，
+  `y=5%` 之类笔误会让 QA 的全屏背景豁免失效、误报 overlap
+- **文字块三件套**：`bg=bg`（不透明底牌保证图上可读）+ `enter.fly-in`（飞入）+
+  `delay=1.0`（等页面切换动画走完）
+- **kicker 连号**（实貌 1/4…4/4），`anim=none` 关页级动画避免与块动画叠加
+- 多张轮播就复制整页，图位编号 `P{页}-图1` 按真实页码递增
+
+### 竖屏截图（手机端）先合成再铺
+
+竖图直接 contain 会因 figure 高度塌陷按原始尺寸溢出（报「溢出容器 NNNpx」）。
+修法：PIL 合成到 16:10 画布（竖图居中、两侧垫主题底色），再按标准模板 cover：
+
+```python
+canvas = Image.new("RGB", (1600, 1000), (248, 244, 234))  # 暖纸底色
+im2 = im.resize((nw, nh), Image.LANCZOS)  # 按高度 94% 缩放
+canvas.paste(im2, (居中坐标))
+canvas.save("shot-mobile-canvas.png")
+```
+
+### 截图来源纪律
+
+- 实拍前确认目标实例：开发型工作目录用 8000 端口发行版，知识库型才是 7860（勿混）
+- 主题色按用户要求挂 `data-theme`（暖纸=paper）后截图，四张色调才一致
+- Playwright 截图 viewport 1600×1000（16:10）；Lit 组件要 pierce shadow DOM 定位控件
 
 ---
 

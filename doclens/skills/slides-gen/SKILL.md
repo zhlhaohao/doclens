@@ -86,7 +86,7 @@ doctor（首次）→ 复述+提问 → 写 deck.md → check（幽灵稿确认�
 | 场景 | 读这个 |
 |---|---|
 | 写 deck.md 之前（语法/指令/动画词/图表属性） | `SCHEMA.md` |
-| 做全屏产品截图页（图铺满+文字压图） | `SCHEMA.md` §4 的 `bg`/`delay` 键 + `SCENARIOS.md`「截图要全屏铺满」行 + `PLAYBOOK.md` §3 两条特判 |
+| 做全屏产品截图页（图铺满+文字压图） | `SCHEMA.md` §4 的 `bg`/`delay`/`full=screen` 键 + `SCENARIOS.md`「八b 全屏截图页配方」+ `PLAYBOOK.md` §3 两条特判 |
 | 用户说了句模糊话，不知道怎么接 | `SCENARIOS.md`（90+ 条话术对照） |
 | 验收报了问题怎么修 / 降级了怎么交代 / 看反例 | `PLAYBOOK.md` |
 | 用户问字体兼容 | `FONTS.md` |

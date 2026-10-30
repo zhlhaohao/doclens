@@ -15,7 +15,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +117,11 @@ def _attrs(block: Block, page_anim: str, theme: Theme, page_level: bool) -> tupl
     d = block.directive
     parts: list[str] = []
     style: list[str] = []
+
+    # full=screen 糖衣：全屏背景图块（blank 版式）——自动展开 0/0/100%/100% 坐标。
+    # 手写坐标易错（y=5% 就会破坏 QA 的全屏背景豁免判定），糖衣保证形态标准。
+    if d.get("full") == "screen":
+        d = {**d, "x": "0%", "y": "0%", "w": "100%", "h": "100%"}
 
     align = d.get("align", "")
     if align in ("left", "center", "right"):
@@ -401,6 +406,9 @@ class Renderer:
                 if b.kind == "hr":
                     continue
                 dd = b.directive
+                if dd.get("full") == "screen":   # 糖衣展开（与 _attrs 同口径）
+                    dd = {**dd, "x": "0%", "y": "0%", "w": "100%", "h": "100%"}
+                    b = replace(b, directive=dd)
                 coords = [dd.get(k, "") for k in ("x", "y", "w", "h")]
                 if all(coords):
                     flush()
