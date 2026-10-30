@@ -22,6 +22,10 @@ THINKING_DEPTHS = ("auto", "off", "low", "medium", "high")
 # low/medium/high → Anthropic thinking.budget_tokens
 THINKING_BUDGET_TOKENS = {"low": 2048, "medium": 8192, "high": 16384}
 
+# max_tokens 公共上限（思考 budget 叠加后钳制用）：GLM /anthropic 硬限
+# ≤131072（超限 400 code 1210）；Anthropic 官方上限更高，取行业公约数。
+MAX_OUTPUT_TOKENS_CEILING = 131072
+
 
 def normalize_thinking_depth(value: Any) -> str:
     """归一化思考深度档位：None/空串/未知值 → "auto"（不干预，向后兼容）。"""

@@ -20,6 +20,7 @@ from .types import (
     Tool,
     ToolResultBlock,
     ToolUseBlock,
+    MAX_OUTPUT_TOKENS_CEILING,
     THINKING_BUDGET_TOKENS,
     normalize_thinking_depth,
 )
@@ -127,7 +128,11 @@ class AnthropicProvider:
             budget = THINKING_BUDGET_TOKENS[depth]
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
             kwargs["output_config"] = {"effort": depth}
-            kwargs["max_tokens"] = max_tokens + budget
+            # budget 叠加进 max_tokens（可见输出不缩水），但钳到公共上限：
+            # GLM /anthropic 等端点硬限 max_tokens ≤ 131072，叠加后超限直接
+            # 400 code 1210（max_tokens参数非法：限制数值范围[1,131072]）——
+            # 钳制后预算挤占可见输出，请求不再被拒。
+            kwargs["max_tokens"] = min(max_tokens + budget, MAX_OUTPUT_TOKENS_CEILING)
         else:
             kwargs["max_tokens"] = max_tokens
         return kwargs
@@ -273,7 +278,13 @@ class AnthropicProvider:
         """SDK 响应 → 归一化 LLMResponse（chat/achat 共用）。"""
         content = [
             b
-            for b in (AnthropicProvider._block_from_anthropic(x) for x in response.content)
+            # 兜底 content=None：部分 Anthropic 兼容端点（如 MiniMax /anthropic）
+            # 在 max_tokens 全部耗在 thinking、零内容块时返回 "content": null
+            #（官方返回 []），SDK 原样解析为 None——迭代即 TypeError。
+            for b in (
+                AnthropicProvider._block_from_anthropic(x)
+                for x in (response.content or [])
+            )
             if b is not None
         ]
         return LLMResponse(

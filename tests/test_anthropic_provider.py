@@ -31,6 +31,34 @@ class TestBlockFromAnthropic:
         assert isinstance(out, TextBlock)
 
 
+class TestResponseToLLM:
+    def test_content_none_tolerated(self):
+        """MiniMax /anthropic 在零内容块时回 "content": null（官方回 []），
+        SDK 解析为 None——_response_to_llm 必须兜底为空列表而非迭代崩溃。"""
+        resp = SimpleNamespace(
+            content=None, stop_reason="max_tokens", model="MiniMax-M3.1-Flash",
+            usage=SimpleNamespace(
+                input_tokens=6, output_tokens=1,
+                cache_creation_input_tokens=0, cache_read_input_tokens=0,
+            ),
+        )
+        out = AnthropicProvider._response_to_llm(resp)
+        assert out.content == []
+        assert out.stop_reason == "max_tokens"
+
+    def test_content_blocks_mapped(self):
+        resp = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="hi")],
+            stop_reason="end_turn", model="m",
+            usage=SimpleNamespace(
+                input_tokens=1, output_tokens=1,
+                cache_creation_input_tokens=0, cache_read_input_tokens=0,
+            ),
+        )
+        out = AnthropicProvider._response_to_llm(resp)
+        assert len(out.content) == 1 and isinstance(out.content[0], TextBlock)
+
+
 class TestPromptCaching:
     """cache_control 断点：system / tools 末位 / 最后一条 user 消息。"""
 
@@ -141,6 +169,16 @@ class TestThinkingDepthRequestKwargs:
 
     def test_high_budget_16384(self):
         assert self._kwargs("high")["thinking"]["budget_tokens"] == 16384
+
+    def test_budget_clamped_to_ceiling(self):
+        """budget 叠加超公共上限时钳制：GLM 端硬限 131072，叠加 16384 会 400。"""
+        kw = self._kwargs("high", max_tokens=131072)
+        assert kw["max_tokens"] == 131072
+        assert kw["thinking"]["budget_tokens"] == 16384
+
+    def test_budget_no_clamp_below_ceiling(self):
+        kw = self._kwargs("low", max_tokens=8000)
+        assert kw["max_tokens"] == 8000 + 2048
 
     def test_per_call_override_to_auto(self):
         """每调用级覆盖：构造 low、调用时显式 auto → 不发思考参数。"""
