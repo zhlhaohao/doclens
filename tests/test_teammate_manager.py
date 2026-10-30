@@ -241,15 +241,31 @@ class TestProgrammingTaskLifecycle:
 
 class TestStateMachine:
     def test_spawn_same_name_while_working_rejected(self, env):
-        team, _ = env.make([tool_use_resp("idle", {})])
+        """working 中同名 spawn 必须被拒。
+
+        原 FakeProvider 即回脚本让重激活线程秒进 IDLE PHASE（2s 后
+        shutdown），第二次 spawn 与该窗口赛跑——机器慢时 flaky。
+        改用 gate 卡住第一段 chat，status 稳定 working 后再断言。
+        """
+        team, provider = env.make([tool_use_resp("idle", {})])
+        release = threading.Event()
+        inner_chat = provider.chat
+
+        def gated_chat(*a, **kw):
+            r = inner_chat(*a, **kw)
+            release.wait(timeout=10)  # 第一段工作卡在此，alice 稳定 working
+            return r
+
+        provider.chat = gated_chat
         team.spawn("alice", "coder", "干活")
-        assert wait_until(lambda: member_status(team, "alice") == "idle")
-        # idle 后同名 spawn = 重激活
-        resp = team.spawn("alice", "reviewer", "新任务")
-        assert resp == "Spawned 'alice' (role: reviewer)"
-        # working 中再 spawn 报错（本轮脚本耗尽 → FakeProvider 返回 end_turn → 退出 work 循环）
-        assert "Error" in team.spawn("alice", "coder", "重复 spawn")
+        # alice 已进 work 循环（第一轮 chat 被卡）
+        assert wait_until(lambda: provider.calls >= 1)
+        resp = team.spawn("alice", "coder", "重复 spawn")
+        assert "Error" in resp, f"期望 working 中被拒，实际: {resp!r}"
+        # 放行 → idle → IDLE PHASE → idle_timeout=2s → shutdown
+        release.set()
         join_thread(team, "alice")
+        assert wait_until(lambda: member_status(team, "alice") == "shutdown")
 
     def test_inbox_message_revives_idle_teammate(self, env):
         """idle 队友收到 inbox 消息后恢复 working 并看到消息内容。"""
