@@ -85,6 +85,10 @@ export class SessionInfoDialog extends LitElement {
   @property({ type: Number }) inputTotal: number | null = null;
   /** 全会话 LLM 调用次数 */
   @property({ type: Number }) calls = 0;
+  /** 最近一次调用 cache_read tokens；null = 暂无数据（隐藏单次命中率行） */
+  @property({ type: Number }) lastCallRead: number | null = null;
+  /** 最近一次调用总输入 tokens（input + cache_read + cache_creation） */
+  @property({ type: Number }) lastCallUsed = 0;
   /** 全会话自动压缩次数（kind="compacted" 条目数，ADR-0026）；0 = 未压缩过（隐藏压缩行） */
   @property({ type: Number }) compactionCount = 0;
   /** 最近一次压缩时间（ISO 字符串）；null = 无数据（旧后端 / 时间缺失） */
@@ -144,6 +148,21 @@ export class SessionInfoDialog extends LitElement {
             <div class="value-sm">
               cache_read ${formatTokens(this.cacheReadTotal!)} /
               总输入 ${formatTokens(this.inputTotal!)} · ${this.calls} 次调用
+            </div>
+          </div>`
+        : ""}
+      ${this.lastCallRead !== null
+        ? html`
+          <div class="row">
+            <div class="label">最近一次调用命中率</div>
+            <div class="value">
+              ${this.lastCallUsed
+                ? ((this.lastCallRead! * 100) / this.lastCallUsed).toFixed(2)
+                : "0.00"}%
+            </div>
+            <div class="value-sm">
+              cache_read ${formatTokens(this.lastCallRead!)} /
+              总输入 ${formatTokens(this.lastCallUsed)}——反映缓存当下冷热，冷却后骤降属正常
             </div>
           </div>`
         : ""}

@@ -81,15 +81,18 @@ describe("aggregateUsage（会话信息弹窗，2026-09-17）", () => {
       }) },
     ];
     // used = 最后一条 300+60+15 = 375；累计 cache_read = 80，
-    // 累计总输入 = 125 + 375 = 500，调用 2 次；lastSeq = 最后一条 seq
+    // 累计总输入 = 125 + 375 = 500，调用 2 次；lastSeq = 最后一条 seq；
+    // 单次口径 lastUsed/lastRead = 最后一条 375 / 60（最近一次调用命中率）
     expect(aggregateUsage(items)).toEqual({
       used: 375, contextWindow: 200000,
-      cacheReadTotal: 80, inputTotal: 500, calls: 2, lastSeq: 2,
+      cacheReadTotal: 80, inputTotal: 500,
+      lastUsed: 375, lastRead: 60,
+      calls: 2, lastSeq: 2,
     });
   });
 
   it("applyLiveWindow：实时窗口覆盖历史快照（配置热更后旧会话显示不再停滞）", () => {
-    const usage = { used: 375, contextWindow: 200000, cacheReadTotal: 80, inputTotal: 500, calls: 2, lastSeq: 2 };
+    const usage = { used: 375, contextWindow: 200000, cacheReadTotal: 80, inputTotal: 500, lastUsed: 375, lastRead: 60, calls: 2, lastSeq: 2 };
     // 实时 100k 覆盖快照 200k（不可变：原对象不动）
     const updated = applyLiveWindow(usage, 100000);
     expect(updated).toEqual({ ...usage, contextWindow: 100000 });
@@ -124,7 +127,9 @@ describe("aggregateUsage（会话信息弹窗，2026-09-17）", () => {
     ];
     expect(aggregateUsage(items)).toEqual({
       used: 150, contextWindow: 200000,
-      cacheReadTotal: 40, inputTotal: 150, calls: 1, lastSeq: 5,
+      cacheReadTotal: 40, inputTotal: 150,
+      lastUsed: 150, lastRead: 40,
+      calls: 1, lastSeq: 5,
     });
   });
 });

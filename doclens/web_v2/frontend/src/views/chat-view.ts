@@ -128,6 +128,10 @@ export interface SessionUsageState {
   cacheReadTotal: number;
   /** 全会话累计总输入 tokens（命中率分母） */
   inputTotal: number;
+  /** 最近一次调用的总输入（input + cache_read + cache_creation） */
+  lastUsed: number;
+  /** 最近一次调用的 cache_read tokens（单次命中率分子） */
+  lastRead: number;
   /** 全会话 LLM 调用次数 */
   calls: number;
   /** 最后一条 usage 条目的 seq（压缩晚于此值 → 占用显示压缩后估算） */
@@ -158,6 +162,8 @@ export function applyUsageEvent(
         contextWindow: sample.contextWindow,
         cacheReadTotal: sample.read,
         inputTotal: used,
+        lastUsed: used,
+        lastRead: sample.read,
         calls: 1,
         lastSeq: sample.seq,
       }
@@ -166,6 +172,8 @@ export function applyUsageEvent(
         used,
         cacheReadTotal: prev.cacheReadTotal + sample.read,
         inputTotal: prev.inputTotal + used,
+        lastUsed: used,
+        lastRead: sample.read,
         calls: prev.calls + 1,
         lastSeq: Math.max(prev.lastSeq, sample.seq),
       };
@@ -999,6 +1007,8 @@ export class ChatView extends LitElement {
           .cacheReadTotal=${usage?.cacheReadTotal ?? null}
           .inputTotal=${usage?.inputTotal ?? null}
           .calls=${usage?.calls ?? 0}
+          .lastCallRead=${usage ? usage.lastRead : null}
+          .lastCallUsed=${usage?.lastUsed ?? 0}
           .compactionCount=${compaction?.count ?? 0}
           .lastCompactedAt=${compaction?.lastAt ?? null}
           .lastPreTokens=${compaction?.lastPreTokens ?? null}
