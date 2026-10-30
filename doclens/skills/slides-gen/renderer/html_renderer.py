@@ -259,7 +259,7 @@ class Renderer:
 
     def render(self, md_path: Path, out_path: Path, *,
                theme_override: str = "", embed_images: bool = True,
-               draft: bool = False) -> dict[str, Any]:
+               draft: bool = False, narrate_dir: Path | None = None) -> dict[str, Any]:
         text = md_path.read_text(encoding="utf-8")
         self.md_dir = md_path.parent
         self.embed_images = embed_images
@@ -281,11 +281,30 @@ class Renderer:
             size_key = "16:9"
         cw, ch = CANVAS[size_key]
 
+        # 口播音频：narrate_dir/<pNN>.mp3 存在则注入该页（相对 out_path 的路径）
+        narr_rel = ""
+        narr_pages: set[int] = set()
+        if narrate_dir is not None:
+            narr_pages = {int(m.group(1)) for f in narrate_dir.glob("p*.mp3")
+                          if (m := re.match(r"p(\d+)\.mp3$", f.name))}
+            if narr_pages:
+                try:
+                    narr_rel = narrate_dir.resolve().relative_to(
+                        out_path.parent.resolve()).as_posix()
+                except ValueError:
+                    narr_rel = narrate_dir.resolve().as_uri()
+
         slides_html: list[str] = []
         for i, slide in enumerate(deck.slides, 1):
-            slides_html.append(self._slide_html(slide, i))
+            page_html = self._slide_html(slide, i)
+            if i in narr_pages:
+                page_html = page_html.replace(
+                    '<div class="pageno"></div>',
+                    f'<audio class="narr" src="{narr_rel}/p{i:02d}.mp3" preload="auto"></audio>\n    <div class="pageno"></div>')
+            slides_html.append(page_html)
         self.slide_count = len(deck.slides)
         self._draft = draft
+        self._narr_pages = sorted(narr_pages)
 
         doc = self._document(slides_html, cw, ch)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -892,7 +911,7 @@ class Renderer:
 {chr(10).join(slides)}
 </div>
 <div class="progress"></div>
-<div class="hint">← → 翻页 · N 备注 · F 全屏 · P 打印</div>
+<div class="hint">← → 翻页 · N 备注 · F 全屏 · P 打印 · V 旁白</div>
 <div class="draft-badge">内容稿 · 未做最终验收</div>
 <script>
 {presenter_js}

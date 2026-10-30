@@ -110,6 +110,12 @@ def check(need_vision: bool = True) -> Report:
         "Windows/macOS 一般自带；Linux 执行 apt-get install fonts-noto-cjk")
 
     # ---- 可选 ----
+    from .narrate import _load_conf as _narr_conf
+    nc = _narr_conf()
+    add("MiniMax 语音（口播合成）", "optional", nc is not None,
+        f"{nc.get('model', '')} · group {nc.get('group', '')[:4]}…" if nc
+        else "未配置：narrate 口播合成不可用（需 MINIMAX_API_KEY + MINIMAX_GROUP_ID）",
+        "全局 .env 写 MINIMAX_API_KEY 与 MINIMAX_GROUP_ID（GroupId 在 MiniMax 控制台「账户-基本信息」）")
     add("numpy（参考图提色更准）", "optional", _has("numpy"), "",
         f"{sys.executable} -m pip install numpy")
     mmdc = shutil.which("mmdc") or shutil.which("mmdc.cmd")

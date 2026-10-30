@@ -583,3 +583,11 @@ body.draft .draft-badge {
 @media print {
   .draft-badge { display: none !important; }  /* 打印 PDF 时不带徽标（导出走 pdf 命令） */
 }
+
+/* ---------- 旁白模式（V 键） ---------- */
+
+audio.narr { display: none; }   /* 不显示原生控件，由旁白模式接管 */
+body.narration-on .hint::after {
+  content: " · 🔊 旁白中";
+  color: var(--c-accent, #e8622d);
+}

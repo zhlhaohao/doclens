@@ -48,6 +48,7 @@ doctor（首次）→ 复述+提问 → 写 deck.md → check（幽灵稿确认�
 | `build deck.md` | render + qa（rc=0 = 全过） |
 | `images deck.md` | 图位清单（重绘前必查：区分即梦生成/本地截图） |
 | `pdf deck.html` | 导出 PDF（`--annotations` 带备注版） |
+| `narrate deck.md` | 口播合成：notes → MiniMax T2A → 逐页 mp3（`--voice` 选音色/克隆 id）；`--narrate` 渲染时注入，播放按 **V** 键旁白模式（读完整页自动翻页） |
 
 开发版从技能目录跑：`<venv>/python.exe -m renderer <子命令>`；发行版 `doclens slides-gen <子命令>`。
 
@@ -80,6 +81,7 @@ doctor（首次）→ 复述+提问 → 写 deck.md → check（幽灵稿确认�
 - 强调色 ≤3 处/页、面积 ≤8%；对比度 WCAG（正文 4.5:1、主色 3:1）
 - 图标 `<i data-icon="zap"/>`，一页 ≤3 个；图位编号 `P3-图1` 是永久身份，**换图不换号**
 - 图片：先 glob 查库内已有 → 无图才即梦生成（≥3 张先报数征得同意）→ local 截图重绘必须先问
+- 口播（用户要"带讲解的/自动播放的"才用）：`narrate` 合成（配置 MINIMAX_API_KEY + MINIMAX_GROUP_ID）→ `render --narrate` 注入 → 演示按 **V** 开旁白；克隆音色须**本人或已授权**，合成前确认；没配 key 明确说"口播不可用"，不静默
 
 ## 按需深入（遇到对应场景再 read_file，不要一次全读）
 

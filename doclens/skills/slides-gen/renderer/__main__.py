@@ -173,6 +173,15 @@ def cmd_images(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_narrate(args: argparse.Namespace) -> int:
+    from .narrate import main as narrate_main
+
+    argv = [str(args.input), "--voice", args.voice, f"--speed={args.speed}"]
+    if args.pages:
+        argv.append(f"--pages={args.pages}")
+    return narrate_main(argv)
+
+
 def cmd_gallery(args: argparse.Namespace) -> int:
     from .gallery import main as gallery_main
 
@@ -246,11 +255,18 @@ def cmd_render(args: argparse.Namespace) -> int:
         return 2
     # 内容稿默认写 <名>-draft.html；用户显式 -o 指定则尊重
     out = args.output or _default_html(md, draft=True)
+    narr_dir = None
+    if getattr(args, "narrate", False):
+        cand = md.parent / (md.stem + "-audio")
+        if cand.exists():
+            narr_dir = cand
+        else:
+            print(f"提示：未找到 {cand}，先跑 narrate 生成音频；本次不含口播。")
     r = Renderer(layout_dir=args.layout_dir, theme_dir=args.theme_dir)
     try:
         stats = r.render(md, out, theme_override=args.theme,
                          embed_images=not args.no_embed,
-                         draft=True)
+                         draft=True, narrate_dir=narr_dir)
     except Exception as e:  # noqa: BLE001
         print(f"错误：渲染失败 {e}", file=sys.stderr)
         return 2
@@ -386,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--pages", default="", help="只验收指定页，如 1,3-5")
         p.add_argument("--no-vision", action="store_true", help="只跑几何自检，不调视觉模型")
         p.add_argument("--open", action="store_true", help="渲染完用默认程序打开产物")
+        p.add_argument("--narrate", action="store_true",
+                       help="注入口播音频（需先跑 narrate 生成 <名>-audio/）")
         p.add_argument("--strict", action="store_true",
                        help="有降级警告即视为失败（自动化/CI 用）")
 
@@ -423,6 +441,13 @@ def main(argv: list[str] | None = None) -> int:
     p_images = sub.add_parser("images", help="列图位清单（重绘/替换图片前用）")
     p_images.add_argument("input", type=Path, help="deck md 文件")
     p_images.set_defaults(func=cmd_images)
+
+    p_nar = sub.add_parser("narrate", help="口播合成（notes → mp3）")
+    p_nar.add_argument("input", type=Path, help="deck md")
+    p_nar.add_argument("--voice", default="presenter_male", help="音色（--list-voices 看预设）")
+    p_nar.add_argument("--speed", type=float, default=1.0)
+    p_nar.add_argument("--pages", default="")
+    p_nar.set_defaults(func=cmd_narrate)
 
     p_gal = sub.add_parser("gallery", help="版式样板间（19 版式各渲染一页）")
     p_gal.add_argument("--theme", default="corporate-blue")

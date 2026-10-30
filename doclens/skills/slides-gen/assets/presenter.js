@@ -283,6 +283,11 @@
         break;
       case "p": case "P": window.print(); break;
       case "h": case "H": document.body.classList.toggle("hide-hint"); break;
+      case "v": case "V":
+        narration = !narration;
+        document.body.classList.toggle("narration-on", narration);
+        if (narration) playNarr(slides[index]); else stopNarr();
+        break;
     }
   });
 
@@ -321,9 +326,43 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(refitCurrent);
   window.addEventListener("load", refitCurrent);
 
+  /* ---------------- 旁白模式（V 键）：每页自动播口播音频，读完自动翻页 ----------------
+     音频由渲染器以 <audio class="narr" src=".../p01.mp3"> 注入每页。
+     浏览器自动播放策略要求先有用户交互——所以必须按键开启，不能自动响。 */
+  var narration = false;
+  var narrAudio = null;   // 当前正在播的 <audio>
+
+  function narrOf(slide) {
+    return slide ? slide.querySelector("audio.narr") : null;
+  }
+
+  function stopNarr() {
+    if (narrAudio) { try { narrAudio.pause(); } catch (e) {} narrAudio = null; }
+  }
+
+  function playNarr(slide) {
+    stopNarr();
+    if (!narration) return;
+    var a = narrOf(slide);
+    if (!a) { return; }             // 该页无音频：保持安静
+    narrAudio = a;
+    a.currentTime = 0;
+    a.play().catch(function () { /* 被浏览器拦截：忽略，用户再按 V */ });
+    a.onended = function () {
+      narrAudio = null;
+      // 读完自动翻下一页（最后一页不翻）
+      if (index < slides.length - 1) next();
+    };
+  }
+
+  // 翻页时接管音频：跳到哪页就播哪页
+  var _origJump = jump;
+  jump = function (n) { _origJump(n); playNarr(slides[index]); };
+
   // 供外部（自动化/嵌入）调用
   window.deck = {
     next: next, prev: prev, go: jump,
+    setNarration: function (on) { narration = !!on; document.body.classList.toggle("narration-on", narration); if (narration) playNarr(slides[index]); else stopNarr(); },
     get index() { return index; },
     get count() { return slides.length; }
   };
