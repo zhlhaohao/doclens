@@ -234,6 +234,48 @@ figure.style-device {
   border-right: 3px solid #26292e;
   margin-right: 3px;
 }
+
+/* ---------- 笔记本/浏览器壳（桌面截图套壳）：style=laptop ----------
+   纯 CSS 画浏览器窗口：顶部工具栏（红黄绿三点 + 地址栏）+ 机身圆角 + 投影。
+   桌面端实拍（建议 viewport 1600×1000）套用后即"真实浏览器"观感。 */
+figure.style-laptop {
+  background: #f4f4f2;
+  border-radius: 18px 18px 12px 12px;
+  padding: 0;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, .35);
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .12);
+}
+/* 顶部工具栏：伪元素画三色点 + 地址条 */
+figure.style-laptop::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 44px;
+  background: linear-gradient(#e9e9e7, #dededa);
+  border-bottom: 1px solid rgba(0, 0, 0, .1);
+  z-index: 2;
+  /* 地址栏（居中圆角条）+ 左侧三点用多重背景画 */
+  background-image:
+    radial-gradient(circle 6px at 22px 22px, #ff5f57 0 6px, transparent 7px),
+    radial-gradient(circle 6px at 44px 22px, #febc2e 0 6px, transparent 7px),
+    radial-gradient(circle 6px at 66px 22px, #28c840 0 6px, transparent 7px),
+    linear-gradient(#ffffff, #ffffff);
+  background-size: auto, auto, auto, 46% 22px;
+  background-position: left top, left top, left top, center 11px;
+  background-repeat: no-repeat;
+  border-radius: 18px 18px 0 0;
+}
+figure.style-laptop img {
+  border-radius: 0 0 12px 12px;
+  object-fit: cover;
+  width: 100%;
+  height: calc(100% - 44px);
+  margin-top: 44px;
+  display: block;
+}
 figure.style-circle img { border-radius: 50%; aspect-ratio: 1; object-fit: cover; }
 figure.style-shadow img { box-shadow: 0 10px 30px rgba(0, 0, 0, .16); }
 

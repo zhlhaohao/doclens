@@ -73,7 +73,7 @@ font:                   # 可选覆盖主题字体（部分覆盖即可）
 | `anim` | 动画白名单词 + 可选 `direction=left\|right\|up\|down` | 覆盖页级策略 |
 | `align` | `left` / `center` / `right` | 文本对齐 |
 | `fit` | `cover` / `contain` / `stretch` | 仅图片块；cover=填满裁剪（默认），contain=完整留白，stretch=拉伸变形 |
-| `style` | `rounded` / `circle` / `shadow` / `device` | 图片块装饰，可组合 `style=rounded,shadow`。`device` = 手机设备框（圆角机身+刘海+Home 条+投影），用于手机实拍套壳——实拍 viewport 建议 390×844 |
+| `style` | `rounded` / `circle` / `shadow` / `device` / `laptop` | 图片块装饰，可组合 `style=rounded,shadow`。`device` = 手机设备框（圆角机身+刘海+Home 条+投影），实拍 viewport 390×844；`laptop` = 浏览器窗口壳（红黄绿三点+地址栏+投影），桌面实拍 viewport 1600×1000 |
 | `chart` | `bar` / `line` / `pie` / `doughnut` / `stacked` | 紧随的 MD 表格 = 数据源 → 内联 SVG 图表 |
 | `highlight` | 0 基整数 | 突出第几个类目（其余淡化）；饼图/环形图按类目着色顺序生效 |
 | `unit` | 字符串，如 `%` `万` | 数值后缀 |

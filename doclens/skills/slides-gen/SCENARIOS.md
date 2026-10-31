@@ -364,13 +364,15 @@
 
 ### 标准页模板（桌面横屏截图，直接抄）
 
-```markdown
-<!-- slide: layout=blank bg=bg kicker="02 · 实貌 1/4" anim=none notes="讲这页看什么" -->
+桌面截图套 `style=laptop` 浏览器壳（红黄绿三点+地址栏），占位 ~96% 居中，
+四周露底色像放在展示台上；说明文字条压在壳子下缘：
 
-<!-- block: full=screen fit=cover -->
+```markdown
+<!-- block: x=2% y=3% w=96% h=91% fit=cover style=laptop anim=enter.fly-in direction=up trigger=after delay=0.3 -->
+
 ![P3-图1 主界面](images/shot1-main.png)
 
-<!-- block: x=6% y=78% w=72% h=14% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.0 -->
+<!-- block: x=2% y=94% w=72% h=6% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.0 -->
 
 **页面主功能**——一句话说明（≤25 字）
 ```
