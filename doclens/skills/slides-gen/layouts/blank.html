@@ -8,8 +8,10 @@
      否则 section 的 position:absolute 会被覆盖成 relative 导致高度塌陷 */
   .slide.layout-blank { padding: 0; }
   .slide-inner.layout-blank { display: block; position: relative; height: 100%; }
-  .slide-inner.layout-blank .abs-block { position: absolute; overflow: hidden; }
+  .slide-inner.layout-blank .abs-block { position: absolute; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: center; }
   .slide-inner.layout-blank .abs-block > :first-child { margin-top: 0; }
-  /* 图片块撑满：figure 需要确定高度，max-height:100% 才能约束 img（否则塌陷溢出） */
-  .slide-inner.layout-blank .abs-block > figure { height: 100%; }
+  .slide-inner.layout-blank .abs-block > p { margin: 0; }   /* 居中态下清除默认 margin 干扰 */
+  /* 图片块撑满：figure 不参与垂直居中——flex 下保持 100% 高度铺满 */
+  .slide-inner.layout-blank .abs-block > figure { height: 100%; flex: 0 0 100%; align-self: stretch; }
 </style>
