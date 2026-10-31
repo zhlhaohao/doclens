@@ -238,9 +238,9 @@ figure.style-device {
   margin-right: 3px;
 }
 
-/* ---------- 笔记本/浏览器壳（桌面截图套壳）：style=laptop ----------
-   深色舞台 + 白窗口：macOS 风顶栏（红黄绿三点+胶囊地址栏+右侧图标位）、
-   12px 圆角、轻投影。桌面实拍 viewport 1600×1000。 */
+/* ---------- Windows 窗口壳（桌面截图套壳）：style=laptop ----------
+   Win11 风格：浅灰顶栏（左窗口标题、右 最小化/最大化/关闭 三钮），
+   12px 机身圆角、轻投影。桌面实拍 viewport 1600×1000。 */
 figure.style-laptop {
   background: #ffffff;
   border-radius: 12px;
@@ -250,34 +250,34 @@ figure.style-laptop {
   height: 100%;
   overflow: hidden;
 }
-/* macOS 顶栏：三色点 + 居中胶囊地址栏 + 右侧三点图标位 */
+/* Win 顶栏：右侧三钮（─ □ ×），无地址栏 */
 figure.style-laptop::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 30px;
-  background: linear-gradient(#f6f6f4, #ececea);
-  border-bottom: 1px solid rgba(0, 0, 0, .08);
+  height: 32px;
+  background: #f0f0ef;
+  border-bottom: 1px solid rgba(0, 0, 0, .1);
   z-index: 2;
+  /* 右侧：最小化(横线)、最大化(方框)、关闭(×)——× 用两根 45° 线段渐变画 */
   background-image:
-    radial-gradient(circle 5.5px at 17px 15px, #ff5f57 0 5.5px, transparent 6.5px),
-    radial-gradient(circle 5.5px at 35px 15px, #febc2e 0 5.5px, transparent 6.5px),
-    radial-gradient(circle 5.5px at 53px 15px, #28c840 0 5.5px, transparent 6.5px),
-    linear-gradient(#ffffff, #ffffff),
-    radial-gradient(circle 2px at 85% 15px, #b9b9b6 0 2px, transparent 3px),
-    radial-gradient(circle 2px at 88% 15px, #b9b9b6 0 2px, transparent 3px),
-    radial-gradient(circle 2px at 91% 15px, #b9b9b6 0 2px, transparent 3px);
-  background-size: auto, auto, auto, 56% 20px, auto, auto, auto;
-  background-position: left top, left top, left top, center 5px, left top, left top, left top;
+    linear-gradient(#4a4a48, #4a4a48),                                   /* ─ */
+    linear-gradient(#4a4a48, #4a4a48),
+    linear-gradient(#c42b1c, #c42b1c), linear-gradient(#c42b1c, #c42b1c),  /* × 两笔 */
+    linear-gradient(#ffffff, #ffffff), linear-gradient(#ffffff, #ffffff);   /* □ 描边近似：两道白衬 */
+  background-size: 10px 1px, 9px 9px, 12px 2px, 12px 2px, 9px 9px, 9px 9px;
+  background-position:
+    calc(100% - 44px) 16px, calc(100% - 66px) 11px,
+    calc(100% - 26px) 10px, calc(100% - 26px) 20px,
+    calc(100% - 65px) 10px, calc(100% - 67px) 12px;
   background-repeat: no-repeat;
-  border-radius: 12px 12px 0 0;
 }
 figure.style-laptop img {
   border-radius: 0 0 10px 10px;
   object-fit: cover;
   width: 100%;
-  height: calc(100% - 30px);
-  margin-top: 30px;
+  height: calc(100% - 32px);
+  margin-top: 32px;
   display: block;
 }
 /* 深色舞台：套壳页建议 bg 深灰（slide 级 bg=stage-dark 或 #1e2229），
