@@ -198,8 +198,8 @@ figure.style-device {
   background: #1a1d21;
   border-radius: 36px;
   padding: 10px 8px;
-  /* 深色舞台上收敛投影（大偏移会把四角外晕黑，圆角形状消失）+ 亮描边勾出轮廓 */
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .5), 0 0 0 1.5px rgba(255, 255, 255, .22);
+  /* 无外投影（任何 box-shadow 都会晕到圆角外）——亮描边 + 底部内阴影造立体 */
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .25), inset 0 -14px 28px rgba(0, 0, 0, .35);
   position: relative;
   height: 100%;
 }
