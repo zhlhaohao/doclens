@@ -196,14 +196,14 @@ figure.style-rounded img { border-radius: 16px; }
    竖屏截图（建议实拍 viewport 390×844）套用后即"真机感"。 */
 figure.style-device {
   background: #1a1d21;
-  border-radius: 44px;
-  padding: 12px 10px;
+  border-radius: 36px;
+  padding: 10px 8px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, .45), 0 0 0 2px rgba(255, 255, 255, .06) inset;
   position: relative;
   height: 100%;
 }
 figure.style-device img {
-  border-radius: 34px;
+  border-radius: 14px;
   object-fit: cover;
   max-height: 100%;
   width: 100%;

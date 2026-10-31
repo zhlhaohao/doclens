@@ -134,7 +134,14 @@ def _attrs(block: Block, page_anim: str, theme: Theme, page_level: bool) -> tupl
     # bg=主题角色名：该块文字的不透明背景（全屏图上覆盖文字的可读性保障）
     bg = d.get("bg", "")
     if bg:
-        style.append(f"background:{theme.color(bg)}")
+        # bg=dark：深色玻璃胶囊（深色舞台上的字幕/标签用，与 .sub-banner 同视觉）
+        if bg == "dark":
+            style.append("background:rgba(16,24,40,.88)")
+            style.append("color:#f5f7fa")
+            style.append("border-left:4px solid #e8622d")
+            style.append("box-shadow:0 8px 28px rgba(0,0,0,.45)")
+        else:
+            style.append(f"background:{theme.color(bg)}")
         style.append("padding:.35em .7em")
         style.append("border-radius:8px")
         style.append("width:fit-content")
