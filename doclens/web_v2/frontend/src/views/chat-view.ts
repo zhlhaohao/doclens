@@ -1001,6 +1001,7 @@ export class ChatView extends LitElement {
     return html`
       <dialog @cancel=${this._onInfoClose}>
         <session-info-dialog
+          .sessionId=${this.viewState.currentSession?.id ?? ""}
           .used=${used}
           .usedIsEstimate=${useEstimate}
           .contextWindow=${usage?.contextWindow ?? 0}
@@ -1013,6 +1014,7 @@ export class ChatView extends LitElement {
           .lastCompactedAt=${compaction?.lastAt ?? null}
           .lastPreTokens=${compaction?.lastPreTokens ?? null}
           @close=${this._onInfoClose}
+          @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}
         ></session-info-dialog>
       </dialog>`;
   }

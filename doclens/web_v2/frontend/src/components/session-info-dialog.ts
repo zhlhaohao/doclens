@@ -1,7 +1,8 @@
-import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 
 import { formatTokens } from "../utils/format";
+import "./icon";
 
 /** 会话信息对话框（2026-09-17）：展示当前会话的上下文窗口占用 + 累计缓存命中率
  *  + 自动压缩信息（ADR-0026）。usage 数据来自 SSE usage 事件 / 会话详情
@@ -54,6 +55,49 @@ export class SessionInfoDialog extends LitElement {
       font-size: var(--cortex-fs-sm);
       padding: var(--cortex-space-3) 0;
     }
+    /* 会话 ID 行：label 左、ID + copy 钮右侧对齐成一排；长 ID 不换行 */
+    .id-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--cortex-space-2);
+      margin: var(--cortex-space-3) 0;
+    }
+    .id-row .label { margin-bottom: 0; flex-shrink: 0; }
+    .id-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .id-text {
+      font-size: var(--cortex-fs-sm);
+      font-family: var(--cortex-font-mono);
+      color: var(--cortex-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* copy 图标钮：同 history-item copy-btn 款式 */
+    .copy-btn {
+      background: transparent;
+      border: none;
+      padding: 2px;
+      cursor: pointer;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text-subtle);
+      border-radius: var(--cortex-radius-sm);
+      flex-shrink: 0;
+      line-height: 0;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .copy-btn:hover {
+      color: var(--cortex-primary);
+      transform: scale(1.15);
+    }
+    .copy-btn.copied {
+      color: var(--cortex-primary);
+    }
     .actions {
       display: flex; justify-content: flex-end;
       margin-top: var(--cortex-space-4);
@@ -75,6 +119,8 @@ export class SessionInfoDialog extends LitElement {
 
   /** 已占用 tokens（最近一次调用的总输入）；null = 暂无数据 */
   @property({ type: Number }) used: number | null = null;
+  /** 会话 ID（ULID）：显示 + copy 按钮；空串 = 宿主无当前会话（隐藏整行） */
+  @property({ type: String }) sessionId = "";
   /** used 为压缩后估算（压缩晚于最近一次调用，下轮对话实测覆盖） */
   @property({ type: Boolean }) usedIsEstimate = false;
   /** 上下文窗口上限 */
@@ -99,13 +145,53 @@ export class SessionInfoDialog extends LitElement {
   /** 压缩阈值（与后端 compact_threshold = context_window × 0.8 对齐） */
   private static readonly COMPACT_RATIO = 0.8;
 
+  /** 复制成功瞬时反馈：图标 copy→check，1.5s 恢复（同 history-item copy-btn） */
+  @state() private _copied = false;
+  private _copyTimer?: number;
+
   private _close() {
     this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+  }
+
+  /** copy 会话 ID 到剪贴板；失败图标不变并冒泡 copy-failed（宿主 toast）。 */
+  private _onCopyId = async (e: Event): Promise<void> => {
+    e.stopPropagation();
+    if (!this.sessionId) return;
+    try {
+      await navigator.clipboard.writeText(this.sessionId);
+      this._copied = true;
+      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
+    } catch {
+      this.dispatchEvent(
+        new CustomEvent("copy-failed", { bubbles: true, composed: true }),
+      );
+    }
+  };
+
+  /** 会话 ID 行（sessionId 非空时显示；置于弹窗首行）。 */
+  private _renderIdRow() {
+    if (!this.sessionId) return nothing;
+    return html`
+      <div class="id-row">
+        <div class="label">会话 ID</div>
+        <span class="id-value">
+          <span class="id-text" title=${this.sessionId}>${this.sessionId}</span>
+          <button
+            class="copy-btn ${this._copied ? "copied" : ""}"
+            title=${this._copied ? "已复制" : "复制会话 ID"}
+            aria-label=${this._copied ? "已复制" : "复制会话 ID"}
+            @click=${this._onCopyId}>
+            <doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon>
+          </button>
+        </span>
+      </div>`;
   }
 
   render() {
     if (this.used === null || !this.contextWindow) {
       return html`
+        ${this._renderIdRow()}
         <div class="row">
           <div class="label">上下文占用</div>
           <div class="empty">暂无上下文数据——发送首轮后显示</div>
@@ -123,6 +209,7 @@ export class SessionInfoDialog extends LitElement {
         ? ((this.cacheReadTotal * 100) / this.inputTotal).toFixed(2)
         : null;
     return html`
+      ${this._renderIdRow()}
       <div class="row">
         <div class="label">上下文占用</div>
         <div class="value">
