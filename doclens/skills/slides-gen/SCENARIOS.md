@@ -384,16 +384,31 @@
 - **kicker 连号**（实貌 1/4…4/4），`anim=none` 关页级动画避免与块动画叠加
 - 多张轮播就复制整页，图位编号 `P{页}-图1` 按真实页码递增
 
-### 竖屏截图（手机端）先合成再铺
+### 竖屏截图（手机端）：单机用 device 框，双机并排一页装
 
-竖图直接 contain 会因 figure 高度塌陷按原始尺寸溢出（报「溢出容器 NNNpx」）。
-修法：PIL 合成到 16:10 画布（竖图居中、两侧垫主题底色），再按标准模板 cover：
+手机实拍**不要合成画布**——直接用 `style=device`（CSS 设备框：圆角机身+刘海+Home 条+投影），
+真实感更强。实拍 viewport 建议 390×844（iPhone 14 比例，套框最贴合）。
 
-```python
-canvas = Image.new("RGB", (1600, 1000), (248, 244, 234))  # 暖纸底色
-im2 = im.resize((nw, nh), Image.LANCZOS)  # 按高度 94% 缩放
-canvas.paste(im2, (居中坐标))
-canvas.save("shot-mobile-canvas.png")
+单机页：
+
+```markdown
+<!-- block: x=33% y=6% w=34% h=82% fit=cover style=device anim=enter.fly-in direction=up trigger=after -->
+
+![P6-图1 手机端](images/shot-mobile.png)
+```
+
+双机并排页（一页放两台，各自飞入+标签）：
+
+```markdown
+<!-- block: x=10% y=6% w=34% h=80% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=0.6 -->
+
+![P6-图1 手机A](images/shot-a.png)
+
+<!-- block: x=56% y=6% w=34% h=80% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=1.0 -->
+
+![P6-图2 手机B](images/shot-b.png)
+
+<!-- 每台下方小标签（x 对齐机身） + 底部结论条，均 bg=bg 飞入 -->
 ```
 
 ### 截图来源纪律

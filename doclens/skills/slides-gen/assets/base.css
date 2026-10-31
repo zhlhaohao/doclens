@@ -187,6 +187,53 @@ img { max-width: 100%; display: block; border-radius: var(--radius, 10px); }
 figure { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 0; }
 figure img { max-height: 100%; width: auto; object-fit: var(--fit, contain); }
 figure.style-rounded img { border-radius: 16px; }
+
+/* ---------- 设备框（手机实拍套壳）：style=device ----------
+   纯 CSS 画现代手机边框：圆角机身 + 刘海凹槽 + 电源键 + Home 指示条 + 投影。
+   竖屏截图（建议实拍 viewport 390×844）套用后即"真机感"。 */
+figure.style-device {
+  background: #1a1d21;
+  border-radius: 44px;
+  padding: 12px 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .45), 0 0 0 2px rgba(255, 255, 255, .06) inset;
+  position: relative;
+  height: 100%;
+}
+figure.style-device img {
+  border-radius: 34px;
+  object-fit: cover;
+  max-height: 100%;
+  width: 100%;
+  display: block;
+}
+/* 刘海凹槽 */
+figure.style-device::before {
+  content: "";
+  position: absolute;
+  top: 12px; left: 50%;
+  transform: translateX(-50%);
+  width: 34%; height: 24px;
+  background: #1a1d21;
+  border-radius: 0 0 16px 16px;
+  z-index: 2;
+}
+/* Home 指示条 */
+figure.style-device::after {
+  content: "";
+  position: absolute;
+  bottom: 18px; left: 50%;
+  transform: translateX(-50%);
+  width: 34%; height: 5px;
+  background: rgba(255, 255, 255, .55);
+  border-radius: 3px;
+  z-index: 2;
+}
+/* 电源键凸起（右缘） */
+figure.style-device > .dev-btn { display: none; }
+figure.style-device {
+  border-right: 3px solid #26292e;
+  margin-right: 3px;
+}
 figure.style-circle img { border-radius: 50%; aspect-ratio: 1; object-fit: cover; }
 figure.style-shadow img { box-shadow: 0 10px 30px rgba(0, 0, 0, .16); }
 
