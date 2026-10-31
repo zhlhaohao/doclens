@@ -399,18 +399,21 @@
 ![P6-图1 手机端](images/shot-mobile.png)
 ```
 
-双机并排页（一页放两台，各自飞入+标签）：
+双机并排页（一页放两台，各自飞入+标签）。**框内区比例必须匹配截图比例**（390×844
+截图 → 框内区 0.462），否则 `fit=cover` 会上下裁切 30-40%（顶栏/底栏全丢）。
+匹配公式：`w% ≈ (0.9 × 720 × 0.462 + 20px 边) / 1280 ≈ 23%`，h=88%：
 
 ```markdown
-<!-- block: x=10% y=6% w=34% h=80% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=0.6 -->
+<!-- block: x=21% y=2% w=23% h=88% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=0.6 -->
 
 ![P6-图1 手机A](images/shot-a.png)
 
-<!-- block: x=56% y=6% w=34% h=80% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=1.0 -->
+<!-- block: x=56% y=2% w=23% h=88% fit=cover style=device anim=enter.fly-in direction=up trigger=after delay=1.0 -->
 
 ![P6-图2 手机B](images/shot-b.png)
 
-<!-- 每台下方小标签（x 对齐机身） + 底部结论条，均 bg=bg 飞入 -->
+<!-- 两侧小标签（x 对齐机身外侧） + 底部结论条，均 bg=bg 飞入；
+     机身与结论条垂直留 ≥3% 空隙防 overlap 报警 -->
 ```
 
 ### 截图来源纪律
