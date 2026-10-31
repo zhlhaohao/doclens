@@ -782,6 +782,26 @@ class Renderer:
             return f"<h{lvl}{(' ' + attrs) if attrs else ''}>{runs_html(b.runs, theme)}</h{lvl}>"
 
         if b.kind == "para":
+            # banner=frag：字幕条碎片模式——文本切成多片 .sub-frag（中文 4-6 字/片），
+            # 容器加 .sub-banner（accent 左条+投影），play() 时逐片聚合
+            if b.directive.get("banner") == "frag":
+                full = "".join(r.text for r in b.runs)
+                # 按 5 字滑切（保留标点跟随），粗体词单独成片优先
+                frags = []
+                for r in b.runs:
+                    t = r.text.strip()
+                    if not t:
+                        continue
+                    if r.bold and len(t) <= 10:
+                        frags.append(t)
+                    else:
+                        i = 0
+                        while i < len(t):
+                            frags.append(t[i:i+5])
+                            i += 5
+                frag_html = "".join(f'<span class="sub-frag">{f}</span>' for f in frags if f)
+                return (f'<p{(" " + attrs).replace(" class=", " data-x-class=") if attrs else ""} '
+                        f'class="sub-banner">{frag_html}</p>')
             return f"<p{(' ' + attrs) if attrs else ''}>{runs_html(b.runs, theme)}</p>"
 
         if b.kind == "list":

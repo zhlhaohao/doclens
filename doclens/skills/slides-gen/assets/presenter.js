@@ -46,6 +46,12 @@
     var token = el.getAttribute("data-anim") || "enter.fade";
     var dir = el.getAttribute("data-anim-dir") || "";
     if (token === "enter.appear") { el.classList.add("anim-done"); return; }
+    // 字幕条特效：容器整体 fly-in，内部带 .sub-frag 的 span 逐片聚合（CSS 驱动，
+    // 延迟由 style 内联 animation-delay 控制）
+    if (el.classList && el.classList.contains("sub-banner")) {
+      var frags = el.querySelectorAll(".sub-frag");
+      frags.forEach(function (f, i) { setTimeout(function () { f.classList.add("f1"); }, 180 + i * 220); });
+    }
     var cls = animClass(token);
     if (dir && cls === "anim-fly-in") cls += " dir-" + dir;
     if (dir && cls === "anim-fly-out") cls += " dir-" + dir;

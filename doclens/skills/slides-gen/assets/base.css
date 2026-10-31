@@ -450,6 +450,23 @@ body.show-notes #stage { transform: translate(-50%, -60%) scale(calc(var(--stage
 .anim-grow { animation: a-grow 700ms cubic-bezier(.34, 1.56, .64, 1) both; }
 @keyframes a-grow { from { transform: scale(.86) } to { transform: scale(1) } }
 
+/* ---------- 字幕条特效（飞入+成型）：字幕胶囊三段式入场 ----------
+   关键词碎片先散落后聚合，整条随后从左滑入定格——比单一 fly-in 更有仪式感。
+   只作用于 .subtitle-anim 容器（由 presenter 在 play() 时挂类触发）。 */
+.sub-frag { display: inline-block; opacity: 0; transform: translateY(-14px) rotate(-4deg); }
+.sub-frag.f1 { animation: sub-assemble 460ms cubic-bezier(.34, 1.56, .64, 1) forwards; }
+@keyframes sub-assemble {
+  0%   { opacity: 0; transform: translateY(-14px) rotate(-4deg) scale(1.15); }
+  60%  { opacity: 1; transform: translateY(2px) rotate(1deg) scale(.98); }
+  100% { opacity: 1; transform: none; }
+}
+.sub-banner {
+  border-left: 4px solid var(--c-accent, #e8622d);
+  background: var(--c-bg, #fff) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .35);
+  padding: .5em .9em !important;
+}
+
 .anim-fly-out { animation: a-fly-out 420ms ease forwards; }
 @keyframes a-fly-out { to { opacity: 0; transform: translateX(64px) } }
 .anim-fade-out { animation: a-fade-out 420ms ease forwards; }
