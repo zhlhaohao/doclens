@@ -250,28 +250,22 @@ figure.style-laptop {
   height: 100%;
   overflow: hidden;
 }
-/* Win 顶栏：右侧三钮（─ □ ×），无地址栏 */
-figure.style-laptop::before {
-  content: "";
+/* Win 顶栏：右侧三钮用 Unicode 字符（─ □ ×）——渐变绘制多重背景跨渲染不稳 */
+figure.style-laptop::after {
+  content: "─  □  ✕";
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0; right: 0;
   height: 32px;
-  background: #f0f0ef;
-  border-bottom: 1px solid rgba(0, 0, 0, .1);
-  z-index: 2;
-  /* 右侧：最小化(横线)、最大化(方框)、关闭(×)——× 用两根 45° 线段渐变画 */
-  background-image:
-    linear-gradient(#4a4a48, #4a4a48),                                   /* ─ */
-    linear-gradient(#4a4a48, #4a4a48),
-    linear-gradient(#c42b1c, #c42b1c), linear-gradient(#c42b1c, #c42b1c),  /* × 两笔 */
-    linear-gradient(#ffffff, #ffffff), linear-gradient(#ffffff, #ffffff);   /* □ 描边近似：两道白衬 */
-  background-size: 10px 1px, 9px 9px, 12px 2px, 12px 2px, 9px 9px, 9px 9px;
-  background-position:
-    calc(100% - 44px) 16px, calc(100% - 66px) 11px,
-    calc(100% - 26px) 10px, calc(100% - 26px) 20px,
-    calc(100% - 65px) 10px, calc(100% - 67px) 12px;
-  background-repeat: no-repeat;
+  line-height: 32px;
+  padding: 0 14px 0 22px;
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", system-ui, sans-serif;
+  font-size: 15px;
+  letter-spacing: 6px;
+  color: #4a4a48;
+  z-index: 3;
+  border-radius: 0 12px 0 8px;
 }
+figure.style-laptop::after:hover { background: rgba(0,0,0,.06); }
 figure.style-laptop img {
   border-radius: 0 0 10px 10px;
   object-fit: cover;
