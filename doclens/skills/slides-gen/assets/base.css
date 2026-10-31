@@ -462,10 +462,13 @@ body.show-notes #stage { transform: translate(-50%, -60%) scale(calc(var(--stage
 }
 .sub-banner {
   border-left: 4px solid var(--c-accent, #e8622d);
-  background: var(--c-bg, #fff) !important;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .35);
-  padding: .5em .9em !important;
+  background: rgba(16, 24, 40, .88) !important;   /* 深色玻璃底：与米黄截图强对比 */
+  color: #f5f7fa !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08) inset;
+  padding: .55em 1em !important;
+  backdrop-filter: blur(4px);
 }
+.sub-banner strong, .sub-banner .sub-frag { color: #ffffff; }
 
 .anim-fly-out { animation: a-fly-out 420ms ease forwards; }
 @keyframes a-fly-out { to { opacity: 0; transform: translateX(64px) } }

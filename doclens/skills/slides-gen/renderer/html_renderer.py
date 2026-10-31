@@ -800,8 +800,9 @@ class Renderer:
                             frags.append(t[i:i+5])
                             i += 5
                 frag_html = "".join(f'<span class="sub-frag">{f}</span>' for f in frags if f)
-                return (f'<p{(" " + attrs).replace(" class=", " data-x-class=") if attrs else ""} '
-                        f'class="sub-banner">{frag_html}</p>')
+                # banner 样式由 .sub-banner 类全权负责——剔除 bg/color 内联（bg=bg 白底会盖住深色玻璃底）
+                clean_attrs = re.sub(r'(background|color|padding|border-radius)[^;"]*;?', "", attrs or "").strip().rstrip(";")
+                return f'<p{((" " + clean_attrs) if clean_attrs else "")} class="sub-banner">{frag_html}</p>'
             return f"<p{(' ' + attrs) if attrs else ''}>{runs_html(b.runs, theme)}</p>"
 
         if b.kind == "list":
