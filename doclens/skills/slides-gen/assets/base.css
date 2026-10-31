@@ -203,7 +203,7 @@ figure.style-device {
   height: 100%;
 }
 figure.style-device img {
-  border-radius: 14px;
+  border-radius: 20px;
   object-fit: cover;
   max-height: 100%;
   width: 100%;
