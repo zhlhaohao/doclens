@@ -364,18 +364,22 @@
 
 ### 标准页模板（桌面横屏截图，直接抄）
 
-桌面截图套 `style=laptop` 浏览器壳（红黄绿三点+地址栏），占位 ~96% 居中，
-四周露底色像放在展示台上；说明文字条压在壳子下缘：
+桌面截图套 `style=laptop` 浏览器壳（红黄绿三点+地址栏），说明文字条压在壳子下缘。
+**深色舞台**（`bg=#1e2229`）+ 白窗口形成发布会层级，白底白壳会喧宾夺主。
+**占位必须匹配截图比例**（1600×1000 截图 ratio 1.6，框内区还要减去 30px 顶栏）：
 
 ```markdown
-<!-- block: x=2% y=3% w=96% h=91% fit=cover style=laptop anim=enter.fly-in direction=up trigger=after delay=0.3 -->
+<!-- block: x=12% y=2% w=76% h=88% fit=cover style=laptop anim=enter.fly-in direction=up trigger=after delay=0.3 -->
 
 ![P3-图1 主界面](images/shot1-main.png)
 
-<!-- block: x=2% y=94% w=72% h=6% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.0 -->
+<!-- block: x=12% y=94% w=76% h=6% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.0 -->
 
 **页面主功能**——一句话说明（≤25 字）
 ```
+
+框内区实测 973×604（ratio 1.612 ≈ 截图 1.6），cover 裁切仅 1%；
+比例不匹配时上下/左右可裁 19-39%（顶栏、输入框全丢）。
 
 ### 要点
 
