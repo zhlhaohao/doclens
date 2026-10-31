@@ -46,6 +46,9 @@ html, body {
 .slide.is-active { display: flex; opacity: 1; }
 .slide.is-entering { animation: slide-in 420ms cubic-bezier(.22, .61, .36, 1) forwards; }
 .slide.is-leaving { animation: slide-out 300ms ease forwards; }
+/* 交叉切换：退场页叠在入场页上方淡出（入场页先就位），无空窗 */
+.slide.is-leaving { z-index: 2; }
+.slide.is-entering { z-index: 1; }
 
 @keyframes slide-in  { from { opacity: 0; transform: translateX(2.5%); } to { opacity: 1; transform: none; } }
 @keyframes slide-out { from { opacity: 1; } to { opacity: 0; } }

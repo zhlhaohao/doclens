@@ -88,12 +88,22 @@
       pendingSteps = [];
       return;
     }
+    // 作废本页上一轮残留的动画定时器：离开页面时 timer 不会自行取消，
+    // 重进后旧 timer 触发会把元素提前点亮（"先显示再动画"的跨页根因）
+    if (slide.__animTimers) {
+      slide.__animTimers.forEach(clearTimeout);
+    }
+    slide.__animTimers = [];
     // 等页面切换动画（is-entering, 420ms）播完再启动元素入场，
     // 否则元素动画在页面尚未可见时已播掉大半，观感是"闪一下"
     var base = slide.classList.contains("is-entering") ? 480 : 0;
+    var timers = slide.__animTimers;
     s.after.forEach(function (el, i) {
       var dl = parseFloat(el.getAttribute("data-anim-delay") || "0") * 1000 || 0;
-      setTimeout(function () { play(el); }, base + i * 300 + dl);
+      timers.push(setTimeout(function () {
+        if (slides[index] !== slide) return;   // 已翻走：丢弃过期回调
+        play(el);
+      }, base + i * 300 + dl));
     });
     pendingSteps = s.click.slice();
     // 无点击步骤时，页面所有元素在 after 序列后应可见
@@ -195,6 +205,9 @@
     if (busy || target === index || target < 0 || target >= slides.length) return;
     busy = true;
     var from = slides[index], to = slides[target];
+    // 重进某页前必须复位该页动画元素：清残留类、恢复初始隐藏态，
+    // 否则上次播完的 anim-done 会让元素在动画序列开始前短暂显示（"先显示再动画"根因）
+    resetSlide(to);
     var finish = function () {
       from.classList.remove("is-active", "is-entering", "is-leaving");
       from.style.display = "none";
@@ -209,8 +222,15 @@
       busy = false;
     };
     if (QA) { finish(); return; }
+    // 交叉淡入：新页立即进场（叠在旧页上方），旧页同时淡出——
+    // 消除"旧页走完→空窗→新页淡入"的黑场感
+    finish();
+    from.style.display = "flex";
     from.classList.add("is-leaving");
-    setTimeout(finish, 260);
+    setTimeout(function () {
+      from.classList.remove("is-leaving");
+      from.style.display = "none";
+    }, 300);
   }
 
   function next() {
@@ -239,6 +259,7 @@
       index = to;
     }
     var t = slides[index];
+    resetSlide(t);   // 跳转路径同样复位动画元素
     t.style.display = "flex";
     t.classList.add("is-active");
     if (!QA) t.classList.add("is-entering");
