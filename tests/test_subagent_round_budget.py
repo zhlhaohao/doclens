@@ -163,6 +163,60 @@ class TestIdenticalRoundDetection:
         ]
         assert reminders, "应注入 <system-reminder> 死循环提醒"
 
+    def test_tool_result_always_follows_tool_use(self):
+        """消息序契约（2026-11-01 P1）：任何注入都不得破坏 tool_use/tool_result 配对。
+
+        旧版把提醒插在 assistant(tool_use) 与 user(tool_result) 之间——
+        DeepSeek/Kimi 网关 400 "tool result does not follow tool call"，
+        子代理整轮报废（debug_20261021.log 12 连发）。修复后：提醒一律
+        尾注在 tool_result 之后；死循环轮以合成 [suppressed] 结果完成配对。
+        """
+        # 触发软提醒（轮预算 3 → 第 3 轮生效）+ 死循环（3 轮同参）
+        client = ScriptedClient([
+            {"tools": [("bash", {"command": "same"})]} for _ in range(3)
+        ] + [{"text": "收尾。"}])
+        _run(client, max_rounds=6)
+        for r in client.records:
+            for i, m in enumerate(r):
+                if m.get("role") != "assistant" or not isinstance(
+                    m.get("content"), list
+                ):
+                    continue
+                ids = [
+                    b.get("id") for b in m["content"] if b.get("type") == "tool_use"
+                ]
+                if not ids:
+                    continue
+                # 下一条消息必须携带全部 tool_result（可后跟提醒/回执）
+                nxt = r[i + 1]
+                assert nxt.get("role") == "user", (
+                    f"tool_use 后必须紧跟 user(tool_result)，实得 {nxt.get('role')}"
+                )
+                content = nxt.get("content")
+                assert isinstance(content, list), (
+                    "tool_use 后的 user 消息必须是 tool_result 块数组"
+                    f"（软提醒/死循环提醒只能尾注其后），实得 str: {content!r}"
+                )
+                got = {
+                    b.get("tool_use_id") for b in content
+                    if b.get("type") == "tool_result"
+                }
+                assert set(ids) <= got, f"tool_result 缺配对: {set(ids) - got}"
+
+    def test_dead_loop_round_suppresses_execution(self):
+        """死循环轮不真实执行工具：结果以 [suppressed] 合成、配对完整。"""
+        client = ScriptedClient([
+            {"tools": [("bash", {"command": "same"})]} for _ in range(3)
+        ] + [{"text": "done"}])
+        _run(client, max_rounds=6)
+        suppressed = [
+            m for r in client.records for m in r
+            if isinstance(m.get("content"), list)
+            for b in m["content"]
+            if b.get("type") == "tool_result" and "[suppressed]" in str(b.get("content"))
+        ]
+        assert suppressed, "第 3 轮同参调用应以 [suppressed] 合成结果完成配对"
+
     def test_different_params_no_reminder(self):
         client = ScriptedClient([
             {"tools": [("bash", {"command": "a"})]},

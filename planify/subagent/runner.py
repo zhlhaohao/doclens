@@ -332,11 +332,7 @@ def run_subagent(
         if resp.stop_reason != "tool_use":
             break
 
-        # ---- 预算机制 ①：同参死循环早警 ----
-        # 本轮全部工具调用签名与上一轮完全相同且连续达到阈值 → 真死循环
-        # 形态（同工具同参反复调用），立即注入针对性提醒，不等软提醒。
-        # 检测放在工具执行前：提醒属于「下一轮 LLM 输入」，注入后模型
-        # 在下一次调用时读到。
+        # ---- 同参签名追踪（预算机制 ①的判定输入）----
         round_tool_calls = [
             (b.get("name", ""), b.get("input", {}))
             for b in assistant_blocks
@@ -348,7 +344,58 @@ def run_subagent(
         else:
             identical_rounds = 1
             last_round_signature = signature
-        if round_tool_calls and identical_rounds >= _IDENTICAL_ROUNDS_LIMIT:
+
+        # ---- 工具执行（先完成 tool_use/tool_result 配对）----
+        # 预算机制的两种提醒一律在 tool_result 落库**之后**追加到消息尾
+        # （与 StreamingAgent 同构）。2026-11-01 日志审计 P1：旧版把提醒
+        # 插在 assistant(tool_use) 与 user(tool_result) 之间（或以提醒
+        # 顶替 tool_result），两种形态都破坏配对——DeepSeek/Kimi 网关
+        # 400 "tool_result does not follow tool call"，子代理 26 轮工作
+        # 全部报废（debug_20261021.log 12 连发，全部命中软提醒轮）。
+        tool_names = [
+            b.get("name", "?") for b in assistant_blocks if b.get("type") == "tool_use"
+        ]
+        if tool_names:
+            logger.info(
+                "[subagent] 执行工具: %s (agent_type=%s)", ", ".join(tool_names), agent_type
+            )
+        dead_loop = round_tool_calls and identical_rounds >= _IDENTICAL_ROUNDS_LIMIT
+        results = []
+        for b in assistant_blocks:
+            if b.get("type") != "tool_use":
+                continue
+            block_id = b.get("id", "")
+            if dead_loop:
+                # 死循环压制：第 3+ 次同参调用不再真实执行，以合成结果
+                # 完成配对（既省一次白跑，又不破坏消息序）。
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block_id,
+                        "content": (
+                            "[suppressed] 本轮调用与此前完全相同（连续 "
+                            f"{identical_rounds} 轮同参），已抑制执行。"
+                            "请改变策略、换参数，或停止调用工具并基于已有"
+                            "信息输出总结。"
+                        ),
+                    }
+                )
+                continue
+            block_name = b.get("name", "")
+            block_input = b.get("input", {})
+            h = sub_handlers.get(block_name, lambda **kw: "Unknown tool")
+            output = h(**block_input) if h else f"Unknown tool: {block_name}"
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block_id,
+                    "content": str(output)[:50000],
+                }
+            )
+        sub_msgs.append({"role": "user", "content": results})
+
+        # ---- 预算机制 ①：同参死循环早警（尾注，下一轮 LLM 输入）----
+        if dead_loop:
             logger.warning(
                 "[subagent] 连续 %d 轮同参调用，注入死循环提醒 "
                 "(agent_type=%s, 轮 %d/%d)",
@@ -367,12 +414,11 @@ def run_subagent(
             # 按 prefill 处理并要求回传 thinking 块 → 400
             if injection_ack_enabled():
                 sub_msgs.append({"role": "assistant", "content": "收到，我会调整策略或总结。"})
-            continue
 
-        # ---- 预算机制 ②：软提醒（预算将尽，先劝后断）----
+        # ---- 预算机制 ②：软提醒（预算将尽，先劝后断；尾注注入点同 ①）----
         # 剩约 1/6 预算时注入一次收尾提醒，给模型自我收编机会——
         # 跑满上限的静默截断（机制③）是不可恢复的最后手段。
-        if round_no == soft_remind_from:
+        elif round_no == soft_remind_from:
             logger.info(
                 "[subagent] 轮次预算将尽，注入收尾提醒 (轮 %d/%d)",
                 round_no, max_rounds,
@@ -389,33 +435,6 @@ def run_subagent(
             # 同上：合成回执走总开关（默认关，防 thinking 端点 400）
             if injection_ack_enabled():
                 sub_msgs.append({"role": "assistant", "content": "明白，我现在开始汇总。"})
-
-        # 执行工具调用
-        tool_names = [
-            b.get("name", "?") for b in assistant_blocks if b.get("type") == "tool_use"
-        ]
-        if tool_names:
-            logger.info(
-                "[subagent] 执行工具: %s (agent_type=%s)", ", ".join(tool_names), agent_type
-            )
-        results = []
-        for b in assistant_blocks:
-            if b.get("type") != "tool_use":
-                continue
-            block_name = b.get("name", "")
-            block_id = b.get("id", "")
-            block_input = b.get("input", {})
-            h = sub_handlers.get(block_name, lambda **kw: "Unknown tool")
-            output = h(**block_input) if h else f"Unknown tool: {block_name}"
-            results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block_id,
-                    "content": str(output)[:50000],
-                }
-            )
-
-        sub_msgs.append({"role": "user", "content": results})
 
     else:
         # for 循环未 break（跑满 max_rounds 仍要工具）→ 截断标记
