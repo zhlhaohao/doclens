@@ -139,6 +139,36 @@ class TestPureHelpers:
         ) is False
         assert _is_pure_poll_round([]) is False
 
+    def test_wait_round_detection(self):
+        """等待轮判定（2026-11-01 P4）：sleep 打头的 shell 调用 = 合法等待。
+
+        事故形态：`sleep 60 && wc -l bench.jsonl` 连跑 3 轮被同参检测
+        误判死循环，注入误导性提醒、模型提前交卷。
+        """
+        from planify.streaming.runner import _is_wait_round
+
+        # sleep 打头（含 && 串探测命令）→ 等待轮
+        assert _is_wait_round([
+            ("bash", {"command": "sleep 115"}, "…"),
+            ("bash", {"command": "sleep 60 && wc -l /tmp/out.jsonl"}, "…"),
+        ]) is True
+        # 事故原样：bench 等待 + 同参 wc —— 只要全部 sleep 打头即等待
+        assert _is_wait_round([
+            ("bash", {"command": "wc -l \"x.jsonl\"; sleep 30"}, "…"),
+        ]) is False  # wc 打头不是等待轮（探测先行 = 主动轮询形态）
+        # 非等待命令
+        assert _is_wait_round([("bash", {"command": "npm run build"}, "…")]) is False
+        # 混入非 shell 工具
+        assert _is_wait_round([
+            ("bash", {"command": "sleep 30"}, "…"),
+            ("grep", {"pattern": "x"}, "…"),
+        ]) is False
+        assert _is_wait_round([]) is False
+        # PowerShell 等价形态
+        assert _is_wait_round([
+            ("powershell", {"command": "Start-Sleep -Seconds 30"}, "…"),
+        ]) is True
+
     def test_signature_normalizes_key_order(self):
         a = _round_signature([("grep", {"b": 2, "a": 1}, "x")])
         b = _round_signature([("grep", {"a": 1, "b": 2}, "y")])
