@@ -80,6 +80,15 @@ def active_count() -> int:
         return sum(1 for t in _active.values() if not t.done())
 
 
+def running_sessions() -> list[str]:
+    """当前在生成中的会话 id 快照（批量删除前停续跑 agent 用，2026-11-01）。
+
+    拷贝键集返回（锁内 O(n) 小字典）——调用方在锁外逐个停止，避免持锁
+    跨 await。"""
+    with _lock:
+        return [sid for sid, t in _active.items() if not t.done()]
+
+
 def get_task(session_id: str) -> Optional[asyncio.Task]:
     """取该会话的活跃 task（/chat/stop 取消路径，ADR-0035）。
 

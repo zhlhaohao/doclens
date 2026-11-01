@@ -1,5 +1,6 @@
 """GET/POST/PATCH/DELETE /api/sessions。"""
 import json
+import logging
 from datetime import datetime, timezone
 from itertools import chain
 from pathlib import Path
@@ -32,6 +33,8 @@ from doclens.web_v2.tmp_workspace import cleanup_all_tmp, cleanup_session_tmp
 from planify.tools.guard import grant_clear_all, grant_session_clear
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _get_store() -> SessionsStore:
@@ -532,6 +535,12 @@ async def delete_session(session_id: str):
         raise CortexAPIError(404, "SESSION_NOT_FOUND", f"会话不存在: {session_id}")
     if summary.starred:
         raise CortexAPIError(409, "SESSION_STARRED", "加星会话受保护，请先取消加星再删除")
+    # 先停续跑 agent 再删行（2026-11-01 P1）：断开续跑（ADR-0028）放生的
+    # agent task 仍持有 session_key——若直接 DELETE，收尾 6 段持久化逐条撞
+    # FK FOREIGN KEY constraint failed，整轮回答/usage/raw messages 静默
+    # 丢失（debug_20261023.log 三会话实证）。与 /chat/stop 同一层信号 +
+    # cancel，落库在 task finally 自理（半截保留，ADR-0028 语义不变）。
+    await _stop_orphan_agent(session_id)
     store.delete(session_id)
     # 顺带清理该会话的 AI 临时工作区（.cortex/tmp/<session_id>/）
     cleanup_session_tmp(_get_workdir(), session_id)
@@ -543,12 +552,41 @@ async def delete_session(session_id: str):
     return {"ok": True}
 
 
+async def _stop_orphan_agent(session_id: str) -> None:
+    """停掉该会话在跑的 agent（含断开续跑放生态），删除路径专用。
+
+    与 /chat/stop 的三步同构但绝不抛错——删除是清理路径，agent 不存在 /
+    已收尾 / 取消超时都不应阻断删行本身。后台 shell 由中断 hook 击杀。
+    """
+    import asyncio
+
+    from doclens.web_v2 import chat_runner
+    from doclens.web_v2.chat_interrupt import request_stop
+
+    stopped = request_stop(session_id)
+    task = chat_runner.get_task(session_id)
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):  # noqa: BLE001
+            pass
+    if stopped:
+        logger.info("删除会话前已请求停止续跑 agent: %s", session_id)
+
+
+
 @router.delete("/sessions")
 async def clear_sessions(
     type: Optional[SessionType] = Query(default=None, description="按类型清空；不传则清空全部"),
 ):
     """批量删除会话。type=None 清全部。加星会话受保护跳过（2026-09-17）。"""
     store = _get_store()
+    # 先停全部在跑 agent 再批量删行（同单删：防断开续跑收尾撞 FK 丢数据）
+    from doclens.web_v2 import chat_runner
+
+    for sid in chat_runner.running_sessions():
+        await _stop_orphan_agent(sid)
     deleted, skipped_starred, deleted_ids = store.delete_by_type(type)
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:
