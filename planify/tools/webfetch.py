@@ -68,6 +68,25 @@ def _extract_with_trafilatura(
     try:
         downloaded = trafilatura.fetch_url(url)
         if not downloaded:
+            # SSRF 拦截症状探测（2026-11-01 P2）：trafilatura 2.x 对解析到
+            # 非全球地址的域名抛 OSError（fetch_url 吞掉返回 None，只在
+            # 自己的 logger 里留 "SSRF protection: connection to non-public
+            # address blocked"）。Clash TUN fake-ip（198.18.0.0/16）下所有
+            # 域名都命中该拦截 → webfetch 100% 失败且无诊断（debug_
+            # 20261028.log 实证）。Playwright 降级也走同一网络栈，同样
+            # 失败——直接报可行动的环境诊断，别让模型空转重试。
+            from urllib.parse import urlparse
+
+            if _looks_like_ssrf_block(urlparse(url).hostname or ""):
+                return (
+                    f"抓取失败（网络环境拦截）: {url}\n\n"
+                    "本机 DNS 把域名解析到了非公网地址（如 198.18.x.x 的 "
+                    "fake-ip 段），trafilatura 的 SSRF 防护拒绝直连。常见原因：\n"
+                    "1. 代理软件 TUN/fake-ip 模式（Clash 等）占用了 DNS；\n"
+                    "2. trafilatura 只认 http_proxy 环境变量（未设代理走直连）。\n"
+                    "建议：换用 search 工具检索，或先在系统层修复该域名的"
+                    "DNS 解析/配置 http_proxy 环境变量后重试。"
+                )
             logger.debug("trafilatura.fetch_url 返回空: %s", url)
             return None
 
@@ -92,6 +111,31 @@ def _extract_with_trafilatura(
     except Exception as exc:
         logger.debug("trafilatura 提取失败: %s - %s", url, exc)
         return None
+
+
+def _looks_like_ssrf_block(host: str) -> bool:
+    """探测「域名解析到非公网地址」的 SSRF 拦截形态（2026-11-01 P2）。
+
+    trafilatura.fetch_url 吞异常返回 None，拦截证据只写它自己的 logger。
+    这里做独立判定：socket 解析目标域名，命中保留段（RFC1918/回环/
+    链路本地/198.18.0.0/15 benchmark 段——Clash fake-ip 等 TUN 劫持的
+    特征段）即视为被拦。解析失败不误报（返回 False，走既有 None 路径）。
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if not ip.is_global:
+                return True
+        return False
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _is_unsupported_content(html: str) -> bool:
