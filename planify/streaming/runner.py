@@ -88,6 +88,26 @@ def _is_pure_poll_round(calls: List[Tuple[str, dict, str]]) -> bool:
     )
 
 
+def _is_wait_round(calls: List[Tuple[str, dict, str]]) -> bool:
+    """本轮是否为「等待轮」：shell 调用全部以 sleep 打头（可附带探测命令）。
+
+    与 check_background 纯轮询同属合法等待，只是换了载体（bash sleep 等
+    外部进程产出）。判据从宽：command 首个 token 是 sleep 即认定（LLM 写
+    `sleep 60 && wc -l x` 的意图无歧义）；多工具轮只要混入任何非 sleep
+    打头的 shell 调用即不算等待轮。
+    """
+    if not calls:
+        return False
+    for name, input_data, _output in calls:
+        if name not in ("bash", "powershell"):
+            return False
+        cmd = str(input_data.get("command", "")).strip()
+        first = cmd.split()[0] if cmd.split() else ""
+        if first not in ("sleep", "timeout", "Start-Sleep", "ping"):
+            return False
+    return True
+
+
 def _round_signature(calls: List[Tuple[str, dict, str]]) -> tuple:
     """轮次工具签名：(工具名, 规范化参数 JSON) 序列——同签名 = 同参重复调用。"""
     return tuple(
@@ -99,6 +119,27 @@ def _round_signature(calls: List[Tuple[str, dict, str]]) -> tuple:
         )
         for name, input_data, _output in calls
     )
+
+
+def is_retryable_llm_error(e: BaseException) -> bool:
+    """LLM 调用是否值得退避重试（瞬时 429/网络抖动，2026-11-01 P2）。
+
+    两类来源都认：planify 归一异常（``LLMRateLimitError``/``LLMNetworkError``
+    的 ``retryable=True``）与 SDK 原生异常（anthropic/openai SDK 经
+    provider.astream 直穿的 RateLimitError / APIConnectionError / 5xx
+    APIStatusError）。认证/上下文超限/4xx 参数错误一律不可重试。
+    """
+    # planify 归一异常（子代理 _chat_with_retry 同口径）
+    if bool(getattr(e, "retryable", False)):
+        return True
+    name = type(e).__name__
+    if name in ("RateLimitError", "APIConnectionError", "APITimeoutError"):
+        return True
+    # SDK 5xx 服务端错误（overloaded / internal）：status_code 属性判别
+    status = getattr(e, "status_code", None)
+    if isinstance(status, int) and 500 <= status < 600:
+        return True
+    return False
 
 
 def _refresh_or_insert_context(
@@ -806,9 +847,13 @@ class StreamingAgent:
                             )
                             await self.emitter.emit_done(session_id, summary)
                             return self._cleanup_messages(messages)
-                        # 同参签名追踪（纯轮询轮不参与——等待合法，见上）
+                        # 同参签名追踪（纯轮询轮/等待轮不参与——等待合法，
+                        # 见上；bash sleep 长等待同此，2026-11-01 P4）
                         signature = _round_signature(round_calls)
-                        if signature == last_round_signature:
+                        if _is_wait_round(round_calls):
+                            identical_rounds = 1
+                            last_round_signature = None
+                        elif signature == last_round_signature:
                             identical_rounds += 1
                         else:
                             identical_rounds = 1
@@ -1098,6 +1143,136 @@ class StreamingAgent:
         else:
             return obj
 
+    async def _astream_once(
+        self,
+        *,
+        messages: List[Dict],
+        system: str,
+        tool_defs: list,
+        assistant_content: List[Any],
+        block_text_parts: Dict[int, List[str]],
+        block_tool_states: Dict[int, ToolCallState],
+        call_usage: Dict[str, int],
+    ) -> Tuple[str, str]:
+        """单次流式调用（_stream_llm_call 的流循环体，2026-11-01 拆出）。
+
+        拆出动机：外层对瞬时 429/5xx 做退避重试（首字节前安全窗口），
+        本方法保持单次语义——事件消费、发射与收集逻辑不变。收集器由
+        调用方传入（重试时外层 clear 后重用同一批容器）。
+
+        Returns:
+            (stop_reason, current_text)：本次调用的停止原因与累计正文。
+        """
+        cur_stop_reason = "end_turn"
+        cur_text = ""
+        async with aclosing(
+            self.provider.astream(
+                messages=messages,
+                system=system,
+                tools=tool_defs,
+                max_tokens=self.config.max_tokens,
+                tracer=self.tracer,
+            )
+        ) as stream:
+            async for event in stream:
+                # 检查中断
+                if self._interrupt_event and self._interrupt_event.is_set():
+                    self.logger.info("[StreamingAgent] 流式调用被中断")
+                    break
+
+                event_type = event.type
+
+                if event.usage:
+                    for k, v in event.usage.items():
+                        if v and v > call_usage.get(k, 0):
+                            call_usage[k] = v
+
+                if event_type == "content_block_start":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    block_type = event.block_type
+                    if block_type == "text":
+                        block_text_parts.setdefault(index, [])
+                    elif block_type == "tool_use":
+                        # 工具调用开始
+                        self._tool_call_states[index] = ToolCallState(
+                            tool_use_id=event.tool_use_id or "",
+                            name=event.tool_name or "",
+                        )
+                        block_tool_states[index] = self._tool_call_states[index]
+                        # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
+                        await self.emitter.emit_tool_call(
+                            tool_use_id=event.tool_use_id or "",
+                            name=event.tool_name or "",
+                            input_data={},
+                            is_complete=False,
+                        )
+
+                elif event_type == "content_block_delta":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    if event.text_delta:
+                        text = event.text_delta
+                        cur_text += text
+                        block_text_parts.setdefault(index, []).append(text)
+                        # 发射文本事件
+                        await self.emitter.emit_text(text, is_end=False)
+                    elif event.thinking_delta:
+                        # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
+                        # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
+                        # 实现只惠及显式继承 EventEmitter 的实现类）
+                        emit_thinking = getattr(self.emitter, "emit_thinking", None)
+                        if emit_thinking is not None:
+                            await emit_thinking(event.thinking_delta)
+                    elif event.input_json_delta:
+                        # 工具参数增量
+                        if index in self._tool_call_states:
+                            state = self._tool_call_states[index]
+                            state.append_chunk(event.input_json_delta)
+
+                elif event_type == "content_block_stop":
+                    index = event.block_index
+                    if index is None:
+                        continue
+                    if index in block_tool_states:
+                        # 工具调用完成
+                        state = block_tool_states[index]
+                        complete_input = state.get_complete_input()
+
+                        # 发射工具调用完成事件
+                        await self.emitter.emit_tool_call(
+                            tool_use_id=state.tool_use_id,
+                            name=state.name,
+                            input_data=complete_input,
+                            is_complete=True,
+                        )
+                        assistant_content.append({
+                            "type": "tool_use",
+                            "id": state.tool_use_id,
+                            "name": state.name,
+                            "input": complete_input,
+                        })
+                    elif index in block_text_parts:
+                        # 文本块完成
+                        text = "".join(block_text_parts[index])
+                        if text:
+                            assistant_content.append({
+                                "type": "text",
+                                "text": text,
+                            })
+
+                elif event_type == "message_delta":
+                    # 消息级别更新
+                    if event.stop_reason:
+                        cur_stop_reason = event.stop_reason
+
+                elif event_type == "message_stop":
+                    # 消息结束
+                    break
+        return cur_stop_reason, cur_text
+
     async def _stream_llm_call(
         self,
         messages: List[Dict],
@@ -1128,7 +1303,6 @@ class StreamingAgent:
         # 累积每个 block 的状态（按 block_index）
         block_text_parts: Dict[int, List[str]] = {}
         block_tool_states: Dict[int, ToolCallState] = {}
-        text_started_index: Optional[int] = None
         # token 用量（缓存命中率观测）：message_start 带输入/缓存字段，
         # message_delta 带 output_tokens；同键取最大（字段单调不减，避免
         # message_delta 的 0 值覆盖 message_start 的缓存计数）
@@ -1147,123 +1321,60 @@ class StreamingAgent:
         # 输入就是此刻的 messages 全量，usage 的 input 类字段精确覆盖它
         request_len = len(messages)
 
-        try:
-            # 通过 LLMProvider.astream() 归一化事件流（async 客户端，不阻塞事件循环）。
-            # aclosing：break/中断退出时确定性 close 生成器——provider 内部的
-            # SDK 流与 httpx Response 在本循环内释放，而不是等 GC 终结器在
-            # 循环关闭后重入（否则 GC 调 response.aclose() 会撞上仍在执行的
-            # Response.aiter_raw，抛 "async generator already executing"）
-            async with aclosing(
-                self.provider.astream(
+        # 瞬时 429/5xx 退避重试（2026-11-01 P2）：SDK 内建 2 次重试耗尽后
+        # 整轮对话报废（debug_20261027.log：tools=68 的长任务在循环 #66
+        # 撞 "engine is currently overloaded"，68 轮成果全丢）。与子代理
+        # _chat_with_retry 同构：仅重试 retryable 异常（429/网络），指数
+        # 退避，最多 _RETRY_MAX_ATTEMPTS 次。
+        # 安全边界：**仅在未发射任何字节时重试**——emit_text 已把增量推给
+        # 用户，重试会造成正文重复；一旦有发射（或已收到任何事件），维持
+        # 原语义上抛。首字节前静默期正是 429 的发生位置（请求被网关拒绝，
+        # 尚无流事件），重试覆盖面与事故形态吻合。
+        max_attempts = 4
+        base_delay = 3.0
+        for attempt in range(1, max_attempts + 1):
+            try:
+                stop_reason, current_text = await self._astream_once(
                     messages=messages,
                     system=system,
-                    tools=tool_defs,
-                    max_tokens=self.config.max_tokens,
-                    tracer=self.tracer,
+                    tool_defs=tool_defs,
+                    assistant_content=assistant_content,
+                    block_text_parts=block_text_parts,
+                    block_tool_states=block_tool_states,
+                    call_usage=call_usage,
                 )
-            ) as stream:
-                async for event in stream:
-                    # 检查中断
-                    if self._interrupt_event and self._interrupt_event.is_set():
-                        self.logger.info("[StreamingAgent] 流式调用被中断")
-                        break
-
-                    event_type = event.type
-
-                    if event.usage:
-                        for k, v in event.usage.items():
-                            if v and v > call_usage.get(k, 0):
-                                call_usage[k] = v
-
-                    if event_type == "content_block_start":
-                        index = event.block_index
-                        if index is None:
-                            continue
-                        block_type = event.block_type
-                        if block_type == "text":
-                            text_started_index = index
-                            block_text_parts.setdefault(index, [])
-                        elif block_type == "tool_use":
-                            # 工具调用开始
-                            self._tool_call_states[index] = ToolCallState(
-                                tool_use_id=event.tool_use_id or "",
-                                name=event.tool_name or "",
-                            )
-                            block_tool_states[index] = self._tool_call_states[index]
-                            # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
-                            await self.emitter.emit_tool_call(
-                                tool_use_id=event.tool_use_id or "",
-                                name=event.tool_name or "",
-                                input_data={},
-                                is_complete=False,
-                            )
-
-                    elif event_type == "content_block_delta":
-                        index = event.block_index
-                        if index is None:
-                            continue
-                        if event.text_delta:
-                            text = event.text_delta
-                            current_text += text
-                            block_text_parts.setdefault(index, []).append(text)
-                            # 发射文本事件
-                            await self.emitter.emit_text(text, is_end=False)
-                        elif event.thinking_delta:
-                            # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
-                            # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
-                            # 实现只惠及显式继承 EventEmitter 的实现类）
-                            emit_thinking = getattr(self.emitter, "emit_thinking", None)
-                            if emit_thinking is not None:
-                                await emit_thinking(event.thinking_delta)
-                        elif event.input_json_delta:
-                            # 工具参数增量
-                            if index in self._tool_call_states:
-                                state = self._tool_call_states[index]
-                                state.append_chunk(event.input_json_delta)
-
-                    elif event_type == "content_block_stop":
-                        index = event.block_index
-                        if index is None:
-                            continue
-                        if index in block_tool_states:
-                            # 工具调用完成
-                            state = block_tool_states[index]
-                            complete_input = state.get_complete_input()
-
-                            # 发射工具调用完成事件
-                            await self.emitter.emit_tool_call(
-                                tool_use_id=state.tool_use_id,
-                                name=state.name,
-                                input_data=complete_input,
-                                is_complete=True,
-                            )
-                            assistant_content.append({
-                                "type": "tool_use",
-                                "id": state.tool_use_id,
-                                "name": state.name,
-                                "input": complete_input,
-                            })
-                        elif index in block_text_parts:
-                            # 文本块完成
-                            text = "".join(block_text_parts[index])
-                            if text:
-                                assistant_content.append({
-                                    "type": "text",
-                                    "text": text,
-                                })
-
-                    elif event_type == "message_delta":
-                        # 消息级别更新
-                        if event.stop_reason:
-                            stop_reason = event.stop_reason
-
-                    elif event_type == "message_stop":
-                        # 消息结束
-                        break
-
-        except Exception as e:
-            self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")
-            raise
+                break
+            except Exception as e:
+                emitted = bool(current_text or assistant_content)
+                retryable = is_retryable_llm_error(e)
+                if (
+                    retryable
+                    and attempt < max_attempts
+                    and not emitted
+                    and not (self._interrupt_event and self._interrupt_event.is_set())
+                ):
+                    delay = min(base_delay * (2 ** (attempt - 1)), 30.0)
+                    self.logger.warning(
+                        "[StreamingAgent] LLM 调用可重试失败（%s），"
+                        "%.1fs 后重试（attempt=%d/%d）: %s",
+                        type(e).__name__, delay, attempt, max_attempts, e,
+                    )
+                    # 重试前清空半途状态（call_usage 的 dict 在外层持引用，
+                    # 由成功轮覆盖；此处只清块级收集器）
+                    assistant_content.clear()
+                    block_text_parts.clear()
+                    block_tool_states.clear()
+                    self._tool_call_states.clear()
+                    await asyncio.sleep(delay)
+                else:
+                    if retryable:
+                        self.logger.error(
+                            "[StreamingAgent] LLM 调用重试耗尽/不可安全重试"
+                            "（attempt=%d/%d, 已发射字节=%s）: %s",
+                            attempt, max_attempts, bool(emitted), e,
+                        )
+                    self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")
+                    raise
 
         # 添加助手响应到消息历史
         messages.append({"role": "assistant", "content": assistant_content})
@@ -1356,6 +1467,20 @@ class StreamingAgent:
                 # （门禁依赖 get_current_session_id()，默认 ThreadPoolExecutor
                 # 不会跨线程复制上下文，会导致门禁静默失效）
                 return await asyncio.to_thread(handler, **input_data)
+            except KeyError as e:
+                # 参数缺失（模型少参/参数名漂移，2026-11-01 P2）：
+                # KeyError 的 str() 只有裸键名（"Error: 'path'"），模型无从
+                # 自愈。转成可行动提示（哪个参数、现有键清单）。
+                missing = e.args[0] if e.args else "?"
+                self.logger.warning(
+                    "[StreamingAgent] 工具 %s 缺参数 %s（实得键: %s）",
+                    name, missing, sorted(input_data.keys()),
+                )
+                return (
+                    f"Error: 参数缺失——工具 {name} 需要参数 "
+                    f"{missing!r}（本次调用只提供了 {sorted(input_data.keys())}）。"
+                    "请按工具 schema 补全参数后重试。"
+                )
             except Exception as e:
                 self.logger.exception(f"[StreamingAgent] 工具执行异常: {name}")
                 return f"Error: {e}"
