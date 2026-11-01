@@ -349,7 +349,15 @@ class McpClientManager:
         )
 
     async def _reap(self, server_id: str, conn: _ServerConnection) -> None:
-        """收割单个连接：取消协程 + 等待退出（宽限 REAP_GRACE）。"""
+        """收割单个连接：取消协程 + 等待退出（宽限 REAP_GRACE）。
+
+        二次 cancel 后不放任：连接协程可能卡在 SDK 内部对 stdin 管道的
+        同步 close（Windows 上 WriteFile 阻塞），task 永不 done → 底层
+        httpx/anyio 流退栈交给 GC 终结器 → "async generator already
+        executing" unraisable（2026-11-01 日志审计 51 次）。最终兜底：
+        再等一个 REAP_GRACE（有界），把日志留给排查；无论结果如何都从
+        连接表摘除（调用方语义不变）。
+        """
         if conn.task is not None and not conn.task.done():
             conn.task.cancel()
             try:
@@ -359,6 +367,16 @@ class McpClientManager:
             except (asyncio.TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
                 if not conn.task.done():
                     conn.task.cancel()
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.shield(conn.task), timeout=REAP_GRACE
+                        )
+                    except (asyncio.TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
+                        logger.warning(
+                            "[mcp-client] 连接协程二次取消后仍未退出"
+                            "（底层流将由 GC 收尾，可能产生 unraisable 噪音）: %s",
+                            conn.cfg.get("name"),
+                        )
         self._connections.pop(server_id, None)
         logger.info("[mcp-client] 已收割: %s", conn.cfg.get("name"))
 
