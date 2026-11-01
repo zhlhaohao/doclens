@@ -40,10 +40,17 @@ TODO_WRITE_TOOL = {
                             "type": "string",
                             "enum": ["pending", "in_progress", "completed"],
                         },
-                        "activeForm": {"type": "string"},
+                        "activeForm": {
+                            "type": "string",
+                            "description": "进行中任务的现在进行时描述（必填）",
+                        },
                     },
+                    # item 级必填（2026-11-01 P2）：handler 侧 TodoManager
+                    # 校验 activeForm/content 必填，schema 漏报会诱导模型省参
+                    # → ValueError 工具异常（debug_20261021.log 两次实证）。
+                    "required": ["content", "status", "activeForm"],
                 },
-            }
+            },
         },
         "required": ["items"],
     },
