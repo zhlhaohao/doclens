@@ -60,6 +60,7 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
     if not skills_src_root.exists():
         return []
     deleted = skills_config.deleted_names()
+    _cleanup_tombstone_dirs(skills_dir)
     deployed: list[str] = []
     for src_skill_md in sorted(skills_src_root.rglob("SKILL.md")):
         skill_src_dir = src_skill_md.parent
@@ -75,3 +76,53 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
         shutil.copytree(skill_src_dir, skill_dst_dir, dirs_exist_ok=True)
         deployed.append(skill_name)
     return deployed
+
+
+def _cleanup_tombstone_dirs(skills_dir: Path) -> None:
+    """清理「改名墓碑」目录（2026-11-01 P3）：``~<名>/`` 形态的历史遗迹。
+
+    成因：历史版本的删除操作（或用户手动）把技能目录改名成 ``~<名>``
+    ——注意改名是**削掉首字符再冠 ~**（``deep-read`` → ``~eep-read``），
+    meta name 仍是原名，SkillLoader 递归扫描时同名冲突「先者胜」每次
+    启动告警一行/技能（13 天日志累计 3,940+ 行噪音）。
+
+    判据（按 meta name 认亲，防误删）：
+    1. 目录名以 ``~`` 开头；
+    2. 墓碑 SKILL.md 的 meta name 与 skills_dir 下**另一个正主目录**的
+       meta name 相同（正主=非 ~ 前缀）——认不上任何正主的 ~ 目录不动
+       （可能是用户自建）；
+    3. 墓碑内只有 SKILL.md（无用户附件——有附件的保守跳过）。
+    Windows 删除失败（文件占用）跳过不抛——下轮启动再试。
+    """
+    if not skills_dir.is_dir():
+        return
+    # 正主清单：非 ~ 前缀目录的 meta name → 目录
+    canon: dict[str, Path] = {}
+    for d in skills_dir.iterdir():
+        if not d.is_dir() or d.name.startswith("~"):
+            continue
+        md = d / "SKILL.md"
+        if md.is_file():
+            canon.setdefault(skill_name_of(md, d.name), d)
+    for d in skills_dir.iterdir():
+        if not d.is_dir() or not d.name.startswith("~"):
+            continue
+        # 墓碑内混入用户附件：保守跳过
+        try:
+            entries = sorted(p.name for p in d.iterdir())
+        except OSError:
+            continue
+        if entries != ["SKILL.md"]:
+            continue
+        md = d / "SKILL.md"
+        name = skill_name_of(md, d.name.lstrip("~"))
+        if name not in canon:
+            continue
+        try:
+            shutil.rmtree(d)
+            logger.info(
+                "已清理技能改名墓碑目录: %s（meta=%s 正主 %s 保留）",
+                d.name, name, canon[name].name,
+            )
+        except OSError as e:
+            logger.debug("清理墓碑目录失败（占用？下轮再试）: %s - %s", d, e)
