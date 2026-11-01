@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass, field
 import asyncio
+import dataclasses
 import logging
 import sys
 import threading
@@ -543,21 +544,36 @@ class CortexAgent:
         """阶段 7：组装 AgentRuntime 并挂到 self。"""
         # AgentRuntime（进程级组件容器；runtime_id 仅作兜底标识，
         # 对话身份由 doclens DB 会话承担并穿透传入）
-        runtime_config = RuntimeConfig(
-            workdir=self.workdir,
-            model_id=asm.config.get("model_id", "claude-opus-4-6"),
-            api_key=asm.config.get("api_key"),
-            base_url=asm.config.get("base_url"),
-            token_threshold=asm.config.get("token_threshold", 100000),
-            planify_context_window=asm.kb_config.planify_context_window,
-            planify_max_tokens=asm.max_tokens,
-            planify_max_tool_rounds=asm.kb_config.planify_max_tool_rounds,
-            planify_thinking_depth=asm.kb_config.planify_thinking_depth,
-            poll_interval=asm.config.get("poll_interval", 5),
-            idle_timeout=asm.config.get("idle_timeout", 60),
+        # 版本错配防御（2026-11-01 P4）：旧安装现场可能残留 planify<1.2.36
+        # （RuntimeConfig 无 planify_thinking_depth 等新字段）——首条消息
+        # 直接 TypeError 500（debug_20261023.log 16:11:25 实证）。按 dataclass
+        # 字段探测过滤 kwargs：新字段在旧 planify 上静默丢弃（思考档回退
+        # auto），升级 planify 后自动生效，不再把用户挡在门外。
+        _supported = RuntimeConfig.__dataclass_fields__ if dataclasses.is_dataclass(RuntimeConfig) else {}
+        _wanted = {
+            "workdir": self.workdir,
+            "model_id": asm.config.get("model_id", "claude-opus-4-6"),
+            "api_key": asm.config.get("api_key"),
+            "base_url": asm.config.get("base_url"),
+            "token_threshold": asm.config.get("token_threshold", 100000),
+            "planify_context_window": asm.kb_config.planify_context_window,
+            "planify_max_tokens": asm.max_tokens,
+            "planify_max_tool_rounds": asm.kb_config.planify_max_tool_rounds,
+            "planify_thinking_depth": asm.kb_config.planify_thinking_depth,
+            "poll_interval": asm.config.get("poll_interval", 5),
+            "idle_timeout": asm.config.get("idle_timeout", 60),
             # 压缩 transcript 落到 .cortex/transcripts（上面已 mkdir）：
             # .cortex 被索引器/FileWatcher 排除，杜绝落盘→watch→reindex 回路
-            compact_transcript_dir=asm.dirs["transcripts"],
+            "compact_transcript_dir": asm.dirs["transcripts"],
+        }
+        dropped = [k for k in _wanted if k not in _supported]
+        if dropped:
+            logging.getLogger(__name__).warning(
+                "已安装 planify 较旧，RuntimeConfig 不支持 %s（已降级跳过，"
+                "升级 planify 后自动生效）", dropped,
+            )
+        runtime_config = RuntimeConfig(
+            **{k: v for k, v in _wanted.items() if k in _supported}
         )
 
         runtime = AgentRuntime(
