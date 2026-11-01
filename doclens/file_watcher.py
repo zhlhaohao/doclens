@@ -28,7 +28,7 @@ except ImportError:
 
 from doclens.index_manager import SUPPORTED_FORMATS
 from doclens.config import data_dirname
-from treesearch.pathutil import is_gitignored
+from treesearch.pathutil import is_gitignored, should_ignore_file
 
 
 if _HAS_WATCHDOG:
@@ -95,6 +95,11 @@ if _HAS_WATCHDOG:
             # （pathutil walk 同规则），其事件同样丢弃
             basename = os.path.basename(path)
             if basename.startswith("._") and basename.endswith(".md"):
+                return False
+            # Office/LibreOffice 锁文件（~$xxx.docx / .~lock.xxx#）——
+            # 索引 walk 已跳过（pathutil.should_ignore_file），watcher
+            # 同规则丢弃：文档打开/关闭期间的创建删除事件不再触发空 reindex
+            if should_ignore_file(basename):
                 return False
             # .gitignore（与索引器同一谓词，treesearch.pathutil.is_gitignored）
             if is_gitignored(self._gitignore_spec, self._gitignore_base, path):
