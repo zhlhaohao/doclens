@@ -1376,6 +1376,35 @@ class StreamingAgent:
                     self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")
                     raise
 
+        # suppress_tools 下模型违规返回 tool_use（2026-11-02 实测 Kimi 端
+        # bug：tools=[] 时仍下发 tool_use block，id 形如 "check_background:1119"，
+        # stop_reason=tool_use）——就地剥除。tools=[] 时这些 block 物理上不可能
+        # 被执行；留着会 append 到 messages 末尾成孤儿 tool_use（无配对
+        # tool_result），插话分支 continue 跳过 _execute_tools 后，下一轮
+        # 请求带孤儿 tool_use → 网关 400 整轮报废。
+        if suppress_tools and assistant_content:
+            dropped = sum(
+                1 for b in assistant_content
+                if isinstance(b, dict) and b.get("type") == "tool_use"
+            )
+            if dropped:
+                self.logger.warning(
+                    "[StreamingAgent] suppress_tools 下模型违规返回 %d 个 "
+                    "tool_use block，已剥除（Kimi 等端点 tools=[] 仍下发 "
+                    "tool_calls 的协议偏差兜底）",
+                    dropped,
+                )
+                # 就地过滤（不 rebind）：本列表与 _astream_once 共享引用，
+                # 重绑定会让将来"再次写入"的修改路径漏改
+                assistant_content[:] = [
+                    b for b in assistant_content
+                    if not (isinstance(b, dict) and b.get("type") == "tool_use")
+                ]
+                # stop_reason 同步改写：调用方（插话 continue / 硬阈值终答）
+                # 均不消费 tool_use，留着会让后续分支按「需执行工具」误判
+                if stop_reason == "tool_use":
+                    stop_reason = "end_turn"
+
         # 添加助手响应到消息历史
         messages.append({"role": "assistant", "content": assistant_content})
 

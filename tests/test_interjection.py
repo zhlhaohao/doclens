@@ -272,6 +272,109 @@ class TestRunnerInterjection:
         drop_interjection_slot(sid)
 
 
+class RogueInterjectProvider(ScriptedProvider):
+    """插话汇报轮（tools=[]）违规返回 tool_use block + stop_reason=tool_use
+    ——模拟 2026-11-02 Kimi 端协议偏差（api.kimi.com/coding 在 tools=[]
+    时仍下发 tool_calls，id 形如 "check_background:1119"）。"""
+
+    async def astream(self, *, messages, system, tools, max_tokens, tracer=None):
+        idx = len(self.records)
+        async for ev in super().astream(
+            messages=messages, system=system, tools=tools,
+            max_tokens=max_tokens, tracer=tracer,
+        ):
+            # 首轮（插话汇报轮，tools==[]）——在 text 流之后追加 tool_use 块，
+            # 并把 stop_reason 改写为 tool_use
+            if idx == 0 and not tools:
+                if ev.type == "message_delta" and ev.stop_reason:
+                    # 在 stop 前补发一个 tool_use block
+                    yield _ev("content_block_start", block_index=99,
+                              block_type="tool_use",
+                              tool_use_id="check_background:1119",
+                              tool_name="check_background")
+                    yield _ev("content_block_delta", block_index=99,
+                              input_json_delta='{"task_id": "x"}')
+                    yield _ev("content_block_stop", block_index=99)
+                    ev = _ev("message_delta", stop_reason="tool_use")
+            yield ev
+
+
+class TestSuppressToolsStripsToolUse:
+    """suppress_tools=True 下模型违规返回 tool_use 的兜底剥除（2026-11-02）。
+
+    事故回放：长会话持续 check_background 轮询期间用户插话 → runner 走
+    suppress_tools 汇报分支 → Kimi 端忽略 tools=[] 仍下发 tool_use
+    （id=check_background:1119）→ runner 原样 append 到 messages →
+    插话分支 continue 跳过 _execute_tools（无 tool_result 配对）→
+    下一轮 LLM 请求带孤儿 tool_use assistant → Kimi 400 整轮报废。
+    """
+
+    def test_suppress_tools_strips_rogue_tool_use(self, tmp_path, caplog):
+        """suppress_tools 轮违规 tool_use 被剥除 + stop_reason 改写为 end_turn，
+        messages 末尾 assistant 不含 tool_use block，后续轮可正常发请求。"""
+        from planify.streaming.interjection import get_interjection_slot
+
+        sid = "sess_rogue"
+        provider = RogueInterjectProvider([
+            {"text": "汇报文本"},                  # 轮1 = 插话汇报（rogue：夹带 tool_use）
+            {"text": "任务完成"},                  # 轮2 = 恢复后的终答
+        ])
+        agent = _make_agent(provider, tmp_path)
+        get_interjection_slot(sid).submit("进度？")
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="planify.streaming.runner"):
+            try:
+                asyncio.run(agent.run_stream([], "开始任务", sid))
+            finally:
+                drop_interjection_slot(sid)
+
+        # 1. 剥除告警落日志
+        assert any(
+            "违规返回" in r.message and "tool_use" in r.message
+            for r in caplog.records
+        ), "应记录 suppress_tools 下违规 tool_use 剥除告警"
+
+        # 2. 轮 2 请求的 messages 末尾 assistant **不含** tool_use block
+        #    （已被剥除；否则会带孤儿 tool_use 触发网关 400）
+        assert len(provider.records) == 2
+        round2_msgs = provider.records[1]["messages"]
+        assistant_msgs = [m for m in round2_msgs if m.get("role") == "assistant"]
+        assert assistant_msgs, "应有汇报 assistant 消息"
+        last_assistant = assistant_msgs[-1]
+        content = last_assistant.get("content")
+        if isinstance(content, list):
+            tool_use_blocks = [
+                b for b in content
+                if isinstance(b, dict) and b.get("type") == "tool_use"
+            ]
+            assert not tool_use_blocks, (
+                f"suppress_tools 轮 assistant 不应残留 tool_use block: {tool_use_blocks}"
+            )
+
+        # 3. 轮 2 恢复任务（工具表回来）正常发出，回合按 end_turn 终答
+        assert "grep" in provider.records[1]["tools"]
+        assert "任务完成" in "".join(agent.emitter.texts)
+
+    def test_suppress_tools_normal_path_unaffected(self, tmp_path):
+        """合规端点（suppress_tools 轮无 tool_use）行为不变——剥除逻辑是 no-op。"""
+        from planify.streaming.interjection import get_interjection_slot
+
+        sid = "sess_compliant"
+        provider = ScriptedProvider([
+            {"text": "合规汇报"},                  # 轮1 = 插话汇报（无 tool_use）
+            {"text": "任务完成"},
+        ])
+        agent = _make_agent(provider, tmp_path)
+        get_interjection_slot(sid).submit("进度？")
+        try:
+            asyncio.run(agent.run_stream([], "任务", sid))
+        finally:
+            drop_interjection_slot(sid)
+        assert "合规汇报" in "".join(agent.emitter.texts)
+        assert "任务完成" in "".join(agent.emitter.texts)
+
+
 # ---------- ChatEventEmitter 双事件 ----------
 
 class HangingProvider(ScriptedProvider):
