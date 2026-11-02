@@ -420,6 +420,56 @@
      机身与结论条垂直留 ≥3% 空隙防 overlap 报警 -->
 ```
 
+### 卡片墙模式（能力对比/优势盘点，高频）
+
+产品对比类汇报几乎必有"我们有的能力清单"页。**别用三列对勾表**（两列 ✓ 信息密度极低）。
+两种形态：
+
+**卡片墙（≤12 卡单页）**——blank 版式 4×3 手排（grid 版式 table_rows=5 上限装不下 6 行）：
+
+```markdown
+<!-- block: x=3.5% y=14% w=22.5% h=24% bg=bg align=center anim=enter.zoom trigger=after delay=0.30 -->
+
+<i data-icon="message"/> **能力名（≤6字）**
+副标（≤6字）
+```
+
+- x=3.5/27/50.5/74，y=14/42/70（行距均分防"视觉重心偏上"）
+- 12 卡 delay=0.3+i*0.12 逐个 zoom 入场（1.7s 铺满）
+- 图标名必须在 assets/icons.json 白名单内（history/brain/plug 等常见名不存在）
+- 标题也走坐标块（y=3% h=9%），否则"未指定坐标"警告
+
+**选卡纪律**：先查对方官方文档的知名功能清单，再译成**用户可感知语言**（"Agent 主循环"
+→"对话即编程"）；每卡 = 图标 + 能力名 + 短副标，技术黑话不上面。诚实口径：每张卡都要有
+自家源码/ADR 可指认的对应实现。
+
+**镜像结构**：「我们更强」墙 + 「我们对等」墙连排，同构布局形成节奏呼应。
+
+### 一卡一页展开模式（卡片墙的深潜版）
+
+墙当总览后，重点卡可各展开一页（左文右图）：
+
+```markdown
+<!-- slide: layout=blank bg=#1e2229 kicker="04 · 差异 02/12" anim=none notes="...">
+
+<!-- block: x=6% y=16% w=34% h=14% bg=dark anim=enter.fly-in direction=left trigger=after delay=0.3 -->
+
+**主张（≤6字）**
+
+<!-- block: x=6% y=34% w=34% h=34% anim=enter.fade trigger=after delay=0.8 -->
+
+说明段（60-90字）
+
+<!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
+
+![P{页}-图1 主张示意](images/placeholder-{slug}.png)
+```
+
+- 主张胶囊 bg=dark（与截图页字幕同视觉语言）；说明白字；图区从右飞入与文字相对
+- **假图占位工作流**：PIL 生成深灰底+slug 标签占位图先用，真图同名替换（图位编号
+  P{页}-图1 不漂移）；占位图视觉评审时"右侧留白偏多"属占位本身，真图即消
+- kicker 连号 `NN/12`，与前面的墙页同章节号
+
 ### 白底验证法（壳子圆角纯度）
 
 调设备壳/窗口壳样式时，**深色舞台会掩盖晕影问题**——投影外溢与舞台色混在一起肉眼难辨。
