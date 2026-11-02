@@ -60,10 +60,14 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
     if not skills_src_root.exists():
         return []
     deleted = skills_config.deleted_names()
-    _cleanup_tombstone_dirs(skills_dir)
     deployed: list[str] = []
     for src_skill_md in sorted(skills_src_root.rglob("SKILL.md")):
         skill_src_dir = src_skill_md.parent
+        # 部署源过滤：包内 ~ 前缀目录是历史改名墓碑（曾混入发行包），
+        # 绝不部署到全局——否则清理刚删掉就被 copytree 复活（死循环）
+        if skill_src_dir.relative_to(skills_src_root).parts[0].startswith("~"):
+            logger.warning("部署源含墓碑目录，跳过: %s", skill_src_dir)
+            continue
         skill_name = skill_name_of(src_skill_md, skill_src_dir.name)
         if skill_name in deleted:
             logger.info("内置技能已标记删除，跳过部署: %s", skill_name)
@@ -75,6 +79,8 @@ def deploy_builtin_skills(skills_dir: Path) -> list[str]:
         # 之外，不受影响
         shutil.copytree(skill_src_dir, skill_dst_dir, dirs_exist_ok=True)
         deployed.append(skill_name)
+    # 清理必须在部署之后：跑在部署前会被 copytree 立刻复活（见墓碑死循环事故）
+    _cleanup_tombstone_dirs(skills_dir)
     return deployed
 
 
@@ -86,13 +92,15 @@ def _cleanup_tombstone_dirs(skills_dir: Path) -> None:
     meta name 仍是原名，SkillLoader 递归扫描时同名冲突「先者胜」每次
     启动告警一行/技能（13 天日志累计 3,940+ 行噪音）。
 
-    判据（按 meta name 认亲，防误删）：
+    判据（按 meta name 认亲 + 内容是正主子集，防误删）：
     1. 目录名以 ``~`` 开头；
     2. 墓碑 SKILL.md 的 meta name 与 skills_dir 下**另一个正主目录**的
        meta name 相同（正主=非 ~ 前缀）——认不上任何正主的 ~ 目录不动
        （可能是用户自建）；
-    3. 墓碑内只有 SKILL.md（无用户附件——有附件的保守跳过）。
+    3. 墓碑全部文件在正主中同名同内容存在（改名是原地改名，附件本就是
+       技能自带附件的副本；有正主之外独有文件的保守跳过并告警）。
     Windows 删除失败（文件占用）跳过不抛——下轮启动再试。
+    必须在 deploy 之后调用，否则刚清理就被 copytree 复活（死循环事故）。
     """
     if not skills_dir.is_dir():
         return
@@ -107,16 +115,23 @@ def _cleanup_tombstone_dirs(skills_dir: Path) -> None:
     for d in skills_dir.iterdir():
         if not d.is_dir() or not d.name.startswith("~"):
             continue
-        # 墓碑内混入用户附件：保守跳过
-        try:
-            entries = sorted(p.name for p in d.iterdir())
-        except OSError:
-            continue
-        if entries != ["SKILL.md"]:
-            continue
         md = d / "SKILL.md"
+        if not md.is_file():
+            continue
         name = skill_name_of(md, d.name.lstrip("~"))
         if name not in canon:
+            continue
+        # 墓碑文件须全部在正主中同名同内容（改名产生的附件副本可安全删）
+        duplicate = all(
+            (canon[name] / f.relative_to(d)).is_file()
+            and (canon[name] / f.relative_to(d)).read_bytes() == f.read_bytes()
+            for f in d.rglob("*")
+            if f.is_file()
+        )
+        if not duplicate:
+            logger.warning(
+                "墓碑目录 %s 含正主之外的内容，保守跳过（人工核查）", d.name,
+            )
             continue
         try:
             shutil.rmtree(d)

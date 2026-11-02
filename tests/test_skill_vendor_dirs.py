@@ -228,6 +228,54 @@ class TestDeployRecursion:
         assert sorted(deployed) == expected
         assert (tmp_path / "dst" / "knowledge_base" / "SKILL.md").exists()
 
+    def test_source_tombstone_dir_never_deployed(self, tmp_path, monkeypatch):
+        """部署源过滤：包内 ~ 前缀墓碑目录绝不部署（防 copytree 复活死循环）。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        _write_skill(mod._BUILTIN_SKILLS_SRC, "~lat-one", meta="name: flat-one\ndescription: d")
+        dst = tmp_path / "dst"
+        deployed = mod.deploy_builtin_skills(dst)
+        assert deployed == ["flat-one", "v-one"]
+        assert not (dst / "~lat-one").exists()
+
+    def test_tombstone_cleaned_after_deploy_not_before(self, tmp_path, monkeypatch):
+        """清理在部署之后：墓碑（含附件副本）部署后被清，不再复活。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        # 正主 + 墓碑（削首字符形态：flat-one → ~lat-one，内容与正主一致）
+        mod.deploy_builtin_skills(dst)
+        tomb = dst / "~lat-one"
+        tomb.mkdir()
+        (tomb / "SKILL.md").write_text(
+            "---\nname: flat-one\ndescription: d\n---\n正文", encoding="utf-8"
+        )
+        (tomb / "refs.md").write_text("附件", encoding="utf-8")
+        (dst / "flat-one" / "refs.md").write_text("附件", encoding="utf-8")
+        deployed = mod.deploy_builtin_skills(dst)
+        assert "flat-one" in deployed
+        assert not tomb.exists(), "墓碑应被清理且不被部署复活"
+
+    def test_tombstone_with_unique_files_kept(self, tmp_path, monkeypatch):
+        """墓碑含正主没有的独有文件：保守跳过（可能是用户自建内容）。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        mod.deploy_builtin_skills(dst)
+        tomb = dst / "~lat-one"
+        tomb.mkdir()
+        (tomb / "SKILL.md").write_text(
+            "---\nname: flat-one\ndescription: d\n---\n正文", encoding="utf-8"
+        )
+        (tomb / "user-notes.md").write_text("用户独有", encoding="utf-8")
+        mod.deploy_builtin_skills(dst)
+        assert tomb.exists(), "独有文件墓碑须保留待人工核查"
+
+    def test_tombstone_no_canon_kept(self, tmp_path, monkeypatch):
+        """认不上正主的 ~ 目录不动（可能是用户自建技能）。"""
+        mod = self._pkg(tmp_path, monkeypatch)
+        dst = tmp_path / "dst"
+        _write_skill(dst, "~myown", meta="name: myown\ndescription: d")
+        mod.deploy_builtin_skills(dst)
+        assert (dst / "~myown").exists()
+
 
 # ---------------------------------------------------------------- delete
 
