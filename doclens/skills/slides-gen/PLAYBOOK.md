@@ -132,6 +132,10 @@ luobo generate.md 的核心方法，按此展开：
 与覆盖文字的重叠已被 qa.py 豁免（背景语义）。若你手动改了坐标（如 y=5%），豁免
 失效、overlap 会再报——要么保持全屏块原样，要么接受 high 报告并说明设计意图。
 
+**特判：标题"双线"与高度不一**——版式页 slot-title 自带 2px 底线会与全局 h1 3px 底线
+叠加成双线（已拆除 13 个版式自带线，全局唯一接管）；blank 坐标块页标题 y 必须 12%
+才与版式页（kicker 让位 padding 后 86px）同水平线；标题底与下方内容 ≥21px。
+
 **特判：abs-block 内图片 overflow**——blank 版式的 figure 若没撑满高度，contain
 图会以原始尺寸渲染（max-height:100% 失效）→ 报「溢出容器 NNNpx」。修法不是删图：
 竖屏截图先用 PIL 合成到目标比例画布（垫底色），再统一 `fit=cover` 全屏。
