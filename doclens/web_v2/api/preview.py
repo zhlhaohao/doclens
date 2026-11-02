@@ -24,10 +24,12 @@ from doclens.web_v2.api.preview_common import (
     BINARY_PREVIEW_EXTS,
     ERR_BINARY_NOT_PREVIEWABLE,
     ERR_FILE_NOT_FOUND,
+    ERR_NOT_INDEXED,
     compute_writable,
     resolve_path,
     resolve_path_optional,
     resolve_rel_best_effort,
+    safe_resolve,
 )
 from doclens.web_v2.deps import get_index_manager
 from doclens.web_v2.models.preview import PreviewResponse
@@ -236,6 +238,38 @@ def preview(
     # 字节由 GET /api/preview/pdf 服务；合成 md 链路对 pdf 退役
     if path.lower().endswith(".pdf"):
         return _pdf_preview_meta(idx, path)
+    # 图像（png/jpg/jpeg/webp）：预览本体（原图渲染）不依赖索引——DB 命中
+    # 则带视觉解读章节，未索引时退回**原图直读**（与 ADR-0049 外部图像
+    # `_preview_outside_workdir` 同口径），不再整页拒绝为 NOT_INDEXED
+    # （「请先 doclens index」对图像预览是误导——原图不需要索引）。
+    if path.lower().endswith(tuple(_OUTSIDE_IMAGE_EXTS)):
+        resolved = resolve_path_optional(base, path, idx)
+        rel = resolved[1] if resolved is not None else path
+        try:
+            return preview_synth.synthesize_binary_preview(idx, rel)
+        except CortexAPIError as e:
+            if e.code != ERR_NOT_INDEXED:
+                raise
+            full = safe_resolve(base, rel)
+            if not full.exists() or not full.is_file():
+                raise CortexAPIError(
+                    404, ERR_FILE_NOT_FOUND, f"文件不存在: {path}"
+                ) from e
+            from urllib.parse import quote
+
+            raw_url = f"/api/preview/raw?path={quote(rel, safe='')}"
+            return PreviewResponse(
+                path=rel,
+                language="markdown",
+                content=(
+                    f"![原图]({raw_url})\n\n"
+                    "> 该图像尚未索引：当前仅显示原图"
+                    "（视觉解读与文件名搜索需先索引）。\n"
+                ),
+                line_range=None,
+                writable=False,
+                synthesized=False,
+            )
     # 二进制文档：走 DB 合成 md 路径（不能依赖磁盘存在性——可能已索引但文件移走；
     # 也不能直接 _resolve_path 因为它对不存在文件抛 FILE_NOT_FOUND，绕过 NOT_INDEXED 语义）
     if path.lower().endswith(tuple(BINARY_PREVIEW_EXTS)):
