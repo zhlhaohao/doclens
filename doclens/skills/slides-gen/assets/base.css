@@ -546,8 +546,9 @@ h1 .ico, h2 .ico, h3 .ico { color: var(--c-primary, #1b4f8a); }
 /* 标题上方小标签（章节胶带） */
 .kicker {
   position: absolute;
-  left: var(--pad, 72px);
+  right: var(--pad, 72px);
   top: calc(var(--pad, 72px) * .32);
+  text-align: right;
   font-size: calc(var(--fs-caption, 14px) * var(--fit, 1));
   font-weight: 600;
   letter-spacing: .12em;
