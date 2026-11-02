@@ -456,7 +456,7 @@
 
 **主张（≤6字）**
 
-<!-- block: x=6% y=34% w=34% h=34% anim=enter.fade trigger=after delay=0.8 -->
+<!-- block: x=6% y=34% w=34% h=34% color=bg anim=enter.fade trigger=after delay=0.8 -->
 
 说明段（60-90字）
 
@@ -465,7 +465,7 @@
 ![P{页}-图1 主张示意](images/placeholder-{slug}.png)
 ```
 
-- 主张胶囊 bg=dark（与截图页字幕同视觉语言）；说明白字；图区从右飞入与文字相对
+- 主张胶囊 bg=dark（与截图页字幕同视觉语言）；**说明必须 color=bg 白字**（深色舞台上默认深灰=黑底黑字，实测踩过）；图区从右飞入
 - **假图占位工作流**：PIL 生成深灰底+slug 标签占位图先用，真图同名替换（图位编号
   P{页}-图1 不漂移）；占位图视觉评审时"右侧留白偏多"属占位本身，真图即消
 - kicker 连号 `NN/12`，与前面的墙页同章节号
