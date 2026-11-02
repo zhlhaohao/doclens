@@ -75,6 +75,16 @@ h4 { font-size: calc(var(--fs-h4, 22px) * var(--fit, 1)); margin: 16px 0 6px; co
 p { margin: 0 0 .7em; font-size: calc(var(--fs-body, 22px) * var(--fit, 1)); line-height: 1.65;
   text-wrap: pretty; }
 a { color: var(--c-primary, #1b4f8a); text-decoration: underline; text-underline-offset: 3px; }
+/* ---------- 页面总标题统一风格（全 deck 一致绘制） ---------- */
+.slide h1, .slide h2 {
+  color: var(--c-primary, #1b4f8a) !important;
+  font-size: calc(var(--fs-h2, 30px) * var(--fit, 1)) !important;
+  font-weight: 800 !important;
+  letter-spacing: .01em;
+  padding-bottom: .28em;
+  border-bottom: 3px solid color-mix(in srgb, var(--c-primary, #1b4f8a) 32%, transparent);
+}
+
 strong { font-weight: 700; color: var(--c-primary, #1b4f8a); }
 /* 胶囊（自带背景色）内的 strong 跟随块色，避免主题蓝压白底不可读 */
 .abs-block p.capsule-color strong { color: #ffffff; }
