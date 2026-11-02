@@ -82,8 +82,12 @@ GEOM_JS = r"""
       Array.from(node.children).forEach(ch => {
         // SVG 内部元素的 bbox 不代表布局溢出（坐标轴文字可能临时越出 viewBox），跳过
         if (ch.ownerSVGElement || ch.tagName.toLowerCase() === 'svg') return;
+        // body 级开发态浮层（.draft-badge 等 fixed 定位）不在 slide 内，属演示态 UI——
+        // 不参与页面内容溢出判定（否则 draft 视图下误报"徽标被下边缘裁切"）
+        if (ch.classList && (ch.classList.contains('draft-badge') || ch.classList.contains('hint'))) return;
         const cs2 = getComputedStyle(ch);
         if (cs2.display === 'none') return;
+        if (cs2.position === 'fixed') return;
         const cr = ch.getBoundingClientRect();
         if (cr.width < 1 && cr.height < 1) return;
         overV = Math.max(overV, cr.bottom - er.bottom, er.top - cr.top);
