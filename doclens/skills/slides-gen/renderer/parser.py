@@ -170,7 +170,11 @@ def parse_inline(text: str) -> list[Run]:
             elif payload.startswith("<span"):
                 cls = re.search(r'class="([\w-]+)"', payload)
                 inner = re.sub(r"<[^>]+>", "", payload)
-                runs.append(Run(text=inner, color_role=cls.group(1) if cls else ""))
+                # span 内部支持 MD 加粗：**词** → 加粗+着色 Run（否则星号字面漏出）
+                if inner.startswith("**") and inner.endswith("**") and len(inner) > 4:
+                    runs.append(Run(text=inner[2:-2], bold=True, color_role=cls.group(1) if cls else ""))
+                else:
+                    runs.append(Run(text=inner, color_role=cls.group(1) if cls else ""))
             elif payload.startswith("<i"):
                 m2 = re.search(r'data-icon="([\w-]+)"', payload)
                 runs.append(Run(text="", icon=m2.group(1) if m2 else ""))
