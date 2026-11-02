@@ -24,6 +24,24 @@ describe("<md-viewer>", () => {
     expect(p!.textContent).toContain("paragraph");
   });
 
+  it("renders a single newline inside a paragraph as <br> (breaks: true)", async () => {
+    // GFM 换行模式：段内单个换行（LF 与 CRLF 两种行尾）都要出 <br>，
+    // 不再按 CommonMark 折叠成空格。
+    const el = await fixture(html`
+      <md-viewer content="# T\n\nline1\nline2\n\na\r\nb\r\n"></md-viewer>
+    `) as MdViewer;
+    await el.updateComplete;
+
+    const ps = el.shadowRoot!.querySelectorAll("p");
+    expect(ps.length).toBe(2);
+    expect(ps[0].querySelectorAll("br").length).toBe(1);
+    expect(ps[0].textContent).toContain("line1");
+    expect(ps[0].textContent).toContain("line2");
+    expect(ps[1].querySelectorAll("br").length).toBe(1);
+    expect(ps[1].textContent).toContain("a");
+    expect(ps[1].textContent).toContain("b");
+  });
+
   it("renders empty state when content is empty", async () => {
     const el = await fixture(html`<md-viewer content=""></md-viewer>`) as MdViewer;
     await el.updateComplete;

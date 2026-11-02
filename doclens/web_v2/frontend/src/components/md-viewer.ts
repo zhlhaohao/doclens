@@ -239,6 +239,10 @@ function ensureMdConfigured(): void {
       },
     },
     renderer: blockRenderer,
+    // GFM 换行模式：段落内单个换行（\n 或 CRLF）渲染为 <br>，不再折叠成空格。
+    // 知识库 md 大量手写「一行一句」正文，CommonMark 的软换行折叠会让预览
+    // 与原文观感不一致（chat 气泡早已用 createMathMarked 开 breaks 同理）。
+    breaks: true,
   });
   // KaTeX 公式：$...$ 行内 / $$...$$ 块级；throwOnError:false 非法公式渲染为
   // 红色源码而非抛错。扩展 tokenizer 先于默认规则命中，可阻止公式内 `_` 被

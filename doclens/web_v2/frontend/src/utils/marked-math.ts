@@ -117,8 +117,8 @@ export function kbImageUrl(path: string): string | null {
  *
  *  breaks:true（GFM 换行模式）——段内单个换行渲染为 <br>。聊天语境的
  *  换行几乎总是有意的（AI 多选项回答「A. …\nB. …」无空行分隔即典型），
- *  CommonMark 默认折叠会并成一段。仅聊天气泡用本工厂；文档预览
- *  （md-viewer，全局 marked）保持严格 CommonMark 不受影响。 */
+ *  CommonMark 默认折叠会并成一段。文档预览（md-viewer）同样开 breaks，
+ *  保持「预览所见 = 原文换行」一致。 */
 export function createMathMarked(): Marked {
   const md = new Marked();
   md.use(markedKatex({ throwOnError: false }));
