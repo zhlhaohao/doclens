@@ -200,6 +200,18 @@ def _list_html(b: Block, theme: Theme, page_anim: str, page_level: bool) -> str:
     direction = b.directive.get("direction", "")
     trigger = b.directive.get("trigger", "after")
 
+    # 块指令的颜色/背景同样要作用到列表项——此前只作用于段落/标题，
+    # 导致深色底 + color=白 的列表文字仍是默认深色（不可读）
+    li_style = ""
+    color = b.directive.get("color", "")
+    if color:
+        li_style = f' style="color:{theme.color(color)}"'
+    if b.directive.get("bg"):
+        bg = b.directive["bg"]
+        li_style = (f' style="color:#ffffff;background:{theme.color(bg)}"'
+                    if bg in ("accent", "primary", "table-header")
+                    else f' style="background:{theme.color(bg)}"')
+
     items = b.list_items
     ordered = any(o for _, _, o in items)
     tag = "ol" if ordered else "ul"
@@ -214,7 +226,7 @@ def _list_html(b: Block, theme: Theme, page_anim: str, page_level: bool) -> str:
                 attrs += f' data-anim-dir="{direction}"'
             if trigger == "click":
                 attrs += ' data-anim-trigger="click"'
-        out.append(f"{indent}<li{attrs}>{runs_html(runs, theme)}</li>")
+        out.append(f"{indent}<li{attrs}{li_style}>{runs_html(runs, theme)}</li>")
         li_i += 1
     out.append(f"</{tag}>")
     return "\n".join(out)
