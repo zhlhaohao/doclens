@@ -140,8 +140,15 @@ def _attrs(block: Block, page_anim: str, theme: Theme, page_level: bool) -> tupl
             style.append("color:#f5f7fa")
             style.append("border-left:4px solid #e8622d")
             style.append("box-shadow:0 8px 28px rgba(0,0,0,.45)")
+            parts.append('class="capsule-dark"')
         else:
             style.append(f"background:{theme.color(bg)}")
+            if bg in ("accent", "primary", "table-header"):
+                # 深色胶囊：白字（strong 默认主题蓝在深底上不可读，需覆盖）
+                style.append("color:#ffffff")
+                parts.append('class="capsule-color"')
+            else:
+                style.append("color:#1A1A1A")
         style.append("padding:.35em .7em")
         style.append("border-radius:8px")
         style.append("width:fit-content")

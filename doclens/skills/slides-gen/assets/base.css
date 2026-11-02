@@ -76,6 +76,9 @@ p { margin: 0 0 .7em; font-size: calc(var(--fs-body, 22px) * var(--fit, 1)); lin
   text-wrap: pretty; }
 a { color: var(--c-primary, #1b4f8a); text-decoration: underline; text-underline-offset: 3px; }
 strong { font-weight: 700; color: var(--c-primary, #1b4f8a); }
+/* 胶囊（自带背景色）内的 strong 跟随块色，避免主题蓝压白底不可读 */
+.abs-block p.capsule-color strong { color: #ffffff; }
+.abs-block p.capsule-dark strong { color: #f5f7fa; }
 em { font-style: italic; }
 code {
   font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
