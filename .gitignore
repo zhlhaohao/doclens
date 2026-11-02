@@ -279,7 +279,7 @@ benchmarks/gui_err.log
 # 用户 PPT/slides 工作目录（产物，非源码）
 ppt/
 ppt_work/
-slides/
+# slides/ 已入库（deck 源码 + 素材 + 交付稿）；运行产物见 slides/.gitignore
 图片/
 
 # slides-gen 生成产物（gallery 命令输出到 layouts/ 旁，勿入库）
