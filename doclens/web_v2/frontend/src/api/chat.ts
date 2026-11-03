@@ -22,6 +22,7 @@ export type ChatStreamEvent =
   | { type: "usage" } & UsagePayload
   | { type: "interject_ack"; question: string; tool_use_id: string }
   | { type: "interject_report"; tool_use_id: string; text: string }
+  | { type: "user_seq"; seq: number }
   | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
 
@@ -140,6 +141,12 @@ export async function* chatStream(
           tool_use_id: String(d.tool_use_id ?? ""),
           text: String(d.text ?? ""),
         };
+      }
+    } else if (ev.event === "user_seq") {
+      // 回退锚点即时绑定（ADR-0027 补口）：本轮 message_user 落库 seq
+      const d = parseData("user_seq", ev.data);
+      if (d && typeof d.seq === "number") {
+        yield { type: "user_seq", seq: d.seq };
       }
     } else if (ev.event === "done") {
       // reason 仅对话式提问（ADR-0033）终止时携带（waiting_user）；

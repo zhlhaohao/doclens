@@ -1669,6 +1669,18 @@ export class ChatView extends LitElement {
             messages = [...messages.slice(0, -1), { ...last, tool_steps }];
             actions.setChatState({ messages });
           }
+        } else if (ev.type === "user_seq") {
+          // 回退锚点即时绑定（ADR-0027 补口）：seq 绑到本地流式 user
+          // 消息——回合完成即出「回退到这里」等锚点按钮，不等刷新。
+          // 锚点是本轮 user 消息：从末尾找最后一条无 seq 的 user 气泡。
+          for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.role === "user" && m.seq === undefined) {
+              messages = [...messages.slice(0, i), { ...m, seq: ev.seq }, ...messages.slice(i + 1)];
+              actions.setChatState({ messages });
+              break;
+            }
+          }
         } else if (ev.type !== "done") {
           messages = applyStreamEvent(messages, ev);
           actions.setChatState({ messages });

@@ -81,14 +81,14 @@ def test_ensure_message_user_with_images(store):
 
     _seed(store)
     imgs = [{"data": "abc", "media_type": "image/png"}]
-    # 老条目（无 images 键）+ 无图重发 → 幂等（老前端路径不变）
-    assert store.ensure_message_user("s1", "hello") is False
-    # 同文字带图 → 新条目（图不同即不同消息）
-    assert store.ensure_message_user("s1", "hello", imgs) is True
+    # 老条目（无 images 键）+ 无图重发 → 幂等（老前端路径不变，返回 None）
+    assert store.ensure_message_user("s1", "hello") is None
+    # 同文字带图 → 新条目（图不同即不同消息），返回新 seq（回退锚点）
+    assert store.ensure_message_user("s1", "hello", imgs) == 1
     # 同文字同图 → 幂等
-    assert store.ensure_message_user("s1", "hello", imgs) is False
+    assert store.ensure_message_user("s1", "hello", imgs) is None
     # 同文字不同图 → 新条目
-    assert store.ensure_message_user("s1", "hello", [{"data": "xyz", "media_type": "image/jpeg"}]) is True
+    assert store.ensure_message_user("s1", "hello", [{"data": "xyz", "media_type": "image/jpeg"}]) == 2
 
     # payload 形态：带图条目有 images 键，无图条目没有
     items = [i for i in store.get_detail("s1") if i.kind == "message_user"]
@@ -111,9 +111,9 @@ def test_ensure_message_user_with_images(store):
 
 def test_ensure_message_user_idempotent(store):
     _seed(store)  # 老前端形态：已前置写入
-    assert store.ensure_message_user("s1", "hello") is False   # 幂等跳过
-    assert store.ensure_message_user("s1", "hello2") is True   # 新消息写入
-    assert store.ensure_message_user("s1", "hello2") is False
+    assert store.ensure_message_user("s1", "hello") is None   # 幂等跳过
+    assert store.ensure_message_user("s1", "hello2") == 1     # 新消息写入，返回新 seq
+    assert store.ensure_message_user("s1", "hello2") is None
     users = [
         json.loads(i.payload)["content"]
         for i in store.get_detail("s1") if i.kind == "message_user"

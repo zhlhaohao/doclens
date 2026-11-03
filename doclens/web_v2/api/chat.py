@@ -45,7 +45,7 @@ from doclens.web_v2.models.chat import (
     ChatStopRequest,
     ChatInterjectRequest,
 )
-from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES
+from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES, user_seq_event
 from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
 from doclens.web_v2.api._chat_slash import (
     SLASH_HINT_RE,
@@ -114,6 +114,7 @@ async def _stream_agent_response(
     slash_skill = legal_slash_skill(message, runtime.skills)
 
     history: list[dict] = []
+    user_seq: Optional[int] = None  # 本轮 message_user 锚点（ADR-0027 补口）
     skill_session = is_skill_message(message) or slash_skill is not None
     if session_id:
         try:
@@ -130,7 +131,11 @@ async def _stream_agent_response(
             # 回放轮次分组与回退快照锚点都依赖它先于本轮其余条目入库。
             # images（ADR-0034）：带图消息 payload 平级携带，无图与旧格式
             # 逐字节相同。
-            store.ensure_message_user(session_id, message, images)
+            # 锚点即时绑定（ADR-0027 补口）：新写入时拿到 seq 立刻推
+            # user_seq 事件——前端绑到本地流式 user 消息，回合完成即出
+            # 「回退到这里」，不等刷新（幂等跳过=老前端已写，无新 seq 可推）。
+            # queue 在下方才创建，先暂存、创建后补推。
+            user_seq = store.ensure_message_user(session_id, message, images)
             history = store.get_chat_history(session_id)
             # 末尾是本轮 message_user（后端已确保），run_stream 内部还会再
             # 追加一次 user_message —— 弹出避免重复。带图消息回放为块数组
@@ -177,6 +182,10 @@ async def _stream_agent_response(
     emitter = ChatEventEmitter(
         queue, context_window=runtime.config.planify_context_window
     )
+    # 锚点 seq 补推（ADR-0027 补口）：ensure_message_user 新写入时先于
+    # queue 创建拿到 seq，此处第一时间进队（早于一切 token/thinking）。
+    if user_seq is not None:
+        queue.put_nowait(user_seq_event(user_seq))
 
     # 在消费开始前登记中断（杜绝「stop 早于 register」竞态）。
     # session_id 为 None 时不登记（无法被 /chat/stop 寻址；前端总会传 DB session id）。

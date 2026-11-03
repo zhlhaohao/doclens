@@ -867,8 +867,8 @@ class SessionsStore(_StorePart):
 
     # ---- 写入 ----
 
-    def _append_item(self, session_id: str, kind: str, payload: dict) -> None:
-        """session_items 追加一条（锁内事务 MAX(seq)+1 续排）。
+    def _append_item(self, session_id: str, kind: str, payload: dict) -> int:
+        """session_items 追加一条（锁内事务 MAX(seq)+1 续排），返回新条目 seq。
 
         各 ``append_*``（kind 签名固定、payload dict 形态）的公共落库路径，
         seq 分配与 payload 序列化约定收敛在此单一实现。
@@ -880,13 +880,15 @@ class SessionsStore(_StorePart):
                    WHERE session_id = ?""",
                 (session_id,),
             ).fetchone()
+            seq = row[0] + 1
             conn.execute(
                 """INSERT INTO session_items
                    (session_id, seq, kind, payload, created_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (session_id, row[0] + 1, kind,
+                (session_id, seq, kind,
                  json.dumps(payload, ensure_ascii=False, default=str), now),
             )
+            return seq
 
     def create(self, s: SessionSummary) -> None:
         with self._lock, self._conn() as conn:
@@ -1041,7 +1043,7 @@ class SessionsStore(_StorePart):
 
     def ensure_message_user(
         self, session_id: str, content: str, images: Optional[list] = None
-    ) -> bool:
+    ) -> Optional[int]:
         """确保本轮 message_user 已落库（ADR-0028 统一后端落库）。
 
         新前端不再前置写入（后端是唯一生产者）；老前端已写的末尾同内容
@@ -1052,14 +1054,16 @@ class SessionsStore(_StorePart):
         格式逐字节相同（无 images 键）。
 
         Returns:
-            是否新写入。
+            新写入时返回本条 message_user 的 seq（回退锚点，ADR-0027——
+            前端流式轮次即时绑定锚点依赖此值，否则要等刷新才有「回退到
+            这里」按钮）；幂等跳过（已写入/老前端已写）返回 None。
         """
         payload: dict = {"content": content}
         if images:
             payload["images"] = images
         with self._lock, self._conn() as conn:
             row = conn.execute(
-                """SELECT kind, payload FROM session_items
+                """SELECT kind, payload, seq FROM session_items
                    WHERE session_id = ? ORDER BY seq DESC LIMIT 1""",
                 (session_id,),
             ).fetchone()
@@ -1071,10 +1075,9 @@ class SessionsStore(_StorePart):
                 if isinstance(p, dict) and p.get("content") == content:
                     # 带图判重：旧条目无 images 键视同 []（老前端/无图路径幂等不变）
                     if (p.get("images") or []) == (images or []):
-                        return False
+                        return None
         # RLock 内嵌调用 _append_item：查-判与插-入之间无并发写入
-        self._append_item(session_id, "message_user", payload)
-        return True
+        return self._append_item(session_id, "message_user", payload)
 
     def append_message_ai(
         self, session_id: str, content: str, tool_calls: list

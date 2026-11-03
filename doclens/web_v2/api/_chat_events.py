@@ -80,6 +80,14 @@ class UsageEvent(TypedDict):
     context_window: int
 
 
+class UserSeqEvent(TypedDict):
+    """锚点即时绑定（ADR-0027 补口）：本轮 message_user 落库后推送其 seq
+    ——前端把 seq 绑到本地流式 user 消息，回合完成即出「回退到这里」
+    （否则要等刷新经 buildChatTimeline 才有锚点）。"""
+    type: str  # "user_seq"
+    seq: int
+
+
 class DoneEvent(TypedDict):
     """带原因的收尾事件（2026-10-01，ADR-0033 对话式提问）：仅终止原因
     存在时由 emitter 推送（reason="waiting_user" = 回合因提问等待用户
@@ -108,12 +116,13 @@ class InterjectReportEvent(TypedDict):
 ChatQueueEvent = Union[
     TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
     UsageEvent, DoneEvent, ThinkingEvent, InterjectAckEvent, InterjectReportEvent,
+    UserSeqEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
     {"token", "tool_call", "tool_result", "ask", "toast", "compact", "error", "usage",
-     "done", "thinking", "interject_ack", "interject_report"}
+     "done", "thinking", "interject_ack", "interject_report", "user_seq"}
 )
 
 
@@ -178,6 +187,11 @@ def compact_event(
 
 def thinking_event(delta: str) -> ThinkingEvent:
     return {"type": "thinking", "delta": delta}
+
+
+def user_seq_event(seq: int) -> UserSeqEvent:
+    """本轮 message_user 落库 seq（回退锚点即时绑定，ADR-0027 补口）。"""
+    return {"type": "user_seq", "seq": seq}
 
 
 def done_event(reason: str) -> DoneEvent:

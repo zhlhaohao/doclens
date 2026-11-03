@@ -91,6 +91,12 @@ export class AppBar extends LitElement {
       font-weight: 700;
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
+    /* @ 分隔符点缀（2026-11-03 用户需求）：蓝色强调多实例「库@端口」结构；
+       左右间距用 margin——flex 容器吞空白文本节点，模板空格不渲染 */
+    }
+    .center-title.workdir-title .at {
+      color: var(--cortex-fb-blue);
+      margin: 0 0.3em;
     }
     .brand .logo {
       width: 28px; height: 28px;
@@ -543,16 +549,14 @@ export class AppBar extends LitElement {
     `;
   }
 
-  /** 桌面顶栏标题「工作目录名@端口」（2026-10-26 用户决议）：多实例并行
-   *  时（worktree 各占一个端口）一眼区分这是哪个库。工作目录名取末段；
-   *  status 未返回时回退「Doclens@端口」。同一标签也写 document.title
-   *  （浏览器标签页文字，2026-10-26 追加需求）。 */
-  private _workdirShortLabel(): string {
+  /** 顶栏标题三段拆分（2026-11-03 用户需求）：「库名 @ 端口」中 @ 用蓝色
+   *  点缀（.at 样式）。workdir 缺失时回退「Doclens@端口」同一结构。 */
+  private _renderWorkdirTitle() {
     const workdir = store.getState().status?.workdir || "";
     const name = workdir
       ? workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir
       : "Doclens";
-    return `${name}@${this._portLabel()}`;
+    return html`${name}<span class="at">@</span>${this._portLabel()}`;
   }
 
   /** document.title 同步：status.workdir 变化即更新（store 订阅里调用）。
@@ -560,7 +564,11 @@ export class AppBar extends LitElement {
    *  document.title」限 webview 场景；浏览器态这正是需求）。 */
   private _syncDocumentTitle(): void {
     if (this._inWebview) return;
-    document.title = this._workdirShortLabel();
+    const workdir = store.getState().status?.workdir || "";
+    const name = workdir
+      ? workdir.replace(/[\\/]+/g, "/").split("/").filter(Boolean).pop() || workdir
+      : "Doclens";
+    document.title = `${name}@${this._portLabel()}`;
   }
 
   /** 完整标签（title 悬浮）：全路径 + 端口。 */
@@ -585,7 +593,7 @@ export class AppBar extends LitElement {
       ${this._inWebview && this._hostTitle
         ? html`<div class="center-title">${this._hostTitle}</div>`
         : html`<div class="center-title workdir-title" title=${this._workdirFullLabel()}>
-            ${this._workdirShortLabel()}
+            ${this._renderWorkdirTitle()}
           </div>`}
       <div class="right-cluster">
         ${!this._isMobileViewport ? html`
