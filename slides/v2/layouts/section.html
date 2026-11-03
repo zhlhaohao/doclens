@@ -1,0 +1,12 @@
+<!-- 版式：section 章节过渡页 —— 序号/大标题 + 一句话说明，左侧强调色条 -->
+<div class="slide-inner layout-section"
+     data-cap='{"bullets": 0, "bullet_chars": 0, "total_chars": 60, "table_rows": 0, "table_cols": 0, "image_min_ratio": 0.0}'>
+  <div class="slot-title">{{title}}</div>
+  <div class="slot-content">{{content}}</div>
+</div>
+<style>
+  .layout-section { justify-content: center; gap: 20px; padding-left: 28px; border-left: 8px solid var(--c-accent); }
+  .layout-section .slot-title h1 { font-size: calc(var(--fs-h1) * 1.25 * var(--fit, 1)); color: var(--c-text); }
+  .layout-section .slot-content { flex: 0 0 auto; }
+  .layout-section .slot-content p { color: var(--c-accent); font-size: calc(var(--fs-body) * 1.02 * var(--fit, 1)); font-weight: 500; margin: 0; }
+</style>

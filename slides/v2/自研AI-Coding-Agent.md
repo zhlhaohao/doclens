@@ -26,17 +26,17 @@ transition: fade
 | **生而手机友好** | 前端第一天按移动优先设计，桌面端功能手机全有：搜索/对话/预览/文件管理 |
 | **实测可替代** | 编码、调试、重构、文档等日常开发场景实测覆盖；模型可插拔，可接内网 |
 
-<!-- slide: layout=agenda kicker="01 · 路线" takeaway="**三步走：先追平，再差异，后对决**" notes="今天的汇报分三步。第一步，先证明它不是玩具：Claude Code 有的能力，它基本都有；第二步，讲它结构性做不到、而我们做到的事——数据主权、图形界面、记忆系统、模型自由、技能生态；第三步，两张表正面对比，它的强项我们也不回避。" -->
+<!-- slide: layout=blank kicker="02 · 实貌" anim=none notes="接下来这一组都是我们产品的真实截图，不是设计稿。先看桌面端三个核心界面，再看手机端实拍——同一个应用，全端可用。" -->
 
-# 今天讲三件事
+<!-- block: x=5.6% y=4% w=88.8% h=16% -->
 
-| | |
-|---|---|
-| **对等** | Claude Code 有的，我们也有——迁移零成本 |
-| **差异** | 它结构性给不了的：数据主权 / 图形界面 / 记忆 / 模型自由 / 技能生态 |
-| **对决** | 六维正面对比，它的强项我们也认 |
+# 真实界面，不是设计稿
 
-<!-- slide: layout=blank bg=bg kicker="02 · 实貌 1/7" bg=#1e2229 anim=none notes="接下来这一组都是我们产品的真实截图，不是设计稿。这一页是主界面：打开就是一个提问入口，下面是最近的工作会话——它像一个每天见面的助理，而不是一个冷冰冰的搜索引擎。" -->
+<!-- block: x=5.6% y=22% w=88.8% h=8% color=text anim=enter.fade trigger=after delay=0.4 -->
+
+七页实拍：桌面主界面 · 文件管理 · AI 编码 · 手机端四连拍
+
+<!-- slide: layout=blank bg=bg kicker="02 · 实貌 1/7" bg=#1e2229 anim=none notes="这一页是主界面：打开就是一个提问入口，下面是最近的工作会话——它像一个每天见面的助理，而不是一个冷冰冰的搜索引擎。" -->
 
 <!-- block: x=13.75% y=5% w=72.5% h=85% fit=cover style=laptop anim=enter.fly-in direction=up trigger=after delay=0.3 -->
 
@@ -79,11 +79,11 @@ transition: fade
 
 ![P7-图2 会话聚焦](images/mob-2-chat-focus.png)
 
-<!-- block: x=8% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
+<!-- block: x=5% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
 
 助手首页
 
-<!-- block: x=80% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
+<!-- block: x=80% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
 
 会话聚焦
 
@@ -101,11 +101,11 @@ transition: fade
 
 ![P8-图2 模型配置](images/mob-3-settings-model.png)
 
-<!-- block: x=8% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
+<!-- block: x=5% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
 
 会话信息
 
-<!-- block: x=80% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
+<!-- block: x=80% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
 
 模型配置
 
@@ -123,11 +123,11 @@ transition: fade
 
 ![P9-图2 MCP 连接](images/mob-5-settings-mcp.png)
 
-<!-- block: x=8% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
+<!-- block: x=5% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
 
 技能管理
 
-<!-- block: x=80% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
+<!-- block: x=80% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
 
 MCP 连接
 
@@ -145,11 +145,11 @@ MCP 连接
 
 ![P10-图2 深色预览](images/mob-7-preview-dark.png)
 
-<!-- block: x=8% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
+<!-- block: x=5% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.4 -->
 
 文件管理
 
-<!-- block: x=80% y=43% w=12% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
+<!-- block: x=80% y=43% w=15% h=7% bg=dark align=center anim=enter.fade trigger=after delay=1.5 -->
 
 深色预览
 
@@ -157,27 +157,27 @@ MCP 连接
 
 **文档随行阅读**
 
-<!-- slide: layout=blank kicker="03 · 方案" takeaway="**四层全自有，唯一外联是可替换的模型接口**" notes="先回到开场的三个问题。我们现有的工作方式里，代码是流向云端大模型的——方便，但数据流向、审计、供应风险，这三个问题没有人能替我们回答。我们的答案是这张分层图：从上到下四层——界面、宿主、AI 框架、索引引擎——每一层都是我们自己写的，名字和职责都叫得出来、改得动。索引、会话、记忆全部落在本地磁盘。底下这条线就是内网边界：唯一穿过它的，是右下角这个可替换的模型接口——可以指向内网，可以换国产，也可以用 Anthropic。动画顺序：四层从上到下逐层落下，边界线最后划出，模型接口行最后飞入。" -->
+<!-- slide: layout=blank kicker="03 · 方案" takeaway="**四层全自有，唯一外联是可替换的模型接口**" notes="我们的答案是这张分层图：从上到下四层——界面、宿主、AI 框架、索引引擎——每一层都是我们自己写的，名字和职责都叫得出来、改得动。索引、会话、记忆全部落在本地磁盘。底下这条线就是内网边界：唯一穿过它的，是右下角这个可替换的模型接口——可以指向内网，可以换国产，也可以用 Anthropic。动画顺序：四层从上到下逐层落下，边界线最后划出，模型接口行最后飞入。" -->
 
-<!-- block: x=5.6% y=12% w=88.8% h=9% -->
+<!-- block: x=5.6% y=6% w=88.8% h=9% -->
 
-# 四层全自有，唯一外联可换模型
+# 系统架构图
 
 
 
-<!-- block: x=6% y=22% w=88% h=8.5% bg=bg anim=enter.fly-in direction=left trigger=after delay=0.3 -->
+<!-- block: x=6% y=18% w=88% h=8.5% bg=#e3ecf6 anim=enter.fly-in direction=left trigger=after delay=0.3 -->
 
 **Web 界面**——浏览器即用 · PWA 可装桌面与手机（Lit + Vite）
 
-<!-- block: x=9% y=31.5% w=82% h=8.5% bg=bg anim=enter.fly-in direction=left trigger=after delay=0.55 -->
+<!-- block: x=9% y=31.5% w=82% h=8.5% bg=#e3ecf6 anim=enter.fly-in direction=left trigger=after delay=0.55 -->
 
 **宿主层**——会话 / 备份 / 文件管理 / 权限门禁（FastAPI + SSE）
 
-<!-- block: x=12% y=41% w=76% h=8.5% bg=bg anim=enter.fly-in direction=left trigger=after delay=0.8 -->
+<!-- block: x=12% y=41% w=76% h=8.5% bg=#e3ecf6 anim=enter.fly-in direction=left trigger=after delay=0.8 -->
 
 **AI 框架**——agent 主循环 / 上下文压缩 / 技能（自研 planify）
 
-<!-- block: x=15% y=50.5% w=70% h=8.5% bg=bg anim=enter.fly-in direction=left trigger=after delay=1.05 -->
+<!-- block: x=15% y=50.5% w=70% h=8.5% bg=#e3ecf6 anim=enter.fly-in direction=left trigger=after delay=1.05 -->
 
 **索引引擎**——全文检索 / 结构感知（自研 treesearch · SQLite FTS5）
 
@@ -191,263 +191,231 @@ MCP 连接
 
 <!-- block: x=6% y=74.5% w=88% h=15% anim=enter.fade trigger=after delay=2.0 -->
 
-索引、会话、记忆全部落在本地磁盘——这条线以内，数据不出内网。
+索引、会话、记忆全部落在本地磁盘——这条线以内，数据不出你的电脑。
 
-<!-- slide: layout=blank kicker="04 · 差异" takeaway="**它结构性给不了的，我们天生就有**" anim=none notes="对等之外，这面墙是真正的不同——十二项，每一项都是 Claude Code 结构上给不了的。头两张连着讲：全端可用——同一个应用，电脑和手机功能一个不少；工作接力——办公室干到一半的任务，出门路上掏出手机打开同一个会话接着干，上下文一点不丢。这是终端工具做不到的移动场景。后面：数据不出内网、逐调用留痕，闭源云服务做不到；自动备份、全保真导出、AI 自动记忆，是产品形态的差距；模型随插随换、技能反向互通、源码全自有、知识资产化、零许可费用——自己的代码才做得出的自由。语气讲事实，不贬对方。" -->
+<!-- slide: layout=blank kicker="03 · 对等" takeaway="**先追平，再谈不同——迁移成本接近零**" anim=none source="功能项基于本仓源码逐项核对" notes="有人会问：自研的，会不会是个玩具？这面墙十二项一次回答——Claude Code 用户最熟悉的能力，我们全都有：对话改代码、深度代码库理解、任务清单、CLAUDE.md 兼容、子代理并行、MCP 生态、技能系统、斜杠命令、危险操作确认；还有 Checkpoint 改错回退、Plan 规划——在我们这是一个内置技能，追问打磨方案、产出架构决策记录；超长对话压缩。特别看第二行第一张：CLAUDE.md 兼容，团队沉淀的规范文件一个字不用改直接用。到这里只是追平，真正的不同在后面。" -->
 
-<!-- block: x=5.6% y=12% w=88.8% h=9% -->
+<!-- block: x=5.6% y=6% w=88.8% h=9% -->
 
-# 比它更强的十二项
+# Claude Code 有的，我们都有
 
-<!-- block: x=3.5% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.30 -->
+<!-- block: x=3.5% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.30 -->
+
+<i data-icon="message"/> **对话即编程**
+说需求就动手
+
+<!-- block: x=27% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.42 -->
+
+<i data-icon="search"/> **深度代码库理解**
+结构感知索引
+
+<!-- block: x=50.5% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.54 -->
+
+<i data-icon="list"/> **任务清单跟踪**
+步骤看得见
+
+<!-- block: x=74% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.66 -->
+
+<i data-icon="users"/> **子代理并行**
+大任务拆小
+
+<!-- block: x=3.5% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.78 -->
+
+<i data-icon="file-text"/> **CLAUDE.md 兼容**
+存量直接用
+
+<!-- block: x=27% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.90 -->
+
+<i data-icon="network"/> **MCP 生态**
+工具即插即用
+
+<!-- block: x=50.5% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.02 -->
+
+<i data-icon="package"/> **技能系统**
+Markdown 即技能
+
+<!-- block: x=74% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.14 -->
+
+<i data-icon="zap"/> **斜杠命令**
+调用对应技能
+
+<!-- block: x=3.5% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.26 -->
+
+<i data-icon="shield"/> **危险操作确认**
+不点头不动手
+
+<!-- block: x=27% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.38 -->
+
+<i data-icon="repeat"/> **Checkpoint 回退**
+改错随时退
+
+<!-- block: x=50.5% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.50 -->
+
+<i data-icon="target"/> **Plan 规划先行**
+技能打磨方案
+
+<!-- block: x=74% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.62 -->
+
+<i data-icon="layers"/> **超长对话压缩**
+不丢关键
+
+<!-- slide: layout=blank kicker="04 · 差异" takeaway="**它结构性给不了的，我们天生就有**" anim=none notes="对等之外，这面墙是真正的不同——十二项，每一项都是 Claude Code 结构上给不了的。头两张连着讲：全端可用——手机浏览器里装上就像个 App，功能一个不少；工作接力——半路换到手机上接着干，进度不丢。数据侧：文件全在自己电脑里、没有任何上报代码，闭源云服务做不到；每一步做了什么都有记录、随时能查；自动备份，数据坏了能找回；聊天记录整个导出带走。AI 自动记忆——它真的记得你。模型随便换——国产模型填个地址就能用。技能两边通用、源码全自有、文档变技能、网页里直接改代码——自己的代码才做得出的自由。语气讲事实，不贬对方。" -->
+
+<!-- block: x=5.6% y=6% w=88.8% h=9% -->
+
+# CC 给不了的，我们有
+
+<!-- block: x=3.5% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.30 -->
 
 <i data-icon="globe"/> **全端可用**
-电脑手机同一应用
+手机装上像 App
 
-<!-- block: x=27% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.42 -->
+<!-- block: x=27% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.42 -->
 
 <i data-icon="refresh"/> **工作接力**
-半途换机接着干
+半路换手机接着干
 
-<!-- block: x=50.5% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.54 -->
+<!-- block: x=50.5% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.54 -->
 
-<i data-icon="lock"/> **数据不出内网**
-代码留在本地
+<i data-icon="lock"/> **数据不出本机**
+文件全在自己电脑
 
-<!-- block: x=74% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.66 -->
+<!-- block: x=74% y=18% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.66 -->
 
-<i data-icon="eye"/> **逐调用留痕**
-审计<span class="primary">**随时抽查**</span>
+<i data-icon="eye"/> **过程全有记录**
+做了什么都能查
 
-<!-- block: x=3.5% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.78 -->
+<!-- block: x=3.5% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.78 -->
 
-<i data-icon="database"/> **整库自动备份**
-环形十份兜底
+<i data-icon="database"/> **自动备份**
+数据坏了能找回
 
-<!-- block: x=27% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.90 -->
+<!-- block: x=27% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.90 -->
 
-<i data-icon="package"/> **会话全保真导出**
-迁移带走资产
+<i data-icon="package"/> **聊天记录可带走**
+整个导出随时迁
 
-<!-- block: x=50.5% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.02 -->
+<!-- block: x=50.5% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.02 -->
 
 <i data-icon="lightbulb"/> **AI 自动记忆**
-越用越懂团队
+它真的记得你
 
-<!-- block: x=74% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.14 -->
+<!-- block: x=74% y=43% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.14 -->
 
-<i data-icon="zap"/> **模型随插随换**
-内网国产都行
+<i data-icon="zap"/> **模型随便换**
+国产模型填地址就用
 
-<!-- block: x=3.5% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.26 -->
+<!-- block: x=3.5% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.26 -->
 
-<i data-icon="repeat"/> **技能反向互通**
-也能给 CC 用
+<i data-icon="repeat"/> **技能两边通用**
+社区技能直接装
 
-<!-- block: x=27% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.38 -->
+<!-- block: x=27% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.38 -->
 
 <i data-icon="code"/> **源码全自有**
 需求变了自己改
 
-<!-- block: x=50.5% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.50 -->
+<!-- block: x=50.5% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.50 -->
 
-<i data-icon="file-text"/> **知识资产化**
-写文档即技能
+<i data-icon="file-text"/> **文档变技能**
+写好说明书就能用
 
-<!-- block: x=74% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.62 -->
+<!-- block: x=74% y=68% w=22.5% h=22% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=1.62 -->
 
 <i data-icon="code"/> **内置代码工作台**
-高亮编辑看变更
+网页里直接改代码
 
-<!-- slide: layout=blank bg=bg kicker="04 · 差异 01/5" anim=none notes="第一项差异，两句话：全端可用——同一个应用，电脑和手机功能一个不少；工作接力——办公室干到一半的任务，出门路上掏出手机打开同一个会话接着干，上下文一点不丢。左边这幅画就是这个场景。" -->
+<!-- slide: layout=blank bg=bg kicker="04 · 差异 01/5" anim=none notes="第一项差异：全端可用。第一，它是一个 PWA——电脑和手机浏览器装的是同一个应用，手机上也是完整重排版的界面，不是缩窄的凑合版，底部四页签导航、刘海屏避让、触屏手势都做了专门适配。第二，工作接力：手机连的电脑上跑的那个服务，同一份会话库——办公室干到一半的任务，掏出手机打开就是同一个会话，上下文一点不丢。第三，最实在的一条：关掉页面任务照样跑——您切走了、断网了，服务端把任务跑完落库，回来一打开自动接管，中间完成的步骤都给您重建出来。第四，上次浏览现场也记得：当前目录、选中的文件、正在聊的会话，重开浏览器直接回到现场。" -->
 
-<!-- block: x=5.6% y=12% w=38% h=9% -->
+<!-- block: x=5.6% y=6% w=38% h=9% -->
 
 # 全端可用，接力不停
 
-<!-- block: x=6% y=24.5% w=34% h=49% color=text anim=enter.fade trigger=after delay=0.6 -->
+<!-- block: x=6% y=19% w=34% h=66% color=text anim=enter.fade trigger=after delay=0.6 -->
 
-- 同一个应用，电脑手机功能一个不少
-- 办公室干到一半，路上掏出手机接着干
-- <span class="primary">**上下文一点不丢**</span>，断网也续跑落库
+- <span class="primary">**电脑手机同一应用**</span>：PWA 可装主屏，功能一个不少
+- 手机端<span class="primary">**完整重排版**</span>，非缩窄凑合：四页签导航、刘海屏避让
+- <span class="primary">**同一份会话库**</span>：手机连电脑服务，半途任务接着干
+- <span class="primary">**关页任务照跑**</span>：服务端续跑落库，回来自动接管现场
+- 重开浏览器<span class="primary">**直接回到上次现场**</span>：目录、文件、会话全恢复
+- <span class="primary">**上下文一点不丢**</span>，切换设备不丢进度
 
 <!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
 
 ![P13-图1 全端可用，接力不停示意](images/art-all-platforms.png)
 
-<!-- slide: layout=blank bg=bg kicker="04 · 差异 02/5" anim=none notes="讲主权：唯一外联点是可替换的模型接口，其余一切本地。" -->
+<!-- slide: layout=blank bg=bg kicker="04 · 差异 02/5" anim=none notes="这一页讲个人隐私。先说清定位：它是装在您个人办公电脑上的编程助理，不是 Workbuddy 那类公有云服务，也不是公司内部架的网站——没有服务器替您保管数据。落到实处的保护有六条：一，索引、会话、记忆、备份、日志全部落在您电脑磁盘上同一个可见目录，肉眼可查；二，检索引擎完全离线，一个本地文件装下全部索引，不需要向量库、不需要联网；三，唯一必然外联的是模型接口，可指向内网或自建端点，其余联网工具都能一键关停；四，凭据只存本机文件，界面上一律打码显示；访问服务默认只绑本机，手机连入才需要 PIN 密码，且密码不走明文传输；五，会话可整份导出带走，系统自动做十份环形备份；六，代码里没有任何遥测上报——我们全仓查过。隐私不是靠承诺，是结构性的。" -->
 
-<!-- block: x=5.6% y=12% w=38% h=9% -->
+<!-- block: x=5.6% y=6% w=38% h=9% -->
 
-# 数据不出内网
+# 数据不出你的电脑
 
-<!-- block: x=6% y=24.5% w=34% h=49% color=text anim=enter.fade trigger=after delay=0.6 -->
+<!-- block: x=6% y=19% w=34% h=66% color=text anim=enter.fade trigger=after delay=0.6 -->
 
-- 索引、会话、记忆<span class="primary">**全部落在本地磁盘**</span>
-- 模型接口指向内网，代码<span class="primary">**全程不出网**</span>
-- 唯一外联点可替换，内网国产任选
+- <span class="primary">**个人编程助理**</span>：非公有云、非内部网站，数据不经任何服务器
+- 索引、会话、记忆、备份<span class="primary">**落在本机一个可见目录**</span>，肉眼可查
+- 检索引擎<span class="primary">**完全离线**</span>：本地文件装下全部索引，无需联网
+- 唯一外联是<span class="primary">**可替换模型接口**</span>（内网/自建任选），联网工具可关停
+- 凭据只存本机、界面打码；服务<span class="primary">**默认只绑本机**</span>，密码不上线
+- <span class="primary">**零遥测零上报**</span>：全仓无任何数据回传代码
 
 <!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
 
-![P14-图1 数据不出内网示意](images/art-data-local.png)
+![P14-图1 数据不出本机示意](images/art-data-local.png)
 
-<!-- slide: layout=blank bg=bg kicker="04 · 差异 03/5" anim=none notes="对比 CLAUDE.md 手工维护：我们是自动策展。" -->
+<!-- slide: layout=blank bg=bg kicker="04 · 差异 03/5" anim=none notes="这一页讲长期记忆，核心一句话：它真的记得你。跨对话、跨知识库持久生效——你交代过的偏好、纠正过的工作方式、定过的决策，一次说过，以后每次对话自动带上。记忆分四类，每类都有例子：你是谁——代码风格偏好简洁、多用类型注解；怎么干活——改完前端必须先跑构建再交付；做什么——上次那个崩溃的根因和修法，下次直接想起；资料在哪——部署文档在仓库哪个目录。而且控制权在你手里：说「记住这个」当场写入，说「不用记了」立即归档退役。" -->
 
-<!-- block: x=5.6% y=12% w=38% h=9% -->
+<!-- block: x=5.6% y=6% w=38% h=9% -->
 
-# AI 自动记忆
+# 长期记忆：AI 真的记得你
 
-<!-- block: x=6% y=24.5% w=34% h=49% color=text anim=enter.fade trigger=after delay=0.6 -->
+<!-- block: x=6% y=19% w=34% h=62% color=text anim=enter.fade trigger=after delay=0.6 -->
 
-- AI 自己维护长期记忆，非手写配置
-- 偏好、工作方式、决策<span class="primary">**自动记录去重**</span>
-- 过时自动归档，每条人可审计
+- <span class="primary">**跨对话持久**</span>：偏好、纠错、决策一次交代永久生效
+- **你是谁**：代码风格简洁，多用类型注解
+- **怎么干活**：改完前端先跑构建再交付
+- **做什么**：上次崩溃的根因，下次直接想起
+- **资料在哪**：部署文档在仓库哪个目录
+- 「记住这个」当场写入，「不用记了」立即退役
 
 <!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
 
 ![P18-图1 AI 自动记忆示意](images/art-auto-memory.png)
 
-<!-- slide: layout=blank bg=bg kicker="04 · 差异 04/5" anim=none notes="模型这一层，选择权全在我们手里。对话模型原生支持 Anthropic 和 OpenAI 两大协议——智谱、DeepSeek、MiniMax、通义千问填个地址就能用；LLM Route、OneAPI 这类聚合网关完全兼容，内网服务同样即插即用，切换不改代码。再往上一层：视觉模型独立配置——您在前几页看到的贴图提问、手机截图，背后都是它在看图；文生图和语音合成也是直连的——今天这份汇报里的插画和旁白，就是我们自己的系统生成的。工具链完整，不用东拼西凑。" -->
+<!-- slide: layout=blank bg=bg kicker="04 · 差异 04/5" anim=none notes="模型这一层，选择权全在我们手里。第一，对话模型原生支持 Anthropic 和 OpenAI 两大协议——智谱、DeepSeek、MiniMax、Kimi、通义千问，这些长任务智能体填个地址就开箱即用。第二，平台级接入：阿里云百炼、腾讯云、火山方舟、OpenRouter，还有公司自建的大模型池，都能直接接。第三，视觉模型是独立配置的——您在前几页看到的贴图提问、手机截图，背后都是它在看图判读。第四，文生图和语音合成原生对接——今天这份汇报里的插画和旁白，就是我们自己的系统生成的。工具链完整，不用东拼西凑。" -->
 
-<!-- block: x=5.6% y=12% w=38% h=9% -->
+<!-- block: x=5.6% y=6% w=38% h=9% -->
 
 # 模型随插随换
 
-<!-- block: x=6% y=24.5% w=34% h=49% color=text anim=enter.fade trigger=after delay=0.6 -->
+<!-- block: x=5% y=19% w=40% h=66% color=text anim=enter.fade trigger=after delay=0.6 -->
 
-- <span class="primary">**Anthropic 与 OpenAI 双协议**</span>：智谱、DeepSeek、MiniMax、千问即配即用
-- LLM Route / OneAPI / 内网服务，<span class="primary">**填地址即接入**</span>
-- 独立<span class="primary">**视觉模型**</span>：贴图提问、截图判向
-- 直连<span class="primary">**文生图与语音合成**</span>：素材开口即得
+- 支持 <span class="primary">**Anthropic、OpenAI 双协议**</span>，智谱、DeepSeek、MiniMax、Kimi、通义千问等长任务智能体开箱接入
+- 支持<span class="primary">**阿里云百炼、腾讯云、火山方舟、OpenRouter**</span>及公司自有大模型池接入
+- 除文本模型外，还有<span class="primary">**独立视觉模型**</span>：图片上传、截图理解与判读
+- 原生对接<span class="primary">**文生图、语音合成**</span>：快速生成汇报图文与 PPT 口播音频
 
-<!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
+<!-- block: x=46% y=8% w=48% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
 
 ![P16-图1 模型随插随换示意](images/art-model-swap.png)
 
-<!-- slide: layout=blank bg=bg kicker="04 · 差异 05/5" anim=none notes="最后一项：代码工作台。终端工具看代码要另开编辑器、看变更要敲 git 命令；我们内建 VSCode 风格的代码页——AI 写完当场看改验，不用切换工具。" -->
+<!-- slide: layout=blank bg=bg kicker="04 · 差异 05/5" anim=none notes="最后一项：代码工作台，这一页功能密度其实很高。看代码：几十种语言的语法高亮，行号点选、区间选择，选中直接带入提问——您问哪段代码，点一下就行。改代码：页面内就地编辑，Ctrl+S 落盘保存，保存后自动重建索引，不用切终端。看变更：git 未提交改动全列出，逐行 diff 新旧对照，改了什么一目了然。AI 写完当场看、当场改、当场验，浏览器里闭环。甚至 Markdown 公式渲染、PDF 原生预览、Office 文档都在同一个页面里看——不夸张地说，日常轻量场景可以不开编辑器。" -->
 
-<!-- block: x=5.6% y=12% w=38% h=9% -->
+<!-- block: x=5.6% y=6% w=38% h=9% -->
 
 # 内置代码工作台
 
-<!-- block: x=6% y=24.5% w=34% h=49% color=text anim=enter.fade trigger=after delay=0.6 -->
+<!-- block: x=6% y=19% w=34% h=62% color=text anim=enter.fade trigger=after delay=0.6 -->
 
-- VSCode 风格：<span class="primary">**语法高亮**</span>浏览与编辑
-- 并排查看<span class="primary">**变更差异**</span>，翻阅项目文档
-- AI 写完<span class="primary">**当场看、当场改、当场验**</span>
+- <span class="primary">**几十种语言高亮**</span>，行号点选区间选择，选中即入提问
+- 页面内<span class="primary">**就地编辑，Ctrl+S 落盘**</span>，保存自动重建索引
+- <span class="primary">**未提交改动逐行 diff**</span>，新旧对照，改了什么一目了然
+- <span class="primary">**就地看图判图**</span>：Markdown 公式、PDF、Office 同页预览
+- AI 写完<span class="primary">**当场看、当场改、当场验**</span>，全程不出浏览器
 
 <!-- block: x=44% y=8% w=50% h=84% bg=bg anim=enter.fly-in direction=right trigger=after delay=1.2 -->
 
 ![P24-图1 内置代码工作台示意](images/art-code-workbench.png)
-
-
-<!-- slide: layout=blank kicker="05 · 对等" takeaway="**先追平，再谈不同——迁移成本接近零**" anim=none source="功能项基于本仓源码逐项核对" notes="有人会问：自研的，会不会是个玩具？这面能力墙十二项一次回答——Claude Code 用户最熟悉的能力，从对话改代码、贴图提问、改错回退，到子代理、技能、MCP 生态、权限确认、会话恢复，我们全都有。特别看第三行第一张：CLAUDE.md 兼容，团队沉淀的规范文件一个字不用改直接用。到这里只是追平，真正的不同在后面。" -->
-
-<!-- block: x=5.6% y=12% w=88.8% h=9% -->
-
-# Claude Code 有的，我们都有
-
-<!-- block: x=3.5% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.30 -->
-
-<i data-icon="message"/> **对话即编程**
-说需求就动手
-
-<!-- block: x=27% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.42 -->
-
-<i data-icon="image"/> **贴图提问**
-截图粘贴即问
-
-<!-- block: x=50.5% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.54 -->
-
-<i data-icon="repeat"/> **改错随时退回**
-零风险试错
-
-<!-- block: x=74% y=23% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.66 -->
-
-<i data-icon="users"/> **子代理并行**
-大任务拆小
-
-<!-- block: x=3.5% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.78 -->
-
-<i data-icon="list"/> **任务清单跟踪**
-步骤看得见
-
-<!-- block: x=27% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=0.90 -->
-
-<i data-icon="zap"/> **斜杠命令**
-一句话触发
-
-<!-- block: x=50.5% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.02 -->
-
-<i data-icon="file-text"/> **CLAUDE.md 兼容**
-存量直接用
-
-<!-- block: x=74% y=48% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.14 -->
-
-<i data-icon="network"/> **MCP 生态**
-工具即插即用
-
-<!-- block: x=3.5% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.26 -->
-
-<i data-icon="shield"/> **危险操作确认**
-不点头不动手
-
-<!-- block: x=27% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.38 -->
-
-<i data-icon="layers"/> **超长对话压缩**
-不丢关键
-
-<!-- block: x=50.5% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.50 -->
-
-<i data-icon="refresh"/> **会话恢复**
-接着上次聊
-
-<!-- block: x=74% y=73% w=22.5% h=22% bg=bg align=center anim=enter.zoom trigger=after delay=1.62 -->
-
-<i data-icon="timer"/> **后台任务**
-跑完来报
-
-<!-- slide: layout=image-right kicker="06 · 主权" takeaway="**代码不出内网，每一步都可审计**" anim=none notes="回到开场的三个问号，现在给答案。代码去了哪？全部留在本地磁盘，接内网模型就是完全闭环。谁能审计？每一次模型调用都有留痕，随时可以抽查；越界操作必须人工确认；登录密码不以明文传输。这些不是我们做得好不好，而是闭源产品在结构上就无法提供的。动画顺序：两段文字先从左飞入；讲到审计留痕时点击一下，堡垒图从右飞入。" -->
-
-# 三个问号，三个对勾
-
-<!-- block: anim=enter.fly-in direction=left trigger=after -->
-
-**代码流去了哪？** 索引、会话、记忆全落本地磁盘，唯一外联是可替换的模型接口，接内网模型即完全闭环。
-
-<!-- block: anim=enter.fly-in direction=left trigger=after -->
-
-**谁能审计它？** 每次模型调用留痕可抽查，权限门禁三态越界必确认，登录走质询响应密码不上线。
-
-<!-- block: fit=contain anim=enter.fly-in direction=right trigger=click -->
-
-![P26-图1 审计留痕](images/p2-fortress.png)
-
-<!-- slide: layout=image-right kicker="07 · 沉淀" takeaway="**记忆自动积累，会话可备份可回退**" notes="这页讲两件长期价值。记忆：不是手写配置文件，是 AI 自己按纪律策展——写入、去重、退役都自动，人还能逐条审计。会话：整库备份环形十份、单会话全保真导出、每轮快照可回退。这套机制来自一次真实的数据损坏事故，是真刀真枪做出来的。" -->
-
-# 越用越懂团队：记忆与会话资产
-
-<!-- block: fit=contain style=rounded,shadow -->
-![P27-图1 会话备份入口](images/p6-session-backup.png)
-
-- **记忆自动策展**：写入、去重、退役由 AI 按纪律执行
-- **四分区**：用户偏好、工作方式、项目事实、外部指针
-- **整库备份**：环形十份，损坏自动留证
-- **全保真导出**：单会话 JSON，可跨实例迁移
-- **回退**：每轮快照，改错能退回
-
-<!-- slide: layout=image-left kicker="08 · 解锁" takeaway="**谁强用谁、谁合规用谁，选择权在自己手里**" notes="这页讲议价权。模型是消耗品不是信仰，双协议并存意味着可以随时换：便宜了换、合规要求变了换、内网有了新模型换。切换在界面上点几下就完成，不用改代码。视觉模型还能单独配，跟对话模型解耦。" -->
-
-# 多模型后端：不被任何一家锁定
-
-<!-- block: fit=contain -->
-![P28-图1 可插拔模块](images/p7-plugs.png)
-
-- 双协议并存：Anthropic 原生与 OpenAI 兼容
-- 任意 base_url：DeepSeek、Qwen、内网都能接
-- 界面内预设切换，保存即生效
-- 视觉模型独立配置，与对话解耦
-- 双后端差异已磨平：格式翻译、用量回收
 
 <!-- slide: layout=two-col kicker="09 · 生态" takeaway="**生态直接继承，团队知识可资产化**" notes="上半场讲继承：技能格式与主流 agent 同构，社区技能贴个链接就能装进来，不用从零建生态。下半场讲沉淀：repo-wiki 能把任意项目的架构文档一键生成，deep-read 能把一本规范手册变成技能。写技能就是写 Markdown，测试、运维、文档岗都能贡献。" -->
 
@@ -469,19 +437,6 @@ MCP 连接
 - **anti-patterns** 反模式审计出修复台账
 - **deep-read** 深读规范手册提炼成技能
 
-<!-- slide: layout=title-content kicker="10 · 对标" takeaway="**不是全面超越，是补齐了它结构性缺的那几块**" source="功能项基于本仓源码核对；对方能力以官方文档为准" notes="全篇最重的一页，也是最需要诚实的。逐行讲，语气不要挑衅。重点在可审计性和源码归属两条：这是闭源产品结构上给不了的。最后主动承认：对方的生态规模和战场历练我们暂时不如——这一句不要藏，主动说了才立得住前面的所有主张。" -->
-
-# 正面对比：六维对标
-
-| 维度 | Claude Code | 本项目 |
-|---|---|---|
-| 交互形态 | 终端为主 | 全功能 Web UI + PWA |
-| 数据流向 | 代码经境外云 | 全本地，可接内网模型 |
-| 可审计性 | 闭源黑箱 | 白箱，逐调用留痕 |
-| 源码与技术栈 | Node 闭源 | Python 全栈自有 |
-| 可定制深度 | 配置与钩子 | 可改框架本身 |
-| 技能生态 | 社区大、闭源加载 | 格式兼容，可继承可自建 |
-
 <!-- slide: layout=timeline kicker="11 · 上手" takeaway="**十分钟能跑起来，不需要运维介入**" notes="讲引入成本。唯一依赖是 Python，没有 Docker、没有数据库服务要架。四条命令走完就到浏览器界面。模型在设置页里点鼠标配。这页的目的是让试试看这件事变得没有心理负担。" -->
 
 # 十分钟上手
@@ -498,7 +453,7 @@ MCP 连接
 # 方向盘已经造出来了
 
 - **能看**：随时可以演示真机界面
-- **能验**：数据不出内网，每步留痕可审计
+- **能验**：数据不出本机，每步留痕可审计
 - **能接**：贴 GitHub 链接即可导入社区技能
 - **能改**：Python 全栈自有，需求变了我们自己改
 

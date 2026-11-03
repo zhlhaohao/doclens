@@ -1,0 +1,18 @@
+<!-- 版式：big_number 大数字主张 —— 页指令 number= 或正文首行数字 -->
+<div class="slide-inner layout-big-number"
+     data-cap='{"bullets": 3, "bullet_chars": 32, "total_chars": 130, "table_rows": 0, "table_cols": 0, "image_min_ratio": 0.0}'>
+  <div class="bn-wrap">{{content}}</div>
+</div>
+<style>
+  .layout-big-number { justify-content: center; gap: 18px; }
+  .bn-wrap { display: flex; flex-direction: column; gap: .5em; }
+  .bn-number {
+    font-size: calc(var(--fs-h1) * 2.5 * var(--fit, 1));
+    font-weight: 900; line-height: .92; letter-spacing: -.045em;
+    color: var(--c-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .bn-lines { font-size: calc(var(--fs-h2) * .92 * var(--fit, 1)); font-weight: 600; line-height: 1.35; color: var(--c-text); }
+  .bn-title { font-size: calc(var(--fs-body) * .82 * var(--fit, 1)); color: var(--c-text-muted); }
+  .bn-body { font-size: calc(var(--fs-body) * .92 * var(--fit, 1)); line-height: 1.5; color: var(--c-text); max-width: 72%; }
+</style>
