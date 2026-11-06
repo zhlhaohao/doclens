@@ -63,7 +63,8 @@ export class ChatStream extends LitElement {
         margin-left: 10px;
       }
       /* 会话导航三钮组（回顶 / 展开-收起思考过程 / 回底，2026-10-21）：
-         仅桌面渲染——移动端上划就是看历史，悬浮钮更占视线且易误触。 */
+         仅桌面渲染——移动端上划就是看历史，悬浮钮更占视线且易误触；
+         移动端把三个动作收进顶栏「更多」菜单（2026-11-06）。 */
       @media (max-width: 1023px) {
         .scroll-jump-anchor {
           display: none;
@@ -201,6 +202,27 @@ export class ChatStream extends LitElement {
     return keys;
   }
 
+  /** 上次上报的导航态签名（trace 条数 | 是否全部展开）。
+   *  宿主（chat-view）凭此渲染移动端「更多」菜单里的思考过程项；只在变化时
+   *  通知，避免 chat-view 重渲染 → chat-stream updated → 再通知的回环。 */
+  private _navStateSig = "";
+
+  /** 上报导航态（移动端上下文菜单的数据源）。 */
+  private _emitNavState(): void {
+    const count = this._liveTraceKeys().size;
+    const allExpanded = this._allExpanded;
+    const sig = `${count}|${allExpanded}`;
+    if (sig === this._navStateSig) return;
+    this._navStateSig = sig;
+    this.dispatchEvent(
+      new CustomEvent("chat-nav-state", {
+        detail: { traceCount: count, allExpanded },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   /** 是否全部 trace 已展开（混合态算「未全展开」→ 中间钮显示「展开全部」）。 */
   private get _allExpanded(): boolean {
     const keys = this._liveTraceKeys();
@@ -224,8 +246,29 @@ export class ChatStream extends LitElement {
     this.requestUpdate();
   };
 
+  /** 活段 trace 条数（宿主移动端「更多」菜单据此判可用性）。 */
+  get traceCount(): number {
+    return this._liveTraceKeys().size;
+  }
+
+  /** 是否全部 trace 已展开（宿主移动端「更多」菜单据此切换文案）。 */
+  get allTracesExpanded(): boolean {
+    return this._allExpanded;
+  }
+
+  /** 回到顶部（宿主菜单与悬浮三钮组共用）：先脱离贴底粘滞，
+   *  否则流式增量一到就把视口拽回底部。 */
+  jumpToTop(): void {
+    this._scrollJump.jumpTop();
+  }
+
+  /** 回到底部（宿主菜单与悬浮三钮组共用）。 */
+  jumpToBottom(): void {
+    this._scrollJump.jumpBottom();
+  }
+
   /** 中间钮：全部展开 → 全部收起，否则全部展开。 */
-  private _toggleAllTraces = (): void => {
+  toggleAllTraces = (): void => {
     const next = !this._allExpanded;
     this._expandOverride = next;
     // 乐观更新：同帧内各 trace 收到指令后会各自上报，避免文案闪一帧
@@ -262,6 +305,7 @@ export class ChatStream extends LitElement {
     // 三钮组显隐跟随内容变化：内容变高只改 scrollHeight、视口尺寸不变，
     // ResizeObserver 不触发，须在此显式重算
     this._scrollJump.refresh();
+    this._emitNavState();
     // 贴底粘滞：仅 pinned 时跟随滚底。延迟到下一帧，等子组件
     // （chat-message → chat-tool-trace）渲染/展开后再算 scrollHeight；
     // guard 合并同帧多次 updated 为单次 rAF
@@ -331,7 +375,7 @@ export class ChatStream extends LitElement {
                   @click=${() => jump.jumpTop()}><doclens-icon name="arrow-up-to-line"></doclens-icon></button>
           <button class="scroll-jump-fab" type="button" ?disabled=${!hasTrace}
                   aria-label=${toggleLabel} title=${toggleLabel}
-                  @click=${this._toggleAllTraces}><doclens-icon name="chevrons-down-up"></doclens-icon></button>
+                  @click=${this.toggleAllTraces}><doclens-icon name="chevrons-down-up"></doclens-icon></button>
           <button class="scroll-jump-fab" type="button" aria-label="回到底部" title="回到底部"
                   @click=${() => jump.jumpBottom()}><doclens-icon name="arrow-down-to-line"></doclens-icon></button>
         </div>

@@ -6,6 +6,9 @@ export interface FocusHeaderAction {
   icon?: string;
   onClick: () => void;
   disabled?: boolean;
+  /** 横排展示（2026-11-06）：true = 图标钮，与其余 row 项并排成一行
+   *  （菜单顶部快捷条），不进入下方竖排文字项列表。 */
+  row?: boolean;
 }
 
 @customElement("focus-header")
@@ -135,6 +138,40 @@ export class FocusHeader extends LitElement {
     .menu-item:disabled { opacity: 0.5; cursor: not-allowed; }
     .menu-item .icon { font-size: 16px; flex-shrink: 0; }
     .menu-item .label { font-size: var(--cortex-fs-sm); font-weight: 500; }
+    /* 横排快捷条（2026-11-06）：与竖排文字项分组，等宽三钮一行。
+       min-width 200px 的菜单里每钮约 60px，够 36px 触摸目标。 */
+    .menu-row {
+      display: flex;
+      gap: var(--cortex-space-1);
+      padding-bottom: var(--cortex-space-1);
+      margin-bottom: var(--cortex-space-1);
+      border-bottom: 1px solid var(--cortex-border-muted);
+    }
+    .menu-row + .menu-list { display: block; }
+    .menu-row-btn {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 0;
+      border: none;
+      border-radius: var(--cortex-radius-md);
+      background: transparent;
+      color: var(--cortex-text);
+      font-family: inherit;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      touch-action: manipulation;
+    }
+    .menu-row-btn:hover {
+      background: var(--cortex-surface-muted);
+      color: var(--cortex-primary);
+    }
+    .menu-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .menu-row-btn:disabled:hover { background: transparent; color: var(--cortex-text); }
   `;
 
   @property() backLabel = "返回";
@@ -177,6 +214,35 @@ export class FocusHeader extends LitElement {
     super.disconnectedCallback();
   }
 
+  private get _rowActions(): FocusHeaderAction[] {
+    return this.actions.filter((a) => a.row);
+  }
+
+  private get _listActions(): FocusHeaderAction[] {
+    return this.actions.filter((a) => !a.row);
+  }
+
+  /** 横排快捷条（图标钮）：与竖排文字项同菜单，但共用一行。 */
+  private _renderRow() {
+    const items = this._rowActions;
+    if (items.length === 0) return null;
+    return html`
+      <div class="menu-row" role="group">
+        ${items.map((a) => html`
+          <button
+            class="menu-row-btn"
+            type="button"
+            role="menuitem"
+            aria-label=${a.label}
+            title=${a.label}
+            ?disabled=${a.disabled ?? false}
+            @click=${() => this._onItemClick(a)}
+          >${a.icon ? html`<doclens-icon name=${a.icon}></doclens-icon>` : html`<span class="label">${a.label}</span>`}</button>
+        `)}
+      </div>
+    `;
+  }
+
   render() {
     return html`
       <button class="back" aria-label=${this.backLabel} title=${this.backLabel} @click=${this._back}>‹</button>
@@ -196,18 +262,21 @@ export class FocusHeader extends LitElement {
             <doclens-icon class="kebab" aria-hidden="true" name=${this._menuOpen ? "more-horizontal" : "more-vertical"}></doclens-icon>
           </button>
           <div class="menu ${this._menuOpen ? "open" : ""}" role="menu">
-            ${this.actions.map((a) => html`
-              <button
-                class="menu-item"
-                type="button"
-                role="menuitem"
-                ?disabled=${a.disabled ?? false}
-                @click=${() => this._onItemClick(a)}
-              >
-                ${a.icon ? html`<doclens-icon class="icon" name=${a.icon}></doclens-icon>` : null}
-                <span class="label">${a.label}</span>
-              </button>
-            `)}
+            ${this._renderRow()}
+            <div class="menu-list">
+              ${this._listActions.map((a) => html`
+                <button
+                  class="menu-item"
+                  type="button"
+                  role="menuitem"
+                  ?disabled=${a.disabled ?? false}
+                  @click=${() => this._onItemClick(a)}
+                >
+                  ${a.icon ? html`<doclens-icon class="icon" name=${a.icon}></doclens-icon>` : null}
+                  <span class="label">${a.label}</span>
+                </button>
+              `)}
+            </div>
           </div>
         </div>
       ` : null}

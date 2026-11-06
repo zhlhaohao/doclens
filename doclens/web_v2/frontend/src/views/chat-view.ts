@@ -34,6 +34,7 @@ import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
 import type { ToastStack } from "../components/toast-stack";
+import type { FocusHeaderAction } from "../components/focus-header";
 
 /** 斜杠技能调用的提交校验结果（checkSlashSubmit）：
  *  non-slash = 普通消息直接发送；ok = 合法斜杠调用（记录最近技能后发送）；
@@ -620,6 +621,19 @@ export class ChatView extends LitElement {
   @state() private _interjectPending = false;
   /** 插话输入框（ADR-0048）：true = 打开原生 dialog。 */
   @state() private _interjectDialogOpen = false;
+  /** 移动视口（≤1023px，与 chat-stream 悬浮三钮组的隐藏断点同口径）：
+   *  移动端空间有限，会话导航（回顶 / 展开思考 / 回底）收进顶栏「更多」
+   *  菜单（2026-11-06）；桌面端仍用悬浮三钮组，菜单项不重复。 */
+  @state() private _isMobileViewport = ChatView._probeMobileViewport();
+  private _mqMobileViewport?: MediaQueryList;
+  private _onMobileViewportChange = (): void => {
+    this._isMobileViewport = ChatView._probeMobileViewport();
+  };
+
+  private static _probeMobileViewport(): boolean {
+    return typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 1023px)").matches;
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -648,6 +662,11 @@ export class ChatView extends LitElement {
     this._consumePendingSkillChat();
     // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
     void this._loadSkillCandidates();
+    // 视口跨断点切换（桌面 ↔ 移动）：决定会话导航动作放悬浮三钮组还是菜单
+    this._mqMobileViewport = typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 1023px)")
+      : undefined;
+    this._mqMobileViewport?.addEventListener("change", this._onMobileViewportChange);
   }
 
   updated() {
@@ -724,10 +743,52 @@ export class ChatView extends LitElement {
     void this._sendWithSkill(e.detail.name);
   };
 
+  /** 移动端会话导航动作（顶栏「更多」菜单）：桌面由 chat-stream 悬浮
+   *  三钮组承担，移动端空间不足收进菜单（2026-11-06）。
+   *  可用性/文案取自 chat-stream 实时状态（trace 条数 / 是否全部展开），
+   *  状态变化经 chat-nav-state 事件回灌重渲染。 */
+  private get _mobileNavActions(): FocusHeaderAction[] {
+    if (!this._isMobileViewport) return [];
+    const stream = this._streamEl;
+    const hasTrace = (stream?.traceCount ?? 0) > 0;
+    const allExpanded = stream?.allTracesExpanded ?? false;
+    return [
+      {
+        label: "回到顶部",
+        icon: "arrow-up-to-line",
+        row: true,
+        onClick: () => this._streamEl?.jumpToTop(),
+      },
+      {
+        label: !hasTrace
+          ? "本会话没有思考过程"
+          : allExpanded
+            ? "收起全部思考过程"
+            : "展开全部思考过程",
+        icon: "chevrons-down-up",
+        row: true,
+        disabled: !hasTrace,
+        onClick: () => this._streamEl?.toggleAllTraces(),
+      },
+      {
+        label: "回到底部",
+        icon: "arrow-down-to-line",
+        row: true,
+        onClick: () => this._streamEl?.jumpToBottom(),
+      },
+    ];
+  }
+
+  /** chat-stream 导航态变化（trace 增减 / 展开态翻转）：刷新菜单文案与可用性。 */
+  private _onChatNavState = (): void => {
+    this.requestUpdate();
+  };
+
   /** focus-header more 菜单动作：刷新/会话改名/会话信息（仅当前会话存在时出现）。 */
   private get _headerActions() {
     if (!this.viewState.currentSession) return [];
     return [
+      ...this._mobileNavActions,
       {
         label: "刷新会话",
         icon: "refresh-cw",
@@ -1062,6 +1123,8 @@ export class ChatView extends LitElement {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._stopGeneratingPoll();
+    this._mqMobileViewport?.removeEventListener("change", this._onMobileViewportChange);
+    this._mqMobileViewport = undefined;
     window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored);
   }
 
@@ -2373,6 +2436,7 @@ export class ChatView extends LitElement {
             @export-upto=${this._onExportUpto}
             @delete-turn=${this._onDeleteTurn}
             @interject-request=${this._onInterjectRequest}
+            @chat-nav-state=${this._onChatNavState}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </chat-stream>
           ${this._activeAsk

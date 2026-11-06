@@ -255,3 +255,81 @@ describe("<chat-stream> 会话导航三钮组", () => {
     expect(tr.shadowRoot.querySelector(".steps")).toBeNull();
   });
 });
+
+/** 宿主菜单接口（2026-11-06）：移动端顶栏「更多」菜单复用三钮组动作——
+ *  chat-view 通过 traceCount / allTracesExpanded 渲染文案与可用性，
+ *  经 jumpToTop / jumpToBottom / toggleAllTraces 执行，状态变化走
+ *  chat-nav-state 事件回灌（避免 chat-view 与 chat-stream 的渲染回环）。 */
+describe("<chat-stream> 宿主菜单接口（移动端「更多」菜单）", () => {
+  const traceNode = (id: string): TimelineNode => ({
+    type: "message",
+    message: {
+      role: "assistant",
+      content: "x",
+      tool_steps: [{ tool_use_id: id, name: "search", input: {}, status: "done" }],
+    },
+  });
+
+  function stubScrollTo(el: ChatStream): ReturnType<typeof vi.fn> {
+    const fn = vi.fn();
+    (el as unknown as { scrollTo: unknown }).scrollTo = fn;
+    return fn;
+  }
+
+  it("traceCount / allTracesExpanded 跟随内容，toggleAllTraces 翻转", async () => {
+    const el = await fixture(
+      html`<chat-stream .nodes=${[traceNode("a"), traceNode("b")]}></chat-stream>`,
+    ) as ChatStream;
+    await el.updateComplete;
+    expect(el.traceCount).toBe(2);
+    expect(el.allTracesExpanded).toBe(false);
+
+    el.toggleAllTraces();
+    await el.updateComplete;
+    expect(el.allTracesExpanded).toBe(true);
+
+    el.toggleAllTraces();
+    await el.updateComplete;
+    expect(el.allTracesExpanded).toBe(false);
+
+    // 无 trace 的会话：条数 0（菜单据此置灰）
+    el.nodes = nodes(2);
+    await el.updateComplete;
+    expect(el.traceCount).toBe(0);
+  });
+
+  it("jumpToTop 解除贴底粘滞并回到顶部，jumpToBottom 强制回底", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    stubLayout(el, 5000, 300);
+    const scrollTo = stubScrollTo(el);
+
+    el.jumpToTop();
+    expect(el.pinned).toBe(false);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+
+    el.jumpToBottom();
+    expect(el.pinned).toBe(true);
+    expect(el.scrollTop).toBe(5000);
+  });
+
+  it("chat-nav-state 只在导航态变化时上报（宿主重渲染不回流）", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(2)}></chat-stream>`) as ChatStream;
+    const seen: { traceCount: number; allExpanded: boolean }[] = [];
+    el.addEventListener("chat-nav-state", (e) => {
+      seen.push((e as CustomEvent<{ traceCount: number; allExpanded: boolean }>).detail);
+    });
+
+    // 无 trace 内容更新：签名未变 → 不重复上报（挂载时已发过 0|false）
+    el.nodes = nodes(3);
+    await el.updateComplete;
+    expect(seen.length).toBe(0);
+
+    el.nodes = [traceNode("a")];
+    await el.updateComplete;
+    expect(seen[seen.length - 1]).toEqual({ traceCount: 1, allExpanded: false });
+
+    el.toggleAllTraces();
+    await el.updateComplete;
+    expect(seen[seen.length - 1]).toEqual({ traceCount: 1, allExpanded: true });
+  });
+});
