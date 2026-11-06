@@ -1,6 +1,6 @@
 ---
 name: ego-remote
-description: 让运行在 WSL2 / Docker 容器 / 远程 Linux 里的 AI agent 驱动 Windows 主机上的 ego(lite) 浏览器（复用用户真实登录态）。当 agent 跑在容器或 WSL 里、但浏览器在 Windows 桌面时使用本技能：Windows 侧装中继（计划任务开机自启）+ Linux 侧装 shim（token 注入），并完成双向文件交换与验证。加载方式：load_skill("ego-remote")。
+description: 让运行在 WSL2 / Docker 容器 / 远程 Linux 里的 AI agent 驱动 Windows 主机上的 ego(lite) 浏览器（复用用户真实登录态）。当 agent 跑在容器或 WSL 里、但浏览器在 Windows 桌面时使用本技能：Windows 侧装中继（计划任务开机自启，回环绑定免 token）+ Linux 侧装 shim，并完成双向文件交换与验证。加载方式：load_skill("ego-remote")。
 icon: globe
 ---
 
@@ -30,9 +30,9 @@ from WSL2 agents」仍 open；#202/#291 是在 Linux 侧另起一个 Chromium，
 | 文件 | 位置 | 作用 |
 |---|---|---|
 | **Windows 中继** | `scripts/ego_relay.py` | HTTP 服务；`POST /run` 收脚本 → `ego-browser.exe nodejs`；`POST /exec` 跑任意子命令 |
-| **Windows 安装器** | `scripts/setup_windows.ps1` | 装中继 + **生成 token 并锁 ACL** + **注册开机自启计划任务** + 立即启动 |
+| **Windows 安装器** | `scripts/setup_windows.ps1` | 装中继 + **注册开机自启计划任务** + 防火墙规则 + 启动（默认回环无 token；`-Bind 0.0.0.0` 时生成 token 并锁 ACL） |
 | **Linux shim** | `scripts/ego-browser.sh` | 容器/WSL 里的 `ego-browser` 命令，转发到中继 |
-| **Linux 安装器** | `scripts/setup_container.sh` | 装 shim + **注入 token**（文件 0600）+ 连通性自检 |
+| **Linux 安装器** | `scripts/setup_container.sh` | 装 shim（自动去 CRLF）+ 连通性自检（token 模式时注入 token 0600） |
 
 `<技能目录>` = 本 SKILL.md 所在目录（加载技能时系统会注入 `Base directory for this skill: <路径>`）。
 
@@ -46,32 +46,33 @@ from WSL2 agents」仍 open；#202/#291 是在 Linux 侧另起一个 Chromium，
 
 它做四件事：
 1. 把 `ego_relay.py` 复制到 `%LOCALAPPDATA%\ego-relay\`（稳定位置，与仓库 checkout 无关）
-2. 生成 32 字节随机 token 写入 `%LOCALAPPDATA%\ego-relay\token.txt`，并**锁 ACL 到当前用户**
-3. 注册计划任务 `ego-browser-relay`（**登录时自启**，失败重试 5 次，无时限）
-4. 立即启动中继并报告监听端口
+2. 注册计划任务 `ego-browser-relay`（**登录时自启**，失败重试 5 次，无时限）
+3. 建防火墙入站阻断规则（TCP 端口非本机来源全断；回环与 Docker NAT 不受影响）
+4. 立即启动中继并报告监听地址（默认 `127.0.0.1`，**无需 token**）
 
 常用开关：
 
 ```powershell
+-Bind 0.0.0.0         # 局域网模式：强制 token（自动生成并锁 ACL）
 -Uninstall            # 注销任务并停掉中继（安装目录保留）
--RotateToken         # 重新生成 token（需重启中继并重新注入容器）
--Python <path>       # 指定 python.exe
+-RotateToken          # 重新生成 token（仅非回环模式有意义）
+-Python <path>        # 指定 python.exe
 ```
 
-### 第 2 步：Linux 侧装 shim + 注入 token
+### 第 2 步：Linux 侧装 shim
 
 ```bash
 # 把 scripts/ 下的 setup_container.sh 与 ego-browser.sh 弄进容器/WSL，然后：
-EGO_RELAY_TOKEN=<secret> bash setup_container.sh
+bash setup_container.sh
 ```
 
 安装器会：装 shim 到 `/usr/local/bin/ego-browser`（**自动去 CRLF**，否则 shebang 失效）、
-把 token 写到 `/etc/ego-relay/token`（权限 0600）、并立刻跑一次 `ego-browser --version` 自检。
+并立刻跑一次 `ego-browser --version` 自检。**回环模式（默认）无需任何 token。**
 
-token 从哪来：Windows 侧 `Get-Content $env:LOCALAPPDATA\ego-relay\token.txt`。
-
-**注意**：容器重启后 `/etc/ego-relay/token` 会丢（除非写进镜像或用 secret 挂载）。
-把 token 写进 compose 的 `secrets`/env 或 Dockerfile 的 `ENV` 更稳。
+仅当局域网模式（`-Bind 0.0.0.0`）时注入 token：
+`EGO_RELAY_TOKEN=<secret> bash setup_container.sh`（写到 `/etc/ego-relay/token`，0600；
+token 值从 Windows 侧 `Get-Content $env:LOCALAPPDATA\ego-relay\token.txt` 取）。
+容器重启后该文件会丢——写进 compose 的 `secrets`/env 或 Dockerfile 的 `ENV` 更稳。
 
 ### 第 3 步：装技能到 Linux 侧
 
@@ -125,8 +126,8 @@ Get-NetTCPConnection -State Listen -LocalPort 18777
 
 | 闸 | 机制 | 适用 |
 |---|---|---|
-| **绑定地址**（默认） | 中继绑 `127.0.0.1`（`EGO_RELAY_BIND` 可改）——本机之外根本连不上；容器走 `host.docker.internal`（Docker/WSL2 NAT 到回环），不受影响 | 单用户主机 + 防火墙（推荐默认） |
-| **共享 token** | 绑 `0.0.0.0`（局域网可达）时**必须**配 token；缺 token 的非回环绑定**拒绝启动**（fail closed） | 中继要被其他机器访问时 |
+| **绑定地址**（默认） | 中继绑 `127.0.0.1`（`EGO_RELAY_BIND` / `-Bind` 可改）——本机之外根本连不上；容器走 `host.docker.internal`（Docker/WSL2 NAT 到回环），不受影响 | 单用户主机（推荐默认，**无需 token**） |
+| **共享 token** | 显式绑 `0.0.0.0`（局域网可达）时**必须**配 token；缺 token 的非回环绑定**拒绝启动**（fail closed） | 中继要被其他机器访问时 |
 
 `setup_windows.ps1` 还会自动建防火墙入站阻断规则 `ego-browser-relay-block-inbound`（TCP 18777，阻断非本机来源）——即使日后有人误改绑 `0.0.0.0`，局域网也进不来；回环与 Docker NAT 不受影响。
 
