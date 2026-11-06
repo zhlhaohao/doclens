@@ -1,2 +1,2 @@
-.playwright-cli/
+# 前端本地调试截图（.playwright-cli/ 等通用规则见根 .gitignore）
 user-bubble-fixed.png
