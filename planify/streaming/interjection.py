@@ -21,13 +21,18 @@ import threading
 
 __all__ = [
     "INTERJECTION_TAG",
+    "INTERJECTION_ACK_TAG",
     "interjection_message",
+    "interjection_ack_message",
     "InterjectionSlot",
     "get_interjection_slot",
 ]
 
 #: 注入消息的包裹标签（与 background-results / inbox 注入惯例一致）
 INTERJECTION_TAG = "user-interjection"
+
+#: 汇报回执确认的包裹标签（插话汇报成功后追加，见 interjection_ack_message）
+INTERJECTION_ACK_TAG = "user-interjection-ack"
 
 
 def interjection_message(question: str) -> str:
@@ -44,6 +49,28 @@ def interjection_message(question: str) -> str:
         "本次回复只做文字汇报，不要调用任何工具。汇报完成之后，"
         "请立刻恢复我们原本的任务，继续使用工具推进目标，不要结束任务。\n"
         f"</{INTERJECTION_TAG}>"
+    )
+
+
+def interjection_ack_message() -> str:
+    """汇报送达后的 user 确认消息（2026-11-06 DeepSeek 400 修复）。
+
+    插话汇报是真实 assistant 响应，runner 会 append 进 messages；插话分支
+    随即 continue 回循环顶发起下一次调用——这是全循环唯一一条「以
+    assistant 结尾再调 LLM」的路径（工具轮尾部是 tool_result、终答轮直接
+    return）。thinking 模式端点（DeepSeek /anthropic 等）把 assistant 结尾
+    按 prefill 处理，要求回传该轮 thinking 块，而框架有意丢弃 thinking 块
+    → 400（debug_20261106 19:52 循环 #15 事故）。
+
+    修复：汇报成功后无条件追加本确认消息，下一请求以 user 结尾。这不是
+    ``injection_ack`` 开关管的「合成 assistant 回执」——那是反方向的坑
+    （assistant 结尾才危险），补 user 无 prefill 风险，故不加开关、无条件
+    默认开；连续 user 消息 Messages API 自动合并，语义等价。
+    """
+    return (
+        f"<{INTERJECTION_ACK_TAG}>\n"
+        "汇报已收到。请立刻继续原本的任务，使用工具推进目标，不要结束任务。\n"
+        f"</{INTERJECTION_ACK_TAG}>"
     )
 
 

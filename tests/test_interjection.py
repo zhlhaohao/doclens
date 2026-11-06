@@ -550,3 +550,77 @@ class TestInterjectEndpoint:
             assert drop_interjection_slot(sid) is None
         finally:
             unregister_interrupt(sid, ev)
+
+
+class TestInterjectAckTailing:
+    """插话汇报后补 user 确认——下轮请求不得以 assistant 结尾。
+
+    2026-11-06 DeepSeek /anthropic thinking 模式事故：循环 #14 汇报
+    （200 OK）append assistant 后 continue，循环 #15 请求以 assistant
+    结尾被按 prefill 处理，要求回传 thinking 块 → 400
+    ``The content[].thinking in the thinking mode must be passed back``。
+    """
+
+    def test_request_after_report_ends_with_user(self, tmp_path):
+        from planify.streaming.interjection import (
+            INTERJECTION_ACK_TAG,
+            get_interjection_slot,
+        )
+
+        sid = "sess_ij_ack"
+        provider = ScriptedProvider([
+            {"text": "当前进度：已完成检索"},   # 轮1 = 插话汇报
+            {"tools": [("grep", {"q": "a"})]},  # 轮2 = 恢复任务
+            {"text": "终答"},                   # 轮3
+        ])
+        agent = _make_agent(provider, tmp_path)
+        get_interjection_slot(sid).submit("进度？")
+
+        try:
+            asyncio.run(agent.run_stream([], "任务", sid))
+        finally:
+            drop_interjection_slot(sid)
+
+        recs = provider.records
+        assert len(recs) >= 3
+        # 轮2（汇报后的第一次请求）：尾部必须是 user（确认消息在位）
+        assert recs[1]["messages"][-1]["role"] == "user"
+        assert INTERJECTION_ACK_TAG in recs[1]["messages"][-1]["content"]
+        # 汇报 assistant 仍在历史（确认前）
+        assert any(
+            m["role"] == "assistant" and "当前进度" in str(m["content"])
+            for m in recs[1]["messages"]
+        )
+        # 轮3 同样不以 assistant 结尾（工具轮尾部本就是 tool_result）
+        assert recs[2]["messages"][-1]["role"] != "assistant"
+
+    def test_timeout_path_no_ack_message(self, tmp_path):
+        """汇报超时被放弃 → 不追加确认（没有汇报就没有 assistant 尾部，
+        下一请求尾部仍是 user(插话)，无 prefill 风险）。"""
+        from planify.streaming.interjection import (
+            INTERJECTION_ACK_TAG,
+            get_interjection_slot,
+        )
+
+        sid = "sess_ij_ack_timeout"
+        provider = HangingProvider(
+            [
+                {"text": "挂起"},   # 轮1 = 汇报挂起（超时放弃）
+                {"text": "终答"},   # 轮2
+            ],
+            hang_on=0,
+        )
+        agent = _make_agent(provider, tmp_path, interject_report_timeout_s=0.05)
+        get_interjection_slot(sid).submit("进度？")
+
+        try:
+            asyncio.run(agent.run_stream([], "任务", sid))
+        finally:
+            drop_interjection_slot(sid)
+
+        # 超时路径的下一请求（records[1]）不含确认消息，且尾部为 user
+        assert not any(
+            INTERJECTION_ACK_TAG in str(m.get("content", ""))
+            for m in provider.records[1]["messages"]
+        )
+        assert provider.records[1]["messages"][-1]["role"] == "user"

@@ -25,7 +25,7 @@ from ..tools.basic import to_tool_defs
 from .emitter import EventEmitter, SSEEmitter
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
-from .interjection import interjection_message
+from .interjection import interjection_ack_message, interjection_message
 from ..skills.access_state import (
     get_current_session_id,
     reset_current_session_id,
@@ -603,6 +603,12 @@ class StreamingAgent:
                 # - 不补合成 ack：汇报本身就是模型真实回复（user(插话) →
                 #   assistant(汇报) 自然配对）；且 assistant 结尾会触发
                 #   thinking 模式端点 prefill 400（DeepSeek 事故）。
+                # - 汇报送达后追加 user 确认（interjection_ack_message）：
+                #   汇报是真实 assistant 响应、已 append 进 messages，若
+                #   直接 continue，下一请求以 assistant 结尾——thinking
+                #   模式端点（DeepSeek）按 prefill 处理要求回传 thinking
+                #   块 → 400（2026-11-06 循环 #15 事故）。无条件追加，
+                #   无开关（补 user 无风险，与 injection_ack 的方向相反）。
                 # - 汇报文本以 suppress_tools 调用的流式 text 事件正常推送
                 #   （CLI/TUI 直接可见）；宿主 ChatEventEmitter 在此分支
                 #   改道 interject_report 通道（不进正文 text_parts，防污染
@@ -663,6 +669,17 @@ class StreamingAgent:
                                     f"插话汇报超过 {_report_timeout:.0f}s 未返回，"
                                     "已跳过（原任务继续）",
                                     level="error",
+                                )
+                            else:
+                                # 汇报成功送达：追加 user 确认，把下轮请求
+                                # 尾部从 assistant(汇报) 翻回 user——否则
+                                # thinking 模式端点（DeepSeek）按 prefill
+                                # 处理 → 400（见 interjection_ack_message）
+                                messages.append(
+                                    {
+                                        "role": "user",
+                                        "content": interjection_ack_message(),
+                                    }
                                 )
                             report_end = getattr(
                                 self.emitter, "end_interjection", None
