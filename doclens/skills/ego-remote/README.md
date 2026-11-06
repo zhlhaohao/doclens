@@ -38,8 +38,8 @@ ego-browser (shim)  ──HTTP──▶  ego_relay.py (127.0.0.1:18777)
 | 环境 | 装什么 | 见 |
 |---|---|---|
 | **Windows**（浏览器所在） | 中继 + 计划任务 + 防火墙规则 | 第 1 步 |
-| **WSL2** | shim（+ 技能） | 第 2 步 · WSL2 |
-| **Docker 容器** | shim（+ 技能） | 第 2 步 · Docker 容器 |
+| **WSL2** | shim + 两个技能（ego-remote、ego-browser） | 第 2、3 步 |
+| **Docker 容器** | shim + 两个技能（ego-remote、ego-browser） | 第 2、3 步 |
 
 ### 前提
 
@@ -97,14 +97,30 @@ Linux 原生 Docker 引擎（无 Docker Desktop）没有这个域名，需改用
 
 装完自动装 shim 到 `/usr/local/bin/ego-browser`（自动去 CRLF 防 shebang 失效）+ 连通性自检（跑一次 `ego-browser --version`）。
 
-### 第 3 步：把技能装到 agent 那侧
+### 第 3 步：把技能装到 agent 那侧（ego-remote **和** ego-browser 两个都要）
 
-agent 读的是**它自己环境里**的技能目录，Windows 侧装了不算：
+agent 读的是**它自己环境里**的技能目录，Windows 侧装了不算。要装**两份**：
+
+| 技能 | 职责 | 何时用 |
+|---|---|---|
+| `ego-remote` | 搭桥（装中继 + shim） | 部署期 |
+| `ego-browser`（官方） | 教 agent 调浏览器 API（taskSpace/snapshot/click…） | **日常每次浏览器任务** |
 
 ```bash
 # WSL / 容器通用（EGO_DIR 同第 2 步）
-SKILLS_DIR="${HOME}/.doclens/skills"     # doclens 形态；其他 agent 用 ~/.agents/skills 等
-mkdir -p "$SKILLS_DIR" && cp -r "$EGO_DIR" "$SKILLS_DIR/ego-remote"
+SKILLS_DIR="${HOME}/.doclens/skills"     # doclens 形态；其他 agent 目录见下表
+mkdir -p "$SKILLS_DIR"
+
+# 3a. 本技能（ego-remote）
+cp -r "$EGO_DIR" "$SKILLS_DIR/ego-remote"
+
+# 3b. 官方 ego-browser 技能——源在 Windows 侧 ego lite 安装目录里
+#     Windows: C:\Program Files\Citro Labs\ego lite\Application\<版本>\ego-skills\ego-browser
+#     WSL 里直接拷：
+cp -r "/mnt/c/Program Files/Citro Labs/ego lite/Application/<版本>/ego-skills/ego-browser" \
+      "$SKILLS_DIR/ego-browser"
+#     Docker 容器里先 docker cp 进来再拷（版本号以实际目录为准）：
+#       docker cp "/c/Program Files/Citro Labs/ego lite/Application/<版本>/ego-skills/ego-browser" <容器>:/tmp/
 ```
 
 | agent 形态 | 技能目录 |
@@ -114,9 +130,13 @@ mkdir -p "$SKILLS_DIR" && cp -r "$EGO_DIR" "$SKILLS_DIR/ego-remote"
 | Codex | `~/.codex/skills/` |
 | 通用 agents 约定 | `~/.agents/skills/` |
 
-### 第 4 步：验证（四步，缺一不算通）
+> ⚠️ **升级要手动同步**：ego lite 升级后官方技能在 `<新版本目录>\ego-skills\` 下重新生成，
+> 各 agent 侧的 `ego-browser` 副本不会自动更新——重跑一次 3b 的拷贝即可。
+
+### 第 4 步：验证（五步，缺一不算通）
 
 ```bash
+ls "$SKILLS_DIR"            # ego-remote 与 ego-browser 两个技能目录都在
 ego-browser --version        # 打印版本（如 0.6.2.7 / chromium 156 / node v24）
 ego-browser skill | head -2  # 打印 ego-browser 使用指南
 ego-browser import list      # 列出 Chrome/Edge/Firefox 配置

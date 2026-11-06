@@ -76,20 +76,33 @@ token 值从 Windows 侧 `Get-Content $env:LOCALAPPDATA\ego-relay\token.txt` 取
 
 ### 第 3 步：装技能到 Linux 侧
 
-agent 读的是**它自己那侧**的技能目录，Windows 侧装了不算：
+agent 读的是**它自己那侧**的技能目录，Windows 侧装了不算。要装**两份**：
 
 ```bash
 # 装到本容器/Shell 的技能目录（doclens 形态）
 SKILLS_DIR="${HOME}/.doclens/skills"
-mkdir -p "$SKILLS_DIR" && cp -r "<技能目录>" "$SKILLS_DIR/ego-remote"
+mkdir -p "$SKILLS_DIR"
+
+# 3a. 本技能（ego-remote）——管搭桥
+cp -r "<技能目录>" "$SKILLS_DIR/ego-remote"
+
+# 3b. 官方 ego-browser 技能——管浏览器 API 用法（日常任务必读）
+#     源在 Windows 侧 ego lite 安装目录（版本号以实际为准）：
+#     /mnt/c/Program Files/Citro Labs/ego lite/Application/<版本>/ego-skills/ego-browser
+cp -r "/mnt/c/Program Files/Citro Labs/ego lite/Application/<版本>/ego-skills/ego-browser" \
+      "$SKILLS_DIR/ego-browser"
+#     Docker 容器无 /mnt/c：先 docker cp 该目录进容器再拷
 # 若是 WSL 里的 agent，另有 ~/.agents/skills、~/.claude/skills、~/.codex/skills
 ```
 
-**实际验证过的容器技能目录**：pod1 的 doclens 全局技能目录为 `${HOME}/.doclens/skills/`（容器内 `HOME=/home/lianghao`，ego-remote 已装到 `${HOME}/.doclens/skills/ego-remote/`）。**路径不要写死用户名**——脚本里一律用 `$HOME`。
+**实际验证过的容器技能目录**：pod1 的 doclens 全局技能目录为 `${HOME}/.doclens/skills/`（容器内 `HOME=/home/lianghao`，两个技能均已装到该目录下）。**路径不要写死用户名**——脚本里一律用 `$HOME`。
 
-## 验证（四步，缺一不算通）
+⚠️ **官方技能升级要手动同步**：ego lite 升级后 `<新版本目录>\ego-skills\` 重新生成，各 agent 侧副本不会自动更新——重跑一次 3b 拷贝即可。
+
+## 验证（五步，缺一不算通）
 
 ```bash
+ls "$SKILLS_DIR"            # 期望：ego-remote 与 ego-browser 两个目录都在
 ego-browser --version        # 期望：打印版本（版本号随 ego lite 升级变化；
                              # 2026-11-05 验证时为 0.6.2.7 / chromium 156 / node v24）
 ego-browser skill | head -2  # 期望：打印使用指南（首行形如 [ego-browser:skill] ...）
