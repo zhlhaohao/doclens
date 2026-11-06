@@ -143,8 +143,15 @@ class TreeSearchConfig:
     xlsx_max_consecutive_empty_rows: int = 100  # stop parsing after this many consecutive empty rows
 
     # Shadow Markdown: generate a hidden .md copy for binary files (PDF, DOCX, etc.)
-    # so ripgrep fallback can search them. Disable to speed up indexing.
-    enable_shadow_md: bool = True
+    # so ripgrep fallback can search them.
+    #
+    # 默认关闭（2026-11-06 起）：该机制已被索引库内的解析文本取代——宿主
+    # （doclens）默认 False，二进制文档走 SQLite REGEXP 子集扫描，磁盘上不再
+    # 需要 ._*.md 副本。曾因引擎默认 True 而宿主默认 False，任何绕过宿主配置
+    # 直接调 build_index 的脚本都会在知识库里凭空生成影子文件（含备份目录）。
+    # 需要旧行为（磁盘 md 副本供 ripgrep 直接 grep）时显式开启：
+    # TREESEARCH_ENABLE_SHADOW_MD=1 或 TreeSearchConfig(enable_shadow_md=True)。
+    enable_shadow_md: bool = False
 
     # Allowed source types: if non-empty, only files matching these source types
     # will be indexed. Empty list means all types are allowed (backward compatible).
