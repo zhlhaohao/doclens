@@ -32,7 +32,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 #: 环形保留份数（每次备份后删最旧）
-BACKUP_KEEP = 10
+BACKUP_KEEP = 3
 
 #: 启动备份的最小间隔：近 1 小时内已有新备份则跳过（防频繁重启刷备份）
 STARTUP_BACKUP_MIN_INTERVAL_SEC = 3600.0
