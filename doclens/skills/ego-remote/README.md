@@ -146,6 +146,19 @@ echo 'const t=await taskSpace("t");console.log(t.spaceId);await t.finish({keep:[
 
 ## 使用
 
+### 两个技能的分工与交接
+
+`ego-remote` 是**一次性搭桥**技能：装好中继 + shim + 两个技能并验证通过后，它的使命就完成了。此后**每次浏览器任务都应加载 `ego-browser` 技能**（官方那份）：
+
+| 阶段 | 加载的技能 | 做什么 |
+|---|---|---|
+| 首次部署 / 环境坏了重搭 | **ego-remote** | 跑 setup 脚本、装 shim、装技能、验证 |
+| 日常浏览器任务 | **ego-browser** | 读 `ego-browser skill` 输出的 API 指南，写 `taskSpace/goto/snapshot/click/...` 脚本 |
+
+判断口诀：`ego-browser --version` 通 → 直接用 ego-browser 干活；不通 → 回 ego-remote 排障/重搭。
+
+### 命令用法
+
 装好后，`ego-browser` 在容器/WSL 里的行为与 Windows 原生一致：
 
 ```bash
@@ -158,7 +171,7 @@ ego-browser skill
 ego-browser import list
 ```
 
-浏览器 API（taskSpace / page.goto / snapshot / click / fill…）**不是 Playwright**——先跑 `ego-browser skill` 读当前版的使用指南，不要凭记忆猜 API。
+浏览器 API（taskSpace / page.goto / snapshot / click / fill…）**不是 Playwright**——先跑 `ego-browser skill` 读当前版的使用指南，不要凭记忆猜 API。跨系统路径/CRLF/退出码等环境坑见 SKILL.md 的「写脚本的硬约束」表——那些与桥无关，日常任务同样适用。
 
 ## 安全模型
 

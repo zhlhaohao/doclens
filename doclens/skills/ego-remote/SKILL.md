@@ -118,6 +118,24 @@ Get-ScheduledTask -TaskName ego-browser-relay | Select-Object State   # Running
 Get-NetTCPConnection -State Listen -LocalPort 18777
 ```
 
+## 交接：验证通过后，日常任务改用 ego-browser 技能
+
+本技能（ego-remote）是**一次性搭桥**：装好中继 + shim + 两个技能并验证通过后，
+它的使命就完成了。此后**每次浏览器任务都应加载 `ego-browser` 技能**（官方那份），
+按其指引干活：
+
+| 阶段 | 加载的技能 | 做什么 |
+|---|---|---|
+| 首次部署 / 环境坏了重搭 | **ego-remote** | 跑 setup 脚本、装 shim、装技能、验证 |
+| 日常浏览器任务 | **ego-browser** | 读 `ego-browser skill` 输出的 API 指南，写 `taskSpace/goto/snapshot/click/...` 脚本 |
+
+判断口诀：
+- `ego-browser --version` 通 → 桥是好的 → 直接用 **ego-browser** 技能干活
+- `ego-browser --version` 不通（403/超时/command not found）→ 先回到 **ego-remote** 排障/重搭
+
+本技能的「写脚本的硬约束」表在日常任务中**仍然适用**（跨系统路径/CRLF/退出码
+等坑与桥无关，是环境本身的属性）——写浏览器脚本时值得一并参考。
+
 ## 写脚本的硬约束（踩过的坑）
 
 | 坑 | 现象 | 正解 |
