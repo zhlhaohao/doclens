@@ -1617,6 +1617,17 @@ async def build_index(
             # 视觉解析队列一并清空（重建过程会重新登记）
             fts.vision_clear()
 
+        # force 重建需要知道「库里已有哪些文档」：有些文件会因为 ignore 规则
+        # （.gitignore / 排除目录）而落在本次扫描范围之外，但它们早已索引在库。
+        # 若不透传重建，旧 structure 会永久陈旧——force 却报告成功，用户看到的
+        # 仍是旧内容（典型：后加的 .gitignore 规则让整个目录从扫描中消失）。
+        force_carry_paths: list[str] = []
+        if force:
+            try:
+                force_carry_paths = list(fts.get_all_index_meta())
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Force rebuild: failed to read indexed paths (%s)", e)
+
         if not force:
             # Batch fetch all stored hashes in one query (instead of N queries)
             all_meta = fts.get_all_index_meta()
@@ -1725,6 +1736,52 @@ async def build_index(
 
         if skipped:
             logger.info("Skipped %d unchanged file(s)", len(skipped))
+
+        # force 全量重建补齐：库中已有、磁盘仍在、但本次扫描未覆盖的文档。
+        # 语义 = 刷新**所有已知文档**，而不是把索引范围缩小到扫描结果；这些文件
+        # 不参与 prune（下面 orphan 逻辑不动它们），只是重新解析覆盖旧 structure。
+        if force and force_carry_paths:
+            expanded_abs = {os.path.abspath(p) for p in expanded}
+            allowed_exts = None
+            if cfg.allowed_source_types:
+                from .pathutil import get_allowed_extensions_for_source_types
+                allowed_exts = get_allowed_extensions_for_source_types(
+                    cfg.allowed_source_types
+                )
+            carried: list[str] = []
+            for sp in force_carry_paths:
+                if not sp or "#" in sp:
+                    continue  # PST 等派生文档：由主文件重建
+                abs_sp = os.path.abspath(sp)
+                if abs_sp in expanded_abs:
+                    continue
+                if allowed_exts is not None \
+                        and os.path.splitext(abs_sp)[1].lower() not in allowed_exts:
+                    continue
+                if not os.path.isfile(abs_sp):
+                    continue  # 磁盘已消失：交给 orphan/prune 逻辑
+                expanded_abs.add(abs_sp)
+                carried.append(abs_sp)
+
+            if carried:
+                for abs_sp in carried:
+                    expanded.append(abs_sp)
+                    # 复用库里已有的 doc_id：避免确定性 id 与历史行不一致时
+                    # 新建重复行（旧行继续被预览读到，修复形同未生效）。
+                    existing_id = fts.get_doc_id_by_source_path(abs_sp)
+                    _fp_to_doc_id[abs_sp] = existing_id or _doc_id_for(abs_sp)
+                    fh = file_hash_with_salts(abs_sp)
+                    if not fh:
+                        continue
+                    file_hashes[abs_sp] = fh
+                    to_index.append(abs_sp)
+                total_files = len(expanded)
+                logger.info(
+                    "Force rebuild: %d previously-indexed file(s) are outside the "
+                    "current scan scope (gitignore/ignore rules) but still on disk "
+                    "— re-indexing them so their stored content is refreshed.",
+                    len(carried),
+                )
 
         # Filter out files that have exceeded the consecutive failure threshold
         excluded_count = 0
