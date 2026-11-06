@@ -33,6 +33,14 @@ ego-browser (shim)  ──HTTP──▶  ego_relay.py (127.0.0.1:18777)
 
 ## 快速开始
 
+三种环境的安装总览：
+
+| 环境 | 装什么 | 见 |
+|---|---|---|
+| **Windows**（浏览器所在） | 中继 + 计划任务 + 防火墙规则 | 第 1 步 |
+| **WSL2** | shim（+ 技能） | 第 2 步 · WSL2 |
+| **Docker 容器** | shim（+ 技能） | 第 2 步 · Docker 容器 |
+
 ### 前提
 
 - Windows：ego(lite) 浏览器已安装并完成 onboarding（自带 `ego-browser.exe`）
@@ -51,23 +59,60 @@ ego-browser (shim)  ──HTTP──▶  ego_relay.py (127.0.0.1:18777)
 3. 建防火墙入站阻断规则（TCP 18777 非本机来源全断，回环/Docker NAT 不受影响）
 4. 立即启动并报告监听地址（默认 `127.0.0.1:18777`）
 
-### 第 2 步：Linux 侧（容器或 WSL）
+### 第 2 步：Linux 侧装 shim
+
+#### WSL2
+
+WSL 里能直接读 Windows 文件（`/mnt/c`），技能目录从仓库/Windows 侧拷过来即可：
 
 ```bash
-# 把 scripts/ 下的 setup_container.sh 与 ego-browser.sh 弄进目标环境，然后：
-bash setup_container.sh
+# 假设仓库/技能在 C:\Users\<你>\github\cortex\doclens\skills\ego-remote
+EGO_DIR=/mnt/c/Users/<你>/github/cortex/doclens/skills/ego-remote
+bash "$EGO_DIR/scripts/setup_container.sh"
 ```
 
-自动完成：shim 装到 `/usr/local/bin/ego-browser`（自动去 CRLF 防 shebang 失效）+ 连通性自检（跑一次 `ego-browser --version`）。
+装完自动自检。默认中继地址 `host.docker.internal:18777` 在 WSL2 里同样指向宿主回环；若不通可显式 `EGO_RELAY_URL=http://localhost:18777`。
+
+> WSL 还有更轻的**互操作直跑**路线（不经中继）：`~/.local/bin/ego-browser` 写成
+> `exec "/mnt/c/Users/<你>/.local/bin/ego-browser.exe" "$@"`——直接执行 Windows exe。
+> 中继路线的好处是与容器用法完全一致；直跑路线少一层转发。两者选一即可。
+
+#### Docker 容器
+
+容器没有 `/mnt/c`，先把两个脚本送进去（任选其一），再跑安装器：
+
+```bash
+# 方式 A：docker cp（宿主机上执行）
+docker cp <技能目录>/scripts/ego-browser.sh     <容器>:/tmp/
+docker cp <技能目录>/scripts/setup_container.sh <容器>:/tmp/
+docker exec -it <容器> bash /tmp/setup_container.sh
+
+# 方式 B：compose 挂载（写进 volumes，容器内路径自定义）
+#   - ./skills/ego-remote/scripts:/opt/ego-remote:ro
+#   然后：bash /opt/ego-remote/setup_container.sh
+```
+
+中继地址默认 `http://host.docker.internal:18777`（Docker Desktop / WSL2 后端 NAT 到宿主回环）。
+Linux 原生 Docker 引擎（无 Docker Desktop）没有这个域名，需改用宿主 IP 或加 `extra_hosts: ["host.docker.internal:host-gateway"]`。
+
+装完自动装 shim 到 `/usr/local/bin/ego-browser`（自动去 CRLF 防 shebang 失效）+ 连通性自检（跑一次 `ego-browser --version`）。
 
 ### 第 3 步：把技能装到 agent 那侧
 
 agent 读的是**它自己环境里**的技能目录，Windows 侧装了不算：
 
 ```bash
+# WSL / 容器通用（EGO_DIR 同第 2 步）
 SKILLS_DIR="${HOME}/.doclens/skills"     # doclens 形态；其他 agent 用 ~/.agents/skills 等
-mkdir -p "$SKILLS_DIR" && cp -r "<技能目录>" "$SKILLS_DIR/ego-remote"
+mkdir -p "$SKILLS_DIR" && cp -r "$EGO_DIR" "$SKILLS_DIR/ego-remote"
 ```
+
+| agent 形态 | 技能目录 |
+|---|---|
+| doclens | `${HOME}/.doclens/skills/` |
+| Claude Code | `~/.claude/skills/`（容器内/WSL 内的那份，不是 Windows 侧的） |
+| Codex | `~/.codex/skills/` |
+| 通用 agents 约定 | `~/.agents/skills/` |
 
 ### 第 4 步：验证（四步，缺一不算通）
 
