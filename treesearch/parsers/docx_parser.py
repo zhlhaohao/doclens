@@ -24,7 +24,52 @@ def _escape_md_cell(s: str) -> str:
     return s.replace("|", "\\|").replace("\n", " ").replace("\r", "")
 
 
-def _table_to_text(table) -> str:
+def _tc_text(tc) -> str:
+    """取 ``<w:tc>`` 的纯文本（按段落分行）。
+
+    直接子节点按文档顺序处理：
+    - ``w:p`` → 段落文本；
+    - ``w:tbl`` → 嵌套表格，渲染成 ``a | b | c`` 形式（丢掉边框信息，
+      保留内容——嵌套表格在预览里没有等价的 md 表达）。
+
+    不用 ``cell.text``——那会把嵌套表格的文字重复/串行地平铺进单元格。
+    """
+    from docx.oxml.ns import qn
+
+    parts: list[str] = []
+    for child in tc:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if tag == "p":
+            parts.append("".join(n.text or "" for n in child.iter(qn("w:t"))))
+        elif tag == "tbl":
+            for tr in child.findall(qn("w:tr")):
+                row_cells = []
+                for c in tr.findall(qn("w:tc")):
+                    row_cells.append(
+                        _escape_md_cell(" ".join(_tc_text(c).split()))
+                    )
+                if any(row_cells):
+                    parts.append(" | ".join(row_cells))
+    return "\n".join(p for p in parts if p.strip()).strip()
+
+
+def _tc_grid_span(tc) -> int:
+    """``<w:tc>`` 占据的网格列数（``w:gridSpan``，缺省 1）。"""
+    from docx.oxml.ns import qn
+
+    tcPr = tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        return 1
+    gs = tcPr.find(qn("w:gridSpan"))
+    if gs is None:
+        return 1
+    try:
+        return max(1, int(gs.get(qn("w:val"), 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def table_to_markdown(table) -> str:
     """Convert a docx Table to a GitHub-flavored markdown table string.
 
     首行视为 header，输出形如::
@@ -35,17 +80,36 @@ def _table_to_text(table) -> str:
 
     这样前端 ``<md-viewer>`` 才能识别为真正的表格（缺 separator 行只会被
     当成软换行段落）。单元格里的 ``|`` 转义为 ``\\|``，换行替换为空格。
+
+    关键：**不能用** ``table.rows[i].cells``——python-docx 会把一个
+    ``w:gridSpan=3`` 的单元格在行内展开成 3 个重复的 cell，导致合并单元格
+    的内容在预览里重复 N 次。这里直接遍历底层 ``<w:tr>/<w:tc>``，按
+    ``gridSpan`` 把跨列单元格补成首格有内容、其余列留空。
     """
-    rows = []
-    ncols = 0
-    for row in table.rows:
-        cells = [_escape_md_cell(cell.text.strip()) for cell in row.cells]
-        ncols = max(ncols, len(cells))
-        rows.append("| " + " | ".join(cells) + " |")
+    from docx.oxml.ns import qn
+
+    tbl = table._tbl
+    grid = tbl.find(qn("w:tblGrid"))
+    ncols = len(grid.findall(qn("w:gridCol"))) if grid is not None else 0
+
+    rows: list[list[str]] = []
+    for tr in tbl.findall(qn("w:tr")):
+        cells: list[str] = []
+        for tc in tr.findall(qn("w:tc")):
+            span = _tc_grid_span(tc)
+            cells.append(_escape_md_cell(_tc_text(tc)))
+            cells.extend([""] * (span - 1))
+        if ncols <= 0:
+            ncols = max(ncols, len(cells))
+        while len(cells) < ncols:
+            cells.append("")
+        rows.append(cells)
+
     if not rows or ncols == 0:
         return ""
+    md_rows = ["| " + " | ".join(r) + " |" for r in rows]
     separator = "| " + " | ".join(["---"] * ncols) + " |"
-    return "\n".join([rows[0], separator, *rows[1:]])
+    return "\n".join([md_rows[0], separator, *md_rows[1:]])
 
 
 def _paragraph_image_rids(para) -> list[str]:
@@ -187,7 +251,7 @@ def _extract_docx_headings(
 
         elif tag == "tbl":
             table = Table(child, doc)
-            table_text = _table_to_text(table)
+            table_text = table_to_markdown(table)
             if table_text.strip():
                 line_num = len(lines) + 1
                 lines.append(table_text)
