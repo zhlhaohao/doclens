@@ -45,6 +45,7 @@ BUILTIN_SKILL_DEFAULTS: dict[str, dict[str, bool]] = {
     "knowledge-base": {"context_menu": True, "accept_dirs": True},
     "ask-files": {"context_menu": True},
     "code-explain": {"context_menu": True},
+    "ego-remote": {"context_menu": True},
 }
 
 
