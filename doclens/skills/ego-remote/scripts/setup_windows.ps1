@@ -5,21 +5,26 @@
 .DESCRIPTION
     1. Copies ego_relay.py into %LOCALAPPDATA%\ego-relay\ (stable location,
        independent of the repository checkout).
-    2. Generates a 32-byte random token into token.txt and locks it down with
-       an explicit ACL (owner only) — the token is the only barrier between the
-       LAN and the user's logged-in browser.
-    3. Registers a scheduled task that starts the relay at logon with the
-       token file path (not the token itself) in the environment.
+    2. Registers a scheduled task that starts the relay at logon.
+    3. Security model (two independent guards, default needs neither token):
+       - The relay binds 127.0.0.1 (loopback-only) — nothing outside this
+         machine can connect. A firewall inbound-block rule on the port is
+         also installed as a second layer.
+       - A shared token is ONLY needed when binding a non-loopback address
+         (-Bind 0.0.0.0 etc.); then setup generates token.txt (ACL locked to
+         the current user) and the relay refuses to start without it.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File setup_windows.ps1
     powershell -ExecutionPolicy Bypass -File setup_windows.ps1 -Port 18777 -Uninstall
+    powershell -ExecutionPolicy Bypass -File setup_windows.ps1 -Bind 0.0.0.0   # token mode
 #>
 [CmdletBinding()]
 param(
     [int]$Port = 18777,
     [string]$TaskName = "ego-browser-relay",
     [string]$Python = "",
+    [string]$Bind = "127.0.0.1",
     [switch]$Uninstall,
     [switch]$RotateToken
 )
@@ -30,6 +35,7 @@ $InstallDir = Join-Path $env:LOCALAPPDATA "ego-relay"
 $TokenFile = Join-Path $InstallDir "token.txt"
 $LogFile = Join-Path $InstallDir "relay.log"
 $TaskName = "ego-browser-relay"
+$Loopback = $Bind -in @("127.0.0.1", "::1", "localhost")
 
 function Resolve-Python {
     if ($Python) { return $Python }
@@ -64,28 +70,38 @@ if (-not (Test-Path $relaySrc)) {
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Copy-Item $relaySrc (Join-Path $InstallDir "ego_relay.py") -Force
 
-# --- token ------------------------------------------------------------------
-$needToken = $RotateToken -or -not (Test-Path $TokenFile)
-if ($needToken) {
-    $bytes = New-Object byte[] 32
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-    $token = [Convert]::ToHexString($bytes).ToLowerInvariant()
-    # Write as UTF-8 without BOM so the Python side reads it verbatim.
-    [System.IO.File]::WriteAllText($TokenFile, $token, (New-Object System.Text.UTF8Encoding $false))
-    "generated new token -> $TokenFile"
+# --- token (only for non-loopback binds) -------------------------------------
+if ($Loopback) {
+    # Tokenless loopback mode: remove any stale token so the relay cannot
+    # accidentally re-enable verification from an old file.
+    if (Test-Path $TokenFile) {
+        Remove-Item $TokenFile -Force
+        "removed stale token file (loopback mode needs no token): $TokenFile"
+    }
+    "loopback bind ($Bind): tokenless mode — firewall rule is the guard"
 }
 else {
-    "token file already exists (use -RotateToken to regenerate): $TokenFile"
+    $needToken = $RotateToken -or -not (Test-Path $TokenFile)
+    if ($needToken) {
+        $bytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+        $token = [Convert]::ToHexString($bytes).ToLowerInvariant()
+        # Write as UTF-8 without BOM so the Python side reads it verbatim.
+        [System.IO.File]::WriteAllText($TokenFile, $token, (New-Object System.Text.UTF8Encoding $false))
+        "generated new token -> $TokenFile"
+    }
+    else {
+        "token file already exists (use -RotateToken to regenerate): $TokenFile"
+    }
+    # Lock the token file down to the current user only.
+    $acl = Get-Acl $TokenFile
+    $acl.SetAccessRuleProtection($true, $false)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $env:USERNAME, "FullControl", "Allow")
+    $acl.SetAccessRule($rule)
+    Set-Acl -Path $TokenFile -AclObject $acl
+    "locked ACL on token file (owner only)"
 }
-
-# Lock the token file down to the current user only.
-$acl = Get-Acl $TokenFile
-$acl.SetAccessRuleProtection($true, $false)
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $env:USERNAME, "FullControl", "Allow")
-$acl.SetAccessRule($rule)
-Set-Acl -Path $TokenFile -AclObject $acl
-"locked ACL on token file (owner only)"
 
 # --- firewall: block the relay port from non-loopback sources ----------------
 # The relay binds 127.0.0.1 by default, so LAN machines cannot connect anyway.
@@ -135,9 +151,7 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 Start-Process -FilePath $exe -ArgumentList "`"$InstallDir\ego_relay.py`"", "$Port" `
     -WorkingDirectory $InstallDir -WindowStyle Hidden `
     -RedirectStandardError $LogFile -RedirectStandardOutput "$LogFile.out"
-Start-Sleep -Seconds 2
-
-$listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2$listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
 if ($listener) {
     $bind = $listener[0].LocalAddress
     "relay listening on ${bind}:$Port (pid=$($listener[0].OwningProcess))"

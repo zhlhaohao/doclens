@@ -60,24 +60,14 @@ EGO_BROWSER = default_ego_browser()
 TIMEOUT = int(os.environ.get("EGO_RELAY_TIMEOUT", "300"))
 
 
-def default_token_file() -> str:
-    local_appdata = os.environ.get("LOCALAPPDATA") or os.path.expanduser(
-        "~\\AppData\\Local"
-    )
-    return os.path.join(local_appdata, "ego-relay", "token.txt")
-
-
 def load_token() -> str:
-    """Resolve the shared secret; empty string means "not configured"."""
-    token = (os.environ.get("EGO_RELAY_TOKEN") or "").strip()
-    if token:
-        return token
-    path = os.environ.get("EGO_RELAY_TOKEN_FILE") or default_token_file()
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return fh.read().strip()
-    except OSError:
-        return ""
+    """Resolve the shared secret; empty string means "not configured".
+
+    Only EGO_RELAY_TOKEN / EGO_RELAY_TOKEN_FILE are consulted. There is no
+    default token file: loopback-only deployments run tokenless, and a token
+    exists only when explicitly provided.
+    """
+    return (os.environ.get("EGO_RELAY_TOKEN") or "").strip()
 
 
 def run_ego(args, stdin_text=None):
@@ -149,9 +139,8 @@ def main():
         # remote control for the user's browser on the LAN. Refuse to start.
         sys.stderr.write(
             "[relay] FATAL: binding %s without a token is not allowed.\n"
-            "[relay] Set EGO_RELAY_TOKEN / EGO_RELAY_TOKEN_FILE (secret in %s),\n"
-            "[relay] or drop EGO_RELAY_BIND to 127.0.0.1.\n"
-            % (bind, default_token_file())
+            "[relay] Set EGO_RELAY_TOKEN / EGO_RELAY_TOKEN_FILE, or bind 127.0.0.1.\n"
+            % (bind,)
         )
         sys.exit(2)
     srv = HTTPServer((bind, port), Handler)
