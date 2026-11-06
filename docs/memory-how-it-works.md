@@ -44,7 +44,7 @@ flowchart LR
 
 ```markdown
 ## user
-- [用户：梁浩](user-lianghao.md) — doclens 项目作者，偏好简洁中文回答
+- [用户：林晓](user-lianghao.md) — doclens 项目作者，偏好简洁中文回答
 
 ## feedback
 - [少加工具优先](feedback-minimal-tools.md) — 新能力默认通用工具+注入达成，专用工具先确认
@@ -78,7 +78,7 @@ frontmatter 是受限的逐行 `key: value` 格式（非完整 YAML）：`name /
 
 ## 新记忆条目怎么加进去（写入链路）
 
-写入者就是模型自己，按注入纪律逐步执行。以真实一例（「我叫梁浩，doclens 作者」）：
+写入者就是模型自己，按注入纪律逐步执行。以真实一例（「我叫林晓，doclens 作者」）：
 
 ```mermaid
 sequenceDiagram
@@ -86,7 +86,7 @@ sequenceDiagram
     participant M as 模型（看着注入的纪律+索引）
     participant FS as 通用文件工具
     participant MEM as ~/.cortex/memory/
-    U->>M: 「我叫梁浩，doclens 项目作者，偏好简洁中文」
+    U->>M: 「我叫林晓，doclens 项目作者，偏好简洁中文」
     M->>M: ① 值得写？——任务完成检查点：持久 user 事实 ✓
     M->>M: ② 查重：索引 user 分区无覆盖条目
     M->>M: ③ 负面范围：git/README 没记过、非会话局部、非凭据 ✓
