@@ -128,8 +128,11 @@ $action = New-ScheduledTaskAction -Execute $exe `
     -Argument "`"$InstallDir\ego_relay.py`" $Port" `
     -WorkingDirectory $InstallDir
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+# S4U = 非交互登录类型：任务在后台运行，**不弹控制台窗口**（Interactive 会在
+# 登录时拉起一个黑窗口）。中继不需要桌面交互——它以回环 HTTP 服务容器请求。
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
+    -Hidden `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
