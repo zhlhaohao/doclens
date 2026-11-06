@@ -46,8 +46,8 @@ GUI（FastAPI + uvicorn）与 MCP server 的网络监听。**改 host/port 需�
 
 | 参数 | 默认值 | 用途 | 涉及模块 |
 |---|---|---|---|
-| `CORTEX_LOG_LEVEL` | `INFO` | 文件日志级别：`INFO` / `DEBUG`（全量，排障临时开）/ `WARNING` / `ERROR` / `CRITICAL`。非法值回落 INFO；改后需重启 | `planify/core/logging_config.py`（宿主注入） |
-| `CORTEX_LOG_DIR` | 空（默认 `{工作目录}/<数据目录>/logs`） | 日志目录覆盖。移出被监控的知识库目录可让日志写入不产生文件事件（运维项） | `planify/core/logging_config.py` |
+| `CORTEX_LOG_LEVEL` | `INFO` | 文件日志级别：`INFO` / `DEBUG`（全量，排障临时开）/ `WARNING` / `ERROR` / `CRITICAL`。非法值回落 INFO；改后需重启 | `doclens/config.py`（映射到 `PLANIFY_LOG_LEVEL`，ADR-0053） |
+| `CORTEX_LOG_DIR` | 空（默认 `{工作目录}/<数据目录>/logs`） | 日志目录覆盖。移出被监控的知识库目录可让日志写入不产生文件事件（运维项） | 同上（映射到 `PLANIFY_LOG_DIR`） |
 
 日志文件名 `debug_YYYYMMDD.log`，日期为**应用启动日**（跨天常驻进程继续写启动日文件）。
 

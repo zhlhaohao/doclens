@@ -10,8 +10,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# 统一日志配置：使用 planify 的 setup_logging
+# 统一日志配置：使用 planify 的 setup_logging。
+# doclens.config 必须先于 setup_logging 导入：它在模块级把「数据目录名 +
+# .env 加载器」注册进 planify（ADR-0053）。顺序颠倒时 planify 拿不到宿主的
+# .env 位置与目录名，日志级别/日志目录会落到中性回退值。
+import doclens.config  # noqa: F401  触发注册
 from planify.core.logging_config import setup_logging
+
 setup_logging(console_output=False)
 
 from textual.app import App, ComposeResult

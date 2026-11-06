@@ -303,7 +303,19 @@ bootstrap.register_app_dependencies(
     external_tools=[{"name": "read_document", "description": "...", "input_schema": {...}}],
     external_handlers={"read_document": my_handler},
 )
+
+# 3. Inject host-owned runtime paths (optional)
+from planify.core.logging_config import register_data_dirname, register_env_loader
+
+register_data_dirname(".yourdata")        # where the host keeps its data dir
+register_env_loader(load_your_dotenv)      # callback: load your .env into os.environ
 ```
+
+Steps 3 let the host tell the framework where its data directory and `.env` live
+without the framework importing the host (framework code stays host-neutral and
+depends on nothing above it). Leave them unset when running standalone — the
+framework then uses its own `.planify` namespace and loads `.planify/.env`
+(see `planify.core.config.get_config`).
 
 User-question tools are wired at runtime: the host binds its event emitter and response waiter with `bind_user_interaction_handlers()` (in `tools/user_interaction.py`), so agent questions reach whatever front end the host provides and answers flow back asynchronously.
 

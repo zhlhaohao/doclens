@@ -59,6 +59,7 @@
 1. ~~**`planify/prompts.py:128-142,177` 硬编码 doclens 业务语义**~~（✅ 已修复，见第六节 #1）：曾在「通用 base」system prompt 写死 `search_kb / read_document / manage_kb / grep` 工具名、`load_skill("knowledge-base")`、「本应用是知识库问答工具……必须先查知识库」。
 2. ~~**`planify/core/logging_config.py:16-55`**~~（✅ 已修复，见第六节 #4）：曾读 doclens 写入的 `CORTEX_DATA_DIRNAME` 环境变量；`_cortex_package_dir()` 通过 `Path(__file__).parent.parent.parent / "doclens"` **定位 doclens 包目录**，拷贝 doclens 的 `.env.example` 和 skills——首启工作区初始化（纯宿主职责）曾做进框架的日志配置模块。
 3. ~~**`planify/streaming/runner.py:21,217-231`**~~（✅ 已修复，见第六节 #4）：曾从 logging_config 导入**私有函数** `_data_dirname`（下划线开头）；prompt 临时目录约定的注释曾直接引用 `doclens/web_v2/tmp_workspace.py`。
+4. ~~**`planify/core/logging_config.py` 用 importlib 反向探测宿主**~~（✅ 已修复，见第六节 #7 / ADR-0053）：曾以 `importlib.import_module("doclens.config")` 反查宿主的数据目录名与 `.env` 位置——用动态 import 把静态依赖藏进字符串，运行时反向依赖照旧成立（违反红线 1）。改为纯注入：宿主经 `register_data_dirname()` / `register_env_loader()` 主动注册，框架不再知道宿主是谁。
 
 ## 四、灰色地带（可接受，但需知晓）
 
@@ -97,5 +98,6 @@
 | 3 | apply_config 直写 RuntimeConfig | planify 新增 `AgentRuntime.update_llm_config()` 官方热更新 API（重建 Provider + 更新 config 字段，None 表示不动）；`CortexAgent.apply_config` 改为薄适配层。顺手删除 `session.py` 死导入 `from anthropic import Anthropic`（planify 技术债 #3 一半） | `planify/core/runtime.py`（原 session.py）、`doclens/agent_integration.py` |
 | 4 | logging_config 内置 doclens 首启初始化 | 确认 `_init_cortex_workspace` / `_cortex_package_dir` 全仓库零调用（doclens 自有 `CortexConfig._init_first_run`）→ 纯删除 + `import shutil` 移除；`_data_dirname` 公开化为 `data_dirname()`；`streaming/runner.py` 注释删除对 doclens 模块的引用 | `planify/core/logging_config.py`、`planify/streaming/runner.py` |
 | 5 | per-request 改写共享 tool_handlers | `chat.py` 与 `agent_integration.run_query` CLI 分支改为 `{**runtime.tool_handlers}` 浅拷贝后 bind——顺带修复同 runtime 并发两流 emitter 交叉接线的真实 bug | `doclens/web_v2/api/chat.py`、`doclens/agent_integration.py` |
+| 7 | planify 用 importlib 反向探测宿主 | 改为纯注入：planify 新增 `register_data_dirname()` / `register_env_loader()` 两个扩展点，宿主在 `doclens/config.py` 模块级主动注册（数据目录名 + `.env` 加载回调）；planify 侧删除 importlib 探测、删除自行读 `.env`、删除读 `CORTEX_LOG_*`（命名空间越界，规则 3）——宿主 loader 做 `CORTEX_LOG_*` → `PLANIFY_LOG_*` 映射，用户配置口径不变。未注入时框架回退自己的 `.planify` 命名空间。`tests/test_architecture.py` 新增三条守卫（禁动态 import 高层 / 禁框架代码出现宿主名 / 禁框架读宿主命名空间） | `planify/core/logging_config.py`、`doclens/config.py`、`doclens/tui/app.py`、`tests/test_architecture.py`、`tests/test_planify_injection.py`（新建） |
 
 **残留（接受的边界状态）**：配置双通路仍在（doclens env 直读 + `register_planify_config`）；双装配器转为文档化决策而非消除；`kb_tools.py` 对 `split_words_with_seps` 的共享为有意单一真相源。（skill_gate 对 contextvar 的依赖曾在此列——2026-10-19 门禁删除后消失。）

@@ -32,9 +32,17 @@ _BARE_IMPORT_RE = re.compile(r"^\s*import\s+([\w.]+)", re.M)
 
 
 def _py_sources(pkg: str) -> list[Path]:
-    """包下全部 .py（排除 __pycache__；测试文件本身不扫描源码包）。"""
+    """包下全部 .py（排除 __pycache__ 与 build/ 产物；测试文件本身不扫描源码包）。
+
+    ``build/`` 是 setuptools 的构建产物目录（gitignored、内容是源码快照），
+    扫它会命中已修掉的旧代码——只扫真实源码树。
+    """
     root = REPO / pkg
-    return [p for p in root.rglob("*.py") if "__pycache__" not in p.parts]
+    return [
+        p
+        for p in root.rglob("*.py")
+        if "__pycache__" not in p.parts and "build" not in p.parts
+    ]
 
 
 def test_no_upward_imports():
@@ -50,6 +58,190 @@ def test_no_upward_imports():
                     rel = py.relative_to(REPO).as_posix()
                     violations.append(f"{rel}: import {mod}（{pkg} 禁止依赖该模块）")
     assert not violations, "底层依赖高层：\n" + "\n".join(violations)
+
+
+# 动态 import 的三种逃逸形态（importlib.import_module / __import__ /
+# importlib.util.find_spec）——静态 import 正则抓不到它们，但运行时依赖真实存在。
+# 用 AST 判定（不用正则）：正则会命中注释与文档字符串里的说明文字，也会
+# 误伤 __import__("time") 这类标准库用法——只有「实际调用 + 参数指向高层
+# 模块」才是违规。
+_DYNAMIC_IMPORT_FUNCS = {
+    "importlib.import_module",
+    "importlib.util.find_spec",
+    "__import__",
+}
+
+
+def _dotted_name(node: ast.AST) -> str:
+    """AST 表达式 → 点号路径（无法还原时返回 ""）。"""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def test_no_dynamic_import_of_high_level():
+    """红线 1 补漏：底层不得用动态 import 绕开静态依赖检查。
+
+    历史教训（2026-11-06 修复的真实案例）：planify/core/logging_config.py
+    曾用 ``importlib.import_module("doclens.config")`` 反查宿主的数据目录名
+    与 .env 位置——用动态 import 把静态依赖藏进字符串里，运行时反向依赖
+    （框架知道宿主模块名）照旧成立。静态 import 正则抓不到它，本守卫补漏。
+
+    底层需要宿主能力时走**注入**（回调 / 扩展点），不由底层主动找宿主。
+    标准库动态 import（__import__("time")）不在此列——只拦指向高层包的。
+    """
+    violations: list[str] = []
+    for pkg, forbidden in FORBIDDEN_ROOTS.items():
+        for py in _py_sources(pkg):
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = _dotted_name(node.func)
+                if func not in _DYNAMIC_IMPORT_FUNCS:
+                    continue
+                # 参数必须是字面量模块名（动态拼接的名字抓不到——那种写法
+                # 本就无法静态审计，靠 code review 兜底）
+                for arg in node.args:
+                    if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+                        continue
+                    if arg.value.split(".")[0] in forbidden:
+                        line = py.read_text(encoding="utf-8", errors="replace")[
+                            : node.lineno
+                        ].count("\n") + 1
+                        rel = py.relative_to(REPO).as_posix()
+                        violations.append(
+                            f"{rel}:{line}: {func}({arg.value!r})（底层禁动态 import 高层）"
+                        )
+    assert not violations, (
+        "底层用动态 import 绕过静态依赖检查（底层需要宿主能力请走注入）：\n"
+        + "\n".join(violations)
+    )
+
+
+def test_framework_does_not_name_the_host():
+    """红线 1 补漏：框架层代码不得出现宿主模块名（代码级字符串）。
+
+    CLAUDE.md 规则 5「引擎/框架代码中性化：不得出现 "doclens"，用「宿主 /
+    host」表述」。注释/文档字符串里的历史说明不计入（它们是解释，不是
+    依赖），但**可执行字符串**（importlib 参数、路径拼接、比较）里的宿主
+    名意味着框架仍在按宿主身份行事——正是 ADR-0053 要消除的耦合。
+
+    例外（有意保留）：treesearch 的图片元数据标记 ``<!--doclens ... -->``
+    与 pathutil 的忽略目录名 ".doclens"——那是**宿主写宿主数据**的格式
+    契约（宿主自读自写），不是框架反向依赖宿主。
+    """
+    # 宿主数据格式契约（有意保留）
+    _FORMAT_CONTRACTS = {
+        "treesearch/parsers/image_metadata.py",
+        "treesearch/pathutil.py",
+    }
+    violations: list[str] = []
+    for pkg in ("planify", "treesearch"):
+        for py in _py_sources(pkg):
+            rel = py.relative_to(REPO).as_posix()
+            if rel in _FORMAT_CONTRACTS:
+                continue
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+            # 收集 docstring 节点（注释性引用不算违规）
+            docstrings: set[int] = set()
+            for node in ast.walk(tree):
+                if isinstance(
+                    node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    body = node.body
+                    if (
+                        body
+                        and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                    ):
+                        docstrings.add(id(body[0].value))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and "doclens" in node.value.lower()
+                    and id(node) not in docstrings
+                ):
+                    violations.append(f"{rel}:{node.lineno}: {node.value[:60]!r}")
+    assert not violations, (
+        "框架层代码出现宿主模块名（框架应中性化，用「宿主/host」表述；\n"
+        "需要宿主能力请走注入——见 ADR-0053）：\n" + "\n".join(violations)
+    )
+
+
+def test_framework_does_not_read_host_namespace():
+    """红线 3：框架层不得读宿主配置命名空间（CORTEX_*）。
+
+    CLAUDE.md 规则 3「配置命名空间隔离：treesearch 只认 TREESEARCH_*，
+    planify 只认 PLANIFY_*；底层不碰 CORTEX_*」。
+
+    历史教训（2026-11-06 修复的真实案例）：planify/core/logging_config.py
+    曾直接读 ``CORTEX_LOG_LEVEL`` / ``CORTEX_LOG_DIR``——用户的 .env 里是
+    宿主键（对外口径不变），但读到它的是框架层：命名空间越界。现改为宿主
+    loader 做一次性映射（``CORTEX_LOG_*`` → ``PLANIFY_LOG_*``），框架只读
+    自己的键。
+
+    判定：框架源码里出现 ``os.environ`` / ``os.getenv`` 读取以 ``CORTEX_``
+    开头的键即违规（注释与 docstring 不算——那是解释不是依赖）。
+    """
+    violations: list[str] = []
+    for pkg in ("planify", "treesearch"):
+        for py in _py_sources(pkg):
+            rel = py.relative_to(REPO).as_posix()
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+            docstrings: set[int] = set()
+            for node in ast.walk(tree):
+                if isinstance(
+                    node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    body = node.body
+                    if (
+                        body
+                        and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                    ):
+                        docstrings.add(id(body[0].value))
+            for node in ast.walk(tree):
+                # os.environ["CORTEX_X"]
+                if (
+                    isinstance(node, ast.Subscript)
+                    and isinstance(node.value, ast.Attribute)
+                    and node.value.attr == "environ"
+                ):
+                    key = node.slice
+                # os.environ.get("CORTEX_X") / os.getenv("CORTEX_X")
+                elif (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.args
+                    and (
+                        node.func.attr == "getenv"
+                        or (
+                            node.func.attr == "get"
+                            and isinstance(node.func.value, ast.Attribute)
+                            and node.func.value.attr == "environ"
+                        )
+                    )
+                ):
+                    key = node.args[0]
+                else:
+                    continue
+                if (
+                    isinstance(key, ast.Constant)
+                    and isinstance(key.value, str)
+                    and key.value.startswith("CORTEX_")
+                    and id(key) not in docstrings
+                ):
+                    violations.append(f"{rel}:{node.lineno}: 读宿主命名空间 {key.value!r}")
+    assert not violations, (
+        "框架层读宿主配置命名空间 CORTEX_*（底层只认自己的命名空间——\n"
+        "宿主键由宿主映射后注入，见 ADR-0053）：\n" + "\n".join(violations)
+    )
 
 
 def test_no_cross_module_private_imports():

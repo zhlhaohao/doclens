@@ -30,7 +30,7 @@ python -m playwright install chromium --only-shell   # webfetch 二级降级需�
 5. 引擎/框架代码中性化：不得出现 "doclens"，用「宿主 / host」表述。
 6. doclens 内部同样只走公共接口，不 import 对方私有成员。
 
-规则 1、2 由 `tests/test_architecture.py` 守护——任何改动先过它。
+规则 1、2 由 `tests/test_architecture.py` 守护——任何改动先过它。规则 1 的守卫同时覆盖**动态 import**（`importlib.import_module` / `__import__` 指向高层）、框架代码里的**宿主名**、以及框架读**宿主命名空间**（`CORTEX_*`）——用动态 import 把静态依赖藏进字符串不构成豁免（见 ADR-0053）。
 
 ## 项目结构
 

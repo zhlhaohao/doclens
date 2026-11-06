@@ -90,11 +90,21 @@ def bundled_env_example_path() -> Path:
     return Path(__file__).parent / ".env.example"
 
 
-# 模块级：把模式决策经注入通路同步给 planify（register_data_dirname，
-# 2026-10-09 收敛）。旧通路是写 CORTEX_DATA_DIRNAME env + planify 读回——
-# env 通路对子进程继承不设防（AI 宿主 .doclens → 其启动的 dev 实例日志被
-# 劫持落错目录，而 DB 因现场计算落对，同进程分裂；2026-10-08/09 两起事故
-# 同源）。注入走 Python 模块级全局，不经进程环境，免疫继承劫持。
+# =============================================================================
+# 宿主装配：把「数据目录名 + .env 加载器」注入 planify（ADR-0053）
+# =============================================================================
+# 2026-10-09 收敛（旧）：把模式决策经 register_data_dirname 同步给 planify。
+# 旧通路是写 CORTEX_DATA_DIRNAME env + planify 读回——env 通路对子进程继承
+# 不设防（AI 宿主 .doclens → 其启动的 dev 实例日志被劫持落错目录，而 DB 因
+# 现场计算落对，同进程分裂；2026-10-08/09 两起事故同源）。注入走 Python
+# 模块级全局，不经进程环境，免疫继承劫持。
+#
+# 2026-11-06（ADR-0053）：planify 侧曾用 importlib 按名探测宿主模块
+# （importlib.import_module("doclens.config")）来反查数据目录名与 .env 位置
+# ——用动态 import 规避静态依赖检查，实质是运行时反向依赖（框架知道宿主
+# 模块名），违反 CLAUDE.md 红线 1「底层禁止 import 高层」。改为纯注入：
+# 宿主在本模块（唯一真相源）主动注册，planify 只接收回调、不知宿主是谁。
+#
 # CORTEX_DATA_DIRNAME env 仍被尊重（高级用户强制口径），但仅本模块消费；
 # 残留的外部值打 stderr 警告——此处 logging 尚未初始化，logger 会被吞。
 if os.environ.get("CORTEX_DATA_DIRNAME"):
@@ -109,12 +119,76 @@ if os.environ.get("CORTEX_DATA_DIRNAME"):
 else:
     _dirname = data_dirname()
 
-try:
-    from planify.core.logging_config import register_data_dirname as _reg
 
-    _reg(_dirname)
-except ImportError:  # planify 未安装（极端裁剪环境）——doclens 自身路径不受影响
-    pass
+def _load_host_env_files() -> None:
+    """加载宿主的 .env 到 os.environ（全局 + 项目两级，后加载者覆盖前者）。
+
+    这是宿主对 planify 注入的 .env 加载回调（register_env_loader）——宿主的
+    .env 位置、口径、加载顺序全由宿主自己决定；planify 只负责调用本回调。
+
+    加载顺序（与 CortexConfig.load / deps.reload_config 一致）：
+      1. 全局 ``~/<数据目录>/.env``
+      2. 项目 ``{cwd}/<数据目录>/.env``（覆盖全局）
+    两者都 override=True：.env 是用户显式配置，优先于继承来的进程 env
+    （start-app.ps1 的灭菌面已清 CORTEX_*/PLANIFY_*，此处是最后一道兜底）。
+
+    历史（2026-10-09）：planify 侧自己读这两份 .env（路径靠反向 import 宿主
+    猜出来）。收敛到宿主后，planify 不再知道 .env 在哪——框架的 .env 约定
+    另走 ``.planify/.env``（见 planify.core.config.get_config）。
+
+    命名空间映射（CLAUDE.md 规则 3：底层不碰 CORTEX_*）：日志级别/目录的
+    **用户可见开关**仍是宿主键 CORTEX_LOG_LEVEL / CORTEX_LOG_DIR（见
+    .env.example 与 docs/doclens-config-parameters.md），但框架只认自己的
+    PLANIFY_LOG_LEVEL / PLANIFY_LOG_DIR——宿主在此做一次性映射，planify
+    侧不再直接读 CORTEX_*（原先 planify 读 CORTEX_LOG_LEVEL 本身就是命名
+    空间越界）。宿主键优先（用户配的 CORTEX_LOG_LEVEL 生效），未配时框架
+    键兜底（planify 独立运行场景）。
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # dotenv 未安装——静默跳过，不阻断启动
+        return
+
+    # 全局配置: ~/<数据目录>/.env （开发 .cortex / 发行版 .doclens）
+    global_env = Path.home() / _dirname / ".env"
+    if global_env.exists():
+        load_dotenv(global_env, override=True)
+    # 项目配置: {cwd}/<数据目录>/.env
+    local_env = Path.cwd() / _dirname / ".env"
+    if local_env.exists():
+        load_dotenv(local_env, override=True)
+
+    # 宿主键 → 框架命名空间（宿主键优先；未配则保留框架键）
+    for host_key, fw_key in (
+        ("CORTEX_LOG_LEVEL", "PLANIFY_LOG_LEVEL"),
+        ("CORTEX_LOG_DIR", "PLANIFY_LOG_DIR"),
+    ):
+        val = os.environ.get(host_key)
+        if val:
+            os.environ[fw_key] = val
+
+
+def _register_with_planify() -> None:
+    """把宿主口径注入 planify（数据目录名 + .env 加载器）。
+
+    ADR-0053：宿主**主动**注册，框架被动接收——框架不需要（也不允许）
+    反向 import 宿主模块来问「你的 .env 在哪」。
+
+    幂等：重复调用安全（后调用覆盖先调用）。
+    planify 未安装时静默跳过（极端裁剪环境）——doclens 自身路径不受影响。
+    """
+    try:
+        from planify.core.logging_config import (
+            register_data_dirname as _reg_dd,
+            register_env_loader as _reg_loader,
+        )
+    except ImportError:  # planify 未安装——doclens 自身路径不受影响
+        return
+    _reg_dd(_dirname)
+    _reg_loader(_load_host_env_files)
+
+
+_register_with_planify()
 
 
 class CortexConfig(BaseSettings):

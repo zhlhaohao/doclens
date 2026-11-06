@@ -303,7 +303,18 @@ bootstrap.register_app_dependencies(
     external_tools=[{"name": "read_document", "description": "...", "input_schema": {...}}],
     external_handlers={"read_document": my_handler},
 )
+
+# 3. 注入宿主自有的运行时路径（可选）
+from planify.core.logging_config import register_data_dirname, register_env_loader
+
+register_data_dirname(".yourdata")        # 宿主的数据目录名
+register_env_loader(load_your_dotenv)      # 回调：把宿主的 .env 灌进 os.environ
 ```
+
+第 3 步让宿主告诉框架「我的数据目录和 .env 在哪」，而不必由框架 import
+宿主（框架代码保持中性、只做底层，不反向依赖高层）。独立运行时不注册即
+可——框架用自己的 `.planify` 命名空间，加载 `.planify/.env`
+（见 `planify.core.config.get_config`）。
 
 用户提问工具在运行时接线：宿主用 `bind_user_interaction_handlers()`（`tools/user_interaction.py` 中）绑定自己的事件发射器与应答等待器——代理的提问到达宿主任意前端，答案异步回流。
 
