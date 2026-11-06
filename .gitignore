@@ -279,7 +279,8 @@ benchmarks/gui_err.log
 # 用户 PPT/slides 工作目录（产物，非源码）
 ppt/
 ppt_work/
-# slides/ 已入库（deck 源码 + 素材 + 交付稿）；运行产物见 slides/.gitignore
+# slides/ 整目录不入库（2026-11-03 起改为忽略，历史内容已入库可回溯）
+slides/
 图片/
 
 # slides-gen 生成产物（gallery 命令输出到 layouts/ 旁，勿入库）
