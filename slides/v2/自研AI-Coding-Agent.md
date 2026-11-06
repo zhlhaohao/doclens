@@ -26,6 +26,34 @@ transition: fade
 | **生而手机友好** | 前端第一天按移动优先设计，桌面端功能手机全有：搜索/对话/预览/文件管理 |
 | **实测可替代** | 编码、调试、重构、文档等日常开发场景实测覆盖；模型可插拔，可接内网 |
 
+<!-- slide: layout=blank kicker="00 · 它是什么" takeaway="**不是补充，是替代——不是套壳，是重造**" anim=none notes="在往下看之前，先把三个最容易被误解的点说清楚。第一，它的定位是完全取代 Claude Code，不是与之协作的辅助工具——装完这套，Claude Code 可以从这台机器上卸掉，日常开发它一个人接得住。第二，它不是套壳，不是把 Claude Code 包了一层皮、里面藏着一个别人的内核。它是全新从零到一开发的，Python 全栈自己写，agent 的 harness 规则——工具调度、上下文管理、权限门禁——全部从底层自己实现，拥有完整自主知识产权；全仓没有任何一行依赖 Claude Code 运行。第三，它在 GitHub 上开源，源码全开源，谁都能审、能改、能自己部署一套。" -->
+
+<!-- block: x=5.6% y=6% w=88.8% h=9% -->
+
+# 不是套壳，是重造
+
+<!-- block: x=3.5% y=22% w=29.5% h=34% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.3 -->
+
+<i data-icon="check-circle"/> **完全取代**
+
+不是辅助协作，装完就能卸掉 Claude Code
+
+<!-- block: x=35.2% y=22% w=29.5% h=34% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.5 -->
+
+<i data-icon="code"/> **从 0 到 1 自研**
+
+Python 全栈自己写，harness 规则底层自实现
+
+<!-- block: x=67% y=22% w=29.5% h=34% bg=#e3ecf6 align=center anim=enter.zoom trigger=after delay=0.7 -->
+
+<i data-icon="globe"/> **GitHub 开源**
+
+源码谁都能审、能改、能自己部署
+
+<!-- block: x=5.6% y=58% w=88.8% h=14% color=text anim=enter.fade trigger=after delay=1.0 -->
+
+**没有藏在别人的内核里**——全仓零 Claude Code 运行时依赖，从索引引擎到 agent 主循环每一层都是自己的代码。
+
 <!-- slide: layout=blank kicker="02 · 实貌" anim=none notes="接下来这一组都是我们产品的真实截图，不是设计稿。先看桌面端三个核心界面，再看手机端实拍——同一个应用，全端可用。" -->
 
 <!-- block: x=5.6% y=4% w=88.8% h=16% -->
