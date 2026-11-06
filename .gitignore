@@ -288,3 +288,12 @@ doclens/skills/slides-gen/layouts/sheet.png
 
 # 演示运行时无引用拷贝（真身 doclens/skills/slides-gen/assets/presenter.js）
 doclens/web_v2/static/presenter.js
+
+# 研发项目结项资料（立项/结项/样板材料，非项目源码）
+研发项目资料/
+
+# Scratch 工作目录（历史 OCR/截图产物，不入库）
+.scratch/
+
+# OCR 临时截图目录（历史产物，不入库）
+.tmp_ocr/
