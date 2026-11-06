@@ -38,7 +38,7 @@ sed 's/\r$//' "$SHIM_SRC" > "$SHIM_PATH"
 chmod 0755 "$SHIM_PATH"
 echo "installed shim -> $SHIM_PATH"
 
-# --- token injection --------------------------------------------------------
+# --- token injection (optional; not needed for loopback-only relay) ---------
 have_token=0
 if [ -n "${EGO_RELAY_TOKEN:-}" ]; then
   mkdir -p "$(dirname "$TOKEN_FILE")"
@@ -50,8 +50,8 @@ elif [ -r "$TOKEN_FILE" ]; then
   have_token=1
   echo "using existing token file $TOKEN_FILE"
 else
-  echo "WARNING: no token provided. The relay rejects every request without it." >&2
-  echo "  EGO_RELAY_TOKEN=<secret> $0" >&2
+  echo "no token provided — OK if the relay binds 127.0.0.1 (default; guarded by"
+  echo "firewall). Required only if the relay binds 0.0.0.0 for LAN access."
 fi
 
 # The shim reads the token from EGO_RELAY_TOKEN first, then from the token
@@ -62,19 +62,16 @@ if ! grep -q "EGO_RELAY_TOKEN_FILE" "$SHIM_PATH" 2>/dev/null; then
 fi
 
 # --- verify -----------------------------------------------------------------
-if [ "$have_token" = "1" ]; then
-  echo ""
-  echo "verifying relay reachability at $RELAY_URL ..."
-  if "$SHIM_PATH" --version; then
-    echo "OK — ego-browser is reachable from this environment"
-  else
-    echo "FAILED — relay not reachable. Check:" >&2
-    echo "  - the relay task is running on the Windows host" >&2
-    echo "  - EGO_RELAY_URL matches the relay's host:port" >&2
-    echo "  - the token matches the one on the Windows side" >&2
-    exit 1
-  fi
+echo ""
+echo "verifying relay reachability at $RELAY_URL ..."
+if "$SHIM_PATH" --version; then
+  echo "OK — ego-browser is reachable from this environment"
 else
-  echo ""
-  echo "skipped verification (no token). Re-run with EGO_RELAY_TOKEN to check."
+  echo "FAILED — relay not reachable. Check:" >&2
+  echo "  - the relay task is running on the Windows host" >&2
+  echo "  - EGO_RELAY_URL matches the relay's host:port" >&2
+  if [ "$have_token" = "1" ]; then
+    echo "  - the token matches the one on the Windows side" >&2
+  fi
+  exit 1
 fi

@@ -87,6 +87,25 @@ $acl.SetAccessRule($rule)
 Set-Acl -Path $TokenFile -AclObject $acl
 "locked ACL on token file (owner only)"
 
+# --- firewall: block the relay port from non-loopback sources ----------------
+# The relay binds 127.0.0.1 by default, so LAN machines cannot connect anyway.
+# This rule is a second layer: if someone later rebinds 0.0.0.0, inbound
+# connections from other hosts are dropped while loopback/Docker (host.docker
+# .internal is NATed to loopback) keeps working.
+$fwRuleName = "ego-browser-relay-block-inbound"
+$existingRule = Get-NetFirewallRule -DisplayName $fwRuleName -ErrorAction SilentlyContinue
+if ($existingRule) {
+    Set-NetFirewallRule -DisplayName $fwRuleName -Enabled True
+    "firewall rule already present (re-enabled): $fwRuleName"
+}
+else {
+    New-NetFirewallRule -DisplayName $fwRuleName `
+        -Direction Inbound -Action Block `
+        -Protocol TCP -LocalPort $Port `
+        -Profile Any | Out-Null
+    "firewall rule created: $fwRuleName (inbound block on TCP $Port; loopback unaffected)"
+}
+
 # --- scheduled task ---------------------------------------------------------
 $exe = (Get-Item $py).FullName
 $action = New-ScheduledTaskAction -Execute $exe `
@@ -120,7 +139,14 @@ Start-Sleep -Seconds 2
 
 $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
 if ($listener) {
-    "relay listening on port $Port (pid=$($listener[0].OwningProcess))"
+    $bind = $listener[0].LocalAddress
+    "relay listening on ${bind}:$Port (pid=$($listener[0].OwningProcess))"
+    if ($bind -eq "127.0.0.1" -or $bind -eq "::1") {
+        "loopback-only bind: token not required; LAN blocked by bind address + firewall rule"
+    }
+    else {
+        "WARNING: non-loopback bind — make sure the token is configured and the firewall rule is active"
+    }
 }
 else {
     "WARNING: relay not listening; see $LogFile"
@@ -129,7 +155,6 @@ else {
 ""
 "container side:"
 "  1. copy the shim:      cp ego-browser.sh <container>:/usr/local/bin/ego-browser"
-"  2. inject the token:   read the token from $TokenFile and place it in the"
-"     container at /etc/ego-relay/token (mode 600), then:"
-"  3. (optional) restart the relay so it picks up a rotated token"
-"  token value: $(Get-Content $TokenFile -Raw)"
+"  2. token: not required for loopback-only bind (default); with 0.0.0.0 bind,"
+"     inject the token from $TokenFile into the container as"
+"     /etc/ego-relay/token (mode 600) or via EGO_RELAY_TOKEN"

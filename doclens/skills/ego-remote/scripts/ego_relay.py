@@ -1,7 +1,7 @@
 """Windows-side ego-browser relay.
 
 Runs on the Windows host (where ego lite and ego-browser.exe live) and lets a
-Linux container or WSL shell drive the real browser through a local-only HTTP
+Linux container or WSL shell drive the real browser through a local HTTP
 endpoint.
 
 Endpoints
@@ -12,20 +12,24 @@ POST /run    body = raw script text
               -> runs `ego-browser.exe nodejs` with the body as stdin
 
 Response: HTTP 200 with the combined stdout/stderr; header X-Exit-Code holds
-the exit code. Requests without a valid token are rejected with 403.
+the exit code.
 
 Security
 --------
-The relay drives the user's real, logged-in browser, so it must never be open
-to the LAN unauthenticated. It binds 0.0.0.0 (containers reach the host through
-host.docker.internal), which means the shared token is the only barrier.
+The relay drives the user's real, logged-in browser. Two independent guards,
+either alone is sufficient:
 
-**Fail closed**: with no token configured, every request is rejected. An
-unauthenticated relay is never started by accident.
+1. **Bind address** (``EGO_RELAY_BIND``, default ``127.0.0.1``): loopback-only
+   means nothing outside this machine can connect at all. Containers reach the
+   host through ``host.docker.internal`` (NATed to loopback by Docker Desktop /
+   WSL2), so the default works for containers without exposing a LAN port.
+2. **Shared token** (``EGO_RELAY_TOKEN`` env or ``EGO_RELAY_TOKEN_FILE``, default
+   ``%LOCALAPPDATA%\\ego-relay\\token.txt``): required when binding a
+   non-loopback address (e.g. ``0.0.0.0`` for LAN access). Binding non-loopback
+   without a token refuses to start (fail closed).
 
-Token resolution order:
-1. ``EGO_RELAY_TOKEN`` environment variable
-2. ``EGO_RELAY_TOKEN_FILE`` path (default: ``%LOCALAPPDATA%\\ego-relay\\token.txt``)
+Use loopback bind + firewall for single-user hosts; use 0.0.0.0 + token when
+the relay must be reachable from other machines.
 """
 import json
 import os
@@ -64,7 +68,7 @@ def default_token_file() -> str:
 
 
 def load_token() -> str:
-    """Resolve the shared secret; empty string means "reject everything"."""
+    """Resolve the shared secret; empty string means "not configured"."""
     token = (os.environ.get("EGO_RELAY_TOKEN") or "").strip()
     if token:
         return token
@@ -109,15 +113,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self):
+        # With a token configured, every request must carry it. Without one
+        # (loopback-only mode), the bind address is the guard and requests pass.
         token = load_token()
-        if not token:
-            self._reply(
-                403,
-                "forbidden: relay has no token configured (set EGO_RELAY_TOKEN or "
-                "EGO_RELAY_TOKEN_FILE)\n",
-            )
-            return
-        if self.headers.get("X-Ego-Relay-Token", "") != token:
+        if token and self.headers.get("X-Ego-Relay-Token", "") != token:
             self._reply(403, "forbidden: bad or missing relay token\n")
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -142,18 +141,23 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 18777
+    # Bind loopback by default; 0.0.0.0 only when the caller opts in.
+    bind = _expand_user_home(os.environ.get("EGO_RELAY_BIND") or "127.0.0.1")
     token = load_token()
-    if not token:
+    if not token and bind not in ("127.0.0.1", "::1", "localhost"):
+        # Non-loopback bind without a token: the port would be an unguarded
+        # remote control for the user's browser on the LAN. Refuse to start.
         sys.stderr.write(
-            "[relay] FATAL: no token configured — every request will be rejected.\n"
-            "[relay] Set EGO_RELAY_TOKEN or write the secret to %s\n"
-            % default_token_file()
+            "[relay] FATAL: binding %s without a token is not allowed.\n"
+            "[relay] Set EGO_RELAY_TOKEN / EGO_RELAY_TOKEN_FILE (secret in %s),\n"
+            "[relay] or drop EGO_RELAY_BIND to 127.0.0.1.\n"
+            % (bind, default_token_file())
         )
         sys.exit(2)
-    srv = HTTPServer(("0.0.0.0", port), Handler)
+    srv = HTTPServer((bind, port), Handler)
+    mode = "token" if token else "loopback-only (no token)"
     sys.stderr.write(
-        "[relay] listening on 0.0.0.0:%d -> %s (token: file/env)\n"
-        % (port, EGO_BROWSER)
+        "[relay] listening on %s:%d -> %s (%s)\n" % (bind, port, EGO_BROWSER, mode)
     )
     srv.serve_forever()
 
