@@ -290,11 +290,10 @@ doclens/skills/slides-gen/layouts/sheet.png
 # 演示运行时无引用拷贝（真身 doclens/skills/slides-gen/assets/presenter.js）
 doclens/web_v2/static/presenter.js
 
-# 研发项目结项资料（立项/结项/样板材料，非项目源码）
-研发项目资料/
-# 例外：样板项目仍需进知识库索引（git 侧依旧忽略——取反在父目录被排除时不生效；
-# 索引侧用 pathspec 独立匹配，取反生效。改后需重启应用让 FileWatcher 重读快照）
-!研发项目资料/样板项目/
+# 研发项目结项资料（立项/结项/样板材料，非项目源码）：
+# 规则写在 .git/info/exclude（仅 git 读取），不放这里——索引器只读本文件，
+# 写在这里会把整个目录挡在扫描范围外，导致既不索引也不监控。
+# 见 .git/info/exclude 注释。
 
 # Scratch 工作目录（历史 OCR/截图产物，不入库）
 .scratch/
