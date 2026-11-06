@@ -3,10 +3,10 @@
 
 背景：``table.rows[i].cells`` 会把一个 ``w:gridSpan=3`` 的单元格在行内
 展开成 3 个**内容相同**的 cell，导致预览里合并单元格的内容重复 3 次
-（实测：中国联通验收证明文档的「项目目标和预计成果」重复三次）。
 修复：``_table_to_text`` 直接遍历底层 ``<w:tr>/<w:tc>``，按 gridSpan
 补空列。
 """
+
 import pytest
 
 docx = pytest.importorskip("docx", reason="python-docx not installed")

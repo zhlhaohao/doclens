@@ -4,6 +4,7 @@
 匹配（永远选不中）。统一窗口模型后：片段 = 锚点前 before 字符 + 命中体
 （≤match_max）+ 锚点后 after 字符，grep 与 search 同口径。
 """
+
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,7 +18,7 @@ PAT = r"第29题[\s\S]{0,300}"
 TEXT = (
     "全性\n\nD、 画像全面\n\n参考答案：A\n\n"
     "第28题, 上一题内容\n\n"
-    "第29题, 联通大数据产品中，线上广告可投放的行业？\n\n"
+    "第29题, 某运营商大数据产品中，线上广告可投放的行业？\n\n"
     "A、 医疗\n\nB、 房产\n\n参考答案：A\n\n"
     "第30题, 下一题内容"
 )
@@ -28,6 +29,7 @@ BEFORE, AFTER = 200, 200
 # ---------------------------------------------------------------------------
 # treesearch.fts._extract_match_snippet
 # ---------------------------------------------------------------------------
+
 
 class TestExtractMatchSnippetRegex:
     def test_snippet_led_by_match_body(self):
@@ -69,6 +71,7 @@ class TestExtractMatchSnippetRegex:
 # doclens.grep_tools 片段选取
 # ---------------------------------------------------------------------------
 
+
 class TestGrepSnippetSelection:
     def test_select_keyword_lines_regex_anchor(self):
         from doclens.grep_tools import _select_keyword_lines
@@ -90,7 +93,9 @@ class TestGrepSnippetSelection:
     def test_regex_led_snippet_unified_window(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        led = _regex_led_snippet(TEXT, [PAT], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            TEXT, [PAT], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         assert led is not None
         assert "第29题" in led
         assert "医疗" in led  # 选项内容在跨度内
@@ -101,7 +106,9 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         assert led is not None
         assert led.startswith("前" * 100)
         assert led.endswith("后" * 200)
@@ -110,23 +117,49 @@ class TestGrepSnippetSelection:
     def test_regex_led_snippet_none_on_invalid(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        assert _regex_led_snippet(TEXT, ["["], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS) is None
+        assert (
+            _regex_led_snippet(
+                TEXT,
+                ["["],
+                before=BEFORE,
+                after=AFTER,
+                match_max=SNIPPET_MATCH_MAX_CHARS,
+            )
+            is None
+        )
 
     def test_regex_led_snippet_none_on_no_hit(self):
         from doclens.grep_tools import _regex_led_snippet
 
-        assert _regex_led_snippet(TEXT, ["不存在的词"], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS) is None
+        assert (
+            _regex_led_snippet(
+                TEXT,
+                ["不存在的词"],
+                before=BEFORE,
+                after=AFTER,
+                match_max=SNIPPET_MATCH_MAX_CHARS,
+            )
+            is None
+        )
 
     def test_regex_led_snippet_greedy_capped(self):
         from doclens.grep_tools import _regex_led_snippet
         from doclens.word_window import WORD_CHAR_CEILING
 
         text = "第29题" + "A" * 5000
-        led = _regex_led_snippet(text, [r"第29题[\s\S]*"], before=BEFORE, after=AFTER, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            text,
+            [r"第29题[\s\S]*"],
+            before=BEFORE,
+            after=AFTER,
+            match_max=SNIPPET_MATCH_MAX_CHARS,
+        )
         assert led is not None and led.startswith("第29题")
         # 词口径：命中体 cap 字符 + 前后词窗的字符保险丝上限。A*5000 是
         # 一个无空白「词」，在 after 词数预算内吃满剩余是词定义的正确语义
-        assert len(led) <= SNIPPET_MATCH_MAX_CHARS + (BEFORE + AFTER) * WORD_CHAR_CEILING
+        assert (
+            len(led) <= SNIPPET_MATCH_MAX_CHARS + (BEFORE + AFTER) * WORD_CHAR_CEILING
+        )
 
     def test_regex_led_snippet_word_unit_english(self):
         """当量词单位：英文场景下窗口按词数计量（旧字符口径仅约 1/6 词量）。"""
@@ -134,7 +167,9 @@ class TestGrepSnippetSelection:
 
         words = [f"w{i}" for i in range(200)]
         text = " ".join(words[:100]) + " NEEDLE " + " ".join(words[100:])
-        led = _regex_led_snippet(text, ["NEEDLE"], before=5, after=8, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            text, ["NEEDLE"], before=5, after=8, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         assert led is not None
         assert led.split()[-1] == "w107"  # 锚点后 8 词（NEEDLE 后第一个词是 w100）
         # 锚点前 5 当量词：NEEDLE 自身计 1，窗口 = w94..w99（含锚点共 6 词）
@@ -149,7 +184,9 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         # 2026-10-24 修 start_before_words 尾累计边界（> → >=）：旧代码恰好
         # 凑满预算时多吞 1 字（201），注释误标为「词中边界近似余量」
         assert led == "前" * 200 + "NEEDLE" + "后" * 400
@@ -159,7 +196,9 @@ class TestGrepSnippetSelection:
         from doclens.grep_tools import _regex_led_snippet
 
         text = "NEEDLE" + "A" * 30000
-        led = _regex_led_snippet(text, ["NEEDLE"], before=0, after=10, match_max=SNIPPET_MATCH_MAX_CHARS)
+        led = _regex_led_snippet(
+            text, ["NEEDLE"], before=0, after=10, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         assert led is not None
         assert len(led) <= len("NEEDLE") + 10 * 8  # 10 词 × WORD_CHAR_CEILING
 
@@ -187,14 +226,21 @@ class TestGrepSnippetSelection:
 # TUI 渲染（is_ripgrep 路径的行锚点正则感知）
 # ---------------------------------------------------------------------------
 
+
 class TestTuiRenderRegexAnchor:
     def test_ripgrep_render_snippet_contains_match(self):
         from doclens.tui.renderers.search import render_search_result
 
         node = {"title": "单选题", "text": TEXT}
         t = render_search_result(
-            1, "d1", node, 1, 1, path="kb/a.docx",
-            is_ripgrep=True, query_words=[PAT],
+            1,
+            "d1",
+            node,
+            1,
+            1,
+            path="kb/a.docx",
+            is_ripgrep=True,
+            query_words=[PAT],
         )
         assert "第29题" in t.plain
 
@@ -209,6 +255,7 @@ class TestTuiRenderRegexAnchor:
 # ---------------------------------------------------------------------------
 # 统一窗口模型：grep 与 search 同口径
 # ---------------------------------------------------------------------------
+
 
 class TestUnifiedWindowModel:
     def test_keyword_window_before_after_params(self):
@@ -229,7 +276,9 @@ class TestUnifiedWindowModel:
         from doclens.kb_tools import _extract_keyword_window
 
         text = "前" * 1000 + "NEEDLE" + "后" * 1000
-        g = _regex_led_snippet(text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS)
+        g = _regex_led_snippet(
+            text, ["NEEDLE"], before=100, after=200, match_max=SNIPPET_MATCH_MAX_CHARS
+        )
         k = _extract_keyword_window(text, ["needle"], before=100, after=200)
         # 两窗口都覆盖锚点前后核心区（尾部余量允许省略标记/rstrip 差异）
         assert g is not None and "NEEDLE" in g and "NEEDLE" in k
@@ -303,27 +352,34 @@ class TestUnifiedWindowModel:
             "percent of their streams fail mid-response.\n\n"
         )
         filler = "carol: some filler chatter line without keywords here\n"
-        tail_part = "\n".join(f"dan: header check {i} streaming 502 header" for i in range(60))
+        tail_part = "\n".join(
+            f"dan: header check {i} streaming 502 header" for i in range(60)
+        )
         text = head_part + filler * 3 + tail_part
 
-        out = _extract_keyword_window(text, ["502", "streaming", "header"], 200, 600, max_chars=800)
+        out = _extract_keyword_window(
+            text, ["502", "streaming", "header"], 200, 600, max_chars=800
+        )
 
         # 1) 锚点必须仍在窗口内
         assert "502" in out
         # 2) 窗口起点在词边界：中部略标记后的 excerpt 不以半词开头
         i = out.find("…（中部略）")
         if i >= 0:
-            excerpt_head = out[i + len("…（中部略）"):].lstrip("\n")[:20]
+            excerpt_head = out[i + len("…（中部略）") :].lstrip("\n")[:20]
             # 词边界 = 前一字符是空白/换行，或 excerpt 就是全文开头
             start_in_text = text.find(excerpt_head)
             assert start_in_text == 0 or text[start_in_text - 1] in " \t\n\r"
         # 3) head 与 excerpt 不重叠：标记前后的文本段不同段出现
         if i >= 0:
             head_seg = out[:i].strip()
-            excerpt_seg = out[i + len("…（中部略）"):].lstrip("\n")
+            excerpt_seg = out[i + len("…（中部略）") :].lstrip("\n")
             # head 的最后一行不得原样出现在 excerpt 开头部分（重复 ≥30 字符）
             last_line = head_seg.split("\n")[-1]
-            assert len(last_line) < 30 or last_line not in excerpt_seg[: len(last_line) + 50]
+            assert (
+                len(last_line) < 30
+                or last_line not in excerpt_seg[: len(last_line) + 50]
+            )
 
     def test_char_fuse_default_english_small_doc_no_markers(self):
         """回归（2026-10-23）：字符兜底默认须与词窗口同量级。
@@ -340,7 +396,9 @@ class TestUnifiedWindowModel:
 
         # ~394 词 / 2435 字符的英文小文档：词预算内，整篇返回
         # （≤max_chars 时走早退分支原样返回，含尾换行）
-        head = "channel\n\nalice: Hey folks seeing intermittent 502s during streaming.\n\n"
+        head = (
+            "channel\n\nalice: Hey folks seeing intermittent 502s during streaming.\n\n"
+        )
         text = head + ("bob: plain filler chatter line number here\n" * 55)
         out = _extract_keyword_window(
             text, ["502", "streaming"], 200, 600, max_chars=max_chars
@@ -350,9 +408,7 @@ class TestUnifiedWindowModel:
 
         # 超长无空白段（单词 > 兜底）：保险丝仍生效
         blob = "x" * 20000 + " needle " + "y" * 20000
-        out2 = _extract_keyword_window(
-            blob, ["needle"], 200, 600, max_chars=max_chars
-        )
+        out2 = _extract_keyword_window(blob, ["needle"], 200, 600, max_chars=max_chars)
         assert "needle" in out2
         assert len(out2) < 20000  # 兜底截断，未被超长词炸穿
 
@@ -360,6 +416,7 @@ class TestUnifiedWindowModel:
 # ---------------------------------------------------------------------------
 # 引擎一致性：SQLite REGEXP 与 rg --ignore-case 大小写口径对齐
 # ---------------------------------------------------------------------------
+
 
 class TestRegexpCaseAlignment:
     def test_sqlite_regexp_case_insensitive(self):
@@ -386,10 +443,14 @@ class TestRegexpCaseAlignment:
             doc = Document(
                 doc_id="d1",
                 doc_name="case.md",
-                structure=[{
-                    "node_id": "n1", "title": "NEEDLE Title",
-                    "summary": "Foo NEEDLE bar", "depth": 0,
-                }],
+                structure=[
+                    {
+                        "node_id": "n1",
+                        "title": "NEEDLE Title",
+                        "summary": "Foo NEEDLE bar",
+                        "depth": 0,
+                    }
+                ],
             )
             fts.index_document(doc)
             hits = fts.like_search("needle", top_k=10, use_regex=True)
@@ -428,6 +489,7 @@ class TestRegexpCaseAlignment:
 # handler 端到端（真实 like_search → REGEXP → 片段）
 # ---------------------------------------------------------------------------
 
+
 def _real_idx(kb: Path, monkeypatch):
     """真实 IndexManager：构建小型索引库（含超长节点，触发摘要截断路径）。"""
     from doclens.config import CortexConfig
@@ -436,9 +498,10 @@ def _real_idx(kb: Path, monkeypatch):
     long_text = (
         "开头填充。" * 20
         + "第28题, 上一题\n\n"
-        + "第29题, 联通大数据产品中，线上广告可投放的行业，不包括以下哪个？\n\n"
+        + "第29题, 某运营商大数据产品中，线上广告可投放的行业，不包括以下哪个？\n\n"
         + "A、 医疗\n\nB、 房产\n\nC、 母婴\n\nD、 教育\n\n参考答案：A\n\n"
-        + "第30题, 下一题\n\n" + "结尾填充。" * 20
+        + "第30题, 下一题\n\n"
+        + "结尾填充。" * 20
     )
     (kb / "题库.md").write_text(f"# 单选题\n\n{long_text}\n", encoding="utf-8")
 
@@ -496,7 +559,9 @@ class TestGrepUnindexedFiles:
         from doclens.config import CortexConfig
         from doclens.index_manager import IndexManager
 
-        (kb / "indexed.md").write_text("# 已索引\n\nNEEDLE_INDEXED 内容\n", encoding="utf-8")
+        (kb / "indexed.md").write_text(
+            "# 已索引\n\nNEEDLE_INDEXED 内容\n", encoding="utf-8"
+        )
         monkeypatch.chdir(kb)
         idx = IndexManager(CortexConfig())
         idx.reindex(force=True)
@@ -517,7 +582,9 @@ class TestGrepUnindexedFiles:
 
     def test_gitignored_file_excluded(self, tmp_path: Path, monkeypatch):
         idx = self._make_idx(tmp_path, monkeypatch)
-        (tmp_path / "ignored.md").write_text("NEEDLE_IGNORED 不应被搜到\n", encoding="utf-8")
+        (tmp_path / "ignored.md").write_text(
+            "NEEDLE_IGNORED 不应被搜到\n", encoding="utf-8"
+        )
         (tmp_path / ".gitignore").write_text("ignored.md\n", encoding="utf-8")
 
         from doclens.grep_tools import handle_grep
@@ -534,7 +601,10 @@ class TestGrepUnindexedFiles:
         idx = self._make_idx(tmp_path, monkeypatch)
         called = {"n": 0}
         orig = rgmod.rg_search_root_hits
-        rgmod.rg_search_root_hits = lambda *a, **kw: (called.__setitem__("n", called["n"] + 1), orig(*a, **kw))[1]
+        rgmod.rg_search_root_hits = lambda *a, **kw: (
+            called.__setitem__("n", called["n"] + 1),
+            orig(*a, **kw),
+        )[1]
         try:
             r = execute_grep_search(idx, "NEEDLE_INDEXED")
         finally:
