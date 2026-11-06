@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from openai import AsyncOpenAI, OpenAI
 
+from .stream_close import close_sdk_stream_iterator
 from .timeouts import build_httpx_timeout
 from .tool_translator import (
     messages_anthropic_to_openai,
@@ -476,11 +477,17 @@ class OpenAICompatProvider:
             # 流（httpx Response）——否则残留的 aiter_raw 由 GC 终结器在事件
             # 循环关闭后重入，抛 "async generator already executing"
             async with aclosing(stream):
-                async for chunk in stream:
-                    if accumulator:
-                        accumulator.feed(chunk)
-                    for event in translator.feed(chunk):
-                        yield event
+                try:
+                    async for chunk in stream:
+                        if accumulator:
+                            accumulator.feed(chunk)
+                        for event in translator.feed(chunk):
+                            yield event
+                finally:
+                    # 先关 SDK 内部迭代器再让 aclosing 关 Response：只关
+                    # Response 会把 __stream__ 生成器链留给 GC（同 anthropic
+                    # provider 的 unraisable 根因）。
+                    await close_sdk_stream_iterator(stream)
         except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
             if tracer and not done:
                 tracer.trace_error(turn, e)

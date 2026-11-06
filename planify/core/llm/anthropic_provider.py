@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 from anthropic import Anthropic, AsyncAnthropic
 
+from .stream_close import close_sdk_stream_iterator
 from .timeouts import build_httpx_timeout
 from .types import (
     LLMResponse,
@@ -27,6 +28,14 @@ from .types import (
 
 if TYPE_CHECKING:
     from .trace import LLMTracer
+
+
+def _final_snapshot(stream: Any) -> Any:
+    """取 SDK 已累积的最终消息快照（不推进迭代器）。"""
+    try:
+        return stream.current_message_snapshot
+    except Exception:  # noqa: BLE001 —— 快照未就绪（无 message_start）
+        return None
 
 
 def _sdk_httpx() -> Any:
@@ -261,17 +270,29 @@ class AnthropicProvider:
                         continue
                     if tracer and normalized.type == "message_stop":
                         # 调用方（runner）在 message_stop 即中断消费，循环后
-                        # 代码不会执行——答节必须在 yield 它之前落盘
+                        # 代码不会执行——答节必须在 yield 它之前落盘。
+                        # 优先读快照而非 get_final_message()：后者会
+                        # `until_done()` 重入同一个 _iterator 再驱动一遍，
+                        # 与「响应体尚未读尽」叠加时抬高
+                        # "async generator already executing" 的概率。
                         done = True
-                        try:
-                            tracer.trace_response(turn, await stream.get_final_message())
-                        except Exception as e:  # noqa: BLE001
-                            tracer.trace_error(turn, f"get_final_message 失败: {e}")
+                        snapshot = _final_snapshot(stream)
+                        if snapshot is not None:
+                            tracer.trace_response(turn, snapshot)
+                        else:
+                            try:
+                                tracer.trace_response(turn, await stream.get_final_message())
+                            except Exception as e:  # noqa: BLE001
+                                tracer.trace_error(turn, f"get_final_message 失败: {e}")
                     yield normalized
             except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
                 if tracer and not done:
                     tracer.trace_error(turn, e)
                 raise
+            finally:
+                # 必须在 `async with` 关闭 Response 之前关迭代器：
+                # 顺序反了就是「响应已关、生成器链仍挂起」，只能等 GC 收尾。
+                await close_sdk_stream_iterator(stream)
 
     @staticmethod
     def _response_to_llm(response: Any) -> LLMResponse:
