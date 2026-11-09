@@ -1877,6 +1877,15 @@ async def build_index(
                         # Unknown extension: fall back to text_to_tree
                         result = await text_to_tree(text_path=fp, **common)
 
+                    # md table 列数归一化（parser 公共后处理）：docx 等来源
+                    # 产出的表格 header 与内容行列数可能不一致（gridSpan 超
+                    # 宽等），GFM 渲染按 header 列数截断丢列。在汇合点统一
+                    # pad 到块内最大列数，覆盖所有 parser，不逐个打补丁。
+                    from .parsers.md_table import normalize_tree_tables
+                    normalize_tree_tables(result.get("structure"))
+                    for t in result.get("multi_docs") or []:
+                        normalize_tree_tables(t.get("structure"))
+
                     # Tag source_type for search routing
                     source_type = SOURCE_TYPE_MAP.get(ext, "text")
                     result["source_type"] = source_type
