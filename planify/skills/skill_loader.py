@@ -2,9 +2,9 @@
 
 从文件系统加载专业技能。
 
-目录组织：递归发现（rglob），支持厂商/分类子目录（skills/<厂商>/<技能名>/
-SKILL.md）；子目录层级不参与技能名——身份 = meta name（缺省回退叶子目录名），
-同名冲突先者胜（sorted 路径序）+ warning。
+目录组织：递归发现（iter_skill_files，跟随目录软链），支持厂商/分类子目录
+（skills/<厂商>/<技能名>/SKILL.md）；子目录层级不参与技能名——身份 = meta
+name（缺省回退叶子目录名），同名冲突先者胜（sorted 路径序）+ warning。
 
 技能文件格式 (skills/my_skill/SKILL.md)：
     ---
@@ -34,10 +34,11 @@ user-invocable 契约（宿主用户调用面硬门）：
 """
 
 import logging
+import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,45 @@ def _parse_user_invocable(raw: Any) -> bool:
 def _shell_friendly_dir(base_dir: str) -> str:
     """技能目录 → shell 友好字符串（反斜杠归一为正斜杠，防 bash 转义吞噬）。"""
     return base_dir.replace("\\", "/")
+
+
+def iter_skill_files(root: Path) -> Iterator[Path]:
+    """递归发现 SKILL.md——**跟随目录符号链接**（Path.rglob 不跟随，Py 3.12/3.13
+    默认均如此），外部技能以「目录整体软链」注册时才能被发现。
+
+    模块级公共函数：planify 与宿主（doclens）的技能发现链路统一走本函数
+    （宿主只消费公共接口，不碰私有成员）。用 os.walk(followlinks=True)
+    实现，兼容 3.10+。
+
+    环保护：目录软链可以成环（a/link → a），逐 dirpath 做 realpath 集合
+    去重——同一真实目录只访问一次，环自然截断（代价：同一真实目录经多条
+    软链路径可达时只发现一次，这是期望行为）。文件级 symlink 由 os.walk
+    常规产出（无需开关），SKILL.md 本身是软链时 read_text/stat 正常跟随。
+
+    Yields:
+        SKILL.md 路径（发现顺序按 dirpath 名排序，同层确定序）。
+    """
+    root = Path(root)
+    seen_real: set[str] = set()
+
+    def _real(p: Path) -> str:
+        try:
+            return str(p.resolve())
+        except OSError:
+            return str(p.absolute())
+
+    seen_real.add(_real(root))
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        # 原位过滤子目录：软链环不重复进入（见上）；原位排序保证同层确定序
+        dirnames.sort()
+        for d in list(dirnames):
+            real = _real(Path(dirpath) / d)
+            if real in seen_real:
+                dirnames.remove(d)
+                continue
+            seen_real.add(real)
+        if "SKILL.md" in filenames:
+            yield Path(dirpath) / "SKILL.md"
 
 
 class SkillLoader:
@@ -123,9 +163,10 @@ class SkillLoader:
     def rescan(self) -> None:
         """重新扫描技能目录，原位替换 skills dict（不 mutation 旧 dict）。
 
-        目录组织：递归发现（rglob）——支持厂商/分类子目录（``skills/<厂商>/
-        <技能名>/SKILL.md``）；子目录层级不参与技能名（身份 = meta name，
-        缺省回退叶子目录名）。
+        目录组织：递归发现（iter_skill_files）——支持厂商/分类子目录
+        （``skills/<厂商>/<技能名>/SKILL.md``）；子目录层级不参与技能名
+        （身份 = meta name，缺省回退叶子目录名）。跟随目录软链：外部技能
+        以「目录整体软链」注册也可被发现（Path.rglob 不跟随，曾致静默失效）。
 
         同名冲突：**先者胜**——sorted 路径序靠前者保留，其余丢弃 +
         warning（厂商组织升高同名概率，静默覆盖不可诊断）。
@@ -140,7 +181,7 @@ class SkillLoader:
         # 名字 → 首个来源文件（冲突告警时报告保留者路径）
         name_sources: Dict[str, Path] = {}
         if self.skills_dir.exists():
-            for f in sorted(self.skills_dir.rglob("SKILL.md")):
+            for f in sorted(iter_skill_files(self.skills_dir)):
                 try:
                     text = f.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as e:
@@ -226,7 +267,7 @@ class SkillLoader:
         try:
             if not self.skills_dir.exists():
                 return signature
-            for f in self.skills_dir.rglob("SKILL.md"):
+            for f in iter_skill_files(self.skills_dir):
                 try:
                     st = f.stat()
                 except OSError:

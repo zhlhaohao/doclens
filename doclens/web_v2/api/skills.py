@@ -142,7 +142,9 @@ async def list_books():
     md_by_name: dict[str, Path] = {}
     root = _skills_dir()
     if root.exists():
-        for skill_md in sorted(root.rglob("SKILL.md")):
+        from planify.skills.skill_loader import iter_skill_files
+
+        for skill_md in sorted(iter_skill_files(root)):
             md_by_name.setdefault(
                 skill_name_of(skill_md, skill_md.parent.name), skill_md
             )
@@ -311,9 +313,10 @@ async def refresh_skills():
 def _find_skill_dir(name: str):
     """按技能名定位磁盘目录（meta name 解析，目录名兜底）。"""
     from doclens.skills_deploy import skill_name_of
+    from planify.skills.skill_loader import iter_skill_files
 
     root = _skills_dir()
-    for skill_md in sorted(root.rglob("SKILL.md")):
+    for skill_md in sorted(iter_skill_files(root)):
         if skill_name_of(skill_md, skill_md.parent.name) == name:
             return skill_md.parent
     return None
