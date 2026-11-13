@@ -1,0 +1,13 @@
+# FigCraft 复刻与视觉评审工具的依赖
+#
+# 独立于 doclens 运行时依赖——这些脚本只在设计/评审时手动跑，
+# 不进 pip install 的主依赖链。
+#
+# svgpathtools：权威 SVG path 解析器。
+#   自研分词无法正确处理 Lucide 的无分隔符参数（如 "A2 2 0 0022 17"，
+#   0022 会被误读成 22），导致整段弧线被吞、图标渲染不出来。
+#   详见 README「path 解析必须用权威实现」一节。
+svgpathtools>=0.10.0
+
+# Pillow：像素探针校验（check_render.py）与图标墨迹测量
+pillow>=10.0.0

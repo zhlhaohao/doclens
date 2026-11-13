@@ -1,0 +1,218 @@
+[
+ {
+  "command": "file.open",
+  "params": {
+   "path": "C:\\Users\\lianghao\\github\\cortex\\doclens\\web_v2\\design\\designs\\component_library.figcraft"
+  }
+ },
+ {
+  "command": "node.set",
+  "params": {
+   "ids": [
+    "Button"
+   ],
+   "name": 42
+  }
+ },
+ {
+  "command": "node.set",
+  "params": {
+   "ids": [
+    "FileBadge"
+   ],
+   "name": 65
+  }
+ },
+ {
+  "command": "node.set",
+  "params": {
+   "ids": [
+    "SearchInput"
+   ],
+   "name": 80
+  }
+ },
+ {
+  "command": "node.set",
+  "params": {
+   "ids": [
+    "Chip"
+   ],
+   "name": 98
+  }
+ },
+ {
+  "command": "codeConnect.import",
+  "params": {
+   "json": {
+    "version": 1,
+    "links": [
+     {
+      "component": "variant=primary state=default",
+      "language": "react",
+      "importPath": "./components/input-box",
+      "name": "SendButton",
+      "template": "<button class=\"send\" ?disabled={disabled}>发送</button>"
+     },
+     {
+      "component": "variant=ink state=default",
+      "language": "react",
+      "importPath": "./components/delete-dialog",
+      "name": "ConfirmButton",
+      "template": "<button class=\"confirm\">{label}</button>"
+     },
+     {
+      "component": "variant=outline state=default",
+      "language": "react",
+      "importPath": "./components/file-list",
+      "name": "ToolbarButton",
+      "template": "<button class=\"tb-btn\" data-action=\"{action}\">{label}</button>"
+     },
+     {
+      "component": "variant=danger state=default",
+      "language": "react",
+      "importPath": "./components/delete-dialog",
+      "name": "DangerButton",
+      "template": "<button class=\"danger\">{label}</button>"
+     },
+     {
+      "component": "type=md state=default",
+      "language": "react",
+      "importPath": "./utils/file-type",
+      "name": "FileTypeBadge",
+      "template": "<span class=\"badge\" style=\"background:{bg}\">{letter}</span>"
+     },
+     {
+      "component": "state=default",
+      "language": "react",
+      "importPath": "./components/file-search-box",
+      "name": "FileSearchBox",
+      "template": "<file-search-box ?disabled={disabled}></file-search-box>"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 6,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/input-box.ts",
+   "name": "Lit: input-box.ts（primary 发送按钮）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 15,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/delete-dialog.ts",
+   "name": "Lit: delete-dialog.ts（ink 确认按钮）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 24,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/file-list.ts",
+   "name": "Lit: file-list.ts（outline 工具条按钮）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 33,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/delete-dialog.ts",
+   "name": "Lit: delete-dialog.ts（danger 危险按钮）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 44,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（md 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 47,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（pdf 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 50,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（xlsx 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 53,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（pptx 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 56,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（png 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 59,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（docx 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 62,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/utils/file-type.ts",
+   "name": "Lit: utils/file-type.ts（txt 徽标）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 67,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/file-search-box.ts",
+   "name": "Lit: file-search-box.ts（default）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 71,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/file-search-box.ts",
+   "name": "Lit: file-search-box.ts（focus）"
+  }
+ },
+ {
+  "command": "devResource.add",
+  "params": {
+   "id": 76,
+   "url": "https://github.com/zhlhaohao/doclens/blob/main/doclens/web_v2/frontend/src/components/file-search-box.ts",
+   "name": "Lit: file-search-box.ts（disabled）"
+  }
+ },
+ {
+  "command": "codeConnect.export",
+  "params": {
+   "path": "C:\\Users\\lianghao\\github\\cortex\\doclens\\web_v2\\design\\figcraft.connect.json"
+  }
+ },
+ {
+  "command": "file.save",
+  "params": {}
+ }
+]

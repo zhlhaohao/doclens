@@ -1,0 +1,47 @@
+{
+ "version": 1,
+ "links": [
+  {
+   "component": "variant=primary state=default",
+   "language": "react",
+   "importPath": "./components/input-box",
+   "name": "SendButton",
+   "template": "<button class=\"send\" ?disabled={disabled}>发送</button>"
+  },
+  {
+   "component": "variant=ink state=default",
+   "language": "react",
+   "importPath": "./components/delete-dialog",
+   "name": "ConfirmButton",
+   "template": "<button class=\"confirm\">{label}</button>"
+  },
+  {
+   "component": "variant=outline state=default",
+   "language": "react",
+   "importPath": "./components/file-list",
+   "name": "ToolbarButton",
+   "template": "<button class=\"tb-btn\" data-action=\"{action}\">{label}</button>"
+  },
+  {
+   "component": "variant=danger state=default",
+   "language": "react",
+   "importPath": "./components/delete-dialog",
+   "name": "DangerButton",
+   "template": "<button class=\"danger\">{label}</button>"
+  },
+  {
+   "component": "type=md state=default",
+   "language": "react",
+   "importPath": "./utils/file-type",
+   "name": "FileTypeBadge",
+   "template": "<span class=\"badge\" style=\"background:{bg}\">{letter}</span>"
+  },
+  {
+   "component": "state=default",
+   "language": "react",
+   "importPath": "./components/file-search-box",
+   "name": "FileSearchBox",
+   "template": "<file-search-box ?disabled={disabled}></file-search-box>"
+  }
+ ]
+}
