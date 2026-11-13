@@ -12,6 +12,8 @@ import type {
   SettingsScope,
   WatchChange,
 } from "./types";
+import type { FileSortDir, FileSortKey } from "../utils/file-sort";
+import { sortFileEntries } from "../utils/file-sort";
 
 function computeDirty(
   original: SettingsFieldValues,
@@ -80,6 +82,8 @@ export const INITIAL_STATE: AppState = {
   },
   files: {
     treeCache: {},
+    sortKey: "name",
+    sortDir: "asc",
     expandedPaths: [],
     currentDir: "",
     selectedPaths: [],
@@ -294,6 +298,21 @@ export const actions = {
     store.setState({ files: { ...cur, ...s } });
   },
 
+  /**
+   * 列头排序切换：同一键再点一次翻转方向；换键则用该键的默认方向
+   * （名称升序 / 大小降序 / 修改时间降序）。
+   */
+  toggleFileSort(key: FileSortKey) {
+    const cur = store.getState().files;
+    if (cur.sortKey === key) {
+      const dir = cur.sortDir === "asc" ? "desc" : "asc";
+      store.setState({ files: { ...cur, sortKey: key, sortDir: dir } });
+      return;
+    }
+    const sortDir: FileSortDir = key === "name" ? "asc" : "desc";
+    store.setState({ files: { ...cur, sortKey: key, sortDir } });
+  },
+
   setDiaryState(s: Partial<AppState["diary"]>) {
     const cur = store.getState().diary;
     store.setState({ diary: { ...cur, ...s } });
@@ -328,7 +347,12 @@ export const actions = {
     let next: string[];
     let anchor: string | null = cur.lastSelectedAnchor;
     if (opts.shift && anchor !== null) {
-      const entries = cur.treeCache[cur.currentDir] || [];
+      // 用列头排序后的顺序做区间选择——shift 选区必须与屏幕上的行序一致
+      const entries = sortFileEntries(
+        cur.treeCache[cur.currentDir] || [],
+        cur.sortKey,
+        cur.sortDir,
+      );
       const paths = entries.map(e => e.path);
       const a = paths.indexOf(anchor);
       const b = paths.indexOf(path);

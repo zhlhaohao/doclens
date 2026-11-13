@@ -4,6 +4,10 @@ export type ViewId = "search" | "chat" | "settings" | "files" | "diary" | "login
 export type FocusState = "initial" | "focus";
 export type SearchMode = "keyword" | "grep";
 
+/** 文件列表列头排序键/方向（见 utils/file-sort.ts）。 */
+import type { FileSortDir, FileSortKey } from "../utils/file-sort";
+export type { FileSortDir, FileSortKey };
+
 export interface MatchItem {
   /** 命中行号；无行号源（LIKE）为 null，行号区显示「—」 */
   line: number | null;
@@ -248,6 +252,9 @@ export interface FilenameSearchState {
 
 export interface FileExplorerViewState {
   treeCache: Record<string, FileEntry[]>;
+  /** 列头排序：键（名称/大小/修改）+ 方向（升/降）。 */
+  sortKey: FileSortKey;
+  sortDir: FileSortDir;
   expandedPaths: string[];
   currentDir: string;
   selectedPaths: string[];

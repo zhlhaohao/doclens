@@ -9,6 +9,8 @@ export function resetStore(target: typeof store) {
     settings: { scope: "local", values: {}, original: {}, dirty: false, exists: true, saving: false, error: null },
     files: {
       treeCache: {},
+      sortKey: "name",
+      sortDir: "asc",
       expandedPaths: [],
       currentDir: "",
       selectedPaths: [],

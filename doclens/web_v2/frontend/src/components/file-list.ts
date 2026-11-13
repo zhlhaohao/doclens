@@ -9,6 +9,7 @@ import {
   parentBrowsePath,
   parentOfBrowseRoot,
 } from "../utils/browse-path";
+import { sortFileEntries, type FileSortKey } from "../utils/file-sort";
 import "./file-row";
 
 const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140] as const;
@@ -311,6 +312,31 @@ export class FileList extends LitElement {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-xs);
     }
+    /* 可排序列头：点击切换排序键/方向 */
+    .header-row .sortable {
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: var(--cortex-radius-sm);
+    }
+    .header-row .sortable:hover { color: var(--cortex-text); }
+    .header-row .sortable:focus-visible {
+      outline: 1px solid var(--cortex-primary);
+      outline-offset: 1px;
+    }
+    .header-row .sortable.sorted { color: var(--cortex-primary); }
+    /* 居中列（大小/修改）：inline-flex 需显式 justify 才居中 */
+    .header-row .sortable.cell-size,
+    .header-row .sortable.cell-time { justify-content: center; }
+    .sort-arrow {
+      font-size: 0.75em;
+      line-height: 1;
+      min-width: 0.75em;
+    }
+    /* 箭头用 CSS content 渲染——列头 DOM 文本保持纯标签（表头文本契约） */
+    .sort-arrow::before { content: attr(data-arrow); }
     .rows { flex: 1; overflow-y: auto; }
     .empty {
       padding: var(--cortex-space-8);
@@ -707,9 +733,49 @@ export class FileList extends LitElement {
     `;
   }
 
+  /**
+   * 可排序列头：点击切换排序键/方向，当前列显示 ▲/▼ 指示。
+   * 列宽拖拽句柄（col-resize）与点击排序共存于同一单元格。
+   */
+  private _renderSortHeader(
+    key: FileSortKey,
+    label: string,
+    colIdx: number,
+    extraClass = "",
+  ) {
+    const { sortKey, sortDir } = store.getState().files;
+    const active = sortKey === key;
+    const arrow = active ? (sortDir === "asc" ? "▲" : "▼") : "";
+    const title = active
+      ? `${label}（当前排序：${sortDir === "asc" ? "升序" : "降序"}，点击切换）`
+      : `${label}（点击按${label}排序）`;
+    return html`<span
+      class="sortable ${extraClass} ${active ? "sorted" : ""}"
+      role="button"
+      tabindex="0"
+      title=${title}
+      aria-sort=${active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      @click=${() => actions.toggleFileSort(key)}
+      @keydown=${(e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          actions.toggleFileSort(key);
+        }
+      }}
+    >${label}<span class="sort-arrow" data-arrow=${arrow}></span><span
+        class="col-resize"
+        title="拖动调整列宽"
+        @mousedown=${this._makeColResizeHandler(colIdx)}
+      ></span></span>`;
+  }
+
   render() {
-    const { currentDir, treeCache, selectedPaths, listing } = store.getState().files;
-    const entries = treeCache[currentDir] || [];
+    const { currentDir, treeCache, selectedPaths, listing, sortKey, sortDir } =
+      store.getState().files;
+    // 列头排序在前端做（后端 /files/list 固定按名称排序且刻意不对全目录
+    // stat——见 api/files.py:318-333），排序域 = 已加载的当页条目。
+    const rawEntries = treeCache[currentDir] || [];
+    const entries = sortFileEntries(rawEntries, sortKey, sortDir);
     const sel = new Set(selectedPaths);
     // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
     const outside = isOutsideWorkdir(currentDir);
@@ -748,9 +814,9 @@ export class FileList extends LitElement {
                 />
               </span>
               <span></span>
-              <span>名称</span>
-              <span class="cell-size">大小</span>
-              <span class="cell-time">修改</span>
+              ${this._renderSortHeader("name", "名称", 2)}
+              ${this._renderSortHeader("size", "大小", 3, "cell-size")}
+              ${this._renderSortHeader("mtime", "修改", 4, "cell-time")}
             </div>`}
         <div class="rows">
           ${entries.map(e => html`
@@ -827,21 +893,9 @@ export class FileList extends LitElement {
               />`}
             </span>
             <span></span>
-            <span>名称<span
-                class="col-resize"
-                title="拖动调整列宽"
-                @mousedown=${this._makeColResizeHandler(2)}
-              ></span></span>
-            <span class="cell-size">大小<span
-                class="col-resize"
-                title="拖动调整列宽"
-                @mousedown=${this._makeColResizeHandler(3)}
-              ></span></span>
-            <span class="cell-time">修改<span
-                class="col-resize"
-                title="拖动调整列宽"
-                @mousedown=${this._makeColResizeHandler(4)}
-              ></span></span>
+            ${this._renderSortHeader("name", "名称", 2)}
+            ${this._renderSortHeader("size", "大小", 3, "cell-size")}
+            ${this._renderSortHeader("mtime", "修改", 4, "cell-time")}
           </div>`}
       <div class="rows">
         ${entries.map(e => html`
