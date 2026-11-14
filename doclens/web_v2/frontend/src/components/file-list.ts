@@ -273,6 +273,19 @@ export class FileList extends LitElement {
     @media (max-width: 1023px) {
       .col-resize { display: none !important; }
     }
+    /* 移动端（mobile 模式）：名称列 minmax(100%,1fr) 占满整屏宽，大小/修改
+       列排在屏外——手指左右滑横滚露出（用户决议 2026-11-14，替代旧版
+       「列溢出被动横滚」——那版大小/日期永远看不到）。表头与行区横滚
+       同步：@scroll 处理器把 .rows 的 scrollLeft 映射到 .header-row。 */
+    @media (max-width: 1023px) {
+      .header-row {
+        grid-template-columns: 24px 20px minmax(100%, 1fr) 56px 84px;
+        gap: var(--cortex-space-1);
+        padding: 6px var(--cortex-space-2);
+        overflow-x: hidden; /* 横滚由 .rows 驱动，表头跟随 scrollLeft */
+      }
+      .rows { overflow-x: auto; }
+    }
     .header-row > span { position: relative; }
     .col-resize {
       position: absolute;
@@ -312,6 +325,7 @@ export class FileList extends LitElement {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-xs);
     }
+    /* 可排序列头：点击切换排序键/方向 */
     /* 可排序列头：点击切换排序键/方向 */
     .header-row .sortable {
       cursor: pointer;
@@ -397,6 +411,10 @@ export class FileList extends LitElement {
 
   willUpdate(): void {
     // 把列宽注入到 :host 的 CSS 变量，子树（含 file-row 的 shadow DOM）继承读取
+    // 移动端（mobile 模式）：跳过注入，让 .header-row/.row 的移动端媒体查询
+    // 生效——桌面固定像素网格（240+80+140+gap ≈ 516px）在 ~390px 视口下
+    // 大小/修改两列被挤出屏幕外，只看得见名称列。
+    if (this.mobile) return;
     for (let i = 0; i < COL_COUNT; i++) {
       this.style.setProperty(`--col-${i + 1}`, `${this._colWidths[i]}px`);
     }
@@ -734,6 +752,17 @@ export class FileList extends LitElement {
   }
 
   /**
+   * 移动端：行区横滚（手指左右滑露出大小/修改列）时，表头跟随
+   * scrollLeft——表头自身 overflow-x:hidden，不独立滚动。桌面端
+   * .rows 无横滚（overflow-y only），此处理器为空操作。
+   */
+  private _onRowsScroll = (e: Event) => {
+    const rows = e.target as HTMLElement;
+    const header = this.renderRoot.querySelector<HTMLElement>(".header-row");
+    if (header) header.style.transform = `translateX(${-rows.scrollLeft}px)`;
+  };
+
+  /**
    * 可排序列头：点击切换排序键/方向，当前列显示 ▲/▼ 指示。
    * 列宽拖拽句柄（col-resize）与点击排序共存于同一单元格。
    */
@@ -818,7 +847,7 @@ export class FileList extends LitElement {
               ${this._renderSortHeader("size", "大小", 3, "cell-size")}
               ${this._renderSortHeader("mtime", "修改", 4, "cell-time")}
             </div>`}
-        <div class="rows">
+        <div class="rows" @scroll=${this._onRowsScroll}>
           ${entries.map(e => html`
             <file-row
               .entry=${e}

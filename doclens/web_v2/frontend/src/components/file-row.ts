@@ -68,6 +68,16 @@ export class FileRow extends LitElement {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text-muted);
     }
+    /* 移动端：名称列 minmax(100%,1fr) 占满整屏宽——内容超宽产生横滚，
+       手指左右滑露出大小/修改列；网格与 file-list .header-row 一致 */
+    @media (max-width: 1023px) {
+      .row {
+        grid-template-columns: 24px 20px minmax(100%, 1fr) 56px 84px;
+        gap: var(--cortex-space-1);
+        padding: 6px var(--cortex-space-2);
+      }
+      .size { font-size: var(--cortex-fs-2xs, var(--cortex-fs-xs)); }
+    }
   `;
 
   @property({ type: Object }) entry!: FileEntry;
