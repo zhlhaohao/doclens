@@ -273,18 +273,50 @@ export class FileList extends LitElement {
     @media (max-width: 1023px) {
       .col-resize { display: none !important; }
     }
-    /* 移动端（mobile 模式）：名称列 minmax(100%,1fr) 占满整屏宽，大小/修改
-       列排在屏外——手指左右滑横滚露出（用户决议 2026-11-14，替代旧版
-       「列溢出被动横滚」——那版大小/日期永远看不到）。表头与行区横滚
-       同步：@scroll 处理器把 .rows 的 scrollLeft 映射到 .header-row。 */
+    /* 移动端（mobile 模式）：名称列 min(100%, 420px)——普通手机占满整屏宽，
+       折叠屏展开（>420px 剩余空间）时封顶 420px，大小/修改列直接进入屏内
+       无需横滚。minmax(100%,1fr) 的问题：折叠屏上名称列过宽，屏外没有内容
+       可滑。表头与行区横滚同步：@scroll 处理器把 .rows 的 scrollLeft 写到
+       .header-row 的 scrollLeft（表头 touch-action:none 禁手势防抢滚动，
+       且 pointer-events 不裁剪——不能用 transform 同步：transform 连裁剪
+       窗口一起平移，滑出部分的列头点击失效）。右缘渐隐提示屏外还有列
+       （滑到最右摘除）。 */
     @media (max-width: 1023px) {
       .header-row {
-        grid-template-columns: 24px 20px minmax(100%, 1fr) 56px 84px;
+        /* 与 file-row .row 完全一致——窄屏档用 --cortex-files-name-col
+           （file-list willUpdate 按 100vw-200px 注入 px 值）。不用百分比：
+           行侧 100% 在 max-content 行宽下循环解析，表头 374px vs 行 420px
+           的 46px 错位事故（2026-11-14）就是这类解析差异。 */
+        grid-template-columns: 24px 20px var(--cortex-files-name-col, 420px) 67px 100px;
         gap: var(--cortex-space-1);
         padding: 6px var(--cortex-space-2);
-        overflow-x: hidden; /* 横滚由 .rows 驱动，表头跟随 scrollLeft */
+        /* 同步行区滚动：scrollLeft 由 @scroll 处理器写入；
+           touch-action:none 禁掉表头自身的手势滚动（手指只在行区滑） */
+        overflow-x: hidden;
+        touch-action: none;
+        scrollbar-width: none;
       }
-      .rows { overflow-x: auto; }
+      .rows {
+        overflow-x: auto;
+        /* 列吸附：松手吸附到行首(0)或行尾(=修改列右缘)——滑一半时部分
+           露出的列文字偏在屏幕一侧，看起来像右对齐；吸附后列要么完整
+           可见要么不见，消除错觉。mandatory：proximity 对中间位置不强拉。
+           shadow DOM 内列格不能做外层 scroller 的 snap 目标，用行 host 的
+           start/end 两点对齐。 */
+        scroll-snap-type: x mandatory;
+      }
+      .rows > file-row { scroll-snap-align: end; }
+      /* 右缘渐隐：暗示屏外还有大小/修改列（滑到最右由 scroll-end class 摘除） */
+      .rows {
+        background:
+          linear-gradient(to left, var(--cortex-surface), transparent 24px)
+            right/24px 100% no-repeat local,
+          linear-gradient(to left, var(--cortex-border-muted), transparent 1px)
+            right/1px 100% no-repeat scroll;
+      }
+      .rows.scroll-end {
+        background: none;
+      }
     }
     .header-row > span { position: relative; }
     .col-resize {
@@ -411,10 +443,22 @@ export class FileList extends LitElement {
 
   willUpdate(): void {
     // 把列宽注入到 :host 的 CSS 变量，子树（含 file-row 的 shadow DOM）继承读取
-    // 移动端（mobile 模式）：跳过注入，让 .header-row/.row 的移动端媒体查询
-    // 生效——桌面固定像素网格（240+80+140+gap ≈ 516px）在 ~390px 视口下
-    // 大小/修改两列被挤出屏幕外，只看得见名称列。
-    if (this.mobile) return;
+    // 移动端（mobile 模式）：跳过桌面列宽注入，改注入 --cortex-files-name-col。
+    // ≤430px 视口：名称列固定为「可见区实际宽度」= 100vw − 243px（左侧
+    // checkbox24+icon20+gaps16+padding16 = 76，右侧屏外大小67+修改100+gaps16
+    // = 183，合计 259；再减 gap 已计入）→ 名称列右缘正好贴屏右缘，名称在
+    // 屏内完整换行；大小/修改列整体滑出屏外，右滑露出。
+    // 430~1023px（折叠屏档）：420px 固定。
+    // px 值而非 vw/calc：行侧 max-content 行宽会与百分比循环解析（46px 错位事故）
+    if (this.mobile) {
+      const vw = window.innerWidth;
+      // 布局：padding 8*2 + checkbox24 + icon20 + gaps 4*4 + size67 + time100
+      // 名称列贴屏右缘 = vw − 8 − 24 − 4 − 20 − 4 = vw − 60；此后 size/time
+      // 共 4(gap)+67+4+100+8(padding) = 183px 全部滑出屏外
+      const nameCol = vw <= 430 ? Math.max(120, vw - 60) : 420;
+      this.style.setProperty("--cortex-files-name-col", `${nameCol}px`);
+      return;
+    }
     for (let i = 0; i < COL_COUNT; i++) {
       this.style.setProperty(`--col-${i + 1}`, `${this._colWidths[i]}px`);
     }
@@ -752,14 +796,17 @@ export class FileList extends LitElement {
   }
 
   /**
-   * 移动端：行区横滚（手指左右滑露出大小/修改列）时，表头跟随
-   * scrollLeft——表头自身 overflow-x:hidden，不独立滚动。桌面端
-   * .rows 无横滚（overflow-y only），此处理器为空操作。
+   * 移动端：行区横滚（手指左右滑露出大小/修改列）时，表头 scrollLeft
+   * 跟随（表头 overflow-x:hidden 下写 scrollLeft 同样裁剪内容并平移
+   * 可视窗口，但命中测试与裁剪一致——列头滑入屏内即可点）。
+   * 滑到最右摘除右缘渐隐提示（scroll-end）。
+   * 桌面端 .rows 无横滚，此处理器为空操作。
    */
   private _onRowsScroll = (e: Event) => {
     const rows = e.target as HTMLElement;
     const header = this.renderRoot.querySelector<HTMLElement>(".header-row");
-    if (header) header.style.transform = `translateX(${-rows.scrollLeft}px)`;
+    if (header) header.scrollLeft = rows.scrollLeft;
+    rows.classList.toggle("scroll-end", rows.scrollLeft >= rows.scrollWidth - rows.clientWidth - 1);
   };
 
   /**
@@ -853,6 +900,7 @@ export class FileList extends LitElement {
               .entry=${e}
               .selected=${sel.has(e.path)}
               .active=${e.path === this.activePath}
+              ?mobile=${true}
               @checked=${this._onRowChecked}
             ></file-row>`)}
         </div>

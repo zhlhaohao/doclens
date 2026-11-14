@@ -7,6 +7,11 @@ import { getFileTypeBadge } from "../utils/file-type";
 export class FileRow extends LitElement {
   static styles = css`
     :host { display: block; }
+    /* 移动端：host 跟随 .row 的 max-content 宽（file-list :host overflow
+       hidden 会裁 display:block 的 host），行底线/行点击区贯穿滑出列 */
+    @media (max-width: 1023px) {
+      :host { width: max-content; min-width: 100%; }
+    }
     .row {
       display: grid;
       grid-template-columns:
@@ -44,6 +49,7 @@ export class FileRow extends LitElement {
       font-size: var(--cortex-fs-xs);
       text-align: center;
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .badge {
       display: inline-block;
@@ -68,13 +74,20 @@ export class FileRow extends LitElement {
       background: var(--cortex-surface-muted);
       color: var(--cortex-text-muted);
     }
-    /* 移动端：名称列 minmax(100%,1fr) 占满整屏宽——内容超宽产生横滚，
-       手指左右滑露出大小/修改列；网格与 file-list .header-row 一致 */
+    /* 移动端（mobile 模式）：名称列宽由 --cortex-files-name-col 驱动
+       （file-list willUpdate 注入：
+       ≤430px 视口 = calc(100vw - 215px)——名称列在屏内完整显示、长名
+       换行（.name white-space:normal），大小/修改列滑出屏外由横滚露出；
+       430~1023px = 420px 固定——折叠屏展开，多余空间行尾留白，两列
+       直接在屏内）。表头网格与此处逐像素一致（对齐事故见 2026-11-14）。 */
     @media (max-width: 1023px) {
       .row {
-        grid-template-columns: 24px 20px minmax(100%, 1fr) 56px 84px;
+        grid-template-columns: 24px 20px var(--cortex-files-name-col, 420px) 67px 100px;
         gap: var(--cortex-space-1);
         padding: 6px var(--cortex-space-2);
+        width: max-content;
+        min-width: 100%;
+        box-sizing: border-box;
       }
       .size { font-size: var(--cortex-fs-2xs, var(--cortex-fs-xs)); }
     }
@@ -86,6 +99,8 @@ export class FileRow extends LitElement {
   @property({ type: Boolean }) active = false;
   /** 外部浏览态（ADR-0049）：隐藏 checkbox 与索引徽标（外部恒只读未索引）。 */
   @property({ type: Boolean }) hideCheckbox = false;
+  /** 移动端：时间列用短格式（MM-DD HH:mm），窄列不折行（file-list 传入）。 */
+  @property({ type: Boolean }) mobile = false;
 
   private _fmtSize(n: number): string {
     if (n < 1024) return `${n} B`;
@@ -96,6 +111,14 @@ export class FileRow extends LitElement {
   private _fmtTime(s: string): string {
     if (!s) return "";
     try {
+      // 桌面端列宽充足用完整格式；移动端窄列（84px）用「MM-DD HH:mm」
+      // ——完整 toLocaleString（~71px @12px）会在空格处折行成两行
+      if (this.mobile) {
+        const d = new Date(s);
+        if (Number.isNaN(d.getTime())) return "";
+        const p = (n: number) => String(n).padStart(2, "0");
+        return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      }
       return new Date(s).toLocaleString(undefined, {
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit",
