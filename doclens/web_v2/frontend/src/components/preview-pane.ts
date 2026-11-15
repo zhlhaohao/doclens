@@ -5,13 +5,9 @@ import "./code-viewer";
 import "./cm-editor";
 import "./toc-drawer";
 import "./pdf-viewer";
-import "./skill-toolbox-dialog";
-import "./skill-run-dialog";
 import { savePreview, PreviewSaveError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
-import { fetchSkills, type SkillInfo } from "../api/skills";
-import { recordSkillUse } from "../state/recent-skills";
 import { extractHeadings, activeTocIndex, type TocItem } from "../utils/toc";
 import type { CmEditor } from "./cm-editor";
 import type { MdViewer } from "./md-viewer";
@@ -22,17 +18,12 @@ import {
   scrollJumpFabStyles,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
-import {
-  addBookmark,
-  bookmarksFor,
-  removeBookmark,
-  type ReadingBookmark,
-} from "../utils/bookmarks";
-import "./bookmark-drawer";
+import { BookmarksController } from "../utils/bookmarks-controller";
 import "./translate-dialog";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
 import { formatBytes } from "../utils/format";
+import { SkillToolboxController } from "../utils/skill-toolbox";
 import { downloadServerFile } from "../utils/download";
 import { getFileTypeBadge } from "../utils/file-type";
 import {
@@ -646,11 +637,10 @@ export class PreviewPane extends LitElement {
   /** PDF 缩放控件显示（「适宽」/百分比；pdf-viewer scalechanging 驱动）。 */
   @state() private _pdfZoomLabel = "适宽";
 
-  /** 技能工具箱（预览文件 → AI 技能处理）：对话框态与数据源。 */
-  @state() private _toolbox: "list" | "run" | null = null;
-  @state() private _toolboxSkills: SkillInfo[] | null = null;
-  @state() private _toolboxError: string | null = null;
-  @state() private _pickedSkill: SkillInfo | null = null;
+    /** 技能工具箱域（AP-4 拆分，2026-11-15）：状态机/数据拉取/消息拼装迁
+   *  SkillToolboxController（utils/skill-toolbox.ts），本组件只持入口按钮
+   *  与 skill-chat 派发——沿 2026-10-19 P1-1（行选择迁 code-viewer）先例。 */
+  private _toolbox = new SkillToolboxController(this);
 
   /** 行选择已迁 code-viewer（2026-10-19 P1-1 拆分）：选区态归组件自治，
    *  宿主经 _codeSelection 镜像 + _pathWithRanges 消费；path/content 变化
@@ -727,9 +717,10 @@ export class PreviewPane extends LitElement {
   /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
   @state() private _tocCurrentLine = 1;
 
-  /** 阅读书签抽屉（2026-10-01 决议）：显隐 + 当前文件书签列表 */
-  @state() private _showBookmarks = false;
-  @state() private _bookmarkItems: ReadingBookmark[] = [];
+  /** 阅读书签域（AP-4 拆分，2026-11-15）：显隐/列表/收藏/跳转/删除迁
+   *  BookmarksController（utils/bookmarks-controller.ts），本组件注入
+   *  锚点捕获与跳转回调。 */
+  private _bookmarks = new BookmarksController(this);
 
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
@@ -766,9 +757,8 @@ export class PreviewPane extends LitElement {
       // 分支不触发，须在 path 变化时清书签条目）
       this._showToc = false;
       this._tocItems = [];
-      // 书签抽屉同样不跨文档残留；列表换 path 重读
-      this._showBookmarks = false;
-      this._bookmarkItems = bookmarksFor(this.path);
+      // 书签抽屉同样不跨文档残留；列表换 path 重读（controller 自理）
+      this._bookmarks.onPathChanged(this.path);
       // 行选择清空已随 code-viewer content 变化自清（组件自治）；宿主镜像复位
       this._codeSelection = "";
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
@@ -791,12 +781,8 @@ export class PreviewPane extends LitElement {
 
   async updated(changed: Map<string, unknown>) {
     super.updated?.(changed);
-    // 工具箱对话框以 showModal 打开（top layer，防 PDF portal 遮挡、
-    // 不受预览栏裁剪）；list↔run 切换时 dialog 节点重建，需重新 showModal
-    if (changed.has("_toolbox") && this._toolbox) {
-      const dlg = this.shadowRoot!.querySelector("dialog") as HTMLDialogElement | null;
-      if (dlg && !dlg.open) dlg.showModal();
-    }
+    // 工具箱对话框 showModal 时机已迁 SkillToolboxController.hostUpdated
+    // （AP-4 拆分）；list↔run 切换重建 dialog 的重开逻辑同迁。
     // 纯文本分支的滚动容器 .body 只在该分支存在：在则绑定，不在则解绑
     const body = this.shadowRoot!.querySelector(".body") as HTMLElement | null;
     if (body) this._scrollJump.attach(body);
@@ -1264,10 +1250,10 @@ export class PreviewPane extends LitElement {
           : null}
         ${this._bookmarkAvailable
           ? html`<button
-              class="mobile-toc mobile-bookmark ${this._showBookmarks ? "active" : ""}"
+              class="mobile-toc mobile-bookmark ${this._bookmarks.open ? "active" : ""}"
               type="button"
               aria-label="书签"
-              @click=${this._onBookmarksToggle}
+              @click=${() => { this._syncBookmarks(); this._bookmarks.toggle(); }}
             ><doclens-icon name="star"></doclens-icon></button>`
           : null}
         ${(this.language === "markdown" || this.language === "pdf") && this._mode === "preview"
@@ -1335,7 +1321,7 @@ export class PreviewPane extends LitElement {
                 <button
                   type="button"
                   role="menuitem"
-                  @click=${() => { this._showMobileMenu = false; void this._onToolboxOpen(); }}
+                  @click=${() => { this._showMobileMenu = false; this._syncToolbox(); void this._toolbox.open_(); }}
                 ><doclens-icon name="sparkles"></doclens-icon>工具箱</button>
                 ${this.path
                   ? html`<button
@@ -1736,6 +1722,32 @@ export class PreviewPane extends LitElement {
   // （md/epub/docx，源行号锚点）+ pdf-viewer 链路（pdf，页号+页内偏移
   // 锚点）。与滚动记忆（隐式自动）分工并存；与 PDF 原生书签（TOC）无关。
   // ------------------------------------------------------------------
+  // 阅读书签（2026-10-01 决议）：域已迁 BookmarksController（AP-4 拆分，
+  //  2026-11-15）——本组件注入环境参数（入口判定/锚点捕获/标签/跳转），
+  //  toast 反馈事件口径不变（bookmark-added/duplicate/full）。
+  // ------------------------------------------------------------------
+
+  /** 同步书签控制器的环境参数（render 前调用）。 */
+  private _syncBookmarks() {
+    this._bookmarks.available = this._bookmarkAvailable;
+    this._bookmarks.captureAnchor = () => {
+      const viewer = this._activePreviewViewer();
+      return viewer ? { kind: viewer.kind, anchor: viewer.top() } : null;
+    };
+    this._bookmarks.labelFor = (kind, anchor) => this._bookmarkLabel(kind, anchor);
+    this._bookmarks.onJump = (b) => {
+      if (b.kind === "pdf") {
+        const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+        pdf?.restoreScrollAnchorValue(b.anchor);
+        return;
+      }
+      const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+      viewer?.scrollToSourceLine(b.anchor, "smooth");
+    };
+    this._bookmarks.onFeedback = (kind) => {
+      this.dispatchEvent(new CustomEvent(`bookmark-${kind}`, { bubbles: true, composed: true }));
+    };
+  }
 
   /** 书签支持的扩展名（按预览链路划定：md-viewer 链路 md/epub/docx +
    *  pdf-viewer 链路 pdf；pptx/xlsx/邮件/图像等不提供）。 */
@@ -1763,88 +1775,26 @@ export class PreviewPane extends LitElement {
     return idx >= 0 ? this._tocItems[idx].text : `第 ${anchor} 行`;
   }
 
-  /** 收藏当前位置（header 圆钮一键动作）：捕获当前锚点 + 生成自动标签。
-   *  幂等命中 / 满员经 toast 反馈（bookmark-added 事件，宿主视图 toast，
-   *  与 download-success 同模式）。 */
-  private _onBookmarkAdd = () => {
-    if (!this._bookmarkAvailable) return;
-    const viewer = this._activePreviewViewer();
-    if (!viewer) return;
-    const kind = viewer.kind;
-    const anchor = Math.max(1, Math.floor(viewer.top()));
-    const label = this._bookmarkLabel(kind, anchor);
-    const result = addBookmark({ path: this.path, anchor, kind, label });
-    if (!result.ok) {
-      this.dispatchEvent(new CustomEvent("bookmark-full", { bubbles: true, composed: true }));
-      return;
-    }
-    this._bookmarkItems = bookmarksFor(this.path);
-    if (result.duplicate) {
-      this.dispatchEvent(new CustomEvent("bookmark-duplicate", { bubbles: true, composed: true }));
-    } else {
-      this.dispatchEvent(new CustomEvent("bookmark-added", { bubbles: true, composed: true }));
-    }
-  };
-
-  private _onBookmarksToggle = () => {
-    if (!this._showBookmarks) {
-      this._bookmarkItems = bookmarksFor(this.path);
-    }
-    this._showBookmarks = !this._showBookmarks;
-  };
-
-  private _onBookmarksClose = () => {
-    this._showBookmarks = false;
-  };
-
-  /** 点击书签条目：关闭抽屉 + 跳转（md：平滑滚到源行号；pdf：restore
-   *  页号+页内偏移——与滚动记忆恢复同路径）。 */
-  private _onBookmarkJump = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
-    const b = e.detail.bookmark;
-    this._showBookmarks = false;
-    if (b.kind === "pdf") {
-      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-      pdf?.restoreScrollAnchorValue(b.anchor);
-      return;
-    }
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    viewer?.scrollToSourceLine(b.anchor, "smooth");
-  };
-
-  /** 删除书签：本地移除并刷新列表（抽屉不关闭，可连续删）。 */
-  private _onBookmarkRemove = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
-    const b = e.detail.bookmark;
-    removeBookmark(b.path, b.anchor);
-    this._bookmarkItems = bookmarksFor(this.path);
-  };
-
   /** 桌面 header 的书签按钮（图标 + hover 文字，同 toc-btn）：点击打开
    *  抽屉（收藏动作在抽屉内——右键入口不可发现，2026-10-01 修正）。 */
   private _renderBookmarkBtn() {
+    this._syncBookmarks();
     if (!this._bookmarkAvailable) return null;
     return html`<button
-      class="toc-btn ${this._showBookmarks ? "active" : ""}"
+      class="toc-btn ${this._bookmarks.open ? "active" : ""}"
       title="书签列表"
-      @click=${this._onBookmarksToggle}
+      @click=${() => this._bookmarks.toggle()}
     ><doclens-icon name="star"></doclens-icon><span class="btn-label">书签</span></button>`;
   }
 
   private _renderBookmarkDrawer() {
-    if (!this._showBookmarks) return null;
-    return html`<bookmark-drawer
-      .items=${this._bookmarkItems}
-      .canAdd=${this._bookmarkAvailable}
-      @add=${this._onBookmarkAdd}
-      @jump=${this._onBookmarkJump}
-      @remove=${this._onBookmarkRemove}
-      @close=${this._onBookmarksClose}
-    ></bookmark-drawer>`;
+    return this._bookmarks.renderDrawer();
   }
 
   // ------------------------------------------------------------------
-  // 技能工具箱（对当前预览文件跑 AI 技能）：流程内嵌本组件（对话框
-  // 组件复用 files 页同款），完成后发 skill-chat 组合事件由 cortex-app
-  // 统一消费（新建技能会话 + 切 chat），三个宿主视图零改动。
+  // 技能工具箱（对当前预览文件跑 AI 技能）：域已迁 SkillToolboxController
+  // （AP-4 拆分，2026-11-15）——本组件只保留入口按钮与 skill-chat 派发，
+  // 完成后由 cortex-app 统一消费（新建技能会话 + 切 chat）。
   // ------------------------------------------------------------------
 
   /** 工具箱入口可用：有预览文件且非 PST（派生路径非真实文件）。 */
@@ -1852,58 +1802,28 @@ export class PreviewPane extends LitElement {
     return !!this.path && !this._isPst;
   }
 
-  private async _onToolboxOpen() {
-    if (!this._toolboxAvailable) return;
-    this._pickedSkill = null;
-    this._toolbox = "list";
-    this._toolboxSkills = null;
-    this._toolboxError = null;
-    try {
-      this._toolboxSkills = await fetchSkills();
-    } catch (e) {
-      this._toolboxError = (e as Error)?.message || "技能列表加载失败";
-    }
+  /** 同步工具箱控制器的入口参数（render 时调用；路径/选区变化即生效）。 */
+  private _syncToolbox() {
+    this._toolbox.available = this._toolboxAvailable;
+    this._toolbox.filePaths = () => [this._pathWithRanges];
+    this._toolbox.onRun = (payload) => {
+      this._codeViewer()?.clearSelection(); // 已发送：选区消费完毕，不残留旧区间
+      this._codeSelection = "";
+      this.dispatchEvent(new CustomEvent("skill-chat", {
+        detail: { message: payload.message, title: payload.title },
+        bubbles: true, composed: true,
+      }));
+    };
   }
-
-  private _onSkillPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
-    this._pickedSkill = e.detail.skill;
-    this._toolbox = "run";
-  };
-
-  /** 确认「开始对话」：拼消息 → skill-chat 事件（app 层建会话切 chat）。
-   *  有选中行时文件路径附 `:区间` 后缀（行选择，2026-10-05 决议）。 */
-  private _onSkillRunSubmit = (e: CustomEvent<{ prompt: string }>) => {
-    const skill = this._pickedSkill;
-    this._toolbox = null;
-    if (!skill) return;
-    const lines = [
-      `/${skill.name} 按技能指引处理以下文件`,
-      "",
-      "文件：",
-      `- ${this._pathWithRanges}`,
-      "",
-      `补充要求：${e.detail.prompt || "无"}`,
-    ];
-    recordSkillUse(skill.name);
-    const firstFile = this.path.split("/").pop() ?? this.path;
-    this._codeViewer()?.clearSelection(); // 已发送：选区消费完毕，不残留旧区间
-    this._codeSelection = "";
-    this.dispatchEvent(new CustomEvent("skill-chat", {
-      detail: {
-        message: lines.join("\n"),
-        title: `${skill.name} · ${firstFile}`,
-      },
-      bubbles: true, composed: true,
-    }));
-  };
 
   /** 工具箱按钮（桌面 header，sparkles 图标与 files 工具栏同款）。 */
   private _renderToolboxBtn() {
+    this._syncToolbox();
     if (!this._toolboxAvailable) return null;
     return html`<button
       class="toc-btn"
       title="技能工具箱（对当前文件运行 AI 技能）"
-      @click=${() => void this._onToolboxOpen()}
+      @click={() => void this._toolbox.open_()}
     ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
   }
 
@@ -1935,28 +1855,9 @@ export class PreviewPane extends LitElement {
 
   /** 工具箱对话框组（list → run 两段式，与 files 页同组件同交互）。
    *  showModal 渲染（top layer）：见 updated() 的打开时机。 */
+  /** 工具箱对话框组（渲染委派 SkillToolboxController，AP-4 拆分）。 */
   private _renderToolboxDialogs() {
-    if (this._toolbox === "list") {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
-        <skill-toolbox-dialog
-          .skills=${this._toolboxSkills}
-          .error=${this._toolboxError}
-          @pick=${this._onSkillPick}
-          @cancel=${() => { this._toolbox = null; }}
-        ></skill-toolbox-dialog>
-      </dialog>`;
-    }
-    if (this._toolbox === "run" && this._pickedSkill) {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
-        <skill-run-dialog
-          .skill=${this._pickedSkill}
-          .filePaths=${[this.path]}
-          @submit=${this._onSkillRunSubmit}
-          @cancel=${() => { this._toolbox = null; }}
-        ></skill-run-dialog>
-      </dialog>`;
-    }
-    return null;
+    return this._toolbox.renderDialogs();
   }
 
   private _onTocToggle = () => {
