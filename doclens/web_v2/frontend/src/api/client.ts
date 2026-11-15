@@ -30,6 +30,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     try {
       body = await res.json();
     } catch {
+      // 错误响应非 JSON（代理/网关 HTML 错误页等）：退化为 statusText，
+      // ApiError 照常抛出（code=unknown）——静默的是解析，不是错误本身。
       body = { code: "unknown", detail: res.statusText };
     }
     throw new ApiError(res.status, body.code ?? "unknown", body.detail ?? "请求失败");
