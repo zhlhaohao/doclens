@@ -19,6 +19,7 @@ import {
   type QuotaResult,
 } from "../api/presets";
 import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
+import { ProbeController } from "../utils/probe-controller";
 
 /** 空表单初值（新建用）。 */
 function emptyForm(kind: PresetKind): FormState {
@@ -371,11 +372,20 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
   @state() private _error: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
-  @state() private _probing = false;
-  @state() private _probeMsg: string | null = null;
-  @state() private _probingVision = false;
-  @state() private _probingTranslate = false;
-  @state() private _probeTranslateMsg: string | null = null;
+  /** 探测三兄弟的 busy/提示状态（AP-23 迁 ProbeController；错误统一落 _formError）。 */
+  private _probes = new ProbeController(this);
+
+  constructor() {
+    super();
+    this._probes.onError = (msg) => { this._formError = msg; };
+    this._probes.toErrMsg = (e) => this._errMsg(e);
+  }
+
+  private get _probing(): boolean { return this._probes.isBusy("max"); }
+  private get _probingVision(): boolean { return this._probes.isBusy("vision"); }
+  private get _probingTranslate(): boolean { return this._probes.isBusy("translate"); }
+  private get _probeMsg(): string | null { return this._probes.msg("max"); }
+  private get _probeTranslateMsg(): string | null { return this._probes.msg("translate"); }
   /** 套餐额度（仅 LLM 组）：preset_id → 查询状态（loading/ok/error） */
   @state() private _quotas: Record<
     string,
@@ -632,7 +642,7 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
     }
   }
 
-  private async _probe() {
+  private _probe() {
     const ed = this._editing;
     if (!ed) return;
     const f = ed.form;
@@ -644,10 +654,8 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       this._formError = "探测前请先填写 API Key";
       return;
     }
-    this._probing = true;
     this._formError = null;
-    this._probeMsg = null;
-    try {
+    void this._probes.run("max", async () => {
       const r = await probeMaxTokens({
         protocol: f.protocol,
         base_url: f.base_url.trim(),
@@ -656,25 +664,19 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
         preset_id: ed.mode === "edit" ? ed.presetId : undefined,
       });
       this._setField("max_tokens", String(r.max_tokens));
-      this._probeMsg = `探测成功：服务端上限 ${r.max_tokens} tokens（${r.attempts} 次请求），已填入输入框`;
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probing = false;
-    }
+      return `探测成功：服务端上限 ${r.max_tokens} tokens（${r.attempts} 次请求），已填入输入框`;
+    });
   }
 
   /** 行为学探测视觉能力（ADR-0034 增补）：后端发随机密码串图实测模型能否
    *  读图；结果回填 vision 字段（不自动保存，用户可否决）。 */
   /** 翻译服务连通性探测（ADR-0039）：当前表单服务 + envs 翻一句固定文本。 */
-  private async _probeTranslate() {
+  private _probeTranslate() {
     const ed = this._editing;
     if (!ed || ed.form.kind !== "translate") return;
     const f = ed.form;
-    this._probingTranslate = true;
     this._formError = null;
-    this._probeTranslateMsg = null;
-    try {
+    void this._probes.run("translate", async () => {
       const envs: Record<string, string> = {};
       for (const r of f.translateEnvRows) {
         if (r.key.trim()) envs[r.key.trim()] = r.value.trim();
@@ -684,15 +686,11 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
         envs,
         preset_id: ed.mode === "edit" ? ed.presetId : undefined,
       });
-      this._probeTranslateMsg = `连通正常：「Hello, this is a connectivity test.」→ ${r.translation.slice(0, 60)}`;
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probingTranslate = false;
-    }
+      return `连通正常：「Hello, this is a connectivity test.」→ ${r.translation.slice(0, 60)}`;
+    });
   }
 
-  private async _probeVision() {
+  private _probeVision() {
     const ed = this._editing;
     if (!ed) return;
     const f = ed.form;
@@ -704,9 +702,8 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       this._formError = "探测前请先填写 API Key";
       return;
     }
-    this._probingVision = true;
     this._formError = null;
-    try {
+    void this._probes.run("vision", async () => {
       const r = await probeVision({
         protocol: f.protocol,
         base_url: f.base_url.trim(),
@@ -716,11 +713,8 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       });
       // 探测即回填（不自动保存——声明权在用户）；结果文案不展示（用户要求）
       this._setField("vision", r.supported ? "true" : "false");
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probingVision = false;
-    }
+      return null;
+    });
   }
 
   private _renderForm() {

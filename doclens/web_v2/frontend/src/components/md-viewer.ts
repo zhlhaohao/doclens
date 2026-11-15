@@ -12,6 +12,13 @@ import type { PageMarker } from "../api/preview";
 import { bustRawImages } from "./image-viewer";
 import "./icon";
 import {
+  shadowSelection,
+  domTextLength,
+  domLocate,
+  blockSourceText,
+  type SourceContext,
+} from "../utils/selection-math";
+import {
   ScrollJumpController,
   scrollJumpFabStyles,
   renderScrollJumpFabs,
@@ -959,66 +966,29 @@ export class MdViewer extends LitElement {
     requestAnimationFrame(() => requestAnimationFrame(scrollOnce));
   }
 
-  /** 组件渲染树内的 Selection（Chromium 提供 ShadowRoot.getSelection，
-   *  标准 TS DOM lib 未收录——运行时探测）；回退 window 级（open shadow
-   *  的选区节点同样暴露在 document selection 中）。 */
+  /** 组件渲染树内的 Selection（工具函数 shadowSelection，AP-6 迁出）。 */
   private _shadowSelection(): Selection | null {
-    const shadowSel = (this.shadowRoot as unknown as {
-      getSelection?: () => Selection | null;
-    })?.getSelection?.();
-    return shadowSel ?? window.getSelection();
+    return shadowSelection(this.shadowRoot!);
   }
 
-  /** 块覆盖的源行闭区间（from = 锚行，to = 下一锚块起始行-1 / 文档末行）。 */
-  private _blockSourceLines(el: HTMLElement): { from: number; to: number } {
-    const from = Number(el.getAttribute("data-source-line")) || 1;
-    const blocks = this._anchorBlocks();
-    const idx = blocks.indexOf(el);
-    const next =
-      idx >= 0 && idx + 1 < blocks.length
-        ? Number(blocks[idx + 1].getAttribute("data-source-line")) || from
-        : this.content.split("\n").length + 1;
-    return { from, to: Math.max(from, next - 1) };
+  /** 选区换算的源上下文（content + 锚块；utils/selection-math 纯函数消费）。 */
+  private _srcCtx(): SourceContext {
+    return { content: this.content, anchorBlocks: this._anchorBlocks() };
   }
 
-  /** 行号（1-indexed）行首在 content 中的绝对字符偏移。 */
-  private _lineStartOffset(n: number): number {
-    const lines = this.content.split("\n");
-    let off = 0;
-    for (let i = 0; i < Math.min(n - 1, lines.length); i++) off += lines[i].length + 1;
-    return off;
-  }
-
-  /** 块内渲染文本总长（TreeWalker 累计文本节点；含 copy-btn 文本，
-   *  与捕获方向的 Range.toString 对称）。 */
+  /** 块内源文本（覆盖行 join）；同时返回块首绝对偏移。 */
   private _domTextLength(el: HTMLElement): number {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let len = 0;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) len += (n as Text).length;
-    return len;
+    return domTextLength(el);
   }
 
-  /** 块渲染文本第 k 字符的 DOM 位置（(node, offset)；超界钳块尾文本节点）。 */
+  /** 块渲染文本第 k 字符的 DOM 位置（utils/selection-math#domLocate）。 */
   private _domLocate(el: HTMLElement, k: number): { node: Node; offset: number } | null {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let remain = Math.max(0, k);
-    let last: Text | null = null;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const t = n as Text;
-      if (remain <= t.length) return { node: t, offset: remain };
-      remain -= t.length;
-      last = t;
-    }
-    return last ? { node: last, offset: last.length } : null;
+    return domLocate(el, k);
   }
 
   /** 块内源文本（覆盖行 join）；同时返回块首绝对偏移。 */
   private _blockSourceText(el: HTMLElement): { abs: number; text: string } {
-    const { from, to } = this._blockSourceLines(el);
-    return {
-      abs: this._lineStartOffset(from),
-      text: this.content.split("\n").slice(from - 1, to).join("\n"),
-    };
+    return blockSourceText(this._srcCtx(), el);
   }
 
   /** 当前 DOM 选区 → 源文本字符偏移（与 cm-editor 的 selectionStart/End
