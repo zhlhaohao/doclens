@@ -192,6 +192,7 @@ export class LoginView extends LitElement {
         maxlength=${PIN_LENGTH}
         autocomplete="current-password"
         placeholder="●●●●●●"
+        aria-label="访问密码"
         .value=${this._pin}
         @input=${this._onInput}
         @keydown=${this._onKeydown}
