@@ -74,9 +74,12 @@ async function markInView(
     ) as HTMLElement[];
     if (!marks.length) return { ok: false, reason: "no keyword-hit marks" };
     // 大小写不敏感：命中行 spans 由后端按词标出（rg --ignore-case 同口径），
-    // 语料原文可能是「Sheet」而查询词是小写「sheet」（S6 实证 mobile 翻车）。
+    // 语料原文可能是「Sheet」而查询词是小写「sheet」。精确匹配（整 mark
+    // 文本相等）：sheet 标题块（「Sheet One」标题自身也被标 Sheet）与命中
+    // 行内嵌词并存时，子串匹配会误中块标题——S6 实证（定位正确、断言看错块）。
     const needle = text.toLowerCase();
-    const target = marks.find((m) => m.textContent?.toLowerCase().includes(needle));
+    const target = marks.find((m) => m.textContent?.toLowerCase() === needle)
+      ?? marks.find((m) => m.textContent?.toLowerCase().includes(needle));
     if (!target) {
       return {
         ok: false,
@@ -179,15 +182,59 @@ test.describe("search → preview locate（desktop）", () => {
     expect(card).not.toBeNull();
     await card!.locator(".row").first().click();
     await page.waitForTimeout(2000);
-    // keyword = hl（spans 字面「sheet」「three」），不含 kirin——
-    // 断言 sheet 命中区被定位（xlsx 分页表切换 + mark 在视口内）。
-    // xlsx 分页表切换：跳转后收敛循环持续校准，轮询等待
+    // 定位语义断言（AP-9 重写）：跳转目标 = lineMap 前驱映射的 Sheet 03
+    // 标题块（命中行「Columns: Sheet 03 …」是节点标题行）——断言该块
+    // 在视口内且节点行号正确，不断言 mark 位置（标题「Sheet」mark 恒在
+    // 块内，命中行内嵌小写 sheet 在块下方表格里，两者都随块入视口）。
     let r: any = { ok: false };
     for (let i = 0; i < 16 && !r.ok; i++) {
       await page.waitForTimeout(500);
-      r = await markInView(page, "sheet", 80);
+      r = await page.evaluate(() => {
+        const find = (root: ShadowRoot | Document): Element | null => {
+          const d = root.querySelector?.("md-viewer");
+          if (d) return d;
+          for (const el of Array.from(root.querySelectorAll?.("*") ?? [])) {
+            if ((el as HTMLElement).shadowRoot) {
+              const h = find((el as HTMLElement).shadowRoot!);
+              if (h) return h;
+            }
+          }
+          return null;
+        };
+        const mdv = find(document) as any;
+        if (!mdv) return { ok: false, reason: "no md-viewer" };
+        const blocks = Array.from(
+          mdv.shadowRoot.querySelectorAll("[data-source-line]"),
+        ) as HTMLElement[];
+        const b = blocks.find((x) => x.textContent?.includes("Sheet 03"));
+        if (!b) return { ok: false, reason: "no Sheet 03 block" };
+        const host = mdv.getBoundingClientRect();
+        const r = b.getBoundingClientRect();
+        const ok = r.top >= host.top - 80 && r.top <= host.bottom;
+        return {
+          ok,
+          reason: ok ? "" : `Sheet03 block top=${Math.round(r.top - host.top)} vs host [0,${Math.round(host.height)}]`,
+        };
+      });
     }
     expect(r.ok, (r as any).reason).toBe(true);
+    // mark 存在性：Sheet 03 块内应有 keyword-hit mark（标题「Sheet」）
+    const hasMark = await page.evaluate(() => {
+      const find = (root: ShadowRoot | Document): Element | null => {
+        const d = root.querySelector?.("md-viewer");
+        if (d) return d;
+        for (const el of Array.from(root.querySelectorAll?.("*") ?? [])) {
+          if ((el as HTMLElement).shadowRoot) {
+            const h = find((el as HTMLElement).shadowRoot!);
+            if (h) return h;
+          }
+        }
+        return null;
+      };
+      const mdv = find(document) as any;
+      return !!mdv?.shadowRoot?.querySelector("mark.keyword-hit");
+    });
+    expect(hasMark).toBe(true);
   });
 
   test("S7 pptx：第 5 页命中 → 定位 + mark", async ({ page }) => {
