@@ -74,12 +74,10 @@ function controllableSseBody(events: Array<[string, string]>) {
 
 let stopCalls = 0;
 let createdSessions: Array<{ title: string; mode?: string }> = [];
-let currentAbort: AbortSignal | undefined;
 /** 挂起流的控制器（测试手动结束它）。 */
 let hangingStream: { close: () => void; error: (e: Error) => void } | null = null;
 
 function installFetch(opts: MockOpts) {
-  currentAbort = undefined;
   hangingStream = null;
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
@@ -96,7 +94,6 @@ function installFetch(opts: MockOpts) {
       return jsonRes({ ok: true });
     }
     if (u === "/api/chat") {
-      currentAbort = init?.signal ?? undefined;
       if (opts.hang) {
         // 保持流打开（测试手动 close/error）——测停止与切走的竞态
         const ctl = controllableSseBody(opts.events ?? []);
