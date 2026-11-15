@@ -892,6 +892,15 @@ export class PreviewPane extends LitElement {
     this._scrollSaveTimer = window.setTimeout(() => this._flushScrollMemory(), 300);
   };
 
+  /** 强制重定位到当前行（AP-2：search-view 同文件同行重复点击的兜底，
+   *  取代宿主双层 shadowRoot 穿透直调 md-viewer.reLocate）。内部转发当前
+   *  md-viewer；无 md 预览时 no-op。 */
+  async reLocate(): Promise<void> {
+    const md = this.shadowRoot?.querySelector("md-viewer") as MdViewer | null;
+    await md?.updateComplete;
+    md?.reLocate();
+  }
+
   /** 把待落盘的滚动位置写入 localStorage（幂等；line<=1 时由 writeScrollLine 删条目）。 */
   private _flushScrollMemory() {
     window.clearTimeout(this._scrollSaveTimer);

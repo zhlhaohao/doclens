@@ -20,7 +20,7 @@
 - **回归验证**：`npm run test -- tests/input-box.spec.ts`（涉及 input-box 交互）+ `npm run test:e2e:search`（会话旅程）+ `npm run build`。
 - **执行记录（2026-11-15）**：按方案①变体执行——审计判定时发现 9 个对话框中 7 个已是薄宿主（`<dialog>` 包既有独立组件），真正内联的只有 vision-gate 与 interject 两块。实际改动：新建 `components/vision-gate-dialog.ts`（74 行）与 `components/interject-dialog.ts`（98 行，草稿状态内收于组件、submit 事件出参），chat-view 删除两块内联模板 + 33 行专属 CSS + 死状态 `_interjectDraft`，2396→2335 行。方案②③（SSE 循环/历史列表提 controller）经复核**不执行**：二者与组件 @state 及 store 深耦合，强拆需引入回调网，属 Wrong Abstraction 风险（判据 DRY Misuse）；God Object 主病灶（对话框渲染器堆叠）已消解。回归：chat 域 9 个 spec 136 测试全过；`chat-view-preview.spec.ts` 1 个失败与 settings 域 3 个失败经 stash 对照证实为**预存失败**（与本次改动无关）；`npm run build` 通过。
 
-### AP-2 search-view 双层 shadow DOM 穿透打洞 + `as any` 调私有方法 [P2] [status: pending]
+### AP-2 search-view 双层 shadow DOM 穿透打洞 + `as any` 调私有方法 [P2] [status: done(4014f82f)]
 - **形态**：shadow DOM 穿透打洞（Lit 栈清单）+ Abstraction Inversion（高层绕过封装直捣两层子组件内部）
 - **证据**：`views/search-view.ts:476-480`：`this.shadowRoot?.querySelector("preview-pane") as any` → `pp?.shadowRoot?.querySelector("md-viewer") as any` → `mdv?.reLocate?.()`——search-view 穿透 preview-pane 的 shadow root 直取 md-viewer 并调用其方法，preview-pane 的封装名存实亡。注释自证成因（`:470-474`：Lit 属性批处理合并导致 updated() 不触发的兜底）。
 - **风险**：将损——md-viewer 内部结构/方法名任何调整都静默击穿 search-view（`as any` 无编译期检查）；同类需求会在其他视图复制此模式（files-view/chat-view 已有 getPane 单层穿透的苗头）。
@@ -85,6 +85,7 @@
 |---|---|---|---|
 | 2026-11-15 | 修 AP-1 | AP-1 | done(35ade81f→amend ed2fafbd)：新建 vision-gate-dialog.ts / interject-dialog.ts，chat-view.ts 2396→2335 行；chat 域 136 测试过，build 过；chat-view-preview 1 败 + settings 3 败为预存失败（stash 对照证实）。 |
 | 2026-11-15 | 按你的想法继续修 | AP-8 | done(b24db34e)：断言同步即梦×4 字段（18→22、AI tab 5→9）；根因 = jimeng 两提交加字段未同步测试（测试滞后，非固化错误）；22 测试过，build 过。 |
+| 2026-11-15 | 按你的想法继续修 | AP-2 | done(4014f82f)：preview-pane 新增公共 `reLocate()`（内部转发 md-viewer + 自理 updateComplete），search-view 删双层穿透/`as any`、querySelector 泛型收敛 PreviewPane；130 单测过、build 过、E2E 仅 S7/S8 预存失败（基线对照全同）。 |
 
 ## 六、修复中新发现（discovered-during-fix）
 
@@ -94,3 +95,10 @@
 - **风险**：已损——CI 红且 AP-6 的守卫缺失被实证。
 - **修复方案**：同步断言到 22 条字段真值；落地 AP-6 的前后端守卫测试防再漂移。
 - **回归验证**：`npx vitest run tests/settings-fields.spec.ts tests/settings-view.spec.ts`。
+
+### AP-9 E2E search-preview-locate S7/S8 全平台失败（预存，与 AP-2 无关） [P2] [status: discovered-during-fix]
+- **形态**：测试与实现失联（S7 pptx 定位 mark 未入视口；S8 grep 模式 file-card 未出现/点击后 preview-pane 未出现）
+- **证据**：`tests/e2e/search-preview-locate.spec.ts:190,205` 在 AP-2 改动前后 stash 对照均失败（desktop+mobile 共 4 例）；其余用例全过。
+- **风险**：已损——搜索→预览定位旅程的两个格式（pptx/py-grep）回归通道红着，真回归会被噪音淹没。
+- **修复方案**：单独排查（可能涉 pptx 分页表切换收敛循环 / grep 模式结果渲染），不在本批修复范围。
+- **回归验证**：`npm run test:e2e:search -- tests/e2e/search-preview-locate.spec.ts`。

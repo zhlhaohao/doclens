@@ -9,6 +9,7 @@ import { listSessions, clearSessions, findOrCreateSession, starSession } from ".
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/preview-pane";
+import type { PreviewPane } from "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
 import { pushLocalToast } from "../utils/toast";
@@ -469,15 +470,12 @@ export class SearchView extends LitElement {
       await this._fetchAndShowPreview(hit);
       // Lit 属性去重竞态（2026-10-19）：null→同值在同一轮批处理中被合并为
       // 「值未变」，md-viewer updated() 完全不触发（content/path 也全同）。
-      // 同文件同行重击时显式调用 reLocate 兜底；嵌套组件（preview-pane →
-      // md-viewer）的属性传递异步排队——先等 md-viewer 自身 updateComplete
-      // 才能保证 reLocate 读到最新 line。
+      // 同文件同行重击时显式调用 reLocate 兜底（AP-2：穿透已收敛为
+      // preview-pane 公共方法，内部转发 md-viewer 并自理 updateComplete 时序）。
       if (sameHit && this.previewLanguage === "markdown") {
-        const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+        const pp = this.shadowRoot?.querySelector<PreviewPane>("preview-pane");
         await pp?.updateComplete;
-        const mdv = pp?.shadowRoot?.querySelector("md-viewer") as any;
-        await mdv?.updateComplete;
-        mdv?.reLocate?.();
+        await pp?.reLocate();
       }
     });
   }
