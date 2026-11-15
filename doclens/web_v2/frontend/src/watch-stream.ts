@@ -7,6 +7,7 @@
 import { streamSSE } from "./api/client";
 import { actions } from "./state/store";
 import type { GitSyncStatus, WatchChange, WatcherStatus } from "./state/types";
+import { WORKDIR_SWAP_FAILED_EVENT } from "./utils/events";
 
 const RECONNECT_DELAY_MS = 3000;
 
@@ -119,7 +120,7 @@ async function run(): Promise<void> {
           }));
         } else if (ev.event === "workdir_swap_failed") {
           // 切换失败已回滚：遮罩解锁 + toast（app 层消费）。
-          window.dispatchEvent(new CustomEvent("cortex:workdir-swap-failed", {
+          window.dispatchEvent(new CustomEvent(WORKDIR_SWAP_FAILED_EVENT, {
             detail: safeParse<{ error?: string }>(ev.data) ?? {},
           }));
         } else if (ev.event === "sessions_restored") {

@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
 import { getFileTypeBadge } from "../utils/file-type";
+import { formatBytes } from "../utils/format";
 
 @customElement("file-row")
 export class FileRow extends LitElement {
@@ -100,12 +101,6 @@ export class FileRow extends LitElement {
   /** 移动端：时间列用短格式（MM-DD HH:mm），窄列不折行（file-list 传入）。 */
   @property({ type: Boolean }) mobile = false;
 
-  private _fmtSize(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
-
   private _fmtTime(s: string): string {
     if (!s) return "";
     try {
@@ -176,7 +171,7 @@ export class FileRow extends LitElement {
                 ? "已登记（文件名可搜索；内容不参与全文检索）"
                 : "未索引（不参与搜索）"}
         >${this.entry.name}</span>
-        <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
+        <span class="size">${this.entry.is_dir ? "" : formatBytes(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
       </div>
     `;

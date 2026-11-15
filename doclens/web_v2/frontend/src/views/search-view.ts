@@ -11,7 +11,7 @@ import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
-import type { ToastStack } from "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import {
   PreviewController,
   mapLineViaPredecessor,
@@ -578,8 +578,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
   };
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number) {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _popDetail() {

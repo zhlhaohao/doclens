@@ -32,6 +32,7 @@ import "./bookmark-drawer";
 import "./translate-dialog";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
+import { formatBytes } from "../utils/format";
 import { downloadServerFile } from "../utils/download";
 import { getFileTypeBadge } from "../utils/file-type";
 import {
@@ -1995,9 +1996,7 @@ export class PreviewPane extends LitElement {
   }
 
   private _formatSize(size: number): string {
-    if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-    if (size >= 1024) return `${Math.round(size / 1024)} KB`;
-    return `${size} B`;
+    return formatBytes(size);
   }
 
   /** PST 邮件附件下载区：stored 的可点击下载，未落盘的仅展示名称。 */

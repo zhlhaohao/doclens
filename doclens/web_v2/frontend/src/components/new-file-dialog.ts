@@ -1,9 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
-
-const ILLEGAL = /[\\/:*?"<>|]/;
-const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+import { validateFilename } from "../utils/filename-rules";
 
 @customElement("new-file-dialog")
 export class NewFileDialog extends LitElement {
@@ -72,9 +70,9 @@ export class NewFileDialog extends LitElement {
   private _validate(v: string): string {
     if (!v) return "名称不能为空";
     if (v.startsWith(".")) return "不能以点开头";
-    if (ILLEGAL.test(v)) return '含非法字符 / \\ : * ? " < > |';
+    const illegal = validateFilename(v);
+    if (illegal) return illegal;
     if (/\s/.test(v[0] || "")) return "不能以空白开头";
-    if (RESERVED.test(v)) return "Windows 保留名";
     if (!v.includes(".")) return "须带扩展名，如 笔记.md";
     return "";
   }

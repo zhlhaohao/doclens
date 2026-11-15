@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import { filesApi } from "../api/files";
+import { formatBytes } from "../utils/format";
 
 type Phase = "loading-stats" | "confirming" | "deleting";
 
@@ -99,12 +100,6 @@ export class DeleteDialog extends LitElement {
     this._phase = "confirming";
   }
 
-  private _fmtSize(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
-
   private _delete() {
     if (!this._confirmed) return;
     this._phase = "deleting";
@@ -132,7 +127,7 @@ export class DeleteDialog extends LitElement {
           <ul>
             <li>• ${this._stats.file_count} 个文件</li>
             ${this._stats.dir_count > 0 ? html`<li>• ${this._stats.dir_count} 个子文件夹</li>` : ""}
-            ${this._stats.total_size_bytes > 0 ? html`<li>• 总计 ${this._fmtSize(this._stats.total_size_bytes)}</li>` : ""}
+            ${this._stats.total_size_bytes > 0 ? html`<li>• 总计 ${formatBytes(this._stats.total_size_bytes)}</li>` : ""}
           </ul>
         </div>
       ` : html`<div class="stats">将永久删除 ${count} 个项目。</div>`}

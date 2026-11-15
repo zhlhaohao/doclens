@@ -5,6 +5,7 @@ import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import "./control-panel-dialog";
 import "./backup-dialog";
 import "./watch-changes-dialog";
@@ -440,9 +441,7 @@ export class AppBar extends LitElement {
   }
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as
-      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
-    stack?.pushToast?.(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   connectedCallback() {

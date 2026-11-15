@@ -1,8 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
-
-const ILLEGAL = /[\\/:*?"<>|]/;
-const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+import { validateFilename } from "../utils/filename-rules";
 
 @customElement("rename-dialog")
 export class RenameDialog extends LitElement {
@@ -74,8 +72,8 @@ export class RenameDialog extends LitElement {
     if (!v) return "名称不能为空";
     if (v === this.currentName) return "名称未变化";
     if (v.startsWith(".")) return "不能以点开头";
-    if (ILLEGAL.test(v)) return '含非法字符 / \\ : * ? " < > |';
-    if (RESERVED.test(v)) return "Windows 保留名";
+    const illegal = validateFilename(v);
+    if (illegal) return illegal;
     return "";
   }
 

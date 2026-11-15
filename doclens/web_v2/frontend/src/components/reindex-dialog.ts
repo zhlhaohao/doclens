@@ -4,8 +4,8 @@ import { customElement } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { ReindexState } from "../state/types";
 import { streamSSE } from "../api/client";
+import { pushLocalToast } from "../utils/toast";
 import "./toast-stack";
-import type { ToastStack } from "./toast-stack";
 
 @customElement("reindex-dialog")
 export class ReindexDialog extends LitElement {
@@ -80,8 +80,7 @@ export class ReindexDialog extends LitElement {
   }
 
   private _pushToast(message: string, level: "success" | "error" | "info" = "info", duration = 2500) {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _confirm() {

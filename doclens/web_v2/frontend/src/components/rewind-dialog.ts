@@ -4,6 +4,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { fetchRewindPreview } from "../api/sessions";
 import type { RewindFilesPlan } from "../api/sessions";
 
+/** 锚点摘录截断长度（与 turn-delete-dialog 同口径，摘录仅提示用）。 */
+const ANCHOR_EXCERPT_LEN = 160;
+
 /**
  * <rewind-dialog> —— 回退确认框（ADR-0027）。
  *
@@ -219,7 +222,7 @@ export class RewindDialog extends LitElement {
   }
 
   render() {
-    const excerpt = this.anchorContent.slice(0, 160) || "（空消息）";
+    const excerpt = this.anchorContent.slice(0, ANCHOR_EXCERPT_LEN) || "（空消息）";
     return html`
       <h2>回退到这条消息</h2>
       <div class="anchor">${excerpt}</div>

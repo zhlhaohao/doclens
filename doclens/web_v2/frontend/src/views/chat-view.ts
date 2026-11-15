@@ -33,7 +33,7 @@ import "../components/import-confirm-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
-import type { ToastStack } from "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import type { FocusHeaderAction } from "../components/focus-header";
 
 /** 斜杠技能调用的提交校验结果（checkSlashSubmit）：
@@ -2301,8 +2301,7 @@ export class ChatView extends LitElement {
   private _onBookmarkFull = (): void => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _renderNotIndexedHint(): unknown {

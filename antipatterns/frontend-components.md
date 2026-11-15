@@ -179,14 +179,14 @@
 - **修复方案**：删两段 CSS。
 - **回归验证**：`npm run build`
 
-### AP-25 formatSize 六份手抄副本且行为分裂（无 GB 档） [P2] [status: pending]
+### AP-25 formatSize 六份手抄副本且行为分裂（无 GB 档） [P2] [status: done(批3 提交待填)]
 - **形态**：手抄跨文件契约字面量 + Copy-and-Paste（已现行为分裂）
 - **证据**：副本：file-row.ts:105-109、file-search-results.ts:28-32、delete-dialog.ts:104-105、backup-dialog.ts:276、git-changes-list.ts:41、preview-pane.ts:2001（`_formatSize`）；而 `utils/format.ts:6-8` 已有正式实现**且支持 GB 档**。副本全部缺 GB 分支 → >1GB 文件显示"xxxx.x MB"。
 - **风险**：行为分裂已成事实（同库同一文件大小在不同视图显示口径不同）；GB 级知识库文件真实存在（PDF/PST）。
 - **修复方案**：六处全部改 import `utils/format.ts` 的 formatSize，删本地副本。单一真相源清剿（同因多处形态）。
 - **回归验证**：`npm run test -- tests/file-card.spec.ts tests/preview-pane.spec.ts` + `npm run build`；手工核对 >1GB 文件在删除对话框/文件行/预览头的显示。
 
-### AP-26 ILLEGAL/RESERVED 文件名校验常量三份手抄 [P3] [status: pending]
+### AP-26 ILLEGAL/RESERVED 文件名校验常量三份手抄 [P3] [status: done(批3 提交待填)]
 - **形态**：手抄跨文件契约字面量
 - **证据**：`mkdir-dialog.ts:5-6` ≡ `new-file-dialog.ts:5-6` ≡ `rename-dialog.ts:4-5`（正则 + 同一错误文案逐字）；grep 全仓仅这 3 处，无共享模块。后端若改规则需改 3 处。
 - **修复方案**：抽 `utils/filename-rules.ts`（ILLEGAL/RESERVED/validateFilename），三处 import。
@@ -270,14 +270,14 @@
 - **修复方案**：按 diff 内容 willUpdate 记忆化。
 - **回归验证**：`npm run build` + 手工 git 大 diff 打开。
 
-### AP-38 跨组件硬编码散布（toast 时长/断点/事件名/魔法阈值） [P3] [status: pending]
+### AP-38 跨组件硬编码散布（toast 时长/断点/事件名/魔法阈值） [P3] [status: done(批3 提交待填)]
 - **形态**：Hard Code / Magic Numbers + 手抄契约字面量
 - **证据**：toast 3000ms ×4（AP-22 内）；`cortex:workdir-swap-failed` 事件名三文件手写（workdir-switch-dialog.ts:287、watch-stream.ts:122、app.ts:163）；`slice(0,160)` ×2（AP-35）；session-rename `maxlength=1000`「与后端 SESSION_TITLE_MAX 对齐」靠注释（:103）；session-info `COMPACT_RATIO=0.8`「与后端 compact_threshold 对齐」靠注释（:146）；mcp 轮询 5000ms；额度警示 90%；`@media (max-width:1023px)` 断点五文件各写。
 - **风险**：契约靠注释维系，漂移无告警。
 - **修复方案**：常量归位 utils/constants（事件名导出常量；前后端对齐值集中注释指向后端常量名）；部分随 AP-22 公共层自然收敛。
 - **回归验证**：`npm run build`
 
-### AP-39 _pushToast 帮助方法六份复制（跨 shadow DOM 抓 toast-stack） [P3] [status: pending]
+### AP-39 _pushToast 帮助方法六份复制（跨 shadow DOM 抓 toast-stack） [P3] [status: done(批3 提交待填)]
 - **形态**：Copy-and-Paste + shadow DOM 穿透打洞
 - **证据**：app-bar.ts:444-448 ≡ search-view.ts:580 ≡ chat-view.ts:2303 ≡ settings-view.ts:725 ≡ reindex-dialog.ts:82，translate-dialog.ts:251 变体（`document.querySelector("app-bar")?.shadowRoot?.querySelector("toast-stack")`——跨 shadow 抓取，脆弱：换宿主结构即断）。
 - **风险**：toast 通道改动（如 toast-stack 挂载点变化）六处齐断。
@@ -349,4 +349,5 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 3（单源清剿） | AP-25、AP-26、AP-38、AP-39 | AP-25：六份 formatSize 副本全部改 import utils/format.ts formatBytes（file-row/delete-dialog/backup-dialog/preview-pane/file-search-results/git-changes-list；>1GB 显示 GB 档自动修复，git-changes-list 的 null→"—" 特判留在本地薄包装）；AP-26：新建 utils/filename-rules.ts（FILENAME_ILLEGAL_RE/FILENAME_RESERVED_RE/validateFilename），mkdir/new-file/rename 三处 _validate 改调公共函数（校验顺序微调：RESERVED 并入 validateFilename 在空白判定前，空白名不在保留集内，行为等价）；AP-38：新建 utils/events.ts（WORKDIR_SWAP_FAILED_EVENT），workdir-switch-dialog/watch-stream/app.ts 四处手写字符串改常量；rewind/turn-delete 的 slice(0,160) 提为各自文件头 ANCHOR_EXCERPT_LEN=160（同口径注释互指）；AP-39：新建 utils/toast.ts（pushLocalToast/pushToast 双通道），app-bar/search-view/chat-view/settings-view/reindex-dialog 五处本地实例 _pushToast 改薄包装（视觉位置不变），translate-dialog 跨 shadow 抓取改全局 pushToast 通道。回归：12 spec 文件 195 测试通过（settings-view.spec.ts 1 失败为基线既有，stash 验证）；npm run build 通过 |
 | 2026-11-15 | 批 2（死代码清扫） | AP-3、AP-13~18、AP-24 | AP-3：删 634-636 未闭合 JSDoc 残留三行（保留 710 行生效声明）；AP-13：删 chat-message error prop + 两处死模板分支 + .error 样式；AP-14：删 input-box iconAfter prop（模板简化为 icon/label 单渲染）+ 修正 images-restored 幻影注释为真实受控往返描述；AP-15：删 file-row hideCheckbox prop 及分支；AP-16：删 tree-node loading prop + 永假分支 + file-tree 恒空传值；AP-17：删 search-results `?expanded=${false}` 恒假绑定、删 welcome-pane suffix prop + .sep 样式（heroIcon **反证保留**——宿主以 heroicon attribute 传值，AP-19 关闭为误报）；AP-18：删 app-bar activeView prop + app.ts 传值 + ViewId import；AP-24：删 search-presets .head/.badge 死样式。回归：8 spec 文件 162 测试全绿 + `npm run build` 通过；chat-view-preview.spec.ts 1 失败为基线既有失败（stash 验证），非本批引入 |

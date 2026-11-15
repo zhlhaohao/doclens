@@ -10,6 +10,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { gitApi } from "../api/git";
 import type { GitChange } from "../api/git";
+import { formatBytes } from "../utils/format";
 import "../components/icon";
 import "./diff-viewer";
 
@@ -37,10 +38,7 @@ export function sortChanges(changes: GitChange[]): GitChange[] {
 }
 
 function formatSize(size: number | null): string {
-  if (size === null) return "—";
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
-  return `${size} B`;
+  return size === null ? "—" : formatBytes(size);
 }
 
 @customElement("git-changes-list")

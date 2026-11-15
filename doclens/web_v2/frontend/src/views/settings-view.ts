@@ -16,12 +16,12 @@ import {
 import { getConfig, putConfig, ConfigApiError, probeJimeng, fetchJimengBalance, type JimengBalance } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import "../components/password-section";
 import "../components/model-presets-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
 import "../components/skills-section";
-import type { ToastStack } from "../components/toast-stack";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
 
@@ -723,8 +723,7 @@ export class SettingsView extends LitElement {
   }
 
   private _pushToast(message: string, level: "success" | "error" | "info" = "info", duration = 2500) {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _extractFieldErrors(e: unknown): Record<string, string> {

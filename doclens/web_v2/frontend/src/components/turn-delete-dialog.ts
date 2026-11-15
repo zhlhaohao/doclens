@@ -1,6 +1,9 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+/** 锚点摘录截断长度（与 rewind-dialog 同口径，摘录仅提示用）。 */
+const ANCHOR_EXCERPT_LEN = 160;
+
 /**
  * <turn-delete-dialog> —— 删除对话对确认框（2026-10-29）。
  *
@@ -117,7 +120,7 @@ export class TurnDeleteDialog extends LitElement {
   };
 
   render() {
-    const excerpt = this.anchorContent.slice(0, 160) || "（空消息）";
+    const excerpt = this.anchorContent.slice(0, ANCHOR_EXCERPT_LEN) || "（空消息）";
     const n = this.turnMessageCount;
     return html`
       <h2><doclens-icon name="trash-2"></doclens-icon>删除这一轮对话</h2>

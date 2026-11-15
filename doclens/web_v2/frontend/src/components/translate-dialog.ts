@@ -15,6 +15,7 @@ import {
   type TranslateOutputs,
 } from "../api/translate";
 import { listPresets, type Preset } from "../api/presets";
+import { pushToast } from "../utils/toast";
 import { getConfig } from "../api/config";
 
 const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "es", "it", "pt", "ru"];
@@ -247,14 +248,10 @@ export class TranslateDialog extends LitElement {
     }
   }
 
-  /** 全局 toast-stack（app-bar shadow 内唯一实例，与 app.ts 同范式）。 */
+  /** 全局 toast（app-bar shadow 内唯一实例，utils/toast.ts 单一入口）。 */
   private _pushToast(message: string, level: "success" | "error" | "info"): void {
     if (!message) return;
-    const stack = document
-      .querySelector("app-bar")
-      ?.shadowRoot?.querySelector("toast-stack") as
-      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
-    stack?.pushToast?.(message, level, 6000);
+    pushToast(message, level, 6000);
   }
 
   private _onEvent(ev: TranslateEvent) {

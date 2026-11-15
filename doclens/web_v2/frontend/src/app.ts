@@ -11,6 +11,7 @@ import { router } from "./router/router";
 import { getStatus } from "./api/status";
 import { setUnauthorizedHandler } from "./api/client";
 import { getAuthStatus } from "./api/auth";
+import { WORKDIR_SWAP_FAILED_EVENT } from "./utils/events";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -160,7 +161,7 @@ export class CortexApp extends LitElement {
     // ADR-0043：工作目录热切换 SSE 终态——成功即整页 reload（切换即重载，
     // 一切状态天然重置）；失败已回滚则解锁遮罩 + 提示。
     window.addEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
-    window.addEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.addEventListener(WORKDIR_SWAP_FAILED_EVENT, this._onWorkdirSwapFailed as EventListener);
     window.addEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     // 启动时探测登录闸门：需要登录且未认证 → 只渲染登录页，不启动轮询
     void this._probeAuth();
@@ -242,7 +243,7 @@ export class CortexApp extends LitElement {
   disconnectedCallback() {
     this.removeEventListener("skill-chat", this._onSkillChat as EventListener);
     window.removeEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
-    window.removeEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.removeEventListener(WORKDIR_SWAP_FAILED_EVENT, this._onWorkdirSwapFailed as EventListener);
     window.removeEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     this._unsubscribe?.();
     this._unsubAuth?.();

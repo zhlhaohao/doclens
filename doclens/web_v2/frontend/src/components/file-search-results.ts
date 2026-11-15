@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { IndexedDocument } from "../state/types";
+import { formatBytes } from "../utils/format";
 
 const MAX_RESULTS = 100;
 
@@ -26,9 +27,7 @@ function dirOf(path: string): string {
 }
 
 function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return formatBytes(n);
 }
 
 function formatRelative(s: string): string {

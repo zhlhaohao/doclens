@@ -8,6 +8,7 @@ import {
   WorkdirSwitchError,
   type RecentWorkdir,
 } from "../api/workdir";
+import { WORKDIR_SWAP_FAILED_EVENT } from "../utils/events";
 
 /** 工作目录切换对话框（ADR-0043）：顶栏「工作目录指示器」点击弹出。
  * 内容：最近工作目录清单 + 路径输入框 + 确认警告（孤儿任务数、草稿丢失）。
@@ -284,7 +285,7 @@ export class WorkdirSwitchDialog extends LitElement {
       // 409/500 = 窗口内失败（已回滚），兜底解锁遮罩（SSE workdir_swap_failed
       // 可能在断连间隙丢失——POST 失败响应是可靠终态信号；app 层幂等）。
       if (!(e instanceof WorkdirSwitchError && e.status === 400)) {
-        window.dispatchEvent(new CustomEvent("cortex:workdir-swap-failed", {
+        window.dispatchEvent(new CustomEvent(WORKDIR_SWAP_FAILED_EVENT, {
           detail: { error: e instanceof Error ? e.message : String(e) },
         }));
       }

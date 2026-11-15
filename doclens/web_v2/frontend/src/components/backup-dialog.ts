@@ -7,6 +7,7 @@ import {
   type SessionBackupInfo,
   type CorruptFileInfo,
 } from "../api/sessions";
+import { formatBytes } from "../utils/format";
 import "./icon";
 
 /**
@@ -272,12 +273,6 @@ export class BackupDialog extends LitElement {
     }
   }
 
-  private _fmtSize(bytes: number): string {
-    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${bytes} B`;
-  }
-
   private _fmtTime(iso: string): string {
     try {
       const d = new Date(iso);
@@ -314,7 +309,7 @@ export class BackupDialog extends LitElement {
                         <span class="when">
                           <span class="ts">${this._fmtTime(b.created_at)}</span>
                           <span class="meta">
-                            ${this._fmtSize(b.size_bytes)} · ${b.session_count ?? "?"} 个会话
+                            ${formatBytes(b.size_bytes)} · ${b.session_count ?? "?"} 个会话
                           </span>
                         </span>
                         <button
@@ -338,7 +333,7 @@ export class BackupDialog extends LitElement {
                   ${this._corrupt.map(
                     (c) => html`
                       <div class="muted">
-                        ${c.file} · ${this._fmtSize(c.size_bytes)} · ${this._fmtTime(c.created_at)}
+                        ${c.file} · ${formatBytes(c.size_bytes)} · ${this._fmtTime(c.created_at)}
                       </div>
                     `,
                   )}
