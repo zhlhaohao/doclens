@@ -2,12 +2,11 @@ import { LitElement, html, css, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
-import katex from "katex";
 // shadow DOM 隔离全局样式，KaTeX CSS 必须以内联方式注入组件 styles；
 // Vite 会重写其中字体 url() 为构建产物路径（woff2 按 @font-face 按需加载）。
 import katexStyles from "katex/dist/katex.min.css?inline";
 import { sanitizeHtml } from "../utils/sanitize";
-import { cjkInlineMath } from "../utils/marked-math";
+import { cjkInlineMath, makeSingleLineDisplayMath } from "../utils/marked-math";
 import type { PageMarker } from "../api/preview";
 import { bustRawImages } from "./image-viewer";
 import "./icon";
@@ -202,35 +201,6 @@ blockRenderer.image = function (token: any) {
   return `<figure><img src="${href}" alt="${alt}"${titleAttr} loading="lazy">${caption}</figure>\n`;
 };
 
-/** 单行 `$$...$$` 块级公式扩展（marked-katex-extension 只认定界符独占一行）。
- *
- *  arxiv 转换的 md 常写成单行 `$$ $A$ ( $B$ ) $$`，且内部嵌套 `$...$`
- *  （LaTeX→md 转换残留）。自定义 block tokenizer 整行匹配、不改写源文本
- *  （改写会打乱 data-source-line 与后端行号对齐）；renderer 剥掉内层 `$`
- *  后按 displayMode 渲染。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const singleLineDisplayMath: any = {
-  name: "singleLineDisplayMath",
-  level: "block",
-  start(src: string) {
-    return src.indexOf("$$");
-  },
-  tokenizer(src: string) {
-    const m = /^\$\$([^\n]+?)\$\$\s*(?:\n|$)/.exec(src);
-    if (!m) return undefined;
-    return { type: "singleLineDisplayMath", raw: m[0], text: m[1].trim() };
-  },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderer(token: any) {
-    const line = lineOf(token.raw);
-    const body = katex.renderToString(token.text.replace(/\$/g, ""), {
-      displayMode: true,
-      throwOnError: false,
-    });
-    return `<div data-source-line="${line}">${body}</div>\n`;
-  },
-};
-
 /** 标记是否已 use 过（避免重复 use） */
 let mdConfigured = false;
 function ensureMdConfigured(): void {
@@ -260,7 +230,9 @@ function ensureMdConfigured(): void {
   // 后注册先尝试）。
   marked.use({ extensions: [cjkInlineMath] });
   // 单行 $$...$$ 兜底（扩展 tokenizer 返回 undefined 才轮到它，不抢标准块级语法）
-  marked.use({ extensions: [singleLineDisplayMath] });
+  // ——AP-6：逻辑体收敛 marked-math.ts 的 makeSingleLineDisplayMath 工厂，
+  // 本组件只注入 data-source-line 行号（源行对齐，聊天版不需要）。
+  marked.use({ extensions: [makeSingleLineDisplayMath((token) => `data-source-line="${lineOf(token.raw)}"`)] });
 }
 
 /** 匹配导航粗跳阈值（px）：目标距离超过此值时第一段用瞬跳（auto）粗定位，
