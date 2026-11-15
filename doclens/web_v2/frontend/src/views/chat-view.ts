@@ -30,6 +30,8 @@ import "../components/rewind-dialog";
 import "../components/turn-delete-dialog";
 import "../components/compact-confirm-dialog";
 import "../components/import-confirm-dialog";
+import "../components/vision-gate-dialog";
+import "../components/interject-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
@@ -268,39 +270,6 @@ export class ChatView extends LitElement {
   static readonly PREVIEW_PANE_WIDTH_MAX = 900;
 
   static styles = css`
-    /* 视觉能力拦截对话框（ADR-0034） */
-    .vision-gate { max-width: 360px; padding: 4px; }
-    .vision-gate h3 { margin: 0 0 8px; font-size: 16px; }
-    .vision-gate p { margin: 0 0 8px; color: var(--cortex-text-muted); font-size: 14px; line-height: 1.5; }
-    .vision-gate .vision-gate-hint { color: var(--cortex-text-subtle); font-size: 13px; }
-    .vision-gate-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .vision-gate-actions button {
-      border: none; border-radius: var(--cortex-radius-pill, 100px);
-      padding: 8px 18px; font-size: 14px; cursor: pointer;
-    }
-    .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
-    .vision-gate-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
-    /* 插话输入框（ADR-0048）：与 vision-gate 同规格的小 dialog */
-    .interject-dialog { max-width: 380px; padding: 4px; display: block; }
-    .interject-dialog h3 { margin: 0 0 8px; font-size: 16px; }
-    .interject-dialog .interject-hint {
-      margin: 0 0 10px; color: var(--cortex-text-subtle); font-size: 13px; line-height: 1.5;
-    }
-    .interject-dialog textarea {
-      width: 100%; box-sizing: border-box; resize: vertical;
-      border: 1px solid var(--cortex-border); border-radius: var(--cortex-radius-md);
-      padding: 8px 10px; font-size: 14px; font-family: var(--cortex-font);
-      background: var(--cortex-surface); color: var(--cortex-text);
-    }
-    .interject-dialog textarea:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: -1px; }
-    .interject-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .interject-actions button {
-      border: none; border-radius: var(--cortex-radius-pill, 100px);
-      padding: 8px 18px; font-size: 14px; cursor: pointer;
-    }
-    .interject-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
-    .interject-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
-    .interject-actions .primary:disabled { opacity: 0.5; cursor: not-allowed; }
     :host {
       display: flex;
       flex-direction: column;
@@ -945,24 +914,17 @@ export class ChatView extends LitElement {
       </dialog>`;
   }
 
-  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉，消息未发送、
-   *  草稿与附件保留——「前往设置」跳模型 tab 手动切换（预设热生效）。 */
+  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉时弹出，引导
+   *  跳设置页切换；拦截的消息/图保留在草稿与暂存区。 */
   private _renderVisionGateDialog() {
     if (!this._visionGateOpen) return nothing;
     return html`
       <dialog @cancel=${() => (this._visionGateOpen = false)}>
-        <div class="vision-gate">
-          <h3>当前模型不支持图像</h3>
-          <p>这条消息带有图片，但当前对话模型（${store.getState().status?.model_name || "未命名"}）
-            未声明视觉能力，发送会被模型忽略或报错。</p>
-          <p class="vision-gate-hint">在设置 → 模型中切换到支持视觉的模型预设
-            （或编辑当前预设勾选「支持视觉」），切换即时生效，回来重新发送即可。
-            消息与图片已保留在输入框。</p>
-          <div class="vision-gate-actions">
-            <button class="secondary" @click=${() => (this._visionGateOpen = false)}>取消</button>
-            <button class="primary" @click=${this._gotoModelSettings}>前往设置</button>
-          </div>
-        </div>
+        <vision-gate-dialog
+          .modelName=${store.getState().status?.model_name ?? ""}
+          @goto-settings=${this._gotoModelSettings}
+          @cancel=${() => (this._visionGateOpen = false)}
+        ></vision-gate-dialog>
       </dialog>`;
   }
 
@@ -976,30 +938,26 @@ export class ChatView extends LitElement {
 
   // ---- 插话（ADR-0048）----
 
-  /** 插话输入框草稿（dialog 打开期间）。 */
-  @state() private _interjectDraft = "";
-
   /** trace 标题栏「插话」按钮 → 打开原生 dialog（ADR-0048 决策 7）。
    *  入口在生成中才渲染（组件侧控制）；恢复态（无本地流但 generating）
    *  同样可达——按钮显隐由 chat-tool-trace 按 running 步骤判定。 */
   private _onInterjectRequest = (): void => {
-    this._interjectDraft = "";
     this._interjectDialogOpen = true;
   };
 
   private _onInterjectCancel = (): void => {
     this._interjectDialogOpen = false;
-    this._interjectDraft = "";
   };
 
   /** 提交插话：写会话单槽位，按钮转「已插入」等检查点送达（ack 回落）。
    *  拒绝路径（占用/不在生成）toast 提示，dialog 关闭。 */
-  private _onInterjectSubmit = async (): Promise<void> => {
+  private _onInterjectSubmit = async (
+    e: CustomEvent<{ text: string }>,
+  ): Promise<void> => {
     const session = store.getState().chat.currentSession;
-    const text = this._interjectDraft.trim();
+    const text = e.detail.text;
     if (!session || !text) return;
     this._interjectDialogOpen = false;
-    this._interjectDraft = "";
     const r = await interject(session.id, text);
     if (r === "ok") {
       this._interjectPending = true;
@@ -1013,35 +971,15 @@ export class ChatView extends LitElement {
     }
   };
 
-  /** 插话输入 dialog（原生 <dialog>，仓库惯例 showModal）。 */
+  /** 插话输入 dialog 宿主（原生 <dialog>，仓库惯例 showModal）。 */
   private _renderInterjectDialog() {
     if (!this._interjectDialogOpen) return nothing;
     return html`
       <dialog @cancel=${this._onInterjectCancel}>
-        <div class="interject-dialog">
-          <h3>插话</h3>
-          <p class="interject-hint">向正在执行的 AI 提问或下达临时指令。当前步骤
-            完成后送达，AI 只做文字汇报并继续原任务，不会被打断。</p>
-          <textarea
-            rows="4"
-            placeholder="例如：现在进度汇报一下 / 改用方案 B / 已读文件里有线索吗"
-            .value=${this._interjectDraft}
-            @input=${(e: InputEvent) => {
-              this._interjectDraft = (e.target as HTMLTextAreaElement).value;
-            }}
-            @keydown=${(e: KeyboardEvent) => {
-              // Ctrl/Cmd+Enter 快捷提交（Enter 留给多行输入）
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                e.preventDefault();
-                void this._onInterjectSubmit();
-              }
-            }}></textarea>
-          <div class="interject-actions">
-            <button class="secondary" @click=${this._onInterjectCancel}>取消</button>
-            <button class="primary" ?disabled=${!this._interjectDraft.trim()}
-                    @click=${this._onInterjectSubmit}>插入</button>
-          </div>
-        </div>
+        <interject-dialog
+          @submit=${this._onInterjectSubmit}
+          @cancel=${this._onInterjectCancel}
+        ></interject-dialog>
       </dialog>`;
   }
 
