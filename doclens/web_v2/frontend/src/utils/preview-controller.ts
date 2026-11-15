@@ -1,6 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 
-import { fetchPreview, isPstDerivedPath } from "../api/preview";
+import { fetchPreview, fetchPreviewRange, isPstDerivedPath } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath } from "../api/pst";
 
@@ -65,6 +65,11 @@ export interface PreviewControllerOptions {
   /** 保存后的重拉策略（默认 "tokens"）。 */
   reloadAfterSave?: "tokens" | "full";
 }
+
+/** 搜索命中行范围切片的上下文行数（AP-7 命名常量：命中行前 10 行 /
+ *  后 20 行——前短后长，命中行天然偏切片头部，便于看到命中处上下文）。 */
+const HIT_CONTEXT_BEFORE = 10;
+const HIT_CONTEXT_AFTER = 20;
 
 /** 命中行 → 合成 md 行号的「前驱近似」换算（BUG-F3 修复语义）：
  *  精确键 miss 时取 ≤line 的最大键——命中行常落在 docx 段落/xlsx 单元格/
@@ -165,23 +170,21 @@ export class PreviewController implements ReactiveController {
   async openHit(path: string, line: number | null): Promise<PreviewState> {
     if (line === null || isPstDerivedPath(path)) return this.open(path);
     const seq = ++this._seq;
-    const params = new URLSearchParams({ path });
-    params.set("start_line", String(Math.max(1, line - 10)));
-    params.set("end_line", String(line + 20));
-    let body: any;
-    try {
-      const res = await fetch(`/api/preview?${params}`);
-      if (seq !== this._seq) return this.state; // 过期响应
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        if (seq !== this._seq) return this.state; // 过期响应
-        return this._set(this._failState(path, err.code === "NOT_INDEXED", err.detail || `HTTP ${res.status}`));
-      }
-      body = await res.json();
-    } catch {
-      if (seq !== this._seq) return this.state; // 过期响应
-      return this._set(this._setTempError(path));
+    // 行范围请求经 api 层 fetchPreviewRange（AP-8：取代手写裸 fetch——
+    // 参数拼装/错误解析与 fetchPreview 双份维护）
+    const r = await fetchPreviewRange(
+      path,
+      Math.max(1, line - HIT_CONTEXT_BEFORE),
+      line + HIT_CONTEXT_AFTER,
+    );
+    if (seq !== this._seq) return this.state; // 过期响应（已有更新的 open/clear）
+    if (!r.ok) {
+      return this._set(this._failState(path, r.notIndexed, r.message));
     }
+    const body = r.body as {
+      synthesized?: boolean; language?: string; path?: string; content?: string;
+      writable?: boolean; size_bytes?: number | null; tokens?: string[][][] | null;
+    };
     if (body.synthesized || body.language === "markdown") {
       return this.open(path); // 合成/md 预览必须整文件渲染（open 内部自增代数）
     }
@@ -196,7 +199,7 @@ export class PreviewController implements ReactiveController {
         writable: body.writable ?? false,
         synthesized: body.synthesized ?? false,
         sizeBytes: body.size_bytes ?? null,
-        pages: body.pages ?? null,
+        pages: null,
         lineMap: null,
         pageStarts: null,
         attachments: null,
@@ -321,10 +324,6 @@ export class PreviewController implements ReactiveController {
     return notIndexed
       ? { status: "not-indexed", path }
       : { status: "error", path, message: message || "预览失败" };
-  }
-
-  private _setTempError(path: string): PreviewState {
-    return { status: "error", path, message: "网络错误" };
   }
 
   private _set(state: PreviewState): PreviewState {

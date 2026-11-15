@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { PreviewController } from "../src/utils/preview-controller";
-import { fetchPreview } from "../src/api/preview";
+import { fetchPreview, fetchPreviewRange } from "../src/api/preview";
 
 vi.mock("../src/api/preview", () => ({
   fetchPreview: vi.fn(),
+  fetchPreviewRange: vi.fn(),
   isPstDerivedPath: (p: string) => p.endsWith(".pst/eml") || p.includes("/eml/"),
 }));
 
@@ -87,9 +88,9 @@ describe("PreviewController 请求代数守卫（AP-3）", () => {
     const { host } = makeHost();
     const c = new PreviewController(host);
 
-    const rangeD = deferred<Response>();
+    const rangeD = deferred<{ ok: false; notIndexed: boolean; message: string } | { ok: true; body: Record<string, unknown> }>();
     const fullD = deferred<ReturnType<typeof okResp> | { ok: false; notIndexed: boolean; message: string; outsideWorkdir?: boolean }>();
-    vi.stubGlobal("fetch", vi.fn().mockReturnValueOnce(rangeD.promise));
+    vi.mocked(fetchPreviewRange).mockReturnValueOnce(rangeD.promise as never);
     mockedFetchPreview.mockReturnValueOnce(fullD.promise as never);
 
     const hitP = c.openHit("a.txt", 42);
@@ -99,11 +100,9 @@ describe("PreviewController 请求代数守卫（AP-3）", () => {
     await openP;
 
     // 范围请求此刻才返回（迟到）——不得覆盖 b
-    const body = { ...makeDoc("a.txt", "slice"), synthesized: false, language: "text" };
-    rangeD.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    rangeD.resolve({ ok: true, body: { ...makeDoc("a.txt", "slice"), synthesized: false, language: "text" } });
     await hitP;
     expect(c.state.status === "ok" && c.state.doc.path).toBe("b.txt");
-    vi.unstubAllGlobals();
   });
 
   it("正常路径不受影响：单发 open 落 state", async () => {

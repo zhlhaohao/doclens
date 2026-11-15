@@ -16,6 +16,14 @@ export class PreviewSaveError extends Error {
   }
 }
 
+/** 错误响应解析（AP-8 抽公共）：json 失败兜底 → {code, detail} 二元组
+ *  （save/upload 两端点错误分支同构，此前各复制一份）。 */
+async function parseErrorBody(res: Response): Promise<{ code: string; detail: string }> {
+  return res
+    .json()
+    .catch(() => ({ code: "UNKNOWN", detail: res.statusText }));
+}
+
 export async function savePreview(path: string, content: string): Promise<PreviewSaveResponse> {
   const res = await fetch(`/api/preview?path=${encodeURIComponent(path)}`, {
     method: "PUT",
@@ -23,9 +31,7 @@ export async function savePreview(path: string, content: string): Promise<Previe
     body: JSON.stringify({ content }),
   });
   if (!res.ok) {
-    const err = await res
-      .json()
-      .catch(() => ({ code: "UNKNOWN", detail: res.statusText }));
+    const err = await parseErrorBody(res);
     throw new PreviewSaveError(
       err.code ?? "UNKNOWN",
       err.detail ?? "保存失败",
@@ -76,9 +82,7 @@ export async function uploadPreview(file: File): Promise<PreviewUploadResponse> 
     body: form,
   });
   if (!res.ok) {
-    const err = await res
-      .json()
-      .catch(() => ({ code: "UNKNOWN", detail: res.statusText }));
+    const err = await parseErrorBody(res);
     throw new PreviewUploadError(
       err.code ?? "UNKNOWN",
       err.detail ?? "上传失败",
@@ -236,5 +240,37 @@ export async function fetchPreview(path: string): Promise<PreviewFetchResult> {
       notIndexed: false,
       message: (e as Error).message || "网络错误",
     };
+  }
+}
+
+/** 行范围预览请求（搜索命中切片，GET /api/preview + start_line/end_line）：
+ *  preview-controller.openHit 此前手写裸 fetch（参数拼装/错误解析与
+ *  fetchPreview 双份），收敛到 api 层（AP-8）。返回原始 body（openHit
+ *  按 synthesized/language 判定是否改取全文件）与错误态二选一。 */
+export type PreviewRangeResult =
+  | { ok: true; body: Record<string, unknown> }
+  | { ok: false; notIndexed: boolean; message: string };
+
+export async function fetchPreviewRange(
+  path: string,
+  startLine: number,
+  endLine: number,
+): Promise<PreviewRangeResult> {
+  const params = new URLSearchParams({ path });
+  params.set("start_line", String(startLine));
+  params.set("end_line", String(endLine));
+  try {
+    const res = await fetch(`/api/preview?${params}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        notIndexed: err.code === "NOT_INDEXED",
+        message: err.detail || `HTTP ${res.status}`,
+      };
+    }
+    return { ok: true, body: await res.json() };
+  } catch {
+    return { ok: false, notIndexed: false, message: "网络错误" };
   }
 }
