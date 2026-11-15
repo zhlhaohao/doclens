@@ -66,7 +66,7 @@ describe("<preview-pane> markdown branch", () => {
 });
 
 describe("<preview-pane> download overlay（公共组件集成）", () => {
-  it("_downloading=true 渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
+  it("下载中渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" path="t.md" content="# T"></preview-pane>
     `) as any;
@@ -74,14 +74,20 @@ describe("<preview-pane> download overlay（公共组件集成）", () => {
     // 默认不显示
     let ov = el.shadowRoot!.querySelector("download-overlay") as any;
     expect(ov?.open ?? false).toBe(false);
-    // 下载中：组件在且 open=true（遮罩内容在其自身 shadow 内渲染）
-    el._downloading = true;
+    // 下载中（AP-1 拆分：态迁 DownloadController，经注入回调驱动）
+    const r = new Promise<{ via: "jsbridge"; name?: string; error?: string }>((resolve) =>
+      setTimeout(() => resolve({ via: "jsbridge", name: "t.md" }), 50));
+    el._download.download = () => r;
+    el._download.click();
     await el.updateComplete;
     ov = el.shadowRoot!.querySelector("download-overlay") as any;
     expect(ov).toBeTruthy();
     expect(ov.open).toBe(true);
     await ov.updateComplete;
     expect(ov.shadowRoot!.querySelector(".download-overlay")).toBeTruthy();
+    await r; // 完成 → 遮罩关闭
+    await el.updateComplete;
+    expect((el.shadowRoot!.querySelector("download-overlay") as any).open).toBe(false);
   });
 });
 

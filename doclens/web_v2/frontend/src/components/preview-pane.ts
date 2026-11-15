@@ -53,6 +53,11 @@ import {
   CodeThemeController,
   FullscreenController,
 } from "../utils/preview-appearance";
+import {
+  DownloadController,
+  KeywordHighlightController,
+  TranslateController,
+} from "../utils/preview-interactions";
 
 /** CJK 字符（汉字 / 假名 / 谚文基础区）——用于高亮输入条的分词判定。 */
 const CJK_RE = /[一-鿿぀-ヿ가-힯]/;
@@ -624,8 +629,6 @@ export class PreviewPane extends LitElement {
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
   @state() private _showMobileMenu = false;
-  /** 下载进行中（App 内 jsbridge 通道）——屏幕中心遮罩动画 */
-  @state() private _downloading = false;
 
   /** 外观域（AP-1 拆分，2026-11-15）：md 字号 / 行号字号 / 代码主题 / 全屏
    *  四块纯呈现态迁 PreviewAppearanceController 族（utils/preview-appearance.ts），
@@ -647,10 +650,12 @@ export class PreviewPane extends LitElement {
     step: CODE_FONT_SCALE_STEP_PCT,
   });
   private _fullscreenCtl = new FullscreenController(this, this);
-  /** 关键词高亮输入条（仅 markdown 预览分支可用） */
-  @state() private _showHighlightBar = false;
-  @state() private _highlightInput = "";
-  private _highlightDebounce: number | undefined;
+
+  /** 交互域（AP-1 拆分，2026-11-15）：下载 / 关键词高亮 / PDF 翻译迁
+   *  utils/preview-interactions.ts 的 controller 族。 */
+  private _download = new DownloadController(this);
+  private _highlight = new KeywordHighlightController(this);
+  private _translate = new TranslateController(this);
 
   /** PDF 缩放控件显示（「适宽」/百分比；pdf-viewer scalechanging 驱动）。 */
   @state() private _pdfZoomLabel = "适宽";
@@ -735,8 +740,6 @@ export class PreviewPane extends LitElement {
   /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
   @state() private _showToc = false;
 
-  /** PDF 翻译弹框（ADR-0039）：仅 pdf 分支可用。 */
-  @state() private _showTranslate = false;
   @state() private _tocItems: TocItem[] = [];
   /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
   @state() private _tocCurrentLine = 1;
@@ -774,9 +777,7 @@ export class PreviewPane extends LitElement {
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("path")) {
       // 换文档：清空高亮输入并收起输入条，不残留旧文档的高亮
-      this._highlightInput = "";
-      this._showHighlightBar = false;
-      this._clearHighlightDebounce();
+      this._highlight.onPathChanged();
       // 目录抽屉同样不跨文档残留（pdf 的 content 恒空串，content 变化
       // 分支不触发，须在 path 变化时清书签条目）
       this._showToc = false;
@@ -885,7 +886,7 @@ export class PreviewPane extends LitElement {
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
-    this._clearHighlightDebounce();
+    this._highlight.clearDebounce();
     this._detachScrollMemory();
     super.disconnectedCallback();
   }
@@ -1223,7 +1224,7 @@ export class PreviewPane extends LitElement {
           : null}
         ${(this.language === "markdown" || this.language === "pdf") && this._mode === "preview"
           ? html`<button
-              class="mobile-highlight ${this._showHighlightBar ? "active" : ""}"
+              class="mobile-highlight ${this._highlight.show ? "active" : ""}"
               type="button"
               aria-label="关键词高亮"
               @click=${this._onHighlightToggle}
@@ -1273,14 +1274,14 @@ export class PreviewPane extends LitElement {
                   : html`<button
                       type="button"
                       role="menuitem"
-                      ?disabled=${this._downloading}
-                      @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
+                      ?disabled=${this._download.downloading}
+                      @click=${() => { this._showMobileMenu = false; this._download.click(); }}
+                >${this._download.downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
                 ${this._translateAvailable
                   ? html`<button
                       type="button"
                       role="menuitem"
-                      @click=${() => { this._showMobileMenu = false; this._showTranslate = true; }}
+                      @click=${() => { this._showMobileMenu = false; this._translateCtlShow(); }}
                     ><doclens-icon name="language"></doclens-icon>翻译</button>`
                   : null}
                 <button
@@ -1393,32 +1394,53 @@ export class PreviewPane extends LitElement {
     this._mode = "preview";
   }
 
-  /** 触发原始文件下载（WebView 内 jsbridge 原生通道，浏览器 `<a>` 兜底，
-   *  编排见 utils/download.ts）；文件名由后端 Content-Disposition 决定。 */
-  private _onDownloadClick = () => {
-    if (!this.path || this._downloading) return;
-    void (async () => {
-      this._downloading = true;
-      try {
-        const r = await downloadServerFile(this.path!);
-        if (r.via !== "jsbridge") return;
-        if (r.name) {
-          this.dispatchEvent(
-            new CustomEvent("download-success", { detail: { name: r.name } }),
-          );
-        } else if (r.error) {
-          this.dispatchEvent(new CustomEvent("download-failed", { detail: { message: r.error } }));
-        }
-        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
-      } finally {
-        this._downloading = false;
+  /** 交互域接线（AP-1 拆分：download/highlight/translate 注入环境回调）。 */
+  private _syncInteractions() {
+    this._download.path = () => this.path;
+    this._download.download = downloadServerFile;
+    this._download.onFeedback = (detail) => {
+      if ("name" in detail) {
+        this.dispatchEvent(new CustomEvent("download-success", { detail }));
+      } else {
+        this.dispatchEvent(new CustomEvent("download-failed", { detail }));
       }
-    })();
+    };
+    this._highlight.normalize = normalizeHighlightKeyword;
+    this._highlight.fallbackKeyword = () => this.keyword;
+    this._highlight.language = () => this.language;
+    this._highlight.focusInput = async () => {
+      await this.updateComplete;
+      const input = this.shadowRoot?.querySelector(
+        ".highlight-bar input",
+      ) as HTMLInputElement | null;
+      input?.focus();
+    };
+    this._highlight.jumpToFirstHit = () => this._jumpToFirstHit();
+    this._highlight.stepHit = (dir) => this._stepHit(dir);
+    this._translate.available = () => this._translateAvailable;
+    this._translate.onFinished = (paths) => {
+      this.dispatchEvent(new CustomEvent("translate-finished", {
+        detail: { paths }, bubbles: true, composed: true,
+      }));
+    };
+  }
+
+  /** mobile 菜单「翻译」入口（关菜单 + 开弹框）。 */
+  private _translateCtlShow() {
+    this._showMobileMenu = false;
+    this._translate.toggle();
   }
 
   private _renderDownloadBtn() {
     if (this._isPst) return null;
-    return html`<button class="download-btn" ?disabled=${this._downloading} @click=${this._onDownloadClick}>${this._downloading ? html`<span class="btn-label">下载中</span>` : html`<doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span>`}</button>`;
+    const busy = this._download.downloading;
+    return html`<button
+      class="download-btn"
+      ?disabled=${busy}
+      @click=${() => this._download.click()}
+    >${busy
+        ? html`<span class="btn-label">下载中</span>`
+        : html`<doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span>`}</button>`;
   }
 
   /** 触发「重新解析」：冒泡 reparse 事件给父组件（files-view 挂 reparse-dialog）。 */
@@ -1448,89 +1470,54 @@ export class PreviewPane extends LitElement {
   // 透传 md-viewer keyword 高亮全部命中，并自动滚动到第一个命中。
   // ------------------------------------------------------------------
 
-  /** md-viewer 生效的关键词：手动输入经 normalizeHighlightKeyword 归一化
-   *  （含 CJK 去空格整串）；未手动输入时透传父组件 keyword 原样。 */
+  /** md-viewer 生效的关键词：手动输入经归一化；未输入时透传 keyword prop。 */
   private get _effectiveKeyword(): string {
-    return this._highlightInput.trim()
-      ? normalizeHighlightKeyword(this._highlightInput)
-      : this.keyword;
+    this._highlight.normalize = normalizeHighlightKeyword;
+    this._highlight.fallbackKeyword = () => this.keyword;
+    return this._highlight.effectiveKeyword;
   }
 
   /** 桌面 header 的高亮按钮（图标 + hover 文字）。 */
   private _renderHighlightBtn() {
     return html`<button
-      class="highlight-btn ${this._showHighlightBar ? "active" : ""}"
+      class="highlight-btn ${this._highlight.show ? "active" : ""}"
       @click=${this._onHighlightToggle}
     ><doclens-icon name="search"></doclens-icon><span class="btn-label">高亮</span></button>`;
   }
 
   /** 高亮输入条（桌面 header 下方 / 移动端 mobile-header 下方共用）。 */
   private _renderHighlightBar() {
-    if (!this._showHighlightBar) return null;
+    if (!this._highlight.show) return null;
     return html`
       <div class="highlight-bar">
         <doclens-icon name="search"></doclens-icon>
         <input
           type="text"
           placeholder="输入关键字高亮（中文整词匹配，英文空格分隔多个）"
-          .value=${this._highlightInput}
+          .value=${this._highlight.input}
           @input=${this._onHighlightInput}
           @keydown=${this._onHighlightKeydown}
         />
         <button
           class="highlight-clear"
           aria-label="清除并关闭"
-          @click=${this._onHighlightClear}
+          @click=${() => this._highlight.clearAll()}
         ><doclens-icon name="x"></doclens-icon></button>
       </div>
     `;
   }
 
   private _onHighlightToggle = async () => {
-    this._showHighlightBar = !this._showHighlightBar;
-    if (this._showHighlightBar) {
-      await this.updateComplete;
-      const input = this.shadowRoot?.querySelector(
-        ".highlight-bar input",
-      ) as HTMLInputElement | null;
-      input?.focus();
-    }
+    await this._highlight.toggle();
   };
 
   private _onHighlightInput = (e: Event) => {
-    this._highlightInput = (e.target as HTMLInputElement).value;
-    // 输入停顿 300ms 后自动跳到第一个命中（Enter 立即跳）
-    this._clearHighlightDebounce();
-    if (!this._highlightInput.trim()) return;
-    this._highlightDebounce = window.setTimeout(() => {
-      this._highlightDebounce = undefined;
-      void this._jumpToFirstHit();
-    }, 300);
+    this._highlight.onInput((e.target as HTMLInputElement).value);
   };
 
   private _onHighlightKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      // Enter=下一个 / Shift+Enter=上一个（匹配导航，2026-09-28 决议，
-      // 浏览器 find bar 手感）。关键词变化后的自动首跳由输入 debounce 负责。
-      this._clearHighlightDebounce();
-      void this._stepHit(e.shiftKey ? -1 : 1);
-    } else if (e.key === "Escape") {
-      this._onHighlightClear();
-    }
+    this._highlight.onKeydown(e);
   };
-
-  private _onHighlightClear = () => {
-    this._clearHighlightDebounce();
-    this._highlightInput = "";
-    this._showHighlightBar = false;
-  };
-
-  private _clearHighlightDebounce() {
-    if (this._highlightDebounce !== undefined) {
-      window.clearTimeout(this._highlightDebounce);
-      this._highlightDebounce = undefined;
-    }
-  }
 
   /** 等 md-viewer 重渲染并完成关键词高亮后，滚动到第一个命中。
    *  pdf 分支无需处理：findController 的 find 命令默认选中首个命中。 */
@@ -1664,22 +1651,14 @@ export class PreviewPane extends LitElement {
       return null;
     }
     return html`<button
-      class="toc-btn ${this._showTranslate ? "active" : ""}"
+      class="toc-btn ${this._translate.show ? "active" : ""}"
       title="翻译此 PDF（产物写回本目录）"
-      @click=${() => (this._showTranslate = !this._showTranslate)}
+      @click=${() => this._translate.toggle()}
     ><doclens-icon name="language"></doclens-icon><span class="btn-label">翻译</span></button>`;  }
 
   /** 翻译完成：关弹框 + toast 提示产物路径（FileWatcher 会自动入索引）。 */
   private _onTranslateDone = (e: CustomEvent<{ paths: string[] }>) => {
-    this._showTranslate = false;
-    const paths = e.detail?.paths ?? [];
-    this.dispatchEvent(
-      new CustomEvent("translate-finished", {
-        detail: { paths },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this._translate.done(e.detail?.paths ?? []);
   };
 
   // ------------------------------------------------------------------
@@ -1890,6 +1869,11 @@ export class PreviewPane extends LitElement {
   }
 
   render() {
+    // 交互域环境注入（AP-1 拆分）：render 入口统一同步——渲染分支众多
+    // （桌面 header / mobile 菜单 / 高亮条 / 翻译弹框），挂在各渲染方法内
+    // 会漏掉只渲染其中某个分支的场景（mobile 无桌面 header → download
+    // 注入缺失）。
+    this._syncInteractions();
     if (this.loading) return html`<div class="empty">加载中...</div>`;
     // 空态守卫按 path 判定：空文件（新建 笔记.md 等）的 content 是合法空串，
     // 不等于「无预览」；各视图清空预览时都会把 path 重置为 ""。
@@ -2000,10 +1984,10 @@ export class PreviewPane extends LitElement {
         ></pdf-viewer>
         ${this._renderTocDrawer()}
         ${this._renderBookmarkDrawer()}
-        ${this._showTranslate
+        ${this._translate.show
           ? html`<translate-dialog
               .path=${this.path}
-              @translate-close=${() => (this._showTranslate = false)}
+              @translate-close=${() => this._translate.toggle()}
               @translate-done=${this._onTranslateDone}
             ></translate-dialog>`
           : null}
@@ -2076,7 +2060,7 @@ export class PreviewPane extends LitElement {
    *  显隐由组件 open 属性自理（false 不渲染），不再条件挂载——漏传
    *  open 即「preview 没转圈」回归的根因。 */
   private _renderDownloadOverlay() {
-    return html`<download-overlay ?open=${this._downloading} label="下载中…"></download-overlay>`;
+    return html`<download-overlay ?open=${this._download.downloading} label="下载中…"></download-overlay>`;
   }
 }
 
