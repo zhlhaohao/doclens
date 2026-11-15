@@ -228,6 +228,8 @@ export class CmEditor extends LitElement {
   private _view: import("@codemirror/view").EditorView | null = null;
   /** CM6 核心模块（动态 import 的结果）。 */
   private _core: typeof import("../utils/cm-core") | null = null;
+  /** _loadCore 完成 promise（whenReady 等待它而非轮询 _view，AP-12）。 */
+  private _coreReady: Promise<void> | null = null;
   /** 语言扩展的隔间：语言包懒加载完成后用 reconfigure 注入。 */
   private _langCompartment: import("@codemirror/state").Compartment | null = null;
   private _themeCompartment: import("@codemirror/state").Compartment | null = null;
@@ -253,7 +255,8 @@ export class CmEditor extends LitElement {
       this._codeTheme = t;
       this._applyTheme();
     });
-    await this._loadCore();
+    this._coreReady = this._loadCore();
+    await this._coreReady;
   }
 
   disconnectedCallback() {
@@ -399,9 +402,9 @@ export class CmEditor extends LitElement {
    * 避免锚点静默丢失。
    */
   async whenReady(): Promise<void> {
-    for (let i = 0; i < 200 && !this._view; i++) {
-      await new Promise((r) => setTimeout(r, 10));
-    }
+    // 等 _loadCore 的 promise（事件驱动，AP-12）：原先 10ms×200 轮询 _view，
+    // 慢设备上 2s 超时静默放弃会导致宿主锚点恢复丢失。
+    await this._coreReady;
   }
 
   /** 视口顶部所在的源行号（1-indexed）。 */

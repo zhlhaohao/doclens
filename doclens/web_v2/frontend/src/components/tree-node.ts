@@ -1,7 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
-import { store } from "../state/store";
 
 @customElement("tree-node")
 export class TreeNode extends LitElement {
@@ -38,19 +37,14 @@ export class TreeNode extends LitElement {
   @property({ type: Boolean }) selected = false;
   @property({ type: Boolean }) readonly = false;
   @property({ type: Array }) childEntries: FileEntry[] = [];
+  /** 子节点的展开态集合与当前目录（AP-34：store 订阅已上提 file-tree，
+   *  这两个状态经属性下发——每个节点不再独立订阅 store，全树从 N 份订阅
+   *  ×N 次重渲收敛为宿主单点订阅 + 属性传播）。 */
+  @property({ attribute: false }) expandedPaths: string[] = [];
+  @property() currentDir = "";
 
-  private _unsubscribe?: () => void;
-
-  connectedCallback() {
-    super.connectedCallback();
-    // 订阅 store：expandedPaths / currentDir / treeCache 变化时重渲染，
-    // 让递归子节点的展开/选中/子项状态实时反映 store。
-    this._unsubscribe = store.subscribe(() => this.requestUpdate());
-  }
-  disconnectedCallback() {
-    this._unsubscribe?.();
-    super.disconnectedCallback();
-  }
+  /** 子目录条目缓存（AP-34：随属性下发，替代每节点直读 store）。 */
+  @property({ attribute: false }) treeCache: Record<string, FileEntry[]> = {};
 
   private _onClick() {
     if (this.readonly) {
@@ -76,8 +70,8 @@ export class TreeNode extends LitElement {
   }
 
   render() {
-    const { treeCache, expandedPaths, currentDir } = store.getState().files;
-    const expanded = new Set(expandedPaths);
+    const expanded = new Set(this.expandedPaths);
+    const currentDir = this.currentDir;
     return html`
       <div class="row ${this.selected ? "selected" : ""}" @click=${this._onClick}>
         <span
@@ -94,7 +88,10 @@ export class TreeNode extends LitElement {
                 .depth=${this.depth + 1}
                 .expanded=${expanded.has(c.path)}
                 .selected=${c.path === currentDir}
-                .childEntries=${treeCache[c.path] || []}
+                .childEntries=${this.treeCache[c.path] || []}
+                .expandedPaths=${this.expandedPaths}
+                .currentDir=${currentDir}
+                .treeCache=${this.treeCache}
                 .readonly=${this.readonly}
                 @select-dir=${(e: Event) => this._relay("select-dir", e)}
                 @toggle=${(e: Event) => this._relay("toggle", e)}

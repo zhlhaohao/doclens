@@ -639,6 +639,9 @@ export class MdViewer extends LitElement {
   // 滚动接近（observer 提前量）才渲染该页内容；跳转/定位先展开目标页。
   /** _splitByPages 的缓存（content/pages 变化时重算，render 与 _renderPage 共用）。 */
   private _pagedChunks: Array<{ label: string; md: string; offset: number }> | null = null;
+  /** 单块模式解析记忆化（AP-7）：content 未变时复用 parse+sanitize 结果。 */
+  private _renderedHtml: string | null = null;
+  private _renderedHtmlFor = "";
   /** 已渲染页的 index 集合（content/pages 变化时整体作废）。 */
   private _renderedPages = new Set<number>();
   private _pageObserver: IntersectionObserver | null = null;
@@ -1523,7 +1526,15 @@ export class MdViewer extends LitElement {
     // 导致 _locateAndHighlight 用正确的 line 找不到匹配块（dsl 全部偏大），
     // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
     currentOffset = 0;
-    const raw = sanitizeHtml(marked.parse(this.content, { async: false }) as string);
+    // 解析记忆化（AP-7）：单块模式此前每次 render 都全量 parse+sanitize——
+    // _copied/_matchIndex（滚动派生）等无关 @state 变化都触发重解析。
+    // 按 content 记忆化：内容未变直接复用（keyword 高亮走 <mark> 后处理，
+    // 不依赖重解析）。
+    if (this._renderedHtml === null || this._renderedHtmlFor !== this.content) {
+      this._renderedHtmlFor = this.content;
+      this._renderedHtml = sanitizeHtml(marked.parse(this.content, { async: false }) as string);
+    }
+    const raw = this._renderedHtml;
     return html`
       <div class="md-body">
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>

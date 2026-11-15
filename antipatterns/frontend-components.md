@@ -53,7 +53,7 @@
 - **修复方案**：⑤⑥（锚点/选区换算）可抽 utils 纯函数模块（已是纯几何计算）；④ 匹配导航可抽 controller。按需渐进，不强制。
 - **回归验证**：`npm run test -- tests/md-viewer.spec.ts` + `npm run build`
 
-### AP-7 md-viewer render() 内全量 parse+sanitize 无缓存（单块模式） [P2] [status: pending]
+### AP-7 md-viewer render() 内全量 parse+sanitize 无缓存（单块模式） [P2] [status: done(批5b 提交待填)]
 - **形态**：模板内重计算（Lit 栈清单）
 - **证据**：`md-viewer.ts:1526` 每次 render 执行 `sanitizeHtml(marked.parse(...))`；触发面宽：`_copied`(607/1586)、`_viewerSrc`(605)、`_matchIndex`(623，滚动派生) 任一 @state 变化都全量重解析。分页模式有 `_pagedChunks` 缓存（640-641），**单块模式无任何缓存**。render 内还有全局副作用：`ensureMdConfigured()`(1495)、模块级 `currentOffset = 0`（1525，注释 1520-1524 自认残留态补丁）。
 - **风险**：大文档 + 高亮步进（每步改 _matchIndex）时每步全量 parse+sanitize；滚动期间 _matchIndex 更新亦触发。规模盲区判读：demo 短文无感，MB 级 md 步进一次 = 一次全量重解析。
@@ -88,7 +88,7 @@
 - **修复方案**：补 disconnectedCallback 摘除 `_onDocClick`。
 - **回归验证**：`npm run test -- tests/input-box.spec.ts`
 
-### AP-12 cm-editor `whenReady()` 10ms×200 轮询（Busy Waiting） [P3] [status: pending]
+### AP-12 cm-editor `whenReady()` 10ms×200 轮询（Busy Waiting） [P3] [status: done(批5b 提交待填)]
 - **形态**：Busy Waiting
 - **证据**：`cm-editor.ts:401-405` 以 `setTimeout(10ms)×200` 轮询 `this._view` 非空（等待动态 import 完成事件），2s 后静默放弃——宿主 `preview-pane.ts:842` 依赖它做锚点恢复，超时即锚点静默丢失（注释自认）。
 - **风险**：低频但真实：慢设备上首次进编辑态锚点丢失；轮询本身开销可忽略。
@@ -244,7 +244,7 @@
 - **修复方案**：面包屑、列宽拖拽、排序列头各自抽子组件/controller；七项重复计算提为私有 getter。
 - **回归验证**：`npm run test:e2e:search`（文件列表在语境内）+ `npm run build`
 
-### AP-34 tree-node 每节点独立订阅 store（全树 N 份订阅 × 全量重渲） [P2] [status: pending]
+### AP-34 tree-node 每节点独立订阅 store（全树 N 份订阅 × 全量重渲） [P2] [status: done(批5b 提交待填)]
 - **形态**：模板内重计算 + 订阅放大
 - **证据**：`tree-node.ts:49` 每个树节点独立 `store.subscribe`；任一 store 变更 → 全树 N 节点各 requestUpdate，render(94) 再跑 `childEntries.filter`。对照：file-list 单点订阅（431-442）。
 - **风险**：规模盲区判读：目录树几千节点 × store 高频变更（索引进度/watch 状态推送）时是 N×渲染风暴；demo 小树无感。
@@ -264,7 +264,7 @@
 - **修复方案**：统一为单一真相源（推荐：组件自管 busy，宿主只听 confirm 事件）。
 - **回归验证**：`npm run build` + 手工 turn 删除成功/失败两路径。
 
-### AP-37 diff-viewer render() 内全量 parseUnifiedDiff 无缓存 [P3] [status: pending]
+### AP-37 diff-viewer render() 内全量 parseUnifiedDiff 无缓存 [P3] [status: done(批5b 提交待填)]
 - **形态**：模板内重计算
 - **证据**：`diff-viewer.ts:163` render() 内对整个 diff 文本逐行正则解析，无 memo；任意无关 @state 更新都重解析（注释自述有超长 diff 场景）。
 - **修复方案**：按 diff 内容 willUpdate 记忆化。
@@ -349,6 +349,7 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 5b（性能缓存） | AP-7、12、34、37 | AP-7：md-viewer 单块模式按 content 记忆化 parse+sanitize 结果（keyword 高亮走 _stripKeywordMarks/_highlightKeyword DOM 后处理，不依赖重解析，安全性核实）；AP-12：cm-editor whenReady 改等 _loadCore promise（firstUpdated 记录 _coreReady），删 10ms×200 轮询；AP-34：tree-node 删每节点独立 store 订阅，expandedPaths/currentDir/treeCache 三态经属性由宿主下发（file-tree 单点订阅；move-dialog 同步补传），全树 N 份订阅收敛为 1；AP-37：diff-viewer parseUnifiedDiff 按 diff 内容记忆化。回归：9 spec 165 测试通过（chat-view-preview 1 失败为既有基线失败）+ build 通过 |
 | 2026-11-15 | 批 5a（小修快赢） | AP-8、9、10、11、20、21、41 | AP-8：pdf-viewer 交互监听句柄化（_portalHandlers 数组）+ 换文档先 _unbindPortalInteractions 再挂 + _destroyPortal 一并摘除；AP-9：_applyKeyword 400ms setTimeout 补 _loadSeq 代数守卫；AP-10：ask-card 加 _doneDispatched 单次派发守卫（超时与在途 respond 的先到者独占 ask-done，新 requestId 复位）；AP-11：input-box 补 disconnectedCallback 摘 document _onDocClick；AP-20：search-view history-list 补 @copy-failed toast（对齐 chat 侧）；AP-21：mcp _toggleTools 失败不再缓存空数组（cache 判据 id in cache，缺失保持加载中、重展开重试）；AP-41：chat-tool-trace 复制复位 timer 句柄化 + disconnectedCallback 清理。回归：7 spec 100 测试全绿 + build 通过 |
 | 2026-11-15 | 批 4（对话框抽公共层） | AP-27、28、29、30、31、35（部分）、36 | AP-31：新建 utils/nav.ts（NAV_ITEMS/navItems/emitNavigate），tab-bar/activity-bar 各删本地 _items+_select 副本；AP-30：新建 utils/side-drawer.ts（sideDrawerStyles+renderSideDrawer 骨架），bookmark-drawer/toc-drawer 重写为薄壳（仅留条目渲染与专属事件，keyframes 前缀改名痕迹一并归一）；AP-28：新建 components/input-dialog-base.ts（InputDialogBase：样式 60 行 + _onInput/_submit/_cancel/Enter/invalid 骨架 + prefill 预填即校验），mkdir/new-file/rename/session-rename 四件套变 ~40 行配置子类（validator/label/prefill/submitDetail）；AP-27/29：新建 utils/dialog-styles.ts（dialogSlotStyles：.note/.buttons/button.primary/移动端断点），fork-confirm/compact-confirm/import-confirm 三件迁移（fork 保留静态单态不并入 compact 四态机——反证防 DRY Misuse）；AP-35（部分）：rewind/turn-delete 样式经核对仅近似非逐字同（.anchor 边色/.warn 配色有真实差异），不做强行归一，ANCHOR_EXCERPT_LEN 已在批 3 常量化——本条按实际差异降档关闭；AP-36：删 turn-delete _submittingLocal 双真相源（dispatchEvent 同步性核实：confirm 派发后宿主随即置 submitting=true 回传，无覆盖窗口），统一为宿主单源。回归：12 spec 183 测试全绿 + npm run build 通过 |
 | 2026-11-15 | 批 3（单源清剿） | AP-25、AP-26、AP-38、AP-39 | AP-25：六份 formatSize 副本全部改 import utils/format.ts formatBytes（file-row/delete-dialog/backup-dialog/preview-pane/file-search-results/git-changes-list；>1GB 显示 GB 档自动修复，git-changes-list 的 null→"—" 特判留在本地薄包装）；AP-26：新建 utils/filename-rules.ts（FILENAME_ILLEGAL_RE/FILENAME_RESERVED_RE/validateFilename），mkdir/new-file/rename 三处 _validate 改调公共函数（校验顺序微调：RESERVED 并入 validateFilename 在空白判定前，空白名不在保留集内，行为等价）；AP-38：新建 utils/events.ts（WORKDIR_SWAP_FAILED_EVENT），workdir-switch-dialog/watch-stream/app.ts 四处手写字符串改常量；rewind/turn-delete 的 slice(0,160) 提为各自文件头 ANCHOR_EXCERPT_LEN=160（同口径注释互指）；AP-39：新建 utils/toast.ts（pushLocalToast/pushToast 双通道），app-bar/search-view/chat-view/settings-view/reindex-dialog 五处本地实例 _pushToast 改薄包装（视觉位置不变），translate-dialog 跨 shadow 抓取改全局 pushToast 通道。回归：12 spec 文件 195 测试通过（settings-view.spec.ts 1 失败为基线既有，stash 验证）；npm run build 通过 |

@@ -156,11 +156,20 @@ export class DiffViewer extends LitElement {
   /** unified diff 文本（空 = 无差异/占位）。 */
   @property({ attribute: false }) diff = "";
 
+  /** 解析记忆化（AP-37）：diff 未变时复用 parseUnifiedDiff 结果——原先每次
+   *  render（含无关 @state 更新）都全量逐行正则重解析。 */
+  private _rowsCache: ReturnType<typeof parseUnifiedDiff> | null = null;
+  private _rowsCacheFor = "";
+
   render() {
     if (!this.diff) {
       return html`<div class="empty">无差异内容</div>`;
     }
-    const rows = parseUnifiedDiff(this.diff);
+    if (this._rowsCache === null || this._rowsCacheFor !== this.diff) {
+      this._rowsCacheFor = this.diff;
+      this._rowsCache = parseUnifiedDiff(this.diff);
+    }
+    const rows = this._rowsCache;
     if (rows.length === 0) {
       return html`<div class="empty">无差异内容</div>`;
     }
