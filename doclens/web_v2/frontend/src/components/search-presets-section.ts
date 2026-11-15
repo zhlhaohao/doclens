@@ -79,23 +79,6 @@ export class SearchPresetsSection extends LitElement {
     .wrap {
       margin-bottom: var(--cortex-space-6);
     }
-    .head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--cortex-space-3);
-      margin-bottom: var(--cortex-space-2);
-    }
-    .head h2 {
-      margin: 0;
-      font-size: var(--cortex-fs-lg);
-      font-weight: 700;
-      letter-spacing: -0.015em;
-    }
-    .head .hint {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
-    }
     .group {
       margin-top: var(--cortex-space-5);
     }
@@ -149,15 +132,6 @@ export class SearchPresetsSection extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-    }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
     }
     .preset-meta {
       font-size: var(--cortex-fs-xs);

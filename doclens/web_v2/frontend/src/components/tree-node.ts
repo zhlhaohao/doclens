@@ -38,7 +38,6 @@ export class TreeNode extends LitElement {
   @property({ type: Boolean }) selected = false;
   @property({ type: Boolean }) readonly = false;
   @property({ type: Array }) childEntries: FileEntry[] = [];
-  @property({ type: String }) loading = "";
 
   private _unsubscribe?: () => void;
 
@@ -89,9 +88,7 @@ export class TreeNode extends LitElement {
       </div>
       ${this.expanded && this.entry.is_dir ? html`
         <div class="children">
-          ${this.loading && this.loading === this.entry.path
-            ? html`<div style="padding: 4px 8px; color: var(--cortex-text-subtle); font-size: var(--cortex-fs-sm);">加载中…</div>`
-            : this.childEntries.filter(c => c.is_dir).map(c => html`
+          ${this.childEntries.filter(c => c.is_dir).map(c => html`
               <tree-node
                 .entry=${c}
                 .depth=${this.depth + 1}

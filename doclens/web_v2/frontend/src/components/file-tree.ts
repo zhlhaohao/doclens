@@ -99,7 +99,6 @@ export class FileTree extends LitElement {
         .expanded=${expanded.has("")}
         .selected=${currentDir === ""}
         .childEntries=${rootEntries}
-        .loading=""
         @toggle=${this._onToggle}
         @select-dir=${this._onSelectDir}
       ></tree-node>

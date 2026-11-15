@@ -90,7 +90,6 @@ export class SearchResults extends LitElement {
                 <file-card
                   .group=${g}
                   .activeHit=${this.activeHit}
-                  ?expanded=${false}
                   @hit-select=${this._onHitSelect}>
                 </file-card>`)}
       </div>

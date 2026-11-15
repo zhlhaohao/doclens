@@ -323,8 +323,6 @@ export class InputBox extends LitElement {
   @property() placeholder = "";
   @property() buttonLabel = "搜索";
   @property() buttonIcon = "";
-  /** 图标放在文字右侧（true = 文字在前、图标在后） */
-  @property({ type: Boolean }) iconAfter = false;
   @property({ type: Boolean }) multiline = false;
   @property({ type: Boolean }) disabled = false;
   /** 流式中：按钮原地变身为「停止」（发 stop 事件），输入框禁用。仅 chat 用。 */
@@ -333,8 +331,8 @@ export class InputBox extends LitElement {
   /** 对话图片附件（ADR-0034）：true 时启用粘贴/📎/拖拽三入口 + 缩略图暂存行。
    *  仅 chat 输入框开启；文字仍是消息主体（必填），图是附件。 */
   @property({ type: Boolean }) attachments = false;
-  /** 暂存图片（压缩后 base64，不含 data: 前缀）。宿主只读（经 submit 事件带出，
-   *  经 images-restored 事件回填）；增删由组件内部入口驱动。 */
+  /** 暂存图片（压缩后 base64，不含 data: 前缀）。宿主只读（经 submit 事件带出）；
+   *  回填走受控往返（宿主直接置 .images 属性），增删由组件内部入口驱动。 */
   @property({ attribute: false }) images: ChatImage[] = [];
 
   /** 模式选择器：提供 .mode + .modes 时渲染分裂按钮 + caret 下拉；
@@ -614,14 +612,15 @@ export class InputBox extends LitElement {
         </button>`;
     }
     if (!this._hasModes && !this._hasSkillMenu) {
-      const icon = this.buttonIcon
-        ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
-        : null;
-      const label = html`<span>${this.buttonLabel}</span>`;
-      return html`
-        <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-          ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
-        </button>`;
+      return this.buttonIcon
+        ? html`
+          <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            <doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>
+          </button>`
+        : html`
+          <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            <span>${this.buttonLabel}</span>
+          </button>`;
     }
     if (this._hasSkillMenu) {
       // 技能菜单分裂按钮：主键 = 普通发送；caret 弹出技能菜单（空输入也可打开，
@@ -629,11 +628,10 @@ export class InputBox extends LitElement {
       const icon = this.buttonIcon
         ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
         : null;
-      const label = html`<span>${this.buttonLabel}</span>`;
       return html`
         <div class="actions split">
           <button class="primary submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-            ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
+            ${icon ?? html`<span>${this.buttonLabel}</span>`}
           </button>
           <button class="caret" @click=${this._toggleMenu} ?disabled=${this.disabled}
                   aria-label="选择技能" aria-expanded=${this._menuOpen}><doclens-icon name="chevron-down"></doclens-icon></button>

@@ -300,7 +300,6 @@ export class CortexApp extends LitElement {
     }
     return html`
       <app-bar
-        .activeView=${view}
         @navigate=${this._navigate}
       ></app-bar>
       <div class="app-body">

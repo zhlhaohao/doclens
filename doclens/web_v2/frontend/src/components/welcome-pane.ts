@@ -35,15 +35,6 @@ export class WelcomePane extends LitElement {
       color: var(--cortex-primary);
       font-weight: 700;
     }
-    .title .sep + span {
-      color: var(--cortex-primary);
-      font-weight: 600;
-    }
-    .title .sep {
-      color: var(--cortex-text-subtle);
-      margin: 0 6px;
-      font-weight: 400;
-    }
     .subtitle {
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text-muted);
@@ -247,7 +238,6 @@ export class WelcomePane extends LitElement {
   @property() variant: WelcomePaneVariant = "compact";
   @property() heading = "Doclens";
   @property() subheading = "";
-  @property() suffix = "";
   /** hero 圆盘图标名（仅 onboarding；空则不渲染圆盘） */
   @property() heroIcon = "";
 
@@ -269,9 +259,7 @@ export class WelcomePane extends LitElement {
   private _renderCompact() {
     return html`
       <h1 class="title">
-        <span class="accent">${this.heading}</span>${this.suffix
-          ? html`<span class="sep">·</span><span>${this.suffix}</span>`
-          : nothing}
+        <span class="accent">${this.heading}</span>
       </h1>
       ${this.subheading ? html`<p class="subtitle">${this.subheading}</p>` : nothing}
     `;

@@ -25,7 +25,7 @@
 - **修复方案**：icon.ts 补 `file-x`/`loader`（lucide 有同名图标）或改用已注册近似名（`circle-x`/`loader-circle` 若已注册）；可选：加一条 spec 断言所有静态 `name="..."` 引用都在 ICONS 表内（契约闭合测试）。
 - **回归验证**：`npm run test -- tests/pdf-viewer.spec.ts` + 手工开 PDF 预览看两个状态图标。
 
-### AP-3 preview-pane 635 行未闭合 JSDoc 吞掉 636 行 @state 声明 [P3] [status: pending]
+### AP-3 preview-pane 635 行未闭合 JSDoc 吞掉 636 行 @state 声明 [P3] [status: done(批2 提交待填)]
 - **形态**：死代码残留（注释事故——Lava Flow 变体）
 - **证据**：字节级核实（od）：635 行 `/** 代码主题（ADR-0043 三态）…` 无 `*/`，借 638 行注释的闭合符，把 636 行 `@state() private _codeTheme: CodeTheme = readCodeTheme();` 整行吞入注释。真实生效声明在 710 行（自带 708-709 JSDoc）。634 行还有一条已过时的 ADR-0036 两态 JSDoc 残留。若 636 生效将与 710 构成重复声明编译错——当前行为完全依赖 710 那份。
 - **风险**：纯死代码 + 误导性文档（读者以为 636 是声明点）；无行为影响。
@@ -95,45 +95,45 @@
 - **修复方案**：动态 import 的 promise resolve 后直接置 ready 标志/派发事件，whenReady 等待该 promise 而非轮询。
 - **回归验证**：`npm run build` + 手工：打开大 md → 编辑 → 取消，验证视口位置保持。
 
-### AP-13 chat-message 死 prop `error` [P3] [status: pending]
+### AP-13 chat-message 死 prop `error` [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props
 - **证据**：`chat-message.ts:341` `@property error`；唯一实例化点 chat-stream.ts:335 透传清单不含 error，chat-view.ts:2427-2441 也未绑定；模板 599/622 的 error 渲染分支无输入路径 → 死 prop + 死模板分支。
 - **风险**：无行为影响；误导维护者以为存在错误通道。
 - **修复方案**：删除 prop 与对应模板分支（或接通真实错误源——按产品意图二选一）。
 - **回归验证**：`npm run build`
 
-### AP-14 input-box 死 prop `iconAfter` + 幻影事件注释 `images-restored` [P3] [status: pending]
+### AP-14 input-box 死 prop `iconAfter` + 幻影事件注释 `images-restored` [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props / 文档-代码冲突
 - **证据**：`input-box.ts:327` `iconAfter` 全库无消费方赋值（仅 621/634 自读）；`:337` 注释描述 `images-restored` 事件，实际无 dispatchEvent 也无监听者——注释描述了不存在的事件通道（实际回填走 `.images=` 绑定，chat-view.ts:2363/2471）。
 - **风险**：误导；无行为影响。
 - **修复方案**：删 iconAfter prop；改写 337 行注释为真实的 `.images=` 受控往返描述。
 - **回归验证**：`npm run build`
 
-### AP-15 file-row 死 prop `hideCheckbox` [P3] [status: pending]
+### AP-15 file-row 死 prop `hideCheckbox` [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props
 - **证据**：`file-row.ts:101,157`；全库无调用方传 `hide-checkbox`（file-list.ts:899-905、979-984 均不传，file-list 已计算 readOnly(858) 却不转发）。
 - **修复方案**：删 prop 及 157 行分支；或让 file-list 转发 readOnly（若产品需要只读态隐藏 checkbox——二选一，默认删）。
 - **回归验证**：`npm run test -- tests/file-card.spec.ts tests/search-highlight-units.spec.ts` + `npm run build`
 
-### AP-16 tree-node 死 prop `loading`（永假分支） [P3] [status: pending]
+### AP-16 tree-node 死 prop `loading`（永假分支） [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props
 - **证据**：`tree-node.ts:41,92`；唯一外部传值 file-tree.ts:102 恒传 `""`，递归子节点（95-105）不传 → `this.loading === this.entry.path` 永假，「加载中…」分支（93）不可达。
 - **修复方案**：删 prop 与分支（或接通真实 loading 路径）。
 - **回归验证**：`npm run build`
 
-### AP-17 search-results 死绑定 `?expanded=${false}` + welcome-pane 死 prop `suffix` [P3] [status: pending]
+### AP-17 search-results 死绑定 `?expanded=${false}` + welcome-pane 死 prop `suffix` [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props / 死绑定
 - **证据**：`search-results.ts:93` 恒 false 绑定（展开态实由 file-card 内部 `_toggle` 124-127 管理）；`welcome-pane.ts:250` `suffix` 全仓无传值（两处宿主均传 variant="onboarding"），compact 变体（269-278）+ heading 默认 "Doclens"（247）疑似遗留死分支。
 - **修复方案**：删恒 false 绑定；welcome-pane 确认无外部 HTML 入口后删 suffix/compact 分支。
 - **回归验证**：`npm run build`
 
-### AP-18 app-bar 死 prop `activeView` [P3] [status: pending]
+### AP-18 app-bar 死 prop `activeView` [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Props
 - **证据**：`app-bar.ts:280`；app.ts:303 传入但组件内零读取（全文 grep 仅声明行）。
 - **修复方案**：删 prop 与 app.ts 传值。
 - **回归验证**：`npm run build`
 
-### AP-19 welcome-pane 死 prop `heroIcon`（静态引用面外，动态绑定侧） [P4] [status: pending]
+### AP-19 welcome-pane 死 prop `heroIcon` [P4] [status: 误报关闭（2026-11-15 核实：chat-view.ts:2321 / search-view.ts:614 以 attribute 形式 heroicon="bot"/"search" 传值，属性存活）]
 - **形态**：Dead Props
 - **证据**：`welcome-pane.ts:252` `heroIcon` 属性全仓库无赋值点（AP-2 核实任务的附带发现）。
 - **修复方案**：与 AP-17 一并清理 welcome-pane。
@@ -173,7 +173,7 @@
 - **修复方案**：探测三兄弟 → `probe-button` 组件；额度域 → `quota-badge`；与 AP-22 的公共层配合收敛。
 - **回归验证**：`npm run build` + 手工：模型预设页增删改/探测/额度显示。
 
-### AP-24 search-presets-section 死样式（.head/.badge 无模板匹配） [P3] [status: pending]
+### AP-24 search-presets-section 死样式（.head/.badge 无模板匹配） [P3] [status: done(批2 提交待填)]
 - **形态**：Dead Styles
 - **证据**：`search-presets-section.ts:82-98`（`.head/.head h2/.head .hint`）与 153-161（`.badge`）在全文模板无匹配元素（grep 证实 .badge 仅 mcp/skills/password 使用）。
 - **修复方案**：删两段 CSS。
@@ -349,3 +349,4 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 2（死代码清扫） | AP-3、AP-13~18、AP-24 | AP-3：删 634-636 未闭合 JSDoc 残留三行（保留 710 行生效声明）；AP-13：删 chat-message error prop + 两处死模板分支 + .error 样式；AP-14：删 input-box iconAfter prop（模板简化为 icon/label 单渲染）+ 修正 images-restored 幻影注释为真实受控往返描述；AP-15：删 file-row hideCheckbox prop 及分支；AP-16：删 tree-node loading prop + 永假分支 + file-tree 恒空传值；AP-17：删 search-results `?expanded=${false}` 恒假绑定、删 welcome-pane suffix prop + .sep 样式（heroIcon **反证保留**——宿主以 heroicon attribute 传值，AP-19 关闭为误报）；AP-18：删 app-bar activeView prop + app.ts 传值 + ViewId import；AP-24：删 search-presets .head/.badge 死样式。回归：8 spec 文件 162 测试全绿 + `npm run build` 通过；chat-view-preview.spec.ts 1 失败为基线既有失败（stash 验证），非本批引入 |

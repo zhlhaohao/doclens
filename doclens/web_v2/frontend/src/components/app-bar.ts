@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 
 import appLogoSvg from "../assets/app_icon.svg?raw";
@@ -10,7 +10,7 @@ import "./backup-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
 import { store, actions } from "../state/store";
-import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
+import type { SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
 import { closeWebview, isWebviewContainer } from "../utils/jsbridge";
 import { router } from "../router/router";
@@ -276,8 +276,6 @@ export class AppBar extends LitElement {
       margin-top: 2px;
     }
   `;
-
-  @property() activeView: ViewId = "search";
 
   @state() private _menuOpen = false;
   @state() private _showSaveAndRevert = false;

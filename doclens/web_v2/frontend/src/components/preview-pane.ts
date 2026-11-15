@@ -631,9 +631,6 @@ export class PreviewPane extends LitElement {
   @state() private _downloading = false;
   /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
   @state() private _fontScalePct = readFontScalePct();
-  /** 代码主题（ADR-0036）：行号视图浅/深两态；持久化 localStorage，默认 light。 */
-  /** 代码主题（ADR-0043 三态）：auto=跟随应用主题（深夜→深色），light/dark=显式固定。
-  @state() private _codeTheme: CodeTheme = readCodeTheme();
 
   /** 行号视图字号档位（60–200 步长 10）；持久化 localStorage（独立于 md 字号）。 */
   @state() private _codeFontScalePct = readCodeFontScalePct();
