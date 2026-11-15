@@ -401,8 +401,10 @@ export class InputBox extends LitElement {
     this._slashDismissed = false; // 输入变化即复位 Esc 驳回
     this._slashIndex = 0;
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
-    // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件
-    const btn = this.renderRoot.querySelector("button");
+    // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件。
+    // 精确命中提交键（AP-1）：renderRoot 文档序中 thumb-x 删除钮/📎 attach 键
+    // 排在提交键之前，裸 querySelector("button") 会写错目标。
+    const btn = this.renderRoot.querySelector<HTMLButtonElement>("button.submit:not(.caret)");
     if (btn) btn.disabled = !this.trimmed || this.disabled;
     this._autoResize();
   }
@@ -434,7 +436,7 @@ export class InputBox extends LitElement {
     this.value = `/${item.name} `;
     this._slashIndex = 0;
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
-    const btn = this.renderRoot.querySelector("button");
+    const btn = this.renderRoot.querySelector<HTMLButtonElement>("button.submit:not(.caret)");
     if (btn) btn.disabled = !this.trimmed || this.disabled;
     this._autoResize();
     this.focus();
@@ -617,7 +619,7 @@ export class InputBox extends LitElement {
         : null;
       const label = html`<span>${this.buttonLabel}</span>`;
       return html`
-        <button @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+        <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
           ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
         </button>`;
     }
@@ -630,7 +632,7 @@ export class InputBox extends LitElement {
       const label = html`<span>${this.buttonLabel}</span>`;
       return html`
         <div class="actions split">
-          <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+          <button class="primary submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
             ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
           </button>
           <button class="caret" @click=${this._toggleMenu} ?disabled=${this.disabled}
@@ -640,7 +642,7 @@ export class InputBox extends LitElement {
     const cur = this.modes![this.mode];
     return html`
       <div class="actions split">
-        <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+        <button class="primary submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
           ${cur?.icon ? html`<doclens-icon name=${cur.icon} aria-hidden="true"></doclens-icon>` : null}
           <span>${cur?.label ?? this.buttonLabel}</span>
         </button>
