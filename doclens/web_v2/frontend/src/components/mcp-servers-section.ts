@@ -1,5 +1,6 @@
 import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -97,14 +98,11 @@ function formatLines(obj: Record<string, string>): string {
  */
 @customElement("mcp-servers-section")
 export class McpServersSection extends ToastFlashMixin(LitElement) {
-  static styles = css`
+  static styles = css`${settingsSectionStyles} 
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
-    }
-    .wrap {
-      margin-bottom: var(--cortex-space-6);
     }
     /* 列表底部工具条：添加按钮靠右（顶替原 head/risk-note 区域） */
     .toolbar {
@@ -199,34 +197,6 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
       gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
-    .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 启用开关（复用 .switch 视觉语言的最小实现） */
     .toggle {
       position: relative;
@@ -245,7 +215,7 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
     .toggle .track {
       position: absolute;
       inset: 0;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border);
       transition: background 0.15s;
@@ -265,11 +235,6 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
     }
     .toggle input:checked ~ .track { background: var(--cortex-primary); border-color: var(--cortex-primary); }
     .toggle input:checked ~ .thumb { left: 16px; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
     /* 工具清单展开区 */
     .tools-panel {
       margin-top: var(--cortex-space-2);
@@ -294,24 +259,6 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
     .tools-panel .tool-desc {
       color: var(--cortex-text-muted);
     }
-    /* 内联编辑表单 */
-    .form {
-      margin-top: var(--cortex-space-3);
-      padding: var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--cortex-space-3);
-    }
-    .form .full { grid-column: 1 / -1; }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
-    }
     .input, .select, .textarea {
       padding: 8px 10px;
       border: 1px solid var(--cortex-border);
@@ -334,25 +281,6 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-focus-ring);
     }
-    .form-actions {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    .form-error {
-      grid-column: 1 / -1;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
-    }
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
-    }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
     @media (max-width: 1023px) {
       /* 移动端 scroll-area 无顶 padding，补齐与 .section 一致的顶部间距，避免标题行顶到 tab 条分隔线 */
       .wrap { margin-top: var(--cortex-space-4); }

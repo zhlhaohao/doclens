@@ -79,7 +79,7 @@ export class AskCard extends LitElement {
       font-weight: 600;
       color: var(--cortex-text-subtle);
       border: 1px solid var(--cortex-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       padding: 1px 8px;
       margin-right: 6px;
       vertical-align: 1px;
@@ -116,7 +116,7 @@ export class AskCard extends LitElement {
       font-size: var(--cortex-fs-xs, 11px);
       color: var(--cortex-primary);
       border: 1px solid currentColor;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       padding: 0 6px;
       margin-left: 6px;
       vertical-align: 1px;
@@ -151,7 +151,7 @@ export class AskCard extends LitElement {
     }
     button.primary {
       padding: 6px 18px;
-      border-radius: 999px;
+      border-radius: var(--cortex-btn-radius);
       border: none;
       background: var(--cortex-btn-primary-bg);
       color: var(--cortex-btn-primary-text);

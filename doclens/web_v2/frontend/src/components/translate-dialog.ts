@@ -2,6 +2,7 @@
 // 表单（预设只读展示/语言对/页码/产物形态）→ 提交进串行队列 → SSE 进度 →
 // 完成后派发 translate-done 事件（preview-pane 刷新文件树/打开译文）。
 import { LitElement, html, css, nothing } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -25,7 +26,7 @@ const CANCEL_WIRED = new WeakSet<HTMLDialogElement>();
 
 @customElement("translate-dialog")
 export class TranslateDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     /* 原生 <dialog> + showModal()：top layer 全屏居中（沿宿主工具箱/
        关于对话框范式）——不被 PDF portal（document.body z-index 1）遮挡、
        不受预览栏 overflow 裁剪（2026-10-08 修复：旧 absolute 定位只浮在
@@ -103,32 +104,8 @@ export class TranslateDialog extends LitElement {
     .check input {
       accent-color: var(--cortex-btn-primary-bg);
     }
-    .actions {
-      display: flex;
-      gap: var(--cortex-space-2);
-      justify-content: flex-end;
-      margin-top: var(--cortex-space-2);
-    }
-    button {
-      /* 对话框按钮 = pill（DESIGN.md：对话框/设置确认黑 pill 营销主按钮；
-       * 对齐 delete-dialog/city-dialog 范式） */
-      font: inherit;
-      font-size: var(--cortex-fs-base);
-      padding: 6px 16px;
-      border-radius: var(--cortex-radius-pill);
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      cursor: pointer;
-    }
     button:hover:not(:disabled) {
       background: var(--cortex-surface-muted);
-    }
-    button.primary {
-      /* 黑 pill 主按钮（marketing primary） */
-      background: var(--cortex-btn-primary-bg);
-      border: none;
-      color: var(--cortex-btn-primary-text);
     }
     button.primary:hover:not(:disabled) {
       background: var(--cortex-btn-primary-pressed);

@@ -1,4 +1,5 @@
 import { LitElement, html, css } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import { filesApi } from "../api/files";
@@ -8,7 +9,7 @@ type Phase = "loading-stats" | "confirming" | "deleting";
 
 @customElement("delete-dialog")
 export class DeleteDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host { display: block; min-width: 360px; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .warn {
@@ -29,27 +30,6 @@ export class DeleteDialog extends LitElement {
     }
     .stats ul { list-style: none; padding: 0; margin: var(--cortex-space-2) 0; }
     .stats li { padding: 2px 0; }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.danger {
-      background: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-      border: none;
-      border-radius: var(--cortex-radius-pill);
-    }
-    button.danger:hover:not(:disabled) { filter: brightness(1.05); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {
       display: flex; gap: var(--cortex-space-2); align-items: center;
       padding: var(--cortex-space-2) 0;
@@ -58,8 +38,6 @@ export class DeleteDialog extends LitElement {
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

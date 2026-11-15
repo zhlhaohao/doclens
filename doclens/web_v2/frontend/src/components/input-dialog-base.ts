@@ -6,10 +6,11 @@
  *  事件契约不变：submit（detail 由子类定）/ cancel，均冒泡+穿透。 */
 
 import { LitElement, html, css, nothing } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { state } from "lit/decorators.js";
 
 export abstract class InputDialogBase extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host { display: block; min-width: 360px; }
     .row { margin: var(--cortex-space-3) 0; }
     label {
@@ -37,32 +38,9 @@ export abstract class InputDialogBase extends LitElement {
       font-size: var(--cortex-fs-sm);
       margin-top: 4px;
     }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-      border-radius: var(--cortex-radius-pill);
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       input { font-size: 16px; padding: 10px; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

@@ -1,5 +1,6 @@
 import { ToastFlashMixin } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -35,13 +36,12 @@ interface InstallDialogState {
  */
 @customElement("skills-section")
 export class SkillsSection extends ToastFlashMixin(LitElement) {
-  static styles = css`
+  static styles = css`${settingsSectionStyles} 
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
     }
-    .wrap { margin-bottom: var(--cortex-space-6); }
     /* 列表底部工具条：刷新靠左、安装靠右（顶替原 risk-note 区域） */
     .toolbar {
       display: flex;
@@ -155,7 +155,7 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
     .toggle .track {
       position: absolute;
       inset: 0;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border);
       transition: background 0.15s;
@@ -181,45 +181,15 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
+    /* 本 section 的 icon-btn 为「图标 + 文字」内联排（共享块只给基础形态） */
     .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
       min-height: 28px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
     }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 纯图标按钮：直径对齐左侧 Toggle（track 高 20px）的视觉尺度 */
     .icon-btn.icon-only { padding: 2px 4px; min-height: 20px; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
     /* 更多面板（行内展开，避免移动端下拉定位问题） */
     .more-panel {
       margin-top: var(--cortex-space-2);
@@ -238,14 +208,6 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       color: var(--cortex-text-subtle);
       margin-left: var(--cortex-space-2);
     }
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
-    }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
     /* 安装弹窗：桌面居中卡片 / 移动端全屏 */
     .overlay {
       position: fixed;
@@ -275,12 +237,6 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       margin: 0;
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
-    }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
     }
     .input {
       padding: 8px 10px;
@@ -325,10 +281,6 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       display: flex;
       justify-content: flex-end;
       gap: var(--cortex-space-2);
-    }
-    .form-error {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
     }
 
     /* ===== 移动端：卡片堆叠 + 大命中区 + 全屏弹窗 ===== */

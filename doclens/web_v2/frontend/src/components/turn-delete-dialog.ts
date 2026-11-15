@@ -1,4 +1,5 @@
 import { LitElement, html, css } from "lit";
+import { confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property } from "lit/decorators.js";
 
 /** 锚点摘录截断长度（与 rewind-dialog 同口径，摘录仅提示用）。 */
@@ -13,7 +14,7 @@ const ANCHOR_EXCERPT_LEN = 160;
  */
 @customElement("turn-delete-dialog")
 export class TurnDeleteDialog extends LitElement {
-  static styles = css`
+  static styles = css`${confirmButtonStyles} ${buttonRowStyles} 
     :host {
       display: block;
       min-width: 340px;
@@ -60,31 +61,6 @@ export class TurnDeleteDialog extends LitElement {
     }
     .warn doclens-icon { color: var(--cortex-danger); flex: none; }
     .error { color: var(--cortex-danger); font-size: var(--cortex-fs-sm); margin-bottom: var(--cortex-space-2); }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    button.plain {
-      background: transparent;
-      color: var(--cortex-text-muted);
-      border: 1px solid var(--cortex-border);
-      border-radius: 999px;
-      padding: 8px 18px;
-      font-size: var(--cortex-fs-sm);
-      cursor: pointer;
-    }
-    button.danger {
-      background: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-      border: none;
-      border-radius: 999px;
-      padding: 8px 18px;
-      font-size: var(--cortex-fs-sm);
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button.danger:disabled { opacity: 0.5; cursor: not-allowed; }
   `;
 
   /** 锚点（该 user 消息）seq */

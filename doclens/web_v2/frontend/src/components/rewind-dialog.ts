@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
+import { confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import { fetchRewindPreview } from "../api/sessions";
@@ -17,7 +18,7 @@ const ANCHOR_EXCERPT_LEN = 160;
  */
 @customElement("rewind-dialog")
 export class RewindDialog extends LitElement {
-  static styles = css`
+  static styles = css`${confirmButtonStyles} ${buttonRowStyles} 
     :host {
       display: block;
       font-size: var(--cortex-fs-md);
@@ -108,35 +109,6 @@ export class RewindDialog extends LitElement {
     }
     .checkbox-row input {
       accent-color: var(--cortex-primary);
-    }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-2);
-    }
-    button.primary {
-      background: var(--cortex-text);
-      color: var(--cortex-surface);
-      border: none;
-      border-radius: 999px;
-      padding: 8px 18px;
-      font-size: var(--cortex-fs-sm);
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button.primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    button.plain {
-      background: transparent;
-      color: var(--cortex-text-muted);
-      border: 1px solid var(--cortex-border);
-      border-radius: 999px;
-      padding: 8px 18px;
-      font-size: var(--cortex-fs-sm);
-      cursor: pointer;
     }
     .loading, .error {
       font-size: var(--cortex-fs-sm);

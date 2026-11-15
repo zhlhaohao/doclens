@@ -150,7 +150,7 @@ export class AppBar extends LitElement {
       font-family: inherit;
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-btn-radius);
       background: var(--cortex-surface-muted);
       white-space: nowrap;
       cursor: pointer;

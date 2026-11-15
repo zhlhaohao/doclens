@@ -1,4 +1,5 @@
 import { LitElement, html, css } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
@@ -9,7 +10,7 @@ import "./toast-stack";
 
 @customElement("reindex-dialog")
 export class ReindexDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host {
       position: fixed;
       inset: 0;
@@ -43,25 +44,12 @@ export class ReindexDialog extends LitElement {
       color: var(--cortex-text-muted); margin-top: var(--cortex-space-2);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2); margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px; border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface); cursor: pointer;
-      border-radius: var(--cortex-radius-pill); font-size: var(--cortex-fs-base);
-    }
-    button.primary { background: var(--cortex-btn-primary-bg); color: var(--cortex-btn-primary-text); border: none; border-radius: var(--cortex-radius-pill); }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
     button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
       dialog {
         min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px);
         max-height: calc(100vh - 16px);
       }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

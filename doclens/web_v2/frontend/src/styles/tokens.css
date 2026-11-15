@@ -65,6 +65,13 @@
   /* ── 按钮水平内边距（与字号同缩放；日记页等文字按钮消费）── */
   --cortex-btn-pad-x: 14px;
 
+  /* ── 按钮通用形态（DESIGN.md：按钮一律 pill，绝不方角）──
+     此前 999px/100px 硬编码散落 13 处，统一到 radius-pill token。── */
+  --cortex-btn-radius: var(--cortex-radius-pill);
+  --cortex-btn-disabled-opacity: 0.4;   /* 禁用态透明度（0.5 变体随各自场景覆盖） */
+  --cortex-btn-hover-bg: var(--cortex-surface-muted);
+  --cortex-btn-hover-border: var(--cortex-text-subtle);
+
   /* ── 文字按钮高度基准（= fs-md + 2×padding-y；随字号缩放）── */
   --cortex-btn-h-sm: calc(var(--cortex-fs-md) * 1.4 + 12px);   /* ≈33px：导航/保存等紧凑按钮 */
   --cortex-btn-h-md: calc(var(--cortex-fs-md) * 1.4 + 16px);   /* ≈37px：记录/回顾 sub-tab */

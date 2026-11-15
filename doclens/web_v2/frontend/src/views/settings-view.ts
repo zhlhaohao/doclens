@@ -262,7 +262,7 @@ export class SettingsView extends LitElement {
     .switch .track {
       width: 36px;
       height: 20px;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-border);
       position: relative;
       transition: background 0.15s;

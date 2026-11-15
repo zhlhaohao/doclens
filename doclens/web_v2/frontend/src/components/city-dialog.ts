@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 
 /** 广东六城（与后端设置页 CITY_OPTIONS 同步）。 */
 const CITIES = ["广州", "深圳", "珠海", "东莞", "佛山", "中山"];
@@ -10,7 +11,7 @@ const CITIES = ["广州", "深圳", "珠海", "东莞", "佛山", "中山"];
  */
 @customElement("city-dialog")
 export class CityDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host { display: block; min-width: 320px; }
     .title {
       font-size: var(--cortex-fs-base);
@@ -36,23 +37,8 @@ export class CityDialog extends LitElement {
       border-color: var(--cortex-primary);
       color: var(--cortex-primary);
     }
-    .actions {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: var(--cortex-space-4);
-    }
-    button.cancel {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
-      .actions { flex-direction: column-reverse; }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import { formatTokens } from "../utils/format";
@@ -12,7 +13,7 @@ import "./icon";
  *  打开弹窗时 re-fetch 刷新）。 */
 @customElement("session-info-dialog")
 export class SessionInfoDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host { display: block; min-width: 340px; }
     .row { margin: var(--cortex-space-3) 0; }
     .label {
@@ -98,22 +99,8 @@ export class SessionInfoDialog extends LitElement {
     .copy-btn.copied {
       color: var(--cortex-primary);
     }
-    .actions {
-      display: flex; justify-content: flex-end;
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-      font-family: inherit;
-    }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

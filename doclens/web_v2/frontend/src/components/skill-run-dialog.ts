@@ -1,4 +1,5 @@
 import { LitElement, html, css } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 import type { SkillInfo } from "../api/skills";
 import "../components/icon";
@@ -9,7 +10,7 @@ import "../components/icon";
  */
 @customElement("skill-run-dialog")
 export class SkillRunDialog extends LitElement {
-  static styles = css`
+  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
     :host {
       display: block;
       min-width: 420px;
@@ -67,32 +68,9 @@ export class SkillRunDialog extends LitElement {
       border-color: var(--cortex-primary);
       box-shadow: var(--cortex-focus-ring);
     }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-      border-radius: var(--cortex-radius-pill);
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       .files { max-height: 35vh; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
   `;
 

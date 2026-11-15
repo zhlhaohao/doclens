@@ -47,36 +47,9 @@ export const dialogSlotStyles = css`
   }
 `;
 
-/** 危险操作确认件的额外样式：警示摘录（.anchor）+ 不可撤销提示（.warn）
- *  + plain 副按钮（rewind / turn-delete 共用）。 */
-export const dangerConfirmStyles = css`
-  .anchor {
-    font-size: var(--cortex-fs-sm);
-    color: var(--cortex-text-muted);
-    background: var(--cortex-surface-muted);
-    border-left: 3px solid var(--cortex-border);
-    padding: var(--cortex-space-2) var(--cortex-space-3);
-    margin: 0 0 var(--cortex-space-3);
-    max-height: 8em;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .warn {
-    display: flex;
-    gap: 6px;
-    align-items: flex-start;
-    font-size: var(--cortex-fs-sm);
-    color: var(--cortex-danger);
-    background: var(--cortex-danger-soft, rgba(220, 38, 38, 0.1));
-    border-radius: var(--cortex-radius-sm);
-    padding: 8px 10px;
-    margin: 0 0 var(--cortex-space-4);
-  }
-  button.plain {
-    background: transparent;
-    border: none;
-    color: var(--cortex-text-muted);
-  }
-  button.plain:hover { color: var(--cortex-text); background: var(--cortex-surface-muted); }
-`;
+/** 已移除：dangerConfirmStyles（危险确认件的 .anchor / .warn / button.plain）。
+ *
+ *  AP-40 抽取时：button.plain 归入 styles/button-styles.ts 的
+ *  buttonBaseStyles（+ confirmButtonStyles 的确认框变体）；.anchor / .warn
+ *  两件（rewind / turn-delete）形态确有差异（前者带 primary 边框色、
+ *  后者带左描边圆角），故各留组件内，不强行归一（防 DRY Misuse）。 */

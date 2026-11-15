@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
+import { dialogFrameStyles } from "../styles/dialog-frame";
 import { customElement, property } from "lit/decorators.js";
 
 import { store } from "../state/store";
@@ -10,68 +11,7 @@ import type { WatchChange } from "../state/types";
  * 打开期间订阅 store 实时刷新列表；Esc / 点遮罩 / 关闭按钮 → 派发 close。 */
 @customElement("watch-changes-dialog")
 export class WatchChangesDialog extends LitElement {
-  static styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-    /* 仅在 open 时显示遮罩并捕获点击（modal 行为） */
-    :host([open]) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    .scrim {
-      position: absolute;
-      inset: 0;
-    }
-    dialog {
-      position: relative;
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 380px;
-      max-width: 90vw;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      border-bottom: 1px solid var(--cortex-border-muted);
-    }
-    .head h3 {
-      margin: 0;
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--cortex-text);
-    }
-    .close-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: var(--cortex-fs-lg);
-      line-height: 1;
-      color: var(--cortex-text-muted);
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
-    }
-    .close-btn:hover {
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
-    }
+  static styles = css`${dialogFrameStyles} 
     .list {
       overflow-y: auto;
       padding: var(--cortex-space-2) var(--cortex-space-6) var(--cortex-space-4);
@@ -105,13 +45,6 @@ export class WatchChangesDialog extends LitElement {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-sm);
       font-family: var(--cortex-font);
-    }
-    @media (max-width: 1023px) {
-      dialog {
-        min-width: 0;
-        width: calc(100vw - 16px);
-        max-width: calc(100vw - 16px);
-      }
     }
   `;
 

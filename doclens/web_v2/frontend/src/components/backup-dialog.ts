@@ -1,4 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
+import { dialogFrameStyles } from "../styles/dialog-frame";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -20,65 +21,7 @@ import "./icon";
  */
 @customElement("backup-dialog")
 export class BackupDialog extends LitElement {
-  static styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-    :host([open]) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    .scrim {
-      position: absolute;
-      inset: 0;
-    }
-    dialog {
-      position: relative;
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      width: min(520px, 90vw);
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      border-bottom: 1px solid var(--cortex-border-muted);
-    }
-    .head h3 {
-      margin: 0;
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
-      color: var(--cortex-text);
-    }
-    .close-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: var(--cortex-fs-lg);
-      line-height: 1;
-      color: var(--cortex-text-muted);
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
-    }
-    .close-btn:hover {
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
-    }
+  static styles = css`${dialogFrameStyles} 
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -196,11 +139,6 @@ export class BackupDialog extends LitElement {
       color: var(--cortex-text-muted);
       text-align: center;
       padding: var(--cortex-space-6) 0;
-    }
-    @media (max-width: 1023px) {
-      dialog {
-        width: calc(100vw - 16px);
-      }
     }
   `;
 

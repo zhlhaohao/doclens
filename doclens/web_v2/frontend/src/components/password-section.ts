@@ -54,7 +54,7 @@ export class PasswordSection extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-success);
       border: 1px solid var(--cortex-success);
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       margin-left: 8px;
       vertical-align: middle;
     }

@@ -217,7 +217,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
   color: var(--cortex-text-muted);
   background: var(--cortex-surface);
   border: 1px solid var(--cortex-border);
-  border-radius: 999px;
+  border-radius: var(--cortex-radius-pill);
   padding: 1px 8px;
   box-shadow: var(--cortex-shadow-md);
   white-space: nowrap;
