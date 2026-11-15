@@ -26,10 +26,11 @@ import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
 import { ChatHistoryController } from "../utils/chat-history-controller";
+import { ChatSkillsController } from "../utils/chat-skills-controller";
+// 向后兼容再导出：checkSlashSubmit 已迁至 chat-skills-controller（纯函数模块）
+export { checkSlashSubmit } from "../utils/chat-skills-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
-import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
-import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
 import type { ChatStream } from "../components/chat-stream";
@@ -50,26 +51,6 @@ import "../components/preview-pane";
 import "../components/toast-stack";
 import { pushLocalToast } from "../utils/toast";
 import type { FocusHeaderAction } from "../components/focus-header";
-
-/** 斜杠技能调用的提交校验结果（checkSlashSubmit）：
- *  non-slash = 普通消息直接发送；ok = 合法斜杠调用（记录最近技能后发送）；
- *  unknown = 未知技能名，阻断发送并提示（后端对漏网斜杠按普通文本处理）。 */
-export type SlashCheck =
-  | { type: "non-slash" }
-  | { type: "ok"; name: string }
-  | { type: "unknown"; name: string };
-
-/** 提交校验：首字符 / 即技能模式，技能名 = 首个空白前的片段；
- *  合法集合 = 对话技能候选（启用 ∧ 未删除 ∧ 用户可调用，与引导菜单同源）。 */
-export function checkSlashSubmit(
-  message: string,
-  candidates: { name: string }[] | null,
-): SlashCheck {
-  if (!message.startsWith("/")) return { type: "non-slash" };
-  const name = message.slice(1).split(/\s/, 1)[0];
-  if ((candidates ?? []).some((c) => c.name === name)) return { type: "ok", name };
-  return { type: "unknown", name };
-}
 
 /** 流事件归属判定（导出供单测）：本次流只许写回发起它的会话。
  *  用户中途切到别的对话/回欢迎页后，事件静默丢弃——否则别的对话会实时
@@ -340,15 +321,27 @@ export class ChatView extends LitElement {
     syncCurrentSessionStar: (sessionId, starred) => this._history.syncStarToStore(sessionId, starred),
   });
 
+  /** 对话技能域（AP-1 外迁）：候选取数/最近项求交/斜杠校验/技能直发。 */
+  private _skills = new ChatSkillsController(this, {
+    prefillSkill: (name) => this._prefillSkill(name),
+    sendWithSkill: (name) => this._sendWithSkill(name),
+  });
+
+  /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
+  private _prefillSkill(name: string) {
+    this.draft = `/${name} `;
+    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
+  }
+
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
    *  views/chat-dialogs.ts 的纯模板函数——视图不再持有模板细节。 */
   private _dialogs = {
     skill: () => renderSkillDialog({
-      open: this._skillDialogOpen,
-      skills: this._skillCandidates,
-      error: this._skillCandidatesError,
-      onPick: this._onSkillDialogPick,
-      onCancel: this._onSkillDialogCancel,
+      open: this._skills.dialogOpen,
+      skills: this._skills.candidates,
+      error: this._skills.error,
+      onPick: (e: CustomEvent<{ skill: SkillInfo }>) => this._skills.pickFromDialog(e.detail.skill, !!this.draft.trim()),
+      onCancel: () => this._skills.cancelDialog(),
     }),
     rename: () => renderRenameDialog({
       open: this._ops.renameDialogOpen,
@@ -436,11 +429,6 @@ export class ChatView extends LitElement {
   /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
   private get previewSizeBytes() { return this._preview.sizeBytes; }
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
-  /** 对话技能候选（ADR-0016 §1：全部启用技能）；null = 未加载/加载中 */
-  @state() private _skillCandidates: SkillInfo[] | null = null;
-  @state() private _skillCandidatesError: string | null = null;
-  /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
-  @state() private _skillDialogOpen = false;
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
   /** 压缩上下文模态框（more 菜单「压缩上下文」）：单框三态——确认 →
    *  压缩中（模态 spinner，禁止操作页面）→ 完成/失败（框内展示效果）。
@@ -506,7 +494,7 @@ export class ChatView extends LitElement {
     }
     this._consumePendingSkillChat();
     // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
-    void this._loadSkillCandidates();
+    void this._skills.loadCandidates();
     // 视口跨断点切换（桌面 ↔ 移动）：决定会话导航动作放悬浮三钮组还是菜单
     this._mqMobileViewport = typeof window.matchMedia === "function"
       ? window.matchMedia("(max-width: 1023px)")
@@ -521,72 +509,6 @@ export class ChatView extends LitElement {
       if (!dlg.open) dlg.showModal();
     }
   }
-
-  /** 拉取对话技能候选 = 全部启用且未删除的技能（ADR-0016 §1，与工具箱白名单独立）。 */
-  private async _loadSkillCandidates() {
-    try {
-      const items = await listSkillsManage();
-      this._skillCandidates = items
-        .filter((s) => s.enabled && !s.deleted)
-        .map((s) => ({ name: s.name, description: s.description, icon: s.icon }));
-      this._skillCandidatesError = null;
-    } catch (e) {
-      this._skillCandidatesError = (e as Error)?.message || "技能列表加载失败";
-    }
-  }
-
-  /** 传给 input-box 的最近技能项：与候选求交（停用/删除静默消失）取前 3；
-   *  候选全空 → null（caret 隐藏，退化为普通发送按钮，ADR-0016 §5）。 */
-  private get _recentSkillItems(): { name: string; icon?: string }[] | null {
-    const cands = this._skillCandidates;
-    if (cands !== null && cands.length === 0) return null;
-    if (!cands) return []; // 未加载：caret 可用，菜单暂只显示「选择技能…」
-    const byName = new Map(cands.map((c) => [c.name, c]));
-    return getRecentSkillNames()
-      .filter((n) => byName.has(n))
-      .slice(0, RECENT_SKILLS_MENU_CAP)
-      .map((n) => ({ name: n, icon: byName.get(n)!.icon }));
-  }
-
-  /** caret 菜单打开：刷新候选（设置页可能刚改过启用状态），recents 重算随之更新。 */
-  private _onSkillMenuOpen = () => {
-    void this._loadSkillCandidates();
-  };
-
-  /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
-  private _prefillSkill(name: string) {
-    this.draft = `/${name} `;
-    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
-  }
-
-  /** 空输入时从 caret 菜单选技能：预填 `/name `（用户续写问题后发送），
-   *  而非直接发送——没有可发送的问题（2026-10-21：caret 空输入不再禁用）。 */
-  private _onSkillPickEmpty = (e: CustomEvent<{ name: string }>) => {
-    this._prefillSkill(e.detail.name);
-  };
-
-  /** 菜单「选择技能…」→ 弹技能选择对话框（刷新候选保证最新）。 */
-  private _onSkillBrowse = () => {
-    this._skillDialogOpen = true;
-    void this._loadSkillCandidates();
-  };
-
-  private _onSkillDialogPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
-    this._skillDialogOpen = false;
-    if (!this.draft.trim()) {
-      this._prefillSkill(e.detail.skill.name);
-      return;
-    }
-    void this._sendWithSkill(e.detail.skill.name);
-  };
-
-  private _onSkillDialogCancel = () => {
-    this._skillDialogOpen = false;
-  };
-
-  private _onSkillMenuPick = (e: CustomEvent<{ name: string }>) => {
-    void this._sendWithSkill(e.detail.name);
-  };
 
   /** 移动端会话导航动作（顶栏「更多」菜单）：桌面由 chat-stream 悬浮
    *  三钮组承担，移动端空间不足收进菜单（2026-11-06）。
@@ -756,7 +678,7 @@ export class ChatView extends LitElement {
   private async _sendWithSkill(name: string) {
     const question = this.draft.trim();
     if (!question) return;
-    recordSkillUse(name);
+    this._skills.recordUse(name);
     const message = `/${name} ${question}`;
     this.draft = "";
     if (this.viewState.state === "initial") {
@@ -968,10 +890,10 @@ export class ChatView extends LitElement {
     // 调用）。非法阻断发送并保留草稿（后端对漏网的非法斜杠按普通文本处理，
     // 不注入 hint）；合法则记录最近技能后按普通消息原样发送——hint 由后端
     // 在发送给 LLM 时注入（展示保真/落库原文）。
-    if (message.startsWith("/") && this._skillCandidates === null) {
-      await this._loadSkillCandidates();
+    if (message.startsWith("/") && this._skills.candidates === null) {
+      await this._skills.loadCandidates();
     }
-    const check = checkSlashSubmit(message, this._skillCandidates);
+    const check = this._skills.checkSubmit(message);
     if (check.type === "unknown") {
       this.draft = message; // 恢复草稿便于修正
       this._pushToast(
@@ -981,8 +903,6 @@ export class ChatView extends LitElement {
       );
       return;
     }
-    if (check.type === "ok") recordSkillUse(check.name);
-
     this.draft = "";
 
     // initial 态时消息发送前先建会话（与技能对话共用路径）
@@ -1571,15 +1491,15 @@ export class ChatView extends LitElement {
               attachments
               .value=${this.draft}
               .images=${this._pendingImages}
-              .skillItems=${this._recentSkillItems}
-              .slashItems=${this._skillCandidates}
+              .skillItems=${this._skills.recentItems}
+              .slashItems=${this._skills.candidates}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
               @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
               @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
-              @skill-menu-open=${this._onSkillMenuOpen}
-              @skill-pick=${this._onSkillMenuPick}
-              @skill-pick-empty=${this._onSkillPickEmpty}
-              @skill-browse=${this._onSkillBrowse}
+              @skill-menu-open=${() => this._skills.onMenuOpen()}
+              @skill-pick=${(e: CustomEvent<{ name: string }>) => this._skills.pickFromMenu(e.detail.name)}
+              @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
+              @skill-browse=${() => this._skills.openDialog()}
               @submit=${this._submit}>
             </input-box>
           </div>
@@ -1679,15 +1599,15 @@ export class ChatView extends LitElement {
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             .images=${this._pendingImages}
-            .skillItems=${this._recentSkillItems}
-            .slashItems=${this._skillCandidates}
+            .skillItems=${this._skills.recentItems}
+            .slashItems=${this._skills.candidates}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
             @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
             @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
-            @skill-menu-open=${this._onSkillMenuOpen}
-            @skill-pick=${this._onSkillMenuPick}
-            @skill-pick-empty=${this._onSkillPickEmpty}
-            @skill-browse=${this._onSkillBrowse}
+            @skill-menu-open=${() => this._skills.onMenuOpen()}
+            @skill-pick=${(e: CustomEvent<{ name: string }>) => this._skills.pickFromMenu(e.detail.name)}
+            @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
+            @skill-browse=${() => this._skills.openDialog()}
             @submit=${this._submit}
             @stop=${this._stop}>
           </input-box>
