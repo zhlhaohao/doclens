@@ -21,12 +21,11 @@ import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, deleteTurn, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession, fetchChatTrace } from "../api/sessions";
+import { createSession, listSessions, clearSessions, starSession, fetchSessionDetail, fetchChatTrace } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
+import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
-import { downloadFromUrl } from "../utils/download";
-import { jsbridgeDownloadAvailable, jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
 import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
 import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
@@ -303,24 +302,42 @@ export class ChatView extends LitElement {
    *  进入会话后跟随真实 id，返回 initial 清空。 */
   @state() private _highlightSessionId: string | null = null;
   @state() private _clearing = false;
-  /** WebView 原生导入进行中（防重复拉起选择器）。 */
-  private _importing = false;
   /** 导入确认框状态（2026-10-29：替代 window.confirm——后者被浏览器
    *  「阻止此页面创建更多对话框」静默返回 false 时，导入表现为毫无反应）。
    *  phase=exists 表示后端回报同 id 已存在，等待用户选择「作为副本导入」。 */
-  @state() private _importDialog: {
-    fileName: string;
-    title: string;
-    count: number;
-    phase: "confirm" | "exists" | "busy";
-    /** 浏览器路径持有的解析结果（WebView 直传路径为 null，副本需重选文件）。 */
-    data: unknown | null;
-    webview: boolean;
-  } | null = null;
   @state() private previewOpen = false;
   /** 预览状态机（P1-2 收敛，同 search 策略：只回填 content+tokens）。 */
   private _preview = new PreviewController(this, {
     getPane: () => this.shadowRoot?.querySelector("preview-pane") ?? null,
+  });
+
+  /** 会话操作域（AP-1 外迁）：改名 / 压缩 / 导出 / 导入 / 孪生复制 /
+   *  回退 / 删轮的状态与副作用在 controller，视图只留事件接线。 */
+  private _ops = new ChatSessionOpsController(this, {
+    toast: (message, level, duration) => this._pushToast(message, level, duration),
+    reloadHistory: () => this._loadHistory(),
+    reloadSession: () => {
+      const cur = this.viewState.currentSession;
+      return cur ? this._loadSession(cur) : Promise.resolve();
+    },
+    restoreDraft: (content, images) => {
+      this.draft = content;
+      this._pendingImages = images ?? [];
+    },
+    applyRenamedTitle: (title) => {
+      const session = this.viewState.currentSession;
+      if (!session) return;
+      // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
+      actions.setChatState({ currentSession: { ...session, title } });
+      this.historySessions = this.historySessions.map((s) =>
+        s.id === session.id ? { ...s, title } : s);
+    },
+    currentSessionId: () => this.viewState.currentSession?.id ?? null,
+    currentSessionTitle: () => this.viewState.currentSession?.title ?? "",
+    messages: () => this.viewState.messages,
+    streaming: () => this.viewState.streaming,
+    refreshCompaction: () => this._refreshCompaction(),
+    enterSession: (session) => this._loadSession(session as unknown as Session),
   });
 
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
@@ -334,10 +351,10 @@ export class ChatView extends LitElement {
       onCancel: this._onSkillDialogCancel,
     }),
     rename: () => renderRenameDialog({
-      open: this._renameDialogOpen,
+      open: this._ops.renameDialogOpen,
       session: this.viewState.currentSession,
-      onSubmit: this._onRenameSubmit,
-      onCancel: this._onRenameCancel,
+      onSubmit: (e) => this._ops.submitRename(e),
+      onCancel: () => this._ops.cancelRename(),
     }),
     visionGate: () => renderVisionGateDialog({
       open: this._visionGateOpen,
@@ -381,30 +398,30 @@ export class ChatView extends LitElement {
       });
     },
     rewind: () => renderRewindDialog({
-      state: this._rewindDialog,
+      state: this._ops.rewindDialog,
       sessionId: this.viewState.currentSession?.id ?? null,
-      onConfirm: this._onRewindConfirm,
-      onCancel: this._onRewindCancel,
+      onConfirm: (e) => this._ops.confirmRewind(e),
+      onCancel: () => this._ops.cancelRewind(),
     }),
     deleteTurn: () => renderDeleteTurnDialog({
-      state: this._deleteTurnDialog,
-      onConfirm: this._onDeleteTurnConfirm,
-      onCancel: this._onDeleteTurnCancel,
+      state: this._ops.deleteTurnDialog,
+      onConfirm: (e) => this._ops.confirmDeleteTurn(e),
+      onCancel: () => this._ops.cancelDeleteTurn(),
     }),
     compact: () => renderCompactDialog({
-      state: this._compactDialog,
-      onConfirm: this._onCompactConfirm,
-      onCancel: this._onCompactCancel,
+      state: this._ops.compactDialog,
+      onConfirm: () => void this._ops.confirmCompact(),
+      onCancel: () => this._ops.cancelCompact(),
     }),
     fork: () => renderForkDialog({
-      session: this._forkDialogSession,
-      onConfirm: this._onForkConfirm,
-      onCancel: this._onForkCancel,
+      session: this._ops.forkSession as unknown as Session | null,
+      onConfirm: () => void this._ops.confirmFork(),
+      onCancel: () => this._ops.cancelFork(),
     }),
     import: () => renderImportDialog({
-      state: this._importDialog,
-      onConfirm: this._onImportConfirm,
-      onCancel: this._onImportCancel,
+      state: this._ops.importDialog,
+      onConfirm: (e) => void this._ops.confirmImport(e),
+      onCancel: () => this._ops.cancelImport(),
     }),
   };
   private get previewContent() { return this._preview.content; }
@@ -424,26 +441,10 @@ export class ChatView extends LitElement {
   @state() private _skillCandidatesError: string | null = null;
   /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
   @state() private _skillDialogOpen = false;
-  @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
-  /** 孪生复制确认框待复制的源会话（null = 关闭）；确认后执行复制。 */
-  @state() private _forkDialogSession: Session | null = null;
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
   /** 压缩上下文模态框（more 菜单「压缩上下文」）：单框三态——确认 →
    *  压缩中（模态 spinner，禁止操作页面）→ 完成/失败（框内展示效果）。
    *  null = 关闭。 */
-  @state() private _compactDialog: {
-    phase: "confirm" | "running" | "done" | "error";
-    preTokens: number;
-    postTokens: number;
-    errorMessage: string;
-    /** 压缩产物可读转录（done 态 copy 按钮拷贝供人审核，2026-10-10） */
-    compactedText: string;
-    /** auto = 回合末自动压缩（SSE compact 事件驱动，ADR-0044）；
-     *  手动入口（confirm 态）为 undefined。 */
-    auto?: boolean;
-  } | null = null;
-  /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
-  private _compacting = false;
   /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
    *  SSE usage 事件逐条累加，恢复会话时从 items 的 kind="usage" 条目聚合。 */
   @state() private _sessionUsage: SessionUsageState | null = null;
@@ -454,16 +455,6 @@ export class ChatView extends LitElement {
    *  新会话 / 返回 initial 清空。 */
   @state() private _rewindDividers: RewindDivider[] = [];
   /** 回退确认框载荷（null = 关闭）：seq 锚点 / content 回填内容 / deadCount 折叠数。 */
-  @state() private _rewindDialog: {
-    seq: number; content: string; deadCount: number;
-    /** 锚点图片（ADR-0034）：确认后回填附件暂存区 */
-    images?: { data: string; media_type: string }[];
-  } | null = null;
-  /** 删轮确认框载荷（null = 关闭）：seq 锚点 / 内容预览 / 本轮消息数 / 错误。 */
-  @state() private _deleteTurnDialog: {
-    seq: number; content: string; turnMessageCount: number;
-    submitting: boolean; errorMessage: string;
-  } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -651,24 +642,19 @@ export class ChatView extends LitElement {
       {
         label: "重命名会话",
         icon: "pencil",
-        onClick: () => { this._renameDialogOpen = true; },
+        onClick: () => { this._ops.openRename(); },
       },
       {
         label: "压缩上下文",
         icon: "archive",
         // 先弹确认框（压缩不可逆替换上下文 + 摘要调用耗时数十秒）
-        onClick: () => {
-          this._compactDialog = {
-            phase: "confirm", preTokens: 0, postTokens: 0, errorMessage: "",
-            compactedText: "",
-          };
-        },
+        onClick: () => { this._ops.openCompactConfirm(); },
       },
       {
         label: "导出会话",
         icon: "download",
         // ADR-0038：全保真 JSON 浏览器下载（跨实例记忆转移）；纯读不互斥流式
-        onClick: () => { void this._exportSession(); },
+        onClick: () => { void this._ops.exportSession(); },
       },
       {
         label: "会话信息",
@@ -684,54 +670,9 @@ export class ChatView extends LitElement {
 
   /** 手动压缩当前会话历史（ADR-0026 手动入口）：LLM 摘要落库 compacted
    *  条目，下轮起上下文从摘要开始；对话流展示不受影响。压缩期间模态框
-   *  保持打开（running 态）锁定页面交互，完成/失败切换框内结果展示。 */
-  private async _compactSession() {
-    const session = this.viewState.currentSession;
-    if (!session || this._compacting) return;
-    this._compacting = true;
-    this._compactDialog = {
-      phase: "running", preTokens: 0, postTokens: 0, errorMessage: "",
-      compactedText: "",
-    };
-    try {
-      const body = await compactSession(session.id);
-      this._compactDialog = {
-        phase: "done",
-        preTokens: body.pre_tokens ?? 0,
-        postTokens: body.post_tokens ?? 0,
-        errorMessage: "",
-        compactedText: body.compacted_text ?? "",
-      };
-      void this._refreshCompaction();
-    } catch (err) {
-      this._compactDialog = {
-        phase: "error", preTokens: 0, postTokens: 0,
-        errorMessage: (err as Error)?.message || String(err),
-        compactedText: "",
-      };
-    } finally {
-      this._compacting = false;
-    }
-  }
-
-  /** 确认压缩：切换模态框为 running 态后执行（_compactSession 自带防重入）。 */
-  private _onCompactConfirm = (): void => {
-    void this._compactSession();
-  };
-
-  private _onCompactCancel = (): void => {
-    // running 态不允许关闭（拦截 ESC/backdrop；模态 spinner 必须停留到出结果）
-    if (this._compactDialog?.phase === "running") return;
-    this._compactDialog = null;
-  };
 
   /** auto 压缩模态兜底收尾（ADR-0044）：SSE done 已到而压缩 done 事件
    *  丢失/未发（未触发压缩、网络丢包）时撤下 running 模态，防止卡死
-   *  页面；正常路径 done 事件已先行切换为 done 态，此处 no-op。 */
-  private _finalizeAutoCompactDialog(): void {
-    const d = this._compactDialog;
-    if (d?.auto && d.phase === "running") this._compactDialog = null;
-  }
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
   private async _refreshCompaction() {
@@ -745,25 +686,6 @@ export class ChatView extends LitElement {
     }
   }
 
-  private _onRenameSubmit = async (e: CustomEvent<{ title: string }>) => {
-    const session = this.viewState.currentSession;
-    this._renameDialogOpen = false;
-    if (!session) return;
-    try {
-      const res = await renameSession(session.id, e.detail.title);
-      // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
-      actions.setChatState({ currentSession: { ...session, title: res.title } });
-      this.historySessions = this.historySessions.map((s) =>
-        s.id === session.id ? { ...s, title: res.title } : s);
-      this._pushToast("已重命名", "success", 2500);
-    } catch (err) {
-      this._pushToast(`重命名失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
-
-  private _onRenameCancel = () => {
-    this._renameDialogOpen = false;
-  };
 
   /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
    *  加载历史时自然发生），失败回滚。 */
@@ -1088,206 +1010,7 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 导出当前会话（ADR-0038）：全保真 JSON，跨实例记忆转移。
-   *  WebView 内 `<a download>`（blob URL）在 X5 无下载 UI → 走 jsbridge
-   *  原生下载（写 Downloads + 系统通知）；浏览器仍走 fetch+blob。
-   *  uptoSeq 非空 = 截断导出（导出到此为止，2026-10-29）：只导该 user
-   *  消息及之前的条目，产物是新 id 的派生会话（避免整段上下文过长）。 */
-  private async _exportSession(uptoSeq?: number): Promise<void> {
-    const cur = this.viewState.currentSession;
-    if (!cur) return;
-    const truncated = uptoSeq !== undefined;
-    try {
-      if (jsbridgeDownloadAvailable()) {
-        const r = await downloadFromUrl(
-          sessionExportUrl(cur.id, uptoSeq),
-          sessionExportFileName(cur.title || "", truncated),
-        );
-        if (r.via !== "jsbridge") return;
-        if (r.name) this._pushToast(`已导出：${r.name}（保存在下载目录）`, "success", 3500);
-        else if (r.error) this._pushToast(`导出失败：${r.error}`, "error", 5000);
-        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
-        return;
-      }
-      await exportSession(cur.id, uptoSeq);
-      this._pushToast(
-        truncated ? "已导出（截至该消息）" : "已导出会话文件",
-        "success", 2500,
-      );
-    } catch (e) {
-      this._pushToast(`导出失败：${(e as Error)?.message || e}`, "error", 5000);
-    }
-  }
-
-  /** user 气泡「导出到此为止」：截断导出到该消息（含）为止。 */
-  private _onExportUpto = (e: CustomEvent<{ seq: number }>): void => {
-    void this._exportSession(e.detail.seq);
-  };
-
-  /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认框（标题/条目数）→
-   *  上传；WebView 内改用原生选择器 + 直传（X5 不弹 input file）。
-   *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。
-   *
-   *  2026-10-29：确认改用原生 <dialog>（window.confirm 可能被浏览器
-   *  「阻止此页面创建更多对话框」静默返回 false = 点了没反应）；后端回报
-   *  同 id 已存在时，弹「作为副本导入」分支而不是一闪而过的 toast。 */
-  private _onImportHistory(): void {
-    if (jsbridgeUploadAvailable()) {
-      void this._importViaJsbridge();
-      return;
-    }
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json,.json";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file) void this._importSessionFile(file);
-    };
-    input.click();
-  }
-
-  /** WebView 原生导入：pickAndUploadFiles 选中 JSON 直传
-   *  /api/sessions/import/upload（multipart），H5 不碰文件字节。
-   *  服务端借 path 字段回报 imported / skipped。 */
-  private async _importViaJsbridge(): Promise<void> {
-    if (this._importing) return;
-    this._importing = true;
-    try {
-      const res = await pickAndUploadFiles({
-        destDir: "",
-        uploadUrl: sessionImportUploadUrl(),
-        maxCount: 1,
-      });
-      if (!res) return; // 用户在选择器取消
-      if (res.unauthorized) {
-        // 与 client.ts 的 401 统一钩子行为对齐
-        actions.setAuthState({ authenticated: false });
-        router.navigate("login");
-        return;
-      }
-      const item = res.results[0];
-      if (!item) {
-        this._pushToast("导入失败：未选择文件", "error", 5000);
-        return;
-      }
-      if (!item.ok) {
-        this._pushToast(`导入失败：${item.detail || item.code || "未知错误"}`, "error", 5000);
-        return;
-      }
-      if (item.path === "skipped") {
-        // 已导入过：展示「作为副本导入」分支（副本需重新选文件——原生
-        // 直传通道不把文件字节交给 H5，只能再走一次选择器）。
-        this._importDialog = {
-          fileName: "", title: "", count: 0,
-          phase: "exists", data: null, webview: true,
-        };
-        await this._loadHistory();
-        return;
-      }
-      this._pushToast("已导入会话", "success", 3000);
-      await this._loadHistory();
-    } catch (e) {
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    } finally {
-      this._importing = false;
-    }
-  }
-
-  /** 浏览器路径：解析文件 → 打开原生确认框（不直接用 window.confirm）。 */
-  private async _importSessionFile(file: File): Promise<void> {
-    let data: unknown;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
-      this._pushToast("导入失败：文件不是合法 JSON", "error", 5000);
-      return;
-    }
-    // 前端轻量预读（标题/条目数）供确认展示；完整结构校验在后端
-    const d = data as { session?: { title?: unknown }; items?: unknown };
-    const title = typeof d.session?.title === "string" ? d.session.title : "";
-    const count = Array.isArray(d.items) ? d.items.length : 0;
-    this._importDialog = {
-      fileName: file.name, title, count,
-      phase: "confirm", data, webview: false,
-    };
-  }
-
-  /** 确认框「导入 / 作为副本导入」（detail.asCopy）。 */
-  private _onImportConfirm = async (
-    e: CustomEvent<{ asCopy: boolean }>,
-  ): Promise<void> => {
-    const asCopy = !!e.detail?.asCopy;
-    const dlg = this._importDialog;
-    if (!dlg) return;
-
-    // WebView 副本路径：无文件字节，重新拉起原生选择器（as_copy 直传端点）
-    if (dlg.webview) {
-      if (!asCopy) return;
-      this._importDialog = null;
-      await this._importViaJsbridgeCopy();
-      return;
-    }
-
-    if (dlg.data === null) return;
-    this._importDialog = { ...dlg, phase: "busy" };
-    try {
-      const res = await importSession(dlg.data, { asCopy });
-      if (res.imported > 0) {
-        this._importDialog = null;
-        this._pushToast(
-          asCopy
-            ? `已导入副本「${dlg.title || dlg.fileName}」`
-            : `已导入会话「${dlg.title || dlg.fileName}」`,
-          "success", 3000,
-        );
-        await this._loadHistory();  // 刷新列表（导入即置顶）
-        return;
-      }
-      // skipped：切到「已存在」态，让用户决定是否作为副本导入
-      this._importDialog = { ...dlg, phase: "exists" };
-    } catch (e) {
-      this._importDialog = { ...dlg, phase: "confirm" };
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    }
-  };
-
-  /** WebView 副本导入：带 as_copy 再走一次原生选择器直传。 */
-  private async _importViaJsbridgeCopy(): Promise<void> {
-    if (this._importing) return;
-    this._importing = true;
-    try {
-      const res = await pickAndUploadFiles({
-        destDir: "",
-        uploadUrl: sessionImportUploadUrl(true),
-        maxCount: 1,
-      });
-      if (!res) return;
-      if (res.unauthorized) {
-        actions.setAuthState({ authenticated: false });
-        router.navigate("login");
-        return;
-      }
-      const item = res.results[0];
-      if (!item || !item.ok) {
-        this._pushToast(
-          `导入失败：${item?.detail || item?.code || "未选择文件"}`, "error", 5000,
-        );
-        return;
-      }
-      this._pushToast("已导入会话副本", "success", 3000);
-      await this._loadHistory();
-    } catch (e) {
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    } finally {
-      this._importing = false;
-    }
-  }
-
-  private _onImportCancel = (): void => {
-    this._importDialog = null;
-  };
-
-  private get viewState() {
+    private get viewState() {
     return store.getState().chat;
   }
 
@@ -1362,8 +1085,8 @@ export class ChatView extends LitElement {
     this._markTabSession(created.id); // 新会话也算本页当前会话
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
-    this._rewindDialog = null;
-    this._deleteTurnDialog = null;
+    this._ops.cancelRewind();
+    this._ops.cancelDeleteTurn();
     actions.setChatState({
       state: "focus",
       currentSession: {
@@ -1441,15 +1164,15 @@ export class ChatView extends LitElement {
           // 回合末自动压缩（ADR-0044）：start → 不可关闭模态 running 态；
           // done → 框内展示 pre→post 结果（「完成」按钮才可关）。
           // 手动压缩弹窗在场时让位（同一次压缩不叠两个模态）。
-          if (this._compactDialog && !this._compactDialog.auto) break;
-          this._compactDialog = {
+          if (this._ops.compactDialog && !this._ops.compactDialog.auto) break;
+          this._ops.setAutoCompactDialog({
             phase: ev.phase === "done" ? "done" : "running",
             preTokens: ev.pre_tokens ?? 0,
             postTokens: ev.post_tokens ?? 0,
             errorMessage: "",
             compactedText: "",
             auto: true,
-          };
+          });
           if (ev.phase === "done") void this._refreshCompaction();
         } else if (ev.type === "usage") {
           // 与恢复态聚合共用 applyUsageEvent（口径单一真相源）；
@@ -1466,7 +1189,7 @@ export class ChatView extends LitElement {
           // 对话式提问（ADR-0033）：回合因提问而终止，输入框已解锁——
           // 提示用户直接发消息作答（答案即下一条用户消息）
           this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
-          this._finalizeAutoCompactDialog();
+          this._ops.finalizeAutoCompactDialog();
         } else if (ev.type === "interject_ack") {
           // 插话送达（ADR-0048）：占位 trace 末追加 running 插话卡
           // （interject_report 到达回填 output；回合落库条目随 raw 回放一致）
@@ -1515,7 +1238,7 @@ export class ChatView extends LitElement {
       // 维持流式视图（重进会话时经 detail 重建）。切走了就别动当前会话的
       // 收尾状态（弹窗/输入锁属于正在展示的那个会话）；历史列表是全局的，
       // 照常刷新（标题/条数随本轮落库更新）。
-      if (stillOwn()) this._finalizeAutoCompactDialog();
+      if (stillOwn()) this._ops.finalizeAutoCompactDialog();
       this._loadHistory();
     } catch (err) {
       if (this._isAbortError(err)) {
@@ -1598,8 +1321,8 @@ export class ChatView extends LitElement {
     this._highlightSessionId = null; // 「新会话」返回后不残留旧高亮
     this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
-    this._rewindDialog = null;
-    this._deleteTurnDialog = null;
+    this._ops.cancelRewind();
+    this._ops.cancelDeleteTurn();
     this._stopGeneratingPoll();
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
     this._loadHistory();
@@ -1684,32 +1407,6 @@ export class ChatView extends LitElement {
   /** 历史条目「复制会话」（2026-10-10）：先弹确认框说明复制语义，确认后
    *  调孪生复制 API → 刷新历史 → 直接进入孪生会话（复制即为了继续干活，
    *  避免再点一次）。失败 toast。 */
-  private _onForkSession(e: CustomEvent<{ session: Session }>) {
-    this._forkDialogSession = e.detail.session;
-  }
-
-  private _onForkCancel = () => {
-    this._forkDialogSession = null;
-  };
-
-  private _onForkConfirm = async (): Promise<void> => {
-    const session = this._forkDialogSession;
-    this._forkDialogSession = null;
-    if (!session) return;
-    try {
-      const twin = await duplicateSession(session.id);
-      await this._loadHistory();
-      // 复用 Session 形态进入会话（starred/mode 已知，免一次 get）
-      this._loadSession({
-        id: twin.id, type: "chat", title: twin.title, preview: twin.preview,
-        updated_at: new Date().toISOString(),
-        message_count: session.message_count, mode: session.mode,
-      });
-      this._pushToast("已复制会话，原会话保留", "success", 2500);
-    } catch (err) {
-      this._pushToast(`复制会话失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
 
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
@@ -1796,102 +1493,8 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 点击 user 气泡的「回退到这里」：算折叠数并弹确认框（ADR-2026-09-19）。 */
-  private _onRewind(e: CustomEvent<{ seq: number; content: string; images?: { data: string; media_type: string }[] }>): void {
-    if (this.viewState.streaming) return; // 流式期间按钮已禁用，双保险
-    const anchorSeq = e.detail.seq;
-    // 折叠数 = 锚点及其后的活消息（锚点回填输入框，同样从时间线消失）
-    const deadCount = this.viewState.messages.filter(
-      (m) => m.seq !== undefined && m.seq >= anchorSeq,
-    ).length;
-    this._rewindDialog = {
-      seq: anchorSeq, content: e.detail.content, deadCount,
-      images: e.detail.images,
-    };
-  }
-
-  /** 确认回退：POST → 重拉 detail（渲染新折叠条）→ 锚点内容回填输入框。 */
-  private async _onRewindConfirm(
-    e: CustomEvent<{ pointSeq: number; restoreFiles: boolean }>,
-  ): Promise<void> {
-    const session = this.viewState.currentSession;
-    const anchor = this._rewindDialog;
-    this._rewindDialog = null;
-    if (!session || !anchor) return;
-    try {
-      const res = await rewindSession(
-        session.id, e.detail.pointSeq, e.detail.restoreFiles,
-      );
-      this.draft = anchor.content;
-      this._pendingImages = anchor.images ?? [];
-      const f = res.files;
-      const parts: string[] = [];
-      if (f.restored.length) parts.push(`恢复 ${f.restored.length} 个文件`);
-      if (f.deleted.length) parts.push(`删除 ${f.deleted.length} 个文件`);
-      if (f.failed.length) parts.push(`${f.failed.length} 个文件处置失败`);
-      this._pushToast(
-        parts.length ? `已回退（${parts.join("，")}）` : "已回退",
-        f.failed.length ? "info" : "success",
-        4000,
-      );
-      await this._loadSession(session);
-    } catch (err) {
-      this._pushToast(`回退失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  }
-
-  private _onRewindCancel = (): void => {
-    this._rewindDialog = null;
-  };
 
   /** user 气泡「删除这一轮」：弹确认框（删除不可撤销，不直接执行）。
-   *  本轮消息数 = 锚点起、到下一条 user 消息之前的可见消息条数。 */
-  private _onDeleteTurn(e: CustomEvent<{ seq: number }>): void {
-    const seq = e.detail.seq;
-    const msgs = this.viewState.messages.filter((m) => m.seq !== undefined);
-    const nextUser = msgs.find(
-      (m) => m.role === "user" && (m.seq as number) > seq,
-    );
-    const end = nextUser?.seq ?? Infinity;
-    const inTurn = msgs.filter(
-      (m) => (m.seq as number) >= seq && (m.seq as number) < end,
-    );
-    const anchorMsg = msgs.find((m) => m.seq === seq);
-    this._deleteTurnDialog = {
-      seq,
-      content: anchorMsg?.content ?? "",
-      turnMessageCount: Math.max(inTurn.length, 1),
-      submitting: false,
-      errorMessage: "",
-    };
-  }
-
-  /** 确认删轮：DELETE → 重拉 detail（消息流与压缩信息同步刷新）。 */
-  private async _onDeleteTurnConfirm(
-    e: CustomEvent<{ pointSeq: number }>,
-  ): Promise<void> {
-    const session = this.viewState.currentSession;
-    const d = this._deleteTurnDialog;
-    if (!session || !d) return;
-    this._deleteTurnDialog = { ...d, submitting: true, errorMessage: "" };
-    try {
-      const res = await deleteTurn(session.id, e.detail.pointSeq);
-      this._deleteTurnDialog = null;
-      this._pushToast(
-        `已删除该轮对话（剩 ${res.message_count} 条消息）`, "success", 3000,
-      );
-      await this._loadSession(session);
-    } catch (err) {
-      this._deleteTurnDialog = {
-        ...d, submitting: false,
-        errorMessage: (err as Error)?.message || String(err),
-      };
-    }
-  }
-
-  private _onDeleteTurnCancel = (): void => {
-    this._deleteTurnDialog = null;
-  };
 
   /** 删轮确认框宿主（<dialog> 由 updated() showModal）。 */
 
@@ -2025,11 +1628,11 @@ export class ChatView extends LitElement {
             ?importable=${true}
             @select=${this._onHistorySelect}
             @toggle-star=${this._onToggleStar}
-            @fork=${this._onForkSession}
+            @fork=${(e: CustomEvent<{ session: Session }>) => this._ops.openFork(e.detail.session)}
             @page-change=${this._onHistoryPage}
             @star-pin-change=${this._onStarPinChange}
             @clear=${this._onClearHistory}
-            @import=${this._onImportHistory}>
+            @import=${() => this._ops.importHistory()}>
           </history-list>
           <div class="input-row">
             <input-box
@@ -2111,9 +1714,9 @@ export class ChatView extends LitElement {
             ?interjectPending=${this._interjectPending}
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
-            @rewind=${this._onRewind}
-            @export-upto=${this._onExportUpto}
-            @delete-turn=${this._onDeleteTurn}
+            @rewind=${(e: CustomEvent<{ seq: number; content: string; images?: { data: string; media_type: string }[] }>) => this._ops.openRewind(e)}
+            @export-upto=${(e: CustomEvent<{ seq: number }>) => void this._ops.exportSession(e.detail.seq)}
+            @delete-turn=${(e: CustomEvent<{ seq: number }>) => this._ops.openDeleteTurn(e)}
             @interject-request=${this._onInterjectRequest}
             @chat-nav-state=${this._onChatNavState}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>

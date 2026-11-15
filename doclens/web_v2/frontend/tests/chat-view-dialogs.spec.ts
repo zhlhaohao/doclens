@@ -38,7 +38,7 @@ describe("<chat-view> 对话框宿主（模板外迁回归）", () => {
 
   it("rename 对话框：open 时渲染 <dialog> 并 showModal", async () => {
     const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
-    (el as any)._renameDialogOpen = true;
+    (el as any)._ops.openRename();
     await el.updateComplete;
     const dlg = el.shadowRoot?.querySelector("dialog");
     expect(dlg).toBeTruthy();
@@ -64,9 +64,7 @@ describe("<chat-view> 对话框宿主（模板外迁回归）", () => {
 
   it("compact 对话框：open 时渲染并 showModal", async () => {
     const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
-    (el as any)._compactDialog = {
-      phase: "confirm", preTokens: 0, postTokens: 0, errorMessage: "", compactedText: "",
-    };
+    (el as any)._ops.openCompactConfirm();
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector("compact-confirm-dialog")).toBeTruthy();
     expect(el.shadowRoot?.querySelector("dialog")?.open).toBe(true);
