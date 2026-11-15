@@ -1414,7 +1414,7 @@ export class FilesView extends LitElement {
     await this._previewPathWithDirtyCheck(path);
   }
 
-  private _renderPreviewPane(opts: { noHeader?: boolean; mobile?: boolean } = {}) {
+  private _renderPreviewPane(opts: { mobile?: boolean } = {}) {
     if (this._previewError) {
       return this._renderPreviewErrorHint(opts.mobile ?? false);
     }
@@ -1431,7 +1431,6 @@ export class FilesView extends LitElement {
       ></pst-email-list>`;
     }
     return html`<preview-pane
-      ?noHeader=${opts.noHeader ?? false}
       ?mobile=${opts.mobile ?? false}
       ?enableReparse=${true}
       ?rememberScroll=${true}
@@ -1646,7 +1645,7 @@ export class FilesView extends LitElement {
           aria-label="调整预览栏宽度"
           @mousedown=${this._onPreviewSplitterMouseDown}
         ></div>
-        <div class="preview-col">${this._modes.changesMode ? this._renderDiffPane(false) : this._renderPreviewPane({ noHeader: false })}</div>
+        <div class="preview-col">${this._modes.changesMode ? this._renderDiffPane(false) : this._renderPreviewPane()}</div>
       </div>
     `;
   }

@@ -614,9 +614,8 @@ export class PreviewPane extends LitElement {
   @property({ type: Boolean }) writable = false;
   /** 文件字节数（ADR-0046）：超过 EDIT_MAX_BYTES 则禁编辑（仍可预览）。 */
   @property({ type: Number }) sizeBytes: number | null = null;
-  @property({ type: Boolean }) noHeader = false;
-  /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）。与 noHeader 互不冲突：
-   *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
+  /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）；桌面 .header 恒显
+   *  （AP-9：noHeader 死属性已删——全仓无 true 传值）。 */
   @property({ type: Boolean }) mobile = false;
   @property({ attribute: false }) pages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表（后端 page_starts），命中行跳页依据。 */
@@ -1874,7 +1873,7 @@ export class PreviewPane extends LitElement {
 
     // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
     const renderMobileBar = this.mobile ? this._renderMobileHeader() : null;
-    const showDesktopHeader = !this.mobile && !this.noHeader;
+    const showDesktopHeader = !this.mobile;
 
     /** 可编辑语言：md 格式化预览 + 行号视图全家（代码/txt/未知后缀——
      *  cm-editor 是通用编辑器内核（ADR-0046），保存走同一条 savePreview

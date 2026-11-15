@@ -10,7 +10,7 @@
 
 ## 二、发现条目
 
-### AP-1 preview-pane God Object + Interface Bloat [P2] [status: pending]
+### AP-1 preview-pane God Object + Interface Bloat [P2] [status: done(分4批, b1c1482c 后续 4d41dba8/1d767101/6f65b1fa)]
 - **形态**：God Object / Interface Bloat / Feature Envy
 - **证据**：`components/preview-pane.ts:588-743` —— 21 个 @property + 17 个 @state + 约 55 个方法，职责块含渲染分发、滚动记忆、双套字号 stepper、代码主题、全屏、查找高亮、目录、翻译、书签、下载、编辑保存/锚点恢复、移动端菜单、路径复制、附件列表 ≥13 块。21 props 中三调用方（chat-view.ts:1522、files-view.ts:1433、search-view.ts:709/762）各用不同子集，无一方过半。且 18 处 `querySelector("md-viewer"/"pdf-viewer"/"cm-editor")` 直读子组件内部方法在本地计算（:899,1183,1359,1584,1644,1675,1749,1893…）——Feature Envy，封装边界靠约定维持
 - **风险**：任何预览功能改动都 touch 此文件（Divergent Change），2131 行已是两次拆分后（:640,720 记录 AP-4 拆分史）的剩余过渡态；props 分视图专属使新增视图继续膨胀接口
@@ -65,7 +65,7 @@
 - **修复方案**：save/upload 错误分支抽公共 helper（endpoint+Error 构造器参数化）；controller 的范围请求改走 api 层新增的 `fetchPreviewRange`
 - **回归验证**：`tests/test_web_preview_formats.py` + preview-pane spec + `npm run build`
 
-### AP-9 noHeader 死属性 [P4] [status: pending]
+### AP-9 noHeader 死属性 [P4] [status: done(随 AP-1 批4 commit)]
 - **形态**：Dead Props
 - **证据**：`preview-pane.ts:601` 声明 `noHeader`，全仓无任何调用点传 true——files-view.ts:1434 恒 `?? false`、:1649 显式 `false`、:1703 mobile 分支不传；search-view.ts:760 注释明言"不再用 focus-header + noHeader"；chat-view.ts:1516 注释"无需传"
 - **风险**：接口面虚胖（与 AP-1 同根），误导后续视图以为有此形态
@@ -98,5 +98,9 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 第一批 | AP-3 | done(b1c1482c) |
-| 2026-11-15 | 第一批 | AP-2 | closed-wontfix（部分误判：dirty 派生不可行，用户裁定跳过） |
+| 2026-11-15 | 第一批 | AP-2 | closed-wontfix（部分误判：dirty 派生不可行，cm-editor 内属主；用户裁定跳过） |
+| 2026-11-15 | 第一批 | AP-1 批1 | done(4d41dba8) 外观域（字号×2/代码主题/全屏）→ utils/preview-appearance.ts |
+| 2026-11-15 | 第一批 | AP-1 批2 | done(1d767101) 交互域（下载/关键词高亮/PDF翻译）→ utils/preview-interactions.ts；_syncInteractions 挂 render 入口 |
+| 2026-11-15 | 第一批 | AP-1 批3 | done(6f65b1fa) 阅读域（TOC/滚动记忆）→ utils/preview-reading.ts + 活跃 viewer 登记制（~14 处 querySelector 清剿） |
+| 2026-11-15 | 第一批 | AP-1 批4 + AP-9 | done(本提交) noHeader 死属性删除（3 个固化死行为的测试随契约删改）；preview-pane 2131→2063 行、11 个 @state 与 ~40 方法迁出，剩余为编辑↔预览切换核心编排与 render 分派（结构测绘判定的有意保留） |
 |---|---|---|---|

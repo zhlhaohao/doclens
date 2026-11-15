@@ -302,28 +302,6 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
   });
 });
 
-describe("<preview-pane> noHeader prop", () => {
-  it("does not render .header in markdown preview branch when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" path="hi.md" content="# hi" ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
-  });
-
-  it("does not render .header in edit mode when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" path="hi.md" content="# hi" writable ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    el.enterEdit();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
-  });
-});
-
 describe("<preview-pane> download button", () => {
   it("renders download button in markdown preview header", async () => {
     const el = await fixture(html`
@@ -351,14 +329,6 @@ describe("<preview-pane> download button", () => {
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
     expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
-  });
-
-  it("does not render download button when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md" ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
   });
 
   it("clicking download button triggers anchor click with server URL", async () => {
@@ -478,17 +448,16 @@ describe("<preview-pane> html branch", () => {
     expect(el.shadowRoot!.querySelector(".upload-btn")).toBeNull();
   });
 
-  it("hides header when noHeader=true for html", async () => {
+  it("renders header + iframe for html branch", async () => {
     const el = await fixture(html`
       <preview-pane
-        noHeader
         language="html"
         path="x.html"
         content="<p>x</p>">
       </preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".header")).toBeTruthy();
     expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeTruthy();
   });
 
