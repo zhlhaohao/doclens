@@ -34,28 +34,28 @@
 - **修复方案**：① git 改动域提为 `components/git-changes-panel.ts`（自带 refresh 公共方法，顺带消解 `:499` 的 `as any` 穿透）；② 深读域同理提组件；③ `_onStoreChange` 改为 selector 订阅（store 已支持 `subscribe(selector, cb)`，见 store.ts 头注释）按切片触发。按域分提交。
 - **回归验证**：`npm run test -- tests/file-card.spec.ts tests/preview-pane.spec.ts` + `npm run test:e2e:search` + `npm run build`。
 
-### AP-4 z-index 裸数字散布，无分层规范 [P3] [status: pending]
+### AP-4 z-index 裸数字散布，无分层规范 [P3] [status: done(114a67fa)]
 - **形态**：z-index 军备竞赛（前端栈清单，本仓已有实证史——PDF portal 被压灰底）+ Magic Numbers
 - **证据**：全仓 z-index 值域从 10 到 10000 无谱系：`views/files-view.ts:267` z-index:10000、`:278` 9999；`components/download-overlay.ts:22` 9999；`components/image-viewer.ts:61` 9999；`app.ts:80` 2000；`styles/dialog-frame.ts:25` 1000；`components/app-bar.ts:43,242` 50/60；`utils/side-drawer.ts:13` 30。两个 9999 互相不知道对方存在，下一个浮层只能再加 1。
 - **风险**：将损——历史上已爆过 portal 层叠 bug（栈清单实证条）；每加浮层都是一次猜数。
 - **修复方案**：在 tokens.css 定义分层变量（如 `--z-base/--z-drawer/--z-overlay/--z-dialog/--z-toast`，步进 100），全仓替换裸数字；dialog 已在 top-layer 的元素删除冗余 z-index。
 - **回归验证**：`npm run build` + 人工过一遍浮层界面（预览 overlay/图片查看器/下载浮层）。
 
-### AP-5 空 `catch {}` 静默吞错 20+ 处，其中探测类可辨、渲染/IO 类可疑 [P3] [status: pending]
+### AP-5 空 `catch {}` 静默吞错 20+ 处 [P3] [status: done(7e8029dc)——审计收口：全域有正当理由，仅补 client.ts:32 注释]
 - **形态**：Error Hiding（`catch {}` 无日志无上报）
 - **证据**：全仓 ≥20 处空 catch：`app.ts:203,238`、`watch-stream.ts:34,135`、`api/chat.ts:175`、`api/client.ts:32`、`components/chat-message.ts:524,650`、`components/app-bar.ts:424` 等。**反证部分**：探测类静默是有意设计且有注释（`files-view.ts:523` git 根探测、`:534` 家目录探测、`chat-view.ts:1172` 网络抖动）；但 `api/client.ts:32`、`api/chat.ts:175`、`chat-message.ts:524`（内容渲染路径）未见注释说明吞错理由。
 - **风险**：将损——渲染/API 链路错误静默 = 用户看到"没反应"，排障无入口（无日志、无 toast）。
 - **修复方案**：逐处分类——探测类保留但补一行注释（部分已有）；渲染/IO 类至少 `console.warn` 或落入既有 toast 通道；`api/client.ts:32` 响应解析失败应让 ApiError 透出。
 - **回归验证**：`npm run build` + 同名 spec。
 
-### AP-6 settings 字段契约手工双向同步（settings-fields.ts ↔ 后端 config_store.py） [P3] [status: pending]
+### AP-6 settings 字段契约手工双向同步 [P3] [status: done(a5db3e45)]
 - **形态**：手抄跨文件契约字面量（前后端各一份字段清单，靠注释维系的漂移风险）
 - **证据**：`views/settings-fields.ts:4-6` 注释自证："IMPORTANT: keep the envVar values in sync with KNOWN_KEYS in cortex/web_v2/config_store.py"——同步纪律靠人肉，无测试/生成物守卫。同文件 `:59-60` 出厂基准值"与包内 .env.example 同步"是第二处手工对齐点。
 - **风险**：将损——后端加键前端忘加 = 设置项在 UI 不可见（静默缺口）；历史同形态（前后端格式清单漂移 8 后缀）已实证过此类漂移会发生。
 - **修复方案**：加守卫测试：pytest 读 config_store.KNOWN_KEYS 与 settings-fields.ts 的 envVar 集合比对（前端导出 JSON 快照或测试解析 ts 文本取 `envVar: "..."` 集合），漂移即红。.env.example 基准值同法。
 - **回归验证**：新增测试 + `pytest tests/test_skills_config.py -q`（相邻配置套件）。
 
-### AP-7 登录页密码输入框无关联 label（可访问性） [P3] [status: pending]
+### AP-7 登录页密码输入框无关联 label（可访问性） [P3] [status: done(2f909375)]
 - **形态**：表单控件缺 label（WCAG 高频违规之首）
 - **证据**：`views/login-view.ts:187-199` `<input class="pin-input" type="password">` 无 `<label for>`、无 `aria-label`、无 `aria-labelledby`（placeholder "●●●●●●" 不是标签——输入即消失）。同页 `:171` 的 dots 区有 aria-label，说明项目有 ARIA 意识但密码框漏了。
 - **风险**：将损——屏幕阅读器用户无法识别该输入框用途；其余无碍。
@@ -88,6 +88,10 @@
 | 2026-11-15 | 按你的想法继续修 | AP-2 | done(4014f82f→amend 234a44ee)：preview-pane 新增公共 `reLocate()`（内部转发 md-viewer + 自理 updateComplete），search-view 删双层穿透/`as any`、querySelector 泛型收敛 PreviewPane；130 单测过、build 过、E2E 仅 S7/S8 预存失败（基线对照全同）。 |
 | 2026-11-15 | 继续修 | AP-9 | done(f0167682)：S7 断言词改「第五」（分词失联）、S8 固定等待改轮询 + 补 shadow 层、markInView 大小写不敏感；4 例全过。修复中暴露 S6 异常 → 记 AP-10。 |
 | 2026-11-15 | 继续修 | AP-10 | done(7ee8221e)：实证非功能回归（定位完全正确，Sheet03 块贴顶 33px），是断言语义失联（找第一个 sheet mark = Sheet1 标题）。S6 断言重写为定位语义；E2E 23 过 0 败。 |
+| 2026-11-15 | 继续修（除 AP-3） | AP-7 | done(2f909375)：login 密码框补 aria-label；login-view.spec 11 过。 |
+| 2026-11-15 | 继续修（除 AP-3） | AP-6 | done(a5db3e45)：新 tests/test_settings_fields_contract.py——前端 envVar ⊆ KNOWN_KEYS 漂移即红 + 高发键反向抽查；3 测试过。 |
+| 2026-11-15 | 继续修（除 AP-3） | AP-5 | done(7e8029dc)：全域取证 16+ 处空 catch 均有正当理由（fallback/注释/事件透出），Error Hiding 嫌疑排除；仅补 client.ts:32 注释。 |
+| 2026-11-15 | 继续修（除 AP-3） | AP-4 | done(114a67fa)：tokens.css 五档 z 变量（base/raised/overlay/toast/modal），26 文件 47 处裸数字归层替换；128 测试过、build 过。 |
 
 ## 六、修复中新发现（discovered-during-fix）
 
