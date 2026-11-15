@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { dialogSlotStyles } from "../utils/dialog-styles";
 
 /**
  * <import-confirm-dialog> —— 会话导入确认框（2026-10-29 重做，ADR-0038）。
@@ -20,7 +21,9 @@ import { customElement, property } from "lit/decorators.js";
  */
 @customElement("import-confirm-dialog")
 export class ImportConfirmDialog extends LitElement {
-  static styles = css`
+  static styles = [
+    dialogSlotStyles,
+    css`
     :host {
       display: block;
       min-width: 340px;
@@ -59,46 +62,10 @@ export class ImportConfirmDialog extends LitElement {
       line-height: 1.6;
       margin-bottom: var(--cortex-space-3);
     }
-    .note {
-      display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin-bottom: var(--cortex-space-4);
-    }
     .note doclens-icon { color: var(--cortex-primary, var(--cortex-text)); flex: none; }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    button {
-      padding: 8px 18px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
-    @media (max-width: 1023px) {
-      :host { min-width: 0; }
-      .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
-    }
-  `;
+    `,
+  ];
 
   /** 所选文件名（浏览器路径有；WebView 直传路径为空）。 */
   @property({ type: String }) fileName = "";

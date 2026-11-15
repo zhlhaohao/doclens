@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { ViewId } from "../state/types";
+import { navItems, emitNavigate } from "../utils/nav";
 
 @customElement("activity-bar")
 export class ActivityBar extends LitElement {
@@ -64,22 +65,12 @@ export class ActivityBar extends LitElement {
   /** 日记 tab 显隐（ADR-0030）：来自 store.status.diary_enabled，未知按显示 */
   @property() diaryEnabled: boolean = true;
 
-  private _items: Array<{ id: ViewId; icon: string; label: string }> = [
-    { id: "search", icon: "search", label: "全库搜索" },
-    { id: "chat", icon: "bot", label: "个人助手" },
-    { id: "diary", icon: "book-open", label: "岁月微笺" },
-    { id: "files", icon: "folder", label: "文件管理" },
-  ];
-
   private _select(id: ViewId) {
-    this.dispatchEvent(new CustomEvent("navigate", {
-      detail: { view: id },
-      bubbles: true, composed: true,
-    }));
+    emitNavigate(this, id);
   }
 
   render() {
-    const items = this.diaryEnabled ? this._items : this._items.filter((it) => it.id !== "diary");
+    const items = navItems(this.diaryEnabled);
     return html`
       ${items.map((it) => html`
         <button

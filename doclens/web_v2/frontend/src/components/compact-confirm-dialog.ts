@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatTokens } from "../utils/format";
+import { dialogSlotStyles } from "../utils/dialog-styles";
 
 /** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
  *  三态复用同一个 <dialog> 宿主（chat-view 渲染），确认后不关框——压缩
@@ -17,118 +18,86 @@ import { formatTokens } from "../utils/format";
  */
 @customElement("compact-confirm-dialog")
 export class CompactConfirmDialog extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      min-width: 340px;
-      font-size: var(--cortex-fs-md);
-      color: var(--cortex-text);
-    }
-    h2 {
-      font-size: var(--cortex-fs-lg);
-      margin: 0 0 var(--cortex-space-4);
-    }
-    h2.with-icon {
-      display: flex;
-      align-items: center;
-      gap: var(--cortex-space-3);
-    }
-    p {
-      margin: 0 0 var(--cortex-space-3);
-      line-height: 1.6;
-    }
-    .muted {
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
-    }
-    .note {
-      display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin-bottom: var(--cortex-space-4);
-    }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 8px 18px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    button.primary:hover { opacity: 0.9; }
-    button doclens-icon { font-size: 14px; vertical-align: -2px; margin-right: 4px; }
+  static styles = [
+    dialogSlotStyles,
+    css`
+      :host {
+        display: block;
+        min-width: 340px;
+        font-size: var(--cortex-fs-md);
+        color: var(--cortex-text);
+      }
+      h2 {
+        font-size: var(--cortex-fs-lg);
+        margin: 0 0 var(--cortex-space-4);
+      }
+      h2.with-icon {
+        display: flex;
+        align-items: center;
+        gap: var(--cortex-space-3);
+      }
+      p {
+        margin: 0 0 var(--cortex-space-3);
+        line-height: 1.6;
+      }
+      .muted {
+        color: var(--cortex-text-muted);
+        font-size: var(--cortex-fs-sm);
+      }
+      button doclens-icon { font-size: 14px; vertical-align: -2px; margin-right: 4px; }
 
-    /* —— running 态 —— */
-    .running {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-6) 0;
-      text-align: center;
-    }
-    .spinner {
-      width: 28px;
-      height: 28px;
-      border: 3px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: compact-spin 0.8s linear infinite;
-    }
-    @keyframes compact-spin { to { transform: rotate(360deg); } }
+      /* —— running 态 —— */
+      .running {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--cortex-space-4);
+        padding: var(--cortex-space-6) 0;
+        text-align: center;
+      }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--cortex-border);
+        border-top-color: var(--cortex-primary);
+        border-radius: 50%;
+        animation: compact-spin 0.8s linear infinite;
+      }
+      @keyframes compact-spin { to { transform: rotate(360deg); } }
 
-    /* —— done 态效果展示 —— */
-    .result {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--cortex-space-4);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: var(--cortex-space-4) var(--cortex-space-5);
-      margin-bottom: var(--cortex-space-4);
-    }
-    .result .tokens {
-      font-size: var(--cortex-fs-xl);
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-    .result .arrow { color: var(--cortex-text-muted); }
-    .result .saved {
-      margin-left: auto;
-      color: var(--cortex-btn-primary-bg);
-      font-size: var(--cortex-fs-sm);
-      white-space: nowrap;
-    }
-    .error-text {
-      color: var(--cortex-danger);
-      word-break: break-all;
-    }
-    @media (max-width: 1023px) {
-      :host { min-width: 0; }
-      .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
-      .result { flex-wrap: wrap; }
-    }
-  `;
+      /* —— done 态效果展示 —— */
+      .result {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--cortex-space-4);
+        background: var(--cortex-surface-muted);
+        border-radius: var(--cortex-radius-sm);
+        padding: var(--cortex-space-4) var(--cortex-space-5);
+        margin-bottom: var(--cortex-space-4);
+      }
+      .result .tokens {
+        font-size: var(--cortex-fs-xl);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .result .arrow { color: var(--cortex-text-muted); }
+      .result .saved {
+        margin-left: auto;
+        color: var(--cortex-btn-primary-bg);
+        font-size: var(--cortex-fs-sm);
+        white-space: nowrap;
+      }
+      .error-text {
+        color: var(--cortex-danger);
+        word-break: break-all;
+      }
+      @media (max-width: 1023px) {
+        :host { min-width: 0; }
+        .result { flex-wrap: wrap; }
+      }
+    `,
+  ];
 
   /** 当前阶段：confirm（确认）/ running（压缩中）/ done（完成）/ error（失败）。 */
   @property({ attribute: false }) phase: "confirm" | "running" | "done" | "error" = "confirm";

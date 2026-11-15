@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 
 /** 锚点摘录截断长度（与 rewind-dialog 同口径，摘录仅提示用）。 */
 const ANCHOR_EXCERPT_LEN = 160;
@@ -93,19 +93,18 @@ export class TurnDeleteDialog extends LitElement {
   @property() anchorContent = "";
   /** 将被删除的本轮消息条数（user + AI） */
   @property({ type: Number }) turnMessageCount = 0;
-  /** 提交中（防重复点击；失败时由 chat-view 回填 errorMessage） */
+  /** 提交中（防重复点击；失败时由 chat-view 回填 errorMessage）。
+   *  单一真相源（AP-36）：confirm 派发是同步的，宿主随即置 true 回传本
+   *  prop——无需组件内第二份本地 busy 态。 */
   @property() submitting = false;
   @property() errorMessage = "";
 
-  @state() private _submittingLocal = false;
-
   private get _busy(): boolean {
-    return this.submitting || this._submittingLocal;
+    return this.submitting;
   }
 
   private _onConfirm = (): void => {
     if (this._busy) return;
-    this._submittingLocal = true;
     this.dispatchEvent(
       new CustomEvent("turn-delete-confirm", {
         detail: { pointSeq: this.pointSeq },

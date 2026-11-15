@@ -1,69 +1,37 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { dialogSlotStyles } from "../utils/dialog-styles";
 
 /** 孪生复制确认框（2026-10-10）：说明复制语义（原会话保留、副本继承全部
  *  对话继续干活、加星不继承）；确认冒泡 fork-confirm，取消/ESC 冒泡
- *  cancel；执行由 chat-view 负责。 */
+ *  cancel；执行由 chat-view 负责。
+ *  样式走 utils/dialog-styles 共享层（AP-27/29：本组件是 compact-confirm
+ *  的静态单态子集，不并入其四态机——防 DRY Misuse，仅收敛重复样式）。 */
 @customElement("fork-confirm-dialog")
 export class ForkConfirmDialog extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      min-width: 340px;
-      font-size: var(--cortex-fs-md);
-      color: var(--cortex-text);
-    }
-    h2 {
-      font-size: var(--cortex-fs-lg);
-      margin: 0 0 var(--cortex-space-4);
-    }
-    p {
-      margin: 0 0 var(--cortex-space-3);
-      line-height: 1.6;
-    }
-    .muted {
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
-    }
-    .note {
-      display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin-bottom: var(--cortex-space-4);
-    }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 8px 18px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    button.primary:hover { opacity: 0.9; }
-    @media (max-width: 1023px) {
-      :host { min-width: 0; }
-      .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
-    }
-  `;
+  static styles = [
+    dialogSlotStyles,
+    css`
+      :host {
+        display: block;
+        min-width: 340px;
+        font-size: var(--cortex-fs-md);
+        color: var(--cortex-text);
+      }
+      h2 {
+        font-size: var(--cortex-fs-lg);
+        margin: 0 0 var(--cortex-space-4);
+      }
+      p {
+        margin: 0 0 var(--cortex-space-3);
+        line-height: 1.6;
+      }
+      .muted {
+        color: var(--cortex-text-muted);
+        font-size: var(--cortex-fs-sm);
+      }
+    `,
+  ];
 
   /** 源会话标题（展示用）。 */
   @property() sessionTitle = "";

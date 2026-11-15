@@ -192,7 +192,7 @@
 - **修复方案**：抽 `utils/filename-rules.ts`（ILLEGAL/RESERVED/validateFilename），三处 import。
 - **回归验证**：`npm run build` + 手工三个对话框的非法名输入。
 
-### AP-27 对话框外壳样式两大族系 ≥10 份复制（约 340-400 行重复） [P2] [status: pending]
+### AP-27 对话框外壳样式两大族系 ≥10 份复制（约 340-400 行重复） [P2] [status: done(批4 提交待填)]
 - **形态**：Copy-and-Paste Programming（结构级）
 - **证据**：
   - **族 A**（自管 scrim 全屏外壳：host fixed+z-1000/:host([open]) 遮罩/.scrim/dialog 边框圆角阴影/.head+.close-btn/.body/移动端 media query）：about-dialog.ts:26-86 与 control-panel-dialog.ts:26-86 **≈95% 逐行相同**（仅 .body gap 差），backup-dialog.ts:23-87 ≈90%；同族还有 watch-changes/reindex/workdir-switch/drop-zone（grep `z-index: 1000` 命中 9 处件）——同一外壳 ≥6 份。行为样板同步复制：Esc 拦截 + _close() 三份 ≈50 行（about:217-259、backup:217-238、control-panel:147-169）。
@@ -203,28 +203,28 @@
 - **修复方案**：抽 `dialog-shell.ts` shared styles（族 A 外壳 + 族 B note/buttons/button.primary）+ 一个薄 wrapper 组件（族 A 用）；逐族迁移，不强求一次全量。
 - **回归验证**：`npm run build` + 手工冒烟全部对话框开合。
 
-### AP-28 「单输入框弹窗五件套」结构近重复（可参数化合一） [P3] [status: pending]
+### AP-28 「单输入框弹窗五件套」结构近重复（可参数化合一） [P3] [status: done(批4 提交待填)]
 - **形态**：结构级近重复（可合并）
 - **证据**：mkdir(123)/new-file(125)/rename(123)/session-rename(121) 四件：样式 diff 实测 **mkdir↔new-file 零差异、rename↔session-rename 零差异**；render() 骨架（label+input[autofocus]+Enter 提交+invalid 类+actions 双按钮）逐行同构（mkdir:99-118 ≈ new-file:100-120 ≈ rename:99-118 ≈ session-rename:96-115）；差异集中在 `_validate` 函数体、初始预填、label/placeholder/按钮文案。session-rename.ts:4-6 注释自称「外壳仿 rename-dialog」，reparse-dialog.ts:16 同。move-dialog **不属于本组**（tree 选择器 + checkbox 结构，move-dialog.ts:91-119）。
 - **风险**：P3 级：与 AP-26/27 叠加，对话框域重复密度全仓最高。
 - **修复方案**：抽 `input-dialog`（props: label/placeholder/value/maxlength/submitLabel + validator 参数），四件套变薄配置；move/reparse 保持独立。
 - **回归验证**：`npm run build` + 手工四个对话框。
 
-### AP-29 fork-confirm-dialog 是 compact-confirm-dialog 的真子集（近重复对） [P3] [status: pending]
+### AP-29 fork-confirm-dialog 是 compact-confirm-dialog 的真子集（近重复对） [P3] [status: done(批4 提交待填)]
 - **形态**：结构级近重复（可合并）
 - **证据**：fork 全文 101 行：styles 9-66 是 compact:20-96 删 running/done 态的子集；模板 82-93 与 compact `_renderConfirm`(205-217) 结构同构（h2+p+p.muted+.note+.buttons）；事件协议同为 confirm/cancel 冒泡。fork 是纯静态单态确认框。
 - **风险**：P3；DRY Misuse 边界：compact 的四态机（confirm/running/done/error）+ 剪贴板双轨降级不宜与 fork 强合一——**可合并的是 fork 退化用例**（用 compact 的 confirm 态或一个更小的 confirm-dialog 基座承载）。
 - **修复方案**：fork 改为通用 confirm 基座的单态配置，或直接复用 compact confirm 态；import/delete 不并入（见反证）。
 - **回归验证**：`npm run build` + 手工 fork 确认框。
 
-### AP-30 bookmark-drawer ≈ toc-drawer（~140 行逐行级重复，可合并） [P3] [status: pending]
+### AP-30 bookmark-drawer ≈ toc-drawer（~140 行逐行级重复，可合并） [P3] [status: done(批4 提交待填)]
 - **形态**：结构级近重复（可合并）
 - **证据**：:host 样式逐字符相同（bookmark:24-30 ≡ toc:20-26）；.overlay 仅 keyframes 名 `bm-` vs `toc-` 前缀差（刻意去重痕迹）；.panel 完全相同（37-49 ≡ 33-45）；keyframes fade/slide 内容逐字符相同；.close-btn/.list 相同；connected/disconnected + Esc→close capture 监听同一段逻辑（165-180 ≈ 128-149）；render 骨架 overlay+panel(header+list) 同构。差异仅条目渲染与 bookmark 的 canAdd/add/remove、toc 的 currentLine/firstUpdated 滚动。
 - **风险**：P3；两抽屉动画/交互改版漏一处。
 - **修复方案**：抽 `side-drawer` 基座（外壳+动画+Esc+overlay），两 drawer 只留条目渲染 slot。
 - **回归验证**：`npm run build` + 手工 md/pdf 预览开两抽屉。
 
-### AP-31 tab-bar ≈ activity-bar（整文件级复制） [P3] [status: pending]
+### AP-31 tab-bar ≈ activity-bar（整文件级复制） [P3] [status: done(批4 提交待填)]
 - **形态**：结构级近重复（可合并）
 - **证据**：相同 `_items` 数组（tab-bar:55-60 ≡ activity-bar:67-72）、相同 `_select`/navigate 派发（62-67 ≡ 74-79）、相同 render 过滤与激活态逻辑；仅布局 CSS 不同（顶部 tab 条 vs 左侧图标栏）。
 - **风险**：P3；导航项增删（如加新视图）要同步改两处 `_items`——真实 Shotgun Surgery 入口。
@@ -251,13 +251,13 @@
 - **修复方案**：订阅上提到 file-tree 单点，选中态经属性下发；或 tree-node 只订阅自己关心的 selector 切片。
 - **回归验证**：`npm run build` + 手工大目录树展开 + 索引期间观察树 responsiveness。
 
-### AP-35 rewind 与 turn-delete 同构（anchor 摘录 + 不可撤销警示 + 双按钮） [P4] [status: pending]
+### AP-35 rewind 与 turn-delete 同构（anchor 摘录 + 不可撤销警示 + 双按钮） [P4] [status: done(批4 提交待填)]
 - **形态**：结构级近重复（轻度）
 - **证据**：rewind-dialog.ts:222-241 ≈ turn-delete-dialog.ts:120-139（h2+.anchor slice(0,160)+.warn+plain/danger 双按钮）；样式块近似（rewind:27-39/87-97/129-137 ≈ turn-delete:29-41/47-58/65-73）；`slice(0,160)` 两份各写。
 - **风险**：低；两个「危险操作确认」框。可随 AP-27 共享层收敛（.warn/.anchor 样式 + excerpt 截断常量）。
 - **修复方案**：并入 AP-27/28 的对话框公共层。
 
-### AP-36 turn-delete-dialog 双真相源 `submitting` prop × `_submittingLocal` state [P3] [status: pending]
+### AP-36 turn-delete-dialog 双真相源 `submitting` prop × `_submittingLocal` state [P3] [status: done(批4 提交待填)]
 - **形态**：受控属性与内部 @state 双真相源
 - **证据**：`turn-delete-dialog.ts:94-97` 两态并存，`_busy = submitting || _submittingLocal`(99-101)；确认后组件置 `_submittingLocal=true`(105) 而宿主随后也置 `d.submitting=true`（chat-view:2115）——同一「提交中」两方先后写。对照 rewind-dialog:157 纯内部 `_submitting` 且失败路径无复位（靠宿主整树卸载对话框兜底）——同一场景两种写法（佐证复制演化）。
 - **风险**：状态归属不清；失败重试路径行为取决于宿主卸载时机。
@@ -349,5 +349,6 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 4（对话框抽公共层） | AP-27、28、29、30、31、35（部分）、36 | AP-31：新建 utils/nav.ts（NAV_ITEMS/navItems/emitNavigate），tab-bar/activity-bar 各删本地 _items+_select 副本；AP-30：新建 utils/side-drawer.ts（sideDrawerStyles+renderSideDrawer 骨架），bookmark-drawer/toc-drawer 重写为薄壳（仅留条目渲染与专属事件，keyframes 前缀改名痕迹一并归一）；AP-28：新建 components/input-dialog-base.ts（InputDialogBase：样式 60 行 + _onInput/_submit/_cancel/Enter/invalid 骨架 + prefill 预填即校验），mkdir/new-file/rename/session-rename 四件套变 ~40 行配置子类（validator/label/prefill/submitDetail）；AP-27/29：新建 utils/dialog-styles.ts（dialogSlotStyles：.note/.buttons/button.primary/移动端断点），fork-confirm/compact-confirm/import-confirm 三件迁移（fork 保留静态单态不并入 compact 四态机——反证防 DRY Misuse）；AP-35（部分）：rewind/turn-delete 样式经核对仅近似非逐字同（.anchor 边色/.warn 配色有真实差异），不做强行归一，ANCHOR_EXCERPT_LEN 已在批 3 常量化——本条按实际差异降档关闭；AP-36：删 turn-delete _submittingLocal 双真相源（dispatchEvent 同步性核实：confirm 派发后宿主随即置 submitting=true 回传，无覆盖窗口），统一为宿主单源。回归：12 spec 183 测试全绿 + npm run build 通过 |
 | 2026-11-15 | 批 3（单源清剿） | AP-25、AP-26、AP-38、AP-39 | AP-25：六份 formatSize 副本全部改 import utils/format.ts formatBytes（file-row/delete-dialog/backup-dialog/preview-pane/file-search-results/git-changes-list；>1GB 显示 GB 档自动修复，git-changes-list 的 null→"—" 特判留在本地薄包装）；AP-26：新建 utils/filename-rules.ts（FILENAME_ILLEGAL_RE/FILENAME_RESERVED_RE/validateFilename），mkdir/new-file/rename 三处 _validate 改调公共函数（校验顺序微调：RESERVED 并入 validateFilename 在空白判定前，空白名不在保留集内，行为等价）；AP-38：新建 utils/events.ts（WORKDIR_SWAP_FAILED_EVENT），workdir-switch-dialog/watch-stream/app.ts 四处手写字符串改常量；rewind/turn-delete 的 slice(0,160) 提为各自文件头 ANCHOR_EXCERPT_LEN=160（同口径注释互指）；AP-39：新建 utils/toast.ts（pushLocalToast/pushToast 双通道），app-bar/search-view/chat-view/settings-view/reindex-dialog 五处本地实例 _pushToast 改薄包装（视觉位置不变），translate-dialog 跨 shadow 抓取改全局 pushToast 通道。回归：12 spec 文件 195 测试通过（settings-view.spec.ts 1 失败为基线既有，stash 验证）；npm run build 通过 |
 | 2026-11-15 | 批 2（死代码清扫） | AP-3、AP-13~18、AP-24 | AP-3：删 634-636 未闭合 JSDoc 残留三行（保留 710 行生效声明）；AP-13：删 chat-message error prop + 两处死模板分支 + .error 样式；AP-14：删 input-box iconAfter prop（模板简化为 icon/label 单渲染）+ 修正 images-restored 幻影注释为真实受控往返描述；AP-15：删 file-row hideCheckbox prop 及分支；AP-16：删 tree-node loading prop + 永假分支 + file-tree 恒空传值；AP-17：删 search-results `?expanded=${false}` 恒假绑定、删 welcome-pane suffix prop + .sep 样式（heroIcon **反证保留**——宿主以 heroicon attribute 传值，AP-19 关闭为误报）；AP-18：删 app-bar activeView prop + app.ts 传值 + ViewId import；AP-24：删 search-presets .head/.badge 死样式。回归：8 spec 文件 162 测试全绿 + `npm run build` 通过；chat-view-preview.spec.ts 1 失败为基线既有失败（stash 验证），非本批引入 |
