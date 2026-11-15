@@ -27,7 +27,7 @@
 - **修复方案**：preview-pane 暴露公共方法 `reLocate()`（内部转发 md-viewer），search-view 只调 `previewPane.reLocate()`；`getPane()` 返回类型从 `as any` 收敛为具体组件类型。同时在 preview-pane 侧根治"同值重击不触发 updated"：加显式 `requestUpdate('previewLine')` 或将定位信号改为事件下发，删掉 search-view 的兜底穿透。
 - **回归验证**：`npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/preview-pane.spec.ts` + `npm run test:e2e:search` + `npm run build`。
 
-### AP-3 files-view.ts God Object 次级（1779 行，文件树/git 改动/深读/预览/上传五域混合） [P2] [status: pending]
+### AP-3 files-view.ts God Object 次级（1779 行，文件树/git 改动/深读/预览/上传五域混合） [P2] [status: done(857c0d36)]
 - **形态**：God Object + Divergent Change
 - **证据**：`views/files-view.ts` 内并存：文件树导航（`_lastDirBefore*`）、git 改动模式（`_changesMode`/`_diffResp`，`:435-441`）、深读模式（`_deepReadMode`/`_hasBooks`，`:450-456`）、上传/下载（`_uploading`）、预览协调、两条分栏拖拽（`:741-789`）。`:504-514` 一个 `_onStoreChange` 里顺序处理 sync 轮次/改动模式退出/深读模式退出三件不相关的事。
 - **风险**：将损——git/深读/上传三个 feature 的改动全部汇聚此文件；`_onStoreChange` 无条件 `requestUpdate()`（`:515`）使任何 store 变化都触发整视图重渲染。
@@ -92,6 +92,7 @@
 | 2026-11-15 | 继续修（除 AP-3） | AP-6 | done(a5db3e45)：新 tests/test_settings_fields_contract.py——前端 envVar ⊆ KNOWN_KEYS 漂移即红 + 高发键反向抽查；3 测试过。 |
 | 2026-11-15 | 继续修（除 AP-3） | AP-5 | done(7e8029dc)：全域取证 16+ 处空 catch 均有正当理由（fallback/注释/事件透出），Error Hiding 嫌疑排除；仅补 client.ts:32 注释。 |
 | 2026-11-15 | 继续修（除 AP-3） | AP-4 | done(114a67fa)：tokens.css 五档 z 变量（base/raised/overlay/toast/modal），26 文件 47 处裸数字归层替换；128 测试过、build 过。 |
+| 2026-11-15 | 修 AP-3 | AP-3 | done(857c0d36)：新 utils/files-modes-controller.ts（252 行）承载改动/深读模式域（模式互斥/diff 取数/目录守卫/技能探测删除/同步轮次），files-view 删 8 个 @state 与 4 方法只留渲染接线；_onStoreChange 改 subscribeSelector；消 2 处 as any 穿透；新增 controller spec 4 例；46 测试过、全量 1076 过、build 过。 |
 
 ## 六、修复中新发现（discovered-during-fix）
 
