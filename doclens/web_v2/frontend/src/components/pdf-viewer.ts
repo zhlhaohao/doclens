@@ -122,6 +122,8 @@ export function lineToPage(line: number, pageStarts: number[] | null): number | 
 }
 
 /** 缩放上下限（PDFViewer 的 scale 是相对 PDF 原始尺寸的倍率）。 */
+import { pinchScaleFrom, ZOOM_STEP_FACTOR, clampScale } from "../utils/pinch-gesture";
+
 const SCALE_MIN = 0.3;
 const SCALE_MAX = 5;
 
@@ -930,11 +932,8 @@ export class PdfViewer extends LitElement {
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
       const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const ratio = dist / (this._pinchBase.dist || 1);
       this._fitWidthMode = false;
-      this._viewer.currentScale = Math.min(
-        SCALE_MAX, Math.max(SCALE_MIN, this._pinchBase.scale * ratio),
-      );
+      this._viewer.currentScale = pinchScaleFrom(this._pinchBase, dist, SCALE_MIN, SCALE_MAX);
     };
     const onTouchEnd = () => {
       this._pinchBase = null;
@@ -954,9 +953,9 @@ export class PdfViewer extends LitElement {
       if (!e.ctrlKey || !this._viewer) return;
       e.preventDefault();
       const cur = this._viewer.currentScale ?? 1;
-      const next = e.deltaY < 0 ? cur * 1.1 : cur / 1.1;
+      const next = e.deltaY < 0 ? cur * ZOOM_STEP_FACTOR : cur / ZOOM_STEP_FACTOR;
       this._fitWidthMode = false;
-      this._viewer.currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, next));
+      this._viewer.currentScale = clampScale(next, SCALE_MIN, SCALE_MAX);
     };
     host.addEventListener("wheel", onWheel, { passive: false });
     this._portalHandlers.push([host, "wheel", onWheel as EventListener]);
