@@ -30,35 +30,35 @@
 - **修复方案**：照 `_loadSeq` 范式给 controller 加请求代数：`const seq = ++this._openSeq`，每个 await 回跳点 `if (seq !== this._openSeq) return`
 - **回归验证**：新增 controller 级竞态单测（连开两文件断言终态为后者）+ preview-pane spec + `npm run build`
 
-### AP-4 pinch 手势双实现 + image-viewer 魔法数 [P3] [status: pending]
+### AP-4 pinch 手势双实现 + image-viewer 魔法数 [P3] [status: done(a7943ffa)]
 - **形态**：Copy-and-Paste Programming / Magic Numbers
 - **证据**：`pdf-viewer.ts:918-950`（_bindPinch：hypot 距离→ratio→clamp，用命名常量 SCALE_MIN/MAX=0.3/5）与 `image-viewer.ts:221-241`（_pinchDist 基线→ratio→clamp，用裸字面量 `Math.max(0.5, Math.min(5, …))`）——同一 pinch 公式两份独立实现且阈值域不同（0.3 vs 0.5）。`image-viewer.ts:201-202` 双击判定 1.5/目标 2.5 亦裸字面量
 - **风险**：改缩放阈值/手感时只改一处，两 viewer 缩放行为分裂（复制已现漂移：clamp 风格、常量命名不一致）
 - **修复方案**：抽 `utils/pinch-gesture.ts`（基线距离→ratio + clamp 边界参数化），两 viewer 各传自己的 SCALE 域；image-viewer 裸字面量提命名常量
 - **回归验证**：`npm run test -- tests/image-viewer.test.ts` + preview-pane spec + `npm run build`
 
-### AP-5 font-scale / code-font-scale 复制漂移 [P3] [status: pending]
+### AP-5 font-scale / code-font-scale 复制漂移 [P3] [status: done(ca6068ef)]（执行时另发现 code 侧误用 md 版 clamp，两域常量分化即静默失守——已随修）
 - **形态**：Copy-and-Paste Programming（复制后小改漂移）
 - **证据**：`utils/font-scale.ts` 与 `utils/code-font-scale.ts` 结构同构；clamp 已复用（code 版 import clampFontScalePct），但 read 函数异常处理不对称——font-scale.ts:16 `localStorage.getItem` 裸调，code 版包 try/catch。禁 cookie/隐私模式环境下前者可抛未捕获异常
 - **风险**：独立键为有意设计（注释声明），但防御不对称是漂移不是设计——后续维护者不知哪份是基准
 - **修复方案**：抽公共 `readPct(key: string): number`（含 try/catch 与 clamp），两文件各传键名与常量；或合并为单文件双键导出
 - **回归验证**：两文件无同名 spec，跑 `npm run test`（全前端单测）+ `npm run build`
 
-### AP-6 marked 公式扩展双份维护 [P3] [status: pending]
+### AP-6 marked 公式扩展双份维护 [P3] [status: done(6dfc6881)]
 - **形态**：Copy-and-Paste Programming
 - **证据**：`utils/marked-math.ts:21` 注释自认"与 md-viewer 同款逻辑"——`singleLineDisplayMath` 正则/renderer 是 `md-viewer.ts:215-224` 附近同名扩展的手工复制（独立实例 vs 全局 marked 之故）
 - **风险**：改公式渲染（如新的 `$...$` 边界规则）时漏改一份，聊天流与文档预览的数学公式渲染行为分裂
 - **修复方案**：把 tokenizer/renderer 工厂抽到 marked-math.ts 导出，md-viewer 以工厂注入自己的 marked 实例而非复制逻辑体
 - **回归验证**：md-viewer spec + `npm run build`
 
-### AP-7 阈值魔法数散布 [P3] [status: pending]
+### AP-7 阈值魔法数散布 [P3] [status: done(218d6fac；±10/+20 随 AP-8 commit 118c85fb)]
 - **形态**：Magic Numbers
 - **证据**：`md-viewer.ts:1266`（收敛循环 300 帧超时）、`:1273`（stable>=5）、`scroll-jump.ts:83`（`scrollHeight-clientHeight > 8` 的 8px）、`preview-controller.ts:162-163`（行范围 line-10/line+20）、`preview-pane.ts:1546`（debounce 300ms）、`:892`（滚动落盘 300ms）、`pdf-viewer.ts:957`（wheel 步进 1.1）。对照组：`MATCH_NAV_ROUGH_JUMP_PX`（md-viewer.ts:1242）与 SCALE_MIN/MAX 已命名——团队规范存在但未贯通
 - **风险**：调手感/性能阈值时全仓 grep 数字，同名同值散布多处易漏改；「为什么是 300 帧」这类约束只活在注释里
 - **修复方案**：逐文件提命名常量（SETTLE_MAX_FRAMES / SCROLL_END_EPS_PX / HIT_CONTEXT_LINES 等），同值同语义的跨文件常量合并到单一来源
 - **回归验证**：涉及文件的同名 spec + `npm run build`
 
-### AP-8 api/preview.ts 错误分支复制 + controller 裸 fetch 绕封装 [P3] [status: pending]
+### AP-8 api/preview.ts 错误分支复制 + controller 裸 fetch 绕封装 [P3] [status: done(118c85fb)]
 - **形态**：Copy-and-Paste Programming / Abstraction Inversion（高层重写底层逻辑绕过接口）
 - **证据**：`api/preview.ts:25-35`（savePreview）与 `:78-88`（uploadPreview）错误分支同构（json catch→构造专属 Error→三参 throw）各一份；`preview-controller.ts:166-174` 手写裸 fetch 拼参数，而同文件 `:203-240` 已有 `fetchPreview` 封装可复用
 - **风险**：错误契约（状态码→Error 类型/消息）改动时漏改副本；裸 fetch 绕过统一鉴权/错误解析入口
@@ -72,7 +72,7 @@
 - **修复方案**：随 AP-1 拆分时删除该 prop 及 :1946 分支判定（记录即处置，删除属低风险清理）
 - **回归验证**：preview-pane spec + `npm run build`
 
-### AP-10 观察项（不动代码，记录备查） [P4] [status: pending]
+### AP-10 观察项（不动代码，记录备查） [P4] [status: recorded（保持观察，有 profiling/keep-alive 实证再动）]
 - `md-viewer.ts:890`：`img.addEventListener("load", apply, { once: true })` 无 dataset.bound 防护，updated() 多触发路径可重复挂——apply 幂等故当前无害；若未来 apply 非幂等需补防
 - `pdf-viewer.ts:966`：`_bindKeys` 内联箭头函数无 remove——监听在自身元素上随 GC，firstUpdated 仅一次不叠加；keep-alive 场景（mcp-servers-section.ts:329 先例）若引入 pdf-viewer 需复查
 - `md-viewer.ts:895-899` `_anchorBlocks()` 每次全量 querySelectorAll 被 4 个高频方法调用——受 rAF 节流且缓存失效时机复杂（懒渲染新增块），无 profiling 证据不定罪
@@ -104,3 +104,8 @@
 | 2026-11-15 | 第一批 | AP-1 批3 | done(6f65b1fa) 阅读域（TOC/滚动记忆）→ utils/preview-reading.ts + 活跃 viewer 登记制（~14 处 querySelector 清剿） |
 | 2026-11-15 | 第一批 | AP-1 批4 + AP-9 | done(本提交) noHeader 死属性删除（3 个固化死行为的测试随契约删改）；preview-pane 2131→2063 行、11 个 @state 与 ~40 方法迁出，剩余为编辑↔预览切换核心编排与 render 分派（结构测绘判定的有意保留） |
 |---|---|---|---|
+| 2026-11-15 | 第二批 | AP-5 | done(ca6068ef) font-scale 读写收敛参数化公共件；另修 code 侧误用 md clamp |
+| 2026-11-15 | 第二批 | AP-8 | done(118c85fb) parseErrorBody + fetchPreviewRange 收编裸 fetch |
+| 2026-11-15 | 第二批 | AP-4 | done(a7943ffa) pinch 收敛 utils/pinch-gesture.ts + image-viewer 常量化 |
+| 2026-11-15 | 第二批 | AP-7 | done(218d6fac) SETTLE_*/SCROLLABLE_EPS_PX 等命名常量贯通 |
+| 2026-11-15 | 第二批 | AP-6 | done(6dfc6881) 单行 $$ 公式扩展工厂单源 |
